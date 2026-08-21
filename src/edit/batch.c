@@ -60,6 +60,9 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.lsp.symbols", "no batch alternative"},
     {"ed.lsp.signature", "no batch alternative"},
     {"ed.macro.record", "recording needs keys; none exist"},
+    {"ed.ai.enable",
+     "AI cannot be enabled non-interactively; set ai.enable in init.fl "
+     "if you have read :ai privacy"},
     {"ed.ai.open", "no batch alternative"},
     {"ed.mode.enter", "use ed.run(name, args)"},
 };

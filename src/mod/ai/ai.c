@@ -284,6 +284,12 @@ bool yew_ai_state_key_cache_enabled(const Ed *ed)
     return ed != NULL && ed->ai != NULL && ed->ai->keys.enabled;
 }
 
+void yew_ai_policy_options_changed(Ed *ed)
+{
+    if (ed != NULL && ed->ai != NULL)
+        ed->ai->policy_options_loaded = false;
+}
+
 static bool ai_bool(const Ed *ed, const char *name, bool fallback)
 {
     OptVal v;

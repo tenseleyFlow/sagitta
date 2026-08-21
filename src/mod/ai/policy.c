@@ -428,6 +428,27 @@ static bool bool_option(Ed *ed, const char *name)
            value.type == (u8)YEW_OPT_BOOL && value.as.b;
 }
 
+static AiPathPolicy *path_policy_from_options(Ed *ed, bool replace)
+{
+    OptVal value;
+    const char **globs = NULL;
+    AiPathPolicy *policy;
+    u32 i;
+
+    if (ed == NULL || ed->opt_globals == NULL ||
+        !yew_opt_get(ed, NULL, NULL, "ai.exclude_paths", 16U, &value) ||
+        value.type != (u8)YEW_OPT_STRLIST)
+        return yew_ai_path_policy_new(NULL, 0U, replace, NULL);
+    if (value.as.list.len != 0U) {
+        globs = yew_xcalloc(value.as.list.len, sizeof(*globs));
+        for (i = 0U; i < value.as.list.len; i++)
+            globs[i] = value.as.list.v[i].s;
+    }
+    policy = yew_ai_path_policy_new(globs, value.as.list.len, replace, NULL);
+    free(globs);
+    return policy;
+}
+
 bool yew_ai_policy_reload(Ed *ed)
 {
     char *shipped;
@@ -445,6 +466,19 @@ bool yew_ai_policy_reload(Ed *ed)
         free(user);
         free(shipped);
         return false;
+    }
+    {
+        AiPathPolicy *paths = path_policy_from_options(
+            ed, bool_option(ed, "ai.exclude_replace"));
+
+        if (paths == NULL) {
+            yew_ai_policy_bundle_drop(&bundle);
+            free(user);
+            free(shipped);
+            return false;
+        }
+        yew_ai_path_policy_free(bundle.paths);
+        bundle.paths = paths;
     }
     yew_ai_redact_policy_free(ed->ai->redact);
     yew_ai_path_policy_free(ed->ai->paths);

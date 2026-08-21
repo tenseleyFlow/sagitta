@@ -276,6 +276,17 @@ static void drop_priority(Segment *segments, size_t count, u8 priority)
     }
 }
 
+static void drop_priority_except(Segment *segments, size_t count,
+                                 u8 priority, size_t keep)
+{
+    size_t i;
+
+    for (i = 0U; i < count; i++) {
+        if (i != keep && segments[i].priority == priority)
+            segments[i].shown = false;
+    }
+}
+
 static void path_clip(const char *path, int max_cells,
                       char *dst, size_t cap)
 {
@@ -577,7 +588,25 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
                 (right_cells == 0 ? 0 : 2 + right_cells);
     for (priority = 5U; priority >= 1U && min_cells > available;
          priority--) {
-        drop_priority(segments, YEW_ARRAY_LEN(segments), priority);
+        /* A remote AI badge is a disclosure, not decoration.  Drop its
+         * priority-2 peers first and clip the path before considering the
+         * badge itself; otherwise a long path makes the privacy marker
+         * disappear before path_clip() gets a chance to make room. */
+        if (priority == 2U && segments[14].shown &&
+            segments[14].priority == 2U) {
+            int clipped_min;
+
+            drop_priority_except(segments, YEW_ARRAY_LEN(segments),
+                                 priority, 14U);
+            right_cells = right_width(segments, YEW_ARRAY_LEN(segments));
+            clipped_min = 1 + (path_cells == 0 ? 0 : 1) + dirty_cells +
+                          (right_cells == 0 ? 0 : 2 + right_cells);
+            if (clipped_min <= available)
+                break;
+            segments[14].shown = false;
+        } else {
+            drop_priority(segments, YEW_ARRAY_LEN(segments), priority);
+        }
         right_cells = right_width(segments, YEW_ARRAY_LEN(segments));
         min_cells = 1 + path_cells + dirty_cells +
                     (right_cells == 0 ? 0 : 2 + right_cells);

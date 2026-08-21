@@ -126,6 +126,17 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
                               value.as.str.len);
         }
     }
+    {
+        const OptDesc *desc = yew_opt_desc("ai.exclude_paths", 16U);
+        OptVal value = ai_option_get(&ed, "ai.exclude_paths");
+
+        YEW_ASSERT_NOT_NULL(desc);
+        YEW_ASSERT_EQ_U64(desc->scope, YEW_OPT_GLOBAL);
+        YEW_ASSERT_EQ_U64(desc->type, YEW_OPT_STRLIST);
+        YEW_ASSERT_EQ_U64(value.type, YEW_OPT_STRLIST);
+        YEW_ASSERT_EQ_U64(value.as.list.len, 0U);
+        YEW_ASSERT_NULL(value.as.list.v);
+    }
     YEW_ASSERT(yew_ai_state_key_cache_enabled(&ed));
     {
         const char *err = NULL;

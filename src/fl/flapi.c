@@ -1262,10 +1262,22 @@ static bool option_map_error(FlVm *vm, const FlStr *name, const char *err)
 typedef struct FlOptStage {
     const FlStr *name;
     OptVal value;
+    OptStr *owned_list;
     u32 checkpoint;
     u32 ledger_id;
     bool created;
 } FlOptStage;
+
+static void option_stages_free(FlOptStage *staged, u32 n)
+{
+    u32 i;
+
+    if (staged == NULL)
+        return;
+    for (i = 0U; i < n; i++)
+        free(staged[i].owned_list);
+    free(staged);
+}
 
 static void option_stage_rollback(Ed *ed, FlOptStage *staged, u32 n)
 {
@@ -1279,7 +1291,8 @@ static void option_stage_rollback(Ed *ed, FlOptStage *staged, u32 n)
     }
 }
 
-static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out)
+static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out,
+                           OptStr **owned_list)
 {
     if (value.t == (u8)FL_BOOL) {
         *out = (OptVal){YEW_OPT_BOOL, {.b = value.as.b}};
@@ -1295,8 +1308,29 @@ static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out)
         *out = (OptVal){YEW_OPT_STR, {.str = {s->b, s->len}}};
         return true;
     }
+    if (value.t == (u8)FL_LIST) {
+        const FlList *list = (const FlList *)value.as.o;
+        OptStr *items = yew_xcalloc(list->n == 0U ? 1U : list->n,
+                                    sizeof(*items));
+        u32 i;
+
+        for (i = 0U; i < list->n; i++) {
+            const FlStr *item;
+
+            if (list->v[i].t != (u8)FL_STR) {
+                free(items);
+                return fl_raise(vm, "type",
+                                "set: string-list options require only strings");
+            }
+            item = (const FlStr *)list->v[i].as.o;
+            items[i] = (OptStr){item->b, item->len};
+        }
+        *out = (OptVal){YEW_OPT_STRLIST, {.list = {items, list->n}}};
+        *owned_list = items;
+        return true;
+    }
     return fl_raise(vm, "type",
-                    "set: option values must be bool, int, or string");
+                    "set: option values must be bool, int, string, or string list");
 }
 
 bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
@@ -1328,7 +1362,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         const char *err = NULL;
 
         if (key.t != (u8)FL_STR) {
-            free(staged);
+            option_stages_free(staged, n);
             return fl_raise(vm, "type", "set: option names must be strings");
         }
         staged[n].name = (const FlStr *)key.as.o;
@@ -1336,13 +1370,14 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
             staged[n].name->len == sizeof("ai.on_redact") - 1U &&
             memcmp(staged[n].name->b, "ai.on_redact",
                    sizeof("ai.on_redact") - 1U) == 0) {
-            free(staged);
+            option_stages_free(staged, n + 1U);
             return fl_raise(vm, "capability",
                             "set: ai.on_redact may not be set from "
                             "FL_ORIGIN_WORKSPACE (the workspace config)");
         }
-        if (!option_from_fl(vm, value, &staged[n].value)) {
-            free(staged);
+        if (!option_from_fl(vm, value, &staged[n].value,
+                            &staged[n].owned_list)) {
+            option_stages_free(staged, n + 1U);
             return false;
         }
         if (!yew_opt_validate(vm->ed, YEW_OPT_SCOPE_DECLARED,
@@ -1350,7 +1385,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
                               &staged[n].value, &err)) {
             const FlStr *bad = staged[n].name;
 
-            free(staged);
+            option_stages_free(staged, n + 1U);
             return option_map_error(vm, bad, err);
         }
         n++;
@@ -1363,7 +1398,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         if (staged[i].checkpoint == 0U) {
             const FlStr *bad = staged[i].name;
             option_stage_rollback(vm->ed, staged, i);
-            free(staged);
+            option_stages_free(staged, n);
             return option_map_error(vm, bad, err);
         }
         if (!yew_opt_set(vm->ed, YEW_OPT_SCOPE_DECLARED,
@@ -1372,7 +1407,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
             const FlStr *bad = staged[i].name;
             yew_opt_discard(vm->ed, staged[i].checkpoint);
             option_stage_rollback(vm->ed, staged, i);
-            free(staged);
+            option_stages_free(staged, n);
             return option_map_error(vm, bad, err);
         }
         staged[i].ledger_id = yew_opt_commit(vm->ed, origin,
@@ -1384,7 +1419,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     for (i = 0U; i < n; i++)
         if (!staged[i].created)
             yew_opt_discard(vm->ed, staged[i].checkpoint);
-    free(staged);
+    option_stages_free(staged, n);
     *out = FL_NIL_V;
     return true;
 }
@@ -1468,6 +1503,21 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
         case YEW_OPT_ENUM:
             *out = api_str(vm, opt_out.as.str.s, opt_out.as.str.len);
             break;
+        case YEW_OPT_STRLIST: {
+            FlList *list = fl_list_new(vm);
+            u32 i;
+
+            fl_gc_protect(vm, FL_OBJ_V(FL_LIST, list));
+            for (i = 0U; i < opt_out.as.list.len; i++) {
+                const OptStr *item = &opt_out.as.list.v[i];
+
+                (void)fl_list_push(vm, list,
+                                   api_str(vm, item->s, item->len));
+            }
+            *out = FL_OBJ_V(FL_LIST, list);
+            fl_gc_release(vm, 1U);
+            break;
+        }
         default:
             ok = fl_raise(vm, "type", "option provider returned bad type");
             free(owned_cursors);

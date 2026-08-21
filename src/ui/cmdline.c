@@ -69,6 +69,8 @@ static bool parse_option_value(const OptDesc *desc, const char *text,
         *out = (OptVal){YEW_OPT_INT, {.i = (i64)integer}};
         return true;
     }
+    if (desc->type == (u8)YEW_OPT_STRLIST)
+        return false;
     *out = (OptVal){desc->type,
                     {.str = {text, (u32)strlen(text)}}};
     return true;

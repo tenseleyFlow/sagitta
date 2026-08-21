@@ -321,6 +321,9 @@ static void assert_default_value(const OptVal *actual, const OptVal *want)
         YEW_ASSERT_EQ_U64(actual->as.b, want->as.b);
     } else if (want->type == (u8)YEW_OPT_INT) {
         YEW_ASSERT_EQ_I64(actual->as.i, want->as.i);
+    } else if (want->type == (u8)YEW_OPT_STRLIST) {
+        YEW_ASSERT_EQ_U64(actual->as.list.len, want->as.list.len);
+        YEW_ASSERT_NULL(actual->as.list.v);
     } else {
         YEW_ASSERT_EQ_U64(actual->as.str.len, want->as.str.len);
         YEW_ASSERT_EQ_MEM(actual->as.str.s, want->as.str.s,

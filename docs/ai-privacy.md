@@ -100,6 +100,17 @@ case-insensitive; directory patterns match any path component.
 | `.netrc`, `_netrc`, `.npmrc`, `.pypirc` | conventional credential files |
 | `*.kdbx`, `*.gpg`, `*.asc` | password databases and encrypted/armored files |
 
+Add project-independent exclusions in `init.fl` with a Fletch string list;
+they append to the table above:
+
+```fletch
+set({"ai.exclude_paths": ["*.wolf-key", "generated/private/?"]})
+```
+
+`*` and `?` do not cross `/`, and `**` is rejected. Setting
+`ai.exclude_replace = true` deliberately drops the shipped rows and writes a
+warning naming them.
+
 ## What yew stores
 
 - `ai_stats.fl` contains counters and latency summaries, never bodies.

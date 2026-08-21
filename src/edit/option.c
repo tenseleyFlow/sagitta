@@ -26,6 +26,7 @@
 struct OptStored {
     OptVal value;
     char *owned;
+    OptStr *owned_list;
 };
 
 typedef struct YewOptUndo {
@@ -116,10 +117,37 @@ static bool shadow_providers_validate(const OptVal *value, const char **err)
     return true;
 }
 
+static bool ai_exclude_paths_validate(const OptVal *value, const char **err)
+{
+    u32 i;
+
+    for (i = 0U; i < value->as.list.len; i++) {
+        const OptStr *item = &value->as.list.v[i];
+        u32 j;
+
+        if (item->s == NULL || item->len == 0U) {
+            *err = "ai.exclude_paths entries must be non-empty strings";
+            return false;
+        }
+        if (memchr(item->s, '\0', item->len) != NULL) {
+            *err = "ai.exclude_paths entries may not contain NUL bytes";
+            return false;
+        }
+        for (j = 1U; j < item->len; j++) {
+            if (item->s[j - 1U] == '*' && item->s[j] == '*') {
+                *err = "ai.exclude_paths does not support '**'";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 #define OPT_BOOL(v_) {YEW_OPT_BOOL, {.b = (v_)}}
 #define OPT_INT(v_) {YEW_OPT_INT, {.i = (v_)}}
 #define OPT_STR(v_) {YEW_OPT_STR, {.str = {(v_), (u32)(sizeof(v_) - 1U)}}}
 #define OPT_ENUM(v_) {YEW_OPT_ENUM, {.str = {(v_), (u32)(sizeof(v_) - 1U)}}}
+#define OPT_STRLIST() {YEW_OPT_STRLIST, {.list = {NULL, 0U}}}
 
 static void option_changed(Ed *ed, const OptDesc *desc,
                            const OptVal *old, const OptVal *nu);
@@ -250,6 +278,9 @@ const OptDesc yew_opts[] = {
     {"ai.exclude_replace", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
      NULL, 0, 0, NULL, option_changed,
      "Replace shipped AI path exclusions instead of appending user rows"},
+    {"ai.exclude_paths", YEW_OPT_STRLIST, YEW_OPT_GLOBAL, OPT_STRLIST(),
+     NULL, 0, 0, ai_exclude_paths_validate, option_changed,
+     "Additional workspace-relative paths excluded from AI context"},
     {"ai.badge", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("on"),
      ai_badge_values, 0, 0, NULL, option_changed,
      "Show the AI statusline badge for local backends"},
@@ -290,6 +321,7 @@ const u32 yew_opts_len = (u32)YEW_ARRAY_LEN(yew_opts);
 #undef OPT_INT
 #undef OPT_STR
 #undef OPT_ENUM
+#undef OPT_STRLIST
 
 static bool name_is(const char *name, u32 len, const char *want)
 {
@@ -320,13 +352,16 @@ static void stored_clear(struct OptStored *stored)
     if (stored == NULL)
         return;
     free(stored->owned);
+    free(stored->owned_list);
     stored->owned = NULL;
+    stored->owned_list = NULL;
     (void)memset(&stored->value, 0, sizeof(stored->value));
 }
 
 static bool stored_assign(struct OptStored *stored, const OptVal *value)
 {
     char *owned = NULL;
+    OptStr *owned_list = NULL;
     OptVal copy = *value;
 
     if (value->type == (u8)YEW_OPT_STR ||
@@ -338,10 +373,43 @@ static bool stored_assign(struct OptStored *stored, const OptVal *value)
             (void)memcpy(owned, value->as.str.s, value->as.str.len);
         owned[value->as.str.len] = '\0';
         copy.as.str.s = owned;
+    } else if (value->type == (u8)YEW_OPT_STRLIST) {
+        size_t total = 0U;
+        size_t at = 0U;
+        u32 i;
+
+        if (value->as.list.v == NULL && value->as.list.len != 0U)
+            return false;
+        for (i = 0U; i < value->as.list.len; i++) {
+            const OptStr *item = &value->as.list.v[i];
+
+            if (item->s == NULL && item->len != 0U)
+                return false;
+            if (total > SIZE_MAX - (size_t)item->len - 1U)
+                return false;
+            total += (size_t)item->len + 1U;
+        }
+        if (value->as.list.len != 0U) {
+            owned_list = yew_xcalloc(value->as.list.len,
+                                     sizeof(*owned_list));
+            owned = yew_xmalloc(total);
+        }
+        for (i = 0U; i < value->as.list.len; i++) {
+            const OptStr *item = &value->as.list.v[i];
+
+            owned_list[i].s = owned + at;
+            owned_list[i].len = item->len;
+            if (item->len != 0U)
+                (void)memcpy(owned + at, item->s, item->len);
+            owned[at + item->len] = '\0';
+            at += (size_t)item->len + 1U;
+        }
+        copy.as.list.v = owned_list;
     }
     stored_clear(stored);
     stored->value = copy;
     stored->owned = owned;
+    stored->owned_list = owned_list;
     return true;
 }
 
@@ -422,7 +490,9 @@ static bool value_validate(Ed *ed, const OptDesc *desc, const OptVal *value,
         *err = desc->type == (u8)YEW_OPT_BOOL ? "option requires a bool" :
                desc->type == (u8)YEW_OPT_INT ? "option requires an int" :
                desc->type == (u8)YEW_OPT_STR ? "option requires a string" :
-                                               "option requires an enum value";
+               desc->type == (u8)YEW_OPT_ENUM ?
+                   "option requires an enum value" :
+                   "option requires a string list";
         return false;
     }
     if (desc->type == (u8)YEW_OPT_INT &&
@@ -438,6 +508,11 @@ static bool value_validate(Ed *ed, const OptDesc *desc, const OptVal *value,
          desc->type == (u8)YEW_OPT_ENUM) &&
         normalized->as.str.s == NULL && normalized->as.str.len != 0U) {
         *err = "option string is missing its bytes";
+        return false;
+    }
+    if (desc->type == (u8)YEW_OPT_STRLIST &&
+        normalized->as.list.v == NULL && normalized->as.list.len != 0U) {
+        *err = "option string list is missing its values";
         return false;
     }
     if (desc->validate != NULL && !desc->validate(normalized, err))
@@ -518,6 +593,10 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
         return;
     if (strcmp(desc->name, "ai.key_cache") == 0) {
         yew_ai_state_key_cache_enable(ed, nu->as.b);
+    } else if (strcmp(desc->name, "ai.deny_replace") == 0 ||
+               strcmp(desc->name, "ai.exclude_replace") == 0 ||
+               strcmp(desc->name, "ai.exclude_paths") == 0) {
+        yew_ai_policy_options_changed(ed);
     } else if (strcmp(desc->name, "tabwidth") == 0 && buffer != NULL) {
         buffer->tabwidth = (u32)nu->as.i;
         invalidate_buffer_views(ed, buffer);

@@ -47,6 +47,11 @@ bool yew_ai_state_key_cache_enabled(const Ed *ed)
     return ed != NULL && ed->ai != NULL && ed->ai->key_cache_enabled;
 }
 
+void yew_ai_policy_options_changed(Ed *ed)
+{
+    (void)ed;
+}
+
 bool yew_ai_status_badge(const Ed *ed, char *out, size_t outsz, u8 *priority)
 {
     (void)ed;

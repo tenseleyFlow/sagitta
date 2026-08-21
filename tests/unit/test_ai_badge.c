@@ -7,6 +7,7 @@
 #include "fl/flruntime.h"
 #include "mod/ai/ai.h"
 #include "mod/ai/ai_int.h"
+#include "ui/statusline.h"
 
 static void badge_set(Ed *ed, const char *name, OptVal value)
 {
@@ -122,5 +123,32 @@ void test_ai_badge_remote_cannot_be_hidden(void)
     YEW_ASSERT_EQ_STR(error, "remote AI backends require ai.badge=on");
     badge_set(&ed, "ai.badge", on);
     badge_select(&ed, "remote");
+    yew_ed_free(&ed);
+}
+
+void test_ai_badge_remote_survives_narrow_statusline(void)
+{
+    static const char long_path[] =
+        "/workspace/with/a/long/path/to/hello.lu";
+    Ed ed;
+    StatuslineText out;
+    OptVal enabled = {YEW_OPT_BOOL, {.b = true}};
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_ai_workspace_session_set(&ed, YEW_AI_WS_ALLOW);
+    badge_define_backends(&ed);
+    badge_set(&ed, "ai.enable", enabled);
+    badge_select(&ed, "remote");
+    ed.buffer.path = arena_strdup(&ed.arena, long_path);
+    ed.buffer.name = NULL;
+
+    yew_statusline_build(&ed, ed.win, 40U, &out);
+    YEW_ASSERT_NOT_NULL(strstr(out.body, "[AI->api.anthropic.com]"));
+    YEW_ASSERT_NULL(strstr(out.body, "utf-8"));
+    YEW_ASSERT_NULL(strstr(out.body, " lf"));
+    YEW_ASSERT_NULL(strstr(out.body, " all"));
+    YEW_ASSERT(out.body_cells <= 40U - out.chip_cells);
+    yew_statusline_text_free(&out);
     yew_ed_free(&ed);
 }

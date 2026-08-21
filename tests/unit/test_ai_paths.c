@@ -4,6 +4,8 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/option.h"
+#include "fl/flruntime.h"
 #include "mod/ai/ai.h"
 #include "mod/ai/redact.h"
 #include "util/base.h"
@@ -123,4 +125,46 @@ void test_ai_paths_null_and_empty_lifecycle(void)
     YEW_ASSERT(yew_ai_path_glob_valid("*.key"));
     yew_ai_path_policy_free(empty);
     yew_ai_path_policy_free(NULL);
+}
+
+void test_ai_paths_fletch_list_option_merges_and_replaces(void)
+{
+    static const char merge[] =
+        "set({\"ai.exclude_paths\": [\"*.wolf-key\", \"generated/?\"]})";
+    static const char replace[] =
+        "set({\"ai.exclude_replace\": true, "
+        "\"ai.exclude_paths\": [\"*.wolf-key\", \"generated/?\"]})";
+    static const char invalid[] =
+        "set({\"ai.exclude_paths\": [\"safe\", \"bad/**\"]})";
+    Ed ed;
+    OptVal value;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, merge,
+                                  (u32)(sizeof(merge) - 1U)), YEW_CMD_OK);
+    YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.exclude_paths", 16U,
+                           &value));
+    YEW_ASSERT_EQ_U64(value.type, YEW_OPT_STRLIST);
+    YEW_ASSERT_EQ_U64(value.as.list.len, 2U);
+    YEW_ASSERT_EQ_STR(value.as.list.v[0].s, "*.wolf-key");
+    YEW_ASSERT_EQ_STR(value.as.list.v[1].s, "generated/?");
+    YEW_ASSERT_EQ_STR(yew_ai_path_exclusion(&ed, "src/private.wolf-key"),
+                      "*.wolf-key");
+    YEW_ASSERT_EQ_STR(yew_ai_path_exclusion(&ed, ".env.local"), ".env*");
+
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, replace,
+                                  (u32)(sizeof(replace) - 1U)), YEW_CMD_OK);
+    YEW_ASSERT_EQ_STR(yew_ai_path_exclusion(&ed, "generated/x"),
+                      "generated/?");
+    YEW_ASSERT_NULL(yew_ai_path_exclusion(&ed, ".env.local"));
+
+    YEW_ASSERT(yew_fl_eval(&ed, invalid,
+                           (u32)(sizeof(invalid) - 1U)) != YEW_CMD_OK);
+    YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.exclude_paths", 16U,
+                           &value));
+    YEW_ASSERT_EQ_U64(value.as.list.len, 2U);
+    YEW_ASSERT_EQ_STR(value.as.list.v[0].s, "*.wolf-key");
+    YEW_ASSERT_EQ_STR(value.as.list.v[1].s, "generated/?");
+    yew_ed_free(&ed);
 }

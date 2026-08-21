@@ -19,7 +19,8 @@ typedef enum OptValType {
     YEW_OPT_BOOL = 0,
     YEW_OPT_INT,
     YEW_OPT_STR,
-    YEW_OPT_ENUM
+    YEW_OPT_ENUM,
+    YEW_OPT_STRLIST
 } OptValType;
 
 typedef enum OptScope {
@@ -29,15 +30,21 @@ typedef enum OptScope {
     YEW_OPT_SCOPE_DECLARED = 255
 } OptScope;
 
+typedef struct OptStr {
+    const char *s;                 /* borrowed for the duration of a call */
+    u32 len;
+} OptStr;
+
 typedef struct OptVal {
     u8 type;                       /* OptValType */
     union {
         bool b;
         i64 i;
+        OptStr str;
         struct {
-            const char *s;         /* borrowed for the duration of a call */
+            const OptStr *v;       /* borrowed for the duration of a call */
             u32 len;
-        } str;
+        } list;
     } as;
 } OptVal;
 

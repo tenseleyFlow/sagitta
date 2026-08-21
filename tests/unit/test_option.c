@@ -45,7 +45,8 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "ai.context_prefix_pct",
         "ai.max_tokens", "ai.max_lines", "ai.temperature", "ai.frame_ms",
         "ai.fim", "ai.on_redact", "ai.deny_replace",
-        "ai.exclude_replace", "ai.badge", "ai.badge_host_max",
+        "ai.exclude_replace", "ai.exclude_paths", "ai.badge",
+        "ai.badge_host_max",
         "ai.debug_bodies",
         "ai.allow_plain_remote", "ai.key_cache", "ai.connect_timeout_ms",
         "ai.first_byte_timeout_ms", "ai.stream_idle_timeout_ms",
@@ -70,7 +71,11 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
             YEW_ASSERT_EQ_U64(got.as.b, yew_opts[i].dflt.as.b);
         else if (got.type == (u8)YEW_OPT_INT)
             YEW_ASSERT_EQ_I64(got.as.i, yew_opts[i].dflt.as.i);
-        else {
+        else if (got.type == (u8)YEW_OPT_STRLIST) {
+            YEW_ASSERT_EQ_U64(got.as.list.len,
+                              yew_opts[i].dflt.as.list.len);
+            YEW_ASSERT_NULL(got.as.list.v);
+        } else {
             char *config = strcmp(names[i], "macro.dir") == 0 ?
                            yew_xdg_config_dir() : NULL;
 

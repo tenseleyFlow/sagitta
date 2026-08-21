@@ -1,0 +1,8 @@
+# CONFIG
+# Sprint 50: path exclusions are a real Fletch string-list option.
+import opt
+import list
+let paths = opt.get("ai.exclude_paths")
+t.eq(list.len(paths), 2)
+t.eq(paths[0], "*.wolf-key")
+t.eq(paths[1], "generated/?")
