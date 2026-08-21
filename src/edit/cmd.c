@@ -1235,7 +1235,15 @@ static bool command_name_valid(const char *name)
          * optional module is stripped. */
         "backends", "models", "ping",
         /* Sprint 50: explicit privacy and preset surfaces. */
-        "privacy", "preset"};
+        "privacy", "preset",
+        /* Sprint 51: the complete Git command surface is registered before
+         * the Sprint 52/53 viewers and mutating actions land. */
+        "abort", "all", "amend", "arm", "blame", "cherry_pick",
+        "commit", "continue", "create", "diff", "discard", "fetch",
+        "first", "force", "hidden", "history", "init", "interactive",
+        "last", "merge", "parent", "pop", "pull", "push", "reflog",
+        "refresh", "reset", "revert", "row_next", "row_prev", "switch",
+        "tag", "unstage", "view"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
