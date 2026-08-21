@@ -6,6 +6,7 @@
 #include "edit/option.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/shadow_ai.h"
+#include "text/edit.h"
 
 static AiCall *frame_call(Ed *ed, u32 seq)
 {
@@ -130,5 +131,38 @@ void test_ai_frame_deadline_wakes_a_dirty_final_batch(void)
 
     YEW_ASSERT(yew_ai_shadow_deadline(&ed, now) >= 0);
     YEW_ASSERT(yew_ai_shadow_deadline(&ed, now) <= 200);
+    yew_ed_free(&ed);
+}
+
+void test_ai_frame_continues_after_a_matching_typed_prefix(void)
+{
+    Ed ed;
+    AiCall *call = frame_call(&ed, 11U);
+    EditCtx edit;
+
+    frame_option(&ed, 0);
+    bytebuf_append(&call->raw, "hello", 5U);
+    call->dirty = true;
+    yew_ai_shadow_pump(&ed);
+    YEW_ASSERT_EQ_U64(ed.win->shadow.sug.seq, 11U);
+
+    edit = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(0U), (const u8 *)"h", 1U));
+    yew_ed_finish_edit(&ed, &edit);
+    ed.win->cs.curs.data[0].pos = BYTEOFF(1U);
+    ed.win->cs.curs.data[0].anchor = BYTEOFF(1U);
+    YEW_ASSERT(ed.win->shadow.live);
+    YEW_ASSERT(call->active);
+
+    bytebuf_append(&call->raw, " world", 6U);
+    call->dirty = true;
+    yew_ai_shadow_pump(&ed);
+    YEW_ASSERT(ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.win->shadow.sug.seq, 12U);
+    YEW_ASSERT_EQ_U64(ed.win->shadow.sug.buf_gen, ed.win->buf->tb->gen);
+    YEW_ASSERT_EQ_I64(yew_shadow_revalidate(ed.win->buf->tb,
+                                            &ed.win->shadow.sug,
+                                            BYTEOFF(1U)), 1);
+    YEW_ASSERT_EQ_MEM(ed.win->shadow.sug.text, "hello world", 11U);
     yew_ed_free(&ed);
 }

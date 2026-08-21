@@ -855,6 +855,7 @@ const YewTest yew_tests[] = {
     T(ai_frame_first_token_bypasses_the_floor),
     T(ai_frame_enforces_the_growth_only_rule),
     T(ai_frame_deadline_wakes_a_dirty_final_batch),
+    T(ai_frame_continues_after_a_matching_typed_prefix),
     T(ai_cancel_http_never_pools_the_connection),
     T(ai_cancel_curl_detaches_then_reaps_without_callbacks),
     T(ai_stats_persist_and_render_local_fletch_data),

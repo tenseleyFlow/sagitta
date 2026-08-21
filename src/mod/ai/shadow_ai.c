@@ -742,6 +742,7 @@ static void ai_clear_ghost(Ed *ed, const AiCall *call)
 
 static bool ai_shadow_frame(Ed *ed, AiCall *call)
 {
+    ShadowAnswer *answer;
     ShadowSug suggestion = {0};
     u32 max_lines;
     i64 frame_ms;
@@ -749,6 +750,22 @@ static bool ai_shadow_frame(Ed *ed, AiCall *call)
 
     if (!call->active || !call->dirty)
         return false;
+    /* Sprint 43 deliberately advances seq_min on every edit.  A typed
+     * prefix that byte-matches the visible AI answer is the one exception
+     * which remains a valid in-flight generation: shadow_note_window_edit
+     * refreshes that answer's buffer generation.  Promote the call to a
+     * fresh sequence before its next growing frame so the independent
+     * stale-sequence and generation guards both remain enabled. */
+    answer = &ed->win->shadow.answers[YEW_SHADOW_AI];
+    if (answer->live && answer->sug.seq == call->seq &&
+        answer->sug.buf_id == call->buf_id &&
+        answer->sug.buf_gen == ed->win->buf->tb->gen &&
+        call->seq < ed->win->shadow.seq_min[YEW_SHADOW_AI]) {
+        call->seq = ed->win->shadow.seq_min[YEW_SHADOW_AI];
+        call->buf_gen = answer->sug.buf_gen;
+        if (ed->win->shadow.seq_next[YEW_SHADOW_AI] <= call->seq)
+            ed->win->shadow.seq_next[YEW_SHADOW_AI] = call->seq + 1U;
+    }
     now = yew_now_ms();
     frame_ms = ai_option_int(ed, "ai.frame_ms", 33);
     if (call->delivered != 0U && ed->ai->last_deliver_ms >= 0 &&
