@@ -8,6 +8,8 @@ FUZZ_SECONDS ?=
 LSP_RESP_FUZZ_ITERS ?= 50000
 LSP_RESP_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                        0x9e3779b97f4a7c15 0xd1b54a32d192ed03
+PORCELAIN_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                        0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 CMDPARSE_FUZZ_ITERS ?= 1000000
 TEXTBUF_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                       0x9e3779b97f4a7c15 0xd1b54a32d192ed03
@@ -380,6 +382,7 @@ UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
                tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
                tests/unit/test_http_rx.c tests/unit/test_http_url.c \
                tests/unit/test_http_live.c
+UNIT_FUSS_SRC := tests/unit/test_porcelain.c tests/unit/test_gitcache.c
 ifeq ($(filter lsp ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))
 endif
@@ -388,6 +391,9 @@ UNIT_SRC := $(filter-out $(UNIT_LSP_SRC),$(UNIT_SRC))
 endif
 ifeq ($(filter ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_AI_SRC),$(UNIT_SRC))
+endif
+ifeq ($(filter fuss,$(MODULES)),)
+UNIT_SRC := $(filter-out $(UNIT_FUSS_SRC),$(UNIT_SRC))
 endif
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
 SYN_ENGINE_UNIT_OBJ := $(BUILD)/tests/unit/syn_engine.o
@@ -484,6 +490,7 @@ FUZZ_REDIFF_OBJ := $(BUILD)/tests/fuzz/fuzz_re_diff.o
 FUZZ_FUZZY_OBJ := $(BUILD)/tests/fuzz/fuzz_fuzzy.o
 FUZZ_STATE_OBJ := $(BUILD)/tests/fuzz/fuzz_state.o
 FUZZ_GITIGNORE_OBJ := $(BUILD)/tests/fuzz/fuzz_gitignore.o
+FUZZ_PORCELAIN_OBJ := $(BUILD)/tests/fuzz/fuzz_porcelain.o
 FUZZ_MOUSE_OBJ := $(BUILD)/tests/fuzz/fuzz_mouse.o
 FUZZ_FLLEX_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_lex.o
 FUZZ_FLPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_parse.o
@@ -529,6 +536,7 @@ FL_SMOKE_OBJ := $(BUILD)/tests/perf/fl_smoke.o
 PERF_STATE_OBJ := $(BUILD)/tests/perf/perf_state.o
 PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
+PERF_GIT_STATUS_OBJ := $(BUILD)/tests/perf/git_status.o
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
@@ -548,8 +556,14 @@ endif
 ifneq ($(filter ai,$(MODULES)),)
 AI_PERF_TARGET := perf-ai-http perf-ai-shadow perf-ai-privacy
 endif
+ifneq ($(filter fuss,$(MODULES)),)
+FUSS_FUZZ_TARGET := fuzz-porcelain
+FUSS_PERF_TARGET := perf-git-status
+FUSS_SCRIPT_TARGET := test-git-script
+endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
+GIT_SCRIPT_OBJ := $(BUILD)/tests/script/git_layer.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 ROUNDTRIP_OBJ := $(BUILD)/tests/roundtrip/gen.o \
                  $(BUILD)/tests/roundtrip/runner.o
@@ -593,6 +607,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_STATE_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
                 $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(SCRIPT_RUNNER_OBJ) \
+                $(GIT_SCRIPT_OBJ) \
                 $(ROUNDTRIP_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
@@ -618,11 +633,12 @@ MODULE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test clean install dirs FORCE test-script \
+.PHONY: all check test clean install dirs FORCE test-script test-git-script \
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-lsp-msg fuzz-lsp-resp \
+        fuzz-porcelain \
         fuzz-ai \
         test-lsp-live \
         fuzz-syn-long \
@@ -634,6 +650,7 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
+        perf-git-status \
         perf-ai-shadow perf-ai-privacy \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
@@ -778,6 +795,10 @@ $(BUILD)/fuzz_gitignore: $(FUZZ_LINK_OBJ) $(FUZZ_GITIGNORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_GITIGNORE_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_porcelain: $(FUZZ_LINK_OBJ) $(FUZZ_PORCELAIN_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_PORCELAIN_OBJ) $(LDLIBS)
+
 $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_MOUSE_OBJ) $(LDLIBS)
@@ -841,6 +862,10 @@ $(BUILD)/perf_symidx: $(PERF_CORE_OBJ) $(PERF_SYMIDX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_SYMIDX_OBJ) $(LDLIBS)
 
+$(BUILD)/perf_git_status: $(PERF_CORE_OBJ) $(PERF_GIT_STATUS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_GIT_STATUS_OBJ) $(LDLIBS)
+
 $(BUILD)/perf_lsp: $(PERF_CORE_OBJ) $(PERF_LSP_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_LSP_OBJ) $(LDLIBS)
@@ -875,6 +900,10 @@ $(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
 
 $(BUILD)/script_runner: $(SCRIPT_RUNNER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SCRIPT_RUNNER_OBJ) $(LDLIBS)
+
+$(BUILD)/git_script: $(PERF_CORE_OBJ) $(GIT_SCRIPT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(GIT_SCRIPT_OBJ) $(LDLIBS)
 
 $(BUILD)/roundtrip_runner: $(ROUNDTRIP_LINK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ROUNDTRIP_LINK_OBJ) $(LDLIBS)
@@ -1048,7 +1077,8 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-      fuzz-symidx fuzz-json fuzz-jsonrpc $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET)
+      fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
+      $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET)
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -1191,6 +1221,12 @@ fuzz-symidx: $(BUILD)/fuzz_symidx
 		$(BUILD)/fuzz_symidx --iters=$(FUZZ_ITERS) --seed=$$seed; \
 	done
 
+fuzz-porcelain: $(BUILD)/fuzz_porcelain
+	@set -eu; \
+	for seed in $(PORCELAIN_FUZZ_SEEDS); do \
+		$(BUILD)/fuzz_porcelain --iters=$(FUZZ_ITERS) --seed=$$seed; \
+	done
+
 test-syn-def-corpus: $(BUILD)/fuzz_syn_def
 	$(BUILD)/fuzz_syn_def --corpus-only
 
@@ -1245,7 +1281,11 @@ perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor pe
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
       perf-mouse perf-record perf-syn perf-symidx perf-batch \
+      $(FUSS_PERF_TARGET) \
       $(LSP_PERF_TARGET) $(AI_PERF_TARGET)
+
+perf-git-status: $(BUILD)/perf_git_status
+	$(BUILD)/perf_git_status
 
 perf-lsp: $(BUILD)/perf_lsp
 	$(BUILD)/perf_lsp
@@ -1605,7 +1645,8 @@ install: all
 clean:
 	rm -rf $(BUILD)
 
-test-script: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
+test-script: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP) \
+             $(FUSS_SCRIPT_TARGET)
 	LC_ALL=C YEW_SCRIPT_BUDGET_MS=$(YEW_SCRIPT_BUDGET_MS) \
 		$(if $(filter 1,$(VALGRIND)),YEW_TEST_INSTRUMENTED=1,) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
@@ -1622,6 +1663,18 @@ test-script: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 		$(SCRIPT_RUNNER_ARGS) \
 		--yew $(abspath $(BUILD)/yew) \
 		--fakelsp $(abspath $(FAKELSP))
+
+test-git-script: $(BUILD)/git_script tests/fixtures/git/mkrepo.sh \
+                 tests/fixtures/git/hashes.txt
+	@if ! command -v git >/dev/null 2>&1; then \
+		echo 'HARNESS_SKIP git_layer: git not found'; \
+	else \
+		set -e; \
+		tmp=$$(mktemp -d); \
+		trap 'find "$$tmp" -depth -delete' EXIT HUP INT TERM; \
+		tests/fixtures/git/mkrepo.sh "$$tmp/repo"; \
+		LC_ALL=C $(BUILD)/git_script "$$tmp/repo"; \
+	fi
 
 test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 	@set -e; \

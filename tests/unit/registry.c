@@ -1730,6 +1730,7 @@ const YewTest yew_tests[] = {
     T(gitignore_load_reads_a_file),
     T(gitignore_absent_file_returns_the_parent),
     T(gitignore_degenerate_inputs),
+#if YEW_WITH_FUSS
     T(porcelain_status_all_records_headers_and_sort),
     T(porcelain_xy_mapping_complete),
     T(porcelain_rename_consumes_two_nuls_and_preserves_newline),
@@ -1738,6 +1739,7 @@ const YewTest yew_tests[] = {
     T(porcelain_z_paths_ignore_prefixes),
     T(porcelain_blame_metadata_reuse_and_incremental),
     T(porcelain_log_reflog_format_edges),
+#endif
     T(picker_selection_survives_a_refilter),
     T(picker_selection_falls_to_row_zero_when_filtered_out),
     T(picker_movement_keys),
