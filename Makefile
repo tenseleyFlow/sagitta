@@ -537,6 +537,11 @@ PERF_STATE_OBJ := $(BUILD)/tests/perf/perf_state.o
 PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
 PERF_GIT_STATUS_OBJ := $(BUILD)/tests/perf/git_status.o
+ifeq ($(HOST_OS),Linux)
+PERF_GIT_ALLOC_WRAP := -Wl,--wrap=malloc -Wl,--wrap=calloc \
+                       -Wl,--wrap=realloc -Wl,--wrap=free \
+                       -Wl,--wrap=arena_alloc
+endif
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
@@ -862,8 +867,10 @@ $(BUILD)/perf_symidx: $(PERF_CORE_OBJ) $(PERF_SYMIDX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_SYMIDX_OBJ) $(LDLIBS)
 
-$(BUILD)/perf_git_status: $(PERF_CORE_OBJ) $(PERF_GIT_STATUS_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+$(BUILD)/perf_git_status: $(PERF_CORE_OBJ) $(PERF_GIT_STATUS_OBJ) \
+		tests/fixtures/git/mkrepo.sh
+	$(CC) $(CFLAGS) $(LDFLAGS) $(PERF_GIT_ALLOC_WRAP) \
+		-o $@ $(PERF_CORE_OBJ) \
 		$(PERF_GIT_STATUS_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_lsp: $(PERF_CORE_OBJ) $(PERF_LSP_OBJ)
