@@ -260,6 +260,9 @@ void test_ai_context_shipped_policy_blocks_cloud_before_prompt(void)
     YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_PROTOCOL);
     YEW_ASSERT(strstr(err.msg, "line 2 matches 'bearer-token'") != NULL);
     YEW_ASSERT(strstr(err.msg, "api.anthropic.com") != NULL);
+    YEW_ASSERT(strstr(err.msg, "[g] go to line 2") != NULL);
+    YEW_ASSERT(strstr(err.msg, "[i] ignore this file") != NULL);
+    YEW_ASSERT(strstr(err.msg, "[p] :ai privacy") != NULL);
     YEW_ASSERT(ed.ai->have_last_error);
     YEW_ASSERT_EQ_U64(ed.ai->last_error, YEW_AI_ERR_PROTOCOL);
     arena_free_all(&arena);

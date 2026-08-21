@@ -137,8 +137,10 @@ static bool context_apply_redaction(Ed *ed, Arena *arena, AiCtx *context,
         context_error(err, YEW_AI_ERR_PROTOCOL, "");
         (void)snprintf(
             err->msg, sizeof(err->msg),
-            "AI request blocked: line %u matches '%s'. Nothing was sent to %s.",
-            hit->line_1based, rule, host);
+            "AI request blocked: line %u matches '%s'. Nothing was sent to "
+            "%s. [g] go to line %u [i] ignore this file for the session "
+            "[p] :ai privacy",
+            hit->line_1based, rule, host, hit->line_1based);
         yew_ai_status_note(ed, YEW_AI_ERR_PROTOCOL);
         return false;
     }
