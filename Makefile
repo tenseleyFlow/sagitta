@@ -365,7 +365,8 @@ UNIT_LSP_SRC := tests/unit/test_jsonrpc_frame.c \
 UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
                tests/unit/test_ai_config.c tests/unit/test_ai_key.c \
                tests/unit/test_ai_registry.c tests/unit/test_ai_runtime.c \
-               tests/unit/test_ai_stream.c \
+               tests/unit/test_ai_stream.c tests/unit/test_ai_context.c \
+               tests/unit/test_ai_prompt.c tests/unit/test_ai_trim.c \
                tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
                tests/unit/test_http_rx.c tests/unit/test_http_url.c \
                tests/unit/test_http_live.c
