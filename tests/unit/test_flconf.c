@@ -14,7 +14,9 @@
 #include "edit/option.h"
 #include "fl/flconf.h"
 #include "fl/flruntime.h"
+#include "fl/gc.h"
 #include "fl/value.h"
+#include "fl/vm.h"
 
 typedef struct ConfigFix {
     Ed ed;
@@ -141,6 +143,30 @@ static OptVal cf_opt(ConfigFix *f, const char *name)
     return value;
 }
 
+static bool cf_error_contains(ConfigFix *f, const char *needle)
+{
+    FlVm *vm = yew_fl_vm(&f->ed);
+    FlValue key;
+    FlValue value = FL_NIL_V;
+    FlStr *message;
+    size_t needle_len = strlen(needle);
+    u32 i;
+
+    if (vm == NULL || vm->err.t != (u8)FL_MAP)
+        return false;
+    key = FL_OBJ_V(FL_STR, fl_str_new(vm, "msg", 3U));
+    if (!fl_map_get((FlMap *)vm->err.as.o, key, &value) ||
+        value.t != (u8)FL_STR)
+        return false;
+    message = (FlStr *)value.as.o;
+    if (message->len < needle_len)
+        return false;
+    for (i = 0U; i <= message->len - needle_len; i++)
+        if (memcmp(message->b + i, needle, needle_len) == 0)
+            return true;
+    return false;
+}
+
 static u32 cf_active_ledger(const ConfigFix *f)
 {
     u32 active = 0U;
@@ -165,6 +191,27 @@ void test_flconf_loads_builtin_user_workspace_in_precedence_order(void)
     YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
     YEW_ASSERT_EQ_I64(cf_opt(&f, "tabwidth").as.i, 7);
     YEW_ASSERT_EQ_U64(f.ed.buffer.tabwidth, 7U);
+    cf_free(&f);
+}
+
+void test_flconf_workspace_cannot_weaken_ai_redaction(void)
+{
+    YewEdStartup startup = {0};
+    ConfigFix f;
+    OptVal value;
+
+    startup.trust_workspace = true;
+    cf_init(&f, &startup);
+    cf_write(f.user_init, "set({\"ai.on_redact\": \"elide\"})\n");
+    cf_write(f.workspace_init,
+             "set({errorbells: true, \"ai.on_redact\": \"off\"})\n");
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_RUN);
+    value = cf_opt(&f, "ai.on_redact");
+    YEW_ASSERT_EQ_U64(value.as.str.len, sizeof("elide") - 1U);
+    YEW_ASSERT_EQ_MEM(value.as.str.s, "elide", value.as.str.len);
+    YEW_ASSERT(!cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT(cf_error_contains(&f, "FL_ORIGIN_WORKSPACE"));
+    YEW_ASSERT(cf_error_contains(&f, "workspace config"));
     cf_free(&f);
 }
 

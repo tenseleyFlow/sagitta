@@ -14,6 +14,7 @@ const YewTest yew_tests[] = {
     T(trust_prompt_routes_all_terminal_answers_through_event_loop),
     T(trust_prompt_view_is_readonly_and_reprompts_after_close),
     T(flconf_loads_builtin_user_workspace_in_precedence_order),
+    T(flconf_workspace_cannot_weaken_ai_redaction),
     T(flconf_parse_error_isolated_to_its_source),
     T(flconf_reload_parse_error_keeps_old_binding_live),
     T(flconf_runtime_error_tears_down_source_and_continues),

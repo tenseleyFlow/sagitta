@@ -13,6 +13,7 @@
 #include "edit/option.h"
 #include "fl/gc.h"
 #include "fl/flruntime.h"
+#include "fl/origin.h"
 #include "fl/fltxn.h"
 #include "fl/suggest.h"
 #include "search/regex.h"
@@ -1308,6 +1309,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     u32 n = 0U;
     u32 i;
     u32 origin;
+    FlOrigin caller;
 
     if (vm == NULL || out == NULL || nargs != 1U ||
         args[0].t != (u8)FL_MAP)
@@ -1319,6 +1321,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     origin = fl_origin_of_frame(vm);
     if (origin == FL_ORIGIN_ID_NONE)
         return fl_raise(vm, "handle", "set: callback has no editor origin");
+    caller = fl_cap_origin(vm);
     staged = yew_xcalloc(fl_map_count(map) == 0U ? 1U : fl_map_count(map),
                          sizeof(*staged));
     while (fl_map_iter(map, &cursor, &key, &value)) {
@@ -1329,6 +1332,15 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
             return fl_raise(vm, "type", "set: option names must be strings");
         }
         staged[n].name = (const FlStr *)key.as.o;
+        if (caller.kind == (u8)FL_ORIGIN_WORKSPACE &&
+            staged[n].name->len == sizeof("ai.on_redact") - 1U &&
+            memcmp(staged[n].name->b, "ai.on_redact",
+                   sizeof("ai.on_redact") - 1U) == 0) {
+            free(staged);
+            return fl_raise(vm, "capability",
+                            "set: ai.on_redact may not be set from "
+                            "FL_ORIGIN_WORKSPACE (the workspace config)");
+        }
         if (!option_from_fl(vm, value, &staged[n].value)) {
             free(staged);
             return false;

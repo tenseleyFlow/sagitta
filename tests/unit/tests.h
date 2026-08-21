@@ -1873,6 +1873,7 @@ void test_runtime_defaults_parse_run_style_and_options(void);
 void test_trust_prompt_routes_all_terminal_answers_through_event_loop(void);
 void test_trust_prompt_view_is_readonly_and_reprompts_after_close(void);
 void test_flconf_loads_builtin_user_workspace_in_precedence_order(void);
+void test_flconf_workspace_cannot_weaken_ai_redaction(void);
 void test_flconf_parse_error_isolated_to_its_source(void);
 void test_flconf_reload_parse_error_keeps_old_binding_live(void);
 void test_flconf_runtime_error_tears_down_source_and_continues(void);

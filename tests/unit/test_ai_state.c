@@ -47,6 +47,10 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
 {
     static const AiOptionDefault rows[] = {
         {"ai.enable", YEW_OPT_BOOL, 0, false, 0, 0},
+        {"ai.deny_replace", YEW_OPT_BOOL, 0, false, 0, 0},
+        {"ai.exclude_replace", YEW_OPT_BOOL, 0, false, 0, 0},
+        {"ai.badge_host_max", YEW_OPT_INT, 20, false, 8, 255},
+        {"ai.debug_bodies", YEW_OPT_BOOL, 0, false, 0, 0},
         {"ai.allow_plain_remote", YEW_OPT_BOOL, 0, false, 0, 0},
         {"ai.key_cache", YEW_OPT_BOOL, 0, true, 0, 0},
         {"ai.connect_timeout_ms", YEW_OPT_INT, 2000, false, 1, 600000},
@@ -95,6 +99,30 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
             YEW_ASSERT(!yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
                                          (u32)strlen(row->name), &edge,
                                          &err));
+        }
+    }
+    {
+        static const struct {
+            const char *name;
+            const char *value;
+        } enums[] = {
+            {"ai.default_workspace", "ask"},
+            {"ai.on_redact", "block"},
+            {"ai.badge", "on"}
+        };
+
+        for (i = 0U; i < YEW_ARRAY_LEN(enums); i++) {
+            const OptDesc *desc = yew_opt_desc(
+                enums[i].name, (u32)strlen(enums[i].name));
+            OptVal value = ai_option_get(&ed, enums[i].name);
+
+            YEW_ASSERT_NOT_NULL(desc);
+            YEW_ASSERT_EQ_U64(desc->scope, YEW_OPT_GLOBAL);
+            YEW_ASSERT_EQ_U64(desc->type, YEW_OPT_ENUM);
+            YEW_ASSERT_EQ_U64(value.type, YEW_OPT_ENUM);
+            YEW_ASSERT_EQ_U64(value.as.str.len, strlen(enums[i].value));
+            YEW_ASSERT_EQ_MEM(value.as.str.s, enums[i].value,
+                              value.as.str.len);
         }
     }
     YEW_ASSERT(yew_ai_state_key_cache_enabled(&ed));

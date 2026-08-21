@@ -62,6 +62,15 @@ static const char *const lsp_open_in_values[] = {
 static const char *const ai_fim_values[] = {
     "auto", "on", "off", NULL
 };
+static const char *const ai_default_workspace_values[] = {
+    "ask", "allow", "deny", NULL
+};
+static const char *const ai_on_redact_values[] = {
+    "block", "elide", "off", NULL
+};
+static const char *const ai_badge_values[] = {
+    "on", "off", NULL
+};
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -210,6 +219,9 @@ const OptDesc yew_opts[] = {
      0, 0, NULL, option_changed, "Enable AI features after disclosure"},
     {"ai.backend", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
      0, 0, NULL, option_changed, "Selected AI backend name"},
+    {"ai.default_workspace", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("ask"),
+     ai_default_workspace_values, 0, 0, NULL, option_changed,
+     "Policy for workspaces without an explicit AI grant"},
     {"ai.context_bytes", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(4096), NULL,
      256, 65536, NULL, option_changed,
      "Maximum prefix and suffix context bytes"},
@@ -229,6 +241,24 @@ const OptDesc yew_opts[] = {
     {"ai.fim", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("auto"),
      ai_fim_values, 0, 0, NULL, option_changed,
      "Fill-in-the-middle policy: auto, on, or off"},
+    {"ai.on_redact", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("block"),
+     ai_on_redact_values, 0, 0, NULL, option_changed,
+     "Action when AI context matches a secret deny rule"},
+    {"ai.deny_replace", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
+     NULL, 0, 0, NULL, option_changed,
+     "Replace shipped AI deny rules instead of appending user rules"},
+    {"ai.exclude_replace", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
+     NULL, 0, 0, NULL, option_changed,
+     "Replace shipped AI path exclusions instead of appending user rows"},
+    {"ai.badge", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("on"),
+     ai_badge_values, 0, 0, NULL, option_changed,
+     "Show the AI statusline badge for local backends"},
+    {"ai.badge_host_max", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(20), NULL,
+     8, 255, NULL, option_changed,
+     "Maximum remote AI hostname cells shown in the statusline badge"},
+    {"ai.debug_bodies", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
+     NULL, 0, 0, NULL, option_changed,
+     "Allow AI prompt and completion logging with YEW_AI_DEBUG=1"},
     {"ai.allow_plain_remote", YEW_OPT_BOOL, YEW_OPT_GLOBAL,
      OPT_BOOL(false), NULL, 0, 0, NULL, option_changed,
      "Allow plain HTTP AI endpoints outside the local host"},
