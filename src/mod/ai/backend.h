@@ -19,6 +19,12 @@ typedef enum {
 } AiTransport;
 
 typedef enum {
+    YEW_AI_FIM_AUTO = 0,
+    YEW_AI_FIM_ON,
+    YEW_AI_FIM_OFF
+} AiFimPolicy;
+
+typedef enum {
     YEW_AI_OK = 0,
     YEW_AI_ERR_UNREACHABLE,
     YEW_AI_ERR_AUTH,
@@ -83,6 +89,7 @@ typedef struct AiBackend {
     double temperature;
     bool stream;
     bool fim;
+    u8 fim_policy;
 } AiBackend;
 
 typedef struct AiBlockState AiBlockState;

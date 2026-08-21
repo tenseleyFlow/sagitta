@@ -8,6 +8,7 @@
 #include "edit/motion.h"
 #include "edit/option.h"
 #include "fl/flruntime.h"
+#include "mod/ai/ai.h"
 #include "text/edit.h"
 #include "ui/message.h"
 #include "ui/shadowdraw.h"
@@ -80,6 +81,10 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     if (win == NULL)
         return;
     shadow = &win->shadow;
+    if (ed != NULL && !shadow->accepting &&
+        shadow->answers[YEW_SHADOW_AI].live)
+        yew_ai_shadow_dismiss_note(
+            ed, shadow->answers[YEW_SHADOW_AI].sug.seq);
     if (ed != NULL && shadow->vrows != 0U) {
         yew_ed_damage_rows(ed, shadow->draw_row,
                            (u16)(shadow->draw_row + shadow->vrows));
@@ -588,7 +593,7 @@ i64 yew_shadow_revalidate(const TextBuf *tb, const ShadowSug *suggestion,
     return (i64)compared;
 }
 
-static bool shadow_accept_n(Ed *ed, Win *win, u64 nbytes)
+static bool shadow_accept_n(Ed *ed, Win *win, u64 nbytes, u64 *accepted)
 {
     Shadow *shadow;
     Cursor *cursor;
@@ -619,6 +624,8 @@ static bool shadow_accept_n(Ed *ed, Win *win, u64 nbytes)
         hi = shadow->sug.len;
     if (hi <= lo)
         return false;
+    if (accepted != NULL)
+        *accepted = hi - lo;
 
     edit = yew_ed_edit_ctx_for(ed, win);
     own_txn = edit.undo != NULL && edit.undo->depth == 0U;
@@ -646,8 +653,10 @@ static bool shadow_accept_n(Ed *ed, Win *win, u64 nbytes)
         yew_shadow_dismiss(ed, win);
         return false;
     }
-    if (hi == shadow->sug.len)
+    if (hi == shadow->sug.len) {
+        shadow->accepting = true;
         yew_shadow_dismiss(ed, win);
+    }
     return true;
 }
 
@@ -681,21 +690,28 @@ bool yew_shadow_accept_word(Ed *ed, Win *win, bool alt)
     Cursor *cursor;
     i64 done;
     u64 nbytes;
+    u64 accepted = 0U;
+    u32 seq;
+    u8 prov;
 
     if (ed == NULL || win == NULL || !win->shadow.live ||
         win->buf == NULL || win->buf->tb == NULL ||
         win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len)
         return false;
     shadow = &win->shadow;
+    seq = shadow->sug.seq;
+    prov = shadow->sug.prov;
     cursor = &win->cs.curs.data[win->cs.primary];
     done = yew_shadow_revalidate(win->buf->tb, &shadow->sug, cursor->pos);
     if (done < 0)
         nbytes = shadow->sug.len;
     else
         nbytes = shadow_word_len(ed, &shadow->sug, (u64)done, alt);
-    if (!shadow_accept_n(ed, win, nbytes))
+    if (!shadow_accept_n(ed, win, nbytes, &accepted))
         return false;
     ed->shadow_stats.accepted_word++;
+    if (prov == (u8)YEW_SHADOW_AI)
+        yew_ai_shadow_accept_note(ed, seq, 0U, accepted);
     return true;
 }
 
@@ -706,12 +722,17 @@ bool yew_shadow_accept_line(Ed *ed, Win *win)
     i64 done;
     u64 nbytes;
     const u8 *newline;
+    u64 accepted = 0U;
+    u32 seq;
+    u8 prov;
 
     if (ed == NULL || win == NULL || !win->shadow.live ||
         win->buf == NULL || win->buf->tb == NULL ||
         win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len)
         return false;
     shadow = &win->shadow;
+    seq = shadow->sug.seq;
+    prov = shadow->sug.prov;
     cursor = &win->cs.curs.data[win->cs.primary];
     done = yew_shadow_revalidate(win->buf->tb, &shadow->sug, cursor->pos);
     if (done < 0)
@@ -724,9 +745,11 @@ bool yew_shadow_accept_line(Ed *ed, Win *win)
             nbytes = (u64)(newline -
                            (shadow->sug.text + (u64)done)) + 1U;
     }
-    if (!shadow_accept_n(ed, win, nbytes))
+    if (!shadow_accept_n(ed, win, nbytes, &accepted))
         return false;
     ed->shadow_stats.accepted_line++;
+    if (prov == (u8)YEW_SHADOW_AI)
+        yew_ai_shadow_accept_note(ed, seq, 1U, accepted);
     return true;
 }
 
@@ -736,18 +759,25 @@ bool yew_shadow_accept_all(Ed *ed, Win *win)
     Cursor *cursor;
     i64 done;
     u64 nbytes;
+    u64 accepted = 0U;
+    u32 seq;
+    u8 prov;
 
     if (ed == NULL || win == NULL || !win->shadow.live ||
         win->buf == NULL || win->buf->tb == NULL ||
         win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len)
         return false;
     shadow = &win->shadow;
+    seq = shadow->sug.seq;
+    prov = shadow->sug.prov;
     cursor = &win->cs.curs.data[win->cs.primary];
     done = yew_shadow_revalidate(win->buf->tb, &shadow->sug, cursor->pos);
     nbytes = done < 0 ? shadow->sug.len : shadow->sug.len - (u64)done;
-    if (!shadow_accept_n(ed, win, nbytes))
+    if (!shadow_accept_n(ed, win, nbytes, &accepted))
         return false;
     ed->shadow_stats.accepted_all++;
+    if (prov == (u8)YEW_SHADOW_AI)
+        yew_ai_shadow_accept_note(ed, seq, 2U, accepted);
     return true;
 }
 

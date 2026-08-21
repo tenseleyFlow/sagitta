@@ -23,6 +23,8 @@ CmdStatus yew_ai_cmd_models(CmdCtx *cx);
 CmdStatus yew_ai_cmd_ping(CmdCtx *cx);
 CmdStatus yew_ai_cmd_log(CmdCtx *cx);
 CmdStatus yew_ai_cmd_reload(CmdCtx *cx);
+CmdStatus yew_ai_cmd_stats(CmdCtx *cx);
+CmdStatus yew_ai_cmd_open(CmdCtx *cx);
 
 /* Module-neutral, Ed-owned lifecycle.  Both the enabled implementation and
  * stripped shim provide it, keeping compile-time module checks out of core. */
@@ -37,10 +39,17 @@ bool yew_ai_backend_define(Ed *ed, const FlStr *name, const FlMap *config,
                            char *err, size_t errsz);
 u32 yew_ai_backend_count(const Ed *ed);
 const AiBackendEntry *yew_ai_backend_at(const Ed *ed, u32 index);
+const AiBackendEntry *yew_ai_backend_selected(const Ed *ed);
 
 /* Module-neutral event-loop hooks. */
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n);
 void yew_ai_pump(Ed *ed, const struct pollfd *pfd, u32 n);
 i64 yew_ai_deadline(const Ed *ed, i64 now_ms);
+
+/* Sprint 49's passive completion provider.  Registration is process-global;
+ * the Ed argument is accepted for the module-neutral startup surface. */
+void yew_ai_shadow_init(Ed *ed);
+void yew_ai_shadow_accept_note(Ed *ed, u32 seq, u8 kind, u64 bytes);
+void yew_ai_shadow_dismiss_note(Ed *ed, u32 seq);
 
 #endif

@@ -943,11 +943,12 @@ static const CmdDesc builtins[] = {
      "Reload AI backends and clear cached credentials", NULL},
     AI_DEFER("ed.ai.enable", 50, "enable AI after disclosure"),
     AI_DEFER("ed.ai.disable", 50, "disable AI"),
-    AI_DEFER("ed.ai.stats", 49, "show AI request statistics"),
+    {"ed.ai.stats", yew_ai_cmd_stats, YEW_ARITY_NONE, 0U,
+     "Show local AI request statistics", NULL},
     DEFER("ed.git.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
           "stage the selected path"),
-    DEFER("ed.ai.open", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 49,
-          "open the AI prompt"),
+    {"ed.ai.open", yew_ai_cmd_open, YEW_ARITY_NONE, 0U,
+     "Explain the ghost-only AI surface", NULL},
     DEFER("ed.plug.reload", YEW_ARITY_OPT_STR, 0U, 54,
           "reload a plugin")
 };

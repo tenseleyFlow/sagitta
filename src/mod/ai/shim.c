@@ -69,6 +69,12 @@ const AiBackendEntry *yew_ai_backend_at(const Ed *ed, u32 index)
     return NULL;
 }
 
+const AiBackendEntry *yew_ai_backend_selected(const Ed *ed)
+{
+    (void)ed;
+    return NULL;
+}
+
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
 {
     (void)ed;
@@ -88,6 +94,25 @@ i64 yew_ai_deadline(const Ed *ed, i64 now_ms)
     (void)ed;
     (void)now_ms;
     return -1;
+}
+
+void yew_ai_shadow_init(Ed *ed)
+{
+    (void)ed;
+}
+
+void yew_ai_shadow_accept_note(Ed *ed, u32 seq, u8 kind, u64 bytes)
+{
+    (void)ed;
+    (void)seq;
+    (void)kind;
+    (void)bytes;
+}
+
+void yew_ai_shadow_dismiss_note(Ed *ed, u32 seq)
+{
+    (void)ed;
+    (void)seq;
 }
 
 static CmdStatus require_ai(CmdCtx *cx)
@@ -134,6 +159,16 @@ CmdStatus yew_ai_cmd_log(CmdCtx *cx)
 }
 
 CmdStatus yew_ai_cmd_reload(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_stats(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_open(CmdCtx *cx)
 {
     return require_ai(cx);
 }

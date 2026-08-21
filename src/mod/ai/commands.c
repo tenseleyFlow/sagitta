@@ -140,24 +140,23 @@ static i64 option_int(Ed *ed, const char *name, i64 fallback)
 
 static AiBackendEntry *only_backend(Ed *ed)
 {
-    u32 count;
+    const AiBackendEntry *selected;
 
     if (ed == NULL || ed->ai == NULL)
         return NULL;
-    count = yew_ai_registry_count(&ed->ai->backends);
-    if (count == 0U) {
+    if (yew_ai_registry_count(&ed->ai->backends) == 0U) {
         yew_msg(ed, YEW_MSG_INFO,
                 "no AI backends configured; add ai.backend(...) to init.fl");
         return NULL;
     }
-    if (count != 1U) {
+    selected = yew_ai_backend_selected(ed);
+    if (selected == NULL) {
         yew_msg(ed, YEW_MSG_INFO,
-                "multiple AI backends configured; backend selection lands in Sprint 49");
+                "select a configured backend with set({\"ai.backend\": \"name\"})");
         return NULL;
     }
     return yew_ai_registry_find_mut(
-        &ed->ai->backends,
-        yew_ai_registry_at(&ed->ai->backends, 0U)->backend.name);
+        &ed->ai->backends, selected->backend.name);
 }
 
 static void command_call_free(AiCommandCall *call)

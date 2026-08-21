@@ -166,8 +166,7 @@ bool yew_http_url_parse(Arena *a, const char *url, HttpUrl *out,
         return http_error(err, errsz, "%s", http_tls_error);
     if (ascii_prefix_ci(url, "unix:"))
         return http_error(err, errsz,
-                          "unix socket endpoints are deferred to Sprint 49 "
-                          "and will not ship in yew 1.0");
+                          "unix socket endpoints are not a yew 1.0 feature");
     if (!ascii_prefix_ci(url, "http://"))
         return http_error(err, errsz, "bad url");
 
@@ -231,6 +230,11 @@ bool yew_http_url_parse(Arena *a, const char *url, HttpUrl *out,
         return http_error(err, errsz, "bad url");
 
     host = arena_strndup(a, host_start, (size_t)(host_end - host_start));
+    if (getenv("YEW_AI_MOCK") != NULL &&
+        strcmp(getenv("YEW_AI_MOCK"), "1") == 0 &&
+        !host_loopback(host, port))
+        return http_error(err, errsz,
+                          "YEW_AI_MOCK permits loopback endpoints only");
     path = *tail == '\0' ? arena_strdup(a, "/") : path_copy(a, tail);
     out->host = host;
     out->port = port;
@@ -1641,5 +1645,8 @@ void yew_http_abort(Ed *ed, HttpConn *c)
     if (c == NULL || c->state == (u8)YEW_HC_DONE ||
         c->state == (u8)YEW_HC_DEAD)
         return;
+    c->reusable = false;
+    if (c->fd >= 0)
+        (void)shutdown(c->fd, SHUT_RDWR);
     conn_error(c, YEW_AI_ERR_CANCELLED, "HTTP request cancelled");
 }

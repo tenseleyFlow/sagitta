@@ -46,7 +46,9 @@ AiTemplate yew_ai_template_of(const AiBackend *backend)
 
     if (backend == NULL || backend->kind != (u8)YEW_AI_OLLAMA)
         return YEW_AI_TPL_CHAT;
-    if (backend->fim)
+    if (backend->fim_policy == (u8)YEW_AI_FIM_OFF)
+        return YEW_AI_TPL_CHAT;
+    if (backend->fim || backend->fim_policy == (u8)YEW_AI_FIM_ON)
         return YEW_AI_TPL_FIM;
     for (i = 0U; i < YEW_ARRAY_LEN(families); i++)
         if (prefix_ci(backend->model, families[i]))
