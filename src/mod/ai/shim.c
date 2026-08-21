@@ -128,6 +128,13 @@ void yew_ai_workspace_session_set(Ed *ed, AiWsGrant grant)
     (void)grant;
 }
 
+const char *yew_ai_path_exclusion(Ed *ed, const char *path)
+{
+    (void)ed;
+    (void)path;
+    return NULL;
+}
+
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
 {
     (void)ed;

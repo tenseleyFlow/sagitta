@@ -491,6 +491,7 @@ CmdStatus yew_ai_cmd_status(CmdCtx *cx)
 {
     OptVal enabled;
     const AiBackendEntry *backend;
+    const char *excluded;
     AiWsGrant grant;
 
     if (cx == NULL || cx->ed == NULL)
@@ -498,6 +499,13 @@ CmdStatus yew_ai_cmd_status(CmdCtx *cx)
     (void)yew_opt_get(cx->ed, NULL, NULL, "ai.enable", 9U, &enabled);
     backend = yew_ai_backend_selected(cx->ed);
     grant = yew_ai_workspace_grant(cx->ed);
+    excluded = cx->ed->win == NULL || cx->ed->win->buf == NULL ? NULL :
+        yew_ai_path_exclusion(cx->ed, cx->ed->win->buf->path);
+    if (excluded != NULL) {
+        yew_msg(cx->ed, YEW_MSG_INFO,
+                "AI: excluded (path matches '%s')", excluded);
+        return YEW_CMD_OK;
+    }
     yew_msg(cx->ed, YEW_MSG_INFO, "AI: %s; backend=%s; workspace=%s",
             enabled.type == (u8)YEW_OPT_BOOL && enabled.as.b ? "enabled" :
                                                                     "disabled",

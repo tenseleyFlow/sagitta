@@ -61,6 +61,8 @@ AiWsGrant yew_ai_workspace_grant(Ed *ed);
 bool yew_ai_workspace_allowed(Ed *ed);
 void yew_ai_workspace_set(Ed *ed, AiWsGrant grant);
 void yew_ai_workspace_session_set(Ed *ed, AiWsGrant grant);
+/* Returns the borrowed shipped/user glob that excludes path, or NULL. */
+const char *yew_ai_path_exclusion(Ed *ed, const char *path);
 
 /* Module-neutral event-loop hooks. */
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n);

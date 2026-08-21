@@ -1,5 +1,6 @@
 #include "mod/ai/ai.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,8 +25,63 @@ static bool ai_redact_policy_check(Ed *ed, const AiCtx *context,
 
 static bool ai_path_policy_check(Ed *ed, const char *path)
 {
-    return ed != NULL && ed->ai != NULL &&
-           yew_ai_path_excluded(ed->ai->paths, path, NULL);
+    return yew_ai_path_exclusion(ed, path) != NULL;
+}
+
+static const char *ai_relative_path(const Ed *ed, const char *path,
+                                    char out[PATH_MAX])
+{
+    const char *root;
+    const char *relative;
+    const char *base;
+    size_t root_len;
+    size_t len;
+    size_t i;
+
+    if (ed == NULL || path == NULL || path[0] == '\0')
+        return "";
+    root = yew_ws_root(ed);
+    relative = path;
+    if (path[0] == '/') {
+        root_len = strlen(root);
+        if (strncmp(path, root, root_len) == 0 &&
+            (root_len == 1U || path[root_len] == '/' ||
+             path[root_len] == '\0')) {
+            relative = path + root_len;
+            if (*relative == '/')
+                relative++;
+        } else {
+            base = strrchr(path, '/');
+            relative = base == NULL ? path : base + 1;
+        }
+    } else {
+        while (relative[0] == '.' && relative[1] == '/')
+            relative += 2;
+        if (strcmp(relative, "..") == 0 ||
+            strncmp(relative, "../", 3U) == 0) {
+            base = strrchr(relative, '/');
+            relative = base == NULL ? relative : base + 1;
+        }
+    }
+    len = strlen(relative);
+    if (len >= PATH_MAX)
+        return "";
+    for (i = 0U; i < len; i++)
+        out[i] = relative[i] == '\\' ? '/' : relative[i];
+    out[len] = '\0';
+    return out;
+}
+
+const char *yew_ai_path_exclusion(Ed *ed, const char *path)
+{
+    char relative[PATH_MAX];
+    AiPathHit hit = {0};
+
+    if (ed == NULL || ed->ai == NULL ||
+        !yew_ai_path_excluded(ed->ai->paths,
+                              ai_relative_path(ed, path, relative), &hit))
+        return NULL;
+    return hit.pattern;
 }
 
 static AiWsGrant ai_workspace_resolve(Ed *ed, bool notify)

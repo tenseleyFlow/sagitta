@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "edit/ed.h"
+#include "mod/ai/ai.h"
 #include "mod/ai/redact.h"
 #include "util/base.h"
 
@@ -32,6 +34,8 @@ static const PathCase default_cases[] = {
 void test_ai_paths_all_defaults_case_and_nesting(void)
 {
     AiPathPolicy *policy = yew_ai_path_policy_new(NULL, 0U, false, NULL);
+    char absolute[4096];
+    Ed ed;
     size_t i;
 
     YEW_ASSERT_NOT_NULL(policy);
@@ -45,6 +49,15 @@ void test_ai_paths_all_defaults_case_and_nesting(void)
         YEW_ASSERT(yew_ai_path_excluded(policy, default_cases[i].path, &hit));
         YEW_ASSERT_EQ_STR(hit.pattern, default_cases[i].pattern);
     }
+    yew_ed_init(&ed);
+    YEW_ASSERT(snprintf(absolute, sizeof(absolute), "%s/%s",
+                        yew_ws_root(&ed), ".docker/config.json") > 0);
+    YEW_ASSERT_EQ_STR(yew_ai_path_exclusion(&ed, absolute),
+                      ".docker/config.json");
+    YEW_ASSERT_EQ_STR(yew_ai_path_exclusion(&ed,
+                      "./vendor/.ssh/id_ed25519"), ".ssh/");
+    YEW_ASSERT_NULL(yew_ai_path_exclusion(&ed, "src/editor.c"));
+    yew_ed_free(&ed);
     yew_ai_path_policy_free(policy);
 }
 
