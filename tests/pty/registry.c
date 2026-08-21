@@ -5661,6 +5661,7 @@ static bool s49_ai_open(PtyCtx *c, pid_t *server, char *path,
                  "transport: \"http\", url: \"http://127.0.0.1:%u\", "
                  "model: \"pty-model\"})\n"
                  "set({\"ai.enable\": true, \"ai.backend\": \"local\", "
+                 "\"ai.default_workspace\": \"allow\", "
                  "\"ai.frame_ms\": 0, \"shadow.ai_debounce_ms\": 0, "
                  "\"shadow.providers\": \"ai\"})\n",
                  (unsigned)port);
@@ -5672,19 +5673,6 @@ static bool s49_ai_open(PtyCtx *c, pid_t *server, char *path,
     ptc_spawn(c, ptc_yew_bin(c), "--config", config, path, NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
-    return !c->failed;
-}
-
-static bool s49_ai_first_frame(PtyCtx *c)
-{
-    u32 before = c->vt.nsync_pairs;
-
-    ptc_keys(c, "end a X");
-    ptc_wait_sync_pairs(c, before + 2U);
-    ptc_check(c, s43_screen_contains(&c->vt, "anchorXint "),
-              "Sprint 49 intermediate AI ghost did not appear");
-    ptc_check(c, !s43_screen_contains(&c->vt, "answer = 42;"),
-              "Sprint 49 stream skipped its intermediate frame");
     return !c->failed;
 }
 
@@ -5700,6 +5688,16 @@ static bool s49_ai_wait_for(PtyCtx *c, const char *text, u32 max_frames)
         ptc_wait_sync_pairs(c, before + 1U);
     }
     return !c->failed && s43_screen_contains(&c->vt, text);
+}
+
+static bool s49_ai_first_frame(PtyCtx *c)
+{
+    ptc_keys(c, "end a X");
+    ptc_check(c, s49_ai_wait_for(c, "anchorXint ", 32U),
+              "Sprint 49 intermediate AI ghost did not appear");
+    ptc_check(c, !s43_screen_contains(&c->vt, "answer = 42;"),
+              "Sprint 49 stream skipped its intermediate frame");
+    return !c->failed;
 }
 
 static void s49_ai_finish(PtyCtx *c, pid_t server, const char *path,
