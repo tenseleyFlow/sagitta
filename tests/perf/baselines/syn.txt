@@ -9,7 +9,7 @@ line_cap_512k 65 70
 c_kitchen_line 1950 2700
 c_kitchen_edit 3100 18000
 comment_line 70 110
-comment_edit 250 300
+comment_edit 310 330
 minified_line 30 35
 minified_edit 1450 1800
 fletch_line 1100 1550
