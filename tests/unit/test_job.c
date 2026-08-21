@@ -95,6 +95,245 @@ static u32 spawn_argv(Ed *ed, char **argv, char *err, size_t errsz)
     return yew_job_spawn(ed, &spec, err, errsz);
 }
 
+static bool run_until_released(Ed *ed, u32 id)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_job_find(ed, id) != NULL) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(ed, pfd, &n);
+        if (n != 0U)
+            (void)poll(pfd, (nfds_t)n, 20);
+        else
+            (void)poll(NULL, 0U, 5);
+        yew_job_pump(ed, pfd, n);
+        yew_job_reap(ed);
+        yew_job_tick(ed, yew_now_ms());
+        yew_job_settle(ed);
+        if (yew_now_ms() - start > 10000)
+            return false;
+    }
+    return true;
+}
+
+typedef struct JobCallbackWitness {
+    Bytebuf out;
+    Bytebuf err;
+    YewJobState state;
+    int exit_code;
+    u32 completes;
+    u32 destroys;
+    bool reaped;
+    bool pipes_eof;
+    bool destroyed_after_complete;
+    bool collect_capped;
+} JobCallbackWitness;
+
+static void job_callback_test_complete(void *owner, Ed *ed,
+                                       const YewJob *job)
+{
+    JobCallbackWitness *w = owner;
+
+    (void)ed;
+    w->completes++;
+    w->state = job->state;
+    w->exit_code = job->exit_code;
+    w->reaped = job->reaped;
+    w->pipes_eof = job->out_fd == -1 && job->err_fd == -1;
+    w->collect_capped = job->collect_capped;
+    bytebuf_append(&w->out, job->collect.data, job->collect.len);
+    bytebuf_append(&w->err, job->collect_err.data, job->collect_err.len);
+}
+
+static void job_callback_test_destroy(void *owner)
+{
+    JobCallbackWitness *w = owner;
+
+    w->destroys++;
+    w->destroyed_after_complete = w->completes == 1U;
+}
+
+static const YewJobCallbackOps job_callback_test_ops = {
+    job_callback_test_complete,
+    job_callback_test_destroy
+};
+
+static void job_callback_witness_init(JobCallbackWitness *w)
+{
+    (void)memset(w, 0, sizeof(*w));
+    bytebuf_init(&w->out);
+    bytebuf_init(&w->err);
+}
+
+static void job_callback_witness_free(JobCallbackWitness *w)
+{
+    bytebuf_free(&w->out);
+    bytebuf_free(&w->err);
+}
+
+static char *job_test_env_copy(const char *name)
+{
+    const char *value = getenv(name);
+    size_t len;
+    char *copy;
+
+    if (value == NULL)
+        return NULL;
+    len = strlen(value);
+    copy = yew_xmalloc(len + 1U);
+    (void)memcpy(copy, value, len + 1U);
+    return copy;
+}
+
+static void job_test_env_restore(const char *name, char *saved)
+{
+    if (saved != NULL) {
+        YEW_ASSERT_EQ_I64(setenv(name, saved, 1), 0);
+        free(saved);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv(name), 0);
+    }
+}
+
+void test_job_callback_waits_for_reap_and_both_eofs_then_releases(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobCallbackWitness w;
+    char *argv[] = {
+        (char *)"/bin/sh", (char *)"-c",
+        (char *)"printf early; (sleep 0.2; printf late; printf err >&2) & "
+                 "exit 7",
+        NULL
+    };
+    char err[256] = {0};
+    u32 id;
+
+    job_fixture(&ed);
+    job_callback_witness_init(&w);
+    spec.argv = argv;
+    spec.sink = YEW_SINK_CALLBACK;
+    spec.callback_owner = &w;
+    spec.callback_ops = &job_callback_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT(run_until_released(&ed, id));
+    YEW_ASSERT(yew_job_find(&ed, id) == NULL);
+    YEW_ASSERT_EQ_U64(w.completes, 1U);
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    YEW_ASSERT(w.destroyed_after_complete);
+    YEW_ASSERT(w.reaped);
+    YEW_ASSERT(w.pipes_eof);
+    YEW_ASSERT(w.state == YEW_JOB_EXITED);
+    YEW_ASSERT_EQ_I64(w.exit_code, 7);
+    YEW_ASSERT_EQ_MEM(w.out.data, "earlylate", 9U);
+    YEW_ASSERT_EQ_MEM(w.err.data, "err", 3U);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    job_callback_witness_free(&w);
+}
+
+void test_job_callback_collect_max_and_destroy_on_teardown(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobCallbackWitness capped;
+    JobCallbackWitness teardown;
+    char *output_argv[] = {(char *)"/bin/sh", (char *)"-c",
+                           (char *)"printf 12345", NULL};
+    char *sleep_argv[] = {(char *)"/bin/sh", (char *)"-c",
+                          (char *)"sleep 30", NULL};
+    char err[256] = {0};
+    u32 id;
+
+    job_fixture(&ed);
+    job_callback_witness_init(&capped);
+    job_callback_witness_init(&teardown);
+    spec.argv = output_argv;
+    spec.sink = YEW_SINK_CALLBACK;
+    spec.collect_max = 4U;
+    spec.callback_owner = &capped;
+    spec.callback_ops = &job_callback_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT(run_until_released(&ed, id));
+    YEW_ASSERT(capped.collect_capped);
+    YEW_ASSERT_EQ_U64(capped.completes, 1U);
+    YEW_ASSERT_EQ_U64(capped.destroys, 1U);
+
+    (void)memset(&spec, 0, sizeof(spec));
+    spec.argv = sleep_argv;
+    spec.sink = YEW_SINK_CALLBACK;
+    spec.callback_owner = &teardown;
+    spec.callback_ops = &job_callback_test_ops;
+    YEW_ASSERT(yew_job_spawn(&ed, &spec, err, sizeof(err)) != 0U);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(teardown.completes, 0U);
+    YEW_ASSERT_EQ_U64(teardown.destroys, 1U);
+    job_callback_witness_free(&capped);
+    job_callback_witness_free(&teardown);
+}
+
+void test_job_environment_overrides_are_copied_and_name_exact(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobCallbackWitness w;
+    const char *const env_set[] = {"YEW_JOB_ENV_SET=child",
+                                    "YEW_JOB_ENV_NEW=new", NULL};
+    const char *const env_unset[] = {"YEW_JOB_ENV_EXACT", NULL};
+    const char *const env_prefix[] = {"YEW_JOB_ENV_PREFIX_", NULL};
+    char *argv[] = {
+        (char *)"/bin/sh", (char *)"-c",
+        (char *)"printf '%s|%s|%s|%s|%s|%s' \"$YEW_JOB_ENV_KEEP\" "
+                 "\"$YEW_JOB_ENV_SET\" \"${YEW_JOB_ENV_EXACT-unset}\" "
+                 "\"${YEW_JOB_ENV_EXACTLY-unset}\" "
+                 "\"${YEW_JOB_ENV_PREFIX_ONE-unset}\" "
+                 "\"$YEW_JOB_ENV_NEW\"",
+        NULL
+    };
+    char err[256] = {0};
+    u32 id;
+    char *saved_keep = job_test_env_copy("YEW_JOB_ENV_KEEP");
+    char *saved_set = job_test_env_copy("YEW_JOB_ENV_SET");
+    char *saved_exact = job_test_env_copy("YEW_JOB_ENV_EXACT");
+    char *saved_exactly = job_test_env_copy("YEW_JOB_ENV_EXACTLY");
+    char *saved_prefix = job_test_env_copy("YEW_JOB_ENV_PREFIX_ONE");
+
+    YEW_ASSERT_EQ_I64(setenv("YEW_JOB_ENV_KEEP", "parent", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_JOB_ENV_SET", "parent", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_JOB_ENV_EXACT", "gone", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_JOB_ENV_EXACTLY", "keep", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_JOB_ENV_PREFIX_ONE", "gone", 1), 0);
+    job_fixture(&ed);
+    job_callback_witness_init(&w);
+    spec.argv = argv;
+    spec.sink = YEW_SINK_CALLBACK;
+    spec.env_set = env_set;
+    spec.env_unset = env_unset;
+    spec.env_unset_prefix = env_prefix;
+    spec.callback_owner = &w;
+    spec.callback_ops = &job_callback_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT_EQ_STR(getenv("YEW_JOB_ENV_SET"), "parent");
+    YEW_ASSERT_EQ_STR(getenv("YEW_JOB_ENV_EXACT"), "gone");
+    YEW_ASSERT_EQ_STR(getenv("YEW_JOB_ENV_PREFIX_ONE"), "gone");
+    YEW_ASSERT(run_until_released(&ed, id));
+    YEW_ASSERT_EQ_MEM(w.out.data,
+                      "parent|child|unset|keep|unset|new", 33U);
+    YEW_ASSERT_EQ_U64(w.err.len, 0U);
+    yew_ed_free(&ed);
+    job_callback_witness_free(&w);
+    job_test_env_restore("YEW_JOB_ENV_KEEP", saved_keep);
+    job_test_env_restore("YEW_JOB_ENV_SET", saved_set);
+    job_test_env_restore("YEW_JOB_ENV_EXACT", saved_exact);
+    job_test_env_restore("YEW_JOB_ENV_EXACTLY", saved_exactly);
+    job_test_env_restore("YEW_JOB_ENV_PREFIX_ONE", saved_prefix);
+}
+
 void test_job_buffer_append_updates_syntax(void)
 {
     Ed ed;

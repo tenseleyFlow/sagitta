@@ -176,6 +176,18 @@ static void job_stream_destroy(YewJob *j)
     j->stream_destroyed = true;
 }
 
+static void job_callback_destroy(YewJob *j)
+{
+    if (j->callback_destroyed)
+        return;
+    if (j->callback_owner != NULL && j->callback_ops != NULL &&
+        j->callback_ops->destroy != NULL)
+        j->callback_ops->destroy(j->callback_owner);
+    j->callback_owner = NULL;
+    j->callback_ops = NULL;
+    j->callback_destroyed = true;
+}
+
 static void job_wipe_stdin_bytes(YewJob *j)
 {
     if (j->in_bytes == NULL)
@@ -193,11 +205,13 @@ static void job_dispose(YewJob *j)
     job_close(&j->exec_fd);
     bytebuf_free(&j->hold);
     bytebuf_free(&j->collect);
+    bytebuf_free(&j->collect_err);
     bytebuf_free(&j->framed_err);
     bytebuf_free(&j->stream_err);
     job_wipe_stdin_bytes(j);
     job_framed_destroy(j);
     job_stream_destroy(j);
+    job_callback_destroy(j);
     free(j->label);
     (void)memset(j, 0, sizeof(*j));
     j->in_fd = j->out_fd = j->err_fd = j->exec_fd = -1;
@@ -311,7 +325,137 @@ const char *yew_job_shell(void)
 /* Builds the child environment: a copy of environ with the §7 rows applied.
  * The parent's environment is never mutated — putenv() there would leak
  * into every later job and into the editor itself. */
-static char **job_build_env(Ed *ed, Arena *a)
+static bool job_env_name_eq(const char *row, const char *name)
+{
+    size_t len;
+
+    if (row == NULL || name == NULL)
+        return false;
+    len = strlen(name);
+    return len != 0U && strncmp(row, name, len) == 0 && row[len] == '=';
+}
+
+static bool job_env_name_has_prefix(const char *row, const char *prefix)
+{
+    const char *eq;
+    size_t len;
+
+    if (row == NULL || prefix == NULL || prefix[0] == '\0')
+        return false;
+    eq = strchr(row, '=');
+    if (eq == NULL)
+        return false;
+    len = strlen(prefix);
+    return (size_t)(eq - row) >= len && strncmp(row, prefix, len) == 0;
+}
+
+static bool job_env_list_exact(const char *row, const char *const *names)
+{
+    size_t i;
+
+    if (names == NULL)
+        return false;
+    for (i = 0U; names[i] != NULL; i++) {
+        if (job_env_name_eq(row, names[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool job_env_list_prefix(const char *row,
+                                const char *const *prefixes)
+{
+    size_t i;
+
+    if (prefixes == NULL)
+        return false;
+    for (i = 0U; prefixes[i] != NULL; i++) {
+        if (job_env_name_has_prefix(row, prefixes[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool job_env_overridden(const char *row, const YewJobSpec *spec)
+{
+    size_t i;
+
+    if (spec->env_set == NULL)
+        return false;
+    for (i = 0U; spec->env_set[i] != NULL; i++) {
+        const char *set = spec->env_set[i];
+        const char *eq = strchr(set, '=');
+        size_t len;
+
+        if (eq == NULL || eq == set)
+            continue;
+        len = (size_t)(eq - set);
+        if (strncmp(row, set, len) == 0 && row[len] == '=')
+            return true;
+    }
+    return false;
+}
+
+static bool job_env_removed(const char *row, const YewJobSpec *spec)
+{
+    return job_env_list_exact(row, spec->env_unset) ||
+           job_env_list_prefix(row, spec->env_unset_prefix) ||
+           job_env_overridden(row, spec);
+}
+
+static bool job_env_set_valid(const char *row)
+{
+    const char *eq = row != NULL ? strchr(row, '=') : NULL;
+
+    return eq != NULL && eq != row;
+}
+
+static size_t job_env_set_count(const YewJobSpec *spec)
+{
+    size_t n = 0U;
+
+    if (spec->env_set != NULL) {
+        while (spec->env_set[n] != NULL)
+            n++;
+    }
+    return n;
+}
+
+static bool job_env_spec_valid(const YewJobSpec *spec)
+{
+    size_t i;
+
+    if (spec->env_set != NULL) {
+        for (i = 0U; spec->env_set[i] != NULL; i++) {
+            if (!job_env_set_valid(spec->env_set[i]))
+                return false;
+        }
+    }
+    if (spec->env_unset != NULL) {
+        for (i = 0U; spec->env_unset[i] != NULL; i++) {
+            if (spec->env_unset[i][0] == '\0' ||
+                strchr(spec->env_unset[i], '=') != NULL)
+                return false;
+        }
+    }
+    if (spec->env_unset_prefix != NULL) {
+        for (i = 0U; spec->env_unset_prefix[i] != NULL; i++) {
+            if (spec->env_unset_prefix[i][0] == '\0' ||
+                strchr(spec->env_unset_prefix[i], '=') != NULL)
+                return false;
+        }
+    }
+    return true;
+}
+
+static void job_env_append(Arena *a, char **env, size_t *out,
+                           const char *row, const YewJobSpec *spec)
+{
+    if (!job_env_removed(row, spec))
+        env[(*out)++] = arena_strdup(a, row);
+}
+
+static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
 {
     static const char *const drop[] = {"COLUMNS=", "LINES=", "YEW_FILE=",
                                        "YEW_LINE=", "YEW_COL=",
@@ -329,8 +473,9 @@ static char **job_build_env(Ed *ed, Arena *a)
 
     while (environ[n] != NULL)
         n++;
-    /* environ + 7 added rows + NULL */
-    env = arena_alloc(a, (n + 9U) * sizeof(*env), sizeof(void *));
+    /* Parent rows + seven standard rows + caller sets + NULL. */
+    env = arena_alloc(a, (n + 8U + job_env_set_count(spec)) * sizeof(*env),
+                      sizeof(void *));
     for (i = 0U; i < n; i++) {
         bool skip = false;
         size_t d;
@@ -343,8 +488,8 @@ static char **job_build_env(Ed *ed, Arena *a)
                 break;
             }
         }
-        if (!skip)
-            env[out++] = environ[i];
+        if (!skip && !job_env_removed(environ[i], spec))
+            env[out++] = arena_strdup(a, environ[i]);
     }
     if (ed->win != NULL && buf != NULL && buf->tb != NULL &&
         ed->win->cs.curs.len != 0U) {
@@ -356,22 +501,26 @@ static char **job_build_env(Ed *ed, Arena *a)
                               cur->pos);
     }
     (void)snprintf(tmp, sizeof(tmp), "YEW_FILE=%s", path);
-    env[out++] = arena_strdup(a, tmp);
+    job_env_append(a, env, &out, tmp, spec);
     (void)snprintf(tmp, sizeof(tmp), "YEW_LINE=%llu",
                    (unsigned long long)(line.v + 1U));
-    env[out++] = arena_strdup(a, tmp);
+    job_env_append(a, env, &out, tmp, spec);
     /* Grapheme columns, not bytes and not cells: the number the statusline
      * shows, so scripts and the UI agree. */
     (void)snprintf(tmp, sizeof(tmp), "YEW_COL=%llu",
                    (unsigned long long)((u64)col.v + 1U));
-    env[out++] = arena_strdup(a, tmp);
+    job_env_append(a, env, &out, tmp, spec);
     (void)snprintf(tmp, sizeof(tmp), "YEW_WORKSPACE=%s", yew_ws_root(ed));
-    env[out++] = arena_strdup(a, tmp);
-    env[out++] = arena_strdup(a, "YEW_JOB=1");
+    job_env_append(a, env, &out, tmp, spec);
+    job_env_append(a, env, &out, "YEW_JOB=1", spec);
     /* A job that spawns `less` would wait forever on a stdin it does not
      * own: no output, no exit, no clue. */
-    env[out++] = arena_strdup(a, "PAGER=cat");
-    env[out++] = arena_strdup(a, "GIT_PAGER=cat");
+    job_env_append(a, env, &out, "PAGER=cat", spec);
+    job_env_append(a, env, &out, "GIT_PAGER=cat", spec);
+    if (spec->env_set != NULL) {
+        for (i = 0U; spec->env_set[i] != NULL; i++)
+            env[out++] = arena_strdup(a, spec->env_set[i]);
+    }
     env[out] = NULL;
     return env;
 }
@@ -589,6 +738,10 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         (void)snprintf(err, errsz, "job stdin byte source is too large");
         return 0U;
     }
+    if (!job_env_spec_valid(spec)) {
+        (void)snprintf(err, errsz, "invalid job environment override");
+        return 0U;
+    }
     if (spec->sink == YEW_SINK_FRAMED &&
         (spec->framed_owner == NULL || spec->framed_ops == NULL ||
          spec->framed_ops->feed_stdout == NULL ||
@@ -609,6 +762,13 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         (void)snprintf(err, errsz, "stream job has no transport");
         return 0U;
     }
+    if (spec->sink == YEW_SINK_CALLBACK &&
+        (spec->callback_owner == NULL || spec->callback_ops == NULL ||
+         spec->callback_ops->complete == NULL ||
+         spec->callback_ops->destroy == NULL)) {
+        (void)snprintf(err, errsz, "callback job has no completion owner");
+        return 0U;
+    }
 
     /* Everything that allocates happens BEFORE fork. */
     arena_init(&scratch);
@@ -621,7 +781,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         shell_argv[3] = NULL;
         argv = shell_argv;
     }
-    envp = job_build_env(ed, &scratch);
+    envp = job_build_env(ed, &scratch, spec);
     exec_paths = job_exec_paths(&scratch, envp, argv[0]);
     cwd = spec->cwd != NULL ? spec->cwd : yew_ws_root(ed);
     want_stdin = (spec->in_buf != NULL &&
@@ -670,15 +830,20 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     j->framed_ops = spec->framed_ops;
     j->stream_owner = spec->stream_owner;
     j->stream_ops = spec->stream_ops;
+    j->callback_owner = spec->callback_owner;
+    j->callback_ops = spec->callback_ops;
     j->in_buf = spec->in_buf;
     j->in_span = spec->in_span;
     j->in_bytes = spec->in_bytes;
     j->in_len = spec->in_len;
     j->timeout_ms = spec->timeout_ms;
+    j->collect_max = spec->collect_max != 0U ? spec->collect_max :
+                     YEW_JOB_COLLECT_MAX;
     j->start_ms = yew_now_ms();
     j->follow_tail = true;
     bytebuf_init(&j->hold);
     bytebuf_init(&j->collect);
+    bytebuf_init(&j->collect_err);
     bytebuf_init(&j->framed_err);
     bytebuf_init(&j->stream_err);
     display = spec->display != NULL ? spec->display :
@@ -797,11 +962,13 @@ static short revents_for(const struct pollfd *pfd, u32 n, int fd)
 static void job_deliver(Ed *ed, YewJob *j, const u8 *bytes, u64 len,
                         bool is_err)
 {
+    u64 collected;
+
     if (len == 0U)
         return;
     switch (j->sink) {
     case YEW_SINK_COLLECT:
-        if (j->collect.len + len > YEW_JOB_COLLECT_MAX) {
+        if (len > j->collect_max - (u64)j->collect.len) {
             if (!j->collect_capped) {
                 j->collect_capped = true;
                 (void)yew_job_signal(ed, j->id, SIGTERM);
@@ -809,6 +976,18 @@ static void job_deliver(Ed *ed, YewJob *j, const u8 *bytes, u64 len,
             return;
         }
         bytebuf_append(&j->collect, bytes, (size_t)len);
+        break;
+    case YEW_SINK_CALLBACK:
+        collected = (u64)j->collect.len + (u64)j->collect_err.len;
+        if (collected > j->collect_max || len > j->collect_max - collected) {
+            if (!j->collect_capped) {
+                j->collect_capped = true;
+                (void)yew_job_signal(ed, j->id, SIGTERM);
+            }
+            return;
+        }
+        bytebuf_append(is_err ? &j->collect_err : &j->collect, bytes,
+                       (size_t)len);
         break;
     case YEW_SINK_BUFFER:
         yew_job_buffer_append(ed, j, bytes, len, is_err);
@@ -897,7 +1076,8 @@ static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
         /* Protocol bytes are already framed and counted.  Passing them
          * through the text-safe prefix would retain a split UTF-8 tail and
          * prevent Content-Length from ever completing. */
-        if (j->sink == YEW_SINK_FRAMED || j->sink == YEW_SINK_STREAM) {
+        if (j->sink == YEW_SINK_FRAMED || j->sink == YEW_SINK_STREAM ||
+            j->sink == YEW_SINK_CALLBACK) {
             if (got != 0)
                 job_deliver(ed, j, chunk, (u64)got, is_err);
             if (got == 0) {
@@ -905,10 +1085,11 @@ static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
                     if (!is_err &&
                         !j->framed_ops->finish_stdout(j->framed_owner))
                         j->framed_failed = true;
-                } else if (is_err) {
+                } else if (j->sink == YEW_SINK_STREAM && is_err) {
                     if (!j->stream_ops->finish_stderr(j->stream_owner))
                         j->stream_failed = true;
-                } else if (!j->stream_ops->finish_stdout(j->stream_owner)) {
+                } else if (j->sink == YEW_SINK_STREAM &&
+                           !j->stream_ops->finish_stdout(j->stream_owner)) {
                     j->stream_failed = true;
                 }
                 job_close(fd);
@@ -1154,21 +1335,38 @@ bool yew_job_pending(const YewJob *j)
 
 void yew_job_settle(Ed *ed)
 {
-    u32 i;
+    u32 i = 0U;
 
     if (ed == NULL)
         return;
-    for (i = 0U; i < ed->jobs.len; i++) {
+    while (i < ed->jobs.len) {
         YewJob *j = &ed->jobs.v[i];
 
-        if (j->drained || yew_job_pending(j))
+        if (j->drained || yew_job_pending(j) ||
+            (j->sink == YEW_SINK_CALLBACK && j->exec_fd >= 0)) {
+            i++;
             continue;
+        }
         j->drained = true;
         job_close(&j->in_fd);
         job_wipe_stdin_bytes(j);
+        if (j->sink == YEW_SINK_CALLBACK) {
+            u32 id = j->id;
+
+            j->callback_called = true;
+            j->callback_ops->complete(j->callback_owner, ed, j);
+            /* A callback may spawn another job.  Re-find by stable id before
+             * releasing because the table is compacted on every release. */
+            j = yew_job_find(ed, id);
+            if (j != NULL)
+                yew_job_release(ed, j);
+            i = 0U;
+            continue;
+        }
         job_framed_destroy(j);
         job_stream_destroy(j);
         yew_job_finish(ed, j);
+        i++;
     }
 }
 

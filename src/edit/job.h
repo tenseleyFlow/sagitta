@@ -21,6 +21,7 @@
 
 typedef struct Ed Ed;
 typedef struct TextBuf TextBuf;
+typedef struct YewJob YewJob;
 
 /*
  * Module-neutral seam for protocol transports.  Core cannot name RpcConn:
@@ -56,6 +57,18 @@ typedef struct YewJobStreamOps {
     void (*tick)(void *owner, Ed *ed, i64 now_ms);
     void (*destroy)(void *owner);
 } YewJobStreamOps;
+
+/*
+ * Collected completion seam for finite module-owned jobs.  stdout and
+ * stderr remain byte-exact and separate.  `complete` runs once only after
+ * the child has been reaped and both output pipes reached EOF; the job is
+ * then released automatically.  Ownership transfers on successful spawn,
+ * and `destroy` runs exactly once (including editor teardown).
+ */
+typedef struct YewJobCallbackOps {
+    void (*complete)(void *owner, Ed *ed, const YewJob *job);
+    void (*destroy)(void *owner);
+} YewJobCallbackOps;
 
 enum {
     /* Concurrent jobs.  Spawning past this errors — never queues silently,
@@ -105,6 +118,7 @@ typedef enum {
     YEW_SINK_COLLECT, /* accumulate, deliver when the job ends (b and c) */
     YEW_SINK_FRAMED,  /* raw stdout -> owner; stderr -> framed_err        */
     YEW_SINK_STREAM,  /* raw stdout/stderr -> owner; retain diagnostics   */
+    YEW_SINK_CALLBACK, /* split collect -> callback, then auto-release     */
     YEW_SINK_DISCARD
 } YewJobSink;
 
@@ -123,6 +137,14 @@ typedef struct YewJobSpec {
     i64 timeout_ms;       /* 0 = none (async jobs)                        */
     u32 target_win;
     const char *display;  /* job-table text; defaults to cmdline/argv[0]  */
+    /* Collection ceiling for COLLECT/CALLBACK; 0 keeps the default. */
+    u64 collect_max;
+    /* NULL-terminated environment overrides, applied to a copy of the
+     * standard job environment.  Set rows are NAME=value; unset rows are
+     * exact NAMEs; prefix rows intentionally remove every matching NAME. */
+    const char *const *env_set;
+    const char *const *env_unset;
+    const char *const *env_unset_prefix;
     /* Required for YEW_SINK_FRAMED.  Ownership transfers only after a
      * successful spawn and is released exactly once by the job. */
     void *framed_owner;
@@ -130,9 +152,12 @@ typedef struct YewJobSpec {
     /* Required for YEW_SINK_STREAM; same ownership rule as framed_owner. */
     void *stream_owner;
     const YewJobStreamOps *stream_ops;
+    /* Required for YEW_SINK_CALLBACK; ownership transfers on success. */
+    void *callback_owner;
+    const YewJobCallbackOps *callback_ops;
 } YewJobSpec;
 
-typedef struct YewJob {
+struct YewJob {
     u32 id;
     pid_t pid;
     pid_t pgid;
@@ -147,13 +172,17 @@ typedef struct YewJob {
     int exec_errno;
     YewJobSink sink;
     Bytebuf hold;    /* incomplete UTF-8 / cluster tail (§3)              */
-    Bytebuf collect; /* YEW_SINK_COLLECT                                  */
+    Bytebuf collect; /* COLLECT merged output; CALLBACK stdout            */
+    Bytebuf collect_err; /* YEW_SINK_CALLBACK stderr; stdout is collect    */
+    u64 collect_max;
     Bytebuf framed_err; /* YEW_SINK_FRAMED stderr, never protocol input    */
     void *framed_owner;
     const YewJobFramedOps *framed_ops;
     Bytebuf stream_err; /* YEW_SINK_STREAM stderr diagnostic transcript   */
     void *stream_owner;
     const YewJobStreamOps *stream_ops;
+    void *callback_owner;
+    const YewJobCallbackOps *callback_ops;
     const TextBuf *in_buf;
     Span in_span;
     const u8 *in_bytes;
@@ -173,6 +202,8 @@ typedef struct YewJob {
     bool framed_destroyed;
     bool stream_failed;
     bool stream_destroyed;
+    bool callback_called;
+    bool callback_destroyed;
     bool reaped;
     /* Set once the child is reaped AND its output pipes have reached
      * EOF.  Child exit alone is not the end of the output: up to a
@@ -186,7 +217,7 @@ typedef struct YewJob {
     MarkId at;
     bool has_mark;
     char *label; /* owned                                          */
-} YewJob;
+};
 
 typedef struct JobTable {
     YewJob v[YEW_JOB_MAX];
