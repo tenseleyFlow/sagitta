@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/mode.h"
 #include "edit/option.h"
 #include "edit/shadow.h"
 #include "fl/flruntime.h"
@@ -89,6 +90,18 @@ static void policy_fire(Ed *ed)
     yew_timers_fire(&ed->timers, ed, ed->now_ms);
 }
 
+static Key policy_text_key(u8 byte)
+{
+    Key key = {0};
+
+    key.code = byte;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.ntext = 1U;
+    key.text[0] = byte;
+    return key;
+}
+
 static int policy_child(void)
 {
     char status[512];
@@ -112,33 +125,39 @@ static int policy_child(void)
         return 13;
     sockets = yew_http_socket_call_count();
 
-    /* Row 1: the default-off profile silently declines before socket(2). */
-    policy_fire(&ed);
+    /* Row 1: a real 500-keystroke fresh-profile editing session stays
+     * entirely before socket(2), then its settle timer still declines. */
+    if (yew_mode_enter(&ed, YEW_MODE_I) != YEW_CMD_OK)
+        return 14;
+    for (u32 i = 0U; i < 500U; i++)
+        yew_ed_handle_key(&ed, policy_text_key((u8)'x'), (i64)i);
+    ed.now_ms = 850;
+    yew_timers_fire(&ed.timers, &ed, ed.now_ms);
     if (ed.msg.active || ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
-        return 14;
+        return 15;
 
     if (!policy_set_bool(&ed, "ai.enable", true))
-        return 15;
+        return 16;
     /* Row 2a: no selected backend. */
     policy_fire(&ed);
     if (ed.msg.active || ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
-        return 16;
+        return 17;
 
     if (!policy_define(&ed, false) ||
         !policy_set_str(&ed, "ai.backend", "local"))
-        return 17;
+        return 18;
     entry = yew_ai_registry_find_mut(&ed.ai->backends, "local");
     if (entry == NULL)
-        return 18;
+        return 19;
 
     /* Row 2b: a selected backend in cooldown. */
     entry->cooldown.until_ms = yew_now_ms() + 60000;
     policy_fire(&ed);
     if (ed.msg.active || ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
-        return 19;
+        return 20;
     entry->cooldown.until_ms = 0;
 
     /* Rows 3–5: trust, excluded path, and the pre-prompt redaction gate. */
@@ -147,13 +166,13 @@ static int policy_child(void)
     yew_ai_workspace_policy_set(NULL);
     if (ed.msg.active || ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
-        return 20;
+        return 21;
     yew_ai_path_policy_set(policy_exclude_path);
     policy_fire(&ed);
     yew_ai_path_policy_set(NULL);
     if (ed.msg.active || ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
-        return 21;
+        return 22;
     entry->backend.url.loopback = false;
     yew_ai_redact_hook_set(policy_redact);
     policy_fire(&ed);
@@ -162,7 +181,7 @@ static int policy_child(void)
     if (!ed.msg.active || strstr(ed.msg.text, "line 1 matches 'fixture'") == NULL ||
         ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
-        return 22;
+        return 23;
     yew_msg_clear(&ed);
 
     /* Row 6: a non-newer generation cannot replace the global call. */
@@ -172,20 +191,20 @@ static int policy_child(void)
     policy_fire(&ed);
     ed.ai->call.active = false;
     if (ed.msg.active || yew_http_socket_call_count() != sockets)
-        return 23;
+        return 24;
 
     /* Row 7: a failed curl probe warns once, then declines silently. */
     if (!policy_define(&ed, true))
-        return 24;
+        return 25;
     ed.ai->curl.state = YEW_CURL_ABSENT;
     policy_fire(&ed);
     if (!ed.msg.active || !ed.ai->curl_probe_messaged ||
         strstr(ed.msg.text, "curl") == NULL)
-        return 25;
+        return 26;
     yew_msg_clear(&ed);
     policy_fire(&ed);
     if (ed.msg.active || yew_http_socket_call_count() != sockets)
-        return 26;
+        return 27;
 
     yew_ed_free(&ed);
     return 0;
