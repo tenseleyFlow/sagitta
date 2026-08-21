@@ -36,11 +36,18 @@ typedef struct RedactHit {
 } RedactHit;
 
 typedef bool (*AiRedactCheck)(Ed *ed, const AiCtx *ctx, RedactHit *hit);
+typedef void (*AiContextBuildTestFn)(void *opaque);
 
 /* A standard-C hook keeps Sprint 49's safe default and lets Sprint 50 own
  * policy without weak symbols or compiler-specific attributes. */
 void yew_ai_redact_hook_set(AiRedactCheck check);
 bool yew_ai_redact_check(Ed *ed, const AiCtx *ctx, RedactHit *hit);
+
+/* Test observation seam: production leaves this unset.  The callback runs
+ * at function entry, making an excluded-path early return distinguishable
+ * from a context that was built and later discarded. */
+void yew_ai_context_build_test_set(AiContextBuildTestFn observe,
+                                   void *opaque);
 
 bool yew_ai_context_build(Ed *ed, Win *win, const ShadowReq *request,
                           Arena *arena, AiCtx *out, AiErr *err);

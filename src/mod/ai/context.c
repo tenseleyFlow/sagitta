@@ -24,6 +24,8 @@ enum {
 };
 
 static AiRedactCheck redact_check;
+static AiContextBuildTestFn context_build_observe;
+static void *context_build_observe_opaque;
 
 void yew_ai_redact_hook_set(AiRedactCheck check)
 {
@@ -35,6 +37,13 @@ bool yew_ai_redact_check(Ed *ed, const AiCtx *ctx, RedactHit *hit)
     if (hit != NULL)
         (void)memset(hit, 0, sizeof(*hit));
     return redact_check != NULL && redact_check(ed, ctx, hit);
+}
+
+void yew_ai_context_build_test_set(AiContextBuildTestFn observe,
+                                   void *opaque)
+{
+    context_build_observe = observe;
+    context_build_observe_opaque = opaque;
 }
 
 static void context_error(AiErr *err, AiErrKind kind, const char *message)
@@ -332,6 +341,9 @@ bool yew_ai_context_build(Ed *ed, Win *win, const ShadowReq *request,
     u32 prefix_budget;
     u32 suffix_budget;
     RedactHit hit;
+
+    if (context_build_observe != NULL)
+        context_build_observe(context_build_observe_opaque);
 
     if (out != NULL)
         (void)memset(out, 0, sizeof(*out));

@@ -27,6 +27,8 @@
 
 static AiWorkspaceAllowedFn workspace_allowed;
 static AiPathExcludedFn path_excluded;
+static AiTransportTestFn transport_test_start;
+static void *transport_test_opaque;
 
 static i64 ai_option_int(Ed *ed, const char *name, i64 fallback)
 {
@@ -89,6 +91,12 @@ void yew_ai_workspace_policy_set(AiWorkspaceAllowedFn allowed)
 void yew_ai_path_policy_set(AiPathExcludedFn excluded)
 {
     path_excluded = excluded;
+}
+
+void yew_ai_transport_test_set(AiTransportTestFn start, void *opaque)
+{
+    transport_test_start = start;
+    transport_test_opaque = opaque;
 }
 
 static void ai_call_init(AiCall *call, Ed *ed)
@@ -506,6 +514,11 @@ static bool ai_start_http(Ed *ed, AiCall *call, const char *path)
     u32 nhdr;
     bool secret;
 
+    if (transport_test_start != NULL)
+        return transport_test_start(transport_test_opaque,
+                                    YEW_AI_TR_HTTP, call->body.data,
+                                    call->body.len);
+
     (void)memset(auth, 0, sizeof(auth));
     (void)memset(key, 0, sizeof(key));
     if (!ai_auth(ed, call, headers, &nhdr, &unused, auth, sizeof(auth),
@@ -550,6 +563,11 @@ static bool ai_start_curl(Ed *ed, AiCall *call, const char *path)
     char err[192] = {0};
     u32 nhdr;
     u32 npublic = 1U;
+
+    if (transport_test_start != NULL)
+        return transport_test_start(transport_test_opaque,
+                                    YEW_AI_TR_CURL, call->body.data,
+                                    call->body.len);
 
     bytebuf_init(&url);
     (void)memset(auth, 0, sizeof(auth));
@@ -668,7 +686,8 @@ static bool ai_shadow_request(Ed *ed, const ShadowReq *request)
         }
         yew_ai_call_abort(ed, call, YEW_AI_ERR_CANCELLED);
     }
-    if (selected->backend.transport == (u8)YEW_AI_TR_CURL &&
+    if (transport_test_start == NULL &&
+        selected->backend.transport == (u8)YEW_AI_TR_CURL &&
         !yew_ai_curl_probe(ed, &state->curl, probe_error,
                            sizeof(probe_error))) {
         if (probe_error[0] != '\0' && !state->curl_probe_messaged) {
@@ -726,6 +745,11 @@ static bool ai_shadow_request(Ed *ed, const ShadowReq *request)
                       "curl" : "http");
     yew_ai_debug_body(ed, "request", call->body.data, (u32)call->body.len);
     return true;
+}
+
+bool yew_ai_shadow_test_request(Ed *ed, const ShadowReq *request)
+{
+    return ai_shadow_request(ed, request);
 }
 
 static void ai_shadow_cancel(Ed *ed, u32 buf_id, u32 up_to)

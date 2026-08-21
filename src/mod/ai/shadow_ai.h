@@ -59,9 +59,13 @@ typedef struct AiCall {
 
 typedef bool (*AiWorkspaceAllowedFn)(Ed *ed, const char *root);
 typedef bool (*AiPathExcludedFn)(Ed *ed, const char *path);
+typedef bool (*AiTransportTestFn)(void *opaque, u8 transport,
+                                  const u8 *body, u64 len);
 
 void yew_ai_workspace_policy_set(AiWorkspaceAllowedFn allowed);
 void yew_ai_path_policy_set(AiPathExcludedFn excluded);
+void yew_ai_transport_test_set(AiTransportTestFn start, void *opaque);
+bool yew_ai_shadow_test_request(Ed *ed, const ShadowReq *request);
 
 void yew_ai_shadow_init(Ed *ed);
 void yew_ai_shadow_pump(Ed *ed);
