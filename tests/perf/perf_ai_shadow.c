@@ -531,6 +531,7 @@ static bool measure_keypress(u64 *p99_out)
 {
     struct timespec delay = {0, 8333333L};
     u64 samples[AI_SHADOW_KEY_SAMPLES];
+    u64 deliveries = 0U;
     Ed ed;
     u32 i;
     bool ok = false;
@@ -583,14 +584,19 @@ static bool measure_keypress(u64 *p99_out)
         delay.tv_nsec = 8333333L;
     }
     *p99_out = percentile(samples, AI_SHADOW_KEY_SAMPLES, 99U);
-    ok = *p99_out <= AI_SHADOW_KEY_P99_NS && ed.ai->call.active;
+    ok = *p99_out <= AI_SHADOW_KEY_P99_NS && ed.ai->call.active &&
+         ed.shadow_stats.delivered <= 4000U / 33U + 1U;
 
 done:
+    deliveries = ed.shadow_stats.delivered;
     if (ed.ai->call.active)
         yew_ai_call_abort(&ed, &ed.ai->call, YEW_AI_ERR_CANCELLED);
     yew_ed_free(&ed);
-    (void)printf("ai.shadow.keypress_120tps p99_ns=%llu budget_ns=%u%s\n",
+    (void)printf("ai.shadow.keypress_120tps p99_ns=%llu budget_ns=%u "
+                 "deliveries=%llu max_deliveries=%u%s\n",
                  (unsigned long long)*p99_out, AI_SHADOW_KEY_P99_NS,
+                 (unsigned long long)deliveries,
+                 4000U / 33U + 1U,
                  ok ? " ok" : " REGRESSION");
     return ok;
 }

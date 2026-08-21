@@ -369,6 +369,7 @@ UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
                tests/unit/test_ai_prompt.c tests/unit/test_ai_trim.c \
                tests/unit/test_ai_frame.c tests/unit/test_ai_cancel.c \
                tests/unit/test_ai_stats.c tests/unit/test_ai_shadow_live.c \
+               tests/unit/test_ai_shadow_policy.c \
                tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
                tests/unit/test_http_rx.c tests/unit/test_http_url.c \
                tests/unit/test_http_live.c
@@ -422,6 +423,11 @@ PTY_HARNESS_OBJ := $(BUILD)/tests/pty/harness.o
 PTY_REGISTRY_OBJ := $(BUILD)/tests/pty/registry.o
 PTY_RUNNER_OBJ := $(BUILD)/tests/pty/runner.o
 PTY_DEMO_OBJ := $(BUILD)/tests/pty/demo_paint.o
+ifneq ($(filter ai,$(MODULES)),)
+$(PTY_REGISTRY_OBJ): CFLAGS += \
+  -DYEW_TEST_MOCKAI='"$(abspath $(MOCKAI))"'
+$(PTY_REGISTRY_OBJ): $(MOCKAI)
+endif
 PTY_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) \
                 $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) \
                 $(PTY_RUNNER_OBJ)
@@ -1676,7 +1682,8 @@ test-roundtrip-coverage: $(BUILD)/roundtrip_runner
 
 test-fletch-roundtrip: test-roundtrip
 
-test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP)
+test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
+          $(AI_TEST_HELPERS)
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 

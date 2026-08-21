@@ -154,6 +154,10 @@ typedef struct HttpState HttpState;
 HttpState *yew_http_state_new(void);
 void yew_http_state_free(HttpState *state);
 
+/* Process-local diagnostic used by the hermetic test lane to prove that
+ * an opt-out profile never reaches socket(2). */
+u64 yew_http_socket_call_count(void);
+
 /* Named hosts must be registered before use.  Registration performs the
  * sole blocking lookup and caches one exact sockaddr; requests only copy
  * that cached address.  Numeric hosts are cached with AI_NUMERICHOST. */

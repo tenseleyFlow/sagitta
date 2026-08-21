@@ -240,6 +240,7 @@ static void ai_stream_event(void *ctx, const AiEvent *event)
     Arena arena;
     JsonErr json_error = {0};
     JsonValue *root = NULL;
+    AiErrKind event_kind;
 
     if (call == NULL || !call->active || event == NULL || call->failed)
         return;
@@ -252,6 +253,22 @@ static void ai_stream_event(void *ctx, const AiEvent *event)
             yew_ai_err_format(&call->error, YEW_AI_ERR_PROTOCOL,
                               &call->backend, call->status, -1,
                               json_error.msg);
+            arena_free_all(&arena);
+            return;
+        }
+        /* Streaming APIs can report a provider failure inside an otherwise
+         * successful HTTP response.  Classify each complete event at the
+         * semantic 2xx layer so this works before curl has emitted its final
+         * status marker as well as on the bespoke HTTP path.  A later stream
+         * terminator must never turn that provider error back into success. */
+        event_kind = adapter->classify(200U, root);
+        if (event_kind != YEW_AI_OK) {
+            call->failed = true;
+            call->terminal = true;
+            yew_ai_err_format(&call->error, event_kind, &call->backend,
+                              call->status, -1, NULL);
+            if (call->conn != NULL)
+                yew_http_conn_mark_stream_done(call->conn);
             arena_free_all(&arena);
             return;
         }

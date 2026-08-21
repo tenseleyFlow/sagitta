@@ -12,6 +12,7 @@
 
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/shadow.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/http.h"
 #include "mod/ai/shadow_ai.h"
@@ -40,7 +41,7 @@ static void cancel_call_init(Ed *ed, AiCall *call)
     yew_ai_adapter_state_init(&call->adapter);
 }
 
-static pid_t cancel_server_start(u16 *port)
+static pid_t cancel_server_start(const char *mode, u16 *port)
 {
     int output[2];
     pid_t pid;
@@ -55,7 +56,7 @@ static pid_t cancel_server_start(u16 *port)
         if (dup2(output[1], STDOUT_FILENO) < 0)
             _exit(126);
         (void)close(output[1]);
-        execl(YEW_TEST_FAKEHTTP, YEW_TEST_FAKEHTTP, "delay", (char *)NULL);
+        execl(YEW_TEST_FAKEHTTP, YEW_TEST_FAKEHTTP, mode, (char *)NULL);
         _exit(127);
     }
     (void)close(output[1]);
@@ -87,7 +88,8 @@ void test_ai_cancel_http_never_pools_the_connection(void)
     HttpUrl url;
     AiErr error = {0};
     u16 port;
-    pid_t server = cancel_server_start(&port);
+    HttpConn *next;
+    pid_t server = cancel_server_start("stale", &port);
 
     yew_ed_init(&ed);
     call = &ed.ai->call;
@@ -101,7 +103,65 @@ void test_ai_cancel_http_never_pools_the_connection(void)
     YEW_ASSERT(!call->active);
     YEW_ASSERT_NULL(call->conn);
     YEW_ASSERT_EQ_I64(yew_http_deadline(&ed, yew_now_ms()), -1);
+
+    next = yew_http_begin(&ed, &url, &request, &error);
+    YEW_ASSERT_NOT_NULL(next);
+    YEW_ASSERT(!next->from_pool);
+    yew_http_abort(&ed, next);
+    yew_http_conn_release(&ed, next);
     cancel_server_wait(server);
+    yew_ed_free(&ed);
+}
+
+/* Guard A: even with provider cancellation stubbed to a no-op, the shared
+ * shadow generation floor rejects a response that was already queued. */
+void test_ai_cancel_guard_sequence_floor_rejects_late_delivery(void)
+{
+    Ed ed;
+    ShadowSug suggestion = {0};
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U, "ai-sequence-guard"));
+    suggestion.seq = 4U;
+    suggestion.prov = (u8)YEW_SHADOW_AI;
+    suggestion.buf_id = ed.win->buf->id;
+    suggestion.buf_gen = ed.win->buf->tb->gen;
+    suggestion.pos = BYTEOFF(0U);
+    suggestion.text = (const u8 *)"late";
+    suggestion.len = 4U;
+    ed.win->shadow.seq_min[YEW_SHADOW_AI] = 5U;
+    ed.win->shadow.seq_next[YEW_SHADOW_AI] = 6U;
+
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.dropped_stale, 1U);
+    yew_ed_free(&ed);
+}
+
+/* Guard B: even with the shared sequence floor held unchanged, transport
+ * cancellation destroys the pending bytes and the pump cannot emit them. */
+void test_ai_cancel_guard_transport_abort_discards_pending_bytes(void)
+{
+    Ed ed;
+    AiCall *call;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U, "ai-transport-guard"));
+    call = &ed.ai->call;
+    cancel_call_init(&ed, call);
+    call->seq = 1U;
+    call->buf_id = ed.win->buf->id;
+    call->buf_gen = ed.win->buf->tb->gen;
+    call->pos = BYTEOFF(0U);
+    bytebuf_append(&call->raw, "queued", 6U);
+    call->dirty = true;
+    ed.win->shadow.seq_next[YEW_SHADOW_AI] = 2U;
+
+    yew_ai_call_abort(&ed, call, YEW_AI_ERR_CANCELLED);
+    YEW_ASSERT_EQ_U64(ed.win->shadow.seq_min[YEW_SHADOW_AI], 0U);
+    yew_ai_shadow_pump(&ed);
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT(!ed.ai->call.active);
     yew_ed_free(&ed);
 }
 
@@ -154,5 +214,43 @@ void test_ai_cancel_curl_detaches_then_reaps_without_callbacks(void)
     YEW_ASSERT_NULL(yew_job_find(&ed, id));
     YEW_ASSERT_EQ_U64(ed.ai->nretired_jobs, 0U);
     YEW_ASSERT_EQ_U64(ed.jobs.len, 0U);
+    yew_ed_free(&ed);
+}
+
+void test_ai_cancel_curl_reaps_five_hundred_cycles(void)
+{
+    char *argv[] = {(char *)"/bin/sh", (char *)"-c",
+                    (char *)"sleep 30", NULL};
+    YewJobSpec spec = {0};
+    char error[192];
+    Ed ed;
+    u32 cycle;
+
+    yew_ed_init(&ed);
+    spec.argv = argv;
+    spec.sink = YEW_SINK_COLLECT;
+    for (cycle = 0U; cycle < 500U; cycle++) {
+        AiCall *call = &ed.ai->call;
+        u32 id;
+        i64 started;
+
+        (void)memset(error, 0, sizeof(error));
+        cancel_call_init(&ed, call);
+        id = yew_job_spawn(&ed, &spec, error, sizeof(error));
+        YEW_ASSERT(id != 0U);
+        call->job = id;
+        yew_ai_call_abort(&ed, call, YEW_AI_ERR_CANCELLED);
+        started = yew_now_ms();
+        while (yew_job_find(&ed, id) != NULL &&
+               yew_now_ms() - started < 3000) {
+            (void)poll(NULL, 0U, 1);
+            yew_job_reap(&ed);
+            yew_job_settle(&ed);
+            yew_ai_shadow_pump(&ed);
+        }
+        YEW_ASSERT_NULL(yew_job_find(&ed, id));
+        YEW_ASSERT_EQ_U64(ed.jobs.len, 0U);
+        YEW_ASSERT_EQ_U64(ed.ai->nretired_jobs, 0U);
+    }
     yew_ed_free(&ed);
 }

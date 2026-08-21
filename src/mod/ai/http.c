@@ -24,6 +24,13 @@
 #include "mod/ai/backend.h"
 #include "util/log.h"
 
+static u64 http_socket_calls;
+
+u64 yew_http_socket_call_count(void)
+{
+    return http_socket_calls;
+}
+
 static const char http_tls_error[] =
     "yew has no TLS: https backends run through curl.\n"
     "set transport: \"curl\" on this backend, or use a http:// endpoint.";
@@ -1177,6 +1184,7 @@ static bool conn_socket(HttpConn *c, i64 now)
     int one = 1;
     int result;
 
+    http_socket_calls++;
     c->fd = socket(c->address.ss_family,
                    SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (c->fd < 0) {
