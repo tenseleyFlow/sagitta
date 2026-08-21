@@ -267,6 +267,7 @@ void test_log_levels(void);
 void test_log_bug_prehook(void);
 void test_mod_require_message(void);
 void test_lsp_restart_crosses_module_boundary(void);
+void test_git_commands_cross_module_boundary(void);
 void test_keyid_canonical_rows(void);
 void test_keyid_shift_and_legacy_equivalence(void);
 void test_keyseq_atom_roundtrip(void);
@@ -1736,6 +1737,16 @@ void test_porcelain_every_byte_truncation_and_rejections(void);
 void test_porcelain_z_paths_ignore_prefixes(void);
 void test_porcelain_blame_metadata_reuse_and_incremental(void);
 void test_porcelain_log_reflog_format_edges(void);
+void test_gitcache_ttl_uses_monotonic_wall_milliseconds(void);
+void test_gitcache_state_strings_cover_taxonomy(void);
+void test_gitcache_filesystem_taxonomy_is_message_free(void);
+void test_gitcache_verb_table_and_argv_are_structural(void);
+void test_gitcache_coalesces_and_caps_inflight(void);
+void test_gitcache_environment_fingerprint_tracks_passthrough(void);
+void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void);
+void test_gitcache_every_mutation_schedules_structural_refresh(void);
+void test_gitcache_index_lock_skips_expired_refresh(void);
+void test_gitcache_log_completion_publishes_owned_records(void);
 
 /* Sprint 26 §5: the list picker. */
 void test_picker_selection_survives_a_refilter(void);

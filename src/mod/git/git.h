@@ -232,6 +232,7 @@ GitAsyncState yew_git_detect_state(const Ed *ed);
 bool yew_git_avail(Ed *ed, GitVersion *out);
 GitStatusCode yew_git_detect(Ed *ed, GitRepo *out);
 const GitSnapshot *yew_git_snapshot(Ed *ed);
+const GitLogRecordList *yew_git_log_records(const Ed *ed);
 bool yew_git_refresh(Ed *ed, bool force);
 void yew_git_invalidate(Ed *ed);
 u64 yew_git_env_fingerprint(void);
