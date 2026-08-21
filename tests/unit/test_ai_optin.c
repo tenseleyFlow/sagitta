@@ -40,6 +40,19 @@ static void optin_answer(Ed *ed, const char *answer)
     yew_cmdline_close(ed, true);
 }
 
+static u32 optin_count_text(const char *haystack, const char *needle)
+{
+    u32 count = 0U;
+    size_t len = strlen(needle);
+    const char *at = haystack;
+
+    while ((at = strstr(at, needle)) != NULL) {
+        count++;
+        at += len;
+    }
+    return count;
+}
+
 void test_ai_optin_local_and_cloud_confirmations_are_distinct(void)
 {
     Ed ed;
@@ -94,6 +107,8 @@ void test_ai_optin_escape_and_no_tty_never_commit(void)
     Ed ed;
     YewAiOptin optin;
     OptinCommitProbe probe = {0};
+    Bytebuf first;
+    Bytebuf second;
 
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U, "optin-cancel"));
@@ -125,6 +140,38 @@ void test_ai_optin_escape_and_no_tty_never_commit(void)
     YEW_ASSERT(!optin.active);
     YEW_ASSERT_EQ_U64(probe.calls, 0U);
     yew_ed_free(&ed);
+
+    bytebuf_init(&first);
+    bytebuf_init(&second);
+    YEW_ASSERT(yew_ai_optin_config_merge(
+        &first, "let before = 1\nlet after = 2\n",
+        sizeof("let before = 1\nlet after = 2\n") - 1U,
+        YEW_AI_OPTIN_LOCAL, true));
+    bytebuf_push_u8(&first, 0U);
+    YEW_ASSERT(strstr((const char *)first.data, "let before = 1") != NULL);
+    YEW_ASSERT(strstr((const char *)first.data, "let after = 2") != NULL);
+    YEW_ASSERT(strstr((const char *)first.data,
+                      "\"ai.default_workspace\": \"allow\"") != NULL);
+    YEW_ASSERT_EQ_U64(optin_count_text((const char *)first.data,
+                                      "# yew AI opt-in"), 1U);
+    YEW_ASSERT_EQ_U64(optin_count_text((const char *)first.data,
+                                      "# end yew AI opt-in"), 1U);
+
+    YEW_ASSERT(yew_ai_optin_config_merge(
+        &second, (const char *)first.data, first.len - 1U,
+        YEW_AI_OPTIN_CLOUD, false));
+    bytebuf_push_u8(&second, 0U);
+    YEW_ASSERT(strstr((const char *)second.data, "let before = 1") != NULL);
+    YEW_ASSERT(strstr((const char *)second.data, "let after = 2") != NULL);
+    YEW_ASSERT(strstr((const char *)second.data, "api.anthropic.com") != NULL);
+    YEW_ASSERT(strstr((const char *)second.data,
+                      "\"ai.default_workspace\": \"allow\"") == NULL);
+    YEW_ASSERT_EQ_U64(optin_count_text((const char *)second.data,
+                                      "# yew AI opt-in"), 1U);
+    YEW_ASSERT_EQ_U64(optin_count_text((const char *)second.data,
+                                      "# end yew AI opt-in"), 1U);
+    bytebuf_free(&second);
+    bytebuf_free(&first);
 }
 
 void test_ai_privacy_commands_are_live(void)

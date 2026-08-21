@@ -230,6 +230,49 @@ static const char cloud_config[] =
     "\"ai.temperature\": 10, \"ai.on_redact\": \"block\", "
     "\"ai.default_workspace\": \"ask\"})\n";
 
+bool yew_ai_optin_config_merge(Bytebuf *out, const char *old,
+                               size_t old_len,
+                               YewAiOptinBackend backend, bool allow_all)
+{
+    static const char start[] =
+        "# yew AI opt-in (managed by :ai enable)\n";
+    static const char finish[] = "# end yew AI opt-in\n";
+    static const char allow[] =
+        "set({\"ai.default_workspace\": \"allow\"})\n";
+    const char *block;
+    const char *begin;
+    const char *end;
+
+    if (out == NULL || old == NULL || strlen(old) != old_len ||
+        (backend != YEW_AI_OPTIN_LOCAL &&
+         backend != YEW_AI_OPTIN_CLOUD))
+        return false;
+    block = backend == YEW_AI_OPTIN_LOCAL ? local_config : cloud_config;
+    out->len = 0U;
+    begin = strstr(old, start);
+    end = begin == NULL ? NULL : strstr(begin, finish);
+    if (begin != NULL && end != NULL) {
+        end += sizeof(finish) - 1U;
+        bytebuf_append(out, old, (size_t)(begin - old));
+        bytebuf_append(out, block, strlen(block));
+        if (allow_all)
+            bytebuf_append(out, allow, sizeof(allow) - 1U);
+        bytebuf_append(out, finish, sizeof(finish) - 1U);
+        bytebuf_append(out, end, old_len - (size_t)(end - old));
+    } else {
+        bytebuf_append(out, old, old_len);
+        if (old_len != 0U && old[old_len - 1U] != '\n')
+            bytebuf_push_u8(out, (u8)'\n');
+        if (old_len != 0U)
+            bytebuf_push_u8(out, (u8)'\n');
+        bytebuf_append(out, block, strlen(block));
+        if (allow_all)
+            bytebuf_append(out, allow, sizeof(allow) - 1U);
+        bytebuf_append(out, finish, sizeof(finish) - 1U);
+    }
+    return true;
+}
+
 static char *optin_read_file(const char *path, size_t *len)
 {
     FILE *file;
@@ -286,47 +329,27 @@ static char *optin_parent(const char *path)
     return parent;
 }
 
-static bool optin_write_config(Ed *ed, const char *block, bool allow_all)
+static bool optin_write_config(Ed *ed, YewAiOptinBackend backend,
+                               bool allow_all)
 {
-    static const char start[] = "# yew AI opt-in (managed by :ai enable)\n";
-    static const char finish[] = "# end yew AI opt-in\n";
-    const char allow[] =
-        "set({\"ai.default_workspace\": \"allow\"})\n";
     const char *path = yew_config_user_path(ed);
     char *parent;
     char *old;
-    char *begin;
-    char *end;
     size_t old_len;
     Bytebuf next;
     bool ok;
 
-    if (path == NULL || block == NULL)
+    if (path == NULL)
         return false;
     old = optin_read_file(path, &old_len);
     if (old == NULL)
         return false;
     bytebuf_init(&next);
-    begin = strstr(old, start);
-    end = begin == NULL ? NULL : strstr(begin, finish);
-    if (begin != NULL && end != NULL) {
-        end += sizeof(finish) - 1U;
-        bytebuf_append(&next, old, (size_t)(begin - old));
-        bytebuf_append(&next, block, strlen(block));
-        if (allow_all)
-            bytebuf_append(&next, allow, sizeof(allow) - 1U);
-        bytebuf_append(&next, finish, sizeof(finish) - 1U);
-        bytebuf_append(&next, end, old_len - (size_t)(end - old));
-    } else {
-        bytebuf_append(&next, old, old_len);
-        if (old_len != 0U && old[old_len - 1U] != '\n')
-            bytebuf_push_u8(&next, (u8)'\n');
-        if (old_len != 0U)
-            bytebuf_push_u8(&next, (u8)'\n');
-        bytebuf_append(&next, block, strlen(block));
-        if (allow_all)
-            bytebuf_append(&next, allow, sizeof(allow) - 1U);
-        bytebuf_append(&next, finish, sizeof(finish) - 1U);
+    if (!yew_ai_optin_config_merge(&next, old, old_len, backend,
+                                    allow_all)) {
+        free(old);
+        bytebuf_free(&next);
+        return false;
     }
     free(old);
     parent = optin_parent(path);
@@ -367,8 +390,6 @@ static bool optin_commit(Ed *ed, YewAiOptinBackend backend, char scope,
                          void *ctx)
 {
     const char *preset = backend == YEW_AI_OPTIN_LOCAL ? "local" : "cloud";
-    const char *block = backend == YEW_AI_OPTIN_LOCAL ? local_config :
-                                                          cloud_config;
 
     (void)ctx;
     if (!yew_ai_preset_load(ed, preset)) {
@@ -382,7 +403,7 @@ static bool optin_commit(Ed *ed, YewAiOptinBackend backend, char scope,
                 "  undo: :ai disable");
         return true;
     }
-    if (!optin_write_config(ed, block, scope == 'a')) {
+    if (!optin_write_config(ed, backend, scope == 'a')) {
         yew_msg(ed, YEW_MSG_ERROR,
                 "could not write init.fl; choose session-only to continue");
         return false;

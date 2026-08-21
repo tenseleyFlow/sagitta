@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "util/base.h"
+#include "util/buf.h"
 
 typedef struct Ed Ed;
 
@@ -34,5 +35,9 @@ bool yew_ai_optin_begin_checked(YewAiOptin *optin, Ed *ed,
                                 bool has_tty);
 void yew_ai_optin_cancel(YewAiOptin *optin);
 const char *yew_ai_optin_no_tty_message(void);
+/* Pure targeted-edit seam used by the atomic writer and regression tests. */
+bool yew_ai_optin_config_merge(Bytebuf *out, const char *old,
+                               size_t old_len,
+                               YewAiOptinBackend backend, bool allow_all);
 
 #endif
