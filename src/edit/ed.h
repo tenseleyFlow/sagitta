@@ -61,6 +61,7 @@ typedef struct YewOptHistory YewOptHistory;
 typedef struct LspClient LspClient;
 typedef struct LspRenameState LspRenameState;
 typedef struct AiState AiState;
+typedef struct GitCtx GitCtx;
 struct OptStored;
 
 typedef struct YewEdStartup {
@@ -176,6 +177,9 @@ struct Ed {
      * backend registry, credentials, curl probe and HTTP pool opaque to the
      * editor core in both full and stripped builds. */
     AiState *ai;
+    /* Sprint 51: repository detection, porcelain snapshots and Git jobs.
+     * Both the enabled module and stripped shim preserve this lifecycle. */
+    GitCtx *git;
     Msg msg;
     /* Cursor-local diagnostic echo; real messages always take precedence. */
     Msg msg_hint;

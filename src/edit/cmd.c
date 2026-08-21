@@ -23,6 +23,7 @@
 #include "fl/flconf.h"
 #include "fl/record.h"
 #include "mod/ai/ai.h"
+#include "mod/git/git.h"
 #include "mod/lsp/lsp.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
@@ -190,6 +191,10 @@ static CmdStatus deferred_unreachable(CmdCtx *cx)
         name_, yew_ai_cmd_require, YEW_ARITY_NONE, 0U,                        \
             "AI module unavailable: " help_, NULL                            \
     }
+#endif
+
+#ifndef YEW_WITH_FUSS
+#define YEW_WITH_FUSS 0
 #endif
 
 static const CmdDesc builtins[] = {
@@ -955,8 +960,121 @@ static const CmdDesc builtins[] = {
      "Show the effective AI privacy gates", NULL},
     {"ed.ai.stats", yew_ai_cmd_stats, YEW_ARITY_NONE, 0U,
      "Show local AI request statistics", NULL},
+    {"ed.git.info", yew_git_cmd_info, YEW_ARITY_NONE, 0U,
+     "Show repository, branch, state, and snapshot age", NULL},
+    {"ed.git.refresh", yew_git_cmd_refresh, YEW_ARITY_NONE, 0U,
+     "Force an asynchronous Git snapshot refresh", NULL},
+    {"ed.git.log", yew_git_cmd_log, YEW_ARITY_NONE, 0U,
+     "Populate the pinned Git log record list", NULL},
+    DEFER("ed.git.init", YEW_ARITY_NONE, 0U, 52,
+          "initialize the workspace repository"),
+    DEFER("ed.git.mode.leave", YEW_ARITY_NONE, 0U, 52,
+          "leave F mode"),
+    DEFER("ed.git.tree.all", YEW_ARITY_NONE, 0U, 52,
+          "toggle the all-files F-mode tree"),
+    DEFER("ed.git.tree.hidden", YEW_ARITY_NONE, 0U, 52,
+          "toggle hidden and ignored files"),
+    DEFER("ed.git.nav.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 52,
+          "move to the previous F-mode entry"),
+    DEFER("ed.git.nav.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 52,
+          "move to the next F-mode entry"),
+    DEFER("ed.git.nav.parent", YEW_ARITY_NONE, 0U, 52,
+          "move to the parent F-mode entry"),
+    DEFER("ed.git.nav.enter", YEW_ARITY_NONE, 0U, 52,
+          "enter the selected F-mode directory"),
+    DEFER("ed.git.nav.toggle", YEW_ARITY_NONE, 0U, 52,
+          "toggle the selected F-mode directory"),
+    DEFER("ed.git.nav.row_prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 52,
+          "move to the previous raw F-mode row"),
+    DEFER("ed.git.nav.row_next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 52,
+          "move to the next raw F-mode row"),
+    DEFER("ed.git.jump.arm", YEW_ARITY_NONE, 0U, 52,
+          "arm F-mode fuzzy jump"),
     DEFER("ed.git.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
           "stage the selected path"),
+    DEFER("ed.git.unstage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
+          "unstage the selected path"),
+    DEFER("ed.git.stage.all", YEW_ARITY_NONE, 0U, 52,
+          "stage all paths"),
+    DEFER("ed.git.unstage.all", YEW_ARITY_NONE, 0U, 52,
+          "unstage all paths"),
+    DEFER("ed.git.commit", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "commit staged changes"),
+    DEFER("ed.git.commit.amend", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "amend the current commit"),
+    DEFER("ed.git.push", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "push the current branch"),
+    DEFER("ed.git.push.force", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "force-push after typed confirmation"),
+    DEFER("ed.git.pull", YEW_ARITY_NONE, 0U, 52,
+          "pull the current branch"),
+    DEFER("ed.git.fetch", YEW_ARITY_NONE, 0U, 52,
+          "fetch remotes"),
+    DEFER("ed.git.diff", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
+          "open the selected path's diff"),
+    DEFER("ed.git.status", YEW_ARITY_NONE, 0U, 52,
+          "open Git status output"),
+    DEFER("ed.git.blame", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
+          "open blame for the selected path"),
+    DEFER("ed.git.history", YEW_ARITY_NONE, 0U, 52,
+          "open repository history"),
+    DEFER("ed.git.reflog", YEW_ARITY_NONE, 0U, 52,
+          "open the reflog"),
+    DEFER("ed.git.view", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
+          "view the selected path"),
+    DEFER("ed.git.branch.switch", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "switch branches"),
+    DEFER("ed.git.branch.create", YEW_ARITY_STR, YEW_CMD_PROMPTS, 52,
+          "create and switch to a branch"),
+    DEFER("ed.git.branch.delete", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "delete a branch"),
+    DEFER("ed.git.merge", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "merge a branch"),
+    DEFER("ed.git.reset", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "reset to a commit"),
+    DEFER("ed.git.rebase.interactive", YEW_ARITY_NONE,
+          YEW_CMD_PROMPTS, 52, "start an interactive rebase"),
+    DEFER("ed.git.rebase.continue", YEW_ARITY_NONE, 0U, 52,
+          "continue a rebase"),
+    DEFER("ed.git.rebase.abort", YEW_ARITY_NONE, 0U, 52,
+          "abort a rebase"),
+    DEFER("ed.git.cherry_pick", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "cherry-pick a commit"),
+    DEFER("ed.git.revert", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "revert a commit"),
+    DEFER("ed.git.stash.push", YEW_ARITY_OPT_STR, YEW_CMD_PROMPTS, 52,
+          "stash worktree changes"),
+    DEFER("ed.git.stash.pop", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "apply or pop a stash"),
+    DEFER("ed.git.tag", YEW_ARITY_OPT_STR, YEW_CMD_PROMPTS, 52,
+          "create a tag"),
+    DEFER("ed.git.discard", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "discard the selected path's changes"),
+    DEFER("ed.git.file.delete", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 52,
+          "delete the selected path"),
+    DEFER("ed.git.file.rename", YEW_ARITY_STR, YEW_CMD_PROMPTS, 52,
+          "rename the selected path"),
+    DEFER("ed.git.open", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
+          "open the selected path and leave F mode"),
+    DEFER("ed.git.hunk.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 53,
+          "jump to the next changed hunk"),
+    DEFER("ed.git.hunk.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 53,
+          "jump to the previous changed hunk"),
+    DEFER("ed.git.hunk.first", YEW_ARITY_NONE, 0U, 53,
+          "jump to the first changed hunk"),
+    DEFER("ed.git.hunk.last", YEW_ARITY_NONE, 0U, 53,
+          "jump to the last changed hunk"),
+    DEFER("ed.git.hunk.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
+          "stage the current hunk"),
+    DEFER("ed.git.hunk.unstage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
+          "unstage the current hunk"),
+    DEFER("ed.git.hunk.discard", YEW_ARITY_NONE,
+          YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS, 53,
+          "discard the current hunk"),
+    DEFER("ed.git.blame.toggle", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
+          "toggle inline blame"),
+    DEFER("ed.git.diff.view", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
+          "open the editor diff view"),
     {"ed.ai.open", yew_ai_cmd_open, YEW_ARITY_NONE, 0U,
      "Explain the ghost-only AI surface", NULL},
     DEFER("ed.plug.reload", YEW_ARITY_OPT_STR, 0U, 54,
@@ -1497,6 +1615,13 @@ static CmdStatus command_deferred(const CmdDesc *d, CmdCtx *cx)
         (void)yew_ai_cmd_off(cx);
 #else
     (void)cx;
+#endif
+#if !YEW_WITH_FUSS
+    /* A stripped build explains how to obtain the module before it talks
+     * about the later UI sprint.  Enabled builds retain the exact Sprint
+     * 52/53 hard error until those implementations land. */
+    if (strncmp(d->name, "ed.git.", 7U) == 0)
+        return yew_git_cmd_require(cx);
 #endif
     yew_log(YEW_LOG_ERROR,
             "command not implemented yet: %s lands in Sprint %s", d->name,
