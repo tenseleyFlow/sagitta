@@ -22,6 +22,7 @@
 #include "mod/ai/ai.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/key.h"
+#include "mod/ai/optin.h"
 
 #ifndef YEW_TEST_FAKEHTTP
 #define YEW_TEST_FAKEHTTP "build/tests/helpers/fakehttp"
@@ -230,8 +231,8 @@ void test_ai_commands_cross_module_boundary(void)
         {"ed.ai.ping", 0U},
         {"ed.ai.log", 0U},
         {"ed.ai.reload", 0U},
-        {"ed.ai.enable", 50U},
-        {"ed.ai.disable", 50U},
+        {"ed.ai.enable", 0U},
+        {"ed.ai.disable", 0U},
         {"ed.ai.stats", 0U}
     };
     Ed ed;
@@ -275,6 +276,17 @@ void test_ai_commands_cross_module_boundary(void)
                 YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
                                   YEW_CMD_OK);
                 YEW_ASSERT_NOT_NULL(strstr(ai_message(&ed), "backend"));
+            } else if (strcmp(rows[i].name, "ed.ai.enable") == 0) {
+                YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
+                                  YEW_CMD_ERR_STATE);
+                YEW_ASSERT_EQ_STR(ed.msg.text,
+                                  yew_ai_optin_no_tty_message());
+            } else if (strcmp(rows[i].name, "ed.ai.disable") == 0) {
+                YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
+                                  YEW_CMD_OK);
+                YEW_ASSERT_EQ_STR(
+                    ed.msg.text,
+                    "AI disabled; backend definitions and workspace grants remain");
             } else {
                 YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
                                   YEW_CMD_ERR_STATE);
