@@ -159,14 +159,16 @@ void test_porcelain_rename_consumes_two_nuls_and_preserves_newline(void)
         "1 .M N... 100644 100644 100644 " OID_A " " OID_B " two\0"
         "1 A. N... 000000 100644 100644 " OID_A " " OID_B " three\0"
         "1 D. N... 100644 000000 000000 " OID_A " " OID_B " four\0"
-        "1 T. N... 100644 120000 120000 " OID_A " " OID_B " five\0";
+        "1 T. N... 100644 120000 120000 " OID_A " " OID_B " five\0"
+        "2 C. N... 100644 100644 100644 " OID_A " " OID_C
+        " C100 copied\0copy source\0";
     GitSnapshot snap;
     GitParseErr err;
     const GitEntry *renamed;
 
     snapshot_begin(&snap);
     YEW_ASSERT(yew_git_parse_status(&snap, input, sizeof(input) - 1U, &err));
-    YEW_ASSERT_EQ_U64(snap.entries.len, 6U);
+    YEW_ASSERT_EQ_U64(snap.entries.len, 7U);
     YEW_ASSERT_NOT_NULL(entry_named(&snap, "one"));
     YEW_ASSERT_NOT_NULL(entry_named(&snap, "two"));
     YEW_ASSERT_NOT_NULL(entry_named(&snap, "three"));
@@ -176,7 +178,15 @@ void test_porcelain_rename_consumes_two_nuls_and_preserves_newline(void)
     YEW_ASSERT_NOT_NULL(renamed);
     YEW_ASSERT_EQ_U64(renamed->path_len, strlen("renamed\npath"));
     YEW_ASSERT_EQ_MEM(renamed->path, "renamed\npath", renamed->path_len);
+    /* Mutation pin: this test must fail if rename consumption is patched from
+     * two NULs to one; the original path would desynchronize the stream. */
     YEW_ASSERT_EQ_MEM(renamed->orig_path, "old\npath", renamed->orig_len);
+    renamed = entry_named(&snap, "copied");
+    YEW_ASSERT_NOT_NULL(renamed);
+    YEW_ASSERT_EQ_I64(renamed->kind, GIT_E_RENAME);
+    YEW_ASSERT_EQ_I64(renamed->x, 'C');
+    YEW_ASSERT_EQ_I64(renamed->score, 100);
+    YEW_ASSERT_EQ_MEM(renamed->orig_path, "copy source", renamed->orig_len);
     arena_free_all(&snap.a);
 }
 
@@ -226,18 +236,70 @@ void test_porcelain_header_state_matrices(void)
     arena_free_all(&snap.a);
 }
 
+#define TR_HOID "# branch.oid " OID_A "\0"
+#define TR_HHEAD "# branch.head trunk\0"
+#define TR_HUP "# branch.upstream origin/trunk\0"
+#define TR_ONE "1 M. N... 100644 100644 100644 " OID_A " " OID_B " one\0"
+#define TR_RENAME "2 R. N... 100644 100644 100644 " OID_A " " OID_B \
+                  " R100 renamed\0old name\0"
+#define TR_COPY "2 C. N... 100644 100644 100644 " OID_A " " OID_C \
+                " C075 copied\0source\0"
+#define TR_UNMERGED "u UU N... 100644 100644 100644 100644 " OID_A " " \
+                    OID_B " " OID_C " conflict\0"
+#define TR_UNTRACKED "? loose\0"
+#define TR_IGNORED "! ignored\0"
+
 void test_porcelain_every_byte_truncation_and_rejections(void)
 {
-    static const u8 record[] =
-        "1 M. N... 100644 100644 100644 " OID_A " " OID_B " path\0";
+    static const u8 mixed[] = TR_HOID TR_HHEAD TR_HUP TR_ONE TR_RENAME
+                              TR_COPY TR_UNMERGED TR_UNTRACKED TR_IGNORED;
+    static const size_t boundaries[] = {
+        0U,
+        sizeof(TR_HOID) - 1U,
+        sizeof(TR_HOID) + sizeof(TR_HHEAD) - 2U,
+        sizeof(TR_HOID) + sizeof(TR_HHEAD) + sizeof(TR_HUP) - 3U,
+        sizeof(TR_HOID) + sizeof(TR_HHEAD) + sizeof(TR_HUP) +
+            sizeof(TR_ONE) - 4U,
+        sizeof(TR_HOID) + sizeof(TR_HHEAD) + sizeof(TR_HUP) +
+            sizeof(TR_ONE) + sizeof(TR_RENAME) - 5U,
+        sizeof(TR_HOID) + sizeof(TR_HHEAD) + sizeof(TR_HUP) +
+            sizeof(TR_ONE) + sizeof(TR_RENAME) + sizeof(TR_COPY) - 6U,
+        sizeof(TR_HOID) + sizeof(TR_HHEAD) + sizeof(TR_HUP) +
+            sizeof(TR_ONE) + sizeof(TR_RENAME) + sizeof(TR_COPY) +
+            sizeof(TR_UNMERGED) - 7U,
+        sizeof(TR_HOID) + sizeof(TR_HHEAD) + sizeof(TR_HUP) +
+            sizeof(TR_ONE) + sizeof(TR_RENAME) + sizeof(TR_COPY) +
+            sizeof(TR_UNMERGED) + sizeof(TR_UNTRACKED) - 8U,
+        sizeof(mixed) - 1U
+    };
+    static const size_t boundary_entries[] = {0U, 0U, 0U, 0U, 1U,
+                                               2U, 3U, 4U, 5U, 6U};
     size_t cut;
     GitParseErr err;
 
-    for (cut = 0U; cut + 1U < sizeof(record) - 1U; cut++) {
+    for (cut = 0U; cut <= sizeof(mixed) - 1U; cut++) {
         GitSnapshot snap;
+        size_t boundary;
+        bool expected_ok = false;
+        size_t expected_entries = 0U;
+        bool ok;
+
+        for (boundary = 0U;
+             boundary < sizeof(boundaries) / sizeof(boundaries[0]);
+             boundary++) {
+            if (cut == boundaries[boundary]) {
+                expected_ok = true;
+                expected_entries = boundary_entries[boundary];
+                break;
+            }
+        }
         snapshot_begin(&snap);
-        YEW_ASSERT(!yew_git_parse_status(&snap, record, cut + 1U, &err));
-        YEW_ASSERT(err.off <= cut + 1U);
+        ok = yew_git_parse_status(&snap, mixed, cut, &err);
+        YEW_ASSERT_EQ_I64(ok, expected_ok);
+        if (ok)
+            YEW_ASSERT_EQ_U64(snap.entries.len, expected_entries);
+        else
+            YEW_ASSERT(err.off <= cut);
         arena_free_all(&snap.a);
     }
     {
@@ -251,6 +313,16 @@ void test_porcelain_every_byte_truncation_and_rejections(void)
         arena_free_all(&snap.a);
     }
 }
+
+#undef TR_HOID
+#undef TR_HHEAD
+#undef TR_HUP
+#undef TR_ONE
+#undef TR_RENAME
+#undef TR_COPY
+#undef TR_UNMERGED
+#undef TR_UNTRACKED
+#undef TR_IGNORED
 
 void test_porcelain_z_paths_ignore_prefixes(void)
 {
