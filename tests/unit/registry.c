@@ -815,6 +815,8 @@ const YewTest yew_tests[] = {
     T(ai_badge_states_hosts_and_priority),
     T(ai_badge_remote_cannot_be_hidden),
     T(ai_redact_shipped_fixture_matrix),
+    T(ai_policy_user_rows_append_and_invalid_rows_are_isolated),
+    T(ai_policy_replace_is_explicit_and_warns_about_dropped_defaults),
     T(ai_redact_false_positive_boundaries),
     T(ai_redact_prefix_suffix_line_and_first_rule),
     T(ai_redact_user_merge_replace_and_compile_error),

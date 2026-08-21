@@ -776,6 +776,8 @@ void test_ai_workspace_policy_resolves_once_per_session(void);
 void test_ai_badge_states_hosts_and_priority(void);
 void test_ai_badge_remote_cannot_be_hidden(void);
 void test_ai_redact_shipped_fixture_matrix(void);
+void test_ai_policy_user_rows_append_and_invalid_rows_are_isolated(void);
+void test_ai_policy_replace_is_explicit_and_warns_about_dropped_defaults(void);
 void test_ai_redact_false_positive_boundaries(void);
 void test_ai_redact_prefix_suffix_line_and_first_rule(void);
 void test_ai_redact_user_merge_replace_and_compile_error(void);

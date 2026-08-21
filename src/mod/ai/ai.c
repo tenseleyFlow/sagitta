@@ -19,12 +19,14 @@
 static bool ai_redact_policy_check(Ed *ed, const AiCtx *context,
                                    RedactHit *hit)
 {
+    yew_ai_policy_ensure(ed);
     return ed != NULL && ed->ai != NULL &&
            yew_ai_redact_scan(ed->ai->redact, context, hit);
 }
 
 static bool ai_path_policy_check(Ed *ed, const char *path)
 {
+    yew_ai_policy_ensure(ed);
     return yew_ai_path_exclusion(ed, path) != NULL;
 }
 
@@ -77,6 +79,7 @@ const char *yew_ai_path_exclusion(Ed *ed, const char *path)
     char relative[PATH_MAX];
     AiPathHit hit = {0};
 
+    yew_ai_policy_ensure(ed);
     if (ed == NULL || ed->ai == NULL ||
         !yew_ai_path_excluded(ed->ai->paths,
                               ai_relative_path(ed, path, relative), &hit))
@@ -156,6 +159,7 @@ void yew_ai_state_init(Ed *ed)
     state->paths = yew_ai_path_policy_new(NULL, 0U, false, NULL);
     if (state->redact == NULL || state->paths == NULL)
         YEW_BUG("failed to install shipped AI privacy policy");
+    (void)yew_ai_policy_reload(ed);
     yew_ai_redact_hook_set(ai_redact_policy_check);
     yew_ai_path_policy_set(ai_path_policy_check);
     yew_ai_workspace_policy_set(ai_workspace_policy_check);
