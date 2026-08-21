@@ -1,7 +1,9 @@
 #include "unit/harness.h"
 
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 #include "ui/layout.h"
@@ -359,4 +361,52 @@ void test_viewport_resize_roundtrip_and_gutter_digit_damage(void)
     interner_free(&ed.interner);
     arena_free_all(&ed.arena);
     vp_fixture_free(&f);
+}
+
+void test_viewport_relative_cursor_render_touches_only_gutter(void)
+{
+    static const u8 text[] = "alpha\nbeta\ngamma\n";
+    Ed ed;
+    TtyCaps caps = {0};
+    Cursor *cursor;
+    Cell *content;
+    size_t at;
+    int sink;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, sizeof(text) - 1U,
+                                  "relative-gutter.txt"));
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 8U, 40U));
+    ed.grid_ready = true;
+    yew_render_init(&ed.render, &caps, NULL);
+    ed.render_ready = true;
+    yew_ed_layout(&ed);
+    sink = open("/dev/null", O_WRONLY);
+    YEW_ASSERT(sink >= 0);
+    ed.tty.wfd = sink;
+
+    yew_ed_render(&ed);
+    YEW_ASSERT(!ed.full_damage);
+    YEW_ASSERT(ed.drawn_cursor_line_valid);
+    YEW_ASSERT(ed.win->gutter_width != 0U);
+    YEW_ASSERT(ed.win->rect.w > 1U);
+    at = (size_t)ed.win->rect.y * ed.grid.cols + ed.win->rect.x + 1U;
+    content = &ed.grid.back[at];
+    YEW_ASSERT_EQ_U64(content->utf8[0], (u8)'l');
+
+    /* Leave an unmarked sentinel in a document cell.  A cursor-line change
+     * may repaint the relative-number gutter and footer, but must not revisit
+     * document text while the viewport itself remains stable. */
+    content->utf8[0] = (u8)'#';
+    cursor = yew_ed_cursor(&ed);
+    cursor->pos = yew_textbuf_line_start(ed.buffer.tb, LINENO(1U));
+    cursor->anchor = cursor->pos;
+    ed.cursor_follow_pending = true;
+    yew_ed_render(&ed);
+    YEW_ASSERT_EQ_U64(ed.drawn_cursor_line.v, 1U);
+    YEW_ASSERT_EQ_U64(content->utf8[0], (u8)'#');
+
+    YEW_ASSERT(close(sink) == 0);
+    ed.tty.wfd = -1;
+    yew_ed_free(&ed);
 }

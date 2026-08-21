@@ -2121,10 +2121,19 @@ void yew_ed_render(Ed *ed)
                    ed->drawn_left.v != win->vp.left.v ||
                    ed->drawn_wrap != win->vp.wrap ||
                    !ed->drawn_cursor_line_valid;
-    if (view_changed ||
-        ((win->number_style == YEW_NUM_REL ||
-          win->number_style == YEW_NUM_HYBRID) && cursor_line_changed)) {
+    if (view_changed) {
         yew_ed_damage_document(ed);
+    } else if ((win->number_style == YEW_NUM_REL ||
+                win->number_style == YEW_NUM_HYBRID) &&
+               cursor_line_changed) {
+        /* Relative values change on every visible line, but only inside the
+         * gutter.  Re-running document drawing here used to revisit text,
+         * syntax spans, selections, diagnostics, and overlays on every
+         * vertical arrow even though the cell diff ultimately emitted only
+         * the numbers.  Keep the distance-number UX without turning cursor
+         * motion into a document repaint. */
+        yew_gutter_draw(ed, win, 0U, win->rect.h);
+        ed->footer_dirty = true;
     } else if (win->number_style == YEW_NUM_ABS && cursor_line_changed) {
         u16 row;
 

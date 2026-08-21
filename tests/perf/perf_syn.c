@@ -29,6 +29,17 @@
 #include "util/buf.h"
 #include "util/intern.h"
 
+/* The benchmark intentionally exercises degradation paths millions of times.
+ * Those warnings are useful in the editor and harmful in a measurement
+ * process: synchronous persistent logging perturbs timings and used to grow a
+ * developer's normal yew log by hundreds of megabytes.  Error diagnostics
+ * remain enabled for genuine benchmark failures and are inherited by probes. */
+static void isolate_benchmark_logging(void)
+{
+    if (setenv("YEW_LOG_LEVEL", "error", 1) != 0)
+        (void)fprintf(stderr, "perf_syn: cannot isolate benchmark logging\n");
+}
+
 enum {
     PERF_SYN_DEFAULT_SAMPLES = 1001,
     PERF_SYN_MAX_SAMPLES = 1001,
@@ -2719,6 +2730,7 @@ int main(int argc, char **argv)
     PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
     int status = 0;
 
+    isolate_benchmark_logging();
     if (argc == 2 && strcmp(argv[1], "--prime-all-syntax") == 0)
         return prime_all_syntax();
     if (argc == 2 && strcmp(argv[1], "--warm-start-probe") == 0)

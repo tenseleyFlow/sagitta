@@ -14,6 +14,7 @@
 
 enum {
     LATENCY_KEYS = 10000,
+    ARROW_KEYS = 2000,
     LATENCY_LINES = 10000,
     COLD_RUNS = 9,
     SCREEN_ROWS = 24,
@@ -22,6 +23,7 @@ enum {
 
 typedef struct LatencyLimits {
     i64 key_p99_ns;
+    i64 arrow_p99_ns;
     i64 cold_ns;
 } LatencyLimits;
 
@@ -46,9 +48,21 @@ static bool write_all(int fd, const void *data, size_t len)
 
 static bool make_fixture(char *root, size_t root_cap,
                          char *path, size_t path_cap,
+                         char *wolf, size_t wolf_cap,
                          char *state, size_t state_cap)
 {
     static const char line[] = "x\n";
+    static const char hello_lu[] =
+        "fn main() -> !int {\n"
+        "    print(\"hello, wolf\")\n"
+        "    greet(\"reader\")\n"
+        "    0\n"
+        "}\n"
+        "\n"
+        "fn greet(name: str) -> !int {\n"
+        "    print(\"hello, {name}\")\n"
+        "    0\n"
+        "}\n";
     char template[] = "/tmp/yew-latency-XXXXXX";
     char *made;
     int fd;
@@ -62,6 +76,9 @@ static bool make_fixture(char *root, size_t root_cap,
     n = snprintf(path, path_cap, "%s/fixture.c", root);
     if (n < 0 || (size_t)n >= path_cap)
         return false;
+    n = snprintf(wolf, wolf_cap, "%s/hello.lu", root);
+    if (n < 0 || (size_t)n >= wolf_cap)
+        return false;
     n = snprintf(state, state_cap, "%s/state", root);
     if (n < 0 || (size_t)n >= state_cap || mkdir(state, 0700) != 0)
         return false;
@@ -73,6 +90,15 @@ static bool make_fixture(char *root, size_t root_cap,
             (void)close(fd);
             return false;
         }
+    }
+    if (close(fd) != 0)
+        return false;
+    fd = open(wolf, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0)
+        return false;
+    if (!write_all(fd, hello_lu, sizeof(hello_lu) - 1U)) {
+        (void)close(fd);
+        return false;
     }
     return close(fd) == 0;
 }
@@ -167,12 +193,15 @@ static bool load_limits(const char *path, LatencyLimits *limits)
             continue;
         if (strcmp(name, "keypress_to_paint_p99") == 0)
             limits->key_p99_ns = (i64)value;
+        else if (strcmp(name, "cursor_arrow_to_paint_p99") == 0)
+            limits->arrow_p99_ns = (i64)value;
         else if (strcmp(name, "cold_open_to_first_paint") == 0)
             limits->cold_ns = (i64)value;
     }
     if (ferror(file) || fclose(file) != 0)
         return false;
-    return limits->key_p99_ns > 0 && limits->cold_ns > 0;
+    return limits->key_p99_ns > 0 && limits->arrow_p99_ns > 0 &&
+           limits->cold_ns > 0;
 }
 
 static void merge_sort_i64(i64 *values, i64 *work, size_t len)
@@ -411,13 +440,76 @@ done_alloc:
     return ok;
 }
 
+static bool measure_arrows(const char *binary, const char *path,
+                           const char *state, i64 *p99_out)
+{
+    size_t configured = key_count();
+    size_t count = configured < ARROW_KEYS ? configured : ARROW_KEYS;
+    i64 inject = injected_delay();
+    i64 *samples;
+    i64 *work;
+    YewLivePty pty = {.master = -1, .pid = -1};
+    i64 deadline;
+    size_t i;
+    bool ok = false;
+
+    if (count == 0U || inject < 0)
+        return false;
+    samples = malloc(count * sizeof(*samples));
+    work = malloc(count * sizeof(*work));
+    if (samples == NULL || work == NULL)
+        goto done_alloc;
+    deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
+    if (!yew_live_pty_spawn(&pty, binary, path, state,
+                            SCREEN_ROWS, SCREEN_COLS) ||
+        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
+        (void)fprintf(stderr, "latency: arrow run did not paint initially\n");
+        goto done_pty;
+    }
+    for (i = 0U; i < count; i++) {
+        static const char up[] = "\033[A";
+        static const char down[] = "\033[B";
+        const char *key = (i & 1U) != 0U ? up : down;
+        u64 frame = pty.frames;
+        i64 start = yew_live_pty_now_ns();
+        i64 completed;
+
+        deadline = start + INT64_C(1000000000);
+        if (start < 0 || !yew_live_pty_write(&pty, key, sizeof(up) - 1U,
+                                              deadline))
+            goto done_pty;
+        delay_ns(inject);
+        if (!yew_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
+            (void)fprintf(stderr, "latency: arrow %zu did not paint\n", i + 1U);
+            goto done_pty;
+        }
+        samples[i] = completed - start;
+    }
+    if (!stop_editor(&pty)) {
+        (void)fprintf(stderr, "latency: arrow run did not quit\n");
+        goto done_pty;
+    }
+    merge_sort_i64(samples, work, count);
+    *p99_out = samples[(count * 99U + 99U) / 100U - 1U];
+    ok = true;
+
+done_pty:
+    yew_live_pty_close(&pty);
+done_alloc:
+    free(work);
+    free(samples);
+    return ok;
+}
+
 int main(int argc, char **argv)
 {
     char root[1024];
     char fixture[1024];
+    char wolf[1024];
     char state[1024];
     LatencyLimits limits;
     i64 key_p99;
+    i64 arrow_p99;
     i64 cold;
     int status = 0;
 
@@ -434,12 +526,14 @@ int main(int argc, char **argv)
         return 2;
     }
     if (!make_fixture(root, sizeof(root), fixture, sizeof(fixture),
+                      wolf, sizeof(wolf),
                       state, sizeof(state))) {
-        (void)fprintf(stderr, "latency: cannot create 10 kLOC fixture\n");
+        (void)fprintf(stderr, "latency: cannot create fixtures\n");
         return 2;
     }
     if (!measure_cold(argv[2], fixture, state, &cold) ||
-        !measure_keys(argv[2], fixture, state, &key_p99)) {
+        !measure_keys(argv[2], fixture, state, &key_p99) ||
+        !measure_arrows(argv[2], wolf, state, &arrow_p99)) {
         (void)fprintf(stderr, "latency: PTY measurement failed\n");
         (void)remove_tree(root);
         return 2;
@@ -452,10 +546,14 @@ int main(int argc, char **argv)
     (void)printf("keypress_to_paint_p99 %lld limit=%lld%s\n",
                  (long long)key_p99, (long long)limits.key_p99_ns,
                  key_p99 <= limits.key_p99_ns ? " ok" : " FAIL");
+    (void)printf("cursor_arrow_to_paint_p99 %lld limit=%lld%s\n",
+                 (long long)arrow_p99, (long long)limits.arrow_p99_ns,
+                 arrow_p99 <= limits.arrow_p99_ns ? " ok" : " FAIL");
     (void)printf("cold_open_to_first_paint %lld limit=%lld%s\n",
                  (long long)cold, (long long)limits.cold_ns,
                  cold <= limits.cold_ns ? " ok" : " FAIL");
-    if (key_p99 > limits.key_p99_ns || cold > limits.cold_ns)
+    if (key_p99 > limits.key_p99_ns ||
+        arrow_p99 > limits.arrow_p99_ns || cold > limits.cold_ns)
         status = 1;
     return status;
 }

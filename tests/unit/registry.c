@@ -524,6 +524,7 @@ const YewTest yew_tests[] = {
     T(viewport_cursor_push_preserves_nowrap_goal),
     T(viewport_scroll_pushes_cursor_without_follow_snapback),
     T(viewport_resize_roundtrip_and_gutter_digit_damage),
+    T(viewport_relative_cursor_render_touches_only_gutter),
     T(wrap_prefers_space_runs_and_absorbs_trailing_space),
     T(wrap_hard_breaks_long_token),
     T(wrap_breaks_after_hyphen_dash_and_slash),
