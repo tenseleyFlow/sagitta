@@ -1049,11 +1049,43 @@ static Protocol parse_protocol(const Bytes *bytes)
     return parsed;
 }
 
+static bool contains_span(const char *name, const char *span, size_t span_len)
+{
+    size_t name_len = strlen(name);
+    size_t i;
+
+    if (span_len == 0U || span_len > name_len)
+        return false;
+    for (i = 0U; i <= name_len - span_len; i++)
+        if (memcmp(name + i, span, span_len) == 0)
+            return true;
+    return false;
+}
+
+static bool excluded_test(const char *name, const char *exclude)
+{
+    const char *start;
+
+    if (exclude == NULL)
+        return false;
+    start = exclude;
+    for (;;) {
+        const char *comma = strchr(start, ',');
+        size_t len = comma == NULL ? strlen(start) : (size_t)(comma - start);
+
+        if (contains_span(name, start, len))
+            return true;
+        if (comma == NULL)
+            return false;
+        start = comma + 1;
+    }
+}
+
 static bool selected_test(const char *name, const char *filter,
                           const char *exclude)
 {
     return (filter == NULL || strstr(name, filter) != NULL) &&
-           (exclude == NULL || strstr(name, exclude) == NULL);
+           !excluded_test(name, exclude);
 }
 
 static size_t selected_count(const TestList *tests, const char *filter,
@@ -1285,6 +1317,15 @@ static bool selftest_zero_assertions(void)
          strcmp(reason, "no assertions") == 0;
     bytes_free(&result.protocol);
     return ok;
+}
+
+static bool selftest_exclude_list(void)
+{
+    return !selected_test("lsp_sync", NULL, "lsp_,ai_") &&
+           !selected_test("ai_preset_local", NULL, "lsp_,ai_") &&
+           selected_test("file_bytes", NULL, "lsp_,ai_") &&
+           selected_test("ai_preset_local", "preset", "lsp_") &&
+           !selected_test("ai_preset_local", "status", "lsp_");
 }
 
 static bool selftest_skip_report(void)
@@ -1557,6 +1598,8 @@ static int run_selftests(const char *yew, const char *fixtures,
 
     failures += report_selftest("zero_assertions_fail",
                                 selftest_zero_assertions());
+    failures += report_selftest("exclude_list_selects_by_substring",
+                                selftest_exclude_list());
     failures += report_selftest("skip_reports_skipped",
                                 selftest_skip_report());
     failures += report_selftest("failure_report_is_pinned",

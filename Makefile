@@ -425,7 +425,19 @@ $(BUILD)/tests/unit/test_ai_shadow_live.o: CFLAGS += \
   -DYEW_TEST_MOCKAI='"$(abspath $(MOCKAI))"' \
   -DYEW_TEST_MOCKCURL='"$(abspath $(MOCKCURL))"'
 $(BUILD)/tests/unit/test_ai_shadow_live.o: $(MOCKAI) $(MOCKCURL)
-SCRIPT_RUNNER_ARGS := $(if $(filter lsp,$(MODULES)),,--exclude lsp_)
+ifeq ($(filter lsp,$(MODULES)),)
+ifeq ($(filter ai,$(MODULES)),)
+SCRIPT_RUNNER_ARGS := --exclude lsp_,ai_
+else
+SCRIPT_RUNNER_ARGS := --exclude lsp_
+endif
+else
+ifeq ($(filter ai,$(MODULES)),)
+SCRIPT_RUNNER_ARGS := --exclude ai_
+else
+SCRIPT_RUNNER_ARGS :=
+endif
+endif
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
 PTY_ORACLE_OBJ := $(PTY_VT_OBJ) $(PTY_SNAPSHOT_OBJ)
