@@ -28,16 +28,32 @@
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
+#include "util/log.h"
 
 /* The benchmark intentionally exercises degradation paths millions of times.
  * Those warnings are useful in the editor and harmful in a measurement
  * process: synchronous persistent logging perturbs timings and used to grow a
- * developer's normal yew log by hundreds of megabytes.  Error diagnostics
- * remain enabled for genuine benchmark failures and are inherited by probes. */
+ * developer's normal yew log by hundreds of megabytes.  Keep all benchmark
+ * logging process-local: discard the expected degradation warning and preserve
+ * unexpected warnings and errors on stderr.  Child probes inherit the
+ * installed sink across fork(). */
+static void benchmark_log_write(void *user, YewLogLevel level, const char *msg)
+{
+    static const char expected_warning[] =
+        "syntax highlighting degraded for buffer";
+
+    (void)user;
+    if (level == YEW_LOG_WARN && strcmp(msg, expected_warning) == 0)
+        return;
+    if (level >= YEW_LOG_WARN)
+        (void)fprintf(stderr, "perf_syn: %s\n", msg);
+}
+
 static void isolate_benchmark_logging(void)
 {
-    if (setenv("YEW_LOG_LEVEL", "error", 1) != 0)
-        (void)fprintf(stderr, "perf_syn: cannot isolate benchmark logging\n");
+    static const YewLogSink sink = {benchmark_log_write, NULL};
+
+    yew_log_set_sink(&sink);
 }
 
 enum {
@@ -2660,6 +2676,8 @@ static bool init_cases(
 
 int main(int argc, char **argv)
 {
+    isolate_benchmark_logging();
+
     PerfCase cases[PERF_SYN_CASE_COUNT];
     char case_names[PERF_SYN_FIXTURE_COUNT * 4U][PERF_SYN_CASE_NAME_CAP];
     Timing case_trials[YEW_ARRAY_LEN(cases)][PERF_SYN_TRIALS];
@@ -2730,7 +2748,6 @@ int main(int argc, char **argv)
     PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
     int status = 0;
 
-    isolate_benchmark_logging();
     if (argc == 2 && strcmp(argv[1], "--prime-all-syntax") == 0)
         return prime_all_syntax();
     if (argc == 2 && strcmp(argv[1], "--warm-start-probe") == 0)
