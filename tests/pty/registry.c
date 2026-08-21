@@ -5762,6 +5762,12 @@ static void case_s49_ai_escape_midstream(PtyCtx *c)
     /* A printable key after the first Esc proves the editor stayed in I;
      * the saved bytes make that mode assertion independent of the chrome. */
     s18_settle_after_keys(c, "Z");
+    /* Z immediately re-arms the zero-debounce provider.  Dismiss either a
+     * pending call or its first ghost, then disable the provider before the
+     * snapshot so instrumented and plain runs observe the same state. */
+    s18_settle_after_keys(c, "esc esc :");
+    s18_settle_after_bytes(c, "set ai.enable false");
+    s18_settle_after_keys(c, "enter a");
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, "s49_ai_escape_midstream");
     s18_settle_after_keys(c, "esc s");

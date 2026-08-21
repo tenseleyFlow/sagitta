@@ -56,6 +56,19 @@ typedef struct MockScript {
     size_t nops;
 } MockScript;
 
+#ifndef YEW_MOCKAI_NO_MAIN
+static volatile sig_atomic_t mock_stop;
+
+static void mock_stop_handler(int signo)
+{
+    (void)signo;
+    mock_stop = 1;
+}
+#define MOCK_STOP_REQUESTED() (mock_stop != 0)
+#else
+#define MOCK_STOP_REQUESTED() false
+#endif
+
 static void mock_error(const char *message)
 {
     (void)fprintf(stderr, "mockai: %s\n", message);
@@ -75,7 +88,7 @@ static bool mock_write_all(int fd, const void *data, size_t len, bool split)
         size_t want = split ? 1U : len - sent;
         ssize_t n = write(fd, bytes + sent, want);
 
-        if (n < 0 && errno == EINTR)
+        if (n < 0 && errno == EINTR && !MOCK_STOP_REQUESTED())
             continue;
         if (n <= 0)
             return false;
@@ -95,7 +108,9 @@ static bool mock_pause_ms(unsigned long ms)
     delay.tv_sec = (time_t)(ms / 1000UL);
     delay.tv_nsec = (long)(ms % 1000UL) * 1000000L;
     while (nanosleep(&delay, &delay) != 0) {
-        if (errno != EINTR) {
+        if (errno != EINTR || MOCK_STOP_REQUESTED()) {
+            if (MOCK_STOP_REQUESTED())
+                return false;
             mock_system_error("nanosleep");
             return false;
         }
@@ -641,6 +656,7 @@ int main(int argc, char **argv)
     unsigned long seed = 0UL;
     unsigned bound_port;
     MockScript script;
+    struct sigaction stop_action;
     int listener;
     int i;
 
@@ -667,6 +683,14 @@ int main(int argc, char **argv)
     }
     if (!mock_script_load(script_path, &script))
         return 2;
+    (void)memset(&stop_action, 0, sizeof(stop_action));
+    stop_action.sa_handler = mock_stop_handler;
+    if (sigemptyset(&stop_action.sa_mask) != 0 ||
+        sigaction(SIGTERM, &stop_action, NULL) != 0) {
+        mock_system_error("install SIGTERM handler");
+        mock_script_free(&script);
+        return 2;
+    }
     (void)signal(SIGPIPE, SIG_IGN);
     listener = mock_listener((unsigned)port, &bound_port);
     if (listener < 0) {
@@ -675,13 +699,15 @@ int main(int argc, char **argv)
     }
     (void)printf("port %u\n", bound_port);
     (void)fflush(stdout);
-    for (;;) {
+    while (!MOCK_STOP_REQUESTED()) {
         int fd;
 
         do {
             fd = accept(listener, NULL, NULL);
-        } while (fd < 0 && errno == EINTR);
+        } while (fd < 0 && errno == EINTR && !MOCK_STOP_REQUESTED());
         if (fd < 0) {
+            if (MOCK_STOP_REQUESTED())
+                break;
             mock_system_error("accept");
             break;
         }
@@ -691,6 +717,6 @@ int main(int argc, char **argv)
     }
     (void)close(listener);
     mock_script_free(&script);
-    return 2;
+    return MOCK_STOP_REQUESTED() ? 0 : 2;
 }
 #endif
