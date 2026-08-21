@@ -5783,6 +5783,198 @@ out:
         (void)unlink(config);
     }
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 50: AI status badge privacy and truncation contracts      */
+/* ---------------------------------------------------------------- */
+
+typedef enum S50BadgeState {
+    S50_BADGE_DISABLED = 0,
+    S50_BADGE_IDLE,
+    S50_BADGE_STREAMING,
+    S50_BADGE_ERROR
+} S50BadgeState;
+
+static S50BadgeState s50_badge_state(const char *name)
+{
+    if (strstr(name, "_disabled_") != NULL)
+        return S50_BADGE_DISABLED;
+    if (strstr(name, "_streaming_") != NULL)
+        return S50_BADGE_STREAMING;
+    if (strstr(name, "_error_") != NULL)
+        return S50_BADGE_ERROR;
+    return S50_BADGE_IDLE;
+}
+
+static bool s50_badge_open(PtyCtx *c, pid_t *server, char *path,
+                           size_t path_cap, char *config, size_t config_cap,
+                           S50BadgeState state, bool remote, bool long_host)
+{
+    static const u8 initial[] = "anchor\n";
+    static const u8 secret[] = "anchor\nWOLF_TOKEN=abcdefghi\n";
+    const char *transport = remote ? "curl" : "http";
+    const char *kind = "ollama";
+    const char *host = remote ? "api.anthropic.com" : "127.0.0.1";
+    bool enabled = state != S50_BADGE_DISABLED;
+    u16 port = remote ? 443U : 11434U;
+    char source[1400];
+    int n;
+
+    *server = -1;
+    if (state == S50_BADGE_STREAMING) {
+        *server = s49_mockai_start("tests/fixtures/ai/pty-stream.script",
+                                  &port);
+        if (*server <= 0) {
+            ptc_check(c, false, "could not start Sprint 50 badge mockai");
+            return false;
+        }
+        host = remote ? "0.0.0.0" : "127.0.0.1";
+    } else if (long_host) {
+        host = "completion.edge.research.api.anthropic.com";
+        port = 443U;
+    }
+    if (!make_fixture(c, state == S50_BADGE_ERROR ? secret : initial,
+                      state == S50_BADGE_ERROR ? sizeof(secret) - 1U :
+                                                  sizeof(initial) - 1U,
+                      path, path_cap))
+        return false;
+    n = snprintf(config, config_cap, "build/pty-s50-%s.fl", c->test->name);
+    if (n <= 0 || (size_t)n >= config_cap) {
+        ptc_check(c, false, "Sprint 50 badge config path overflow");
+        return false;
+    }
+    if (state == S50_BADGE_ERROR) {
+        n = snprintf(source, sizeof(source),
+                     "import ai\n"
+                     "ai.backend(\"local\", {kind: \"ollama\", "
+                     "transport: \"http\", "
+                     "url: \"http://127.0.0.1:11434\", "
+                     "model: \"pty-model\"})\n"
+                     "ai.backend(\"remote\", {kind: \"ollama\", "
+                     "transport: \"curl\", "
+                     "url: \"http://api.anthropic.com:80\", "
+                     "model: \"pty-model\"})\n"
+                     "set({\"ai.enable\": true, "
+                     "\"ai.backend\": \"remote\", "
+                     "\"ai.default_workspace\": \"allow\", "
+                     "\"ai.frame_ms\": 0, "
+                     "\"shadow.ai_debounce_ms\": 0, "
+                     "\"shadow.providers\": \"ai\"})\n");
+    } else {
+        n = snprintf(source, sizeof(source),
+                     "import ai\n"
+                     "ai.backend(\"badge\", {kind: \"%s\", "
+                     "transport: \"%s\", url: \"http://%s:%u\", "
+                     "model: \"pty-model\"})\n"
+                     "set({\"ai.enable\": %s, "
+                     "\"ai.backend\": \"badge\", "
+                     "\"ai.default_workspace\": \"allow\", "
+                     "\"ai.frame_ms\": 0, "
+                     "\"shadow.ai_debounce_ms\": 0, "
+                     "\"shadow.providers\": \"ai\"})\n",
+                     kind, transport, host, (unsigned)port,
+                     enabled ? "true" : "false");
+    }
+    if (n <= 0 || (size_t)n >= sizeof(source) ||
+        !write_bytes(config, (const u8 *)source, (size_t)n)) {
+        ptc_check(c, false, "could not create Sprint 50 badge config");
+        return false;
+    }
+    ptc_spawn(c, ptc_yew_bin(c), "--config", config, path, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    return !c->failed;
+}
+
+static void s50_badge_finish(PtyCtx *c, pid_t server, const char *path,
+                             const char *config)
+{
+    if (c->spawned)
+        s43_force_quit(c);
+    s49_mockai_stop(server);
+    (void)unlink(path);
+    (void)unlink(config);
+}
+
+static void case_s50_ai_badge(PtyCtx *c)
+{
+    S50BadgeState state = s50_badge_state(c->test->name);
+    bool remote = strstr(c->test->name, "_remote_") != NULL;
+    bool long_host = strstr(c->test->name, "_long_") != NULL;
+    const char *marker = remote ? "[AI->" : "[AI";
+    pid_t server = -1;
+    char path[256] = {0};
+    char config[256] = {0};
+
+    if (!s50_badge_open(c, &server, path, sizeof(path), config,
+                        sizeof(config), state, remote, long_host))
+        goto out;
+    if ((remote && state == S50_BADGE_STREAMING) ||
+        state == S50_BADGE_ERROR) {
+        /* The first curl-backed request starts the asynchronous version
+         * probe and is deliberately declined.  Its successor exercises the
+         * actual badge state once that one-time probe is cached. */
+        ptc_keys(c, "end a X");
+        ptc_settle(c, 1200);
+    }
+    if (state == S50_BADGE_STREAMING) {
+        if (remote) {
+            s18_settle_after_keys(c, "Y");
+            ptc_check(c, s49_ai_wait_for(c, "anchorXYint ", 6U),
+                      "Sprint 50 remote AI stream did not start");
+        } else if (!s49_ai_first_frame(c)) {
+            goto out;
+        }
+        if (c->test->cols <= 40U && !remote)
+            ptc_check(c, !s43_screen_contains(&c->vt, "[AI"),
+                      "low-priority local streaming badge survived 40 columns");
+        else
+            ptc_check(c, s43_screen_contains(
+                             &c->vt,
+                             remote ? "[AI->0.0.0.0~]" : "[AI~]"),
+                      "Sprint 50 streaming badge is not visible");
+    } else if (state == S50_BADGE_ERROR) {
+        ptc_keys(c, "end a Y");
+        ptc_settle(c, 300);
+        s18_settle_after_keys(c, "i");
+        s18_settle_after_keys(c, "esc");
+        if (!remote)
+            s43_command(c, "set ai.backend local");
+        else
+            s18_settle_after_keys(c, ": esc");
+        if (c->test->cols <= 40U && !remote)
+            ptc_check(c, !s43_screen_contains(&c->vt, "[AI"),
+                      "low-priority local error badge survived 40 columns");
+        else
+            ptc_check(c, s43_screen_contains(
+                             &c->vt,
+                             remote ? "[AI->api.anthropic.com!]" :
+                                      "[AI!]"),
+                      "Sprint 50 error badge is not visible");
+    } else if (state == S50_BADGE_DISABLED) {
+        ptc_check(c, !s43_screen_contains(&c->vt, marker),
+                  "disabled AI badge is visible");
+    } else if (long_host) {
+        ptc_check(c, s43_screen_contains(&c->vt,
+                                         "[AI->\xE2\x80\xA6"
+                                         "h.api.anthropic.com]"),
+                  "long remote host was not elided from the left");
+    } else {
+        if (c->test->cols <= 40U && !remote)
+            ptc_check(c, !s43_screen_contains(&c->vt, "[AI"),
+                      "low-priority local idle badge survived 40 columns");
+        else
+            ptc_check(c, s43_screen_contains(
+                             &c->vt,
+                             remote ? "[AI->api.anthropic.com]" : "[AI]"),
+                      "Sprint 50 idle badge is not visible");
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+
+out:
+    s50_badge_finish(c, server, path, config);
+}
 #endif
 
 /* ---------------------------------------------------------------- */
@@ -6262,6 +6454,35 @@ static void case_s47_rename_refusal(PtyCtx *c)
 
 const PtyCase yew_pty_cases[] = {
 #if YEW_WITH_AI
+    C(ai_badge_local_disabled_200, modern, 24U, 200U, case_s50_ai_badge),
+    C(ai_badge_local_idle_200, modern, 24U, 200U, case_s50_ai_badge),
+    C(ai_badge_local_streaming_200, modern, 24U, 200U, case_s50_ai_badge),
+    C(ai_badge_local_error_200, modern, 24U, 200U, case_s50_ai_badge),
+    C(ai_badge_local_disabled_80, modern, 24U, 80U, case_s50_ai_badge),
+    C(ai_badge_local_idle_80, modern, 24U, 80U, case_s50_ai_badge),
+    C(ai_badge_local_streaming_80, modern, 24U, 80U, case_s50_ai_badge),
+    C(ai_badge_local_error_80, modern, 24U, 80U, case_s50_ai_badge),
+    C(ai_badge_local_disabled_40, modern, 24U, 40U, case_s50_ai_badge),
+    C(ai_badge_local_idle_40, modern, 24U, 40U, case_s50_ai_badge),
+    C(ai_badge_local_streaming_40, modern, 24U, 40U, case_s50_ai_badge),
+    C(ai_badge_local_error_40, modern, 24U, 40U, case_s50_ai_badge),
+    C(ai_badge_remote_disabled_200, modern, 24U, 200U, case_s50_ai_badge),
+    C(ai_badge_remote_idle_200, modern, 24U, 200U, case_s50_ai_badge),
+    C(ai_badge_remote_streaming_200, modern, 24U, 200U,
+      case_s50_ai_badge),
+    C(ai_badge_remote_error_200, modern, 24U, 200U, case_s50_ai_badge),
+    C(ai_badge_remote_disabled_80, modern, 24U, 80U, case_s50_ai_badge),
+    C(ai_badge_remote_idle_80, modern, 24U, 80U, case_s50_ai_badge),
+    C(ai_badge_remote_streaming_80, modern, 24U, 80U,
+      case_s50_ai_badge),
+    C(ai_badge_remote_error_80, modern, 24U, 80U, case_s50_ai_badge),
+    C(ai_badge_remote_disabled_40, modern, 24U, 40U, case_s50_ai_badge),
+    C(ai_badge_remote_idle_40, modern, 24U, 40U, case_s50_ai_badge),
+    C(ai_badge_remote_streaming_40, modern, 24U, 40U,
+      case_s50_ai_badge),
+    C(ai_badge_remote_error_40, modern, 24U, 40U, case_s50_ai_badge),
+    C(ai_badge_remote_long_idle_200, modern, 24U, 200U,
+      case_s50_ai_badge),
     C(s49_ai_stream, modern, 24U, 80U, case_s49_ai_stream),
     C(s49_ai_escape_midstream, modern, 24U, 80U,
       case_s49_ai_escape_midstream),

@@ -511,6 +511,27 @@ static void strv_free(char **v)
     free(v);
 }
 
+static void env_remove(char **envp, const char *name)
+{
+    size_t name_len;
+    size_t i;
+
+    if (envp == NULL || name == NULL)
+        return;
+    name_len = strlen(name);
+    for (i = 0U; envp[i] != NULL; i++) {
+        if (strncmp(envp[i], name, name_len) != 0 ||
+            envp[i][name_len] != '=')
+            continue;
+        free(envp[i]);
+        do {
+            envp[i] = envp[i + 1U];
+            i++;
+        } while (envp[i - 1U] != NULL);
+        return;
+    }
+}
+
 void ptc_spawn(PtyCtx *c, const char *bin, ...)
 {
     char **argv;
@@ -563,6 +584,14 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
         ptc_fail(c, "allocating pinned environment");
         return;
     }
+    /* Sprint 50's remote status badge needs a non-loopback URL to exercise
+     * its privacy marker.  The local-error cases select that backend only to
+     * establish error state.  Ordinary PTY children retain the transport
+     * guard; these named cases use only a local mock listener or make no
+     * request. */
+    if (strncmp(c->test->name, "ai_badge_remote_", 16U) == 0 ||
+        strncmp(c->test->name, "ai_badge_local_error_", 21U) == 0)
+        env_remove(envp, "YEW_AI_MOCK");
     free(runtime_dir);
     (void)memset(&spec, 0, sizeof(spec));
     spec.path = bin;
