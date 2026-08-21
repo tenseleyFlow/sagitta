@@ -234,11 +234,6 @@ void yew_ai_state_init(Ed *ed)
     yew_ai_curl_probe_init(&state->curl);
     bytebuf_init(&state->log);
     state->stats = yew_ai_stats_new();
-    state->redact = yew_ai_redact_policy_new(NULL, 0U, false, NULL);
-    state->paths = yew_ai_path_policy_new(NULL, 0U, false, NULL);
-    if (state->redact == NULL || state->paths == NULL)
-        YEW_BUG("failed to install shipped AI privacy policy");
-    (void)yew_ai_policy_reload(ed);
     yew_ai_redact_hook_set(ai_redact_policy_check);
     yew_ai_path_policy_set(ai_path_policy_check);
     yew_ai_workspace_policy_set(ai_workspace_policy_check);
