@@ -160,6 +160,7 @@ void test_ai_frame_continues_after_a_matching_typed_prefix(void)
     YEW_ASSERT(ed.win->shadow.live);
     YEW_ASSERT_EQ_U64(ed.win->shadow.sug.seq, 12U);
     YEW_ASSERT_EQ_U64(ed.win->shadow.sug.buf_gen, ed.win->buf->tb->gen);
+    YEW_ASSERT_EQ_U64(ed.win->shadow.sug.consumed, 1U);
     YEW_ASSERT_EQ_I64(yew_shadow_revalidate(ed.win->buf->tb,
                                             &ed.win->shadow.sug,
                                             BYTEOFF(1U)), 1);

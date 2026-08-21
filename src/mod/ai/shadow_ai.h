@@ -42,6 +42,8 @@ typedef struct AiCall {
     u16 status;
     i64 retry_after_ms;
     i64 t_armed;
+    i64 t_context;
+    i64 t_prompt;
     i64 t_sent;
     i64 t_first_token;
     i64 t_done;
