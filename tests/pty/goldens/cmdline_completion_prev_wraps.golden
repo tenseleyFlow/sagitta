@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
   view.half_page_down          Scroll half a viewport down                      
   move.line.half_page_up       Move half a viewport up                          
   move.line.half_page_down     Move half a viewport down                        
-> edit.delete.grapheme_left    Delete the grapheme left of the cursor      57/57
+> edit.delete.grapheme_left    Delete the grapheme left of the cursor      58/58
 :edit.delete.grapheme_left                                                      
 --- style
 AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
