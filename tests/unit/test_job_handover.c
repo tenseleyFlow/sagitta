@@ -65,6 +65,19 @@ fail:
     return -1;
 }
 
+static bool handover_termios_equal(const struct termios *left,
+                                    const struct termios *right)
+{
+    /* tcgetattr need not initialize implementation padding. */
+    return left->c_iflag == right->c_iflag &&
+           left->c_oflag == right->c_oflag &&
+           left->c_cflag == right->c_cflag &&
+           left->c_lflag == right->c_lflag &&
+           memcmp(left->c_cc, right->c_cc, sizeof(left->c_cc)) == 0 &&
+           cfgetispeed(left) == cfgetispeed(right) &&
+           cfgetospeed(left) == cfgetospeed(right);
+}
+
 static bool handover_attach_slave(const char *path)
 {
     int slave;
@@ -122,7 +135,7 @@ static void handover_tty_child(const char *slave_path,
     if (!ed.tty.alt || !yew_tty_handover_begin(&ed.tty))
         _exit(104);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        memcmp(&actual, initial, sizeof(actual)) != 0)
+        !handover_termios_equal(&actual, initial))
         _exit(105);
     if (fatal_mid_handover) {
         (void)raise(SIGTERM);
@@ -133,7 +146,7 @@ static void handover_tty_child(const char *slave_path,
     raw = *initial;
     yew_tty_rawios(&raw);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        memcmp(&actual, &raw, sizeof(actual)) != 0)
+        !handover_termios_equal(&actual, &raw))
         _exit(108);
 
     spec.sink = YEW_SINK_DISCARD;
@@ -143,21 +156,21 @@ static void handover_tty_child(const char *slave_path,
         result.state != YEW_JOB_EXECFAIL || result.exec_errno != ENOENT)
         _exit(109);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        memcmp(&actual, &raw, sizeof(actual)) != 0)
+        !handover_termios_equal(&actual, &raw))
         _exit(110);
     spec.argv = exit_argv;
     if (!yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
         result.state != YEW_JOB_EXITED || result.exit_code != 23)
         _exit(111);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        memcmp(&actual, &raw, sizeof(actual)) != 0)
+        !handover_termios_equal(&actual, &raw))
         _exit(112);
     spec.argv = signal_argv;
     if (!yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
         result.state != YEW_JOB_SIGNALED || result.termsig != SIGTERM)
         _exit(113);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        memcmp(&actual, &raw, sizeof(actual)) != 0)
+        !handover_termios_equal(&actual, &raw))
         _exit(114);
 
     /* Force the one fallible setup step that occurs after tty release.
@@ -172,12 +185,12 @@ static void handover_tty_child(const char *slave_path,
             strstr(err, "cannot create pipe") == NULL)
             _exit(116);
         if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-            memcmp(&actual, &raw, sizeof(actual)) != 0)
+            !handover_termios_equal(&actual, &raw))
             _exit(117);
     }
     yew_ed_free(&ed);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        memcmp(&actual, initial, sizeof(actual)) != 0)
+        !handover_termios_equal(&actual, initial))
         _exit(118);
     _exit(0);
 }
@@ -222,7 +235,7 @@ static void handover_assert_tty_case(bool fatal_mid_handover)
     }
     (void)memset(&after, 0, sizeof(after));
     YEW_ASSERT_EQ_I64(tcgetattr(master, &after), 0);
-    YEW_ASSERT_EQ_MEM(&after, &initial, sizeof(after));
+    YEW_ASSERT(handover_termios_equal(&after, &initial));
     YEW_ASSERT_EQ_I64(close(master), 0);
 }
 
