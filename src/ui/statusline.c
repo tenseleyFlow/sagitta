@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 
 #include "edit/ed.h"
+#include "mod/git/git.h"
 #include "edit/theme_cmds.h"
 #include "syn/theme.h"
 #include "text/file.h"
@@ -19,6 +20,7 @@
 #include "unicode/coords.h"
 #include "unicode/width.h"
 #include "util/log.h"
+#include "ws/state.h"
 #if YEW_WITH_LSP
 #include "mod/lsp/diag.h"
 #include "mod/lsp/lsp.h"
@@ -380,13 +382,14 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     char syn_badge[8];
     char diag_badge[48];
     char ai_badge[320];
+    char git_badge[160];
     size_t diag_error_off = 0U;
     size_t diag_error_len = 0U;
     size_t diag_warn_off = 0U;
     size_t diag_warn_len = 0U;
     char recording[32];
     RecStatus rec_status;
-    Segment segments[15];
+    Segment segments[16];
     int available;
     int path_cells;
     int dirty_cells;
@@ -575,11 +578,29 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     segments[13] = (Segment){w->buf->lang, 3U,
                              w->buf->lang != NULL &&
                              strncmp(w->buf->lang, "fortran", 7U) == 0};
+    git_badge[0] = '\0';
+    {
+        const GitSnapshot *gs = yew_git_snapshot((Ed *)ed);
+        bool ascii = yew_state_option_bool(ed, "git.ascii_glyphs", false);
+        const char *mark = ascii ? "git:" : "⎇";
+        if (gs != NULL && gs->state != YEW_GIT_NO_GIT &&
+            gs->state != YEW_GIT_NOT_REPO) {
+            if (gs->unborn) (void)snprintf(git_badge, sizeof(git_badge), "%s (no commits)", mark);
+            else if (gs->detached) (void)snprintf(git_badge, sizeof(git_badge), "%s (%-.6s)", mark, gs->head_oid != NULL ? gs->head_oid : "");
+            else (void)snprintf(git_badge, sizeof(git_badge), "%s %s", mark, gs->branch != NULL ? gs->branch : "?");
+            if (gs->upstream != NULL && gs->ahead >= 0 && gs->behind >= 0) {
+                size_t n = strlen(git_badge);
+                (void)snprintf(git_badge + n, sizeof(git_badge) - n, " ↑%d ↓%d", gs->ahead, gs->behind);
+            }
+            if (gs->conflicted) { size_t n = strlen(git_badge); (void)snprintf(git_badge + n, sizeof(git_badge) - n, " ⚑"); }
+        }
+    }
+    segments[14] = (Segment){git_badge, 5U, git_badge[0] != '\0'};
     {
         u8 ai_priority = 5U;
         bool show = yew_ai_status_badge(ed, ai_badge, sizeof(ai_badge),
                                         &ai_priority);
-        segments[14] = (Segment){ai_badge, ai_priority, show};
+        segments[15] = (Segment){ai_badge, ai_priority, show};
     }
     path_cells = cells(path);
     dirty_cells = yew_buf_dirty(w->buf) ? 2 : 0;
@@ -592,18 +613,18 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
          * priority-2 peers first and clip the path before considering the
          * badge itself; otherwise a long path makes the privacy marker
          * disappear before path_clip() gets a chance to make room. */
-        if (priority == 2U && segments[14].shown &&
-            segments[14].priority == 2U) {
+        if (priority == 2U && segments[15].shown &&
+            segments[15].priority == 2U) {
             int clipped_min;
 
             drop_priority_except(segments, YEW_ARRAY_LEN(segments),
-                                 priority, 14U);
+                                 priority, 15U);
             right_cells = right_width(segments, YEW_ARRAY_LEN(segments));
             clipped_min = 1 + (path_cells == 0 ? 0 : 1) + dirty_cells +
                           (right_cells == 0 ? 0 : 2 + right_cells);
             if (clipped_min <= available)
                 break;
-            segments[14].shown = false;
+            segments[15].shown = false;
         } else {
             drop_priority(segments, YEW_ARRAY_LEN(segments), priority);
         }

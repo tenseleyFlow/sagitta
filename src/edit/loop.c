@@ -21,6 +21,7 @@
 #include "mod/ai/ai.h"
 #include "mod/ai/http.h"
 #include "mod/git/fussmode.h"
+#include "mod/git/git.h"
 #include "mod/lsp/lsp.h"
 #include "term/input.h"
 #include "term/tty.h"
@@ -387,6 +388,10 @@ static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
          */
         if (key.code == YEW_KEY_FOCUS_OUT)
             yew_mouse_cancel(ed);
+        else if (key.code == YEW_KEY_FOCUS_IN) {
+            yew_git_invalidate(ed);
+            (void)yew_git_refresh(ed, true);
+        }
         break;
     default:
         break;
@@ -451,8 +456,11 @@ int yew_loop_run(Ed *ed)
          * render, and after input is drained so keystrokes always win the
          * race for this iteration (invariant 4). */
         yew_job_pump(ed, fds, nfds);
-        if (chld)
+        if (chld) {
             yew_job_reap(ed);
+            yew_git_invalidate(ed);
+            (void)yew_git_refresh(ed, true);
+        }
         yew_job_tick(ed, now);
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */

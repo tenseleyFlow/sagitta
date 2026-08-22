@@ -1682,6 +1682,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
     yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", doc->path,
             (unsigned long long)lines);
     yew_lsp_buffer_save(ed, doc);
+    yew_git_invalidate(ed);
     yew_symidx_workspace_replace(&ed->ws, doc);
     yew_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     if (ed->quit_after_save) {

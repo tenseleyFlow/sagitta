@@ -35,6 +35,7 @@
 #include "ui/message.h"
 #include "ui/win.h"
 #include "ui/grouppicker.h"
+#include "ui/groupfromdir.h"
 #include "ui/tabs.h"
 #include "syn/defs.h"
 #include "util/arena.h"
@@ -741,8 +742,8 @@ static const CmdDesc builtins[] = {
      "Assemble a new tab group", NULL},
     {"ed.group.edit", yew_gp_cmd_edit, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Edit the active group's membership", NULL},
-    DEFER_W("ed.group.from_dir", YEW_ARITY_OPT_STR, YEW_CMD_RECORDABLE, 53,
-            "open a directory as a tab group (F-mode)", "from_dir"),
+    {"ed.group.from_dir", yew_group_cmd_from_dir, YEW_ARITY_OPT_STR,
+     YEW_CMD_RECORDABLE, "open a directory as a tab group (F-mode)", "from_dir"},
     DEFER("ed.group.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 24,
           "activate the next tab group"),
     DEFER("ed.group.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 24,
