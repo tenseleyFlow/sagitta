@@ -6947,6 +6947,7 @@ static bool s52_spawn_editor(PtyCtx *c, const char *file)
 
     if (strstr(c->test->name, "_ascii") != NULL) {
         static const char ascii_source[] =
+            "let lsp = {servers: {}}\n"
             "set({ \"git.ascii_glyphs\": true })\n"
             "bind(\"L\", \"f\", \"ed.mode.enter\", { sarg: \"F\" })\n";
         int n = snprintf(config, sizeof(config), "%s/fuss-ascii.fl",
@@ -6960,6 +6961,7 @@ static bool s52_spawn_editor(PtyCtx *c, const char *file)
         }
         ptc_spawn(c, ptc_yew_bin(c), "--config", config,
                   "--no-workspace-config", file, NULL);
+        c->vt.sync_pairs_unstable = true;
     } else {
         ptc_spawn(c, ptc_yew_bin(c), file, NULL);
     }
