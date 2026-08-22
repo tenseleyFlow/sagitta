@@ -18,6 +18,7 @@ typedef struct YewJobCallbackOps YewJobCallbackOps;
 #define YEW_GIT_NET_TIMEOUT_MS 120000
 #define YEW_GIT_MAX_INFLIGHT 4U
 #define YEW_GIT_TTL_MS 500
+#define YEW_GIT_BLOB_MAX (16U * 1024U * 1024U)
 
 typedef struct GitVersion {
     u16 major;
@@ -76,6 +77,23 @@ typedef struct GitResult {
     u64 err_len;
     u32 job_id;
 } GitResult;
+
+typedef enum YewGitBlobState {
+    YEW_GIT_BLOB_OK,
+    YEW_GIT_BLOB_MISSING,
+    YEW_GIT_BLOB_TOO_LARGE,
+    YEW_GIT_BLOB_FAILED,
+    YEW_GIT_BLOB_PARSE
+} YewGitBlobState;
+
+typedef struct YewGitBlobResult {
+    YewGitBlobState state;
+    const u8 *bytes; /* callback-lifetime view; copy to retain */
+    u64 len;
+    u32 request_id;
+} YewGitBlobResult;
+
+typedef void (*YewGitBlobFn)(void *owner, const YewGitBlobResult *result);
 
 typedef struct GitParseErr {
     u64 off;
@@ -258,6 +276,24 @@ bool yew_git_refresh(Ed *ed, bool force);
 void yew_git_invalidate(Ed *ed);
 /* True when `job_id` belongs to an in-flight Git module request. */
 bool yew_git_job_owned(const Ed *ed, u32 job_id);
+
+/* Queue an object-name query on the workspace's persistent
+ * `git cat-file --batch` transport.  Requests complete in submission order.
+ * Paths containing a line terminator are rejected because the batch protocol
+ * is line framed.  Returned bytes are raw object bytes: no filters or text
+ * conversion are applied. */
+u32 yew_git_index_blob(Ed *ed, const char *path, void *owner,
+                       YewGitBlobFn callback, char *err, size_t errsz);
+u32 yew_git_head_blob(Ed *ed, const char *path, void *owner,
+                      YewGitBlobFn callback, char *err, size_t errsz);
+
+/* Deterministic framed-transport seams used by focused unit tests. */
+bool yew_git_test_blob_batch_open(Ed *ed);
+bool yew_git_test_blob_batch_feed(Ed *ed, const u8 *bytes, u64 len);
+bool yew_git_test_blob_batch_finish(Ed *ed);
+u64 yew_git_test_blob_batch_tx(const Ed *ed, const u8 **bytes);
+u32 yew_git_test_blob_request_count(const Ed *ed);
+u32 yew_git_test_blob_spawn_count(const Ed *ed);
 u64 yew_git_env_fingerprint(void);
 
 /* Fetch one object by its full object id.  Binary output is published through

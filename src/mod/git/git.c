@@ -24,6 +24,32 @@ typedef struct GitPending {
     bool active;
 } GitPending;
 
+typedef struct GitBlobRequest {
+    struct GitBlobRequest *next;
+    void *owner;
+    YewGitBlobFn callback;
+    char *query;
+    size_t query_len;
+    u32 id;
+} GitBlobRequest;
+
+typedef struct GitBlobBatch {
+    Ed *ed;
+    Bytebuf rx;
+    Bytebuf tx;
+    Bytebuf body;
+    GitBlobRequest *head;
+    GitBlobRequest *tail;
+    u64 tx_off;
+    u64 body_len;
+    u64 body_got;
+    u32 job_id;
+    bool in_body;
+    bool oversized;
+    bool failed;
+    bool test_only;
+} GitBlobBatch;
+
 struct GitCtx {
     GitRepo repo;
     char *detected_root;
@@ -51,6 +77,10 @@ struct GitCtx {
     bool forced;
     i64 test_now_ms;
     bool test_now;
+    GitBlobBatch *blob_batch;
+    u32 blob_next_request;
+    u32 blob_requests;
+    u32 blob_spawns;
 };
 
 typedef struct GitJobOwner {
@@ -685,6 +715,7 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
         spec.in_len = pending->req.stdin_len;
         spec.timeout_ms = verb->timeout_ms;
         spec.display = verb->name;
+        spec.internal = true;
         spec.collect_max = YEW_GIT_COLLECT_MAX;
         spec.env_set = (pending->req.literal_paths || git_takes_paths(verb)) ?
                        env_paths : env_base;
@@ -803,6 +834,7 @@ u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
     spec.in_len = wrapped->stdin_len;
     spec.timeout_ms = verb->timeout_ms;
     spec.display = verb->name;
+    spec.internal = true;
     spec.collect_max = YEW_GIT_COLLECT_MAX;
     spec.env_set = env_base;
     spec.env_unset = env_unset;
@@ -828,6 +860,414 @@ u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
 {
     return yew_git_spawn_callback_input(ed, verb, argv, NULL, 0U,
                                         owner, ops, err, errsz);
+}
+
+static void git_blob_rx_consume(GitBlobBatch *batch, size_t n)
+{
+    if (n < batch->rx.len)
+        (void)memmove(batch->rx.data, batch->rx.data + n,
+                      batch->rx.len - n);
+    batch->rx.len -= n;
+}
+
+static void git_blob_complete(GitBlobBatch *batch, YewGitBlobState state)
+{
+    GitBlobRequest *request = batch->head;
+    YewGitBlobResult result;
+
+    if (request == NULL)
+        return;
+    batch->head = request->next;
+    if (batch->head == NULL)
+        batch->tail = NULL;
+    result.state = state;
+    result.bytes = state == YEW_GIT_BLOB_OK ? batch->body.data : NULL;
+    result.len = state == YEW_GIT_BLOB_OK ? batch->body_len : 0U;
+    result.request_id = request->id;
+    request->callback(request->owner, &result);
+    free(request->query);
+    free(request);
+    batch->body.len = 0U;
+    batch->body_len = 0U;
+    batch->body_got = 0U;
+    batch->in_body = false;
+    batch->oversized = false;
+}
+
+static void git_blob_fail_all(GitBlobBatch *batch, YewGitBlobState state)
+{
+    while (batch->head != NULL)
+        git_blob_complete(batch, state);
+}
+
+static bool git_blob_hex(const u8 *s, size_t n)
+{
+    size_t i;
+
+    if (n != 40U && n != 64U)
+        return false;
+    for (i = 0U; i < n; i++) {
+        if (!((s[i] >= '0' && s[i] <= '9') ||
+              (s[i] >= 'a' && s[i] <= 'f') ||
+              (s[i] >= 'A' && s[i] <= 'F')))
+            return false;
+    }
+    return true;
+}
+
+static bool git_blob_size(const u8 *s, size_t n, u64 *out)
+{
+    u64 value = 0U;
+    size_t i;
+
+    if (n == 0U)
+        return false;
+    for (i = 0U; i < n; i++) {
+        u64 digit;
+
+        if (s[i] < '0' || s[i] > '9')
+            return false;
+        digit = (u64)(s[i] - '0');
+        if (value > (UINT64_MAX - digit) / 10U)
+            return false;
+        value = value * 10U + digit;
+    }
+    *out = value;
+    return true;
+}
+
+static bool git_blob_header(GitBlobBatch *batch, const u8 *line, size_t n)
+{
+    static const char missing[] = " missing";
+    size_t first = 0U;
+    size_t second;
+    u64 len;
+
+    if (batch->head == NULL)
+        return false;
+    if (n > sizeof(missing) - 1U &&
+        memcmp(line + n - (sizeof(missing) - 1U), missing,
+               sizeof(missing) - 1U) == 0) {
+        if (n != batch->head->query_len + sizeof(missing) - 1U ||
+            memcmp(line, batch->head->query, batch->head->query_len) != 0)
+            return false;
+        git_blob_complete(batch, YEW_GIT_BLOB_MISSING);
+        return true;
+    }
+    while (first < n && line[first] != ' ')
+        first++;
+    if (!git_blob_hex(line, first) || first == n)
+        return false;
+    second = first + 1U;
+    if (n - second < 6U || memcmp(line + second, "blob ", 5U) != 0 ||
+        !git_blob_size(line + second + 5U, n - second - 5U, &len))
+        return false;
+    batch->body_len = len;
+    batch->body_got = 0U;
+    batch->body.len = 0U;
+    batch->oversized = len > YEW_GIT_BLOB_MAX || len > (u64)SIZE_MAX;
+    if (!batch->oversized)
+        bytebuf_reserve(&batch->body, (size_t)len);
+    batch->in_body = true;
+    return true;
+}
+
+static bool git_blob_parse(GitBlobBatch *batch)
+{
+    for (;;) {
+        if (!batch->in_body) {
+            u8 *newline = memchr(batch->rx.data, '\n', batch->rx.len);
+            size_t line_len;
+
+            if (newline == NULL)
+                return batch->rx.len <= 4096U;
+            line_len = (size_t)(newline - batch->rx.data);
+            if (!git_blob_header(batch, batch->rx.data, line_len))
+                return false;
+            git_blob_rx_consume(batch, line_len + 1U);
+            if (!batch->in_body)
+                continue;
+        }
+        if (batch->body_got < batch->body_len) {
+            u64 remaining = batch->body_len - batch->body_got;
+            size_t take = batch->rx.len;
+
+            if ((u64)take > remaining)
+                take = (size_t)remaining;
+            if (take == 0U)
+                return true;
+            if (!batch->oversized)
+                bytebuf_append(&batch->body, batch->rx.data, take);
+            batch->body_got += (u64)take;
+            git_blob_rx_consume(batch, take);
+            if (batch->body_got < batch->body_len)
+                return true;
+        }
+        if (batch->rx.len == 0U)
+            return true;
+        if (batch->rx.data[0] != '\n')
+            return false;
+        git_blob_rx_consume(batch, 1U);
+        git_blob_complete(batch, batch->oversized ?
+                          YEW_GIT_BLOB_TOO_LARGE : YEW_GIT_BLOB_OK);
+    }
+}
+
+static bool git_blob_feed(void *owner, const u8 *bytes, u64 len)
+{
+    GitBlobBatch *batch = owner;
+
+    if (batch->failed || len > (u64)SIZE_MAX ||
+        len > (u64)SIZE_MAX - (u64)batch->rx.len)
+        return false;
+    bytebuf_append(&batch->rx, bytes, (size_t)len);
+    if (git_blob_parse(batch))
+        return true;
+    batch->failed = true;
+    git_blob_fail_all(batch, YEW_GIT_BLOB_PARSE);
+    return false;
+}
+
+static bool git_blob_finish(void *owner)
+{
+    GitBlobBatch *batch = owner;
+
+    if (!batch->failed) {
+        batch->failed = true;
+        git_blob_fail_all(batch, YEW_GIT_BLOB_FAILED);
+    }
+    return false;
+}
+
+static u64 git_blob_tx_view(void *owner, const u8 **bytes)
+{
+    GitBlobBatch *batch = owner;
+
+    if (batch->tx_off >= (u64)batch->tx.len) {
+        *bytes = NULL;
+        return 0U;
+    }
+    *bytes = batch->tx.data + (size_t)batch->tx_off;
+    return (u64)batch->tx.len - batch->tx_off;
+}
+
+static void git_blob_tx_consume(void *owner, u64 len)
+{
+    GitBlobBatch *batch = owner;
+    u64 remain = (u64)batch->tx.len - batch->tx_off;
+
+    batch->tx_off += len < remain ? len : remain;
+    if (batch->tx_off == (u64)batch->tx.len) {
+        batch->tx.len = 0U;
+        batch->tx_off = 0U;
+    }
+}
+
+static void git_blob_destroy(void *owner)
+{
+    GitBlobBatch *batch = owner;
+
+    if (!batch->failed)
+        git_blob_fail_all(batch, YEW_GIT_BLOB_FAILED);
+    if (batch->ed != NULL && batch->ed->git != NULL &&
+        batch->ed->git->blob_batch == batch)
+        batch->ed->git->blob_batch = NULL;
+    bytebuf_free(&batch->rx);
+    bytebuf_free(&batch->tx);
+    bytebuf_free(&batch->body);
+    free(batch);
+}
+
+static const YewJobFramedOps git_blob_ops = {
+    git_blob_feed,
+    git_blob_finish,
+    git_blob_tx_view,
+    git_blob_tx_consume,
+    NULL,
+    NULL,
+    git_blob_destroy
+};
+
+static GitBlobBatch *git_blob_batch_new(Ed *ed)
+{
+    GitBlobBatch *batch = yew_xcalloc(1U, sizeof(*batch));
+
+    batch->ed = ed;
+    bytebuf_init(&batch->rx);
+    bytebuf_init(&batch->tx);
+    bytebuf_init(&batch->body);
+    return batch;
+}
+
+static GitBlobBatch *git_blob_batch_ensure(Ed *ed, char *err, size_t errsz)
+{
+    static const char *const env_set[] = {
+        "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false",
+        "GIT_SEQUENCE_EDITOR=false", "GIT_FLUSH=1", "GIT_PAGER=cat",
+        "PAGER=cat", "LC_ALL=C", NULL
+    };
+    static const char *const env_unset[] = {
+        "COLUMNS", "LINES", "GIT_TRACE", "GIT_TRACE_PACKET",
+        "GIT_TRACE_PERFORMANCE", "GIT_CURL_VERBOSE", "GIT_TRANSFER_TRACE",
+        NULL
+    };
+    static const char *const env_unset_prefix[] = {"GIT_TRACE2", NULL};
+    GitCtx *ctx = ed->git;
+    GitBlobBatch *batch;
+    YewJobSpec spec = {0};
+    const GitVerb *verb = yew_git_verb("blob");
+    char *argv[] = {(char *)"cat-file", (char *)"--batch", NULL};
+    char **final_argv;
+
+    if (ctx->blob_batch != NULL)
+        return ctx->blob_batch;
+    if (ctx->detect_state != YEW_GIT_ASYNC_READY ||
+        ctx->detect_result != YEW_GIT_OK) {
+        git_error(err, errsz, yew_git_state_str(YEW_GIT_NOT_REPO));
+        return NULL;
+    }
+    batch = git_blob_batch_new(ed);
+    final_argv = git_build_argv(verb, argv);
+    spec.argv = final_argv;
+    spec.cwd = yew_ws_root(ed);
+    spec.sink = YEW_SINK_FRAMED;
+    spec.display = "blob";
+    spec.internal = true;
+    spec.env_set = env_set;
+    spec.env_unset = env_unset;
+    spec.env_unset_prefix = env_unset_prefix;
+    spec.framed_owner = batch;
+    spec.framed_ops = &git_blob_ops;
+    batch->job_id = yew_job_spawn(ed, &spec, err, errsz);
+    free(final_argv);
+    if (batch->job_id == 0U) {
+        git_blob_destroy(batch);
+        return NULL;
+    }
+    ctx->blob_batch = batch;
+    ctx->blob_spawns++;
+    return batch;
+}
+
+static bool git_blob_path_valid(const char *path)
+{
+    const unsigned char *p = (const unsigned char *)path;
+
+    if (path == NULL || path[0] == '\0')
+        return false;
+    for (; *p != 0U; p++)
+        if (*p == '\n' || *p == '\r')
+            return false;
+    return true;
+}
+
+static u32 git_blob_request(Ed *ed, const char *prefix, const char *path,
+                            void *owner, YewGitBlobFn callback,
+                            char *err, size_t errsz)
+{
+    GitBlobBatch *batch;
+    GitBlobRequest *request;
+    size_t prefix_len;
+    size_t path_len;
+
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    if (ed == NULL || ed->git == NULL || callback == NULL ||
+        !git_blob_path_valid(path)) {
+        git_error(err, errsz, "invalid Git blob request");
+        return 0U;
+    }
+    prefix_len = strlen(prefix);
+    path_len = strlen(path);
+    if (path_len > SIZE_MAX - prefix_len - 1U) {
+        git_error(err, errsz, "Git blob request is too large");
+        return 0U;
+    }
+    batch = git_blob_batch_ensure(ed, err, errsz);
+    if (batch == NULL)
+        return 0U;
+    request = yew_xcalloc(1U, sizeof(*request));
+    request->owner = owner;
+    request->callback = callback;
+    request->query_len = prefix_len + path_len;
+    request->query = yew_xmalloc(request->query_len + 1U);
+    (void)memcpy(request->query, prefix, prefix_len);
+    (void)memcpy(request->query + prefix_len, path, path_len + 1U);
+    request->id = ++ed->git->blob_next_request;
+    if (request->id == 0U)
+        request->id = ++ed->git->blob_next_request;
+    if (batch->tail != NULL)
+        batch->tail->next = request;
+    else
+        batch->head = request;
+    batch->tail = request;
+    if (batch->tx_off == (u64)batch->tx.len) {
+        batch->tx.len = 0U;
+        batch->tx_off = 0U;
+    }
+    bytebuf_append(&batch->tx, request->query, request->query_len);
+    bytebuf_push_u8(&batch->tx, '\n');
+    ed->git->blob_requests++;
+    return request->id;
+}
+
+u32 yew_git_index_blob(Ed *ed, const char *path, void *owner,
+                       YewGitBlobFn callback, char *err, size_t errsz)
+{
+    return git_blob_request(ed, ":", path, owner, callback, err, errsz);
+}
+
+u32 yew_git_head_blob(Ed *ed, const char *path, void *owner,
+                      YewGitBlobFn callback, char *err, size_t errsz)
+{
+    return git_blob_request(ed, "HEAD:", path, owner, callback, err, errsz);
+}
+
+bool yew_git_test_blob_batch_open(Ed *ed)
+{
+    GitBlobBatch *batch;
+
+    if (ed == NULL || ed->git == NULL || ed->git->blob_batch != NULL)
+        return false;
+    batch = git_blob_batch_new(ed);
+    batch->test_only = true;
+    ed->git->blob_batch = batch;
+    return true;
+}
+
+bool yew_git_test_blob_batch_feed(Ed *ed, const u8 *bytes, u64 len)
+{
+    if (ed == NULL || ed->git == NULL || ed->git->blob_batch == NULL ||
+        bytes == NULL)
+        return false;
+    return git_blob_feed(ed->git->blob_batch, bytes, len);
+}
+
+bool yew_git_test_blob_batch_finish(Ed *ed)
+{
+    if (ed == NULL || ed->git == NULL || ed->git->blob_batch == NULL)
+        return false;
+    return git_blob_finish(ed->git->blob_batch);
+}
+
+u64 yew_git_test_blob_batch_tx(const Ed *ed, const u8 **bytes)
+{
+    if (bytes != NULL)
+        *bytes = NULL;
+    if (ed == NULL || ed->git == NULL || ed->git->blob_batch == NULL ||
+        bytes == NULL)
+        return 0U;
+    return git_blob_tx_view(ed->git->blob_batch, bytes);
+}
+
+u32 yew_git_test_blob_request_count(const Ed *ed)
+{
+    return ed == NULL || ed->git == NULL ? 0U : ed->git->blob_requests;
+}
+
+u32 yew_git_test_blob_spawn_count(const Ed *ed)
+{
+    return ed == NULL || ed->git == NULL ? 0U : ed->git->blob_spawns;
 }
 
 void yew_git_test_spawn_set(GitTestSpawnFn spawn, void *opaque)
@@ -872,6 +1312,8 @@ void yew_git_state_free(Ed *ed)
 
     if (ed == NULL || ed->git == NULL)
         return;
+    if (ed->git->blob_batch != NULL && ed->git->blob_batch->test_only)
+        git_blob_destroy(ed->git->blob_batch);
     for (i = 0U; i < YEW_ARRAY_LEN(ed->git->pending); i++) {
         GitPending *pending = &ed->git->pending[i];
         YewJob *job;
@@ -1573,10 +2015,20 @@ bool yew_git_job_owned(const Ed *ed, u32 job_id)
 
     if (ed == NULL || ed->git == NULL || job_id == 0U)
         return false;
+    if (ed->git->blob_batch != NULL &&
+        ed->git->blob_batch->job_id == job_id)
+        return true;
     for (i = 0U; i < YEW_ARRAY_LEN(ed->git->pending); i++) {
         const GitPending *pending = &ed->git->pending[i];
 
         if (pending->active && pending->req.job_id == job_id)
+            return true;
+    }
+    for (i = 0U; i < ed->jobs.len; i++) {
+        const YewJob *job = &ed->jobs.v[i];
+
+        if (job->id == job_id && job->sink == YEW_SINK_CALLBACK &&
+            job->callback_ops == &git_callback_ops)
             return true;
     }
     return false;

@@ -558,6 +558,9 @@ static void jobs_table_render(Ed *ed, Buffer *b)
         char code[16];
         i64 end = j->state == YEW_JOB_RUNNING ? yew_now_ms() : j->end_ms;
 
+        if (j->internal)
+            continue;
+
         fmt_elapsed(elapsed, sizeof(elapsed), end - j->start_ms);
         if (j->state == YEW_JOB_RUNNING)
             (void)snprintf(code, sizeof(code), "-");

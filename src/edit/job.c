@@ -373,7 +373,8 @@ u32 yew_job_running_count(const Ed *ed)
     if (ed == NULL)
         return 0U;
     for (i = 0U; i < ed->jobs.len; i++) {
-        if (ed->jobs.v[i].state == YEW_JOB_RUNNING)
+        if (ed->jobs.v[i].state == YEW_JOB_RUNNING &&
+            !ed->jobs.v[i].internal)
             n++;
     }
     return n;
@@ -1128,6 +1129,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     j->exec_fd = exec_p[0];
     j->state = YEW_JOB_RUNNING;
     j->sink = spec->sink;
+    j->internal = spec->internal;
     j->framed_owner = spec->framed_owner;
     j->framed_ops = spec->framed_ops;
     j->stream_owner = spec->stream_owner;

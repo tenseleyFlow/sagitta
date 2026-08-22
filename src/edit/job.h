@@ -137,6 +137,9 @@ typedef struct YewJobSpec {
     i64 timeout_ms;       /* 0 = none (async jobs)                        */
     u32 target_win;
     const char *display;  /* job-table text; defaults to cmdline/argv[0]  */
+    /* Internal module plumbing stays pollable but is hidden from user job
+     * chrome and the *jobs* table. */
+    bool internal;
     /* Collection ceiling for COLLECT/CALLBACK; 0 keeps the default. */
     u64 collect_max;
     /* NULL-terminated environment overrides, applied to a copy of the
@@ -224,6 +227,7 @@ struct YewJob {
      * filter).  yew_job_finish must not touch buffers or the message line
      * for such a job: the driver owns the outcome, including rollback. */
     bool synchronous;
+    bool internal;
     /* Mode (c): insertion point that survives edits elsewhere. */
     MarkId at;
     bool has_mark;

@@ -409,6 +409,8 @@ void test_gitcache_callback_input_copies_and_owns_stdin(void)
                                       &gitcache_callback_ops,
                                       err, sizeof(err));
     YEW_ASSERT(id != 0U);
+    YEW_ASSERT(yew_git_job_owned(&ed, id));
+    YEW_ASSERT_EQ_U64(yew_job_running_count(&ed), 0U);
     (void)memset(input, 'x', sizeof(input) - 1U);
     started = yew_now_ms();
     while (!capture.completed && yew_now_ms() - started < 5000) {
@@ -427,6 +429,179 @@ void test_gitcache_callback_input_copies_and_owns_stdin(void)
     YEW_ASSERT_EQ_STR(capture.out, "owned copy\n");
     YEW_ASSERT_NULL(yew_job_find(&ed, id));
     yew_ed_free(&ed);
+}
+
+typedef struct BlobCapture {
+    YewGitBlobState state[128];
+    u32 request_id[128];
+    u8 bytes[128][16];
+    u64 len[128];
+    u32 calls;
+} BlobCapture;
+
+static void gitcache_blob_capture(void *owner,
+                                  const YewGitBlobResult *result)
+{
+    BlobCapture *capture = owner;
+    u32 at = capture->calls++;
+    u64 len = result->len;
+
+    YEW_ASSERT(at < YEW_ARRAY_LEN(capture->state));
+    if (at >= YEW_ARRAY_LEN(capture->state))
+        return;
+    capture->state[at] = result->state;
+    capture->request_id[at] = result->request_id;
+    if (len > sizeof(capture->bytes[at]))
+        len = sizeof(capture->bytes[at]);
+    if (len != 0U)
+        (void)memcpy(capture->bytes[at], result->bytes, (size_t)len);
+    capture->len[at] = result->len;
+}
+
+void test_gitcache_blob_batch_parser_handles_split_binary_and_missing(void)
+{
+    static const char oid[] = "0123456789012345678901234567890123456789";
+    static const u8 body[] = {'A', 0U, 'B', '\n', 'C'};
+    BlobCapture capture = {0};
+    Ed ed;
+    Bytebuf response;
+    const u8 *tx;
+    u64 tx_len;
+    char err[128];
+    u32 first;
+    u32 second;
+    u32 third;
+    size_t i;
+
+    (void)memset(&ed, 0, sizeof(ed));
+    yew_git_state_init(&ed);
+    YEW_ASSERT(yew_git_test_blob_batch_open(&ed));
+    first = yew_git_index_blob(&ed, "- odd:name", &capture,
+                               gitcache_blob_capture, err, sizeof(err));
+    second = yew_git_index_blob(&ed, "gone", &capture,
+                                gitcache_blob_capture, err, sizeof(err));
+    third = yew_git_head_blob(&ed, "empty", &capture,
+                              gitcache_blob_capture, err, sizeof(err));
+    YEW_ASSERT(first != 0U && second != 0U && third != 0U);
+    tx_len = yew_git_test_blob_batch_tx(&ed, &tx);
+    YEW_ASSERT_EQ_U64(tx_len, 29U);
+    YEW_ASSERT_EQ_MEM(tx, ":- odd:name\n:gone\nHEAD:empty\n", tx_len);
+
+    bytebuf_init(&response);
+    bytebuf_append(&response, oid, sizeof(oid) - 1U);
+    bytebuf_append(&response, " blob 5\n", 8U);
+    bytebuf_append(&response, body, sizeof(body));
+    bytebuf_push_u8(&response, '\n');
+    bytebuf_append(&response, ":gone missing\n", 14U);
+    bytebuf_append(&response, oid, sizeof(oid) - 1U);
+    bytebuf_append(&response, " blob 0\n\n", 9U);
+    for (i = 0U; i < response.len; i++)
+        YEW_ASSERT(yew_git_test_blob_batch_feed(&ed, response.data + i, 1U));
+    YEW_ASSERT_EQ_U64(capture.calls, 3U);
+    YEW_ASSERT(capture.state[0] == YEW_GIT_BLOB_OK);
+    YEW_ASSERT(capture.state[1] == YEW_GIT_BLOB_MISSING);
+    YEW_ASSERT(capture.state[2] == YEW_GIT_BLOB_OK);
+    YEW_ASSERT_EQ_U64(capture.request_id[0], first);
+    YEW_ASSERT_EQ_U64(capture.request_id[1], second);
+    YEW_ASSERT_EQ_U64(capture.request_id[2], third);
+    YEW_ASSERT_EQ_U64(capture.len[0], sizeof(body));
+    YEW_ASSERT_EQ_MEM(capture.bytes[0], body, sizeof(body));
+    YEW_ASSERT_EQ_U64(capture.len[2], 0U);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 3U);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_spawn_count(&ed), 0U);
+    bytebuf_free(&response);
+    yew_git_state_free(&ed);
+}
+
+void test_gitcache_blob_batch_failure_and_size_limit_are_explicit(void)
+{
+    static const char oid[] = "0123456789012345678901234567890123456789";
+    BlobCapture capture = {0};
+    Ed ed;
+    Bytebuf chunk;
+    char header[96];
+    char err[128];
+    int n;
+    u64 left;
+
+    (void)memset(&ed, 0, sizeof(ed));
+    yew_git_state_init(&ed);
+    YEW_ASSERT(yew_git_test_blob_batch_open(&ed));
+    YEW_ASSERT(yew_git_index_blob(&ed, "huge", &capture,
+                                  gitcache_blob_capture,
+                                  err, sizeof(err)) != 0U);
+    YEW_ASSERT(yew_git_index_blob(&ed, "pending", &capture,
+                                  gitcache_blob_capture,
+                                  err, sizeof(err)) != 0U);
+    n = snprintf(header, sizeof(header), "%s blob %u\n", oid,
+                 (unsigned)(YEW_GIT_BLOB_MAX + 1U));
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(header));
+    YEW_ASSERT(yew_git_test_blob_batch_feed(&ed, (const u8 *)header,
+                                            (u64)n));
+    bytebuf_init(&chunk);
+    bytebuf_reserve(&chunk, 65536U);
+    chunk.len = 65536U;
+    (void)memset(chunk.data, 'x', chunk.len);
+    left = (u64)YEW_GIT_BLOB_MAX + 1U;
+    while (left != 0U) {
+        size_t take = chunk.len;
+
+        if ((u64)take > left)
+            take = (size_t)left;
+        YEW_ASSERT(yew_git_test_blob_batch_feed(&ed, chunk.data,
+                                                (u64)take));
+        left -= (u64)take;
+    }
+    YEW_ASSERT(yew_git_test_blob_batch_feed(&ed, (const u8 *)"\n", 1U));
+    YEW_ASSERT_EQ_U64(capture.calls, 1U);
+    YEW_ASSERT(capture.state[0] == YEW_GIT_BLOB_TOO_LARGE);
+    YEW_ASSERT(!yew_git_test_blob_batch_finish(&ed));
+    YEW_ASSERT_EQ_U64(capture.calls, 2U);
+    YEW_ASSERT(capture.state[1] == YEW_GIT_BLOB_FAILED);
+    bytebuf_free(&chunk);
+    yew_git_state_free(&ed);
+}
+
+void test_gitcache_blob_batch_reuses_one_child_for_100_requests(void)
+{
+    BlobCapture capture = {0};
+    SpawnLog log = {0};
+    Ed ed;
+    char err[128];
+    i64 started;
+    u32 i;
+
+    gitcache_ed(&ed, &log);
+    gitcache_ready(&ed, &log, ".", 1000);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_jobs_init(&ed.jobs);
+    for (i = 0U; i < 100U; i++)
+        YEW_ASSERT(yew_git_index_blob(&ed, "Makefile", &capture,
+                                      gitcache_blob_capture,
+                                      err, sizeof(err)) != 0U);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 100U);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_spawn_count(&ed), 1U);
+    YEW_ASSERT_EQ_U64(yew_job_running_count(&ed), 0U);
+    started = yew_now_ms();
+    while (capture.calls != 100U && yew_now_ms() - started < 5000) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 nfd = 0U;
+
+        yew_job_collect_fds(&ed, pfd, &nfd);
+        if (nfd != 0U)
+            (void)poll(pfd, (nfds_t)nfd, 20);
+        yew_job_pump(&ed, pfd, nfd);
+        yew_job_reap(&ed);
+        yew_job_settle(&ed);
+    }
+    YEW_ASSERT_EQ_U64(capture.calls, 100U);
+    for (i = 0U; i < capture.calls; i++) {
+        YEW_ASSERT(capture.state[i] == YEW_GIT_BLOB_OK);
+        YEW_ASSERT(capture.len[i] != 0U);
+    }
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_spawn_count(&ed), 1U);
+    yew_jobs_free(&ed);
+    yew_git_state_free(&ed);
 }
 
 void test_gitcache_verb_table_and_argv_are_structural(void)
