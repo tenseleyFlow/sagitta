@@ -31,6 +31,9 @@ static unsigned assertions;
 static unsigned failures;
 static unsigned patches_checked;
 
+static const GitEntry *find_git_entry(const GitSnapshot *snapshot,
+                                      const char *path);
+
 #define CHECK(expr) do {                                                   \
     assertions++;                                                          \
     if (!(expr)) {                                                         \
@@ -463,6 +466,63 @@ static void check_crlf_and_dirty_worktree(const char *repo)
                      "worktree-only");
 }
 
+static void check_three_way_index_base(const char *repo)
+{
+    static const u8 indexed[] = "index-only\nkeep\n";
+    static const u8 disk[] = "disk-only\nkeep\n";
+    static const u8 live[] = "buffer-only\nindex-only\nkeep\n";
+    char *add[] = {(char *)"add", (char *)"--",
+                   (char *)"three-way.txt", NULL};
+    char full[4096];
+    const GitSnapshot *snapshot;
+    const GitEntry *entry;
+    const HunkList *hunks = NULL;
+    Bytes actual_disk = {0};
+    i64 start;
+    Ed ed;
+
+    CHECK(make_file(repo, "three-way.txt", indexed, sizeof(indexed) - 1U));
+    CHECK(run_git(repo, add, NULL, 0U, NULL));
+    CHECK(make_file(repo, "three-way.txt", disk, sizeof(disk) - 1U));
+    CHECK(snprintf(full, sizeof(full), "%s/three-way.txt", repo) > 0);
+
+    yew_ed_init(&ed);
+    ed.ws.dir = arena_strdup(&ed.arena, repo);
+    CHECK(yew_ed_open_memory(&ed, live, sizeof(live) - 1U,
+                             "three-way.txt"));
+    ed.buffer.path = arena_strdup(&ed.arena, full);
+    CHECK(yew_git_refresh(&ed, true));
+    CHECK(run_editor_jobs_idle(&ed));
+    snapshot = yew_git_snapshot_cached(&ed);
+    entry = find_git_entry(snapshot, "three-way.txt");
+    CHECK(entry != NULL && entry->index_oid[0] != '\0');
+
+    ed.now_ms = 0;
+    yew_git_editor_prepare(&ed, ed.win);
+    start = yew_now_ms();
+    while (yew_now_ms() - start <= 10000) {
+        pump_editor_jobs(&ed);
+        yew_git_editor_tick(&ed, 5000);
+        hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+        if (hunks != NULL && hunks->h.len != 0U)
+            break;
+    }
+    CHECK(hunks != NULL && !hunks->base_is_head);
+    CHECK(hunks != NULL && hunks->h.len == 1U);
+    if (hunks != NULL && hunks->h.len == 1U) {
+        CHECK(hunks->h.data[0].kind == YEW_HUNK_ADD);
+        CHECK(hunks->h.data[0].base_lo.v == 0U);
+        CHECK(hunks->h.data[0].base_n.v == 0U);
+        CHECK(hunks->h.data[0].buf_lo.v == 0U);
+        CHECK(hunks->h.data[0].buf_n.v == 1U);
+    }
+    CHECK(read_file(repo, "three-way.txt", &actual_disk));
+    CHECK(actual_disk.len == sizeof(disk) - 1U &&
+          memcmp(actual_disk.data, disk, sizeof(disk) - 1U) == 0);
+    bytes_drop(&actual_disk);
+    yew_ed_free(&ed);
+}
+
 static void check_path_rules(const char *repo)
 {
     static const u8 base[] = "before\n";
@@ -668,6 +728,7 @@ int main(int argc, char **argv)
     check_bounds_and_context(repo);
     check_edit_fixture_matrix(repo);
     check_crlf_and_dirty_worktree(repo);
+    check_three_way_index_base(repo);
     check_path_rules(repo);
     check_stage_command_selection(repo);
     check_conflicted_head_base(argv[1]);

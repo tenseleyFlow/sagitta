@@ -378,12 +378,12 @@ static const RtDenied denied[] = {
     D("ed.shell.run_bg", "external process side effect"),
     D("ed.shell.read", "external process side effect"),
     D("ed.shell.filter", "external process side effect"),
-    /* Sprint 52: these commands still participate in the word bijection,
-     * but the editor-state round-trip property deliberately has no repo,
-     * F-mode tree, picker, confirmation prompt, or subprocess oracle.  Their
-     * command/macro reachability is covered by the registry and F-mode table;
-     * their effects are covered by the real-Git and pty suites. */
-    D("ed.group.from_dir", "deferred to Sprint 53"),
+    /* These commands still participate in the word bijection, but the
+     * editor-state round-trip property deliberately has no repo, F-mode tree,
+     * picker, confirmation prompt, or subprocess oracle.  Their command/macro
+     * reachability is covered by the registry and F-mode table; their effects
+     * are covered by the real-Git and pty suites. */
+    D("ed.group.from_dir", "requires a live workspace walk and layout state"),
     D("ed.git.refresh", "requires a live F-mode repository"),
     D("ed.git.init", "external Git side effect"),
     D("ed.git.mode.leave", "requires live F-mode layout state"),
@@ -429,7 +429,8 @@ static const RtDenied denied[] = {
     D("ed.git.discard", "destructive Git side effect"),
     D("ed.git.file.delete", "destructive file side effect"),
     D("ed.git.file.rename", "file-system side effect"),
-    D("ed.git.open", "requires live F-mode layout state")
+    D("ed.git.open", "requires live F-mode layout state"),
+    D("ed.git.diff.view", "requires live Git workspace and layout state")
 };
 #undef D
 
