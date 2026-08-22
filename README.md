@@ -44,6 +44,14 @@ plugin, language server, external process, or rebuild. Symbol intelligence
 and LSP features are a separate campaign and are not required for native
 coloring.
 
+## Git-aware editing
+
+With the `fuss` module enabled, yew shows buffer-vs-index hunk signs, supports
+undoable hunk discard and dirty-buffer staging, provides inline blame and a
+side-by-side diff, and opens F-mode directories as tab groups. See the
+[Git-aware editing guide](.docs/git-editor.md) for the commands, statusline
+badges, refresh policy, and byte-honest filter behavior.
+
 ## Build
 
 ```sh
