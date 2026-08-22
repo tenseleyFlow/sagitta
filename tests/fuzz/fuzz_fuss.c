@@ -1,15 +1,23 @@
 #define _POSIX_C_SOURCE 200809L
 
-/* Sprint 52: arbitrary tree shapes and navigation/state transitions. */
+/* Sprint 52: arbitrary tree shapes plus live F-mode key dispatch. */
 #include "fuzzlib.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "edit/ed.h"
+#include "edit/mode.h"
+#include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
+#include "mod/git/git_int.h"
 
-enum { FUSS_FUZZ_MAX_ENTRIES = 128, FUSS_FUZZ_PATH_CAP = 48 };
+enum {
+    FUSS_FUZZ_MAX_ENTRIES = 128,
+    FUSS_FUZZ_PATH_CAP = 48,
+    FUSS_FUZZ_LIVE_KEYS = 48
+};
 
 typedef struct FussFixture {
     GitSnapshot snap;
@@ -97,6 +105,156 @@ static bool tree_valid(const FussTree *t, char *why, size_t why_cap)
         }
     }
     return true;
+}
+
+typedef struct LiveSpawn {
+    u32 next_id;
+    u32 calls;
+} LiveSpawn;
+
+static u32 live_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
+                      const GitReq *req, void *opaque, char *err,
+                      size_t errsz)
+{
+    LiveSpawn *spawn = opaque;
+
+    (void)ed;
+    (void)req;
+    (void)err;
+    (void)errsz;
+    if (spawn == NULL || verb == NULL || argv == NULL || argv[0] == NULL)
+        return 0U;
+    spawn->calls++;
+    if (spawn->next_id == UINT32_MAX)
+        spawn->next_id = 1000U;
+    return spawn->next_id++;
+}
+
+static Key live_key(u8 byte)
+{
+    static const u32 named[] = {
+        YEW_KEY_UP, YEW_KEY_DOWN, YEW_KEY_LEFT, YEW_KEY_RIGHT,
+        YEW_KEY_PAGE_UP, YEW_KEY_PAGE_DOWN, YEW_KEY_HOME, YEW_KEY_END,
+        YEW_KEY_ENTER, YEW_KEY_ESCAPE
+    };
+    static const char printable[] =
+        "kjhl auUSmMplfdswhLcbnRGOIyvzZtxrNT./q0123456789";
+    Key key = {0};
+    size_t named_count = YEW_ARRAY_LEN(named);
+    size_t printable_count = sizeof(printable) - 1U;
+    size_t choice = (size_t)byte % (named_count + printable_count + 3U);
+
+    key.kind = YEW_EV_KEY;
+    key.ev = (byte & 0x40U) != 0U ? YEW_KEY_REPEAT : YEW_KEY_PRESS;
+    if (choice < named_count) {
+        key.code = named[choice];
+        if ((byte & 0x80U) != 0U &&
+            (key.code == YEW_KEY_UP || key.code == YEW_KEY_DOWN))
+            key.mods = YEW_MOD_CTRL;
+    } else if (choice < named_count + printable_count) {
+        u8 text = (u8)printable[choice - named_count];
+
+        key.code = text;
+        key.ntext = 1U;
+        key.text[0] = text;
+    } else {
+        key.code = (u32)'r';
+        key.mods = YEW_MOD_CTRL;
+        key.ntext = 1U;
+        key.text[0] = (u8)'r';
+    }
+    return key;
+}
+
+static bool live_teardown(Ed *ed, Pane *saved_root, Win *saved_win,
+                          char *why, size_t why_cap)
+{
+    bool handled = false;
+
+    /* Direct teardown helpers bypass the normal command-dispatch barrier.
+     * Close a typing transaction exactly as a user-issued mode/close command
+     * would before any scratch buffer can be released. */
+    yew_ed_insert_barrier(ed);
+    if (yew_fuss_active(ed) && ed->win != NULL && ed->win->buf != NULL)
+        (void)yew_fuss_commit_close(ed, ed->win->buf, &handled);
+    if (ed->cmdline.active)
+        yew_cmdline_close(ed, false);
+    if (ed->prompt != YEW_PROMPT_NONE)
+        (void)yew_mode_escape(ed);
+    if (yew_fuss_active(ed)) {
+        if (ed->mode == YEW_MODE_F)
+            (void)yew_mode_enter(ed, YEW_MODE_L);
+        else
+            yew_fuss_mode_leave(ed);
+    }
+    if (ed->mode != YEW_MODE_L)
+        (void)yew_mode_enter(ed, YEW_MODE_L);
+    if (ed->mode != YEW_MODE_L || yew_fuss_active(ed) ||
+        ed->pane_root != saved_root || ed->win != saved_win ||
+        ed->keys.n == 0U || ed->keys.l[0] != &ed->mode_keys[YEW_MODE_L] ||
+        (ed->keys.n >= 3U && ed->keys.l[2] != &ed->bind_keys[YEW_MODE_L]) ||
+        ed->chord.n != 0U || ed->chord.layer != -1 ||
+        ed->chord.count_given || ed->chord.deadline != 0) {
+        (void)snprintf(why, why_cap,
+                       "F-mode teardown left mode, pane, or key-layer state");
+        return false;
+    }
+    return true;
+}
+
+static bool check_live_fuss(const u8 *data, size_t len, char *why,
+                            size_t why_cap)
+{
+    LiveSpawn spawn = {1000U, 0U};
+    Ed ed;
+    Pane *saved_root;
+    Win *saved_win;
+    size_t count = len < FUSS_FUZZ_LIVE_KEYS ? len : FUSS_FUZZ_LIVE_KEYS;
+    size_t at;
+    bool ok;
+
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
+        yew_ed_free(&ed);
+        (void)snprintf(why, why_cap, "live editor initialization failed");
+        return false;
+    }
+    saved_root = ed.pane_root;
+    saved_win = ed.win;
+    yew_git_test_spawn_set(live_spawn, &spawn);
+    if (yew_mode_enter(&ed, YEW_MODE_F) != YEW_CMD_OK ||
+        !yew_fuss_active(&ed) || ed.mode != YEW_MODE_F) {
+        yew_git_test_spawn_set(NULL, NULL);
+        yew_ed_free(&ed);
+        (void)snprintf(why, why_cap, "could not enter live F mode");
+        return false;
+    }
+    for (at = 0U; at < count; at++) {
+        Key key = live_key(data[at]);
+
+        yew_ed_handle_key(&ed, key, 1000 + (i64)at * 17);
+        yew_fuss_tick(&ed, 1000 + (i64)at * 17);
+        if (ed.jobs.len != 0U) {
+            (void)snprintf(why, why_cap,
+                           "live F key spawned a real subprocess at byte %zu",
+                           at);
+            yew_git_test_spawn_set(NULL, NULL);
+            yew_ed_free(&ed);
+            return false;
+        }
+        if (!yew_fuss_active(&ed) && at + 1U < count &&
+            yew_mode_enter(&ed, YEW_MODE_F) != YEW_CMD_OK) {
+            (void)snprintf(why, why_cap,
+                           "could not re-enter F mode after byte %zu", at);
+            yew_git_test_spawn_set(NULL, NULL);
+            yew_ed_free(&ed);
+            return false;
+        }
+    }
+    ok = live_teardown(&ed, saved_root, saved_win, why, why_cap);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+    return ok;
 }
 
 static bool check_fuss(const u8 *data, size_t len, char *why,
@@ -200,7 +358,11 @@ done:
     yew_fuss_sel_clear(&sel);
     yew_fuss_tree_drop(&tree);
     fixture_drop(&fixture);
-    return ok;
+    if (!ok)
+        return false;
+    /* The Sprint 52 gate is explicitly 20k live sequences: retain the model
+     * oracle above and drive every generated input through the editor too. */
+    return check_live_fuss(data, len, why, why_cap);
 }
 
 int main(int argc, char **argv)

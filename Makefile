@@ -817,10 +817,8 @@ $(BUILD)/fuzz_porcelain: $(FUZZ_LINK_OBJ) $(FUZZ_PORCELAIN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_PORCELAIN_OBJ) $(LDLIBS)
 
-$(BUILD)/fuzz_fuss: $(FUSS_TREE_TEST_OBJ) $(FUZZ_LIB_OBJ) \
-                    $(BUILD)/src/unicode/utf8.o $(FUZZ_FUSS_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUSS_TREE_TEST_OBJ) \
-		$(FUZZ_LIB_OBJ) $(BUILD)/src/unicode/utf8.o \
+$(BUILD)/fuzz_fuss: $(FUZZ_LINK_OBJ) $(FUZZ_FUSS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_FUSS_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
