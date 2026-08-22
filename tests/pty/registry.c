@@ -6728,8 +6728,8 @@ static bool s52_screen_contains(const VtScreen *vt, const char *needle)
     return found;
 }
 
-static bool s52_git(PtyCtx *c, const char *dir,
-                    const char *const argv[])
+static bool s52_git_exit(PtyCtx *c, const char *dir,
+                         const char *const argv[], int expected)
 {
     pid_t pid;
     int status;
@@ -6760,11 +6760,17 @@ static bool s52_git(PtyCtx *c, const char *dir,
             return false;
         }
     }
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != expected) {
         ptc_check(c, false, "Sprint 52 fixture git command failed");
         return false;
     }
     return true;
+}
+
+static bool s52_git(PtyCtx *c, const char *dir,
+                    const char *const argv[])
+{
+    return s52_git_exit(c, dir, argv, 0);
 }
 
 static bool s52_write(PtyCtx *c, const char *repo, const char *rel,
@@ -6841,6 +6847,86 @@ static bool s52_fixture(PtyCtx *c, char *repo, size_t repo_cap)
         return false;
     ptc_set_cwd(c, repo);
     return true;
+}
+
+static bool s52_status_fixture(PtyCtx *c, char *repo, size_t repo_cap)
+{
+    static const char *const init[] = {"git", "init", "-q", "-b", "trunk",
+                                       NULL};
+    static const char *const user_name[] = {"git", "config", "user.name",
+                                            "Yew PTY", NULL};
+    static const char *const user_mail[] = {"git", "config", "user.email",
+                                            "pty@yew.invalid", NULL};
+    static const char *const add_all[] = {"git", "add", "--all", NULL};
+    static const char *const commit_base[] = {"git", "commit", "-q", "-m",
+                                              "base", NULL};
+    static const char *const push_base[] = {"git", "push", "-q", "-u",
+                                            "origin", "trunk", NULL};
+    static const char *const commit_incoming[] = {
+        "git", "commit", "-q", "-am", "incoming", NULL
+    };
+    static const char *const push_incoming[] = {"git", "push", "-q", NULL};
+    static const char *const fetch[] = {"git", "fetch", "-q", "origin", NULL};
+    static const char *const checkout_side[] = {
+        "git", "checkout", "-q", "-b", "collision", NULL
+    };
+    static const char *const commit_side[] = {
+        "git", "commit", "-q", "-am", "collision", NULL
+    };
+    static const char *const checkout_trunk[] = {
+        "git", "checkout", "-q", "trunk", NULL
+    };
+    static const char *const commit_trunk[] = {
+        "git", "commit", "-q", "-am", "local", NULL
+    };
+    static const char *const merge_side[] = {
+        "git", "merge", "--no-edit", "collision", NULL
+    };
+    char remote[PATH_MAX];
+    char peer[PATH_MAX];
+    const char *init_bare[] = {"git", "init", "-q", "--bare", remote, NULL};
+    const char *add_remote[] = {"git", "remote", "add", "origin", remote,
+                                NULL};
+    const char *clone[] = {"git", "clone", "-q", remote, peer, NULL};
+    int n;
+
+    n = snprintf(repo, repo_cap, "%s/fuss-status-repo", c->workspace_dir);
+    if (n <= 0 || (size_t)n >= repo_cap)
+        goto path_fail;
+    n = snprintf(remote, sizeof(remote), "%s/fuss-status-remote.git",
+                 c->workspace_dir);
+    if (n <= 0 || (size_t)n >= sizeof(remote))
+        goto path_fail;
+    n = snprintf(peer, sizeof(peer), "%s/fuss-status-peer", c->workspace_dir);
+    if (n <= 0 || (size_t)n >= sizeof(peer))
+        goto path_fail;
+    if (mkdir(repo, 0700) != 0 || !s52_git(c, repo, init) ||
+        !s52_git(c, repo, user_name) || !s52_git(c, repo, user_mail) ||
+        !s52_write(c, repo, ".gitignore", "*.log\n") ||
+        !s52_write(c, repo, "conflict.c", "base\n") ||
+        !s52_write(c, repo, "incoming.c", "base\n") ||
+        !s52_git(c, repo, add_all) || !s52_git(c, repo, commit_base) ||
+        !s52_git(c, NULL, init_bare) || !s52_git(c, repo, add_remote) ||
+        !s52_git(c, repo, push_base) || !s52_git(c, NULL, clone) ||
+        !s52_git(c, peer, user_name) || !s52_git(c, peer, user_mail) ||
+        !s52_write(c, peer, "incoming.c", "upstream\n") ||
+        !s52_git(c, peer, commit_incoming) ||
+        !s52_git(c, peer, push_incoming) || !s52_git(c, repo, fetch) ||
+        !s52_git(c, repo, checkout_side) ||
+        !s52_write(c, repo, "conflict.c", "side\n") ||
+        !s52_git(c, repo, commit_side) ||
+        !s52_git(c, repo, checkout_trunk) ||
+        !s52_write(c, repo, "conflict.c", "local\n") ||
+        !s52_git(c, repo, commit_trunk) ||
+        !s52_git_exit(c, repo, merge_side, 1) ||
+        !s52_write(c, repo, "ignored.log", "ignored\n"))
+        return false;
+    ptc_set_cwd(c, repo);
+    return true;
+
+path_fail:
+    ptc_check(c, false, "Sprint 52 status fixture path was too long");
+    return false;
 }
 
 static void s52_wait_screen(PtyCtx *c, const char *text)
@@ -7045,6 +7131,35 @@ static void case_s52_fuss_discard_confirm(PtyCtx *c)
     ptc_settle(c, 0);
     s52_finish(c);
 }
+
+static void case_s52_fuss_status_rows(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+
+    if (!s52_status_fixture(c, repo, sizeof(repo)))
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "conflict.c", NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_keys(c, "f");
+    ptc_settle(c, 1000);
+    ptc_check(c, s52_screen_contains(&c->vt, "conflict.c !"),
+              "FUSS tree omitted the conflicted row marker");
+    ptc_check(c, s52_screen_contains(&c->vt, "incoming.c ↓"),
+              "FUSS tree omitted the incoming row marker");
+    ptc_check(c, s52_screen_contains(&c->vt, "↑1 ↓1"),
+              "FUSS branch header omitted divergence counts");
+    ptc_keys(c, "T");
+    ptc_settle(c, 500);
+    ptc_keys(c, ".");
+    ptc_settle(c, 1000);
+    ptc_check(c, s52_screen_contains(&c->vt, "ignored.log"),
+              "FUSS hidden-files tree omitted the ignored row");
+    ptc_check(c, !c->pty.reaped,
+              "rendering FUSS status rows exited yew");
+    ptc_snapshot_sgr(c, c->test->name);
+    s52_finish(c);
+}
 #endif
 
 const PtyCase yew_pty_cases[] = {
@@ -7066,6 +7181,8 @@ const PtyCase yew_pty_cases[] = {
       case_s52_fuss_loading),
     C(fuss_discard_confirmation, modern, 24U, 120U,
       case_s52_fuss_discard_confirm),
+    C(fuss_status_conflict_ignored_incoming, modern, 24U, 100U,
+      case_s52_fuss_status_rows),
     C(fuss_leave_q, modern, 24U, 80U, case_s52_fuss),
     C(fuss_leave_esc, modern, 24U, 80U, case_s52_fuss),
     C(fuss_nonrepo, modern, 24U, 80U, case_s52_fuss),
