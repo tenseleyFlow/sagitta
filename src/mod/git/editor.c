@@ -807,8 +807,8 @@ void yew_git_editor_prepare(Ed *ed, Win *w)
     static const u8 del_end_glyph[] = "\342\226\201";
     static const u8 unknown_glyph[] = "~";
 
-    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL ||
-        w->buf->path == NULL)
+    if (ed == NULL || ed->git_editor == NULL || w == NULL ||
+        w->buf == NULL || w->buf->tb == NULL || w->buf->path == NULL)
         return;
     state = state_for(ed, w->buf, true);
     gen = w->buf->tb->gen;
