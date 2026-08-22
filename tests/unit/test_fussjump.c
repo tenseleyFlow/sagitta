@@ -246,7 +246,8 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         {"z", "ed.git.stash.push"}, {"Z", "ed.git.stash.pop"},
         {"t", "ed.git.tag"}, {"x", "ed.git.discard"},
         {"r", "ed.git.file.delete"}, {"N", "ed.git.file.rename"},
-        {"<cr>", "ed.git.open"}, {"T", "ed.git.tree.all"},
+        {"<cr>", "ed.git.open"}, {"g", "ed.group.from_dir"},
+        {"T", "ed.git.tree.all"},
         {".", "ed.git.tree.hidden"}, {"/", "ed.git.jump.arm"},
         {"C-r", "ed.git.refresh"}, {"q", "ed.git.mode.leave"},
         {"<esc>", "ed.git.mode.leave"}
@@ -272,6 +273,10 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         desc = yew_cmd_desc(binding->cmd);
         YEW_ASSERT_NOT_NULL(desc);
         YEW_ASSERT_EQ_STR(desc->name, rows[i].cmd);
+        YEW_ASSERT((desc->flags & YEW_CMD_RECORDABLE) != 0U);
+        YEW_ASSERT_NOT_NULL(desc->word);
+        YEW_ASSERT(desc->word[0] != '\0');
+        YEW_ASSERT(desc->help[0] != '\0');
         YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
         YEW_ASSERT_EQ_I64(ed.chord.layer, -1);
     }
