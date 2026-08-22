@@ -404,7 +404,7 @@ void yew_loop_dispatch_event(Ed *ed, const Key *key, i64 now_ms)
 
 u32 yew_loop_settle_jobs(Ed *ed)
 {
-    bool external_completion = false;
+    bool observable_completion = false;
     u32 completed;
     u32 i;
 
@@ -416,13 +416,18 @@ u32 yew_loop_settle_jobs(Ed *ed)
         if (!job->drained && !yew_job_pending(job) &&
             !(job->sink == YEW_SINK_CALLBACK && job->exec_fd >= 0) &&
             !yew_git_job_owned(ed, job->id)) {
-            external_completion = true;
+            /* Git's private read workers complete the refresh they would
+             * otherwise invalidate, creating an endless status-refresh loop.
+             * Private mutate/net jobs invalidate from their verb callback;
+             * every user-visible job, including an ad-hoc git process, comes
+             * through this path. */
+            observable_completion = true;
             break;
         }
     }
     completed = yew_job_settle(ed);
 
-    if (external_completion) {
+    if (observable_completion) {
         yew_git_invalidate(ed);
         (void)yew_git_refresh(ed, true);
     }

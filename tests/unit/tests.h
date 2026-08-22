@@ -1756,7 +1756,7 @@ void test_gitcache_ttl_uses_monotonic_wall_milliseconds(void);
 void test_gitcache_focus_gain_invalidates_before_ttl(void);
 void test_gitcache_arbitrary_job_completion_invalidates_before_ttl(void);
 void test_gitcache_buffer_save_invalidates_before_ttl(void);
-void test_gitcache_internal_job_completion_does_not_self_invalidate(void);
+void test_gitcache_internal_read_job_completion_does_not_self_invalidate(void);
 void test_gitcache_state_strings_cover_taxonomy(void);
 void test_gitcache_filesystem_taxonomy_is_message_free(void);
 void test_gitcache_verb_table_and_argv_are_structural(void);

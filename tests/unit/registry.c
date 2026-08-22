@@ -1759,7 +1759,7 @@ const YewTest yew_tests[] = {
     T(gitcache_focus_gain_invalidates_before_ttl),
     T(gitcache_arbitrary_job_completion_invalidates_before_ttl),
     T(gitcache_buffer_save_invalidates_before_ttl),
-    T(gitcache_internal_job_completion_does_not_self_invalidate),
+    T(gitcache_internal_read_job_completion_does_not_self_invalidate),
     T(gitcache_state_strings_cover_taxonomy),
     T(gitcache_filesystem_taxonomy_is_message_free),
     T(gitcache_verb_table_and_argv_are_structural),

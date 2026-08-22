@@ -581,7 +581,7 @@ void test_gitcache_callback_input_allows_mutate_rejects_network(void)
     free(tmp);
 }
 
-void test_gitcache_internal_job_completion_does_not_self_invalidate(void)
+void test_gitcache_internal_read_job_completion_does_not_self_invalidate(void)
 {
     Ed ed;
     SpawnLog log = {0};
