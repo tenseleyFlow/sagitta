@@ -588,6 +588,15 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
             if (gs->unborn) (void)snprintf(git_badge, sizeof(git_badge), "%s (no commits)", mark);
             else if (gs->detached) (void)snprintf(git_badge, sizeof(git_badge), "%s (%-.6s)", mark, gs->head_oid != NULL ? gs->head_oid : "");
             else (void)snprintf(git_badge, sizeof(git_badge), "%s %s", mark, gs->branch != NULL ? gs->branch : "?");
+            {
+                const char *phase = gs->state == YEW_GIT_MID_MERGE ? "|MERGING" :
+                                    gs->state == YEW_GIT_MID_REBASE ? "|REBASE" :
+                                    gs->state == YEW_GIT_MID_CHERRY_PICK ? "|CHERRY-PICKING" :
+                                    gs->state == YEW_GIT_MID_REVERT ? "|REVERTING" :
+                                    gs->state == YEW_GIT_MID_BISECT ? "|BISECTING" : "";
+                size_t n = strlen(git_badge);
+                if (phase[0] != '\0') (void)snprintf(git_badge + n, sizeof(git_badge) - n, " %s", phase);
+            }
             if (gs->upstream != NULL && gs->ahead >= 0 && gs->behind >= 0) {
                 size_t n = strlen(git_badge);
                 (void)snprintf(git_badge + n, sizeof(git_badge) - n, " ↑%d ↓%d", gs->ahead, gs->behind);

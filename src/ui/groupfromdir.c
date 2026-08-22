@@ -25,8 +25,10 @@ u32 yew_group_from_dir(Ed *ed, const char *dir, const GroupFromDirOpts *in)
     (void)yew_walk_step(walk, 0); yew_walk_end(walk);
     if (files.n_files == 0U) { yew_filelist_free(&files); return 0U; }
     if (files.truncated || files.paths.len > (size_t)o.max_members) {
-        for (i = 0; i < files.paths.len; i++) yew_gp_preselect(files.paths.data[i]);
-        (void)yew_gp_show(ed, dir); yew_filelist_free(&files); return 0U;
+        (void)yew_gp_show(ed, dir);
+        for (i = 0; i < files.paths.len; i++)
+            yew_gp_preselect(files.paths.data[i]);
+        yew_filelist_free(&files); return 0U;
     }
     gid = yew_group_create(ed, dir, o.label);
     if (gid == 0U) { yew_filelist_free(&files); return 0U; }
