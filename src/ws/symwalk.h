@@ -4,8 +4,8 @@
 /* Sprint 44: cooperative workspace discovery and symbol indexing.
  *
  * Re-indexing is explicit: workspace open and ed.compl.reindex call
- * yew_symwalk_start.  There is deliberately no filesystem watching,
- * inotify/kqueue integration, polling, or cross-workspace index in 1.0.
+ * yew_symwalk_start.  There is deliberately no filesystem notification
+ * backend, polling, or cross-workspace index in 1.0.
  */
 
 #include <stdbool.h>

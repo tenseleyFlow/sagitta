@@ -323,9 +323,15 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
 
             draw_sign(ed, grid, (u16)grid_row32, grid_col,
                       diag == NULL ? git : diag, gutter_blank);
-            if (width > 1U)
+            if (width > 1U) {
+                /* Diagnostics own the first cell.  A simultaneous Git
+                 * hunk remains visible in the second; transient shadow
+                 * decoration uses that cell only when Git does not need it. */
                 draw_sign(ed, grid, (u16)grid_row32,
-                          (u16)(grid_col + 1U), shadow, gutter_blank);
+                          (u16)(grid_col + 1U),
+                          diag != NULL && git != NULL ? git : shadow,
+                          gutter_blank);
+            }
         }
         if (number_width != 0U &&
             yew_vp_line_of_row(w, row, &line, &sub)) {

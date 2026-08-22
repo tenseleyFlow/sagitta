@@ -56,6 +56,7 @@ void test_gutter_sign_kind_cells_and_priority_cover_all_combinations(void)
                           (mask & 1U) != 0U ? (u8)'d' :
                           (mask & 2U) != 0U ? (u8)'g' : 0U);
         YEW_ASSERT_EQ_U64(gutter_byte(&ed, 0U, 1U),
+                          (mask & 3U) == 3U ? (u8)'g' :
                           (mask & 4U) != 0U ? (u8)'s' : 0U);
         yew_ed_free(&ed);
     }
