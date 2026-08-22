@@ -313,45 +313,588 @@ bool yew_diff_within_size_limits(size_t left_bytes, u32 left_lines,
            right_lines <= YEW_DIFF_MAX_LINES;
 }
 
-static bool diff_hash_raw_lines(const u8 *bytes, size_t len, Arena *arena,
-                                YewGitLineHashFn hash_fn, u64 **hashes,
-                                DiffLine **lines, u32 *count)
-{
+typedef enum DiffWorkPhase {
+    WORK_COUNT_LEFT,
+    WORK_COUNT_RIGHT,
+    WORK_ALLOC_LINES,
+    WORK_HASH_LEFT,
+    WORK_HASH_RIGHT,
+    WORK_PREFIX,
+    WORK_SUFFIX,
+    WORK_INIT_SEARCH,
+    WORK_COPY_TRACE,
+    WORK_SEARCH,
+    WORK_BACKTRACK,
+    WORK_REVERSE,
+    WORK_EMIT,
+    WORK_FINISH,
+    WORK_DONE
+} DiffWorkPhase;
+
+typedef enum EqualProgress {
+    EQUAL_MORE,
+    EQUAL_YES,
+    EQUAL_NO
+} EqualProgress;
+
+struct YewDiffWork {
+    const u8 *left;
+    const u8 *right;
+    size_t left_len;
+    size_t right_len;
+    YewGitLineHashFn hash_fn;
+    u32 budget_d;
+    DiffLine *left_lines;
+    DiffLine *right_lines;
+    u64 *left_hashes;
+    u64 *right_hashes;
+    u32 left_n;
+    u32 right_n;
     size_t at;
-    u32 nlines = 0U;
-    u32 line = 0U;
+    size_t line_start;
+    u32 line_at;
+    u64 hash;
+    u32 prefix;
+    u32 suffix;
+    u32 middle_left;
+    u32 middle_right;
+    u32 max_d;
+    size_t width;
+    i32 offset;
+    i32 *frontier;
+    i32 **trace;
+    u32 distance;
+    u32 trace_count;
+    size_t copy_at;
+    i32 k;
+    i32 x;
+    i32 y;
+    bool snake_active;
+    bool equal_active;
+    u32 equal_left;
+    u32 equal_right;
+    size_t equal_at;
+    i32 back_d;
+    i32 back_x;
+    i32 back_y;
+    i32 prev_x;
+    i32 prev_y;
+    bool back_selected;
+    size_t reverse_at;
+    size_t emit_at;
+    u32 emit_left;
+    u32 emit_right;
+    bool emit_hunk;
+    u32 emit_base_lo;
+    u32 emit_buf_lo;
+    DiffOpVec ops;
+    GitHunkVec result;
+    YewDiffOutcome outcome;
+    DiffWorkPhase phase;
+    bool taken;
+};
 
-    for (at = 0U; at < len; at++) {
-        if (bytes[at] == '\n')
-            nlines++;
-    }
-    if (len != 0U && bytes[len - 1U] != '\n')
-        nlines++;
-    if (nlines > YEW_DIFF_MAX_LINES) {
-        *count = nlines;
-        return true;
-    }
-    *hashes = nlines == 0U ? NULL :
-              arena_alloc(arena, (size_t)nlines * sizeof(**hashes),
-                          _Alignof(u64));
-    *lines = nlines == 0U ? NULL :
-             arena_alloc(arena, (size_t)nlines * sizeof(**lines),
-                         _Alignof(DiffLine));
-    at = 0U;
-    while (at < len) {
-        size_t end = at;
+static bool work_tick_expired(YewDiffNowUsFn now_us, void *ctx,
+                              i64 deadline)
+{
+    return now_us(ctx) >= deadline;
+}
 
-        while (end < len && bytes[end] != '\n')
-            end++;
-        if (end < len)
-            end++;
-        (*lines)[line] = (DiffLine){at, end - at};
-        (*hashes)[line] = hash_fn(bytes + at, end - at);
-        line++;
-        at = end;
+static EqualProgress work_equal(YewDiffWork *work, u32 left_at,
+                                u32 right_at)
+{
+    const DiffLine *a = &work->left_lines[left_at];
+    const DiffLine *b = &work->right_lines[right_at];
+    size_t limit;
+
+    if (!work->equal_active) {
+        if (work->left_hashes[left_at] != work->right_hashes[right_at] ||
+            a->len != b->len)
+            return EQUAL_NO;
+        work->equal_active = true;
+        work->equal_left = left_at;
+        work->equal_right = right_at;
+        work->equal_at = 0U;
     }
-    *count = nlines;
-    return true;
+    if (work->equal_left != left_at || work->equal_right != right_at)
+        return EQUAL_NO;
+    limit = work->equal_at + 4096U;
+    if (limit < work->equal_at || limit > a->len)
+        limit = a->len;
+    while (work->equal_at < limit) {
+        if (work->left[a->off + work->equal_at] !=
+            work->right[b->off + work->equal_at]) {
+            work->equal_active = false;
+            return EQUAL_NO;
+        }
+        work->equal_at++;
+    }
+    return work->equal_at < a->len ? EQUAL_MORE : EQUAL_YES;
+}
+
+static void work_equal_reset(YewDiffWork *work)
+{
+    work->equal_active = false;
+}
+
+static void work_hash_byte(YewDiffWork *work, const u8 *bytes)
+{
+    work->hash ^= bytes[work->at];
+    work->hash *= UINT64_C(1099511628211);
+    work->at++;
+}
+
+static bool work_hash_line(YewDiffWork *work, const u8 *bytes, size_t len,
+                           DiffLine *lines, u64 *hashes)
+{
+    size_t limit = work->at + 4096U;
+
+    if (limit < work->at || limit > len)
+        limit = len;
+    while (work->at < limit) {
+        bool end;
+
+        work_hash_byte(work, bytes);
+        end = bytes[work->at - 1U] == '\n' || work->at == len;
+        if (!end)
+            continue;
+        lines[work->line_at] = (DiffLine){work->line_start,
+                                          work->at - work->line_start};
+        hashes[work->line_at] = work->hash_fn == yew_git_line_hash ?
+                                work->hash :
+                                work->hash_fn(bytes + work->line_start,
+                                              work->at - work->line_start);
+        work->line_at++;
+        work->line_start = work->at;
+        work->hash = UINT64_C(1469598103934665603);
+        break;
+    }
+    return work->at == len;
+}
+
+static void work_truncated(YewDiffWork *work)
+{
+    GitHunkVec_push(&work->result, ((GitHunk){
+        LINENO(0U), LINENO(work->left_n), LINENO(0U), LINENO(work->right_n),
+        YEW_HUNK_MOD
+    }));
+    work->outcome = YEW_DIFF_TRUNCATED;
+    work->phase = WORK_DONE;
+}
+
+static void work_free_search(YewDiffWork *work)
+{
+    u32 i;
+
+    for (i = 0U; i < work->trace_count; i++)
+        free(work->trace[i]);
+    free(work->trace);
+    free(work->frontier);
+    work->trace = NULL;
+    work->frontier = NULL;
+    work->trace_count = 0U;
+}
+
+YewDiffWork *yew_diff_work_begin_bytes_with_hash(
+    const u8 *left, size_t left_len, const u8 *right, size_t right_len,
+    u32 budget_d, YewGitLineHashFn hash_fn)
+{
+    YewDiffWork *work;
+
+    if (hash_fn == NULL || (left == NULL && left_len != 0U) ||
+        (right == NULL && right_len != 0U))
+        return NULL;
+    work = yew_xcalloc(1U, sizeof(*work));
+    work->left = left;
+    work->right = right;
+    work->left_len = left_len;
+    work->right_len = right_len;
+    work->hash_fn = hash_fn;
+    work->budget_d = budget_d;
+    work->hash = UINT64_C(1469598103934665603);
+    work->outcome = YEW_DIFF_OK;
+    work->phase = left_len > YEW_DIFF_MAX_BYTES ||
+                  right_len > YEW_DIFF_MAX_BYTES ?
+                  WORK_DONE : WORK_COUNT_LEFT;
+    if (work->phase == WORK_DONE)
+        work->outcome = YEW_DIFF_TOO_LARGE;
+    return work;
+}
+
+YewDiffWork *yew_diff_work_begin_bytes(const u8 *left, size_t left_len,
+                                       const u8 *right, size_t right_len,
+                                       u32 budget_d)
+{
+    return yew_diff_work_begin_bytes_with_hash(left, left_len, right,
+                                               right_len, budget_d,
+                                               yew_git_line_hash);
+}
+
+YewDiffProgress yew_diff_work_step(YewDiffWork *work, u32 budget_us,
+                                   YewDiffNowUsFn now_us, void *clock_ctx)
+{
+    i64 start;
+    i64 deadline;
+
+    if (work == NULL || now_us == NULL || work->phase == WORK_DONE)
+        return YEW_DIFF_DONE;
+    start = now_us(clock_ctx);
+    deadline = start > INT64_MAX - (i64)budget_us ? INT64_MAX :
+               start + (i64)budget_us;
+    do {
+        switch (work->phase) {
+        case WORK_COUNT_LEFT:
+            if (work->at < work->left_len) {
+                size_t limit = work->at + 4096U;
+
+                if (limit < work->at || limit > work->left_len)
+                    limit = work->left_len;
+                while (work->at < limit) {
+                    if (work->left[work->at++] == '\n')
+                        work->left_n++;
+                }
+            } else {
+                if (work->left_len != 0U &&
+                    work->left[work->left_len - 1U] != '\n')
+                    work->left_n++;
+                work->at = 0U;
+                work->phase = WORK_COUNT_RIGHT;
+            }
+            break;
+        case WORK_COUNT_RIGHT:
+            if (work->at < work->right_len) {
+                size_t limit = work->at + 4096U;
+
+                if (limit < work->at || limit > work->right_len)
+                    limit = work->right_len;
+                while (work->at < limit) {
+                    if (work->right[work->at++] == '\n')
+                        work->right_n++;
+                }
+            } else {
+                if (work->right_len != 0U &&
+                    work->right[work->right_len - 1U] != '\n')
+                    work->right_n++;
+                work->phase = WORK_ALLOC_LINES;
+            }
+            break;
+        case WORK_ALLOC_LINES:
+            if (!yew_diff_within_size_limits(work->left_len, work->left_n,
+                                              work->right_len,
+                                              work->right_n)) {
+                work->outcome = YEW_DIFF_TOO_LARGE;
+                work->phase = WORK_DONE;
+                break;
+            }
+            work->left_lines = work->left_n == 0U ? NULL :
+                yew_xmalloc((size_t)work->left_n * sizeof(*work->left_lines));
+            work->left_hashes = work->left_n == 0U ? NULL :
+                yew_xmalloc((size_t)work->left_n * sizeof(*work->left_hashes));
+            work->right_lines = work->right_n == 0U ? NULL :
+                yew_xmalloc((size_t)work->right_n * sizeof(*work->right_lines));
+            work->right_hashes = work->right_n == 0U ? NULL :
+                yew_xmalloc((size_t)work->right_n * sizeof(*work->right_hashes));
+            work->at = 0U;
+            work->line_start = 0U;
+            work->line_at = 0U;
+            work->phase = WORK_HASH_LEFT;
+            break;
+        case WORK_HASH_LEFT:
+            if (work_hash_line(work, work->left, work->left_len,
+                               work->left_lines, work->left_hashes)) {
+                work->at = 0U;
+                work->line_start = 0U;
+                work->line_at = 0U;
+                work->hash = UINT64_C(1469598103934665603);
+                work->phase = WORK_HASH_RIGHT;
+            }
+            break;
+        case WORK_HASH_RIGHT:
+            if (work_hash_line(work, work->right, work->right_len,
+                               work->right_lines, work->right_hashes))
+                work->phase = WORK_PREFIX;
+            break;
+        case WORK_PREFIX:
+            if (work->prefix >= work->left_n ||
+                work->prefix >= work->right_n) {
+                work->phase = WORK_SUFFIX;
+            } else {
+                EqualProgress eq = work_equal(work, work->prefix,
+                                              work->prefix);
+                if (eq == EQUAL_YES) {
+                    work->prefix++;
+                    work_equal_reset(work);
+                } else if (eq == EQUAL_NO) {
+                    work_equal_reset(work);
+                    work->phase = WORK_SUFFIX;
+                }
+            }
+            break;
+        case WORK_SUFFIX:
+            if (work->suffix >= work->left_n - work->prefix ||
+                work->suffix >= work->right_n - work->prefix) {
+                work->phase = WORK_INIT_SEARCH;
+            } else {
+                u32 li = work->left_n - work->suffix - 1U;
+                u32 ri = work->right_n - work->suffix - 1U;
+                EqualProgress eq = work_equal(work, li, ri);
+                if (eq == EQUAL_YES) {
+                    work->suffix++;
+                    work_equal_reset(work);
+                } else if (eq == EQUAL_NO) {
+                    work_equal_reset(work);
+                    work->phase = WORK_INIT_SEARCH;
+                }
+            }
+            break;
+        case WORK_INIT_SEARCH:
+        {
+            size_t i;
+
+            work->middle_left = work->left_n - work->prefix - work->suffix;
+            work->middle_right = work->right_n - work->prefix - work->suffix;
+            if (work->middle_left == 0U && work->middle_right == 0U) {
+                work->phase = WORK_DONE;
+                break;
+            }
+            if (work->middle_left > UINT32_MAX - work->middle_right) {
+                work->outcome = YEW_DIFF_INVALID;
+                work->phase = WORK_DONE;
+                break;
+            }
+            work->max_d = work->middle_left + work->middle_right;
+            if (work->max_d > work->budget_d)
+                work->max_d = work->budget_d;
+            work->width = (size_t)work->max_d * 2U + 3U;
+            work->offset = (i32)work->max_d + 1;
+            work->frontier = yew_xmalloc(work->width * sizeof(*work->frontier));
+            work->trace = yew_xcalloc((size_t)work->max_d + 1U,
+                                      sizeof(*work->trace));
+            for (i = 0U; i < work->width; i++)
+                work->frontier[i] = -1;
+            work->frontier[work->max_d + 2U] = 0;
+            work->copy_at = 0U;
+            work->distance = 0U;
+            work->k = 0;
+            work->phase = WORK_COPY_TRACE;
+            break;
+        }
+        case WORK_COPY_TRACE:
+            if (work->trace[work->distance] == NULL) {
+                work->trace[work->distance] =
+                    yew_xmalloc(work->width * sizeof(**work->trace));
+                work->trace_count = work->distance + 1U;
+            }
+            if (work->copy_at < work->width) {
+                size_t limit = work->copy_at + 1024U;
+
+                if (limit < work->copy_at || limit > work->width)
+                    limit = work->width;
+                while (work->copy_at < limit) {
+                    work->trace[work->distance][work->copy_at] =
+                        work->frontier[work->copy_at];
+                    work->copy_at++;
+                }
+            } else {
+                work->k = -(i32)work->distance;
+                work->snake_active = false;
+                work->phase = WORK_SEARCH;
+            }
+            break;
+        case WORK_SEARCH:
+            if (!work->snake_active) {
+                i32 d = (i32)work->distance;
+                if (work->k > d) {
+                    if (work->distance == work->max_d) {
+                        work_truncated(work);
+                    } else {
+                        work->distance++;
+                        work->copy_at = 0U;
+                        work->phase = WORK_COPY_TRACE;
+                    }
+                    break;
+                }
+                if (work->k == -d ||
+                    (work->k != d &&
+                     work->frontier[work->offset + work->k - 1] <
+                     work->frontier[work->offset + work->k + 1]))
+                    work->x = work->frontier[work->offset + work->k + 1];
+                else
+                    work->x = work->frontier[work->offset + work->k - 1] + 1;
+                work->y = work->x - work->k;
+                work->snake_active = true;
+            }
+            if (work->x < (i32)work->middle_left &&
+                work->y < (i32)work->middle_right) {
+                EqualProgress eq = work_equal(
+                    work, work->prefix + (u32)work->x,
+                    work->prefix + (u32)work->y);
+                if (eq == EQUAL_MORE)
+                    break;
+                work_equal_reset(work);
+                if (eq == EQUAL_YES) {
+                    work->x++;
+                    work->y++;
+                    break;
+                }
+            }
+            work->frontier[work->offset + work->k] = work->x;
+            work->snake_active = false;
+            if (work->x >= (i32)work->middle_left &&
+                work->y >= (i32)work->middle_right) {
+                work->back_d = (i32)work->distance;
+                work->back_x = (i32)work->middle_left;
+                work->back_y = (i32)work->middle_right;
+                work->back_selected = false;
+                work->phase = WORK_BACKTRACK;
+            } else {
+                work->k += 2;
+            }
+            break;
+        case WORK_BACKTRACK:
+            if (!work->back_selected) {
+                i32 *v;
+                i32 bk;
+                i32 prev_k;
+
+                if (work->back_d < 0) {
+                    work->reverse_at = 0U;
+                    work->phase = WORK_REVERSE;
+                    break;
+                }
+                v = work->trace[work->back_d];
+                bk = work->back_x - work->back_y;
+                if (bk == -work->back_d ||
+                    (bk != work->back_d &&
+                     v[work->offset + bk - 1] <
+                     v[work->offset + bk + 1]))
+                    prev_k = bk + 1;
+                else
+                    prev_k = bk - 1;
+                work->prev_x = v[work->offset + prev_k];
+                work->prev_y = work->prev_x - prev_k;
+                work->back_selected = true;
+            }
+            if (work->back_x > work->prev_x &&
+                work->back_y > work->prev_y) {
+                DiffOpVec_push(&work->ops, DIFF_EQUAL);
+                work->back_x--;
+                work->back_y--;
+            } else {
+                if (work->back_d != 0) {
+                    if (work->back_x == work->prev_x) {
+                        DiffOpVec_push(&work->ops, DIFF_INSERT);
+                        work->back_y--;
+                    } else {
+                        DiffOpVec_push(&work->ops, DIFF_DELETE);
+                        work->back_x--;
+                    }
+                }
+                work->back_d--;
+                work->back_selected = false;
+            }
+            break;
+        case WORK_REVERSE:
+            if (work->reverse_at < work->ops.len / 2U) {
+                size_t hi = work->ops.len - work->reverse_at - 1U;
+                DiffOp tmp = work->ops.data[work->reverse_at];
+                work->ops.data[work->reverse_at] = work->ops.data[hi];
+                work->ops.data[hi] = tmp;
+                work->reverse_at++;
+            } else {
+                work->emit_left = work->prefix;
+                work->emit_right = work->prefix;
+                work->phase = WORK_EMIT;
+            }
+            break;
+        case WORK_EMIT:
+            if (work->emit_at >= work->ops.len) {
+                if (work->emit_hunk) {
+                    GitHunkVec_push(&work->result, ((GitHunk){
+                        LINENO(work->emit_base_lo),
+                        LINENO(work->emit_left - work->emit_base_lo),
+                        LINENO(work->emit_buf_lo),
+                        LINENO(work->emit_right - work->emit_buf_lo),
+                        work->emit_left == work->emit_base_lo ? YEW_HUNK_ADD :
+                        work->emit_right == work->emit_buf_lo ? YEW_HUNK_DEL :
+                        YEW_HUNK_MOD
+                    }));
+                    work->emit_hunk = false;
+                }
+                work->phase = WORK_FINISH;
+                break;
+            }
+            if (work->ops.data[work->emit_at] == DIFF_EQUAL) {
+                if (work->emit_hunk) {
+                    GitHunkVec_push(&work->result, ((GitHunk){
+                        LINENO(work->emit_base_lo),
+                        LINENO(work->emit_left - work->emit_base_lo),
+                        LINENO(work->emit_buf_lo),
+                        LINENO(work->emit_right - work->emit_buf_lo),
+                        work->emit_left == work->emit_base_lo ? YEW_HUNK_ADD :
+                        work->emit_right == work->emit_buf_lo ? YEW_HUNK_DEL :
+                        YEW_HUNK_MOD
+                    }));
+                    work->emit_hunk = false;
+                }
+                work->emit_left++;
+                work->emit_right++;
+            } else {
+                if (!work->emit_hunk) {
+                    work->emit_base_lo = work->emit_left;
+                    work->emit_buf_lo = work->emit_right;
+                    work->emit_hunk = true;
+                }
+                if (work->ops.data[work->emit_at] == DIFF_DELETE)
+                    work->emit_left++;
+                else
+                    work->emit_right++;
+            }
+            work->emit_at++;
+            break;
+        case WORK_FINISH:
+            work_free_search(work);
+            work->phase = WORK_DONE;
+            break;
+        case WORK_DONE:
+            break;
+        }
+    } while (work->phase != WORK_DONE &&
+             !work_tick_expired(now_us, clock_ctx, deadline));
+    return work->phase == WORK_DONE ? YEW_DIFF_DONE : YEW_DIFF_MORE;
+}
+
+YewDiffOutcome yew_diff_work_take(YewDiffWork *work, GitHunkVec *out)
+{
+    if (work == NULL || out == NULL || work->phase != WORK_DONE ||
+        work->taken)
+        return YEW_DIFF_INVALID;
+    GitHunkVec_free(out);
+    *out = work->result;
+    work->result = (GitHunkVec){0};
+    work->taken = true;
+    return work->outcome;
+}
+
+void yew_diff_work_free(YewDiffWork *work)
+{
+    if (work == NULL)
+        return;
+    free(work->left_lines);
+    free(work->right_lines);
+    free(work->left_hashes);
+    free(work->right_hashes);
+    work_free_search(work);
+    DiffOpVec_free(&work->ops);
+    GitHunkVec_free(&work->result);
+    free(work);
+}
+
+static i64 sync_clock(void *ctx)
+{
+    i64 *ticks = ctx;
+
+    return (*ticks)++;
 }
 
 YewDiffOutcome yew_diff_bytes_with_hash(Arena *arena,
@@ -361,39 +904,24 @@ YewDiffOutcome yew_diff_bytes_with_hash(Arena *arena,
                                         YewGitLineHashFn hash_fn,
                                         GitHunkVec *out)
 {
-    u64 *left_hashes = NULL;
-    u64 *right_hashes = NULL;
-    DiffLine *left_lines = NULL;
-    DiffLine *right_lines = NULL;
-    u32 left_n = 0U;
-    u32 right_n = 0U;
-    DiffSeq a;
-    DiffSeq b;
+    YewDiffWork *work;
+    YewDiffOutcome outcome;
+    i64 ticks = 0;
 
     if (arena == NULL || out == NULL || hash_fn == NULL ||
         (left == NULL && left_len != 0U) ||
         (right == NULL && right_len != 0U))
         return YEW_DIFF_INVALID;
-    out->len = 0U;
-    if (left_len > YEW_DIFF_MAX_BYTES || right_len > YEW_DIFF_MAX_BYTES)
-        return YEW_DIFF_TOO_LARGE;
-    if (!diff_hash_raw_lines(left, left_len, arena, hash_fn, &left_hashes,
-                             &left_lines, &left_n) ||
-        !diff_hash_raw_lines(right, right_len, arena, hash_fn, &right_hashes,
-                             &right_lines, &right_n))
+    work = yew_diff_work_begin_bytes_with_hash(left, left_len, right,
+                                               right_len, budget_d, hash_fn);
+    if (work == NULL)
         return YEW_DIFF_INVALID;
-    if (!yew_diff_within_size_limits(left_len, left_n, right_len, right_n))
-        return YEW_DIFF_TOO_LARGE;
-    a = (DiffSeq){left_hashes, left, left_lines};
-    b = (DiffSeq){right_hashes, right, right_lines};
-    if (!diff_sequences(arena, &a, left_n, &b, right_n, budget_d, out)) {
-        GitHunk whole = {LINENO(0U), LINENO(left_n),
-                         LINENO(0U), LINENO(right_n), YEW_HUNK_MOD};
-
-        GitHunkVec_push(out, whole);
-        return YEW_DIFF_TRUNCATED;
-    }
-    return YEW_DIFF_OK;
+    while (yew_diff_work_step(work, UINT32_MAX, sync_clock, &ticks) ==
+           YEW_DIFF_MORE)
+        ;
+    outcome = yew_diff_work_take(work, out);
+    yew_diff_work_free(work);
+    return outcome;
 }
 
 YewDiffOutcome yew_diff_bytes(Arena *arena,

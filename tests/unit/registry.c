@@ -1780,6 +1780,8 @@ const YewTest yew_tests[] = {
     T(git_diff_raw_bytes_resolve_hash_collisions),
     T(git_diff_raw_bytes_preserve_line_terminators),
     T(git_diff_raw_budget_and_size_outcomes),
+    T(git_diff_incremental_matches_sync_and_publishes_atomically),
+    T(git_diff_incremental_budget_covers_hash_and_compare),
     T(git_hunk_patch_headers_and_path_guard),
     T(git_hunk_patch_exact_three_line_context),
     T(git_hunk_patch_add_delete_at_bounds),

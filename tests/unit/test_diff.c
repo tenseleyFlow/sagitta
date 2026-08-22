@@ -51,6 +51,45 @@ static u64 colliding_hash(const u8 *bytes, size_t len)
     return UINT64_C(0x5353535353535353);
 }
 
+typedef struct DiffFakeClock {
+    i64 now;
+    i64 first;
+    i64 last;
+    u32 calls;
+} DiffFakeClock;
+
+static i64 diff_fake_now(void *ctx)
+{
+    DiffFakeClock *clock = ctx;
+    i64 value = clock->now;
+
+    clock->now += 250;
+    if (clock->calls == 0U)
+        clock->first = value;
+    clock->last = value;
+    clock->calls++;
+    return value;
+}
+
+static void assert_same_hunks(const GitHunkVec *left,
+                              const GitHunkVec *right)
+{
+    size_t i;
+
+    YEW_ASSERT_EQ_U64(left->len, right->len);
+    for (i = 0U; i < left->len; i++) {
+        YEW_ASSERT_EQ_U64(left->data[i].base_lo.v,
+                          right->data[i].base_lo.v);
+        YEW_ASSERT_EQ_U64(left->data[i].base_n.v,
+                          right->data[i].base_n.v);
+        YEW_ASSERT_EQ_U64(left->data[i].buf_lo.v,
+                          right->data[i].buf_lo.v);
+        YEW_ASSERT_EQ_U64(left->data[i].buf_n.v,
+                          right->data[i].buf_n.v);
+        YEW_ASSERT(left->data[i].kind == right->data[i].kind);
+    }
+}
+
 void test_git_line_hash_and_split(void)
 {
     Arena arena;
@@ -238,6 +277,10 @@ void test_git_diff_raw_bytes_preserve_line_terminators(void)
     GitHunkVec hunks = {0};
     static const u8 lf[] = "x\ny\n";
     static const u8 crlf[] = "x\r\ny\n";
+    static const u8 base[] = "alpha\nbeta\ngamma\n";
+    static const u8 added[] = "alpha\ninserted\nbeta\ngamma\n";
+    static const u8 modified[] = "alpha\nchanged\ngamma\n";
+    static const u8 deleted[] = "beta\ngamma\n";
 
     arena_init(&arena);
     YEW_ASSERT(yew_diff_bytes(&arena, lf, sizeof(lf) - 1U,
@@ -247,6 +290,30 @@ void test_git_diff_raw_bytes_preserve_line_terminators(void)
     YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 0U);
     YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 0U);
     YEW_ASSERT_EQ_U64(hunk_distance(&hunks), 2U);
+
+    YEW_ASSERT(yew_diff_bytes(&arena, base, sizeof(base) - 1U,
+                              added, sizeof(added) - 1U, 4U, &hunks) ==
+               YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 1U);
+    YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_ADD);
+
+    YEW_ASSERT(yew_diff_bytes(&arena, base, sizeof(base) - 1U,
+                              modified, sizeof(modified) - 1U, 4U,
+                              &hunks) == YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 1U);
+    YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_MOD);
+
+    YEW_ASSERT(yew_diff_bytes(&arena, base, sizeof(base) - 1U,
+                              deleted, sizeof(deleted) - 1U, 4U,
+                              &hunks) == YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 0U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 0U);
+    YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_DEL);
     GitHunkVec_free(&hunks);
     arena_free_all(&arena);
 }
@@ -295,4 +362,94 @@ void test_git_diff_raw_budget_and_size_outcomes(void)
     bytebuf_free(&right);
     GitHunkVec_free(&hunks);
     arena_free_all(&arena);
+}
+
+void test_git_diff_incremental_matches_sync_and_publishes_atomically(void)
+{
+    Arena arena;
+    GitHunkVec sync = {0};
+    GitHunkVec incremental = {0};
+    GitHunkVec sentinel = {0};
+    YewDiffWork *work;
+    DiffFakeClock clock = {0};
+    YewDiffProgress progress;
+    u32 slices = 0U;
+    static const u8 left[] =
+        "same\nalpha\r\nlong collision-safe payload\ntail\n";
+    static const u8 right[] =
+        "same\nbeta\nlong collision-safe payload\nadded\ntail\n";
+
+    arena_init(&arena);
+    YEW_ASSERT(yew_diff_bytes_with_hash(
+        &arena, left, sizeof(left) - 1U, right, sizeof(right) - 1U,
+        16U, colliding_hash, &sync) == YEW_DIFF_OK);
+    GitHunkVec_push(&sentinel, ((GitHunk){LINENO(91U), LINENO(92U),
+                                         LINENO(93U), LINENO(94U),
+                                         YEW_HUNK_DEL}));
+    work = yew_diff_work_begin_bytes_with_hash(
+        left, sizeof(left) - 1U, right, sizeof(right) - 1U, 16U,
+        colliding_hash);
+    YEW_ASSERT_NOT_NULL(work);
+    YEW_ASSERT(yew_diff_work_take(work, &sentinel) == YEW_DIFF_INVALID);
+    YEW_ASSERT_EQ_U64(sentinel.len, 1U);
+    YEW_ASSERT_EQ_U64(sentinel.data[0].base_lo.v, 91U);
+    do {
+        clock.calls = 0U;
+        progress = yew_diff_work_step(work, YEW_DIFF_BUDGET_US,
+                                      diff_fake_now, &clock);
+        YEW_ASSERT(clock.last - clock.first <= YEW_DIFF_BUDGET_US);
+        slices++;
+    } while (progress == YEW_DIFF_MORE);
+    YEW_ASSERT(slices > 1U);
+    YEW_ASSERT(yew_diff_work_take(work, &incremental) == YEW_DIFF_OK);
+    assert_same_hunks(&sync, &incremental);
+    YEW_ASSERT(yew_diff_work_take(work, &sentinel) == YEW_DIFF_INVALID);
+
+    yew_diff_work_free(work);
+    GitHunkVec_free(&sentinel);
+    GitHunkVec_free(&incremental);
+    GitHunkVec_free(&sync);
+    arena_free_all(&arena);
+}
+
+void test_git_diff_incremental_budget_covers_hash_and_compare(void)
+{
+    Bytebuf left;
+    Bytebuf right;
+    GitHunkVec hunks = {0};
+    YewDiffWork *work;
+    DiffFakeClock clock = {0};
+    YewDiffProgress progress;
+    u32 slices = 0U;
+    u32 i;
+
+    bytebuf_init(&left);
+    bytebuf_init(&right);
+    for (i = 0U; i < 512U; i++) {
+        bytebuf_printf(&left, "shared-%04u-abcdefghijklmnopqrstuvwxyz\n", i);
+        bytebuf_printf(&right, "shared-%04u-abcdefghijklmnopqrstuvwxyz\n", i);
+    }
+    bytebuf_append(&right, "one-more-line\n", sizeof("one-more-line\n") - 1U);
+    work = yew_diff_work_begin_bytes(left.data, left.len, right.data,
+                                     right.len, 4U);
+    YEW_ASSERT_NOT_NULL(work);
+    do {
+        clock.calls = 0U;
+        progress = yew_diff_work_step(work, YEW_DIFF_BUDGET_US,
+                                      diff_fake_now, &clock);
+        YEW_ASSERT(clock.calls >= 2U);
+        YEW_ASSERT(clock.last - clock.first <= YEW_DIFF_BUDGET_US);
+        slices++;
+    } while (progress == YEW_DIFF_MORE);
+    YEW_ASSERT(slices > 2U);
+    YEW_ASSERT(yew_diff_work_take(work, &hunks) == YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_ADD);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 512U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_n.v, 1U);
+
+    yew_diff_work_free(work);
+    GitHunkVec_free(&hunks);
+    bytebuf_free(&right);
+    bytebuf_free(&left);
 }

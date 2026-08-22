@@ -44,6 +44,14 @@ typedef enum YewDiffOutcome {
     YEW_DIFF_INVALID
 } YewDiffOutcome;
 
+typedef struct YewDiffWork YewDiffWork;
+typedef i64 (*YewDiffNowUsFn)(void *ctx);
+
+typedef enum YewDiffProgress {
+    YEW_DIFF_MORE,
+    YEW_DIFF_DONE
+} YewDiffProgress;
+
 #define YEW_DIFF_MAX_LINES 200000U
 #define YEW_DIFF_MAX_BYTES (16U * 1024U * 1024U)
 #define YEW_DIFF_MAX_D 4096U
@@ -64,6 +72,16 @@ YewDiffOutcome yew_diff_bytes(Arena *a,
                               const u8 *left, size_t left_len,
                               const u8 *right, size_t right_len,
                               u32 budget_d, GitHunkVec *out);
+YewDiffWork *yew_diff_work_begin_bytes_with_hash(
+    const u8 *left, size_t left_len, const u8 *right, size_t right_len,
+    u32 budget_d, YewGitLineHashFn hash_fn);
+YewDiffWork *yew_diff_work_begin_bytes(const u8 *left, size_t left_len,
+                                       const u8 *right, size_t right_len,
+                                       u32 budget_d);
+YewDiffProgress yew_diff_work_step(YewDiffWork *work, u32 budget_us,
+                                   YewDiffNowUsFn now_us, void *clock_ctx);
+YewDiffOutcome yew_diff_work_take(YewDiffWork *work, GitHunkVec *out);
+void yew_diff_work_free(YewDiffWork *work);
 u64 yew_git_line_hash(const u8 *bytes, size_t len);
 bool yew_git_hash_lines(const u8 *bytes, size_t len, Arena *a,
                         u64 **hashes, u32 *count, bool *missing_final_nl);
