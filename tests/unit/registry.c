@@ -1783,6 +1783,7 @@ const YewTest yew_tests[] = {
     T(gitcache_blob_batch_parser_handles_split_binary_and_missing),
     T(gitcache_blob_batch_failure_and_size_limit_are_explicit),
     T(gitcache_blob_batch_reuses_one_child_for_100_requests),
+    T(gitcache_editor_reuses_base_across_one_hundred_edits),
     T(git_line_hash_and_split),
     T(git_diff_basic_shapes),
     T(git_diff_matches_random_minimal_oracle),

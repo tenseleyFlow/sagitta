@@ -1780,6 +1780,7 @@ void test_gitcache_callback_input_copies_and_owns_stdin(void);
 void test_gitcache_blob_batch_parser_handles_split_binary_and_missing(void);
 void test_gitcache_blob_batch_failure_and_size_limit_are_explicit(void);
 void test_gitcache_blob_batch_reuses_one_child_for_100_requests(void);
+void test_gitcache_editor_reuses_base_across_one_hundred_edits(void);
 void test_git_line_hash_and_split(void);
 void test_git_diff_basic_shapes(void);
 void test_git_diff_matches_random_minimal_oracle(void);

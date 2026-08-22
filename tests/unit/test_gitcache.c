@@ -13,8 +13,10 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "mod/git/editor.h"
 #include "mod/git/git.h"
 #include "mod/git/git_int.h"
+#include "text/piece.h"
 
 typedef struct SpawnLog {
     u32 next_id;
@@ -745,6 +747,114 @@ void test_gitcache_blob_batch_reuses_one_child_for_100_requests(void)
     YEW_ASSERT_EQ_U64(yew_git_test_blob_spawn_count(&ed), 1U);
     yew_jobs_free(&ed);
     yew_git_state_free(&ed);
+}
+
+static void gitcache_editor_pump_until(Ed *ed, i64 now_ms, u64 published)
+{
+    YewGitEditorStats stats;
+    u32 ticks = 0U;
+
+    do {
+        yew_git_editor_tick(ed, now_ms);
+        yew_git_editor_stats(ed, &stats);
+        ticks++;
+    } while (stats.diff_published < published && ticks < 100U);
+    YEW_ASSERT(ticks < 100U);
+}
+
+static void gitcache_assert_no_git_signs(const Win *win)
+{
+    u32 i;
+
+    for (i = 0U; i < win->gutter_signs.len; i++)
+        YEW_ASSERT((win->gutter_signs.v[i].mask &
+                    (u8)(1U << YEW_SIGN_GIT)) == 0U);
+}
+
+static bool gitcache_has_git_sign(const Win *win)
+{
+    u32 i;
+
+    for (i = 0U; i < win->gutter_signs.len; i++)
+        if ((win->gutter_signs.v[i].mask &
+             (u8)(1U << YEW_SIGN_GIT)) != 0U)
+            return true;
+    return false;
+}
+
+void test_gitcache_editor_reuses_base_across_one_hundred_edits(void)
+{
+    static const char oid[] = "0123456789012345678901234567890123456789";
+    static const u8 initial[] = "local two\n";
+    SpawnLog log = {0};
+    YewGitEditorStats stats;
+    const HunkList *hunks;
+    const u8 *tx;
+    Ed ed;
+    char root[1024];
+    char path[1200];
+    char response[128];
+    int n;
+    u32 i;
+
+    YEW_ASSERT_NOT_NULL(getcwd(root, sizeof(root)));
+    n = snprintf(path, sizeof(path), "%s/main.c", root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(path));
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, initial, sizeof(initial) - 1U,
+                                  "main.c"));
+    ed.buffer.path = arena_strdup(&ed.arena, path);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    gitcache_ready(&ed, &log, root, 1000);
+    YEW_ASSERT(yew_git_test_blob_batch_open(&ed));
+
+    ed.now_ms = 1000;
+    yew_git_editor_prepare(&ed, ed.win);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 1U);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_batch_tx(&ed, &tx), 8U);
+    YEW_ASSERT_EQ_MEM(tx, ":main.c\n", 8U);
+    n = snprintf(response, sizeof(response), "%s blob %u\nlocal two\n\n",
+                 oid, (unsigned)(sizeof(initial) - 1U));
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(response));
+    YEW_ASSERT(yew_git_test_blob_batch_feed(&ed, (const u8 *)response,
+                                            (u64)n));
+    gitcache_editor_pump_until(&ed, 1000, 1U);
+    yew_git_editor_prepare(&ed, ed.win);
+    hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+    YEW_ASSERT_NOT_NULL(hunks);
+    YEW_ASSERT_EQ_U64(hunks->h.len, 0U);
+    gitcache_assert_no_git_signs(ed.win);
+
+    for (i = 0U; i < 50U; i++) {
+        u64 published;
+        u64 end = yew_textbuf_len(ed.buffer.tb);
+
+        yew_textbuf_insert(ed.buffer.tb, BYTEOFF(end), (const u8 *)"x", 1U);
+        ed.now_ms = 1100 + (i64)i * 400;
+        yew_git_editor_prepare(&ed, ed.win);
+        yew_git_editor_stats(&ed, &stats);
+        published = stats.diff_published + 1U;
+        gitcache_editor_pump_until(&ed, ed.now_ms + 150, published);
+        yew_git_editor_prepare(&ed, ed.win);
+        hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+        YEW_ASSERT(hunks->h.len != 0U);
+        YEW_ASSERT(gitcache_has_git_sign(ed.win));
+
+        yew_textbuf_delete(ed.buffer.tb, (Span){end, end + 1U});
+        ed.now_ms += 200;
+        yew_git_editor_prepare(&ed, ed.win);
+        yew_git_editor_stats(&ed, &stats);
+        published = stats.diff_published + 1U;
+        gitcache_editor_pump_until(&ed, ed.now_ms + 150, published);
+        yew_git_editor_prepare(&ed, ed.win);
+        hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+        YEW_ASSERT_EQ_U64(hunks->h.len, 0U);
+        gitcache_assert_no_git_signs(ed.win);
+        YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 1U);
+    }
+    YEW_ASSERT_EQ_U64(ed.buffer.tb->gen, 100U);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
 }
 
 void test_gitcache_verb_table_and_argv_are_structural(void)
