@@ -108,6 +108,15 @@ void yew_tty_close(Tty *t);
 bool yew_tty_winsize(Tty *t);
 void yew_tty_altscreen(Tty *t, bool on);
 
+/*
+ * Temporarily return the controlling terminal to an inherited foreground
+ * child, then reacquire it without reinstalling the editor's signal
+ * handlers.  This is distinct from yew_tty_suspend(), which performs Unix
+ * job-control suspension of yew itself.
+ */
+bool yew_tty_handover_begin(Tty *t);
+bool yew_tty_handover_end(Tty *t);
+
 int yew_tty_signal_fd(const Tty *t);
 /* A cont event reports delivery; t->raw reports whether raw re-entry worked. */
 void yew_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld);

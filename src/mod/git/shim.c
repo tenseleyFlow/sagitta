@@ -1,4 +1,5 @@
 #include "mod/git/git.h"
+#include "mod/git/fussmode.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,10 @@
 
 struct GitCtx {
     bool ready;
+};
+
+struct FussMode {
+    bool active;
 };
 
 static bool git_require(Ed *ed)
@@ -105,6 +110,84 @@ void yew_git_state_free(Ed *ed)
         return;
     free(ed->git);
     ed->git = NULL;
+}
+
+void yew_fuss_state_init(Ed *ed)
+{
+    if (ed != NULL)
+        ed->fuss = NULL;
+}
+
+void yew_fuss_state_free(Ed *ed)
+{
+    if (ed != NULL)
+        ed->fuss = NULL;
+}
+
+bool yew_fuss_active(const Ed *ed)
+{
+    (void)ed;
+    return false;
+}
+
+CmdStatus yew_fuss_mode_enter(Ed *ed)
+{
+    (void)git_require(ed);
+    return YEW_CMD_ERR_STATE;
+}
+
+void yew_fuss_mode_leave(Ed *ed)
+{
+    (void)ed;
+}
+
+bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms)
+{
+    (void)ed;
+    (void)key;
+    (void)now_ms;
+    return false;
+}
+
+void yew_fuss_tick(Ed *ed, i64 now_ms)
+{
+    (void)ed;
+    (void)now_ms;
+}
+
+u16 yew_fuss_footer_rows(const Ed *ed)
+{
+    (void)ed;
+    return 0U;
+}
+
+void yew_fuss_draw(Ed *ed)
+{
+    (void)ed;
+}
+
+void yew_fuss_draw_footer(Ed *ed, Rect footer)
+{
+    (void)ed;
+    (void)footer;
+}
+
+CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled)
+{
+    (void)ed;
+    (void)buffer;
+    if (handled != NULL)
+        *handled = false;
+    return YEW_CMD_ERR_STATE;
+}
+
+CmdStatus yew_fuss_commit_close(Ed *ed, Buffer *buffer, bool *handled)
+{
+    (void)ed;
+    (void)buffer;
+    if (handled != NULL)
+        *handled = false;
+    return YEW_CMD_ERR_STATE;
 }
 
 GitAsyncState yew_git_avail_state(const Ed *ed)
@@ -237,3 +320,57 @@ CmdStatus yew_git_cmd_log(CmdCtx *cx)
 {
     return yew_git_cmd_require(cx);
 }
+
+#define FUSS_SHIM(name)                 \
+    CmdStatus name(CmdCtx *cx)          \
+    {                                   \
+        return yew_git_cmd_require(cx); \
+    }
+
+FUSS_SHIM(yew_fuss_cmd_init)
+FUSS_SHIM(yew_fuss_cmd_leave)
+FUSS_SHIM(yew_fuss_cmd_tree_all)
+FUSS_SHIM(yew_fuss_cmd_tree_hidden)
+FUSS_SHIM(yew_fuss_cmd_nav_prev)
+FUSS_SHIM(yew_fuss_cmd_nav_next)
+FUSS_SHIM(yew_fuss_cmd_nav_parent)
+FUSS_SHIM(yew_fuss_cmd_nav_enter)
+FUSS_SHIM(yew_fuss_cmd_nav_toggle)
+FUSS_SHIM(yew_fuss_cmd_nav_row_prev)
+FUSS_SHIM(yew_fuss_cmd_nav_row_next)
+FUSS_SHIM(yew_fuss_cmd_jump_arm)
+FUSS_SHIM(yew_fuss_cmd_stage)
+FUSS_SHIM(yew_fuss_cmd_unstage)
+FUSS_SHIM(yew_fuss_cmd_stage_all)
+FUSS_SHIM(yew_fuss_cmd_unstage_all)
+FUSS_SHIM(yew_fuss_cmd_commit)
+FUSS_SHIM(yew_fuss_cmd_commit_amend)
+FUSS_SHIM(yew_fuss_cmd_push)
+FUSS_SHIM(yew_fuss_cmd_push_force)
+FUSS_SHIM(yew_fuss_cmd_pull)
+FUSS_SHIM(yew_fuss_cmd_fetch)
+FUSS_SHIM(yew_fuss_cmd_diff)
+FUSS_SHIM(yew_fuss_cmd_status)
+FUSS_SHIM(yew_fuss_cmd_blame)
+FUSS_SHIM(yew_fuss_cmd_history)
+FUSS_SHIM(yew_fuss_cmd_reflog)
+FUSS_SHIM(yew_fuss_cmd_view)
+FUSS_SHIM(yew_fuss_cmd_branch_switch)
+FUSS_SHIM(yew_fuss_cmd_branch_create)
+FUSS_SHIM(yew_fuss_cmd_branch_delete)
+FUSS_SHIM(yew_fuss_cmd_merge)
+FUSS_SHIM(yew_fuss_cmd_reset)
+FUSS_SHIM(yew_fuss_cmd_rebase_interactive)
+FUSS_SHIM(yew_fuss_cmd_rebase_continue)
+FUSS_SHIM(yew_fuss_cmd_rebase_abort)
+FUSS_SHIM(yew_fuss_cmd_cherry_pick)
+FUSS_SHIM(yew_fuss_cmd_revert)
+FUSS_SHIM(yew_fuss_cmd_stash_push)
+FUSS_SHIM(yew_fuss_cmd_stash_pop)
+FUSS_SHIM(yew_fuss_cmd_tag)
+FUSS_SHIM(yew_fuss_cmd_discard)
+FUSS_SHIM(yew_fuss_cmd_file_delete)
+FUSS_SHIM(yew_fuss_cmd_file_rename)
+FUSS_SHIM(yew_fuss_cmd_open)
+
+#undef FUSS_SHIM

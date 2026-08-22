@@ -258,7 +258,7 @@ static const BindRow frozen_E[] = {
 };
 
 static const BindRow frozen_F[] = {
-    {"<esc>", "ed.mode.escape", 0, NULL},
+    {"<esc>", "ed.git.mode.leave", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
@@ -362,7 +362,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
         assert_frozen_mode(&ed, (Mode)mode, rows[mode], counts[mode]);
     }
-    YEW_ASSERT_EQ_U64(panic_rows, 6U);
+    YEW_ASSERT_EQ_U64(panic_rows, 56U);
     yew_ed_free(&ed);
     bytebuf_free(&source);
 }

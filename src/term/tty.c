@@ -636,6 +636,67 @@ void yew_tty_altscreen(Tty *t, bool on)
     t->alt = on;
 }
 
+bool yew_tty_handover_begin(Tty *t)
+{
+    if (t == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    YEW_TTY_GUARD(t);
+    if (t != g_owner || !t->raw || !g_raw) {
+        errno = EINVAL;
+        return false;
+    }
+
+    /* The restore blob leaves the alternate screen and disables every
+     * input/output terminal mode yew enabled; tcsetattr then restores the
+     * exact termios captured at startup. */
+    /* A SIGTSTP/SIGCONT cycle during the child must not make yew reclaim
+     * raw mode behind that child.  handover_end re-arms normal resume. */
+    g_resume_raw = 0;
+    yew_tty_restore();
+    t->raw = false;
+    t->alt = false;
+    return true;
+}
+
+bool yew_tty_handover_end(Tty *t)
+{
+    int saved_errno;
+
+    if (t == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    YEW_TTY_GUARD(t);
+    if (t != g_owner || g_raw) {
+        errno = EINVAL;
+        return false;
+    }
+
+    /* Keep the guard pessimistic: it may restore the saved termios until
+     * tcsetattr has definitely succeeded. */
+    yew_tty_guard_note(YEW_TTY_GUARD_RAW);
+    if (tcsetattr(t->rfd, TCSANOW, &g_rawios) != 0) {
+        saved_errno = errno;
+        yew_tty_guard_note(YEW_TTY_GUARD_CLEAN);
+        errno = saved_errno;
+        return false;
+    }
+    g_raw = 1;
+    g_resume_raw = 1;
+    t->raw = true;
+    yew_tty_altscreen(t, true);
+    if (!t->alt) {
+        saved_errno = errno != 0 ? errno : EIO;
+        yew_tty_restore();
+        t->raw = false;
+        errno = saved_errno;
+        return false;
+    }
+    return true;
+}
+
 int yew_tty_signal_fd(const Tty *t)
 {
     if (t == NULL)

@@ -14,6 +14,7 @@
 #include "edit/ed.h"
 #include "edit/select.h"
 #include "edit/theme_cmds.h"
+#include "mod/git/fussmode.h"
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
@@ -811,6 +812,10 @@ void yew_draw_footer(Ed *ed, Win *w)
 #endif
     if (ed->footer_rect.h == 0U)
         return;
+    if (yew_fuss_active(ed)) {
+        yew_fuss_draw_footer(ed, ed->footer_rect);
+        return;
+    }
     if (ed->cmdline.active)
         yew_cmdline_draw(ed, ed->footer_rect);
     else if (yew_msg_visible(ed))

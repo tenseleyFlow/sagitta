@@ -30,6 +30,7 @@
 #include "mod/lsp/lsp.h"
 #include "mod/ai/ai.h"
 #include "mod/git/git.h"
+#include "mod/git/fussmode.h"
 #include "syn/defs.h"
 #include "util/log.h"
 
@@ -653,6 +654,7 @@ void yew_ed_init(Ed *ed)
     yew_jobs_init(&ed->jobs);
     yew_ai_state_init(ed);
     yew_git_state_init(ed);
+    yew_fuss_state_init(ed);
     yew_mouse_init(&ed->mouse);
     yew_shadow_test_install();
     yew_block_provider_syntax_install(true);
@@ -713,6 +715,8 @@ void yew_ed_free(Ed *ed)
     /* AI owns transport jobs and pooled sockets, so it must release them
      * before the generic job table is dismantled. */
     yew_ai_state_free(ed);
+    /* F mode borrows snapshots and scratch buffers; release it first. */
+    yew_fuss_state_free(ed);
     /* Git refreshes and verbs borrow generic job slots too. */
     yew_git_state_free(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
@@ -1975,6 +1979,8 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      */
     if (yew_tab_jump_key(ed, key))
         return;
+    if (yew_fuss_active(ed) && yew_fuss_key(ed, &key, now_ms))
+        return;
     if (ed->msg.active && ed->msg.sev == YEW_MSG_ERROR)
         yew_msg_clear(ed);
     if (ed->mode == YEW_MODE_I && key.ev != YEW_KEY_RELEASE &&
@@ -2115,11 +2121,22 @@ void yew_ed_render(Ed *ed)
     LineNo cursor_line;
     bool cursor_line_changed;
     bool view_changed;
+    bool fuss;
 
     if (ed == NULL || !ed->grid_ready || !ed->render_ready ||
         !ed->model_ready)
         return;
     win = ed->win;
+    fuss = yew_fuss_active(ed);
+    cursor_line = LINENO(0U);
+    if (fuss) {
+        if (ed->full_damage)
+            yew_fuss_draw(ed);
+        if (ed->full_damage || ed->footer_dirty)
+            yew_draw_footer(ed, win);
+        yew_grid_cursor(&ed->grid, 0U, 0U, false);
+        goto draw_overlays;
+    }
     if (ed->cursor_follow_pending) {
         yew_win_follow_cursor(win);
         ed->cursor_follow_pending = false;
@@ -2186,6 +2203,7 @@ void yew_ed_render(Ed *ed)
     if (!ed->cmdline.active)
         yew_draw_cursor(ed, win);
     yew_shadow_draw_panes(ed);
+draw_overlays:
     /*
      * The picker draws LAST, after the footer, cursor preparation, and
      * passive shadow text.
@@ -2226,13 +2244,18 @@ void yew_ed_render(Ed *ed)
     ed->footer_dirty = false;
     ed->doc_damage_lo = ed->grid.rows;
     ed->doc_damage_hi = 0U;
-    ed->drawn_top = yew_win_view_top(win);
-    ed->drawn_top_sub = win->vp.top_sub;
-    ed->drawn_left = win->vp.left;
-    ed->drawn_wrap = win->vp.wrap;
-    ed->drawn_cursor_line = cursor_line;
-    ed->drawn_cursor_line_valid = true;
-    ed->drawn_top_valid = true;
+    if (!fuss) {
+        ed->drawn_top = yew_win_view_top(win);
+        ed->drawn_top_sub = win->vp.top_sub;
+        ed->drawn_left = win->vp.left;
+        ed->drawn_wrap = win->vp.wrap;
+        ed->drawn_cursor_line = cursor_line;
+        ed->drawn_cursor_line_valid = true;
+        ed->drawn_top_valid = true;
+    } else {
+        ed->drawn_cursor_line_valid = false;
+        ed->drawn_top_valid = false;
+    }
 }
 
 static const char *load_error_text(YewLoadErr error)

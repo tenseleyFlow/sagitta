@@ -145,6 +145,10 @@ typedef struct YewJobSpec {
     const char *const *env_set;
     const char *const *env_unset;
     const char *const *env_unset_prefix;
+    /* Synchronous terminal handover only: leave fd 0/1/2 inherited rather
+     * than replacing them with pipes.  yew_job_run_sync is the sole API
+     * that accepts this flag; normal asynchronous jobs remain nonblocking. */
+    bool inherit_tty;
     /* Required for YEW_SINK_FRAMED.  Ownership transfers only after a
      * successful spawn and is released exactly once by the job. */
     void *framed_owner;
@@ -156,6 +160,13 @@ typedef struct YewJobSpec {
     void *callback_owner;
     const YewJobCallbackOps *callback_ops;
 } YewJobSpec;
+
+typedef struct YewJobWait {
+    YewJobState state;
+    int exit_code;
+    int termsig;
+    int exec_errno;
+} YewJobWait;
 
 struct YewJob {
     u32 id;
@@ -233,6 +244,11 @@ void yew_jobs_free(Ed *ed);
 
 /* Returns the new job id, or 0 with `err` filled in. */
 u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz);
+/* Run one inherited-terminal child to completion outside the async job
+ * table.  A false return is a parent-side setup/wait/resume failure;
+ * child exit, signal, and exec failure are reported in `result`. */
+bool yew_job_run_sync(Ed *ed, const YewJobSpec *spec, YewJobWait *result,
+                      char *err, size_t errsz);
 /* Poll-set integration.  `n` is advanced; the caller guarantees room for
  * yew_job_pollfd_count() entries. */
 u32 yew_job_pollfd_count(const Ed *ed);

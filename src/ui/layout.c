@@ -5,6 +5,7 @@
 
 #include "edit/ed.h"
 #include "edit/pane_cmds.h"
+#include "mod/git/fussmode.h"
 #include "ui/gutter.h"
 #include "ui/panel.h"
 #include "ui/tabs.h"
@@ -504,14 +505,19 @@ void yew_layout(Ed *ed)
 {
     u16 content_rows;
     u16 top = 0U;
+    u16 footer_rows;
 
     if (ed == NULL || ed->win == NULL)
         YEW_BUG("editor layout: missing window");
 
     ed->footer_rect = (Rect){0U, 0U, 0U, 0U};
-    if (ed->grid.rows >= 2U) {
-        content_rows = (u16)(ed->grid.rows - 1U);
-        ed->footer_rect = (Rect){0U, content_rows, ed->grid.cols, 1U};
+    footer_rows = yew_fuss_footer_rows(ed);
+    if (footer_rows == 0U)
+        footer_rows = 1U;
+    if (ed->grid.rows > footer_rows) {
+        content_rows = (u16)(ed->grid.rows - footer_rows);
+        ed->footer_rect = (Rect){0U, content_rows, ed->grid.cols,
+                                 footer_rows};
     } else {
         content_rows = ed->grid.rows;
     }

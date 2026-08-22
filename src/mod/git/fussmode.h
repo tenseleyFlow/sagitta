@@ -1,0 +1,88 @@
+#ifndef YEW_MOD_GIT_FUSSMODE_H
+#define YEW_MOD_GIT_FUSSMODE_H
+
+#include <stdbool.h>
+
+#include "edit/cmd.h"
+#include "term/input.h"
+#include "ui/layout.h"
+#include "ui/typejump.h"
+
+typedef struct Ed Ed;
+typedef struct Buffer Buffer;
+typedef struct FussMode FussMode;
+
+typedef struct FussJump {
+    TypeJump type;
+    bool armed;
+    i64 deadline_ms;
+} FussJump;
+
+void yew_fuss_jump_init(FussJump *jump);
+void yew_fuss_jump_arm(FussJump *jump, i64 now_ms);
+bool yew_fuss_jump_key(FussJump *jump, const Key *key, i64 now_ms,
+                       const PickItem *items, u32 n, u32 *sel);
+bool yew_fuss_jump_tick(FussJump *jump, i64 now_ms);
+bool yew_fuss_jump_armed(const FussJump *jump);
+const char *yew_fuss_jump_pattern(const FussJump *jump, u32 *len);
+
+void yew_fuss_state_init(Ed *ed);
+void yew_fuss_state_free(Ed *ed);
+bool yew_fuss_active(const Ed *ed);
+CmdStatus yew_fuss_mode_enter(Ed *ed);
+void yew_fuss_mode_leave(Ed *ed);
+bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms);
+void yew_fuss_tick(Ed *ed, i64 now_ms);
+u16 yew_fuss_footer_rows(const Ed *ed);
+void yew_fuss_draw(Ed *ed);
+void yew_fuss_draw_footer(Ed *ed, Rect footer);
+CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled);
+CmdStatus yew_fuss_commit_close(Ed *ed, Buffer *buffer, bool *handled);
+
+CmdStatus yew_fuss_cmd_init(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_leave(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_tree_all(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_tree_hidden(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_nav_prev(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_nav_next(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_nav_parent(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_nav_enter(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_nav_toggle(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_nav_row_prev(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_nav_row_next(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_jump_arm(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_stage(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_unstage(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_stage_all(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_unstage_all(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_commit(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_commit_amend(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_push(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_push_force(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_pull(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_fetch(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_diff(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_status(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_blame(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_history(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_reflog(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_view(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_branch_switch(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_branch_create(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_branch_delete(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_merge(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_reset(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_rebase_interactive(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_rebase_continue(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_rebase_abort(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_cherry_pick(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_revert(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_stash_push(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_stash_pop(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_tag(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_discard(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_file_delete(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_file_rename(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_open(CmdCtx *cx);
+
+#endif

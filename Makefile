@@ -10,6 +10,7 @@ LSP_RESP_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                        0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 PORCELAIN_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                         0x9e3779b97f4a7c15 0xd1b54a32d192ed03
+FUSS_FUZZ_ITERS ?= 20000
 CMDPARSE_FUZZ_ITERS ?= 1000000
 TEXTBUF_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                       0x9e3779b97f4a7c15 0xd1b54a32d192ed03
@@ -382,7 +383,10 @@ UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
                tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
                tests/unit/test_http_rx.c tests/unit/test_http_url.c \
                tests/unit/test_http_live.c
-UNIT_FUSS_SRC := tests/unit/test_porcelain.c tests/unit/test_gitcache.c
+UNIT_FUSS_SRC := tests/unit/test_porcelain.c tests/unit/test_gitcache.c \
+                 tests/unit/test_fusstree.c tests/unit/test_fussnav.c \
+                 tests/unit/test_fusscollapse.c tests/unit/test_fussjump.c \
+                 tests/unit/test_fusscommit.c
 ifeq ($(filter lsp ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))
 endif
@@ -491,6 +495,7 @@ FUZZ_FUZZY_OBJ := $(BUILD)/tests/fuzz/fuzz_fuzzy.o
 FUZZ_STATE_OBJ := $(BUILD)/tests/fuzz/fuzz_state.o
 FUZZ_GITIGNORE_OBJ := $(BUILD)/tests/fuzz/fuzz_gitignore.o
 FUZZ_PORCELAIN_OBJ := $(BUILD)/tests/fuzz/fuzz_porcelain.o
+FUZZ_FUSS_OBJ := $(BUILD)/tests/fuzz/fuzz_fuss.o
 FUZZ_MOUSE_OBJ := $(BUILD)/tests/fuzz/fuzz_mouse.o
 FUZZ_FLLEX_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_lex.o
 FUZZ_FLPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_parse.o
@@ -514,6 +519,10 @@ LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
+FUSS_TREE_TEST_OBJ := $(BUILD)/src/mod/git/fusstree.o \
+                      $(BUILD)/src/mod/git/porcelain.o \
+                      $(BUILD)/src/util/arena.o $(BUILD)/src/util/base.o \
+                      $(BUILD)/src/util/log.o $(BUILD)/src/util/sort.o
 AI_FUZZ_TARGET := $(if $(filter ai,$(MODULES)),fuzz-ai,)
 
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
@@ -537,6 +546,7 @@ PERF_STATE_OBJ := $(BUILD)/tests/perf/perf_state.o
 PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
 PERF_GIT_STATUS_OBJ := $(BUILD)/tests/perf/git_status.o
+PERF_FUSS_OBJ := $(BUILD)/tests/perf/fuss.o
 ifeq ($(HOST_OS),Linux)
 PERF_GIT_ALLOC_WRAP := -Wl,--wrap=malloc -Wl,--wrap=calloc \
                        -Wl,--wrap=realloc -Wl,--wrap=free \
@@ -562,8 +572,8 @@ ifneq ($(filter ai,$(MODULES)),)
 AI_PERF_TARGET := perf-ai-http perf-ai-shadow perf-ai-privacy
 endif
 ifneq ($(filter fuss,$(MODULES)),)
-FUSS_FUZZ_TARGET := fuzz-porcelain
-FUSS_PERF_TARGET := perf-git-status
+FUSS_FUZZ_TARGET := fuzz-porcelain fuzz-fuss
+FUSS_PERF_TARGET := perf-git-status perf-fuss
 FUSS_SCRIPT_TARGET := test-git-script
 endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
@@ -618,12 +628,13 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
                 $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
                 $(FUZZ_SYMIDX_OBJ) $(FUZZ_JSON_OBJ) $(FUZZ_JSONRPC_OBJ) \
+                $(FUZZ_FUSS_OBJ) \
                 $(FUZZ_LSP_MSG_OBJ) $(FUZZ_LSP_RESP_OBJ) $(LSP_LIVE_OBJ) \
                 $(FUZZ_HTTP_OBJ) $(FUZZ_AI_STREAM_OBJ) \
                 $(FUZZ_AI_SHADOW_OBJ) $(FUZZ_AI_REDACT_OBJ) \
                 $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
                 $(PERF_AI_HTTP_OBJ) $(PERF_AI_SHADOW_OBJ) \
-                $(PERF_AI_PRIVACY_OBJ) \
+                $(PERF_AI_PRIVACY_OBJ) $(PERF_FUSS_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(FAULTSHIM) $(FAKELSP)))
@@ -642,7 +653,7 @@ endif
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-        fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-lsp-msg fuzz-lsp-resp \
+        fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
         fuzz-porcelain \
         fuzz-ai \
         test-lsp-live \
@@ -655,7 +666,7 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
-        perf-git-status \
+        perf-git-status perf-fuss \
         perf-ai-shadow perf-ai-privacy \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
@@ -804,6 +815,12 @@ $(BUILD)/fuzz_porcelain: $(FUZZ_LINK_OBJ) $(FUZZ_PORCELAIN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_PORCELAIN_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_fuss: $(FUSS_TREE_TEST_OBJ) $(FUZZ_LIB_OBJ) \
+                    $(BUILD)/src/unicode/utf8.o $(FUZZ_FUSS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUSS_TREE_TEST_OBJ) \
+		$(FUZZ_LIB_OBJ) $(BUILD)/src/unicode/utf8.o \
+		$(FUZZ_FUSS_OBJ) $(LDLIBS)
+
 $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_MOUSE_OBJ) $(LDLIBS)
@@ -872,6 +889,10 @@ $(BUILD)/perf_git_status: $(PERF_CORE_OBJ) $(PERF_GIT_STATUS_OBJ) \
 	$(CC) $(CFLAGS) $(LDFLAGS) $(PERF_GIT_ALLOC_WRAP) \
 		-o $@ $(PERF_CORE_OBJ) \
 		$(PERF_GIT_STATUS_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_fuss: $(FUSS_TREE_TEST_OBJ) $(PERF_FUSS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUSS_TREE_TEST_OBJ) \
+		$(PERF_FUSS_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_lsp: $(PERF_CORE_OBJ) $(PERF_LSP_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
@@ -1234,6 +1255,9 @@ fuzz-porcelain: $(BUILD)/fuzz_porcelain
 		$(BUILD)/fuzz_porcelain --iters=$(FUZZ_ITERS) --seed=$$seed; \
 	done
 
+fuzz-fuss: $(BUILD)/fuzz_fuss
+	$(BUILD)/fuzz_fuss --iters=$(FUSS_FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
 test-syn-def-corpus: $(BUILD)/fuzz_syn_def
 	$(BUILD)/fuzz_syn_def --corpus-only
 
@@ -1293,6 +1317,9 @@ perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor pe
 
 perf-git-status: $(BUILD)/perf_git_status
 	$(BUILD)/perf_git_status
+
+perf-fuss: $(BUILD)/perf_fuss
+	$(BUILD)/perf_fuss
 
 perf-lsp: $(BUILD)/perf_lsp
 	$(BUILD)/perf_lsp
@@ -1805,6 +1832,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(FUZZ_SYN_DEF_OBJ:.o=.d) \
          $(FUZZ_SYMIDX_OBJ:.o=.d) \
          $(FUZZ_JSON_OBJ:.o=.d) $(FUZZ_JSONRPC_OBJ:.o=.d) \
+         $(FUZZ_FUSS_OBJ:.o=.d) \
          $(FUZZ_LSP_MSG_OBJ:.o=.d) $(FUZZ_LSP_RESP_OBJ:.o=.d) \
          $(FUZZ_HTTP_OBJ:.o=.d) $(FUZZ_AI_STREAM_OBJ:.o=.d) \
          $(FUZZ_AI_SHADOW_OBJ:.o=.d) $(FUZZ_AI_REDACT_OBJ:.o=.d) \
@@ -1833,7 +1861,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_SYMIDX_OBJ:.o=.d) \
          $(PERF_LSP_OBJ:.o=.d) \
          $(PERF_AI_HTTP_OBJ:.o=.d) $(PERF_AI_SHADOW_OBJ:.o=.d) \
-         $(PERF_AI_PRIVACY_OBJ:.o=.d) \
+         $(PERF_AI_PRIVACY_OBJ:.o=.d) $(PERF_FUSS_OBJ:.o=.d) \
          $(PERF_SCRIPT_SUITE_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \

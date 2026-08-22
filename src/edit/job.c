@@ -18,6 +18,7 @@
 
 #include "edit/ed.h"
 #include "edit/loop.h"
+#include "term/input.h"
 #include "text/piece.h"
 #include "unicode/coords.h"
 #include "unicode/grapheme.h"
@@ -623,20 +624,31 @@ static JobExecPaths job_exec_paths(Arena *a, char **envp, const char *name)
  * in a forked child can deadlock on an allocator lock the parent held at
  * fork time, and yew_log formats through stdio and opens files.  The
  * exec-status pipe is the only diagnostic channel in this window. */
-static void job_child(char **argv, char **envp, JobExecPaths exec_paths,
-                      const char *cwd,
-                      int in_p[2], int out_p[2], int err_p[2],
-                      int exec_p[2])
+static void job_child_reset_signals(void)
 {
     /* Every signal the editor installs a handler for or ignores. */
     static const int reset_signals[] = {SIGPIPE, SIGINT,  SIGTERM, SIGHUP,
                                         SIGQUIT, SIGWINCH, SIGCHLD,
                                         SIGCONT, SIGTSTP, SIGTTIN, SIGTTOU};
+    int sig;
+    sigset_t empty;
+
+    /* SIGPIPE matters most: the parent ignores it so writes return EPIPE,
+     * but a child that inherited SIG_IGN could keep a pipeline alive. */
+    for (sig = 0; sig < (int)YEW_ARRAY_LEN(reset_signals); sig++)
+        (void)signal(reset_signals[sig], SIG_DFL);
+    (void)sigemptyset(&empty);
+    (void)sigprocmask(SIG_SETMASK, &empty, NULL);
+}
+
+static void job_child(char **argv, char **envp, JobExecPaths exec_paths,
+                      const char *cwd,
+                      int in_p[2], int out_p[2], int err_p[2],
+                      int exec_p[2])
+{
     int e;
     int denied = 0;
-    int sig;
     size_t path_i;
-    sigset_t empty;
 
     (void)setpgid(0, 0);
     if (dup2(in_p[0], STDIN_FILENO) < 0 ||
@@ -652,16 +664,8 @@ static void job_child(char **argv, char **envp, JobExecPaths exec_paths,
     (void)close(exec_p[0]);
     /* Reset exactly the dispositions the editor changes.  NSIG is not in
      * the POSIX namespace, and blindly walking 1..NSIG would also touch
-     * realtime signals we never install.
-     *
-     * SIGPIPE matters most: the parent ignores it so a write to a dead
-     * child returns EPIPE instead of killing the editor, but a child that
-     * inherits SIG_IGN never dies from a closed pipe, so `head`-style
-     * pipelines inside the command run forever. */
-    for (sig = 0; sig < (int)YEW_ARRAY_LEN(reset_signals); sig++)
-        (void)signal(reset_signals[sig], SIG_DFL);
-    (void)sigemptyset(&empty);
-    (void)sigprocmask(SIG_SETMASK, &empty, NULL);
+     * realtime signals we never install. */
+    job_child_reset_signals();
     if (cwd != NULL && chdir(cwd) != 0)
         goto fail;
     for (path_i = 0U; path_i < exec_paths.len; path_i++) {
@@ -695,6 +699,205 @@ fail:
     _exit(127);
 }
 
+static void job_sync_child(char **argv, char **envp,
+                           JobExecPaths exec_paths, const char *cwd,
+                           int exec_p[2])
+{
+    int e;
+    int denied = 0;
+    size_t path_i;
+
+    (void)close(exec_p[0]);
+    job_child_reset_signals();
+    if (cwd != NULL && chdir(cwd) != 0)
+        goto fail;
+    for (path_i = 0U; path_i < exec_paths.len; path_i++) {
+        (void)execve(exec_paths.v[path_i], argv, envp);
+        if (errno == EACCES) {
+            denied = EACCES;
+            continue;
+        }
+        if (errno != ENOENT && errno != ENOTDIR)
+            goto fail;
+    }
+    errno = denied != 0 ? denied : ENOENT;
+fail:
+    e = errno;
+    {
+        ssize_t reported = write(exec_p[1], &e, sizeof e);
+
+        (void)reported;
+    }
+    _exit(127);
+}
+
+bool yew_job_run_sync(Ed *ed, const YewJobSpec *spec, YewJobWait *result,
+                      char *err, size_t errsz)
+{
+    Arena scratch;
+    char **argv;
+    char **envp;
+    JobExecPaths exec_paths;
+    char *shell_argv[4];
+    int exec_p[2] = {-1, -1};
+    int status = 0;
+    int exec_errno = 0;
+    ssize_t got;
+    pid_t pid = -1;
+    pid_t waited;
+    const char *cwd;
+    struct sigaction ignore = {0};
+    struct sigaction saved_int;
+    struct sigaction saved_quit;
+    bool handed = false;
+    bool ignore_int = false;
+    bool ignore_quit = false;
+    bool ok = false;
+
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    if (result != NULL)
+        (void)memset(result, 0, sizeof(*result));
+    if (ed == NULL || spec == NULL || result == NULL) {
+        (void)snprintf(err, errsz, "invalid synchronous job");
+        return false;
+    }
+    if (!spec->inherit_tty) {
+        (void)snprintf(err, errsz, "synchronous job must inherit tty");
+        return false;
+    }
+    if (spec->sink != YEW_SINK_DISCARD || spec->framed_owner != NULL ||
+        spec->stream_owner != NULL || spec->callback_owner != NULL) {
+        (void)snprintf(err, errsz,
+                       "inherited-tty job cannot use an output sink");
+        return false;
+    }
+    if (spec->argv == NULL && spec->cmdline == NULL) {
+        (void)snprintf(err, errsz, "no command");
+        return false;
+    }
+    if (spec->in_buf != NULL || spec->in_bytes != NULL ||
+        spec->in_len != 0U) {
+        (void)snprintf(err, errsz,
+                       "inherited-tty job cannot pipe stdin");
+        return false;
+    }
+    if (spec->timeout_ms != 0) {
+        (void)snprintf(err, errsz,
+                       "inherited-tty job cannot use an async timeout");
+        return false;
+    }
+    if (!job_env_spec_valid(spec)) {
+        (void)snprintf(err, errsz, "invalid job environment override");
+        return false;
+    }
+
+    arena_init(&scratch);
+    if (spec->argv != NULL) {
+        argv = spec->argv;
+    } else {
+        shell_argv[0] = (char *)yew_job_shell();
+        shell_argv[1] = (char *)"-c";
+        shell_argv[2] = (char *)spec->cmdline;
+        shell_argv[3] = NULL;
+        argv = shell_argv;
+    }
+    envp = job_build_env(ed, &scratch, spec);
+    exec_paths = job_exec_paths(&scratch, envp, argv[0]);
+    cwd = spec->cwd != NULL ? spec->cwd : yew_ws_root(ed);
+
+    /* The inherited child remains in yew's foreground process group so it
+     * can read the controlling terminal.  Shell-style parent ignores keep
+     * Ctrl-C/Ctrl-\\ aimed at the child; the child resets both to default. */
+    ignore.sa_handler = SIG_IGN;
+    (void)sigemptyset(&ignore.sa_mask);
+    if (sigaction(SIGINT, &ignore, &saved_int) != 0) {
+        (void)snprintf(err, errsz, "cannot prepare terminal signals: %s",
+                       strerror(errno));
+        goto resume;
+    }
+    ignore_int = true;
+    if (sigaction(SIGQUIT, &ignore, &saved_quit) != 0) {
+        (void)snprintf(err, errsz, "cannot prepare terminal signals: %s",
+                       strerror(errno));
+        goto resume;
+    }
+    ignore_quit = true;
+    if (ed->tty_ready) {
+        if (!yew_tty_handover_begin(&ed->tty)) {
+            (void)snprintf(err, errsz, "cannot hand over terminal: %s",
+                           strerror(errno));
+            goto resume;
+        }
+        handed = true;
+    }
+    if (!make_pipe(exec_p, err, errsz))
+        goto resume;
+    pid = fork();
+    if (pid < 0) {
+        (void)snprintf(err, errsz, "cannot fork: %s", strerror(errno));
+        goto resume;
+    }
+    if (pid == 0)
+        job_sync_child(argv, envp, exec_paths, cwd, exec_p);
+
+    job_close(&exec_p[1]);
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited < 0) {
+        (void)snprintf(err, errsz, "cannot wait for child: %s",
+                       strerror(errno));
+        goto resume;
+    }
+
+    do {
+        got = read(exec_p[0], &exec_errno, sizeof(exec_errno));
+    } while (got < 0 && errno == EINTR);
+    if (got == (ssize_t)sizeof(exec_errno)) {
+        result->state = YEW_JOB_EXECFAIL;
+        result->exec_errno = exec_errno;
+        result->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 127;
+    } else if (got < 0) {
+        (void)snprintf(err, errsz, "cannot read exec status: %s",
+                       strerror(errno));
+        goto resume;
+    } else if (WIFEXITED(status)) {
+        result->state = YEW_JOB_EXITED;
+        result->exit_code = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        result->state = YEW_JOB_SIGNALED;
+        result->termsig = WTERMSIG(status);
+    } else {
+        (void)snprintf(err, errsz, "child returned no final wait status");
+        goto resume;
+    }
+    ok = true;
+
+resume:
+    job_close(&exec_p[0]);
+    job_close(&exec_p[1]);
+    if (handed) {
+        if (!yew_tty_handover_end(&ed->tty)) {
+            (void)snprintf(err, errsz, "cannot resume terminal: %s",
+                           strerror(errno));
+            ok = false;
+        } else {
+            yew_input_enable(ed->tty.wfd, &ed->tty.caps);
+            (void)yew_tty_winsize(&ed->tty);
+            ed->layout_dirty = true;
+            ed->full_damage = true;
+            ed->footer_dirty = true;
+        }
+    }
+    if (ignore_quit)
+        (void)sigaction(SIGQUIT, &saved_quit, NULL);
+    if (ignore_int)
+        (void)sigaction(SIGINT, &saved_int, NULL);
+    arena_free_all(&scratch);
+    return ok;
+}
+
 u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
 {
     Arena scratch;
@@ -716,6 +919,11 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         err[0] = '\0';
     if (ed == NULL || spec == NULL)
         return 0U;
+    if (spec->inherit_tty) {
+        (void)snprintf(err, errsz,
+                       "inherited-tty job requires synchronous runner");
+        return 0U;
+    }
     if (ed->jobs.len >= YEW_JOB_MAX) {
         (void)snprintf(err, errsz,
                        "too many jobs (%d); finish or kill one first",

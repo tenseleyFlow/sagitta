@@ -20,6 +20,7 @@
 #include "fl/flruntime.h"
 #include "mod/ai/ai.h"
 #include "mod/ai/http.h"
+#include "mod/git/fussmode.h"
 #include "mod/lsp/lsp.h"
 #include "term/input.h"
 #include "term/tty.h"
@@ -455,6 +456,7 @@ int yew_loop_run(Ed *ed)
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */
         yew_job_settle(ed);
+        yew_fuss_tick(ed, now);
         yew_ai_pump(ed, fds, nfds);
         yew_lsp_pump(ed);
         if (ed->jobs.dirty) {

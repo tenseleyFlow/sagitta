@@ -91,14 +91,7 @@ void test_cmd_registry_invocation_and_deferred(void)
         "ed.ui.goto", probe_takes_count, YEW_ARITY_INT,
         YEW_CMD_TAKES_COUNT, "Send a count to the test probe", NULL
     };
-    static const struct {
-        const char *mode;
-        const char *sprint;
-    } mode_rows[] = {
-        {"L", "Sprint 14"}, {"I", "Sprint 14"},
-        {"W", "Sprint 16"}, {"B", "Sprint 16"},
-        {"H", "Sprint 17"}, {"F", "Sprint 52"},
-    };
+    static const char *const mode_rows[] = {"L", "I", "W", "B", "H"};
     CmdCtx cx = {0};
     CmdId repeat;
     CmdId takes;
@@ -192,23 +185,30 @@ void test_cmd_registry_invocation_and_deferred(void)
         mode.count = 1U;
         mode.ed = &fake_ed;
         mode.source = YEW_SRC_TEST;
-        mode.sarg = mode_rows[i].mode;
+        mode.sarg = mode_rows[i];
         mode.sarg_len = 1U;
-        yew_test_capture_log();
-        if (i < 5U) {
-            YEW_ASSERT_EQ_I64(yew_cmd_invoke(enter, &mode), YEW_CMD_OK);
-            YEW_ASSERT_EQ_U64(
-                fake_ed.mode,
-                mode_rows[i].mode[0] == 'L' ? YEW_MODE_L :
-                mode_rows[i].mode[0] == 'I' ? YEW_MODE_I :
-                mode_rows[i].mode[0] == 'W' ? YEW_MODE_W :
-                mode_rows[i].mode[0] == 'B' ? YEW_MODE_B : YEW_MODE_H);
-        } else {
-            YEW_ASSERT_EQ_I64(yew_cmd_invoke(enter, &mode),
-                              YEW_CMD_ERR_DEFERRED);
-            YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR,
-                                             mode_rows[i].sprint));
-        }
+        YEW_ASSERT_EQ_I64(yew_cmd_invoke(enter, &mode), YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(
+            fake_ed.mode,
+            mode_rows[i][0] == 'L' ? YEW_MODE_L :
+            mode_rows[i][0] == 'I' ? YEW_MODE_I :
+            mode_rows[i][0] == 'W' ? YEW_MODE_W :
+            mode_rows[i][0] == 'B' ? YEW_MODE_B : YEW_MODE_H);
+    }
+    {
+        const CmdDesc *stage = yew_cmd_desc(
+            yew_cmd_lookup("ed.git.stage", 12U));
+        const CmdDesc *hunk = yew_cmd_desc(
+            yew_cmd_lookup("ed.git.hunk.stage", 17U));
+
+        YEW_ASSERT_NOT_NULL(stage);
+        YEW_ASSERT((stage->flags & YEW_CMD_DEFERRED) == 0U);
+        YEW_ASSERT((stage->flags & YEW_CMD_RECORDABLE) != 0U);
+        YEW_ASSERT_NOT_NULL(stage->word);
+        YEW_ASSERT(stage->help[0] != '\0');
+        YEW_ASSERT_NOT_NULL(hunk);
+        YEW_ASSERT((hunk->flags & YEW_CMD_DEFERRED) != 0U);
+        YEW_ASSERT_NOT_NULL(strstr(hunk->help, "Sprint 53"));
     }
     yew_keymap_free(&fake_ed.mode_keys[YEW_MODE_H]);
     yew_cmd_shutdown();

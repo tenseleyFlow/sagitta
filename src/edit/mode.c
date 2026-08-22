@@ -8,6 +8,7 @@
 #include "edit/motion.h"
 #include "edit/shadow.h"
 #include "fl/flruntime.h"
+#include "mod/git/fussmode.h"
 #include "util/log.h"
 
 static void mode_transition(Ed *ed, Mode mode)
@@ -31,27 +32,10 @@ const ModeDesc yew_modes[YEW_MODE__N] = {
     [YEW_MODE_F] = {"F", "fuss", false, false, YEW_MODE_F},
 };
 
-static const char *mode_sprint(Mode mode)
-{
-    switch (mode) {
-    case YEW_MODE_F:
-        return "52";
-    case YEW_MODE_L:
-    case YEW_MODE_W:
-    case YEW_MODE_B:
-    case YEW_MODE_H:
-    case YEW_MODE_I:
-    case YEW_MODE_E:
-    case YEW_MODE__N:
-        break;
-    }
-    return NULL;
-}
-
 CmdStatus yew_mode_enter(Ed *ed, Mode mode)
 {
-    const char *sprint;
     size_t i;
+    CmdStatus status;
 
     if (ed == NULL || mode >= YEW_MODE__N)
         return YEW_CMD_ERR_ARG;
@@ -75,14 +59,12 @@ CmdStatus yew_mode_enter(Ed *ed, Mode mode)
         yew_cmdline_open(ed, YEW_PROMPT_CMD, seed);
         return YEW_CMD_OK;
     }
-    sprint = mode_sprint(mode);
-    if (sprint != NULL) {
-        yew_msg(ed, YEW_MSG_ERROR,
-                "%s mode lands in Sprint %s", yew_modes[mode].name, sprint);
-        yew_log(YEW_LOG_ERROR,
-                "command not implemented yet: %s mode lands in Sprint %s",
-                yew_modes[mode].name, sprint);
-        return YEW_CMD_ERR_DEFERRED;
+    if (mode == YEW_MODE_F) {
+        status = yew_fuss_mode_enter(ed);
+        if (status != YEW_CMD_OK)
+            return status;
+    } else if (ed->mode == YEW_MODE_F) {
+        yew_fuss_mode_leave(ed);
     }
     if (ed->mode == YEW_MODE_I && mode != YEW_MODE_I) {
         yew_ed_insert_barrier(ed);

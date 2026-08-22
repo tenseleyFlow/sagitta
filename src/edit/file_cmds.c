@@ -8,6 +8,7 @@
 #include "edit/option.h"
 #include "fl/flruntime.h"
 #include "fl/fltxn.h"
+#include "mod/git/fussmode.h"
 #include "mod/lsp/lsp.h"
 #include "text/journal.h"
 #include "ui/layout.h"
@@ -18,8 +19,14 @@
 
 CmdStatus yew_file_cmd_save(Ed *ed, bool force)
 {
+    bool handled = false;
+    CmdStatus status;
+
     if (ed == NULL)
         return YEW_CMD_ERR_ARG;
+    status = yew_fuss_commit_save(ed, yew_ed_doc(ed), &handled);
+    if (handled)
+        return status;
     if (ed->win != NULL && ed->win->buf != NULL &&
         ed->win->buf->macro_reg != 0U)
         return yew_macro_store(ed, ed->win->buf);
@@ -28,8 +35,16 @@ CmdStatus yew_file_cmd_save(Ed *ed, bool force)
 
 CmdStatus yew_file_cmd_save_current(CmdCtx *cx)
 {
+    bool handled = false;
+    CmdStatus status;
+
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_ARG;
+    status = yew_fuss_commit_save(cx->ed,
+                                  cx->win == NULL ? NULL : cx->win->buf,
+                                  &handled);
+    if (handled)
+        return status;
     if (cx->win != NULL && cx->win->buf != NULL &&
         cx->win->buf->macro_reg != 0U)
         return yew_macro_store(cx->ed, cx->win->buf);
@@ -38,6 +53,9 @@ CmdStatus yew_file_cmd_save_current(CmdCtx *cx)
 
 CmdStatus yew_file_cmd_write(CmdCtx *cx)
 {
+    bool handled = false;
+    CmdStatus status;
+
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_ARG;
     if (cx->sarg != NULL &&
@@ -46,6 +64,11 @@ CmdStatus yew_file_cmd_write(CmdCtx *cx)
     if (cx->sarg != NULL && cx->sarg_len != 0U)
         return yew_ed_file_write_to_win(cx->ed, cx->win, cx->sarg,
                                         cx->bang);
+    status = yew_fuss_commit_save(cx->ed,
+                                  cx->win == NULL ? NULL : cx->win->buf,
+                                  &handled);
+    if (handled)
+        return status;
     if (cx->win != NULL && cx->win->buf != NULL &&
         cx->win->buf->macro_reg != 0U)
         return yew_macro_store(cx->ed, cx->win->buf);
@@ -254,6 +277,8 @@ static void close_primary(Ed *ed)
 CmdStatus yew_file_cmd_buf_close(CmdCtx *cx)
 {
     Buffer *b;
+    bool handled = false;
+    CmdStatus status;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->model_ready ||
         cx->ed->fl_model_teardown)
@@ -261,6 +286,9 @@ CmdStatus yew_file_cmd_buf_close(CmdCtx *cx)
     b = cx->win != NULL ? cx->win->buf : yew_ed_doc(cx->ed);
     if (b == NULL)
         return YEW_CMD_ERR_STATE;
+    status = yew_fuss_commit_close(cx->ed, b, &handled);
+    if (handled)
+        return status;
     if (yew_buf_dirty(b) && !cx->bang)
         return YEW_CMD_ERR_IO;
     /* A subprocess owns these pointers until its slot is released.  Force

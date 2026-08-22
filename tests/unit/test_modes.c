@@ -132,12 +132,19 @@ void test_modes_deferred_entries_name_their_sprints(void)
     YEW_ASSERT(!ed.cmdline.active);
 
     yew_ed_handle_key(&ed, modes_key((u32)'f'), 12);
-    YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_ERR_DEFERRED);
+#if YEW_WITH_FUSS
+    YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
+    yew_ed_handle_key(&ed, modes_key(YEW_KEY_ESCAPE), 13);
+    YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+#else
+    YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_ERR_STATE);
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
     YEW_ASSERT(ed.msg.active);
     YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
-    YEW_ASSERT(strstr(ed.msg.text, "F") != NULL);
-    YEW_ASSERT(strstr(ed.msg.text, "52") != NULL);
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "no fuss module"));
+#endif
     yew_ed_free(&ed);
 }
 
@@ -163,7 +170,20 @@ void test_modes_only_line_and_insert_are_enterable_in_sprint14(void)
     YEW_ASSERT(ed.cmdline.active);
     yew_cmdline_close(&ed, false);
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_B);
-    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE__N), YEW_CMD_ERR_ARG);
+#if YEW_WITH_FUSS
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+#else
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_ERR_STATE);
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_B);
+#endif
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE__N), YEW_CMD_ERR_ARG);
+#if YEW_WITH_FUSS
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+#else
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_B);
+#endif
     yew_ed_free(&ed);
 }

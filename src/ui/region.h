@@ -73,7 +73,9 @@ typedef enum {
      * re-resolved its target from the cells beneath it would act on a
      * different file than the one the user right-clicked.
      */
-    YEW_REGION_CTX_ROW
+    YEW_REGION_CTX_ROW,
+    /* Sprint 52: payload is the flattened FUSS row for this frame. */
+    YEW_REGION_FUSS_ROW
 } RegionKind;
 
 typedef struct Region {

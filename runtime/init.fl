@@ -232,7 +232,7 @@ bind("E", "C-z", "ed.edit.undo")
 bind("E", "C-y", "ed.edit.redo")
 bind("E", "C-g", "ed.cmdline.cancel")
 
-bind("F", "<esc>", "ed.mode.escape")
+bind("F", "<esc>", "ed.git.mode.leave")
 bind("F", "C-g", "ed.ui.message_expand")
 
 # -- 6. macros ----------------------------------------------------------
