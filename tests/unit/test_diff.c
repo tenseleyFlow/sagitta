@@ -44,6 +44,13 @@ static u64 rng_next(u64 *state)
     return x;
 }
 
+static u64 colliding_hash(const u8 *bytes, size_t len)
+{
+    (void)bytes;
+    (void)len;
+    return UINT64_C(0x5353535353535353);
+}
+
 void test_git_line_hash_and_split(void)
 {
     Arena arena;
@@ -192,5 +199,100 @@ void test_git_diff_identical_large_is_allocation_free_path(void)
                               YEW_ARRAY_LEN(lines), 0U, &hunks));
     YEW_ASSERT_EQ_U64(hunks.len, 0U);
     YEW_ASSERT_NULL(hunks.data);
+    arena_free_all(&arena);
+}
+
+void test_git_diff_raw_bytes_resolve_hash_collisions(void)
+{
+    Arena arena;
+    GitHunkVec hunks = {0};
+    static const u8 left[] = "same\nleft\r\ntail\n";
+    static const u8 right[] = "same\nright\ntail\n";
+
+    arena_init(&arena);
+    YEW_ASSERT(yew_diff_bytes_with_hash(&arena,
+                                        left, sizeof(left) - 1U,
+                                        right, sizeof(right) - 1U,
+                                        8U, colliding_hash, &hunks) ==
+               YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_n.v, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_n.v, 1U);
+    YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_MOD);
+
+    YEW_ASSERT(yew_diff_bytes_with_hash(&arena,
+                                        left, sizeof(left) - 1U,
+                                        left, sizeof(left) - 1U,
+                                        0U, colliding_hash, &hunks) ==
+               YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 0U);
+    GitHunkVec_free(&hunks);
+    arena_free_all(&arena);
+}
+
+void test_git_diff_raw_bytes_preserve_line_terminators(void)
+{
+    Arena arena;
+    GitHunkVec hunks = {0};
+    static const u8 lf[] = "x\ny\n";
+    static const u8 crlf[] = "x\r\ny\n";
+
+    arena_init(&arena);
+    YEW_ASSERT(yew_diff_bytes(&arena, lf, sizeof(lf) - 1U,
+                              crlf, sizeof(crlf) - 1U, 2U, &hunks) ==
+               YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 0U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 0U);
+    YEW_ASSERT_EQ_U64(hunk_distance(&hunks), 2U);
+    GitHunkVec_free(&hunks);
+    arena_free_all(&arena);
+}
+
+void test_git_diff_raw_budget_and_size_outcomes(void)
+{
+    Arena arena;
+    GitHunkVec hunks = {0};
+    Bytebuf left;
+    Bytebuf right;
+    u32 i;
+
+    arena_init(&arena);
+    bytebuf_init(&left);
+    bytebuf_init(&right);
+    for (i = 0U; i < YEW_DIFF_MAX_D / 2U + 1U; i++) {
+        bytebuf_printf(&left, "left-%u\n", i);
+        bytebuf_printf(&right, "right-%u\n", i);
+    }
+    YEW_ASSERT(yew_diff_bytes(&arena, left.data, left.len,
+                              right.data, right.len,
+                              YEW_DIFF_MAX_D, &hunks) ==
+               YEW_DIFF_TRUNCATED);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 0U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 0U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_n.v,
+                      YEW_DIFF_MAX_D / 2U + 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_n.v,
+                      YEW_DIFF_MAX_D / 2U + 1U);
+    YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_MOD);
+
+    YEW_ASSERT(yew_diff_within_size_limits(YEW_DIFF_MAX_BYTES,
+                                            YEW_DIFF_MAX_LINES,
+                                            YEW_DIFF_MAX_BYTES,
+                                            YEW_DIFF_MAX_LINES));
+    YEW_ASSERT(!yew_diff_within_size_limits(YEW_DIFF_MAX_BYTES + 1U, 0U,
+                                             0U, 0U));
+    YEW_ASSERT(!yew_diff_within_size_limits(0U, YEW_DIFF_MAX_LINES + 1U,
+                                             0U, 0U));
+    YEW_ASSERT(yew_diff_bytes(&arena, left.data, YEW_DIFF_MAX_BYTES + 1U,
+                              right.data, right.len, 3U, &hunks) ==
+               YEW_DIFF_TOO_LARGE);
+    YEW_ASSERT_EQ_U64(hunks.len, 0U);
+    bytebuf_free(&left);
+    bytebuf_free(&right);
+    GitHunkVec_free(&hunks);
     arena_free_all(&arena);
 }

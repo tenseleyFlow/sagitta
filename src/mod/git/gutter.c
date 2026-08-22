@@ -20,6 +20,17 @@ typedef struct PatchLine {
 
 VEC_DECL(PatchLineVec, PatchLine);
 
+typedef struct DiffLine {
+    size_t off;
+    size_t len;
+} DiffLine;
+
+typedef struct DiffSeq {
+    const u64 *hashes;
+    const u8 *bytes;
+    const DiffLine *lines;
+} DiffSeq;
+
 u64 yew_git_line_hash(const u8 *bytes, size_t len)
 {
     u64 hash = UINT64_C(1469598103934665603);
@@ -69,6 +80,24 @@ bool yew_git_hash_lines(const u8 *bytes, size_t len, Arena *arena,
     return true;
 }
 
+static bool diff_equal(const DiffSeq *left, u32 left_at,
+                       const DiffSeq *right, u32 right_at)
+{
+    const DiffLine *a;
+    const DiffLine *b;
+
+    if (left->hashes[left_at] != right->hashes[right_at])
+        return false;
+    if (left->lines == NULL || right->lines == NULL)
+        return true;
+    a = &left->lines[left_at];
+    b = &right->lines[right_at];
+    return a->len == b->len &&
+           (a->len == 0U ||
+            memcmp(left->bytes + a->off, right->bytes + b->off,
+                   a->len) == 0);
+}
+
 static void diff_ops_reverse(DiffOpVec *ops)
 {
     size_t lo = 0U;
@@ -87,8 +116,8 @@ static void diff_ops_reverse(DiffOpVec *ops)
     }
 }
 
-static bool diff_backtrack(i32 **trace, u32 distance, const u64 *left,
-                           u32 left_n, const u64 *right, u32 right_n,
+static bool diff_backtrack(i32 **trace, u32 distance, const DiffSeq *left,
+                           u32 left_n, const DiffSeq *right, u32 right_n,
                            u32 prefix, i32 offset, DiffOpVec *ops)
 {
     i32 x = (i32)left_n;
@@ -110,8 +139,8 @@ static bool diff_backtrack(i32 **trace, u32 distance, const u64 *left,
         prev_x = v[offset + prev_k];
         prev_y = prev_x - prev_k;
         while (x > prev_x && y > prev_y) {
-            if (left[prefix + (u32)x - 1U] !=
-                right[prefix + (u32)y - 1U])
+            if (!diff_equal(left, prefix + (u32)x - 1U,
+                            right, prefix + (u32)y - 1U))
                 return false;
             DiffOpVec_push(ops, DIFF_EQUAL);
             x--;
@@ -168,9 +197,9 @@ static void diff_emit_hunks(const DiffOpVec *ops, u32 prefix,
 /* Standard Myers frontier search.  We retain the bounded frontier history
  * needed for deterministic reconstruction.  The cap is D, never N*M, so a
  * 100 kLOC file with one changed row takes a tiny trace. */
-bool yew_diff_lines(Arena *arena, const u64 *left, u32 left_n,
-                    const u64 *right, u32 right_n, u32 budget_d,
-                    GitHunkVec *out)
+static bool diff_sequences(Arena *arena, const DiffSeq *left, u32 left_n,
+                           const DiffSeq *right, u32 right_n, u32 budget_d,
+                           GitHunkVec *out)
 {
     u32 prefix = 0U;
     u32 suffix = 0U;
@@ -187,15 +216,17 @@ bool yew_diff_lines(Arena *arena, const u64 *left, u32 left_n,
     bool ok = false;
 
     (void)arena;
-    if (out == NULL || (left == NULL && left_n != 0U) ||
-        (right == NULL && right_n != 0U))
+    if (out == NULL || left == NULL || right == NULL ||
+        (left->hashes == NULL && left_n != 0U) ||
+        (right->hashes == NULL && right_n != 0U))
         return false;
     out->len = 0U;
     while (prefix < left_n && prefix < right_n &&
-           left[prefix] == right[prefix])
+           diff_equal(left, prefix, right, prefix))
         prefix++;
     while (suffix < left_n - prefix && suffix < right_n - prefix &&
-           left[left_n - suffix - 1U] == right[right_n - suffix - 1U])
+           diff_equal(left, left_n - suffix - 1U,
+                      right, right_n - suffix - 1U))
         suffix++;
     middle_left = left_n - prefix - suffix;
     middle_right = right_n - prefix - suffix;
@@ -232,7 +263,8 @@ bool yew_diff_lines(Arena *arena, const u64 *left, u32 left_n,
                 x = frontier[offset + k - 1] + 1;
             y = x - k;
             while (x < (i32)middle_left && y < (i32)middle_right &&
-                   left[prefix + (u32)x] == right[prefix + (u32)y]) {
+                   diff_equal(left, prefix + (u32)x,
+                              right, prefix + (u32)y)) {
                 x++;
                 y++;
             }
@@ -260,6 +292,117 @@ bool yew_diff_lines(Arena *arena, const u64 *left, u32 left_n,
     if (!ok)
         out->len = 0U;
     return ok;
+}
+
+bool yew_diff_lines(Arena *arena, const u64 *left, u32 left_n,
+                    const u64 *right, u32 right_n, u32 budget_d,
+                    GitHunkVec *out)
+{
+    DiffSeq a = {left, NULL, NULL};
+    DiffSeq b = {right, NULL, NULL};
+
+    return diff_sequences(arena, &a, left_n, &b, right_n, budget_d, out);
+}
+
+bool yew_diff_within_size_limits(size_t left_bytes, u32 left_lines,
+                                 size_t right_bytes, u32 right_lines)
+{
+    return left_bytes <= YEW_DIFF_MAX_BYTES &&
+           right_bytes <= YEW_DIFF_MAX_BYTES &&
+           left_lines <= YEW_DIFF_MAX_LINES &&
+           right_lines <= YEW_DIFF_MAX_LINES;
+}
+
+static bool diff_hash_raw_lines(const u8 *bytes, size_t len, Arena *arena,
+                                YewGitLineHashFn hash_fn, u64 **hashes,
+                                DiffLine **lines, u32 *count)
+{
+    size_t at;
+    u32 nlines = 0U;
+    u32 line = 0U;
+
+    for (at = 0U; at < len; at++) {
+        if (bytes[at] == '\n')
+            nlines++;
+    }
+    if (len != 0U && bytes[len - 1U] != '\n')
+        nlines++;
+    if (nlines > YEW_DIFF_MAX_LINES) {
+        *count = nlines;
+        return true;
+    }
+    *hashes = nlines == 0U ? NULL :
+              arena_alloc(arena, (size_t)nlines * sizeof(**hashes),
+                          _Alignof(u64));
+    *lines = nlines == 0U ? NULL :
+             arena_alloc(arena, (size_t)nlines * sizeof(**lines),
+                         _Alignof(DiffLine));
+    at = 0U;
+    while (at < len) {
+        size_t end = at;
+
+        while (end < len && bytes[end] != '\n')
+            end++;
+        if (end < len)
+            end++;
+        (*lines)[line] = (DiffLine){at, end - at};
+        (*hashes)[line] = hash_fn(bytes + at, end - at);
+        line++;
+        at = end;
+    }
+    *count = nlines;
+    return true;
+}
+
+YewDiffOutcome yew_diff_bytes_with_hash(Arena *arena,
+                                        const u8 *left, size_t left_len,
+                                        const u8 *right, size_t right_len,
+                                        u32 budget_d,
+                                        YewGitLineHashFn hash_fn,
+                                        GitHunkVec *out)
+{
+    u64 *left_hashes = NULL;
+    u64 *right_hashes = NULL;
+    DiffLine *left_lines = NULL;
+    DiffLine *right_lines = NULL;
+    u32 left_n = 0U;
+    u32 right_n = 0U;
+    DiffSeq a;
+    DiffSeq b;
+
+    if (arena == NULL || out == NULL || hash_fn == NULL ||
+        (left == NULL && left_len != 0U) ||
+        (right == NULL && right_len != 0U))
+        return YEW_DIFF_INVALID;
+    out->len = 0U;
+    if (left_len > YEW_DIFF_MAX_BYTES || right_len > YEW_DIFF_MAX_BYTES)
+        return YEW_DIFF_TOO_LARGE;
+    if (!diff_hash_raw_lines(left, left_len, arena, hash_fn, &left_hashes,
+                             &left_lines, &left_n) ||
+        !diff_hash_raw_lines(right, right_len, arena, hash_fn, &right_hashes,
+                             &right_lines, &right_n))
+        return YEW_DIFF_INVALID;
+    if (!yew_diff_within_size_limits(left_len, left_n, right_len, right_n))
+        return YEW_DIFF_TOO_LARGE;
+    a = (DiffSeq){left_hashes, left, left_lines};
+    b = (DiffSeq){right_hashes, right, right_lines};
+    if (!diff_sequences(arena, &a, left_n, &b, right_n, budget_d, out)) {
+        GitHunk whole = {LINENO(0U), LINENO(left_n),
+                         LINENO(0U), LINENO(right_n), YEW_HUNK_MOD};
+
+        GitHunkVec_push(out, whole);
+        return YEW_DIFF_TRUNCATED;
+    }
+    return YEW_DIFF_OK;
+}
+
+YewDiffOutcome yew_diff_bytes(Arena *arena,
+                              const u8 *left, size_t left_len,
+                              const u8 *right, size_t right_len,
+                              u32 budget_d, GitHunkVec *out)
+{
+    return yew_diff_bytes_with_hash(arena, left, left_len, right, right_len,
+                                    budget_d, yew_git_line_hash, out);
 }
 
 static bool patch_lines(const u8 *bytes, size_t len, PatchLineVec *out)
