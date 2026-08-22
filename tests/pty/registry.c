@@ -6822,9 +6822,9 @@ static bool s52_fixture(PtyCtx *c, char *repo, size_t repo_cap)
         !s52_write(c, repo, "src/staged.c", "base staged\n") ||
         !s52_write(c, repo, "src/modified.c", "base modified\n") ||
         !s52_write(c, repo, "src/both.c", "base both\n") ||
-        !s52_write(c, repo, "docs/æ¼¢å­.txt", "base cjk\n") ||
+        !s52_write(c, repo, "docs/漢字.txt", "base cjk\n") ||
         !s52_write(c, repo,
-                   "docs/ð¨âð©âð§âð¦.txt",
+                   "docs/👨‍👩‍👧‍👦.txt",
                    "base emoji\n") ||
         !s52_git(c, repo, add_all) || !s52_git(c, repo, commit) ||
         !s52_write(c, repo, "src/staged.c", "staged change\n") ||
@@ -6833,9 +6833,9 @@ static bool s52_fixture(PtyCtx *c, char *repo, size_t repo_cap)
         !s52_write(c, repo, "src/both.c", "staged half\n") ||
         !s52_git(c, repo, add_both) ||
         !s52_write(c, repo, "src/both.c", "unstaged half\n") ||
-        !s52_write(c, repo, "docs/æ¼¢å­.txt", "changed cjk\n") ||
+        !s52_write(c, repo, "docs/漢字.txt", "changed cjk\n") ||
         !s52_write(c, repo,
-                   "docs/ð¨âð©âð§âð¦.txt",
+                   "docs/👨‍👩‍👧‍👦.txt",
                    "changed emoji\n") ||
         !s52_write(c, repo, "untracked.txt", "untracked\n"))
         return false;
