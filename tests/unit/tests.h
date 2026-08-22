@@ -527,6 +527,7 @@ void test_statusline_mode_roles_are_fixed_and_distinct(void);
 void test_statusline_git_badge_uses_cached_snapshot_rows(void);
 #endif
 void test_draw_selection_then_secondary_cursor_preserves_glyphs(void);
+void test_draw_git_diff_rows_distinguish_fillers_and_preserve_intraline(void);
 void test_draw_rect_selected_cells_equal_deleted_span_cells(void);
 void test_draw_primary_is_only_hardware_cursor_target_in_raw_frame(void);
 void test_message_expiry_and_replacement_rules(void);
@@ -1804,6 +1805,7 @@ void test_blamecache_layout_omits_when_23_cells_remain(void);
 void test_blamecache_layout_accepts_when_24_cells_remain(void);
 void test_blamecache_layout_draws_only_final_wrapped_row(void);
 void test_diffview_rowmap_aligns_unbalanced_hunks(void);
+void test_diffview_blame_clock_uses_injected_anchor(void);
 void test_diffview_rowmap_rejects_noncoherent_hunks_atomically(void);
 void test_diffview_scratch_builds_fillers_and_source_rows(void);
 void test_diffview_intraline_preserves_zwj_and_cjk_clusters(void);

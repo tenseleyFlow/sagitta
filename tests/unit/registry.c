@@ -550,6 +550,7 @@ const YewTest yew_tests[] = {
     T(statusline_git_badge_uses_cached_snapshot_rows),
 #endif
     T(draw_selection_then_secondary_cursor_preserves_glyphs),
+    T(draw_git_diff_rows_distinguish_fillers_and_preserve_intraline),
     T(draw_rect_selected_cells_equal_deleted_span_cells),
     T(draw_primary_is_only_hardware_cursor_target_in_raw_frame),
     T(message_expiry_and_replacement_rules),
@@ -1807,6 +1808,7 @@ const YewTest yew_tests[] = {
     T(blamecache_layout_accepts_when_24_cells_remain),
     T(blamecache_layout_draws_only_final_wrapped_row),
     T(diffview_rowmap_aligns_unbalanced_hunks),
+    T(diffview_blame_clock_uses_injected_anchor),
     T(diffview_rowmap_rejects_noncoherent_hunks_atomically),
     T(diffview_scratch_builds_fillers_and_source_rows),
     T(diffview_intraline_preserves_zwj_and_cjk_clusters),
