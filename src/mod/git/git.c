@@ -1,6 +1,7 @@
 #include "mod/git/git.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -286,6 +287,66 @@ static bool git_exists(const char *dir, const char *tail)
 
     free(path);
     return exists;
+}
+
+static bool git_read_u32(const char *dir, const char *tail, u32 *out)
+{
+    char bytes[32];
+    char *path = git_join(dir, tail);
+    size_t at = 0U;
+    u64 value = 0U;
+    ssize_t got;
+    int fd;
+
+    if (path == NULL || out == NULL) {
+        free(path);
+        return false;
+    }
+    fd = open(path, O_RDONLY);
+    free(path);
+    if (fd < 0)
+        return false;
+    do {
+        got = read(fd, bytes, sizeof(bytes));
+    } while (got < 0 && errno == EINTR);
+    (void)close(fd);
+    if (got <= 0 || (size_t)got == sizeof(bytes))
+        return false;
+    while (at < (size_t)got && bytes[at] >= '0' && bytes[at] <= '9') {
+        value = value * 10U + (u64)(bytes[at] - '0');
+        if (value > UINT32_MAX)
+            return false;
+        at++;
+    }
+    if (at == 0U)
+        return false;
+    while (at < (size_t)got &&
+           (bytes[at] == '\n' || bytes[at] == '\r'))
+        at++;
+    if (at != (size_t)got)
+        return false;
+    *out = (u32)value;
+    return true;
+}
+
+static GitStatusCode git_operation_state(const GitRepo *repo)
+{
+    const char *dir;
+
+    if (repo == NULL || repo->git_dir == NULL)
+        return YEW_GIT_OK;
+    dir = repo->git_dir;
+    if (git_exists(dir, "MERGE_HEAD"))
+        return YEW_GIT_MID_MERGE;
+    if (git_exists(dir, "rebase-merge") || git_exists(dir, "rebase-apply"))
+        return YEW_GIT_MID_REBASE;
+    if (git_exists(dir, "CHERRY_PICK_HEAD"))
+        return YEW_GIT_MID_CHERRY_PICK;
+    if (git_exists(dir, "REVERT_HEAD"))
+        return YEW_GIT_MID_REVERT;
+    if (git_exists(dir, "BISECT_LOG"))
+        return YEW_GIT_MID_BISECT;
+    return YEW_GIT_OK;
 }
 
 GitStatusCode yew_git_probe_state(const GitRepo *repo)
@@ -1219,9 +1280,26 @@ static void git_publish_refresh(Ed *ed)
     GitCtx *ctx = ed->git;
     GitSnapshot *next = &ctx->snap[ctx->live ^ 1U];
     GitStatusCode probe = yew_git_probe_state(&ctx->repo);
+    GitStatusCode operation = git_operation_state(&ctx->repo);
     bool again;
+    size_t i;
 
-    if (probe != YEW_GIT_OK)
+    next->conflict_count = 0U;
+    for (i = 0U; i < next->entries.len; i++) {
+        if (next->entries.data[i].conflicted)
+            next->conflict_count++;
+    }
+    next->rebase_step = 0U;
+    next->rebase_total = 0U;
+    if (operation == YEW_GIT_MID_REBASE) {
+        (void)git_read_u32(ctx->repo.git_dir, "rebase-merge/msgnum",
+                           &next->rebase_step);
+        (void)git_read_u32(ctx->repo.git_dir, "rebase-merge/end",
+                           &next->rebase_total);
+    }
+    if (operation != YEW_GIT_OK)
+        next->state = operation;
+    else if (probe != YEW_GIT_OK)
         next->state = probe;
     next->gen = ctx->snap[ctx->live].gen + 1U;
     next->taken_ms = git_now(ed);
@@ -1304,6 +1382,23 @@ const GitSnapshot *yew_git_snapshot(Ed *ed)
     if (ed == NULL || ed->git == NULL)
         return NULL;
     (void)yew_git_refresh(ed, false);
+    return &ed->git->snap[ed->git->live];
+}
+
+const GitSnapshot *yew_git_snapshot_cached(const Ed *ed)
+{
+    const GitSnapshot *snap;
+
+    if (ed == NULL || ed->git == NULL)
+        return NULL;
+    snap = &ed->git->snap[ed->git->live];
+    return snap->gen == 0U ? NULL : snap;
+}
+
+GitSnapshot *yew_git_test_snapshot_mut(Ed *ed)
+{
+    if (ed == NULL || ed->git == NULL)
+        return NULL;
     return &ed->git->snap[ed->git->live];
 }
 
@@ -1401,6 +1496,21 @@ void yew_git_invalidate(Ed *ed)
     ed->git->forced = true;
     if (ed->git->refresh_inflight)
         ed->git->refresh_again = true;
+}
+
+bool yew_git_job_owned(const Ed *ed, u32 job_id)
+{
+    size_t i;
+
+    if (ed == NULL || ed->git == NULL || job_id == 0U)
+        return false;
+    for (i = 0U; i < YEW_ARRAY_LEN(ed->git->pending); i++) {
+        const GitPending *pending = &ed->git->pending[i];
+
+        if (pending->active && pending->req.job_id == job_id)
+            return true;
+    }
+    return false;
 }
 
 static void git_refresh_failed(Ed *ed)

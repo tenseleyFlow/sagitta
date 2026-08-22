@@ -3,6 +3,10 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#if YEW_WITH_FUSS
+#include "mod/git/git.h"
+#include "mod/git/git_int.h"
+#endif
 #include "text/edit.h"
 #include "text/undo.h"
 #include "ui/gutter.h"
@@ -367,3 +371,90 @@ void test_statusline_mode_roles_are_fixed_and_distinct(void)
         }
     }
 }
+
+#if YEW_WITH_FUSS
+void test_statusline_git_badge_uses_cached_snapshot_rows(void)
+{
+    static const u8 text[] = "x\n";
+    StatusFixture f;
+    StatuslineText out;
+    GitSnapshot *snap;
+
+    status_fixture_init(&f, text, sizeof(text) - 1U, "main.c");
+    yew_git_state_init(&f.ed);
+    snap = yew_git_test_snapshot_mut(&f.ed);
+    YEW_ASSERT_NOT_NULL(snap);
+    snap->gen = 1U;
+    snap->state = YEW_GIT_OK;
+    snap->branch = (char *)"trunk";
+    snap->upstream = (char *)"origin/trunk";
+    snap->ahead = 2;
+    snap->behind = 1;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ trunk ↑2 ↓1"));
+    yew_statusline_text_free(&out);
+
+    snap->ahead = 0;
+    snap->behind = 0;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ trunk"));
+    YEW_ASSERT(!contains(&out, "↑"));
+    YEW_ASSERT(!contains(&out, "↓"));
+    yew_statusline_text_free(&out);
+
+    snap->upstream = NULL;
+    snap->state = YEW_GIT_MID_MERGE;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ trunk|MERGING"));
+    yew_statusline_text_free(&out);
+
+    snap->state = YEW_GIT_MID_REBASE;
+    snap->rebase_step = 3U;
+    snap->rebase_total = 7U;
+    snap->conflicted = true;
+    snap->conflict_count = 2U;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ trunk|REBASE 3/7 ⚑2"));
+    yew_statusline_text_free(&out);
+
+    snap->state = YEW_GIT_MID_CHERRY_PICK;
+    snap->conflicted = false;
+    snap->conflict_count = 0U;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ trunk|CHERRY-PICKING"));
+    yew_statusline_text_free(&out);
+
+    snap->state = YEW_GIT_MID_REVERT;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ trunk|REVERTING"));
+    yew_statusline_text_free(&out);
+
+    snap->state = YEW_GIT_MID_BISECT;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ trunk|BISECTING"));
+    yew_statusline_text_free(&out);
+
+    snap->state = YEW_GIT_DETACHED;
+    snap->detached = true;
+    snap->head_oid = (char *)"a1b2c3d4e5f6";
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ (a1b2c3)"));
+    yew_statusline_text_free(&out);
+
+    snap->state = YEW_GIT_NO_HEAD;
+    snap->detached = false;
+    snap->unborn = true;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(contains(&out, "⎇ (no commits)"));
+    yew_statusline_text_free(&out);
+
+    snap->state = YEW_GIT_NOT_REPO;
+    snap->unborn = false;
+    yew_statusline_build(&f.ed, &f.win, 160U, &out);
+    YEW_ASSERT(!contains(&out, "⎇"));
+    yew_statusline_text_free(&out);
+
+    yew_git_state_free(&f.ed);
+    status_fixture_free(&f);
+}
+#endif

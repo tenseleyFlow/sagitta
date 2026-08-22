@@ -457,14 +457,31 @@ int yew_loop_run(Ed *ed)
          * race for this iteration (invariant 4). */
         yew_job_pump(ed, fds, nfds);
         if (chld) {
+            bool was_reaped[YEW_JOB_MAX];
+            bool external_completion = false;
+            u32 before = ed->jobs.len;
+            u32 i;
+
+            for (i = 0U; i < before; i++)
+                was_reaped[i] = ed->jobs.v[i].reaped;
             yew_job_reap(ed);
-            yew_git_invalidate(ed);
-            (void)yew_git_refresh(ed, true);
+            for (i = 0U; i < before && i < ed->jobs.len; i++) {
+                if (!was_reaped[i] && ed->jobs.v[i].reaped &&
+                    !yew_git_job_owned(ed, ed->jobs.v[i].id))
+                    external_completion = true;
+            }
+            if (external_completion) {
+                yew_git_invalidate(ed);
+                (void)yew_git_refresh(ed, true);
+            }
         }
         yew_job_tick(ed, now);
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */
         yew_job_settle(ed);
+        /* TTL polling is an event-loop responsibility.  Rendering only
+         * consumes the last published snapshot and therefore cannot fork. */
+        (void)yew_git_refresh(ed, false);
         yew_fuss_tick(ed, now);
         yew_ai_pump(ed, fds, nfds);
         yew_lsp_pump(ed);

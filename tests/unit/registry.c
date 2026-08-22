@@ -546,6 +546,9 @@ const YewTest yew_tests[] = {
     T(statusline_recording_indicator_is_pinned_and_counted),
     T(statusline_unicode_path_elision_uses_cells),
     T(statusline_mode_roles_are_fixed_and_distinct),
+#if YEW_WITH_FUSS
+    T(statusline_git_badge_uses_cached_snapshot_rows),
+#endif
     T(draw_selection_then_secondary_cursor_preserves_glyphs),
     T(draw_rect_selected_cells_equal_deleted_span_cells),
     T(draw_primary_is_only_hardware_cursor_target_in_raw_frame),
@@ -1766,6 +1769,8 @@ const YewTest yew_tests[] = {
     T(gitcache_large_incoming_merge_is_sorted_and_deduplicated),
     T(gitcache_runtime_taxonomy_is_behaviorally_reachable),
     T(gitcache_teardown_detaches_inflight_stdin),
+    T(gitcache_cached_accessor_and_job_ownership_are_side_effect_free),
+    T(gitcache_rebase_progress_and_conflict_count_publish),
     T(fusstree_builds_every_status_flag),
     T(fusstree_directories_or_descendant_flags),
     T(fusstree_sorts_directories_before_files_deterministically),

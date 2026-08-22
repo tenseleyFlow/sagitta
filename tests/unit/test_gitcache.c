@@ -223,6 +223,35 @@ static void gitcache_remove(const char *dir, const char *name, bool directory)
     free(path);
 }
 
+static void gitcache_write(const char *dir, const char *name,
+                           const char *text)
+{
+    size_t dn = strlen(dir);
+    size_t nn = strlen(name);
+    size_t len = strlen(text);
+    char *path = malloc(dn + nn + 2U);
+    size_t off = 0U;
+    int fd;
+
+    YEW_ASSERT_NOT_NULL(path);
+    (void)memcpy(path, dir, dn);
+    path[dn] = '/';
+    (void)memcpy(path + dn + 1U, name, nn + 1U);
+    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    YEW_ASSERT(fd >= 0);
+    while (fd >= 0 && off < len) {
+        ssize_t wrote = write(fd, text + off, len - off);
+
+        YEW_ASSERT(wrote > 0);
+        if (wrote <= 0)
+            break;
+        off += (size_t)wrote;
+    }
+    if (fd >= 0)
+        YEW_ASSERT_EQ_I64(close(fd), 0);
+    free(path);
+}
+
 void test_gitcache_filesystem_taxonomy_is_message_free(void)
 {
     static const struct {
@@ -254,6 +283,76 @@ void test_gitcache_filesystem_taxonomy_is_message_free(void)
         gitcache_remove(tmp, rows[i].name, rows[i].directory);
     }
     YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
+}
+
+void test_gitcache_cached_accessor_and_job_ownership_are_side_effect_free(void)
+{
+    Ed ed;
+    SpawnLog log = {0};
+    const GitSnapshot *snap;
+
+    gitcache_ed(&ed, &log);
+    snap = yew_git_snapshot_cached(&ed);
+    YEW_ASSERT_NULL(snap);
+    YEW_ASSERT_EQ_U64(log.calls, 0U);
+    snap = yew_git_snapshot(&ed);
+    YEW_ASSERT_NOT_NULL(snap);
+    YEW_ASSERT_EQ_U64(log.calls, 1U);
+    YEW_ASSERT(yew_git_job_owned(&ed, log.next_id));
+    YEW_ASSERT(!yew_git_job_owned(&ed, log.next_id + 1U));
+    YEW_ASSERT_NULL(yew_git_snapshot_cached(&ed));
+    YEW_ASSERT_EQ_U64(log.calls, 1U);
+    gitcache_done(&ed);
+}
+
+void test_gitcache_rebase_progress_and_conflict_count_publish(void)
+{
+    static const u8 status[] =
+        "# branch.oid 0123456789012345678901234567890123456789\0"
+        "# branch.head trunk\0"
+        "u UU N... 100644 100644 100644 100644 "
+        "0123456789012345678901234567890123456789 "
+        "1123456789012345678901234567890123456789 "
+        "2123456789012345678901234567890123456789 conflict.c\0";
+    Ed ed;
+    SpawnLog log = {0};
+    char *tmp = gitcache_tmp_template("yew-git-rebase");
+    char *rebase;
+    const GitSnapshot *snap;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    gitcache_ed(&ed, &log);
+    gitcache_ready(&ed, &log, tmp, 1000);
+    rebase = malloc(strlen(tmp) + sizeof("/rebase-merge"));
+    YEW_ASSERT_NOT_NULL(rebase);
+    (void)sprintf(rebase, "%s/rebase-merge", tmp);
+    YEW_ASSERT_EQ_I64(mkdir(rebase, 0700), 0);
+    gitcache_write(rebase, "msgnum", "3\n");
+    gitcache_write(rebase, "end", "7\n");
+
+    yew_git_test_now_set(&ed, 1500);
+    YEW_ASSERT(yew_git_refresh(&ed, false));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_status, YEW_GIT_OK,
+                                     status, sizeof(status) - 1U,
+                                     NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
+                                     NULL, 0U, NULL, 0U));
+    gitcache_complete_default_comment(&ed, &log);
+    snap = yew_git_snapshot_cached(&ed);
+    YEW_ASSERT_NOT_NULL(snap);
+    YEW_ASSERT_EQ_I64(snap->state, YEW_GIT_MID_REBASE);
+    YEW_ASSERT(snap->conflicted);
+    YEW_ASSERT_EQ_U64(snap->conflict_count, 1U);
+    YEW_ASSERT_EQ_U64(snap->rebase_step, 3U);
+    YEW_ASSERT_EQ_U64(snap->rebase_total, 7U);
+
+    gitcache_done(&ed);
+    gitcache_remove(rebase, "msgnum", false);
+    gitcache_remove(rebase, "end", false);
+    YEW_ASSERT_EQ_I64(rmdir(rebase), 0);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(rebase);
     free(tmp);
 }
 

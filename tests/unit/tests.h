@@ -523,6 +523,9 @@ void test_statusline_priority_drop_order_is_tiered(void);
 void test_statusline_recording_indicator_is_pinned_and_counted(void);
 void test_statusline_unicode_path_elision_uses_cells(void);
 void test_statusline_mode_roles_are_fixed_and_distinct(void);
+#if YEW_WITH_FUSS
+void test_statusline_git_badge_uses_cached_snapshot_rows(void);
+#endif
 void test_draw_selection_then_secondary_cursor_preserves_glyphs(void);
 void test_draw_rect_selected_cells_equal_deleted_span_cells(void);
 void test_draw_primary_is_only_hardware_cursor_target_in_raw_frame(void);
@@ -1763,6 +1766,8 @@ void test_gitcache_blob_validation_and_owned_binary_result(void);
 void test_gitcache_large_incoming_merge_is_sorted_and_deduplicated(void);
 void test_gitcache_runtime_taxonomy_is_behaviorally_reachable(void);
 void test_gitcache_teardown_detaches_inflight_stdin(void);
+void test_gitcache_cached_accessor_and_job_ownership_are_side_effect_free(void);
+void test_gitcache_rebase_progress_and_conflict_count_publish(void);
 void test_fusstree_builds_every_status_flag(void);
 void test_fusstree_directories_or_descendant_flags(void);
 void test_fusstree_sorts_directories_before_files_deterministically(void);

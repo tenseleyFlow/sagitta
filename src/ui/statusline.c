@@ -580,14 +580,22 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
                              strncmp(w->buf->lang, "fortran", 7U) == 0};
     git_badge[0] = '\0';
     {
-        const GitSnapshot *gs = yew_git_snapshot((Ed *)ed);
+        const GitSnapshot *gs = yew_git_snapshot_cached(ed);
         bool ascii = yew_state_option_bool(ed, "git.ascii_glyphs", false);
         const char *mark = ascii ? "git:" : "⎇";
         if (gs != NULL && gs->state != YEW_GIT_NO_GIT &&
-            gs->state != YEW_GIT_NOT_REPO) {
-            if (gs->unborn) (void)snprintf(git_badge, sizeof(git_badge), "%s (no commits)", mark);
-            else if (gs->detached) (void)snprintf(git_badge, sizeof(git_badge), "%s (%-.6s)", mark, gs->head_oid != NULL ? gs->head_oid : "");
-            else (void)snprintf(git_badge, sizeof(git_badge), "%s %s", mark, gs->branch != NULL ? gs->branch : "?");
+            gs->state != YEW_GIT_NOT_REPO &&
+            gs->state != YEW_GIT_BARE) {
+            if (gs->unborn) {
+                (void)snprintf(git_badge, sizeof(git_badge),
+                               "%s (no commits)", mark);
+            } else if (gs->detached) {
+                (void)snprintf(git_badge, sizeof(git_badge), "%s (%-.6s)",
+                               mark, gs->head_oid != NULL ? gs->head_oid : "");
+            } else if (gs->branch != NULL) {
+                (void)snprintf(git_badge, sizeof(git_badge), "%s %s",
+                               mark, gs->branch);
+            }
             {
                 const char *phase = gs->state == YEW_GIT_MID_MERGE ? "|MERGING" :
                                     gs->state == YEW_GIT_MID_REBASE ? "|REBASE" :
@@ -595,13 +603,35 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
                                     gs->state == YEW_GIT_MID_REVERT ? "|REVERTING" :
                                     gs->state == YEW_GIT_MID_BISECT ? "|BISECTING" : "";
                 size_t n = strlen(git_badge);
-                if (phase[0] != '\0') (void)snprintf(git_badge + n, sizeof(git_badge) - n, " %s", phase);
+                if (phase[0] != '\0') {
+                    (void)snprintf(git_badge + n, sizeof(git_badge) - n,
+                                   "%s", phase);
+                    if (gs->state == YEW_GIT_MID_REBASE &&
+                        gs->rebase_step != 0U && gs->rebase_total != 0U) {
+                        n = strlen(git_badge);
+                        (void)snprintf(git_badge + n,
+                                       sizeof(git_badge) - n, " %u/%u",
+                                       (unsigned)gs->rebase_step,
+                                       (unsigned)gs->rebase_total);
+                    }
+                }
             }
-            if (gs->upstream != NULL && gs->ahead >= 0 && gs->behind >= 0) {
+            if (gs->upstream != NULL && gs->ahead > 0) {
                 size_t n = strlen(git_badge);
-                (void)snprintf(git_badge + n, sizeof(git_badge) - n, " ↑%d ↓%d", gs->ahead, gs->behind);
+                (void)snprintf(git_badge + n, sizeof(git_badge) - n,
+                               " ↑%d", gs->ahead);
             }
-            if (gs->conflicted) { size_t n = strlen(git_badge); (void)snprintf(git_badge + n, sizeof(git_badge) - n, " ⚑"); }
+            if (gs->upstream != NULL && gs->behind > 0) {
+                size_t n = strlen(git_badge);
+                (void)snprintf(git_badge + n, sizeof(git_badge) - n,
+                               " ↓%d", gs->behind);
+            }
+            if (gs->conflict_count != 0U) {
+                size_t n = strlen(git_badge);
+
+                (void)snprintf(git_badge + n, sizeof(git_badge) - n,
+                               " ⚑%u", (unsigned)gs->conflict_count);
+            }
         }
     }
     segments[14] = (Segment){git_badge, 5U, git_badge[0] != '\0'};
@@ -746,7 +776,7 @@ static void statusline_draw_body(Ed *ed, Grid *grid, u16 row, u16 col,
                                  const StatuslineText *text,
                                  const YewUiStyle *style)
 {
-    StatusRoleSpan spans[3];
+    StatusRoleSpan spans[4];
     size_t n = 0U;
     size_t pos = 0U;
     size_t i;
@@ -762,6 +792,19 @@ static void statusline_draw_body(Ed *ed, Grid *grid, u16 row, u16 col,
         spans[n++] = (StatusRoleSpan){text->diag_warn_at,
                                      text->diag_warn_len,
                                      "diag.warn", false};
+    {
+        const char *conflict = strstr(text->body, "⚑");
+
+        if (conflict != NULL) {
+            const char *end = conflict + strlen("⚑");
+
+            while (*end >= '0' && *end <= '9')
+                end++;
+            spans[n++] = (StatusRoleSpan){(size_t)(conflict - text->body),
+                                         (size_t)(end - conflict),
+                                         "diag.error", false};
+        }
+    }
     for (i = 0U; i < n; i++) {
         if (spans[i].at > pos)
             col = yew_grid_puts(grid, row, col,

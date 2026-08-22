@@ -47,5 +47,6 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
                                 int exit_code, const u8 *out, u64 out_len,
                                 const u8 *err, u64 err_len);
 GitStatusCode yew_git_test_auth_state(const u8 *bytes, u64 len);
+GitSnapshot *yew_git_test_snapshot_mut(Ed *ed);
 
 #endif

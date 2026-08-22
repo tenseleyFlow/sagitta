@@ -152,6 +152,9 @@ typedef struct GitSnapshot {
     bool detached;
     bool unborn;
     bool conflicted;
+    u32 conflict_count;
+    u32 rebase_step;
+    u32 rebase_total;
     GitEntryList entries;
     GitIgnoreSet ignored;
     u32 gen;
@@ -246,11 +249,15 @@ GitStatusCode yew_git_detect_result(const Ed *ed);
 bool yew_git_avail(Ed *ed, GitVersion *out);
 GitStatusCode yew_git_detect(Ed *ed, GitRepo *out);
 const GitRepo *yew_git_repo_cached(const Ed *ed);
+/* A rendering-safe read: never detects, refreshes, or starts a process. */
+const GitSnapshot *yew_git_snapshot_cached(const Ed *ed);
 const GitSnapshot *yew_git_snapshot(Ed *ed);
 const GitLogRecordList *yew_git_log_records(const Ed *ed);
 const GitResult *yew_git_result(const Ed *ed);
 bool yew_git_refresh(Ed *ed, bool force);
 void yew_git_invalidate(Ed *ed);
+/* True when `job_id` belongs to an in-flight Git module request. */
+bool yew_git_job_owned(const Ed *ed, u32 job_id);
 u64 yew_git_env_fingerprint(void);
 
 /* Fetch one object by its full object id.  Binary output is published through
