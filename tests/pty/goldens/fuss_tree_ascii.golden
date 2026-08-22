@@ -25,7 +25,7 @@ yew:trunk  ↑0 ↓0
                                                                                 
                                                                                 
 git discovery unavailable; using workspace walk                                 
-←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave                   
+<> tree | ^v siblings | a stage | m commit | / jump | q leave                   
 --- style
 AAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 CCCCCCCCCCDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
