@@ -335,12 +335,15 @@ static bool work_hash_line(YewDiffWork *work, const u8 *bytes, size_t len,
     if (limit < work->at || limit > len)
         limit = len;
     while (work->at < limit) {
-        bool end;
+        const u8 *newline = memchr(bytes + work->at, '\n',
+                                   limit - work->at);
+        size_t line_end = newline == NULL ? limit :
+                          (size_t)(newline - bytes) + 1U;
 
-        work_hash_byte(work, bytes);
-        end = bytes[work->at - 1U] == '\n' || work->at == len;
-        if (!end)
-            continue;
+        while (work->at < line_end)
+            work_hash_byte(work, bytes);
+        if (newline == NULL && work->at != len)
+            break;
         lines[work->line_at] = (DiffLine){work->line_start,
                                           work->at - work->line_start};
         hashes[work->line_at] = work->hash_fn == yew_git_line_hash ?
