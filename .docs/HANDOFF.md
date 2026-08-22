@@ -1,8 +1,8 @@
 # yew — session handoff
 
-**Written:** 2026-08-21. **Active implementation frontier:** Sprint 53,
-editor Git hunks, blame, diff view, branch status, and directory groups.
-Campaign 10 and Sprints 51–52 are complete; Campaign 11 is active.
+**Written:** 2026-08-22. **Active implementation frontier:** Sprint 54,
+plugin packages, discovery, lifecycle, events, capabilities, and containment.
+Campaign 11 and Sprints 51–53 are complete; Campaign 12 is active.
 
 ---
 
@@ -13,11 +13,11 @@ Read, in order:
 1. `.docs/plan/00-decisions.md`
 2. `.docs/plan/01-architecture.md`
 3. `.docs/plan/02-fletch.md`
-4. `.docs/sprints/11-fuss-git/s53-editor-git.md`
+4. `.docs/sprints/12-plugins/s54-plugin-system.md`
 
-Sprint 53 is the binding implementation contract. Sprint 52 is complete; do
-not reopen its F-mode tree, viewer, keymap, or Git-verb contracts except where
-Sprint 53 explicitly consumes them.
+Sprint 54 is the binding implementation contract. Sprint 53 is complete; do
+not reopen its Git diff, hunk, blame, statusline, refresh, or directory-group
+contracts except where Sprint 54 explicitly consumes them.
 
 ## 1. Sprint 47 closeout
 
@@ -92,7 +92,7 @@ per-workspace grants, deny-pattern and path redaction, conservative local/cloud
 presets, the privacy page, and the four-state `[AI]` statusline badge. A fresh
 profile continues to make zero network syscalls.
 
-## 3. Sprint 52 closeout and Sprint 53 objective
+## 3. Sprint 52–53 closeout and Sprint 54 objective
 
 Sprint 52 completes F mode:
 
@@ -121,10 +121,40 @@ Local closeout evidence:
   the 20,000-entry tree builds in 6.629 ms and toggle p99 is 0.123 ms against
   12 ms / 5 ms gates.
 
-Sprint 53 now owns the index-blob differ and two-cell hunk gutter, buffer hunk
-stage/discard, lazy viewport blame, synchronized side-by-side diff view,
-branch/ahead/behind status, focus/job-completion refresh policy, and
-`ed.group.from_dir` implementation. No libgit2, libxdiff, threads, or inotify.
+Sprint 53 completes Git-aware editing:
+
+- one persistent `git cat-file --batch` transport per workspace supplies the
+  index blob; conflict entries fall back to `HEAD`, and untracked files use an
+  empty base;
+- a collision-safe, linear-space Myers differ drives the two-cell sign column,
+  hunk motions, index-only staging, and buffer-only discard as one undo step;
+- lazy viewport blame preserves stale annotations while refreshing, and the
+  side-by-side diff view keeps aligned rows and synchronized scroll state;
+- cached branch, ahead/behind, conflict, phase, and stash state reaches the
+  statusline without spawning from render;
+- focus, save, and external-job completion invalidate Git state without a file
+  watcher, while private read workers cannot create refresh loops;
+- `ed.group.from_dir` deterministically adopts or defers directory members and
+  reads only the focused file.
+
+Local closeout evidence:
+
+- strict full GCC and Clang suites are green at 2,243 tests / 70,983,393
+  assertions, including every deterministic PTY, 87 scripts / 770 assertions,
+  smoke, round-trip, syntax assets, structural gates, and live torture;
+- Clang ASan/UBSan with Fletch invariant checks is green at 2,224 runnable
+  tests / 70,983,075 assertions plus the complete script and PTY matrices;
+- the real-Git suites report 15,337 layer assertions, 333 FUSS workflow
+  assertions, and 20 accepted patch fixtures / 254 hunk assertions;
+- the 100 kLOC / 500-hunk gate settles in about 20–22 ms, keeps its largest
+  slice below 3.7 ms, performs viewport lookup below 0.1 microsecond, and
+  coalesces 200 edits into one diff.
+
+The exact pushed closeout SHA must pass the complete hosted matrix and the
+explicit on-demand Valgrind lane before Sprint 53 is treated as released.
+Sprint 54 now owns plugin manifests and XDG discovery, zero-residue lifecycle,
+the namespaced event bus, capability consent, error containment, and the
+`yew plug` CLI/picker. Distribution remains Sprint 55.
 
 ## 4. Campaign sequence
 
@@ -142,7 +172,10 @@ branch/ahead/behind status, focus/job-completion refresh policy, and
 9. Sprint 51 — asynchronous Git layer, porcelain parsers and TTL cache
    (complete)
 10. Sprint 52 — F mode tree, navigation, viewers and Git verbs (complete)
-11. Sprint 53 — editor Git hunks, blame, diff view and groups (active frontier)
+11. Sprint 53 — editor Git hunks, blame, diff view and groups (complete;
+    Campaign 11 closed)
+12. Sprint 54 — plugin packages, lifecycle, events and capabilities
+    (active frontier)
 
 ## 5. Daily Driver remains separate and pending
 
@@ -177,7 +210,14 @@ designated and logged before eligible implementation edits.
 - Keep all Git execution argv-only through the existing job layer; paths,
   refs, commit text, and stash text never pass through a shell or formatted
   command line.
-- Sprint 53 diffs buffer bytes against the index blob, not the worktree file;
+- Git editor diffs compare buffer bytes with the index blob, not the worktree;
   conflict fallback is `HEAD:<path>` and untracked files use an empty base.
+- Plugin manifests are pure data literals; entry paths must resolve inside the
+  package root, and discovery/load order stays deterministic.
+- Plugins share yew's VM, process, and address space. Capability gates constrain
+  flapi I/O; they are not memory or resource isolation and must not be described
+  as a sandbox in user-facing text.
+- A failed init or disable must leave zero registrations, timers, closures, or
+  partial capability state behind.
 - Do not change performance baselines outside Sprint 56 calibration.
 - Do not mark Daily Driver `EARNED` from automated evidence.

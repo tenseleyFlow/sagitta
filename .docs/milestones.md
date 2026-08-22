@@ -6,9 +6,9 @@ not earn a field milestone.
 ## Daily driver — Sprint 42
 
 - State: `PENDING`
-- Implementation frontier: Sprint 53 (editor Git hunks, blame, diff view,
-  branch status, and directory groups); Campaign 10 and Sprints 51–52 are
-  complete, and Campaign 11 is active
+- Implementation frontier: Sprint 54 (plugin packages, discovery, lifecycle,
+  events, capabilities, and containment); Campaign 11 and Sprints 51–53 are
+  complete, and Campaign 12 is active
 - Reference machine: Intel Core i7-10870H, 32 GiB RAM, Linux
   7.1.5-arch1-2, `TERM=xterm-256color`; terminal emulator not yet recorded
 - Evidence: [daily-driver dogfood log](dogfood-log.md)
