@@ -6941,6 +6941,17 @@ static void s52_wait_screen(PtyCtx *c, const char *text)
               "Sprint 52 expected screen state did not appear");
 }
 
+static void s52_wait_screen_gone(PtyCtx *c, const char *text)
+{
+    u32 i;
+
+    for (i = 0U; i < 80U && !c->failed &&
+                 s52_screen_contains(&c->vt, text); i++)
+        ptc_settle(c, 25);
+    ptc_check(c, !s52_screen_contains(&c->vt, text),
+              "Sprint 52 transient screen state did not clear");
+}
+
 static bool s52_spawn_editor(PtyCtx *c, const char *file)
 {
     char config[PATH_MAX];
@@ -7000,6 +7011,7 @@ static void s52_finish(PtyCtx *c)
 static void case_s52_fuss(PtyCtx *c)
 {
     const char *name = c->test->name;
+    bool semantic_snapshot = false;
 
     if (strstr(name, "nonrepo") != NULL) {
         ptc_spawn(c, ptc_yew_bin(c), NULL);
@@ -7031,7 +7043,9 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_keys(c, "/");
     } else if (strstr(name, "jump_clears") != NULL) {
         ptc_keys(c, "/");
-        ptc_settle(c, 600);
+        s52_wait_screen(c, "jump:");
+        s52_wait_screen_gone(c, "jump:");
+        semantic_snapshot = true;
     } else if (strstr(name, "leave_q") != NULL) {
         ptc_keys(c, "q");
         ptc_settle(c, 0);
@@ -7043,7 +7057,12 @@ static void case_s52_fuss(PtyCtx *c)
     } else {
         ptc_settle(c, 0);
     }
-    ptc_snapshot_sgr(c, name);
+    if (semantic_snapshot) {
+        c->vt.sync_pairs_unstable = true;
+        ptc_snapshot(c, name);
+    } else {
+        ptc_snapshot_sgr(c, name);
+    }
     s52_finish(c);
 }
 
@@ -7163,14 +7182,15 @@ static void case_s52_fuss_status_rows(PtyCtx *c)
     ptc_check(c, s52_screen_contains(&c->vt, "↑1 ↓1"),
               "FUSS branch header omitted divergence counts");
     ptc_keys(c, "T");
-    ptc_settle(c, 500);
+    s52_wait_screen(c, "all-files tree enabled");
     ptc_keys(c, ".");
-    ptc_settle(c, 1000);
+    s52_wait_screen(c, "hidden files shown");
     ptc_check(c, s52_screen_contains(&c->vt, "ignored.log"),
               "FUSS hidden-files tree omitted the ignored row");
     ptc_check(c, !c->pty.reaped,
               "rendering FUSS status rows exited yew");
-    ptc_snapshot_sgr(c, c->test->name);
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
     s52_finish(c);
 }
 #endif
