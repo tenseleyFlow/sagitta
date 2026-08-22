@@ -1366,6 +1366,13 @@ static void git_publish_refresh(Ed *ed)
     next->gen = ctx->snap[ctx->live].gen + 1U;
     next->taken_ms = git_now(ed);
     ctx->live ^= 1U;
+    /* The statusline and editor gutter are cache consumers: publishing a
+     * snapshot must wake both without making either render path poll or
+     * spawn.  In particular, the first paint happens before asynchronous
+     * repository discovery completes, so a document repaint is what gives
+     * the gutter its first chance to request the index blob. */
+    ed->footer_dirty = true;
+    ed->full_damage = true;
     again = ctx->refresh_again;
     ctx->refresh_inflight = false;
     ctx->refresh_again = false;
