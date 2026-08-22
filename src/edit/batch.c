@@ -87,7 +87,6 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.git.discard", "no batch alternative"},
     {"ed.git.file.delete", "no batch alternative"},
     {"ed.git.file.rename", "no batch alternative"},
-    {"ed.git.hunk.discard", "no batch alternative"},
     {"ed.mode.enter", "use ed.run(name, args)"},
 };
 

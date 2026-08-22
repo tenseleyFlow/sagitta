@@ -37,13 +37,16 @@ void test_pty_environment_exact(void)
         /* Sprint 43's deterministic provider is opt-in per PTY case. */
         "YEW_SHADOW_TEST=0",
         /* Sprint 49's live-provider PTYs opt into deterministic mocks. */
-        "YEW_AI_MOCK=1"
+        "YEW_AI_MOCK=1",
+        /* Sprint 53 keeps non-repository PTYs from discovering the source
+         * checkout above their isolated workspace. */
+        "GIT_CEILING_DIRECTORIES=/tmp/yew-pty-state"
     };
     char *envp[YEW_PTY_ENV_COUNT + 1U] = {0};
     size_t i;
 
-    /* Keeps the two in lockstep: adding a key without an expectation
-     * would otherwise read past `expected` (it did, once). */
+    /* NO_COLOR is absent from this baseline, so one configured environment
+     * key intentionally has no corresponding expected entry. */
     YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(expected) + 1U,
                       (u64)YEW_PTY_ENV_COUNT);
 
