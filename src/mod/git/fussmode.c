@@ -27,6 +27,7 @@
 #include "text/undo.h"
 #include "ui/draw.h"
 #include "ui/message.h"
+#include "ui/picker.h"
 #include "ui/region.h"
 #include "ui/statusline.h"
 #include "ui/tabs.h"
@@ -36,16 +37,9 @@
 
 typedef enum FussPromptAction {
     FUSS_PROMPT_NONE,
-    FUSS_PROMPT_BRANCH_SWITCH,
     FUSS_PROMPT_BRANCH_CREATE,
     FUSS_PROMPT_BRANCH_DELETE,
-    FUSS_PROMPT_MERGE,
-    FUSS_PROMPT_RESET,
-    FUSS_PROMPT_REBASE,
-    FUSS_PROMPT_CHERRY_PICK,
-    FUSS_PROMPT_REVERT,
     FUSS_PROMPT_STASH_PUSH,
-    FUSS_PROMPT_STASH_POP,
     FUSS_PROMPT_TAG,
     FUSS_PROMPT_DISCARD,
     FUSS_PROMPT_DELETE,
@@ -54,6 +48,21 @@ typedef enum FussPromptAction {
     FUSS_PROMPT_COMMIT,
     FUSS_PROMPT_COMMIT_AMEND
 } FussPromptAction;
+
+typedef enum FussPickAction {
+    FUSS_PICK_NONE,
+    FUSS_PICK_BRANCH_SWITCH,
+    FUSS_PICK_BRANCH_DELETE,
+    FUSS_PICK_MERGE,
+    FUSS_PICK_RESET_COMMIT,
+    FUSS_PICK_RESET_MODE,
+    FUSS_PICK_REBASE,
+    FUSS_PICK_CHERRY_BRANCH,
+    FUSS_PICK_CHERRY_COMMIT,
+    FUSS_PICK_REVERT,
+    FUSS_PICK_STASH,
+    FUSS_PICK_REMOTE
+} FussPickAction;
 
 struct FussMode {
     FussTree tree;
@@ -75,9 +84,22 @@ struct FussMode {
     FussPromptAction prompt_action;
     char *prompt_path;
     bool prompt_untracked;
+    FussPickAction pending_pick;
+    FussPickAction picker_action;
+    PickItem *picker_items;
+    char **picker_values;
+    u32 picker_count;
+    char *picker_aux;
+    bool picker_alt;
     FileList files;
     WalkState *walk;
 };
+
+static bool fuss_picker_result(Ed *ed, FussPickAction action,
+                               const GitResult *result);
+static void fuss_prompt_clear(FussMode *f);
+static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
+                             size_t len, void *ctx);
 
 static size_t fuss_cstr_len(const char *s)
 {
@@ -236,6 +258,7 @@ static void fuss_result_tick(Ed *ed)
 {
     FussMode *f;
     const GitResult *result;
+    FussPickAction pick;
     u64 err_len;
 
     if (ed == NULL || ed->fuss == NULL)
@@ -249,12 +272,34 @@ static void fuss_result_tick(Ed *ed)
         return;
     f->seen_result_job = result->job_id;
     f->pending_job = 0U;
+    pick = f->pending_pick;
+    f->pending_pick = FUSS_PICK_NONE;
     if (result->state == YEW_GIT_OK) {
-        if (f->pending_view)
+        if (pick != FUSS_PICK_NONE)
+            (void)fuss_picker_result(ed, pick, result);
+        else if (f->pending_view)
             fuss_show_result(ed, result);
         else
             yew_msg(ed, YEW_MSG_INFO, "%s complete",
                     result->verb == NULL ? "git" : result->verb);
+        if (result->verb != NULL &&
+            strcmp(result->verb, "branch-delete") == 0 &&
+            f->prompt_action == FUSS_PROMPT_NONE) {
+            free(f->prompt_path);
+            f->prompt_path = NULL;
+        }
+    } else if (result->verb != NULL &&
+               strcmp(result->verb, "branch-delete") == 0 &&
+               f->prompt_path != NULL &&
+               f->prompt_action == FUSS_PROMPT_NONE) {
+        f->prompt_action = FUSS_PROMPT_BRANCH_DELETE;
+        yew_cmdline_open_input(ed, NULL, fuss_prompt_done, f);
+        if (ed->cmdline.active)
+            yew_msg(ed, YEW_MSG_WARN,
+                    "force-delete branch %s — type 'delete' to confirm",
+                    f->prompt_path);
+        else
+            fuss_prompt_clear(f);
     } else if (result->err != NULL && result->err_len != 0U) {
         err_len = result->err_len > (u64)INT_MAX ? (u64)INT_MAX :
                                                        result->err_len;
@@ -344,6 +389,18 @@ void yew_fuss_state_free(Ed *ed)
         return;
     f = ed->fuss;
     free(f->prompt_path);
+    {
+        u32 i;
+
+        for (i = 0U; i < f->picker_count; i++) {
+            free((char *)f->picker_items[i].label);
+            free((char *)f->picker_items[i].detail);
+            free(f->picker_values[i]);
+        }
+    }
+    free(f->picker_items);
+    free(f->picker_values);
+    free(f->picker_aux);
     if (f->walk != NULL)
         yew_walk_end(f->walk);
     yew_filelist_free(&f->files);
@@ -914,6 +971,141 @@ static CmdStatus fuss_spawn(Ed *ed, const char *verb_name,
     return YEW_CMD_OK;
 }
 
+static void fuss_picker_clear(FussMode *f)
+{
+    u32 i;
+
+    if (f == NULL)
+        return;
+    for (i = 0U; i < f->picker_count; i++) {
+        free((char *)f->picker_items[i].label);
+        free((char *)f->picker_items[i].detail);
+        free(f->picker_values[i]);
+    }
+    free(f->picker_items);
+    free(f->picker_values);
+    free(f->picker_aux);
+    f->picker_items = NULL;
+    f->picker_values = NULL;
+    f->picker_count = 0U;
+    f->picker_aux = NULL;
+    f->picker_action = FUSS_PICK_NONE;
+    f->picker_alt = false;
+}
+
+static bool fuss_picker_add(FussMode *f, const char *label, size_t label_len,
+                            const char *detail, size_t detail_len,
+                            const char *value, size_t value_len)
+{
+    PickItem *items;
+    char **values;
+    u32 at;
+
+    if (f == NULL || label == NULL || label_len == 0U || value == NULL ||
+        value_len == 0U || f->picker_count >= (u32)INT32_MAX)
+        return false;
+    at = f->picker_count;
+    items = yew_xreallocarray(f->picker_items, (size_t)at + 1U,
+                              sizeof(*items));
+    values = yew_xreallocarray(f->picker_values, (size_t)at + 1U,
+                               sizeof(*values));
+    f->picker_items = items;
+    f->picker_values = values;
+    (void)memset(&f->picker_items[at], 0, sizeof(f->picker_items[at]));
+    f->picker_items[at].label = fuss_dup_bytes(label, label_len);
+    if (detail != NULL && detail_len != 0U)
+        f->picker_items[at].detail = fuss_dup_bytes(detail, detail_len);
+    f->picker_items[at].payload = (i32)at;
+    f->picker_values[at] = fuss_dup_bytes(value, value_len);
+    if (f->picker_items[at].label == NULL || f->picker_values[at] == NULL) {
+        free((char *)f->picker_items[at].label);
+        free((char *)f->picker_items[at].detail);
+        free(f->picker_values[at]);
+        return false;
+    }
+    f->picker_count++;
+    return true;
+}
+
+static const PickItem *fuss_picker_items(void *ctx, u32 *n)
+{
+    FussMode *f = ctx;
+
+    if (n != NULL)
+        *n = f == NULL ? 0U : f->picker_count;
+    return f == NULL ? NULL : f->picker_items;
+}
+
+static CmdStatus fuss_pick_list(Ed *ed, FussPickAction action,
+                                const char *verb_name, char *const *argv)
+{
+    CmdStatus status;
+
+    if (ed == NULL || ed->fuss == NULL)
+        return YEW_CMD_ERR_STATE;
+    fuss_picker_clear(ed->fuss);
+    status = fuss_spawn(ed, verb_name, argv, false, NULL, 0U, false);
+    if (status == YEW_CMD_OK)
+        ed->fuss->pending_pick = action;
+    return status;
+}
+
+static CmdStatus fuss_pick_branches(Ed *ed, FussPickAction action)
+{
+    char *argv_all[] = {
+        (char *)"for-each-ref",
+        (char *)"--format=%(refname:short)%1f%(upstream:short)%1f%(committerdate:unix)%00",
+        (char *)"refs/heads", (char *)"refs/remotes", NULL
+    };
+    char *argv_local[] = {
+        (char *)"for-each-ref",
+        (char *)"--format=%(refname:short)%1f%(upstream:short)%1f%(committerdate:unix)%00",
+        (char *)"refs/heads", NULL
+    };
+
+    return fuss_pick_list(ed, action, "branch-list",
+                          action == FUSS_PICK_BRANCH_DELETE ? argv_local :
+                                                             argv_all);
+}
+
+static CmdStatus fuss_pick_commits(Ed *ed, FussPickAction action,
+                                   const char *branch)
+{
+    char *argv[12];
+    size_t at = 0U;
+
+    argv[at++] = (char *)"log";
+    if (branch != NULL) {
+        argv[at++] = (char *)branch;
+        argv[at++] = (char *)"--not";
+        argv[at++] = (char *)"HEAD";
+    }
+    argv[at++] = (char *)"-n";
+    argv[at++] = (char *)"200";
+    argv[at++] = (char *)"-z";
+    argv[at++] = (char *)"--date-order";
+    argv[at++] = (char *)"--pretty=format:%H%x1f%h%x1f%at%x1f%s";
+    argv[at] = NULL;
+    return fuss_pick_list(ed, action, "log", argv);
+}
+
+static CmdStatus fuss_pick_stashes(Ed *ed)
+{
+    char *argv[] = {
+        (char *)"stash", (char *)"list", (char *)"-z",
+        (char *)"--pretty=format:%gd%x1f%at%x1f%gs", NULL
+    };
+
+    return fuss_pick_list(ed, FUSS_PICK_STASH, "stash-pop", argv);
+}
+
+static CmdStatus fuss_pick_remotes(Ed *ed)
+{
+    char *argv[] = {(char *)"remote", (char *)"-v", NULL};
+
+    return fuss_pick_list(ed, FUSS_PICK_REMOTE, "remote-list", argv);
+}
+
 static CmdStatus fuss_path_verb(CmdCtx *cx, const char *verb_name,
                                 char *const *prefix, size_t prefix_n,
                                 bool view)
@@ -1156,15 +1348,39 @@ CmdStatus yew_fuss_commit_close(Ed *ed, Buffer *buffer, bool *handled)
 static CmdStatus fuss_rebase_sync(Ed *ed, const char *operation,
                                   const char *base)
 {
-    static const char *const env[] = {
-        "GIT_SEQUENCE_EDITOR=/proc/self/exe", "GIT_EDITOR=/proc/self/exe",
-        "GIT_PAGER=cat", "PAGER=cat", "LC_ALL=C", NULL
-    };
+    const char *self = yew_job_self_exe();
+    const char *env[6];
+    char *sequence_env;
+    char *editor_env;
+    size_t self_len;
     char *argv[7];
     YewJobSpec spec = {0};
     YewJobWait wait = {0};
     char error[192];
     size_t at = 0U;
+    bool ran;
+
+    if (self == NULL || self[0] == '\0') {
+        yew_msg(ed, YEW_MSG_ERROR,
+                "rebase handover failed: cannot resolve yew executable");
+        return YEW_CMD_ERR_IO;
+    }
+    self_len = fuss_cstr_len(self);
+    sequence_env = yew_xmalloc(sizeof("GIT_SEQUENCE_EDITOR=") + self_len);
+    editor_env = yew_xmalloc(sizeof("GIT_EDITOR=") + self_len);
+    (void)memcpy(sequence_env, "GIT_SEQUENCE_EDITOR=",
+                 sizeof("GIT_SEQUENCE_EDITOR=") - 1U);
+    (void)memcpy(sequence_env + sizeof("GIT_SEQUENCE_EDITOR=") - 1U,
+                 self, self_len + 1U);
+    (void)memcpy(editor_env, "GIT_EDITOR=", sizeof("GIT_EDITOR=") - 1U);
+    (void)memcpy(editor_env + sizeof("GIT_EDITOR=") - 1U, self,
+                 self_len + 1U);
+    env[0] = sequence_env;
+    env[1] = editor_env;
+    env[2] = "GIT_PAGER=cat";
+    env[3] = "PAGER=cat";
+    env[4] = "LC_ALL=C";
+    env[5] = NULL;
 
     argv[at++] = (char *)"git";
     argv[at++] = (char *)"--no-pager";
@@ -1178,7 +1394,10 @@ static CmdStatus fuss_rebase_sync(Ed *ed, const char *operation,
     spec.sink = YEW_SINK_DISCARD;
     spec.env_set = env;
     spec.inherit_tty = true;
-    if (!yew_job_run_sync(ed, &spec, &wait, error, sizeof(error))) {
+    ran = yew_job_run_sync(ed, &spec, &wait, error, sizeof(error));
+    free(sequence_env);
+    free(editor_env);
+    if (!ran) {
         yew_msg(ed, YEW_MSG_ERROR, "%s",
                 error[0] == '\0' ? "rebase handover failed" : error);
         return YEW_CMD_ERR_IO;
@@ -1212,95 +1431,42 @@ static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
         memchr(text, '\0', len) == NULL)
         value = fuss_dup_bytes((const char *)text, len);
     switch (action) {
-    case FUSS_PROMPT_BRANCH_SWITCH:
-        if (value != NULL) {
-            char *argv[] = {(char *)"switch", (char *)"--", value, NULL};
-            (void)fuss_spawn(ed, "switch", argv, false, NULL, 0U, false);
-        }
-        break;
     case FUSS_PROMPT_BRANCH_CREATE:
         if (value != NULL) {
-            char *argv[] = {
-                (char *)"switch", (char *)"-c", (char *)"--", value, NULL
-            };
-            (void)fuss_spawn(ed, "switch-create", argv, false, NULL, 0U,
-                             false);
+            if (value[0] == '-') {
+                yew_msg(ed, YEW_MSG_ERROR,
+                        "branch name must not begin with '-'");
+            } else {
+                char *argv[] = {
+                    (char *)"switch", (char *)"-c", value, NULL
+                };
+
+                (void)fuss_spawn(ed, "switch-create", argv, false, NULL,
+                                 0U, false);
+            }
         }
         break;
     case FUSS_PROMPT_BRANCH_DELETE:
-        if (value != NULL) {
+        if (fuss_text_is(text, len, "delete", sizeof("delete") - 1U) &&
+            f->prompt_path != NULL) {
             char *argv[] = {
-                (char *)"branch", (char *)"-d", (char *)"--", value, NULL
+                (char *)"branch", (char *)"-D", (char *)"--",
+                f->prompt_path, NULL
             };
             (void)fuss_spawn(ed, "branch-delete", argv, false, NULL, 0U,
                              false);
         }
         break;
-    case FUSS_PROMPT_MERGE:
-        if (value != NULL) {
-            char *argv[] = {
-                (char *)"merge", (char *)"--no-edit", (char *)"--", value,
-                NULL
-            };
-            (void)fuss_spawn(ed, "merge", argv, false, NULL, 0U, false);
-        }
-        break;
-    case FUSS_PROMPT_RESET:
-        if (value != NULL) {
-            const char *mode = "--mixed";
-            char *ref = value;
-
-            if (len > 5U && memcmp(value, "soft ", 5U) == 0) {
-                mode = "--soft";
-                ref += 5;
-            } else if (len > 6U && memcmp(value, "mixed ", 6U) == 0) {
-                ref += 6;
-            } else if (len > 5U && memcmp(value, "hard ", 5U) == 0) {
-                mode = "--hard";
-                ref += 5;
-            }
-            if (*ref != '\0') {
-                char *argv[] = {
-                    (char *)"reset", (char *)mode, (char *)"--", ref, NULL
-                };
-                (void)fuss_spawn(ed, "reset", argv, false, NULL, 0U,
-                                 false);
-            }
-        }
-        break;
-    case FUSS_PROMPT_REBASE:
-        if (value != NULL)
-            (void)fuss_rebase_sync(ed, "-i", value);
-        break;
-    case FUSS_PROMPT_CHERRY_PICK:
-        if (value != NULL) {
-            char *argv[] = {(char *)"cherry-pick", value, NULL};
-            (void)fuss_spawn(ed, "cherry-pick", argv, false, NULL, 0U,
-                             false);
-        }
-        break;
-    case FUSS_PROMPT_REVERT:
-        if (value != NULL) {
-            char *argv[] = {
-                (char *)"revert", (char *)"--no-edit", value, NULL
-            };
-            (void)fuss_spawn(ed, "revert", argv, false, NULL, 0U, false);
-        }
-        break;
     case FUSS_PROMPT_STASH_PUSH:
-        if (accepted) {
-            char *argv[] = {
-                (char *)"stash", (char *)"push", (char *)"-m", (char *)"-",
-                NULL
-            };
-            (void)fuss_spawn(ed, "stash-push", argv, false, text, (u64)len,
-                             false);
-        }
-        break;
-    case FUSS_PROMPT_STASH_POP:
         if (value != NULL) {
-            char *argv[] = {(char *)"stash", (char *)"pop", value, NULL};
-            (void)fuss_spawn(ed, "stash-pop", argv, false, NULL, 0U, false);
+            char *argv[] = {
+                (char *)"stash", (char *)"push", (char *)"-m", value, NULL
+            };
+
+            /* `git stash push` has no -F/stdin message form.  Direct argv
+             * preserves every non-NUL byte without a shell or formatting. */
+            (void)fuss_spawn(ed, "stash-push", argv, false, NULL, 0U,
+                             false);
         }
         break;
     case FUSS_PROMPT_TAG:
@@ -1439,6 +1605,302 @@ static CmdStatus fuss_prompt(CmdCtx *cx, FussPromptAction action,
     if (hint != NULL)
         yew_msg(cx->ed, YEW_MSG_WARN, "%s", hint);
     return YEW_CMD_OK;
+}
+
+static bool fuss_picker_action(Ed *ed, void *ctx, i32 payload,
+                               const Key *key)
+{
+    FussMode *f = ctx;
+
+    (void)payload;
+    if (ed == NULL || f == NULL || key == NULL ||
+        f->picker_action != FUSS_PICK_STASH)
+        return false;
+    if ((key->mods & YEW_MOD_CTRL) != 0U &&
+        (key->code == (u32)'v' || key->code == (u32)'V')) {
+        f->picker_alt = true;
+        (void)yew_picker_accept(ed);
+        return true;
+    }
+    return false;
+}
+
+static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
+{
+    FussMode *f = ctx;
+    FussPickAction action;
+    char *value;
+    char *aux;
+    bool alt;
+
+    (void)how;
+    if (ed == NULL || f == NULL || payload < 0 ||
+        (u32)payload >= f->picker_count)
+        return false;
+    action = f->picker_action;
+    value = fuss_dup_bytes(f->picker_values[payload],
+                           fuss_cstr_len(f->picker_values[payload]));
+    aux = f->picker_aux == NULL ? NULL :
+          fuss_dup_bytes(f->picker_aux, fuss_cstr_len(f->picker_aux));
+    alt = f->picker_alt;
+    fuss_picker_clear(f);
+    if (value == NULL) {
+        free(aux);
+        return false;
+    }
+    switch (action) {
+    case FUSS_PICK_BRANCH_SWITCH: {
+        char *argv[] = {(char *)"switch", (char *)"--", value, NULL};
+        (void)fuss_spawn(ed, "switch", argv, false, NULL, 0U, false);
+        break;
+    }
+    case FUSS_PICK_BRANCH_DELETE:
+        free(f->prompt_path);
+        f->prompt_path = fuss_dup_bytes(value, fuss_cstr_len(value));
+        if (f->prompt_path != NULL) {
+            char *argv[] = {
+                (char *)"branch", (char *)"-d", (char *)"--",
+                f->prompt_path, NULL
+            };
+            if (fuss_spawn(ed, "branch-delete", argv, false, NULL, 0U,
+                           false) != YEW_CMD_OK) {
+                free(f->prompt_path);
+                f->prompt_path = NULL;
+            }
+        }
+        break;
+    case FUSS_PICK_MERGE: {
+        char *argv[] = {
+            (char *)"merge", (char *)"--no-edit", (char *)"--", value, NULL
+        };
+        (void)fuss_spawn(ed, "merge", argv, false, NULL, 0U, false);
+        break;
+    }
+    case FUSS_PICK_RESET_COMMIT: {
+        PickerSpec spec = {0};
+
+        f->picker_aux = value;
+        value = NULL;
+        (void)fuss_picker_add(f, "soft", sizeof("soft") - 1U, NULL, 0U,
+                              "--soft", sizeof("--soft") - 1U);
+        (void)fuss_picker_add(f, "mixed", sizeof("mixed") - 1U, NULL, 0U,
+                              "--mixed", sizeof("--mixed") - 1U);
+        (void)fuss_picker_add(f, "hard", sizeof("hard") - 1U, NULL, 0U,
+                              "--hard", sizeof("--hard") - 1U);
+        f->picker_action = FUSS_PICK_RESET_MODE;
+        spec.title = "reset mode";
+        spec.items = fuss_picker_items;
+        spec.accept = fuss_picker_accept;
+        spec.ctx = f;
+        yew_picker_open(ed, &spec);
+        break;
+    }
+    case FUSS_PICK_RESET_MODE:
+        if (aux != NULL) {
+            char *argv[] = {(char *)"reset", value, aux, NULL};
+            (void)fuss_spawn(ed, "reset", argv, false, NULL, 0U, false);
+        }
+        break;
+    case FUSS_PICK_REBASE:
+        (void)fuss_rebase_sync(ed, "-i", value);
+        break;
+    case FUSS_PICK_CHERRY_BRANCH:
+        (void)fuss_pick_commits(ed, FUSS_PICK_CHERRY_COMMIT, value);
+        break;
+    case FUSS_PICK_CHERRY_COMMIT: {
+        char *argv[] = {(char *)"cherry-pick", value, NULL};
+        (void)fuss_spawn(ed, "cherry-pick", argv, false, NULL, 0U, false);
+        break;
+    }
+    case FUSS_PICK_REVERT: {
+        char *argv[] = {(char *)"revert", (char *)"--no-edit", value, NULL};
+        (void)fuss_spawn(ed, "revert", argv, false, NULL, 0U, false);
+        break;
+    }
+    case FUSS_PICK_STASH: {
+        char *argv[] = {
+            (char *)"stash", alt ? (char *)"apply" : (char *)"pop", value,
+            NULL
+        };
+        (void)fuss_spawn(ed, "stash-pop", argv, false, NULL, 0U, false);
+        break;
+    }
+    case FUSS_PICK_REMOTE:
+        if (aux != NULL) {
+            char *argv[] = {
+                (char *)"push", (char *)"-u", value, aux, NULL
+            };
+            (void)fuss_spawn(ed, "push", argv, false, NULL, 0U, false);
+        }
+        break;
+    case FUSS_PICK_NONE:
+        break;
+    }
+    free(value);
+    free(aux);
+    return true;
+}
+
+static void fuss_picker_open(Ed *ed, FussPickAction action,
+                             const char *title)
+{
+    FussMode *f = ed->fuss;
+    PickerSpec spec = {0};
+
+    if (f->picker_count == 0U) {
+        yew_msg(ed, YEW_MSG_WARN, "no %s available", title);
+        fuss_picker_clear(f);
+        return;
+    }
+    f->picker_action = action;
+    spec.title = title;
+    spec.items = fuss_picker_items;
+    spec.accept = fuss_picker_accept;
+    spec.action = action == FUSS_PICK_STASH ? fuss_picker_action : NULL;
+    spec.footer = action == FUSS_PICK_STASH ?
+                  "Enter pop · C-v apply · Esc cancel" : NULL;
+    spec.path_mode = false;
+    spec.ctx = f;
+    yew_picker_open(ed, &spec);
+}
+
+static bool fuss_parse_records(Ed *ed, FussMode *f, FussPickAction action,
+                               const u8 *out, size_t len)
+{
+    size_t off = 0U;
+    const GitSnapshot *snap = yew_git_snapshot(ed);
+
+    while (off < len) {
+        size_t end = off;
+        size_t at = 0U;
+        const char *fields[4] = {NULL, NULL, NULL, NULL};
+        size_t lens[4] = {0U, 0U, 0U, 0U};
+        u32 nfield = 0U;
+
+        while (off < len && (out[off] == (u8)'\n' ||
+                             out[off] == (u8)'\r'))
+            off++;
+        if (off == len)
+            break;
+        end = off;
+
+        while (end < len && out[end] != 0U)
+            end++;
+        while (at < end - off && nfield < YEW_ARRAY_LEN(fields)) {
+            size_t start = at;
+
+            while (at < end - off && out[off + at] != 0x1fU)
+                at++;
+            fields[nfield] = (const char *)out + off + start;
+            lens[nfield++] = at - start;
+            if (at < end - off)
+                at++;
+        }
+        if ((action == FUSS_PICK_BRANCH_SWITCH ||
+             action == FUSS_PICK_BRANCH_DELETE ||
+             action == FUSS_PICK_MERGE ||
+             action == FUSS_PICK_CHERRY_BRANCH) && nfield >= 1U) {
+            bool include = true;
+
+            if (action == FUSS_PICK_BRANCH_DELETE && snap != NULL &&
+                snap->branch != NULL &&
+                lens[0] == fuss_cstr_len(snap->branch) &&
+                memcmp(fields[0], snap->branch, lens[0]) == 0)
+                include = false;
+            if (include)
+                (void)fuss_picker_add(f, fields[0], lens[0],
+                                      nfield > 1U ? fields[1] : NULL,
+                                      nfield > 1U ? lens[1] : 0U,
+                                      fields[0], lens[0]);
+        } else if ((action == FUSS_PICK_RESET_COMMIT ||
+                    action == FUSS_PICK_REBASE ||
+                    action == FUSS_PICK_CHERRY_COMMIT ||
+                    action == FUSS_PICK_REVERT) && nfield >= 2U) {
+            (void)fuss_picker_add(f, fields[1], lens[1],
+                                  nfield > 3U ? fields[3] : NULL,
+                                  nfield > 3U ? lens[3] : 0U,
+                                  fields[0], lens[0]);
+        } else if (action == FUSS_PICK_STASH && nfield >= 1U) {
+            (void)fuss_picker_add(f, fields[0], lens[0],
+                                  nfield > 2U ? fields[2] : NULL,
+                                  nfield > 2U ? lens[2] : 0U,
+                                  fields[0], lens[0]);
+        }
+        off = end < len ? end + 1U : end;
+    }
+    return f->picker_count != 0U;
+}
+
+static bool fuss_parse_remotes(FussMode *f, const u8 *out, size_t len)
+{
+    size_t off = 0U;
+
+    while (off < len) {
+        size_t end = off;
+        size_t name_end;
+        u32 i;
+        bool seen = false;
+
+        while (end < len && out[end] != (u8)'\n' && out[end] != 0U)
+            end++;
+        name_end = off;
+        while (name_end < end && out[name_end] != (u8)'\t' &&
+               out[name_end] != (u8)' ')
+            name_end++;
+        for (i = 0U; i < f->picker_count; i++) {
+            size_t old_len = fuss_cstr_len(f->picker_values[i]);
+
+            if (old_len == name_end - off &&
+                memcmp(f->picker_values[i], out + off, old_len) == 0)
+                seen = true;
+        }
+        if (!seen && name_end > off)
+            (void)fuss_picker_add(f, (const char *)out + off, name_end - off,
+                                  NULL, 0U, (const char *)out + off,
+                                  name_end - off);
+        off = end < len ? end + 1U : end;
+    }
+    return f->picker_count != 0U;
+}
+
+static bool fuss_picker_result(Ed *ed, FussPickAction action,
+                               const GitResult *result)
+{
+    FussMode *f;
+    size_t len;
+    const GitSnapshot *snap;
+
+    if (ed == NULL || ed->fuss == NULL || result == NULL ||
+        result->out_len > (u64)SIZE_MAX)
+        return false;
+    f = ed->fuss;
+    len = (size_t)result->out_len;
+    if (action == FUSS_PICK_REMOTE)
+        (void)fuss_parse_remotes(f, result->out, len);
+    else
+        (void)fuss_parse_records(ed, f, action, result->out, len);
+    if (action == FUSS_PICK_REMOTE) {
+        snap = yew_git_snapshot(ed);
+        if (snap != NULL && snap->branch != NULL)
+            f->picker_aux = fuss_dup_bytes(snap->branch,
+                                           fuss_cstr_len(snap->branch));
+    }
+    switch (action) {
+    case FUSS_PICK_BRANCH_SWITCH: fuss_picker_open(ed, action, "branch"); break;
+    case FUSS_PICK_BRANCH_DELETE: fuss_picker_open(ed, action, "branch"); break;
+    case FUSS_PICK_MERGE: fuss_picker_open(ed, action, "branch"); break;
+    case FUSS_PICK_RESET_COMMIT: fuss_picker_open(ed, action, "commit"); break;
+    case FUSS_PICK_REBASE: fuss_picker_open(ed, action, "rebase base"); break;
+    case FUSS_PICK_CHERRY_BRANCH: fuss_picker_open(ed, action, "branch"); break;
+    case FUSS_PICK_CHERRY_COMMIT: fuss_picker_open(ed, action, "commit"); break;
+    case FUSS_PICK_REVERT: fuss_picker_open(ed, action, "commit"); break;
+    case FUSS_PICK_STASH: fuss_picker_open(ed, action, "stash"); break;
+    case FUSS_PICK_REMOTE: fuss_picker_open(ed, action, "remote"); break;
+    case FUSS_PICK_RESET_MODE:
+    case FUSS_PICK_NONE:
+        return false;
+    }
+    return true;
 }
 
 static CmdStatus fuss_nav(CmdCtx *cx, i32 kind)
@@ -1612,9 +2074,15 @@ CmdStatus yew_fuss_cmd_commit_amend(CmdCtx *cx)
 CmdStatus yew_fuss_cmd_push(CmdCtx *cx)
 {
     char *argv[] = {(char *)"push", NULL};
-    return fuss_require(cx, NULL) == YEW_CMD_OK ?
-           fuss_spawn(cx->ed, "push", argv, false, NULL, 0U, false) :
-           YEW_CMD_ERR_STATE;
+    const GitSnapshot *snap;
+
+    if (fuss_require(cx, NULL) != YEW_CMD_OK)
+        return YEW_CMD_ERR_STATE;
+    snap = yew_git_snapshot(cx->ed);
+    if (snap != NULL && snap->branch != NULL &&
+        (snap->upstream == NULL || snap->upstream[0] == '\0'))
+        return fuss_pick_remotes(cx->ed);
+    return fuss_spawn(cx->ed, "push", argv, false, NULL, 0U, false);
 }
 
 CmdStatus yew_fuss_cmd_push_force(CmdCtx *cx)
@@ -1724,8 +2192,23 @@ CmdStatus yew_fuss_cmd_view(CmdCtx *cx) { return fuss_open_path(cx, false); }
 
 CmdStatus yew_fuss_cmd_branch_switch(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_BRANCH_SWITCH, NULL, NULL,
-                       "branch to switch to");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *name = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        CmdStatus status;
+
+        if (name == NULL)
+            return YEW_CMD_ERR_ARG;
+        {
+            char *argv[] = {(char *)"switch", (char *)"--", name, NULL};
+            status = fuss_spawn(cx->ed, "switch", argv, false, NULL, 0U,
+                                false);
+        }
+        free(name);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_branches(cx->ed, FUSS_PICK_BRANCH_SWITCH) :
+           YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_branch_create(CmdCtx *cx)
@@ -1736,10 +2219,14 @@ CmdStatus yew_fuss_cmd_branch_create(CmdCtx *cx)
 
         if (name == NULL)
             return YEW_CMD_ERR_ARG;
+        if (name[0] == '-') {
+            free(name);
+            yew_msg(cx->ed, YEW_MSG_ERROR,
+                    "branch name must not begin with '-'");
+            return YEW_CMD_ERR_ARG;
+        }
         {
-            char *argv[] = {
-                (char *)"switch", (char *)"-c", (char *)"--", name, NULL
-            };
+            char *argv[] = {(char *)"switch", (char *)"-c", name, NULL};
             status = fuss_spawn(cx->ed, "switch-create", argv, false, NULL,
                                 0U, false);
         }
@@ -1752,26 +2239,101 @@ CmdStatus yew_fuss_cmd_branch_create(CmdCtx *cx)
 
 CmdStatus yew_fuss_cmd_branch_delete(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_BRANCH_DELETE, NULL, NULL,
-                       "local branch to delete");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *name = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        CmdStatus status;
+
+        if (name == NULL)
+            return YEW_CMD_ERR_ARG;
+        {
+            char *argv[] = {
+                (char *)"branch", (char *)"-d", (char *)"--", name, NULL
+            };
+            status = fuss_spawn(cx->ed, "branch-delete", argv, false, NULL,
+                                0U, false);
+        }
+        free(name);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_branches(cx->ed, FUSS_PICK_BRANCH_DELETE) :
+           YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_merge(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_MERGE, NULL, NULL,
-                       "branch to merge");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *name = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        CmdStatus status;
+
+        if (name == NULL)
+            return YEW_CMD_ERR_ARG;
+        {
+            char *argv[] = {
+                (char *)"merge", (char *)"--no-edit", (char *)"--", name,
+                NULL
+            };
+            status = fuss_spawn(cx->ed, "merge", argv, false, NULL, 0U,
+                                false);
+        }
+        free(name);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_branches(cx->ed, FUSS_PICK_MERGE) : YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_reset(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_RESET, NULL, NULL,
-                       "reset target: [soft|mixed|hard] <commit>");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *value = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        const char *mode = "--mixed";
+        char *ref = value;
+        CmdStatus status;
+
+        if (value == NULL)
+            return YEW_CMD_ERR_ARG;
+        if (cx->sarg_len > 5U && memcmp(value, "soft ", 5U) == 0) {
+            mode = "--soft";
+            ref += 5;
+        } else if (cx->sarg_len > 6U && memcmp(value, "mixed ", 6U) == 0) {
+            ref += 6;
+        } else if (cx->sarg_len > 5U && memcmp(value, "hard ", 5U) == 0) {
+            mode = "--hard";
+            ref += 5;
+        }
+        if (*ref == '\0') {
+            free(value);
+            return YEW_CMD_ERR_ARG;
+        }
+        {
+            char *argv[] = {(char *)"reset", (char *)mode, ref, NULL};
+            status = fuss_spawn(cx->ed, "reset", argv, false, NULL, 0U,
+                                false);
+        }
+        free(value);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_commits(cx->ed, FUSS_PICK_RESET_COMMIT, NULL) :
+           YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_rebase_interactive(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_REBASE, NULL, NULL,
-                       "interactive rebase base commit");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *base = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        CmdStatus status;
+
+        if (base == NULL)
+            return YEW_CMD_ERR_ARG;
+        status = fuss_rebase_sync(cx->ed, "-i", base);
+        free(base);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_commits(cx->ed, FUSS_PICK_REBASE, NULL) :
+           YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_rebase_continue(CmdCtx *cx)
@@ -1789,26 +2351,71 @@ CmdStatus yew_fuss_cmd_rebase_abort(CmdCtx *cx)
 
 CmdStatus yew_fuss_cmd_cherry_pick(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_CHERRY_PICK, NULL, NULL,
-                       "commit to cherry-pick");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *commit = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        CmdStatus status;
+
+        if (commit == NULL)
+            return YEW_CMD_ERR_ARG;
+        {
+            char *argv[] = {(char *)"cherry-pick", commit, NULL};
+            status = fuss_spawn(cx->ed, "cherry-pick", argv, false, NULL,
+                                0U, false);
+        }
+        free(commit);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_branches(cx->ed, FUSS_PICK_CHERRY_BRANCH) :
+           YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_revert(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_REVERT, NULL, NULL,
-                       "commit to revert");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *commit = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        CmdStatus status;
+
+        if (commit == NULL)
+            return YEW_CMD_ERR_ARG;
+        {
+            char *argv[] = {
+                (char *)"revert", (char *)"--no-edit", commit, NULL
+            };
+            status = fuss_spawn(cx->ed, "revert", argv, false, NULL, 0U,
+                                false);
+        }
+        free(commit);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_commits(cx->ed, FUSS_PICK_REVERT, NULL) :
+           YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_stash_push(CmdCtx *cx)
 {
     if (cx != NULL && cx->sarg != NULL) {
-        char *argv[] = {
-            (char *)"stash", (char *)"push", (char *)"-m", (char *)"-",
-            NULL
-        };
+        char *message;
+        CmdStatus status;
 
-        return fuss_spawn(cx->ed, "stash-push", argv, false,
-                          (const u8 *)cx->sarg, cx->sarg_len, false);
+        if (cx->sarg_len == 0U ||
+            memchr(cx->sarg, '\0', cx->sarg_len) != NULL)
+            return YEW_CMD_ERR_ARG;
+        message = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        if (message == NULL)
+            return YEW_CMD_ERR_ARG;
+        {
+            char *argv[] = {
+                (char *)"stash", (char *)"push", (char *)"-m", message,
+                NULL
+            };
+
+            status = fuss_spawn(cx->ed, "stash-push", argv, false, NULL,
+                                0U, false);
+        }
+        free(message);
+        return status;
     }
     return fuss_prompt(cx, FUSS_PROMPT_STASH_PUSH, NULL, NULL,
                        "stash message");
@@ -1816,8 +2423,22 @@ CmdStatus yew_fuss_cmd_stash_push(CmdCtx *cx)
 
 CmdStatus yew_fuss_cmd_stash_pop(CmdCtx *cx)
 {
-    return fuss_prompt(cx, FUSS_PROMPT_STASH_POP, "stash@{0}", NULL,
-                       "stash reference to pop");
+    if (cx != NULL && cx->sarg != NULL && cx->sarg_len != 0U) {
+        char *ref = fuss_dup_bytes(cx->sarg, cx->sarg_len);
+        CmdStatus status;
+
+        if (ref == NULL)
+            return YEW_CMD_ERR_ARG;
+        {
+            char *argv[] = {(char *)"stash", (char *)"pop", ref, NULL};
+            status = fuss_spawn(cx->ed, "stash-pop", argv, false, NULL, 0U,
+                                false);
+        }
+        free(ref);
+        return status;
+    }
+    return fuss_require(cx, NULL) == YEW_CMD_OK ?
+           fuss_pick_stashes(cx->ed) : YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_tag(CmdCtx *cx)

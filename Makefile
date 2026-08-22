@@ -574,11 +574,12 @@ endif
 ifneq ($(filter fuss,$(MODULES)),)
 FUSS_FUZZ_TARGET := fuzz-porcelain fuzz-fuss
 FUSS_PERF_TARGET := perf-git-status perf-fuss
-FUSS_SCRIPT_TARGET := test-git-script
+FUSS_SCRIPT_TARGET := test-git-script test-fuss-commands
 endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 GIT_SCRIPT_OBJ := $(BUILD)/tests/script/git_layer.o
+FUSS_COMMANDS_OBJ := $(BUILD)/tests/script/fuss_commands.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 ROUNDTRIP_OBJ := $(BUILD)/tests/roundtrip/gen.o \
                  $(BUILD)/tests/roundtrip/runner.o
@@ -622,7 +623,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_STATE_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
                 $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(SCRIPT_RUNNER_OBJ) \
-                $(GIT_SCRIPT_OBJ) \
+                $(GIT_SCRIPT_OBJ) $(FUSS_COMMANDS_OBJ) \
                 $(ROUNDTRIP_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
@@ -650,6 +651,7 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all check test clean install dirs FORCE test-script test-git-script \
+        test-fuss-commands \
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
@@ -932,6 +934,10 @@ $(BUILD)/script_runner: $(SCRIPT_RUNNER_OBJ)
 $(BUILD)/git_script: $(PERF_CORE_OBJ) $(GIT_SCRIPT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(GIT_SCRIPT_OBJ) $(LDLIBS)
+
+$(BUILD)/fuss_commands: $(PERF_CORE_OBJ) $(FUSS_COMMANDS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(FUSS_COMMANDS_OBJ) $(LDLIBS)
 
 $(BUILD)/roundtrip_runner: $(ROUNDTRIP_LINK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ROUNDTRIP_LINK_OBJ) $(LDLIBS)
@@ -1710,6 +1716,16 @@ test-git-script: $(BUILD)/git_script tests/fixtures/git/mkrepo.sh \
 		LC_ALL=C $(BUILD)/git_script "$$tmp/repo"; \
 	fi
 
+test-fuss-commands: $(BUILD)/fuss_commands
+	@if ! command -v git >/dev/null 2>&1; then \
+		echo 'HARNESS_SKIP fuss_commands: git not found'; \
+	else \
+		set -e; \
+		tmp=$$(mktemp -d); \
+		trap 'find "$$tmp" -depth -delete' EXIT HUP INT TERM; \
+		LC_ALL=C $(BUILD)/fuss_commands "$$tmp"; \
+	fi
+
 test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 	@set -e; \
 	tmp=$$(mktemp -d); \
@@ -1843,6 +1859,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
          $(FLETCH_RUN_OBJ:.o=.d) $(SCRIPT_RUNNER_OBJ:.o=.d) \
+         $(FUSS_COMMANDS_OBJ:.o=.d) \
          $(ROUNDTRIP_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_SHADOW_OBJ:.o=.d) \
