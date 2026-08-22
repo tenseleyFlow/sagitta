@@ -6940,13 +6940,10 @@ static void s52_wait_screen(PtyCtx *c, const char *text)
               "Sprint 52 expected screen state did not appear");
 }
 
-static bool s52_open(PtyCtx *c, VtCell *original_cells)
+static bool s52_spawn_editor(PtyCtx *c, const char *file)
 {
-    char repo[PATH_MAX];
     char config[PATH_MAX];
 
-    if (!s52_fixture(c, repo, sizeof(repo)))
-        return false;
     if (strstr(c->test->name, "_ascii") != NULL) {
         static const char ascii_source[] =
             "set({ \"git.ascii_glyphs\": true })\n"
@@ -6961,10 +6958,20 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
             return false;
         }
         ptc_spawn(c, ptc_yew_bin(c), "--config", config,
-                  "--no-workspace-config", "src/main.c", NULL);
+                  "--no-workspace-config", file, NULL);
     } else {
-        ptc_spawn(c, ptc_yew_bin(c), "src/main.c", NULL);
+        ptc_spawn(c, ptc_yew_bin(c), file, NULL);
     }
+    return true;
+}
+
+static bool s52_open(PtyCtx *c, VtCell *original_cells)
+{
+    char repo[PATH_MAX];
+
+    if (!s52_fixture(c, repo, sizeof(repo)) ||
+        !s52_spawn_editor(c, "src/main.c"))
+        return false;
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
     if (original_cells != NULL)
@@ -7135,17 +7142,20 @@ static void case_s52_fuss_discard_confirm(PtyCtx *c)
 static void case_s52_fuss_status_rows(PtyCtx *c)
 {
     char repo[PATH_MAX];
+    bool ascii = strstr(c->test->name, "_ascii") != NULL;
 
-    if (!s52_status_fixture(c, repo, sizeof(repo)))
+    if (!s52_status_fixture(c, repo, sizeof(repo)) ||
+        !s52_spawn_editor(c, "conflict.c"))
         return;
-    ptc_spawn(c, ptc_yew_bin(c), "conflict.c", NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
     ptc_keys(c, "f");
     ptc_settle(c, 1000);
     ptc_check(c, s52_screen_contains(&c->vt, "conflict.c !"),
               "FUSS tree omitted the conflicted row marker");
-    ptc_check(c, s52_screen_contains(&c->vt, "incoming.c ↓"),
+    ptc_check(c, s52_screen_contains(&c->vt,
+                                     ascii ? "incoming.c v" :
+                                             "incoming.c ↓"),
               "FUSS tree omitted the incoming row marker");
     ptc_check(c, s52_screen_contains(&c->vt, "↑1 ↓1"),
               "FUSS branch header omitted divergence counts");
@@ -7182,6 +7192,8 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_discard_confirmation, modern, 24U, 120U,
       case_s52_fuss_discard_confirm),
     C(fuss_status_conflict_ignored_incoming, modern, 24U, 100U,
+      case_s52_fuss_status_rows),
+    C(fuss_status_conflict_ignored_incoming_ascii, modern, 24U, 100U,
       case_s52_fuss_status_rows),
     C(fuss_leave_q, modern, 24U, 80U, case_s52_fuss),
     C(fuss_leave_esc, modern, 24U, 80U, case_s52_fuss),
