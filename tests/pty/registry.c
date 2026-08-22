@@ -6884,7 +6884,8 @@ static bool s52_status_fixture(PtyCtx *c, char *repo, size_t repo_cap)
     };
     char remote[PATH_MAX];
     char peer[PATH_MAX];
-    const char *init_bare[] = {"git", "init", "-q", "--bare", remote, NULL};
+    const char *init_bare[] = {"git", "init", "-q", "--bare", "-b",
+                               "trunk", remote, NULL};
     const char *add_remote[] = {"git", "remote", "add", "origin", remote,
                                 NULL};
     const char *clone[] = {"git", "clone", "-q", remote, peer, NULL};
