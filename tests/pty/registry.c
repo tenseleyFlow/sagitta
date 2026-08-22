@@ -6887,6 +6887,10 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
                          sizeof(*original_cells));
     ptc_keys(c, "f");
     s52_wait_screen(c, "both.c");
+    if (strstr(c->test->name, "_ascii") != NULL) {
+        s52_wait_screen(c, "<> tree");
+        c->vt.sync_pairs_unstable = true;
+    }
     return !c->failed;
 }
 
