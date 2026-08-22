@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "edit/ed.h"
 #include "edit/job.h"
@@ -49,6 +48,9 @@ struct GitEditorState {
     size_t len;
     size_t cap;
     u32 next_scroll_link;
+    i64 clock_mono_ms;
+    i64 clock_wall_secs;
+    bool clock_anchored;
     bool warned_dirty_stage;
 };
 
@@ -237,6 +239,57 @@ static void diff_intraline_spans(Win *left, Win *right,
     }
     bytebuf_free(&lb);
     bytebuf_free(&rb);
+}
+
+static YewGitDiffRowStyle diff_row_style(HunkKind kind, i32 source_row)
+{
+    if (source_row == YEW_DIFF_FILLER_ROW)
+        return YEW_GIT_DIFF_ROW_FILLER;
+    switch (kind) {
+    case YEW_HUNK_ADD: return YEW_GIT_DIFF_ROW_ADD;
+    case YEW_HUNK_DEL: return YEW_GIT_DIFF_ROW_DEL;
+    case YEW_HUNK_MOD: return YEW_GIT_DIFF_ROW_MOD;
+    }
+    return YEW_GIT_DIFF_ROW_NONE;
+}
+
+static void diff_row_styles(Win *left, Win *right, const DiffRowMap *map,
+                            const HunkList *hunks)
+{
+    size_t display_at = 0U;
+    u32 base_at = 0U;
+    size_t h;
+
+    for (h = 0U; h < hunks->h.len; h++) {
+        const GitHunk *gh = &hunks->h.data[h];
+        u64 unchanged = gh->base_lo.v - base_at;
+        u64 changed = gh->base_n.v > gh->buf_n.v ? gh->base_n.v :
+                                                       gh->buf_n.v;
+        u64 i;
+
+        for (i = 0U; i < unchanged; i++, display_at++) {
+            YewGitDiffRowStyleVec_push(&left->git_diff_rows,
+                                       YEW_GIT_DIFF_ROW_NONE);
+            YewGitDiffRowStyleVec_push(&right->git_diff_rows,
+                                       YEW_GIT_DIFF_ROW_NONE);
+        }
+        for (i = 0U; i < changed; i++, display_at++) {
+            YewGitDiffRowStyleVec_push(
+                &left->git_diff_rows,
+                diff_row_style(gh->kind, map->left.data[display_at]));
+            YewGitDiffRowStyleVec_push(
+                &right->git_diff_rows,
+                diff_row_style(gh->kind, map->right.data[display_at]));
+        }
+        base_at = (u32)(gh->base_lo.v + gh->base_n.v);
+    }
+    while (display_at < map->left.len) {
+        YewGitDiffRowStyleVec_push(&left->git_diff_rows,
+                                   YEW_GIT_DIFF_ROW_NONE);
+        YewGitDiffRowStyleVec_push(&right->git_diff_rows,
+                                   YEW_GIT_DIFF_ROW_NONE);
+        display_at++;
+    }
 }
 
 static const char *repo_path(const Ed *ed, const Buffer *buf)
@@ -553,6 +606,33 @@ void yew_git_editor_state_free(Ed *ed)
     free(ed->git_editor->v);
     free(ed->git_editor);
     ed->git_editor = NULL;
+}
+
+void yew_git_editor_clock_anchor(Ed *ed, i64 monotonic_ms, i64 wall_secs)
+{
+    if (ed == NULL || ed->git_editor == NULL || monotonic_ms < 0 ||
+        wall_secs < 0)
+        return;
+    ed->git_editor->clock_mono_ms = monotonic_ms;
+    ed->git_editor->clock_wall_secs = wall_secs;
+    ed->git_editor->clock_anchored = true;
+}
+
+i64 yew_git_editor_wall_now(const Ed *ed)
+{
+    const GitEditorState *state;
+    i64 elapsed_secs;
+
+    if (ed == NULL || ed->git_editor == NULL)
+        return 0;
+    state = ed->git_editor;
+    if (!state->clock_anchored)
+        return 0;
+    elapsed_secs = ed->now_ms <= state->clock_mono_ms ? 0 :
+                   (ed->now_ms - state->clock_mono_ms) / 1000;
+    if (elapsed_secs > INT64_MAX - state->clock_wall_secs)
+        return INT64_MAX;
+    return state->clock_wall_secs + elapsed_secs;
 }
 
 void yew_git_editor_prepare(Ed *ed, Win *w)
@@ -989,7 +1069,7 @@ void yew_git_blame_draw(Ed *ed, Win *w, u16 lo, u16 hi)
 
     if (ed == NULL || w == NULL || !w->git_blame)
         return;
-    wall_now = (i64)time(NULL);
+    wall_now = yew_git_editor_wall_now(ed);
     if (hi > w->rect.h)
         hi = w->rect.h;
     for (row = lo; row < hi; row++) {
@@ -1100,6 +1180,7 @@ CmdStatus yew_git_cmd_diff_view(CmdCtx *cx)
     yew_ed_win_set_buffer(cx->ed, right_leaf->win, right);
     split->a->win->git_diff_intra_add = false;
     right_leaf->win->git_diff_intra_add = true;
+    diff_row_styles(split->a->win, right_leaf->win, &map, &state->hunks);
     diff_intraline_spans(split->a->win, right_leaf->win, &map,
                          &state->hunks);
     split->a->win->scroll_link = cx->ed->git_editor->next_scroll_link;

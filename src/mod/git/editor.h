@@ -10,6 +10,8 @@ typedef struct BlameLine BlameLine;
 
 void yew_git_editor_state_init(Ed *ed);
 void yew_git_editor_state_free(Ed *ed);
+void yew_git_editor_clock_anchor(Ed *ed, i64 monotonic_ms, i64 wall_secs);
+i64 yew_git_editor_wall_now(const Ed *ed);
 void yew_git_editor_tick(Ed *ed, i64 now_ms);
 i64 yew_git_editor_deadline(const Ed *ed, i64 now_ms);
 void yew_git_editor_prepare(Ed *ed, Win *w);

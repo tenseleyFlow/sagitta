@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "ui/ctxmenu.h"
@@ -221,6 +222,7 @@ static void ed_buffer_free(Ed *ed)
     yew_overlay_free(&ed->single_win.overlay);
     yew_overlay_free(&ed->single_win.lsp_highlight.read);
     yew_overlay_free(&ed->single_win.lsp_highlight.write);
+    YewGitDiffRowStyleVec_free(&ed->single_win.git_diff_rows);
     SpanVec_free(&ed->single_win.git_diff_intra);
     yew_compl_free(&ed->single_win.compl);
     yew_panel_close(ed, &ed->single_win.panel);
@@ -547,6 +549,7 @@ bool yew_ed_show_buffer(Ed *ed, Buffer *b)
     ed->win->buf = b;
     ed->win->git_sign_gen = 0U;
     ed->win->git_sign_buf = 0U;
+    YewGitDiffRowStyleVec_free(&ed->win->git_diff_rows);
     SpanVec_free(&ed->win->git_diff_intra);
     yew_vp_init(ed->win);
     yew_reg_bind_context(&ed->regs, b->undo, &b->meta);
@@ -1019,6 +1022,7 @@ void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
     w->buf = b;
     w->git_sign_gen = 0U;
     w->git_sign_buf = 0U;
+    YewGitDiffRowStyleVec_free(&w->git_diff_rows);
     SpanVec_free(&w->git_diff_intra);
     yew_vp_init(w);
 }
@@ -1034,6 +1038,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
     yew_overlay_free(&w->overlay);
     yew_overlay_free(&w->lsp_highlight.read);
     yew_overlay_free(&w->lsp_highlight.write);
+    YewGitDiffRowStyleVec_free(&w->git_diff_rows);
     SpanVec_free(&w->git_diff_intra);
     if (w->compl.open)
         yew_compl_close_result(ed, w, false);
@@ -2298,10 +2303,14 @@ static int ed_driver_inner(const char *path, const YewEdStartup *startup)
     Ed ed;
     YewLoadErr load = YEW_LOAD_OK;
     int result;
+    i64 wall_now;
     u16 rows;
     u16 cols;
 
     yew_ed_init(&ed);
+    wall_now = (i64)time(NULL);
+    if (wall_now >= 0)
+        yew_git_editor_clock_anchor(&ed, yew_now_ms(), wall_now);
     yew_config_init(&ed, startup);
     errno = 0;
     if (!yew_tty_open(&ed.tty)) {

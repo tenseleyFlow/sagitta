@@ -36,6 +36,16 @@ typedef struct LspHighlightState {
     bool cursor_valid;
 } LspHighlightState;
 
+typedef enum YewGitDiffRowStyle {
+    YEW_GIT_DIFF_ROW_NONE,
+    YEW_GIT_DIFF_ROW_ADD,
+    YEW_GIT_DIFF_ROW_DEL,
+    YEW_GIT_DIFF_ROW_MOD,
+    YEW_GIT_DIFF_ROW_FILLER
+} YewGitDiffRowStyle;
+
+VEC_DECL(YewGitDiffRowStyleVec, YewGitDiffRowStyle);
+
 typedef struct Win {
     /*
      * Sprint 34: stable for this window's lifetime and never reused.
@@ -94,6 +104,7 @@ typedef struct Win {
     u32 scroll_link;
     u64 git_sign_gen;
     u32 git_sign_buf;
+    YewGitDiffRowStyleVec git_diff_rows;
     SpanVec git_diff_intra;
     bool git_diff_intra_add;
     bool git_blame;

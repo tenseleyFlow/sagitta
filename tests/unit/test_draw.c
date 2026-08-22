@@ -5,6 +5,7 @@
 #include "edit/ed.h"
 #include "edit/sel_actions.h"
 #include "edit/select.h"
+#include "edit/theme_cmds.h"
 #include "ui/draw.h"
 #include "ui/viewport.h"
 
@@ -54,6 +55,67 @@ static size_t draw_count_bytes(const Bytebuf *out, const char *needle)
             count++;
     }
     return count;
+}
+
+void test_draw_git_diff_rows_distinguish_fillers_and_preserve_intraline(void)
+{
+    static const u8 text[] = "a\n~\n~\nx\n";
+    Ed ed;
+    const ThemeEnt *add;
+    const ThemeEnt *mod;
+    const ThemeEnt *filler;
+    const ThemeEnt *intra;
+    Span changed = {0U, 1U};
+    const Cell *row;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_undo_free(ed.buffer.undo);
+    yew_textbuf_free(ed.buffer.tb);
+    ed.buffer.tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
+    ed.buffer.undo = yew_undo_new(ed.buffer.tb);
+    ed.win->buf = &ed.buffer;
+    ed.win->rect = (Rect){0U, 0U, 8U, 4U};
+    ed.win->vp.rows = 4U;
+    ed.win->vp.cols = 8U;
+    ed.win->gutter_width = 0U;
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 4U, 8U));
+    ed.grid_ready = true;
+    YewGitDiffRowStyleVec_push(&ed.win->git_diff_rows,
+                               YEW_GIT_DIFF_ROW_ADD);
+    YewGitDiffRowStyleVec_push(&ed.win->git_diff_rows,
+                               YEW_GIT_DIFF_ROW_MOD);
+    YewGitDiffRowStyleVec_push(&ed.win->git_diff_rows,
+                               YEW_GIT_DIFF_ROW_FILLER);
+    YewGitDiffRowStyleVec_push(&ed.win->git_diff_rows,
+                               YEW_GIT_DIFF_ROW_NONE);
+    SpanVec_push(&ed.win->git_diff_intra, changed);
+    ed.win->git_diff_intra_add = true;
+
+    yew_draw_document_rows(&ed, ed.win, 0U, 4U);
+    add = yew_theme_ui_tab(&ed, "git.diff.add");
+    mod = yew_theme_ui_tab(&ed, "git.diff.mod");
+    filler = yew_theme_ui_tab(&ed, "git.diff.filler");
+    intra = yew_theme_ui_tab(&ed, "git.diff.intra.add");
+    YEW_ASSERT_NOT_NULL(add);
+    YEW_ASSERT_NOT_NULL(mod);
+    YEW_ASSERT_NOT_NULL(filler);
+    YEW_ASSERT_NOT_NULL(intra);
+
+    row = &ed.grid.back[0U];
+    YEW_ASSERT_EQ_MEM(&row[0U].bg, &intra->bg, sizeof(row[0U].bg));
+    YEW_ASSERT_EQ_MEM(&row[1U].bg, &add->bg, sizeof(row[1U].bg));
+    row = &ed.grid.back[ed.grid.cols];
+    YEW_ASSERT_EQ_U64(row[0U].utf8[0], (u8)'~');
+    YEW_ASSERT_EQ_MEM(&row[0U].bg, &mod->bg, sizeof(row[0U].bg));
+    row = &ed.grid.back[2U * ed.grid.cols];
+    YEW_ASSERT_EQ_U64(row[0U].utf8[0], (u8)'~');
+    YEW_ASSERT_EQ_MEM(&row[0U].fg, &filler->fg, sizeof(row[0U].fg));
+    YEW_ASSERT((row[0U].attrs & filler->attrs) == filler->attrs);
+    row = &ed.grid.back[3U * ed.grid.cols];
+    YEW_ASSERT(memcmp(&row[0U].bg, &mod->bg, sizeof(row[0U].bg)) != 0);
+
+    yew_ed_free(&ed);
 }
 
 void test_draw_selection_then_secondary_cursor_preserves_glyphs(void)

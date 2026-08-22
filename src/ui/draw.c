@@ -474,6 +474,45 @@ static void draw_git_diff_intra_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
 }
 
+static const char *git_diff_row_role(YewGitDiffRowStyle row_style)
+{
+    switch (row_style) {
+    case YEW_GIT_DIFF_ROW_ADD: return "git.diff.add";
+    case YEW_GIT_DIFF_ROW_DEL: return "git.diff.del";
+    case YEW_GIT_DIFF_ROW_MOD: return "git.diff.mod";
+    case YEW_GIT_DIFF_ROW_FILLER: return "git.diff.filler";
+    case YEW_GIT_DIFF_ROW_NONE: break;
+    }
+    return NULL;
+}
+
+static void draw_git_diff_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+{
+    u16 screen_row;
+
+    for (screen_row = lo;
+         screen_row < hi && screen_row < w->rect.h; screen_row++) {
+        LineNo line;
+        u32 sub;
+        const char *role;
+        Cell style;
+        u8 fields;
+
+        if (!yew_vp_line_of_row(w, screen_row, &line, &sub) ||
+            line.v >= w->git_diff_rows.len)
+            continue;
+        role = git_diff_row_role(w->git_diff_rows.data[line.v]);
+        if (role == NULL)
+            continue;
+        style = ed->grid.blank;
+        fields = themed_overlay(&style, yew_theme_ui_tab(ed, role));
+        if (fields == 0U)
+            continue;
+        yew_grid_overlay(&ed->grid, (u16)(w->rect.y + screen_row),
+                         w->rect.x, row_right(&ed->grid, w), &style, fields);
+    }
+}
+
 #if YEW_WITH_LSP
 static void draw_lsp_highlight_overlay(Ed *ed, Win *w,
                                        const MatchOverlay *overlay,
@@ -771,6 +810,7 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
         }
     }
     yew_gutter_draw(ed, w, lo, hi);
+    draw_git_diff_rows(ed, w, lo, hi);
     yew_git_blame_draw(ed, w, lo, hi);
     draw_git_diff_intra_rows(ed, w, lo, hi);
     draw_selection_rows(ed, w, lo, hi);

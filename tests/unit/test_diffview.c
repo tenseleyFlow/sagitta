@@ -3,6 +3,8 @@
 
 #include <string.h>
 
+#include "edit/ed.h"
+#include "mod/git/editor.h"
 #include "mod/git/diffview.h"
 #include "unicode/grapheme.h"
 
@@ -17,6 +19,23 @@ static GitHunk dv_hunk(u64 base_lo, u64 base_n, u64 buf_lo, u64 buf_n,
     h.buf_n = LINENO(buf_n);
     h.kind = kind;
     return h;
+}
+
+void test_diffview_blame_clock_uses_injected_anchor(void)
+{
+    Ed ed;
+
+    yew_ed_init(&ed);
+    ed.now_ms = 1000;
+    yew_git_editor_clock_anchor(&ed, 1000, 1700000000);
+    YEW_ASSERT_EQ_I64(yew_git_editor_wall_now(&ed), 1700000000);
+    ed.now_ms = 4999;
+    YEW_ASSERT_EQ_I64(yew_git_editor_wall_now(&ed), 1700000003);
+    ed.now_ms = 999;
+    YEW_ASSERT_EQ_I64(yew_git_editor_wall_now(&ed), 1700000000);
+    yew_git_editor_clock_anchor(&ed, -1, 1800000000);
+    YEW_ASSERT_EQ_I64(yew_git_editor_wall_now(&ed), 1700000000);
+    yew_ed_free(&ed);
 }
 
 void test_diffview_rowmap_aligns_unbalanced_hunks(void)
