@@ -33,6 +33,7 @@
 #include "ui/tabs.h"
 #include "unicode/width.h"
 #include "util/buf.h"
+#include "ws/state.h"
 #include "ws/walk.h"
 
 typedef enum FussPromptAction {
@@ -93,6 +94,10 @@ struct FussMode {
     bool picker_alt;
     FileList files;
     WalkState *walk;
+    FileList expand_files;
+    WalkState *expand_walk;
+    char *expand_path;
+    bool expand_enter;
 };
 
 static bool fuss_picker_result(Ed *ed, FussPickAction action,
@@ -100,6 +105,10 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
 static void fuss_prompt_clear(FussMode *f);
 static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
                              size_t len, void *ctx);
+static void fuss_walk_restart(Ed *ed);
+static void fuss_expand_clear(FussMode *f);
+static bool fuss_expand_start(Ed *ed, bool enter);
+static void fuss_expand_tick(Ed *ed);
 
 static size_t fuss_cstr_len(const char *s)
 {
@@ -378,6 +387,7 @@ void yew_fuss_state_init(Ed *ed)
     yew_fuss_tree_init(&f->tree);
     yew_fuss_jump_init(&f->jump);
     yew_filelist_init(&f->files);
+    yew_filelist_init(&f->expand_files);
     ed->fuss = f;
 }
 
@@ -403,7 +413,9 @@ void yew_fuss_state_free(Ed *ed)
     free(f->picker_aux);
     if (f->walk != NULL)
         yew_walk_end(f->walk);
+    fuss_expand_clear(f);
     yew_filelist_free(&f->files);
+    yew_filelist_free(&f->expand_files);
     yew_fuss_sel_clear(&f->sel);
     yew_fuss_tree_drop(&f->tree);
     free(f);
@@ -433,9 +445,14 @@ CmdStatus yew_fuss_mode_enter(Ed *ed)
         ascii.type == (u8)YEW_OPT_BOOL)
         ed->fuss->ascii_glyphs = ascii.as.b;
     if (!ed->fuss->active) {
+        ed->fuss->opts.all_files = yew_state_option_bool(
+            ed, "git.tree.all_files", false);
+        ed->fuss->opts.show_hidden = yew_state_option_bool(
+            ed, "git.tree.show_hidden", false);
         ed->fuss->active = true;
         ed->fuss->saved_buffer_id = ed->win != NULL && ed->win->buf != NULL ?
                                     ed->win->buf->id : 0U;
+        fuss_walk_restart(ed);
     }
     snap = yew_git_snapshot(ed);
     if (snap != NULL)
@@ -466,6 +483,7 @@ void yew_fuss_mode_leave(Ed *ed)
     f = ed->fuss;
     f->active = false;
     f->viewer = false;
+    fuss_expand_clear(f);
     yew_fuss_jump_init(&f->jump);
     saved = yew_ws_buf_by_id(ed, f->saved_buffer_id);
     if (saved != NULL && ed->win != NULL && ed->win->buf != saved)
@@ -503,6 +521,7 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
             fuss_damage(ed);
         }
     }
+    fuss_expand_tick(ed);
     if (yew_fuss_jump_tick(&ed->fuss->jump, now_ms))
         ed->footer_dirty = true;
 }
@@ -578,43 +597,100 @@ static void fuss_put_lit(Grid *g, u16 row, u16 *col, u16 right,
                    attrs);
 }
 
+static ThemeEnt fuss_base_style(const Ed *ed)
+{
+    const ThemeEnt *fg = yew_theme_ui_tab(ed, "fg");
+    const ThemeEnt *bg = yew_theme_ui_tab(ed, "bg");
+    ThemeEnt style = {
+        {YEW_COLOR_RGB, 218U, 229U, 240U},
+        {YEW_COLOR_DEFAULT, 0U, 0U, 0U},
+        0U
+    };
+
+    if (fg != NULL) {
+        style.fg = fg->fg;
+        style.attrs = fg->attrs;
+    }
+    if (bg != NULL) {
+        style.bg = bg->bg;
+        style.attrs = (u16)(style.attrs | bg->attrs);
+    }
+    return style;
+}
+
+static ThemeEnt fuss_role_style(const Ed *ed, const char *role,
+                                 ThemeEnt fallback)
+{
+    const ThemeEnt *themed = yew_theme_ui_tab(ed, role);
+
+    if (themed != NULL) {
+        fallback.fg = themed->fg;
+        fallback.attrs = (u16)(fallback.attrs | themed->attrs);
+    }
+    return fallback;
+}
+
 static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
 {
     const GitSnapshot *snap = yew_git_snapshot(ed);
-    YewColor fg = {YEW_COLOR_RGB, 220U, 220U, 220U};
-    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    ThemeEnt style = fuss_base_style(ed);
     char counts[64];
     u16 col = left;
     int n;
 
     fuss_put_lit(&ed->grid, row, &col, right, "yew:", sizeof("yew:") - 1U,
-                 fg, bg, YEW_ATTR_BOLD);
+                 style.fg, style.bg,
+                 (u16)(style.attrs | YEW_ATTR_BOLD));
     if (snap == NULL || snap->gen == 0U) {
         fuss_put_lit(&ed->grid, row, &col, right, "loading",
-                     sizeof("loading") - 1U, fg, bg, YEW_ATTR_DIM);
+                     sizeof("loading") - 1U, style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_DIM));
         return;
     }
     if (snap->branch != NULL)
         fuss_put_lit(&ed->grid, row, &col, right, snap->branch,
-                     fuss_cstr_len(snap->branch), fg, bg, YEW_ATTR_BOLD);
+                     fuss_cstr_len(snap->branch), style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_BOLD));
     else
         fuss_put_lit(&ed->grid, row, &col, right, "(detached)",
-                     sizeof("(detached)") - 1U, fg, bg, YEW_ATTR_BOLD);
+                     sizeof("(detached)") - 1U, style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_BOLD));
     n = snprintf(counts, sizeof(counts), "  ↑%d ↓%d", snap->ahead < 0 ? 0 :
                  snap->ahead, snap->behind < 0 ? 0 : snap->behind);
     if (n > 0)
-        fuss_put_lit(&ed->grid, row, &col, right, counts, (size_t)n, fg, bg,
-                     0U);
+        fuss_put_lit(&ed->grid, row, &col, right, counts, (size_t)n,
+                     style.fg, style.bg, style.attrs);
 }
 
 static void fuss_marker(Ed *ed, u16 row, u16 *col, u16 right,
-                        const char *glyph, size_t len, YewColor fg,
-                        u16 attrs)
+                        const char *glyph, size_t len, ThemeEnt style,
+                        u16 selected_attrs)
 {
-    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    u16 attrs = (u16)(style.attrs | selected_attrs);
 
-    fuss_put_lit(&ed->grid, row, col, right, " ", 1U, fg, bg, attrs);
-    fuss_put_lit(&ed->grid, row, col, right, glyph, len, fg, bg, attrs);
+    fuss_put_lit(&ed->grid, row, col, right, " ", 1U, style.fg, style.bg,
+                 attrs);
+    fuss_put_lit(&ed->grid, row, col, right, glyph, len, style.fg,
+                 style.bg, attrs);
+}
+
+static const FussNode *fuss_prefix_ancestor(const FussMode *f,
+                                            const FussItem *item,
+                                            u16 depth)
+{
+    u32 node;
+    u16 climb;
+
+    if (f == NULL || item == NULL || depth >= item->depth)
+        return NULL;
+    node = item->node;
+    climb = (u16)(item->depth - depth);
+    while (climb-- != 0U) {
+        if (node >= f->tree.nodes.len)
+            return NULL;
+        node = f->tree.nodes.data[node].parent;
+    }
+    return node < f->tree.nodes.len ? &f->tree.nodes.data[node] : NULL;
 }
 
 static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
@@ -622,14 +698,15 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
 {
     FussMode *f = ed->fuss;
     const FussNode *node = fuss_node(f, item);
-    YewColor normal = {YEW_COLOR_RGB, 218U, 229U, 240U};
-    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
-    YewColor green = {YEW_COLOR_RGB, 72U, 190U, 92U};
-    YewColor red = {YEW_COLOR_RGB, 224U, 78U, 78U};
-    YewColor blue = {YEW_COLOR_RGB, 75U, 145U, 230U};
-    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    ThemeEnt normal = fuss_base_style(ed);
+    ThemeEnt ignored = fuss_role_style(ed, "git.ignored", normal);
+    ThemeEnt staged = fuss_role_style(ed, "git.staged", normal);
+    ThemeEnt modified = fuss_role_style(ed, "git.modified", normal);
+    ThemeEnt untracked = fuss_role_style(ed, "git.untracked", normal);
+    ThemeEnt incoming = fuss_role_style(ed, "git.incoming", normal);
+    ThemeEnt conflict = fuss_role_style(ed, "git.conflict", normal);
     Cell blank = ed->grid.blank;
-    u16 attrs = selected ? YEW_ATTR_REVERSE : 0U;
+    u16 selected_attrs = selected ? YEW_ATTR_REVERSE : 0U;
     u16 col = left;
     u16 depth;
     const char *branch;
@@ -637,13 +714,22 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
 
     if (node == NULL)
         return;
-    blank.fg = normal;
-    blank.bg = bg;
-    blank.attrs = attrs;
+    blank.fg = normal.fg;
+    blank.bg = normal.bg;
+    blank.attrs = (u16)(normal.attrs | selected_attrs);
     yew_grid_fill(&ed->grid, row, left, right, blank);
-    for (depth = 0U; depth < item->depth && col < right; depth++)
-        fuss_put_lit(&ed->grid, row, &col, right, "    ", 4U, normal, bg,
-                     attrs);
+    for (depth = 0U; depth < item->depth && col < right; depth++) {
+        const FussNode *ancestor = fuss_prefix_ancestor(f, item, depth);
+        bool open = ancestor != NULL && ancestor->next_sibling != 0U;
+        const char *prefix = open ? (f->ascii_glyphs ? "|   " : "│   ") :
+                                    "    ";
+        size_t prefix_len = open && !f->ascii_glyphs ?
+                            sizeof("│   ") - 1U : 4U;
+
+        fuss_put_lit(&ed->grid, row, &col, right, prefix, prefix_len,
+                     normal.fg, normal.bg,
+                     (u16)(normal.attrs | selected_attrs));
+    }
     if (f->ascii_glyphs) {
         branch = node->next_sibling == 0U ? "`-- " : "|-- ";
         branch_len = 4U;
@@ -651,43 +737,45 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
         branch = node->next_sibling == 0U ? "└── " : "├── ";
         branch_len = sizeof("└── ") - 1U;
     }
-    fuss_put_lit(&ed->grid, row, &col, right, branch, branch_len, normal, bg,
-                 attrs);
+    fuss_put_lit(&ed->grid, row, &col, right, branch, branch_len, normal.fg,
+                 normal.bg, (u16)(normal.attrs | selected_attrs));
     if (!node->is_file) {
         const char *dir = f->ascii_glyphs ? (node->expanded ? "v " : "> ") :
                           (node->expanded ? "▼ " : "▶ ");
         size_t dir_len = f->ascii_glyphs ? 2U : sizeof("▼ ") - 1U;
 
-        fuss_put_lit(&ed->grid, row, &col, right, dir, dir_len, normal, bg,
-                     attrs);
+        fuss_put_lit(&ed->grid, row, &col, right, dir, dir_len, normal.fg,
+                     normal.bg, (u16)(normal.attrs | selected_attrs));
     }
     fuss_put_lit(&ed->grid, row, &col, right, node->name, node->name_len,
-                 node->ignored ? dim : normal, bg, attrs);
+                 node->ignored ? ignored.fg : normal.fg, normal.bg,
+                 (u16)((node->ignored ? ignored.attrs : normal.attrs) |
+                       selected_attrs));
     if (node->conflicted) {
-        fuss_marker(ed, row, &col, right, "!", 1U, red,
-                    (u16)(attrs | YEW_ATTR_BOLD));
+        fuss_marker(ed, row, &col, right, "!", 1U, conflict,
+                    (u16)(selected_attrs | YEW_ATTR_BOLD));
     } else {
         if (node->staged)
             fuss_marker(ed, row, &col, right,
                         f->ascii_glyphs ? "^" : "↑",
                         f->ascii_glyphs ? 1U : sizeof("↑") - 1U,
-                        green, attrs);
+                        staged, selected_attrs);
         if (node->unstaged)
             fuss_marker(ed, row, &col, right,
                         f->ascii_glyphs ? "x" : "✗",
                         f->ascii_glyphs ? 1U : sizeof("✗") - 1U,
-                        red, attrs);
+                        modified, selected_attrs);
         if (node->untracked)
             fuss_marker(ed, row, &col, right,
                         f->ascii_glyphs ? "x" : "✗",
                         f->ascii_glyphs ? 1U : sizeof("✗") - 1U,
-                        dim, attrs);
+                        untracked, selected_attrs);
     }
     if (node->incoming)
         fuss_marker(ed, row, &col, right,
                     f->ascii_glyphs ? "v" : "↓",
                     f->ascii_glyphs ? 1U : sizeof("↓") - 1U,
-                    blue, attrs);
+                    incoming, selected_attrs);
 }
 
 static void fuss_draw_viewer(Ed *ed, Rect r)
@@ -1911,6 +1999,8 @@ static CmdStatus fuss_nav(CmdCtx *cx, i32 kind)
 
     if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
         return YEW_CMD_ERR_STATE;
+    if (kind == 4 && fuss_expand_start(cx->ed, true))
+        return YEW_CMD_OK;
     row = fuss_row(f);
     count = cx->count_given && cx->count != 0U ? cx->count : 1U;
     while (count-- != 0U) {
@@ -1946,6 +2036,148 @@ static void fuss_walk_restart(Ed *ed)
     f->walk = yew_walk_begin(yew_ws_root(ed), &opts, &f->files);
 }
 
+static void fuss_expand_clear(FussMode *f)
+{
+    if (f == NULL)
+        return;
+    if (f->expand_walk != NULL)
+        yew_walk_end(f->expand_walk);
+    f->expand_walk = NULL;
+    yew_filelist_free(&f->expand_files);
+    yew_filelist_init(&f->expand_files);
+    free(f->expand_path);
+    f->expand_path = NULL;
+    f->expand_enter = false;
+}
+
+static bool fuss_expand_start(Ed *ed, bool enter)
+{
+    FussMode *f;
+    const FussItem *item;
+    const FussNode *node;
+    WalkOpts opts = {0};
+    char *root;
+    i32 row;
+
+    if (ed == NULL || ed->fuss == NULL)
+        return false;
+    f = ed->fuss;
+    row = fuss_row(f);
+    item = fuss_item(f, row);
+    node = fuss_node(f, item);
+    if (item == NULL || node == NULL || !node->untracked_dir ||
+        node->untracked_loaded)
+        return false;
+    if (f->expand_walk != NULL) {
+        yew_msg(ed, YEW_MSG_INFO, "untracked directory scan is running");
+        return true;
+    }
+    root = fuss_join_root(ed, item->path);
+    if (root == NULL)
+        return false;
+    fuss_expand_clear(f);
+    f->expand_path = fuss_dup_bytes(item->path, item->path_len);
+    f->expand_enter = enter;
+    opts.hidden = f->opts.show_hidden;
+    opts.include_dirs = true;
+    opts.max_depth = 1U;
+    f->expand_walk = yew_walk_begin(root, &opts, &f->expand_files);
+    free(root);
+    if (f->expand_walk == NULL) {
+        fuss_expand_clear(f);
+        yew_msg(ed, YEW_MSG_ERROR, "cannot scan untracked directory");
+        return true;
+    }
+    yew_msg(ed, YEW_MSG_INFO, "scanning untracked directory…");
+    return true;
+}
+
+static bool fuss_expand_children(FussMode *f, const GitSnapshot *snap,
+                                 GitPathList *children, Arena *arena)
+{
+    size_t base_len;
+    size_t i;
+
+    if (f == NULL || f->expand_path == NULL || children == NULL ||
+        arena == NULL)
+        return false;
+    base_len = fuss_cstr_len(f->expand_path);
+    children->len = 0U;
+    children->data = f->expand_files.paths.len == 0U ? NULL :
+        arena_alloc(arena, f->expand_files.paths.len * sizeof(GitPath),
+                    _Alignof(GitPath));
+    for (i = 0U; i < f->expand_files.paths.len; i++) {
+        const char *tail = f->expand_files.paths.data[i];
+        size_t tail_len = fuss_cstr_len(tail);
+        size_t full_len;
+        char *full;
+
+        if (tail_len == 0U || base_len > SIZE_MAX - tail_len - 1U)
+            continue;
+        full_len = base_len + 1U + tail_len;
+        if (full_len > UINT32_MAX)
+            continue;
+        full = arena_alloc(arena, full_len + 1U, _Alignof(char));
+        (void)memcpy(full, f->expand_path, base_len);
+        full[base_len] = '/';
+        (void)memcpy(full + base_len + 1U, tail, tail_len + 1U);
+        if (!f->opts.show_hidden && snap != NULL &&
+            yew_git_ignored(&snap->ignored, full, (u32)full_len))
+            continue;
+        children->data[children->len].path = full;
+        children->data[children->len].len = (u32)full_len;
+        children->data[children->len].is_dir =
+            i < f->expand_files.is_dir.len &&
+            f->expand_files.is_dir.data[i] != 0U;
+        children->len++;
+    }
+    return true;
+}
+
+static void fuss_expand_tick(Ed *ed)
+{
+    FussMode *f;
+    const GitSnapshot *snap;
+    FussSel lookup = {0};
+    GitPathList children = {0};
+    Arena arena;
+    i32 row;
+    u32 node;
+    bool enter;
+
+    if (ed == NULL || ed->fuss == NULL || ed->fuss->expand_walk == NULL)
+        return;
+    f = ed->fuss;
+    if (yew_walk_step(f->expand_walk, 2000))
+        return;
+    yew_walk_end(f->expand_walk);
+    f->expand_walk = NULL;
+    yew_fuss_sel_set(&lookup, f->expand_path,
+                     (u32)fuss_cstr_len(f->expand_path));
+    row = yew_fuss_row_of(&f->tree, &lookup);
+    yew_fuss_sel_clear(&lookup);
+    if (row < 0 || (size_t)row >= f->tree.items.len ||
+        f->tree.items.data[row].path_len != fuss_cstr_len(f->expand_path) ||
+        memcmp(f->tree.items.data[row].path, f->expand_path,
+               f->tree.items.data[row].path_len) != 0) {
+        fuss_expand_clear(f);
+        return;
+    }
+    node = f->tree.items.data[row].node;
+    enter = f->expand_enter;
+    snap = yew_git_snapshot(ed);
+    arena_init(&arena);
+    if (fuss_expand_children(f, snap, &children, &arena) &&
+        yew_fuss_expand_untracked(&f->tree, node, &children)) {
+        if (enter)
+            row = yew_fuss_nav_enter(&f->tree, row);
+        fuss_select_row(f, row);
+        fuss_damage(ed);
+    }
+    arena_free_all(&arena);
+    fuss_expand_clear(f);
+}
+
 CmdStatus yew_fuss_cmd_init(CmdCtx *cx)
 {
     char *argv[] = {(char *)"init", NULL};
@@ -1970,6 +2202,8 @@ CmdStatus yew_fuss_cmd_tree_all(CmdCtx *cx)
     if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
         return YEW_CMD_ERR_STATE;
     f->opts.all_files = !f->opts.all_files;
+    (void)yew_state_option_bool_set(cx->ed, "git.tree.all_files",
+                                    f->opts.all_files);
     snap = yew_git_snapshot(cx->ed);
     if (snap != NULL)
         fuss_build(cx->ed, snap, true);
@@ -1987,6 +2221,8 @@ CmdStatus yew_fuss_cmd_tree_hidden(CmdCtx *cx)
     if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
         return YEW_CMD_ERR_STATE;
     f->opts.show_hidden = !f->opts.show_hidden;
+    (void)yew_state_option_bool_set(cx->ed, "git.tree.show_hidden",
+                                    f->opts.show_hidden);
     snap = yew_git_snapshot(cx->ed);
     if (snap != NULL)
         fuss_build(cx->ed, snap, true);
