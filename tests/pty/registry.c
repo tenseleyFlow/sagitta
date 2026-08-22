@@ -6742,6 +6742,13 @@ static bool s52_git_exit(PtyCtx *c, const char *dir,
     if (pid == 0) {
         int devnull = open("/dev/null", O_RDWR);
 
+        if (strncmp(c->test->name, "git_editor_", 11U) == 0 &&
+            (setenv("GIT_AUTHOR_DATE", "1700000000 +0000", 1) != 0 ||
+             setenv("GIT_COMMITTER_DATE", "1700000000 +0000", 1) != 0 ||
+             setenv("GIT_CONFIG_COUNT", "1", 1) != 0 ||
+             setenv("GIT_CONFIG_KEY_0", "commit.gpgsign", 1) != 0 ||
+             setenv("GIT_CONFIG_VALUE_0", "false", 1) != 0))
+            _exit(125);
         if (dir != NULL && chdir(dir) != 0)
             _exit(125);
         if (devnull >= 0) {
@@ -7193,10 +7200,544 @@ static void case_s52_fuss_status_rows(PtyCtx *c)
     ptc_snapshot(c, c->test->name);
     s52_finish(c);
 }
+
+static bool s53_status_fixture(PtyCtx *c, char *repo, size_t repo_cap)
+{
+    static const char *const init[] = {"git", "init", "-q", "-b", "trunk",
+                                       NULL};
+    static const char *const user_name[] = {"git", "config", "user.name",
+                                            "Yew PTY", NULL};
+    static const char *const user_mail[] = {"git", "config", "user.email",
+                                            "pty@yew.invalid", NULL};
+    static const char *const add[] = {"git", "add", "--", "main.c", NULL};
+    static const char *const commit[] = {"git", "commit", "-q", "-m",
+                                         "base", NULL};
+    const char *name = c->test->name;
+    char gitdir[PATH_MAX];
+    int n;
+
+    n = snprintf(repo, repo_cap, "%s/git-statusline", c->workspace_dir);
+    if (n <= 0 || (size_t)n >= repo_cap || mkdir(repo, 0700) != 0)
+        goto fail;
+    if (!s52_git(c, repo, init) || !s52_git(c, repo, user_name) ||
+        !s52_git(c, repo, user_mail) ||
+        !s52_write(c, repo, "main.c", "base\n"))
+        return false;
+    if (strstr(name, "unborn") == NULL &&
+        (!s52_git(c, repo, add) || !s52_git(c, repo, commit)))
+        return false;
+    n = snprintf(gitdir, sizeof(gitdir), "%s/.git", repo);
+    if (n <= 0 || (size_t)n >= sizeof(gitdir))
+        goto fail;
+
+    if (strstr(name, "normal") != NULL) {
+        static const char *const branch_upstream[] = {
+            "git", "branch", "upstream", NULL
+        };
+        static const char *const checkout_upstream[] = {
+            "git", "checkout", "-q", "upstream", NULL
+        };
+        static const char *const checkout_trunk[] = {
+            "git", "checkout", "-q", "trunk", NULL
+        };
+        static const char *const commit_all[] = {
+            "git", "commit", "-q", "-am", "change", NULL
+        };
+        static const char *const remote_dot[] = {
+            "git", "config", "branch.trunk.remote", ".", NULL
+        };
+        static const char *const merge_ref[] = {
+            "git", "config", "branch.trunk.merge", "refs/heads/upstream",
+            NULL
+        };
+
+        if (!s52_git(c, repo, branch_upstream) ||
+            !s52_git(c, repo, checkout_upstream) ||
+            !s52_write(c, repo, "main.c", "upstream\n") ||
+            !s52_git(c, repo, commit_all) ||
+            !s52_git(c, repo, checkout_trunk) ||
+            !s52_write(c, repo, "main.c", "local one\n") ||
+            !s52_git(c, repo, commit_all) ||
+            !s52_write(c, repo, "main.c", "local two\n") ||
+            !s52_git(c, repo, commit_all) ||
+            !s52_git(c, repo, remote_dot) || !s52_git(c, repo, merge_ref))
+            return false;
+    } else if (strstr(name, "detached") != NULL) {
+        static const char *const detach[] = {"git", "checkout", "-q",
+                                             "--detach", NULL};
+        if (!s52_git(c, repo, detach))
+            return false;
+    } else if (strstr(name, "merge") != NULL) {
+        if (!s52_write(c, gitdir, "MERGE_HEAD",
+                       "0000000000000000000000000000000000000000\n"))
+            return false;
+    } else if (strstr(name, "rebase") != NULL) {
+        char rebase[PATH_MAX];
+        n = snprintf(rebase, sizeof(rebase), "%s/rebase-merge", gitdir);
+        if (n <= 0 || (size_t)n >= sizeof(rebase) || mkdir(rebase, 0700) != 0 ||
+            !s52_write(c, rebase, "msgnum", "3\n") ||
+            !s52_write(c, rebase, "end", "7\n"))
+            return false;
+    } else if (strstr(name, "cherry") != NULL) {
+        if (!s52_write(c, gitdir, "CHERRY_PICK_HEAD",
+                       "0000000000000000000000000000000000000000\n"))
+            return false;
+    } else if (strstr(name, "revert") != NULL) {
+        if (!s52_write(c, gitdir, "REVERT_HEAD",
+                       "0000000000000000000000000000000000000000\n"))
+            return false;
+    } else if (strstr(name, "bisect") != NULL &&
+               !s52_write(c, gitdir, "BISECT_LOG", "# deterministic\n")) {
+        return false;
+    }
+    ptc_set_cwd(c, repo);
+    return true;
+
+fail:
+    ptc_check(c, false, "Sprint 53 statusline fixture creation failed");
+    return false;
+}
+
+static bool s53_conflict_fixture(PtyCtx *c, char *repo, size_t repo_cap)
+{
+    static const char *const init[] = {"git", "init", "-q", "-b", "trunk",
+                                       NULL};
+    static const char *const user_name[] = {"git", "config", "user.name",
+                                            "Yew PTY", NULL};
+    static const char *const user_mail[] = {"git", "config", "user.email",
+                                            "pty@yew.invalid", NULL};
+    static const char *const add_all[] = {"git", "add", "--all", NULL};
+    static const char *const commit_base[] = {"git", "commit", "-q", "-m",
+                                              "base", NULL};
+    static const char *const checkout_side[] = {
+        "git", "checkout", "-q", "-b", "collision", NULL
+    };
+    static const char *const commit_side[] = {
+        "git", "commit", "-q", "-am", "collision", NULL
+    };
+    static const char *const checkout_trunk[] = {
+        "git", "checkout", "-q", "trunk", NULL
+    };
+    static const char *const commit_trunk[] = {
+        "git", "commit", "-q", "-am", "local", NULL
+    };
+    static const char *const merge_side[] = {
+        "git", "merge", "--no-edit", "collision", NULL
+    };
+    int n = snprintf(repo, repo_cap, "%s/git-two-conflicts",
+                     c->workspace_dir);
+
+    if (n <= 0 || (size_t)n >= repo_cap || mkdir(repo, 0700) != 0 ||
+        !s52_git(c, repo, init) || !s52_git(c, repo, user_name) ||
+        !s52_git(c, repo, user_mail) ||
+        !s52_write(c, repo, "conflict.c", "base one\n") ||
+        !s52_write(c, repo, "conflict2.c", "base two\n") ||
+        !s52_git(c, repo, add_all) || !s52_git(c, repo, commit_base) ||
+        !s52_git(c, repo, checkout_side) ||
+        !s52_write(c, repo, "conflict.c", "side one\n") ||
+        !s52_write(c, repo, "conflict2.c", "side two\n") ||
+        !s52_git(c, repo, commit_side) ||
+        !s52_git(c, repo, checkout_trunk) ||
+        !s52_write(c, repo, "conflict.c", "local one\n") ||
+        !s52_write(c, repo, "conflict2.c", "local two\n") ||
+        !s52_git(c, repo, commit_trunk) ||
+        !s52_git_exit(c, repo, merge_side, 1)) {
+        ptc_check(c, false,
+                  "Sprint 53 two-conflict fixture creation failed");
+        return false;
+    }
+    ptc_set_cwd(c, repo);
+    return true;
+}
+
+static void s53_wait_git(PtyCtx *c)
+{
+    ptc_settle(c, 900);
+    ptc_wait_kitty_push(c, 21U);
+    /* Opening the real command prompt clears transient startup messages;
+     * cancelling it exposes the cached statusline without a four-second
+     * sleep or an extra forced Git refresh. */
+    ptc_keys(c, ": esc");
+    ptc_settle(c, 50);
+}
+
+static void case_s53_statusline(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+    const char *name = c->test->name;
+    const char *expected = NULL;
+
+    if (strstr(name, "nonrepo") != NULL) {
+        ptc_spawn(c, ptc_yew_bin(c), NULL);
+    } else if (strstr(name, "conflicted") != NULL) {
+        if (!s53_conflict_fixture(c, repo, sizeof(repo)))
+            return;
+        ptc_spawn(c, ptc_yew_bin(c), "conflict.c", NULL);
+    } else {
+        if (!s53_status_fixture(c, repo, sizeof(repo)))
+            return;
+        ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
+    }
+    s53_wait_git(c);
+    if (strstr(name, "normal") != NULL)
+        ptc_settle(c, 900);
+    ptc_check(c, !c->pty.reaped,
+              "rendering a Sprint 53 Git statusline exited yew");
+    if (strstr(name, "normal") != NULL)
+        expected = "⎇ trunk ↑2 ↓1";
+    else if (strstr(name, "no_upstream") != NULL)
+        expected = "⎇ trunk";
+    else if (strstr(name, "detached") != NULL)
+        expected = "⎇ (";
+    else if (strstr(name, "unborn") != NULL)
+        expected = "⎇ (no commits)";
+    else if (strstr(name, "merge") != NULL)
+        expected = "|MERGING";
+    else if (strstr(name, "rebase") != NULL)
+        expected = "|REBASE 3/7";
+    else if (strstr(name, "cherry_pick") != NULL)
+        expected = "|CHERRY-PICKING";
+    else if (strstr(name, "revert") != NULL)
+        expected = "|REVERTING";
+    else if (strstr(name, "bisect") != NULL)
+        expected = "|BISECTING";
+    else if (strstr(name, "conflicted") != NULL)
+        expected = "⚑2";
+    if (expected != NULL)
+        ptc_check(c, s52_screen_contains(&c->vt, expected),
+                  "Sprint 53 Git statusline omitted its repository state");
+    else
+        ptc_check(c, !s52_screen_contains(&c->vt, "⎇"),
+                  "non-repository statusline displayed a Git branch");
+    if (strstr(name, "unborn") == NULL &&
+        strstr(name, "conflicted") == NULL) {
+        ptc_check(c, !s52_screen_contains(&c->vt, "▎"),
+                  "clean status fixture displayed an add/modify sign");
+        ptc_check(c, !s52_screen_contains(&c->vt, "▔"),
+                  "clean status fixture displayed a delete-above sign");
+        ptc_check(c, !s52_screen_contains(&c->vt, "▁"),
+                  "clean status fixture displayed a delete-at-EOF sign");
+        ptc_check(c, !s52_screen_contains(&c->vt, "~"),
+                  "clean status fixture displayed an unknown Git sign");
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, name);
+    force_quit(c);
+}
+
+static bool s53_write_line_fixture(PtyCtx *c, const char *repo,
+                                   const char *text)
+{
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/main.c", repo);
+
+    if (n <= 0 || (size_t)n >= sizeof(path) ||
+        !write_bytes(path, (const u8 *)text, strlen(text))) {
+        ptc_check(c, false, "Sprint 53 sign fixture write failed");
+        return false;
+    }
+    return true;
+}
+
+static bool s53_sign_fixture(PtyCtx *c, char *repo, size_t repo_cap)
+{
+    static const char *const init[] = {"git", "init", "-q", "-b", "trunk",
+                                       NULL};
+    static const char *const user_name[] = {"git", "config", "user.name",
+                                            "Yew PTY", NULL};
+    static const char *const user_mail[] = {"git", "config", "user.email",
+                                            "pty@yew.invalid", NULL};
+    static const char *const add[] = {"git", "add", "--", "main.c", NULL};
+    static const char *const commit[] = {"git", "commit", "-q", "-m",
+                                         "base", NULL};
+    const char *name = c->test->name;
+    const char *base = "alpha\nbeta\ngamma\n";
+    const char *live = base;
+    Bytebuf many;
+    u32 i;
+    int n;
+
+    bytebuf_init(&many);
+    n = snprintf(repo, repo_cap, "%s/git-signs", c->workspace_dir);
+    if (n <= 0 || (size_t)n >= repo_cap || mkdir(repo, 0700) != 0)
+        goto fail;
+    if (strstr(name, "unknown") != NULL) {
+        for (i = 0U; i < 5000U; i++)
+            bytebuf_printf(&many, "base-%04u\n", (unsigned)i);
+        bytebuf_push_u8(&many, 0U);
+        base = (const char *)many.data;
+    } else if (strstr(name, "width") != NULL) {
+        for (i = 0U; i < 99U; i++)
+            bytebuf_printf(&many, "line-%02u\n", (unsigned)(i + 1U));
+        bytebuf_push_u8(&many, 0U);
+        base = (const char *)many.data;
+    } else if (strstr(name, "add") != NULL) {
+        live = "alpha\ninserted\nbeta\ngamma\n";
+    } else if (strstr(name, "mod") != NULL) {
+        live = "alpha\nchanged\ngamma\n";
+    } else if (strstr(name, "delete_above") != NULL) {
+        live = "beta\ngamma\n";
+    } else if (strstr(name, "delete_eof") != NULL) {
+        live = "alpha\nbeta\n";
+    }
+    if (!s52_git(c, repo, init) || !s52_git(c, repo, user_name) ||
+        !s52_git(c, repo, user_mail) ||
+        !s53_write_line_fixture(c, repo, base) ||
+        !s52_git(c, repo, add) || !s52_git(c, repo, commit)) {
+        bytebuf_free(&many);
+        return false;
+    }
+    if (strstr(name, "unknown") != NULL) {
+        many.len = 0U;
+        for (i = 0U; i < 5000U; i++)
+            bytebuf_printf(&many, "live-%04u\n", (unsigned)i);
+        bytebuf_push_u8(&many, 0U);
+        live = (const char *)many.data;
+    }
+    if (!s53_write_line_fixture(c, repo, live)) {
+        bytebuf_free(&many);
+        return false;
+    }
+    bytebuf_free(&many);
+    ptc_set_cwd(c, repo);
+    return true;
+
+fail:
+    bytebuf_free(&many);
+    ptc_check(c, false, "Sprint 53 sign fixture creation failed");
+    return false;
+}
+
+static void case_s53_git_sign(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+    const char *file = "main.c";
+    const char *expected;
+    const char *expected_row = NULL;
+
+    if (strstr(c->test->name, "conflict") != NULL) {
+        if (!s52_status_fixture(c, repo, sizeof(repo)))
+            return;
+        file = "conflict.c";
+    } else if (!s53_sign_fixture(c, repo, sizeof(repo))) {
+        return;
+    }
+    ptc_spawn(c, ptc_yew_bin(c), file, NULL);
+    s53_wait_git(c);
+    if (strstr(c->test->name, "width") != NULL) {
+        ptc_keys(c, "end i enter esc");
+        ptc_settle(c, 400);
+    }
+    ptc_check(c, !c->pty.reaped,
+              "rendering a Sprint 53 Git sign exited yew");
+    expected = strstr(c->test->name, "delete_above") != NULL ? "▔" :
+               strstr(c->test->name, "delete_eof") != NULL ? "▁" :
+               strstr(c->test->name, "unknown") != NULL ? "~" : "▎";
+    ptc_check(c, s52_screen_contains(&c->vt, expected),
+              "Sprint 53 Git gutter omitted the expected sign");
+    if (strstr(c->test->name, "sign_add") != NULL)
+        expected_row = "▎   1 inserted";
+    else if (strstr(c->test->name, "sign_mod") != NULL)
+        expected_row = "▎   1 changed";
+    else if (strstr(c->test->name, "delete_above") != NULL)
+        expected_row = "▔   1 beta";
+    else if (strstr(c->test->name, "conflict") != NULL)
+        expected_row = "▎   1 <<<<<<< HEAD";
+    if (expected_row != NULL)
+        ptc_check(c, s52_screen_contains(&c->vt, expected_row),
+                  "Sprint 53 Git gutter sign was placed on the wrong row");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    force_quit(c);
+}
+
+static bool s53_diff_fixture(PtyCtx *c, char *repo, size_t repo_cap)
+{
+    static const char *const init[] = {"git", "init", "-q", "-b", "trunk",
+                                       NULL};
+    static const char *const user_name[] = {"git", "config", "user.name",
+                                            "Yew PTY", NULL};
+    static const char *const user_mail[] = {"git", "config", "user.email",
+                                            "pty@yew.invalid", NULL};
+    static const char *const add[] = {"git", "add", "--", "main.c", NULL};
+    static const char *const commit[] = {"git", "commit", "-q", "-m",
+                                         "base", NULL};
+    Bytebuf base;
+    Bytebuf live;
+    u32 i;
+    int n;
+
+    bytebuf_init(&base);
+    bytebuf_init(&live);
+    n = snprintf(repo, repo_cap, "%s/git-diff-view", c->workspace_dir);
+    if (n <= 0 || (size_t)n >= repo_cap || mkdir(repo, 0700) != 0)
+        goto fail;
+    if (strstr(c->test->name, "scroll") != NULL) {
+        bytebuf_append(&base, "base-only-a\nbase-only-b\n", 24U);
+        for (i = 0U; i < 80U; i++) {
+            bytebuf_printf(&base, "row-%03u shared\n", (unsigned)i);
+            bytebuf_printf(&live, "row-%03u shared\n", (unsigned)i);
+        }
+    } else {
+        static const char base_text[] =
+            "alpha\nleft-only-a\nleft-only-b\nanchor-one\n"
+            "shared old\nanchor-mid\nanchor-two\ntail\n";
+        static const char live_text[] =
+            "alpha\nanchor-one\nshared new\nanchor-mid\nright-only\n"
+            "anchor-two\ntail\n";
+
+        bytebuf_append(&base, base_text, sizeof(base_text) - 1U);
+        bytebuf_append(&live, live_text, sizeof(live_text) - 1U);
+    }
+    bytebuf_push_u8(&base, 0U);
+    bytebuf_push_u8(&live, 0U);
+    if (!s52_git(c, repo, init) || !s52_git(c, repo, user_name) ||
+        !s52_git(c, repo, user_mail) ||
+        !s53_write_line_fixture(c, repo, (const char *)base.data) ||
+        !s52_git(c, repo, add) || !s52_git(c, repo, commit) ||
+        !s53_write_line_fixture(c, repo, (const char *)live.data)) {
+        bytebuf_free(&live);
+        bytebuf_free(&base);
+        return false;
+    }
+    bytebuf_free(&live);
+    bytebuf_free(&base);
+    ptc_set_cwd(c, repo);
+    return true;
+
+fail:
+    bytebuf_free(&live);
+    bytebuf_free(&base);
+    ptc_check(c, false, "Sprint 53 diff-view fixture creation failed");
+    return false;
+}
+
+static void case_s53_diff_view(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+
+    if (!s53_diff_fixture(c, repo, sizeof(repo)))
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
+    s53_wait_git(c);
+    ptc_keys(c, ":");
+    ptc_bytes(c, "ed.git.diff.view");
+    ptc_keys(c, "enter");
+    ptc_settle(c, 200);
+    ptc_check(c, !c->pty.reaped,
+              "opening the Sprint 53 editor diff view exited yew");
+    if (strstr(c->test->name, "scroll") != NULL) {
+        ptc_keys(c, "ctrl+w left pagedown");
+        ptc_settle(c, 100);
+        ptc_check(c, !s52_screen_contains(&c->vt, "row-000 shared"),
+                  "scrolling the left diff pane did not synchronize right");
+    } else {
+        ptc_check(c, s52_screen_contains(&c->vt, "~"),
+                  "side-by-side diff omitted filler rows");
+        ptc_check(c, s52_screen_contains(&c->vt, "left-only-a") &&
+                         s52_screen_contains(&c->vt, "right-only"),
+                  "side-by-side diff omitted an unbalanced hunk side");
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    force_quit(c);
+}
+
+static bool s53_blame_fixture(PtyCtx *c, char *repo, size_t repo_cap)
+{
+    static const char *const init[] = {"git", "init", "-q", "-b", "trunk",
+                                       NULL};
+    static const char *const user_name[] = {"git", "config", "user.name",
+                                            "Yew PTY", NULL};
+    static const char *const user_mail[] = {"git", "config", "user.email",
+                                            "pty@yew.invalid", NULL};
+    static const char *const add[] = {"git", "add", "--", "main.c", NULL};
+    static const char *const commit[] = {"git", "commit", "-q", "-m",
+                                         "pin blame", NULL};
+    static const char text[] =
+        "short blamed line\n"
+        "漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字\n"
+        "tail\n";
+    static const char narrow_text[] =
+        "漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字\n";
+    const char *fixture_text = strstr(c->test->name, "omit_cjk") != NULL
+                                   ? narrow_text : text;
+    int n = snprintf(repo, repo_cap, "%s/git-blame", c->workspace_dir);
+
+    if (n <= 0 || (size_t)n >= repo_cap || mkdir(repo, 0700) != 0 ||
+        !s52_git(c, repo, init) || !s52_git(c, repo, user_name) ||
+        !s52_git(c, repo, user_mail) ||
+        !s53_write_line_fixture(c, repo, fixture_text) ||
+        !s52_git(c, repo, add) || !s52_git(c, repo, commit)) {
+        ptc_check(c, false, "Sprint 53 blame fixture creation failed");
+        return false;
+    }
+    ptc_set_cwd(c, repo);
+    return true;
+}
+
+static void case_s53_blame(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+
+    if (!s53_blame_fixture(c, repo, sizeof(repo)))
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
+    s53_wait_git(c);
+    ptc_keys(c, ":");
+    ptc_bytes(c, "ed.git.blame.toggle");
+    ptc_keys(c, "enter");
+    ptc_settle(c, 900);
+    if (strstr(c->test->name, "omit_cjk") != NULL) {
+        ptc_check(c, !s52_screen_contains(&c->vt, "▏ Yew PTY"),
+                  "narrow CJK blame annotation was not omitted");
+    } else {
+        ptc_check(c, s52_screen_contains(&c->vt, "▏ Yew PTY"),
+                  "inline blame annotation did not become visible");
+    }
+    if (strstr(c->test->name, "stale") != NULL) {
+        ptc_keys(c, "i X esc esc");
+        ptc_settle(c, 25);
+        ptc_check(c, s52_screen_contains(&c->vt, "▏ Yew PTY"),
+                  "stale inline blame vanished while recomputing");
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    force_quit(c);
+}
 #endif
 
 const PtyCase yew_pty_cases[] = {
 #if YEW_WITH_FUSS
+    C(git_editor_blame_fits, modern, 24U, 120U, case_s53_blame),
+    C(git_editor_blame_omit_cjk, modern, 24U, 40U, case_s53_blame),
+    C(git_editor_blame_stale, modern, 24U, 120U, case_s53_blame),
+    C(git_editor_diff_fillers_intraline, modern, 24U, 120U,
+      case_s53_diff_view),
+    C(git_editor_diff_sync_scroll, modern, 24U, 120U,
+      case_s53_diff_view),
+    C(git_editor_sign_add, modern, 24U, 100U, case_s53_git_sign),
+    C(git_editor_sign_mod, modern, 24U, 100U, case_s53_git_sign),
+    C(git_editor_sign_delete_above, modern, 24U, 100U, case_s53_git_sign),
+    C(git_editor_sign_delete_eof, modern, 24U, 100U, case_s53_git_sign),
+    C(git_editor_sign_conflict, modern, 24U, 100U, case_s53_git_sign),
+    C(git_editor_sign_unknown, modern, 24U, 100U, case_s53_git_sign),
+    C(git_editor_sign_width_99_100, modern, 24U, 100U,
+      case_s53_git_sign),
+    C(git_editor_status_normal, modern, 24U, 160U, case_s53_statusline),
+    C(git_editor_status_no_upstream, modern, 24U, 160U,
+      case_s53_statusline),
+    C(git_editor_status_detached, modern, 24U, 160U, case_s53_statusline),
+    C(git_editor_status_unborn, modern, 24U, 160U, case_s53_statusline),
+    C(git_editor_status_merge, modern, 24U, 160U, case_s53_statusline),
+    C(git_editor_status_rebase, modern, 24U, 160U, case_s53_statusline),
+    C(git_editor_status_cherry_pick, modern, 24U, 160U,
+      case_s53_statusline),
+    C(git_editor_status_revert, modern, 24U, 160U, case_s53_statusline),
+    C(git_editor_status_bisect, modern, 24U, 160U, case_s53_statusline),
+    C(git_editor_status_conflicted, modern, 24U, 160U,
+      case_s53_statusline),
+    C(git_editor_status_nonrepo, modern, 24U, 160U, case_s53_statusline),
     C(fuss_tree_unicode_80, modern, 24U, 80U, case_s52_fuss),
     C(fuss_tree_unicode_120, modern, 40U, 120U, case_s52_fuss),
     C(fuss_tree_ascii, modern, 24U, 80U, case_s52_fuss),
