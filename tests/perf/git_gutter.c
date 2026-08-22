@@ -9,6 +9,7 @@
 #include <time.h>
 
 #include "edit/ed.h"
+#include "edit/loop.h"
 #include "mod/git/editor.h"
 #include "text/piece.h"
 #include "util/base.h"
@@ -27,11 +28,11 @@ enum {
     GUTTER_LOOKUP_BUDGET_NS = 50000
 };
 
-typedef struct TickSamples {
+typedef struct Samples {
     u64 *data;
     size_t len;
     size_t cap;
-} TickSamples;
+} Samples;
 
 static volatile u64 gutter_sink;
 
@@ -69,7 +70,7 @@ static void sort_u64(u64 *values, size_t len)
     }
 }
 
-static bool samples_push(TickSamples *samples, u64 value)
+static bool samples_push(Samples *samples, u64 value)
 {
     if (samples->len == samples->cap) {
         size_t cap = samples->cap == 0U ? 64U : samples->cap * 2U;
@@ -142,7 +143,20 @@ static bool fixture_open(Ed *ed, const Bytebuf *base, const Bytebuf *live,
     return true;
 }
 
-static bool tick_timed(Ed *ed, i64 now_ms, TickSamples *ticks)
+static bool dispatch_timed(Ed *ed, i64 now_ms, Samples *keys)
+{
+    Key key = {0};
+    u64 start;
+
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.code = (keys->len & 1U) == 0U ? YEW_KEY_DOWN : YEW_KEY_UP;
+    start = now_ns();
+    yew_loop_dispatch_event(ed, &key, now_ms);
+    return samples_push(keys, now_ns() - start);
+}
+
+static bool tick_timed(Ed *ed, i64 now_ms, Samples *ticks)
 {
     u64 start = now_ns();
 
@@ -151,13 +165,14 @@ static bool tick_timed(Ed *ed, i64 now_ms, TickSamples *ticks)
 }
 
 static bool pump_until(Ed *ed, i64 now_ms, u64 published,
-                       TickSamples *ticks)
+                       Samples *ticks, Samples *keys)
 {
     YewGitEditorStats stats;
     u32 count = 0U;
 
     do {
-        if (!tick_timed(ed, now_ms, ticks))
+        if (!dispatch_timed(ed, now_ms, keys) ||
+            !tick_timed(ed, now_ms, ticks))
             return false;
         yew_git_editor_stats(ed, &stats);
         count++;
@@ -182,7 +197,7 @@ static u64 measure_lookup(const GitHunkVec *hunks)
 }
 
 static bool verify_debounce(Ed *ed, i64 first_edit_ms,
-                            TickSamples *ticks)
+                            Samples *ticks, Samples *keys)
 {
     YewGitEditorStats before;
     YewGitEditorStats after;
@@ -202,7 +217,7 @@ static bool verify_debounce(Ed *ed, i64 first_edit_ms,
     if (after.diff_started != before.diff_started)
         return false;
     if (!pump_until(ed, first_edit_ms + GUTTER_EDITS + 149,
-                    before.diff_published + 1U, ticks))
+                    before.diff_published + 1U, ticks, keys))
         return false;
     yew_git_editor_stats(ed, &after);
     return after.diff_started == before.diff_started + 1U &&
@@ -213,10 +228,12 @@ int main(int argc, char **argv)
 {
     Bytebuf base;
     Bytebuf live;
-    TickSamples ticks = {0};
+    Samples ticks = {0};
+    Samples keys = {0};
     u64 diff_samples[GUTTER_DIFF_SAMPLES];
     u64 lookup_p99 = UINT64_MAX;
     u64 keypress_p99 = UINT64_MAX;
+    u64 idle_tick_p99 = UINT64_MAX;
     u64 max_slice_us = 0U;
     bool debounce_ok = false;
     bool gate = argc == 2 && strcmp(argv[1], "--gate") == 0;
@@ -239,7 +256,7 @@ int main(int argc, char **argv)
             break;
         }
         start = now_ns();
-        if (!pump_until(&ed, 1000, 1U, &ticks))
+        if (!pump_until(&ed, 1000, 1U, &ticks, &keys))
             ok = false;
         diff_samples[i] = now_ns() - start;
         yew_git_editor_stats(&ed, &stats);
@@ -252,7 +269,7 @@ int main(int argc, char **argv)
             max_slice_us = stats.diff_max_slice_us;
         if (i + 1U == YEW_ARRAY_LEN(diff_samples) && hunks != NULL) {
             lookup_p99 = measure_lookup(&hunks->h);
-            debounce_ok = verify_debounce(&ed, 2000, &ticks);
+            debounce_ok = verify_debounce(&ed, 2000, &ticks, &keys);
             yew_git_editor_stats(&ed, &stats);
             if (stats.diff_max_slice_us > max_slice_us)
                 max_slice_us = stats.diff_max_slice_us;
@@ -264,16 +281,20 @@ int main(int argc, char **argv)
     if (ok) {
         sort_u64(diff_samples, YEW_ARRAY_LEN(diff_samples));
         sort_u64(ticks.data, ticks.len);
-        keypress_p99 = ticks.data[(ticks.len * 99U + 99U) / 100U - 1U];
+        sort_u64(keys.data, keys.len);
+        idle_tick_p99 = ticks.data[(ticks.len * 99U + 99U) / 100U - 1U];
+        keypress_p99 = keys.data[(keys.len * 99U + 99U) / 100U - 1U];
     }
     (void)printf("git_gutter diff_100k_500_median_ns=%llu "
                  "slice_max_us=%llu keypress_p99_ns=%llu "
-                 "lookup_p99_ns=%llu edits=%u diff_starts=%u sink=%llu\n",
+                 "idle_tick_p99_ns=%llu lookup_p99_ns=%llu "
+                 "edits=%u diff_starts=%u sink=%llu\n",
                  (unsigned long long)(ok ?
                      diff_samples[YEW_ARRAY_LEN(diff_samples) / 2U] :
                      UINT64_MAX),
                  (unsigned long long)max_slice_us,
                  (unsigned long long)keypress_p99,
+                 (unsigned long long)idle_tick_p99,
                  (unsigned long long)lookup_p99, GUTTER_EDITS,
                  debounce_ok ? 1U : 0U,
                  (unsigned long long)gutter_sink);
@@ -296,6 +317,7 @@ int main(int argc, char **argv)
                       GUTTER_KEYPRESS_BUDGET_NS, GUTTER_LOOKUP_BUDGET_NS);
         ok = false;
     }
+    free(keys.data);
     free(ticks.data);
     bytebuf_free(&live);
     bytebuf_free(&base);
