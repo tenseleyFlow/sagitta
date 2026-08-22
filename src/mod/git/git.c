@@ -724,6 +724,12 @@ GitAsyncState yew_git_detect_state(const Ed *ed)
            ed->git->detect_state;
 }
 
+GitStatusCode yew_git_detect_result(const Ed *ed)
+{
+    return ed == NULL || ed->git == NULL ? YEW_GIT_FAILED :
+           ed->git->detect_result;
+}
+
 static bool git_parse_version(const u8 *buf, u64 n, GitVersion *out)
 {
     static const char prefix[] = "git version ";
@@ -886,6 +892,14 @@ GitStatusCode yew_git_detect(Ed *ed, GitRepo *out)
             ed->git->detect_state = YEW_GIT_ASYNC_FAILED;
     }
     return ed->git->detect_result;
+}
+
+const GitRepo *yew_git_repo_cached(const Ed *ed)
+{
+    if (ed == NULL || ed->git == NULL ||
+        ed->git->detect_state != YEW_GIT_ASYNC_READY)
+        return NULL;
+    return &ed->git->repo;
 }
 
 static bool git_spawn_ignore(Ed *ed)

@@ -209,6 +209,12 @@ GitAsyncState yew_git_detect_state(const Ed *ed)
     return YEW_GIT_ASYNC_FAILED;
 }
 
+GitStatusCode yew_git_detect_result(const Ed *ed)
+{
+    (void)ed;
+    return YEW_GIT_NO_GIT;
+}
+
 bool yew_git_avail(Ed *ed, GitVersion *out)
 {
     (void)out;
@@ -220,6 +226,12 @@ GitStatusCode yew_git_detect(Ed *ed, GitRepo *out)
     (void)out;
     (void)git_require(ed);
     return YEW_GIT_NO_GIT;
+}
+
+const GitRepo *yew_git_repo_cached(const Ed *ed)
+{
+    (void)ed;
+    return NULL;
 }
 
 const GitSnapshot *yew_git_snapshot(Ed *ed)

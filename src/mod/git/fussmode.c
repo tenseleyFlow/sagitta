@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
@@ -62,7 +63,8 @@ typedef enum FussPickAction {
     FUSS_PICK_CHERRY_COMMIT,
     FUSS_PICK_REVERT,
     FUSS_PICK_STASH,
-    FUSS_PICK_REMOTE
+    FUSS_PICK_REMOTE,
+    FUSS_PICK_COMMIT_AMEND
 } FussPickAction;
 
 struct FussMode {
@@ -87,6 +89,7 @@ struct FussMode {
     bool pending_view;
     bool commit_editing;
     bool commit_amend;
+    u8 commit_comment;
     FussPromptAction prompt_action;
     char *prompt_path;
     bool prompt_untracked;
@@ -107,10 +110,14 @@ struct FussMode {
 
 static bool fuss_picker_result(Ed *ed, FussPickAction action,
                                const GitResult *result);
+static CmdStatus fuss_commit_begin(Ed *ed, bool amend, const u8 *prefill,
+                                   size_t prefill_len);
+static bool fuss_commit_guard(Ed *ed, const GitSnapshot *snap);
 static void fuss_prompt_clear(FussMode *f);
 static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
                              size_t len, void *ctx);
 static void fuss_damage(Ed *ed);
+static char *fuss_join_root(const Ed *ed, const char *path);
 static void fuss_walk_restart(Ed *ed);
 static void fuss_expand_clear(FussMode *f);
 static bool fuss_expand_start(Ed *ed, bool enter);
@@ -371,6 +378,21 @@ static void fuss_show_result(Ed *ed, const GitResult *result)
     (void)fuss_show_buffer(ed, buffer);
 }
 
+static bool fuss_result_has(const u8 *bytes, u64 len, const char *needle)
+{
+    size_t needle_len = fuss_cstr_len(needle);
+    u64 at;
+
+    if (bytes == NULL || needle == NULL || needle_len == 0U ||
+        len < (u64)needle_len)
+        return false;
+    for (at = 0U; at <= len - (u64)needle_len; at++) {
+        if (memcmp(bytes + at, needle, needle_len) == 0)
+            return true;
+    }
+    return false;
+}
+
 static void fuss_result_tick(Ed *ed)
 {
     FussMode *f;
@@ -392,7 +414,15 @@ static void fuss_result_tick(Ed *ed)
     pick = f->pending_pick;
     f->pending_pick = FUSS_PICK_NONE;
     if (result->state == YEW_GIT_OK) {
-        if (pick != FUSS_PICK_NONE)
+        if (pick == FUSS_PICK_COMMIT_AMEND) {
+            if (result->out_len > (u64)SIZE_MAX)
+                yew_msg(ed, YEW_MSG_ERROR,
+                        "previous commit message is too large to edit");
+            else
+                (void)fuss_commit_begin(ed, true, result->out,
+                                        (size_t)result->out_len);
+        }
+        else if (pick != FUSS_PICK_NONE)
             (void)fuss_picker_result(ed, pick, result);
         else if (f->pending_view)
             fuss_show_result(ed, result);
@@ -408,7 +438,9 @@ static void fuss_result_tick(Ed *ed)
     } else if (result->verb != NULL &&
                strcmp(result->verb, "branch-delete") == 0 &&
                f->prompt_path != NULL &&
-               f->prompt_action == FUSS_PROMPT_NONE) {
+               f->prompt_action == FUSS_PROMPT_NONE &&
+               fuss_result_has(result->err, result->err_len,
+                               "not fully merged")) {
         f->prompt_action = FUSS_PROMPT_BRANCH_DELETE;
         yew_cmdline_open_input(ed, NULL, fuss_prompt_done, f);
         if (ed->cmdline.active)
@@ -425,6 +457,12 @@ static void fuss_result_tick(Ed *ed)
     } else {
         yew_msg(ed, YEW_MSG_ERROR, "%s",
                 yew_git_state_str(result->state));
+    }
+    if (result->state != YEW_GIT_OK && result->verb != NULL &&
+        strcmp(result->verb, "branch-delete") == 0 &&
+        f->prompt_action == FUSS_PROMPT_NONE) {
+        free(f->prompt_path);
+        f->prompt_path = NULL;
     }
     f->pending_view = false;
     fuss_damage(ed);
@@ -626,6 +664,15 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
     fuss_result_tick(ed);
     if (!yew_fuss_active(ed))
         return;
+    if (yew_git_avail_state(ed) == YEW_GIT_ASYNC_FAILED) {
+        yew_msg(ed, YEW_MSG_ERROR, "%s",
+                yew_git_state_str(YEW_GIT_NO_GIT));
+        if (ed->mode == YEW_MODE_F)
+            (void)yew_mode_enter(ed, YEW_MODE_L);
+        return;
+    }
+    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED)
+        return;
     snap = yew_git_snapshot(ed);
     if (snap != NULL)
         fuss_rebuild(ed, snap);
@@ -771,15 +818,23 @@ static ThemeEnt fuss_role_style(const Ed *ed, const char *role,
 
 static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
 {
-    const GitSnapshot *snap = yew_git_snapshot(ed);
+    const GitSnapshot *snap;
     ThemeEnt style = fuss_base_style(ed);
-    char counts[64];
+    Bytebuf counts;
     u16 col = left;
-    int n;
 
     fuss_put_lit(&ed->grid, row, &col, right, "yew:", sizeof("yew:") - 1U,
                  style.fg, style.bg,
                  (u16)(style.attrs | YEW_ATTR_BOLD));
+    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED) {
+        const char *state = yew_git_state_str(yew_git_detect_result(ed));
+
+        fuss_put_lit(&ed->grid, row, &col, right, state,
+                     fuss_cstr_len(state), style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_DIM));
+        return;
+    }
+    snap = yew_git_snapshot(ed);
     if (snap == NULL || snap->gen == 0U) {
         fuss_put_lit(&ed->grid, row, &col, right, "loading",
                      sizeof("loading") - 1U, style.fg, style.bg,
@@ -794,11 +849,12 @@ static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
         fuss_put_lit(&ed->grid, row, &col, right, "(detached)",
                      sizeof("(detached)") - 1U, style.fg, style.bg,
                      (u16)(style.attrs | YEW_ATTR_BOLD));
-    n = snprintf(counts, sizeof(counts), "  ↑%d ↓%d", snap->ahead < 0 ? 0 :
-                 snap->ahead, snap->behind < 0 ? 0 : snap->behind);
-    if (n > 0)
-        fuss_put_lit(&ed->grid, row, &col, right, counts, (size_t)n,
-                     style.fg, style.bg, style.attrs);
+    bytebuf_init(&counts);
+    bytebuf_printf(&counts, "  ↑%d ↓%d", snap->ahead < 0 ? 0 : snap->ahead,
+                   snap->behind < 0 ? 0 : snap->behind);
+    fuss_put_lit(&ed->grid, row, &col, right, (const char *)counts.data,
+                 counts.len, style.fg, style.bg, style.attrs);
+    bytebuf_free(&counts);
 }
 
 static void fuss_marker(Ed *ed, u16 row, u16 *col, u16 right,
@@ -964,6 +1020,17 @@ void yew_fuss_draw(Ed *ed)
         tree = f->fuss_root->a->rect;
     fuss_header(ed, tree.y, tree.x, (u16)(tree.x + tree.w));
     visible = tree.h > 1U ? (u16)(tree.h - 1U) : 0U;
+    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED && visible != 0U) {
+        ThemeEnt style = fuss_base_style(ed);
+        const char *message = "not a Git repository — use :git.init";
+        u16 col = tree.x;
+
+        fuss_put_lit(&ed->grid, (u16)(tree.y + 1U), &col,
+                     (u16)(tree.x + tree.w), message,
+                     fuss_cstr_len(message), style.fg, style.bg,
+                     YEW_ATTR_DIM);
+        return;
+    }
     selected = fuss_row(f);
     if (selected >= 0 && visible != 0U) {
         if ((u32)selected < f->scroll)
@@ -1004,12 +1071,18 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer)
     Cell blank;
     u16 col;
     const GitSnapshot *snap;
-    const char *line1 = "Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict";
-    const char *line2 = "←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave";
+    const char *line1;
+    const char *line2;
 
     if (!yew_fuss_active(ed) || footer.h == 0U)
         return;
     f = ed->fuss;
+    line1 = f->ascii_glyphs ?
+        "Legend: ^ staged  x modified  x untracked  v incoming  ! conflict" :
+        "Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict";
+    line2 = f->ascii_glyphs ?
+        "<> tree | ^v siblings | a stage | m commit | / jump | q leave" :
+        "←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave";
     style = yew_statusline_mode_style(YEW_MODE_F);
     blank = ed->grid.blank;
     blank.fg = style.chip_fg;
@@ -1040,17 +1113,27 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer)
                      fuss_cstr_len(ed->msg.text), style.chip_fg,
                      style.chip_bg, 0U);
     } else {
-        snap = yew_git_snapshot(ed);
-        if (snap == NULL || snap->gen == 0U)
+        if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED) {
+            const char *state =
+                yew_git_state_str(yew_git_detect_result(ed));
+
             fuss_put_lit(&ed->grid, footer.y, &col,
-                         (u16)(footer.x + footer.w), "loading…",
-                         sizeof("loading…") - 1U, style.chip_fg,
-                         style.chip_bg, 0U);
-        else
-            fuss_put_lit(&ed->grid, footer.y, &col,
-                         (u16)(footer.x + footer.w), line1,
-                         fuss_cstr_len(line1), style.chip_fg,
-                         style.chip_bg, 0U);
+                         (u16)(footer.x + footer.w), state,
+                         fuss_cstr_len(state), style.chip_fg, style.chip_bg,
+                         0U);
+        } else {
+            snap = yew_git_snapshot(ed);
+            if (snap == NULL || snap->gen == 0U)
+                fuss_put_lit(&ed->grid, footer.y, &col,
+                             (u16)(footer.x + footer.w), "loading…",
+                             sizeof("loading…") - 1U, style.chip_fg,
+                             style.chip_bg, 0U);
+            else
+                fuss_put_lit(&ed->grid, footer.y, &col,
+                             (u16)(footer.x + footer.w), line1,
+                             fuss_cstr_len(line1), style.chip_fg,
+                             style.chip_bg, 0U);
+        }
     }
     if (footer.h > 1U) {
         col = footer.x;
@@ -1126,6 +1209,102 @@ static char *fuss_selected_path(CmdCtx *cx)
     if (item == NULL || !fuss_safe_path(item->path, item->path_len))
         return NULL;
     return fuss_dup_bytes(item->path, item->path_len);
+}
+
+typedef struct FussTarget {
+    bool known;
+    bool status_known;
+    bool is_file;
+    bool staged;
+    bool unstaged;
+    bool untracked;
+    bool incoming;
+    bool conflicted;
+} FussTarget;
+
+typedef enum FussTargetGuard {
+    FUSS_TARGET_ANY,
+    FUSS_TARGET_FILE,
+    FUSS_TARGET_STAGED_FILE,
+    FUSS_TARGET_DIRTY_FILE
+} FussTargetGuard;
+
+static bool fuss_target_lookup(CmdCtx *cx, const char *path,
+                               FussTarget *target)
+{
+    FussMode *f;
+    size_t len;
+    size_t i;
+    char *absolute;
+    struct stat st;
+
+    if (target == NULL)
+        return false;
+    (void)memset(target, 0, sizeof(*target));
+    if (fuss_require(cx, &f) != YEW_CMD_OK || path == NULL)
+        return false;
+    len = fuss_cstr_len(path);
+    for (i = 0U; i < f->tree.items.len; i++) {
+        const FussItem *item = &f->tree.items.data[i];
+        const FussNode *node;
+
+        if (item->path_len != len || memcmp(item->path, path, len) != 0)
+            continue;
+        node = fuss_node(f, item);
+        if (node == NULL)
+            break;
+        target->known = true;
+        target->status_known = true;
+        target->is_file = node->is_file;
+        target->staged = node->staged;
+        target->unstaged = node->unstaged;
+        target->untracked = node->untracked;
+        target->incoming = node->incoming;
+        target->conflicted = node->conflicted;
+        return true;
+    }
+    absolute = fuss_join_root(cx->ed, path);
+    if (absolute != NULL && lstat(absolute, &st) == 0) {
+        target->known = true;
+        target->is_file = !S_ISDIR(st.st_mode);
+    }
+    free(absolute);
+    return target->known;
+}
+
+static bool fuss_target_guard(CmdCtx *cx, const char *path,
+                              FussTargetGuard guard, const char *action,
+                              FussTarget *target)
+{
+    FussTarget found;
+
+    if (guard == FUSS_TARGET_ANY) {
+        if (target != NULL)
+            (void)memset(target, 0, sizeof(*target));
+        return true;
+    }
+    if (!fuss_target_lookup(cx, path, &found)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "select a valid workspace path");
+        return false;
+    }
+    if (guard != FUSS_TARGET_ANY && !found.is_file) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "select a file to %s", action);
+        return false;
+    }
+    if (guard == FUSS_TARGET_STAGED_FILE && found.status_known &&
+        !found.staged) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "nothing staged to unstage");
+        return false;
+    }
+    if (guard == FUSS_TARGET_DIRTY_FILE &&
+        ((!found.staged && !found.unstaged) || found.untracked ||
+         found.conflicted)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "nothing dirty to discard");
+        return false;
+    }
+    if (target != NULL)
+        *target = found;
+    return true;
 }
 
 static char *fuss_join_root(const Ed *ed, const char *path)
@@ -1324,11 +1503,12 @@ static CmdStatus fuss_pick_remotes(Ed *ed)
 
 static CmdStatus fuss_path_verb(CmdCtx *cx, const char *verb_name,
                                 char *const *prefix, size_t prefix_n,
-                                bool view)
+                                FussTargetGuard guard, bool view)
 {
     char *path;
     char **argv;
     CmdStatus status;
+    FussTarget target;
     size_t i;
 
     if (fuss_require(cx, NULL) != YEW_CMD_OK)
@@ -1338,9 +1518,15 @@ static CmdStatus fuss_path_verb(CmdCtx *cx, const char *verb_name,
         yew_msg(cx->ed, YEW_MSG_ERROR, "select a valid workspace path");
         return YEW_CMD_ERR_ARG;
     }
+    if (!fuss_target_guard(cx, path, guard, verb_name, &target)) {
+        free(path);
+        return YEW_CMD_ERR_STATE;
+    }
     argv = yew_xcalloc(prefix_n + 3U, sizeof(*argv));
     for (i = 0U; i < prefix_n; i++)
         argv[i] = prefix[i];
+    if (strcmp(verb_name, "diff") == 0 && target.incoming && prefix_n > 1U)
+        argv[1] = (char *)"HEAD...@{upstream}";
     argv[prefix_n] = (char *)"--";
     argv[prefix_n + 1U] = path;
     status = fuss_spawn(cx->ed, verb_name, argv, true, NULL, 0U, view);
@@ -1367,8 +1553,10 @@ static bool fuss_text_is(const u8 *text, size_t len, const char *literal,
 }
 
 static CmdStatus fuss_commit_bytes(Ed *ed, const u8 *text, size_t len,
-                                   bool amend)
+                                   bool amend, bool *empty_out)
 {
+    FussMode *f;
+    const GitSnapshot *snap;
     Bytebuf clean;
     u8 comment = (u8)'#';
     char *argv_commit[] = {
@@ -1381,11 +1569,28 @@ static CmdStatus fuss_commit_bytes(Ed *ed, const u8 *text, size_t len,
     };
     CmdStatus status;
 
+    if (empty_out != NULL)
+        *empty_out = false;
+    f = ed == NULL ? NULL : ed->fuss;
+    snap = yew_git_snapshot(ed);
+    if (!fuss_commit_guard(ed, snap))
+        return YEW_CMD_ERR_STATE;
+    if (f != NULL && f->commit_editing && f->commit_comment != 0U) {
+        comment = f->commit_comment;
+    } else if (snap != NULL &&
+               !yew_fuss_commit_select_comment(
+                   text, len, (const u8 *)snap->comment_char,
+                   snap->comment_char_len, &comment)) {
+        yew_msg(ed, YEW_MSG_ERROR,
+                "cannot resolve core.commentChar for commit message");
+        return YEW_CMD_ERR_STATE;
+    }
     bytebuf_init(&clean);
-    (void)yew_fuss_commit_select_comment(text, len, NULL, 0U, &comment);
     if (!yew_fuss_commit_cleanup(&clean, text, len, comment) ||
         yew_fuss_commit_empty(clean.data, clean.len)) {
         bytebuf_free(&clean);
+        if (empty_out != NULL)
+            *empty_out = true;
         yew_msg(ed, YEW_MSG_ERROR,
                 "aborting commit due to empty commit message");
         return YEW_CMD_ERR_STATE;
@@ -1440,6 +1645,7 @@ static void fuss_commit_resume(Ed *ed, Buffer *commit)
     f->commit_editing = false;
     f->commit_buffer_id = 0U;
     f->commit_amend = false;
+    f->commit_comment = 0U;
     fuss_viewer_close(ed);
     if (commit != NULL && commit != &ed->buffer)
         yew_ws_scratch_drop(ed, commit);
@@ -1447,47 +1653,245 @@ static void fuss_commit_resume(Ed *ed, Buffer *commit)
         (void)yew_mode_enter(ed, YEW_MODE_L);
 }
 
-static CmdStatus fuss_commit_open(CmdCtx *cx, bool amend)
+static u32 fuss_conflict_count(const GitSnapshot *snap)
+{
+    size_t i;
+    u32 count = 0U;
+
+    if (snap == NULL)
+        return 0U;
+    for (i = 0U; i < snap->entries.len; i++) {
+        if (snap->entries.data[i].conflicted && count != UINT32_MAX)
+            count++;
+    }
+    return count;
+}
+
+static bool fuss_commit_guard(Ed *ed, const GitSnapshot *snap)
+{
+    u32 conflicts = fuss_conflict_count(snap);
+
+    if (conflicts == 0U)
+        return true;
+    yew_msg(ed, YEW_MSG_ERROR,
+            "resolve conflicts before committing (%u files)",
+            (unsigned int)conflicts);
+    return false;
+}
+
+static void fuss_comment_line(Bytebuf *out, u8 comment, const char *text,
+                              size_t len)
+{
+    bytebuf_push_u8(out, comment);
+    if (len != 0U) {
+        bytebuf_push_u8(out, (u8)' ');
+        fuss_append_lit(out, text, len);
+    }
+    bytebuf_push_u8(out, (u8)'\n');
+}
+
+static void fuss_comment_prefix(Bytebuf *out, u8 comment)
+{
+    bytebuf_push_u8(out, comment);
+    bytebuf_push_u8(out, (u8)' ');
+}
+
+static void fuss_template_path(Bytebuf *out, const char *path, u32 len)
+{
+    u32 i;
+
+    for (i = 0U; i < len; i++) {
+        u8 byte = (u8)path[i];
+
+        if (byte == (u8)'\n')
+            fuss_append_lit(out, "\\n", sizeof("\\n") - 1U);
+        else if (byte == (u8)'\r')
+            fuss_append_lit(out, "\\r", sizeof("\\r") - 1U);
+        else if (byte == (u8)'\t')
+            fuss_append_lit(out, "\\t", sizeof("\\t") - 1U);
+        else
+            bytebuf_push_u8(out, byte);
+    }
+}
+
+static const char *fuss_change_label(const GitEntry *entry, bool staged)
+{
+    char code = staged ? entry->x : entry->y;
+
+    if (entry->kind == GIT_E_RENAME || code == 'R' || code == 'C')
+        return "renamed";
+    if (code == 'A' || entry->untracked)
+        return "new file";
+    if (code == 'D')
+        return "deleted";
+    if (code == 'T')
+        return "typechange";
+    return "modified";
+}
+
+static void fuss_status_line(Bytebuf *out, u8 comment,
+                             const GitEntry *entry, bool staged)
+{
+    const char *label = fuss_change_label(entry, staged);
+
+    bytebuf_push_u8(out, comment);
+    bytebuf_push_u8(out, (u8)'\t');
+    fuss_append_lit(out, label, fuss_cstr_len(label));
+    fuss_append_lit(out, ":   ", sizeof(":   ") - 1U);
+    fuss_template_path(out, entry->path, entry->path_len);
+    bytebuf_push_u8(out, (u8)'\n');
+}
+
+static bool fuss_has_status(const GitSnapshot *snap, u8 kind)
+{
+    size_t i;
+
+    for (i = 0U; snap != NULL && i < snap->entries.len; i++) {
+        const GitEntry *entry = &snap->entries.data[i];
+
+        if ((kind == 0U && entry->staged) ||
+            (kind == 1U && entry->unstaged && !entry->untracked) ||
+            (kind == 2U && entry->untracked))
+            return true;
+    }
+    return false;
+}
+
+static bool fuss_commit_template(Bytebuf *text, const GitSnapshot *snap,
+                                 const u8 *prefill, size_t prefill_len,
+                                 bool amend, u8 *comment_out)
+{
+    const u8 *setting = (const u8 *)"#";
+    size_t setting_len = 1U;
+    u8 comment = (u8)'#';
+    size_t i;
+
+    if (text == NULL || comment_out == NULL ||
+        (prefill == NULL && prefill_len != 0U))
+        return false;
+    if (snap != NULL && snap->comment_char != NULL) {
+        setting = (const u8 *)snap->comment_char;
+        setting_len = snap->comment_char_len;
+    }
+    if (!yew_fuss_commit_select_comment(prefill, prefill_len, setting,
+                                        setting_len, &comment))
+        return false;
+    bytebuf_init(text);
+    if (prefill_len != 0U) {
+        bytebuf_append(text, prefill, prefill_len);
+        if (prefill[prefill_len - 1U] != (u8)'\n')
+            bytebuf_push_u8(text, (u8)'\n');
+        bytebuf_push_u8(text, (u8)'\n');
+    } else {
+        bytebuf_push_u8(text, (u8)'\n');
+    }
+    fuss_comment_line(text, comment,
+        "Please enter the commit message for your changes. Lines starting",
+        sizeof("Please enter the commit message for your changes. Lines starting") - 1U);
+    fuss_comment_prefix(text, comment);
+    fuss_append_lit(text, "with '", sizeof("with '") - 1U);
+    bytebuf_push_u8(text, comment);
+    fuss_append_lit(text,
+                    "' will be ignored, and an empty message aborts the commit.\n",
+                    sizeof("' will be ignored, and an empty message aborts the commit.\n") - 1U);
+    fuss_comment_line(text, comment, NULL, 0U);
+    if (snap != NULL && snap->branch != NULL) {
+        fuss_comment_prefix(text, comment);
+        fuss_append_lit(text, "On branch ", sizeof("On branch ") - 1U);
+        fuss_append_lit(text, snap->branch, fuss_cstr_len(snap->branch));
+        bytebuf_push_u8(text, (u8)'\n');
+    }
+    if (snap != NULL && snap->upstream != NULL) {
+        fuss_comment_prefix(text, comment);
+        if (snap->ahead > 0 && snap->behind > 0)
+            bytebuf_printf(text,
+                           "Your branch and '%s' have diverged (%d ahead, %d behind).\n",
+                           snap->upstream, snap->ahead, snap->behind);
+        else if (snap->ahead > 0)
+            bytebuf_printf(text, "Your branch is ahead of '%s' by %d commits.\n",
+                           snap->upstream, snap->ahead);
+        else if (snap->behind > 0)
+            bytebuf_printf(text, "Your branch is behind '%s' by %d commits.\n",
+                           snap->upstream, snap->behind);
+        else
+            bytebuf_printf(text, "Your branch is up to date with '%s'.\n",
+                           snap->upstream);
+        if (amend && snap->ahead == 0) {
+            fuss_comment_prefix(text, comment);
+            bytebuf_printf(text, "This commit has been pushed to %s.\n",
+                           snap->upstream);
+        }
+    }
+    fuss_comment_line(text, comment, NULL, 0U);
+    if (fuss_has_status(snap, 0U)) {
+        fuss_comment_line(text, comment, "Changes to be committed:",
+                          sizeof("Changes to be committed:") - 1U);
+        for (i = 0U; i < snap->entries.len; i++) {
+            const GitEntry *entry = &snap->entries.data[i];
+
+            if (entry->staged)
+                fuss_status_line(text, comment, entry, true);
+        }
+        fuss_comment_line(text, comment, NULL, 0U);
+    }
+    if (fuss_has_status(snap, 1U)) {
+        fuss_comment_line(text, comment, "Changes not staged for commit:",
+                          sizeof("Changes not staged for commit:") - 1U);
+        for (i = 0U; i < snap->entries.len; i++) {
+            const GitEntry *entry = &snap->entries.data[i];
+
+            if (entry->unstaged && !entry->untracked)
+                fuss_status_line(text, comment, entry, false);
+        }
+        fuss_comment_line(text, comment, NULL, 0U);
+    }
+    if (fuss_has_status(snap, 2U)) {
+        fuss_comment_line(text, comment, "Untracked files:",
+                          sizeof("Untracked files:") - 1U);
+        for (i = 0U; i < snap->entries.len; i++) {
+            const GitEntry *entry = &snap->entries.data[i];
+
+            if (entry->untracked)
+                fuss_status_line(text, comment, entry, false);
+        }
+        fuss_comment_line(text, comment, NULL, 0U);
+    }
+    fuss_comment_line(text, comment,
+        "Save this buffer to commit; close it without saving to abort.",
+        sizeof("Save this buffer to commit; close it without saving to abort.") - 1U);
+    *comment_out = comment;
+    return true;
+}
+
+static CmdStatus fuss_commit_begin(Ed *ed, bool amend, const u8 *prefill,
+                                   size_t prefill_len)
 {
     FussMode *f;
     Buffer *buffer;
     const GitSnapshot *snap;
     Bytebuf text;
+    u8 comment;
 
-    if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
+    if (ed == NULL || ed->fuss == NULL || !ed->fuss->active)
         return YEW_CMD_ERR_STATE;
-    buffer = yew_ws_scratch_find(cx->ed, "*commit*");
-    if (buffer == NULL)
-        buffer = yew_ws_scratch_new(cx->ed, "*commit*", 0U);
-    if (buffer == NULL || buffer->tb == NULL)
-        return YEW_CMD_ERR_IO;
-    bytebuf_init(&text);
-    fuss_append_lit(&text, "\n", 1U);
-    fuss_append_lit(&text,
-        "# Please enter the commit message for your changes. Lines "
-        "starting\n# with '#' will be ignored, and an empty message "
-        "aborts the commit.\n#\n",
-        sizeof("# Please enter the commit message for your changes. Lines "
-               "starting\n# with '#' will be ignored, and an empty message "
-               "aborts the commit.\n#\n") - 1U);
-    snap = yew_git_snapshot(cx->ed);
-    if (snap != NULL && snap->branch != NULL) {
-        fuss_append_lit(&text, "# On branch ", sizeof("# On branch ") - 1U);
-        bytebuf_append(&text, (const u8 *)snap->branch,
-                       fuss_cstr_len(snap->branch));
-        fuss_append_lit(&text, "\n#\n", sizeof("\n#\n") - 1U);
+    f = ed->fuss;
+    snap = yew_git_snapshot(ed);
+    if (!fuss_commit_guard(ed, snap))
+        return YEW_CMD_ERR_STATE;
+    if (!fuss_commit_template(&text, snap, prefill, prefill_len, amend,
+                              &comment)) {
+        yew_msg(ed, YEW_MSG_ERROR,
+                "cannot resolve core.commentChar for commit template");
+        return YEW_CMD_ERR_STATE;
     }
-    if (amend)
-        fuss_append_lit(&text,
-            "# Amend mode: replace this template with the complete new "
-            "message.\n",
-            sizeof("# Amend mode: replace this template with the complete "
-                   "new message.\n") - 1U);
-    fuss_append_lit(&text,
-        "# Save this buffer to commit; close it without saving to abort.\n",
-        sizeof("# Save this buffer to commit; close it without saving to "
-               "abort.\n") - 1U);
-    if (!fuss_replace_buffer(cx->ed, buffer, text.data, (u64)text.len)) {
+    buffer = yew_ws_scratch_find(ed, "*commit*");
+    if (buffer == NULL)
+        buffer = yew_ws_scratch_new(ed, "*commit*", 0U);
+    if (buffer == NULL || buffer->tb == NULL) {
+        bytebuf_free(&text);
+        return YEW_CMD_ERR_IO;
+    }
+    if (!fuss_replace_buffer(ed, buffer, text.data, (u64)text.len)) {
         bytebuf_free(&text);
         return YEW_CMD_ERR_IO;
     }
@@ -1498,22 +1902,129 @@ static CmdStatus fuss_commit_open(CmdCtx *cx, bool amend)
     f->commit_editing = true;
     f->commit_buffer_id = buffer->id;
     f->commit_amend = amend;
-    if (!fuss_show_buffer(cx->ed, buffer)) {
+    f->commit_comment = comment;
+    if (!fuss_show_buffer(ed, buffer)) {
         f->commit_editing = false;
         f->commit_buffer_id = 0U;
         f->commit_amend = false;
+        f->commit_comment = 0U;
         return YEW_CMD_ERR_STATE;
     }
-    if (yew_mode_enter(cx->ed, YEW_MODE_I) != YEW_CMD_OK) {
+    if (yew_mode_enter(ed, YEW_MODE_I) != YEW_CMD_OK) {
         f->commit_editing = false;
         f->commit_buffer_id = 0U;
         f->commit_amend = false;
-        fuss_viewer_close(cx->ed);
+        f->commit_comment = 0U;
+        fuss_viewer_close(ed);
         return YEW_CMD_ERR_STATE;
     }
-    yew_msg(cx->ed, YEW_MSG_INFO,
+    yew_msg(ed, YEW_MSG_INFO,
             "edit *commit*, then save to commit or close to abort");
     return YEW_CMD_OK;
+}
+
+static char *fuss_dir_path(const char *dir, const char *name)
+{
+    size_t dir_len;
+    size_t name_len;
+    bool slash;
+    char *path;
+
+    if (dir == NULL || name == NULL)
+        return NULL;
+    dir_len = fuss_cstr_len(dir);
+    name_len = fuss_cstr_len(name);
+    slash = dir_len != 0U && dir[dir_len - 1U] != '/';
+    if (dir_len > SIZE_MAX - name_len - (slash ? 2U : 1U))
+        return NULL;
+    path = yew_xmalloc(dir_len + name_len + (slash ? 2U : 1U));
+    if (dir_len != 0U)
+        (void)memcpy(path, dir, dir_len);
+    if (slash)
+        path[dir_len++] = '/';
+    (void)memcpy(path + dir_len, name, name_len + 1U);
+    return path;
+}
+
+static bool fuss_read_small_file(const char *path, Bytebuf *out)
+{
+    enum { FUSS_COMMIT_FILE_MAX = 1024 * 1024 };
+    int fd;
+    u8 bytes[4096];
+
+    if (path == NULL || out == NULL)
+        return false;
+    bytebuf_init(out);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return false;
+    for (;;) {
+        ssize_t got = read(fd, bytes, sizeof(bytes));
+
+        if (got == 0)
+            break;
+        if (got < 0) {
+            if (errno == EINTR)
+                continue;
+            (void)close(fd);
+            bytebuf_free(out);
+            return false;
+        }
+        if (out->len > FUSS_COMMIT_FILE_MAX - (size_t)got) {
+            (void)close(fd);
+            bytebuf_free(out);
+            return false;
+        }
+        bytebuf_append(out, bytes, (size_t)got);
+    }
+    if (close(fd) != 0) {
+        bytebuf_free(out);
+        return false;
+    }
+    return true;
+}
+
+static CmdStatus fuss_commit_open(CmdCtx *cx, bool amend)
+{
+    FussMode *f;
+    const GitSnapshot *snap;
+
+    if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
+        return YEW_CMD_ERR_STATE;
+    snap = yew_git_snapshot(cx->ed);
+    if (!fuss_commit_guard(cx->ed, snap))
+        return YEW_CMD_ERR_STATE;
+    if (amend) {
+        char *argv[] = {
+            (char *)"log", (char *)"-1", (char *)"--pretty=%B", NULL
+        };
+        CmdStatus status = fuss_spawn(cx->ed, "log", argv, false, NULL,
+                                      0U, false);
+
+        if (status == YEW_CMD_OK)
+            f->pending_pick = FUSS_PICK_COMMIT_AMEND;
+        return status;
+    }
+    if (snap != NULL && snap->state == YEW_GIT_MID_MERGE) {
+        const GitRepo *repo = yew_git_repo_cached(cx->ed);
+        char *path = repo == NULL ? NULL :
+                     fuss_dir_path(repo->git_dir, "MERGE_MSG");
+        Bytebuf message;
+        CmdStatus status;
+
+        if (path == NULL || !fuss_read_small_file(path, &message)) {
+            free(path);
+            yew_msg(cx->ed, YEW_MSG_ERROR,
+                    "cannot read the pending merge message");
+            return YEW_CMD_ERR_IO;
+        }
+        free(path);
+        status = fuss_commit_begin(cx->ed, false, message.data,
+                                   message.len);
+        bytebuf_free(&message);
+        return status;
+    }
+    return fuss_commit_begin(cx->ed, false, NULL, 0U);
 }
 
 CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled)
@@ -1521,6 +2032,7 @@ CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled)
     FussMode *f;
     Bytebuf message;
     CmdStatus status;
+    bool empty;
 
     if (handled != NULL)
         *handled = false;
@@ -1534,10 +2046,14 @@ CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled)
     if (!fuss_buffer_bytes(buffer, &message))
         return YEW_CMD_ERR_IO;
     status = fuss_commit_bytes(ed, message.data, message.len,
-                               f->commit_amend);
+                               f->commit_amend, &empty);
     bytebuf_free(&message);
-    if (status != YEW_CMD_OK)
+    if (status != YEW_CMD_OK && !empty)
         return status;
+    if (empty) {
+        fuss_commit_resume(ed, buffer);
+        return status;
+    }
     yew_undo_mark_saved(buffer->undo);
     fuss_commit_resume(ed, buffer);
     return YEW_CMD_OK;
@@ -1694,8 +2210,8 @@ static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
                 (void)fuss_spawn(ed, "tag", argv, false, NULL, 0U, false);
             } else {
                 char *argv[] = {
-                    (char *)"tag", (char *)"-a", value, (char *)"-F",
-                    (char *)"-", NULL
+                    (char *)"tag", (char *)"-a", (char *)"-F",
+                    (char *)"-", (char *)"--", value, NULL
                 };
                 *message++ = '\0';
                 if (*value != '\0')
@@ -1782,7 +2298,8 @@ static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
     case FUSS_PROMPT_COMMIT_AMEND:
         if (accepted)
             (void)fuss_commit_bytes(ed, text, len,
-                                    action == FUSS_PROMPT_COMMIT_AMEND);
+                                    action == FUSS_PROMPT_COMMIT_AMEND,
+                                    NULL);
         break;
     case FUSS_PROMPT_NONE:
         break;
@@ -1804,21 +2321,25 @@ static CmdStatus fuss_prompt(CmdCtx *cx, FussPromptAction action,
     fuss_prompt_clear(f);
     f->prompt_action = action;
     if (path != NULL) {
-        const FussItem *item = fuss_item(f, fuss_row(f));
-        const FussNode *node = fuss_node(f, item);
+        FussTarget target;
 
         f->prompt_path = fuss_dup_bytes(path, fuss_cstr_len(path));
-        if (node != NULL && item != NULL &&
-            item->path_len == fuss_cstr_len(path) &&
-            memcmp(item->path, path, item->path_len) == 0)
-            f->prompt_untracked = node->untracked;
+        if (fuss_target_lookup(cx, path, &target))
+            f->prompt_untracked = target.untracked;
     }
     yew_cmdline_open_input(cx->ed, seed, fuss_prompt_done, f);
     if (!cx->ed->cmdline.active) {
         fuss_prompt_clear(f);
         return YEW_CMD_ERR_STATE;
     }
-    if (hint != NULL)
+    if (action == FUSS_PROMPT_DISCARD && path != NULL)
+        yew_msg(cx->ed, YEW_MSG_WARN,
+                "discard %s — type 'discard' to confirm — use hunk "
+                "discard for an undoable version", path);
+    else if (action == FUSS_PROMPT_DELETE && path != NULL)
+        yew_msg(cx->ed, YEW_MSG_WARN,
+                "delete %s — type 'delete' to confirm", path);
+    else if (hint != NULL)
         yew_msg(cx->ed, YEW_MSG_WARN, "%s", hint);
     return YEW_CMD_OK;
 }
@@ -1949,6 +2470,7 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
             (void)fuss_spawn(ed, "push", argv, false, NULL, 0U, false);
         }
         break;
+    case FUSS_PICK_COMMIT_AMEND:
     case FUSS_PICK_NONE:
         break;
     }
@@ -2112,6 +2634,7 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
     case FUSS_PICK_REVERT: fuss_picker_open(ed, action, "commit"); break;
     case FUSS_PICK_STASH: fuss_picker_open(ed, action, "stash"); break;
     case FUSS_PICK_REMOTE: fuss_picker_open(ed, action, "remote"); break;
+    case FUSS_PICK_COMMIT_AMEND:
     case FUSS_PICK_RESET_MODE:
     case FUSS_PICK_NONE:
         return false;
@@ -2396,14 +2919,15 @@ CmdStatus yew_fuss_cmd_jump_arm(CmdCtx *cx)
 CmdStatus yew_fuss_cmd_stage(CmdCtx *cx)
 {
     char *prefix[] = {(char *)"add"};
-    return fuss_path_verb(cx, "stage", prefix, YEW_ARRAY_LEN(prefix), false);
+    return fuss_path_verb(cx, "stage", prefix, YEW_ARRAY_LEN(prefix),
+                          FUSS_TARGET_ANY, false);
 }
 
 CmdStatus yew_fuss_cmd_unstage(CmdCtx *cx)
 {
     char *prefix[] = {(char *)"restore", (char *)"--staged"};
     return fuss_path_verb(cx, "unstage", prefix, YEW_ARRAY_LEN(prefix),
-                          false);
+                          FUSS_TARGET_STAGED_FILE, false);
 }
 
 CmdStatus yew_fuss_cmd_stage_all(CmdCtx *cx)
@@ -2474,7 +2998,8 @@ CmdStatus yew_fuss_cmd_fetch(CmdCtx *cx)
 CmdStatus yew_fuss_cmd_diff(CmdCtx *cx)
 {
     char *prefix[] = {(char *)"diff", (char *)"HEAD"};
-    return fuss_path_verb(cx, "diff", prefix, YEW_ARRAY_LEN(prefix), true);
+    return fuss_path_verb(cx, "diff", prefix, YEW_ARRAY_LEN(prefix),
+                          FUSS_TARGET_FILE, true);
 }
 
 CmdStatus yew_fuss_cmd_status(CmdCtx *cx)
@@ -2488,7 +3013,8 @@ CmdStatus yew_fuss_cmd_status(CmdCtx *cx)
 CmdStatus yew_fuss_cmd_blame(CmdCtx *cx)
 {
     char *prefix[] = {(char *)"blame", (char *)"--porcelain"};
-    return fuss_path_verb(cx, "blame", prefix, YEW_ARRAY_LEN(prefix), true);
+    return fuss_path_verb(cx, "blame", prefix, YEW_ARRAY_LEN(prefix),
+                          FUSS_TARGET_FILE, true);
 }
 
 CmdStatus yew_fuss_cmd_history(CmdCtx *cx)
@@ -2527,6 +3053,11 @@ static CmdStatus fuss_open_path(CmdCtx *cx, bool leave)
     path = fuss_selected_path(cx);
     if (path == NULL)
         return YEW_CMD_ERR_ARG;
+    if (!fuss_target_guard(cx, path, FUSS_TARGET_FILE,
+                           leave ? "open" : "view", NULL)) {
+        free(path);
+        return YEW_CMD_ERR_STATE;
+    }
     absolute = fuss_join_root(cx->ed, path);
     free(path);
     if (absolute == NULL)
@@ -2831,6 +3362,11 @@ CmdStatus yew_fuss_cmd_discard(CmdCtx *cx)
 
     if (path == NULL)
         return YEW_CMD_ERR_ARG;
+    if (!fuss_target_guard(cx, path, FUSS_TARGET_DIRTY_FILE, "discard",
+                           NULL)) {
+        free(path);
+        return YEW_CMD_ERR_STATE;
+    }
     status = fuss_prompt(cx, FUSS_PROMPT_DISCARD, NULL, path,
                          "type 'discard' to permanently discard the path");
     free(path);
@@ -2844,6 +3380,10 @@ CmdStatus yew_fuss_cmd_file_delete(CmdCtx *cx)
 
     if (path == NULL)
         return YEW_CMD_ERR_ARG;
+    if (!fuss_target_guard(cx, path, FUSS_TARGET_FILE, "delete", NULL)) {
+        free(path);
+        return YEW_CMD_ERR_STATE;
+    }
     status = fuss_prompt(cx, FUSS_PROMPT_DELETE, NULL, path,
                          "type 'delete' to permanently delete the path");
     free(path);
