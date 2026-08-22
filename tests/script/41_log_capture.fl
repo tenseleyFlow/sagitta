@@ -1,7 +1,7 @@
 # Sprint 37: assertion host observes structural log records, not stderr text.
 import ed
-t.raises("name", fn() { return ed.run("ed.git.hunk.next", {}) })
-t.log("error", "ed.git.hunk.next lands in Sprint 53")
+t.raises("name", fn() { return ed.run("ed.group.from_dir", {}) })
+t.log("error", "ed.group.from_dir lands in Sprint 53")
 t.log("error", "command not implemented yet")
 t.eq(batch, true)
 t.ne(script_path, "")
