@@ -2,6 +2,7 @@
 
 #include "edit/cmd.h"
 #include "edit/ed.h"
+#include "mod/git/git.h"
 #include "mod/mods.h"
 #include "syn/engine.h"
 #include "ui/message.h"
@@ -112,6 +113,26 @@ void test_git_commands_cross_module_boundary(void)
     }
     YEW_ASSERT(seen >= 40U);
     yew_ed_free(&ed);
+}
+
+void test_git_passive_lifecycle_is_silent_when_stripped(void)
+{
+#if YEW_WITH_FUSS
+    YEW_ASSERT(true);
+#else
+    Ed ed;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_msg_clear(&ed);
+
+    YEW_ASSERT(!yew_git_refresh(&ed, false));
+    YEW_ASSERT(!ed.msg.active);
+    yew_git_invalidate(&ed);
+    YEW_ASSERT(!ed.msg.active);
+
+    yew_ed_free(&ed);
+#endif
 }
 
 void test_git_diff_scratch_direct_fill_reattaches_syntax(void)

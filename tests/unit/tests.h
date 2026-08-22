@@ -268,6 +268,7 @@ void test_log_bug_prehook(void);
 void test_mod_require_message(void);
 void test_lsp_restart_crosses_module_boundary(void);
 void test_git_commands_cross_module_boundary(void);
+void test_git_passive_lifecycle_is_silent_when_stripped(void);
 void test_git_diff_scratch_direct_fill_reattaches_syntax(void);
 void test_keyid_canonical_rows(void);
 void test_keyid_shift_and_legacy_equivalence(void);

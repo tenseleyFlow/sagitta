@@ -375,13 +375,14 @@ u32 yew_git_blob(Ed *ed, const char *oid, char *err, size_t errsz)
 
 bool yew_git_refresh(Ed *ed, bool force)
 {
+    (void)ed;
     (void)force;
-    return git_require(ed);
+    return false;
 }
 
 void yew_git_invalidate(Ed *ed)
 {
-    (void)git_require(ed);
+    (void)ed;
 }
 
 bool yew_git_job_owned(const Ed *ed, u32 job_id)
