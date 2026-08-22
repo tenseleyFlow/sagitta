@@ -236,6 +236,7 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         {"m", "ed.git.commit"}, {"M", "ed.git.commit.amend"},
         {"p", "ed.git.push"}, {"l", "ed.git.pull"},
         {"f", "ed.git.fetch"}, {"d", "ed.git.diff"},
+        {"D", "ed.git.diff.view"},
         {"s", "ed.git.status"}, {"w", "ed.git.blame"},
         {"h", "ed.git.history"}, {"L", "ed.git.reflog"},
         {"c", "ed.git.view"}, {"b", "ed.git.branch.switch"},

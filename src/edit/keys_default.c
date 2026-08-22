@@ -55,6 +55,7 @@ static const BindRow panic_F[] = {
     {"l", "ed.git.pull", 0, NULL},
     {"f", "ed.git.fetch", 0, NULL},
     {"d", "ed.git.diff", 0, NULL},
+    {"D", "ed.git.diff.view", 0, NULL},
     {"s", "ed.git.status", 0, NULL},
     {"w", "ed.git.blame", 0, NULL},
     {"h", "ed.git.history", 0, NULL},

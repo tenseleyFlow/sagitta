@@ -72,7 +72,11 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
     static const char *const ui_roles[] = {
         "lsp.hover_range", "lsp.highlight_read", "lsp.highlight_write",
         "diag.error", "diag.warn", "diag.info", "diag.hint",
-        "diag.unnecessary", "diag.deprecated"
+        "diag.unnecessary", "diag.deprecated", "git.blame",
+        "git.blame.stale", "git.sign.add", "git.sign.mod",
+        "git.sign.del", "git.sign.conflict", "git.sign.unknown",
+        "git.diff.add", "git.diff.del", "git.diff.mod",
+        "git.diff.filler", "git.diff.intra.add", "git.diff.intra.del"
     };
     ThemeFix f;
     u32 file;

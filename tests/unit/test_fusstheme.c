@@ -53,7 +53,11 @@ void test_fuss_theme_roles_are_shipped(void)
     };
     static const char *const roles[] = {
         "mode.git", "git.staged", "git.modified", "git.untracked",
-        "git.incoming", "git.conflict", "git.ignored"
+        "git.incoming", "git.conflict", "git.ignored", "git.blame",
+        "git.blame.stale", "git.sign.add", "git.sign.mod",
+        "git.sign.del", "git.sign.conflict", "git.sign.unknown",
+        "git.diff.add", "git.diff.del", "git.diff.mod",
+        "git.diff.filler", "git.diff.intra.add", "git.diff.intra.del"
     };
     FussThemeFix fix = {0};
     u32 file;
