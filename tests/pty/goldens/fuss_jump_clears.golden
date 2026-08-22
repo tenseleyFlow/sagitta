@@ -1,0 +1,156 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,0 vis=0
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=4
+--- text
+yew:trunk  ↑0 ↓0                                                                
+├── ▼ docs ✗                                                                    
+│   ├── æ¼¢å­<97>.txt ✗                                                         
+│   └── ð<9F><91>¨â<80><8D>ð<9F><91>©â<80><8D>ð<9F><91>§â<80><8D>ð<9F><91>¦.txt 
+├── ▼ src ↑ ✗                                                                   
+│   ├── both.c ↑ ✗                                                              
+│   ├── modified.c ✗                                                            
+│   └── staged.c ↑                                                              
+└── untracked.txt ✗                                                             
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+git discovery unavailable; using workspace walk                                 
+←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave                   
+--- style
+AAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+CCCCCCCCCCDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+BBBBBBBBBBBBBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBE
+BBBBBBBBBFFEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBFFEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBFFBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBGGBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+--- legend
+A fg=#c8ccd4 bg=#12141a attrs=b---------
+B fg=#c8ccd4 bg=#12141a attrs=----------
+C fg=#c8ccd4 bg=#12141a attrs=------r---
+D fg=#e06c75 bg=#12141a attrs=------r---
+E fg=#e06c75 bg=#12141a attrs=----------
+F fg=#98c379 bg=#12141a attrs=----------
+G fg=#5c6370 bg=#12141a attrs=----------
+H fg=#faebf8 bg=#b13d9b attrs=----------
+--- sgr
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;200;204;212m
+\x1b[38;2;97;175;239m
+\x1b[38;2;154;160;170m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;209;154;102m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;235;244;255;48;2;38;110;186m
+\x1b[22;38;2;218;229;240;48;2;20;48;76m
+\x1b[0;1;38;2;200;204;212;48;2;18;20;26m
+\x1b[22;2m
+\x1b[22m
+\x1b[38;2;250;235;248;48;2;177;61;155m
+\x1b[0;1;38;2;200;204;212;48;2;18;20;26m
+\x1b[22m
+\x1b[7m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[27m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[0;1;38;2;250;235;248;48;2;177;61;155m
+\x1b[22m
+\x1b[0;38;2;250;235;248;48;2;177;61;155m
