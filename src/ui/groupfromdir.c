@@ -74,19 +74,23 @@ static u32 group_open_members(Ed *ed, const char *root,
     for (i = 0U; i < files->paths.len; i++) {
         char *path = group_path_join(root, files->paths.data[i]);
         int idx;
+        bool opened = false;
 
         if (path == NULL)
             continue;
         idx = yew_tab_find_by_path(ed, path);
-        if (idx < 0)
+        if (idx < 0) {
             idx = yew_tab_open(ed, path);
+            opened = idx >= 0;
+        }
         free(path);
         if (idx < 0)
             continue;
         /* yew_group_add_member removes an adopted tab from its old group
          * before appending it here, preserving both ordinal sequences. */
         yew_group_add_member(ed, gid, idx);
-        yew_tab_defer(ed, idx);
+        if (opened)
+            yew_tab_defer(ed, idx);
     }
     n = yew_group_members(ed, gid, members,
                           (int)YEW_ARRAY_LEN(members));
