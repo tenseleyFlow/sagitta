@@ -33,11 +33,13 @@ runs `/bin/sleep 300` under a 50 ms budget and asserts `SIGKILL`, bounded reap,
 an empty live-child list, and a closed master descriptor.
 
 `YEW_PTY_CASE_BUDGET_MS` overrides the default 5-second per-case deadline.
-The Valgrind lane uses 15 seconds per case and a 180-second global budget to
+The Valgrind lane uses 60 seconds per case and a two-hour global budget to
 account for instrumentation overhead; ordinary runs retain the strict defaults.
-`YEW_PTY_EXCLUDE` omits cases whose names contain its value. Valgrind excludes
-only `notepad_restore_segv`: compiler and sanitizer PTY lanes cover that
-deliberate fatal-signal contract because Valgrind owns the fatal signal and can
+The global value bounds the complete sweep while the per-case value remains the
+hang detector. `YEW_PTY_EXCLUDE` omits cases whose names contain its value.
+Valgrind excludes `notepad_restore_segv` and
+`s32_bug_restores_the_terminal`: compiler and sanitizer PTY lanes cover those
+deliberate fatal-signal contracts because Valgrind owns the fatal signal and can
 hold the independently repeated child indefinitely.
 
 Terminal profiles are deterministic (`modern`, `nokitty`, `nosync`, `dumb`).

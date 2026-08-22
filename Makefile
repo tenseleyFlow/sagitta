@@ -246,12 +246,12 @@ UNIT_DEATH_EXCLUDES := \
   --exclude tty_poisoned_access_is_bug \
   --exclude render_invalid_cells_are_bugs
 ifeq ($(VALGRIND),1)
-# MEASURED, not guessed: the full suite takes 1147 s under valgrind on a
-# quiet developer machine (206 cases, QUIET_SCALE=8 — scaling the settles
-# is what makes it slow, and is not optional; see quiet_scale()).  CI
-# runners are slower still, so this is roughly 3x headroom.  It is a
-# wall-clock ceiling, not a latency budget: nothing measures against it.
-YEW_PTY_BUDGET_MS ?= 3600000
+# MEASURED, not guessed: the expanded suite exceeded the old 3600 s ceiling
+# on a hosted runner while cases were still completing normally.  Keep the
+# strict per-case hang bound below, but give the complete leak-check sweep
+# enough aggregate time to finish on CI.  This is a wall-clock ceiling, not a
+# latency budget: nothing measures against it.
+YEW_PTY_BUDGET_MS ?= 7200000
 YEW_PTY_CASE_BUDGET_MS ?= 60000
 YEW_SCRIPT_BUDGET_MS ?= 600000
 # A settle infers "done" from silence, and valgrind makes the editor
