@@ -40,6 +40,8 @@ static unsigned assertions;
 static unsigned failures;
 static u32 next_job_id = 8000U;
 
+static bool setup_repo(const char *repo);
+
 #define CHECK(expr) do {                                                   \
     assertions++;                                                          \
     if (!(expr)) {                                                         \
@@ -282,6 +284,16 @@ static bool write_repo_file(const char *repo, const char *path,
     return close(fd) == 0 && ok;
 }
 
+static bool child_repo_path(const char *parent, const char *name,
+                            char *path, size_t path_size)
+{
+    int wrote;
+
+    wrote = snprintf(path, path_size, "%s/%s", parent, name);
+    return wrote > 0 && (size_t)wrote < path_size &&
+           mkdir(path, 0700) == 0 && setup_repo(path);
+}
+
 static bool output_is_path(const Bytes *out, const char *path)
 {
     size_t len = strlen(path);
@@ -514,6 +526,193 @@ static bool run_jobs_idle(Ed *ed)
     return true;
 }
 
+static bool enter_fuss(const char *repo, Ed *ed)
+{
+    yew_ed_init(ed);
+    if (!yew_ed_open_scratch(ed))
+        return false;
+    ed->ws.dir = arena_strdup(&ed->arena, repo);
+    if (yew_mode_enter(ed, YEW_MODE_F) != YEW_CMD_OK)
+        return false;
+    return run_jobs_idle(ed);
+}
+
+static bool buffer_bytes(const Buffer *buffer, Bytes *out)
+{
+    TextIter iter;
+    const u8 *chunk;
+    u64 len;
+
+    if (buffer == NULL || buffer->tb == NULL)
+        return false;
+    if (yew_textbuf_len(buffer->tb) == 0U)
+        return true;
+    if (!yew_textiter_begin(&iter, buffer->tb, BYTEOFF(0U)))
+        return false;
+    do {
+        if (!yew_textiter_chunk(&iter, buffer->tb, &chunk, &len) ||
+            len > (u64)SIZE_MAX ||
+            !bytes_append(out, chunk, (size_t)len))
+            return false;
+    } while (yew_textiter_advance(&iter, buffer->tb));
+    return true;
+}
+
+static bool open_amend_editor(const char *repo, Ed *ed)
+{
+    if (!enter_fuss(repo, ed))
+        return false;
+    if (invoke(ed, "ed.git.commit.amend", NULL, 0U) != YEW_CMD_OK ||
+        !run_jobs_idle(ed))
+        return false;
+    yew_fuss_tick(ed, yew_now_ms());
+    return ed->win != NULL && ed->win->buf != NULL &&
+           strcmp(ed->win->buf->name, "*commit*") == 0;
+}
+
+static void test_commit_template_uses_auto_comment_char(const char *parent)
+{
+    char repo[4096];
+    char *config[] = {(char *)"config", (char *)"core.commentChar",
+                      (char *)"auto", NULL};
+    char *add[] = {(char *)"add", (char *)"--", (char *)"staged.txt",
+                   NULL};
+    const GitSnapshot *snap;
+    Bytes text = {0};
+    Ed ed;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "commit-auto", repo, sizeof(repo)));
+    CHECK(run_git(repo, config, NULL, &code) && code == 0);
+    CHECK(write_repo_file(repo, "staged.txt", "staged\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(enter_fuss(repo, &ed));
+    snap = yew_git_snapshot(&ed);
+    CHECK(snap != NULL && strcmp(snap->comment_char, "auto") == 0);
+    CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
+    CHECK(buffer_bytes(ed.win == NULL ? NULL : ed.win->buf, &text));
+    CHECK(bytes_contains(&text, (const u8 *)"# Please enter the commit message",
+                         sizeof("# Please enter the commit message") - 1U));
+    CHECK(bytes_contains(&text, (const u8 *)"# Changes to be committed:",
+                         sizeof("# Changes to be committed:") - 1U));
+    bytes_drop(&text);
+    yew_ed_free(&ed);
+}
+
+static void test_commit_template_uses_custom_comment_char(const char *parent)
+{
+    char repo[4096];
+    char *config[] = {(char *)"config", (char *)"core.commentChar",
+                      (char *)";", NULL};
+    const GitSnapshot *snap;
+    Bytes text = {0};
+    Ed ed;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "commit-custom", repo, sizeof(repo)));
+    CHECK(run_git(repo, config, NULL, &code) && code == 0);
+    CHECK(enter_fuss(repo, &ed));
+    snap = yew_git_snapshot(&ed);
+    CHECK(snap != NULL && strcmp(snap->comment_char, ";") == 0);
+    CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
+    CHECK(buffer_bytes(ed.win == NULL ? NULL : ed.win->buf, &text));
+    CHECK(bytes_contains(&text, (const u8 *)"; Please enter the commit message",
+                         sizeof("; Please enter the commit message") - 1U));
+    CHECK(!bytes_contains(&text, (const u8 *)"# Please enter the commit message",
+                          sizeof("# Please enter the commit message") - 1U));
+    bytes_drop(&text);
+    yew_ed_free(&ed);
+}
+
+static bool setup_conflict_repo(const char *parent, char *repo,
+                                size_t repo_size)
+{
+    char *topic[] = {(char *)"switch", (char *)"-q", (char *)"-c",
+                     (char *)"topic", NULL};
+    char *trunk[] = {(char *)"switch", (char *)"-q", (char *)"trunk",
+                     NULL};
+    char *add[] = {(char *)"add", (char *)"--", (char *)"base.txt", NULL};
+    char *topic_commit[] = {(char *)"commit", (char *)"-q", (char *)"-m",
+                            (char *)"topic", NULL};
+    char *trunk_commit[] = {(char *)"commit", (char *)"-q", (char *)"-m",
+                            (char *)"trunk", NULL};
+    char *merge[] = {(char *)"merge", (char *)"topic", NULL};
+    int code = -1;
+
+    return child_repo_path(parent, "commit-conflict", repo, repo_size) &&
+           run_git(repo, topic, NULL, &code) && code == 0 &&
+           write_repo_file(repo, "base.txt", "topic\n") &&
+           run_git(repo, add, NULL, &code) && code == 0 &&
+           run_git(repo, topic_commit, NULL, &code) && code == 0 &&
+           run_git(repo, trunk, NULL, &code) && code == 0 &&
+           write_repo_file(repo, "base.txt", "trunk\n") &&
+           run_git(repo, add, NULL, &code) && code == 0 &&
+           run_git(repo, trunk_commit, NULL, &code) && code == 0 &&
+           run_git(repo, merge, NULL, &code) && code != 0;
+}
+
+static void test_commit_refuses_conflicted_snapshot(const char *parent)
+{
+    char repo[4096];
+    SpawnCapture capture = {0};
+    Ed ed;
+
+    CHECK(setup_conflict_repo(parent, repo, sizeof(repo)));
+    CHECK(enter_fuss(repo, &ed));
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_ERR_STATE);
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(strcmp(ed.msg.text,
+                 "resolve conflicts before committing (1 files)") == 0);
+    CHECK(capture.calls == 0U);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+}
+
+static void test_amend_prefills_previous_message(const char *parent)
+{
+    char repo[4096];
+    Bytes text = {0};
+    Ed ed;
+
+    CHECK(child_repo_path(parent, "commit-amend-prefill", repo,
+                          sizeof(repo)));
+    CHECK(open_amend_editor(repo, &ed));
+    CHECK(buffer_bytes(ed.win == NULL ? NULL : ed.win->buf, &text));
+    CHECK(text.len >= sizeof("base\n") - 1U &&
+          memcmp(text.data, "base\n", sizeof("base\n") - 1U) == 0);
+    bytes_drop(&text);
+    yew_ed_free(&ed);
+}
+
+static void test_cleared_amend_message_does_not_spawn_git(const char *parent)
+{
+    char repo[4096];
+    SpawnCapture capture = {0};
+    Buffer *commit;
+    EditCtx ec;
+    bool handled = false;
+    Ed ed;
+
+    CHECK(child_repo_path(parent, "commit-amend-empty", repo, sizeof(repo)));
+    CHECK(open_amend_editor(repo, &ed));
+    commit = ed.win == NULL ? NULL : ed.win->buf;
+    ec = yew_ed_edit_ctx_buffer(&ed, commit);
+    CHECK(ec.tb != NULL &&
+          yew_edit_delete(&ec, (Span){0U, yew_textbuf_len(ec.tb)}));
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    CHECK(yew_fuss_commit_save(&ed, commit, &handled) == YEW_CMD_ERR_STATE);
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(handled);
+    CHECK(strcmp(ed.msg.text,
+                 "aborting commit due to empty commit message") == 0);
+    CHECK(capture.calls == 0U);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+}
+
 static void test_empty_commit_message_does_not_spawn_git(const char *repo)
 {
     SpawnCapture capture = {0};
@@ -560,6 +759,11 @@ int main(int argc, char **argv)
     test_tag_uses_the_exact_argument(argv[1]);
     test_stash_push_preserves_message_argv(argv[1]);
     test_empty_commit_message_does_not_spawn_git(argv[1]);
+    test_commit_template_uses_auto_comment_char(argv[1]);
+    test_commit_template_uses_custom_comment_char(argv[1]);
+    test_commit_refuses_conflicted_snapshot(argv[1]);
+    test_amend_prefills_previous_message(argv[1]);
+    test_cleared_amend_message_does_not_spawn_git(argv[1]);
     if (failures != 0U) {
         (void)fprintf(stderr, "fuss_commands: %u/%u checks failed\n",
                       failures, assertions);
