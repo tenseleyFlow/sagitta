@@ -1794,6 +1794,7 @@ void test_git_diff_incremental_budget_covers_hash_and_compare(void);
 void test_git_editor_runtime_slices_and_publishes_atomically(void);
 void test_git_editor_runtime_cancels_stale_work_before_publish(void);
 void test_git_editor_runtime_debounces_two_hundred_edits_to_one_diff(void);
+void test_git_editor_discard_all_selections_is_one_undo_step(void);
 void test_git_hunk_patch_headers_and_path_guard(void);
 void test_git_hunk_patch_exact_three_line_context(void);
 void test_git_hunk_patch_add_delete_at_bounds(void);

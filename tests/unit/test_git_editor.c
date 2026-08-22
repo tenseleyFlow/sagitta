@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "mod/git/editor.h"
 #include "text/piece.h"
+#include "text/undo.h"
 #include "util/buf.h"
 
 typedef struct GitEditorClock {
@@ -56,6 +57,35 @@ static void git_editor_lines(Bytebuf *base, Bytebuf *live, u32 lines,
         else
             bytebuf_printf(live, "line-%05u shared payload\n", i);
     }
+}
+
+static void git_editor_assert_text(const TextBuf *tb, const u8 *want,
+                                   size_t want_len)
+{
+    TextIter it;
+    const u8 *bytes;
+    u64 len;
+    size_t at = 0U;
+
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(tb), want_len);
+    if (want_len == 0U)
+        return;
+    YEW_ASSERT(yew_textiter_begin(&it, tb, BYTEOFF(0U)));
+    do {
+        YEW_ASSERT(yew_textiter_chunk(&it, tb, &bytes, &len));
+        YEW_ASSERT(len <= want_len - at);
+        YEW_ASSERT(memcmp(bytes, want + at, (size_t)len) == 0);
+        at += (size_t)len;
+    } while (at < want_len && yew_textiter_advance(&it, tb));
+    YEW_ASSERT_EQ_U64(at, want_len);
+}
+
+static Cursor git_editor_selection(const TextBuf *tb, u32 line)
+{
+    ByteOff start = yew_textbuf_line_start(tb, LINENO(line));
+    Cursor cursor = {start, {0U}, BYTEOFF(start.v + 1U)};
+
+    return cursor;
 }
 
 void test_git_editor_runtime_slices_and_publishes_atomically(void)
@@ -164,5 +194,58 @@ void test_git_editor_runtime_debounces_two_hundred_edits_to_one_diff(void)
     YEW_ASSERT_EQ_U64(after.diff_started, before.diff_started + 1U);
     YEW_ASSERT_EQ_U64(after.diff_published, before.diff_published + 1U);
     YEW_ASSERT(after.diff_max_slice_us <= YEW_DIFF_BUDGET_US);
+    yew_ed_free(&ed);
+}
+
+void test_git_editor_discard_all_selections_is_one_undo_step(void)
+{
+    static const u8 base[] =
+        "zero\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n";
+    static const u8 live[] =
+        "zero\nONE\ntwo\nthree\nfour\nFIVE\nsix\nseven\neight\nNINE\nten\n";
+    CmdCtx cx = {0};
+    CmdId discard;
+    CmdId undo;
+    const CmdDesc *desc;
+    Cursor cursor;
+    const HunkList *hunks;
+    Ed ed;
+
+    git_editor_fixture(&ed, live, sizeof(live) - 1U);
+    YEW_ASSERT(yew_git_editor_test_base(&ed, &ed.buffer,
+                                        base, sizeof(base) - 1U,
+                                        "index-selection", true, 5000));
+    git_editor_pump_until(&ed, 5000, 1U);
+    hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+    YEW_ASSERT_NOT_NULL(hunks);
+    YEW_ASSERT_EQ_U64(hunks->h.len, 3U);
+    YEW_ASSERT(hunks->base_is_head);
+
+    ed.win->cs.curs.data[0] = git_editor_selection(ed.buffer.tb, 1U);
+    cursor = git_editor_selection(ed.buffer.tb, 5U);
+    YEW_ASSERT(yew_cset_add(&ed.win->cs, cursor));
+    cursor = git_editor_selection(ed.buffer.tb, 9U);
+    YEW_ASSERT(yew_cset_add(&ed.win->cs, cursor));
+
+    discard = yew_cmd_lookup("ed.git.hunk.discard", 19U);
+    YEW_ASSERT(discard.v != 0U);
+    desc = yew_cmd_desc(discard);
+    YEW_ASSERT_NOT_NULL(desc);
+    YEW_ASSERT((desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U);
+    YEW_ASSERT((desc->flags & YEW_CMD_MULTI_AGGREGATE) != 0U);
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_U64(yew_ed_invoke(&ed, discard, &cx), YEW_CMD_OK);
+    git_editor_assert_text(ed.buffer.tb, base, sizeof(base) - 1U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    YEW_ASSERT_EQ_U64(ed.buffer.undo->depth, 0U);
+
+    undo = yew_cmd_lookup("ed.edit.undo", 12U);
+    YEW_ASSERT(undo.v != 0U);
+    YEW_ASSERT_EQ_U64(yew_ed_invoke(&ed, undo, &cx), YEW_CMD_OK);
+    git_editor_assert_text(ed.buffer.tb, live, sizeof(live) - 1U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo), ed.buffer.undo->root);
     yew_ed_free(&ed);
 }

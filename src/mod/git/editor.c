@@ -912,45 +912,20 @@ i64 yew_git_editor_deadline(const Ed *ed, i64 now_ms)
     return best;
 }
 
-static const GitHunk *current_hunk(Ed *ed, Win *w, GitBufState **out)
-{
-    GitBufState *state = state_for(ed, w->buf, false);
-    LineNo line;
-    size_t i;
-
-    if (state == NULL || state->hunks.h.len == 0U || w->cs.curs.len == 0U)
-        return NULL;
-    line = yew_textbuf_line_of(w->buf->tb,
-                               w->cs.curs.data[w->cs.primary].pos);
-    for (i = 0U; i < state->hunks.h.len; i++) {
-        const GitHunk *h = &state->hunks.h.data[i];
-        u64 n = h->buf_n.v == 0U ? 1U : h->buf_n.v;
-        if (line.v >= h->buf_lo.v && line.v < h->buf_lo.v + n) {
-            if (out != NULL)
-                *out = state;
-            return h;
-        }
-    }
-    return NULL;
-}
-
 typedef struct HunkSelection {
     LineNo first;
     LineNo last;
     bool active;
 } HunkSelection;
 
-static HunkSelection primary_hunk_selection(const Win *w)
+static HunkSelection cursor_hunk_selection(const Win *w, const Cursor *cursor)
 {
     HunkSelection selection = {LINENO(0U), LINENO(0U), false};
-    const Cursor *cursor;
     const TextBuf *tb;
     Span span;
 
-    if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
-        w->cs.curs.len == 0U || w->cs.primary >= w->cs.curs.len)
+    if (w == NULL || w->buf == NULL || w->buf->tb == NULL || cursor == NULL)
         return selection;
-    cursor = &w->cs.curs.data[w->cs.primary];
     if (cursor->anchor.v == cursor->pos.v)
         return selection;
     tb = w->buf->tb;
@@ -982,13 +957,73 @@ static bool hunk_intersects_selection(const GitHunk *h,
     return h->buf_lo.v <= selection.last.v && last >= selection.first.v;
 }
 
-static bool hunk_is_target(const GitHunk *candidate,
-                           const GitHunk *cursor_hunk,
-                           HunkSelection selection)
+static bool window_has_selection(const Win *w)
 {
-    return selection.active ?
-        hunk_intersects_selection(candidate, selection) :
-        candidate == cursor_hunk;
+    size_t i;
+
+    if (w == NULL)
+        return false;
+    for (i = 0U; i < w->cs.curs.len; i++)
+        if (w->cs.curs.data[i].anchor.v != w->cs.curs.data[i].pos.v)
+            return true;
+    return false;
+}
+
+static bool hunk_contains_line(const GitHunk *h, LineNo line)
+{
+    u64 count;
+
+    if (h == NULL)
+        return false;
+    count = h->buf_n.v == 0U ? 1U : h->buf_n.v;
+    return line.v >= h->buf_lo.v && line.v < h->buf_lo.v + count;
+}
+
+static bool hunk_is_target(const Win *w, const GitHunk *candidate,
+                           bool selections_active)
+{
+    size_t i;
+
+    if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        candidate == NULL)
+        return false;
+    for (i = 0U; i < w->cs.curs.len; i++) {
+        const Cursor *cursor = &w->cs.curs.data[i];
+
+        if (selections_active) {
+            HunkSelection selection = cursor_hunk_selection(w, cursor);
+
+            if (hunk_intersects_selection(candidate, selection))
+                return true;
+        } else if (hunk_contains_line(
+                       candidate, yew_textbuf_line_of(w->buf->tb,
+                                                      cursor->pos))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool stage_patch_run(Bytebuf *patch, const char *path,
+                            const GitBufState *state, const Bytebuf *live,
+                            const GitHunk *first, const GitHunk *last)
+{
+    GitHunk combined = *first;
+    Bytebuf section;
+
+    if (last != first) {
+        combined.base_n = LINENO(last->base_lo.v + last->base_n.v -
+                                 first->base_lo.v);
+        combined.buf_n = LINENO(last->buf_lo.v + last->buf_n.v -
+                                first->buf_lo.v);
+        combined.kind = YEW_HUNK_MOD;
+    }
+    if (!yew_git_hunk_patch(&section, path, state->base.data, state->base.len,
+                            live->data, live->len, &combined))
+        return false;
+    bytebuf_append(patch, section.data, section.len);
+    bytebuf_free(&section);
+    return true;
 }
 
 static CmdStatus move_hunk(CmdCtx *cx, int which)
@@ -1061,8 +1096,6 @@ static const YewJobCallbackOps stage_ops = {stage_complete, owner_free};
 CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx)
 {
     GitBufState *state = NULL;
-    const GitHunk *h;
-    HunkSelection selection;
     Bytebuf live;
     Bytebuf patch;
     StageJob *owner;
@@ -1070,23 +1103,22 @@ CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx)
     char *argv[] = {(char *)"apply", (char *)"--cached", (char *)"-", NULL};
     char err[160];
     bool dirty;
+    bool selections_active;
     size_t i;
     size_t target_count = 0U;
-    const GitHunk *first_target = NULL;
-    const GitHunk *last_target = NULL;
-    GitHunk combined;
+    const GitHunk *run_first = NULL;
+    const GitHunk *run_last = NULL;
 
     if (cx == NULL || cx->ed == NULL || cx->win == NULL)
         return YEW_CMD_ERR_STATE;
-    selection = primary_hunk_selection(cx->win);
+    selections_active = window_has_selection(cx->win);
     state = state_for(cx->ed, cx->win->buf, false);
-    h = selection.active ? NULL : current_hunk(cx->ed, cx->win, &state);
     path = repo_path(cx->ed, cx->win->buf);
-    if (state == NULL || path == NULL ||
-        (!selection.active && h == NULL)) {
+    if (state == NULL || path == NULL) {
         yew_msg(cx->ed, YEW_MSG_INFO,
-                selection.active ? "selection does not intersect a changed hunk" :
-                                   "cursor is not on a changed hunk");
+                selections_active ?
+                    "selection does not intersect a changed hunk" :
+                    "cursor is not on a changed hunk");
         return YEW_CMD_ERR_STATE;
     }
     if (strchr(path, '\n') != NULL) {
@@ -1098,31 +1130,34 @@ CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx)
     bytebuf_init(&patch);
     text_bytes(cx->win->buf->tb, &live);
     for (i = 0U; i < state->hunks.h.len; i++) {
-        if (!hunk_is_target(&state->hunks.h.data[i], h, selection))
+        const GitHunk *candidate = &state->hunks.h.data[i];
+
+        if (!hunk_is_target(cx->win, candidate, selections_active)) {
+            if (run_first != NULL &&
+                !stage_patch_run(&patch, path, state, &live,
+                                 run_first, run_last)) {
+                bytebuf_free(&patch); bytebuf_free(&live);
+                return YEW_CMD_ERR_STATE;
+            }
+            run_first = NULL;
+            run_last = NULL;
             continue;
-        if (first_target == NULL)
-            first_target = &state->hunks.h.data[i];
-        last_target = &state->hunks.h.data[i];
+        }
+        if (run_first == NULL)
+            run_first = candidate;
+        run_last = candidate;
         target_count++;
     }
-    if (target_count == 0U) {
-        yew_msg(cx->ed, YEW_MSG_INFO,
-                "selection does not intersect a changed hunk");
+    if (run_first != NULL &&
+        !stage_patch_run(&patch, path, state, &live, run_first, run_last)) {
         bytebuf_free(&patch); bytebuf_free(&live);
         return YEW_CMD_ERR_STATE;
     }
-    combined = *first_target;
-    if (last_target != first_target) {
-        combined.base_n = LINENO(last_target->base_lo.v +
-                                 last_target->base_n.v -
-                                 first_target->base_lo.v);
-        combined.buf_n = LINENO(last_target->buf_lo.v +
-                                last_target->buf_n.v -
-                                first_target->buf_lo.v);
-        combined.kind = YEW_HUNK_MOD;
-    }
-    if (!yew_git_hunk_patch(&patch, path, state->base.data, state->base.len,
-                            live.data, live.len, &combined)) {
+    if (target_count == 0U) {
+        yew_msg(cx->ed, YEW_MSG_INFO,
+                selections_active ?
+                    "selection does not intersect a changed hunk" :
+                    "cursor is not on a changed hunk");
         bytebuf_free(&patch); bytebuf_free(&live);
         return YEW_CMD_ERR_STATE;
     }
@@ -1155,32 +1190,42 @@ CmdStatus yew_git_cmd_hunk_unstage(CmdCtx *cx)
 CmdStatus yew_git_cmd_hunk_discard(CmdCtx *cx)
 {
     GitBufState *state = NULL;
-    const GitHunk *h;
-    HunkSelection selection;
     EditCtx edit;
     bool ok = true;
+    bool own_transaction;
+    bool selections_active;
+    bool *targeted;
     TextBuf *base;
     size_t i;
     size_t target_count = 0U;
 
     if (cx == NULL || cx->ed == NULL || cx->win == NULL)
         return YEW_CMD_ERR_STATE;
-    selection = primary_hunk_selection(cx->win);
+    selections_active = window_has_selection(cx->win);
     state = state_for(cx->ed, cx->win->buf, false);
-    h = selection.active ? NULL : current_hunk(cx->ed, cx->win, &state);
-    if (state == NULL || (!selection.active && h == NULL))
+    if (state == NULL)
         return YEW_CMD_ERR_STATE;
-    for (i = 0U; i < state->hunks.h.len; i++)
-        if (hunk_is_target(&state->hunks.h.data[i], h, selection))
+    targeted = yew_xcalloc(state->hunks.h.len == 0U ? 1U :
+                           state->hunks.h.len, sizeof(*targeted));
+    for (i = 0U; i < state->hunks.h.len; i++) {
+        targeted[i] = hunk_is_target(cx->win, &state->hunks.h.data[i],
+                                     selections_active);
+        if (targeted[i])
             target_count++;
+    }
     if (target_count == 0U) {
         yew_msg(cx->ed, YEW_MSG_INFO,
-                "selection does not intersect a changed hunk");
+                selections_active ?
+                    "selection does not intersect a changed hunk" :
+                    "cursor is not on a changed hunk");
+        free(targeted);
         return YEW_CMD_ERR_STATE;
     }
     base = yew_textbuf_from_bytes(state->base.data, (u64)state->base.len);
     edit = yew_ed_edit_ctx_for(cx->ed, cx->win);
-    yew_undo_begin(&edit, YEW_TXN_EXTERNAL);
+    own_transaction = edit.undo->depth == 0U;
+    if (own_transaction)
+        yew_undo_begin(&edit, YEW_TXN_EXTERNAL);
     i = state->hunks.h.len;
     while (i > 0U && ok) {
         const GitHunk *target;
@@ -1189,7 +1234,7 @@ CmdStatus yew_git_cmd_hunk_discard(CmdCtx *cx)
 
         i--;
         target = &state->hunks.h.data[i];
-        if (!hunk_is_target(target, h, selection))
+        if (!targeted[i])
             continue;
         removed.lo = yew_textbuf_line_start(cx->win->buf->tb,
                                              target->buf_lo).v;
@@ -1210,9 +1255,15 @@ CmdStatus yew_git_cmd_hunk_discard(CmdCtx *cx)
                                  state->base.data + restored.lo,
                                  restored.hi - restored.lo);
     }
-    if (ok) yew_undo_end(&edit); else yew_undo_abort(&edit);
+    if (own_transaction) {
+        if (ok)
+            yew_undo_end(&edit);
+        else
+            yew_undo_abort(&edit);
+    }
     yew_ed_finish_edit(cx->ed, &edit);
     yew_textbuf_free(base);
+    free(targeted);
     if (!ok)
         return YEW_CMD_ERR_IO;
     yew_msg(cx->ed, YEW_MSG_INFO, "hunk discarded (undo restores it)");

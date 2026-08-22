@@ -1797,6 +1797,7 @@ const YewTest yew_tests[] = {
     T(git_editor_runtime_slices_and_publishes_atomically),
     T(git_editor_runtime_cancels_stale_work_before_publish),
     T(git_editor_runtime_debounces_two_hundred_edits_to_one_diff),
+    T(git_editor_discard_all_selections_is_one_undo_step),
     T(git_hunk_patch_headers_and_path_guard),
     T(git_hunk_patch_exact_three_line_context),
     T(git_hunk_patch_add_delete_at_bounds),

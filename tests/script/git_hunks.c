@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +12,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "edit/ed.h"
+#include "edit/job.h"
+#include "edit/loop.h"
+#include "mod/git/editor.h"
+#include "mod/git/git.h"
 #include "mod/git/gutter.h"
+#include "text/edit.h"
+#include "text/undo.h"
 
 typedef struct Bytes {
     u8 *data;
@@ -213,6 +221,34 @@ static bool read_file(const char *repo, const char *path, Bytes *out)
         return false;
     ok = read_all(fd, out);
     return close(fd) == 0 && ok;
+}
+
+static void pump_editor_jobs(Ed *ed)
+{
+    struct pollfd pfd[YEW_JOB_MAX * 4U];
+    u32 n = 0U;
+
+    yew_job_collect_fds(ed, pfd, &n);
+    if (n != 0U)
+        (void)poll(pfd, (nfds_t)n, 20);
+    else
+        (void)poll(NULL, 0U, 5);
+    yew_job_pump(ed, pfd, n);
+    yew_job_reap(ed);
+    yew_job_tick(ed, yew_now_ms());
+    yew_job_settle(ed);
+}
+
+static bool run_editor_jobs_idle(Ed *ed)
+{
+    i64 start = yew_now_ms();
+
+    while (ed->jobs.len != 0U) {
+        pump_editor_jobs(ed);
+        if (yew_now_ms() - start > 10000)
+            return false;
+    }
+    return true;
 }
 
 static bool repo_init(const char *repo)
@@ -443,6 +479,166 @@ static void check_path_rules(const char *repo)
                               &hunk));
 }
 
+static void check_stage_command_selection(const char *repo)
+{
+    static const u8 base[] =
+        "zero\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n";
+    static const u8 live[] =
+        "zero\nONE\ntwo\nthree\nfour\nFIVE\nsix\nseven\neight\nNINE\nten\n";
+    char full[4096];
+    char object[] = ":command-selection.txt";
+    char *add[] = {(char *)"add", (char *)"--",
+                   (char *)"command-selection.txt", NULL};
+    char *show[] = {(char *)"show", object, NULL};
+    Bytes indexed = {0};
+    Bytes disk = {0};
+    CmdCtx cx = {0};
+    CmdId stage;
+    EditCtx edit;
+    const HunkList *hunks = NULL;
+    ByteOff first;
+    ByteOff last;
+    Ed ed;
+    u32 ticks = 0U;
+
+    CHECK(make_file(repo, "command-selection.txt", base, sizeof(base) - 1U));
+    CHECK(run_git(repo, add, NULL, 0U, NULL));
+    CHECK(snprintf(full, sizeof(full), "%s/command-selection.txt", repo) > 0);
+    yew_ed_init(&ed);
+    ed.ws.dir = arena_strdup(&ed.arena, repo);
+    CHECK(yew_ed_open_memory(&ed, live, sizeof(live) - 1U,
+                             "command-selection.txt"));
+    ed.buffer.path = arena_strdup(&ed.arena, full);
+    CHECK(yew_git_refresh(&ed, true));
+    CHECK(run_editor_jobs_idle(&ed));
+    CHECK(yew_git_editor_test_base(&ed, &ed.buffer,
+                                    base, sizeof(base) - 1U,
+                                    "command-index", false, 0));
+    do {
+        yew_git_editor_tick(&ed, 0);
+        hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+        ticks++;
+    } while ((hunks == NULL || hunks->h.len != 3U) && ticks < 20000U);
+    CHECK(hunks != NULL && hunks->h.len == 3U);
+
+    edit = yew_ed_edit_ctx(&ed);
+    yew_undo_begin(&edit, YEW_TXN_EXTERNAL);
+    CHECK(yew_edit_insert(&edit, BYTEOFF(yew_textbuf_len(ed.buffer.tb)),
+                          (const u8 *)"x", 1U));
+    CHECK(yew_edit_delete(&edit,
+                          (Span){yew_textbuf_len(ed.buffer.tb) - 1U,
+                                 yew_textbuf_len(ed.buffer.tb)}));
+    yew_undo_end(&edit);
+    yew_ed_finish_edit(&ed, &edit);
+    CHECK(!yew_undo_at_save_point(ed.buffer.undo));
+
+    first = yew_textbuf_line_start(ed.buffer.tb, LINENO(1U));
+    last = yew_textbuf_line_start(ed.buffer.tb, LINENO(9U));
+    ed.win->cs.curs.data[0].anchor = first;
+    ed.win->cs.curs.data[0].pos = BYTEOFF(last.v + 1U);
+    stage = yew_cmd_lookup("ed.git.hunk.stage", 17U);
+    CHECK(stage.v != 0U);
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    CHECK(yew_ed_invoke(&ed, stage, &cx) == YEW_CMD_OK);
+    CHECK(ed.jobs.len == 1U);
+    CHECK(ed.msg.active && strcmp(ed.msg.text,
+          "staged from an unsaved buffer — the file on disk is still the old version") == 0);
+    CHECK(run_editor_jobs_idle(&ed));
+    CHECK(run_git(repo, show, NULL, 0U, &indexed));
+    CHECK(indexed.len == sizeof(live) - 1U &&
+          memcmp(indexed.data, live, sizeof(live) - 1U) == 0);
+    CHECK(read_file(repo, "command-selection.txt", &disk));
+    CHECK(disk.len == sizeof(base) - 1U &&
+          memcmp(disk.data, base, sizeof(base) - 1U) == 0);
+    bytes_drop(&disk);
+    bytes_drop(&indexed);
+    yew_ed_free(&ed);
+}
+
+static const GitEntry *find_git_entry(const GitSnapshot *snapshot,
+                                      const char *path)
+{
+    size_t i;
+
+    if (snapshot == NULL)
+        return NULL;
+    for (i = 0U; i < snapshot->entries.len; i++)
+        if (snapshot->entries.data[i].path != NULL &&
+            strcmp(snapshot->entries.data[i].path, path) == 0)
+            return &snapshot->entries.data[i];
+    return NULL;
+}
+
+static void check_conflicted_head_base(const char *parent)
+{
+    static const u8 initial[] = "base\n";
+    static const u8 trunk[] = "trunk\n";
+    static const u8 side[] = "side\n";
+    char repo[4096];
+    char full[4096];
+    char *branch_trunk[] = {(char *)"checkout", (char *)"-q", (char *)"-B",
+                            (char *)"trunk", NULL};
+    char *branch_side[] = {(char *)"checkout", (char *)"-q", (char *)"-b",
+                           (char *)"side", NULL};
+    char *checkout_trunk[] = {(char *)"checkout", (char *)"-q",
+                              (char *)"trunk", NULL};
+    char *add[] = {(char *)"add", (char *)"--", (char *)"conflict.txt", NULL};
+    char *commit_base[] = {(char *)"commit", (char *)"-q", (char *)"-m",
+                           (char *)"base", NULL};
+    char *commit_side[] = {(char *)"commit", (char *)"-q", (char *)"-am",
+                           (char *)"side", NULL};
+    char *commit_trunk[] = {(char *)"commit", (char *)"-q", (char *)"-am",
+                            (char *)"trunk", NULL};
+    char *merge[] = {(char *)"merge", (char *)"--no-edit", (char *)"side",
+                     NULL};
+    const GitSnapshot *snapshot;
+    const GitEntry *entry;
+    const HunkList *hunks = NULL;
+    i64 start;
+    Ed ed;
+
+    CHECK(snprintf(repo, sizeof(repo), "%s/conflict-repo", parent) > 0);
+    CHECK(repo_init(repo));
+    CHECK(run_git(repo, branch_trunk, NULL, 0U, NULL));
+    CHECK(make_file(repo, "conflict.txt", initial, sizeof(initial) - 1U));
+    CHECK(run_git(repo, add, NULL, 0U, NULL));
+    CHECK(run_git(repo, commit_base, NULL, 0U, NULL));
+    CHECK(run_git(repo, branch_side, NULL, 0U, NULL));
+    CHECK(make_file(repo, "conflict.txt", side, sizeof(side) - 1U));
+    CHECK(run_git(repo, commit_side, NULL, 0U, NULL));
+    CHECK(run_git(repo, checkout_trunk, NULL, 0U, NULL));
+    CHECK(make_file(repo, "conflict.txt", trunk, sizeof(trunk) - 1U));
+    CHECK(run_git(repo, commit_trunk, NULL, 0U, NULL));
+    CHECK(!run_git(repo, merge, NULL, 0U, NULL));
+
+    CHECK(snprintf(full, sizeof(full), "%s/conflict.txt", repo) > 0);
+    yew_ed_init(&ed);
+    ed.ws.dir = arena_strdup(&ed.arena, repo);
+    CHECK(yew_ed_open_memory(&ed, trunk, sizeof(trunk) - 1U,
+                             "conflict.txt"));
+    ed.buffer.path = arena_strdup(&ed.arena, full);
+    CHECK(yew_git_refresh(&ed, true));
+    CHECK(run_editor_jobs_idle(&ed));
+    snapshot = yew_git_snapshot_cached(&ed);
+    entry = find_git_entry(snapshot, "conflict.txt");
+    CHECK(entry != NULL && entry->conflicted);
+    ed.now_ms = 0;
+    yew_git_editor_prepare(&ed, ed.win);
+    start = yew_now_ms();
+    while (yew_now_ms() - start <= 10000) {
+        pump_editor_jobs(&ed);
+        yew_git_editor_tick(&ed, 0);
+        hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+        if (hunks != NULL && hunks->base_is_head)
+            break;
+    }
+    CHECK(hunks != NULL && hunks->base_is_head);
+    CHECK(hunks != NULL && hunks->h.len == 0U);
+    yew_ed_free(&ed);
+}
+
 int main(int argc, char **argv)
 {
     char repo[4096];
@@ -462,6 +658,8 @@ int main(int argc, char **argv)
     check_edit_fixture_matrix(repo);
     check_crlf_and_dirty_worktree(repo);
     check_path_rules(repo);
+    check_stage_command_selection(repo);
+    check_conflicted_head_base(argv[1]);
     CHECK(patches_checked == 20U);
     (void)printf("HARNESS_RESULT git_hunks assertions=%u patches=%u "
                  "failures=%u\n", assertions, patches_checked, failures);
