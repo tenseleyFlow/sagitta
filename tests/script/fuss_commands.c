@@ -41,6 +41,7 @@ static unsigned failures;
 static u32 next_job_id = 8000U;
 
 static bool setup_repo(const char *repo);
+static bool enter_fuss(const char *repo, Ed *ed);
 
 #define CHECK(expr) do {                                                   \
     assertions++;                                                          \
@@ -329,6 +330,25 @@ static size_t argv_index(const SpawnCapture *capture, const char *arg)
     return SIZE_MAX;
 }
 
+static bool argv_has_sequence(const SpawnCapture *capture,
+                              const char *const *sequence, size_t count)
+{
+    size_t at;
+    size_t i;
+
+    if (count == 0U)
+        return true;
+    for (at = 0U; at + count <= capture->argc; at++) {
+        for (i = 0U; i < count; i++) {
+            if (strcmp(capture->argv[at + i], sequence[i]) != 0)
+                break;
+        }
+        if (i == count)
+            return true;
+    }
+    return false;
+}
+
 static bool cached_path_is(const char *repo, const char *path, bool staged)
 {
     char *tail[] = {
@@ -526,6 +546,49 @@ static bool run_jobs_idle(Ed *ed)
     return true;
 }
 
+static CmdStatus invoke_active_real(const char *repo, const char *name,
+                                    const char *arg, SpawnCapture *capture)
+{
+    Ed ed;
+    CmdStatus status;
+
+    if (!enter_fuss(repo, &ed))
+        return YEW_CMD_ERR_STATE;
+    capture->repo = repo;
+    yew_git_test_spawn_set(capture_and_run, capture);
+    status = invoke(&ed, name, arg, arg == NULL ? 0U : (u32)strlen(arg));
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+    return status;
+}
+
+typedef CmdStatus (*FussHandler)(CmdCtx *cx);
+
+static CmdStatus invoke_handler_real(const char *repo, FussHandler handler,
+                                     const char *arg,
+                                     SpawnCapture *capture)
+{
+    Ed ed;
+    CmdCtx cx = {0};
+    CmdStatus status;
+
+    if (!enter_fuss(repo, &ed)) {
+        return YEW_CMD_ERR_STATE;
+    }
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.sarg = arg;
+    cx.sarg_len = arg == NULL ? 0U : (u32)strlen(arg);
+    cx.source = YEW_SRC_TEST;
+    capture->repo = repo;
+    yew_git_test_spawn_set(capture_and_run, capture);
+    status = handler(&cx);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+    return status;
+}
+
 static bool enter_fuss(const char *repo, Ed *ed)
 {
     yew_ed_init(ed);
@@ -568,6 +631,313 @@ static bool open_amend_editor(const char *repo, Ed *ed)
     yew_fuss_tick(ed, yew_now_ms());
     return ed->win != NULL && ed->win->buf != NULL &&
            strcmp(ed->win->buf->name, "*commit*") == 0;
+}
+
+static void test_read_views_use_expected_git_argv(const char *parent)
+{
+    static const char *const diff[] = {"diff", "HEAD", "--", "base.txt"};
+    static const char *const status[] = {"status"};
+    static const char *const blame[] = {
+        "blame", "--porcelain", "--", "base.txt"
+    };
+    static const char *const history[] = {
+        "log", "-n", "200", "--date-order",
+        "--pretty=format:%h%x1f%at%x1f%an%x1f%d%x1f%s"
+    };
+    static const char *const reflog[] = {
+        "reflog", "show", "-n", "200",
+        "--pretty=format:%h%x1f%gd%x1f%at%x1f%gs"
+    };
+    static const struct {
+        const char *command;
+        const char *arg;
+        const char *const *argv;
+        size_t argc;
+        bool literal_paths;
+    } cases[] = {
+        {"ed.git.diff", "base.txt", diff, YEW_ARRAY_LEN(diff), true},
+        {"ed.git.status", NULL, status, YEW_ARRAY_LEN(status), false},
+        {"ed.git.blame", "base.txt", blame, YEW_ARRAY_LEN(blame), true},
+        {"ed.git.history", NULL, history, YEW_ARRAY_LEN(history), false},
+        {"ed.git.reflog", NULL, reflog, YEW_ARRAY_LEN(reflog), false}
+    };
+    char repo[4096];
+    size_t i;
+
+    CHECK(child_repo_path(parent, "read-views", repo, sizeof(repo)));
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        SpawnCapture capture = {0};
+
+        CHECK(invoke_active_real(repo, cases[i].command, cases[i].arg,
+                                 &capture) == YEW_CMD_OK);
+        CHECK(capture.calls == 1U && capture.exit_code == 0);
+        CHECK(capture.literal_paths == cases[i].literal_paths);
+        CHECK(argv_has_sequence(&capture, cases[i].argv, cases[i].argc));
+        capture_drop(&capture);
+    }
+}
+
+static bool git_current_branch(const char *repo, const char *expected)
+{
+    char *tail[] = {
+        (char *)"symbolic-ref", (char *)"--short", (char *)"HEAD", NULL
+    };
+    Bytes out = {0};
+    size_t len = strlen(expected);
+    int code = -1;
+    bool ok;
+
+    ok = run_git(repo, tail, &out, &code) && code == 0 &&
+         out.len == len + 1U && memcmp(out.data, expected, len) == 0 &&
+         out.data[len] == (u8)'\n';
+    bytes_drop(&out);
+    return ok;
+}
+
+static void test_branch_switch_delete_and_merge_change_repo(const char *parent)
+{
+    static const char *const switch_argv[] = {"switch", "--", "topic"};
+    static const char *const merge_argv[] = {
+        "merge", "--no-edit", "--", "merge-topic"
+    };
+    static const char *const delete_argv[] = {
+        "branch", "-d", "--", "topic"
+    };
+    char repo[4096];
+    char *branch_topic[] = {(char *)"branch", (char *)"topic", NULL};
+    char *trunk[] = {(char *)"switch", (char *)"-q", (char *)"trunk", NULL};
+    char *merge_topic[] = {
+        (char *)"switch", (char *)"-q", (char *)"-c",
+        (char *)"merge-topic", NULL
+    };
+    char *add[] = {(char *)"add", (char *)"--", (char *)"merged.txt", NULL};
+    char *commit[] = {
+        (char *)"commit", (char *)"-q", (char *)"-m", (char *)"merge", NULL
+    };
+    SpawnCapture capture = {0};
+    struct stat st;
+    char merged[4096];
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "branch-verbs", repo, sizeof(repo)));
+    CHECK(run_git(repo, branch_topic, NULL, &code) && code == 0);
+    CHECK(invoke_handler_real(repo, yew_fuss_cmd_branch_switch, "topic",
+                              &capture) == YEW_CMD_OK);
+    CHECK(capture.exit_code == 0 &&
+          argv_has_sequence(&capture, switch_argv,
+                            YEW_ARRAY_LEN(switch_argv)));
+    CHECK(git_current_branch(repo, "topic"));
+    capture_drop(&capture);
+    CHECK(run_git(repo, trunk, NULL, &code) && code == 0);
+    CHECK(run_git(repo, merge_topic, NULL, &code) && code == 0);
+    CHECK(write_repo_file(repo, "merged.txt", "merged\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    CHECK(run_git(repo, trunk, NULL, &code) && code == 0);
+    (void)memset(&capture, 0, sizeof(capture));
+    CHECK(invoke_handler_real(repo, yew_fuss_cmd_merge, "merge-topic",
+                              &capture) == YEW_CMD_OK);
+    CHECK(capture.exit_code == 0 &&
+          argv_has_sequence(&capture, merge_argv,
+                            YEW_ARRAY_LEN(merge_argv)));
+    CHECK(snprintf(merged, sizeof(merged), "%s/merged.txt", repo) > 0 &&
+          stat(merged, &st) == 0 && S_ISREG(st.st_mode));
+    capture_drop(&capture);
+    (void)memset(&capture, 0, sizeof(capture));
+    CHECK(invoke_handler_real(repo, yew_fuss_cmd_branch_delete, "topic",
+                              &capture) == YEW_CMD_OK);
+    CHECK(capture.exit_code == 0 &&
+          argv_has_sequence(&capture, delete_argv,
+                            YEW_ARRAY_LEN(delete_argv)));
+    capture_drop(&capture);
+}
+
+static bool git_head_oid(const char *repo, const char *ref, Bytes *out)
+{
+    char *tail[] = {
+        (char *)"rev-parse", (char *)"--verify", (char *)ref, NULL
+    };
+    int code = -1;
+
+    if (!run_git(repo, tail, out, &code) || code != 0 || out->len < 2U ||
+        out->data[out->len - 1U] != (u8)'\n')
+        return false;
+    out->data[--out->len] = 0U;
+    return true;
+}
+
+static void test_reset_cherry_pick_and_revert_use_exact_refs(const char *parent)
+{
+    static const char *const reset_argv[] = {"reset", "--soft", "HEAD"};
+    char repo[4096];
+    char *source[] = {
+        (char *)"switch", (char *)"-q", (char *)"-c", (char *)"source", NULL
+    };
+    char *add[] = {(char *)"add", (char *)"--", (char *)"picked.txt", NULL};
+    char *commit[] = {
+        (char *)"commit", (char *)"-q", (char *)"-m", (char *)"picked", NULL
+    };
+    char *trunk[] = {(char *)"switch", (char *)"-q", (char *)"trunk", NULL};
+    SpawnCapture capture = {0};
+    Bytes oid = {0};
+    const char *cherry_argv[2];
+    const char *revert_argv[3];
+    struct stat st;
+    char picked[4096];
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "history-verbs", repo, sizeof(repo)));
+    CHECK(invoke_handler_real(repo, yew_fuss_cmd_reset, "soft HEAD",
+                              &capture) == YEW_CMD_OK);
+    CHECK(capture.exit_code == 0 &&
+          argv_has_sequence(&capture, reset_argv,
+                            YEW_ARRAY_LEN(reset_argv)));
+    capture_drop(&capture);
+    CHECK(run_git(repo, source, NULL, &code) && code == 0);
+    CHECK(write_repo_file(repo, "picked.txt", "picked\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    CHECK(git_head_oid(repo, "HEAD", &oid));
+    CHECK(run_git(repo, trunk, NULL, &code) && code == 0);
+    cherry_argv[0] = "cherry-pick";
+    cherry_argv[1] = (const char *)oid.data;
+    (void)memset(&capture, 0, sizeof(capture));
+    CHECK(invoke_handler_real(repo, yew_fuss_cmd_cherry_pick,
+                              (const char *)oid.data,
+                              &capture) == YEW_CMD_OK);
+    CHECK(capture.exit_code == 0 &&
+          argv_has_sequence(&capture, cherry_argv,
+                            YEW_ARRAY_LEN(cherry_argv)));
+    CHECK(snprintf(picked, sizeof(picked), "%s/picked.txt", repo) > 0 &&
+          stat(picked, &st) == 0);
+    capture_drop(&capture);
+    revert_argv[0] = "revert";
+    revert_argv[1] = "--no-edit";
+    revert_argv[2] = (const char *)oid.data;
+    (void)memset(&capture, 0, sizeof(capture));
+    CHECK(invoke_handler_real(repo, yew_fuss_cmd_revert,
+                              (const char *)oid.data,
+                              &capture) == YEW_CMD_OK);
+    CHECK(capture.exit_code == 0 &&
+          argv_has_sequence(&capture, revert_argv,
+                            YEW_ARRAY_LEN(revert_argv)));
+    CHECK(stat(picked, &st) != 0 && errno == ENOENT);
+    capture_drop(&capture);
+    bytes_drop(&oid);
+}
+
+static void test_rebase_prepare_only_loads_exact_log_range(const char *parent)
+{
+    static const char *const expected[] = {
+        "log", "HEAD~1..HEAD", "--date-order",
+        "--pretty=format:%h%x1f%at%x1f%an%x1f%s"
+    };
+    char repo[4096];
+    char *add[] = {(char *)"add", (char *)"--", (char *)"second.txt", NULL};
+    char *commit[] = {
+        (char *)"commit", (char *)"-q", (char *)"-m", (char *)"second", NULL
+    };
+    SpawnCapture capture = {0};
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "rebase-prepare", repo, sizeof(repo)));
+    CHECK(write_repo_file(repo, "second.txt", "second\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    CHECK(invoke_handler_real(repo, yew_fuss_cmd_rebase_interactive,
+                              "HEAD~1", &capture) == YEW_CMD_OK);
+    CHECK(capture.calls == 1U && capture.exit_code == 0);
+    CHECK(argv_has_sequence(&capture, expected, YEW_ARRAY_LEN(expected)));
+    capture_drop(&capture);
+}
+
+static void test_local_remote_network_verbs_use_plain_argv(const char *parent)
+{
+    static const struct {
+        const char *command;
+        const char *verb;
+    } cases[] = {
+        {"ed.git.fetch", "fetch"},
+        {"ed.git.pull", "pull"},
+        {"ed.git.push", "push"}
+    };
+    char repo[4096];
+    char remote[4096];
+    char *bare[] = {(char *)"init", (char *)"-q", (char *)"--bare", NULL};
+    char *add_remote[] = {(char *)"remote", (char *)"add", (char *)"origin",
+                          remote, NULL};
+    char *first_push[] = {
+        (char *)"push", (char *)"-q", (char *)"-u", (char *)"origin",
+        (char *)"trunk", NULL
+    };
+    size_t i;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "network-verbs", repo, sizeof(repo)));
+    CHECK(snprintf(remote, sizeof(remote), "%s/network-remote.git", parent) > 0 &&
+          mkdir(remote, 0700) == 0);
+    CHECK(run_git(remote, bare, NULL, &code) && code == 0);
+    CHECK(run_git(repo, add_remote, NULL, &code) && code == 0);
+    CHECK(run_git(repo, first_push, NULL, &code) && code == 0);
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        SpawnCapture capture = {0};
+        const char *expected[] = {cases[i].verb};
+
+        CHECK(invoke_active_real(repo, cases[i].command, NULL, &capture) ==
+              YEW_CMD_OK);
+        CHECK(capture.calls == 1U && capture.exit_code == 0);
+        CHECK(argv_has_sequence(&capture, expected, YEW_ARRAY_LEN(expected)));
+        capture_drop(&capture);
+    }
+}
+
+static void test_file_verbs_reject_directories_and_unsafe_paths(
+    const char *parent)
+{
+    static const struct {
+        const char *command;
+        const char *message;
+    } cases[] = {
+        {"ed.git.diff", "select a file to diff"},
+        {"ed.git.blame", "select a file to blame"},
+        {"ed.git.view", "select a file to view"},
+        {"ed.git.open", "select a file to open"},
+        {"ed.git.file.delete", "select a file to delete"},
+        {"ed.git.discard", "select a file to discard"}
+    };
+    char repo[4096];
+    char dir[4096];
+    SpawnCapture capture = {0};
+    CmdCtx cx = {0};
+    Ed ed;
+    size_t i;
+
+    CHECK(child_repo_path(parent, "verb-guards", repo, sizeof(repo)));
+    CHECK(snprintf(dir, sizeof(dir), "%s/dir", repo) > 0 &&
+          mkdir(dir, 0700) == 0);
+    CHECK(enter_fuss(repo, &ed));
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        CHECK(invoke(&ed, cases[i].command, "dir", 3U) ==
+              YEW_CMD_ERR_STATE);
+        CHECK(strcmp(ed.msg.text, cases[i].message) == 0);
+    }
+    CHECK(invoke(&ed, "ed.git.diff", "../base.txt", 11U) ==
+          YEW_CMD_ERR_ARG);
+    CHECK(strcmp(ed.msg.text, "select a valid workspace path") == 0);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.sarg = "--exec";
+    cx.sarg_len = 6U;
+    cx.source = YEW_SRC_TEST;
+    CHECK(yew_fuss_cmd_rebase_interactive(&cx) == YEW_CMD_ERR_ARG);
+    CHECK(strcmp(ed.msg.text, "invalid rebase base") == 0);
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(capture.calls == 0U);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
 }
 
 static void test_commit_template_uses_auto_comment_char(const char *parent)
@@ -764,6 +1134,12 @@ int main(int argc, char **argv)
     test_commit_refuses_conflicted_snapshot(argv[1]);
     test_amend_prefills_previous_message(argv[1]);
     test_cleared_amend_message_does_not_spawn_git(argv[1]);
+    test_read_views_use_expected_git_argv(argv[1]);
+    test_branch_switch_delete_and_merge_change_repo(argv[1]);
+    test_reset_cherry_pick_and_revert_use_exact_refs(argv[1]);
+    test_rebase_prepare_only_loads_exact_log_range(argv[1]);
+    test_local_remote_network_verbs_use_plain_argv(argv[1]);
+    test_file_verbs_reject_directories_and_unsafe_paths(argv[1]);
     if (failures != 0U) {
         (void)fprintf(stderr, "fuss_commands: %u/%u checks failed\n",
                       failures, assertions);
