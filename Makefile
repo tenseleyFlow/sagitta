@@ -578,7 +578,8 @@ endif
 ifneq ($(filter fuss,$(MODULES)),)
 FUSS_FUZZ_TARGET := fuzz-porcelain fuzz-fuss fuzz-git-diff
 FUSS_PERF_TARGET := perf-git-status perf-fuss perf-git-gutter
-FUSS_SCRIPT_TARGET := test-git-script test-fuss-commands test-git-hunks
+FUSS_SCRIPT_TARGET := test-git-script test-fuss-commands test-git-hunks \
+                      test-group-from-dir
 FUSS_TORTURE_TARGET := torture-git-hunk
 endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
@@ -586,6 +587,7 @@ SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 GIT_SCRIPT_OBJ := $(BUILD)/tests/script/git_layer.o
 FUSS_COMMANDS_OBJ := $(BUILD)/tests/script/fuss_commands.o
 GIT_HUNKS_OBJ := $(BUILD)/tests/script/git_hunks.o
+GROUP_FROM_DIR_OBJ := $(BUILD)/tests/script/group_from_dir.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 ROUNDTRIP_OBJ := $(BUILD)/tests/roundtrip/gen.o \
                  $(BUILD)/tests/roundtrip/runner.o
@@ -648,7 +650,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(TORTURE_GIT_HUNK_OBJ) \
-                $(GIT_HUNKS_OBJ) $(FAULTSHIM) $(FAKELSP)))
+                $(GIT_HUNKS_OBJ) $(GROUP_FROM_DIR_OBJ) \
+                $(FAULTSHIM) $(FAKELSP)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -661,7 +664,7 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all check test clean install dirs FORCE test-script test-git-script \
-        test-fuss-commands test-git-hunks \
+        test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
@@ -959,6 +962,10 @@ $(BUILD)/fuss_commands: $(PERF_CORE_OBJ) $(FUSS_COMMANDS_OBJ)
 $(BUILD)/git_hunks: $(PERF_CORE_OBJ) $(GIT_HUNKS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(GIT_HUNKS_OBJ) $(LDLIBS)
+
+$(BUILD)/group_from_dir: $(PERF_CORE_OBJ) $(GROUP_FROM_DIR_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(GROUP_FROM_DIR_OBJ) $(LDLIBS)
 
 $(BUILD)/roundtrip_runner: $(ROUNDTRIP_LINK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ROUNDTRIP_LINK_OBJ) $(LDLIBS)
@@ -1778,6 +1785,16 @@ test-git-hunks: $(BUILD)/git_hunks
 		LC_ALL=C $(BUILD)/git_hunks "$$tmp"; \
 	fi
 
+test-group-from-dir: $(BUILD)/group_from_dir
+	@if ! command -v git >/dev/null 2>&1; then \
+		echo 'HARNESS_SKIP group_from_dir: git not found'; \
+	else \
+		set -e; \
+		tmp=$$(mktemp -d); \
+		trap 'find "$$tmp" -depth -delete' EXIT HUP INT TERM; \
+		LC_ALL=C $(BUILD)/group_from_dir "$$tmp"; \
+	fi
+
 test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 	@set -e; \
 	tmp=$$(mktemp -d); \
@@ -1912,6 +1929,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
          $(FLETCH_RUN_OBJ:.o=.d) $(SCRIPT_RUNNER_OBJ:.o=.d) \
          $(FUSS_COMMANDS_OBJ:.o=.d) \
+         $(GROUP_FROM_DIR_OBJ:.o=.d) \
          $(ROUNDTRIP_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_SHADOW_OBJ:.o=.d) \
