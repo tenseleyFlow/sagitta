@@ -777,6 +777,7 @@ const YewTest yew_tests[] = {
     T(shell_quote_roundtrips_hard_cases),
     T(shell_quote_roundtrips_random_bytes),
     T(job_echo_lifecycle),
+    T(job_internal_ids_do_not_advance_public_ids),
     T(job_handover_inherits_stdio_and_reports_all_outcomes),
     T(job_argv_resolves_path_and_preserves_explicit_paths),
     T(job_exec_failure_is_not_exit_127),

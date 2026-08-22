@@ -423,6 +423,38 @@ void test_job_echo_lifecycle(void)
     }
 }
 
+void test_job_internal_ids_do_not_advance_public_ids(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    char *argv[2];
+    char err[256] = {0};
+    u32 internal_a;
+    u32 internal_b;
+    u32 public_a;
+    u32 public_b;
+
+    job_fixture(&ed);
+    argv[0] = (char *)"/bin/true";
+    argv[1] = NULL;
+    spec.argv = argv;
+    spec.sink = YEW_SINK_DISCARD;
+    spec.internal = true;
+    internal_a = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    internal_b = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    spec.internal = false;
+    public_a = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    public_b = yew_job_spawn(&ed, &spec, err, sizeof(err));
+
+    YEW_ASSERT_EQ_U64(internal_a, UINT32_MAX);
+    YEW_ASSERT_EQ_U64(internal_b, UINT32_MAX - 1U);
+    YEW_ASSERT_EQ_U64(public_a, 1U);
+    YEW_ASSERT_EQ_U64(public_b, 2U);
+    YEW_ASSERT_NOT_NULL(yew_job_find(&ed, internal_a));
+    YEW_ASSERT_NOT_NULL(yew_job_find(&ed, public_a));
+    yew_ed_free(&ed);
+}
+
 void test_job_argv_resolves_path_and_preserves_explicit_paths(void)
 {
     Ed ed;

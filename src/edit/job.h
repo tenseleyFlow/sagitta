@@ -237,7 +237,10 @@ struct YewJob {
 typedef struct JobTable {
     YewJob v[YEW_JOB_MAX];
     u32 len;
+    /* Public jobs count upward from 1; hidden module jobs count downward
+     * from UINT32_MAX so background plumbing cannot create visible gaps. */
     u32 next_id;
+    u32 next_internal_id;
     /* Set when any job changes state, so the *jobs* table and the
      * statusline badge redraw exactly once per loop iteration. */
     bool dirty;

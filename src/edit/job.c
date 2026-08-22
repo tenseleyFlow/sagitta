@@ -237,6 +237,7 @@ void yew_jobs_init(JobTable *jt)
         return;
     (void)memset(jt, 0, sizeof(*jt));
     jt->next_id = 1U;
+    jt->next_internal_id = UINT32_MAX;
 }
 
 static void job_close(int *fd)
@@ -1120,7 +1121,8 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
 
     j = &ed->jobs.v[ed->jobs.len++];
     (void)memset(j, 0, sizeof(*j));
-    j->id = ed->jobs.next_id++;
+    j->id = spec->internal ? ed->jobs.next_internal_id-- :
+            ed->jobs.next_id++;
     j->pid = pid;
     j->pgid = pid;
     j->in_fd = in_p[1];

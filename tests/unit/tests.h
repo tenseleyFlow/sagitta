@@ -757,6 +757,7 @@ void test_shell_quote_roundtrips_hard_cases(void);
 void test_shell_quote_roundtrips_random_bytes(void);
 
 void test_job_echo_lifecycle(void);
+void test_job_internal_ids_do_not_advance_public_ids(void);
 void test_job_handover_inherits_stdio_and_reports_all_outcomes(void);
 void test_job_argv_resolves_path_and_preserves_explicit_paths(void);
 void test_job_exec_failure_is_not_exit_127(void);
