@@ -1,0 +1,13 @@
+# yew Sprint 53 Git gutter performance baseline v1
+#
+# Recorded on x86_64-linux-gnu at -O2 with a 100,000-line buffer and
+# 500 modified hunks.  The budgets are hard gates in tests/perf/git_gutter.c;
+# observations document the implementation checkpoint and are not substitutes
+# for those absolute limits.
+#
+# metric                         budget       gcc observed    clang observed
+full_rediff_median_ns          25000000          21550825          19986414
+worst_idle_slice_us                4000              3954              3892
+keypress_p99_ns                 5000000              7169              5843
+viewport_lookup_p99_ns            50000                85                85
+edits_per_diff_start             200:1             200:1             200:1
