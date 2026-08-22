@@ -5,10 +5,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
@@ -47,6 +49,7 @@ typedef enum FussPromptAction {
     FUSS_PROMPT_DELETE,
     FUSS_PROMPT_RENAME,
     FUSS_PROMPT_PUSH_FORCE,
+    FUSS_PROMPT_REBASE,
     FUSS_PROMPT_COMMIT,
     FUSS_PROMPT_COMMIT_AMEND
 } FussPromptAction;
@@ -64,8 +67,15 @@ typedef enum FussPickAction {
     FUSS_PICK_REVERT,
     FUSS_PICK_STASH,
     FUSS_PICK_REMOTE,
+    FUSS_PICK_REMOTE_CHECK,
+    FUSS_PICK_REBASE_CONFIRM,
     FUSS_PICK_COMMIT_AMEND
 } FussPickAction;
+
+typedef struct FussPreviewJob {
+    char *value;
+    u32 job_id;
+} FussPreviewJob;
 
 struct FussMode {
     FussTree tree;
@@ -99,20 +109,31 @@ struct FussMode {
     char **picker_values;
     u32 picker_count;
     char *picker_aux;
+    char *picker_aux2;
     bool picker_alt;
+    u32 preview_job;
+    char *preview_value;
+    Bytebuf preview_bytes;
+    bool preview_ready;
     FileList files;
     WalkState *walk;
     FileList expand_files;
     WalkState *expand_walk;
     char *expand_path;
     bool expand_enter;
+    i32 rebase_step;
+    i32 rebase_total;
 };
 
 static bool fuss_picker_result(Ed *ed, FussPickAction action,
                                const GitResult *result);
+static void fuss_picker_open(Ed *ed, FussPickAction action,
+                             const char *title);
 static CmdStatus fuss_commit_begin(Ed *ed, bool amend, const u8 *prefill,
                                    size_t prefill_len);
 static bool fuss_commit_guard(Ed *ed, const GitSnapshot *snap);
+static CmdStatus fuss_rebase_prepare(Ed *ed, const char *base);
+static void fuss_rebase_progress_update(Ed *ed, const GitSnapshot *snap);
 static void fuss_prompt_clear(FussMode *f);
 static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
                              size_t len, void *ctx);
@@ -421,8 +442,16 @@ static void fuss_result_tick(Ed *ed)
             else
                 (void)fuss_commit_begin(ed, true, result->out,
                                         (size_t)result->out_len);
-        }
-        else if (pick != FUSS_PICK_NONE)
+        } else if (pick == FUSS_PICK_REBASE_CONFIRM) {
+            fuss_show_result(ed, result);
+            f->prompt_action = FUSS_PROMPT_REBASE;
+            yew_cmdline_open_input(ed, NULL, fuss_prompt_done, f);
+            if (ed->cmdline.active)
+                yew_msg(ed, YEW_MSG_WARN,
+                        "review the rebase range, then type 'rebase' to continue");
+            else
+                fuss_prompt_clear(f);
+        } else if (pick != FUSS_PICK_NONE)
             (void)fuss_picker_result(ed, pick, result);
         else if (f->pending_view)
             fuss_show_result(ed, result);
@@ -464,6 +493,11 @@ static void fuss_result_tick(Ed *ed)
         free(f->prompt_path);
         f->prompt_path = NULL;
     }
+    if (result->state != YEW_GIT_OK &&
+        pick == FUSS_PICK_REBASE_CONFIRM)
+        fuss_prompt_clear(f);
+    if (result->state != YEW_GIT_OK && pick == FUSS_PICK_REMOTE_CHECK)
+        fuss_picker_open(ed, FUSS_PICK_REMOTE, "remote");
     f->pending_view = false;
     fuss_damage(ed);
 }
@@ -507,6 +541,7 @@ static void fuss_build(Ed *ed, const GitSnapshot *snap, bool force)
     arena_init(&saved);
     npaths = yew_fuss_harvest_collapsed(&f->tree, &saved, &paths);
     yew_fuss_build(&f->tree, snap, &f->opts);
+    fuss_rebase_progress_update(ed, snap);
     if (f->opts.all_files && f->walk == NULL && f->files.paths.len != 0U)
         (void)yew_fuss_merge_files(&f->tree, &f->files, snap, &f->opts);
     yew_fuss_restore_collapsed(&f->tree, paths, npaths);
@@ -534,6 +569,7 @@ void yew_fuss_state_init(Ed *ed)
     yew_fuss_jump_init(&f->jump);
     yew_filelist_init(&f->files);
     yew_filelist_init(&f->expand_files);
+    bytebuf_init(&f->preview_bytes);
     ed->fuss = f;
 }
 
@@ -562,6 +598,11 @@ void yew_fuss_state_free(Ed *ed)
     free(f->picker_items);
     free(f->picker_values);
     free(f->picker_aux);
+    free(f->picker_aux2);
+    if (f->preview_job != 0U)
+        (void)yew_job_signal(ed, f->preview_job, SIGTERM);
+    free(f->preview_value);
+    bytebuf_free(&f->preview_bytes);
     if (f->walk != NULL)
         yew_walk_end(f->walk);
     fuss_expand_clear(f);
@@ -852,6 +893,15 @@ static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
     bytebuf_init(&counts);
     bytebuf_printf(&counts, "  ↑%d ↓%d", snap->ahead < 0 ? 0 : snap->ahead,
                    snap->behind < 0 ? 0 : snap->behind);
+    if (snap->state == YEW_GIT_MID_REBASE) {
+        if (ed->fuss->rebase_step > 0 && ed->fuss->rebase_total > 0)
+            bytebuf_printf(&counts, "  REBASING %d/%d",
+                           ed->fuss->rebase_step,
+                           ed->fuss->rebase_total);
+        else
+            bytebuf_append(&counts, (const u8 *)"  REBASING",
+                           sizeof("  REBASING") - 1U);
+    }
     fuss_put_lit(&ed->grid, row, &col, right, (const char *)counts.data,
                  counts.len, style.fg, style.bg, style.attrs);
     bytebuf_free(&counts);
@@ -1042,12 +1092,16 @@ void yew_fuss_draw(Ed *ed)
     for (i = 0U; i < visible && (size_t)first + i < f->tree.items.len; i++) {
         u16 row = (u16)(tree.y + 1U + (u16)i);
         const FussItem *item = fuss_item(f, (i32)((size_t)first + i));
+        u32 path_id;
 
         fuss_tree_row(ed, row, tree.x, (u16)(tree.x + tree.w), item,
                       (i32)((size_t)first + i) == selected);
-        yew_region_add(YEW_REGION_FUSS_ROW,
-                       (Rect){tree.x, row, tree.w, 1U},
-                       (i32)((size_t)first + i));
+        path_id = item == NULL ? 0U :
+                  yew_intern(&ed->interner, item->path, item->path_len);
+        if (path_id <= (u32)INT32_MAX)
+            yew_region_add(YEW_REGION_FUSS_ROW,
+                           (Rect){tree.x, row, tree.w, 1U},
+                           (i32)path_id);
     }
     if (f->viewer_leaf != NULL && f->fuss_root != NULL &&
         !f->fuss_root->is_leaf) {
@@ -1083,6 +1137,9 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer)
     line2 = f->ascii_glyphs ?
         "<> tree | ^v siblings | a stage | m commit | / jump | q leave" :
         "←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave";
+    snap = yew_git_snapshot(ed);
+    if (snap != NULL && snap->state == YEW_GIT_MID_REBASE)
+        line2 = "rebase stopped · :git.rebase.continue · :git.rebase.abort";
     style = yew_statusline_mode_style(YEW_MODE_F);
     blank = ed->grid.blank;
     blank.fg = style.chip_fg;
@@ -1122,7 +1179,6 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer)
                          fuss_cstr_len(state), style.chip_fg, style.chip_bg,
                          0U);
         } else {
-            snap = yew_git_snapshot(ed);
             if (snap == NULL || snap->gen == 0U)
                 fuss_put_lit(&ed->grid, footer.y, &col,
                              (u16)(footer.x + footer.w), "loading…",
@@ -1380,12 +1436,20 @@ static void fuss_picker_clear(FussMode *f)
     free(f->picker_items);
     free(f->picker_values);
     free(f->picker_aux);
+    free(f->picker_aux2);
+    free(f->preview_value);
+    bytebuf_free(&f->preview_bytes);
+    bytebuf_init(&f->preview_bytes);
     f->picker_items = NULL;
     f->picker_values = NULL;
     f->picker_count = 0U;
     f->picker_aux = NULL;
+    f->picker_aux2 = NULL;
     f->picker_action = FUSS_PICK_NONE;
     f->picker_alt = false;
+    f->preview_job = 0U;
+    f->preview_value = NULL;
+    f->preview_ready = false;
 }
 
 static bool fuss_picker_add(FussMode *f, const char *label, size_t label_len,
@@ -1984,6 +2048,97 @@ static bool fuss_read_small_file(const char *path, Bytebuf *out)
     return true;
 }
 
+static bool fuss_positive_int(const Bytebuf *bytes, i32 *out)
+{
+    size_t at = 0U;
+    i32 value = 0;
+    bool any = false;
+
+    if (bytes == NULL || out == NULL)
+        return false;
+    while (at < bytes->len &&
+           (bytes->data[at] == (u8)' ' || bytes->data[at] == (u8)'\t' ||
+            bytes->data[at] == (u8)'\r' || bytes->data[at] == (u8)'\n'))
+        at++;
+    while (at < bytes->len && bytes->data[at] >= (u8)'0' &&
+           bytes->data[at] <= (u8)'9') {
+        i32 digit = (i32)(bytes->data[at] - (u8)'0');
+
+        if (value > (INT_MAX - digit) / 10)
+            return false;
+        value = value * 10 + digit;
+        any = true;
+        at++;
+    }
+    while (at < bytes->len &&
+           (bytes->data[at] == (u8)' ' || bytes->data[at] == (u8)'\t' ||
+            bytes->data[at] == (u8)'\r' || bytes->data[at] == (u8)'\n'))
+        at++;
+    if (!any || at != bytes->len || value <= 0)
+        return false;
+    *out = value;
+    return true;
+}
+
+static void fuss_rebase_progress_update(Ed *ed, const GitSnapshot *snap)
+{
+    const GitRepo *repo;
+    const char *step_name;
+    const char *total_name;
+    char *step_path;
+    char *total_path;
+    Bytebuf step;
+    Bytebuf total;
+    bool step_ok;
+    bool total_ok;
+
+    if (ed == NULL || ed->fuss == NULL)
+        return;
+    ed->fuss->rebase_step = 0;
+    ed->fuss->rebase_total = 0;
+    if (snap == NULL || snap->state != YEW_GIT_MID_REBASE)
+        return;
+    repo = yew_git_repo_cached(ed);
+    if (repo == NULL || repo->git_dir == NULL)
+        return;
+    step_name = "rebase-merge/msgnum";
+    total_name = "rebase-merge/end";
+    step_path = fuss_dir_path(repo->git_dir, step_name);
+    total_path = fuss_dir_path(repo->git_dir, total_name);
+    step_ok = step_path != NULL && fuss_read_small_file(step_path, &step);
+    total_ok = total_path != NULL && fuss_read_small_file(total_path, &total);
+    if (!step_ok || !total_ok) {
+        if (step_ok)
+            bytebuf_free(&step);
+        if (total_ok)
+            bytebuf_free(&total);
+        free(step_path);
+        free(total_path);
+        step_name = "rebase-apply/next";
+        total_name = "rebase-apply/last";
+        step_path = fuss_dir_path(repo->git_dir, step_name);
+        total_path = fuss_dir_path(repo->git_dir, total_name);
+        step_ok = step_path != NULL && fuss_read_small_file(step_path, &step);
+        total_ok = total_path != NULL && fuss_read_small_file(total_path,
+                                                               &total);
+    }
+    if (step_ok && total_ok &&
+        fuss_positive_int(&step, &ed->fuss->rebase_step) &&
+        fuss_positive_int(&total, &ed->fuss->rebase_total) &&
+        ed->fuss->rebase_step <= ed->fuss->rebase_total) {
+        /* Values published above. */
+    } else {
+        ed->fuss->rebase_step = 0;
+        ed->fuss->rebase_total = 0;
+    }
+    if (step_ok)
+        bytebuf_free(&step);
+    if (total_ok)
+        bytebuf_free(&total);
+    free(step_path);
+    free(total_path);
+}
+
 static CmdStatus fuss_commit_open(CmdCtx *cx, bool amend)
 {
     FussMode *f;
@@ -2075,6 +2230,47 @@ CmdStatus yew_fuss_commit_close(Ed *ed, Buffer *buffer, bool *handled)
     yew_msg(ed, YEW_MSG_INFO, "commit aborted");
     fuss_commit_resume(ed, buffer);
     return YEW_CMD_OK;
+}
+
+static CmdStatus fuss_rebase_prepare(Ed *ed, const char *base)
+{
+    FussMode *f;
+    size_t base_len;
+    char *range;
+    char *argv[6];
+    CmdStatus status;
+
+    if (ed == NULL || ed->fuss == NULL || base == NULL || base[0] == '\0')
+        return YEW_CMD_ERR_ARG;
+    f = ed->fuss;
+    base_len = fuss_cstr_len(base);
+    if (base[0] == '-' || base_len > SIZE_MAX - sizeof("..HEAD")) {
+        yew_msg(ed, YEW_MSG_ERROR, "invalid rebase base");
+        return YEW_CMD_ERR_ARG;
+    }
+    range = yew_xmalloc(base_len + sizeof("..HEAD"));
+    (void)memcpy(range, base, base_len);
+    (void)memcpy(range + base_len, "..HEAD", sizeof("..HEAD"));
+    fuss_prompt_clear(f);
+    f->prompt_path = fuss_dup_bytes(base, base_len);
+    if (f->prompt_path == NULL) {
+        free(range);
+        return YEW_CMD_ERR_ARG;
+    }
+    argv[0] = (char *)"log";
+    argv[1] = range;
+    argv[2] = (char *)"--date-order";
+    argv[3] = (char *)"--pretty=format:%h%x1f%at%x1f%an%x1f%s";
+    argv[4] = NULL;
+    status = fuss_spawn(ed, "log", argv, false, NULL, 0U, false);
+    free(range);
+    if (status == YEW_CMD_OK) {
+        f->pending_pick = FUSS_PICK_REBASE_CONFIRM;
+        yew_msg(ed, YEW_MSG_INFO, "loading rebase range");
+    } else {
+        fuss_prompt_clear(f);
+    }
+    return status;
 }
 
 static CmdStatus fuss_rebase_sync(Ed *ed, const char *operation,
@@ -2294,6 +2490,11 @@ static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
             (void)fuss_spawn(ed, "push", argv, false, NULL, 0U, false);
         }
         break;
+    case FUSS_PROMPT_REBASE:
+        if (fuss_text_is(text, len, "rebase", sizeof("rebase") - 1U) &&
+            f->prompt_path != NULL)
+            (void)fuss_rebase_sync(ed, "-i", f->prompt_path);
+        break;
     case FUSS_PROMPT_COMMIT:
     case FUSS_PROMPT_COMMIT_AMEND:
         if (accepted)
@@ -2439,7 +2640,7 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
         }
         break;
     case FUSS_PICK_REBASE:
-        (void)fuss_rebase_sync(ed, "-i", value);
+        (void)fuss_rebase_prepare(ed, value);
         break;
     case FUSS_PICK_CHERRY_BRANCH:
         (void)fuss_pick_commits(ed, FUSS_PICK_CHERRY_COMMIT, value);
@@ -2471,12 +2672,154 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
         }
         break;
     case FUSS_PICK_COMMIT_AMEND:
+    case FUSS_PICK_REBASE_CONFIRM:
+    case FUSS_PICK_REMOTE_CHECK:
     case FUSS_PICK_NONE:
         break;
     }
     free(value);
     free(aux);
     return true;
+}
+
+static void fuss_preview_complete(void *opaque, Ed *ed,
+                                  const YewJob *job)
+{
+    FussPreviewJob *owner = opaque;
+    FussMode *f;
+    static const char unavailable[] = "preview unavailable";
+
+    if (owner == NULL || ed == NULL || ed->fuss == NULL || job == NULL)
+        return;
+    f = ed->fuss;
+    if (f->preview_job != owner->job_id ||
+        f->preview_value == NULL || owner->value == NULL ||
+        strcmp(f->preview_value, owner->value) != 0)
+        return;
+    f->preview_job = 0U;
+    bytebuf_free(&f->preview_bytes);
+    bytebuf_init(&f->preview_bytes);
+    if (job->state == YEW_JOB_EXITED && job->exit_code == 0 &&
+        !job->collect_capped)
+        bytebuf_append(&f->preview_bytes, job->collect.data,
+                       job->collect.len);
+    else
+        bytebuf_append(&f->preview_bytes, (const u8 *)unavailable,
+                       sizeof(unavailable) - 1U);
+    f->preview_ready = true;
+    fuss_damage(ed);
+}
+
+static void fuss_preview_destroy(void *opaque)
+{
+    FussPreviewJob *owner = opaque;
+
+    if (owner == NULL)
+        return;
+    free(owner->value);
+    free(owner);
+}
+
+static const YewJobCallbackOps fuss_preview_ops = {
+    fuss_preview_complete,
+    fuss_preview_destroy
+};
+
+static bool fuss_preview_start(Ed *ed, FussMode *f, const char *value)
+{
+    FussPreviewJob *owner;
+    const GitVerb *verb;
+    char *argv[6];
+    char error[160];
+    u32 job;
+
+    if (ed == NULL || f == NULL || value == NULL || value[0] == '\0' ||
+        value[0] == '-' || f->preview_job != 0U)
+        return false;
+    verb = yew_git_verb("show");
+    if (verb == NULL)
+        return false;
+    owner = yew_xcalloc(1U, sizeof(*owner));
+    owner->value = fuss_dup_bytes(value, fuss_cstr_len(value));
+    if (owner->value == NULL) {
+        free(owner);
+        return false;
+    }
+    argv[0] = (char *)"show";
+    argv[1] = (char *)"--stat";
+    argv[2] = (char *)"--oneline";
+    argv[3] = (char *)"--decorate";
+    argv[4] = owner->value;
+    argv[5] = NULL;
+    job = yew_git_spawn_callback(ed, verb, argv, owner,
+                                 &fuss_preview_ops, error, sizeof(error));
+    if (job == 0U) {
+        fuss_preview_destroy(owner);
+        return false;
+    }
+    owner->job_id = job;
+    free(f->preview_value);
+    f->preview_value = fuss_dup_bytes(value, fuss_cstr_len(value));
+    bytebuf_free(&f->preview_bytes);
+    bytebuf_init(&f->preview_bytes);
+    f->preview_ready = false;
+    f->preview_job = job;
+    return true;
+}
+
+static void fuss_preview_draw_text(Ed *ed, Rect r, const u8 *bytes,
+                                   size_t len)
+{
+    ThemeEnt style = fuss_base_style(ed);
+    size_t at = 0U;
+    u16 row = 0U;
+
+    while (at < len && row < r.h) {
+        size_t end = at;
+        size_t fit;
+        int cells = 0;
+
+        while (end < len && bytes[end] != (u8)'\n')
+            end++;
+        if (end > at && bytes[end - 1U] == (u8)'\r')
+            end--;
+        fit = yew_str_clip(bytes + at, end - at, (int)r.w, &cells);
+        if (fit != 0U)
+            (void)yew_grid_puts(&ed->grid, (u16)(r.y + row), r.x,
+                                bytes + at, fit, style.fg, style.bg,
+                                (u16)(style.attrs | YEW_ATTR_DIM));
+        row++;
+        while (end < len && bytes[end] != (u8)'\n')
+            end++;
+        at = end < len ? end + 1U : end;
+    }
+}
+
+static void fuss_picker_preview(Ed *ed, void *ctx, i32 payload, Rect r)
+{
+    FussMode *f = ctx;
+    const char *value;
+    static const u8 loading[] = "loading…";
+
+    if (ed == NULL || f == NULL || payload < 0 ||
+        (u32)payload >= f->picker_count || r.w == 0U || r.h == 0U)
+        return;
+    value = f->picker_values[payload];
+    if (value == NULL)
+        return;
+    if (f->preview_value == NULL ||
+        strcmp(f->preview_value, value) != 0) {
+        if (f->preview_job == 0U)
+            (void)fuss_preview_start(ed, f, value);
+        fuss_preview_draw_text(ed, r, loading, sizeof(loading) - 1U);
+        return;
+    }
+    if (!f->preview_ready) {
+        fuss_preview_draw_text(ed, r, loading, sizeof(loading) - 1U);
+        return;
+    }
+    fuss_preview_draw_text(ed, r, f->preview_bytes.data,
+                           f->preview_bytes.len);
 }
 
 static void fuss_picker_open(Ed *ed, FussPickAction action,
@@ -2494,12 +2837,86 @@ static void fuss_picker_open(Ed *ed, FussPickAction action,
     spec.title = title;
     spec.items = fuss_picker_items;
     spec.accept = fuss_picker_accept;
+    if (action != FUSS_PICK_REMOTE && action != FUSS_PICK_RESET_MODE)
+        spec.preview = fuss_picker_preview;
     spec.action = action == FUSS_PICK_STASH ? fuss_picker_action : NULL;
     spec.footer = action == FUSS_PICK_STASH ?
                   "Enter pop · C-v apply · Esc cancel" : NULL;
     spec.path_mode = false;
     spec.ctx = f;
     yew_picker_open(ed, &spec);
+}
+
+static bool fuss_parse_epoch(const char *text, size_t len, i64 *out)
+{
+    size_t at;
+    i64 value = 0;
+
+    if (text == NULL || len == 0U || out == NULL)
+        return false;
+    for (at = 0U; at < len; at++) {
+        i64 digit;
+
+        if (text[at] < '0' || text[at] > '9')
+            return false;
+        digit = (i64)(text[at] - '0');
+        if (value > (INT64_MAX - digit) / 10)
+            return false;
+        value = value * 10 + digit;
+    }
+    *out = value;
+    return true;
+}
+
+static void fuss_detail_part(Bytebuf *detail, const char *text, size_t len)
+{
+    if (detail == NULL || text == NULL || len == 0U)
+        return;
+    if (detail->len != 0U)
+        bytebuf_append(detail, (const u8 *)" · ", sizeof(" · ") - 1U);
+    bytebuf_append(detail, (const u8 *)text, len);
+}
+
+static void fuss_detail_relative(Bytebuf *detail, const char *text,
+                                 size_t len)
+{
+    i64 stamp;
+    i64 now;
+    i64 age;
+    i64 count;
+    const char *unit;
+
+    if (!fuss_parse_epoch(text, len, &stamp))
+        return;
+    now = (i64)time(NULL);
+    age = now > stamp ? now - stamp : 0;
+    if (age < 60) {
+        fuss_detail_part(detail, "now", sizeof("now") - 1U);
+        return;
+    }
+    if (age < 60 * 60) {
+        count = age / 60;
+        unit = "minute";
+    } else if (age < 24 * 60 * 60) {
+        count = age / (60 * 60);
+        unit = "hour";
+    } else if (age < 14 * 24 * 60 * 60) {
+        count = age / (24 * 60 * 60);
+        unit = "day";
+    } else if (age < 90 * 24 * 60 * 60) {
+        count = age / (7 * 24 * 60 * 60);
+        unit = "week";
+    } else if (age < 2 * 365 * 24 * 60 * 60) {
+        count = age / (30 * 24 * 60 * 60);
+        unit = "month";
+    } else {
+        count = age / (365 * 24 * 60 * 60);
+        unit = "year";
+    }
+    if (detail->len != 0U)
+        bytebuf_append(detail, (const u8 *)" · ", sizeof(" · ") - 1U);
+    bytebuf_printf(detail, "%lld %s%s ago", (long long)count, unit,
+                   count == 1 ? "" : "s");
 }
 
 static bool fuss_parse_records(Ed *ed, FussMode *f, FussPickAction action,
@@ -2539,30 +2956,56 @@ static bool fuss_parse_records(Ed *ed, FussMode *f, FussPickAction action,
              action == FUSS_PICK_MERGE ||
              action == FUSS_PICK_CHERRY_BRANCH) && nfield >= 1U) {
             bool include = true;
+            Bytebuf detail;
 
             if (action == FUSS_PICK_BRANCH_DELETE && snap != NULL &&
                 snap->branch != NULL &&
                 lens[0] == fuss_cstr_len(snap->branch) &&
                 memcmp(fields[0], snap->branch, lens[0]) == 0)
                 include = false;
+            bytebuf_init(&detail);
+            if (nfield > 1U)
+                fuss_detail_part(&detail, fields[1], lens[1]);
+            if (nfield > 2U)
+                fuss_detail_relative(&detail, fields[2], lens[2]);
             if (include)
                 (void)fuss_picker_add(f, fields[0], lens[0],
-                                      nfield > 1U ? fields[1] : NULL,
-                                      nfield > 1U ? lens[1] : 0U,
+                                      detail.len == 0U ? NULL :
+                                                               (const char *)detail.data,
+                                      detail.len,
                                       fields[0], lens[0]);
+            bytebuf_free(&detail);
         } else if ((action == FUSS_PICK_RESET_COMMIT ||
                     action == FUSS_PICK_REBASE ||
                     action == FUSS_PICK_CHERRY_COMMIT ||
                     action == FUSS_PICK_REVERT) && nfield >= 2U) {
+            Bytebuf detail;
+
+            bytebuf_init(&detail);
+            if (nfield > 2U)
+                fuss_detail_relative(&detail, fields[2], lens[2]);
+            if (nfield > 3U)
+                fuss_detail_part(&detail, fields[3], lens[3]);
             (void)fuss_picker_add(f, fields[1], lens[1],
-                                  nfield > 3U ? fields[3] : NULL,
-                                  nfield > 3U ? lens[3] : 0U,
+                                  detail.len == 0U ? NULL :
+                                                           (const char *)detail.data,
+                                  detail.len,
                                   fields[0], lens[0]);
+            bytebuf_free(&detail);
         } else if (action == FUSS_PICK_STASH && nfield >= 1U) {
+            Bytebuf detail;
+
+            bytebuf_init(&detail);
+            if (nfield > 1U)
+                fuss_detail_relative(&detail, fields[1], lens[1]);
+            if (nfield > 2U)
+                fuss_detail_part(&detail, fields[2], lens[2]);
             (void)fuss_picker_add(f, fields[0], lens[0],
-                                  nfield > 2U ? fields[2] : NULL,
-                                  nfield > 2U ? lens[2] : 0U,
+                                  detail.len == 0U ? NULL :
+                                                           (const char *)detail.data,
+                                  detail.len,
                                   fields[0], lens[0]);
+            bytebuf_free(&detail);
         }
         off = end < len ? end + 1U : end;
     }
@@ -2615,13 +3058,71 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
     len = (size_t)result->out_len;
     if (action == FUSS_PICK_REMOTE)
         (void)fuss_parse_remotes(f, result->out, len);
-    else
+    else if (action != FUSS_PICK_REMOTE_CHECK)
         (void)fuss_parse_records(ed, f, action, result->out, len);
     if (action == FUSS_PICK_REMOTE) {
         snap = yew_git_snapshot(ed);
         if (snap != NULL && snap->branch != NULL)
             f->picker_aux = fuss_dup_bytes(snap->branch,
                                            fuss_cstr_len(snap->branch));
+        if (f->picker_count == 1U && f->picker_aux != NULL) {
+            size_t branch_len = fuss_cstr_len(f->picker_aux);
+            char *ref;
+
+            if (branch_len <= SIZE_MAX - sizeof("refs/heads/")) {
+                char *argv[6];
+
+                ref = yew_xmalloc(sizeof("refs/heads/") + branch_len);
+                (void)memcpy(ref, "refs/heads/",
+                             sizeof("refs/heads/") - 1U);
+                (void)memcpy(ref + sizeof("refs/heads/") - 1U,
+                             f->picker_aux, branch_len + 1U);
+                f->picker_aux2 = fuss_dup_bytes(f->picker_values[0],
+                    fuss_cstr_len(f->picker_values[0]));
+                argv[0] = (char *)"ls-remote";
+                argv[1] = (char *)"--heads";
+                argv[2] = f->picker_aux2;
+                argv[3] = ref;
+                argv[4] = NULL;
+                if (f->picker_aux2 != NULL &&
+                    fuss_spawn(ed, "remote-check", argv, false, NULL, 0U,
+                               false) == YEW_CMD_OK) {
+                    f->pending_pick = FUSS_PICK_REMOTE_CHECK;
+                    free(ref);
+                    return true;
+                }
+                free(ref);
+                free(f->picker_aux2);
+                f->picker_aux2 = NULL;
+            }
+        }
+    } else if (action == FUSS_PICK_REMOTE_CHECK) {
+        if (len == 0U && f->picker_aux != NULL && f->picker_aux2 != NULL) {
+            char *branch = fuss_dup_bytes(f->picker_aux,
+                                          fuss_cstr_len(f->picker_aux));
+            char *remote = fuss_dup_bytes(f->picker_aux2,
+                                          fuss_cstr_len(f->picker_aux2));
+            CmdStatus status = YEW_CMD_ERR_STATE;
+
+            fuss_picker_clear(f);
+            if (branch != NULL && remote != NULL) {
+                char *argv[] = {
+                    (char *)"push", (char *)"-u", remote, branch, NULL
+                };
+
+                status = fuss_spawn(ed, "push", argv, false, NULL, 0U,
+                                    false);
+                if (status == YEW_CMD_OK)
+                    yew_msg(ed, YEW_MSG_INFO,
+                            "one remote; pushing %s to %s and setting upstream",
+                            branch, remote);
+            }
+            free(branch);
+            free(remote);
+            return status == YEW_CMD_OK;
+        }
+        fuss_picker_open(ed, FUSS_PICK_REMOTE, "remote");
+        return true;
     }
     switch (action) {
     case FUSS_PICK_BRANCH_SWITCH: fuss_picker_open(ed, action, "branch"); break;
@@ -2635,6 +3136,8 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
     case FUSS_PICK_STASH: fuss_picker_open(ed, action, "stash"); break;
     case FUSS_PICK_REMOTE: fuss_picker_open(ed, action, "remote"); break;
     case FUSS_PICK_COMMIT_AMEND:
+    case FUSS_PICK_REBASE_CONFIRM:
+    case FUSS_PICK_REMOTE_CHECK:
     case FUSS_PICK_RESET_MODE:
     case FUSS_PICK_NONE:
         return false;
@@ -3221,7 +3724,7 @@ CmdStatus yew_fuss_cmd_rebase_interactive(CmdCtx *cx)
 
         if (base == NULL)
             return YEW_CMD_ERR_ARG;
-        status = fuss_rebase_sync(cx->ed, "-i", base);
+        status = fuss_rebase_prepare(cx->ed, base);
         free(base);
         return status;
     }

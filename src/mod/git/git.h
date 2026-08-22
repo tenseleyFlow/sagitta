@@ -11,6 +11,7 @@
 typedef struct Ed Ed;
 typedef struct GitCtx GitCtx;
 typedef struct GitReq GitReq;
+typedef struct YewJobCallbackOps YewJobCallbackOps;
 
 #define YEW_GIT_COLLECT_MAX (16U * 1024U * 1024U)
 #define YEW_GIT_READ_TIMEOUT_MS 5000
@@ -261,6 +262,13 @@ const GitVerb *yew_git_verb_at(size_t index);
 size_t yew_git_verb_count(void);
 u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
                   const GitReq *req, char *err, size_t errsz);
+/* Read-only module jobs that need their own completion owner, such as a
+ * picker preview.  They inherit Git's locked environment and argv policy
+ * without publishing through the single generic GitResult slot. */
+u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
+                           char *const *argv, void *owner,
+                           const YewJobCallbackOps *ops,
+                           char *err, size_t errsz);
 
 const char *yew_git_state_str(GitStatusCode code);
 

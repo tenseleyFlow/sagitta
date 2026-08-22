@@ -302,6 +302,17 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     return 0U;
 }
 
+u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
+                           char *const *argv, void *owner,
+                           const YewJobCallbackOps *ops,
+                           char *err, size_t errsz)
+{
+    (void)verb; (void)argv; (void)owner; (void)ops;
+    (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
+    (void)git_require(ed);
+    return 0U;
+}
+
 const char *yew_git_state_str(GitStatusCode code)
 {
     static const char *const states[] = {

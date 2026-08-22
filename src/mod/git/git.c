@@ -109,6 +109,7 @@ static const GitVerb git_verbs[] = {
     GIT_READ("show", true, true),
     GIT_READ("branch-list", true, false),
     GIT_READ("remote-list", true, false),
+    GIT_NET("remote-check", true, false),
     GIT_MUTATE("init", false, false),
     GIT_MUTATE("stage", true, false),
     GIT_MUTATE("unstage", true, false),
@@ -641,6 +642,68 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     pending->req.job_id = id;
     if (owner != NULL)
         owner->job_id = id;
+    return id;
+}
+
+u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
+                           char *const *argv, void *owner,
+                           const YewJobCallbackOps *ops,
+                           char *err, size_t errsz)
+{
+    static const char *const env_base[] = {
+        "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false",
+        "GIT_SEQUENCE_EDITOR=false", "GIT_FLUSH=1", "GIT_PAGER=cat",
+        "PAGER=cat", "LC_ALL=C", NULL
+    };
+    static const char *const env_unset[] = {
+        "COLUMNS", "LINES", "GIT_TRACE", "GIT_TRACE_PACKET",
+        "GIT_TRACE_PERFORMANCE", "GIT_CURL_VERBOSE", "GIT_TRANSFER_TRACE",
+        NULL
+    };
+    static const char *const env_unset_prefix[] = {"GIT_TRACE2", NULL};
+    YewJobSpec spec = {0};
+    char **final_argv;
+    u32 id;
+
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    if (ed == NULL || ed->git == NULL || verb == NULL || argv == NULL ||
+        argv[0] == NULL || owner == NULL || ops == NULL ||
+        ops->complete == NULL || ops->destroy == NULL ||
+        verb->kind != YEW_GV_READ) {
+        git_error(err, errsz, "invalid Git callback job");
+        return 0U;
+    }
+    if (test_spawn != NULL) {
+        git_error(err, errsz, "Git callback job unavailable under test hook");
+        return 0U;
+    }
+    if (verb->needs_repo &&
+        (ed->git->detect_state != YEW_GIT_ASYNC_READY ||
+         ed->git->detect_result != YEW_GIT_OK)) {
+        git_error(err, errsz, yew_git_state_str(YEW_GIT_NOT_REPO));
+        return 0U;
+    }
+    if (verb->needs_head &&
+        (ed->git->snap[ed->git->live].gen == 0U ||
+         ed->git->snap[ed->git->live].unborn)) {
+        git_error(err, errsz, yew_git_state_str(YEW_GIT_NO_HEAD));
+        return 0U;
+    }
+    final_argv = git_build_argv(verb, argv);
+    spec.argv = final_argv;
+    spec.cwd = yew_ws_root(ed);
+    spec.sink = YEW_SINK_CALLBACK;
+    spec.timeout_ms = verb->timeout_ms;
+    spec.display = verb->name;
+    spec.collect_max = YEW_GIT_COLLECT_MAX;
+    spec.env_set = env_base;
+    spec.env_unset = env_unset;
+    spec.env_unset_prefix = env_unset_prefix;
+    spec.callback_owner = owner;
+    spec.callback_ops = ops;
+    id = yew_job_spawn(ed, &spec, err, errsz);
+    free(final_argv);
     return id;
 }
 

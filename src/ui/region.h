@@ -74,7 +74,7 @@ typedef enum {
      * different file than the one the user right-clicked.
      */
     YEW_REGION_CTX_ROW,
-    /* Sprint 52: payload is the flattened FUSS row for this frame. */
+    /* Sprint 52: payload is the selected item's interned path id. */
     YEW_REGION_FUSS_ROW
 } RegionKind;
 
