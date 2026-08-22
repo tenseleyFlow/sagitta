@@ -1056,6 +1056,12 @@ bool yew_diff_lines(Arena *arena, const u64 *left, u32 left_n,
         (left == NULL && left_n != 0U) ||
         (right == NULL && right_n != 0U))
         return false;
+    if (left_n == right_n &&
+        (left_n == 0U ||
+         memcmp(left, right, (size_t)left_n * sizeof(*left)) == 0)) {
+        GitHunkVec_free(out);
+        return true;
+    }
     work = yew_xcalloc(1U, sizeof(*work));
     work->left_hashes = (u64 *)left;
     work->right_hashes = (u64 *)right;

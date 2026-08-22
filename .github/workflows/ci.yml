@@ -327,6 +327,8 @@ jobs:
         run: |
           make perf-batch CC=gcc
           make perf-batch-selftest CC=gcc
+      - name: Enforce Sprint 53 Git gutter latency budgets
+        run: make perf-git-gutter CC=gcc
       - name: Enforce AI transport, streaming, and privacy budgets
         run: |
           make perf-ai-http perf-ai-privacy CC=gcc

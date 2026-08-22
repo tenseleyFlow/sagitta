@@ -207,8 +207,10 @@ void test_cmd_registry_invocation_and_deferred(void)
         YEW_ASSERT_NOT_NULL(stage->word);
         YEW_ASSERT(stage->help[0] != '\0');
         YEW_ASSERT_NOT_NULL(hunk);
-        YEW_ASSERT((hunk->flags & YEW_CMD_DEFERRED) != 0U);
-        YEW_ASSERT_NOT_NULL(strstr(hunk->help, "Sprint 53"));
+        YEW_ASSERT((hunk->flags & YEW_CMD_DEFERRED) == 0U);
+        YEW_ASSERT((hunk->flags & YEW_CMD_MULTI_AGGREGATE) != 0U);
+        YEW_ASSERT_NOT_NULL(hunk->help);
+        YEW_ASSERT(hunk->help[0] != '\0');
     }
     yew_keymap_free(&fake_ed.mode_keys[YEW_MODE_H]);
     yew_cmd_shutdown();
