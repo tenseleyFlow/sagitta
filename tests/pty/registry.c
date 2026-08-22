@@ -6712,7 +6712,255 @@ static void case_s47_rename_refusal(PtyCtx *c)
 }
 #endif
 
+#if YEW_WITH_FUSS
+static bool s52_screen_contains(const VtScreen *vt, const char *needle)
+{
+    Bytebuf screen;
+    bool found;
+
+    if (vt == NULL || needle == NULL)
+        return false;
+    bytebuf_init(&screen);
+    snapshot_write(vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    found = strstr((const char *)screen.data, needle) != NULL;
+    bytebuf_free(&screen);
+    return found;
+}
+
+static bool s52_git(PtyCtx *c, const char *dir,
+                    const char *const argv[])
+{
+    pid_t pid;
+    int status;
+
+    pid = fork();
+    if (pid < 0) {
+        ptc_check(c, false, "Sprint 52 fixture could not fork git");
+        return false;
+    }
+    if (pid == 0) {
+        int devnull = open("/dev/null", O_RDWR);
+
+        if (dir != NULL && chdir(dir) != 0)
+            _exit(125);
+        if (devnull >= 0) {
+            (void)dup2(devnull, STDIN_FILENO);
+            (void)dup2(devnull, STDOUT_FILENO);
+            (void)dup2(devnull, STDERR_FILENO);
+            if (devnull > STDERR_FILENO)
+                (void)close(devnull);
+        }
+        execvp("git", (char *const *)argv);
+        _exit(127);
+    }
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            ptc_check(c, false, "Sprint 52 fixture could not wait for git");
+            return false;
+        }
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        ptc_check(c, false, "Sprint 52 fixture git command failed");
+        return false;
+    }
+    return true;
+}
+
+static bool s52_write(PtyCtx *c, const char *repo, const char *rel,
+                      const char *text)
+{
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/%s", repo, rel);
+
+    if (n <= 0 || (size_t)n >= sizeof(path) ||
+        !write_bytes(path, (const u8 *)text, strlen(text))) {
+        ptc_check(c, false, "Sprint 52 fixture write failed");
+        return false;
+    }
+    return true;
+}
+
+static bool s52_fixture(PtyCtx *c, char *repo, size_t repo_cap)
+{
+    static const char *const init[] = {"git", "init", "-q", "-b", "trunk",
+                                       NULL};
+    static const char *const user_name[] = {"git", "config", "user.name",
+                                            "Yew PTY", NULL};
+    static const char *const user_mail[] = {"git", "config", "user.email",
+                                            "pty@yew.invalid", NULL};
+    static const char *const add_all[] = {"git", "add", "--all", NULL};
+    static const char *const commit[] = {"git", "commit", "-q", "-m",
+                                         "base", NULL};
+    static const char *const add_staged[] = {"git", "add", "--",
+                                             "src/staged.c", NULL};
+    static const char *const add_both[] = {"git", "add", "--",
+                                           "src/both.c", NULL};
+    char src[PATH_MAX];
+    char docs[PATH_MAX];
+    int n;
+
+    n = snprintf(repo, repo_cap, "%s/fussrepo", c->workspace_dir);
+    if (n <= 0 || (size_t)n >= repo_cap || mkdir(repo, 0700) != 0) {
+        ptc_check(c, false, "Sprint 52 fixture repo creation failed");
+        return false;
+    }
+    n = snprintf(src, sizeof(src), "%s/src", repo);
+    if (n <= 0 || (size_t)n >= sizeof(src) || mkdir(src, 0700) != 0) {
+        ptc_check(c, false, "Sprint 52 fixture src creation failed");
+        return false;
+    }
+    n = snprintf(docs, sizeof(docs), "%s/docs", repo);
+    if (n <= 0 || (size_t)n >= sizeof(docs) || mkdir(docs, 0700) != 0) {
+        ptc_check(c, false, "Sprint 52 fixture docs creation failed");
+        return false;
+    }
+    if (!s52_git(c, repo, init) || !s52_git(c, repo, user_name) ||
+        !s52_git(c, repo, user_mail) ||
+        !s52_write(c, repo, "README.md", "clean\n") ||
+        !s52_write(c, repo, "src/main.c", "int main(void) { return 0; }\n") ||
+        !s52_write(c, repo, "src/staged.c", "base staged\n") ||
+        !s52_write(c, repo, "src/modified.c", "base modified\n") ||
+        !s52_write(c, repo, "src/both.c", "base both\n") ||
+        !s52_write(c, repo, "docs/æ¼¢å­.txt", "base cjk\n") ||
+        !s52_write(c, repo,
+                   "docs/ð¨âð©âð§âð¦.txt",
+                   "base emoji\n") ||
+        !s52_git(c, repo, add_all) || !s52_git(c, repo, commit) ||
+        !s52_write(c, repo, "src/staged.c", "staged change\n") ||
+        !s52_git(c, repo, add_staged) ||
+        !s52_write(c, repo, "src/modified.c", "modified change\n") ||
+        !s52_write(c, repo, "src/both.c", "staged half\n") ||
+        !s52_git(c, repo, add_both) ||
+        !s52_write(c, repo, "src/both.c", "unstaged half\n") ||
+        !s52_write(c, repo, "docs/æ¼¢å­.txt", "changed cjk\n") ||
+        !s52_write(c, repo,
+                   "docs/ð¨âð©âð§âð¦.txt",
+                   "changed emoji\n") ||
+        !s52_write(c, repo, "untracked.txt", "untracked\n"))
+        return false;
+    ptc_set_cwd(c, repo);
+    return true;
+}
+
+static void s52_wait_screen(PtyCtx *c, const char *text)
+{
+    u32 i;
+
+    for (i = 0U; i < 20U && !c->failed &&
+                 !s52_screen_contains(&c->vt, text); i++)
+        ptc_settle(c, 25);
+    ptc_check(c, s52_screen_contains(&c->vt, text),
+              "Sprint 52 expected screen state did not appear");
+}
+
+static bool s52_open(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+    char config[PATH_MAX];
+
+    if (!s52_fixture(c, repo, sizeof(repo)))
+        return false;
+    if (strstr(c->test->name, "_ascii") != NULL) {
+        static const char ascii_source[] =
+            "set({ \"git.ascii_glyphs\": true })\n"
+            "bind(\"L\", \"f\", \"ed.mode.enter\", { sarg: \"F\" })\n";
+        int n = snprintf(config, sizeof(config), "%s/fuss-ascii.fl",
+                         c->state_dir);
+
+        if (n <= 0 || (size_t)n >= sizeof(config) ||
+            !write_bytes(config, (const u8 *)ascii_source,
+                         sizeof(ascii_source) - 1U)) {
+            ptc_check(c, false, "Sprint 52 ASCII config creation failed");
+            return false;
+        }
+        ptc_spawn(c, ptc_yew_bin(c), "--config", config,
+                  "--no-workspace-config", "src/main.c", NULL);
+    } else {
+        ptc_spawn(c, ptc_yew_bin(c), "src/main.c", NULL);
+    }
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_keys(c, "f");
+    s52_wait_screen(c, "both.c");
+    return !c->failed;
+}
+
+static void s52_finish(PtyCtx *c)
+{
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    force_quit(c);
+}
+
+static void case_s52_fuss(PtyCtx *c)
+{
+    const char *name = c->test->name;
+
+    if (strstr(name, "nonrepo") != NULL) {
+        ptc_spawn(c, ptc_yew_bin(c), NULL);
+        ptc_settle(c, 0);
+        ptc_wait_kitty_push(c, 21U);
+        ptc_keys(c, "f");
+        ptc_settle(c, 80);
+        ptc_check(c, !c->pty.reaped,
+                  "entering F mode outside a repository exited yew");
+        ptc_snapshot_sgr(c, name);
+        s52_finish(c);
+        return;
+    }
+    if (!s52_open(c))
+        return;
+    if (strstr(name, "nav_next") != NULL)
+        ptc_keys(c, "down");
+    else if (strstr(name, "nav_prev") != NULL)
+        ptc_keys(c, "up");
+    else if (strstr(name, "nav_row_next") != NULL)
+        ptc_keys(c, "ctrl+down");
+    else if (strstr(name, "nav_parent") != NULL)
+        ptc_keys(c, "right left");
+    else if (strstr(name, "nav_enter") != NULL)
+        ptc_keys(c, "right");
+    else if (strstr(name, "toggle") != NULL)
+        ptc_keys(c, "space");
+    else if (strstr(name, "jump_hint") != NULL) {
+        ptc_keys(c, "/");
+    } else if (strstr(name, "jump_clears") != NULL) {
+        ptc_keys(c, "/");
+        ptc_settle(c, 600);
+    } else if (strstr(name, "leave_q") != NULL) {
+        ptc_keys(c, "q");
+        ptc_settle(c, 0);
+        ptc_check(c, !c->pty.reaped, "q in F mode exited yew");
+    } else if (strstr(name, "leave_esc") != NULL) {
+        ptc_keys(c, "esc");
+        ptc_settle(c, 0);
+        ptc_check(c, !c->pty.reaped, "Esc in F mode exited yew");
+    } else {
+        ptc_settle(c, 0);
+    }
+    ptc_snapshot_sgr(c, name);
+    s52_finish(c);
+}
+#endif
+
 const PtyCase yew_pty_cases[] = {
+#if YEW_WITH_FUSS
+    C(fuss_tree_unicode_80, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_tree_unicode_120, modern, 40U, 120U, case_s52_fuss),
+    C(fuss_tree_ascii, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_nav_next, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_nav_prev, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_nav_row_next, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_nav_parent, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_nav_enter, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_tree_toggle, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_jump_hint, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_leave_q, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_leave_esc, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_nonrepo, modern, 24U, 80U, case_s52_fuss),
+#endif
 #if YEW_WITH_AI
     C(ai_optin_local_flow, modern, 30U, 100U, case_s50_ai_optin_flow),
     C(ai_optin_cloud_flow, modern, 30U, 100U, case_s50_ai_optin_flow),
