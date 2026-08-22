@@ -1402,6 +1402,24 @@ static char *fuss_join_root(const Ed *ed, const char *path)
     return joined;
 }
 
+char *yew_fuss_selected_directory(CmdCtx *cx)
+{
+    FussMode *f;
+    const FussItem *item;
+    const FussNode *node;
+    i32 row;
+
+    if (fuss_require(cx, &f) != YEW_CMD_OK)
+        return NULL;
+    row = fuss_row(f);
+    item = fuss_item(f, row);
+    node = fuss_node(f, item);
+    if (item == NULL || node == NULL || node->is_file ||
+        !fuss_safe_path(item->path, item->path_len))
+        return NULL;
+    return fuss_join_root(cx->ed, item->path);
+}
+
 static CmdStatus fuss_spawn(Ed *ed, const char *verb_name,
                             char *const *argv, bool literal_paths,
                             const u8 *stdin_bytes, u64 stdin_len,

@@ -40,6 +40,10 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer);
 CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled);
 CmdStatus yew_fuss_commit_close(Ed *ed, Buffer *buffer, bool *handled);
 
+/* Returns a heap-owned absolute path only when F mode currently selects a
+ * directory row.  The command layer owns and frees the result. */
+char *yew_fuss_selected_directory(CmdCtx *cx);
+
 CmdStatus yew_fuss_cmd_init(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_leave(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_tree_all(CmdCtx *cx);
