@@ -1,0 +1,373 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=10
+--- text
+    1 int main(void) { return 0; }                                                                  
+    1                                                                                               
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ L diff running                                                                                     
+--- style
+AAAABACCCDEEEEFCCCCFDFDGGGGGGDHFDFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+IIIJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+--- legend
+A fg=#4b5263 bg=#12141a attrs=----------
+B fg=#c8ccd4 bg=#12141a attrs=b---------
+C fg=#e5c07b bg=#12141a attrs=--i-------
+D fg=#c8ccd4 bg=#12141a attrs=----------
+E fg=#61afef bg=#12141a attrs=----------
+F fg=#9aa0aa bg=#12141a attrs=----------
+G fg=#c678dd bg=#12141a attrs=b---------
+H fg=#d19a66 bg=#12141a attrs=----------
+I fg=#ebf4ff bg=#266eba attrs=b---------
+J fg=#dae5f0 bg=#14304c attrs=----------
+--- sgr
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;200;204;212m
+\x1b[38;2;97;175;239m
+\x1b[38;2;154;160;170m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;209;154;102m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;235;244;255;48;2;38;110;186m
+\x1b[22;38;2;218;229;240;48;2;20;48;76m
+\x1b[0;1;38;2;200;204;212;48;2;18;20;26m
+\x1b[22;2m
+\x1b[22m
+\x1b[38;2;250;235;248;48;2;177;61;155m
+\x1b[0;1;38;2;200;204;212;48;2;18;20;26m
+\x1b[22m
+\x1b[7m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[27m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[0;38;2;200;204;212;48;2;18;20;26m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[7m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[0;38;2;200;204;212;48;2;18;20;26m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[7m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[0;38;2;200;204;212;48;2;18;20;26m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[7m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[0;38;2;200;204;212;48;2;18;20;26m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[7m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[0;38;2;200;204;212;48;2;18;20;26m
+\x1b[38;2;152;195;121m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[7m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[0;38;2;250;235;248;48;2;177;61;155m
+\x1b[0;38;2;92;99;112;48;2;18;20;26m
+\x1b[38;2;75;82;99m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;224;108;117m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[38;2;92;99;112m
+\x1b[38;2;75;82;99m
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;97;175;239m
+\x1b[38;2;154;160;170m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;209;154;102m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;235;244;255;48;2;38;110;186m
+\x1b[22;38;2;218;229;240;48;2;20;48;76m
+--- viewer before leave
+# yew pty golden v1
+size 100x24 alt=1 cursor=0,0 vis=0
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=9
+--- text
+yew:trunk  ↑0 ↓0                             │    1 diff --git a/src/modified.c b/src/modified.c    
+├── ▼ docs ✗                                 │    1 index 8c75c7b..d57506a 100644                   
+│   ├── æ¼¢å­<97>.txt ✗                      │    2 --- a/src/modified.c                            
+│   └── ð<9F><91>¨â<80><8D>ð<9F><91>©â<80> ✗ │    3 +++ b/src/modified.c                            
+├── ▼ src ↑ ✗                                │    4 @@ -1 +1 @@                                     
+│   ├── both.c ↑ ✗                           │    5 -base modified                                  
+│   ├── modified.c ✗                         │    6 +modified change                                
+│   └── staged.c ↑                           │    7                                                 
+└── untracked.txt ✗                          │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+                                             │                                                      
+diff running                                                                                        
+←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave                                       
+--- style
+AAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDADBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBFFEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBFFEEBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+GGGGGGGGGGGGGGGGGGHHGGGGGGGGGGGGGGGGGGGGGGGGGCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBFFBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBCCBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+--- legend
+A fg=#c8ccd4 bg=#12141a attrs=b---------
+B fg=#c8ccd4 bg=#12141a attrs=----------
+C fg=#5c6370 bg=#12141a attrs=----------
+D fg=#4b5263 bg=#12141a attrs=----------
+E fg=#e06c75 bg=#12141a attrs=----------
+F fg=#98c379 bg=#12141a attrs=----------
+G fg=#c8ccd4 bg=#12141a attrs=------r---
+H fg=#e06c75 bg=#12141a attrs=------r---
+I fg=#faebf8 bg=#b13d9b attrs=----------

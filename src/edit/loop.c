@@ -284,6 +284,7 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
      * without this the loop could sleep past a job's kill window. */
     deadline = deadline_min(deadline, yew_job_deadline(ed, now_ms));
     deadline = deadline_min(deadline, yew_ai_deadline(ed, now_ms));
+    deadline = deadline_min(deadline, yew_fuss_deadline(ed, now_ms));
     /* Sprint 27 §4: the dwell and the drag auto-scroll are CLOCKS.  A
      * pointer resting on a group emits no further events, so without
      * this the loop would sleep through the 400 ms the dwell is

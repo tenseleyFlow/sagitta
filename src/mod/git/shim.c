@@ -155,6 +155,13 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
     (void)now_ms;
 }
 
+i64 yew_fuss_deadline(const Ed *ed, i64 now_ms)
+{
+    (void)ed;
+    (void)now_ms;
+    return -1;
+}
+
 u16 yew_fuss_footer_rows(const Ed *ed)
 {
     (void)ed;

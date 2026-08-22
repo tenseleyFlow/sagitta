@@ -33,6 +33,7 @@ CmdStatus yew_fuss_mode_enter(Ed *ed);
 void yew_fuss_mode_leave(Ed *ed);
 bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms);
 void yew_fuss_tick(Ed *ed, i64 now_ms);
+i64 yew_fuss_deadline(const Ed *ed, i64 now_ms);
 u16 yew_fuss_footer_rows(const Ed *ed);
 void yew_fuss_draw(Ed *ed);
 void yew_fuss_draw_footer(Ed *ed, Rect footer);
