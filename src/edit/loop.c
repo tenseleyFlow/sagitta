@@ -354,18 +354,20 @@ static int loop_read_input(Ed *ed)
     return 0;
 }
 
-static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
+void yew_loop_dispatch_event(Ed *ed, const Key *key, i64 now_ms)
 {
     const u8 *bytes;
     size_t len;
 
+    if (ed == NULL || key == NULL)
+        return;
     /* Every event carries the loop's clock in, because nothing in the
      * core reads one itself (invariant 5) — and Sprint 27's dwell is
      * driven from mouse motion as much as from the timer path. */
     ed->now_ms = now_ms;
-    switch (key.kind) {
+    switch (key->kind) {
     case YEW_EV_KEY:
-        yew_ed_handle_key(ed, key, now_ms);
+        yew_ed_handle_key(ed, *key, now_ms);
         break;
     case YEW_EV_PASTE_BEGIN:
         yew_ed_handle_paste(ed, NULL, 0U, false);
@@ -378,7 +380,7 @@ static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
         yew_ed_handle_paste(ed, NULL, 0U, true);
         break;
     case YEW_EV_MOUSE:
-        yew_mouse_event(ed, &key);
+        yew_mouse_event(ed, key);
         break;
     case YEW_EV_FOCUS:
         /*
@@ -388,9 +390,9 @@ static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
          * logically down forever and the next click would be read as
          * the drop of a gesture the user abandoned minutes ago.
          */
-        if (key.code == YEW_KEY_FOCUS_OUT)
+        if (key->code == YEW_KEY_FOCUS_OUT)
             yew_mouse_cancel(ed);
-        else if (key.code == YEW_KEY_FOCUS_IN) {
+        else if (key->code == YEW_KEY_FOCUS_IN) {
             yew_git_invalidate(ed);
             (void)yew_git_refresh(ed, true);
         }
@@ -398,6 +400,33 @@ static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
     default:
         break;
     }
+}
+
+u32 yew_loop_settle_jobs(Ed *ed)
+{
+    bool external_completion = false;
+    u32 completed;
+    u32 i;
+
+    if (ed == NULL)
+        return 0U;
+    for (i = 0U; i < ed->jobs.len; i++) {
+        const YewJob *job = &ed->jobs.v[i];
+
+        if (!job->drained && !yew_job_pending(job) &&
+            !(job->sink == YEW_SINK_CALLBACK && job->exec_fd >= 0) &&
+            !yew_git_job_owned(ed, job->id)) {
+            external_completion = true;
+            break;
+        }
+    }
+    completed = yew_job_settle(ed);
+
+    if (external_completion) {
+        yew_git_invalidate(ed);
+        (void)yew_git_refresh(ed, true);
+    }
+    return completed;
 }
 
 int yew_loop_run(Ed *ed)
@@ -458,29 +487,12 @@ int yew_loop_run(Ed *ed)
          * render, and after input is drained so keystrokes always win the
          * race for this iteration (invariant 4). */
         yew_job_pump(ed, fds, nfds);
-        if (chld) {
-            bool was_reaped[YEW_JOB_MAX];
-            bool external_completion = false;
-            u32 before = ed->jobs.len;
-            u32 i;
-
-            for (i = 0U; i < before; i++)
-                was_reaped[i] = ed->jobs.v[i].reaped;
+        if (chld)
             yew_job_reap(ed);
-            for (i = 0U; i < before && i < ed->jobs.len; i++) {
-                if (!was_reaped[i] && ed->jobs.v[i].reaped &&
-                    !yew_git_job_owned(ed, ed->jobs.v[i].id))
-                    external_completion = true;
-            }
-            if (external_completion) {
-                yew_git_invalidate(ed);
-                (void)yew_git_refresh(ed, true);
-            }
-        }
         yew_job_tick(ed, now);
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */
-        yew_job_settle(ed);
+        (void)yew_loop_settle_jobs(ed);
         /* TTL polling is an event-loop responsibility.  Rendering only
          * consumes the last published snapshot and therefore cannot fork. */
 #if YEW_WITH_FUSS
@@ -501,7 +513,7 @@ int yew_loop_run(Ed *ed)
         loop_seed_probe(ed);
         while (yew_input_next(&ed->in, now, &key)) {
             had_input = true;
-            loop_dispatch_event(ed, key, now);
+            yew_loop_dispatch_event(ed, &key, now);
         }
         if (had_input) {
             ed->fl_idle_since_ms = now;

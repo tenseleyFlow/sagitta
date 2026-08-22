@@ -1637,12 +1637,13 @@ bool yew_job_pending(const YewJob *j)
     return !j->reaped || j->out_fd >= 0 || j->err_fd >= 0;
 }
 
-void yew_job_settle(Ed *ed)
+u32 yew_job_settle(Ed *ed)
 {
     u32 i = 0U;
+    u32 settled = 0U;
 
     if (ed == NULL)
-        return;
+        return 0U;
     while (i < ed->jobs.len) {
         YewJob *j = &ed->jobs.v[i];
 
@@ -1652,6 +1653,7 @@ void yew_job_settle(Ed *ed)
             continue;
         }
         j->drained = true;
+        settled++;
         job_close(&j->in_fd);
         job_wipe_stdin_bytes(j);
         if (j->sink == YEW_SINK_CALLBACK) {
@@ -1672,6 +1674,7 @@ void yew_job_settle(Ed *ed)
         yew_job_finish(ed, j);
         i++;
     }
+    return settled;
 }
 
 i64 yew_job_deadline(const Ed *ed, i64 now_ms)

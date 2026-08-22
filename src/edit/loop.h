@@ -9,6 +9,7 @@
 #define YEW_INPUT_BURST_MAX (256U * 1024U)
 
 typedef struct Ed Ed;
+typedef struct Key Key;
 typedef struct YewTimer YewTimer;
 typedef u64 TimerId;
 typedef void (*TimerFn)(Ed *ed, void *ctx);
@@ -32,6 +33,8 @@ void yew_timers_fire(TimerHeap *timers, Ed *ed, i64 now_ms);
 
 i64 yew_now_ms(void);
 int yew_loop_deadline(const Ed *ed, i64 now_ms);
+void yew_loop_dispatch_event(Ed *ed, const Key *key, i64 now_ms);
+u32 yew_loop_settle_jobs(Ed *ed);
 int yew_loop_run(Ed *ed);
 
 #endif

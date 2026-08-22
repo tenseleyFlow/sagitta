@@ -261,8 +261,8 @@ void yew_job_pump(Ed *ed, const struct pollfd *pfd, u32 n);
 /* Called when the signal self-pipe reports SIGCHLD. */
 void yew_job_reap(Ed *ed);
 /* Delivers completion for jobs that are reaped AND fully drained; the
- * loop calls this after pumping. */
-void yew_job_settle(Ed *ed);
+ * loop calls this after pumping.  Returns the number completed. */
+u32 yew_job_settle(Ed *ed);
 /* True while the job still owes output or a wait status. */
 bool yew_job_pending(const YewJob *j);
 /* Signals the process GROUP: killing the pid alone leaves the shell's

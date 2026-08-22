@@ -12,6 +12,7 @@
 
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/loop.h"
 #include "mod/git/git.h"
 #include "mod/git/git_int.h"
 
@@ -126,6 +127,9 @@ static char *gitcache_tmp_template(const char *tag)
     return path;
 }
 
+static void gitcache_write(const char *dir, const char *name,
+                           const char *text);
+
 static void gitcache_ready(Ed *ed, SpawnLog *log, const char *git_dir,
                            i64 now_ms)
 {
@@ -157,6 +161,98 @@ static void gitcache_ready(Ed *ed, SpawnLog *log, const char *git_dir,
     YEW_ASSERT(yew_git_test_complete(ed, id, YEW_GIT_OK, NULL, 0U,
                                      NULL, 0U));
     gitcache_complete_default_comment(ed, log);
+}
+
+void test_gitcache_focus_gain_invalidates_before_ttl(void)
+{
+    Ed ed;
+    SpawnLog log = {0};
+    Key focus = {.kind = YEW_EV_FOCUS, .code = YEW_KEY_FOCUS_IN};
+    char *tmp = gitcache_tmp_template("yew-git-focus");
+    u32 before;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    gitcache_ed(&ed, &log);
+    gitcache_ready(&ed, &log, tmp, 1000);
+    before = log.status_calls;
+    yew_loop_dispatch_event(&ed, &focus, 1001);
+    YEW_ASSERT_EQ_U64(log.status_calls, before + 1U);
+    gitcache_done(&ed);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
+}
+
+void test_gitcache_arbitrary_job_completion_invalidates_before_ttl(void)
+{
+    Ed ed;
+    SpawnLog log = {0};
+    YewJobSpec spec = {0};
+    char *argv[] = {(char *)"/bin/true", NULL};
+    char *tmp = gitcache_tmp_template("yew-git-job-trigger");
+    char err[128];
+    i64 started;
+    u32 before;
+    u32 job;
+    bool completed = false;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    yew_ed_init(&ed);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    gitcache_ready(&ed, &log, tmp, 1000);
+    spec.argv = argv;
+    spec.sink = YEW_SINK_DISCARD;
+    job = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(job != 0U);
+    before = log.status_calls;
+    started = yew_now_ms();
+    while (!completed && yew_now_ms() - started < 5000) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(&ed, pfd, &n);
+        if (n != 0U)
+            (void)poll(pfd, (nfds_t)n, 20);
+        yew_job_pump(&ed, pfd, n);
+        yew_job_reap(&ed);
+        completed = yew_loop_settle_jobs(&ed) != 0U;
+    }
+    YEW_ASSERT(completed);
+    YEW_ASSERT_EQ_U64(log.status_calls, before + 1U);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
+}
+
+void test_gitcache_buffer_save_invalidates_before_ttl(void)
+{
+    Ed ed;
+    SpawnLog log = {0};
+    char *tmp = gitcache_tmp_template("yew-git-save-trigger");
+    char *path;
+    size_t len;
+    u32 before;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    gitcache_write(tmp, "saved.txt", "before\n");
+    len = strlen(tmp) + sizeof("/saved.txt");
+    path = malloc(len);
+    YEW_ASSERT_NOT_NULL(path);
+    (void)snprintf(path, len, "%s/saved.txt", tmp);
+    yew_ed_init(&ed);
+    YEW_ASSERT_EQ_I64(yew_ed_open(&ed, path), YEW_LOAD_OK);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    gitcache_ready(&ed, &log, tmp, 1000);
+    before = log.status_calls;
+    YEW_ASSERT_EQ_I64(yew_ed_file_save(&ed, false), YEW_CMD_OK);
+    YEW_ASSERT(yew_git_refresh(&ed, false));
+    YEW_ASSERT_EQ_U64(log.status_calls, before + 1U);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(path);
+    free(tmp);
 }
 
 void test_gitcache_ttl_uses_monotonic_wall_milliseconds(void)
@@ -429,6 +525,53 @@ void test_gitcache_callback_input_copies_and_owns_stdin(void)
     YEW_ASSERT_EQ_STR(capture.out, "owned copy\n");
     YEW_ASSERT_NULL(yew_job_find(&ed, id));
     yew_ed_free(&ed);
+}
+
+void test_gitcache_internal_job_completion_does_not_self_invalidate(void)
+{
+    Ed ed;
+    SpawnLog log = {0};
+    GitCallbackCapture capture = {0};
+    char *argv[] = {(char *)"--version", NULL};
+    char *tmp = gitcache_tmp_template("yew-git-internal-trigger");
+    char err[128];
+    i64 started;
+    u32 before;
+    u32 id;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    yew_ed_init(&ed);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    gitcache_ready(&ed, &log, tmp, 1000);
+    yew_git_test_spawn_set(NULL, NULL);
+    id = yew_git_spawn_callback(&ed, yew_git_verb("version"), argv,
+                                &capture, &gitcache_callback_ops,
+                                err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT(yew_git_job_owned(&ed, id));
+    started = yew_now_ms();
+    while (!capture.completed && yew_now_ms() - started < 5000) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(&ed, pfd, &n);
+        if (n != 0U)
+            (void)poll(pfd, (nfds_t)n, 20);
+        yew_job_pump(&ed, pfd, n);
+        yew_job_reap(&ed);
+        (void)yew_loop_settle_jobs(&ed);
+    }
+    YEW_ASSERT(capture.completed);
+    YEW_ASSERT(capture.destroyed);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    before = log.status_calls;
+    yew_git_test_now_set(&ed, 1001);
+    (void)yew_git_refresh(&ed, false);
+    YEW_ASSERT_EQ_U64(log.status_calls, before);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
 }
 
 typedef struct BlobCapture {
