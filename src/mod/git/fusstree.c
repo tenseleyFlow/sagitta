@@ -578,10 +578,16 @@ bool yew_fuss_merge_files(FussTree *t, const FileList *files,
                     cstr_ptr_cmp, NULL);
     for (i = 0U; i < ordered_n; i++) {
         size_t len = path_cstr_len(ordered[i]);
-        if (!path_below_untracked_dir(t, ordered[i], (u32)len))
-            (void)add_path(t, ordered[i], (u32)len, false);
+        if (!path_below_untracked_dir(t, ordered[i], (u32)len)) {
+            u32 node = add_path(t, ordered[i], (u32)len, false);
+
+            if (node != 0U)
+                t->nodes.data[node].ignored |=
+                    yew_git_ignored(&s->ignored, ordered[i], (u32)len);
+        }
     }
     free(ordered);
+    aggregate_flags(t);
     sort_children(t);
     yew_fuss_flatten(t);
     t->files_merged = true;

@@ -39,7 +39,7 @@ void test_fuss_marker_order_and_conflict_override(void)
     FussMarkerKind got[4];
     u8 mask;
     u8 expected;
-    u8 i;
+    u8 at;
 
     (void)memset(&node, 0, sizeof(node));
     for (mask = 1U; mask < 16U; mask++) {
@@ -54,8 +54,16 @@ void test_fuss_marker_order_and_conflict_override(void)
         if (node.untracked) expected++;
         if (node.incoming) expected++;
         YEW_ASSERT_EQ_U64(yew_fuss_marker_kinds(&node, got), expected);
-        for (i = 0U; i < expected; i++)
-            YEW_ASSERT_EQ_U64(got[i], i);
+        at = 0U;
+        if (node.staged)
+            YEW_ASSERT_EQ_U64(got[at++], YEW_FUSS_MARK_STAGED);
+        if (node.unstaged)
+            YEW_ASSERT_EQ_U64(got[at++], YEW_FUSS_MARK_UNSTAGED);
+        if (node.untracked)
+            YEW_ASSERT_EQ_U64(got[at++], YEW_FUSS_MARK_UNTRACKED);
+        if (node.incoming)
+            YEW_ASSERT_EQ_U64(got[at++], YEW_FUSS_MARK_INCOMING);
+        YEW_ASSERT_EQ_U64(at, expected);
     }
     node.conflicted = true;
     YEW_ASSERT_EQ_U64(yew_fuss_marker_kinds(&node, got), 1U);
@@ -332,6 +340,40 @@ void test_fusstree_dirty_first_excludes_clean_until_all_files_is_enabled(void)
     YEW_ASSERT_NOT_NULL(ft_item(&t, "clean.c"));
     YEW_ASSERT_NOT_NULL(ft_item(&t, "dirty.c"));
     YEW_ASSERT(t.all_files);
+    ft_drop(&t);
+}
+
+void test_fusstree_all_files_preserves_ignored_row_style(void)
+{
+    char *paths[] = {(char *)"clean.c", (char *)"nested/ignored.log"};
+    u8 kinds[] = {0U, 0U};
+    GitPath ignored[] = {
+        {(char *)"nested/ignored.log", 18U, false}
+    };
+    GitSnapshot s = ft_snapshot(NULL, 0U, 7U);
+    FileList files = {0};
+    FussOpts o = {true, true};
+    FussTree t;
+    const FussNode *nested;
+    const FussNode *row;
+
+    s.ignored.data = ignored;
+    s.ignored.len = YEW_ARRAY_LEN(ignored);
+    files.paths.data = paths;
+    files.paths.len = YEW_ARRAY_LEN(paths);
+    files.paths.cap = YEW_ARRAY_LEN(paths);
+    files.is_dir.data = kinds;
+    files.is_dir.len = YEW_ARRAY_LEN(kinds);
+    files.is_dir.cap = YEW_ARRAY_LEN(kinds);
+    yew_fuss_tree_init(&t);
+
+    YEW_ASSERT(yew_fuss_merge_files(&t, &files, &s, &o));
+    row = ft_node(&t, "nested/ignored.log");
+    nested = ft_node(&t, "nested");
+    YEW_ASSERT_NOT_NULL(row);
+    YEW_ASSERT(row->ignored);
+    YEW_ASSERT_NOT_NULL(nested);
+    YEW_ASSERT(nested->ignored);
     ft_drop(&t);
 }
 

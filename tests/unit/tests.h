@@ -1766,6 +1766,7 @@ void test_fusstree_untracked_directory_starts_collapsed(void);
 void test_fuss_marker_order_and_conflict_override(void);
 void test_fusstree_hidden_rows_obey_the_option(void);
 void test_fusstree_dirty_first_excludes_clean_until_all_files_is_enabled(void);
+void test_fusstree_all_files_preserves_ignored_row_style(void);
 void test_fusstree_items_hold_rebuild_safe_indices(void);
 void test_fusstree_untracked_expansion_splices_one_level_and_caches(void);
 void test_fusstree_untracked_expansion_cache_survives_refresh(void);

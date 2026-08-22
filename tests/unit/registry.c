@@ -1769,6 +1769,7 @@ const YewTest yew_tests[] = {
     T(fuss_marker_order_and_conflict_override),
     T(fusstree_hidden_rows_obey_the_option),
     T(fusstree_dirty_first_excludes_clean_until_all_files_is_enabled),
+    T(fusstree_all_files_preserves_ignored_row_style),
     T(fusstree_items_hold_rebuild_safe_indices),
     T(fusstree_untracked_expansion_splices_one_level_and_caches),
     T(fusstree_untracked_expansion_cache_survives_refresh),
