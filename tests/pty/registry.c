@@ -1239,7 +1239,7 @@ static void case_s16_block_c_expand(PtyCtx *c)
     settle_sync_delta(c, before, 1U, 0);
     for (u32 i = 0U; i < 4U; i++) {
         before = c->vt.nsync_pairs;
-        ptc_keys(c, "alt+up");
+        ptc_keys(c, "alt+shift+up");
         settle_sync_delta(c, before, 1U, 0);
     }
     ptc_snapshot(c, "s16_block_c_expand");
@@ -1267,7 +1267,7 @@ static void case_s16_block_prose_expand(PtyCtx *c)
     settle_sync_delta(c, before, 1U, 0);
     for (u32 i = 0U; i < 3U; i++) {
         before = c->vt.nsync_pairs;
-        ptc_keys(c, "alt+up");
+        ptc_keys(c, "alt+shift+up");
         settle_sync_delta(c, before, 1U, 0);
     }
     ptc_snapshot(c, "s16_block_prose_expand");
