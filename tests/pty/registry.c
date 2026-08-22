@@ -6854,7 +6854,7 @@ static void s52_wait_screen(PtyCtx *c, const char *text)
               "Sprint 52 expected screen state did not appear");
 }
 
-static bool s52_open(PtyCtx *c)
+static bool s52_open(PtyCtx *c, VtCell *original_cells)
 {
     char repo[PATH_MAX];
     char config[PATH_MAX];
@@ -6881,6 +6881,10 @@ static bool s52_open(PtyCtx *c)
     }
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+    if (original_cells != NULL)
+        (void)memcpy(original_cells, c->vt.cells,
+                     (size_t)c->vt.rows * c->vt.cols *
+                         sizeof(*original_cells));
     ptc_keys(c, "f");
     s52_wait_screen(c, "both.c");
     return !c->failed;
@@ -6909,7 +6913,7 @@ static void case_s52_fuss(PtyCtx *c)
         s52_finish(c);
         return;
     }
-    if (!s52_open(c))
+    if (!s52_open(c, NULL))
         return;
     if (strstr(name, "nav_next") != NULL)
         ptc_keys(c, "down");
@@ -6942,6 +6946,61 @@ static void case_s52_fuss(PtyCtx *c)
     ptc_snapshot_sgr(c, name);
     s52_finish(c);
 }
+
+static void case_s52_fuss_diff_viewer(PtyCtx *c)
+{
+    Bytebuf viewer;
+    VtCell *original_cells;
+    u32 i;
+
+    bytebuf_init(&viewer);
+    original_cells = calloc((size_t)c->vt.rows * c->vt.cols,
+                            sizeof(*original_cells));
+    if (original_cells == NULL) {
+        ptc_check(c, false, "allocating FUSS layout snapshot");
+        goto done;
+    }
+    if (!s52_open(c, original_cells))
+        goto done;
+    for (i = 0U; i < 5U && !c->failed; i++) {
+        ptc_keys(c, "ctrl+down");
+        ptc_settle(c, 0);
+    }
+    ptc_keys(c, "d");
+    s52_wait_screen(c, "diff --git");
+    ptc_check(c, !c->pty.reaped,
+              "opening the FUSS diff viewer exited yew");
+    ptc_check(c, s52_screen_contains(&c->vt, "modified change"),
+              "FUSS diff viewer did not render the dirty-file result");
+    ptc_check(c, s52_screen_contains(&c->vt, "both.c"),
+              "FUSS diff viewer replaced the tree instead of splitting");
+    if (c->failed)
+        goto done;
+    snapshot_write(&c->vt, &viewer);
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    ptc_check(c, !c->pty.reaped,
+              "leaving the FUSS diff viewer exited yew");
+    ptc_check(c, s52_screen_contains(&c->vt, "int main(void)"),
+              "leaving FUSS did not restore the original buffer layout");
+    ptc_check(c, !s52_screen_contains(&c->vt, "diff --git"),
+              "leaving FUSS left the diff viewer visible");
+    ptc_check(c,
+              memcmp(original_cells, c->vt.cells,
+                     (size_t)(c->vt.rows - 1U) * c->vt.cols *
+                         sizeof(*original_cells)) == 0,
+              "leaving FUSS did not restore the original layout exactly");
+    if (c->failed)
+        goto done;
+    ptc_snapshot_sgr(c, c->test->name);
+    bytebuf_append(&c->snapshot, "--- viewer before leave\n", 24U);
+    bytebuf_append(&c->snapshot, viewer.data, viewer.len);
+    force_quit(c);
+
+done:
+    bytebuf_free(&viewer);
+    free(original_cells);
+}
 #endif
 
 const PtyCase yew_pty_cases[] = {
@@ -6957,6 +7016,8 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_tree_toggle, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_hint, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
+      case_s52_fuss_diff_viewer),
     C(fuss_leave_q, modern, 24U, 80U, case_s52_fuss),
     C(fuss_leave_esc, modern, 24U, 80U, case_s52_fuss),
     C(fuss_nonrepo, modern, 24U, 80U, case_s52_fuss),
