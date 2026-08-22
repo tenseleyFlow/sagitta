@@ -6,8 +6,8 @@
 # for those absolute limits.
 #
 # metric                         budget       gcc observed    clang observed
-full_rediff_median_ns          25000000          23403984          21953553
-worst_idle_slice_us                4000              3902              3934
-keypress_p99_ns                 5000000              7276             14905
-viewport_lookup_p99_ns            50000                93                90
+full_rediff_median_ns          25000000          22326250          20631187
+worst_idle_slice_us                4000              3679              3654
+keypress_p99_ns                 5000000             21637             28072
+viewport_lookup_p99_ns            50000                87                86
 edits_per_diff_start             200:1             200:1             200:1

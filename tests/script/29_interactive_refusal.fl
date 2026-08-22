@@ -63,7 +63,21 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 40)
+t.eq(seen, 39)
+
+# Hunk discard stopped being prompt-backed when Sprint 53 made it a direct,
+# undoable buffer edit.  It is still intentionally unavailable in batch mode,
+# so cover that alternative-based refusal separately from the INTERACTIVE set.
+let hunk_caught = false
+try {
+    ed.run("ed.git.hunk.discard", {})
+} catch e {
+    hunk_caught = true
+    t.eq(e.kind, "capability")
+    t.eq(str.contains(e.msg, "ed.git.hunk.discard"), true)
+    t.eq(str.contains(e.msg, "no batch alternative"), true)
+}
+t.eq(hunk_caught, true)
 
 # ed.mode.enter is conditional: only E mode is terminal-backed.
 let mode_caught = false

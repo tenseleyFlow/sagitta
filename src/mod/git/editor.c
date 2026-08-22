@@ -32,7 +32,7 @@ enum {
     GIT_EDIT_DEBOUNCE_MS = 150,
     /* Leave room for the scheduler's final clock read and publication
      * bookkeeping while keeping the whole idle callback inside 4 ms. */
-    GIT_DIFF_CLOCK_RESERVE_US = 250
+    GIT_DIFF_CLOCK_RESERVE_US = 500
 };
 
 typedef struct GitBufState {

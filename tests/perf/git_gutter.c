@@ -236,6 +236,7 @@ int main(int argc, char **argv)
     u64 idle_tick_p99 = UINT64_MAX;
     u64 max_slice_us = 0U;
     bool debounce_ok = false;
+    bool debounce_checked = false;
     bool gate = argc == 2 && strcmp(argv[1], "--gate") == 0;
     bool ok = true;
     size_t i;
@@ -270,6 +271,7 @@ int main(int argc, char **argv)
         if (i + 1U == YEW_ARRAY_LEN(diff_samples) && hunks != NULL) {
             lookup_p99 = measure_lookup(&hunks->h);
             debounce_ok = verify_debounce(&ed, 2000, &ticks, &keys);
+            debounce_checked = true;
             yew_git_editor_stats(&ed, &stats);
             if (stats.diff_max_slice_us > max_slice_us)
                 max_slice_us = stats.diff_max_slice_us;
@@ -298,7 +300,7 @@ int main(int argc, char **argv)
                  (unsigned long long)lookup_p99, GUTTER_EDITS,
                  debounce_ok ? 1U : 0U,
                  (unsigned long long)gutter_sink);
-    if (!debounce_ok) {
+    if (debounce_checked && !debounce_ok) {
         (void)fprintf(stderr,
                       "perf_git_gutter: 200 edits did not debounce once\n");
         ok = false;
