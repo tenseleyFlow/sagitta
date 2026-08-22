@@ -32,6 +32,19 @@ void yew_git_editor_state_free(Ed *ed)
         ed->git_editor = NULL;
 }
 
+void yew_git_editor_clock_anchor(Ed *ed, i64 monotonic_ms, i64 wall_secs)
+{
+    (void)ed;
+    (void)monotonic_ms;
+    (void)wall_secs;
+}
+
+i64 yew_git_editor_wall_now(const Ed *ed)
+{
+    (void)ed;
+    return 0;
+}
+
 void yew_git_editor_tick(Ed *ed, i64 now_ms)
 {
     (void)ed; (void)now_ms;
