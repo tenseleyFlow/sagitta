@@ -1,8 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "mod/git/editor.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "edit/ed.h"
 #include "edit/job.h"
@@ -25,20 +28,33 @@
 #include "util/base.h"
 #include "util/buf.h"
 
-enum { GIT_EDIT_DEBOUNCE_MS = 150 };
+enum {
+    GIT_EDIT_DEBOUNCE_MS = 150,
+    /* Leave room for the scheduler's final clock read and publication
+     * bookkeeping while keeping the whole idle callback inside 4 ms. */
+    GIT_DIFF_CLOCK_RESERVE_US = 250
+};
 
 typedef struct GitBufState {
     u32 buf_id;
     Bytebuf base;
+    Bytebuf live;
     char base_oid[65];
     HunkList hunks;
     BlameCache *blame;
+    YewDiffWork *diff_work;
+    TextSnap diff_snap;
     u64 observed_gen;
+    u64 diff_gen;
+    u64 base_revision;
+    u64 diff_base_revision;
     u64 hunk_revision;
+    u64 diff_copy_at;
     u32 base_snapshot_gen;
     i64 diff_due_ms;
     bool base_ready;
     bool base_pending;
+    bool base_too_large;
     bool base_is_head;
     bool base_by_snapshot;
 } GitBufState;
@@ -50,15 +66,18 @@ struct GitEditorState {
     u32 next_scroll_link;
     i64 clock_mono_ms;
     i64 clock_wall_secs;
+    YewDiffNowUsFn diff_now_us;
+    void *diff_clock_ctx;
+    YewGitEditorStats diff_stats;
     bool clock_anchored;
     bool warned_dirty_stage;
 };
 
 typedef struct BaseJob {
+    Ed *ed;
     u32 buf_id;
     char oid[65];
     u32 snapshot_gen;
-    bool batch;
     bool base_is_head;
     bool by_snapshot;
 } BaseJob;
@@ -71,6 +90,18 @@ typedef struct BlameJob {
 typedef struct StageJob {
     bool dirty;
 } StageJob;
+
+static i64 git_editor_now_us(void *ctx)
+{
+    struct timespec ts;
+
+    (void)ctx;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        YEW_BUG("git editor: monotonic clock failed");
+    if ((i64)ts.tv_sec > INT64_MAX / 1000000)
+        return INT64_MAX;
+    return (i64)ts.tv_sec * 1000000 + (i64)ts.tv_nsec / 1000;
+}
 
 static void oid_copy(char dst[65], const char *src)
 {
@@ -96,6 +127,26 @@ static void hunk_list_drop(HunkList *list)
     (void)memset(list, 0, sizeof(*list));
 }
 
+static bool diff_active(const GitBufState *state)
+{
+    return state->diff_snap.active || state->diff_work != NULL;
+}
+
+static void diff_cancel(GitEditorState *editor, GitBufState *state,
+                        bool counted)
+{
+    bool active = diff_active(state);
+
+    if (state->diff_snap.active)
+        yew_textsnap_release(NULL, &state->diff_snap);
+    yew_diff_work_free(state->diff_work);
+    state->diff_work = NULL;
+    state->live.len = 0U;
+    state->diff_copy_at = 0U;
+    if (active && counted)
+        editor->diff_stats.diff_cancelled++;
+}
+
 static GitBufState *state_for(Ed *ed, Buffer *buf, bool create)
 {
     GitEditorState *state;
@@ -117,6 +168,7 @@ static GitBufState *state_for(Ed *ed, Buffer *buf, bool create)
     (void)memset(&state->v[state->len], 0, sizeof(state->v[state->len]));
     state->v[state->len].buf_id = buf->id;
     bytebuf_init(&state->v[state->len].base);
+    bytebuf_init(&state->v[state->len].live);
     hunk_list_init(&state->v[state->len].hunks);
     state->v[state->len].blame = yew_blame_cache_new();
     state->v[state->len].diff_due_ms = -1;
@@ -324,93 +376,50 @@ static const GitEntry *snapshot_entry(const GitSnapshot *snap,
     return NULL;
 }
 
-static bool batch_payload(const YewJob *job, const u8 **bytes, size_t *len)
-{
-    const u8 *nl;
-    const u8 *last;
-    u64 size = 0U;
-    const u8 *p;
-
-    if (job == NULL || job->state != YEW_JOB_EXITED || job->exit_code != 0)
-        return false;
-    nl = memchr(job->collect.data, '\n', job->collect.len);
-    if (nl == NULL || (size_t)(nl - job->collect.data) >= job->collect.len)
-        return false;
-    last = nl;
-    while (last > job->collect.data && last[-1] != ' ')
-        last--;
-    if (last == job->collect.data)
-        return false;
-    for (p = last; p < nl; p++) {
-        if (*p < '0' || *p > '9')
-            return false;
-        size = size * 10U + (u64)(*p - '0');
-    }
-    if (size > (u64)SIZE_MAX || (size_t)(nl + 1U - job->collect.data) >
-        job->collect.len || (size_t)size > job->collect.len -
-        (size_t)(nl + 1U - job->collect.data))
-        return false;
-    *bytes = nl + 1U;
-    *len = (size_t)size;
-    return true;
-}
-
-static bool batch_missing(const YewJob *job)
-{
-    const u8 *nl;
-    size_t header_len;
-
-    if (job == NULL || job->state != YEW_JOB_EXITED || job->exit_code != 0)
-        return false;
-    nl = memchr(job->collect.data, '\n', job->collect.len);
-    if (nl == NULL)
-        return false;
-    header_len = (size_t)(nl - job->collect.data);
-    return header_len >= sizeof(" missing") - 1U &&
-        memcmp(nl - (sizeof(" missing") - 1U), " missing",
-               sizeof(" missing") - 1U) == 0;
-}
-
-static void base_complete(void *owner, Ed *ed, const YewJob *job)
+static void base_complete(void *owner, const YewGitBlobResult *result)
 {
     BaseJob *request = owner;
+    Ed *ed = request->ed;
     Buffer *buf = yew_ws_buf_by_id(ed, request->buf_id);
     GitBufState *state = state_for(ed, buf, false);
-    const u8 *bytes = job->collect.data;
-    size_t len = job->collect.len;
-    bool missing;
+    const GitSnapshot *snapshot = yew_git_snapshot_cached(ed);
 
-    if (state == NULL)
+    if (state == NULL) {
+        free(request);
         return;
+    }
     state->base_pending = false;
-    missing = request->batch && batch_missing(job);
-    if (request->batch && !missing && !batch_payload(job, &bytes, &len)) {
-        yew_msg(ed, YEW_MSG_ERROR, "git base unavailable");
+    if (snapshot == NULL || snapshot->gen != request->snapshot_gen) {
+        free(request);
         return;
     }
-    if (!request->batch &&
-        (job->state != YEW_JOB_EXITED || job->exit_code != 0)) {
+    if (result->state != YEW_GIT_BLOB_OK &&
+        result->state != YEW_GIT_BLOB_MISSING &&
+        result->state != YEW_GIT_BLOB_TOO_LARGE) {
         yew_msg(ed, YEW_MSG_ERROR, "git base unavailable");
+        free(request);
         return;
     }
+    diff_cancel(ed->git_editor, state, true);
     state->base.len = 0U;
-    if (!missing && len != 0U)
-        bytebuf_append(&state->base, bytes, len);
+    if (result->state == YEW_GIT_BLOB_OK && result->len != 0U) {
+        if (result->len > (u64)SIZE_MAX)
+            YEW_BUG("git editor: blob exceeds address space");
+        bytebuf_append(&state->base, result->bytes, (size_t)result->len);
+    }
     (void)memcpy(state->base_oid, request->oid, sizeof(state->base_oid));
     state->base_snapshot_gen = request->snapshot_gen;
     state->base_by_snapshot = request->by_snapshot;
     state->base_is_head = request->base_is_head;
+    state->base_too_large = result->state == YEW_GIT_BLOB_TOO_LARGE;
     state->base_ready = true;
+    state->base_revision++;
     state->diff_due_ms = ed->now_ms;
     ed->full_damage = true;
-}
-
-static void owner_free(void *owner)
-{
     free(owner);
 }
 
-static const YewJobCallbackOps base_ops = {base_complete, owner_free};
+static void owner_free(void *owner) { free(owner); }
 
 static void blame_complete(void *owner, Ed *ed, const YewJob *job)
 {
@@ -465,123 +474,209 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
     const GitEntry *entry = snapshot_entry(snap, path);
     BaseJob *request;
     char err[160];
-    char *argv[] = {(char *)"cat-file", (char *)"--batch", NULL};
-    Bytebuf input;
-    const char *name;
+    const char *oid;
+    u32 id;
 
     if (path == NULL || snap == NULL || state->base_pending)
         return;
-    if (entry == NULL || entry->untracked) {
-        if (state->base_ready && state->base_by_snapshot &&
-            state->base_snapshot_gen == snap->gen)
-            return;
-    }
     if (entry != NULL && entry->untracked) {
+        if (state->base_ready && state->base_by_snapshot &&
+            state->base_snapshot_gen == snap->gen &&
+            !state->base_is_head)
+            return;
+        diff_cancel(ed->git_editor, state, true);
         state->base.len = 0U;
         state->base_oid[0] = '\0';
         state->base_snapshot_gen = snap->gen;
         state->base_by_snapshot = true;
         state->base_is_head = false;
+        state->base_too_large = false;
         state->base_ready = true;
+        state->base_revision++;
         state->diff_due_ms = ed->now_ms;
         return;
     }
-    name = entry == NULL ? NULL :
-        (entry->conflicted ? snap->head_oid : entry->index_oid);
-    if (name == NULL || name[0] == '\0') {
-        if (entry == NULL)
-            goto request_index_path;
+    oid = entry == NULL || entry->conflicted ? snap->head_oid :
+                                                  entry->index_oid;
+    if (oid == NULL)
+        oid = "";
+    if (oid[0] == '\0') {
+        bool head = entry != NULL && entry->conflicted;
+
         if (state->base_ready && state->base_by_snapshot &&
             state->base_snapshot_gen == snap->gen &&
-            state->base_is_head == entry->conflicted)
+            state->base_is_head == head)
             return;
+        diff_cancel(ed->git_editor, state, true);
         state->base.len = 0U;
         state->base_oid[0] = '\0';
         state->base_snapshot_gen = snap->gen;
         state->base_by_snapshot = true;
         state->base_ready = true;
-        state->base_is_head = entry->conflicted;
+        state->base_too_large = false;
+        state->base_is_head = head;
+        state->base_revision++;
         state->diff_due_ms = ed->now_ms;
         return;
     }
-    if (name != NULL && name[0] != '\0' &&
-        strcmp(state->base_oid, name) == 0) {
-        if (state->base_is_head != entry->conflicted) {
-            state->base_is_head = entry->conflicted;
+    if (state->base_ready && strcmp(state->base_oid, oid) == 0) {
+        bool head = entry != NULL && entry->conflicted;
+
+        if (state->base_is_head != head) {
+            diff_cancel(ed->git_editor, state, true);
+            state->base_is_head = head;
+            state->base_revision++;
             state->diff_due_ms = ed->now_ms;
         }
-        state->base_by_snapshot = false;
-        state->base_ready = true;
         return;
     }
     request = yew_xcalloc(1U, sizeof(*request));
+    request->ed = ed;
     request->buf_id = buf->id;
-    request->base_is_head = entry->conflicted;
+    request->base_is_head = entry != NULL && entry->conflicted;
     request->snapshot_gen = snap->gen;
-    bytebuf_init(&input);
-    if (entry->conflicted) {
-        bytebuf_append(&input, "HEAD:", 5U);
-        bytebuf_append(&input, path, strlen(path));
-        oid_copy(request->oid, name == NULL ? "HEAD" : name);
-    } else {
-        bytebuf_append(&input, name, strlen(name));
-        oid_copy(request->oid, name);
-    }
-    goto spawn_base;
-
-request_index_path:
-    request = yew_xcalloc(1U, sizeof(*request));
-    request->buf_id = buf->id;
-    request->snapshot_gen = snap->gen;
-    request->by_snapshot = true;
-    bytebuf_init(&input);
-    bytebuf_push_u8(&input, ':');
-    bytebuf_append(&input, path, strlen(path));
-
-spawn_base:
-    bytebuf_push_u8(&input, '\n');
-    request->batch = true;
-    if (yew_git_spawn_callback_input(ed, yew_git_verb("blob"), argv,
-                                     input.data, (u64)input.len, request,
-                                     &base_ops, err, sizeof(err)) == 0U) {
+    request->by_snapshot = entry == NULL;
+    oid_copy(request->oid, oid);
+    id = request->base_is_head ?
+        yew_git_head_blob(ed, path, request, base_complete,
+                          err, sizeof(err)) :
+        yew_git_index_blob(ed, path, request, base_complete,
+                           err, sizeof(err));
+    if (id == 0U) {
         yew_msg(ed, YEW_MSG_ERROR, "%s", err);
         free(request);
     } else {
         state->base_pending = true;
     }
-    bytebuf_free(&input);
 }
 
-static void rebuild(Ed *ed, Buffer *buf, GitBufState *state)
+static void diff_publish(Ed *ed, GitBufState *state,
+                         YewDiffOutcome outcome, GitHunkVec *hunks)
 {
-    Bytebuf live;
-    YewDiffOutcome outcome;
+    HunkList next;
 
-    bytebuf_init(&live);
-    text_bytes(buf->tb, &live);
-    hunk_list_drop(&state->hunks);
-    hunk_list_init(&state->hunks);
-    state->hunks.buf_gen = buf->tb->gen;
-    state->hunks.base_is_head = state->base_is_head;
-    oid_copy(state->hunks.base_oid, state->base_oid);
-    outcome = yew_diff_bytes(&state->hunks.a,
-                             state->base.data, state->base.len,
-                             live.data, live.len, YEW_DIFF_MAX_D,
-                             &state->hunks.h);
+    hunk_list_init(&next);
+    if (hunks != NULL) {
+        next.h = *hunks;
+        *hunks = (GitHunkVec){0};
+    }
+    next.buf_gen = state->diff_gen;
+    next.base_is_head = state->base_is_head;
+    oid_copy(next.base_oid, state->base_oid);
     if (outcome == YEW_DIFF_TOO_LARGE) {
         yew_msg_hint(ed, YEW_MSG_WARN, "git: file too large for signs");
     } else if (outcome == YEW_DIFF_TRUNCATED) {
-        state->hunks.truncated = true;
+        next.truncated = true;
         yew_msg_hint(ed, YEW_MSG_WARN, "git: diff truncated");
     } else if (outcome == YEW_DIFF_INVALID) {
-        state->hunks.h.len = 0U;
+        next.h.len = 0U;
         yew_msg_hint(ed, YEW_MSG_ERROR, "git: cannot compute buffer diff");
     }
+    hunk_list_drop(&state->hunks);
+    state->hunks = next;
     state->hunk_revision++;
     if (state->hunk_revision == 0U)
         state->hunk_revision = 1U;
-    bytebuf_free(&live);
+    ed->git_editor->diff_stats.diff_published++;
     ed->full_damage = true;
+}
+
+static void diff_begin(Ed *ed, Buffer *buf, GitBufState *state)
+{
+    GitHunkVec empty = {0};
+
+    state->diff_due_ms = -1;
+    state->diff_gen = buf->tb->gen;
+    state->diff_base_revision = state->base_revision;
+    state->diff_copy_at = 0U;
+    state->live.len = 0U;
+    ed->git_editor->diff_stats.diff_started++;
+    if (state->base_too_large ||
+        yew_textbuf_len(buf->tb) > YEW_DIFF_MAX_BYTES) {
+        diff_publish(ed, state, YEW_DIFF_TOO_LARGE, &empty);
+        return;
+    }
+    state->diff_snap = yew_textbuf_snap(buf->tb);
+    bytebuf_reserve(&state->live, (size_t)state->diff_snap.len);
+}
+
+static bool diff_copy_live(GitBufState *state, YewDiffNowUsFn now_us,
+                           void *clock_ctx, i64 deadline)
+{
+    while (state->diff_copy_at < state->diff_snap.len) {
+        TextIter it;
+        const u8 *bytes;
+        u64 len;
+        size_t take;
+
+        if (now_us(clock_ctx) >= deadline)
+            return false;
+        if (!yew_textsnap_iter(&it, &state->diff_snap,
+                               BYTEOFF(state->diff_copy_at)) ||
+            !yew_textiter_chunk(&it, NULL, &bytes, &len) || len == 0U)
+            YEW_BUG("git editor: cannot copy diff snapshot");
+        take = len > 65536U ? 65536U : (size_t)len;
+        bytebuf_append(&state->live, bytes, take);
+        state->diff_copy_at += (u64)take;
+    }
+    yew_textsnap_release(NULL, &state->diff_snap);
+    state->diff_work = yew_diff_work_begin_bytes(
+        state->base.data, state->base.len, state->live.data, state->live.len,
+        YEW_DIFF_MAX_D);
+    return true;
+}
+
+static void diff_pump(Ed *ed, Buffer *buf, GitBufState *state)
+{
+    GitEditorState *editor = ed->git_editor;
+    YewDiffNowUsFn now_us = editor->diff_now_us;
+    void *clock_ctx = editor->diff_clock_ctx;
+    i64 started;
+    i64 deadline;
+    i64 ended;
+
+    started = now_us(clock_ctx);
+    editor->diff_stats.diff_slices++;
+    if (!diff_active(state))
+        diff_begin(ed, buf, state);
+    if (!diff_active(state))
+        goto measured;
+    deadline = started > INT64_MAX -
+        (i64)(YEW_DIFF_BUDGET_US - GIT_DIFF_CLOCK_RESERVE_US) ? INT64_MAX :
+        started +
+        (i64)(YEW_DIFF_BUDGET_US - GIT_DIFF_CLOCK_RESERVE_US);
+    if (state->diff_snap.active &&
+        !diff_copy_live(state, now_us, clock_ctx, deadline))
+        goto measured;
+    if (state->diff_work == NULL) {
+        GitHunkVec empty = {0};
+
+        diff_publish(ed, state, YEW_DIFF_INVALID, &empty);
+        goto measured;
+    }
+    {
+        i64 current = now_us(clock_ctx);
+        u32 remaining = current >= deadline ? 0U :
+            (u32)(deadline - current);
+
+        if (remaining != 0U &&
+            yew_diff_work_step(state->diff_work, remaining, now_us,
+                               clock_ctx) == YEW_DIFF_DONE) {
+            GitHunkVec hunks = {0};
+            YewDiffOutcome outcome =
+                yew_diff_work_take(state->diff_work, &hunks);
+
+            diff_publish(ed, state, outcome, &hunks);
+            GitHunkVec_free(&hunks);
+            diff_cancel(editor, state, false);
+        }
+    }
+
+measured:
+    ended = now_us(clock_ctx);
+    if (ended > started &&
+        (u64)(ended - started) > editor->diff_stats.diff_max_slice_us)
+        editor->diff_stats.diff_max_slice_us = (u64)(ended - started);
 }
 
 void yew_git_editor_state_init(Ed *ed)
@@ -589,6 +684,7 @@ void yew_git_editor_state_init(Ed *ed)
     if (ed != NULL && ed->git_editor == NULL) {
         ed->git_editor = yew_xcalloc(1U, sizeof(*ed->git_editor));
         ed->git_editor->next_scroll_link = 1U;
+        ed->git_editor->diff_now_us = git_editor_now_us;
     }
 }
 
@@ -599,7 +695,9 @@ void yew_git_editor_state_free(Ed *ed)
     if (ed == NULL || ed->git_editor == NULL)
         return;
     for (i = 0U; i < ed->git_editor->len; i++) {
+        diff_cancel(ed->git_editor, &ed->git_editor->v[i], false);
         bytebuf_free(&ed->git_editor->v[i].base);
+        bytebuf_free(&ed->git_editor->v[i].live);
         hunk_list_drop(&ed->git_editor->v[i].hunks);
         yew_blame_cache_free(ed->git_editor->v[i].blame);
     }
@@ -635,6 +733,66 @@ i64 yew_git_editor_wall_now(const Ed *ed)
     return state->clock_wall_secs + elapsed_secs;
 }
 
+void yew_git_editor_stats(const Ed *ed, YewGitEditorStats *out)
+{
+    if (out == NULL)
+        return;
+    *out = ed == NULL || ed->git_editor == NULL ?
+        (YewGitEditorStats){0} : ed->git_editor->diff_stats;
+}
+
+void yew_git_editor_test_clock(Ed *ed, YewDiffNowUsFn now_us, void *ctx)
+{
+    if (ed == NULL || ed->git_editor == NULL)
+        return;
+    ed->git_editor->diff_now_us = now_us == NULL ? git_editor_now_us : now_us;
+    ed->git_editor->diff_clock_ctx = now_us == NULL ? NULL : ctx;
+}
+
+bool yew_git_editor_test_base(Ed *ed, Buffer *buf, const u8 *bytes,
+                              size_t len, const char *oid,
+                              bool base_is_head, i64 now_ms)
+{
+    GitBufState *state;
+
+    if (ed == NULL || ed->git_editor == NULL || buf == NULL ||
+        buf->tb == NULL || (bytes == NULL && len != 0U))
+        return false;
+    state = state_for(ed, buf, true);
+    diff_cancel(ed->git_editor, state, true);
+    state->base.len = 0U;
+    bytebuf_append(&state->base, bytes, len);
+    oid_copy(state->base_oid, oid);
+    state->base_ready = true;
+    state->base_pending = false;
+    state->base_too_large = len > YEW_DIFF_MAX_BYTES;
+    state->base_is_head = base_is_head;
+    state->base_revision++;
+    state->observed_gen = buf->tb->gen;
+    state->diff_due_ms = now_ms;
+    return true;
+}
+
+const HunkList *yew_git_editor_test_hunks(Ed *ed, Buffer *buf)
+{
+    GitBufState *state = state_for(ed, buf, false);
+
+    return state == NULL ? NULL : &state->hunks;
+}
+
+static bool text_has_terminal_newline(const TextBuf *tb)
+{
+    u64 len = yew_textbuf_len(tb);
+    TextIter it;
+    const u8 *bytes;
+    u64 n;
+
+    return len != 0U &&
+        yew_textiter_begin(&it, tb, BYTEOFF(len - 1U)) &&
+        yew_textiter_chunk(&it, tb, &bytes, &n) && n != 0U &&
+        bytes[0] == '\n';
+}
+
 void yew_git_editor_prepare(Ed *ed, Win *w)
 {
     GitBufState *state;
@@ -651,6 +809,7 @@ void yew_git_editor_prepare(Ed *ed, Win *w)
     state = state_for(ed, w->buf, true);
     gen = w->buf->tb->gen;
     if (gen != state->observed_gen) {
+        diff_cancel(ed->git_editor, state, true);
         state->observed_gen = gen;
         state->diff_due_ms = ed->now_ms + GIT_EDIT_DEBOUNCE_MS;
     }
@@ -668,16 +827,24 @@ void yew_git_editor_prepare(Ed *ed, Win *w)
     for (i = 0U; i < state->hunks.h.len; i++) {
         const GitHunk *h = &state->hunks.h.data[i];
         GutterSign sign;
+        LineNo sign_line;
+        bool delete_below;
         u64 n = h->buf_n.v == 0U ? 1U : h->buf_n.v;
         u64 j;
+        u64 count = yew_textbuf_line_count(w->buf->tb);
+
+        if (!yew_git_hunk_sign_placement(
+                h, count, text_has_terminal_newline(w->buf->tb),
+                &sign_line, &delete_below))
+            continue;
 
         if (state->hunks.truncated) {
             sign = (GutterSign){unknown_glyph, 1U, "git.sign.unknown", 0U};
         } else if (h->kind == YEW_HUNK_DEL) {
-            bool at_end = h->buf_lo.v >= yew_textbuf_line_count(w->buf->tb);
-            sign = (GutterSign){at_end ? del_end_glyph : del_top_glyph, 3U,
+            sign = (GutterSign){delete_below ? del_end_glyph : del_top_glyph,
+                                3U,
                                 "git.sign.del", 0U};
-            if (at_end && h->buf_lo.v != 0U)
+            if (delete_below)
                 n = 1U;
         } else {
             sign = (GutterSign){add_glyph, 3U,
@@ -686,8 +853,7 @@ void yew_git_editor_prepare(Ed *ed, Win *w)
                 0U};
         }
         for (j = 0U; j < n; j++) {
-            u64 line = h->buf_lo.v + j;
-            u64 count = yew_textbuf_line_count(w->buf->tb);
+            u64 line = sign_line.v + j;
             if (line >= count && count != 0U)
                 line = count - 1U;
             yew_gutter_sign_set(w, LINENO(line), YEW_SIGN_GIT, &sign);
@@ -707,11 +873,17 @@ void yew_git_editor_tick(Ed *ed, i64 now_ms)
         GitBufState *state = &ed->git_editor->v[i];
         Buffer *buf = yew_ws_buf_by_id(ed, state->buf_id);
 
-        if (buf != NULL && buf->tb != NULL && state->base_ready &&
-            state->diff_due_ms >= 0 && now_ms >= state->diff_due_ms) {
-            rebuild(ed, buf, state);
-            state->diff_due_ms = -1;
+        if (buf != NULL && buf->tb != NULL && diff_active(state) &&
+            (buf->tb->gen != state->diff_gen ||
+             state->base_revision != state->diff_base_revision)) {
+            diff_cancel(ed->git_editor, state, true);
+            state->observed_gen = buf->tb->gen;
+            state->diff_due_ms = now_ms + GIT_EDIT_DEBOUNCE_MS;
         }
+        if (buf != NULL && buf->tb != NULL && state->base_ready &&
+            (diff_active(state) ||
+             (state->diff_due_ms >= 0 && now_ms >= state->diff_due_ms)))
+            diff_pump(ed, buf, state);
         if (buf != NULL && buf->tb != NULL)
             request_blame(ed, buf, state, now_ms);
     }
@@ -725,10 +897,13 @@ i64 yew_git_editor_deadline(const Ed *ed, i64 now_ms)
     if (ed == NULL || ed->git_editor == NULL)
         return -1;
     for (i = 0U; i < ed->git_editor->len; i++) {
-        i64 at = ed->git_editor->v[i].diff_due_ms;
+        const GitBufState *state = &ed->git_editor->v[i];
+        i64 at = state->diff_due_ms;
         i64 wait;
 
-        if (at < 0)
+        if (diff_active(state))
+            return 0;
+        if (at < 0 || !state->base_ready)
             continue;
         wait = at <= now_ms ? 0 : at - now_ms;
         if (best < 0 || wait < best)

@@ -56,6 +56,41 @@ i64 yew_git_editor_deadline(const Ed *ed, i64 now_ms)
     return -1;
 }
 
+void yew_git_editor_stats(const Ed *ed, YewGitEditorStats *out)
+{
+    (void)ed;
+    if (out != NULL)
+        *out = (YewGitEditorStats){0};
+}
+
+void yew_git_editor_test_clock(Ed *ed, YewDiffNowUsFn now_us, void *ctx)
+{
+    (void)ed;
+    (void)now_us;
+    (void)ctx;
+}
+
+bool yew_git_editor_test_base(Ed *ed, Buffer *buf, const u8 *bytes,
+                              size_t len, const char *oid,
+                              bool base_is_head, i64 now_ms)
+{
+    (void)ed;
+    (void)buf;
+    (void)bytes;
+    (void)len;
+    (void)oid;
+    (void)base_is_head;
+    (void)now_ms;
+    return false;
+}
+
+const HunkList *yew_git_editor_test_hunks(Ed *ed, Buffer *buf)
+{
+    (void)ed;
+    (void)buf;
+    return NULL;
+}
+
 void yew_git_editor_prepare(Ed *ed, Win *w)
 {
     (void)ed; (void)w;

@@ -487,7 +487,6 @@ int yew_loop_run(Ed *ed)
         (void)yew_git_refresh(ed, false);
 #endif
         yew_fuss_tick(ed, now);
-        yew_git_editor_tick(ed, now);
         yew_ai_pump(ed, fds, nfds);
         yew_lsp_pump(ed);
         if (ed->jobs.dirty) {
@@ -508,6 +507,12 @@ int yew_loop_run(Ed *ed)
             ed->fl_idle_since_ms = now;
             ed->fl_idle_fired = false;
         }
+
+        /* Whole-buffer Git work is stale-safe and sliced.  It resumes only
+         * after the queued input burst has drained, so even a due debounce
+         * cannot add diff latency to the keypress path. */
+        if (!had_input)
+            yew_git_editor_tick(ed, now);
 
         /* Deadline work cannot split a queued typeahead burst. */
         yew_dispatch_tick(ed, now);
