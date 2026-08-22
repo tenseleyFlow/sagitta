@@ -251,6 +251,7 @@ static int live_save(const char *path, const char *post_path)
     if (setenv("TERM", "xterm-256color", 1) != 0 ||
         setenv("COLORTERM", "truecolor", 1) != 0 ||
         setenv("YEW_LOG", "/dev/null", 1) != 0 ||
+        setenv("YEW_FAULT_STORAGE_ONLY", "1", 1) != 0 ||
         setenv("YEW_FAULT_SIGNAL_ENABLE", "1", 1) != 0 ||
         !yew_live_pty_attach(&pty, slave, LIVE_ROWS, LIVE_COLS))
         _exit(126);

@@ -4,8 +4,9 @@
  * Public controls are YEW_FAULT_AT, YEW_FAULT_SHORT, YEW_FAULT_SEED and
  * YEW_FAULT_LOG.  The harness also uses YEW_FAULT_ENABLE=0 as its durable-
  * journal barrier, YEW_FAULT_RENAME_EXDEV=1 for decision-table row 5,
- * YEW_FAULT_FCHOWN_EPERM=1 for row 6, and YEW_FAULT_EINTR_AT=N to return
- * EINTR once at intercepted call N.
+ * YEW_FAULT_FCHOWN_EPERM=1 for row 6, YEW_FAULT_EINTR_AT=N to return EINTR
+ * once at intercepted call N, and YEW_FAULT_STORAGE_ONLY=1 to keep a live
+ * editor's terminal and log traffic outside the storage-fault sequence.
  */
 
 #include <dlfcn.h>
@@ -46,6 +47,7 @@ static int initialized;
 static int resolving;
 static int rename_exdev_done;
 static int link_done;
+static int storage_only;
 static volatile sig_atomic_t signal_enabled;
 
 static void enable_faults(int sig)
@@ -118,6 +120,7 @@ static void initialize(void)
     if (rng_state == 0U)
         rng_state = UINT64_C(0x9e3779b97f4a7c15);
     short_writes = env_is_one("YEW_FAULT_SHORT");
+    storage_only = env_is_one("YEW_FAULT_STORAGE_ONLY");
     log_path = getenv("YEW_FAULT_LOG");
     if (log_path != NULL && *log_path != '\0') {
         log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
@@ -136,6 +139,16 @@ static void initialize(void)
     }
     resolving = 0;
     initialized = 1;
+}
+
+static int storage_fd(int fd)
+{
+    struct stat st;
+
+    if (!storage_only)
+        return 1;
+    return fstat(fd, &st) == 0 &&
+           (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode));
 }
 
 static int faults_enabled(void)
@@ -231,6 +244,9 @@ static const char *sync_name(int fd, const char *file_name,
 
 ssize_t write(int fd, const void *buf, size_t count)
 {
+    initialize();
+    if (!storage_fd(fd))
+        return real_write_fn(fd, buf, count);
     before_call("write");
     if (inject_eintr("write"))
         return -1;
@@ -239,6 +255,9 @@ ssize_t write(int fd, const void *buf, size_t count)
 
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
 {
+    initialize();
+    if (!storage_fd(fd))
+        return real_pwrite_fn(fd, buf, count, offset);
     before_call("pwrite");
     if (inject_eintr("pwrite"))
         return -1;
@@ -249,6 +268,9 @@ int fsync(int fd)
 {
     const char *name = sync_name(fd, "fsync-file", "fsync-dir");
 
+    initialize();
+    if (!storage_fd(fd))
+        return real_fsync_fn(fd);
     before_call(name);
     if (inject_eintr(name))
         return -1;
@@ -259,6 +281,9 @@ int fdatasync(int fd)
 {
     const char *name = sync_name(fd, "fdatasync-file", "fdatasync-dir");
 
+    initialize();
+    if (!storage_fd(fd))
+        return real_fdatasync_fn(fd);
     before_call(name);
     if (inject_eintr(name))
         return -1;
@@ -281,6 +306,9 @@ int rename(const char *old_path, const char *new_path)
 
 int ftruncate(int fd, off_t length)
 {
+    initialize();
+    if (!storage_fd(fd))
+        return real_ftruncate_fn(fd, length);
     before_call("ftruncate");
     if (inject_eintr("ftruncate"))
         return -1;
@@ -289,6 +317,9 @@ int ftruncate(int fd, off_t length)
 
 int fchown(int fd, uid_t owner, gid_t group)
 {
+    initialize();
+    if (!storage_fd(fd))
+        return real_fchown_fn(fd, owner, group);
     before_call("fchown");
     if (env_is_one("YEW_FAULT_FCHOWN_EPERM")) {
         log_call("fchown", "errno=EPERM");
@@ -307,6 +338,8 @@ int close(int fd)
 
     initialize();
     if (fd == log_fd)
+        return real_close_fn(fd);
+    if (!storage_fd(fd))
         return real_close_fn(fd);
     before_call("close");
     source = getenv("YEW_FAULT_LINK_SOURCE");
