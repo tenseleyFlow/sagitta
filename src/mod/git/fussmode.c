@@ -77,12 +77,16 @@ typedef struct FussPreviewJob {
     u32 job_id;
 } FussPreviewJob;
 
+enum { FUSS_OPENING_FRAME_MS = 16 };
+
 struct FussMode {
     FussTree tree;
     FussOpts opts;
     FussSel sel;
     FussJump jump;
     bool active;
+    bool opening;
+    i64 opening_until_ms;
     bool ascii_glyphs;
     bool viewer;
     Pane *saved_root;
@@ -642,6 +646,14 @@ CmdStatus yew_fuss_mode_enter(Ed *ed)
         ed->fuss->opts.show_hidden = yew_state_option_bool(
             ed, "git.tree.show_hidden", false);
         ed->fuss->active = true;
+        /* F mode owns a deterministic loading frame even when Sprint 53's
+         * editor/statusline consumers have already warmed the Git cache.
+         * Besides preserving the mode-entry contract, this keeps a fast
+         * repository from collapsing entry and publication into one paint. */
+        ed->fuss->opening = true;
+        ed->fuss->opening_until_ms =
+            ed->now_ms > INT64_MAX - FUSS_OPENING_FRAME_MS ? INT64_MAX :
+            ed->now_ms + FUSS_OPENING_FRAME_MS;
         ed->fuss->saved_buffer_id = ed->win != NULL && ed->win->buf != NULL ?
                                     ed->win->buf->id : 0U;
         ed->fuss->saved_root = ed->pane_root;
@@ -705,6 +717,10 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
     fuss_result_tick(ed);
     if (!yew_fuss_active(ed))
         return;
+    if (ed->fuss->opening && now_ms >= ed->fuss->opening_until_ms) {
+        ed->fuss->opening = false;
+        fuss_damage(ed);
+    }
     if (yew_git_avail_state(ed) == YEW_GIT_ASYNC_FAILED) {
         yew_msg(ed, YEW_MSG_ERROR, "%s",
                 yew_git_state_str(YEW_GIT_NO_GIT));
@@ -742,6 +758,13 @@ i64 yew_fuss_deadline(const Ed *ed, i64 now_ms)
     if (ed == NULL || ed->fuss == NULL || !ed->fuss->active)
         return -1;
     f = ed->fuss;
+    if (f->opening) {
+        if (f->opening_until_ms <= now_ms)
+            return 0;
+        if (now_ms < 0 && f->opening_until_ms > INT64_MAX + now_ms)
+            return INT64_MAX;
+        return f->opening_until_ms - now_ms;
+    }
     if (f->walk != NULL || f->expand_walk != NULL)
         return 0;
     if (!f->jump.armed)
@@ -867,6 +890,12 @@ static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
     fuss_put_lit(&ed->grid, row, &col, right, "yew:", sizeof("yew:") - 1U,
                  style.fg, style.bg,
                  (u16)(style.attrs | YEW_ATTR_BOLD));
+    if (ed->fuss->opening) {
+        fuss_put_lit(&ed->grid, row, &col, right, "loading",
+                     sizeof("loading") - 1U, style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_DIM));
+        return;
+    }
     if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED) {
         const char *state = yew_git_state_str(yew_git_detect_result(ed));
 
@@ -1088,6 +1117,8 @@ void yew_fuss_draw(Ed *ed)
         tree = f->fuss_root->a->rect;
     fuss_header(ed, tree.y, tree.x, (u16)(tree.x + tree.w));
     visible = tree.h > 1U ? (u16)(tree.h - 1U) : 0U;
+    if (f->opening)
+        return;
     if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED && visible != 0U) {
         ThemeEnt style = fuss_base_style(ed);
         const char *message = "not a Git repository — use :git.init";
