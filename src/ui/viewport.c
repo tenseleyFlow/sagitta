@@ -920,7 +920,10 @@ CCol yew_vp_display_col(const Win *w, ByteOff pos)
     LineNo line = yew_textbuf_line_of(tb, pos);
     Span row;
 
-    (void)wrap_subrow_raw(tb, line, pos, w->vp.cols, &row);
+    if (w->vp.wrap)
+        (void)wrap_subrow_raw(tb, line, pos, w->vp.cols, &row);
+    else
+        row = yew_textbuf_line_span(tb, line);
     return yew_off_to_ccol(tb, row, pos, YEW_VP_TABWIDTH);
 }
 

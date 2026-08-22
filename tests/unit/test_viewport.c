@@ -231,6 +231,18 @@ void test_viewport_display_row_motion(void)
     vp_fixture_free(&f);
 }
 
+void test_viewport_display_col_obeys_wrap_mode(void)
+{
+    VpFixture f;
+
+    vp_fixture_init(&f, "abcdef", 5U, 3U);
+    f.win.vp.wrap = false;
+    YEW_ASSERT_EQ_U64(yew_vp_display_col(&f.win, BYTEOFF(6U)).v, 6U);
+    f.win.vp.wrap = true;
+    YEW_ASSERT_EQ_U64(yew_vp_display_col(&f.win, BYTEOFF(6U)).v, 3U);
+    vp_fixture_free(&f);
+}
+
 void test_viewport_display_motion_stays_on_short_and_tab_rows(void)
 {
     VpFixture f;

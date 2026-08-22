@@ -490,7 +490,13 @@ static void layout_leaf_win(Ed *ed, Pane *leaf)
         ed->footer_dirty = true;
     }
     yew_vp_clamp(w);
-    yew_vp_follow(w);
+    /* A linked diff peer deliberately shares its viewport while keeping an
+     * independent cursor.  Focusing the other pane dirties layout; following
+     * this inactive cursor here would immediately undo the synchronized
+     * scroll.  The focused pane still follows normally, and clamping above
+     * keeps an inactive peer valid across resizes. */
+    if (w->scroll_link == 0U || w == ed->win)
+        yew_vp_follow(w);
     if (w == ed->win && w->panel.open)
         yew_panel_resize(ed, &w->panel);
 }

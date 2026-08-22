@@ -554,6 +554,39 @@ void test_layout_tree_walk_visits_every_node(void)
     yew_ed_free(&ed);
 }
 
+void test_layout_keeps_inactive_linked_viewport_detached_from_cursor(void)
+{
+    Ed ed;
+    Pane *right;
+    Bytebuf text;
+    u32 i;
+
+    ly_fixture(&ed);
+    bytebuf_init(&text);
+    for (i = 0U; i < 80U; i++)
+        bytebuf_printf(&text, "row-%03u\n", i);
+    yew_textbuf_insert(ed.buffer.tb, BYTEOFF(0U), text.data,
+                       (u64)text.len);
+    bytebuf_free(&text);
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 24U, 80U));
+    ed.grid_ready = true;
+    yew_layout(&ed);
+    right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(right);
+    ed.focus = ed.pane_root->a;
+    ed.win = ed.focus->win;
+    ed.pane_root->a->win->scroll_link = 7U;
+    right->win->scroll_link = 7U;
+    right->win->vp.top = LINENO(20U);
+    yew_layout(&ed);
+    YEW_ASSERT_EQ_U64(right->win->vp.top.v, 20U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_line_of(
+                          right->win->buf->tb,
+                          right->win->cs.curs.data[0].pos).v,
+                      0U);
+    yew_ed_free(&ed);
+}
+
 /* ---------------------------------------------------------------- */
 /* Commands (§4/§5) — dispatched through the registry, as bound      */
 /* ---------------------------------------------------------------- */
