@@ -7,6 +7,7 @@
 
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/select.h"
 #include "mod/git/blame.h"
 #include "mod/git/diffview.h"
 #include "mod/git/git.h"
@@ -34,10 +35,13 @@ typedef struct GitBufState {
     HunkList hunks;
     BlameCache *blame;
     u64 observed_gen;
+    u64 hunk_revision;
+    u32 base_snapshot_gen;
     i64 diff_due_ms;
     bool base_ready;
     bool base_pending;
     bool base_is_head;
+    bool base_by_snapshot;
 } GitBufState;
 
 struct GitEditorState {
@@ -51,8 +55,10 @@ struct GitEditorState {
 typedef struct BaseJob {
     u32 buf_id;
     char oid[65];
+    u32 snapshot_gen;
     bool batch;
     bool base_is_head;
+    bool by_snapshot;
 } BaseJob;
 
 typedef struct BlameJob {
@@ -294,6 +300,22 @@ static bool batch_payload(const YewJob *job, const u8 **bytes, size_t *len)
     return true;
 }
 
+static bool batch_missing(const YewJob *job)
+{
+    const u8 *nl;
+    size_t header_len;
+
+    if (job == NULL || job->state != YEW_JOB_EXITED || job->exit_code != 0)
+        return false;
+    nl = memchr(job->collect.data, '\n', job->collect.len);
+    if (nl == NULL)
+        return false;
+    header_len = (size_t)(nl - job->collect.data);
+    return header_len >= sizeof(" missing") - 1U &&
+        memcmp(nl - (sizeof(" missing") - 1U), " missing",
+               sizeof(" missing") - 1U) == 0;
+}
+
 static void base_complete(void *owner, Ed *ed, const YewJob *job)
 {
     BaseJob *request = owner;
@@ -301,11 +323,13 @@ static void base_complete(void *owner, Ed *ed, const YewJob *job)
     GitBufState *state = state_for(ed, buf, false);
     const u8 *bytes = job->collect.data;
     size_t len = job->collect.len;
+    bool missing;
 
     if (state == NULL)
         return;
     state->base_pending = false;
-    if (request->batch && !batch_payload(job, &bytes, &len)) {
+    missing = request->batch && batch_missing(job);
+    if (request->batch && !missing && !batch_payload(job, &bytes, &len)) {
         yew_msg(ed, YEW_MSG_ERROR, "git base unavailable");
         return;
     }
@@ -315,8 +339,11 @@ static void base_complete(void *owner, Ed *ed, const YewJob *job)
         return;
     }
     state->base.len = 0U;
-    bytebuf_append(&state->base, bytes, len);
+    if (!missing && len != 0U)
+        bytebuf_append(&state->base, bytes, len);
     (void)memcpy(state->base_oid, request->oid, sizeof(state->base_oid));
+    state->base_snapshot_gen = request->snapshot_gen;
+    state->base_by_snapshot = request->by_snapshot;
     state->base_is_head = request->base_is_head;
     state->base_ready = true;
     state->diff_due_ms = ed->now_ms;
@@ -390,17 +417,33 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
     if (path == NULL || snap == NULL || state->base_pending)
         return;
     if (entry == NULL || entry->untracked) {
+        if (state->base_ready && state->base_by_snapshot &&
+            state->base_snapshot_gen == snap->gen)
+            return;
+    }
+    if (entry != NULL && entry->untracked) {
         state->base.len = 0U;
         state->base_oid[0] = '\0';
+        state->base_snapshot_gen = snap->gen;
+        state->base_by_snapshot = true;
         state->base_is_head = false;
         state->base_ready = true;
         state->diff_due_ms = ed->now_ms;
         return;
     }
-    name = entry->conflicted ? snap->head_oid : entry->index_oid;
+    name = entry == NULL ? NULL :
+        (entry->conflicted ? snap->head_oid : entry->index_oid);
     if (name == NULL || name[0] == '\0') {
+        if (entry == NULL)
+            goto request_index_path;
+        if (state->base_ready && state->base_by_snapshot &&
+            state->base_snapshot_gen == snap->gen &&
+            state->base_is_head == entry->conflicted)
+            return;
         state->base.len = 0U;
         state->base_oid[0] = '\0';
+        state->base_snapshot_gen = snap->gen;
+        state->base_by_snapshot = true;
         state->base_ready = true;
         state->base_is_head = entry->conflicted;
         state->diff_due_ms = ed->now_ms;
@@ -408,12 +451,18 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
     }
     if (name != NULL && name[0] != '\0' &&
         strcmp(state->base_oid, name) == 0) {
+        if (state->base_is_head != entry->conflicted) {
+            state->base_is_head = entry->conflicted;
+            state->diff_due_ms = ed->now_ms;
+        }
+        state->base_by_snapshot = false;
         state->base_ready = true;
         return;
     }
     request = yew_xcalloc(1U, sizeof(*request));
     request->buf_id = buf->id;
     request->base_is_head = entry->conflicted;
+    request->snapshot_gen = snap->gen;
     bytebuf_init(&input);
     if (entry->conflicted) {
         bytebuf_append(&input, "HEAD:", 5U);
@@ -423,6 +472,18 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
         bytebuf_append(&input, name, strlen(name));
         oid_copy(request->oid, name);
     }
+    goto spawn_base;
+
+request_index_path:
+    request = yew_xcalloc(1U, sizeof(*request));
+    request->buf_id = buf->id;
+    request->snapshot_gen = snap->gen;
+    request->by_snapshot = true;
+    bytebuf_init(&input);
+    bytebuf_push_u8(&input, ':');
+    bytebuf_append(&input, path, strlen(path));
+
+spawn_base:
     bytebuf_push_u8(&input, '\n');
     request->batch = true;
     if (yew_git_spawn_callback_input(ed, yew_git_verb("blob"), argv,
@@ -439,12 +500,7 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
 static void rebuild(Ed *ed, Buffer *buf, GitBufState *state)
 {
     Bytebuf live;
-    u64 *ah = NULL;
-    u64 *bh = NULL;
-    u32 an = 0U;
-    u32 bn = 0U;
-    bool missing;
-    bool hashed;
+    YewDiffOutcome outcome;
 
     bytebuf_init(&live);
     text_bytes(buf->tb, &live);
@@ -453,40 +509,22 @@ static void rebuild(Ed *ed, Buffer *buf, GitBufState *state)
     state->hunks.buf_gen = buf->tb->gen;
     state->hunks.base_is_head = state->base_is_head;
     oid_copy(state->hunks.base_oid, state->base_oid);
-    if (live.len > YEW_DIFF_MAX_BYTES || state->base.len > YEW_DIFF_MAX_BYTES ||
-        yew_textbuf_line_count(buf->tb) > YEW_DIFF_MAX_LINES) {
+    outcome = yew_diff_bytes(&state->hunks.a,
+                             state->base.data, state->base.len,
+                             live.data, live.len, YEW_DIFF_MAX_D,
+                             &state->hunks.h);
+    if (outcome == YEW_DIFF_TOO_LARGE) {
         yew_msg_hint(ed, YEW_MSG_WARN, "git: file too large for signs");
-        bytebuf_free(&live);
-        return;
-    }
-    hashed = yew_git_hash_lines(state->base.data, state->base.len,
-                                &state->hunks.a, &ah, &an, &missing) &&
-             yew_git_hash_lines(live.data, live.len, &state->hunks.a,
-                                &bh, &bn, &missing);
-    if (hashed && (an > YEW_DIFF_MAX_LINES || bn > YEW_DIFF_MAX_LINES)) {
-        yew_msg_hint(ed, YEW_MSG_WARN, "git: file too large for signs");
-        bytebuf_free(&live);
-        return;
-    }
-    if (!hashed ||
-        !yew_diff_lines(&state->hunks.a, ah, an, bh, bn, YEW_DIFF_MAX_D,
-                        &state->hunks.h)) {
-        GitHunk all = {LINENO(0U), LINENO(an), LINENO(0U), LINENO(bn),
-                       YEW_HUNK_MOD};
-        GitHunkVec_push(&state->hunks.h, all);
+    } else if (outcome == YEW_DIFF_TRUNCATED) {
         state->hunks.truncated = true;
         yew_msg_hint(ed, YEW_MSG_WARN, "git: diff truncated");
+    } else if (outcome == YEW_DIFF_INVALID) {
+        state->hunks.h.len = 0U;
+        yew_msg_hint(ed, YEW_MSG_ERROR, "git: cannot compute buffer diff");
     }
-    if (state->hunks.h.len == 0U &&
-        (live.len != state->base.len ||
-         (live.len != 0U && memcmp(live.data, state->base.data,
-                                   live.len) != 0))) {
-        GitHunk all = {LINENO(0U), LINENO(an), LINENO(0U), LINENO(bn),
-                       YEW_HUNK_MOD};
-        GitHunkVec_push(&state->hunks.h, all);
-        state->hunks.truncated = true;
-        yew_msg_hint(ed, YEW_MSG_WARN, "git: hash collision; diff marked unknown");
-    }
+    state->hunk_revision++;
+    if (state->hunk_revision == 0U)
+        state->hunk_revision = 1U;
     bytebuf_free(&live);
     ed->full_damage = true;
 }
@@ -541,7 +579,7 @@ void yew_git_editor_prepare(Ed *ed, Win *w)
                                 yew_textbuf_line_count(w->buf->tb),
                                 ed->now_ms);
     if (w->git_sign_buf == w->buf->id &&
-        w->git_sign_gen == state->hunks.buf_gen)
+        w->git_sign_gen == state->hunk_revision)
         return;
     yew_gutter_sign_clear_kind(w, LINENO(0U),
         LINENO(yew_textbuf_line_count(w->buf->tb)), YEW_SIGN_GIT);
@@ -574,7 +612,7 @@ void yew_git_editor_prepare(Ed *ed, Win *w)
         }
     }
     w->git_sign_buf = w->buf->id;
-    w->git_sign_gen = state->hunks.buf_gen;
+    w->git_sign_gen = state->hunk_revision;
 }
 
 void yew_git_editor_tick(Ed *ed, i64 now_ms)
@@ -637,6 +675,63 @@ static const GitHunk *current_hunk(Ed *ed, Win *w, GitBufState **out)
         }
     }
     return NULL;
+}
+
+typedef struct HunkSelection {
+    LineNo first;
+    LineNo last;
+    bool active;
+} HunkSelection;
+
+static HunkSelection primary_hunk_selection(const Win *w)
+{
+    HunkSelection selection = {LINENO(0U), LINENO(0U), false};
+    const Cursor *cursor;
+    const TextBuf *tb;
+    Span span;
+
+    if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        w->cs.curs.len == 0U || w->cs.primary >= w->cs.curs.len)
+        return selection;
+    cursor = &w->cs.curs.data[w->cs.primary];
+    if (cursor->anchor.v == cursor->pos.v)
+        return selection;
+    tb = w->buf->tb;
+    selection.active = true;
+    if (w->h.kind == YEW_SEL_RECT) {
+        LineNo pos = yew_textbuf_line_of(tb, cursor->pos);
+        LineNo anchor = yew_textbuf_line_of(tb, cursor->anchor);
+
+        selection.first = pos.v < anchor.v ? pos : anchor;
+        selection.last = pos.v < anchor.v ? anchor : pos;
+        return selection;
+    }
+    span = yew_sel_span(w, cursor);
+    selection.first = yew_textbuf_line_of(tb, BYTEOFF(span.lo));
+    selection.last = yew_textbuf_line_of(
+        tb, BYTEOFF(span.hi > span.lo ? span.hi - 1U : span.hi));
+    return selection;
+}
+
+static bool hunk_intersects_selection(const GitHunk *h,
+                                      HunkSelection selection)
+{
+    u64 last;
+
+    if (h == NULL || !selection.active)
+        return false;
+    last = h->buf_n.v == 0U ? h->buf_lo.v :
+                              h->buf_lo.v + h->buf_n.v - 1U;
+    return h->buf_lo.v <= selection.last.v && last >= selection.first.v;
+}
+
+static bool hunk_is_target(const GitHunk *candidate,
+                           const GitHunk *cursor_hunk,
+                           HunkSelection selection)
+{
+    return selection.active ?
+        hunk_intersects_selection(candidate, selection) :
+        candidate == cursor_hunk;
 }
 
 static CmdStatus move_hunk(CmdCtx *cx, int which)
@@ -710,6 +805,7 @@ CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx)
 {
     GitBufState *state = NULL;
     const GitHunk *h;
+    HunkSelection selection;
     Bytebuf live;
     Bytebuf patch;
     StageJob *owner;
@@ -717,13 +813,23 @@ CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx)
     char *argv[] = {(char *)"apply", (char *)"--cached", (char *)"-", NULL};
     char err[160];
     bool dirty;
+    size_t i;
+    size_t target_count = 0U;
+    const GitHunk *first_target = NULL;
+    const GitHunk *last_target = NULL;
+    GitHunk combined;
 
     if (cx == NULL || cx->ed == NULL || cx->win == NULL)
         return YEW_CMD_ERR_STATE;
-    h = current_hunk(cx->ed, cx->win, &state);
+    selection = primary_hunk_selection(cx->win);
+    state = state_for(cx->ed, cx->win->buf, false);
+    h = selection.active ? NULL : current_hunk(cx->ed, cx->win, &state);
     path = repo_path(cx->ed, cx->win->buf);
-    if (h == NULL || state == NULL || path == NULL) {
-        yew_msg(cx->ed, YEW_MSG_INFO, "cursor is not on a changed hunk");
+    if (state == NULL || path == NULL ||
+        (!selection.active && h == NULL)) {
+        yew_msg(cx->ed, YEW_MSG_INFO,
+                selection.active ? "selection does not intersect a changed hunk" :
+                                   "cursor is not on a changed hunk");
         return YEW_CMD_ERR_STATE;
     }
     if (strchr(path, '\n') != NULL) {
@@ -734,8 +840,32 @@ CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx)
     bytebuf_init(&live);
     bytebuf_init(&patch);
     text_bytes(cx->win->buf->tb, &live);
+    for (i = 0U; i < state->hunks.h.len; i++) {
+        if (!hunk_is_target(&state->hunks.h.data[i], h, selection))
+            continue;
+        if (first_target == NULL)
+            first_target = &state->hunks.h.data[i];
+        last_target = &state->hunks.h.data[i];
+        target_count++;
+    }
+    if (target_count == 0U) {
+        yew_msg(cx->ed, YEW_MSG_INFO,
+                "selection does not intersect a changed hunk");
+        bytebuf_free(&patch); bytebuf_free(&live);
+        return YEW_CMD_ERR_STATE;
+    }
+    combined = *first_target;
+    if (last_target != first_target) {
+        combined.base_n = LINENO(last_target->base_lo.v +
+                                 last_target->base_n.v -
+                                 first_target->base_lo.v);
+        combined.buf_n = LINENO(last_target->buf_lo.v +
+                                last_target->buf_n.v -
+                                first_target->buf_lo.v);
+        combined.kind = YEW_HUNK_MOD;
+    }
     if (!yew_git_hunk_patch(&patch, path, state->base.data, state->base.len,
-                            live.data, live.len, h)) {
+                            live.data, live.len, &combined)) {
         bytebuf_free(&patch); bytebuf_free(&live);
         return YEW_CMD_ERR_STATE;
     }
@@ -769,42 +899,63 @@ CmdStatus yew_git_cmd_hunk_discard(CmdCtx *cx)
 {
     GitBufState *state = NULL;
     const GitHunk *h;
-    Span removed;
-    Span restored;
+    HunkSelection selection;
     EditCtx edit;
     bool ok = true;
+    TextBuf *base;
+    size_t i;
+    size_t target_count = 0U;
 
     if (cx == NULL || cx->ed == NULL || cx->win == NULL)
         return YEW_CMD_ERR_STATE;
-    h = current_hunk(cx->ed, cx->win, &state);
-    if (h == NULL || state == NULL)
+    selection = primary_hunk_selection(cx->win);
+    state = state_for(cx->ed, cx->win->buf, false);
+    h = selection.active ? NULL : current_hunk(cx->ed, cx->win, &state);
+    if (state == NULL || (!selection.active && h == NULL))
         return YEW_CMD_ERR_STATE;
-    removed.lo = yew_textbuf_line_start(cx->win->buf->tb, h->buf_lo).v;
-    removed.hi = h->buf_lo.v + h->buf_n.v >=
-                 yew_textbuf_line_count(cx->win->buf->tb) ?
-                 yew_textbuf_len(cx->win->buf->tb) :
-                 yew_textbuf_line_start(cx->win->buf->tb,
-                     LINENO(h->buf_lo.v + h->buf_n.v)).v;
-    {
-        TextBuf *base = yew_textbuf_from_bytes(state->base.data,
-                                               (u64)state->base.len);
-        restored.lo = yew_textbuf_line_start(base, h->base_lo).v;
-        restored.hi = h->base_lo.v + h->base_n.v >=
+    for (i = 0U; i < state->hunks.h.len; i++)
+        if (hunk_is_target(&state->hunks.h.data[i], h, selection))
+            target_count++;
+    if (target_count == 0U) {
+        yew_msg(cx->ed, YEW_MSG_INFO,
+                "selection does not intersect a changed hunk");
+        return YEW_CMD_ERR_STATE;
+    }
+    base = yew_textbuf_from_bytes(state->base.data, (u64)state->base.len);
+    edit = yew_ed_edit_ctx_for(cx->ed, cx->win);
+    yew_undo_begin(&edit, YEW_TXN_EXTERNAL);
+    i = state->hunks.h.len;
+    while (i > 0U && ok) {
+        const GitHunk *target;
+        Span removed;
+        Span restored;
+
+        i--;
+        target = &state->hunks.h.data[i];
+        if (!hunk_is_target(target, h, selection))
+            continue;
+        removed.lo = yew_textbuf_line_start(cx->win->buf->tb,
+                                             target->buf_lo).v;
+        removed.hi = target->buf_lo.v + target->buf_n.v >=
+                     yew_textbuf_line_count(cx->win->buf->tb) ?
+                     yew_textbuf_len(cx->win->buf->tb) :
+                     yew_textbuf_line_start(cx->win->buf->tb,
+                         LINENO(target->buf_lo.v + target->buf_n.v)).v;
+        restored.lo = yew_textbuf_line_start(base, target->base_lo).v;
+        restored.hi = target->base_lo.v + target->base_n.v >=
                       yew_textbuf_line_count(base) ? yew_textbuf_len(base) :
                       yew_textbuf_line_start(base,
-                          LINENO(h->base_lo.v + h->base_n.v)).v;
-        edit = yew_ed_edit_ctx_for(cx->ed, cx->win);
-        yew_undo_begin(&edit, YEW_TXN_EXTERNAL);
+                          LINENO(target->base_lo.v + target->base_n.v)).v;
         if (removed.lo != removed.hi)
             ok = yew_edit_delete(&edit, removed);
         if (ok && restored.lo != restored.hi)
             ok = yew_edit_insert(&edit, BYTEOFF(removed.lo),
                                  state->base.data + restored.lo,
                                  restored.hi - restored.lo);
-        if (ok) yew_undo_end(&edit); else yew_undo_abort(&edit);
-        yew_ed_finish_edit(cx->ed, &edit);
-        yew_textbuf_free(base);
     }
+    if (ok) yew_undo_end(&edit); else yew_undo_abort(&edit);
+    yew_ed_finish_edit(cx->ed, &edit);
+    yew_textbuf_free(base);
     if (!ok)
         return YEW_CMD_ERR_IO;
     yew_msg(cx->ed, YEW_MSG_INFO, "hunk discarded (undo restores it)");
