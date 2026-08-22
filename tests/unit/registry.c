@@ -1771,6 +1771,7 @@ const YewTest yew_tests[] = {
     T(gitcache_teardown_detaches_inflight_stdin),
     T(gitcache_cached_accessor_and_job_ownership_are_side_effect_free),
     T(gitcache_rebase_progress_and_conflict_count_publish),
+    T(gitcache_callback_input_copies_and_owns_stdin),
     T(fusstree_builds_every_status_flag),
     T(fusstree_directories_or_descendant_flags),
     T(fusstree_sorts_directories_before_files_deterministically),

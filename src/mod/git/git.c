@@ -706,10 +706,43 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     return id;
 }
 
-u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
-                           char *const *argv, void *owner,
-                           const YewJobCallbackOps *ops,
-                           char *err, size_t errsz)
+typedef struct GitCallbackOwner {
+    void *owner;
+    const YewJobCallbackOps *ops;
+    u8 *stdin_bytes;
+    u64 stdin_len;
+} GitCallbackOwner;
+
+static void git_callback_complete(void *owner, Ed *ed, const YewJob *job)
+{
+    GitCallbackOwner *wrapped = owner;
+
+    wrapped->ops->complete(wrapped->owner, ed, job);
+}
+
+static void git_callback_destroy(void *owner)
+{
+    GitCallbackOwner *wrapped = owner;
+
+    wrapped->ops->destroy(wrapped->owner);
+    if (wrapped->stdin_bytes != NULL) {
+        yew_memzero(wrapped->stdin_bytes, (size_t)wrapped->stdin_len);
+        free(wrapped->stdin_bytes);
+    }
+    free(wrapped);
+}
+
+static const YewJobCallbackOps git_callback_ops = {
+    git_callback_complete,
+    git_callback_destroy
+};
+
+u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
+                                 char *const *argv,
+                                 const u8 *stdin_bytes, u64 stdin_len,
+                                 void *owner,
+                                 const YewJobCallbackOps *ops,
+                                 char *err, size_t errsz)
 {
     static const char *const env_base[] = {
         "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false",
@@ -723,6 +756,7 @@ u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
     };
     static const char *const env_unset_prefix[] = {"GIT_TRACE2", NULL};
     YewJobSpec spec = {0};
+    GitCallbackOwner *wrapped;
     char **final_argv;
     u32 id;
 
@@ -731,7 +765,9 @@ u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
     if (ed == NULL || ed->git == NULL || verb == NULL || argv == NULL ||
         argv[0] == NULL || owner == NULL || ops == NULL ||
         ops->complete == NULL || ops->destroy == NULL ||
-        verb->kind != YEW_GV_READ) {
+        verb->kind != YEW_GV_READ ||
+        (stdin_len != 0U && stdin_bytes == NULL) ||
+        stdin_len > (u64)SIZE_MAX) {
         git_error(err, errsz, "invalid Git callback job");
         return 0U;
     }
@@ -751,21 +787,47 @@ u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
         git_error(err, errsz, yew_git_state_str(YEW_GIT_NO_HEAD));
         return 0U;
     }
+    wrapped = yew_xcalloc(1U, sizeof(*wrapped));
+    wrapped->owner = owner;
+    wrapped->ops = ops;
+    if (stdin_len != 0U) {
+        wrapped->stdin_bytes = yew_xmalloc((size_t)stdin_len);
+        (void)memcpy(wrapped->stdin_bytes, stdin_bytes, (size_t)stdin_len);
+        wrapped->stdin_len = stdin_len;
+    }
     final_argv = git_build_argv(verb, argv);
     spec.argv = final_argv;
     spec.cwd = yew_ws_root(ed);
     spec.sink = YEW_SINK_CALLBACK;
+    spec.in_bytes = wrapped->stdin_bytes;
+    spec.in_len = wrapped->stdin_len;
     spec.timeout_ms = verb->timeout_ms;
     spec.display = verb->name;
     spec.collect_max = YEW_GIT_COLLECT_MAX;
     spec.env_set = env_base;
     spec.env_unset = env_unset;
     spec.env_unset_prefix = env_unset_prefix;
-    spec.callback_owner = owner;
-    spec.callback_ops = ops;
+    spec.callback_owner = wrapped;
+    spec.callback_ops = &git_callback_ops;
     id = yew_job_spawn(ed, &spec, err, errsz);
     free(final_argv);
+    if (id == 0U) {
+        if (wrapped->stdin_bytes != NULL) {
+            yew_memzero(wrapped->stdin_bytes, (size_t)wrapped->stdin_len);
+            free(wrapped->stdin_bytes);
+        }
+        free(wrapped);
+    }
     return id;
+}
+
+u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
+                           char *const *argv, void *owner,
+                           const YewJobCallbackOps *ops,
+                           char *err, size_t errsz)
+{
+    return yew_git_spawn_callback_input(ed, verb, argv, NULL, 0U,
+                                        owner, ops, err, errsz);
 }
 
 void yew_git_test_spawn_set(GitTestSpawnFn spawn, void *opaque)

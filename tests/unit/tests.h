@@ -1768,6 +1768,7 @@ void test_gitcache_runtime_taxonomy_is_behaviorally_reachable(void);
 void test_gitcache_teardown_detaches_inflight_stdin(void);
 void test_gitcache_cached_accessor_and_job_ownership_are_side_effect_free(void);
 void test_gitcache_rebase_progress_and_conflict_count_publish(void);
+void test_gitcache_callback_input_copies_and_owns_stdin(void);
 void test_fusstree_builds_every_status_flag(void);
 void test_fusstree_directories_or_descendant_flags(void);
 void test_fusstree_sorts_directories_before_files_deterministically(void);

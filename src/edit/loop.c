@@ -481,7 +481,9 @@ int yew_loop_run(Ed *ed)
         yew_job_settle(ed);
         /* TTL polling is an event-loop responsibility.  Rendering only
          * consumes the last published snapshot and therefore cannot fork. */
+#if YEW_WITH_FUSS
         (void)yew_git_refresh(ed, false);
+#endif
         yew_fuss_tick(ed, now);
         yew_ai_pump(ed, fds, nfds);
         yew_lsp_pump(ed);

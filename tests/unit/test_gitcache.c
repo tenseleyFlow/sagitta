@@ -3,6 +3,7 @@
 #include "harness.h"
 
 #include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/job.h"
 #include "mod/git/git.h"
 #include "mod/git/git_int.h"
 
@@ -354,6 +356,77 @@ void test_gitcache_rebase_progress_and_conflict_count_publish(void)
     YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
     free(rebase);
     free(tmp);
+}
+
+typedef struct GitCallbackCapture {
+    bool completed;
+    bool destroyed;
+    char out[64];
+} GitCallbackCapture;
+
+static void gitcache_callback_complete(void *owner, Ed *ed,
+                                       const YewJob *job)
+{
+    GitCallbackCapture *capture = owner;
+    size_t len = job->collect.len;
+
+    (void)ed;
+    if (len >= sizeof(capture->out))
+        len = sizeof(capture->out) - 1U;
+    if (len != 0U)
+        (void)memcpy(capture->out, job->collect.data, len);
+    capture->out[len] = '\0';
+    capture->completed = true;
+}
+
+static void gitcache_callback_destroy(void *owner)
+{
+    GitCallbackCapture *capture = owner;
+
+    capture->destroyed = true;
+}
+
+static const YewJobCallbackOps gitcache_callback_ops = {
+    gitcache_callback_complete,
+    gitcache_callback_destroy
+};
+
+void test_gitcache_callback_input_copies_and_owns_stdin(void)
+{
+    Ed ed;
+    GitCallbackCapture capture = {0};
+    char input[] = "owned copy\n";
+    char *argv[] = {(char *)"stripspace", NULL};
+    char err[128];
+    u32 id;
+    i64 started;
+
+    yew_ed_init(&ed);
+    yew_git_test_spawn_set(NULL, NULL);
+    id = yew_git_spawn_callback_input(&ed, yew_git_verb("version"), argv,
+                                      (const u8 *)input,
+                                      (u64)(sizeof(input) - 1U), &capture,
+                                      &gitcache_callback_ops,
+                                      err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    (void)memset(input, 'x', sizeof(input) - 1U);
+    started = yew_now_ms();
+    while (!capture.completed && yew_now_ms() - started < 5000) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(&ed, pfd, &n);
+        if (n != 0U)
+            (void)poll(pfd, (nfds_t)n, 20);
+        yew_job_pump(&ed, pfd, n);
+        yew_job_reap(&ed);
+        yew_job_settle(&ed);
+    }
+    YEW_ASSERT(capture.completed);
+    YEW_ASSERT(capture.destroyed);
+    YEW_ASSERT_EQ_STR(capture.out, "owned copy\n");
+    YEW_ASSERT_NULL(yew_job_find(&ed, id));
+    yew_ed_free(&ed);
 }
 
 void test_gitcache_verb_table_and_argv_are_structural(void)

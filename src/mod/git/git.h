@@ -276,6 +276,13 @@ u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
                            char *const *argv, void *owner,
                            const YewJobCallbackOps *ops,
                            char *err, size_t errsz);
+/* As above, with an owned copy of stdin kept alive until job teardown. */
+u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
+                                 char *const *argv,
+                                 const u8 *stdin_bytes, u64 stdin_len,
+                                 void *owner,
+                                 const YewJobCallbackOps *ops,
+                                 char *err, size_t errsz);
 
 const char *yew_git_state_str(GitStatusCode code);
 
