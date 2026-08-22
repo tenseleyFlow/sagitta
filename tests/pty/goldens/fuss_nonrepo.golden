@@ -1,8 +1,9 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=0,0 vis=0
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
-yew:loading                                                                     
+yew:not a repository                                                            
+not a Git repository — use :git.init                                            
                                                                                 
                                                                                 
                                                                                 
@@ -23,12 +24,11 @@ yew:loading
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-loading…                                                                        
+not a repository                                                                
 ←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave                   
 --- style
-AAAABBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAABBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
@@ -111,3 +111,4 @@ D fg=#faebf8 bg=#b13d9b attrs=----------
 \x1b[22;2m
 \x1b[22m
 \x1b[38;2;250;235;248;48;2;177;61;155m
+\x1b[0;2;38;2;200;204;212;48;2;18;20;26m
