@@ -31,6 +31,17 @@ typedef struct FussNode {
     bool untracked_loaded; /* one-level walk result has been cached */
 } FussNode;
 
+typedef enum FussMarkerKind {
+    YEW_FUSS_MARK_STAGED,
+    YEW_FUSS_MARK_UNSTAGED,
+    YEW_FUSS_MARK_UNTRACKED,
+    YEW_FUSS_MARK_INCOMING,
+    YEW_FUSS_MARK_CONFLICT
+} FussMarkerKind;
+
+/* Return the locked marker order.  Conflict replaces all ordinary markers. */
+u8 yew_fuss_marker_kinds(const FussNode *node, FussMarkerKind out[4]);
+
 typedef struct FussItem {
     char *path;
     u32 path_len;

@@ -33,6 +33,35 @@ static void ft_drop(FussTree *t)
     yew_fuss_tree_drop(t);
 }
 
+void test_fuss_marker_order_and_conflict_override(void)
+{
+    FussNode node;
+    FussMarkerKind got[4];
+    u8 mask;
+    u8 expected;
+    u8 i;
+
+    (void)memset(&node, 0, sizeof(node));
+    for (mask = 1U; mask < 16U; mask++) {
+        node.staged = (mask & 1U) != 0U;
+        node.unstaged = (mask & 2U) != 0U;
+        node.untracked = (mask & 4U) != 0U;
+        node.incoming = (mask & 8U) != 0U;
+        node.conflicted = false;
+        expected = 0U;
+        if (node.staged) expected++;
+        if (node.unstaged) expected++;
+        if (node.untracked) expected++;
+        if (node.incoming) expected++;
+        YEW_ASSERT_EQ_U64(yew_fuss_marker_kinds(&node, got), expected);
+        for (i = 0U; i < expected; i++)
+            YEW_ASSERT_EQ_U64(got[i], i);
+    }
+    node.conflicted = true;
+    YEW_ASSERT_EQ_U64(yew_fuss_marker_kinds(&node, got), 1U);
+    YEW_ASSERT_EQ_U64(got[0], YEW_FUSS_MARK_CONFLICT);
+}
+
 static const FussItem *ft_item(const FussTree *t, const char *path)
 {
     size_t i;

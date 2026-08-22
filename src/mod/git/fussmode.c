@@ -956,6 +956,9 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
     u16 depth;
     const char *branch;
     size_t branch_len;
+    FussMarkerKind markers[4];
+    u8 marker_count;
+    u8 marker_i;
 
     if (node == NULL)
         return;
@@ -996,31 +999,46 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
                  node->ignored ? ignored.fg : normal.fg, normal.bg,
                  (u16)((node->ignored ? ignored.attrs : normal.attrs) |
                        selected_attrs));
-    if (node->conflicted) {
-        fuss_marker(ed, row, &col, right, "!", 1U, conflict,
-                    (u16)(selected_attrs | YEW_ATTR_BOLD));
-    } else {
-        if (node->staged)
-            fuss_marker(ed, row, &col, right,
-                        f->ascii_glyphs ? "^" : "↑",
-                        f->ascii_glyphs ? 1U : sizeof("↑") - 1U,
-                        staged, selected_attrs);
-        if (node->unstaged)
-            fuss_marker(ed, row, &col, right,
-                        f->ascii_glyphs ? "x" : "✗",
-                        f->ascii_glyphs ? 1U : sizeof("✗") - 1U,
-                        modified, selected_attrs);
-        if (node->untracked)
-            fuss_marker(ed, row, &col, right,
-                        f->ascii_glyphs ? "x" : "✗",
-                        f->ascii_glyphs ? 1U : sizeof("✗") - 1U,
-                        untracked, selected_attrs);
+    marker_count = yew_fuss_marker_kinds(node, markers);
+    for (marker_i = 0U; marker_i < marker_count; marker_i++) {
+        const char *glyph;
+        size_t glyph_len;
+        ThemeEnt marker_style;
+        u16 attrs = selected_attrs;
+
+        switch (markers[marker_i]) {
+        case YEW_FUSS_MARK_STAGED:
+            glyph = f->ascii_glyphs ? "^" : "↑";
+            glyph_len = f->ascii_glyphs ? 1U : sizeof("↑") - 1U;
+            marker_style = staged;
+            break;
+        case YEW_FUSS_MARK_UNSTAGED:
+            glyph = f->ascii_glyphs ? "x" : "✗";
+            glyph_len = f->ascii_glyphs ? 1U : sizeof("✗") - 1U;
+            marker_style = modified;
+            break;
+        case YEW_FUSS_MARK_UNTRACKED:
+            glyph = f->ascii_glyphs ? "x" : "✗";
+            glyph_len = f->ascii_glyphs ? 1U : sizeof("✗") - 1U;
+            marker_style = untracked;
+            break;
+        case YEW_FUSS_MARK_INCOMING:
+            glyph = f->ascii_glyphs ? "v" : "↓";
+            glyph_len = f->ascii_glyphs ? 1U : sizeof("↓") - 1U;
+            marker_style = incoming;
+            break;
+        case YEW_FUSS_MARK_CONFLICT:
+            glyph = "!";
+            glyph_len = 1U;
+            marker_style = conflict;
+            attrs = (u16)(attrs | YEW_ATTR_BOLD);
+            break;
+        default:
+            continue;
+        }
+        fuss_marker(ed, row, &col, right, glyph, glyph_len, marker_style,
+                    attrs);
     }
-    if (node->incoming)
-        fuss_marker(ed, row, &col, right,
-                    f->ascii_glyphs ? "v" : "↓",
-                    f->ascii_glyphs ? 1U : sizeof("↓") - 1U,
-                    incoming, selected_attrs);
 }
 
 static void fuss_draw_viewer(Ed *ed)

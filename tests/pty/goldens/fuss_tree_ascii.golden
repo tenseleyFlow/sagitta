@@ -4,8 +4,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
 yew:trunk  ↑0 ↓0                                                                
 |-- v docs x                                                                    
-|   |-- æ¼¢å­<97>.txt x                                                         
-|   `-- ð<9F><91>¨â<80><8D>ð<9F><91>©â<80><8D>ð<9F><91>§â<80><8D>ð<9F><91>¦.txt 
+|   |-- 漢字.txt x                                                              
+|   `-- 👨‍👩‍👧‍👦.txt x                                                                
 |-- v src ^ x                                                                   
 |   |-- both.c ^ x                                                              
 |   |-- modified.c x                                                            
@@ -29,8 +29,8 @@ git discovery unavailable; using workspace walk
 --- style
 AAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 CCCCCCCCCCDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-BBBBBBBBBBBBBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBE
+BBBBBBBBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBBBBBBBBFFEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBBBBBBBBBBBBBFFEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBBBBBBBBBBBBBBBBBEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB

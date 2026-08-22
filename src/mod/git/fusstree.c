@@ -6,6 +6,27 @@
 
 #include "util/sort.h"
 
+u8 yew_fuss_marker_kinds(const FussNode *node, FussMarkerKind out[4])
+{
+    u8 n = 0U;
+
+    if (node == NULL || out == NULL)
+        return 0U;
+    if (node->conflicted) {
+        out[0] = YEW_FUSS_MARK_CONFLICT;
+        return 1U;
+    }
+    if (node->staged)
+        out[n++] = YEW_FUSS_MARK_STAGED;
+    if (node->unstaged)
+        out[n++] = YEW_FUSS_MARK_UNSTAGED;
+    if (node->untracked)
+        out[n++] = YEW_FUSS_MARK_UNTRACKED;
+    if (node->incoming)
+        out[n++] = YEW_FUSS_MARK_INCOMING;
+    return n;
+}
+
 static void node_reserve(FussNodeList *v, size_t need)
 {
     size_t cap;
