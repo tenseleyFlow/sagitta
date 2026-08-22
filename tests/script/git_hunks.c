@@ -498,6 +498,7 @@ static void check_stage_command_selection(const char *repo)
     const HunkList *hunks = NULL;
     ByteOff first;
     ByteOff last;
+    char *editor_path;
     Ed ed;
     u32 ticks = 0U;
 
@@ -515,12 +516,14 @@ static void check_stage_command_selection(const char *repo)
                                     base, sizeof(base) - 1U,
                                     "command-index", false, 0));
     do {
-        yew_git_editor_tick(&ed, 0);
+        yew_git_editor_tick(&ed, 5000);
         hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
         ticks++;
     } while ((hunks == NULL || hunks->h.len != 3U) && ticks < 20000U);
     CHECK(hunks != NULL && hunks->h.len == 3U);
 
+    editor_path = ed.buffer.path;
+    ed.buffer.path = NULL;
     edit = yew_ed_edit_ctx(&ed);
     yew_undo_begin(&edit, YEW_TXN_EXTERNAL);
     CHECK(yew_edit_insert(&edit, BYTEOFF(yew_textbuf_len(ed.buffer.tb)),
@@ -530,7 +533,15 @@ static void check_stage_command_selection(const char *repo)
                                  yew_textbuf_len(ed.buffer.tb)}));
     yew_undo_end(&edit);
     yew_ed_finish_edit(&ed, &edit);
+    ed.buffer.path = editor_path;
     CHECK(!yew_undo_at_save_point(ed.buffer.undo));
+    ticks = 0U;
+    do {
+        yew_git_editor_tick(&ed, 5000);
+        hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
+        ticks++;
+    } while ((hunks == NULL || hunks->h.len != 3U) && ticks < 20000U);
+    CHECK(hunks != NULL && hunks->h.len == 3U);
 
     first = yew_textbuf_line_start(ed.buffer.tb, LINENO(1U));
     last = yew_textbuf_line_start(ed.buffer.tb, LINENO(9U));

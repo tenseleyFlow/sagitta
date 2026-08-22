@@ -796,7 +796,7 @@ u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
     if (ed == NULL || ed->git == NULL || verb == NULL || argv == NULL ||
         argv[0] == NULL || owner == NULL || ops == NULL ||
         ops->complete == NULL || ops->destroy == NULL ||
-        verb->kind != YEW_GV_READ ||
+        (verb->kind != YEW_GV_READ && verb->kind != YEW_GV_MUTATE) ||
         (stdin_len != 0U && stdin_bytes == NULL) ||
         stdin_len > (u64)SIZE_MAX) {
         git_error(err, errsz, "invalid Git callback job");

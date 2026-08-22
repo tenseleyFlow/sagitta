@@ -529,6 +529,58 @@ void test_gitcache_callback_input_copies_and_owns_stdin(void)
     yew_ed_free(&ed);
 }
 
+void test_gitcache_callback_input_allows_mutate_rejects_network(void)
+{
+    Ed ed;
+    SpawnLog log = {0};
+    GitCallbackCapture capture = {0};
+    GitCallbackCapture rejected = {0};
+    static const u8 input[] = "mutation input\n";
+    char *apply[] = {(char *)"apply", (char *)"--check", (char *)"-", NULL};
+    char *version[] = {(char *)"--version", NULL};
+    char *tmp = gitcache_tmp_template("yew-git-callback-mutate");
+    char err[128];
+    u32 id;
+    i64 started;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    yew_ed_init(&ed);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    gitcache_ready(&ed, &log, tmp, 1000);
+    yew_git_test_spawn_set(NULL, NULL);
+    id = yew_git_spawn_callback_input(&ed, yew_git_verb("apply"), apply,
+                                      input, sizeof(input) - 1U, &capture,
+                                      &gitcache_callback_ops,
+                                      err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    started = yew_now_ms();
+    while (!capture.completed && yew_now_ms() - started < 5000) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(&ed, pfd, &n);
+        if (n != 0U)
+            (void)poll(pfd, (nfds_t)n, 20);
+        yew_job_pump(&ed, pfd, n);
+        yew_job_reap(&ed);
+        yew_job_settle(&ed);
+    }
+    YEW_ASSERT(capture.completed);
+    YEW_ASSERT(capture.destroyed);
+
+    id = yew_git_spawn_callback_input(&ed, yew_git_verb("remote-check"),
+                                      version, input, sizeof(input) - 1U,
+                                      &rejected, &gitcache_callback_ops,
+                                      err, sizeof(err));
+    YEW_ASSERT_EQ_U64(id, 0U);
+    YEW_ASSERT_EQ_STR(err, "invalid Git callback job");
+    YEW_ASSERT(!rejected.completed);
+    YEW_ASSERT(!rejected.destroyed);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
+}
+
 void test_gitcache_internal_job_completion_does_not_self_invalidate(void)
 {
     Ed ed;
@@ -853,6 +905,48 @@ void test_gitcache_editor_reuses_base_across_one_hundred_edits(void)
         YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 1U);
     }
     YEW_ASSERT_EQ_U64(ed.buffer.tb->gen, 100U);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+}
+
+void test_gitcache_editor_requests_index_for_incoming_only_clean_path(void)
+{
+    static const u8 initial[] = "local two\n";
+    SpawnLog log = {0};
+    GitSnapshot *snap;
+    GitEntry incoming = {0};
+    const u8 *tx;
+    Ed ed;
+    char root[1024];
+    char path[1200];
+    int n;
+
+    YEW_ASSERT_NOT_NULL(getcwd(root, sizeof(root)));
+    n = snprintf(path, sizeof(path), "%s/main.c", root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(path));
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, initial, sizeof(initial) - 1U,
+                                  "main.c"));
+    ed.buffer.path = arena_strdup(&ed.arena, path);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    gitcache_ready(&ed, &log, root, 1000);
+    snap = yew_git_test_snapshot_mut(&ed);
+    YEW_ASSERT_NOT_NULL(snap);
+    incoming.kind = GIT_E_ORDINARY;
+    incoming.x = '.';
+    incoming.y = '.';
+    incoming.path = (char *)"main.c";
+    incoming.path_len = 6U;
+    incoming.incoming = true;
+    snap->entries.data = &incoming;
+    snap->entries.len = 1U;
+    YEW_ASSERT(yew_git_test_blob_batch_open(&ed));
+
+    ed.now_ms = 1000;
+    yew_git_editor_prepare(&ed, ed.win);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 1U);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_batch_tx(&ed, &tx), 8U);
+    YEW_ASSERT_EQ_MEM(tx, ":main.c\n", 8U);
     yew_git_test_spawn_set(NULL, NULL);
     yew_ed_free(&ed);
 }

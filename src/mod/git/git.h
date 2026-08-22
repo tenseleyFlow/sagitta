@@ -305,8 +305,9 @@ const GitVerb *yew_git_verb_at(size_t index);
 size_t yew_git_verb_count(void);
 u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
                   const GitReq *req, char *err, size_t errsz);
-/* Read-only module jobs that need their own completion owner, such as a
- * picker preview.  They inherit Git's locked environment and argv policy
+/* Module jobs that need their own completion owner, such as a picker preview
+ * or an allowlisted mutation with command-owned completion.  Network verbs
+ * remain forbidden.  These inherit Git's locked environment and argv policy
  * without publishing through the single generic GitResult slot. */
 u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
                            char *const *argv, void *owner,

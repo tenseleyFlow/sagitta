@@ -208,6 +208,7 @@ void test_git_editor_discard_all_selections_is_one_undo_step(void)
     CmdId undo;
     const CmdDesc *desc;
     Cursor cursor;
+    char *fixture_path;
     const HunkList *hunks;
     Ed ed;
 
@@ -233,6 +234,10 @@ void test_git_editor_discard_all_selections_is_one_undo_step(void)
     YEW_ASSERT_NOT_NULL(desc);
     YEW_ASSERT((desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U);
     YEW_ASSERT((desc->flags & YEW_CMD_MULTI_AGGREGATE) != 0U);
+    /* This is an in-memory fixture: keep command durability semantics while
+     * avoiding a synthetic file identity with no crash-journal path. */
+    fixture_path = ed.buffer.path;
+    ed.buffer.path = NULL;
     cx.win = ed.win;
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
@@ -247,5 +252,6 @@ void test_git_editor_discard_all_selections_is_one_undo_step(void)
     YEW_ASSERT_EQ_U64(yew_ed_invoke(&ed, undo, &cx), YEW_CMD_OK);
     git_editor_assert_text(ed.buffer.tb, live, sizeof(live) - 1U);
     YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo), ed.buffer.undo->root);
+    ed.buffer.path = fixture_path;
     yew_ed_free(&ed);
 }
