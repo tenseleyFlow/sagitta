@@ -90,6 +90,36 @@ static void assert_same_hunks(const GitHunkVec *left,
     }
 }
 
+static void assert_hunks_align_equal_regions(const u64 *left, u32 left_n,
+                                             const u64 *right, u32 right_n,
+                                             const GitHunkVec *hunks)
+{
+    u32 left_at = 0U;
+    u32 right_at = 0U;
+    size_t h;
+
+    for (h = 0U; h < hunks->len; h++) {
+        const GitHunk *cur = &hunks->data[h];
+        u32 gap;
+        u32 i;
+
+        YEW_ASSERT(cur->base_lo.v >= left_at);
+        YEW_ASSERT(cur->buf_lo.v >= right_at);
+        gap = (u32)cur->base_lo.v - left_at;
+        YEW_ASSERT_EQ_U64(gap, cur->buf_lo.v - right_at);
+        for (i = 0U; i < gap; i++)
+            YEW_ASSERT_EQ_U64(left[left_at + i], right[right_at + i]);
+        left_at = (u32)(cur->base_lo.v + cur->base_n.v);
+        right_at = (u32)(cur->buf_lo.v + cur->buf_n.v);
+    }
+    YEW_ASSERT_EQ_U64(left_n - left_at, right_n - right_at);
+    while (left_at < left_n) {
+        YEW_ASSERT_EQ_U64(left[left_at], right[right_at]);
+        left_at++;
+        right_at++;
+    }
+}
+
 void test_git_line_hash_and_split(void)
 {
     Arena arena;
@@ -186,6 +216,8 @@ void test_git_diff_matches_random_minimal_oracle(void)
         YEW_ASSERT(yew_diff_lines(&arena, left, left_n, right, right_n,
                                   80U, &hunks));
         YEW_ASSERT_EQ_U64(hunk_distance(&hunks), expected);
+        assert_hunks_align_equal_regions(left, left_n, right, right_n,
+                                         &hunks);
         for (i = 1U; i < hunks.len; i++) {
             YEW_ASSERT(hunks.data[i - 1U].buf_lo.v <=
                        hunks.data[i].buf_lo.v);
@@ -213,6 +245,14 @@ void test_git_diff_budget_and_raw_terminators(void)
         right[i] = 100U + i;
     }
     arena_init(&arena);
+    YEW_ASSERT(yew_diff_lines(&arena, left, 4U, right, 4U, 8U, &hunks));
+    YEW_ASSERT_EQ_U64(hunk_distance(&hunks), 8U);
+    YEW_ASSERT(!yew_diff_lines(&arena, left, 4U, right, 4U, 7U, &hunks));
+    YEW_ASSERT_EQ_U64(hunks.len, 0U);
+    YEW_ASSERT(yew_diff_lines(&arena, left, 4U, right, 5U, 9U, &hunks));
+    YEW_ASSERT_EQ_U64(hunk_distance(&hunks), 9U);
+    YEW_ASSERT(!yew_diff_lines(&arena, left, 4U, right, 5U, 8U, &hunks));
+    YEW_ASSERT_EQ_U64(hunks.len, 0U);
     YEW_ASSERT(!yew_diff_lines(&arena, left, 12U, right, 12U, 8U,
                                &hunks));
     YEW_ASSERT_EQ_U64(hunks.len, 0U);
@@ -344,15 +384,31 @@ void test_git_diff_raw_budget_and_size_outcomes(void)
     GitHunkVec hunks = {0};
     Bytebuf left;
     Bytebuf right;
+    YewDiffWork *work;
+    DiffFakeClock clock = {0};
+    size_t left_at_4096 = 0U;
+    size_t right_at_4096 = 0U;
     u32 i;
 
     arena_init(&arena);
     bytebuf_init(&left);
     bytebuf_init(&right);
     for (i = 0U; i < YEW_DIFF_MAX_D / 2U + 1U; i++) {
+        if (i == YEW_DIFF_MAX_D / 2U) {
+            left_at_4096 = left.len;
+            right_at_4096 = right.len;
+        }
         bytebuf_printf(&left, "left-%u\n", i);
         bytebuf_printf(&right, "right-%u\n", i);
     }
+    YEW_ASSERT(yew_diff_bytes(&arena, left.data, left_at_4096,
+                              right.data, right_at_4096,
+                              YEW_DIFF_MAX_D, &hunks) == YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunk_distance(&hunks), YEW_DIFF_MAX_D);
+    YEW_ASSERT(yew_diff_bytes(&arena, left.data, left_at_4096,
+                              right.data, right.len,
+                              YEW_DIFF_MAX_D, &hunks) ==
+               YEW_DIFF_TRUNCATED);
     YEW_ASSERT(yew_diff_bytes(&arena, left.data, left.len,
                               right.data, right.len,
                               YEW_DIFF_MAX_D, &hunks) ==
@@ -365,6 +421,17 @@ void test_git_diff_raw_budget_and_size_outcomes(void)
     YEW_ASSERT_EQ_U64(hunks.data[0].buf_n.v,
                       YEW_DIFF_MAX_D / 2U + 1U);
     YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_MOD);
+
+    work = yew_diff_work_begin_bytes(left.data, left.len, right.data,
+                                     right.len, YEW_DIFF_MAX_D);
+    YEW_ASSERT_NOT_NULL(work);
+    while (yew_diff_work_step(work, YEW_DIFF_BUDGET_US,
+                              diff_fake_now, &clock) == YEW_DIFF_MORE)
+        ;
+    /* At D=4096 the former full-frontier trace retained about 128 MiB.
+     * Line metadata plus two active frontiers remains below 1 MiB. */
+    YEW_ASSERT(yew_diff_work_peak_bytes(work) < 1024U * 1024U);
+    yew_diff_work_free(work);
 
     YEW_ASSERT(yew_diff_within_size_limits(YEW_DIFF_MAX_BYTES,
                                             YEW_DIFF_MAX_LINES,
@@ -391,23 +458,32 @@ void test_git_diff_incremental_matches_sync_and_publishes_atomically(void)
     GitHunkVec incremental = {0};
     GitHunkVec sentinel = {0};
     YewDiffWork *work;
+    Bytebuf left;
+    Bytebuf right;
     DiffFakeClock clock = {0};
     YewDiffProgress progress;
     u32 slices = 0U;
-    static const u8 left[] =
-        "same\nalpha\r\nlong collision-safe payload\ntail\n";
-    static const u8 right[] =
-        "same\nbeta\nlong collision-safe payload\nadded\ntail\n";
+    u32 i;
 
     arena_init(&arena);
+    bytebuf_init(&left);
+    bytebuf_init(&right);
+    for (i = 0U; i < 512U; i++) {
+        bytebuf_printf(&left, "shared-%04u\n", i);
+        bytebuf_printf(&right, "shared-%04u\n", i);
+    }
+    bytebuf_append(&left, "alpha\r\nlong collision-safe payload\ntail\n",
+                   sizeof("alpha\r\nlong collision-safe payload\ntail\n") - 1U);
+    bytebuf_append(&right, "beta\nlong collision-safe payload\nadded\ntail\n",
+                   sizeof("beta\nlong collision-safe payload\nadded\ntail\n") - 1U);
     YEW_ASSERT(yew_diff_bytes_with_hash(
-        &arena, left, sizeof(left) - 1U, right, sizeof(right) - 1U,
+        &arena, left.data, left.len, right.data, right.len,
         16U, colliding_hash, &sync) == YEW_DIFF_OK);
     GitHunkVec_push(&sentinel, ((GitHunk){LINENO(91U), LINENO(92U),
                                          LINENO(93U), LINENO(94U),
                                          YEW_HUNK_DEL}));
     work = yew_diff_work_begin_bytes_with_hash(
-        left, sizeof(left) - 1U, right, sizeof(right) - 1U, 16U,
+        left.data, left.len, right.data, right.len, 16U,
         colliding_hash);
     YEW_ASSERT_NOT_NULL(work);
     YEW_ASSERT(yew_diff_work_take(work, &sentinel) == YEW_DIFF_INVALID);
@@ -429,6 +505,8 @@ void test_git_diff_incremental_matches_sync_and_publishes_atomically(void)
     GitHunkVec_free(&sentinel);
     GitHunkVec_free(&incremental);
     GitHunkVec_free(&sync);
+    bytebuf_free(&right);
+    bytebuf_free(&left);
     arena_free_all(&arena);
 }
 

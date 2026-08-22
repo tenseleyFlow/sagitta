@@ -81,6 +81,10 @@ YewDiffWork *yew_diff_work_begin_bytes(const u8 *left, size_t left_len,
 YewDiffProgress yew_diff_work_step(YewDiffWork *work, u32 budget_us,
                                    YewDiffNowUsFn now_us, void *clock_ctx);
 YewDiffOutcome yew_diff_work_take(YewDiffWork *work, GitHunkVec *out);
+/* Peak live storage owned by the work item, including line metadata,
+ * refinement frontiers, the explicit range stack, and reconstructed output.
+ * Exposed so the linear-space contract can be regression-tested. */
+size_t yew_diff_work_peak_bytes(const YewDiffWork *work);
 void yew_diff_work_free(YewDiffWork *work);
 bool yew_git_hunk_sign_placement(const GitHunk *h, u64 buffer_line_count,
                                  bool terminal_line_is_synthetic,
