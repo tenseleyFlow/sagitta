@@ -75,6 +75,8 @@ struct GitCtx {
     bool log_requested;
     bool incoming_dirty;
     bool forced;
+    bool refresh_failed;
+    i64 refresh_failed_ms;
     i64 test_now_ms;
     bool test_now;
     GitBlobBatch *blob_batch;
@@ -93,6 +95,7 @@ static void *test_spawn_opaque;
 static bool git_spawn_log(Ed *ed);
 static void git_incoming_clear(GitCtx *ctx);
 static void git_publish_refresh(Ed *ed);
+static void git_refresh_failed(Ed *ed);
 
 void yew_git_snapshot_init(GitSnapshot *snap)
 {
@@ -1808,6 +1811,7 @@ static void git_publish_refresh(Ed *ed)
     next->gen = ctx->snap[ctx->live].gen + 1U;
     next->taken_ms = git_now(ed);
     ctx->live ^= 1U;
+    ctx->refresh_failed = false;
     /* The statusline and editor gutter are cache consumers: publishing a
      * snapshot must wake both without making either render path poll or
      * spawn.  In particular, the first paint happens before asynchronous
@@ -1873,6 +1877,13 @@ bool yew_git_refresh(Ed *ed, bool force)
             ctx->refresh_again = true;
         return false;
     }
+    /* Keep a failed asynchronous refresh from becoming a tight poll-loop.
+     * The published ping-pong snapshot stays untouched, but an ordinary
+     * TTL poll waits one full cache interval before trying again.  Explicit
+     * invalidations still bypass the backoff. */
+    if (!force && ctx->refresh_failed &&
+        yew_git_cache_fresh(ctx->refresh_failed_ms, git_now(ed)))
+        return false;
     live = &ctx->snap[ctx->live];
     if (!ctx->forced && live->gen != 0U &&
         yew_git_cache_fresh(live->taken_ms, git_now(ed)))
@@ -1882,7 +1893,7 @@ bool yew_git_refresh(Ed *ed, bool force)
     ctx->refresh_inflight = true;
     ctx->forced = false;
     if (!git_spawn_status(ed)) {
-        ctx->refresh_inflight = false;
+        git_refresh_failed(ed);
         return false;
     }
     return true;
@@ -2041,6 +2052,8 @@ static void git_refresh_failed(Ed *ed)
 
     ctx->refresh_inflight = false;
     ctx->refresh_again = false;
+    ctx->refresh_failed = true;
+    ctx->refresh_failed_ms = git_now(ed);
     if (again)
         (void)yew_git_refresh(ed, true);
 }

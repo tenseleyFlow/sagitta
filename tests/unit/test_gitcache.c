@@ -1124,6 +1124,13 @@ void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void)
     snap = yew_git_snapshot(&ed);
     YEW_ASSERT_EQ_U64(snap->gen, 2U);
     YEW_ASSERT_EQ_STR(snap->branch, "trunk");
+    YEW_ASSERT_EQ_U64(log.status_calls, baseline + 2U);
+    yew_git_test_now_set(&ed, 1999);
+    (void)yew_git_snapshot(&ed);
+    YEW_ASSERT_EQ_U64(log.status_calls, baseline + 2U);
+    yew_git_test_now_set(&ed, 2000);
+    (void)yew_git_snapshot(&ed);
+    YEW_ASSERT_EQ_U64(log.status_calls, baseline + 3U);
     gitcache_done(&ed);
     YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
     free(tmp);
