@@ -25,6 +25,7 @@
 #include "mod/ai/ai.h"
 #include "mod/git/fussmode.h"
 #include "mod/git/git.h"
+#include "mod/git/editor.h"
 #include "mod/lsp/lsp.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
@@ -1080,25 +1081,31 @@ static const CmdDesc builtins[] = {
     {"ed.git.open", yew_fuss_cmd_open, YEW_ARITY_OPT_STR,
      YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE,
      "Open the selected path and leave F mode", "git_open"},
-    DEFER("ed.git.hunk.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 53,
-          "jump to the next changed hunk"),
-    DEFER("ed.git.hunk.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 53,
-          "jump to the previous changed hunk"),
-    DEFER("ed.git.hunk.first", YEW_ARITY_NONE, 0U, 53,
-          "jump to the first changed hunk"),
-    DEFER("ed.git.hunk.last", YEW_ARITY_NONE, 0U, 53,
-          "jump to the last changed hunk"),
-    DEFER("ed.git.hunk.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
-          "stage the current hunk"),
-    DEFER("ed.git.hunk.unstage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
-          "unstage the current hunk"),
-    DEFER("ed.git.hunk.discard", YEW_ARITY_NONE,
-          YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS, 53,
-          "discard the current hunk"),
-    DEFER("ed.git.blame.toggle", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
-          "toggle inline blame"),
-    DEFER("ed.git.diff.view", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 53,
-          "open the editor diff view"),
+    {"ed.git.hunk.next", yew_git_cmd_hunk_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN, "Jump to next changed hunk", NULL},
+    {"ed.git.hunk.prev", yew_git_cmd_hunk_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN, "Jump to previous changed hunk", NULL},
+    {"ed.git.hunk.first", yew_git_cmd_hunk_first, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Jump to first changed hunk", NULL},
+    {"ed.git.hunk.last", yew_git_cmd_hunk_last, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Jump to last changed hunk", NULL},
+    {"ed.git.hunk.stage", yew_git_cmd_hunk_stage, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Stage current hunk", NULL},
+    {"ed.git.hunk.unstage", yew_git_cmd_hunk_unstage, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Explain hunk unstage scope", NULL},
+    {"ed.git.hunk.discard", yew_git_cmd_hunk_discard, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Discard current hunk into undo history", NULL},
+    {"ed.git.blame.toggle", yew_git_cmd_blame_toggle, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Toggle inline blame", NULL},
+    {"ed.git.diff.view", yew_git_cmd_diff_view, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE, "Open editor diff view",
+     "git_diff_view"},
+    {"ed.git.conflict.next", yew_git_cmd_conflict_scope, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Explain conflict resolution scope", NULL},
+    {"ed.git.conflict.ours", yew_git_cmd_conflict_scope, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Explain conflict resolution scope", NULL},
+    {"ed.git.conflict.theirs", yew_git_cmd_conflict_scope, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Explain conflict resolution scope", NULL},
     {"ed.ai.open", yew_ai_cmd_open, YEW_ARITY_NONE, 0U,
      "Explain the ghost-only AI surface", NULL},
     DEFER("ed.plug.reload", YEW_ARITY_OPT_STR, 0U, 54,
@@ -1267,7 +1274,7 @@ static bool command_name_valid(const char *name)
         "first", "force", "hidden", "history", "init", "interactive",
         "last", "merge", "parent", "pop", "pull", "push", "reflog",
         "refresh", "reset", "revert", "row_next", "row_prev", "switch",
-        "tag", "unstage", "view"};
+        "tag", "unstage", "view", "ours", "theirs"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

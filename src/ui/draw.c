@@ -15,6 +15,7 @@
 #include "edit/select.h"
 #include "edit/theme_cmds.h"
 #include "mod/git/fussmode.h"
+#include "mod/git/editor.h"
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
@@ -439,6 +440,40 @@ static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
 }
 
+static void draw_git_diff_intra_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+{
+    size_t i;
+    Cell style = ed->grid.blank;
+    const char *role = w->git_diff_intra_add ? "git.diff.intra.add" :
+                                               "git.diff.intra.del";
+    u8 fields = themed_overlay(&style, yew_theme_ui_tab(ed, role));
+
+    if (fields == 0U) {
+        style.attrs = YEW_ATTR_UNDERLINE;
+        fields = YEW_OVERLAY_ATTRS;
+    }
+    for (i = 0U; i < w->git_diff_intra.len; i++) {
+        Span match = w->git_diff_intra.data[i];
+        u16 screen_row;
+
+        for (screen_row = lo;
+             screen_row < hi && screen_row < w->rect.h; screen_row++) {
+            LineNo line;
+            u32 sub;
+            Span displayed;
+
+            if (!yew_vp_line_of_row(w, screen_row, &line, &sub))
+                continue;
+            displayed = w->vp.wrap ? yew_wrap_row(w, line, sub) :
+                                     line_content_span(w->buf->tb, line);
+            if (match.hi <= displayed.lo || match.lo >= displayed.hi)
+                continue;
+            overlay_span(&ed->grid, w, (u16)(w->rect.y + screen_row),
+                         displayed, match, &style, fields);
+        }
+    }
+}
+
 #if YEW_WITH_LSP
 static void draw_lsp_highlight_overlay(Ed *ed, Win *w,
                                        const MatchOverlay *overlay,
@@ -695,6 +730,7 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     u64 line_count = yew_textbuf_line_count(tb);
     u16 screen_row;
 
+    yew_git_editor_prepare(ed, w);
     if (hi > w->rect.h)
         hi = w->rect.h;
     if (lo > hi)
@@ -735,6 +771,8 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
         }
     }
     yew_gutter_draw(ed, w, lo, hi);
+    yew_git_blame_draw(ed, w, lo, hi);
+    draw_git_diff_intra_rows(ed, w, lo, hi);
     draw_selection_rows(ed, w, lo, hi);
     draw_search_rows(ed, w, lo, hi);
 #if YEW_WITH_LSP

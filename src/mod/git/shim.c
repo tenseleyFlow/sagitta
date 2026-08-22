@@ -1,4 +1,5 @@
 #include "mod/git/git.h"
+#include "mod/git/editor.h"
 #include "mod/git/fussmode.h"
 
 #include <stdlib.h>
@@ -16,6 +17,64 @@ struct GitCtx {
 struct FussMode {
     bool active;
 };
+
+static bool git_require(Ed *ed);
+
+void yew_git_editor_state_init(Ed *ed)
+{
+    if (ed != NULL)
+        ed->git_editor = NULL;
+}
+
+void yew_git_editor_state_free(Ed *ed)
+{
+    if (ed != NULL)
+        ed->git_editor = NULL;
+}
+
+void yew_git_editor_tick(Ed *ed, i64 now_ms)
+{
+    (void)ed; (void)now_ms;
+}
+
+i64 yew_git_editor_deadline(const Ed *ed, i64 now_ms)
+{
+    (void)ed; (void)now_ms;
+    return -1;
+}
+
+void yew_git_editor_prepare(Ed *ed, Win *w)
+{
+    (void)ed; (void)w;
+}
+
+static CmdStatus git_editor_require(CmdCtx *cx)
+{
+    (void)git_require(cx == NULL ? NULL : cx->ed);
+    return YEW_CMD_ERR_STATE;
+}
+
+CmdStatus yew_git_cmd_hunk_next(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_hunk_prev(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_hunk_first(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_hunk_last(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_hunk_unstage(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_hunk_discard(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_blame_toggle(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_diff_view(CmdCtx *cx) { return git_editor_require(cx); }
+CmdStatus yew_git_cmd_conflict_scope(CmdCtx *cx) { return git_editor_require(cx); }
+
+const BlameLine *yew_git_blame_at(Ed *ed, Win *w, LineNo line)
+{
+    (void)ed; (void)w; (void)line;
+    return NULL;
+}
+
+void yew_git_blame_draw(Ed *ed, Win *w, u16 lo, u16 hi)
+{
+    (void)ed; (void)w; (void)lo; (void)hi;
+}
 
 static bool git_require(Ed *ed)
 {

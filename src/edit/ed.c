@@ -30,6 +30,7 @@
 #include "mod/lsp/lsp.h"
 #include "mod/ai/ai.h"
 #include "mod/git/git.h"
+#include "mod/git/editor.h"
 #include "mod/git/fussmode.h"
 #include "syn/defs.h"
 #include "util/log.h"
@@ -220,6 +221,7 @@ static void ed_buffer_free(Ed *ed)
     yew_overlay_free(&ed->single_win.overlay);
     yew_overlay_free(&ed->single_win.lsp_highlight.read);
     yew_overlay_free(&ed->single_win.lsp_highlight.write);
+    SpanVec_free(&ed->single_win.git_diff_intra);
     yew_compl_free(&ed->single_win.compl);
     yew_panel_close(ed, &ed->single_win.panel);
     yew_shadow_dismiss(ed, &ed->single_win);
@@ -543,6 +545,9 @@ bool yew_ed_show_buffer(Ed *ed, Buffer *b)
     yew_cset_free(&ed->win->cs);
     yew_cset_init(&ed->win->cs, cursor);
     ed->win->buf = b;
+    ed->win->git_sign_gen = 0U;
+    ed->win->git_sign_buf = 0U;
+    SpanVec_free(&ed->win->git_diff_intra);
     yew_vp_init(ed->win);
     yew_reg_bind_context(&ed->regs, b->undo, &b->meta);
     ed->layout_dirty = true;
@@ -654,6 +659,7 @@ void yew_ed_init(Ed *ed)
     yew_jobs_init(&ed->jobs);
     yew_ai_state_init(ed);
     yew_git_state_init(ed);
+    yew_git_editor_state_init(ed);
     yew_fuss_state_init(ed);
     yew_mouse_init(&ed->mouse);
     yew_shadow_test_install();
@@ -717,11 +723,12 @@ void yew_ed_free(Ed *ed)
     yew_ai_state_free(ed);
     /* F mode borrows snapshots and scratch buffers; release it first. */
     yew_fuss_state_free(ed);
-    /* Git refreshes and verbs borrow generic job slots too. */
-    yew_git_state_free(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
     yew_jobs_free(ed);
+    yew_git_editor_state_free(ed);
+    /* Git refreshes and verbs borrow generic job slots too. */
+    yew_git_state_free(ed);
     /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
     yew_macrolib_free(ed, ed->macrolib);
@@ -1010,6 +1017,9 @@ void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
     yew_cset_free(&w->cs);
     yew_cset_init(&w->cs, origin);
     w->buf = b;
+    w->git_sign_gen = 0U;
+    w->git_sign_buf = 0U;
+    SpanVec_free(&w->git_diff_intra);
     yew_vp_init(w);
 }
 
@@ -1024,6 +1034,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
     yew_overlay_free(&w->overlay);
     yew_overlay_free(&w->lsp_highlight.read);
     yew_overlay_free(&w->lsp_highlight.write);
+    SpanVec_free(&w->git_diff_intra);
     if (w->compl.open)
         yew_compl_close_result(ed, w, false);
     yew_compl_free(&w->compl);

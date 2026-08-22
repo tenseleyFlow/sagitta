@@ -22,6 +22,7 @@
 #include "mod/ai/http.h"
 #include "mod/git/fussmode.h"
 #include "mod/git/git.h"
+#include "mod/git/editor.h"
 #include "mod/lsp/lsp.h"
 #include "term/input.h"
 #include "term/tty.h"
@@ -286,6 +287,7 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
     deadline = deadline_min(deadline, yew_job_deadline(ed, now_ms));
     deadline = deadline_min(deadline, yew_ai_deadline(ed, now_ms));
     deadline = deadline_min(deadline, yew_fuss_deadline(ed, now_ms));
+    deadline = deadline_min(deadline, yew_git_editor_deadline(ed, now_ms));
     /* Sprint 27 §4: the dwell and the drag auto-scroll are CLOCKS.  A
      * pointer resting on a group emits no further events, so without
      * this the loop would sleep through the 400 ms the dwell is
@@ -485,6 +487,7 @@ int yew_loop_run(Ed *ed)
         (void)yew_git_refresh(ed, false);
 #endif
         yew_fuss_tick(ed, now);
+        yew_git_editor_tick(ed, now);
         yew_ai_pump(ed, fds, nfds);
         yew_lsp_pump(ed);
         if (ed->jobs.dirty) {

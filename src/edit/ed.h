@@ -62,6 +62,7 @@ typedef struct LspClient LspClient;
 typedef struct LspRenameState LspRenameState;
 typedef struct AiState AiState;
 typedef struct GitCtx GitCtx;
+typedef struct GitEditorState GitEditorState;
 typedef struct FussMode FussMode;
 struct OptStored;
 
@@ -181,6 +182,7 @@ struct Ed {
     /* Sprint 51: repository detection, porcelain snapshots and Git jobs.
      * Both the enabled module and stripped shim preserve this lifecycle. */
     GitCtx *git;
+    GitEditorState *git_editor;
     /* Sprint 52: F mode owns its tree, path selection and transient UI. */
     FussMode *fuss;
     Msg msg;

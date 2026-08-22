@@ -96,14 +96,7 @@ void test_git_commands_cross_module_boundary(void)
             continue;
         seen++;
 #if YEW_WITH_FUSS
-        if (strncmp(desc->name, "ed.git.hunk.", 12U) == 0 ||
-            strcmp(desc->name, "ed.git.blame.toggle") == 0 ||
-            strcmp(desc->name, "ed.git.diff.view") == 0) {
-            YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
-            YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 53"));
-        } else {
-            YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
-        }
+        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
 #else
         {
             CmdId id = yew_cmd_lookup(desc->name, (u32)strlen(desc->name));

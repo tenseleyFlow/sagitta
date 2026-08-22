@@ -11,6 +11,35 @@
 #include "util/base.h"
 #include "util/log.h"
 
+/* A linked diff view uses row-aligned scratch buffers, so equal viewport
+ * line numbers are equal display rows.  The guard prevents A -> B -> A. */
+static bool git_scroll_syncing;
+
+static void git_scroll_sync(Win *source)
+{
+    Ed *ed;
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
+    u32 n = 0U;
+    u32 i;
+
+    if (source == NULL || source->scroll_link == 0U || git_scroll_syncing ||
+        source->buf == NULL || source->buf->owner == NULL)
+        return;
+    ed = source->buf->owner;
+    git_scroll_syncing = true;
+    yew_pane_collect_leaves(ed->pane_root, leaves, YEW_PANE_MAX_LEAVES, &n);
+    for (i = 0U; i < n; i++) {
+        Win *peer = leaves[i]->win;
+
+        if (peer != source && peer->scroll_link == source->scroll_link) {
+            peer->vp.top = source->vp.top;
+            peer->vp.top_sub = source->vp.top_sub;
+            yew_vp_clamp(peer);
+        }
+    }
+    git_scroll_syncing = false;
+}
+
 static TextBuf *vp_text(const Win *w)
 {
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL)
@@ -694,6 +723,7 @@ void yew_vp_scroll(Win *w, i32 rows)
     (void)vp_text(w);
     shift_top(w, rows);
     yew_vp_clamp(w);
+    git_scroll_sync(w);
 }
 
 static void cursor_to_row(Win *w, u16 target)

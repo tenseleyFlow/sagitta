@@ -90,6 +90,13 @@ typedef struct Win {
     /* Sprint 47: passive document highlights debounce and reject stale
      * responses independently of every command-driven LSP request. */
     LspHighlightState lsp_highlight;
+    /* Sprint 53 view-local Git presentation. */
+    u32 scroll_link;
+    u64 git_sign_gen;
+    u32 git_sign_buf;
+    SpanVec git_diff_intra;
+    bool git_diff_intra_add;
+    bool git_blame;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */
