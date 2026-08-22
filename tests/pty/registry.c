@@ -7696,13 +7696,18 @@ static void case_s53_blame(PtyCtx *c)
                   "inline blame annotation did not become visible");
     }
     if (strstr(c->test->name, "stale") != NULL) {
-        ptc_keys(c, "i X esc esc");
-        ptc_settle(c, 25);
+        ptc_keys(c, "i X");
+        s52_wait_screen(c, "Xshort blamed line");
+        ptc_keys(c, "esc esc");
+        ptc_settle(c, 5);
         ptc_check(c, s52_screen_contains(&c->vt, "▏ Yew PTY"),
                   "stale inline blame vanished while recomputing");
     }
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot_sgr(c, c->test->name);
+    if (strstr(c->test->name, "stale") != NULL)
+        ptc_snapshot(c, c->test->name);
+    else
+        ptc_snapshot_sgr(c, c->test->name);
     force_quit(c);
 }
 #endif
