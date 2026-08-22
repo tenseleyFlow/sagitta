@@ -268,6 +268,26 @@ static CmdStatus invoke_real(const char *repo, const char *name,
     return status;
 }
 
+static bool submit_prompt(Ed *ed, const char *text, bool replace)
+{
+    CmdCtx cx = {0};
+    size_t len = strlen(text);
+
+    if (ed == NULL || !ed->cmdline.active || ed->cmdline.buf == NULL)
+        return false;
+    if (replace)
+        yew_textbuf_delete(ed->cmdline.buf,
+                           (Span){0U, yew_textbuf_len(ed->cmdline.buf)});
+    if (len != 0U)
+        yew_textbuf_insert(ed->cmdline.buf, BYTEOFF(0U),
+                           (const u8 *)text, (u64)len);
+    cx.ed = ed;
+    cx.win = yew_cmdline_target(ed);
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    return yew_cmdline_cmd_accept(&cx) == YEW_CMD_OK;
+}
+
 static bool write_repo_file(const char *repo, const char *path,
                             const char *contents)
 {
@@ -591,13 +611,18 @@ static CmdStatus invoke_handler_real(const char *repo, FussHandler handler,
 
 static bool enter_fuss(const char *repo, Ed *ed)
 {
+    bool idle;
+
     yew_ed_init(ed);
     if (!yew_ed_open_scratch(ed))
         return false;
     ed->ws.dir = arena_strdup(&ed->arena, repo);
     if (yew_mode_enter(ed, YEW_MODE_F) != YEW_CMD_OK)
         return false;
-    return run_jobs_idle(ed);
+    idle = run_jobs_idle(ed);
+    if (idle)
+        yew_fuss_tick(ed, yew_now_ms());
+    return idle;
 }
 
 static bool buffer_bytes(const Buffer *buffer, Bytes *out)
@@ -1107,6 +1132,193 @@ static void test_empty_commit_message_does_not_spawn_git(const char *repo)
     yew_ed_free(&ed);
 }
 
+static void test_commit_and_amend_save_change_head(const char *parent)
+{
+    static const char commit_message[] = "quote\" $(id)\nbody line\n";
+    static const char amend_message[] = "amended safely\n";
+    char repo[4096];
+    char *add[] = {(char *)"add", (char *)"--", (char *)"committed.txt",
+                   NULL};
+    char *log[] = {(char *)"log", (char *)"-1", (char *)"--format=%B",
+                   NULL};
+    SpawnCapture capture = {0};
+    Bytes out = {0};
+    Buffer *commit;
+    bool handled = false;
+    Ed ed;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "commit-save", repo, sizeof(repo)));
+    CHECK(write_repo_file(repo, "committed.txt", "committed\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(enter_fuss(repo, &ed));
+    CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
+    commit = ed.win == NULL ? NULL : ed.win->buf;
+    CHECK(commit != NULL && commit->tb != NULL);
+    if (commit != NULL && commit->tb != NULL) {
+        yew_textbuf_delete(commit->tb,
+                           (Span){0U, yew_textbuf_len(commit->tb)});
+        yew_textbuf_insert(commit->tb, BYTEOFF(0U),
+                           (const u8 *)commit_message,
+                           sizeof(commit_message) - 1U);
+    }
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    CHECK(yew_fuss_commit_save(&ed, commit, &handled) == YEW_CMD_OK);
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(handled && capture.calls == 1U && capture.exit_code == 0);
+    CHECK(capture.stdin_len == sizeof(commit_message) - 2U);
+    CHECK(memcmp(capture.stdin_bytes, commit_message,
+                 sizeof(commit_message) - 2U) == 0);
+    CHECK(run_git(repo, log, &out, &code) && code == 0);
+    CHECK(bytes_contains(&out, (const u8 *)commit_message,
+                         sizeof(commit_message) - 1U));
+    bytes_drop(&out);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+
+    CHECK(open_amend_editor(repo, &ed));
+    commit = ed.win == NULL ? NULL : ed.win->buf;
+    CHECK(commit != NULL && commit->tb != NULL);
+    if (commit != NULL && commit->tb != NULL) {
+        yew_textbuf_delete(commit->tb,
+                           (Span){0U, yew_textbuf_len(commit->tb)});
+        yew_textbuf_insert(commit->tb, BYTEOFF(0U),
+                           (const u8 *)amend_message,
+                           sizeof(amend_message) - 1U);
+    }
+    (void)memset(&capture, 0, sizeof(capture));
+    handled = false;
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    CHECK(yew_fuss_commit_save(&ed, commit, &handled) == YEW_CMD_OK);
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(handled && capture.calls == 1U && capture.exit_code == 0);
+    CHECK(argv_index(&capture, "--amend") != SIZE_MAX);
+    CHECK(run_git(repo, log, &out, &code) && code == 0);
+    CHECK(bytes_contains(&out, (const u8 *)amend_message,
+                         sizeof(amend_message) - 1U));
+    bytes_drop(&out);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+}
+
+static void test_stash_pop_restores_worktree(const char *parent)
+{
+    char repo[4096];
+    char *list[] = {(char *)"stash", (char *)"list", NULL};
+    SpawnCapture capture = {0};
+    Bytes out = {0};
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "stash-pop", repo, sizeof(repo)));
+    CHECK(write_repo_file(repo, "base.txt", "stashed change\n"));
+    CHECK(invoke_real(repo, "ed.git.stash.push", "safe stash", 10U,
+                      &capture) == YEW_CMD_OK);
+    CHECK(capture.calls == 1U && capture.exit_code == 0);
+    capture_drop(&capture);
+    (void)memset(&capture, 0, sizeof(capture));
+    {
+        Ed ed;
+        const GitSnapshot *snap;
+        CmdCtx cx = {0};
+
+        CHECK(enter_fuss(repo, &ed));
+        snap = yew_git_snapshot(&ed);
+        CHECK(snap != NULL && snap->gen != 0U && !snap->unborn);
+        capture.repo = repo;
+        yew_git_test_spawn_set(capture_and_run, &capture);
+        cx.ed = &ed;
+        cx.win = ed.win;
+        cx.count = 1U;
+        cx.sarg = "stash@{0}";
+        cx.sarg_len = 9U;
+        cx.source = YEW_SRC_TEST;
+        CHECK(yew_fuss_cmd_stash_pop(&cx) == YEW_CMD_OK);
+        yew_git_test_spawn_set(NULL, NULL);
+        yew_ed_free(&ed);
+    }
+    CHECK(capture.calls == 1U && capture.exit_code == 0);
+    CHECK(argv_index(&capture, "stash@{0}") != SIZE_MAX);
+    CHECK(run_git(repo, list, &out, &code) && code == 0 && out.len == 0U);
+    bytes_drop(&out);
+    capture_drop(&capture);
+}
+
+static void test_confirmed_discard_delete_and_rename(const char *parent)
+{
+    char repo[4096];
+    char renamed[4096];
+    char deleted[4096];
+    char *quiet[] = {(char *)"diff", (char *)"--quiet", (char *)"--",
+                     (char *)"base.txt", NULL};
+    SpawnCapture capture = {0};
+    Ed ed;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "confirm-discard", repo, sizeof(repo)));
+    CHECK(write_repo_file(repo, "base.txt", "discard me\n"));
+    CHECK(enter_fuss(repo, &ed));
+    CHECK(invoke(&ed, "ed.git.discard", "base.txt", 8U) == YEW_CMD_OK);
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    CHECK(submit_prompt(&ed, "discard", false));
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(capture.calls == 1U && capture.exit_code == 0);
+    CHECK(run_git(repo, quiet, NULL, &code) && code == 0);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+
+    CHECK(child_repo_path(parent, "confirm-rename", repo, sizeof(repo)));
+    CHECK(enter_fuss(repo, &ed));
+    CHECK(invoke(&ed, "ed.git.file.rename", "base.txt", 8U) ==
+          YEW_CMD_OK);
+    (void)memset(&capture, 0, sizeof(capture));
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    CHECK(submit_prompt(&ed, "renamed.txt", true));
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(capture.calls == 1U && capture.exit_code == 0);
+    CHECK(snprintf(renamed, sizeof(renamed), "%s/renamed.txt", repo) > 0 &&
+          stat(renamed, &(struct stat){0}) == 0);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+
+    CHECK(child_repo_path(parent, "confirm-delete", repo, sizeof(repo)));
+    CHECK(enter_fuss(repo, &ed));
+    CHECK(invoke(&ed, "ed.git.file.delete", "base.txt", 8U) ==
+          YEW_CMD_OK);
+    (void)memset(&capture, 0, sizeof(capture));
+    capture.repo = repo;
+    yew_git_test_spawn_set(capture_and_run, &capture);
+    CHECK(submit_prompt(&ed, "delete", false));
+    yew_git_test_spawn_set(NULL, NULL);
+    CHECK(capture.calls == 1U && capture.exit_code == 0);
+    CHECK(snprintf(deleted, sizeof(deleted), "%s/base.txt", repo) > 0 &&
+          stat(deleted, &(struct stat){0}) != 0 && errno == ENOENT);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+}
+
+static void test_view_then_open_leaves_f_mode(const char *parent)
+{
+    char repo[4096];
+    Ed ed;
+
+    CHECK(child_repo_path(parent, "view-open", repo, sizeof(repo)));
+    CHECK(enter_fuss(repo, &ed));
+    CHECK(invoke(&ed, "ed.git.view", "base.txt", 8U) == YEW_CMD_OK);
+    CHECK(yew_fuss_active(&ed));
+    CHECK(ed.win != NULL && ed.win->buf != NULL);
+    CHECK(invoke(&ed, "ed.git.open", "base.txt", 8U) == YEW_CMD_OK);
+    CHECK(!yew_fuss_active(&ed));
+    CHECK(ed.mode == YEW_MODE_L);
+    CHECK(ed.win != NULL && ed.win->buf != NULL &&
+          ed.win->buf->path != NULL && strstr(ed.win->buf->path,
+                                              "base.txt") != NULL);
+    yew_ed_free(&ed);
+}
+
 int main(int argc, char **argv)
 {
     struct stat st;
@@ -1134,6 +1346,10 @@ int main(int argc, char **argv)
     test_commit_refuses_conflicted_snapshot(argv[1]);
     test_amend_prefills_previous_message(argv[1]);
     test_cleared_amend_message_does_not_spawn_git(argv[1]);
+    test_commit_and_amend_save_change_head(argv[1]);
+    test_stash_pop_restores_worktree(argv[1]);
+    test_confirmed_discard_delete_and_rename(argv[1]);
+    test_view_then_open_leaves_f_mode(argv[1]);
     test_read_views_use_expected_git_argv(argv[1]);
     test_branch_switch_delete_and_merge_change_repo(argv[1]);
     test_reset_cherry_pick_and_revert_use_exact_refs(argv[1]);
