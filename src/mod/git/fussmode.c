@@ -1409,7 +1409,7 @@ char *yew_fuss_selected_directory(CmdCtx *cx)
     const FussNode *node;
     i32 row;
 
-    if (fuss_require(cx, &f) != YEW_CMD_OK)
+    if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
         return NULL;
     row = fuss_row(f);
     item = fuss_item(f, row);
