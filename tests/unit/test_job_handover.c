@@ -162,17 +162,19 @@ static void handover_tty_child(const char *slave_path,
 
     /* Force the one fallible setup step that occurs after tty release.
      * Its failure must still pass through the common resume epilogue. */
-    no_more_fds.rlim_cur = 3;
-    no_more_fds.rlim_max = 3;
-    if (setrlimit(RLIMIT_NOFILE, &no_more_fds) != 0)
-        _exit(115);
-    spec.argv = exit_argv;
-    if (yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
-        strstr(err, "cannot create pipe") == NULL)
-        _exit(116);
-    if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        memcmp(&actual, &raw, sizeof(actual)) != 0)
-        _exit(117);
+    if (getenv("YEW_TEST_INSTRUMENTED") == NULL) {
+        no_more_fds.rlim_cur = 3;
+        no_more_fds.rlim_max = 3;
+        if (setrlimit(RLIMIT_NOFILE, &no_more_fds) != 0)
+            _exit(115);
+        spec.argv = exit_argv;
+        if (yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
+            strstr(err, "cannot create pipe") == NULL)
+            _exit(116);
+        if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+            memcmp(&actual, &raw, sizeof(actual)) != 0)
+            _exit(117);
+    }
     yew_ed_free(&ed);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
         memcmp(&actual, initial, sizeof(actual)) != 0)

@@ -185,6 +185,37 @@ void test_walk_lists_only_regular_files(void)
     wk_remove(&f);
 }
 
+void test_walk_can_include_one_level_directory_rows(void)
+{
+    WkFix f;
+    FileList fl;
+    WalkOpts opts = {0};
+
+    wk_make(&f);
+    wk_dir(&f, "sub");
+    wk_file(&f, "sub/nested.c");
+    wk_dir(&f, "empty");
+    wk_file(&f, "root.c");
+    opts.include_dirs = true;
+    opts.max_depth = 1U;
+    wk_walk(&f, &opts, &fl);
+
+    YEW_ASSERT_EQ_U64(fl.paths.len, 3U);
+    YEW_ASSERT_EQ_U64(fl.is_dir.len, fl.paths.len);
+    YEW_ASSERT_EQ_STR(fl.paths.data[0], "empty");
+    YEW_ASSERT_EQ_U64(fl.is_dir.data[0], 1U);
+    YEW_ASSERT_EQ_STR(fl.paths.data[1], "root.c");
+    YEW_ASSERT_EQ_U64(fl.is_dir.data[1], 0U);
+    YEW_ASSERT_EQ_STR(fl.paths.data[2], "sub");
+    YEW_ASSERT_EQ_U64(fl.is_dir.data[2], 1U);
+    YEW_ASSERT(!wk_has(&fl, "sub/nested.c"));
+    YEW_ASSERT_EQ_U64(fl.n_dirs, 2U);
+    YEW_ASSERT_EQ_U64(fl.n_files, 1U);
+
+    yew_filelist_free(&fl);
+    wk_remove(&f);
+}
+
 /* ---------------------------------------------------------------- */
 /* Determinism (DoD 4)                                              */
 /* ---------------------------------------------------------------- */

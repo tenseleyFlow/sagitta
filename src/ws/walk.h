@@ -37,6 +37,7 @@
 #include "util/vec.h"
 
 VEC_DECL(YewPathVec, char *);
+VEC_DECL(YewPathKindVec, u8);
 
 typedef struct WalkOpts {
     bool follow_symlinks; /* default false                    */
@@ -49,6 +50,9 @@ typedef struct WalkOpts {
      * 90 000 entries on a JavaScript checkout.
      */
     bool use_gitignore;
+    /* Include directory rows in FileList.paths.  The parallel `is_dir`
+     * vector identifies them.  Default false keeps file-finder behavior. */
+    bool include_dirs;
     u32 max_depth;        /* 0 = YEW_WALK_DEFAULT_DEPTH       */
     u64 max_entries;      /* 0 = YEW_WALK_DEFAULT_ENTRIES     */
 } WalkOpts;
@@ -66,6 +70,7 @@ enum {
 typedef struct FileList {
     Arena a;
     YewPathVec paths;
+    YewPathKindVec is_dir; /* parallel to paths: 1 = directory, 0 = file */
     u64 n_dirs;
     u64 n_files;
     u64 n_ignored;

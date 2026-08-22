@@ -289,6 +289,15 @@ void yew_shell_quote(Bytebuf *out, const u8 *s, size_t n);
 const char *yew_job_shell(void);
 
 /*
+ * Absolute path to this yew executable for nested-editor handovers.  Linux
+ * keeps /proc/self/exe valid across rename/unlink; other POSIX hosts fall
+ * back to argv[0], resolving a bare program name through PATH.  main must
+ * publish argv[0] before any command dispatch.
+ */
+void yew_job_set_argv0(const char *argv0);
+const char *yew_job_self_exe(void);
+
+/*
  * The job <-> shell seam.  job.c owns process mechanics and calls these
  * when bytes arrive and when a job ends; shell.c owns what that means for
  * buffers, undo and the message line.

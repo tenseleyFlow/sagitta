@@ -7,6 +7,7 @@
         bg: "#ffffff", fg: "#24292f", red: "#cf222e",
         blue: "#0550ae", brown: "#953800", green: "#116329",
         violet: "#8250df", magenta: "#bf3989", gold: "#9a6700",
+        grey: "#6a737d",
     },
     ui: {
         bg: "@bg", fg: "@fg",
@@ -21,7 +22,15 @@
         "mode.highlight": { bg: "@gold", fg: "@bg", mono: "bold" },
         "mode.insert": { bg: "@green", fg: "@bg", mono: "bold" },
         "mode.explore": { bg: "@brown", fg: "@bg", mono: "bold" },
+        "mode.git": { bg: "@magenta", fg: "@bg", mono: "bold" },
+        # Compatibility for configurations that still reference the old role.
         "mode.fuss": { bg: "@red", fg: "@bg", mono: "bold" },
+        "git.staged": { fg: "@green", mono: "bold" },
+        "git.modified": { fg: "@red", mono: "bold" },
+        "git.untracked": { fg: "@grey", mono: "dim" },
+        "git.incoming": { fg: "@blue", mono: "underline" },
+        "git.conflict": { fg: "@red", bold: true, mono: "bold" },
+        "git.ignored": { fg: "@grey", mono: "dim" },
         "search.match": { bg: "#fff8c5", mono: "bold" },
         "search.current": { bg: "#f2cc60", fg: "@fg", mono: "underline" },
         "shadow.index": { fg: "@blue", mono: "dim" },

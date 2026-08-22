@@ -9,6 +9,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -26,6 +27,99 @@
 #include "util/log.h"
 
 extern char **environ;
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+static char job_argv0[PATH_MAX];
+static char job_self_exe[PATH_MAX];
+
+static bool job_path_copy(char out[PATH_MAX], const char *s, size_t n)
+{
+    if (s == NULL || n == 0U || n >= (size_t)PATH_MAX)
+        return false;
+    (void)memcpy(out, s, n);
+    out[n] = '\0';
+    return true;
+}
+
+void yew_job_set_argv0(const char *argv0)
+{
+    size_t n;
+
+    job_argv0[0] = '\0';
+    job_self_exe[0] = '\0';
+    if (argv0 == NULL)
+        return;
+    n = strlen(argv0);
+    (void)job_path_copy(job_argv0, argv0, n);
+}
+
+static bool job_exe_from_path(const char *name)
+{
+    const char *path;
+    const char *at;
+    size_t nlen;
+
+    path = getenv("PATH");
+    if (path == NULL)
+        return false;
+    nlen = strlen(name);
+    at = path;
+    for (;;) {
+        const char *end = strchr(at, ':');
+        size_t dlen = end == NULL ? strlen(at) : (size_t)(end - at);
+        size_t need = (dlen == 0U ? 1U : dlen) + 1U + nlen;
+        char candidate[PATH_MAX];
+
+        if (need < (size_t)PATH_MAX) {
+            size_t off = 0U;
+
+            if (dlen == 0U)
+                candidate[off++] = '.';
+            else {
+                (void)memcpy(candidate, at, dlen);
+                off = dlen;
+            }
+            candidate[off++] = '/';
+            (void)memcpy(candidate + off, name, nlen);
+            candidate[off + nlen] = '\0';
+            if (access(candidate, X_OK) == 0 &&
+                realpath(candidate, job_self_exe) != NULL)
+                return true;
+        }
+        if (end == NULL)
+            return false;
+        at = end + 1;
+    }
+}
+
+const char *yew_job_self_exe(void)
+{
+    ssize_t n;
+
+    if (job_self_exe[0] != '\0')
+        return job_self_exe;
+    n = readlink("/proc/self/exe", job_self_exe,
+                 sizeof(job_self_exe) - 1U);
+    if (n > 0 && (size_t)n < sizeof(job_self_exe)) {
+        job_self_exe[n] = '\0';
+        return job_self_exe;
+    }
+    job_self_exe[0] = '\0';
+    if (job_argv0[0] == '\0')
+        return NULL;
+    if (strchr(job_argv0, '/') != NULL) {
+        if (realpath(job_argv0, job_self_exe) != NULL)
+            return job_self_exe;
+        job_self_exe[0] = '\0';
+        return NULL;
+    }
+    if (job_exe_from_path(job_argv0))
+        return job_self_exe;
+    return NULL;
+}
 
 /* ------------------------------------------------------------------ */
 /* Byte-boundary safety (§3)                                          */

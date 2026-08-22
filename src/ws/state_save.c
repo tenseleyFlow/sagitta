@@ -262,6 +262,7 @@ void yew_state_mark_dirty(Ed *ed)
 void yew_state_dispose(Ed *ed)
 {
     WsState *s;
+    u32 i;
 
     if (ed == NULL)
         return;
@@ -278,6 +279,12 @@ void yew_state_dispose(Ed *ed)
         s->doc_ready = false;
         s->options = NULL;
     }
+    for (i = 0U; i < s->bool_options_len; i++)
+        free(s->bool_options[i].key);
+    free(s->bool_options);
+    s->bool_options = NULL;
+    s->bool_options_len = 0U;
+    s->bool_options_cap = 0U;
     s->ready = false;
     s->dirty = false;
 }

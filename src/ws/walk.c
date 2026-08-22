@@ -207,6 +207,7 @@ void yew_filelist_free(FileList *fl)
     if (fl == NULL)
         return;
     YewPathVec_free(&fl->paths);
+    YewPathKindVec_free(&fl->is_dir);
     arena_free_all(&fl->a);
     (void)memset(fl, 0, sizeof(*fl));
 }
@@ -404,7 +405,7 @@ static void path_truncate(WalkState *w, u32 to)
     w->path[to] = '\0';
 }
 
-static void record_file(WalkState *w)
+static void record_path(WalkState *w, bool is_dir)
 {
     FileList *out = w->out;
     char *rel;
@@ -415,7 +416,11 @@ static void record_file(WalkState *w)
     }
     rel = arena_strdup(&out->a, w->path + w->rel_base);
     YewPathVec_push(&out->paths, rel);
-    out->n_files++;
+    YewPathKindVec_push(&out->is_dir, is_dir ? 1U : 0U);
+    if (is_dir)
+        out->n_dirs++;
+    else
+        out->n_files++;
 }
 
 bool yew_walk_step(WalkState *w, i64 budget_us)
@@ -458,6 +463,12 @@ bool yew_walk_step(WalkState *w, i64 budget_us)
             const GiSet *child_gi = f->gi;
             bool child_ignored = f->ignored;
 
+            if (w->opts.include_dirs)
+                record_path(w, true);
+            if (w->out->truncated) {
+                w->done = true;
+                return false;
+            }
             if (f->depth + 1U >= w->opts.max_depth) {
                 path_truncate(w, saved);
                 continue;
@@ -494,7 +505,8 @@ bool yew_walk_step(WalkState *w, i64 budget_us)
                 path_truncate(w, saved);
                 continue;
             }
-            w->out->n_dirs++;
+            if (!w->opts.include_dirs)
+                w->out->n_dirs++;
             /* This directory's own .gitignore, if it has one, layered
              * over everything above it. */
             if (w->opts.use_gitignore)
@@ -524,7 +536,7 @@ bool yew_walk_step(WalkState *w, i64 budget_us)
             if (skip)
                 w->out->n_ignored++;
             else
-                record_file(w);
+                record_path(w, false);
         }
         path_truncate(w, saved);
         if (w->out->truncated) {

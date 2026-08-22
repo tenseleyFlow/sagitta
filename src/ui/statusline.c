@@ -88,7 +88,7 @@ static const char *mode_theme_role(Mode mode)
         [YEW_MODE_H] = "mode.highlight",
         [YEW_MODE_I] = "mode.insert",
         [YEW_MODE_E] = "mode.explore",
-        [YEW_MODE_F] = "mode.fuss",
+        [YEW_MODE_F] = "mode.git",
     };
 
     return mode >= YEW_MODE_L && mode < YEW_MODE__N ? roles[mode] : NULL;

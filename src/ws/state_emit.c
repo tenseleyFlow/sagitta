@@ -180,6 +180,58 @@ static void state_lit(StateEmit *e, const char *key, const FlLit *lit)
     }
 }
 
+static const WsBoolOption *state_bool_override(const WsState *s,
+                                                const char *key, u64 len)
+{
+    u32 i;
+
+    for (i = 0U; i < s->bool_options_len; i++) {
+        const WsBoolOption *o = &s->bool_options[i];
+
+        if ((u64)o->key_len == len && memcmp(o->key, key, (size_t)len) == 0)
+            return o;
+    }
+    return NULL;
+}
+
+static bool retained_has_option(const FlLit *options,
+                                const WsBoolOption *o)
+{
+    u32 i;
+
+    if (options == NULL || options->kind != FL_LIT_MAP)
+        return false;
+    for (i = 0U; i < options->len; i++)
+        if (options->keylens[i] == (u64)o->key_len &&
+            memcmp(options->keys[i], o->key, o->key_len) == 0)
+            return true;
+    return false;
+}
+
+static void state_options(StateEmit *e, const WsState *s)
+{
+    const FlLit *options = s->options;
+    u32 i;
+
+    state_map_open(e, "options");
+    if (options != NULL && options->kind == FL_LIT_MAP) {
+        for (i = 0U; i < options->len; i++) {
+            const WsBoolOption *override = state_bool_override(
+                s, options->keys[i], options->keylens[i]);
+
+            if (override != NULL)
+                state_bool(e, override->key, override->value);
+            else
+                state_lit(e, options->keys[i], options->items[i]);
+        }
+    }
+    for (i = 0U; i < s->bool_options_len; i++)
+        if (!retained_has_option(options, &s->bool_options[i]))
+            state_bool(e, s->bool_options[i].key,
+                       s->bool_options[i].value);
+    state_map_close(e);
+}
+
 void yew_idmap_init(IdMapVec *m)
 {
     if (m != NULL)
@@ -597,13 +649,7 @@ void yew_state_emit(const Ed *ed, Bytebuf *out)
      * never heard of, and since the document is rewritten in full on
      * every change, dropping them once makes it permanent.
      */
-    if (ed->state.options != NULL &&
-        ed->state.options->kind == FL_LIT_MAP) {
-        state_lit(&e, "options", ed->state.options);
-    } else {
-        state_map_open(&e, "options");
-        state_map_close(&e);
-    }
+    state_options(&e, &ed->state);
 
     /*
      * GROUPS FIRST.  See state.h — the restore attaches each tab as it

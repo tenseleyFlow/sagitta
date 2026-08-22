@@ -32,6 +32,12 @@
 
 typedef struct Ed Ed;
 
+typedef struct WsBoolOption {
+    char *key;
+    u32 key_len;
+    bool value;
+} WsBoolOption;
+
 enum {
     YEW_STATE_VERSION = 1,
     /* §5: the debounce.  A state cache that is 2 s stale costs nothing;
@@ -109,6 +115,12 @@ typedef struct WsState {
     Arena doc;
     const FlLit *options;
     bool doc_ready;
+    /* Mutable known booleans overlay the immutable retained literal map.
+     * Rows stay key-sorted so newly introduced options emit deterministically
+     * without disturbing the order or values of unknown retained literals. */
+    WsBoolOption *bool_options;
+    u32 bool_options_len;
+    u32 bool_options_cap;
 
     /* §6: files that were not on disk at restore.  Counted so exactly
      * ONE summary message is shown, never one per tab. */
@@ -171,6 +183,9 @@ bool yew_state_set_aside(Ed *ed, char *out, size_t cap);
  */
 const char *yew_state_option_str(const Ed *ed, const char *key,
                                  const char *dflt);
+bool yew_state_option_bool(const Ed *ed, const char *key, bool dflt);
+/* Returns true only when the retained effective value changed. */
+bool yew_state_option_bool_set(Ed *ed, const char *key, bool value);
 
 /*
  * The file-id -> live-id map (§3.1).

@@ -155,11 +155,97 @@ const char *yew_state_option_str(const Ed *ed, const char *key,
 {
     const char *v;
     u64 n = 0U;
+    u32 i;
 
-    if (ed == NULL || ed->state.options == NULL)
+    if (ed == NULL || key == NULL)
+        return dflt;
+    for (i = 0U; i < ed->state.bool_options_len; i++)
+        if (strcmp(ed->state.bool_options[i].key, key) == 0)
+            return dflt;
+    if (ed->state.options == NULL)
         return dflt;
     v = yew_fl_str_or(yew_fl_get(ed->state.options, key), NULL, &n);
     return v == NULL || n == 0U ? dflt : v;
+}
+
+static i32 bool_option_find(const WsState *s, const char *key, u32 *at)
+{
+    u32 lo = 0U;
+    u32 hi = s->bool_options_len;
+
+    while (lo < hi) {
+        u32 mid = lo + (hi - lo) / 2U;
+        int cmp = strcmp(s->bool_options[mid].key, key);
+
+        if (cmp < 0)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    if (at != NULL)
+        *at = lo;
+    return lo < s->bool_options_len &&
+           strcmp(s->bool_options[lo].key, key) == 0 ? (i32)lo : -1;
+}
+
+bool yew_state_option_bool(const Ed *ed, const char *key, bool dflt)
+{
+    i32 found;
+
+    if (ed == NULL || key == NULL)
+        return dflt;
+    found = bool_option_find(&ed->state, key, NULL);
+    if (found >= 0)
+        return ed->state.bool_options[found].value;
+    return yew_fl_bool_or(yew_fl_get(ed->state.options, key), dflt);
+}
+
+bool yew_state_option_bool_set(Ed *ed, const char *key, bool value)
+{
+    WsState *s;
+    size_t key_len;
+    u32 at;
+    i32 found;
+    const FlLit *retained;
+
+    if (ed == NULL || key == NULL)
+        return false;
+    key_len = strlen(key);
+    if (key_len == 0U || key_len > YEW_FL_MAX_STRING ||
+        key_len > UINT32_MAX)
+        return false;
+    s = &ed->state;
+    found = bool_option_find(s, key, &at);
+    if (found >= 0) {
+        if (s->bool_options[found].value == value)
+            return false;
+        s->bool_options[found].value = value;
+        yew_state_mark_dirty(ed);
+        return true;
+    }
+    retained = yew_fl_get(s->options, key);
+    if (retained != NULL && retained->kind == FL_LIT_BOOL &&
+        (retained->i != 0) == value)
+        return false;
+    if (s->bool_options_len == s->bool_options_cap) {
+        u32 cap = s->bool_options_cap == 0U ? 4U : s->bool_options_cap * 2U;
+
+        s->bool_options = yew_xreallocarray(s->bool_options, cap,
+                                             sizeof(*s->bool_options));
+        s->bool_options_cap = cap;
+    }
+    if (at < s->bool_options_len) {
+        memmove(&s->bool_options[at + 1U], &s->bool_options[at],
+                (size_t)(s->bool_options_len - at) *
+                sizeof(*s->bool_options));
+    }
+    s->bool_options[at].key = yew_xmalloc(key_len + 1U);
+    memcpy(s->bool_options[at].key, key, key_len + 1U);
+    s->bool_options[at].key_len = (u32)key_len;
+    s->bool_options[at].value = value;
+    s->bool_options_len++;
+    yew_state_mark_dirty(ed);
+    return true;
 }
 
 /* One message, exactly once, and never a prompt.  A modal dialog before

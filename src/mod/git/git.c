@@ -61,6 +61,7 @@ static void *test_spawn_opaque;
 
 static bool git_spawn_log(Ed *ed);
 static void git_incoming_clear(GitCtx *ctx);
+static void git_publish_refresh(Ed *ed);
 
 void yew_git_snapshot_init(GitSnapshot *snap)
 {
@@ -68,6 +69,8 @@ void yew_git_snapshot_init(GitSnapshot *snap)
         return;
     (void)memset(snap, 0, sizeof(*snap));
     arena_init(&snap->a);
+    snap->comment_char = arena_strdup(&snap->a, "#");
+    snap->comment_char_len = 1U;
     snap->ahead = -1;
     snap->behind = -1;
 }
@@ -95,6 +98,7 @@ static const GitVerb git_verbs[] = {
     GIT_READ("detect", false, false),
     GIT_READ("status", true, false),
     GIT_READ("ignore", true, false),
+    GIT_READ("comment-char", true, false),
     GIT_READ("upstream-oid", true, true),
     GIT_READ("incoming", true, true),
     GIT_READ("diff", true, true),
@@ -914,6 +918,20 @@ static bool git_spawn_status(Ed *ed)
                          sizeof(err)) != 0U;
 }
 
+static bool git_spawn_comment_char(Ed *ed)
+{
+    char *argv[] = {
+        (char *)"config", (char *)"--get", (char *)"core.commentChar",
+        NULL
+    };
+    GitReq req = {0};
+    char err[128];
+
+    req.kind = YEW_GREQ_VERB;
+    return yew_git_spawn(ed, yew_git_verb("comment-char"), argv, &req,
+                         err, sizeof(err)) != 0U;
+}
+
 static bool git_spawn_incoming(Ed *ed)
 {
     char *argv[] = {
@@ -1015,6 +1033,46 @@ static char *git_parse_oid(const u8 *out, u64 out_len)
             return NULL;
     }
     return git_dup_bytes(out, n);
+}
+
+static bool git_cache_comment_char(GitSnapshot *snap, GitStatusCode state,
+                                   int exit_code, const u8 *out, u64 out_len)
+{
+    size_t len;
+
+    if (snap == NULL)
+        return false;
+    /* `git config --get` uses exit 1 for an absent key.  The snapshot was
+     * initialized with Git's default '#', so there is nothing to copy. */
+    if (state == YEW_GIT_FAILED && exit_code == 1)
+        return true;
+    if (state != YEW_GIT_OK || out == NULL || out_len > (u64)SIZE_MAX)
+        return false;
+    len = (size_t)out_len;
+    if (len != 0U && out[len - 1U] == (u8)'\n') {
+        len--;
+        if (len != 0U && out[len - 1U] == (u8)'\r')
+            len--;
+    }
+    if (!((len == 1U && out[0] != 0U && out[0] != (u8)'\n' &&
+           out[0] != (u8)'\r') ||
+          (len == 4U && memcmp(out, "auto", 4U) == 0)))
+        return false;
+    snap->comment_char = arena_strndup(&snap->a, (const char *)out, len);
+    snap->comment_char_len = (u32)len;
+    return true;
+}
+
+static bool git_continue_refresh_after_comment(Ed *ed)
+{
+    GitCtx *ctx = ed->git;
+    GitSnapshot *next = &ctx->snap[ctx->live ^ 1U];
+
+    if (next->upstream != NULL && next->upstream[0] != '\0')
+        return git_spawn_upstream(ed);
+    git_incoming_clear(ctx);
+    git_publish_refresh(ed);
+    return true;
 }
 
 static bool git_merge_incoming(GitSnapshot *snap, const GitPathList *paths)
@@ -1456,15 +1514,34 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
             git_refresh_failed(ed);
             return true;
         }
-        if (next->upstream != NULL && next->upstream[0] != '\0') {
-            if (!git_spawn_upstream(ed)) {
-                yew_git_snapshot_drop(next);
-                yew_git_snapshot_init(next);
-                git_refresh_failed(ed);
-            }
-        } else {
-            git_incoming_clear(ctx);
-            git_publish_refresh(ed);
+        if (!git_spawn_comment_char(ed)) {
+            yew_git_snapshot_drop(next);
+            yew_git_snapshot_init(next);
+            git_refresh_failed(ed);
+        }
+        return true;
+    }
+    if (kind == YEW_GREQ_VERB &&
+        strcmp(verb_name, "comment-char") == 0 && ctx->refresh_inflight) {
+        GitSnapshot *next = &ctx->snap[ctx->live ^ 1U];
+        bool absent = state == YEW_GIT_FAILED && exit_code == 1;
+
+        if (!git_cache_comment_char(next, state, exit_code, out, out_len)) {
+            if (state == YEW_GIT_OK)
+                git_publish_result(ctx, job_id, verb_name, YEW_GIT_PARSE,
+                                   out, out_len, err, err_len);
+            yew_git_snapshot_drop(next);
+            yew_git_snapshot_init(next);
+            git_refresh_failed(ed);
+            return true;
+        }
+        if (absent)
+            git_publish_result(ctx, job_id, verb_name, YEW_GIT_OK,
+                               NULL, 0U, err, err_len);
+        if (!git_continue_refresh_after_comment(ed)) {
+            yew_git_snapshot_drop(next);
+            yew_git_snapshot_init(next);
+            git_refresh_failed(ed);
         }
         return true;
     }

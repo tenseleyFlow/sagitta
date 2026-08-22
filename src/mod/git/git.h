@@ -144,6 +144,8 @@ typedef struct GitSnapshot {
     char *branch;
     char *upstream;
     char *head_oid;
+    char *comment_char;       /* "#", one configured byte, or "auto" */
+    u32 comment_char_len;
     i32 ahead;
     i32 behind;
     bool detached;

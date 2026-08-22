@@ -19,10 +19,12 @@ typedef struct SpawnLog {
     size_t argc;
     u32 status_calls;
     u32 ignore_calls;
+    u32 comment_calls;
     u32 upstream_calls;
     u32 incoming_calls;
     u32 last_status;
     u32 last_ignore;
+    u32 last_comment;
     u32 last_upstream;
     u32 last_incoming;
     bool fail_next;
@@ -53,6 +55,10 @@ static u32 gitcache_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     if (strcmp(verb->name, "ignore") == 0) {
         log->ignore_calls++;
         log->last_ignore = log->next_id + 1U;
+    }
+    if (strcmp(verb->name, "comment-char") == 0) {
+        log->comment_calls++;
+        log->last_comment = log->next_id + 1U;
     }
     if (strcmp(verb->name, "upstream-oid") == 0) {
         log->upstream_calls++;
@@ -86,6 +92,14 @@ static void gitcache_done(Ed *ed)
 {
     yew_git_state_free(ed);
     yew_git_test_spawn_set(NULL, NULL);
+}
+
+static void gitcache_complete_default_comment(Ed *ed, SpawnLog *log)
+{
+    YEW_ASSERT(log->last_comment != 0U);
+    YEW_ASSERT(yew_git_test_complete_exit(ed, log->last_comment,
+                                          YEW_GIT_FAILED, 1,
+                                          NULL, 0U, NULL, 0U));
 }
 
 static char *gitcache_tmp_template(const char *tag)
@@ -140,6 +154,7 @@ static void gitcache_ready(Ed *ed, SpawnLog *log, const char *git_dir,
     YEW_ASSERT(id != 0U);
     YEW_ASSERT(yew_git_test_complete(ed, id, YEW_GIT_OK, NULL, 0U,
                                      NULL, 0U));
+    gitcache_complete_default_comment(ed, log);
 }
 
 void test_gitcache_ttl_uses_monotonic_wall_milliseconds(void)
@@ -404,6 +419,7 @@ void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void)
                                      status, sizeof(status) - 1U, NULL, 0U));
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
                                      NULL, 0U, NULL, 0U));
+    gitcache_complete_default_comment(&ed, &log);
     YEW_ASSERT_EQ_U64(log.status_calls, baseline + 2U);
     snap = yew_git_snapshot(&ed);
     YEW_ASSERT_EQ_U64(snap->gen, 2U);
@@ -414,6 +430,78 @@ void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void)
     snap = yew_git_snapshot(&ed);
     YEW_ASSERT_EQ_U64(snap->gen, 2U);
     YEW_ASSERT_EQ_STR(snap->branch, "trunk");
+    gitcache_done(&ed);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
+}
+
+void test_gitcache_comment_char_is_cached_before_snapshot_publish(void)
+{
+    static const u8 status[] =
+        "# branch.oid 0123456789012345678901234567890123456789\0"
+        "# branch.head trunk\0";
+    static const u8 auto_char[] = "auto\n";
+    static const u8 explicit_char[] = ";\n";
+    static const u8 malformed[] = "too-long\n";
+    Ed ed;
+    SpawnLog log = {0};
+    char *tmp = gitcache_tmp_template("yew-git-comment");
+    const GitSnapshot *snap;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    gitcache_ed(&ed, &log);
+    gitcache_ready(&ed, &log, tmp, 1000);
+    snap = yew_git_snapshot(&ed);
+    YEW_ASSERT_EQ_U64(snap->gen, 1U);
+    YEW_ASSERT_EQ_STR(snap->comment_char, "#");
+    YEW_ASSERT_EQ_U64(snap->comment_char_len, 1U);
+
+    yew_git_test_now_set(&ed, 1500);
+    YEW_ASSERT(yew_git_refresh(&ed, false));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_status, YEW_GIT_OK,
+                                     status, sizeof(status) - 1U,
+                                     NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
+                                     NULL, 0U, NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_comment, YEW_GIT_OK,
+                                     auto_char, sizeof(auto_char) - 1U,
+                                     NULL, 0U));
+    snap = yew_git_snapshot(&ed);
+    YEW_ASSERT_EQ_U64(snap->gen, 2U);
+    YEW_ASSERT_EQ_STR(snap->comment_char, "auto");
+    YEW_ASSERT_EQ_U64(snap->comment_char_len, 4U);
+
+    yew_git_test_now_set(&ed, 2000);
+    YEW_ASSERT(yew_git_refresh(&ed, false));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_status, YEW_GIT_OK,
+                                     status, sizeof(status) - 1U,
+                                     NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
+                                     NULL, 0U, NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_comment, YEW_GIT_OK,
+                                     explicit_char,
+                                     sizeof(explicit_char) - 1U,
+                                     NULL, 0U));
+    snap = yew_git_snapshot(&ed);
+    YEW_ASSERT_EQ_U64(snap->gen, 3U);
+    YEW_ASSERT_EQ_STR(snap->comment_char, ";");
+    YEW_ASSERT_EQ_U64(snap->comment_char_len, 1U);
+
+    yew_git_test_now_set(&ed, 2500);
+    YEW_ASSERT(yew_git_refresh(&ed, false));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_status, YEW_GIT_OK,
+                                     status, sizeof(status) - 1U,
+                                     NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
+                                     NULL, 0U, NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_comment, YEW_GIT_OK,
+                                     malformed, sizeof(malformed) - 1U,
+                                     NULL, 0U));
+    snap = yew_git_snapshot(&ed);
+    YEW_ASSERT_EQ_U64(snap->gen, 3U);
+    YEW_ASSERT_EQ_STR(snap->comment_char, ";");
+    YEW_ASSERT(yew_git_result(&ed)->state == YEW_GIT_PARSE);
+
     gitcache_done(&ed);
     YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
     free(tmp);
@@ -547,6 +635,7 @@ void test_gitcache_initial_upstream_refresh_and_oid_gating(void)
                                      status, sizeof(status) - 1U, NULL, 0U));
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
                                      NULL, 0U, NULL, 0U));
+    gitcache_complete_default_comment(&ed, &log);
     YEW_ASSERT_EQ_U64(log.upstream_calls, 1U);
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_upstream, YEW_GIT_OK,
                                      oid_a, sizeof(oid_a) - 1U, NULL, 0U));
@@ -567,6 +656,7 @@ void test_gitcache_initial_upstream_refresh_and_oid_gating(void)
                                      status, sizeof(status) - 1U, NULL, 0U));
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
                                      NULL, 0U, NULL, 0U));
+    gitcache_complete_default_comment(&ed, &log);
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_upstream, YEW_GIT_OK,
                                      oid_a, sizeof(oid_a) - 1U, NULL, 0U));
     YEW_ASSERT_EQ_U64(log.incoming_calls, first_incoming);
@@ -578,6 +668,7 @@ void test_gitcache_initial_upstream_refresh_and_oid_gating(void)
                                      status, sizeof(status) - 1U, NULL, 0U));
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
                                      NULL, 0U, NULL, 0U));
+    gitcache_complete_default_comment(&ed, &log);
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_upstream, YEW_GIT_OK,
                                      oid_b, sizeof(oid_b) - 1U, NULL, 0U));
     YEW_ASSERT_EQ_U64(log.incoming_calls, first_incoming + 1U);
@@ -602,6 +693,7 @@ void test_gitcache_initial_upstream_refresh_and_oid_gating(void)
                                          NULL, 0U));
         YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
                                          NULL, 0U, NULL, 0U));
+        gitcache_complete_default_comment(&ed, &log);
         YEW_ASSERT(yew_git_test_complete(&ed, log.last_upstream, YEW_GIT_OK,
                                          oid_b, sizeof(oid_b) - 1U,
                                          NULL, 0U));
@@ -649,6 +741,7 @@ void test_gitcache_large_incoming_merge_is_sorted_and_deduplicated(void)
                                      status.data, (u64)status.len, NULL, 0U));
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
                                      NULL, 0U, NULL, 0U));
+    gitcache_complete_default_comment(&ed, &log);
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_upstream, YEW_GIT_OK,
                                      oid, sizeof(oid) - 1U, NULL, 0U));
     YEW_ASSERT(yew_git_test_complete(&ed, log.last_incoming, YEW_GIT_OK,

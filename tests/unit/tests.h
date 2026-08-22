@@ -1679,10 +1679,13 @@ void test_state_differential_names_sprint_36(void);
 void test_state_diff_generated_500_matrix(void);
 void test_state_diff_data_writer_quotes_non_identifier_keys(void);
 void test_state_diff_pure_literal_runs_nothing(void);
+void test_state_options_bool_overlay_preserves_unknown_literals(void);
+void test_state_options_bool_overlay_is_sorted_and_idempotent(void);
 
 /* Sprint 26 §3: the workspace walk. */
 void test_walk_lists_files_relative_to_the_root(void);
 void test_walk_lists_only_regular_files(void);
+void test_walk_can_include_one_level_directory_rows(void);
 void test_walk_is_deterministic_regardless_of_creation_order(void);
 void test_walk_sliced_equals_unsliced(void);
 void test_walk_symlink_loop_terminates_and_is_counted(void);
@@ -1745,6 +1748,7 @@ void test_gitcache_verb_table_and_argv_are_structural(void);
 void test_gitcache_coalesces_and_caps_inflight(void);
 void test_gitcache_environment_fingerprint_tracks_passthrough(void);
 void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void);
+void test_gitcache_comment_char_is_cached_before_snapshot_publish(void);
 void test_gitcache_every_mutation_schedules_structural_refresh(void);
 void test_gitcache_index_lock_skips_expired_refresh(void);
 void test_gitcache_log_completion_publishes_owned_records(void);
@@ -1801,6 +1805,7 @@ void test_fusscommit_preserves_embedded_nul_bytes(void);
 void test_fusscommit_cleanup_is_idempotent(void);
 void test_fusscommit_empty_detection_is_byte_exact(void);
 void test_fusscommit_rejects_invalid_pointer_length_pairs(void);
+void test_fuss_theme_roles_are_shipped(void);
 
 /* Sprint 26 §5: the list picker. */
 void test_picker_selection_survives_a_refilter(void);
