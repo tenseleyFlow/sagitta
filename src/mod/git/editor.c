@@ -1176,6 +1176,11 @@ CmdStatus yew_git_cmd_diff_view(CmdCtx *cx)
                        (u64)pair.left.bytes.len);
     yew_textbuf_insert(right->tb, BYTEOFF(0U), pair.right.bytes.data,
                        (u64)pair.right.bytes.len);
+    /* These internal, read-only buffers are populated outside the edit
+     * chokepoint.  Reattach after the direct insert so the syntax line-state
+     * arrays describe the finished buffers before their first draw. */
+    yew_syn_attach(&left->syn, YEW_LANG_NONE, left->tb);
+    yew_syn_attach(&right->syn, YEW_LANG_NONE, right->tb);
     yew_ed_win_set_buffer(cx->ed, split->a->win, left);
     yew_ed_win_set_buffer(cx->ed, right_leaf->win, right);
     split->a->win->git_diff_intra_add = false;

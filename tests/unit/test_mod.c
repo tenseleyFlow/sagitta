@@ -3,6 +3,7 @@
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "mod/mods.h"
+#include "syn/engine.h"
 #include "ui/message.h"
 
 #include <stdio.h>
@@ -110,5 +111,28 @@ void test_git_commands_cross_module_boundary(void)
 #endif
     }
     YEW_ASSERT(seen >= 40U);
+    yew_ed_free(&ed);
+}
+
+void test_git_diff_scratch_direct_fill_reattaches_syntax(void)
+{
+    static const u8 text[] = "left\nright\n";
+    SynSpan spans[4];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    Ed ed;
+    Buffer *scratch;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    scratch = yew_ws_scratch_new(&ed, "*git-index*",
+                                 YEW_BUF_NOUNDO | YEW_BUF_READONLY);
+    YEW_ASSERT_NOT_NULL(scratch);
+    yew_textbuf_insert(scratch->tb, BYTEOFF(0U), text, sizeof(text) - 1U);
+    yew_syn_attach(&scratch->syn, YEW_LANG_NONE, scratch->tb);
+    YEW_ASSERT_EQ_U64(scratch->syn.entry.len,
+                      yew_textbuf_line_count(scratch->tb));
+    yew_syn_spans(&scratch->syn, scratch->tb, LINENO(1U), &out);
+    YEW_ASSERT_EQ_U64(out.n, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[0].len, 5U);
     yew_ed_free(&ed);
 }

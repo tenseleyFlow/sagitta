@@ -291,6 +291,7 @@ const YewTest yew_tests[] = {
     T(mod_require_message),
     T(lsp_restart_crosses_module_boundary),
     T(git_commands_cross_module_boundary),
+    T(git_diff_scratch_direct_fill_reattaches_syntax),
     T(keyid_canonical_rows),
     T(keyid_shift_and_legacy_equivalence),
     T(keyseq_atom_roundtrip),
