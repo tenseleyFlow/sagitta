@@ -3,6 +3,9 @@
 
 #include <string.h>
 
+#include "edit/dispatch.h"
+#include "edit/ed.h"
+#include "edit/keymap.h"
 #include "mod/git/fussmode.h"
 
 static const PickItem fj_items[] = {
@@ -215,6 +218,64 @@ void test_fussjump_disarmed_letters_are_released_as_verbs(void)
         YEW_ASSERT(!yew_fuss_jump_armed(&jump));
         YEW_ASSERT_EQ_U64(sel, 0U);
     }
+}
+
+void test_fussjump_f_mode_dispatch_table_is_complete(void)
+{
+    static const struct {
+        const char *seq;
+        const char *cmd;
+    } rows[] = {
+        {"<up>", "ed.git.nav.prev"}, {"<down>", "ed.git.nav.next"},
+        {"<left>", "ed.git.nav.parent"}, {"<right>", "ed.git.nav.enter"},
+        {"<space>", "ed.git.nav.toggle"},
+        {"C-<up>", "ed.git.nav.row_prev"},
+        {"C-<down>", "ed.git.nav.row_next"},
+        {"a", "ed.git.stage"}, {"u", "ed.git.unstage"},
+        {"S", "ed.git.stage.all"}, {"U", "ed.git.unstage.all"},
+        {"m", "ed.git.commit"}, {"M", "ed.git.commit.amend"},
+        {"p", "ed.git.push"}, {"l", "ed.git.pull"},
+        {"f", "ed.git.fetch"}, {"d", "ed.git.diff"},
+        {"s", "ed.git.status"}, {"w", "ed.git.blame"},
+        {"h", "ed.git.history"}, {"L", "ed.git.reflog"},
+        {"c", "ed.git.view"}, {"b", "ed.git.branch.switch"},
+        {"n", "ed.git.branch.create"}, {"R", "ed.git.branch.delete"},
+        {"G", "ed.git.merge"}, {"O", "ed.git.reset"},
+        {"I", "ed.git.rebase.interactive"},
+        {"y", "ed.git.cherry_pick"}, {"v", "ed.git.revert"},
+        {"z", "ed.git.stash.push"}, {"Z", "ed.git.stash.pop"},
+        {"t", "ed.git.tag"}, {"x", "ed.git.discard"},
+        {"r", "ed.git.file.delete"}, {"N", "ed.git.file.rename"},
+        {"<cr>", "ed.git.open"}, {"T", "ed.git.tree.all"},
+        {".", "ed.git.tree.hidden"}, {"/", "ed.git.jump.arm"},
+        {"C-r", "ed.git.refresh"}, {"q", "ed.git.mode.leave"},
+        {"<esc>", "ed.git.mode.leave"}
+    };
+    Ed ed = {0};
+    u32 i;
+
+    yew_dispatch_init(&ed);
+    yew_dispatch_set_mode(&ed, YEW_MODE_F);
+    YEW_ASSERT_EQ_U64(ed.keys.l[0], &ed.mode_keys[YEW_MODE_F]);
+    YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
+    YEW_ASSERT_EQ_I64(ed.chord.layer, -1);
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
+        KeyId key;
+        const Binding *binding = NULL;
+        const CmdDesc *desc;
+
+        YEW_ASSERT_EQ_U64(yew_key_parse_seq(rows[i].seq, &key, 1U), 1U);
+        YEW_ASSERT_EQ_I64(yew_keymap_lookup(ed.keys.l[0], &key, 1U,
+                                            NULL, &binding),
+                          YEW_MATCH_FULL);
+        YEW_ASSERT_NOT_NULL(binding);
+        desc = yew_cmd_desc(binding->cmd);
+        YEW_ASSERT_NOT_NULL(desc);
+        YEW_ASSERT_EQ_STR(desc->name, rows[i].cmd);
+        YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
+        YEW_ASSERT_EQ_I64(ed.chord.layer, -1);
+    }
+    yew_dispatch_free(&ed);
 }
 
 void test_fussjump_armed_letters_are_swallowed_before_verbs(void)
