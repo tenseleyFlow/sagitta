@@ -87,6 +87,9 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.git.discard", "no batch alternative"},
     {"ed.git.file.delete", "no batch alternative"},
     {"ed.git.file.rename", "no batch alternative"},
+    /* Hunk discard is undoable and therefore does not prompt in the editor,
+     * but it still needs an editor buffer and has no headless equivalent. */
+    {"ed.git.hunk.discard", "no batch alternative"},
     {"ed.mode.enter", "use ed.run(name, args)"},
 };
 
