@@ -386,7 +386,9 @@ UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
 UNIT_FUSS_SRC := tests/unit/test_porcelain.c tests/unit/test_gitcache.c \
                  tests/unit/test_fusstree.c tests/unit/test_fussnav.c \
                  tests/unit/test_fusscollapse.c tests/unit/test_fussjump.c \
-                 tests/unit/test_fusscommit.c
+                 tests/unit/test_fusscommit.c tests/unit/test_diff.c \
+                 tests/unit/test_hunk.c tests/unit/test_blamecache.c \
+                 tests/unit/test_diffview.c
 ifeq ($(filter lsp ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))
 endif

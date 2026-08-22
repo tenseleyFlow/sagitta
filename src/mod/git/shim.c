@@ -240,6 +240,12 @@ const GitSnapshot *yew_git_snapshot(Ed *ed)
     return NULL;
 }
 
+const GitSnapshot *yew_git_snapshot_cached(const Ed *ed)
+{
+    (void)ed;
+    return NULL;
+}
+
 const GitLogRecordList *yew_git_log_records(const Ed *ed)
 {
     (void)ed;
@@ -269,6 +275,13 @@ bool yew_git_refresh(Ed *ed, bool force)
 void yew_git_invalidate(Ed *ed)
 {
     (void)git_require(ed);
+}
+
+bool yew_git_job_owned(const Ed *ed, u32 job_id)
+{
+    (void)ed;
+    (void)job_id;
+    return false;
 }
 
 u64 yew_git_env_fingerprint(void)
@@ -308,6 +321,24 @@ u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
                            char *err, size_t errsz)
 {
     (void)verb; (void)argv; (void)owner; (void)ops;
+    (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
+    (void)git_require(ed);
+    return 0U;
+}
+
+u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
+                                 char *const *argv,
+                                 const u8 *stdin_bytes, u64 stdin_len,
+                                 void *owner,
+                                 const YewJobCallbackOps *ops,
+                                 char *err, size_t errsz)
+{
+    (void)verb;
+    (void)argv;
+    (void)stdin_bytes;
+    (void)stdin_len;
+    (void)owner;
+    (void)ops;
     (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
     (void)git_require(ed);
     return 0U;
