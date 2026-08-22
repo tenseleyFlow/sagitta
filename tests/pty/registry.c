@@ -7001,6 +7001,46 @@ done:
     bytebuf_free(&viewer);
     free(original_cells);
 }
+
+static void case_s52_fuss_loading(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+    u32 frame;
+
+    if (!s52_fixture(c, repo, sizeof(repo)))
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "src/main.c", NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    frame = c->vt.nsync_pairs;
+    ptc_keys(c, "f");
+    ptc_wait_sync_pairs(c, frame + 1U);
+    ptc_check(c, s52_screen_contains(&c->vt, "loading"),
+              "FUSS first frame did not publish its loading state");
+    ptc_snapshot_sgr(c, c->test->name);
+    s52_finish(c);
+}
+
+static void case_s52_fuss_discard_confirm(PtyCtx *c)
+{
+    u32 i;
+
+    if (!s52_open(c, NULL))
+        return;
+    for (i = 0U; i < 5U && !c->failed; i++) {
+        ptc_keys(c, "ctrl+down");
+        ptc_settle(c, 0);
+    }
+    ptc_keys(c, "x");
+    s52_wait_screen(c, "type 'discard' to confirm");
+    ptc_check(c, s52_screen_contains(&c->vt,
+                                     "use hunk discard for an undoable version"),
+              "FUSS discard prompt omitted the undoable hunk alternative");
+    ptc_snapshot_sgr(c, c->test->name);
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    s52_finish(c);
+}
 #endif
 
 const PtyCase yew_pty_cases[] = {
@@ -7018,6 +7058,10 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
     C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
       case_s52_fuss_diff_viewer),
+    C(fuss_loading_first_frame, modern, 24U, 80U,
+      case_s52_fuss_loading),
+    C(fuss_discard_confirmation, modern, 24U, 120U,
+      case_s52_fuss_discard_confirm),
     C(fuss_leave_q, modern, 24U, 80U, case_s52_fuss),
     C(fuss_leave_esc, modern, 24U, 80U, case_s52_fuss),
     C(fuss_nonrepo, modern, 24U, 80U, case_s52_fuss),
