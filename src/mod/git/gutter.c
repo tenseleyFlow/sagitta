@@ -890,6 +890,31 @@ void yew_diff_work_free(YewDiffWork *work)
     free(work);
 }
 
+bool yew_git_hunk_sign_placement(const GitHunk *h, u64 buffer_line_count,
+                                 bool terminal_line_is_synthetic,
+                                 LineNo *line, bool *delete_below)
+{
+    u64 real_lines;
+    u64 target;
+
+    if (h == NULL || line == NULL || delete_below == NULL ||
+        buffer_line_count == 0U)
+        return false;
+    real_lines = buffer_line_count;
+    if (terminal_line_is_synthetic && real_lines != 0U)
+        real_lines--;
+    *delete_below = h->kind == YEW_HUNK_DEL && h->buf_n.v == 0U &&
+                    h->buf_lo.v >= real_lines && real_lines != 0U;
+    if (*delete_below)
+        target = real_lines - 1U;
+    else if (h->buf_lo.v < buffer_line_count)
+        target = h->buf_lo.v;
+    else
+        target = buffer_line_count - 1U;
+    *line = LINENO(target);
+    return true;
+}
+
 static i64 sync_clock(void *ctx)
 {
     i64 *ticks = ctx;

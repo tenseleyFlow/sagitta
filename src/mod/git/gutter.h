@@ -82,6 +82,9 @@ YewDiffProgress yew_diff_work_step(YewDiffWork *work, u32 budget_us,
                                    YewDiffNowUsFn now_us, void *clock_ctx);
 YewDiffOutcome yew_diff_work_take(YewDiffWork *work, GitHunkVec *out);
 void yew_diff_work_free(YewDiffWork *work);
+bool yew_git_hunk_sign_placement(const GitHunk *h, u64 buffer_line_count,
+                                 bool terminal_line_is_synthetic,
+                                 LineNo *line, bool *delete_below);
 u64 yew_git_line_hash(const u8 *bytes, size_t len);
 bool yew_git_hash_lines(const u8 *bytes, size_t len, Arena *a,
                         u64 **hashes, u32 *count, bool *missing_final_nl);
