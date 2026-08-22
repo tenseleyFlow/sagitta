@@ -498,6 +498,7 @@ FUZZ_STATE_OBJ := $(BUILD)/tests/fuzz/fuzz_state.o
 FUZZ_GITIGNORE_OBJ := $(BUILD)/tests/fuzz/fuzz_gitignore.o
 FUZZ_PORCELAIN_OBJ := $(BUILD)/tests/fuzz/fuzz_porcelain.o
 FUZZ_FUSS_OBJ := $(BUILD)/tests/fuzz/fuzz_fuss.o
+FUZZ_GIT_DIFF_OBJ := $(BUILD)/tests/fuzz/fuzz_git_diff.o
 FUZZ_MOUSE_OBJ := $(BUILD)/tests/fuzz/fuzz_mouse.o
 FUZZ_FLLEX_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_lex.o
 FUZZ_FLPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_parse.o
@@ -549,6 +550,7 @@ PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
 PERF_GIT_STATUS_OBJ := $(BUILD)/tests/perf/git_status.o
 PERF_FUSS_OBJ := $(BUILD)/tests/perf/fuss.o
+PERF_GIT_GUTTER_OBJ := $(BUILD)/tests/perf/git_gutter.o
 ifeq ($(HOST_OS),Linux)
 PERF_GIT_ALLOC_WRAP := -Wl,--wrap=malloc -Wl,--wrap=calloc \
                        -Wl,--wrap=realloc -Wl,--wrap=free \
@@ -574,14 +576,16 @@ ifneq ($(filter ai,$(MODULES)),)
 AI_PERF_TARGET := perf-ai-http perf-ai-shadow perf-ai-privacy
 endif
 ifneq ($(filter fuss,$(MODULES)),)
-FUSS_FUZZ_TARGET := fuzz-porcelain fuzz-fuss
-FUSS_PERF_TARGET := perf-git-status perf-fuss
-FUSS_SCRIPT_TARGET := test-git-script test-fuss-commands
+FUSS_FUZZ_TARGET := fuzz-porcelain fuzz-fuss fuzz-git-diff
+FUSS_PERF_TARGET := perf-git-status perf-fuss perf-git-gutter
+FUSS_SCRIPT_TARGET := test-git-script test-fuss-commands test-git-hunks
+FUSS_TORTURE_TARGET := torture-git-hunk
 endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 GIT_SCRIPT_OBJ := $(BUILD)/tests/script/git_layer.o
 FUSS_COMMANDS_OBJ := $(BUILD)/tests/script/fuss_commands.o
+GIT_HUNKS_OBJ := $(BUILD)/tests/script/git_hunks.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 ROUNDTRIP_OBJ := $(BUILD)/tests/roundtrip/gen.o \
                  $(BUILD)/tests/roundtrip/runner.o
@@ -593,11 +597,13 @@ TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/yew-torture.o
 TORTURE_DRIVER_OBJ := $(BUILD)/tests/torture/kill9.o
 TORTURE_LIVE_OBJ := $(BUILD)/tests/torture/yew-live-torture.o
 TORTURE_BATCH_OBJ := $(BUILD)/tests/torture/batch_kill9.o
+TORTURE_GIT_HUNK_OBJ := $(BUILD)/tests/torture/git_hunk_kill9.o
 TORTURE_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 TORTURE_CHILD := $(BUILD)/yew-torture
 TORTURE_DRIVER := $(BUILD)/kill9
 TORTURE_LIVE := $(BUILD)/yew-live-torture
 TORTURE_BATCH := $(BUILD)/batch-kill9
+TORTURE_GIT_HUNK := $(BUILD)/git-hunk-kill9
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
@@ -631,16 +637,18 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
                 $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
                 $(FUZZ_SYMIDX_OBJ) $(FUZZ_JSON_OBJ) $(FUZZ_JSONRPC_OBJ) \
-                $(FUZZ_FUSS_OBJ) \
+                $(FUZZ_FUSS_OBJ) $(FUZZ_GIT_DIFF_OBJ) \
                 $(FUZZ_LSP_MSG_OBJ) $(FUZZ_LSP_RESP_OBJ) $(LSP_LIVE_OBJ) \
                 $(FUZZ_HTTP_OBJ) $(FUZZ_AI_STREAM_OBJ) \
                 $(FUZZ_AI_SHADOW_OBJ) $(FUZZ_AI_REDACT_OBJ) \
                 $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
                 $(PERF_AI_HTTP_OBJ) $(PERF_AI_SHADOW_OBJ) \
                 $(PERF_AI_PRIVACY_OBJ) $(PERF_FUSS_OBJ) \
+                $(PERF_GIT_GUTTER_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
-                $(TORTURE_BATCH_OBJ) $(FAULTSHIM) $(FAKELSP)))
+                $(TORTURE_BATCH_OBJ) $(TORTURE_GIT_HUNK_OBJ) \
+                $(GIT_HUNKS_OBJ) $(FAULTSHIM) $(FAKELSP)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -653,12 +661,12 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all check test clean install dirs FORCE test-script test-git-script \
-        test-fuss-commands \
+        test-fuss-commands test-git-hunks \
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
-        fuzz-porcelain \
+        fuzz-porcelain fuzz-git-diff \
         fuzz-ai \
         test-lsp-live \
         fuzz-syn-long \
@@ -670,7 +678,7 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
-        perf-git-status perf-fuss \
+        perf-git-status perf-fuss perf-git-gutter \
         perf-ai-shadow perf-ai-privacy \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
@@ -680,6 +688,7 @@ endif
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check torture-batch \
+        torture-git-hunk \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
         test-fletch test-roundtrip test-roundtrip-coverage \
         test-fletch-roundtrip fletch-ledger \
@@ -823,6 +832,10 @@ $(BUILD)/fuzz_fuss: $(FUZZ_LINK_OBJ) $(FUZZ_FUSS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_FUSS_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_git_diff: $(FUZZ_LINK_OBJ) $(FUZZ_GIT_DIFF_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_GIT_DIFF_OBJ) $(LDLIBS)
+
 $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_MOUSE_OBJ) $(LDLIBS)
@@ -896,6 +909,10 @@ $(BUILD)/perf_fuss: $(FUSS_TREE_TEST_OBJ) $(PERF_FUSS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUSS_TREE_TEST_OBJ) \
 		$(PERF_FUSS_OBJ) $(LDLIBS)
 
+$(BUILD)/perf_git_gutter: $(PERF_CORE_OBJ) $(PERF_GIT_GUTTER_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_GIT_GUTTER_OBJ) $(LDLIBS)
+
 $(BUILD)/perf_lsp: $(PERF_CORE_OBJ) $(PERF_LSP_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_LSP_OBJ) $(LDLIBS)
@@ -938,6 +955,10 @@ $(BUILD)/git_script: $(PERF_CORE_OBJ) $(GIT_SCRIPT_OBJ)
 $(BUILD)/fuss_commands: $(PERF_CORE_OBJ) $(FUSS_COMMANDS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(FUSS_COMMANDS_OBJ) $(LDLIBS)
+
+$(BUILD)/git_hunks: $(PERF_CORE_OBJ) $(GIT_HUNKS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(GIT_HUNKS_OBJ) $(LDLIBS)
 
 $(BUILD)/roundtrip_runner: $(ROUNDTRIP_LINK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ROUNDTRIP_LINK_OBJ) $(LDLIBS)
@@ -1027,6 +1048,10 @@ $(TORTURE_LIVE): $(TORTURE_LIVE_OBJ) $(LIVE_PTY_OBJ)
 
 $(TORTURE_BATCH): $(TORTURE_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_BATCH_OBJ) $(LDLIBS)
+
+$(TORTURE_GIT_HUNK): $(PERF_CORE_OBJ) $(TORTURE_GIT_HUNK_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(TORTURE_GIT_HUNK_OBJ) $(LDLIBS)
 
 $(FAULTSHIM): tests/torture/faultshim.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< \
@@ -1264,6 +1289,9 @@ fuzz-porcelain: $(BUILD)/fuzz_porcelain
 fuzz-fuss: $(BUILD)/fuzz_fuss
 	$(BUILD)/fuzz_fuss --iters=$(FUSS_FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
+fuzz-git-diff: $(BUILD)/fuzz_git_diff
+	$(BUILD)/fuzz_git_diff --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
 test-syn-def-corpus: $(BUILD)/fuzz_syn_def
 	$(BUILD)/fuzz_syn_def --corpus-only
 
@@ -1326,6 +1354,9 @@ perf-git-status: $(BUILD)/perf_git_status
 
 perf-fuss: $(BUILD)/perf_fuss
 	$(BUILD)/perf_fuss
+
+perf-git-gutter: $(BUILD)/perf_git_gutter
+	$(BUILD)/perf_git_gutter --gate
 
 perf-lsp: $(BUILD)/perf_lsp
 	$(BUILD)/perf_lsp
@@ -1596,7 +1627,8 @@ perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
 	fi
 
 torture-build: $(BUILD)/yew $(TORTURE_CHILD) $(TORTURE_LIVE) \
-               $(TORTURE_DRIVER) $(TORTURE_BATCH) $(FAULTSHIM)
+               $(TORTURE_DRIVER) $(TORTURE_BATCH) $(FAULTSHIM) \
+               $(if $(filter fuss,$(MODULES)),$(TORTURE_GIT_HUNK),)
 
 torture-live-check: torture-build
 	YEW_TORTURE_CLEAN_ONLY=1 \
@@ -1611,7 +1643,7 @@ torture-batch: torture-build
 	$(TORTURE_BATCH) --yew $(abspath $(BUILD)/yew) \
 		--checker $(abspath $(TORTURE_CHILD))
 
-torture: torture-build
+torture: torture-build $(FUSS_TORTURE_TARGET)
 	YEW_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_CHILD)) \
 		$(abspath $(FAULTSHIM))
@@ -1624,6 +1656,16 @@ torture: torture-build
 		$(abspath $(FAULTSHIM))
 	$(TORTURE_BATCH) --yew $(abspath $(BUILD)/yew) \
 		--checker $(abspath $(TORTURE_CHILD))
+
+torture-git-hunk: $(TORTURE_GIT_HUNK)
+	@if ! command -v git >/dev/null 2>&1; then \
+		echo 'HARNESS_SKIP git_hunk_kill9: git not found'; \
+	else \
+		set -e; \
+		tmp=$$(mktemp -d); \
+		trap 'find "$$tmp" -depth -delete' EXIT HUP INT TERM; \
+		LC_ALL=C $(TORTURE_GIT_HUNK) "$$tmp"; \
+	fi
 
 unicode-tables: $(BUILD)/gen-unicode-tables
 	$< ucd/16.0.0 > src/unicode/tables.c
@@ -1724,6 +1766,16 @@ test-fuss-commands: $(BUILD)/fuss_commands
 		tmp=$$(mktemp -d); \
 		trap 'find "$$tmp" -depth -delete' EXIT HUP INT TERM; \
 		LC_ALL=C $(BUILD)/fuss_commands "$$tmp"; \
+	fi
+
+test-git-hunks: $(BUILD)/git_hunks
+	@if ! command -v git >/dev/null 2>&1; then \
+		echo 'HARNESS_SKIP git_hunks: git not found'; \
+	else \
+		set -e; \
+		tmp=$$(mktemp -d); \
+		trap 'find "$$tmp" -depth -delete' EXIT HUP INT TERM; \
+		LC_ALL=C $(BUILD)/git_hunks "$$tmp"; \
 	fi
 
 test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
