@@ -242,17 +242,19 @@ static void diff_intraline_spans(Win *left, Win *right,
 static const char *repo_path(const Ed *ed, const Buffer *buf)
 {
     const GitRepo *repo = yew_git_repo_cached(ed);
+    const char *path;
     size_t n;
 
     if (repo == NULL || repo->top_level == NULL || buf == NULL ||
-        buf->path == NULL)
+        (buf->meta.realpath == NULL && buf->path == NULL))
         return NULL;
+    path = buf->meta.realpath != NULL ? buf->meta.realpath : buf->path;
     n = strlen(repo->top_level);
-    if (strncmp(buf->path, repo->top_level, n) != 0)
+    if (strncmp(path, repo->top_level, n) != 0)
         return NULL;
-    if (buf->path[n] == '/')
-        return buf->path + n + 1U;
-    return buf->path[n] == '\0' ? "." : NULL;
+    if (path[n] == '/')
+        return path + n + 1U;
+    return path[n] == '\0' ? "." : NULL;
 }
 
 static const GitEntry *snapshot_entry(const GitSnapshot *snap,
