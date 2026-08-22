@@ -3,5 +3,4 @@ header content-type: text/event-stream
 framing sse
 delay 100
 emit data: {"choices":[{"delta":{"content":"int answer = 42;"}}]}\n\n
-delay 20
 emit data: [DONE]\n\n

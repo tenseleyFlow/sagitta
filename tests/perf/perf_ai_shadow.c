@@ -57,6 +57,15 @@ typedef struct LiveSample {
     u64 deliver_ms;
 } LiveSample;
 
+typedef struct LiveTiming {
+    i64 armed;
+    i64 context;
+    i64 prompt;
+    i64 sent;
+    i64 first_token;
+    bool ready;
+} LiveTiming;
+
 static volatile u64 ai_shadow_sink;
 
 static void fail(const char *message)
@@ -178,7 +187,30 @@ static void server_stop(pid_t pid)
     while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
 }
 
-static bool pump_once(Ed *ed, int timeout_ms)
+static bool live_timing_capture(const Ed *ed, LiveTiming *timing)
+{
+    const AiCall *call;
+
+    if (timing == NULL || timing->ready)
+        return true;
+    call = &ed->ai->call;
+    if (!call->active || call->t_first_token < 0)
+        return true;
+    if (call->t_armed < 0 || call->t_context < call->t_armed ||
+        call->t_prompt < call->t_context ||
+        call->t_sent < call->t_prompt ||
+        call->t_first_token < call->t_sent)
+        return false;
+    timing->armed = call->t_armed;
+    timing->context = call->t_context;
+    timing->prompt = call->t_prompt;
+    timing->sent = call->t_sent;
+    timing->first_token = call->t_first_token;
+    timing->ready = true;
+    return true;
+}
+
+static bool pump_once(Ed *ed, int timeout_ms, LiveTiming *timing)
 {
     struct pollfd fds[YEW_JOB_MAX * 4U + YEW_HTTP_POOL_MAX];
     u32 nfds = 0U;
@@ -194,7 +226,14 @@ static bool pump_once(Ed *ed, int timeout_ms)
     yew_job_reap(ed);
     yew_job_tick(ed, ed->now_ms);
     yew_job_settle(ed);
-    yew_ai_pump(ed, fds, nfds);
+    /* Observe transport timestamps before shadow pumping can finish and
+     * reset a call whose first token and terminator arrived together. */
+    yew_http_pump(ed, fds, nfds);
+    yew_ai_command_pump(ed);
+    if (!live_timing_capture(ed, timing))
+        return false;
+    yew_ai_shadow_pump(ed);
+    yew_ai_stats_pump(ed, ed->now_ms);
     return true;
 }
 
@@ -208,7 +247,7 @@ static bool curl_probe(Ed *ed)
         return false;
     while ((ed->ai->curl.running || ed->ai->curl.job_id != 0U) &&
            yew_now_ms() - started < AI_SHADOW_TIMEOUT_MS)
-        if (!pump_once(ed, 10))
+        if (!pump_once(ed, 10, NULL))
             return false;
     return yew_ai_curl_probe(ed, &ed->ai->curl, error, sizeof(error)) &&
            error[0] == '\0';
@@ -217,30 +256,25 @@ static bool curl_probe(Ed *ed)
 static bool drive_live(Ed *ed, LiveSample *sample)
 {
     i64 started = yew_now_ms();
+    LiveTiming timing = {0};
     bool saw_first = false;
 
     while (yew_now_ms() - started < AI_SHADOW_TIMEOUT_MS) {
         i64 deadline = yew_ai_deadline(ed, yew_now_ms());
         int timeout = deadline < 0 || deadline > 10 ? 10 : (int)deadline;
 
-        if (!pump_once(ed, timeout))
+        if (!pump_once(ed, timeout, &timing))
             return false;
-        if (!saw_first && ed->win->shadow.live) {
-            const AiCall *call = &ed->ai->call;
+        if (!saw_first && timing.ready && ed->win->shadow.live) {
             i64 now = yew_now_ms();
 
-            if (call->t_armed < 0 || call->t_context < call->t_armed ||
-                call->t_prompt < call->t_context ||
-                call->t_sent < call->t_prompt ||
-                call->t_first_token < call->t_sent)
-                return false;
-            sample->first_ms = (u64)(now - call->t_armed);
-            sample->context_ms = (u64)(call->t_context - call->t_armed);
-            sample->prompt_ms = (u64)(call->t_prompt - call->t_context);
-            sample->setup_ms = (u64)(call->t_sent - call->t_prompt);
+            sample->first_ms = (u64)(now - timing.armed);
+            sample->context_ms = (u64)(timing.context - timing.armed);
+            sample->prompt_ms = (u64)(timing.prompt - timing.context);
+            sample->setup_ms = (u64)(timing.sent - timing.prompt);
             sample->transport_first_ms =
-                (u64)(call->t_first_token - call->t_sent);
-            sample->deliver_ms = (u64)(now - call->t_first_token);
+                (u64)(timing.first_token - timing.sent);
+            sample->deliver_ms = (u64)(now - timing.first_token);
             saw_first = true;
         }
         if (saw_first && !ed->ai->call.active)
