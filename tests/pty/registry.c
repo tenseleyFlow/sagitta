@@ -7350,15 +7350,40 @@ static bool s53_conflict_fixture(PtyCtx *c, char *repo, size_t repo_cap)
     return true;
 }
 
+static void s53_wait_cursor(PtyCtx *c, u8 shape, bool footer)
+{
+    u32 i;
+    bool ready = false;
+
+    for (i = 0U; i < 120U && !c->failed; i++) {
+        ready = c->vt.cursor_shape == shape &&
+                ((c->vt.cur_r == c->vt.rows - 1) == footer);
+        if (ready)
+            break;
+        ptc_settle(c, 25);
+    }
+    ptc_check(c, ready, "Sprint 53 editor mode did not settle");
+}
+
 static void s53_wait_git(PtyCtx *c)
 {
     ptc_settle(c, 900);
     ptc_wait_kitty_push(c, 21U);
-    /* Opening the real command prompt clears transient startup messages;
-     * cancelling it exposes the cached statusline without a four-second
-     * sleep or an extra forced Git refresh. */
-    ptc_keys(c, ": esc");
-    ptc_settle(c, 50);
+    ptc_keys(c, ":");
+    s53_wait_cursor(c, 6U, true);
+    ptc_keys(c, "esc");
+    s53_wait_cursor(c, 2U, false);
+}
+
+static void s53_wait_screen(PtyCtx *c, const char *text)
+{
+    u32 i;
+
+    for (i = 0U; i < 240U && !c->failed &&
+                 !s52_screen_contains(&c->vt, text); i++)
+        ptc_settle(c, 25);
+    ptc_check(c, s52_screen_contains(&c->vt, text),
+              "Sprint 53 Git state did not settle");
 }
 
 static void case_s53_statusline(PtyCtx *c)
@@ -7366,6 +7391,27 @@ static void case_s53_statusline(PtyCtx *c)
     char repo[PATH_MAX];
     const char *name = c->test->name;
     const char *expected = NULL;
+
+    if (strstr(name, "normal") != NULL)
+        expected = "⎇ trunk ↑2 ↓1";
+    else if (strstr(name, "no_upstream") != NULL)
+        expected = "⎇ trunk";
+    else if (strstr(name, "detached") != NULL)
+        expected = "⎇ (";
+    else if (strstr(name, "unborn") != NULL)
+        expected = "⎇ (no commits)";
+    else if (strstr(name, "merge") != NULL)
+        expected = "|MERGING";
+    else if (strstr(name, "rebase") != NULL)
+        expected = "|REBASE 3/7";
+    else if (strstr(name, "cherry") != NULL)
+        expected = "|CHERRY-PICKING";
+    else if (strstr(name, "revert") != NULL)
+        expected = "|REVERTING";
+    else if (strstr(name, "bisect") != NULL)
+        expected = "|BISECTING";
+    else if (strstr(name, "conflicted") != NULL)
+        expected = "⚑2";
 
     if (strstr(name, "nonrepo") != NULL) {
         ptc_spawn(c, ptc_yew_bin(c), NULL);
@@ -7379,30 +7425,9 @@ static void case_s53_statusline(PtyCtx *c)
         ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
     }
     s53_wait_git(c);
-    if (strstr(name, "normal") != NULL)
-        ptc_settle(c, 900);
+    s53_wait_screen(c, expected != NULL ? expected : "L  [no name]");
     ptc_check(c, !c->pty.reaped,
               "rendering a Sprint 53 Git statusline exited yew");
-    if (strstr(name, "normal") != NULL)
-        expected = "⎇ trunk ↑2 ↓1";
-    else if (strstr(name, "no_upstream") != NULL)
-        expected = "⎇ trunk";
-    else if (strstr(name, "detached") != NULL)
-        expected = "⎇ (";
-    else if (strstr(name, "unborn") != NULL)
-        expected = "⎇ (no commits)";
-    else if (strstr(name, "merge") != NULL)
-        expected = "|MERGING";
-    else if (strstr(name, "rebase") != NULL)
-        expected = "|REBASE 3/7";
-    else if (strstr(name, "cherry_pick") != NULL)
-        expected = "|CHERRY-PICKING";
-    else if (strstr(name, "revert") != NULL)
-        expected = "|REVERTING";
-    else if (strstr(name, "bisect") != NULL)
-        expected = "|BISECTING";
-    else if (strstr(name, "conflicted") != NULL)
-        expected = "⚑2";
     if (expected != NULL)
         ptc_check(c, s52_screen_contains(&c->vt, expected),
                   "Sprint 53 Git statusline omitted its repository state");
@@ -7528,13 +7553,9 @@ static void case_s53_git_sign(PtyCtx *c)
         ptc_keys(c, "end i enter esc");
         ptc_settle(c, 400);
     }
-    ptc_check(c, !c->pty.reaped,
-              "rendering a Sprint 53 Git sign exited yew");
     expected = strstr(c->test->name, "delete_above") != NULL ? "▔" :
                strstr(c->test->name, "delete_eof") != NULL ? "▁" :
                strstr(c->test->name, "unknown") != NULL ? "~" : "▎";
-    ptc_check(c, s52_screen_contains(&c->vt, expected),
-              "Sprint 53 Git gutter omitted the expected sign");
     if (strstr(c->test->name, "sign_add") != NULL)
         expected_row = "▎   1 inserted";
     else if (strstr(c->test->name, "sign_mod") != NULL)
@@ -7543,6 +7564,12 @@ static void case_s53_git_sign(PtyCtx *c)
         expected_row = "▔   1 beta";
     else if (strstr(c->test->name, "conflict") != NULL)
         expected_row = "▎   1 <<<<<<< HEAD";
+    s53_wait_screen(c, expected_row == NULL ? expected : expected_row);
+    s53_wait_screen(c, "⎇ trunk");
+    ptc_check(c, !c->pty.reaped,
+              "rendering a Sprint 53 Git sign exited yew");
+    ptc_check(c, s52_screen_contains(&c->vt, expected),
+              "Sprint 53 Git gutter omitted the expected sign");
     if (expected_row != NULL)
         ptc_check(c, s52_screen_contains(&c->vt, expected_row),
                   "Sprint 53 Git gutter sign was placed on the wrong row");
@@ -7698,8 +7725,10 @@ static void case_s53_blame(PtyCtx *c)
     if (strstr(c->test->name, "stale") != NULL) {
         ptc_keys(c, "i X");
         s52_wait_screen(c, "Xshort blamed line");
-        ptc_keys(c, "esc esc");
-        ptc_settle(c, 5);
+        ptc_keys(c, "esc");
+        s53_wait_cursor(c, 2U, false);
+        ptc_keys(c, "esc");
+        ptc_settle(c, 30);
         ptc_check(c, s52_screen_contains(&c->vt, "▏ Yew PTY"),
                   "stale inline blame vanished while recomputing");
     }
