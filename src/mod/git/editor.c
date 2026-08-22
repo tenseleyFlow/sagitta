@@ -472,6 +472,8 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
     const GitSnapshot *snap = yew_git_snapshot_cached(ed);
     const char *path = repo_path(ed, buf);
     const GitEntry *entry = snapshot_entry(snap, path);
+    bool base_is_head;
+    bool by_snapshot;
     BaseJob *request;
     char err[160];
     const char *oid;
@@ -496,16 +498,20 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
         state->diff_due_ms = ed->now_ms;
         return;
     }
-    oid = entry == NULL || entry->conflicted ? snap->head_oid :
-                                                  entry->index_oid;
+    base_is_head = entry != NULL && entry->conflicted;
+    by_snapshot = !base_is_head &&
+                  (entry == NULL || entry->index_oid[0] == '\0');
+    oid = base_is_head ? snap->head_oid :
+          by_snapshot ? snap->head_oid : entry->index_oid;
     if (oid == NULL)
         oid = "";
-    if (oid[0] == '\0') {
-        bool head = entry != NULL && entry->conflicted;
-
+    if (by_snapshot && state->base_ready && state->base_by_snapshot &&
+        state->base_snapshot_gen == snap->gen && !state->base_is_head)
+        return;
+    if (base_is_head && oid[0] == '\0') {
         if (state->base_ready && state->base_by_snapshot &&
             state->base_snapshot_gen == snap->gen &&
-            state->base_is_head == head)
+            state->base_is_head)
             return;
         diff_cancel(ed->git_editor, state, true);
         state->base.len = 0U;
@@ -514,17 +520,15 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
         state->base_by_snapshot = true;
         state->base_ready = true;
         state->base_too_large = false;
-        state->base_is_head = head;
+        state->base_is_head = true;
         state->base_revision++;
         state->diff_due_ms = ed->now_ms;
         return;
     }
     if (state->base_ready && strcmp(state->base_oid, oid) == 0) {
-        bool head = entry != NULL && entry->conflicted;
-
-        if (state->base_is_head != head) {
+        if (state->base_is_head != base_is_head) {
             diff_cancel(ed->git_editor, state, true);
-            state->base_is_head = head;
+            state->base_is_head = base_is_head;
             state->base_revision++;
             state->diff_due_ms = ed->now_ms;
         }
@@ -533,9 +537,9 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
     request = yew_xcalloc(1U, sizeof(*request));
     request->ed = ed;
     request->buf_id = buf->id;
-    request->base_is_head = entry != NULL && entry->conflicted;
+    request->base_is_head = base_is_head;
     request->snapshot_gen = snap->gen;
-    request->by_snapshot = entry == NULL;
+    request->by_snapshot = by_snapshot;
     oid_copy(request->oid, oid);
     id = request->base_is_head ?
         yew_git_head_blob(ed, path, request, base_complete,
