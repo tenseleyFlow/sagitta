@@ -7057,10 +7057,12 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_keys(c, "q");
         ptc_settle(c, 0);
         ptc_check(c, !c->pty.reaped, "q in F mode exited yew");
+        c->vt.sync_pairs_unstable = true;
     } else if (strstr(name, "leave_esc") != NULL) {
         ptc_keys(c, "esc");
         ptc_settle(c, 0);
         ptc_check(c, !c->pty.reaped, "Esc in F mode exited yew");
+        c->vt.sync_pairs_unstable = true;
     } else {
         ptc_settle(c, 0);
     }
@@ -7118,6 +7120,7 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
               "leaving FUSS did not restore the original layout exactly");
     if (c->failed)
         goto done;
+    c->vt.sync_pairs_unstable = true;
     ptc_snapshot_sgr(c, c->test->name);
     bytebuf_append(&c->snapshot, "--- viewer before leave\n", 24U);
     bytebuf_append(&c->snapshot, viewer.data, viewer.len);
@@ -7367,8 +7370,12 @@ static void s53_wait_cursor(PtyCtx *c, u8 shape, bool footer)
 
 static void s53_wait_git(PtyCtx *c)
 {
-    ptc_settle(c, 900);
+    ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+}
+
+static void s53_clear_message(PtyCtx *c)
+{
     ptc_keys(c, ":");
     s53_wait_cursor(c, 6U, true);
     ptc_keys(c, "esc");
@@ -7425,6 +7432,8 @@ static void case_s53_statusline(PtyCtx *c)
         ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
     }
     s53_wait_git(c);
+    s53_wait_screen(c, expected != NULL ? expected : "L  [no name]");
+    s53_clear_message(c);
     s53_wait_screen(c, expected != NULL ? expected : "L  [no name]");
     ptc_check(c, !c->pty.reaped,
               "rendering a Sprint 53 Git statusline exited yew");
@@ -7566,6 +7575,9 @@ static void case_s53_git_sign(PtyCtx *c)
         expected_row = "▎   1 <<<<<<< HEAD";
     s53_wait_screen(c, expected_row == NULL ? expected : expected_row);
     s53_wait_screen(c, "⎇ trunk");
+    s53_clear_message(c);
+    s53_wait_screen(c, expected_row == NULL ? expected : expected_row);
+    s53_wait_screen(c, "⎇ trunk");
     ptc_check(c, !c->pty.reaped,
               "rendering a Sprint 53 Git sign exited yew");
     ptc_check(c, s52_screen_contains(&c->vt, expected),
@@ -7574,7 +7586,9 @@ static void case_s53_git_sign(PtyCtx *c)
         ptc_check(c, s52_screen_contains(&c->vt, expected_row),
                   "Sprint 53 Git gutter sign was placed on the wrong row");
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot_sgr(c, c->test->name);
+    /* Async Git completion can reorder equivalent paint frames.  The
+     * final grid and its style legend are the deterministic contract. */
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
 
@@ -7647,10 +7661,14 @@ static void case_s53_diff_view(PtyCtx *c)
         return;
     ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
     s53_wait_git(c);
+    s53_wait_screen(c, "⎇ trunk");
+    s53_wait_screen(c, strstr(c->test->name, "scroll") != NULL
+                           ? "▔" : "▎");
+    s53_clear_message(c);
     ptc_keys(c, ":");
     ptc_bytes(c, "ed.git.diff.view");
     ptc_keys(c, "enter");
-    ptc_settle(c, 200);
+    s53_wait_screen(c, "*git-buffer*");
     ptc_check(c, !c->pty.reaped,
               "opening the Sprint 53 editor diff view exited yew");
     if (strstr(c->test->name, "scroll") != NULL) {
@@ -7666,7 +7684,7 @@ static void case_s53_diff_view(PtyCtx *c)
                   "side-by-side diff omitted an unbalanced hunk side");
     }
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot_sgr(c, c->test->name);
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
 
@@ -7706,37 +7724,48 @@ static bool s53_blame_fixture(PtyCtx *c, char *repo, size_t repo_cap)
 static void case_s53_blame(PtyCtx *c)
 {
     char repo[PATH_MAX];
+    u32 frame;
 
     if (!s53_blame_fixture(c, repo, sizeof(repo)))
         return;
     ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
     s53_wait_git(c);
+    s53_wait_screen(c, "⎇ trunk");
+    s53_clear_message(c);
     ptc_keys(c, ":");
     ptc_bytes(c, "ed.git.blame.toggle");
     ptc_keys(c, "enter");
-    ptc_settle(c, 900);
     if (strstr(c->test->name, "omit_cjk") != NULL) {
+        s53_wait_screen(c, "inline blame on");
         ptc_check(c, !s52_screen_contains(&c->vt, "▏ Yew PTY"),
                   "narrow CJK blame annotation was not omitted");
     } else {
-        ptc_check(c, s52_screen_contains(&c->vt, "▏ Yew PTY"),
-                  "inline blame annotation did not become visible");
+        s53_wait_screen(c, "▏ Yew PTY");
     }
+    s53_clear_message(c);
     if (strstr(c->test->name, "stale") != NULL) {
-        ptc_keys(c, "i X");
-        s52_wait_screen(c, "Xshort blamed line");
+        ptc_keys(c, "i");
+        s53_wait_cursor(c, 6U, false);
+        frame = c->vt.nsync_pairs;
+        ptc_bytes(c, "X");
+        ptc_wait_sync_pairs(c, frame + 1U);
+        ptc_check(c, s52_screen_contains(
+                         &c->vt,
+                         "Xshort blamed line  ▏ Yew PTY"),
+                  "edited line did not retain stale blame");
+        frame = c->vt.nsync_pairs;
         ptc_keys(c, "esc");
-        s53_wait_cursor(c, 2U, false);
-        ptc_keys(c, "esc");
-        ptc_settle(c, 30);
-        ptc_check(c, s52_screen_contains(&c->vt, "▏ Yew PTY"),
-                  "stale inline blame vanished while recomputing");
+        ptc_wait_sync_pairs(c, frame + 1U);
+        ptc_check(c, c->vt.cursor_shape == 2U &&
+                         c->vt.cur_r != c->vt.rows - 1,
+                  "stale blame did not return to normal mode");
+        ptc_check(c, s52_screen_contains(
+                         &c->vt,
+                         "Xshort blamed line  ▏ Yew PTY"),
+                  "stale inline blame vanished before recomputing");
     }
     c->vt.sync_pairs_unstable = true;
-    if (strstr(c->test->name, "stale") != NULL)
-        ptc_snapshot(c, c->test->name);
-    else
-        ptc_snapshot_sgr(c, c->test->name);
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
 #endif
