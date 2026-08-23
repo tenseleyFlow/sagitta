@@ -214,11 +214,12 @@ endif
 endif
 
 UNIT_RUN := $(BUILD)/unit_tests
-# Deferred (=, not :=) so $(YEW_PTY_BUDGET_MS) resolves at USE time,
-# after the VALGRIND/else branches below have chosen a value.  Without
-# the prefix the plain lanes passed nothing and silently inherited
-# runner.c's 180 s fallback.
-PTY_RUN   = YEW_PTY_BUDGET_MS=$(YEW_PTY_BUDGET_MS) $(BUILD)/pty_runner
+# Deferred (=, not :=) so the PTY budgets resolve at USE time, after the
+# VALGRIND/else branches below have chosen their values.  Without these
+# prefixes the plain lanes silently inherit runner.c's fallbacks.
+PTY_RUN   = YEW_PTY_BUDGET_MS=$(YEW_PTY_BUDGET_MS) \
+            YEW_PTY_CASE_BUDGET_MS=$(YEW_PTY_CASE_BUDGET_MS) \
+            $(BUILD)/pty_runner
 PTY_PREP :=
 PTY_LOG_REDIRECT :=
 # Plain compiler lanes cover intentional abort contracts. Instrumented lanes
@@ -321,6 +322,11 @@ else
 # HANG, not a latency budget — nothing measures against it, and the per-case
 # budget is what bounds a single stuck case.
 YEW_PTY_BUDGET_MS ?= 900000
+# Git-backed editor cases execute real subprocesses.  The stale-blame case
+# completed correctly at 4.7-4.9 s under CPU contention, which leaves no
+# honest margin under the runner's 5 s fallback.  This remains a hang
+# ceiling; PTY latency is asserted by semantic barriers and dedicated gates.
+YEW_PTY_CASE_BUDGET_MS ?= 10000
 ifeq ($(SAN),1)
 # The 10,000-replacement migration case is deliberately CPU-heavy under
 # per-instruction VM checks plus ASan/UBSan; this is a hang ceiling only.
