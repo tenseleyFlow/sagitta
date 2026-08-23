@@ -314,10 +314,13 @@ else
 # the pty lane on the same commit finished.  That is a ceiling being
 # brushed, not a hang.
 #
-# 600 s is ~4.5x the measured time.  It is a wall-clock ceiling on a
-# HANG, not a latency budget — nothing measures against it, and the
-# per-case budget is what bounds a single stuck case.
-YEW_PTY_BUDGET_MS ?= 600000
+# Sprint 53 grew this to 421 cases.  Two independent hosted lanes reached
+# the old 600 s aggregate ceiling while cases were still passing normally;
+# the per-case deadline remained healthy.  Give the complete sweep 50%
+# headroom for shared-runner variance.  This is a wall-clock ceiling on a
+# HANG, not a latency budget — nothing measures against it, and the per-case
+# budget is what bounds a single stuck case.
+YEW_PTY_BUDGET_MS ?= 900000
 ifeq ($(SAN),1)
 # The 10,000-replacement migration case is deliberately CPU-heavy under
 # per-instruction VM checks plus ASan/UBSan; this is a hang ceiling only.
