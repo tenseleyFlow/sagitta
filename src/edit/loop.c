@@ -34,10 +34,13 @@
 #include "ws/symwalk.h"
 
 enum {
-    /* Background indexing must not race the next key after a paint.  The
-     * grace period is short enough to be invisible at rest and long enough
-     * for a continuing input burst to reach poll first. */
-    YEW_BACKGROUND_IDLE_MS = 12,
+    /* Open-buffer indexing feeds completion, so resume it promptly after a
+     * paint.  It remains off the input turn itself. */
+    YEW_BUFFER_INDEX_IDLE_MS = 12,
+    /* Workspace discovery is much less urgent.  A normal key-repeat starts
+     * after roughly this long, so treating a shorter pause as idle makes a
+     * background file scan race ordinary navigation. */
+    YEW_WORKSPACE_INDEX_IDLE_MS = 250,
     /* A completed slice must return to poll before taking another one.
      * Without a separate cadence, idle_since + grace remains overdue and
      * a large workspace drives a full core until indexing completes. */
@@ -235,22 +238,41 @@ static i64 absolute_deadline(i64 at_ms, i64 now_ms)
     return at_ms - now_ms;
 }
 
-static i64 background_deadline(const Ed *ed, i64 now_ms)
+static i64 background_work_deadline(const Ed *ed, i64 now_ms,
+                                    bool pending, i64 idle_ms)
 {
     i64 ready_ms;
 
-    if (!yew_symidx_pending(ed) && !ed->ws.sym_walk.running)
+    if (!pending)
         return -1;
     if (ed->fl_idle_since_ms < 0)
         return 0;
     ready_ms = ed->fl_idle_since_ms;
-    if (ready_ms <= INT64_MAX - YEW_BACKGROUND_IDLE_MS)
-        ready_ms += YEW_BACKGROUND_IDLE_MS;
+    if (ready_ms <= INT64_MAX - idle_ms)
+        ready_ms += idle_ms;
     else
         ready_ms = INT64_MAX;
     if (ed->background_next_ms > ready_ms)
         ready_ms = ed->background_next_ms;
     return absolute_deadline(ready_ms, now_ms);
+}
+
+static i64 buffer_index_deadline(const Ed *ed, i64 now_ms)
+{
+    return background_work_deadline(ed, now_ms, yew_symidx_pending(ed),
+                                    YEW_BUFFER_INDEX_IDLE_MS);
+}
+
+static i64 workspace_index_deadline(const Ed *ed, i64 now_ms)
+{
+    return background_work_deadline(ed, now_ms, ed->ws.sym_walk.running,
+                                    YEW_WORKSPACE_INDEX_IDLE_MS);
+}
+
+static i64 background_deadline(const Ed *ed, i64 now_ms)
+{
+    return deadline_min(buffer_index_deadline(ed, now_ms),
+                        workspace_index_deadline(ed, now_ms));
 }
 
 int yew_loop_deadline(const Ed *ed, i64 now_ms)
@@ -564,8 +586,13 @@ int yew_loop_run(Ed *ed)
         if (!had_input && background_deadline(ed, now) == 0) {
             i64 completed_ms;
 
-            yew_symidx_pump(ed, YEW_SYMIDX_FULL_US);
-            yew_symwalk_pump(ed, YEW_SYMWALK_BUDGET_US);
+            /* Never compound the two cooperative budgets.  Buffer-local
+             * completion data wins this turn; the workspace tier resumes
+             * on the next cadence after local work is settled. */
+            if (buffer_index_deadline(ed, now) == 0)
+                yew_symidx_pump(ed, YEW_SYMIDX_FULL_US);
+            else
+                yew_symwalk_pump(ed, YEW_SYMWALK_BUDGET_US);
             completed_ms = yew_now_ms();
             ed->background_next_ms =
                 completed_ms <= INT64_MAX - YEW_BACKGROUND_CADENCE_MS

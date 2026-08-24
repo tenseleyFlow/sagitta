@@ -144,37 +144,51 @@ void test_loop_deadline_clamps_poll_range(void)
 void test_loop_background_work_yields_after_input(void)
 {
     Ed ed;
+    SymBufIndex local = {0};
 
     loop_ed_init(&ed);
+    ed.model_ready = true;
+    ed.ws.sym_buf.data = &local;
+    ed.ws.sym_buf.len = 1U;
+    local.dirty.pending = true;
     ed.ws.sym_walk.running = true;
     ed.ws.sym_walk.job = 0U;
     ed.fl_idle_since_ms = 1000;
 
+    /* Completion's open-buffer tier remains prompt. */
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1000), 12);
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1011), 1);
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 0);
 
+    /* Workspace-wide scanning needs a genuine navigation pause. */
+    local.dirty.pending = false;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1000), 250);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1249), 1);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1250), 0);
+
     /* Completing one slice returns to poll instead of spinning on an
      * idle-since deadline that stays overdue forever. */
-    ed.background_next_ms = 1020;
-    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 8);
-    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1019), 1);
-    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1020), 0);
+    ed.background_next_ms = 1258;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1250), 8);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1257), 1);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1258), 0);
 
     /* A newer keypress re-arms the longer input grace. */
-    ed.fl_idle_since_ms = 1015;
-    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1015), 12);
-    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1027), 0);
+    ed.fl_idle_since_ms = 1260;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1260), 250);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1510), 0);
 
     /* Discovery jobs still need a paced settle turn after their pipe fds
      * drain; excluding job-backed walks can strand the workspace index. */
     ed.ws.sym_walk.job = 42U;
-    ed.background_next_ms = 1035;
-    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1027), 8);
-    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1035), 0);
+    ed.background_next_ms = 1518;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1510), 8);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1518), 0);
 
     ed.fl_idle_since_ms = -1;
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 0);
+    ed.ws.sym_buf.data = NULL;
+    ed.ws.sym_buf.len = 0U;
     loop_ed_free(&ed);
 }
 
