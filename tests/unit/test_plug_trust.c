@@ -60,9 +60,15 @@ void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void)
     PlugTrustFix f;
     YewTrustDb db;
     char *out;
+    char *first;
+    char *second;
 
     pt_make(&f);
+    pt_write(f.dbpath,
+             "{schema: 1, legacy_marker: \"kept\", "
+             "dirs: {\"/legacy\": \"denied\"}}\n");
     yew_trust_db_init(&db);
+    YEW_ASSERT(yew_trust_db_load_path(&db, f.dbpath));
     YEW_ASSERT_EQ_I64(yew_trust_plugin_desired(&db, "notes"),
                       YEW_PLUGIN_DESIRED_DEFAULT);
     YEW_ASSERT_EQ_I64(yew_trust_plugin_capability(
@@ -74,6 +80,10 @@ void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void)
         &db, "absent", YEW_PLUGIN_CAP_NET, YEW_PLUGIN_GRANT_UNSET));
     YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 1000, 365U));
     out = pt_read(f.dbpath);
+    /* A dirs-only schema-1 file upgrades in place without inventing policy. */
+    YEW_ASSERT_NOT_NULL(strstr(out, "schema: 3"));
+    YEW_ASSERT_NOT_NULL(strstr(out, "legacy_marker: \"kept\""));
+    YEW_ASSERT_NOT_NULL(strstr(out, "\"/legacy\": \"denied\""));
     YEW_ASSERT(strstr(out, "plugins:") == NULL);
     free(out);
 
@@ -88,6 +98,7 @@ void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void)
     YEW_ASSERT(yew_trust_plugin_set_capability(
         &db, "notes", YEW_PLUGIN_CAP_CLIPBOARD, YEW_PLUGIN_GRANT_DENY));
     YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 1001, 365U));
+    first = pt_read(f.dbpath);
     yew_trust_db_free(&db);
 
     yew_trust_db_init(&db);
@@ -106,6 +117,12 @@ void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void)
     YEW_ASSERT_EQ_I64(yew_trust_plugin_capability(
                           &db, "notes", YEW_PLUGIN_CAP_CLIPBOARD),
                       YEW_PLUGIN_GRANT_DENY);
+    /* Current plugin policy survives reload and rewrites byte-identically. */
+    YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 1001, 365U));
+    second = pt_read(f.dbpath);
+    YEW_ASSERT_EQ_STR(first, second);
+    free(second);
+    free(first);
     YEW_ASSERT(yew_trust_plugin_set_desired(
         &db, "notes", YEW_PLUGIN_DESIRED_DEFAULT));
     YEW_ASSERT(yew_trust_plugin_set_capability(

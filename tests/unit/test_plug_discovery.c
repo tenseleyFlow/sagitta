@@ -234,6 +234,7 @@ void test_plug_discovery_trusted_workspace_obeys_explicit_desired_state(void)
     fixture_init(&f);
     source_roots(&f, data, sizeof(data), config, sizeof(config), workspace,
                  sizeof(workspace));
+    make_plugin(data, "toggle", "0.5.0", true);
     make_plugin(config, "toggle", "1.0.0", true);
     make_plugin(workspace, "toggle", "2.0.0", true);
     YEW_ASSERT(yew_trust_plugin_set_desired(
@@ -241,10 +242,18 @@ void test_plug_discovery_trusted_workspace_obeys_explicit_desired_state(void)
 
     YEW_ASSERT(yew_plug_discover_with_policy(&f.ed, true, &f.trust,
                                               &f.dc));
-    YEW_ASSERT_EQ_U64(f.ed.plug->n, 2U);
+    YEW_ASSERT_EQ_U64(f.ed.plug->n, 3U);
+    /* Trusted precedence is total: data < config < workspace. */
     YEW_ASSERT_EQ_U64(f.ed.plug->v[0]->st, PLUG_SHADOWED);
-    YEW_ASSERT_EQ_U64(f.ed.plug->v[1]->st, PLUG_DISABLED);
-    YEW_ASSERT_EQ_U64(f.ed.plug->v[1]->source, PLUG_SOURCE_WORKSPACE);
+    YEW_ASSERT_EQ_U64(f.ed.plug->v[1]->st, PLUG_SHADOWED);
+    YEW_ASSERT_EQ_U64(f.ed.plug->v[2]->st, PLUG_DISABLED);
+    YEW_ASSERT_EQ_U64(f.ed.plug->v[0]->source, PLUG_SOURCE_DATA);
+    YEW_ASSERT_EQ_U64(f.ed.plug->v[1]->source, PLUG_SOURCE_CONFIG);
+    YEW_ASSERT_EQ_U64(f.ed.plug->v[2]->source, PLUG_SOURCE_WORKSPACE);
+    YEW_ASSERT(!f.ed.plug->v[0]->winner);
+    YEW_ASSERT(!f.ed.plug->v[1]->winner);
+    YEW_ASSERT(f.ed.plug->v[2]->winner);
+    YEW_ASSERT_EQ_STR(f.ed.plug->v[2]->mf.version, "2.0.0");
     fixture_done(&f);
 }
 
