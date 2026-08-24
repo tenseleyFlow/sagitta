@@ -1205,7 +1205,11 @@ u32 yew_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint, bool *created)
     if (undo == NULL || !undo->pending || undo->active ||
         origin_id == FL_ORIGIN_ID_NONE)
         return 0U;
-    existing = matching_registration(ed, origin_id, undo);
+    /* A hook may set the same option on every event for the lifetime of its
+     * origin.  Reuse that origin's top layer so the registry stays bounded.
+     * Separate top-level set() calls remain distinct rollback layers. */
+    existing = ed->hooks.depth == 0U ? 0U :
+               matching_registration(ed, origin_id, undo);
     if (existing != 0U) {
         undo->ledger_id = existing;
         return existing;
