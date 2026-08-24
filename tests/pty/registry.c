@@ -7959,6 +7959,35 @@ static void case_s54_capability_allow_always(PtyCtx *c)
     force_quit(c);
 }
 
+static void case_s54_capability_restart_persists(PtyCtx *c)
+{
+    static const char request[] = "requests fs";
+
+    if (!s54_capability_answer(c, "A"))
+        return;
+    s54_check_cap_persistence(c, "fs: \"allow\"");
+
+    /* ptc_resume is a real reap + exec, and resets the raw terminal log.
+     * The second process therefore cannot inherit either the in-memory
+     * session grant or evidence from the first process's prompt. */
+    ptc_mark_resume(c);
+    force_quit(c);
+    ptc_resume(c, ptc_yew_bin(c), NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_settle(c, 0);
+    ptc_reject_output(c, request, sizeof(request) - 1U);
+
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.plug.list");
+    s18_settle_after_keys(c, "enter");
+    ptc_settle(c, 0);
+    /* Reuse the enabled-picker oracle: the meaningful extra proof is that
+     * this identical state came from a fresh process with no prompt. */
+    ptc_snapshot(c, "s54_capability_allow_always");
+    force_quit(c);
+}
+
 static void case_s54_capability_deny_once(PtyCtx *c)
 {
     if (!s54_capability_answer(c, "d"))
@@ -7986,6 +8015,8 @@ const PtyCase yew_pty_cases[] = {
       case_s54_capability_allow_once),
     C(s54_capability_allow_always, modern, 24U, 80U,
       case_s54_capability_allow_always),
+    C(s54_capability_restart_persists, modern, 24U, 80U,
+      case_s54_capability_restart_persists),
     C(s54_capability_deny_once, modern, 24U, 80U,
       case_s54_capability_deny_once),
     C(s54_capability_deny_always, modern, 24U, 80U,
