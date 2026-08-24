@@ -133,14 +133,18 @@ static CmdStatus plugin_command_invoke(CmdCtx *cx)
     sys = cx->ed->plug;
     for (i = 0U; i < sys->ncmds; i++) {
         PlugCmd *entry = &sys->cmds[i];
+        FlValue fn;
+        u32 origin_id;
 
         if (!entry->active || entry->id.v != cx->invoked_id.v)
             continue;
-        if (fl_origin_masked(cx->ed, entry->origin_id))
+        origin_id = entry->origin_id;
+        fn = entry->fn;
+        if (fl_origin_masked(cx->ed, origin_id))
             return YEW_CMD_ERR_STATE;
-        if (!fl_call_value_args(cx->ed->fl, entry->fn, NULL, 0U,
+        if (!fl_call_value_args(cx->ed->fl, fn, NULL, 0U,
                                 cx->source, &ignored)) {
-            yew_plug_hook_error(cx->ed, entry->origin_id,
+            yew_plug_hook_error(cx->ed, origin_id,
                                 yew_fl_vm(cx->ed)->err);
             yew_plug_drain_pending(cx->ed);
             return YEW_CMD_ERR_STATE;

@@ -194,6 +194,7 @@ void yew_plug_overlay_run(Ed *ed, Win *win, LineNo lo_line, LineNo hi_line,
     nregs = sys->nregs;
     for (i = 0U; i < nregs; i++) {
         PlugValueReg *reg = &sys->regs[i];
+        PlugValueReg snapshot;
         Plug *plug;
         FlValue result = FL_NIL_V;
 
@@ -203,14 +204,15 @@ void yew_plug_overlay_run(Ed *ed, Win *win, LineNo lo_line, LineNo hi_line,
         plug = yew_plug_by_origin(ed, reg->origin_id);
         if (plug == NULL || plug->st != PLUG_ENABLED)
             continue;
-        if (!fl_call_value_args(ed->fl, reg->value, args, 4U,
+        snapshot = *reg;
+        if (!fl_call_value_args(ed->fl, snapshot.value, args, 4U,
                                 YEW_SRC_FLETCH, &result)) {
-            yew_plug_hook_error(ed, reg->origin_id, vm->err);
+            yew_plug_hook_error(ed, snapshot.origin_id, vm->err);
             if (sys->pending_disable_origin != 0U)
                 break;
             continue;
         }
-        (void)parse_result(ed, reg, win, lo_line, hi_line, result,
+        (void)parse_result(ed, &snapshot, win, lo_line, hi_line, result,
                            visit, ctx);
         if (sys->pending_disable_origin != 0U)
             break;

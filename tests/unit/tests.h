@@ -2081,6 +2081,7 @@ void test_bind_later_origin_shadows_then_teardown_reveals_prior(void);
 void test_option_validators_reject_wrong_types_ranges_and_enums(void);
 void test_option_scope_and_side_effects_share_one_setter(void);
 void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void);
+void test_option_registration_layers_survive_other_origin_teardown(void);
 void test_option_completion_uses_declaration_order_inventory(void);
 void test_trust_content_hash_invalidation_ignores_mtime(void);
 void test_trust_realpath_move_and_symlink_do_not_carry_grant(void);

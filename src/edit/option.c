@@ -34,6 +34,7 @@ struct OptStored {
 
 typedef struct YewOptUndo {
     struct OptStored previous;
+    u64 order;
     u32 target_id;
     u32 ledger_id;
     u16 desc_index;
@@ -44,6 +45,7 @@ typedef struct YewOptUndo {
 
 struct YewOptHistory {
     YewOptUndo *v;
+    u64 next_order;
     u32 n;
     u32 cap;
 };
@@ -1076,49 +1078,23 @@ u32 yew_opt_checkpoint(Ed *ed, const char *name, u32 len,
     return slot + 1U;
 }
 
-static u32 matching_registration(const Ed *ed, u32 origin_id,
-                                 const YewOptUndo *want)
-{
-    const YewOptHistory *history;
-    u32 i;
-
-    if (ed == NULL || (history = ed->opt_history) == NULL)
-        return 0U;
-    for (i = 0U; i < history->n; i++) {
-        const YewOptUndo *undo = &history->v[i];
-        const FlRegistration *registration;
-
-        if (!undo->active || undo->desc_index != want->desc_index ||
-            undo->scope != want->scope || undo->target_id != want->target_id ||
-            undo->ledger_id == 0U ||
-            undo->ledger_id > ed->hooks.ledger.n)
-            continue;
-        registration = &ed->hooks.ledger.v[undo->ledger_id - 1U];
-        if (registration->active &&
-            registration->kind == (u8)REG_OPTION &&
-            registration->origin_id == origin_id)
-            return undo->ledger_id;
-    }
-    return 0U;
-}
-
 u32 yew_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint, bool *created)
 {
     YewOptUndo *undo = undo_by_checkpoint(ed, checkpoint);
-    u32 existing;
+    YewOptHistory *history;
 
     if (created != NULL)
         *created = false;
     if (undo == NULL || !undo->pending || undo->active ||
         origin_id == FL_ORIGIN_ID_NONE)
         return 0U;
-    existing = matching_registration(ed, origin_id, undo);
-    if (existing != 0U) {
-        undo->ledger_id = existing;
-        return existing;
-    }
     undo->ledger_id = fl_reg_add(&ed->hooks.ledger, origin_id, REG_OPTION,
                                  checkpoint);
+    history = history_get(ed);
+    history->next_order++;
+    if (history->next_order == 0U)
+        YEW_BUG("option registration order overflow");
+    undo->order = history->next_order;
     undo->pending = false;
     undo->active = true;
     if (created != NULL)
@@ -1208,6 +1184,9 @@ bool yew_opt_remove(Ed *ed, u32 ledger_id)
 {
     FlRegistration *registration;
     YewOptUndo *undo;
+    YewOptUndo *newer = NULL;
+    YewOptHistory *history;
+    u32 i;
 
     if (ed == NULL || ledger_id == 0U || ledger_id > ed->hooks.ledger.n)
         return false;
@@ -1218,7 +1197,23 @@ bool yew_opt_remove(Ed *ed, u32 ledger_id)
     if (undo == NULL || !undo->active || undo->ledger_id != ledger_id ||
         undo->desc_index >= yew_opts_len)
         return false;
-    undo_restore(ed, undo);
+    history = ed->opt_history;
+    for (i = 0U; i < history->n; i++) {
+        YewOptUndo *candidate = &history->v[i];
+
+        if (!candidate->active || candidate->order <= undo->order ||
+            candidate->desc_index != undo->desc_index ||
+            candidate->scope != undo->scope ||
+            candidate->target_id != undo->target_id)
+            continue;
+        if (newer == NULL || candidate->order < newer->order)
+            newer = candidate;
+    }
+    if (newer == NULL) {
+        undo_restore(ed, undo);
+    } else if (!stored_assign(&newer->previous, &undo->previous.value)) {
+        YEW_BUG("option rollback could not splice registration layers");
+    }
     stored_clear(&undo->previous);
     undo->active = false;
     (void)fl_reg_remove(&ed->hooks.ledger, ledger_id);

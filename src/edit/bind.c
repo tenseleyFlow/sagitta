@@ -92,8 +92,10 @@ CmdStatus yew_bind_closure_cmd(CmdCtx *cx)
 {
     YewBindRow *row;
     FlVm *vm;
+    FlValue fn;
     FlValue ignored = FL_NIL_V;
     Bytebuf trace;
+    u32 origin;
 
     if (cx == NULL || cx->ed == NULL || cx->iarg <= 0 ||
         (u64)cx->iarg > UINT32_MAX)
@@ -103,13 +105,17 @@ CmdStatus yew_bind_closure_cmd(CmdCtx *cx)
     if (row == NULL || vm == NULL ||
         (row->fn.t != (u8)FL_CLOSURE && row->fn.t != (u8)FL_NATIVE))
         return YEW_CMD_ERR_STATE;
-    if (fl_call(vm, row->fn, NULL, 0U, &ignored))
+    fn = row->fn;
+    origin = row->origin;
+    if (fl_origin_masked(cx->ed, origin))
+        return YEW_CMD_ERR_STATE;
+    if (fl_call(vm, fn, NULL, 0U, &ignored))
         return YEW_CMD_OK;
 
 #if YEW_WITH_PLUGINS
-    if (row->origin < cx->ed->origins.n &&
-        cx->ed->origins.v[row->origin].kind == (u8)FL_ORIGIN_PLUGIN) {
-        yew_plug_hook_error(cx->ed, row->origin, vm->err);
+    if (origin < cx->ed->origins.n &&
+        cx->ed->origins.v[origin].kind == (u8)FL_ORIGIN_PLUGIN) {
+        yew_plug_hook_error(cx->ed, origin, vm->err);
         yew_plug_drain_pending(cx->ed);
         return YEW_CMD_ERR_STATE;
     }

@@ -68,6 +68,7 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.macro.record", "recording needs keys; none exist"},
     {"ed.ai.enable", ai_enable_no_tty},
     {"ed.ai.open", "no batch alternative"},
+    {"ed.plug.list", "use `yew plug list`"},
     /* Sprint 51 registers the complete Git command vocabulary so scripts,
      * completion, and stripped builds agree before the Sprint 52/53 UI
      * lands.  Prompt-backed Git actions remain terminal-only. */

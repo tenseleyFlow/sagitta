@@ -27,6 +27,24 @@ static bool opt_set(Ed *ed, u8 scope, const char *name, OptVal value,
     return yew_opt_set(ed, scope, name, (u32)strlen(name), &value, err);
 }
 
+static u32 opt_register(Ed *ed, u32 origin, const char *name, OptVal value)
+{
+    const char *err = NULL;
+    bool created = false;
+    u32 checkpoint;
+    u32 ledger_id;
+
+    checkpoint = yew_opt_checkpoint(ed, name, (u32)strlen(name), &err);
+    YEW_ASSERT(checkpoint != 0U);
+    YEW_ASSERT_NULL(err);
+    YEW_ASSERT(opt_set(ed, YEW_OPT_SCOPE_DECLARED, name, value, &err));
+    YEW_ASSERT_NULL(err);
+    ledger_id = yew_opt_commit(ed, origin, checkpoint, &created);
+    YEW_ASSERT(ledger_id != 0U);
+    YEW_ASSERT(created);
+    return ledger_id;
+}
+
 void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
 {
     static const char *const names[] = {
@@ -232,9 +250,11 @@ void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void)
     YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, later,
                                   (u32)(sizeof(later) - 1U)), YEW_CMD_OK);
     YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 10);
-    YEW_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 2U);
+    YEW_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 3U);
     YEW_ASSERT(yew_opt_remove(&ed, before + 2U));
     YEW_ASSERT(!opt_get(&ed, "wrap").as.b);
+    YEW_ASSERT(yew_opt_remove(&ed, before + 3U));
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
     YEW_ASSERT(yew_opt_remove(&ed, before + 1U));
     YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
     YEW_ASSERT(!yew_opt_remove(&ed, before + 1U));
@@ -243,6 +263,45 @@ void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void)
     YEW_ASSERT_EQ_I64(yew_opt_cmdline_set(&cx), YEW_CMD_OK);
     YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 6);
     YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 6U);
+    yew_ed_free(&ed);
+}
+
+void test_option_registration_layers_survive_other_origin_teardown(void)
+{
+    Ed ed;
+    u32 a_first;
+    u32 b;
+    u32 a_last;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    a_first = opt_register(
+        &ed, 101U, "tabwidth", (OptVal){YEW_OPT_INT, {.i = 6}});
+    b = opt_register(&ed, 202U, "tabwidth",
+                     (OptVal){YEW_OPT_INT, {.i = 7}});
+    a_last = opt_register(
+        &ed, 101U, "tabwidth", (OptVal){YEW_OPT_INT, {.i = 9}});
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 9);
+
+    YEW_ASSERT(yew_opt_remove(&ed, a_last));
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 7);
+    YEW_ASSERT(yew_opt_remove(&ed, a_first));
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 7);
+    YEW_ASSERT(yew_opt_remove(&ed, b));
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
+
+    b = opt_register(&ed, 303U, "wrap",
+                     (OptVal){YEW_OPT_BOOL, {.b = true}});
+    a_first = opt_register(
+        &ed, 101U, "tabwidth", (OptVal){YEW_OPT_INT, {.i = 6}});
+    YEW_ASSERT(yew_opt_remove(&ed, b));
+    b = opt_register(&ed, 202U, "tabwidth",
+                     (OptVal){YEW_OPT_INT, {.i = 7}});
+    YEW_ASSERT(b < a_first);
+    YEW_ASSERT(yew_opt_remove(&ed, a_first));
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 7);
+    YEW_ASSERT(yew_opt_remove(&ed, b));
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
     yew_ed_free(&ed);
 }
 
