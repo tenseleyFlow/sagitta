@@ -1,0 +1,8 @@
+{
+  name: "must-not-run",
+  version: build_version(),
+  api: 1 + 0,
+  entry: "src/main.fl",
+  capabilities: [],
+  events: [],
+}

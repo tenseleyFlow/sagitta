@@ -15,6 +15,7 @@
 #include "fuzzlib.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "fl/parse.h"
@@ -49,8 +50,8 @@ static void count_diag(void *ctx, FlDiagLevel level, FlSpan sp,
         c->n++;
 }
 
-static bool check_fl_parse(const u8 *data, size_t len, char *why,
-                           size_t why_cap)
+static bool check_one(const u8 *data, size_t len, char *why,
+                      size_t why_cap)
 {
     Arena arena;
     Interner in;
@@ -153,6 +154,37 @@ static bool check_fl_parse(const u8 *data, size_t len, char *why,
 
     interner_free(&in);
     arena_free_all(&arena);
+    return ok;
+}
+
+static bool check_fl_parse(const u8 *data, size_t len, char *why,
+                           size_t why_cap)
+{
+    static const u8 prefix[] =
+        "{name:\"";
+    static const u8 suffix[] =
+        "\",version:\"1.0.0\",api:1,entry:\"src/main.fl\","
+        "capabilities:[],events:[]}";
+    u8 *manifest;
+    size_t framed_len;
+    bool ok;
+
+    if (!check_one(data, len, why, why_cap))
+        return false;
+    if (len > FL_FUZZ_MAX_INPUT)
+        len = FL_FUZZ_MAX_INPUT;
+    framed_len = (sizeof(prefix) - 1U) + len + (sizeof(suffix) - 1U);
+    manifest = malloc(framed_len);
+    if (manifest == NULL) {
+        (void)snprintf(why, why_cap, "cannot allocate manifest frame");
+        return false;
+    }
+    (void)memcpy(manifest, prefix, sizeof(prefix) - 1U);
+    (void)memcpy(manifest + sizeof(prefix) - 1U, data, len);
+    (void)memcpy(manifest + sizeof(prefix) - 1U + len, suffix,
+                 sizeof(suffix) - 1U);
+    ok = check_one(manifest, framed_len, why, why_cap);
+    free(manifest);
     return ok;
 }
 

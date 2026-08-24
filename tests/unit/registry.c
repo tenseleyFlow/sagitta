@@ -35,9 +35,11 @@ const YewTest yew_tests[] = {
     T(option_fletch_set_map_is_atomic_and_cmdline_is_identical),
     T(option_registration_layers_survive_other_origin_teardown),
     T(option_completion_uses_declaration_order_inventory),
+#if YEW_WITH_PLUGINS
     T(plug_options_declare_set_complete_teardown_and_reenable),
     T(plug_options_collisions_are_atomic_and_origin_owned),
     T(plug_options_ctx_set_uses_manifest_namespace_and_lifecycle),
+#endif
     T(arena_align),
     T(arena_strdup),
     T(vec_growth),
@@ -2069,6 +2071,7 @@ const YewTest yew_tests[] = {
     T(ai_trust3_update_preserves_unknown_entry_fields),
     T(ai_trust3_writes_sorted_atomically_and_deterministically),
     T(ai_trust3_replacement_clears_state_and_ai),
+#if YEW_WITH_PLUGINS
     T(plug_trust_defaults_and_all_exact_capabilities_round_trip),
     T(plug_trust_schema2_unknowns_and_sorted_output_round_trip),
     T(plug_manifest_valid_literal_is_owned_and_uninterned),
@@ -2092,6 +2095,7 @@ const YewTest yew_tests[] = {
     T(plug_overlay_shape_clips_to_exclusive_visible_lines),
     T(plug_overlay_errors_are_contained_and_disabled_regs_do_not_run),
     T(plug_lifecycle_enable_passes_ctx_and_registers_command_and_hook),
+    T(plug_lifecycle_capability_preflight_runs_bytecode_once),
     T(plug_lifecycle_failing_init_leaves_zero_residue_and_trace),
     T(plug_lifecycle_ctx_on_rejects_event_missing_from_manifest),
     T(plug_lifecycle_reverse_disable_leaves_zero_registry_residue),
@@ -2103,6 +2107,11 @@ const YewTest yew_tests[] = {
     T(plug_lifecycle_bound_errors_share_plugin_limit),
     T(plug_completion_maps_lifecycle_args_and_lists_winners),
     T(plug_completion_hides_unregistered_plugin_commands),
+    T(plug_ctx_frozen_returns_flags_ws_attr_and_message),
+    T(plug_ctx_many_cycles_leave_raw_registries_at_baseline),
+    T(plug_ctx_rejects_unknown_message_level),
+    T(plug_ctx_ws_state_dir_is_string_when_stateful),
+#endif
     T(macro_header_parses_all_five_fields),
     T(macro_header_accepts_missing_optional_fields),
     T(macro_header_unknown_schema_is_skipped),

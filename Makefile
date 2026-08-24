@@ -398,6 +398,7 @@ UNIT_FUSS_SRC := tests/unit/test_porcelain.c tests/unit/test_gitcache.c \
                  tests/unit/test_fusscommit.c tests/unit/test_diff.c \
                  tests/unit/test_hunk.c tests/unit/test_blamecache.c \
                  tests/unit/test_diffview.c tests/unit/test_git_editor.c
+UNIT_PLUG_SRC := $(sort $(wildcard tests/unit/test_plug_*.c))
 ifeq ($(filter lsp ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))
 endif
@@ -409,6 +410,9 @@ UNIT_SRC := $(filter-out $(UNIT_AI_SRC),$(UNIT_SRC))
 endif
 ifeq ($(filter fuss,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_FUSS_SRC),$(UNIT_SRC))
+endif
+ifeq ($(filter plugins,$(MODULES)),)
+UNIT_SRC := $(filter-out $(UNIT_PLUG_SRC),$(UNIT_SRC))
 endif
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
 SYN_ENGINE_UNIT_OBJ := $(BUILD)/tests/unit/syn_engine.o
@@ -577,12 +581,16 @@ PERF_LSP_OBJ := $(BUILD)/tests/perf/perf_lsp.o
 PERF_AI_HTTP_OBJ := $(BUILD)/tests/perf/perf_ai_http.o
 PERF_AI_SHADOW_OBJ := $(BUILD)/tests/perf/perf_ai_shadow.o
 PERF_AI_PRIVACY_OBJ := $(BUILD)/tests/perf/perf_ai_privacy.o
+PERF_PLUG_OBJ := $(BUILD)/tests/perf/perf_plug.o
 ifneq ($(filter lsp,$(MODULES)),)
 LSP_FUZZ_TARGET := fuzz-lsp-msg fuzz-lsp-resp
 LSP_PERF_TARGET := perf-lsp
 endif
 ifneq ($(filter ai,$(MODULES)),)
 AI_PERF_TARGET := perf-ai-http perf-ai-shadow perf-ai-privacy
+endif
+ifneq ($(filter plugins,$(MODULES)),)
+PLUG_PERF_TARGET := perf-plug
 endif
 ifneq ($(filter fuss,$(MODULES)),)
 FUSS_FUZZ_TARGET := fuzz-porcelain fuzz-fuss fuzz-git-diff
@@ -691,7 +699,7 @@ endif
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
-        perf-ai-shadow perf-ai-privacy \
+        perf-ai-shadow perf-ai-privacy perf-plug \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
         perf-syn-gate-selftest perf-syn-line-probe \
@@ -946,6 +954,10 @@ $(BUILD)/perf_ai_shadow: $(PERF_CORE_OBJ) $(PERF_AI_SHADOW_OBJ) \
 $(BUILD)/perf_ai_privacy: $(PERF_CORE_OBJ) $(PERF_AI_PRIVACY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_AI_PRIVACY_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_plug: $(PERF_CORE_OBJ) $(PERF_PLUG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_PLUG_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
@@ -1363,7 +1375,7 @@ perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor pe
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
       perf-mouse perf-record perf-syn perf-symidx perf-batch \
       $(FUSS_PERF_TARGET) \
-      $(LSP_PERF_TARGET) $(AI_PERF_TARGET)
+      $(LSP_PERF_TARGET) $(AI_PERF_TARGET) $(PLUG_PERF_TARGET)
 
 perf-git-status: $(BUILD)/perf_git_status
 	$(BUILD)/perf_git_status
@@ -1385,6 +1397,9 @@ perf-ai-shadow: $(BUILD)/perf_ai_shadow $(MOCKAI) $(MOCKCURL)
 
 perf-ai-privacy: $(BUILD)/perf_ai_privacy
 	$(BUILD)/perf_ai_privacy
+
+perf-plug: $(BUILD)/perf_plug
+	$(BUILD)/perf_plug
 
 perf-ai-http-valgrind: $(BUILD)/perf_ai_http
 	valgrind --quiet --error-exitcode=99 --leak-check=full \

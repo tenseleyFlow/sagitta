@@ -1,0 +1,9 @@
+{
+  name: "fuzz-plugin",
+  version: "1.0.0-alpha.1+build.7",
+  api: 1,
+  entry: "src/main.fl",
+  capabilities: ["fs", "shell", "net", "clipboard"],
+  events: ["buf.open", "buf.save", "plug.disable", "ed.idle"],
+  description: "pure literal manifest corpus seed",
+}
