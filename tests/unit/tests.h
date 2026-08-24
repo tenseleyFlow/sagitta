@@ -2109,6 +2109,11 @@ void test_plug_manifest_event_set_is_frozen(void);
 void test_plug_manifest_rejects_newer_api(void);
 void test_plug_manifest_rejects_dependencies_at_one_dot_zero(void);
 void test_plug_manifest_required_shapes_are_strict(void);
+void test_plug_discovery_workspace_blocks_after_shadowing_lower_sources(void);
+void test_plug_discovery_trusted_workspace_obeys_explicit_desired_state(void);
+void test_plug_discovery_sorts_bytewise_and_keeps_manifest_errors(void);
+void test_plug_discovery_clean_editor_scans_nothing(void);
+void test_plug_discovery_public_seam_uses_loaded_config_policy(void);
 
 void test_macro_header_parses_all_five_fields(void);
 void test_macro_header_accepts_missing_optional_fields(void);
