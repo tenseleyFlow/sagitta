@@ -152,6 +152,45 @@ void test_cmd_registry_invocation_and_deferred(void)
     YEW_ASSERT(yew_cmd_unregister(takes));
     YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before);
 
+    {
+        static const char too_long[] =
+            "abcdefghijklmnopqrstuvwxyzabcdefg";
+        char err[80];
+        CmdId plugin = {(u32)999U};
+        CmdId reactivated;
+
+        YEW_ASSERT(!yew_cmd_register_plugin(
+            "Bad", "toggle", probe_repeat, "Plugin probe", &plugin, err,
+            sizeof(err)));
+        YEW_ASSERT_EQ_U64(plugin.v, YEW_CMD_NONE.v);
+        YEW_ASSERT(err[0] != '\0');
+        YEW_ASSERT(!yew_cmd_register_plugin(
+            "sample", too_long, probe_repeat, "Plugin probe", &plugin, err,
+            sizeof(err)));
+        YEW_ASSERT_EQ_U64(plugin.v, YEW_CMD_NONE.v);
+        YEW_ASSERT(yew_cmd_register_plugin(
+            "sample", "toggle", probe_repeat, "Plugin probe", &plugin, err,
+            sizeof(err)));
+        YEW_ASSERT(plugin.v != YEW_CMD_NONE.v);
+        YEW_ASSERT_EQ_STR(yew_cmd_desc(plugin)->name,
+                          "ed.plug.sample.toggle");
+        YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before + 1U);
+        YEW_ASSERT(!yew_cmd_register_plugin(
+            "sample", "toggle", probe_repeat, "Plugin probe", &reactivated,
+            err, sizeof(err)));
+        YEW_ASSERT_EQ_U64(reactivated.v, YEW_CMD_NONE.v);
+        YEW_ASSERT_NOT_NULL(strstr(err, "already registered"));
+        YEW_ASSERT(yew_cmd_unregister(plugin));
+        YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before);
+        YEW_ASSERT(yew_cmd_register_plugin(
+            "sample", "toggle", probe_repeat, "Plugin probe", &reactivated,
+            err, sizeof(err)));
+        YEW_ASSERT_EQ_U64(reactivated.v, plugin.v);
+        YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before + 1U);
+        YEW_ASSERT(yew_cmd_unregister(reactivated));
+        YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before);
+    }
+
     for (i = 0U; i < yew_cmd_count(); i++) {
         const CmdDesc *desc = yew_cmd_at(i);
         CmdCtx deferred = {0};

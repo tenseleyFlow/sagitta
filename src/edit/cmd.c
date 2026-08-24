@@ -1193,6 +1193,47 @@ static bool word_in(const char *word, size_t len, const char *const *words,
     return false;
 }
 
+static bool plugin_command_token_valid(const char *token, size_t *len_out)
+{
+    size_t i;
+    size_t len;
+
+    if (token == NULL)
+        return false;
+    len = strlen(token);
+    if (len == 0U || len > 32U || token[0] < 'a' || token[0] > 'z')
+        return false;
+    for (i = 1U; i < len; i++) {
+        if (!((token[i] >= 'a' && token[i] <= 'z') ||
+              (token[i] >= '0' && token[i] <= '9') || token[i] == '_'))
+            return false;
+    }
+    if (len_out != NULL)
+        *len_out = len;
+    return true;
+}
+
+static bool plugin_command_name_valid(const char *name)
+{
+    static const char prefix[] = "ed.plug.";
+    const char *separator;
+    char plugin[33];
+    size_t plugin_len;
+
+    if (name == NULL || strncmp(name, prefix, sizeof(prefix) - 1U) != 0)
+        return false;
+    separator = strchr(name + sizeof(prefix) - 1U, '.');
+    if (separator == NULL)
+        return false;
+    plugin_len = (size_t)(separator - (name + sizeof(prefix) - 1U));
+    if (plugin_len == 0U || plugin_len > 32U)
+        return false;
+    (void)memcpy(plugin, name + sizeof(prefix) - 1U, plugin_len);
+    plugin[plugin_len] = '\0';
+    return plugin_command_token_valid(plugin, NULL) &&
+           plugin_command_token_valid(separator + 1, NULL);
+}
+
 static bool command_name_valid(const char *name)
 {
     static const char *const app_verbs[] = {
@@ -1286,6 +1327,8 @@ static bool command_name_valid(const char *name)
 
     if (name == NULL)
         return false;
+    if (plugin_command_name_valid(name))
+        return true;
     p = name;
     for (;;) {
         const char *start = p;
@@ -1577,6 +1620,69 @@ CmdId yew_cmd_register_entry(const CmdEntry *entry)
 {
     yew_cmd_init();
     return register_entry(entry);
+}
+
+static void plugin_register_error(char *err, size_t errcap,
+                                  const char *message)
+{
+    size_t len;
+
+    if (err == NULL || errcap == 0U)
+        return;
+    len = strlen(message);
+    if (len >= errcap)
+        len = errcap - 1U;
+    (void)memcpy(err, message, len);
+    err[len] = '\0';
+}
+
+bool yew_cmd_register_plugin(const char *plugin_segment, const char *local,
+                             CmdFn fn, const char *help, CmdId *out,
+                             char *err, size_t errcap)
+{
+    static const char prefix[] = "ed.plug.";
+    CmdDesc desc;
+    char name[74];
+    size_t plugin_len;
+    size_t local_len;
+    size_t offset;
+    CmdId existing;
+
+    if (out != NULL)
+        *out = YEW_CMD_NONE;
+    if (out == NULL) {
+        plugin_register_error(err, errcap, "missing command result");
+        return false;
+    }
+    if (!plugin_command_token_valid(plugin_segment, &plugin_len) ||
+        !plugin_command_token_valid(local, &local_len)) {
+        plugin_register_error(err, errcap, "invalid plugin command name");
+        return false;
+    }
+    if (fn == NULL || help == NULL || help[0] == '\0') {
+        plugin_register_error(err, errcap, "invalid plugin command descriptor");
+        return false;
+    }
+    offset = sizeof(prefix) - 1U;
+    (void)memcpy(name, prefix, offset);
+    (void)memcpy(name + offset, plugin_segment, plugin_len);
+    offset += plugin_len;
+    name[offset++] = '.';
+    (void)memcpy(name + offset, local, local_len);
+    offset += local_len;
+    name[offset] = '\0';
+
+    yew_cmd_init();
+    existing = yew_cmd_lookup(name, (u32)offset);
+    if (existing.v != 0U) {
+        plugin_register_error(err, errcap, "plugin command already registered");
+        return false;
+    }
+    desc = (CmdDesc){name, fn, YEW_ARITY_NONE, 0U, help, NULL};
+    *out = register_desc(&desc);
+    if (err != NULL && errcap != 0U)
+        err[0] = '\0';
+    return true;
 }
 
 bool yew_cmd_unregister(CmdId id)
