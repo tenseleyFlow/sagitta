@@ -54,7 +54,11 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "undo.min_nodes", "undo.persist_bytes_max", "registers.ring_depth",
         "registers.ring_bytes_max", "registers.clip_read_max",
         "clipboard.sync", "search.ignorecase", "search.smartcase",
-        "hooks.error_limit", "plug.error_limit", "theme", "theme_auto",
+        "hooks.error_limit",
+#if YEW_WITH_PLUGINS
+        "plug.error_limit",
+#endif
+        "theme", "theme_auto",
         "macro.dir",
         "shadow.enable", "shadow.providers", "shadow.max_lines",
         "shadow.midline", "shadow.lsp_debounce_ms",
