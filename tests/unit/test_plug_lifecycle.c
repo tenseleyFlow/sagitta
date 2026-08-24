@@ -14,6 +14,7 @@
 #include "fl/flruntime.h"
 #include "fl/module.h"
 #include "mod/plug/internal.h"
+#include "util/buf.h"
 #include "util/xdg.h"
 #include "ws/trust.h"
 
@@ -202,6 +203,79 @@ static void life_assert_counts(LifecycleCounts got, LifecycleCounts want)
     YEW_ASSERT_EQ_U64(got.ledger, want.ledger);
     YEW_ASSERT_EQ_U64(got.plug_commands, want.plug_commands);
     YEW_ASSERT_EQ_U64(got.plug_values, want.plug_values);
+}
+
+static void life_source_string(Bytebuf *out, const char *text)
+{
+    const u8 *p = (const u8 *)text;
+
+    bytebuf_push_u8(out, (u8)'"');
+    while (*p != 0U) {
+        if (*p == (u8)'"' || *p == (u8)'\\')
+            bytebuf_push_u8(out, (u8)'\\');
+        bytebuf_push_u8(out, *p++);
+    }
+    bytebuf_push_u8(out, (u8)'"');
+}
+
+static void life_hostile_source(Bytebuf *source, Bytebuf *events)
+{
+    static const char *const named_keys[] = {
+        "<left>", "<right>", "<up>", "<down>", "<esc>", "<cr>",
+        "<tab>", "<bs>", "<del>", "<space>", "<home>", "<end>",
+        "<pgup>", "<pgdn>", "<ins>", "<f1>", "<f2>", "<f3>",
+        "<f4>", "<f5>", "<f6>", "<f7>", "<f8>", "<f9>",
+        "<f10>", "<f11>", "<f12>", "<lt>"
+    };
+    u32 i;
+
+    bytebuf_init(source);
+    bytebuf_init(events);
+    bytebuf_append(source,
+                   "fn boom() { error(\"hostile callback\") }\n"
+                   "fn init(ctx) {\n",
+                   strlen("fn boom() { error(\"hostile callback\") }\n"
+                          "fn init(ctx) {\n"));
+    for (i = 0U; i < 100U; i++)
+        bytebuf_printf(source, "  ctx.command(\"c%03u\", boom)\n",
+                       (unsigned)i);
+
+    bytebuf_push_u8(events, (u8)'[');
+    for (i = 0U; i < (u32)FL_EV__N; i++) {
+        const char *name = fl_event_name(i);
+
+        YEW_ASSERT_NOT_NULL(name);
+        if (!yew_plug_event_valid(name, strlen(name)))
+            continue;
+        if (events->len != 1U)
+            bytebuf_append(events, ", ", 2U);
+        life_source_string(events, name);
+        bytebuf_append(source, "  ctx.on(", 9U);
+        life_source_string(source, name);
+        bytebuf_append(source, ", boom)\n", 8U);
+    }
+    bytebuf_push_u8(events, (u8)']');
+
+    for (i = 32U; i <= 126U; i++) {
+        char token[2] = {(char)i, '\0'};
+        const char *seq = token;
+
+        if (i == 32U)
+            seq = "<space>";
+        else if (i == (u32)'<')
+            seq = "<lt>";
+        bytebuf_append(source, "  ctx.bind(\"L\", ", 16U);
+        life_source_string(source, seq);
+        bytebuf_append(source, ", boom)\n", 8U);
+    }
+    for (i = 0U; i < (u32)YEW_ARRAY_LEN(named_keys); i++) {
+        bytebuf_append(source, "  ctx.bind(\"W\", ", 16U);
+        life_source_string(source, named_keys[i]);
+        bytebuf_append(source, ", boom)\n", 8U);
+    }
+    bytebuf_append(source, "}\n", 2U);
+    bytebuf_push_u8(source, 0U);
+    bytebuf_push_u8(events, 0U);
 }
 
 static void life_open(LifecycleFix *f, const char *name,
@@ -668,5 +742,68 @@ void test_plug_lifecycle_bound_errors_share_plugin_limit(void)
     YEW_ASSERT_EQ_U64(f.plug->st, PLUG_DISABLED);
     YEW_ASSERT(strstr(f.plug->last_error, "bind exploded") != NULL);
     life_assert_counts(life_counts(&f), before);
+    life_close(&f);
+}
+
+void test_plug_lifecycle_hostile_surface_fires_and_tears_down_cleanly(void)
+{
+    Bytebuf source;
+    Bytebuf events;
+    LifecycleFix f;
+    LifecycleCounts before;
+    LifecycleCounts enabled;
+    u32 raw_commands;
+    u32 raw_values;
+    u32 event;
+    u32 registered_events = 0U;
+    u32 fired_errors = 0U;
+
+    life_hostile_source(&source, &events);
+    life_open(&f, "life-hostile", (const char *)events.data,
+              (const char *)source.data, NULL);
+    bytebuf_free(&events);
+    bytebuf_free(&source);
+    before = life_counts(&f);
+    for (event = 0U; event < (u32)FL_EV__N; event++) {
+        const char *name = fl_event_name(event);
+
+        YEW_ASSERT_NOT_NULL(name);
+        if (yew_plug_event_valid(name, strlen(name)))
+            registered_events++;
+    }
+    raw_commands = f.ed.plug->ncmds;
+    raw_values = f.ed.plug->nregs;
+    yew_plug_error_limit_set(&f.ed, (u32)FL_EV__N + 1U);
+
+    YEW_ASSERT(yew_plug_enable(&f.ed, f.plug, &f.dc));
+    enabled = life_counts(&f);
+    YEW_ASSERT_EQ_U64(enabled.commands, before.commands + 100U);
+    YEW_ASSERT_EQ_U64(enabled.binds, before.binds + 123U);
+    YEW_ASSERT_EQ_U64(enabled.hooks, before.hooks + registered_events);
+    YEW_ASSERT_EQ_U64(enabled.ledger,
+                      before.ledger + 100U + 123U + registered_events);
+    YEW_ASSERT_EQ_U64(enabled.plug_commands,
+                      before.plug_commands + 100U);
+    YEW_ASSERT_EQ_U64(enabled.plug_values, before.plug_values);
+    YEW_ASSERT_EQ_U64(f.ed.plug->ncmds, raw_commands + 100U);
+    YEW_ASSERT_EQ_U64(f.ed.plug->nregs, raw_values);
+
+    for (event = 0U; event < (u32)FL_EV__N; event++) {
+        const char *name = fl_event_name(event);
+
+        yew_fl_hook_fire(&f.ed, (FlEvent)event, NULL, 0U);
+        if (yew_plug_event_valid(name, strlen(name)))
+            fired_errors++;
+        YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ENABLED);
+        YEW_ASSERT_EQ_U64(f.plug->err_count, fired_errors);
+    }
+    YEW_ASSERT_EQ_U64(fired_errors, registered_events);
+    YEW_ASSERT_NOT_NULL(f.plug->last_error);
+    YEW_ASSERT_NOT_NULL(strstr(f.plug->last_error, "hostile callback"));
+
+    YEW_ASSERT(yew_plug_disable(&f.ed, f.plug));
+    life_assert_counts(life_counts(&f), before);
+    YEW_ASSERT_EQ_U64(f.ed.plug->ncmds, raw_commands);
+    YEW_ASSERT_EQ_U64(f.ed.plug->nregs, raw_values);
     life_close(&f);
 }

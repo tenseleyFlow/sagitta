@@ -2140,6 +2140,7 @@ void test_plug_lifecycle_generic_hook_limit_cannot_preempt_plugin_limit(void);
 void test_plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event(void);
 void test_plug_lifecycle_command_errors_share_plugin_limit(void);
 void test_plug_lifecycle_bound_errors_share_plugin_limit(void);
+void test_plug_lifecycle_hostile_surface_fires_and_tears_down_cleanly(void);
 
 void test_macro_header_parses_all_five_fields(void);
 void test_macro_header_accepts_missing_optional_fields(void);

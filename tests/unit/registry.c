@@ -2106,6 +2106,7 @@ const YewTest yew_tests[] = {
     T(plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event),
     T(plug_lifecycle_command_errors_share_plugin_limit),
     T(plug_lifecycle_bound_errors_share_plugin_limit),
+    T(plug_lifecycle_hostile_surface_fires_and_tears_down_cleanly),
     T(plug_completion_maps_lifecycle_args_and_lists_winners),
     T(plug_completion_hides_unregistered_plugin_commands),
     T(plug_ctx_frozen_returns_flags_ws_attr_and_message),
