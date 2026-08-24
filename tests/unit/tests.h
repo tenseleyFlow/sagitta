@@ -2124,6 +2124,8 @@ void test_plug_lifecycle_ctx_on_rejects_event_missing_from_manifest(void);
 void test_plug_lifecycle_reverse_disable_leaves_zero_registry_residue(void);
 void test_plug_lifecycle_reenable_keeps_imported_helper_principal(void);
 void test_plug_lifecycle_fifth_hook_error_auto_disables_plugin(void);
+void test_plug_lifecycle_command_errors_share_plugin_limit(void);
+void test_plug_lifecycle_bound_errors_share_plugin_limit(void);
 
 void test_macro_header_parses_all_five_fields(void);
 void test_macro_header_accepts_missing_optional_fields(void);

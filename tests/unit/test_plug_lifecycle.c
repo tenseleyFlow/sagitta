@@ -442,3 +442,72 @@ void test_plug_lifecycle_fifth_hook_error_auto_disables_plugin(void)
     life_assert_counts(life_counts(&f), before);
     life_close(&f);
 }
+
+void test_plug_lifecycle_command_errors_share_plugin_limit(void)
+{
+    static const char source[] =
+        "fn init(ctx) {\n"
+        "  ctx.command(\"boom\", fn() error(\"command exploded\"))\n"
+        "}\n";
+    LifecycleFix f;
+    LifecycleCounts before;
+    CmdId command;
+    CmdCtx cx = {0};
+    u32 i;
+
+    life_open(&f, "life-command-errors", "[]", source, NULL);
+    before = life_counts(&f);
+    YEW_ASSERT(yew_plug_enable(&f.ed, f.plug, &f.dc));
+    command = yew_cmd_lookup("ed.plug.life_command_errors.boom",
+                             strlen("ed.plug.life_command_errors.boom"));
+    YEW_ASSERT(command.v != YEW_CMD_NONE.v);
+    cx.source = YEW_SRC_TEST;
+    cx.count = 1U;
+    for (i = 0U; i < 5U; i++)
+        YEW_ASSERT_EQ_U64(yew_ed_invoke(&f.ed, command, &cx),
+                          YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(f.plug->err_count, 5U);
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_DISABLED);
+    YEW_ASSERT(strstr(f.plug->last_error, "command exploded") != NULL);
+    life_assert_counts(life_counts(&f), before);
+    life_close(&f);
+}
+
+void test_plug_lifecycle_bound_errors_share_plugin_limit(void)
+{
+    static const char source[] =
+        "fn init(ctx) {\n"
+        "  ctx.bind(\"L\", \"z\", fn() error(\"bind exploded\"))\n"
+        "}\n";
+    LifecycleFix f;
+    LifecycleCounts before;
+    CmdId closure;
+    CmdCtx cx = {0};
+    u32 ledger_id = 0U;
+    u32 i;
+
+    life_open(&f, "life-bind-errors", "[]", source, NULL);
+    before = life_counts(&f);
+    YEW_ASSERT(yew_plug_enable(&f.ed, f.plug, &f.dc));
+    for (i = 0U; i < f.ed.hooks.ledger.n; i++)
+        if (f.ed.hooks.ledger.v[i].active &&
+            f.ed.hooks.ledger.v[i].origin_id == f.plug->origin_id &&
+            f.ed.hooks.ledger.v[i].kind == (u8)REG_BIND) {
+            ledger_id = i + 1U;
+            break;
+        }
+    YEW_ASSERT(ledger_id != 0U);
+    closure = yew_cmd_lookup("ed.fl.closure", strlen("ed.fl.closure"));
+    YEW_ASSERT(closure.v != YEW_CMD_NONE.v);
+    cx.source = YEW_SRC_TEST;
+    cx.count = 1U;
+    cx.iarg = (i64)ledger_id;
+    for (i = 0U; i < 5U; i++)
+        YEW_ASSERT_EQ_U64(yew_ed_invoke(&f.ed, closure, &cx),
+                          YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(f.plug->err_count, 5U);
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_DISABLED);
+    YEW_ASSERT(strstr(f.plug->last_error, "bind exploded") != NULL);
+    life_assert_counts(life_counts(&f), before);
+    life_close(&f);
+}
