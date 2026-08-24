@@ -322,6 +322,8 @@ void test_git_diff_raw_bytes_preserve_line_terminators(void)
     static const u8 modified[] = "alpha\nchanged\ngamma\n";
     static const u8 deleted[] = "beta\ngamma\n";
     static const u8 deleted_eof[] = "alpha\nbeta\n";
+    u8 boundary_left[4098];
+    u8 boundary_right[4098];
     LineNo sign_line;
     bool delete_below;
 
@@ -374,6 +376,25 @@ void test_git_diff_raw_bytes_preserve_line_terminators(void)
                                            &sign_line, &delete_below));
     YEW_ASSERT_EQ_U64(sign_line.v, 1U);
     YEW_ASSERT(delete_below);
+
+    memset(boundary_left, 'a', sizeof(boundary_left));
+    memcpy(boundary_right, boundary_left, sizeof(boundary_right));
+    boundary_left[4095] = '\n';
+    boundary_left[4096] = '\n';
+    boundary_left[4097] = 'x';
+    boundary_right[4095] = '\n';
+    boundary_right[4096] = '\n';
+    boundary_right[4097] = 'y';
+    YEW_ASSERT(yew_diff_bytes(&arena,
+                              boundary_left, sizeof(boundary_left),
+                              boundary_right, sizeof(boundary_right),
+                              2U, &hunks) == YEW_DIFF_OK);
+    YEW_ASSERT_EQ_U64(hunks.len, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_lo.v, 2U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_lo.v, 2U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].base_n.v, 1U);
+    YEW_ASSERT_EQ_U64(hunks.data[0].buf_n.v, 1U);
+    YEW_ASSERT(hunks.data[0].kind == YEW_HUNK_MOD);
     GitHunkVec_free(&hunks);
     arena_free_all(&arena);
 }

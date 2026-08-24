@@ -298,14 +298,13 @@ static EqualProgress work_equal_mode(YewDiffWork *work, u32 left_at,
     limit = work->equal_at + 4096U;
     if (limit < work->equal_at || limit > a->len)
         limit = a->len;
-    while (work->equal_at < limit) {
-        if (work->left[a->off + work->equal_at] !=
-            work->right[b->off + work->equal_at]) {
-            work->equal_active = false;
-            return EQUAL_NO;
-        }
-        work->equal_at++;
+    if (memcmp(work->left + a->off + work->equal_at,
+               work->right + b->off + work->equal_at,
+               limit - work->equal_at) != 0) {
+        work->equal_active = false;
+        return EQUAL_NO;
     }
+    work->equal_at = limit;
     return work->equal_at < a->len ? EQUAL_MORE : EQUAL_YES;
 }
 
@@ -318,6 +317,25 @@ static EqualProgress work_equal(YewDiffWork *work, u32 left_at,
 static void work_equal_reset(YewDiffWork *work)
 {
     work->equal_active = false;
+}
+
+static void work_count_lines(const u8 *bytes, size_t len, size_t *at,
+                             u32 *count)
+{
+    size_t limit = *at + 4096U;
+
+    if (limit < *at || limit > len)
+        limit = len;
+    while (*at < limit) {
+        const u8 *newline = memchr(bytes + *at, '\n', limit - *at);
+
+        if (newline == NULL) {
+            *at = limit;
+            break;
+        }
+        (*count)++;
+        *at = (size_t)(newline - bytes) + 1U;
+    }
 }
 
 static void work_hash_byte(YewDiffWork *work, const u8 *bytes)
@@ -499,16 +517,10 @@ YewDiffProgress yew_diff_work_step(YewDiffWork *work, u32 budget_us,
     do {
         switch (work->phase) {
         case WORK_COUNT_LEFT:
-            if (work->at < work->left_len) {
-                size_t limit = work->at + 4096U;
-
-                if (limit < work->at || limit > work->left_len)
-                    limit = work->left_len;
-                while (work->at < limit) {
-                    if (work->left[work->at++] == '\n')
-                        work->left_n++;
-                }
-            } else {
+            if (work->at < work->left_len)
+                work_count_lines(work->left, work->left_len, &work->at,
+                                 &work->left_n);
+            else {
                 if (work->left_len != 0U &&
                     work->left[work->left_len - 1U] != '\n')
                     work->left_n++;
@@ -517,16 +529,10 @@ YewDiffProgress yew_diff_work_step(YewDiffWork *work, u32 budget_us,
             }
             break;
         case WORK_COUNT_RIGHT:
-            if (work->at < work->right_len) {
-                size_t limit = work->at + 4096U;
-
-                if (limit < work->at || limit > work->right_len)
-                    limit = work->right_len;
-                while (work->at < limit) {
-                    if (work->right[work->at++] == '\n')
-                        work->right_n++;
-                }
-            } else {
+            if (work->at < work->right_len)
+                work_count_lines(work->right, work->right_len, &work->at,
+                                 &work->right_n);
+            else {
                 if (work->right_len != 0U &&
                     work->right[work->right_len - 1U] != '\n')
                     work->right_n++;
