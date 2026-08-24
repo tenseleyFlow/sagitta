@@ -92,7 +92,30 @@ expect_stdout_contains "YEW_CLIPBOARD" help
 expect_stdout_contains "YEW_OSC52" help
 expect_stdout_contains "YEW_CHORD_TIMEOUT_MS" help
 expect_stdout_contains "plain" help
+expect_stdout_contains "yew plug COMMAND" help
 echo "smoke: help ok"
+
+case " $smoke_modules " in
+    *" plugins "*)
+        ;;
+    *)
+        run_capture "$bin" plug list
+        expect_rc 1 "stripped plugin command"
+        [ ! -s "$out" ] || fail "stripped plugin command wrote stdout"
+        printf '%s\n' \
+            'yew: error: built without plugin support (MODULES=plugins)' \
+            >"$tmp/plugin-error.expected"
+        cmp -s "$err" "$tmp/plugin-error.expected" || \
+            fail "stripped plugin command diagnostic"
+        echo "smoke: stripped plugin command boundary ok"
+        ;;
+esac
+
+run_capture "$bin" pkg anything
+expect_rc 1 "deferred pkg command"
+[ ! -s "$out" ] || fail "deferred pkg command wrote stdout"
+expect_stderr_contains "Sprint 55" "deferred pkg command"
+echo "smoke: deferred pkg command boundary ok"
 
 run_capture "$bin" --help-cmds
 expect_rc 0 help-cmds

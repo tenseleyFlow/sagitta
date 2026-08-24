@@ -8,6 +8,7 @@
 #include "mod/lsp/lsp.h"
 #include "mod/ai/ai.h"
 #include "mod/mods.h"
+#include "mod/plug/plug.h"
 #include "syn/defs.h"
 #include "util/base.h"
 #include "util/buf.h"
@@ -39,6 +40,8 @@ static const char help_text[] =
     "Subcommands:\n"
     "  yew fl FILE      Run a Fletch script headlessly.\n"
     "  yew syn COMMAND   Inspect and compile syntax definitions.\n"
+    "  yew plug COMMAND  List, enable, disable, or reload plugins.\n"
+    "  yew pkg COMMAND   Manage plugin packages (Sprint 55).\n"
     "\n"
     "Command line:\n"
     "  Lines beginning with a space are not saved in command history.\n"
@@ -144,11 +147,6 @@ static int run_driver(const YewArgs *args)
                             args->trust_workspace, args->test, args->quiet};
         return yew_batch_run(&batch);
     }
-    if (args->nfiles != 0U && strcmp(args->files[0], "pkg") == 0) {
-        (void)fprintf(stderr, "yew: error: unknown argument '%s'\n",
-            args->files[0]);
-        return YEW_EXIT_ERR;
-    }
     if (args->nfiles > 1U) {
         (void)fprintf(stderr,
             "yew: error: multiple files are not yet implemented: Sprint 23 (tabs)\n");
@@ -177,6 +175,12 @@ int main(int argc, char **argv)
         return yew_fl_main(argc - 1, argv + 1);
     if (argc >= 2 && strcmp(argv[1], "syn") == 0)
         return yew_syn_main(argc - 1, argv + 1, false);
+    if (argc >= 2 && strcmp(argv[1], "plug") == 0)
+        return yew_plug_main(argc - 1, argv + 1);
+    if (argc >= 2 && strcmp(argv[1], "pkg") == 0) {
+        (void)fputs("yew: error: yew pkg lands in Sprint 55\n", stderr);
+        return YEW_EXIT_ERR;
+    }
     if (argc >= 3 && strcmp(argv[1], "--clean") == 0 &&
         strcmp(argv[2], "syn") == 0)
         return yew_syn_main(argc - 2, argv + 2, true);
