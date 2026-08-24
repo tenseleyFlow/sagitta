@@ -40,7 +40,15 @@ u32 fl_diag_add_file(DiagCtx *dc, const char *path, const char *src,
         dc->capfiles = want;
     }
     id = dc->nfiles++;
-    dc->files[id].path = path == NULL ? "<input>" : path;
+    /*
+     * Paths outlive the call just like the registered source does.  In
+     * particular, module loading resolves a temporary heap realpath and
+     * releases it after compilation, while a later runtime error still
+     * needs the path for its trace.  Keep the small label in the context
+     * arena instead of imposing a second borrowed-lifetime contract.
+     */
+    dc->files[id].path = arena_strdup(dc->arena,
+                                      path == NULL ? "<input>" : path);
     dc->files[id].src = src;
     dc->files[id].len = src == NULL ? 0U : len;
     return id;

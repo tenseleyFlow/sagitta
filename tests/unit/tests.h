@@ -1543,6 +1543,7 @@ void test_fl_lex_motion_block_may_span_lines(void);
 void test_fl_lex_unterminated_motion_block_is_eof_not_an_error(void);
 void test_fl_lex_invalid_utf8_reports_once(void);
 void test_fl_lex_caret_block_renders_the_source_line(void);
+void test_fl_diag_registered_paths_are_arena_owned(void);
 void test_fl_lex_keep_comments_is_opt_in(void);
 void test_fl_lex_spellings_cover_every_kind(void);
 void test_fl_lit_emits_the_canonical_layout(void);

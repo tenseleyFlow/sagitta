@@ -672,6 +672,23 @@ void test_fl_lex_caret_block_renders_the_source_line(void)
     lf_close(&f);
 }
 
+void test_fl_diag_registered_paths_are_arena_owned(void)
+{
+    static const char source[] = "bad";
+    char path[] = "temporary.fl";
+    Arena arena;
+    DiagCtx dc;
+    u32 file;
+
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    file = fl_diag_add_file(&dc, path, source, sizeof(source) - 1U);
+    YEW_ASSERT(dc.files[file].path != path);
+    path[0] = 'X';
+    YEW_ASSERT_EQ_STR(dc.files[file].path, "temporary.fl");
+    arena_free_all(&arena);
+}
+
 void test_fl_lex_keep_comments_is_opt_in(void)
 {
     LexFix f;

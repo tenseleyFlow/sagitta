@@ -635,6 +635,9 @@ void test_plug_lifecycle_fifth_hook_error_auto_disables_plugin(void)
     YEW_ASSERT_EQ_U64(f.plug->st, PLUG_DISABLED);
     YEW_ASSERT_NOT_NULL(f.plug->last_error);
     YEW_ASSERT(strstr(f.plug->last_error, "hook exploded") != NULL);
+    YEW_ASSERT_EQ_I64(f.ed.msg.sev, YEW_MSG_WARN);
+    YEW_ASSERT_EQ_STR(f.ed.msg.text,
+                      "plugin \"life-errors\" disabled after 5 errors");
     life_assert_counts(life_counts(&f), before);
     life_close(&f);
 }

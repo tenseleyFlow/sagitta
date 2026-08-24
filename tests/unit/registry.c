@@ -1573,6 +1573,7 @@ const YewTest yew_tests[] = {
     T(fl_lex_unterminated_motion_block_is_eof_not_an_error),
     T(fl_lex_invalid_utf8_reports_once),
     T(fl_lex_caret_block_renders_the_source_line),
+    T(fl_diag_registered_paths_are_arena_owned),
     T(fl_lex_keep_comments_is_opt_in),
     T(fl_lex_spellings_cover_every_kind),
     T(fl_lit_emits_the_canonical_layout),

@@ -1,5 +1,6 @@
 #include "harness.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
@@ -137,6 +138,8 @@ static void overlay_open(OverlayFix *f)
 static void overlay_close(OverlayFix *f)
 {
     active_fix = NULL;
+    free(f->plug.last_error);
+    f->plug.last_error = NULL;
     f->ed.plug = NULL;
     yew_ed_free(&f->ed);
 }

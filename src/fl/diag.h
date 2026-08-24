@@ -96,10 +96,11 @@ typedef struct DiagCtx {
 void fl_diag_init(DiagCtx *dc, Arena *arena);
 
 /*
- * Registers a source and returns its stable id.  The text is BORROWED: the
- * caller keeps it alive for as long as diagnostics may be rendered
- * against it, because the caret block quotes the offending line out of
- * it rather than copying every line up front.
+ * Registers a source and returns its stable id.  The path is copied into
+ * the context arena.  The text is BORROWED: the caller keeps it alive for
+ * as long as diagnostics may be rendered against it, because the caret
+ * block quotes the offending line out of it rather than copying every
+ * line up front.
  */
 u32 fl_diag_add_file(DiagCtx *dc, const char *path, const char *src,
                      size_t len);
