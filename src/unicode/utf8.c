@@ -302,6 +302,59 @@ size_t yew_utf8_validate(const u8 *s, size_t len)
     return len;
 }
 
+size_t yew_utf8_validate_simple(const u8 *s, size_t len,
+                                bool *simple_ascii)
+{
+    size_t ones = SIZE_MAX / 0xffU;
+    size_t highs = ones * 0x80U;
+    size_t low_limit = ones * 0x20U;
+    size_t del_bytes = ones * 0x7fU;
+    size_t pos = 0U;
+
+    assert(s != NULL || len == 0U);
+    assert(simple_ascii != NULL);
+    *simple_ascii = true;
+    while (len - pos >= sizeof(size_t)) {
+        size_t word;
+        size_t del;
+        size_t low;
+
+        memcpy(&word, s + pos, sizeof(word));
+        if ((word & highs) != 0U) {
+            *simple_ascii = false;
+            return yew_utf8_validate(s, len);
+        }
+        del = word ^ del_bytes;
+        low = (word - low_limit) & ~word & highs;
+        if (((del - ones) & ~del & highs) != 0U) {
+            *simple_ascii = false;
+        } else if (low != 0U) {
+            size_t at;
+
+            for (at = 0U; at < sizeof(word); at++) {
+                u8 byte = s[pos + at];
+
+                if (byte != (u8)'\n' && byte < 0x20U) {
+                    *simple_ascii = false;
+                    break;
+                }
+            }
+        }
+        pos += sizeof(word);
+    }
+    while (pos < len) {
+        u8 byte = s[pos++];
+
+        if (byte >= 0x80U) {
+            *simple_ascii = false;
+            return yew_utf8_validate(s, len);
+        }
+        if (byte != (u8)'\n' && (byte < 0x20U || byte == 0x7fU))
+            *simple_ascii = false;
+    }
+    return len;
+}
+
 bool yew_utf8_is_boundary(const u8 *s, size_t len, size_t pos)
 {
     size_t cursor = 0;

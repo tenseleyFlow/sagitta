@@ -43,6 +43,9 @@ u32 yew_utf8_escape_of(u8 b);
 
 /* Returns the first invalid byte offset, or len when the input is valid. */
 size_t yew_utf8_validate(const u8 *s, size_t len);
+/* Also reports whether every byte is printable ASCII or a line feed. */
+size_t yew_utf8_validate_simple(const u8 *s, size_t len,
+                                bool *simple_ascii);
 bool yew_utf8_is_boundary(const u8 *s, size_t len, size_t pos);
 
 #endif

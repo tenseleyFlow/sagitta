@@ -140,6 +140,9 @@ TextBuf *yew_textbuf_new(void);
 TextBuf *yew_textbuf_from_bytes(const u8 *bytes, u64 len);
 /* Transfers bytes to the immutable original store, including for len == 0. */
 TextBuf *yew_textbuf_from_owned_bytes(u8 *bytes, u64 len);
+/* The trusted classification avoids rescanning file-load input. */
+TextBuf *yew_textbuf_from_owned_bytes_simple(u8 *bytes, u64 len,
+                                             bool simple_ascii);
 /* Frees the live buffer; snapshots and their backing bytes remain valid. */
 void yew_textbuf_free(TextBuf *tb);
 

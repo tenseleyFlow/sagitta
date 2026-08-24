@@ -322,6 +322,8 @@ void test_utf8_decode_prev(void);
 void test_utf8_encode_edges(void);
 void test_utf8_escape_helpers(void);
 void test_utf8_validate(void);
+void test_utf8_validate_simple_classifies_controls(void);
+void test_utf8_validate_simple_checks_each_word_lane(void);
 void test_utf8_boundaries(void);
 void test_utf8_exhaustive_scalars(void);
 void test_utf8_exhaustive_surrogates(void);

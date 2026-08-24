@@ -240,6 +240,63 @@ void test_utf8_validate(void)
     YEW_ASSERT_EQ_U64(yew_utf8_validate(truncated, sizeof(truncated)), 1);
 }
 
+void test_utf8_validate_simple_classifies_controls(void)
+{
+    static const u8 simple[] = "alpha\nbeta";
+    static const u8 tab[] = "alpha\tbeta";
+    static const u8 del[] = {'a', 0x7fU, 'b'};
+    static const u8 unicode[] = {'a', 0xc3U, 0xa9U};
+    static const u8 invalid[] = {'a', 0xffU, 'b'};
+    bool classified;
+
+    YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                          simple, sizeof(simple) - 1U, &classified),
+                      sizeof(simple) - 1U);
+    YEW_ASSERT(classified);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                          tab, sizeof(tab) - 1U, &classified),
+                      sizeof(tab) - 1U);
+    YEW_ASSERT(!classified);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                          del, sizeof(del), &classified), sizeof(del));
+    YEW_ASSERT(!classified);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                          unicode, sizeof(unicode), &classified),
+                      sizeof(unicode));
+    YEW_ASSERT(!classified);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                          invalid, sizeof(invalid), &classified), 1U);
+    YEW_ASSERT(!classified);
+}
+
+void test_utf8_validate_simple_checks_each_word_lane(void)
+{
+    u8 bytes[sizeof(size_t) * 3U + 3U];
+    size_t at;
+    bool classified;
+
+    for (at = 0U; at < sizeof(bytes); at++) {
+        (void)memset(bytes, 'a', sizeof(bytes));
+        bytes[at] = '\n';
+        YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                              bytes, sizeof(bytes), &classified),
+                          sizeof(bytes));
+        YEW_ASSERT(classified);
+
+        bytes[at] = '\t';
+        YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                              bytes, sizeof(bytes), &classified),
+                          sizeof(bytes));
+        YEW_ASSERT(!classified);
+
+        bytes[at] = 0x7fU;
+        YEW_ASSERT_EQ_U64(yew_utf8_validate_simple(
+                              bytes, sizeof(bytes), &classified),
+                          sizeof(bytes));
+        YEW_ASSERT(!classified);
+    }
+}
+
 void test_utf8_boundaries(void)
 {
     static const u8 bytes[] = {0x41, 0xE2, 0x82, 0xAC, 0x80, 0x42};

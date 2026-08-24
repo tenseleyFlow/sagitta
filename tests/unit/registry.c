@@ -351,6 +351,8 @@ const YewTest yew_tests[] = {
     T(utf8_encode_edges),
     T(utf8_escape_helpers),
     T(utf8_validate),
+    T(utf8_validate_simple_classifies_controls),
+    T(utf8_validate_simple_checks_each_word_lane),
     T(utf8_boundaries),
     T(utf8_exhaustive_scalars),
     T(utf8_exhaustive_surrogates),

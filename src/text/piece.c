@@ -645,7 +645,9 @@ TextBuf *yew_textbuf_from_bytes(const u8 *bytes, u64 len)
     return tb;
 }
 
-TextBuf *yew_textbuf_from_owned_bytes(u8 *bytes, u64 len)
+static TextBuf *textbuf_from_owned_bytes(u8 *bytes, u64 len,
+                                         bool classified,
+                                         bool simple_ascii)
 {
     TextBuf *tb = yew_textbuf_new();
 
@@ -657,8 +659,22 @@ TextBuf *yew_textbuf_from_owned_bytes(u8 *bytes, u64 len)
 
         tb->root = node_new(piece);
     }
-    yew_coords_index_seed(tb);
+    if (classified)
+        yew_coords_index_seed_simple(tb, simple_ascii);
+    else
+        yew_coords_index_seed(tb);
     return tb;
+}
+
+TextBuf *yew_textbuf_from_owned_bytes(u8 *bytes, u64 len)
+{
+    return textbuf_from_owned_bytes(bytes, len, false, false);
+}
+
+TextBuf *yew_textbuf_from_owned_bytes_simple(u8 *bytes, u64 len,
+                                             bool simple_ascii)
+{
+    return textbuf_from_owned_bytes(bytes, len, true, simple_ascii);
 }
 
 void yew_textbuf_free(TextBuf *tb)

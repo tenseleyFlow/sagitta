@@ -498,17 +498,17 @@ static void coords_index_rebuild(TextBuf *tb)
     pending_clear(tb);
 }
 
-void yew_coords_index_seed(TextBuf *tb)
+void yew_coords_index_seed_simple(TextBuf *tb, bool simple_ascii)
 {
     YewGraphemeIndex *index;
     u64 len;
 
     if (tb == NULL)
-        YEW_BUG("yew_coords_index_seed: NULL buffer");
+        YEW_BUG("yew_coords_index_seed_simple: NULL buffer");
     index = &tb->graphemes;
     len = yew_textbuf_len(tb);
     if (len >= (u64)YEW_SIMPLE_ASCII_BYPASS_BYTES &&
-        range_is_simple_ascii(tb, 0U, len)) {
+        simple_ascii) {
         index->len = 0U;
         index->motion_len = 0U;
         index->gen = tb->gen;
@@ -529,6 +529,19 @@ void yew_coords_index_seed(TextBuf *tb)
         return;
     }
     coords_index_rebuild(tb);
+}
+
+void yew_coords_index_seed(TextBuf *tb)
+{
+    u64 len;
+    bool simple_ascii = false;
+
+    if (tb == NULL)
+        YEW_BUG("yew_coords_index_seed: NULL buffer");
+    len = yew_textbuf_len(tb);
+    if (len >= (u64)YEW_SIMPLE_ASCII_BYPASS_BYTES)
+        simple_ascii = range_is_simple_ascii(tb, 0U, len);
+    yew_coords_index_seed_simple(tb, simple_ascii);
 }
 
 void yew_coords_index_dispose(TextBuf *tb)

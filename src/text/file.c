@@ -118,7 +118,7 @@ static bool read_exact_file(int fd, u8 *bytes, size_t len)
 }
 
 static void classify_bytes(const u8 *bytes, size_t len, FileMeta *meta,
-                           size_t *content_at)
+                           size_t *content_at, bool *simple_ascii)
 {
     const u8 *at;
     const u8 *end = bytes + len;
@@ -128,6 +128,7 @@ static void classify_bytes(const u8 *bytes, size_t len, FileMeta *meta,
 
     meta->binary = memchr(bytes, 0, binary_len) != NULL;
     *content_at = 0U;
+    *simple_ascii = false;
     if (meta->binary) {
         meta->eol = YEW_EOL_LF;
         meta->dominant_eol = YEW_EOL_LF;
@@ -159,8 +160,8 @@ static void classify_bytes(const u8 *bytes, size_t len, FileMeta *meta,
         meta->eol = YEW_EOL_MIXED;
     else
         meta->eol = meta->dominant_eol;
-    meta->had_invalid_utf8 =
-        yew_utf8_validate(bytes + *content_at, len - *content_at) !=
+    meta->had_invalid_utf8 = yew_utf8_validate_simple(
+        bytes + *content_at, len - *content_at, simple_ascii) !=
         len - *content_at;
     meta->missing_final_nl =
         len != *content_at && bytes[len - 1U] != '\n';
@@ -305,6 +306,7 @@ YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta)
     u8 *bytes;
     size_t size;
     size_t content_at;
+    bool simple_ascii;
     int fd;
     int saved_errno;
 
@@ -392,10 +394,11 @@ YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta)
     meta->realpath = realpath(path, NULL);
     if (meta->realpath == NULL)
         meta->realpath = string_copy(path);
-    classify_bytes(bytes, size, meta, &content_at);
+    classify_bytes(bytes, size, meta, &content_at, &simple_ascii);
     if (content_at != 0U)
         (void)memmove(bytes, bytes + content_at, size - content_at);
-    *out = yew_textbuf_from_owned_bytes(bytes, (u64)(size - content_at));
+    *out = yew_textbuf_from_owned_bytes_simple(
+        bytes, (u64)(size - content_at), simple_ascii);
     return YEW_LOAD_OK;
 }
 
