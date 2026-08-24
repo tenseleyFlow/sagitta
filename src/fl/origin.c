@@ -15,6 +15,14 @@
 #include "util/base.h"
 #include "util/intern.h"
 
+#ifndef YEW_WITH_PLUGINS
+#define YEW_WITH_PLUGINS 0
+#endif
+
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
+
 /* ---------------------------------------------------------------- */
 /* The registry                                                     */
 /* ---------------------------------------------------------------- */
@@ -258,6 +266,10 @@ bool fl_cap_check(FlVm *vm, u32 need)
 
     if ((o.caps & need) == need)
         return true;
+#if YEW_WITH_PLUGINS
+    if (o.kind == (u8)FL_ORIGIN_PLUGIN)
+        return yew_plug_cap_check(vm, need & ~o.caps);
+#endif
     return fl_raise(vm, "capability", "%s denied to %s",
                     fl_cap_name(need), fl_origin_name(vm, &o));
 }

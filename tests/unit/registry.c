@@ -2083,6 +2083,8 @@ const YewTest yew_tests[] = {
     T(plug_discovery_sorts_bytewise_and_keeps_manifest_errors),
     T(plug_discovery_clean_editor_scans_nothing),
     T(plug_discovery_public_seam_uses_loaded_config_policy),
+    T(plug_sandbox_capability_mappings_are_closed),
+    T(plug_sandbox_declared_headless_prompt_and_persistence_policy),
     T(macro_header_parses_all_five_fields),
     T(macro_header_accepts_missing_optional_fields),
     T(macro_header_unknown_schema_is_skipped),

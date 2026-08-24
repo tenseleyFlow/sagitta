@@ -2114,6 +2114,8 @@ void test_plug_discovery_trusted_workspace_obeys_explicit_desired_state(void);
 void test_plug_discovery_sorts_bytewise_and_keeps_manifest_errors(void);
 void test_plug_discovery_clean_editor_scans_nothing(void);
 void test_plug_discovery_public_seam_uses_loaded_config_policy(void);
+void test_plug_sandbox_capability_mappings_are_closed(void);
+void test_plug_sandbox_declared_headless_prompt_and_persistence_policy(void);
 
 void test_macro_header_parses_all_five_fields(void);
 void test_macro_header_accepts_missing_optional_fields(void);
