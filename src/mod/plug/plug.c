@@ -816,7 +816,7 @@ CmdStatus yew_plug_cmd_list(CmdCtx *cx)
     return yew_picker_active(cx->ed) ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
 }
 
-static Plug *cmd_plugin(CmdCtx *cx)
+static Plug *plug_from_cmd(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || cx->sarg == NULL ||
         cx->sarg_len == 0U)
@@ -826,7 +826,7 @@ static Plug *cmd_plugin(CmdCtx *cx)
 
 CmdStatus yew_plug_cmd_enable(CmdCtx *cx)
 {
-    Plug *plug = cmd_plugin(cx);
+    Plug *plug = plug_from_cmd(cx);
 
     if (plug == NULL)
         return YEW_CMD_ERR_ARG;
@@ -839,7 +839,7 @@ CmdStatus yew_plug_cmd_enable(CmdCtx *cx)
 
 CmdStatus yew_plug_cmd_disable(CmdCtx *cx)
 {
-    Plug *plug = cmd_plugin(cx);
+    Plug *plug = plug_from_cmd(cx);
 
     if (plug == NULL)
         return YEW_CMD_ERR_ARG;
@@ -852,7 +852,7 @@ CmdStatus yew_plug_cmd_disable(CmdCtx *cx)
 
 CmdStatus yew_plug_cmd_reload(CmdCtx *cx)
 {
-    Plug *plug = cmd_plugin(cx);
+    Plug *plug = plug_from_cmd(cx);
 
     return plug != NULL && yew_plug_reload(cx->ed, plug, NULL) ?
            YEW_CMD_OK : YEW_CMD_ERR_ARG;
@@ -860,7 +860,7 @@ CmdStatus yew_plug_cmd_reload(CmdCtx *cx)
 
 CmdStatus yew_plug_cmd_info(CmdCtx *cx)
 {
-    Plug *plug = cmd_plugin(cx);
+    Plug *plug = plug_from_cmd(cx);
 
     if (plug == NULL)
         return YEW_CMD_ERR_ARG;
