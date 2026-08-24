@@ -484,6 +484,9 @@ void test_plug_lifecycle_failing_init_leaves_zero_residue_and_trace(void)
         "}\n";
     LifecycleFix f;
     LifecycleCounts before;
+    CmdId info;
+    CmdCtx cx = {0};
+    const char *shown;
 
     life_open(&f, "life-failing", "[\"ed.idle\"]", source, NULL);
     before = life_counts(&f);
@@ -495,6 +498,23 @@ void test_plug_lifecycle_failing_init_leaves_zero_residue_and_trace(void)
     YEW_ASSERT(strstr(f.plug->last_error, "init exploded") != NULL);
     YEW_ASSERT(strstr(f.plug->last_error, "at init") != NULL);
     YEW_ASSERT(strstr(f.plug->last_error, "^") != NULL);
+    life_assert_counts(life_counts(&f), before);
+
+    info = yew_cmd_lookup("ed.plug.info", strlen("ed.plug.info"));
+    YEW_ASSERT(info.v != YEW_CMD_NONE.v);
+    cx.source = YEW_SRC_TEST;
+    cx.count = 1U;
+    cx.sarg = "life-failing";
+    cx.sarg_len = strlen(cx.sarg);
+    YEW_ASSERT_EQ_U64(yew_ed_invoke(&f.ed, info, &cx), YEW_CMD_OK);
+    shown = f.ed.msg.full == NULL ? f.ed.msg.text : f.ed.msg.full;
+    YEW_ASSERT_EQ_U64(f.ed.msg.sev, YEW_MSG_ERROR);
+    YEW_ASSERT_NOT_NULL(strstr(shown, "state: error"));
+    YEW_ASSERT_NOT_NULL(strstr(shown, "last error:"));
+    YEW_ASSERT_NOT_NULL(strstr(shown, "init exploded"));
+    YEW_ASSERT_NOT_NULL(strstr(shown, "at init"));
+    YEW_ASSERT_NOT_NULL(strstr(shown, "^"));
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ERROR);
     life_assert_counts(life_counts(&f), before);
     life_close(&f);
 }
