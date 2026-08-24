@@ -2096,6 +2096,8 @@ void test_ai_trust3_future_schema_is_never_downgraded(void);
 void test_ai_trust3_update_preserves_unknown_entry_fields(void);
 void test_ai_trust3_writes_sorted_atomically_and_deterministically(void);
 void test_ai_trust3_replacement_clears_state_and_ai(void);
+void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void);
+void test_plug_trust_schema2_unknowns_and_sorted_output_round_trip(void);
 
 void test_macro_header_parses_all_five_fields(void);
 void test_macro_header_accepts_missing_optional_fields(void);

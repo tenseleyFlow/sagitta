@@ -105,6 +105,57 @@ static bool trust_map_del(TrustImpl *impl, FlMap *map, const char *key)
     return fl_map_del(map, FL_OBJ_V(FL_STR, name));
 }
 
+static FlMap *trust_plugins(TrustImpl *impl, bool create)
+{
+    FlMap *root = (FlMap *)impl->root.as.o;
+    FlValue value;
+    FlMap *plugins;
+
+    if (trust_map_get(root, "plugins", &value))
+        return value.t == (u8)FL_MAP ? (FlMap *)value.as.o : NULL;
+    if (!create)
+        return NULL;
+    plugins = fl_map_new(&impl->vm);
+    trust_map_set(impl, root, "plugins", FL_OBJ_V(FL_MAP, plugins));
+    return plugins;
+}
+
+static FlMap *trust_plugin_map(TrustImpl *impl, const char *plugin,
+                               bool create)
+{
+    FlMap *plugins;
+    u32 cursor = 0U;
+    FlValue key;
+    FlValue value;
+    size_t plugin_len;
+    FlMap *entry;
+
+    if (plugin == NULL || plugin[0] == '\0')
+        return NULL;
+    plugin_len = strlen(plugin);
+    plugins = trust_plugins(impl, create);
+    if (plugins == NULL)
+        return NULL;
+    while (fl_map_iter(plugins, &cursor, &key, &value)) {
+        const FlStr *name;
+
+        if (key.t != (u8)FL_STR)
+            continue;
+        name = (const FlStr *)key.as.o;
+        if (name->len == plugin_len &&
+            memcmp(name->b, plugin, plugin_len) == 0)
+            return value.t == (u8)FL_MAP ? (FlMap *)value.as.o : NULL;
+    }
+    if (!create)
+        return NULL;
+    entry = fl_map_new(&impl->vm);
+    (void)fl_map_set(&impl->vm, plugins,
+                     FL_OBJ_V(FL_STR, fl_str_new(&impl->vm, plugin,
+                                                (u32)plugin_len)),
+                     FL_OBJ_V(FL_MAP, entry));
+    return entry;
+}
+
 static TrustImpl *trust_impl_new(void)
 {
     TrustImpl *impl = yew_xcalloc(1U, sizeof(*impl));
@@ -532,6 +583,115 @@ bool yew_trust_ai_forget(YewTrustDb *db, const char *workspace)
     return yew_trust_ai_set(db, workspace, YEW_AI_WS_UNSET, 0);
 }
 
+YewPluginDesired yew_trust_plugin_desired(const YewTrustDb *db,
+                                          const char *plugin)
+{
+    TrustImpl *impl;
+    FlMap *entry;
+    FlValue value;
+
+    if (db == NULL || db->impl == NULL)
+        return YEW_PLUGIN_DESIRED_DEFAULT;
+    impl = (TrustImpl *)db->impl;
+    entry = trust_plugin_map(impl, plugin, false);
+    if (entry == NULL || !trust_map_get(entry, "enabled", &value) ||
+        value.t != (u8)FL_BOOL)
+        return YEW_PLUGIN_DESIRED_DEFAULT;
+    return value.as.b ? YEW_PLUGIN_DESIRED_ENABLED :
+                        YEW_PLUGIN_DESIRED_DISABLED;
+}
+
+bool yew_trust_plugin_set_desired(YewTrustDb *db, const char *plugin,
+                                  YewPluginDesired desired)
+{
+    TrustImpl *impl;
+    FlMap *entry;
+
+    if (db == NULL || db->impl == NULL || plugin == NULL ||
+        plugin[0] == '\0' ||
+        (desired != YEW_PLUGIN_DESIRED_DEFAULT &&
+         desired != YEW_PLUGIN_DESIRED_ENABLED &&
+         desired != YEW_PLUGIN_DESIRED_DISABLED))
+        return false;
+    impl = (TrustImpl *)db->impl;
+    entry = trust_plugin_map(impl, plugin,
+                             desired != YEW_PLUGIN_DESIRED_DEFAULT);
+    if (entry == NULL)
+        return desired == YEW_PLUGIN_DESIRED_DEFAULT;
+    if (desired == YEW_PLUGIN_DESIRED_DEFAULT) {
+        (void)trust_map_del(impl, entry, "enabled");
+        return true;
+    }
+    trust_map_set(impl, entry, "enabled",
+                  FL_BOOL_V(desired == YEW_PLUGIN_DESIRED_ENABLED));
+    return true;
+}
+
+static const char *trust_plugin_capability_name(
+    YewPluginCapability capability)
+{
+    switch (capability) {
+    case YEW_PLUGIN_CAP_FS:        return "fs";
+    case YEW_PLUGIN_CAP_SHELL:     return "shell";
+    case YEW_PLUGIN_CAP_NET:       return "net";
+    case YEW_PLUGIN_CAP_CLIPBOARD: return "clipboard";
+    default:                       return NULL;
+    }
+}
+
+YewPluginGrant yew_trust_plugin_capability(const YewTrustDb *db,
+                                           const char *plugin,
+                                           YewPluginCapability capability)
+{
+    TrustImpl *impl;
+    FlMap *entry;
+    FlValue value;
+    const char *field = trust_plugin_capability_name(capability);
+
+    if (db == NULL || db->impl == NULL || field == NULL)
+        return YEW_PLUGIN_GRANT_UNSET;
+    impl = (TrustImpl *)db->impl;
+    entry = trust_plugin_map(impl, plugin, false);
+    if (entry == NULL || !trust_map_get(entry, field, &value))
+        return YEW_PLUGIN_GRANT_UNSET;
+    switch (trust_ai_value(value)) {
+    case YEW_AI_WS_ALLOW: return YEW_PLUGIN_GRANT_ALLOW;
+    case YEW_AI_WS_DENY:  return YEW_PLUGIN_GRANT_DENY;
+    default:              return YEW_PLUGIN_GRANT_UNSET;
+    }
+}
+
+bool yew_trust_plugin_set_capability(YewTrustDb *db, const char *plugin,
+                                     YewPluginCapability capability,
+                                     YewPluginGrant grant)
+{
+    TrustImpl *impl;
+    FlMap *entry;
+    const char *field = trust_plugin_capability_name(capability);
+    const char *value;
+
+    if (db == NULL || db->impl == NULL || plugin == NULL ||
+        plugin[0] == '\0' || field == NULL ||
+        (grant != YEW_PLUGIN_GRANT_UNSET &&
+         grant != YEW_PLUGIN_GRANT_ALLOW &&
+         grant != YEW_PLUGIN_GRANT_DENY))
+        return false;
+    impl = (TrustImpl *)db->impl;
+    entry = trust_plugin_map(impl, plugin,
+                             grant != YEW_PLUGIN_GRANT_UNSET);
+    if (entry == NULL)
+        return grant == YEW_PLUGIN_GRANT_UNSET;
+    if (grant == YEW_PLUGIN_GRANT_UNSET) {
+        (void)trust_map_del(impl, entry, field);
+        return true;
+    }
+    value = grant == YEW_PLUGIN_GRANT_ALLOW ? "allow" : "deny";
+    trust_map_set(impl, entry, field,
+                  FL_OBJ_V(FL_STR, fl_str_new(&impl->vm, value,
+                                              (u32)strlen(value))));
+    return true;
+}
+
 YewTrustDecision yew_trust_check(YewTrustDb *db, const char *workspace,
                                  bool has_tty, bool pregrant,
                                  YewTrustProbe *probe)
@@ -656,6 +816,67 @@ static int trust_row_cmp(const void *ap, const void *bp, void *ctx)
     return as->len < bs->len ? -1 : as->len > bs->len ? 1 : 0;
 }
 
+static FlMap *trust_sorted_map(TrustImpl *impl, const FlMap *old)
+{
+    TrustRow *rows;
+    FlMap *sorted;
+    u32 cursor = 0U;
+    FlValue key;
+    FlValue value;
+    u32 n = 0U;
+    u32 i;
+
+    rows = yew_xcalloc(fl_map_count(old), sizeof(*rows));
+    while (fl_map_iter(old, &cursor, &key, &value)) {
+        if (key.t != (u8)FL_STR) {
+            free(rows);
+            return NULL;
+        }
+        rows[n].key = key;
+        rows[n].value = value;
+        n++;
+    }
+    yew_sort_stable(rows, n, sizeof(*rows), trust_row_cmp, NULL);
+    sorted = fl_map_new(&impl->vm);
+    for (i = 0U; i < n; i++)
+        (void)fl_map_set(&impl->vm, sorted, rows[i].key, rows[i].value);
+    free(rows);
+    return sorted;
+}
+
+static bool trust_rebuild_plugins(TrustImpl *impl)
+{
+    FlMap *root = (FlMap *)impl->root.as.o;
+    FlValue value;
+    FlMap *plugins;
+    FlMap *sorted_plugins;
+    u32 cursor = 0U;
+    FlValue key;
+    FlValue entry_value;
+
+    if (!trust_map_get(root, "plugins", &value))
+        return true;
+    if (value.t != (u8)FL_MAP)
+        return false;
+    plugins = (FlMap *)value.as.o;
+    while (fl_map_iter(plugins, &cursor, &key, &entry_value)) {
+        FlMap *sorted_entry;
+
+        if (key.t != (u8)FL_STR || entry_value.t != (u8)FL_MAP)
+            return false;
+        sorted_entry = trust_sorted_map(impl, (const FlMap *)entry_value.as.o);
+        if (sorted_entry == NULL)
+            return false;
+        (void)fl_map_set(&impl->vm, plugins, key,
+                         FL_OBJ_V(FL_MAP, sorted_entry));
+    }
+    sorted_plugins = trust_sorted_map(impl, plugins);
+    if (sorted_plugins == NULL)
+        return false;
+    trust_map_set(impl, root, "plugins", FL_OBJ_V(FL_MAP, sorted_plugins));
+    return true;
+}
+
 static bool trust_prune(FlValue key, FlValue value, time_t now,
                         u32 prune_days)
 {
@@ -704,7 +925,7 @@ static bool trust_rebuild_sorted(TrustImpl *impl, time_t now, u32 prune_days)
         (void)fl_map_set(&impl->vm, dirs, rows[i].key, rows[i].value);
     free(rows);
     trust_map_set(impl, root, "dirs", FL_OBJ_V(FL_MAP, dirs));
-    return true;
+    return trust_rebuild_plugins(impl);
 }
 
 static bool trust_schema_current(TrustImpl *impl)

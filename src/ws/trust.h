@@ -27,6 +27,25 @@ typedef enum AiWsGrant {
     YEW_AI_WS_DENY
 } AiWsGrant;
 
+typedef enum YewPluginDesired {
+    YEW_PLUGIN_DESIRED_DEFAULT = 0,
+    YEW_PLUGIN_DESIRED_ENABLED,
+    YEW_PLUGIN_DESIRED_DISABLED
+} YewPluginDesired;
+
+typedef enum YewPluginCapability {
+    YEW_PLUGIN_CAP_FS = 0,
+    YEW_PLUGIN_CAP_SHELL,
+    YEW_PLUGIN_CAP_NET,
+    YEW_PLUGIN_CAP_CLIPBOARD
+} YewPluginCapability;
+
+typedef enum YewPluginGrant {
+    YEW_PLUGIN_GRANT_UNSET = 0,
+    YEW_PLUGIN_GRANT_ALLOW,
+    YEW_PLUGIN_GRANT_DENY
+} YewPluginGrant;
+
 typedef enum YewTrustDecision {
     YEW_TRUST_NO_CONFIG,
     YEW_TRUST_GRANTED,
@@ -80,6 +99,21 @@ AiWsGrant yew_trust_ai_grant(YewTrustDb *db, const char *workspace);
 bool yew_trust_ai_set(YewTrustDb *db, const char *workspace,
                       AiWsGrant grant, time_t now);
 bool yew_trust_ai_forget(YewTrustDb *db, const char *workspace);
+
+/* Plugin settings are global per plugin name.  DEFAULT means the desired
+ * enabled key is absent (and therefore enabled by product policy); capability
+ * grants are tri-state.  Setting an absent value does not create a plugins
+ * map, so a dirs-only database stays dirs-only until plugin policy exists. */
+YewPluginDesired yew_trust_plugin_desired(const YewTrustDb *db,
+                                          const char *plugin);
+bool yew_trust_plugin_set_desired(YewTrustDb *db, const char *plugin,
+                                  YewPluginDesired desired);
+YewPluginGrant yew_trust_plugin_capability(const YewTrustDb *db,
+                                           const char *plugin,
+                                           YewPluginCapability capability);
+bool yew_trust_plugin_set_capability(YewTrustDb *db, const char *plugin,
+                                     YewPluginCapability capability,
+                                     YewPluginGrant grant);
 
 void yew_trust_probe_init(YewTrustProbe *probe);
 void yew_trust_probe_free(YewTrustProbe *probe);

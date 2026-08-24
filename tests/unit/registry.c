@@ -2065,6 +2065,8 @@ const YewTest yew_tests[] = {
     T(ai_trust3_update_preserves_unknown_entry_fields),
     T(ai_trust3_writes_sorted_atomically_and_deterministically),
     T(ai_trust3_replacement_clears_state_and_ai),
+    T(plug_trust_defaults_and_all_exact_capabilities_round_trip),
+    T(plug_trust_schema2_unknowns_and_sorted_output_round_trip),
     T(macro_header_parses_all_five_fields),
     T(macro_header_accepts_missing_optional_fields),
     T(macro_header_unknown_schema_is_skipped),
