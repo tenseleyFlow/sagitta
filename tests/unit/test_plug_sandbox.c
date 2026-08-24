@@ -114,6 +114,61 @@ void test_plug_sandbox_capability_mappings_are_closed(void)
                       YEW_PLUGIN_CAP_CLIPBOARD);
 }
 
+void test_plug_sandbox_every_capability_has_all_three_decisions(void)
+{
+    static const struct {
+        YewCap cap;
+        u32 fl_mask;
+        const char *name;
+    } cases[] = {
+        { YEW_CAP_FS, FL_CAP_FS_READ | FL_CAP_FS_WRITE, "fs" },
+        { YEW_CAP_SHELL, FL_CAP_SHELL, "shell" },
+        { YEW_CAP_NET, FL_CAP_NET, "net" },
+        { YEW_CAP_CLIPBOARD, FL_CAP_CLIPBOARD, "clipboard" }
+    };
+    SandboxFix f;
+    u32 i;
+
+    sf_open(&f);
+    /*
+     * Shell, net, and clipboard intentionally have no Fletch stdlib
+     * surfaces yet.  Testing those capabilities here, at fl_cap_check's C
+     * integration seam, is the honest matrix: a test-only native would
+     * invent the very surface whose absence is part of the 1.0 contract.
+     */
+    for (i = 0U; i < (u32)(sizeof(cases) / sizeof(cases[0])); i++) {
+        char want[96];
+        u32 bit = 1U << (u32)cases[i].cap;
+
+        /* Undeclared: reject immediately and never open consent UI. */
+        f.plug.mf.caps_wanted = 0U;
+        f.plug.session_allow = 0U;
+        f.plug.session_deny = 0U;
+        YEW_ASSERT(!fl_cap_check(f.vm, cases[i].fl_mask));
+        (void)snprintf(want, sizeof(want),
+                       "plugin \"cap-test\" did not declare %s",
+                       cases[i].name);
+        YEW_ASSERT_EQ_STR(sf_error_msg(f.vm), want);
+        YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+
+        /* Declared and denied: reject without reopening consent UI. */
+        f.plug.mf.caps_wanted = bit;
+        f.plug.session_deny = bit;
+        YEW_ASSERT(!fl_cap_check(f.vm, cases[i].fl_mask));
+        (void)snprintf(want, sizeof(want),
+                       "plugin \"cap-test\" denied %s", cases[i].name);
+        YEW_ASSERT_EQ_STR(sf_error_msg(f.vm), want);
+        YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+
+        /* Declared and granted: the guarded operation may proceed. */
+        f.plug.session_allow = bit;
+        f.plug.session_deny = 0U;
+        YEW_ASSERT(fl_cap_check(f.vm, cases[i].fl_mask));
+        YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+    }
+    sf_close(&f);
+}
+
 void test_plug_sandbox_declared_headless_prompt_and_persistence_policy(void)
 {
     SandboxFix f;

@@ -2091,6 +2091,7 @@ const YewTest yew_tests[] = {
     T(plug_discovery_clean_editor_scans_nothing),
     T(plug_discovery_public_seam_uses_loaded_config_policy),
     T(plug_sandbox_capability_mappings_are_closed),
+    T(plug_sandbox_every_capability_has_all_three_decisions),
     T(plug_sandbox_declared_headless_prompt_and_persistence_policy),
     T(plug_overlay_shape_clips_to_exclusive_visible_lines),
     T(plug_overlay_errors_are_contained_and_disabled_regs_do_not_run),
