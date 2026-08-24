@@ -593,6 +593,10 @@ static void dirty_prompt(PtyCtx *c, NotepadGolden golden, char answer)
     ptc_keys(c, ":");
     ptc_settle(c, 0);
     ptc_bytes(c, "ed.quit");
+    /* Command text and Enter are separate user actions.  A PTY may merge
+     * adjacent writes into one read, so establish the visible command-line
+     * state before asking the editor to execute it. */
+    ptc_settle(c, 0);
     ptc_keys(c, "enter");
     ptc_settle(c, 600);
     notepad_snapshot(c, golden);
@@ -7763,10 +7767,14 @@ static void case_s53_blame(PtyCtx *c)
         ptc_check(c, c->vt.cursor_shape == 2U &&
                          c->vt.cur_r != c->vt.rows - 1,
                   "stale blame did not return to normal mode");
+        /* The edit also starts the asynchronous Git-sign refresh.  Snapshot
+         * its completed state so runner scheduling cannot decide whether the
+         * modification sign is present in this otherwise identical case. */
+        s53_wait_screen(c, "▎   1 Xshort blamed line");
         ptc_check(c, s52_screen_contains(
                          &c->vt,
                          "Xshort blamed line  ▏ Yew PTY"),
-                  "stale inline blame vanished before recomputing");
+                  "stale inline blame vanished while Git signs recomputed");
     }
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);
