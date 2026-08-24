@@ -2098,6 +2098,17 @@ void test_ai_trust3_writes_sorted_atomically_and_deterministically(void);
 void test_ai_trust3_replacement_clears_state_and_ai(void);
 void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void);
 void test_plug_trust_schema2_unknowns_and_sorted_output_round_trip(void);
+void test_plug_manifest_valid_literal_is_owned_and_uninterned(void);
+void test_plug_manifest_pure_literal_executes_nothing(void);
+void test_plug_manifest_unknown_key_suggests_one_edit(void);
+void test_plug_manifest_name_must_match_directory(void);
+void test_plug_manifest_entry_parent_escape_names_resolved_path(void);
+void test_plug_manifest_entry_symlink_escape_is_rejected(void);
+void test_plug_manifest_capability_set_is_closed(void);
+void test_plug_manifest_event_set_is_frozen(void);
+void test_plug_manifest_rejects_newer_api(void);
+void test_plug_manifest_rejects_dependencies_at_one_dot_zero(void);
+void test_plug_manifest_required_shapes_are_strict(void);
 
 void test_macro_header_parses_all_five_fields(void);
 void test_macro_header_accepts_missing_optional_fields(void);
