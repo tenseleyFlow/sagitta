@@ -6,7 +6,7 @@
 #include "util/base.h"
 #include "util/buf.h"
 
-typedef struct {
+typedef struct YewGrantArg {
     const char *text;
     size_t name_len;
 } YewGrantArg;

@@ -271,7 +271,7 @@ void test_args_parse_batch_empty_arg_tail(void)
 
 void test_args_parse_batch_grants(void)
 {
-    char *argv[] = {"yew", "--grant", "fmt:fs.read", "--batch",
+    char *argv[] = {"yew", "--grant", "fmt:fs", "--batch",
                     "--grant", "lint:shell", "run.fl"};
     YewArgs args;
     Bytebuf err;
@@ -280,10 +280,10 @@ void test_args_parse_batch_grants(void)
     YEW_ASSERT_EQ_I64(yew_args_parse(&args, 7, argv, &err), -1);
     YEW_ASSERT_EQ_STR(args.batch_script, "run.fl");
     YEW_ASSERT_EQ_U64(args.ngrants, 2U);
-    YEW_ASSERT_EQ_STR(args.grants[0].text, "fmt:fs.read");
+    YEW_ASSERT_EQ_STR(args.grants[0].text, "fmt:fs");
     YEW_ASSERT_EQ_U64(args.grants[0].name_len, 3U);
     YEW_ASSERT_EQ_STR(args.grants[0].text + args.grants[0].name_len + 1U,
-                      "fs.read");
+                      "fs");
     YEW_ASSERT_EQ_STR(args.grants[1].text, "lint:shell");
     YEW_ASSERT_EQ_U64(args.grants[1].name_len, 4U);
     YEW_ASSERT_EQ_STR(args.grants[1].text + args.grants[1].name_len + 1U,
@@ -322,7 +322,9 @@ void test_args_parse_batch_only_options_require_batch(void)
 
 void test_args_parse_batch_grant_errors(void)
 {
-    const char *values[] = {"plug", ":fs.read", "plug:", "a:b:c"};
+    const char *values[] = {"plug", ":fs", "plug:", "a:b:c",
+                            "plug:fs.read", "Plug:fs", "plug:unknown",
+                            "plugin-name-that-is-longer-than-thirty-two:fs"};
     size_t i;
 
     for (i = 0U; i < YEW_ARRAY_LEN(values); i++) {

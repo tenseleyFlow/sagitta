@@ -34,7 +34,7 @@ static const char help_text[] =
     "  --batch SCRIPT   Run SCRIPT headlessly; no tty or grid.\n"
     "  --test           Add the t.* script-test assertions (batch only).\n"
     "  --quiet          Suppress batch warnings; errors still print.\n"
-    "  --grant NAME:CAP Reserve a plugin capability grant (Sprint 54).\n"
+    "  --grant NAME:CAP Pre-grant fs, shell, net, or clipboard (repeatable).\n"
     "  --               Pass every remaining argument to the batch script.\n"
     "\n"
     "Subcommands:\n"
@@ -135,16 +135,27 @@ static int run_driver(const YewArgs *args)
     if (args->batch_script != NULL) {
         BatchOpts batch;
 
+#if !YEW_WITH_PLUGINS
         if (args->ngrants != 0U) {
-            (void)fprintf(stderr,
-                "yew: error: --grant enforcement lands in Sprint 54\n");
+            (void)fputs(yew_plug_module_error, stderr);
             return YEW_EXIT_ERR;
         }
-        batch = (BatchOpts){args->batch_script, args->files, args->nfiles,
-                            args->batch_args, args->nbatch_args,
-                            args->config_path, args->clean,
-                            args->no_workspace_config,
-                            args->trust_workspace, args->test, args->quiet};
+#endif
+        batch = (BatchOpts){
+            .script = args->batch_script,
+            .files = args->files,
+            .nfiles = args->nfiles,
+            .args = args->batch_args,
+            .nargs = args->nbatch_args,
+            .config_path = args->config_path,
+            .grants = args->grants,
+            .ngrants = args->ngrants,
+            .clean = args->clean,
+            .no_workspace_config = args->no_workspace_config,
+            .trust_workspace = args->trust_workspace,
+            .test = args->test,
+            .quiet = args->quiet
+        };
         return yew_batch_run(&batch);
     }
     if (args->nfiles > 1U) {

@@ -8,6 +8,7 @@
 
 typedef struct Ed Ed;
 typedef struct CmdCtx CmdCtx;
+typedef struct YewGrantArg YewGrantArg;
 
 typedef struct BatchOpts {
     const char *script;
@@ -16,6 +17,8 @@ typedef struct BatchOpts {
     const char *const *args;
     size_t nargs;
     const char *config_path;
+    const YewGrantArg *grants;
+    size_t ngrants;
     bool clean;
     bool no_workspace_config;
     bool trust_workspace;

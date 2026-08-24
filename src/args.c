@@ -28,11 +28,26 @@ static int parse_error(YewArgs *out, Bytebuf *err, const char *fmt,
 static bool grant_valid(const char *text, size_t *name_len)
 {
     const char *colon = strchr(text, ':');
+    const char *p;
+    size_t len;
 
     if (colon == NULL || colon == text || colon[1] == '\0' ||
         strchr(colon + 1, ':') != NULL)
         return false;
-    *name_len = (size_t)(colon - text);
+    len = (size_t)(colon - text);
+    if (len > 32U)
+        return false;
+    for (p = text; p != colon; p++) {
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') ||
+              *p == '-'))
+            return false;
+    }
+    if (strcmp(colon + 1, "fs") != 0 &&
+        strcmp(colon + 1, "shell") != 0 &&
+        strcmp(colon + 1, "net") != 0 &&
+        strcmp(colon + 1, "clipboard") != 0)
+        return false;
+    *name_len = len;
     return true;
 }
 

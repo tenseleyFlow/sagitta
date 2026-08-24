@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "args.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "fl/diag.h"
@@ -21,6 +22,7 @@
 #include "fl/trace.h"
 #include "fl/value.h"
 #include "fl/vm.h"
+#include "mod/plug/plug.h"
 #include "text/journal.h"
 #include "text/piece.h"
 #include "text/undo.h"
@@ -472,6 +474,32 @@ static void discard_journals(Ed *ed)
     }
 }
 
+#if YEW_WITH_PLUGINS
+static bool apply_plugin_grants(Ed *ed, const BatchOpts *opts)
+{
+    size_t i;
+
+    for (i = 0U; i < opts->ngrants; i++) {
+        const YewGrantArg *grant = &opts->grants[i];
+        const char *cap = grant->text + grant->name_len + 1U;
+        char *name = yew_xmalloc(grant->name_len + 1U);
+        bool ok;
+
+        (void)memcpy(name, grant->text, grant->name_len);
+        name[grant->name_len] = '\0';
+        ok = yew_plug_session_grant(ed, name, cap);
+        if (!ok)
+            (void)fprintf(stderr,
+                          "yew: error: cannot grant %s to plugin %s\n",
+                          cap, name);
+        free(name);
+        if (!ok)
+            return false;
+    }
+    return true;
+}
+#endif
+
 int yew_batch_run(const BatchOpts *opts)
 {
     BatchLogCtx log_ctx;
@@ -528,6 +556,23 @@ int yew_batch_run(const BatchOpts *opts)
         result = YEW_EXIT_IO;
         goto done;
     }
+#if YEW_WITH_PLUGINS
+    if (!yew_plug_discover(&ed, NULL)) {
+        result = YEW_EXIT_IO;
+        goto done;
+    }
+    if (!apply_plugin_grants(&ed, opts) ||
+        !yew_plug_enable_desired(&ed, NULL)) {
+        result = YEW_EXIT_ERR;
+        goto done;
+    }
+#else
+    if (opts->ngrants != 0U) {
+        (void)fputs(yew_plug_module_error, stderr);
+        result = YEW_EXIT_ERR;
+        goto done;
+    }
+#endif
     yew_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
     workspace_hook = true;
     install_globals(&ed, opts, script_path);
