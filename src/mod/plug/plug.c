@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "edit/bind.h"
 #include "edit/ed.h"
 #include "fl/flconf.h"
 #include "fl/flruntime.h"
@@ -225,6 +226,87 @@ static bool callable_arity_one(FlValue value)
     return false;
 }
 
+#ifndef NDEBUG
+static u32 active_hooks(const Ed *ed)
+{
+    u32 active = 0U;
+    u32 i;
+
+    for (i = 0U; i < ed->hooks.n; i++)
+        if (ed->hooks.v[i].active)
+            active++;
+    return active;
+}
+
+static u32 active_ledger(const Ed *ed)
+{
+    u32 active = 0U;
+    u32 i;
+
+    for (i = 0U; i < ed->hooks.ledger.n; i++)
+        if (ed->hooks.ledger.v[i].active)
+            active++;
+    return active;
+}
+
+static u32 active_plugin_commands(const PlugSys *sys)
+{
+    u32 active = 0U;
+    u32 i;
+
+    for (i = 0U; i < sys->ncmds; i++)
+        if (sys->cmds[i].active)
+            active++;
+    return active;
+}
+
+static u32 active_plugin_values(const PlugSys *sys)
+{
+    u32 active = 0U;
+    u32 i;
+
+    for (i = 0U; i < sys->nregs; i++)
+        if (sys->regs[i].active)
+            active++;
+    return active;
+}
+
+static void residue_snapshot(Ed *ed, Plug *plug)
+{
+    plug->residue_before[0] = yew_cmd_active_count();
+    plug->residue_before[1] = yew_bind_active_count(ed);
+    plug->residue_before[2] = active_hooks(ed);
+    plug->residue_before[3] = active_ledger(ed);
+    plug->residue_before[4] = active_plugin_commands(ed->plug);
+    plug->residue_before[5] = active_plugin_values(ed->plug);
+    plug->residue_snapshot = true;
+}
+
+static void residue_assert(Ed *ed, Plug *plug)
+{
+    u32 after[6];
+    u32 i;
+
+    if (!plug->residue_snapshot)
+        return;
+    after[0] = yew_cmd_active_count();
+    after[1] = yew_bind_active_count(ed);
+    after[2] = active_hooks(ed);
+    after[3] = active_ledger(ed);
+    after[4] = active_plugin_commands(ed->plug);
+    after[5] = active_plugin_values(ed->plug);
+    for (i = 0U; i < YEW_ARRAY_LEN(after); i++)
+        if (after[i] != plug->residue_before[i])
+            YEW_BUG("plugin teardown left registry residue (%u: %u != %u)",
+                    (unsigned)i, (unsigned)after[i],
+                    (unsigned)plug->residue_before[i]);
+    plug->residue_snapshot = false;
+}
+#else
+#define residue_snapshot(ed_, plug_) ((void)0)
+#define residue_assert(ed_, plug_) ((void)0)
+#endif
+
 static void teardown(Ed *ed, Plug *plug, PlugState state, bool notify)
 {
     FlVm *vm;
@@ -240,6 +322,7 @@ static void teardown(Ed *ed, Plug *plug, PlugState state, bool notify)
     plug->rooted = false;
     if (vm != NULL)
         fl_gc_collect(vm);
+    residue_assert(ed, plug);
     plug->st = state;
     if (notify)
         fire_lifecycle(ed, FL_EV_PLUG_DISABLE, plug);
@@ -273,6 +356,7 @@ bool yew_plug_enable(Ed *ed, Plug *plug, DiagCtx *dc)
     }
     ensure_provider(ed);
     teardown(ed, plug, PLUG_DISCOVERED, false);
+    residue_snapshot(ed, plug);
     plug->err_count = 0U;
     path = entry_path(plug);
     origin = (FlOrigin){

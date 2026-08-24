@@ -106,6 +106,15 @@ CmdStatus yew_bind_closure_cmd(CmdCtx *cx)
     if (fl_call(vm, row->fn, NULL, 0U, &ignored))
         return YEW_CMD_OK;
 
+#if YEW_WITH_PLUGINS
+    if (row->origin < cx->ed->origins.n &&
+        cx->ed->origins.v[row->origin].kind == (u8)FL_ORIGIN_PLUGIN) {
+        yew_plug_hook_error(cx->ed, row->origin, vm->err);
+        yew_plug_drain_pending(cx->ed);
+        return YEW_CMD_ERR_STATE;
+    }
+#endif
+
     bytebuf_init(&trace);
     fl_trace_render(vm, vm->err, &trace);
     yew_log(YEW_LOG_ERROR, "bound Fletch closure failed: %.*s",

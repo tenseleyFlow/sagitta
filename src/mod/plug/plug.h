@@ -61,6 +61,10 @@ typedef struct Plug {
     char *last_error;
     bool winner;
     bool rooted;
+#ifndef NDEBUG
+    u32 residue_before[6];
+    bool residue_snapshot;
+#endif
 } Plug;
 
 /* Discovery is separate from enabling so --batch can install repeatable
