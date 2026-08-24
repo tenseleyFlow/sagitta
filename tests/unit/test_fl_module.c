@@ -116,6 +116,8 @@ void test_fl_modules_not_found_lists_every_path_tried(void)
 void test_fl_modules_load_once_per_realpath(void)
 {
     FlFix f;
+    FlMap *first_owner;
+    u32 before;
 
     flfix_open(&f);
     write_lib(&f);
@@ -131,6 +133,23 @@ void test_fl_modules_load_once_per_realpath(void)
     flfix_mkdir(&f, "sub");
     FL_EQ(&f, "import \"lib.fl\" as x\nimport \"sub/../lib.fl\" as y\n"
               "return x == y\n", "true");
+
+    /* Kind alone is not a plugin identity.  Two enabled plugins may import
+     * the same helper path, but each gets closures carrying its own stable
+     * teardown/capability principal. */
+    before = f.vm.mods.n;
+    f.origin.kind = (u8)FL_ORIGIN_PLUGIN;
+    f.origin.principal_id = 101U;
+    FL_EQ(&f, "import \"lib.fl\" as x\nreturn x.answer\n", "42");
+    first_owner = f.vm.mods.v[f.vm.mods.n - 1U].exports;
+    f.origin.principal_id = 102U;
+    FL_EQ(&f, "import \"lib.fl\" as x\nreturn x.answer\n", "42");
+    YEW_ASSERT_EQ_U64(f.vm.mods.n, before + 2U);
+    YEW_ASSERT(first_owner != f.vm.mods.v[f.vm.mods.n - 1U].exports);
+    YEW_ASSERT_EQ_U64(f.vm.mods.v[f.vm.mods.n - 2U].origin.principal_id,
+                      101U);
+    YEW_ASSERT_EQ_U64(f.vm.mods.v[f.vm.mods.n - 1U].origin.principal_id,
+                      102U);
     flfix_close(&f);
 }
 
@@ -155,6 +174,9 @@ void test_fl_modules_export_every_top_level_name_but_the_private(void)
 void test_fl_modules_keep_their_own_globals(void)
 {
     FlFix f;
+    FlValue rooted = FL_NIL_V;
+    u32 idx;
+    u32 nested_idx;
 
     flfix_open(&f);
     /*
@@ -173,6 +195,36 @@ void test_fl_modules_keep_their_own_globals(void)
     FL_EQ(&f, "let secret = \"outside\"\n"
               "import \"own.fl\" as o\n"
               "return o.peek() + \"/\" + secret\n", "INSIDE/outside");
+
+    /* Disabling a plugin removes every cached export from the VM's root
+     * map.  The tombstoned slot may then be reused, and the source must run
+     * again rather than returning the disabled plugin's old exports. */
+    flfix_write(&f, "nested.fl", "let answer = 1\n");
+    flfix_write(&f, "reload.fl",
+                "import \"nested.fl\" as n\nlet answer = n.answer\n");
+    f.origin.kind = (u8)FL_ORIGIN_PLUGIN;
+    f.origin.principal_id = 73U;
+    FL_EQ(&f, "import \"reload.fl\" as r\nreturn r.answer\n", "1");
+    idx = f.vm.mods.n - 2U;
+    nested_idx = f.vm.mods.n - 1U;
+    YEW_ASSERT(fl_map_get(f.vm.modules, FL_INT_V((i64)idx), &rooted));
+    YEW_ASSERT(fl_map_get(f.vm.modules, FL_INT_V((i64)nested_idx), &rooted));
+    YEW_ASSERT_EQ_U64(rooted.t, FL_MAP);
+    fl_module_drop_principal(&f.vm, 73U);
+    YEW_ASSERT_EQ_U64(f.vm.mods.v[idx].state, FL_MOD_DROPPED);
+    YEW_ASSERT_EQ_U64(f.vm.mods.v[nested_idx].state, FL_MOD_DROPPED);
+    YEW_ASSERT_NULL(f.vm.mods.v[idx].exports);
+    YEW_ASSERT_NULL(f.vm.mods.v[nested_idx].exports);
+    YEW_ASSERT(!fl_map_get(f.vm.modules, FL_INT_V((i64)idx), &rooted));
+    YEW_ASSERT(!fl_map_get(f.vm.modules, FL_INT_V((i64)nested_idx), &rooted));
+    flfix_write(&f, "nested.fl", "let answer = 2\n");
+    FL_EQ(&f, "import \"reload.fl\" as r\nreturn r.answer\n", "2");
+    YEW_ASSERT_EQ_U64(f.vm.mods.v[idx].state, FL_MOD_READY);
+    YEW_ASSERT_EQ_U64(f.vm.mods.v[nested_idx].state, FL_MOD_READY);
+    YEW_ASSERT_NOT_NULL(f.vm.mods.v[idx].exports);
+    YEW_ASSERT_NOT_NULL(f.vm.mods.v[nested_idx].exports);
+    YEW_ASSERT(fl_map_get(f.vm.modules, FL_INT_V((i64)idx), &rooted));
+    YEW_ASSERT(fl_map_get(f.vm.modules, FL_INT_V((i64)nested_idx), &rooted));
     flfix_close(&f);
 }
 

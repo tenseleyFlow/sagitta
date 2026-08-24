@@ -130,6 +130,8 @@ u32 fl_origin_of_frame(FlVm *vm)
     if (ed == NULL)
         return FL_ORIGIN_ID_NONE;
     o = fl_cap_origin(vm);
+    if (o.principal_id != 0U)
+        return o.principal_id;
     /* Slot zero is the one stable identity for the user's config.  Its
      * defining FlOrigin still carries the concrete path for imports and
      * diagnostics; registrations intentionally do not mint a second id

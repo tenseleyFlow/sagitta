@@ -82,6 +82,16 @@ typedef struct FlOrigin {
     u8 kind;         /* FlOriginKind                                     */
     u32 path_id;     /* interned REALPATH; 0 for builtins                */
     u32 caps;        /* FL_CAP_*                                         */
+    /*
+     * Stable registry owner for an origin whose diagnostic path can
+     * change while code imports helpers.  Plugin entry modules set this
+     * once; every imported helper preserves it, so registrations made by
+     * a helper still belong to the entry plugin's teardown ledger.
+     *
+     * Zero deliberately means "derive as before".  That keeps existing
+     * config/CLI origins and old aggregate initializers source-compatible.
+     */
+    u32 principal_id;
 } FlOrigin;
 
 /* The user config.  Sprint 54 depends on this number. */
@@ -135,7 +145,8 @@ u32 fl_origin_register(Ed *ed, FlOriginKind k, const char *label, u32 caps);
 const char *fl_origin_label(const Ed *ed, u32 origin_id);
 u32 fl_origin_caps(const Ed *ed, u32 origin_id);
 
-/* The registry id of the defining module of the CALLER, per §13's walk.
+/* The stable principal of the defining module of the CALLER, when it has
+ * one; otherwise derive/register its diagnostic origin as before.  Returns
  * FL_ORIGIN_ID_NONE when there is no editor host to ask. */
 u32 fl_origin_of_frame(FlVm *vm);
 

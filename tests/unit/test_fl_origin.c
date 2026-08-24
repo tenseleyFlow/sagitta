@@ -8,11 +8,40 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "fl/gc.h"
 #include "fl/origin.h"
 #include "fl/value.h"
 #include "fl/vm.h"
 
 static const u32 ALL_CAPS = FL_CAP_ALL;
+
+static bool origin_principal_probe(FlVm *vm, FlValue *args, u32 nargs,
+                                   FlValue *out)
+{
+    (void)args;
+    (void)nargs;
+    *out = FL_INT_V((i64)fl_origin_of_frame(vm));
+    return true;
+}
+
+static void origin_install_principal_probe(FlFix *f)
+{
+    u32 name = yew_intern_cstr(&f->in, "principal_probe");
+    FlNative *native = fl_gc_alloc(&f->vm, sizeof(*native), FL_NATIVE);
+
+    native->fn = origin_principal_probe;
+    native->name_id = name;
+    native->min_ar = 0U;
+    native->max_ar = 0U;
+    native->has_recv = 0U;
+    native->rsv = 0U;
+    native->caps = 0U;
+    native->recv = FL_NIL_V;
+    fl_gc_protect(&f->vm, FL_OBJ_V(FL_NATIVE, native));
+    (void)fl_map_set(&f->vm, f->vm.prelude, FL_INT_V((i64)name),
+                     FL_OBJ_V(FL_NATIVE, native));
+    fl_gc_release(&f->vm, 1U);
+}
 
 static void origin_ed_open(Ed *ed)
 {
@@ -170,6 +199,14 @@ void test_fl_origin_of_frame_uses_attached_root_origin(void)
     YEW_ASSERT_EQ_U64(fl_origin_of_frame(&f.vm), id);
     YEW_ASSERT_EQ_U64(ed.origins.n, 2U);
 
+    /* A helper changes path_id for diagnostics, but an explicit plugin
+     * principal remains the ledger owner and avoids registering the helper
+     * as a second plugin. */
+    f.vm.root_origin.path_id = yew_intern_cstr(&f.in, "/tmp/helper.fl");
+    f.vm.root_origin.principal_id = id;
+    YEW_ASSERT_EQ_U64(fl_origin_of_frame(&f.vm), id);
+    YEW_ASSERT_EQ_U64(ed.origins.n, 2U);
+
     f.vm.ed = NULL;
     origin_ed_close(&ed);
     flfix_close(&f);
@@ -184,15 +221,24 @@ void test_fl_origin_of_frame_uses_attached_root_origin(void)
 void test_fl_origin_plugin_helper_chain_denial_is_catchable(void)
 {
     FlFix f;
+    Ed ed;
     const char *dir;
     char trusted[1024];
     char denied[1200];
+    char owner_text[64];
+    u32 owner;
 
     flfix_open(&f);
+    origin_ed_open(&ed);
+    f.vm.ed = &ed;
+    owner = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, "entry-plugin.fl", 0U);
+    origin_install_principal_probe(&f);
     dir = flfix_tmpdir(&f);
     flfix_write(&f, "payload.txt", "secret\n");
     flfix_write(&f, "helper.fl",
-                "import io\nfn peek(p) { return io.read(p) }\n");
+                "import io\n"
+                "fn peek(p) { return io.read(p) }\n"
+                "fn owner() { return principal_probe() }\n");
 
     (void)snprintf(trusted, sizeof(trusted),
                    "import \"helper.fl\" as h\n"
@@ -200,12 +246,18 @@ void test_fl_origin_plugin_helper_chain_denial_is_catchable(void)
     flfix_as(&f, (u8)FL_ORIGIN_CONFIG, (u32)FL_CAP_FS_READ);
     FL_EQ(&f, trusted, "secret\n");
 
+    flfix_as(&f, (u8)FL_ORIGIN_PLUGIN, 0U);
+    f.origin.principal_id = owner;
+    (void)snprintf(owner_text, sizeof(owner_text), "%lu",
+                   (unsigned long)owner);
+    FL_EQ(&f, "import \"helper.fl\" as h\nreturn h.owner()\n", owner_text);
+    YEW_ASSERT_EQ_U64(ed.origins.n, 2U);
+
     (void)snprintf(denied, sizeof(denied),
                    "import \"helper.fl\" as h\n"
                    "try { h.peek(\"%s/payload.txt\") }\n"
                    "catch e { return e.kind + \":\" + e.msg }\n"
                    "return \"authority leaked\"\n", dir);
-    flfix_as(&f, (u8)FL_ORIGIN_PLUGIN, 0U);
     {
         char want[1200];
 
@@ -216,6 +268,8 @@ void test_fl_origin_plugin_helper_chain_denial_is_catchable(void)
     YEW_ASSERT_EQ_U64(f.vm.mods.n, 2U);
     YEW_ASSERT(f.vm.mods.v[0].exports != f.vm.mods.v[1].exports);
 
+    f.vm.ed = NULL;
+    origin_ed_close(&ed);
     flfix_close(&f);
 }
 

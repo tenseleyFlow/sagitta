@@ -4,7 +4,8 @@
 /*
  * Sprint 31 deliverable 9: `import`.
  *
- * THE CACHE KEY IS (realpath, origin.kind), NOT realpath.
+ * THE CACHE KEY IS (realpath, origin.kind, origin.principal_id), NOT
+ * realpath.
  *
  * That is what makes spec §13's sentence -- "a plugin calling a
  * user-config helper gains nothing" -- literally true.  A helper file
@@ -29,7 +30,7 @@
 
 typedef struct FlVm FlVm;
 
-enum { FL_MOD_LOADING = 0, FL_MOD_READY = 1 };
+enum { FL_MOD_LOADING = 0, FL_MOD_READY = 1, FL_MOD_DROPPED = 2 };
 
 /* How deep imports may nest.  A module body's globals map is held on
  * the GC's temp-root stack while a nested import runs, and that stack
@@ -38,7 +39,7 @@ enum { FL_MOD_MAX_DEPTH = 16 };
 
 typedef struct FlModule {
     u32 path_id;         /* interned REALPATH                           */
-    FlOrigin origin;     /* the IMPORTER's kind and caps, this path     */
+    FlOrigin origin;     /* importer authority/principal, this path     */
     FlMap *exports;      /* frozen on completion; NULL while loading    */
     u8 state;            /* FL_MOD_LOADING | FL_MOD_READY               */
     u32 importer;        /* index + 1 of the module that imported this  */
@@ -73,6 +74,14 @@ bool fl_module_eval_path(FlVm *vm, const char *path, FlOrigin origin,
 bool fl_module_eval_source(FlVm *vm, const char *path,
                            const char *source, size_t len,
                            FlOrigin origin, FlValue *out);
+
+/*
+ * Tombstones every cached module owned by `principal_id` and removes its
+ * exports from vm->modules, the cache's GC root.  The next import evaluates
+ * the file afresh.  Principal zero is a real legacy/no-principal cache key,
+ * not a wildcard.
+ */
+void fl_module_drop_principal(FlVm *vm, u32 principal_id);
 
 /* Releases the table itself.  The exports maps are the collector's. */
 void fl_mod_free(FlVm *vm);

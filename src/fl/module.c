@@ -1,7 +1,7 @@
 /*
  * Sprint 31 deliverable 9: `import`.
  *
- * The reasoning for the (realpath, origin.kind) cache key and for
+ * The reasoning for the (realpath, kind, principal) cache key and for
  * resolving through realpath(3) is in module.h, next to the struct it
  * shapes.  What lives here is the mechanism.
  *
@@ -55,13 +55,15 @@ void fl_mod_free(FlVm *vm)
     vm->mods.cap = 0U;
 }
 
-static u32 mod_find(const FlVm *vm, u32 path_id, u8 kind)
+static u32 mod_find(const FlVm *vm, u32 path_id, u8 kind, u32 principal_id)
 {
     u32 i;
 
     for (i = 0U; i < vm->mods.n; i++) {
-        if (vm->mods.v[i].path_id == path_id &&
-            vm->mods.v[i].origin.kind == kind)
+        if (vm->mods.v[i].state != (u8)FL_MOD_DROPPED &&
+            vm->mods.v[i].path_id == path_id &&
+            vm->mods.v[i].origin.kind == kind &&
+            vm->mods.v[i].origin.principal_id == principal_id)
             return i;
     }
     return (u32)-1;
@@ -70,6 +72,14 @@ static u32 mod_find(const FlVm *vm, u32 path_id, u8 kind)
 static u32 mod_add(FlVm *vm, u32 path_id, FlOrigin origin, u32 importer)
 {
     FlModule *m;
+    u32 i;
+
+    for (i = 0U; i < vm->mods.n; i++) {
+        if (vm->mods.v[i].state == (u8)FL_MOD_DROPPED) {
+            m = &vm->mods.v[i];
+            goto fill;
+        }
+    }
 
     if (vm->mods.n == vm->mods.cap) {
         vm->mods.cap = vm->mods.cap == 0U ? 8U : vm->mods.cap * 2U;
@@ -77,12 +87,33 @@ static u32 mod_add(FlVm *vm, u32 path_id, FlOrigin origin, u32 importer)
                                        sizeof(*vm->mods.v));
     }
     m = &vm->mods.v[vm->mods.n];
+    i = vm->mods.n++;
+fill:
     m->path_id = path_id;
     m->origin = origin;
     m->exports = NULL;
     m->state = (u8)FL_MOD_LOADING;
     m->importer = importer;
-    return vm->mods.n++;
+    return i;
+}
+
+void fl_module_drop_principal(FlVm *vm, u32 principal_id)
+{
+    u32 i;
+
+    if (vm == NULL)
+        return;
+    for (i = 0U; i < vm->mods.n; i++) {
+        FlModule *m = &vm->mods.v[i];
+
+        if (m->state == (u8)FL_MOD_DROPPED ||
+            m->origin.principal_id != principal_id)
+            continue;
+        (void)fl_map_del(vm->modules, FL_INT_V((i64)i));
+        m->exports = NULL;
+        m->state = (u8)FL_MOD_DROPPED;
+        m->importer = 0U;
+    }
 }
 
 /* Which module the frame stack is currently inside, or -1 at the top
@@ -98,7 +129,7 @@ static u32 mod_current(const FlVm *vm)
         if (o.kind == (u8)FL_ORIGIN_BUILTIN || o.path_id == 0U)
             continue;
         {
-            u32 k = mod_find(vm, o.path_id, o.kind);
+            u32 k = mod_find(vm, o.path_id, o.kind, o.principal_id);
 
             if (k != (u32)-1)
                 return k;
@@ -515,7 +546,7 @@ bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
     }
     bytebuf_free(&tried);
     rid = yew_intern(vm->in, real, strlen(real));
-    idx = mod_find(vm, rid, o.kind);
+    idx = mod_find(vm, rid, o.kind, o.principal_id);
     if (idx != (u32)-1) {
         if (vm->mods.v[idx].state == (u8)FL_MOD_LOADING) {
             free(real);
@@ -542,6 +573,7 @@ bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
         sub.kind = o.kind;
         sub.path_id = rid;
         sub.caps = o.caps;
+        sub.principal_id = o.principal_id;
         idx = mod_add(vm, rid, sub, cur == (u32)-1 ? 0U : cur + 1U);
     }
     {
