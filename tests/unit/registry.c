@@ -2101,6 +2101,8 @@ const YewTest yew_tests[] = {
     T(plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event),
     T(plug_lifecycle_command_errors_share_plugin_limit),
     T(plug_lifecycle_bound_errors_share_plugin_limit),
+    T(plug_completion_maps_lifecycle_args_and_lists_winners),
+    T(plug_completion_hides_unregistered_plugin_commands),
     T(macro_header_parses_all_five_fields),
     T(macro_header_accepts_missing_optional_fields),
     T(macro_header_unknown_schema_is_skipped),

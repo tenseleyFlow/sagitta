@@ -16,6 +16,12 @@
 
 #include "edit/ed.h"
 #include "edit/option.h"
+#ifndef YEW_WITH_PLUGINS
+#define YEW_WITH_PLUGINS 0
+#endif
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
 #include "ui/cmdparse.h"
 #include "unicode/utf8.h"
 #include "util/buf.h"
@@ -215,12 +221,15 @@ static u32 enumerate_commands(const CompReq *req, Vec_CompItem *out)
 
     for (i = 0U; i < yew_cmd_count(); i++) {
         const CmdDesc *desc = yew_cmd_at(i);
-        CmdId id;
-        const CmdEntry *entry;
+        CmdId id = {i + 1U};
+        const CmdEntry *entry = yew_cmd_entry(id);
         const char *name;
         bool deferred;
 
-        if (desc == NULL || !starts_with(desc->name, "ed.") ||
+        /* yew_cmd_at exposes stable raw rows.  Completion is an active
+         * inventory, so an origin-teardown tombstone must disappear. */
+        if (desc == NULL || entry == NULL ||
+            !starts_with(desc->name, "ed.") ||
             (desc->flags & YEW_CMD_INTERNAL) != 0U)
             continue;
         name = desc->name + 3U;
@@ -229,14 +238,37 @@ static u32 enumerate_commands(const CompReq *req, Vec_CompItem *out)
         deferred = (desc->flags & YEW_CMD_DEFERRED) != 0U;
         (void)candidate_add(&matches, stem, name, name, desc->help, false,
                             deferred);
-        id = yew_cmd_lookup(desc->name, (u32)strlen(desc->name));
-        entry = yew_cmd_entry(id);
-        if (entry != NULL && entry->abbrev != NULL &&
+        if (entry->abbrev != NULL &&
             strcmp(entry->abbrev, name) != 0)
             (void)candidate_add(&matches, stem, entry->abbrev,
                                 entry->abbrev, name, false, deferred);
     }
     return candidate_finish(req, YEW_COMP_CMD, &matches, out);
+}
+
+static u32 enumerate_plugins(const CompReq *req, Vec_CompItem *out)
+{
+    CandidateVec matches = {0};
+#if YEW_WITH_PLUGINS
+    u32 i;
+
+    for (i = 0U; i < yew_plug_count(req->ed); i++) {
+        Plug *plug = yew_plug_at(req->ed, i);
+
+        /* Only winners are command-addressable.  Shadowed records are
+         * retained for diagnostics, but completing them would offer a
+         * name whose lifecycle command resolves to a different row. */
+        if (plug == NULL || !plug->winner || plug->mf.name_text == NULL)
+            continue;
+        (void)candidate_add(&matches, req->stem, plug->mf.name_text,
+                            plug->mf.name_text,
+                            plug->mf.desc == NULL ? "plugin" : plug->mf.desc,
+                            false, false);
+    }
+#else
+    (void)req;
+#endif
+    return candidate_finish(req, YEW_COMP_PLUGIN, &matches, out);
 }
 
 static const char *buffer_name(const Buffer *buffer)
@@ -1013,6 +1045,8 @@ static void comp_init(void)
          YEW_COMP_SRC_CACHEABLE},
         {YEW_COMP_VALUE, "value", enumerate_option_values,
          YEW_COMP_SRC_CACHEABLE},
+        {YEW_COMP_PLUGIN, "plugin", enumerate_plugins,
+         YEW_COMP_SRC_CACHEABLE},
     };
     size_t i;
 
@@ -1329,6 +1363,8 @@ bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
         *kind = YEW_COMP_OPTION;
     else if (code == 'v')
         *kind = YEW_COMP_VALUE;
+    else if (code == 'p')
+        *kind = YEW_COMP_PLUGIN;
     else
         return false;
     return true;

@@ -40,6 +40,7 @@ typedef enum {
     YEW_COMP_BUFFER,
     YEW_COMP_OPTION,
     YEW_COMP_VALUE,
+    YEW_COMP_PLUGIN,
     YEW_COMP_KIND__N
 } YewCompKind;
 

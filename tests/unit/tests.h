@@ -2086,6 +2086,8 @@ void test_option_completion_uses_declaration_order_inventory(void);
 void test_plug_options_declare_set_complete_teardown_and_reenable(void);
 void test_plug_options_collisions_are_atomic_and_origin_owned(void);
 void test_plug_options_ctx_set_uses_manifest_namespace_and_lifecycle(void);
+void test_plug_completion_maps_lifecycle_args_and_lists_winners(void);
+void test_plug_completion_hides_unregistered_plugin_commands(void);
 void test_trust_content_hash_invalidation_ignores_mtime(void);
 void test_trust_realpath_move_and_symlink_do_not_carry_grant(void);
 void test_trust_same_path_new_inode_reprompts(void);

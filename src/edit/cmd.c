@@ -1188,6 +1188,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.job.list", "", YEW_RP_FORBID, "jobs"},
     {"ed.job.kill", "", YEW_RP_FORBID, NULL},
     {"ed.shell.term", "", YEW_RP_FORBID, "term"},
+    {"ed.plug.enable", "p", YEW_RP_FORBID, NULL},
+    {"ed.plug.disable", "p", YEW_RP_FORBID, NULL},
+    {"ed.plug.reload", "p", YEW_RP_FORBID, NULL},
+    {"ed.plug.info", "p", YEW_RP_FORBID, NULL},
 };
 
 static bool word_in(const char *word, size_t len, const char *const *words,
@@ -1480,6 +1484,7 @@ static void entry_validate(const CmdEntry *entry)
                                 entry->argspec;
     while (*p != '\0') {
         if (*p != 'f' && *p != 'b' && *p != 'o' && *p != 'v' &&
+            *p != 'p' &&
             *p != 's' && !(*p == '*' && p[1] == '\0'))
             YEW_BUG("command %s has invalid argspec", entry->cmd.name);
         p++;
