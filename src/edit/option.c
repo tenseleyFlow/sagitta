@@ -11,6 +11,7 @@
 #include "fl/flruntime.h"
 #include "fl/flhook.h"
 #include "fl/macrolib.h"
+#include "fl/vm.h"
 #include "mod/ai/ai.h"
 #if YEW_WITH_PLUGINS
 #include "mod/plug/plug.h"
@@ -32,12 +33,22 @@ struct OptStored {
     OptStr *owned_list;
 };
 
+typedef struct YewDynamicOpt {
+    OptDesc desc;
+    struct OptStored value;
+    struct OptStored dflt;
+    char *name;
+    u32 origin_id;
+    u32 ledger_id;
+    bool active;
+} YewDynamicOpt;
+
 typedef struct YewOptUndo {
     struct OptStored previous;
     u64 order;
     u32 target_id;
     u32 ledger_id;
-    u16 desc_index;
+    u32 desc_index;
     u8 scope;
     bool pending;
     bool active;
@@ -45,10 +56,15 @@ typedef struct YewOptUndo {
 
 struct YewOptHistory {
     YewOptUndo *v;
+    YewDynamicOpt *dynamic;
     u64 next_order;
     u32 n;
     u32 cap;
+    u32 ndynamic;
+    u32 capdynamic;
 };
+
+#define YEW_OPT_DYNAMIC_BIT UINT32_C(0x80000000)
 
 static const char *const number_values[] = {
     "off", "abs", "rel", "both", NULL
@@ -358,6 +374,43 @@ const OptDesc *yew_opt_desc(const char *name, u32 len)
         if (name_is(name, len, yew_opts[i].name))
             return &yew_opts[i];
     return NULL;
+}
+
+static YewDynamicOpt *dynamic_by_id(Ed *ed, u32 id)
+{
+    u32 slot;
+
+    if (ed == NULL || ed->opt_history == NULL ||
+        (id & YEW_OPT_DYNAMIC_BIT) == 0U)
+        return NULL;
+    slot = (id & ~YEW_OPT_DYNAMIC_BIT);
+    if (slot == 0U || slot > ed->opt_history->ndynamic)
+        return NULL;
+    return &ed->opt_history->dynamic[slot - 1U];
+}
+
+static YewDynamicOpt *dynamic_find(Ed *ed, const char *name, u32 len)
+{
+    YewOptHistory *history;
+    u32 i;
+
+    if (ed == NULL || name == NULL || (history = ed->opt_history) == NULL)
+        return NULL;
+    for (i = 0U; i < history->ndynamic; i++) {
+        YewDynamicOpt *dynamic = &history->dynamic[i];
+
+        if (dynamic->active && strlen(dynamic->name) == (size_t)len &&
+            memcmp(dynamic->name, name, len) == 0)
+            return dynamic;
+    }
+    return NULL;
+}
+
+const OptDesc *yew_opt_desc_for(Ed *ed, const char *name, u32 len)
+{
+    YewDynamicOpt *dynamic = dynamic_find(ed, name, len);
+
+    return dynamic == NULL ? yew_opt_desc(name, len) : &dynamic->desc;
 }
 
 static void stored_clear(struct OptStored *stored)
@@ -777,7 +830,13 @@ void yew_opt_free(Ed *ed)
     if (ed->opt_history != NULL) {
         for (i = 0U; i < ed->opt_history->n; i++)
             stored_clear(&ed->opt_history->v[i].previous);
+        for (i = 0U; i < ed->opt_history->ndynamic; i++) {
+            stored_clear(&ed->opt_history->dynamic[i].value);
+            stored_clear(&ed->opt_history->dynamic[i].dflt);
+            free(ed->opt_history->dynamic[i].name);
+        }
         free(ed->opt_history->v);
+        free(ed->opt_history->dynamic);
         free(ed->opt_history);
     }
     ed->opt_globals = NULL;
@@ -842,17 +901,28 @@ void yew_opt_reset(Ed *ed)
                        &ed->opt_globals[i].value);
         stored_clear(&old);
     }
+    if (ed->opt_history != NULL) {
+        for (i = 0U; i < ed->opt_history->ndynamic; i++) {
+            YewDynamicOpt *dynamic = &ed->opt_history->dynamic[i];
+
+            if (dynamic->active &&
+                !stored_assign(&dynamic->value, &dynamic->dflt.value))
+                YEW_BUG("plugin option reset has an invalid default");
+        }
+    }
 }
 
 bool yew_opt_get(Ed *ed, Buffer *buffer, Win *win,
                  const char *name, u32 len, OptVal *out)
 {
     const OptDesc *desc;
+    YewDynamicOpt *dynamic;
     struct OptStored *stored;
 
     if (ed == NULL || out == NULL || ed->opt_globals == NULL)
         return false;
-    desc = yew_opt_desc(name, len);
+    dynamic = dynamic_find(ed, name, len);
+    desc = dynamic == NULL ? yew_opt_desc(name, len) : &dynamic->desc;
     if (desc == NULL)
         return false;
     stored = win == NULL ? NULL : scope_stored(&win->opt_overrides,
@@ -860,6 +930,8 @@ bool yew_opt_get(Ed *ed, Buffer *buffer, Win *win,
     if (stored == NULL)
         stored = buffer == NULL ? NULL :
                  scope_stored(&buffer->opt_overrides, name, len);
+    if (stored == NULL && dynamic != NULL)
+        stored = &dynamic->value;
     if (stored == NULL)
         stored = &ed->opt_globals[desc_index(desc)];
     *out = stored->value;
@@ -870,9 +942,13 @@ static struct OptStored *set_target(Ed *ed, const OptDesc *desc,
                                     const char *name, u32 len,
                                     const char **err)
 {
+    YewDynamicOpt *dynamic;
     Strmap *map;
     struct OptStored *stored;
 
+    dynamic = dynamic_find(ed, name, len);
+    if (dynamic != NULL && desc == &dynamic->desc)
+        return &dynamic->value;
     if (desc->scope == (u8)YEW_OPT_GLOBAL)
         return &ed->opt_globals[desc_index(desc)];
     if (desc->scope == (u8)YEW_OPT_BUFFER) {
@@ -909,7 +985,7 @@ bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
     if (ed == NULL || name == NULL || value == NULL || err == NULL ||
         ed->opt_globals == NULL)
         return false;
-    desc = yew_opt_desc(name, len);
+    desc = yew_opt_desc_for(ed, name, len);
     if (desc == NULL) {
         *err = "unknown option";
         return false;
@@ -941,20 +1017,22 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
     OptVal resolved_old;
     struct OptStored old = {0};
     u32 index;
+    bool dynamic;
 
     if (err != NULL)
         *err = NULL;
     if (!yew_opt_validate(ed, scope_hint, name, len, value, err))
         return false;
-    desc = yew_opt_desc(name, len);
+    desc = yew_opt_desc_for(ed, name, len);
     normalized = *value;
     if (desc->type == (u8)YEW_OPT_ENUM &&
         normalized.type == (u8)YEW_OPT_STR)
         normalized.type = YEW_OPT_ENUM;
     if (!value_validate(ed, desc, value, &normalized, err))
         return false;
-    index = desc_index(desc);
-    if (ed->opt_inflight[index]) {
+    dynamic = dynamic_find(ed, name, len) != NULL;
+    index = dynamic ? 0U : desc_index(desc);
+    if (!dynamic && ed->opt_inflight[index]) {
         *err = "option is already being changed";
         return false;
     }
@@ -981,14 +1059,16 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
             *err = theme_option_error;
         goto fail_old;
     }
-    ed->opt_inflight[index] = true;
+    if (!dynamic)
+        ed->opt_inflight[index] = true;
     if (strcmp(desc->name, "theme") == 0)
         ed->theme_option_inflight = true;
     if (desc->on_change != NULL)
         desc->on_change(ed, desc, &old.value, &target->value);
     if (strcmp(desc->name, "theme") == 0)
         ed->theme_option_inflight = false;
-    ed->opt_inflight[index] = false;
+    if (!dynamic)
+        ed->opt_inflight[index] = false;
     stored_clear(&old);
     return true;
 
@@ -1025,13 +1105,15 @@ u32 yew_opt_checkpoint(Ed *ed, const char *name, u32 len,
     Win *win;
     u32 slot;
     u32 want;
+    YewDynamicOpt *dynamic;
 
     if (err != NULL)
         *err = NULL;
     if (ed == NULL || name == NULL || err == NULL) {
         return 0U;
     }
-    desc = yew_opt_desc(name, len);
+    dynamic = dynamic_find(ed, name, len);
+    desc = dynamic == NULL ? yew_opt_desc(name, len) : &dynamic->desc;
     if (desc == NULL) {
         *err = "unknown option";
         return 0U;
@@ -1068,7 +1150,9 @@ u32 yew_opt_checkpoint(Ed *ed, const char *name, u32 len,
         *err = "could not retain the old option value";
         return 0U;
     }
-    undo->desc_index = (u16)desc_index(desc);
+    undo->desc_index = dynamic == NULL ? desc_index(desc) :
+                       (YEW_OPT_DYNAMIC_BIT |
+                        ((u32)(dynamic - history->dynamic) + 1U));
     undo->scope = desc->scope;
     undo->target_id = desc->scope == (u8)YEW_OPT_BUFFER ? buffer->id :
                       desc->scope == (u8)YEW_OPT_WINDOW ? win->id : 0U;
@@ -1116,12 +1200,16 @@ static struct OptStored *undo_target(Ed *ed, const YewOptUndo *undo,
                                      const OptDesc *desc,
                                      Buffer **buffer_out, Win **win_out)
 {
+    YewDynamicOpt *dynamic;
     Buffer *buffer = NULL;
     Win *win = NULL;
     Strmap *map;
     struct OptStored *stored;
     u32 len = (u32)strlen(desc->name);
 
+    dynamic = dynamic_by_id(ed, undo->desc_index);
+    if (dynamic != NULL)
+        return dynamic->active ? &dynamic->value : NULL;
     if (undo->scope == (u8)YEW_OPT_GLOBAL)
         return &ed->opt_globals[undo->desc_index];
     if (undo->scope == (u8)YEW_OPT_BUFFER) {
@@ -1149,14 +1237,20 @@ static struct OptStored *undo_target(Ed *ed, const YewOptUndo *undo,
 static void undo_restore(Ed *ed, YewOptUndo *undo)
 {
     const OptDesc *desc;
+    YewDynamicOpt *dynamic;
     struct OptStored current = {0};
     struct OptStored *target;
     Buffer *buffer = NULL;
     Win *win = NULL;
 
-    if (undo->desc_index >= yew_opts_len)
-        YEW_BUG("option rollback has an invalid descriptor");
-    desc = &yew_opts[undo->desc_index];
+    dynamic = dynamic_by_id(ed, undo->desc_index);
+    if (dynamic != NULL)
+        desc = &dynamic->desc;
+    else {
+        if (undo->desc_index >= yew_opts_len)
+            YEW_BUG("option rollback has an invalid descriptor");
+        desc = &yew_opts[undo->desc_index];
+    }
     target = undo_target(ed, undo, desc, &buffer, &win);
     if (target == NULL)
         return;
@@ -1183,6 +1277,7 @@ bool yew_opt_rollback(Ed *ed, u32 checkpoint)
 bool yew_opt_remove(Ed *ed, u32 ledger_id)
 {
     FlRegistration *registration;
+    YewDynamicOpt *dynamic;
     YewOptUndo *undo;
     YewOptUndo *newer = NULL;
     YewOptHistory *history;
@@ -1193,9 +1288,38 @@ bool yew_opt_remove(Ed *ed, u32 ledger_id)
     registration = &ed->hooks.ledger.v[ledger_id - 1U];
     if (!registration->active || registration->kind != (u8)REG_OPTION)
         return false;
+    dynamic = dynamic_by_id(ed, registration->handle);
+    if (dynamic != NULL) {
+        YewOptHistory *dynamic_history = ed->opt_history;
+
+        if (!dynamic->active || dynamic->ledger_id != ledger_id)
+            return false;
+        for (i = 0U; i < dynamic_history->n; i++) {
+            YewOptUndo *layer = &dynamic_history->v[i];
+
+            if (layer->desc_index != registration->handle ||
+                (!layer->active && !layer->pending))
+                continue;
+            if (layer->active)
+                (void)fl_reg_remove(&ed->hooks.ledger, layer->ledger_id);
+            stored_clear(&layer->previous);
+            layer->active = false;
+            layer->pending = false;
+        }
+        stored_clear(&dynamic->value);
+        stored_clear(&dynamic->dflt);
+        free(dynamic->name);
+        dynamic->name = NULL;
+        dynamic->desc = (OptDesc){0};
+        dynamic->active = false;
+        dynamic->ledger_id = 0U;
+        (void)fl_reg_remove(&ed->hooks.ledger, ledger_id);
+        return true;
+    }
     undo = undo_by_checkpoint(ed, registration->handle);
     if (undo == NULL || !undo->active || undo->ledger_id != ledger_id ||
-        undo->desc_index >= yew_opts_len)
+        (undo->desc_index >= yew_opts_len &&
+         dynamic_by_id(ed, undo->desc_index) == NULL))
         return false;
     history = ed->opt_history;
     for (i = 0U; i < history->n; i++) {
@@ -1217,6 +1341,215 @@ bool yew_opt_remove(Ed *ed, u32 ledger_id)
     stored_clear(&undo->previous);
     undo->active = false;
     (void)fl_reg_remove(&ed->hooks.ledger, ledger_id);
+    return true;
+}
+
+static bool dynamic_key_valid(const char *key, u32 len)
+{
+    u32 i;
+
+    if (key == NULL || len == 0U || len > 64U || key[0] == '.' ||
+        key[len - 1U] == '.')
+        return false;
+    for (i = 0U; i < len; i++) {
+        unsigned char ch = (unsigned char)key[i];
+
+        if ((ch >= (unsigned char)'a' && ch <= (unsigned char)'z') ||
+            (ch >= (unsigned char)'A' && ch <= (unsigned char)'Z') ||
+            (ch >= (unsigned char)'0' && ch <= (unsigned char)'9') ||
+            ch == (unsigned char)'_' || ch == (unsigned char)'-' ||
+            ch == (unsigned char)'.')
+            continue;
+        return false;
+    }
+    return true;
+}
+
+static bool dynamic_declare(Ed *ed, u32 origin_id,
+                            const char *plugin_name, u32 plugin_name_len,
+                            const char *key, u32 key_len,
+                            const OptVal *value, u32 *ledger_id,
+                            const char **err)
+{
+    YewOptHistory *history;
+    YewDynamicOpt *dynamic;
+    char *name;
+    size_t name_len;
+    u32 slot;
+    u32 want;
+    u32 handle;
+
+    *err = NULL;
+    if (ed == NULL || origin_id == FL_ORIGIN_ID_NONE ||
+        plugin_name == NULL || !dynamic_key_valid(key, key_len)) {
+        *err = "plugin option key must be 1..64 ASCII name characters";
+        return false;
+    }
+    if ((size_t)plugin_name_len > SIZE_MAX - (size_t)key_len -
+                                  sizeof("plug..")) {
+        *err = "plugin option name is too long";
+        return false;
+    }
+    name_len = sizeof("plug.") - 1U + (size_t)plugin_name_len + 1U +
+               (size_t)key_len;
+    name = yew_xmalloc(name_len + 1U);
+    (void)memcpy(name, "plug.", sizeof("plug.") - 1U);
+    (void)memcpy(name + sizeof("plug.") - 1U, plugin_name,
+                 plugin_name_len);
+    name[sizeof("plug.") - 1U + plugin_name_len] = '.';
+    (void)memcpy(name + sizeof("plug.") + plugin_name_len, key, key_len);
+    name[name_len] = '\0';
+    if (yew_opt_desc(name, (u32)name_len) != NULL ||
+        dynamic_find(ed, name, (u32)name_len) != NULL) {
+        free(name);
+        *err = "plugin option name collides with an existing option";
+        return false;
+    }
+    history = history_get(ed);
+    for (slot = 0U; slot < history->ndynamic; slot++)
+        if (!history->dynamic[slot].active)
+            break;
+    if (slot == history->ndynamic && history->ndynamic == history->capdynamic) {
+        want = history->capdynamic == 0U ? 8U : history->capdynamic * 2U;
+        if (want < history->capdynamic || want >= YEW_OPT_DYNAMIC_BIT) {
+            free(name);
+            *err = "plugin option table is full";
+            return false;
+        }
+        history->dynamic = yew_xreallocarray(history->dynamic, want,
+                                              sizeof(*history->dynamic));
+        (void)memset(&history->dynamic[history->capdynamic], 0,
+                     (size_t)(want - history->capdynamic) *
+                         sizeof(*history->dynamic));
+        history->capdynamic = want;
+    }
+    dynamic = &history->dynamic[slot];
+    stored_clear(&dynamic->value);
+    stored_clear(&dynamic->dflt);
+    free(dynamic->name);
+    *dynamic = (YewDynamicOpt){0};
+    dynamic->name = name;
+    if (!stored_assign(&dynamic->value, value) ||
+        !stored_assign(&dynamic->dflt, value)) {
+        stored_clear(&dynamic->value);
+        stored_clear(&dynamic->dflt);
+        free(dynamic->name);
+        *dynamic = (YewDynamicOpt){0};
+        *err = "plugin option default is invalid";
+        return false;
+    }
+    dynamic->desc = (OptDesc){
+        dynamic->name, value->type, YEW_OPT_GLOBAL, dynamic->dflt.value,
+        NULL, INT64_MIN, INT64_MAX, NULL, NULL, "Plugin-declared option"
+    };
+    dynamic->origin_id = origin_id;
+    dynamic->active = true;
+    if (slot == history->ndynamic)
+        history->ndynamic++;
+    handle = YEW_OPT_DYNAMIC_BIT | (slot + 1U);
+    dynamic->ledger_id = fl_reg_add(&ed->hooks.ledger, origin_id,
+                                    REG_OPTION, handle);
+    *ledger_id = dynamic->ledger_id;
+    ed->footer_dirty = true;
+    return true;
+}
+
+static bool plugin_option_from_fl(FlVm *vm, FlValue value, OptVal *out,
+                                  OptStr **owned_list)
+{
+    if (value.t == (u8)FL_BOOL) {
+        *out = (OptVal){YEW_OPT_BOOL, {.b = value.as.b}};
+        return true;
+    }
+    if (value.t == (u8)FL_INT) {
+        *out = (OptVal){YEW_OPT_INT, {.i = value.as.i}};
+        return true;
+    }
+    if (value.t == (u8)FL_STR) {
+        const FlStr *s = (const FlStr *)value.as.o;
+
+        *out = (OptVal){YEW_OPT_STR, {.str = {s->b, s->len}}};
+        return true;
+    }
+    if (value.t == (u8)FL_LIST) {
+        const FlList *list = (const FlList *)value.as.o;
+        OptStr *items = yew_xcalloc(list->n == 0U ? 1U : list->n,
+                                    sizeof(*items));
+        u32 i;
+
+        for (i = 0U; i < list->n; i++) {
+            const FlStr *item;
+
+            if (list->v[i].t != (u8)FL_STR) {
+                free(items);
+                return fl_raise(vm, "type",
+                                "ctx.set: list defaults require only strings");
+            }
+            item = (const FlStr *)list->v[i].as.o;
+            items[i] = (OptStr){item->b, item->len};
+        }
+        *out = (OptVal){YEW_OPT_STRLIST, {.list = {items, list->n}}};
+        *owned_list = items;
+        return true;
+    }
+    return fl_raise(vm, "type",
+                    "ctx.set: defaults must be bool, int, string, or string list");
+}
+
+bool fl_api_declare_plugin_options(FlVm *vm, u32 origin_id,
+                                   const char *plugin_name,
+                                   u32 plugin_name_len,
+                                   FlValue *args, u32 nargs,
+                                   FlValue *out)
+{
+    FlMap *map;
+    FlValue key;
+    FlValue value;
+    u32 *ledger_ids;
+    u32 cursor = 0U;
+    u32 n = 0U;
+
+    if (vm == NULL || vm->ed == NULL || out == NULL || nargs != 1U ||
+        args[0].t != (u8)FL_MAP)
+        return vm == NULL ? false :
+               fl_raise(vm, "type", "ctx.set expects one map argument");
+    map = (FlMap *)args[0].as.o;
+    ledger_ids = yew_xcalloc(fl_map_count(map) == 0U ? 1U :
+                             fl_map_count(map), sizeof(*ledger_ids));
+    while (fl_map_iter(map, &cursor, &key, &value)) {
+        const FlStr *key_text;
+        OptVal option = {0};
+        OptStr *owned_list = NULL;
+        const char *err = NULL;
+
+        if (key.t != (u8)FL_STR) {
+            while (n != 0U)
+                (void)yew_opt_remove(vm->ed, ledger_ids[--n]);
+            free(ledger_ids);
+            return fl_raise(vm, "type", "ctx.set option names must be strings");
+        }
+        key_text = (const FlStr *)key.as.o;
+        if (!plugin_option_from_fl(vm, value, &option, &owned_list)) {
+            while (n != 0U)
+                (void)yew_opt_remove(vm->ed, ledger_ids[--n]);
+            free(ledger_ids);
+            return false;
+        }
+        if (!dynamic_declare(vm->ed, origin_id, plugin_name,
+                             plugin_name_len, key_text->b, key_text->len,
+                             &option, &ledger_ids[n], &err)) {
+            free(owned_list);
+            while (n != 0U)
+                (void)yew_opt_remove(vm->ed, ledger_ids[--n]);
+            free(ledger_ids);
+            return fl_raise(vm, "name", "ctx.set: %s",
+                            err == NULL ? "invalid plugin option" : err);
+        }
+        free(owned_list);
+        n++;
+    }
+    free(ledger_ids);
+    *out = FL_NIL_V;
     return true;
 }
 
@@ -1248,8 +1581,24 @@ static bool builtin_set(Ed *ed, const char *name, u32 len,
 
 static u32 builtin_list(Ed *ed, const char **out, u32 max)
 {
-    (void)ed;
-    return yew_opt_list(out, max);
+    YewOptHistory *history = ed == NULL ? NULL : ed->opt_history;
+    u32 total = yew_opts_len;
+    u32 written = 0U;
+    u32 i;
+
+    if (history != NULL)
+        for (i = 0U; i < history->ndynamic; i++)
+            if (history->dynamic[i].active)
+                total++;
+    if (out == NULL)
+        return total;
+    for (i = 0U; i < yew_opts_len && written < max; i++)
+        out[written++] = yew_opts[i].name;
+    if (history != NULL)
+        for (i = 0U; i < history->ndynamic && written < max; i++)
+            if (history->dynamic[i].active)
+                out[written++] = history->dynamic[i].name;
+    return written;
 }
 
 static const OptProvider builtin_provider = {

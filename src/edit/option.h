@@ -80,6 +80,7 @@ void yew_opt_scope_clone(Strmap *dst, const Strmap *src);
 void yew_opt_reset(Ed *ed);
 
 const OptDesc *yew_opt_desc(const char *name, u32 len);
+const OptDesc *yew_opt_desc_for(Ed *ed, const char *name, u32 len);
 bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
                       const OptVal *value, const char **err);
 bool yew_opt_get(Ed *ed, Buffer *buffer, Win *win,
@@ -106,5 +107,10 @@ CmdStatus yew_fl_cmd_eval(CmdCtx *cx);
 
 /* Native behind the unqualified set({...}) Fletch prelude entry. */
 bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out);
+bool fl_api_declare_plugin_options(FlVm *vm, u32 origin_id,
+                                   const char *plugin_name,
+                                   u32 plugin_name_len,
+                                   FlValue *args, u32 nargs,
+                                   FlValue *out);
 
 #endif /* YEW_EDIT_OPTION_H */

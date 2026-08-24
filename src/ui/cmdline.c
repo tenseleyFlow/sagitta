@@ -85,7 +85,8 @@ CmdStatus yew_opt_cmdline_set(CmdCtx *cx)
 
     if (cx == NULL || cx->ed == NULL || cx->argv.n != 3U)
         return YEW_CMD_ERR_ARG;
-    desc = yew_opt_desc(cx->argv.v[1], (u32)strlen(cx->argv.v[1]));
+    desc = yew_opt_desc_for(cx->ed, cx->argv.v[1],
+                            (u32)strlen(cx->argv.v[1]));
     if (desc == NULL || !parse_option_value(desc, cx->argv.v[2], &value))
         return YEW_CMD_ERR_ARG;
     if (!yew_opt_set(cx->ed, YEW_OPT_SCOPE_DECLARED,

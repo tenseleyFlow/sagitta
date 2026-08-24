@@ -208,16 +208,22 @@ static bool ctx_bind(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
 
 static bool ctx_set(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
 {
+    Plug *plug;
     PlugSys *sys;
     u32 owner;
     bool ok;
 
     if (!owner_args(vm, args, nargs, 1U, 1U, &owner))
         return false;
+    plug = yew_plug_by_origin(vm->ed, owner);
+    if (plug == NULL)
+        return fl_raise(vm, "handle", "plugin context owner is gone");
     sys = vm->ed->plug;
     sys->ctx_origin = owner;
     sys->ctx_registration = true;
-    ok = fl_api_set_options(vm, args + 1, nargs - 1U, out);
+    ok = fl_api_declare_plugin_options(vm, owner, plug->mf.name_text,
+                                       (u32)strlen(plug->mf.name_text),
+                                       args + 1, nargs - 1U, out);
     sys->ctx_registration = false;
     sys->ctx_origin = 0U;
     return ok;

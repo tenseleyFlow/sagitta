@@ -959,11 +959,23 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
 static u32 enumerate_options(const CompReq *req, Vec_CompItem *out)
 {
     CandidateVec matches = {0};
+    const OptProvider *provider = yew_opt_provider(req->ed);
+    const char **names;
+    u32 count;
     u32 i;
 
-    for (i = 0U; i < yew_opts_len; i++)
-        (void)candidate_add(&matches, req->stem, yew_opts[i].name,
-                            yew_opts[i].name, yew_opts[i].help, false, false);
+    count = provider->list(req->ed, NULL, 0U);
+    names = yew_xcalloc(count == 0U ? 1U : count, sizeof(*names));
+    count = provider->list(req->ed, names, count);
+    for (i = 0U; i < count; i++) {
+        const OptDesc *desc = yew_opt_desc_for(req->ed, names[i],
+                                               (u32)strlen(names[i]));
+
+        (void)candidate_add(&matches, req->stem, names[i], names[i],
+                            desc == NULL ? "option" : desc->help,
+                            false, false);
+    }
+    free(names);
     return candidate_finish(req, YEW_COMP_OPTION, &matches, out);
 }
 
