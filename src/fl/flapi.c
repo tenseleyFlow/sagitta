@@ -27,6 +27,7 @@
 #include "text/piece.h"
 #include "unicode/coords.h"
 #include "ui/layout.h"
+#include "ui/message.h"
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
@@ -64,6 +65,42 @@ static FlValue api_cstr(FlVm *vm, const char *s)
 {
     return s == NULL ? FL_NIL_V : api_str(vm, s, (u32)strlen(s));
 }
+
+static bool option_map_error(FlVm *vm, const FlStr *name, const char *err);
+
+static bool option_to_fl(FlVm *vm, const OptVal *value, FlValue *out)
+{
+    switch ((OptValType)value->type) {
+    case YEW_OPT_BOOL:
+        *out = FL_BOOL_V(value->as.b);
+        return true;
+    case YEW_OPT_INT:
+        *out = FL_INT_V(value->as.i);
+        return true;
+    case YEW_OPT_STR:
+    case YEW_OPT_ENUM:
+        *out = api_str(vm, value->as.str.s, value->as.str.len);
+        return true;
+    case YEW_OPT_STRLIST: {
+        FlList *list = fl_list_new(vm);
+        u32 i;
+
+        fl_gc_protect(vm, FL_OBJ_V(FL_LIST, list));
+        for (i = 0U; i < value->as.list.len; i++) {
+            const OptStr *item = &value->as.list.v[i];
+
+            (void)fl_list_push(vm, list, api_str(vm, item->s, item->len));
+        }
+        *out = FL_OBJ_V(FL_LIST, list);
+        fl_gc_release(vm, 1U);
+        return true;
+    }
+    }
+    return fl_raise(vm, "type", "option provider returned bad type");
+}
+
+static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out,
+                           OptStr **owned_list);
 
 static bool need_type(FlVm *vm, FlValue v, FlType want, u32 arg)
 {
@@ -323,6 +360,50 @@ static bool q_buf_readonly(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     return true;
 }
 
+static bool q_buf_opt(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    Buffer *b;
+    const FlStr *name;
+    OptVal value;
+
+    (void)n;
+    if (ed == NULL)
+        return false;
+    b = fl_h_buf(vm, a[0]);
+    if (b == NULL || !need_str(vm, a[1], 1U, &name))
+        return false;
+    if (!yew_opt_get(ed, b, NULL, name->b, name->len, &value))
+        return option_map_error(vm, name, "unknown option");
+    return option_to_fl(vm, &value, out);
+}
+
+static bool q_buf_opt_set(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    Buffer *b;
+    const FlStr *name;
+    OptVal value;
+    OptStr *owned_list = NULL;
+    const char *err = NULL;
+    bool ok;
+
+    (void)n;
+    if (ed == NULL)
+        return false;
+    b = fl_h_buf(vm, a[0]);
+    if (b == NULL || !need_str(vm, a[1], 1U, &name) ||
+        !option_from_fl(vm, a[2], &value, &owned_list))
+        return false;
+    ok = yew_opt_set_for(ed, b, NULL, YEW_OPT_SCOPE_DECLARED,
+                         name->b, name->len, &value, &err);
+    free(owned_list);
+    if (!ok)
+        return option_map_error(vm, name, err);
+    *out = FL_NIL_V;
+    return true;
+}
+
 static bool q_buf_mark(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Buffer *b = fl_h_buf(vm, a[0]);
@@ -333,6 +414,35 @@ static bool q_buf_mark(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (at < 0 || (u64)at > yew_buf_len(b))
         return fl_raise(vm, "range", "mark offset is outside the buffer");
     *out = fl_h_span_make(vm->ed, b, (u64)at, (u64)at);
+    return true;
+}
+
+static bool q_ed_msg(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    const FlStr *message;
+    const FlStr *level = NULL;
+    MsgSev severity = YEW_MSG_INFO;
+
+    if (ed == NULL)
+        return false;
+    if (!need_str(vm, a[0], 0U, &message) ||
+        (n == 2U && !need_str(vm, a[1], 1U, &level)))
+        return false;
+    if (memchr(message->b, '\0', message->len) != NULL)
+        return fl_raise(vm, "type", "ed.msg: message contains a NUL byte");
+    if (level != NULL) {
+        if (level->len == 4U && memcmp(level->b, "warn", 4U) == 0)
+            severity = YEW_MSG_WARN;
+        else if (level->len == 5U && memcmp(level->b, "error", 5U) == 0)
+            severity = YEW_MSG_ERROR;
+        else if (!(level->len == 4U &&
+                   memcmp(level->b, "info", 4U) == 0))
+            return fl_raise(vm, "type",
+                            "ed.msg: level must be info, warn, or error");
+    }
+    yew_msg(ed, severity, "%.*s", (int)message->len, message->b);
+    *out = FL_NIL_V;
     return true;
 }
 
@@ -699,6 +809,8 @@ FlBindDesc fl_api[] = {
     QUERY("buf.find_all", FL_H_BUF, 2U, 2U, q_buf_find_all),
     QUERY("buf.dirty", FL_H_BUF, 1U, 1U, q_buf_dirty),
     QUERY("buf.readonly", FL_H_BUF, 1U, 1U, q_buf_readonly),
+    QUERY("buf.opt", FL_H_BUF, 2U, 2U, q_buf_opt),
+    QUERY("buf.opt_set", FL_H_BUF, 3U, 3U, q_buf_opt_set),
     QUERY("buf.mark", FL_H_BUF, 2U, 2U, q_buf_mark),
 
     QUERY("win.current", FL_H_NONE, 0U, 0U, q_win_current),
@@ -751,7 +863,8 @@ FlBindDesc fl_api[] = {
     COMMAND_ARGS("opt.get", "ed.opt.get", FL_H_NONE, 1U, 1U, 0U,
                  FL_ARG_STR, FL_ARG_NONE, FL_ARG_NONE),
     COMMAND_ARGS("opt.set", "ed.opt.set", FL_H_NONE, 2U, 2U, 0U,
-                 FL_ARG_STR, FL_ARG_VALUE, FL_ARG_NONE)
+                 FL_ARG_STR, FL_ARG_VALUE, FL_ARG_NONE),
+    QUERY("ed.msg", FL_H_NONE, 1U, 2U, q_ed_msg)
 };
 
 const u32 fl_api_len = (u32)YEW_ARRAY_LEN(fl_api);
@@ -1755,6 +1868,7 @@ static const FlNativeDef BUF_DEFS[] = {
     NATIVE("insert", 3U, 3U), NATIVE("delete", 2U, 2U),
     NATIVE("find", 2U, 3U), NATIVE("find_all", 2U, 2U),
     NATIVE("dirty", 1U, 1U), NATIVE("readonly", 1U, 1U),
+    NATIVE("opt", 2U, 2U), NATIVE("opt_set", 3U, 3U),
     NATIVE("mark", 2U, 2U)
 };
 static const FlNativeDef WIN_DEFS[] = {
@@ -1787,7 +1901,8 @@ static const FlNativeDef OPT_DEFS[] = {
 };
 static const FlNativeDef ED_DEFS[] = {
     {"run", fl_api_ed_run, 2U, 2U, 0U, "(name, args) -> nil"},
-    {"commands", fl_api_ed_commands, 0U, 0U, 0U, "() -> list"}
+    {"commands", fl_api_ed_commands, 0U, 0U, 0U, "() -> list"},
+    NATIVE("msg", 1U, 2U)
 };
 
 const FlModuleDef fl_mod_buf = {"buf", BUF_DEFS, YEW_ARRAY_LEN(BUF_DEFS), NULL, 0U};

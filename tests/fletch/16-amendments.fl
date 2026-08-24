@@ -7,9 +7,9 @@
 #
 # A1 (Sprint 30) took the error-kind set from 11 to 12 by adding
 # "limit".  A2 (Sprint 34) took it from 12 to 13 by adding "handle".
-# A4 (Sprint 30) corrected §7's closure sentence to "9 then 10".  A3
-# remains RESERVED, not filed -- a reserved row is a promise and must
-# not be observable here.
+# A3 (Sprint 55) added the last-resort runtime-directory import row;
+# errors/runtime_dir_last.fl observes that row in the attempted paths.
+# A4 (Sprint 30) corrected §7's closure sentence to "9 then 10".
 import io
 import buf
 import list

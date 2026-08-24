@@ -11,6 +11,7 @@
 
 #include "text/file.h"
 #include "text/edit.h"
+#include "text/edit.h"
 #include "text/journal.h"
 #include "text/piece.h"
 #include "text/undo.h"
@@ -105,7 +106,9 @@ static int save_case(const char *path, const char *post_path)
     FileMeta meta;
     TextBuf *tb = NULL;
     Journal *journal = NULL;
+    UndoTree *undo = NULL;
     YewSaveErr save_err;
+    YewSaveOpts save_opts;
     u8 *old_bytes = NULL;
     u8 *post_bytes = NULL;
     size_t old_len = 0U;
@@ -146,10 +149,34 @@ static int save_case(const char *path, const char *post_path)
         goto io_fail_loaded;
     if (getenv("YEW_TORTURE_FOREIGN_OWNER") != NULL)
         meta.uid = meta.uid == (uid_t)-1 ? 1U : meta.uid + 1U;
-    save_err = yew_file_save(tb, &meta, path);
+    if (getenv("YEW_TORTURE_INPLACE") != NULL) {
+        EditCtx ec;
+
+        yew_file_save_opts_default(&save_opts);
+        save_opts.strategy = YEW_SAVE_STRATEGY_INPLACE;
+        save_opts.backup_keep = 10U;
+        save_opts.backup_dir = getenv("YEW_TORTURE_BACKUP_DIR");
+        undo = yew_undo_new(tb);
+        undo->saved = UINT32_MAX;
+        (void)memset(&ec, 0, sizeof(ec));
+        ec.tb = tb;
+        ec.meta = &meta;
+        ec.jrnl = journal;
+        ec.undo = undo;
+        save_err = yew_edit_save_opts(&ec, path, &save_opts);
+        journal = ec.jrnl;
+    } else {
+        save_err = yew_file_save(tb, &meta, path);
+    }
+    if (save_err == YEW_SAVE_BACKUP_FAILED) {
+        if (journal != NULL || undo == NULL || undo->saved != undo->cur)
+            _exit(5);
+        _exit(4);
+    }
     if (save_err != YEW_SAVE_OK)
         _exit(3); /* Retain the durable journal for the parent checker. */
     yew_journal_discard(journal);
+    yew_undo_free(undo);
     yew_textbuf_free(tb);
     yew_filemeta_dispose(&meta);
     free(old_bytes);
@@ -158,6 +185,7 @@ static int save_case(const char *path, const char *post_path)
 
 io_fail_loaded:
     yew_journal_close(journal);
+    yew_undo_free(undo);
     yew_textbuf_free(tb);
     yew_filemeta_dispose(&meta);
 io_fail:
@@ -251,6 +279,20 @@ done:
     return ok ? 0 : 1;
 }
 
+static int atomic_result_case(const char *path)
+{
+    static const u8 bytes[] = "atomic result\n";
+    YewAtomicWriteResult result;
+
+    if (setenv("YEW_FAULT_ENABLE", "1", 1) != 0)
+        return 3;
+    result = yew_file_write_atomic_result(path, bytes, sizeof(bytes) - 1U,
+                                          0600U);
+    if (result.error == YEW_SAVE_OK)
+        return result.committed ? 0 : 5;
+    return result.committed ? 4 : 3;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 4 && strcmp(argv[1], "--save") == 0)
@@ -259,9 +301,11 @@ int main(int argc, char **argv)
         return check_case(argv[2], argv[3], argv[4]);
     if (argc == 5 && strcmp(argv[1], "--check-batch") == 0)
         return check_batch_case(argv[2], argv[3], argv[4]);
+    if (argc == 3 && strcmp(argv[1], "--atomic-result") == 0)
+        return atomic_result_case(argv[2]);
     (void)fprintf(stderr,
                   "usage: %s --save PATH POST | --check PATH OLD POST | "
-                  "--check-batch PATH OLD POST\n",
+                  "--check-batch PATH OLD POST | --atomic-result PATH\n",
                   argv[0]);
     return 2;
 }

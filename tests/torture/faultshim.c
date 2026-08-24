@@ -7,6 +7,10 @@
  * YEW_FAULT_FCHOWN_EPERM=1 for row 6, YEW_FAULT_EINTR_AT=N to return EINTR
  * once at intercepted call N, and YEW_FAULT_STORAGE_ONLY=1 to keep a live
  * editor's terminal and log traffic outside the storage-fault sequence.
+ * YEW_FAULT_WRITE_EIO_AFTER_DIRSYNC=1 fails the first file write after a
+ * directory fsync, exercising rollback after a durable backup is published.
+ * YEW_FAULT_SAVE_META_EIO_AT=N returns EIO at the Nth rename/fsync boundary;
+ * YEW_FAULT_SAVE_META_EIO_AT2=N injects a second EIO in the same process.
  */
 
 #include <dlfcn.h>
@@ -48,6 +52,9 @@ static int resolving;
 static int rename_exdev_done;
 static int link_done;
 static int storage_only;
+static int dirsync_seen;
+static int write_eio_done;
+static unsigned long long save_meta_no;
 static volatile sig_atomic_t signal_enabled;
 
 static void enable_faults(int sig)
@@ -232,6 +239,24 @@ static int inject_eintr(const char *name)
     return 1;
 }
 
+static int inject_save_meta_eio(const char *name)
+{
+    unsigned long long at;
+    unsigned long long at2;
+    unsigned long long current;
+
+    if (!faults_enabled())
+        return 0;
+    at = parse_ull(getenv("YEW_FAULT_SAVE_META_EIO_AT"), UINT64_MAX);
+    at2 = parse_ull(getenv("YEW_FAULT_SAVE_META_EIO_AT2"), UINT64_MAX);
+    current = save_meta_no++;
+    if (at != current && at2 != current)
+        return 0;
+    log_call(name, "errno=EIO");
+    errno = EIO;
+    return 1;
+}
+
 static const char *sync_name(int fd, const char *file_name,
                              const char *dir_name)
 {
@@ -248,6 +273,13 @@ ssize_t write(int fd, const void *buf, size_t count)
     if (!storage_fd(fd))
         return real_write_fn(fd, buf, count);
     before_call("write");
+    if (env_is_one("YEW_FAULT_WRITE_EIO_AFTER_DIRSYNC") && dirsync_seen &&
+        !write_eio_done) {
+        write_eio_done = 1;
+        log_call("write", "errno=EIO");
+        errno = EIO;
+        return -1;
+    }
     if (inject_eintr("write"))
         return -1;
     return real_write_fn(fd, buf, maybe_short(count, "write"));
@@ -267,14 +299,20 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
 int fsync(int fd)
 {
     const char *name = sync_name(fd, "fsync-file", "fsync-dir");
+    int result;
 
     initialize();
     if (!storage_fd(fd))
         return real_fsync_fn(fd);
     before_call(name);
+    if (inject_save_meta_eio(name))
+        return -1;
     if (inject_eintr(name))
         return -1;
-    return real_fsync_fn(fd);
+    result = real_fsync_fn(fd);
+    if (result == 0 && faults_enabled() && strcmp(name, "fsync-dir") == 0)
+        dirsync_seen = 1;
+    return result;
 }
 
 int fdatasync(int fd)
@@ -293,6 +331,8 @@ int fdatasync(int fd)
 int rename(const char *old_path, const char *new_path)
 {
     before_call("rename");
+    if (inject_save_meta_eio("rename"))
+        return -1;
     if (env_is_one("YEW_FAULT_RENAME_EXDEV") && !rename_exdev_done) {
         rename_exdev_done = 1;
         log_call("rename", "errno=EXDEV");

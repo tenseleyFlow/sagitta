@@ -1,0 +1,99 @@
+# Sprint 55: the shipped cloud preset imports from the runtime directory and
+# applies buffer-scoped save policy only to watched paths.
+import buf
+import ed
+import io
+import list
+import opt
+import "preset.cloud.fl" as cloud
+
+let scratch = buf.current()
+t.eq(scratch.opt("save.strategy"), "auto")
+t.eq(scratch.opt("save.check_disk"), "mtime")
+t.eq(opt.get("save.backup_keep"), 10)
+t.eq(opt.get("save.check_disk_max"), 33554432)
+
+cloud.watch(t.tmpdir())
+t.eq(list.len(cloud.watching()), 1)
+let watched = buf.open(t.fixture("save.txt"))
+t.eq(watched.opt("save.strategy"), "inplace")
+t.eq(watched.opt("save.check_disk"), "content")
+t.eq(scratch.opt("save.strategy"), "auto")
+t.eq(scratch.opt("save.check_disk"), "mtime")
+
+# Receiver writes target the receiver even when it is not focused.
+scratch.opt_set("save.strategy", "atomic")
+t.eq(scratch.opt("save.strategy"), "atomic")
+t.eq(watched.opt("save.strategy"), "inplace")
+t.raises("name", fn() { return watched.opt("not.an.option") })
+t.raises("type", fn() { watched.opt_set("save.strategy", 42) })
+
+let work = t.tmpdir() + "/work"
+io.write(work + "/save.sync-conflict-peer.txt", "one")
+io.write(work + "/save (conflicted copy host).txt", "two")
+io.write(work + "/save_conflict-peer.txt", "three")
+io.write(work + "/save (SFConflict host).txt", "four")
+io.write(work + "/save (conflicted).sync-conflict-peer.txt", "five")
+
+# These names are too ambiguous to warn on by default.
+io.write(work + "/save (1).txt", "not matched")
+io.write(work + "/save 2.txt", "not matched")
+io.write(work + "/save.txt.conflict", "not matched")
+
+# A name containing two configured markers is still one twin.
+t.eq(list.len(cloud.twins(buf.path(watched))), 5)
+t.eq(list.len(cloud.scan()), 5)
+t.eq(cloud.check_state_dir(), true)
+t.raises("type", fn() { ed.msg("notice", "loud") })
+let first = cloud.twins(buf.path(watched))[0]
+cloud.open_conflict()
+t.eq(buf.path(buf.current()), first)
+t.eq(buf.current().opt("save.strategy"), "inplace")
+
+# Content mode treats a sync client's metadata-only rewrite as unchanged.
+# The paired mtime-mode case below proves this same rewrite moved metadata.
+let content_same_path = work + "/content-same.txt"
+io.write(content_same_path, "base\n")
+let content_same = buf.open(content_same_path)
+edit { buf.insert(content_same, buf.len(content_same), "editor\n") }
+io.write(content_same_path, "metadata mover\n")
+io.write(content_same_path, "base\n")
+buf.save(content_same)
+t.file(content_same_path, "base\neditor\n")
+t.eq(buf.dirty(content_same), false)
+
+# The default mtime policy refuses the same on-disk bytes after metadata
+# moved, preserving both the external file and the dirty editor contents.
+let mtime_same_path = work + "/mtime-same.txt"
+io.write(mtime_same_path, "base\n")
+let mtime_same = buf.open(mtime_same_path)
+mtime_same.opt_set("save.check_disk", "mtime")
+edit { buf.insert(mtime_same, buf.len(mtime_same), "editor\n") }
+io.write(mtime_same_path, "metadata mover\n")
+io.write(mtime_same_path, "base\n")
+t.raises("io", fn() { buf.save(mtime_same) })
+t.file(mtime_same_path, "base\n")
+t.eq(buf.dirty(mtime_same), true)
+t.text(mtime_same, "base\neditor\n")
+
+# A real byte change is refused by both policies.
+let content_diff_path = work + "/content-diff.txt"
+io.write(content_diff_path, "base\n")
+let content_diff = buf.open(content_diff_path)
+edit { buf.insert(content_diff, buf.len(content_diff), "editor\n") }
+io.write(content_diff_path, "remote\n")
+t.raises("io", fn() { buf.save(content_diff) })
+t.file(content_diff_path, "remote\n")
+t.eq(buf.dirty(content_diff), true)
+
+let mtime_diff_path = work + "/mtime-diff.txt"
+io.write(mtime_diff_path, "base\n")
+let mtime_diff = buf.open(mtime_diff_path)
+mtime_diff.opt_set("save.check_disk", "mtime")
+edit { buf.insert(mtime_diff, buf.len(mtime_diff), "editor\n") }
+io.write(mtime_diff_path, "remote\n")
+t.raises("io", fn() { buf.save(mtime_diff) })
+t.file(mtime_diff_path, "remote\n")
+t.eq(buf.dirty(mtime_diff), true)
+
+t.eq(batch, true)

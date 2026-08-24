@@ -41,6 +41,10 @@
 #include "util/intern.h"
 #include "util/xdg.h"
 
+#ifndef YEW_RUNTIME_DIR_DEFAULT
+#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
+#endif
+
 enum { MOD_MAX_BYTES = 8U * 1024U * 1024U };
 
 /* ---------------------------------------------------------------- */
@@ -232,8 +236,11 @@ static char *importer_dir(FlVm *vm, const FlOrigin *o)
 }
 
 /*
- * Tries the two places §11 names, in order, and records each attempt so
- * a miss can list them.  Returns a heap realpath, or NULL.
+ * Tries the places §11 names, in order, and records each attempt so a
+ * miss can list them.  The shipped runtime is deliberately last: a file
+ * beside the importer or in the user's config must be able to shadow a
+ * preset without modifying the installation.  Returns a heap realpath, or
+ * NULL.
  */
 static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
                      Bytebuf *tried)
@@ -242,6 +249,7 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
     char *dir;
     char *real = NULL;
     char *cfg;
+    const char *runtime;
 
     bytebuf_init(&cand);
     dir = importer_dir(vm, o);
@@ -268,6 +276,15 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
             bytebuf_free(&under);
             free(cfg);
         }
+    }
+    if (real == NULL) {
+        runtime = getenv("YEW_RUNTIME_DIR");
+        if (runtime == NULL || runtime[0] == '\0')
+            runtime = YEW_RUNTIME_DIR_DEFAULT;
+        join(&cand, runtime, rel, rn);
+        bytebuf_append(tried, "\n  ", 3U);
+        bytebuf_append(tried, cand.data, cand.len);
+        real = realpath((const char *)cand.data, NULL);
     }
     bytebuf_free(&cand);
     return real;

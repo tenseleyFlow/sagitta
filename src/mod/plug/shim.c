@@ -1,4 +1,5 @@
 #include "mod/plug/plug.h"
+#include "mod/plug/pkg.h"
 
 #include <stdio.h>
 
@@ -21,6 +22,14 @@ CmdStatus yew_plug_cmd_reload(CmdCtx *cx) { return plug_cmd_unavailable(cx); }
 CmdStatus yew_plug_cmd_info(CmdCtx *cx) { return plug_cmd_unavailable(cx); }
 
 int yew_plug_main(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    (void)fputs(yew_plug_module_error, stderr);
+    return YEW_EXIT_ERR;
+}
+
+int yew_pkg_main(int argc, char **argv)
 {
     (void)argc;
     (void)argv;

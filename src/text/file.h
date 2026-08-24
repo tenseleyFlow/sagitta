@@ -34,6 +34,9 @@ typedef struct FileMeta {
     char *realpath;
     struct timespec mtime;
     u64 size_on_disk;
+    /* Pinned last-loaded/saved bytes for exact save.check_disk=content. */
+    TextSnap disk_snapshot;
+    bool disk_snapshot_valid;
 } FileMeta;
 
 typedef enum {
@@ -49,8 +52,48 @@ typedef enum {
     YEW_SAVE_OK,
     YEW_SAVE_IO,
     YEW_SAVE_PERM,
-    YEW_SAVE_CHANGED_ON_DISK
+    YEW_SAVE_CHANGED_ON_DISK,
+    /* Document bytes are durable, but backup retention did not commit. */
+    YEW_SAVE_BACKUP_FAILED
 } YewSaveErr;
+
+typedef enum {
+    YEW_SAVE_STRATEGY_AUTO = 0,
+    YEW_SAVE_STRATEGY_ATOMIC,
+    YEW_SAVE_STRATEGY_INPLACE
+} YewSaveStrategy;
+
+typedef enum {
+    YEW_SAVE_CHECK_OFF = 0,
+    YEW_SAVE_CHECK_MTIME,
+    YEW_SAVE_CHECK_CONTENT
+} YewSaveCheck;
+
+#define YEW_SAVE_STRATEGY_DEFAULT YEW_SAVE_STRATEGY_AUTO
+#define YEW_SAVE_STRATEGY_DEFAULT_TEXT "auto"
+#define YEW_SAVE_CHECK_DISK_DEFAULT YEW_SAVE_CHECK_MTIME
+#define YEW_SAVE_CHECK_DISK_DEFAULT_TEXT "mtime"
+#define YEW_SAVE_CHECK_DISK_MAX_DEFAULT (UINT64_C(8) * 1024U * 1024U)
+#define YEW_SAVE_CHECK_DISK_MAX_LIMIT (UINT64_C(4) * 1024U * 1024U * 1024U)
+#define YEW_SAVE_BACKUP_KEEP_DEFAULT 1U
+#define YEW_SAVE_BACKUP_KEEP_MAX 64U
+#define YEW_SAVE_BACKUP_DIR_DEFAULT ""
+#define YEW_PLUG_VERIFY_ON_LOAD_DEFAULT true
+
+typedef struct YewSaveOpts {
+    YewSaveStrategy strategy;
+    YewSaveCheck check_disk;
+    u64 check_disk_max;
+    u32 backup_keep;
+    /* Empty or NULL selects $XDG_STATE_HOME/yew/backup/. */
+    const char *backup_dir;
+} YewSaveOpts;
+
+typedef struct YewAtomicWriteResult {
+    YewSaveErr error;
+    /* The destination rename completed, even if parent-directory sync did not. */
+    bool committed;
+} YewAtomicWriteResult;
 
 YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta);
 /* Sprint 24 D4 test hook: file reads performed so far.  Counting is the
@@ -59,11 +102,22 @@ u64 yew_file_load_count(void);
 void yew_file_load_count_reset(void);
 YewSaveErr yew_file_save(const TextBuf *tb, FileMeta *meta,
                          const char *path);
+YewSaveErr yew_file_save_opts(const TextBuf *tb, FileMeta *meta,
+                              const char *path, const YewSaveOpts *opts);
 /* Overwrite after accepting the destination identity observed now. */
 YewSaveErr yew_file_save_force(const TextBuf *tb, FileMeta *meta,
                                const char *path);
+YewSaveErr yew_file_save_force_opts(const TextBuf *tb, FileMeta *meta,
+                                    const char *path,
+                                    const YewSaveOpts *opts);
+void yew_file_save_opts_default(YewSaveOpts *opts);
 YewSaveErr yew_file_write_atomic(const char *path, const u8 *bytes,
                                  size_t len, mode_t mode);
+YewAtomicWriteResult yew_file_write_atomic_result(const char *path,
+                                                  const u8 *bytes,
+                                                  size_t len, mode_t mode);
+/* True when the requested document bytes are now the destination contents. */
+bool yew_save_committed(YewSaveErr error);
 
 /*
  * Moves `from` to `to`, REFUSING to overwrite an existing `to`.
@@ -79,6 +133,8 @@ YewSaveErr yew_file_move_aside(const char *from, const char *to);
 
 void yew_filemeta_init(FileMeta *meta);
 void yew_filemeta_dispose(FileMeta *meta);
+/* Release the exact-content baseline when a buffer becomes non-resident. */
+void yew_filemeta_content_forget(FileMeta *meta);
 void yew_filemeta_eol_bytes(const FileMeta *meta, const u8 **bytes,
                             size_t *len);
 

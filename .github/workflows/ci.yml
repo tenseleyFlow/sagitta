@@ -356,6 +356,8 @@ jobs:
           fi
       - name: Enforce Sprint 54 plugin startup budgets
         run: make perf-plug CC=gcc
+      - name: Enforce Sprint 55 package and cloud budgets
+        run: make perf-pkg perf-cloud CC=gcc
 
   torture:
     runs-on: ubuntu-latest
@@ -369,6 +371,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: SMOKE_MODULES=none make test 'MODULES='
+      - name: Prove package independence from FUSS and optional modules
+        run: make clean && make check MODULES=plugins
 
   unicode:
     runs-on: ubuntu-latest
@@ -531,6 +535,10 @@ jobs:
       - name: Fuzz plugin manifest data for one hour under ASan and UBSan
         run: |
           make fuzz-plug-manifest CC=clang SAN=1 BUILD=build-plug-san \
+            PLUG_FUZZ_SECONDS=3600 FUZZ_SEED=1
+      - name: Fuzz package trees for one hour under ASan and UBSan
+        run: |
+          make fuzz-pkg-tree-long CC=clang SAN=1 BUILD=build-pkg-san \
             PLUG_FUZZ_SECONDS=3600 FUZZ_SEED=1
       - name: Run randomized text campaigns for 30 minutes
         run: make fuzz-long CC=clang SAN=1 BUILD=build-nightly-san

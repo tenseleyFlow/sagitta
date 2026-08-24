@@ -55,8 +55,10 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "registers.ring_bytes_max", "registers.clip_read_max",
         "clipboard.sync", "search.ignorecase", "search.smartcase",
         "hooks.error_limit",
+        "save.strategy", "save.check_disk", "save.check_disk_max",
+        "save.backup_keep", "save.backup_dir",
 #if YEW_WITH_PLUGINS
-        "plug.error_limit",
+        "plug.error_limit", "plug.verify_on_load",
 #endif
         "theme", "theme_auto",
         "macro.dir",

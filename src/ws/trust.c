@@ -692,6 +692,111 @@ bool yew_trust_plugin_set_capability(YewTrustDb *db, const char *plugin,
     return true;
 }
 
+u32 yew_trust_plugin_grant_count(const YewTrustDb *db, const char *plugin)
+{
+    u32 count = 0U;
+    u32 cap;
+
+    for (cap = 0U; cap <= (u32)YEW_PLUGIN_CAP_CLIPBOARD; cap++) {
+        if (yew_trust_plugin_capability(
+                db, plugin, (YewPluginCapability)cap) !=
+            YEW_PLUGIN_GRANT_UNSET)
+            count++;
+    }
+    return count;
+}
+
+static void trust_plugin_prune_empty(TrustImpl *impl, const char *plugin,
+                                     FlMap *entry)
+{
+    FlMap *plugins;
+
+    if (entry == NULL || fl_map_count(entry) != 0U)
+        return;
+    plugins = trust_plugins(impl, false);
+    if (plugins == NULL)
+        return;
+    (void)trust_map_del(impl, plugins, plugin);
+    if (fl_map_count(plugins) == 0U)
+        (void)trust_map_del(impl, (FlMap *)impl->root.as.o, "plugins");
+}
+
+u32 yew_trust_plugin_drop_grants(YewTrustDb *db, const char *plugin)
+{
+    TrustImpl *impl;
+    FlMap *entry;
+    u32 dropped = 0U;
+    u32 cap;
+
+    if (db == NULL || db->impl == NULL || plugin == NULL ||
+        plugin[0] == '\0')
+        return 0U;
+    impl = (TrustImpl *)db->impl;
+    entry = trust_plugin_map(impl, plugin, false);
+    if (entry == NULL)
+        return 0U;
+    for (cap = 0U; cap <= (u32)YEW_PLUGIN_CAP_CLIPBOARD; cap++) {
+        const char *field = trust_plugin_capability_name(
+            (YewPluginCapability)cap);
+
+        if (trust_map_del(impl, entry, field))
+            dropped++;
+    }
+    trust_plugin_prune_empty(impl, plugin, entry);
+    return dropped;
+}
+
+bool yew_trust_plugin_drop_policy(YewTrustDb *db, const char *plugin)
+{
+    TrustImpl *impl;
+    FlMap *entry;
+
+    if (db == NULL || db->impl == NULL || plugin == NULL ||
+        plugin[0] == '\0')
+        return false;
+    impl = (TrustImpl *)db->impl;
+    entry = trust_plugin_map(impl, plugin, false);
+    if (entry == NULL)
+        return true;
+    (void)yew_trust_plugin_drop_grants(db, plugin);
+    entry = trust_plugin_map(impl, plugin, false);
+    if (entry != NULL) {
+        (void)trust_map_del(impl, entry, "enabled");
+        trust_plugin_prune_empty(impl, plugin, entry);
+    }
+    return true;
+}
+
+bool yew_trust_plugin_revoke_persisted(const char *plugin, u32 *dropped)
+{
+    YewTrustDb db;
+    u32 count;
+    time_t now;
+    bool ok;
+
+    if (dropped != NULL)
+        *dropped = 0U;
+    if (plugin == NULL || plugin[0] == '\0')
+        return false;
+    yew_trust_db_init(&db);
+    if (!yew_trust_db_load(&db)) {
+        yew_trust_db_free(&db);
+        return false;
+    }
+    count = yew_trust_plugin_drop_grants(&db, plugin);
+    if (count == 0U) {
+        yew_trust_db_free(&db);
+        return true;
+    }
+    now = time(NULL);
+    ok = now != (time_t)-1 &&
+         yew_trust_db_write(&db, now, YEW_TRUST_PRUNE_DAYS_DEFAULT);
+    yew_trust_db_free(&db);
+    if (ok && dropped != NULL)
+        *dropped = count;
+    return ok;
+}
+
 YewTrustDecision yew_trust_check(YewTrustDb *db, const char *workspace,
                                  bool has_tty, bool pregrant,
                                  YewTrustProbe *probe)
@@ -941,37 +1046,54 @@ static bool trust_schema_current(TrustImpl *impl)
     return true;
 }
 
-bool yew_trust_db_write_path(YewTrustDb *db, const char *path, time_t now,
-                             u32 prune_days)
+YewTrustWriteResult yew_trust_db_write_path_result(YewTrustDb *db,
+                                                   const char *path,
+                                                   time_t now,
+                                                   u32 prune_days)
 {
     static const char header[] =
         "# yew trust database — hand-editable; delete a line to be asked again.\n";
+    YewTrustWriteResult result = {false, false};
+    YewAtomicWriteResult atomic;
     TrustImpl *impl;
     Bytebuf out;
-    bool ok;
 
     if (db == NULL || db->impl == NULL || path == NULL)
-        return false;
+        return result;
     impl = (TrustImpl *)db->impl;
     if (!trust_schema_current(impl) ||
         !trust_rebuild_sorted(impl, now, prune_days))
-        return false;
+        return result;
     bytebuf_init(&out);
     bytebuf_append(&out, (const u8 *)header, sizeof(header) - 1U);
     fl_data_write(&out, impl->root, 0U);
-    ok = yew_file_write_atomic(path, out.data, out.len, 0600) == YEW_SAVE_OK;
+    atomic = yew_file_write_atomic_result(path, out.data, out.len, 0600);
     bytebuf_free(&out);
-    return ok;
+    result.ok = atomic.error == YEW_SAVE_OK;
+    result.committed = atomic.committed;
+    return result;
+}
+
+bool yew_trust_db_write_path(YewTrustDb *db, const char *path, time_t now,
+                             u32 prune_days)
+{
+    return yew_trust_db_write_path_result(db, path, now, prune_days).ok;
+}
+
+YewTrustWriteResult yew_trust_db_write_result(YewTrustDb *db, time_t now,
+                                              u32 prune_days)
+{
+    YewTrustWriteResult result = {false, false};
+    char *path = trust_xdg_path(true);
+
+    if (path == NULL)
+        return result;
+    result = yew_trust_db_write_path_result(db, path, now, prune_days);
+    free(path);
+    return result;
 }
 
 bool yew_trust_db_write(YewTrustDb *db, time_t now, u32 prune_days)
 {
-    char *path = trust_xdg_path(true);
-    bool ok;
-
-    if (path == NULL)
-        return false;
-    ok = yew_trust_db_write_path(db, path, now, prune_days);
-    free(path);
-    return ok;
+    return yew_trust_db_write_result(db, now, prune_days).ok;
 }

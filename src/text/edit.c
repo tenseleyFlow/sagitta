@@ -148,7 +148,8 @@ bool yew_edit_delete(EditCtx *ec, Span range)
     return ok;
 }
 
-YewSaveErr yew_edit_save(EditCtx *ec, const char *path)
+YewSaveErr yew_edit_save_opts(EditCtx *ec, const char *path,
+                              const YewSaveOpts *opts)
 {
     YewSaveErr result;
 
@@ -158,8 +159,8 @@ YewSaveErr yew_edit_save(EditCtx *ec, const char *path)
     if (ec->undo != NULL &&
         (ec->undo->depth != 0U || ec->undo->open != 0U))
         YEW_BUG("edit save: open undo transaction");
-    result = yew_file_save(ec->tb, ec->meta, path);
-    if (result != YEW_SAVE_OK)
+    result = yew_file_save_opts(ec->tb, ec->meta, path, opts);
+    if (!yew_save_committed(result))
         return result;
     if (ec->undo != NULL) {
         yew_undo_boundary(ec->undo);
@@ -169,5 +170,10 @@ YewSaveErr yew_edit_save(EditCtx *ec, const char *path)
         yew_journal_discard(ec->jrnl);
         ec->jrnl = NULL;
     }
-    return YEW_SAVE_OK;
+    return result;
+}
+
+YewSaveErr yew_edit_save(EditCtx *ec, const char *path)
+{
+    return yew_edit_save_opts(ec, path, NULL);
 }

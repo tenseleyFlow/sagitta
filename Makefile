@@ -531,6 +531,7 @@ FUZZ_HTTP_OBJ := $(BUILD)/tests/fuzz/fuzz_http.o
 FUZZ_AI_STREAM_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_stream.o
 FUZZ_AI_SHADOW_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_shadow.o
 FUZZ_AI_REDACT_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_redact.o
+FUZZ_PKG_TREE_OBJ := $(BUILD)/tests/fuzz/fuzz_pkg_tree.o
 LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
 LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
@@ -583,6 +584,8 @@ PERF_AI_HTTP_OBJ := $(BUILD)/tests/perf/perf_ai_http.o
 PERF_AI_SHADOW_OBJ := $(BUILD)/tests/perf/perf_ai_shadow.o
 PERF_AI_PRIVACY_OBJ := $(BUILD)/tests/perf/perf_ai_privacy.o
 PERF_PLUG_OBJ := $(BUILD)/tests/perf/perf_plug.o
+PERF_PKG_OBJ := $(BUILD)/tests/perf/perf_pkg.o
+PERF_CLOUD_OBJ := $(BUILD)/tests/perf/perf_cloud.o
 ifneq ($(filter lsp,$(MODULES)),)
 LSP_FUZZ_TARGET := fuzz-lsp-msg fuzz-lsp-resp
 LSP_PERF_TARGET := perf-lsp
@@ -591,7 +594,9 @@ ifneq ($(filter ai,$(MODULES)),)
 AI_PERF_TARGET := perf-ai-http perf-ai-shadow perf-ai-privacy
 endif
 ifneq ($(filter plugins,$(MODULES)),)
-PLUG_PERF_TARGET := perf-plug
+PLUG_PERF_TARGET := perf-plug perf-pkg perf-cloud
+PKG_FUZZ_TARGET := fuzz-pkg-tree
+PKG_TEST_TARGET := test-pkg
 endif
 ifneq ($(filter fuss,$(MODULES)),)
 FUSS_FUZZ_TARGET := fuzz-porcelain fuzz-fuss fuzz-git-diff
@@ -683,9 +688,9 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all check test clean install dirs FORCE test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
-        test-script-determinism test-script-budget test-pty fuzz \
+        test-script-determinism test-script-budget test-pkg test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
-        fuzz-plug-manifest \
+        fuzz-plug-manifest fuzz-pkg-tree fuzz-pkg-tree-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
         fuzz-porcelain fuzz-git-diff \
@@ -701,7 +706,7 @@ endif
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
-        perf-ai-shadow perf-ai-privacy perf-plug \
+        perf-ai-shadow perf-ai-privacy perf-plug perf-pkg perf-cloud \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
         perf-syn-gate-selftest perf-syn-line-probe \
@@ -781,6 +786,10 @@ $(BUILD)/fuzz_fl_vm: $(FUZZ_LINK_OBJ) $(FUZZ_FLVM_OBJ)
 $(BUILD)/fuzz_flapi: $(FUZZ_LINK_OBJ) $(FUZZ_FLAPI_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_FLAPI_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_pkg_tree: $(FUZZ_LINK_OBJ) $(FUZZ_PKG_TREE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_PKG_TREE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_record: $(FUZZ_LINK_OBJ) $(FUZZ_RECORD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -961,6 +970,14 @@ $(BUILD)/perf_plug: $(PERF_CORE_OBJ) $(PERF_PLUG_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_PLUG_OBJ) $(LDLIBS)
 
+$(BUILD)/perf_pkg: $(PERF_CORE_OBJ) $(PERF_PKG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_PKG_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_cloud: $(PERF_CORE_OBJ) $(PERF_CLOUD_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_CLOUD_OBJ) $(LDLIBS)
+
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
 
@@ -1129,7 +1146,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c | dirs
 # has to be asked for by hand.
 #
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
-       test-syn-assets
+       test-syn-assets $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -1137,12 +1154,13 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-scri
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
+	scripts/check-plugin-docs.sh
 	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \
-      test-syn-def-corpus test-syn-assets torture-build
+      test-syn-def-corpus test-syn-assets torture-build $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -1150,9 +1168,13 @@ test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch t
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
+	scripts/check-plugin-docs.sh
 	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
 	$(MAKE) --no-print-directory torture-live-check BUILD=$(BUILD) \
 		CC=$(CC) SAN=$(SAN) VALGRIND=$(VALGRIND)
+
+test-pkg: $(BUILD)/yew
+	tests/pkg/run.sh $(BUILD)/yew
 
 fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
@@ -1167,7 +1189,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
       fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
-      $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET)
+      $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET) $(PKG_FUZZ_TARGET)
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -1195,6 +1217,12 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 
 fuzz-plug-manifest: $(BUILD)/fuzz_fl_parse
 	$(BUILD)/fuzz_fl_parse --seconds=$(PLUG_FUZZ_SECONDS) --seed=$(FUZZ_SEED)
+
+fuzz-pkg-tree: $(BUILD)/fuzz_pkg_tree
+	$(BUILD)/fuzz_pkg_tree --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+fuzz-pkg-tree-long: $(BUILD)/fuzz_pkg_tree
+	$(BUILD)/fuzz_pkg_tree --seconds=$(PLUG_FUZZ_SECONDS) --seed=$(FUZZ_SEED)
 
 fuzz-ai: $(BUILD)/fuzz_http $(BUILD)/fuzz_ai_stream \
          $(BUILD)/fuzz_ai_shadow $(BUILD)/fuzz_ai_redact
@@ -1406,6 +1434,12 @@ perf-ai-privacy: $(BUILD)/perf_ai_privacy
 
 perf-plug: $(BUILD)/perf_plug
 	$(BUILD)/perf_plug
+
+perf-pkg: $(BUILD)/perf_pkg
+	$(BUILD)/perf_pkg
+
+perf-cloud: $(BUILD)/perf_cloud
+	$(BUILD)/perf_cloud
 
 perf-ai-http-valgrind: $(BUILD)/perf_ai_http
 	valgrind --quiet --error-exitcode=99 --leak-check=full \
@@ -1749,7 +1783,7 @@ install: all
 	install -m 0644 runtime/init.fl \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/init.fl
 	install -m 0644 runtime/ai-deny.fl runtime/preset.ai-local.fl \
-		runtime/preset.ai-cloud.fl \
+		runtime/preset.ai-cloud.fl runtime/preset.cloud.fl \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/
 	install -d $(DESTDIR)$(PREFIX)/share/yew/docs
 	install -m 0644 docs/ai-privacy.md \
@@ -1951,6 +1985,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(FUZZ_LSP_MSG_OBJ:.o=.d) $(FUZZ_LSP_RESP_OBJ:.o=.d) \
          $(FUZZ_HTTP_OBJ:.o=.d) $(FUZZ_AI_STREAM_OBJ:.o=.d) \
          $(FUZZ_AI_SHADOW_OBJ:.o=.d) $(FUZZ_AI_REDACT_OBJ:.o=.d) \
+         $(FUZZ_PKG_TREE_OBJ:.o=.d) \
          $(LSP_LIVE_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
@@ -1965,6 +2000,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_SHADOW_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
+         $(PERF_PKG_OBJ:.o=.d) $(PERF_CLOUD_OBJ:.o=.d) \
          $(PERF_LATENCY_OBJ:.o=.d) $(PERF_JOBSTREAM_OBJ:.o=.d) \
          $(PERF_REPATH_OBJ:.o=.d) $(PERF_RETHRU_OBJ:.o=.d) \
          $(LIVE_PTY_OBJ:.o=.d) \

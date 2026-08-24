@@ -1,0 +1,14 @@
+{
+  schema: 1,
+  plugins: {
+    "wrong-hex": {
+      url: "file:///tmp/wrong-hex",
+      shorthand: "",
+      rev: "0123456789abcdef0123456789abcdef0123456",
+      pin: "rev:0123456789abcdef0123456789abcdef012345678",
+      tree: "0123456789abcde",
+      installed_at: 1,
+      updated_at: 1,
+    },
+  },
+}

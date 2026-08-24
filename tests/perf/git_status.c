@@ -314,6 +314,7 @@ static bool fake_git_complete_one(Ed *ed, FakeGit *fake)
         "/tmp/yew-perf-git/.git\ntrue\nfalse\n/tmp/yew-perf-git\n";
     static const u8 upstream[] =
         "0123456789012345678901234567890123456789\n";
+    static const u8 comment_char[] = "#\n";
     static const u8 status[] =
         "# branch.oid 0123456789012345678901234567890123456789\0"
         "# branch.head trunk\0"
@@ -354,6 +355,10 @@ static bool fake_git_complete_one(Ed *ed, FakeGit *fake)
     case YEW_GREQ_INCOMING:
         out = (const u8 *)"";
         out_len = 0U;
+        break;
+    case YEW_GREQ_VERB:
+        out = comment_char;
+        out_len = sizeof(comment_char) - 1U;
         break;
     default:
         return false;
@@ -407,7 +412,7 @@ static bool measure_ttl_typing(u64 *p99_out, u32 *refreshes_out)
                       "perf_git_status: fake TTL cadence statuses=%u "
                       "generation=%u queued=%zu/%zu version=%u/%u "
                       "detect=%u/%u ignore=%u/%u upstream=%u/%u "
-                      "incoming=%u/%u\n",
+                      "incoming=%u/%u comment=%u/%u\n",
                       fake.status_spawns, snap == NULL ? 0U : snap->gen,
                       fake.read_at, fake.len,
                       fake.completions[YEW_GREQ_VERSION],
@@ -419,7 +424,9 @@ static bool measure_ttl_typing(u64 *p99_out, u32 *refreshes_out)
                       fake.completions[YEW_GREQ_UPSTREAM],
                       fake.spawns[YEW_GREQ_UPSTREAM],
                       fake.completions[YEW_GREQ_INCOMING],
-                      fake.spawns[YEW_GREQ_INCOMING]);
+                      fake.spawns[YEW_GREQ_INCOMING],
+                      fake.completions[YEW_GREQ_VERB],
+                      fake.spawns[YEW_GREQ_VERB]);
     }
 done_spawn:
     yew_git_test_spawn_set(NULL, NULL);

@@ -11,8 +11,10 @@
 #include <time.h>
 
 #include "edit/ed.h"
+#include "edit/option.h"
 #include "fl/flconf.h"
 #include "fl/origin.h"
+#include "mod/plug/pkg.h"
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/intern.h"
@@ -126,6 +128,62 @@ static void intern_manifest(Ed *ed, PlugManifest *mf)
     for (i = 0U; i < mf->nevents; i++)
         mf->events[i] = yew_intern_cstr(&ed->interner,
                                         mf->event_names[i]);
+}
+
+static bool verify_on_load(Ed *ed)
+{
+    OptVal value;
+
+    if (!yew_opt_get(ed, NULL, NULL, "plug.verify_on_load", 19U,
+                     &value) || value.type != (u8)YEW_OPT_BOOL)
+        return true;
+    return value.as.b;
+}
+
+static bool verify_managed_candidate(Ed *ed, Plug *plug,
+                                     bool use_live_config, DiagCtx *dc)
+{
+    char expected[YEW_PKG_TREE_HEX + 1U];
+    char actual[YEW_PKG_TREE_HEX + 1U];
+    bool managed = false;
+    u32 dropped = 0U;
+
+    if (plug->source != PLUG_SOURCE_DATA || !verify_on_load(ed))
+        return true;
+    if (!yew_pkg_expected_tree(plug->mf.name_text, expected, &managed, dc))
+        return false;
+    if (!managed)
+        return true;
+    if (!yew_pkg_tree_hash(plug->mf.dir, actual, dc))
+        return false;
+    if (memcmp(expected, actual, YEW_PKG_TREE_HEX) == 0)
+        return true;
+
+    yew_msg(ed, YEW_MSG_WARN,
+            "plugin \"%s\" changed on disk since install "
+            "(yew pkg doctor %s)",
+            plug->mf.name_text, plug->mf.name_text);
+    yew_log(YEW_LOG_WARN,
+            "plugin \"%s\" changed on disk since install "
+            "(yew pkg doctor %s)",
+            plug->mf.name_text, plug->mf.name_text);
+    plug->session_allow = 0U;
+    plug->session_deny = 0U;
+    if (!(use_live_config ?
+          yew_config_plugin_drop_grants(ed, plug->mf.name_text, &dropped) :
+          yew_trust_plugin_revoke_persisted(plug->mf.name_text,
+                                             &dropped))) {
+        if (dc != NULL)
+            fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){0U, 1U, 1U, 1U},
+                         "cannot revoke persisted grants for plugin %s",
+                         plug->mf.name_text);
+        return false;
+    }
+    if (dropped != 0U)
+        yew_log(YEW_LOG_WARN,
+                "revoked %u persisted grant(s) for \"%s\": code changed",
+                dropped, plug->mf.name_text);
+    return true;
 }
 
 static bool add_candidate(Ed *ed, PlugSource source, const char *dir,
@@ -250,6 +308,29 @@ static bool scan_root(Ed *ed, const char *root, PlugSource source,
     return ok;
 }
 
+static void verify_managed_winners(Ed *ed, bool use_live_config,
+                                   DiagCtx *dc)
+{
+    PlugSys *sys = ed->plug;
+    u32 i;
+
+    if (sys == NULL)
+        return;
+    for (i = 0U; i < sys->n; i++) {
+        Plug *plug = sys->v[i];
+
+        if (!plug->winner || plug->source != PLUG_SOURCE_DATA ||
+            plug->st == PLUG_ERROR ||
+            verify_managed_candidate(ed, plug, use_live_config, dc))
+            continue;
+        plug->last_error = plug_strdup(
+            "cannot verify managed plugin integrity");
+        plug->st = PLUG_ERROR;
+        yew_log(YEW_LOG_ERROR, "plugin %s: %s", plug->mf.name_text,
+                plug->last_error);
+    }
+}
+
 bool yew_plug_discover_with_policy(Ed *ed, bool workspace_trusted,
                                    const YewTrustDb *policy, DiagCtx *dc)
 {
@@ -280,6 +361,9 @@ bool yew_plug_discover_with_policy(Ed *ed, bool workspace_trusted,
                    workspace_trusted, policy, dc) &&
          scan_root(ed, ws_plugins, PLUG_SOURCE_WORKSPACE,
                    workspace_trusted, policy, dc);
+    if (ok)
+        verify_managed_winners(ed, policy == NULL && ed->config != NULL,
+                               dc);
     free(ws_plugins);
     free(ws_meta);
     free(config_plugins);

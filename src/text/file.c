@@ -54,6 +54,14 @@ static char *string_copy(const char *s)
     return copy;
 }
 
+static void filemeta_snapshot_set(FileMeta *meta, const TextBuf *tb)
+{
+    if (meta->disk_snapshot_valid)
+        yew_textsnap_release(NULL, &meta->disk_snapshot);
+    meta->disk_snapshot = yew_textbuf_snap((TextBuf *)tb);
+    meta->disk_snapshot_valid = true;
+}
+
 void yew_filemeta_init(FileMeta *meta)
 {
     if (meta == NULL)
@@ -67,8 +75,17 @@ void yew_filemeta_dispose(FileMeta *meta)
 {
     if (meta == NULL)
         return;
+    yew_filemeta_content_forget(meta);
     free(meta->realpath);
     yew_filemeta_init(meta);
+}
+
+void yew_filemeta_content_forget(FileMeta *meta)
+{
+    if (meta == NULL || !meta->disk_snapshot_valid)
+        return;
+    yew_textsnap_release(NULL, &meta->disk_snapshot);
+    meta->disk_snapshot_valid = false;
 }
 
 void yew_filemeta_eol_bytes(const FileMeta *meta, const u8 **bytes,
@@ -339,6 +356,7 @@ YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta)
                 return YEW_LOAD_IO;
             }
             meta->mode = 0666U;
+            filemeta_snapshot_set(meta, *out);
         }
         return error;
     }
@@ -399,6 +417,7 @@ YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta)
         (void)memmove(bytes, bytes + content_at, size - content_at);
     *out = yew_textbuf_from_owned_bytes_simple(
         bytes, (u64)(size - content_at), simple_ascii);
+    filemeta_snapshot_set(meta, *out);
     return YEW_LOAD_OK;
 }
 
@@ -449,23 +468,152 @@ static bool fsync_directory(const char *path)
     return ok;
 }
 
+static void meta_accept_stat(FileMeta *meta, const struct stat *st)
+{
+    meta->exists = true;
+    meta->mode = st->st_mode;
+    meta->uid = st->st_uid;
+    meta->gid = st->st_gid;
+    meta->nlink = st->st_nlink;
+    meta->dev = st->st_dev;
+    meta->ino = st->st_ino;
+    meta->mtime = stat_mtime(st);
+    meta->size_on_disk = (u64)st->st_size;
+}
+
+static bool read_matches(int fd, const u8 *want, size_t len, bool *io_error)
+{
+    u8 block[64U * 1024U];
+    size_t at = 0U;
+
+    while (at < len) {
+        size_t ask = len - at < sizeof(block) ? len - at : sizeof(block);
+        ssize_t n = read(fd, block, ask);
+
+        if (n > 0) {
+            if (memcmp(block, want + at, (size_t)n) != 0)
+                return false;
+            at += (size_t)n;
+        } else if (n == 0) {
+            return false;
+        } else if (errno != EINTR) {
+            *io_error = true;
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool content_matches_disk(const FileMeta *meta, const char *path,
+                                 const struct stat *before, bool *io_error)
+{
+    TextIter it;
+    struct stat after;
+    u8 extra;
+    int fd;
+    bool ok = true;
+
+    *io_error = false;
+    if (!meta->disk_snapshot_valid)
+        return false;
+    fd = open(path, O_RDONLY
+#ifdef O_NOFOLLOW
+              | O_NOFOLLOW
+#endif
+    );
+    if (fd < 0) {
+        *io_error = true;
+        return false;
+    }
+    if (meta->had_bom && !read_matches(fd, bom, sizeof(bom), io_error))
+        ok = false;
+    if (ok && yew_textsnap_iter(&it, &meta->disk_snapshot, BYTEOFF(0U))) {
+        do {
+            const u8 *bytes;
+            u64 len;
+
+            if (!yew_textiter_chunk(&it, NULL, &bytes, &len) ||
+                len > SIZE_MAX ||
+                !read_matches(fd, bytes, (size_t)len, io_error)) {
+                ok = false;
+                break;
+            }
+        } while (yew_textiter_advance(&it, NULL));
+    }
+    if (ok) {
+        ssize_t n;
+
+        do {
+            n = read(fd, &extra, 1U);
+        } while (n < 0 && errno == EINTR);
+        if (n != 0) {
+            if (n < 0)
+                *io_error = true;
+            ok = false;
+        }
+    }
+    if (fstat(fd, &after) != 0) {
+        *io_error = true;
+        ok = false;
+    } else if (after.st_dev != before->st_dev ||
+               after.st_ino != before->st_ino ||
+               after.st_size != before->st_size ||
+               !timespec_equal(stat_mtime(&after), stat_mtime(before))) {
+        ok = false;
+    }
+    if (close(fd) != 0) {
+        *io_error = true;
+        ok = false;
+    }
+    return ok;
+}
+
 static YewSaveErr destination_matches(const FileMeta *meta, const char *path,
+                                      const YewSaveOpts *opts,
+                                      FileMeta *accepted,
                                       bool *needs_inplace)
 {
     struct stat st;
+    bool metadata_matches;
 
+    *accepted = *meta;
     *needs_inplace = false;
     if (stat(path, &st) == 0) {
-        if (!S_ISREG(st.st_mode) || !meta->exists || st.st_size < 0 ||
-            st.st_dev != meta->dev || st.st_ino != meta->ino ||
-            (u64)st.st_size != meta->size_on_disk ||
-            !timespec_equal(stat_mtime(&st), meta->mtime))
+        bool io_error;
+
+        if (!S_ISREG(st.st_mode) || st.st_size < 0)
             return YEW_SAVE_CHANGED_ON_DISK;
+        metadata_matches = meta->exists && st.st_dev == meta->dev &&
+                           st.st_ino == meta->ino &&
+                           (u64)st.st_size == meta->size_on_disk &&
+                           timespec_equal(stat_mtime(&st), meta->mtime);
+        if (!metadata_matches && opts->check_disk == YEW_SAVE_CHECK_MTIME)
+            return YEW_SAVE_CHANGED_ON_DISK;
+        if (!metadata_matches && opts->check_disk == YEW_SAVE_CHECK_CONTENT) {
+            if ((u64)st.st_size > opts->check_disk_max) {
+                yew_log(YEW_LOG_INFO,
+                        "content save check degraded to mtime: %llu bytes exceeds %llu",
+                        (unsigned long long)st.st_size,
+                        (unsigned long long)opts->check_disk_max);
+                return YEW_SAVE_CHANGED_ON_DISK;
+            }
+            if (!content_matches_disk(meta, path, &st, &io_error))
+                return io_error ? YEW_SAVE_IO : YEW_SAVE_CHANGED_ON_DISK;
+        }
+        if (!metadata_matches)
+            meta_accept_stat(accepted, &st);
         *needs_inplace = st.st_nlink > 1;
         return YEW_SAVE_OK;
     }
-    if (errno == ENOENT)
-        return meta->exists ? YEW_SAVE_CHANGED_ON_DISK : YEW_SAVE_OK;
+    if (errno == ENOENT) {
+        if (meta->exists && opts->check_disk != YEW_SAVE_CHECK_OFF)
+            return YEW_SAVE_CHANGED_ON_DISK;
+        accepted->exists = false;
+        accepted->mode = 0666U;
+        accepted->nlink = 0U;
+        accepted->size_on_disk = 0U;
+        return YEW_SAVE_OK;
+    }
     return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM : YEW_SAVE_IO;
 }
 
@@ -558,7 +706,18 @@ static bool make_parent_dirs(char *path)
     return true;
 }
 
-static char *state_backup_dir(void)
+void yew_file_save_opts_default(YewSaveOpts *opts)
+{
+    if (opts == NULL)
+        YEW_BUG("yew_file_save_opts_default: NULL options");
+    *opts = (YewSaveOpts){YEW_SAVE_STRATEGY_DEFAULT,
+                          YEW_SAVE_CHECK_DISK_DEFAULT,
+                          YEW_SAVE_CHECK_DISK_MAX_DEFAULT,
+                          YEW_SAVE_BACKUP_KEEP_DEFAULT,
+                          YEW_SAVE_BACKUP_DIR_DEFAULT};
+}
+
+static char *state_backup_dir(const char *configured)
 {
     const char *state = getenv("XDG_STATE_HOME");
     const char *home;
@@ -566,6 +725,14 @@ static char *state_backup_dir(void)
     size_t n;
     char *dir;
 
+    if (configured != NULL && configured[0] != '\0') {
+        dir = string_copy(configured);
+        if (!make_parent_dirs(dir) || !make_dir(dir)) {
+            free(dir);
+            return NULL;
+        }
+        return dir;
+    }
     if (state != NULL && state[0] != '\0') {
         suffix = "/yew/backup";
     } else {
@@ -596,9 +763,9 @@ static u64 fnv64(const char *text)
     return hash;
 }
 
-static char *backup_path(const char *dst)
+static char *backup_path(const char *dst, const YewSaveOpts *opts)
 {
-    char *dir = state_backup_dir();
+    char *dir = state_backup_dir(opts->backup_dir);
     char resolved[PATH_MAX];
     const char *key;
     size_t n;
@@ -613,6 +780,234 @@ static char *backup_path(const char *dst)
                    (unsigned long long)fnv64(key));
     free(dir);
     return path;
+}
+
+static char *numbered_backup_path(const char *base, u32 number)
+{
+    size_t base_len = strlen(base);
+    size_t stem_len = base_len - strlen(".bak");
+    size_t n = base_len + 32U;
+    char *path = yew_xmalloc(n);
+
+    (void)snprintf(path, n, "%.*s.%u.bak", (int)stem_len, base, number);
+    return path;
+}
+
+static char *pending_backup_path(const char *base, bool primary)
+{
+    size_t base_len = strlen(base);
+    size_t stem_len = base_len - strlen(".bak");
+    size_t n = base_len + 80U;
+    char *path = yew_xmalloc(n);
+    if (primary) {
+        (void)snprintf(path, n, "%.*s.pending.bak", (int)stem_len, base);
+    } else {
+        unsigned long long serial = (unsigned long long)++temp_counter;
+
+        (void)snprintf(path, n, "%.*s.pending-%ld-%llu.bak", (int)stem_len,
+                       base, (long)getpid(), serial);
+    }
+    return path;
+}
+
+static bool rotate_backups(const char *base, u32 keep)
+{
+    u32 number;
+
+    if (keep <= 1U)
+        return true;
+    for (number = keep - 1U; number != 0U; number--) {
+        char *from = number == 1U ? string_copy(base) :
+                     numbered_backup_path(base, number - 1U);
+        char *to = numbered_backup_path(base, number);
+
+        if (rename(from, to) != 0 && errno != ENOENT) {
+            free(to);
+            free(from);
+            return false;
+        }
+        free(to);
+        free(from);
+    }
+    return true;
+}
+
+static bool prune_backups(const char *base, u32 keep)
+{
+    u32 number;
+    bool ok = true;
+
+    if (keep == 0U && unlink(base) != 0 && errno != ENOENT)
+        ok = false;
+    for (number = keep == 0U ? 1U : keep;
+         number < YEW_SAVE_BACKUP_KEEP_MAX; number++) {
+        char *path = numbered_backup_path(base, number);
+
+        if (unlink(path) != 0 && errno != ENOENT)
+            ok = false;
+        free(path);
+    }
+    return ok;
+}
+
+static bool discard_backup(const char *path)
+{
+    char *dir = path_dirname(path);
+    bool ok = unlink(path) == 0 || errno == ENOENT;
+
+    if (ok)
+        ok = fsync_directory(dir);
+    free(dir);
+    return ok;
+}
+
+typedef struct BackupRecovery {
+    char *path;
+} BackupRecovery;
+
+static bool recovery_paths_dispose(BackupRecovery *recoveries, u32 count,
+                                   bool unlink_paths)
+{
+    u32 i;
+    bool ok = true;
+
+    for (i = 0U; i < count; i++) {
+        if (unlink_paths && unlink(recoveries[i].path) != 0 &&
+            errno != ENOENT)
+            ok = false;
+        free(recoveries[i].path);
+        recoveries[i].path = NULL;
+    }
+    return ok;
+}
+
+static bool link_recovery_unique(const char *source, char **path_out)
+{
+    unsigned int tries;
+
+    for (tries = 0U; tries < 1000U; tries++) {
+        size_t n = strlen(source) + 80U;
+        char *recovery = yew_xmalloc(n);
+
+        if (tries == 0U) {
+            (void)snprintf(recovery, n, "%s.recover.bak", source);
+        } else {
+            unsigned long long serial = (unsigned long long)++temp_counter;
+
+            (void)snprintf(recovery, n, "%s.recover-%ld-%llu.bak", source,
+                           (long)getpid(), serial);
+        }
+        if (link(source, recovery) == 0) {
+            *path_out = recovery;
+            return true;
+        }
+        free(recovery);
+        if (errno != EEXIST)
+            return false;
+    }
+    errno = EEXIST;
+    return false;
+}
+
+static bool preserve_rotation_history(const char *base, u32 keep,
+                                      const char *dir,
+                                      BackupRecovery *recoveries,
+                                      u32 *recovery_count)
+{
+    u32 number;
+
+    *recovery_count = 0U;
+    for (number = 0U; number < keep; number++) {
+        char *source = number == 0U ? string_copy(base) :
+                       numbered_backup_path(base, number);
+        struct stat st;
+
+        if (lstat(source, &st) != 0) {
+            int saved_errno = errno;
+
+            free(source);
+            if (saved_errno == ENOENT)
+                continue;
+            errno = saved_errno;
+            goto fail;
+        }
+        if (!S_ISREG(st.st_mode)) {
+            if (S_ISLNK(st.st_mode)) {
+                if (unlink(source) != 0) {
+                    int saved_errno = errno;
+
+                    free(source);
+                    errno = saved_errno;
+                    goto fail;
+                }
+                free(source);
+                continue;
+            }
+            free(source);
+            errno = EINVAL;
+            goto fail;
+        }
+        if (!link_recovery_unique(source,
+                                  &recoveries[*recovery_count].path)) {
+            int saved_errno = errno;
+
+            free(source);
+            errno = saved_errno;
+            goto fail;
+        }
+        (*recovery_count)++;
+        free(source);
+    }
+    if (!fsync_directory(dir))
+        return false;
+    return true;
+
+fail:
+    {
+        int saved_errno = errno == 0 ? EIO : errno;
+
+        (void)recovery_paths_dispose(recoveries, *recovery_count, true);
+        *recovery_count = 0U;
+        (void)fsync_directory(dir);
+        errno = saved_errno;
+    }
+    return false;
+}
+
+static bool commit_backup_rotation(const char *pending, const char *base,
+                                   u32 keep)
+{
+    BackupRecovery recoveries[YEW_SAVE_BACKUP_KEEP_MAX];
+    char *dir = path_dirname(base);
+    u32 recovery_count = 0U;
+    bool ok = true;
+
+    (void)memset(recoveries, 0, sizeof(recoveries));
+    if (keep == 0U) {
+        ok = unlink(pending) == 0 || errno == ENOENT;
+    } else {
+        ok = preserve_rotation_history(base, keep, dir, recoveries,
+                                       &recovery_count);
+        if (ok && (!rotate_backups(base, keep) ||
+                   rename(pending, base) != 0))
+            ok = false;
+    }
+    if (ok) {
+        bool pruned = prune_backups(base, keep);
+        bool synced = fsync_directory(dir);
+
+        ok = pruned && synced;
+    }
+    if (ok && recovery_count != 0U) {
+        ok = recovery_paths_dispose(recoveries, recovery_count, true);
+        recovery_count = 0U;
+        if (!fsync_directory(dir))
+            ok = false;
+    }
+    if (recovery_count != 0U)
+        (void)recovery_paths_dispose(recoveries, recovery_count, false);
+    free(dir);
+    return ok;
 }
 
 static bool copy_fd(int src, int dst)
@@ -675,7 +1070,14 @@ static bool copy_path_to_backup(const char *src_path, const char *bak_path,
         goto done;
     }
     bak = -1;
-    if (rename(tmp, bak_path) != 0 || !fsync_directory(dir))
+    /* Publish without replacing stale recovery evidence from a reused PID. */
+    if (link(tmp, bak_path) != 0)
+        goto done;
+    if (unlink(tmp) != 0)
+        goto done;
+    free(tmp);
+    tmp = NULL;
+    if (!fsync_directory(dir))
         goto done;
     ok = true;
 done:
@@ -736,19 +1138,64 @@ done:
 }
 
 static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
-                               const char *dst, struct stat *saved_st)
+                               const char *dst, const YewSaveOpts *opts,
+                               struct stat *saved_st)
 {
-    char *bak = backup_path(dst);
+    char *bak;
+    char *pending;
     struct stat st;
     int fd;
     off_t end;
     bool ok;
+    bool backup_copied = false;
 
+    if (!meta->exists) {
+        char *dir;
+
+        fd = open(dst, O_WRONLY | O_CREAT | O_EXCL, 0666U);
+        if (fd < 0)
+            return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM
+                                                      : YEW_SAVE_IO;
+        ok = write_text(fd, tb, meta->had_bom);
+        end = ok ? lseek(fd, 0, SEEK_CUR) : (off_t)-1;
+        if (end < 0 || ftruncate(fd, end) != 0 || !fsync_full(fd) ||
+            fstat(fd, saved_st) != 0)
+            ok = false;
+        if (close(fd) != 0)
+            ok = false;
+        dir = path_dirname(dst);
+        if (ok && !fsync_directory(dir))
+            ok = false;
+        free(dir);
+        if (!ok) {
+            (void)unlink(dst);
+            return YEW_SAVE_IO;
+        }
+        return YEW_SAVE_OK;
+    }
+    bak = backup_path(dst, opts);
     if (bak == NULL)
         return YEW_SAVE_IO;
-    if (!copy_path_to_backup(dst, bak, meta)) {
+    pending = NULL;
+    {
+        unsigned int tries;
+
+        for (tries = 0U; tries < 1000U; tries++) {
+            pending = pending_backup_path(bak, tries == 0U);
+            if (copy_path_to_backup(dst, pending, meta)) {
+                backup_copied = true;
+                break;
+            }
+            if (errno != EEXIST)
+                break;
+            free(pending);
+            pending = NULL;
+        }
+    }
+    if (!backup_copied) {
         int saved_errno = errno;
 
+        free(pending);
         free(bak);
         if (saved_errno == ESTALE)
             return YEW_SAVE_CHANGED_ON_DISK;
@@ -761,12 +1208,19 @@ static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
 #endif
     );
     if (fd < 0) {
+        int saved_errno = errno;
+
+        (void)discard_backup(pending);
+        free(pending);
         free(bak);
-        return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM
-                                                  : YEW_SAVE_IO;
+        return saved_errno == EACCES || saved_errno == EPERM
+                   ? YEW_SAVE_PERM
+                   : YEW_SAVE_IO;
     }
     if (fstat(fd, &st) != 0 || !stat_matches_meta(&st, meta)) {
         (void)close(fd);
+        (void)discard_backup(pending);
+        free(pending);
         free(bak);
         return YEW_SAVE_CHANGED_ON_DISK;
     }
@@ -778,10 +1232,20 @@ static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
     if (close(fd) != 0)
         ok = false;
     if (!ok) {
-        (void)restore_backup(bak, dst);
+        if (restore_backup(pending, dst))
+            (void)discard_backup(pending);
+        free(pending);
         free(bak);
         return YEW_SAVE_IO;
     }
+    if (!commit_backup_rotation(pending, bak, opts->backup_keep)) {
+        yew_log(YEW_LOG_WARN,
+                "save completed but backup retention failed; recovery evidence was preserved where possible");
+        free(pending);
+        free(bak);
+        return YEW_SAVE_BACKUP_FAILED;
+    }
+    free(pending);
     free(bak);
     return YEW_SAVE_OK;
 }
@@ -867,9 +1331,11 @@ static bool commit_temp(const char *tmp, const char *dst, const char *dir)
     return fsync_directory(dir);
 }
 
-YewSaveErr yew_file_write_atomic(const char *path, const u8 *bytes,
-                                 size_t len, mode_t mode)
+YewAtomicWriteResult yew_file_write_atomic_result(const char *path,
+                                                  const u8 *bytes,
+                                                  size_t len, mode_t mode)
 {
+    YewAtomicWriteResult result = {YEW_SAVE_IO, false};
     char *dir;
     char *tmp = NULL;
     int fd;
@@ -877,7 +1343,7 @@ YewSaveErr yew_file_write_atomic(const char *path, const u8 *bytes,
 
     if (path == NULL || (bytes == NULL && len != 0U)) {
         errno = EINVAL;
-        return YEW_SAVE_IO;
+        return result;
     }
     dir = path_dirname(path);
     fd = open_temp(dir, path_basename(path), mode, &tmp);
@@ -890,11 +1356,15 @@ YewSaveErr yew_file_write_atomic(const char *path, const u8 *bytes,
         goto fail;
     }
     fd = -1;
-    if (!commit_temp(tmp, path, dir))
+    if (rename(tmp, path) != 0)
+        goto fail;
+    result.committed = true;
+    if (!fsync_directory(dir))
         goto fail;
     free(tmp);
     free(dir);
-    return YEW_SAVE_OK;
+    result.error = YEW_SAVE_OK;
+    return result;
 
 fail:
     saved_errno = errno == 0 ? EIO : errno;
@@ -905,8 +1375,21 @@ fail:
     free(tmp);
     free(dir);
     errno = saved_errno;
-    return saved_errno == EACCES || saved_errno == EPERM ? YEW_SAVE_PERM
-                                                          : YEW_SAVE_IO;
+    result.error = saved_errno == EACCES || saved_errno == EPERM
+                       ? YEW_SAVE_PERM
+                       : YEW_SAVE_IO;
+    return result;
+}
+
+YewSaveErr yew_file_write_atomic(const char *path, const u8 *bytes,
+                                 size_t len, mode_t mode)
+{
+    return yew_file_write_atomic_result(path, bytes, len, mode).error;
+}
+
+bool yew_save_committed(YewSaveErr error)
+{
+    return error == YEW_SAVE_OK || error == YEW_SAVE_BACKUP_FAILED;
 }
 
 YewSaveErr yew_file_move_aside(const char *from, const char *to)
@@ -938,7 +1421,8 @@ YewSaveErr yew_file_move_aside(const char *from, const char *to)
 }
 
 static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
-                              const char *dst, struct stat *saved_st)
+                              const char *dst, const YewSaveOpts *opts,
+                              bool force_atomic, struct stat *saved_st)
 {
     char *dir = path_dirname(dst);
     char *tmp = NULL;
@@ -948,6 +1432,7 @@ static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
     int saved_errno;
     YewSaveErr match;
     bool needs_inplace;
+    FileMeta accepted;
 
     if (fd < 0) {
         saved_errno = errno;
@@ -965,7 +1450,8 @@ static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
             (void)unlink(tmp);
             free(tmp);
             free(dir);
-            return inplace_save(tb, meta, dst, saved_st);
+            return force_atomic ? YEW_SAVE_IO :
+                   inplace_save(tb, meta, dst, opts, saved_st);
         }
         if (fchmod(fd, meta->mode & 07777U) != 0)
             goto fail;
@@ -978,26 +1464,26 @@ static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         goto fail;
     }
     fd = -1;
-    match = destination_matches(meta, dst, &needs_inplace);
+    match = destination_matches(meta, dst, opts, &accepted, &needs_inplace);
     if (match != YEW_SAVE_OK) {
         (void)unlink(tmp);
         free(tmp);
         free(dir);
         return match;
     }
-    if (needs_inplace) {
+    if (needs_inplace && !force_atomic) {
         (void)unlink(tmp);
         free(tmp);
         free(dir);
-        return inplace_save(tb, meta, dst, saved_st);
+        return inplace_save(tb, &accepted, dst, opts, saved_st);
     }
     if (!commit_temp(tmp, dst, dir)) {
         saved_errno = errno;
         (void)unlink(tmp);
         free(tmp);
         free(dir);
-        if (saved_errno == EXDEV)
-            return inplace_save(tb, meta, dst, saved_st);
+        if (saved_errno == EXDEV && !force_atomic)
+            return inplace_save(tb, &accepted, dst, opts, saved_st);
         return saved_errno == EACCES || saved_errno == EPERM
                    ? YEW_SAVE_PERM
                    : YEW_SAVE_IO;
@@ -1068,7 +1554,8 @@ static YewSaveErr accept_destination(FileMeta *accepted, const char *path)
 }
 
 static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
-                            const char *path, bool force)
+                            const char *path, const YewSaveOpts *requested,
+                            bool force)
 {
     struct stat link_st;
     struct stat saved_st;
@@ -1082,9 +1569,29 @@ static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
     bool is_symlink = false;
     YewSaveErr match;
     YewSaveErr result;
+    YewSaveOpts defaults;
+    YewSaveOpts effective;
+    const YewSaveOpts *opts;
 
     if (tb == NULL || meta == NULL || path == NULL)
         YEW_BUG("yew_file_save: NULL argument");
+    if (requested == NULL) {
+        yew_file_save_opts_default(&defaults);
+        opts = &defaults;
+    } else {
+        effective = *requested;
+        opts = &effective;
+    }
+    if (opts->strategy > YEW_SAVE_STRATEGY_INPLACE ||
+        opts->check_disk > YEW_SAVE_CHECK_CONTENT ||
+        opts->check_disk_max > YEW_SAVE_CHECK_DISK_MAX_LIMIT ||
+        opts->backup_keep > YEW_SAVE_BACKUP_KEEP_MAX)
+        return YEW_SAVE_IO;
+    if (force) {
+        effective = *opts;
+        effective.check_disk = YEW_SAVE_CHECK_OFF;
+        opts = &effective;
+    }
     if (lstat(path, &link_st) == 0) {
         is_symlink = S_ISLNK(link_st.st_mode);
     } else if (errno != ENOENT) {
@@ -1111,21 +1618,28 @@ static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
         }
         expected = &accepted;
     }
-    match = destination_matches(expected, dst, &needs_inplace);
+    match = destination_matches(expected, dst, opts, &accepted,
+                                &needs_inplace);
     if (match != YEW_SAVE_OK) {
         free(resolved);
         return match;
     }
+    expected = &accepted;
     saved_realpath = realpath(dst, NULL);
     if (saved_realpath == NULL)
         saved_realpath = canonical_new_path(dst);
     dir = path_dirname(dst);
-    if (needs_inplace || !directory_writable(dir))
-        result = inplace_save(tb, expected, dst, &saved_st);
+    if (opts->strategy == YEW_SAVE_STRATEGY_INPLACE)
+        result = inplace_save(tb, expected, dst, opts, &saved_st);
+    else if (opts->strategy == YEW_SAVE_STRATEGY_ATOMIC)
+        result = atomic_save(tb, expected, dst, opts, true, &saved_st);
+    else if (needs_inplace || !directory_writable(dir))
+        result = inplace_save(tb, expected, dst, opts, &saved_st);
     else
-        result = atomic_save(tb, expected, dst, &saved_st);
-    if (result == YEW_SAVE_OK) {
+        result = atomic_save(tb, expected, dst, opts, false, &saved_st);
+    if (yew_save_committed(result)) {
         refresh_saved_meta(meta, &saved_st, saved_realpath, is_symlink);
+        filemeta_snapshot_set(meta, tb);
         saved_realpath = NULL;
     }
     free(saved_realpath);
@@ -1137,11 +1651,24 @@ static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
 YewSaveErr yew_file_save(const TextBuf *tb, FileMeta *meta,
                          const char *path)
 {
-    return file_save(tb, meta, path, false);
+    return file_save(tb, meta, path, NULL, false);
+}
+
+YewSaveErr yew_file_save_opts(const TextBuf *tb, FileMeta *meta,
+                              const char *path, const YewSaveOpts *opts)
+{
+    return file_save(tb, meta, path, opts, false);
 }
 
 YewSaveErr yew_file_save_force(const TextBuf *tb, FileMeta *meta,
                                const char *path)
 {
-    return file_save(tb, meta, path, true);
+    return file_save(tb, meta, path, NULL, true);
+}
+
+YewSaveErr yew_file_save_force_opts(const TextBuf *tb, FileMeta *meta,
+                                    const char *path,
+                                    const YewSaveOpts *opts)
+{
+    return file_save(tb, meta, path, opts, true);
 }

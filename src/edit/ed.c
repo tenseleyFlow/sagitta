@@ -44,6 +44,43 @@ static void ed_syn_init(Buffer *b)
     yew_syn_buf_init(&b->syn);
 }
 
+static bool opt_string_is(const OptVal *value, const char *want)
+{
+    size_t len = strlen(want);
+
+    return value != NULL &&
+           (value->type == (u8)YEW_OPT_STR ||
+            value->type == (u8)YEW_OPT_ENUM) &&
+           value->as.str.len == (u32)len &&
+           memcmp(value->as.str.s, want, len) == 0;
+}
+
+static void ed_save_opts(Ed *ed, Buffer *buffer, Win *win,
+                         YewSaveOpts *opts)
+{
+    OptVal value;
+
+    yew_file_save_opts_default(opts);
+    if (yew_opt_get(ed, buffer, win, "save.strategy", 13U, &value)) {
+        if (opt_string_is(&value, "atomic"))
+            opts->strategy = YEW_SAVE_STRATEGY_ATOMIC;
+        else if (opt_string_is(&value, "inplace"))
+            opts->strategy = YEW_SAVE_STRATEGY_INPLACE;
+    }
+    if (yew_opt_get(ed, buffer, win, "save.check_disk", 15U, &value)) {
+        if (opt_string_is(&value, "off"))
+            opts->check_disk = YEW_SAVE_CHECK_OFF;
+        else if (opt_string_is(&value, "content"))
+            opts->check_disk = YEW_SAVE_CHECK_CONTENT;
+    }
+    if (yew_opt_get(ed, buffer, win, "save.check_disk_max", 19U, &value))
+        opts->check_disk_max = (u64)value.as.i;
+    if (yew_opt_get(ed, buffer, win, "save.backup_keep", 16U, &value))
+        opts->backup_keep = (u32)value.as.i;
+    if (yew_opt_get(ed, buffer, win, "save.backup_dir", 15U, &value))
+        opts->backup_dir = value.as.str.s;
+}
+
 static u8 *ed_first_line(const TextBuf *tb, u32 *len_out)
 {
     Span span = yew_textbuf_line_span(tb, LINENO(0U));
@@ -430,6 +467,7 @@ void yew_buf_defer(Ed *ed, Buffer *b)
     yew_marks_free(b->marks);
     b->marks = NULL;
     yew_syn_detach(&b->syn);
+    yew_filemeta_content_forget(&b->meta);
     yew_textbuf_free(b->tb);
     b->tb = NULL;
 }
@@ -1632,6 +1670,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
 {
     EditCtx ec;
     YewSaveErr result;
+    YewSaveOpts opts;
     Buffer *doc;
     u32 doc_id;
     u32 win_id;
@@ -1673,9 +1712,10 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
     if (!fl_txn_prepare_save(yew_fl_vm(ed), doc->undo))
         return YEW_CMD_ERR_STATE;
     ec = yew_ed_edit_ctx_for(ed, win);
+    ed_save_opts(ed, doc, win, &opts);
     if (force) {
-        result = yew_file_save_force(ec.tb, ec.meta, doc->path);
-        if (result == YEW_SAVE_OK) {
+        result = yew_file_save_force_opts(ec.tb, ec.meta, doc->path, &opts);
+        if (yew_save_committed(result)) {
             yew_undo_boundary(ec.undo);
             yew_undo_mark_saved(ec.undo);
             if (ec.jrnl != NULL) {
@@ -1684,7 +1724,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
             }
         }
     } else {
-        result = yew_edit_save(&ec, doc->path);
+        result = yew_edit_save_opts(&ec, doc->path, &opts);
     }
     yew_ed_finish_edit(ed, &ec);
     if (result == YEW_SAVE_CHANGED_ON_DISK) {
@@ -1696,7 +1736,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
                     doc->path);
         return YEW_CMD_ERR_IO;
     }
-    if (result != YEW_SAVE_OK) {
+    if (!yew_save_committed(result)) {
         yew_msg(ed, YEW_MSG_ERROR, "could not write %s", doc->path);
         ed->quit_after_save = false;
         return YEW_CMD_ERR_IO;
@@ -1704,8 +1744,12 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
     ed->durability_failed = false;
     ed->prompt = YEW_PROMPT_NONE;
     lines = yew_textbuf_line_count(doc->tb);
-    yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", doc->path,
-            (unsigned long long)lines);
+    if (result == YEW_SAVE_BACKUP_FAILED)
+        yew_msg(ed, YEW_MSG_WARN,
+                "wrote %s, but backup retention failed", doc->path);
+    else
+        yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", doc->path,
+                (unsigned long long)lines);
     yew_lsp_buffer_save(ed, doc);
     yew_git_invalidate(ed);
     yew_symidx_workspace_replace(&ed->ws, doc);
@@ -1731,6 +1775,7 @@ CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
     EditCtx ec;
     YewLoadErr load;
     YewSaveErr result;
+    YewSaveOpts opts;
     Buffer *doc;
     u32 doc_id;
     u32 win_id;
@@ -1768,9 +1813,10 @@ CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
     }
     ec = yew_ed_edit_ctx_for(ed, win);
     ec.meta = &next;
-    result = force ? yew_file_save_force(ec.tb, ec.meta, path) :
-                     yew_edit_save(&ec, path);
-    if (force && result == YEW_SAVE_OK) {
+    ed_save_opts(ed, doc, win, &opts);
+    result = force ? yew_file_save_force_opts(ec.tb, ec.meta, path, &opts) :
+                     yew_edit_save_opts(&ec, path, &opts);
+    if (force && yew_save_committed(result)) {
         yew_undo_boundary(ec.undo);
         yew_undo_mark_saved(ec.undo);
         if (ec.jrnl != NULL) {
@@ -1779,7 +1825,7 @@ CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
         }
     }
     yew_ed_finish_edit(ed, &ec);
-    if (result != YEW_SAVE_OK) {
+    if (!yew_save_committed(result)) {
         yew_filemeta_dispose(&next);
         yew_msg(ed, YEW_MSG_ERROR, "could not write %s", path);
         return YEW_CMD_ERR_IO;
@@ -1818,8 +1864,12 @@ CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
     if (ed->win == win)
         yew_reg_bind_context(&ed->regs, doc->undo, &doc->meta);
     ed->durability_failed = false;
-    yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", path,
-            (unsigned long long)yew_textbuf_line_count(doc->tb));
+    if (result == YEW_SAVE_BACKUP_FAILED)
+        yew_msg(ed, YEW_MSG_WARN,
+                "wrote %s, but backup retention failed", path);
+    else
+        yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", path,
+                (unsigned long long)yew_textbuf_line_count(doc->tb));
     yew_symidx_workspace_replace(&ed->ws, doc);
     yew_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     return YEW_CMD_OK;

@@ -178,6 +178,7 @@ void test_trust_write_prunes_only_old_missing_dirs(void)
 {
     TrustFix f;
     YewTrustDb db;
+    YewTrustWriteResult write;
     char doc[2048];
     char *out;
 
@@ -191,7 +192,9 @@ void test_trust_write_prunes_only_old_missing_dirs(void)
     tf_write(f.dbpath, doc);
     yew_trust_db_init(&db);
     YEW_ASSERT(yew_trust_db_load_path(&db, f.dbpath));
-    YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 200000, 1U));
+    write = yew_trust_db_write_path_result(&db, f.dbpath, 200000, 1U);
+    YEW_ASSERT(write.ok);
+    YEW_ASSERT(write.committed);
     out = tf_read(f.dbpath);
     YEW_ASSERT(strstr(out, "/definitely/missing/old") == NULL);
     YEW_ASSERT_NOT_NULL(strstr(out, "/definitely/missing/new"));

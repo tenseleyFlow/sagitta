@@ -453,9 +453,11 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
         "undo.bytes_max", "undo.min_nodes", "undo.persist_bytes_max",
         "registers.ring_depth", "registers.ring_bytes_max",
         "registers.clip_read_max", "clipboard.sync", "search.ignorecase",
-        "search.smartcase", "hooks.error_limit",
+        "search.smartcase", "hooks.error_limit", "save.strategy",
+        "save.check_disk", "save.check_disk_max", "save.backup_keep",
+        "save.backup_dir",
 #if YEW_WITH_PLUGINS
-        "plug.error_limit",
+        "plug.error_limit", "plug.verify_on_load",
 #endif
         "theme", "theme_auto", "macro.dir", "shadow.enable",
         "shadow.providers",

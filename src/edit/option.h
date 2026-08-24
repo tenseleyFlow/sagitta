@@ -87,6 +87,10 @@ bool yew_opt_get(Ed *ed, Buffer *buffer, Win *win,
                  const char *name, u32 len, OptVal *out);
 bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
                  const OptVal *value, const char **err);
+/* Set against explicit receiver state; global options ignore buffer/window. */
+bool yew_opt_set_for(Ed *ed, Buffer *buffer, Win *win, u8 scope_hint,
+                     const char *name, u32 len, const OptVal *value,
+                     const char **err);
 /* Snapshot/commit is the transactional registration seam used by set(map).
  * A committed checkpoint is removed by its shared registration-ledger id. */
 u32 yew_opt_checkpoint(Ed *ed, const char *name, u32 len,

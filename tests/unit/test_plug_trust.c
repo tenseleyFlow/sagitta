@@ -123,15 +123,18 @@ void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void)
     YEW_ASSERT_EQ_STR(first, second);
     free(second);
     free(first);
-    YEW_ASSERT(yew_trust_plugin_set_desired(
-        &db, "notes", YEW_PLUGIN_DESIRED_DEFAULT));
+    YEW_ASSERT_EQ_U64(yew_trust_plugin_grant_count(&db, "notes"), 4U);
+    YEW_ASSERT_EQ_U64(yew_trust_plugin_drop_grants(&db, "notes"), 4U);
+    YEW_ASSERT_EQ_U64(yew_trust_plugin_drop_grants(&db, "notes"), 0U);
+    YEW_ASSERT_EQ_I64(yew_trust_plugin_desired(&db, "notes"),
+                      YEW_PLUGIN_DESIRED_DISABLED);
+    YEW_ASSERT_EQ_U64(yew_trust_plugin_grant_count(&db, "notes"), 0U);
     YEW_ASSERT(yew_trust_plugin_set_capability(
-        &db, "notes", YEW_PLUGIN_CAP_FS, YEW_PLUGIN_GRANT_UNSET));
+        &db, "notes", YEW_PLUGIN_CAP_FS, YEW_PLUGIN_GRANT_ALLOW));
+    YEW_ASSERT(yew_trust_plugin_drop_policy(&db, "notes"));
     YEW_ASSERT_EQ_I64(yew_trust_plugin_desired(&db, "notes"),
                       YEW_PLUGIN_DESIRED_DEFAULT);
-    YEW_ASSERT_EQ_I64(yew_trust_plugin_capability(
-                          &db, "notes", YEW_PLUGIN_CAP_FS),
-                      YEW_PLUGIN_GRANT_UNSET);
+    YEW_ASSERT_EQ_U64(yew_trust_plugin_grant_count(&db, "notes"), 0U);
     yew_trust_db_free(&db);
     pt_remove(&f);
 }
@@ -191,6 +194,24 @@ void test_plug_trust_schema2_unknowns_and_sorted_output_round_trip(void)
     second = pt_read(f.dbpath);
     YEW_ASSERT_EQ_STR(first, second);
     free(second);
+    free(first);
+    YEW_ASSERT(yew_trust_plugin_drop_policy(&db, "alpha"));
+    YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 2001, 365U));
+    first = pt_read(f.dbpath);
+    alpha = strstr(first, "alpha: {");
+    zeta = strstr(first, "zeta: {");
+    YEW_ASSERT_NOT_NULL(alpha);
+    YEW_ASSERT_NOT_NULL(zeta);
+    YEW_ASSERT_NOT_NULL(strstr(alpha, "zz_future: {"));
+    YEW_ASSERT(strstr(alpha, "enabled:") == NULL ||
+               strstr(alpha, "enabled:") > zeta);
+    YEW_ASSERT(strstr(alpha, "clipboard:") == NULL ||
+               strstr(alpha, "clipboard:") > zeta);
+    YEW_ASSERT(strstr(alpha, "fs:") == NULL || strstr(alpha, "fs:") > zeta);
+    YEW_ASSERT(strstr(alpha, "net:") == NULL ||
+               strstr(alpha, "net:") > zeta);
+    YEW_ASSERT(strstr(alpha, "shell:") == NULL ||
+               strstr(alpha, "shell:") > zeta);
     free(first);
     yew_trust_db_free(&db);
     pt_remove(&f);

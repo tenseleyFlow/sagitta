@@ -31,6 +31,10 @@
 
 #include "util/buf.h"
 
+#ifndef YEW_RUNTIME_DIR_DEFAULT
+#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
+#endif
+
 /* The library every case here imports. */
 static void write_lib(FlFix *f)
 {
@@ -93,6 +97,7 @@ void test_fl_modules_not_found_lists_every_path_tried(void)
     char want[2048];
     const char *xdg = getenv("XDG_CONFIG_HOME");
     const char *home = getenv("HOME");
+    const char *runtime = getenv("YEW_RUNTIME_DIR");
     char cfg[1024];
 
     flfix_open(&f);
@@ -101,6 +106,8 @@ void test_fl_modules_not_found_lists_every_path_tried(void)
     else
         (void)snprintf(cfg, sizeof(cfg), "%s/.config/yew",
                        home == NULL ? "" : home);
+    if (runtime == NULL || runtime[0] == '\0')
+        runtime = YEW_RUNTIME_DIR_DEFAULT;
     /*
      * Every path, one per line.  "cannot find x.fl" without the list is
      * the message that makes a user guess at the search order, and the
@@ -108,7 +115,8 @@ void test_fl_modules_not_found_lists_every_path_tried(void)
      */
     (void)snprintf(want, sizeof(want),
                    "!import: cannot find 'missing.fl'; tried:\n  %s/missing.fl"
-                   "\n  %s/fl/missing.fl", flfix_tmpdir(&f), cfg);
+                   "\n  %s/fl/missing.fl\n  %s/missing.fl",
+                   flfix_tmpdir(&f), cfg, runtime);
     FL_EQ(&f, "import \"missing.fl\" as m\nreturn 1\n", want);
     flfix_close(&f);
 }
@@ -325,16 +333,17 @@ void test_fl_modules_list_natives_is_deterministic(void)
     }
     YEW_ASSERT_EQ_U64((u64)lines, (u64)na);
     /*
-     * 177 = the stdlib's 118 (30 str + 19 list + 12 map + 29 math +
+     * 181 = the stdlib's 118 (30 str + 19 list + 12 map + 29 math +
      * 7 fmt + 13 io + 7 re) plus Sprint 34's 59 editor natives and Sprint
-     * 48's AI backend front door.  Pinned so a function added or lost shows
-     * up here and in s33's coverage ledger;
+     * 48's AI backend front door, plus Sprint 55's buf.opt, buf.opt_set, and
+     * ctx.message.  Pinned so a function added or lost shows up here and in
+     * s33's coverage ledger;
      * the ledger names every new native missing a COVERS token.
      *
      * s31's DoD 2 asks for 150 and its own tables define 117; see the
      * DoD-walk note.  The number below is the tables, not the target.
      */
-    YEW_ASSERT_EQ_U64((u64)na, 178U);
+    YEW_ASSERT_EQ_U64((u64)na, 181U);
     bytebuf_free(&a);
     bytebuf_free(&b);
     flfix_close(&f);

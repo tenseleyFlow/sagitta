@@ -1,0 +1,171 @@
+# Cloud-storage preset for Syncthing, rclone, Dropbox, Nextcloud, Seafile,
+# iCloud, OneDrive, and similar tools.
+#
+# Load it from init.fl, then name each synced root explicitly:
+#
+#     import "preset.cloud.fl" as cloud
+#     cloud.watch(io.env("HOME") + "/Sync")
+#
+# This preset cannot close the race between checking a path and saving it.
+# POSIX has no compare-and-swap for path names, and sync clients do not share
+# advisory locks across machines.  It therefore does three narrower things:
+# keep the inode stable, make likely conflict twins visible, and retain more
+# recovery copies.  It never claims to merge concurrent edits.
+#
+# The in-place path creates no `.yew-<base>-<pid>-<n>` file in a synced tree.
+# If other configurations use atomic saves, exclude `.yew-*` in clients that
+# support ignores.  Dropbox does not support a general ignore pattern.
+
+import buf
+import ed
+import fmt
+import io
+import list
+import str
+import win
+
+let dirs = []
+let marks = [
+    ".sync-conflict-",
+    "(conflicted copy",
+    "_conflict-",
+    "(SFConflict ",
+    "(conflicted)",
+]
+
+# Ten backups make a remote winner recoverable.  Content checking avoids a
+# false conflict when a client writes identical bytes with a new mtime.  Files
+# above 32 MiB deliberately fall back to the metadata check.
+set({
+    "save.backup_keep": 10,
+    "save.check_disk_max": 33554432,
+})
+
+fn watch(d) {
+    list.push(dirs, d)
+}
+
+fn watching() {
+    return list.copy(dirs)
+}
+
+fn mark(s) {
+    list.push(marks, s)
+}
+
+fn under_watched(path) {
+    if path == nil {
+        return false
+    }
+    for d in dirs {
+        if str.starts_with(path, d + "/") {
+            return true
+        }
+    }
+    return false
+}
+
+fn configure_buffer(b) {
+    if under_watched(b.path()) == false {
+        return nil
+    }
+
+    # In-place save keeps file identity and avoids a rename reaching a sync
+    # watcher as delete plus create.  It gives up atomic replacement, but the
+    # existing in-place path writes before truncation and retains a backup and
+    # crash journal; this preset selects that path rather than inventing one.
+    b.opt_set("save.strategy", "inplace")
+    b.opt_set("save.check_disk", "content")
+}
+
+on("buf.open", configure_buffer)
+
+# io.glob returns complete paths in bytewise order.  Keep those paths intact;
+# rebuilding them from a basename would duplicate the directory prefix.
+fn twins(path) {
+    let cut = str.rfind(path, "/")
+    let dir = str.slice(path, 0, cut)
+    let out = []
+    for f in io.glob("*", dir) {
+        if f != path {
+            for m in marks {
+                if str.contains(f, m) {
+                    list.push(out, f)
+                    break
+                }
+            }
+        }
+    }
+    return out
+}
+
+fn scan() {
+    let out = []
+    for b in buf.list() {
+        if under_watched(b.path()) {
+            for twin in twins(b.path()) {
+                list.push(out, twin)
+            }
+        }
+    }
+    return out
+}
+
+fn report_conflicts() {
+    if list.len(dirs) == 0 {
+        return nil
+    }
+    let found = scan()
+    if list.len(found) > 0 {
+        ed.msg(fmt.f("sync conflict: {} file(s) beside open buffers -- "
+                     + "<space> c d", list.len(found)), "warn")
+    }
+}
+
+on("ed.idle", report_conflicts)
+
+fn open_conflict() {
+    let found = scan()
+    if list.len(found) == 0 {
+        ed.msg("no conflict files found")
+        return nil
+    }
+    # win.split focuses the new pane.  Batch mode and a full pane tree can
+    # refuse a split; opening the twin is still more useful than losing the
+    # action, but say plainly that it replaces the current view in that case.
+    try {
+        win.current().split("v")
+    } catch e {
+        if e.kind != "user" {
+            error(e)
+        }
+        ed.msg("could not split; opening conflict in the current pane", "warn")
+    }
+    buf.open(found[0])
+}
+
+fn count_conflicts() {
+    ed.msg(fmt.f("{} conflict file(s)", list.len(scan())))
+}
+
+bind("*", "<space> c d", open_conflict)
+bind("*", "<space> c s", count_conflicts)
+
+fn check_state_dir() {
+    let state = io.env("XDG_STATE_HOME")
+    if state == nil {
+        state = io.env("HOME") + "/.local/state"
+    }
+    if under_watched(state + "/yew") {
+        ed.msg("yew's state directory is inside a synced folder; exclude it "
+               + "-- journals and backups must not sync", "warn")
+        return true
+    }
+    return false
+}
+
+fn warn_state_dir(ws) {
+    check_state_dir()
+}
+
+on("ws.open", warn_state_dir)

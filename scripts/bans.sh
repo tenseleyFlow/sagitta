@@ -322,6 +322,45 @@ if [ -s "$tmp/option-set-hits" ]; then
     cat "$tmp/option-set-hits" >>"$hits"
 fi
 
+#
+# Sprint 55 DoD 7: git belongs exclusively to the explicit `yew pkg`
+# subcommand.  Discovery may hash installed trees during editor startup,
+# but it must never spawn git (a captive portal must not be able to hang
+# opening an editor).  Keeping every call in pkg.c is a stronger and more
+# stable boundary than trying to enumerate today's startup-path files.
+#
+pkg_git_calls()
+{
+    pkg_git_list=$1
+    pkg_git_out=$2
+    : >"$pkg_git_out"
+    while IFS= read -r file; do
+        case ${file#"$repo_dir"/} in
+            src/mod/plug/pkg.c|src/mod/plug/pkg.h) continue ;;
+        esac
+        grep -nE -e '(^|[^[:alnum:]_])yew_pkg_git[[:space:]]*\(' \
+            "$file" 2>/dev/null |
+            sed "s|^|${file#"$repo_dir"/}:|" >>"$pkg_git_out" || :
+    done <"$pkg_git_list"
+}
+
+pkg_git_calls "$source_files" "$tmp/pkg-git-hits"
+if [ -s "$tmp/pkg-git-hits" ]; then
+    echo "ban: git package transport must not enter editor startup" >>"$hits"
+    cat "$tmp/pkg-git-hits" >>"$hits"
+fi
+
+# Prove the boundary catches a newly seeded startup call.
+pkg_git_seed=$tmp/seeded-pkg-git-call.c
+echo 'void seeded(void) { (void)yew_pkg_git(argv, 1, 1, true, run); }' \
+    >"$pkg_git_seed"
+printf '%s\n' "$pkg_git_seed" >"$tmp/pkg-git-seed-list"
+pkg_git_calls "$tmp/pkg-git-seed-list" "$tmp/pkg-git-seed-hits"
+if [ "$(wc -l <"$tmp/pkg-git-seed-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the no-startup-git rule no longer fires on its own seed" \
+        >>"$hits"
+fi
+
 # Prove the allow-list catches the next call site instead of silently
 # becoming decorative as source layout evolves.
 option_seed=$tmp/seeded-option-call.c

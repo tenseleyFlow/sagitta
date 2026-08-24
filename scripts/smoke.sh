@@ -182,11 +182,26 @@ case " $smoke_modules " in
         ;;
 esac
 
-run_capture "$bin" pkg anything
-expect_rc 1 "deferred pkg command"
-[ ! -s "$out" ] || fail "deferred pkg command wrote stdout"
-expect_stderr_contains "Sprint 55" "deferred pkg command"
-echo "smoke: deferred pkg command boundary ok"
+case " $smoke_modules " in
+    *" plugins "*)
+        run_capture "$bin" pkg search
+        expect_rc 1 "pkg registry non-goal"
+        [ ! -s "$out" ] || fail "pkg registry non-goal wrote stdout"
+        expect_stderr_contains "registry" "pkg registry non-goal"
+        echo "smoke: pkg registry non-goal boundary ok"
+        ;;
+    *)
+        run_capture "$bin" pkg list
+        expect_rc 1 "stripped pkg command"
+        [ ! -s "$out" ] || fail "stripped pkg command wrote stdout"
+        printf '%s\n' \
+            'yew: error: built without plugin support (MODULES=plugins)' \
+            >"$tmp/pkg-error.expected"
+        cmp -s "$err" "$tmp/pkg-error.expected" || \
+            fail "stripped pkg command diagnostic"
+        echo "smoke: stripped pkg command boundary ok"
+        ;;
+esac
 
 run_capture "$bin" --help-cmds
 expect_rc 0 help-cmds
@@ -461,7 +476,7 @@ expect_rc 0 "fl --list-natives"
 # anyone noticing is the thing this line exists to prevent, and it is
 # checked in three places (here, test_fl_module.c, and s33's ledger) so
 # that adding one to the tables without covering it cannot pass.
-[ "$(wc -l < "$out" | tr -d ' ')" -eq 178 ] || fail "fl --list-natives count"
+[ "$(wc -l < "$out" | tr -d ' ')" -eq 181 ] || fail "fl --list-natives count"
 echo "smoke: fl --list-natives ok"
 
 run_capture "$bin" fl --help

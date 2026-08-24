@@ -93,6 +93,12 @@ static const char *const ai_on_redact_values[] = {
 static const char *const ai_badge_values[] = {
     "on", "off", NULL
 };
+static const char *const save_strategy_values[] = {
+    "auto", "atomic", "inplace", NULL
+};
+static const char *const save_check_disk_values[] = {
+    "off", "mtime", "content", NULL
+};
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -235,10 +241,34 @@ const OptDesc yew_opts[] = {
     {"hooks.error_limit", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(YEW_HOOK_ERROR_LIMIT_DEFAULT), NULL, 1, 100, NULL,
      option_changed, "Disable a failing hook after this many errors"},
+    {"save.strategy", YEW_OPT_ENUM, YEW_OPT_BUFFER,
+     OPT_ENUM(YEW_SAVE_STRATEGY_DEFAULT_TEXT),
+     save_strategy_values, 0, 0, NULL, option_changed,
+     "Save using auto, atomic, or in-place strategy"},
+    {"save.check_disk", YEW_OPT_ENUM, YEW_OPT_BUFFER,
+     OPT_ENUM(YEW_SAVE_CHECK_DISK_DEFAULT_TEXT),
+     save_check_disk_values, 0, 0, NULL, option_changed,
+     "External-change check: off, metadata, or exact content"},
+    {"save.check_disk_max", YEW_OPT_INT, YEW_OPT_GLOBAL,
+     OPT_INT((i64)YEW_SAVE_CHECK_DISK_MAX_DEFAULT), NULL, 0,
+     (i64)YEW_SAVE_CHECK_DISK_MAX_LIMIT, NULL, option_changed,
+     "Maximum bytes compared by save.check_disk=content"},
+    {"save.backup_keep", YEW_OPT_INT, YEW_OPT_GLOBAL,
+     OPT_INT(YEW_SAVE_BACKUP_KEEP_DEFAULT), NULL, 0,
+     YEW_SAVE_BACKUP_KEEP_MAX, NULL, option_changed,
+     "In-place save backups retained per file"},
+    {"save.backup_dir", YEW_OPT_STR, YEW_OPT_GLOBAL,
+     OPT_STR(YEW_SAVE_BACKUP_DIR_DEFAULT), NULL,
+     0, 0, NULL, option_changed,
+     "Directory for in-place save backups"},
 #if YEW_WITH_PLUGINS
     {"plug.error_limit", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(5), NULL,
      1, 100, NULL, option_changed,
      "Disable a failing plugin after this many errors"},
+    {"plug.verify_on_load", YEW_OPT_BOOL, YEW_OPT_GLOBAL,
+     OPT_BOOL(YEW_PLUG_VERIFY_ON_LOAD_DEFAULT), NULL, 0, 0, NULL,
+     option_changed,
+     "Verify installed plugin content before loading"},
 #endif
     {"theme", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR("quiver-dark"), NULL,
      0, 0, NULL, option_changed, "Active theme name"},
@@ -938,9 +968,9 @@ bool yew_opt_get(Ed *ed, Buffer *buffer, Win *win,
     return true;
 }
 
-static struct OptStored *set_target(Ed *ed, const OptDesc *desc,
-                                    const char *name, u32 len,
-                                    const char **err)
+static struct OptStored *set_target(Ed *ed, Buffer *buffer, Win *win,
+                                    const OptDesc *desc, const char *name,
+                                    u32 len, const char **err)
 {
     YewDynamicOpt *dynamic;
     Strmap *map;
@@ -952,19 +982,17 @@ static struct OptStored *set_target(Ed *ed, const OptDesc *desc,
     if (desc->scope == (u8)YEW_OPT_GLOBAL)
         return &ed->opt_globals[desc_index(desc)];
     if (desc->scope == (u8)YEW_OPT_BUFFER) {
-        Buffer *buffer = current_buffer(ed);
-
         if (buffer == NULL) {
             *err = "no current buffer";
             return NULL;
         }
         map = &buffer->opt_overrides;
     } else {
-        if (ed->win == NULL) {
+        if (win == NULL) {
             *err = "no current window";
             return NULL;
         }
-        map = &ed->win->opt_overrides;
+        map = &win->opt_overrides;
     }
     stored = scope_stored(map, name, len);
     if (stored == NULL) {
@@ -1008,8 +1036,9 @@ bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
     return value_validate(ed, desc, value, &normalized, err);
 }
 
-bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
-                 const OptVal *value, const char **err)
+bool yew_opt_set_for(Ed *ed, Buffer *buffer, Win *win, u8 scope_hint,
+                     const char *name, u32 len, const OptVal *value,
+                     const char **err)
 {
     const OptDesc *desc;
     struct OptStored *target;
@@ -1021,9 +1050,29 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
 
     if (err != NULL)
         *err = NULL;
-    if (!yew_opt_validate(ed, scope_hint, name, len, value, err))
+    if (ed == NULL || name == NULL || value == NULL || err == NULL ||
+        ed->opt_globals == NULL)
         return false;
     desc = yew_opt_desc_for(ed, name, len);
+    if (desc == NULL) {
+        *err = "unknown option";
+        return false;
+    }
+    if (scope_hint != (u8)YEW_OPT_SCOPE_DECLARED &&
+        scope_hint != desc->scope) {
+        *err = desc->scope == (u8)YEW_OPT_GLOBAL ?
+               "global option refuses a buffer or window scope" :
+               "option refuses the requested scope";
+        return false;
+    }
+    if (desc->scope == (u8)YEW_OPT_BUFFER && buffer == NULL) {
+        *err = "no current buffer";
+        return false;
+    }
+    if (desc->scope == (u8)YEW_OPT_WINDOW && win == NULL) {
+        *err = "no current window";
+        return false;
+    }
     normalized = *value;
     if (desc->type == (u8)YEW_OPT_ENUM &&
         normalized.type == (u8)YEW_OPT_STR)
@@ -1036,12 +1085,12 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
         *err = "option is already being changed";
         return false;
     }
-    if (!yew_opt_get(ed, current_buffer(ed), ed->win, name, len,
-                     &resolved_old) || !stored_assign(&old, &resolved_old)) {
+    if (!yew_opt_get(ed, buffer, win, name, len, &resolved_old) ||
+        !stored_assign(&old, &resolved_old)) {
         *err = "could not retain the old option value";
         return false;
     }
-    target = set_target(ed, desc, name, len, err);
+    target = set_target(ed, buffer, win, desc, name, len, err);
     if (target == NULL)
         goto fail_old;
     if (!stored_assign(target, &normalized)) {
@@ -1064,7 +1113,8 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
     if (strcmp(desc->name, "theme") == 0)
         ed->theme_option_inflight = true;
     if (desc->on_change != NULL)
-        desc->on_change(ed, desc, &old.value, &target->value);
+        option_changed_target(ed, desc, &old.value, &target->value,
+                              buffer, win);
     if (strcmp(desc->name, "theme") == 0)
         ed->theme_option_inflight = false;
     if (!dynamic)
@@ -1075,6 +1125,14 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
 fail_old:
     stored_clear(&old);
     return false;
+}
+
+bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
+                 const OptVal *value, const char **err)
+{
+    return yew_opt_set_for(ed, current_buffer(ed),
+                           ed == NULL ? NULL : ed->win, scope_hint,
+                           name, len, value, err);
 }
 
 static YewOptHistory *history_get(Ed *ed)

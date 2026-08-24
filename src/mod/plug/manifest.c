@@ -539,7 +539,11 @@ bool yew_plug_manifest_read(Arena *a, const char *dir,
     }
     if (!path_join(manifest_path, sizeof(manifest_path), canonical,
                    "plugin.fl") ||
-        !read_source(a, manifest_path, &source, &len, dc)) {
+        /* DiagCtx keeps a borrowed source pointer for later caret rendering.
+         * Parsed manifest values live in `a`, but the registered source must
+         * live with the diagnostic context even when callers release their
+         * short-lived manifest arena before emitting a later error. */
+        !read_source(dc->arena, manifest_path, &source, &len, dc)) {
         free(canonical);
         return false;
     }

@@ -421,6 +421,318 @@ static bool backup_matches(const char *state, const char *dst)
     return matches;
 }
 
+static bool inplace_backup_matches(const char *state, const char *dst,
+                                   const unsigned char *want,
+                                   size_t want_len)
+{
+    DIR *stream;
+    struct dirent *entry;
+    char *resolved;
+    char base[1536];
+    char path[1600];
+    char backup_dir[1536];
+    char prefix[32];
+    unsigned number;
+    int n;
+    bool matches = false;
+
+    resolved = realpath(dst, NULL);
+    if (resolved == NULL)
+        return false;
+    n = snprintf(base, sizeof(base), "%s/yew/backup/%016llx.bak",
+                 state, (unsigned long long)path_hash(resolved));
+    free(resolved);
+    if (n <= 0 || (size_t)n >= sizeof(base))
+        return false;
+    if (file_equals_bytes(base, want, want_len))
+        return true;
+    for (number = 1U; number < 10U; number++) {
+        n = snprintf(path, sizeof(path), "%.*s.%u.bak",
+                     (int)(strlen(base) - strlen(".bak")), base, number);
+        if (n > 0 && (size_t)n < sizeof(path) &&
+            file_equals_bytes(path, want, want_len)) {
+            matches = true;
+            break;
+        }
+    }
+    if (matches)
+        return true;
+    n = snprintf(backup_dir, sizeof(backup_dir), "%s/yew/backup", state);
+    if (n <= 0 || (size_t)n >= sizeof(backup_dir))
+        return false;
+    n = snprintf(prefix, sizeof(prefix), "%016llx.",
+                 (unsigned long long)path_hash(dst));
+    if (n <= 0 || (size_t)n >= sizeof(prefix))
+        return false;
+    stream = opendir(backup_dir);
+    if (stream == NULL)
+        return false;
+    while ((entry = readdir(stream)) != NULL) {
+        if (strncmp(entry->d_name, prefix, strlen(prefix)) != 0 ||
+            (strstr(entry->d_name, ".pending-") == NULL &&
+             strstr(entry->d_name, ".pending.bak") == NULL &&
+             strstr(entry->d_name, ".recover-") == NULL &&
+             strstr(entry->d_name, ".recover.bak") == NULL))
+            continue;
+        n = snprintf(path, sizeof(path), "%s/%s", backup_dir,
+                     entry->d_name);
+        if (n > 0 && (size_t)n < sizeof(path) &&
+            file_equals_bytes(path, want, want_len)) {
+            matches = true;
+            break;
+        }
+    }
+    (void)closedir(stream);
+    return matches;
+}
+
+static bool inplace_backup_path(char *out, size_t out_len,
+                                const char *state, const char *dst,
+                                unsigned generation)
+{
+    char *resolved = realpath(dst, NULL);
+    char base[1536];
+    int n;
+
+    if (resolved == NULL)
+        return false;
+    n = snprintf(base, sizeof(base), "%s/yew/backup/%016llx.bak",
+                 state, (unsigned long long)path_hash(resolved));
+    free(resolved);
+    if (n <= 0 || (size_t)n >= sizeof(base))
+        return false;
+    if (generation == 0U)
+        n = snprintf(out, out_len, "%s", base);
+    else
+        n = snprintf(out, out_len, "%.*s.%u.bak",
+                     (int)(strlen(base) - strlen(".bak")), base,
+                     generation);
+    return n > 0 && (size_t)n < out_len;
+}
+
+static unsigned long long inplace_sweep(const char *driver,
+                                        const char *shim,
+                                        const char *root,
+                                        const char *state,
+                                        unsigned long long *serial)
+{
+    unsigned long long at;
+
+    if (setenv("YEW_TORTURE_INPLACE", "1", 1) != 0)
+        die("setenv inplace");
+    for (at = 0U; at < 4096U; at++) {
+        char dst[512], old[512], post[512], log[512];
+        bool old_new_or_restorable;
+        int code;
+
+        case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
+                   log, sizeof(log), root, "inplace", (*serial)++);
+        make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
+        make_file(old, old_bytes, sizeof(old_bytes) - 1U);
+        make_file(post, post_bytes, sizeof(post_bytes) - 1U);
+        code = wait_child(start_save(driver, shim, dst, post, log, 55U,
+                                     (long)at, -1));
+        old_new_or_restorable = run_check(driver, dst, old, post) ||
+            inplace_backup_matches(state, dst, old_bytes,
+                                   sizeof(old_bytes) - 1U);
+        if (!old_new_or_restorable) {
+            (void)fprintf(stderr,
+                          "torture: inplace invariant failed at=%llu\n", at);
+            exit(1);
+        }
+        if (code == 0) {
+            if (!file_equals_bytes(dst, post_bytes,
+                                   sizeof(post_bytes) - 1U) ||
+                !inplace_backup_matches(state, dst, old_bytes,
+                                        sizeof(old_bytes) - 1U)) {
+                (void)fprintf(stderr,
+                              "torture: successful inplace save invalid\n");
+                exit(1);
+            }
+            (void)unsetenv("YEW_TORTURE_INPLACE");
+            return at;
+        }
+        if (code != 137) {
+            (void)fprintf(stderr,
+                          "torture: inplace child exit %d at=%llu\n",
+                          code, at);
+            exit(1);
+        }
+    }
+    (void)fprintf(stderr, "torture: inplace sweep exceeded safety bound\n");
+    exit(1);
+}
+
+static void inplace_rotation_check(const char *driver, const char *shim,
+                                   const char *root, const char *state,
+                                   unsigned long long *serial)
+{
+    char dst[512], old[512], post[512], log[512], path[1600];
+    unsigned generation;
+    unsigned save;
+
+    case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
+               log, sizeof(log), root, "rotation", (*serial)++);
+    make_file(dst, (const unsigned char *)"v0", 2U);
+    if (setenv("YEW_TORTURE_INPLACE", "1", 1) != 0)
+        die("setenv inplace rotation");
+    for (save = 1U; save <= 10U; save++) {
+        char value[16];
+        int len = snprintf(value, sizeof(value), "v%u", save);
+
+        if (len <= 0 || (size_t)len >= sizeof(value))
+            die("format rotation fixture");
+        make_file(post, (const unsigned char *)value, (size_t)len);
+        if (wait_child(start_save(driver, shim, dst, post, log, 55U,
+                                  -1, -1)) != 0)
+            die("clean inplace rotation save");
+    }
+    (void)unsetenv("YEW_TORTURE_INPLACE");
+    for (generation = 0U; generation < 10U; generation++) {
+        char want[16];
+        int len = snprintf(want, sizeof(want), "v%u", 9U - generation);
+
+        if (!inplace_backup_path(path, sizeof(path), state, dst,
+                                 generation) ||
+            len <= 0 || !file_equals_bytes(path,
+                                           (const unsigned char *)want,
+                                           (size_t)len)) {
+            (void)fprintf(stderr,
+                          "torture: rotation generation %u is not exact\n",
+                          generation);
+            exit(1);
+        }
+    }
+    if (!inplace_backup_path(path, sizeof(path), state, dst, 10U))
+        die("format extra backup path");
+    if (access(path, F_OK) == 0 || errno != ENOENT ||
+        !file_equals_bytes(dst, (const unsigned char *)"v10", 3U)) {
+        (void)fprintf(stderr,
+                      "torture: rotation retained more than ten backups\n");
+        exit(1);
+    }
+    (void)printf("inplace backup_keep=10 rotation ok\n");
+}
+
+static void inplace_write_failure_check(const char *driver,
+                                        const char *shim,
+                                        const char *root,
+                                        const char *state,
+                                        unsigned long long *serial)
+{
+    static const unsigned char third_bytes[] =
+        "third image that must not survive a failed write";
+    char dst[512], old[512], post[512], log[512], base[1600], pending[1664];
+    int n;
+
+    case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
+               log, sizeof(log), root, "inplace-eio", (*serial)++);
+    make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(post, post_bytes, sizeof(post_bytes) - 1U);
+    if (setenv("YEW_TORTURE_INPLACE", "1", 1) != 0)
+        die("setenv inplace EIO");
+    if (wait_child(start_save(driver, shim, dst, post, log, 42U,
+                              -1, -1)) != 0)
+        die("prepare inplace EIO history");
+    make_file(post, third_bytes, sizeof(third_bytes) - 1U);
+    if (setenv("YEW_FAULT_WRITE_EIO_AFTER_DIRSYNC", "1", 1) != 0)
+        die("setenv write EIO");
+    if (wait_child(start_save(driver, shim, dst, post, log, 42U,
+                              -1, -1)) != 3) {
+        (void)fprintf(stderr,
+                      "torture: injected inplace write did not fail\n");
+        exit(1);
+    }
+    (void)unsetenv("YEW_FAULT_WRITE_EIO_AFTER_DIRSYNC");
+    (void)unsetenv("YEW_TORTURE_INPLACE");
+    if (!inplace_backup_path(base, sizeof(base), state, dst, 0U))
+        die("format inplace EIO backup");
+    n = snprintf(pending, sizeof(pending), "%.*s.pending.bak",
+                 (int)(strlen(base) - strlen(".bak")), base);
+    if (n <= 0 || (size_t)n >= sizeof(pending) ||
+        !file_equals_bytes(dst, post_bytes, sizeof(post_bytes) - 1U) ||
+        !file_equals_bytes(base, old_bytes, sizeof(old_bytes) - 1U) ||
+        access(pending, F_OK) == 0 || errno != ENOENT) {
+        (void)fprintf(stderr,
+                      "torture: inplace write rollback/history failed\n");
+        exit(1);
+    }
+    (void)printf("inplace failed-write rollback/history ok\n");
+}
+
+static void inplace_meta_fault_sweep(const char *driver, const char *shim,
+                                     const char *root, const char *state,
+                                     unsigned long long *serial)
+{
+    unsigned long long at;
+
+    if (setenv("YEW_TORTURE_INPLACE", "1", 1) != 0)
+        die("setenv inplace metadata faults");
+    for (at = 0U; at < 64U; at++) {
+        char dst[512], old[512], post[512], log[512];
+        unsigned save;
+        int code;
+
+        case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
+                   log, sizeof(log), root, "inplace-meta", (*serial)++);
+        make_file(dst, (const unsigned char *)"v0", 2U);
+        for (save = 1U; save <= 10U; save++) {
+            char value[16];
+            int len = snprintf(value, sizeof(value), "v%u", save);
+
+            if (len <= 0 || (size_t)len >= sizeof(value))
+                die("format metadata fault fixture");
+            make_file(post, (const unsigned char *)value, (size_t)len);
+            if (wait_child(start_save(driver, shim, dst, post, log, 55U,
+                                      -1, -1)) != 0)
+                die("seed metadata fault history");
+        }
+        make_file(post, post_bytes, sizeof(post_bytes) - 1U);
+        set_num_env("YEW_FAULT_SAVE_META_EIO_AT", at);
+        code = wait_child(start_save(driver, shim, dst, post, log, 55U,
+                                     -1, -1));
+        (void)unsetenv("YEW_FAULT_SAVE_META_EIO_AT");
+        if (code == 0) {
+            if (!file_equals_bytes(dst, post_bytes,
+                                   sizeof(post_bytes) - 1U)) {
+                (void)fprintf(stderr,
+                              "torture: metadata fault terminal save invalid\n");
+                exit(1);
+            }
+            (void)unsetenv("YEW_TORTURE_INPLACE");
+            (void)printf("inplace rename/fsync EIO boundaries=%llu ok\n",
+                         at);
+            return;
+        }
+        if (code == 3) {
+            if (!file_equals_bytes(dst, (const unsigned char *)"v10", 3U)) {
+                (void)fprintf(stderr,
+                              "torture: precommit metadata EIO changed dst "
+                              "at=%llu\n", at);
+                exit(1);
+            }
+        } else if (code == 4) {
+            if (!file_equals_bytes(dst, post_bytes,
+                                   sizeof(post_bytes) - 1U) ||
+                !inplace_backup_matches(state, dst,
+                                        (const unsigned char *)"v10", 3U)) {
+                (void)fprintf(stderr,
+                              "torture: post-save metadata EIO lost recovery "
+                              "at=%llu\n", at);
+                exit(1);
+            }
+        } else {
+            (void)fprintf(stderr,
+                          "torture: metadata EIO child exit %d at=%llu\n",
+                          code, at);
+            exit(1);
+        }
+    }
+    (void)fprintf(stderr,
+                  "torture: metadata EIO sweep exceeded safety bound\n");
+    exit(1);
+}
+
 static bool same_inode(const char *a, const char *b)
 {
     struct stat sa;
@@ -453,7 +765,9 @@ static void hardlink_sweep(const char *driver, const char *shim,
                                      (long)at, -1));
         old_or_new = run_check(driver, dst, old, post);
         if (!same_inode(dst, twin) ||
-            (!old_or_new && !backup_matches(state, dst))) {
+            (!old_or_new &&
+             !inplace_backup_matches(state, dst, old_bytes,
+                                     sizeof(old_bytes) - 1U))) {
             (void)fprintf(stderr,
                           "torture: hardlink invariant failed at=%llu\n", at);
             exit(1);
@@ -806,6 +1120,15 @@ int main(int argc, char **argv)
         injected_fallback(argv[1], argv[2], root, state, "rename-exdev",
                           &serial);
         injected_fallback(argv[1], argv[2], root, state, "fchown", &serial);
+        {
+            unsigned long long calls = inplace_sweep(
+                argv[1], argv[2], root, state, &serial);
+
+            (void)printf("inplace backup_keep=10 syscalls=%llu ok\n", calls);
+        }
+        inplace_rotation_check(argv[1], argv[2], root, state, &serial);
+        inplace_write_failure_check(argv[1], argv[2], root, state, &serial);
+        inplace_meta_fault_sweep(argv[1], argv[2], root, state, &serial);
     }
     injected_eintr(argv[1], argv[2], root, &serial);
     determinism_check(argv[1], argv[2], root, &serial);

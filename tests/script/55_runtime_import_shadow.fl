@@ -1,0 +1,9 @@
+# Sprint 55 amendment A3: user config shadows the shipped runtime row.
+import io
+
+let dir = io.env("XDG_CONFIG_HOME") + "/yew/fl"
+io.mkdir(dir, true)
+io.write(dir + "/preset.cloud.fl", "let source = \"user copy\"\n")
+import "preset.cloud.fl" as cloud
+t.eq(cloud.source, "user copy")
+t.eq(batch, true)

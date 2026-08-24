@@ -452,7 +452,13 @@ one step.
 `import "lib/x.fl" as x` imports a **file**, resolved in this order:
 
 1. relative to the importing file,
-2. `$XDG_CONFIG_HOME/yew/fl/`.
+2. `$XDG_CONFIG_HOME/yew/fl/` when `XDG_CONFIG_HOME` is set,
+3. `$HOME/.config/yew/fl/` when `XDG_CONFIG_HOME` is unset,
+4. `$YEW_RUNTIME_DIR/`, or the installed runtime directory when
+   `YEW_RUNTIME_DIR` is unset.
+
+The runtime directory is searched last. A user copy under the config
+directory therefore shadows a shipped module with the same path.
 
 Modules are **cached by realpath**, so a module imported by two paths
 that resolve to one file is one instance.
@@ -655,7 +661,7 @@ it. A reserved row is a promise, not a change to the spec.
 |---|---|---|---|---|---|---|
 | A1 | 30 | 9 / 16 | error kinds 11 → 12, adding `"limit"` | stack/step-limit exhaustion is user-triggerable and fits none of the 11 closed kinds | 2026-08-08 | Sprint 30 implementation review |
 | A2 | 34 | 9 / 16 | error kinds 12 → 13, adding `"handle"` | a stale or closed editor handle is neither a type nor an index error; `catch` must distinguish "wrong argument" from "the buffer closed under you" | 2026-08-10 | Sprint 34 implementation review |
-| A3 | 55 | 11 | import resolution gains a fourth row, `$YEW_RUNTIME_DIR/`, searched **last** | shipped presets must be importable, and searching last lets a user's copy shadow the shipped one | reserved | — |
+| A3 | 55 | 11 | import resolution gains a fourth row, `$YEW_RUNTIME_DIR/`, searched **last** | shipped presets must be importable, and searching last lets a user's copy shadow the shipped one | 2026-08-24 | Sprint 55 implementation review |
 | A4 | 30 | 7 | §7's closure sentence reads "9 then 10", was "10 then 11" | §7 cited §14.1 as normative and then disagreed with it; `clamp(9, 0, 8)` is 8, so the first call yields 9 | 2026-08-08 | Sprint 30 implementation review |
 
 **A4 is out of sprint order, deliberately.** A2 and A3 were reserved

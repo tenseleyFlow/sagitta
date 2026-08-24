@@ -2,13 +2,14 @@
 # COVERS: buf.current buf.list buf.open buf.close buf.save buf.path buf.name
 # COVERS: buf.lang buf.len buf.lines buf.text buf.line buf.span buf.line_span
 # COVERS: buf.insert buf.delete buf.find buf.find_all buf.dirty buf.readonly
-# COVERS: buf.mark win.current win.list win.buf win.cursors win.selection
+# COVERS: buf.mark buf.opt buf.opt_set win.current win.list win.buf
+# COVERS: win.cursors win.selection
 # COVERS: win.split win.close win.focus win.viewport win.set_cursors cur.pos
 # COVERS: cur.line cur.col cur.anchor cur.span cur.goto cur.move cur.word
 # COVERS: cur.line_span cur.insert cur.is_primary cur.valid span.lo span.hi
 # COVERS: span.len span.text span.lines span.replace span.replace_lines
 # COVERS: span.prepend span.append span.delete span.yank span.valid opt.get opt.set
-# COVERS: ed.run ed.commands bind unbind set record replay
+# COVERS: ed.run ed.commands ed.msg bind unbind set record replay
 # COVERS: ai.backend
 # COVERS: kind:handle
 # ERROR_KIND: handle
@@ -83,6 +84,7 @@ try {
 # above.  Wrong receiver types must be rejected before any editor pointer
 # can be consulted; free functions must report the unavailable host.
 refuses("handle", fn() { buf.list() })
+refuses("handle", fn() { ed.msg("hello") })
 refuses("handle", fn() { ai.backend("local", {}) })
 refuses("handle", fn() { buf.open("missing") })
 refuses("type", fn() { buf.close(42) })
@@ -98,6 +100,8 @@ refuses("type", fn() { buf.delete(42, nil) })
 refuses("type", fn() { buf.find(42, nil) })
 refuses("type", fn() { buf.find_all(42, nil) })
 refuses("type", fn() { buf.dirty(42) })
+refuses("type", fn() { buf.opt(42, "save.strategy") })
+refuses("type", fn() { buf.opt_set(42, "save.strategy", "auto") })
 refuses("type", fn() { buf.readonly(42) })
 refuses("type", fn() { buf.mark(42, 0) })
 

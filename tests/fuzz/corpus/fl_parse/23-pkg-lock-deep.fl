@@ -1,0 +1,15 @@
+{
+  schema: 1,
+  plugins: {
+    "deep": {
+      url: "file:///tmp/deep",
+      shorthand: "",
+      rev: "0123456789abcdef0123456789abcdef01234567",
+      pin: "head",
+      tree: "0123456789abcdef",
+      installed_at: 1,
+      updated_at: 1,
+      future: {a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:nil}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}},
+    },
+  },
+}

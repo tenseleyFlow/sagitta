@@ -40,6 +40,15 @@ void test_fl_receiver_field_get_calls_bound_handle(void)
           "import win\n"
           "let w = win.current()\n"
           "return w.buf().len()\n", "0");
+    FL_EQ(&f.fl,
+          "import buf\n"
+          "let b = buf.current()\n"
+          "b.opt_set(\"ai.exclude_paths\", "
+          "[\"*.wolf-key\", \"generated/?\"])\n"
+          "let paths = b.opt(\"ai.exclude_paths\")\n"
+          "if paths[0] != \"*.wolf-key\" { error(\"bad first path\") }\n"
+          "if paths[1] != \"generated/?\" { error(\"bad second path\") }\n"
+          "return 2\n", "2");
     receiver_close(&f);
 }
 

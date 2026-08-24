@@ -762,6 +762,23 @@ bool yew_config_plugin_set_capability(Ed *ed, const char *plugin,
                               YEW_TRUST_PRUNE_DAYS_DEFAULT);
 }
 
+bool yew_config_plugin_drop_grants(Ed *ed, const char *plugin,
+                                   u32 *dropped)
+{
+    u32 count = 0U;
+
+    if (dropped != NULL)
+        *dropped = 0U;
+    if (ed == NULL || ed->config == NULL ||
+        !yew_trust_plugin_revoke_persisted(plugin, &count))
+        return false;
+    if (!yew_trust_db_load(&ed->config->trust_db))
+        return false;
+    if (dropped != NULL)
+        *dropped = count;
+    return true;
+}
+
 bool yew_config_workspace_plugins_trusted(const Ed *ed)
 {
     const YewConfigState *state;

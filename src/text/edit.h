@@ -39,6 +39,8 @@ typedef struct EditCtx {
 bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len);
 bool yew_edit_delete(EditCtx *ec, Span range);
 YewSaveErr yew_edit_save(EditCtx *ec, const char *path);
+YewSaveErr yew_edit_save_opts(EditCtx *ec, const char *path,
+                              const YewSaveOpts *opts);
 /* Internal: undo/navigation must establish durability before replay. */
 bool yew_edit_ensure_journal(EditCtx *ec);
 

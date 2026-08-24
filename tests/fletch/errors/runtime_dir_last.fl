@@ -1,0 +1,11 @@
+# SPEC: §11, §16
+# ERROR_KIND: import
+# ERROR: tried:
+# ERROR: /runtime/a3-missing.fl
+# EXIT: 1
+#
+# Amendment A3 makes the shipped runtime the final quoted-import candidate.
+# The file is intentionally absent: the diagnostic exposes every attempted
+# path, so reaching the runtime row is observable without installing a test
+# module into the product runtime.
+import "a3-missing.fl" as missing

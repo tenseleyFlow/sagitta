@@ -1,8 +1,8 @@
 # yew — session handoff
 
-**Written:** 2026-08-22. **Active implementation frontier:** Sprint 54,
-plugin packages, discovery, lifecycle, events, capabilities, and containment.
-Campaign 11 and Sprints 51–53 are complete; Campaign 12 is active.
+**Written:** 2026-08-24. **Active implementation frontier:** Sprint 55.5,
+the two shipped example plugins and their executable author-guide coverage.
+Campaign 11 and Sprints 51–55 are complete; Campaign 12 is active.
 
 ---
 
@@ -13,11 +13,11 @@ Read, in order:
 1. `.docs/plan/00-decisions.md`
 2. `.docs/plan/01-architecture.md`
 3. `.docs/plan/02-fletch.md`
-4. `.docs/sprints/12-plugins/s54-plugin-system.md`
+4. `.docs/sprints/12-plugins/s55_5-example-plugins.md`
 
-Sprint 54 is the binding implementation contract. Sprint 53 is complete; do
-not reopen its Git diff, hunk, blame, statusline, refresh, or directory-group
-contracts except where Sprint 54 explicitly consumes them.
+Sprint 55.5 is the binding implementation contract. Sprint 55 is complete; do
+not reopen its package, lockfile, integrity, save-policy, or cloud-preset
+contracts except where Sprint 55.5 explicitly consumes them.
 
 ## 1. Sprint 47 closeout
 
@@ -92,7 +92,7 @@ per-workspace grants, deny-pattern and path redaction, conservative local/cloud
 presets, the privacy page, and the four-state `[AI]` statusline badge. A fresh
 profile continues to make zero network syscalls.
 
-## 3. Sprint 52–53 closeout and Sprint 54 objective
+## 3. Sprint 52–55 closeout and Sprint 55.5 objective
 
 Sprint 52 completes F mode:
 
@@ -150,11 +150,45 @@ Local closeout evidence:
   slice below 3.7 ms, performs viewport lookup below 0.1 microsecond, and
   coalesces 200 edits into one diff.
 
-The exact pushed closeout SHA must pass the complete hosted matrix and the
-explicit on-demand Valgrind lane before Sprint 53 is treated as released.
-Sprint 54 now owns plugin manifests and XDG discovery, zero-residue lifecycle,
-the namespaced event bus, capability consent, error containment, and the
-`yew plug` CLI/picker. Distribution remains Sprint 55.
+Sprint 54 completed plugin manifests and deterministic XDG discovery,
+zero-residue lifecycle, the namespaced event bus, capability consent and
+containment, and the `yew plug` CLI/picker.
+
+Sprint 55 completes plugin distribution and the cloud-save preset:
+
+- `yew pkg` installs, updates, removes, lists and diagnoses Git-backed plugin
+  packages without a shell or a dependency on the FUSS Git module;
+- deterministic pure-literal lockfiles record exact revisions and a bespoke
+  content-tree drift hash, while crash intents recover installs/removals to a
+  complete before-or-after state and restore the exact prior trust policy;
+- managed-code drift revokes persisted capability grants and re-prompts on
+  first use instead of silently transferring consent to changed code;
+- the cloud preset selects in-place saves and content conflict checks only for
+  configured synced roots, retaining the normal atomic-save default elsewhere;
+- save-policy, symlink/hardlink preservation, backup rotation, recovery,
+  offline behavior, package docs, Fletch import behavior, fuzz corpora and all
+  three sprint performance budgets are covered in-tree.
+
+Local closeout evidence:
+
+- strict full GCC and Clang suites are green at 2,310 tests / 71,007,767
+  assertions, plus 89 scripts / 808 assertions, every PTY, Fletch 38/38,
+  package integration 50/50, round-trip, structural/docs gates, smoke and live
+  save torture;
+- the `MODULES=plugins` suite is green at 1,924 tests / 70,052,585 assertions
+  and exercises packages without the FUSS module;
+- Clang ASan/UBSan is green at 2,291 runnable tests / 71,007,449
+  assertions; the 5,000-iteration package-tree fuzz lane and focused package,
+  manifest, drift, save-policy and conflict-check Valgrind slices are clean;
+- tree-hash p99 is 0.723 ms against 3 ms, lock load/save p99 is 0.822 ms
+  against 1 ms, and cloud conflict-scan p99 is 0.207 ms against 2 ms;
+- the exact Wolf-file regression remains responsive while workspace indexing:
+  raw keypress p99 1.382 ms and paced arrow p99 1.624 ms against 5 ms.
+
+The pushed Sprint 55 closeout SHA must pass the complete hosted matrix and the
+explicit on-demand Valgrind lane before release. Sprint 55.5 now owns only the
+two shipped examples, their author-guide walkthroughs, and executable coverage
+of the frozen plugin API; its contract forbids new host code.
 
 ## 4. Campaign sequence
 
@@ -174,7 +208,11 @@ the namespaced event bus, capability consent, error containment, and the
 10. Sprint 52 — F mode tree, navigation, viewers and Git verbs (complete)
 11. Sprint 53 — editor Git hunks, blame, diff view and groups (complete;
     Campaign 11 closed)
-12. Sprint 54 — plugin packages, lifecycle, events and capabilities
+12. Sprint 54 — plugin manifests, lifecycle, events and capabilities
+    (complete)
+13. Sprint 55 — package distribution, integrity and cloud-save preset
+    (complete locally; hosted closeout gates pending)
+14. Sprint 55.5 — shipped example plugins and executable author-guide coverage
     (active frontier)
 
 ## 5. Daily Driver remains separate and pending
@@ -219,5 +257,11 @@ designated and logged before eligible implementation edits.
   as a sandbox in user-facing text.
 - A failed init or disable must leave zero registrations, timers, closures, or
   partial capability state behind.
-- Do not change performance baselines outside Sprint 56 calibration.
+- Package transactions must publish code disabled, durably commit the lock and
+  exact trust policy, then enable; recovery must complete the proven commit or
+  restore the byte-exact previous state.
+- Managed plugin drift never inherits persisted grants. Hashes detect ordinary
+  drift; they are explicitly not a cryptographic authenticity mechanism.
+- Do not relax existing performance baselines outside Sprint 56 calibration;
+  a sprint may add the new baseline files its own Definition of Done requires.
 - Do not mark Daily Driver `EARNED` from automated evidence.

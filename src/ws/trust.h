@@ -79,6 +79,12 @@ typedef struct YewTrustDb {
     void *impl;
 } YewTrustDb;
 
+typedef struct YewTrustWriteResult {
+    bool ok;
+    /* The trust file rename completed, even if its directory sync failed. */
+    bool committed;
+} YewTrustWriteResult;
+
 void yew_trust_db_init(YewTrustDb *db);
 void yew_trust_db_free(YewTrustDb *db);
 
@@ -86,9 +92,15 @@ void yew_trust_db_free(YewTrustDb *db);
  * forms use $XDG_STATE_HOME/yew/trust.fl.  A failed load leaves the
  * previous in-memory database untouched. */
 bool yew_trust_db_load_path(YewTrustDb *db, const char *path);
+YewTrustWriteResult yew_trust_db_write_path_result(YewTrustDb *db,
+                                                   const char *path,
+                                                   time_t now,
+                                                   u32 prune_days);
 bool yew_trust_db_write_path(YewTrustDb *db, const char *path, time_t now,
                              u32 prune_days);
 bool yew_trust_db_load(YewTrustDb *db);
+YewTrustWriteResult yew_trust_db_write_result(YewTrustDb *db, time_t now,
+                                              u32 prune_days);
 bool yew_trust_db_write(YewTrustDb *db, time_t now, u32 prune_days);
 
 /* AI disclosure grants are independent of workspace-config trust.  These
@@ -114,6 +126,15 @@ YewPluginGrant yew_trust_plugin_capability(const YewTrustDb *db,
 bool yew_trust_plugin_set_capability(YewTrustDb *db, const char *plugin,
                                      YewPluginCapability capability,
                                      YewPluginGrant grant);
+/* Count and revoke persisted capability decisions without disturbing the
+ * plugin's desired state or unknown future fields.  Drop-policy additionally
+ * removes the desired state and is the package-manager removal seam. */
+u32 yew_trust_plugin_grant_count(const YewTrustDb *db, const char *plugin);
+u32 yew_trust_plugin_drop_grants(YewTrustDb *db, const char *plugin);
+bool yew_trust_plugin_drop_policy(YewTrustDb *db, const char *plugin);
+
+/* Load, revoke, and atomically rewrite the standard XDG trust database. */
+bool yew_trust_plugin_revoke_persisted(const char *plugin, u32 *dropped);
 
 void yew_trust_probe_init(YewTrustProbe *probe);
 void yew_trust_probe_free(YewTrustProbe *probe);

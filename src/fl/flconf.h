@@ -58,6 +58,8 @@ YewPluginGrant yew_config_plugin_capability(const Ed *ed,
 bool yew_config_plugin_set_capability(Ed *ed, const char *plugin,
                                       YewPluginCapability capability,
                                       YewPluginGrant grant);
+bool yew_config_plugin_drop_grants(Ed *ed, const char *plugin,
+                                   u32 *dropped);
 bool yew_config_workspace_plugins_trusted(const Ed *ed);
 
 const char *yew_config_user_path(Ed *ed);
