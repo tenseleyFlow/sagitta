@@ -119,6 +119,8 @@ void test_fl_hook_order_mask_and_remove(void)
     (void)fl_hook_add(&f.hooks, 0U, FL_EV_BUF_OPEN, fake_fn(&f, 2U));
     removed = fl_hook_add(&f.hooks, 1U, FL_EV_BUF_OPEN, fake_fn(&f, 3U));
     (void)fl_hook_add(&f.hooks, 0U, FL_EV_BUF_OPEN, fake_fn(&f, 4U));
+    YEW_ASSERT_EQ_U64(fl_hook_origin(&f.hooks, removed), 1U);
+    YEW_ASSERT_EQ_U64(fl_hook_origin(&f.hooks, 0U), FL_ORIGIN_ID_NONE);
 
     fl_hook_fire(&f.hooks, NULL, FL_EV_BUF_OPEN, NULL, 0U);
     YEW_ASSERT_EQ_U64(f.ncalls, 4U);
@@ -130,6 +132,8 @@ void test_fl_hook_order_mask_and_remove(void)
     f.ncalls = 0U;
     f.masked_origin = 2U;
     YEW_ASSERT(fl_hook_remove(&f.hooks, removed));
+    YEW_ASSERT_EQ_U64(fl_hook_origin(&f.hooks, removed),
+                      FL_ORIGIN_ID_NONE);
     YEW_ASSERT(!fl_hook_remove(&f.hooks, removed));
     fl_hook_fire(&f.hooks, NULL, FL_EV_BUF_OPEN, NULL, 0U);
     YEW_ASSERT_EQ_U64(f.ncalls, 2U);

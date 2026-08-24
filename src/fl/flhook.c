@@ -161,6 +161,23 @@ static FlHook *hook_by_ledger(FlHookTable *t, u32 ledger_id)
     return &t->v[i];
 }
 
+u32 fl_hook_origin(const FlHookTable *t, u32 ledger_id)
+{
+    const FlRegistration *r;
+    u32 i;
+
+    if (t == NULL || ledger_id == 0U || ledger_id > t->ledger.n)
+        return FL_ORIGIN_ID_NONE;
+    r = &t->ledger.v[ledger_id - 1U];
+    if (!r->active || r->kind != (u8)REG_HOOK || r->handle == 0U)
+        return FL_ORIGIN_ID_NONE;
+    i = r->handle - 1U;
+    if (i >= t->n || !t->v[i].active ||
+        t->v[i].ledger_id != ledger_id)
+        return FL_ORIGIN_ID_NONE;
+    return t->v[i].origin;
+}
+
 bool fl_hook_remove(FlHookTable *t, u32 ledger_id)
 {
     FlHook *h;

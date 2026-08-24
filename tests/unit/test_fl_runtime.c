@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "edit/bind.h"
 #include "edit/ed.h"
 #include "edit/opt.h"
 #include "fl/flapi.h"
@@ -168,6 +169,37 @@ void test_fl_runtime_is_persistent_and_on_registers(void)
     YEW_ASSERT_NOT_NULL(vm);
     YEW_ASSERT(vm == yew_fl_vm(&ed));
     vm->root_origin.kind = (u8)FL_ORIGIN_CONFIG;
+#if YEW_WITH_PLUGINS
+    {
+        FlValue bind_args[3];
+        FlValue set_arg;
+        u32 plugin_origin;
+
+        plugin_origin = fl_origin_register(&ed, FL_ORIGIN_PLUGIN,
+                                           "/plugin/direct.fl", 0U);
+        YEW_ASSERT(plugin_origin != FL_ORIGIN_ID_NONE);
+        vm->root_origin.kind = (u8)FL_ORIGIN_PLUGIN;
+        vm->root_origin.principal_id = plugin_origin;
+
+        args[0] = FL_OBJ_V(FL_STR, fl_str_new(vm, "ws.open", 7U));
+        args[1] = runtime_native(vm, "runtime.plugin.on");
+        YEW_ASSERT(!fl_runtime_on(vm, args, 2U, &out));
+        YEW_ASSERT(runtime_error_field_contains(vm, "msg", "ctx.on"));
+
+        bind_args[0] = FL_OBJ_V(FL_STR, fl_str_new(vm, "leader", 6U));
+        bind_args[1] = FL_OBJ_V(FL_STR, fl_str_new(vm, "x", 1U));
+        bind_args[2] = runtime_native(vm, "runtime.plugin.bind");
+        YEW_ASSERT(!fl_bind_native(vm, bind_args, 3U, &out));
+        YEW_ASSERT(runtime_error_field_contains(vm, "msg", "ctx.bind"));
+
+        set_arg = FL_OBJ_V(FL_MAP, fl_map_new(vm));
+        YEW_ASSERT(!fl_api_set_options(vm, &set_arg, 1U, &out));
+        YEW_ASSERT(runtime_error_field_contains(vm, "msg", "ctx.set"));
+
+        vm->root_origin.kind = (u8)FL_ORIGIN_CONFIG;
+        vm->root_origin.principal_id = 0U;
+    }
+#endif
     args[0] = FL_OBJ_V(FL_STR, fl_str_new(vm, "ws.open", 7U));
     args[1] = runtime_native(vm, "runtime.ws.open");
     YEW_ASSERT(fl_runtime_on(vm, args, 2U, &out));

@@ -14,6 +14,12 @@
 #include "fl/origin.h"
 #include "fl/trace.h"
 #include "fl/vm.h"
+#ifndef YEW_WITH_PLUGINS
+#define YEW_WITH_PLUGINS 0
+#endif
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
 #include "ui/message.h"
 #include "util/buf.h"
 #include "util/log.h"
@@ -661,6 +667,16 @@ bool fl_bind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         free(sarg);
         return fl_raise(vm, "handle", "bind: callback has no editor origin");
     }
+#if YEW_WITH_PLUGINS
+    if (origin < vm->ed->origins.n &&
+        vm->ed->origins.v[origin].kind == (u8)FL_ORIGIN_PLUGIN &&
+        !yew_plug_ctx_registration_allowed(vm->ed, origin)) {
+        free(name);
+        free(sarg);
+        return fl_raise(vm, "capability",
+                        "plugin binds must be registered through ctx.bind");
+    }
+#endif
     seq = string_copy(seq_value);
     ok = add_modes(vm, mode, seq, cmd, iarg, sarg, fn, origin, out);
     free(seq);

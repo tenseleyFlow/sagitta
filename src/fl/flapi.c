@@ -16,6 +16,12 @@
 #include "fl/origin.h"
 #include "fl/fltxn.h"
 #include "fl/suggest.h"
+#ifndef YEW_WITH_PLUGINS
+#define YEW_WITH_PLUGINS 0
+#endif
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
 #include "search/regex.h"
 #include "text/mark.h"
 #include "text/piece.h"
@@ -1355,6 +1361,13 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     origin = fl_origin_of_frame(vm);
     if (origin == FL_ORIGIN_ID_NONE)
         return fl_raise(vm, "handle", "set: callback has no editor origin");
+#if YEW_WITH_PLUGINS
+    if (origin < vm->ed->origins.n &&
+        vm->ed->origins.v[origin].kind == (u8)FL_ORIGIN_PLUGIN &&
+        !yew_plug_ctx_registration_allowed(vm->ed, origin))
+        return fl_raise(vm, "capability",
+                        "plugin options must be registered through ctx.set");
+#endif
     caller = fl_cap_origin(vm);
     staged = yew_xcalloc(fl_map_count(map) == 0U ? 1U : fl_map_count(map),
                          sizeof(*staged));

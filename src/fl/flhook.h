@@ -118,6 +118,7 @@ bool fl_reg_remove(FlRegLedger *l, u32 ledger_id);
 /* Returns a stable, nonzero ledger id. */
 u32 fl_hook_add(FlHookTable *t, u32 origin, u32 event, FlValue fn);
 bool fl_hook_remove(FlHookTable *t, u32 ledger_id);
+u32 fl_hook_origin(const FlHookTable *t, u32 ledger_id);
 
 /* A nested same-event fire is dropped.  Other event recursion is bounded. */
 void fl_hook_fire(FlHookTable *t, FlVm *vm, u32 event,

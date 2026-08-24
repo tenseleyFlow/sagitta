@@ -12,6 +12,12 @@
 #include "fl/std.h"
 #include "fl/trace.h"
 #include "fl/vm.h"
+#ifndef YEW_WITH_PLUGINS
+#define YEW_WITH_PLUGINS 0
+#endif
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
 #include "ui/message.h"
 #include "util/arena.h"
 #include "util/buf.h"
@@ -90,11 +96,22 @@ static const char *first_line(const Bytebuf *text, char *out, size_t cap)
     return n == 0U ? "hook error" : out;
 }
 
+#if YEW_WITH_PLUGINS
+static bool runtime_plugin_origin(const Ed *ed, u32 origin)
+{
+    return ed != NULL && origin < ed->origins.n &&
+           ed->origins.v[origin].kind == (u8)FL_ORIGIN_PLUGIN;
+}
+#endif
+
 static void hook_notice(void *ctx, FlHookNotice what, u32 event,
                         u32 ledger_id, u32 errs, FlValue err)
 {
     Ed *ed = (Ed *)ctx;
     const char *name = fl_event_name(event);
+#if YEW_WITH_PLUGINS
+    u32 origin = fl_hook_origin(&ed->hooks, ledger_id);
+#endif
     Bytebuf trace;
     char line[256];
 
@@ -111,6 +128,10 @@ static void hook_notice(void *ctx, FlHookNotice what, u32 event,
                 "hook \"%s\" error (%lu/%lu): nesting depth exceeded",
                 name, (unsigned long)errs,
                 (unsigned long)ed->hooks.error_limit);
+#if YEW_WITH_PLUGINS
+        if (runtime_plugin_origin(ed, origin))
+            yew_plug_hook_error(ed, origin, err);
+#endif
         return;
     }
     if (what == FL_HOOK_NOTICE_DISABLED) {
@@ -132,6 +153,10 @@ static void hook_notice(void *ctx, FlHookNotice what, u32 event,
             (unsigned long)ed->hooks.error_limit,
             first_line(&trace, line, sizeof(line)));
     bytebuf_free(&trace);
+#if YEW_WITH_PLUGINS
+    if (runtime_plugin_origin(ed, origin))
+        yew_plug_hook_error(ed, origin, err);
+#endif
 }
 
 bool yew_fl_runtime_init(Ed *ed)
@@ -246,6 +271,17 @@ bool fl_runtime_on(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     origin = fl_origin_of_frame(vm);
     if (origin == FL_ORIGIN_ID_NONE)
         return fl_raise(vm, "handle", "on: callback has no editor origin");
+#if YEW_WITH_PLUGINS
+    if (runtime_plugin_origin(vm->ed, origin) &&
+        !yew_plug_ctx_registration_allowed(vm->ed, origin))
+        return fl_raise(vm, "capability",
+                        "plugin hooks must be registered through ctx.on");
+    if (runtime_plugin_origin(vm->ed, origin) &&
+        !yew_plug_event_allowed(vm->ed, origin, event->b, event->len))
+        return fl_raise(vm, "capability",
+                        "plugin manifest does not declare event '%.*s'",
+                        (int)event->len, event->b);
+#endif
     *out = FL_INT_V((i64)fl_hook_add(&vm->ed->hooks, origin, id, args[1]));
     return true;
 }
@@ -255,8 +291,13 @@ void yew_fl_hook_fire(Ed *ed, FlEvent event,
 {
     FlVm *vm = yew_fl_vm(ed);
 
-    if (vm != NULL)
+    if (vm != NULL) {
         fl_hook_fire(&ed->hooks, vm, (u32)event, args, nargs);
+#if YEW_WITH_PLUGINS
+        if (ed->hooks.depth == 0U)
+            yew_plug_drain_pending(ed);
+#endif
+    }
 }
 
 void yew_fl_hook_buffer(Ed *ed, FlEvent event, Buffer *buffer)
