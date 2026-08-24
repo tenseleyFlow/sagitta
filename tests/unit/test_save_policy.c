@@ -82,8 +82,12 @@ void test_save_policy_defaults_match_option_table(void)
     YEW_ASSERT_NOT_NULL(desc);
     YEW_ASSERT_EQ_I64(desc->dflt.as.i, YEW_SAVE_BACKUP_KEEP_DEFAULT);
     desc = yew_opt_desc("plug.verify_on_load", 19U);
+#if YEW_WITH_PLUGINS
     YEW_ASSERT_NOT_NULL(desc);
     YEW_ASSERT(desc->dflt.as.b);
+#else
+    YEW_ASSERT_NULL(desc);
+#endif
     policy_atomic_result_reports_commit();
 }
 
