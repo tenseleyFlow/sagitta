@@ -184,6 +184,9 @@ Local closeout evidence:
   against 1 ms, and cloud conflict-scan p99 is 0.207 ms against 2 ms;
 - the exact Wolf-file regression remains responsive while workspace indexing:
   raw keypress p99 1.382 ms and paced arrow p99 1.624 ms against 5 ms.
+  The defect was editor-side, not a Wolf LSP: startup discovery repeatedly
+  scheduled already-due background slices. Yew now spaces completed indexing
+  slices by 8 ms and yields them behind the input grace deadline.
 
 The pushed Sprint 55 closeout SHA must pass the complete hosted matrix and the
 explicit on-demand Valgrind lane before release. Sprint 55.5 now owns only the
