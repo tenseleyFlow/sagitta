@@ -7770,7 +7770,229 @@ static void case_s53_blame(PtyCtx *c)
 }
 #endif
 
+#if YEW_WITH_PLUGINS
+/* ---------------------------------------------------------------- */
+/* Sprint 54: plugin picker lifecycle                               */
+/* ---------------------------------------------------------------- */
+
+static bool s54_plugin_fixture(PtyCtx *c)
+{
+    static const u8 manifest[] =
+        "{ name: \"picker-demo\", version: \"1.2.3\", api: 1, "
+        "entry: \"src/main.fl\", capabilities: [], events: [], "
+        "description: \"deterministic picker fixture\" }\n";
+    static const u8 source[] = "fn init(ctx) { nil }\n";
+    char plugins[PATH_MAX];
+    char plugin[PATH_MAX];
+    char source_dir[PATH_MAX];
+    char manifest_path[PATH_MAX];
+    char source_path[PATH_MAX];
+    int n;
+
+    n = snprintf(plugins, sizeof(plugins), "%s/yew/plugins", c->state_dir);
+    if (n <= 0 || (size_t)n >= sizeof(plugins) ||
+        (mkdir(plugins, 0700) != 0 && errno != EEXIST))
+        goto fail;
+    n = snprintf(plugin, sizeof(plugin), "%s/picker-demo", plugins);
+    if (n <= 0 || (size_t)n >= sizeof(plugin) ||
+        (mkdir(plugin, 0700) != 0 && errno != EEXIST))
+        goto fail;
+    n = snprintf(source_dir, sizeof(source_dir), "%s/src", plugin);
+    if (n <= 0 || (size_t)n >= sizeof(source_dir) ||
+        (mkdir(source_dir, 0700) != 0 && errno != EEXIST))
+        goto fail;
+    n = snprintf(manifest_path, sizeof(manifest_path), "%s/plugin.fl",
+                 plugin);
+    if (n <= 0 || (size_t)n >= sizeof(manifest_path))
+        goto fail;
+    n = snprintf(source_path, sizeof(source_path), "%s/main.fl", source_dir);
+    if (n <= 0 || (size_t)n >= sizeof(source_path))
+        goto fail;
+    if (!write_bytes(manifest_path, manifest, sizeof(manifest) - 1U) ||
+        !write_bytes(source_path, source, sizeof(source) - 1U))
+        goto fail;
+    return true;
+
+fail:
+    ptc_check(c, false, "Sprint 54 plugin fixture creation failed");
+    return false;
+}
+
+static bool s54_plugin_picker_open(PtyCtx *c)
+{
+    if (!s54_plugin_fixture(c))
+        return false;
+    ptc_spawn(c, ptc_yew_bin(c), NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.plug.list");
+    s18_settle_after_keys(c, "enter");
+    ptc_settle(c, 0);
+    return !c->failed;
+}
+
+static void case_s54_plugin_picker(PtyCtx *c)
+{
+    if (!s54_plugin_picker_open(c))
+        return;
+    ptc_snapshot(c, "s54_plugin_picker");
+    force_quit(c);
+}
+
+static void case_s54_plugin_toggle(PtyCtx *c)
+{
+    if (!s54_plugin_picker_open(c))
+        return;
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.plug.list");
+    s18_settle_after_keys(c, "enter");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, "s54_plugin_toggle");
+    force_quit(c);
+}
+
+static bool s54_capability_prompt_open(PtyCtx *c)
+{
+    static const u8 manifest[] =
+        "{ name: \"cap-demo\", version: \"1.0.0\", api: 1, "
+        "entry: \"src/main.fl\", capabilities: [\"fs\"], events: [], "
+        "description: \"capability prompt fixture\" }\n";
+    static const u8 source[] =
+        "import io\n"
+        "fn init(ctx) { io.read(\"/etc/hostname\") }\n";
+    char plugins[PATH_MAX];
+    char plugin[PATH_MAX];
+    char source_dir[PATH_MAX];
+    char manifest_path[PATH_MAX];
+    char source_path[PATH_MAX];
+    int n;
+
+    n = snprintf(plugins, sizeof(plugins), "%s/yew/plugins", c->state_dir);
+    if (n <= 0 || (size_t)n >= sizeof(plugins) ||
+        (mkdir(plugins, 0700) != 0 && errno != EEXIST))
+        goto fail;
+    n = snprintf(plugin, sizeof(plugin), "%s/cap-demo", plugins);
+    if (n <= 0 || (size_t)n >= sizeof(plugin) ||
+        (mkdir(plugin, 0700) != 0 && errno != EEXIST))
+        goto fail;
+    n = snprintf(source_dir, sizeof(source_dir), "%s/src", plugin);
+    if (n <= 0 || (size_t)n >= sizeof(source_dir) ||
+        (mkdir(source_dir, 0700) != 0 && errno != EEXIST))
+        goto fail;
+    n = snprintf(manifest_path, sizeof(manifest_path), "%s/plugin.fl",
+                 plugin);
+    if (n <= 0 || (size_t)n >= sizeof(manifest_path))
+        goto fail;
+    n = snprintf(source_path, sizeof(source_path), "%s/main.fl", source_dir);
+    if (n <= 0 || (size_t)n >= sizeof(source_path) ||
+        !write_bytes(manifest_path, manifest, sizeof(manifest) - 1U) ||
+        !write_bytes(source_path, source, sizeof(source) - 1U))
+        goto fail;
+    ptc_spawn(c, ptc_yew_bin(c), NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    return !c->failed;
+
+fail:
+    ptc_check(c, false, "Sprint 54 capability fixture creation failed");
+    return false;
+}
+
+static bool s54_capability_answer(PtyCtx *c, const char *answer)
+{
+    if (!s54_capability_prompt_open(c))
+        return false;
+    s18_settle_after_keys(c, answer);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.plug.list");
+    s18_settle_after_keys(c, "enter");
+    ptc_settle(c, 0);
+    return !c->failed;
+}
+
+static void s54_check_cap_persistence(PtyCtx *c, const char *decision)
+{
+    char trust[PATH_MAX];
+    int n = snprintf(trust, sizeof(trust), "%s/yew/trust.fl",
+                     c->state_dir);
+
+    if (n <= 0 || (size_t)n >= sizeof(trust)) {
+        ptc_check(c, false, "Sprint 54 trust path overflow");
+        return;
+    }
+    if (decision == NULL) {
+        ptc_check(c, !file_contains(trust, "cap-demo"),
+                  "once capability answer was persisted");
+        return;
+    }
+    ptc_check(c, file_contains(trust, "cap-demo") &&
+                     file_contains(trust, decision),
+              "always capability answer was not persisted");
+}
+
+static void case_s54_capability_prompt(PtyCtx *c)
+{
+    if (!s54_capability_prompt_open(c))
+        return;
+    ptc_snapshot(c, "s54_capability_prompt");
+    s18_settle_after_keys(c, "d");
+    force_quit(c);
+}
+
+static void case_s54_capability_allow_once(PtyCtx *c)
+{
+    if (!s54_capability_answer(c, "a"))
+        return;
+    s54_check_cap_persistence(c, NULL);
+    ptc_snapshot(c, "s54_capability_allow_once");
+    force_quit(c);
+}
+
+static void case_s54_capability_allow_always(PtyCtx *c)
+{
+    if (!s54_capability_answer(c, "A"))
+        return;
+    s54_check_cap_persistence(c, "fs: \"allow\"");
+    ptc_snapshot(c, "s54_capability_allow_always");
+    force_quit(c);
+}
+
+static void case_s54_capability_deny_once(PtyCtx *c)
+{
+    if (!s54_capability_answer(c, "d"))
+        return;
+    s54_check_cap_persistence(c, NULL);
+    ptc_snapshot(c, "s54_capability_deny_once");
+    force_quit(c);
+}
+
+static void case_s54_capability_deny_always(PtyCtx *c)
+{
+    if (!s54_capability_answer(c, "D"))
+        return;
+    s54_check_cap_persistence(c, "fs: \"deny\"");
+    ptc_snapshot(c, "s54_capability_deny_always");
+    force_quit(c);
+}
+#endif
+
 const PtyCase yew_pty_cases[] = {
+#if YEW_WITH_PLUGINS
+    C(s54_capability_prompt, modern, 24U, 80U,
+      case_s54_capability_prompt),
+    C(s54_capability_allow_once, modern, 24U, 80U,
+      case_s54_capability_allow_once),
+    C(s54_capability_allow_always, modern, 24U, 80U,
+      case_s54_capability_allow_always),
+    C(s54_capability_deny_once, modern, 24U, 80U,
+      case_s54_capability_deny_once),
+    C(s54_capability_deny_always, modern, 24U, 80U,
+      case_s54_capability_deny_always),
+    C(s54_plugin_picker, modern, 24U, 80U, case_s54_plugin_picker),
+    C(s54_plugin_toggle, modern, 24U, 80U, case_s54_plugin_toggle),
+#endif
 #if YEW_WITH_FUSS
     C(git_editor_blame_fits, modern, 24U, 120U, case_s53_blame),
     C(git_editor_blame_omit_cjk, modern, 24U, 40U, case_s53_blame),

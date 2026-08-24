@@ -46,6 +46,14 @@ run_capture()
     "$@" >"$out" 2>"$err" || rc=$?
 }
 
+run_capture_in()
+{
+    run_dir=$1
+    shift
+    rc=0
+    (CDPATH='' cd "$run_dir" && "$@") >"$out" 2>"$err" || rc=$?
+}
+
 fail()
 {
     echo "smoke: $1 failed" >&2
@@ -97,6 +105,69 @@ echo "smoke: help ok"
 
 case " $smoke_modules " in
     *" plugins "*)
+        plug_data=$tmp/plugin-data
+        plug_config=$tmp/plugin-config
+        plug_state=$tmp/plugin-state
+        plug_ws=$tmp/plugin-workspace
+        mkdir -p "$plug_data/yew/plugins" "$plug_config/yew/plugins" \
+            "$plug_state" "$plug_ws/.yew/plugins"
+        for spec in \
+            "$plug_data/yew/plugins/active:active:1.0.0" \
+            "$plug_data/yew/plugins/disabled:disabled:1.1.0" \
+            "$plug_data/yew/plugins/same:same:1.2.0" \
+            "$plug_config/yew/plugins/same:same:2.0.0" \
+            "$plug_ws/.yew/plugins/same:same:3.0.0"
+        do
+            plug_dir=${spec%%:*}
+            rest=${spec#*:}
+            plug_name=${rest%%:*}
+            plug_version=${rest#*:}
+            mkdir -p "$plug_dir/src"
+            printf '{ name: "%s", version: "%s", api: 1, entry: "src/main.fl", capabilities: ["fs"], events: [], description: "%s fixture" }\n' \
+                "$plug_name" "$plug_version" "$plug_name" \
+                >"$plug_dir/plugin.fl"
+            printf 'fn init(ctx) { nil }\n' >"$plug_dir/src/main.fl"
+        done
+        mkdir -p "$plug_config/yew/plugins/broken/src"
+        printf '{ name: "broken", version: "9.0.0", api: 1, entry: "src/main.fl", capabilities: [], events: [], mystery: true }\n' \
+            >"$plug_config/yew/plugins/broken/plugin.fl"
+        printf 'fn init(ctx) { nil }\n' \
+            >"$plug_config/yew/plugins/broken/src/main.fl"
+
+        run_capture_in "$plug_ws" env \
+            XDG_DATA_HOME="$plug_data" XDG_CONFIG_HOME="$plug_config" \
+            XDG_STATE_HOME="$plug_state" \
+            "$bin" plug disable disabled
+        expect_rc 0 "plugin disable fixture setup"
+        [ ! -s "$out" ] || fail "plugin disable fixture setup stdout"
+        [ ! -s "$err" ] || fail "plugin disable fixture setup stderr"
+
+        run_capture_in "$plug_ws" env \
+            XDG_DATA_HOME="$plug_data" XDG_CONFIG_HOME="$plug_config" \
+            XDG_STATE_HOME="$plug_state" \
+            "$bin" plug list
+        expect_rc 0 "plugin list"
+        [ ! -s "$err" ] || fail "plugin list stderr"
+        printf '%s\t%s\t%s\t%s\n' \
+            active enabled 1.0.0 data \
+            disabled disabled 1.1.0 data \
+            same shadowed 1.2.0 data \
+            broken error '' config \
+            same shadowed 2.0.0 config \
+            same blocked 3.0.0 workspace \
+            >"$tmp/plugin-list.expected"
+        cmp -s "$out" "$tmp/plugin-list.expected" || \
+            fail "plugin list state golden"
+        cp "$out" "$tmp/plugin-list.first"
+        run_capture_in "$plug_ws" env \
+            XDG_DATA_HOME="$plug_data" XDG_CONFIG_HOME="$plug_config" \
+            XDG_STATE_HOME="$plug_state" \
+            "$bin" plug list
+        expect_rc 0 "plugin list repeat"
+        [ ! -s "$err" ] || fail "plugin list repeat stderr"
+        cmp -s "$out" "$tmp/plugin-list.first" || \
+            fail "plugin list determinism"
+        echo "smoke: plugin list states and determinism ok"
         ;;
     *)
         run_capture "$bin" plug list
@@ -242,9 +313,43 @@ run_capture "$bin" --batch --clean "$batch_dir/ok.fl" \
 expect_rc 3 "batch unreadable file"
 expect_stderr_contains "$batch_dir/missing.txt" "batch unreadable file"
 
-run_capture "$bin" --batch --grant formatter:fs.write "$batch_dir/ok.fl"
-expect_rc 1 "batch deferred grant"
-expect_stderr_contains "Sprint 54" "batch deferred grant"
+case " $smoke_modules " in
+    *" plugins "*)
+        grant_data=$tmp/grant-data
+        grant_config=$tmp/grant-config
+        grant_runtime=$tmp/grant-runtime
+        mkdir -p "$grant_data/yew/plugins/active/src"
+        mkdir -p "$grant_config/yew"
+        mkdir -p "$grant_runtime"
+        printf '%s\n' \
+            '{ name: "active", version: "1.0.0", api: 1, entry: "src/main.fl", capabilities: ["fs"], events: [], description: "grant fixture" }' \
+            >"$grant_data/yew/plugins/active/plugin.fl"
+        printf 'fn init(ctx) { nil }\n' \
+            >"$grant_data/yew/plugins/active/src/main.fl"
+        printf 'let lsp = {servers: {}}\n' >"$grant_config/yew/init.fl"
+        printf 'let lsp = {servers: {}}\n' >"$grant_runtime/init.fl"
+        run_capture env \
+            XDG_DATA_HOME="$grant_data" XDG_CONFIG_HOME="$grant_config" \
+            XDG_STATE_HOME="$plug_state" \
+            YEW_RUNTIME_DIR="$grant_runtime" \
+            "$bin" --batch --grant active:fs "$batch_dir/ok.fl"
+        expect_rc 0 "batch plugin grant"
+        [ "$(cat "$out")" = "batch-ok" ] || \
+            fail "batch plugin grant stdout"
+        [ ! -s "$err" ] || fail "batch plugin grant stderr"
+        ;;
+    *)
+        run_capture "$bin" --batch --clean --grant active:fs \
+            "$batch_dir/ok.fl"
+        expect_rc 1 "stripped batch plugin grant"
+        [ ! -s "$out" ] || fail "stripped batch plugin grant stdout"
+        printf '%s\n' \
+            'yew: error: built without plugin support (MODULES=plugins)' \
+            >"$tmp/plugin-grant-error.expected"
+        cmp -s "$err" "$tmp/plugin-grant-error.expected" || \
+            fail "stripped batch plugin grant diagnostic"
+        ;;
+esac
 
 run_capture "$bin" --batch --replay q "$batch_dir/ok.fl"
 expect_rc 1 "batch deferred replay"
