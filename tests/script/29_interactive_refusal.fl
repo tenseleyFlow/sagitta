@@ -24,6 +24,7 @@ let alternatives = {
     "ed.macro.record": "recording needs keys; none exist",
     "ed.ai.enable": "AI cannot be enabled non-interactively; set " +
                     "ai.enable in init.fl if you have read :ai privacy",
+    "ed.plug.list": "use `yew plug list`",
     "ed.git.commit": "no batch alternative",
     "ed.git.commit.amend": "no batch alternative",
     "ed.git.push": "no batch alternative",
@@ -63,7 +64,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 39)
+t.eq(seen, 40)
 
 # Hunk discard stopped being prompt-backed when Sprint 53 made it a direct,
 # undoable buffer edit.  It is still intentionally unavailable in batch mode,
