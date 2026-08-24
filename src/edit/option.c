@@ -1162,16 +1162,54 @@ u32 yew_opt_checkpoint(Ed *ed, const char *name, u32 len,
     return slot + 1U;
 }
 
+static u32 matching_registration(Ed *ed, u32 origin_id,
+                                 const YewOptUndo *want)
+{
+    YewOptHistory *history;
+    const YewOptUndo *newest = NULL;
+    u32 i;
+
+    if (ed == NULL || want == NULL ||
+        (history = ed->opt_history) == NULL)
+        return 0U;
+    for (i = 0U; i < history->n; i++) {
+        const YewOptUndo *undo = &history->v[i];
+
+        if (!undo->active || undo->desc_index != want->desc_index ||
+            undo->scope != want->scope ||
+            undo->target_id != want->target_id ||
+            (newest != NULL && undo->order <= newest->order))
+            continue;
+        newest = undo;
+    }
+    if (newest != NULL && newest->ledger_id != 0U &&
+        newest->ledger_id <= ed->hooks.ledger.n) {
+        const FlRegistration *reg =
+            &ed->hooks.ledger.v[newest->ledger_id - 1U];
+
+        if (reg->active && reg->kind == (u8)REG_OPTION &&
+            reg->origin_id == origin_id)
+            return newest->ledger_id;
+    }
+    return 0U;
+}
+
 u32 yew_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint, bool *created)
 {
     YewOptUndo *undo = undo_by_checkpoint(ed, checkpoint);
     YewOptHistory *history;
+    u32 existing;
 
     if (created != NULL)
         *created = false;
     if (undo == NULL || !undo->pending || undo->active ||
         origin_id == FL_ORIGIN_ID_NONE)
         return 0U;
+    existing = matching_registration(ed, origin_id, undo);
+    if (existing != 0U) {
+        undo->ledger_id = existing;
+        return existing;
+    }
     undo->ledger_id = fl_reg_add(&ed->hooks.ledger, origin_id, REG_OPTION,
                                  checkpoint);
     history = history_get(ed);
