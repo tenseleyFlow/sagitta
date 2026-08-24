@@ -33,6 +33,9 @@
 #include "mod/git/git.h"
 #include "mod/git/editor.h"
 #include "mod/git/fussmode.h"
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
 #include "syn/defs.h"
 #include "util/log.h"
 
@@ -734,6 +737,9 @@ void yew_ed_free(Ed *ed)
     yew_git_state_free(ed);
     /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
+#if YEW_WITH_PLUGINS
+    yew_plug_free(ed);
+#endif
     yew_macrolib_free(ed, ed->macrolib);
     ed->macrolib = NULL;
     yew_bind_free(ed);
@@ -1614,6 +1620,9 @@ void yew_ed_prompt(Ed *ed, PromptKind prompt)
     case YEW_PROMPT_AI_BLOCK:
         /* The AI module owns the matched rule, line, and action text. */
         break;
+    case YEW_PROMPT_PLUGIN_CAP:
+        /* The plugin module owns the plugin/capability names and choices. */
+        break;
     }
     if (prompt != YEW_PROMPT_NONE)
         ed->msg.prompt = true;
@@ -1859,6 +1868,14 @@ static bool prompt_key(Ed *ed, Key key)
 
         return yew_ai_block_prompt_key(ed, answer);
     }
+#if YEW_WITH_PLUGINS
+    if (ed->prompt == YEW_PROMPT_PLUGIN_CAP) {
+        u32 answer = code == YEW_KEY_ESCAPE ? YEW_KEY_ESCAPE :
+                     (key.mods == 0U && code <= 0x7fU ? code : 0U);
+
+        return yew_plug_prompt_key(ed, answer);
+    }
+#endif
     if (code == YEW_KEY_ESCAPE) {
         ed->quit_after_save = false;
         yew_ed_prompt(ed, YEW_PROMPT_NONE);
@@ -2388,6 +2405,11 @@ static int ed_driver_inner(const char *path, const YewEdStartup *startup)
      */
     if (path == NULL && !ed.clean)
         (void)yew_ws_restore(&ed);
+#if YEW_WITH_PLUGINS
+    /* Plugins see the restored workspace, but load before ws.open so their
+     * declared workspace hooks observe the first session boundary. */
+    (void)yew_plug_boot(&ed);
+#endif
     yew_symwalk_start(&ed);
     /* The workspace hook sees restored tabs and buffers, and runs before
      * the first paint.  Startup used to paint once before restore, which

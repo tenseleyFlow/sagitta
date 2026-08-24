@@ -50,7 +50,8 @@ typedef enum {
      * cache" must never share a keystroke with those. */
     YEW_PROMPT_WS_FORGET,
     YEW_PROMPT_WORKSPACE_TRUST,
-    YEW_PROMPT_AI_BLOCK
+    YEW_PROMPT_AI_BLOCK,
+    YEW_PROMPT_PLUGIN_CAP
 } PromptKind;
 
 typedef struct FlRuntime FlRuntime;
@@ -64,6 +65,7 @@ typedef struct AiState AiState;
 typedef struct GitCtx GitCtx;
 typedef struct GitEditorState GitEditorState;
 typedef struct FussMode FussMode;
+typedef struct PlugSys PlugSys;
 struct OptStored;
 
 typedef struct YewEdStartup {
@@ -185,6 +187,10 @@ struct Ed {
     GitEditorState *git_editor;
     /* Sprint 52: F mode owns its tree, path selection and transient UI. */
     FussMode *fuss;
+    /* Sprint 54: discovery, lifecycle, grants and picker state remain
+     * module-owned; core only keeps the opaque lifetime anchor. */
+    PlugSys *plug;
+    u32 plug_error_limit;
     Msg msg;
     /* Cursor-local diagnostic echo; real messages always take precedence. */
     Msg msg_hint;

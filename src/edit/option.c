@@ -12,6 +12,9 @@
 #include "fl/flhook.h"
 #include "fl/macrolib.h"
 #include "mod/ai/ai.h"
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
 #include "search/searchui.h"
 #include "text/register.h"
 #include "text/undo.h"
@@ -214,6 +217,11 @@ const OptDesc yew_opts[] = {
     {"hooks.error_limit", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(YEW_HOOK_ERROR_LIMIT_DEFAULT), NULL, 1, 100, NULL,
      option_changed, "Disable a failing hook after this many errors"},
+#if YEW_WITH_PLUGINS
+    {"plug.error_limit", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(5), NULL,
+     1, 100, NULL, option_changed,
+     "Disable a failing plugin after this many errors"},
+#endif
     {"theme", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR("quiver-dark"), NULL,
      0, 0, NULL, option_changed, "Active theme name"},
     {"theme_auto", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
@@ -665,6 +673,10 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
         yew_ed_syn_bind(buffer);
     } else if (strcmp(desc->name, "hooks.error_limit") == 0) {
         fl_hook_error_limit(&ed->hooks, (u32)nu->as.i);
+#if YEW_WITH_PLUGINS
+    } else if (strcmp(desc->name, "plug.error_limit") == 0) {
+        yew_plug_error_limit_set(ed, (u32)nu->as.i);
+#endif
     } else if (strcmp(desc->name, "theme") == 0 &&
                !ed->theme_option_inflight) {
         char error[192];

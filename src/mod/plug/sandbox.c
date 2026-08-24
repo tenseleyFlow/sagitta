@@ -146,18 +146,23 @@ static bool cap_one(FlVm *vm, Plug *plug, YewCap cap)
 
 bool yew_plug_cap_check(FlVm *vm, u32 need)
 {
+    FlOrigin origin;
     Plug *plug;
     u32 origin_id;
     u32 covered = 0U;
     u32 cap;
 
-    if (vm == NULL || vm->ed == NULL || vm->ed->plug == NULL)
+    if (vm == NULL)
         return false;
+    origin = fl_cap_origin(vm);
+    if (vm->ed == NULL || vm->ed->plug == NULL)
+        return fl_raise(vm, "capability", "%s denied to %s",
+                        fl_cap_name(need), fl_origin_name(vm, &origin));
     origin_id = fl_origin_of_frame(vm);
     plug = plug_by_origin(vm->ed, origin_id);
     if (plug == NULL || plug->mf.name_text == NULL)
-        return fl_raise(vm, "capability", "%s denied to a plugin",
-                        fl_cap_name(need));
+        return fl_raise(vm, "capability", "%s denied to %s",
+                        fl_cap_name(need), fl_origin_name(vm, &origin));
     for (cap = 0U; cap < (u32)YEW_CAP__N; cap++) {
         u32 mask = yew_plug_cap_fl_mask((YewCap)cap);
 
@@ -215,6 +220,7 @@ bool yew_plug_prompt_key(Ed *ed, u32 code)
     u32 bit;
     bool allow;
     bool always;
+    bool retry;
 
     if (ed == NULL || ed->plug == NULL || !ed->plug->prompt.active)
         return false;
@@ -248,6 +254,7 @@ bool yew_plug_prompt_key(Ed *ed, u32 code)
         return true;
     }
     bit = 1U << (u32)prompt->cap;
+    retry = prompt->retry_enable;
     if (allow) {
         plug->session_allow |= bit;
         plug->session_deny &= ~bit;
@@ -256,5 +263,11 @@ bool yew_plug_prompt_key(Ed *ed, u32 code)
         plug->session_allow &= ~bit;
     }
     prompt_close(ed);
+    if (allow && retry && plug->st != PLUG_ENABLED &&
+        !yew_plug_enable(ed, plug, NULL) &&
+        !(ed->plug->prompt.active && ed->plug->prompt.plug == plug)) {
+        yew_msg(ed, YEW_MSG_ERROR, "plugin \"%s\" retry failed",
+                plug->mf.name_text);
+    }
     return true;
 }

@@ -71,6 +71,11 @@ bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out);
  */
 bool fl_module_eval_path(FlVm *vm, const char *path, FlOrigin origin,
                          FlValue *out);
+/* Loads one exact path through the principal-aware module cache.  Plugin
+ * entry modules use this so teardown can tombstone the entry and every
+ * helper with one principal-id walk. */
+bool fl_module_load_path(FlVm *vm, const char *path, FlOrigin origin,
+                         FlValue *out);
 bool fl_module_eval_source(FlVm *vm, const char *path,
                            const char *source, size_t len,
                            FlOrigin origin, FlValue *out);

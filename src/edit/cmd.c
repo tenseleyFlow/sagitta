@@ -27,6 +27,7 @@
 #include "mod/git/git.h"
 #include "mod/git/editor.h"
 #include "mod/lsp/lsp.h"
+#include "mod/plug/plug.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
 #include "ui/complmenu.h"
@@ -1112,8 +1113,16 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN, "Explain conflict resolution scope", NULL},
     {"ed.ai.open", yew_ai_cmd_open, YEW_ARITY_NONE, 0U,
      "Explain the ghost-only AI surface", NULL},
-    DEFER("ed.plug.reload", YEW_ARITY_OPT_STR, 0U, 54,
-          "reload a plugin")
+    {"ed.plug.list", yew_plug_cmd_list, YEW_ARITY_NONE,
+     YEW_CMD_PROMPTS, "Open the plugin picker", NULL},
+    {"ed.plug.enable", yew_plug_cmd_enable, YEW_ARITY_STR, 0U,
+     "Enable a plugin", NULL},
+    {"ed.plug.disable", yew_plug_cmd_disable, YEW_ARITY_STR, 0U,
+     "Disable a plugin", NULL},
+    {"ed.plug.reload", yew_plug_cmd_reload, YEW_ARITY_STR, 0U,
+     "Reload a plugin", NULL},
+    {"ed.plug.info", yew_plug_cmd_info, YEW_ARITY_STR, 0U,
+     "Show plugin manifest, grants, and last error", NULL}
 };
 
 #undef DEFER

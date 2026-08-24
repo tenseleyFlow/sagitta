@@ -466,6 +466,47 @@ bool fl_module_eval_path(FlVm *vm, const char *path, FlOrigin origin,
     return eval_source(vm, path, src, len, origin, out);
 }
 
+bool fl_module_load_path(FlVm *vm, const char *path, FlOrigin origin,
+                         FlValue *out)
+{
+    char *real;
+    char *src = NULL;
+    size_t len = 0U;
+    u32 path_id;
+    u32 idx;
+
+    if (vm == NULL || path == NULL || out == NULL)
+        return false;
+    *out = FL_NIL_V;
+    real = realpath(path, NULL);
+    if (real == NULL)
+        return fl_raise(vm, "import", "cannot read %s", path);
+    path_id = yew_intern(vm->in, real, strlen(real));
+    idx = mod_find(vm, path_id, origin.kind, origin.principal_id);
+    if (idx != (u32)-1) {
+        if (vm->mods.v[idx].state == (u8)FL_MOD_LOADING) {
+            free(real);
+            return cycle_err(vm, idx);
+        }
+        *out = FL_OBJ_V(FL_MAP, vm->mods.v[idx].exports);
+        free(real);
+        return true;
+    }
+    if (!read_source(vm, real, &src, &len)) {
+        free(real);
+        return false;
+    }
+    origin.path_id = path_id;
+    idx = mod_add(vm, path_id, origin, 0U);
+    if (!run_body(vm, idx, real, src, len)) {
+        free(real);
+        return false;
+    }
+    *out = FL_OBJ_V(FL_MAP, vm->mods.v[idx].exports);
+    free(real);
+    return true;
+}
+
 /* ---------------------------------------------------------------- */
 
 bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
