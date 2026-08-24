@@ -2085,6 +2085,8 @@ const YewTest yew_tests[] = {
     T(plug_discovery_public_seam_uses_loaded_config_policy),
     T(plug_sandbox_capability_mappings_are_closed),
     T(plug_sandbox_declared_headless_prompt_and_persistence_policy),
+    T(plug_overlay_shape_clips_to_exclusive_visible_lines),
+    T(plug_overlay_errors_are_contained_and_disabled_regs_do_not_run),
     T(plug_lifecycle_enable_passes_ctx_and_registers_command_and_hook),
     T(plug_lifecycle_failing_init_leaves_zero_residue_and_trace),
     T(plug_lifecycle_ctx_on_rejects_event_missing_from_manifest),

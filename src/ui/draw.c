@@ -30,6 +30,9 @@
 #if YEW_WITH_LSP
 #include "mod/lsp/diag.h"
 #endif
+#if YEW_WITH_PLUGINS
+#include "mod/plug/overlay.h"
+#endif
 
 static u8 themed_overlay(Cell *style, const ThemeEnt *theme)
 {
@@ -264,6 +267,65 @@ static void overlay_span(Grid *grid, const Win *w, u16 row,
         x1 = right;
     yew_grid_overlay(grid, row, x0, x1, style, fields);
 }
+
+#if YEW_WITH_PLUGINS
+typedef struct PlugOverlayDraw {
+    Ed *ed;
+    Win *win;
+    u16 lo;
+    u16 hi;
+} PlugOverlayDraw;
+
+static void draw_plugin_span(void *ctx, Span selected, u8 attr)
+{
+    PlugOverlayDraw *draw = ctx;
+    Cell style = draw->ed->grid.blank;
+    u8 fields = themed_overlay(&style, &yew_theme_tab(draw->ed)[attr]);
+    u16 screen_row;
+
+    if (fields == 0U)
+        return;
+    for (screen_row = draw->lo; screen_row < draw->hi; screen_row++) {
+        LineNo line;
+        u32 sub;
+        Span displayed;
+
+        if (!yew_vp_line_of_row(draw->win, screen_row, &line, &sub))
+            continue;
+        displayed = draw->win->vp.wrap ?
+                    yew_wrap_row(draw->win, line, sub) :
+                    line_content_span(draw->win->buf->tb, line);
+        if (selected.hi <= displayed.lo || selected.lo >= displayed.hi)
+            continue;
+        overlay_span(&draw->ed->grid, draw->win,
+                     (u16)(draw->win->rect.y + screen_row), displayed,
+                     selected, &style, fields);
+    }
+}
+
+static void draw_plugin_rows(Ed *ed, Win *win, u16 lo, u16 hi)
+{
+    PlugOverlayDraw draw = {ed, win, lo, hi};
+    LineNo first;
+    LineNo last;
+    u32 sub;
+    u16 row;
+
+    if (lo >= hi || !yew_vp_line_of_row(win, 0U, &first, &sub))
+        return;
+    row = win->rect.h;
+    do {
+        row--;
+        if (yew_vp_line_of_row(win, row, &last, &sub))
+            break;
+    } while (row != 0U);
+    if (row == 0U && !yew_vp_line_of_row(win, row, &last, &sub))
+        return;
+    if (last.v != UINT64_MAX)
+        last.v++;
+    yew_plug_overlay_run(ed, win, first, last, draw_plugin_span, &draw);
+}
+#endif
 
 static void draw_selection_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 {
@@ -813,6 +875,9 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     draw_git_diff_rows(ed, w, lo, hi);
     yew_git_blame_draw(ed, w, lo, hi);
     draw_git_diff_intra_rows(ed, w, lo, hi);
+#if YEW_WITH_PLUGINS
+    draw_plugin_rows(ed, w, lo, hi);
+#endif
     draw_selection_rows(ed, w, lo, hi);
     draw_search_rows(ed, w, lo, hi);
 #if YEW_WITH_LSP
