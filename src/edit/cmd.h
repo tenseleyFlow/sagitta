@@ -177,6 +177,10 @@ CmdId yew_cmd_register_entry(const CmdEntry *entry);
 bool yew_cmd_register_plugin(const char *plugin_segment, const char *local,
                              CmdFn fn, const char *help, CmdId *out,
                              char *err, size_t errcap);
+bool yew_cmd_register_plugin_flags(const char *plugin_segment,
+                                   const char *local, CmdFn fn,
+                                   const char *help, u32 flags, CmdId *out,
+                                   char *err, size_t errcap);
 bool yew_cmd_unregister(CmdId id);
 CmdId yew_cmd_lookup(const char *name, u32 len);
 /*

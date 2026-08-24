@@ -89,7 +89,8 @@ static bool ctx_on(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
                         plug->mf.name_text,
                         (int)name->len, name->b);
     ledger_id = fl_hook_add(&vm->ed->hooks, owner, event, args[2]);
-    *out = FL_INT_V((i64)ledger_id);
+    (void)ledger_id;
+    *out = FL_NIL_V;
     return true;
 }
 
@@ -108,6 +109,15 @@ static void command_segment(const char *name, char out[33])
 static void command_push(PlugSys *sys, CmdId id, u32 owner, FlValue fn)
 {
     PlugCmd *entry;
+    u32 i;
+
+    for (i = 0U; i < sys->ncmds; i++) {
+        entry = &sys->cmds[i];
+        if (!entry->active) {
+            *entry = (PlugCmd){id, owner, fn, true};
+            return;
+        }
+    }
 
     if (sys->ncmds == sys->capcmds) {
         u32 want = sys->capcmds == 0U ? 8U : sys->capcmds * 2U;
@@ -120,6 +130,77 @@ static void command_push(PlugSys *sys, CmdId id, u32 owner, FlValue fn)
     }
     entry = &sys->cmds[sys->ncmds++];
     *entry = (PlugCmd){id, owner, fn, true};
+}
+
+static bool command_flag(const FlStr *name, u32 *flag)
+{
+    static const struct {
+        const char *name;
+        u32 flag;
+    } table[] = {
+        {"repeatable", YEW_CMD_REPEATABLE},
+        {"takes_count", YEW_CMD_TAKES_COUNT},
+        {"needs_win", YEW_CMD_NEEDS_WIN},
+        {"changes_buffer", YEW_CMD_CHANGES_BUFFER},
+        {"prompts", YEW_CMD_PROMPTS}
+    };
+    u32 i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(table); i++)
+        if (name->len == strlen(table[i].name) &&
+            memcmp(name->b, table[i].name, name->len) == 0) {
+            *flag = table[i].flag;
+            return true;
+        }
+    return false;
+}
+
+static bool command_forbidden_flag(const FlStr *name)
+{
+    return (name->len == 10U &&
+            memcmp(name->b, "recordable", 10U) == 0) ||
+           (name->len == 8U && memcmp(name->b, "deferred", 8U) == 0);
+}
+
+static bool command_flags(FlVm *vm, FlValue value, u32 *out)
+{
+    FlMap *map;
+    u32 flags = 0U;
+    u32 i;
+
+    if (value.t != (u8)FL_MAP)
+        return fl_raise(vm, "type", "ctx.command opts must be a map");
+    map = (FlMap *)value.as.o;
+    for (i = 0U; i < map->n; i++) {
+        const FlMapEnt *entry = &map->ent[i];
+        FlStr *name;
+        u32 flag;
+
+        if (entry->dead)
+            continue;
+        if (entry->k.t != (u8)FL_STR || entry->v.t != (u8)FL_BOOL)
+            return fl_raise(vm, "type",
+                            "ctx.command opts must map names to booleans");
+        name = (FlStr *)entry->k.as.o;
+        if (!command_flag(name, &flag)) {
+            if (command_forbidden_flag(name) && entry->v.as.b)
+                return fl_raise(vm, "value",
+                                "ctx.command flag '%.*s' is host-only",
+                                (int)name->len, name->b);
+            if (command_forbidden_flag(name))
+                continue;
+            return fl_raise(vm, "name", "unknown ctx.command flag '%.*s'",
+                            (int)name->len, name->b);
+        }
+        if (entry->v.as.b)
+            flags |= flag;
+    }
+    if ((flags & YEW_CMD_REPEATABLE) != 0U &&
+        (flags & YEW_CMD_TAKES_COUNT) != 0U)
+        return fl_raise(vm, "value",
+                        "ctx.command repeatable and takes_count conflict");
+    *out = flags;
+    return true;
 }
 
 static CmdStatus plugin_command_invoke(CmdCtx *cx)
@@ -163,8 +244,9 @@ static bool ctx_command(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     char error[128];
     CmdId id;
     u32 owner;
+    u32 flags = 0U;
 
-    if (!owner_args(vm, args, nargs, 2U, 2U, &owner))
+    if (!owner_args(vm, args, nargs, 2U, 3U, &owner))
         return false;
     local = arg_string(vm, args[1], "ctx.command name");
     if (local == NULL || local->len == 0U || local->len > 32U)
@@ -173,19 +255,22 @@ static bool ctx_command(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     if (!callable_arity(args[2], 0U))
         return fl_raise(vm, "arity",
                         "plugin command callback must take no arguments");
+    if (nargs == 4U && !command_flags(vm, args[3], &flags))
+        return false;
     plug = yew_plug_by_origin(vm->ed, owner);
     if (plug == NULL)
         return fl_raise(vm, "handle", "plugin context owner is gone");
     command_segment(plug->mf.name_text, plugin);
     (void)memcpy(name, local->b, local->len);
     name[local->len] = '\0';
-    if (!yew_cmd_register_plugin(plugin, name, plugin_command_invoke,
-                                 "Run a plugin command", &id,
-                                 error, sizeof(error)))
+    if (!yew_cmd_register_plugin_flags(plugin, name,
+                                       plugin_command_invoke,
+                                       "Run a plugin command", flags, &id,
+                                       error, sizeof(error)))
         return fl_raise(vm, "name", "ctx.command: %s", error);
     command_push(vm->ed->plug, id, owner, args[2]);
     (void)fl_reg_add(&vm->ed->hooks.ledger, owner, REG_CMD, id.v);
-    *out = FL_INT_V((i64)id.v);
+    *out = FL_NIL_V;
     return true;
 }
 
@@ -203,6 +288,8 @@ static bool ctx_bind(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     ok = fl_bind_native(vm, args + 1, nargs - 1U, out);
     sys->ctx_registration = false;
     sys->ctx_origin = 0U;
+    if (ok)
+        *out = FL_NIL_V;
     return ok;
 }
 
@@ -226,24 +313,36 @@ static bool ctx_set(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
                                        args + 1, nargs - 1U, out);
     sys->ctx_registration = false;
     sys->ctx_origin = 0U;
+    if (ok)
+        *out = FL_NIL_V;
     return ok;
 }
 
+static void value_reg_push(PlugSys *sys, u32 handle, u32 owner,
+                           RegKind kind, FlValue value);
+
 static bool ctx_attr(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
 {
+    PlugSys *sys;
     FlStr *name;
     u32 owner;
+    u32 handle;
     u8 attr;
 
     if (!owner_args(vm, args, nargs, 1U, 1U, &owner))
         return false;
-    (void)owner;
     name = arg_string(vm, args[1], "ctx.attr name");
     if (name == NULL)
         return false;
     if (!yew_syn_attr_id(name->b, name->len, &attr))
         return fl_raise(vm, "name", "unknown syntax attribute '%.*s'",
                         (int)name->len, name->b);
+    sys = vm->ed->plug;
+    handle = sys->next_handle++;
+    if (handle == 0U)
+        YEW_BUG("plugin registration handle overflow");
+    value_reg_push(sys, handle, owner, REG_ATTR, FL_INT_V((i64)attr));
+    (void)fl_reg_add(&vm->ed->hooks.ledger, owner, REG_ATTR, handle);
     *out = FL_INT_V((i64)attr);
     return true;
 }
@@ -252,6 +351,15 @@ static void value_reg_push(PlugSys *sys, u32 handle, u32 owner,
                            RegKind kind, FlValue value)
 {
     PlugValueReg *entry;
+    u32 i;
+
+    for (i = 0U; i < sys->nregs; i++) {
+        entry = &sys->regs[i];
+        if (!entry->active) {
+            *entry = (PlugValueReg){handle, owner, (u8)kind, value, true};
+            return;
+        }
+    }
 
     if (sys->nregs == sys->capregs) {
         u32 want = sys->capregs == 0U ? 8U : sys->capregs * 2U;
@@ -282,23 +390,75 @@ static bool ctx_overlay(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         YEW_BUG("plugin registration handle overflow");
     value_reg_push(sys, handle, owner, REG_OVERLAY, args[1]);
     (void)fl_reg_add(&vm->ed->hooks.ledger, owner, REG_OVERLAY, handle);
-    *out = FL_INT_V((i64)handle);
+    *out = FL_NIL_V;
     return true;
 }
 
 static bool ctx_msg(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
 {
+    Plug *plug;
     FlStr *message;
+    MsgSev severity = YEW_MSG_INFO;
     u32 owner;
 
-    if (!owner_args(vm, args, nargs, 1U, 1U, &owner))
+    if (!owner_args(vm, args, nargs, 1U, 2U, &owner))
         return false;
-    (void)owner;
     message = arg_string(vm, args[1], "ctx.msg text");
     if (message == NULL)
         return false;
-    yew_msg(vm->ed, YEW_MSG_INFO, "%.*s", (int)message->len, message->b);
+    if (nargs == 3U) {
+        FlStr *level = arg_string(vm, args[2], "ctx.msg level");
+
+        if (level == NULL)
+            return false;
+        if (level->len == 4U && memcmp(level->b, "info", 4U) == 0)
+            severity = YEW_MSG_INFO;
+        else if (level->len == 4U && memcmp(level->b, "warn", 4U) == 0)
+            severity = YEW_MSG_WARN;
+        else if (level->len == 5U && memcmp(level->b, "error", 5U) == 0)
+            severity = YEW_MSG_ERROR;
+        else
+            return fl_raise(vm, "value",
+                            "ctx.msg level must be info, warn, or error");
+    }
+    plug = yew_plug_by_origin(vm->ed, owner);
+    if (plug == NULL)
+        return fl_raise(vm, "handle", "plugin context owner is gone");
+    yew_msg(vm->ed, severity, "[%s] %.*s", plug->mf.name_text,
+            (int)message->len, message->b);
     *out = FL_NIL_V;
+    return true;
+}
+
+static bool ctx_ws_root(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
+{
+    const char *root;
+    u32 owner;
+
+    if (!owner_args(vm, args, nargs, 0U, 0U, &owner))
+        return false;
+    (void)owner;
+    root = yew_ws_root(vm->ed);
+    *out = FL_OBJ_V(FL_STR, fl_str_new(vm, root, (u32)strlen(root)));
+    return true;
+}
+
+static bool ctx_ws_state_dir(FlVm *vm, FlValue *args, u32 nargs,
+                             FlValue *out)
+{
+    u32 owner;
+
+    if (!owner_args(vm, args, nargs, 0U, 0U, &owner))
+        return false;
+    (void)owner;
+    if (vm->ed->clean || vm->ed->headless || !vm->ed->state.ready ||
+        vm->ed->state.key.stateless) {
+        *out = FL_NIL_V;
+        return true;
+    }
+    *out = FL_OBJ_V(FL_STR,
+                    fl_str_new(vm, vm->ed->state.key.dir,
+                               (u32)strlen(vm->ed->state.key.dir)));
     return true;
 }
 
@@ -361,7 +521,7 @@ bool yew_plug_context_build(Ed *ed, Plug *plug, FlValue *out)
     fl_gc_protect(vm, FL_OBJ_V(FL_MAP, ctx));
     ok = map_native(vm, ctx, "on", "ctx.on", ctx_on, 2U, 2U,
                     plug->origin_id) &&
-         map_native(vm, ctx, "command", "ctx.command", ctx_command, 2U, 2U,
+         map_native(vm, ctx, "command", "ctx.command", ctx_command, 2U, 3U,
                     plug->origin_id) &&
          map_native(vm, ctx, "bind", "ctx.bind", ctx_bind, 3U, 4U,
                     plug->origin_id) &&
@@ -371,7 +531,7 @@ bool yew_plug_context_build(Ed *ed, Plug *plug, FlValue *out)
                     plug->origin_id) &&
          map_native(vm, ctx, "overlay", "ctx.overlay", ctx_overlay, 1U, 1U,
                     plug->origin_id) &&
-         map_native(vm, ctx, "msg", "ctx.msg", ctx_msg, 1U, 1U,
+         map_native(vm, ctx, "msg", "ctx.msg", ctx_msg, 1U, 2U,
                     plug->origin_id);
     if (ok && builtin(vm, "buf", &value))
         ok = map_put(vm, ctx, "buf", value);
@@ -383,10 +543,10 @@ bool yew_plug_context_build(Ed *ed, Plug *plug, FlValue *out)
         ok = false;
     ws = fl_map_new(vm);
     fl_gc_protect(vm, FL_OBJ_V(FL_MAP, ws));
-    ok = ok && map_put(vm, ws, "root",
-                       FL_OBJ_V(FL_STR,
-                                fl_str_new(vm, yew_ws_root(ed),
-                                           (u32)strlen(yew_ws_root(ed)))));
+    ok = ok && map_native(vm, ws, "root", "ctx.ws.root", ctx_ws_root,
+                          0U, 0U, plug->origin_id) &&
+         map_native(vm, ws, "state_dir", "ctx.ws.state_dir",
+                    ctx_ws_state_dir, 0U, 0U, plug->origin_id);
     ws->h.oflags |= (u16)FL_OF_FROZEN;
     ok = ok && map_put(vm, ctx, "ws", FL_OBJ_V(FL_MAP, ws));
     fl_gc_release(vm, 1U);
@@ -432,12 +592,17 @@ bool yew_plug_registration_remove(Ed *ed, const FlRegistration *reg)
     if (reg->kind == (u8)REG_CMD) {
         for (i = 0U; i < sys->ncmds; i++) {
             PlugCmd *entry = &sys->cmds[i];
+            bool removed;
 
             if (!entry->active || entry->id.v != reg->handle)
                 continue;
+            removed = yew_cmd_unregister(entry->id);
             entry->active = false;
             entry->fn = FL_NIL_V;
-            return yew_cmd_unregister(entry->id);
+            while (sys->ncmds != 0U &&
+                   !sys->cmds[sys->ncmds - 1U].active)
+                sys->ncmds--;
+            return removed;
         }
         return false;
     }
@@ -451,6 +616,9 @@ bool yew_plug_registration_remove(Ed *ed, const FlRegistration *reg)
                 continue;
             entry->active = false;
             entry->value = FL_NIL_V;
+            while (sys->nregs != 0U &&
+                   !sys->regs[sys->nregs - 1U].active)
+                sys->nregs--;
             return true;
         }
     }

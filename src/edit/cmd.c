@@ -1650,11 +1650,15 @@ static void plugin_register_error(char *err, size_t errcap,
     err[len] = '\0';
 }
 
-bool yew_cmd_register_plugin(const char *plugin_segment, const char *local,
-                             CmdFn fn, const char *help, CmdId *out,
-                             char *err, size_t errcap)
+bool yew_cmd_register_plugin_flags(const char *plugin_segment,
+                                   const char *local, CmdFn fn,
+                                   const char *help, u32 flags, CmdId *out,
+                                   char *err, size_t errcap)
 {
     static const char prefix[] = "ed.plug.";
+    const u32 allowed_flags = YEW_CMD_REPEATABLE | YEW_CMD_TAKES_COUNT |
+                              YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+                              YEW_CMD_PROMPTS;
     CmdDesc desc;
     char name[74];
     size_t plugin_len;
@@ -1677,6 +1681,12 @@ bool yew_cmd_register_plugin(const char *plugin_segment, const char *local,
         plugin_register_error(err, errcap, "invalid plugin command descriptor");
         return false;
     }
+    if ((flags & ~allowed_flags) != 0U ||
+        ((flags & YEW_CMD_REPEATABLE) != 0U &&
+         (flags & YEW_CMD_TAKES_COUNT) != 0U)) {
+        plugin_register_error(err, errcap, "invalid plugin command flags");
+        return false;
+    }
     offset = sizeof(prefix) - 1U;
     (void)memcpy(name, prefix, offset);
     (void)memcpy(name + offset, plugin_segment, plugin_len);
@@ -1692,11 +1702,19 @@ bool yew_cmd_register_plugin(const char *plugin_segment, const char *local,
         plugin_register_error(err, errcap, "plugin command already registered");
         return false;
     }
-    desc = (CmdDesc){name, fn, YEW_ARITY_NONE, 0U, help, NULL};
+    desc = (CmdDesc){name, fn, YEW_ARITY_NONE, flags, help, NULL};
     *out = register_desc(&desc);
     if (err != NULL && errcap != 0U)
         err[0] = '\0';
     return true;
+}
+
+bool yew_cmd_register_plugin(const char *plugin_segment, const char *local,
+                             CmdFn fn, const char *help, CmdId *out,
+                             char *err, size_t errcap)
+{
+    return yew_cmd_register_plugin_flags(plugin_segment, local, fn, help,
+                                         0U, out, err, errcap);
 }
 
 bool yew_cmd_unregister(CmdId id)
