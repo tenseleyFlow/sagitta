@@ -12,8 +12,7 @@
 #include "fl/value.h"
 #include "fl/vm.h"
 
-static const u32 ALL_CAPS = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                            (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+static const u32 ALL_CAPS = FL_CAP_ALL;
 
 static void origin_ed_open(Ed *ed)
 {

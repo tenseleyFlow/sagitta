@@ -667,8 +667,7 @@ static u64 sample_config_program(void *ud)
     editor_env_open(&e);
     origin = (FlOrigin){(u8)FL_ORIGIN_BUILTIN,
                         yew_intern(&e.fl.in, arg->name, strlen(arg->name)),
-                        (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                            (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
+                        FL_CAP_ALL};
     yew_bind_batch_begin(&e.ed);
     t0 = now_ns();
     (void)fl_diag_add_file(&e.fl.dc, arg->name, arg->src, strlen(arg->src));

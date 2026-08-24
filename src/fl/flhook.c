@@ -9,7 +9,8 @@
 static const char *const EVENT_NAMES[FL_EV__N] = {
     "buf.open",    "buf.change", "buf.save",   "buf.saved",
     "buf.close",   "mode.enter", "mode.leave", "win.focus",
-    "cursor.move", "ws.open",    "ws.close",   "ed.idle"
+    "cursor.move", "ws.open",    "ws.close",   "plug.enable",
+    "plug.disable", "ed.idle"
 };
 
 const char *fl_event_name(u32 event)

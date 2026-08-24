@@ -55,9 +55,7 @@ void fl_origin_reg_init(FlOriginReg *r)
      * load order would mean a session with no config gives id 0 to
      * whatever registered first.
      */
-    reg_push(r, FL_ORIGIN_CONFIG, "the user config",
-             (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                 (u32)FL_CAP_SHELL | (u32)FL_CAP_NET);
+    reg_push(r, FL_ORIGIN_CONFIG, "the user config", FL_CAP_ALL);
 }
 
 void fl_origin_reg_free(FlOriginReg *r)
@@ -226,6 +224,7 @@ const char *fl_cap_name(u32 cap)
     case FL_CAP_FS_WRITE: return "fs.write";
     case FL_CAP_SHELL:    return "shell";
     case FL_CAP_NET:      return "net";
+    case FL_CAP_CLIPBOARD: return "clipboard";
     default:              return "capability";
     }
 }

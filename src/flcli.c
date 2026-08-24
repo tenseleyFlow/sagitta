@@ -166,8 +166,7 @@ static char *slurp(const char *path, size_t *len, Arena *arena)
  * from outside -- a suite that can only run as the CLI cannot test
  * §13 at all, and the alternative was a test-only backdoor.
  */
-static u32 g_caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                    (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+static u32 g_caps = FL_CAP_ALL;
 static FlOriginKind g_origin = FL_ORIGIN_CLI;
 
 /* "all" | "none" | fs.read,fs.write,shell,net.  False on an unknown
@@ -187,8 +186,7 @@ static bool parse_caps(const char *s, u32 *out)
         return true;
     }
     if (strcmp(s, "all") == 0) {
-        *out = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-               (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+        *out = FL_CAP_ALL;
         return true;
     }
     while (*s != '\0') {

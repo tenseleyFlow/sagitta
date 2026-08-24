@@ -23,6 +23,8 @@ typedef enum FlEvent {
     FL_EV_CURSOR_MOVE,
     FL_EV_WS_OPEN,
     FL_EV_WS_CLOSE,
+    FL_EV_PLUG_ENABLE,
+    FL_EV_PLUG_DISABLE,
     FL_EV_ED_IDLE,
     FL_EV__N
 } FlEvent;
@@ -38,7 +40,10 @@ typedef enum RegKind {
     REG_HOOK = 0,
     REG_BIND,
     REG_OPTION,
-    REG_CMD
+    REG_CMD,
+    REG_ATTR,
+    REG_OVERLAY,
+    REG_TIMER
 } RegKind;
 
 typedef struct FlRegistration {

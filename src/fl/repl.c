@@ -201,7 +201,7 @@ static void repl_caps(FlRepl *r, Bytebuf *out)
     FlOrigin o = fl_cap_origin(r->vm);
     static const u32 BITS[] = {
         (u32)FL_CAP_FS_READ, (u32)FL_CAP_FS_WRITE,
-        (u32)FL_CAP_SHELL, (u32)FL_CAP_NET
+        (u32)FL_CAP_SHELL, (u32)FL_CAP_NET, (u32)FL_CAP_CLIPBOARD
     };
     size_t i;
 
@@ -716,8 +716,7 @@ static int repl_main(bool selftest_bug)
      * the user is sitting at it. */
     vm.root_origin.kind = (u8)FL_ORIGIN_REPL;
     vm.root_origin.path_id = 0U;
-    vm.root_origin.caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                          (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+    vm.root_origin.caps = FL_CAP_ALL;
     yew_input_init(&input, &tty.caps);
     /* A fourth history file beside the editor's three. */
     hist = yew_hist_open("fl");

@@ -70,8 +70,13 @@ enum {
     FL_CAP_FS_READ  = 1U << 0,
     FL_CAP_FS_WRITE = 1U << 1,
     FL_CAP_SHELL    = 1U << 2,
-    FL_CAP_NET      = 1U << 3
+    FL_CAP_NET      = 1U << 3,
+    FL_CAP_CLIPBOARD = 1U << 4
 };
+
+#define FL_CAP_ALL ((u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE | \
+                    (u32)FL_CAP_SHELL | (u32)FL_CAP_NET |       \
+                    (u32)FL_CAP_CLIPBOARD)
 
 typedef struct FlOrigin {
     u8 kind;         /* FlOriginKind                                     */

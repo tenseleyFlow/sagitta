@@ -308,8 +308,7 @@ static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
     FlMap *globals;
     FlClosure *closure;
     u32 file_id;
-    u32 caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-               (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+    u32 caps = FL_CAP_ALL;
 
     if (rt == NULL || vm == NULL || unit->path == NULL)
         return false;

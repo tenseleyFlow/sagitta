@@ -29,9 +29,7 @@ static const char *eval_first_line(const Bytebuf *text, char *out,
 
 static FlOrigin runtime_origin(void)
 {
-    return (FlOrigin){(u8)FL_ORIGIN_CONFIG, 0U,
-                      (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                          (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
+    return (FlOrigin){(u8)FL_ORIGIN_CONFIG, 0U, FL_CAP_ALL};
 }
 
 static FlFn *compile_owned(FlRuntime *rt, const u8 *source, size_t len,
@@ -78,8 +76,7 @@ FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
     origin = (FlOrigin){(u8)FL_ORIGIN_CLI,
                         yew_intern(&rt->interner, realpath_label,
                                    strlen(realpath_label)),
-                        (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                            (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
+                        FL_CAP_ALL};
     rt->vm.root_origin = origin;
     return compile_owned(rt, source, len, realpath_label, origin);
 }

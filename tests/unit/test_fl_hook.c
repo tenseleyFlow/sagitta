@@ -92,11 +92,12 @@ void test_fl_hook_event_inventory(void)
     static const char *const names[] = {
         "buf.open",    "buf.change", "buf.save",   "buf.saved",
         "buf.close",   "mode.enter", "mode.leave", "win.focus",
-        "cursor.move", "ws.open",    "ws.close",   "ed.idle"
+        "cursor.move", "ws.open",    "ws.close",   "plug.enable",
+        "plug.disable", "ed.idle"
     };
     u32 i;
 
-    YEW_ASSERT_EQ_U64(FL_EV__N, 12U);
+    YEW_ASSERT_EQ_U64(FL_EV__N, 14U);
     for (i = 0U; i < (u32)YEW_ARRAY_LEN(names); i++) {
         u32 parsed = 99U;
 

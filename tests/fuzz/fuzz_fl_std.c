@@ -347,8 +347,7 @@ static bool check_fl_std(const u8 *data, size_t len, char *why,
      * filesystem -- but the origin should not be the reason a call
      * fails, or the fuzzer would only ever see "capability". */
     vm.root_origin.kind = (u8)FL_ORIGIN_CLI;
-    vm.root_origin.caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                          (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+    vm.root_origin.caps = FL_CAP_ALL;
 
     /* The counts are the sprint's tables; a native added without being
      * fuzzed shows up here rather than in a later campaign. */
