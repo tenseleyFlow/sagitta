@@ -7028,6 +7028,10 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_settle(c, 80);
         ptc_check(c, !c->pty.reaped,
                   "entering F mode outside a repository exited yew");
+        /* Workspace discovery may publish an otherwise identical frame
+         * while this screen is settling.  The grid is the contract; the
+         * cumulative synchronized-update count is scheduler state. */
+        c->vt.sync_pairs_unstable = true;
         ptc_snapshot_sgr(c, name);
         s52_finish(c);
         return;
@@ -7724,7 +7728,6 @@ static bool s53_blame_fixture(PtyCtx *c, char *repo, size_t repo_cap)
 static void case_s53_blame(PtyCtx *c)
 {
     char repo[PATH_MAX];
-    u32 frame;
 
     if (!s53_blame_fixture(c, repo, sizeof(repo)))
         return;
@@ -7746,16 +7749,17 @@ static void case_s53_blame(PtyCtx *c)
     if (strstr(c->test->name, "stale") != NULL) {
         ptc_keys(c, "i");
         s53_wait_cursor(c, 6U, false);
-        frame = c->vt.nsync_pairs;
         ptc_bytes(c, "X");
-        ptc_wait_sync_pairs(c, frame + 1U);
+        s53_wait_screen(c, "Xshort blamed line  ▏ Yew PTY");
         ptc_check(c, s52_screen_contains(
                          &c->vt,
                          "Xshort blamed line  ▏ Yew PTY"),
                   "edited line did not retain stale blame");
-        frame = c->vt.nsync_pairs;
         ptc_keys(c, "esc");
-        ptc_wait_sync_pairs(c, frame + 1U);
+        /* Background index paints are allowed between a key write and its
+         * mode transition.  Wait for the state the Escape key promises,
+         * rather than mistaking the next unrelated frame for its paint. */
+        s53_wait_cursor(c, 2U, false);
         ptc_check(c, c->vt.cursor_shape == 2U &&
                          c->vt.cur_r != c->vt.rows - 1,
                   "stale blame did not return to normal mode");
