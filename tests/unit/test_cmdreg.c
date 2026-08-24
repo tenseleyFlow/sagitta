@@ -18,11 +18,13 @@ static u32 probe_calls;
 static u32 probe_count;
 static u32 tap_calls;
 static CmdId tap_id;
+static CmdId probe_invoked_id;
 
 static CmdStatus probe_repeat(CmdCtx *cx)
 {
     probe_calls++;
     probe_count = cx->count;
+    probe_invoked_id = cx->invoked_id;
     return YEW_CMD_OK;
 }
 
@@ -95,10 +97,12 @@ void test_cmd_registry_invocation_and_deferred(void)
     CmdCtx cx = {0};
     CmdId repeat;
     CmdId takes;
+    u32 active_before;
     u32 i;
 
     yew_cmd_shutdown();
     yew_cmd_init();
+    active_before = yew_cmd_active_count();
     fake_ed.win = &fake_win;
     repeat = yew_cmd_register(&repeat_desc);
     takes = yew_cmd_register(&count_desc);
@@ -107,6 +111,7 @@ void test_cmd_registry_invocation_and_deferred(void)
     cx.source = YEW_SRC_TEST;
     probe_calls = 0U;
     probe_count = 0U;
+    probe_invoked_id = YEW_CMD_NONE;
     tap_calls = 0U;
     yew_cmd_set_record_tap(probe_tap);
     YEW_ASSERT_EQ_I64(yew_cmd_invoke(repeat, &cx), YEW_CMD_OK);
@@ -114,6 +119,26 @@ void test_cmd_registry_invocation_and_deferred(void)
     YEW_ASSERT_EQ_U64(probe_count, 4U);
     YEW_ASSERT_EQ_U64(tap_calls, 1U);
     YEW_ASSERT_EQ_U64(tap_id.v, repeat.v);
+    YEW_ASSERT_EQ_U64(probe_invoked_id.v, repeat.v);
+
+    YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before + 2U);
+    YEW_ASSERT(yew_cmd_unregister(repeat));
+    YEW_ASSERT(!yew_cmd_unregister(repeat));
+    YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before + 1U);
+    YEW_ASSERT_EQ_U64(yew_cmd_lookup(repeat_desc.name,
+                                     (u32)strlen(repeat_desc.name)).v,
+                      YEW_CMD_NONE.v);
+    YEW_ASSERT(yew_cmd_desc(repeat) == NULL);
+    YEW_ASSERT(yew_cmd_entry(repeat) == NULL);
+    {
+        CmdId reactivated = yew_cmd_register(&repeat_desc);
+
+        YEW_ASSERT_EQ_U64(reactivated.v, repeat.v);
+        YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before + 2U);
+        YEW_ASSERT_EQ_U64(yew_cmd_lookup(repeat_desc.name,
+                                         (u32)strlen(repeat_desc.name)).v,
+                          repeat.v);
+    }
 
     cx.iarg = 7;
     probe_calls = 0U;
@@ -122,6 +147,10 @@ void test_cmd_registry_invocation_and_deferred(void)
     YEW_ASSERT_EQ_U64(probe_count, 4U);
     YEW_ASSERT_EQ_U64(tap_calls, 1U);
     yew_cmd_set_record_tap(NULL);
+
+    YEW_ASSERT(yew_cmd_unregister(repeat));
+    YEW_ASSERT(yew_cmd_unregister(takes));
+    YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before);
 
     for (i = 0U; i < yew_cmd_count(); i++) {
         const CmdDesc *desc = yew_cmd_at(i);

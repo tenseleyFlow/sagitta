@@ -72,6 +72,8 @@ typedef enum {
 typedef struct CmdCtx {
     Ed *ed;
     Win *win;
+    /* Stable registry identity of the command currently being invoked. */
+    CmdId invoked_id;
     CmdRange range;
     CmdArgv argv;
     u32 cursor_index;
@@ -172,6 +174,7 @@ void yew_cmd_init(void);
 void yew_cmd_shutdown(void);
 CmdId yew_cmd_register(const CmdDesc *d);
 CmdId yew_cmd_register_entry(const CmdEntry *entry);
+bool yew_cmd_unregister(CmdId id);
 CmdId yew_cmd_lookup(const char *name, u32 len);
 /*
  * Sprint 34 §8: the motion-space word -> command map, built at
@@ -183,6 +186,7 @@ const CmdEntry *yew_cmd_entry(CmdId id);
 CmdStatus yew_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out);
 CmdStatus yew_cmd_invoke(CmdId id, CmdCtx *cx);
 u32 yew_cmd_count(void);
+u32 yew_cmd_active_count(void);
 const CmdDesc *yew_cmd_at(u32 i);
 void yew_cmd_set_record_tap(CmdRecordTap tap);
 

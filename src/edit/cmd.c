@@ -52,8 +52,10 @@ typedef struct {
      * word up per WORD, inside the 1 us dispatch budget. */
     Strmap words;
     CmdEntry *entries;
+    bool *active;
     size_t len;
     size_t cap;
+    u32 active_count;
     CmdRecordTap record_tap;
     bool initialized;
 } CmdRegistry;
@@ -1445,26 +1447,37 @@ static CmdId register_entry(const CmdEntry *entry)
 {
     CmdEntry copy;
     const CmdDesc *d;
+    void *found;
     u32 id;
 
     entry_validate(entry);
     d = &entry->cmd;
-    if (strmap_has(&registry.names.map, d->name, strlen(d->name)))
-        YEW_BUG("duplicate command registration: %s", d->name);
-    if (registry.len == UINT32_MAX)
-        YEW_BUG("command registry overflow");
-    if (registry.len == registry.cap) {
-        size_t cap = registry.cap ? registry.cap * 2U : 64U;
+    found = strmap_get(&registry.names.map, d->name, strlen(d->name));
+    id = (u32)(uintptr_t)found;
+    if (id != 0U) {
+        if ((size_t)id > registry.len)
+            YEW_BUG("command registry name map is corrupt");
+        if (registry.active[id - 1U])
+            YEW_BUG("duplicate command registration: %s", d->name);
+    } else {
+        if (registry.len == UINT32_MAX)
+            YEW_BUG("command registry overflow");
+        if (registry.len == registry.cap) {
+            size_t cap = registry.cap ? registry.cap * 2U : 64U;
 
-        if (cap < registry.cap)
-            YEW_BUG("command registry allocation overflow");
-        registry.entries = yew_xreallocarray(registry.entries, cap,
-                                             sizeof(*registry.entries));
-        registry.cap = cap;
+            if (cap < registry.cap)
+                YEW_BUG("command registry allocation overflow");
+            registry.entries = yew_xreallocarray(
+                registry.entries, cap, sizeof(*registry.entries));
+            registry.active = yew_xreallocarray(
+                registry.active, cap, sizeof(*registry.active));
+            registry.cap = cap;
+        }
+        id = yew_intern_cstr(&registry.names, d->name);
+        if ((size_t)id != registry.len + 1U)
+            YEW_BUG("command registry and interner order diverged");
+        registry.len++;
     }
-    id = yew_intern_cstr(&registry.names, d->name);
-    if ((size_t)id != registry.len + 1U)
-        YEW_BUG("command registry and interner order diverged");
     copy = *entry;
     copy.cmd = *d;
     if ((copy.cmd.flags & YEW_CMD_PROMPTS) != 0U)
@@ -1476,18 +1489,22 @@ static CmdId register_entry(const CmdEntry *entry)
         entry->argspec == NULL ? default_argspec(d) : entry->argspec);
     copy.abbrev = entry->abbrev == NULL ? NULL :
                   arena_strdup(&registry.arena, entry->abbrev);
-    registry.entries[registry.len++] = copy;
     if (copy.cmd.word != NULL) {
         size_t wlen = strlen(copy.cmd.word);
+        u32 owner = (u32)(uintptr_t)strmap_get(
+            &registry.words, copy.cmd.word, wlen);
 
-        if (strmap_has(&registry.words, copy.cmd.word, wlen))
+        if (owner != 0U && owner != id &&
+            (size_t)owner <= registry.len && registry.active[owner - 1U])
             YEW_BUG("duplicate CMDWORD '%s' on %s", copy.cmd.word,
                     d->name);
         copy.cmd.word = arena_strdup(&registry.arena, copy.cmd.word);
-        registry.entries[registry.len - 1U].cmd.word = copy.cmd.word;
         (void)strmap_put(&registry.words, copy.cmd.word, wlen,
                          (void *)(uintptr_t)id);
     }
+    registry.entries[id - 1U] = copy;
+    registry.active[id - 1U] = true;
+    registry.active_count++;
     return (CmdId){id};
 }
 
@@ -1546,6 +1563,7 @@ void yew_cmd_shutdown(void)
     strmap_free(&registry.words);
     arena_free_all(&registry.arena);
     free(registry.entries);
+    free(registry.active);
     registry = (CmdRegistry){0};
 }
 
@@ -1561,6 +1579,17 @@ CmdId yew_cmd_register_entry(const CmdEntry *entry)
     return register_entry(entry);
 }
 
+bool yew_cmd_unregister(CmdId id)
+{
+    yew_cmd_init();
+    if (id.v == 0U || (size_t)id.v > registry.len ||
+        !registry.active[id.v - 1U])
+        return false;
+    registry.active[id.v - 1U] = false;
+    registry.active_count--;
+    return true;
+}
+
 CmdId yew_cmd_lookup(const char *name, u32 len)
 {
     void *found;
@@ -1569,7 +1598,14 @@ CmdId yew_cmd_lookup(const char *name, u32 len)
     if (name == NULL)
         return YEW_CMD_NONE;
     found = strmap_get(&registry.names.map, name, len);
-    return (CmdId){(u32)(uintptr_t)found};
+    {
+        CmdId id = {(u32)(uintptr_t)found};
+
+        if (id.v == 0U || (size_t)id.v > registry.len ||
+            !registry.active[id.v - 1U])
+            return YEW_CMD_NONE;
+        return id;
+    }
 }
 
 CmdId yew_cmd_by_word(const char *word, u32 len)
@@ -1580,13 +1616,22 @@ CmdId yew_cmd_by_word(const char *word, u32 len)
     if (word == NULL || len == 0U)
         return YEW_CMD_NONE;
     found = strmap_get(&registry.words, word, len);
-    return (CmdId){(u32)(uintptr_t)found};
+    {
+        CmdId id = {(u32)(uintptr_t)found};
+        const CmdDesc *d = yew_cmd_desc(id);
+
+        if (d == NULL || d->word == NULL || strlen(d->word) != len ||
+            memcmp(d->word, word, len) != 0)
+            return YEW_CMD_NONE;
+        return id;
+    }
 }
 
 const CmdDesc *yew_cmd_desc(CmdId id)
 {
     yew_cmd_init();
-    if (id.v == 0U || (size_t)id.v > registry.len)
+    if (id.v == 0U || (size_t)id.v > registry.len ||
+        !registry.active[id.v - 1U])
         return NULL;
     return &registry.entries[id.v - 1U].cmd;
 }
@@ -1594,7 +1639,8 @@ const CmdDesc *yew_cmd_desc(CmdId id)
 const CmdEntry *yew_cmd_entry(CmdId id)
 {
     yew_cmd_init();
-    if (id.v == 0U || (size_t)id.v > registry.len)
+    if (id.v == 0U || (size_t)id.v > registry.len ||
+        !registry.active[id.v - 1U])
         return NULL;
     return &registry.entries[id.v - 1U];
 }
@@ -1706,6 +1752,8 @@ CmdStatus yew_cmd_invoke(CmdId id, CmdCtx *cx)
     u32 n;
     u32 i;
 
+    if (cx != NULL)
+        cx->invoked_id = id;
     status = yew_cmd_prepare(id, cx, &d);
     if (status != YEW_CMD_OK)
         return status;
@@ -1719,6 +1767,12 @@ u32 yew_cmd_count(void)
 {
     yew_cmd_init();
     return (u32)registry.len;
+}
+
+u32 yew_cmd_active_count(void)
+{
+    yew_cmd_init();
+    return registry.active_count;
 }
 
 const CmdDesc *yew_cmd_at(u32 i)
