@@ -354,6 +354,8 @@ jobs:
           if [ "$passed" -ne 1 ]; then
             exit 1
           fi
+      - name: Enforce Sprint 54 plugin startup budgets
+        run: make perf-plug CC=gcc
 
   torture:
     runs-on: ubuntu-latest
@@ -526,6 +528,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Fuzz plugin manifest data for one hour under ASan and UBSan
+        run: |
+          make fuzz-plug-manifest CC=clang SAN=1 BUILD=build-plug-san \
+            PLUG_FUZZ_SECONDS=3600 FUZZ_SEED=1
       - name: Run randomized text campaigns for 30 minutes
         run: make fuzz-long CC=clang SAN=1 BUILD=build-nightly-san
       - name: Run the Sprint 35 round-trip law at nightly depth

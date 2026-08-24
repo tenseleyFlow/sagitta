@@ -5,6 +5,7 @@ MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
 FUZZ_SEED  ?= 1
 FUZZ_SECONDS ?=
+PLUG_FUZZ_SECONDS ?= 3600
 LSP_RESP_FUZZ_ITERS ?= 50000
 LSP_RESP_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                        0x9e3779b97f4a7c15 0xd1b54a32d192ed03
@@ -684,6 +685,7 @@ endif
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
+        fuzz-plug-manifest \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
         fuzz-porcelain fuzz-git-diff \
@@ -1188,7 +1190,11 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_flapi --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
+		$(BUILD)/fuzz_fl_parse --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
+
+fuzz-plug-manifest: $(BUILD)/fuzz_fl_parse
+	$(BUILD)/fuzz_fl_parse --seconds=$(PLUG_FUZZ_SECONDS) --seed=$(FUZZ_SEED)
 
 fuzz-ai: $(BUILD)/fuzz_http $(BUILD)/fuzz_ai_stream \
          $(BUILD)/fuzz_ai_shadow $(BUILD)/fuzz_ai_redact

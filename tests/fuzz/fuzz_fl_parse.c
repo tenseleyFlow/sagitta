@@ -1,7 +1,8 @@
 /*
  * Sprint 29 deliverable 6: the Fletch parser fuzzer.
  *
- * Runs both entry points over the same bytes and checks the properties
+ * Runs all three data-facing entry points over the same bytes and checks
+ * the properties
  * that are cheap to state and expensive to discover in the field: the
  * error cap holds, the arena does not run away, and the REPL's two
  * flags are never both set.
@@ -18,7 +19,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "fl/data.h"
 #include "fl/parse.h"
+#include "fl/vm.h"
 #include "util/arena.h"
 #include "util/intern.h"
 
@@ -157,6 +160,56 @@ static bool check_one(const u8 *data, size_t len, char *why,
     return ok;
 }
 
+static bool check_data_read(const u8 *data, size_t len, char *why,
+                            size_t why_cap)
+{
+    Arena arena;
+    Interner in;
+    DiagCtx dc;
+    Counter counter;
+    FlVm vm;
+    bool ok = true;
+
+    if (len > FL_FUZZ_MAX_INPUT)
+        len = FL_FUZZ_MAX_INPUT;
+    (void)memset(&counter, 0, sizeof(counter));
+    arena_init(&arena);
+    interner_init(&in, &arena);
+    fl_diag_init(&dc, &arena);
+    fl_diag_set_sink(&dc, count_diag, &counter);
+    if (!fl_vm_init(&vm, &arena, &in, &dc)) {
+        (void)snprintf(why, why_cap, "cannot initialize data-reader VM");
+        ok = false;
+        goto done_without_vm;
+    }
+
+    /*
+     * This is the actual state-file/manifest data seam, not merely the
+     * parser it delegates to.  It exercises container completeness and
+     * the byte/node/depth/string limits while the returned object graph is
+     * owned by a real VM and reclaimed by its collector.
+     */
+    (void)fl_data_read(&vm, (const char *)data, len, &dc);
+    if (counter.n > (u32)FL_PARSE_MAX_ERRORS + 2U) {
+        (void)snprintf(why, why_cap,
+                       "%u data-reader diagnostics exceeds the cap of %d",
+                       (unsigned)counter.n, FL_PARSE_MAX_ERRORS + 2);
+        ok = false;
+    }
+    if (ok && arena.next_block_size > (size_t)FL_FUZZ_ARENA_LIMIT) {
+        (void)snprintf(why, why_cap,
+                       "data-reader arena grew past %d MiB on %zu bytes",
+                       FL_FUZZ_ARENA_LIMIT / (1024 * 1024), len);
+        ok = false;
+    }
+    fl_vm_free(&vm);
+
+done_without_vm:
+    interner_free(&in);
+    arena_free_all(&arena);
+    return ok;
+}
+
 static bool check_fl_parse(const u8 *data, size_t len, char *why,
                            size_t why_cap)
 {
@@ -169,7 +222,8 @@ static bool check_fl_parse(const u8 *data, size_t len, char *why,
     size_t framed_len;
     bool ok;
 
-    if (!check_one(data, len, why, why_cap))
+    if (!check_one(data, len, why, why_cap) ||
+        !check_data_read(data, len, why, why_cap))
         return false;
     if (len > FL_FUZZ_MAX_INPUT)
         len = FL_FUZZ_MAX_INPUT;
@@ -183,7 +237,8 @@ static bool check_fl_parse(const u8 *data, size_t len, char *why,
     (void)memcpy(manifest + sizeof(prefix) - 1U, data, len);
     (void)memcpy(manifest + sizeof(prefix) - 1U + len, suffix,
                  sizeof(suffix) - 1U);
-    ok = check_one(manifest, framed_len, why, why_cap);
+    ok = check_one(manifest, framed_len, why, why_cap) &&
+         check_data_read(manifest, framed_len, why, why_cap);
     free(manifest);
     return ok;
 }
