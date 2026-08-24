@@ -6,6 +6,8 @@
 /* Returned paths are heap-owned.  NULL means the environment has no usable
  * state root; callers must degrade to an in-memory feature. */
 char *yew_xdg_state_dir(void);
+/* $XDG_DATA_HOME/yew, or ~/.local/share/yew. */
+char *yew_xdg_data_dir(void);
 /* $XDG_CONFIG_HOME/yew, or ~/.config/yew.  Sprint 31's module
  * resolver looks for `fl/` beneath it, which is the second and last
  * place a quoted import is searched. */

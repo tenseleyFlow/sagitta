@@ -46,6 +46,20 @@ AiWsGrant yew_config_ai_workspace_grant(Ed *ed);
 bool yew_config_ai_workspace_set(Ed *ed, AiWsGrant grant);
 bool yew_config_ai_workspace_forget(Ed *ed);
 
+/* Sprint 54 plugin policy uses the same loaded, atomic trust database as
+ * workspace configuration.  DEFAULT/UNSET are absence, not false. */
+YewPluginDesired yew_config_plugin_desired(const Ed *ed,
+                                           const char *plugin);
+bool yew_config_plugin_set_desired(Ed *ed, const char *plugin,
+                                   YewPluginDesired desired);
+YewPluginGrant yew_config_plugin_capability(const Ed *ed,
+                                            const char *plugin,
+                                            YewPluginCapability capability);
+bool yew_config_plugin_set_capability(Ed *ed, const char *plugin,
+                                      YewPluginCapability capability,
+                                      YewPluginGrant grant);
+bool yew_config_workspace_plugins_trusted(const Ed *ed);
+
 const char *yew_config_user_path(Ed *ed);
 CmdStatus yew_config_cmd_reload(CmdCtx *cx);
 CmdStatus yew_config_cmd_edit(CmdCtx *cx);

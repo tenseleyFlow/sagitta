@@ -713,6 +713,65 @@ bool yew_config_ai_workspace_forget(Ed *ed)
                               YEW_TRUST_PRUNE_DAYS_DEFAULT);
 }
 
+YewPluginDesired yew_config_plugin_desired(const Ed *ed,
+                                           const char *plugin)
+{
+    if (ed == NULL || ed->config == NULL)
+        return YEW_PLUGIN_DESIRED_DEFAULT;
+    return yew_trust_plugin_desired(&ed->config->trust_db, plugin);
+}
+
+bool yew_config_plugin_set_desired(Ed *ed, const char *plugin,
+                                   YewPluginDesired desired)
+{
+    time_t now;
+
+    if (ed == NULL || ed->config == NULL)
+        return false;
+    now = time(NULL);
+    return now != (time_t)-1 &&
+           yew_trust_plugin_set_desired(&ed->config->trust_db, plugin,
+                                        desired) &&
+           yew_trust_db_write(&ed->config->trust_db, now,
+                              YEW_TRUST_PRUNE_DAYS_DEFAULT);
+}
+
+YewPluginGrant yew_config_plugin_capability(
+    const Ed *ed, const char *plugin, YewPluginCapability capability)
+{
+    if (ed == NULL || ed->config == NULL)
+        return YEW_PLUGIN_GRANT_UNSET;
+    return yew_trust_plugin_capability(&ed->config->trust_db, plugin,
+                                       capability);
+}
+
+bool yew_config_plugin_set_capability(Ed *ed, const char *plugin,
+                                      YewPluginCapability capability,
+                                      YewPluginGrant grant)
+{
+    time_t now;
+
+    if (ed == NULL || ed->config == NULL)
+        return false;
+    now = time(NULL);
+    return now != (time_t)-1 &&
+           yew_trust_plugin_set_capability(&ed->config->trust_db, plugin,
+                                           capability, grant) &&
+           yew_trust_db_write(&ed->config->trust_db, now,
+                              YEW_TRUST_PRUNE_DAYS_DEFAULT);
+}
+
+bool yew_config_workspace_plugins_trusted(const Ed *ed)
+{
+    const YewConfigState *state;
+
+    if (ed == NULL || ed->config == NULL)
+        return false;
+    state = ed->config;
+    return state->trust_workspace || state->workspace_once ||
+           state->unit[YEW_CFG_WORKSPACE].ran;
+}
+
 const char *yew_config_user_path(Ed *ed)
 {
     if (ed == NULL || ed->config == NULL)

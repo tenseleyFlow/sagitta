@@ -29,6 +29,26 @@ char *yew_xdg_state_dir(void)
     return path;
 }
 
+char *yew_xdg_data_dir(void)
+{
+    const char *root = getenv("XDG_DATA_HOME");
+    const char *suffix = "/yew";
+    size_t len;
+    char *path;
+
+    if (root == NULL || root[0] == '\0') {
+        root = getenv("HOME");
+        suffix = "/.local/share/yew";
+    }
+    if (root == NULL || root[0] == '\0')
+        return NULL;
+    len = strlen(root) + strlen(suffix);
+    path = yew_xmalloc(len + 1U);
+    (void)memcpy(path, root, strlen(root));
+    (void)memcpy(path + strlen(root), suffix, strlen(suffix) + 1U);
+    return path;
+}
+
 char *yew_xdg_config_dir(void)
 {
     const char *root = getenv("XDG_CONFIG_HOME");
