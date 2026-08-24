@@ -25,6 +25,7 @@ static Buffer *runtime_reentrant_buffer;
 static char runtime_mode_payloads[8][4];
 static u32 runtime_mode_payloads_len;
 static bool runtime_reentrant_event;
+static CmdSource runtime_seen_source;
 
 static bool runtime_probe(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
 {
@@ -111,6 +112,16 @@ static FlValue runtime_native(FlVm *vm, const char *name)
     return runtime_native_fn(vm, name, runtime_probe);
 }
 
+static bool runtime_echo_arg(FlVm *vm, FlValue *args, u32 nargs,
+                             FlValue *out)
+{
+    runtime_seen_source = fl_runtime_cmd_source(vm);
+    if (nargs != 1U)
+        return fl_raise(vm, "arity", "runtime echo expects one argument");
+    *out = args[0];
+    return true;
+}
+
 static bool runtime_mutate_then_fail(FlVm *vm, FlValue *args, u32 nargs,
                                      FlValue *out)
 {
@@ -122,6 +133,7 @@ static bool runtime_mutate_then_fail(FlVm *vm, FlValue *args, u32 nargs,
     (void)args;
     (void)nargs;
     (void)out;
+    runtime_seen_source = fl_runtime_cmd_source(vm);
     buffer = yew_ed_doc(vm->ed);
     if (buffer == NULL || insert == NULL)
         return fl_raise(vm, "user", "hook test has no buffer");
@@ -143,6 +155,7 @@ void test_fl_runtime_is_persistent_and_on_registers(void)
     FlVm *vm;
     FlValue args[2];
     FlValue out = FL_NIL_V;
+    CmdSource before;
 
     runtime_calls = 0U;
     runtime_nargs = 0U;
@@ -164,6 +177,27 @@ void test_fl_runtime_is_persistent_and_on_registers(void)
     YEW_ASSERT_EQ_U64(runtime_calls, 1U);
     YEW_ASSERT_EQ_U64(runtime_nargs, 1U);
     YEW_ASSERT(runtime_payload_ok);
+
+    /* Host lifecycle calls pass arguments while preserving the caller's
+     * command source, and a throwing call rolls back its editor mutation. */
+    before = fl_runtime_cmd_source(vm);
+    args[0] = FL_INT_V(54);
+    YEW_ASSERT(fl_call_value_args(
+        ed.fl, runtime_native_fn(vm, "runtime.echo", runtime_echo_arg),
+        args, 1U, YEW_SRC_TEST, &out));
+    YEW_ASSERT_EQ_U64(runtime_seen_source, YEW_SRC_TEST);
+    YEW_ASSERT_EQ_U64(out.t, FL_INT);
+    YEW_ASSERT_EQ_I64(out.as.i, 54);
+    YEW_ASSERT_EQ_U64(fl_runtime_cmd_source(vm), before);
+
+    YEW_ASSERT(!fl_call_value_args(
+        ed.fl,
+        runtime_native_fn(vm, "runtime.rollback", runtime_mutate_then_fail),
+        args, 1U, YEW_SRC_MOUSE, &out));
+    YEW_ASSERT_EQ_U64(runtime_seen_source, YEW_SRC_MOUSE);
+    YEW_ASSERT_EQ_U64(fl_runtime_cmd_source(vm), before);
+    YEW_ASSERT_EQ_U64(yew_buf_len(yew_ed_doc(&ed)), 0U);
+    YEW_ASSERT_EQ_U64(yew_ed_doc(&ed)->undo->depth, 0U);
     yew_ed_free(&ed);
 }
 

@@ -45,6 +45,11 @@ bool fl_call_chunk(FlRuntime *rt, FlFn *fn, CmdSource source);
 /* Execute a retained closure with its own globals map.  Config files use
  * this entry so each origin can be torn down without sharing globals. */
 bool fl_call_value(FlRuntime *rt, FlValue callable, CmdSource source);
+/* The argument-bearing form used by host-managed plugin lifecycle calls.
+ * `out` receives the callable's result on success. */
+bool fl_call_value_args(FlRuntime *rt, FlValue callable,
+                        const FlValue *args, u32 nargs, CmdSource source,
+                        FlValue *out);
 
 /* Sprint 35's bounded register cache.  Registers are lower-case a..z.  A hit
  * requires byte-identical source, not merely matching register metadata.

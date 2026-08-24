@@ -275,6 +275,8 @@ void fl_gc_host_root_remove(FlVm *vm, FlValue *slot);
 
 /* Root 11: for collections that move.  See FlGcProvider. */
 void fl_gc_root_provider(FlVm *vm, FlGcMarkFn mark, void *ctx);
+/* Idempotent teardown.  Remaining providers retain registration order. */
+void fl_gc_root_provider_remove(FlVm *vm, FlGcMarkFn mark, void *ctx);
 /* What a provider calls.  Safe on any value, including scalars. */
 void fl_gc_mark_value(FlVm *vm, FlValue v);
 

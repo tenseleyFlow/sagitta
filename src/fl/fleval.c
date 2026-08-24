@@ -29,7 +29,7 @@ static const char *eval_first_line(const Bytebuf *text, char *out,
 
 static FlOrigin runtime_origin(void)
 {
-    return (FlOrigin){(u8)FL_ORIGIN_CONFIG, 0U, FL_CAP_ALL};
+    return (FlOrigin){(u8)FL_ORIGIN_CONFIG, 0U, FL_CAP_ALL, 0U};
 }
 
 static FlFn *compile_owned(FlRuntime *rt, const u8 *source, size_t len,
@@ -76,7 +76,7 @@ FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
     origin = (FlOrigin){(u8)FL_ORIGIN_CLI,
                         yew_intern(&rt->interner, realpath_label,
                                    strlen(realpath_label)),
-                        FL_CAP_ALL};
+                        FL_CAP_ALL, 0U};
     rt->vm.root_origin = origin;
     return compile_owned(rt, source, len, realpath_label, origin);
 }
@@ -115,14 +115,16 @@ bool fl_call_chunk(FlRuntime *rt, FlFn *fn, CmdSource source)
     return call_chunk_result(rt, fn, source, &result);
 }
 
-bool fl_call_value(FlRuntime *rt, FlValue callable, CmdSource source)
+bool fl_call_value_args(FlRuntime *rt, FlValue callable,
+                        const FlValue *args, u32 nargs, CmdSource source,
+                        FlValue *out)
 {
-    FlValue result = FL_NIL_V;
     FlOrigin saved_origin;
     CmdSource saved;
     bool ok;
 
-    if (rt == NULL || !rt->ready ||
+    if (rt == NULL || out == NULL || (args == NULL && nargs != 0U) ||
+        !rt->ready ||
         (callable.t != (u8)FL_CLOSURE && callable.t != (u8)FL_NATIVE))
         return false;
     saved = rt->command_source;
@@ -130,10 +132,17 @@ bool fl_call_value(FlRuntime *rt, FlValue callable, CmdSource source)
     rt->command_source = source;
     if (callable.t == (u8)FL_CLOSURE)
         rt->vm.root_origin = ((FlClosure *)callable.as.o)->fn->origin;
-    ok = fl_call(&rt->vm, callable, NULL, 0U, &result);
+    ok = fl_call(&rt->vm, callable, args, nargs, out);
     rt->vm.root_origin = saved_origin;
     rt->command_source = saved;
     return ok;
+}
+
+bool fl_call_value(FlRuntime *rt, FlValue callable, CmdSource source)
+{
+    FlValue result = FL_NIL_V;
+
+    return fl_call_value_args(rt, callable, NULL, 0U, source, &result);
 }
 
 void fl_macro_cache_invalidate(FlRuntime *rt, u8 reg)

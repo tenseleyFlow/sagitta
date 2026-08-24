@@ -308,6 +308,27 @@ void fl_gc_root_provider(FlVm *vm, FlGcMarkFn mark, void *ctx)
     vm->nproviders++;
 }
 
+void fl_gc_root_provider_remove(FlVm *vm, FlGcMarkFn mark, void *ctx)
+{
+    u32 i;
+
+    if (vm == NULL || mark == NULL)
+        return;
+    for (i = 0U; i < vm->nproviders; i++) {
+        if (vm->providers[i].mark != mark || vm->providers[i].ctx != ctx)
+            continue;
+        if (i + 1U < vm->nproviders) {
+            (void)memmove(&vm->providers[i], &vm->providers[i + 1U],
+                          (size_t)(vm->nproviders - i - 1U) *
+                              sizeof(*vm->providers));
+        }
+        vm->nproviders--;
+        vm->providers[vm->nproviders].mark = NULL;
+        vm->providers[vm->nproviders].ctx = NULL;
+        return;
+    }
+}
+
 /* ---------------------------------------------------------------- */
 /* Sweep                                                            */
 /* ---------------------------------------------------------------- */

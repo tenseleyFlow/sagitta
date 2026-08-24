@@ -339,8 +339,10 @@ void test_fl_gc_root_provider(void)
 {
     GcFix f;
     ProviderCtx ctx;
+    ProviderCtx tail;
     FlValue held[2];
-    FlStr *a, *b;
+    FlValue tail_held;
+    FlStr *a, *b, *c;
 
     gf_open(&f);
     a = witness(&f, "provider a");
@@ -372,6 +374,29 @@ void test_fl_gc_root_provider(void)
     fl_gc_root_provider(&f.vm, provider_mark, &ctx);
     fl_gc_collect(&f.vm);
     YEW_ASSERT_EQ_U64(ctx.calls, 3U);
+
+    /* Removing a non-tail provider compacts the table without dropping
+     * or duplicating the provider that follows it. */
+    c = witness(&f, "provider c");
+    tail_held = FL_OBJ_V(FL_STR, c);
+    tail.v = &tail_held;
+    tail.n = 1U;
+    tail.calls = 0U;
+    fl_gc_root_provider(&f.vm, provider_mark, &tail);
+    fl_gc_root_provider_remove(&f.vm, provider_mark, &ctx);
+    fl_gc_collect(&f.vm);
+    YEW_ASSERT_EQ_U64(ctx.calls, 3U);
+    YEW_ASSERT_EQ_U64(tail.calls, 1U);
+    YEW_ASSERT(!still_live(&f.vm, a));
+    YEW_ASSERT(still_live(&f.vm, c));
+
+    /* Teardown is idempotent, including after the table was compacted. */
+    fl_gc_root_provider_remove(&f.vm, provider_mark, &ctx);
+    fl_gc_root_provider_remove(&f.vm, provider_mark, &tail);
+    fl_gc_root_provider_remove(&f.vm, provider_mark, &tail);
+    fl_gc_collect(&f.vm);
+    YEW_ASSERT_EQ_U64(tail.calls, 1U);
+    YEW_ASSERT(!still_live(&f.vm, c));
     gf_close(&f);
 }
 
@@ -574,7 +599,7 @@ void test_fl_gc_stress_collects_at_every_instruction(void)
     /* CLI origin, no capabilities: these tests never call io,
      * and a grant nobody needs is a grant nobody notices is
      * wrong. */
-    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
     static const char *const src = "let a = [1]\nlet b = [2]\nreturn 0\n";
 
     /*
@@ -646,7 +671,7 @@ void test_fl_gc_stress_survives_the_whole_pipeline(void)
     /* CLI origin, no capabilities: these tests never call io,
      * and a grant nobody needs is a grant nobody notices is
      * wrong. */
-    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
     static const char *const src =
         "fn build(n) {\n"
         "    let acc = []\n"
