@@ -37,7 +37,11 @@ enum {
     /* Background indexing must not race the next key after a paint.  The
      * grace period is short enough to be invisible at rest and long enough
      * for a continuing input burst to reach poll first. */
-    YEW_BACKGROUND_IDLE_MS = 12
+    YEW_BACKGROUND_IDLE_MS = 12,
+    /* A completed slice must return to poll before taking another one.
+     * Without a separate cadence, idle_since + grace remains overdue and
+     * a large workspace drives a full core until indexing completes. */
+    YEW_BACKGROUND_CADENCE_MS = 8
 };
 
 static const char *loop_getenv(const char *name)
@@ -235,8 +239,7 @@ static i64 background_deadline(const Ed *ed, i64 now_ms)
 {
     i64 ready_ms;
 
-    if (!yew_symidx_pending(ed) &&
-        !(ed->ws.sym_walk.running && ed->ws.sym_walk.job == 0U))
+    if (!yew_symidx_pending(ed) && !ed->ws.sym_walk.running)
         return -1;
     if (ed->fl_idle_since_ms < 0)
         return 0;
@@ -245,6 +248,8 @@ static i64 background_deadline(const Ed *ed, i64 now_ms)
         ready_ms += YEW_BACKGROUND_IDLE_MS;
     else
         ready_ms = INT64_MAX;
+    if (ed->background_next_ms > ready_ms)
+        ready_ms = ed->background_next_ms;
     return absolute_deadline(ready_ms, now_ms);
 }
 
@@ -556,11 +561,15 @@ int yew_loop_run(Ed *ed)
         /* Symbol indexing is stale-safe, so preserve input-to-paint latency
          * by waiting for a short idle window.  The deadline above wakes the
          * loop even when no further event arrives. */
-        if (!had_input &&
-            (ed->fl_idle_since_ms < 0 ||
-             now - ed->fl_idle_since_ms >= YEW_BACKGROUND_IDLE_MS)) {
+        if (!had_input && background_deadline(ed, now) == 0) {
+            i64 completed_ms;
+
             yew_symidx_pump(ed, YEW_SYMIDX_FULL_US);
             yew_symwalk_pump(ed, YEW_SYMWALK_BUDGET_US);
+            completed_ms = yew_now_ms();
+            ed->background_next_ms =
+                completed_ms <= INT64_MAX - YEW_BACKGROUND_CADENCE_MS
+                    ? completed_ms + YEW_BACKGROUND_CADENCE_MS : INT64_MAX;
         }
         yew_mouse_tick(ed, now);
         /* Coalesced events run after input and deadline work, never inside

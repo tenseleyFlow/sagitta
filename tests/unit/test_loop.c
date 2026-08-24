@@ -154,6 +154,25 @@ void test_loop_background_work_yields_after_input(void)
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1011), 1);
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 0);
 
+    /* Completing one slice returns to poll instead of spinning on an
+     * idle-since deadline that stays overdue forever. */
+    ed.background_next_ms = 1020;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 8);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1019), 1);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1020), 0);
+
+    /* A newer keypress re-arms the longer input grace. */
+    ed.fl_idle_since_ms = 1015;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1015), 12);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1027), 0);
+
+    /* Discovery jobs still need a paced settle turn after their pipe fds
+     * drain; excluding job-backed walks can strand the workspace index. */
+    ed.ws.sym_walk.job = 42U;
+    ed.background_next_ms = 1035;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1027), 8);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1035), 0);
+
     ed.fl_idle_since_ms = -1;
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 0);
     loop_ed_free(&ed);

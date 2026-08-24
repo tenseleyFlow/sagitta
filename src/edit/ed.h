@@ -241,6 +241,9 @@ struct Ed {
     u32 fl_changes_len;
     u32 fl_changes_cap;
     i64 fl_idle_since_ms;
+    /* Workspace indexing is idle work, not a reason to spin the poll loop.
+     * This clock spaces its bounded slices after the initial input grace. */
+    i64 background_next_ms;
     bool fl_flushing_change;
     bool fl_idle_fired;
     bool fl_model_teardown;

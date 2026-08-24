@@ -15,6 +15,9 @@
 enum {
     LATENCY_KEYS = 10000,
     ARROW_KEYS = 2000,
+    PACED_ARROW_KEYS = 128,
+    PACED_ARROW_INTERVAL_NS = 40000000,
+    PACED_QUIET_NS = 1000000,
     LATENCY_LINES = 10000,
     COLD_RUNS = 9,
     SCREEN_ROWS = 24,
@@ -24,6 +27,7 @@ enum {
 typedef struct LatencyLimits {
     i64 key_p99_ns;
     i64 arrow_p99_ns;
+    i64 paced_arrow_p99_ns;
     i64 cold_ns;
 } LatencyLimits;
 
@@ -241,13 +245,15 @@ static bool load_limits(const char *path, LatencyLimits *limits)
             limits->key_p99_ns = (i64)value;
         else if (strcmp(name, "cursor_arrow_to_paint_p99") == 0)
             limits->arrow_p99_ns = (i64)value;
+        else if (strcmp(name, "cursor_arrow_to_paint_p99_paced") == 0)
+            limits->paced_arrow_p99_ns = (i64)value;
         else if (strcmp(name, "cold_open_to_first_paint") == 0)
             limits->cold_ns = (i64)value;
     }
     if (ferror(file) || fclose(file) != 0)
         return false;
     return limits->key_p99_ns > 0 && limits->arrow_p99_ns > 0 &&
-           limits->cold_ns > 0;
+           limits->paced_arrow_p99_ns > 0 && limits->cold_ns > 0;
 }
 
 static void merge_sort_i64(i64 *values, i64 *work, size_t len)
@@ -559,6 +565,73 @@ done_alloc:
     return ok;
 }
 
+/*
+ * The burst lane proves the renderer's hot path, but a person does not send
+ * two thousand arrows in one scheduler slice.  Leave enough time between
+ * arrows for 500 ms Git/status TTLs, job completions, idle hooks, and syntax
+ * settling to cross the input boundary.  Drain repaint-only output before
+ * starting each sample so the frame we time belongs to the arrow we wrote.
+ */
+static bool measure_arrows_paced(const char *binary, const char *path,
+                                 const char *state, i64 *p99_out)
+{
+    static const char arrows[][3] = {
+        {'\033', '[', 'B'}, {'\033', '[', 'A'},
+        {'\033', '[', 'C'}, {'\033', '[', 'D'}
+    };
+    i64 samples[PACED_ARROW_KEYS];
+    i64 work[PACED_ARROW_KEYS];
+    YewLivePty pty = {.master = -1, .pid = -1};
+    i64 deadline;
+    size_t i;
+    bool ok = false;
+
+    deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
+    if (!yew_live_pty_spawn(&pty, binary, path, state,
+                            SCREEN_ROWS, SCREEN_COLS) ||
+        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL) ||
+        !settle_editor(&pty)) {
+        (void)fprintf(stderr,
+                      "latency: paced arrow run did not paint initially\n");
+        goto done;
+    }
+    for (i = 0U; i < PACED_ARROW_KEYS; i++) {
+        size_t phase = i % 32U;
+        size_t arrow = phase < 8U ? 0U : phase < 16U ? 1U :
+                       (phase & 1U) == 0U ? 2U : 3U;
+        const char *key = arrows[arrow];
+        u64 frame;
+        i64 start;
+        i64 completed;
+
+        delay_ns(PACED_ARROW_INTERVAL_NS);
+        deadline = yew_live_pty_now_ns() + INT64_C(1000000000);
+        if (!yew_live_pty_wait_quiet(&pty, PACED_QUIET_NS, deadline))
+            goto done;
+        frame = pty.frames;
+        start = yew_live_pty_now_ns();
+        deadline = start + INT64_C(1000000000);
+        if (start < 0 ||
+            !yew_live_pty_write(&pty, key, sizeof(arrows[0]), deadline) ||
+            !yew_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
+            (void)fprintf(stderr, "latency: paced arrow %zu did not paint\n",
+                          i + 1U);
+            goto done;
+        }
+        samples[i] = completed - start;
+    }
+    if (!stop_editor(&pty)) {
+        (void)fprintf(stderr, "latency: paced arrow run did not quit\n");
+        goto done;
+    }
+    merge_sort_i64(samples, work, PACED_ARROW_KEYS);
+    *p99_out = samples[(PACED_ARROW_KEYS * 99U + 99U) / 100U - 1U];
+    ok = true;
+done:
+    yew_live_pty_close(&pty);
+    return ok;
+}
+
 int main(int argc, char **argv)
 {
     char root[1024];
@@ -568,6 +641,7 @@ int main(int argc, char **argv)
     LatencyLimits limits;
     i64 key_p99;
     i64 arrow_p99;
+    i64 paced_arrow_p99;
     i64 cold;
     const char *wolf_path;
     int status = 0;
@@ -607,7 +681,9 @@ int main(int argc, char **argv)
     }
     if (!measure_cold(argv[2], fixture, state, &cold) ||
         !measure_keys(argv[2], fixture, state, &key_p99) ||
-        !measure_arrows(argv[2], wolf_path, state, &arrow_p99)) {
+        !measure_arrows(argv[2], wolf_path, state, &arrow_p99) ||
+        !measure_arrows_paced(argv[2], wolf_path, state,
+                              &paced_arrow_p99)) {
         (void)fprintf(stderr, "latency: PTY measurement failed\n");
         (void)remove_tree(root);
         return 2;
@@ -623,11 +699,18 @@ int main(int argc, char **argv)
     (void)printf("cursor_arrow_to_paint_p99 %lld limit=%lld%s\n",
                  (long long)arrow_p99, (long long)limits.arrow_p99_ns,
                  arrow_p99 <= limits.arrow_p99_ns ? " ok" : " FAIL");
+    (void)printf("cursor_arrow_to_paint_p99_paced %lld limit=%lld%s\n",
+                 (long long)paced_arrow_p99,
+                 (long long)limits.paced_arrow_p99_ns,
+                 paced_arrow_p99 <= limits.paced_arrow_p99_ns
+                     ? " ok" : " FAIL");
     (void)printf("cold_open_to_first_paint %lld limit=%lld%s\n",
                  (long long)cold, (long long)limits.cold_ns,
                  cold <= limits.cold_ns ? " ok" : " FAIL");
     if (key_p99 > limits.key_p99_ns ||
-        arrow_p99 > limits.arrow_p99_ns || cold > limits.cold_ns)
+        arrow_p99 > limits.arrow_p99_ns ||
+        paced_arrow_p99 > limits.paced_arrow_p99_ns ||
+        cold > limits.cold_ns)
         status = 1;
     return status;
 }
