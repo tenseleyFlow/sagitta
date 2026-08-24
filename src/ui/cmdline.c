@@ -669,6 +669,8 @@ static const char *hint_arg_name(const CmdEntry *entry, u32 token_index,
         return "<option>";
     case 'v':
         return "<value>";
+    case 'p':
+        return "<plugin>";
     case 's':
         return "<text>";
     default:

@@ -2414,7 +2414,10 @@ static int ed_driver_inner(const char *path, const YewEdStartup *startup)
     /* The workspace hook sees restored tabs and buffers, and runs before
      * the first paint.  Startup used to paint once before restore, which
      * made this ordering impossible and also caused a redundant frame. */
-    yew_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
+#if YEW_WITH_PLUGINS
+    if (!yew_plug_startup_pending(&ed))
+#endif
+        yew_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
     yew_ed_layout(&ed);
     yew_ed_render(&ed);
     result = ed.quit ? ed.exit_code : yew_loop_run(&ed);

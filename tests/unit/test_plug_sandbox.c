@@ -120,9 +120,7 @@ void test_plug_sandbox_declared_headless_prompt_and_persistence_policy(void)
     YewTrustDb db;
 
     sf_open(&f);
-    f.plug.mf.caps_wanted =
-        (1U << YEW_CAP_FS) | (1U << YEW_CAP_SHELL) |
-        (1U << YEW_CAP_CLIPBOARD);
+    f.plug.mf.caps_wanted = 1U << YEW_CAP_FS;
 
     /* Undeclared is an immediate, exact error and never a question. */
     YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_NET));
@@ -130,14 +128,16 @@ void test_plug_sandbox_declared_headless_prompt_and_persistence_policy(void)
                       "plugin \"cap-test\" did not declare net");
     YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
 
-    /* Headless declared use denies without touching prompt state. */
+    /* Headless preflight settles every declaration as denied without UI. */
     f.ed.headless = true;
+    YEW_ASSERT(yew_plug_cap_preflight(&f.ed, &f.plug));
     YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_FS_READ));
     YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+    f.plug.session_deny = 0U;
     f.ed.headless = false;
 
-    /* The triggering call is denied; lower-case allow authorizes retry. */
-    YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_FS_WRITE));
+    /* Interactive preflight asks before any guarded call can execute. */
+    YEW_ASSERT(!yew_plug_cap_preflight(&f.ed, &f.plug));
     YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_PLUGIN_CAP);
     YEW_ASSERT_EQ_STR(
         sf_message(&f.ed),
@@ -147,15 +147,17 @@ void test_plug_sandbox_declared_headless_prompt_and_persistence_policy(void)
     YEW_ASSERT(yew_plug_prompt_key(&f.ed, (u32)'a'));
     YEW_ASSERT(fl_cap_check(f.vm, FL_CAP_FS_READ | FL_CAP_FS_WRITE));
 
-    /* Upper-case allow persists and remains effective without session state. */
-    YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_SHELL));
+    /* Upper-case allow persists and preflight memoizes it after restart. */
+    f.plug.mf.caps_wanted |= 1U << YEW_CAP_SHELL;
+    YEW_ASSERT(!yew_plug_cap_preflight(&f.ed, &f.plug));
     YEW_ASSERT(yew_plug_prompt_key(&f.ed, (u32)'A'));
     f.plug.session_allow &= ~(1U << YEW_CAP_SHELL);
+    YEW_ASSERT(yew_plug_cap_preflight(&f.ed, &f.plug));
     YEW_ASSERT(fl_cap_check(f.vm, FL_CAP_SHELL));
 
     /* A once-deny lasts the session; an explicit pregrant overrides it. */
     f.plug.mf.caps_wanted |= 1U << YEW_CAP_NET;
-    YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_NET));
+    YEW_ASSERT(!yew_plug_cap_preflight(&f.ed, &f.plug));
     YEW_ASSERT(yew_plug_prompt_key(&f.ed, (u32)'d'));
     YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_NET));
     YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
@@ -163,9 +165,11 @@ void test_plug_sandbox_declared_headless_prompt_and_persistence_policy(void)
     YEW_ASSERT(fl_cap_check(f.vm, FL_CAP_NET));
 
     /* Upper-case deny persists and is consulted after session state clears. */
-    YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_CLIPBOARD));
+    f.plug.mf.caps_wanted |= 1U << YEW_CAP_CLIPBOARD;
+    YEW_ASSERT(!yew_plug_cap_preflight(&f.ed, &f.plug));
     YEW_ASSERT(yew_plug_prompt_key(&f.ed, (u32)'D'));
     f.plug.session_deny &= ~(1U << YEW_CAP_CLIPBOARD);
+    YEW_ASSERT(yew_plug_cap_preflight(&f.ed, &f.plug));
     YEW_ASSERT(!fl_cap_check(f.vm, FL_CAP_CLIPBOARD));
     YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
 
@@ -178,5 +182,15 @@ void test_plug_sandbox_declared_headless_prompt_and_persistence_policy(void)
                           &db, "cap-test", YEW_PLUGIN_CAP_CLIPBOARD),
                       YEW_PLUGIN_GRANT_DENY);
     yew_trust_db_free(&db);
+
+    /* Escape cancels a deferred enable and executes no plugin code. */
+    f.plug.mf.caps_wanted = 1U << YEW_CAP_FS;
+    f.plug.session_allow = 0U;
+    f.plug.session_deny = 0U;
+    f.plug.st = PLUG_DISCOVERED;
+    YEW_ASSERT(!yew_plug_cap_preflight(&f.ed, &f.plug));
+    YEW_ASSERT(yew_plug_prompt_key(&f.ed, 0x1BU));
+    YEW_ASSERT_EQ_U64(f.plug.st, PLUG_DISABLED);
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
     sf_close(&f);
 }

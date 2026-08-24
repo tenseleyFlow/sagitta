@@ -374,6 +374,8 @@ bool yew_plug_enable(Ed *ed, Plug *plug, DiagCtx *dc)
         return false;
     }
     ensure_provider(ed);
+    if (!yew_plug_cap_preflight(ed, plug))
+        return ed->plug->prompt.active && ed->plug->prompt.plug == plug;
     teardown(ed, plug, PLUG_DISCOVERED, false);
     residue_snapshot(ed, plug);
     plug->err_count = 0U;
@@ -414,8 +416,6 @@ bool yew_plug_enable(Ed *ed, Plug *plug, DiagCtx *dc)
                             &ignored);
     if (!ok) {
         capture_error(ed, plug, vm->err);
-        if (ed->plug->prompt.active && ed->plug->prompt.plug == plug)
-            ed->plug->prompt.retry_enable = true;
         teardown(ed, plug, PLUG_ERROR, false);
         return false;
     }
@@ -477,13 +477,25 @@ bool yew_plug_enable_desired(Ed *ed, DiagCtx *dc)
     if (ed->plug == NULL)
         return true;
     ensure_provider(ed);
+    ed->plug->enable_desired_pending = false;
     for (i = 0U; i < ed->plug->n; i++) {
         Plug *plug = ed->plug->v[i];
 
         if (plug == NULL || !plug->winner || plug->st != PLUG_DISCOVERED)
             continue;
-        if (!yew_plug_enable(ed, plug, dc))
+        if (!yew_plug_enable(ed, plug, dc)) {
             ok = false;
+            if (ed->prompt != YEW_PROMPT_NONE) {
+                ed->plug->enable_desired_pending = true;
+                ok = true;
+                break;
+            }
+        }
+        if (ed->plug->prompt.active) {
+            ed->plug->prompt.resume_desired = true;
+            ed->plug->enable_desired_pending = true;
+            break;
+        }
     }
     return ok;
 }
@@ -507,7 +519,32 @@ bool yew_plug_boot(Ed *ed)
     ensure_provider(ed);
     enabled = yew_plug_enable_desired(ed, NULL);
     ed->plug->booted = true;
+    ed->plug->startup_ws_open_pending =
+        ed->plug->prompt.active || ed->plug->enable_desired_pending;
     return enabled;
+}
+
+bool yew_plug_startup_pending(const Ed *ed)
+{
+    return ed != NULL && ed->plug != NULL &&
+           ed->plug->startup_ws_open_pending;
+}
+
+void yew_plug_pump(Ed *ed)
+{
+    PlugSys *sys;
+
+    if (ed == NULL || ed->plug == NULL)
+        return;
+    sys = ed->plug;
+    if (sys->enable_desired_pending && !sys->prompt.active &&
+        ed->prompt == YEW_PROMPT_NONE)
+        (void)yew_plug_enable_desired(ed, NULL);
+    if (sys->startup_ws_open_pending && !sys->prompt.active &&
+        !sys->enable_desired_pending && ed->prompt == YEW_PROMPT_NONE) {
+        sys->startup_ws_open_pending = false;
+        yew_fl_hook_workspace(ed, FL_EV_WS_OPEN);
+    }
 }
 
 void yew_plug_free(Ed *ed)

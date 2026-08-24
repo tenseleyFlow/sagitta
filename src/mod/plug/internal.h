@@ -26,7 +26,7 @@ typedef struct PlugPrompt {
     Plug *plug;
     YewCap cap;
     bool active;
-    bool retry_enable;
+    bool resume_desired;
 } PlugPrompt;
 
 struct PlugSys {
@@ -50,6 +50,8 @@ struct PlugSys {
     bool gc_registered;
     bool booted;
     bool draining;
+    bool enable_desired_pending;
+    bool startup_ws_open_pending;
     PickItem *pick_items;
     char *pick_text;
     u32 pick_n;
@@ -72,5 +74,6 @@ void yew_plug_drop_origin_regs(Ed *ed, u32 origin_id);
 /* sandbox.c owns capability decisions and message-line consent. */
 u32 yew_plug_cap_fl_mask(YewCap cap);
 YewPluginCapability yew_plug_trust_cap(YewCap cap);
+bool yew_plug_cap_preflight(Ed *ed, Plug *plug);
 
 #endif /* YEW_MOD_PLUG_INTERNAL_H */

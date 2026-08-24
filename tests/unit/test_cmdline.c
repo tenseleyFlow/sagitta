@@ -815,6 +815,12 @@ void test_cmdline_hint_reports_what_the_parser_understands(void)
     YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "redraw");
     yew_cmdline_close(&fixture.ed, false);
 
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "plug.enable");
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
+                      "plug.enable \xC2\xB7 <plugin>");
+    yew_cmdline_close(&fixture.ed, false);
+
     /*
      * A range reports how many LINES it covers.  The user typed the
      * numbers, so echoing them back says nothing; what they cannot see

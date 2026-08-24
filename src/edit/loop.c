@@ -24,6 +24,9 @@
 #include "mod/git/git.h"
 #include "mod/git/editor.h"
 #include "mod/lsp/lsp.h"
+#if YEW_WITH_PLUGINS
+#include "mod/plug/plug.h"
+#endif
 #include "term/input.h"
 #include "term/tty.h"
 #include "util/log.h"
@@ -520,6 +523,11 @@ int yew_loop_run(Ed *ed)
             had_input = true;
             yew_loop_dispatch_event(ed, &key, now);
         }
+#if YEW_WITH_PLUGINS
+        /* Capability consent defers plugin bytecode; resume the startup
+         * queue only after the owning prompt has consumed its key. */
+        yew_plug_pump(ed);
+#endif
         if (had_input) {
             ed->fl_idle_since_ms = now;
             ed->fl_idle_fired = false;

@@ -300,6 +300,79 @@ static u32 life_principal_modules(const LifecycleFix *f, u8 state)
     return count;
 }
 
+static void life_rediscover_caps(LifecycleFix *f, const char *name,
+                                 const char *caps, const char *events,
+                                 const char *source)
+{
+    char manifest_source[1024];
+    int n;
+
+    life_write(f->entry, source);
+    n = snprintf(manifest_source, sizeof(manifest_source),
+                 "{name: \"%s\", version: \"1.0.0\", api: 1, "
+                 "entry: \"src/main.fl\", capabilities: %s, events: %s, "
+                 "description: \"lifecycle fixture\"}\n",
+                 name, caps, events);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(manifest_source));
+    life_write(f->manifest, manifest_source);
+    yew_plug_free(&f->ed);
+    YEW_ASSERT(yew_plug_discover_with_policy(&f->ed, true, &f->trust,
+                                              &f->dc));
+    f->plug = yew_plug_find(&f->ed, name);
+    YEW_ASSERT_NOT_NULL(f->plug);
+}
+
+void test_plug_lifecycle_capability_preflight_runs_bytecode_once(void)
+{
+    LifecycleFix f;
+    char sentinel[512];
+    char source[1400];
+    char bytes[32] = {0};
+    FILE *fp;
+    int n;
+
+    life_open(&f, "life-preflight", "[]", "fn init(ctx) nil\n", NULL);
+    n = snprintf(sentinel, sizeof(sentinel), "%s/preflight-sentinel",
+                 f.root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(sentinel));
+    n = snprintf(source, sizeof(source),
+                 "import io\n"
+                 "io.write(\"%s\", \"top\\n\")\n"
+                 "fn init(ctx) { io.append(\"%s\", \"init\\n\") }\n",
+                 sentinel, sentinel);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(source));
+    life_rediscover_caps(&f, "life-preflight", "[\"fs\", \"shell\"]",
+                         "[]", source);
+
+    /* Enable is accepted but no module bytecode runs before both decisions. */
+    YEW_ASSERT(yew_plug_enable_desired(&f.ed, &f.dc));
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_PLUGIN_CAP);
+    YEW_ASSERT(f.ed.plug->enable_desired_pending);
+    YEW_ASSERT_EQ_I64(f.plug->st, PLUG_DISCOVERED);
+    YEW_ASSERT_EQ_I64(access(sentinel, F_OK), -1);
+    YEW_ASSERT_EQ_U64(f.ed.plug->prompt.cap, YEW_CAP_FS);
+
+    YEW_ASSERT(yew_plug_prompt_key(&f.ed, (u32)'a'));
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_PLUGIN_CAP);
+    YEW_ASSERT_EQ_U64(f.ed.plug->prompt.cap, YEW_CAP_SHELL);
+    YEW_ASSERT_EQ_I64(f.plug->st, PLUG_DISCOVERED);
+    YEW_ASSERT_EQ_I64(access(sentinel, F_OK), -1);
+
+    /* A denial is a settled decision, not a refusal to load. */
+    YEW_ASSERT(yew_plug_prompt_key(&f.ed, (u32)'d'));
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT(!f.ed.plug->enable_desired_pending);
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ENABLED);
+    YEW_ASSERT((f.plug->session_allow & (1U << YEW_CAP_FS)) != 0U);
+    YEW_ASSERT((f.plug->session_deny & (1U << YEW_CAP_SHELL)) != 0U);
+    fp = fopen(sentinel, "rb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fread(bytes, 1U, sizeof(bytes), fp), 9U);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_STR(bytes, "top\ninit\n");
+    life_close(&f);
+}
+
 void test_plug_lifecycle_enable_passes_ctx_and_registers_command_and_hook(void)
 {
     static const char source[] =

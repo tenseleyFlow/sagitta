@@ -72,6 +72,8 @@ typedef struct Plug {
 bool yew_plug_discover(Ed *ed, DiagCtx *dc);
 bool yew_plug_enable_desired(Ed *ed, DiagCtx *dc);
 bool yew_plug_boot(Ed *ed);
+bool yew_plug_startup_pending(const Ed *ed);
+void yew_plug_pump(Ed *ed);
 void yew_plug_free(Ed *ed);
 bool yew_plug_session_grant(Ed *ed, const char *plugin, const char *cap);
 

@@ -5,9 +5,9 @@
  *
  * Plugins share the editor process and VM.  These checks cover only the
  * four named host I/O surfaces; they provide neither memory nor resource
- * isolation.  The current call is denied before an interactive question is
- * shown.  An allow answer authorizes a later retry, so no Fletch frame is
- * resumed after its transaction has already rolled back.
+ * isolation.  Every declared capability is decided before the entry module
+ * is evaluated.  Guarded calls therefore never open UI, suspend a VM frame,
+ * or replay a callback after observable work has already happened.
  */
 
 #include "mod/plug/internal.h"
@@ -16,6 +16,7 @@
 #include <time.h>
 
 #include "edit/ed.h"
+#include "fl/flruntime.h"
 #include "fl/origin.h"
 #include "fl/vm.h"
 #include "ui/message.h"
@@ -111,9 +112,7 @@ static bool cap_denied(FlVm *vm, const Plug *plug, YewCap cap)
 
 static bool cap_one(FlVm *vm, Plug *plug, YewCap cap)
 {
-    Ed *ed = vm->ed;
     u32 bit = 1U << (u32)cap;
-    YewPluginGrant persisted;
 
     if ((plug->mf.caps_wanted & bit) == 0U) {
         return fl_raise(vm, "capability",
@@ -124,30 +123,56 @@ static bool cap_one(FlVm *vm, Plug *plug, YewCap cap)
         return true;
     if ((plug->session_deny & bit) != 0U)
         return cap_denied(vm, plug, cap);
-    persisted = persisted_grant(plug, cap);
-    if (persisted == YEW_PLUGIN_GRANT_ALLOW) {
-        plug->session_allow |= bit;
-        return true;
-    }
-    if (persisted == YEW_PLUGIN_GRANT_DENY) {
-        plug->session_deny |= bit;
-        return cap_denied(vm, plug, cap);
-    }
-    if (ed->headless)
-        return cap_denied(vm, plug, cap);
-    if (ed->plug->prompt.active || ed->prompt != YEW_PROMPT_NONE)
-        return cap_denied(vm, plug, cap);
+    return fl_raise(vm, "capability",
+                    "plugin \"%s\" has no settled %s decision",
+                    plug->mf.name_text, yew_cap_name(cap));
+}
 
+static void prompt_open(Ed *ed, Plug *plug, YewCap cap)
+{
     ed->plug->prompt.plug = plug;
     ed->plug->prompt.cap = cap;
     ed->plug->prompt.active = true;
-    ed->plug->prompt.retry_enable = false;
+    ed->plug->prompt.resume_desired = false;
     yew_ed_prompt(ed, YEW_PROMPT_PLUGIN_CAP);
     yew_msg(ed, YEW_MSG_WARN,
             "plugin \"%s\" requests %s (%s) — [a]llow once  "
             "[A]llow always  [d]eny once  [D]eny always",
             plug->mf.name_text, yew_cap_name(cap), cap_detail(cap));
-    return cap_denied(vm, plug, cap);
+}
+
+bool yew_plug_cap_preflight(Ed *ed, Plug *plug)
+{
+    u32 cap;
+
+    if (ed == NULL || ed->plug == NULL || plug == NULL)
+        return false;
+    for (cap = 0U; cap < (u32)YEW_CAP__N; cap++) {
+        u32 bit = 1U << cap;
+        YewPluginGrant persisted;
+
+        if ((plug->mf.caps_wanted & bit) == 0U ||
+            ((plug->session_allow | plug->session_deny) & bit) != 0U)
+            continue;
+        persisted = persisted_grant(plug, (YewCap)cap);
+        if (persisted == YEW_PLUGIN_GRANT_ALLOW) {
+            plug->session_allow |= bit;
+            continue;
+        }
+        if (persisted == YEW_PLUGIN_GRANT_DENY) {
+            plug->session_deny |= bit;
+            continue;
+        }
+        if (ed->headless) {
+            plug->session_deny |= bit;
+            continue;
+        }
+        if (ed->plug->prompt.active || ed->prompt != YEW_PROMPT_NONE)
+            return false;
+        prompt_open(ed, plug, (YewCap)cap);
+        return false;
+    }
+    return true;
 }
 
 bool yew_plug_cap_check(FlVm *vm, u32 need)
@@ -226,7 +251,7 @@ bool yew_plug_prompt_key(Ed *ed, u32 code)
     u32 bit;
     bool allow;
     bool always;
-    bool retry;
+    bool resume_desired;
 
     if (ed == NULL || ed->plug == NULL || !ed->plug->prompt.active)
         return false;
@@ -237,7 +262,16 @@ bool yew_plug_prompt_key(Ed *ed, u32 code)
         return true;
     }
     if (code == 0x1BU) {
+        resume_desired = prompt->resume_desired;
+        plug->st = PLUG_DISABLED;
         prompt_close(ed);
+        if (resume_desired)
+            (void)yew_plug_enable_desired(ed, NULL);
+        if (ed->plug->startup_ws_open_pending &&
+            !ed->plug->prompt.active) {
+            ed->plug->startup_ws_open_pending = false;
+            yew_fl_hook_workspace(ed, FL_EV_WS_OPEN);
+        }
         return true;
     }
     if (code != (u32)'a' && code != (u32)'A' &&
@@ -260,7 +294,7 @@ bool yew_plug_prompt_key(Ed *ed, u32 code)
         return true;
     }
     bit = 1U << (u32)prompt->cap;
-    retry = prompt->retry_enable;
+    resume_desired = prompt->resume_desired;
     if (allow) {
         plug->session_allow |= bit;
         plug->session_deny &= ~bit;
@@ -269,11 +303,20 @@ bool yew_plug_prompt_key(Ed *ed, u32 code)
         plug->session_allow &= ~bit;
     }
     prompt_close(ed);
-    if (allow && retry && plug->st != PLUG_ENABLED &&
-        !yew_plug_enable(ed, plug, NULL) &&
-        !(ed->plug->prompt.active && ed->plug->prompt.plug == plug)) {
-        yew_msg(ed, YEW_MSG_ERROR, "plugin \"%s\" retry failed",
+    if (plug->st != PLUG_ENABLED && !yew_plug_enable(ed, plug, NULL)) {
+        yew_msg(ed, YEW_MSG_ERROR, "plugin \"%s\" enable failed",
                 plug->mf.name_text);
+    }
+    if (resume_desired) {
+        if (ed->plug->prompt.active)
+            ed->plug->prompt.resume_desired = true;
+        else
+            (void)yew_plug_enable_desired(ed, NULL);
+    }
+    if (ed->plug->startup_ws_open_pending &&
+        !ed->plug->prompt.active) {
+        ed->plug->startup_ws_open_pending = false;
+        yew_fl_hook_workspace(ed, FL_EV_WS_OPEN);
     }
     return true;
 }
