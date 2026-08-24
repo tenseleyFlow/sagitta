@@ -135,6 +135,21 @@ static void hook_notice(void *ctx, FlHookNotice what, u32 event,
         return;
     }
     if (what == FL_HOOK_NOTICE_DISABLED) {
+#if YEW_WITH_PLUGINS
+        if (runtime_plugin_origin(ed, origin)) {
+            u32 i;
+
+            for (i = 0U; i < ed->hooks.n; i++) {
+                FlHook *hook = &ed->hooks.v[i];
+
+                if (hook->active && hook->ledger_id == ledger_id) {
+                    hook->disabled = false;
+                    break;
+                }
+            }
+            return;
+        }
+#endif
         yew_log(YEW_LOG_ERROR, "hook \"%s\" disabled after %lu errors",
                 name, (unsigned long)errs);
         yew_msg(ed, YEW_MSG_WARN,

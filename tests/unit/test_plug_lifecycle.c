@@ -108,6 +108,35 @@ static void life_write(const char *path, const char *source)
     YEW_ASSERT_EQ_I64(fclose(fp), 0);
 }
 
+static void life_add_plugin(LifecycleFix *f, const char *name,
+                            const char *events, const char *entry_source)
+{
+    char plugin_dir[512];
+    char source_dir[544];
+    char entry[576];
+    char manifest[576];
+    char manifest_source[1024];
+    int n;
+
+    n = snprintf(plugin_dir, sizeof(plugin_dir), "%s/%s", f->plugins, name);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(plugin_dir));
+    n = snprintf(source_dir, sizeof(source_dir), "%s/src", plugin_dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(source_dir));
+    n = snprintf(entry, sizeof(entry), "%s/main.fl", source_dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(entry));
+    n = snprintf(manifest, sizeof(manifest), "%s/plugin.fl", plugin_dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(manifest));
+    YEW_ASSERT(yew_mkdirs(source_dir, 0700U));
+    life_write(entry, entry_source);
+    n = snprintf(manifest_source, sizeof(manifest_source),
+                 "{name: \"%s\", version: \"1.0.0\", api: 1, "
+                 "entry: \"src/main.fl\", capabilities: [], events: %s, "
+                 "description: \"lifecycle fixture\"}\n",
+                 name, events);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(manifest_source));
+    life_write(manifest, manifest_source);
+}
+
 static u32 life_active_ledger(const Ed *ed)
 {
     u32 active = 0U;
@@ -470,6 +499,63 @@ void test_plug_lifecycle_command_errors_share_plugin_limit(void)
     YEW_ASSERT_EQ_U64(f.plug->st, PLUG_DISABLED);
     YEW_ASSERT(strstr(f.plug->last_error, "command exploded") != NULL);
     life_assert_counts(life_counts(&f), before);
+    life_close(&f);
+}
+
+void test_plug_lifecycle_generic_hook_limit_cannot_preempt_plugin_limit(void)
+{
+    static const char source[] =
+        "fn init(ctx) {\n"
+        "  ctx.on(\"ed.idle\", fn() error(\"hook exploded\"))\n"
+        "}\n";
+    LifecycleFix f;
+    u32 i;
+
+    life_open(&f, "life-hook-limits", "[\"ed.idle\"]", source, NULL);
+    YEW_ASSERT(yew_plug_enable(&f.ed, f.plug, &f.dc));
+    fl_hook_error_limit(&f.ed.hooks, 1U);
+    for (i = 0U; i < 4U; i++) {
+        yew_fl_hook_fire(&f.ed, FL_EV_ED_IDLE, NULL, 0U);
+        YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ENABLED);
+        YEW_ASSERT_EQ_U64(f.plug->err_count, i + 1U);
+    }
+    yew_fl_hook_fire(&f.ed, FL_EV_ED_IDLE, NULL, 0U);
+    YEW_ASSERT_EQ_U64(f.plug->err_count, 5U);
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_DISABLED);
+    life_close(&f);
+}
+
+void test_plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event(void)
+{
+    static const char source[] =
+        "fn init(ctx) {\n"
+        "  ctx.on(\"ed.idle\", fn() error(\"hook exploded\"))\n"
+        "}\n";
+    LifecycleFix f;
+    Plug *first;
+    Plug *second;
+    u32 i;
+
+    life_open(&f, "life-queue-a", "[\"ed.idle\"]", source, NULL);
+    life_add_plugin(&f, "life-queue-b", "[\"ed.idle\"]", source);
+    yew_plug_free(&f.ed);
+    YEW_ASSERT(yew_plug_discover_with_policy(&f.ed, true, &f.trust,
+                                              &f.dc));
+    first = yew_plug_find(&f.ed, "life-queue-a");
+    second = yew_plug_find(&f.ed, "life-queue-b");
+    YEW_ASSERT_NOT_NULL(first);
+    YEW_ASSERT_NOT_NULL(second);
+    YEW_ASSERT(yew_plug_enable(&f.ed, first, &f.dc));
+    YEW_ASSERT(yew_plug_enable(&f.ed, second, &f.dc));
+    for (i = 0U; i < 4U; i++)
+        yew_fl_hook_fire(&f.ed, FL_EV_ED_IDLE, NULL, 0U);
+    YEW_ASSERT_EQ_U64(first->st, PLUG_ENABLED);
+    YEW_ASSERT_EQ_U64(second->st, PLUG_ENABLED);
+    yew_fl_hook_fire(&f.ed, FL_EV_ED_IDLE, NULL, 0U);
+    YEW_ASSERT_EQ_U64(first->err_count, 5U);
+    YEW_ASSERT_EQ_U64(second->err_count, 5U);
+    YEW_ASSERT_EQ_U64(first->st, PLUG_DISABLED);
+    YEW_ASSERT_EQ_U64(second->st, PLUG_DISABLED);
     life_close(&f);
 }
 

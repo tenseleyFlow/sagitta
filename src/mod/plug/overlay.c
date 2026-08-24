@@ -208,13 +208,13 @@ void yew_plug_overlay_run(Ed *ed, Win *win, LineNo lo_line, LineNo hi_line,
         if (!fl_call_value_args(ed->fl, snapshot.value, args, 4U,
                                 YEW_SRC_FLETCH, &result)) {
             yew_plug_hook_error(ed, snapshot.origin_id, vm->err);
-            if (sys->pending_disable_origin != 0U)
+            if (sys->npending_disable != 0U)
                 break;
             continue;
         }
         (void)parse_result(ed, &snapshot, win, lo_line, hi_line, result,
                            visit, ctx);
-        if (sys->pending_disable_origin != 0U)
+        if (sys->npending_disable != 0U)
             break;
     }
     yew_plug_drain_pending(ed);

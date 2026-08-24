@@ -27,6 +27,7 @@ void yew_bind_batch_end(Ed *ed);
 
 const char *yew_bind_error(const Ed *ed);
 u32 yew_bind_active_count(const Ed *ed);
+u32 yew_bind_origin_count(const Ed *ed, u32 origin_id);
 u32 yew_bind_rebuild_count(const Ed *ed);
 
 bool fl_bind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out);

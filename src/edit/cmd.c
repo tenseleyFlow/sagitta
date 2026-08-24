@@ -1893,7 +1893,7 @@ u32 yew_cmd_active_count(void)
 const CmdDesc *yew_cmd_at(u32 i)
 {
     yew_cmd_init();
-    if ((size_t)i >= registry.len)
+    if ((size_t)i >= registry.len || !registry.active[i])
         return NULL;
     return &registry.entries[i].cmd;
 }

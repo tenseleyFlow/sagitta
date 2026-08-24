@@ -2097,6 +2097,8 @@ const YewTest yew_tests[] = {
     T(plug_lifecycle_reverse_disable_leaves_zero_registry_residue),
     T(plug_lifecycle_reenable_keeps_imported_helper_principal),
     T(plug_lifecycle_fifth_hook_error_auto_disables_plugin),
+    T(plug_lifecycle_generic_hook_limit_cannot_preempt_plugin_limit),
+    T(plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event),
     T(plug_lifecycle_command_errors_share_plugin_limit),
     T(plug_lifecycle_bound_errors_share_plugin_limit),
     T(macro_header_parses_all_five_fields),

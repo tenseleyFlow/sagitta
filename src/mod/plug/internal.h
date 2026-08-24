@@ -42,7 +42,9 @@ struct PlugSys {
     u32 capregs;
     u32 next_handle;
     PlugPrompt prompt;
-    u32 pending_disable_origin;
+    u32 *pending_disable;
+    u32 npending_disable;
+    u32 cappending_disable;
     u32 ctx_origin;
     bool ctx_registration;
     bool gc_registered;

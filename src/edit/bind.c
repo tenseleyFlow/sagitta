@@ -452,6 +452,20 @@ u32 yew_bind_active_count(const Ed *ed)
     return n;
 }
 
+u32 yew_bind_origin_count(const Ed *ed, u32 origin_id)
+{
+    const YewBindings *binds;
+    u32 count = 0U;
+    u32 i;
+
+    if (ed == NULL || (binds = ed->bindings) == NULL)
+        return 0U;
+    for (i = 0U; i < binds->n; i++)
+        if (binds->v[i].active && binds->v[i].origin == origin_id)
+            count++;
+    return count;
+}
+
 u32 yew_bind_rebuild_count(const Ed *ed)
 {
     return ed == NULL || ed->bindings == NULL ? 0U :

@@ -227,58 +227,77 @@ static bool callable_arity_one(FlValue value)
 }
 
 #ifndef NDEBUG
-static u32 active_hooks(const Ed *ed)
+static u32 active_hooks(const Ed *ed, u32 origin_id)
 {
     u32 active = 0U;
     u32 i;
 
     for (i = 0U; i < ed->hooks.n; i++)
-        if (ed->hooks.v[i].active)
+        if (ed->hooks.v[i].active &&
+            ed->hooks.v[i].origin == origin_id)
             active++;
     return active;
 }
 
-static u32 active_ledger(const Ed *ed)
+static u32 active_ledger(const Ed *ed, u32 origin_id)
 {
     u32 active = 0U;
     u32 i;
 
     for (i = 0U; i < ed->hooks.ledger.n; i++)
-        if (ed->hooks.ledger.v[i].active)
+        if (ed->hooks.ledger.v[i].active &&
+            ed->hooks.ledger.v[i].origin_id == origin_id)
             active++;
     return active;
 }
 
-static u32 active_plugin_commands(const PlugSys *sys)
+static u32 active_plugin_commands(const PlugSys *sys, u32 origin_id)
 {
     u32 active = 0U;
     u32 i;
 
     for (i = 0U; i < sys->ncmds; i++)
-        if (sys->cmds[i].active)
+        if (sys->cmds[i].active && sys->cmds[i].origin_id == origin_id)
             active++;
     return active;
 }
 
-static u32 active_plugin_values(const PlugSys *sys)
+static u32 active_plugin_values(const PlugSys *sys, u32 origin_id)
 {
     u32 active = 0U;
     u32 i;
 
     for (i = 0U; i < sys->nregs; i++)
-        if (sys->regs[i].active)
+        if (sys->regs[i].active && sys->regs[i].origin_id == origin_id)
+            active++;
+    return active;
+}
+
+static u32 active_principal_modules(const Ed *ed, u32 origin_id)
+{
+    const FlVm *vm = yew_fl_vm((Ed *)ed);
+    u32 active = 0U;
+    u32 i;
+
+    if (vm == NULL)
+        return 0U;
+    for (i = 0U; i < vm->mods.n; i++)
+        if (vm->mods.v[i].origin.principal_id == origin_id &&
+            vm->mods.v[i].state == (u8)FL_MOD_READY)
             active++;
     return active;
 }
 
 static void residue_snapshot(Ed *ed, Plug *plug)
 {
-    plug->residue_before[0] = yew_cmd_active_count();
-    plug->residue_before[1] = yew_bind_active_count(ed);
-    plug->residue_before[2] = active_hooks(ed);
-    plug->residue_before[3] = active_ledger(ed);
-    plug->residue_before[4] = active_plugin_commands(ed->plug);
-    plug->residue_before[5] = active_plugin_values(ed->plug);
+    plug->residue_before[0] = active_plugin_commands(ed->plug,
+                                                      plug->origin_id);
+    plug->residue_before[1] = yew_bind_origin_count(ed, plug->origin_id);
+    plug->residue_before[2] = active_hooks(ed, plug->origin_id);
+    plug->residue_before[3] = active_ledger(ed, plug->origin_id);
+    plug->residue_before[4] = active_plugin_values(ed->plug,
+                                                    plug->origin_id);
+    plug->residue_before[5] = active_principal_modules(ed, plug->origin_id);
     plug->residue_snapshot = true;
 }
 
@@ -289,12 +308,12 @@ static void residue_assert(Ed *ed, Plug *plug)
 
     if (!plug->residue_snapshot)
         return;
-    after[0] = yew_cmd_active_count();
-    after[1] = yew_bind_active_count(ed);
-    after[2] = active_hooks(ed);
-    after[3] = active_ledger(ed);
-    after[4] = active_plugin_commands(ed->plug);
-    after[5] = active_plugin_values(ed->plug);
+    after[0] = active_plugin_commands(ed->plug, plug->origin_id);
+    after[1] = yew_bind_origin_count(ed, plug->origin_id);
+    after[2] = active_hooks(ed, plug->origin_id);
+    after[3] = active_ledger(ed, plug->origin_id);
+    after[4] = active_plugin_values(ed->plug, plug->origin_id);
+    after[5] = active_principal_modules(ed, plug->origin_id);
     for (i = 0U; i < YEW_ARRAY_LEN(after); i++)
         if (after[i] != plug->residue_before[i])
             YEW_BUG("plugin teardown left registry residue (%u: %u != %u)",
@@ -519,6 +538,7 @@ void yew_plug_free(Ed *ed)
     free(sys->v);
     free(sys->cmds);
     free(sys->regs);
+    free(sys->pending_disable);
     free(sys->pick_items);
     free(sys->pick_text);
     arena_free_all(&sys->arena);
@@ -529,8 +549,11 @@ void yew_plug_free(Ed *ed)
 void yew_plug_hook_error(Ed *ed, u32 origin_id, FlValue error)
 {
     Plug *plug = yew_plug_by_origin(ed, origin_id);
+    PlugSys *sys;
     char line[256];
     u32 limit;
+    u32 i;
+    u32 want;
 
     if (plug == NULL || plug->st != PLUG_ENABLED)
         return;
@@ -546,33 +569,48 @@ void yew_plug_hook_error(Ed *ed, u32 origin_id, FlValue error)
             (unsigned)limit,
             first_line(plug->last_error, line, sizeof(line)),
             plug->mf.name_text);
-    if (plug->err_count >= limit &&
-        ed->plug->pending_disable_origin == 0U)
-        ed->plug->pending_disable_origin = origin_id;
+    if (plug->err_count < limit)
+        return;
+    sys = ed->plug;
+    for (i = 0U; i < sys->npending_disable; i++)
+        if (sys->pending_disable[i] == origin_id)
+            return;
+    if (sys->npending_disable == sys->cappending_disable) {
+        want = sys->cappending_disable == 0U ? 4U :
+               sys->cappending_disable * 2U;
+        if (want < sys->cappending_disable)
+            YEW_BUG("plugin pending-disable queue overflow");
+        sys->pending_disable = yew_xreallocarray(
+            sys->pending_disable, want, sizeof(*sys->pending_disable));
+        sys->cappending_disable = want;
+    }
+    sys->pending_disable[sys->npending_disable++] = origin_id;
 }
 
 void yew_plug_drain_pending(Ed *ed)
 {
     PlugSys *sys;
-    u32 origin;
+    u32 at;
     u32 limit;
-    Plug *plug;
 
     if (ed == NULL || ed->plug == NULL)
         return;
     sys = ed->plug;
-    if (sys->draining || sys->pending_disable_origin == 0U)
+    if (sys->draining || sys->npending_disable == 0U)
         return;
     sys->draining = true;
     limit = error_limit(ed);
-    origin = sys->pending_disable_origin;
-    sys->pending_disable_origin = 0U;
-    plug = yew_plug_by_origin(ed, origin);
-    if (plug != NULL) {
+    for (at = 0U; at < sys->npending_disable; at++) {
+        Plug *plug = yew_plug_by_origin(ed, sys->pending_disable[at]);
+
+        if (plug == NULL || plug->st != PLUG_ENABLED)
+            continue;
         (void)yew_plug_disable(ed, plug);
-        yew_msg(ed, YEW_MSG_WARN, "plugin \"%s\" disabled after %u errors",
+        yew_msg(ed, YEW_MSG_WARN,
+                "plugin \"%s\" disabled after %u errors",
                 plug->mf.name_text, (unsigned)limit);
     }
+    sys->npending_disable = 0U;
     sys->draining = false;
 }
 
@@ -625,14 +663,56 @@ static const PickItem *picker_items(void *ctx, u32 *n)
 
 static void plugin_info(Ed *ed, Plug *plug)
 {
+    Bytebuf info;
+    u32 cap;
+    u32 event;
+
+    bytebuf_init(&info);
+    bytebuf_printf(&info,
+                   "plugin: %s\nversion: %s\napi: %u\nstate: %s\n"
+                   "source: %s\nentry: %s\ndir: %s\ndescription: %s\n"
+                   "capabilities:",
+                   plug->mf.name_text,
+                   plug->mf.version == NULL ? "" : plug->mf.version,
+                   (unsigned)plug->mf.api, yew_plug_state_name(plug->st),
+                   yew_plug_source_name(plug->source),
+                   plug->mf.entry == NULL ? "" : plug->mf.entry,
+                   plug->mf.dir == NULL ? "" : plug->mf.dir,
+                   plug->mf.desc == NULL ? "" : plug->mf.desc);
+    for (cap = 0U; cap < (u32)YEW_CAP__N; cap++) {
+        u32 bit = 1U << cap;
+        const char *grant = "undecided";
+
+        if ((plug->mf.caps_wanted & bit) == 0U)
+            continue;
+        if ((plug->session_allow & bit) != 0U) {
+            grant = "allow once";
+        } else if ((plug->session_deny & bit) != 0U) {
+            grant = "deny once";
+        } else {
+            YewPluginGrant persisted = yew_config_plugin_capability(
+                ed, plug->mf.name_text, yew_plug_trust_cap((YewCap)cap));
+
+            if (persisted == YEW_PLUGIN_GRANT_ALLOW)
+                grant = "allow always";
+            else if (persisted == YEW_PLUGIN_GRANT_DENY)
+                grant = "deny always";
+        }
+        bytebuf_printf(&info, " %s=%s", yew_cap_name((YewCap)cap), grant);
+    }
+    if (plug->mf.caps_wanted == 0U)
+        bytebuf_append(&info, " none", sizeof(" none") - 1U);
+    bytebuf_append(&info, "\nevents:", sizeof("\nevents:") - 1U);
+    for (event = 0U; event < plug->mf.nevents; event++)
+        bytebuf_printf(&info, " %s", plug->mf.event_names[event]);
+    if (plug->mf.nevents == 0U)
+        bytebuf_append(&info, " none", sizeof(" none") - 1U);
+    bytebuf_printf(&info, "\nlast error: %s",
+                   plug->last_error == NULL ? "none" : plug->last_error);
+    bytebuf_push_u8(&info, (u8)'\0');
     yew_msg(ed, plug->st == PLUG_ERROR ? YEW_MSG_ERROR : YEW_MSG_INFO,
-            "%s %s — %s — %s%s%s",
-            plug->mf.name_text,
-            plug->mf.version == NULL ? "" : plug->mf.version,
-            yew_plug_state_name(plug->st),
-            plug->mf.desc == NULL ? "" : plug->mf.desc,
-            plug->last_error == NULL ? "" : " — ",
-            plug->last_error == NULL ? "" : plug->last_error);
+            "%s", (const char *)info.data);
+    bytebuf_free(&info);
 }
 
 static bool picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)

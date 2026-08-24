@@ -125,9 +125,15 @@ static bool cap_one(FlVm *vm, Plug *plug, YewCap cap)
     if ((plug->session_deny & bit) != 0U)
         return cap_denied(vm, plug, cap);
     persisted = persisted_grant(plug, cap);
-    if (persisted == YEW_PLUGIN_GRANT_ALLOW)
+    if (persisted == YEW_PLUGIN_GRANT_ALLOW) {
+        plug->session_allow |= bit;
         return true;
-    if (persisted == YEW_PLUGIN_GRANT_DENY || ed->headless)
+    }
+    if (persisted == YEW_PLUGIN_GRANT_DENY) {
+        plug->session_deny |= bit;
+        return cap_denied(vm, plug, cap);
+    }
+    if (ed->headless)
         return cap_denied(vm, plug, cap);
     if (ed->plug->prompt.active || ed->prompt != YEW_PROMPT_NONE)
         return cap_denied(vm, plug, cap);
