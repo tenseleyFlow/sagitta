@@ -35,7 +35,7 @@ static void motion_compile_close(MotionCompileFix *f)
 
 static FlMotionProg *compile_motion(MotionCompileFix *f, const char *src)
 {
-    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
     FlProgram p;
     FlFn *fn;
     u32 i;

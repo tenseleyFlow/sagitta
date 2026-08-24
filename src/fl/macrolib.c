@@ -784,7 +784,7 @@ u32 yew_macrolib_scan(Ed *ed, DiagCtx *dc)
             continue;
         origin = (FlOrigin){(u8)FL_ORIGIN_CONFIG,
                   yew_intern(vm->in, file->path, strlen(file->path)),
-                  FL_CAP_ALL};
+                  FL_CAP_ALL, 0U};
         ledger_before = ed->hooks.ledger.n;
         if (!fl_module_eval_source(vm, file->path, file->source,
                                    file->source_len, origin, &exports)) {

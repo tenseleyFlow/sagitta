@@ -325,7 +325,8 @@ static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
     }
     file_id = unit->file_id;
     origin = (FlOrigin){unit->kind,
-                        yew_intern(&rt->interner, path, strlen(path)), caps};
+                        yew_intern(&rt->interner, path, strlen(path)), caps,
+                        0U};
     unit->origin = unit->kind == (u8)FL_ORIGIN_CONFIG ?
                    FL_ORIGIN_ID_CONFIG :
                    fl_origin_register(ed, (FlOriginKind)unit->kind, path,

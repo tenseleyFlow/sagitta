@@ -71,7 +71,7 @@ static FlFn *cf_compile(CFix *f, const char *src)
     /* CLI origin, no capabilities: these tests never call io,
      * and a grant nobody needs is a grant nobody notices is
      * wrong. */
-    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
 
     (void)fl_diag_add_file(&f->dc, "t.fl", src, strlen(src));
     p = fl_parse(&f->arena, &f->dc, &f->in, src, strlen(src), 0U);

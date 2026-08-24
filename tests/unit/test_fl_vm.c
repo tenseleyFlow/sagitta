@@ -73,7 +73,7 @@ static bool vf_run(VmFix *f, const char *src, FlValue *out)
     /* CLI origin, no capabilities: these tests never call io,
      * and a grant nobody needs is a grant nobody notices is
      * wrong. */
-    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
 
     (void)fl_diag_add_file(&f->dc, "t.fl", src, strlen(src));
     p = fl_parse(&f->arena, &f->dc, &f->in, src, strlen(src), 0U);
@@ -969,7 +969,7 @@ void test_fl_vm_disassembly_is_deterministic(void)
     /* CLI origin, no capabilities: these tests never call io,
      * and a grant nobody needs is a grant nobody notices is
      * wrong. */
-    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
     static const char *const src =
         "fn f(x) { return x + 1 }\n"
         "let m = {a: 1, b: \"two\"}\n"
