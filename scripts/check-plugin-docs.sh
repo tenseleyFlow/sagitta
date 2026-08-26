@@ -44,6 +44,37 @@ ctx_rows=$(awk '
     exit 1
 }
 
+awk '
+    /^This table is normative and frozen at plugin API 1:/ { table = 1; next }
+    table && /^`ctx.command` accepts/ { exit }
+    table {
+        line = $0
+        while (match(line, /`ctx\.[A-Za-z_][A-Za-z_]*/)) {
+            print substr(line, RSTART + 1, RLENGTH - 1)
+            line = substr(line, RSTART + RLENGTH)
+        }
+    }
+' docs/plugins-authoring.md | sort -u >"$tmp/ctx-documented"
+grep -ho 'ctx\.[A-Za-z_][A-Za-z_]*' \
+    examples/plugins/*/src/main.fl | sort -u >"$tmp/ctx-examples"
+if ! cmp -s "$tmp/ctx-documented" "$tmp/ctx-examples"; then
+    echo "plugin docs: no example matches the frozen ctx matrix" >&2
+    diff -u "$tmp/ctx-documented" "$tmp/ctx-examples" >&2 || true
+    exit 1
+fi
+
+for manifest in examples/plugins/*/plugin.fl; do
+    source=${manifest%/plugin.fl}/src/main.fl
+    events=$(sed -n 's/.*events: \[\(.*\)\].*/\1/p' "$manifest" |
+        tr ',' '\n' | tr -d ' "')
+    for event in $events; do
+        grep -Fq "ctx.on(\"$event\"" "$source" || {
+            echo "plugin docs: $manifest declares $event without an example hook" >&2
+            exit 1
+        }
+    done
+done
+
 for command in install update remove list; do
     grep -q "^### $command$" docs/pkg.md || {
         echo "plugin docs: missing yew pkg $command section" >&2

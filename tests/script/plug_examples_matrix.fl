@@ -35,7 +35,9 @@ let ws_readme = io.read(base + "trailing-ws/README.md")
 let notes_readme = io.read(base + "session-notes/README.md")
 let guide = io.read("plugins-authoring.md")
 
-# Every frozen ctx field is touched by at least one shipped example.
+# Every currently frozen ctx field is used by at least one shipped example.
+# scripts/check-plugin-docs.sh compares this source union with the normative
+# API table so adding or removing a field cannot leave this list stale.
 t.eq(has(ws, "ctx.name"), true)
 t.eq(has(ws, "ctx.on("), true)
 t.eq(has(ws, "ctx.command("), true)
