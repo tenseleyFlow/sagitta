@@ -198,7 +198,7 @@ const YewTest yew_tests[] = {
     T(multicursor_remove_and_normalize_clamp),
     T(multicursor_normalize_preserves_sticky_motion),
     T(multicursor_edit_guard_requires_multi_transaction),
-    T(multicursor_deferred_guards_name_their_sprints),
+    T(multicursor_boundary_guards_name_their_constraints),
     T(file_load_empty_roundtrips),
     T(file_load_lf_roundtrips),
     T(file_load_missing_final_newline_roundtrips),

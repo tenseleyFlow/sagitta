@@ -1074,13 +1074,13 @@ void test_multicursor_edit_guard_requires_multi_transaction(void)
     yew_cset_free(&set);
 }
 
-typedef enum DeferredGuard {
-    DEFERRED_REGEX_LIFT,
-    DEFERRED_COMPLETION,
-    DEFERRED_LSP_EDIT
-} DeferredGuard;
+typedef enum BoundaryGuard {
+    BOUNDARY_REGEX_LIFT,
+    BOUNDARY_COMPLETION,
+    BOUNDARY_LSP_EDIT
+} BoundaryGuard;
 
-static void assert_deferred_guard(DeferredGuard guard, const char *sprint)
+static void assert_boundary_guard(BoundaryGuard guard, const char *message)
 {
     CursorSet set;
     Bytebuf output;
@@ -1104,9 +1104,9 @@ static void assert_deferred_guard(DeferredGuard guard, const char *sprint)
             _exit(126);
         (void)close(pipefd[1]);
         (void)setenv("YEW_LOG", "/dev/null", 1);
-        if (guard == DEFERRED_REGEX_LIFT)
+        if (guard == BOUNDARY_REGEX_LIFT)
             yew_mc_require_literal_lift(true);
-        else if (guard == DEFERRED_COMPLETION)
+        else if (guard == BOUNDARY_COMPLETION)
             yew_mc_require_single_completion(&set);
         else
             yew_mc_require_single_lsp_edit(&set);
@@ -1131,14 +1131,17 @@ static void assert_deferred_guard(DeferredGuard guard, const char *sprint)
     YEW_ASSERT(WIFEXITED(status));
     YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
     bytebuf_append(&output, "", 1U);
-    YEW_ASSERT(strstr((const char *)output.data, sprint) != NULL);
+    YEW_ASSERT(strstr((const char *)output.data, message) != NULL);
     bytebuf_free(&output);
     yew_cset_free(&set);
 }
 
-void test_multicursor_deferred_guards_name_their_sprints(void)
+void test_multicursor_boundary_guards_name_their_constraints(void)
 {
-    assert_deferred_guard(DEFERRED_REGEX_LIFT, "Sprint 21");
-    assert_deferred_guard(DEFERRED_COMPLETION, "Sprint 43");
-    assert_deferred_guard(DEFERRED_LSP_EDIT, "Sprint 47");
+    assert_boundary_guard(BOUNDARY_REGEX_LIFT,
+                          "cursor lift requires literal matches");
+    assert_boundary_guard(BOUNDARY_COMPLETION,
+                          "completion requires one primary cursor");
+    assert_boundary_guard(BOUNDARY_LSP_EDIT,
+                          "LSP edits require one primary cursor");
 }

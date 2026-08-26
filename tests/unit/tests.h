@@ -165,7 +165,7 @@ void test_multicursor_integrated_edit_motion_fuzz(void);
 void test_multicursor_remove_and_normalize_clamp(void);
 void test_multicursor_normalize_preserves_sticky_motion(void);
 void test_multicursor_edit_guard_requires_multi_transaction(void);
-void test_multicursor_deferred_guards_name_their_sprints(void);
+void test_multicursor_boundary_guards_name_their_constraints(void);
 void test_file_load_empty_roundtrips(void);
 void test_file_load_lf_roundtrips(void);
 void test_file_load_missing_final_newline_roundtrips(void);
