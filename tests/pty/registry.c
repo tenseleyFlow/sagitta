@@ -7034,9 +7034,9 @@ static void case_s52_fuss(PtyCtx *c)
                   "entering F mode outside a repository exited yew");
         /* Workspace discovery may publish an otherwise identical frame
          * while this screen is settling.  The grid is the contract; the
-         * cumulative synchronized-update count is scheduler state. */
+         * cumulative render history is scheduler state. */
         c->vt.sync_pairs_unstable = true;
-        ptc_snapshot_sgr(c, name);
+        ptc_snapshot(c, name);
         s52_finish(c);
         return;
     }
