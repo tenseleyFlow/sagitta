@@ -107,7 +107,7 @@ This table is normative and frozen at plugin API 1:
 | `ctx.bind(mode, seq, target)` | → nil | `REG_BIND` | target = command name or closure; stacks in the plugin layer above the user's |
 | `ctx.set(map)` | → nil | `REG_OPTION` | declares `plug.<name>.<key>` with defaults; read with `opt.get` |
 | `ctx.attr(name)` | → int | `REG_ATTR` | resolves a syntax attribute name; unknown name = init-time error |
-| `ctx.overlay(fn)` | → nil | `REG_OVERLAY` | `fn(win, buf, lo_line, hi_line)` → list of `{lo, hi, attr}`; runs inside the frame budget; out-of-range spans are dropped with one log line |
+| `ctx.overlay(fn)` | → nil | `REG_OVERLAY` | `fn(win, buf, lo_line, hi_line)` receives a zero-based, half-open line interval and returns `{lo, hi, attr}` maps; `buf.line` remains one-based; runs inside the frame budget; out-of-range spans are dropped with one log line |
 | `ctx.buf` / `ctx.win` | module | — | the `buf.*` / `win.*` editor modules, re-exported |
 | `ctx.ws` | module | — | `ctx.ws.root()` → str; `ctx.ws.state_dir()` → str or **nil** when stateless |
 | `ctx.msg(s, level?)` | → nil | — | message line, prefixed `[<name>]`; level is `info`, `warn`, or `error` |
@@ -278,11 +278,13 @@ buffers already open in yew. `cfg` reads namespaced values declared by
 hard breaks and diff content because automatic cleanup must not silently turn
 meaningful bytes into formatting.
 
-`trailing` scans `str.bytes(b.line(n))` from the end. Byte scanning is
-intentional: paths and buffers need not be valid UTF-8, while spaces and tabs
-have the same byte values in every UTF-8-compatible file. `runs_in` visits only
-the `lo_line..hi_line` range passed by the overlay; chapter 7's frame budget is
-a real deadline, not permission to scan the rest of the buffer and hope.
+`runs_in` copies only the requested line-span window, then finds final
+space/tab runs in one cached regex scan. Match offsets are byte offsets, so
+invalid UTF-8 stays byte-exact without allocating a byte list per row. It
+visits only the range passed by the overlay. The callback converts the host's
+zero-based half-open interval to `buf.line`'s one-based line numbers; chapter 7's frame
+budget is a real deadline, not permission to scan the rest of the buffer and
+hope.
 
 `ctx.attr("warning")` follows chapter 7's meanings-not-colors rule. The theme
 chooses the appearance. The overlay only returns `{lo, hi, attr}` maps for the

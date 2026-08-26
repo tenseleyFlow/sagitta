@@ -3,6 +3,7 @@
 import fmt
 import list
 import opt
+import re
 import str
 
 fn cfg(ctx, key) { return opt.get("plug." + ctx.name + "." + key) }
@@ -14,27 +15,20 @@ fn skipped(ctx, b) {
     return list.contains(str.split(cfg(ctx, "skip_langs"), ","), lang)
 }
 
-fn trailing(b, line, attr) {
-    # line() excludes the EOL; byte scanning keeps invalid UTF-8 byte-exact.
-    let text = b.line(line)
-    let bytes = str.bytes(text)
-    let at = list.len(bytes)
-    while at > 0 and (bytes[at - 1] == 32 or bytes[at - 1] == 9) {
-        at = at - 1
-    }
-    if at == list.len(bytes) { return nil }
-    let base = b.line_span(line).lo()
-    return { lo: base + at, hi: base + list.len(bytes), attr: attr }
-}
-
 fn runs_in(b, lo_line, hi_line, attr) {
     # The overlay receives a visible range. Scanning more would spend the
     # frame budget on bytes the user cannot see.
-    let out = []; let line = lo_line
-    while line <= hi_line {
-        let run = trailing(b, line, attr)
-        if run != nil { list.push(out, run) }
-        line = line + 1
+    let out = []
+    if lo_line > hi_line { return out }
+    let first = b.line_span(lo_line)
+    let last = b.line_span(hi_line)
+    let base = first.lo()
+    let text = b.span(base, last.hi()).text()
+    for run in re.find_all(text, "[ \\t]+(?:\\r?\\n|$)") {
+        let end = run.hi
+        if str.ends_with(run.text, "\r\n") { end = end - 2 }
+        else if str.ends_with(run.text, "\n") { end = end - 1 }
+        list.push(out, { lo: base + run.lo, hi: base + end, attr: attr })
     }
     return out
 }
@@ -56,7 +50,8 @@ fn init(ctx) {
 
     ctx.overlay(fn(w, b, lo, hi) {
         if cfg(ctx, "highlight") and not skipped(ctx, b) {
-            return runs_in(b, lo, hi, warning)
+            # Overlay lines are zero-based [lo, hi); buf.line is one-based.
+            return runs_in(b, lo + 1, hi, warning)
         }
         return []
     })

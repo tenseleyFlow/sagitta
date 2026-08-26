@@ -1,3 +1,5 @@
 # case median_ns p99_ns
 discover_parse_20 389765 456799
 enable_noop_10 372013 395225
+examples_enable_2 371392 428182
+example_overlay_200 65424 110162
