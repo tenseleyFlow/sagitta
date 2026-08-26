@@ -292,10 +292,10 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...);
  * functions; false means it raised and vm->err holds the error.
  */
 /*
- * The message an unbound name gets.  Names the SPRINT that owes the
- * surface when there is one -- `bind lands in Sprint 36` -- and reads
- * `undefined name 'x'` otherwise.  Exported so the tests can assert the
- * deferral without going through a raise.
+ * The message an unbound name gets. Names the sprint that owns a reserved
+ * surface when there is one and reads `undefined name 'x'` otherwise.
+ * Exported so tests can assert the distinction without going through a
+ * raise.
  *
  * The returned string is a static buffer, valid until the next call.
  */

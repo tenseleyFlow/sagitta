@@ -233,8 +233,8 @@ static u32 enumerate_commands(const CompReq *req, Vec_CompItem *out)
             (desc->flags & YEW_CMD_INTERNAL) != 0U)
             continue;
         name = desc->name + 3U;
-        /* A deferred command's help already reads "Sprint 23: open a
-         * file", so the detail column names the sprint for free. */
+        /* A deferred command's help names its owning sprint, so the detail
+         * column carries the reason without a second lookup. */
         deferred = (desc->flags & YEW_CMD_DEFERRED) != 0U;
         (void)candidate_add(&matches, stem, name, name, desc->help, false,
                             deferred);

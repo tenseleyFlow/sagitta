@@ -192,10 +192,8 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
  * The message for an unbound name.
  *
  * DEFERRED SURFACES ARE NAMED, NEVER SILENT (invariant 3, and the same
- * discipline s13's YEW_CMD_DEFERRED gives commands).  A config that
- * writes `bind("<C-p>", ...)` today must be told the feature is coming
- * in Sprint 34, not that `bind` is a typo -- the second answer sends
- * the author looking for a spelling mistake that is not there.
+ * discipline s13's YEW_CMD_DEFERRED gives commands). A future reserved
+ * global must be distinguished from a typo and name its owning sprint.
  *
  * Kept as a table of names rather than as registered natives because a
  * module body runs against a FRESH globals map: a native installed at

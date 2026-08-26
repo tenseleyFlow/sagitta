@@ -36,9 +36,11 @@ then the workspace `.yew.fl` after its trust check.
 | `--no-workspace-config` | Do not load the workspace `.yew.fl`. |
 | `--trust-workspace` | Pre-grant the current workspace configuration. Batch mode never opens a trust prompt. |
 | `--quiet` | Suppress batch warnings and mirrored warning logs. Errors still go to stderr. |
+| `--replay REG` | Replay the one-letter macro register once after the script completes successfully. |
+| `--grant NAME:CAP` | Pre-grant a plugin capability (`fs`, `shell`, `net`, or `clipboard`); repeatable. |
 
-`--grant NAME:CAP` has reserved syntax but is not usable yet. Supplying it
-exits with an error naming Sprint 54. There is no `--batch-strict` option.
+`--batch-strict` is owned by Sprint 59. Supplying it before then exits with
+an error naming that sprint rather than silently changing batch semantics.
 
 ## Script globals
 
