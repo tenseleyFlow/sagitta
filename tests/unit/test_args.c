@@ -425,8 +425,8 @@ void test_args_parse_batch_misuse(void)
         "yew: error: option '--grant' requires an argument\n",
         "yew: error: option '--batch' requires an argument\n",
         "yew: error: option '--replay' requires an argument\n",
-        "yew: error: invalid --replay register 'qq' "
-        "(expected one letter a-z/A-Z)\n",
+        ("yew: error: invalid --replay register 'qq' "
+         "(expected one letter a-z/A-Z)\n"),
         "yew: error: option '--replay' specified twice\n",
         "yew: error: option '--batch-strict' lands in Sprint 59\n"
     };
