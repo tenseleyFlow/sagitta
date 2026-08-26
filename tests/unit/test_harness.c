@@ -108,9 +108,9 @@ void test_harness_filter_selects(void)
     bytebuf_init(&output);
     rc = run_unit_child(argv, NULL, false, &output);
     YEW_ASSERT_EQ_I64(rc, 0);
-    YEW_ASSERT_EQ_U64(substring_count(&output, "PASS args_parse_"), 18U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "PASS args_parse_"), 20U);
     YEW_ASSERT_EQ_U64(substring_count(&output, "PASS arena_"), 0U);
-    YEW_ASSERT_EQ_U64(substring_count(&output, "unit: 18 tests,"), 1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "unit: 20 tests,"), 1U);
     bytebuf_free(&output);
 }
 
