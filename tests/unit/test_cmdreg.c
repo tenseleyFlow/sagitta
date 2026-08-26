@@ -222,19 +222,15 @@ void test_cmd_registry_invocation_and_deferred(void)
         YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR, desc->name));
         YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR, "Sprint"));
     }
-    /*
-     * Sprint 18.5 DoD 13 names this one: the sprint ranks command names,
-     * while the palette that also matches help text is Sprint 38's.  The
-     * name has to EXIST and say so -- absent, it reads to the user as
-     * "no such command" rather than "not yet".
-     */
+    /* Sprint 38 closes Sprint 18.5's command-palette deferral. */
     {
         CmdId palette = yew_cmd_lookup("ed.find.command", 15U);
         const CmdDesc *desc = yew_cmd_desc(palette);
 
         YEW_ASSERT_NOT_NULL(desc);
-        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
-        YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 38"));
+        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
+        YEW_ASSERT((desc->flags & YEW_CMD_PROMPTS) != 0U);
+        YEW_ASSERT_EQ_STR(desc->help, "Open the command palette");
     }
     {
         CmdId theme = yew_cmd_lookup("ed.theme.set", 12U);

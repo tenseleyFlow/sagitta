@@ -31,6 +31,7 @@
 #include "edit/ed.h"
 #include "term/input.h"
 #include "text/file.h"
+#include "ui/cmdline.h"
 #include "ui/layout.h"
 #include "ui/picker.h"
 #include "ui/pickers.h"
@@ -146,6 +147,21 @@ static void ps_press(PsFix *f, u32 code)
     (void)memset(&k, 0, sizeof(k));
     k.code = code;
     YEW_ASSERT(yew_picker_key(&f->ed, &k));
+}
+
+static void ps_finish_scan(PsFix *f)
+{
+    while (yew_picker_tick(&f->ed))
+        ;
+}
+
+static u32 command_probe_calls;
+
+static CmdStatus command_probe(CmdCtx *cx)
+{
+    (void)cx;
+    command_probe_calls++;
+    return YEW_CMD_OK;
 }
 
 /* ---------------------------------------------------------------- */
@@ -406,7 +422,8 @@ void test_pickers_undo_branches_travels_to_a_state(void)
 void test_pickers_commands_are_registered(void)
 {
     static const char *const names[] = {
-        "ed.find.file", "ed.find.buffer", "ed.undo.branches"};
+        "ed.find.file", "ed.find.buffer", "ed.find.command",
+        "ed.undo.branches"};
     u32 i;
 
     yew_cmd_shutdown();
@@ -423,6 +440,51 @@ void test_pickers_commands_are_registered(void)
     }
     yew_cmd_shutdown();
     yew_cmd_init();
+
+    {
+        PsFix f;
+        static const CmdDesc probe = {
+            "ed.ui.toggle", command_probe, YEW_ARITY_NONE, 0U,
+            "Palette execution probe", NULL
+        };
+
+        ps_make(&f);
+        command_probe_calls = 0U;
+        (void)yew_cmd_register(&probe);
+        YEW_ASSERT_EQ_I64(ps_run(&f, yew_find_cmd_command), YEW_CMD_OK);
+        ps_type(&f, "Palette execution probe");
+        ps_finish_scan(&f);
+        YEW_ASSERT_EQ_U64(yew_picker_shown(&f.ed), 1U);
+        ps_press(&f, YEW_KEY_ENTER);
+        YEW_ASSERT_EQ_U64(command_probe_calls, 1U);
+        YEW_ASSERT(!yew_picker_active(&f.ed));
+        ps_remove(&f);
+    }
+
+    {
+        PsFix f;
+        Bytebuf text;
+
+        ps_make(&f);
+        YEW_ASSERT_EQ_I64(ps_run(&f, yew_find_cmd_command), YEW_CMD_OK);
+        /* This phrase exists only in help, proving the palette searches
+         * descriptions rather than command names alone. */
+        ps_type(&f, "syntax language");
+        ps_finish_scan(&f);
+        YEW_ASSERT_EQ_U64(yew_picker_shown(&f.ed), 1U);
+        YEW_ASSERT_EQ_U64((u32)yew_picker_selected(&f.ed),
+                          yew_cmd_lookup("ed.syn.set", 10U).v);
+        ps_press(&f, YEW_KEY_ENTER);
+        YEW_ASSERT(!yew_picker_active(&f.ed));
+        YEW_ASSERT(f.ed.cmdline.active);
+        YEW_ASSERT_EQ_U64(f.ed.cmdline.kind, YEW_PROMPT_CMD);
+        bytebuf_init(&text);
+        yew_cmdline_text(&f.ed, &text);
+        YEW_ASSERT_EQ_U64(text.len, strlen("syn.set "));
+        YEW_ASSERT_EQ_MEM(text.data, "syn.set ", text.len);
+        bytebuf_free(&text);
+        ps_remove(&f);
+    }
 }
 
 /*
@@ -435,10 +497,7 @@ void test_pickers_deferred_ones_name_their_sprint(void)
         const char *name;
         u32 len;
         const char *sprint;
-    } rows[] = {
-        {"ed.find.command", 15U, "Sprint 38"},
-        {"ed.find.symbol", 14U, "Sprint 47"}
-    };
+    } rows[] = {{"ed.find.symbol", 14U, "Sprint 47"}};
     u32 i;
 
     yew_cmd_shutdown();

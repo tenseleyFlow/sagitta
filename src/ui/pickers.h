@@ -22,6 +22,7 @@ typedef struct Ed Ed;
 
 CmdStatus yew_find_cmd_file(CmdCtx *cx);
 CmdStatus yew_find_cmd_buffer(CmdCtx *cx);
+CmdStatus yew_find_cmd_command(CmdCtx *cx);
 CmdStatus yew_undo_cmd_branches(CmdCtx *cx);
 
 /*

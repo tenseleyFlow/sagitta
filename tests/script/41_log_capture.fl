@@ -1,8 +1,6 @@
 # Sprint 37: assertion host observes structural log records, not stderr text.
 import ed
-t.raises("name", fn() { return ed.run("ed.find.command", {}) })
-t.log("error", "ed.find.command lands in Sprint 38")
-t.log("error", "command not implemented yet")
+t.raises("capability", fn() { return ed.run("ed.find.command", {}) })
 t.eq(batch, true)
 t.ne(script_path, "")
 t.eq(2 + 2, 4)

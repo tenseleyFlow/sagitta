@@ -14,6 +14,7 @@
 
 #include "edit/ed.h"
 #include "term/grid.h"
+#include "ui/cmdline.h"
 #include "ui/groups.h"
 #include "ui/message.h"
 #include "ui/picker.h"
@@ -414,6 +415,128 @@ CmdStatus yew_find_cmd_buffer(CmdCtx *cx)
     spec.items = store_items;
     spec.accept = find_buffer_accept;
     spec.path_mode = true;
+    yew_picker_open(ed, &spec);
+    return YEW_CMD_OK;
+}
+
+/* ---------------------------------------------------------------- */
+/* Command palette                                                  */
+/* ---------------------------------------------------------------- */
+
+static bool command_search_part(void *ctx, i32 payload, u32 part,
+                                const u8 **text, size_t *len)
+{
+    const CmdDesc *desc;
+
+    (void)ctx;
+    if (payload <= 0 || text == NULL || len == NULL || part > 1U)
+        return false;
+    desc = yew_cmd_desc((CmdId){(u32)payload});
+    if (desc == NULL)
+        return false;
+    *text = (const u8 *)(part == 0U ? desc->name : desc->help);
+    *len = strlen((const char *)*text);
+    return true;
+}
+
+static bool find_command_accept(Ed *ed, void *ctx, i32 payload, u8 how)
+{
+    const CmdDesc *desc;
+    CmdId id;
+
+    (void)ctx;
+    (void)how;
+    if (ed == NULL || payload <= 0)
+        return false;
+    id = (CmdId){(u32)payload};
+    desc = yew_cmd_desc(id);
+    if (desc == NULL || (desc->flags & YEW_CMD_INTERNAL) != 0U) {
+        yew_msg(ed, YEW_MSG_ERROR, "command is no longer available");
+        return false;
+    }
+
+    /* Commands needing an argument stay on the ordinary E-mode path, where
+     * their argspec, completion and diagnostics already live.  Deferred
+     * rows use the same path so accepting one produces the pinned Sprint
+     * refusal instead of a registry-only log line. */
+    if (desc->arity != YEW_ARITY_NONE ||
+        (desc->flags & YEW_CMD_DEFERRED) != 0U) {
+        char seed[256];
+        const char *name = strncmp(desc->name, "ed.", 3U) == 0
+                               ? desc->name + 3U
+                               : desc->name;
+
+        if (snprintf(seed, sizeof(seed), "%s%s", name,
+                     desc->arity == YEW_ARITY_NONE ? "" : " ") >=
+            (int)sizeof(seed)) {
+            yew_msg(ed, YEW_MSG_ERROR, "command name is too long");
+            return false;
+        }
+        yew_cmdline_open(ed, YEW_PROMPT_CMD, seed);
+        return true;
+    }
+    {
+        CmdCtx cx = {0};
+        CmdStatus status;
+
+        cx.ed = ed;
+        cx.win = ed->win;
+        cx.count = 1U;
+        cx.source = YEW_SRC_KEY;
+        status = yew_ed_invoke(ed, id, &cx);
+        if (status != YEW_CMD_OK && !ed->msg.active)
+            yew_msg(ed, YEW_MSG_ERROR, "command failed: %s", desc->name);
+        return status == YEW_CMD_OK;
+    }
+}
+
+CmdStatus yew_find_cmd_command(CmdCtx *cx)
+{
+    Ed *ed = cx == NULL ? NULL : cx->ed;
+    PickerSpec spec;
+    u64 *label_off;
+    u64 *detail_off;
+    u32 n;
+    u32 i;
+
+    if (ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    store_reset();
+    label_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
+                                  sizeof(*label_off));
+    detail_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
+                                   sizeof(*detail_off));
+    n = yew_cmd_count();
+    for (i = 0U; i < n && store.n < YEW_PICKERS_MAX_ITEMS; i++) {
+        CmdId id = {i + 1U};
+        const CmdDesc *desc = yew_cmd_at(i);
+
+        /* yew_cmd_at() preserves registry order, including inactive plugin
+         * tombstones.  The palette is an executable inventory, so it keeps
+         * only active, user-facing commands. */
+        if (desc == NULL || yew_cmd_desc(id) == NULL ||
+            (desc->flags & YEW_CMD_INTERNAL) != 0U)
+            continue;
+        label_off[store.n] = store_str(desc->name);
+        detail_off[store.n] = store_str(desc->help);
+        store.items[store.n].payload = (i32)id.v;
+        store.items[store.n].flags =
+            (desc->flags & YEW_CMD_DEFERRED) != 0U
+                ? (u8)YEW_PICK_DEFERRED
+                : 0U;
+        store.n++;
+    }
+    store_fixup(label_off, detail_off);
+    free(label_off);
+    free(detail_off);
+
+    (void)memset(&spec, 0, sizeof(spec));
+    spec.title = "Command palette";
+    spec.items = store_items;
+    spec.accept = find_command_accept;
+    spec.search_part = command_search_part;
+    spec.search_parts_independent = true;
+    spec.path_mode = false;
     yew_picker_open(ed, &spec);
     return YEW_CMD_OK;
 }

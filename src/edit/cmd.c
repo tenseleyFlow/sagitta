@@ -791,8 +791,8 @@ static const CmdDesc builtins[] = {
      */
     DEFER("ed.find.symbol", YEW_ARITY_NONE, 0U, 47,
           "pick a symbol from the LSP workspace index"),
-    DEFER("ed.find.command", YEW_ARITY_NONE, 0U, 38,
-          "open the command palette"),
+    {"ed.find.command", yew_find_cmd_command, YEW_ARITY_NONE,
+     YEW_CMD_PROMPTS, "Open the command palette", NULL},
     {"ed.pane.split_h", yew_pane_cmd_split_h, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN, "Split the focused pane side by side", NULL},
     {"ed.pane.split_v", yew_pane_cmd_split_v, YEW_ARITY_NONE,
