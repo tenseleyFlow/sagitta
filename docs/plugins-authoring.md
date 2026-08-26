@@ -103,7 +103,7 @@ This table is normative and frozen at plugin API 1:
 |---|---|---|---|
 | `ctx.name` | str | — | manifest name; the option and command namespace |
 | `ctx.on(event, fn)` | → nil | `REG_HOOK` | event must be in API 1's frozen table **and** in the manifest `events` |
-| `ctx.command(name, fn, opts?)` | → nil | `REG_CMD` | registers `plug.<ctx.name>.<name>` in the one registry; `opts` carries command flags |
+| `ctx.command(name, fn, opts?)` | → nil | `REG_CMD` | registers `ed.plug.<normalized-name>.<name>` in the one registry; hyphens in the plugin name become underscores; `opts` carries command flags |
 | `ctx.bind(mode, seq, target)` | → nil | `REG_BIND` | target = command name or closure; stacks in the plugin layer above the user's |
 | `ctx.set(map)` | → nil | `REG_OPTION` | declares `plug.<name>.<key>` with defaults; read with `opt.get` |
 | `ctx.attr(name)` | → int | `REG_ATTR` | resolves a syntax attribute name; unknown name = init-time error |
@@ -141,12 +141,14 @@ Batch mode never prompts. Pre-grant each required capability explicitly and
 repeat `--grant` when a test needs more than one:
 
 ```text
-yew --clean --batch --grant session-notes:fs tests/session-notes.fl
+yew --batch --grant session-notes:fs tests/session-notes.fl
 ```
 
 The name and capability must match the discovered plugin and its manifest.
 A batch grant lasts for that process; it does not write an `allow always`
-decision.
+decision. Do not add `--clean`: clean mode deliberately suppresses plugin
+discovery. Use a temporary XDG tree, as yew's script harness does, when the
+test needs isolated configuration.
 
 ## 5. Lifecycle and zero residue
 
@@ -221,9 +223,10 @@ and terminal capabilities.
 ## 8. Testing
 
 Test the entry module and its teardown under a temporary XDG tree. Use
-`--clean` for deterministic host configuration, `--batch` to avoid a tty,
-and one repeatable `--grant NAME:CAP` per required capability. Assert both the
-normal path and the catchable-denial path.
+`--batch` to avoid a tty and one repeatable `--grant NAME:CAP` per required
+capability. `--clean` disables plugin discovery, so isolation comes from the
+temporary XDG roots instead. Assert both the normal path and the
+catchable-denial path.
 
 At minimum, cover:
 
@@ -261,5 +264,78 @@ verification, dependency resolver, install hooks, or auto-update. A repository
 URL is not an endorsement. Tell users who maintains the code, what every
 declared capability enables, and which tag or revision they should inspect.
 
-The two in-tree examples and their line-by-line walkthrough are owned by
-Sprint 55.5. They use the same local-path installation flow documented above.
+## 10. The shipped examples
+
+The packages under `examples/plugins/` are deliberately small enough to read
+before enabling. They are also installed and executed by the script suite, so
+the source below is part of the API 1 compatibility gate.
+
+### `trailing-ws`, in source order
+
+Its manifest follows chapter 2 and declares no capabilities: it touches only
+buffers already open in yew. `cfg` reads namespaced values declared by
+`ctx.set`, the option-table pattern from chapter 6. `skipped` protects Markdown
+hard breaks and diff content because automatic cleanup must not silently turn
+meaningful bytes into formatting.
+
+`trailing` scans `str.bytes(b.line(n))` from the end. Byte scanning is
+intentional: paths and buffers need not be valid UTF-8, while spaces and tabs
+have the same byte values in every UTF-8-compatible file. `runs_in` visits only
+the `lo_line..hi_line` range passed by the overlay; chapter 7's frame budget is
+a real deadline, not permission to scan the rest of the buffer and hope.
+
+`ctx.attr("warning")` follows chapter 7's meanings-not-colors rule. The theme
+chooses the appearance. The overlay only returns `{lo, hi, attr}` maps for the
+visible range. The command is registered as
+`ed.plug.trailing_ws.strip`: plugin-name hyphens are normalized to underscores
+in command segments, as specified by chapter 3.
+
+All deletions happen back-to-front in one `edit` block, producing one undo
+node. The `buf.save` hook runs before the write and participates in the save
+transaction described in chapter 5; the `buf.open` hook reports existing runs
+without changing them.
+
+### `session-notes`, in source order
+
+Its manifest declares `fs`, so chapter 4's consent decision is settled when
+the plugin is enabled, before the entry module runs. This is not a lazy prompt
+at the first `io.mkdir`: batch mode must use `--grant session-notes:fs`, while
+a denial is remembered for the session and every guarded filesystem call
+raises a catchable `capability` error.
+
+`note_path` uses chapter 3's `ctx.ws.state_dir()`. That function returns `nil`
+for stateless, clean, and headless sessions, and every entry point handles the
+case before calling `io.*`. The note therefore never leaks into the project
+tree just because workspace state is unavailable.
+
+The chord is an option declared with `ctx.set`, not a constant. Chapter 6
+explains why the user must be able to replace a plugin-layer bind. Reload after
+changing it because `ctx.bind` reads the option during `init`. The `ws.open`
+hook announces an existing note; the `ws.close` hook is the last chance to save
+a dirty note. Chapter 5 guarantees that disabling the plugin removes the bind,
+both hooks, and its option through the same registration ledger.
+
+### Write your own
+
+1. Create a package directory: `mkdir -p "$XDG_CONFIG_HOME/yew/plugins/my-plugin/src"`.
+2. Write its pure-literal `plugin.fl`, following chapter 2: `$EDITOR "$XDG_CONFIG_HOME/yew/plugins/my-plugin/plugin.fl"`.
+3. Export `fn init(ctx)` from the declared entry module: `$EDITOR "$XDG_CONFIG_HOME/yew/plugins/my-plugin/src/main.fl"`.
+4. Discover and enable it: `yew plug enable my-plugin`.
+5. Iterate without restarting yew: run `:ed.plug.reload my-plugin`.
+6. Exercise it headlessly, granting only declared capabilities: `yew --batch --grant my-plugin:fs tests/my-plugin.fl`.
+
+For a distributable package, keep the same layout at the root of its own Git
+repository and test the local installer with
+`yew pkg install ./path/to/my-plugin`. The in-tree examples are subdirectories
+of yew's repository rather than standalone Git roots, so their READMEs use the
+documented hand-copy path for trying them directly from a yew checkout.
+
+### Deliberate gaps
+
+The examples do not subscribe to `buf.change`, `win.focus`, or `mode.enter`:
+callbacks on hot editor paths are poor introductions to latency discipline.
+Read chapter 2's frozen event table before using them. They also avoid
+`shell`, `net`, and `clipboard`; read chapter 1's trust text and chapter 4's
+exact authority table before declaring those capabilities. API 1 keeps these
+gaps explicit instead of shipping a third plugin that users might run without
+reviewing.

@@ -1,0 +1,9 @@
+{
+  name: "trailing-ws",
+  version: "1.0.0",
+  api: 1,
+  entry: "src/main.fl",
+  capabilities: [],
+  events: ["buf.open", "buf.save"],
+  description: "highlight trailing whitespace and strip it on save",
+}

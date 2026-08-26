@@ -1,0 +1,9 @@
+{
+  name: "session-notes",
+  version: "1.0.0",
+  api: 1,
+  entry: "src/main.fl",
+  capabilities: ["fs"],
+  events: ["ws.open", "ws.close"],
+  description: "keep a private scratch note for each workspace",
+}

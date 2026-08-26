@@ -1,0 +1,64 @@
+# CONFIG
+# Sprint 55.5: trailing-ws is executable documentation, not sample-shaped prose.
+import buf
+import ed
+import io
+import opt
+
+fn has_command(name) {
+    for command in ed.commands() {
+        if command.name == name { return true }
+    }
+    return false
+}
+
+let command = "ed.plug.trailing_ws.strip"
+t.eq(opt.get("plug.trailing-ws.highlight"), true)
+t.eq(opt.get("plug.trailing-ws.strip_on_save"), true)
+t.eq(opt.get("plug.trailing-ws.skip_langs"), "markdown,diff")
+t.eq(has_command(command), true)
+
+let original = "one  \ntwo\t\nclean\nthree \nfour\t \nfive   \n"
+let stripped = "one\ntwo\nclean\nthree\nfour\nfive\n"
+io.write("trailing.txt", original)
+let b = buf.open("trailing.txt")
+t.eq(buf.current(), b)
+t.eq(buf.lang(b), nil)
+t.eq(buf.lines(b), 7)
+t.text(b, original)
+t.undo(b, 1)
+
+buf.save(b)
+t.text(b, stripped)
+t.file("trailing.txt", stripped)
+t.eq(buf.dirty(b), false)
+t.undo(b, 2)
+ed.run("ed.edit.undo", {})
+t.text(b, original)
+t.eq(buf.dirty(b), true)
+t.file("trailing.txt", stripped)
+
+edit { opt.set("plug.trailing-ws.strip_on_save", false) }
+buf.save(b)
+t.text(b, original)
+t.file("trailing.txt", original)
+t.eq(opt.get("plug.trailing-ws.highlight"), true)
+
+edit { opt.set("plug.trailing-ws.strip_on_save", true) }
+edit { ed.run(command, {}) }
+t.text(b, stripped)
+t.file("trailing.txt", original)
+ed.run("ed.edit.undo", {})
+t.text(b, original)
+
+let markdown = "hard break  \nplain\n"
+io.write("skip.md", markdown)
+b = buf.open("skip.md")
+t.eq(buf.lang(b), "markdown")
+buf.save(b)
+t.text(b, markdown)
+t.file("skip.md", markdown)
+
+ed.run("ed.plug.disable", { sarg: "trailing-ws" })
+t.raises("name", fn() { ed.run(command, {}) })
+t.raises("name", fn() { return opt.get("plug.trailing-ws.highlight") })

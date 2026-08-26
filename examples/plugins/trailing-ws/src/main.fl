@@ -1,0 +1,78 @@
+# yew's hello-world plugin: options, an overlay, two hooks, and a command.
+# It declares no capabilities because every operation stays in open buffers.
+import fmt
+import list
+import opt
+import str
+
+fn cfg(ctx, key) { return opt.get("plug." + ctx.name + "." + key) }
+
+fn skipped(ctx, b) {
+    # Markdown hard breaks and diff context can use trailing spaces as data.
+    let lang = b.lang()
+    if lang == nil { return false }
+    return list.contains(str.split(cfg(ctx, "skip_langs"), ","), lang)
+}
+
+fn trailing(b, line, attr) {
+    # line() excludes the EOL; byte scanning keeps invalid UTF-8 byte-exact.
+    let text = b.line(line)
+    let bytes = str.bytes(text)
+    let at = list.len(bytes)
+    while at > 0 and (bytes[at - 1] == 32 or bytes[at - 1] == 9) {
+        at = at - 1
+    }
+    if at == list.len(bytes) { return nil }
+    let base = b.line_span(line).lo()
+    return { lo: base + at, hi: base + list.len(bytes), attr: attr }
+}
+
+fn runs_in(b, lo_line, hi_line, attr) {
+    # The overlay receives a visible range. Scanning more would spend the
+    # frame budget on bytes the user cannot see.
+    let out = []; let line = lo_line
+    while line <= hi_line {
+        let run = trailing(b, line, attr)
+        if run != nil { list.push(out, run) }
+        line = line + 1
+    }
+    return out
+}
+
+fn strip(b) {
+    let runs = runs_in(b, 1, b.lines(), 0)
+    list.reverse(runs)
+    # Back-to-front deletion inside one edit block creates one undo node.
+    edit {
+        for run in runs { b.span(run.lo, run.hi).delete() }
+    }
+    return list.len(runs)
+}
+
+fn init(ctx) {
+    ctx.set({ highlight: true, strip_on_save: true, skip_langs: "markdown,diff" })
+    # Plugins emit semantic meanings. The theme owns the actual color.
+    let warning = ctx.attr("warning")
+
+    ctx.overlay(fn(w, b, lo, hi) {
+        if cfg(ctx, "highlight") and not skipped(ctx, b) {
+            return runs_in(b, lo, hi, warning)
+        }
+        return []
+    })
+
+    ctx.command("strip", fn() {
+        let n = strip(ctx.buf.current());
+        ctx.msg(fmt.f("stripped {} trailing-whitespace run(s)", n))
+    }, { needs_win: true, changes_buffer: true })
+
+    # buf.save joins the save transaction, so the disk sees stripped bytes.
+    ctx.on("buf.save", fn(b) {
+        if not skipped(ctx, b) and cfg(ctx, "strip_on_save") { strip(b) }
+    })
+    ctx.on("buf.open", fn(b) {
+        if skipped(ctx, b) { return nil }
+        let n = list.len(runs_in(b, 1, b.lines(), 0));
+        if n > 0 { ctx.msg(fmt.f("{} trailing-whitespace run(s)", n)) }
+    })
+}

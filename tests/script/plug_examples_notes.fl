@@ -1,0 +1,37 @@
+# CONFIG
+# Sprint 55.5: no grant plus headless state means honest stateless operation.
+import ed
+import io
+import list
+import opt
+import str
+
+let root = "../data/yew/plugins/session-notes/"
+let source = io.read(root + "src/main.fl")
+let manifest = io.read(root + "plugin.fl")
+let readme = io.read(root + "README.md")
+
+t.eq(opt.get("plug.session-notes.key"), "<space> n")
+t.eq(str.contains(manifest, "capabilities: [\"fs\"]"), true)
+t.eq(str.contains(manifest, "\"ws.open\""), true)
+t.eq(str.contains(manifest, "\"ws.close\""), true)
+t.eq(str.contains(source, "ctx.ws.state_dir()"), true)
+t.eq(str.contains(source, "if dir == nil"), true)
+t.eq(str.contains(source, "ctx.bind(\"*\""), true)
+t.eq(str.contains(source, "io.mkdir"), true)
+t.eq(str.contains(source, "io.exists"), true)
+t.eq(str.contains(source, "b.save()"), true)
+t.eq(str.contains(readme, "--grant session-notes:fs"), true)
+t.eq(list.len(io.glob("notes.md", "../state")), 0)
+t.eq(io.exists("notes.md"), false)
+
+ed.run("ed.plug.disable", { sarg: "session-notes" })
+t.raises("name", fn() { return opt.get("plug.session-notes.key") })
+t.eq(list.len(io.glob("notes.md", "../state")), 0)
+
+# A headless denial is a session decision. Re-enabling restores registrations
+# but state_dir remains nil, so no filesystem call or repeated prompt occurs.
+ed.run("ed.plug.enable", { sarg: "session-notes" })
+t.eq(opt.get("plug.session-notes.key"), "<space> n")
+t.eq(list.len(io.glob("notes.md", "../state")), 0)
+t.eq(io.exists("notes.md"), false)

@@ -464,6 +464,21 @@ else
 SCRIPT_RUNNER_ARGS :=
 endif
 endif
+ifeq ($(filter plugins,$(MODULES)),)
+ifeq ($(filter lsp,$(MODULES)),)
+ifeq ($(filter ai,$(MODULES)),)
+SCRIPT_RUNNER_ARGS := --exclude lsp_,ai_,plug_examples_
+else
+SCRIPT_RUNNER_ARGS := --exclude lsp_,plug_examples_
+endif
+else
+ifeq ($(filter ai,$(MODULES)),)
+SCRIPT_RUNNER_ARGS := --exclude ai_,plug_examples_
+else
+SCRIPT_RUNNER_ARGS := --exclude plug_examples_
+endif
+endif
+endif
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
 PTY_ORACLE_OBJ := $(PTY_VT_OBJ) $(PTY_SNAPSHOT_OBJ)

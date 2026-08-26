@@ -714,13 +714,17 @@ static bool child_environment(const char *root, const char *work,
 
 static size_t build_child_argv(char **argv, const char *yew,
                                const char *script, bool config,
-                               const char *config_path)
+                               const char *config_path, bool grant_examples)
 {
     size_t argc = 0U;
 
     argv[argc++] = (char *)yew;
     argv[argc++] = (char *)"--batch";
     argv[argc++] = (char *)"--test";
+    if (grant_examples) {
+        argv[argc++] = (char *)"--grant";
+        argv[argc++] = (char *)"session-notes:fs";
+    }
     if (config_path != NULL) {
         argv[argc++] = (char *)"--config";
         argv[argc++] = (char *)config_path;
@@ -735,14 +739,16 @@ static size_t build_child_argv(char **argv, const char *yew,
 static void child_exec(const char *yew, const char *script,
                        const char *root, const char *work,
                        bool config, const char *config_path,
+                       bool grant_examples,
                        const char *fakelsp, int out_pipe[2], int err_pipe[2],
                        int result_pipe[2])
 {
     int fds[6];
     size_t i;
-    char *child_argv[8];
+    char *child_argv[10];
 
-    (void)build_child_argv(child_argv, yew, script, config, config_path);
+    (void)build_child_argv(child_argv, yew, script, config, config_path,
+                           grant_examples);
 
     if (setpgid(0, 0) != 0)
         _exit(126);
@@ -908,6 +914,28 @@ static bool make_sandbox(const char *fixtures, char **root_out,
     return true;
 }
 
+static bool stage_example_plugins(const char *root)
+{
+    char *data = path_join(root, "data");
+    char *yew = data == NULL ? NULL : path_join(data, "yew");
+    char *plugins = yew == NULL ? NULL : path_join(yew, "plugins");
+    char *work = path_join(root, "work");
+    char *guide = work == NULL ? NULL :
+                  path_join(work, "plugins-authoring.md");
+    bool ok = data != NULL && yew != NULL && plugins != NULL &&
+              work != NULL && guide != NULL &&
+              mkdir(yew, 0700) == 0 &&
+              copy_tree("examples/plugins", plugins) &&
+              copy_tree("docs/plugins-authoring.md", guide);
+
+    free(data);
+    free(yew);
+    free(plugins);
+    free(work);
+    free(guide);
+    return ok;
+}
+
 static bool run_test(const char *yew, const char *fixtures,
                      const char *fakelsp, const TestFile *test,
                      char **sandbox, RunResult *result)
@@ -921,6 +949,12 @@ static bool run_test(const char *yew, const char *fixtures,
 
     memset(result, 0, sizeof(*result));
     if (!make_sandbox(fixtures, sandbox, &work)) {
+        result->setup_failed = true;
+        return false;
+    }
+    if (strncmp(test->name, "plug_examples_", 14U) == 0 &&
+        !stage_example_plugins(*sandbox)) {
+        free(work);
         result->setup_failed = true;
         return false;
     }
@@ -943,7 +977,9 @@ static bool run_test(const char *yew, const char *fixtures,
     }
     if (child == 0)
         child_exec(yew, test->path, *sandbox, work,
-                   test->config, test->config_path, fakelsp,
+                   test->config, test->config_path,
+                   strcmp(test->name, "plug_examples_matrix") == 0,
+                   fakelsp,
                    out_pipe, err_pipe, result_pipe);
     if (setpgid(child, child) != 0 && errno != EACCES && errno != ESRCH) {
         (void)kill(child, SIGKILL);
@@ -1466,15 +1502,18 @@ static bool selftest_config_directive(void)
     static const char yes_crlf[] = "# CONFIG\r\nprint(1)\r\n";
     static const char no_later[] = "# comment\n# CONFIG\n";
     static const char no_suffix[] = "# CONFIGURE\n";
-    char *clean_argv[8];
-    char *config_argv[8];
-    char *sibling_argv[8];
+    char *clean_argv[10];
+    char *config_argv[10];
+    char *sibling_argv[10];
+    char *grant_argv[10];
     size_t clean_argc = build_child_argv(clean_argv, "yew", "test.fl",
-                                         false, NULL);
+                                         false, NULL, false);
     size_t config_argc = build_child_argv(config_argv, "yew", "test.fl",
-                                          true, NULL);
+                                          true, NULL, false);
     size_t sibling_argc = build_child_argv(sibling_argv, "yew", "test.fl",
-                                           true, "test.config");
+                                           true, "test.config", false);
+    size_t grant_argc = build_child_argv(grant_argv, "yew", "test.fl",
+                                         false, NULL, true);
 
     return config_header_bytes(yes_lf, sizeof(yes_lf) - 1U) &&
            config_header_bytes(yes_crlf, sizeof(yes_crlf) - 1U) &&
@@ -1487,7 +1526,12 @@ static bool selftest_config_directive(void)
            strcmp(sibling_argv[3], "--config") == 0 &&
            strcmp(sibling_argv[4], "test.config") == 0 &&
            strcmp(sibling_argv[5], "test.fl") == 0 &&
-           sibling_argv[6] == NULL;
+           sibling_argv[6] == NULL && grant_argc == 7U &&
+           strcmp(grant_argv[3], "--grant") == 0 &&
+           strcmp(grant_argv[4], "session-notes:fs") == 0 &&
+           strcmp(grant_argv[5], "--clean") == 0 &&
+           strcmp(grant_argv[6], "test.fl") == 0 &&
+           grant_argv[7] == NULL;
 }
 
 static bool protocol_has_all_negative_assertions(const Bytes *protocol)

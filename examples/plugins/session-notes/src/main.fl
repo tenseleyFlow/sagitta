@@ -1,0 +1,70 @@
+# A per-workspace note: state_dir, one configurable bind, and honest
+# stateless degradation. Capability consent is settled before init runs.
+import io
+import opt
+
+fn cfg(ctx, key) { return opt.get("plug." + ctx.name + "." + key) }
+
+fn note_path(ctx) {
+    # State belongs outside the project, so a private note never hits git.
+    let dir = ctx.ws.state_dir()
+    if dir == nil { return nil }
+    return dir + "/notes.md"
+}
+
+fn showing(ctx, path) {
+    for w in ctx.win.list() {
+        let b = w.buf()
+        if b.path() == path { return w }
+    }
+    return nil
+}
+
+fn open_note(ctx) {
+    let path = note_path(ctx)
+    if path == nil {
+        # --clean and --batch intentionally have no workspace state.
+        ctx.msg("workspace state is unavailable; no note was opened", "warn")
+        return nil
+    }
+    # fs was declared in the manifest and consent was decided at enable.
+    io.mkdir(ctx.ws.state_dir(), true)
+    let current = ctx.win.current()
+    let note = current.split("h")
+    note.focus()
+    ctx.buf.open(path)
+    return nil
+}
+
+fn init(ctx) {
+    # Reading the chord from an option lets users reclaim the default key.
+    ctx.set({ key: "<space> n" })
+    ctx.bind("*", cfg(ctx, "key"), fn() {
+        let path = note_path(ctx);
+        if path != nil {
+            let shown = showing(ctx, path);
+            if shown != nil { shown.close(); return nil }
+        }
+        open_note(ctx)
+    })
+
+    ctx.on("ws.open", fn(ws) {
+        let path = note_path(ctx);
+        if path == nil {
+            ctx.msg("workspace state is unavailable; notes are disabled", "warn");
+            return nil
+        }
+        if io.exists(path) and io.size(path) > 0 {
+            ctx.msg("a saved note exists for this workspace")
+        }
+    })
+
+    # This hook is the last chance to preserve a dirty note during teardown.
+    ctx.on("ws.close", fn(ws) {
+        let path = note_path(ctx);
+        if path == nil { return nil }
+        for b in ctx.buf.list() {
+            if b.path() == path and b.dirty() { b.save() }
+        }
+    })
+}

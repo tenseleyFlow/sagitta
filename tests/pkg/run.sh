@@ -239,6 +239,44 @@ test_install_head()
     pass_case
 }
 
+make_shipped_example_source()
+{
+    plugin_name=$1
+    source_repo=$case_root/source-$plugin_name
+    mkdir -p "$source_repo"
+    cp -R "$repo_root/examples/plugins/$plugin_name/." "$source_repo/"
+    git -c init.defaultBranch=trunk -c init.defaultObjectFormat=sha1 \
+        init -q "$source_repo"
+    git -C "$source_repo" config user.name "$GIT_AUTHOR_NAME"
+    git -C "$source_repo" config user.email "$GIT_AUTHOR_EMAIL"
+    git -C "$source_repo" config commit.gpgsign false
+    git -C "$source_repo" config tag.gpgsign false
+    git -C "$source_repo" config core.autocrlf false
+    git -C "$source_repo" config core.hooksPath .git/no-hooks
+    git -C "$source_repo" add -- .
+    git -C "$source_repo" commit -q -m "ship $plugin_name example"
+}
+
+test_shipped_examples_install_as_local_repositories()
+{
+    begin_case shipped_examples_install_as_local_repositories
+    for example in trailing-ws session-notes; do
+        make_shipped_example_source "$example"
+        run_pkg install "$source_repo"
+        assert_status 0
+        [[ -d "$(plugin_dir)" ]] ||
+            fail "$example did not install into the managed plugin root"
+        assert_file_contains "$(plugin_dir)/plugin.fl" "name: \"$example\""
+        assert_file_contains "$(lock_path)" "\"$example\""
+        assert_no_staging "$example install left a staging directory"
+    done
+    run_pkg list
+    assert_status 0
+    assert_output_contains $'session-notes\thead\t'
+    assert_output_contains $'trailing-ws\thead\t'
+    pass_case
+}
+
 test_install_tag()
 {
     begin_case install_tag
@@ -1339,6 +1377,7 @@ test_remove_trash_parent_fsync_recovery_retries()
 }
 
 test_install_head
+test_shipped_examples_install_as_local_repositories
 test_install_tag
 test_historical_pin_selects_historical_manifest
 test_install_rev

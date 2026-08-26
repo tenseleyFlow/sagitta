@@ -1,0 +1,95 @@
+# CONFIG
+# Sprint 55.5 matrix gate. This process receives --grant session-notes:fs.
+import ed
+import io
+import list
+import opt
+import str
+
+fn has(text, needle) { return str.contains(text, needle) }
+
+fn has_command(name) {
+    for command in ed.commands() {
+        if command.name == name { return true }
+    }
+    return false
+}
+
+fn code_lines(text) {
+    let count = 0
+    for line in str.split_lines(text) {
+        let clean = str.trim(line)
+        if clean != "" and not str.starts_with(clean, "#") {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+let base = "../data/yew/plugins/"
+let ws = io.read(base + "trailing-ws/src/main.fl")
+let notes = io.read(base + "session-notes/src/main.fl")
+let ws_manifest = io.read(base + "trailing-ws/plugin.fl")
+let notes_manifest = io.read(base + "session-notes/plugin.fl")
+let ws_readme = io.read(base + "trailing-ws/README.md")
+let notes_readme = io.read(base + "session-notes/README.md")
+let guide = io.read("plugins-authoring.md")
+
+# Every frozen ctx field is touched by at least one shipped example.
+t.eq(has(ws, "ctx.name"), true)
+t.eq(has(ws, "ctx.on("), true)
+t.eq(has(ws, "ctx.command("), true)
+t.eq(has(notes, "ctx.bind("), true)
+t.eq(has(ws, "ctx.set("), true)
+t.eq(has(ws, "ctx.attr("), true)
+t.eq(has(ws, "ctx.overlay("), true)
+t.eq(has(ws, "ctx.buf"), true)
+t.eq(has(notes, "ctx.buf"), true)
+t.eq(has(notes, "ctx.win"), true)
+t.eq(has(notes, "ctx.ws"), true)
+t.eq(has(ws, "ctx.msg("), true)
+t.eq(has(notes, "ctx.msg("), true)
+
+# Every event declared by the packages also has a registered callback.
+t.eq(has(ws_manifest, "\"buf.open\""), true)
+t.eq(has(ws_manifest, "\"buf.save\""), true)
+t.eq(has(ws, "ctx.on(\"buf.open\""), true)
+t.eq(has(ws, "ctx.on(\"buf.save\""), true)
+t.eq(has(notes_manifest, "\"ws.open\""), true)
+t.eq(has(notes_manifest, "\"ws.close\""), true)
+t.eq(has(notes, "ctx.on(\"ws.open\""), true)
+t.eq(has(notes, "ctx.on(\"ws.close\""), true)
+
+t.eq(list.len(str.split_lines(ws)) <= 120, true)
+t.eq(list.len(str.split_lines(notes)) <= 120, true)
+t.eq(code_lines(ws) <= 60, true)
+t.eq(code_lines(notes) <= 60, true)
+t.eq(list.len(str.split_lines(ws_readme)) <= 60, true)
+t.eq(list.len(str.split_lines(notes_readme)) <= 60, true)
+
+for heading in ["## What it does", "## Install", "## Options",
+                "## Capabilities", "## The tradeoff"] {
+    t.eq(has(ws_readme, heading), true, heading)
+    t.eq(has(notes_readme, heading), true, heading)
+}
+
+t.eq(has(guide, "## 10. The shipped examples"), true)
+t.eq(has(guide, "## 2. Layout and manifest"), true)
+t.eq(has(guide, "## 3. The `ctx` API"), true)
+t.eq(has(guide, "## 4. Capabilities and consent"), true)
+t.eq(has(guide, "## 5. Lifecycle and zero residue"), true)
+t.eq(has(guide, "## 6. Options"), true)
+t.eq(has(guide, "## 7. Overlays and attributes"), true)
+
+# Runtime defaults agree with the READMEs, and teardown removes public state.
+t.eq(opt.get("plug.trailing-ws.highlight"), true)
+t.eq(opt.get("plug.trailing-ws.strip_on_save"), true)
+t.eq(opt.get("plug.trailing-ws.skip_langs"), "markdown,diff")
+t.eq(opt.get("plug.session-notes.key"), "<space> n")
+t.eq(has_command("ed.plug.trailing_ws.strip"), true)
+ed.run("ed.plug.disable", { sarg: "trailing-ws" })
+ed.run("ed.plug.disable", { sarg: "session-notes" })
+t.raises("name", fn() { ed.run("ed.plug.trailing_ws.strip", {}) })
+t.raises("name", fn() { return opt.get("plug.trailing-ws.highlight") })
+t.raises("name", fn() { return opt.get("plug.session-notes.key") })
+t.eq(list.len(io.glob("notes.md", "../state")), 0)
