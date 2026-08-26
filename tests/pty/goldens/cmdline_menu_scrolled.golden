@@ -21,10 +21,10 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
   file.next                    Walk to the next open file                       
-  file.open                    Sprint 23: open a file                           
+  file.open                    Open a file                                      
   file.prev                    Walk to the previous open file                   
   file.save                    Atomically save the active file                  
-> file.close                   Sprint 23: close the active file             6/16
+> file.close                   Close the active file                        6/16
 :file.close                                                                     
 --- style
 AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
@@ -46,20 +46,18 @@ AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 FFGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-HHIIIHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
-JKKKKKKKKKKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+HIIIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 --- legend
 A fg=#4b5263 bg=#12141a attrs=----------
 B fg=#c8ccd4 bg=#12141a attrs=b---------
 C fg=#c8ccd4 bg=#12141a attrs=----------
 D fg=#f7e0cc bg=#4e2a0f attrs=b---------
 E fg=#f7e0cc bg=#4e2a0f attrs=b--u------
-F fg=#f7e0cc bg=#4e2a0f attrs=bd--------
-G fg=#f7e0cc bg=#4e2a0f attrs=bd-u------
-H fg=#4e2a0f bg=#f7e0cc attrs=b---------
-I fg=#4e2a0f bg=#f7e0cc attrs=b--u------
-J fg=#2f1806 bg=#e77d24 attrs=b---------
-K fg=#f7e0cc bg=#4e2a0f attrs=----------
+F fg=#4e2a0f bg=#f7e0cc attrs=b---------
+G fg=#4e2a0f bg=#f7e0cc attrs=b--u------
+H fg=#2f1806 bg=#e77d24 attrs=b---------
+I fg=#f7e0cc bg=#4e2a0f attrs=----------
