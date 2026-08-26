@@ -16,7 +16,10 @@ enum {
     LATENCY_KEYS = 10000,
     ARROW_KEYS = 2000,
     PACED_ARROW_KEYS = 128,
+    WOLF_ERASE_KEYS = 16,
     PACED_ARROW_INTERVAL_NS = 40000000,
+    WOLF_FIRST_ERASE_IDLE_NS = 300000000,
+    WOLF_ERASE_INTERVAL_NS = 40000000,
     PACED_QUIET_NS = 1000000,
     LATENCY_LINES = 10000,
     COLD_RUNS = 9,
@@ -28,6 +31,8 @@ typedef struct LatencyLimits {
     i64 key_p99_ns;
     i64 arrow_p99_ns;
     i64 paced_arrow_p99_ns;
+    i64 wolf_first_backspace_ns;
+    i64 wolf_backspace_max_ns;
     i64 cold_ns;
 } LatencyLimits;
 
@@ -247,13 +252,19 @@ static bool load_limits(const char *path, LatencyLimits *limits)
             limits->arrow_p99_ns = (i64)value;
         else if (strcmp(name, "cursor_arrow_to_paint_p99_paced") == 0)
             limits->paced_arrow_p99_ns = (i64)value;
+        else if (strcmp(name, "wolf_kitty_first_backspace_to_paint") == 0)
+            limits->wolf_first_backspace_ns = (i64)value;
+        else if (strcmp(name, "wolf_kitty_backspace_to_paint_max") == 0)
+            limits->wolf_backspace_max_ns = (i64)value;
         else if (strcmp(name, "cold_open_to_first_paint") == 0)
             limits->cold_ns = (i64)value;
     }
     if (ferror(file) || fclose(file) != 0)
         return false;
     return limits->key_p99_ns > 0 && limits->arrow_p99_ns > 0 &&
-           limits->paced_arrow_p99_ns > 0 && limits->cold_ns > 0;
+           limits->paced_arrow_p99_ns > 0 &&
+           limits->wolf_first_backspace_ns > 0 &&
+           limits->wolf_backspace_max_ns > 0 && limits->cold_ns > 0;
 }
 
 static void merge_sort_i64(i64 *values, i64 *work, size_t len)
@@ -632,6 +643,118 @@ done:
     return ok;
 }
 
+static bool send_key_and_wait_frame(YewLivePty *pty, const void *key,
+                                    size_t len)
+{
+    u64 frame = pty->frames;
+    i64 deadline = yew_live_pty_now_ns() + INT64_C(1000000000);
+
+    return yew_live_pty_write(pty, key, len, deadline) &&
+           yew_live_pty_wait_frame(pty, frame, deadline, NULL);
+}
+
+/*
+ * Reproduce the reported Wolf edit stink exactly: enter the blank line
+ * between the two functions, add several newlines, then erase them in I
+ * mode.  Pause across the workspace-idle threshold before the first delete,
+ * then pace the rest like key repeat.  Drain repaint-only output before each
+ * sample so the measured frame can only belong to that Backspace.
+ */
+static bool measure_wolf_backspaces(const char *binary, const char *path,
+                                    const char *state, i64 *first_out,
+                                    i64 *max_out)
+{
+    static const char down[] = "\033[B";
+    static const char enter_insert[] = "\033[105;1u";
+    static const char newline[] = "\033[13;1u";
+    static const char backspace[] = "\033[127;1u";
+    i64 samples[WOLF_ERASE_KEYS];
+    i64 work[WOLF_ERASE_KEYS];
+    YewLivePty pty = {.master = -1, .pid = -1};
+    i64 deadline;
+    size_t i;
+    bool ok = false;
+
+    deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
+    if (!yew_live_pty_spawn(&pty, binary, path, state,
+                            SCREEN_ROWS, SCREEN_COLS)) {
+        (void)fprintf(stderr,
+                      "latency: Wolf backspace run did not spawn\n");
+        goto done;
+    }
+    pty.kitty_supported = true;
+    if (!yew_live_pty_wait_frame(&pty, 0U, deadline, NULL) ||
+        !settle_editor(&pty)) {
+        (void)fprintf(stderr,
+                      "latency: Wolf backspace run did not paint initially\n");
+        goto done;
+    }
+    if (!pty.kitty_enabled) {
+        (void)fprintf(stderr,
+                      "latency: Wolf backspace run did not enable Kitty input\n");
+        goto done;
+    }
+    for (i = 0U; i < 5U; i++) {
+        if (!send_key_and_wait_frame(&pty, down, sizeof(down) - 1U)) {
+            (void)fprintf(stderr,
+                          "latency: Wolf backspace setup motion failed\n");
+            goto done;
+        }
+    }
+    if (!send_key_and_wait_frame(&pty, enter_insert,
+                                 sizeof(enter_insert) - 1U)) {
+        (void)fprintf(stderr,
+                      "latency: Wolf backspace setup did not enter insert\n");
+        goto done;
+    }
+    for (i = 0U; i < WOLF_ERASE_KEYS; i++) {
+        if (!send_key_and_wait_frame(&pty, newline, sizeof(newline) - 1U)) {
+            (void)fprintf(stderr,
+                          "latency: Wolf backspace setup newline %zu failed\n",
+                          i + 1U);
+            goto done;
+        }
+    }
+    for (i = 0U; i < WOLF_ERASE_KEYS; i++) {
+        u64 frame;
+        i64 start;
+        i64 completed;
+
+        delay_ns(i == 0U ? WOLF_FIRST_ERASE_IDLE_NS :
+                           WOLF_ERASE_INTERVAL_NS);
+        deadline = yew_live_pty_now_ns() + INT64_C(1000000000);
+        if (!yew_live_pty_wait_quiet(&pty, PACED_QUIET_NS, deadline)) {
+            (void)fprintf(stderr,
+                          "latency: Wolf backspace %zu did not settle\n",
+                          i + 1U);
+            goto done;
+        }
+        frame = pty.frames;
+        start = yew_live_pty_now_ns();
+        deadline = start + INT64_C(1000000000);
+        if (start < 0 ||
+            !yew_live_pty_write(&pty, backspace,
+                                sizeof(backspace) - 1U, deadline) ||
+            !yew_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
+            (void)fprintf(stderr, "latency: Wolf backspace %zu failed\n",
+                          i + 1U);
+            goto done;
+        }
+        samples[i] = completed - start;
+    }
+    if (!stop_editor(&pty)) {
+        (void)fprintf(stderr, "latency: Wolf backspace run did not quit\n");
+        goto done;
+    }
+    *first_out = samples[0];
+    merge_sort_i64(samples, work, WOLF_ERASE_KEYS);
+    *max_out = samples[WOLF_ERASE_KEYS - 1U];
+    ok = true;
+done:
+    yew_live_pty_close(&pty);
+    return ok;
+}
+
 int main(int argc, char **argv)
 {
     char root[1024];
@@ -642,6 +765,8 @@ int main(int argc, char **argv)
     i64 key_p99;
     i64 arrow_p99;
     i64 paced_arrow_p99;
+    i64 wolf_first_backspace;
+    i64 wolf_backspace_max;
     i64 cold;
     const char *wolf_path;
     int status = 0;
@@ -683,7 +808,10 @@ int main(int argc, char **argv)
         !measure_keys(argv[2], fixture, state, &key_p99) ||
         !measure_arrows(argv[2], wolf_path, state, &arrow_p99) ||
         !measure_arrows_paced(argv[2], wolf_path, state,
-                              &paced_arrow_p99)) {
+                              &paced_arrow_p99) ||
+        !measure_wolf_backspaces(argv[2], wolf_path, state,
+                                 &wolf_first_backspace,
+                                 &wolf_backspace_max)) {
         (void)fprintf(stderr, "latency: PTY measurement failed\n");
         (void)remove_tree(root);
         return 2;
@@ -704,12 +832,24 @@ int main(int argc, char **argv)
                  (long long)limits.paced_arrow_p99_ns,
                  paced_arrow_p99 <= limits.paced_arrow_p99_ns
                      ? " ok" : " FAIL");
+    (void)printf("wolf_kitty_first_backspace_to_paint %lld limit=%lld%s\n",
+                 (long long)wolf_first_backspace,
+                 (long long)limits.wolf_first_backspace_ns,
+                 wolf_first_backspace <= limits.wolf_first_backspace_ns
+                     ? " ok" : " FAIL");
+    (void)printf("wolf_kitty_backspace_to_paint_max %lld limit=%lld%s\n",
+                 (long long)wolf_backspace_max,
+                 (long long)limits.wolf_backspace_max_ns,
+                 wolf_backspace_max <= limits.wolf_backspace_max_ns
+                     ? " ok" : " FAIL");
     (void)printf("cold_open_to_first_paint %lld limit=%lld%s\n",
                  (long long)cold, (long long)limits.cold_ns,
                  cold <= limits.cold_ns ? " ok" : " FAIL");
     if (key_p99 > limits.key_p99_ns ||
         arrow_p99 > limits.arrow_p99_ns ||
         paced_arrow_p99 > limits.paced_arrow_p99_ns ||
+        wolf_first_backspace > limits.wolf_first_backspace_ns ||
+        wolf_backspace_max > limits.wolf_backspace_max_ns ||
         cold > limits.cold_ns)
         status = 1;
     return status;

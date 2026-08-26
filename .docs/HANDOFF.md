@@ -186,7 +186,12 @@ Local closeout evidence:
   raw keypress p99 1.382 ms and paced arrow p99 1.624 ms against 5 ms.
   The defect was editor-side, not a Wolf LSP: startup discovery repeatedly
   scheduled already-due background slices. Yew now spaces completed indexing
-  slices by 8 ms and yields them behind the input grace deadline.
+  slices by 8 ms and yields them behind the input grace deadline;
+- the matching Kitty CSI-u insert/delete gate enters the blank line between the
+  two Wolf functions, inserts 16 newlines, waits across the 300 ms workspace
+  idle boundary, then deletes them. The exact-file first Backspace measured
+  0.437 ms and the worst of all 16 measured 0.588 ms against 5 ms. Backspace
+  turns perform no journal `fsync`, and no Wolf LSP is configured by default.
 
 The pushed Sprint 55 closeout SHA must pass the complete hosted matrix and the
 explicit on-demand Valgrind lane before release. Sprint 55.5 now owns only the

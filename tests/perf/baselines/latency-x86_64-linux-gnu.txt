@@ -3,5 +3,7 @@
 keypress_to_paint_p99                 5000000
 cursor_arrow_to_paint_p99             5000000
 cursor_arrow_to_paint_p99_paced       5000000
+wolf_kitty_first_backspace_to_paint    5000000
+wolf_kitty_backspace_to_paint_max      5000000
 cold_open_to_first_paint             20000000
 keypress_to_paint_p99_streaming        5000000

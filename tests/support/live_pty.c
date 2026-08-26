@@ -214,11 +214,19 @@ static bool consume(YewLivePty *pty, const u8 *bytes, size_t len,
         }
         pty->tail[pty->ntail++] = bytes[i];
         if (!pty->kitty_replied && suffix(pty, "\033[?u")) {
-            /* Exercise the legacy key encoding while still negotiating
-             * synchronized output. An absent kitty reply is the protocol's
-             * supported no-kitty response. */
+            static const char response[] = "\033[?0u";
+
+            /* Legacy remains the default.  Focused callers can opt into
+             * Kitty CSI-u without changing every live-PTY performance lane. */
             pty->kitty_replied = true;
+            if (pty->kitty_supported) {
+                (void)memcpy(responses + nresponses, response,
+                             sizeof(response) - 1U);
+                nresponses += sizeof(response) - 1U;
+            }
         }
+        if (suffix(pty, "\033[>21u"))
+            pty->kitty_enabled = true;
         if (!pty->sync_replied && suffix(pty, "\033[?2026$p")) {
             static const char response[] = "\033[?2026;2$y";
 

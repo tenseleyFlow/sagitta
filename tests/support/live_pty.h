@@ -14,6 +14,8 @@ typedef struct YewLivePty {
     size_t ntail;
     u64 frames;
     bool kitty_replied;
+    bool kitty_supported;
+    bool kitty_enabled;
     bool sync_replied;
     bool da_replied;
     bool in_sync_frame;
