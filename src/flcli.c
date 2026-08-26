@@ -86,8 +86,9 @@ static const char fl_usage[] =
     "Exit: 0 ran, 1 compile or runtime error, 3 unreadable file or a\n"
     "denied capability, 4 internal error.\n"
     "\n"
-    "A script takes no arguments this campaign; batch mode with stdio\n"
-    "and argv is Sprint 37.  A stepping debugger is not a 1.0 feature:\n"
+    "A `yew fl` script takes no arguments; use `yew --batch SCRIPT --\n"
+    "ARGS...` when a script needs argv.  A stepping debugger is not a\n"
+    "1.0 feature:\n"
     "the trace, --dump-bytecode and io.print are the debugging story.\n";
 
 static int list_natives(void)

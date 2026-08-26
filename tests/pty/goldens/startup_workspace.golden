@@ -1,14 +1,8 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=23,1 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
 --- text
-    1 alpha needle one                                                          
-    1 beta two                                                                  
-    2 gamma needle three                                                        
-    3 delta four                                                                
-    4 epsilon five                                                              
-    5 zeta needle six                                                           
-    6                                                                           
+    1                                                                           
                                                                                 
                                                                                 
                                                                                 
@@ -24,8 +18,14 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-E: :g is Fletch's query API (buf.find(re) mapped over an action); a bespoke
-:g/needle/d                                                                     
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L  [no name]                                                utf-8  lf  1:1  all
 --- style
 AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
@@ -49,14 +49,10 @@ AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-EFGGGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=#4b5263 bg=#12141a attrs=----------
 B fg=#c8ccd4 bg=#12141a attrs=b---------
 C fg=#c8ccd4 bg=#12141a attrs=----------
-D fg=idx:196 bg=#4e2a0f attrs=b---------
-E fg=#2f1806 bg=#e77d24 attrs=b---------
-F fg=#f7e0cc bg=idx:196 attrs=b--u------
-G fg=#f7e0cc bg=#4e2a0f attrs=----------
-H fg=#f7e0cc bg=#4e2a0f attrs=b---------
+D fg=#12141a bg=#61afef attrs=----------

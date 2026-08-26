@@ -16,6 +16,7 @@ typedef struct BatchOpts {
     size_t nfiles;
     const char *const *args;
     size_t nargs;
+    u8 replay_reg;
     const char *config_path;
     const YewGrantArg *grants;
     size_t ngrants;

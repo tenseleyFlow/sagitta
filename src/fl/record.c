@@ -842,7 +842,7 @@ CmdStatus yew_record_cmd_repeat(CmdCtx *cx)
 {
     if (cx != NULL && cx->ed != NULL)
         yew_msg(cx->ed, YEW_MSG_ERROR,
-                "ed.repeat requires retained resolved arguments; Sprint 35 "
-                "does not retain them outside recordings");
+                "ed.repeat is unavailable because resolved command "
+                "arguments are not retained outside recordings");
     return YEW_CMD_ERR_STATE;
 }

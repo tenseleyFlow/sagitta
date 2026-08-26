@@ -896,20 +896,6 @@ static bool finish_rest(Parser *p, CmdParse *out, const char *cmdname,
     return finish_body(p, out, cmdname, name_tok);
 }
 
-static bool deferred_name(Parser *p, const char *name, Span tok)
-{
-    const char *msg = NULL;
-
-    /* `:s` and `:g` landed in Sprint 21 — `:g` as an explicit rejection
-     * naming Sprint 34, which is a command, not a parse deferral. */
-    if (strcmp(name, "source") == 0)
-        msg = ":source loads Fletch config: Sprint 36";
-    if (msg == NULL)
-        return false;
-    set_error(p, (size_t)tok.lo, (size_t)tok.hi, "%s", msg);
-    return true;
-}
-
 bool yew_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
                    CmdParse *out)
 {
@@ -1016,8 +1002,10 @@ bool yew_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
             return finish_bang(&p, out, "ed.shell.read");
         }
     }
-    if (deferred_name(&p, name, out->name_tok))
-        return false;
+    /* The traditional spelling is a compatibility alias for Fletch's
+     * complete config reload; it does not accept a legacy file operand. */
+    if (strcmp(name, "source") == 0)
+        name = arena_strdup(a, "config.reload");
     id = resolve_name(&p, name, out->name_tok);
     if (id.v == 0U)
         return false;

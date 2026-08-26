@@ -487,33 +487,24 @@ void test_pickers_commands_are_registered(void)
     }
 }
 
-/*
- * DoD 13: the pickers this sprint does NOT ship name their sprint
- * rather than reading as "no such command".
- */
-void test_pickers_deferred_ones_name_their_sprint(void)
+void test_pickers_symbol_alias_is_live(void)
 {
-    static const struct {
-        const char *name;
-        u32 len;
-        const char *sprint;
-    } rows[] = {{"ed.find.symbol", 14U, "Sprint 47"}};
-    u32 i;
+    CmdId id;
+    CmdId lsp_id;
+    const CmdDesc *desc;
 
     yew_cmd_shutdown();
     yew_cmd_init();
-    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
-        CmdId id = yew_cmd_lookup(rows[i].name, rows[i].len);
-        const CmdDesc *desc;
-
-        YEW_ASSERT(id.v != 0U);
-        desc = yew_cmd_desc(id);
-        YEW_ASSERT_NOT_NULL(desc);
-        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
-        /* It names the sprint that owns it, so "not yet" is
-         * distinguishable from "never". */
-        YEW_ASSERT_NOT_NULL(strstr(desc->help, rows[i].sprint));
-    }
+    id = yew_cmd_lookup("ed.find.symbol", 14U);
+    lsp_id = yew_cmd_lookup("ed.lsp.symbols", 14U);
+    YEW_ASSERT(id.v != 0U);
+    YEW_ASSERT(lsp_id.v != 0U);
+    desc = yew_cmd_desc(id);
+    YEW_ASSERT_NOT_NULL(desc);
+    YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
+    YEW_ASSERT((desc->flags & YEW_CMD_PROMPTS) != 0U);
+    YEW_ASSERT((desc->flags & YEW_CMD_NEEDS_WIN) != 0U);
+    YEW_ASSERT_EQ_U64(desc->fn == yew_cmd_desc(lsp_id)->fn, true);
     yew_cmd_shutdown();
     yew_cmd_init();
 }

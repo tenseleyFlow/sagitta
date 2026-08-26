@@ -34,6 +34,7 @@ CmdStatus yew_ws_cmd_save_state(CmdCtx *cx);
 CmdStatus yew_ws_cmd_restore_state(CmdCtx *cx);
 CmdStatus yew_ws_cmd_info(CmdCtx *cx);
 CmdStatus yew_ws_cmd_forget(CmdCtx *cx);
+CmdStatus yew_ws_cmd_migrate(CmdCtx *cx);
 
 /*
  * Removes a workspace state directory.  Refuses any path that is not

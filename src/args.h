@@ -20,11 +20,13 @@ typedef struct {
     const char *theme;
     bool no_workspace_config;
     bool trust_workspace;
+    const char *workspace_dir;
     const char *batch_script;
     const char **files;
     size_t nfiles;
     const char **batch_args;
     size_t nbatch_args;
+    u8 replay_reg;
     bool test;
     bool quiet;
     YewGrantArg *grants;

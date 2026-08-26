@@ -110,6 +110,7 @@ void yew_pane_collect_leaves(Pane *root, Pane **out, u32 cap, u32 *n);
 Pane *yew_pane_dir(Pane *root, const Pane *from, YewDir dir);
 /* Tree-order cycle, for terminals that eat arrow keys. */
 Pane *yew_pane_next(Pane *root, const Pane *from);
+Pane *yew_pane_prev(Pane *root, const Pane *from);
 
 /*
  * Sprint 25 serializes the tree through this rather than reaching into

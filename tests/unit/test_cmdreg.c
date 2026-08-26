@@ -242,6 +242,36 @@ void test_cmd_registry_invocation_and_deferred(void)
         YEW_ASSERT_NOT_NULL(yew_cmd_desc(
             yew_cmd_lookup("ed.theme.toggle", 15U)));
     }
+    {
+        static const struct {
+            const char *compat;
+            const char *canonical;
+        } aliases[] = {
+            {"ed.file.open", "ed.buf.open"},
+            {"ed.file.close", "ed.buf.close"},
+            {"ed.buf.next", "ed.tab.next"},
+            {"ed.buf.prev", "ed.tab.prev"},
+            {"ed.group.next", "ed.file.next"},
+            {"ed.group.prev", "ed.file.prev"},
+            {"ed.find.symbol", "ed.lsp.symbols"},
+            {"ed.win.next", "ed.pane.focus_next"},
+            {"ed.win.prev", "ed.pane.focus_prev"}
+        };
+        size_t alias_i;
+
+        for (alias_i = 0U; alias_i < YEW_ARRAY_LEN(aliases); alias_i++) {
+            const CmdDesc *compat = yew_cmd_desc(yew_cmd_lookup(
+                aliases[alias_i].compat, strlen(aliases[alias_i].compat)));
+            const CmdDesc *canonical = yew_cmd_desc(yew_cmd_lookup(
+                aliases[alias_i].canonical,
+                strlen(aliases[alias_i].canonical)));
+
+            YEW_ASSERT_NOT_NULL(compat);
+            YEW_ASSERT_NOT_NULL(canonical);
+            YEW_ASSERT((compat->flags & YEW_CMD_DEFERRED) == 0U);
+            YEW_ASSERT(compat->fn == canonical->fn);
+        }
+    }
     for (i = 0U; i < YEW_ARRAY_LEN(mode_rows); i++) {
         CmdCtx mode = {0};
         CmdId enter = yew_cmd_lookup("ed.mode.enter", 13U);

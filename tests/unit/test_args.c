@@ -114,6 +114,8 @@ void test_args_parse_file(void)
 void test_args_parse_batch(void)
 {
     char *argv[] = {"yew", "--batch", "edit.fl", "one.txt"};
+    char *replay_argv[] = {"yew", "--batch", "--replay", "Q", "edit.fl",
+                           "one.txt"};
     YewArgs args;
     Bytebuf err;
     int rc;
@@ -124,6 +126,16 @@ void test_args_parse_batch(void)
     YEW_ASSERT_EQ_STR(args.batch_script, "edit.fl");
     YEW_ASSERT_EQ_U64(args.nfiles, 1U);
     YEW_ASSERT_EQ_STR(args.files[0], "one.txt");
+    yew_args_free(&args);
+    bytebuf_free(&err);
+
+    bytebuf_init(&err);
+    YEW_ASSERT_EQ_I64(yew_args_parse(&args, 6, replay_argv, &err), -1);
+    YEW_ASSERT_EQ_U64(args.replay_reg, (u8)'Q');
+    YEW_ASSERT_EQ_STR(args.batch_script, "edit.fl");
+    YEW_ASSERT_EQ_U64(args.nfiles, 1U);
+    YEW_ASSERT_EQ_STR(args.files[0], "one.txt");
+    YEW_ASSERT_EQ_U64(err.len, 0U);
     yew_args_free(&args);
     bytebuf_free(&err);
 }
@@ -193,6 +205,50 @@ void test_args_parse_config_missing(void)
         "yew: error: option '--config' requires an argument\n"));
     yew_args_free(&args);
     bytebuf_free(&err);
+}
+
+void test_args_parse_workspace(void)
+{
+    char *argv[] = {"yew", "--workspace", "project", "one.c", "two.c"};
+    YewArgs args;
+    Bytebuf err;
+
+    bytebuf_init(&err);
+    YEW_ASSERT_EQ_I64(yew_args_parse(&args, 5, argv, &err), -1);
+    YEW_ASSERT_EQ_STR(args.workspace_dir, "project");
+    YEW_ASSERT_EQ_U64(args.nfiles, 2U);
+    YEW_ASSERT_EQ_STR(args.files[0], "one.c");
+    YEW_ASSERT_EQ_STR(args.files[1], "two.c");
+    YEW_ASSERT_EQ_U64(err.len, 0U);
+    yew_args_free(&args);
+    bytebuf_free(&err);
+}
+
+void test_args_parse_workspace_errors(void)
+{
+    char *missing[] = {"yew", "--workspace"};
+    char *duplicate[] = {"yew", "--workspace", "a", "--workspace", "b"};
+    char *batch[] = {"yew", "--workspace", "a", "--batch", "run.fl"};
+    char **cases[] = {missing, duplicate, batch};
+    int counts[] = {2, 5, 5};
+    const char *messages[] = {
+        "yew: error: option '--workspace' requires an argument\n",
+        "yew: error: option '--workspace' specified twice\n",
+        "yew: error: option '--workspace' cannot be used with --batch\n"
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        YewArgs args;
+        Bytebuf err;
+
+        bytebuf_init(&err);
+        YEW_ASSERT_EQ_I64(yew_args_parse(&args, counts[i], cases[i], &err),
+                          YEW_EXIT_ERR);
+        YEW_ASSERT(buf_equals(&err, messages[i]));
+        yew_args_free(&args);
+        bytebuf_free(&err);
+    }
 }
 
 void test_args_parse_batch_full_model(void)
@@ -295,17 +351,21 @@ void test_args_parse_batch_grants(void)
 
 void test_args_parse_batch_only_options_require_batch(void)
 {
-    const char *options[] = {"--test", "--quiet", "--grant"};
+    const char *options[] = {"--test", "--quiet", "--grant", "--replay"};
     const char *messages[] = {
         "yew: error: option '--test' requires --batch\n",
         "yew: error: option '--quiet' requires --batch\n",
-        "yew: error: option '--grant' requires --batch\n"
+        "yew: error: option '--grant' requires --batch\n",
+        "yew: error: option '--replay' requires --batch\n"
     };
     size_t i;
 
     for (i = 0U; i < YEW_ARRAY_LEN(options); i++) {
-        char *argv[3] = {"yew", (char *)options[i], "plug:net"};
-        int argc = strcmp(options[i], "--grant") == 0 ? 3 : 2;
+        char *argv[3] = {"yew", (char *)options[i],
+                         strcmp(options[i], "--replay") == 0 ? "a" :
+                                                               "plug:net"};
+        int argc = (strcmp(options[i], "--grant") == 0 ||
+                    strcmp(options[i], "--replay") == 0) ? 3 : 2;
         YewArgs args;
         Bytebuf err;
 
@@ -350,16 +410,24 @@ void test_args_parse_batch_misuse(void)
     char *duplicate[] = {"yew", "--batch", "--batch", "run.fl"};
     char *missing_grant[] = {"yew", "--batch", "run.fl", "--grant"};
     char *missing_script[] = {"yew", "--batch", "--test", "--"};
-    char *replay[] = {"yew", "--batch", "--replay", "q", "run.fl"};
+    char *replay_missing[] = {"yew", "--batch", "--replay"};
+    char *replay_invalid[] = {"yew", "--batch", "--replay", "qq",
+                              "run.fl"};
+    char *replay_duplicate[] = {"yew", "--batch", "--replay", "a",
+                                "--replay", "b", "run.fl"};
     char *strict[] = {"yew", "--batch-strict"};
-    char **cases[] = {duplicate, missing_grant, missing_script, replay,
+    char **cases[] = {duplicate, missing_grant, missing_script,
+                      replay_missing, replay_invalid, replay_duplicate,
                       strict};
-    int counts[] = {4, 4, 4, 5, 2};
+    int counts[] = {4, 4, 4, 3, 5, 7, 2};
     const char *messages[] = {
         "yew: error: option '--batch' specified twice\n",
         "yew: error: option '--grant' requires an argument\n",
         "yew: error: option '--batch' requires an argument\n",
-        "yew: error: option '--replay' lands in Sprint 38\n",
+        "yew: error: option '--replay' requires an argument\n",
+        "yew: error: invalid --replay register 'qq' "
+        "(expected one letter a-z/A-Z)\n",
+        "yew: error: option '--replay' specified twice\n",
         "yew: error: option '--batch-strict' lands in Sprint 59\n"
     };
     size_t i;

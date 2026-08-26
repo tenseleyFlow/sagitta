@@ -145,7 +145,7 @@ CmdStatus yew_pane_cmd_close(CmdCtx *cx)
     parent = leaf->parent;
     if (parent == NULL) {
         yew_msg(ed, YEW_MSG_ERROR,
-                "cannot close the last pane (tabs land in Sprint 23)");
+                "cannot close the only pane; close its tab instead");
         return YEW_CMD_ERR_STATE;
     }
     sibling = parent->a == leaf ? parent->b : parent->a;
@@ -210,6 +210,14 @@ CmdStatus yew_pane_cmd_focus_next(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
     pane_refocus(cx->ed, yew_pane_next(cx->ed->pane_root, cx->ed->focus));
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_pane_cmd_focus_prev(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    pane_refocus(cx->ed, yew_pane_prev(cx->ed->pane_root, cx->ed->focus));
     return YEW_CMD_OK;
 }
 

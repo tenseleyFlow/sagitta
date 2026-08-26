@@ -250,6 +250,8 @@ printf 'import ed\ned.run("ed.ai.enable", {})\n' \
     >"$batch_dir/ai-enable.fl"
 printf 'import io\nimport buf\nio.print(buf.text(buf.current()))\n' \
     >"$batch_dir/dash.fl"
+printf 'import ed\ned.run("ed.reg.set", {iarg: 97, sarg: "@[ i\\\"x\\\" ]\\n"})\n' \
+    >"$batch_dir/replay.fl"
 printf 'import io\nimport list\nimport buf\nif list.len(files) != 2 { error("files") }\nif buf.path(buf.current()) != files[0] { error("order") }\nif list.len(args) != 2 or args[0] != "--flag" or args[1] != "" { error("args") }\nio.print("globals-ok")\n' \
     >"$batch_dir/globals.fl"
 printf 'one\n' >"$batch_dir/one.txt"
@@ -366,9 +368,19 @@ case " $smoke_modules " in
         ;;
 esac
 
-run_capture "$bin" --batch --replay q "$batch_dir/ok.fl"
-expect_rc 1 "batch deferred replay"
-expect_stderr_contains "Sprint 38" "batch deferred replay"
+run_capture "$bin" --batch --clean --replay a "$batch_dir/replay.fl"
+expect_rc 0 "batch replay"
+[ ! -s "$out" ] || fail "batch replay stdout"
+expect_stderr_contains "buffer modified and not saved" "batch replay order"
+
+run_capture "$bin" --batch --clean --replay q "$batch_dir/ok.fl"
+expect_rc 2 "batch empty replay"
+expect_stderr_contains "replay @q failed" "batch empty replay"
+
+run_capture "$bin" --batch --replay qq "$batch_dir/ok.fl"
+expect_rc 1 "batch invalid replay register"
+expect_stderr_contains "expected one letter a-z/A-Z" \
+    "batch invalid replay register"
 echo "smoke: batch stdio and exit codes ok"
 
 rc=0

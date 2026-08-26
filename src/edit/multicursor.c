@@ -845,21 +845,21 @@ void yew_cset_require_single_edit(const CursorSet *cs)
 void yew_mc_require_literal_lift(bool regex)
 {
     if (regex)
-        YEW_BUG("regex cursor lift lands in Sprint 21");
+        YEW_BUG("cursor lift requires literal matches");
 }
 
 void yew_mc_require_single_completion(const CursorSet *cs)
 {
     yew_cset_check(cs);
     if (cs->curs.len > 1U)
-        YEW_BUG("per-cursor completion lands in Sprint 43");
+        YEW_BUG("completion requires one primary cursor");
 }
 
 void yew_mc_require_single_lsp_edit(const CursorSet *cs)
 {
     yew_cset_check(cs);
     if (cs->curs.len > 1U)
-        YEW_BUG("per-cursor LSP edits land in Sprint 47");
+        YEW_BUG("LSP edits require one primary cursor");
 }
 
 CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)

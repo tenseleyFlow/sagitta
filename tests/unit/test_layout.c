@@ -470,6 +470,9 @@ void test_layout_focus_next_cycles_in_tree_order(void)
     YEW_ASSERT(yew_pane_next(ed.pane_root, second) == third);
     /* And round, which is what a cycle means. */
     YEW_ASSERT(yew_pane_next(ed.pane_root, third) == first);
+    YEW_ASSERT(yew_pane_prev(ed.pane_root, first) == third);
+    YEW_ASSERT(yew_pane_prev(ed.pane_root, third) == second);
+    YEW_ASSERT(yew_pane_prev(ed.pane_root, second) == first);
     yew_ed_free(&ed);
 }
 

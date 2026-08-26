@@ -228,6 +228,15 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
     assert_error(&f, ":sort", ":ui.grow requires a range");
     assert_error(&f, ":not_a_command",
                  "unknown command 'not_a_command' (try Tab)");
+    {
+        CmdParse parsed;
+
+        YEW_ASSERT(yew_cmd_parse(&f.ed, ":source", 7U, &f.arena,
+                                 &parsed));
+        YEW_ASSERT_EQ_STR(parsed.argv.v[0], "ed.config.reload");
+    }
+    assert_error(&f, ":source old.vim",
+                 ":config.reload takes no arguments");
     assert_error(&f, ":cmdline.accept",
                  "unknown command 'cmdline.accept' (try Tab)");
     /* Sprint 19 opened these: a bang takes the rest of the line verbatim

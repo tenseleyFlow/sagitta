@@ -407,6 +407,22 @@ Pane *yew_pane_next(Pane *root, const Pane *from)
     return leaves.v[0];
 }
 
+Pane *yew_pane_prev(Pane *root, const Pane *from)
+{
+    LeafList leaves;
+    u32 i;
+
+    leaves.n = 0U;
+    collect_leaves(root, &leaves);
+    if (leaves.n == 0U)
+        return NULL;
+    for (i = 0U; i < leaves.n; i++) {
+        if (leaves.v[i] == from)
+            return leaves.v[(i + leaves.n - 1U) % leaves.n];
+    }
+    return leaves.v[leaves.n - 1U];
+}
+
 /* ---------------------------------------------------------------- */
 /* Resize (Sprint 22 §5)                                            */
 /* ---------------------------------------------------------------- */

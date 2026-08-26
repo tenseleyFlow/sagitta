@@ -150,27 +150,31 @@ void test_ws_cmds_are_registered(void)
     yew_cmd_init();
 }
 
-/*
- * v1 is frozen and there is no v2, so ed.ws.migrate has nothing to
- * migrate TO.  It hard-errors naming its sprint rather than silently
- * doing nothing — a no-op here would read as "already migrated".
- */
-void test_ws_cmds_migrate_is_deferred(void)
+/* v1 is current, so the reserved name gives a present-tense diagnostic. */
+void test_ws_cmds_migrate_reports_no_newer_schema(void)
 {
+    WcFix f;
+    CmdCtx cx = {0};
     CmdId id;
     const CmdDesc *desc;
 
+    wc_make(&f);
     yew_cmd_shutdown();
     yew_cmd_init();
     id = yew_cmd_lookup("ed.ws.migrate", 13U);
     YEW_ASSERT(id.v != 0U);
     desc = yew_cmd_desc(id);
     YEW_ASSERT_NOT_NULL(desc);
-    YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
-    /* And it names the sprint that owns it. */
-    YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 25"));
+    YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
+    cx.ed = &f.ed;
+    cx.win = f.ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_cmd_invoke(id, &cx), YEW_CMD_ERR_STATE);
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "schema v1 is current"));
     yew_cmd_shutdown();
     yew_cmd_init();
+    wc_remove(&f);
 }
 
 /* ---------------------------------------------------------------- */

@@ -158,6 +158,23 @@ CmdStatus yew_ws_cmd_info(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+CmdStatus yew_ws_cmd_migrate(CmdCtx *cx)
+{
+    Ed *ed = cx == NULL ? NULL : cx->ed;
+
+    if (ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    /*
+     * Workspace schema v1 is frozen and forward-compatible.  This is a
+     * reserved command, not unfinished Sprint 25 work: there is no newer
+     * schema to migrate to.  Keep the name live so scripts get an accurate
+     * answer instead of either a historical sprint error or a silent no-op.
+     */
+    yew_msg(ed, YEW_MSG_ERROR,
+            "workspace schema v1 is current; no migration is available");
+    return YEW_CMD_ERR_STATE;
+}
+
 /* ---------------------------------------------------------------- */
 /* forget                                                           */
 /* ---------------------------------------------------------------- */

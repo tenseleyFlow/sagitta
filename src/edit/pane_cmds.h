@@ -15,6 +15,7 @@ CmdStatus yew_pane_cmd_focus_right(CmdCtx *cx);
 CmdStatus yew_pane_cmd_focus_up(CmdCtx *cx);
 CmdStatus yew_pane_cmd_focus_down(CmdCtx *cx);
 CmdStatus yew_pane_cmd_focus_next(CmdCtx *cx);
+CmdStatus yew_pane_cmd_focus_prev(CmdCtx *cx);
 CmdStatus yew_pane_cmd_grow(CmdCtx *cx);
 CmdStatus yew_pane_cmd_shrink(CmdCtx *cx);
 

@@ -146,57 +146,8 @@ static CmdStatus cmd_syn_set(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
-static CmdStatus deferred_unreachable(CmdCtx *cx)
-{
-    (void)cx;
-    YEW_BUG("deferred command reached its implementation");
-}
-
-#define DEFER(name_, arity_, flags_, sprint_, help_)                           \
-    {                                                                          \
-        name_, deferred_unreachable, arity_, (flags_) | YEW_CMD_DEFERRED,      \
-            "Sprint " #sprint_ ": " help_, NULL                              \
-    }
-
-/*
- * A deferred command that is nonetheless RECORDABLE, and so must carry
- * its CMDWORD now: the word is what a macro records, and s35 cannot
- * add it later without changing what earlier recordings mean.
- */
-#define DEFER_W(name_, arity_, flags_, sprint_, help_, word_)                  \
-    {                                                                          \
-        name_, deferred_unreachable, arity_, (flags_) | YEW_CMD_DEFERRED,      \
-            "Sprint " #sprint_ ": " help_, word_                             \
-    }
-
-#ifndef YEW_WITH_LSP
-#define YEW_WITH_LSP 0
-#endif
-
-#if YEW_WITH_LSP
-#define LSP_DEFER(name_, arity_, flags_, sprint_, help_)                       \
-    DEFER(name_, arity_, flags_, sprint_, help_)
-#else
-#define LSP_DEFER(name_, arity_, flags_, sprint_, help_)                       \
-    {                                                                          \
-        name_, yew_lsp_cmd_require, arity_, flags_,                            \
-            "LSP module unavailable: " help_, NULL                            \
-    }
-#endif
-
 #ifndef YEW_WITH_AI
 #define YEW_WITH_AI 0
-#endif
-
-#if YEW_WITH_AI
-#define AI_DEFER(name_, sprint_, help_)                                       \
-    DEFER(name_, YEW_ARITY_NONE, 0U, sprint_, help_)
-#else
-#define AI_DEFER(name_, sprint_, help_)                                       \
-    {                                                                          \
-        name_, yew_ai_cmd_require, YEW_ARITY_NONE, 0U,                        \
-            "AI module unavailable: " help_, NULL                            \
-    }
 #endif
 
 #ifndef YEW_WITH_FUSS
@@ -470,7 +421,7 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN, "Close the active insert transaction", NULL},
     {"ed.mode.enter", yew_edit_cmd_mode_enter, YEW_ARITY_STR,
      YEW_CMD_RECORDABLE | YEW_CMD_INTERNAL,
-     "Enter L/W/B/I/H/E; F Sprint 52", "mode"},
+     "Enter L/W/B/I/H/E/F mode", "mode"},
     {"ed.mode.escape", yew_edit_cmd_mode_escape, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_INTERNAL, "Return to line mode", "escape"},
     {"ed.sel.expand", yew_edit_cmd_sel_unit_expand, YEW_ARITY_NONE,
@@ -677,8 +628,8 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER | YEW_CMD_INTERNAL,
      "Delete from the cursor to line end", NULL},
 
-    DEFER("ed.file.open", YEW_ARITY_STR, YEW_CMD_PROMPTS, 23,
-          "open a file"),
+    {"ed.file.open", yew_file_cmd_buf_open, YEW_ARITY_STR,
+     YEW_CMD_PROMPTS, "Open a file", NULL},
     {"ed.file.write", yew_file_cmd_write, YEW_ARITY_OPT_STR,
      YEW_CMD_NEEDS_WIN, "Write the active buffer, optionally to a path", NULL},
     {"ed.file.write_quit", yew_file_cmd_write_quit, YEW_ARITY_OPT_STR,
@@ -689,12 +640,12 @@ static const CmdDesc builtins[] = {
      "Create an empty buffer, optionally naming its file", NULL},
     {"ed.file.reload", yew_file_cmd_reload, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN, "Reload the active file from disk", NULL},
-    DEFER("ed.file.close", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 23,
-          "close the active file"),
-    DEFER("ed.buf.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 23,
-          "activate the next buffer"),
-    DEFER("ed.buf.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 23,
-          "activate the previous buffer"),
+    {"ed.file.close", yew_file_cmd_buf_close, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Close the active file", NULL},
+    {"ed.buf.next", yew_tab_cmd_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Activate the next buffer tab", NULL},
+    {"ed.buf.prev", yew_tab_cmd_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Activate the previous buffer tab", NULL},
     {"ed.tab.goto", yew_tab_cmd_goto, YEW_ARITY_OPT_INT,
      YEW_CMD_TAKES_COUNT, "Activate a numbered tab (0 = tab 10)", NULL},
     {"ed.tab.new", yew_tab_cmd_new, YEW_ARITY_NONE, 0U,
@@ -748,10 +699,10 @@ static const CmdDesc builtins[] = {
      "Edit the active group's membership", NULL},
     {"ed.group.from_dir", yew_group_cmd_from_dir, YEW_ARITY_OPT_STR,
      YEW_CMD_RECORDABLE, "open a directory as a tab group (F-mode)", "from_dir"},
-    DEFER("ed.group.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 24,
-          "activate the next tab group"),
-    DEFER("ed.group.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 24,
-          "activate the previous tab group"),
+    {"ed.group.next", yew_file_cmd_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Walk to the next tab group or file", NULL},
+    {"ed.group.prev", yew_file_cmd_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Walk to the previous tab group or file", NULL},
     /* Sprint 25 §9: workspace state. */
     {"ed.ws.save_state", yew_ws_cmd_save_state, YEW_ARITY_NONE, 0U,
      "Write this workspace's state now, without waiting for the debounce", NULL},
@@ -761,20 +712,8 @@ static const CmdDesc builtins[] = {
      "Report the workspace key, state directory, path record and lock owner", NULL},
     {"ed.ws.forget", yew_ws_cmd_forget, YEW_ARITY_NONE, 0U,
      "Delete this workspace's state directory, after confirming", NULL},
-    /*
-     * v1 is FROZEN and there is no v2, so there is nothing to migrate
-     * TO.  The name exists and hard-errors rather than being absent and
-     * reading as "no such command" (invariant 3); the first sprint that
-     * needs v2 builds the framework and takes this over.
-     */
-    DEFER("ed.ws.migrate", YEW_ARITY_NONE, 0U, 25,
-          "migrate workspace state to a newer schema (no v2 exists)"),
-    /*
-     * Sprint 18.5 ranks command NAMES and declared abbreviations.  The
-     * full palette -- a picker that also matches help text -- stays
-     * Sprint 38, so the name exists and hard-errors rather than being
-     * absent and reading as "no such command" (invariant 3).
-     */
+    {"ed.ws.migrate", yew_ws_cmd_migrate, YEW_ARITY_NONE, 0U,
+     "Report whether workspace state needs schema migration", NULL},
     /* Sprint 26 §6: the three instances. */
     {"ed.find.file", yew_find_cmd_file, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Find a file in the workspace by fuzzy name", NULL},
@@ -783,14 +722,9 @@ static const CmdDesc builtins[] = {
     {"ed.undo.branches", yew_undo_cmd_branches, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS,
      "Pick an undo state from the branch tree", NULL},
-    /*
-     * Sprint 26 §9 defers these two, and they must EXIST to say so:
-     * absent, they read to the user as "no such command" rather than
-     * "not yet" (invariant 3).  Both are PickerSpec values over §5's
-     * widget when their sprint arrives — no new machinery.
-     */
-    DEFER("ed.find.symbol", YEW_ARITY_NONE, 0U, 47,
-          "pick a symbol from the LSP workspace index"),
+    {"ed.find.symbol", yew_lsp_cmd_symbols, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS,
+     "Compatibility alias for the current document symbol picker", NULL},
     {"ed.find.command", yew_find_cmd_command, YEW_ARITY_NONE,
      YEW_CMD_PROMPTS, "Open the command palette", NULL},
     {"ed.pane.split_h", yew_pane_cmd_split_h, YEW_ARITY_NONE,
@@ -809,14 +743,18 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN, "Focus the pane below", NULL},
     {"ed.pane.focus_next", yew_pane_cmd_focus_next, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN, "Focus the next pane in tree order", NULL},
+    {"ed.pane.focus_prev", yew_pane_cmd_focus_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Focus the previous pane in tree order", NULL},
     {"ed.pane.grow", yew_pane_cmd_grow, YEW_ARITY_OPT_INT,
      YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN, "Grow the focused pane", NULL},
     {"ed.pane.shrink", yew_pane_cmd_shrink, YEW_ARITY_OPT_INT,
      YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN, "Shrink the focused pane", NULL},
-    DEFER("ed.win.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 22,
-          "focus the next window"),
-    DEFER("ed.win.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 22,
-          "focus the previous window"),
+    {"ed.win.next", yew_pane_cmd_focus_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN,
+     "Focus the next pane in tree order", NULL},
+    {"ed.win.prev", yew_pane_cmd_focus_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN,
+     "Focus the previous pane in tree order", NULL},
 
     {"ed.search.open", yew_search_cmd_open, YEW_ARITY_OPT_STR,
      YEW_CMD_PROMPTS | YEW_CMD_NEEDS_WIN, "Open incremental search", NULL},
@@ -861,7 +799,7 @@ static const CmdDesc builtins[] = {
      YEW_CMD_CHANGES_BUFFER | YEW_CMD_NEEDS_WIN,
      "Substitute matches of a pattern in a line range", NULL},
     {"ed.search.global", yew_search_cmd_global, YEW_ARITY_STR, 0U,
-     "Rejected: :g is Fletch's query API in Sprint 34", NULL},
+     "Rejected: use Fletch's buf.find query API", NULL},
     {"ed.macro.record", yew_record_cmd_record, YEW_ARITY_OPT_STR,
      YEW_CMD_PROMPTS, "Record a command macro", NULL},
     {"ed.macro.stop", yew_record_cmd_stop, YEW_ARITY_NONE, 0U,
@@ -1125,10 +1063,6 @@ static const CmdDesc builtins[] = {
      "Show plugin manifest, grants, and last error", NULL}
 };
 
-#undef DEFER
-#undef LSP_DEFER
-#undef AI_DEFER
-
 typedef struct {
     const char *name;
     const char *argspec;
@@ -1300,7 +1234,7 @@ static bool command_name_valid(const char *name)
         "open_back", "word_next", "clear_highlight", "set",
         /* Sprint 22 */
         "split_h", "split_v", "focus_left", "focus_right", "focus_up",
-        "focus_down", "focus_next",
+        "focus_down", "focus_next", "focus_prev",
         /* Sprint 23 */
         "move",
         /* Sprint 24 */

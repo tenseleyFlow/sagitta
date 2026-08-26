@@ -299,6 +299,8 @@ void test_args_parse_batch_missing(void);
 void test_args_parse_end_options(void);
 void test_args_parse_config_controls(void);
 void test_args_parse_config_missing(void);
+void test_args_parse_workspace(void);
+void test_args_parse_workspace_errors(void);
 void test_args_parse_batch_full_model(void);
 void test_args_parse_batch_runner_order(void);
 void test_args_parse_batch_empty_arg_tail(void);
@@ -1229,6 +1231,7 @@ void test_ws_key_exhausted_probes_run_stateless(void);
 void test_ws_key_empty_path_record_is_free(void);
 void test_ws_key_without_a_state_home_is_stateless(void);
 void test_ws_key_refuses_an_unresolvable_path(void);
+void test_ws_root_override_requires_and_canonicalizes_a_directory(void);
 void test_fl_parse_let_and_assign(void);
 void test_fl_parse_literals_and_primary(void);
 void test_fl_parse_precedence_ladder(void);
@@ -1652,7 +1655,7 @@ void test_ws_history_memory_history_writes_nothing(void);
 
 /* Sprint 25 §9: the ws commands. */
 void test_ws_cmds_are_registered(void);
-void test_ws_cmds_migrate_is_deferred(void);
+void test_ws_cmds_migrate_reports_no_newer_schema(void);
 void test_ws_cmds_save_state_writes_immediately(void);
 void test_ws_cmds_save_state_refuses_when_stateless(void);
 void test_ws_cmds_save_state_refuses_for_a_reader(void);
@@ -1909,7 +1912,7 @@ void test_pickers_buffer_switcher_marks_deferred_tabs(void);
 void test_pickers_undo_branches_lists_the_tree(void);
 void test_pickers_undo_branches_travels_to_a_state(void);
 void test_pickers_commands_are_registered(void);
-void test_pickers_deferred_ones_name_their_sprint(void);
+void test_pickers_symbol_alias_is_live(void);
 
 /* Sprint 26 §7: incremental filtering. */
 void test_narrow_equals_a_full_rescan(void);

@@ -71,6 +71,7 @@ struct OptStored;
 typedef struct YewEdStartup {
     const char *config_path;
     const char *theme;
+    const char *workspace_dir;
     bool clean;
     bool no_workspace_config;
     bool trust_workspace;
@@ -278,6 +279,7 @@ struct Ed {
 
 void yew_ed_init(Ed *ed);
 void yew_ed_free(Ed *ed);
+bool yew_ed_set_workspace_root(Ed *ed, const char *dir);
 YewLoadErr yew_ed_open(Ed *ed, const char *path);
 bool yew_ed_open_scratch(Ed *ed);
 /* A byte-exact, initially-clean scratch buffer for `--batch ... -`. */
@@ -285,6 +287,8 @@ bool yew_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
                         const char *name);
 int yew_ed_driver(const char *path);
 int yew_ed_driver_opts(const char *path, const YewEdStartup *startup);
+int yew_ed_driver_files_opts(const char *const *paths, size_t npaths,
+                             const YewEdStartup *startup);
 const char *yew_ws_root(const Ed *ed);
 
 bool yew_buf_dirty(const Buffer *b);

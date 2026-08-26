@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include "util/xdg.h"
+#include "edit/ed.h"
 #include "ws/workspace.h"
 
 /*
@@ -76,6 +77,30 @@ static void wsf_remove(WsFix *f)
         (void)unsetenv("XDG_STATE_HOME");
     wsf_rm_rf(f->state_home);
     wsf_rm_rf(f->work);
+}
+
+void test_ws_root_override_requires_and_canonicalizes_a_directory(void)
+{
+    WsFix f;
+    Ed ed;
+    char file[192];
+    FILE *fp;
+
+    wsf_make(&f);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_set_workspace_root(&ed, f.work));
+    YEW_ASSERT_EQ_STR(yew_ws_root(&ed), f.work);
+    (void)snprintf(file, sizeof(file), "%s/not-a-dir", f.work);
+    fp = fopen(file, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    if (fp != NULL)
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT(!yew_ed_set_workspace_root(&ed, file));
+    YEW_ASSERT(!yew_ed_set_workspace_root(&ed, "/no/such/yew-workspace"));
+    YEW_ASSERT_EQ_STR(yew_ws_root(&ed), f.work);
+    yew_ed_free(&ed);
+    (void)unlink(file);
+    wsf_remove(&f);
 }
 
 /* Plants a state directory carrying a `path` record naming `owner`. */

@@ -286,8 +286,8 @@ CmdStatus yew_search_cmd_replace(CmdCtx *cx)
 CmdStatus yew_search_cmd_global(CmdCtx *cx)
 {
     yew_msg(cx->ed, YEW_MSG_ERROR,
-            ":g is Fletch's query API in Sprint 34 (buf.find(re) mapped "
-            "over an action); a bespoke global-command mini-language is "
+            ":g is Fletch's query API (buf.find(re) mapped over an "
+            "action); a bespoke global-command mini-language is "
             "a permanent non-goal");
     /*
      * ERR_ARG, not ERR_DEFERRED: this is a rejection with a reason, and

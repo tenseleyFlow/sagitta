@@ -32,7 +32,9 @@ static const char help_text[] =
     "  --theme NAME     Override the configured theme for this run.\n"
     "  --no-workspace-config  Do not load .yew.fl.\n"
     "  --trust-workspace      Pre-grant this workspace configuration.\n"
+    "  --workspace DIR  Use DIR as the workspace instead of the startup cwd.\n"
     "  --batch SCRIPT   Run SCRIPT headlessly; no tty or grid.\n"
+    "  --replay REG     Replay REG once after the batch script completes.\n"
     "  --test           Add the t.* script-test assertions (batch only).\n"
     "  --quiet          Suppress batch warnings; errors still print.\n"
     "  --grant NAME:CAP Pre-grant fs, shell, net, or clipboard (repeatable).\n"
@@ -148,6 +150,7 @@ static int run_driver(const YewArgs *args)
             .nfiles = args->nfiles,
             .args = args->batch_args,
             .nargs = args->nbatch_args,
+            .replay_reg = args->replay_reg,
             .config_path = args->config_path,
             .grants = args->grants,
             .ngrants = args->ngrants,
@@ -159,16 +162,15 @@ static int run_driver(const YewArgs *args)
         };
         return yew_batch_run(&batch);
     }
-    if (args->nfiles > 1U) {
-        (void)fprintf(stderr,
-            "yew: error: multiple files are not yet implemented: Sprint 23 (tabs)\n");
-        return YEW_EXIT_ERR;
-    }
-    startup = (YewEdStartup){args->config_path, args->theme, args->clean,
-                             args->no_workspace_config,
-                             args->trust_workspace};
-    return yew_ed_driver_opts(args->nfiles == 0U ? NULL : args->files[0],
-                              &startup);
+    startup = (YewEdStartup){
+        .config_path = args->config_path,
+        .theme = args->theme,
+        .workspace_dir = args->workspace_dir,
+        .clean = args->clean,
+        .no_workspace_config = args->no_workspace_config,
+        .trust_workspace = args->trust_workspace
+    };
+    return yew_ed_driver_files_opts(args->files, args->nfiles, &startup);
 }
 
 int main(int argc, char **argv)

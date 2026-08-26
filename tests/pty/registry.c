@@ -5373,6 +5373,57 @@ static bool s43_screen_contains(const VtScreen *vt, const char *needle)
     return found;
 }
 
+static void case_startup_multiple_files(PtyCtx *c)
+{
+    static const u8 first[] = "startup first file\n";
+    static const u8 second[] = "startup second file\n";
+    char one[PATH_MAX];
+    char two[PATH_MAX];
+
+    if (c->workspace_dir == NULL)
+        return;
+    (void)snprintf(one, sizeof(one), "%s/start-one.txt", c->workspace_dir);
+    (void)snprintf(two, sizeof(two), "%s/start-two.txt", c->workspace_dir);
+    if (!write_bytes(one, first, sizeof(first) - 1U) ||
+        !write_bytes(two, second, sizeof(second) - 1U)) {
+        ptc_check(c, false, "could not create multi-file startup fixtures");
+        return;
+    }
+    ptc_spawn(c, ptc_yew_bin(c), "--clean", one, two, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_check(c, s43_screen_contains(&c->vt, "start-one.txt"),
+              "first startup tab is missing");
+    ptc_check(c, s43_screen_contains(&c->vt, "start-two.txt"),
+              "second startup tab is missing");
+    ptc_check(c, s43_screen_contains(&c->vt, "startup first file"),
+              "first positional file is not the active startup tab");
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, "ed.tab.next");
+    ptc_keys(c, "enter");
+    ptc_settle(c, 0);
+    ptc_check(c, s43_screen_contains(&c->vt, "startup second file"),
+              "second positional file did not hydrate on tab switch");
+    ptc_snapshot(c, "startup_multiple_files");
+    force_quit(c);
+    (void)unlink(one);
+    (void)unlink(two);
+}
+
+static void case_startup_workspace(PtyCtx *c)
+{
+    if (strcmp(c->test->name, "startup_directory_workspace") == 0)
+        ptc_spawn(c, ptc_yew_bin(c), "--clean", c->workspace_dir, NULL);
+    else
+        ptc_spawn(c, ptc_yew_bin(c), "--clean", "--workspace",
+                  c->workspace_dir, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_snapshot(c, "startup_workspace");
+    force_quit(c);
+}
+
 static bool s43_cell_is(const VtScreen *vt, int row, int col, u8 want)
 {
     const VtCell *cell;
@@ -8036,6 +8087,12 @@ const PtyCase yew_pty_cases[] = {
     C(s54_plugin_picker, modern, 24U, 80U, case_s54_plugin_picker),
     C(s54_plugin_toggle, modern, 24U, 80U, case_s54_plugin_toggle),
 #endif
+    C(startup_multiple_files, modern, 24U, 80U,
+      case_startup_multiple_files),
+    C(startup_directory_workspace, modern, 24U, 80U,
+      case_startup_workspace),
+    C(startup_explicit_workspace, modern, 24U, 80U,
+      case_startup_workspace),
 #if YEW_WITH_FUSS
     C(git_editor_blame_fits, modern, 24U, 120U, case_s53_blame),
     C(git_editor_blame_omit_cjk, modern, 24U, 40U, case_s53_blame),

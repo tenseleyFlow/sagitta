@@ -276,7 +276,7 @@ const OptDesc yew_opts[] = {
      0, 0, NULL, option_changed,
      "Select a dark or light theme from the terminal background"},
     {"macro.dir", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
-     0, 0, NULL, option_changed, "Macro library directory (Sprint 38)"},
+     0, 0, NULL, option_changed, "Macro library directory"},
     {"shadow.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
      0, 0, NULL, option_changed, "Enable passive shadow suggestions"},
     {"shadow.providers", YEW_OPT_STR, YEW_OPT_GLOBAL,

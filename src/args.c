@@ -78,6 +78,13 @@ static int require_value(YewArgs *out, int *index, int argc, char **argv,
     return -1;
 }
 
+static bool replay_reg_valid(const char *value)
+{
+    return value[0] != '\0' && value[1] == '\0' &&
+           ((value[0] >= 'a' && value[0] <= 'z') ||
+            (value[0] >= 'A' && value[0] <= 'Z'));
+}
+
 int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err)
 {
     int i;
@@ -133,6 +140,15 @@ int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err)
             out->no_workspace_config = true;
         } else if (strcmp(arg, "--trust-workspace") == 0) {
             out->trust_workspace = true;
+        } else if (strcmp(arg, "--workspace") == 0) {
+            int rc = require_value(out, &i, argc, argv, err, &value);
+
+            if (rc >= 0)
+                return rc;
+            if (out->workspace_dir != NULL)
+                return parse_error(out, err, "option '%s' specified twice",
+                                   arg);
+            out->workspace_dir = value;
         } else if (strcmp(arg, "--batch") == 0) {
             if (batch_requested)
                 return parse_error(out, err, "option '%s' specified twice",
@@ -153,8 +169,19 @@ int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err)
         } else if (strcmp(arg, "--selftest-bug") == 0) {
             out->selftest_bug = true;
         } else if (strcmp(arg, "--replay") == 0) {
-            return parse_error(out, err,
-                               "option '%s' lands in Sprint 38", arg);
+            int rc;
+
+            if (out->replay_reg != 0U)
+                return parse_error(out, err, "option '%s' specified twice",
+                                   arg);
+            rc = require_value(out, &i, argc, argv, err, &value);
+            if (rc >= 0)
+                return rc;
+            if (!replay_reg_valid(value))
+                return parse_error(out, err,
+                                   "invalid --replay register '%s' "
+                                   "(expected one letter a-z/A-Z)", value);
+            out->replay_reg = (u8)value[0];
         } else if (strcmp(arg, "--batch-strict") == 0) {
             return parse_error(out, err,
                                "option '%s' lands in Sprint 59", arg);
@@ -191,5 +218,11 @@ int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err)
         return parse_error(out, err, "option '%s' requires --batch", "--quiet");
     if (out->ngrants != 0U && !batch_requested)
         return parse_error(out, err, "option '%s' requires --batch", "--grant");
+    if (out->replay_reg != 0U && !batch_requested)
+        return parse_error(out, err, "option '%s' requires --batch",
+                           "--replay");
+    if (out->workspace_dir != NULL && batch_requested)
+        return parse_error(out, err, "option '%s' cannot be used with --batch",
+                           "--workspace");
     return -1;
 }

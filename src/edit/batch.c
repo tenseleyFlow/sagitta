@@ -19,6 +19,7 @@
 #include "fl/flruntime.h"
 #include "fl/flruntime_int.h"
 #include "fl/gc.h"
+#include "fl/record.h"
 #include "fl/trace.h"
 #include "fl/value.h"
 #include "fl/vm.h"
@@ -55,6 +56,8 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.group.edit", "no batch alternative"},
     {"ed.find.file", "use io.glob(pattern)"},
     {"ed.find.buffer", "use buf.list()"},
+    {"ed.find.symbol", "no batch alternative"},
+    {"ed.find.command", "no batch alternative"},
     {"ed.undo.branches", "use ed.run(\"ed.edit.undo\") or redo"},
     {"ed.search.open", "use b.find(re)"},
     {"ed.search.open_back", "use b.find(re)"},
@@ -548,9 +551,12 @@ int yew_batch_run(const BatchOpts *opts)
     yew_batch_selfcheck(&ed);
     ed.fl->diag.sink = batch_diag;
     ed.fl->diag.sink_ctx = &log_ctx;
-    startup = (YewEdStartup){opts->config_path, NULL, opts->clean,
-                             opts->no_workspace_config,
-                             opts->trust_workspace};
+    startup = (YewEdStartup){
+        .config_path = opts->config_path,
+        .clean = opts->clean,
+        .no_workspace_config = opts->no_workspace_config,
+        .trust_workspace = opts->trust_workspace
+    };
     yew_config_init(&ed, &startup);
     (void)yew_config_load_all(&ed, NULL);
     if (!open_batch_files(&ed, opts)) {
@@ -590,6 +596,18 @@ int yew_batch_run(const BatchOpts *opts)
     if (!fl_call_chunk(ed.fl, script, YEW_SRC_FLETCH)) {
         result = render_script_error(yew_fl_vm(&ed)) ? YEW_EXIT_ERR :
                                                        YEW_EXIT_BATCH;
+        goto done;
+    }
+    if (opts->replay_reg != 0U &&
+        yew_macro_replay(&ed, opts->replay_reg, 1U) != YEW_CMD_OK) {
+        FlVm *vm = yew_fl_vm(&ed);
+
+        if (vm->err.t != (u8)FL_NIL)
+            (void)render_script_error(vm);
+        else
+            (void)fprintf(stderr, "yew: replay @%c failed\n",
+                          (int)opts->replay_reg);
+        result = YEW_EXIT_BATCH;
         goto done;
     }
     /* Product-level guard drill: the smoke lane seeds the forbidden call
