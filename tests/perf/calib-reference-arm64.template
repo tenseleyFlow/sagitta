@@ -1,0 +1,11 @@
+# yew calibration reference v1
+# TEMPLATE ONLY: replace every PLACEHOLDER on the pinned designated runner.
+# machine: PLACEHOLDER CPU model, core count, memory type and speed
+# software: PLACEHOLDER kernel, libc, compiler and version, governor, SMT
+# measured: PLACEHOLDER date, three warmups discarded, 11-run medians
+runner_id perf-arm64-linux
+arch aarch64
+designated 1
+c1_chase_ns PLACEHOLDER
+c2_scalar_ns PLACEHOLDER
+c3_bandwidth_ns PLACEHOLDER

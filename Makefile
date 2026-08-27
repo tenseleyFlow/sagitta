@@ -63,6 +63,7 @@ LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
 PERF_SYN_PROBE_STEM ?= markdown
+CALIB_REFERENCE ?=
 
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
@@ -601,6 +602,7 @@ PERF_AI_PRIVACY_OBJ := $(BUILD)/tests/perf/perf_ai_privacy.o
 PERF_PLUG_OBJ := $(BUILD)/tests/perf/perf_plug.o
 PERF_PKG_OBJ := $(BUILD)/tests/perf/perf_pkg.o
 PERF_CLOUD_OBJ := $(BUILD)/tests/perf/perf_cloud.o
+CALIB_OBJ := $(BUILD)/tests/perf/calib.o
 ifneq ($(filter lsp,$(MODULES)),)
 LSP_FUZZ_TARGET := fuzz-lsp-msg fuzz-lsp-resp
 LSP_PERF_TARGET := perf-lsp
@@ -683,7 +685,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(FUZZ_AI_SHADOW_OBJ) $(FUZZ_AI_REDACT_OBJ) \
                 $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
                 $(PERF_AI_HTTP_OBJ) $(PERF_AI_SHADOW_OBJ) \
-                $(PERF_AI_PRIVACY_OBJ) $(PERF_FUSS_OBJ) \
+                $(PERF_AI_PRIVACY_OBJ) $(PERF_FUSS_OBJ) $(CALIB_OBJ) \
                 $(PERF_GIT_GUTTER_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
@@ -718,7 +720,7 @@ endif
         syn-fuzz-seeds \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
-        unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
+        unicode-tables calib perf perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
         perf-ai-shadow perf-ai-privacy perf-plug perf-pkg perf-cloud \
@@ -992,6 +994,10 @@ $(BUILD)/perf_pkg: $(PERF_CORE_OBJ) $(PERF_PKG_OBJ)
 $(BUILD)/perf_cloud: $(PERF_CORE_OBJ) $(PERF_CLOUD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_CLOUD_OBJ) $(LDLIBS)
+
+$(BUILD)/calib_runner: $(CALIB_OBJ) $(BUILD)/src/util/calib.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(CALIB_OBJ) \
+		$(BUILD)/src/util/calib.o $(LDLIBS)
 
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
@@ -1405,6 +1411,22 @@ fuzz-long: $(BUILD)/fuzz_textbuf
 
 perf-unicode: $(BUILD)/perf_unicode
 	$(BUILD)/perf_unicode
+
+calib: $(BUILD)/calib_runner
+	@set -eu; \
+	args=''; \
+	if test -n '$(CALIB_REFERENCE)'; then \
+		args="--reference $(CALIB_REFERENCE)"; \
+	fi; \
+	$(BUILD)/calib_runner --runner-id '$(PERF_RUNNER_ID)' $$args \
+		> $(BUILD)/calib.txt.tmp; \
+	key=$$(awk '$$1 == "cache_key" { print $$2 }' \
+		$(BUILD)/calib.txt.tmp); \
+	test -n "$$key"; \
+	mkdir -p $(BUILD)/calib-cache; \
+	cp $(BUILD)/calib.txt.tmp $(BUILD)/calib-cache/$$key.txt; \
+	mv $(BUILD)/calib.txt.tmp $(BUILD)/calib.txt; \
+	cat $(BUILD)/calib.txt
 
 perf-render: $(BUILD)/perf_render
 	$(BUILD)/perf_render
