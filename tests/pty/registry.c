@@ -7790,8 +7790,11 @@ static void case_s53_blame(PtyCtx *c)
         return;
     ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
     s53_wait_git(c);
-    s53_wait_screen(c, "⎇ trunk");
+    /* The hermetic PTY has no PATH, so the symbol index reports its
+     * workspace-walk fallback for four seconds.  Dismiss that independent
+     * startup message before waiting on the footer it covers. */
     s53_clear_message(c);
+    s53_wait_screen(c, "⎇ trunk");
     ptc_keys(c, ":");
     ptc_bytes(c, "ed.git.blame.toggle");
     ptc_keys(c, "enter");
