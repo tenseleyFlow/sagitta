@@ -16,9 +16,16 @@ enum {
     OUTPUT_CAP = 16384,
     ARG_CAP = 32,
     PROF_RING = 16384,
+    ADVISORY_ATTEMPTS = 3,
     OVERHEAD_LIMIT_PERMILLE = 20,
     CROSSCHECK_LIMIT_PERMILLE = 250
 };
+
+typedef enum RunStatus {
+    RUN_OK,
+    RUN_METRIC_FAILED,
+    RUN_TRANSPORT_FAILED
+} RunStatus;
 
 typedef struct Options {
     const char *runner;
@@ -135,8 +142,8 @@ static bool read_child_output(int fd, char *out, size_t cap)
     return true;
 }
 
-static bool run_latency(const Options *opts, bool prof_on,
-                        const char *dump_path, RunResult *result)
+static RunStatus run_latency(const Options *opts, bool prof_on,
+                             const char *dump_path, RunResult *result)
 {
     char *argv[ARG_CAP];
     char ring[32];
@@ -175,12 +182,12 @@ static bool run_latency(const Options *opts, bool prof_on,
     }
     argv[narg] = NULL;
     if (narg + 1U >= ARG_CAP || pipe(pipefd) != 0)
-        return false;
+        return RUN_TRANSPORT_FAILED;
     pid = fork();
     if (pid < 0) {
         (void)close(pipefd[0]);
         (void)close(pipefd[1]);
-        return false;
+        return RUN_TRANSPORT_FAILED;
     }
     if (pid == 0) {
         (void)close(pipefd[0]);
@@ -205,10 +212,57 @@ static bool run_latency(const Options *opts, bool prof_on,
     (void)close(pipefd[0]);
     while (waitpid(pid, &status, 0) < 0) {
         if (errno != EINTR)
-            return false;
+            return RUN_TRANSPORT_FAILED;
     }
-    return read_ok && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
-           parse_external(result->output, result);
+    if (!read_ok || !WIFEXITED(status))
+        return RUN_TRANSPORT_FAILED;
+    if (WEXITSTATUS(status) == 1)
+        return RUN_METRIC_FAILED;
+    if (WEXITSTATUS(status) != 0 || !parse_external(result->output, result))
+        return RUN_TRANSPORT_FAILED;
+    return RUN_OK;
+}
+
+static bool perf_advisory(void)
+{
+    const char *value = getenv("YEW_PERF_ADVISORY");
+
+    return value != NULL && strcmp(value, "0") != 0;
+}
+
+static bool retry_transport(bool advisory, RunStatus status,
+                            unsigned attempt)
+{
+    return advisory && status == RUN_TRANSPORT_FAILED &&
+           attempt < ADVISORY_ATTEMPTS;
+}
+
+static RunStatus measure_latency(const Options *opts, bool prof_on,
+                                 const char *dump_path, RunResult *result,
+                                 uint64_t *prof_p99_ns, uint32_t *prof_calls,
+                                 bool advisory)
+{
+    unsigned attempt;
+
+    for (attempt = 1U; ; attempt++) {
+        RunStatus status;
+
+        (void)memset(result, 0, sizeof(*result));
+        if (prof_on)
+            (void)unlink(dump_path);
+        status = run_latency(opts, prof_on, dump_path, result);
+        if (status == RUN_OK && prof_on &&
+            !parse_prof_keypaint(dump_path, prof_p99_ns, prof_calls))
+            status = RUN_TRANSPORT_FAILED;
+        if (!retry_transport(advisory, status, attempt))
+            return status;
+        (void)fprintf(stderr,
+                      "perf_prof_crosscheck: retrying %s/%s profiler=%s "
+                      "after transport failure (attempt %u/%u)\n",
+                      opts->session, opts->fixture,
+                      prof_on ? "on" : "off", attempt,
+                      ADVISORY_ATTEMPTS);
+    }
 }
 
 static uint64_t delta_permille(uint64_t a, uint64_t b, uint64_t denominator)
@@ -225,10 +279,8 @@ static uint64_t delta_permille(uint64_t a, uint64_t b, uint64_t denominator)
 static bool gating(void)
 {
     const char *gate = getenv("PERF_GATE");
-    const char *advisory = getenv("YEW_PERF_ADVISORY");
 
-    return gate != NULL && strcmp(gate, "1") == 0 &&
-           (advisory == NULL || strcmp(advisory, "0") == 0);
+    return gate != NULL && strcmp(gate, "1") == 0 && !perf_advisory();
 }
 
 static bool metric_prefix(const Options *opts, char *out, size_t cap)
@@ -256,6 +308,23 @@ static void usage(const char *arg0)
         arg0);
 }
 
+static int policy_selftest(void)
+{
+    if (retry_transport(false, RUN_TRANSPORT_FAILED, 1U) ||
+        retry_transport(true, RUN_OK, 1U) ||
+        retry_transport(true, RUN_METRIC_FAILED, 1U) ||
+        !retry_transport(true, RUN_TRANSPORT_FAILED, 1U) ||
+        !retry_transport(true, RUN_TRANSPORT_FAILED, 2U) ||
+        retry_transport(true, RUN_TRANSPORT_FAILED, 3U)) {
+        (void)fprintf(stderr,
+                      "perf_prof_crosscheck: advisory retry policy failed\n");
+        return 1;
+    }
+    (void)printf("perf-prof-crosscheck-policy: "
+                 "strict/metric/advisory-transport ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     static const char temp_pattern[] = "/tmp/yew-prof-crosscheck-XXXXXX";
@@ -269,11 +338,16 @@ int main(int argc, char **argv)
     uint32_t prof_calls;
     uint64_t overhead_pm;
     uint64_t crosscheck_pm;
+    RunStatus run_status;
+    bool advisory;
     bool gate;
     int i;
     int status = 0;
 
     opts.state = "/tmp";
+
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return policy_selftest();
 
     for (i = 1; i < argc; i++) {
         if (i + 1 < argc && strcmp(argv[i], "--runner") == 0)
@@ -326,12 +400,19 @@ int main(int argc, char **argv)
         status = 2;
         goto done;
     }
-    if (!run_latency(&opts, false, NULL, &off) ||
-        !run_latency(&opts, true, dump_path, &on) ||
-        !parse_prof_keypaint(dump_path, &prof_p99_ns, &prof_calls)) {
+    advisory = perf_advisory();
+    run_status = measure_latency(&opts, false, NULL, &off, NULL, NULL,
+                                 advisory);
+    if (run_status == RUN_OK)
+        run_status = measure_latency(&opts, true, dump_path, &on,
+                                     &prof_p99_ns, &prof_calls, advisory);
+    if (run_status != RUN_OK) {
         (void)fprintf(stderr,
-                      "perf_prof_crosscheck: measurement or profiler dump failed\n");
-        status = 2;
+                      "perf_prof_crosscheck: %s failed\n",
+                      run_status == RUN_METRIC_FAILED ?
+                          "latency metric" :
+                          "measurement transport or profiler dump");
+        status = run_status == RUN_METRIC_FAILED ? 1 : 2;
         goto done;
     }
     overhead_pm = on.external_p99_ns > off.external_p99_ns ?
