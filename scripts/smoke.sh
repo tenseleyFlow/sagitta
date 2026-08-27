@@ -250,7 +250,9 @@ printf 'import ed\ned.run("ed.ai.enable", {})\n' \
     >"$batch_dir/ai-enable.fl"
 printf 'import io\nimport buf\nio.print(buf.text(buf.current()))\n' \
     >"$batch_dir/dash.fl"
-printf 'import ed\ned.run("ed.reg.set", {iarg: 97, sarg: "@[ i\\\"x\\\" ]\\n"})\n' \
+printf '%s\n' \
+    'import ed' \
+    'ed.run("ed.reg.set", {iarg: 97, sarg: "@[ i\"x\" ]\n"})' \
     >"$batch_dir/replay.fl"
 printf 'import io\nimport list\nimport buf\nif list.len(files) != 2 { error("files") }\nif buf.path(buf.current()) != files[0] { error("order") }\nif list.len(args) != 2 or args[0] != "--flag" or args[1] != "" { error("args") }\nio.print("globals-ok")\n' \
     >"$batch_dir/globals.fl"
