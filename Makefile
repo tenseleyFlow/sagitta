@@ -1759,7 +1759,7 @@ perf-mem-s56: $(BUILD)/perf_mem_s56
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_mem_s56 --budgets tests/perf/budgets.txt
 
-perf-s56-functional: perf-latency-s56-check perf-startup-s56 perf-open-s56 \
+perf-s56-functional: perf-latency-s56-smoke perf-startup-s56 perf-open-s56 \
                      perf-mem-s56
 
 fixtures-quick: $(BUILD)/gen-bigfile

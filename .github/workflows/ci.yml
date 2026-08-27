@@ -358,6 +358,34 @@ jobs:
         run: make perf-plug CC=gcc
       - name: Enforce Sprint 55 package and cloud budgets
         run: make perf-pkg perf-cloud CC=gcc
+      - name: Run Sprint 56 end-to-end harnesses in advisory mode
+        run: |
+          make perf-s56-functional CC=gcc PERF_ADVISORY=1 PERF_GATE=0 \
+            YEW_PERF_SMOKE=1
+
+  perf-designated-x86_64:
+    if: vars.YEW_PERF_X86_64_ENABLED == '1'
+    runs-on: [self-hosted, linux, x64, yew-perf-x86_64]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify fixtures and run calibrated gates
+        run: |
+          make fixtures-verify-quick CC=gcc
+          make perf CC=gcc PERF_GATE=1 \
+            PERF_RUNNER_ID=perf-x86_64-linux-gnu \
+            CALIB_REFERENCE=tests/perf/calib-reference.txt
+
+  perf-designated-arm64:
+    if: vars.YEW_PERF_ARM64_ENABLED == '1'
+    runs-on: [self-hosted, linux, arm64, yew-perf-arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify fixtures and run calibrated gates
+        run: |
+          make fixtures-verify-quick CC=gcc
+          make perf CC=gcc PERF_GATE=1 \
+            PERF_RUNNER_ID=perf-arm64-linux \
+            CALIB_REFERENCE=tests/perf/calib-reference-arm64.txt
 
   torture:
     runs-on: ubuntu-latest
