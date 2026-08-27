@@ -1105,6 +1105,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
 {
     if (ed == NULL || w == NULL)
         return;
+    yew_fuss_win_releasing(ed, w->id);
     fl_h_drop_window(ed, w->id);
     yew_lsp_highlight_clear(ed, w);
     if (w == &ed->single_win)

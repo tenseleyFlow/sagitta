@@ -1907,6 +1907,8 @@ void test_fussdrawer_typejump_selection_damage_stays_local(void);
 void test_fussdrawer_selected_row_keeps_the_final_component(void);
 void test_fussdrawer_directory_tree_opens_through_the_first_useful_level(void);
 void test_fussdrawer_mouse_double_click_uses_open_destination(void);
+void test_fussdrawer_preview_owner_tab_can_close(void);
+void test_fussdrawer_commit_owner_tab_close_cancels_cleanly(void);
 void test_fusstree_items_hold_rebuild_safe_indices(void);
 void test_fusstree_untracked_expansion_splices_one_level_and_caches(void);
 void test_fusstree_untracked_expansion_cache_survives_refresh(void);

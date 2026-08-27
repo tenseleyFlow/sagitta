@@ -1920,6 +1920,8 @@ const YewTest yew_tests[] = {
     T(fussdrawer_selected_row_keeps_the_final_component),
     T(fussdrawer_directory_tree_opens_through_the_first_useful_level),
     T(fussdrawer_mouse_double_click_uses_open_destination),
+    T(fussdrawer_preview_owner_tab_can_close),
+    T(fussdrawer_commit_owner_tab_close_cancels_cleanly),
     T(fusstree_items_hold_rebuild_safe_indices),
     T(fusstree_untracked_expansion_splices_one_level_and_caches),
     T(fusstree_untracked_expansion_cache_survives_refresh),

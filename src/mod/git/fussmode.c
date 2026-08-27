@@ -92,7 +92,7 @@ struct FussMode {
     i64 opening_until_ms;
     bool ascii_glyphs;
     bool viewer;
-    Win *viewer_win;
+    u32 viewer_win_id;
     bool draw_dirty;
     bool backdrop_dirty;
     u16 scroll;
@@ -104,10 +104,11 @@ struct FussMode {
     bool pending_view;
     bool commit_editing;
     bool commit_amend;
+    bool commit_cancel_pending;
     u8 commit_comment;
-    Pane *commit_leaf;
-    Win *commit_win;
-    Win *commit_saved_win;
+    u32 commit_win_id;
+    u32 commit_saved_win_id;
+    Win *commit_saved_owned;
     FussPromptAction prompt_action;
     char *prompt_path;
     bool prompt_untracked;
@@ -161,10 +162,14 @@ static void fuss_viewer_close(Ed *ed)
     if (ed == NULL || ed->fuss == NULL)
         return;
     f = ed->fuss;
-    if (f->viewer && f->viewer_win != NULL)
-        yew_panel_close(ed, &f->viewer_win->panel);
+    if (f->viewer) {
+        Win *owner = yew_ed_win_by_id(ed, f->viewer_win_id);
+
+        if (owner != NULL)
+            yew_panel_close(ed, &owner->panel);
+    }
     f->viewer = false;
-    f->viewer_win = NULL;
+    f->viewer_win_id = 0U;
     f->viewer_buffer_id = 0U;
     fuss_damage(ed);
 }
@@ -199,7 +204,7 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     if (ed->win->rect.w < 3U && ed->grid.cols < 3U) {
         bytebuf_free(&body);
         f->viewer = true;
-        f->viewer_win = ed->win;
+        f->viewer_win_id = ed->win->id;
         f->viewer_buffer_id = buffer->id;
         return true;
     }
@@ -209,7 +214,7 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     }
     bytebuf_free(&body);
     f->viewer = true;
-    f->viewer_win = ed->win;
+    f->viewer_win_id = ed->win->id;
     f->viewer_buffer_id = buffer->id;
     ed->full_damage = true;
     fuss_damage(ed);
@@ -350,27 +355,27 @@ static bool fuss_commit_view_open(Ed *ed, Buffer *buffer)
         ed->focus->win != ed->win)
         return false;
     f = ed->fuss;
-    if (f->commit_win != NULL)
+    if (f->commit_win_id != 0U)
         return false;
     fuss_viewer_close(ed);
     win = yew_ed_win_clone(ed, ed->win);
     if (win == NULL)
         return false;
     yew_ed_win_set_buffer(ed, win, buffer);
-    f->commit_leaf = ed->focus;
-    f->commit_saved_win = ed->win;
-    f->commit_win = win;
-    f->commit_leaf->win = win;
+    f->commit_saved_owned = ed->win;
+    f->commit_saved_win_id = ed->win->id;
+    f->commit_win_id = win->id;
+    ed->focus->win = win;
     ed->win = win;
     ed->full_damage = true;
     return true;
 }
 
-static Pane *fuss_leaf_for_win(const Ed *ed, const Win *want)
+static Pane *fuss_leaf_for_win_id(const Ed *ed, u32 want)
 {
     size_t tab;
 
-    if (ed == NULL || want == NULL)
+    if (ed == NULL || want == 0U)
         return NULL;
     for (tab = 0U; tab < ed->tabs.v.len; tab++) {
         Pane *leaves[YEW_PANE_MAX_LEAVES];
@@ -380,7 +385,7 @@ static Pane *fuss_leaf_for_win(const Ed *ed, const Win *want)
         yew_pane_collect_leaves(ed->tabs.v.data[tab].root, leaves,
                                 YEW_ARRAY_LEN(leaves), &n);
         for (i = 0U; i < n; i++)
-            if (leaves[i]->win == want)
+            if (leaves[i]->win != NULL && leaves[i]->win->id == want)
                 return leaves[i];
     }
     return NULL;
@@ -391,27 +396,76 @@ static void fuss_commit_view_close(Ed *ed)
     FussMode *f;
     Pane *leaf;
     Win *win;
+    Win *saved;
 
     if (ed == NULL || ed->fuss == NULL)
         return;
     f = ed->fuss;
-    win = f->commit_win;
+    win = yew_ed_win_by_id(ed, f->commit_win_id);
     if (win == NULL)
         return;
-    leaf = fuss_leaf_for_win(ed, win);
+    saved = f->commit_saved_owned;
+    if (saved == NULL || saved->id != f->commit_saved_win_id)
+        return;
+    leaf = fuss_leaf_for_win_id(ed, f->commit_win_id);
     if (leaf != NULL) {
-        leaf->win = f->commit_saved_win;
+        leaf->win = saved;
         if (ed->win == win)
-            ed->win = f->commit_saved_win;
+            ed->win = saved;
     }
-    f->commit_leaf = NULL;
-    f->commit_win = NULL;
+    f->commit_win_id = 0U;
+    f->commit_saved_win_id = 0U;
+    f->commit_saved_owned = NULL;
     if (leaf != NULL)
         yew_ed_win_release(ed, win);
-    else
-        yew_ed_win_release(ed, f->commit_saved_win);
-    f->commit_saved_win = NULL;
     ed->full_damage = true;
+}
+
+void yew_fuss_win_releasing(Ed *ed, u32 win_id)
+{
+    FussMode *f;
+
+    if (ed == NULL || ed->fuss == NULL || win_id == 0U)
+        return;
+    f = ed->fuss;
+    if (f->viewer_win_id == win_id) {
+        f->viewer = false;
+        f->viewer_win_id = 0U;
+        f->viewer_buffer_id = 0U;
+    }
+    if (f->commit_win_id == win_id) {
+        Win *saved = f->commit_saved_owned;
+        u32 saved_id = f->commit_saved_win_id;
+
+        f->commit_win_id = 0U;
+        f->commit_saved_win_id = 0U;
+        f->commit_saved_owned = NULL;
+        f->commit_editing = false;
+        f->commit_amend = false;
+        f->commit_comment = 0U;
+        f->commit_cancel_pending = true;
+        if (saved != NULL && saved->id == saved_id)
+            yew_ed_win_release(ed, saved);
+    }
+}
+
+void yew_fuss_tabs_changed(Ed *ed)
+{
+    FussMode *f;
+    Buffer *commit;
+
+    if (ed == NULL || ed->fuss == NULL ||
+        !ed->fuss->commit_cancel_pending)
+        return;
+    f = ed->fuss;
+    f->commit_cancel_pending = false;
+    commit = yew_ws_buf_by_id(ed, f->commit_buffer_id);
+    f->commit_buffer_id = 0U;
+    if (commit != NULL && commit != &ed->buffer)
+        yew_ws_scratch_drop(ed, commit);
+    yew_msg(ed, YEW_MSG_INFO, "commit aborted because its tab closed");
+    if (yew_mode_enter(ed, YEW_MODE_F) != YEW_CMD_OK)
+        (void)yew_mode_enter(ed, YEW_MODE_L);
 }
 
 static bool fuss_replace_buffer(Ed *ed, Buffer *buffer, const u8 *bytes,
@@ -602,7 +656,6 @@ static void fuss_build(Ed *ed, const GitSnapshot *snap, bool force)
     if (f->opts.all_files && f->walk == NULL && f->files.paths.len != 0U)
         (void)yew_fuss_merge_files(&f->tree, &f->files, snap, &f->opts);
     yew_fuss_restore_collapsed(&f->tree, paths, npaths);
-    yew_fuss_flatten(&f->tree);
     if (fuss_row(f) < 0 && f->tree.items.len != 0U)
         fuss_select_row(f, 0);
     arena_free_all(&saved);

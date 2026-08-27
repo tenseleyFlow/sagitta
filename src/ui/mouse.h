@@ -99,6 +99,8 @@ typedef struct MouseState {
     /* Multi-click (§6). */
     i64 last_click_ms;
     u16 last_click_x, last_click_y;
+    RegionKind last_click_kind;
+    i32 last_click_payload;
     u8 click_n;
 
     /* Dwell over a group while dragging (§4). */

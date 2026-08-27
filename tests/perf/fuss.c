@@ -515,7 +515,7 @@ int main(void)
     (void)printf("fuss unchanged-gen x5000  %.3f ms (zero rebuilds)\n",
                  (double)unchanged / 1000000.0);
     (void)printf("fuss collapse refresh x100 stable (7 paths)\n");
-    (void)printf("fuss drawer entry 20000   %.3f ms (measured end-to-end)%s\n",
+    (void)printf("fuss drawer entry 20000   %.3f ms (limit 5.000 ms)%s\n",
                  (double)drawer_entry / 1000000.0,
                  advisory ? " ADVISORY" : "");
     (void)printf("fuss input-to-damage p99  %.3f ms (1000 selections)%s\n",
@@ -528,7 +528,8 @@ int main(void)
         nav_p99 > FUSS_PERF_KEY_BUDGET_NS ||
         toggle_p99 > FUSS_PERF_KEY_BUDGET_NS ||
         (!advisory &&
-         (drawer_input_p99 > FUSS_PERF_KEY_BUDGET_NS ||
+         (drawer_entry > FUSS_PERF_KEY_BUDGET_NS ||
+          drawer_input_p99 > FUSS_PERF_KEY_BUDGET_NS ||
           drawer_open > FUSS_PERF_KEY_BUDGET_NS)))
         status = 1;
     fixture_drop(&fixture);

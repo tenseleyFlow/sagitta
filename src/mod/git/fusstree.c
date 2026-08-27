@@ -163,6 +163,11 @@ static void sort_children(FussTree *t)
             order[n++] = child;
         if (n < 2U)
             continue;
+        for (i = 1U; i < n; i++)
+            if (child_cmp(&order[i - 1U], &order[i], t) > 0)
+                break;
+        if (i == n)
+            continue;
         yew_sort_stable(order, n, sizeof(*order), child_cmp, t);
         t->nodes.data[parent].first_child = order[0];
         for (i = 1U; i < n; i++)
@@ -271,6 +276,120 @@ static u32 add_path(FussTree *t, const char *path, u32 len, bool is_dir)
         parent = child;
         at++;
     }
+    return parent;
+}
+
+typedef struct SortedPathState {
+    const char *previous;
+    u32 previous_len;
+    u32 *nodes;
+    size_t cap;
+    u32 depth;
+    u32 *tails;
+    size_t tails_cap;
+} SortedPathState;
+
+static u32 add_sorted_child(FussTree *t, SortedPathState *state, u32 parent,
+                            const char *name, u32 name_len, bool is_file)
+{
+    u32 old_first;
+    u32 child;
+
+    if ((size_t)parent >= state->tails_cap) {
+        size_t old_cap = state->tails_cap;
+        size_t cap = old_cap == 0U ? 16U : old_cap;
+
+        while (cap <= (size_t)parent)
+            cap *= 2U;
+        state->tails = yew_xreallocarray(state->tails, cap,
+                                          sizeof(*state->tails));
+        (void)memset(state->tails + old_cap, 0,
+                     (cap - old_cap) * sizeof(*state->tails));
+        state->tails_cap = cap;
+    }
+    old_first = t->nodes.data[parent].first_child;
+    child = add_child(t, parent, name, name_len, is_file);
+    if (child == 0U)
+        return 0U;
+    if (state->tails[parent] == 0U) {
+        state->tails[parent] = child;
+    } else {
+        t->nodes.data[parent].first_child = old_first;
+        t->nodes.data[state->tails[parent]].next_sibling = child;
+        t->nodes.data[child].next_sibling = 0U;
+        state->tails[parent] = child;
+    }
+    return child;
+}
+
+static u32 add_sorted_path(FussTree *t, SortedPathState *state,
+                           const char *path, u32 len, bool is_dir)
+{
+    u32 previous_at = 0U;
+    u32 at = 0U;
+    u32 common = 0U;
+    u32 depth = 0U;
+    u32 parent = 0U;
+
+    while (len > 0U && path[len - 1U] == '/')
+        len--;
+    while (state->previous != NULL && previous_at < state->previous_len &&
+           at < len) {
+        u32 previous_start = previous_at;
+        u32 start = at;
+
+        while (previous_at < state->previous_len &&
+               state->previous[previous_at] != '/')
+            previous_at++;
+        while (at < len && path[at] != '/')
+            at++;
+        if (previous_at - previous_start != at - start ||
+            memcmp(state->previous + previous_start, path + start,
+                   at - start) != 0)
+            break;
+        common++;
+        previous_at++;
+        at++;
+    }
+    if (common > state->depth)
+        common = state->depth;
+    at = 0U;
+    while (at < len) {
+        u32 start = at;
+        u32 child;
+        bool last;
+
+        while (at < len && path[at] != '/')
+            at++;
+        if (at == start) {
+            at++;
+            continue;
+        }
+        last = at == len;
+        if ((size_t)depth == state->cap) {
+            size_t cap = state->cap == 0U ? 8U : state->cap * 2U;
+
+            state->nodes = yew_xreallocarray(state->nodes, cap,
+                                               sizeof(*state->nodes));
+            state->cap = cap;
+        }
+        if (depth < common)
+            child = state->nodes[depth];
+        else
+            child = add_sorted_child(t, state, parent, path + start,
+                                     at - start, last && !is_dir);
+        if (child == 0U)
+            return 0U;
+        state->nodes[depth] = child;
+        if (!last)
+            t->nodes.data[child].is_file = false;
+        parent = child;
+        depth++;
+        at++;
+    }
+    state->previous = path;
+    state->previous_len = len;
+    state->depth = depth;
     return parent;
 }
 
@@ -455,6 +574,7 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
     size_t i;
     const GitEntry **ordered = NULL;
     size_t ordered_n = 0U;
+    SortedPathState paths = {0};
     FussNode root;
 
     if (!t || !s)
@@ -488,8 +608,12 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
             if (s->entries.data[i].path != NULL &&
                 s->entries.data[i].path_len != 0U)
                 ordered[ordered_n++] = &s->entries.data[i];
-        yew_sort_stable(ordered, ordered_n, sizeof(*ordered),
-                        entry_ptr_cmp, NULL);
+        for (i = 1U; i < ordered_n; i++)
+            if (entry_ptr_cmp(&ordered[i - 1U], &ordered[i], NULL) > 0) {
+                yew_sort_stable(ordered, ordered_n, sizeof(*ordered),
+                                entry_ptr_cmp, NULL);
+                break;
+            }
     }
     for (i = 0U; i < ordered_n; i++) {
         const GitEntry *entry = ordered[i];
@@ -506,13 +630,15 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
         if (!opts.show_hidden &&
             (ignored || path_hidden(entry->path, entry->path_len)))
             continue;
-        node = add_path(t, entry->path, entry->path_len,
-                        entry->is_dir ||
-                        entry->path[entry->path_len - 1U] == '/');
+        node = add_sorted_path(t, &paths, entry->path, entry->path_len,
+                               entry->is_dir ||
+                               entry->path[entry->path_len - 1U] == '/');
         if (node != 0U)
             node_apply_entry(&t->nodes.data[node], entry, ignored);
     }
     free(ordered);
+    free(paths.nodes);
+    free(paths.tails);
 
     aggregate_flags(t);
     sort_children(t);

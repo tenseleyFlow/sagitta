@@ -62,12 +62,16 @@ static void gesture_reset(MouseState *m)
     i64 last_ms = m->last_click_ms;
     u16 last_x = m->last_click_x;
     u16 last_y = m->last_click_y;
+    RegionKind last_kind = m->last_click_kind;
+    i32 last_payload = m->last_click_payload;
     u8 clicks = m->click_n;
 
     yew_mouse_init(m);
     m->last_click_ms = last_ms;
     m->last_click_x = last_x;
     m->last_click_y = last_y;
+    m->last_click_kind = last_kind;
+    m->last_click_payload = last_payload;
     m->click_n = clicks;
 }
 
@@ -546,17 +550,21 @@ static Span unit_span_at(Win *w, const UnitOps *u, ByteOff at, bool alt)
  * cells are the unit of everything here and there is nothing to tune.
  * Four clicks wrap to one: never a surprise paragraph selection.
  */
-static u8 click_advance(Ed *ed, const Key *k)
+static u8 click_advance(Ed *ed, const Key *k, const Region *hit)
 {
     MouseState *m = &ed->mouse;
     bool within = m->click_n != 0U &&
                   ed->now_ms - m->last_click_ms < YEW_CLICK_MULTI_MS &&
-                  m->last_click_x == k->col && m->last_click_y == k->row;
+                  m->last_click_x == k->col && m->last_click_y == k->row &&
+                  hit != NULL && m->last_click_kind == hit->kind &&
+                  m->last_click_payload == hit->payload;
 
     m->click_n = within ? (u8)(m->click_n % 3U + 1U) : 1U;
     m->last_click_ms = ed->now_ms;
     m->last_click_x = k->col;
     m->last_click_y = k->row;
+    m->last_click_kind = hit == NULL ? YEW_REGION_NONE : hit->kind;
+    m->last_click_payload = hit == NULL ? 0 : hit->payload;
     return m->click_n;
 }
 
@@ -569,7 +577,7 @@ static void press_pane(Ed *ed, const Region *hit, const Key *k)
      * Alt+double-click selects the whitespace-delimited WORD and
      * Alt+triple-click the whole display line. */
     bool alt = (k->mods & (u16)YEW_MOD_ALT) != 0U;
-    u8 clicks = click_advance(ed, k);
+    u8 clicks = click_advance(ed, k, hit);
     ByteOff at;
 
     if (leaf == NULL)
@@ -752,6 +760,9 @@ static void mouse_press(Ed *ed, const Key *k)
     m->dwell_gid = 0U;
     m->dwell_since_ms = 0;
 
+    if (hit.kind != YEW_REGION_PANE && hit.kind != YEW_REGION_FUSS_ROW)
+        m->click_n = 0U;
+
     switch (hit.kind) {
     case YEW_REGION_PANE:
         press_pane(ed, &hit, k);
@@ -770,7 +781,7 @@ static void mouse_press(Ed *ed, const Key *k)
         press_pick_row(ed, &hit);
         break;
     case YEW_REGION_FUSS_ROW:
-        (void)click_advance(ed, k);
+        (void)click_advance(ed, k, &hit);
         break;
     case YEW_REGION_GP_ROW:
     case YEW_REGION_GP_NAME:

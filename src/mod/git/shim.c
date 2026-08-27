@@ -310,6 +310,17 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer)
     (void)footer;
 }
 
+void yew_fuss_win_releasing(Ed *ed, u32 win_id)
+{
+    (void)ed;
+    (void)win_id;
+}
+
+void yew_fuss_tabs_changed(Ed *ed)
+{
+    (void)ed;
+}
+
 CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled)
 {
     (void)ed;

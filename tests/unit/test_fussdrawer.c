@@ -12,8 +12,10 @@
 #include "edit/mode.h"
 #include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
+#include "mod/git/git_int.h"
 #include "ui/mouse.h"
 #include "ui/region.h"
+#include "ui/tabs.h"
 #include "util/arena.h"
 
 typedef struct FussDrawerFix {
@@ -362,12 +364,96 @@ void test_fussdrawer_mouse_double_click_uses_open_destination(void)
     ed.now_ms = 1000;
     fussdrawer_click(&ed, 1U, 2U);
     ed.now_ms = 1100;
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_FUSS_ROW, (Rect){0U, 2U, 20U, 1U},
+                   ed.mouse.last_click_payload + 1);
+    fussdrawer_click(&ed, 1U, 2U);
+    YEW_ASSERT_EQ_U64(ed.mouse.click_n, 1U);
+    YEW_ASSERT(yew_fuss_active(&ed));
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    ed.now_ms = 1200;
+    fussdrawer_click(&ed, 1U, 2U);
+    YEW_ASSERT_EQ_U64(ed.mouse.click_n, 1U);
+    ed.now_ms = 1300;
     fussdrawer_click(&ed, 1U, 2U);
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
     YEW_ASSERT(!yew_fuss_active(&ed));
     YEW_ASSERT_NOT_NULL(ed.win);
     YEW_ASSERT_NOT_NULL(ed.win->buf);
     YEW_ASSERT_EQ_STR(ed.win->buf->meta.realpath, fix.file);
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_preview_owner_tab_can_close(void)
+{
+    FussDrawerFix fix;
+    CmdCtx cx = {0};
+    Ed ed;
+    int owner;
+
+    fussdrawer_fix_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    owner = yew_tab_open(&ed, fix.file);
+    YEW_ASSERT(owner >= 0);
+    yew_tab_switch(&ed, owner);
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    yew_fuss_tick(&ed, ed.now_ms + 20);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_view(&cx), YEW_CMD_OK);
+    YEW_ASSERT(yew_tab_close(&ed, owner));
+    YEW_ASSERT(yew_fuss_active(&ed));
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_commit_owner_tab_close_cancels_cleanly(void)
+{
+    FussDrawerFix fix;
+    GitEntry entry = {0};
+    GitSnapshot *snap;
+    CmdCtx cx = {0};
+    Ed ed;
+    int owner;
+
+    fussdrawer_fix_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    owner = yew_tab_open(&ed, fix.file);
+    YEW_ASSERT(owner >= 0);
+    yew_tab_switch(&ed, owner);
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    snap = yew_git_test_snapshot_mut(&ed);
+    YEW_ASSERT_NOT_NULL(snap);
+    entry.kind = GIT_E_ORDINARY;
+    entry.path = "plain.txt";
+    entry.path_len = 9U;
+    entry.staged = true;
+    snap->state = YEW_GIT_OK;
+    snap->comment_char = (char *)"#";
+    snap->comment_char_len = 1U;
+    snap->entries.data = &entry;
+    snap->entries.len = 1U;
+    snap->gen++;
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_commit(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    YEW_ASSERT(yew_tab_close(&ed, owner));
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
+    YEW_ASSERT(yew_fuss_active(&ed));
+    YEW_ASSERT_NULL(yew_ws_scratch_find(&ed, "*commit*"));
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
 }

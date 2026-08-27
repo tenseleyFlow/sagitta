@@ -12,6 +12,7 @@
 #include "edit/ed.h"
 #include "edit/shadow.h"
 #include "fl/flruntime.h"
+#include "mod/git/fussmode.h"
 #include "ui/groupnav.h"
 #include "ui/glyphs.h"
 #include "ui/groups.h"
@@ -269,6 +270,7 @@ bool yew_tab_close(Ed *ed, int idx)
     if (ed->tabs.active < 0 && ed->tabs.v.len > 0U)
         ed->tabs.active = 0;
     yew_tab_switch(ed, ed->tabs.active);
+    yew_fuss_tabs_changed(ed);
     yew_state_mark_dirty(ed);
     return true;
 }
