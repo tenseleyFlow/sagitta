@@ -80,6 +80,7 @@ const YewTest yew_tests[] = {
     T(calib_reference_parser_requires_complete_metadata_and_vector),
     T(rss_reports_finite_nonzero_bytes),
     T(rss_peak_is_monotonic),
+    T(rss_checkpoint_requires_exact_prof_opt_in),
     T(bytebuf),
     T(bytebuf_binary),
     T(base64_rfc4648_vectors),

@@ -2,7 +2,11 @@
 
 #include "util/rss.h"
 
+#include "util/log.h"
+
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -56,4 +60,20 @@ u64 yew_rss_bytes(void)
 #else
     return yew_rss_peak_bytes();
 #endif
+}
+
+void yew_rss_checkpoint(const char *name)
+{
+    const char *prof = getenv("YEW_PROF");
+    u64 current;
+    u64 peak;
+
+    if (name == NULL || name[0] == '\0' || prof == NULL ||
+        strcmp(prof, "1") != 0)
+        return;
+    current = yew_rss_bytes();
+    peak = yew_rss_peak_bytes();
+    yew_log(YEW_LOG_INFO,
+            "rss checkpoint=%s current_bytes=%llu peak_bytes=%llu", name,
+            (unsigned long long)current, (unsigned long long)peak);
 }

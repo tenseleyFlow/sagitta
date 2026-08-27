@@ -38,6 +38,7 @@
 #endif
 #include "syn/defs.h"
 #include "util/log.h"
+#include "util/rss.h"
 
 static void ed_syn_init(Buffer *b)
 {
@@ -836,6 +837,7 @@ void yew_ed_free(Ed *ed)
         yew_tty_altscreen(&ed->tty, false);
         yew_tty_close(&ed->tty);
     }
+    yew_rss_checkpoint("closed");
     (void)memset(ed, 0, sizeof(*ed));
 }
 
@@ -852,6 +854,10 @@ YewLoadErr yew_ed_open(Ed *ed, const char *path)
     if (result != YEW_LOAD_OK && result != YEW_LOAD_ENOENT) {
         yew_filemeta_dispose(&ed->buffer.meta);
         return result;
+    }
+    if (!ed->rss_loaded_logged) {
+        yew_rss_checkpoint("loaded");
+        ed->rss_loaded_logged = true;
     }
     if (tb == NULL)
         tb = yew_textbuf_new();
@@ -2344,6 +2350,10 @@ draw_overlays:
         ed->exit_code = YEW_EXIT_IO;
         return;
     }
+    if (!ed->rss_paint_logged) {
+        yew_rss_checkpoint("paint");
+        ed->rss_paint_logged = true;
+    }
     yew_grid_flip(&ed->grid);
     ed->full_damage = false;
     ed->footer_dirty = false;
@@ -2472,6 +2482,7 @@ static int ed_driver_inner(const char *const *paths, size_t npaths,
      * anything dirty.
      */
     (void)yew_config_load_all(&ed, NULL);
+    yew_rss_checkpoint("config");
     (void)yew_theme_auto_startup(&ed);
     {
         const char *override = startup != NULL && startup->theme != NULL

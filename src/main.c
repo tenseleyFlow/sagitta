@@ -14,6 +14,7 @@
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/log.h"
+#include "util/rss.h"
 #include "ws/symshadow.h"
 
 #include <stdio.h>
@@ -213,6 +214,7 @@ int main(int argc, char **argv)
         return exit_code;
     }
     bytebuf_free(&err);
+    yew_rss_checkpoint("argv");
     exit_code = run_driver(&args);
     yew_args_free(&args);
     return exit_code;

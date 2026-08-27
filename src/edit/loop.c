@@ -30,6 +30,7 @@
 #include "term/input.h"
 #include "term/tty.h"
 #include "util/log.h"
+#include "util/rss.h"
 #include "ws/symidx.h"
 #include "ws/symwalk.h"
 
@@ -574,6 +575,10 @@ int yew_loop_run(Ed *ed)
                 nkeys++;
             yew_loop_dispatch_event(ed, &key, now);
         }
+        if (UINT64_MAX - ed->rss_session_keys < (u64)nkeys)
+            ed->rss_session_keys = UINT64_MAX;
+        else
+            ed->rss_session_keys += (u64)nkeys;
 #if YEW_WITH_PLUGINS
         /* Capability consent defers plugin bytecode; resume the startup
          * queue only after the owning prompt has consumed its key. */
@@ -657,6 +662,10 @@ int yew_loop_run(Ed *ed)
         if (burst_cap)
             frame_flags |= YEW_PF_BURST_CAP;
         yew_prof_frame_end(&ed->prof, nkeys, nbytes, frame_flags);
+        if (!ed->rss_session_logged && ed->rss_session_keys >= 10000U) {
+            yew_rss_checkpoint("session");
+            ed->rss_session_logged = true;
+        }
         if (ed->quit)
             return ed->exit_code;
     }

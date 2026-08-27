@@ -270,6 +270,12 @@ struct Ed {
     ShadowStats shadow_stats;
     bool shadow_holdoff;
 
+    /* Sprint 56: lifecycle RSS rows and the exact 10k-key boundary. */
+    u64 rss_session_keys;
+    bool rss_loaded_logged;
+    bool rss_paint_logged;
+    bool rss_session_logged;
+
     bool dispatch_ready;
     bool model_ready;
     bool tty_ready;
