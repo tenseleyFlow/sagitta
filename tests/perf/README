@@ -160,6 +160,16 @@ Sprint 11's policy remains binding:
    beginning `perf: rebaseline` and list the deltas. The baseline guard
    rejects a commit that touches both `src/` and `tests/perf/baselines/`.
 
+`make perf` and `make perf-huge` capture three complete Sprint 56
+observation ledgers before issuing a timing verdict.  The harnesses emit
+measurements; `scripts/s56-perf-gate.sh` is the single production boundary
+that validates the quick/huge metric set, preserves budget-file order,
+applies the median/2-of-3 rule, and performs the runner-derived v2 baseline
+comparison.  Hosted runs need no baseline and keep timing advisory, but
+`enforcement=all`, frames-greater-than-keys, missing metrics, and the 100x
+sanity bound remain hard.  A designated run refuses a missing, incomplete,
+zero-calibration, or runner/ISA-mismatched baseline with exit 75.
+
 Baseline files always live under `tests/perf/baselines/` (plural). Never
 raise a budget to make a regression green; changing `budgets.txt` changes a
 locked product decision and requires explicit review.

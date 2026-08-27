@@ -3,10 +3,14 @@
 set -u
 
 make_bin=${1:-make}
+scope=${2:-quick}
 build=${BUILD:-build}
 runner_id=${PERF_RUNNER_ID:-local-unknown}
 reference=${CALIB_REFERENCE:-}
 gate=${PERF_GATE:-0}
+evaluate=${PERF_S56_EVALUATE:-1}
+baseline=${PERF_BASELINE:-}
+budgets=${PERF_BUDGETS:-tests/perf/budgets.txt}
 before=$build/calib-before.txt
 after=$build/calib-after.txt
 
@@ -15,6 +19,22 @@ die()
     echo "perf: $*" >&2
     exit 2
 }
+
+case $scope in
+    quick)
+        component_target=perf-components
+        observation_target=perf-s56-observation
+        checks_target=perf-s56-checks
+        collect_arg=PERF_S56_COLLECT=0
+        ;;
+    huge)
+        component_target=perf-huge-components
+        observation_target=perf-s56-huge-observation
+        checks_target=perf-s56-gate-selftest
+        collect_arg=PERF_S56_COLLECT=0
+        ;;
+    *) die "unknown suite scope $scope" ;;
+esac
 
 field()
 {
@@ -56,11 +76,36 @@ if [ -z "$reference" ]; then
         perf-arm64-linux)
             candidate=tests/perf/calib-reference-arm64.txt ;;
         *)
-            candidate= ;;
+            case $(uname -m) in
+                x86_64) candidate=tests/perf/calib-reference.txt ;;
+                aarch64|arm64)
+                    candidate=tests/perf/calib-reference-arm64.txt ;;
+                *) candidate= ;;
+            esac
+            ;;
     esac
     if [ -n "$candidate" ] && [ -f "$candidate" ]; then
         reference=$candidate
     fi
+fi
+
+if [ -z "$baseline" ]; then
+    case $runner_id in
+        perf-x86_64-linux-gnu)
+            baseline=tests/perf/baselines/perf-x86_64-linux-gnu.txt ;;
+        perf-arm64-linux)
+            baseline=tests/perf/baselines/perf-arm64-linux.txt ;;
+        *) baseline=- ;;
+    esac
+fi
+if [ "$baseline" = - ]; then
+    case $(uname -m) in
+        aarch64|arm64)
+            component_baseline=tests/perf/baselines/perf-arm64-linux.txt ;;
+        *) component_baseline=tests/perf/baselines/perf-x86_64-linux-gnu.txt ;;
+    esac
+else
+    component_baseline=$baseline
 fi
 
 measure "$before" || die 'initial calibration failed'
@@ -84,9 +129,36 @@ fi
 echo "perf: runner=$runner_id mode=$([ "$advisory" -eq 1 ] && echo ADVISORY || echo GATING) scale_permille=$scale"
 YEW_PERF_ADVISORY=$advisory YEW_CALIB_SCALE_PERMILLE=$scale \
 YEW_CALIB_C1_NS=$c1 YEW_CALIB_C2_NS=$c2 YEW_CALIB_C3_NS=$c3 \
-    "$make_bin" --no-print-directory perf-components BUILD="$build" \
-    PERF_RUNNER_ID="$runner_id" PERF_ADVISORY="$advisory"
+    "$make_bin" --no-print-directory "$component_target" BUILD="$build" \
+    PERF_RUNNER_ID="$runner_id" PERF_ADVISORY="$advisory" \
+    PERF_BASELINE="$component_baseline" "$collect_arg"
 suite_status=$?
+
+gate_status=0
+if [ "$suite_status" -eq 0 ] && [ "$evaluate" = 1 ]; then
+    YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+        "$make_bin" --no-print-directory "$checks_target" BUILD="$build" \
+        PERF_RUNNER_ID="$runner_id" PERF_ADVISORY=1 PERF_GATE=0 ||
+        suite_status=$?
+fi
+if [ "$suite_status" -eq 0 ] && [ "$evaluate" = 1 ]; then
+    run=1
+    while [ "$run" -le 3 ]; do
+        output=$build/perf-s56-observation-$run.txt
+        if YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+            "$make_bin" --no-print-directory "$observation_target" \
+            BUILD="$build" PERF_RUNNER_ID="$runner_id" \
+            PERF_ADVISORY=1 PERF_GATE=0 >"$output" 2>&1; then
+            cat "$output"
+        else
+            status=$?
+            cat "$output"
+            suite_status=$status
+            break
+        fi
+        run=$((run + 1))
+    done
+fi
 
 measure "$after" || die 'final calibration failed'
 check_scale "$after"
@@ -108,4 +180,16 @@ case $before_scale:$after_scale in
         ;;
 esac
 
-exit "$suite_status"
+if [ "$suite_status" -eq 0 ] && [ "$evaluate" = 1 ]; then
+    scripts/s56-perf-gate.sh --scope "$scope" --budgets "$budgets" \
+        --baseline "$baseline" --runner-id "$runner_id" --scale "$scale" \
+        --mode "$([ "$advisory" -eq 1 ] && echo advisory || echo designated)" \
+        --obs "$build/perf-s56-observation-1.txt" \
+        --obs "$build/perf-s56-observation-2.txt" \
+        --obs "$build/perf-s56-observation-3.txt" || gate_status=$?
+fi
+
+if [ "$suite_status" -ne 0 ]; then
+    exit "$suite_status"
+fi
+exit "$gate_status"

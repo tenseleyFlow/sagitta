@@ -62,6 +62,7 @@ PERF_BASELINE ?= tests/perf/baselines/perf-x86_64-linux-gnu.txt
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
+PERF_S56_COLLECT ?= 1
 PERF_SYN_PROBE_STEM ?= markdown
 # Reduced fixture size for the functional search gate.  Export or override
 # this Make variable to exercise a larger smoke without creating the 3 GiB
@@ -753,10 +754,13 @@ endif
         perf-syn-gate-selftest perf-syn-line-probe \
         perf-syn-resident-line-probe perf-syn-edit-probe perf-syn-size \
         perf-batch perf-batch-selftest \
-        perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
+        perf-undo perf-textbuf perf-huge perf-huge-components \
+        perf-update perf-baseline-guard \
         perf-baseline-selftest \
         perf-gate-selftest perf-latency perf-latency-selftest \
-        perf-s56-functional perf-latency-s56-check perf-latency-s56-smoke \
+        perf-s56-functional perf-s56-observation \
+        perf-s56-huge-observation perf-s56-checks \
+        perf-latency-s56-check perf-latency-s56-smoke \
         perf-latency-s56-matrix perf-latency-s56-typing-huge \
         perf-latency-s56-syntax perf-latency-s56-multicursor \
         perf-latency-s56-search-huge \
@@ -1533,7 +1537,7 @@ perf-components: perf-unicode perf-render perf-shadow perf-scroll perf-piece per
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
       perf-mouse perf-record perf-syn perf-symidx perf-batch \
-      perf-s56-functional \
+      $(if $(filter 1,$(PERF_S56_COLLECT)),perf-s56-functional) \
       $(FUSS_PERF_TARGET) \
       $(LSP_PERF_TARGET) $(AI_PERF_TARGET) $(PLUG_PERF_TARGET)
 
@@ -1949,6 +1953,7 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
                         perf-baseline-selftest
 	$(BUILD)/s56_gate_policy_selftest
 	$(BUILD)/perf_prof_crosscheck --selftest-policy
+	scripts/tests/s56-perf-gate.test.sh
 	scripts/tests/run-perf-suite.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
 
@@ -2020,10 +2025,16 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 		--mockai $(abspath $(MOCKAI)) \
 		--ai-script $(abspath tests/fixtures/ai/ollama.script)
 
-perf-s56-functional: perf-latency-s56-matrix perf-syn-scroll-s56 \
-                     perf-search-s56-smoke \
-                     perf-startup-s56 perf-open-s56 perf-mem-s56 \
-                     perf-s56-gate-selftest perf-prof-crosscheck-s56
+perf-s56-observation: perf-latency-s56-matrix perf-syn-scroll-s56 \
+                      perf-search-s56-smoke \
+                      perf-startup-s56 perf-open-s56 perf-mem-s56 \
+                      perf-prof-crosscheck-s56
+
+perf-s56-huge-observation: perf-search-s56
+
+perf-s56-checks: perf-s56-gate-selftest
+
+perf-s56-functional: perf-s56-observation perf-s56-checks
 
 fixtures-quick: $(BUILD)/gen-bigfile
 	@mkdir -p $(FIXTURE_DIR); \
@@ -2098,7 +2109,13 @@ perf-search-s56-smoke: $(BUILD)/perf_search_s56 $(BUILD)/gen-bigfile
 		--fixture-code $(abspath $(BUILD)/perf-search-smoke/1g-code.bin) \
 		--fixture-noline $(abspath $(BUILD)/perf-search-smoke/1g-noline.bin)
 
-perf-huge: $(BUILD)/perf_textbuf fixtures perf-search-s56
+perf-huge:
+	PERF_GATE='$(PERF_GATE)' BUILD='$(BUILD)' \
+		PERF_RUNNER_ID='$(PERF_RUNNER_ID)' \
+		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
+		scripts/run-perf-suite.sh '$(MAKE)' huge
+
+perf-huge-components: $(BUILD)/perf_textbuf fixtures
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
 		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
 		--runner-id $(PERF_RUNNER_ID) --huge
