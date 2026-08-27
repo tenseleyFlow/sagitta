@@ -102,6 +102,22 @@ jobs:
             build-clang/perf_textbuf build-clang/perf_latency \
             build-clang/fuzz_cmdparse build-clang/perf_cmdcomp
 
+  # The public hosted arm64 image is functional/advisory evidence, not the
+  # pinned perf-arm64-linux baseline authority.  It keeps the ISA-specific
+  # build and the complete quick performance harness live while the separate
+  # designated job below remains fail-closed behind its registered runner.
+  arm64-hosted:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and test arm64 with GCC
+        run: |
+          make CC=gcc
+          make test CC=gcc
+      - name: Run Sprint 56 arm64 metrics in advisory mode
+        run: |
+          make perf CC=gcc PERF_GATE=0 PERF_RUNNER_ID=hosted-arm64
+
   # Sprint 30 DoD 1 and 5.  The computed-goto dispatcher is a SECOND
   # implementation of the interpreter, so it needs its own lane: a
   # divergence between the two shows up as a program computing a
