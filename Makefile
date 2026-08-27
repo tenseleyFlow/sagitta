@@ -63,6 +63,10 @@ LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
 PERF_SYN_PROBE_STEM ?= markdown
+# Reduced fixture size for the functional search gate.  Export or override
+# this Make variable to exercise a larger smoke without creating the 3 GiB
+# manifest set; `perf-search-s56` remains pinned to the manifest's 1 GiB rows.
+PERF_SEARCH_SMOKE_BYTES ?= 8388608
 CALIB_REFERENCE ?=
 CALIB_OUTPUT ?= $(BUILD)/calib.txt
 EXTRA_CFLAGS ?=
@@ -584,6 +588,7 @@ PERF_JOBSTREAM_OBJ := $(BUILD)/tests/perf/jobstream.o
 PERF_REPATH_OBJ := $(BUILD)/tests/perf/re_pathological.o
 PERF_RETHRU_OBJ := $(BUILD)/tests/perf/re_throughput.o
 PERF_SEARCHLAT_OBJ := $(BUILD)/tests/perf/search_latency.o
+PERF_SEARCH_S56_OBJ := $(BUILD)/tests/perf/perf_search.o
 PERF_UNITS_OBJ := $(BUILD)/tests/perf/perf_units.o
 PERF_MULTICURSOR_OBJ := $(BUILD)/tests/perf/multicursor.o
 PERF_CMDCOMP_OBJ := $(BUILD)/tests/perf/perf_cmdcomp.o
@@ -682,7 +687,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_S56_GATE_POLICY_OBJ) \
                 $(PERF_S56_PROF_CROSSCHECK_OBJ) \
                 $(PERF_JOBSTREAM_OBJ) $(PERF_REPATH_OBJ) \
-                $(PERF_RETHRU_OBJ) \
+                $(PERF_RETHRU_OBJ) $(PERF_SEARCH_S56_OBJ) \
                 $(LIVE_PTY_OBJ) \
                 $(PERF_UNITS_OBJ) \
                 $(PERF_MULTICURSOR_OBJ) \
@@ -754,6 +759,7 @@ endif
         perf-latency-s56-matrix perf-latency-s56-typing-huge \
         perf-latency-s56-syntax perf-latency-s56-multicursor \
         perf-latency-s56-search-huge \
+        perf-search-s56 perf-search-s56-smoke \
         perf-latency-s56-many perf-latency-s56-assist \
         perf-startup-s56 perf-open-s56 perf-mem-s56 \
         perf-s56-gate-selftest perf-prof-crosscheck-s56 \
@@ -1124,6 +1130,10 @@ $(BUILD)/perf_re_throughput: $(PERF_RETHRU_OBJ) $(PERF_CORE_OBJ)
 
 $(BUILD)/perf_search_latency: $(PERF_SEARCHLAT_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_SEARCHLAT_OBJ) \
+		$(PERF_CORE_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_search_s56: $(PERF_SEARCH_S56_OBJ) $(PERF_CORE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_SEARCH_S56_OBJ) \
 		$(PERF_CORE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_re_pathological: $(PERF_REPATH_OBJ) $(PERF_CORE_OBJ)
@@ -2058,7 +2068,26 @@ perf-textbuf: $(BUILD)/perf_textbuf fixtures-quick
 perf-baseline-selftest: $(BUILD)/perf_textbuf
 	$(BUILD)/perf_textbuf --baseline-selftest
 
-perf-huge: $(BUILD)/perf_textbuf fixtures
+perf-search-s56: $(BUILD)/perf_search_s56 fixtures
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_search_s56 --budgets tests/perf/budgets.txt \
+		--fixture-code $(abspath $(FIXTURE_DIR)/1g-code.bin) \
+		--fixture-noline $(abspath $(FIXTURE_DIR)/1g-noline.bin)
+
+perf-search-s56-smoke: $(BUILD)/perf_search_s56 $(BUILD)/gen-bigfile
+	@mkdir -p $(BUILD)/perf-search-smoke
+	$(BUILD)/gen-bigfile --profile 1g-code --size $(PERF_SEARCH_SMOKE_BYTES) \
+		--seed 0x9e3779b97f4a7c15 \
+		--output $(BUILD)/perf-search-smoke/1g-code.bin
+	$(BUILD)/gen-bigfile --profile 1g-noline --size $(PERF_SEARCH_SMOKE_BYTES) \
+		--seed 0x9e3779b97f4a7c15 \
+		--output $(BUILD)/perf-search-smoke/1g-noline.bin
+	YEW_PERF_SMOKE=1 YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		$(BUILD)/perf_search_s56 --budgets tests/perf/budgets.txt \
+		--fixture-code $(abspath $(BUILD)/perf-search-smoke/1g-code.bin) \
+		--fixture-noline $(abspath $(BUILD)/perf-search-smoke/1g-noline.bin)
+
+perf-huge: $(BUILD)/perf_textbuf fixtures perf-search-s56
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
 		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
 		--runner-id $(PERF_RUNNER_ID) --huge
@@ -2409,6 +2438,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_S56_PROF_CROSSCHECK_OBJ:.o=.d) \
          $(PERF_JOBSTREAM_OBJ:.o=.d) \
          $(PERF_REPATH_OBJ:.o=.d) $(PERF_RETHRU_OBJ:.o=.d) \
+         $(PERF_SEARCH_S56_OBJ:.o=.d) \
          $(LIVE_PTY_OBJ:.o=.d) \
          $(PERF_MULTICURSOR_OBJ:.o=.d) \
          $(PERF_CMDCOMP_OBJ:.o=.d) \
