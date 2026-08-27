@@ -36,14 +36,14 @@ size_t yew_str_clip(const u8 *s, size_t len, int max_cells,
                     int *out_cells);
 
 /*
- * Glyph rendering for controls and invalid bytes lands in Sprint 5;
- * viewport tab-stop consumption lands in Sprint 15. Word_Break belongs to
- * Sprint 16 and case folding to Sprint 20. yew deliberately provides no
+ * The terminal grid renders controls and invalid bytes, and the viewport
+ * consumes tab stops. Word_Break and case folding live in their dedicated
+ * Unicode tables. yew deliberately provides no
  * normalization API: normalization would rewrite untouched file bytes.
  * UAX #14 line breaking is outside 1.0 because Sprint 15 wraps on whitespace
  * and cluster boundaries. UAX #9 bidi is outside 1.0, so RTL stays in logical
- * order. Unicode 17 tables are deferred until after 1.0 to keep the 16.0.0
- * conformance target stable throughout this campaign.
+ * order. Unicode 17 tables are post-1.0 scope so the 16.0.0 conformance
+ * target stays stable throughout this campaign.
  */
 
 #endif

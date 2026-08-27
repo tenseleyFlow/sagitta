@@ -1,6 +1,7 @@
 # Deferral ledger
 
-Last reconciled: 2026-08-26, after Sprint 55 and before Sprint 55.5.
+Last reconciled: 2026-08-26, after Sprint 55.5 closed Campaign 12 and before
+Sprint 56 implementation.
 
 This ledger covers user-visible product promises that are not live yet. It
 does not treat lazy tab hydration, deferred syntax work queues, or other
@@ -36,6 +37,10 @@ The command registry has no built-in `YEW_CMD_DEFERRED` rows after this
 reconciliation. The flag and its hard-error machinery remain available for
 a future sprint-owned surface, but runtime help must not use it for aliases,
 reserved commands, post-1.0 scope, or permanent non-goals.
+
+Sprint 55.5 added no product deferral: both shipped example plugins execute
+against the public Sprint 54/55 API in every build, and their guide describes
+only live surfaces or explicit post-1.0 scope already listed below.
 
 ## Scheduled 1.0 work
 
