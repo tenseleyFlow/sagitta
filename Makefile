@@ -577,6 +577,7 @@ PERF_STARTUP_OBJ := $(BUILD)/tests/perf/perf_startup.o
 PERF_NULLEXEC_OBJ := $(BUILD)/tests/perf/nullexec.o
 PERF_OPEN_OBJ := $(BUILD)/tests/perf/perf_open.o
 PERF_MEM_OBJ := $(BUILD)/tests/perf/perf_mem.o
+PERF_S56_GATE_POLICY_OBJ := $(BUILD)/tests/perf/s56_gate_policy_selftest.o
 PERF_JOBSTREAM_OBJ := $(BUILD)/tests/perf/jobstream.o
 PERF_REPATH_OBJ := $(BUILD)/tests/perf/re_pathological.o
 PERF_RETHRU_OBJ := $(BUILD)/tests/perf/re_throughput.o
@@ -676,6 +677,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_LATENCY_S56_OBJ) $(PERF_ECHO_CHILD_OBJ) \
                 $(PERF_STARTUP_OBJ) $(PERF_NULLEXEC_OBJ) \
                 $(PERF_OPEN_OBJ) $(PERF_MEM_OBJ) \
+                $(PERF_S56_GATE_POLICY_OBJ) \
                 $(PERF_JOBSTREAM_OBJ) $(PERF_REPATH_OBJ) \
                 $(PERF_RETHRU_OBJ) \
                 $(LIVE_PTY_OBJ) \
@@ -747,6 +749,7 @@ endif
         perf-s56-functional perf-latency-s56-check perf-latency-s56-smoke \
         perf-latency-s56-many \
         perf-startup-s56 perf-open-s56 perf-mem-s56 \
+        perf-s56-gate-selftest \
         torture torture-build torture-live-check torture-batch \
         torture-git-hunk \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
@@ -1098,6 +1101,10 @@ $(BUILD)/perf_open_s56: $(PERF_OPEN_OBJ) $(LIVE_PTY_OBJ)
 $(BUILD)/perf_mem_s56: $(PERF_MEM_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_MEM_OBJ) \
 		$(PERF_CORE_OBJ) $(LDLIBS)
+
+$(BUILD)/s56_gate_policy_selftest: $(PERF_S56_GATE_POLICY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ \
+		$(PERF_S56_GATE_POLICY_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_re_throughput: $(PERF_RETHRU_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_RETHRU_OBJ) \
@@ -1824,8 +1831,13 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \
 		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin)
 
+perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest
+	$(BUILD)/s56_gate_policy_selftest
+	scripts/tests/s56-baseline-guard.test.sh
+
 perf-s56-functional: perf-latency-s56-smoke perf-latency-s56-many \
-                     perf-startup-s56 perf-open-s56 perf-mem-s56
+                     perf-startup-s56 perf-open-s56 perf-mem-s56 \
+                     perf-s56-gate-selftest
 
 fixtures-quick: $(BUILD)/gen-bigfile
 	@mkdir -p $(FIXTURE_DIR); \
@@ -2209,7 +2221,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_LATENCY_OBJ:.o=.d) $(PERF_LATENCY_S56_OBJ:.o=.d) \
          $(PERF_ECHO_CHILD_OBJ:.o=.d) $(PERF_STARTUP_OBJ:.o=.d) \
          $(PERF_NULLEXEC_OBJ:.o=.d) $(PERF_OPEN_OBJ:.o=.d) \
-         $(PERF_MEM_OBJ:.o=.d) $(PERF_JOBSTREAM_OBJ:.o=.d) \
+         $(PERF_MEM_OBJ:.o=.d) $(PERF_S56_GATE_POLICY_OBJ:.o=.d) \
+         $(PERF_JOBSTREAM_OBJ:.o=.d) \
          $(PERF_REPATH_OBJ:.o=.d) $(PERF_RETHRU_OBJ:.o=.d) \
          $(LIVE_PTY_OBJ:.o=.d) \
          $(PERF_MULTICURSOR_OBJ:.o=.d) \
