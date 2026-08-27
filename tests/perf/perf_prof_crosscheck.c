@@ -16,6 +16,7 @@ enum {
     OUTPUT_CAP = 16384,
     ARG_CAP = 32,
     PROF_RING = 16384,
+    METRIC_TRIALS = 3,
     ADVISORY_ATTEMPTS = 3,
     OVERHEAD_LIMIT_PERMILLE = 20,
     CROSSCHECK_LIMIT_PERMILLE = 250
@@ -283,6 +284,37 @@ static bool gating(void)
     return gate != NULL && strcmp(gate, "1") == 0 && !perf_advisory();
 }
 
+static uint64_t median3(const uint64_t values[METRIC_TRIALS])
+{
+    uint64_t a = values[0];
+    uint64_t b = values[1];
+    uint64_t c = values[2];
+
+    if (a > b) {
+        uint64_t tmp = a;
+        a = b;
+        b = tmp;
+    }
+    if (b > c) {
+        uint64_t tmp = b;
+        b = c;
+        c = tmp;
+    }
+    if (a > b)
+        b = a;
+    return b;
+}
+
+static bool overhead_fails(uint64_t overhead_pm, bool gate)
+{
+    return gate && overhead_pm > OVERHEAD_LIMIT_PERMILLE;
+}
+
+static bool crosscheck_fails(uint64_t crosscheck_pm)
+{
+    return crosscheck_pm > CROSSCHECK_LIMIT_PERMILLE;
+}
+
 static bool metric_prefix(const Options *opts, char *out, size_t cap)
 {
     const char *base = strrchr(opts->session, '/');
@@ -310,6 +342,10 @@ static void usage(const char *arg0)
 
 static int policy_selftest(void)
 {
+    static const uint64_t ordered[METRIC_TRIALS] = {10U, 30U, 20U};
+    static const uint64_t one_bad[METRIC_TRIALS] = {300U, 0U, 0U};
+    static const uint64_t two_bad[METRIC_TRIALS] = {300U, 0U, 300U};
+
     if (retry_transport(false, RUN_TRANSPORT_FAILED, 1U) ||
         retry_transport(true, RUN_OK, 1U) ||
         retry_transport(true, RUN_METRIC_FAILED, 1U) ||
@@ -320,8 +356,18 @@ static int policy_selftest(void)
                       "perf_prof_crosscheck: advisory retry policy failed\n");
         return 1;
     }
+    if (median3(ordered) != 20U || median3(one_bad) != 0U ||
+        median3(two_bad) != 300U ||
+        overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, false) ||
+        !overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, true) ||
+        crosscheck_fails(CROSSCHECK_LIMIT_PERMILLE) ||
+        !crosscheck_fails(CROSSCHECK_LIMIT_PERMILLE + 1U)) {
+        (void)fprintf(stderr,
+                      "perf_prof_crosscheck: metric gate policy failed\n");
+        return 1;
+    }
     (void)printf("perf-prof-crosscheck-policy: "
-                 "strict/metric/advisory-transport ok\n");
+                 "median3/strict-crosscheck/advisory-overhead/transport ok\n");
     return 0;
 }
 
@@ -329,18 +375,29 @@ int main(int argc, char **argv)
 {
     static const char temp_pattern[] = "/tmp/yew-prof-crosscheck-XXXXXX";
     Options opts = {0};
-    RunResult off;
-    RunResult on;
+    RunResult off[METRIC_TRIALS];
+    RunResult on[METRIC_TRIALS];
     char temp_dir[128] = "";
     char dump_path[1024] = "";
     char prefix[160] = "";
-    uint64_t prof_p99_ns;
-    uint32_t prof_calls;
+    uint64_t off_p99_ns[METRIC_TRIALS];
+    uint64_t on_p99_ns[METRIC_TRIALS];
+    uint64_t prof_p99_ns[METRIC_TRIALS];
+    uint32_t prof_calls[METRIC_TRIALS];
+    uint64_t overhead_trials[METRIC_TRIALS];
+    uint64_t crosscheck_trials[METRIC_TRIALS];
+    uint64_t off_median_ns;
+    uint64_t on_median_ns;
+    uint64_t prof_median_ns;
+    uint64_t external_samples = 0U;
+    uint64_t internal_samples = 0U;
     uint64_t overhead_pm;
     uint64_t crosscheck_pm;
     RunStatus run_status;
     bool advisory;
     bool gate;
+    bool samples_match = true;
+    unsigned trial;
     int i;
     int status = 0;
 
@@ -401,35 +458,79 @@ int main(int argc, char **argv)
         goto done;
     }
     advisory = perf_advisory();
-    run_status = measure_latency(&opts, false, NULL, &off, NULL, NULL,
-                                 advisory);
-    if (run_status == RUN_OK)
-        run_status = measure_latency(&opts, true, dump_path, &on,
-                                     &prof_p99_ns, &prof_calls, advisory);
-    if (run_status != RUN_OK) {
-        (void)fprintf(stderr,
-                      "perf_prof_crosscheck: %s failed\n",
-                      run_status == RUN_METRIC_FAILED ?
-                          "latency metric" :
-                          "measurement transport or profiler dump");
-        status = run_status == RUN_METRIC_FAILED ? 1 : 2;
-        goto done;
+    for (trial = 0U; trial < METRIC_TRIALS; trial++) {
+        /* Alternate the pair order so monotonic warm-up or frequency drift
+         * cannot systematically charge the second process to profiling.
+         * The median of the three paired deltas is also the required 2-of-3
+         * anti-flap verdict. */
+        bool prof_first = trial == 1U;
+
+        if (prof_first) {
+            run_status = measure_latency(&opts, true, dump_path, &on[trial],
+                                         &prof_p99_ns[trial],
+                                         &prof_calls[trial], advisory);
+            if (run_status == RUN_OK)
+                run_status = measure_latency(&opts, false, NULL, &off[trial],
+                                             NULL, NULL, advisory);
+        } else {
+            run_status = measure_latency(&opts, false, NULL, &off[trial],
+                                         NULL, NULL, advisory);
+            if (run_status == RUN_OK)
+                run_status = measure_latency(&opts, true, dump_path,
+                                             &on[trial],
+                                             &prof_p99_ns[trial],
+                                             &prof_calls[trial], advisory);
+        }
+        if (run_status != RUN_OK) {
+            (void)fprintf(stderr,
+                          "perf_prof_crosscheck: trial %u %s failed\n",
+                          trial + 1U,
+                          run_status == RUN_METRIC_FAILED ?
+                              "latency metric" :
+                              "measurement transport or profiler dump");
+            status = run_status == RUN_METRIC_FAILED ? 1 : 2;
+            goto done;
+        }
+        off_p99_ns[trial] = off[trial].external_p99_ns;
+        on_p99_ns[trial] = on[trial].external_p99_ns;
+        overhead_trials[trial] = on_p99_ns[trial] > off_p99_ns[trial] ?
+            delta_permille(on_p99_ns[trial], off_p99_ns[trial],
+                           off_p99_ns[trial]) : 0U;
+        crosscheck_trials[trial] = delta_permille(on_p99_ns[trial],
+                                                  prof_p99_ns[trial],
+                                                  on_p99_ns[trial]);
+        external_samples += on[trial].painted;
+        internal_samples += prof_calls[trial];
+        if (on[trial].painted != prof_calls[trial])
+            samples_match = false;
     }
-    overhead_pm = on.external_p99_ns > off.external_p99_ns ?
-        delta_permille(on.external_p99_ns, off.external_p99_ns,
-                       off.external_p99_ns) : 0U;
-    crosscheck_pm = delta_permille(on.external_p99_ns, prof_p99_ns,
-                                   on.external_p99_ns);
+    off_median_ns = median3(off_p99_ns);
+    on_median_ns = median3(on_p99_ns);
+    prof_median_ns = median3(prof_p99_ns);
+    overhead_pm = median3(overhead_trials);
+    crosscheck_pm = median3(crosscheck_trials);
     gate = gating();
     (void)printf("%s.off.p99 %llu ns\n", prefix,
-                 (unsigned long long)off.external_p99_ns);
+                 (unsigned long long)off_median_ns);
     (void)printf("%s.on.p99 %llu ns\n", prefix,
-                 (unsigned long long)on.external_p99_ns);
+                 (unsigned long long)on_median_ns);
     (void)printf("%s.keypaint.p99 %llu ns\n", prefix,
-                 (unsigned long long)prof_p99_ns);
-    (void)printf("%s.samples external=%u internal=%u %s\n", prefix,
-                 on.painted, prof_calls,
-                 on.painted == prof_calls ? "OK" : "FAIL");
+                 (unsigned long long)prof_median_ns);
+    (void)printf("%s.trials off=%llu,%llu,%llu on=%llu,%llu,%llu "
+                 "keypaint=%llu,%llu,%llu\n", prefix,
+                 (unsigned long long)off_p99_ns[0],
+                 (unsigned long long)off_p99_ns[1],
+                 (unsigned long long)off_p99_ns[2],
+                 (unsigned long long)on_p99_ns[0],
+                 (unsigned long long)on_p99_ns[1],
+                 (unsigned long long)on_p99_ns[2],
+                 (unsigned long long)prof_p99_ns[0],
+                 (unsigned long long)prof_p99_ns[1],
+                 (unsigned long long)prof_p99_ns[2]);
+    (void)printf("%s.samples external=%llu internal=%llu %s\n", prefix,
+                 (unsigned long long)external_samples,
+                 (unsigned long long)internal_samples,
+                 samples_match ? "OK" : "FAIL");
     (void)printf("%s.overhead %llu permille %s\n", prefix,
                  (unsigned long long)overhead_pm,
                  overhead_pm <= OVERHEAD_LIMIT_PERMILLE ? "OK" :
@@ -437,10 +538,9 @@ int main(int argc, char **argv)
     (void)printf("%s.external_delta %llu permille %s\n", prefix,
                  (unsigned long long)crosscheck_pm,
                  crosscheck_pm <= CROSSCHECK_LIMIT_PERMILLE ? "OK" :
-                 gate ? "FAIL" : "ADVISORY");
-    if (on.painted != prof_calls ||
-        (gate && (overhead_pm > OVERHEAD_LIMIT_PERMILLE ||
-                  crosscheck_pm > CROSSCHECK_LIMIT_PERMILLE)))
+                 "FAIL");
+    if (!samples_match || overhead_fails(overhead_pm, gate) ||
+        crosscheck_fails(crosscheck_pm))
         status = 1;
 
 done:
