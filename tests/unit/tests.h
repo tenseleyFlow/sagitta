@@ -10,6 +10,7 @@ void test_batch_selfcheck_rejects_seeded_grid_input_tty_and_timer(void);
 void test_batch_selfcheck_rejects_interactive_installed_binding(void);
 void test_batch_refusal_table_covers_every_interactive_command(void);
 void test_batch_memory_buffer_is_byte_exact_named_and_initially_clean(void);
+void test_batch_profiler_dumps_one_frame_per_executed_statement(void);
 
 void test_arena_align(void);
 void test_arena_strdup(void);
@@ -1547,6 +1548,7 @@ void test_fl_compile_tracks_max_stack(void);
 void test_fl_compile_lines_are_recorded_for_every_op(void);
 void test_fl_compile_operand_lengths_match_the_emitter(void);
 void test_fl_compile_is_deterministic_across_instances(void);
+void test_fl_compile_profile_markers_are_explicit_and_executed(void);
 void test_fl_lex_comment_keeps_its_newline(void);
 void test_fl_lex_crlf_is_one_newline_and_bare_cr_is_an_error(void);
 void test_fl_lex_keywords_need_a_terminator(void);

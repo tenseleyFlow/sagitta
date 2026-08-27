@@ -109,6 +109,7 @@ typedef struct FlGcProvider {
 enum { FL_GC_PROVIDERS_MAX = 8 };
 
 typedef struct FlMotionProg FlMotionProg;
+typedef void (*FlLineObserverFn)(void *ctx, u16 line);
 
 /*
  * The host seam.  Nothing in vm.c knows what a buffer is.
@@ -194,6 +195,10 @@ struct FlVm {
     DiagCtx *dc;
     u64 steps;
     u64 step_limit;              /* 0 = unlimited; Sprint 32 uses it      */
+    /* Release-safe observer for explicit TRACE_LINE instructions.  Normal
+     * compilation emits none, so the ordinary dispatch path pays nothing. */
+    FlLineObserverFn line_observer;
+    void *line_observer_ctx;
 #if FL_VM_TRACE
     /*
      * DoD 5's differential-dispatch driver: every executed opcode byte,
@@ -261,6 +266,7 @@ struct FlVm {
 };
 
 bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc);
+void fl_vm_set_line_observer(FlVm *vm, FlLineObserverFn observer, void *ctx);
 
 /*
  * Root 6: a host-owned FlValue the collector must see.  `slot` must

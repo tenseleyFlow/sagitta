@@ -55,4 +55,10 @@ FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p,
 FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                  u32 file_id, FlOrigin origin);
 
+/* As fl_compile, with one release-safe TRACE_LINE marker before each
+ * top-level statement.  Batch profiling observes those markers; ordinary
+ * scripts keep their bytecode unchanged. */
+FlFn *fl_compile_profiled(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                          u32 file_id, FlOrigin origin);
+
 #endif /* YEW_FL_COMPILE_H */

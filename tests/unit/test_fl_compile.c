@@ -80,6 +80,45 @@ static FlFn *cf_compile(CFix *f, const char *src)
     return fl_compile(&f->vm, &f->dc, &p, 0U, origin);
 }
 
+static FlFn *cf_compile_profiled(CFix *f, const char *src)
+{
+    FlProgram p;
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
+
+    (void)fl_diag_add_file(&f->dc, "profiled.fl", src, strlen(src));
+    p = fl_parse(&f->arena, &f->dc, &f->in, src, strlen(src), 0U);
+    if (p.had_error)
+        return NULL;
+    return fl_compile_profiled(&f->vm, &f->dc, &p, 0U, origin);
+}
+
+static u32 cf_count_op(const FlFn *fn, FlOp wanted)
+{
+    u32 count = 0U;
+    u32 pc = 0U;
+
+    while (pc < fn->ch.ncode) {
+        if (fn->ch.code[pc] == (u8)wanted)
+            count++;
+        pc += fl_op_length(&fn->ch, pc);
+    }
+    return count;
+}
+
+typedef struct LineSeen {
+    u16 line[8];
+    u32 n;
+} LineSeen;
+
+static void cf_line_seen(void *ctx, u16 line)
+{
+    LineSeen *seen = ctx;
+
+    if (seen->n < YEW_ARRAY_LEN(seen->line))
+        seen->line[seen->n] = line;
+    seen->n++;
+}
+
 /* ---------------------------------------------------------------- */
 /* Opcode coverage: the table, and the walk that proves it complete  */
 /* ---------------------------------------------------------------- */
@@ -218,8 +257,7 @@ static const OpSynth OP_SYNTH[] = {
       FL_OP_INT8, 1U, FL_OP_RETURN,
       FL_OP_INT8, 0U, FL_OP_RETURN}, 11U, 0, false},
 
-    {FL_OP_TRACE_LINE, "emitted only in FL_VM_CHECKS builds and never "
-                       "in release, so no ordinary compile reaches it",
+    {FL_OP_TRACE_LINE, "ordinary compilation emits no profile markers",
      {FL_OP_TRACE_LINE, 4U, 0U, FL_OP_INT8, 3U, FL_OP_RETURN}, 6U, 3,
      false}
 };
@@ -695,4 +733,49 @@ void test_fl_compile_is_deterministic_across_instances(void)
     YEW_ASSERT_EQ_U64(fa->max_stack, fb->max_stack);
     cf_close(&b);
     cf_close(&a);
+}
+
+void test_fl_compile_profile_markers_are_explicit_and_executed(void)
+{
+    static const char src[] =
+        "fn nested() { let hidden = 1\nreturn hidden }\n"
+        "return 2\n"
+        "let skipped = 3\n";
+    CFix ordinary;
+    CFix profiled;
+    FlFn *plain;
+    FlFn *marked;
+    FlFn *nested = NULL;
+    FlValue result = FL_NIL_V;
+    LineSeen seen = {{0U}, 0U};
+    u32 i;
+
+    cf_open(&ordinary);
+    plain = cf_compile(&ordinary, src);
+    YEW_ASSERT_NOT_NULL(plain);
+    YEW_ASSERT_EQ_U64(cf_count_op(plain, FL_OP_TRACE_LINE), 0U);
+    cf_close(&ordinary);
+
+    cf_open(&profiled);
+    marked = cf_compile_profiled(&profiled, src);
+    YEW_ASSERT_NOT_NULL(marked);
+    YEW_ASSERT_EQ_U64(cf_count_op(marked, FL_OP_TRACE_LINE), 3U);
+    for (i = 0U; i < marked->ch.nconsts; i++) {
+        if (marked->ch.consts[i].t == (u8)FL_FN) {
+            nested = (FlFn *)marked->ch.consts[i].as.o;
+            break;
+        }
+    }
+    YEW_ASSERT_NOT_NULL(nested);
+    YEW_ASSERT_EQ_U64(cf_count_op(nested, FL_OP_TRACE_LINE), 0U);
+
+    fl_vm_set_line_observer(&profiled.vm, cf_line_seen, &seen);
+    YEW_ASSERT(fl_vm_run(&profiled.vm, marked, &result));
+    fl_vm_set_line_observer(&profiled.vm, NULL, NULL);
+    YEW_ASSERT_EQ_U64(result.t, FL_INT);
+    YEW_ASSERT_EQ_I64(result.as.i, 2);
+    YEW_ASSERT_EQ_U64(seen.n, 2U);
+    YEW_ASSERT_EQ_U64(seen.line[0], 1U);
+    YEW_ASSERT_EQ_U64(seen.line[1], 3U);
+    cf_close(&profiled);
 }

@@ -36,6 +36,9 @@ FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
 /* Compile a top-level CLI script with its real path and full user authority. */
 FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
                         const char *realpath_label);
+/* Batch-profiler variant: emits explicit top-level statement markers. */
+FlFn *fl_compile_script_profiled(FlRuntime *rt, const u8 *source, size_t len,
+                                 const char *realpath_label);
 
 /* Execute a compiled script in the persistent editor VM.  A call made from
  * inside Fletch nests without resetting the caller's frames; a host call is

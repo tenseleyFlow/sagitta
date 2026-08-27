@@ -112,6 +112,14 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
     return true;
 }
 
+void fl_vm_set_line_observer(FlVm *vm, FlLineObserverFn observer, void *ctx)
+{
+    if (vm == NULL)
+        return;
+    vm->line_observer = observer;
+    vm->line_observer_ctx = observer == NULL ? NULL : ctx;
+}
+
 void fl_vm_set_step_limit(FlVm *vm, u64 steps)
 {
     vm->step_limit = steps;
@@ -1462,7 +1470,10 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             VM_NEXT();
         }
         VM_CASE(TRACE_LINE) {
-            (void)read_u16(&ip);
+            u16 line = read_u16(&ip);
+
+            if (vm->line_observer != NULL)
+                vm->line_observer(vm->line_observer_ctx, line);
             VM_NEXT();
         }
 

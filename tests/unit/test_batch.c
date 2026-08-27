@@ -1,7 +1,14 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
+#include "args.h"
 #include "edit/batch.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
@@ -129,4 +136,76 @@ void test_batch_memory_buffer_is_byte_exact_named_and_initially_clean(void)
     YEW_ASSERT_EQ_U64(len, sizeof(bytes));
     YEW_ASSERT_EQ_MEM(chunk, bytes, sizeof(bytes));
     yew_ed_free(&ed);
+}
+
+static char *batch_env_copy(const char *name)
+{
+    const char *value = getenv(name);
+
+    return value == NULL ? NULL : strdup(value);
+}
+
+static void batch_env_restore(const char *name, char *saved)
+{
+    if (saved == NULL)
+        (void)unsetenv(name);
+    else {
+        (void)setenv(name, saved, 1);
+        free(saved);
+    }
+}
+
+void test_batch_profiler_dumps_one_frame_per_executed_statement(void)
+{
+    static const char source[] =
+        "let a = 1\nlet b = 2\nreturn a + b\nlet skipped = 4\n";
+    char root[] = "/tmp/yew-batch-prof-XXXXXX";
+    char script[512];
+    char report_path[512];
+    char report[4096];
+    char *saved_prof = batch_env_copy("YEW_PROF");
+    char *saved_out = batch_env_copy("YEW_PROF_OUT");
+    FILE *fp;
+    size_t n;
+    struct stat st;
+    BatchOpts opts = {0};
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    (void)snprintf(script, sizeof(script), "%s/run.fl", root);
+    (void)snprintf(report_path, sizeof(report_path), "%s/report.txt", root);
+    fp = fopen(script, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite(source, 1U, sizeof(source) - 1U, fp),
+                      sizeof(source) - 1U);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    fp = fopen(report_path, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite("stale", 1U, 5U, fp), 5U);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+
+    YEW_ASSERT_EQ_I64(setenv("YEW_PROF", "1", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_PROF_OUT", report_path, 1), 0);
+    opts.script = script;
+    opts.clean = true;
+    opts.quiet = true;
+    YEW_ASSERT_EQ_I64(yew_batch_run(&opts), YEW_EXIT_OK);
+
+    fp = fopen(report_path, "rb");
+    YEW_ASSERT_NOT_NULL(fp);
+    n = fread(report, 1U, sizeof(report) - 1U, fp);
+    report[n] = '\0';
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_NOT_NULL(strstr(report, "frames=3 dropped=0"));
+    YEW_ASSERT_NOT_NULL(strstr(report,
+                               "mode=batch phases=dispatch,jobs,syn"));
+    YEW_ASSERT_NOT_NULL(strstr(report, "render             0"));
+    YEW_ASSERT_NOT_NULL(strstr(report, "write              0"));
+    YEW_ASSERT_EQ_I64(stat(report_path, &st), 0);
+    YEW_ASSERT_EQ_U64(st.st_mode & 0777U, 0600U);
+
+    batch_env_restore("YEW_PROF_OUT", saved_out);
+    batch_env_restore("YEW_PROF", saved_prof);
+    YEW_ASSERT_EQ_I64(unlink(report_path), 0);
+    YEW_ASSERT_EQ_I64(unlink(script), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
 }

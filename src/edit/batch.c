@@ -24,6 +24,7 @@
 #include "fl/value.h"
 #include "fl/vm.h"
 #include "mod/plug/plug.h"
+#include "text/file.h"
 #include "text/journal.h"
 #include "text/piece.h"
 #include "text/undo.h"
@@ -31,6 +32,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
+#include "util/xdg.h"
 
 typedef struct BatchLogCtx {
     bool quiet;
@@ -41,6 +43,68 @@ typedef struct InteractiveRow {
     const char *name;
     const char *alternative;
 } InteractiveRow;
+
+static void batch_prof_statement(void *ctx, u16 line)
+{
+    Ed *ed = ctx;
+
+    (void)line;
+    yew_prof_frame_end(&ed->prof, 0U, 0U, 0U);
+    yew_prof_frame_begin(&ed->prof);
+    yew_prof_phase(&ed->prof, YEW_PH_DISPATCH);
+}
+
+static char *batch_prof_path(void)
+{
+    const char *configured = getenv("YEW_PROF_OUT");
+    char *dir;
+    char *path;
+    int need;
+
+    if (configured != NULL && configured[0] != '\0')
+        return strdup(configured);
+    dir = yew_xdg_state_dir();
+    if (dir == NULL || !yew_mkdirs(dir, 0700U)) {
+        free(dir);
+        return NULL;
+    }
+    need = snprintf(NULL, 0, "%s/prof-%ld.txt", dir, (long)getpid());
+    if (need < 0)
+        YEW_BUG("cannot format batch profiler path");
+    path = yew_xmalloc((size_t)need + 1U);
+    (void)snprintf(path, (size_t)need + 1U, "%s/prof-%ld.txt", dir,
+                   (long)getpid());
+    free(dir);
+    return path;
+}
+
+static bool batch_prof_dump(Ed *ed)
+{
+    Bytebuf out;
+    char *path;
+    YewSaveErr saved;
+
+    if (!ed->prof.on)
+        return true;
+    ed->prof.batch = true;
+    path = batch_prof_path();
+    if (path == NULL) {
+        yew_log(YEW_LOG_ERROR, "cannot create batch profiler path");
+        return false;
+    }
+    bytebuf_init(&out);
+    yew_prof_write(&ed->prof, &out);
+    saved = yew_file_write_atomic(path, out.data, out.len, 0600U);
+    bytebuf_free(&out);
+    if (saved != YEW_SAVE_OK) {
+        yew_log(YEW_LOG_ERROR, "cannot write profiler dump: %s", path);
+        free(path);
+        return false;
+    }
+    yew_log(YEW_LOG_INFO, "profiler dump: %s", path);
+    free(path);
+    return true;
+}
 
 static const char ai_enable_no_tty[] =
     "AI cannot be enabled non-interactively; set ai.enable in init.fl "
@@ -588,16 +652,27 @@ int yew_batch_run(const BatchOpts *opts)
             YEW_BUG("cannot install batch assertion host");
         test_installed = true;
     }
-    script = fl_compile_script(ed.fl, source.data, source.len, script_path);
+    script = ed.prof.on ?
+        fl_compile_script_profiled(ed.fl, source.data, source.len,
+                                   script_path) :
+        fl_compile_script(ed.fl, source.data, source.len, script_path);
     if (script == NULL) {
         result = YEW_EXIT_BATCH;
         goto done;
     }
+    if (ed.prof.on) {
+        ed.prof.batch = true;
+        fl_vm_set_line_observer(yew_fl_vm(&ed), batch_prof_statement, &ed);
+    }
     if (!fl_call_chunk(ed.fl, script, YEW_SRC_FLETCH)) {
+        fl_vm_set_line_observer(yew_fl_vm(&ed), NULL, NULL);
+        yew_prof_frame_end(&ed.prof, 0U, 0U, 0U);
         result = render_script_error(yew_fl_vm(&ed)) ? YEW_EXIT_ERR :
                                                        YEW_EXIT_BATCH;
         goto done;
     }
+    fl_vm_set_line_observer(yew_fl_vm(&ed), NULL, NULL);
+    yew_prof_frame_end(&ed.prof, 0U, 0U, 0U);
     if (opts->replay_reg != 0U &&
         yew_macro_replay(&ed, opts->replay_reg, 1U) != YEW_CMD_OK) {
         FlVm *vm = yew_fl_vm(&ed);
@@ -619,6 +694,8 @@ int yew_batch_run(const BatchOpts *opts)
     result = YEW_EXIT_OK;
 
 done:
+    if (ed_ready && !batch_prof_dump(&ed) && result == YEW_EXIT_OK)
+        result = YEW_EXIT_IO;
     if (test_installed && !yew_batch_test_finish(&test_state, -1))
         result = YEW_EXIT_BATCH;
     if (workspace_hook)

@@ -1307,7 +1307,8 @@ static void comp_stmt(Compiler *c, const FlNode *n)
 /* ---------------------------------------------------------------- */
 
 static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
-                             u32 file_id, FlOrigin origin, u8 fnkind)
+                             u32 file_id, FlOrigin origin, u8 fnkind,
+                             bool trace_statements)
 {
     Compiler top;
     FlFn *fn;
@@ -1326,6 +1327,12 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
 
     for (i = 0U; i < p->n; i++) {
         const FlNode *st = p->stmts[i];
+
+        if (trace_statements) {
+            emit_op(&top, FL_OP_TRACE_LINE, st->sp);
+            emit_u16(&top, st->sp.line > UINT16_MAX ? UINT16_MAX :
+                                                        (u16)st->sp.line);
+        }
 
         /*
          * §2: the prompt's last expression is the entry's VALUE.  Only
@@ -1419,11 +1426,20 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
 FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
                  FlOrigin origin)
 {
-    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT);
+    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
+                           false);
+}
+
+FlFn *fl_compile_profiled(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                          u32 file_id, FlOrigin origin)
+{
+    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
+                           true);
 }
 
 FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
                       FlOrigin origin)
 {
-    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_REPL);
+    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_REPL,
+                           false);
 }
