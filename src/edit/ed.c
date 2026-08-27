@@ -685,12 +685,16 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
 
 void yew_ed_init(Ed *ed)
 {
+    const char *prof;
     char *root;
 
     if (ed == NULL)
         YEW_BUG("editor init: NULL editor");
     (void)memset(ed, 0, sizeof(*ed));
     arena_init(&ed->arena);
+    prof = getenv("YEW_PROF");
+    yew_prof_init(&ed->prof, &ed->arena,
+                  prof != NULL && strcmp(prof, "1") == 0);
     arena_init(&ed->cmdline.comp_arena);
     interner_init(&ed->interner, &ed->arena);
     ed->ws.owner = ed;
@@ -2334,6 +2338,7 @@ draw_overlays:
         yew_panel_draw(ed, &win->panel, &ed->grid);
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
+    yew_prof_phase(&ed->prof, YEW_PH_WRITE);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {
         ed->quit = true;
         ed->exit_code = YEW_EXIT_IO;

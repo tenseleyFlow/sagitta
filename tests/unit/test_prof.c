@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "edit/ed.h"
 #include "util/arena.h"
 #include "util/prof.h"
 
@@ -120,4 +121,26 @@ void test_prof_reset_keeps_allocation(void)
     YEW_ASSERT_EQ_U64(prof.open, YEW_PH_COUNT);
     YEW_ASSERT_EQ_STR(prof.mark, "");
     arena_free_all(&arena);
+}
+
+void test_prof_editor_enable_is_read_once(void)
+{
+    Ed enabled;
+    Ed disabled;
+
+    YEW_ASSERT_EQ_I64(setenv("YEW_PROF", "1", 1), 0);
+    yew_ed_init(&enabled);
+    YEW_ASSERT(enabled.prof.on);
+    YEW_ASSERT_NOT_NULL(enabled.prof.ring);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_PROF"), 0);
+    YEW_ASSERT(enabled.prof.on);
+    yew_ed_free(&enabled);
+
+    yew_ed_init(&disabled);
+    YEW_ASSERT(!disabled.prof.on);
+    YEW_ASSERT_NULL(disabled.prof.ring);
+    YEW_ASSERT_EQ_I64(setenv("YEW_PROF", "1", 1), 0);
+    YEW_ASSERT(!disabled.prof.on);
+    yew_ed_free(&disabled);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_PROF"), 0);
 }

@@ -34,6 +34,7 @@
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
+#include "util/prof.h"
 #include "util/strmap.h"
 #include "ws/state.h"
 #include "ws/symidx.h"
@@ -114,6 +115,7 @@ struct Ed {
     Render render;
     Bytebuf frame;
     Bytebuf paste;
+    Prof prof;
 
     Workspace ws;
     /* Sprint 25 §5.  Zeroed = stateless; the driver opts in with

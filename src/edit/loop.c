@@ -353,9 +353,11 @@ static void loop_seed_probe(Ed *ed)
     ed->full_damage = true;
 }
 
-static int loop_read_input(Ed *ed)
+static int loop_read_input(Ed *ed, bool *burst_cap)
 {
     size_t drained = 0U;
+
+    *burst_cap = false;
 
     while (drained < YEW_INPUT_BURST_MAX) {
         u8 bytes[4096];
@@ -381,6 +383,7 @@ static int loop_read_input(Ed *ed)
             return 0;
         return -1;
     }
+    *burst_cap = true;
     return 0;
 }
 
@@ -478,6 +481,13 @@ int yew_loop_run(Ed *ed)
         bool cont = false;
         bool chld = false;
         bool had_input = false;
+        bool burst_cap = false;
+        bool job_io = false;
+        bool frame_full_damage;
+        u16 frame_flags = 0U;
+        u16 nkeys = 0U;
+        u32 nbytes;
+        u32 i;
         Win *burst_win;
         u64 burst_cursors;
         Key key;
@@ -497,16 +507,19 @@ int yew_loop_run(Ed *ed)
         fds[1].revents = 0;
         yew_job_collect_fds(ed, fds, &nfds);
         yew_ai_collect_fds(ed, fds, &nfds);
+        yew_prof_phase(&ed->prof, YEW_PH_POLL);
         result = poll(fds, (nfds_t)nfds, yew_loop_deadline(ed, now));
         if (result < 0 && errno != EINTR)
             return YEW_EXIT_IO;
+        yew_prof_frame_begin(&ed->prof);
+        yew_prof_phase(&ed->prof, YEW_PH_INPUT);
         if ((fds[0].revents & (POLLERR | POLLNVAL)) != 0 ||
             (fds[1].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
             return YEW_EXIT_IO;
         now = yew_now_ms();
         ed->now_ms = now;
         if ((fds[0].revents & (POLLIN | POLLHUP)) != 0 &&
-            loop_read_input(ed) != 0)
+            loop_read_input(ed, &burst_cap) != 0)
             return YEW_EXIT_IO;
         if ((fds[0].revents & POLLHUP) != 0) {
             yew_input_eof(&ed->in);
@@ -518,9 +531,17 @@ int yew_loop_run(Ed *ed)
         if (winch || cont)
             yew_ed_resize(ed, cont);
 
+        for (i = 2U; i < nfds; i++) {
+            if (fds[i].revents != 0) {
+                job_io = true;
+                break;
+            }
+        }
+
         /* Jobs are pumped before dispatch so a burst of output is one
          * render, and after input is drained so keystrokes always win the
          * race for this iteration (invariant 4). */
+        yew_prof_phase(&ed->prof, YEW_PH_JOBS);
         yew_job_pump(ed, fds, nfds);
         if (chld)
             yew_job_reap(ed);
@@ -546,8 +567,11 @@ int yew_loop_run(Ed *ed)
 
         yew_tty_probe_tick(&ed->tty, now);
         loop_seed_probe(ed);
+        yew_prof_phase(&ed->prof, YEW_PH_DISPATCH);
         while (yew_input_next(&ed->in, now, &key)) {
             had_input = true;
+            if (nkeys != UINT16_MAX)
+                nkeys++;
             yew_loop_dispatch_event(ed, &key, now);
         }
 #if YEW_WITH_PLUGINS
@@ -608,15 +632,31 @@ int yew_loop_run(Ed *ed)
             yew_fl_hook_fire(ed, FL_EV_ED_IDLE, NULL, 0U);
             ed->fl_idle_fired = true;
         }
+        yew_prof_phase(&ed->prof, YEW_PH_SYN);
         if (yew_ed_syn_pending(ed))
             yew_ed_syn_tick(ed, had_input ? YEW_SYN_FRAME_BUDGET_US :
                                            YEW_SYN_IDLE_BUDGET_US,
                             had_input);
-        if (ed->quit)
+        if (ed->quit) {
+            yew_prof_frame_end(&ed->prof, nkeys, 0U, frame_flags);
             return ed->exit_code;
+        }
+        yew_prof_phase(&ed->prof, YEW_PH_LAYOUT);
         if (ed->layout_dirty)
             yew_ed_layout(ed);
+        frame_full_damage = ed->full_damage;
+        yew_prof_phase(&ed->prof, YEW_PH_RENDER);
         yew_ed_render(ed);
+        nbytes = ed->frame.len > UINT32_MAX ? UINT32_MAX : (u32)ed->frame.len;
+        if (frame_full_damage)
+            frame_flags |= YEW_PF_FULL_DAMAGE;
+        if (winch || cont)
+            frame_flags |= YEW_PF_RESIZE;
+        if (job_io || chld)
+            frame_flags |= YEW_PF_JOB_IO;
+        if (burst_cap)
+            frame_flags |= YEW_PF_BURST_CAP;
+        yew_prof_frame_end(&ed->prof, nkeys, nbytes, frame_flags);
         if (ed->quit)
             return ed->exit_code;
     }

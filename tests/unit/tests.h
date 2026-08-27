@@ -26,6 +26,7 @@ void test_prof_off_is_all_noop(void);
 void test_prof_ring_wrap_retains_newest(void);
 void test_prof_phase_reentry_and_frame_end_close(void);
 void test_prof_reset_keeps_allocation(void);
+void test_prof_editor_enable_is_read_once(void);
 void test_prof_format_empty(void);
 void test_prof_format_synthetic_ring(void);
 void test_prof_format_percentile_edges(void);
