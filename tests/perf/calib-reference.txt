@@ -1,0 +1,18 @@
+# yew calibration reference v1
+# machine: satoyama; Intel Core i7-10870H @ 2.20 GHz, 8 physical cores /
+#          16 logical CPUs, SMT enabled, turbo enabled
+# memory: 32 GiB (2 x 16 GiB) SK hynix HMAB2GS6AMR6N-XN DDR4-3200,
+#         configured at 2933 MT/s; timing fields unavailable through SMBIOS
+# os: Linux 7.1.5-arch1-2 x86_64, glibc 2.44
+# compiler: gcc 16.1.1 20260728, -O2, strict C11 project flags
+# governor: intel_pstate powersave; ASLR enabled (randomize_va_space=2)
+# measured_utc: 2026-08-27T18:09:36Z through 2026-08-27T18:09:40Z
+# method: five independent captures; each capture discarded 3 warmups and
+#         took the median of 11 measured runs per component; the vector below
+#         is the coordinate-wise median of those five captured medians
+runner_id perf-x86_64-linux-gnu
+arch x86_64
+designated 1
+c1_chase_ns 27659540
+c2_scalar_ns 7410643
+c3_bandwidth_ns 24948679
