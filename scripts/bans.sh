@@ -19,6 +19,13 @@ syn_files=$tmp/syn-files
 hits=$tmp/hits
 : >"$hits"
 
+# Sprint 56 unified the performance ledger under the plural directory.
+# A revived singular copy would accept updates that no runner reads.
+if [ -d "$repo_dir/tests/perf/baseline" ]; then
+    echo "ban: singular tests/perf/baseline directory" >>"$hits"
+    echo "tests/perf/baseline" >>"$hits"
+fi
+
 find "$repo_dir/src" "$repo_dir/tests" -type f -print |
     LC_ALL=C sort >"$all_files"
 while IFS= read -r file; do

@@ -64,6 +64,7 @@ SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
 PERF_SYN_PROBE_STEM ?= markdown
 CALIB_REFERENCE ?=
+CALIB_OUTPUT ?= $(BUILD)/calib.txt
 EXTRA_CFLAGS ?=
 
 ifneq ($(filter 1,$(SAN)),)
@@ -722,7 +723,7 @@ endif
         syn-fuzz-seeds \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
-        unicode-tables calib perf perf-symbols size \
+        unicode-tables calib perf perf-components perf-symbols size \
         perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
@@ -1434,15 +1435,16 @@ calib: $(BUILD)/calib_runner
 	if test -n '$(CALIB_REFERENCE)'; then \
 		args="--reference $(CALIB_REFERENCE)"; \
 	fi; \
+	mkdir -p $$(dirname '$(CALIB_OUTPUT)'); \
 	$(BUILD)/calib_runner --runner-id '$(PERF_RUNNER_ID)' $$args \
-		> $(BUILD)/calib.txt.tmp; \
+		> '$(CALIB_OUTPUT).tmp'; \
 	key=$$(awk '$$1 == "cache_key" { print $$2 }' \
-		$(BUILD)/calib.txt.tmp); \
+		'$(CALIB_OUTPUT).tmp'); \
 	test -n "$$key"; \
 	mkdir -p $(BUILD)/calib-cache; \
-	cp $(BUILD)/calib.txt.tmp $(BUILD)/calib-cache/$$key.txt; \
-	mv $(BUILD)/calib.txt.tmp $(BUILD)/calib.txt; \
-	cat $(BUILD)/calib.txt
+	cp '$(CALIB_OUTPUT).tmp' $(BUILD)/calib-cache/$$key.txt; \
+	mv '$(CALIB_OUTPUT).tmp' '$(CALIB_OUTPUT)'; \
+	cat '$(CALIB_OUTPUT)'
 
 perf-render: $(BUILD)/perf_render
 	$(BUILD)/perf_render
@@ -1456,7 +1458,13 @@ perf-scroll: $(BUILD)/perf_scroll
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
-perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
+perf:
+	PERF_GATE='$(PERF_GATE)' BUILD='$(BUILD)' \
+		PERF_RUNNER_ID='$(PERF_RUNNER_ID)' \
+		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
+		scripts/run-perf-suite.sh '$(MAKE)'
+
+perf-components: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
