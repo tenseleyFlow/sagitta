@@ -1,40 +1,44 @@
-# yew perf baseline v1  runner=perf-x86_64-linux-gnu
-# metric                         p50_ns        p99_ns        max_ns     rss_bytes
-open.100m-code                 118400000      131900000      140000000     148897792
-open.100m-utf8                 120000000      140000000      148000000     155000000
+# yew perf baseline v2  runner=perf-x86_64-linux-gnu
+# TEMPLATE CALIBRATION: Sprint 11 values are preserved below, but no pinned
+# runner calibration measurement exists yet. A designated gate refuses this
+# all-zero vector; replace it only with evidence from the named runner.
+# calib scale_permille=0 c1=0 c2=0 c3=0
+# metric                         p50_ns        p99_ns        max_ns     rss_bytes  why
+open.100m-code                 118400000      131900000      140000000     148897792  s11 value preserved; pinned-runner calibration pending
+open.100m-utf8                 120000000      140000000      148000000     155000000  s11 value preserved; pinned-runner calibration pending
 # Informational: all-newline input is exempt from the 1.6x RSS gate because
 # s07's u64 line-feed index necessarily dominates one-byte lines.
-rss.100m-allnl                1200000000     1500000000     1700000000    1000000000
-open.1g-code                  1250000000     1600000000     1800000000    1550000000
-open.1g-noline                1100000000     1500000000     1700000000    1450000000
-insert.head.1g-code                18000          41000          50000             0
-insert.eof.1g-code                  500           1500           5000             0
-line_start.1g-code                  800           2500           5000             0
-line_of.1g-code                     350            800          60000             0
-line_start.1g-noline                 40            150            500             0
-materialize.1g-code           650000000      850000000      950000000             0
-edit.ends.1g-code             500000000      800000000      900000000       8388608
-undo.100m-code                250000000      350000000      390000000      67108864
-save.atomic.1g-code          4000000000     5500000000     6000000000             0
+rss.100m-allnl                1200000000     1500000000     1700000000    1000000000  s11 informational value preserved; s07 all-newline exemption
+open.1g-code                  1250000000     1600000000     1800000000    1550000000  s11 value preserved; pinned-runner calibration pending
+open.1g-noline                1100000000     1500000000     1700000000    1450000000  s11 value preserved; pinned-runner calibration pending
+insert.head.1g-code                18000          41000          50000             0  s11 value preserved; pinned-runner calibration pending
+insert.eof.1g-code                  500           1500           5000             0  s11 value preserved; pinned-runner calibration pending
+line_start.1g-code                  800           2500           5000             0  s11 value preserved; pinned-runner calibration pending
+line_of.1g-code                     350            800          60000             0  s11 value preserved; pinned-runner calibration pending
+line_start.1g-noline                 40            150            500             0  s11 value preserved; pinned-runner calibration pending
+materialize.1g-code           650000000      850000000      950000000             0  s11 value preserved; pinned-runner calibration pending
+edit.ends.1g-code             500000000      800000000      900000000       8388608  s11 value preserved; pinned-runner calibration pending
+undo.100m-code                250000000      350000000      390000000      67108864  s11 value preserved; pinned-runner calibration pending
+save.atomic.1g-code          4000000000     5500000000     6000000000             0  s11 value preserved; pinned-runner filesystem evidence pending
 
 # Sprint 20: the no-backtracking proof.  The ratio is the load-bearing
 # limit -- an absolute budget only catches a slow machine, while a
 # super-linear ratio catches backtracking creeping back in on any machine.
-re.pathological_100k_ns            50000000
-re.pathological_scale_ratio              15
+re.pathological_100k_ns            50000000  s20 no-backtracking absolute bound preserved
+re.pathological_scale_ratio              15  s20 no-backtracking ratio bound preserved
 
 # Sprint 20 search throughput.  The RSS ceiling is the no-materialization
 # proof: searching a gigabyte must cost the same kilobytes as searching a
 # line, so a regression that copies the buffer once is caught here even
 # though it would pass both rate gates.
-re.throughput_literal_mibs              500
-re.throughput_dfa_mibs                   50
-re.throughput_rss_bytes             4194304
+re.throughput_literal_mibs              500  s20 literal throughput bound preserved
+re.throughput_dfa_mibs                   50  s20 DFA throughput bound preserved
+re.throughput_rss_bytes             4194304  s20 no-materialization memory bound preserved
 
 # Sprint 21: search latency.  The keypress budget is invariant 4's 5 ms,
 # measured on a 1 GB buffer with the only match far outside the viewport
 # -- an overlay that scans the file rather than the viewport misses the
 # budget by orders of magnitude, not by a margin.
-search.keypress_p99_ns             5000000
-search.step_mean_ns                1000000
-search.overlay_rss_bytes           4194304
+search.keypress_p99_ns             5000000  s21 invariant-4 keypress bound preserved
+search.step_mean_ns                1000000  s21 search-step bound preserved
+search.overlay_rss_bytes           4194304  s21 viewport-only overlay memory bound preserved

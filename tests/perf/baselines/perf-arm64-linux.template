@@ -1,0 +1,21 @@
+# yew perf baseline v2  runner=perf-arm64-linux
+# TEMPLATE ONLY: this is not a baseline and the strict numeric parser rejects
+# it. Measure every row on the pinned arm64 runner, replace every PLACEHOLDER,
+# record a concrete why, then promote this file to perf-arm64-linux.txt in its
+# own evidence-only commit. Never copy x86_64 measurements across the ISA.
+# calib scale_permille=PLACEHOLDER c1=PLACEHOLDER c2=PLACEHOLDER c3=PLACEHOLDER
+# metric                         p50_ns        p99_ns        max_ns     rss_bytes  why
+open.100m-code                  PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+open.100m-utf8                  PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+rss.100m-allnl                  PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+open.1g-code                    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+open.1g-noline                  PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+insert.head.1g-code             PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+insert.eof.1g-code              PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+line_start.1g-code              PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+line_of.1g-code                 PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+line_start.1g-noline            PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+materialize.1g-code             PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+edit.ends.1g-code               PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+undo.100m-code                  PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
+save.atomic.1g-code             PLACEHOLDER    PLACEHOLDER    PLACEHOLDER    PLACEHOLDER  PLACEHOLDER
