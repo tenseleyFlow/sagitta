@@ -170,6 +170,10 @@ void yew_prof_frame_end(Prof *p, u16 keys, u32 bytes_out, u16 flags)
     frame->total_ns = duration_u32(p->frame_t0, now);
     frame->keys = keys;
     frame->bytes_out = bytes_out;
+    if (p->mark_pending) {
+        flags |= YEW_PF_MARK;
+        p->mark_pending = false;
+    }
     frame->flags = flags;
     p->head = (p->head + 1U) % p->cap;
     if (p->n < p->cap)
@@ -178,6 +182,16 @@ void yew_prof_frame_end(Prof *p, u16 keys, u32 bytes_out, u16 flags)
     p->frame_t0 = 0U;
     p->phase_t0 = 0U;
     p->open = YEW_PH_COUNT;
+}
+
+bool yew_prof_mark(Prof *p, const char *label, size_t len)
+{
+    if (!p->on || label == NULL || len == 0U || len >= sizeof(p->mark))
+        return false;
+    memcpy(p->mark, label, len);
+    p->mark[len] = '\0';
+    p->mark_pending = true;
+    return true;
 }
 
 void yew_prof_reset(Prof *p)
@@ -191,6 +205,7 @@ void yew_prof_reset(Prof *p)
     p->phase_t0 = 0U;
     p->open = YEW_PH_COUNT;
     p->mark[0] = '\0';
+    p->mark_pending = false;
 }
 
 static const ProfFrame *chronological_frame(const Prof *p, u32 index)
@@ -270,9 +285,10 @@ void yew_prof_write(const Prof *p, Bytebuf *out)
 
     bytebuf_printf(out,
                    "# yew prof v1  frames=%" PRIu32 " dropped=%" PRIu64
-                   " overhead_ns=%" PRIu64 " mark=%s\n",
+                   " overhead_ns=%" PRIu64 " mark=%s%s\n",
                    p->n, p->seq >= p->n ? p->seq - p->n : 0U,
-                   p->overhead_ns, p->mark[0] == '\0' ? "-" : p->mark);
+                   p->overhead_ns, p->mark[0] == '\0' ? "-" : p->mark,
+                   p->batch ? " mode=batch phases=dispatch,jobs,syn" : "");
     bytebuf_append(out,
                    "phase        p50      p90      p99      max    share   calls\n",
                    sizeof("phase        p50      p90      p99      max    share   calls\n") - 1U);
@@ -354,6 +370,48 @@ void yew_prof_write(const Prof *p, Bytebuf *out)
     }
     free(worst);
     free(values);
+    bytebuf_reserve(out, out->len + 1U);
+    out->data[out->len] = '\0';
+}
+
+void yew_prof_write_frames(const Prof *p, Bytebuf *out, u32 limit)
+{
+    u32 shown = limit < p->n ? limit : p->n;
+    u32 first = p->n - shown;
+    u32 i;
+
+    bytebuf_printf(out,
+                   "# yew prof frames v1  frames=%" PRIu32
+                   " shown=%" PRIu32 " mark=%s%s\n",
+                   p->n, shown, p->mark[0] == '\0' ? "-" : p->mark,
+                   p->batch ? " mode=batch phases=dispatch,jobs,syn" : "");
+    bytebuf_append(out,
+                   "seq t_mono_ns total_ns poll input dispatch jobs layout "
+                   "syn render write keys bytes flags\n",
+                   sizeof("seq t_mono_ns total_ns poll input dispatch jobs "
+                          "layout syn render write keys bytes flags\n") - 1U);
+    for (i = first; i < p->n; i++) {
+        const ProfFrame *frame = chronological_frame(p, i);
+
+        bytebuf_printf(out,
+                       "%" PRIu64 " %" PRIu64 " %" PRIu32
+                       " %" PRIu32 " %" PRIu32 " %" PRIu32
+                       " %" PRIu32 " %" PRIu32 " %" PRIu32
+                       " %" PRIu32 " %" PRIu32 " %" PRIu16
+                       " %" PRIu32 " ",
+                       frame->seq, frame->t_mono_ns, frame->total_ns,
+                       frame->ph_ns[YEW_PH_POLL],
+                       frame->ph_ns[YEW_PH_INPUT],
+                       frame->ph_ns[YEW_PH_DISPATCH],
+                       frame->ph_ns[YEW_PH_JOBS],
+                       frame->ph_ns[YEW_PH_LAYOUT],
+                       frame->ph_ns[YEW_PH_SYN],
+                       frame->ph_ns[YEW_PH_RENDER],
+                       frame->ph_ns[YEW_PH_WRITE], frame->keys,
+                       frame->bytes_out);
+        append_flags(out, frame->flags);
+        bytebuf_push_u8(out, '\n');
+    }
     bytebuf_reserve(out, out->len + 1U);
     out->data[out->len] = '\0';
 }

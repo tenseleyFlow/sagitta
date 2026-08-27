@@ -992,6 +992,41 @@ bool yew_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
         bytebuf_free(&qualified);
         out->name_tok.hi = verb_tok.hi;
     }
+    if (strcmp(name, "prof") == 0) {
+        static const struct {
+            const char *verb;
+            const char *command;
+        } actions[] = {
+            {"report", "ed.prof.report"},
+            {"reset", "ed.prof.reset"},
+            {"dump", "ed.prof.dump"},
+            {"mark", "ed.prof.mark"},
+            {"frames", "ed.prof.frames"}
+        };
+        char *verb = NULL;
+        Span verb_tok = {0U, 0U};
+        size_t i;
+
+        skip_ws(&p);
+        if (p.at == len) {
+            name = arena_strdup(a, "ed.prof.report");
+        } else {
+            if (!parse_token(&p, false, len, &verb, &verb_tok))
+                return false;
+            for (i = 0U; i < YEW_ARRAY_LEN(actions); i++) {
+                if (strcmp(verb, actions[i].verb) == 0) {
+                    name = arena_strdup(a, actions[i].command);
+                    out->name_tok.hi = verb_tok.hi;
+                    break;
+                }
+            }
+            if (i == YEW_ARRAY_LEN(actions)) {
+                set_error(&p, (size_t)verb_tok.lo, (size_t)verb_tok.hi,
+                          "unknown prof action '%s'", verb);
+                return false;
+            }
+        }
+    }
     if (strcmp(name, "r") == 0) {
         size_t bang = p.at;
 

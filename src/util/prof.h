@@ -41,6 +41,8 @@ enum {
 
 typedef struct Prof {
     bool on;
+    bool batch;
+    bool mark_pending;
     ProfFrame *ring;
     u32 cap;
     u32 head;
@@ -58,7 +60,9 @@ void yew_prof_init(Prof *p, Arena *a, bool on);
 void yew_prof_frame_begin(Prof *p);
 void yew_prof_phase(Prof *p, YewPhase ph);
 void yew_prof_frame_end(Prof *p, u16 keys, u32 bytes_out, u16 flags);
+bool yew_prof_mark(Prof *p, const char *label, size_t len);
 void yew_prof_reset(Prof *p);
 void yew_prof_write(const Prof *p, Bytebuf *out);
+void yew_prof_write_frames(const Prof *p, Bytebuf *out, u32 limit);
 
 #endif

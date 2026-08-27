@@ -207,6 +207,42 @@ void test_cmdparse_fl_preserves_source_as_one_argument(void)
     parse_fixture_free(&f);
 }
 
+void test_cmdparse_prof_subcommands_route_to_registry(void)
+{
+    static const struct {
+        const char *line;
+        const char *command;
+        const char *arg;
+    } rows[] = {
+        {":prof", "ed.prof.report", NULL},
+        {":prof report", "ed.prof.report", NULL},
+        {":prof reset", "ed.prof.reset", NULL},
+        {":prof dump '/tmp/prof report'", "ed.prof.dump",
+         "/tmp/prof report"},
+        {":prof mark typing", "ed.prof.mark", "typing"},
+        {":prof frames", "ed.prof.frames", NULL},
+        {":prof frames 12", "ed.prof.frames", "12"}
+    };
+    ParseFixture f;
+    size_t i;
+
+    parse_fixture_init(&f);
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
+        CmdParse parsed;
+
+        YEW_ASSERT(yew_cmd_parse(&f.ed, rows[i].line, strlen(rows[i].line),
+                                 &f.arena, &parsed));
+        YEW_ASSERT_EQ_STR(parsed.argv.v[0], rows[i].command);
+        YEW_ASSERT_EQ_U64(parsed.argv.n, rows[i].arg == NULL ? 1U : 2U);
+        if (rows[i].arg != NULL)
+            YEW_ASSERT_EQ_STR(parsed.argv.v[1], rows[i].arg);
+    }
+    assert_error(&f, ":prof unknown", "unknown prof action 'unknown'");
+    assert_error(&f, ":prof report extra",
+                 ":prof.report takes no arguments");
+    parse_fixture_free(&f);
+}
+
 void test_cmdparse_resolution_bang_errors_and_parse_point(void)
 {
     ParseFixture f;

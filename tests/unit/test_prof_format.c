@@ -43,6 +43,22 @@ static void assert_contains(const Bytebuf *out, const char *needle)
     YEW_ASSERT(strstr((const char *)out->data, needle) != NULL);
 }
 
+static Bytebuf read_fixture(const char *path)
+{
+    Bytebuf out;
+    u8 block[512];
+    FILE *file = fopen(path, "rb");
+    size_t n;
+
+    YEW_ASSERT_NOT_NULL(file);
+    bytebuf_init(&out);
+    while ((n = fread(block, 1U, sizeof(block), file)) != 0U)
+        bytebuf_append(&out, block, n);
+    YEW_ASSERT(!ferror(file));
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+    return out;
+}
+
 void test_prof_format_empty(void)
 {
     Prof prof;
@@ -115,4 +131,47 @@ void test_prof_format_percentile_edges(void)
     check_percentile_case(3U, 2U, 3U, 3U);
     check_percentile_case(100U, 50U, 90U, 99U);
     check_percentile_case(4096U, 2048U, 3687U, 4056U);
+}
+
+void test_prof_frames_format_keeps_last_n_in_order(void)
+{
+    ProfFrame frames[5];
+    Prof prof;
+    Bytebuf out;
+
+    fill_linear(frames, YEW_ARRAY_LEN(frames));
+    frames[3].flags = YEW_PF_MARK;
+    frames[4].flags = YEW_PF_JOB_IO | YEW_PF_BURST_CAP;
+    synthetic_prof(&prof, frames, YEW_ARRAY_LEN(frames));
+    prof.batch = true;
+    bytebuf_init(&out);
+    yew_prof_write_frames(&prof, &out, 2U);
+    assert_contains(&out,
+                    "# yew prof frames v1  frames=5 shown=2 mark=fixture "
+                    "mode=batch phases=dispatch,jobs,syn\n");
+    YEW_ASSERT_NULL(strstr((const char *)out.data,
+                           "\n2 100002 30 "));
+    assert_contains(&out, "\n3 100003 40 9000 4 8 0 0 0 0 0 1 3 MARK\n");
+    assert_contains(&out,
+                    "\n4 100004 50 9000 5 10 0 0 0 0 0 1 4 JOB,BURST\n");
+    bytebuf_free(&out);
+}
+
+void test_prof_format_committed_golden(void)
+{
+    ProfFrame frames[3];
+    Prof prof;
+    Bytebuf out;
+    Bytebuf golden;
+
+    fill_linear(frames, YEW_ARRAY_LEN(frames));
+    frames[2].flags = YEW_PF_FULL_DAMAGE | YEW_PF_MARK;
+    synthetic_prof(&prof, frames, YEW_ARRAY_LEN(frames));
+    bytebuf_init(&out);
+    yew_prof_write(&prof, &out);
+    golden = read_fixture("tests/unit/fixtures/prof-report.golden");
+    YEW_ASSERT_EQ_U64(out.len, golden.len);
+    YEW_ASSERT_EQ_MEM(out.data, golden.data, out.len);
+    bytebuf_free(&golden);
+    bytebuf_free(&out);
 }

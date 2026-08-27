@@ -12,6 +12,7 @@
 #include "edit/lsp_cmds.h"
 #include "edit/opt.h"
 #include "edit/pane_cmds.h"
+#include "edit/prof_cmds.h"
 #include "edit/search_cmds.h"
 #include "edit/shadow_cmds.h"
 #include "edit/file_cmds.h"
@@ -215,6 +216,16 @@ static const CmdDesc builtins[] = {
     {"ed.map", yew_bind_cmd_map, YEW_ARITY_NONE, 0U,
      "List configured bindings for the current mode", NULL},
     {"ed.nop", cmd_nop, YEW_ARITY_NONE, 0U, "Do nothing", NULL},
+    {"ed.prof.report", yew_prof_cmd_report, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Open the in-loop profiler report", NULL},
+    {"ed.prof.reset", yew_prof_cmd_reset, YEW_ARITY_NONE, 0U,
+     "Clear captured profiler frames", NULL},
+    {"ed.prof.dump", yew_prof_cmd_dump, YEW_ARITY_STR, 0U,
+     "Write the profiler report atomically", NULL},
+    {"ed.prof.mark", yew_prof_cmd_mark, YEW_ARITY_STR, 0U,
+     "Mark the next captured profiler frame", NULL},
+    {"ed.prof.frames", yew_prof_cmd_frames, YEW_ARITY_OPT_INT,
+     YEW_CMD_NEEDS_WIN, "Open the raw profiler frame view", NULL},
     {"ed.syn.status", cmd_syn_status, YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN,
      "Report incremental syntax highlighting progress", NULL},
     {"ed.syn.set", cmd_syn_set, YEW_ARITY_STR, YEW_CMD_NEEDS_WIN,
@@ -1191,7 +1202,7 @@ static bool command_name_valid(const char *name)
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
         "cmdline", "del", "shell", "opt", "fl", "config", "syn",
-        "theme", "shadow", "compl",
+        "theme", "shadow", "compl", "prof",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
@@ -1266,7 +1277,9 @@ static bool command_name_valid(const char *name)
         "first", "force", "hidden", "history", "init", "interactive",
         "last", "merge", "parent", "pop", "pull", "push", "reflog",
         "refresh", "reset", "revert", "row_next", "row_prev", "switch",
-        "tag", "unstage", "view", "ours", "theirs"};
+        "tag", "unstage", "view", "ours", "theirs",
+        /* Sprint 56: in-loop profiler report and raw data surfaces. */
+        "report", "dump", "frames", "mark"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
