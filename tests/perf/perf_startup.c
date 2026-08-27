@@ -187,9 +187,24 @@ static bool wait_marker(YewLivePty *pty, bool dumb, i64 deadline,
     return false;
 }
 
-static bool child_env(const char *state, bool dumb)
+static const char *profile_log(const char *profile)
 {
-    const char *log = getenv("YEW_PERF_LOG");
+    const char *log = NULL;
+
+    if (strcmp(profile, "default") == 0)
+        log = getenv("YEW_PERF_LOG_DEFAULT");
+    else if (strcmp(profile, "clean") == 0)
+        log = getenv("YEW_PERF_LOG_CLEAN");
+    else if (strcmp(profile, "dumb") == 0)
+        log = getenv("YEW_PERF_LOG_DUMB");
+    else if (strcmp(profile, "workspace") == 0)
+        log = getenv("YEW_PERF_LOG_WORKSPACE");
+    return log != NULL ? log : getenv("YEW_PERF_LOG");
+}
+
+static bool child_env(const char *state, bool dumb, const char *profile)
+{
+    const char *log = profile_log(profile);
 
     return setenv("TERM", dumb ? "dumb" : "xterm-256color", 1) == 0 &&
            setenv("COLORTERM", dumb ? "" : "truecolor", 1) == 0 &&
@@ -206,6 +221,8 @@ static bool spawn_editor(YewLivePty *pty, const Options *opt, bool clean,
                          bool dumb, bool workspace, i64 *started)
 {
     char slave[128];
+    const char *profile = workspace ? "workspace" : clean ? "clean" :
+                          dumb ? "dumb" : "default";
     pid_t pid;
 
     if (!yew_live_pty_open(pty, slave, sizeof(slave), ROWS, COLS))
@@ -221,7 +238,7 @@ static bool spawn_editor(YewLivePty *pty, const Options *opt, bool clean,
         return false;
     }
     if (pid == 0) {
-        if (!child_env(opt->state, dumb) ||
+        if (!child_env(opt->state, dumb, profile) ||
             !yew_live_pty_attach(pty, slave, ROWS, COLS))
             _exit(126);
         if (workspace)
@@ -288,7 +305,7 @@ static bool one_floor(const Options *opt, i64 *sample)
         return false;
     }
     if (pid == 0) {
-        if (!child_env(opt->state, false) ||
+        if (!child_env(opt->state, false, "floor") ||
             !yew_live_pty_attach(&pty, slave, ROWS, COLS))
             _exit(126);
         (void)execl(opt->nullexec, opt->nullexec, (char *)NULL);

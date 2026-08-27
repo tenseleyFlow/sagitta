@@ -117,11 +117,15 @@ static bool budget(const char *path, const char *wanted, u64 *limit)
 }
 
 static bool spawn_clean(YewLivePty *pty, const Options *opt,
-                        const char *fixture, i64 *started)
+                        const char *fixture, const char *log_env,
+                        i64 *started)
 {
     char slave[128];
-    const char *log = getenv("YEW_PERF_LOG");
+    const char *log = getenv(log_env);
     pid_t pid;
+
+    if (log == NULL)
+        log = getenv("YEW_PERF_LOG");
 
     if (!yew_live_pty_open(pty, slave, sizeof(slave), ROWS, COLS))
         return false;
@@ -161,7 +165,7 @@ static bool stop_editor(YewLivePty *pty)
 }
 
 static bool one_sample(const Options *opt, const char *fixture,
-                       bool key_sample, Sample *out)
+                       const char *log_env, bool key_sample, Sample *out)
 {
     static const char down[] = "\033[B";
     YewLivePty pty = {.master = -1, .pid = -1};
@@ -171,7 +175,7 @@ static bool one_sample(const Options *opt, const char *fixture,
     u64 frame;
     bool ok;
 
-    if (!spawn_clean(&pty, opt, fixture, &started))
+    if (!spawn_clean(&pty, opt, fixture, log_env, &started))
         return false;
     deadline = started + INT64_C(30000000000);
     if (!yew_live_pty_wait_frame(&pty, 0U, deadline, &completed)) {
@@ -218,7 +222,8 @@ static void sort_i64(i64 *values, size_t n)
     }
 }
 
-static bool measure(const Options *opt, const char *fixture, bool key,
+static bool measure(const Options *opt, const char *fixture,
+                    const char *log_env, bool key,
                     i64 *open_ns, i64 *key_ns)
 {
     i64 opens[DEFAULT_RUNS];
@@ -229,7 +234,7 @@ static bool measure(const Options *opt, const char *fixture, bool key,
     for (i = 0U; i < runs; i++) {
         Sample sample;
 
-        if (!one_sample(opt, fixture, key, &sample))
+        if (!one_sample(opt, fixture, log_env, key, &sample))
             return false;
         opens[i] = sample.open_ns;
         keys[i] = sample.key_ns;
@@ -284,7 +289,8 @@ int main(int argc, char **argv)
         (void)fputs("perf_open: malformed or incomplete budgets\n", stderr);
         return 2;
     }
-    if (!measure(&opt, opt.code, true, &open_ns, &key_ns)) {
+    if (!measure(&opt, opt.code, "YEW_PERF_LOG_CODE", true,
+                 &open_ns, &key_ns)) {
         (void)fputs("perf_open: 100m-code measurement failed\n", stderr);
         return 1;
     }
@@ -294,7 +300,8 @@ int main(int argc, char **argv)
     ok = report("open.100m_code.first_key_paint", key_ns, key_limit, gate,
                 false) && ok;
     if (opt.utf8 != NULL) {
-        if (!measure(&opt, opt.utf8, false, &open_ns, &key_ns))
+        if (!measure(&opt, opt.utf8, "YEW_PERF_LOG_UTF8", false,
+                     &open_ns, &key_ns))
             return 1;
         ok = report("open.100m_utf8.e2e", open_ns, utf8_limit, gate, false) &&
              ok;
@@ -303,7 +310,8 @@ int main(int argc, char **argv)
                    "reason=fixture_not_supplied");
     }
     if (opt.allnl != NULL) {
-        if (!measure(&opt, opt.allnl, false, &open_ns, &key_ns))
+        if (!measure(&opt, opt.allnl, "YEW_PERF_LOG_ALLNL", false,
+                     &open_ns, &key_ns))
             return 1;
         ok = report("open.100m_allnl.e2e", open_ns, allnl_limit, gate, true) &&
              ok;

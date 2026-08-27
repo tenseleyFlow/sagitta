@@ -1755,9 +1755,57 @@ perf-open-s56: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
 		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \
 		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin)
 
-perf-mem-s56: $(BUILD)/perf_mem_s56
+perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
+              $(BUILD)/perf_nullexec $(BUILD)/perf_open_s56 \
+              $(BUILD)/perf_latency_s56 $(BUILD)/yew fixtures-quick
+	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures \
+		$(BUILD)/perf-s56-logs
+	@: > $(BUILD)/perf-s56-fixtures/empty.c
+	@rm -f $(BUILD)/perf-s56-logs/default.log \
+		$(BUILD)/perf-s56-logs/clean.log \
+		$(BUILD)/perf-s56-logs/code.log \
+		$(BUILD)/perf-s56-logs/utf8.log \
+		$(BUILD)/perf-s56-logs/allnl.log \
+		$(BUILD)/perf-s56-logs/typing.log
+	@YEW_PROF=1 YEW_PERF_SMOKE=1 \
+		YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		YEW_PERF_LOG_DEFAULT=$(abspath $(BUILD)/perf-s56-logs/default.log) \
+		YEW_PERF_LOG_CLEAN=$(abspath $(BUILD)/perf-s56-logs/clean.log) \
+		$(BUILD)/perf_startup_s56 --yew $(abspath $(BUILD)/yew) \
+		--nullexec $(abspath $(BUILD)/perf_nullexec) \
+		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--budgets tests/perf/budgets.txt >/dev/null
+	@YEW_PROF=1 YEW_PERF_SMOKE=1 \
+		YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		YEW_PERF_LOG_CODE=$(abspath $(BUILD)/perf-s56-logs/code.log) \
+		YEW_PERF_LOG_UTF8=$(abspath $(BUILD)/perf-s56-logs/utf8.log) \
+		YEW_PERF_LOG_ALLNL=$(abspath $(BUILD)/perf-s56-logs/allnl.log) \
+		$(BUILD)/perf_open_s56 --yew $(abspath $(BUILD)/yew) \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--budgets tests/perf/budgets.txt \
+		--fixture-code $(abspath $(FIXTURE_DIR)/100m-code.bin) \
+		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \
+		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin) >/dev/null
+	@YEW_PROF=1 YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		YEW_PERF_LOG=$(abspath $(BUILD)/perf-s56-logs/typing.log) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/typing.keys --fixture small \
+		--path tests/perf/fixtures/syn/c_kitchen.c \
+		--state $(abspath $(BUILD)/perf-s56-state) >/dev/null
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
-		$(BUILD)/perf_mem_s56 --budgets tests/perf/budgets.txt
+		$(BUILD)/perf_mem_s56 --budgets tests/perf/budgets.txt \
+		--yew $(abspath $(BUILD)/yew) \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--log-default $(abspath $(BUILD)/perf-s56-logs/default.log) \
+		--log-clean $(abspath $(BUILD)/perf-s56-logs/clean.log) \
+		--log-code $(abspath $(BUILD)/perf-s56-logs/code.log) \
+		--log-utf8 $(abspath $(BUILD)/perf-s56-logs/utf8.log) \
+		--log-allnl $(abspath $(BUILD)/perf-s56-logs/allnl.log) \
+		--log-typing $(abspath $(BUILD)/perf-s56-logs/typing.log) \
+		--fixture-code $(abspath $(FIXTURE_DIR)/100m-code.bin) \
+		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \
+		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin)
 
 perf-s56-functional: perf-latency-s56-smoke perf-startup-s56 perf-open-s56 \
                      perf-mem-s56
