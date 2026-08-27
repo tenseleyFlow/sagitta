@@ -592,7 +592,7 @@ static int check_scripts(const char *dir)
         if (n <= 0 || (size_t)n >= sizeof(path) ||
             !load_session(path, &session))
             return 1;
-        (void)printf("session.%s.keys %zu\n", names[i], session.len);
+        (void)printf("session.%s %zu\n", names[i], session.len);
     }
     return 0;
 }

@@ -138,6 +138,7 @@ bool yew_live_pty_spawn(YewLivePty *pty, const char *binary,
                         u16 rows, u16 cols)
 {
     char slave[128];
+    const char *log = getenv("YEW_PERF_LOG");
     pid_t pid;
 
     if (!yew_live_pty_open(pty, slave, sizeof(slave), rows, cols))
@@ -157,7 +158,7 @@ bool yew_live_pty_spawn(YewLivePty *pty, const char *binary,
             setenv("LANG", "C.UTF-8", 1) != 0 ||
             setenv("LC_ALL", "C.UTF-8", 1) != 0 ||
             setenv("XDG_STATE_HOME", state_dir, 1) != 0 ||
-            setenv("YEW_LOG", "/dev/null", 1) != 0 ||
+            setenv("YEW_LOG", log != NULL ? log : "/dev/null", 1) != 0 ||
             !yew_live_pty_attach(pty, slave, rows, cols))
             _exit(126);
         yew_live_pty_exec(binary, path);

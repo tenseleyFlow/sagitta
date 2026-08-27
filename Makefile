@@ -571,6 +571,12 @@ PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
 PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
 PERF_TEXTBUF_OBJ := $(BUILD)/tests/perf/perf_textbuf.o
 PERF_LATENCY_OBJ := $(BUILD)/tests/perf/latency.o
+PERF_LATENCY_S56_OBJ := $(BUILD)/tests/perf/perf_latency.o
+PERF_ECHO_CHILD_OBJ := $(BUILD)/tests/perf/echo_child.o
+PERF_STARTUP_OBJ := $(BUILD)/tests/perf/perf_startup.o
+PERF_NULLEXEC_OBJ := $(BUILD)/tests/perf/nullexec.o
+PERF_OPEN_OBJ := $(BUILD)/tests/perf/perf_open.o
+PERF_MEM_OBJ := $(BUILD)/tests/perf/perf_mem.o
 PERF_JOBSTREAM_OBJ := $(BUILD)/tests/perf/jobstream.o
 PERF_REPATH_OBJ := $(BUILD)/tests/perf/re_pathological.o
 PERF_RETHRU_OBJ := $(BUILD)/tests/perf/re_throughput.o
@@ -667,6 +673,9 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_SHADOW_OBJ) \
                 $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
                 $(PERF_TEXTBUF_OBJ) $(PERF_LATENCY_OBJ) \
+                $(PERF_LATENCY_S56_OBJ) $(PERF_ECHO_CHILD_OBJ) \
+                $(PERF_STARTUP_OBJ) $(PERF_NULLEXEC_OBJ) \
+                $(PERF_OPEN_OBJ) $(PERF_MEM_OBJ) \
                 $(PERF_JOBSTREAM_OBJ) $(PERF_REPATH_OBJ) \
                 $(PERF_RETHRU_OBJ) \
                 $(LIVE_PTY_OBJ) \
@@ -735,6 +744,8 @@ endif
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
+        perf-s56-functional perf-latency-s56-check perf-latency-s56-smoke \
+        perf-startup-s56 perf-open-s56 perf-mem-s56 \
         torture torture-build torture-live-check torture-batch \
         torture-git-hunk \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
@@ -1064,6 +1075,28 @@ $(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 $(BUILD)/perf_latency: $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_OBJ) \
 		$(LIVE_PTY_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_latency_s56: $(PERF_LATENCY_S56_OBJ) $(LIVE_PTY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_S56_OBJ) \
+		$(LIVE_PTY_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_echo_child: $(PERF_ECHO_CHILD_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_ECHO_CHILD_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_startup_s56: $(PERF_STARTUP_OBJ) $(LIVE_PTY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_STARTUP_OBJ) \
+		$(LIVE_PTY_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_nullexec: $(PERF_NULLEXEC_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_NULLEXEC_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_open_s56: $(PERF_OPEN_OBJ) $(LIVE_PTY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_OPEN_OBJ) \
+		$(LIVE_PTY_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_mem_s56: $(PERF_MEM_OBJ) $(PERF_CORE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_MEM_OBJ) \
+		$(PERF_CORE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_re_throughput: $(PERF_RETHRU_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_RETHRU_OBJ) \
@@ -1469,6 +1502,7 @@ perf-components: perf-unicode perf-render perf-shadow perf-scroll perf-piece per
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
       perf-mouse perf-record perf-syn perf-symidx perf-batch \
+      perf-s56-functional \
       $(FUSS_PERF_TARGET) \
       $(LSP_PERF_TARGET) $(AI_PERF_TARGET) $(PLUG_PERF_TARGET)
 
@@ -1682,6 +1716,51 @@ perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 	else \
 		echo 'perf-latency-selftest: injected delay rejected'; \
 	fi
+
+# Sprint 56's end-to-end harnesses deliberately keep their names separate
+# from the earlier per-editor latency gate.  Unknown and hosted runners are
+# advisory; PERF_GATE=1 remains meaningful only under run-perf-suite.sh's
+# calibrated designated-runner preflight.
+perf-latency-s56-check: $(BUILD)/perf_latency_s56 $(BUILD)/perf_echo_child
+	$(BUILD)/perf_latency_s56 --check-scripts tests/perf/sessions
+	$(BUILD)/perf_latency_s56 --floor --echo \
+		$(abspath $(BUILD)/perf_echo_child)
+
+perf-latency-s56-smoke: perf-latency-s56-check $(BUILD)/yew
+	@mkdir -p $(BUILD)/perf-s56-state
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/typing.keys --fixture small \
+		--path tests/perf/fixtures/syn/c_kitchen.c \
+		--state $(abspath $(BUILD)/perf-s56-state)
+
+perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
+                  $(BUILD)/yew
+	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures
+	@: > $(BUILD)/perf-s56-fixtures/empty.c
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_startup_s56 --yew $(abspath $(BUILD)/yew) \
+		--nullexec $(abspath $(BUILD)/perf_nullexec) \
+		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--budgets tests/perf/budgets.txt
+
+perf-open-s56: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
+	@mkdir -p $(BUILD)/perf-s56-state
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_open_s56 --yew $(abspath $(BUILD)/yew) \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--budgets tests/perf/budgets.txt \
+		--fixture-code $(abspath $(FIXTURE_DIR)/100m-code.bin) \
+		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \
+		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin)
+
+perf-mem-s56: $(BUILD)/perf_mem_s56
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_mem_s56 --budgets tests/perf/budgets.txt
+
+perf-s56-functional: perf-latency-s56-check perf-startup-s56 perf-open-s56 \
+                     perf-mem-s56
 
 fixtures-quick: $(BUILD)/gen-bigfile
 	@mkdir -p $(FIXTURE_DIR); \
@@ -2062,7 +2141,10 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
          $(PERF_PKG_OBJ:.o=.d) $(PERF_CLOUD_OBJ:.o=.d) \
-         $(PERF_LATENCY_OBJ:.o=.d) $(PERF_JOBSTREAM_OBJ:.o=.d) \
+         $(PERF_LATENCY_OBJ:.o=.d) $(PERF_LATENCY_S56_OBJ:.o=.d) \
+         $(PERF_ECHO_CHILD_OBJ:.o=.d) $(PERF_STARTUP_OBJ:.o=.d) \
+         $(PERF_NULLEXEC_OBJ:.o=.d) $(PERF_OPEN_OBJ:.o=.d) \
+         $(PERF_MEM_OBJ:.o=.d) $(PERF_JOBSTREAM_OBJ:.o=.d) \
          $(PERF_REPATH_OBJ:.o=.d) $(PERF_RETHRU_OBJ:.o=.d) \
          $(LIVE_PTY_OBJ:.o=.d) \
          $(PERF_MULTICURSOR_OBJ:.o=.d) \
