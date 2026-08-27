@@ -1,8 +1,10 @@
 # yew — session handoff
 
-**Written:** 2026-08-24. **Active implementation frontier:** Sprint 55.5,
-the two shipped example plugins and their executable author-guide coverage.
-Campaign 11 and Sprints 51–55 are complete; Campaign 12 is active.
+**Written:** 2026-08-27. **Active implementation frontier:** Sprint 56.5,
+workspace startup semantics, the FUSS drawer, and non-destructive shadow
+composition. Campaign 12 is complete. Sprint 56's repository implementation is
+complete; its pinned self-hosted hardware evidence remains external and
+pending.
 
 ---
 
@@ -13,13 +15,34 @@ Read, in order:
 1. `.docs/plan/00-decisions.md`
 2. `.docs/plan/01-architecture.md`
 3. `.docs/plan/02-fletch.md`
-4. `.docs/sprints/12-plugins/s55_5-example-plugins.md`
+4. `.docs/sprints/13-performance/s56_5-workspace-interaction.md`
 
-Sprint 55.5 is the binding implementation contract. Sprint 55 is complete; do
-not reopen its package, lockfile, integrity, save-policy, or cloud-preset
-contracts except where Sprint 55.5 explicitly consumes them.
+Sprint 56.5 is the binding implementation contract. It repairs the dogfooded
+workspace/FUSS/shadow interaction seams before Sprint 57 freezes binary and
+allocation budgets. Do not manufacture Sprint 56 reference vectors or promote
+this laptop as a designated runner.
 
-## 1. Sprint 47 closeout
+## 1. Sprint 56 repository closeout
+
+Sprint 56 now provides the in-loop profiler, deterministic latency/startup/open/
+search/RSS harnesses, calibration refusal policy, hosted advisory x86_64 and
+arm64 coverage, production anti-flap and relative gates, and a transactional
+designated-only baseline update path. Cursor coordinate fallbacks preserve real
+Unicode grapheme state while bulk-consuming proven ASCII spans, keeping the
+8 MiB ASCII-to-Unicode transition below the 5 ms motion budget.
+
+Repository verification includes the fast gate, strict GCC/Clang coordinate
+coverage, gate selftests, and the cursor performance matrix. The latest pushed
+Sprint 56 SHA is `9ebd1b4`.
+
+The contract's hardware-evidence rows remain deliberately open: GitHub reports
+zero registered self-hosted runners and no enabling repository variables, so
+there is no honest source for promoted x86_64/arm64 calibration references,
+runner baselines, or five consecutive designated runs. Hosted timing stays
+advisory. This does not block the next repository implementation frontier, but
+it remains a release closeout prerequisite.
+
+## 2. Sprint 47 closeout
 
 Sprint 47 completes the 1.0 editor-facing LSP surface:
 
@@ -56,7 +79,7 @@ Closeout evidence:
   raw prompt handling and lifecycle; the generated compile database is
   byte-identical across repeated runs.
 
-## 2. Sprint 49–50 closeout
+## 3. Sprint 49–50 closeout
 
 Sprint 49 completed the live AI shadow-provider path while preserving the
 off-by-default boundary:
@@ -92,7 +115,7 @@ per-workspace grants, deny-pattern and path redaction, conservative local/cloud
 presets, the privacy page, and the four-state `[AI]` statusline badge. A fresh
 profile continues to make zero network syscalls.
 
-## 3. Sprint 52–55 closeout and Sprint 55.5 objective
+## 4. Sprint 52–55.5 closeout
 
 Sprint 52 completes F mode:
 
@@ -193,12 +216,11 @@ Local closeout evidence:
   0.437 ms and the worst of all 16 measured 0.588 ms against 5 ms. Backspace
   turns perform no journal `fsync`, and no Wolf LSP is configured by default.
 
-The pushed Sprint 55 closeout SHA must pass the complete hosted matrix and the
-explicit on-demand Valgrind lane before release. Sprint 55.5 now owns only the
-two shipped examples, their author-guide walkthroughs, and executable coverage
-of the frozen plugin API; its contract forbids new host code.
+Sprint 55.5 then shipped the two example plugins, their author-guide
+walkthroughs, and executable coverage of the frozen plugin API without adding
+host code. Hosted CI run `33025642745` attempt 3 closed Campaign 12 green.
 
-## 4. Campaign sequence
+## 5. Campaign sequence
 
 1. Sprint 43 — provider-neutral shadow text (complete)
 2. Sprint 44 — no-LSP buffer/workspace symbol index (complete)
@@ -221,9 +243,16 @@ of the frozen plugin API; its contract forbids new host code.
 13. Sprint 55 — package distribution, integrity and cloud-save preset
     (complete locally; hosted closeout gates pending)
 14. Sprint 55.5 — shipped example plugins and executable author-guide coverage
-    (active frontier)
+    (complete; Campaign 12 closed)
+15. Sprint 56 — profiling, calibration, latency/startup/open/search/RSS gates,
+    and transactional baselines (repository complete; designated hardware
+    evidence pending)
+16. Sprint 56.5 — workspace invocation, FUSS drawer/open behavior, and honest
+    insertion-preview shadow composition (active frontier)
+17. Sprint 57 — binary size, allocation audit, musl embedded profile, and
+    target proof (next)
 
-## 5. Daily Driver remains separate and pending
+## 6. Daily Driver remains separate and pending
 
 Sprint 42's field milestone remains `PENDING` at:
 
@@ -237,7 +266,7 @@ Automated tests, generated goldens, benchmarks and editing in another editor
 never count. A future sprint contributes only if a qualifying yew session is
 designated and logged before eligible implementation edits.
 
-## 6. Invariants and cautions
+## 7. Invariants and cautions
 
 - Preserve byte identity, terminal restoration, deterministic rendering and
   central edit/undo laws ahead of latency or convenience.

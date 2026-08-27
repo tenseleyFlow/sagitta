@@ -1,7 +1,7 @@
 # Deferral ledger
 
-Last reconciled: 2026-08-26, during Sprint 56 closeout after Campaign 12 and
-the historical deferral sweep were complete.
+Last reconciled: 2026-08-27, while activating Sprint 56.5 after Sprint 56's
+repository closeout and the Campaign 12 historical sweep.
 
 This ledger covers user-visible product promises that are not live yet. It
 does not treat lazy tab hydration, deferred syntax work queues, or other
@@ -42,6 +42,10 @@ Sprint 55.5 added no product deferral: both shipped example plugins execute
 against the public Sprint 54/55 API in every build, and their guide describes
 only live surfaces or explicit post-1.0 scope already listed below.
 
+Sprint 56.5 owns the current workspace/FUSS/shadow interaction corrections.
+It adds no new deferred 1.0 surface and keeps the existing workspace state file
+canonical; simultaneous-process state merge remains post-1.0.
+
 ## Scheduled 1.0 work
 
 | Surface | Owner | Current behavior |
@@ -54,6 +58,7 @@ only live surfaces or explicit post-1.0 scope already listed below.
 | Surface | Current 1.0 behavior |
 |---|---|
 | Workspace-wide LSP `workspace/symbol` | Current-document symbols and the local index ship; workspace-wide server querying does not. |
+| Simultaneous-process workspace-state merge | Each process saves through the existing atomic XDG state path; cross-process semantic merge is post-1.0. |
 | LSP snippet tab stops/placeholders | Snippets are safely downgraded to insertion-ready plain text. |
 | Interactive terminal emulator | Shell jobs, filters, and captured output ship; `ed.shell.term` explains the boundary. |
 | AI prompt/conversation UI | Ghost-text completions ship; prompt UI reports that it is outside 1.0. |
