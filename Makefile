@@ -66,6 +66,7 @@ PERF_SYN_PROBE_STEM ?= markdown
 CALIB_REFERENCE ?=
 CALIB_OUTPUT ?= $(BUILD)/calib.txt
 EXTRA_CFLAGS ?=
+PERF_S56_WORKSPACE_READY := $(BUILD)/perf-s56-many/.ready
 
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
@@ -1749,13 +1750,7 @@ perf-latency-s56-smoke: perf-latency-s56-check $(BUILD)/yew
 		--state $(abspath $(BUILD)/perf-s56-state)
 
 perf-latency-s56-many: perf-latency-s56-check $(BUILD)/yew
-	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-many
-	@set -eu; n=0; while test $$n -lt 50; do \
-		name=$$(printf '%02d' $$n); \
-		cp tests/perf/fixtures/syn/c_kitchen.c \
-			$(BUILD)/perf-s56-many/buf-$$name.c; \
-		n=$$((n + 1)); \
-	done
+	@mkdir -p $(BUILD)/perf-s56-state
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/navigate.keys \
@@ -1764,8 +1759,20 @@ perf-latency-s56-many: perf-latency-s56-check $(BUILD)/yew
 		--many-dir $(abspath $(BUILD)/perf-s56-many) \
 		--state $(abspath $(BUILD)/perf-s56-state)
 
+$(PERF_S56_WORKSPACE_READY): tests/perf/fixtures/syn/c_kitchen.c
+	@mkdir -p $(BUILD)/perf-s56-many
+	@set -eu; n=0; while test $$n -lt 50; do \
+		name=$$(printf '%02d' $$n); \
+		cp tests/perf/fixtures/syn/c_kitchen.c \
+			$(BUILD)/perf-s56-many/buf-$$name.c; \
+		n=$$((n + 1)); \
+	done
+	@: > $@
+
+perf-latency-s56-many: $(PERF_S56_WORKSPACE_READY)
+
 perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
-                  $(BUILD)/yew
+                  $(BUILD)/yew $(PERF_S56_WORKSPACE_READY)
 	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures
 	@: > $(BUILD)/perf-s56-fixtures/empty.c
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
@@ -1773,7 +1780,8 @@ perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
 		--nullexec $(abspath $(BUILD)/perf_nullexec) \
 		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
 		--state $(abspath $(BUILD)/perf-s56-state) \
-		--budgets tests/perf/budgets.txt
+		--budgets tests/perf/budgets.txt \
+		--workspace $(abspath $(BUILD)/perf-s56-many)
 
 perf-open-s56: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
 	@mkdir -p $(BUILD)/perf-s56-state
@@ -1787,7 +1795,8 @@ perf-open-s56: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
 
 perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
               $(BUILD)/perf_nullexec $(BUILD)/perf_open_s56 \
-              $(BUILD)/perf_latency_s56 $(BUILD)/yew fixtures-quick
+              $(BUILD)/perf_latency_s56 $(BUILD)/yew fixtures-quick \
+              $(PERF_S56_WORKSPACE_READY)
 	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures \
 		$(BUILD)/perf-s56-logs
 	@: > $(BUILD)/perf-s56-fixtures/empty.c
@@ -1796,16 +1805,19 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		$(BUILD)/perf-s56-logs/code.log \
 		$(BUILD)/perf-s56-logs/utf8.log \
 		$(BUILD)/perf-s56-logs/allnl.log \
+		$(BUILD)/perf-s56-logs/workspace.log \
 		$(BUILD)/perf-s56-logs/typing.log
 	@YEW_PROF=1 YEW_PERF_SMOKE=1 \
 		YEW_PERF_ADVISORY=1 PERF_GATE=0 \
 		YEW_PERF_LOG_DEFAULT=$(abspath $(BUILD)/perf-s56-logs/default.log) \
 		YEW_PERF_LOG_CLEAN=$(abspath $(BUILD)/perf-s56-logs/clean.log) \
+		YEW_PERF_LOG_WORKSPACE=$(abspath $(BUILD)/perf-s56-logs/workspace.log) \
 		$(BUILD)/perf_startup_s56 --yew $(abspath $(BUILD)/yew) \
 		--nullexec $(abspath $(BUILD)/perf_nullexec) \
 		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
 		--state $(abspath $(BUILD)/perf-s56-state) \
-		--budgets tests/perf/budgets.txt >/dev/null
+		--budgets tests/perf/budgets.txt \
+		--workspace $(abspath $(BUILD)/perf-s56-many) >/dev/null
 	@YEW_PROF=1 YEW_PERF_SMOKE=1 \
 		YEW_PERF_ADVISORY=1 PERF_GATE=0 \
 		YEW_PERF_LOG_CODE=$(abspath $(BUILD)/perf-s56-logs/code.log) \
@@ -1832,6 +1844,7 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		--log-code $(abspath $(BUILD)/perf-s56-logs/code.log) \
 		--log-utf8 $(abspath $(BUILD)/perf-s56-logs/utf8.log) \
 		--log-allnl $(abspath $(BUILD)/perf-s56-logs/allnl.log) \
+		--log-workspace $(abspath $(BUILD)/perf-s56-logs/workspace.log) \
 		--log-typing $(abspath $(BUILD)/perf-s56-logs/typing.log) \
 		--fixture-code $(abspath $(FIXTURE_DIR)/100m-code.bin) \
 		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \

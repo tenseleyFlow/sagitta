@@ -11,7 +11,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-enum { ROWS = 24, COLS = 80, DEFAULT_RUNS = 3 };
+enum {
+    ROWS = 24,
+    COLS = 80,
+    DEFAULT_RUNS = 3,
+    WORKSPACE_BUFFERS = 50
+};
 
 typedef struct Options {
     const char *yew;
@@ -241,14 +246,30 @@ static bool spawn_editor(YewLivePty *pty, const Options *opt, bool clean,
         if (!child_env(opt->state, dumb, profile) ||
             !yew_live_pty_attach(pty, slave, ROWS, COLS))
             _exit(126);
-        if (workspace)
-            (void)execl(opt->yew, opt->yew, "--workspace", opt->workspace,
-                        opt->fixture, (char *)NULL);
-        else if (clean)
+        if (workspace) {
+            char paths[WORKSPACE_BUFFERS][1024];
+            char *args[WORKSPACE_BUFFERS + 4U];
+            size_t i;
+
+            args[0] = (char *)opt->yew;
+            args[1] = (char *)"--workspace";
+            args[2] = (char *)opt->workspace;
+            for (i = 0U; i < WORKSPACE_BUFFERS; i++) {
+                int n = snprintf(paths[i], sizeof(paths[i]),
+                                 "%s/buf-%02zu.c", opt->workspace, i);
+
+                if (n <= 0 || (size_t)n >= sizeof(paths[i]))
+                    _exit(126);
+                args[i + 3U] = paths[i];
+            }
+            args[WORKSPACE_BUFFERS + 3U] = NULL;
+            (void)execv(opt->yew, args);
+        } else if (clean) {
             (void)execl(opt->yew, opt->yew, "--clean", opt->fixture,
                         (char *)NULL);
-        else
+        } else {
             (void)execl(opt->yew, opt->yew, opt->fixture, (char *)NULL);
+        }
         _exit(126);
     }
     pty->pid = pid;
