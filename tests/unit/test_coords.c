@@ -535,11 +535,13 @@ void test_coords_sparse_index_edit_invalidation(void)
     yew_textbuf_insert(tb, BYTEOFF(32U * 1024U), accent,
                        sizeof(accent));
     YEW_ASSERT(!tb->graphemes.simple_ascii);
-    YEW_ASSERT_EQ_U64(tb->graphemes.pending.len, 1U);
+    YEW_ASSERT(!tb->graphemes.initialized);
+    YEW_ASSERT_EQ_U64(tb->graphemes.pending.len, 0U);
     line = yew_textbuf_line_span(tb, LINENO(0U));
     YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
                                      BYTEOFF(63492U)).v,
                       63490U);
+    YEW_ASSERT(!tb->graphemes.initialized);
     yew_textbuf_free(tb);
 
     large_ascii = yew_xmalloc(64U * 1024U);
@@ -561,6 +563,14 @@ void test_coords_sparse_index_edit_invalidation(void)
                       99U);
     YEW_ASSERT_EQ_U64(yew_ccol_to_off(tb, line, (CCol){100U}, 4U).v,
                       200U);
+    yew_textbuf_insert(tb, BYTEOFF(10U), accent, sizeof(accent));
+    YEW_ASSERT(!tb->graphemes.simple_ascii);
+    YEW_ASSERT(!tb->graphemes.initialized);
+    line = yew_textbuf_line_span(tb, LINENO(2U));
+    YEW_ASSERT_EQ_U64(line.lo, 203U);
+    YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line, BYTEOFF(1002U)).v,
+                      799U);
+    YEW_ASSERT(!tb->graphemes.initialized);
     yew_textbuf_free(tb);
 
     tb = yew_textbuf_from_bytes(split_cluster, sizeof(split_cluster));
@@ -596,21 +606,24 @@ void test_coords_sparse_index_edit_invalidation(void)
 
 void test_coords_deferred_index_keeps_line_local_motion_local(void)
 {
-    const size_t len = 17U * 1024U * 1024U;
+    const size_t len = 15U * 1024U * 1024U;
+    static const u8 accent[] = {0xCCU, 0x81U};
     u8 *bytes = yew_xmalloc(len);
     TextBuf *tb;
     Span line;
 
     (void)memset(bytes, 'x', len);
-    bytes[0] = 0xC3U;
-    bytes[1] = 0xA9U;
     bytes[len - 101U] = '\n';
-    tb = yew_textbuf_from_owned_bytes_simple(bytes, len, false);
+    tb = yew_textbuf_from_owned_bytes_simple(bytes, len, true);
     YEW_ASSERT_NOT_NULL(tb);
+    YEW_ASSERT(tb->graphemes.initialized);
+    YEW_ASSERT(tb->graphemes.simple_ascii_direct);
+
+    yew_textbuf_insert(tb, BYTEOFF(0U), accent, sizeof(accent));
     YEW_ASSERT(!tb->graphemes.initialized);
 
     line = yew_textbuf_line_span(tb, LINENO(1U));
-    YEW_ASSERT_EQ_U64(line.lo, len - 100U);
+    YEW_ASSERT_EQ_U64(line.lo, len - 98U);
     YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
                                      BYTEOFF(line.lo + 40U)).v,
                       40U);

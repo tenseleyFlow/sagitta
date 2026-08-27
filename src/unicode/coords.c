@@ -639,43 +639,6 @@ static u64 next_motion_threshold(u64 off)
     return off > UINT64_MAX - add ? UINT64_MAX : off + add;
 }
 
-static void coords_index_restore_simple_ascii(YewGraphemeIndex *index,
-                                              u64 len, u64 gen)
-{
-    YewGbState gb;
-    u64 off;
-
-    index->len = 0U;
-    index->motion_len = 0U;
-    for (off = (u64)YEW_GCOL_CHECKPOINT_STRIDE; off < len;) {
-        index_push(index, off, off);
-        if (off > UINT64_MAX - (u64)YEW_GCOL_CHECKPOINT_STRIDE)
-            break;
-        off += (u64)YEW_GCOL_CHECKPOINT_STRIDE;
-    }
-    yew_gb_init(&gb);
-    (void)yew_gb_boundary(&gb, (u32)'x');
-    for (off = (u64)YEW_MOTION_CHECKPOINT_STRIDE; off <= len;
-         off += (u64)YEW_MOTION_CHECKPOINT_STRIDE) {
-        YewGraphemeMotionCheckpoint checkpoint;
-
-        checkpoint.off = off;
-        checkpoint.cluster_start = off - 1U;
-        checkpoint.gcol = off - 1U;
-        checkpoint.prev_gcb = gb.prev_gcb;
-        checkpoint.flags = gb.flags;
-        checkpoint.have_cluster = true;
-        checkpoint.after_lf = false;
-        motion_index_push(index, checkpoint);
-        if (off > UINT64_MAX - (u64)YEW_MOTION_CHECKPOINT_STRIDE)
-            break;
-    }
-    index->gen = gen;
-    index->simple_ascii = true;
-    index->simple_ascii_direct = false;
-    index->initialized = true;
-}
-
 static void coords_index_apply_edit(YewGraphemeIndex *old_index,
                                     TextBuf *source,
                                     const YewGraphemePendingEdit *edit)
@@ -918,10 +881,17 @@ void yew_coords_index_note_edit(TextBuf *tb, Span old_range,
             return;
         }
         if (!inserted_simple) {
-            if (pending->len == 0U && index->gen == old_gen &&
-                index->simple_ascii_direct)
-                coords_index_restore_simple_ascii(index, old_len,
-                                                  old_gen);
+            if (index->simple_ascii_direct) {
+                if (pending->len != 0U || index->gen != old_gen)
+                    YEW_BUG("direct simple ASCII index is inconsistent");
+                index->len = 0U;
+                index->motion_len = 0U;
+                index->simple_ascii = false;
+                index->simple_ascii_direct = false;
+                index->gen = tb->gen;
+                index->initialized = false;
+                return;
+            }
             index->simple_ascii = false;
             index->simple_ascii_direct = false;
         }
