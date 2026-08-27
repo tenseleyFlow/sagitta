@@ -94,6 +94,20 @@ void test_loop_deadline_matrix(void)
     YEW_ASSERT_EQ_U64(key.code, (u32)'x');
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1000), -1);
 
+    /* A buffered but incomplete legacy escape is waiting on its clock,
+     * not runnable work.  Treating every unread byte as immediately ready
+     * busy-spins for the whole escape timeout. */
+    yew_input_feed(&ed.in, (const u8 *)"\033", 1U);
+    YEW_ASSERT(yew_input_dispatch_ready(&ed.in));
+    YEW_ASSERT(!yew_input_next(&ed.in, 1000, &key));
+    YEW_ASSERT(!yew_input_dispatch_ready(&ed.in));
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1000), YEW_ESC_TIMEOUT_MS);
+    YEW_ASSERT(yew_input_next(&ed.in, 1000 + YEW_ESC_TIMEOUT_MS, &key));
+    YEW_ASSERT_EQ_U64(key.code, YEW_KEY_ESCAPE);
+    YEW_ASSERT(!yew_input_next(&ed.in, 1000 + YEW_ESC_TIMEOUT_MS, &key));
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1000 + YEW_ESC_TIMEOUT_MS),
+                      -1);
+
     ed.chord.n = 1U;
     ed.chord.deadline = 1400;
     YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1000), 400);

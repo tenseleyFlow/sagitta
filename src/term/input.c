@@ -694,10 +694,11 @@ void yew_input_feed(In *in, const u8 *b, size_t n)
              in->state == IN_SS3))
             in->deadline = 0;
         input_append(&in->buf, b, n);
+        in->dispatch_ready = true;
     }
 }
 
-bool yew_input_next(In *in, i64 now_ms, Key *out)
+static bool input_next(In *in, i64 now_ms, Key *out)
 {
     size_t before;
 
@@ -974,6 +975,26 @@ bool yew_input_next(In *in, i64 now_ms, Key *out)
     }
 }
 
+bool yew_input_next(In *in, i64 now_ms, Key *out)
+{
+    bool emitted;
+
+    if (in == NULL || out == NULL)
+        return false;
+    emitted = input_next(in, now_ms, out);
+    /* A feed wakes the loop for one parser pass.  Keep it runnable only
+     * while that pass emitted an event and left unread bytes behind; a
+     * partial escape/UTF-8 sequence is waiting for bytes or its deadline,
+     * not immediate work. */
+    in->dispatch_ready = emitted && in->rd < in->buf.len;
+    return emitted;
+}
+
+bool yew_input_dispatch_ready(const In *in)
+{
+    return in != NULL && in->dispatch_ready;
+}
+
 i64 yew_input_deadline(const In *in, i64 now_ms)
 {
     i64 left;
@@ -986,8 +1007,10 @@ i64 yew_input_deadline(const In *in, i64 now_ms)
 
 void yew_input_eof(In *in)
 {
-    if (in != NULL)
+    if (in != NULL) {
         in->eof = true;
+        in->dispatch_ready = true;
+    }
 }
 
 const u8 *yew_input_paste_chunk(const In *in, size_t *n)

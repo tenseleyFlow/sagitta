@@ -282,7 +282,7 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
 
     if (ed == NULL)
         return -1;
-    if (ed->in.rd < ed->in.buf.len)
+    if (yew_input_dispatch_ready(&ed->in))
         return 0;
     /*
      * Sprint 26 §7.2: a sliced rescan is work waiting to be done, so
@@ -367,15 +367,27 @@ static int loop_read_input(Ed *ed, bool *burst_cap)
         ssize_t n = read(ed->tty.rfd, bytes, want);
 
         if (n > 0) {
+            struct pollfd fd = {ed->tty.rfd, POLLIN | POLLHUP, 0};
+            int ready;
+
             if (ed->probe_seeded)
                 yew_input_feed(&ed->in, bytes, (size_t)n);
             else
                 (void)yew_tty_probe_feed(&ed->tty, bytes, (size_t)n);
             drained += (size_t)n;
             loop_seed_probe(ed);
+            if (drained == YEW_INPUT_BURST_MAX)
+                break;
+            do {
+                ready = poll(&fd, 1U, 0);
+            } while (ready < 0 && errno == EINTR);
+            if (ready < 0)
+                return -1;
+            if (ready == 0)
+                return 0;
             continue;
         }
-        /* Raw mode uses VMIN=0: zero means this drain is complete. */
+        /* With VMIN=1, zero on an fd poll said was ready means hangup. */
         if (n == 0)
             return 0;
         if (errno == EINTR)

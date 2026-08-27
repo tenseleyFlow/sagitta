@@ -1,7 +1,12 @@
+#define _XOPEN_SOURCE 700
+
 #include "harness.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -135,11 +140,49 @@ void test_tty_raw_control_flags(void)
     YEW_ASSERT((io.c_cflag & CSIZE) == CS8);
     YEW_ASSERT((io.c_cflag & PARENB) == 0);
     YEW_ASSERT((io.c_cflag & CLOCAL) != 0);
-    YEW_ASSERT_EQ_U64(io.c_cc[VMIN], 0U);
+    YEW_ASSERT_EQ_U64(io.c_cc[VMIN], 1U);
     YEW_ASSERT_EQ_U64(io.c_cc[VTIME], 0U);
     once = io;
     yew_tty_rawios(&io);
     YEW_ASSERT_EQ_MEM(&io, &once, sizeof(io));
+}
+
+void test_tty_raw_poll_sleeps_when_idle(void)
+{
+    struct termios io;
+    struct pollfd pfd;
+    char bytes[8];
+    char *name;
+    int master;
+    int slave;
+    ssize_t n;
+
+    master = posix_openpt(O_RDWR | O_NOCTTY);
+    YEW_ASSERT(master >= 0);
+    YEW_ASSERT_EQ_I64(grantpt(master), 0);
+    YEW_ASSERT_EQ_I64(unlockpt(master), 0);
+    name = ptsname(master);
+    YEW_ASSERT_NOT_NULL(name);
+    slave = open(name, O_RDWR | O_NOCTTY);
+    YEW_ASSERT(slave >= 0);
+    YEW_ASSERT_EQ_I64(tcgetattr(slave, &io), 0);
+    yew_tty_rawios(&io);
+    YEW_ASSERT_EQ_I64(tcsetattr(slave, TCSANOW, &io), 0);
+
+    pfd = (struct pollfd){slave, POLLIN | POLLHUP, 0};
+    YEW_ASSERT_EQ_I64(poll(&pfd, 1U, 0), 0);
+    YEW_ASSERT_EQ_I64(write(master, "abc", 3U), 3);
+    pfd.revents = 0;
+    YEW_ASSERT_EQ_I64(poll(&pfd, 1U, 100), 1);
+    YEW_ASSERT((pfd.revents & POLLIN) != 0);
+    n = read(slave, bytes, sizeof(bytes));
+    YEW_ASSERT_EQ_I64(n, 3);
+    YEW_ASSERT_EQ_MEM(bytes, "abc", 3U);
+    pfd.revents = 0;
+    YEW_ASSERT_EQ_I64(poll(&pfd, 1U, 0), 0);
+
+    YEW_ASSERT_EQ_I64(close(slave), 0);
+    YEW_ASSERT_EQ_I64(close(master), 0);
 }
 
 void test_tty_restore_blob(void)

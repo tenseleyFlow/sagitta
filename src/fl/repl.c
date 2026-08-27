@@ -778,10 +778,9 @@ static int repl_main(bool selftest_bug)
         Key key;
 
         /*
-         * POLL, THEN READ.  Raw mode sets VMIN=0, so a bare read()
-         * returns 0 the instant the input queue is empty -- reading
-         * without waiting first would take that for end-of-input and
-         * quit before the user typed a single byte.
+         * POLL, THEN READ.  Raw mode uses VMIN=1 so poll readiness means
+         * either at least one input byte or terminal hangup; the REPL has
+         * no other event sources to multiplex here.
          */
         pfd.fd = tty.rfd;
         pfd.events = POLLIN;

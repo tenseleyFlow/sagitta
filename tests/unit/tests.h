@@ -385,6 +385,7 @@ void test_tty_raw_input_flags(void);
 void test_tty_raw_output_flags(void);
 void test_tty_raw_local_flags(void);
 void test_tty_raw_control_flags(void);
+void test_tty_raw_poll_sleeps_when_idle(void);
 void test_tty_restore_blob(void);
 void test_tty_poison_marks_terminal_unusable(void);
 void test_tty_poisoned_access_is_bug(void);

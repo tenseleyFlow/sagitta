@@ -213,6 +213,8 @@ typedef struct In {
     u8 pending_mods;
     u8 log_mask;
     bool eof;
+    /* Feed/EOF work that has not yet reached a parser wait point. */
+    bool dispatch_ready;
 } In;
 
 /*
@@ -229,6 +231,7 @@ void yew_input_free(In *in);
 void yew_input_seed(In *in, const Bytebuf *pending);
 void yew_input_feed(In *in, const u8 *b, size_t n);
 bool yew_input_next(In *in, i64 now_ms, Key *out);
+bool yew_input_dispatch_ready(const In *in);
 i64 yew_input_deadline(const In *in, i64 now_ms);
 void yew_input_eof(In *in);
 const u8 *yew_input_paste_chunk(const In *in, size_t *n);

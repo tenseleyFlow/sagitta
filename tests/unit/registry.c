@@ -418,6 +418,7 @@ const YewTest yew_tests[] = {
     T(tty_raw_output_flags),
     T(tty_raw_local_flags),
     T(tty_raw_control_flags),
+    T(tty_raw_poll_sleeps_when_idle),
     T(tty_restore_blob),
     T(tty_poison_marks_terminal_unusable),
     T(tty_poisoned_access_is_bug),

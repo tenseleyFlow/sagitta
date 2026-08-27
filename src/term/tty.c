@@ -480,7 +480,13 @@ void yew_tty_rawios(struct termios *io)
     io->c_lflag &= ~local_clear;
     io->c_cflag &= ~(CSIZE | PARENB);
     io->c_cflag |= CS8;
-    io->c_cc[VMIN] = 0;
+    /* poll(2) must sleep when the terminal has no queued input.  Linux
+     * reports a noncanonical tty with VMIN=0 as continuously readable,
+     * because a read would immediately return zero bytes; that turns the
+     * editor loop into a full-core busy spin.  VMIN=1 restores truthful
+     * readiness.  The loop drains an already-ready tty with zero-time
+     * poll calls between reads, so this does not sacrifice burst handling. */
+    io->c_cc[VMIN] = 1;
     io->c_cc[VTIME] = 0;
 }
 
