@@ -354,11 +354,12 @@ static void loop_seed_probe(Ed *ed)
     ed->full_damage = true;
 }
 
-static int loop_read_input(Ed *ed, bool *burst_cap)
+static int loop_read_input(Ed *ed, bool *burst_cap, bool *raw_input)
 {
     size_t drained = 0U;
 
     *burst_cap = false;
+    *raw_input = false;
 
     while (drained < YEW_INPUT_BURST_MAX) {
         u8 bytes[4096];
@@ -370,6 +371,14 @@ static int loop_read_input(Ed *ed, bool *burst_cap)
             struct pollfd fd = {ed->tty.rfd, POLLIN | POLLHUP, 0};
             int ready;
 
+            /*
+             * Raw input preempts cooperative search before decoding.  A
+             * lone Escape is deliberately held for the terminal ambiguity
+             * timeout; waiting until it becomes a Key lets 80 ms of preview
+             * slices run ahead of input that is already in our pipe.
+             */
+            yew_search_preview_preempt(ed);
+            *raw_input = true;
             if (ed->probe_seeded)
                 yew_input_feed(&ed->in, bytes, (size_t)n);
             else
@@ -494,6 +503,7 @@ int yew_loop_run(Ed *ed)
         bool cont = false;
         bool chld = false;
         bool had_input = false;
+        bool raw_input = false;
         bool burst_cap = false;
         bool job_io = false;
         bool frame_full_damage;
@@ -532,7 +542,7 @@ int yew_loop_run(Ed *ed)
         now = yew_now_ms();
         ed->now_ms = now;
         if ((fds[0].revents & (POLLIN | POLLHUP)) != 0 &&
-            loop_read_input(ed, &burst_cap) != 0)
+            loop_read_input(ed, &burst_cap, &raw_input) != 0)
             return YEW_EXIT_IO;
         if ((fds[0].revents & POLLHUP) != 0) {
             yew_input_eof(&ed->in);
@@ -591,7 +601,7 @@ int yew_loop_run(Ed *ed)
          * queue only after the owning prompt has consumed its key. */
         yew_plug_pump(ed);
 #endif
-        if (had_input) {
+        if (had_input || raw_input) {
             ed->fl_idle_since_ms = now;
             ed->fl_idle_fired = false;
         }
@@ -601,7 +611,7 @@ int yew_loop_run(Ed *ed)
          * launch a chain of subprocesses while continuous typing is keeping
          * the foreground path busy.  Forced invalidations still refresh at
          * their call sites. */
-        if (!had_input) {
+        if (!had_input && !raw_input) {
 #if YEW_WITH_FUSS
             (void)yew_git_refresh(ed, false);
 #endif
@@ -611,6 +621,12 @@ int yew_loop_run(Ed *ed)
         /* Deadline work cannot split a queued typeahead burst. */
         yew_dispatch_tick(ed, now);
         yew_lsp_highlight_cursor(ed, ed->win);
+        /* General deadlines remain correctness clocks during sustained
+         * input (workspace saves, message expiry, tab-jump expiry, and
+         * similar state).  Raw input already preempts the cooperative
+         * search timer before decoding, and decoded non-Enter keys cancel
+         * its pending work, so firing the heap here cannot let stale search
+         * work outrun a key that was present for this turn. */
         yew_timers_fire(&ed->timers, ed, now);
         /*
          * Sprint 26 §7.2: a sliced rescan continues here, on the idle
@@ -625,7 +641,7 @@ int yew_loop_run(Ed *ed)
         /* Symbol indexing is stale-safe, so preserve input-to-paint latency
          * by waiting for a short idle window.  The deadline above wakes the
          * loop even when no further event arrives. */
-        if (!had_input && background_deadline(ed, now) == 0) {
+        if (!had_input && !raw_input && background_deadline(ed, now) == 0) {
             i64 completed_ms;
 
             /* Never compound the two cooperative budgets.  Buffer-local
@@ -652,9 +668,10 @@ int yew_loop_run(Ed *ed)
         }
         yew_prof_phase(&ed->prof, YEW_PH_SYN);
         if (yew_ed_syn_pending(ed))
-            yew_ed_syn_tick(ed, had_input ? YEW_SYN_FRAME_BUDGET_US :
-                                           YEW_SYN_IDLE_BUDGET_US,
-                            had_input);
+            yew_ed_syn_tick(ed, had_input || raw_input ?
+                                YEW_SYN_FRAME_BUDGET_US :
+                                YEW_SYN_IDLE_BUDGET_US,
+                            had_input || raw_input);
         if (ed->quit) {
             yew_prof_frame_end(&ed->prof, nkeys, 0U, frame_flags);
             return ed->exit_code;
@@ -664,8 +681,11 @@ int yew_loop_run(Ed *ed)
             yew_ed_layout(ed);
         frame_full_damage = ed->full_damage;
         yew_prof_phase(&ed->prof, YEW_PH_RENDER);
+        ed->perf_frame_keys = nkeys;
         yew_ed_render(ed);
-        nbytes = ed->frame.len > UINT32_MAX ? UINT32_MAX : (u32)ed->frame.len;
+        nbytes = ed->perf_frame_output_bytes;
+        if (nkeys == 1U && ed->perf_frame_visible_bytes != 0U)
+            frame_flags |= YEW_PF_KEY_PAINT;
         if (frame_full_damage)
             frame_flags |= YEW_PF_FULL_DAMAGE;
         if (winch || cont)

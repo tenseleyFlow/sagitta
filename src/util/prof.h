@@ -36,7 +36,8 @@ enum {
     YEW_PF_RESIZE = 1U << 1,
     YEW_PF_JOB_IO = 1U << 2,
     YEW_PF_MARK = 1U << 3,
-    YEW_PF_BURST_CAP = 1U << 4
+    YEW_PF_BURST_CAP = 1U << 4,
+    YEW_PF_KEY_PAINT = 1U << 5
 };
 
 typedef struct Prof {

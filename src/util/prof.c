@@ -360,7 +360,7 @@ void yew_prof_write(const Prof *p, Bytebuf *out)
         for (i = 0U; i < p->n; i++) {
             const ProfFrame *frame = chronological_frame(p, i);
 
-            if (frame->keys == 1U && frame->bytes_out != 0U)
+            if ((frame->flags & YEW_PF_KEY_PAINT) != 0U)
                 values[keypaint++] = frame->total_ns;
         }
         p50 = percentile(values, keypaint, 50U);

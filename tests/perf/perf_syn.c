@@ -72,6 +72,7 @@ enum {
     PERF_SYN_FIXTURE_COUNT = 26,
     PERF_SYN_S42_5_FIRST = 19,
     PERF_SYN_MAKE_INDEX = 5,
+    PERF_SYN_MARKDOWN_INDEX = 6,
     PERF_SYN_JSON_INDEX = 14,
     PERF_SYN_MD_EMBED_INDEX = 15,
     PERF_SYN_HTML_EMBED_INDEX = 16,
@@ -284,6 +285,34 @@ typedef struct ScrollProfile {
     u64 syn_work_permille;
     u32 frames;
 } ScrollProfile;
+
+typedef struct ScrollProfileVerdict {
+    bool phase_regression;
+    bool timing_regression;
+} ScrollProfileVerdict;
+
+typedef struct ScrollProfileCase {
+    const char *name;
+    bool markdown;
+    bool wrap;
+    u16 rows;
+    u16 cols;
+} ScrollProfileCase;
+
+static const ScrollProfileCase scroll_profile_cases[] = {
+    {"md_nowrap_80x24", true, false, 24U, 80U},
+    {"md_wrap_80x24", true, true, 24U, 80U},
+    {"md_nowrap_200x60", true, false, 60U, 200U},
+    {"md_wrap_200x60", true, true, 60U, 200U},
+    {"plain10k_nowrap_80x24", false, false, 24U, 80U},
+    {"plain10k_wrap_80x24", false, true, 24U, 80U},
+    {"plain10k_nowrap_200x60", false, false, 60U, 200U},
+    {"plain10k_wrap_200x60", false, true, 60U, 200U}
+};
+
+_Static_assert(YEW_ARRAY_LEN(scroll_profile_cases) ==
+               PERF_SYN_SCROLL_PROFILE_CASES,
+               "scroll profile case count");
 
 static const FrozenSpec frozen_specs[PERF_SYN_FIXTURE_COUNT] = {
     {"c", "tests/perf/fixtures/syn/c_kitchen.c", "runtime/syntax/c.fl",
@@ -2454,6 +2483,116 @@ static bool scroll_timing_advisory(void)
     return value != NULL && strcmp(value, "1") == 0;
 }
 
+static bool measure_scroll_profiles(FrozenFixture *markdown,
+                                    FrozenFixture *plain,
+                                    ScrollProfile *profiles)
+{
+    for (size_t i = 0U; i < YEW_ARRAY_LEN(scroll_profile_cases); i++) {
+        const ScrollProfileCase *profile = &scroll_profile_cases[i];
+        FrozenFixture *fixture = profile->markdown ? markdown : plain;
+
+        if (!measure_scroll_profile(fixture, profile->name, profile->rows,
+                                    profile->cols, profile->wrap,
+                                    &profiles[i])) {
+            (void)fprintf(stderr, "perf_syn: scroll profile '%s' failed\n",
+                          profile->name);
+            return false;
+        }
+    }
+    return true;
+}
+
+static ScrollProfileVerdict report_scroll_profiles(
+    const ScrollProfile *profiles, bool advisory)
+{
+    ScrollProfileVerdict verdict = {false, false};
+
+    for (size_t i = 0U; i < YEW_ARRAY_LEN(scroll_profile_cases); i++) {
+        const ScrollProfile *profile = &profiles[i];
+        bool phase_regression =
+            profile->render_permille >
+                PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ||
+            profile->syn_permille > PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE;
+        bool timing_regression =
+            profile->fps_milli < (u64)PERF_SYN_SCROLL_MIN_FPS * 1000U;
+
+        (void)printf(
+            "syn.scroll.throughput_%-20s frames=%u "
+            "fps_milli=%llu active_total_ns=%llu%s\n",
+            profile->name, (unsigned)profile->frames,
+            (unsigned long long)profile->fps_milli,
+            (unsigned long long)profile->total_ns,
+            timing_regression ? (advisory ? " TIMING-WARN" :
+                                            " REGRESSION") : " ok");
+        (void)printf(
+            "syn.scroll.render_share_%-17s phase_ns=%llu "
+            "budget_ns=%llu share_permille=%llu "
+            "work_permille=%llu limit_permille=%u%s\n",
+            profile->name, (unsigned long long)profile->render_ns,
+            (unsigned long long)((u64)profile->frames *
+                PERF_SYN_SCROLL_FRAME_BUDGET_NS),
+            (unsigned long long)profile->render_permille,
+            (unsigned long long)profile->render_work_permille,
+            (unsigned)PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE,
+            profile->render_permille >
+                PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ?
+                " REGRESSION" : " ok");
+        (void)printf(
+            "syn.scroll.syntax_share_%-17s phase_ns=%llu "
+            "budget_ns=%llu share_permille=%llu "
+            "work_permille=%llu limit_permille=%u%s\n",
+            profile->name, (unsigned long long)profile->syn_ns,
+            (unsigned long long)((u64)profile->frames *
+                PERF_SYN_SCROLL_FRAME_BUDGET_NS),
+            (unsigned long long)profile->syn_permille,
+            (unsigned long long)profile->syn_work_permille,
+            (unsigned)PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE,
+            profile->syn_permille > PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE ?
+                " REGRESSION" : " ok");
+        if (phase_regression)
+            verdict.phase_regression = true;
+        if (timing_regression && !advisory)
+            verdict.timing_regression = true;
+    }
+    return verdict;
+}
+
+static int run_scroll_profile_gate(void)
+{
+    FrozenFixture markdown = {0};
+    FrozenFixture plain = {0};
+    FrozenSpec plain_spec = {0};
+    ScrollProfile profiles[PERF_SYN_SCROLL_PROFILE_CASES] = {{0}};
+    ScrollProfileVerdict verdict;
+    bool markdown_ready = false;
+    int status = 0;
+
+    yew_syn_discovery_set_bypass(true);
+    if (!frozen_init(&markdown, &frozen_specs[PERF_SYN_MARKDOWN_INDEX])) {
+        (void)fputs("perf_syn: markdown scroll fixture failed\n", stderr);
+        status = 2;
+    } else {
+        markdown_ready = true;
+    }
+    if (status == 0 && !plain_scroll_fixture_init(&plain, &plain_spec)) {
+        (void)fputs("perf_syn: plain scroll fixture failed\n", stderr);
+        status = 2;
+    }
+    if (status == 0 &&
+        !measure_scroll_profiles(&markdown, &plain, profiles))
+        status = 2;
+    if (status == 0) {
+        verdict = report_scroll_profiles(profiles,
+                                         scroll_timing_advisory());
+        if (verdict.phase_regression || verdict.timing_regression)
+            status = 1;
+    }
+    if (markdown_ready)
+        frozen_free(&markdown);
+    free(plain.source.data);
+    return status;
+}
+
 static bool check_all_state_memory(FrozenFixture *fixtures,
                                    u64 *capacity_bytes, u64 *limit_bytes)
 {
@@ -2819,6 +2958,9 @@ int main(int argc, char **argv)
 {
     isolate_benchmark_logging();
 
+    if (argc == 2 && strcmp(argv[1], "--gate-scroll-s56") == 0)
+        return run_scroll_profile_gate();
+
     PerfCase cases[PERF_SYN_CASE_COUNT];
     char case_names[PERF_SYN_FIXTURE_COUNT * 4U][PERF_SYN_CASE_NAME_CAP];
     Timing case_trials[YEW_ARRAY_LEN(cases)][PERF_SYN_TRIALS];
@@ -2913,6 +3055,7 @@ int main(int argc, char **argv)
     else if (argc != 1) {
         (void)fprintf(stderr,
                       "usage: perf_syn [--gate|--gate-budgets|"
+                      "--gate-scroll-s56|"
                       "--selftest-gate|--probe-legacy-line=STEM|"
                       "--probe-resident-line=STEM|"
                       "--probe-legacy-edit=STEM]\n");
@@ -3241,45 +3384,15 @@ int main(int argc, char **argv)
         }
     }
     if (status == 0 &&
-        !measure_scroll(&frozen[6], true, &markdown_wrap_fps)) {
+        !measure_scroll(&frozen[PERF_SYN_MARKDOWN_INDEX], true,
+                        &markdown_wrap_fps)) {
         (void)fprintf(stderr, "perf_syn: markdown wrap measurement failed\n");
         status = 2;
     }
-    if (status == 0) {
-        static const struct {
-            const char *name;
-            bool markdown;
-            bool wrap;
-            u16 rows;
-            u16 cols;
-        } profile_cases[PERF_SYN_SCROLL_PROFILE_CASES] = {
-            {"md_nowrap_80x24", true, false, 24U, 80U},
-            {"md_wrap_80x24", true, true, 24U, 80U},
-            {"md_nowrap_200x60", true, false, 60U, 200U},
-            {"md_wrap_200x60", true, true, 60U, 200U},
-            {"plain10k_nowrap_80x24", false, false, 24U, 80U},
-            {"plain10k_wrap_80x24", false, true, 24U, 80U},
-            {"plain10k_nowrap_200x60", false, false, 60U, 200U},
-            {"plain10k_wrap_200x60", false, true, 60U, 200U}
-        };
-
-        for (size_t i = 0U; i < YEW_ARRAY_LEN(profile_cases); i++) {
-            FrozenFixture *fixture = profile_cases[i].markdown ?
-                                     &frozen[6] : &plain_scroll;
-
-            if (!measure_scroll_profile(fixture, profile_cases[i].name,
-                                        profile_cases[i].rows,
-                                        profile_cases[i].cols,
-                                        profile_cases[i].wrap,
-                                        &scroll_profile[i])) {
-                (void)fprintf(stderr,
-                              "perf_syn: scroll profile '%s' failed\n",
-                              profile_cases[i].name);
-                status = 2;
-                break;
-            }
-        }
-    }
+    if (status == 0 &&
+        !measure_scroll_profiles(&frozen[PERF_SYN_MARKDOWN_INDEX],
+                                 &plain_scroll, scroll_profile))
+        status = 2;
     if (status == 0 &&
         !check_all_state_memory(frozen, &all_state_capacity_bytes,
                                 &all_state_limit_bytes)) {
@@ -3431,6 +3544,7 @@ int main(int argc, char **argv)
             bool scroll_profile_phase_regression = false;
             bool scroll_profile_timing_regression = false;
             bool scroll_advisory = scroll_timing_advisory();
+            ScrollProfileVerdict scroll_verdict;
             bool whole_regression = whole_total_ns > UINT64_C(45000000) ||
                                     whole_max_frame_ns > UINT64_C(1000000);
             bool state_regression =
@@ -3465,58 +3579,12 @@ int main(int argc, char **argv)
                 if (fixture_scroll_regression)
                     scroll_regression = true;
             }
-            for (size_t i = 0U; i < YEW_ARRAY_LEN(scroll_profile); i++) {
-                bool phase_regression =
-                    scroll_profile[i].render_permille >
-                        PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ||
-                    scroll_profile[i].syn_permille >
-                        PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE;
-                bool timing_regression =
-                    scroll_profile[i].fps_milli <
-                        (u64)PERF_SYN_SCROLL_MIN_FPS * 1000U;
-                (void)printf(
-                    "syn.scroll.throughput_%-20s frames=%u "
-                    "fps_milli=%llu active_total_ns=%llu%s\n",
-                    scroll_profile[i].name,
-                    (unsigned)scroll_profile[i].frames,
-                    (unsigned long long)scroll_profile[i].fps_milli,
-                    (unsigned long long)scroll_profile[i].total_ns,
-                    timing_regression ? (scroll_advisory ?
-                        " TIMING-WARN" : " REGRESSION") : " ok");
-                (void)printf(
-                    "syn.scroll.render_share_%-17s phase_ns=%llu "
-                    "budget_ns=%llu share_permille=%llu "
-                    "work_permille=%llu limit_permille=%u%s\n",
-                    scroll_profile[i].name,
-                    (unsigned long long)scroll_profile[i].render_ns,
-                    (unsigned long long)((u64)scroll_profile[i].frames *
-                        PERF_SYN_SCROLL_FRAME_BUDGET_NS),
-                    (unsigned long long)scroll_profile[i].render_permille,
-                    (unsigned long long)
-                        scroll_profile[i].render_work_permille,
-                    (unsigned)PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE,
-                    scroll_profile[i].render_permille >
-                        PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ?
-                        " REGRESSION" : " ok");
-                (void)printf(
-                    "syn.scroll.syntax_share_%-17s phase_ns=%llu "
-                    "budget_ns=%llu share_permille=%llu "
-                    "work_permille=%llu limit_permille=%u%s\n",
-                    scroll_profile[i].name,
-                    (unsigned long long)scroll_profile[i].syn_ns,
-                    (unsigned long long)((u64)scroll_profile[i].frames *
-                        PERF_SYN_SCROLL_FRAME_BUDGET_NS),
-                    (unsigned long long)scroll_profile[i].syn_permille,
-                    (unsigned long long)scroll_profile[i].syn_work_permille,
-                    (unsigned)PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE,
-                    scroll_profile[i].syn_permille >
-                        PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE ?
-                        " REGRESSION" : " ok");
-                if (phase_regression)
-                    scroll_profile_phase_regression = true;
-                if (timing_regression && !scroll_advisory)
-                    scroll_profile_timing_regression = true;
-            }
+            scroll_verdict = report_scroll_profiles(scroll_profile,
+                                                     scroll_advisory);
+            scroll_profile_phase_regression =
+                scroll_verdict.phase_regression;
+            scroll_profile_timing_regression =
+                scroll_verdict.timing_regression;
             {
                 size_t worst_line = PERF_SYN_S42_5_FIRST;
                 size_t worst_edit = PERF_SYN_S42_5_FIRST;

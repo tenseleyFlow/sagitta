@@ -536,8 +536,11 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     /* A successful command may have produced the message the user needs to
      * see.  Opening the prompt already cleared older messages, so an active
      * message here belongs to the command that was just accepted. */
-    keep_message = accepted && line->kind == YEW_PROMPT_CMD &&
-                   ed->msg.active;
+    keep_message = accepted && ed->msg.active &&
+                   (line->kind == YEW_PROMPT_CMD ||
+                    ((line->kind == YEW_PROMPT_SEARCH_F ||
+                      line->kind == YEW_PROMPT_SEARCH_B) &&
+                     ed->search.preview_pending));
     if (line->kind == YEW_PROMPT_SEARCH_F ||
         line->kind == YEW_PROMPT_SEARCH_B) {
         /* Accept commits the pattern and the jump; cancel restores the

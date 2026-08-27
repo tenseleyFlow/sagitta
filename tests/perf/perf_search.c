@@ -25,12 +25,19 @@
 #include "edit/ed.h"
 #include "search/regex.h"
 #include "search/searchui.h"
+#include "term/grid.h"
+#include "term/render.h"
 #include "text/piece.h"
 #include "ui/cmdline.h"
+#include "ui/win.h"
 #include "util/arena.h"
 #include "util/base.h"
 
-enum { RUNS = 3, HOSTILE_BYTES = 64U * 1024U };
+enum {
+    RUNS = 3,
+    HOSTILE_BYTES = 64U * 1024U,
+    INCREMENTAL_MIN_OFFSET = 2U * 1024U * 1024U + 32U
+};
 
 typedef struct Options {
     const char *budgets;
@@ -264,6 +271,48 @@ static Key text_key(u8 byte)
     return key;
 }
 
+static bool render_incremental(Ed *ed, u64 inserted_at, bool require_hit)
+{
+    u16 row;
+
+    yew_ed_render(ed);
+    if (ed->quit)
+        return false;
+    if (!require_hit)
+        return true;
+    return yew_ed_cursor(ed)->pos.v == inserted_at &&
+           yew_win_view_row(ed->win,
+                            yew_textbuf_line_of(ed->win->buf->tb,
+                                                BYTEOFF(inserted_at)),
+                            &row);
+}
+
+static bool settle_incremental(Ed *ed, u64 inserted_at, bool require_hit,
+                               i64 started_ns, i64 *elapsed)
+{
+    size_t slices = 0U;
+    i64 end;
+
+    while (ed->search.preview_timer != YEW_TIMER_NONE) {
+        if (++slices > 2048U)
+            return false;
+        if (ed->now_ms == INT64_MAX)
+            return false;
+        ed->now_ms++;
+        yew_timers_fire(&ed->timers, ed, ed->now_ms);
+        if (!render_incremental(ed, inserted_at, false))
+            return false;
+    }
+    if (ed->search.preview_timer != YEW_TIMER_NONE ||
+        !render_incremental(ed, inserted_at, require_hit))
+        return false;
+    end = now_ns();
+    if (started_ns < 0 || end < started_ns)
+        return false;
+    *elapsed = end - started_ns;
+    return true;
+}
+
 static bool measure_incremental(Ed *ed, u64 inserted_at, i64 *elapsed)
 {
     static const u8 prefix[] = {'n', 'e', 'e'};
@@ -278,7 +327,10 @@ static bool measure_incremental(Ed *ed, u64 inserted_at, i64 *elapsed)
         i64 worst = 0;
         size_t i;
 
-        yew_ed_cursor(ed)->pos = BYTEOFF(inserted_at);
+        /* Start at the file origin.  The planted match is deliberately
+         * beyond one runtime slice even in the reduced smoke fixture, so a
+         * passing row proves both bounded key work and timer continuation. */
+        yew_ed_cursor(ed)->pos = BYTEOFF(0U);
         yew_win_follow_cursor(ed->win);
         yew_search_open(ed, ed->win, false);
         /* Establish the prescribed `/nee` state through the same cmdline
@@ -288,35 +340,47 @@ static bool measure_incremental(Ed *ed, u64 inserted_at, i64 *elapsed)
          * earlier keys in the product. */
         for (i = 0U; i < sizeof(prefix); i++) {
             Key key = text_key(prefix[i]);
+            i64 begin = now_ns();
+            i64 prefix_elapsed;
 
             if (!yew_cmdline_key(ed, &key)) {
                 yew_search_cancel(ed, ed->win);
                 return false;
             }
-        }
-        if (yew_ed_cursor(ed)->pos.v != inserted_at) {
-            yew_search_cancel(ed, ed->win);
-            return false;
+            if (!render_incremental(ed, inserted_at, false)) {
+                yew_search_cancel(ed, ed->win);
+                return false;
+            }
+            if (!settle_incremental(ed, inserted_at, false, begin,
+                                    &prefix_elapsed)) {
+                yew_search_cancel(ed, ed->win);
+                return false;
+            }
         }
         for (i = 0U; i < sizeof(suffix); i++) {
             Key key = text_key(suffix[i]);
             i64 begin = now_ns();
-            i64 end;
+            i64 key_elapsed;
 
             if (!yew_cmdline_key(ed, &key)) {
                 yew_search_cancel(ed, ed->win);
                 return false;
             }
-            end = now_ns();
-            if (begin < 0 || end < begin ||
-                yew_ed_cursor(ed)->pos.v != inserted_at) {
+            if (!render_incremental(ed, inserted_at, false)) {
                 yew_search_cancel(ed, ed->win);
                 return false;
             }
-            if (end - begin > worst)
-                worst = end - begin;
+            if (!settle_incremental(ed, inserted_at, true, begin,
+                                    &key_elapsed)) {
+                yew_search_cancel(ed, ed->win);
+                return false;
+            }
+            if (key_elapsed > worst)
+                worst = key_elapsed;
         }
         yew_search_cancel(ed, ed->win);
+        if (!render_incremental(ed, inserted_at, false))
+            return false;
         samples[run] = worst;
     }
     sort_i64(samples, runs);
@@ -355,14 +419,16 @@ int main(int argc, char **argv)
         "search.incremental.1g_code"
     };
     Options opt;
-    Mapping code;
-    Mapping noline;
+    Mapping code = {0};
+    Mapping noline = {0};
     i64 values[YEW_ARRAY_LEN(metrics)];
     u64 limits[YEW_ARRAY_LEN(metrics)];
     u8 hostile[HOSTILE_BYTES];
     Ed ed;
     EditCtx edit;
+    TtyCaps caps = {0};
     u64 inserted_at;
+    int sink = -1;
     bool gate;
     bool ok = true;
     size_t i;
@@ -417,14 +483,42 @@ int main(int argc, char **argv)
         return 2;
     }
     inserted_at = yew_textbuf_len(ed.win->buf->tb) / UINT64_C(100);
+    if (inserted_at < INCREMENTAL_MIN_OFFSET)
+        inserted_at = INCREMENTAL_MIN_OFFSET;
     edit = yew_ed_edit_ctx(&ed);
     if (!yew_edit_insert(&edit, BYTEOFF(inserted_at),
                          (const u8 *)"needle", 6U) ||
+        !yew_grid_init(&ed.grid, &ed.interner, 50U, 120U)) {
+        (void)fputs("perf_search: cannot initialize editor fixture\n",
+                    stderr);
+        yew_ed_free(&ed);
+        return 1;
+    }
+    ed.grid_ready = true;
+    yew_render_init(&ed.render, &caps, NULL);
+    ed.render_ready = true;
+    yew_ed_layout(&ed);
+    sink = open("/dev/null", O_WRONLY);
+    if (sink < 0) {
+        (void)fputs("perf_search: cannot open render sink\n", stderr);
+        yew_ed_free(&ed);
+        return 2;
+    }
+    ed.tty.wfd = sink;
+    if (!render_incremental(&ed, inserted_at, false) ||
         !measure_early(&ed, inserted_at, &values[0]) ||
         !measure_incremental(&ed, inserted_at, &values[6])) {
         (void)fputs("perf_search: editor-backed measurement failed\n", stderr);
+        ed.tty.wfd = -1;
+        (void)close(sink);
         yew_ed_free(&ed);
         return 1;
+    }
+    ed.tty.wfd = -1;
+    if (close(sink) != 0) {
+        (void)fputs("perf_search: cannot close render sink\n", stderr);
+        yew_ed_free(&ed);
+        return 2;
     }
     yew_ed_free(&ed);
 

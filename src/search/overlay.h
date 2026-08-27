@@ -36,8 +36,13 @@ enum {
     /* Look-ahead beyond the viewport, so an ordinary scroll reuses the
      * scanned range instead of rescanning. */
     YEW_SEARCH_LOOKAHEAD_MAX = 64U * 1024U,
-    /* Counting every match IS a whole-file scan, so it is capped. */
-    YEW_SEARCH_COUNT_MAX = 10000
+    /* Counting every match IS a whole-file scan, so an interactive count
+     * is bounded by bytes as well as matches and wall time. */
+    YEW_SEARCH_COUNT_MAX = 10000,
+    /* The regex engine cannot preempt one search call.  Keep that call
+     * small enough that even the slow anchored/alternation smoke rows stay
+     * below one keypress frame on the designated class of machine. */
+    YEW_SEARCH_COUNT_BUDGET_BYTES = 16U * 1024U
 };
 
 typedef struct MatchOverlay {
@@ -64,8 +69,9 @@ void yew_overlay_invalidate(MatchOverlay *ov);
 void yew_overlay_refresh(Ed *ed, Win *w, const YewRe *re, u32 pat_gen,
                          i64 budget_us);
 
-/* The bounded count behind the `[3/17]` indicator.  Stops at
- * YEW_SEARCH_COUNT_MAX and says so. */
+/* The bounded count behind the `[3/17]` indicator.  A positive time budget
+ * also enables the byte ceiling; any ceiling produces the honest `+` badge.
+ * A non-positive budget is exact and is reserved for tests/batch work. */
 void yew_overlay_count(MatchOverlay *ov, const YewRe *re, const TextBuf *tb,
                        i64 budget_us);
 

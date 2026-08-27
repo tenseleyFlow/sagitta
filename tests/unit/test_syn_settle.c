@@ -196,6 +196,10 @@ void test_syn_spans_cache_avoids_unchanged_rehighlight(void)
     yew_syn_attach(&syn, 1U, tb);
     settle_all(&syn, tb, INT64_MAX);
     out = (SynLineOut){spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    yew_syn_engine_reset_counters(toy.engine);
+    yew_syn_spans(&syn, tb, LINENO(100U), &out);
+    YEW_ASSERT(out.n > 40U);
+    YEW_ASSERT_EQ_U64(yew_syn_engine_line_calls(toy.engine), 0U);
     for (line = 0U; line < 200U; line++) {
         out.n = 0U;
         yew_syn_spans(&syn, tb, LINENO(line), &out);

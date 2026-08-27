@@ -1092,6 +1092,24 @@ GCol yew_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
         pos.v = end;
     if (pos.v == line.lo)
         return (GCol){0U};
+    /*
+     * Large non-ASCII buffers deliberately defer the global index.  A
+     * vertical motion only needs one line, so building an index for the
+     * whole 100 MiB/1 GiB file here turns the first arrow after a distant
+     * search hit into a tens-of-milliseconds stall.
+     */
+    if (!tb->graphemes.initialized) {
+        count = 0U;
+        cluster_reader_init(&reader, tb, line.lo, end);
+        while (cluster_next(&reader, &cluster, false)) {
+            if (pos.v < cluster.end)
+                break;
+            if (count != UINT64_MAX)
+                count++;
+        }
+        cluster_reader_free(&reader);
+        return (GCol){count};
+    }
     index = coords_index(tb);
     first = motion_lower_bound_off(index, line.lo);
     after = motion_upper_bound_off(index, pos.v);
@@ -1156,6 +1174,23 @@ ByteOff yew_gcol_to_off(const TextBuf *tb, Span line, GCol g)
     if (coords_simple_ascii(tb))
         return simple_col_to_off(tb, line, g.v);
     end = line_content_end(tb, line);
+    if (!tb->graphemes.initialized) {
+        count = 0U;
+        cluster_reader_init(&reader, tb, line.lo, end);
+        while (cluster_next(&reader, &cluster, false)) {
+            if (count == g.v) {
+                cluster_reader_free(&reader);
+                return BYTEOFF(cluster.start);
+            }
+            last = cluster.start;
+            have_cluster = true;
+            count++;
+        }
+        cluster_reader_free(&reader);
+        if (g.v == count || end < line.hi || !have_cluster)
+            return BYTEOFF(end);
+        return BYTEOFF(last);
+    }
     index = coords_index(tb);
     checkpoint = index_before_gcol(index, line, end, g.v);
     count = checkpoint.gcol;

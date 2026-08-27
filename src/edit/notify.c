@@ -60,11 +60,16 @@ void yew_edit_notify_post(EditCtx *ec, u8 kind, ByteOff at, u64 len)
     inserted = new_lines > ec->notify_old_lines ?
                    new_lines - ec->notify_old_lines : 0U;
     if (ec->buffer != NULL) {
-        if (ec->notify_old_lines == ec->buffer->syn.entry.len)
-            yew_syn_edit(&ec->buffer->syn, ec->notify_line,
-                         removed, inserted);
-        else
+        if (ec->notify_old_lines == ec->buffer->syn.entry.len) {
+            if (ec->ed != NULL)
+                yew_ed_syn_note_edit(ec->ed, ec->buffer, ec->notify_line,
+                                     removed, inserted);
+            else
+                yew_syn_edit(&ec->buffer->syn, ec->notify_line,
+                             removed, inserted);
+        } else {
             yew_syn_attach(&ec->buffer->syn, ec->buffer->syn.lang, ec->tb);
+        }
     }
     yew_shadow_on_edit(ec, kind, at, len);
     yew_symidx_note_post(ec, kind, at, len);

@@ -136,12 +136,14 @@ typedef struct SymDirty {
     bool pending;
     bool have_pre;
     bool prepared;
+    bool full_rebuild;
     size_t occ_base;
     Vec_SymTick affected;
 } SymDirty;
 
 typedef struct SymBufIndex {
     u32 buf_id;
+    u32 full_invalidations;
     SymIndex idx;
     SymDirty dirty;
 } SymBufIndex;
@@ -168,6 +170,7 @@ u32 yew_symidx_query(Workspace *ws, const SymQuery *q, SymHit *out, u32 max);
 
 SymIndex *yew_symidx_buffer(Workspace *ws, u32 buf_id, bool create);
 void yew_symidx_drop_buffer(Workspace *ws, u32 buf_id);
+void yew_symidx_invalidate_buffer(Ed *ed, Buffer *buf);
 void yew_symidx_note_pre(EditCtx *ec, u8 kind, ByteOff at, u64 len);
 void yew_symidx_note_post(EditCtx *ec, u8 kind, ByteOff at, u64 len);
 bool yew_symidx_pending(const Ed *ed);

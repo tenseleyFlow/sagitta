@@ -12,6 +12,7 @@
 #include "util/base.h"
 #include "util/log.h"
 #include "util/sort.h"
+#include "ws/symidx.h"
 
 typedef struct CursorItem {
     Cursor cursor;
@@ -910,6 +911,8 @@ CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
     repeats = (desc->flags & YEW_CMD_REPEATABLE) != 0U ? cx->count : 1U;
     skips = build_skip_plan(desc, w->buf->tb, &w->cs, repeats,
                             &skip_count);
+    yew_symidx_invalidate_buffer(cx->ed, w->buf);
+    yew_ed_damage_batch_begin(cx->ed, w);
     w->cs.active = 0U;
     w->cs.batching = true;
     w->cs.batch_delta = 0;
@@ -959,5 +962,6 @@ CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
                     merged == 1U ? "" : "s");
         }
     }
+    yew_ed_damage_batch_end(cx->ed);
     return status;
 }

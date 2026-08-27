@@ -124,6 +124,46 @@ void test_viewport_horizontal_follow_wide_glyph(void)
     vp_fixture_free(&f);
 }
 
+void test_viewport_large_utf8_follow_keeps_deferred_index(void)
+{
+    const size_t len = 17U * 1024U * 1024U;
+    u8 *bytes = yew_xmalloc(len);
+    VpFixture f;
+    Span row;
+
+    (void)memset(bytes, 'x', len);
+    bytes[0] = 0xE4U;
+    bytes[1] = 0xB8U;
+    bytes[2] = 0xADU;
+    bytes[3] = '\n';
+    bytes[4] = 0xE4U;
+    bytes[5] = 0xB8U;
+    bytes[6] = 0xADU;
+    bytes[7] = '\r';
+    bytes[8] = '\n';
+
+    memset(&f, 0, sizeof(f));
+    f.buffer.tb = yew_textbuf_from_owned_bytes_simple(bytes, len, false);
+    YEW_ASSERT_NOT_NULL(f.buffer.tb);
+    f.win.buf = &f.buffer;
+    yew_cset_init(&f.win.cs, vp_test_cursor(0U));
+    yew_vp_init(&f.win);
+    f.win.vp.rows = 8U;
+    f.win.vp.cols = 80U;
+    YEW_ASSERT(!f.buffer.tb->graphemes.initialized);
+
+    yew_vp_follow(&f.win);
+    YEW_ASSERT(!f.buffer.tb->graphemes.initialized);
+    row = yew_wrap_row(&f.win, LINENO(0U), 0U);
+    YEW_ASSERT_EQ_U64(row.lo, 0U);
+    YEW_ASSERT_EQ_U64(row.hi, 3U);
+    row = yew_wrap_row(&f.win, LINENO(1U), 0U);
+    YEW_ASSERT_EQ_U64(row.lo, 4U);
+    YEW_ASSERT_EQ_U64(row.hi, 7U);
+    YEW_ASSERT(!f.buffer.tb->graphemes.initialized);
+    vp_fixture_free(&f);
+}
+
 void test_viewport_wrap_forces_left_and_conversions(void)
 {
     VpFixture f;

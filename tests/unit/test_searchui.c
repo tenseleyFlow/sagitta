@@ -49,6 +49,38 @@ static void su_search(Ed *ed, const char *pat, bool reverse)
     ed->search.patlen = 0U;
 }
 
+static void su_large_fixture(Ed *ed, size_t len, size_t needle_at)
+{
+    EditCtx ec;
+    Bytebuf src;
+
+    YEW_ASSERT(needle_at <= len);
+    YEW_ASSERT(len - needle_at >= 6U);
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    bytebuf_init(&src);
+    bytebuf_reserve(&src, len);
+    (void)memset(src.data, 'x', len);
+    (void)memcpy(src.data + needle_at, "needle", 6U);
+    src.len = len;
+    ec = yew_ed_edit_ctx(ed);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), src.data, src.len));
+    bytebuf_free(&src);
+    ed->win->rect.h = 10U;
+    ed->win->rect.w = 80U;
+}
+
+static void su_finish_preview(Ed *ed)
+{
+    u32 turns = 0U;
+
+    while (ed->search.preview_timer != YEW_TIMER_NONE) {
+        YEW_ASSERT(turns++ < 64U);
+        ed->now_ms++;
+        yew_timers_fire(&ed->timers, ed, ed->now_ms);
+    }
+}
+
 /*
  * DoD 3, structurally.  Cancel must restore the cursor, its GOAL
  * COLUMN, and the viewport's top line.  Restoring only the cursor is
@@ -110,6 +142,31 @@ void test_searchui_accept_commits_pattern_to_register(void)
     /* Accepting a search is a jump, so where we came from is on the
      * jumplist. */
     YEW_ASSERT_EQ_U64(yew_jumplist_len(&ed.win->jumps), 1U);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_accept_retires_deferred_count(void)
+{
+    Ed ed;
+
+    su_fixture(&ed);
+    yew_search_open(&ed, ed.win, false);
+    ed.search.re = yew_search_compile(&ed.search.arena, "needle", 6U,
+                                      &ed.search_opts, NULL);
+    YEW_ASSERT_NOT_NULL(ed.search.re);
+    ed.search.pat = arena_alloc(&ed.search.arena, 7U, 1U);
+    (void)memcpy(ed.search.pat, "needle", 7U);
+    ed.search.patlen = 6U;
+    yew_search_schedule_count(&ed, ed.win);
+    YEW_ASSERT(ed.search.count_timer != YEW_TIMER_NONE);
+    YEW_ASSERT_EQ_U64(ed.search.count_win_id, ed.win->id);
+
+    yew_search_accept(&ed, ed.win);
+
+    YEW_ASSERT_EQ_U64(ed.search.count_timer, YEW_TIMER_NONE);
+    YEW_ASSERT_EQ_U64(ed.search.count_win_id, 0U);
+    YEW_ASSERT_EQ_U64(ed.win->overlay.count_total, 2U);
+    YEW_ASSERT(!ed.win->overlay.count_capped);
     yew_ed_free(&ed);
 }
 
@@ -181,6 +238,7 @@ void test_searchui_count_repeats_the_step(void)
     ed.search.re = NULL;
     su_search(&ed, "line", false);
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 3U));
+    su_finish_preview(&ed);
     two = yew_ed_cursor(&ed)->pos.v;
     YEW_ASSERT(two > one);
     yew_ed_free(&ed);
@@ -301,5 +359,211 @@ void test_searchui_bad_pattern_keeps_the_last_good_program(void)
     }
     /* The last good program is still the one on record. */
     YEW_ASSERT(ed.search.re == good);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_literal_preview_continues_in_bounded_slices(void)
+{
+    enum { CHUNK = 1024U * 1024U };
+    Ed ed;
+    const size_t hit = CHUNK + 32U;
+
+    su_large_fixture(&ed, CHUNK + 128U, hit);
+    su_search(&ed, "needle", false);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 0U);
+    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT_EQ_U64(ed.search.preview_win_id, ed.win->id);
+    YEW_ASSERT(ed.search.preview_pending);
+    YEW_ASSERT(ed.msg.active);
+
+    su_finish_preview(&ed);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT_EQ_U64(ed.search.preview_win_id, 0U);
+    YEW_ASSERT(!ed.search.preview_pending);
+    YEW_ASSERT(!ed.msg.active);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_accept_resumes_pending_preview(void)
+{
+    enum { CHUNK = 1024U * 1024U };
+    Ed ed;
+    const size_t hit = CHUNK + 32U;
+
+    su_large_fixture(&ed, CHUNK + 128U, hit);
+    yew_search_open(&ed, ed.win, false);
+    su_search(&ed, "needle", false);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT(ed.search.preview_pending);
+
+    /* Raw Enter arrives before terminal decoding.  It must preempt the
+     * timer without throwing away the search Enter is about to accept. */
+    yew_search_preview_preempt(&ed);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(ed.search.preview_pending);
+    yew_search_accept(&ed, ed.win);
+
+    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT_EQ_U64(ed.search.preview_win_id, ed.win->id);
+    YEW_ASSERT(ed.search.preview_pending);
+    ed.now_ms++;
+    yew_timers_fire(&ed.timers, &ed, ed.now_ms);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!ed.search.preview_pending);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_literal_preview_finds_across_a_slice_edge(void)
+{
+    enum { CHUNK = 1024U * 1024U };
+    Ed ed;
+    const size_t hit = CHUNK - 2U;
+
+    su_large_fixture(&ed, CHUNK + 64U, hit);
+    su_search(&ed, "needle", false);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_backward_literal_finds_across_slice_edges(void)
+{
+    enum {
+        CHUNK = 1024U * 1024U,
+        BACK_WINDOW = 256U * 1024U
+    };
+    Ed ed;
+    const size_t hit = 128U + BACK_WINDOW - 2U;
+
+    /* With this length, the first 1 MiB backward slice begins at byte 128;
+     * the hit also straddles yew_re_search_back's internal 256 KiB edge. */
+    su_large_fixture(&ed, CHUNK + 128U, hit);
+    su_search(&ed, "needle", true);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(CHUNK + 128U);
+
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    yew_ed_free(&ed);
+
+    /* The search origin is also the high edge of the first outer 1 MiB
+     * preview slice.  A match is selected by its start offset, so clipping
+     * the literal at that edge must not hide a match that begins before it. */
+    su_large_fixture(&ed, CHUNK + 128U, CHUNK - 2U);
+    su_search(&ed, "needle", true);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(CHUNK);
+
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, CHUNK - 2U);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_counted_literal_continues_without_blocking(void)
+{
+    enum { CHUNK = 1024U * 1024U };
+    Ed ed;
+    EditCtx ec;
+    const size_t late = CHUNK + 32U;
+
+    su_large_fixture(&ed, CHUNK + 128U, late);
+    ec = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(12U),
+                               (const u8 *)"needle", 6U));
+    su_search(&ed, "needle", false);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 2U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 12U);
+    YEW_ASSERT(ed.search.preview_pending);
+    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    su_finish_preview(&ed);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, late + 6U);
+    YEW_ASSERT(!ed.search.preview_pending);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_empty_input_retires_count_state(void)
+{
+    Ed ed;
+
+    su_fixture(&ed);
+    yew_search_open(&ed, ed.win, false);
+    ed.search.re = yew_search_compile(&ed.search.arena, "needle", 6U,
+                                      &ed.search_opts, NULL);
+    YEW_ASSERT_NOT_NULL(ed.search.re);
+    yew_search_schedule_count(&ed, ed.win);
+    ed.win->overlay.count_total = 2U;
+    ed.win->overlay.count_capped = true;
+
+    /* The newly opened prompt is empty. */
+    yew_search_input(&ed, ed.win);
+    YEW_ASSERT_EQ_U64(ed.search.count_timer, YEW_TIMER_NONE);
+    YEW_ASSERT_EQ_U64(ed.search.count_win_id, 0U);
+    YEW_ASSERT_EQ_U64(ed.win->overlay.count_total, 0U);
+    YEW_ASSERT(!ed.win->overlay.count_capped);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_new_literal_cancels_a_pending_preview(void)
+{
+    enum { CHUNK = 1024U * 1024U };
+    Ed ed;
+    EditCtx ec;
+    const u8 early[] = "early";
+
+    su_large_fixture(&ed, CHUNK + 128U, CHUNK + 32U);
+    ec = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(12U), early,
+                               sizeof(early) - 1U));
+    su_search(&ed, "needle", false);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+
+    su_search(&ed, "early", false);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 12U);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+
+    ed.now_ms++;
+    yew_timers_fire(&ed.timers, &ed, ed.now_ms);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 12U);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_later_key_cancels_a_pending_preview(void)
+{
+    enum { CHUNK = 1024U * 1024U };
+    Ed ed;
+    Key escape = {0};
+
+    su_large_fixture(&ed, CHUNK + 128U, CHUNK + 32U);
+    su_search(&ed, "needle", false);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+
+    escape.kind = YEW_EV_KEY;
+    escape.ev = YEW_KEY_PRESS;
+    escape.code = YEW_KEY_ESCAPE;
+    yew_ed_handle_key(&ed, escape, ed.now_ms);
+    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!ed.search.preview_pending);
+    YEW_ASSERT(!ed.msg.active);
+
+    ed.now_ms++;
+    yew_timers_fire(&ed.timers, &ed, ed.now_ms);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 0U);
     yew_ed_free(&ed);
 }

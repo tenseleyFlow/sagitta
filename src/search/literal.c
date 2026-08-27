@@ -18,7 +18,8 @@ void yew_bmh_build(ReLit *l)
 
 u64 yew_lit_find(const ReLit *l, const u8 *hay, u64 n)
 {
-    u64 at = 0U;
+    const u8 *probe;
+    const u8 *end;
 
     if (l->kind == RE_LIT_NONE || l->n == 0U || n < l->n)
         return UINT64_MAX;
@@ -29,11 +30,23 @@ u64 yew_lit_find(const ReLit *l, const u8 *hay, u64 n)
 
         return hit == NULL ? UINT64_MAX : (u64)(hit - hay);
     }
-    while (at + l->n <= n) {
-        if (hay[at + l->n - 1U] == l->s[l->n - 1U] &&
-            memcmp(hay + at, l->s, (size_t)l->n) == 0)
-            return at;
-        at += l->skip[hay[at + l->n - 1U]];
+    /* libc's memchr is normally vectorized.  Searching for the required
+     * last byte first keeps the exact binary semantics of Horspool while
+     * avoiding its scalar byte-at-a-time candidate loop on large editor
+     * buffers.  The full memcmp remains the authority at each candidate. */
+    probe = hay + l->n - 1U;
+    end = hay + n;
+    while (probe < end) {
+        const u8 *hit = memchr(probe, l->s[l->n - 1U],
+                               (size_t)(end - probe));
+        const u8 *candidate;
+
+        if (hit == NULL)
+            return UINT64_MAX;
+        candidate = hit - (l->n - 1U);
+        if (memcmp(candidate, l->s, (size_t)l->n) == 0)
+            return (u64)(candidate - hay);
+        probe = hit + 1U;
     }
     return UINT64_MAX;
 }

@@ -110,6 +110,10 @@ bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from);
 u32 yew_re_group_count(const YewRe *re);
 /* Minimum codepoints any match consumes; 0 when a match may be empty. */
 u32 yew_re_min_len(const YewRe *re);
+/* Exact byte length when the whole pattern is one literal, otherwise 0.
+ * The live-search UI uses this to chunk the overwhelmingly common case
+ * without changing regex-anchor semantics at artificial chunk edges. */
+u32 yew_re_whole_literal_bytes(const YewRe *re);
 /* True only for one class-or-any atom, optionally repeated without an
  * upper bound.  Syntax-definition validation uses this narrow shape to
  * diagnose first-match rules that make later rules unreachable. */

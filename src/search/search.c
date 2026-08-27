@@ -374,6 +374,11 @@ bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from)
     return yew_re_search(re, in, from, NULL);
 }
 
+u32 yew_re_whole_literal_bytes(const YewRe *re)
+{
+    return re != NULL && re->lit.kind == RE_LIT_WHOLE ? re->lit.n : 0U;
+}
+
 /*
  * Backward search: scan forward inside a bounded window that walks
  * backwards, keeping the last match.  Each window is one yew_re_search,
@@ -398,10 +403,35 @@ bool yew_re_search_back(const YewRe *re, const YewReInput *in,
         bool found = false;
         u64 at;
 
+        u64 scan_lo;
+
         lo = hi > in->window.lo + WINDOW ? hi - WINDOW : in->window.lo;
-        sub.window.lo = lo;
-        sub.window.hi = in->window.hi;
-        at = lo;
+        scan_lo = lo;
+        if (re->lit.kind == RE_LIT_WHOLE && re->lit.n > 1U) {
+            u64 overlap = (u64)re->lit.n - 1U;
+
+            scan_lo = lo > in->window.lo + overlap ? lo - overlap :
+                      in->window.lo;
+        }
+        sub.window.lo = scan_lo;
+        /*
+         * A whole literal has no anchor semantics to preserve outside this
+         * backward-search window.  Keeping the caller's far `window.hi`
+         * made the final failed probe after the last local match scan all
+         * the way to the end of a huge buffer before we discarded it for
+         * starting at or beyond `hi`.  Bound literals to the window we are
+         * actually asking about; regex programs retain the original high
+         * edge because \z and related context are measured against it.
+         */
+        if (re->lit.kind == RE_LIT_WHOLE) {
+            u64 overlap = re->lit.n > 1U ? (u64)re->lit.n - 1U : 0U;
+
+            sub.window.hi = overlap > in->window.hi - hi ?
+                            in->window.hi : hi + overlap;
+        } else {
+            sub.window.hi = in->window.hi;
+        }
+        at = scan_lo;
         (void)memset(&best, 0, sizeof(best));
         while (at < hi) {
             if (!yew_re_search(re, &sub, BYTEOFF(at), &cur))

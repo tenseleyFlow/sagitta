@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #include "util/log.h"
@@ -247,6 +248,29 @@ static bool write_all(int fd, const u8 *bytes, size_t len)
     return true;
 }
 
+static bool writev_all(int fd, struct iovec *iov, int count)
+{
+    int first = 0;
+
+    while (first < count) {
+        ssize_t written = writev(fd, iov + first, count - first);
+
+        if (written < 0 && errno == EINTR)
+            continue;
+        if (written <= 0)
+            return false;
+        while (first < count && (size_t)written >= iov[first].iov_len) {
+            written -= (ssize_t)iov[first].iov_len;
+            first++;
+        }
+        if (first < count && written != 0) {
+            iov[first].iov_base = (u8 *)iov[first].iov_base + written;
+            iov[first].iov_len -= (size_t)written;
+        }
+    }
+    return true;
+}
+
 static bool read_all(int fd, u8 *bytes, size_t len)
 {
     while (len != 0U) {
@@ -419,6 +443,7 @@ bool yew_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
 {
     u8 fixed[17];
     u8 encoded_crc[4];
+    struct iovec record[3];
     u32 crc;
 
     if (j == NULL || j->failed) {
@@ -439,9 +464,13 @@ bool yew_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
     crc = yew_crc32_add(crc, fixed, sizeof(fixed));
     crc = yew_crc32_add(crc, b, (size_t)n);
     put_u32_le(encoded_crc, yew_crc32_end(crc));
-    if (!write_all(j->fd, fixed, sizeof(fixed)) ||
-        !write_all(j->fd, b, (size_t)n) ||
-        !write_all(j->fd, encoded_crc, sizeof(encoded_crc))) {
+    record[0].iov_base = fixed;
+    record[0].iov_len = sizeof(fixed);
+    record[1].iov_base = (void *)b;
+    record[1].iov_len = (size_t)n;
+    record[2].iov_base = encoded_crc;
+    record[2].iov_len = sizeof(encoded_crc);
+    if (!writev_all(j->fd, record, (int)YEW_ARRAY_LEN(record))) {
         j->failed = true;
         yew_log(YEW_LOG_ERROR, "cannot append crash journal %s: %s", j->path,
                 strerror(errno));

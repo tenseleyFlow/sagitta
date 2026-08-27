@@ -59,12 +59,26 @@ static u64 sat_add(u64 a, u64 b)
     return UINT64_MAX - a < b ? UINT64_MAX : a + b;
 }
 
+static u8 text_byte_at(const TextBuf *tb, u64 off)
+{
+    TextIter it;
+    const u8 *bytes;
+    u64 len;
+
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(off)) ||
+        !yew_textiter_chunk(&it, tb, &bytes, &len) || len == 0U)
+        YEW_BUG("viewport: cannot read buffer byte");
+    return bytes[0];
+}
+
 static u64 line_content_hi(const TextBuf *tb, LineNo line, Span span)
 {
-    if (line.v + 1U < yew_textbuf_line_count(tb)) {
-        ByteOff end = yew_grapheme_prev_boundary(tb, BYTEOFF(span.hi));
-        return end.v;
-    }
+    if (line.v + 1U >= yew_textbuf_line_count(tb) || span.lo == span.hi ||
+        text_byte_at(tb, span.hi - 1U) != '\n')
+        return span.hi;
+    span.hi--;
+    if (span.hi > span.lo && text_byte_at(tb, span.hi - 1U) == '\r')
+        span.hi--;
     return span.hi;
 }
 

@@ -593,3 +593,30 @@ void test_coords_sparse_index_edit_invalidation(void)
     YEW_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
     yew_textbuf_free(tb);
 }
+
+void test_coords_deferred_index_keeps_line_local_motion_local(void)
+{
+    const size_t len = 17U * 1024U * 1024U;
+    u8 *bytes = yew_xmalloc(len);
+    TextBuf *tb;
+    Span line;
+
+    (void)memset(bytes, 'x', len);
+    bytes[0] = 0xC3U;
+    bytes[1] = 0xA9U;
+    bytes[len - 101U] = '\n';
+    tb = yew_textbuf_from_owned_bytes_simple(bytes, len, false);
+    YEW_ASSERT_NOT_NULL(tb);
+    YEW_ASSERT(!tb->graphemes.initialized);
+
+    line = yew_textbuf_line_span(tb, LINENO(1U));
+    YEW_ASSERT_EQ_U64(line.lo, len - 100U);
+    YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
+                                     BYTEOFF(line.lo + 40U)).v,
+                      40U);
+    YEW_ASSERT(!tb->graphemes.initialized);
+    YEW_ASSERT_EQ_U64(yew_gcol_to_off(tb, line, (GCol){25U}).v,
+                      line.lo + 25U);
+    YEW_ASSERT(!tb->graphemes.initialized);
+    yew_textbuf_free(tb);
+}

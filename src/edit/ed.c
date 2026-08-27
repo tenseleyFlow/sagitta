@@ -687,6 +687,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
 void yew_ed_init(Ed *ed)
 {
     const char *prof;
+    const char *frame_tags;
     char *root;
 
     if (ed == NULL)
@@ -694,6 +695,9 @@ void yew_ed_init(Ed *ed)
     (void)memset(ed, 0, sizeof(*ed));
     arena_init(&ed->arena);
     prof = getenv("YEW_PROF");
+    frame_tags = getenv("YEW_PERF_FRAME_TAGS");
+    ed->perf_frame_tags = frame_tags != NULL &&
+                          strcmp(frame_tags, "1") == 0;
     yew_prof_init(&ed->prof, &ed->arena,
                   prof != NULL && strcmp(prof, "1") == 0);
     arena_init(&ed->cmdline.comp_arena);
@@ -1354,6 +1358,10 @@ void yew_ed_damage_document(Ed *ed)
 {
     if (ed == NULL || ed->win == NULL)
         return;
+    if (ed->damage_batching) {
+        ed->damage_batch_pending = true;
+        return;
+    }
     ed->doc_damage_lo = 0U;
     ed->doc_damage_hi = ed->win->rect.h;
     ed->footer_dirty = true;
@@ -1363,6 +1371,10 @@ void yew_ed_damage_rows(Ed *ed, u16 lo, u16 hi)
 {
     if (ed == NULL || ed->win == NULL || lo >= hi)
         return;
+    if (ed->damage_batching) {
+        ed->damage_batch_pending = true;
+        return;
+    }
     if (lo > ed->win->rect.h)
         lo = ed->win->rect.h;
     if (hi > ed->win->rect.h)
@@ -1389,6 +1401,10 @@ static void ed_damage_win_line(Ed *ed, Win *win, LineNo line,
 
     if (ed == NULL || win == NULL)
         return;
+    if (ed->damage_batching) {
+        ed->damage_batch_pending = true;
+        return;
+    }
     yew_vp_invalidate_from(win, line);
     if (line_count_changed)
         ed->layout_dirty = true;
@@ -1413,6 +1429,88 @@ void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
     if (ed == NULL)
         return;
     ed_damage_win_line(ed, ed->win, line, line_count_changed);
+}
+
+static void ed_syn_batch_flush(Ed *ed)
+{
+    if (!ed->damage_batch_syn_pending)
+        return;
+    yew_syn_edit(&ed->damage_batch_syn_buffer->syn,
+                 ed->damage_batch_syn_lo, 0U, 0U);
+    ed->damage_batch_syn_pending = false;
+    ed->damage_batch_syn_buffer = NULL;
+}
+
+void yew_ed_syn_note_edit(Ed *ed, Buffer *buffer, LineNo lo,
+                          u64 removed, u64 inserted)
+{
+    bool owns_batch;
+
+    if (ed == NULL || buffer == NULL)
+        YEW_BUG("syntax edit notification: missing editor or buffer");
+    owns_batch = ed->damage_batching && ed->damage_batch_win != NULL &&
+                 ed->damage_batch_win->buf == buffer;
+    if (!owns_batch || removed != 0U || inserted != 0U) {
+        ed_syn_batch_flush(ed);
+        yew_syn_edit(&buffer->syn, lo, removed, inserted);
+        return;
+    }
+    if (ed->damage_batch_syn_pending &&
+        ed->damage_batch_syn_buffer != buffer)
+        ed_syn_batch_flush(ed);
+    if (!ed->damage_batch_syn_pending || lo.v < ed->damage_batch_syn_lo.v)
+        ed->damage_batch_syn_lo = lo;
+    ed->damage_batch_syn_pending = true;
+    ed->damage_batch_syn_buffer = buffer;
+}
+
+void yew_ed_damage_batch_begin(Ed *ed, Win *win)
+{
+    if (ed == NULL)
+        return;
+    if (ed->damage_batching)
+        YEW_BUG("damage batch: nested begin");
+    ed->damage_batching = true;
+    ed->damage_batch_pending = true;
+    ed->damage_batch_syn_pending = false;
+    ed->damage_batch_syn_buffer = NULL;
+    ed->damage_batch_win = win;
+    ed->damage_batch_lines = win != NULL && win->buf != NULL &&
+                                     win->buf->tb != NULL
+                                 ? yew_textbuf_line_count(win->buf->tb) : 0U;
+}
+
+void yew_ed_damage_batch_end(Ed *ed)
+{
+    bool pending;
+    Win *win;
+
+    if (ed == NULL)
+        return;
+    if (!ed->damage_batching)
+        YEW_BUG("damage batch: end without begin");
+    pending = ed->damage_batch_pending;
+    win = ed->damage_batch_win;
+    ed_syn_batch_flush(ed);
+    ed->damage_batching = false;
+    ed->damage_batch_pending = false;
+    ed->damage_batch_win = NULL;
+    if (win != NULL) {
+        yew_vp_invalidate(win);
+        if (win->buf != NULL && win->buf->tb != NULL &&
+            yew_textbuf_line_count(win->buf->tb) != ed->damage_batch_lines)
+            ed->layout_dirty = true;
+    }
+    ed->damage_batch_lines = 0U;
+    if (pending) {
+        yew_ed_damage_document(ed);
+        ed->damage_batch_finalizations++;
+    }
+}
+
+bool yew_ed_damage_batch_active(const Ed *ed)
+{
+    return ed != NULL && ed->damage_batching;
 }
 
 Cursor *yew_ed_cursor(Ed *ed)
@@ -2015,6 +2113,9 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 
     if (ed == NULL || key.kind != YEW_EV_KEY)
         return;
+    if (key.ev != YEW_KEY_RELEASE &&
+        !(ed->search.active && key.code == YEW_KEY_ENTER))
+        yew_search_preview_cancel(ed);
     yew_record_key(ed, key);
     ed->now_ms = now_ms;
     /*
@@ -2225,6 +2326,30 @@ static bool write_all(int fd, const u8 *bytes, size_t len)
     return true;
 }
 
+static void perf_frame_tag(Ed *ed, size_t visible_bytes)
+{
+    char tag[64];
+    int n;
+
+    ed->perf_frame_visible_bytes = visible_bytes > UINT32_MAX
+                                       ? UINT32_MAX : (u32)visible_bytes;
+    if (ed->perf_frame_tags && ed->perf_frame_keys != 0U) {
+        n = snprintf(tag, sizeof(tag), "\033]777;yew-key;%u;%u\a",
+                     (unsigned)ed->perf_frame_keys,
+                     (unsigned)ed->perf_frame_visible_bytes);
+        if (n <= 0 || (size_t)n >= sizeof(tag))
+            YEW_BUG("performance frame tag overflow");
+        bytebuf_reserve(&ed->frame, ed->frame.len + (size_t)n);
+        if (ed->frame.len != 0U)
+            (void)memmove(ed->frame.data + (size_t)n, ed->frame.data,
+                         ed->frame.len);
+        (void)memcpy(ed->frame.data, tag, (size_t)n);
+        ed->frame.len += (size_t)n;
+    }
+    ed->perf_frame_output_bytes = ed->frame.len > UINT32_MAX ? UINT32_MAX :
+                                  (u32)ed->frame.len;
+}
+
 void yew_ed_render(Ed *ed)
 {
     Win *win;
@@ -2344,6 +2469,7 @@ draw_overlays:
         yew_panel_draw(ed, &win->panel, &ed->grid);
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
+    perf_frame_tag(ed, ed->frame.len);
     yew_prof_phase(&ed->prof, YEW_PH_WRITE);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {
         ed->quit = true;

@@ -4819,6 +4819,41 @@ static u32 cache_span_alloc(SynCache *cache, u32 n)
     return off;
 }
 
+static SynCacheEnt *cache_find(SynCache *cache, u64 line, u64 gen,
+                               u32 state)
+{
+    u32 i;
+
+    for (i = 0U; i < YEW_SYN_SPAN_CACHE; i++) {
+        SynCacheEnt *ent = &cache->slots[i];
+
+        if (ent->valid && ent->line == line && ent->gen == gen &&
+            ent->entry_state == state)
+            return ent;
+    }
+    return NULL;
+}
+
+static SynCacheEnt *cache_store(SynCache *cache, u64 line, u64 gen,
+                                u32 state, const SynLineOut *evaluated)
+{
+    SynCacheEnt *ent = &cache->slots[cache->hand++ % YEW_SYN_SPAN_CACHE];
+
+    ent->valid = false;
+    ent->span_off = cache_span_alloc(cache, evaluated->n);
+    if (evaluated->n != 0U)
+        (void)memcpy(cache->slab + ent->span_off, evaluated->spans,
+                     evaluated->n * sizeof(*cache->slab));
+    ent->n = evaluated->n;
+    ent->exit_state = evaluated->exit_state;
+    ent->stop = evaluated->stop;
+    ent->line = line;
+    ent->gen = gen;
+    ent->entry_state = state;
+    ent->valid = true;
+    return ent;
+}
+
 void yew_syn_attach(SynBuf *syn, u32 lang, const TextBuf *tb)
 {
     size_t n;
@@ -5258,6 +5293,7 @@ void yew_syn_settle(SynBuf *syn, const TextBuf *tb, LineNo view_lo,
         } else {
             syn_settle_embed_line(syn, i, entry, bytes, len, &out);
         }
+        (void)cache_store(cache_get(syn), i, tb->gen, entry, &out);
         report->lines++;
         {
             bool degraded = out.stop != YEW_SYN_STOP_OK ||
@@ -5345,18 +5381,6 @@ void yew_syn_settle(SynBuf *syn, const TextBuf *tb, LineNo view_lo,
     syn->buf_gen = tb->gen;
 }
 
-static SynCacheEnt *cache_find(SynCache *cache, u64 line, u64 gen, u32 state)
-{
-    u32 i;
-    for (i = 0U; i < YEW_SYN_SPAN_CACHE; i++) {
-        SynCacheEnt *ent = &cache->slots[i];
-        if (ent->valid && ent->line == line && ent->gen == gen &&
-            ent->entry_state == state)
-            return ent;
-    }
-    return NULL;
-}
-
 static void note_span_stop(SynBuf *syn, u8 stop)
 {
     if (stop == YEW_SYN_STOP_OK)
@@ -5393,25 +5417,13 @@ void yew_syn_spans(SynBuf *syn, const TextBuf *tb, LineNo line,
     cache = cache_get(syn);
     ent = cache_find(cache, line.v, tb->gen, state);
     if (ent == NULL) {
-        ent = &cache->slots[cache->hand++ % YEW_SYN_SPAN_CACHE];
-        ent->valid = false;
         bytes = line_copy(syn, tb, line, &len);
         {
             SynLineOut evaluated = {cache->scratch, 0U, YEW_SYN_MAX_SPANS, 0U,
                                     YEW_SYN_STOP_OK};
             yew_syn_line(syn->engine, state, bytes, len, &evaluated);
-            ent->span_off = cache_span_alloc(cache, evaluated.n);
-            if (evaluated.n != 0U)
-                (void)memcpy(cache->slab + ent->span_off, evaluated.spans,
-                             evaluated.n * sizeof(*cache->slab));
-            ent->n = evaluated.n;
-            ent->exit_state = evaluated.exit_state;
-            ent->stop = evaluated.stop;
+            ent = cache_store(cache, line.v, tb->gen, state, &evaluated);
         }
-        ent->line = line.v;
-        ent->gen = tb->gen;
-        ent->entry_state = state;
-        ent->valid = true;
     }
     copy = ent->n < out->cap ? ent->n : out->cap;
     if (copy != 0U)

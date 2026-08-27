@@ -20,7 +20,10 @@ enum {
     SESSION_KEYS = 10000,
     SCREEN_ROWS = 50,
     SCREEN_COLS = 200,
-    KEY_TIMEOUT_MS = 100,
+    /* Transport must outlive the metric's 500 ms broken-run ceiling so a
+     * slow editor frame is recorded and fails as latency, not mislabeled as
+     * a PTY protocol error before the harness can report it. */
+    KEY_TIMEOUT_MS = 600,
     FLOOR_SAMPLES = 1001,
     MANY_BUFFER_COUNT = 50,
     MANY_BUFFER_HYDRATED = 20
@@ -46,9 +49,28 @@ typedef struct MetricSpec {
 
 typedef struct FrameRead {
     bool painted;
+    bool no_paint;
     i64 completed_ns;
     u64 frames;
 } FrameRead;
+
+typedef enum FrameScanResult {
+    FRAME_SCAN_MORE,
+    FRAME_SCAN_PAINT,
+    FRAME_SCAN_NO_PAINT,
+    FRAME_SCAN_INVALID
+} FrameScanResult;
+
+typedef struct FrameScan {
+    size_t frame_matched;
+    size_t tag_matched;
+    u32 tag_keys;
+    u32 tag_visible;
+    u16 frame_keys;
+    u8 tag_field;
+    bool tag_digit;
+    bool frame_tagged;
+} FrameScan;
 
 typedef struct AssistRun {
     VtScreen screen;
@@ -158,27 +180,33 @@ static bool modifier(const char *text, size_t len, u16 *mods)
     return true;
 }
 
-static bool named_key(const char *text, size_t len, const char **legacy,
-                      unsigned *tilde)
+static bool named_key(const char *text, size_t len, u32 *kitty,
+                      const char **legacy, unsigned *tilde)
 {
     static const struct {
         const char *name;
+        u32 kitty;
         const char *legacy;
         unsigned tilde;
     } names[] = {
-        {"esc", "\033", 0U}, {"enter", "\r", 0U},
-        {"tab", "\t", 0U}, {"space", " ", 0U},
-        {"backspace", "\177", 0U}, {"insert", NULL, 2U},
-        {"delete", NULL, 3U}, {"left", "\033[D", 0U},
-        {"right", "\033[C", 0U}, {"up", "\033[A", 0U},
-        {"down", "\033[B", 0U}, {"pageup", NULL, 5U},
-        {"pagedown", NULL, 6U}, {"home", "\033[H", 0U},
-        {"end", "\033[F", 0U}
+        {"esc", 27U, "\033", 0U}, {"enter", 13U, "\r", 0U},
+        {"tab", 9U, "\t", 0U}, {"space", 32U, " ", 0U},
+        {"backspace", 127U, "\177", 0U},
+        {"insert", 57348U, NULL, 2U}, {"delete", 57349U, NULL, 3U},
+        {"left", 57350U, "\033[D", 0U},
+        {"right", 57351U, "\033[C", 0U},
+        {"up", 57352U, "\033[A", 0U},
+        {"down", 57353U, "\033[B", 0U},
+        {"pageup", 57354U, NULL, 5U},
+        {"pagedown", 57355U, NULL, 6U},
+        {"home", 57356U, "\033[H", 0U},
+        {"end", 57357U, "\033[F", 0U}
     };
     size_t i;
 
     for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         if (same_ci(text, len, names[i].name)) {
+            *kitty = names[i].kitty;
             *legacy = names[i].legacy;
             *tilde = names[i].tilde;
             return true;
@@ -195,6 +223,7 @@ static bool encode_key(const char *token, size_t len, KeyStroke *out)
     const char *legacy = NULL;
     unsigned tilde = 0U;
     u16 mods = 0U;
+    u32 kitty = 0U;
     u8 scalar = 0U;
     int n;
 
@@ -204,24 +233,21 @@ static bool encode_key(const char *token, size_t len, KeyStroke *out)
         part = plus + 1;
     }
     if (end - part == 1 && (unsigned char)*part >= 0x20U &&
-        (unsigned char)*part <= 0x7eU)
+        (unsigned char)*part <= 0x7eU) {
         scalar = (u8)*part;
-    else if (!named_key(part, (size_t)(end - part), &legacy, &tilde))
+        kitty = scalar;
+    } else if (!named_key(part, (size_t)(end - part), &kitty, &legacy,
+                          &tilde)) {
         return false;
-
-    if (scalar != 0U) {
-        size_t used = 0U;
-
-        if ((mods & 2U) != 0U)
-            out->bytes[used++] = 0x1bU;
-        if ((mods & 4U) != 0U && isalpha((unsigned char)scalar))
-            out->bytes[used++] = (u8)(tolower((unsigned char)scalar) - 'a' + 1);
-        else
-            out->bytes[used++] = scalar;
-        out->len = (u8)used;
-        return (mods & ~(u16)(2U | 4U)) == 0U;
     }
-    if (tilde != 0U) {
+
+    /* Kitty flag 21 reports printable keys and the disambiguated controls as
+     * CSI u, while arrows and navigation retain their legacy CSI forms. */
+    if (scalar != 0U || kitty == 32U || kitty == 27U || kitty == 13U ||
+        kitty == 9U || kitty == 127U || (legacy == NULL && tilde == 0U)) {
+        n = snprintf((char *)out->bytes, sizeof(out->bytes), "\033[%u;%uu",
+                     (unsigned)kitty, (unsigned)mods + 1U);
+    } else if (tilde != 0U) {
         n = mods == 0U ?
             snprintf((char *)out->bytes, sizeof(out->bytes), "\033[%u~", tilde) :
             snprintf((char *)out->bytes, sizeof(out->bytes), "\033[%u;%u~",
@@ -245,6 +271,16 @@ static bool encode_key(const char *token, size_t len, KeyStroke *out)
         return false;
     out->len = (u8)n;
     return true;
+}
+
+static bool encoding_is(const char *token, const char *expected)
+{
+    KeyStroke key = {{0}, 0U};
+    size_t len = strlen(token);
+    size_t expected_len = strlen(expected);
+
+    return encode_key(token, len, &key) && key.len == expected_len &&
+           memcmp(key.bytes, expected, expected_len) == 0;
 }
 
 static bool load_session(const char *path, Session *out)
@@ -312,29 +348,92 @@ static bool load_session(const char *path, Session *out)
     return ok;
 }
 
-static bool scan_frames(const u8 *data, size_t len, size_t *matched,
-                        u64 *frames)
+static bool tag_value_push(u32 *value, u8 byte)
 {
-    static const u8 esu[] = "\033[?2026l";
+    u32 digit;
+
+    if (byte < (u8)'0' || byte > (u8)'9')
+        return false;
+    digit = (u32)(byte - (u8)'0');
+    if (*value > (UINT32_MAX - digit) / 10U)
+        return false;
+    *value = *value * 10U + digit;
+    return true;
+}
+
+static FrameScanResult scan_frame_bytes(FrameScan *scan, const u8 *data,
+                                        size_t len, FrameRead *out)
+{
+    static const u8 frame_end[] = "\033[?2026l";
+    static const u8 tag[] = "\033]777;yew-key;";
+    FrameScanResult result = FRAME_SCAN_MORE;
     size_t i;
 
     for (i = 0U; i < len; i++) {
-        if (data[i] == esu[*matched]) {
-            (*matched)++;
-            if (*matched == sizeof(esu) - 1U) {
-                (*frames)++;
-                *matched = 0U;
+        u8 byte = data[i];
+
+        if (scan->tag_field == 0U) {
+            if (byte == tag[scan->tag_matched]) {
+                scan->tag_matched++;
+                if (scan->tag_matched == sizeof(tag) - 1U) {
+                    scan->tag_matched = 0U;
+                    scan->tag_field = 1U;
+                    scan->tag_keys = 0U;
+                    scan->tag_visible = 0U;
+                    scan->tag_digit = false;
+                }
+            } else {
+                scan->tag_matched = byte == tag[0] ? 1U : 0U;
+            }
+        } else if (scan->tag_field == 1U) {
+            if (byte == (u8)';' && scan->tag_digit &&
+                scan->tag_keys <= UINT16_MAX) {
+                scan->tag_field = 2U;
+                scan->tag_digit = false;
+            } else if (tag_value_push(&scan->tag_keys, byte)) {
+                scan->tag_digit = true;
+            } else {
+                return FRAME_SCAN_INVALID;
+            }
+        } else if (byte == (u8)'\a' && scan->tag_digit) {
+            scan->tag_field = 0U;
+            scan->frame_keys = (u16)scan->tag_keys;
+            scan->frame_tagged = scan->tag_visible != 0U;
+            if (scan->frame_keys != 0U && scan->tag_visible == 0U) {
+                if (result == FRAME_SCAN_MORE)
+                    result = FRAME_SCAN_NO_PAINT;
+                scan->frame_keys = 0U;
+            }
+        } else if (tag_value_push(&scan->tag_visible, byte)) {
+            scan->tag_digit = true;
+        } else {
+            return FRAME_SCAN_INVALID;
+        }
+
+        if (byte == frame_end[scan->frame_matched]) {
+            scan->frame_matched++;
+            if (scan->frame_matched == sizeof(frame_end) - 1U) {
+                out->frames++;
+                scan->frame_matched = 0U;
+                if (scan->frame_tagged) {
+                    bool key_frame = scan->frame_keys != 0U;
+
+                    scan->frame_tagged = false;
+                    scan->frame_keys = 0U;
+                    if (key_frame && result == FRAME_SCAN_MORE)
+                        result = FRAME_SCAN_PAINT;
+                }
             }
         } else {
-            *matched = data[i] == esu[0] ? 1U : 0U;
+            scan->frame_matched = byte == frame_end[0] ? 1U : 0U;
         }
     }
-    return true;
+    return result;
 }
 
 static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
 {
-    size_t matched = 0U;
+    FrameScan scan = {0};
 
     (void)memset(out, 0, sizeof(*out));
     while (yew_live_pty_now_ns() < deadline) {
@@ -346,7 +445,7 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
         if (result < 0 && errno == EINTR)
             continue;
         if (result <= 0)
-            return result == 0;
+            return false;
         n = read(pty->master, data, sizeof(data));
         if (n < 0 && errno == EINTR)
             continue;
@@ -355,14 +454,21 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
         if (n <= 0)
             return false;
         yew_live_pty_observe_output(pty, data, (size_t)n);
-        (void)scan_frames(data, (size_t)n, &matched, &out->frames);
-        if (!out->painted && out->frames != 0U) {
-            out->painted = true;
+        {
+            FrameScanResult scan_result =
+                scan_frame_bytes(&scan, data, (size_t)n, out);
+
+            if (scan_result == FRAME_SCAN_INVALID)
+                return false;
+            if (scan_result == FRAME_SCAN_MORE)
+                continue;
+            out->painted = scan_result == FRAME_SCAN_PAINT;
+            out->no_paint = scan_result == FRAME_SCAN_NO_PAINT;
             out->completed_ns = yew_live_pty_now_ns();
             return out->completed_ns >= 0;
         }
     }
-    return true;
+    return false;
 }
 
 static bool stop_editor(YewLivePty *pty)
@@ -838,6 +944,10 @@ static int run_session(const char *binary, const char *script,
         (void)fprintf(stderr, "perf_latency: invalid binary, fixture, or session\n");
         return 2;
     }
+    if (setenv("YEW_PERF_FRAME_TAGS", "1", 1) != 0) {
+        (void)fprintf(stderr, "perf_latency: cannot enable frame tags\n");
+        return 2;
+    }
     is_assist = strcmp(fixture, "assist") == 0;
     if (is_assist && (fakelsp == NULL || mockai == NULL ||
                       ai_script == NULL)) {
@@ -868,12 +978,27 @@ static int run_session(const char *binary, const char *script,
         (void)remove_tree(run_state);
         return 2;
     }
+    /* The child has not been pumped yet, so this opt-in is set before the
+     * terminal capability probe can be observed and answered. */
+    pty.kitty_supported = true;
     if (!yew_live_pty_wait_frame(&pty, 0U,
             yew_live_pty_now_ns() + INT64_C(5000000000), NULL) ||
         !yew_live_pty_wait_quiet(&pty, INT64_C(100000000),
             yew_live_pty_now_ns() + INT64_C(2000000000))) {
         (void)fprintf(stderr, "perf_latency: editor did not settle\n");
         yew_live_pty_close(&pty);
+        if (run_workspace[0] != '\0')
+            (void)remove_tree(run_workspace);
+        (void)remove_tree(run_state);
+        return 2;
+    }
+    if (!pty.kitty_enabled) {
+        (void)fprintf(stderr,
+                      "perf_latency: editor did not enable Kitty input\n");
+        yew_live_pty_close(&pty);
+        stop_mock_ai(assist.ai_pid);
+        if (assist.screen_on)
+            vt_free(&assist.screen);
         if (run_workspace[0] != '\0')
             (void)remove_tree(run_workspace);
         (void)remove_tree(run_state);
@@ -934,10 +1059,20 @@ static int run_session(const char *binary, const char *script,
             break;
         }
         frames += read.frames;
-        if (read.painted)
-            samples[nsamples++] = read.completed_ns - start;
-        else
+        if (read.painted) {
+            i64 elapsed = read.completed_ns - start;
+
+            samples[nsamples++] = elapsed;
+        }
+        else if (read.no_paint)
             no_paint++;
+        else {
+            (void)fprintf(stderr,
+                          "perf_latency: key %zu had no terminal frame result\n",
+                          i + 1U);
+            status = 2;
+            break;
+        }
     }
     if (prof_dump != NULL && status == 0) {
         char command[1200];
@@ -1087,6 +1222,18 @@ static int check_scripts(const char *dir)
     };
     size_t i;
 
+    if (!encoding_is("esc", "\033[27;1u") ||
+        !encoding_is("ctrl+r", "\033[114;5u") ||
+        !encoding_is("space", "\033[32;1u") ||
+        !encoding_is("left", "\033[D") ||
+        !encoding_is("ctrl+left", "\033[1;5D") ||
+        !encoding_is("insert", "\033[2~")) {
+        (void)fprintf(stderr,
+                      "perf_latency: modern key encoding self-check failed\n");
+        return 1;
+    }
+    (void)printf("latency_modern_keys OK\n");
+
     for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         char path[1024];
         Session session;
@@ -1119,6 +1266,60 @@ static int check_assist_vt(void)
     return ok ? 0 : 1;
 }
 
+static int check_frame_tags(void)
+{
+    static const u8 background[] =
+        "\033[?2026hbackground\033[?2026l";
+    static const u8 no_paint[] = "\033]777;yew-key;1;0\a";
+    static const u8 painted_a[] = "\033]777;yew-key;1;3\a\033[?2026hab";
+    static const u8 painted_b[] =
+        "c\033[?2026l"
+        "\033[?2026hbackground\033[?2026l";
+    static const u8 trailing[] =
+        "\033]777;yew-key;1;0\a"
+        "\033[?2026hbackground\033[?2026l"
+        "\033[?2026hbackground\033[?2026l";
+    FrameScan scan = {0};
+    FrameRead read = {0};
+    YewLivePty pty = {0};
+    int pipefd[2] = {-1, -1};
+    bool ok;
+
+    ok = scan_frame_bytes(&scan, background, sizeof(background) - 1U,
+                          &read) == FRAME_SCAN_MORE &&
+         read.frames == 1U && !read.painted;
+    (void)memset(&scan, 0, sizeof(scan));
+    (void)memset(&read, 0, sizeof(read));
+    ok = ok && scan_frame_bytes(&scan, no_paint,
+                                sizeof(no_paint) - 1U, &read) ==
+                   FRAME_SCAN_NO_PAINT &&
+         !read.painted && read.frames == 0U;
+    (void)memset(&scan, 0, sizeof(scan));
+    (void)memset(&read, 0, sizeof(read));
+    ok = ok && scan_frame_bytes(&scan, painted_a,
+                                sizeof(painted_a) - 1U, &read) ==
+                   FRAME_SCAN_MORE &&
+         scan_frame_bytes(&scan, painted_b, sizeof(painted_b) - 1U,
+                          &read) == FRAME_SCAN_PAINT &&
+         read.frames == 2U;
+    (void)memset(&scan, 0, sizeof(scan));
+    (void)memset(&read, 0, sizeof(read));
+    ok = ok && scan_frame_bytes(&scan, trailing, sizeof(trailing) - 1U,
+                                &read) == FRAME_SCAN_NO_PAINT &&
+         read.frames == 2U;
+    if (pipe(pipefd) != 0) {
+        ok = false;
+    } else {
+        pty.master = pipefd[0];
+        ok = ok && !read_frames(&pty, yew_live_pty_now_ns() +
+                                      INT64_C(1000000), &read);
+        (void)close(pipefd[0]);
+        (void)close(pipefd[1]);
+    }
+    (void)printf("latency_frame_tags %s\n", ok ? "OK" : "FAIL");
+    return ok ? 0 : 1;
+}
+
 static void usage(const char *arg0)
 {
     (void)fprintf(stderr,
@@ -1126,9 +1327,11 @@ static void usage(const char *arg0)
         "  %s --floor --echo PATH\n"
         "  %s --check-scripts DIR\n"
         "  %s --check-assist-vt\n"
+        "  %s --check-frame-tags\n"
         "  %s --yew PATH --session FILE --fixture CLASS --path FILE "
         "[--state DIR] [--many-dir DIR] [--fakelsp PATH --mockai PATH "
-        "--ai-script PATH] [--prof-dump PATH]\n", arg0, arg0, arg0, arg0);
+        "--ai-script PATH] [--prof-dump PATH]\n", arg0, arg0, arg0, arg0,
+        arg0);
 }
 
 int main(int argc, char **argv)
@@ -1147,6 +1350,7 @@ int main(int argc, char **argv)
     const char *prof_dump = NULL;
     bool floor = false;
     bool assist_vt = false;
+    bool frame_tags = false;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -1154,6 +1358,8 @@ int main(int argc, char **argv)
             floor = true;
         else if (strcmp(argv[i], "--check-assist-vt") == 0)
             assist_vt = true;
+        else if (strcmp(argv[i], "--check-frame-tags") == 0)
+            frame_tags = true;
         else if (i + 1 < argc && strcmp(argv[i], "--echo") == 0)
             echo = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--check-scripts") == 0)
@@ -1183,14 +1389,17 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    if (assist_vt && !floor && check == NULL && yew == NULL)
+    if (assist_vt && !frame_tags && !floor && check == NULL && yew == NULL)
         return check_assist_vt();
-    if (check != NULL && !floor && !assist_vt && yew == NULL)
+    if (frame_tags && !assist_vt && !floor && check == NULL && yew == NULL)
+        return check_frame_tags();
+    if (check != NULL && !floor && !assist_vt && !frame_tags && yew == NULL)
         return check_scripts(check);
-    if (floor && echo != NULL && check == NULL && !assist_vt && yew == NULL)
+    if (floor && echo != NULL && check == NULL && !assist_vt && !frame_tags &&
+        yew == NULL)
         return run_floor(echo);
-    if (!floor && !assist_vt && check == NULL && yew != NULL && script != NULL &&
-        fixture != NULL && path != NULL)
+    if (!floor && !assist_vt && !frame_tags && check == NULL && yew != NULL &&
+        script != NULL && fixture != NULL && path != NULL)
         return run_session(yew, script, fixture, path, state, many_dir,
                            fakelsp, mockai, ai_script, prof_dump);
     usage(argv[0]);

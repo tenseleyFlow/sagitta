@@ -356,14 +356,21 @@ void yew_overlay_count(MatchOverlay *ov, const YewRe *re, const TextBuf *tb,
 {
     YewReInput in;
     i64 deadline;
+    u64 len;
     u64 at = 0U;
     u32 n = 0U;
+    bool byte_bounded;
 
     if (ov == NULL || re == NULL || tb == NULL)
         return;
     ov->count_total = 0U;
     ov->count_capped = false;
     in = yew_re_input_textbuf(tb);
+    len = yew_textbuf_len(tb);
+    byte_bounded = budget_us > 0 &&
+                   len > (u64)YEW_SEARCH_COUNT_BUDGET_BYTES;
+    if (byte_bounded)
+        in.window.hi = YEW_SEARCH_COUNT_BUDGET_BYTES;
     deadline = budget_us > 0 ? now_us() + budget_us : 0;
     for (;;) {
         YewReMatch m;
@@ -371,8 +378,19 @@ void yew_overlay_count(MatchOverlay *ov, const YewRe *re, const TextBuf *tb,
         (void)memset(&m, 0, sizeof(m));
         if (at > yew_textbuf_len(tb))
             break;
-        if (!yew_re_search(re, &in, BYTEOFF(at), &m))
+        if (!yew_re_search(re, &in, BYTEOFF(at), &m)) {
+            if (byte_bounded)
+                ov->count_capped = true;
             break;
+        }
+        /* A match at the artificial edge may exist only because `$` or
+         * `\z` sees that edge as EOF.  Drop it; a partial count may
+         * undercount, but it must never report a false match. */
+        if (byte_bounded && yew_re_whole_literal_bytes(re) == 0U &&
+            m.g[0].hi == in.window.hi) {
+            ov->count_capped = true;
+            break;
+        }
         n++;
         /*
          * The cap is the point.  An unbounded counter is exactly the
@@ -383,7 +401,7 @@ void yew_overlay_count(MatchOverlay *ov, const YewRe *re, const TextBuf *tb,
             ov->count_capped = true;
             break;
         }
-        if ((n & 0xFFU) == 0U && deadline != 0 && now_us() >= deadline) {
+        if (deadline != 0 && now_us() >= deadline) {
             ov->count_capped = true;
             break;
         }

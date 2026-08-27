@@ -114,6 +114,12 @@ struct Ed {
     Grid grid;
     Render render;
     Bytebuf frame;
+    /* Perf-only frame causality tag; visible bytes exclude the tag while
+     * output bytes remain the profiler's exact write(2) population. */
+    u32 perf_frame_visible_bytes;
+    u32 perf_frame_output_bytes;
+    u16 perf_frame_keys;
+    bool perf_frame_tags;
     Bytebuf paste;
     Prof prof;
 
@@ -214,6 +220,14 @@ struct Ed {
     bool cursor_follow_pending;
     u16 doc_damage_lo;
     u16 doc_damage_hi;
+    bool damage_batching;
+    bool damage_batch_pending;
+    u32 damage_batch_finalizations;
+    Win *damage_batch_win;
+    u64 damage_batch_lines;
+    bool damage_batch_syn_pending;
+    Buffer *damage_batch_syn_buffer;
+    LineNo damage_batch_syn_lo;
     LineNo drawn_top;
     u32 drawn_top_sub;
     CCol drawn_left;
@@ -389,6 +403,11 @@ void yew_ed_syn_tick(Ed *ed, i64 budget_us, bool prioritize_focus);
 void yew_ed_damage_rows(Ed *ed, u16 lo, u16 hi);
 void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed);
 void yew_ed_damage_document(Ed *ed);
+void yew_ed_damage_batch_begin(Ed *ed, Win *win);
+void yew_ed_damage_batch_end(Ed *ed);
+bool yew_ed_damage_batch_active(const Ed *ed);
+void yew_ed_syn_note_edit(Ed *ed, Buffer *buffer, LineNo lo,
+                          u64 removed, u64 inserted);
 
 void yew_ed_prompt(Ed *ed, PromptKind prompt);
 

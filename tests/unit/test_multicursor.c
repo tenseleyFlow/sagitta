@@ -19,6 +19,7 @@
 #include "text/mark.h"
 #include "ui/statusline.h"
 #include "util/buf.h"
+#include "ws/symidx.h"
 
 static Cursor test_cursor(u64 pos, u64 anchor, u64 goal)
 {
@@ -317,6 +318,8 @@ void test_multicursor_run_commits_one_undo_transaction(void)
     assert_mc_text(ed.buffer.tb, (const u8 *)"ab", 2U);
     yew_undo_begin(&ec, YEW_TXN_MULTI);
     YEW_ASSERT_EQ_I64(yew_mc_run(&win, mc_probe_id(), &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.damage_batch_finalizations, 1U);
+    YEW_ASSERT(!ed.damage_batching);
     assert_mc_text(ed.buffer.tb, (const u8 *)"XabX", 4U);
     YEW_ASSERT_EQ_U64(ed.buffer.undo->depth, 1U);
     YEW_ASSERT_EQ_U64(ed.buffer.undo->nodes.len, 2U);
@@ -351,6 +354,8 @@ void test_multicursor_run_rolls_back_every_cursor(void)
     yew_undo_begin(&ec, YEW_TXN_MULTI);
     YEW_ASSERT_EQ_I64(yew_mc_run(&win, mc_probe_fail_id(), &cx),
                       YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(ed.damage_batch_finalizations, 1U);
+    YEW_ASSERT(!ed.damage_batching);
     assert_mc_text(ed.buffer.tb, (const u8 *)"Xab", 3U);
     YEW_ASSERT_EQ_U64(ed.buffer.undo->depth, 1U);
     yew_undo_abort(&ec);
@@ -362,6 +367,102 @@ void test_multicursor_run_rolls_back_every_cursor(void)
     assert_cursor(&win.cs.curs.data[0], 0U, 0U, 0U);
     assert_cursor(&win.cs.curs.data[1], 2U, 2U, 2U);
     mc_ed_free(&ed, &win);
+}
+
+void test_multicursor_batches_symbol_rebuild_and_damage(void)
+{
+    u8 text[1024];
+    size_t len = 0U;
+    Ed ed;
+    CmdCtx cx = {0};
+    CmdId redo;
+    CmdId undo;
+    SymBufIndex *sb;
+    u64 before_splices;
+    SymIndex fresh;
+    u32 before_invalidations;
+    u32 line;
+    size_t i;
+
+    for (line = 0U; line < 40U; line++) {
+        int n = snprintf((char *)text + len, sizeof(text) - len,
+                         "symbol_%02u value_%02u\n", line, line);
+
+        YEW_ASSERT(n > 0 && (size_t)n < sizeof(text) - len);
+        len += (size_t)n;
+    }
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, len, "mc-symbols.txt"));
+    while (yew_symidx_pending(&ed))
+        yew_symidx_pump(&ed, INT64_MAX);
+    sb = NULL;
+    for (i = 0U; i < ed.ws.sym_buf.len; i++) {
+        if (ed.ws.sym_buf.data[i].buf_id == ed.buffer.id) {
+            sb = &ed.ws.sym_buf.data[i];
+            break;
+        }
+    }
+    YEW_ASSERT_NOT_NULL(sb);
+    if (sb == NULL) {
+        yew_ed_free(&ed);
+        return;
+    }
+    YEW_ASSERT(sb->idx.e.len != 0U);
+    before_invalidations = sb->full_invalidations;
+    for (line = 1U; line < 40U; line++) {
+        Span span = yew_textbuf_line_span(ed.buffer.tb, LINENO(line));
+
+        YEW_ASSERT(yew_cset_add(&ed.win->cs,
+                                test_cursor(span.lo, span.lo, 0U)));
+    }
+    ed.win->rect.h = 24U;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    before_splices = ed.buffer.syn.splice_count;
+
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, mc_probe_id(), &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.buffer.syn.splice_count, before_splices + 1U);
+    YEW_ASSERT_EQ_U64(sb->full_invalidations,
+                      (u64)before_invalidations + 1U);
+    YEW_ASSERT_EQ_U64(sb->idx.e.len, 0U);
+    YEW_ASSERT(sb->dirty.pending);
+    YEW_ASSERT(sb->dirty.full_rebuild);
+    YEW_ASSERT_EQ_U64(ed.damage_batch_finalizations, 1U);
+    YEW_ASSERT(!ed.damage_batching);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 0U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, ed.win->rect.h);
+
+    while (yew_symidx_pending(&ed))
+        yew_symidx_pump(&ed, INT64_MAX);
+    YEW_ASSERT(!sb->dirty.full_rebuild);
+    yew_symidx_init(&fresh, &ed.interner);
+    (void)yew_symidx_scan(&fresh, &ed.buffer,
+                          (Span){0U, yew_textbuf_len(ed.buffer.tb)});
+    YEW_ASSERT_EQ_U64(sb->idx.e.len, fresh.e.len);
+    for (i = 0U; i < sb->idx.e.len && i < fresh.e.len; i++) {
+        YEW_ASSERT_EQ_U64(sb->idx.e.data[i].name, fresh.e.data[i].name);
+        YEW_ASSERT_EQ_U64(sb->idx.e.data[i].off, fresh.e.data[i].off);
+        YEW_ASSERT_EQ_U64(sb->idx.e.data[i].line, fresh.e.data[i].line);
+        YEW_ASSERT_EQ_U64(sb->idx.e.data[i].hits, fresh.e.data[i].hits);
+        YEW_ASSERT_EQ_U64(sb->idx.e.data[i].kind, fresh.e.data[i].kind);
+        YEW_ASSERT_EQ_U64(sb->idx.e.data[i].flags, fresh.e.data[i].flags);
+    }
+    yew_symidx_free(&fresh);
+
+    undo = yew_cmd_lookup("ed.edit.undo", 12U);
+    redo = yew_cmd_lookup("ed.edit.redo", 12U);
+    YEW_ASSERT(undo.v != 0U);
+    YEW_ASSERT(redo.v != 0U);
+    before_splices = ed.buffer.syn.splice_count;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, undo, &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.buffer.syn.splice_count, before_splices + 1U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.buffer.tb), len);
+    before_splices = ed.buffer.syn.splice_count;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, redo, &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.buffer.syn.splice_count, before_splices + 1U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.buffer.tb), len + 40U);
+    yew_ed_free(&ed);
 }
 
 void test_multicursor_editor_invoke_rolls_back_on_per_cursor_failure(void)

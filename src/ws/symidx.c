@@ -909,6 +909,29 @@ static void dirty_affect(SymDirty *dirty, u32 name)
     Vec_SymTick_push(&dirty->affected, name);
 }
 
+void yew_symidx_invalidate_buffer(Ed *ed, Buffer *buf)
+{
+    SymBufIndex *sb;
+    Vec_SymTick affected;
+
+    if (ed == NULL || ed->ws.owner != ed || buf == NULL || buf->tb == NULL)
+        return;
+    (void)yew_symidx_buffer(&ed->ws, buf->id, true);
+    sb = symbuf_find(&ed->ws, buf->id);
+    if (sb == NULL || sb->dirty.full_rebuild)
+        return;
+    affected = sb->dirty.affected;
+    yew_symidx_clear(&sb->idx);
+    affected.len = 0U;
+    (void)memset(&sb->dirty, 0, sizeof(sb->dirty));
+    sb->dirty.affected = affected;
+    sb->dirty.post_lo = LINENO(0U);
+    sb->dirty.post_hi = LINENO(yew_textbuf_line_count(buf->tb) - 1U);
+    sb->dirty.pending = true;
+    sb->dirty.full_rebuild = true;
+    sb->full_invalidations++;
+}
+
 void yew_symidx_note_pre(EditCtx *ec, u8 kind, ByteOff at, u64 len)
 {
     SymBufIndex *sb;
@@ -919,6 +942,8 @@ void yew_symidx_note_pre(EditCtx *ec, u8 kind, ByteOff at, u64 len)
     (void)yew_symidx_buffer(&ec->ed->ws, ec->buffer->id, true);
     sb = symbuf_find(&ec->ed->ws, ec->buffer->id);
     if (sb == NULL)
+        return;
+    if (sb->dirty.full_rebuild)
         return;
     end = kind == YEW_JOURNAL_DEL && len <= yew_textbuf_len(ec->tb) - at.v
               ? at.v + len
@@ -996,7 +1021,7 @@ void yew_symidx_note_post(EditCtx *ec, u8 kind, ByteOff at, u64 len)
     if (ec == NULL || ec->ed == NULL || ec->buffer == NULL)
         return;
     sb = symbuf_find(&ec->ed->ws, ec->buffer->id);
-    if (sb == NULL || !sb->dirty.have_pre)
+    if (sb == NULL || sb->dirty.full_rebuild || !sb->dirty.have_pre)
         return;
     lines = yew_textbuf_line_count(ec->tb);
     delta = lines >= sb->dirty.old_lines

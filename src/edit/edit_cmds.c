@@ -56,6 +56,10 @@ static void damage_offsets(Ed *ed, ByteOff first, ByteOff second)
     if (ed == NULL || ed->win == NULL || ed->win->buf == NULL ||
         ed->win->buf->tb == NULL)
         return;
+    if (yew_ed_damage_batch_active(ed)) {
+        yew_ed_damage_document(ed);
+        return;
+    }
     win = ed->win;
     tb = win->buf->tb;
     lo = yew_textbuf_line_of(tb, first.v < second.v ? first : second);
@@ -1525,6 +1529,7 @@ CmdStatus yew_edit_cmd_undo(CmdCtx *cx)
     TextBuf *tb;
     Cursor *cursor;
     EditCtx ec;
+    bool batch;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
@@ -1539,8 +1544,13 @@ CmdStatus yew_edit_cmd_undo(CmdCtx *cx)
                 "cannot persist edit to crash journal");
         return YEW_CMD_ERR_IO;
     }
+    batch = win->cs.curs.len > 1U;
+    if (batch)
+        yew_ed_damage_batch_begin(cx->ed, win);
     (void)yew_undo(&ec);
     yew_ed_finish_edit(cx->ed, &ec);
+    if (batch)
+        yew_ed_damage_batch_end(cx->ed);
     if (ec.jrnl != NULL && !yew_journal_ok(ec.jrnl)) {
         yew_msg(cx->ed, YEW_MSG_ERROR,
                 "cannot persist edit to crash journal");
@@ -1558,6 +1568,7 @@ CmdStatus yew_edit_cmd_redo(CmdCtx *cx)
     TextBuf *tb;
     Cursor *cursor;
     EditCtx ec;
+    bool batch;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
@@ -1573,8 +1584,13 @@ CmdStatus yew_edit_cmd_redo(CmdCtx *cx)
                 "cannot persist edit to crash journal");
         return YEW_CMD_ERR_IO;
     }
+    batch = win->cs.curs.len > 1U;
+    if (batch)
+        yew_ed_damage_batch_begin(cx->ed, win);
     (void)yew_redo(&ec);
     yew_ed_finish_edit(cx->ed, &ec);
+    if (batch)
+        yew_ed_damage_batch_end(cx->ed);
     if (ec.jrnl != NULL && !yew_journal_ok(ec.jrnl)) {
         yew_msg(cx->ed, YEW_MSG_ERROR,
                 "cannot persist edit to crash journal");

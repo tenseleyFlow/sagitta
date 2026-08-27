@@ -83,6 +83,20 @@ typedef struct SearchState {
     bool wrapped;
     bool active;      /* a prompt is open */
     TimerId count_timer;
+    u32 count_win_id; /* stable identity; timer callbacks hold no Win * */
+    TimerId preview_timer; /* chunked whole-literal continuation */
+    u32 preview_win_id;
+    u64 preview_at;
+    u64 preview_stop;
+    u64 preview_origin;
+    u64 preview_buf_gen;
+    u32 preview_gen;
+    u32 preview_ui_seq;
+    bool preview_pending;
+    bool preview_backward;
+    bool preview_wrapped;
+    bool preview_wrapscan;
+    u32 preview_remaining;
     i64 wrap_until_ms; /* the 2 s indicator's deadline; 0 = not shown */
     YewReErr err;     /* live compile error; err.msg NULL means ok */
 } SearchState;
@@ -91,6 +105,14 @@ void yew_search_state_init(SearchState *st);
 void yew_search_state_free(SearchState *st);
 
 void yew_search_open(Ed *ed, Win *w, bool reverse);
+/* A preview continuation belongs to the key that started it.  Call before
+ * handling a later key so stale work cannot move the cursor afterward. */
+void yew_search_preview_cancel(Ed *ed);
+/* Raw bytes must stop the timer before terminal escape disambiguation, but
+ * Enter still has to accept the search that timer was completing.  Preempt
+ * therefore retires only the scheduled callback and preserves its state;
+ * decoded non-Enter keys call cancel before they take effect. */
+void yew_search_preview_preempt(Ed *ed);
 void yew_search_input(Ed *ed, Win *w);
 void yew_search_accept(Ed *ed, Win *w);
 void yew_search_cancel(Ed *ed, Win *w);

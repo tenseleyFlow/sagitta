@@ -141,6 +141,7 @@ void test_prof_format_keypaint_matches_external_population(void)
         frames[i].total_ns = i + 1U;
         frames[i].keys = 1U;
         frames[i].bytes_out = 1U;
+        frames[i].flags = YEW_PF_KEY_PAINT;
     }
     for (; i < KEY_FRAMES + BACKGROUND_FRAMES; i++) {
         frames[i].seq = i;
@@ -149,6 +150,9 @@ void test_prof_format_keypaint_matches_external_population(void)
     frames[KEY_FRAMES + BACKGROUND_FRAMES - 2U].keys = 2U;
     frames[KEY_FRAMES + BACKGROUND_FRAMES - 2U].bytes_out = 1U;
     frames[KEY_FRAMES + BACKGROUND_FRAMES - 1U].keys = 1U;
+    /* The performance OSC tag is output, but zero visible bytes is not a
+     * paint in the external causality protocol. */
+    frames[KEY_FRAMES + BACKGROUND_FRAMES - 1U].bytes_out = 24U;
     synthetic_prof(&prof, frames, KEY_FRAMES + BACKGROUND_FRAMES);
     bytebuf_init(&out);
     yew_prof_write(&prof, &out);
@@ -201,7 +205,8 @@ void test_prof_format_committed_golden(void)
     Bytebuf golden;
 
     fill_linear(frames, YEW_ARRAY_LEN(frames));
-    frames[2].flags = YEW_PF_FULL_DAMAGE | YEW_PF_MARK;
+    frames[1].flags = YEW_PF_KEY_PAINT;
+    frames[2].flags = YEW_PF_KEY_PAINT | YEW_PF_FULL_DAMAGE | YEW_PF_MARK;
     synthetic_prof(&prof, frames, YEW_ARRAY_LEN(frames));
     bytebuf_init(&out);
     yew_prof_write(&prof, &out);

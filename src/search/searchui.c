@@ -15,6 +15,14 @@
 #include "ui/win.h"
 #include "unicode/coords.h"
 
+enum { YEW_SEARCH_PREVIEW_CHUNK_BYTES = 1024U * 1024U };
+
+typedef enum SearchPreviewResult {
+    SEARCH_PREVIEW_FOUND,
+    SEARCH_PREVIEW_PENDING,
+    SEARCH_PREVIEW_MISS
+} SearchPreviewResult;
+
 void yew_search_opts_init(SearchOpts *o)
 {
     if (o == NULL)
@@ -106,6 +114,7 @@ void yew_search_open(Ed *ed, Win *w, bool reverse)
 {
     if (ed == NULL || w == NULL)
         return;
+    yew_search_preview_cancel(ed);
     search_capture_restore_point(ed, w);
     ed->search.reverse = reverse;
     ed->search.wrapped = false;
@@ -187,6 +196,238 @@ static void search_report_miss(Ed *ed, bool backward, bool wrapscan,
     yew_msg(ed, YEW_MSG_ERROR, "pattern not found: %.*s", (int)patlen, pat);
 }
 
+void yew_search_preview_cancel(Ed *ed)
+{
+    if (ed == NULL)
+        return;
+    if (ed->search.preview_timer != YEW_TIMER_NONE) {
+        (void)yew_timer_cancel(&ed->timers, ed->search.preview_timer);
+        ed->search.preview_timer = YEW_TIMER_NONE;
+    }
+    ed->search.preview_win_id = 0U;
+    if (ed->search.preview_pending) {
+        ed->search.preview_pending = false;
+        ed->search.preview_remaining = 0U;
+        yew_msg_clear(ed);
+    }
+}
+
+void yew_search_preview_preempt(Ed *ed)
+{
+    if (ed == NULL)
+        return;
+    if (ed->search.preview_timer != YEW_TIMER_NONE) {
+        (void)yew_timer_cancel(&ed->timers, ed->search.preview_timer);
+        ed->search.preview_timer = YEW_TIMER_NONE;
+    }
+}
+
+static SearchPreviewResult search_preview_slice(Ed *ed, Win *w);
+
+static void search_preview_continue(Ed *ed, void *ctx)
+{
+    Win *w;
+    SearchPreviewResult result;
+
+    (void)ctx;
+    if (ed == NULL)
+        return;
+    ed->search.preview_timer = YEW_TIMER_NONE;
+    w = yew_ed_win_by_id(ed, ed->search.preview_win_id);
+    if (w == NULL) {
+        ed->search.preview_win_id = 0U;
+        ed->search.preview_pending = false;
+        ed->search.preview_remaining = 0U;
+        yew_msg_clear(ed);
+        return;
+    }
+    result = search_preview_slice(ed, w);
+    if (result != SEARCH_PREVIEW_PENDING) {
+        ed->search.preview_win_id = 0U;
+        if (result == SEARCH_PREVIEW_MISS && ed->search.preview_pending) {
+            ed->search.preview_pending = false;
+            ed->search.preview_remaining = 0U;
+            yew_msg_clear(ed);
+        }
+    }
+}
+
+static void search_preview_schedule(Ed *ed, Win *w)
+{
+    if (!ed->search.preview_pending) {
+        ed->search.preview_pending = true;
+        ed->search.preview_ui_seq++;
+        yew_msg(ed, YEW_MSG_INFO, "searching %s%s",
+                ed->search.preview_backward ? "backward" : "forward",
+                (ed->search.preview_ui_seq & 1U) != 0U ? "." : "..");
+    }
+    ed->search.preview_win_id = w->id;
+    ed->search.preview_timer = yew_timer_add(&ed->timers, ed->now_ms + 1,
+                                              search_preview_continue, NULL);
+}
+
+static SearchPreviewResult search_preview_found(Ed *ed, Win *w, u64 hit)
+{
+    ed->search.wrapped = ed->search.preview_wrapped;
+    search_go(ed, w, hit);
+    if (ed->search.preview_wrapped)
+        search_report_wrap(ed, ed->search.preview_backward);
+    else if (ed->search.preview_remaining <= 1U)
+        yew_msg_clear(ed);
+    if (ed->search_opts.hlsearch)
+        yew_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
+                            YEW_OVERLAY_BUDGET_US);
+    if (ed->search.preview_remaining > 1U) {
+        const Cursor *c = yew_ed_cursor(ed);
+        u64 len = yew_textbuf_len(w->buf->tb);
+        u64 from;
+
+        ed->search.preview_remaining--;
+        if (c == NULL) {
+            ed->search.preview_pending = false;
+            ed->search.preview_remaining = 0U;
+            return SEARCH_PREVIEW_MISS;
+        }
+        from = ed->search.preview_backward ? c->pos.v :
+               yew_grapheme_next(w->buf->tb, c->pos).v;
+        if (!ed->search.preview_backward && from <= c->pos.v)
+            from = c->pos.v < len ? c->pos.v + 1U : len;
+        ed->search.preview_at = from;
+        ed->search.preview_stop = ed->search.preview_backward ? 0U : len;
+        ed->search.preview_origin = from;
+        ed->search.preview_wrapped = false;
+        search_preview_schedule(ed, w);
+        return SEARCH_PREVIEW_PENDING;
+    }
+    ed->search.preview_pending = false;
+    ed->search.preview_remaining = 0U;
+    return SEARCH_PREVIEW_FOUND;
+}
+
+static bool search_preview_wrap(Ed *ed, Win *w)
+{
+    u64 len = yew_textbuf_len(w->buf->tb);
+
+    if (!ed->search.preview_wrapped && ed->search.preview_wrapscan &&
+        ((!ed->search.preview_backward && ed->search.preview_origin > 0U) ||
+         (ed->search.preview_backward &&
+          ed->search.preview_origin < len))) {
+        ed->search.preview_wrapped = true;
+        ed->search.preview_at = ed->search.preview_backward ? len : 0U;
+        ed->search.preview_stop = ed->search.preview_origin;
+        return true;
+    }
+    ed->search.preview_pending = false;
+    ed->search.preview_remaining = 0U;
+    search_report_miss(ed, ed->search.preview_backward,
+                       ed->search.preview_wrapscan, ed->search.pat,
+                       ed->search.patlen);
+    return false;
+}
+
+static SearchPreviewResult search_preview_slice(Ed *ed, Win *w)
+{
+    YewReInput in;
+    YewReMatch match;
+    u32 literal_bytes;
+    u64 budget = YEW_SEARCH_PREVIEW_CHUNK_BYTES;
+    u64 len;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        ed->search.preview_gen != ed->search.pat_gen ||
+        ed->search.preview_buf_gen != w->buf->tb->gen)
+        return SEARCH_PREVIEW_MISS;
+    literal_bytes = yew_re_whole_literal_bytes(ed->search.re);
+    if (literal_bytes == 0U)
+        return SEARCH_PREVIEW_MISS;
+    len = yew_textbuf_len(w->buf->tb);
+    in = yew_re_input_textbuf(w->buf->tb);
+
+    for (;;) {
+        (void)memset(&match, 0, sizeof(match));
+        if (!ed->search.preview_backward) {
+            u64 at = ed->search.preview_at;
+            u64 span;
+            u64 next;
+            u64 scan_hi;
+            u64 overlap = literal_bytes - 1U;
+
+            if (at >= ed->search.preview_stop) {
+                if (!search_preview_wrap(ed, w))
+                    return SEARCH_PREVIEW_MISS;
+                if (budget == 0U)
+                    break;
+                continue;
+            }
+            span = ed->search.preview_stop - at;
+            if (span > budget)
+                span = budget;
+            next = at + span;
+            scan_hi = overlap > len - next ? len : next + overlap;
+            in.window.hi = scan_hi;
+            if (yew_re_search(ed->search.re, &in, BYTEOFF(at), &match) &&
+                match.g[0].lo < next &&
+                match.g[0].lo < ed->search.preview_stop)
+                return search_preview_found(ed, w, match.g[0].lo);
+            ed->search.preview_at = next;
+            budget -= span;
+        } else {
+            u64 before = ed->search.preview_at > len ? len :
+                         ed->search.preview_at;
+            u64 span;
+            u64 lo;
+            u64 overlap;
+
+            if (before <= ed->search.preview_stop) {
+                if (!search_preview_wrap(ed, w))
+                    return SEARCH_PREVIEW_MISS;
+                if (budget == 0U)
+                    break;
+                continue;
+            }
+            span = before - ed->search.preview_stop;
+            if (span > budget)
+                span = budget;
+            lo = before - span;
+            overlap = literal_bytes - 1U;
+            in.window.lo = lo > ed->search.preview_stop + overlap ?
+                           lo - overlap : ed->search.preview_stop;
+            if (yew_re_search_back(ed->search.re, &in, BYTEOFF(before),
+                                   &match) &&
+                match.g[0].lo >= ed->search.preview_stop)
+                return search_preview_found(ed, w, match.g[0].lo);
+            ed->search.preview_at = lo;
+            budget -= span;
+        }
+        if (budget == 0U)
+            break;
+    }
+    search_preview_schedule(ed, w);
+    return SEARCH_PREVIEW_PENDING;
+}
+
+static SearchPreviewResult search_preview_start(Ed *ed, Win *w, u64 from,
+                                                bool backward,
+                                                bool wrapscan, u32 count)
+{
+    u64 len = yew_textbuf_len(w->buf->tb);
+
+    yew_search_preview_cancel(ed);
+    if (from > len)
+        from = len;
+    ed->search.preview_at = from;
+    ed->search.preview_stop = backward ? 0U : len;
+    ed->search.preview_origin = from;
+    ed->search.preview_buf_gen = w->buf->tb->gen;
+    ed->search.preview_gen = ed->search.pat_gen;
+    ed->search.preview_backward = backward;
+    ed->search.preview_wrapped = false;
+    ed->search.preview_wrapscan = wrapscan;
+    ed->search.preview_remaining = count == 0U ? 1U : count;
+    yew_msg_clear(ed);
+    return search_preview_slice(ed, w);
+}
+
 void yew_search_input(Ed *ed, Win *w)
 {
     Bytebuf text;
@@ -197,8 +438,31 @@ void yew_search_input(Ed *ed, Win *w)
 
     if (ed == NULL || w == NULL || !ed->search.active)
         return;
+    yew_search_preview_cancel(ed);
     bytebuf_init(&text);
     yew_cmdline_text(ed, &text);
+    if (text.len == 0U) {
+        /* Empty is a UI state, not a regex program.  Handling it before
+         * compilation matters because the engine intentionally rejects an
+         * empty pattern while the prompt must still retire every artifact
+         * left by the previous non-empty preview. */
+        (void)memset(&ed->search.err, 0, sizeof(ed->search.err));
+        ed->search.re = NULL;
+        ed->search.pat = NULL;
+        ed->search.patlen = 0U;
+        ed->search.pat_gen++;
+        yew_search_clear_highlight(ed, w);
+        if (ed->search.count_timer != YEW_TIMER_NONE) {
+            (void)yew_timer_cancel(&ed->timers, ed->search.count_timer);
+            ed->search.count_timer = YEW_TIMER_NONE;
+        }
+        ed->search.count_win_id = 0U;
+        w->overlay.count_total = 0U;
+        w->overlay.count_capped = false;
+        ed->footer_dirty = true;
+        bytebuf_free(&text);
+        return;
+    }
     (void)memset(&err, 0, sizeof(err));
     re = yew_search_compile(&ed->search.arena, (const char *)text.data,
                             text.len, &ed->search_opts, &err);
@@ -223,16 +487,13 @@ void yew_search_input(Ed *ed, Win *w)
     ed->search.pat[text.len] = '\0';
     ed->search.patlen = text.len;
     ed->search.pat_gen++;
-    if (text.len == 0U) {
-        /* An empty prompt previews nothing and highlights nothing, but
-         * the restore point stays live. */
-        yew_search_clear_highlight(ed, w);
-        bytebuf_free(&text);
-        return;
-    }
-    if (search_find(re, w->buf->tb, ed->search.origin.v,
-                    ed->search.reverse, ed->search_opts.wrapscan, &hit,
-                    &wrapped)) {
+    if (yew_re_whole_literal_bytes(re) != 0U) {
+        (void)search_preview_start(ed, w, ed->search.origin.v,
+                                   ed->search.reverse,
+                                   ed->search_opts.wrapscan, 1U);
+    } else if (search_find(re, w->buf->tb, ed->search.origin.v,
+                           ed->search.reverse, ed->search_opts.wrapscan,
+                           &hit, &wrapped)) {
         ed->search.wrapped = wrapped;
         search_go(ed, w, hit);
         yew_msg_clear(ed);
@@ -254,9 +515,30 @@ void yew_search_input(Ed *ed, Win *w)
 
 void yew_search_accept(Ed *ed, Win *w)
 {
+    bool pending;
+
     if (ed == NULL || w == NULL || !ed->search.active)
         return;
+    pending = ed->search.preview_pending;
+    if (!pending)
+        yew_search_preview_cancel(ed);
     ed->search.active = false;
+    /*
+     * The prompt scheduled this count for a later idle tick.  Once Enter
+     * commits the search, letting that timer survive makes its repaint land
+     * during an unrelated subsequent key.  Finish the deliberately bounded
+     * count in Enter's own frame instead, then retire the timer.
+     */
+    if (ed->search.count_timer != YEW_TIMER_NONE) {
+        (void)yew_timer_cancel(&ed->timers, ed->search.count_timer);
+        ed->search.count_timer = YEW_TIMER_NONE;
+    }
+    ed->search.count_win_id = 0U;
+    if (ed->search.re != NULL && ed->search.patlen > 0U &&
+        w->buf != NULL && w->buf->tb != NULL) {
+        yew_overlay_count(&w->overlay, ed->search.re, w->buf->tb, 1000);
+        ed->footer_dirty = true;
+    }
     if (ed->search.pat != NULL && ed->search.patlen > 0U) {
         /* Register `/` is the pattern's home; `:s//` and `^R /` read it
          * from there rather than from this struct. */
@@ -265,6 +547,8 @@ void yew_search_accept(Ed *ed, Win *w)
         /* The jump is a jump: `origin` becomes a place to come back to. */
         yew_jump_push(w, ed->search.origin, ed->now_ms);
     }
+    if (pending && ed->search.preview_timer == YEW_TIMER_NONE)
+        search_preview_schedule(ed, w);
 }
 
 void yew_search_cancel(Ed *ed, Win *w)
@@ -297,6 +581,8 @@ void yew_search_cancel(Ed *ed, Win *w)
         (void)yew_timer_cancel(&ed->timers, ed->search.count_timer);
         ed->search.count_timer = YEW_TIMER_NONE;
     }
+    ed->search.count_win_id = 0U;
+    yew_search_preview_cancel(ed);
     w->overlay.count_total = 0U;
     w->overlay.count_capped = false;
     ed->search.wrap_until_ms = 0;
@@ -344,6 +630,11 @@ bool yew_search_step(Ed *ed, Win *w, bool forward, u32 count)
         if (re == NULL)
             return false;
         ed->search.re = re;
+        ed->search.pat = arena_alloc(&ed->search.arena,
+                                     slash->bytes.len + 1U, 1U);
+        (void)memcpy(ed->search.pat, slash->bytes.data, slash->bytes.len);
+        ed->search.pat[slash->bytes.len] = '\0';
+        ed->search.patlen = slash->bytes.len;
         ed->search.pat_gen++;
     }
     /*
@@ -351,16 +642,32 @@ bool yew_search_step(Ed *ed, Win *w, bool forward, u32 count)
      * backwards: after `?foo`, `n` goes backwards and `N` forwards.
      */
     {
-        bool backward = ed->search.reverse ? forward : !forward;
+        bool backward = forward ? ed->search.reverse : !ed->search.reverse;
 
-        backward = forward ? ed->search.reverse : !ed->search.reverse;
+        if (yew_re_whole_literal_bytes(re) != 0U) {
+            const Cursor *c = yew_ed_cursor(ed);
+            u64 from;
+            SearchPreviewResult result;
+
+            if (c == NULL)
+                return false;
+            from = backward ? c->pos.v :
+                   yew_grapheme_next(w->buf->tb, c->pos).v;
+            if (!backward && from <= c->pos.v)
+                from = c->pos.v + 1U;
+            result = search_preview_start(ed, w, from, backward,
+                                          ed->search_opts.wrapscan, n);
+            if (result == SEARCH_PREVIEW_PENDING)
+                return true;
+            any = result == SEARCH_PREVIEW_FOUND;
+        }
         for (i = 0U; i < n; i++) {
             const Cursor *c = yew_ed_cursor(ed);
             u64 from;
             u64 hit = 0U;
             bool wrapped = false;
 
-            if (c == NULL)
+            if (c == NULL || yew_re_whole_literal_bytes(re) != 0U)
                 break;
             /*
              * Step off the current match before searching, or `n` finds
@@ -390,8 +697,9 @@ bool yew_search_step(Ed *ed, Win *w, bool forward, u32 count)
     if (any && ed->search_opts.hlsearch)
         yew_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
                             YEW_OVERLAY_BUDGET_US);
-    if (any)
-        yew_search_schedule_count(ed, w);
+    /* Moving between matches does not change the match total.  Recounting
+     * here used to arm a whole-buffer idle pass after every n/N key and let
+     * that work land in a later keypress frame. */
     /*
      * Exactly one match, and the cursor is on it: say so rather than
      * appearing to do nothing.  Silence here reads as a broken
@@ -437,20 +745,23 @@ static bool search_word_span(const TextBuf *tb, ByteOff pos, Span *out)
  */
 static void search_idle(Ed *ed, void *ctx)
 {
-    Win *w = ctx;
+    Win *w;
 
-    if (ed == NULL || w == NULL || ed->search.re == NULL)
+    (void)ctx;
+    if (ed == NULL)
         return;
     ed->search.count_timer = YEW_TIMER_NONE;
+    w = yew_ed_win_by_id(ed, ed->search.count_win_id);
+    ed->search.count_win_id = 0U;
+    if (w == NULL || ed->search.re == NULL)
+        return;
     if (!w->overlay.complete)
         yew_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen, 0);
-    /*
-     * 50 ms and 10 000 matches, whichever comes first.  An unbounded
-     * counter is the exact feature that makes a big-file editor feel
-     * broken, so the number the statusline shows is explicitly a
-     * bounded one — `[3/10000+]` rather than a lie or a stall.
-     */
-    yew_overlay_count(&w->overlay, ed->search.re, w->buf->tb, 50000);
+    /* One millisecond, 16 KiB and 10 000 matches, whichever comes first.
+     * The badge carries `+` whenever the result is partial.  The old 50 ms
+     * slice could fire on the next input wake and was itself a visible
+     * keypress stall. */
+    yew_overlay_count(&w->overlay, ed->search.re, w->buf->tb, 1000);
     ed->footer_dirty = true;
 }
 
@@ -462,8 +773,9 @@ void yew_search_schedule_count(Ed *ed, Win *w)
         (void)yew_timer_cancel(&ed->timers, ed->search.count_timer);
     /* One tick out, so a burst of `n` presses schedules once rather
      * than counting between each. */
+    ed->search.count_win_id = w->id;
     ed->search.count_timer = yew_timer_add(&ed->timers,
-                                           ed->now_ms + 16, search_idle, w);
+                                           ed->now_ms + 16, search_idle, NULL);
     if (ed->search.wrapped)
         ed->search.wrap_until_ms = ed->now_ms + 2000;
 }

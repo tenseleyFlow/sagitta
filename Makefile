@@ -749,6 +749,7 @@ endif
         perf-ai-shadow perf-ai-privacy perf-plug perf-pkg perf-cloud \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
+        perf-syn-scroll-s56 \
         perf-syn-gate-selftest perf-syn-line-probe \
         perf-syn-resident-line-probe perf-syn-edit-probe perf-syn-size \
         perf-batch perf-batch-selftest \
@@ -1592,6 +1593,10 @@ perf-record: $(BUILD)/perf_record
 perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
 	$(BUILD)/perf_syn --gate
 
+perf-syn-scroll-s56: $(BUILD)/perf_syn $(BUILD)/yew
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_syn --gate-scroll-s56
+
 perf-symidx: $(BUILD)/perf_symidx
 	$(BUILD)/perf_symidx
 
@@ -1754,6 +1759,7 @@ perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 perf-latency-s56-check: $(BUILD)/perf_latency_s56 $(BUILD)/perf_echo_child
 	$(BUILD)/perf_latency_s56 --check-scripts tests/perf/sessions
 	$(BUILD)/perf_latency_s56 --check-assist-vt
+	$(BUILD)/perf_latency_s56 --check-frame-tags
 	$(BUILD)/perf_latency_s56 --floor --echo \
 		$(abspath $(BUILD)/perf_echo_child)
 
@@ -2010,7 +2016,8 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 		--mockai $(abspath $(MOCKAI)) \
 		--ai-script $(abspath tests/fixtures/ai/ollama.script)
 
-perf-s56-functional: perf-latency-s56-matrix \
+perf-s56-functional: perf-latency-s56-matrix perf-syn-scroll-s56 \
+                     perf-search-s56-smoke \
                      perf-startup-s56 perf-open-s56 perf-mem-s56 \
                      perf-s56-gate-selftest perf-prof-crosscheck-s56
 
@@ -2423,6 +2430,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
          $(FLETCH_RUN_OBJ:.o=.d) $(SCRIPT_RUNNER_OBJ:.o=.d) \
+         $(GIT_SCRIPT_OBJ:.o=.d) $(GIT_HUNKS_OBJ:.o=.d) \
          $(FUSS_COMMANDS_OBJ:.o=.d) \
          $(GROUP_FROM_DIR_OBJ:.o=.d) \
          $(ROUNDTRIP_OBJ:.o=.d) \
