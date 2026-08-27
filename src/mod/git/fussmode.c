@@ -30,6 +30,7 @@
 #include "text/undo.h"
 #include "ui/draw.h"
 #include "ui/message.h"
+#include "ui/panel.h"
 #include "ui/picker.h"
 #include "ui/region.h"
 #include "ui/statusline.h"
@@ -89,11 +90,8 @@ struct FussMode {
     i64 opening_until_ms;
     bool ascii_glyphs;
     bool viewer;
-    Pane *saved_root;
-    Pane *saved_focus;
-    Win *saved_win;
-    Pane *fuss_root;
-    Pane *viewer_leaf;
+    bool draw_dirty;
+    bool backdrop_dirty;
     u16 scroll;
     u32 saved_buffer_id;
     u32 viewer_buffer_id;
@@ -104,6 +102,9 @@ struct FussMode {
     bool commit_editing;
     bool commit_amend;
     u8 commit_comment;
+    Pane *commit_leaf;
+    Win *commit_win;
+    Win *commit_saved_win;
     FussPromptAction prompt_action;
     char *prompt_path;
     bool prompt_untracked;
@@ -147,6 +148,8 @@ static void fuss_walk_restart(Ed *ed);
 static void fuss_expand_clear(FussMode *f);
 static bool fuss_expand_start(Ed *ed, bool enter);
 static void fuss_expand_tick(Ed *ed);
+static bool fuss_buffer_bytes(const Buffer *buffer, Bytebuf *out);
+static void fuss_commit_view_close(Ed *ed);
 
 static void fuss_viewer_close(Ed *ed)
 {
@@ -155,85 +158,54 @@ static void fuss_viewer_close(Ed *ed)
     if (ed == NULL || ed->fuss == NULL)
         return;
     f = ed->fuss;
-    if (f->viewer_leaf != NULL) {
-        (void)yew_pane_close(ed, f->viewer_leaf);
-        f->viewer_leaf = NULL;
-    }
+    if (f->viewer && ed->win != NULL)
+        yew_panel_close(ed, &ed->win->panel);
     f->viewer = false;
     f->viewer_buffer_id = 0U;
-    if (f->fuss_root != NULL && f->fuss_root->is_leaf) {
-        ed->focus = f->fuss_root;
-        ed->win = f->fuss_root->win;
-    }
-    fuss_damage(ed);
-}
-
-static void fuss_layout_restore(Ed *ed)
-{
-    FussMode *f;
-
-    if (ed == NULL || ed->fuss == NULL)
-        return;
-    f = ed->fuss;
-    fuss_viewer_close(ed);
-    if (f->fuss_root != NULL) {
-        f->fuss_root->win = NULL;
-        yew_pane_free(ed, f->fuss_root);
-    }
-    ed->pane_root = f->saved_root;
-    ed->focus = f->saved_focus;
-    ed->win = f->saved_win;
-    f->saved_root = NULL;
-    f->saved_focus = NULL;
-    f->saved_win = NULL;
-    f->fuss_root = NULL;
     fuss_damage(ed);
 }
 
 static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
 {
     FussMode *f;
-    Pane *viewer;
-    u16 usable;
-    u16 wanted;
+    Bytebuf body;
+    PanelSpec spec;
 
     if (ed == NULL || buffer == NULL || ed->fuss == NULL)
         return false;
     f = ed->fuss;
-    if (!f->active || f->fuss_root == NULL)
+    if (!f->active || ed->win == NULL)
         return false;
-    if (f->viewer_leaf == NULL) {
-        yew_layout(ed);
-        if (!ed->grid_ready && f->fuss_root->rect.w == 0U)
-            f->fuss_root->rect =
-                (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2U + 1U),
-                       (u16)YEW_PANE_MIN_H};
-        viewer = yew_pane_split(ed, f->fuss_root, YEW_SPLIT_H);
-        if (viewer == NULL) {
-            yew_msg(ed, YEW_MSG_ERROR,
-                    "terminal is too narrow for a FUSS viewer pane");
-            return false;
-        }
-        f->viewer_leaf = viewer;
-        usable = f->fuss_root->rect.w > 0U ?
-                 (u16)(f->fuss_root->rect.w - 1U) : 0U;
-        wanted = (u16)((u32)f->fuss_root->rect.w * 45U / 100U);
-        if (wanted > 56U)
-            wanted = 56U;
-        if (wanted < YEW_PANE_MIN_W)
-            wanted = YEW_PANE_MIN_W;
-        if (usable > YEW_PANE_MIN_W &&
-            wanted > (u16)(usable - YEW_PANE_MIN_W))
-            wanted = (u16)(usable - YEW_PANE_MIN_W);
-        if (usable != 0U)
-            f->fuss_root->ratio = (float)wanted / (float)usable;
-        yew_layout(ed);
+    if (!fuss_buffer_bytes(buffer, &body))
+        return false;
+    if (body.len > UINT32_MAX) {
+        bytebuf_free(&body);
+        return false;
     }
-    yew_ed_win_set_buffer(ed, f->viewer_leaf->win, buffer);
-    ed->focus = f->viewer_leaf;
-    ed->win = f->viewer_leaf->win;
+    (void)memset(&spec, 0, sizeof(spec));
+    spec.title = buffer->name == NULL ? "preview" : buffer->name;
+    spec.body = body.data;
+    spec.len = (u32)body.len;
+    spec.x = ed->win->rect.x;
+    spec.y = ed->win->rect.y;
+    spec.place = YEW_PANEL_CURSOR;
+    spec.max_w = YEW_PANEL_MAX_W;
+    spec.max_h = YEW_PANEL_MAX_H;
+    spec.role = "git.ignored";
+    if (ed->win->rect.w < 3U && ed->grid.cols < 3U) {
+        bytebuf_free(&body);
+        f->viewer = true;
+        f->viewer_buffer_id = buffer->id;
+        return true;
+    }
+    if (!yew_panel_open(ed, &ed->win->panel, &spec)) {
+        bytebuf_free(&body);
+        return false;
+    }
+    bytebuf_free(&body);
     f->viewer = true;
     f->viewer_buffer_id = buffer->id;
+    ed->full_damage = true;
     fuss_damage(ed);
     return true;
 }
@@ -351,14 +323,63 @@ const char *yew_fuss_jump_pattern(const FussJump *jump, u32 *len)
 
 static void fuss_damage(Ed *ed)
 {
-    ed->layout_dirty = true;
-    ed->full_damage = true;
+    if (ed == NULL || ed->fuss == NULL)
+        return;
+    ed->fuss->draw_dirty = true;
     ed->footer_dirty = true;
 }
 
 static bool fuss_show_buffer(Ed *ed, Buffer *buffer)
 {
     return fuss_viewer_open(ed, buffer);
+}
+
+static bool fuss_commit_view_open(Ed *ed, Buffer *buffer)
+{
+    FussMode *f;
+    Win *win;
+
+    if (ed == NULL || ed->fuss == NULL || buffer == NULL ||
+        ed->focus == NULL || !ed->focus->is_leaf || ed->win == NULL ||
+        ed->focus->win != ed->win)
+        return false;
+    f = ed->fuss;
+    if (f->commit_win != NULL)
+        return false;
+    fuss_viewer_close(ed);
+    win = yew_ed_win_clone(ed, ed->win);
+    if (win == NULL)
+        return false;
+    yew_ed_win_set_buffer(ed, win, buffer);
+    f->commit_leaf = ed->focus;
+    f->commit_saved_win = ed->win;
+    f->commit_win = win;
+    f->commit_leaf->win = win;
+    ed->win = win;
+    ed->full_damage = true;
+    return true;
+}
+
+static void fuss_commit_view_close(Ed *ed)
+{
+    FussMode *f;
+    Win *win;
+
+    if (ed == NULL || ed->fuss == NULL)
+        return;
+    f = ed->fuss;
+    win = f->commit_win;
+    if (win == NULL)
+        return;
+    if (f->commit_leaf != NULL && f->commit_leaf->win == win)
+        f->commit_leaf->win = f->commit_saved_win;
+    if (ed->win == win)
+        ed->win = f->commit_saved_win;
+    f->commit_leaf = NULL;
+    f->commit_win = NULL;
+    f->commit_saved_win = NULL;
+    yew_ed_win_release(ed, win);
+    ed->full_damage = true;
 }
 
 static bool fuss_replace_buffer(Ed *ed, Buffer *buffer, const u8 *bytes,
@@ -584,11 +605,9 @@ void yew_fuss_state_free(Ed *ed)
     if (ed == NULL || ed->fuss == NULL)
         return;
     f = ed->fuss;
-    if (f->active || f->fuss_root != NULL) {
-        f->commit_editing = false;
-        f->active = false;
-        fuss_layout_restore(ed);
-    }
+    fuss_commit_view_close(ed);
+    f->commit_editing = false;
+    f->active = false;
     free(f->prompt_path);
     {
         u32 i;
@@ -625,24 +644,18 @@ bool yew_fuss_active(const Ed *ed)
 
 CmdStatus yew_fuss_mode_enter(Ed *ed)
 {
-    GitAsyncState avail;
     const GitSnapshot *snap;
     OptVal ascii;
 
     if (ed == NULL || ed->fuss == NULL)
         return YEW_CMD_ERR_STATE;
-    avail = yew_git_avail_state(ed);
-    if (avail == YEW_GIT_ASYNC_FAILED) {
-        yew_msg(ed, YEW_MSG_ERROR, "%s", yew_git_state_str(YEW_GIT_NO_GIT));
-        return YEW_CMD_ERR_STATE;
-    }
     if (yew_opt_get(ed, NULL, NULL, "git.ascii_glyphs",
                     (u32)(sizeof("git.ascii_glyphs") - 1U), &ascii) &&
         ascii.type == (u8)YEW_OPT_BOOL)
         ed->fuss->ascii_glyphs = ascii.as.b;
     if (!ed->fuss->active) {
         ed->fuss->opts.all_files = yew_state_option_bool(
-            ed, "git.tree.all_files", false);
+            ed, "git.tree.all_files", true);
         ed->fuss->opts.show_hidden = yew_state_option_bool(
             ed, "git.tree.show_hidden", false);
         ed->fuss->active = true;
@@ -656,12 +669,9 @@ CmdStatus yew_fuss_mode_enter(Ed *ed)
             ed->now_ms + FUSS_OPENING_FRAME_MS;
         ed->fuss->saved_buffer_id = ed->win != NULL && ed->win->buf != NULL ?
                                     ed->win->buf->id : 0U;
-        ed->fuss->saved_root = ed->pane_root;
-        ed->fuss->saved_focus = ed->focus;
-        ed->fuss->saved_win = ed->win;
-        ed->fuss->fuss_root = yew_pane_new_leaf(ed->win);
-        ed->pane_root = ed->fuss->fuss_root;
-        ed->focus = ed->fuss->fuss_root;
+        ed->fuss->backdrop_dirty = true;
+        ed->layout_dirty = true;
+        ed->full_damage = true;
         fuss_walk_restart(ed);
     }
     snap = yew_git_snapshot(ed);
@@ -686,7 +696,6 @@ CmdStatus yew_fuss_mode_enter(Ed *ed)
 void yew_fuss_mode_leave(Ed *ed)
 {
     FussMode *f;
-    Buffer *saved;
 
     if (ed == NULL || ed->fuss == NULL)
         return;
@@ -696,11 +705,10 @@ void yew_fuss_mode_leave(Ed *ed)
     f->active = false;
     fuss_expand_clear(f);
     yew_fuss_jump_init(&f->jump);
-    saved = yew_ws_buf_by_id(ed, f->saved_buffer_id);
-    if (saved != NULL && f->saved_win != NULL && f->saved_win->buf != saved)
-        yew_ed_win_set_buffer(ed, f->saved_win, saved);
-    fuss_layout_restore(ed);
-    fuss_damage(ed);
+    fuss_viewer_close(ed);
+    ed->layout_dirty = true;
+    ed->full_damage = true;
+    ed->footer_dirty = true;
 }
 
 u16 yew_fuss_footer_rows(const Ed *ed)
@@ -721,15 +729,6 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
         ed->fuss->opening = false;
         fuss_damage(ed);
     }
-    if (yew_git_avail_state(ed) == YEW_GIT_ASYNC_FAILED) {
-        yew_msg(ed, YEW_MSG_ERROR, "%s",
-                yew_git_state_str(YEW_GIT_NO_GIT));
-        if (ed->mode == YEW_MODE_F)
-            (void)yew_mode_enter(ed, YEW_MODE_L);
-        return;
-    }
-    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED)
-        return;
     snap = yew_git_snapshot(ed);
     if (snap != NULL)
         fuss_rebuild(ed, snap);
@@ -887,30 +886,34 @@ static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
     Bytebuf counts;
     u16 col = left;
 
-    fuss_put_lit(&ed->grid, row, &col, right, "yew:", sizeof("yew:") - 1U,
-                 style.fg, style.bg,
-                 (u16)(style.attrs | YEW_ATTR_BOLD));
-    if (ed->fuss->opening) {
-        fuss_put_lit(&ed->grid, row, &col, right, "loading",
-                     sizeof("loading") - 1U, style.fg, style.bg,
-                     (u16)(style.attrs | YEW_ATTR_DIM));
-        return;
-    }
-    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED) {
-        const char *state = yew_git_state_str(yew_git_detect_result(ed));
+    const char *root = yew_ws_root(ed);
+    const char *title = root;
+    const char *slash;
 
-        fuss_put_lit(&ed->grid, row, &col, right, state,
-                     fuss_cstr_len(state), style.fg, style.bg,
+    slash = root == NULL ? NULL : strrchr(root, '/');
+    if (slash != NULL && slash[1] != '\0')
+        title = slash + 1;
+    if (title == NULL || title[0] == '\0')
+        title = "/";
+    fuss_put_lit(&ed->grid, row, &col, right, title, fuss_cstr_len(title),
+                 style.fg, style.bg, (u16)(style.attrs | YEW_ATTR_BOLD));
+    if (ed->fuss->opening) {
+        fuss_put_lit(&ed->grid, row, &col, right, " · loading",
+                     sizeof(" · loading") - 1U, style.fg, style.bg,
                      (u16)(style.attrs | YEW_ATTR_DIM));
         return;
     }
+    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED)
+        return;
     snap = yew_git_snapshot(ed);
     if (snap == NULL || snap->gen == 0U) {
-        fuss_put_lit(&ed->grid, row, &col, right, "loading",
-                     sizeof("loading") - 1U, style.fg, style.bg,
+        fuss_put_lit(&ed->grid, row, &col, right, " · loading",
+                     sizeof(" · loading") - 1U, style.fg, style.bg,
                      (u16)(style.attrs | YEW_ATTR_DIM));
         return;
     }
+    fuss_put_lit(&ed->grid, row, &col, right, " · ",
+                 sizeof(" · ") - 1U, style.fg, style.bg, style.attrs);
     if (snap->branch != NULL)
         fuss_put_lit(&ed->grid, row, &col, right, snap->branch,
                      fuss_cstr_len(snap->branch), style.fg, style.bg,
@@ -1070,19 +1073,44 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
     }
 }
 
-static void fuss_draw_viewer(Ed *ed)
+u16 yew_fuss_drawer_width(u16 content_cols)
 {
-    FussMode *f;
-    Win *w;
+    u16 width;
 
-    if (ed == NULL || ed->fuss == NULL)
-        return;
-    f = ed->fuss;
-    w = f->viewer_leaf == NULL ? NULL : f->viewer_leaf->win;
-    if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
-        w->rect.w == 0U || w->rect.h == 0U)
-        return;
-    yew_draw_document_rows(ed, w, 0U, w->rect.h);
+    if (content_cols < 48U)
+        return (u16)(content_cols / 2U);
+    width = (u16)(content_cols / 6U);
+    if (width < 20U)
+        width = 20U;
+    if (width > 48U)
+        width = 48U;
+    return width;
+}
+
+Rect yew_fuss_backdrop_rect(const Ed *ed)
+{
+    u16 top;
+
+
+    if (ed == NULL)
+        return (Rect){0U, 0U, 0U, 0U};
+    top = (u16)(ed->tab_strip_rect.y + ed->tab_strip_rect.h);
+    return (Rect){0U, top, ed->grid.cols,
+                  ed->footer_rect.y > top ?
+                      (u16)(ed->footer_rect.y - top) : 0U};
+}
+
+Rect yew_fuss_drawer_rect(const Ed *ed)
+{
+    Rect rect = yew_fuss_backdrop_rect(ed);
+
+    rect.w = yew_fuss_drawer_width(rect.w);
+    return rect;
+}
+
+bool yew_fuss_draw_dirty(const Ed *ed)
+{
+    return yew_fuss_active(ed) && ed->fuss->draw_dirty;
 }
 
 void yew_fuss_draw(Ed *ed)
@@ -1090,7 +1118,6 @@ void yew_fuss_draw(Ed *ed)
     FussMode *f;
     Rect content;
     Rect tree;
-    u16 top;
     u16 first;
     u16 visible;
     i32 selected;
@@ -1100,34 +1127,34 @@ void yew_fuss_draw(Ed *ed)
     if (!yew_fuss_active(ed))
         return;
     f = ed->fuss;
-    yew_region_frame_begin();
-    yew_tab_strip_draw(ed, ed->tab_strip_rect);
-    top = (u16)(ed->tab_strip_rect.y + ed->tab_strip_rect.h);
-    content = (Rect){0U, top, ed->grid.cols,
-                     ed->footer_rect.y > top ?
-                         (u16)(ed->footer_rect.y - top) : 0U};
+    yew_region_remove_kind(YEW_REGION_FUSS_ROW);
+    content = yew_fuss_backdrop_rect(ed);
     blank = ed->grid.blank;
-    for (i = content.y; i < (size_t)content.y + content.h; i++)
-        yew_grid_fill(&ed->grid, (u16)i, 0U, ed->grid.cols, blank);
-    if (content.h == 0U)
+    if (f->backdrop_dirty || ed->full_damage) {
+        Cell dim = blank;
+
+        dim.attrs = YEW_ATTR_DIM;
+        for (i = content.y; i < (size_t)content.y + content.h; i++)
+            yew_grid_overlay(&ed->grid, (u16)i, content.x,
+                             (u16)(content.x + content.w), &dim,
+                             YEW_OVERLAY_ATTRS);
+        f->backdrop_dirty = false;
+    }
+    if (content.h == 0U) {
+        f->draw_dirty = false;
         return;
-    tree = f->fuss_root == NULL ? content : f->fuss_root->rect;
-    if (f->viewer_leaf != NULL && f->fuss_root != NULL &&
-        !f->fuss_root->is_leaf)
-        tree = f->fuss_root->a->rect;
+    }
+    tree = yew_fuss_drawer_rect(ed);
+    blank = ed->grid.blank;
+    blank.fg = fuss_base_style(ed).fg;
+    blank.bg = fuss_base_style(ed).bg;
+    for (i = tree.y; i < (size_t)tree.y + tree.h; i++)
+        yew_grid_fill(&ed->grid, (u16)i, tree.x,
+                      (u16)(tree.x + tree.w), blank);
     fuss_header(ed, tree.y, tree.x, (u16)(tree.x + tree.w));
     visible = tree.h > 1U ? (u16)(tree.h - 1U) : 0U;
-    if (f->opening)
-        return;
-    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED && visible != 0U) {
-        ThemeEnt style = fuss_base_style(ed);
-        const char *message = "not a Git repository — use :git.init";
-        u16 col = tree.x;
-
-        fuss_put_lit(&ed->grid, (u16)(tree.y + 1U), &col,
-                     (u16)(tree.x + tree.w), message,
-                     fuss_cstr_len(message), style.fg, style.bg,
-                     YEW_ATTR_DIM);
+    if (f->opening) {
+        f->draw_dirty = false;
         return;
     }
     selected = fuss_row(f);
@@ -1152,19 +1179,7 @@ void yew_fuss_draw(Ed *ed)
                            (Rect){tree.x, row, tree.w, 1U},
                            (i32)path_id);
     }
-    if (f->viewer_leaf != NULL && f->fuss_root != NULL &&
-        !f->fuss_root->is_leaf) {
-        ThemeEnt border_style = fuss_role_style(ed, "git.ignored",
-                                                 fuss_base_style(ed));
-        u16 border = (u16)(tree.x + tree.w);
-        u16 row;
-
-        for (row = content.y; row < (u16)(content.y + content.h); row++)
-            (void)yew_grid_put(&ed->grid, row, border, (const u8 *)"│",
-                               sizeof("│") - 1U, border_style.fg,
-                               border_style.bg, border_style.attrs);
-        fuss_draw_viewer(ed);
-    }
+    f->draw_dirty = false;
 }
 
 void yew_fuss_draw_footer(Ed *ed, Rect footer)
@@ -1777,7 +1792,7 @@ static void fuss_commit_resume(Ed *ed, Buffer *commit)
     f->commit_buffer_id = 0U;
     f->commit_amend = false;
     f->commit_comment = 0U;
-    fuss_viewer_close(ed);
+    fuss_commit_view_close(ed);
     if (commit != NULL && commit != &ed->buffer)
         yew_ws_scratch_drop(ed, commit);
     if (yew_mode_enter(ed, YEW_MODE_F) != YEW_CMD_OK)
@@ -2034,7 +2049,7 @@ static CmdStatus fuss_commit_begin(Ed *ed, bool amend, const u8 *prefill,
     f->commit_buffer_id = buffer->id;
     f->commit_amend = amend;
     f->commit_comment = comment;
-    if (!fuss_show_buffer(ed, buffer)) {
+    if (!fuss_commit_view_open(ed, buffer)) {
         f->commit_editing = false;
         f->commit_buffer_id = 0U;
         f->commit_amend = false;
@@ -2046,7 +2061,7 @@ static CmdStatus fuss_commit_begin(Ed *ed, bool amend, const u8 *prefill,
         f->commit_buffer_id = 0U;
         f->commit_amend = false;
         f->commit_comment = 0U;
-        fuss_viewer_close(ed);
+        fuss_commit_view_close(ed);
         return YEW_CMD_ERR_STATE;
     }
     yew_msg(ed, YEW_MSG_INFO,
@@ -3616,10 +3631,22 @@ static CmdStatus fuss_open_path(CmdCtx *cx, bool leave)
     char *path;
     char *absolute;
     Buffer *buffer;
+    const FussItem *item;
+    const FussNode *node;
+    i32 row;
+    int tab;
     bool was_resident;
 
     if (fuss_require(cx, &f) != YEW_CMD_OK)
         return YEW_CMD_ERR_STATE;
+    row = fuss_row(f);
+    item = fuss_item(f, row);
+    node = fuss_node(f, item);
+    if (cx->sarg == NULL && node != NULL && !node->is_file) {
+        (void)yew_fuss_nav_toggle(&f->tree, row);
+        fuss_damage(cx->ed);
+        return YEW_CMD_OK;
+    }
     path = fuss_selected_path(cx);
     if (path == NULL)
         return YEW_CMD_ERR_ARG;
@@ -3642,17 +3669,84 @@ static CmdStatus fuss_open_path(CmdCtx *cx, bool leave)
     if (!was_resident)
         yew_fl_hook_buffer(cx->ed, FL_EV_BUF_OPEN, buffer);
     if (leave) {
-        if (f->saved_win == NULL)
+        fuss_viewer_close(cx->ed);
+        tab = yew_tab_open(cx->ed, buffer->meta.realpath);
+        if (tab < 0)
             return YEW_CMD_ERR_STATE;
-        yew_ed_win_set_buffer(cx->ed, f->saved_win, buffer);
-        f->saved_buffer_id = buffer->id;
-        return yew_mode_enter(cx->ed, YEW_MODE_L);
+        if (yew_mode_enter(cx->ed, YEW_MODE_L) != YEW_CMD_OK)
+            return YEW_CMD_ERR_STATE;
+        yew_tab_switch(cx->ed, tab);
+        return YEW_CMD_OK;
     }
     return fuss_show_buffer(cx->ed, buffer) ? YEW_CMD_OK :
                                              YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_view(CmdCtx *cx) { return fuss_open_path(cx, false); }
+
+static CmdStatus fuss_open_split(CmdCtx *cx, SplitDir dir)
+{
+    FussMode *f;
+    char *path;
+    char *absolute;
+    Buffer *buffer;
+    bool was_resident;
+    Pane *leaf;
+    Pane *split;
+    Tab *tab;
+
+    if (fuss_require(cx, &f) != YEW_CMD_OK || cx->ed->focus == NULL)
+        return YEW_CMD_ERR_STATE;
+    path = fuss_selected_path(cx);
+    if (path == NULL)
+        return YEW_CMD_ERR_ARG;
+    if (!fuss_target_guard(cx, path, FUSS_TARGET_FILE, "open split", NULL)) {
+        free(path);
+        return YEW_CMD_ERR_STATE;
+    }
+    absolute = fuss_join_root(cx->ed, path);
+    free(path);
+    if (absolute == NULL)
+        return YEW_CMD_ERR_ARG;
+    buffer = yew_ws_file_buf(cx->ed, absolute);
+    free(absolute);
+    if (buffer == NULL)
+        return YEW_CMD_ERR_IO;
+    was_resident = yew_buf_resident(buffer);
+    if (yew_buf_hydrate(cx->ed, buffer) != 0)
+        return YEW_CMD_ERR_IO;
+    if (!was_resident)
+        yew_fl_hook_buffer(cx->ed, FL_EV_BUF_OPEN, buffer);
+
+    leaf = cx->ed->focus;
+    split = yew_pane_split(cx->ed, leaf, dir);
+    if (split == NULL) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "no room to split");
+        return YEW_CMD_ERR_STATE;
+    }
+    yew_ed_win_set_buffer(cx->ed, split->win, buffer);
+    cx->ed->focus = split;
+    cx->ed->win = split->win;
+    tab = yew_tab_at(cx->ed, cx->ed->tabs.active);
+    if (tab != NULL)
+        tab->focus = split;
+    yew_state_mark_dirty(cx->ed);
+    cx->ed->layout_dirty = true;
+    cx->ed->full_damage = true;
+    if (yew_mode_enter(cx->ed, YEW_MODE_L) != YEW_CMD_OK)
+        return YEW_CMD_ERR_STATE;
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_fuss_cmd_open_split_h(CmdCtx *cx)
+{
+    return fuss_open_split(cx, YEW_SPLIT_H);
+}
+
+CmdStatus yew_fuss_cmd_open_split_v(CmdCtx *cx)
+{
+    return fuss_open_split(cx, YEW_SPLIT_V);
+}
 
 CmdStatus yew_fuss_cmd_branch_switch(CmdCtx *cx)
 {

@@ -76,6 +76,10 @@ void test_cmd_registry_builtins_are_deterministic(void)
     append_registry(&second);
     YEW_ASSERT_EQ_U64(first.len, second.len);
     YEW_ASSERT_EQ_MEM(first.data, second.data, first.len);
+    YEW_ASSERT_NOT_NULL(yew_cmd_desc(yew_cmd_lookup(
+        "ed.git.open_split_h", (u32)strlen("ed.git.open_split_h"))));
+    YEW_ASSERT_NOT_NULL(yew_cmd_desc(yew_cmd_lookup(
+        "ed.git.open_split_v", (u32)strlen("ed.git.open_split_v"))));
     bytebuf_free(&second);
     bytebuf_free(&first);
 }

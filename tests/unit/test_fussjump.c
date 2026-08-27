@@ -228,7 +228,9 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
     } rows[] = {
         {"<up>", "ed.git.nav.prev"}, {"<down>", "ed.git.nav.next"},
         {"<left>", "ed.git.nav.parent"}, {"<right>", "ed.git.nav.enter"},
-        {"<space>", "ed.git.nav.toggle"},
+        {"<space>", "ed.git.view"},
+        {"C-w s", "ed.git.open_split_h"},
+        {"C-w v", "ed.git.open_split_v"},
         {"C-<up>", "ed.git.nav.row_prev"},
         {"C-<down>", "ed.git.nav.row_next"},
         {"a", "ed.git.stage"}, {"u", "ed.git.unstage"},
@@ -262,12 +264,15 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
     YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
     YEW_ASSERT_EQ_I64(ed.chord.layer, -1);
     for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
-        KeyId key;
+        KeyId keys[2];
+        size_t key_count;
         const Binding *binding = NULL;
         const CmdDesc *desc;
 
-        YEW_ASSERT_EQ_U64(yew_key_parse_seq(rows[i].seq, &key, 1U), 1U);
-        YEW_ASSERT_EQ_I64(yew_keymap_lookup(ed.keys.l[0], &key, 1U,
+        key_count = yew_key_parse_seq(rows[i].seq, keys,
+                                      YEW_ARRAY_LEN(keys));
+        YEW_ASSERT(key_count == 1U || key_count == 2U);
+        YEW_ASSERT_EQ_I64(yew_keymap_lookup(ed.keys.l[0], keys, key_count,
                                             NULL, &binding),
                           YEW_MATCH_FULL);
         YEW_ASSERT_NOT_NULL(binding);

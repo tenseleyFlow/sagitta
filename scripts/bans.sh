@@ -261,6 +261,10 @@ shadow_draw_files=$tmp/shadow-draw-files
 printf '%s\n' "$repo_dir/src/ui/shadowdraw.c" >"$shadow_draw_files"
 scan "shadow insertion preview must compose without destructive row fill" \
     'yew_grid_fill[[:space:]]*\(' "$shadow_draw_files"
+fuss_mode_files=$tmp/fuss-mode-files
+printf '%s\n' "$repo_dir/src/mod/git/fussmode.c" >"$fuss_mode_files"
+scan "F mode is a drawer and must not replace the live pane root" \
+    'pane_root[[:space:]]*=' "$fuss_mode_files"
 scan "generated edit campaigns must use xorshift64*, not libc randomness" \
     '(^|[^[:alnum:]_])rand[[:space:]]*\(|(^|[^[:alnum:]_])srand[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)' \
     "$deterministic_fuzz_files"

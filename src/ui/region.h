@@ -93,6 +93,8 @@ enum {
 /* Clears the table.  Called at frame BEGIN — see region.c for why the
  * obvious alternative is wrong. */
 void yew_region_frame_begin(void);
+/* Rebuild one overlay's rows without invalidating live pane/tab regions. */
+void yew_region_remove_kind(RegionKind kind);
 void yew_region_add(RegionKind kind, Rect rect, i32 payload);
 /* Last-added wins, so overlays drawn after the document shadow it. */
 Region yew_region_hit(u16 x, u16 y);

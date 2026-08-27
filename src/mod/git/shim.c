@@ -275,6 +275,30 @@ u16 yew_fuss_footer_rows(const Ed *ed)
     return 0U;
 }
 
+u16 yew_fuss_drawer_width(u16 content_cols)
+{
+    (void)content_cols;
+    return 0U;
+}
+
+Rect yew_fuss_drawer_rect(const Ed *ed)
+{
+    (void)ed;
+    return (Rect){0U, 0U, 0U, 0U};
+}
+
+Rect yew_fuss_backdrop_rect(const Ed *ed)
+{
+    (void)ed;
+    return (Rect){0U, 0U, 0U, 0U};
+}
+
+bool yew_fuss_draw_dirty(const Ed *ed)
+{
+    (void)ed;
+    return false;
+}
+
 void yew_fuss_draw(Ed *ed)
 {
     (void)ed;
@@ -541,5 +565,7 @@ FUSS_SHIM(yew_fuss_cmd_discard)
 FUSS_SHIM(yew_fuss_cmd_file_delete)
 FUSS_SHIM(yew_fuss_cmd_file_rename)
 FUSS_SHIM(yew_fuss_cmd_open)
+FUSS_SHIM(yew_fuss_cmd_open_split_h)
+FUSS_SHIM(yew_fuss_cmd_open_split_v)
 
 #undef FUSS_SHIM

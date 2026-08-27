@@ -35,6 +35,10 @@ bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms);
 void yew_fuss_tick(Ed *ed, i64 now_ms);
 i64 yew_fuss_deadline(const Ed *ed, i64 now_ms);
 u16 yew_fuss_footer_rows(const Ed *ed);
+u16 yew_fuss_drawer_width(u16 content_cols);
+Rect yew_fuss_drawer_rect(const Ed *ed);
+Rect yew_fuss_backdrop_rect(const Ed *ed);
+bool yew_fuss_draw_dirty(const Ed *ed);
 void yew_fuss_draw(Ed *ed);
 void yew_fuss_draw_footer(Ed *ed, Rect footer);
 CmdStatus yew_fuss_commit_save(Ed *ed, Buffer *buffer, bool *handled);
@@ -89,5 +93,7 @@ CmdStatus yew_fuss_cmd_discard(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_file_delete(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_file_rename(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_open_split_h(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_open_split_v(CmdCtx *cx);
 
 #endif

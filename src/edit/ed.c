@@ -2365,7 +2365,11 @@ void yew_ed_render(Ed *ed)
     fuss = yew_fuss_active(ed);
     cursor_line = LINENO(0U);
     if (fuss) {
-        if (ed->full_damage)
+        if (ed->full_damage) {
+            yew_draw_panes(ed);
+            yew_grid_mark_all(&ed->grid);
+        }
+        if (ed->full_damage || yew_fuss_draw_dirty(ed))
             yew_fuss_draw(ed);
         if (ed->full_damage || ed->footer_dirty)
             yew_draw_footer(ed, win);

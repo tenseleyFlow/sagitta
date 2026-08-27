@@ -54,6 +54,21 @@ void yew_region_add(RegionKind kind, Rect rect, i32 payload)
     r->payload = payload;
 }
 
+void yew_region_remove_kind(RegionKind kind)
+{
+    u32 read;
+    u32 write = 0U;
+
+    for (read = 0U; read < regions.len; read++) {
+        if (regions.v[read].kind == kind)
+            continue;
+        if (write != read)
+            regions.v[write] = regions.v[read];
+        write++;
+    }
+    regions.len = write;
+}
+
 void yew_region_freeze(bool on)
 {
     regions.frozen = on;
