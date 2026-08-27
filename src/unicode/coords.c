@@ -435,6 +435,81 @@ static bool bytes_are_simple_ascii(const u8 *bytes, size_t len)
     return true;
 }
 
+static u64 reader_take_simple_ascii(TextReader *reader, u64 limit)
+{
+    u64 start = reader->off;
+
+    while (reader->off < limit) {
+        u64 available;
+        size_t take;
+
+        while (reader->chunk_pos == reader->chunk_len) {
+            if (!yew_textiter_advance(&reader->it, reader->tb))
+                YEW_BUG("simple ASCII run ended early");
+            if (!yew_textiter_chunk(&reader->it, reader->tb,
+                                    &reader->chunk,
+                                    &reader->chunk_len) ||
+                reader->chunk_len == 0U)
+                YEW_BUG("simple ASCII run found an empty chunk");
+            reader->chunk_pos = 0U;
+        }
+        available = reader->chunk_len - reader->chunk_pos;
+        if (available > limit - reader->off)
+            available = limit - reader->off;
+        if (available > SIZE_MAX)
+            YEW_BUG("simple ASCII run is not addressable");
+        take = (size_t)available;
+        if (bytes_are_simple_ascii(
+                reader->chunk + (size_t)reader->chunk_pos, take)) {
+            reader->chunk_pos += available;
+            reader->off += available;
+            continue;
+        }
+        while (take != 0U) {
+            u8 byte = reader->chunk[(size_t)reader->chunk_pos];
+
+            /* A line-content span cannot contain LF.  Every other byte
+             * accepted by bytes_are_simple_ascii is printable ASCII and
+             * therefore has Grapheme_Cluster_Break=Other. */
+            if (byte < 0x20U || byte >= 0x7fU)
+                return reader->off - start;
+            reader->chunk_pos++;
+            reader->off++;
+            take--;
+        }
+    }
+    return reader->off - start;
+}
+
+static void index_consume_simple_ascii_run(IndexScanState *state,
+                                           u64 start, u64 end)
+{
+    StreamCp cp;
+    u64 middle;
+
+    if (start >= end)
+        YEW_BUG("empty simple ASCII run");
+    memset(&cp, 0, sizeof(cp));
+    cp.cp = (u32)'x';
+    cp.start = start;
+    cp.end = start + 1U;
+    cp.len = 1U;
+    index_consume_cp(NULL, state, &cp);
+    if (cp.end == end)
+        return;
+
+    /* After one printable ASCII code point the grapheme state is the
+     * canonical Other state.  Every interior byte is therefore one new
+     * cluster; consume only the last byte to leave the exact final state. */
+    middle = end - start - 2U;
+    if (state->gcol > UINT64_MAX - middle)
+        YEW_BUG("grapheme coordinate index column overflow");
+    state->gcol += middle;
+    cp.start = end - 1U;
+    cp.end = end;
+    index_consume_cp(NULL, state, &cp);
+}
+
 static bool range_is_simple_ascii(const TextBuf *tb, u64 start, u64 end)
 {
     TextIter iter;
@@ -1036,6 +1111,54 @@ static ByteOff simple_col_to_off(const TextBuf *tb, Span line, u64 col)
     return BYTEOFF(end - 1U);
 }
 
+static GCol unindexed_line_gcol(const TextBuf *tb, u64 start, u64 end,
+                                u64 pos)
+{
+    IndexScanState state;
+    TextReader reader;
+    StreamCp cp;
+    bool next_is_boundary;
+    u64 run_start;
+    u64 run_len;
+
+    index_scan_init(&state);
+    reader_init(&reader, tb, start, end);
+    while (reader.off < pos) {
+        run_start = reader.off;
+        run_len = reader_take_simple_ascii(&reader, pos);
+        if (run_len != 0U) {
+            index_consume_simple_ascii_run(&state, run_start,
+                                           run_start + run_len);
+            continue;
+        }
+        {
+            TextReader probe = reader;
+
+            if (!reader_cp(&probe, &cp))
+                YEW_BUG("unindexed grapheme scan ended early");
+            if (pos < cp.end)
+                break;
+            reader = probe;
+        }
+        index_consume_cp(NULL, &state, &cp);
+    }
+    if (!state.have_cluster)
+        return (GCol){0U};
+    if (reader.off == end) {
+        next_is_boundary = true;
+    } else {
+        TextReader probe = reader;
+        YewGbState gb = state.gb;
+
+        if (!reader_cp(&probe, &cp))
+            YEW_BUG("unindexed grapheme scan cannot inspect next codepoint");
+        next_is_boundary = yew_gb_boundary(&gb, cp.cp);
+    }
+    if (next_is_boundary && state.gcol != UINT64_MAX)
+        state.gcol++;
+    return (GCol){state.gcol};
+}
+
 GCol yew_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 {
     const YewGraphemeIndex *index;
@@ -1069,16 +1192,7 @@ GCol yew_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
      * search hit into a tens-of-milliseconds stall.
      */
     if (!tb->graphemes.initialized) {
-        count = 0U;
-        cluster_reader_init(&reader, tb, line.lo, end);
-        while (cluster_next(&reader, &cluster, false)) {
-            if (pos.v < cluster.end)
-                break;
-            if (count != UINT64_MAX)
-                count++;
-        }
-        cluster_reader_free(&reader);
-        return (GCol){count};
+        return unindexed_line_gcol(tb, line.lo, end, pos.v);
     }
     index = coords_index(tb);
     first = motion_lower_bound_off(index, line.lo);

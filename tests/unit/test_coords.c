@@ -380,6 +380,7 @@ void test_coords_sparse_index_edit_invalidation(void)
     u8 deferred[700];
     u8 *large_ascii;
     static const u8 accent[] = {0xCCU, 0x81U};
+    static const u8 prepend[] = {0xD8U, 0x80U}; /* U+0600, GCB=Prepend */
     static const u8 split[] = {'\n', 'z', 'z'};
     static const u8 x = 'x';
     static const u8 y = 'y';
@@ -541,6 +542,28 @@ void test_coords_sparse_index_edit_invalidation(void)
     YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
                                      BYTEOFF(63492U)).v,
                       63490U);
+    YEW_ASSERT(!tb->graphemes.initialized);
+    yew_textbuf_free(tb);
+
+    large_ascii = yew_xmalloc(64U * 1024U);
+    memset(large_ascii, 'a', 64U * 1024U);
+    tb = yew_textbuf_from_owned_bytes(large_ascii, 64U * 1024U);
+    yew_textbuf_insert(tb, BYTEOFF(32U * 1024U), prepend,
+                       sizeof(prepend));
+    YEW_ASSERT(!tb->graphemes.initialized);
+    line = yew_textbuf_line_span(tb, LINENO(0U));
+    YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
+                                     BYTEOFF(32U * 1024U + 1U)).v,
+                      32U * 1024U);
+    YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
+                                     BYTEOFF(32U * 1024U + 2U)).v,
+                      32U * 1024U);
+    YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
+                                     BYTEOFF(32U * 1024U + 3U)).v,
+                      32U * 1024U + 1U);
+    YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
+                                     BYTEOFF(64U * 1024U + 2U)).v,
+                      64U * 1024U);
     YEW_ASSERT(!tb->graphemes.initialized);
     yew_textbuf_free(tb);
 
