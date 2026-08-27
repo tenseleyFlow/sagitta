@@ -10,16 +10,25 @@
 #include "edit/ed.h"
 
 typedef struct StartFix {
-    char dir[128];
-    char link[160];
+    char dir[PATH_MAX];
+    char link[PATH_MAX];
 } StartFix;
 
 static void start_fix_make(StartFix *f)
 {
-    (void)snprintf(f->dir, sizeof(f->dir), "/tmp/yew-start-XXXXXX");
-    YEW_ASSERT_NOT_NULL(mkdtemp(f->dir));
-    (void)snprintf(f->link, sizeof(f->link), "%s-link", f->dir);
-    YEW_ASSERT_EQ_I64(symlink(f->dir, f->link), 0);
+    const char *tmp = getenv("TMPDIR");
+    char *dir;
+    int n;
+
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "/tmp";
+    n = snprintf(f->dir, sizeof(f->dir), "%s/yew-start-XXXXXX", tmp);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->dir));
+    dir = mkdtemp(f->dir);
+    YEW_ASSERT_NOT_NULL(dir);
+    n = snprintf(f->link, sizeof(f->link), "%s-link", dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->link));
+    YEW_ASSERT_EQ_I64(symlink(dir, f->link), 0);
 }
 
 static void start_fix_remove(StartFix *f)
@@ -70,9 +79,13 @@ void test_startup_plan_canonicalizes_directory_and_symlink_launches(void)
     const char *paths[1];
     char dotted[PATH_MAX];
     char error[256];
+    size_t dir_len;
 
     start_fix_make(&f);
-    (void)snprintf(dotted, sizeof(dotted), "%s/.", f.dir);
+    dir_len = strlen(f.dir);
+    YEW_ASSERT(dir_len + 2U < sizeof(dotted));
+    (void)memcpy(dotted, f.dir, dir_len);
+    (void)memcpy(dotted + dir_len, "/.", 3U);
     paths[0] = dotted;
     YEW_ASSERT(yew_start_plan_resolve(&plan, paths, 1U, NULL,
                                       error, sizeof(error)));
