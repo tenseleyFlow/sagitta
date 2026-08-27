@@ -57,7 +57,11 @@ case $scale in ''|*[!0-9]*) usage ;; esac
 if [ -n "$update_why" ]; then
     [ "$scope" = all ] && [ "$mode" = designated ] &&
         [ "$baseline" != - ] || usage
-    case $update_why in *PLACEHOLDER*|'') usage ;; esac
+    case $update_why in
+        *PLACEHOLDER*|*'s11 initial'*|*'s33 initial'*|'') usage ;;
+    esac
+    printf '%s\n' "$update_why" | LC_ALL=C \
+        grep -Eq '^[[:alnum:]_.,:/+()% -]+$' || usage
     for value in "$c1_new" "$c2_new" "$c3_new"; do
         case $value in ''|*[!0-9]*|0) usage ;; esac
     done
@@ -372,6 +376,7 @@ END {
 ' "$budgets" "$baseline" "$@"
 
 if [ -n "$update_file" ]; then
+    chmod 0644 "$update_file"
     mv "$update_file" "$baseline"
     trap - EXIT HUP INT TERM
     echo "perf-gate: updated $baseline"

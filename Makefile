@@ -58,7 +58,9 @@ TORTURE_SIGKILL_ITERS ?= 500
 FIXTURE_DIR ?= $(BUILD)/fixtures
 FIXTURE_MANIFEST ?= tests/perf/fixtures.sha
 PERF_RUNNER_ID ?= local-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
-PERF_BASELINE ?= tests/perf/baselines/perf-x86_64-linux-gnu.txt
+PERF_BASELINE ?= $(if $(filter perf-arm64-linux,$(PERF_RUNNER_ID)),\
+                    tests/perf/baselines/perf-arm64-linux.txt,\
+                    tests/perf/baselines/perf-x86_64-linux-gnu.txt)
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
@@ -1955,6 +1957,7 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
 	$(BUILD)/perf_prof_crosscheck --selftest-policy
 	scripts/tests/s56-perf-gate.test.sh
 	scripts/tests/run-perf-suite.test.sh
+	scripts/tests/update-perf-suite.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
 
 perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
@@ -2120,26 +2123,12 @@ perf-huge-components: $(BUILD)/perf_textbuf fixtures
 		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
 		--runner-id $(PERF_RUNNER_ID) --huge
 
-perf-update: $(BUILD)/perf_textbuf fixtures calib
-	@set -eu; \
-	why=$${YEW_PERF_UPDATE_WHY-}; \
-	test -n "$$why" || { \
-		echo 'perf-update: set YEW_PERF_UPDATE_WHY' >&2; exit 2; \
-	}; \
-	scale=$$(awk '$$1 == "scale_permille" { print $$2; exit }' \
-		'$(CALIB_OUTPUT)'); \
-	c1=$$(awk '$$1 == "c1_chase_ns" { print $$2; exit }' \
-		'$(CALIB_OUTPUT)'); \
-	c2=$$(awk '$$1 == "c2_scalar_ns" { print $$2; exit }' \
-		'$(CALIB_OUTPUT)'); \
-	c3=$$(awk '$$1 == "c3_bandwidth_ns" { print $$2; exit }' \
-		'$(CALIB_OUTPUT)'); \
-	YEW_PERF_ADVISORY=1 YEW_PERF_UPDATE_WHY="$$why" \
-	YEW_CALIB_SCALE_PERMILLE="$$scale" YEW_CALIB_C1_NS="$$c1" \
-	YEW_CALIB_C2_NS="$$c2" YEW_CALIB_C3_NS="$$c3" \
-		$(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
-		--baseline $(PERF_BASELINE) --runner-id $(PERF_RUNNER_ID) \
-		--huge --update
+perf-update:
+	BUILD='$(BUILD)' FIXTURE_DIR='$(FIXTURE_DIR)' \
+		PERF_RUNNER_ID='$(PERF_RUNNER_ID)' \
+		PERF_BASELINE='$(PERF_BASELINE)' \
+		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
+		scripts/update-perf-suite.sh '$(MAKE)'
 
 perf-baseline-guard:
 	scripts/perf-baseline-guard.sh
