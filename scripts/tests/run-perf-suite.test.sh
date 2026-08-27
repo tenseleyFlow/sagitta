@@ -41,11 +41,20 @@ case $target in
         {
             echo '# fake calibration'
             echo 'cache_key fake'
+            echo 'c1_chase_ns 101'
+            echo 'c2_scalar_ns 202'
+            echo 'c3_bandwidth_ns 303'
             echo "scale_permille $scale"
             echo "mode ${FAKE_MODE:-ADVISORY}"
         } >"$output"
         ;;
     perf-components)
+        {
+            echo "$YEW_CALIB_SCALE_PERMILLE"
+            echo "$YEW_CALIB_C1_NS"
+            echo "$YEW_CALIB_C2_NS"
+            echo "$YEW_CALIB_C3_NS"
+        } >"$FAKE_ROOT/suite-calib"
         echo called >"$FAKE_ROOT/suite-called"
         exit "${FAKE_SUITE_STATUS:-0}"
         ;;
@@ -60,7 +69,7 @@ chmod +x "$scratch/make"
 
 reset_case()
 {
-    rm -f "$scratch/count" "$scratch/suite-called"
+    rm -f "$scratch/count" "$scratch/suite-called" "$scratch/suite-calib"
     rm -rf "$scratch/build"
 }
 
@@ -69,6 +78,10 @@ FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=unavailable FAKE_MODE=ADVISORY \
     BUILD=$scratch/build PERF_GATE=0 PERF_RUNNER_ID=hosted \
     "$runner" "$scratch/make" >"$scratch/advisory.out"
 [ -f "$scratch/suite-called" ] || fail 'advisory run skipped the suite'
+[ "$(sed -n '1p' "$scratch/suite-calib")" = 0 ] ||
+    fail 'advisory scale was not propagated'
+[ "$(sed -n '2,4p' "$scratch/suite-calib" | tr '\n' ' ')" = '101 202 303 ' ] ||
+    fail 'calibration vector was not propagated'
 rg='runner=hosted mode=ADVISORY scale_permille=0'
 grep -F "$rg" "$scratch/advisory.out" >/dev/null ||
     fail 'advisory banner missing'

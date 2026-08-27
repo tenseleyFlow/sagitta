@@ -748,6 +748,7 @@ endif
         perf-syn-resident-line-probe perf-syn-edit-probe perf-syn-size \
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
+        perf-baseline-selftest \
         perf-gate-selftest perf-latency perf-latency-selftest \
         perf-s56-functional perf-latency-s56-check perf-latency-s56-smoke \
         perf-latency-s56-many perf-latency-s56-assist \
@@ -1810,7 +1811,8 @@ perf-open-s56: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
 perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
               $(BUILD)/perf_nullexec $(BUILD)/perf_open_s56 \
               $(BUILD)/perf_latency_s56 $(BUILD)/yew fixtures-quick \
-              $(PERF_S56_WORKSPACE_READY)
+              $(PERF_S56_WORKSPACE_READY) $(FAKELSP) $(MOCKAI) \
+              tests/fixtures/ai/ollama.script
 	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures \
 		$(BUILD)/perf-s56-logs
 	@: > $(BUILD)/perf-s56-fixtures/empty.c
@@ -1820,7 +1822,8 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		$(BUILD)/perf-s56-logs/utf8.log \
 		$(BUILD)/perf-s56-logs/allnl.log \
 		$(BUILD)/perf-s56-logs/workspace.log \
-		$(BUILD)/perf-s56-logs/typing.log
+		$(BUILD)/perf-s56-logs/typing.log \
+		$(BUILD)/perf-s56-logs/assist.log
 	@YEW_PROF=1 YEW_PERF_SMOKE=1 \
 		YEW_PERF_ADVISORY=1 PERF_GATE=0 \
 		YEW_PERF_LOG_DEFAULT=$(abspath $(BUILD)/perf-s56-logs/default.log) \
@@ -1849,6 +1852,15 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		--session tests/perf/sessions/typing.keys --fixture small \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
 		--state $(abspath $(BUILD)/perf-s56-state) >/dev/null
+	@YEW_PROF=1 YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		YEW_PERF_LOG=$(abspath $(BUILD)/perf-s56-logs/assist.log) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/typing.keys --fixture assist \
+		--path tests/perf/fixtures/syn/c_kitchen.c \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--fakelsp $(abspath $(FAKELSP)) \
+		--mockai $(abspath $(MOCKAI)) \
+		--ai-script $(abspath tests/fixtures/ai/ollama.script) >/dev/null
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_mem_s56 --budgets tests/perf/budgets.txt \
 		--yew $(abspath $(BUILD)/yew) \
@@ -1860,11 +1872,13 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		--log-allnl $(abspath $(BUILD)/perf-s56-logs/allnl.log) \
 		--log-workspace $(abspath $(BUILD)/perf-s56-logs/workspace.log) \
 		--log-typing $(abspath $(BUILD)/perf-s56-logs/typing.log) \
+		--log-assist $(abspath $(BUILD)/perf-s56-logs/assist.log) \
 		--fixture-code $(abspath $(FIXTURE_DIR)/100m-code.bin) \
 		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \
 		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin)
 
-perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest
+perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
+                        perf-baseline-selftest
 	$(BUILD)/s56_gate_policy_selftest
 	scripts/tests/s56-baseline-guard.test.sh
 
@@ -1935,13 +1949,32 @@ perf-textbuf: $(BUILD)/perf_textbuf fixtures-quick
 		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
 		--runner-id $(PERF_RUNNER_ID)
 
+perf-baseline-selftest: $(BUILD)/perf_textbuf
+	$(BUILD)/perf_textbuf --baseline-selftest
+
 perf-huge: $(BUILD)/perf_textbuf fixtures
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
 		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
 		--runner-id $(PERF_RUNNER_ID) --huge
 
-perf-update: $(BUILD)/perf_textbuf fixtures
-	YEW_PERF_ADVISORY=1 $(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
+perf-update: $(BUILD)/perf_textbuf fixtures calib
+	@set -eu; \
+	why=$${YEW_PERF_UPDATE_WHY-}; \
+	test -n "$$why" || { \
+		echo 'perf-update: set YEW_PERF_UPDATE_WHY' >&2; exit 2; \
+	}; \
+	scale=$$(awk '$$1 == "scale_permille" { print $$2; exit }' \
+		'$(CALIB_OUTPUT)'); \
+	c1=$$(awk '$$1 == "c1_chase_ns" { print $$2; exit }' \
+		'$(CALIB_OUTPUT)'); \
+	c2=$$(awk '$$1 == "c2_scalar_ns" { print $$2; exit }' \
+		'$(CALIB_OUTPUT)'); \
+	c3=$$(awk '$$1 == "c3_bandwidth_ns" { print $$2; exit }' \
+		'$(CALIB_OUTPUT)'); \
+	YEW_PERF_ADVISORY=1 YEW_PERF_UPDATE_WHY="$$why" \
+	YEW_CALIB_SCALE_PERMILLE="$$scale" YEW_CALIB_C1_NS="$$c1" \
+	YEW_CALIB_C2_NS="$$c2" YEW_CALIB_C3_NS="$$c3" \
+		$(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
 		--baseline $(PERF_BASELINE) --runner-id $(PERF_RUNNER_ID) \
 		--huge --update
 

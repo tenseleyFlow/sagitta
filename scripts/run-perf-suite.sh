@@ -69,6 +69,12 @@ scale=$(field "$before" scale_permille)
 case $scale in
     ''|*[!0-9]*) scale=0 ;;
 esac
+c1=$(field "$before" c1_chase_ns)
+c2=$(field "$before" c2_scalar_ns)
+c3=$(field "$before" c3_bandwidth_ns)
+case $c1:$c2:$c3 in
+    *[!0-9:]*|:*|*:) die 'calibration vector is invalid' ;;
+esac
 if [ "$gate" = 1 ]; then
     advisory=0
 else
@@ -77,6 +83,7 @@ fi
 
 echo "perf: runner=$runner_id mode=$([ "$advisory" -eq 1 ] && echo ADVISORY || echo GATING) scale_permille=$scale"
 YEW_PERF_ADVISORY=$advisory YEW_CALIB_SCALE_PERMILLE=$scale \
+YEW_CALIB_C1_NS=$c1 YEW_CALIB_C2_NS=$c2 YEW_CALIB_C3_NS=$c3 \
     "$make_bin" --no-print-directory perf-components BUILD="$build" \
     PERF_RUNNER_ID="$runner_id" PERF_ADVISORY="$advisory"
 suite_status=$?
