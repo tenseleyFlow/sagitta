@@ -2058,13 +2058,17 @@ const SynLangDesc *yew_syn_lang_desc(u32 lang)
     size_t i;
 
     discover_user_definitions();
-    for (m = metas; m != NULL; m = m->next) {
-        if (!m->retired && m->lang.id == lang)
-            return &m->lang;
-    }
+    /* Built-in metadata is generated and stable.  A lazily loaded built-in
+     * definition also has a DefMeta, but its source names the runtime copy
+     * that happened to be resolved on this machine.  Never let that mutable
+     * load state change the public descriptor. */
     for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
         if (yew_syn_builtin_langs[i].id == lang)
             return builtin_desc_at(i);
+    }
+    for (m = metas; m != NULL; m = m->next) {
+        if (!m->retired && m->lang.id == lang)
+            return &m->lang;
     }
     return NULL;
 }
