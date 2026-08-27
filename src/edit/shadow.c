@@ -78,6 +78,8 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     u32 seq_min[YEW_SHADOW_NPROV];
     bool suppressed;
     u8 max_lines;
+    u16 draw_row;
+    u16 vrows;
     u32 i;
 
     if (win == NULL)
@@ -111,6 +113,8 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     }
     suppressed = shadow->suppressed;
     max_lines = shadow->max_lines;
+    draw_row = shadow->draw_row;
+    vrows = shadow->vrows;
     shadow_suggestion_clear(&shadow->sug, &shadow->owned_text);
     for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++)
         shadow_answer_clear(&shadow->answers[i]);
@@ -122,6 +126,11 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     shadow->suppressed = suppressed;
     shadow->max_lines = max_lines == 0U ? YEW_SHADOW_MAX_LINES : max_lines;
     shadow->selected = (u8)YEW_SHADOW_NPROV;
+    /* This is geometry of the frame currently on screen, not suggestion
+     * ownership.  Keep it until the next draw pass so queued click/drag
+     * reports still map the shifted real rows they visibly targeted. */
+    shadow->draw_row = draw_row;
+    shadow->vrows = vrows;
 }
 
 void yew_shadow_register(const ShadowProvider *provider)

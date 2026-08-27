@@ -2394,6 +2394,8 @@ const YewTest yew_tests[] = {
     T(shadow_draw_single_line_inserts_before_ascii_suffix),
     T(shadow_draw_moves_wide_suffix_pairs_and_clips_whole_glyphs),
     T(shadow_multiline_midline_layout_paints_nothing),
+    T(shadow_tabs_use_logical_stops_and_clip_at_the_pane_edge),
+    T(shadow_shifted_rows_click_and_drag_to_exact_document_rows),
 };
 
 const size_t yew_tests_len = YEW_ARRAY_LEN(yew_tests);

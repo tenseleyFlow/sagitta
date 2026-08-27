@@ -4,9 +4,11 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/pane_cmds.h"
 #include "edit/shadow.h"
 #include "term/grid.h"
 #include "ui/draw.h"
+#include "ui/mouse.h"
 #include "ui/region.h"
 #include "ui/shadowdraw.h"
 
@@ -70,6 +72,19 @@ static bool shadow_textbuf_eq(const TextBuf *tb, const u8 *want, size_t len)
             return false;
     }
     return true;
+}
+
+static Key shadow_mouse_event(u8 ev, u16 col, u16 row)
+{
+    Key key;
+
+    (void)memset(&key, 0, sizeof(key));
+    key.kind = (u16)YEW_EV_MOUSE;
+    key.button = (u8)YEW_MB_LEFT;
+    key.ev = ev;
+    key.col = col;
+    key.row = row;
+    return key;
 }
 
 void test_shadow_layout_geometry_is_exact_and_viewport_is_unchanged(void)
@@ -296,6 +311,103 @@ void test_shadow_multiline_midline_layout_paints_nothing(void)
     yew_shadow_layout(ed.win, &ed.win->shadow, &layout);
     YEW_ASSERT_EQ_U64(layout.nlines, 0U);
     YEW_ASSERT_EQ_U64(layout.inline_run.w, 0U);
+    yew_ed_free(&ed);
+}
+
+void test_shadow_tabs_use_logical_stops_and_clip_at_the_pane_edge(void)
+{
+    static const u8 inline_document[] = "abcSUF";
+    static const u8 inline_ghost[] = "\tX";
+    static const u8 multiline_document[] = "\nR\nS\n";
+    static const u8 multiline_ghost[] = "g\n\tX";
+    Ed ed;
+    ShadowLayout layout;
+    u16 col;
+
+    shadow_layout_fixture(&ed, inline_document,
+                          sizeof(inline_document) - 1U, 3U,
+                          (Rect){6U, 0U, 10U, 1U});
+    ed.win->buf->tabwidth = 4U;
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 1U, 16U));
+    ed.grid_ready = true;
+    yew_draw_document_rows(&ed, ed.win, 0U, 1U);
+    shadow_layout_suggestion(ed.win, inline_ghost,
+                             sizeof(inline_ghost) - 1U,
+                             YEW_SHADOW_INDEX);
+    yew_shadow_layout(ed.win, &ed.win->shadow, &layout);
+    yew_shadow_draw(&ed, ed.win, &layout, &ed.grid);
+
+    YEW_ASSERT_EQ_U64(layout.logical_col, 3U);
+    YEW_ASSERT((shadow_cell(&ed, 0U, 9U)->attrs & YEW_ATTR_DIM) != 0U);
+    YEW_ASSERT_EQ_U64(shadow_cell(&ed, 0U, 10U)->utf8[0], (u8)'X');
+    YEW_ASSERT_EQ_U64(shadow_cell(&ed, 0U, 11U)->utf8[0], (u8)'S');
+    YEW_ASSERT_EQ_U64(shadow_cell(&ed, 0U, 12U)->utf8[0], (u8)'U');
+    YEW_ASSERT_EQ_U64(shadow_cell(&ed, 0U, 13U)->utf8[0], (u8)'F');
+    yew_ed_free(&ed);
+
+    shadow_layout_fixture(&ed, multiline_document,
+                          sizeof(multiline_document) - 1U, 0U,
+                          (Rect){6U, 0U, 3U, 4U});
+    ed.win->buf->tabwidth = 4U;
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 4U, 9U));
+    ed.grid_ready = true;
+    yew_draw_document_rows(&ed, ed.win, 0U, 4U);
+    shadow_layout_suggestion(ed.win, multiline_ghost,
+                             sizeof(multiline_ghost) - 1U,
+                             YEW_SHADOW_AI);
+    yew_shadow_layout(ed.win, &ed.win->shadow, &layout);
+    yew_shadow_draw(&ed, ed.win, &layout, &ed.grid);
+
+    for (col = 6U; col < 9U; col++) {
+        YEW_ASSERT((shadow_cell(&ed, 1U, col)->attrs & YEW_ATTR_DIM) != 0U);
+        YEW_ASSERT(shadow_cell(&ed, 1U, col)->utf8[0] != (u8)'X');
+    }
+    YEW_ASSERT_EQ_U64(shadow_cell(&ed, 2U, 6U)->utf8[0], (u8)'R');
+    yew_ed_free(&ed);
+}
+
+void test_shadow_shifted_rows_click_and_drag_to_exact_document_rows(void)
+{
+    static const u8 document[] = "a\nb\nc\nd\n";
+    static const u8 ghost[] = "g\nh\ni";
+    Ed ed;
+    ShadowLayout layout;
+    i32 leaf;
+    Key press;
+    Key motion;
+    Key release;
+    Cursor *cursor;
+
+    shadow_layout_fixture(&ed, document, sizeof(document) - 1U, 1U,
+                          (Rect){0U, 0U, 8U, 5U});
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 5U, 8U));
+    ed.grid_ready = true;
+    yew_draw_document_rows(&ed, ed.win, 0U, 5U);
+    shadow_layout_suggestion(ed.win, ghost, sizeof(ghost) - 1U,
+                             YEW_SHADOW_LSP);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    YEW_ASSERT(leaf >= 0);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, ed.win->rect, leaf);
+    yew_shadow_layout(ed.win, &ed.win->shadow, &layout);
+    yew_shadow_draw(&ed, ed.win, &layout, &ed.grid);
+    YEW_ASSERT_EQ_U64(ed.win->shadow.draw_row, 0U);
+    YEW_ASSERT_EQ_U64(ed.win->shadow.vrows, 3U);
+
+    yew_mouse_set_enabled(true);
+    press = shadow_mouse_event((u8)YEW_KEY_PRESS, 0U, 3U);
+    yew_mouse_event(&ed, &press);
+    cursor = &ed.win->cs.curs.data[ed.win->cs.primary];
+    YEW_ASSERT_EQ_U64(cursor->pos.v, 2U);
+
+    motion = shadow_mouse_event((u8)YEW_KEY_REPEAT, 0U, 4U);
+    yew_mouse_event(&ed, &motion);
+    YEW_ASSERT_EQ_U64(cursor->anchor.v, 2U);
+    YEW_ASSERT_EQ_U64(cursor->pos.v, 4U);
+
+    release = shadow_mouse_event((u8)YEW_KEY_RELEASE, 0U, 4U);
+    yew_mouse_event(&ed, &release);
     yew_ed_free(&ed);
 }
 

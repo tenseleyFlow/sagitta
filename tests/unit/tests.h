@@ -2423,5 +2423,7 @@ void test_shadow_draw_provenance_attrs_and_glyphs_are_distinct(void);
 void test_shadow_draw_single_line_inserts_before_ascii_suffix(void);
 void test_shadow_draw_moves_wide_suffix_pairs_and_clips_whole_glyphs(void);
 void test_shadow_multiline_midline_layout_paints_nothing(void);
+void test_shadow_tabs_use_logical_stops_and_clip_at_the_pane_edge(void);
+void test_shadow_shifted_rows_click_and_drag_to_exact_document_rows(void);
 
 #endif

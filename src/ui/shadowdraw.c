@@ -107,6 +107,7 @@ void yew_shadow_layout(const Win *win, const Shadow *shadow,
     if (out->nlines == 0U)
         return;
     out->clipped = lines > out->nlines;
+    out->logical_col = col.v;
     out->inline_run = (Rect){x, (u16)(win->rect.y + row),
                              (u16)(right - x), 1U};
     if (out->nlines > 1U)
@@ -144,28 +145,84 @@ static void shadow_style(const Ed *ed, const ShadowSug *suggestion,
     style->attrs |= theme->attrs;
 }
 
-static u16 shadow_puts(Grid *grid, u16 row, u16 col, const u8 *text,
-                       size_t len, Cell style)
+static u16 shadow_puts(Grid *grid, u16 row, u16 col, u16 right,
+                       const u8 *text, size_t len, Cell style,
+                       CCol logical, u32 tabwidth)
 {
     static const u8 space = ' ';
     size_t at = 0U;
 
-    while (at < len && col < grid->cols) {
+    if (right > grid->cols)
+        right = grid->cols;
+    while (at < len && col < right) {
         size_t run = at;
 
         while (run < len && text[run] != '\t')
             run++;
         if (run != at) {
+            u16 before = col;
+
             col = yew_grid_puts(grid, row, col, text + at, run - at,
                                 style.fg, style.bg, style.attrs);
+            logical.v += (u64)(col - before);
             at = run;
             continue;
         }
-        col = yew_grid_put(grid, row, col, &space, 1U, style.fg,
-                           style.bg, style.attrs);
+        {
+            u32 cells = yew_tab_cells(logical, tabwidth);
+
+            logical.v += cells;
+            while (cells != 0U && col < right) {
+                col = yew_grid_put(grid, row, col, &space, 1U,
+                                   style.fg, style.bg, style.attrs);
+                cells--;
+            }
+        }
         at++;
     }
     return col;
+}
+
+static size_t shadow_clip(const u8 *text, size_t len, u16 max_cells,
+                          CCol logical, u32 tabwidth, u16 *out_cells)
+{
+    size_t at = 0U;
+    u16 cells = 0U;
+
+    while (at < len && cells < max_cells) {
+        size_t run = at;
+        size_t run_len;
+        int run_cells = 0;
+        size_t keep;
+
+        while (run < len && text[run] != '\t')
+            run++;
+        if (run != at) {
+            run_len = run - at;
+            keep = yew_str_clip(text + at, run_len,
+                                (int)(max_cells - cells), &run_cells);
+            at += keep;
+            cells = (u16)(cells + (u16)run_cells);
+            logical.v += (u64)run_cells;
+            if (keep != run_len)
+                break;
+            continue;
+        }
+        {
+            u32 tab_cells = yew_tab_cells(logical, tabwidth);
+            u16 visible = tab_cells > (u32)(max_cells - cells)
+                              ? (u16)(max_cells - cells)
+                              : (u16)tab_cells;
+
+            cells = (u16)(cells + visible);
+            logical.v += tab_cells;
+            at++;
+            if (visible != tab_cells)
+                break;
+        }
+    }
+    *out_cells = cells;
+    return at;
 }
 
 static void shadow_damage(Grid *grid, u16 row, u16 lo, u16 hi)
@@ -265,25 +322,27 @@ static void shadow_shift_rows(Grid *grid, const Win *win,
 
 static u16 shadow_draw_line(Grid *grid, Rect rect, const u8 *text,
                             size_t len, bool ellipsis, Cell style,
-                            bool compose_inline)
+                            bool compose_inline, CCol logical,
+                            u32 tabwidth)
 {
     static const u8 dots[] = "\xE2\x80\xA6";
     u16 text_cells;
     size_t keep;
-    int cells = 0;
     u16 total_cells;
 
     if (rect.w == 0U || rect.h == 0U || rect.y >= grid->rows ||
         rect.x >= grid->cols)
         return 0U;
     text_cells = ellipsis && rect.w != 0U ? (u16)(rect.w - 1U) : rect.w;
-    keep = yew_str_clip(text, len, text_cells, &cells);
-    total_cells = (u16)cells;
+    keep = shadow_clip(text, len, text_cells, logical, tabwidth,
+                       &total_cells);
     if (ellipsis)
         total_cells++;
     if (compose_inline)
         shadow_shift_inline(grid, rect, total_cells);
-    (void)shadow_puts(grid, rect.y, rect.x, text, keep, style);
+    (void)shadow_puts(grid, rect.y, rect.x,
+                      (u16)(rect.x + rect.w), text, keep, style,
+                      logical, tabwidth);
     if (ellipsis)
         (void)yew_grid_put(grid, rect.y,
                            (u16)(rect.x + rect.w - 1U), dots,
@@ -303,6 +362,7 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
     Cell style;
     u8 glyph;
     u16 gutter_col;
+    u32 tabwidth;
 
     if (ed == NULL || win == NULL || layout == NULL || grid == NULL ||
         layout->nlines == 0U)
@@ -316,6 +376,8 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
     len = shadow->sug.len - shadow->sug.consumed;
     style = grid->blank;
     shadow_style(ed, &shadow->sug, &style, &glyph);
+    tabwidth = win->buf->tabwidth == 0U ? YEW_VP_TABWIDTH :
+                                         win->buf->tabwidth;
     shadow_shift_rows(grid, win, layout);
     at = 0U;
     for (line = 0U; line < layout->nlines; line++) {
@@ -332,7 +394,9 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
             end--;
         (void)shadow_draw_line(grid, row, text + at, end - at,
                               last && layout->clipped, style,
-                              line == 0U);
+                              line == 0U,
+                              (CCol){line == 0U ? layout->logical_col : 0U},
+                              tabwidth);
         if (end < len && text[end] == '\r')
             end++;
         at = end < len && text[end] == '\n' ? end + 1U : end;
@@ -362,7 +426,13 @@ static void shadow_draw_rec(Ed *ed, Pane *pane)
         shadow_draw_rec(ed, pane->b);
         return;
     }
-    if (pane->win == NULL || !pane->win->shadow.live)
+    if (pane->win == NULL)
+        return;
+    /* Retire the previous frame's row transform even when dismissal made
+     * this frame ghost-free.  Input keeps using the old geometry until
+     * this draw pass replaces the cells and region table together. */
+    pane->win->shadow.vrows = 0U;
+    if (!pane->win->shadow.live)
         return;
     yew_shadow_layout(pane->win, &pane->win->shadow, &layout);
     yew_shadow_draw(ed, pane->win, &layout, &ed->grid);

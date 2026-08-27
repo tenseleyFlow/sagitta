@@ -2,8 +2,23 @@
 
 #include "edit/ed.h"
 
+#include "edit/shadow.h"
 #include "ui/viewport.h"
 #include "util/log.h"
+
+static u16 shadow_source_grid_y(const Win *w, u16 grid_y)
+{
+    u16 relative;
+    u32 first_real;
+
+    if (w->shadow.vrows <= 1U || grid_y < w->rect.y)
+        return grid_y;
+    relative = (u16)(grid_y - w->rect.y);
+    first_real = (u32)w->shadow.draw_row + w->shadow.vrows;
+    if (relative < first_real)
+        return grid_y;
+    return (u16)(grid_y - (w->shadow.vrows - 1U));
+}
 
 LineNo yew_win_view_top(const Win *w)
 {
@@ -44,6 +59,7 @@ void yew_win_click_to_cursor(Win *w, u16 grid_x, u16 grid_y)
 
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL)
         return;
+    grid_y = shadow_source_grid_y(w, grid_y);
     if (grid_y < w->rect.y || grid_y >= (u32)w->rect.y + w->rect.h)
         return;
     if (!yew_vp_line_of_row(w, (u16)(grid_y - w->rect.y), &line, &sub))

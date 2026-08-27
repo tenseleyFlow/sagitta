@@ -16,6 +16,7 @@ typedef struct Win Win;
 typedef struct ShadowLayout {
     Rect inline_run;
     Rect vrows;
+    u64 logical_col;
     u16 nlines;
     bool clipped;
 } ShadowLayout;
