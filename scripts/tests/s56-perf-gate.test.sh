@@ -15,8 +15,11 @@ fail()
 
 cat >"$scratch/budgets" <<'EOF'
 latency.typing.small.p99 le 10000000 ns calibrated designated latency
+latency.any.max record - ns raw informational diagnose_long_tail
+latency.typing.no_paint_fraction record - permille none informational expected_noops
 latency.typing.frames le 10000 frames_per_10000_keys none all frames
 startup.spawn_floor_fraction le 300 permille none all harness_sanity
+search.literal_early.1g_code le 20000000 ns calibrated designated first_match
 EOF
 
 write_baseline()
@@ -28,6 +31,7 @@ write_baseline()
 # calib scale_permille=1000 c1=100 c2=200 c3=300
 # metric p50_ns p99_ns max_ns rss_bytes why
 latency.typing.small.p99 3000000 $value 5000000 0 measured_runner_evidence
+legacy.scalar 42 preserved_scalar_reason
 EOF
 }
 
@@ -40,8 +44,11 @@ write_observations()
         value=${pair#*:}
         cat >"$scratch/obs$index" <<EOF
 latency.typing.small.p99 $value ns ADVISORY
+latency.typing.small.max $((value + 1000)) ns
+latency.typing.small.no_paint 10 permille=25
 latency.typing.small.frames $frames keys=$keys
 startup.spawn_floor_fraction value_permille=$fraction verdict=PASS
+search.literal_early.1g_code value_ns=$((value + 2000)) verdict=ADVISORY
 EOF
     done
 }
@@ -136,5 +143,43 @@ run_gate designated >"$scratch/rebaseline.out" ||
     fail 'improvement unexpectedly failed'
 grep -F 'rebaseline me' "$scratch/rebaseline.out" >/dev/null ||
     fail 'greater-than-20-percent improvement did not request rebaseline'
+
+write_baseline 5000000
+write_observations 4000000 5000000 6000000
+"$gate" --scope all --budgets "$scratch/budgets" \
+    --baseline "$scratch/baseline" \
+    --runner-id perf-x86_64-linux-gnu --scale 1000 --mode designated \
+    --update 'measured pinned runner' --c1 111 --c2 222 --c3 333 \
+    --obs "$scratch/obs1" --obs "$scratch/obs2" --obs "$scratch/obs3" \
+    >"$scratch/update.out" || fail 'transactional update failed'
+grep -F '# calib scale_permille=1000 c1=111 c2=222 c3=333' \
+    "$scratch/baseline" >/dev/null || fail 'updated calibration missing'
+grep -F 'legacy.scalar' "$scratch/baseline" >/dev/null ||
+    fail 'scalar baseline row was not preserved'
+grep -E '^latency\.typing\.small\.p99 +5000000 +5000000 +6000000 +0 +measured pinned runner$' \
+    "$scratch/baseline" >/dev/null || fail 'latency baseline row is wrong'
+grep -E '^latency\.any\.max +5001000 +5001000 +6001000 +0 +measured pinned runner$' \
+    "$scratch/baseline" >/dev/null || fail 'informational row was omitted'
+grep -E '^latency\.typing\.no_paint_fraction +25 +25 +25 +0 +measured pinned runner$' \
+    "$scratch/baseline" >/dev/null || fail 'no-paint row was omitted'
+grep -E '^search\.literal_early\.1g_code +5002000 +5002000 +6002000 +0 +measured pinned runner$' \
+    "$scratch/baseline" >/dev/null || fail 'huge row was omitted'
+[ "$(grep -c '^latency.typing.small.p99 ' "$scratch/baseline")" -eq 1 ] ||
+    fail 'updated metric was duplicated'
+
+cp "$scratch/baseline" "$scratch/baseline-before"
+write_observations 4000000 5000000 1100000000
+set +e
+"$gate" --scope all --budgets "$scratch/budgets" \
+    --baseline "$scratch/baseline" \
+    --runner-id perf-x86_64-linux-gnu --scale 1000 --mode designated \
+    --update 'must not land' --c1 111 --c2 222 --c3 333 \
+    --obs "$scratch/obs1" --obs "$scratch/obs2" --obs "$scratch/obs3" \
+    >"$scratch/update-fail.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail 'invalid update did not fail'
+cmp -s "$scratch/baseline-before" "$scratch/baseline" ||
+    fail 'failed update changed the baseline'
 
 echo 's56 perf gate test: ok'

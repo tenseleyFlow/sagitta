@@ -4,7 +4,7 @@ set -eu
 
 usage()
 {
-    echo 'usage: s56-perf-gate.sh --scope quick|huge --budgets FILE --baseline FILE|- --runner-id ID --scale N --mode advisory|designated --obs FILE --obs FILE --obs FILE' >&2
+    echo 'usage: s56-perf-gate.sh --scope quick|huge|all --budgets FILE --baseline FILE|- --runner-id ID --scale N --mode advisory|designated [--update WHY --c1 N --c2 N --c3 N] --obs FILE --obs FILE --obs FILE' >&2
     exit 2
 }
 
@@ -15,10 +15,15 @@ scale=
 mode=
 scope=
 observations=
+update_why=
+c1_new=
+c2_new=
+c3_new=
 count=0
 while [ "$#" -gt 0 ]; do
     case $1 in
-        --scope|--budgets|--baseline|--runner-id|--scale|--mode|--obs)
+        --scope|--budgets|--baseline|--runner-id|--scale|--mode|--obs|\
+        --update|--c1|--c2|--c3)
             [ "$#" -ge 2 ] || usage
             key=$1
             value=$2
@@ -30,6 +35,10 @@ while [ "$#" -gt 0 ]; do
                 --runner-id) runner_id=$value ;;
                 --scale) scale=$value ;;
                 --mode) mode=$value ;;
+                --update) update_why=$value ;;
+                --c1) c1_new=$value ;;
+                --c2) c2_new=$value ;;
+                --c3) c3_new=$value ;;
                 --obs)
                     observations="$observations $value"
                     count=$((count + 1))
@@ -43,8 +52,18 @@ done
 [ -n "$scope" ] && [ -n "$budgets" ] && [ -n "$baseline" ] && [ -n "$runner_id" ] &&
     [ -n "$scale" ] && [ "$count" -eq 3 ] || usage
 case $mode in advisory|designated) ;; *) usage ;; esac
-case $scope in quick|huge) ;; *) usage ;; esac
+case $scope in quick|huge|all) ;; *) usage ;; esac
 case $scale in ''|*[!0-9]*) usage ;; esac
+if [ -n "$update_why" ]; then
+    [ "$scope" = all ] && [ "$mode" = designated ] &&
+        [ "$baseline" != - ] || usage
+    case $update_why in *PLACEHOLDER*|'') usage ;; esac
+    for value in "$c1_new" "$c2_new" "$c3_new"; do
+        case $value in ''|*[!0-9]*|0) usage ;; esac
+    done
+elif [ -n "$c1_new$c2_new$c3_new" ]; then
+    usage
+fi
 if [ "$scale" -eq 0 ]; then
     if [ "$mode" = designated ]; then
         echo 'perf-gate: zero calibration scale' >&2
@@ -69,8 +88,19 @@ for file do
     [ -f "$file" ] || { echo "perf-gate: missing observation $file" >&2; exit 2; }
 done
 
+update_file=
+if [ -n "$update_why" ]; then
+    update_file=$(umask 077 && mktemp "$baseline.update.XXXXXX") || {
+        echo "perf-gate: cannot create baseline transaction" >&2
+        exit 2
+    }
+    trap 'rm -f "$update_file"' EXIT HUP INT TERM
+fi
+
 awk -v runner="$runner_id" -v scale="$scale" -v mode="$mode" \
-    -v scope="$scope" '
+    -v scope="$scope" -v update_file="$update_file" \
+    -v update_why="$update_why" -v update_c1="$c1_new" \
+    -v update_c2="$c2_new" -v update_c3="$c3_new" '
 function bad(message, code) {
     print "perf-gate: " message > "/dev/stderr"
     fatal = 1
@@ -89,6 +119,15 @@ function median3(a, b, c, t) {
     if (a > b) { t = a; a = b; b = t }
     return b
 }
+function max3(a, b, c) {
+    return a > b ? (a > c ? a : c) : (b > c ? b : c)
+}
+function join_fields(first, text, i) {
+    text = ""
+    for (i = first; i <= NF; i++)
+        text = text (i == first ? "" : " ") $i
+    return text
+}
 function keep(metric, value, comparison, slot) {
     if (!number(value)) return
     slot = obs SUBSEP metric
@@ -106,6 +145,10 @@ function baseline_value(metric, unit) {
 }
 function expected(metric) {
     if (scope == "huge") return metric ~ /^search\./
+    if (scope == "all")
+        return metric ~ /^latency\./ || metric ~ /^startup\./ ||
+               metric ~ /^open\./ || metric ~ /^scroll\./ ||
+               metric ~ /^mem\./ || metric ~ /^search\./
     return metric ~ /^latency\./ || metric ~ /^startup\./ ||
            metric ~ /^open\./ || metric ~ /^scroll\./ || metric ~ /^mem\./
 }
@@ -137,8 +180,12 @@ FILENAME == ARGV[2] {
         next
     }
     if ($0 ~ /^[[:space:]]*#/ || NF == 0) next
-    if (NF < 6 || !number($2) || !number($3) || !number($4) ||
-        !number($5) || $6 == "PLACEHOLDER") {
+    full_row = NF >= 6 && number($2) && number($3) && number($4) &&
+               number($5)
+    scalar_row = !full_row && NF >= 3 && number($2)
+    why = full_row ? join_fields(6) : scalar_row ? join_fields(3) : ""
+    if ((!full_row && !scalar_row) || why == "" ||
+        why ~ /PLACEHOLDER/) {
         if (mode == "designated")
             bad("malformed or placeholder baseline row: " $0, 75)
         next
@@ -148,14 +195,20 @@ FILENAME == ARGV[2] {
         next
     }
     base_seen[$1] = 1
-    base_p99[$1] = $3 + 0
-    base_rss[$1] = $5 + 0
+    base_order[++base_count] = $1
+    base_scalar[$1] = scalar_row
+    base_p50[$1] = $2 + 0
+    base_p99[$1] = full_row ? $3 + 0 : 0
+    base_max[$1] = full_row ? $4 + 0 : 0
+    base_rss[$1] = full_row ? $5 + 0 : 0
+    base_why[$1] = why
     next
 }
 FILENAME != ARGV[1] && FILENAME != ARGV[2] {
     obs = FILENAME == ARGV[3] ? 1 : FILENAME == ARGV[4] ? 2 : 3
     metric = $1
     if (metric ~ /^latency\..*\.frames$/) metric = "latency.typing.frames"
+    else if (metric ~ /^latency\..*\.max$/) metric = "latency.any.max"
     else if (metric ~ /^latency\.typing\..*\.no_paint$/)
         metric = "latency.typing.no_paint_fraction"
     else if (metric ~ /^latency\.prof\..*\.external_delta$/)
@@ -191,6 +244,7 @@ FILENAME != ARGV[1] && FILENAME != ARGV[2] {
         split($i, p, "=")
         if (p[1] == "value_ns" || p[1] == "value_bytes" ||
             p[1] == "value_permille" || p[1] == "share_permille") value = p[2]
+        else if (p[1] == "permille") value = p[2]
         else if (p[1] == "fps_milli") value = int((p[2] + 0) / 1000)
     }
     if (metric in budget && expected(metric))
@@ -219,7 +273,8 @@ END {
     metrics = 0
     for (order = 1; order <= budget_count; order++) {
         metric = metric_order[order]
-        if (!expected(metric) || enforcement[metric] == "informational")
+        if (!expected(metric) ||
+            (enforcement[metric] == "informational" && update_file == ""))
             continue
         present = ((1 SUBSEP metric) in seen) || ((2 SUBSEP metric) in seen) ||
                   ((3 SUBSEP metric) in seen)
@@ -232,6 +287,8 @@ END {
         b = measured[2 SUBSEP metric]
         c = measured[3 SUBSEP metric]
         med = median3(a, b, c)
+        observed_median[metric] = med
+        observed_max[metric] = max3(a, b, c)
         limit = budget[metric]
         if (calibration[metric] == "calibrated") {
             if (comparison[metric] == "ge") limit = int(limit * 1000 / scale)
@@ -247,7 +304,8 @@ END {
 
         relative = 0
         base = 0
-        if (enforcement[metric] == "designated" && baseline_valid) {
+        if (update_file == "" && enforcement[metric] == "designated" &&
+            baseline_valid) {
             if (!(metric in base_seen)) {
                 if (mode == "designated")
                     bad("baseline missing observed metric " metric, 75)
@@ -276,5 +334,45 @@ END {
     }
     if (metrics == 0) bad("observations contained no Sprint 56 metrics", 2)
     if (failures != 0) exit 1
+    if (update_file != "") {
+        print "# yew perf baseline v2  runner=" runner > update_file
+        print "# calib scale_permille=" scale " c1=" update_c1 \
+              " c2=" update_c2 " c3=" update_c3 > update_file
+        print "# metric                         p50_ns        p99_ns" \
+              "        max_ns     rss_bytes  why" > update_file
+        for (i = 1; i <= base_count; i++) {
+            metric = base_order[i]
+            if (metric in budget && expected(metric)) continue
+            if (base_scalar[metric])
+                printf "%-36s %14.0f  %s\n", metric, base_p50[metric], \
+                       base_why[metric] > update_file
+            else
+                printf "%-28s %14.0f %14.0f %14.0f %14.0f  %s\n", metric, \
+                       base_p50[metric], base_p99[metric], \
+                       base_max[metric], base_rss[metric], \
+                       base_why[metric] > update_file
+        }
+        for (i = 1; i <= budget_count; i++) {
+            metric = metric_order[i]
+            if (!expected(metric)) continue
+            med = observed_median[metric]
+            top = observed_max[metric]
+            rss = unit[metric] == "bytes" ||
+                  unit[metric] == "file_size_permille" ? med : 0
+            p50 = rss != 0 ? 0 : med
+            p99 = rss != 0 ? 0 : med
+            max = rss != 0 ? 0 : top
+            printf "%-28s %14.0f %14.0f %14.0f %14.0f  %s\n", metric, \
+                   p50, p99, max, rss, update_why > update_file
+        }
+        if (close(update_file) != 0)
+            bad("cannot flush baseline transaction", 2)
+    }
 }
 ' "$budgets" "$baseline" "$@"
+
+if [ -n "$update_file" ]; then
+    mv "$update_file" "$baseline"
+    trap - EXIT HUP INT TERM
+    echo "perf-gate: updated $baseline"
+fi
