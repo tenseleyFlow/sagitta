@@ -1,7 +1,7 @@
 # Deferral ledger
 
-Last reconciled: 2026-08-26, after Sprint 55.5 closed Campaign 12 and before
-Sprint 56 implementation.
+Last reconciled: 2026-08-26, during Sprint 56 closeout after Campaign 12 and
+the historical deferral sweep were complete.
 
 This ledger covers user-visible product promises that are not live yet. It
 does not treat lazy tab hydration, deferred syntax work queues, or other
@@ -46,6 +46,7 @@ only live surfaces or explicit post-1.0 scope already listed below.
 
 | Surface | Owner | Current behavior |
 |---|---|---|
+| Cooperative incremental preview for nonliteral regex searches | Sprint 59, after Sprint 58 F06 audit | Sprint 56 bounds literal prompt previews and counted literal repeats; nonliteral prompt edits still run the exact Sprint 20 engine synchronously. The remediation must preserve anchors, word boundaries, captures and cross-slice matches through resumable Pike/DFA state rather than search-window approximations. |
 | `--batch-strict` | Sprint 59 | Argument parsing rejects it and names Sprint 59. |
 
 ## Explicit post-1.0 scope
