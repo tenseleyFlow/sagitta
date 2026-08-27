@@ -606,6 +606,8 @@ ifeq ($(HOST_OS),Linux)
 PERF_GIT_ALLOC_WRAP := -Wl,--wrap=malloc -Wl,--wrap=calloc \
                        -Wl,--wrap=realloc -Wl,--wrap=free \
                        -Wl,--wrap=arena_alloc
+PERF_SHADOW_ALLOC_WRAP := -Wl,--wrap=malloc -Wl,--wrap=calloc \
+                          -Wl,--wrap=realloc -Wl,--wrap=free
 endif
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
@@ -1081,7 +1083,7 @@ $(BUILD)/perf_render: $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_shadow: $(PERF_CORE_OBJ) $(PERF_SHADOW_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+	$(CC) $(CFLAGS) $(LDFLAGS) $(PERF_SHADOW_ALLOC_WRAP) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_SHADOW_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_scroll: $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ)

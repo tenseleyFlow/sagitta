@@ -30,6 +30,7 @@ enum {
     SHADOW_COLS = 200,
     SHADOW_GHOST_LINES = 8,
     SHADOW_GHOST_COLS = 160,
+    SHADOW_LARGE_LINES = 100000,
     SHADOW_FRAME_P99_BUDGET_NS = 250000,
     SHADOW_EDIT_P99_BUDGET_NS = 5000
 };
@@ -45,6 +46,57 @@ typedef struct PerfResult {
 
 static volatile u64 perf_sink;
 static u32 provider_requests[YEW_SHADOW_NPROV];
+
+#if defined(__linux__)
+static bool allocation_probe_active;
+static u64 allocation_calls;
+
+void *__real_malloc(size_t size);
+void *__real_calloc(size_t count, size_t size);
+void *__real_realloc(void *ptr, size_t size);
+void __real_free(void *ptr);
+
+void *__wrap_malloc(size_t size)
+{
+    if (allocation_probe_active)
+        allocation_calls++;
+    return __real_malloc(size);
+}
+
+void *__wrap_calloc(size_t count, size_t size)
+{
+    if (allocation_probe_active)
+        allocation_calls++;
+    return __real_calloc(count, size);
+}
+
+void *__wrap_realloc(void *ptr, size_t size)
+{
+    if (allocation_probe_active)
+        allocation_calls++;
+    return __real_realloc(ptr, size);
+}
+
+void __wrap_free(void *ptr)
+{
+    __real_free(ptr);
+}
+
+static void allocation_probe_begin(void)
+{
+    allocation_calls = 0U;
+    allocation_probe_active = true;
+}
+
+static bool allocation_probe_end(void)
+{
+    allocation_probe_active = false;
+    return allocation_calls == 0U;
+}
+#else
+static void allocation_probe_begin(void) { }
+static bool allocation_probe_end(void) { return true; }
+#endif
 
 static i64 now_ns(void)
 {
@@ -157,7 +209,8 @@ static size_t make_ghost(u8 *out, size_t cap, u8 fill)
     return at;
 }
 
-static void install_ghost(Ed *ed, const u8 *text, size_t len)
+static void install_ghost_at(Ed *ed, ByteOff pos, const u8 *text,
+                             size_t len)
 {
     Shadow *shadow = &ed->win->shadow;
 
@@ -167,12 +220,17 @@ static void install_ghost(Ed *ed, const u8 *text, size_t len)
     shadow->sug.prov = YEW_SHADOW_AI;
     shadow->sug.buf_id = ed->win->buf->id;
     shadow->sug.buf_gen = ed->win->buf->tb->gen;
-    shadow->sug.pos = BYTEOFF(0U);
+    shadow->sug.pos = pos;
     shadow->sug.text = text;
     shadow->sug.len = (u32)len;
     shadow->sug.consumed = 0U;
     shadow->sug.scratch = NULL;
     shadow->owned_text = NULL;
+}
+
+static void install_ghost(Ed *ed, const u8 *text, size_t len)
+{
+    install_ghost_at(ed, BYTEOFF(0U), text, len);
 }
 
 static bool frame_once(Ed *ed, const u8 *ghost, size_t ghost_len,
@@ -245,6 +303,80 @@ static bool measure_frame(PerfResult *result)
         p99s[trial] = samples[99U];
     }
     reduce_trials(medians, p99s, result);
+    return true;
+}
+
+static bool measure_midline_large(PerfResult *result)
+{
+    static const u8 line[] = "int value = suffix_value;\n";
+    static const u8 ghost[] = "ghost_";
+    const size_t line_len = sizeof(line) - 1U;
+    const size_t fixture_len = line_len * SHADOW_LARGE_LINES;
+    u8 *fixture = malloc(fixture_len);
+    i64 medians[SHADOW_PERF_TRIALS];
+    i64 p99s[SHADOW_PERF_TRIALS];
+    u32 trial;
+
+    if (fixture == NULL)
+        return false;
+    for (size_t at = 0U; at < fixture_len; at += line_len)
+        (void)memcpy(fixture + at, line, line_len);
+    for (trial = 0U; trial < SHADOW_PERF_TRIALS; trial++) {
+        Ed ed;
+        Cursor *cursor;
+        i64 samples[SHADOW_FRAME_SAMPLES];
+        u32 sample;
+
+        if (!open_editor(&ed, fixture, fixture_len, true)) {
+            free(fixture);
+            return false;
+        }
+        cursor = &ed.win->cs.curs.data[ed.win->cs.primary];
+        cursor->pos = BYTEOFF(12U);
+        cursor->anchor = BYTEOFF(12U);
+        yew_draw_document_rows(&ed, ed.win, 0U, 1U);
+        for (sample = 0U; sample < SHADOW_FRAME_SAMPLES; sample++) {
+            ShadowLayout layout;
+            i64 start;
+            i64 elapsed;
+
+            yew_draw_document_rows(&ed, ed.win, 0U, 1U);
+            install_ghost_at(&ed, cursor->pos, ghost,
+                             sizeof(ghost) - 1U);
+            yew_region_frame_begin();
+            allocation_probe_begin();
+            start = now_ns();
+            if (start < 0) {
+                (void)allocation_probe_end();
+                yew_ed_free(&ed);
+                free(fixture);
+                return false;
+            }
+            yew_shadow_layout(ed.win, &ed.win->shadow, &layout);
+            yew_shadow_draw(&ed, ed.win, &layout, &ed.grid);
+            elapsed = now_ns() - start;
+            if (!allocation_probe_end() || elapsed < 0 ||
+                layout.nlines != 1U ||
+                ed.grid.back[(size_t)layout.inline_run.y * ed.grid.cols +
+                             layout.inline_run.x].utf8[0] != (u8)'g' ||
+                ed.grid.back[(size_t)layout.inline_run.y * ed.grid.cols +
+                             layout.inline_run.x + sizeof(ghost) - 1U]
+                        .utf8[0] != (u8)'s') {
+                yew_ed_free(&ed);
+                free(fixture);
+                return false;
+            }
+            samples[sample] = elapsed;
+            perf_sink ^= (u64)layout.inline_run.x + (u64)elapsed;
+        }
+        yew_ed_free(&ed);
+        sort_i64(samples, SHADOW_FRAME_SAMPLES);
+        medians[trial] = samples[SHADOW_FRAME_SAMPLES / 2U];
+        p99s[trial] = samples[99U];
+    }
+    free(fixture);
+    reduce_trials(medians, p99s, result);
+    (void)printf("shadow.compose_midline_100kloc allocations=0 ok\n");
     return true;
 }
 
@@ -393,6 +525,8 @@ int main(int argc, char **argv)
     PerfResult results[] = {
         {"frame_8line_200x50", 0, 0, 0, 0,
          SHADOW_FRAME_P99_BUDGET_NS},
+        {"compose_midline_100kloc", 0, 0, 0, 0,
+         SHADOW_FRAME_P99_BUDGET_NS},
         {"on_edit_match", 0, 0, 0, 0, SHADOW_EDIT_P99_BUDGET_NS},
     };
     bool measure_only = argc == 2 && strcmp(argv[1], "--measure") == 0;
@@ -408,9 +542,20 @@ int main(int argc, char **argv)
         return 2;
     }
     register_providers();
-    if (!measure_frame(&results[0]) || !measure_edit(&results[1]) ||
-        !check_debounce()) {
-        (void)fprintf(stderr, "perf_shadow: measurement invariant failed\n");
+    if (!measure_frame(&results[0])) {
+        (void)fprintf(stderr, "perf_shadow: frame invariant failed\n");
+        return 2;
+    }
+    if (!measure_midline_large(&results[1])) {
+        (void)fprintf(stderr, "perf_shadow: large composition invariant failed\n");
+        return 2;
+    }
+    if (!measure_edit(&results[2])) {
+        (void)fprintf(stderr, "perf_shadow: edit invariant failed\n");
+        return 2;
+    }
+    if (!check_debounce()) {
+        (void)fprintf(stderr, "perf_shadow: debounce invariant failed\n");
         return 2;
     }
     if (!measure_only && !load_baselines(results, YEW_ARRAY_LEN(results)))

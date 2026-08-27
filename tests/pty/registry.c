@@ -5553,10 +5553,11 @@ static void case_s43_shadow_overlay_no_jump(PtyCtx *c)
               "four-line shadow did not appear");
     for (row = 4U; row <= 8U; row++)
         ptc_check(c,
-                  memcmp(baseline + (size_t)row * (size_t)c->vt.cols,
+                  memcmp(baseline + (size_t)(row - 3U) *
+                                        (size_t)c->vt.cols,
                          c->vt.cells + (size_t)row * (size_t)c->vt.cols,
                          (size_t)c->vt.cols * sizeof(*baseline)) == 0,
-                  "shadow changed or moved a non-ghost document row");
+                  "shadow did not shift a real row intact below the ghost");
     free(baseline);
     /* s43_command already waited for the completed command frame.  Do not
      * add a scaled quiet window here: under Valgrind it spans the four-second

@@ -94,6 +94,8 @@ void yew_shadow_layout(const Win *win, const Shadow *shadow,
     if (x < win->rect.x || x >= right || row >= win->rect.h)
         return;
     lines = shadow_line_count(&shadow->sug);
+    if (lines > 1U && cursor->pos.v != shadow_line_content(tb, line).hi)
+        return;
     max_lines = shadow->max_lines == 0U ? YEW_SHADOW_MAX_LINES :
                                          shadow->max_lines;
     if (max_lines > YEW_SHADOW_MAX_LINES)
@@ -166,25 +168,128 @@ static u16 shadow_puts(Grid *grid, u16 row, u16 col, const u8 *text,
     return col;
 }
 
-static void shadow_draw_line(Grid *grid, Rect rect, const u8 *text,
-                             size_t len, bool ellipsis, Cell style)
+static void shadow_damage(Grid *grid, u16 row, u16 lo, u16 hi)
+{
+    yew_grid_overlay(grid, row, lo, hi, &grid->blank, 0U);
+}
+
+static void shadow_blank_cells(Grid *grid, u16 row, u16 lo, u16 hi)
+{
+    Cell *cells;
+    u16 col;
+
+    if (row >= grid->rows || lo >= hi || lo >= grid->cols)
+        return;
+    if (hi > grid->cols)
+        hi = grid->cols;
+    cells = grid->back + (size_t)row * grid->cols;
+    for (col = lo; col < hi; col++)
+        cells[col] = grid->blank;
+}
+
+static void shadow_shift_inline(Grid *grid, Rect rect, u16 cells_right)
+{
+    Cell *row;
+    u16 right;
+    u16 width;
+    u16 keep;
+    u16 moved_end;
+
+    if (rect.y >= grid->rows || rect.x >= grid->cols || rect.w == 0U ||
+        cells_right == 0U)
+        return;
+    right = (u32)rect.x + rect.w > grid->cols ? grid->cols :
+                                                    (u16)(rect.x + rect.w);
+    width = (u16)(right - rect.x);
+    row = grid->back + (size_t)rect.y * grid->cols;
+    if (cells_right >= width) {
+        shadow_blank_cells(grid, rect.y, rect.x, right);
+        shadow_damage(grid, rect.y, rect.x, right);
+        return;
+    }
+    keep = (u16)(width - cells_right);
+    /* Clipping may not strand a wide head at the pane edge. */
+    if (keep != 0U && row[rect.x + keep - 1U].w == 2U)
+        keep--;
+    if (keep != 0U)
+        (void)memmove(row + rect.x + cells_right, row + rect.x,
+                      (size_t)keep * sizeof(*row));
+    moved_end = (u16)(rect.x + cells_right + keep);
+    shadow_blank_cells(grid, rect.y, rect.x,
+                       (u16)(rect.x + cells_right));
+    shadow_blank_cells(grid, rect.y, moved_end, right);
+    shadow_damage(grid, rect.y, rect.x, right);
+}
+
+static void shadow_shift_rows(Grid *grid, const Win *win,
+                              const ShadowLayout *layout)
+{
+    u16 count;
+    u16 top;
+    u16 bottom;
+    u16 left;
+    u16 right;
+    u16 dst;
+
+    if (layout->nlines <= 1U)
+        return;
+    count = (u16)(layout->nlines - 1U);
+    top = (u16)(layout->inline_run.y + 1U);
+    bottom = (u32)win->rect.y + win->rect.h > grid->rows ? grid->rows :
+                                                        (u16)(win->rect.y +
+                                                              win->rect.h);
+    left = win->rect.x >= win->gutter_width
+               ? (u16)(win->rect.x - win->gutter_width)
+               : 0U;
+    right = (u32)win->rect.x + win->rect.w > grid->cols ? grid->cols :
+                                                        (u16)(win->rect.x +
+                                                              win->rect.w);
+    if (top >= bottom || left >= right)
+        return;
+    dst = bottom;
+    while (dst > (u16)(top + count)) {
+        Cell *to;
+        const Cell *from;
+
+        dst--;
+        to = grid->back + (size_t)dst * grid->cols + left;
+        from = grid->back + (size_t)(dst - count) * grid->cols + left;
+        (void)memmove(to, from, (size_t)(right - left) * sizeof(*to));
+        shadow_damage(grid, dst, left, right);
+    }
+    for (dst = top; dst < (u16)(top + count); dst++) {
+        shadow_blank_cells(grid, dst, left, right);
+        shadow_damage(grid, dst, left, right);
+    }
+}
+
+static u16 shadow_draw_line(Grid *grid, Rect rect, const u8 *text,
+                            size_t len, bool ellipsis, Cell style,
+                            bool compose_inline)
 {
     static const u8 dots[] = "\xE2\x80\xA6";
     u16 text_cells;
     size_t keep;
+    int cells = 0;
+    u16 total_cells;
 
     if (rect.w == 0U || rect.h == 0U || rect.y >= grid->rows ||
         rect.x >= grid->cols)
-        return;
-    yew_grid_fill(grid, rect.y, rect.x, (u16)(rect.x + rect.w), style);
+        return 0U;
     text_cells = ellipsis && rect.w != 0U ? (u16)(rect.w - 1U) : rect.w;
-    keep = yew_str_clip(text, len, text_cells, NULL);
+    keep = yew_str_clip(text, len, text_cells, &cells);
+    total_cells = (u16)cells;
+    if (ellipsis)
+        total_cells++;
+    if (compose_inline)
+        shadow_shift_inline(grid, rect, total_cells);
     (void)shadow_puts(grid, rect.y, rect.x, text, keep, style);
     if (ellipsis)
         (void)yew_grid_put(grid, rect.y,
                            (u16)(rect.x + rect.w - 1U), dots,
                            sizeof(dots) - 1U, style.fg, style.bg,
                            style.attrs);
+    return total_cells;
 }
 
 void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
@@ -211,6 +316,7 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
     len = shadow->sug.len - shadow->sug.consumed;
     style = grid->blank;
     shadow_style(ed, &shadow->sug, &style, &glyph);
+    shadow_shift_rows(grid, win, layout);
     at = 0U;
     for (line = 0U; line < layout->nlines; line++) {
         u32 end = at;
@@ -224,8 +330,9 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
             end++;
         if (end > at && text[end - 1U] == '\r')
             end--;
-        shadow_draw_line(grid, row, text + at, end - at,
-                         last && layout->clipped, style);
+        (void)shadow_draw_line(grid, row, text + at, end - at,
+                              last && layout->clipped, style,
+                              line == 0U);
         if (end < len && text[end] == '\r')
             end++;
         at = end < len && text[end] == '\n' ? end + 1U : end;

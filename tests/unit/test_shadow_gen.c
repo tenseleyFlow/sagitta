@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/option.h"
 #include "edit/shadow.h"
 #include "text/edit.h"
 
@@ -184,6 +185,63 @@ void test_shadow_generation_drop_preserves_buffer_bytes(void)
     yew_ed_free(&ed);
 }
 
+void test_shadow_delivery_eligibility_uses_suffix_and_line_shape(void)
+{
+    static const u8 indented[] = "    code";
+    static const u8 whitespace[] = " \t  ";
+    static const u8 multiline[] = "one\ntwo";
+    OptVal yes = {YEW_OPT_BOOL, {.b = true}};
+    const char *err = NULL;
+    ShadowSug suggestion;
+    Ed ed;
+
+    shadow_fixture(&ed, indented, sizeof(indented) - 1U);
+    suggestion = suggestion_for(&ed, 1U, BYTEOFF(0U),
+                                (const u8 *)"ghost", 5U);
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.delivered, 1U);
+    ed.win->cs.curs.data[0].pos = BYTEOFF(4U);
+    ed.win->cs.curs.data[0].anchor = BYTEOFF(4U);
+    suggestion = suggestion_for(&ed, 2U, BYTEOFF(4U),
+                                (const u8 *)"ghost", 5U);
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.delivered, 2U);
+    yew_ed_free(&ed);
+
+    shadow_fixture(&ed, whitespace, sizeof(whitespace) - 1U);
+    suggestion = suggestion_for(&ed, 1U, BYTEOFF(0U),
+                                (const u8 *)"ghost", 5U);
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(ed.win->shadow.live);
+    yew_ed_free(&ed);
+
+    shadow_fixture(&ed, indented, sizeof(indented) - 1U);
+    YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_SCOPE_DECLARED, "shadow.midline",
+                           14U, &yes, &err));
+    suggestion = suggestion_for(&ed, 1U, BYTEOFF(0U),
+                                (const u8 *)"ghost", 5U);
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(ed.win->shadow.live);
+    yew_shadow_dismiss(&ed, ed.win);
+    suggestion = suggestion_for(&ed, 2U, BYTEOFF(0U), multiline,
+                                sizeof(multiline) - 1U);
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.delivered, 2U);
+    ed.win->cs.curs.data[0].pos = BYTEOFF(sizeof(indented) - 1U);
+    ed.win->cs.curs.data[0].anchor = BYTEOFF(sizeof(indented) - 1U);
+    suggestion = suggestion_for(&ed, 3U,
+                                BYTEOFF(sizeof(indented) - 1U), multiline,
+                                sizeof(multiline) - 1U);
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(ed.win->shadow.live);
+    YEW_ASSERT(textbuf_eq(ed.win->buf->tb, indented,
+                          sizeof(indented) - 1U));
+    yew_ed_free(&ed);
+}
+
 void test_shadow_edit_keeps_only_a_matching_typed_prefix(void)
 {
     Ed ed;
@@ -218,6 +276,8 @@ void test_shadow_delete_always_dismisses(void)
     ShadowSug suggestion;
 
     shadow_fixture(&ed, (const u8 *)"abc", 3U);
+    ed.win->cs.curs.data[0].pos = BYTEOFF(3U);
+    ed.win->cs.curs.data[0].anchor = BYTEOFF(3U);
     suggestion = suggestion_for(&ed, 1U, BYTEOFF(3U),
                                 (const u8 *)"def", 3U);
     yew_shadow_deliver(&ed, &suggestion);

@@ -207,7 +207,7 @@ void test_shadow_debounce_policy_gates_and_provider_filter(void)
     debounce_fixture(&ed, (const u8 *)"a b", 3U, 1U);
     ed.now_ms = 6000;
     yew_shadow_arm(&ed, ed.win);
-    YEW_ASSERT_EQ_U64(ed.timers.len, 1U);
+    YEW_ASSERT_EQ_U64(ed.timers.len, 0U);
     yew_ed_free(&ed);
 }
 

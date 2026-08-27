@@ -257,6 +257,10 @@ scan "golden updates are forbidden in CI" \
     'YEW_PTY_UPDATE' "$ci_files"
 scan "piece tree file I/O belongs to Sprint 8" \
     '(^|[^[:alnum:]_])(open|fopen|read)[[:space:]]*\(' "$piece_files"
+shadow_draw_files=$tmp/shadow-draw-files
+printf '%s\n' "$repo_dir/src/ui/shadowdraw.c" >"$shadow_draw_files"
+scan "shadow insertion preview must compose without destructive row fill" \
+    'yew_grid_fill[[:space:]]*\(' "$shadow_draw_files"
 scan "generated edit campaigns must use xorshift64*, not libc randomness" \
     '(^|[^[:alnum:]_])rand[[:space:]]*\(|(^|[^[:alnum:]_])srand[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)' \
     "$deterministic_fuzz_files"

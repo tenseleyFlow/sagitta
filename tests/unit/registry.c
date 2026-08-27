@@ -2352,6 +2352,7 @@ const YewTest yew_tests[] = {
     T(shadow_revalidate_boundaries_pieces_and_binary),
     T(shadow_delivery_owns_bytes_and_rejects_stale_results),
     T(shadow_generation_drop_preserves_buffer_bytes),
+    T(shadow_delivery_eligibility_uses_suffix_and_line_shape),
     T(shadow_edit_keeps_only_a_matching_typed_prefix),
     T(shadow_delete_always_dismisses),
     T(shadow_accept_all_is_one_owned_undo_transaction),
@@ -2386,6 +2387,9 @@ const YewTest yew_tests[] = {
     T(shadow_layout_last_visible_row_and_inline_only_clip),
     T(shadow_draw_overlays_exact_damage_blocks_hits_and_clips),
     T(shadow_draw_provenance_attrs_and_glyphs_are_distinct),
+    T(shadow_draw_single_line_inserts_before_ascii_suffix),
+    T(shadow_draw_moves_wide_suffix_pairs_and_clips_whole_glyphs),
+    T(shadow_multiline_midline_layout_paints_nothing),
 };
 
 const size_t yew_tests_len = YEW_ARRAY_LEN(yew_tests);

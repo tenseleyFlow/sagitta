@@ -99,13 +99,13 @@ void test_shadow_backspace_motion_and_mode_change_follow_table(void)
     YEW_ASSERT_EQ_U64(ed.timers.len, 1U);
     yew_ed_free(&ed);
 
-    interaction_fixture(&ed, (const u8 *)"a", 1U, 0U);
+    interaction_fixture(&ed, (const u8 *)"a ", 2U, 1U);
     (void)interaction_deliver(&ed, "ghost");
     YEW_ASSERT_EQ_I64(interaction_invoke(&ed, "ed.move.char.next",
                                          YEW_SRC_TEST, NULL),
                       YEW_CMD_OK);
     YEW_ASSERT(!ed.win->shadow.live);
-    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 1U);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 2U);
     YEW_ASSERT_EQ_U64(ed.timers.len, 1U);
     yew_ed_free(&ed);
 

@@ -2381,6 +2381,7 @@ void test_shadow_revalidate_exact_and_divergent_prefixes(void);
 void test_shadow_revalidate_boundaries_pieces_and_binary(void);
 void test_shadow_delivery_owns_bytes_and_rejects_stale_results(void);
 void test_shadow_generation_drop_preserves_buffer_bytes(void);
+void test_shadow_delivery_eligibility_uses_suffix_and_line_shape(void);
 void test_shadow_edit_keeps_only_a_matching_typed_prefix(void);
 void test_shadow_delete_always_dismisses(void);
 void test_shadow_accept_all_is_one_owned_undo_transaction(void);
@@ -2415,5 +2416,8 @@ void test_shadow_layout_clamps_forty_lines_to_eight(void);
 void test_shadow_layout_last_visible_row_and_inline_only_clip(void);
 void test_shadow_draw_overlays_exact_damage_blocks_hits_and_clips(void);
 void test_shadow_draw_provenance_attrs_and_glyphs_are_distinct(void);
+void test_shadow_draw_single_line_inserts_before_ascii_suffix(void);
+void test_shadow_draw_moves_wide_suffix_pairs_and_clips_whole_glyphs(void);
+void test_shadow_multiline_midline_layout_paints_nothing(void);
 
 #endif

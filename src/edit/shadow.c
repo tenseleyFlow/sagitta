@@ -20,6 +20,8 @@
 static const ShadowProvider *shadow_providers[YEW_SHADOW_NPROV];
 
 static bool shadow_opt(Ed *ed, Win *win, const char *name, OptVal *out);
+static bool shadow_position_eligible(Ed *ed, Win *win,
+                                     const ShadowSug *suggestion);
 
 static bool shadow_provider_valid(u8 prov)
 {
@@ -324,6 +326,19 @@ void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion)
         ed->shadow_stats.dropped_stale++;
         return;
     }
+    ed->shadow_stats.delivered++;
+    if (!shadow_position_eligible(ed, win,
+                                  &shadow->answers[prov].sug)) {
+        bool selected = shadow->selected == prov;
+
+        shadow_answer_clear(&shadow->answers[prov]);
+        if (selected) {
+            shadow->selected_by_user = false;
+            (void)shadow_select_preferred(ed, win);
+        }
+        ed->full_damage = true;
+        return;
+    }
     if (shadow->selected_by_user && shadow->selected == prov) {
         if (!shadow_select_answer(shadow, prov)) {
             shadow->selected_by_user = false;
@@ -335,7 +350,6 @@ void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion)
     else if (!shadow->live)
         (void)shadow_select_preferred(ed, win);
     ed->full_damage = true;
-    ed->shadow_stats.delivered++;
 }
 
 static bool shadow_opt(Ed *ed, Win *win, const char *name, OptVal *out)
@@ -389,52 +403,102 @@ static u32 shadow_provider_delay(Ed *ed, Win *win,
     return provider->debounce_ms;
 }
 
+static bool shadow_byte_at(const TextBuf *tb, u64 off, u8 *out)
+{
+    TextIter iter;
+    const u8 *bytes;
+    u64 len;
+
+    if (out == NULL || !yew_textiter_begin(&iter, tb, BYTEOFF(off)) ||
+        !yew_textiter_chunk(&iter, tb, &bytes, &len) || len == 0U)
+        return false;
+    *out = bytes[0];
+    return true;
+}
+
 static ByteOff shadow_line_end(const TextBuf *tb, LineNo line)
 {
     Span span = yew_textbuf_line_span(tb, line);
     ByteOff end = BYTEOFF(span.hi);
+    u8 byte;
 
-    if (line.v + 1U < yew_textbuf_line_count(tb))
-        end = yew_grapheme_prev_boundary(tb, end);
+    if (end.v > span.lo && shadow_byte_at(tb, end.v - 1U, &byte) &&
+        byte == '\n')
+        end.v--;
+    if (end.v > span.lo && shadow_byte_at(tb, end.v - 1U, &byte) &&
+        byte == '\r')
+        end.v--;
     return end;
 }
 
-static bool shadow_cursor_on_whitespace(const TextBuf *tb, ByteOff cursor)
+typedef enum ShadowSuffix {
+    SHADOW_SUFFIX_EMPTY = 0,
+    SHADOW_SUFFIX_WHITESPACE,
+    SHADOW_SUFFIX_TEXT
+} ShadowSuffix;
+
+static ShadowSuffix shadow_suffix(const TextBuf *tb, ByteOff cursor)
 {
-    TextIter iter;
-    u8 bytes[YEW_UTF8_MAX];
-    size_t copied = 0U;
-    u32 cp;
+    LineNo line;
+    ByteOff end;
+    u64 at;
 
-    if (cursor.v >= yew_textbuf_len(tb) ||
-        !yew_textiter_begin(&iter, tb, cursor))
-        return false;
-    while (copied < sizeof(bytes)) {
-        const u8 *chunk;
-        u64 available;
-        size_t take;
+    line = yew_textbuf_line_of(tb, cursor);
+    end = shadow_line_end(tb, line);
+    if (cursor.v >= end.v)
+        return SHADOW_SUFFIX_EMPTY;
+    at = cursor.v;
+    while (at < end.v) {
+        u8 bytes[YEW_UTF8_MAX];
+        size_t copied = 0U;
+        size_t used;
+        u32 cp;
 
-        if (!yew_textiter_chunk(&iter, tb, &chunk, &available))
-            break;
-        take = (size_t)(available < sizeof(bytes) - copied
-                            ? available
-                            : sizeof(bytes) - copied);
-        if (take == 0U)
-            break;
-        (void)memcpy(bytes + copied, chunk, take);
-        copied += take;
-        if (copied == sizeof(bytes) ||
-            !yew_textiter_advance(&iter, tb))
-            break;
+        while (copied < sizeof(bytes) && at + copied < end.v) {
+            if (!shadow_byte_at(tb, at + copied, &bytes[copied]))
+                return SHADOW_SUFFIX_TEXT;
+            copied++;
+        }
+        used = yew_utf8_decode(bytes, copied, &cp);
+        if (used == 0U || !yew_unicode_is_white_space(cp))
+            return SHADOW_SUFFIX_TEXT;
+        at += used;
     }
-    return copied != 0U && yew_utf8_decode(bytes, copied, &cp) != 0U &&
-           yew_unicode_is_white_space(cp);
+    return SHADOW_SUFFIX_WHITESPACE;
+}
+
+static bool shadow_suggestion_single_line(const ShadowSug *suggestion)
+{
+    u32 remaining;
+
+    if (suggestion == NULL || suggestion->consumed > suggestion->len)
+        return false;
+    remaining = suggestion->len - suggestion->consumed;
+    if (remaining == 0U)
+        return true;
+    return suggestion->text != NULL &&
+           memchr(suggestion->text + suggestion->consumed, '\n',
+                  remaining) == NULL;
+}
+
+static bool shadow_position_eligible(Ed *ed, Win *win,
+                                     const ShadowSug *suggestion)
+{
+    const Cursor *cursor;
+    ShadowSuffix suffix;
+    OptVal value;
+
+    cursor = &win->cs.curs.data[win->cs.primary];
+    suffix = shadow_suffix(win->buf->tb, cursor->pos);
+    if (suggestion != NULL && !shadow_suggestion_single_line(suggestion))
+        return suffix == SHADOW_SUFFIX_EMPTY;
+    if (suffix != SHADOW_SUFFIX_TEXT)
+        return true;
+    return shadow_opt(ed, win, "shadow.midline", &value) && value.as.b;
 }
 
 static bool shadow_arm_eligible(Ed *ed, Win *win)
 {
-    Cursor *cursor;
-    TextBuf *tb;
     OptVal value;
     u32 i;
 
@@ -449,14 +513,7 @@ static bool shadow_arm_eligible(Ed *ed, Win *win)
     for (i = 0U; i < win->cs.curs.len; i++)
         if (win->cs.curs.data[i].pos.v != win->cs.curs.data[i].anchor.v)
             return false;
-    cursor = &win->cs.curs.data[win->cs.primary];
-    tb = win->buf->tb;
-    if (shadow_opt(ed, win, "shadow.midline", &value) && value.as.b)
-        return true;
-    if (cursor->pos.v ==
-        shadow_line_end(tb, yew_textbuf_line_of(tb, cursor->pos)).v)
-        return true;
-    return shadow_cursor_on_whitespace(tb, cursor->pos);
+    return shadow_position_eligible(ed, win, NULL);
 }
 
 static void shadow_timer_fire(Ed *ed, void *ctx)
