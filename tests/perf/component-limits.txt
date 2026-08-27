@@ -1,0 +1,16 @@
+# Architecture-neutral functional limits for legacy perf components.
+#
+# These are product/algorithm constraints from Sprints 20 and 21, not
+# measurements from a designated runner. Runner measurements belong only in
+# tests/perf/baselines/perf-<runner>.txt; hosted lanes use no such baseline.
+
+re.pathological_100k_ns            50000000  s20 functional sanity bound
+re.pathological_scale_ratio              15  s20 linear-scaling invariant
+
+re.throughput_literal_mibs              500  s20 functional target
+re.throughput_dfa_mibs                   50  s20 functional target
+re.throughput_rss_bytes             4194304  s20 no-materialization invariant
+
+search.keypress_p99_ns             5000000  s21 invariant-4 target
+search.step_mean_ns                1000000  s21 search-step target
+search.overlay_rss_bytes           4194304  s21 viewport-only invariant

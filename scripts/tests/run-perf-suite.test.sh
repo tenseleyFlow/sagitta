@@ -19,6 +19,8 @@ set -eu
 
 target=
 output=
+runner_baseline=
+component_limits=
 for arg do
     case $arg in
         calib|perf-components|perf-huge-components|perf-s56-checks|\
@@ -26,6 +28,9 @@ for arg do
         perf-s56-huge-observation)
             target=$arg ;;
         CALIB_OUTPUT=*) output=${arg#CALIB_OUTPUT=} ;;
+        PERF_BASELINE=*) runner_baseline=${arg#PERF_BASELINE=} ;;
+        PERF_COMPONENT_LIMITS=*)
+            component_limits=${arg#PERF_COMPONENT_LIMITS=} ;;
     esac
 done
 case $target in
@@ -59,6 +64,10 @@ case $target in
             echo "$YEW_CALIB_C3_NS"
         } >"$FAKE_ROOT/suite-calib"
         echo called >"$FAKE_ROOT/suite-called"
+        {
+            echo "$runner_baseline"
+            echo "$component_limits"
+        } >"$FAKE_ROOT/suite-routing"
         exit "${FAKE_SUITE_STATUS:-0}"
         ;;
     perf-s56-checks|perf-s56-gate-selftest)
@@ -95,6 +104,7 @@ reset_case()
 {
     rm -f "$scratch/count" "$scratch/obs-count" \
         "$scratch/suite-called" "$scratch/suite-calib"
+    rm -f "$scratch/suite-routing"
     rm -rf "$scratch/build"
 }
 
@@ -111,6 +121,11 @@ FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=unavailable FAKE_MODE=ADVISORY \
 rg='runner=hosted mode=ADVISORY scale_permille=0'
 grep -F "$rg" "$scratch/advisory.out" >/dev/null ||
     fail 'advisory banner missing'
+[ "$(sed -n '1p' "$scratch/suite-routing")" = - ] ||
+    fail 'hosted runner was assigned a designated baseline'
+[ "$(sed -n '2p' "$scratch/suite-routing")" = \
+  tests/perf/component-limits.txt ] ||
+    fail 'hosted runner did not receive architecture-neutral component limits'
 
 cat >"$scratch/budgets" <<'EOF'
 latency.typing.small.p99 le 10000000 ns calibrated designated latency
@@ -156,9 +171,37 @@ set -e
 [ ! -f "$scratch/suite-called" ] || fail 'refused gate ran the suite'
 
 reset_case
+set +e
+FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_MODE=GATING \
+    BUILD=$scratch/build PERF_GATE=1 PERF_RUNNER_ID=perf-arm64-linux \
+    PERF_BASELINE=$scratch/missing-arm64-baseline \
+    CALIB_REFERENCE=$scratch/missing-arm64-reference PERF_S56_EVALUATE=0 \
+    "$runner" "$scratch/make" >"$scratch/arm64-refuse.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 75 ] || fail 'uncalibrated designated arm64 did not refuse'
+[ ! -f "$scratch/suite-called" ] ||
+    fail 'uncalibrated designated arm64 ran the suite'
+
+make -C "$repo" --no-print-directory -n \
+    perf-textbuf perf-re-pathological perf-re-throughput perf-search-latency \
+    BUILD="$scratch/plan-build" PERF_BASELINE=- \
+    PERF_COMPONENT_LIMITS=tests/perf/component-limits.txt \
+    >"$scratch/component-plan"
+grep -F -- '--baseline -' "$scratch/component-plan" >/dev/null ||
+    fail 'perf-textbuf did not retain baseline-free advisory routing'
+for consumer in perf_re_pathological perf_re_throughput perf_search_latency
+do
+    grep -F "$consumer --baseline tests/perf/component-limits.txt" \
+        "$scratch/component-plan" >/dev/null ||
+        fail "$consumer did not receive architecture-neutral limits"
+done
+
+: >"$scratch/reference"
+reset_case
 FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1150 \
     FAKE_MODE=GATING BUILD=$scratch/build PERF_GATE=1 \
-    PERF_S56_EVALUATE=0 \
+    PERF_S56_EVALUATE=0 CALIB_REFERENCE=$scratch/reference \
     PERF_RUNNER_ID=perf-x86_64-linux-gnu \
     "$runner" "$scratch/make" >"$scratch/boundary.out"
 
@@ -166,7 +209,7 @@ reset_case
 set +e
 FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1151 \
     FAKE_MODE=GATING BUILD=$scratch/build PERF_GATE=1 \
-    PERF_S56_EVALUATE=0 \
+    PERF_S56_EVALUATE=0 CALIB_REFERENCE=$scratch/reference \
     PERF_RUNNER_ID=perf-x86_64-linux-gnu \
     "$runner" "$scratch/make" >"$scratch/drift.out" 2>&1
 status=$?
@@ -179,7 +222,7 @@ reset_case
 set +e
 FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1000 \
     FAKE_MODE=GATING FAKE_SUITE_STATUS=7 BUILD=$scratch/build PERF_GATE=1 \
-    PERF_S56_EVALUATE=0 \
+    PERF_S56_EVALUATE=0 CALIB_REFERENCE=$scratch/reference \
     PERF_RUNNER_ID=perf-x86_64-linux-gnu \
     "$runner" "$scratch/make" >"$scratch/suite-fail.out" 2>&1
 status=$?

@@ -10,6 +10,7 @@ reference=${CALIB_REFERENCE:-}
 gate=${PERF_GATE:-0}
 evaluate=${PERF_S56_EVALUATE:-1}
 baseline=${PERF_BASELINE:-}
+component_limits=${PERF_COMPONENT_LIMITS:-tests/perf/component-limits.txt}
 budgets=${PERF_BUDGETS:-tests/perf/budgets.txt}
 before=$build/calib-before.txt
 after=$build/calib-after.txt
@@ -98,15 +99,17 @@ if [ -z "$baseline" ]; then
         *) baseline=- ;;
     esac
 fi
-if [ "$baseline" = - ]; then
-    case $(uname -m) in
-        aarch64|arm64)
-            component_baseline=tests/perf/baselines/perf-arm64-linux.txt ;;
-        *) component_baseline=tests/perf/baselines/perf-x86_64-linux-gnu.txt ;;
-    esac
-else
-    component_baseline=$baseline
+if [ "$gate" = 1 ]; then
+    if [ "$baseline" = - ] || [ ! -f "$baseline" ]; then
+        echo "perf: designated runner baseline is unavailable: $baseline; no verdict" >&2
+        exit 75
+    fi
+    if [ -z "$reference" ] || [ ! -f "$reference" ]; then
+        echo "perf: designated calibration reference is unavailable; no verdict" >&2
+        exit 75
+    fi
 fi
+[ -f "$component_limits" ] || die "component limits are unavailable: $component_limits"
 
 measure "$before" || die 'initial calibration failed'
 check_scale "$before"
@@ -131,7 +134,8 @@ YEW_PERF_ADVISORY=$advisory YEW_CALIB_SCALE_PERMILLE=$scale \
 YEW_CALIB_C1_NS=$c1 YEW_CALIB_C2_NS=$c2 YEW_CALIB_C3_NS=$c3 \
     "$make_bin" --no-print-directory "$component_target" BUILD="$build" \
     PERF_RUNNER_ID="$runner_id" PERF_ADVISORY="$advisory" \
-    PERF_BASELINE="$component_baseline" "$collect_arg"
+    PERF_BASELINE="$baseline" PERF_COMPONENT_LIMITS="$component_limits" \
+    "$collect_arg"
 suite_status=$?
 
 gate_status=0

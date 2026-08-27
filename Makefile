@@ -61,6 +61,7 @@ PERF_RUNNER_ID ?= local-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
 PERF_BASELINE ?= $(if $(filter perf-arm64-linux,$(PERF_RUNNER_ID)),\
                     tests/perf/baselines/perf-arm64-linux.txt,\
                     tests/perf/baselines/perf-x86_64-linux-gnu.txt)
+PERF_COMPONENT_LIMITS ?= tests/perf/component-limits.txt
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
@@ -1727,13 +1728,13 @@ perf-latency: $(BUILD)/perf_latency $(BUILD)/yew
 		--baseline $(LATENCY_BASELINE)
 
 perf-re-pathological: $(BUILD)/perf_re_pathological
-	$(BUILD)/perf_re_pathological --baseline $(PERF_BASELINE)
+	$(BUILD)/perf_re_pathological --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-re-throughput: $(BUILD)/perf_re_throughput
-	$(BUILD)/perf_re_throughput --baseline $(PERF_BASELINE)
+	$(BUILD)/perf_re_throughput --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-search-latency: $(BUILD)/perf_search_latency
-	$(BUILD)/perf_search_latency --baseline $(PERF_BASELINE)
+	$(BUILD)/perf_search_latency --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-jobstream: $(BUILD)/perf_jobstream $(BUILD)/yew
 	$(BUILD)/perf_jobstream --yew $(abspath $(BUILD)/yew) \
