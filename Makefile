@@ -751,6 +751,9 @@ endif
         perf-baseline-selftest \
         perf-gate-selftest perf-latency perf-latency-selftest \
         perf-s56-functional perf-latency-s56-check perf-latency-s56-smoke \
+        perf-latency-s56-matrix perf-latency-s56-typing-huge \
+        perf-latency-s56-syntax perf-latency-s56-multicursor \
+        perf-latency-s56-search-huge \
         perf-latency-s56-many perf-latency-s56-assist \
         perf-startup-s56 perf-open-s56 perf-mem-s56 \
         perf-s56-gate-selftest perf-prof-crosscheck-s56 \
@@ -1752,6 +1755,45 @@ perf-latency-s56-smoke: perf-latency-s56-check $(BUILD)/yew
 		--path tests/perf/fixtures/syn/c_kitchen.c \
 		--state $(abspath $(BUILD)/perf-s56-state)
 
+perf-latency-s56-typing-huge: perf-latency-s56-check $(BUILD)/yew \
+                                fixtures-quick
+	@mkdir -p $(BUILD)/perf-s56-state
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/typing.keys --fixture huge \
+		--path $(abspath $(FIXTURE_DIR)/100m-code.bin) \
+		--state $(abspath $(BUILD)/perf-s56-state)
+
+perf-latency-s56-syntax: perf-latency-s56-check $(BUILD)/yew
+	@mkdir -p $(BUILD)/perf-s56-state
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/edit.keys --fixture syntax \
+		--path tests/perf/fixtures/syn/c_kitchen.c \
+		--state $(abspath $(BUILD)/perf-s56-state)
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/edit.keys --fixture syntax \
+		--path tests/perf/fixtures/syn/c_comment_bomb.c \
+		--state $(abspath $(BUILD)/perf-s56-state)
+
+perf-latency-s56-multicursor: perf-latency-s56-check $(BUILD)/yew
+	@mkdir -p $(BUILD)/perf-s56-state
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/multicursor.keys --fixture small \
+		--path tests/perf/fixtures/syn/c_kitchen.c \
+		--state $(abspath $(BUILD)/perf-s56-state)
+
+perf-latency-s56-search-huge: perf-latency-s56-check $(BUILD)/yew \
+                                fixtures-quick
+	@mkdir -p $(BUILD)/perf-s56-state
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/search.keys --fixture huge \
+		--path $(abspath $(FIXTURE_DIR)/100m-code.bin) \
+		--state $(abspath $(BUILD)/perf-s56-state)
+
 perf-latency-s56-many: perf-latency-s56-check $(BUILD)/yew
 	@mkdir -p $(BUILD)/perf-s56-state
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
@@ -1785,6 +1827,14 @@ perf-latency-s56-assist: perf-latency-s56-check $(BUILD)/yew \
 		--fakelsp $(abspath $(FAKELSP)) \
 		--mockai $(abspath $(MOCKAI)) \
 		--ai-script $(abspath tests/fixtures/ai/ollama.script)
+
+perf-latency-s56-matrix: perf-latency-s56-smoke \
+                         perf-latency-s56-typing-huge \
+                         perf-latency-s56-syntax \
+                         perf-latency-s56-multicursor \
+                         perf-latency-s56-many \
+                         perf-latency-s56-search-huge \
+                         perf-latency-s56-assist
 
 perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
                   $(BUILD)/yew $(PERF_S56_WORKSPACE_READY)
@@ -1893,8 +1943,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
 		--state $(abspath $(BUILD)/perf-s56-state)
 
-perf-s56-functional: perf-latency-s56-smoke perf-latency-s56-many \
-                     perf-latency-s56-assist \
+perf-s56-functional: perf-latency-s56-matrix \
                      perf-startup-s56 perf-open-s56 perf-mem-s56 \
                      perf-s56-gate-selftest perf-prof-crosscheck-s56
 
