@@ -294,15 +294,30 @@ static bool settle_incremental(Ed *ed, u64 inserted_at, bool require_hit,
     i64 end;
 
     while (yew_search_preview_queued(ed)) {
-        if (++slices > 2048U)
+        if (++slices > 2048U) {
+            (void)fputs("perf_search: incremental preview did not settle\n",
+                        stderr);
             return false;
+        }
         yew_search_preview_tick(ed);
-        if (!render_incremental(ed, inserted_at, false))
+        if (!render_incremental(ed, inserted_at, false)) {
+            (void)fputs("perf_search: incremental continuation render failed\n",
+                        stderr);
             return false;
+        }
     }
-    if (yew_search_preview_queued(ed) ||
-        !render_incremental(ed, inserted_at, require_hit))
+    if (yew_search_preview_queued(ed)) {
+        (void)fputs("perf_search: incremental preview remained queued\n",
+                    stderr);
         return false;
+    }
+    if (!render_incremental(ed, inserted_at, require_hit)) {
+        (void)fprintf(stderr,
+                      "perf_search: incremental landed at %llu, wanted %llu\n",
+                      (unsigned long long)yew_ed_cursor(ed)->pos.v,
+                      (unsigned long long)inserted_at);
+        return false;
+    }
     end = now_ns();
     if (started_ns < 0 || end < started_ns)
         return false;
@@ -315,7 +330,10 @@ static bool measure_incremental(Ed *ed, u64 inserted_at, i64 *elapsed)
     static const u8 prefix[] = {'n', 'e', 'e'};
     static const u8 suffix[] = {'d', 'l', 'e'};
     i64 samples[RUNS];
-    size_t runs = getenv("YEW_PERF_SMOKE") != NULL ? 1U : RUNS;
+    /* Keep all three editor sessions in smoke mode: the setup/teardown
+     * lifecycle between them is part of this gate, and is cheap on the
+     * reduced fixture.  Whole-file smoke rows still run once. */
+    size_t runs = RUNS;
     size_t run;
 
     ed->win->rect.w = 120U;
@@ -351,6 +369,9 @@ static bool measure_incremental(Ed *ed, u64 inserted_at, i64 *elapsed)
             }
             if (!settle_incremental(ed, inserted_at, false, begin,
                                     &prefix_elapsed)) {
+                (void)fprintf(stderr,
+                              "perf_search: prefix run=%zu key=%zu byte=%c\n",
+                              run, i, prefix[i]);
                 yew_search_cancel(ed, ed->win);
                 return false;
             }
@@ -370,13 +391,16 @@ static bool measure_incremental(Ed *ed, u64 inserted_at, i64 *elapsed)
             }
             if (!settle_incremental(ed, inserted_at, true, begin,
                                     &key_elapsed)) {
+                (void)fprintf(stderr,
+                              "perf_search: suffix run=%zu key=%zu byte=%c\n",
+                              run, i, suffix[i]);
                 yew_search_cancel(ed, ed->win);
                 return false;
             }
             if (key_elapsed > worst)
                 worst = key_elapsed;
         }
-        yew_search_cancel(ed, ed->win);
+        yew_cmdline_close(ed, false);
         if (!render_incremental(ed, inserted_at, false))
             return false;
         samples[run] = worst;
@@ -503,10 +527,22 @@ int main(int argc, char **argv)
         return 2;
     }
     ed.tty.wfd = sink;
-    if (!render_incremental(&ed, inserted_at, false) ||
-        !measure_early(&ed, inserted_at, &values[0]) ||
-        !measure_incremental(&ed, inserted_at, &values[6])) {
-        (void)fputs("perf_search: editor-backed measurement failed\n", stderr);
+    if (!render_incremental(&ed, inserted_at, false)) {
+        (void)fputs("perf_search: initial editor render failed\n", stderr);
+        ed.tty.wfd = -1;
+        (void)close(sink);
+        yew_ed_free(&ed);
+        return 1;
+    }
+    if (!measure_early(&ed, inserted_at, &values[0])) {
+        (void)fputs("perf_search: early editor search failed\n", stderr);
+        ed.tty.wfd = -1;
+        (void)close(sink);
+        yew_ed_free(&ed);
+        return 1;
+    }
+    if (!measure_incremental(&ed, inserted_at, &values[6])) {
+        (void)fputs("perf_search: incremental editor search failed\n", stderr);
         ed.tty.wfd = -1;
         (void)close(sink);
         yew_ed_free(&ed);

@@ -1139,6 +1139,7 @@ void test_overlay_cur_index_updates_when_spans_are_reused(void);
 void test_overlay_null_pattern_clears(void);
 void test_overlay_count_caps_at_ten_thousand(void);
 void test_overlay_count_is_exact_below_the_cap(void);
+void test_overlay_interactive_count_is_exact_for_small_buffer(void);
 void test_overlay_interactive_count_is_byte_bounded(void);
 void test_overlay_damage_is_diffed_not_blanket(void);
 void test_searchui_cancel_restores_cursor_goal_and_viewport(void);

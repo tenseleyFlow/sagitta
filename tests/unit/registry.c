@@ -1173,6 +1173,7 @@ const YewTest yew_tests[] = {
     T(overlay_null_pattern_clears),
     T(overlay_count_caps_at_ten_thousand),
     T(overlay_count_is_exact_below_the_cap),
+    T(overlay_interactive_count_is_exact_for_small_buffer),
     T(overlay_interactive_count_is_byte_bounded),
     T(overlay_damage_is_diffed_not_blanket),
     T(searchui_cancel_restores_cursor_goal_and_viewport),

@@ -754,10 +754,11 @@ static void search_idle(Ed *ed, void *ctx)
         return;
     if (!w->overlay.complete)
         yew_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen, 0);
-    /* One millisecond, 16 KiB and 10 000 matches, whichever comes first.
-     * The badge carries `+` whenever the result is partial.  The old 50 ms
-     * slice could fire on the next input wake and was itself a visible
-     * keypress stall. */
+    /* Large buffers stop after one millisecond, 16 KiB or 10 000 matches;
+     * the badge carries `+` whenever the result is partial.  Small buffers
+     * are already byte-bounded and count exactly, including under
+     * instrumentation.  The old 50 ms slice could fire on the next input
+     * wake and was itself a visible keypress stall. */
     yew_overlay_count(&w->overlay, ed->search.re, w->buf->tb, 1000);
     ed->footer_dirty = true;
 }

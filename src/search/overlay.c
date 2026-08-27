@@ -371,7 +371,11 @@ void yew_overlay_count(MatchOverlay *ov, const YewRe *re, const TextBuf *tb,
                    len > (u64)YEW_SEARCH_COUNT_BUDGET_BYTES;
     if (byte_bounded)
         in.window.hi = YEW_SEARCH_COUNT_BUDGET_BYTES;
-    deadline = budget_us > 0 ? now_us() + budget_us : 0;
+    /* A small buffer is already bounded by the byte ceiling.  Making its
+     * exact count depend on a wall-clock race made the same five-match
+     * document exact natively and partial under instrumentation.  Only
+     * large buffers need the additional time ceiling. */
+    deadline = byte_bounded ? now_us() + budget_us : 0;
     for (;;) {
         YewReMatch m;
 

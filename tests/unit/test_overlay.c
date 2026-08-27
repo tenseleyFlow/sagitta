@@ -328,6 +328,27 @@ void test_overlay_count_is_exact_below_the_cap(void)
     yew_ed_free(&ed);
 }
 
+void test_overlay_interactive_count_is_exact_for_small_buffer(void)
+{
+    Ed ed;
+    Arena arena;
+    YewRe *re;
+
+    /* Five kilobytes stays below the interactive byte ceiling while 1,000
+     * matches make a one-microsecond wall deadline reliably partial under
+     * Valgrind.  Small-buffer results are a deterministic UI contract, so
+     * the wall clock must not participate. */
+    ov_fixture(&ed, 1000U, UINT32_MAX, UINT32_MAX);
+    re = ov_compile(&arena, "aaaa");
+    YEW_ASSERT(yew_textbuf_len(ed.buffer.tb) <
+               YEW_SEARCH_COUNT_BUDGET_BYTES);
+    yew_overlay_count(&ed.win->overlay, re, ed.buffer.tb, 1);
+    YEW_ASSERT_EQ_U64(ed.win->overlay.count_total, 1000U);
+    YEW_ASSERT(!ed.win->overlay.count_capped);
+    arena_free_all(&arena);
+    yew_ed_free(&ed);
+}
+
 void test_overlay_interactive_count_is_byte_bounded(void)
 {
     Ed ed;

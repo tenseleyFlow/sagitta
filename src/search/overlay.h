@@ -70,8 +70,9 @@ void yew_overlay_refresh(Ed *ed, Win *w, const YewRe *re, u32 pat_gen,
                          i64 budget_us);
 
 /* The bounded count behind the `[3/17]` indicator.  A positive time budget
- * also enables the byte ceiling; any ceiling produces the honest `+` badge.
- * A non-positive budget is exact and is reserved for tests/batch work. */
+ * enables the byte and time ceilings for buffers larger than the byte
+ * ceiling; small buffers count exactly so instrumentation and machine speed
+ * cannot change the badge.  A non-positive budget is exact too. */
 void yew_overlay_count(MatchOverlay *ov, const YewRe *re, const TextBuf *tb,
                        i64 budget_us);
 
