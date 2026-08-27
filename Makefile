@@ -750,7 +750,7 @@ endif
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         perf-s56-functional perf-latency-s56-check perf-latency-s56-smoke \
-        perf-latency-s56-many \
+        perf-latency-s56-many perf-latency-s56-assist \
         perf-startup-s56 perf-open-s56 perf-mem-s56 \
         perf-s56-gate-selftest perf-prof-crosscheck-s56 \
         torture torture-build torture-live-check torture-batch \
@@ -1083,9 +1083,10 @@ $(BUILD)/perf_latency: $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_OBJ) \
 		$(LIVE_PTY_OBJ) $(LDLIBS)
 
-$(BUILD)/perf_latency_s56: $(PERF_LATENCY_S56_OBJ) $(LIVE_PTY_OBJ)
+$(BUILD)/perf_latency_s56: $(PERF_LATENCY_S56_OBJ) $(LIVE_PTY_OBJ) \
+                          $(PTY_VT_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_S56_OBJ) \
-		$(LIVE_PTY_OBJ) $(LDLIBS)
+		$(LIVE_PTY_OBJ) $(PTY_VT_OBJ) $(PERF_CORE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_echo_child: $(PERF_ECHO_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_ECHO_CHILD_OBJ) $(LDLIBS)
@@ -1738,6 +1739,7 @@ perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 # calibrated designated-runner preflight.
 perf-latency-s56-check: $(BUILD)/perf_latency_s56 $(BUILD)/perf_echo_child
 	$(BUILD)/perf_latency_s56 --check-scripts tests/perf/sessions
+	$(BUILD)/perf_latency_s56 --check-assist-vt
 	$(BUILD)/perf_latency_s56 --floor --echo \
 		$(abspath $(BUILD)/perf_echo_child)
 
@@ -1770,6 +1772,18 @@ $(PERF_S56_WORKSPACE_READY): tests/perf/fixtures/syn/c_kitchen.c
 	@: > $@
 
 perf-latency-s56-many: $(PERF_S56_WORKSPACE_READY)
+
+perf-latency-s56-assist: perf-latency-s56-check $(BUILD)/yew \
+                         $(FAKELSP) $(MOCKAI)
+	@mkdir -p $(BUILD)/perf-s56-state
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/typing.keys --fixture assist \
+		--path tests/perf/fixtures/syn/c_kitchen.c \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--fakelsp $(abspath $(FAKELSP)) \
+		--mockai $(abspath $(MOCKAI)) \
+		--ai-script $(abspath tests/fixtures/ai/ollama.script)
 
 perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
                   $(BUILD)/yew $(PERF_S56_WORKSPACE_READY)
@@ -1866,6 +1880,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 		--state $(abspath $(BUILD)/perf-s56-state)
 
 perf-s56-functional: perf-latency-s56-smoke perf-latency-s56-many \
+                     perf-latency-s56-assist \
                      perf-startup-s56 perf-open-s56 perf-mem-s56 \
                      perf-s56-gate-selftest perf-prof-crosscheck-s56
 
