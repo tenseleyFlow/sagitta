@@ -1949,6 +1949,7 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
                         perf-baseline-selftest
 	$(BUILD)/s56_gate_policy_selftest
 	$(BUILD)/perf_prof_crosscheck --selftest-policy
+	scripts/tests/run-perf-suite.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
 
 perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
