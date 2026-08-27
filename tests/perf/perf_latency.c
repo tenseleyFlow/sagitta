@@ -3,6 +3,7 @@
 #include "support/live_pty.h"
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -19,7 +20,9 @@ enum {
     SCREEN_ROWS = 50,
     SCREEN_COLS = 200,
     KEY_TIMEOUT_MS = 100,
-    FLOOR_SAMPLES = 1001
+    FLOOR_SAMPLES = 1001,
+    MANY_BUFFER_COUNT = 50,
+    MANY_BUFFER_HYDRATED = 20
 };
 
 typedef struct KeyStroke {
@@ -51,9 +54,8 @@ static const MetricSpec metrics[] = {
     {"typing", "huge", "latency.typing.huge.p99", true, NULL},
     {"edit", "syntax", "latency.edit.syntax.p99", true, NULL},
     {"multicursor", "small", "latency.multicursor.small.p99", true, NULL},
-    {"navigate", "many-buffers", "latency.navigate.many_buffers.p99", false,
-     "the public live-PTY API cannot construct or verify a 50-buffer "
-     "workspace with 20 hydrated and 30 deferred buffers"},
+    {"navigate", "many-buffers", "latency.navigate.many_buffers.p99", true,
+     NULL},
     {"search", "huge", "latency.search.huge.p99", true, NULL},
     {"typing", "assist", "latency.typing.assist.p99", false,
      "the public live-PTY API does not expose the VT screen needed to "
@@ -398,12 +400,136 @@ static bool regular_file(const char *path)
     return path != NULL && stat(path, &st) == 0 && S_ISREG(st.st_mode);
 }
 
+static bool regular_dir(const char *path)
+{
+    struct stat st;
+
+    return path != NULL && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static bool remove_tree(const char *path)
+{
+    struct stat st;
+
+    if (lstat(path, &st) != 0)
+        return errno == ENOENT;
+    if (S_ISDIR(st.st_mode)) {
+        DIR *dir = opendir(path);
+        struct dirent *entry;
+
+        if (dir == NULL)
+            return false;
+        while ((entry = readdir(dir)) != NULL) {
+            char child[1200];
+            int n;
+
+            if (strcmp(entry->d_name, ".") == 0 ||
+                strcmp(entry->d_name, "..") == 0)
+                continue;
+            n = snprintf(child, sizeof(child), "%s/%s", path,
+                         entry->d_name);
+            if (n <= 0 || (size_t)n >= sizeof(child) ||
+                !remove_tree(child)) {
+                (void)closedir(dir);
+                return false;
+            }
+        }
+        if (closedir(dir) != 0)
+            return false;
+        return rmdir(path) == 0;
+    }
+    return unlink(path) == 0;
+}
+
+static bool make_run_state(const char *parent, char *out, size_t cap)
+{
+    int n;
+
+    if (!regular_dir(parent))
+        return false;
+    n = snprintf(out, cap, "%s/latency-XXXXXX", parent);
+    return n > 0 && (size_t)n < cap && mkdtemp(out) != NULL;
+}
+
+static bool make_run_workspace(char *out, size_t cap)
+{
+    static const char pattern[] = "/tmp/yew-perf-workspace-XXXXXX";
+
+    if (sizeof(pattern) > cap)
+        return false;
+    (void)memcpy(out, pattern, sizeof(pattern));
+    return mkdtemp(out) != NULL;
+}
+
+static bool spawn_many_buffers(YewLivePty *pty, const char *binary,
+                               const char *dir, const char *state,
+                               const char *workspace)
+{
+    char paths[MANY_BUFFER_COUNT][1024];
+    char *argv[MANY_BUFFER_COUNT + 4U];
+    size_t i;
+
+    if (!regular_dir(dir) || !regular_dir(workspace))
+        return false;
+    argv[0] = (char *)binary;
+    argv[1] = (char *)"--workspace";
+    argv[2] = (char *)workspace;
+    for (i = 0U; i < MANY_BUFFER_COUNT; i++) {
+        int n = snprintf(paths[i], sizeof(paths[i]), "%s/buf-%02zu.c", dir,
+                         i);
+
+        if (n <= 0 || (size_t)n >= sizeof(paths[i]) ||
+            !regular_file(paths[i]))
+            return false;
+        argv[i + 3U] = paths[i];
+    }
+    argv[MANY_BUFFER_COUNT + 3U] = NULL;
+    return yew_live_pty_spawn_argv(pty, binary, argv, state, SCREEN_ROWS,
+                                   SCREEN_COLS);
+}
+
+static bool spawn_file(YewLivePty *pty, const char *binary,
+                       const char *path, const char *state,
+                       const char *workspace)
+{
+    char *argv[5];
+
+    if (!regular_dir(workspace))
+        return false;
+    argv[0] = (char *)binary;
+    argv[1] = (char *)"--workspace";
+    argv[2] = (char *)workspace;
+    argv[3] = (char *)path;
+    argv[4] = NULL;
+    return yew_live_pty_spawn_argv(pty, binary, argv, state, SCREEN_ROWS,
+                                   SCREEN_COLS);
+}
+
+static bool hydrate_many_buffers(YewLivePty *pty)
+{
+    static const char next[] = "tn";
+    size_t i;
+
+    for (i = 1U; i < MANY_BUFFER_HYDRATED; i++) {
+        i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
+        u64 before = pty->frames;
+
+        if (!yew_live_pty_write(pty, next, sizeof(next) - 1U, deadline) ||
+            !yew_live_pty_wait_frame(pty, before, deadline, NULL) ||
+            !yew_live_pty_wait_quiet(pty, INT64_C(1000000), deadline))
+            return false;
+    }
+    return true;
+}
+
 static int run_session(const char *binary, const char *script,
                        const char *fixture, const char *path,
-                       const char *state)
+                       const char *state, const char *many_dir)
 {
     Session session;
     YewLivePty pty;
+    char run_state[1024];
+    char run_workspace[1024] = "";
     i64 samples[SESSION_KEYS];
     size_t nsamples = 0U;
     size_t no_paint = 0U;
@@ -426,14 +552,30 @@ static int run_session(const char *binary, const char *script,
                       spec->metric, spec->why);
         return 2;
     }
-    if (!regular_file(binary) || !regular_file(path) ||
+    if (!regular_file(binary) ||
+        (strcmp(fixture, "many-buffers") == 0 ? !regular_dir(many_dir) :
+                                                !regular_file(path)) ||
         !load_session(script, &session)) {
         (void)fprintf(stderr, "perf_latency: invalid binary, fixture, or session\n");
         return 2;
     }
-    if (!yew_live_pty_spawn(&pty, binary, path, state, SCREEN_ROWS,
-                            SCREEN_COLS)) {
+    if (!make_run_state(state, run_state, sizeof(run_state))) {
+        (void)fprintf(stderr, "perf_latency: cannot isolate run state\n");
+        return 2;
+    }
+    if (!make_run_workspace(run_workspace, sizeof(run_workspace))) {
+        (void)fprintf(stderr, "perf_latency: cannot isolate workspace\n");
+        (void)remove_tree(run_state);
+        return 2;
+    }
+    if (!(strcmp(fixture, "many-buffers") == 0 ?
+          spawn_many_buffers(&pty, binary, many_dir, run_state,
+                             run_workspace) :
+          spawn_file(&pty, binary, path, run_state, run_workspace))) {
         (void)fprintf(stderr, "perf_latency: cannot spawn editor\n");
+        if (run_workspace[0] != '\0')
+            (void)remove_tree(run_workspace);
+        (void)remove_tree(run_state);
         return 2;
     }
     if (!yew_live_pty_wait_frame(&pty, 0U,
@@ -442,6 +584,19 @@ static int run_session(const char *binary, const char *script,
             yew_live_pty_now_ns() + INT64_C(2000000000))) {
         (void)fprintf(stderr, "perf_latency: editor did not settle\n");
         yew_live_pty_close(&pty);
+        if (run_workspace[0] != '\0')
+            (void)remove_tree(run_workspace);
+        (void)remove_tree(run_state);
+        return 2;
+    }
+    if (strcmp(fixture, "many-buffers") == 0 &&
+        !hydrate_many_buffers(&pty)) {
+        (void)fprintf(stderr,
+                      "perf_latency: could not hydrate 20 of 50 buffers\n");
+        yew_live_pty_close(&pty);
+        if (run_workspace[0] != '\0')
+            (void)remove_tree(run_workspace);
+        (void)remove_tree(run_state);
         return 2;
     }
     for (i = 0U; i < session.len; i++) {
@@ -466,6 +621,16 @@ static int run_session(const char *binary, const char *script,
     if (!stop_editor(&pty) && status == 0)
         status = 2;
     yew_live_pty_close(&pty);
+    if (!remove_tree(run_state) && status == 0) {
+        (void)fprintf(stderr, "perf_latency: cannot remove isolated state\n");
+        status = 2;
+    }
+    if (run_workspace[0] != '\0' && !remove_tree(run_workspace) &&
+        status == 0) {
+        (void)fprintf(stderr,
+                      "perf_latency: cannot remove isolated workspace\n");
+        status = 2;
+    }
     if (status != 0)
         return status;
     if (nsamples == 0U) {
@@ -604,7 +769,7 @@ static void usage(const char *arg0)
         "  %s --floor --echo PATH\n"
         "  %s --check-scripts DIR\n"
         "  %s --yew PATH --session FILE --fixture CLASS --path FILE "
-        "[--state DIR]\n", arg0, arg0, arg0);
+        "[--state DIR] [--many-dir DIR]\n", arg0, arg0, arg0);
 }
 
 int main(int argc, char **argv)
@@ -616,6 +781,7 @@ int main(int argc, char **argv)
     const char *state = "/tmp";
     const char *echo = NULL;
     const char *check = NULL;
+    const char *many_dir = NULL;
     bool floor = false;
     int i;
 
@@ -636,6 +802,8 @@ int main(int argc, char **argv)
             path = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--state") == 0)
             state = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--many-dir") == 0)
+            many_dir = argv[++i];
         else {
             usage(argv[0]);
             return 2;
@@ -647,7 +815,7 @@ int main(int argc, char **argv)
         return run_floor(echo);
     if (!floor && check == NULL && yew != NULL && script != NULL &&
         fixture != NULL && path != NULL)
-        return run_session(yew, script, fixture, path, state);
+        return run_session(yew, script, fixture, path, state, many_dir);
     usage(argv[0]);
     return 2;
 }

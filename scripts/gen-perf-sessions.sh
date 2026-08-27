@@ -41,7 +41,12 @@ while [ "$block" -lt 100 ]; do
     block=$((block + 1))
 done
 
-navigate='l down down up right left home end pagedown pageup g g G w right left down up esc b down up left right esc 1 G 9 9 9 G'
+# Keep every repeated motion paint-producing: deliberate boundary no-ops are
+# useful semantically but make a serialized key-to-frame harness spend its
+# whole run waiting for the no-paint timeout.  Home/end and page jumps still
+# exercise extremes without parking the cursor at a boundary for the next
+# event.
+navigate='down down up right left end home pagedown pageup'
 emit_cycle "$out/navigate.keys" "$navigate"
 
 edit='i x y z esc left x u ctrl+r a q esc h right enter x esc u ctrl+r i p a s t e esc'

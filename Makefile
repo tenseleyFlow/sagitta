@@ -745,6 +745,7 @@ endif
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         perf-s56-functional perf-latency-s56-check perf-latency-s56-smoke \
+        perf-latency-s56-many \
         perf-startup-s56 perf-open-s56 perf-mem-s56 \
         torture torture-build torture-live-check torture-batch \
         torture-git-hunk \
@@ -1734,6 +1735,22 @@ perf-latency-s56-smoke: perf-latency-s56-check $(BUILD)/yew
 		--path tests/perf/fixtures/syn/c_kitchen.c \
 		--state $(abspath $(BUILD)/perf-s56-state)
 
+perf-latency-s56-many: perf-latency-s56-check $(BUILD)/yew
+	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-many
+	@set -eu; n=0; while test $$n -lt 50; do \
+		name=$$(printf '%02d' $$n); \
+		cp tests/perf/fixtures/syn/c_kitchen.c \
+			$(BUILD)/perf-s56-many/buf-$$name.c; \
+		n=$$((n + 1)); \
+	done
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
+		$(BUILD)/perf_latency_s56 --yew $(abspath $(BUILD)/yew) \
+		--session tests/perf/sessions/navigate.keys \
+		--fixture many-buffers \
+		--path $(abspath $(BUILD)/perf-s56-many/buf-00.c) \
+		--many-dir $(abspath $(BUILD)/perf-s56-many) \
+		--state $(abspath $(BUILD)/perf-s56-state)
+
 perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
                   $(BUILD)/yew
 	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures
@@ -1807,8 +1824,8 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		--fixture-utf8 $(abspath $(FIXTURE_DIR)/100m-utf8.bin) \
 		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin)
 
-perf-s56-functional: perf-latency-s56-smoke perf-startup-s56 perf-open-s56 \
-                     perf-mem-s56
+perf-s56-functional: perf-latency-s56-smoke perf-latency-s56-many \
+                     perf-startup-s56 perf-open-s56 perf-mem-s56
 
 fixtures-quick: $(BUILD)/gen-bigfile
 	@mkdir -p $(FIXTURE_DIR); \

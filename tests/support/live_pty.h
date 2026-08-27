@@ -29,6 +29,9 @@ bool yew_live_pty_attach(const YewLivePty *pty, const char *slave,
 bool yew_live_pty_spawn(YewLivePty *pty, const char *binary,
                         const char *path, const char *state_dir,
                         u16 rows, u16 cols);
+bool yew_live_pty_spawn_argv(YewLivePty *pty, const char *binary,
+                             char *const argv[], const char *state_dir,
+                             u16 rows, u16 cols);
 bool yew_live_pty_write(YewLivePty *pty, const void *bytes, size_t len,
                         i64 deadline_ns);
 bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
@@ -39,5 +42,6 @@ bool yew_live_pty_wait_quiet(YewLivePty *pty, i64 quiet_ns,
 bool yew_live_pty_wait_exit(YewLivePty *pty, i64 deadline_ns, int *code);
 void yew_live_pty_close(YewLivePty *pty);
 void yew_live_pty_exec(const char *binary, const char *path);
+void yew_live_pty_exec_argv(const char *binary, char *const argv[]);
 
 #endif

@@ -121,21 +121,43 @@ bool yew_live_pty_attach(const YewLivePty *pty, const char *slave,
     return true;
 }
 
-void yew_live_pty_exec(const char *binary, const char *path)
+void yew_live_pty_exec_argv(const char *binary, char *const argv[])
 {
     if (getenv("YEW_TEST_VALGRIND") != NULL) {
-        execlp("valgrind", "valgrind", "--quiet", "--error-exitcode=99",
-               "--leak-check=full", "--errors-for-leak-kinds=definite",
-               "--track-fds=yes", binary, path, (char *)NULL);
+        enum { PREFIX = 7, ARGV_CAP = 128 };
+        char *wrapped[ARGV_CAP];
+        size_t n = 0U;
+
+        while (argv[n] != NULL && n + PREFIX + 1U < ARGV_CAP)
+            n++;
+        if (argv[n] != NULL)
+            _exit(126);
+        wrapped[0] = (char *)"valgrind";
+        wrapped[1] = (char *)"--quiet";
+        wrapped[2] = (char *)"--error-exitcode=99";
+        wrapped[3] = (char *)"--leak-check=full";
+        wrapped[4] = (char *)"--errors-for-leak-kinds=definite";
+        wrapped[5] = (char *)"--track-fds=yes";
+        wrapped[6] = (char *)binary;
+        for (size_t i = 1U; i <= n; i++)
+            wrapped[PREFIX - 1U + i] = argv[i];
+        execvp("valgrind", wrapped);
     } else {
-        execl(binary, binary, path, (char *)NULL);
+        execv(binary, argv);
     }
     _exit(126);
 }
 
-bool yew_live_pty_spawn(YewLivePty *pty, const char *binary,
-                        const char *path, const char *state_dir,
-                        u16 rows, u16 cols)
+void yew_live_pty_exec(const char *binary, const char *path)
+{
+    char *const argv[] = {(char *)binary, (char *)path, NULL};
+
+    yew_live_pty_exec_argv(binary, argv);
+}
+
+bool yew_live_pty_spawn_argv(YewLivePty *pty, const char *binary,
+                             char *const argv[], const char *state_dir,
+                             u16 rows, u16 cols)
 {
     char slave[128];
     const char *log = getenv("YEW_PERF_LOG");
@@ -161,10 +183,19 @@ bool yew_live_pty_spawn(YewLivePty *pty, const char *binary,
             setenv("YEW_LOG", log != NULL ? log : "/dev/null", 1) != 0 ||
             !yew_live_pty_attach(pty, slave, rows, cols))
             _exit(126);
-        yew_live_pty_exec(binary, path);
+        yew_live_pty_exec_argv(binary, argv);
     }
     pty->pid = pid;
     return true;
+}
+
+bool yew_live_pty_spawn(YewLivePty *pty, const char *binary,
+                        const char *path, const char *state_dir,
+                        u16 rows, u16 cols)
+{
+    char *const argv[] = {(char *)binary, (char *)path, NULL};
+
+    return yew_live_pty_spawn_argv(pty, binary, argv, state_dir, rows, cols);
 }
 
 bool yew_live_pty_write(YewLivePty *pty, const void *data, size_t len,
