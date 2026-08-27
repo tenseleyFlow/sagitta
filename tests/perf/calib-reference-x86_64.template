@@ -1,8 +1,21 @@
 # yew calibration reference v1
-# TEMPLATE ONLY: replace every PLACEHOLDER on the pinned designated runner.
-# machine: PLACEHOLDER CPU model, core count, memory type and speed
-# software: PLACEHOLDER kernel, libc, compiler and version, governor, SMT
-# measured: PLACEHOLDER date, three warmups discarded, 11-run medians
+# TEMPLATE ONLY: this is intentionally rejected by the strict parser.
+# Measure on the pinned runner, replace every PLACEHOLDER, then promote the
+# completed artifact to tests/perf/calib-reference.txt in its own evidence
+# commit. Never copy values from another machine or ISA.
+# cpu_model: PLACEHOLDER
+# physical_cores: PLACEHOLDER
+# logical_cpus: PLACEHOLDER
+# memory_capacity: PLACEHOLDER
+# memory_type_speed_timings: PLACEHOLDER
+# kernel_version: PLACEHOLDER
+# libc_and_version: PLACEHOLDER
+# compiler_and_version: PLACEHOLDER
+# cpu_governor: PLACEHOLDER
+# smt_enabled: PLACEHOLDER
+# aslr_enabled: PLACEHOLDER
+# measured_utc: PLACEHOLDER
+# method: 3 warmups discarded; 11 measured runs; median of 11 per component
 runner_id perf-x86_64-linux-gnu
 arch x86_64
 designated 1

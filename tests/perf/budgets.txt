@@ -1,0 +1,62 @@
+# yew performance budgets v1
+#
+# Whitespace-separated schema:
+# metric  comparison  limit  unit  calibration  enforcement  why
+#
+# comparison: le | ge | record
+# calibration: calibrated | raw | none
+# enforcement: designated | all | informational
+# `-` is permitted only with comparison=record.
+# Time values are reference nanoseconds. Byte and count rows are integers.
+# Locked quality bars appear literally: 5000000 ns (5 ms), 20000000 ns
+# (20 ms), 150000000 ns (150 ms), 120 frames/s, and 1600 permille (1.6x).
+
+latency.typing.small.p99                  le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.typing.huge.p99                   le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.edit.syntax.p99                   le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.multicursor.small.p99             le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.navigate.many_buffers.p99         le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.search.huge.p99                   le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.typing.assist.p99                 le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.any.max                           le      40000000    ns                 raw         informational diagnose_long_tail
+latency.typing.no_paint_fraction          record  -           permille           none        informational expected_noops
+latency.typing.frames                     le      10000       frames_per_10000_keys none      all           drain_then_render
+latency.prof_external_delta               le      250         permille           none        all           profiler_crosscheck
+latency.prof_overhead                     le      20          permille           none        designated    profiler_cost
+latency.pty_floor_p50.min                 ge      2000        ns                 raw         all           harness_sanity
+latency.pty_floor_p50.max                 le      500000      ns                 raw         all           harness_sanity
+
+startup.first_paint.default               le      20000000    ns                 raw         designated    cold_start
+startup.first_paint.clean                 le      20000000    ns                 raw         designated    cold_start
+startup.first_paint.dumb                  le      20000000    ns                 raw         designated    probe_independence
+startup.first_paint.workspace50           le      20000000    ns                 raw         designated    deferred_tabs
+startup.first_paint.batch                 record  -           ns                 raw         informational headless_start
+startup.config_delta                      record  -           ns                 raw         informational config_crosscheck
+startup.spawn_floor_fraction              le      300         permille           none        all           harness_sanity
+
+open.100m_code.e2e                        le      150000000   ns                 raw         designated    open_100mb
+open.100m_utf8.e2e                        le      150000000   ns                 raw         designated    open_100mb
+open.100m_allnl.e2e                       record  -           ns                 raw         informational allnl_exemption_stands
+open.100m_code.first_key_paint            le      5000000     ns                 calibrated  designated    post_open_interaction
+
+scroll.full_viewport                      ge      120         frames_per_second  calibrated  designated    smooth_scroll
+scroll.render_share                       le      250         permille           none        designated    renderer_slice
+scroll.syntax_share                       le      180         permille           none        designated    syntax_slice
+
+search.literal_early.1g_code              le      20000000    ns                 calibrated  designated    first_match
+search.literal_absent.1g_code             le      2000000000  ns                 calibrated  designated    full_scan
+search.literal.1g_noline                  le      2000000000  ns                 calibrated  designated    no_line_materialize
+search.regex_anchored.1g_code             le      4000000000  ns                 calibrated  designated    full_scan
+search.regex_alternation.1g_code          le      6000000000  ns                 calibrated  designated    full_scan
+search.regex_hostile.64k                  le      50000000    ns                 calibrated  designated    no_backtracking
+search.incremental.1g_code                le      5000000     ns                 calibrated  designated    bounded_keystroke
+
+mem.clean_open.100m_code                  le      1600        file_size_permille none        designated    memory_1_6x
+mem.clean_open.100m_utf8                  le      1600        file_size_permille none        designated    memory_1_6x
+mem.clean_open.100m_allnl                 record  -           file_size_permille none        informational allnl_exemption_stands
+mem.paint.default_empty                   le      12582912    bytes              none        designated    default_footprint
+mem.paint.clean_empty                     le      8388608     bytes              none        designated    clean_footprint
+mem.workspace50                           le      41943040    bytes              none        designated    deferred_tabs
+mem.typing_growth.small                   le      2097152     bytes              none        designated    session_leak
+mem.closed_growth.100m_code.linux         le      4194304     bytes              none        designated    closed_buffer_leak
+mem.assist.small                          le      25165824    bytes              none        designated    assist_footprint

@@ -1,0 +1,169 @@
+# yew performance suite
+
+This directory contains yew's performance contracts, measurements, and
+committed runner baselines. `budgets.txt` is the single machine-readable
+source for limits. A baseline records observed performance; it never changes
+a budget.
+
+## Start with yew's profiler
+
+For any interactive latency symptom, the first move is to restart with
+`YEW_PROF=1`, reproduce it, and run `:prof`. Read the phase table before
+reaching for `perf`: the built-in profiler answers *which phase* in one
+keystroke, with a measured overhead limit of 2 percent. External profilers
+answer narrower questions and must never supply a gate number.
+
+Useful commands:
+
+```text
+:prof                  report p50/p90/p99, shares, and worst frames
+:prof frames           show the last 40 raw frames
+:prof frames 200       show the last 200 raw frames
+:prof mark paste-100k  label the next frame before reproducing a spike
+:prof reset            discard old samples without disabling profiling
+:prof dump /tmp/yew-prof.txt
+```
+
+All five commands refuse with `profiling is off; restart with YEW_PROF=1`
+when profiling is disabled. For headless work, use
+`YEW_PROF=1 YEW_PROF_OUT=/tmp/yew-prof.txt build/yew --batch SCRIPT.fl ...`.
+Batch frames are top-level script statements and intentionally contain only
+the dispatch, jobs, and syntax phases.
+
+## Triage playbook
+
+| Symptom | Likely phase | First look | Then |
+|---|---|---|---|
+| Typing lags only in one file | `YEW_PH_SYN` | `:prof` share | `yew syn check --coverage`; inspect the per-line syntax p99 |
+| Every file lags, worse on large files | `YEW_PH_DISPATCH` | `:prof` p99 and worst frames | callgrind for an accidental O(n) line walk |
+| Lag appears only with LSP or AI | `YEW_PH_JOBS` | `:prof frames` around the spike | inspect generation counters and stale-response rejection |
+| Lag appears after a long session | all phases or `unaccounted` | RSS checkpoints | Sprint 57 allocation accounting; check cache growth/fragmentation |
+| Frame count exceeds key count | dispatch/event loop | deterministic frames-per-key row | restore drain-then-render ordering |
+| `unaccounted` is high | uninstrumented work | add the missing phase boundary | `perf record -g` to identify the owning function |
+| `poll` is nonzero inside a burst | input drain | `:prof frames` | inspect `YEW_INPUT_BURST_MAX`, early exit, and `EAGAIN` handling |
+| First paint is slow only on some terminals | startup | `perf_startup` with the `dumb` profile | find work waiting on capability negotiation |
+| First paint is slow everywhere | startup | compare default with `--clean` | config loading or eager file/workspace work |
+| Scrolling stutters but typing is fine | `YEW_PH_RENDER` | render byte-count rows | damage widening or suppressed `CSI K` |
+| A large paste freezes | input/dispatch | `YEW_PF_BURST_CAP` on the frame | verify burst cap and paste coalescing |
+| RSS is several times file size | memory | `perf_mem` checkpoints | massif for heap shape; inspect unreleased snapshots |
+| Only `MODULES=""` is slow | build configuration | `make MODULES="" perf` | find a disabled-module shim doing work |
+| Local is green, CI is red without a code delta | runner | beginning/end calibration scales | treat drift/refusal as no verdict, not a regression |
+
+## Runner and calibration policy
+
+Only the pinned runners named `perf-x86_64-linux-gnu` and
+`perf-arm64-linux` may issue wall-clock verdicts. They use separate,
+same-ISA calibration references and separate baselines. A designated run
+sets `PERF_GATE=1`, measures calibration before and after the suite, and
+enforces both absolute budgets and relative regressions.
+
+Every hosted, shared, developer, unknown, or differently named runner is
+advisory. It runs the same metrics so the harness cannot rot, prints
+`ADVISORY` and the baseline rows it would write, and exits successfully for
+ordinary timing regressions. Finite/nonzero sanity checks and deterministic
+rows such as byte counts and frame counts remain hard failures everywhere;
+a value above 100 times its budget is a broken harness/feature, not noise.
+An unknown runner ID never becomes designated by having a reference file.
+
+`make calib` performs three warmup-discarded, median-of-11 measurements for
+pointer-chase latency, branchy scalar work, and memory bandwidth. Calibrated
+limits use the equal-weight integer scale in permille. Calibration refuses a
+gating verdict when:
+
+- the beginning or ending scale is outside `[500, 3000]`;
+- the ending scale differs from the beginning by more than 15 percent;
+- runner ID or ISA differs from the designated reference;
+- the reference is absent, malformed, incomplete, or still a template.
+
+The 15 percent boundary itself is accepted; only a difference greater than
+15 percent refuses. Refusal means **no verdict**, never pass. A single scale
+does not model every workload axis, so it is used only on the two pinned
+hosts. It does not calibrate syscalls, page faults, fork/exec, or filesystem
+I/O: cold start, 100 MB open, and atomic save remain raw designated-host
+budgets and are advisory elsewhere.
+
+The checked-in `calib-reference-*.template` files contain no measurements.
+They deliberately fail the strict reference parser until an operator on the
+corresponding pinned host replaces every `PLACEHOLDER`, records all required
+machine metadata, and promotes the result as:
+
+- `calib-reference.txt` for `perf-x86_64-linux-gnu`;
+- `calib-reference-arm64.txt` for `perf-arm64-linux`.
+
+Never infer, copy across ISAs, or manufacture a reference vector. Promotion
+and both initial baseline commits require evidence from the named hardware.
+
+## External deep dives
+
+Build symbols in a disjoint object tree first:
+
+```sh
+make perf-symbols
+```
+
+Use the external tools only after the phase table identifies the expensive
+phase:
+
+```sh
+perf record -g --call-graph=fp -- build-prof/yew --batch tests/perf/sessions/typing.fl f
+perf report
+
+perf stat -e cycles,instructions,cache-misses,branch-misses -- \
+  build-prof/yew --batch tests/perf/sessions/typing.fl f
+
+valgrind --tool=callgrind build-prof/yew --batch tests/perf/sessions/typing.fl f
+callgrind_annotate callgrind.out.*
+
+valgrind --tool=massif --time-unit=B \
+  build-prof/yew --batch tests/perf/sessions/typing.fl f
+
+valgrind --tool=dhat build-prof/yew --batch tests/perf/sessions/typing.fl f
+```
+
+For an interactive PTY child, spawn it with the performance harness and
+attach using the child PID printed by the runner:
+
+```sh
+perf record -g --call-graph=fp -p CHILD_PID
+```
+
+Do not profile the PTY runner and mistake its cost for yew's. `perf` wall
+time includes profiler overhead; hardware counter values are not comparable
+between machines. Callgrind gives exact call counts but its timing is not
+real. Massif measures heap, not RSS; process RSS comes from the suite's
+`getrusage` checkpoints.
+
+## Baselines and rebaselining
+
+Sprint 11's policy remains binding:
+
+1. Designated runners compare the median of three p99 measurements. A
+   relative regression is over 10 percent and must occur in two of three
+   runs to fail.
+2. Advisory runners warn for timing regressions. Deterministic and sanity
+   failures remain hard everywhere.
+3. An improvement over 20 percent prints `rebaseline me`; it never updates
+   files automatically.
+4. Unknown runner IDs are advisory and print the row they would commit.
+5. Every baseline row has a nonempty `why`; moving a number over 5 percent
+   requires replacing an initial placeholder reason with the actual cause.
+6. Baseline headers record the calibration vector and `scale_permille`.
+   Comparing materially different calibration scales is refused.
+7. `make perf-update` is manual. Commit its output alone with a message
+   beginning `perf: rebaseline` and list the deltas. The baseline guard
+   rejects a commit that touches both `src/` and `tests/perf/baselines/`.
+
+Baseline files always live under `tests/perf/baselines/` (plural). Never
+raise a budget to make a regression green; changing `budgets.txt` changes a
+locked product decision and requires explicit review.
+
+## `100m-allnl` decision
+
+Sprint 56 closes the Sprint 11 revisit: the exemption stands and is not
+deferred again. `100m-allnl` remains measured and baseline-tracked, but its
+end-to-end open time and 1.6-times memory ceiling are informational. The
+piece tree's line index necessarily costs eight bytes per one-byte line;
+alternatives were already rejected in Sprints 7 and 11. The 1.6-times clean
+open quality bar applies to realistic line lengths (`100m-code` and
+`100m-utf8`). A relative change in `100m-allnl` must still be visible in the
+advisory/baseline output.
