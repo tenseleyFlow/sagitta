@@ -2681,6 +2681,8 @@ static void case_s21_search_word_under_cursor(PtyCtx *c)
         return;
     s18_settle_after_keys(c, "right right right right right right");
     s18_settle_after_keys(c, "*");
+    /* The bounded count is intentionally deferred by one idle timer. */
+    ptc_settle(c, 60);
     ptc_snapshot(c, "s21_search_word_under_cursor");
     s18_finish(c, path);
 }

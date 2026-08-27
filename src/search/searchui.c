@@ -838,6 +838,8 @@ bool yew_search_word(Ed *ed, Win *w, bool forward)
         at = c->pos.v;
         yew_jump_push(w, BYTEOFF(at), ed->now_ms);
         ok = yew_search_step(ed, w, true, 1U);
+        if (ok)
+            yew_search_schedule_count(ed, w);
     }
     bytebuf_free(&pat);
     return ok;

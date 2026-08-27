@@ -311,6 +311,10 @@ void test_searchui_word_search_quotes_metacharacters(void)
     yew_ed_cursor(&ed)->pos = BYTEOFF(4U); /* inside `a.b` */
 
     YEW_ASSERT(yew_search_word(&ed, ed.win, true));
+    YEW_ASSERT(ed.search.count_timer != YEW_TIMER_NONE);
+    YEW_ASSERT_EQ_U64(ed.search.count_win_id, ed.win->id);
+    yew_timers_fire(&ed.timers, &ed, ed.now_ms + 16);
+    YEW_ASSERT_EQ_U64(ed.win->overlay.count_total, 1U);
     slash = yew_reg_get(&ed.regs, (u8)'/');
     YEW_ASSERT_NOT_NULL(slash);
     /* The dot is escaped and the word is \b-wrapped. */
