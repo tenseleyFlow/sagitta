@@ -29,6 +29,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
+#include "util/prof.h"
 
 /* The benchmark intentionally exercises degradation paths millions of times.
  * Those warnings are useful in the editor and harmful in a measurement
@@ -83,7 +84,11 @@ enum {
     PERF_SYN_HTML_SCAN_TRIALS = 9,
     PERF_SYN_HTML_SCAN_REPLAYS = 32,
     PERF_SYN_HTML_BODY_LINES = 800,
-    PERF_SYN_WARM_CHILD_OK = 10
+    PERF_SYN_WARM_CHILD_OK = 10,
+    PERF_SYN_SCROLL_PROFILE_CASES = 8,
+    PERF_SYN_SCROLL_FRAME_BUDGET_NS = 8333333,
+    PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE = 250,
+    PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE = 180
 };
 
 enum {
@@ -266,6 +271,19 @@ typedef struct PaintFixture {
     Win win;
     TtyCaps caps;
 } PaintFixture;
+
+typedef struct ScrollProfile {
+    const char *name;
+    u64 total_ns;
+    u64 render_ns;
+    u64 syn_ns;
+    u64 fps_milli;
+    u64 render_permille;
+    u64 syn_permille;
+    u64 render_work_permille;
+    u64 syn_work_permille;
+    u32 frames;
+} ScrollProfile;
 
 static const FrozenSpec frozen_specs[PERF_SYN_FIXTURE_COUNT] = {
     {"c", "tests/perf/fixtures/syn/c_kitchen.c", "runtime/syntax/c.fl",
@@ -2313,6 +2331,129 @@ static bool measure_scroll(FrozenFixture *fixture, bool wrap, double *fps)
     return true;
 }
 
+static bool plain_scroll_fixture_init(FrozenFixture *fixture,
+                                      FrozenSpec *spec)
+{
+    static const u8 row[] =
+        "plain text row for full-stack scroll measurement\n";
+    const size_t row_len = sizeof(row) - 1U;
+    const size_t lines = 10000U;
+    size_t len;
+
+    (void)memset(fixture, 0, sizeof(*fixture));
+    (void)memset(spec, 0, sizeof(*spec));
+    if (lines > SIZE_MAX / row_len)
+        return false;
+    len = lines * row_len;
+    fixture->source.data = malloc(len);
+    if (fixture->source.data == NULL)
+        return false;
+    for (size_t i = 0U; i < lines; i++)
+        (void)memcpy(fixture->source.data + i * row_len, row, row_len);
+    fixture->source.len = len;
+    spec->stem = "plain";
+    spec->source_path = "<generated-plain-10kloc>";
+    spec->definition_path = NULL;
+    spec->lines = lines;
+    spec->bytes = len;
+    fixture->spec = spec;
+    return fixture->source.len == spec->bytes &&
+           source_lines(&fixture->source) == spec->lines;
+}
+
+static const ProfFrame *scroll_prof_frame(const Prof *prof, u32 at)
+{
+    u32 oldest = (prof->head + prof->cap - prof->n) % prof->cap;
+
+    return &prof->ring[(oldest + at) % prof->cap];
+}
+
+static bool measure_scroll_profile(FrozenFixture *fixture, const char *name,
+                                   u16 rows, u16 cols, bool wrap,
+                                   ScrollProfile *result)
+{
+    PaintFixture paint;
+
+    (void)memset(result, 0, sizeof(*result));
+    result->name = name;
+    if (!paint_init(&paint, fixture, rows, cols, wrap, false, true))
+        return false;
+    yew_prof_init(&paint.ed.prof, &paint.ed.arena, true);
+    for (u32 frame = 0U; frame < PERF_SYN_SCROLL_FRAMES; frame++) {
+        u32 bytes_out;
+
+        yew_prof_frame_begin(&paint.ed.prof);
+        yew_prof_phase(&paint.ed.prof, YEW_PH_DISPATCH);
+        yew_vp_scroll(&paint.win, 1);
+        yew_vp_push_cursor(&paint.win);
+        yew_prof_phase(&paint.ed.prof, YEW_PH_SYN);
+        if (paint.buffer.syn.settling) {
+            SynSettleReport report;
+            LineNo lo = yew_win_view_top(&paint.win);
+            LineNo hi = yew_vp_last_visible_line(&paint.win);
+
+            if (hi.v != UINT64_MAX)
+                hi.v++;
+            yew_syn_settle(&paint.buffer.syn, paint.buffer.tb, lo, hi,
+                           YEW_SYN_FRAME_BUDGET_US, &report);
+        }
+        yew_prof_phase(&paint.ed.prof, YEW_PH_LAYOUT);
+        yew_prof_phase(&paint.ed.prof, YEW_PH_RENDER);
+        yew_draw_win(&paint.ed, &paint.win);
+        yew_grid_mark_all(&paint.ed.grid);
+        paint.ed.frame.len = 0U;
+        perf_syn_sink += yew_render_frame(&paint.ed.render, &paint.ed.grid,
+                                          &paint.ed.frame);
+        bytes_out = paint.ed.frame.len > UINT32_MAX ? UINT32_MAX :
+                                                       (u32)paint.ed.frame.len;
+        yew_prof_phase(&paint.ed.prof, YEW_PH_WRITE);
+        yew_grid_flip(&paint.ed.grid);
+        yew_prof_frame_end(&paint.ed.prof, 1U, bytes_out,
+                           YEW_PF_FULL_DAMAGE);
+    }
+    result->frames = paint.ed.prof.n;
+    for (u32 i = 0U; i < paint.ed.prof.n; i++) {
+        const ProfFrame *frame = scroll_prof_frame(&paint.ed.prof, i);
+
+        if (UINT64_MAX - result->total_ns < frame->total_ns ||
+            UINT64_MAX - result->render_ns <
+                frame->ph_ns[YEW_PH_RENDER] ||
+            UINT64_MAX - result->syn_ns < frame->ph_ns[YEW_PH_SYN]) {
+            paint_free(&paint);
+            return false;
+        }
+        result->total_ns += frame->total_ns;
+        result->render_ns += frame->ph_ns[YEW_PH_RENDER];
+        result->syn_ns += frame->ph_ns[YEW_PH_SYN];
+    }
+    if (result->frames != PERF_SYN_SCROLL_FRAMES || result->total_ns == 0U) {
+        paint_free(&paint);
+        return false;
+    }
+    result->fps_milli = (u64)result->frames * UINT64_C(1000000000000) /
+                        result->total_ns;
+    /* s05/s41 define these shares against the fixed 120-fps whole-frame
+     * budget, not against an unpaced benchmark's active CPU time.  Keep
+     * the latter as diagnostic work shares, but never gate on them. */
+    result->render_permille = result->render_ns * 1000U /
+        ((u64)result->frames * PERF_SYN_SCROLL_FRAME_BUDGET_NS);
+    result->syn_permille = result->syn_ns * 1000U /
+        ((u64)result->frames * PERF_SYN_SCROLL_FRAME_BUDGET_NS);
+    result->render_work_permille = result->render_ns * 1000U /
+                                   result->total_ns;
+    result->syn_work_permille = result->syn_ns * 1000U /
+                                result->total_ns;
+    paint_free(&paint);
+    return true;
+}
+
+static bool scroll_timing_advisory(void)
+{
+    const char *value = getenv("YEW_PERF_ADVISORY");
+
+    return value != NULL && strcmp(value, "1") == 0;
+}
+
 static bool check_all_state_memory(FrozenFixture *fixtures,
                                    u64 *capacity_bytes, u64 *limit_bytes)
 {
@@ -2698,6 +2839,9 @@ int main(int argc, char **argv)
     TextBuf *edit = line_fixture(PERF_SYN_EDIT_LINES - 1U);
     SynFixture fx;
     FrozenFixture frozen[PERF_SYN_FIXTURE_COUNT];
+    FrozenFixture plain_scroll;
+    FrozenSpec plain_scroll_spec;
+    ScrollProfile scroll_profile[PERF_SYN_SCROLL_PROFILE_CASES];
     size_t frozen_initialized = 0U;
     Source ini = {NULL, 0U};
     Timing detect = {0U, 0U};
@@ -2791,6 +2935,9 @@ int main(int argc, char **argv)
     (void)memset(make_embed_view_trials, 0,
                  sizeof(make_embed_view_trials));
     (void)memset(frozen, 0, sizeof(frozen));
+    (void)memset(&plain_scroll, 0, sizeof(plain_scroll));
+    (void)memset(&plain_scroll_spec, 0, sizeof(plain_scroll_spec));
+    (void)memset(scroll_profile, 0, sizeof(scroll_profile));
     (void)memset(scroll_fps, 0, sizeof(scroll_fps));
     for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
         if (!frozen_init(&frozen[i], &frozen_specs[i])) {
@@ -2815,6 +2962,11 @@ int main(int argc, char **argv)
         for (size_t i = 0U; i < frozen_initialized; i++)
             frozen_free(&frozen[i]);
         return 2;
+    }
+    if (!plain_scroll_fixture_init(&plain_scroll, &plain_scroll_spec)) {
+        (void)fprintf(stderr,
+                      "perf_syn: plain scroll fixture allocation failed\n");
+        status = 2;
     }
     /* The original s41/s42 fixtures are the frozen non-resident path: their
      * unchanged baselines prove that adding embed-capable state does not tax
@@ -3093,6 +3245,41 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "perf_syn: markdown wrap measurement failed\n");
         status = 2;
     }
+    if (status == 0) {
+        static const struct {
+            const char *name;
+            bool markdown;
+            bool wrap;
+            u16 rows;
+            u16 cols;
+        } profile_cases[PERF_SYN_SCROLL_PROFILE_CASES] = {
+            {"md_nowrap_80x24", true, false, 24U, 80U},
+            {"md_wrap_80x24", true, true, 24U, 80U},
+            {"md_nowrap_200x60", true, false, 60U, 200U},
+            {"md_wrap_200x60", true, true, 60U, 200U},
+            {"plain10k_nowrap_80x24", false, false, 24U, 80U},
+            {"plain10k_wrap_80x24", false, true, 24U, 80U},
+            {"plain10k_nowrap_200x60", false, false, 60U, 200U},
+            {"plain10k_wrap_200x60", false, true, 60U, 200U}
+        };
+
+        for (size_t i = 0U; i < YEW_ARRAY_LEN(profile_cases); i++) {
+            FrozenFixture *fixture = profile_cases[i].markdown ?
+                                     &frozen[6] : &plain_scroll;
+
+            if (!measure_scroll_profile(fixture, profile_cases[i].name,
+                                        profile_cases[i].rows,
+                                        profile_cases[i].cols,
+                                        profile_cases[i].wrap,
+                                        &scroll_profile[i])) {
+                (void)fprintf(stderr,
+                              "perf_syn: scroll profile '%s' failed\n",
+                              profile_cases[i].name);
+                status = 2;
+                break;
+            }
+        }
+    }
     if (status == 0 &&
         !check_all_state_memory(frozen, &all_state_capacity_bytes,
                                 &all_state_limit_bytes)) {
@@ -3241,6 +3428,9 @@ int main(int argc, char **argv)
                 comment_wall_ns > UINT64_C(400000000);
             bool scroll_regression =
                 markdown_wrap_fps < PERF_SYN_SCROLL_MIN_FPS;
+            bool scroll_profile_phase_regression = false;
+            bool scroll_profile_timing_regression = false;
+            bool scroll_advisory = scroll_timing_advisory();
             bool whole_regression = whole_total_ns > UINT64_C(45000000) ||
                                     whole_max_frame_ns > UINT64_C(1000000);
             bool state_regression =
@@ -3274,6 +3464,58 @@ int main(int argc, char **argv)
                                                          " ok");
                 if (fixture_scroll_regression)
                     scroll_regression = true;
+            }
+            for (size_t i = 0U; i < YEW_ARRAY_LEN(scroll_profile); i++) {
+                bool phase_regression =
+                    scroll_profile[i].render_permille >
+                        PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ||
+                    scroll_profile[i].syn_permille >
+                        PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE;
+                bool timing_regression =
+                    scroll_profile[i].fps_milli <
+                        (u64)PERF_SYN_SCROLL_MIN_FPS * 1000U;
+                (void)printf(
+                    "syn.scroll.throughput_%-20s frames=%u "
+                    "fps_milli=%llu active_total_ns=%llu%s\n",
+                    scroll_profile[i].name,
+                    (unsigned)scroll_profile[i].frames,
+                    (unsigned long long)scroll_profile[i].fps_milli,
+                    (unsigned long long)scroll_profile[i].total_ns,
+                    timing_regression ? (scroll_advisory ?
+                        " TIMING-WARN" : " REGRESSION") : " ok");
+                (void)printf(
+                    "syn.scroll.render_share_%-17s phase_ns=%llu "
+                    "budget_ns=%llu share_permille=%llu "
+                    "work_permille=%llu limit_permille=%u%s\n",
+                    scroll_profile[i].name,
+                    (unsigned long long)scroll_profile[i].render_ns,
+                    (unsigned long long)((u64)scroll_profile[i].frames *
+                        PERF_SYN_SCROLL_FRAME_BUDGET_NS),
+                    (unsigned long long)scroll_profile[i].render_permille,
+                    (unsigned long long)
+                        scroll_profile[i].render_work_permille,
+                    (unsigned)PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE,
+                    scroll_profile[i].render_permille >
+                        PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ?
+                        " REGRESSION" : " ok");
+                (void)printf(
+                    "syn.scroll.syntax_share_%-17s phase_ns=%llu "
+                    "budget_ns=%llu share_permille=%llu "
+                    "work_permille=%llu limit_permille=%u%s\n",
+                    scroll_profile[i].name,
+                    (unsigned long long)scroll_profile[i].syn_ns,
+                    (unsigned long long)((u64)scroll_profile[i].frames *
+                        PERF_SYN_SCROLL_FRAME_BUDGET_NS),
+                    (unsigned long long)scroll_profile[i].syn_permille,
+                    (unsigned long long)scroll_profile[i].syn_work_permille,
+                    (unsigned)PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE,
+                    scroll_profile[i].syn_permille >
+                        PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE ?
+                        " REGRESSION" : " ok");
+                if (phase_regression)
+                    scroll_profile_phase_regression = true;
+                if (timing_regression && !scroll_advisory)
+                    scroll_profile_timing_regression = true;
             }
             {
                 size_t worst_line = PERF_SYN_S42_5_FIRST;
@@ -3379,7 +3621,9 @@ int main(int argc, char **argv)
                 scroll_regression || whole_regression || state_regression ||
                 all_state_regression || embed_pump_regression ||
                 make_embed_regression || inline_scan_regression ||
-                definition_switch_regression)
+                definition_switch_regression ||
+                scroll_profile_phase_regression ||
+                scroll_profile_timing_regression)
                 regression_seen = true;
         }
         if (detect_regression || compile_regression || cache_regression ||
@@ -3398,6 +3642,7 @@ int main(int argc, char **argv)
     yew_textbuf_free(edit);
     for (size_t i = 0U; i < frozen_initialized; i++)
         frozen_free(&frozen[i]);
+    free(plain_scroll.source.data);
     free(ini.data);
     free(cap_line);
     free(start_samples);
