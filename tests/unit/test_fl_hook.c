@@ -181,6 +181,32 @@ void test_fl_hook_drops_self_reentrancy_once(void)
     hf_close(&f);
 }
 
+void test_fl_hook_listens_only_to_dispatchable_rows(void)
+{
+    HookFix f;
+    u32 live;
+    u32 disabled;
+
+    hf_open(&f);
+    YEW_ASSERT(!fl_hook_listens(&f.hooks, FL_EV_BUF_CHANGE));
+    YEW_ASSERT(!fl_hook_listens(&f.hooks, FL_EV__N));
+    live = fl_hook_add(&f.hooks, 2U, FL_EV_BUF_CHANGE,
+                       fake_fn(&f, 1U));
+    disabled = fl_hook_add(&f.hooks, 3U, FL_EV_BUF_CHANGE,
+                           fake_fn(&f, 2U));
+    YEW_ASSERT(fl_hook_listens(&f.hooks, FL_EV_BUF_CHANGE));
+    YEW_ASSERT(!fl_hook_listens(&f.hooks, FL_EV_BUF_OPEN));
+    f.masked_origin = 2U;
+    YEW_ASSERT(fl_hook_listens(&f.hooks, FL_EV_BUF_CHANGE));
+    f.hooks.v[f.hooks.ledger.v[disabled - 1U].handle - 1U].disabled = true;
+    YEW_ASSERT(!fl_hook_listens(&f.hooks, FL_EV_BUF_CHANGE));
+    f.masked_origin = 0U;
+    YEW_ASSERT(fl_hook_listens(&f.hooks, FL_EV_BUF_CHANGE));
+    YEW_ASSERT(fl_hook_remove(&f.hooks, live));
+    YEW_ASSERT(!fl_hook_listens(&f.hooks, FL_EV_BUF_CHANGE));
+    hf_close(&f);
+}
+
 void test_fl_hook_bounds_cross_event_depth(void)
 {
     HookFix f;

@@ -319,7 +319,8 @@ void yew_fl_hook_buffer(Ed *ed, FlEvent event, Buffer *buffer)
 {
     FlValue arg;
 
-    if (ed == NULL || buffer == NULL || yew_fl_vm(ed) == NULL)
+    if (ed == NULL || buffer == NULL || yew_fl_vm(ed) == NULL ||
+        !fl_hook_listens(&ed->hooks, (u32)event))
         return;
     arg = fl_h_buf_make(ed, buffer);
     yew_fl_hook_fire(ed, event, &arg, 1U);
@@ -330,7 +331,8 @@ void yew_fl_hook_mode(Ed *ed, FlEvent event, const char *mode)
     FlVm *vm = yew_fl_vm(ed);
     FlValue arg;
 
-    if (vm == NULL || mode == NULL)
+    if (vm == NULL || mode == NULL ||
+        !fl_hook_listens(&ed->hooks, (u32)event))
         return;
     arg = FL_OBJ_V(FL_STR, fl_str_new(vm, mode, (u32)strlen(mode)));
     yew_fl_hook_fire(ed, event, &arg, 1U);
@@ -340,7 +342,8 @@ void yew_fl_hook_window(Ed *ed, FlEvent event, Win *win)
 {
     FlValue arg;
 
-    if (ed == NULL || win == NULL || yew_fl_vm(ed) == NULL)
+    if (ed == NULL || win == NULL || yew_fl_vm(ed) == NULL ||
+        !fl_hook_listens(&ed->hooks, (u32)event))
         return;
     arg = fl_h_win_make(ed, win);
     yew_fl_hook_fire(ed, event, &arg, 1U);
@@ -391,7 +394,7 @@ void yew_fl_hook_workspace(Ed *ed, FlEvent event)
     const char *root;
     FlValue arg;
 
-    if (vm == NULL)
+    if (vm == NULL || !fl_hook_listens(&ed->hooks, (u32)event))
         return;
     root = yew_ws_root(ed);
     arg = FL_OBJ_V(FL_STR, fl_str_new(vm, root, (u32)strlen(root)));
@@ -448,6 +451,13 @@ void yew_fl_hook_flush_change(Ed *ed)
     if (ed == NULL || ed->fl_changes_len == 0U || ed->fl_flushing_change)
         return;
     if (yew_fl_vm(ed) == NULL) {
+        ed->fl_changes_len = 0U;
+        return;
+    }
+    /* Hook arguments are stable script-visible handles, so creating a
+     * mark-backed span when nobody can observe it retains two marks for the
+     * life of the buffer.  Clear the coalescer before constructing payloads. */
+    if (!fl_hook_listens(&ed->hooks, (u32)FL_EV_BUF_CHANGE)) {
         ed->fl_changes_len = 0U;
         return;
     }

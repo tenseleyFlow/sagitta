@@ -550,11 +550,6 @@ int yew_loop_run(Ed *ed)
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */
         (void)yew_loop_settle_jobs(ed);
-        /* TTL polling is an event-loop responsibility.  Rendering only
-         * consumes the last published snapshot and therefore cannot fork. */
-#if YEW_WITH_FUSS
-        (void)yew_git_refresh(ed, false);
-#endif
         yew_fuss_tick(ed, now);
         yew_ai_pump(ed, fds, nfds);
         yew_lsp_pump(ed);
@@ -589,11 +584,17 @@ int yew_loop_run(Ed *ed)
             ed->fl_idle_fired = false;
         }
 
-        /* Whole-buffer Git work is stale-safe and sliced.  It resumes only
-         * after the queued input burst has drained, so even a due debounce
-         * cannot add diff latency to the keypress path. */
-        if (!had_input)
+        /* Ordinary Git polling and whole-buffer diff work are stale-safe.
+         * Keep both off input-bearing turns: a 500 ms status TTL must not
+         * launch a chain of subprocesses while continuous typing is keeping
+         * the foreground path busy.  Forced invalidations still refresh at
+         * their call sites. */
+        if (!had_input) {
+#if YEW_WITH_FUSS
+            (void)yew_git_refresh(ed, false);
+#endif
             yew_git_editor_tick(ed, now);
+        }
 
         /* Deadline work cannot split a queued typeahead burst. */
         yew_dispatch_tick(ed, now);

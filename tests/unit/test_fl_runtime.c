@@ -283,6 +283,30 @@ void test_fl_runtime_coalesces_buffer_changes(void)
     yew_ed_free(&ed);
 }
 
+void test_fl_runtime_unobserved_changes_allocate_no_handles(void)
+{
+    Ed ed;
+    EditCtx ec;
+    u64 handles_before;
+    u32 slots_before;
+    u32 i;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    handles_before = ed.handles.live;
+    slots_before = ed.handles.n;
+    ec = yew_ed_edit_ctx(&ed);
+    for (i = 0U; i < 4000U; i++)
+        YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(i), (const u8 *)"x", 1U));
+    yew_ed_finish_edit(&ed, &ec);
+    YEW_ASSERT_EQ_U64(ed.fl_changes_len, 1U);
+    yew_fl_hook_flush_change(&ed);
+    YEW_ASSERT_EQ_U64(ed.fl_changes_len, 0U);
+    YEW_ASSERT_EQ_U64(ed.handles.live, handles_before);
+    YEW_ASSERT_EQ_U64(ed.handles.n, slots_before);
+    yew_ed_free(&ed);
+}
+
 void test_fl_runtime_coalesces_each_buffer_in_workspace_order(void)
 {
     Ed ed;

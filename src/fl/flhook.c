@@ -13,6 +13,8 @@ static const char *const EVENT_NAMES[FL_EV__N] = {
     "plug.disable", "ed.idle"
 };
 
+static bool origin_is_masked(const FlHookTable *t, u32 origin);
+
 const char *fl_event_name(u32 event)
 {
     return event < (u32)FL_EV__N ? EVENT_NAMES[event] : NULL;
@@ -176,6 +178,22 @@ u32 fl_hook_origin(const FlHookTable *t, u32 ledger_id)
         t->v[i].ledger_id != ledger_id)
         return FL_ORIGIN_ID_NONE;
     return t->v[i].origin;
+}
+
+bool fl_hook_listens(const FlHookTable *t, u32 event)
+{
+    u32 i;
+
+    if (t == NULL || event >= (u32)FL_EV__N)
+        return false;
+    for (i = 0U; i < t->n; i++) {
+        const FlHook *hook = &t->v[i];
+
+        if (hook->active && !hook->disabled && hook->event == event &&
+            !origin_is_masked(t, hook->origin))
+            return true;
+    }
+    return false;
 }
 
 bool fl_hook_remove(FlHookTable *t, u32 ledger_id)

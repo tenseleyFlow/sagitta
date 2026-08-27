@@ -448,14 +448,15 @@ void yew_undo_prepare_delete(EditCtx *ec, Span range)
         yew_marks_observe_collapse(ec->marks, range, capture_repair, &capture);
 }
 
-static void finish_record(EditCtx *ec, UndoNode *node)
+static void finish_record(EditCtx *ec, UndoNode *node, bool added_op)
 {
     UndoTree *ut = ec->undo;
     if (ut->depth != 0U && ut->pending_reason == YEW_TXN_MULTI) {
         node->t_last_ms = ut->mono_clock(ut->clock_ctx);
         ut->cur = node->id;
-        ut->bytes_live += sizeof(UndoOp) + sizeof(UndoRepairRun) +
-                          sizeof(UndoReplaySpan);
+        if (added_op)
+            ut->bytes_live += sizeof(UndoOp) + sizeof(UndoRepairRun) +
+                              sizeof(UndoReplaySpan);
         return;
     }
     if (node->n_after != 0U &&
@@ -468,9 +469,10 @@ static void finish_record(EditCtx *ec, UndoNode *node)
     node->t_last_ms = ut->mono_clock(ut->clock_ctx);
     snapshot_cursors(ut, ec->cset, &node->cur_after, &node->n_after);
     ut->cur = node->id;
-    ut->bytes_live += sizeof(UndoOp) + sizeof(UndoRepairRun) +
-                      sizeof(UndoReplaySpan) +
-                      (u64)node->n_after * sizeof(CursorRec);
+    if (added_op)
+        ut->bytes_live += sizeof(UndoOp) + sizeof(UndoRepairRun) +
+                          sizeof(UndoReplaySpan);
+    ut->bytes_live += (u64)node->n_after * sizeof(CursorRec);
     if (ut->depth == 0U) {
         ut->open = 0U;
         if (ec->jrnl != NULL)
@@ -521,6 +523,23 @@ void yew_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
     node = node_mut(ut, ut->open);
     if (node == NULL)
         YEW_BUG("undo: insert recorded without prepare");
+    if (ut->depth != 0U && ut->pending_reason == YEW_TXN_TYPE &&
+        node->n_ops != 0U) {
+        size_t index = (size_t)node->ops_at + node->n_ops - 1U;
+        UndoOp *prev = &ut->ops.data[index];
+
+        if (prev->kind == YEW_OP_INS && prev->src == YEW_STORE_ADD &&
+            prev->off <= UINT64_MAX - prev->len &&
+            prev->payload <= UINT64_MAX - prev->len &&
+            at.v == prev->off + prev->len &&
+            payload == prev->payload + prev->len &&
+            len <= UINT64_MAX - prev->len) {
+            prev->len += len;
+            ut->replay_spans.data[index].valid = false;
+            finish_record(ec, node, false);
+            return;
+        }
+    }
     op.kind = YEW_OP_INS;
     op.src = YEW_STORE_ADD;
     op.off = at.v;
@@ -534,7 +553,7 @@ void yew_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
     YewUndoReplaySpanVec_push(&ut->replay_spans, replay);
     node = node_mut(ut, ut->open);
     node->n_ops++;
-    finish_record(ec, node);
+    finish_record(ec, node, true);
 }
 
 void yew_undo_record_delete(EditCtx *ec, Span range)
@@ -565,7 +584,7 @@ void yew_undo_record_delete(EditCtx *ec, Span range)
     node = node_mut(ut, ut->open);
     node->n_ops++;
     ut->bytes_live += op.len + (u64)run.len * sizeof(MarkRepair);
-    finish_record(ec, node);
+    finish_record(ec, node, true);
 }
 
 static const u8 *store_bytes(const TextBuf *tb, u8 src, Span span)

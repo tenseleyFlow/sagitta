@@ -15,6 +15,20 @@
 #include "unicode/utf8.h"
 #include "util/log.h"
 
+enum {
+    /* One pathological line still fits in full.  The shared ring retains
+     * several dense viewportfuls without reserving and progressively
+     * faulting an 8 MiB per-buffer slab during ordinary typing. */
+    YEW_SYN_SPAN_SLAB_CAP = 32768U,
+    YEW_SYN_SPAN_SLAB_BYTES_MAX = 256U * 1024U
+};
+
+_Static_assert(YEW_SYN_SPAN_SLAB_CAP >= YEW_SYN_MAX_SPANS,
+               "span slab holds one maximum line");
+_Static_assert(YEW_SYN_SPAN_SLAB_CAP * sizeof(SynSpan) <=
+                   YEW_SYN_SPAN_SLAB_BYTES_MAX,
+               "span slab stays within the resident-memory budget");
+
 typedef struct SynCacheEnt {
     u64 line;
     u64 gen;
@@ -4765,7 +4779,7 @@ static void cache_prepare(SynBuf *syn)
     if (syn->private_cache != NULL)
         return;
     cache = yew_xcalloc(1U, sizeof(*cache));
-    cache->slab_cap = YEW_SYN_SPAN_CACHE * YEW_SYN_MAX_SPANS;
+    cache->slab_cap = YEW_SYN_SPAN_SLAB_CAP;
     cache->slab = yew_xcalloc(cache->slab_cap, sizeof(*cache->slab));
     cache->line_cap = YEW_SYN_LINE_BYTE_CAP + 1U;
     cache->line = yew_xmalloc(cache->line_cap);

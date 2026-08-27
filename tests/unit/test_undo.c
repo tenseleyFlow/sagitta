@@ -251,6 +251,54 @@ void test_undo_explicit_depth_prevents_implicit_merge(void)
     undo_fixture_free(&f);
 }
 
+void test_undo_explicit_type_coalesces_contiguous_insert_ops(void)
+{
+    UndoFixture f;
+    const UndoNode *node;
+
+    undo_fixture_init(&f, NULL, 0U);
+    yew_undo_begin(&f.edit, YEW_TXN_TYPE);
+    YEW_ASSERT(yew_edit_insert(&f.edit, BYTEOFF(0U),
+                               (const u8 *)"ab", 2U));
+    YEW_ASSERT(yew_edit_insert(&f.edit, BYTEOFF(2U),
+                               (const u8 *)"cd", 2U));
+    yew_undo_end(&f.edit);
+
+    node = undo_current_node(f.undo);
+    YEW_ASSERT_EQ_U64(node->n_ops, 1U);
+    YEW_ASSERT_EQ_U64(f.undo->ops.data[node->ops_at].off, 0U);
+    YEW_ASSERT_EQ_U64(f.undo->ops.data[node->ops_at].len, 4U);
+    undo_assert_text(f.tb, (const u8 *)"abcd", 4U);
+    YEW_ASSERT(yew_undo(&f.edit));
+    undo_assert_text(f.tb, NULL, 0U);
+    YEW_ASSERT(yew_redo(&f.edit));
+    undo_assert_text(f.tb, (const u8 *)"abcd", 4U);
+    undo_fixture_free(&f);
+}
+
+void test_undo_explicit_type_keeps_noncontiguous_insert_ops(void)
+{
+    UndoFixture f;
+    const UndoNode *node;
+
+    undo_fixture_init(&f, (const u8 *)"--", 2U);
+    yew_undo_begin(&f.edit, YEW_TXN_TYPE);
+    YEW_ASSERT(yew_edit_insert(&f.edit, BYTEOFF(0U),
+                               (const u8 *)"a", 1U));
+    YEW_ASSERT(yew_edit_insert(&f.edit, BYTEOFF(3U),
+                               (const u8 *)"b", 1U));
+    yew_undo_end(&f.edit);
+
+    node = undo_current_node(f.undo);
+    YEW_ASSERT_EQ_U64(node->n_ops, 2U);
+    undo_assert_text(f.tb, (const u8 *)"a--b", 4U);
+    YEW_ASSERT(yew_undo(&f.edit));
+    undo_assert_text(f.tb, (const u8 *)"--", 2U);
+    YEW_ASSERT(yew_redo(&f.edit));
+    undo_assert_text(f.tb, (const u8 *)"a--b", 4U);
+    undo_fixture_free(&f);
+}
+
 void test_undo_nesting_depth_three_commits_once(void)
 {
     UndoFixture f;
