@@ -346,6 +346,32 @@ void yew_prof_write(const Prof *p, Bytebuf *out)
         bytebuf_printf(out, "TOTAL       %8" PRIu32 " %8" PRIu32 " %8" PRIu32
                        " %8" PRIu32 "\n", p50, p90, p99, max);
     }
+    {
+        u32 keypaint = 0U;
+        u32 p50;
+        u32 p90;
+        u32 p99;
+        u32 max;
+
+        /* The external latency harness injects one key spelling at a time
+         * and samples only completed paints.  Keep TOTAL as the all-wake
+         * diagnostic, but expose the matching population so its p99 can be
+         * cross-checked without admitting timer/job wakes or no-op keys. */
+        for (i = 0U; i < p->n; i++) {
+            const ProfFrame *frame = chronological_frame(p, i);
+
+            if (frame->keys == 1U && frame->bytes_out != 0U)
+                values[keypaint++] = frame->total_ns;
+        }
+        p50 = percentile(values, keypaint, 50U);
+        p90 = percentile(values, keypaint, 90U);
+        p99 = percentile(values, keypaint, 99U);
+        max = keypaint == 0U ? 0U : values[keypaint - 1U];
+        bytebuf_printf(out,
+                       "KEYPAINT    %8" PRIu32 " %8" PRIu32 " %8" PRIu32
+                       " %8" PRIu32 " calls=%" PRIu32 "\n",
+                       p50, p90, p99, max, keypaint);
+    }
     bytebuf_append(out,
                    "poll     (asleep, excluded)\n"
                    "--- worst frames\n"

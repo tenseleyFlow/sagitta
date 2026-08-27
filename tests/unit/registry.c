@@ -64,6 +64,7 @@ const YewTest yew_tests[] = {
     T(prof_format_empty),
     T(prof_format_synthetic_ring),
     T(prof_format_percentile_edges),
+    T(prof_format_keypaint_matches_external_population),
     T(prof_frames_format_keeps_last_n_in_order),
     T(prof_format_committed_golden),
     T(prof_commands_refuse_when_disabled),

@@ -70,6 +70,8 @@ void test_prof_format_empty(void)
     assert_contains(&out, "# yew prof v1  frames=0 dropped=0 overhead_ns=0 mark=-\n");
     assert_contains(&out, "input              0        0        0        0");
     assert_contains(&out, "TOTAL              0        0        0        0\n");
+    assert_contains(&out,
+                    "KEYPAINT           0        0        0        0 calls=0\n");
     assert_contains(&out, "poll     (asleep, excluded)\n");
     bytebuf_free(&out);
 }
@@ -120,6 +122,40 @@ static void check_percentile_case(u32 n, u32 p50, u32 p90, u32 p99)
     (void)snprintf(expected, sizeof(expected),
                    "input       %8u %8u %8u %8u", p50, p90, p99, n);
     assert_contains(&out, expected);
+    bytebuf_free(&out);
+    free(frames);
+}
+
+void test_prof_format_keypaint_matches_external_population(void)
+{
+    enum { KEY_FRAMES = 1000U, BACKGROUND_FRAMES = 25U };
+    ProfFrame *frames = calloc(KEY_FRAMES + BACKGROUND_FRAMES,
+                               sizeof(*frames));
+    Prof prof;
+    Bytebuf out;
+    u32 i;
+
+    YEW_ASSERT_NOT_NULL(frames);
+    for (i = 0U; i < KEY_FRAMES; i++) {
+        frames[i].seq = i;
+        frames[i].total_ns = i + 1U;
+        frames[i].keys = 1U;
+        frames[i].bytes_out = 1U;
+    }
+    for (; i < KEY_FRAMES + BACKGROUND_FRAMES; i++) {
+        frames[i].seq = i;
+        frames[i].total_ns = 1000000U;
+    }
+    frames[KEY_FRAMES + BACKGROUND_FRAMES - 2U].keys = 2U;
+    frames[KEY_FRAMES + BACKGROUND_FRAMES - 2U].bytes_out = 1U;
+    frames[KEY_FRAMES + BACKGROUND_FRAMES - 1U].keys = 1U;
+    synthetic_prof(&prof, frames, KEY_FRAMES + BACKGROUND_FRAMES);
+    bytebuf_init(&out);
+    yew_prof_write(&prof, &out);
+    assert_contains(&out,
+                    "TOTAL            513      923  1000000  1000000\n");
+    assert_contains(&out,
+                    "KEYPAINT         500      900      990     1000 calls=1000\n");
     bytebuf_free(&out);
     free(frames);
 }

@@ -375,6 +375,18 @@ static bool stop_editor(YewLivePty *pty)
            yew_live_pty_wait_exit(pty, deadline, &code) && code == 0;
 }
 
+static bool send_editor_command(YewLivePty *pty, const char *command)
+{
+    char wire[1400];
+    i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
+    int n;
+
+    n = snprintf(wire, sizeof(wire), "\033[27u:%s\r", command);
+    return n > 0 && (size_t)n < sizeof(wire) &&
+           yew_live_pty_write(pty, wire, (size_t)n, deadline) &&
+           yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline);
+}
+
 static const MetricSpec *find_metric(const char *session, const char *fixture)
 {
     size_t i;
@@ -786,7 +798,7 @@ static int run_session(const char *binary, const char *script,
                        const char *fixture, const char *path,
                        const char *state, const char *many_dir,
                        const char *fakelsp, const char *mockai,
-                       const char *ai_script)
+                       const char *ai_script, const char *prof_dump)
 {
     Session session;
     YewLivePty pty;
@@ -888,6 +900,26 @@ static int run_session(const char *binary, const char *script,
         (void)remove_tree(run_state);
         return 2;
     }
+    if (prof_dump != NULL &&
+        (!send_editor_command(&pty, "prof reset") ||
+         /* Opening a second command clears reset's four-second info
+          * message and cancels its timer.  Otherwise that unrelated paint
+          * can satisfy a key wait mid-session and merge the displaced key
+          * into the following profiler frame.  nop itself is one multi-key
+          * command frame and is excluded from KEYPAINT. */
+         !send_editor_command(&pty, "nop") ||
+         !yew_live_pty_wait_quiet(
+             &pty, INT64_C(500000000),
+             yew_live_pty_now_ns() + INT64_C(5000000000)))) {
+        (void)fprintf(stderr, "perf_latency: cannot reset profiler\n");
+        yew_live_pty_close(&pty);
+        stop_mock_ai(assist.ai_pid);
+        if (assist.screen_on)
+            vt_free(&assist.screen);
+        (void)remove_tree(run_workspace);
+        (void)remove_tree(run_state);
+        return 2;
+    }
     for (i = 0U; i < session.len; i++) {
         i64 start = yew_live_pty_now_ns();
         i64 deadline = start + (i64)KEY_TIMEOUT_MS * INT64_C(1000000);
@@ -906,6 +938,16 @@ static int run_session(const char *binary, const char *script,
             samples[nsamples++] = read.completed_ns - start;
         else
             no_paint++;
+    }
+    if (prof_dump != NULL && status == 0) {
+        char command[1200];
+        int n = snprintf(command, sizeof(command), "prof dump %s", prof_dump);
+
+        if (n <= 0 || (size_t)n >= sizeof(command) ||
+            !send_editor_command(&pty, command) || !regular_file(prof_dump)) {
+            (void)fprintf(stderr, "perf_latency: cannot dump profiler\n");
+            status = 2;
+        }
     }
     if (!stop_editor(&pty) && status == 0)
         status = 2;
@@ -1086,7 +1128,7 @@ static void usage(const char *arg0)
         "  %s --check-assist-vt\n"
         "  %s --yew PATH --session FILE --fixture CLASS --path FILE "
         "[--state DIR] [--many-dir DIR] [--fakelsp PATH --mockai PATH "
-        "--ai-script PATH]\n", arg0, arg0, arg0, arg0);
+        "--ai-script PATH] [--prof-dump PATH]\n", arg0, arg0, arg0, arg0);
 }
 
 int main(int argc, char **argv)
@@ -1102,6 +1144,7 @@ int main(int argc, char **argv)
     const char *fakelsp = NULL;
     const char *mockai = NULL;
     const char *ai_script = NULL;
+    const char *prof_dump = NULL;
     bool floor = false;
     bool assist_vt = false;
     int i;
@@ -1133,6 +1176,8 @@ int main(int argc, char **argv)
             mockai = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--ai-script") == 0)
             ai_script = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--prof-dump") == 0)
+            prof_dump = argv[++i];
         else {
             usage(argv[0]);
             return 2;
@@ -1147,7 +1192,7 @@ int main(int argc, char **argv)
     if (!floor && !assist_vt && check == NULL && yew != NULL && script != NULL &&
         fixture != NULL && path != NULL)
         return run_session(yew, script, fixture, path, state, many_dir,
-                           fakelsp, mockai, ai_script);
+                           fakelsp, mockai, ai_script, prof_dump);
     usage(argv[0]);
     return 2;
 }

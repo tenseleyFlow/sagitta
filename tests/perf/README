@@ -30,6 +30,13 @@ when profiling is disabled. For headless work, use
 Batch frames are top-level script statements and intentionally contain only
 the dispatch, jobs, and syntax phases.
 
+`TOTAL` describes every event-loop wake, including background and timer
+frames. `KEYPAINT` uses the same measured total but only for frames with one
+decoded key and nonzero terminal output. The external keypress-to-paint
+cross-check uses `KEYPAINT`, and hard-fails if its call count differs from
+the harness's painted-key count; comparing external samples with all wakes
+would mix two different populations.
+
 ## Triage playbook
 
 | Symptom | Likely phase | First look | Then |

@@ -1,8 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -16,7 +14,7 @@
 enum {
     SESSION_KEYS = 10000,
     OUTPUT_CAP = 16384,
-    ARG_CAP = 20,
+    ARG_CAP = 32,
     PROF_RING = 16384,
     OVERHEAD_LIMIT_PERMILLE = 20,
     CROSSCHECK_LIMIT_PERMILLE = 250
@@ -30,10 +28,14 @@ typedef struct Options {
     const char *path;
     const char *state;
     const char *many_dir;
+    const char *fakelsp;
+    const char *mockai;
+    const char *ai_script;
 } Options;
 
 typedef struct RunResult {
     uint64_t external_p99_ns;
+    uint32_t painted;
     char output[OUTPUT_CAP];
 } RunResult;
 
@@ -44,187 +46,36 @@ static bool regular_file(const char *path)
     return path != NULL && stat(path, &st) == 0 && S_ISREG(st.st_mode);
 }
 
-static bool write_all(int fd, const void *data, size_t len)
-{
-    const unsigned char *bytes = data;
-
-    while (len != 0U) {
-        ssize_t n = write(fd, bytes, len);
-
-        if (n > 0) {
-            bytes += (size_t)n;
-            len -= (size_t)n;
-        } else if (n < 0 && errno == EINTR) {
-            continue;
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool write_token(int fd, const char *token, size_t len)
-{
-    return write_all(fd, token, len) && write_all(fd, "\n", 1U);
-}
-
-static bool write_text_tokens(int fd, const char *text)
-{
-    const unsigned char *p = (const unsigned char *)text;
-
-    while (*p != '\0') {
-        char token[2];
-
-        if (*p == ' ') {
-            if (!write_token(fd, "space", sizeof("space") - 1U))
-                return false;
-        } else if (*p >= 0x21U && *p <= 0x7eU) {
-            token[0] = (char)*p;
-            token[1] = '\0';
-            if (!write_token(fd, token, 1U))
-                return false;
-        } else {
-            return false;
-        }
-        p++;
-    }
-    return true;
-}
-
-static bool load_tokens(const char *path, char **tokens, size_t *count)
-{
-    FILE *fp = fopen(path, "r");
-    char *line = NULL;
-    size_t cap = 0U;
-    bool ok = fp != NULL;
-
-    *count = 0U;
-    while (ok && getline(&line, &cap, fp) >= 0) {
-        char *start = line;
-        char *end;
-        char *copy;
-        char *p;
-
-        while (*start != '\0' && isspace((unsigned char)*start))
-            start++;
-        if (*start == '\0' || *start == '#')
-            continue;
-        end = start + strlen(start);
-        while (end > start && isspace((unsigned char)end[-1]))
-            end--;
-        for (p = start; p < end && !isspace((unsigned char)*p); p++)
-            ;
-        if (end == start || p != end || *count == SESSION_KEYS) {
-            ok = false;
-            break;
-        }
-        copy = malloc((size_t)(end - start) + 1U);
-        if (copy == NULL) {
-            ok = false;
-            break;
-        }
-        (void)memcpy(copy, start, (size_t)(end - start));
-        copy[end - start] = '\0';
-        tokens[(*count)++] = copy;
-    }
-    if (fp != NULL && ferror(fp))
-        ok = false;
-    free(line);
-    if (fp != NULL)
-        (void)fclose(fp);
-    return ok && *count == SESSION_KEYS;
-}
-
-static void free_tokens(char **tokens, size_t count)
-{
-    size_t i;
-
-    for (i = 0U; i < count; i++)
-        free(tokens[i]);
-}
-
-static size_t command_keys(const char *command)
-{
-    return 2U + strlen(command) + 1U;
-}
-
-static bool write_command(int fd, const char *command)
-{
-    return write_token(fd, "esc", sizeof("esc") - 1U) &&
-           write_token(fd, ":", 1U) && write_text_tokens(fd, command) &&
-           write_token(fd, "enter", sizeof("enter") - 1U);
-}
-
-static bool make_profile_session(const char *source, const char *dump_path,
-                                 const char *dir, char *session,
-                                 size_t session_cap)
-{
-    char *tokens[SESSION_KEYS];
-    char dump_command[1024];
-    const char *base;
-    size_t count = 0U;
-    size_t prefix;
-    size_t suffix;
-    size_t i;
-    int fd = -1;
-    int n;
-    bool ok = false;
-
-    base = strrchr(source, '/');
-    base = base == NULL ? source : base + 1;
-    n = snprintf(session, session_cap, "%s/%s", dir, base);
-    if (n <= 0 || (size_t)n >= session_cap)
-        goto done;
-    n = snprintf(dump_command, sizeof(dump_command), "prof dump %s",
-                 dump_path);
-    if (n <= 0 || (size_t)n >= sizeof(dump_command) ||
-        !load_tokens(source, tokens, &count))
-        goto done;
-    prefix = command_keys("prof reset");
-    suffix = command_keys(dump_command);
-    if (prefix + suffix >= SESSION_KEYS)
-        goto done;
-    fd = open(session, O_WRONLY | O_CREAT | O_EXCL, 0600);
-    if (fd < 0 || !write_command(fd, "prof reset"))
-        goto done;
-    for (i = prefix; i < SESSION_KEYS - suffix; i++) {
-        if (!write_token(fd, tokens[i], strlen(tokens[i])))
-            goto done;
-    }
-    if (!write_command(fd, dump_command) || close(fd) != 0)
-        goto done;
-    fd = -1;
-    ok = true;
-
-done:
-    if (fd >= 0)
-        (void)close(fd);
-    free_tokens(tokens, count);
-    return ok;
-}
-
-static bool parse_external_p99(const char *output, uint64_t *value)
+static bool parse_external(const char *output, RunResult *result)
 {
     const char *line = output;
+    uint32_t no_paint = UINT32_MAX;
 
     while (*line != '\0') {
         const char *end = strchr(line, '\n');
         const char *p99 = strstr(line, ".p99 ");
+        const char *no_paint_row = strstr(line, ".no_paint ");
         unsigned long long parsed;
 
         if (p99 != NULL && (end == NULL || p99 < end) &&
-            sscanf(p99 + sizeof(".p99 ") - 1U, "%llu ns", &parsed) == 1) {
-            *value = (uint64_t)parsed;
-            return *value != 0U;
-        }
+            sscanf(p99 + sizeof(".p99 ") - 1U, "%llu ns", &parsed) == 1)
+            result->external_p99_ns = (uint64_t)parsed;
+        if (no_paint_row != NULL && (end == NULL || no_paint_row < end) &&
+            sscanf(no_paint_row + sizeof(".no_paint ") - 1U,
+                   "%llu", &parsed) == 1 && parsed <= SESSION_KEYS)
+            no_paint = (uint32_t)parsed;
         if (end == NULL)
             break;
         line = end + 1;
     }
-    return false;
+    if (result->external_p99_ns == 0U || no_paint == UINT32_MAX)
+        return false;
+    result->painted = SESSION_KEYS - no_paint;
+    return result->painted != 0U;
 }
 
-static bool parse_prof_total(const char *path, uint64_t *value)
+static bool parse_prof_keypaint(const char *path, uint64_t *value,
+                                uint32_t *calls)
 {
     FILE *fp = fopen(path, "r");
     char *line = NULL;
@@ -234,18 +85,21 @@ static bool parse_prof_total(const char *path, uint64_t *value)
     if (fp == NULL)
         return false;
     while (getline(&line, &cap, fp) >= 0) {
-        unsigned long p50;
-        unsigned long p90;
-        unsigned long p99;
-        unsigned long max;
+        unsigned long long p50;
+        unsigned long long p90;
+        unsigned long long p99;
+        unsigned long long max;
+        unsigned long long parsed_calls;
 
-        if (sscanf(line, "TOTAL %lu %lu %lu %lu", &p50, &p90, &p99,
-                   &max) == 4) {
+        if (sscanf(line, "KEYPAINT %llu %llu %llu %llu calls=%llu",
+                   &p50, &p90, &p99, &max, &parsed_calls) == 5 &&
+            parsed_calls <= UINT32_MAX) {
             (void)p50;
             (void)p90;
             (void)max;
             *value = (uint64_t)p99;
-            ok = *value != 0U;
+            *calls = (uint32_t)parsed_calls;
+            ok = *value != 0U && *calls != 0U;
             break;
         }
     }
@@ -281,8 +135,8 @@ static bool read_child_output(int fd, char *out, size_t cap)
     return true;
 }
 
-static bool run_latency(const Options *opts, const char *session,
-                        bool prof_on, RunResult *result)
+static bool run_latency(const Options *opts, bool prof_on,
+                        const char *dump_path, RunResult *result)
 {
     char *argv[ARG_CAP];
     char ring[32];
@@ -296,7 +150,7 @@ static bool run_latency(const Options *opts, const char *session,
     argv[narg++] = (char *)"--yew";
     argv[narg++] = (char *)opts->yew;
     argv[narg++] = (char *)"--session";
-    argv[narg++] = (char *)session;
+    argv[narg++] = (char *)opts->session;
     argv[narg++] = (char *)"--fixture";
     argv[narg++] = (char *)opts->fixture;
     argv[narg++] = (char *)"--path";
@@ -306,6 +160,18 @@ static bool run_latency(const Options *opts, const char *session,
     if (opts->many_dir != NULL) {
         argv[narg++] = (char *)"--many-dir";
         argv[narg++] = (char *)opts->many_dir;
+    }
+    if (opts->fakelsp != NULL) {
+        argv[narg++] = (char *)"--fakelsp";
+        argv[narg++] = (char *)opts->fakelsp;
+        argv[narg++] = (char *)"--mockai";
+        argv[narg++] = (char *)opts->mockai;
+        argv[narg++] = (char *)"--ai-script";
+        argv[narg++] = (char *)opts->ai_script;
+    }
+    if (prof_on) {
+        argv[narg++] = (char *)"--prof-dump";
+        argv[narg++] = (char *)dump_path;
     }
     argv[narg] = NULL;
     if (narg + 1U >= ARG_CAP || pipe(pipefd) != 0)
@@ -342,7 +208,7 @@ static bool run_latency(const Options *opts, const char *session,
             return false;
     }
     return read_ok && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
-           parse_external_p99(result->output, &result->external_p99_ns);
+           parse_external(result->output, result);
 }
 
 static uint64_t delta_permille(uint64_t a, uint64_t b, uint64_t denominator)
@@ -365,29 +231,49 @@ static bool gating(void)
            (advisory == NULL || strcmp(advisory, "0") == 0);
 }
 
+static bool metric_prefix(const Options *opts, char *out, size_t cap)
+{
+    const char *base = strrchr(opts->session, '/');
+    const char *dot;
+    size_t len;
+    int n;
+
+    base = base == NULL ? opts->session : base + 1;
+    dot = strrchr(base, '.');
+    len = dot != NULL && strcmp(dot, ".keys") == 0 ?
+          (size_t)(dot - base) : strlen(base);
+    n = snprintf(out, cap, "latency.prof.%.*s.%s", (int)len, base,
+                 opts->fixture);
+    return len != 0U && n > 0 && (size_t)n < cap;
+}
+
 static void usage(const char *arg0)
 {
     (void)fprintf(stderr,
         "usage: %s --runner PATH --yew PATH --session FILE "
-        "--fixture CLASS --path FILE [--state DIR] [--many-dir DIR]\n",
+        "--fixture CLASS --path FILE [--state DIR] [--many-dir DIR] "
+        "[--fakelsp PATH --mockai PATH --ai-script PATH]\n",
         arg0);
 }
 
 int main(int argc, char **argv)
 {
     static const char temp_pattern[] = "/tmp/yew-prof-crosscheck-XXXXXX";
-    Options opts = {NULL, NULL, NULL, NULL, NULL, "/tmp", NULL};
+    Options opts = {0};
     RunResult off;
     RunResult on;
     char temp_dir[128] = "";
-    char prof_session[1024] = "";
     char dump_path[1024] = "";
+    char prefix[160] = "";
     uint64_t prof_p99_ns;
+    uint32_t prof_calls;
     uint64_t overhead_pm;
     uint64_t crosscheck_pm;
     bool gate;
     int i;
     int status = 0;
+
+    opts.state = "/tmp";
 
     for (i = 1; i < argc; i++) {
         if (i + 1 < argc && strcmp(argv[i], "--runner") == 0)
@@ -404,6 +290,12 @@ int main(int argc, char **argv)
             opts.state = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--many-dir") == 0)
             opts.many_dir = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--fakelsp") == 0)
+            opts.fakelsp = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--mockai") == 0)
+            opts.mockai = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--ai-script") == 0)
+            opts.ai_script = argv[++i];
         else {
             usage(argv[0]);
             return 2;
@@ -411,7 +303,11 @@ int main(int argc, char **argv)
     }
     if (!regular_file(opts.runner) || !regular_file(opts.yew) ||
         !regular_file(opts.session) || opts.fixture == NULL ||
-        opts.path == NULL) {
+        opts.path == NULL ||
+        (strcmp(opts.fixture, "assist") == 0 &&
+         (!regular_file(opts.fakelsp) || !regular_file(opts.mockai) ||
+          !regular_file(opts.ai_script))) ||
+        !metric_prefix(&opts, prefix, sizeof(prefix))) {
         usage(argv[0]);
         return 2;
     }
@@ -425,16 +321,14 @@ int main(int argc, char **argv)
         return 2;
     }
     i = snprintf(dump_path, sizeof(dump_path), "%s/report.txt", temp_dir);
-    if (i <= 0 || (size_t)i >= sizeof(dump_path) ||
-        !make_profile_session(opts.session, dump_path, temp_dir, prof_session,
-                              sizeof(prof_session))) {
+    if (i <= 0 || (size_t)i >= sizeof(dump_path)) {
         (void)fprintf(stderr, "perf_prof_crosscheck: cannot prepare session\n");
         status = 2;
         goto done;
     }
-    if (!run_latency(&opts, opts.session, false, &off) ||
-        !run_latency(&opts, prof_session, true, &on) ||
-        !parse_prof_total(dump_path, &prof_p99_ns)) {
+    if (!run_latency(&opts, false, NULL, &off) ||
+        !run_latency(&opts, true, dump_path, &on) ||
+        !parse_prof_keypaint(dump_path, &prof_p99_ns, &prof_calls)) {
         (void)fprintf(stderr,
                       "perf_prof_crosscheck: measurement or profiler dump failed\n");
         status = 2;
@@ -446,27 +340,30 @@ int main(int argc, char **argv)
     crosscheck_pm = delta_permille(on.external_p99_ns, prof_p99_ns,
                                    on.external_p99_ns);
     gate = gating();
-    (void)printf("latency.prof.off.p99 %llu ns\n",
+    (void)printf("%s.off.p99 %llu ns\n", prefix,
                  (unsigned long long)off.external_p99_ns);
-    (void)printf("latency.prof.on.p99 %llu ns\n",
+    (void)printf("%s.on.p99 %llu ns\n", prefix,
                  (unsigned long long)on.external_p99_ns);
-    (void)printf("latency.prof.total.p99 %llu ns\n",
+    (void)printf("%s.keypaint.p99 %llu ns\n", prefix,
                  (unsigned long long)prof_p99_ns);
-    (void)printf("latency.prof_overhead %llu permille %s\n",
+    (void)printf("%s.samples external=%u internal=%u %s\n", prefix,
+                 on.painted, prof_calls,
+                 on.painted == prof_calls ? "OK" : "FAIL");
+    (void)printf("%s.overhead %llu permille %s\n", prefix,
                  (unsigned long long)overhead_pm,
                  overhead_pm <= OVERHEAD_LIMIT_PERMILLE ? "OK" :
                  gate ? "FAIL" : "ADVISORY");
-    (void)printf("latency.prof_external_delta %llu permille %s\n",
+    (void)printf("%s.external_delta %llu permille %s\n", prefix,
                  (unsigned long long)crosscheck_pm,
                  crosscheck_pm <= CROSSCHECK_LIMIT_PERMILLE ? "OK" :
                  gate ? "FAIL" : "ADVISORY");
-    if (gate && (overhead_pm > OVERHEAD_LIMIT_PERMILLE ||
-                 crosscheck_pm > CROSSCHECK_LIMIT_PERMILLE))
+    if (on.painted != prof_calls ||
+        (gate && (overhead_pm > OVERHEAD_LIMIT_PERMILLE ||
+                  crosscheck_pm > CROSSCHECK_LIMIT_PERMILLE)))
         status = 1;
 
 done:
     (void)unlink(dump_path);
-    (void)unlink(prof_session);
     (void)rmdir(temp_dir);
     return status;
 }

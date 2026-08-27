@@ -31,6 +31,7 @@ void test_prof_editor_enable_is_read_once(void);
 void test_prof_format_empty(void);
 void test_prof_format_synthetic_ring(void);
 void test_prof_format_percentile_edges(void);
+void test_prof_format_keypaint_matches_external_population(void);
 void test_prof_frames_format_keeps_last_n_in_order(void);
 void test_prof_format_committed_golden(void);
 void test_prof_commands_refuse_when_disabled(void);

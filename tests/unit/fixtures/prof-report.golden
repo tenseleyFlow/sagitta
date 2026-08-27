@@ -9,6 +9,7 @@ render             0        0        0        0    0.0%        0
 write              0        0        0        0    0.0%        0
 unaccounted                                       70.0%
 TOTAL             20       30       30       30
+KEYPAINT          20       30       30       30 calls=2
 poll     (asleep, excluded)
 --- worst frames
   seq      total_ns  keys  bytes  flags        top phase
