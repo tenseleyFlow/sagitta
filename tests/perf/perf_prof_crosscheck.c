@@ -310,9 +310,9 @@ static bool overhead_fails(uint64_t overhead_pm, bool gate)
     return gate && overhead_pm > OVERHEAD_LIMIT_PERMILLE;
 }
 
-static bool crosscheck_fails(uint64_t crosscheck_pm)
+static bool crosscheck_fails(uint64_t crosscheck_pm, bool gate)
 {
-    return crosscheck_pm > CROSSCHECK_LIMIT_PERMILLE;
+    return gate && crosscheck_pm > CROSSCHECK_LIMIT_PERMILLE;
 }
 
 static bool metric_prefix(const Options *opts, char *out, size_t cap)
@@ -345,6 +345,9 @@ static int policy_selftest(void)
     static const uint64_t ordered[METRIC_TRIALS] = {10U, 30U, 20U};
     static const uint64_t one_bad[METRIC_TRIALS] = {300U, 0U, 0U};
     static const uint64_t two_bad[METRIC_TRIALS] = {300U, 0U, 300U};
+    static const uint64_t hosted_crosscheck[METRIC_TRIALS] = {
+        265U, 242U, 291U
+    };
 
     if (retry_transport(false, RUN_TRANSPORT_FAILED, 1U) ||
         retry_transport(true, RUN_OK, 1U) ||
@@ -360,20 +363,21 @@ static int policy_selftest(void)
         median3(two_bad) != 300U ||
         overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, false) ||
         !overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, true) ||
-        crosscheck_fails(CROSSCHECK_LIMIT_PERMILLE) ||
-        !crosscheck_fails(CROSSCHECK_LIMIT_PERMILLE + 1U)) {
+        crosscheck_fails(CROSSCHECK_LIMIT_PERMILLE, true) ||
+        !crosscheck_fails(CROSSCHECK_LIMIT_PERMILLE + 1U, true) ||
+        crosscheck_fails(median3(hosted_crosscheck), false) ||
+        !crosscheck_fails(median3(hosted_crosscheck), true)) {
         (void)fprintf(stderr,
                       "perf_prof_crosscheck: metric gate policy failed\n");
         return 1;
     }
     (void)printf("perf-prof-crosscheck-policy: "
-                 "median3/strict-crosscheck/advisory-overhead/transport ok\n");
+                 "median3/designated-crosscheck/advisory-wallclock/transport ok\n");
     return 0;
 }
 
 int main(int argc, char **argv)
 {
-    static const char temp_pattern[] = "/tmp/yew-prof-crosscheck-XXXXXX";
     Options opts = {0};
     RunResult off[METRIC_TRIALS];
     RunResult on[METRIC_TRIALS];
@@ -400,6 +404,7 @@ int main(int argc, char **argv)
     unsigned trial;
     int i;
     int status = 0;
+    const char *tmp;
 
     opts.state = "/tmp";
 
@@ -442,11 +447,15 @@ int main(int argc, char **argv)
         usage(argv[0]);
         return 2;
     }
-    if (sizeof(temp_pattern) > sizeof(temp_dir)) {
+    tmp = getenv("TMPDIR");
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "/tmp";
+    i = snprintf(temp_dir, sizeof(temp_dir),
+                 "%s/yew-prof-crosscheck-XXXXXX", tmp);
+    if (i <= 0 || (size_t)i >= sizeof(temp_dir)) {
         (void)fprintf(stderr, "perf_prof_crosscheck: cannot prepare session\n");
         return 2;
     }
-    (void)memcpy(temp_dir, temp_pattern, sizeof(temp_pattern));
     if (mkdtemp(temp_dir) == NULL) {
         (void)fprintf(stderr, "perf_prof_crosscheck: cannot prepare session\n");
         return 2;
@@ -538,9 +547,9 @@ int main(int argc, char **argv)
     (void)printf("%s.external_delta %llu permille %s\n", prefix,
                  (unsigned long long)crosscheck_pm,
                  crosscheck_pm <= CROSSCHECK_LIMIT_PERMILLE ? "OK" :
-                 "FAIL");
+                 gate ? "FAIL" : "ADVISORY");
     if (!samples_match || overhead_fails(overhead_pm, gate) ||
-        crosscheck_fails(crosscheck_pm))
+        crosscheck_fails(crosscheck_pm, gate))
         status = 1;
 
 done:

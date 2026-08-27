@@ -14,6 +14,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 enum {
@@ -78,6 +79,11 @@ typedef struct AssistRun {
     bool screen_on;
 } AssistRun;
 
+typedef struct DelayedObserver {
+    i64 started_ns;
+    i64 finished_ns;
+} DelayedObserver;
+
 static const MetricSpec metrics[] = {
     {"typing", "small", "latency.typing.small.p99", true, NULL},
     {"typing", "huge", "latency.typing.huge.p99", true, NULL},
@@ -92,6 +98,20 @@ static const MetricSpec metrics[] = {
 static void screen_feed(void *ctx, const u8 *bytes, size_t len)
 {
     vt_feed(ctx, bytes, len);
+}
+
+static void delayed_observer(void *ctx, const u8 *bytes, size_t len)
+{
+    DelayedObserver *observer = ctx;
+    struct timespec delay = {0, 20000000L};
+    struct timespec remaining;
+
+    (void)bytes;
+    (void)len;
+    observer->started_ns = yew_live_pty_now_ns();
+    while (nanosleep(&delay, &remaining) != 0 && errno == EINTR)
+        delay = remaining;
+    observer->finished_ns = yew_live_pty_now_ns();
 }
 
 static bool sort_i64(i64 *values, size_t len)
@@ -440,6 +460,7 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
         struct pollfd fd = {pty->master, POLLIN | POLLHUP, 0};
         u8 data[8192];
         int result = poll(&fd, 1U, poll_timeout(deadline));
+        i64 read_ns;
         ssize_t n;
 
         if (result < 0 && errno == EINTR)
@@ -453,6 +474,9 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
             continue;
         if (n <= 0)
             return false;
+        read_ns = yew_live_pty_now_ns();
+        if (read_ns < 0)
+            return false;
         yew_live_pty_observe_output(pty, data, (size_t)n);
         {
             FrameScanResult scan_result =
@@ -464,8 +488,8 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
                 continue;
             out->painted = scan_result == FRAME_SCAN_PAINT;
             out->no_paint = scan_result == FRAME_SCAN_NO_PAINT;
-            out->completed_ns = yew_live_pty_now_ns();
-            return out->completed_ns >= 0;
+            out->completed_ns = read_ns;
+            return true;
         }
     }
     return false;
@@ -711,12 +735,13 @@ static bool make_run_state(const char *parent, char *out, size_t cap)
 
 static bool make_run_workspace(char *out, size_t cap)
 {
-    static const char pattern[] = "/tmp/yew-perf-workspace-XXXXXX";
+    const char *tmp = getenv("TMPDIR");
+    int n;
 
-    if (sizeof(pattern) > cap)
-        return false;
-    (void)memcpy(out, pattern, sizeof(pattern));
-    return mkdtemp(out) != NULL;
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "/tmp";
+    n = snprintf(out, cap, "%s/yew-perf-workspace-XXXXXX", tmp);
+    return n > 0 && (size_t)n < cap && mkdtemp(out) != NULL;
 }
 
 static bool make_hermetic_config(const char *workspace, char *out,
@@ -1279,6 +1304,9 @@ static int check_frame_tags(void)
         "\033]777;yew-key;1;0\a"
         "\033[?2026hbackground\033[?2026l"
         "\033[?2026hbackground\033[?2026l";
+    static const u8 observed[] =
+        "\033]777;yew-key;1;3\a\033[?2026habc\033[?2026l";
+    DelayedObserver observer = {0};
     FrameScan scan = {0};
     FrameRead read = {0};
     YewLivePty pty = {0};
@@ -1313,6 +1341,26 @@ static int check_frame_tags(void)
         pty.master = pipefd[0];
         ok = ok && !read_frames(&pty, yew_live_pty_now_ns() +
                                       INT64_C(1000000), &read);
+        (void)close(pipefd[0]);
+        (void)close(pipefd[1]);
+    }
+    pipefd[0] = -1;
+    pipefd[1] = -1;
+    (void)memset(&read, 0, sizeof(read));
+    if (pipe(pipefd) != 0) {
+        ok = false;
+    } else {
+        ssize_t written;
+
+        pty.master = pipefd[0];
+        yew_live_pty_set_output(&pty, delayed_observer, &observer);
+        written = write(pipefd[1], observed, sizeof(observed) - 1U);
+        ok = ok && written == (ssize_t)(sizeof(observed) - 1U) &&
+             read_frames(&pty, yew_live_pty_now_ns() + INT64_C(1000000000),
+                         &read) &&
+             read.painted && observer.started_ns >= read.completed_ns &&
+             observer.finished_ns - observer.started_ns >= INT64_C(10000000) &&
+             observer.finished_ns - read.completed_ns >= INT64_C(10000000);
         (void)close(pipefd[0]);
         (void)close(pipefd[1]);
     }
