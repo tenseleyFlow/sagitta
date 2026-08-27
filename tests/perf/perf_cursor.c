@@ -676,10 +676,14 @@ static bool measure_ascii_context_transition(void)
         cursor.goal_col = (GCol){0U};
         start = now_ns();
         yew_cursor_left(tb, &cursor);
+        if (cursor.pos.v != LONG_LINE_BYTES + sizeof(accent) - 1U ||
+            cursor.goal_col.v != LONG_LINE_BYTES - 1U ||
+            yew_gcol_to_off(
+                tb, (Span){0U, LONG_LINE_BYTES + sizeof(accent)},
+                cursor.goal_col).v != cursor.pos.v)
+            goto fail;
         elapsed = now_ns() - start;
-        if (start < 0 || elapsed < 0 ||
-            cursor.pos.v != LONG_LINE_BYTES + sizeof(accent) - 1U ||
-            cursor.goal_col.v != LONG_LINE_BYTES - 1U)
+        if (start < 0 || elapsed < 0)
             goto fail;
         if (elapsed > worst_query)
             worst_query = elapsed;

@@ -1261,7 +1261,37 @@ ByteOff yew_gcol_to_off(const TextBuf *tb, Span line, GCol g)
     if (!tb->graphemes.initialized) {
         count = 0U;
         cluster_reader_init(&reader, tb, line.lo, end);
-        while (cluster_next(&reader, &cluster, false)) {
+        while (reader.reader.off < end) {
+            TextReader before_run = reader.reader;
+            u64 run_start = reader.reader.off;
+            u64 run_len = reader_take_simple_ascii(&reader.reader, end);
+
+            /* The final ASCII byte can share a cluster with following
+             * Unicode (for example `x` + Extend).  Leave that byte for
+             * cluster_next so it decides the cross-run boundary. */
+            if (run_len != 0U && reader.reader.off < end) {
+                reader.reader = before_run;
+                run_len--;
+                if (run_len != 0U &&
+                    reader_take_simple_ascii(&reader.reader,
+                                             run_start + run_len) !=
+                        run_len)
+                    YEW_BUG("simple ASCII run replay diverged");
+            }
+            if (run_len != 0U) {
+                if (g.v >= count && g.v - count < run_len) {
+                    cluster_reader_free(&reader);
+                    return BYTEOFF(run_start + (g.v - count));
+                }
+                last = run_start + run_len - 1U;
+                have_cluster = true;
+                count = run_len > UINT64_MAX - count
+                            ? UINT64_MAX
+                            : count + run_len;
+                continue;
+            }
+            if (!cluster_next(&reader, &cluster, false))
+                YEW_BUG("unindexed grapheme column scan ended early");
             if (count == g.v) {
                 cluster_reader_free(&reader);
                 return BYTEOFF(cluster.start);

@@ -564,6 +564,15 @@ void test_coords_sparse_index_edit_invalidation(void)
     YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line,
                                      BYTEOFF(64U * 1024U + 2U)).v,
                       64U * 1024U);
+    YEW_ASSERT_EQ_U64(yew_gcol_to_off(tb, line,
+                                     (GCol){32U * 1024U}).v,
+                      32U * 1024U);
+    YEW_ASSERT_EQ_U64(yew_gcol_to_off(tb, line,
+                                     (GCol){32U * 1024U + 1U}).v,
+                      32U * 1024U + 3U);
+    YEW_ASSERT_EQ_U64(yew_gcol_to_off(tb, line,
+                                     (GCol){64U * 1024U}).v,
+                      64U * 1024U + 2U);
     YEW_ASSERT(!tb->graphemes.initialized);
     yew_textbuf_free(tb);
 
