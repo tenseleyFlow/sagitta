@@ -238,6 +238,7 @@ static bool consume(YewLivePty *pty, const u8 *bytes, size_t len,
     size_t nresponses = 0U;
     size_t i;
 
+    yew_live_pty_observe_output(pty, bytes, len);
     for (i = 0U; i < len; i++) {
         if (pty->ntail == sizeof(pty->tail)) {
             (void)memmove(pty->tail, pty->tail + 1U,
@@ -287,6 +288,22 @@ static bool consume(YewLivePty *pty, const u8 *bytes, size_t len,
     }
     return nresponses == 0U ||
            reply(pty, (const char *)responses, nresponses, deadline_ns);
+}
+
+void yew_live_pty_set_output(YewLivePty *pty, YewLivePtyOutputFn output,
+                             void *ctx)
+{
+    if (pty == NULL)
+        return;
+    pty->output = output;
+    pty->output_ctx = ctx;
+}
+
+void yew_live_pty_observe_output(YewLivePty *pty, const u8 *bytes,
+                                 size_t len)
+{
+    if (pty != NULL && pty->output != NULL && bytes != NULL && len != 0U)
+        pty->output(pty->output_ctx, bytes, len);
 }
 
 bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,

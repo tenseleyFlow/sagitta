@@ -7,6 +7,8 @@
 
 #include "util/base.h"
 
+typedef void (*YewLivePtyOutputFn)(void *ctx, const u8 *bytes, size_t len);
+
 typedef struct YewLivePty {
     int master;
     pid_t pid;
@@ -19,6 +21,8 @@ typedef struct YewLivePty {
     bool sync_replied;
     bool da_replied;
     bool in_sync_frame;
+    YewLivePtyOutputFn output;
+    void *output_ctx;
 } YewLivePty;
 
 i64 yew_live_pty_now_ns(void);
@@ -40,6 +44,10 @@ bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
 bool yew_live_pty_wait_quiet(YewLivePty *pty, i64 quiet_ns,
                              i64 deadline_ns);
 bool yew_live_pty_wait_exit(YewLivePty *pty, i64 deadline_ns, int *code);
+void yew_live_pty_set_output(YewLivePty *pty, YewLivePtyOutputFn output,
+                             void *ctx);
+void yew_live_pty_observe_output(YewLivePty *pty, const u8 *bytes,
+                                 size_t len);
 void yew_live_pty_close(YewLivePty *pty);
 void yew_live_pty_exec(const char *binary, const char *path);
 void yew_live_pty_exec_argv(const char *binary, char *const argv[]);

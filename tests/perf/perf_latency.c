@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "support/live_pty.h"
+#include "pty/vt.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -49,6 +50,12 @@ typedef struct FrameRead {
     u64 frames;
 } FrameRead;
 
+typedef struct AssistRun {
+    VtScreen screen;
+    pid_t ai_pid;
+    bool screen_on;
+} AssistRun;
+
 static const MetricSpec metrics[] = {
     {"typing", "small", "latency.typing.small.p99", true, NULL},
     {"typing", "huge", "latency.typing.huge.p99", true, NULL},
@@ -57,10 +64,13 @@ static const MetricSpec metrics[] = {
     {"navigate", "many-buffers", "latency.navigate.many_buffers.p99", true,
      NULL},
     {"search", "huge", "latency.search.huge.p99", true, NULL},
-    {"typing", "assist", "latency.typing.assist.p99", false,
-     "the public live-PTY API does not expose the VT screen needed to "
-     "assert that the LSP/AI ghost is visible"}
+    {"typing", "assist", "latency.typing.assist.p99", true, NULL}
 };
+
+static void screen_feed(void *ctx, const u8 *bytes, size_t len)
+{
+    vt_feed(ctx, bytes, len);
+}
 
 static bool sort_i64(i64 *values, size_t len)
 {
@@ -344,6 +354,7 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
             continue;
         if (n <= 0)
             return false;
+        yew_live_pty_observe_output(pty, data, (size_t)n);
         (void)scan_frames(data, (size_t)n, &matched, &out->frames);
         if (!out->painted && out->frames != 0U) {
             out->painted = true;
@@ -407,6 +418,135 @@ static bool regular_dir(const char *path)
     return path != NULL && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+static bool copy_file(const char *from, const char *to)
+{
+    FILE *in = fopen(from, "rb");
+    FILE *out = NULL;
+    u8 bytes[8192];
+    bool ok = in != NULL;
+
+    if (ok) {
+        out = fopen(to, "wb");
+        ok = out != NULL;
+    }
+    while (ok) {
+        size_t n = fread(bytes, 1U, sizeof(bytes), in);
+
+        if (n != 0U && fwrite(bytes, 1U, n, out) != n)
+            ok = false;
+        if (n < sizeof(bytes)) {
+            if (ferror(in))
+                ok = false;
+            break;
+        }
+    }
+    if (out != NULL && fclose(out) != 0)
+        ok = false;
+    if (in != NULL && fclose(in) != 0)
+        ok = false;
+    return ok;
+}
+
+static bool write_file(const char *path, const char *text, size_t len)
+{
+    FILE *fp = fopen(path, "wb");
+    bool ok = fp != NULL;
+
+    if (ok && fwrite(text, 1U, len, fp) != len)
+        ok = false;
+    if (fp != NULL && fclose(fp) != 0)
+        ok = false;
+    return ok;
+}
+
+static pid_t start_mock_ai(const char *binary, const char *script, u16 *port)
+{
+    int output[2];
+    pid_t pid;
+    FILE *stream;
+    unsigned value = 0U;
+    bool ready;
+
+    if (!regular_file(binary) || !regular_file(script) || pipe(output) != 0)
+        return -1;
+    pid = fork();
+    if (pid == 0) {
+        (void)close(output[0]);
+        if (dup2(output[1], STDOUT_FILENO) < 0)
+            _exit(126);
+        (void)close(output[1]);
+        execl(binary, binary, "--port", "0", "--script", script,
+              (char *)NULL);
+        _exit(127);
+    }
+    (void)close(output[1]);
+    if (pid < 0) {
+        (void)close(output[0]);
+        return -1;
+    }
+    stream = fdopen(output[0], "r");
+    ready = stream != NULL && fscanf(stream, "port %u", &value) == 1 &&
+            value != 0U && value <= 65535U;
+    if (stream != NULL && fclose(stream) != 0)
+        ready = false;
+    if (!ready) {
+        (void)kill(pid, SIGKILL);
+        while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) {}
+        return -1;
+    }
+    *port = (u16)value;
+    return pid;
+}
+
+static void stop_mock_ai(pid_t pid)
+{
+    if (pid <= 0)
+        return;
+    (void)kill(pid, SIGTERM);
+    while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) {}
+}
+
+static bool screen_contains(const VtScreen *screen, const char *text)
+{
+    size_t wanted = strlen(text);
+    int row;
+
+    for (row = 0; row < screen->rows; row++) {
+        Bytebuf line;
+        int col;
+        bool found;
+
+        bytebuf_init(&line);
+        for (col = 0; col < screen->cols; col++) {
+            const VtCell *cell = &screen->cells[
+                (size_t)row * (size_t)screen->cols + (size_t)col];
+            size_t len = 0U;
+            const u8 *bytes = vt_cell_bytes(screen, cell, &len);
+
+            if (cell->w != 0U && bytes != NULL && len != 0U)
+                bytebuf_append(&line, bytes, len);
+            else if (cell->w != 0U)
+                bytebuf_push_u8(&line, (u8)' ');
+        }
+        found = wanted <= line.len;
+        if (found) {
+            size_t at;
+
+            found = false;
+            for (at = 0U; at + wanted <= line.len; at++) {
+                if (memcmp(line.data + at, text, wanted) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        bytebuf_free(&line);
+        if (found)
+            return true;
+    }
+    return false;
+}
+
 static bool remove_tree(const char *path)
 {
     struct stat st;
@@ -461,19 +601,34 @@ static bool make_run_workspace(char *out, size_t cap)
     return mkdtemp(out) != NULL;
 }
 
+static bool make_hermetic_config(const char *workspace, char *out,
+                                 size_t cap)
+{
+    static const char source[] = "let lsp = {servers: {}}\n";
+    int n = snprintf(out, cap, "%s/perf-no-lsp.fl", workspace);
+
+    return n > 0 && (size_t)n < cap &&
+           write_file(out, source, sizeof(source) - 1U);
+}
+
 static bool spawn_many_buffers(YewLivePty *pty, const char *binary,
                                const char *dir, const char *state,
                                const char *workspace)
 {
     char paths[MANY_BUFFER_COUNT][1024];
-    char *argv[MANY_BUFFER_COUNT + 4U];
+    char config[1024];
+    char *argv[MANY_BUFFER_COUNT + 7U];
     size_t i;
 
-    if (!regular_dir(dir) || !regular_dir(workspace))
+    if (!regular_dir(dir) || !regular_dir(workspace) ||
+        !make_hermetic_config(workspace, config, sizeof(config)))
         return false;
     argv[0] = (char *)binary;
     argv[1] = (char *)"--workspace";
     argv[2] = (char *)workspace;
+    argv[3] = (char *)"--config";
+    argv[4] = config;
+    argv[5] = (char *)"--no-workspace-config";
     for (i = 0U; i < MANY_BUFFER_COUNT; i++) {
         int n = snprintf(paths[i], sizeof(paths[i]), "%s/buf-%02zu.c", dir,
                          i);
@@ -481,9 +636,9 @@ static bool spawn_many_buffers(YewLivePty *pty, const char *binary,
         if (n <= 0 || (size_t)n >= sizeof(paths[i]) ||
             !regular_file(paths[i]))
             return false;
-        argv[i + 3U] = paths[i];
+        argv[i + 6U] = paths[i];
     }
-    argv[MANY_BUFFER_COUNT + 3U] = NULL;
+    argv[MANY_BUFFER_COUNT + 6U] = NULL;
     return yew_live_pty_spawn_argv(pty, binary, argv, state, SCREEN_ROWS,
                                    SCREEN_COLS);
 }
@@ -492,17 +647,116 @@ static bool spawn_file(YewLivePty *pty, const char *binary,
                        const char *path, const char *state,
                        const char *workspace)
 {
-    char *argv[5];
+    char config[1024];
+    char *argv[8];
 
-    if (!regular_dir(workspace))
+    if (!regular_dir(workspace) ||
+        !make_hermetic_config(workspace, config, sizeof(config)))
         return false;
     argv[0] = (char *)binary;
     argv[1] = (char *)"--workspace";
     argv[2] = (char *)workspace;
-    argv[3] = (char *)path;
-    argv[4] = NULL;
+    argv[3] = (char *)"--config";
+    argv[4] = config;
+    argv[5] = (char *)"--no-workspace-config";
+    argv[6] = (char *)path;
+    argv[7] = NULL;
     return yew_live_pty_spawn_argv(pty, binary, argv, state, SCREEN_ROWS,
                                    SCREEN_COLS);
+}
+
+static bool spawn_assist(YewLivePty *pty, AssistRun *assist,
+                         const char *binary, const char *path,
+                         const char *state, const char *workspace,
+                         const char *fakelsp, const char *mockai,
+                         const char *ai_script)
+{
+    char git_dir[1024];
+    char source_path[1024];
+    char config_path[1024];
+    char config[4096];
+    char *argv[8];
+    u16 port = 0U;
+    int n;
+
+    if (!regular_file(fakelsp) || !regular_file(mockai) ||
+        !regular_file(ai_script))
+        return false;
+    n = snprintf(git_dir, sizeof(git_dir), "%s/.git", workspace);
+    if (n <= 0 || (size_t)n >= sizeof(git_dir) ||
+        (mkdir(git_dir, 0700) != 0 && errno != EEXIST))
+        return false;
+    n = snprintf(source_path, sizeof(source_path), "%s/assist.c", workspace);
+    if (n <= 0 || (size_t)n >= sizeof(source_path) ||
+        !copy_file(path, source_path))
+        return false;
+    n = snprintf(config_path, sizeof(config_path), "%s/assist.fl", workspace);
+    if (n <= 0 || (size_t)n >= sizeof(config_path))
+        return false;
+    assist->ai_pid = start_mock_ai(mockai, ai_script, &port);
+    if (assist->ai_pid <= 0)
+        return false;
+    n = snprintf(config, sizeof(config),
+        "import ai\n"
+        "let lsp = {servers: {c: {id: \"fakelsp\", cmd: \"%s\", "
+        "args: [\"session-nosync\"], roots: [\".git\"], "
+        "init_options: nil, init_timeout_ms: 2000}}}\n"
+        "ai.backend(\"local\", {kind: \"ollama\", transport: \"http\", "
+        "url: \"http://127.0.0.1:%u\", model: \"perf-model\"})\n"
+        "set({\"ai.enable\": true, \"ai.backend\": \"local\", "
+        "\"ai.default_workspace\": \"allow\", \"ai.frame_ms\": 0, "
+        "\"shadow.ai_debounce_ms\": 50, \"shadow.providers\": \"ai\"})\n",
+        fakelsp, (unsigned)port);
+    if (n <= 0 || (size_t)n >= sizeof(config) ||
+        !write_file(config_path, config, (size_t)n))
+        goto fail;
+    argv[0] = (char *)binary;
+    argv[1] = (char *)"--workspace";
+    argv[2] = (char *)workspace;
+    argv[3] = (char *)"--config";
+    argv[4] = config_path;
+    argv[5] = (char *)"--no-workspace-config";
+    argv[6] = source_path;
+    argv[7] = NULL;
+    if (!yew_live_pty_spawn_argv(pty, binary, argv, state, SCREEN_ROWS,
+                                  SCREEN_COLS))
+        goto fail;
+    vt_init(&assist->screen, SCREEN_ROWS, SCREEN_COLS);
+    assist->screen_on = true;
+    yew_live_pty_set_output(pty, screen_feed, &assist->screen);
+    return true;
+
+fail:
+    stop_mock_ai(assist->ai_pid);
+    assist->ai_pid = -1;
+    return false;
+}
+
+static bool assist_ghost_preflight(YewLivePty *pty, AssistRun *assist)
+{
+    static const char trigger[] = "\033[F" "aX";
+    static const char restore[] = "\033\033";
+    i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
+    size_t tries;
+
+    if (!yew_live_pty_write(pty, trigger, sizeof(trigger) - 1U, deadline))
+        return false;
+    for (tries = 0U; tries < 64U &&
+                       !screen_contains(&assist->screen,
+                                        "int answer = 42;"); tries++) {
+        u64 before = pty->frames;
+
+        if (!yew_live_pty_wait_frame(pty, before, deadline, NULL))
+            return false;
+    }
+    if (!screen_contains(&assist->screen, "int answer = 42;") ||
+        kill(assist->ai_pid, 0) != 0)
+        return false;
+    if (!yew_live_pty_write(pty, restore, sizeof(restore) - 1U, deadline) ||
+        !yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline))
+        return false;
+    (void)puts("latency.typing.assist.ghost_visible 1 lsp=fakelsp ai=mockai");
+    return true;
 }
 
 static bool hydrate_many_buffers(YewLivePty *pty)
@@ -530,7 +784,9 @@ static bool hydrate_many_buffers(YewLivePty *pty)
 
 static int run_session(const char *binary, const char *script,
                        const char *fixture, const char *path,
-                       const char *state, const char *many_dir)
+                       const char *state, const char *many_dir,
+                       const char *fakelsp, const char *mockai,
+                       const char *ai_script)
 {
     Session session;
     YewLivePty pty;
@@ -544,7 +800,12 @@ static int run_session(const char *binary, const char *script,
     const MetricSpec *spec;
     size_t i;
     bool gate;
+    bool is_assist;
+    AssistRun assist;
     int status = 0;
+
+    (void)memset(&assist, 0, sizeof(assist));
+    assist.ai_pid = -1;
 
     if (session_name(script, name, sizeof(name)) == NULL ||
         (spec = find_metric(name, fixture)) == NULL) {
@@ -565,6 +826,13 @@ static int run_session(const char *binary, const char *script,
         (void)fprintf(stderr, "perf_latency: invalid binary, fixture, or session\n");
         return 2;
     }
+    is_assist = strcmp(fixture, "assist") == 0;
+    if (is_assist && (fakelsp == NULL || mockai == NULL ||
+                      ai_script == NULL)) {
+        (void)fprintf(stderr,
+                      "perf_latency: assist requires fakelsp, mockai, and script\n");
+        return 2;
+    }
     if (!make_run_state(state, run_state, sizeof(run_state))) {
         (void)fprintf(stderr, "perf_latency: cannot isolate run state\n");
         return 2;
@@ -574,11 +842,15 @@ static int run_session(const char *binary, const char *script,
         (void)remove_tree(run_state);
         return 2;
     }
-    if (!(strcmp(fixture, "many-buffers") == 0 ?
+    if (!(is_assist ?
+          spawn_assist(&pty, &assist, binary, path, run_state,
+                       run_workspace, fakelsp, mockai, ai_script) :
+          strcmp(fixture, "many-buffers") == 0 ?
           spawn_many_buffers(&pty, binary, many_dir, run_state,
                              run_workspace) :
           spawn_file(&pty, binary, path, run_state, run_workspace))) {
         (void)fprintf(stderr, "perf_latency: cannot spawn editor\n");
+        stop_mock_ai(assist.ai_pid);
         if (run_workspace[0] != '\0')
             (void)remove_tree(run_workspace);
         (void)remove_tree(run_state);
@@ -605,6 +877,17 @@ static int run_session(const char *binary, const char *script,
         (void)remove_tree(run_state);
         return 2;
     }
+    if (is_assist && !assist_ghost_preflight(&pty, &assist)) {
+        (void)fprintf(stderr,
+                      "perf_latency: assist mocks did not paint a live ghost\n");
+        yew_live_pty_close(&pty);
+        stop_mock_ai(assist.ai_pid);
+        if (assist.screen_on)
+            vt_free(&assist.screen);
+        (void)remove_tree(run_workspace);
+        (void)remove_tree(run_state);
+        return 2;
+    }
     for (i = 0U; i < session.len; i++) {
         i64 start = yew_live_pty_now_ns();
         i64 deadline = start + (i64)KEY_TIMEOUT_MS * INT64_C(1000000);
@@ -627,6 +910,13 @@ static int run_session(const char *binary, const char *script,
     if (!stop_editor(&pty) && status == 0)
         status = 2;
     yew_live_pty_close(&pty);
+    if (is_assist && kill(assist.ai_pid, 0) != 0 && status == 0) {
+        (void)fprintf(stderr, "perf_latency: mock AI exited during session\n");
+        status = 2;
+    }
+    stop_mock_ai(assist.ai_pid);
+    if (assist.screen_on)
+        vt_free(&assist.screen);
     if (!remove_tree(run_state) && status == 0) {
         (void)fprintf(stderr, "perf_latency: cannot remove isolated state\n");
         status = 2;
@@ -768,14 +1058,35 @@ static int check_scripts(const char *dir)
     return 0;
 }
 
+static int check_assist_vt(void)
+{
+    static const u8 first[] = "\033[?1049h\033[Hghost ";
+    static const u8 second[] = "visible";
+    YewLivePty pty;
+    VtScreen screen;
+    bool ok;
+
+    (void)memset(&pty, 0, sizeof(pty));
+    vt_init(&screen, 4, 32);
+    yew_live_pty_set_output(&pty, screen_feed, &screen);
+    yew_live_pty_observe_output(&pty, first, sizeof(first) - 1U);
+    yew_live_pty_observe_output(&pty, second, sizeof(second) - 1U);
+    ok = screen.nerrors == 0U && screen_contains(&screen, "ghost visible");
+    vt_free(&screen);
+    (void)printf("assist_vt_observer %s\n", ok ? "OK" : "FAIL");
+    return ok ? 0 : 1;
+}
+
 static void usage(const char *arg0)
 {
     (void)fprintf(stderr,
         "usage:\n"
         "  %s --floor --echo PATH\n"
         "  %s --check-scripts DIR\n"
+        "  %s --check-assist-vt\n"
         "  %s --yew PATH --session FILE --fixture CLASS --path FILE "
-        "[--state DIR] [--many-dir DIR]\n", arg0, arg0, arg0);
+        "[--state DIR] [--many-dir DIR] [--fakelsp PATH --mockai PATH "
+        "--ai-script PATH]\n", arg0, arg0, arg0, arg0);
 }
 
 int main(int argc, char **argv)
@@ -788,12 +1099,18 @@ int main(int argc, char **argv)
     const char *echo = NULL;
     const char *check = NULL;
     const char *many_dir = NULL;
+    const char *fakelsp = NULL;
+    const char *mockai = NULL;
+    const char *ai_script = NULL;
     bool floor = false;
+    bool assist_vt = false;
     int i;
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--floor") == 0)
             floor = true;
+        else if (strcmp(argv[i], "--check-assist-vt") == 0)
+            assist_vt = true;
         else if (i + 1 < argc && strcmp(argv[i], "--echo") == 0)
             echo = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--check-scripts") == 0)
@@ -810,18 +1127,27 @@ int main(int argc, char **argv)
             state = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--many-dir") == 0)
             many_dir = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--fakelsp") == 0)
+            fakelsp = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--mockai") == 0)
+            mockai = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--ai-script") == 0)
+            ai_script = argv[++i];
         else {
             usage(argv[0]);
             return 2;
         }
     }
-    if (check != NULL && !floor && yew == NULL)
+    if (assist_vt && !floor && check == NULL && yew == NULL)
+        return check_assist_vt();
+    if (check != NULL && !floor && !assist_vt && yew == NULL)
         return check_scripts(check);
-    if (floor && echo != NULL && check == NULL && yew == NULL)
+    if (floor && echo != NULL && check == NULL && !assist_vt && yew == NULL)
         return run_floor(echo);
-    if (!floor && check == NULL && yew != NULL && script != NULL &&
+    if (!floor && !assist_vt && check == NULL && yew != NULL && script != NULL &&
         fixture != NULL && path != NULL)
-        return run_session(yew, script, fixture, path, state, many_dir);
+        return run_session(yew, script, fixture, path, state, many_dir,
+                           fakelsp, mockai, ai_script);
     usage(argv[0]);
     return 2;
 }
