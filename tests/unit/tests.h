@@ -45,6 +45,8 @@ void test_calib_limit_scales_and_rejects_overflow(void);
 void test_calib_refusal_band_includes_only_500_through_3000(void);
 void test_calib_drift_aborts_only_above_15_percent(void);
 void test_calib_reference_parser_requires_complete_metadata_and_vector(void);
+void test_rss_reports_finite_nonzero_bytes(void);
+void test_rss_peak_is_monotonic(void);
 void test_bytebuf(void);
 void test_bytebuf_binary(void);
 void test_base64_rfc4648_vectors(void);

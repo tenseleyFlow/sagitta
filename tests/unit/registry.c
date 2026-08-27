@@ -78,6 +78,8 @@ const YewTest yew_tests[] = {
     T(calib_refusal_band_includes_only_500_through_3000),
     T(calib_drift_aborts_only_above_15_percent),
     T(calib_reference_parser_requires_complete_metadata_and_vector),
+    T(rss_reports_finite_nonzero_bytes),
+    T(rss_peak_is_monotonic),
     T(bytebuf),
     T(bytebuf_binary),
     T(base64_rfc4648_vectors),
