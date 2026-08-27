@@ -293,17 +293,14 @@ static bool settle_incremental(Ed *ed, u64 inserted_at, bool require_hit,
     size_t slices = 0U;
     i64 end;
 
-    while (ed->search.preview_timer != YEW_TIMER_NONE) {
+    while (yew_search_preview_queued(ed)) {
         if (++slices > 2048U)
             return false;
-        if (ed->now_ms == INT64_MAX)
-            return false;
-        ed->now_ms++;
-        yew_timers_fire(&ed->timers, ed, ed->now_ms);
+        yew_search_preview_tick(ed);
         if (!render_incremental(ed, inserted_at, false))
             return false;
     }
-    if (ed->search.preview_timer != YEW_TIMER_NONE ||
+    if (yew_search_preview_queued(ed) ||
         !render_incremental(ed, inserted_at, require_hit))
         return false;
     end = now_ns();
@@ -329,7 +326,8 @@ static bool measure_incremental(Ed *ed, u64 inserted_at, i64 *elapsed)
 
         /* Start at the file origin.  The planted match is deliberately
          * beyond one runtime slice even in the reduced smoke fixture, so a
-         * passing row proves both bounded key work and timer continuation. */
+         * passing row proves both bounded key work and idle-turn
+         * continuation. */
         yew_ed_cursor(ed)->pos = BYTEOFF(0U);
         yew_win_follow_cursor(ed->win);
         yew_search_open(ed, ed->win, false);

@@ -84,7 +84,7 @@ typedef struct SearchState {
     bool active;      /* a prompt is open */
     TimerId count_timer;
     u32 count_win_id; /* stable identity; timer callbacks hold no Win * */
-    TimerId preview_timer; /* chunked whole-literal continuation */
+    bool preview_queued; /* one chunked whole-literal slice next idle turn */
     u32 preview_win_id;
     u64 preview_at;
     u64 preview_stop;
@@ -108,11 +108,16 @@ void yew_search_open(Ed *ed, Win *w, bool reverse);
 /* A preview continuation belongs to the key that started it.  Call before
  * handling a later key so stale work cannot move the cursor afterward. */
 void yew_search_preview_cancel(Ed *ed);
-/* Raw bytes must stop the timer before terminal escape disambiguation, but
- * Enter still has to accept the search that timer was completing.  Preempt
- * therefore retires only the scheduled callback and preserves its state;
+/* Raw bytes must stop queued work before terminal escape disambiguation, but
+ * Enter still has to accept the search that work was completing.  Preempt
+ * therefore retires only the queued slice and preserves its state;
  * decoded non-Enter keys call cancel before they take effect. */
 void yew_search_preview_preempt(Ed *ed);
+/* Cooperative literal preview runs at most one slice per idle loop turn.
+ * A queued slice makes the poll deadline immediate without imposing an
+ * artificial millisecond delay between slices. */
+bool yew_search_preview_queued(const Ed *ed);
+void yew_search_preview_tick(Ed *ed);
 void yew_search_input(Ed *ed, Win *w);
 void yew_search_accept(Ed *ed, Win *w);
 void yew_search_cancel(Ed *ed, Win *w);

@@ -74,10 +74,9 @@ static void su_finish_preview(Ed *ed)
 {
     u32 turns = 0U;
 
-    while (ed->search.preview_timer != YEW_TIMER_NONE) {
+    while (yew_search_preview_queued(ed)) {
         YEW_ASSERT(turns++ < 64U);
-        ed->now_ms++;
-        yew_timers_fire(&ed->timers, ed, ed->now_ms);
+        yew_search_preview_tick(ed);
     }
 }
 
@@ -374,17 +373,47 @@ void test_searchui_literal_preview_continues_in_bounded_slices(void)
 
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 0U);
-    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT(yew_search_preview_queued(&ed));
     YEW_ASSERT_EQ_U64(ed.search.preview_win_id, ed.win->id);
     YEW_ASSERT(ed.search.preview_pending);
     YEW_ASSERT(ed.msg.active);
 
     su_finish_preview(&ed);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
     YEW_ASSERT_EQ_U64(ed.search.preview_win_id, 0U);
     YEW_ASSERT(!ed.search.preview_pending);
     YEW_ASSERT(!ed.msg.active);
+    yew_ed_free(&ed);
+}
+
+void test_searchui_preview_continuations_have_no_timer_delay(void)
+{
+    enum { CHUNK = 1024U * 1024U };
+    Ed ed;
+    const size_t hit = (size_t)CHUNK * 6U + 32U;
+    const size_t len = hit + 96U;
+    i64 started_ms;
+    u32 turns = 0U;
+
+    su_large_fixture(&ed, len, hit);
+    su_search(&ed, "needle", false);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    started_ms = ed.now_ms;
+
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT(yew_search_preview_queued(&ed));
+    while (yew_search_preview_queued(&ed)) {
+        YEW_ASSERT(turns++ < 8U);
+        YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, ed.now_ms), 0);
+        yew_search_preview_tick(&ed);
+        YEW_ASSERT_EQ_I64(ed.now_ms, started_ms);
+    }
+    /* The first slice ran on the key turn; six idle turns reach a match
+     * beyond six chunk boundaries.  The old +1 ms timer cadence therefore
+     * imposed at least 6 ms and could never satisfy the 5 ms gate. */
+    YEW_ASSERT_EQ_U64(turns, 6U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
     yew_ed_free(&ed);
 }
 
@@ -399,23 +428,22 @@ void test_searchui_accept_resumes_pending_preview(void)
     su_search(&ed, "needle", false);
     yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
-    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT(yew_search_preview_queued(&ed));
     YEW_ASSERT(ed.search.preview_pending);
 
-    /* Raw Enter arrives before terminal decoding.  It must preempt the
-     * timer without throwing away the search Enter is about to accept. */
+    /* Raw Enter arrives before terminal decoding.  It must preempt queued
+     * work without throwing away the search Enter is about to accept. */
     yew_search_preview_preempt(&ed);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
     YEW_ASSERT(ed.search.preview_pending);
     yew_search_accept(&ed, ed.win);
 
-    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT(yew_search_preview_queued(&ed));
     YEW_ASSERT_EQ_U64(ed.search.preview_win_id, ed.win->id);
     YEW_ASSERT(ed.search.preview_pending);
-    ed.now_ms++;
-    yew_timers_fire(&ed.timers, &ed, ed.now_ms);
+    yew_search_preview_tick(&ed);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
     YEW_ASSERT(!ed.search.preview_pending);
     yew_ed_free(&ed);
 }
@@ -432,7 +460,7 @@ void test_searchui_literal_preview_finds_across_a_slice_edge(void)
 
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
     yew_ed_free(&ed);
 }
 
@@ -453,7 +481,7 @@ void test_searchui_backward_literal_finds_across_slice_edges(void)
 
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, hit);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
     yew_ed_free(&ed);
 
     /* The search origin is also the high edge of the first outer 1 MiB
@@ -465,7 +493,7 @@ void test_searchui_backward_literal_finds_across_slice_edges(void)
 
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, CHUNK - 2U);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
     yew_ed_free(&ed);
 }
 
@@ -486,7 +514,7 @@ void test_searchui_counted_literal_continues_without_blocking(void)
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 2U));
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 12U);
     YEW_ASSERT(ed.search.preview_pending);
-    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT(yew_search_preview_queued(&ed));
     su_finish_preview(&ed);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, late + 6U);
     YEW_ASSERT(!ed.search.preview_pending);
@@ -529,15 +557,14 @@ void test_searchui_new_literal_cancels_a_pending_preview(void)
     su_search(&ed, "needle", false);
     yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
-    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT(yew_search_preview_queued(&ed));
 
     su_search(&ed, "early", false);
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 12U);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
 
-    ed.now_ms++;
-    yew_timers_fire(&ed.timers, &ed, ed.now_ms);
+    yew_search_preview_tick(&ed);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 12U);
     yew_ed_free(&ed);
 }
@@ -552,18 +579,17 @@ void test_searchui_later_key_cancels_a_pending_preview(void)
     su_search(&ed, "needle", false);
     yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
     YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
-    YEW_ASSERT(ed.search.preview_timer != YEW_TIMER_NONE);
+    YEW_ASSERT(yew_search_preview_queued(&ed));
 
     escape.kind = YEW_EV_KEY;
     escape.ev = YEW_KEY_PRESS;
     escape.code = YEW_KEY_ESCAPE;
     yew_ed_handle_key(&ed, escape, ed.now_ms);
-    YEW_ASSERT_EQ_U64(ed.search.preview_timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_search_preview_queued(&ed));
     YEW_ASSERT(!ed.search.preview_pending);
     YEW_ASSERT(!ed.msg.active);
 
-    ed.now_ms++;
-    yew_timers_fire(&ed.timers, &ed, ed.now_ms);
+    yew_search_preview_tick(&ed);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 0U);
     yew_ed_free(&ed);
 }

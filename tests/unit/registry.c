@@ -1187,6 +1187,7 @@ const YewTest yew_tests[] = {
     T(searchui_word_search_quotes_metacharacters),
     T(searchui_bad_pattern_keeps_the_last_good_program),
     T(searchui_literal_preview_continues_in_bounded_slices),
+    T(searchui_preview_continuations_have_no_timer_delay),
     T(searchui_accept_resumes_pending_preview),
     T(searchui_literal_preview_finds_across_a_slice_edge),
     T(searchui_backward_literal_finds_across_slice_edges),

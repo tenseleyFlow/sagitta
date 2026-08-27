@@ -284,6 +284,11 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
         return -1;
     if (yew_input_dispatch_ready(&ed->in))
         return 0;
+    /* Literal search continuations yield a complete poll/dispatch turn, not
+     * an arbitrary millisecond.  An immediate deadline gives input the next
+     * turn while avoiding cumulative timer delay on large files. */
+    if (yew_search_preview_queued(ed))
+        return 0;
     /*
      * Sprint 26 §7.2: a sliced rescan is work waiting to be done, so
      * the loop must not sleep on poll while one is in flight.  Without
@@ -624,10 +629,15 @@ int yew_loop_run(Ed *ed)
         /* General deadlines remain correctness clocks during sustained
          * input (workspace saves, message expiry, tab-jump expiry, and
          * similar state).  Raw input already preempts the cooperative
-         * search timer before decoding, and decoded non-Enter keys cancel
-         * its pending work, so firing the heap here cannot let stale search
+         * search queue before decoding, and decoded non-Enter keys cancel
+         * its pending work, so deadline work here cannot let stale search
          * work outrun a key that was present for this turn. */
         yew_timers_fire(&ed->timers, ed, now);
+        /* The key that started a preview already consumed one bounded slice.
+         * Resume only on an input-free turn so a key is never charged for a
+         * second slice and queued bytes always preempt stale search work. */
+        if (!had_input && !raw_input)
+            yew_search_preview_tick(ed);
         /*
          * Sprint 26 §7.2: a sliced rescan continues here, on the idle
          * path, AFTER input has been drained — so a keystroke always

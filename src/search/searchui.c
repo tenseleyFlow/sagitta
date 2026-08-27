@@ -200,10 +200,7 @@ void yew_search_preview_cancel(Ed *ed)
 {
     if (ed == NULL)
         return;
-    if (ed->search.preview_timer != YEW_TIMER_NONE) {
-        (void)yew_timer_cancel(&ed->timers, ed->search.preview_timer);
-        ed->search.preview_timer = YEW_TIMER_NONE;
-    }
+    ed->search.preview_queued = false;
     ed->search.preview_win_id = 0U;
     if (ed->search.preview_pending) {
         ed->search.preview_pending = false;
@@ -216,23 +213,24 @@ void yew_search_preview_preempt(Ed *ed)
 {
     if (ed == NULL)
         return;
-    if (ed->search.preview_timer != YEW_TIMER_NONE) {
-        (void)yew_timer_cancel(&ed->timers, ed->search.preview_timer);
-        ed->search.preview_timer = YEW_TIMER_NONE;
-    }
+    ed->search.preview_queued = false;
 }
 
 static SearchPreviewResult search_preview_slice(Ed *ed, Win *w);
 
-static void search_preview_continue(Ed *ed, void *ctx)
+bool yew_search_preview_queued(const Ed *ed)
+{
+    return ed != NULL && ed->search.preview_queued;
+}
+
+void yew_search_preview_tick(Ed *ed)
 {
     Win *w;
     SearchPreviewResult result;
 
-    (void)ctx;
-    if (ed == NULL)
+    if (!yew_search_preview_queued(ed))
         return;
-    ed->search.preview_timer = YEW_TIMER_NONE;
+    ed->search.preview_queued = false;
     w = yew_ed_win_by_id(ed, ed->search.preview_win_id);
     if (w == NULL) {
         ed->search.preview_win_id = 0U;
@@ -262,8 +260,7 @@ static void search_preview_schedule(Ed *ed, Win *w)
                 (ed->search.preview_ui_seq & 1U) != 0U ? "." : "..");
     }
     ed->search.preview_win_id = w->id;
-    ed->search.preview_timer = yew_timer_add(&ed->timers, ed->now_ms + 1,
-                                              search_preview_continue, NULL);
+    ed->search.preview_queued = true;
 }
 
 static SearchPreviewResult search_preview_found(Ed *ed, Win *w, u64 hit)
@@ -547,7 +544,7 @@ void yew_search_accept(Ed *ed, Win *w)
         /* The jump is a jump: `origin` becomes a place to come back to. */
         yew_jump_push(w, ed->search.origin, ed->now_ms);
     }
-    if (pending && ed->search.preview_timer == YEW_TIMER_NONE)
+    if (pending && !ed->search.preview_queued)
         search_preview_schedule(ed, w);
 }
 

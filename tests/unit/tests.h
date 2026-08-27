@@ -1153,6 +1153,7 @@ void test_searchui_no_pattern_reports_rather_than_moving(void);
 void test_searchui_word_search_quotes_metacharacters(void);
 void test_searchui_bad_pattern_keeps_the_last_good_program(void);
 void test_searchui_literal_preview_continues_in_bounded_slices(void);
+void test_searchui_preview_continuations_have_no_timer_delay(void);
 void test_searchui_accept_resumes_pending_preview(void);
 void test_searchui_literal_preview_finds_across_a_slice_edge(void);
 void test_searchui_backward_literal_finds_across_slice_edges(void);
