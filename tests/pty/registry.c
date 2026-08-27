@@ -5398,15 +5398,15 @@ static void case_startup_multiple_files(PtyCtx *c)
               "first startup tab is missing");
     ptc_check(c, s43_screen_contains(&c->vt, "start-two.txt"),
               "second startup tab is missing");
-    ptc_check(c, s43_screen_contains(&c->vt, "startup first file"),
-              "first positional file is not the active startup tab");
+    ptc_check(c, s43_screen_contains(&c->vt, "startup second file"),
+              "final positional file is not the active startup tab");
     ptc_keys(c, ":");
     ptc_settle(c, 0);
-    ptc_bytes(c, "ed.tab.next");
+    ptc_bytes(c, "ed.tab.prev");
     ptc_keys(c, "enter");
     ptc_settle(c, 0);
-    ptc_check(c, s43_screen_contains(&c->vt, "startup second file"),
-              "second positional file did not hydrate on tab switch");
+    ptc_check(c, s43_screen_contains(&c->vt, "startup first file"),
+              "first positional file did not remain available");
     ptc_snapshot(c, "startup_multiple_files");
     force_quit(c);
     (void)unlink(one);

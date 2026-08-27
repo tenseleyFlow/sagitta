@@ -2499,45 +2499,110 @@ draw_overlays:
     }
 }
 
-static const char *load_error_text(YewLoadErr error)
-{
-    switch (error) {
-    case YEW_LOAD_EACCES:
-        return "permission denied";
-    case YEW_LOAD_EISDIR:
-        return "is a directory";
-    case YEW_LOAD_TOO_LARGE:
-        return "file is too large";
-    case YEW_LOAD_IO:
-        return "input/output error";
-    case YEW_LOAD_OK:
-    case YEW_LOAD_ENOENT:
-        break;
-    }
-    return "unknown load error";
-}
-
 static const char *ed_getenv(const char *name)
 {
     return getenv(name);
 }
 
-static int ed_driver_inner(const char *const *paths, size_t npaths,
+static bool start_canonical_dir(const char *dir, char out[PATH_MAX])
+{
+    struct stat st;
+
+    return dir != NULL && stat(dir, &st) == 0 && S_ISDIR(st.st_mode) &&
+           realpath(dir, out) != NULL;
+}
+
+bool yew_start_plan_resolve(YewStartPlan *out,
+                            const char *const *paths, size_t npaths,
+                            const char *workspace_dir,
+                            char *error, size_t error_cap)
+{
+    size_t i;
+    size_t directory = SIZE_MAX;
+
+    if (out == NULL || (paths == NULL && npaths != 0U))
+        return false;
+    (void)memset(out, 0, sizeof(*out));
+    if (!start_canonical_dir(workspace_dir == NULL ? "." : workspace_dir,
+                             out->workspace)) {
+        if (error != NULL && error_cap != 0U) {
+            (void)snprintf(error, error_cap,
+                           "workspace is not a directory: %s",
+                           workspace_dir == NULL ? "." : workspace_dir);
+        }
+        return false;
+    }
+    for (i = 0U; i < npaths; i++) {
+        struct stat st;
+
+        if (paths[i] != NULL && stat(paths[i], &st) == 0 &&
+            S_ISDIR(st.st_mode)) {
+            directory = i;
+            break;
+        }
+    }
+    if (directory != SIZE_MAX) {
+        if (npaths != 1U || workspace_dir != NULL) {
+            if (error != NULL && error_cap != 0U) {
+                (void)snprintf(error, error_cap,
+                               "directory argument cannot be combined with files or --workspace: %s",
+                               paths[directory]);
+            }
+            return false;
+        }
+        if (!start_canonical_dir(paths[directory], out->workspace)) {
+            if (error != NULL && error_cap != 0U) {
+                (void)snprintf(error, error_cap,
+                               "workspace is not a directory: %s",
+                               paths[directory]);
+            }
+            return false;
+        }
+        out->kind = YEW_START_DIRECTORY;
+        out->enter_fuss = true;
+        return true;
+    }
+    out->kind = npaths == 0U ? YEW_START_RESUME : YEW_START_FILES;
+    out->files = paths;
+    out->nfiles = npaths;
+    return true;
+}
+
+static bool ed_apply_start_files(Ed *ed, const YewStartPlan *plan,
+                                 const char **failed)
+{
+    size_t i;
+
+    for (i = 0U; i < plan->nfiles; i++) {
+        int idx = yew_tab_open(ed, plan->files[i]);
+
+        if (idx < 0 || yew_tab_hydrate(ed, idx) != 0) {
+            if (failed != NULL)
+                *failed = plan->files[i];
+            return false;
+        }
+        /* yew_tab_open focuses an existing canonical path.  New tabs are
+         * deliberately lazy, so make the same focus decision explicit. */
+        yew_tab_switch(ed, idx);
+    }
+    return true;
+}
+
+static int ed_driver_inner(const YewStartPlan *plan,
                            const YewEdStartup *startup)
 {
     Ed ed;
-    YewLoadErr load = YEW_LOAD_OK;
+    u32 placeholder_tab_id;
     int result;
     i64 wall_now;
     u16 rows;
     u16 cols;
 
     yew_ed_init(&ed);
-    if (startup != NULL && startup->workspace_dir != NULL &&
-        !yew_ed_set_workspace_root(&ed, startup->workspace_dir)) {
+    if (!yew_ed_set_workspace_root(&ed, plan->workspace)) {
         (void)fprintf(stderr,
                       "yew: error: workspace is not a directory: %s\n",
-                      startup->workspace_dir);
+                      plan->workspace);
         yew_ed_free(&ed);
         return YEW_EXIT_ERR;
     }
@@ -2567,29 +2632,8 @@ static int ed_driver_inner(const char *const *paths, size_t npaths,
     yew_input_init(&ed.in, &ed.tty.caps);
     ed.input_ready = true;
 
-    if (npaths == 0U) {
-        (void)yew_ed_open_scratch(&ed);
-    } else {
-        size_t i;
-
-        load = yew_ed_open(&ed, paths[0]);
-        if (load != YEW_LOAD_OK && load != YEW_LOAD_ENOENT) {
-            const char *message = load_error_text(load);
-
-            yew_ed_free(&ed);
-            (void)fprintf(stderr, "yew: error: cannot open %s: %s\n",
-                          paths[0], message);
-            return YEW_EXIT_IO;
-        }
-        for (i = 1U; i < npaths; i++) {
-            if (yew_tab_open(&ed, paths[i]) < 0) {
-                yew_ed_free(&ed);
-                (void)fprintf(stderr, "yew: error: cannot open tab: %s\n",
-                              paths[i]);
-                return YEW_EXIT_IO;
-            }
-        }
-    }
+    (void)yew_ed_open_scratch(&ed);
+    placeholder_tab_id = ed.tabs.v.data[0].tab_id;
     rows = ed.tty.rows > 0 && ed.tty.rows <= UINT16_MAX ?
                (u16)ed.tty.rows : 24U;
     cols = ed.tty.cols > 0 && ed.tty.cols <= UINT16_MAX ?
@@ -2623,15 +2667,27 @@ static int ed_driver_inner(const char *const *paths, size_t npaths,
     }
     if (!ed.clean)
         yew_state_open(&ed);
-    /*
-     * Restored only when no file was named.  `yew yew.c` is a
-     * request to edit that file, and burying it under forty restored
-     * tabs answers a question nobody asked; the arrangement comes back
-     * when you start the way you left — in the directory, with no
-     * argument.
-     */
-    if (npaths == 0U && !ed.clean)
+    if (!ed.clean)
         (void)yew_ws_restore(&ed);
+    if (plan->nfiles != 0U) {
+        const char *failed = NULL;
+
+        if (!ed_apply_start_files(&ed, plan, &failed)) {
+            yew_ed_free(&ed);
+            (void)fprintf(stderr, "yew: error: cannot open tab: %s\n",
+                          failed == NULL ? "(unknown)" : failed);
+            return YEW_EXIT_IO;
+        }
+        /* The untitled tab existed only so state had a model to restore
+         * into.  Explicit targets replace that placeholder, not restored
+         * tabs, groups, panes, or cursors. */
+        if (yew_tab_count(&ed) > 1U) {
+            int placeholder = yew_tab_index_of_id(&ed, placeholder_tab_id);
+
+            if (placeholder >= 0)
+                (void)yew_tab_close(&ed, placeholder);
+        }
+    }
 #if YEW_WITH_PLUGINS
     /* Plugins see the restored workspace, but load before ws.open so their
      * declared workspace hooks observe the first session boundary. */
@@ -2645,6 +2701,8 @@ static int ed_driver_inner(const char *const *paths, size_t npaths,
     if (!yew_plug_startup_pending(&ed))
 #endif
         yew_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
+    if (plan->enter_fuss)
+        (void)yew_mode_enter(&ed, YEW_MODE_F);
     yew_ed_layout(&ed);
     yew_ed_render(&ed);
     result = ed.quit ? ed.exit_code : yew_loop_run(&ed);
@@ -2674,33 +2732,24 @@ int yew_ed_driver_opts(const char *path, const YewEdStartup *startup)
 int yew_ed_driver_files_opts(const char *const *paths, size_t npaths,
                              const YewEdStartup *startup)
 {
-    YewEdStartup effective = {0};
+    YewStartPlan plan;
     TtyGuard guard;
+    char error[PATH_MAX + 128U];
     int result;
-    size_t i;
 
-    if (startup != NULL)
-        effective = *startup;
-    for (i = 0U; i < npaths; i++) {
-        struct stat st;
-
-        if (stat(paths[i], &st) != 0 || !S_ISDIR(st.st_mode))
-            continue;
-        if (npaths != 1U || effective.workspace_dir != NULL) {
-            (void)fprintf(stderr,
-                          "yew: error: directory argument cannot be combined with files or --workspace: %s\n",
-                          paths[i]);
-            return YEW_EXIT_ERR;
-        }
-        effective.workspace_dir = paths[i];
-        paths = NULL;
-        npaths = 0U;
-        break;
+    error[0] = '\0';
+    if (!yew_start_plan_resolve(&plan, paths, npaths,
+                                startup == NULL ? NULL :
+                                    startup->workspace_dir,
+                                error, sizeof(error))) {
+        (void)fprintf(stderr, "yew: error: %s\n",
+                      error[0] == '\0' ? "invalid startup targets" : error);
+        return YEW_EXIT_ERR;
     }
 
     if (!yew_tty_guard_start(&guard))
         return YEW_EXIT_IO;
-    result = ed_driver_inner(paths, npaths, &effective);
+    result = ed_driver_inner(&plan, startup);
     if (!yew_tty_guard_finish(&guard) && result == YEW_EXIT_OK)
         result = YEW_EXIT_IO;
     return result;

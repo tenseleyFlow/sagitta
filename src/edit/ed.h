@@ -69,6 +69,20 @@ typedef struct FussMode FussMode;
 typedef struct PlugSys PlugSys;
 struct OptStored;
 
+typedef enum YewStartKind {
+    YEW_START_RESUME = 0,
+    YEW_START_FILES,
+    YEW_START_DIRECTORY
+} YewStartKind;
+
+typedef struct YewStartPlan {
+    YewStartKind kind;
+    char workspace[PATH_MAX];
+    const char *const *files;
+    size_t nfiles;
+    bool enter_fuss;
+} YewStartPlan;
+
 typedef struct YewEdStartup {
     const char *config_path;
     const char *theme;
@@ -77,6 +91,12 @@ typedef struct YewEdStartup {
     bool no_workspace_config;
     bool trust_workspace;
 } YewEdStartup;
+
+/* Resolve filesystem identity before the terminal guard is entered. */
+bool yew_start_plan_resolve(YewStartPlan *out,
+                            const char *const *paths, size_t npaths,
+                            const char *workspace_dir,
+                            char *error, size_t error_cap);
 
 typedef struct FlPendingChange {
     u32 buffer_id;
