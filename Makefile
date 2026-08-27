@@ -64,6 +64,7 @@ SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
 PERF_SYN_PROBE_STEM ?= markdown
 CALIB_REFERENCE ?=
+EXTRA_CFLAGS ?=
 
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
@@ -105,7 +106,8 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DYEW_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
           -DYEW_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
           -DYEW_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
-          -DYEW_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0)
+          -DYEW_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0) \
+          $(EXTRA_CFLAGS)
 
 # Sprint 30 DoD 1: the Fletch VM's computed-goto dispatcher.  The label
 # table is a GNU extension, so -pedantic rejects it under -std=c11 --
@@ -720,7 +722,8 @@ endif
         syn-fuzz-seeds \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
-        unicode-tables calib perf perf-unicode perf-render perf-piece perf-cursor \
+        unicode-tables calib perf perf-symbols size \
+        perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
         perf-ai-shadow perf-ai-privacy perf-plug perf-pkg perf-cloud \
@@ -1411,6 +1414,19 @@ fuzz-long: $(BUILD)/fuzz_textbuf
 
 perf-unicode: $(BUILD)/perf_unicode
 	$(BUILD)/perf_unicode
+
+# Manual deep-dive build.  The recursive invocation keeps profiling objects
+# disjoint from every ordinary/sanitized tree and preserves the release -O2
+# shape while retaining usable frame-pointer call stacks.
+perf-symbols:
+	$(MAKE) --no-print-directory BUILD=build-prof \
+		EXTRA_CFLAGS=-fno-omit-frame-pointer build-prof/yew
+
+# Sprint 56 deliberately owns latency, not the binary/allocation campaign.
+# A named refusal keeps the future surface from becoming a silent stub.
+size:
+	@echo 'size: not implemented; Sprint 57 owns binary and allocation budgets' >&2
+	@exit 2
 
 calib: $(BUILD)/calib_runner
 	@set -eu; \
