@@ -3,4 +3,5 @@
 # committed p99 fail, and perf_shadow.c independently enforces the Sprint 43
 # absolute ceilings of 250 us per 8-line frame and 5 us per matching edit.
 frame_8line_200x50 110000 200000
+compose_midline_100kloc 773 1409
 on_edit_match 60 150
