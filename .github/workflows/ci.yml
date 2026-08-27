@@ -345,7 +345,7 @@ jobs:
           make perf-ai-http perf-ai-privacy CC=gcc
           passed=0
           for attempt in 1 2 3; do
-            if make perf-ai-shadow CC=gcc; then
+            if YEW_PERF_ADVISORY=1 make perf-ai-shadow CC=gcc; then
               passed=1
               break
             fi

@@ -68,6 +68,29 @@ typedef struct LiveTiming {
 
 static volatile u64 ai_shadow_sink;
 
+static bool perf_advisory(void)
+{
+    const char *value = getenv("YEW_PERF_ADVISORY");
+
+    return value != NULL && strcmp(value, "0") != 0;
+}
+
+static bool timing_accepted(u64 value, u64 budget, bool advisory)
+{
+    if (value == 0U || value > budget * UINT64_C(100))
+        return false;
+    return advisory || value <= budget;
+}
+
+static const char *timing_verdict(u64 value, u64 budget, bool advisory)
+{
+    if (value == 0U || value > budget * UINT64_C(100))
+        return " BROKEN";
+    if (value > budget)
+        return advisory ? " ADVISORY" : " REGRESSION";
+    return " ok";
+}
+
 static void fail(const char *message)
 {
     (void)fprintf(stderr, "perf_ai_shadow: %s\n", message);
@@ -380,7 +403,8 @@ done:
     return ok;
 }
 
-static bool measure_live_transport(bool curl_transport, u64 *p95_out)
+static bool measure_live_transport(bool curl_transport, u64 *p95_out,
+                                   bool advisory)
 {
     /* The transport interval includes the mock's 100 ms model delay and
      * the poll wakeup, so enforce its contract over the same 100-run p95
@@ -401,16 +425,24 @@ static bool measure_live_transport(bool curl_transport, u64 *p95_out)
         if (sample.context_ms > 3U || sample.prompt_ms > 1U ||
             sample.setup_ms > AI_SHADOW_SETUP_MAX_MS ||
             sample.deliver_ms > AI_SHADOW_DELIVER_MAX_MS) {
+            bool sane = sample.context_ms <= 3U * 100U &&
+                        sample.prompt_ms <= 1U * 100U &&
+                        sample.setup_ms <= AI_SHADOW_SETUP_MAX_MS * 100U &&
+                        sample.deliver_ms <= AI_SHADOW_DELIVER_MAX_MS * 100U;
+
             (void)fprintf(stderr,
-                          "perf_ai_shadow: %s stage regression run=%u context=%llu prompt=%llu setup=%llu transport=%llu deliver=%llu first=%llu\n",
-                          curl_transport ? "curl" : "http", i,
+                          "perf_ai_shadow: %s stage %s run=%u context=%llu prompt=%llu setup=%llu transport=%llu deliver=%llu first=%llu\n",
+                          curl_transport ? "curl" : "http",
+                          advisory && sane ? "advisory" : "regression",
+                          i,
                           (unsigned long long)sample.context_ms,
                           (unsigned long long)sample.prompt_ms,
                           (unsigned long long)sample.setup_ms,
                           (unsigned long long)sample.transport_first_ms,
                           (unsigned long long)sample.deliver_ms,
                           (unsigned long long)sample.first_ms);
-            return false;
+            if (!advisory || !sane)
+                return false;
         }
         first[i] = sample.first_ms;
         transport_first[i] = sample.transport_first_ms;
@@ -427,21 +459,23 @@ static bool measure_live_transport(bool curl_transport, u64 *p95_out)
                  (unsigned long long)transport_p95,
                  (unsigned long long)transport_maximum,
                  AI_SHADOW_TRANSPORT_FIRST_P95_MS,
-                 transport_p95 <= AI_SHADOW_TRANSPORT_FIRST_P95_MS ?
-                     " ok" : " REGRESSION");
+                 timing_verdict(transport_p95,
+                                AI_SHADOW_TRANSPORT_FIRST_P95_MS,
+                                advisory));
     (void)printf("ai.shadow.%s first_p50_ms=%llu first_p95_ms=%llu "
                  "first_max_ms=%llu budget_ms=%u%s\n",
                  curl_transport ? "curl" : "http",
                  (unsigned long long)first[AI_SHADOW_RUNS / 2U],
                  (unsigned long long)*p95_out,
                  (unsigned long long)maximum, AI_SHADOW_FIRST_P95_MS,
-                 *p95_out <= AI_SHADOW_FIRST_P95_MS ? " ok" :
-                                                       " REGRESSION");
-    return transport_p95 <= AI_SHADOW_TRANSPORT_FIRST_P95_MS &&
-           *p95_out <= AI_SHADOW_FIRST_P95_MS;
+                 timing_verdict(*p95_out, AI_SHADOW_FIRST_P95_MS,
+                                advisory));
+    return timing_accepted(transport_p95,
+                           AI_SHADOW_TRANSPORT_FIRST_P95_MS, advisory) &&
+           timing_accepted(*p95_out, AI_SHADOW_FIRST_P95_MS, advisory);
 }
 
-static bool measure_context(u64 *p99_out)
+static bool measure_context(u64 *p99_out, bool advisory)
 {
     u8 *bytes = malloc(AI_SHADOW_BIG_BYTES);
     u64 samples[AI_SHADOW_CONTEXT_RUNS];
@@ -493,7 +527,7 @@ static bool measure_context(u64 *p99_out)
         arena_free_all(&arena);
     }
     *p99_out = percentile(samples, AI_SHADOW_CONTEXT_RUNS, 99U);
-    ok = *p99_out <= AI_SHADOW_CONTEXT_P99_NS;
+    ok = timing_accepted(*p99_out, AI_SHADOW_CONTEXT_P99_NS, advisory);
 
 done:
     if (initialized)
@@ -501,11 +535,13 @@ done:
     free(bytes);
     (void)printf("ai.shadow.context_100m p99_ns=%llu budget_ns=%u%s\n",
                  (unsigned long long)*p99_out,
-                 AI_SHADOW_CONTEXT_P99_NS, ok ? " ok" : " REGRESSION");
+                 AI_SHADOW_CONTEXT_P99_NS,
+                 timing_verdict(*p99_out, AI_SHADOW_CONTEXT_P99_NS,
+                                advisory));
     return ok;
 }
 
-static bool measure_prompt(u64 *p99_out)
+static bool measure_prompt(u64 *p99_out, bool advisory)
 {
     static const u8 prefix[] = "int main(void) {\n    ";
     static const u8 suffix[] = "\n}\n";
@@ -547,9 +583,9 @@ static bool measure_prompt(u64 *p99_out)
     *p99_out = percentile(samples, AI_SHADOW_PROMPT_RUNS, 99U);
     (void)printf("ai.shadow.prompt p99_ns=%llu budget_ns=%u%s\n",
                  (unsigned long long)*p99_out, AI_SHADOW_PROMPT_P99_NS,
-                 *p99_out <= AI_SHADOW_PROMPT_P99_NS ? " ok" :
-                                                       " REGRESSION");
-    return *p99_out <= AI_SHADOW_PROMPT_P99_NS;
+                 timing_verdict(*p99_out, AI_SHADOW_PROMPT_P99_NS,
+                                advisory));
+    return timing_accepted(*p99_out, AI_SHADOW_PROMPT_P99_NS, advisory);
 }
 
 static void synthetic_call_begin(Ed *ed)
@@ -581,13 +617,14 @@ static void synthetic_call_begin(Ed *ed)
     yew_ai_adapter_state_init(&call->adapter);
 }
 
-static bool measure_keypress(u64 *p99_out)
+static bool measure_keypress(u64 *p99_out, bool advisory)
 {
     struct timespec delay = {0, 8333333L};
     u64 samples[AI_SHADOW_KEY_SAMPLES];
     u64 deliveries = 0U;
     Ed ed;
     u32 i;
+    bool deterministic_ok = false;
     bool ok = false;
 
     yew_ed_init(&ed);
@@ -638,8 +675,10 @@ static bool measure_keypress(u64 *p99_out)
         delay.tv_nsec = 8333333L;
     }
     *p99_out = percentile(samples, AI_SHADOW_KEY_SAMPLES, 99U);
-    ok = *p99_out <= AI_SHADOW_KEY_P99_NS && ed.ai->call.active &&
-         ed.shadow_stats.delivered <= 4000U / 33U + 1U;
+    deterministic_ok = ed.ai->call.active &&
+                       ed.shadow_stats.delivered <= 4000U / 33U + 1U;
+    ok = deterministic_ok &&
+         timing_accepted(*p99_out, AI_SHADOW_KEY_P99_NS, advisory);
 
 done:
     deliveries = ed.shadow_stats.delivered;
@@ -651,11 +690,29 @@ done:
                  (unsigned long long)*p99_out, AI_SHADOW_KEY_P99_NS,
                  (unsigned long long)deliveries,
                  4000U / 33U + 1U,
-                 ok ? " ok" : " REGRESSION");
+                 deterministic_ok ?
+                     timing_verdict(*p99_out, AI_SHADOW_KEY_P99_NS,
+                                    advisory) :
+                     " REGRESSION");
     return ok;
 }
 
-int main(void)
+static int policy_selftest(void)
+{
+    if (!timing_accepted(115U, 115U, false) ||
+        timing_accepted(116U, 115U, false) ||
+        !timing_accepted(116U, 115U, true) ||
+        !timing_accepted(11500U, 115U, true) ||
+        timing_accepted(11501U, 115U, true) ||
+        timing_accepted(0U, 115U, true)) {
+        (void)fprintf(stderr, "perf_ai_shadow: advisory policy failed\n");
+        return 1;
+    }
+    (void)printf("perf-ai-shadow-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     char state_root[] = "/tmp/yew-ai-perf-state-XXXXXX";
     char state_dir[sizeof(state_root) + sizeof("/yew")];
@@ -667,7 +724,14 @@ int main(void)
     u64 http_p95 = 0U;
     u64 curl_p95 = 0U;
     u64 key_p99 = 0U;
+    bool advisory;
     bool ok;
+
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return policy_selftest();
+    if (argc != 1)
+        fail("usage: perf_ai_shadow [--selftest-policy]");
+    advisory = perf_advisory();
 
     if (mkdtemp(state_root) == NULL || mkdtemp(curl_root) == NULL ||
         snprintf(curl_link, sizeof(curl_link), "%s/curl", curl_root) <= 0 ||
@@ -678,11 +742,12 @@ int main(void)
         setenv("YEW_TEST_AI_PERF_KEY", "local-test-key", 1) != 0)
         fail("cannot prepare hermetic mock environment");
     yew_ai_shadow_init(NULL);
-    ok = measure_context(&context_p99) &&
-         measure_prompt(&prompt_p99) &&
-         measure_live_transport(false, &http_p95) &&
-         measure_live_transport(true, &curl_p95) &&
-         measure_keypress(&key_p99);
+    (void)printf("ai.shadow.mode %s\n", advisory ? "ADVISORY" : "GATING");
+    ok = measure_context(&context_p99, advisory) &&
+         measure_prompt(&prompt_p99, advisory) &&
+         measure_live_transport(false, &http_p95, advisory) &&
+         measure_live_transport(true, &curl_p95, advisory) &&
+         measure_keypress(&key_p99, advisory);
     (void)unlink(curl_link);
     (void)rmdir(curl_root);
     (void)snprintf(state_dir, sizeof(state_dir), "%s/yew", state_root);

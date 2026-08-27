@@ -1553,6 +1553,7 @@ perf-ai-http: $(BUILD)/perf_ai_http
 	$(BUILD)/perf_ai_http
 
 perf-ai-shadow: $(BUILD)/perf_ai_shadow $(MOCKAI) $(MOCKCURL)
+	$(BUILD)/perf_ai_shadow --selftest-policy
 	YEW_AI_MOCK=1 $(BUILD)/perf_ai_shadow
 
 perf-ai-privacy: $(BUILD)/perf_ai_privacy
