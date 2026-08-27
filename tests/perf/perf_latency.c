@@ -519,7 +519,13 @@ static bool hydrate_many_buffers(YewLivePty *pty)
             !yew_live_pty_wait_quiet(pty, INT64_C(1000000), deadline))
             return false;
     }
-    return true;
+    /* Opening a buffer can schedule syntax, Git, and symbol work after the
+     * navigation frame.  Measurement must start from a genuinely quiet
+     * editor; otherwise a deferred startup redraw can be charged to the
+     * first measured key and violate the frames <= keys invariant. */
+    return yew_live_pty_wait_quiet(
+        pty, INT64_C(100000000),
+        yew_live_pty_now_ns() + INT64_C(5000000000));
 }
 
 static int run_session(const char *binary, const char *script,
