@@ -2,6 +2,7 @@
 
 #include "harness.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,19 +11,25 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "mod/git/fussmode.h"
+#include "mod/git/fusstree.h"
+#include "ui/mouse.h"
+#include "ui/region.h"
 #include "util/arena.h"
 
 typedef struct FussDrawerFix {
-    char root[64];
-    char file[96];
+    char root[PATH_MAX];
+    char file[PATH_MAX + sizeof("/plain.txt")];
 } FussDrawerFix;
 
 static void fussdrawer_fix_make(FussDrawerFix *fix)
 {
+    const char *tmp = getenv("TMPDIR");
     FILE *file;
 
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "build/tmp";
     (void)snprintf(fix->root, sizeof(fix->root),
-                   "/tmp/yew-fussdrawer-XXXXXX");
+                   "%s/yew-fussdrawer-XXXXXX", tmp);
     YEW_ASSERT_NOT_NULL(mkdtemp(fix->root));
     (void)snprintf(fix->file, sizeof(fix->file), "%s/plain.txt",
                    fix->root);
@@ -45,6 +52,47 @@ static void fussdrawer_enter_non_git(Ed *ed, const FussDrawerFix *fix)
     ed->ws.dir = arena_strdup(&ed->arena, fix->root);
     YEW_ASSERT_EQ_I64(yew_mode_enter(ed, YEW_MODE_F), YEW_CMD_OK);
     yew_fuss_tick(ed, ed->now_ms + 20);
+}
+
+static void fussdrawer_grid(Ed *ed)
+{
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, 24U, 80U));
+    ed->grid_ready = true;
+    ed->tab_strip_rect = (Rect){0U, 0U, 80U, 1U};
+    ed->footer_rect = (Rect){0U, 22U, 80U, 2U};
+    ed->win->rect = (Rect){0U, 1U, 80U, 21U};
+}
+
+static void fussdrawer_click(Ed *ed, u16 col, u16 row)
+{
+    Key key = {0};
+
+    key.kind = (u16)YEW_EV_MOUSE;
+    key.button = (u8)YEW_MB_LEFT;
+    key.col = col;
+    key.row = row;
+    key.ev = (u8)YEW_KEY_PRESS;
+    yew_mouse_event(ed, &key);
+    key.ev = (u8)YEW_KEY_RELEASE;
+    yew_mouse_event(ed, &key);
+}
+
+static bool fussdrawer_row_contains(const Grid *grid, u16 row,
+                                    const char *needle)
+{
+    char text[81];
+    u16 col;
+
+    if (grid == NULL || row >= grid->rows)
+        return false;
+    for (col = 0U; col < grid->cols && col < sizeof(text) - 1U; col++) {
+        const Cell *cell = &grid->back[(size_t)row * grid->cols + col];
+
+        text[col] = cell->w != 0U && (cell->flags & CELL_INTERNED) == 0U &&
+                    cell->utf8[0] != 0U ? (char)cell->utf8[0] : ' ';
+    }
+    text[col] = '\0';
+    return strstr(text, needle) != NULL;
 }
 
 void test_fussdrawer_width_follows_the_locked_clamp_table(void)
@@ -219,6 +267,107 @@ void test_fussdrawer_selection_damage_stays_local(void)
     YEW_ASSERT(!ed.layout_dirty);
     YEW_ASSERT(ed.footer_dirty);
     YEW_ASSERT(yew_fuss_draw_dirty(&ed));
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_typejump_selection_damage_stays_local(void)
+{
+    FussDrawerFix fix;
+    CmdCtx cx = {0};
+    Key key = {0};
+    Ed ed;
+
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_jump_arm(&cx), YEW_CMD_OK);
+    ed.full_damage = false;
+    ed.layout_dirty = false;
+    ed.footer_dirty = false;
+    key.code = (u32)'p';
+    key.ntext = 1U;
+    key.text[0] = (u8)'p';
+    YEW_ASSERT(yew_fuss_key(&ed, &key, yew_now_ms()));
+    YEW_ASSERT(!ed.full_damage);
+    YEW_ASSERT(!ed.layout_dirty);
+    YEW_ASSERT(ed.footer_dirty);
+    YEW_ASSERT(yew_fuss_draw_dirty(&ed));
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_selected_row_keeps_the_final_component(void)
+{
+    static const char name[] = "aaaa-prefix-that-must-clip-final-component.c";
+    FussDrawerFix fix;
+    char path[sizeof(fix.root) + sizeof(name) + 2U];
+    FILE *file;
+    Ed ed;
+
+    fussdrawer_fix_make(&fix);
+    YEW_ASSERT(snprintf(path, sizeof(path), "%s/%s", fix.root, name) > 0);
+    file = fopen(path, "wb");
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT(fputs("long name\n", file) >= 0);
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+    fussdrawer_enter_non_git(&ed, &fix);
+    fussdrawer_grid(&ed);
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 2U, "final-component.c"));
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_directory_tree_opens_through_the_first_useful_level(void)
+{
+    GitEntry entries[] = {
+        {.path = "one/two/three.c", .path_len = 15U},
+        {.path = "one/peer.c", .path_len = 10U}
+    };
+    GitSnapshot snap = {0};
+    FussOpts opts = {true, false};
+    FussTree tree;
+    size_t i;
+    bool found = false;
+
+    snap.entries.data = entries;
+    snap.entries.len = YEW_ARRAY_LEN(entries);
+    snap.gen = 1U;
+    yew_fuss_tree_init(&tree);
+    yew_fuss_build(&tree, &snap, &opts);
+    for (i = 0U; i < tree.items.len; i++)
+        if (tree.items.data[i].path_len == 15U &&
+            memcmp(tree.items.data[i].path, "one/two/three.c", 15U) == 0)
+            found = true;
+    YEW_ASSERT(found);
+    yew_fuss_tree_drop(&tree);
+}
+
+void test_fussdrawer_mouse_double_click_uses_open_destination(void)
+{
+    FussDrawerFix fix;
+    Ed ed;
+
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    fussdrawer_grid(&ed);
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    ed.now_ms = 1000;
+    fussdrawer_click(&ed, 1U, 2U);
+    ed.now_ms = 1100;
+    fussdrawer_click(&ed, 1U, 2U);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+    YEW_ASSERT(!yew_fuss_active(&ed));
+    YEW_ASSERT_NOT_NULL(ed.win);
+    YEW_ASSERT_NOT_NULL(ed.win->buf);
+    YEW_ASSERT_EQ_STR(ed.win->buf->meta.realpath, fix.file);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
 }

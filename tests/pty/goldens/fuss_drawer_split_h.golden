@@ -1,0 +1,59 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,47 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1                                   │    1 drawer startup target            
+                                        │    1                                  
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+ L  drawer-only.txt                                          utf-8  lf  1:1  all
+--- style
+AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+EEECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=#4b5263 bg=#12141a attrs=----------
+B fg=#c8ccd4 bg=#12141a attrs=b---------
+C fg=#c8ccd4 bg=#12141a attrs=----------
+D fg=#e77d24 bg=default attrs=----------
+E fg=#12141a bg=#61afef attrs=----------

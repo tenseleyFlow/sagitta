@@ -5422,7 +5422,7 @@ static void case_startup_workspace(PtyCtx *c)
                   c->workspace_dir, NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
-    ptc_snapshot(c, "startup_workspace");
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
 
@@ -6786,6 +6786,92 @@ static bool s52_screen_contains(const VtScreen *vt, const char *needle)
     return found;
 }
 
+static void s52_wait_screen(PtyCtx *c, const char *text);
+
+static bool s56_5_drawer_file(PtyCtx *c, char *path, size_t cap)
+{
+    static const u8 bytes[] = "drawer startup target\n";
+    int wrote;
+
+    if (c->workspace_dir == NULL)
+        return false;
+    wrote = snprintf(path, cap, "%s/drawer-only.txt", c->workspace_dir);
+    if (wrote <= 0 || (size_t)wrote >= cap ||
+        !write_bytes(path, bytes, sizeof(bytes) - 1U)) {
+        ptc_check(c, false, "could not create drawer startup fixture");
+        return false;
+    }
+    return true;
+}
+
+static void case_s56_5_drawer(PtyCtx *c)
+{
+    VtCell *before = NULL;
+    char path[PATH_MAX];
+    const char *name = c->test->name;
+    size_t cells;
+
+    if (!s56_5_drawer_file(c, path, sizeof(path)))
+        return;
+    cells = (size_t)c->vt.rows * c->vt.cols;
+    if (strstr(name, "escape_exact") != NULL) {
+        ptc_spawn(c, ptc_yew_bin(c), "--clean", path, NULL);
+        ptc_settle(c, 0);
+        ptc_wait_kitty_push(c, 21U);
+        before = malloc(cells * sizeof(*before));
+        if (before == NULL) {
+            ptc_check(c, false, "allocating drawer restore grid");
+            goto done;
+        }
+        (void)memcpy(before, c->vt.cells, cells * sizeof(*before));
+        ptc_keys(c, "f");
+        s52_wait_screen(c, "drawer-only.txt");
+        ptc_keys(c, "esc");
+        ptc_settle(c, 0);
+        ptc_check(c,
+                  memcmp(before, c->vt.cells,
+                         (size_t)(c->vt.rows - 1U) * c->vt.cols *
+                             sizeof(*before)) == 0,
+                  "Esc did not restore the pre-drawer visuals exactly");
+    } else {
+        if (strstr(name, "startup_dot") != NULL)
+            ptc_spawn(c, ptc_yew_bin(c), "--clean", ".", NULL);
+        else
+            ptc_spawn(c, ptc_yew_bin(c), "--clean", c->workspace_dir,
+                      NULL);
+        ptc_settle(c, 0);
+        ptc_wait_kitty_push(c, 21U);
+        s52_wait_screen(c, "drawer-only.txt");
+        ptc_check(c, s52_screen_contains(&c->vt, "workspace"),
+                  "drawer title omitted the workspace basename");
+        ptc_check(c,
+                  (c->vt.cells[10U * (size_t)c->vt.cols + 40U].attrs &
+                   YEW_ATTR_DIM) != 0U,
+                  "drawer backdrop did not dim the live pane");
+        if (strstr(name, "enter_tab") != NULL)
+            ptc_keys(c, "enter");
+        else if (strstr(name, "split_h") != NULL)
+            ptc_keys(c, "ctrl+w s");
+        else if (strstr(name, "split_v") != NULL)
+            ptc_keys(c, "ctrl+w v");
+        if (strstr(name, "enter_tab") != NULL ||
+            strstr(name, "split_") != NULL) {
+            ptc_settle(c, 0);
+            ptc_check(c, s52_screen_contains(&c->vt,
+                                             "drawer startup target"),
+                      "drawer open did not hydrate the selected file");
+            ptc_check(c, !s52_screen_contains(&c->vt, "tree ·"),
+                      "drawer open did not return to layout mode");
+        }
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, name);
+done:
+    free(before);
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static bool s52_git_exit(PtyCtx *c, const char *dir,
                          const char *const argv[], int expected)
 {
@@ -8100,6 +8186,13 @@ const PtyCase yew_pty_cases[] = {
     C(startup_explicit_workspace, modern, 24U, 80U,
       case_startup_workspace),
 #if YEW_WITH_FUSS
+    C(fuss_drawer_startup_dot, modern, 24U, 80U, case_s56_5_drawer),
+    C(fuss_drawer_startup_directory, modern, 24U, 80U,
+      case_s56_5_drawer),
+    C(fuss_drawer_enter_tab, modern, 24U, 80U, case_s56_5_drawer),
+    C(fuss_drawer_split_h, modern, 24U, 80U, case_s56_5_drawer),
+    C(fuss_drawer_split_v, modern, 24U, 80U, case_s56_5_drawer),
+    C(fuss_drawer_escape_exact, modern, 24U, 80U, case_s56_5_drawer),
     C(git_editor_blame_fits, modern, 24U, 120U, case_s53_blame),
     C(git_editor_blame_omit_cjk, modern, 24U, 40U, case_s53_blame),
     C(git_editor_blame_stale, modern, 24U, 120U, case_s53_blame),

@@ -18,6 +18,7 @@ CmdStatus yew_pane_cmd_focus_next(CmdCtx *cx);
 CmdStatus yew_pane_cmd_focus_prev(CmdCtx *cx);
 CmdStatus yew_pane_cmd_grow(CmdCtx *cx);
 CmdStatus yew_pane_cmd_shrink(CmdCtx *cx);
+void yew_pane_refocus(Ed *ed, Pane *want);
 
 /*
  * Border drag.  Deliberately minimal this sprint: press, motion,

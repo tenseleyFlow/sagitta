@@ -72,6 +72,11 @@ static void pane_refocus(Ed *ed, Pane *want)
         yew_fl_hook_window(ed, FL_EV_WIN_FOCUS, ed->win);
 }
 
+void yew_pane_refocus(Ed *ed, Pane *want)
+{
+    pane_refocus(ed, want);
+}
+
 static CmdStatus pane_split(CmdCtx *cx, SplitDir dir)
 {
     Pane *nu;

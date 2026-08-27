@@ -397,6 +397,31 @@ static void invoke_named(Ed *ed, const char *name)
     (void)yew_ed_invoke(ed, id, &cx);
 }
 
+static void invoke_fuss_open(Ed *ed, i32 payload)
+{
+    CmdCtx cx = {0};
+    CmdId id;
+    const char *path;
+    size_t path_len;
+
+    if (ed == NULL || payload <= 0)
+        return;
+    path = yew_intern_str(&ed->interner, (u32)payload);
+    path_len = yew_intern_len(&ed->interner, (u32)payload);
+    if (path == NULL || path_len == 0U || path_len > UINT32_MAX)
+        return;
+    id = yew_cmd_lookup("ed.git.open", (u32)(sizeof("ed.git.open") - 1U));
+    if (id.v == 0U)
+        return;
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.sarg = path;
+    cx.sarg_len = (u32)path_len;
+    cx.source = YEW_SRC_MOUSE;
+    (void)yew_ed_invoke(ed, id, &cx);
+}
+
 /*
  * Runs whatever row was chosen, against the target the menu captured.
  *
@@ -743,6 +768,9 @@ static void mouse_press(Ed *ed, const Key *k)
         break;
     case YEW_REGION_PICK_ROW:
         press_pick_row(ed, &hit);
+        break;
+    case YEW_REGION_FUSS_ROW:
+        (void)click_advance(ed, k);
         break;
     case YEW_REGION_GP_ROW:
     case YEW_REGION_GP_NAME:
@@ -1208,6 +1236,14 @@ static void mouse_release(Ed *ed, const Key *k)
                 apply_menu_action(ed);
             }
             ed->full_damage = true;
+            break;
+        }
+        case YEW_REGION_FUSS_ROW: {
+            Region up = yew_region_hit(k->col, k->row);
+
+            if (m->click_n == 2U && up.kind == YEW_REGION_FUSS_ROW &&
+                up.payload == m->press_rgn.payload)
+                invoke_fuss_open(ed, m->press_rgn.payload);
             break;
         }
         default:

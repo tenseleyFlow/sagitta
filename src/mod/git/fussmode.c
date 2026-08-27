@@ -19,6 +19,7 @@
 #include "edit/loop.h"
 #include "edit/mode.h"
 #include "edit/option.h"
+#include "edit/pane_cmds.h"
 #include "fl/flruntime.h"
 #include "mod/git/fusscommit.h"
 #include "mod/git/fusstree.h"
@@ -35,6 +36,7 @@
 #include "ui/region.h"
 #include "ui/statusline.h"
 #include "ui/tabs.h"
+#include "unicode/grapheme.h"
 #include "unicode/width.h"
 #include "util/buf.h"
 #include "ws/state.h"
@@ -90,6 +92,7 @@ struct FussMode {
     i64 opening_until_ms;
     bool ascii_glyphs;
     bool viewer;
+    Win *viewer_win;
     bool draw_dirty;
     bool backdrop_dirty;
     u16 scroll;
@@ -158,9 +161,10 @@ static void fuss_viewer_close(Ed *ed)
     if (ed == NULL || ed->fuss == NULL)
         return;
     f = ed->fuss;
-    if (f->viewer && ed->win != NULL)
-        yew_panel_close(ed, &ed->win->panel);
+    if (f->viewer && f->viewer_win != NULL)
+        yew_panel_close(ed, &f->viewer_win->panel);
     f->viewer = false;
+    f->viewer_win = NULL;
     f->viewer_buffer_id = 0U;
     fuss_damage(ed);
 }
@@ -195,6 +199,7 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     if (ed->win->rect.w < 3U && ed->grid.cols < 3U) {
         bytebuf_free(&body);
         f->viewer = true;
+        f->viewer_win = ed->win;
         f->viewer_buffer_id = buffer->id;
         return true;
     }
@@ -204,6 +209,7 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     }
     bytebuf_free(&body);
     f->viewer = true;
+    f->viewer_win = ed->win;
     f->viewer_buffer_id = buffer->id;
     ed->full_damage = true;
     fuss_damage(ed);
@@ -360,9 +366,30 @@ static bool fuss_commit_view_open(Ed *ed, Buffer *buffer)
     return true;
 }
 
+static Pane *fuss_leaf_for_win(const Ed *ed, const Win *want)
+{
+    size_t tab;
+
+    if (ed == NULL || want == NULL)
+        return NULL;
+    for (tab = 0U; tab < ed->tabs.v.len; tab++) {
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
+        u32 n = 0U;
+        u32 i;
+
+        yew_pane_collect_leaves(ed->tabs.v.data[tab].root, leaves,
+                                YEW_ARRAY_LEN(leaves), &n);
+        for (i = 0U; i < n; i++)
+            if (leaves[i]->win == want)
+                return leaves[i];
+    }
+    return NULL;
+}
+
 static void fuss_commit_view_close(Ed *ed)
 {
     FussMode *f;
+    Pane *leaf;
     Win *win;
 
     if (ed == NULL || ed->fuss == NULL)
@@ -371,14 +398,19 @@ static void fuss_commit_view_close(Ed *ed)
     win = f->commit_win;
     if (win == NULL)
         return;
-    if (f->commit_leaf != NULL && f->commit_leaf->win == win)
-        f->commit_leaf->win = f->commit_saved_win;
-    if (ed->win == win)
-        ed->win = f->commit_saved_win;
+    leaf = fuss_leaf_for_win(ed, win);
+    if (leaf != NULL) {
+        leaf->win = f->commit_saved_win;
+        if (ed->win == win)
+            ed->win = f->commit_saved_win;
+    }
     f->commit_leaf = NULL;
     f->commit_win = NULL;
+    if (leaf != NULL)
+        yew_ed_win_release(ed, win);
+    else
+        yew_ed_win_release(ed, f->commit_saved_win);
     f->commit_saved_win = NULL;
-    yew_ed_win_release(ed, win);
     ed->full_damage = true;
 }
 
@@ -817,8 +849,7 @@ bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms)
     free(items);
     if (consumed && row < n) {
         fuss_select_row(f, (i32)row);
-        ed->full_damage = true;
-        ed->footer_dirty = true;
+        fuss_damage(ed);
     }
     return consumed;
 }
@@ -970,6 +1001,21 @@ static const FussNode *fuss_prefix_ancestor(const FussMode *f,
     return node < f->tree.nodes.len ? &f->tree.nodes.data[node] : NULL;
 }
 
+static size_t fuss_tail_fit(const char *bytes, size_t len, u16 cells)
+{
+    size_t at = 0U;
+
+    while (at < len && yew_str_width((const u8 *)bytes + at, len - at,
+                                     YEW_VP_TABWIDTH) > (int)cells) {
+        size_t next = yew_gb_next_bytes((const u8 *)bytes, len, at);
+
+        if (next <= at || next > len)
+            return len;
+        at = next;
+    }
+    return at;
+}
+
 static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
                           const FussItem *item, bool selected)
 {
@@ -991,14 +1037,48 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
     FussMarkerKind markers[4];
     u8 marker_count;
     u8 marker_i;
+    u16 content_right = right;
+    u16 prefix_blocks;
+    u16 prefix_skip = 0U;
+    size_t name_at = 0U;
 
     if (node == NULL)
         return;
+    prefix_blocks = (u16)(item->depth + 1U);
+    marker_count = yew_fuss_marker_kinds(node, markers);
+    if (selected) {
+        u16 marker_cells = (u16)(marker_count * 2U);
+        u16 dir_cells = node->is_file ? 0U : 2U;
+        u16 row_cells = right > left ? (u16)(right - left) : 0U;
+        u16 name_cells;
+        u16 name_budget;
+        int measured = yew_str_width((const u8 *)node->name,
+                                     node->name_len, YEW_VP_TABWIDTH);
+
+        if (marker_cells < row_cells)
+            content_right = (u16)(right - marker_cells);
+        else
+            content_right = left;
+        name_budget = content_right > left + dir_cells ?
+                      (u16)(content_right - left - dir_cells) : 0U;
+        name_cells = measured <= 0 ? 0U :
+                     measured > UINT16_MAX ? UINT16_MAX : (u16)measured;
+        if (name_cells > name_budget) {
+            name_at = fuss_tail_fit(node->name, node->name_len, name_budget);
+            prefix_skip = prefix_blocks;
+        } else {
+            u16 prefix_budget = (u16)(name_budget - name_cells);
+            u16 keep = (u16)(prefix_budget / 4U);
+
+            if (keep < prefix_blocks)
+                prefix_skip = (u16)(prefix_blocks - keep);
+        }
+    }
     blank.fg = normal.fg;
     blank.bg = normal.bg;
     blank.attrs = (u16)(normal.attrs | selected_attrs);
     yew_grid_fill(&ed->grid, row, left, right, blank);
-    for (depth = 0U; depth < item->depth && col < right; depth++) {
+    for (depth = 0U; depth < item->depth && col < content_right; depth++) {
         const FussNode *ancestor = fuss_prefix_ancestor(f, item, depth);
         bool open = ancestor != NULL && ancestor->next_sibling != 0U;
         const char *prefix = open ? (f->ascii_glyphs ? "|   " : "│   ") :
@@ -1006,9 +1086,10 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
         size_t prefix_len = open && !f->ascii_glyphs ?
                             sizeof("│   ") - 1U : 4U;
 
-        fuss_put_lit(&ed->grid, row, &col, right, prefix, prefix_len,
-                     normal.fg, normal.bg,
-                     (u16)(normal.attrs | selected_attrs));
+        if (depth >= prefix_skip)
+            fuss_put_lit(&ed->grid, row, &col, content_right, prefix,
+                         prefix_len, normal.fg, normal.bg,
+                         (u16)(normal.attrs | selected_attrs));
     }
     if (f->ascii_glyphs) {
         branch = node->next_sibling == 0U ? "`-- " : "|-- ";
@@ -1017,21 +1098,24 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
         branch = node->next_sibling == 0U ? "└── " : "├── ";
         branch_len = sizeof("└── ") - 1U;
     }
-    fuss_put_lit(&ed->grid, row, &col, right, branch, branch_len, normal.fg,
-                 normal.bg, (u16)(normal.attrs | selected_attrs));
+    if (prefix_skip <= item->depth)
+        fuss_put_lit(&ed->grid, row, &col, content_right, branch, branch_len,
+                     normal.fg, normal.bg,
+                     (u16)(normal.attrs | selected_attrs));
     if (!node->is_file) {
         const char *dir = f->ascii_glyphs ? (node->expanded ? "v " : "> ") :
                           (node->expanded ? "▼ " : "▶ ");
         size_t dir_len = f->ascii_glyphs ? 2U : sizeof("▼ ") - 1U;
 
-        fuss_put_lit(&ed->grid, row, &col, right, dir, dir_len, normal.fg,
-                     normal.bg, (u16)(normal.attrs | selected_attrs));
+        fuss_put_lit(&ed->grid, row, &col, content_right, dir, dir_len,
+                     normal.fg, normal.bg,
+                     (u16)(normal.attrs | selected_attrs));
     }
-    fuss_put_lit(&ed->grid, row, &col, right, node->name, node->name_len,
+    fuss_put_lit(&ed->grid, row, &col, content_right, node->name + name_at,
+                 node->name_len - name_at,
                  node->ignored ? ignored.fg : normal.fg, normal.bg,
                  (u16)((node->ignored ? ignored.attrs : normal.attrs) |
                        selected_attrs));
-    marker_count = yew_fuss_marker_kinds(node, markers);
     for (marker_i = 0U; marker_i < marker_count; marker_i++) {
         const char *glyph;
         size_t glyph_len;
@@ -3693,7 +3777,6 @@ static CmdStatus fuss_open_split(CmdCtx *cx, SplitDir dir)
     bool was_resident;
     Pane *leaf;
     Pane *split;
-    Tab *tab;
 
     if (fuss_require(cx, &f) != YEW_CMD_OK || cx->ed->focus == NULL)
         return YEW_CMD_ERR_STATE;
@@ -3725,14 +3808,7 @@ static CmdStatus fuss_open_split(CmdCtx *cx, SplitDir dir)
         return YEW_CMD_ERR_STATE;
     }
     yew_ed_win_set_buffer(cx->ed, split->win, buffer);
-    cx->ed->focus = split;
-    cx->ed->win = split->win;
-    tab = yew_tab_at(cx->ed, cx->ed->tabs.active);
-    if (tab != NULL)
-        tab->focus = split;
-    yew_state_mark_dirty(cx->ed);
-    cx->ed->layout_dirty = true;
-    cx->ed->full_damage = true;
+    yew_pane_refocus(cx->ed, split);
     if (yew_mode_enter(cx->ed, YEW_MODE_L) != YEW_CMD_OK)
         return YEW_CMD_ERR_STATE;
     return YEW_CMD_OK;

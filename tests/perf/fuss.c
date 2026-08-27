@@ -5,9 +5,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
+#include "edit/ed.h"
+#include "edit/mode.h"
+#include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
+#include "mod/git/git_int.h"
 #include "util/base.h"
 
 enum {
@@ -15,6 +21,7 @@ enum {
     FUSS_PERF_PATH_CAP = 48,
     FUSS_PERF_BUILD_SAMPLES = 9,
     FUSS_PERF_KEY_SAMPLES = 2001,
+    FUSS_PERF_DRAWER_KEYS = 1000,
     FUSS_PERF_UNCHANGED_CALLS = 5000,
     FUSS_PERF_REFRESHES = 100,
     FUSS_PERF_COLLAPSED = 7,
@@ -29,6 +36,13 @@ typedef struct PerfFixture {
 } PerfFixture;
 
 static volatile u64 fuss_perf_sink;
+
+static bool perf_advisory(void)
+{
+    const char *value = getenv("YEW_PERF_ADVISORY");
+
+    return value != NULL && strcmp(value, "0") != 0;
+}
 
 static u64 now_ns(void)
 {
@@ -311,6 +325,148 @@ static bool measure_unchanged(const PerfFixture *fixture, u64 *elapsed)
     return true;
 }
 
+static u32 drawer_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
+                        const GitReq *req, void *opaque, char *err,
+                        size_t errsz)
+{
+    u32 *next = opaque;
+
+    (void)ed;
+    (void)verb;
+    (void)argv;
+    (void)req;
+    (void)err;
+    (void)errsz;
+    return ++*next;
+}
+
+static bool drawer_root_make(char *root, size_t root_cap)
+{
+    const char *tmp = getenv("TMPDIR");
+    int wrote;
+
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "build/tmp";
+    wrote = snprintf(root, root_cap, "%s/yew-perf-fuss-XXXXXX", tmp);
+    return wrote > 0 && (size_t)wrote < root_cap && mkdtemp(root) != NULL;
+}
+
+static bool drawer_snapshot_fill(Ed *ed)
+{
+    GitSnapshot *snap = yew_git_test_snapshot_mut(ed);
+    GitEntry *entries;
+    u32 i;
+
+    if (snap == NULL)
+        return false;
+    entries = arena_alloc(&snap->a,
+                          (size_t)FUSS_PERF_ENTRIES * sizeof(*entries),
+                          _Alignof(GitEntry));
+    if (entries == NULL)
+        return false;
+    (void)memset(entries, 0,
+                 (size_t)FUSS_PERF_ENTRIES * sizeof(*entries));
+    for (i = 0U; i < FUSS_PERF_ENTRIES; i++) {
+        char path[32];
+        int wrote = snprintf(path, sizeof(path), "file-%05u.c", i);
+
+        if (wrote <= 0 || (size_t)wrote >= sizeof(path))
+            return false;
+        entries[i].kind = GIT_E_ORDINARY;
+        entries[i].path = arena_strndup(&snap->a, path, (size_t)wrote);
+        if (entries[i].path == NULL)
+            return false;
+        entries[i].path_len = (u32)wrote;
+        entries[i].unstaged = true;
+    }
+    snap->state = YEW_GIT_OK;
+    snap->entries.data = entries;
+    snap->entries.len = FUSS_PERF_ENTRIES;
+    snap->gen++;
+    return true;
+}
+
+static bool measure_drawer(u64 *entry_ns, u64 *input_p99,
+                           u64 *open_ns)
+{
+    char root[PATH_MAX];
+    char selected[PATH_MAX];
+    u64 samples[FUSS_PERF_DRAWER_KEYS];
+    CmdCtx cx = {0};
+    Ed ed;
+    FILE *file = NULL;
+    u32 next_job = 0U;
+    u64 start;
+    size_t i;
+    bool initialized = false;
+    bool ok = false;
+
+    if (!drawer_root_make(root, sizeof(root)) ||
+        snprintf(selected, sizeof(selected), "%s/file-19999.c", root) <= 0)
+        return false;
+    file = fopen(selected, "wb");
+    if (file == NULL || fputs("drawer open target\n", file) < 0 ||
+        fclose(file) != 0)
+        goto done;
+    file = NULL;
+    yew_ed_init(&ed);
+    initialized = true;
+    if (!yew_ed_open_scratch(&ed))
+        goto done;
+    ed.ws.dir = arena_strdup(&ed.arena, root);
+    if (ed.ws.dir == NULL || !drawer_snapshot_fill(&ed) ||
+        !yew_grid_init(&ed.grid, &ed.interner, 24U, 80U))
+        goto done;
+    ed.grid_ready = true;
+    ed.tab_strip_rect = (Rect){0U, 0U, 80U, 1U};
+    ed.footer_rect = (Rect){0U, 22U, 80U, 2U};
+    ed.win->rect = (Rect){0U, 1U, 80U, 21U};
+    yew_git_test_spawn_set(drawer_spawn, &next_job);
+    start = now_ns();
+    if (yew_mode_enter(&ed, YEW_MODE_F) != YEW_CMD_OK)
+        goto done_spawn;
+    *entry_ns = now_ns() - start;
+    yew_fuss_draw(&ed);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    for (i = 0U; i < YEW_ARRAY_LEN(samples); i++) {
+        ed.full_damage = false;
+        ed.layout_dirty = false;
+        ed.footer_dirty = false;
+        start = now_ns();
+        if (yew_fuss_cmd_nav_row_next(&cx) != YEW_CMD_OK)
+            goto done_spawn;
+        samples[i] = now_ns() - start;
+        if (ed.full_damage || ed.layout_dirty || !ed.footer_dirty ||
+            !yew_fuss_draw_dirty(&ed))
+            goto done_spawn;
+        yew_fuss_draw(&ed);
+    }
+    sort_u64(samples, YEW_ARRAY_LEN(samples));
+    *input_p99 = samples[(YEW_ARRAY_LEN(samples) * 99U + 99U) / 100U - 1U];
+    cx.sarg = "file-19999.c";
+    cx.sarg_len = 12U;
+    start = now_ns();
+    if (yew_fuss_cmd_open(&cx) != YEW_CMD_OK)
+        goto done_spawn;
+    *open_ns = now_ns() - start;
+    ok = ed.mode == YEW_MODE_L && ed.win != NULL && ed.win->buf != NULL &&
+         ed.win->buf->meta.realpath != NULL &&
+         strcmp(ed.win->buf->meta.realpath, selected) == 0;
+done_spawn:
+    yew_git_test_spawn_set(NULL, NULL);
+done:
+    if (file != NULL)
+        (void)fclose(file);
+    if (initialized)
+        yew_ed_free(&ed);
+    (void)unlink(selected);
+    (void)rmdir(root);
+    return ok;
+}
+
 int main(void)
 {
     PerfFixture fixture;
@@ -318,6 +474,10 @@ int main(void)
     u64 nav_p99 = 0U;
     u64 toggle_p99 = 0U;
     u64 unchanged = 0U;
+    u64 drawer_entry = 0U;
+    u64 drawer_input_p99 = 0U;
+    u64 drawer_open = 0U;
+    bool advisory = perf_advisory();
     int status = 0;
 
     if (!fixture_make(&fixture)) {
@@ -342,6 +502,10 @@ int main(void)
         (void)fputs("perf_fuss: unchanged generation rebuilt tree\n", stderr);
         status = 1;
     }
+    if (!measure_drawer(&drawer_entry, &drawer_input_p99, &drawer_open)) {
+        (void)fputs("perf_fuss: end-to-end drawer fixture failed\n", stderr);
+        status = 1;
+    }
     (void)printf("fuss build+flatten 20000  %.3f ms (limit 12.000 ms)\n",
                  (double)build_median / 1000000.0);
     (void)printf("fuss navigation p99       %.3f ms (limit 5.000 ms)\n",
@@ -351,9 +515,21 @@ int main(void)
     (void)printf("fuss unchanged-gen x5000  %.3f ms (zero rebuilds)\n",
                  (double)unchanged / 1000000.0);
     (void)printf("fuss collapse refresh x100 stable (7 paths)\n");
+    (void)printf("fuss drawer entry 20000   %.3f ms (measured end-to-end)%s\n",
+                 (double)drawer_entry / 1000000.0,
+                 advisory ? " ADVISORY" : "");
+    (void)printf("fuss input-to-damage p99  %.3f ms (1000 selections)%s\n",
+                 (double)drawer_input_p99 / 1000000.0,
+                 advisory ? " ADVISORY" : "");
+    (void)printf("fuss open resolve 20000   %.3f ms (limit 5.000 ms)%s\n",
+                 (double)drawer_open / 1000000.0,
+                 advisory ? " ADVISORY" : "");
     if (build_median > FUSS_PERF_BUILD_BUDGET_NS ||
         nav_p99 > FUSS_PERF_KEY_BUDGET_NS ||
-        toggle_p99 > FUSS_PERF_KEY_BUDGET_NS)
+        toggle_p99 > FUSS_PERF_KEY_BUDGET_NS ||
+        (!advisory &&
+         (drawer_input_p99 > FUSS_PERF_KEY_BUDGET_NS ||
+          drawer_open > FUSS_PERF_KEY_BUDGET_NS)))
         status = 1;
     fixture_drop(&fixture);
     return status;

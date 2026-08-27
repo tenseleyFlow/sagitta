@@ -996,8 +996,8 @@ $(BUILD)/perf_git_status: $(PERF_CORE_OBJ) $(PERF_GIT_STATUS_OBJ) \
 		-o $@ $(PERF_CORE_OBJ) \
 		$(PERF_GIT_STATUS_OBJ) $(LDLIBS)
 
-$(BUILD)/perf_fuss: $(FUSS_TREE_TEST_OBJ) $(PERF_FUSS_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUSS_TREE_TEST_OBJ) \
+$(BUILD)/perf_fuss: $(PERF_CORE_OBJ) $(PERF_FUSS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_FUSS_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_git_gutter: $(PERF_CORE_OBJ) $(PERF_GIT_GUTTER_OBJ)
@@ -1551,7 +1551,7 @@ perf-git-status: $(BUILD)/perf_git_status
 	$(BUILD)/perf_git_status
 
 perf-fuss: $(BUILD)/perf_fuss
-	$(BUILD)/perf_fuss
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_fuss
 
 perf-git-gutter: $(BUILD)/perf_git_gutter
 	$(BUILD)/perf_git_gutter --gate
