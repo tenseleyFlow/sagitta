@@ -46,20 +46,22 @@ void test_alloc_debug_counts_and_report_order(void)
     b1 = yew_xmalloc_at(5U, "b.c", 10);
     b2 = yew_xmalloc_at(7U, "b.c", 10);
     a = yew_xcalloc_at(2U, 3U, "a.c", 20);
+    a = yew_xrealloc_at(a, 9U, "realloc.c", 99);
     c = yew_xmalloc_at(4U, "c.c", 3);
-    YEW_ASSERT_EQ_U64(yew_alloc_calls(), 4U);
+    YEW_ASSERT_EQ_U64(yew_alloc_calls(), 5U);
 
     bytebuf_init(&out);
     yew_alloc_report(&out);
     bytebuf_push_u8(&out, 0U);
     b_row = strstr((const char *)out.data, "2 12 12 12 b.c:10\n");
-    a_row = strstr((const char *)out.data, "1 6 6 6 a.c:20\n");
+    a_row = strstr((const char *)out.data, "2 15 9 9 a.c:20\n");
     c_row = strstr((const char *)out.data, "1 4 4 4 c.c:3\n");
     YEW_ASSERT_NOT_NULL(b_row);
     YEW_ASSERT_NOT_NULL(a_row);
     YEW_ASSERT_NOT_NULL(c_row);
-    YEW_ASSERT(b_row < a_row);
-    YEW_ASSERT(a_row < c_row);
+    YEW_ASSERT(a_row < b_row);
+    YEW_ASSERT(b_row < c_row);
+    YEW_ASSERT_NULL(strstr((const char *)out.data, "realloc.c:99"));
 
     yew_xfree(out.data);
     yew_xfree(b1);

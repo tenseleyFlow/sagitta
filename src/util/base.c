@@ -228,7 +228,13 @@ void *yew_xrealloc_at(void *ptr, size_t size, const char *file, int line)
     if (header == NULL)
         YEW_BUG("out of memory reallocating to %zu bytes", size);
     alloc_unaccount(&old);
-    site = alloc_site_find(file, line);
+    /* Reallocation grows or shrinks the original allocation site.  Moving
+     * it to the call site of a shared growth helper would hide the owner the
+     * report exists to name.  An allocation from an older reset generation
+     * is outside the current epoch, so only that case starts a new site. */
+    site = old.generation == alloc_generation
+               ? old.site
+               : alloc_site_find(file, line);
     alloc_meta_write(header, site, size);
     alloc_account(site, size);
     return header + 1;
