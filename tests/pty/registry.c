@@ -7206,6 +7206,50 @@ static void s52_wait_screen_gone(PtyCtx *c, const char *text)
               "Sprint 52 transient screen state did not clear");
 }
 
+static void s52_collapse_job_frames(PtyCtx *c, size_t at)
+{
+    static const u8 begin[] = "\x1b[?2026h";
+    static const u8 end[] = "\x1b[?2026l";
+    size_t first_end = 0U;
+    size_t last_begin = 0U;
+    size_t i = at;
+    u32 frames = 0U;
+
+    if (c == NULL || at > c->raw.len)
+        return;
+    while (i + sizeof(begin) - 1U <= c->raw.len) {
+        size_t finish;
+
+        if (memcmp(c->raw.data + i, begin, sizeof(begin) - 1U) != 0) {
+            i++;
+            continue;
+        }
+        finish = i + sizeof(begin) - 1U;
+        while (finish + sizeof(end) - 1U <= c->raw.len &&
+               memcmp(c->raw.data + finish, end,
+                      sizeof(end) - 1U) != 0)
+            finish++;
+        if (finish + sizeof(end) - 1U > c->raw.len)
+            break;
+        finish += sizeof(end) - 1U;
+        frames++;
+        if (frames == 1U)
+            first_end = finish;
+        last_begin = i;
+        i = finish;
+    }
+    if (frames > 2U && first_end < last_begin) {
+        /* The first loading frame and final joined state are observable
+         * contracts.  Frames between them merely expose whether the walk
+         * or git child won a scheduler race; the grid has already consumed
+         * them, and the SGR golden must not encode that race. */
+        (void)memmove(c->raw.data + first_end,
+                      c->raw.data + last_begin,
+                      c->raw.len - last_begin);
+        c->raw.len -= last_begin - first_end;
+    }
+}
+
 static bool s52_spawn_editor(PtyCtx *c, const char *file)
 {
     char config[PATH_MAX];
@@ -7236,6 +7280,7 @@ static bool s52_spawn_editor(PtyCtx *c, const char *file)
 static bool s52_open(PtyCtx *c, VtCell *original_cells)
 {
     char repo[PATH_MAX];
+    size_t frame_at;
 
     if (!s52_fixture(c, repo, sizeof(repo)) ||
         !s52_spawn_editor(c, "src/main.c"))
@@ -7246,8 +7291,28 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
         (void)memcpy(original_cells, c->vt.cells,
                      (size_t)c->vt.rows * c->vt.cols *
                          sizeof(*original_cells));
+    frame_at = c->raw.len;
     ptc_keys(c, "f");
     s52_wait_screen(c, "both.c");
+    s52_wait_screen(c, "fussrepo · trunk");
+    {
+        u16 bumped_rows = c->test->rows < UINT16_MAX ?
+                              (u16)(c->test->rows + 1U) :
+                              (u16)(c->test->rows - 1U);
+        u32 repaint = c->vt.nsync_pairs + 1U;
+
+        /* A resize round-trip turns the joined state into one full frame.
+         * Without it, two independent child completions can leave Darwin
+         * with a tree frame followed by a header-only frame, while Linux
+         * commonly coalesces both into the one frame the golden records. */
+        ptc_resize(c, bumped_rows, c->test->cols);
+        ptc_wait_sync_pairs(c, repaint);
+        repaint = c->vt.nsync_pairs + 1U;
+        ptc_resize(c, c->test->rows, c->test->cols);
+        ptc_wait_sync_pairs(c, repaint);
+    }
+    ptc_settle(c, 0);
+    s52_collapse_job_frames(c, frame_at);
     /* Git discovery may publish the same completed tree in one or more
      * synchronized frames.  Every case below checks the rendered tree or a
      * semantic barrier; the cumulative frame count is scheduler state. */
