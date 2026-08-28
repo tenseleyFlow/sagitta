@@ -21,14 +21,21 @@ enum {
     SESSION_KEYS = 10000,
     SCREEN_ROWS = 50,
     SCREEN_COLS = 200,
-    /* Transport must outlive the metric's 500 ms broken-run ceiling so a
-     * slow editor frame is recorded and fails as latency, not mislabeled as
-     * a PTY protocol error before the harness can report it. */
-    KEY_TIMEOUT_MS = 600,
+    /* This is a hang ceiling, not a latency allowance.  Shared runners can
+     * deschedule both processes for longer than the old 600 ms deadline;
+     * wait long enough to observe the frame, then let BROKEN_RUN_NS reject
+     * it as latency instead of mislabeling scheduler contention as a PTY
+     * transport failure. */
+    KEY_TIMEOUT_MS = 5000,
     FLOOR_SAMPLES = 1001,
     MANY_BUFFER_COUNT = 50,
     MANY_BUFFER_HYDRATED = 20
 };
+
+#define BROKEN_RUN_NS INT64_C(500000000)
+
+_Static_assert((i64)KEY_TIMEOUT_MS * INT64_C(1000000) > BROKEN_RUN_NS,
+               "PTY hang ceiling must outlive the broken-run latency gate");
 
 typedef struct KeyStroke {
     u8 bytes[32];
@@ -1163,7 +1170,7 @@ static int run_session(const char *binary, const char *script,
                      no_paint, (unsigned long long)no_paint_pm);
         (void)printf("%.*s.frames %llu keys=%zu\n", base_len, spec->metric,
                      (unsigned long long)frames, session.len);
-        if ((over && gate) || p99 <= 0 || p99 > INT64_C(500000000) ||
+        if ((over && gate) || p99 <= 0 || p99 > BROKEN_RUN_NS ||
             frames > session.len)
             status = 1;
     }
