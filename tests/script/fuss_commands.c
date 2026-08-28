@@ -43,6 +43,27 @@ static u32 next_job_id = 8000U;
 static bool setup_repo(const char *repo);
 static bool enter_fuss(const char *repo, Ed *ed);
 
+static bool isolate_git_environment(void)
+{
+    static const char *const inherited[] = {
+        "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_NAMESPACE", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT", "GIT_DEFAULT_HASH", "GIT_DEFAULT_REF_FORMAT",
+        "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE",
+        "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "GIT_COMMITTER_DATE",
+        "GIT_TEMPLATE_DIR"
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(inherited); i++)
+        if (unsetenv(inherited[i]) != 0)
+            return false;
+    return setenv("GIT_CONFIG_NOSYSTEM", "1", 1) == 0 &&
+           setenv("GIT_CONFIG_SYSTEM", "/dev/null", 1) == 0 &&
+           setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1) == 0;
+}
+
 #define CHECK(expr) do {                                                   \
     assertions++;                                                          \
     if (!(expr)) {                                                         \
@@ -1330,6 +1351,12 @@ int main(int argc, char **argv)
     if (stat(argv[1], &st) != 0 || !S_ISDIR(st.st_mode)) {
         (void)fprintf(stderr, "fuss_commands: not a directory: %s\n",
                       argv[1]);
+        return 2;
+    }
+    if (!isolate_git_environment()) {
+        (void)fprintf(stderr,
+                      "fuss_commands: cannot isolate Git environment: %s\n",
+                      strerror(errno));
         return 2;
     }
     CHECK(setup_repo(argv[1]));

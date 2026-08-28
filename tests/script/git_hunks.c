@@ -34,6 +34,27 @@ static unsigned patches_checked;
 static const GitEntry *find_git_entry(const GitSnapshot *snapshot,
                                       const char *path);
 
+static bool isolate_git_environment(void)
+{
+    static const char *const inherited[] = {
+        "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_NAMESPACE", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT", "GIT_DEFAULT_HASH", "GIT_DEFAULT_REF_FORMAT",
+        "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE",
+        "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "GIT_COMMITTER_DATE",
+        "GIT_TEMPLATE_DIR"
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(inherited); i++)
+        if (unsetenv(inherited[i]) != 0)
+            return false;
+    return setenv("GIT_CONFIG_NOSYSTEM", "1", 1) == 0 &&
+           setenv("GIT_CONFIG_SYSTEM", "/dev/null", 1) == 0 &&
+           setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1) == 0;
+}
+
 #define CHECK(expr) do {                                                   \
     assertions++;                                                          \
     if (!(expr)) {                                                         \
@@ -712,6 +733,7 @@ static void check_conflicted_head_base(const char *parent)
 
 int main(int argc, char **argv)
 {
+    char *root;
     char repo[4096];
     int wrote;
 
@@ -719,9 +741,18 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "usage: %s TMPDIR\n", argv[0]);
         return 2;
     }
-    wrote = snprintf(repo, sizeof(repo), "%s/repo", argv[1]);
+    root = realpath(argv[1], NULL);
+    if (root == NULL || !isolate_git_environment()) {
+        (void)fprintf(stderr,
+                      "git_hunks: cannot isolate fixture root: %s\n",
+                      strerror(errno));
+        free(root);
+        return 2;
+    }
+    wrote = snprintf(repo, sizeof(repo), "%s/repo", root);
     if (wrote <= 0 || (size_t)wrote >= sizeof(repo) || !repo_init(repo)) {
         (void)fprintf(stderr, "git_hunks: could not initialize fixture\n");
+        free(root);
         return 2;
     }
     check_newline_matrix(repo);
@@ -731,9 +762,10 @@ int main(int argc, char **argv)
     check_three_way_index_base(repo);
     check_path_rules(repo);
     check_stage_command_selection(repo);
-    check_conflicted_head_base(argv[1]);
+    check_conflicted_head_base(root);
     CHECK(patches_checked == 20U);
     (void)printf("HARNESS_RESULT git_hunks assertions=%u patches=%u "
                  "failures=%u\n", assertions, patches_checked, failures);
+    free(root);
     return failures == 0U ? 0 : 1;
 }
