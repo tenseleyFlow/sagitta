@@ -2,6 +2,7 @@
 
 #include "harness.h"
 
+#include <errno.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,29 @@ static CapturedLog *captured_logs;
 static size_t captured_logs_len;
 static size_t captured_logs_cap;
 static const char *program_path;
+
+bool yew_test_canonicalize_path(char *path, size_t cap)
+{
+    char *canonical;
+    size_t len;
+
+    if (path == NULL || cap == 0U) {
+        errno = EINVAL;
+        return false;
+    }
+    canonical = realpath(path, NULL);
+    if (canonical == NULL)
+        return false;
+    len = strlen(canonical);
+    if (len + 1U > cap) {
+        free(canonical);
+        errno = ENAMETOOLONG;
+        return false;
+    }
+    (void)memcpy(path, canonical, len + 1U);
+    free(canonical);
+    return true;
+}
 
 static char *env_copy(const char *name)
 {

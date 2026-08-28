@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -137,7 +138,7 @@ void test_lsp_lifecycle_restart_window_resets(void)
 
 void test_lsp_root_resolution_uses_nearest_marker(void)
 {
-    char tmp[] = "/tmp/yew-lsp-root-XXXXXX";
+    char tmp[PATH_MAX] = "/tmp/yew-lsp-root-XXXXXX";
     char project[256];
     char source[256];
     char file[256];
@@ -146,6 +147,7 @@ void test_lsp_root_resolution_uses_nearest_marker(void)
     int fd;
 
     YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    YEW_ASSERT(yew_test_canonicalize_path(tmp, sizeof(tmp)));
     (void)snprintf(project, sizeof(project), "%s/project", tmp);
     (void)snprintf(source, sizeof(source), "%s/project/src", tmp);
     (void)snprintf(file, sizeof(file), "%s/project/src/main.c", tmp);

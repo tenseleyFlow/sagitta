@@ -47,8 +47,11 @@ static void wsf_make(WsFix *f)
     (void)snprintf(f->state_home, sizeof(f->state_home),
                    "/tmp/yew-wsstate-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
+    YEW_ASSERT(yew_test_canonicalize_path(f->state_home,
+                                           sizeof(f->state_home)));
     (void)snprintf(f->work, sizeof(f->work), "/tmp/yew-wswork-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(f->work));
+    YEW_ASSERT(yew_test_canonicalize_path(f->work, sizeof(f->work)));
     YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
 }
 

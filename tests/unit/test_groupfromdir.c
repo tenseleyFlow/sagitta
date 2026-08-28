@@ -41,6 +41,8 @@ static void gd_make(GroupDirTree *tree)
     (void)snprintf(tree->root, sizeof(tree->root),
                    "/tmp/yew-group-dir-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(tree->root));
+    YEW_ASSERT(yew_test_canonicalize_path(tree->root,
+                                           sizeof(tree->root)));
     (void)snprintf(tree->sub, sizeof(tree->sub), "%s/sub", tree->root);
     (void)snprintf(tree->git, sizeof(tree->git), "%s/.git", tree->root);
     YEW_ASSERT_EQ_I64(mkdir(tree->sub, 0700), 0);

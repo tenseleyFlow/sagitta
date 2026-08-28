@@ -73,6 +73,7 @@ const char *flfix_tmpdir(FlFix *f)
         return f->tmp;
     (void)snprintf(f->tmp, sizeof(f->tmp), "/tmp/yew-flfix-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(f->tmp));
+    YEW_ASSERT(yew_test_canonicalize_path(f->tmp, sizeof(f->tmp)));
     f->has_tmp = true;
     /*
      * The origin's path is what a relative import and io.glob resolve

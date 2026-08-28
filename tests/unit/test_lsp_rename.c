@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +65,7 @@ static void rename_fix_init(RenameFix *f)
     (void)snprintf(f->root, sizeof(f->root),
                    "/tmp/yew-lsp-rename-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
+    YEW_ASSERT(yew_test_canonicalize_path(f->root, sizeof(f->root)));
     YEW_ASSERT(snprintf(f->state, sizeof(f->state), "%s/state",
                         f->root) > 0);
     if (getenv("XDG_STATE_HOME") != NULL)
@@ -326,7 +328,7 @@ void test_lsp_rename_preflight_refuses_delete_file_without_mutation(void)
 void test_lsp_rename_preflight_refuses_outside_workspace_without_mutation(void)
 {
     RenameFix f;
-    char outside[] = "/tmp/yew-lsp-rename-outside-XXXXXX";
+    char outside[PATH_MAX] = "/tmp/yew-lsp-rename-outside-XXXXXX";
     char uri[160];
     char want[256];
     char *json;
@@ -336,6 +338,7 @@ void test_lsp_rename_preflight_refuses_outside_workspace_without_mutation(void)
     fd = mkstemp(outside);
     YEW_ASSERT(fd >= 0);
     YEW_ASSERT_EQ_I64(close(fd), 0);
+    YEW_ASSERT(yew_test_canonicalize_path(outside, sizeof(outside)));
     YEW_ASSERT(snprintf(uri, sizeof(uri), "file://%s", outside) > 0);
     YEW_ASSERT(snprintf(want, sizeof(want),
                        "rename would edit outside the workspace: %s",

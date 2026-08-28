@@ -349,8 +349,8 @@ void test_tabs_find_by_path_canonicalizes(void)
 void test_tabs_display_path_preserves_workspace_spelling(void)
 {
     Ed ed;
-    char root[] = "/tmp/yew-tab-root-XXXXXX";
-    char target[] = "/tmp/yew-tab-target-XXXXXX";
+    char root[PATH_MAX] = "/tmp/yew-tab-root-XXXXXX";
+    char target[PATH_MAX] = "/tmp/yew-tab-target-XXXXXX";
     char link_path[PATH_MAX];
     char file_path[PATH_MAX];
     char cwd[PATH_MAX];
@@ -359,6 +359,8 @@ void test_tabs_display_path_preserves_workspace_spelling(void)
 
     YEW_ASSERT_NOT_NULL(mkdtemp(root));
     YEW_ASSERT_NOT_NULL(mkdtemp(target));
+    YEW_ASSERT(yew_test_canonicalize_path(root, sizeof(root)));
+    YEW_ASSERT(yew_test_canonicalize_path(target, sizeof(target)));
     YEW_ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
     (void)snprintf(link_path, sizeof(link_path), "%s/linked", root);
     (void)snprintf(file_path, sizeof(file_path), "%s/note.txt", target);

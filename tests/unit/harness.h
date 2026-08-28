@@ -39,6 +39,7 @@ void yew_test_teardown(void);
 bool yew_test_name_matches(const char *name, const char *filter);
 const char *yew_test_program_path(void);
 void yew_test_load_runtime(Ed *ed);
+bool yew_test_canonicalize_path(char *path, size_t cap);
 
 #define YEW_ASSERT(cond)                                                      \
     do {                                                                      \
