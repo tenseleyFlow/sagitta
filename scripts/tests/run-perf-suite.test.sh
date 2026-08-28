@@ -197,6 +197,20 @@ do
         fail "$consumer did not receive architecture-neutral limits"
 done
 
+make -C "$repo" --no-print-directory -n \
+    perf-record perf-syn bench-fletch BUILD="$scratch/plan-build" \
+    PERF_GATE=0 PERF_ADVISORY=1 >"$scratch/advisory-component-plan"
+if grep -F "$scratch/plan-build/perf_record --gate" \
+    "$scratch/advisory-component-plan" >/dev/null
+then
+    fail 'PERF_GATE=0 incorrectly enabled the record gate'
+fi
+grep -F "YEW_PERF_ADVISORY=1 $scratch/plan-build/perf_syn --gate" \
+    "$scratch/advisory-component-plan" >/dev/null ||
+    fail 'perf-syn did not receive the advisory policy'
+grep -F -- '--gate-budgets' "$scratch/advisory-component-plan" >/dev/null ||
+    fail 'PERF_GATE=0 incorrectly enabled the Fletch relative gate'
+
 : >"$scratch/reference"
 reset_case
 FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1150 \

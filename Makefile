@@ -1884,10 +1884,10 @@ perf-cmdcomp: $(BUILD)/perf_cmdcomp
 	$(BUILD)/perf_cmdcomp
 
 perf-record: $(BUILD)/perf_record
-	$(BUILD)/perf_record $(if $(PERF_GATE),--gate,)
+	$(BUILD)/perf_record $(if $(filter 1,$(PERF_GATE)),--gate,)
 
 perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
-	$(BUILD)/perf_syn --gate
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_syn --gate
 
 perf-syn-scroll-s56: $(BUILD)/perf_syn $(BUILD)/yew
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
@@ -2660,7 +2660,7 @@ BASELINE ?= dev
 bench-fletch: $(BUILD)/perf_fletch
 	$(BUILD)/perf_fletch --selftest-gate
 	$(BUILD)/perf_fletch --baseline $(BASELINE) \
-		$(if $(PERF_GATE),--gate,--gate-budgets)
+		$(if $(filter 1,$(PERF_GATE)),--gate,--gate-budgets)
 
 fletch-ledger: $(BUILD)/fletch_run $(BUILD)/yew
 	LC_ALL=C $(BUILD)/fletch_run --ledger \

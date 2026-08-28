@@ -191,6 +191,11 @@ static bool gate_uses_baseline(PerfSynGateMode mode)
     return mode == PERF_SYN_GATE_FULL;
 }
 
+static int gate_status(bool regression_seen, bool advisory)
+{
+    return regression_seen && !advisory ? 1 : 0;
+}
+
 static int selftest_gate(void)
 {
     static const struct {
@@ -225,6 +230,11 @@ static int selftest_gate(void)
     if (gate_uses_baseline(PERF_SYN_GATE_BUDGETS) ||
         !gate_uses_baseline(PERF_SYN_GATE_FULL)) {
         (void)printf("FAIL gate rule: baseline selection\n");
+        failures++;
+    }
+    if (gate_status(false, false) != 0 || gate_status(false, true) != 0 ||
+        gate_status(true, false) != 1 || gate_status(true, true) != 0) {
+        (void)printf("FAIL gate rule: advisory exit status\n");
         failures++;
     }
     if (failures != 0U) {
@@ -2476,11 +2486,11 @@ static bool measure_scroll_profile(FrozenFixture *fixture, const char *name,
     return true;
 }
 
-static bool scroll_timing_advisory(void)
+static bool perf_syn_advisory(void)
 {
     const char *value = getenv("YEW_PERF_ADVISORY");
 
-    return value != NULL && strcmp(value, "1") == 0;
+    return value != NULL && strcmp(value, "0") != 0;
 }
 
 static bool measure_scroll_profiles(FrozenFixture *markdown,
@@ -2583,7 +2593,7 @@ static int run_scroll_profile_gate(void)
         status = 2;
     if (status == 0) {
         verdict = report_scroll_profiles(profiles,
-                                         scroll_timing_advisory());
+                                         perf_syn_advisory());
         if (verdict.phase_regression || verdict.timing_regression)
             status = 1;
     }
@@ -2956,10 +2966,39 @@ static bool init_cases(
 
 int main(int argc, char **argv)
 {
+    PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
+
     isolate_benchmark_logging();
 
     if (argc == 2 && strcmp(argv[1], "--gate-scroll-s56") == 0)
         return run_scroll_profile_gate();
+    if (argc == 2 && strcmp(argv[1], "--prime-all-syntax") == 0)
+        return prime_all_syntax();
+    if (argc == 2 && strcmp(argv[1], "--warm-start-probe") == 0)
+        return warm_start_probe();
+    if (argc == 2 && strcmp(argv[1], "--detect-probe") == 0)
+        return detect_probe();
+    if (argc == 2 && strcmp(argv[1], "--selftest-gate") == 0)
+        return selftest_gate();
+    if (argc == 2 && strncmp(argv[1], "--probe-legacy-line=", 20U) == 0)
+        return probe_legacy_line(argv[1] + 20U, false);
+    if (argc == 2 && strncmp(argv[1], "--probe-resident-line=", 22U) == 0)
+        return probe_legacy_line(argv[1] + 22U, true);
+    if (argc == 2 && strncmp(argv[1], "--probe-legacy-edit=", 20U) == 0)
+        return probe_legacy_edit(argv[1] + 20U);
+    if (argc == 2 && strcmp(argv[1], "--gate-budgets") == 0)
+        gate_mode = PERF_SYN_GATE_BUDGETS;
+    else if (argc == 2 && strcmp(argv[1], "--gate") == 0)
+        gate_mode = PERF_SYN_GATE_FULL;
+    else if (argc != 1) {
+        (void)fprintf(stderr,
+                      "usage: perf_syn [--gate|--gate-budgets|"
+                      "--gate-scroll-s56|"
+                      "--selftest-gate|--probe-legacy-line=STEM|"
+                      "--probe-resident-line=STEM|"
+                      "--probe-legacy-edit=STEM]\n");
+        return 2;
+    }
 
     PerfCase cases[PERF_SYN_CASE_COUNT];
     char case_names[PERF_SYN_FIXTURE_COUNT * 4U][PERF_SYN_CASE_NAME_CAP];
@@ -3031,36 +3070,9 @@ int main(int argc, char **argv)
     u64 html_scan_ratio_bp = 0U;
     u64 definition_switch_ns = 0U;
     bool regression_seen = false;
-    PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
+    bool advisory = perf_syn_advisory();
     int status = 0;
 
-    if (argc == 2 && strcmp(argv[1], "--prime-all-syntax") == 0)
-        return prime_all_syntax();
-    if (argc == 2 && strcmp(argv[1], "--warm-start-probe") == 0)
-        return warm_start_probe();
-    if (argc == 2 && strcmp(argv[1], "--detect-probe") == 0)
-        return detect_probe();
-    if (argc == 2 && strcmp(argv[1], "--selftest-gate") == 0)
-        return selftest_gate();
-    if (argc == 2 && strncmp(argv[1], "--probe-legacy-line=", 20U) == 0)
-        return probe_legacy_line(argv[1] + 20U, false);
-    if (argc == 2 && strncmp(argv[1], "--probe-resident-line=", 22U) == 0)
-        return probe_legacy_line(argv[1] + 22U, true);
-    if (argc == 2 && strncmp(argv[1], "--probe-legacy-edit=", 20U) == 0)
-        return probe_legacy_edit(argv[1] + 20U);
-    if (argc == 2 && strcmp(argv[1], "--gate-budgets") == 0)
-        gate_mode = PERF_SYN_GATE_BUDGETS;
-    else if (argc == 2 && strcmp(argv[1], "--gate") == 0)
-        gate_mode = PERF_SYN_GATE_FULL;
-    else if (argc != 1) {
-        (void)fprintf(stderr,
-                      "usage: perf_syn [--gate|--gate-budgets|"
-                      "--gate-scroll-s56|"
-                      "--selftest-gate|--probe-legacy-line=STEM|"
-                      "--probe-resident-line=STEM|"
-                      "--probe-legacy-edit=STEM]\n");
-        return 2;
-    }
     yew_syn_discovery_set_bypass(true);
     if (!init_cases(cases, case_names)) {
         (void)fprintf(stderr, "perf_syn: case name initialization failed\n");
@@ -3543,7 +3555,6 @@ int main(int argc, char **argv)
                 markdown_wrap_fps < PERF_SYN_SCROLL_MIN_FPS;
             bool scroll_profile_phase_regression = false;
             bool scroll_profile_timing_regression = false;
-            bool scroll_advisory = scroll_timing_advisory();
             ScrollProfileVerdict scroll_verdict;
             bool whole_regression = whole_total_ns > UINT64_C(45000000) ||
                                     whole_max_frame_ns > UINT64_C(1000000);
@@ -3580,7 +3591,7 @@ int main(int argc, char **argv)
                     scroll_regression = true;
             }
             scroll_verdict = report_scroll_profiles(scroll_profile,
-                                                     scroll_advisory);
+                                                     advisory);
             scroll_profile_phase_regression =
                 scroll_verdict.phase_regression;
             scroll_profile_timing_regression =
@@ -3700,8 +3711,7 @@ int main(int argc, char **argv)
             runtime_size_regression || block_regression ||
             multiline_regression)
             regression_seen = true;
-        if (regression_seen)
-            status = 1;
+        status = gate_status(regression_seen, advisory);
     }
     if (status == 2)
         (void)fprintf(stderr, "perf_syn: measurement failed\n");
