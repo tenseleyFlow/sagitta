@@ -274,7 +274,7 @@ void yew_job_finish(Ed *ed, YewJob *j)
         u8 last = 0U;
         TextIter it;
         const u8 *chunk = NULL;
-        size_t chunk_len = 0U;
+        u64 chunk_len = 0U;
 
         if (yew_textiter_begin(&it, j->buf->tb, BYTEOFF(end - 1U)) &&
             yew_textiter_chunk(&it, j->buf->tb, &chunk, &chunk_len) &&
@@ -633,7 +633,7 @@ u32 yew_jobs_table_row_id(Ed *ed)
     Span span;
     TextIter it;
     const u8 *chunk = NULL;
-    size_t len = 0U;
+    u64 len = 0U;
     unsigned id = 0U;
     char row[32];
     size_t n = 0U;
@@ -654,11 +654,10 @@ u32 yew_jobs_table_row_id(Ed *ed)
         return 0U;
     while (n + 1U < sizeof(row) &&
            yew_textiter_chunk(&it, b->tb, &chunk, &len) && len != 0U) {
-        size_t take = len;
+        size_t room = sizeof(row) - 1U - n;
+        size_t take = len > (u64)room ? room : (size_t)len;
         size_t k;
 
-        if (take > sizeof(row) - 1U - n)
-            take = sizeof(row) - 1U - n;
         for (k = 0U; k < take; k++)
             row[n++] = (char)chunk[k];
         break;
