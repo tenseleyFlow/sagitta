@@ -337,8 +337,14 @@ static bool read_available(PtyCtx *c, bool *activity)
             if (c->vt.alt)
                 c->ready = true;
         } else if (n == 0 || (n < 0 && errno == EIO)) {
-            c->eof = true;
-            return true;
+            /* Linux commonly reports EIO after the slave side has closed.
+             * Darwin can return either EIO or zero transiently between fork
+             * and the child's open of the slave.  Only a reaped child makes
+             * either result EOF; before that, keep polling for startup. */
+            reap_nonblocking(c);
+            if (c->pty.reaped)
+                c->eof = true;
+            return !c->failed;
         } else if (n < 0 && errno == EINTR) {
             continue;
         } else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -739,6 +745,7 @@ void ptc_host_session(PtyCtx *c)
 
 static const u8 *find_bytes(const u8 *hay, size_t nhay,
                             const u8 *needle, size_t nneedle);
+static void wait_for_exit(PtyCtx *c);
 
 void ptc_wait_output_since(PtyCtx *c, size_t at,
                            const void *bytes, size_t len)
@@ -763,7 +770,17 @@ void ptc_wait_output_since(PtyCtx *c, size_t at,
             return;
         }
         if (c->eof) {
-            ptc_fail(c, "child ended before the expected output");
+            wait_for_exit(c);
+            if (c->failed)
+                return;
+            if (c->pty.reaped && WIFSIGNALED(c->pty.status))
+                ptc_fail(c, "child died on signal %d before the expected output",
+                         WTERMSIG(c->pty.status));
+            else if (c->pty.reaped && WIFEXITED(c->pty.status))
+                ptc_fail(c, "child exited %d before the expected output",
+                         WEXITSTATUS(c->pty.status));
+            else
+                ptc_fail(c, "child ended before the expected output");
             return;
         }
         pump_quiet(c, 20, false);
