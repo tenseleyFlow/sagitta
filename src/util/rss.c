@@ -10,12 +10,14 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
+#if !defined(__APPLE__)
 static u64 checked_scale(unsigned long long value, u64 scale)
 {
     if (value > UINT64_MAX / scale)
         return 0U;
     return (u64)value * scale;
 }
+#endif
 
 u64 yew_rss_peak_bytes(void)
 {
