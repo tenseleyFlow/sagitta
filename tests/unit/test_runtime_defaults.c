@@ -370,7 +370,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
         assert_frozen_mode(&ed, (Mode)mode, rows[mode], counts[mode]);
     }
-    YEW_ASSERT_EQ_U64(panic_rows, 57U);
+    YEW_ASSERT_EQ_U64(panic_rows, 59U);
     yew_ed_free(&ed);
     bytebuf_free(&source);
 }
