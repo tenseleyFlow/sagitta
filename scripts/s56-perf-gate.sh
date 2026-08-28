@@ -298,9 +298,10 @@ END {
             if (comparison[metric] == "ge") limit = int(limit * 1000 / scale)
             else limit = int(limit * scale / 1000)
         }
-        over_abs = (comparison[metric] == "ge") ?
-            ((a < limit) + (b < limit) + (c < limit)) :
-            ((a > limit) + (b > limit) + (c > limit))
+        if (comparison[metric] == "ge")
+            over_abs = ((a < limit) + (b < limit) + (c < limit))
+        else
+            over_abs = ((a > limit) + (b > limit) + (c > limit))
         if (comparison[metric] != "record" && limit > 0 &&
             ((comparison[metric] == "le" && (a > limit * 100 || b > limit * 100 || c > limit * 100)) ||
              (comparison[metric] == "ge" && (a * 100 < limit || b * 100 < limit || c * 100 < limit))))

@@ -13,6 +13,16 @@ fail()
     exit 1
 }
 
+sed_rewrite()
+{
+    expression=$1
+    path=$2
+    replacement=$path.sed.$$
+
+    sed "$expression" "$path" >"$replacement"
+    mv -- "$replacement" "$path"
+}
+
 cat >"$scratch/budgets" <<'EOF'
 latency.typing.small.p99 le 10000000 ns calibrated designated latency
 latency.any.max record - ns raw informational diagnose_long_tail
@@ -106,7 +116,7 @@ set -e
 [ "$status" -eq 1 ] || fail 'enforcement=all budget passed advisory mode'
 
 write_observations 5000000 5000000 5000000
-sed -i '/startup.spawn_floor_fraction/d' "$scratch/obs2"
+sed_rewrite '/startup.spawn_floor_fraction/d' "$scratch/obs2"
 set +e
 run_gate advisory >"$scratch/omitted.out" 2>&1
 status=$?
@@ -135,7 +145,7 @@ set -e
 [ "$status" -eq 75 ] || fail 'ISA/runner mismatch was not refused'
 
 write_baseline 5000000
-sed -i '/latency.typing.small.p99/d' "$scratch/baseline"
+sed_rewrite '/latency.typing.small.p99/d' "$scratch/baseline"
 set +e
 run_gate designated >"$scratch/missing.out" 2>&1
 status=$?
