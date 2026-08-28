@@ -56,6 +56,16 @@ would mix two different populations.
 | Only `MODULES=""` is slow | build configuration | `make MODULES="" perf` | find a disabled-module shim doing work |
 | Local is green, CI is red without a code delta | runner | beginning/end calibration scales | treat drift/refusal as no verdict, not a regression |
 
+## Allocation accounting
+
+`make alloc` builds the fixed-site debug allocator in its own `build-adbg`
+tree, verifies its accounting contract, and runs the deterministic Sprint 57
+allocation gates. Allocation counts and live-byte deltas since the last
+counter reset are hard failures on every machine; failures print the
+contributing source sites. Never take a timing number from an `ALLOCDBG=1`
+build: its headers change object sizes, alignment, and cache behaviour. It
+answers *who allocates*, not *how long*.
+
 ## Runner and calibration policy
 
 Only the pinned runners named `perf-x86_64-linux-gnu` and

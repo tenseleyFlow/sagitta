@@ -75,8 +75,8 @@ static void capture_reset(void)
     size_t i;
 
     for (i = 0U; i < captured_logs_len; i++)
-        free(captured_logs[i].message);
-    free(captured_logs);
+        yew_xfree(captured_logs[i].message);
+    yew_xfree(captured_logs);
     captured_logs = NULL;
     captured_logs_len = 0U;
     captured_logs_cap = 0U;
@@ -325,7 +325,7 @@ int yew_test_run(int argc, char **argv)
             failures++;
     }
     env_restore("XDG_STATE_HOME", xdg_state);
-    free(xdg_state);
+    yew_xfree(xdg_state);
     (void)printf("unit: %zu tests, %zu assertions, %zu failure%s\n",
                  selected, assertion_count, failures,
                  failures == 1U ? "" : "s");

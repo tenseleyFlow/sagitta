@@ -89,6 +89,7 @@ void yew_xfree(void *ptr);
 
 void yew_alloc_reset(void);
 u64 yew_alloc_calls(void);
+u64 yew_alloc_live_bytes(void);
 void yew_alloc_report(Bytebuf *out);
 
 /*

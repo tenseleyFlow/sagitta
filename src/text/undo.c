@@ -16,7 +16,13 @@
 #include "text/journal.h"
 #include "util/log.h"
 
-enum { YEWU_VERSION = 1U, YEWU_HEADER_LEN = 64U, YEWU_TRUNCATED = 1U };
+enum {
+    YEWU_VERSION = 1U,
+    YEWU_HEADER_LEN = 64U,
+    YEWU_TRUNCATED = 1U,
+    YEW_UNDO_HOT_NODES = 128U,
+    YEW_UNDO_HOT_CURSORS = YEW_UNDO_HOT_NODES * 2U
+};
 
 VEC_DECL(YewU32Vec, u32);
 
@@ -223,6 +229,15 @@ static void require_reason(EditCtx *ec, YewTxnReason reason)
         yew_cset_require_single_edit(ec->cset);
 }
 
+static void reserve_hot_transaction(UndoTree *ut)
+{
+    YewUndoNodeVec_reserve(&ut->nodes, YEW_UNDO_HOT_NODES);
+    YewUndoOpVec_reserve(&ut->ops, YEW_UNDO_HOT_NODES);
+    YewCursorRecVec_reserve(&ut->cursors, YEW_UNDO_HOT_CURSORS);
+    YewUndoRepairRunVec_reserve(&ut->repair_runs, YEW_UNDO_HOT_NODES);
+    YewUndoReplaySpanVec_reserve(&ut->replay_spans, YEW_UNDO_HOT_NODES);
+}
+
 void yew_undo_begin(EditCtx *ec, YewTxnReason why)
 {
     UndoTree *ut;
@@ -230,6 +245,7 @@ void yew_undo_begin(EditCtx *ec, YewTxnReason why)
     require_reason(ec, why);
     ut = ec->undo;
     if (ut->depth == 0U) {
+        reserve_hot_transaction(ut);
         ut->pending_reason = why;
         ut->boundary = true;
         ut->reopened = false;

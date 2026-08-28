@@ -8,6 +8,8 @@
 #include "unicode/coords_internal.h"
 #include "util/log.h"
 
+enum { YEW_ADD_INITIAL_CAP = 16 * 1024 };
+
 static u64 node_bytes(const PieceNode *node)
 {
     return node != NULL ? node->sub_bytes : 0;
@@ -58,12 +60,35 @@ static void node_fix(PieceNode *node)
     node->sub_count = (u32)count;
 }
 
-static PieceNode *node_new(Piece piece)
+static PieceNode *node_alloc(TextBacking *backing)
 {
-    PieceNode *node = yew_xmalloc(sizeof(*node));
+    PieceNode *node;
+
+    if (backing == NULL)
+        YEW_BUG("piece node allocation without backing");
+    if (backing->free_nodes == NULL) {
+        PieceNodeSlab *slab = yew_xmalloc(sizeof(*slab));
+        size_t i;
+
+        slab->next = backing->node_slabs;
+        backing->node_slabs = slab;
+        for (i = 0U; i < YEW_ARRAY_LEN(slab->nodes); i++) {
+            slab->nodes[i].left = backing->free_nodes;
+            backing->free_nodes = &slab->nodes[i];
+        }
+    }
+    node = backing->free_nodes;
+    backing->free_nodes = node->left;
+    return node;
+}
+
+static PieceNode *node_new(TextBacking *backing, Piece piece)
+{
+    PieceNode *node = node_alloc(backing);
 
     node->left = NULL;
     node->right = NULL;
+    node->backing = backing;
     node->span = piece.span;
     node->sub_bytes = piece.span.hi - piece.span.lo;
     node->sub_lfs = piece.lf_count;
@@ -82,7 +107,7 @@ static PieceNode *node_own(PieceNode *node)
 
     if (node == NULL || node->refs == 1U)
         return node;
-    copy = yew_xmalloc(sizeof(*copy));
+    copy = node_alloc(node->backing);
     *copy = *node;
     copy->refs = 1U;
     node_ref(copy->left);
@@ -111,7 +136,8 @@ static void node_release(PieceNode *root)
             continue;
         left = node->left;
         right = node->right;
-        yew_xfree(node);
+        node->left = node->backing->free_nodes;
+        node->backing->free_nodes = node;
         if (left != NULL) {
             if (depth == YEW_ARRAY_LEN(stack))
                 YEW_BUG("piece release stack overflow");
@@ -417,7 +443,7 @@ static void node_split(TextBuf *tb, PieceNode *root, u64 at,
         u64 split = root->span.lo + at - left_bytes;
         Piece tail = piece_make(tb->backing, root->src,
                                 (Span){split, root->span.hi});
-        PieceNode *tail_node = node_new(tail);
+        PieceNode *tail_node = node_new(tb->backing, tail);
         Piece head = piece_make(tb->backing, root->src,
                                 (Span){root->span.lo, split});
 
@@ -473,7 +499,7 @@ static PieceNode *node_insert(TextBuf *tb, PieceNode *root, u64 at,
         root->lf_first = head.lf_first;
         root->lf_count = head.lf_count;
         node_make_singleton(root);
-        tail_tree = node_link(node_new(tail), NULL, old_right);
+        tail_tree = node_link(node_new(tb->backing, tail), NULL, old_right);
         inserted_tree = node_link(inserted, NULL, tail_tree);
         return node_link(root, old_left, inserted_tree);
     }
@@ -496,7 +522,7 @@ static void store_append(TextStore *store, const u8 *bytes, u64 len)
     if (need > SIZE_MAX)
         YEW_BUG("text store exceeds addressable memory");
     if (need > store->cap) {
-        cap = store->cap != 0U ? store->cap : 64U;
+        cap = store->cap != 0U ? store->cap : YEW_ADD_INITIAL_CAP;
         while (cap < need) {
             if (cap > (u64)SIZE_MAX / 2U) {
                 cap = need;
@@ -597,6 +623,8 @@ static void backing_ref(TextBacking *backing)
 
 static void backing_release(TextBacking *backing)
 {
+    PieceNodeSlab *slab;
+
     if (backing == NULL || backing->refs == 0U)
         YEW_BUG("text backing reference count underflow");
     backing->refs--;
@@ -604,6 +632,13 @@ static void backing_release(TextBacking *backing)
         return;
     store_free(&backing->orig);
     store_free(&backing->add);
+    slab = backing->node_slabs;
+    while (slab != NULL) {
+        PieceNodeSlab *next = slab->next;
+
+        yew_xfree(slab);
+        slab = next;
+    }
     yew_xfree(backing);
 }
 
@@ -639,7 +674,7 @@ TextBuf *yew_textbuf_from_bytes(const u8 *bytes, u64 len)
         store_init_original(&tb->backing->orig, bytes, len);
         textbuf_sync_store_views(tb);
         piece = piece_make(tb->backing, YEW_STORE_ORIG, (Span){0U, len});
-        tb->root = node_new(piece);
+        tb->root = node_new(tb->backing, piece);
     }
     yew_coords_index_seed(tb);
     return tb;
@@ -657,7 +692,7 @@ static TextBuf *textbuf_from_owned_bytes(u8 *bytes, u64 len,
         Piece piece = piece_make(tb->backing, YEW_STORE_ORIG,
                                  (Span){0U, len});
 
-        tb->root = node_new(piece);
+        tb->root = node_new(tb->backing, piece);
     }
     if (classified)
         yew_coords_index_seed_simple(tb, simple_ascii);
@@ -838,7 +873,8 @@ void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
         tb->add_tail_known = true;
         return;
     }
-    middle = node_new(piece_make(tb->backing, YEW_STORE_ADD,
+    middle = node_new(tb->backing,
+                      piece_make(tb->backing, YEW_STORE_ADD,
                                  (Span){old_add_len,
                                         tb->backing->add.len}));
     tb->root = node_insert(tb, tb->root, at.v, middle);
@@ -882,7 +918,8 @@ void yew_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
     old_gen = tb->gen;
     old_affected = yew_textbuf_line_span(
         tb, yew_textbuf_line_of(tb, at));
-    middle = node_new(piece_make(tb->backing, src, span));
+    middle = node_new(tb->backing,
+                      piece_make(tb->backing, src, span));
     node_split(tb, tb->root, at.v, &before, &after);
     tb->root = node_concat(node_concat(before, middle), after);
     tb->gen++;

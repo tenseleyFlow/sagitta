@@ -383,6 +383,8 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     char diag_badge[48];
     char ai_badge[320];
     char git_badge[160];
+    char clipped_path_inline[YEW_STATUSLINE_INLINE_CAP];
+    bool clipped_path_owned = false;
     size_t diag_error_off = 0U;
     size_t diag_error_len = 0U;
     size_t diag_warn_off = 0U;
@@ -412,7 +414,13 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     if (path_len > SIZE_MAX - (size_t)cols - 512U)
         YEW_BUG("statusline build: text capacity overflow");
     out->body_cap = path_len + (size_t)cols + 512U;
-    out->body = yew_xmalloc(out->body_cap);
+    if (out->body_cap <= sizeof(out->body_inline)) {
+        out->body = out->body_inline;
+        out->body_cap = sizeof(out->body_inline);
+    } else {
+        out->body = yew_xmalloc(out->body_cap);
+        out->body_owned = true;
+    }
     out->body[0] = '\0';
     chip_text(ed, w, out->chip, sizeof(out->chip));
     out->chip_len = strlen(out->chip);
@@ -679,8 +687,16 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
 
         if (path_budget < 0)
             path_budget = 0;
-        clipped_path = yew_xmalloc(path_len + 4U);
-        path_clip(path, path_budget, clipped_path, path_len + 4U);
+        size_t clipped_cap = path_len + 4U;
+
+        if (clipped_cap <= sizeof(clipped_path_inline)) {
+            clipped_path = clipped_path_inline;
+            clipped_cap = sizeof(clipped_path_inline);
+        } else {
+            clipped_path = yew_xmalloc(clipped_cap);
+            clipped_path_owned = true;
+        }
+        path_clip(path, path_budget, clipped_path, clipped_cap);
     }
     path_cells = cells(clipped_path);
     at = append_text(out->body, out->body_cap, at, " ");
@@ -728,14 +744,16 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     }
     out->body_len = at;
     out->body_cells = (u16)cells(out->body);
-    yew_xfree(clipped_path);
+    if (clipped_path_owned)
+        yew_xfree(clipped_path);
 }
 
 void yew_statusline_text_free(StatuslineText *text)
 {
     if (text == NULL)
         return;
-    yew_xfree(text->body);
+    if (text->body_owned)
+        yew_xfree(text->body);
     memset(text, 0, sizeof(*text));
 }
 

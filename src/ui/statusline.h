@@ -10,6 +10,8 @@
 typedef struct Ed Ed;
 typedef struct Win Win;
 
+enum { YEW_STATUSLINE_INLINE_CAP = 4096 };
+
 typedef struct YewUiStyle {
     YewColor chip_fg;
     YewColor chip_bg;
@@ -23,9 +25,11 @@ typedef struct StatuslineText {
     size_t chip_len;
     char recording[32];
     size_t recording_len;
+    char body_inline[YEW_STATUSLINE_INLINE_CAP];
     char *body;
     size_t body_cap;
     size_t body_len;
+    bool body_owned;
     u16 chip_cells;
     u16 recording_cells;
     u16 body_cells;

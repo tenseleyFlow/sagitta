@@ -327,6 +327,16 @@ u64 yew_alloc_calls(void)
     return alloc_calls;
 }
 
+u64 yew_alloc_live_bytes(void)
+{
+    u64 live = alloc_overflow.live;
+    size_t i;
+
+    for (i = 0U; i < ALLOC_SITE_CAP; i++)
+        live += alloc_sites[i].live;
+    return live;
+}
+
 static size_t alloc_snapshot(void)
 {
     size_t len = 0U;
@@ -538,6 +548,11 @@ void yew_alloc_reset(void)
 }
 
 u64 yew_alloc_calls(void)
+{
+    return 0U;
+}
+
+u64 yew_alloc_live_bytes(void)
 {
     return 0U;
 }

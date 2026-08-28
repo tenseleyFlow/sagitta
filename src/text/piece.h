@@ -18,29 +18,18 @@ typedef enum {
 } PieceSrc;
 
 typedef struct {
-    u8 *bytes;
-    u64 len;
-    u64 cap;
-    YewU64Vec lfs;
-} TextStore;
-
-/* Shared by a live buffer and every snapshot made from it. */
-typedef struct TextBacking {
-    TextStore orig;                 /* immutable after construction */
-    TextStore add;                  /* append-only until last release */
-    u32 refs;                       /* single-threaded ownership count */
-} TextBacking;
-
-typedef struct {
     u8 src;
     Span span;
     u64 lf_first;
     u64 lf_count;
 } Piece;
 
+typedef struct TextBacking TextBacking;
+
 typedef struct PieceNode {
     struct PieceNode *left;
     struct PieceNode *right;
+    TextBacking *backing;
     Span span;
     u64 sub_bytes;
     u64 sub_lfs;
@@ -52,6 +41,29 @@ typedef struct PieceNode {
 } PieceNode;
 
 _Static_assert(sizeof(PieceNode) <= 96, "node bloat");
+
+enum { YEW_PIECE_NODE_SLAB = 128 };
+
+typedef struct PieceNodeSlab {
+    struct PieceNodeSlab *next;
+    PieceNode nodes[YEW_PIECE_NODE_SLAB];
+} PieceNodeSlab;
+
+typedef struct {
+    u8 *bytes;
+    u64 len;
+    u64 cap;
+    YewU64Vec lfs;
+} TextStore;
+
+/* Shared by a live buffer and every snapshot made from it. */
+struct TextBacking {
+    TextStore orig;                 /* immutable after construction */
+    TextStore add;                  /* append-only until last release */
+    PieceNode *free_nodes;
+    PieceNodeSlab *node_slabs;
+    u32 refs;                       /* single-threaded ownership count */
+};
 
 typedef struct {
     PieceNode *root;

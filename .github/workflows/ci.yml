@@ -102,6 +102,15 @@ jobs:
             build-clang/perf_textbuf build-clang/perf_latency \
             build-clang/fuzz_cmdparse build-clang/perf_cmdcomp
 
+  alloc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build allocation accounting and run its unit contract
+        run: make CC=gcc BUILD=build-adbg ALLOCDBG=1 test-alloc-debug
+      - name: Gate steady-state editor allocations
+        run: make CC=gcc BUILD=build-adbg ALLOCDBG=1 perf-alloc
+
   # The public hosted arm64 image is functional/advisory evidence, not the
   # pinned perf-arm64-linux baseline authority.  It keeps the ISA-specific
   # build and the complete quick performance harness live while the separate

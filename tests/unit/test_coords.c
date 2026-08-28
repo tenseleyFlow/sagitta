@@ -510,6 +510,15 @@ void test_coords_sparse_index_edit_invalidation(void)
     YEW_ASSERT_EQ_U64(tb->graphemes.pending.len, 0U);
     yew_textbuf_free(tb);
 
+    tb = yew_textbuf_from_bytes((const u8 *)"abc", 3U);
+    yew_textbuf_insert(tb, BYTEOFF(3U), &x, 1U);
+    YEW_ASSERT(tb->graphemes.simple_ascii);
+    YEW_ASSERT(tb->graphemes.simple_ascii_direct);
+    YEW_ASSERT_EQ_U64(tb->graphemes.pending.len, 0U);
+    line = yew_textbuf_line_span(tb, LINENO(0U));
+    YEW_ASSERT_EQ_U64(yew_off_to_gcol(tb, line, BYTEOFF(4U)).v, 4U);
+    yew_textbuf_free(tb);
+
     large_ascii = yew_xmalloc(64U * 1024U);
     memset(large_ascii, 'a', 64U * 1024U);
     tb = yew_textbuf_from_owned_bytes(large_ascii, 64U * 1024U);

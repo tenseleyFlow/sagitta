@@ -251,7 +251,7 @@ static void serial_build_500(SerialFixture *f)
     large[1] = 0xffU;
     large[2] = 0xc0U;
     (void)serial_append(f, large, 1024U * 1024U);
-    free(large);
+    yew_xfree(large);
     for (i = 1U; i < 500U; i++) {
         u8 byte = (u8)(i * 37U);
         (void)serial_append(f, &byte, 1U);

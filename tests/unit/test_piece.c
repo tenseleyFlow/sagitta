@@ -215,7 +215,7 @@ void test_piece_insert_accepts_exposed_chunk_alias(void)
     (void)memset(fill, 'b', (size_t)fill_len);
     yew_textbuf_insert(tb, BYTEOFF(yew_textbuf_len(tb)), fill, fill_len);
     yew_textbuf_check(tb);
-    free(fill);
+    yew_xfree(fill);
     YEW_ASSERT_EQ_U64(tb->add.len, tb->add.cap);
     before = textbuf_materialize(tb);
     YEW_ASSERT(yew_textiter_begin(&it, tb, BYTEOFF(0U)));
@@ -372,7 +372,7 @@ void test_piece_line_mapping_mixed_fixture(void)
             fixture[off] = (u8)('a' + off % 26U);
     }
     tb = yew_textbuf_from_bytes(fixture, FIXTURE_LEN);
-    free(fixture);
+    yew_xfree(fixture);
     yew_textbuf_check(tb);
     for (off = 0U; off <= FIXTURE_LEN; off++) {
         LineNo line = yew_textbuf_line_of(tb, BYTEOFF(off));
@@ -480,7 +480,7 @@ void test_piece_snapshot_survives_middle_edits(void)
     for (i = 0U; i < INITIAL_LEN; i++)
         initial[i] = (u8)('a' + i % 26U);
     tb = yew_textbuf_from_bytes(initial, INITIAL_LEN);
-    free(initial);
+    yew_xfree(initial);
     for (i = 0U; i < PREP_EDITS; i++) {
         u8 byte = (u8)('A' + i % 26U);
         u64 at = 1U + piece_test_random(&rng) % (yew_textbuf_len(tb) - 1U);

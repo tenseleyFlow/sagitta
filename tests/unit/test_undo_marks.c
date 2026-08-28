@@ -200,7 +200,7 @@ void test_undo_marks_randomized_oracle_restores_1000_marks(void)
 
     (void)memset(initial, 'x', (size_t)text_len);
     marks_fixture_init(&f, initial, text_len);
-    free(initial);
+    yew_xfree(initial);
     for (i = 0U; i < MARKS; i++) {
         oracle[i].pos = marks_random(&state) % (text_len + 1U);
         oracle[i].bias = (marks_random(&state) & 1U) != 0U
@@ -261,7 +261,7 @@ void test_undo_marks_randomized_oracle_restores_1000_marks(void)
     }
     for (i = 0U; i < MARKS; i++)
         YEW_ASSERT(yew_mark_pos(f.marks, oracle[i].id).v <= text_len);
-    free(before);
-    free(oracle);
+    yew_xfree(before);
+    yew_xfree(oracle);
     marks_fixture_free(&f);
 }

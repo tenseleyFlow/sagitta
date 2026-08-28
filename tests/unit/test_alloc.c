@@ -58,6 +58,7 @@ void test_alloc_debug_counts_and_report_order(void)
     a = yew_xrealloc_at(a, 9U, "realloc.c", 99);
     c = yew_xmalloc_at(4U, "c.c", 3);
     YEW_ASSERT_EQ_U64(yew_alloc_calls(), 5U);
+    YEW_ASSERT_EQ_U64(yew_alloc_live_bytes(), 25U);
 
     bytebuf_init(&out);
     yew_alloc_report(&out);
@@ -77,9 +78,11 @@ void test_alloc_debug_counts_and_report_order(void)
     yew_xfree(b2);
     yew_xfree(a);
     yew_xfree(c);
+    YEW_ASSERT_EQ_U64(yew_alloc_live_bytes(), 0U);
 #else
     yew_alloc_reset();
     YEW_ASSERT_EQ_U64(yew_alloc_calls(), 0U);
+    YEW_ASSERT_EQ_U64(yew_alloc_live_bytes(), 0U);
 #endif
 }
 

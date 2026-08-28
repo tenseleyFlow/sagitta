@@ -948,6 +948,20 @@ void yew_coords_index_note_edit(TextBuf *tb, Span old_range,
                                                 inserted_hi);
         if (index->simple_ascii_direct && pending->len != 0U)
             YEW_BUG("direct simple ASCII index has pending edits");
+        /*
+         * Appending simple ASCII preserves the byte-to-column law for
+         * every existing line and creates no ambiguous boundary at the
+         * edit point. Switch immediately to the direct formulas instead
+         * of snapshotting and replaying the ordinary typing path.
+         */
+        if (inserted_simple && pending->len == 0U &&
+            old_range.lo == old_len && old_range.hi == old_len) {
+            index->len = 0U;
+            index->motion_len = 0U;
+            index->gen = tb->gen;
+            index->simple_ascii_direct = true;
+            return;
+        }
         if (inserted_simple && pending->len == 0U &&
             (index->simple_ascii_direct ||
              old_len >= (u64)YEW_SIMPLE_ASCII_BYPASS_BYTES)) {

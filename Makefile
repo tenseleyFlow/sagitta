@@ -608,6 +608,7 @@ PERF_STARTUP_OBJ := $(BUILD)/tests/perf/perf_startup.o
 PERF_NULLEXEC_OBJ := $(BUILD)/tests/perf/nullexec.o
 PERF_OPEN_OBJ := $(BUILD)/tests/perf/perf_open.o
 PERF_MEM_OBJ := $(BUILD)/tests/perf/perf_mem.o
+PERF_ALLOC_OBJ := $(BUILD)/tests/perf/perf_alloc.o
 PERF_S56_GATE_POLICY_OBJ := $(BUILD)/tests/perf/s56_gate_policy_selftest.o
 PERF_S56_PROF_CROSSCHECK_OBJ := $(BUILD)/tests/perf/perf_prof_crosscheck.o
 PERF_JOBSTREAM_OBJ := $(BUILD)/tests/perf/jobstream.o
@@ -712,6 +713,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_LATENCY_S56_OBJ) $(PERF_ECHO_CHILD_OBJ) \
                 $(PERF_STARTUP_OBJ) $(PERF_NULLEXEC_OBJ) \
                 $(PERF_OPEN_OBJ) $(PERF_MEM_OBJ) \
+                $(PERF_ALLOC_OBJ) \
                 $(PERF_S56_GATE_POLICY_OBJ) \
                 $(PERF_S56_PROF_CROSSCHECK_OBJ) \
                 $(PERF_JOBSTREAM_OBJ) $(PERF_REPATH_OBJ) \
@@ -753,7 +755,7 @@ MODULE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test test-alloc-debug clean install dirs FORCE \
+.PHONY: all check test test-alloc-debug alloc perf-alloc clean install dirs FORCE \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
@@ -1011,6 +1013,11 @@ $(BUILD)/perf_record: $(PERF_CORE_OBJ) $(PERF_RECORD_OBJ)
 $(BUILD)/perf_syn: $(PERF_CORE_OBJ) $(PERF_SYN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_SYN_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_alloc: $(PERF_CORE_OBJ) $(PERF_ALLOC_OBJ) \
+                     $(BUILD)/tests/unit/syn_toy.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_ALLOC_OBJ) $(BUILD)/tests/unit/syn_toy.o $(LDLIBS)
 
 $(BUILD)/perf_symidx: $(PERF_CORE_OBJ) $(PERF_SYMIDX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
@@ -1592,6 +1599,16 @@ calib: $(BUILD)/calib_runner
 
 perf-render: $(BUILD)/perf_render
 	$(BUILD)/perf_render
+
+alloc:
+	$(MAKE) --no-print-directory BUILD=build-adbg ALLOCDBG=1 \
+		test-alloc-debug perf-alloc
+
+perf-alloc: $(BUILD)/perf_alloc
+	@if test '$(ALLOCDBG)' != 1; then \
+		echo "perf-alloc requires ALLOCDBG=1" >&2; exit 2; \
+	fi
+	TMPDIR=$(abspath $(BUILD)/tmp) $(BUILD)/perf_alloc
 
 perf-shadow: $(BUILD)/perf_shadow
 	YEW_SHADOW_TEST=0 $(BUILD)/perf_shadow
@@ -2526,7 +2543,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_LATENCY_OBJ:.o=.d) $(PERF_LATENCY_S56_OBJ:.o=.d) \
          $(PERF_ECHO_CHILD_OBJ:.o=.d) $(PERF_STARTUP_OBJ:.o=.d) \
          $(PERF_NULLEXEC_OBJ:.o=.d) $(PERF_OPEN_OBJ:.o=.d) \
-         $(PERF_MEM_OBJ:.o=.d) $(PERF_S56_GATE_POLICY_OBJ:.o=.d) \
+         $(PERF_MEM_OBJ:.o=.d) $(PERF_ALLOC_OBJ:.o=.d) \
+         $(PERF_S56_GATE_POLICY_OBJ:.o=.d) \
          $(PERF_S56_PROF_CROSSCHECK_OBJ:.o=.d) \
          $(PERF_JOBSTREAM_OBJ:.o=.d) \
          $(PERF_REPATH_OBJ:.o=.d) $(PERF_RETHRU_OBJ:.o=.d) \
