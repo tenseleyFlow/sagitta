@@ -1153,6 +1153,7 @@ bool yew_http_register_endpoint(Ed *ed, HttpUrl *u, AiErr *e)
     hints.ai_flags |= AI_ADDRCONFIG;
 #endif
     (void)snprintf(service, sizeof(service), "%u", (unsigned)u->port);
+    yew_log(YEW_LOG_WARN, "resolving HTTP endpoint %s may block", u->host);
     http_resolver_calls++;
     status = getaddrinfo(u->host, service, &hints, &addresses);
     if (status != 0) {

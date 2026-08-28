@@ -316,6 +316,7 @@ void test_http_live_resolver_and_address_fallback(void)
     LiveCapture capture;
     HttpConn *conn;
     HttpUrl literal = {"127.0.0.1", 9U, "/", true};
+    HttpUrl named = {"localhost", 9U, "/", true};
     HttpUrl alias;
     u64 resolvers;
     u64 sockets;
@@ -326,6 +327,12 @@ void test_http_live_resolver_and_address_fallback(void)
     capture_init(&capture);
     resolvers = yew_http_resolver_call_count();
     YEW_ASSERT(yew_http_register_endpoint(&ed, &literal, &err));
+    YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
+    yew_test_capture_log();
+    YEW_ASSERT(yew_http_register_endpoint(&ed, &named, &err));
+    YEW_ASSERT(yew_test_log_contains(
+        YEW_LOG_WARN, "resolving HTTP endpoint localhost may block"));
+    resolvers++;
     YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
 
     alias.host = "fallback.test";
