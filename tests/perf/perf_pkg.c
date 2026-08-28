@@ -20,9 +20,11 @@ enum {
     PKG_PERF_PLUGINS = 20,
     PKG_PERF_PLUGIN_BYTES = 24 * 1024,
     PKG_PERF_LOCK_ENTRIES = 100,
-    /* With 101 observations, nearest-rank p99 permits one scheduler outlier
-     * while still failing when one percent of operations miss the budget. */
-    PKG_PERF_SAMPLES = 101,
+    /* With 1001 observations, nearest-rank p99 permits ten scheduler
+     * outliers while still failing when one percent of operations miss the
+     * budget.  The larger window keeps this sub-millisecond filesystem gate
+     * from depending on two noisy samples from a short hosted-CI run. */
+    PKG_PERF_SAMPLES = 1001,
     PKG_HASH_BUDGET_NS = 3000000,
     PKG_LOCK_BUDGET_NS = 1000000
 };
