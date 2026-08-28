@@ -86,7 +86,10 @@ cat >"$scratch/bin/fake-nm" <<'EOF'
 #!/bin/sh
 for last do :; done
 case $last in
-*/src/util/a.o) printf '%s\n' '0 0000000000000100 T util_big' '0 0000000000000000 t thunk' ;;
+*/src/util/a.o)
+printf '%s\n' '0 0000000000000100 T util_big'
+if [ "${ZERO_SYMBOLS:-0}" = 1 ]; then printf '%s\n' '0 0000000000000000 t thunk'; fi
+;;
 */src/fl/a.o)
 if [ "${BIG_FL:-0}" = 1 ]; then size=0000000000020100; else size=0000000000000100; fi
 printf '%s\n' "0 $size T fl_big"
@@ -108,8 +111,18 @@ grep -E '^core\.main +10 +0 +0 +0 +10 ' "$scratch/ledger" >/dev/null || fail 'di
 first_tie=$(grep '^  *100  core\.' "$scratch/ledger" | sed -n '1p')
 case $first_tie in *core.fl*) ;; *) fail 'symbol tie was not broken by bucket name' ;; esac
 grep -F '.debug_info' "$scratch/ledger" >/dev/null || fail 'non-folded section was silently discarded'
-grep -F '# zero-sized-symbols 1' "$scratch/ledger" >/dev/null || fail 'zero-sized symbol count missing'
-grep -E '^unattributed +0 +0 +0 +0 +0 ' "$scratch/ledger" >/dev/null || fail 'explicit unattributed row missing'
+grep -F '# unattributed-symbols 0/4 (0.0%)   limit 2.0%' "$scratch/ledger" >/dev/null || fail 'unattributed symbol ratio missing'
+grep -F '# on-disk 5000   object-file-backed 360   link-file-residue 4640' "$scratch/ledger" >/dev/null || fail 'file-backed link residue included BSS'
+grep -F '# final-file-backed 305   final-bss 10   object-bss 10' "$scratch/ledger" >/dev/null || fail 'BSS accounting was not explicit'
+
+set +e
+ZERO_SYMBOLS=1 MAKEFILE="$scratch/Makefile" SIZE="$scratch/bin/fake-size" NM="$scratch/bin/fake-nm" CC=false \
+    "$repo/scripts/size-ledger.sh" --build "$scratch/build" --binary "$scratch/yew" >"$scratch/unattributed.out" 2>"$scratch/unattributed.err"
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail 'unattributed ratio over 2% passed'
+grep -F '# unattributed-symbols 1/5 (20.0%)   limit 2.0%' "$scratch/unattributed.out" >/dev/null || fail 'unattributed failure ratio missing'
+grep -F 'unattributed zero-sized symbols 1/5 exceed 2%' "$scratch/unattributed.err" >/dev/null || fail 'unattributed failure was unclear'
 
 cp "$scratch/ledger" "$scratch/baseline"
 MAKEFILE="$scratch/Makefile" SIZE="$scratch/bin/fake-size" NM="$scratch/bin/fake-nm" CC=false \

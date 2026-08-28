@@ -112,11 +112,15 @@ while IFS= read -r obj; do
         die "NM failed for $obj"
     awk -v bucket="$bucket" -v object="$rel" '
         NF >= 4 && $2 ~ /^[0-9]+$/ {
+            count++
             size=$2 + 0
             if (size == 0) zero++
             else print size, bucket, object, $4
         }
-        END { if (zero) print "#zero", zero, bucket, object }
+        END {
+            print "#count", count+0, bucket, object
+            if (zero) print "#zero", zero, bucket, object
+        }
     ' "$tmpdir/one-nm" >>"$tmpdir/symbols"
 done <"$tmpdir/objects"
 
@@ -136,13 +140,25 @@ awk '
     }
 ' "$tmpdir/sections" >"$tmpdir/buckets"
 
-object_total=$(awk '{ n += $2+$3+$4+$5 } END { print n+0 }' "$tmpdir/buckets")
-final_sections=$(awk '
-    NR > 2 && $2 ~ /^[0-9]+$/ && $1 ~ /^\.(text|rodata|data|bss)/ { n += $2 }
+object_file_backed=$(awk '{ n += $2+$3+$4 } END { print n+0 }' "$tmpdir/buckets")
+object_bss=$(awk '{ n += $5 } END { print n+0 }' "$tmpdir/buckets")
+object_total=$((object_file_backed + object_bss))
+final_file_backed=$(awk '
+    NR > 2 && $2 ~ /^[0-9]+$/ && $1 ~ /^\.(text|rodata|data)/ { n += $2 }
     END { print n+0 }
 ' "$tmpdir/final-size")
-link_overhead=$((on_disk - object_total))
+final_bss=$(awk '
+    NR > 2 && $2 ~ /^[0-9]+$/ && $1 ~ /^\.bss/ { n += $2 }
+    END { print n+0 }
+' "$tmpdir/final-size")
+link_file_residue=$((on_disk - object_file_backed))
 zero_count=$(awk '$1 == "#zero" { n += $2 } END { print n+0 }' "$tmpdir/symbols")
+symbol_count=$(awk '$1 == "#count" { n += $2 } END { print n+0 }' "$tmpdir/symbols")
+if [ "$symbol_count" -eq 0 ]; then
+    zero_permille=0
+else
+    zero_permille=$((zero_count * 1000 / symbol_count))
+fi
 unknown_total=$(awk '{ n += $2 } END { print n+0 }' "$tmpdir/unknown")
 
 if [ -n "$baseline" ]; then
@@ -186,8 +202,10 @@ size_line=$($SIZE --version 2>/dev/null | sed -n '1p' || true)
 if [ "$format" = txt ]; then
     printf '# yew size ledger v1  config=%s  binary=%s  stripped=1\n' "$config" "$binary"
     printf '# toolchain: %s / %s / %s   target=%s\n' "${cc_line:-unknown cc}" "${nm_line:-unknown nm}" "${size_line:-unknown size}" "${target:-unknown}"
-    printf '# on-disk %s   sections %s   link_overhead %s\n' "$on_disk" "$final_sections" "$link_overhead"
-    printf '# zero-sized-symbols %s   non-folded-object-sections %s\n\n' "$zero_count" "$unknown_total"
+    printf '# on-disk %s   object-file-backed %s   link-file-residue %s\n' "$on_disk" "$object_file_backed" "$link_file_residue"
+    printf '# final-file-backed %s   final-bss %s   object-bss %s\n' "$final_file_backed" "$final_bss" "$object_bss"
+    printf '# unattributed-symbols %s/%s (%d.%d%%)   limit 2.0%%\n' "$zero_count" "$symbol_count" "$((zero_permille / 10))" "$((zero_permille % 10))"
+    printf '# non-folded-object-sections %s\n\n' "$unknown_total"
     if [ -n "$baseline" ]; then
         printf '%-18s %10s %10s %10s %10s %10s %10s %7s\n' bucket .text .rodata .data .bss total delta pct
     else
@@ -202,8 +220,7 @@ if [ "$format" = txt ]; then
             printf '%-18s %10s %10s %10s %10s %10s %3d.%d%%\n' "$b" "$text" "$rodata" "$data" "$bss" "$total" "$pct_whole" "$pct_tenth"
         fi
     done <"$tmpdir/rows"
-    printf '%-18s %10s %10s %10s %10s %10s %7s\n' unattributed 0 0 0 0 0 '0.0%'
-    printf '%-18s %10s\n' libc+crt "$link_overhead"
+    printf '%-18s %10s\n' libc+crt "$link_file_residue"
     printf '%-18s %10s\n' --totals "$object_total"
     if [ -s "$tmpdir/unknown" ]; then
         printf '\n-- non-folded object sections\n'
@@ -211,12 +228,12 @@ if [ "$format" = txt ]; then
             sort -k1,1 | while read -r section bytes; do printf '  %10s  %s\n' "$bytes" "$section"; done
     fi
     printf '\n-- top %s symbols by size\n' "$top"
-    awk '$1 != "#zero"' "$tmpdir/symbols" | sort -k1,1nr -k2,2 -k3,3 -k4,4 |
+    awk '$1 !~ /^#/' "$tmpdir/symbols" | sort -k1,1nr -k2,2 -k3,3 -k4,4 |
         awk -v limit="$top" 'NR <= limit { printf "  %10d  %-18s %-32s %s\n", $1, $2, $3, $4 }'
     if [ -n "$baseline" ]; then
         awk -v basefile="$tmpdir/base-symbols" '
             BEGIN { while ((getline < basefile) > 0) old[$1]=$2 }
-            $1 != "#zero" {
+            $1 !~ /^#/ {
                 key=$2 SUBSEP $3 SUBSEP $4
                 if (key in old) {
                     delta=$1-old[key]
@@ -235,6 +252,10 @@ else
 fi
 
 failed=0
+if [ "$symbol_count" -gt 0 ] && [ $((zero_count * 100)) -gt $((symbol_count * 2)) ]; then
+    echo "size-ledger: unattributed zero-sized symbols $zero_count/$symbol_count exceed 2%" >&2
+    failed=1
+fi
 if [ -n "$baseline" ]; then
     while read -r b text rodata data bss total delta; do
         old=$((total - delta))
