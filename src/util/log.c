@@ -133,11 +133,11 @@ static void default_write(YewLogLevel level, const char *msg)
     int fd;
 
     if (path == NULL || !make_parent_dirs(path)) {
-        free(path);
+        yew_xfree(path);
         return;
     }
     fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
-    free(path);
+    yew_xfree(path);
     if (fd < 0) {
         return;
     }
@@ -225,7 +225,7 @@ void yew_log(YewLogLevel level, const char *fmt, ...)
     }
     if (has_mirror_sink && mirror_sink.write != NULL)
         mirror_sink.write(mirror_sink.user, level, message);
-    free(message);
+    yew_xfree(message);
 }
 
 _Noreturn void yew_bug(const char *file, int line, const char *fmt, ...)
@@ -258,7 +258,7 @@ _Noreturn void yew_bug(const char *file, int line, const char *fmt, ...)
     yew_log(YEW_LOG_ERROR, "%s", message);
     yew_log(YEW_LOG_ERROR, "%s", report);
     (void)fprintf(stderr, "%s\n%s\n", message, report);
-    free(detail);
-    free(message);
+    yew_xfree(detail);
+    yew_xfree(message);
     exit(YEW_EXIT_BUG);
 }

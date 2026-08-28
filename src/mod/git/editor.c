@@ -385,19 +385,19 @@ static void base_complete(void *owner, const YewGitBlobResult *result)
     const GitSnapshot *snapshot = yew_git_snapshot_cached(ed);
 
     if (state == NULL) {
-        free(request);
+        yew_xfree(request);
         return;
     }
     state->base_pending = false;
     if (snapshot == NULL || snapshot->gen != request->snapshot_gen) {
-        free(request);
+        yew_xfree(request);
         return;
     }
     if (result->state != YEW_GIT_BLOB_OK &&
         result->state != YEW_GIT_BLOB_MISSING &&
         result->state != YEW_GIT_BLOB_TOO_LARGE) {
         yew_msg(ed, YEW_MSG_ERROR, "git base unavailable");
-        free(request);
+        yew_xfree(request);
         return;
     }
     diff_cancel(ed->git_editor, state, true);
@@ -416,10 +416,10 @@ static void base_complete(void *owner, const YewGitBlobResult *result)
     state->base_revision++;
     state->diff_due_ms = ed->now_ms;
     ed->full_damage = true;
-    free(owner);
+    yew_xfree(owner);
 }
 
-static void owner_free(void *owner) { free(owner); }
+static void owner_free(void *owner) { yew_xfree(owner); }
 
 static void blame_complete(void *owner, Ed *ed, const YewJob *job)
 {
@@ -462,7 +462,7 @@ static void request_blame(Ed *ed, Buffer *buf, GitBufState *state, i64 now_ms)
                                      input.data, (u64)input.len, owner,
                                      &blame_ops, err, sizeof(err)) == 0U) {
         yew_blame_cache_fail(state->blame, &request);
-        free(owner);
+        yew_xfree(owner);
     }
     bytebuf_free(&input);
 }
@@ -548,7 +548,7 @@ static void request_base(Ed *ed, Buffer *buf, GitBufState *state)
                            err, sizeof(err));
     if (id == 0U) {
         yew_msg(ed, YEW_MSG_ERROR, "%s", err);
-        free(request);
+        yew_xfree(request);
     } else {
         state->base_pending = true;
     }
@@ -705,8 +705,8 @@ void yew_git_editor_state_free(Ed *ed)
         hunk_list_drop(&ed->git_editor->v[i].hunks);
         yew_blame_cache_free(ed->git_editor->v[i].blame);
     }
-    free(ed->git_editor->v);
-    free(ed->git_editor);
+    yew_xfree(ed->git_editor->v);
+    yew_xfree(ed->git_editor);
     ed->git_editor = NULL;
 }
 
@@ -1172,7 +1172,7 @@ CmdStatus yew_git_cmd_hunk_stage(CmdCtx *cx)
                                      patch.data, (u64)patch.len, owner,
                                      &stage_ops, err, sizeof(err)) == 0U) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "%s", err);
-        free(owner); bytebuf_free(&patch); bytebuf_free(&live);
+        yew_xfree(owner); bytebuf_free(&patch); bytebuf_free(&live);
         return YEW_CMD_ERR_IO;
     }
     if (dirty && !cx->ed->git_editor->warned_dirty_stage) {
@@ -1222,7 +1222,7 @@ CmdStatus yew_git_cmd_hunk_discard(CmdCtx *cx)
                 selections_active ?
                     "selection does not intersect a changed hunk" :
                     "cursor is not on a changed hunk");
-        free(targeted);
+        yew_xfree(targeted);
         return YEW_CMD_ERR_STATE;
     }
     base = yew_textbuf_from_bytes(state->base.data, (u64)state->base.len);
@@ -1267,7 +1267,7 @@ CmdStatus yew_git_cmd_hunk_discard(CmdCtx *cx)
     }
     yew_ed_finish_edit(cx->ed, &edit);
     yew_textbuf_free(base);
-    free(targeted);
+    yew_xfree(targeted);
     if (!ok)
         return YEW_CMD_ERR_IO;
     yew_msg(cx->ed, YEW_MSG_INFO, "hunk discarded (undo restores it)");

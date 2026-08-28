@@ -63,10 +63,10 @@ static char *batch_prof_path(void)
     int need;
 
     if (configured != NULL && configured[0] != '\0')
-        return strdup(configured);
+        return yew_xstrdup(configured);
     dir = yew_xdg_state_dir();
     if (dir == NULL || !yew_mkdirs(dir, 0700U)) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     need = snprintf(NULL, 0, "%s/prof-%ld.txt", dir, (long)getpid());
@@ -75,7 +75,7 @@ static char *batch_prof_path(void)
     path = yew_xmalloc((size_t)need + 1U);
     (void)snprintf(path, (size_t)need + 1U, "%s/prof-%ld.txt", dir,
                    (long)getpid());
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -99,11 +99,11 @@ static bool batch_prof_dump(Ed *ed)
     bytebuf_free(&out);
     if (saved != YEW_SAVE_OK) {
         yew_log(YEW_LOG_ERROR, "cannot write profiler dump: %s", path);
-        free(path);
+        yew_xfree(path);
         return false;
     }
     yew_log(YEW_LOG_INFO, "profiler dump: %s", path);
-    free(path);
+    yew_xfree(path);
     return true;
 }
 
@@ -561,7 +561,7 @@ static bool apply_plugin_grants(Ed *ed, const BatchOpts *opts)
             (void)fprintf(stderr,
                           "yew: error: cannot grant %s to plugin %s\n",
                           cap, name);
-        free(name);
+        yew_xfree(name);
         if (!ok)
             return false;
     }
@@ -593,9 +593,9 @@ int yew_batch_run(const BatchOpts *opts)
         flush_stdout();
         return YEW_EXIT_ERR;
     }
-    script_path = realpath(opts->script, NULL);
+    script_path = yew_xrealpath(opts->script);
     if (script_path == NULL)
-        script_path = strdup(opts->script);
+        script_path = yew_xstrdup(opts->script);
     if (script_path == NULL)
         YEW_BUG("cannot allocate batch script path");
 
@@ -713,7 +713,7 @@ done:
         yew_ed_free(&ed);
     yew_bug_set_prehook(NULL);
     yew_log_set_mirror(NULL);
-    free(script_path);
+    yew_xfree(script_path);
     bytebuf_free(&source);
     return result;
 }

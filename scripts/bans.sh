@@ -10,6 +10,7 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 all_files=$tmp/all-files
 c_files=$tmp/c-files
 source_files=$tmp/source-files
+allocator_files=$tmp/allocator-files
 non_unicode_files=$tmp/non-unicode-files
 ci_files=$tmp/ci-files
 pty_files=$tmp/pty-files
@@ -34,6 +35,13 @@ while IFS= read -r file; do
     esac
 done <"$all_files" >"$c_files"
 find "$repo_dir/src" -type f -print | LC_ALL=C sort >"$source_files"
+while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/util/base.c) ;;
+        src/*.c|src/*.h|src/*/*.c|src/*/*.h|src/*/*/*.c|src/*/*/*.h)
+            printf '%s\n' "$file" ;;
+    esac
+done <"$source_files" >"$allocator_files"
 find "$repo_dir/.github" -type f -print | LC_ALL=C sort >"$ci_files"
 {
     find "$repo_dir/tests" -type f -print
@@ -243,6 +251,15 @@ scan "__DATE__ and __TIME__ break reproducible builds" \
     '(__DATE__|__TIME__)' "$source_files"
 scan "mmap risks SIGBUS after truncation" \
     '(^|[^[:alnum:]_])mmap[[:space:]]*\(' "$source_files"
+scan "source allocations must use the audited yew allocator" \
+    '(^|[^[:alnum:]_])(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)[[:space:]]*\(' \
+    "$allocator_files"
+scan "libc-owned cwd allocations must use yew_xgetcwd" \
+    'getcwd[[:space:]]*\([[:space:]]*NULL[[:space:]]*,' \
+    "$allocator_files"
+scan "libc-owned realpath allocations must use yew_xrealpath" \
+    'realpath[[:space:]]*\([^,]+,[[:space:]]*NULL[[:space:]]*\)' \
+    "$allocator_files"
 scan "locale-dependent Unicode APIs are forbidden" \
     '(wcwidth|wcswidth|mbrtowc|wchar\.h|setlocale|iconv)' "$source_files"
 scan "Unicode width math belongs only in src/unicode" \

@@ -201,7 +201,7 @@ static char *default_dir(void)
     if (cfg == NULL)
         return dup_n("", 0U);
     dir = path_join(cfg, "macros");
-    free(cfg);
+    yew_xfree(cfg);
     return dir == NULL ? dup_n("", 0U) : dir;
 }
 
@@ -217,17 +217,17 @@ static char *effective_dir(Ed *ed)
 
 static void file_free(MacroFile *file)
 {
-    free(file->path);
-    free(file->stem);
-    free(file->source);
+    yew_xfree(file->path);
+    yew_xfree(file->stem);
+    yew_xfree(file->source);
     (void)memset(file, 0, sizeof(*file));
 }
 
 static void entry_free(MacroEntry *entry)
 {
-    free(entry->name);
-    free(entry->alias);
-    free(entry->binding);
+    yew_xfree(entry->name);
+    yew_xfree(entry->alias);
+    yew_xfree(entry->binding);
     (void)memset(entry, 0, sizeof(*entry));
 }
 
@@ -239,10 +239,10 @@ static void contents_free(MacroLib *lib)
         entry_free(&lib->entries[i]);
     for (i = 0U; i < lib->nfiles; i++)
         file_free(&lib->files[i]);
-    free(lib->entries);
-    free(lib->files);
-    free(lib->dir);
-    free(lib->ledger_ids);
+    yew_xfree(lib->entries);
+    yew_xfree(lib->files);
+    yew_xfree(lib->dir);
+    yew_xfree(lib->ledger_ids);
     lib->entries = NULL;
     lib->files = NULL;
     lib->dir = NULL;
@@ -281,7 +281,7 @@ void yew_macrolib_free(Ed *ed, MacroLib *lib)
     if (vm != NULL)
         fl_gc_host_root_remove(vm, &lib->root);
     contents_free(lib);
-    free(lib);
+    yew_xfree(lib);
 }
 
 static int name_cmp(const void *a, const void *b, void *ctx)
@@ -305,8 +305,8 @@ static void names_free(NameVec *names)
     u32 i;
 
     for (i = 0U; i < names->n; i++)
-        free(names->v[i]);
-    free(names->v);
+        yew_xfree(names->v[i]);
+    yew_xfree(names->v);
     (void)memset(names, 0, sizeof(*names));
 }
 

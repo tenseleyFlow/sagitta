@@ -13,7 +13,7 @@ static int args_error(Bytebuf *err, const char *fmt, const char *arg)
 
 void yew_args_free(YewArgs *args)
 {
-    free(args->grants);
+    yew_xfree(args->grants);
     args->grants = NULL;
     args->ngrants = 0U;
 }

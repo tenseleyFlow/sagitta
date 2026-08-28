@@ -60,6 +60,9 @@ void *yew_xrealloc_at(void *ptr, size_t size, const char *file, int line);
 void *yew_xcalloc_at(size_t count, size_t size, const char *file, int line);
 void *yew_xreallocarray_at(void *ptr, size_t count, size_t size,
                            const char *file, int line);
+char *yew_xstrdup_at(const char *str, const char *file, int line);
+char *yew_xrealpath_at(const char *path, const char *file, int line);
+char *yew_xgetcwd_at(const char *file, int line);
 void yew_xfree_at(void *ptr, const char *file, int line);
 
 #ifndef YEW_ALLOC_IMPLEMENTATION
@@ -68,6 +71,9 @@ void yew_xfree_at(void *ptr, const char *file, int line);
 #define yew_xcalloc(c, n) yew_xcalloc_at((c), (n), __FILE__, __LINE__)
 #define yew_xreallocarray(p, c, n)                                           \
     yew_xreallocarray_at((p), (c), (n), __FILE__, __LINE__)
+#define yew_xstrdup(s) yew_xstrdup_at((s), __FILE__, __LINE__)
+#define yew_xrealpath(p) yew_xrealpath_at((p), __FILE__, __LINE__)
+#define yew_xgetcwd() yew_xgetcwd_at(__FILE__, __LINE__)
 #define yew_xfree(p) yew_xfree_at((p), __FILE__, __LINE__)
 #endif
 #else
@@ -75,6 +81,9 @@ void *yew_xmalloc(size_t size);
 void *yew_xrealloc(void *ptr, size_t size);
 void *yew_xcalloc(size_t count, size_t size);
 void *yew_xreallocarray(void *ptr, size_t count, size_t size);
+char *yew_xstrdup(const char *str);
+char *yew_xrealpath(const char *path);
+char *yew_xgetcwd(void);
 void yew_xfree(void *ptr);
 #endif
 

@@ -517,7 +517,7 @@ static u64 word_left_of(FlLine *l, u64 from)
         at--;
     while (at > 0U && text[at - 1U] != ' ' && text[at - 1U] != '\t')
         at--;
-    free(text);
+    yew_xfree(text);
     return at;
 }
 
@@ -569,7 +569,7 @@ static void redraw(const FlLine *l, const char *prompt)
     (void)fprintf(stdout, "\r\x1b[%dC",
                   (int)strlen(prompt) + (cells < 0 ? 0 : cells));
     (void)fflush(stdout);
-    free(text);
+    yew_xfree(text);
 }
 
 /*
@@ -838,7 +838,7 @@ static int repl_main(bool selftest_bug)
                  */
                 if (opened && pending.len == 0U && text[0] != '\0')
                     yew_hist_add(hist, text);
-                free(text);
+                yew_xfree(text);
                 if (out.len != 0U)
                     write_out(&out);
                 if (quit)
@@ -902,7 +902,7 @@ static int repl_main(bool selftest_bug)
                     char *text = line_text(&line);
                     bool empty = text[0] == '\0' && pending.len == 0U;
 
-                    free(text);
+                    yew_xfree(text);
                     if (empty) {
                         (void)fprintf(stdout, "\r\n");
                         goto done;

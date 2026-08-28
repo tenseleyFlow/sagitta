@@ -92,7 +92,7 @@ static void seen_init(SeenSet *s)
 
 static void seen_free(SeenSet *s)
 {
-    free(s->slot);
+    yew_xfree(s->slot);
     s->slot = NULL;
     s->cap = 0U;
     s->len = 0U;
@@ -135,7 +135,7 @@ static void seen_grow(SeenSet *s)
         if (old[i].used)
             (void)seen_add(s, old[i].dev, old[i].ino);
     }
-    free(old);
+    yew_xfree(old);
 }
 
 /* ---------------------------------------------------------------- */
@@ -250,8 +250,8 @@ static void frame_pop(WalkState *w)
     w->depth--;
     f = &w->stack[w->depth];
     for (i = 0U; i < f->n; i++)
-        free(f->names[i]);
-    free(f->names);
+        yew_xfree(f->names[i]);
+    yew_xfree(f->names);
     f->names = NULL;
     f->n = 0U;
 }
@@ -361,7 +361,7 @@ WalkState *yew_walk_begin(const char *root, const WalkOpts *o, FileList *out)
 
     if (!read_sorted(w, w->path, &names, &n)) {
         seen_free(&w->seen);
-        free(w);
+        yew_xfree(w);
         return NULL;
     }
     {
@@ -554,8 +554,8 @@ void yew_walk_end(WalkState *w)
         return;
     while (w->depth > 0U)
         frame_pop(w);
-    free(w->stack);
+    yew_xfree(w->stack);
     seen_free(&w->seen);
     arena_free_all(&w->gi_arena);
-    free(w);
+    yew_xfree(w);
 }

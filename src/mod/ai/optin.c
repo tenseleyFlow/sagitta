@@ -368,14 +368,14 @@ static char *optin_read_file(const char *path, size_t *len)
     }
     bytes = yew_xmalloc((size_t)size + 1U);
     if (fread(bytes, 1U, (size_t)size, file) != (size_t)size) {
-        free(bytes);
+        yew_xfree(bytes);
         bytes = NULL;
     } else {
         bytes[(size_t)size] = '\0';
         *len = (size_t)size;
     }
     if (fclose(file) != 0) {
-        free(bytes);
+        yew_xfree(bytes);
         return NULL;
     }
     return bytes;
@@ -412,7 +412,7 @@ static void optin_config_backup_free(OptinConfigBackup *backup)
 {
     if (backup == NULL)
         return;
-    free(backup->old);
+    yew_xfree(backup->old);
     (void)memset(backup, 0, sizeof(*backup));
 }
 
@@ -429,7 +429,7 @@ static bool optin_config_rollback(OptinConfigBackup *backup)
     ok = yew_mkdirs(parent, 0700U) &&
          yew_file_write_atomic(backup->path, (const u8 *)backup->old,
                                backup->old_len, 0600) == YEW_SAVE_OK;
-    free(parent);
+    yew_xfree(parent);
     return ok;
 }
 
@@ -454,7 +454,7 @@ static bool optin_write_config(Ed *ed, YewAiOptinBackend backend,
     bytebuf_init(&next);
     if (!yew_ai_optin_config_merge(&next, old, old_len, backend,
                                     allow_all)) {
-        free(old);
+        yew_xfree(old);
         bytebuf_free(&next);
         return false;
     }
@@ -462,10 +462,10 @@ static bool optin_write_config(Ed *ed, YewAiOptinBackend backend,
     ok = yew_mkdirs(parent, 0700U) &&
          yew_file_write_atomic(path, next.data, next.len, 0600) ==
              YEW_SAVE_OK;
-    free(parent);
+    yew_xfree(parent);
     bytebuf_free(&next);
     if (!ok) {
-        free(old);
+        yew_xfree(old);
         return false;
     }
     backup->old = old;
@@ -490,16 +490,16 @@ static bool optin_write_disabled_config(Ed *ed)
         return false;
     bytebuf_init(&next);
     if (!optin_config_disable_merge(&next, old, old_len)) {
-        free(old);
+        yew_xfree(old);
         bytebuf_free(&next);
         return false;
     }
-    free(old);
+    yew_xfree(old);
     parent = optin_parent(path);
     ok = yew_mkdirs(parent, 0700U) &&
          yew_file_write_atomic(path, next.data, next.len, 0600) ==
              YEW_SAVE_OK;
-    free(parent);
+    yew_xfree(parent);
     bytebuf_free(&next);
     return ok;
 }
@@ -614,8 +614,8 @@ static bool optin_commit(Ed *ed, YewAiOptinBackend backend, char scope,
             "(ai: allow for this workspace)\n"
             "  undo: :ai disable; :ai forget", backup.path,
             trust_path == NULL ? "trust.fl" : trust_path);
-    free(trust_path);
-    free(state_dir);
+    yew_xfree(trust_path);
+    yew_xfree(state_dir);
     optin_config_backup_free(&backup);
     return true;
 }

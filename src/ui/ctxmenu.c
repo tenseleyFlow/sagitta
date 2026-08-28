@@ -54,7 +54,7 @@ void yew_ctx_begin(u32 kind)
      * first would keep answering keys, which is how a menu ends up
      * acting on a target nobody can see.
      */
-    free(ctx.target_path);
+    yew_xfree(ctx.target_path);
     (void)memset(&ctx, 0, sizeof(ctx));
     ctx.kind = kind;
     ctx.cursor = -1;
@@ -89,7 +89,7 @@ void yew_ctx_sep(void)
 
 void yew_ctx_target(u32 id, const char *path)
 {
-    free(ctx.target_path);
+    yew_xfree(ctx.target_path);
     ctx.target_path = NULL;
     ctx.target_id = id;
     if (path != NULL) {
@@ -217,7 +217,7 @@ bool yew_ctx_active(void)
 
 void yew_ctx_close(void)
 {
-    free(ctx.target_path);
+    yew_xfree(ctx.target_path);
     (void)memset(&ctx, 0, sizeof(ctx));
     ctx.cursor = -1;
 }

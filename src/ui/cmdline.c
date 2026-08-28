@@ -173,7 +173,7 @@ static void cmdline_target_free(CmdLineTarget *target)
     yew_undo_free(target->buffer.undo);
     yew_textbuf_free(target->buffer.tb);
     yew_filemeta_dispose(&target->buffer.meta);
-    free(target);
+    yew_xfree(target);
 }
 
 static void menu_discard(Ed *ed)
@@ -190,7 +190,7 @@ static void menu_discard(Ed *ed)
      * menu: a prompt opened later must see the directory as it is now. */
     yew_comp_listing_invalidate();
     arena_free_all(&line->comp_arena);
-    free(line->menu_stem);
+    yew_xfree(line->menu_stem);
     line->menu_stem = NULL;
     line->menu_original = (Span){0U, 0U};
     line->comp_total = 0U;
@@ -328,7 +328,7 @@ static bool replace_span(Ed *ed, Span span, const u8 *bytes, size_t len,
         char *draft = text_string(line->buf);
 
         yew_hist_cur_reset(&line->hist, draft);
-        free(draft);
+        yew_xfree(draft);
     }
     clear_error(ed);
     ed->footer_dirty = true;
@@ -486,7 +486,7 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
         char *draft = text_string(line->buf);
 
         yew_hist_cur_reset(&line->hist, draft);
-        free(draft);
+        yew_xfree(draft);
     }
     line->err = (CmdErr){0};
     line->scroll = 0U;
@@ -584,7 +584,7 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     if (input_done != NULL) {
         input_done(ed, accepted, (const u8 *)input_text, input_len,
                    input_ctx);
-        free(input_text);
+        yew_xfree(input_text);
     }
 }
 
@@ -762,7 +762,7 @@ static void cmdline_refilter(Ed *ed)
         yew_menu_dismiss(&line->menu);
         line->hint[0] = '\0';
         arena_free_all(&scratch);
-        free(text);
+        yew_xfree(text);
         ed->full_damage = true;
         return;
     }
@@ -771,7 +771,7 @@ static void cmdline_refilter(Ed *ed)
         query.replace.hi <= query.replace.lo) {
         yew_menu_dismiss(&line->menu);
         arena_free_all(&scratch);
-        free(text);
+        yew_xfree(text);
         ed->full_damage = true;
         return;
     }
@@ -786,7 +786,7 @@ static void cmdline_refilter(Ed *ed)
         yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
     }
     arena_free_all(&scratch);
-    free(text);
+    yew_xfree(text);
     ed->full_damage = true;
 }
 
@@ -848,7 +848,7 @@ void yew_cmdline_edited(Ed *ed)
     sync_from_target(&ed->cmdline);
     draft = text_string(ed->cmdline.buf);
     yew_hist_cur_reset(&ed->cmdline.hist, draft);
-    free(draft);
+    yew_xfree(draft);
     clear_error(ed);
     cmdline_refilter(ed);
     ed->footer_dirty = true;
@@ -876,7 +876,7 @@ void yew_cmdline_text(Ed *ed, Bytebuf *out)
     if (text == NULL)
         return;
     bytebuf_append(out, text, strlen(text));
-    free(text);
+    yew_xfree(text);
 }
 
 void yew_cmdline_sync(Ed *ed)
@@ -1015,7 +1015,7 @@ static CmdStatus complete(Ed *ed, bool previous)
                         (size_t)line->cur.pos.v,
                         &scratch, &query)) {
         arena_free_all(&scratch);
-        free(text);
+        yew_xfree(text);
         return insert_sanitized(ed, (const u8 *)"\t", 1U);
     }
     /*
@@ -1033,7 +1033,7 @@ static CmdStatus complete(Ed *ed, bool previous)
         ed->footer_dirty = true;
         Vec_CompItem_free(&items);
         arena_free_all(&scratch);
-        free(text);
+        yew_xfree(text);
         return YEW_CMD_OK;
     }
     if (items.len == 1U) {
@@ -1041,7 +1041,7 @@ static CmdStatus complete(Ed *ed, bool previous)
 
         Vec_CompItem_free(&items);
         arena_free_all(&scratch);
-        free(text);
+        yew_xfree(text);
         if (!ok)
             return YEW_CMD_ERR_IO;
         /*
@@ -1053,7 +1053,7 @@ static CmdStatus complete(Ed *ed, bool previous)
         cmdline_refilter(ed);
         return YEW_CMD_OK;
     }
-    free(line->menu_stem);
+    yew_xfree(line->menu_stem);
     line->menu_stem = heap_slice(text, query.replace);
     line->menu_original = query.replace;
     yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
@@ -1084,7 +1084,7 @@ static CmdStatus complete(Ed *ed, bool previous)
                           true)) {
             menu_discard(ed);
             arena_free_all(&scratch);
-            free(text);
+            yew_xfree(text);
             return YEW_CMD_ERR_IO;
         }
         line->menu.replace = (Span){query.replace.lo,
@@ -1099,7 +1099,7 @@ static CmdStatus complete(Ed *ed, bool previous)
             if (item != NULL &&
                 !insert_completion(ed, line->menu.replace, item, false)) {
                 arena_free_all(&scratch);
-                free(text);
+                yew_xfree(text);
                 return YEW_CMD_ERR_IO;
             }
         }
@@ -1107,7 +1107,7 @@ static CmdStatus complete(Ed *ed, bool previous)
     ed->full_damage = true;
     ed->footer_dirty = true;
     arena_free_all(&scratch);
-    free(text);
+    yew_xfree(text);
     return YEW_CMD_OK;
 }
 
@@ -1497,7 +1497,7 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
     }
     text = text_string(line->buf);
     if (yew_textbuf_len(line->buf) == 0U) {
-        free(text);
+        yew_xfree(text);
         yew_cmdline_close(ed, true);
         return YEW_CMD_OK;
     }
@@ -1511,13 +1511,13 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
     if (line->kind == YEW_PROMPT_SEARCH_F ||
         line->kind == YEW_PROMPT_SEARCH_B) {
         yew_hist_add(line->history, text);
-        free(text);
+        yew_xfree(text);
         yew_cmdline_close(ed, true);
         return YEW_CMD_OK;
     }
     if (line->kind == YEW_PROMPT_INPUT) {
         yew_hist_add(line->history, text);
-        free(text);
+        yew_xfree(text);
         yew_cmdline_close(ed, true);
         return YEW_CMD_OK;
     }
@@ -1526,7 +1526,7 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
                        &arena, &parsed)) {
         set_error(ed, &parsed.err);
         arena_free_all(&arena);
-        free(text);
+        yew_xfree(text);
         return YEW_CMD_ERR_ARG;
     }
     invoke = (YewCmdInvoke){parsed.range, parsed.argv, 0, parsed.bang,
@@ -1557,7 +1557,7 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
             set_error(ed, &error);
         }
         arena_free_all(&arena);
-        free(text);
+        yew_xfree(text);
         return status;
     }
     if (ed->cmdline.active &&
@@ -1568,7 +1568,7 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
         history_add_closed_prompt(ed, accepted_kind, text);
     set_cmd_register(ed, text);
     arena_free_all(&arena);
-    free(text);
+    yew_xfree(text);
     if (ed->cmdline.active &&
         ed->cmdline.generation == accepted_generation &&
         ed->cmdline.kind == accepted_kind)
@@ -1603,7 +1603,7 @@ CmdStatus yew_cmdline_cmd_cancel(CmdCtx *cx)
             bool ok = replace_span(cx->ed, replace, (const u8 *)stem,
                                    strlen(stem), true);
 
-            free(stem);
+            yew_xfree(stem);
             return ok ? YEW_CMD_OK : YEW_CMD_ERR_IO;
         }
         return YEW_CMD_OK;
@@ -1857,7 +1857,7 @@ void yew_cmdline_draw(Ed *ed, Rect rect)
                                style.row_fg, style.row_bg, 0U);
         }
         if (bytes != local)
-            free(bytes);
+            yew_xfree(bytes);
         logical.v += cluster.cells;
         at = BYTEOFF(cluster.bytes.hi);
     }

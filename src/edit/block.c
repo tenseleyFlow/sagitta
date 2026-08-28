@@ -636,7 +636,7 @@ static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
     if (!read_span(u->tb, window, bytes))
         YEW_BUG("scope provider cannot read scan window");
     if (!scope_window_has_delimiter(bytes, window_len)) {
-        free(bytes);
+        yew_xfree(bytes);
         return false;
     }
     while (cursor < window_len) {
@@ -732,8 +732,8 @@ static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
         }
         cursor += raw_len;
     }
-    free(bytes);
-    free(stack.data);
+    yew_xfree(bytes);
+    yew_xfree(stack.data);
     if (!have_best)
         return false;
     *out = best;

@@ -169,7 +169,7 @@ static void command_call_free(AiCommandCall *call)
         yew_memzero(call->curl_config.data, call->curl_config.cap);
     bytebuf_free(&call->curl_config);
     yew_memzero(call, sizeof(*call));
-    free(call);
+    yew_xfree(call);
 }
 
 void yew_ai_command_cancel(Ed *ed)
@@ -1002,14 +1002,14 @@ CmdStatus yew_ai_cmd_reload(CmdCtx *cx)
         }
         cx->ed->ai->http = old;
         yew_http_state_free(fresh);
-        free(loopback);
+        yew_xfree(loopback);
         yew_msg(cx->ed, YEW_MSG_WARN, "%s", error.msg);
         ai_log(cx->ed, "reload failed: %s", error.msg);
         return YEW_CMD_ERR_IO;
     }
     yew_http_state_free(old);
     yew_ai_key_cache_reload(&cx->ed->ai->keys);
-    free(loopback);
+    yew_xfree(loopback);
     yew_msg(cx->ed, YEW_MSG_INFO, "reloaded %u AI backend%s; key cache cleared",
             (unsigned)count, count == 1U ? "" : "s");
     ai_log(cx->ed, "reload: %u backend%s; key cache cleared",

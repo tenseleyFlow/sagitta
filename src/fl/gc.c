@@ -339,7 +339,7 @@ static void obj_free(FlVm *vm, FlObj *o)
     /* FL_MOTION_PROG's op array is ARENA memory, not heap: the
      * compiler builds it alongside the chunk it belongs to and it
      * dies with that arena.  Freeing it here handed an arena
-     * pointer to free(). */
+     * pointer to the allocator release path. */
     default: break;
     }
     if (vm->gc.stress) {

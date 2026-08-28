@@ -222,7 +222,7 @@ void yew_lsp_highlight_clear(Ed *ed, Win *w)
 
 static void highlight_request_free(void *ctx)
 {
-    free(ctx);
+    yew_xfree(ctx);
 }
 
 static void highlight_apply(Ed *ed, Win *w, const Vec_LspHighlight *rows)

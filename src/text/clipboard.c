@@ -175,7 +175,7 @@ static bool clip_path_exec(const char *name)
         (void)memcpy(candidate + used, name, name_len + 1U);
         found = access(candidate, X_OK) == 0 && stat(candidate, &st) == 0 &&
                 S_ISREG(st.st_mode);
-        free(candidate);
+        yew_xfree(candidate);
         if (found)
             return true;
         if (colon == NULL)
@@ -317,8 +317,8 @@ YewClipBackend yew_clip_detect_read(void)
 
 static void clip_cmd_free(YewClipCmd *cmd)
 {
-    free(cmd->argv);
-    free(cmd->storage);
+    yew_xfree(cmd->argv);
+    yew_xfree(cmd->storage);
     cmd->argv = NULL;
     cmd->storage = NULL;
 }

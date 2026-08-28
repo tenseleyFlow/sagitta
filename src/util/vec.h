@@ -39,7 +39,7 @@
     }                                                                          \
     static inline void Name##_free(Name *vec)                                  \
     {                                                                          \
-        free(vec->data);                                                       \
+        yew_xfree(vec->data);                                                  \
         vec->data = NULL;                                                      \
         vec->len = 0;                                                          \
         vec->cap = 0;                                                          \

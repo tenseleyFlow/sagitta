@@ -636,7 +636,7 @@ static CmdStatus promote_macro(Ed *ed, u8 reg, const char *name,
     if (!read_file(path, &file) && stat(path, &existing) == 0) {
         yew_msg(ed, YEW_MSG_ERROR, "cannot read existing %s", path);
         bytebuf_free(&file);
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_IO;
     }
     bytebuf_init(&candidate);
@@ -661,7 +661,7 @@ static CmdStatus promote_macro(Ed *ed, u8 reg, const char *name,
                 diag == NULL ? "named macro does not compile" : diag);
         bytebuf_free(&candidate);
         bytebuf_free(&file);
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_ARG;
     }
     (void)compiled;
@@ -670,7 +670,7 @@ static CmdStatus promote_macro(Ed *ed, u8 reg, const char *name,
     bytebuf_free(&file);
     if (saved != YEW_SAVE_OK) {
         yew_msg(ed, YEW_MSG_ERROR, "cannot write %s", path);
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_IO;
     }
     (void)yew_macrolib_scan(ed, NULL);
@@ -684,15 +684,15 @@ static CmdStatus promote_macro(Ed *ed, u8 reg, const char *name,
             !loaded.replayable) {
             yew_msg(ed, YEW_MSG_ERROR,
                     "wrote %s but macro %s did not load", path, canonical);
-            free(canonical);
-            free(path);
+            yew_xfree(canonical);
+            yew_xfree(path);
             return YEW_CMD_ERR_STATE;
         }
-        free(canonical);
+        yew_xfree(canonical);
     }
     yew_msg(ed, YEW_MSG_INFO, "named macro @%c as %.*s", (int)reg,
             (int)name_len, name);
-    free(path);
+    yew_xfree(path);
     return YEW_CMD_OK;
 }
 

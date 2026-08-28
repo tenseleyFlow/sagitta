@@ -983,9 +983,9 @@ static void conn_destroy(HttpConn *c)
     bytebuf_free(&c->out);
     if (c->rx != NULL) {
         bytebuf_free(&c->rx->line);
-        free(c->rx);
+        yew_xfree(c->rx);
     }
-    free(c);
+    yew_xfree(c);
 }
 
 void yew_http_state_free(HttpState *state)
@@ -1002,7 +1002,7 @@ void yew_http_state_free(HttpState *state)
     while (endpoint != NULL) {
         HttpEndpoint *next = endpoint->next;
 
-        free(endpoint);
+        yew_xfree(endpoint);
         endpoint = next;
     }
     conn = state->connections;
@@ -1012,7 +1012,7 @@ void yew_http_state_free(HttpState *state)
         conn_destroy(conn);
         conn = next;
     }
-    free(state);
+    yew_xfree(state);
 }
 
 static HttpState *http_state(Ed *ed)

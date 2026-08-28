@@ -104,7 +104,7 @@ void yew_diag_store_free(Buffer *b)
         diagnostic_drop_marks(b, &b->diag->d.data[i]);
     DiagnosticVec_free(&b->diag->d);
     arena_free_all(&b->diag->arena);
-    free(b->diag);
+    yew_xfree(b->diag);
     b->diag = NULL;
 }
 

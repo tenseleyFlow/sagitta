@@ -242,7 +242,7 @@ void yew_idmap_free(IdMapVec *m)
 {
     if (m == NULL)
         return;
-    free(m->data);
+    yew_xfree(m->data);
     (void)memset(m, 0, sizeof(*m));
 }
 

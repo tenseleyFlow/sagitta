@@ -201,7 +201,7 @@ static void discovered_owned_free(DiscoveredDef *owned)
 {
     yew_syn_def_dispose(owned->def);
     arena_free_all(&owned->arena);
-    free(owned);
+    yew_xfree(owned);
 }
 
 void yew_syn_def_pin(const SynDef *def)
@@ -1639,7 +1639,7 @@ static void register_meta(Compile *c, SynDef *def, SynLangDesc *lang,
                  err.msg == NULL ? "compile failed" : err.msg);
     }
     if (c->errors != 0U) {
-        free(m);
+        yew_xfree(m);
         return;
     }
     meta_link(m);
@@ -1844,7 +1844,7 @@ void yew_syn_def_dispose(SynDef *def)
         if (m->aux != NULL)
             interner_free(m->aux);
         yew_syn_engine_free(m->engine);
-        free(m);
+        yew_xfree(m);
         return;
     }
 }
@@ -1952,13 +1952,13 @@ static void discover_user_definitions(void)
     if (config == NULL)
         return;
     dir = discovery_path(config, "syntax");
-    free(config);
+    yew_xfree(config);
     stream = opendir(dir);
     if (stream == NULL) {
         if (errno != ENOENT)
             yew_log(YEW_LOG_WARN, "cannot scan syntax definitions: %s",
                     dir);
-        free(dir);
+        yew_xfree(dir);
         return;
     }
     errno = 0;
@@ -1995,21 +1995,21 @@ static void discover_user_definitions(void)
                     owned->def->name, path);
             yew_syn_def_dispose(owned->def);
             arena_free_all(&owned->arena);
-            free(owned);
+            yew_xfree(owned);
         } else if (owned->def == NULL) {
             yew_log(YEW_LOG_WARN, "ignoring invalid syntax definition: %s",
                     path);
             arena_free_all(&owned->arena);
-            free(owned);
+            yew_xfree(owned);
         } else {
             owned->next = discovered_defs;
             discovered_defs = owned;
         }
-        free(path);
-        free(names[i]);
+        yew_xfree(path);
+        yew_xfree(names[i]);
     }
-    free(names);
-    free(dir);
+    yew_xfree(names);
+    yew_xfree(dir);
 }
 
 void yew_syn_discovery_reset(void)
@@ -2752,7 +2752,7 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
 fail:
     if (aux != NULL)
         interner_free(aux);
-    free(m);
+    yew_xfree(m);
     return NULL;
 }
 
@@ -2886,7 +2886,7 @@ char *yew_syn_cache_dir(void)
     n = strlen(root) + strlen("/syn");
     path = yew_xmalloc(n + 1U);
     (void)snprintf(path, n + 1U, "%s/syn", root);
-    free(root);
+    yew_xfree(root);
     return path;
 }
 
@@ -2904,7 +2904,7 @@ char *yew_syn_cache_path(const char *name)
     n = strlen(dir) + 1U + strlen(name) + strlen(".stab");
     path = yew_xmalloc(n + 1U);
     (void)snprintf(path, n + 1U, "%s/%s.stab", dir, name);
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -2925,7 +2925,7 @@ bool yew_syn_cache_clear(void)
     stream = opendir(dir);
     if (stream == NULL) {
         ok = errno == ENOENT;
-        free(dir);
+        yew_xfree(dir);
         return ok;
     }
     errno = 0;
@@ -2941,14 +2941,14 @@ bool yew_syn_cache_clear(void)
             (void)snprintf(path, n + 1U, "%s/%s", dir, entry->d_name);
             if (unlink(path) != 0 && errno != ENOENT)
                 ok = false;
-            free(path);
+            yew_xfree(path);
         }
     }
     if (errno != 0)
         ok = false;
     if (closedir(stream) != 0)
         ok = false;
-    free(dir);
+    yew_xfree(dir);
     return ok;
 }
 
@@ -2980,14 +2980,14 @@ static bool cache_write(const char *path, const struct stat *st,
     bool ok;
 
     if (path == NULL || dir == NULL || blob_len > UINT32_MAX) {
-        free(dir);
+        yew_xfree(dir);
         return false;
     }
     if (!yew_mkdirs(dir, 0700U)) {
-        free(dir);
+        yew_xfree(dir);
         return false;
     }
-    free(dir);
+    yew_xfree(dir);
     (void)memset(header, 0, sizeof(header));
     (void)memcpy(header, YEW_SYN_CACHE_MAGIC, 8U);
     put32(header + 8U, YEW_SYN_TABLE_VERSION);
@@ -3033,7 +3033,7 @@ static char *builtin_language_for_source(const char *source)
 
         resolved = runtime_definition_path(&yew_syn_builtin_langs[i]);
         matches = strcmp(source, resolved) == 0;
-        free(resolved);
+        yew_xfree(resolved);
         if (matches) {
             char *name = yew_xmalloc(strlen(builtin_name) + 1U);
 
@@ -3211,8 +3211,8 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
     (void)warnings;
 
 done:
-    free(expected_name);
-    free(cache_path);
+    yew_xfree(expected_name);
+    yew_xfree(cache_path);
     bytebuf_free(&source);
     bytebuf_free(&cached);
     bytebuf_free(&packed);
@@ -3677,7 +3677,7 @@ static char *runtime_definition_path(const SynLangSeed *seed)
         (void)snprintf(path, n + 1U, "%s/%s", root, relative);
         if (access(path, R_OK) == 0)
             return path;
-        free(path);
+        yew_xfree(path);
     }
     root = YEW_RUNTIME_DIR_DEFAULT;
     n = strlen(root) + 1U + strlen(relative);
@@ -3685,7 +3685,7 @@ static char *runtime_definition_path(const SynLangSeed *seed)
     (void)snprintf(path, n + 1U, "%s/%s", root, relative);
     if (access(path, R_OK) == 0)
         return path;
-    free(path);
+    yew_xfree(path);
     path = yew_xmalloc(strlen(seed->source) + 1U);
     (void)memcpy(path, seed->source, strlen(seed->source) + 1U);
     return path;
@@ -3700,7 +3700,7 @@ static SynDef *load_builtin_definition(Arena *arena, DiagCtx *dc,
     (void)ctx;
     path = runtime_definition_path(seed);
     def = yew_syn_def_load(arena, dc, path);
-    free(path);
+    yew_xfree(path);
     return def;
 }
 

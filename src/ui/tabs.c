@@ -51,7 +51,7 @@ static void tab_destroy(Ed *ed, Tab *t)
             yew_ed_win_release(ed, leaves[i]->win);
         yew_pane_free(ed, t->root);
     }
-    free(t->path);
+    yew_xfree(t->path);
     (void)memset(t, 0, sizeof(*t));
 }
 
@@ -125,7 +125,7 @@ static char *canonical_path(const char *path)
 
     if (path == NULL || path[0] == '\0')
         return NULL;
-    resolved = realpath(path, NULL);
+    resolved = yew_xrealpath(path);
     if (resolved != NULL)
         return resolved; /* realpath allocates; the Tab owns it */
     /* A path that does not exist yet is still a legitimate tab name;
@@ -155,7 +155,7 @@ int yew_tab_find_by_path(const Ed *ed, const char *path)
             break;
         }
     }
-    free(want);
+    yew_xfree(want);
     return found;
 }
 
@@ -165,7 +165,7 @@ void yew_tab_set_path(Ed *ed, int idx, const char *path)
 
     if (t == NULL)
         return;
-    free(t->path);
+    yew_xfree(t->path);
     t->path = canonical_path(path);
     yew_state_mark_dirty(ed);
 }
@@ -212,7 +212,7 @@ int yew_tab_open(Ed *ed, const char *path)
     buf = yew_ws_file_buf(ed, t.path);
     if (buf == NULL) {
         yew_ed_win_release(ed, win);
-        free(t.path);
+        yew_xfree(t.path);
         yew_msg(ed, YEW_MSG_ERROR, "no room for another buffer");
         return -1;
     }

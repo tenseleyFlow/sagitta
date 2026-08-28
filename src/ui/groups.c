@@ -36,9 +36,9 @@ static void group_dispose(TabGroup *g)
 {
     if (g == NULL)
         return;
-    free(g->label);
-    free(g->dir_path);
-    free(g->last_active_member);
+    yew_xfree(g->label);
+    yew_xfree(g->dir_path);
+    yew_xfree(g->last_active_member);
     (void)memset(g, 0, sizeof(*g));
 }
 
@@ -447,7 +447,7 @@ void yew_group_note_position(Ed *ed)
     t = yew_tab_at(ed, ed->tabs.active);
     if (g == NULL || t == NULL || t->path == NULL)
         return;
-    free(g->last_active_member);
+    yew_xfree(g->last_active_member);
     g->last_active_member = dup_str(t->path);
 }
 
@@ -457,7 +457,7 @@ void yew_group_set_last_member(Ed *ed, u32 gid, const char *path)
 
     if (g == NULL)
         return;
-    free(g->last_active_member);
+    yew_xfree(g->last_active_member);
     g->last_active_member = path == NULL ? NULL : dup_str(path);
     yew_state_mark_dirty(ed);
 }

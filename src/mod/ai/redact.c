@@ -180,8 +180,8 @@ void yew_ai_redact_policy_free(AiRedactPolicy *policy)
     if (policy == NULL)
         return;
     arena_free_all(&policy->arena);
-    free(policy->rules);
-    free(policy);
+    yew_xfree(policy->rules);
+    yew_xfree(policy);
 }
 
 size_t yew_ai_redact_policy_len(const AiRedactPolicy *policy)
@@ -420,9 +420,9 @@ void yew_ai_path_policy_free(AiPathPolicy *policy)
     if (policy == NULL)
         return;
     for (i = 0U; i < policy->len; i++)
-        free(policy->globs[i]);
-    free(policy->globs);
-    free(policy);
+        yew_xfree(policy->globs[i]);
+    yew_xfree(policy->globs);
+    yew_xfree(policy);
 }
 
 size_t yew_ai_path_policy_len(const AiPathPolicy *policy)

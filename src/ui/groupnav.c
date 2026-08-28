@@ -375,7 +375,7 @@ CmdStatus yew_group_cmd_rename(CmdCtx *cx)
     nu = yew_xmalloc(cx->sarg_len + 1U);
     (void)memcpy(nu, cx->sarg, cx->sarg_len);
     nu[cx->sarg_len] = '\0';
-    free(g->label);
+    yew_xfree(g->label);
     g->label = nu;
     yew_state_mark_dirty(ed);
     ed->full_damage = true;

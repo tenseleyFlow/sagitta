@@ -53,8 +53,8 @@ void fl_hook_table_free(FlHookTable *t)
 {
     if (t == NULL)
         return;
-    free(t->v);
-    free(t->ledger.v);
+    yew_xfree(t->v);
+    yew_xfree(t->ledger.v);
     (void)memset(t, 0, sizeof(*t));
 }
 

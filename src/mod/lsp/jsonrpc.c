@@ -485,7 +485,7 @@ void yew_rpc_destroy(void *owner)
 
     if (c != NULL) {
         yew_rpc_conn_free(c);
-        free(c);
+        yew_xfree(c);
     }
 }
 

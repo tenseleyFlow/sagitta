@@ -76,7 +76,7 @@ void yew_filemeta_dispose(FileMeta *meta)
     if (meta == NULL)
         return;
     yew_filemeta_content_forget(meta);
-    free(meta->realpath);
+    yew_xfree(meta->realpath);
     yew_filemeta_init(meta);
 }
 
@@ -192,10 +192,10 @@ static int open_temp(const char *dir, const char *base, mode_t mode,
 static char *canonical_new_path(const char *path)
 {
     char *dir = path_dirname(path);
-    char *resolved_dir = realpath(dir, NULL);
+    char *resolved_dir = yew_xrealpath(dir);
     char *result;
 
-    free(dir);
+    yew_xfree(dir);
     if (resolved_dir == NULL)
         return string_copy(path);
     {
@@ -205,7 +205,7 @@ static char *canonical_new_path(const char *path)
         result = yew_xmalloc(n);
         (void)snprintf(result, n, "%s/%s", resolved_dir, base);
     }
-    free(resolved_dir);
+    yew_xfree(resolved_dir);
     return result;
 }
 
@@ -218,7 +218,7 @@ static char *resolve_save_target_at(const char *path, unsigned int depth)
     size_t cap;
     ssize_t len;
 
-    resolved = realpath(path, NULL);
+    resolved = yew_xrealpath(path);
     if (resolved != NULL)
         return resolved;
     if (errno != ENOENT || depth >= 40U)
@@ -246,7 +246,7 @@ static char *resolve_save_target_at(const char *path, unsigned int depth)
     if (len < 0 || (size_t)len >= cap - 1U) {
         int saved_errno = len < 0 ? errno : ENAMETOOLONG;
 
-        free(link_text);
+        yew_xfree(link_text);
         errno = saved_errno;
         return NULL;
     }
@@ -259,11 +259,11 @@ static char *resolve_save_target_at(const char *path, unsigned int depth)
 
         next = yew_xmalloc(next_len);
         (void)snprintf(next, next_len, "%s/%s", dir, link_text);
-        free(dir);
-        free(link_text);
+        yew_xfree(dir);
+        yew_xfree(link_text);
     }
     resolved = resolve_save_target_at(next, depth + 1U);
-    free(next);
+    yew_xfree(next);
     return resolved;
 }
 
@@ -291,8 +291,8 @@ static void warn_temp_leftovers(const char *path)
         }
         (void)closedir(stream);
     }
-    free(prefix);
-    free(dir);
+    yew_xfree(prefix);
+    yew_xfree(dir);
 }
 
 /*
@@ -381,19 +381,19 @@ YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta)
     bytes = yew_xmalloc(size);
     if (!read_exact_file(fd, bytes, size)) {
         saved_errno = errno;
-        free(bytes);
+        yew_xfree(bytes);
         (void)close(fd);
         return saved_errno == EACCES ? YEW_LOAD_EACCES : YEW_LOAD_IO;
     }
     if (fstat(fd, &after) != 0 || after.st_dev != st.st_dev ||
         after.st_ino != st.st_ino || after.st_size != st.st_size ||
         !timespec_equal(stat_mtime(&after), stat_mtime(&st))) {
-        free(bytes);
+        yew_xfree(bytes);
         (void)close(fd);
         return YEW_LOAD_IO;
     }
     if (close(fd) != 0) {
-        free(bytes);
+        yew_xfree(bytes);
         return YEW_LOAD_IO;
     }
     if ((u64)size > YEW_FILE_NORMAL_MAX)
@@ -409,7 +409,7 @@ YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta)
     meta->ino = st.st_ino;
     meta->mtime = stat_mtime(&st);
     meta->size_on_disk = (u64)size;
-    meta->realpath = realpath(path, NULL);
+    meta->realpath = yew_xrealpath(path);
     if (meta->realpath == NULL)
         meta->realpath = string_copy(path);
     classify_bytes(bytes, size, meta, &content_at, &simple_ascii);
@@ -728,7 +728,7 @@ static char *state_backup_dir(const char *configured)
     if (configured != NULL && configured[0] != '\0') {
         dir = string_copy(configured);
         if (!make_parent_dirs(dir) || !make_dir(dir)) {
-            free(dir);
+            yew_xfree(dir);
             return NULL;
         }
         return dir;
@@ -746,7 +746,7 @@ static char *state_backup_dir(const char *configured)
     dir = yew_xmalloc(n);
     (void)snprintf(dir, n, "%s%s", state, suffix);
     if (!make_parent_dirs(dir) || !make_dir(dir)) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     return dir;
@@ -778,7 +778,7 @@ static char *backup_path(const char *dst, const YewSaveOpts *opts)
     path = yew_xmalloc(n);
     (void)snprintf(path, n, "%s/%016llx.bak", dir,
                    (unsigned long long)fnv64(key));
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -822,12 +822,12 @@ static bool rotate_backups(const char *base, u32 keep)
         char *to = numbered_backup_path(base, number);
 
         if (rename(from, to) != 0 && errno != ENOENT) {
-            free(to);
-            free(from);
+            yew_xfree(to);
+            yew_xfree(from);
             return false;
         }
-        free(to);
-        free(from);
+        yew_xfree(to);
+        yew_xfree(from);
     }
     return true;
 }
@@ -845,7 +845,7 @@ static bool prune_backups(const char *base, u32 keep)
 
         if (unlink(path) != 0 && errno != ENOENT)
             ok = false;
-        free(path);
+        yew_xfree(path);
     }
     return ok;
 }
@@ -857,7 +857,7 @@ static bool discard_backup(const char *path)
 
     if (ok)
         ok = fsync_directory(dir);
-    free(dir);
+    yew_xfree(dir);
     return ok;
 }
 
@@ -875,7 +875,7 @@ static bool recovery_paths_dispose(BackupRecovery *recoveries, u32 count,
         if (unlink_paths && unlink(recoveries[i].path) != 0 &&
             errno != ENOENT)
             ok = false;
-        free(recoveries[i].path);
+        yew_xfree(recoveries[i].path);
         recoveries[i].path = NULL;
     }
     return ok;
@@ -901,7 +901,7 @@ static bool link_recovery_unique(const char *source, char **path_out)
             *path_out = recovery;
             return true;
         }
-        free(recovery);
+        yew_xfree(recovery);
         if (errno != EEXIST)
             return false;
     }
@@ -925,7 +925,7 @@ static bool preserve_rotation_history(const char *base, u32 keep,
         if (lstat(source, &st) != 0) {
             int saved_errno = errno;
 
-            free(source);
+            yew_xfree(source);
             if (saved_errno == ENOENT)
                 continue;
             errno = saved_errno;
@@ -936,14 +936,14 @@ static bool preserve_rotation_history(const char *base, u32 keep,
                 if (unlink(source) != 0) {
                     int saved_errno = errno;
 
-                    free(source);
+                    yew_xfree(source);
                     errno = saved_errno;
                     goto fail;
                 }
-                free(source);
+                yew_xfree(source);
                 continue;
             }
-            free(source);
+            yew_xfree(source);
             errno = EINVAL;
             goto fail;
         }
@@ -951,12 +951,12 @@ static bool preserve_rotation_history(const char *base, u32 keep,
                                   &recoveries[*recovery_count].path)) {
             int saved_errno = errno;
 
-            free(source);
+            yew_xfree(source);
             errno = saved_errno;
             goto fail;
         }
         (*recovery_count)++;
-        free(source);
+        yew_xfree(source);
     }
     if (!fsync_directory(dir))
         return false;
@@ -1006,7 +1006,7 @@ static bool commit_backup_rotation(const char *pending, const char *base,
     }
     if (recovery_count != 0U)
         (void)recovery_paths_dispose(recoveries, recovery_count, false);
-    free(dir);
+    yew_xfree(dir);
     return ok;
 }
 
@@ -1075,7 +1075,7 @@ static bool copy_path_to_backup(const char *src_path, const char *bak_path,
         goto done;
     if (unlink(tmp) != 0)
         goto done;
-    free(tmp);
+    yew_xfree(tmp);
     tmp = NULL;
     if (!fsync_directory(dir))
         goto done;
@@ -1093,8 +1093,8 @@ done:
     }
     if (!ok && tmp != NULL)
         (void)unlink(tmp);
-    free(tmp);
-    free(dir);
+    yew_xfree(tmp);
+    yew_xfree(dir);
     if (!ok)
         errno = saved_errno;
     return ok;
@@ -1166,7 +1166,7 @@ static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
         dir = path_dirname(dst);
         if (ok && !fsync_directory(dir))
             ok = false;
-        free(dir);
+        yew_xfree(dir);
         if (!ok) {
             (void)unlink(dst);
             return YEW_SAVE_IO;
@@ -1188,15 +1188,15 @@ static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
             }
             if (errno != EEXIST)
                 break;
-            free(pending);
+            yew_xfree(pending);
             pending = NULL;
         }
     }
     if (!backup_copied) {
         int saved_errno = errno;
 
-        free(pending);
-        free(bak);
+        yew_xfree(pending);
+        yew_xfree(bak);
         if (saved_errno == ESTALE)
             return YEW_SAVE_CHANGED_ON_DISK;
         return saved_errno == EACCES || saved_errno == EPERM ? YEW_SAVE_PERM
@@ -1211,8 +1211,8 @@ static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
         int saved_errno = errno;
 
         (void)discard_backup(pending);
-        free(pending);
-        free(bak);
+        yew_xfree(pending);
+        yew_xfree(bak);
         return saved_errno == EACCES || saved_errno == EPERM
                    ? YEW_SAVE_PERM
                    : YEW_SAVE_IO;
@@ -1220,8 +1220,8 @@ static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
     if (fstat(fd, &st) != 0 || !stat_matches_meta(&st, meta)) {
         (void)close(fd);
         (void)discard_backup(pending);
-        free(pending);
-        free(bak);
+        yew_xfree(pending);
+        yew_xfree(bak);
         return YEW_SAVE_CHANGED_ON_DISK;
     }
     ok = write_text(fd, tb, meta->had_bom);
@@ -1234,19 +1234,19 @@ static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
     if (!ok) {
         if (restore_backup(pending, dst))
             (void)discard_backup(pending);
-        free(pending);
-        free(bak);
+        yew_xfree(pending);
+        yew_xfree(bak);
         return YEW_SAVE_IO;
     }
     if (!commit_backup_rotation(pending, bak, opts->backup_keep)) {
         yew_log(YEW_LOG_WARN,
                 "save completed but backup retention failed; recovery evidence was preserved where possible");
-        free(pending);
-        free(bak);
+        yew_xfree(pending);
+        yew_xfree(bak);
         return YEW_SAVE_BACKUP_FAILED;
     }
-    free(pending);
-    free(bak);
+    yew_xfree(pending);
+    yew_xfree(bak);
     return YEW_SAVE_OK;
 }
 
@@ -1262,7 +1262,7 @@ static void copy_xattrs(const char *src, int dst)
     names = yew_xmalloc((size_t)names_len);
     names_len = listxattr(src, names, (size_t)names_len);
     if (names_len <= 0) {
-        free(names);
+        yew_xfree(names);
         return;
     }
     name = names;
@@ -1276,11 +1276,11 @@ static void copy_xattrs(const char *src, int dst)
             value_len = getxattr(src, name, value, (size_t)value_len);
             if (value_len >= 0)
                 (void)fsetxattr(dst, name, value, (size_t)value_len, 0);
-            free(value);
+            yew_xfree(value);
         }
         name += name_len;
     }
-    free(names);
+    yew_xfree(names);
 }
 #else
 static void copy_xattrs(const char *src, int dst)
@@ -1316,7 +1316,7 @@ static int open_temp(const char *dir, const char *base, mode_t mode,
             *path_out = path;
             return fd;
         }
-        free(path);
+        yew_xfree(path);
         if (errno != EEXIST)
             return -1;
     }
@@ -1361,8 +1361,8 @@ YewAtomicWriteResult yew_file_write_atomic_result(const char *path,
     result.committed = true;
     if (!fsync_directory(dir))
         goto fail;
-    free(tmp);
-    free(dir);
+    yew_xfree(tmp);
+    yew_xfree(dir);
     result.error = YEW_SAVE_OK;
     return result;
 
@@ -1372,8 +1372,8 @@ fail:
         (void)close(fd);
     if (tmp != NULL)
         (void)unlink(tmp);
-    free(tmp);
-    free(dir);
+    yew_xfree(tmp);
+    yew_xfree(dir);
     errno = saved_errno;
     result.error = saved_errno == EACCES || saved_errno == EPERM
                        ? YEW_SAVE_PERM
@@ -1436,7 +1436,7 @@ static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
 
     if (fd < 0) {
         saved_errno = errno;
-        free(dir);
+        yew_xfree(dir);
         return saved_errno == EACCES || saved_errno == EPERM
                    ? YEW_SAVE_PERM
                    : YEW_SAVE_IO;
@@ -1448,8 +1448,8 @@ static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         if (fchown(fd, meta->uid, meta->gid) != 0 && foreign_owner) {
             (void)close(fd);
             (void)unlink(tmp);
-            free(tmp);
-            free(dir);
+            yew_xfree(tmp);
+            yew_xfree(dir);
             return force_atomic ? YEW_SAVE_IO :
                    inplace_save(tb, meta, dst, opts, saved_st);
         }
@@ -1467,29 +1467,29 @@ static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
     match = destination_matches(meta, dst, opts, &accepted, &needs_inplace);
     if (match != YEW_SAVE_OK) {
         (void)unlink(tmp);
-        free(tmp);
-        free(dir);
+        yew_xfree(tmp);
+        yew_xfree(dir);
         return match;
     }
     if (needs_inplace && !force_atomic) {
         (void)unlink(tmp);
-        free(tmp);
-        free(dir);
+        yew_xfree(tmp);
+        yew_xfree(dir);
         return inplace_save(tb, &accepted, dst, opts, saved_st);
     }
     if (!commit_temp(tmp, dst, dir)) {
         saved_errno = errno;
         (void)unlink(tmp);
-        free(tmp);
-        free(dir);
+        yew_xfree(tmp);
+        yew_xfree(dir);
         if (saved_errno == EXDEV && !force_atomic)
             return inplace_save(tb, &accepted, dst, opts, saved_st);
         return saved_errno == EACCES || saved_errno == EPERM
                    ? YEW_SAVE_PERM
                    : YEW_SAVE_IO;
     }
-    free(tmp);
-    free(dir);
+    yew_xfree(tmp);
+    yew_xfree(dir);
     return YEW_SAVE_OK;
 
 fail:
@@ -1497,8 +1497,8 @@ fail:
     if (fd >= 0)
         (void)close(fd);
     (void)unlink(tmp);
-    free(tmp);
-    free(dir);
+    yew_xfree(tmp);
+    yew_xfree(dir);
     return saved_errno == EACCES || saved_errno == EPERM ? YEW_SAVE_PERM
                                                           : YEW_SAVE_IO;
 }
@@ -1506,7 +1506,7 @@ fail:
 static void refresh_saved_meta(FileMeta *meta, const struct stat *st,
                                char *saved_path, bool via_symlink)
 {
-    free(meta->realpath);
+    yew_xfree(meta->realpath);
     meta->realpath = saved_path;
     meta->exists = true;
     meta->via_symlink = via_symlink;
@@ -1604,7 +1604,7 @@ static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
             return YEW_SAVE_IO;
         if (!force && meta->realpath != NULL &&
             strcmp(resolved, meta->realpath) != 0) {
-            free(resolved);
+            yew_xfree(resolved);
             return YEW_SAVE_CHANGED_ON_DISK;
         }
         dst = resolved;
@@ -1613,7 +1613,7 @@ static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
         accepted = *meta;
         match = accept_destination(&accepted, dst);
         if (match != YEW_SAVE_OK) {
-            free(resolved);
+            yew_xfree(resolved);
             return match;
         }
         expected = &accepted;
@@ -1621,11 +1621,11 @@ static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
     match = destination_matches(expected, dst, opts, &accepted,
                                 &needs_inplace);
     if (match != YEW_SAVE_OK) {
-        free(resolved);
+        yew_xfree(resolved);
         return match;
     }
     expected = &accepted;
-    saved_realpath = realpath(dst, NULL);
+    saved_realpath = yew_xrealpath(dst);
     if (saved_realpath == NULL)
         saved_realpath = canonical_new_path(dst);
     dir = path_dirname(dst);
@@ -1642,9 +1642,9 @@ static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
         filemeta_snapshot_set(meta, tb);
         saved_realpath = NULL;
     }
-    free(saved_realpath);
-    free(dir);
-    free(resolved);
+    yew_xfree(saved_realpath);
+    yew_xfree(dir);
+    yew_xfree(resolved);
     return result;
 }
 

@@ -97,7 +97,7 @@ static void gp_free_results(void)
     int i;
 
     for (i = 0; i < gp.n_result; i++)
-        free(gp.result_paths[i]);
+        yew_xfree(gp.result_paths[i]);
     gp.n_result = 0;
 }
 
@@ -117,10 +117,10 @@ static void gp_canonical(const char *path, char *out, size_t cap)
     out[0] = '\0';
     if (path == NULL)
         return;
-    resolved = realpath(path, NULL);
+    resolved = yew_xrealpath(path);
     if (resolved != NULL) {
         (void)snprintf(out, cap, "%s", resolved);
-        free(resolved);
+        yew_xfree(resolved);
         return;
     }
     /* A path that does not resolve is still a legitimate selection —

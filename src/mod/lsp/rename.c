@@ -169,43 +169,43 @@ static char *rename_canonical_path(Ed *ed, const u8 *uri, u32 uri_len,
     }
     bytebuf_push_u8(&decoded, 0U);
     decoded_path = (const char *)decoded.data;
-    root = realpath(yew_ws_root(ed), NULL);
-    path = realpath(decoded_path, NULL);
+    root = yew_xrealpath(yew_ws_root(ed));
+    path = yew_xrealpath(decoded_path);
     saved_errno = errno;
     if (path == NULL) {
         (void)rename_error(err, "cannot edit %s: %s", decoded_path,
                            strerror(saved_errno));
         bytebuf_free(&decoded);
-        free(root);
+        yew_xfree(root);
         return NULL;
     }
     bytebuf_free(&decoded);
     if (root == NULL || !rename_path_inside(root, path)) {
         (void)rename_error(err, "rename would edit outside the workspace: %s",
                            path);
-        free(root);
-        free(path);
+        yew_xfree(root);
+        yew_xfree(path);
         return NULL;
     }
-    free(root);
+    yew_xfree(root);
     if (stat(path, &st) != 0) {
         saved_errno = errno;
         (void)rename_error(err, "cannot edit %s: %s", path,
                            strerror(saved_errno));
-        free(path);
+        yew_xfree(path);
         return NULL;
     }
     if (!S_ISREG(st.st_mode)) {
         (void)rename_error(err, "cannot edit %s: %s", path,
                            strerror(EINVAL));
-        free(path);
+        yew_xfree(path);
         return NULL;
     }
     if (access(path, R_OK) != 0) {
         saved_errno = errno;
         (void)rename_error(err, "cannot edit %s: %s", path,
                            strerror(saved_errno));
-        free(path);
+        yew_xfree(path);
         return NULL;
     }
     return path;
@@ -225,7 +225,7 @@ static RenameDraftFile *rename_draft_file(Ed *ed, RenamePlan *plan,
         return NULL;
     for (i = 0U; i < drafts->len; i++) {
         if (strcmp(drafts->data[i].path, canonical) == 0) {
-            free(canonical);
+            yew_xfree(canonical);
             return &drafts->data[i];
         }
     }
@@ -234,11 +234,11 @@ static RenameDraftFile *rename_draft_file(Ed *ed, RenamePlan *plan,
                            "rename spans %llu files; refusing (limit %u)",
                            (unsigned long long)(drafts->len + 1U),
                            (unsigned)YEW_RENAME_MAX_FILES);
-        free(canonical);
+        yew_xfree(canonical);
         return NULL;
     }
     file.path = arena_strdup(&plan->arena, canonical);
-    free(canonical);
+    yew_xfree(canonical);
     Vec_RenameDraftFile_push(drafts, file);
     return &drafts->data[drafts->len - 1U];
 }
@@ -767,7 +767,7 @@ static char *rename_span_copy(const TextBuf *tb, Span span, u32 *len_out)
     len = span.hi - span.lo;
     copy = yew_xmalloc((size_t)len + 1U);
     if (len != 0U && !yew_textiter_begin(&it, tb, BYTEOFF(span.lo))) {
-        free(copy);
+        yew_xfree(copy);
         return NULL;
     }
     while (copied < len) {
@@ -777,14 +777,14 @@ static char *rename_span_copy(const TextBuf *tb, Span span, u32 *len_out)
 
         if (!yew_textiter_chunk(&it, tb, &bytes, &available) ||
             available == 0U) {
-            free(copy);
+            yew_xfree(copy);
             return NULL;
         }
         take = available < len - copied ? available : len - copied;
         (void)memcpy(copy + (size_t)copied, bytes, (size_t)take);
         copied += take;
         if (copied < len && !yew_textiter_advance(&it, tb)) {
-            free(copy);
+            yew_xfree(copy);
             return NULL;
         }
     }
@@ -819,9 +819,9 @@ static void rename_state_finish(Ed *ed, bool close_panel)
         yew_panel_close(ed, &win->panel);
     ed->lsp_rename = NULL;
     yew_lsp_rename_plan_free(&state->plan);
-    free(state->old_name);
-    free(state->new_name);
-    free(state);
+    yew_xfree(state->old_name);
+    yew_xfree(state->new_name);
+    yew_xfree(state);
 }
 
 static bool rename_panel_anchor(Win *win, u16 *x, u16 *y)
@@ -1107,7 +1107,7 @@ bool yew_lsp_rename_request(Ed *ed, Win *win)
                                        &state->old_len);
     if (state->old_name == NULL) {
         yew_lsp_rename_plan_free(&state->plan);
-        free(state);
+        yew_xfree(state);
         return false;
     }
     state->ask_gen = yew_lsp_gen(doc, win->buf->tb);

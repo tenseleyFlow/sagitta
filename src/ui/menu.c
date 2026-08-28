@@ -39,8 +39,8 @@ void yew_menu_free(Menu *m)
         return;
     spec = m->spec;
     Vec_CompItem_free(&m->items);
-    free(m->stem);
-    free(m->held);
+    yew_xfree(m->stem);
+    yew_xfree(m->held);
     yew_menu_init(m, &spec);
 }
 
@@ -48,7 +48,7 @@ static void menu_hold(Menu *m)
 {
     const CompItem *item = yew_menu_selected(m);
 
-    free(m->held);
+    yew_xfree(m->held);
     m->held = NULL;
     if (item != NULL && item->text != NULL) {
         size_t n = strlen(item->text) + 1U;
@@ -106,7 +106,7 @@ void yew_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace)
      */
     if (m->sel < 0) {
         m->explicit_sel = false;
-        free(m->held);
+        yew_xfree(m->held);
         m->held = NULL;
     }
 }
@@ -203,7 +203,7 @@ void yew_menu_dismiss(Menu *m)
     if (m == NULL)
         return;
     Vec_CompItem_free(&m->items);
-    free(m->held);
+    yew_xfree(m->held);
     m->held = NULL;
     m->sel = -1;
     m->explicit_sel = false;

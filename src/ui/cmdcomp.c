@@ -137,8 +137,8 @@ static void candidate_dispose(CandidateVec *v)
 
     for (i = 0U; i < v->len; i++) {
         if (v->data[i].match != v->data[i].text)
-            free(v->data[i].match);
-        free(v->data[i].text);
+            yew_xfree(v->data[i].match);
+        yew_xfree(v->data[i].text);
     }
     CandidateVec_free(v);
 }
@@ -389,7 +389,7 @@ static char *expand_home_head(const char *head)
         (void)memcpy(user, head + 1U, user_len);
         user[user_len] = '\0';
         pw = getpwnam(user);
-        free(user);
+        yew_xfree(user);
         home = pw == NULL ? NULL : pw->pw_dir;
     }
     if (home == NULL)
@@ -417,10 +417,10 @@ static bool path_is_dir(const char *scan_dir, const char *name,
                            scan_dir[0] != '\0' &&
                            scan_dir[strlen(scan_dir) - 1U] == '/' ? "" : "/");
         path = join2(with_slash, name);
-        free(with_slash);
+        yew_xfree(with_slash);
         test_lstat_calls++;
         is_dir = lstat(path, &st) == 0 && S_ISDIR(st.st_mode);
-        free(path);
+        yew_xfree(path);
         return is_dir;
     }
 }
@@ -544,7 +544,7 @@ static void path_candidates_dispose(PathCandidateVec *paths)
     size_t i;
 
     for (i = 0U; i < paths->len; i++)
-        free(paths->data[i].name);
+        yew_xfree(paths->data[i].name);
     PathCandidateVec_free(paths);
 }
 
@@ -572,7 +572,7 @@ static void path_candidates_finish(const CompReq *req,
 
         if (is_dir) {
             raw = join2(shown, "/");
-            free(shown);
+            yew_xfree(shown);
         } else {
             raw = shown;
         }
@@ -609,7 +609,7 @@ static void path_candidates_finish(const CompReq *req,
             }
         }
         Vec_CompItem_push(out, item);
-        free(raw);
+        yew_xfree(raw);
     }
     path_candidates_dispose(paths);
 }
@@ -700,10 +700,10 @@ static void listing_dispose(DirListing *l)
 {
     if (l->dir_handle != NULL)
         (void)closedir(l->dir_handle);
-    free(l->blob);
-    free(l->offs);
-    free(l->dtypes);
-    free(l->dir);
+    yew_xfree(l->blob);
+    yew_xfree(l->offs);
+    yew_xfree(l->dtypes);
+    yew_xfree(l->dir);
     (void)memset(l, 0, sizeof(*l));
 }
 
@@ -918,7 +918,7 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
     head[head_len] = '\0';
     expanded = expand_home_head(head);
     if (expanded == NULL) {
-        free(head);
+        yew_xfree(head);
         out->len = 0U;
         return 0U;
     }
@@ -927,10 +927,10 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
     else {
         char *root_slash = join2(yew_ws_root(ed), "/");
         scan_dir = join2(root_slash, expanded);
-        free(root_slash);
+        yew_xfree(root_slash);
     }
     if (scan_dir[0] == '\0') {
-        free(scan_dir);
+        yew_xfree(scan_dir);
         scan_dir = join2("", yew_ws_root(ed));
     }
     /* A fresh request also RETIRES the cache: whoever asked for one did
@@ -961,9 +961,9 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
         dir = opendir(scan_dir);
         comp_opendirs++;
         if (dir == NULL) {
-            free(scan_dir);
-            free(expanded);
-            free(head);
+            yew_xfree(scan_dir);
+            yew_xfree(expanded);
+            yew_xfree(head);
             out->len = 0U;
             return 0U;
         }
@@ -977,9 +977,9 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
         (void)closedir(dir);
     }
     path_candidates_finish(req, &paths, scan_dir, head, out);
-    free(scan_dir);
-    free(expanded);
-    free(head);
+    yew_xfree(scan_dir);
+    yew_xfree(expanded);
+    yew_xfree(head);
     return total;
 }
 
@@ -1007,7 +1007,7 @@ static u32 enumerate_options(const CompReq *req, Vec_CompItem *out)
                             desc == NULL ? "option" : desc->help,
                             false, false);
     }
-    free(names);
+    yew_xfree(names);
     return candidate_finish(req, YEW_COMP_OPTION, &matches, out);
 }
 
@@ -1151,8 +1151,8 @@ void yew_comp_filter_invalidate(CompFilter *f)
     /* base's strings belong to the caller's arena, so only the vector
      * and the two keys are ours to release. */
     f->base.len = 0U;
-    free(f->head);
-    free(f->pattern);
+    yew_xfree(f->head);
+    yew_xfree(f->pattern);
     f->head = NULL;
     f->pattern = NULL;
     f->valid = false;
@@ -1306,15 +1306,15 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
         test_enumerate_calls++;
         f->total = yew_comp_request(&req, &f->base);
         f->capped = f->base.len < (size_t)f->total;
-        free(f->head);
-        free(f->pattern);
+        yew_xfree(f->head);
+        yew_xfree(f->pattern);
         f->head = head;
         f->pattern = dup_range(pattern, strlen(pattern));
         f->kind = q->kind;
         f->valid = true;
         head = NULL;
     }
-    free(head);
+    yew_xfree(head);
     {
         u32 matched = filter_rerank(f, pattern, out);
 

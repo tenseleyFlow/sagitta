@@ -111,7 +111,7 @@ static void node_release(PieceNode *root)
             continue;
         left = node->left;
         right = node->right;
-        free(node);
+        yew_xfree(node);
         if (left != NULL) {
             if (depth == YEW_ARRAY_LEN(stack))
                 YEW_BUG("piece release stack overflow");
@@ -562,7 +562,7 @@ static void store_init_original_owned(TextStore *store, u8 *bytes, u64 len)
     if (len != 0U && bytes == NULL)
         YEW_BUG("owned original text store initialized with NULL bytes");
     if (len == 0U) {
-        free(bytes);
+        yew_xfree(bytes);
         return;
     }
     store->bytes = bytes;
@@ -573,7 +573,7 @@ static void store_init_original_owned(TextStore *store, u8 *bytes, u64 len)
 
 static void store_free(TextStore *store)
 {
-    free(store->bytes);
+    yew_xfree(store->bytes);
     YewU64Vec_free(&store->lfs);
     memset(store, 0, sizeof(*store));
 }
@@ -604,7 +604,7 @@ static void backing_release(TextBacking *backing)
         return;
     store_free(&backing->orig);
     store_free(&backing->add);
-    free(backing);
+    yew_xfree(backing);
 }
 
 static void textbuf_sync_store_views(TextBuf *tb)
@@ -684,7 +684,7 @@ void yew_textbuf_free(TextBuf *tb)
     yew_coords_index_dispose(tb);
     node_release(tb->root);
     backing_release(tb->backing);
-    free(tb);
+    yew_xfree(tb);
 }
 
 u64 yew_textbuf_len(const TextBuf *tb)
@@ -827,7 +827,7 @@ void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
     old_add_len = tb->backing->add.len;
     store_append(&tb->backing->add, payload, len);
     tb->add = tb->backing->add;
-    free(staged);
+    yew_xfree(staged);
     if ((!tb->add_tail_known || tb->add_tail_at == at.v) &&
         node_extend_predecessor(tb, &tb->root, at.v, old_add_len,
                                 tb->backing->add.len)) {

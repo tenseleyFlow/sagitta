@@ -793,9 +793,9 @@ void yew_theme_free(Theme *theme)
     if (theme == NULL)
         return;
     for (i = 0U; i < theme->nui; i++)
-        free(theme->ui[i].name);
-    free(theme->ui);
-    free(theme->name);
+        yew_xfree(theme->ui[i].name);
+    yew_xfree(theme->ui);
+    yew_xfree(theme->name);
     (void)memset(theme, 0, sizeof(*theme));
 }
 
@@ -918,12 +918,12 @@ static char *discover_path(const char *name, const char *runtime_dir)
 
     if (config != NULL) {
         path = path_join3(config, "themes", filename);
-        free(config);
+        yew_xfree(config);
         if (path != NULL && access(path, R_OK) == 0) {
-            free(filename);
+            yew_xfree(filename);
             return path;
         }
-        free(path);
+        yew_xfree(path);
         path = NULL;
     }
     if (runtime == NULL || runtime[0] == '\0')
@@ -931,22 +931,22 @@ static char *discover_path(const char *name, const char *runtime_dir)
     if (runtime != NULL && runtime[0] != '\0') {
         path = path_join3(runtime, "themes", filename);
         if (path != NULL && access(path, R_OK) == 0) {
-            free(filename);
+            yew_xfree(filename);
             return path;
         }
-        free(path);
+        yew_xfree(path);
     }
     path = path_join3(YEW_RUNTIME_DIR_DEFAULT, "themes", filename);
     if (path != NULL && access(path, R_OK) == 0) {
-        free(filename);
+        yew_xfree(filename);
         return path;
     }
-    free(path);
+    yew_xfree(path);
     path = path_join3("runtime", "themes", filename);
-    free(filename);
+    yew_xfree(filename);
     if (path != NULL && access(path, R_OK) == 0)
         return path;
-    free(path);
+    yew_xfree(path);
     return NULL;
 }
 
@@ -977,18 +977,18 @@ bool yew_theme_select(Theme *theme, const char *name,
         if (read_status == THEME_READ_TOO_LARGE) {
             fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){0U, 1U, 1U, 1U},
                          "theme '%s' exceeds the 1 MiB limit", path);
-            free(path);
+            yew_xfree(path);
             return false;
         }
         fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){0U, 1U, 1U, 1U},
                      "cannot read theme '%s': %s", path, strerror(errno));
-        free(path);
+        yew_xfree(path);
         return false;
     }
     yew_theme_init(&candidate);
     ok = yew_theme_compile(&candidate, src.data, src.len, path, dc);
     bytebuf_free(&src);
-    free(path);
+    yew_xfree(path);
     if (ok && strcmp(candidate.name, name) != 0) {
         fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){0U, 1U, 1U, 1U},
                      "theme file '%s' declares name '%s'", name,

@@ -232,8 +232,8 @@ static bool rows_for_mode(Ed *ed, Mode mode, BindRow **out, u32 *out_n)
     }
     *out = rows;
     *out_n = at;
-    free(keep);
-    free(seen);
+    yew_xfree(keep);
+    yew_xfree(seen);
     return true;
 }
 
@@ -279,12 +279,12 @@ void yew_bind_free(Ed *ed)
     if (ed == NULL || (binds = ed->bindings) == NULL)
         return;
     for (i = 0U; i < binds->n; i++) {
-        free(binds->v[i].seq);
-        free(binds->v[i].cmd);
-        free(binds->v[i].sarg);
+        yew_xfree(binds->v[i].seq);
+        yew_xfree(binds->v[i].cmd);
+        yew_xfree(binds->v[i].sarg);
     }
-    free(binds->v);
-    free(binds);
+    yew_xfree(binds->v);
+    yew_xfree(binds);
     ed->bindings = NULL;
 }
 
@@ -340,9 +340,9 @@ u32 yew_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
     }
     row = &binds->v[slot];
     if (slot < binds->n) {
-        free(row->seq);
-        free(row->cmd);
-        free(row->sarg);
+        yew_xfree(row->seq);
+        yew_xfree(row->cmd);
+        yew_xfree(row->sarg);
     }
     *row = candidate;
     row->seq = bind_strdup(seq);
@@ -406,7 +406,7 @@ void yew_bind_rebuild(Ed *ed)
         (void)rows_for_mode(ed, (Mode)mode, &rows, &n);
         if (!yew_keymap_build(&ed->bind_keys[mode], "config", rows, n))
             YEW_BUG("validated config keymap no longer builds");
-        free(rows);
+        yew_xfree(rows);
     }
     binds->pending = false;
     binds->rebuilds++;
@@ -587,7 +587,7 @@ static bool bind_args(FlVm *vm, FlValue value, i64 *iarg, char **sarg)
 
             if (!get_string(vm, got, "bind sarg", &s))
                 return false;
-            free(*sarg);
+            yew_xfree(*sarg);
             *sarg = string_copy(s);
         } else {
             return fl_raise(vm, "name", "unknown bind argument '%.*s'",
@@ -672,7 +672,7 @@ bool fl_bind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         cmd = yew_cmd_lookup(name, command->len);
         if (cmd.v == 0U) {
             ok = fl_raise(vm, "name", "unknown command '%s'", name);
-            free(name);
+            yew_xfree(name);
             return ok;
         }
     } else if (args[2].t == (u8)FL_CLOSURE ||
@@ -686,31 +686,31 @@ bool fl_bind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         return fl_raise(vm, "type", "bind target must be a command string or function");
     }
     if (nargs == 4U && !bind_args(vm, args[3], &iarg, &sarg)) {
-        free(name);
-        free(sarg);
+        yew_xfree(name);
+        yew_xfree(sarg);
         return false;
     }
     origin = fl_origin_of_frame(vm);
     if (origin == FL_ORIGIN_ID_NONE) {
-        free(name);
-        free(sarg);
+        yew_xfree(name);
+        yew_xfree(sarg);
         return fl_raise(vm, "handle", "bind: callback has no editor origin");
     }
 #if YEW_WITH_PLUGINS
     if (origin < vm->ed->origins.n &&
         vm->ed->origins.v[origin].kind == (u8)FL_ORIGIN_PLUGIN &&
         !yew_plug_ctx_registration_allowed(vm->ed, origin)) {
-        free(name);
-        free(sarg);
+        yew_xfree(name);
+        yew_xfree(sarg);
         return fl_raise(vm, "capability",
                         "plugin binds must be registered through ctx.bind");
     }
 #endif
     seq = string_copy(seq_value);
     ok = add_modes(vm, mode, seq, cmd, iarg, sarg, fn, origin, out);
-    free(seq);
-    free(name);
-    free(sarg);
+    yew_xfree(seq);
+    yew_xfree(name);
+    yew_xfree(sarg);
     return ok;
 }
 
@@ -767,7 +767,7 @@ bool fl_unbind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         return fl_raise(vm, "handle", "unbind: callback has no editor origin");
     seq = string_copy(seq_value);
     ok = remove_modes(vm, mode, seq, origin);
-    free(seq);
+    yew_xfree(seq);
     if (ok)
         *out = FL_NIL_V;
     return ok;

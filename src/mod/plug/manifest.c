@@ -271,17 +271,17 @@ static bool validate_entry(ManifestRead *r, const char *entry, size_t len)
         manifest_error(r, "plugin entry path is too long: %s", entry);
         return false;
     }
-    resolved = realpath(joined, NULL);
+    resolved = yew_xrealpath(joined);
     if (resolved == NULL) {
         manifest_error(r, "cannot resolve plugin entry: %s", joined);
         return false;
     }
     if (!path_inside(r->root, resolved)) {
         manifest_error(r, "plugin entry escapes directory: %s", resolved);
-        free(resolved);
+        yew_xfree(resolved);
         return false;
     }
-    free(resolved);
+    yew_xfree(resolved);
     return true;
 }
 
@@ -530,7 +530,7 @@ bool yew_plug_manifest_read(Arena *a, const char *dir,
         (void)memset(out, 0, sizeof(*out));
     if (a == NULL || dir == NULL || out == NULL || dc == NULL)
         return false;
-    canonical = realpath(dir, NULL);
+    canonical = yew_xrealpath(dir);
     if (canonical == NULL) {
         fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){0U, 1U, 1U, 1U},
                      "cannot resolve plugin directory %s: %s", dir,
@@ -544,13 +544,13 @@ bool yew_plug_manifest_read(Arena *a, const char *dir,
          * live with the diagnostic context even when callers release their
          * short-lived manifest arena before emitting a later error. */
         !read_source(dc->arena, manifest_path, &source, &len, dc)) {
-        free(canonical);
+        yew_xfree(canonical);
         return false;
     }
     read.arena = a;
     read.dc = dc;
     read.root = arena_strdup(a, canonical);
-    free(canonical);
+    yew_xfree(canonical);
     slash = strrchr(read.root, '/');
     read.basename = slash == NULL ? read.root : slash + 1U;
     read.span.file_id = fl_diag_add_file(dc, manifest_path, source, len);

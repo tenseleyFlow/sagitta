@@ -394,8 +394,8 @@ void yew_prof_write(const Prof *p, Bytebuf *out)
                        phase_names[top], worst[i].ph_ns[top]);
         bytebuf_free(&flags);
     }
-    free(worst);
-    free(values);
+    yew_xfree(worst);
+    yew_xfree(values);
     bytebuf_reserve(out, out->len + 1U);
     out->data[out->len] = '\0';
 }

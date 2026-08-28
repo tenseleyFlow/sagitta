@@ -127,7 +127,7 @@ static char *runtime_path(void)
     path = path_join(YEW_RUNTIME_DIR_DEFAULT, "init.fl");
     if (path != NULL && access(path, R_OK) == 0)
         return path;
-    free(path);
+    yew_xfree(path);
     /* An uninstalled build is run from the repository root by the test and
      * development targets.  Installed binaries still resolve the compiled
      * prefix first, so this does not weaken the shipped-artifact check. */
@@ -147,7 +147,7 @@ static char *user_path(const YewConfigState *state)
     if (dir == NULL)
         return NULL;
     path = path_join(dir, "init.fl");
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -222,12 +222,12 @@ static void state_dispose(Ed *ed, YewConfigState *state)
         yew_trust_prompt_cancel(ed);
     for (i = 0U; i < YEW_CFG_SOURCE_N; i++) {
         unit_unroot(ed, &state->unit[i]);
-        free(state->unit[i].path);
+        yew_xfree(state->unit[i].path);
     }
     yew_trust_probe_free(&state->trust_probe);
     yew_trust_db_free(&state->trust_db);
-    free(state->config_path);
-    free(state);
+    yew_xfree(state->config_path);
+    yew_xfree(state);
 }
 
 void yew_config_init(Ed *ed, const YewEdStartup *startup)
@@ -392,7 +392,7 @@ static CfgStatus compile_one(Ed *ed, YewConfigState *state, u32 index)
             source = probe.bytes;
             bytebuf_init(&probe.bytes);
             source_ready = true;
-            free(state->unit[index].path);
+            yew_xfree(state->unit[index].path);
             state->unit[index].path = cfg_dup(probe.config_path);
         }
         if (!source_ready) {
@@ -494,7 +494,7 @@ static void trust_prompt_done(Ed *ed, YewTrustAnswer answer, void *ctx)
                            sizeof(state->once_workspace), "%s",
                            state->trust_probe.workspace);
         }
-        free(unit->path);
+        yew_xfree(unit->path);
         unit->path = cfg_dup(state->trust_probe.config_path);
         yew_bind_batch_begin(ed);
         if (compile_unit(ed, unit, &state->trust_probe.bytes))

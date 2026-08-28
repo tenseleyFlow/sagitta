@@ -524,16 +524,16 @@ void yew_re_workspace_free(YewReWorkspace *workspace)
     while (caps != NULL) {
         Caps *next = caps->next_all;
 
-        free(caps->slot);
-        free(caps);
+        yew_xfree(caps->slot);
+        yew_xfree(caps);
         caps = next;
     }
-    free(impl->dense[0]);
-    free(impl->dense[1]);
-    free(impl->stamp[0]);
-    free(impl->stamp[1]);
-    free(impl->stack);
-    free(impl);
+    yew_xfree(impl->dense[0]);
+    yew_xfree(impl->dense[1]);
+    yew_xfree(impl->stamp[0]);
+    yew_xfree(impl->stamp[1]);
+    yew_xfree(impl->stack);
+    yew_xfree(impl);
     workspace->impl = NULL;
 }
 

@@ -807,7 +807,7 @@ CmdStatus yew_record_cmd_replay(CmdCtx *cx)
         (void)memcpy(name, cx->sarg, cx->sarg_len);
         name[cx->sarg_len] = '\0';
         status = yew_macrolib_call(cx->ed, name);
-        free(name);
+        yew_xfree(name);
         return status;
     }
     if (!command_register(cx, &reg))

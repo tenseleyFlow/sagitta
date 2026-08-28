@@ -248,6 +248,48 @@ void *yew_xreallocarray_at(void *ptr, size_t count, size_t size,
     return yew_xrealloc_at(ptr, count * size, file, line);
 }
 
+char *yew_xstrdup_at(const char *str, const char *file, int line)
+{
+    size_t len = strlen(str) + 1U;
+    char *copy = yew_xmalloc_at(len, file, line);
+
+    (void)memcpy(copy, str, len);
+    return copy;
+}
+
+char *yew_xrealpath_at(const char *path, const char *file, int line)
+{
+    char *resolved = realpath(path, NULL);
+    char *copy;
+
+    if (resolved == NULL)
+        return NULL;
+    copy = yew_xstrdup_at(resolved, file, line);
+    free(resolved);
+    return copy;
+}
+
+char *yew_xgetcwd_at(const char *file, int line)
+{
+    size_t cap = 256U;
+    char *cwd = yew_xmalloc_at(cap, file, line);
+
+    for (;;) {
+        int saved;
+
+        if (getcwd(cwd, cap) != NULL)
+            return cwd;
+        saved = errno;
+        if (saved != ERANGE || cap > SIZE_MAX / 2U) {
+            yew_xfree_at(cwd, file, line);
+            errno = saved;
+            return NULL;
+        }
+        cap *= 2U;
+        cwd = yew_xrealloc_at(cwd, cap, file, line);
+    }
+}
+
 void yew_xfree_at(void *ptr, const char *file, int line)
 {
     AllocHeader *header;
@@ -442,6 +484,48 @@ void *yew_xreallocarray(void *ptr, size_t count, size_t size)
     if (size != 0 && count > SIZE_MAX / size)
         YEW_BUG("allocation size overflow: %zu * %zu", count, size);
     return yew_xrealloc(ptr, count * size);
+}
+
+char *yew_xstrdup(const char *str)
+{
+    size_t len = strlen(str) + 1U;
+    char *copy = yew_xmalloc(len);
+
+    (void)memcpy(copy, str, len);
+    return copy;
+}
+
+char *yew_xrealpath(const char *path)
+{
+    char *resolved = realpath(path, NULL);
+    char *copy;
+
+    if (resolved == NULL)
+        return NULL;
+    copy = yew_xstrdup(resolved);
+    free(resolved);
+    return copy;
+}
+
+char *yew_xgetcwd(void)
+{
+    size_t cap = 256U;
+    char *cwd = yew_xmalloc(cap);
+
+    for (;;) {
+        int saved;
+
+        if (getcwd(cwd, cap) != NULL)
+            return cwd;
+        saved = errno;
+        if (saved != ERANGE || cap > SIZE_MAX / 2U) {
+            yew_xfree(cwd);
+            errno = saved;
+            return NULL;
+        }
+        cap *= 2U;
+        cwd = yew_xrealloc(cwd, cap);
+    }
 }
 
 void yew_xfree(void *ptr)

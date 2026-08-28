@@ -299,12 +299,12 @@ static bool scan_root(Ed *ed, const char *root, PlugSource source,
             ok = add_candidate(ed, source, candidate, names[i],
                                workspace_trusted, policy);
         }
-        free(manifest);
-        free(candidate);
+        yew_xfree(manifest);
+        yew_xfree(candidate);
     }
     for (i = 0U; i < n; i++)
-        free(names[i]);
-    free(names);
+        yew_xfree(names[i]);
+    yew_xfree(names);
     return ok;
 }
 
@@ -364,12 +364,12 @@ bool yew_plug_discover_with_policy(Ed *ed, bool workspace_trusted,
     if (ok)
         verify_managed_winners(ed, policy == NULL && ed->config != NULL,
                                dc);
-    free(ws_plugins);
-    free(ws_meta);
-    free(config_plugins);
-    free(data_plugins);
-    free(config);
-    free(data);
+    yew_xfree(ws_plugins);
+    yew_xfree(ws_meta);
+    yew_xfree(config_plugins);
+    yew_xfree(data_plugins);
+    yew_xfree(config);
+    yew_xfree(data);
     return ok;
 }
 

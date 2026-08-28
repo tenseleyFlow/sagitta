@@ -188,7 +188,7 @@ void yew_undo_free(UndoTree *ut)
     YewUndoRepairRunVec_free(&ut->repair_runs);
     YewUndoReplaySpanVec_free(&ut->replay_spans);
     bytebuf_free(&ut->blobs);
-    free(ut);
+    yew_xfree(ut);
 }
 
 void yew_undo_set_clock(UndoTree *ut, YewUndoMonoClock mono_clock,
@@ -839,7 +839,7 @@ static void replay_delete(EditCtx *ec, const UndoOp *op)
         ec->on_change(ec->on_change_ctx, BYTEOFF(op->off), line,
                       old_lines - yew_textbuf_line_count(ec->tb), 0U,
                       ec->now_ms, false);
-    free(bytes);
+    yew_xfree(bytes);
 }
 
 static void apply_inverse(EditCtx *ec, const UndoNode *node)
@@ -2247,12 +2247,12 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
     if (total <= ut->persist_bytes_max)
         wrote = write_selected_tree(ec, file, keep, root, count,
                                     cur_len, cur_hash);
-    free(subtree_counts);
-    free(subtree_sizes);
-    free(node_sizes);
-    free(subtree_protected);
-    free(protect);
-    free(keep);
+    yew_xfree(subtree_counts);
+    yew_xfree(subtree_sizes);
+    yew_xfree(node_sizes);
+    yew_xfree(subtree_protected);
+    yew_xfree(protect);
+    yew_xfree(keep);
     return wrote;
 }
 
@@ -2773,12 +2773,12 @@ static bool validate_loaded(const UndoTree *ut, u32 root, u32 cur, u32 saved,
     if (lengths[cur - 1U] != cur_len ||
         lengths[anchor - 1U] != anchor_len)
         goto invalid;
-    free(lengths);
+    yew_xfree(lengths);
     *root_len_out = root_len;
     return true;
 
 invalid:
-    free(lengths);
+    yew_xfree(lengths);
     return false;
 }
 

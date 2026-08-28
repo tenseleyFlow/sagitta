@@ -198,7 +198,7 @@ static bool pkg_fsync_parent(const char *path, DiagCtx *dc)
         *slash = '\0';
         ok = pkg_fsync_dir(parent, dc);
     }
-    free(parent);
+    yew_xfree(parent);
     return ok;
 }
 
@@ -494,7 +494,7 @@ void yew_pkg_lock_free(PkgLock *lock)
 {
     if (lock == NULL || !lock->initialized)
         return;
-    free(lock->v.data);
+    yew_xfree(lock->v.data);
     fl_vm_free(&lock->vm);
     interner_free(&lock->in);
     arena_free_all(&lock->a);
@@ -595,11 +595,11 @@ static char *pkg_lock_path(bool ensure)
     if (dir == NULL)
         return NULL;
     if (ensure && !yew_mkdirs(dir, 0700U)) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     path = pkg_join(dir, "plugins.lock");
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -628,14 +628,14 @@ bool yew_pkg_lock_load(PkgLock *lock, DiagCtx *dc)
     }
     bytebuf_init(&bytes);
     if (!pkg_read_file(path, &bytes, &missing)) {
-        free(path);
+        yew_xfree(path);
         bytebuf_free(&bytes);
         if (missing)
             return true;
         pkg_diag_errno(dc, "cannot read plugins.lock");
         return false;
     }
-    free(path);
+    yew_xfree(path);
     parse_dc = dc != NULL ? dc : &lock->dc;
     /* fl_data_read registers its source in the diagnostic context so a
      * later diagnostic can still render a caret against it.  The file
@@ -789,7 +789,7 @@ bool yew_pkg_lock_save(const PkgLock *const_lock, DiagCtx *dc)
                                              (u32)strlen(entry->name))),
                          FL_OBJ_V(FL_MAP, map));
     }
-    free(order);
+    yew_xfree(order);
     pkg_copy_extra(lock, root, lock->extra, top_known,
                    YEW_ARRAY_LEN(top_known));
     bytebuf_init(&out);
@@ -817,7 +817,7 @@ bool yew_pkg_lock_save(const PkgLock *const_lock, DiagCtx *dc)
     }
     if (!ok)
         pkg_diag_errno(dc, "cannot write plugins.lock");
-    free(path);
+    yew_xfree(path);
     bytebuf_free(&current);
     bytebuf_free(&out);
     return ok;
@@ -837,8 +837,8 @@ static void tree_vec_free(TreeVec *items)
     size_t i;
 
     for (i = 0U; i < items->n; i++)
-        free(items->v[i].rel);
-    free(items->v);
+        yew_xfree(items->v[i].rel);
+    yew_xfree(items->v);
     (void)memset(items, 0, sizeof(*items));
 }
 
@@ -884,7 +884,7 @@ static bool tree_scan(int dirfd, const char *prefix, TreeVec *items,
         rel = prefix[0] == '\0' ? pkg_strdup(de->d_name)
                                  : pkg_join(prefix, de->d_name);
         if (fstatat(dirfd, de->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
-            free(rel);
+            yew_xfree(rel);
             pkg_diag_errno(dc, "cannot stat plugin tree entry");
             ok = false;
             break;
@@ -893,14 +893,14 @@ static bool tree_scan(int dirfd, const char *prefix, TreeVec *items,
             child = openat(dirfd, de->d_name,
                            O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
             if (child < 0) {
-                free(rel);
+                yew_xfree(rel);
                 pkg_diag_errno(dc, "cannot open plugin subdirectory");
                 ok = false;
                 break;
             }
             ok = tree_scan(child, rel, items, dc);
             (void)close(child);
-            free(rel);
+            yew_xfree(rel);
             if (!ok)
                 break;
         } else if (S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) {
@@ -908,7 +908,7 @@ static bool tree_scan(int dirfd, const char *prefix, TreeVec *items,
                                             st.st_dev, st.st_ino,
                                             S_ISLNK(st.st_mode)});
         } else {
-            free(rel);
+            yew_xfree(rel);
             pkg_diag(dc, "plugin tree contains a non-file filesystem entry");
             ok = false;
             break;
@@ -939,12 +939,12 @@ static int tree_open_dir_path(int rootfd, const char *path)
                                    O_CLOEXEC);
         (void)close(fd);
         if (next < 0) {
-            free(copy);
+            yew_xfree(copy);
             return -1;
         }
         fd = next;
     }
-    free(copy);
+    yew_xfree(copy);
     return fd;
 }
 
@@ -961,7 +961,7 @@ static int tree_open_parent(int rootfd, const char *rel, char **base)
     *slash = '\0';
     *base = pkg_strdup(slash + 1U);
     fd = tree_open_dir_path(rootfd, copy);
-    free(copy);
+    yew_xfree(copy);
     return fd;
 }
 
@@ -1017,15 +1017,15 @@ bool yew_pkg_tree_hash(const char *dir, char out[17], DiagCtx *dc)
                 !S_ISLNK(now.st_mode) || n < 0 || (size_t)n == cap) {
                 if (parentfd >= 0)
                     (void)close(parentfd);
-                free(base);
-                free(target);
+                yew_xfree(base);
+                yew_xfree(target);
                 pkg_diag(dc, "plugin tree changed while hashing symlink");
                 goto done;
             }
             (void)close(parentfd);
-            free(base);
+            yew_xfree(base);
             h = pkg_fnv(h, target, (size_t)n);
-            free(target);
+            yew_xfree(target);
         } else {
             u8 size_le[8];
             u64 size;
@@ -1050,7 +1050,7 @@ bool yew_pkg_tree_hash(const char *dir, char out[17], DiagCtx *dc)
                     openat(parentfd, base, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
                 if (parentfd >= 0)
                     (void)close(parentfd);
-                free(base);
+                yew_xfree(base);
             }
             if (fd < 0) {
                 pkg_diag_errno(dc, "cannot open plugin file");
@@ -1349,7 +1349,7 @@ bool yew_pkg_git(const char *const *argv, u32 nargv, i64 timeout_ms,
     ok = result.done;
 done:
     yew_ed_free(&ed);
-    free(owned_argv);
+    yew_xfree(owned_argv);
     return ok;
 }
 
@@ -1419,7 +1419,7 @@ static bool pkg_git_probe(void)
                       "yew pkg: error: git %u.%u is too old; git 2.24 or "
                       "newer is required\n",
                       major, minor);
-    free(text);
+    yew_xfree(text);
     yew_pkg_git_run_free(&run);
     return ok;
 }
@@ -1432,13 +1432,13 @@ static char *pkg_plugins_root(bool ensure)
     if (data == NULL)
         return NULL;
     if (ensure && !yew_mkdirs(data, 0700U)) {
-        free(data);
+        yew_xfree(data);
         return NULL;
     }
     root = pkg_join(data, "plugins");
-    free(data);
+    yew_xfree(data);
     if (ensure && !yew_mkdirs(root, 0700U)) {
-        free(root);
+        yew_xfree(root);
         return NULL;
     }
     return root;
@@ -1467,7 +1467,7 @@ static bool pkg_resolve_rev(const char *dir, const char *expr, char rev[41])
         (void)memcpy(rev, text, 41U);
     else
         (void)fprintf(stderr, "yew pkg: error: git returned an invalid rev\n");
-    free(text);
+    yew_xfree(text);
     yew_pkg_git_run_free(&run);
     return ok;
 }
@@ -1522,7 +1522,7 @@ static void pkg_warn_gitmodules(const char *dir)
     if (lstat(path, &st) == 0)
         (void)fprintf(stderr,
                       "yew pkg: warning: repository contains .gitmodules; submodules are not initialized\n");
-    free(path);
+    yew_xfree(path);
 }
 
 static char *pkg_manifest_name(PkgLock *lock, const char *dir, DiagCtx *dc)
@@ -1560,7 +1560,7 @@ static char *pkg_manifest_name(PkgLock *lock, const char *dir, DiagCtx *dc)
         pkg_diag(dc, "plugin.fl has no string name");
 done:
     bytebuf_free(&bytes);
-    free(path);
+    yew_xfree(path);
     return copy;
 }
 
@@ -1599,12 +1599,12 @@ typedef struct PkgTxnPaths {
 
 static void pkg_txn_paths_free(PkgTxnPaths *paths)
 {
-    free(paths->lock);
-    free(paths->trust);
-    free(paths->lock_before);
-    free(paths->trust_before);
-    free(paths->intent);
-    free(paths->state);
+    yew_xfree(paths->lock);
+    yew_xfree(paths->trust);
+    yew_xfree(paths->lock_before);
+    yew_xfree(paths->trust_before);
+    yew_xfree(paths->intent);
+    yew_xfree(paths->state);
     (void)memset(paths, 0, sizeof(*paths));
 }
 
@@ -1770,7 +1770,7 @@ static bool pkg_txn_restore_one(const char *path, const char *backup,
         ok = pkg_txn_write_exact(path, bytes.data, bytes.len);
     bytebuf_free(&bytes);
 done_parent:
-    free(parent);
+    yew_xfree(parent);
     return ok;
 }
 
@@ -1903,11 +1903,11 @@ recovery_decided:
                       "yew pkg: recovered interrupted %s of %s\n",
                       op == 'I' ? "install" : "remove", name);
 done_lock:
-    free(staging);
-    free(trash);
-    free(data);
-    free(dir);
-    free(root);
+    yew_xfree(staging);
+    yew_xfree(trash);
+    yew_xfree(data);
+    yew_xfree(dir);
+    yew_xfree(root);
     yew_pkg_lock_free(&lock);
     arena_free_all(&a);
 done_paths:
@@ -2107,7 +2107,7 @@ static int pkg_install(int argc, char **argv)
     named = pkg_join(tmp, name);
     if (rename(repo, named) != 0)
         goto done;
-    free(repo);
+    yew_xfree(repo);
     repo = NULL;
     arena_init(&manifest_arena);
     (void)memset(&mf, 0, sizeof(mf));
@@ -2152,7 +2152,7 @@ static int pkg_install(int argc, char **argv)
     if (rename(named, dest) != 0) {
         goto done_manifest;
     }
-    free(named);
+    yew_xfree(named);
     named = NULL;
     if (!pkg_remove_path_sync(tmp, root, &dc)) {
         bool restored = yew_rmtree(dest, root, &dc);
@@ -2227,13 +2227,13 @@ done_manifest:
 done:
     if (tmp != NULL && access(tmp, F_OK) == 0)
         (void)pkg_remove_path_sync(tmp, root, &dc);
-    free(name);
-    free(dest);
-    free(named);
-    free(repo);
-    free(tmp);
-    free(root);
-    free(url);
+    yew_xfree(name);
+    yew_xfree(dest);
+    yew_xfree(named);
+    yew_xfree(repo);
+    yew_xfree(tmp);
+    yew_xfree(root);
+    yew_xfree(url);
     bytebuf_free(&resolved);
     if (trust_initialized) {
         yew_trust_db_free(&trust_next);
@@ -2299,9 +2299,9 @@ done:
     }
     if (access(tmp, F_OK) == 0)
         (void)yew_rmtree(tmp, root, dc);
-    free(dest);
-    free(repo);
-    free(tmp);
+    yew_xfree(dest);
+    yew_xfree(repo);
+    yew_xfree(tmp);
     return ok;
 }
 
@@ -2337,7 +2337,7 @@ static void pkg_doctor_paths(const PkgEntry *entry, const char *dir)
             } else if (path != NULL)
                 truncated = true;
         }
-        free(text);
+        yew_xfree(text);
     }
     yew_pkg_git_run_free(&run);
     if (yew_pkg_git(other_argv, YEW_ARRAY_LEN(other_argv), 10000, true,
@@ -2354,7 +2354,7 @@ static void pkg_doctor_paths(const PkgEntry *entry, const char *dir)
             } else
                 truncated = true;
         }
-        free(text);
+        yew_xfree(text);
     }
     yew_pkg_git_run_free(&run);
     if (truncated)
@@ -2537,7 +2537,7 @@ static int pkg_list_or_doctor(int argc, char **argv, bool doctor)
                         all_ok = false;
                     }
                 }
-                free(gitdir);
+                yew_xfree(gitdir);
             }
         }
         (void)printf("%s\t%s\t%.12s\t%s\t%s%s%s\n", entry->name,
@@ -2559,7 +2559,7 @@ static int pkg_list_or_doctor(int argc, char **argv, bool doctor)
                              grants[(u32)grant]);
             }
         }
-        free(dir);
+        yew_xfree(dir);
         arena_free_all(&manifest_arena);
     }
     if (root != NULL) {
@@ -2600,13 +2600,13 @@ static int pkg_list_or_doctor(int argc, char **argv, bool doctor)
         for (i = 0U; i < nnames; i++) {
             pkg_print_field(stdout, names[i]);
             (void)fputs("\t-\t-\tunmanaged\t-\n", stdout);
-            free(names[i]);
+            yew_xfree(names[i]);
         }
-        free(names);
+        yew_xfree(names);
     }
     if (changed && !yew_pkg_lock_save(&lock, &dc))
         all_ok = false;
-    free(root);
+    yew_xfree(root);
     yew_trust_db_free(&trust);
     yew_pkg_lock_free(&lock);
     arena_free_all(&a);
@@ -2709,7 +2709,7 @@ static int pkg_remove(int argc, char **argv)
         data = pkg_strdup(root);
         slash = strrchr(data, '/');
         if (slash == NULL) {
-            free(data);
+            yew_xfree(data);
             data = NULL;
             goto remove_io_fail;
         }
@@ -2789,10 +2789,10 @@ static int pkg_remove(int argc, char **argv)
         goto remove_io_fail;
     txn_started = false;
     (void)printf("removed %s\n", argv[1]);
-    free(trash);
-    free(data);
-    free(dir);
-    free(root);
+    yew_xfree(trash);
+    yew_xfree(data);
+    yew_xfree(dir);
+    yew_xfree(root);
     if (trust_initialized) {
         yew_trust_db_free(&trust_next);
         yew_trust_db_free(&trust_before);
@@ -2810,10 +2810,10 @@ remove_io_fail:
             (void)fprintf(stderr,
                           "yew pkg: error: remove rollback could not durably restore the previous trust policy\n");
     }
-    free(trash);
-    free(data);
-    free(dir);
-    free(root);
+    yew_xfree(trash);
+    yew_xfree(data);
+    yew_xfree(dir);
+    yew_xfree(root);
     if (trust_initialized) {
         yew_trust_db_free(&trust_next);
         yew_trust_db_free(&trust_before);
@@ -2931,7 +2931,7 @@ static int pkg_update(int argc, char **argv)
         dir = root == NULL ? NULL : pkg_join(root, entry->name);
         if (dir == NULL || access(dir, F_OK) != 0) {
             (void)fprintf(stderr, "yew pkg: %s is missing\n", entry->name);
-            free(dir);
+            yew_xfree(dir);
             failed = true;
             nunreachable++;
             continue;
@@ -2939,7 +2939,7 @@ static int pkg_update(int argc, char **argv)
         if (strncmp(entry->pin, "rev:", 4U) == 0) {
             (void)printf("%s pinned at %.12s\n", entry->name, entry->rev);
             nuptodate++;
-            free(dir);
+            yew_xfree(dir);
             continue;
         }
         if (strncmp(entry->pin, "tag:", 4U) == 0) {
@@ -2954,7 +2954,7 @@ static int pkg_update(int argc, char **argv)
                            entry->pin + 4U, entry->pin + 4U);
             if (!pkg_git_simple(fetch_tag, YEW_ARRAY_LEN(fetch_tag),
                                 net_timeout, false, "fetch", NULL)) {
-                free(dir);
+                yew_xfree(dir);
                 failed = true;
                 nunreachable++;
                 continue;
@@ -2965,7 +2965,7 @@ static int pkg_update(int argc, char **argv)
                                          "origin"};
             if (!pkg_git_simple(fetch, YEW_ARRAY_LEN(fetch),
                                 net_timeout, false, "fetch", NULL)) {
-                free(dir);
+                yew_xfree(dir);
                 failed = true;
                 nunreachable++;
                 continue;
@@ -2977,7 +2977,7 @@ static int pkg_update(int argc, char **argv)
             if (!pkg_git_simple(set_head, YEW_ARRAY_LEN(set_head),
                                 net_timeout, false,
                                 "remote set-head", NULL)) {
-                free(dir);
+                yew_xfree(dir);
                 failed = true;
                 nunreachable++;
                 continue;
@@ -2987,13 +2987,13 @@ static int pkg_update(int argc, char **argv)
             (void)snprintf(expr, sizeof(expr),
                            "refs/yew-pkg/tags/%s^{commit}", entry->pin + 4U);
         } else if (pkg_pin_expr(entry->pin, expr, sizeof(expr), true) == NULL) {
-            free(dir);
+            yew_xfree(dir);
             failed = true;
             nunreachable++;
             continue;
         }
         if (!pkg_resolve_rev(dir, expr, target)) {
-            free(dir);
+            yew_xfree(dir);
             failed = true;
             nunreachable++;
             continue;
@@ -3001,12 +3001,12 @@ static int pkg_update(int argc, char **argv)
         if (strcmp(target, entry->rev) == 0) {
             (void)printf("%s up to date\n", entry->name);
             nuptodate++;
-            free(dir);
+            yew_xfree(dir);
             continue;
         }
         if (strncmp(entry->pin, "tag:", 4U) == 0) {
             pkg_print_not_ff(entry, dir, target);
-            free(dir);
+            yew_xfree(dir);
             refused = true;
             continue;
         }
@@ -3015,7 +3015,7 @@ static int pkg_update(int argc, char **argv)
                                       "--is-ancestor", "--end-of-options",
                                       entry->rev, target};
             if (!yew_pkg_git(ff, YEW_ARRAY_LEN(ff), 10000, true, &run)) {
-                free(dir);
+                yew_xfree(dir);
                 failed = true;
                 continue;
             }
@@ -3027,7 +3027,7 @@ static int pkg_update(int argc, char **argv)
                 else
                     (void)fprintf(stderr, "yew pkg: ancestry check failed\n");
                 yew_pkg_git_run_free(&run);
-                free(dir);
+                yew_xfree(dir);
                 if (not_ff)
                     refused = true;
                 else
@@ -3055,7 +3055,7 @@ static int pkg_update(int argc, char **argv)
             log_argv[9] = range;
             if (!pkg_git_simple(log_argv, 10U, 10000, true, "log", &run)) {
                 yew_pkg_git_run_free(&run);
-                free(dir);
+                yew_xfree(dir);
                 failed = true;
                 nunreachable++;
                 continue;
@@ -3074,7 +3074,7 @@ static int pkg_update(int argc, char **argv)
             if (!pkg_git_simple(count_argv, 8U, 10000, true,
                                 "rev-list count", &run)) {
                 yew_pkg_git_run_free(&run);
-                free(dir);
+                yew_xfree(dir);
                 failed = true;
                 nunreachable++;
                 continue;
@@ -3090,14 +3090,14 @@ static int pkg_update(int argc, char **argv)
                     (*end == '\n' || *end == '\r' || *end == '\0') &&
                     count > 50UL)
                     (void)printf("... and %lu more\n", count - 50UL);
-                free(count_text);
+                yew_xfree(count_text);
             }
             yew_pkg_git_run_free(&run);
         }
         if (dry) {
             (void)printf("%s would update %.12s -> %.12s\n", entry->name,
                          entry->rev, target);
-            free(dir);
+            yew_xfree(dir);
             continue;
         }
         {
@@ -3107,7 +3107,7 @@ static int pkg_update(int argc, char **argv)
             if (!pkg_git_simple(status_argv, YEW_ARRAY_LEN(status_argv),
                                 10000, true, "status", &run)) {
                 yew_pkg_git_run_free(&run);
-                free(dir);
+                yew_xfree(dir);
                 failed = true;
                 continue;
             }
@@ -3118,7 +3118,7 @@ static int pkg_update(int argc, char **argv)
                               entry->name);
                 pkg_print_sanitized(stderr, run.out.data, run.out.len);
                 yew_pkg_git_run_free(&run);
-                free(dir);
+                yew_xfree(dir);
                 refused = true;
                 continue;
             }
@@ -3136,7 +3136,7 @@ static int pkg_update(int argc, char **argv)
                               "yew pkg: error: update rollback failed; recover with git -C %s checkout --force --detach %s\n",
                               dir, old_rev);
             (void)memcpy(entry->tree, old_tree, sizeof(entry->tree));
-            free(dir);
+            yew_xfree(dir);
             failed = true;
             continue;
         }
@@ -3152,15 +3152,15 @@ static int pkg_update(int argc, char **argv)
             (void)memcpy(entry->rev, old_rev, sizeof(entry->rev));
             (void)memcpy(entry->tree, old_tree, sizeof(entry->tree));
             entry->updated_at = old_updated_at;
-            free(dir);
+            yew_xfree(dir);
             failed = true;
             continue;
         }
         (void)printf("updated %s to %.12s\n", entry->name, entry->rev);
         nupdated++;
-        free(dir);
+        yew_xfree(dir);
     }
-    free(root);
+    yew_xfree(root);
     yew_pkg_lock_free(&lock);
     arena_free_all(&a);
     (void)printf("%u updated, %u up to date, %u unreachable\n",

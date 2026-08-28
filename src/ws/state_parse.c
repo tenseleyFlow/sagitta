@@ -90,7 +90,7 @@ static void prune_corrupt(const char *dir)
         if (strncmp(ent->d_name, YEW_STATE_CORRUPT_PREFIX,
                     strlen(YEW_STATE_CORRUPT_PREFIX)) != 0)
             continue;
-        names[n] = strdup(ent->d_name);
+        names[n] = yew_xstrdup(ent->d_name);
         n++;
     }
     (void)closedir(d);
@@ -103,7 +103,7 @@ static void prune_corrupt(const char *dir)
                 (int)sizeof(path))
                 (void)unlink(path);
         }
-        free(names[i]);
+        yew_xfree(names[i]);
     }
 }
 
@@ -511,7 +511,7 @@ static Pane *build_panes(const FlLit *m, WinSlots *slots, u32 depth)
          */
         Pane *keep = p->a != NULL ? p->a : p->b;
 
-        free(p);
+        yew_xfree(p);
         return keep;
     }
     p->a->parent = p;

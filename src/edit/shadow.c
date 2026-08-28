@@ -33,7 +33,7 @@ static void shadow_suggestion_clear(ShadowSug *suggestion, u8 **owned_text)
     if (suggestion == NULL || owned_text == NULL)
         return;
     yew_textbuf_free(suggestion->scratch);
-    free(*owned_text);
+    yew_xfree(*owned_text);
     (void)memset(suggestion, 0, sizeof(*suggestion));
     *owned_text = NULL;
 }

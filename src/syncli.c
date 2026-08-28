@@ -155,7 +155,7 @@ static int list_defs(bool bypass)
                            strlen(desc->extensions[j]));
         }
         bytebuf_printf(&out, "\t%s\t%s\n", desc->source, state);
-        free(cache);
+        yew_xfree(cache);
     }
     if (!output(&out)) {
         bytebuf_free(&out);
@@ -208,7 +208,7 @@ static char *runtime_source(const SynLangDesc *desc)
         (void)snprintf(path, n + 1U, "%s/%s", root, relative);
         if (access(path, R_OK) == 0)
             return path;
-        free(path);
+        yew_xfree(path);
     }
     n = strlen(YEW_RUNTIME_DIR_DEFAULT) + 1U + strlen(relative);
     path = yew_xmalloc(n + 1U);
@@ -216,7 +216,7 @@ static char *runtime_source(const SynLangDesc *desc)
                    relative);
     if (access(path, R_OK) == 0)
         return path;
-    free(path);
+    yew_xfree(path);
     path = yew_xmalloc(strlen(desc->source) + 1U);
     (void)memcpy(path, desc->source, strlen(desc->source) + 1U);
     return path;
@@ -251,7 +251,7 @@ static int compile_all(void)
             return YEW_EXIT_BUG;
         path = runtime_source(desc);
         status = compile_one(path);
-        free(path);
+        yew_xfree(path);
         if (status != YEW_EXIT_OK)
             return status;
     }
@@ -643,7 +643,7 @@ static int check_embed(bool strict)
                           (unsigned)YEW_SYN_DEF_MAX);
         }
     }
-    free(defs);
+    yew_xfree(defs);
     if (ferror(stdout) != 0)
         return YEW_EXIT_IO;
     if (errors != 0U || (strict && warnings != 0U))
@@ -751,13 +751,13 @@ static void check_embed_source(Arena *arena, DiagCtx *dc, const char *source,
     interner_init(&in, arena);
     root = fl_parse_literal(arena, dc, &in, source, len, file_id);
     if (root == NULL) {
-        free(sites.lang);
+        yew_xfree(sites.lang);
         interner_free(&in);
         return;
     }
     ast_embed_sites(root, &in, &sites);
     if (sites.n == 0U) {
-        free(sites.lang);
+        yew_xfree(sites.lang);
         interner_free(&in);
         return;
     }
@@ -876,8 +876,8 @@ static void check_embed_source(Arena *arena, DiagCtx *dc, const char *source,
             }
         }
     }
-    free(defs);
-    free(sites.lang);
+    yew_xfree(defs);
+    yew_xfree(sites.lang);
     interner_free(&in);
 }
 
@@ -1157,7 +1157,7 @@ static int check_coverage(const SynDef *def, const char *const *inputs,
             covered_embeds != total_embeds)
             status = YEW_EXIT_ERR;
     }
-    free(reachable);
+    yew_xfree(reachable);
     yew_syn_engine_set_coverage(engine, NULL);
     yew_syn_engine_free(engine);
     yew_syn_coverage_free(&coverage);
@@ -1541,26 +1541,26 @@ int yew_syn_main(int argc, char **argv, bool clean)
             else if (coverage) {
                 inputs[ninputs++] = argv[i];
             } else {
-                free(inputs);
+                yew_xfree(inputs);
                 return usage_error("check requires one FILE");
             }
         }
         if (embed) {
-            free(inputs);
+            yew_xfree(inputs);
             if (coverage || path != NULL)
                 return usage_error("--embed takes no FILE or coverage inputs");
             return check_embed(strict);
         }
         if (path == NULL) {
-            free(inputs);
+            yew_xfree(inputs);
             return usage_error("check requires FILE");
         }
         if (coverage && ninputs == 0U) {
-            free(inputs);
+            yew_xfree(inputs);
             return usage_error("--coverage requires at least one INPUT");
         }
         result = check_one(path, strict, coverage, inputs, ninputs);
-        free(inputs);
+        yew_xfree(inputs);
         return result;
     }
     if (strcmp(argv[at], "dump") == 0) {
@@ -1590,7 +1590,7 @@ int yew_syn_main(int argc, char **argv, bool clean)
                 return YEW_EXIT_IO;
             }
             (void)printf("%s\n", path);
-            free(path);
+            yew_xfree(path);
             return ferror(stdout) == 0 ? YEW_EXIT_OK : YEW_EXIT_IO;
         }
         return usage_error("cache requires clear or path");

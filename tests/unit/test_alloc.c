@@ -16,6 +16,9 @@ void test_alloc_release_contract(void)
     max_align_t *plain = yew_xmalloc(sizeof(*plain));
     u8 *zeroed = yew_xcalloc(8U, sizeof(*zeroed));
     u8 *grown = yew_xreallocarray(NULL, 4U, sizeof(*grown));
+    char *copy = yew_xstrdup("tracked");
+    char *resolved = yew_xrealpath(".");
+    char *cwd = yew_xgetcwd();
     size_t i;
 
     YEW_ASSERT_EQ_U64((uintptr_t)plain % _Alignof(max_align_t), 0U);
@@ -24,9 +27,15 @@ void test_alloc_release_contract(void)
     grown[0] = 0xa5U;
     grown = yew_xrealloc(grown, 16U);
     YEW_ASSERT_EQ_U64(grown[0], 0xa5U);
+    YEW_ASSERT_EQ_STR(copy, "tracked");
+    YEW_ASSERT_NOT_NULL(resolved);
+    YEW_ASSERT_NOT_NULL(cwd);
     yew_xfree(plain);
     yew_xfree(zeroed);
     yew_xfree(grown);
+    yew_xfree(copy);
+    yew_xfree(resolved);
+    yew_xfree(cwd);
     yew_xfree(NULL);
 }
 

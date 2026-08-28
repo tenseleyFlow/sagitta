@@ -122,6 +122,6 @@ bool yew_mkdirs(const char *path, unsigned int mode)
     }
     if (ok)
         ok = yew_mkdir_one(copy, (mode_t)mode);
-    free(copy);
+    yew_xfree(copy);
     return ok;
 }

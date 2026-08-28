@@ -125,11 +125,11 @@ CmdStatus yew_flapi_cmd_cursor_set_many(CmdCtx *cx)
         }
         if (!yew_cset_add_many(&replacement, rest,
                                cx->cursor_args_len - 1U)) {
-            free(rest);
+            yew_xfree(rest);
             yew_cset_free(&replacement);
             return YEW_CMD_ERR_ARG;
         }
-        free(rest);
+        yew_xfree(rest);
     }
     yew_cset_normalize(cx->win->buf->tb, &replacement);
     yew_cset_free(&cx->win->cs);

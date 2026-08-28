@@ -65,7 +65,7 @@ static char *entry_path(const Plug *plug)
 
 static void set_last_error(Plug *plug, const char *text)
 {
-    free(plug->last_error);
+    yew_xfree(plug->last_error);
     plug->last_error = plug_strdup(text == NULL ? "plugin error" : text);
 }
 
@@ -387,7 +387,7 @@ bool yew_plug_enable(Ed *ed, Plug *plug, DiagCtx *dc)
         plug->origin_id
     };
     ok = fl_module_load_path(vm, path, origin, &plug->module);
-    free(path);
+    yew_xfree(path);
     if (!ok) {
         capture_error(ed, plug, vm->err);
         teardown(ed, plug, PLUG_ERROR, false);
@@ -419,7 +419,7 @@ bool yew_plug_enable(Ed *ed, Plug *plug, DiagCtx *dc)
         teardown(ed, plug, PLUG_ERROR, false);
         return false;
     }
-    free(plug->last_error);
+    yew_xfree(plug->last_error);
     plug->last_error = NULL;
     plug->st = PLUG_ENABLED;
     fl_origin_mask(ed, plug->origin_id);
@@ -568,18 +568,18 @@ void yew_plug_free(Ed *ed)
         fl_gc_root_provider_remove(vm, yew_plug_mark, sys);
     for (i = 0U; i < sys->n; i++) {
         if (sys->v[i] != NULL) {
-            free(sys->v[i]->last_error);
-            free(sys->v[i]);
+            yew_xfree(sys->v[i]->last_error);
+            yew_xfree(sys->v[i]);
         }
     }
-    free(sys->v);
-    free(sys->cmds);
-    free(sys->regs);
-    free(sys->pending_disable);
-    free(sys->pick_items);
-    free(sys->pick_text);
+    yew_xfree(sys->v);
+    yew_xfree(sys->cmds);
+    yew_xfree(sys->regs);
+    yew_xfree(sys->pending_disable);
+    yew_xfree(sys->pick_items);
+    yew_xfree(sys->pick_text);
     arena_free_all(&sys->arena);
-    free(sys);
+    yew_xfree(sys);
     ed->plug = NULL;
 }
 
@@ -666,8 +666,8 @@ static void picker_build(Ed *ed)
     PlugSys *sys = ed->plug;
     u32 i;
 
-    free(sys->pick_items);
-    free(sys->pick_text);
+    yew_xfree(sys->pick_items);
+    yew_xfree(sys->pick_text);
     sys->pick_items = NULL;
     sys->pick_text = NULL;
     sys->pick_n = 0U;

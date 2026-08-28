@@ -280,8 +280,8 @@ void yew_state_dispose(Ed *ed)
         s->options = NULL;
     }
     for (i = 0U; i < s->bool_options_len; i++)
-        free(s->bool_options[i].key);
-    free(s->bool_options);
+        yew_xfree(s->bool_options[i].key);
+    yew_xfree(s->bool_options);
     s->bool_options = NULL;
     s->bool_options_len = 0U;
     s->bool_options_cap = 0U;

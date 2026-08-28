@@ -37,14 +37,14 @@ static char *ai_read_file(const char *path, u32 *len)
     }
     bytes = yew_xmalloc((size_t)size + 1U);
     if (fread(bytes, 1U, (size_t)size, file) != (size_t)size) {
-        free(bytes);
+        yew_xfree(bytes);
         bytes = NULL;
     } else {
         bytes[(size_t)size] = '\0';
         *len = (u32)size;
     }
     if (fclose(file) != 0) {
-        free(bytes);
+        yew_xfree(bytes);
         return NULL;
     }
     return bytes;
@@ -70,7 +70,7 @@ static char *ai_runtime_path(const char *name)
     path = ai_join_path("runtime", name);
     if (access(path, R_OK) == 0)
         return path;
-    free(path);
+    yew_xfree(path);
     return ai_join_path(YEW_RUNTIME_DIR_DEFAULT, name);
 }
 
@@ -82,7 +82,7 @@ static char *ai_privacy_path(void)
 
     if (access(path, R_OK) == 0)
         return path;
-    free(path);
+    yew_xfree(path);
     if (runtime == NULL || runtime[0] == '\0')
         runtime = YEW_RUNTIME_DIR_DEFAULT;
     len = strlen(runtime) + sizeof("/../docs/ai-privacy.md");
@@ -184,15 +184,15 @@ bool yew_ai_preset_load(Ed *ed, const char *name)
         return false;
     path = ai_runtime_path(file);
     source = ai_read_file(path, &len);
-    free(path);
+    yew_xfree(path);
     if (source == NULL)
         return false;
     if (ed->ai == NULL || !ai_preset_txn_begin(ed, &txn)) {
-        free(source);
+        yew_xfree(source);
         return false;
     }
     status = yew_fl_eval(ed, source, len);
-    free(source);
+    yew_xfree(source);
     ok = status == YEW_CMD_OK &&
          yew_ai_registry_keep(&ed->ai->backends,
                               strcmp(name, "local") == 0 ? "local" :
@@ -213,7 +213,7 @@ bool yew_ai_privacy_open(Ed *ed)
         return false;
     path = ai_privacy_path();
     source = ai_read_file(path, &len);
-    free(path);
+    yew_xfree(path);
     if (source == NULL)
         return false;
     buffer = yew_ws_scratch_find(ed, name);
@@ -221,13 +221,13 @@ bool yew_ai_privacy_open(Ed *ed)
         buffer = yew_ws_scratch_new(ed, name,
                                     YEW_BUF_NOUNDO | YEW_BUF_READONLY);
     if (buffer == NULL) {
-        free(source);
+        yew_xfree(source);
         return false;
     }
     yew_textbuf_delete(buffer->tb,
                        (Span){0U, yew_textbuf_len(buffer->tb)});
     yew_textbuf_insert(buffer->tb, BYTEOFF(0U), (const u8 *)source, len);
     yew_undo_mark_saved(buffer->undo);
-    free(source);
+    yew_xfree(source);
     return yew_ed_show_buffer(ed, buffer);
 }

@@ -43,8 +43,8 @@ void yew_filter_free(FilterState *f)
 {
     if (f == NULL)
         return;
-    free(f->cand);
-    free(f->score);
+    yew_xfree(f->cand);
+    yew_xfree(f->score);
     (void)memset(f, 0, sizeof(*f));
 }
 

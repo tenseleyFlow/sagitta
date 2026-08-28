@@ -74,7 +74,7 @@ static char *shipped_path(void)
     path = policy_join(YEW_RUNTIME_DIR_DEFAULT, "ai-deny.fl");
     if (access(path, R_OK) == 0)
         return path;
-    free(path);
+    yew_xfree(path);
     if (access("runtime/ai-deny.fl", R_OK) == 0)
         return policy_copy("runtime/ai-deny.fl");
     return policy_join(YEW_RUNTIME_DIR_DEFAULT, "ai-deny.fl");
@@ -88,7 +88,7 @@ static char *user_path(void)
     if (dir == NULL)
         return NULL;
     path = policy_join(dir, "ai-deny.fl");
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -407,8 +407,8 @@ bool yew_ai_policy_load_paths(const char *shipped, const char *user,
                 "*.p12, *.pfx, *.jks, *.keystore, id_rsa*, id_ecdsa*, "
                 "id_ed25519*, .netrc, _netrc, .npmrc, .pypirc, .aws/, "
                 ".gnupg/, .docker/config.json, *.kdbx, *.gpg, *.asc");
-    free(shipped_rows.v);
-    free(user_rows.v);
+    yew_xfree(shipped_rows.v);
+    yew_xfree(user_rows.v);
     if (user != NULL)
         doc_drop(&user_doc);
     doc_drop(&shipped_doc);
@@ -445,7 +445,7 @@ static AiPathPolicy *path_policy_from_options(Ed *ed, bool replace)
             globs[i] = value.as.list.v[i].s;
     }
     policy = yew_ai_path_policy_new(globs, value.as.list.len, replace, NULL);
-    free(globs);
+    yew_xfree(globs);
     return policy;
 }
 
@@ -463,8 +463,8 @@ bool yew_ai_policy_reload(Ed *ed)
                                   bool_option(ed, "ai.deny_replace"),
                                   bool_option(ed, "ai.exclude_replace"),
                                   &bundle)) {
-        free(user);
-        free(shipped);
+        yew_xfree(user);
+        yew_xfree(shipped);
         return false;
     }
     {
@@ -473,8 +473,8 @@ bool yew_ai_policy_reload(Ed *ed)
 
         if (paths == NULL) {
             yew_ai_policy_bundle_drop(&bundle);
-            free(user);
-            free(shipped);
+            yew_xfree(user);
+            yew_xfree(shipped);
             return false;
         }
         yew_ai_path_policy_free(bundle.paths);
@@ -486,8 +486,8 @@ bool yew_ai_policy_reload(Ed *ed)
     ed->ai->paths = bundle.paths;
     ed->ai->policy_config = ed->config;
     ed->ai->policy_options_loaded = ed->opt_globals != NULL;
-    free(user);
-    free(shipped);
+    yew_xfree(user);
+    yew_xfree(shipped);
     return true;
 }
 

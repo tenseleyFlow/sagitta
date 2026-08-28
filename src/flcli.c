@@ -283,11 +283,11 @@ static void run_close(FlRun *r)
 /* The script's realpath, so a relative import resolves beside it. */
 static void run_anchor(FlRun *r, const char *path)
 {
-    char *real = realpath(path, NULL);
+    char *real = yew_xrealpath(path);
 
     if (real != NULL) {
         r->origin.path_id = yew_intern(&r->in, real, strlen(real));
-        free(real);
+        yew_xfree(real);
     }
     r->vm.root_origin = r->origin;
 }

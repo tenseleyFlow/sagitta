@@ -315,7 +315,7 @@ void yew_repl_plan_free(YewReplPlan *p)
         return;
     for (i = 0U; i < p->len; i++)
         bytebuf_free(&p->v[i].text);
-    free(p->v);
+    yew_xfree(p->v);
     (void)memset(p, 0, sizeof(*p));
 }
 

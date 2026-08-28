@@ -336,7 +336,7 @@ bool yew_panel_mark(Panel *p, u32 buf_id, u64 buf_gen, Span span,
         role == NULL || role[0] == '\0')
         return false;
     copy = panel_strdup(role);
-    free(p->mark_role);
+    yew_xfree(p->mark_role);
     p->mark_role = copy;
     p->mark = span;
     p->mark_buf_id = buf_id;
@@ -349,10 +349,10 @@ void yew_panel_close(Ed *ed, Panel *p)
 {
     if (p == NULL)
         return;
-    free(p->body);
-    free(p->title);
-    free(p->role);
-    free(p->mark_role);
+    yew_xfree(p->body);
+    yew_xfree(p->title);
+    yew_xfree(p->role);
+    yew_xfree(p->mark_role);
     Vec_Span_free(&p->emph);
     Vec_Span_free(&p->rows);
     yew_keymap_free(&p->keys);

@@ -195,7 +195,7 @@ bool yew_fl_runtime_init(Ed *ed)
         bytebuf_free(&rt->last_diag_rendered);
         interner_free(&rt->interner);
         arena_free_all(&rt->arena);
-        free(rt);
+        yew_xfree(rt);
         return false;
     }
     fl_std_register(&rt->vm);
@@ -222,7 +222,7 @@ void yew_fl_runtime_free(Ed *ed)
         return;
     rt = ed->fl;
     ed->fl = NULL;
-    free(ed->fl_changes);
+    yew_xfree(ed->fl_changes);
     ed->fl_changes = NULL;
     ed->fl_changes_len = 0U;
     ed->fl_changes_cap = 0U;
@@ -232,7 +232,7 @@ void yew_fl_runtime_free(Ed *ed)
     bytebuf_free(&rt->last_diag_rendered);
     interner_free(&rt->interner);
     arena_free_all(&rt->arena);
-    free(rt);
+    yew_xfree(rt);
 }
 
 FlVm *yew_fl_vm(Ed *ed)
@@ -491,5 +491,5 @@ void yew_fl_hook_flush_change(Ed *ed)
         }
     }
     ed->fl_flushing_change = false;
-    free(pending);
+    yew_xfree(pending);
 }

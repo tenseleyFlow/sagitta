@@ -194,8 +194,8 @@ static void git_repo_clear(GitRepo *repo)
 {
     if (repo == NULL)
         return;
-    free(repo->git_dir);
-    free(repo->top_level);
+    yew_xfree(repo->git_dir);
+    yew_xfree(repo->top_level);
     (void)memset(repo, 0, sizeof(*repo));
 }
 
@@ -318,7 +318,7 @@ static bool git_exists(const char *dir, const char *tail)
     char *path = git_join(dir, tail);
     bool exists = path != NULL && access(path, F_OK) == 0;
 
-    free(path);
+    yew_xfree(path);
     return exists;
 }
 
@@ -332,11 +332,11 @@ static bool git_read_u32(const char *dir, const char *tail, u32 *out)
     int fd;
 
     if (path == NULL || out == NULL) {
-        free(path);
+        yew_xfree(path);
         return false;
     }
     fd = open(path, O_RDONLY);
-    free(path);
+    yew_xfree(path);
     if (fd < 0)
         return false;
     do {
@@ -555,7 +555,7 @@ static GitStatusCode git_auth_state(const u8 *bytes, u64 len)
             break;
         }
     }
-    free(text);
+    yew_xfree(text);
     return state;
 }
 
@@ -601,7 +601,7 @@ static void git_job_complete(void *owner, Ed *ed, const YewJob *job)
 
 static void git_job_destroy(void *owner)
 {
-    free(owner);
+    yew_xfree(owner);
 }
 
 static const YewJobCallbackOps git_job_ops = {
@@ -728,9 +728,9 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
         spec.callback_ops = &git_job_ops;
         id = yew_job_spawn(ed, &spec, err, errsz);
     }
-    free(final_argv);
+    yew_xfree(final_argv);
     if (id == 0U) {
-        free(owner);
+        yew_xfree(owner);
         git_pending_drop(ctx, pending);
         return 0U;
     }
@@ -761,9 +761,9 @@ static void git_callback_destroy(void *owner)
     wrapped->ops->destroy(wrapped->owner);
     if (wrapped->stdin_bytes != NULL) {
         yew_memzero(wrapped->stdin_bytes, (size_t)wrapped->stdin_len);
-        free(wrapped->stdin_bytes);
+        yew_xfree(wrapped->stdin_bytes);
     }
-    free(wrapped);
+    yew_xfree(wrapped);
 }
 
 static const YewJobCallbackOps git_callback_ops = {
@@ -845,13 +845,13 @@ u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
     spec.callback_owner = wrapped;
     spec.callback_ops = &git_callback_ops;
     id = yew_job_spawn(ed, &spec, err, errsz);
-    free(final_argv);
+    yew_xfree(final_argv);
     if (id == 0U) {
         if (wrapped->stdin_bytes != NULL) {
             yew_memzero(wrapped->stdin_bytes, (size_t)wrapped->stdin_len);
-            free(wrapped->stdin_bytes);
+            yew_xfree(wrapped->stdin_bytes);
         }
-        free(wrapped);
+        yew_xfree(wrapped);
     }
     return id;
 }
@@ -888,8 +888,8 @@ static void git_blob_complete(GitBlobBatch *batch, YewGitBlobState state)
     result.len = state == YEW_GIT_BLOB_OK ? batch->body_len : 0U;
     result.request_id = request->id;
     request->callback(request->owner, &result);
-    free(request->query);
-    free(request);
+    yew_xfree(request->query);
+    yew_xfree(request);
     batch->body.len = 0U;
     batch->body_len = 0U;
     batch->body_got = 0U;
@@ -1078,7 +1078,7 @@ static void git_blob_destroy(void *owner)
     bytebuf_free(&batch->rx);
     bytebuf_free(&batch->tx);
     bytebuf_free(&batch->body);
-    free(batch);
+    yew_xfree(batch);
 }
 
 static const YewJobFramedOps git_blob_ops = {
@@ -1142,7 +1142,7 @@ static GitBlobBatch *git_blob_batch_ensure(Ed *ed, char *err, size_t errsz)
     spec.framed_owner = batch;
     spec.framed_ops = &git_blob_ops;
     batch->job_id = yew_job_spawn(ed, &spec, err, errsz);
-    free(final_argv);
+    yew_xfree(final_argv);
     if (batch->job_id == 0U) {
         git_blob_destroy(batch);
         return NULL;
@@ -1332,14 +1332,14 @@ void yew_git_state_free(Ed *ed)
         git_pending_drop(ed->git, &ed->git->pending[i]);
     }
     git_repo_clear(&ed->git->repo);
-    free(ed->git->detected_root);
+    yew_xfree(ed->git->detected_root);
     arena_free_all(&ed->git->log_arena);
     arena_free_all(&ed->git->result_arena);
     git_incoming_clear(ed->git);
     arena_free_all(&ed->git->incoming_arena);
     yew_git_snapshot_drop(&ed->git->snap[0]);
     yew_git_snapshot_drop(&ed->git->snap[1]);
-    free(ed->git);
+    yew_xfree(ed->git);
     ed->git = NULL;
 }
 
@@ -1474,7 +1474,7 @@ static bool git_parse_detect(GitRepo *repo, const u8 *buf, u64 n,
     if (git_dir[0] != '/') {
         char *absolute = git_join(cwd, git_dir);
 
-        free(git_dir);
+        yew_xfree(git_dir);
         git_dir = absolute;
     }
     git_repo_clear(repo);
@@ -1638,9 +1638,9 @@ static void git_incoming_clear(GitCtx *ctx)
     arena_init(&ctx->incoming_arena);
     ctx->incoming_paths.data = NULL;
     ctx->incoming_paths.len = 0U;
-    free(ctx->upstream_oid);
+    yew_xfree(ctx->upstream_oid);
     ctx->upstream_oid = NULL;
-    free(ctx->pending_upstream_oid);
+    yew_xfree(ctx->pending_upstream_oid);
     ctx->pending_upstream_oid = NULL;
 }
 
@@ -2137,7 +2137,7 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
         if (parsed && (state == YEW_GIT_OK ||
                        (bare_partial_ok && ctx->repo.bare))) {
             ctx->repo.detected_ms = git_now(ed);
-            free(ctx->detected_root);
+            yew_xfree(ctx->detected_root);
             ctx->detected_root = git_dup_bytes((const u8 *)detect_root,
                                                 strlen(detect_root));
             ctx->detect_result = ctx->repo.bare ? YEW_GIT_BARE : YEW_GIT_OK;
@@ -2156,12 +2156,12 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
             req.retried = true;
             if (yew_git_spawn(ed, yew_git_verb("detect"), argv, &req,
                               spawn_err, sizeof(spawn_err)) != 0U) {
-                free(detect_root);
+                yew_xfree(detect_root);
                 return true;
             }
             git_repo_clear(&ctx->repo);
             ctx->repo.env_fp = detect_env_fp;
-            free(ctx->detected_root);
+            yew_xfree(ctx->detected_root);
             ctx->detected_root = git_dup_bytes((const u8 *)detect_root,
                                                 strlen(detect_root));
             ctx->detect_result = YEW_GIT_NOT_REPO;
@@ -2169,7 +2169,7 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
         } else {
             git_repo_clear(&ctx->repo);
             ctx->repo.env_fp = detect_env_fp;
-            free(ctx->detected_root);
+            yew_xfree(ctx->detected_root);
             ctx->detected_root = git_dup_bytes((const u8 *)detect_root,
                                                 strlen(detect_root));
             ctx->detect_result = state == YEW_GIT_NO_GIT ?
@@ -2182,7 +2182,7 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
              strcmp(detect_root, yew_ws_root(ed)) != 0)) {
             ctx->detect_state = YEW_GIT_ASYNC_UNTRIED;
             (void)yew_git_detect(ed, NULL);
-            free(detect_root);
+            yew_xfree(detect_root);
             return true;
         }
         git_publish_result(ctx, job_id, verb_name, ctx->detect_result,
@@ -2196,7 +2196,7 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
             ctx->detect_result == YEW_GIT_OK) {
             (void)yew_git_refresh(ed, true);
         }
-        free(detect_root);
+        yew_xfree(detect_root);
         return true;
     }
     if (kind == YEW_GREQ_STATUS) {
@@ -2281,7 +2281,7 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
         }
         if (ctx->incoming_dirty || ctx->upstream_oid == NULL ||
             strcmp(ctx->upstream_oid, oid) != 0) {
-            free(ctx->pending_upstream_oid);
+            yew_xfree(ctx->pending_upstream_oid);
             ctx->pending_upstream_oid = oid;
             if (!git_spawn_incoming(ed)) {
                 yew_git_snapshot_drop(next);
@@ -2289,7 +2289,7 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
                 git_refresh_failed(ed);
             }
         } else {
-            free(oid);
+            yew_xfree(oid);
             if (!git_merge_incoming(next, &ctx->incoming_paths)) {
                 yew_git_snapshot_drop(next);
                 yew_git_snapshot_init(next);
@@ -2313,7 +2313,7 @@ bool yew_git_test_complete_exit(Ed *ed, u32 job_id, GitStatusCode state,
             git_refresh_failed(ed);
             return true;
         }
-        free(ctx->upstream_oid);
+        yew_xfree(ctx->upstream_oid);
         ctx->upstream_oid = ctx->pending_upstream_oid;
         ctx->pending_upstream_oid = NULL;
         ctx->incoming_dirty = false;

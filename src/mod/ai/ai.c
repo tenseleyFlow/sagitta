@@ -260,7 +260,7 @@ void yew_ai_state_free(Ed *ed)
     yew_ai_path_policy_free(state->paths);
     bytebuf_free(&state->log);
     ed->ai = NULL;
-    free(state);
+    yew_xfree(state);
 }
 
 bool yew_ai_state_ready(const Ed *ed)

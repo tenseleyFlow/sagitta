@@ -1573,8 +1573,8 @@ void yew_cmd_shutdown(void)
     interner_free(&registry.names);
     strmap_free(&registry.words);
     arena_free_all(&registry.arena);
-    free(registry.entries);
-    free(registry.active);
+    yew_xfree(registry.entries);
+    yew_xfree(registry.active);
     registry = (CmdRegistry){0};
 }
 

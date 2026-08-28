@@ -358,17 +358,17 @@ Journal *yew_journal_open(const char *realpath, const FileMeta *m)
     if (dir == NULL || !make_dirs(dir)) {
         yew_log(YEW_LOG_ERROR, "cannot create crash journal directory: %s",
                 strerror(errno));
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     path = journal_path(dir, realpath);
     if (path == NULL) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     if (journal_path_owned(path)) {
-        free(path);
-        free(dir);
+        yew_xfree(path);
+        yew_xfree(dir);
         errno = EBUSY;
         return NULL;
     }
@@ -404,8 +404,8 @@ Journal *yew_journal_open(const char *realpath, const FileMeta *m)
     if (fd < 0) {
         yew_log(YEW_LOG_ERROR, "cannot open crash journal %s: %s", path,
                 strerror(errno));
-        free(path);
-        free(dir);
+        yew_xfree(path);
+        yew_xfree(dir);
         return NULL;
     }
     if (created && !lock_journal(fd)) {
@@ -414,8 +414,8 @@ Journal *yew_journal_open(const char *realpath, const FileMeta *m)
         (void)close(fd);
         (void)unlink(path);
         (void)fsync_dir(dir);
-        free(path);
-        free(dir);
+        yew_xfree(path);
+        yew_xfree(dir);
         errno = saved_errno;
         return NULL;
     }
@@ -425,8 +425,8 @@ Journal *yew_journal_open(const char *realpath, const FileMeta *m)
 
         (void)close(fd);
         (void)unlink(path);
-        free(path);
-        free(dir);
+        yew_xfree(path);
+        yew_xfree(dir);
         errno = saved_errno;
         return NULL;
     }
@@ -507,9 +507,9 @@ void yew_journal_close(Journal *j)
     if (close(j->fd) != 0)
         yew_log(YEW_LOG_ERROR, "cannot close crash journal %s: %s", j->path,
                 strerror(errno));
-    free(j->path);
-    free(j->dir);
-    free(j);
+    yew_xfree(j->path);
+    yew_xfree(j->dir);
+    yew_xfree(j);
 }
 
 void yew_journal_discard(Journal *j)
@@ -531,9 +531,9 @@ void yew_journal_discard(Journal *j)
         yew_log(YEW_LOG_ERROR, "cannot discard crash journal %s: %s", j->path,
                 strerror(saved_errno));
     }
-    free(j->path);
-    free(j->dir);
-    free(j);
+    yew_xfree(j->path);
+    yew_xfree(j->dir);
+    yew_xfree(j);
 }
 
 static bool buffer_matches(const TextBuf *tb, u64 off, const u8 *bytes,
@@ -613,7 +613,7 @@ static void stale_journal(int fd, const char *path, const char *dir)
             yew_log(YEW_LOG_ERROR,
                     "cannot preserve stale crash journal %s: %s", path,
                     strerror(errno));
-            free(stale);
+            yew_xfree(stale);
             return;
         }
     }
@@ -629,7 +629,7 @@ static void stale_journal(int fd, const char *path, const char *dir)
         yew_log(YEW_LOG_ERROR, "cannot preserve stale crash journal %s: %s",
                 path, strerror(errno));
     }
-    free(stale);
+    yew_xfree(stale);
 }
 
 static bool header_matches(const u8 *data, size_t size, const char *realpath,
@@ -747,7 +747,7 @@ static int adopt_existing_journal(const char *path, const char *realpath,
          * being used as an internal sentinel and then printed with
          * strerror.  An obsolete journal is replaced, not obeyed.
          */
-        free(data);
+        yew_xfree(data);
         (void)close(fd);
         return YEW_JOURNAL_OBSOLETE;
     }
@@ -761,12 +761,12 @@ static int adopt_existing_journal(const char *path, const char *realpath,
         yew_log(YEW_LOG_WARN,
                 "discarded incomplete crash journal tail while adopting %s",
                 path);
-    free(data);
+    yew_xfree(data);
     return fd;
 
 fail:
     saved_errno = errno == 0 ? EIO : errno;
-    free(data);
+    yew_xfree(data);
     (void)close(fd);
     errno = saved_errno;
     return -1;
@@ -778,7 +778,7 @@ static const char *replay_realpath(const char *path, const FileMeta *meta,
     if (meta->realpath != NULL && meta->realpath[0] != '\0') {
         return meta->realpath;
     }
-    *owned = realpath(path, NULL);
+    *owned = yew_xrealpath(path);
     return *owned != NULL ? *owned : path;
 }
 
@@ -828,10 +828,10 @@ bool yew_journal_probe(const char *path, const FileMeta *m)
 done:
     if (fd >= 0)
         (void)close(fd);
-    free(data);
-    free(jpath);
-    free(dir);
-    free(owned);
+    yew_xfree(data);
+    yew_xfree(jpath);
+    yew_xfree(dir);
+    yew_xfree(owned);
     return matched;
 }
 
@@ -890,10 +890,10 @@ bool yew_journal_discard_path(const char *path, const FileMeta *m)
 done:
     if (fd >= 0)
         (void)close(fd);
-    free(data);
-    free(jpath);
-    free(dir);
-    free(owned);
+    yew_xfree(data);
+    yew_xfree(jpath);
+    yew_xfree(dir);
+    yew_xfree(owned);
     return discarded;
 }
 
@@ -1000,10 +1000,10 @@ done:
     if (fd >= 0) {
         (void)close(fd);
     }
-    free(data);
-    free(jpath);
-    free(dir);
-    free(owned);
+    yew_xfree(data);
+    yew_xfree(jpath);
+    yew_xfree(dir);
+    yew_xfree(owned);
     return matched;
 }
 

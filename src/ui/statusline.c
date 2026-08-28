@@ -728,14 +728,14 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     }
     out->body_len = at;
     out->body_cells = (u16)cells(out->body);
-    free(clipped_path);
+    yew_xfree(clipped_path);
 }
 
 void yew_statusline_text_free(StatuslineText *text)
 {
     if (text == NULL)
         return;
-    free(text->body);
+    yew_xfree(text->body);
     memset(text, 0, sizeof(*text));
 }
 

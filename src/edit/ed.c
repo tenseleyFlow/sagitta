@@ -148,7 +148,7 @@ static void ed_fortran_score(const TextBuf *tb, SynFortranScore *score)
             }
         }
         yew_syn_fortran_score_line(score, line, (size_t)copied);
-        free(line);
+        yew_xfree(line);
     }
 }
 
@@ -184,7 +184,7 @@ void yew_ed_syn_bind(Buffer *b)
     }
     lang = yew_syn_lang_for_scored(b->path, line, len, score_ptr, form,
                                    false);
-    free(line);
+    yew_xfree(line);
     yew_syn_attach(&b->syn, lang, b->tb);
     b->lang = NULL;
     if (lang == YEW_LANG_NONE)
@@ -225,9 +225,9 @@ static void ed_ws_free(Ed *ed)
      * other slot is heap-owned here. */
     for (i = 1U; i < ed->ws.nbufs; i++) {
         ed_buffer_dispose(ed->ws.bufs[i]);
-        free(ed->ws.bufs[i]);
+        yew_xfree(ed->ws.bufs[i]);
     }
-    free(ed->ws.bufs);
+    yew_xfree(ed->ws.bufs);
     ed->ws.bufs = NULL;
     ed->ws.nbufs = 0U;
     ed->ws.cap = 0U;
@@ -270,7 +270,7 @@ static void ed_buffer_free(Ed *ed)
     yew_shadow_dismiss(ed, &ed->single_win);
     yew_shadow_free(&ed->single_win.shadow);
     yew_gutter_signs_free(&ed->single_win);
-    free(ed->single_win.syn_spans);
+    yew_xfree(ed->single_win.syn_spans);
     ed->single_win.syn_spans = NULL;
     ed->single_win.syn_spans_cap = 0U;
     yew_vp_free(&ed->single_win);
@@ -554,7 +554,7 @@ void yew_ws_scratch_drop(Ed *ed, Buffer *b)
             (void)yew_ed_show_buffer(ed, &ed->buffer);
         yew_symidx_drop_buffer(&ed->ws, b->id);
         ed_buffer_dispose(b);
-        free(b);
+        yew_xfree(b);
         (void)memmove(&ed->ws.bufs[i], &ed->ws.bufs[i + 1U],
                       (size_t)(ed->ws.nbufs - i - 1U) *
                           sizeof(*ed->ws.bufs));
@@ -646,7 +646,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
         /*
          * malloc'd, like every other tab's path.  Arena-owning this one
          * made Tab.path mean two different things depending on which
-         * tab you had, and tab_destroy's free() then corrupted the heap
+         * tab you had, and tab_destroy's yew_xfree() then corrupted the heap
          * — and a reorder moves this tab away from index 0, so "the
          * first one is special" is not even checkable.
          */
@@ -717,11 +717,11 @@ void yew_ed_init(Ed *ed)
     yew_mouse_init(&ed->mouse);
     yew_shadow_test_install();
     yew_block_provider_syntax_install(true);
-    root = realpath(".", NULL);
+    root = yew_xrealpath(".");
     if (root == NULL)
-        root = getcwd(NULL, 0U);
+        root = yew_xgetcwd();
     ed->ws.dir = arena_strdup(&ed->arena, root == NULL ? "." : root);
-    free(root);
+    yew_xfree(root);
     fl_origin_reg_init(&ed->origins);
     fl_h_table_init(&ed->handles);
     yew_record_init(&ed->rec);
@@ -763,11 +763,11 @@ bool yew_ed_set_workspace_root(Ed *ed, const char *dir)
     if (ed == NULL || dir == NULL || stat(dir, &st) != 0 ||
         !S_ISDIR(st.st_mode))
         return false;
-    root = realpath(dir, NULL);
+    root = yew_xrealpath(dir);
     if (root == NULL)
         return false;
     ed->ws.dir = arena_strdup(&ed->arena, root);
-    free(root);
+    yew_xfree(root);
     return true;
 }
 
@@ -810,8 +810,8 @@ void yew_ed_free(Ed *ed)
     yew_fl_runtime_free(ed);
     yew_opt_free(ed);
     yew_theme_free(&ed->theme);
-    free(ed->theme_last_dark);
-    free(ed->theme_last_light);
+    yew_xfree(ed->theme_last_dark);
+    yew_xfree(ed->theme_last_light);
     ed->theme_last_dark = NULL;
     ed->theme_last_light = NULL;
     yew_record_free(&ed->rec);
@@ -1122,11 +1122,11 @@ void yew_ed_win_release(Ed *ed, Win *w)
     yew_shadow_dismiss(ed, w);
     yew_shadow_free(&w->shadow);
     yew_gutter_signs_free(w);
-    free(w->syn_spans);
+    yew_xfree(w->syn_spans);
     yew_vp_free(w);
     yew_cset_free(&w->cs);
     yew_opt_scope_free(&w->opt_overrides);
-    free(w);
+    yew_xfree(w);
 }
 
 EditCtx yew_ed_edit_ctx_buffer(Ed *ed, Buffer *buffer)

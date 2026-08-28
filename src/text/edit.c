@@ -137,14 +137,14 @@ bool yew_edit_delete(EditCtx *ec, Span range)
     require_edit_wrapped(ec);
     removed = copy_range(ec->tb, range);
     if (!yew_edit_ensure_journal(ec)) {
-        free(removed);
+        yew_xfree(removed);
         return false;
     }
     if (ec->undo != NULL)
         yew_undo_prepare_delete(ec, range);
     ok = edit_apply(ec, YEW_JOURNAL_DEL, BYTEOFF(range.lo), removed, len,
                     0U);
-    free(removed);
+    yew_xfree(removed);
     return ok;
 }
 

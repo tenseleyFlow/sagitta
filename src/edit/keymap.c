@@ -451,7 +451,7 @@ void yew_keymap_free(Keymap *km)
     if (!km)
         return;
     for (i = 1U; i < km->binds.len; i++)
-        free((void *)km->binds.data[i].sarg);
+        yew_xfree((void *)km->binds.data[i].sarg);
     KeyNodeVec_free(&km->nodes);
     KeyEdgeVec_free(&km->edges);
     BindingVec_free(&km->binds);

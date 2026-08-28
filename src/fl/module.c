@@ -53,7 +53,7 @@ enum { MOD_MAX_BYTES = 8U * 1024U * 1024U };
 
 void fl_mod_free(FlVm *vm)
 {
-    free(vm->mods.v);
+    yew_xfree(vm->mods.v);
     vm->mods.v = NULL;
     vm->mods.n = 0U;
     vm->mods.cap = 0U;
@@ -257,8 +257,8 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
         join(&cand, dir, rel, rn);
         bytebuf_append(tried, "\n  ", 3U);
         bytebuf_append(tried, cand.data, cand.len);
-        real = realpath((const char *)cand.data, NULL);
-        free(dir);
+        real = yew_xrealpath((const char *)cand.data);
+        yew_xfree(dir);
     }
     if (real == NULL) {
         cfg = yew_xdg_config_dir();
@@ -272,9 +272,9 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
             join(&cand, (const char *)under.data, rel, rn);
             bytebuf_append(tried, "\n  ", 3U);
             bytebuf_append(tried, cand.data, cand.len);
-            real = realpath((const char *)cand.data, NULL);
+            real = yew_xrealpath((const char *)cand.data);
             bytebuf_free(&under);
-            free(cfg);
+            yew_xfree(cfg);
         }
     }
     if (real == NULL) {
@@ -284,7 +284,7 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
         join(&cand, runtime, rel, rn);
         bytebuf_append(tried, "\n  ", 3U);
         bytebuf_append(tried, cand.data, cand.len);
-        real = realpath((const char *)cand.data, NULL);
+        real = yew_xrealpath((const char *)cand.data);
     }
     bytebuf_free(&cand);
     return real;
@@ -495,32 +495,32 @@ bool fl_module_load_path(FlVm *vm, const char *path, FlOrigin origin,
     if (vm == NULL || path == NULL || out == NULL)
         return false;
     *out = FL_NIL_V;
-    real = realpath(path, NULL);
+    real = yew_xrealpath(path);
     if (real == NULL)
         return fl_raise(vm, "import", "cannot read %s", path);
     path_id = yew_intern(vm->in, real, strlen(real));
     idx = mod_find(vm, path_id, origin.kind, origin.principal_id);
     if (idx != (u32)-1) {
         if (vm->mods.v[idx].state == (u8)FL_MOD_LOADING) {
-            free(real);
+            yew_xfree(real);
             return cycle_err(vm, idx);
         }
         *out = FL_OBJ_V(FL_MAP, vm->mods.v[idx].exports);
-        free(real);
+        yew_xfree(real);
         return true;
     }
     if (!read_source(vm, real, &src, &len)) {
-        free(real);
+        yew_xfree(real);
         return false;
     }
     origin.path_id = path_id;
     idx = mod_add(vm, path_id, origin, 0U);
     if (!run_body(vm, idx, real, src, len)) {
-        free(real);
+        yew_xfree(real);
         return false;
     }
     *out = FL_OBJ_V(FL_MAP, vm->mods.v[idx].exports);
-    free(real);
+    yew_xfree(real);
     return true;
 }
 
@@ -607,20 +607,20 @@ bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
     idx = mod_find(vm, rid, o.kind, o.principal_id);
     if (idx != (u32)-1) {
         if (vm->mods.v[idx].state == (u8)FL_MOD_LOADING) {
-            free(real);
+            yew_xfree(real);
             return cycle_err(vm, idx);
         }
         /* The SAME map object every time, which is what makes two
          * imports of one file compare equal by reference. */
         *out = FL_OBJ_V(FL_MAP, vm->mods.v[idx].exports);
-        free(real);
+        yew_xfree(real);
         return true;
     }
     if (!read_source(vm, real, &src, &srclen)) {
-        free(real);
+        yew_xfree(real);
         return false;
     }
-    free(real);
+    yew_xfree(real);
     {
         FlOrigin sub;
         u32 cur = mod_current(vm);

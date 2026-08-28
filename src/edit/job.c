@@ -308,7 +308,7 @@ static void job_dispose(YewJob *j)
     job_framed_destroy(j);
     job_stream_destroy(j);
     job_callback_destroy(j);
-    free(j->label);
+    yew_xfree(j->label);
     (void)memset(j, 0, sizeof(*j));
     j->in_fd = j->out_fd = j->err_fd = j->exec_fd = -1;
 }

@@ -91,8 +91,8 @@ void yew_fuss_tree_drop(FussTree *t)
     if (!t)
         return;
     arena_free_all(&t->a);
-    free(t->nodes.data);
-    free(t->items.data);
+    yew_xfree(t->nodes.data);
+    yew_xfree(t->items.data);
     memset(t, 0, sizeof(*t));
 }
 
@@ -174,7 +174,7 @@ static void sort_children(FussTree *t)
             t->nodes.data[order[i - 1U]].next_sibling = order[i];
         t->nodes.data[order[n - 1U]].next_sibling = 0U;
     }
-    free(order);
+    yew_xfree(order);
 }
 
 static u32 find_child(const FussTree *t, u32 parent,
@@ -636,9 +636,9 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
         if (node != 0U)
             node_apply_entry(&t->nodes.data[node], entry, ignored);
     }
-    free(ordered);
-    free(paths.nodes);
-    free(paths.tails);
+    yew_xfree(ordered);
+    yew_xfree(paths.nodes);
+    yew_xfree(paths.tails);
 
     aggregate_flags(t);
     sort_children(t);
@@ -712,7 +712,7 @@ bool yew_fuss_merge_files(FussTree *t, const FileList *files,
                     yew_git_ignored(&s->ignored, ordered[i], (u32)len);
         }
     }
-    free(ordered);
+    yew_xfree(ordered);
     aggregate_flags(t);
     sort_children(t);
     yew_fuss_flatten(t);
@@ -1007,7 +1007,7 @@ void yew_fuss_sel_clear(FussSel *s)
 {
     if (!s)
         return;
-    free(s->path);
+    yew_xfree(s->path);
     s->path = NULL;
     s->len = 0U;
 }
@@ -1022,7 +1022,7 @@ void yew_fuss_sel_set(FussSel *s, const char *path, u32 len)
     if (len)
         memcpy(copy, path, len);
     copy[len] = '\0';
-    free(s->path);
+    yew_xfree(s->path);
     s->path = copy;
     s->len = len;
 }

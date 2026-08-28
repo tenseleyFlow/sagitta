@@ -28,7 +28,7 @@ typedef enum FlType {
      * Upvalues are their OWN tag, not a reused closure one.  The
      * collector switches on the tag to trace children and to free
      * owned arrays, so a differently-shaped object wearing FL_CLOSURE
-     * has its `closed` value read as a pointer and handed to free().
+     * has its `closed` value read as a pointer and handed to the allocator.
      * That is a crash on the first collection, and it is what happened.
      */
     FL_UPVAL,

@@ -297,7 +297,7 @@ void yew_ai_adapter_state_init(AiAdapterState *state)
 
 void yew_ai_adapter_state_free(AiAdapterState *state)
 {
-    free(state->blocks);
+    yew_xfree(state->blocks);
     yew_ai_adapter_state_init(state);
 }
 

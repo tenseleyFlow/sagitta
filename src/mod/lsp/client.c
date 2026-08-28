@@ -150,16 +150,16 @@ static void free_string_list(char **list)
     if (list == NULL)
         return;
     for (i = 0U; list[i] != NULL; i++)
-        free(list[i]);
-    free(list);
+        yew_xfree(list[i]);
+    yew_xfree(list);
 }
 
 static void owned_cfg_free(LspOwnedCfg *cfg)
 {
-    free((char *)cfg->pub.id);
-    free((char *)cfg->pub.lang);
-    free((char *)cfg->pub.cmd);
-    free((char *)cfg->pub.init_options);
+    yew_xfree((char *)cfg->pub.id);
+    yew_xfree((char *)cfg->pub.lang);
+    yew_xfree((char *)cfg->pub.cmd);
+    yew_xfree((char *)cfg->pub.init_options);
     free_string_list(cfg->args);
     free_string_list(cfg->roots);
     (void)memset(cfg, 0, sizeof(*cfg));
@@ -273,9 +273,9 @@ static bool owned_cfg_parse(LspOwnedCfg *out, const FlStr *lang,
         !cfg_string_list(row, "roots", YEW_LSP_MAX_ROOTS, &out->roots) ||
         !cfg_init_options(row, &init_options) ||
         !cfg_timeout(row, &out->pub.init_timeout_ms)) {
-        free(id);
-        free(cmd);
-        free(init_options);
+        yew_xfree(id);
+        yew_xfree(cmd);
+        yew_xfree(init_options);
         owned_cfg_free(out);
         return false;
     }
@@ -344,7 +344,7 @@ static void client_cfg_load(Ed *ed, LspClient *client)
 
 static char *canonical_dir(const char *path)
 {
-    char *real = realpath(path, NULL);
+    char *real = yew_xrealpath(path);
 
     return real != NULL ? real : NULL;
 }
@@ -359,7 +359,7 @@ static char *path_dir(const char *path)
     copy = copy_string(path);
     slash = strrchr(copy, '/');
     if (slash == NULL) {
-        free(copy);
+        yew_xfree(copy);
         return copy_string(".");
     }
     if (slash == copy)
@@ -407,9 +407,9 @@ char *yew_lsp_resolve_root(const LspServerCfg *cfg, const char *buffer_path,
     root = canonical_dir(workspace_root);
     raw_dir = path_dir(buffer_path);
     dir = raw_dir == NULL ? NULL : canonical_dir(raw_dir);
-    free(raw_dir);
+    yew_xfree(raw_dir);
     if (root == NULL || dir == NULL || !under_root(dir, root)) {
-        free(dir);
+        yew_xfree(dir);
         return root;
     }
     for (;;) {
@@ -417,7 +417,7 @@ char *yew_lsp_resolve_root(const LspServerCfg *cfg, const char *buffer_path,
 
         for (marker = cfg->roots; marker != NULL && *marker != NULL; marker++) {
             if (has_marker(dir, *marker)) {
-                free(root);
+                yew_xfree(root);
                 return dir;
             }
         }
@@ -427,14 +427,14 @@ char *yew_lsp_resolve_root(const LspServerCfg *cfg, const char *buffer_path,
             char *parent = path_dir(dir);
 
             if (parent == NULL || strcmp(parent, dir) == 0) {
-                free(parent);
+                yew_xfree(parent);
                 break;
             }
-            free(dir);
+            yew_xfree(dir);
             dir = parent;
         }
     }
-    free(dir);
+    yew_xfree(dir);
     return root;
 }
 
@@ -730,7 +730,7 @@ void yew_lsp_server_dispose(LspServer *s)
     VecLspDoc_free(&s->docv);
     VecU32Lsp_free(&s->docs);
     bytebuf_free(&s->stderr_tail);
-    free(s->root);
+    yew_xfree(s->root);
     (void)memset(s, 0, sizeof(*s));
 }
 
@@ -1104,14 +1104,14 @@ bool yew_lsp_client_start_cfg(Ed *ed, Buffer *b, const LspServerCfg *cfg)
     if (s != NULL) {
         LspDoc *doc;
 
-        free(root);
+        yew_xfree(root);
         doc = attach_doc(s, b);
         if (s->state == YEW_LSP_READY && !doc->open)
             (void)yew_lsp_doc_open(&s->rpc, doc, b, b->lang);
         return !s->gave_up;
     }
     if (ed->lsp->len >= YEW_LSP_MAX_SERVERS) {
-        free(root);
+        yew_xfree(root);
         yew_msg(ed, YEW_MSG_ERROR, "LSP server limit reached");
         return false;
     }
@@ -1421,10 +1421,10 @@ void yew_lsp_client_free(Ed *ed)
             j->framed_destroyed = true;
         }
         yew_lsp_server_dispose(s);
-        free(s);
+        yew_xfree(s);
     }
     client_cfg_free(ed->lsp);
-    free(ed->lsp);
+    yew_xfree(ed->lsp);
     ed->lsp = NULL;
 }
 

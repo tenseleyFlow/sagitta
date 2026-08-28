@@ -53,7 +53,7 @@ static void message_expire(Ed *ed, void *ctx)
     if (ed == NULL)
         return;
     expanded = ed->msg.expanded;
-    free(ed->msg.full);
+    yew_xfree(ed->msg.full);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
     ed->footer_dirty = true;
     if (expanded || ed->cmdline.active)
@@ -69,7 +69,7 @@ void yew_msg_clear(Ed *ed)
     expanded = ed->msg.expanded;
     if (ed->msg.expiry != YEW_TIMER_NONE)
         (void)yew_timer_cancel(&ed->timers, ed->msg.expiry);
-    free(ed->msg.full);
+    yew_xfree(ed->msg.full);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
     ed->footer_dirty = true;
     if (expanded || ed->cmdline.active)
@@ -80,7 +80,7 @@ void yew_msg_hint_clear(Ed *ed)
 {
     if (ed == NULL)
         return;
-    free(ed->msg_hint.full);
+    yew_xfree(ed->msg_hint.full);
     (void)memset(&ed->msg_hint, 0, sizeof(ed->msg_hint));
     ed->footer_dirty = true;
 }
@@ -328,7 +328,7 @@ static u16 draw_text_row(Grid *grid, u16 row, u16 col, u16 right,
                                    ellipsize ? &cut : NULL);
     col = yew_grid_puts(grid, row, col, (const u8 *)clipped, clipped_len,
                         style.row_fg, style.row_bg, style.attrs);
-    free(clipped);
+    yew_xfree(clipped);
     if (col < right)
         yew_grid_fill(grid, row, col, right,
                       styled_blank(style.row_fg, style.row_bg, style.attrs));

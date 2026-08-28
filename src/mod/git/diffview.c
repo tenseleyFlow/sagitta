@@ -174,7 +174,7 @@ static bool source_lines(const u8 *source, size_t len, LineSlice **out,
     if (count != 0U)
         lines[at++] = (LineSlice){start, len - start};
     if (at != count) {
-        free(lines);
+        yew_xfree(lines);
         return false;
     }
     *out = lines;
@@ -217,7 +217,7 @@ bool yew_diff_scratch_build(DiffScratch *scratch, const u8 *source,
     (void)memset(&built, 0, sizeof(built));
     ok = true;
 done:
-    free(lines);
+    yew_xfree(lines);
     yew_diff_scratch_drop(&built);
     return ok;
 }
@@ -402,9 +402,9 @@ DiffIntraResult yew_diff_intraline_build(DiffIntraline *diff,
     result = diff->left.len == 0U && diff->right.len == 0U ?
              YEW_DIFF_INTRA_EQUAL : YEW_DIFF_INTRA_SPANS;
 done:
-    free(lcs);
-    free(lchanged);
-    free(rchanged);
+    yew_xfree(lcs);
+    yew_xfree(lchanged);
+    yew_xfree(rchanged);
     ClusterSliceVec_free(&lc);
     ClusterSliceVec_free(&rc);
     yew_diff_intraline_drop(&built);

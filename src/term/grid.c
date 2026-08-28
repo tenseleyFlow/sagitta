@@ -169,7 +169,7 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
         base->id = id;
         base->flags = CELL_INTERNED;
     }
-    free(joined);
+    yew_xfree(joined);
     damage_add(g, row, base_col, (u16)(base_col + 1u));
 }
 
@@ -256,9 +256,9 @@ void yew_grid_free(Grid *g)
 {
     if (g == NULL)
         return;
-    free(g->front);
-    free(g->back);
-    free(g->dmg);
+    yew_xfree(g->front);
+    yew_xfree(g->back);
+    yew_xfree(g->dmg);
     memset(g, 0, sizeof(*g));
 }
 
@@ -280,9 +280,9 @@ bool yew_grid_resize(Grid *g, u16 rows, u16 cols)
         front[i].w = 0xffu;
         back[i] = g->blank;
     }
-    free(g->front);
-    free(g->back);
-    free(g->dmg);
+    yew_xfree(g->front);
+    yew_xfree(g->back);
+    yew_xfree(g->dmg);
     g->front = front;
     g->back = back;
     g->dmg = dmg;

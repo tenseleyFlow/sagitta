@@ -447,8 +447,8 @@ static void stored_clear(struct OptStored *stored)
 {
     if (stored == NULL)
         return;
-    free(stored->owned);
-    free(stored->owned_list);
+    yew_xfree(stored->owned);
+    yew_xfree(stored->owned_list);
     stored->owned = NULL;
     stored->owned_list = NULL;
     (void)memset(&stored->value, 0, sizeof(stored->value));
@@ -521,7 +521,7 @@ void yew_opt_scope_free(Strmap *map)
         struct OptStored *stored = value;
 
         stored_clear(stored);
-        free(stored);
+        yew_xfree(stored);
     }
     strmap_free(map);
 }
@@ -838,8 +838,8 @@ void yew_opt_init(Ed *ed)
         }
         if (!stored_assign(&ed->opt_globals[i], &value))
             YEW_BUG("option default has an invalid string");
-        free(dir);
-        free(cfg);
+        yew_xfree(dir);
+        yew_xfree(cfg);
     }
     for (i = 0U; i < yew_opts_len; i++)
         if (yew_opts[i].on_change != NULL)
@@ -855,19 +855,19 @@ void yew_opt_free(Ed *ed)
         return;
     for (i = 0U; i < yew_opts_len; i++)
         stored_clear(&ed->opt_globals[i]);
-    free(ed->opt_globals);
-    free(ed->opt_inflight);
+    yew_xfree(ed->opt_globals);
+    yew_xfree(ed->opt_inflight);
     if (ed->opt_history != NULL) {
         for (i = 0U; i < ed->opt_history->n; i++)
             stored_clear(&ed->opt_history->v[i].previous);
         for (i = 0U; i < ed->opt_history->ndynamic; i++) {
             stored_clear(&ed->opt_history->dynamic[i].value);
             stored_clear(&ed->opt_history->dynamic[i].dflt);
-            free(ed->opt_history->dynamic[i].name);
+            yew_xfree(ed->opt_history->dynamic[i].name);
         }
-        free(ed->opt_history->v);
-        free(ed->opt_history->dynamic);
-        free(ed->opt_history);
+        yew_xfree(ed->opt_history->v);
+        yew_xfree(ed->opt_history->dynamic);
+        yew_xfree(ed->opt_history);
     }
     ed->opt_globals = NULL;
     ed->opt_inflight = NULL;
@@ -925,8 +925,8 @@ void yew_opt_reset(Ed *ed)
         }
         if (!stored_assign(&ed->opt_globals[i], &value))
             YEW_BUG("option reset has an invalid string");
-        free(dir);
-        free(cfg);
+        yew_xfree(dir);
+        yew_xfree(cfg);
         option_changed(ed, &yew_opts[i], &old.value,
                        &ed->opt_globals[i].value);
         stored_clear(&old);
@@ -1408,7 +1408,7 @@ bool yew_opt_remove(Ed *ed, u32 ledger_id)
         }
         stored_clear(&dynamic->value);
         stored_clear(&dynamic->dflt);
-        free(dynamic->name);
+        yew_xfree(dynamic->name);
         dynamic->name = NULL;
         dynamic->desc = (OptDesc){0};
         dynamic->active = false;
@@ -1501,7 +1501,7 @@ static bool dynamic_declare(Ed *ed, u32 origin_id,
     name[name_len] = '\0';
     if (yew_opt_desc(name, (u32)name_len) != NULL ||
         dynamic_find(ed, name, (u32)name_len) != NULL) {
-        free(name);
+        yew_xfree(name);
         *err = "plugin option name collides with an existing option";
         return false;
     }
@@ -1512,7 +1512,7 @@ static bool dynamic_declare(Ed *ed, u32 origin_id,
     if (slot == history->ndynamic && history->ndynamic == history->capdynamic) {
         want = history->capdynamic == 0U ? 8U : history->capdynamic * 2U;
         if (want < history->capdynamic || want >= YEW_OPT_DYNAMIC_BIT) {
-            free(name);
+            yew_xfree(name);
             *err = "plugin option table is full";
             return false;
         }
@@ -1526,14 +1526,14 @@ static bool dynamic_declare(Ed *ed, u32 origin_id,
     dynamic = &history->dynamic[slot];
     stored_clear(&dynamic->value);
     stored_clear(&dynamic->dflt);
-    free(dynamic->name);
+    yew_xfree(dynamic->name);
     *dynamic = (YewDynamicOpt){0};
     dynamic->name = name;
     if (!stored_assign(&dynamic->value, value) ||
         !stored_assign(&dynamic->dflt, value)) {
         stored_clear(&dynamic->value);
         stored_clear(&dynamic->dflt);
-        free(dynamic->name);
+        yew_xfree(dynamic->name);
         *dynamic = (YewDynamicOpt){0};
         *err = "plugin option default is invalid";
         return false;
@@ -1581,7 +1581,7 @@ static bool plugin_option_from_fl(FlVm *vm, FlValue value, OptVal *out,
             const FlStr *item;
 
             if (list->v[i].t != (u8)FL_STR) {
-                free(items);
+                yew_xfree(items);
                 return fl_raise(vm, "type",
                                 "ctx.set: list defaults require only strings");
             }
@@ -1625,30 +1625,30 @@ bool fl_api_declare_plugin_options(FlVm *vm, u32 origin_id,
         if (key.t != (u8)FL_STR) {
             while (n != 0U)
                 (void)yew_opt_remove(vm->ed, ledger_ids[--n]);
-            free(ledger_ids);
+            yew_xfree(ledger_ids);
             return fl_raise(vm, "type", "ctx.set option names must be strings");
         }
         key_text = (const FlStr *)key.as.o;
         if (!plugin_option_from_fl(vm, value, &option, &owned_list)) {
             while (n != 0U)
                 (void)yew_opt_remove(vm->ed, ledger_ids[--n]);
-            free(ledger_ids);
+            yew_xfree(ledger_ids);
             return false;
         }
         if (!dynamic_declare(vm->ed, origin_id, plugin_name,
                              plugin_name_len, key_text->b, key_text->len,
                              &option, &ledger_ids[n], &err)) {
-            free(owned_list);
+            yew_xfree(owned_list);
             while (n != 0U)
                 (void)yew_opt_remove(vm->ed, ledger_ids[--n]);
-            free(ledger_ids);
+            yew_xfree(ledger_ids);
             return fl_raise(vm, "name", "ctx.set: %s",
                             err == NULL ? "invalid plugin option" : err);
         }
-        free(owned_list);
+        yew_xfree(owned_list);
         n++;
     }
-    free(ledger_ids);
+    yew_xfree(ledger_ids);
     *out = FL_NIL_V;
     return true;
 }

@@ -64,5 +64,5 @@ void yew_sort_stable(void *base, size_t n, size_t elem_size,
             break;
         width *= 2;
     }
-    free(scratch);
+    yew_xfree(scratch);
 }

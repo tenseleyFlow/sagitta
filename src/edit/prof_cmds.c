@@ -113,11 +113,11 @@ CmdStatus yew_prof_cmd_dump(CmdCtx *cx)
     if (saved != YEW_SAVE_OK) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "could not write profiler dump: %s",
                 path);
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_IO;
     }
     yew_msg(cx->ed, YEW_MSG_INFO, "wrote profiler dump: %s", path);
-    free(path);
+    yew_xfree(path);
     return YEW_CMD_OK;
 }
 

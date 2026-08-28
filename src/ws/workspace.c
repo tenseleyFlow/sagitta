@@ -140,7 +140,7 @@ bool yew_ws_key(WsKey *k, const char *dir)
     if (dir == NULL || dir[0] == '\0')
         return false;
 
-    resolved = realpath(dir, NULL);
+    resolved = yew_xrealpath(dir);
     if (resolved == NULL) {
         /* A workspace that does not resolve is not an error here — the
          * caller has already established it is a directory — but there
@@ -151,11 +151,11 @@ bool yew_ws_key(WsKey *k, const char *dir)
     }
     if (strlen(resolved) >= sizeof(k->realpath)) {
         yew_log(YEW_LOG_WARN, "workspace path too long; no state");
-        free(resolved);
+        yew_xfree(resolved);
         return false;
     }
     (void)snprintf(k->realpath, sizeof(k->realpath), "%s", resolved);
-    free(resolved);
+    yew_xfree(resolved);
 
     /* Hashed over the BYTES.  Paths are bytes, not text: hashing
      * codepoints would need a decoder that could fail, on input that is
@@ -190,7 +190,7 @@ bool yew_ws_key(WsKey *k, const char *dir)
                            (unsigned long)k->hash, (unsigned)probe);
         if (!path_cat(candidate, sizeof(candidate), state_root, tail)) {
             yew_log(YEW_LOG_WARN, "state path too long; no state");
-            free(state_root);
+            yew_xfree(state_root);
             return false;
         }
         match = probe_matches(candidate, k->realpath);
@@ -199,7 +199,7 @@ bool yew_ws_key(WsKey *k, const char *dir)
         (void)snprintf(k->dir, sizeof(k->dir), "%s", candidate);
         k->probe = (u8)probe;
         k->stateless = false;
-        free(state_root);
+        yew_xfree(state_root);
         return true;
     }
     /*
@@ -210,7 +210,7 @@ bool yew_ws_key(WsKey *k, const char *dir)
     yew_log(YEW_LOG_WARN,
             "workspace key %016lx collided past %d probes; no state",
             (unsigned long)k->hash, YEW_WS_PROBE_MAX);
-    free(state_root);
+    yew_xfree(state_root);
     return false;
 }
 

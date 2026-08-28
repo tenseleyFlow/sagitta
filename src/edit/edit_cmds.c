@@ -1076,11 +1076,11 @@ static bool add_matches_in_span(const TextBuf *tb, Span haystack,
             *have_match = true;
         } else if (!yew_cset_add(matches, cursor_at(tb, at)) &&
                    matches->curs.len >= YEW_MC_MAX) {
-            free(bytes);
+            yew_xfree(bytes);
             return false;
         }
     }
-    free(bytes);
+    yew_xfree(bytes);
     return true;
 }
 
@@ -1130,7 +1130,7 @@ CmdStatus yew_edit_cmd_cursor_lift_matches(CmdCtx *cx)
         ok = add_matches_in_span(tb, yew_sel_span(cx->win, selected), pat,
                                  pat_len, &matches, &have_match);
     }
-    free(owned_pat);
+    yew_xfree(owned_pat);
     if (!ok) {
         yew_cset_free(&matches);
         yew_msg(cx->ed, YEW_MSG_ERROR, "match lift exceeds 10000 cursors");

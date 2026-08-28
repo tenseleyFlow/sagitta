@@ -131,7 +131,7 @@ static bool compl_stem(Win *w, Span *replace, u8 **stem, u32 *slen)
         return false;
     *stem = len == 0U ? NULL : yew_xmalloc((size_t)len);
     if (!text_copy(w->buf->tb, word, *stem)) {
-        free(*stem);
+        yew_xfree(*stem);
         *stem = NULL;
         return false;
     }
@@ -305,7 +305,7 @@ bool yew_compl_open_source(Ed *ed, Win *w, const ComplSource *src)
         !compl_stem(w, &replace, &stem, &slen) ||
         (slen == 0U &&
          (src->flags & YEW_COMPL_SRC_EMPTY_STEM) == 0U)) {
-        free(stem);
+        yew_xfree(stem);
         return false;
     }
     if (w->compl.open)
@@ -321,7 +321,7 @@ bool yew_compl_open_source(Ed *ed, Win *w, const ComplSource *src)
     yew_shadow_dismiss(ed, w);
     w->shadow.suppressed = true;
     compl_fill(ed, w, src, stem, slen);
-    free(stem);
+    yew_xfree(stem);
     if (w->compl.items.len == 0U &&
         (src->flags & YEW_COMPL_SRC_ASYNC) == 0U) {
         yew_compl_close_result(ed, w, false);
@@ -349,7 +349,7 @@ static bool compl_has_suffix(Win *w, const char *want, u32 len)
     equal = text_copy(w->buf->tb,
                       (Span){cursor->pos.v - len, cursor->pos.v}, got) &&
             memcmp(got, want, len) == 0;
-    free(got);
+    yew_xfree(got);
     return equal;
 }
 
@@ -646,12 +646,12 @@ void yew_compl_after_key(Ed *ed, Win *w)
         (slen == 0U &&
          (menu->src->flags & YEW_COMPL_SRC_EMPTY_STEM) == 0U) ||
         replace.lo != menu->replace.lo || replace.hi != menu->replace.hi) {
-        free(stem);
+        yew_xfree(stem);
         yew_compl_close_result(ed, w, false);
         return;
     }
     compl_fill(ed, w, menu->src, stem, slen);
-    free(stem);
+    yew_xfree(stem);
     if (menu->items.len == 0U &&
         (menu->src->flags & YEW_COMPL_SRC_ASYNC) == 0U) {
         yew_compl_close_result(ed, w, false);

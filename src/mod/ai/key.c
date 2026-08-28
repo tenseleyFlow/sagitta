@@ -248,12 +248,12 @@ static void key_cache_wipe_entries(AiKeyCache *cache)
 
         if (entry->key != NULL) {
             yew_memzero(entry->key, entry->key_cap);
-            free(entry->key);
+            yew_xfree(entry->key);
         }
     }
     if (cache->entries != NULL) {
         yew_memzero(cache->entries, cache->cap * sizeof(*cache->entries));
-        free(cache->entries);
+        yew_xfree(cache->entries);
     }
     cache->entries = NULL;
     cache->len = 0U;
@@ -333,7 +333,7 @@ static AiKeyCacheEntry *key_cache_append(AiKeyCache *cache,
         if (cache->entries != NULL) {
             yew_memzero(cache->entries,
                         cache->cap * sizeof(*cache->entries));
-            free(cache->entries);
+            yew_xfree(cache->entries);
         }
         cache->entries = entries;
         cache->cap = newcap;

@@ -62,7 +62,7 @@ static char *blame_dup(const char *text)
 
 static void block_drop(BlameBlock *block)
 {
-    free(block->lines);
+    yew_xfree(block->lines);
     (void)memset(block, 0, sizeof(*block));
 }
 
@@ -83,13 +83,13 @@ void yew_blame_cache_free(BlameCache *cache)
     for (i = 0U; i < cache->nblocks; i++)
         block_drop(&cache->blocks[i]);
     for (i = 0U; i < cache->nmeta; i++) {
-        free(cache->meta[i]->author);
-        free(cache->meta[i]->summary);
-        free(cache->meta[i]);
+        yew_xfree(cache->meta[i]->author);
+        yew_xfree(cache->meta[i]->summary);
+        yew_xfree(cache->meta[i]);
     }
-    free(cache->blocks);
-    free(cache->meta);
-    free(cache);
+    yew_xfree(cache->blocks);
+    yew_xfree(cache->meta);
+    yew_xfree(cache);
 }
 
 void yew_blame_quantize(LineNo top, LineNo bottom, u64 line_count,
@@ -371,7 +371,7 @@ bool yew_blame_cache_finish(BlameCache *cache, const BlameRequest *request,
     }
     block = block_slot(cache, request);
     if (block->lines == NULL || block->text_gen <= request->text_gen) {
-        free(block->lines);
+        yew_xfree(block->lines);
         block->lines = lines;
         lines = NULL;
         block->text_gen = request->text_gen;
@@ -379,8 +379,8 @@ bool yew_blame_cache_finish(BlameCache *cache, const BlameRequest *request,
     }
     ok = true;
 done:
-    free(lines);
-    free(meta);
+    yew_xfree(lines);
+    yew_xfree(meta);
     arena_free_all(&parsed_arena);
     if (!ok && cache->observed_valid &&
         request_same(&cache->observed, &flight->request))

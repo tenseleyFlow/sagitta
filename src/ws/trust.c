@@ -181,7 +181,7 @@ static void trust_impl_free(TrustImpl *impl)
     fl_vm_free(&impl->vm);
     interner_free(&impl->in);
     arena_free_all(&impl->arena);
-    free(impl);
+    yew_xfree(impl);
 }
 
 void yew_trust_db_init(YewTrustDb *db)
@@ -298,13 +298,13 @@ static char *trust_xdg_path(bool ensure)
     if (dir == NULL)
         return NULL;
     if (ensure && !yew_mkdirs(dir, 0700U)) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     n = strlen(dir) + sizeof("/trust.fl");
     path = yew_xmalloc(n);
     (void)snprintf(path, n, "%s/trust.fl", dir);
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -316,7 +316,7 @@ bool yew_trust_db_load(YewTrustDb *db)
     if (path == NULL)
         return false;
     ok = yew_trust_db_load_path(db, path);
-    free(path);
+    yew_xfree(path);
     return ok;
 }
 
@@ -490,16 +490,16 @@ static bool trust_resolve_workspace(const char *workspace,
 
     if (workspace == NULL || resolved == NULL || st == NULL)
         return false;
-    real = realpath(workspace, NULL);
+    real = yew_xrealpath(workspace);
     if (real == NULL)
         return false;
     n = strlen(real);
     if (n >= PATH_MAX || stat(real, st) != 0 || !S_ISDIR(st->st_mode)) {
-        free(real);
+        yew_xfree(real);
         return false;
     }
     (void)memcpy(resolved, real, n + 1U);
-    free(real);
+    yew_xfree(real);
     return true;
 }
 
@@ -816,16 +816,16 @@ YewTrustDecision yew_trust_check(YewTrustDb *db, const char *workspace,
     impl = (TrustImpl *)db->impl;
     probe->bytes.len = 0U;
     probe->has_config = false;
-    resolved = realpath(workspace, NULL);
+    resolved = yew_xrealpath(workspace);
     if (resolved == NULL)
         return YEW_TRUST_ERROR;
     if (strlen(resolved) >= sizeof(probe->workspace)) {
-        free(resolved);
+        yew_xfree(resolved);
         return YEW_TRUST_ERROR;
     }
     (void)snprintf(probe->workspace, sizeof(probe->workspace), "%s",
                    resolved);
-    free(resolved);
+    yew_xfree(resolved);
     if (stat(probe->workspace, &st) != 0 || !S_ISDIR(st.st_mode))
         return YEW_TRUST_ERROR;
     probe->dev = st.st_dev;
@@ -934,7 +934,7 @@ static FlMap *trust_sorted_map(TrustImpl *impl, const FlMap *old)
     rows = yew_xcalloc(fl_map_count(old), sizeof(*rows));
     while (fl_map_iter(old, &cursor, &key, &value)) {
         if (key.t != (u8)FL_STR) {
-            free(rows);
+            yew_xfree(rows);
             return NULL;
         }
         rows[n].key = key;
@@ -945,7 +945,7 @@ static FlMap *trust_sorted_map(TrustImpl *impl, const FlMap *old)
     sorted = fl_map_new(&impl->vm);
     for (i = 0U; i < n; i++)
         (void)fl_map_set(&impl->vm, sorted, rows[i].key, rows[i].value);
-    free(rows);
+    yew_xfree(rows);
     return sorted;
 }
 
@@ -1028,7 +1028,7 @@ static bool trust_rebuild_sorted(TrustImpl *impl, time_t now, u32 prune_days)
     dirs = fl_map_new(&impl->vm);
     for (i = 0U; i < n; i++)
         (void)fl_map_set(&impl->vm, dirs, rows[i].key, rows[i].value);
-    free(rows);
+    yew_xfree(rows);
     trust_map_set(impl, root, "dirs", FL_OBJ_V(FL_MAP, dirs));
     return trust_rebuild_plugins(impl);
 }
@@ -1089,7 +1089,7 @@ YewTrustWriteResult yew_trust_db_write_result(YewTrustDb *db, time_t now,
     if (path == NULL)
         return result;
     result = yew_trust_db_write_path_result(db, path, now, prune_days);
-    free(path);
+    yew_xfree(path);
     return result;
 }
 

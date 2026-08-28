@@ -219,9 +219,9 @@ static void normalize_unclamped(CursorSet *cs)
     cs->curs.len = group_count;
     cs->stamps.len = group_count;
     cs->selstacks.len = group_count;
-    free(group_stacks);
-    free(groups);
-    free(items);
+    yew_xfree(group_stacks);
+    yew_xfree(groups);
+    yew_xfree(items);
     yew_cset_check(cs);
 }
 
@@ -669,7 +669,7 @@ static McSkip *build_skip_plan(const CmdDesc *desc, const TextBuf *tb,
         have_accepted = true;
     }
     if (count == 0U) {
-        free(skips);
+        yew_xfree(skips);
         return NULL;
     }
     *skip_count = count;
@@ -812,7 +812,7 @@ void yew_cset_check(const CursorSet *cs)
         hi = cursor_hi(&items[i].cursor);
         selected = cursor_selected(&items[i].cursor);
     }
-    free(items);
+    yew_xfree(items);
 }
 
 void yew_cset_check_text(const TextBuf *tb, const CursorSet *cs)
@@ -945,7 +945,7 @@ CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
     w->cs.batch_delta = 0;
     w->cs.batch_next = 0U;
     w->cs.active = YEW_MC_ACTIVE_NONE;
-    free(skips);
+    yew_xfree(skips);
     if (macro_txn) {
         if (ec.undo->open != 0U)
             ec.undo->nodes.data[ec.undo->open - 1U].reason =

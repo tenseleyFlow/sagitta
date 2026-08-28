@@ -53,7 +53,7 @@ static void hist_reserve(CmdHist *h, size_t need)
 
 static void hist_remove(CmdHist *h, size_t index)
 {
-    free(h->entries[index]);
+    yew_xfree(h->entries[index]);
     if (index + 1U < h->len) {
         (void)memmove(&h->entries[index], &h->entries[index + 1U],
                       (h->len - index - 1U) * sizeof(*h->entries));
@@ -74,7 +74,7 @@ static bool hist_store(CmdHist *h, const char *line, size_t len)
     for (i = 0U; i < h->len; i++) {
         if (strcmp(h->entries[i], copy) == 0) {
             if (i + 1U == h->len) {
-                free(copy);
+                yew_xfree(copy);
                 return false;
             }
             hist_remove(h, i);
@@ -117,15 +117,15 @@ static char *hist_path(const char *kind)
     size = strlen(state) + strlen("/history") + 1U;
     dir = yew_xmalloc(size);
     (void)snprintf(dir, size, "%s/history", state);
-    free(state);
+    yew_xfree(state);
     if (!yew_mkdirs(dir, 0700U)) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     size = strlen(dir) + 1U + strlen(kind) + 1U;
     path = yew_xmalloc(size);
     (void)snprintf(path, size, "%s/%s", dir, kind);
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -230,7 +230,7 @@ static void hist_parse_line(CmdHist *h, const Bytebuf *line)
         return;
     }
     (void)hist_store(h, decoded, strlen(decoded));
-    free(decoded);
+    yew_xfree(decoded);
 }
 
 static bool hist_read(CmdHist *h)
@@ -314,7 +314,7 @@ static int hist_lock(const char *path)
                               | O_CLOEXEC
 #endif
               , 0600);
-    free(lock_path);
+    yew_xfree(lock_path);
     if (fd < 0)
         return -1;
     lock.l_type = F_WRLCK;
@@ -362,13 +362,13 @@ static char *ws_hist_path(const char *kind, const char *ws_dir)
     dir = yew_xmalloc(size);
     (void)snprintf(dir, size, "%s/history", ws_dir);
     if (!yew_mkdirs(dir, 0700U)) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     size = strlen(dir) + 1U + strlen(kind) + 1U;
     path = yew_xmalloc(size);
     (void)snprintf(path, size, "%s/%s", dir, kind);
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -403,10 +403,10 @@ CmdHist *yew_hist_open_scoped(const char *kind, const char *ws_dir,
      */
     if (workspace_scope && local != NULL) {
         h->path = local;
-        free(global);
+        yew_xfree(global);
     } else if (!workspace_scope && global != NULL) {
         h->path = global;
-        free(local);
+        yew_xfree(local);
     } else {
         /*
          * The requested scope has no file — a stateless session asking
@@ -418,9 +418,9 @@ CmdHist *yew_hist_open_scoped(const char *kind, const char *ws_dir,
          */
         h->path = local != NULL ? local : global;
         if (h->path == local)
-            free(global);
+            yew_xfree(global);
         else
-            free(local);
+            yew_xfree(local);
     }
     h->memory = h->path == NULL;
     if (h->memory) {
@@ -448,9 +448,9 @@ void yew_hist_close(CmdHist *h)
     if (h == NULL)
         return;
     hist_clear(h);
-    free(h->entries);
-    free(h->path);
-    free(h);
+    yew_xfree(h->entries);
+    yew_xfree(h->path);
+    yew_xfree(h);
 }
 
 void yew_hist_add(CmdHist *h, const char *line)
@@ -509,7 +509,7 @@ void yew_hist_flush(CmdHist *h)
     merged.path = h->path;
     if (!hist_read(&merged)) {
         hist_clear(&merged);
-        free(merged.entries);
+        yew_xfree(merged.entries);
         (void)close(lock_fd);
         return;
     }
@@ -524,7 +524,7 @@ void yew_hist_flush(CmdHist *h)
                 h->path, strerror(errno));
     } else {
         hist_clear(h);
-        free(h->entries);
+        yew_xfree(h->entries);
         h->entries = merged.entries;
         h->len = merged.len;
         h->cap = merged.cap;
@@ -534,7 +534,7 @@ void yew_hist_flush(CmdHist *h)
     }
     bytebuf_free(&encoded);
     hist_clear(&merged);
-    free(merged.entries);
+    yew_xfree(merged.entries);
     (void)close(lock_fd);
 }
 
@@ -557,8 +557,8 @@ void yew_hist_cur_reset(HistCur *c, const char *draft)
 {
     if (c == NULL)
         return;
-    free(c->stem);
-    free(c->draft);
+    yew_xfree(c->stem);
+    yew_xfree(c->draft);
     c->idx = -1;
     c->stem = NULL;
     c->draft = hist_dup(draft == NULL ? "" : draft);
@@ -568,8 +568,8 @@ void yew_hist_cur_dispose(HistCur *c)
 {
     if (c == NULL)
         return;
-    free(c->stem);
-    free(c->draft);
+    yew_xfree(c->stem);
+    yew_xfree(c->draft);
     *c = (HistCur){.idx = -1};
 }
 

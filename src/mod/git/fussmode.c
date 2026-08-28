@@ -307,8 +307,8 @@ bool yew_fuss_jump_key(FussJump *jump, const Key *key, i64 now_ms,
                           ranked);
     if (matched != 0U)
         *sel = ranked[0].idx;
-    free(labels);
-    free(ranked);
+    yew_xfree(labels);
+    yew_xfree(ranked);
     return true;
 }
 
@@ -573,7 +573,7 @@ static void fuss_result_tick(Ed *ed)
         if (result->verb != NULL &&
             strcmp(result->verb, "branch-delete") == 0 &&
             f->prompt_action == FUSS_PROMPT_NONE) {
-            free(f->prompt_path);
+            yew_xfree(f->prompt_path);
             f->prompt_path = NULL;
         }
     } else if (result->verb != NULL &&
@@ -602,7 +602,7 @@ static void fuss_result_tick(Ed *ed)
     if (result->state != YEW_GIT_OK && result->verb != NULL &&
         strcmp(result->verb, "branch-delete") == 0 &&
         f->prompt_action == FUSS_PROMPT_NONE) {
-        free(f->prompt_path);
+        yew_xfree(f->prompt_path);
         f->prompt_path = NULL;
     }
     if (result->state != YEW_GIT_OK &&
@@ -694,23 +694,23 @@ void yew_fuss_state_free(Ed *ed)
     fuss_commit_view_close(ed);
     f->commit_editing = false;
     f->active = false;
-    free(f->prompt_path);
+    yew_xfree(f->prompt_path);
     {
         u32 i;
 
         for (i = 0U; i < f->picker_count; i++) {
-            free((char *)f->picker_items[i].label);
-            free((char *)f->picker_items[i].detail);
-            free(f->picker_values[i]);
+            yew_xfree((char *)f->picker_items[i].label);
+            yew_xfree((char *)f->picker_items[i].detail);
+            yew_xfree(f->picker_values[i]);
         }
     }
-    free(f->picker_items);
-    free(f->picker_values);
-    free(f->picker_aux);
-    free(f->picker_aux2);
+    yew_xfree(f->picker_items);
+    yew_xfree(f->picker_values);
+    yew_xfree(f->picker_aux);
+    yew_xfree(f->picker_aux2);
     if (f->preview_job != 0U)
         (void)yew_job_signal(ed, f->preview_job, SIGTERM);
-    free(f->preview_value);
+    yew_xfree(f->preview_value);
     bytebuf_free(&f->preview_bytes);
     if (f->walk != NULL)
         yew_walk_end(f->walk);
@@ -719,7 +719,7 @@ void yew_fuss_state_free(Ed *ed)
     yew_filelist_free(&f->expand_files);
     yew_fuss_sel_clear(&f->sel);
     yew_fuss_tree_drop(&f->tree);
-    free(f);
+    yew_xfree(f);
     ed->fuss = NULL;
 }
 
@@ -900,7 +900,7 @@ bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms)
     }
     row = fuss_row(f) < 0 ? 0U : (u32)fuss_row(f);
     consumed = yew_fuss_jump_key(&f->jump, key, now_ms, items, n, &row);
-    free(items);
+    yew_xfree(items);
     if (consumed && row < n) {
         fuss_select_row(f, (i32)row);
         fuss_damage(ed);
@@ -1526,7 +1526,7 @@ static bool fuss_target_lookup(CmdCtx *cx, const char *path,
         target->known = true;
         target->is_file = !S_ISDIR(st.st_mode);
     }
-    free(absolute);
+    yew_xfree(absolute);
     return target->known;
 }
 
@@ -1649,15 +1649,15 @@ static void fuss_picker_clear(FussMode *f)
     if (f == NULL)
         return;
     for (i = 0U; i < f->picker_count; i++) {
-        free((char *)f->picker_items[i].label);
-        free((char *)f->picker_items[i].detail);
-        free(f->picker_values[i]);
+        yew_xfree((char *)f->picker_items[i].label);
+        yew_xfree((char *)f->picker_items[i].detail);
+        yew_xfree(f->picker_values[i]);
     }
-    free(f->picker_items);
-    free(f->picker_values);
-    free(f->picker_aux);
-    free(f->picker_aux2);
-    free(f->preview_value);
+    yew_xfree(f->picker_items);
+    yew_xfree(f->picker_values);
+    yew_xfree(f->picker_aux);
+    yew_xfree(f->picker_aux2);
+    yew_xfree(f->preview_value);
     bytebuf_free(&f->preview_bytes);
     bytebuf_init(&f->preview_bytes);
     f->picker_items = NULL;
@@ -1697,9 +1697,9 @@ static bool fuss_picker_add(FussMode *f, const char *label, size_t label_len,
     f->picker_items[at].payload = (i32)at;
     f->picker_values[at] = fuss_dup_bytes(value, value_len);
     if (f->picker_items[at].label == NULL || f->picker_values[at] == NULL) {
-        free((char *)f->picker_items[at].label);
-        free((char *)f->picker_items[at].detail);
-        free(f->picker_values[at]);
+        yew_xfree((char *)f->picker_items[at].label);
+        yew_xfree((char *)f->picker_items[at].detail);
+        yew_xfree(f->picker_values[at]);
         return false;
     }
     f->picker_count++;
@@ -1803,7 +1803,7 @@ static CmdStatus fuss_path_verb(CmdCtx *cx, const char *verb_name,
         return YEW_CMD_ERR_ARG;
     }
     if (!fuss_target_guard(cx, path, guard, verb_name, &target)) {
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_STATE;
     }
     argv = yew_xcalloc(prefix_n + 3U, sizeof(*argv));
@@ -1814,8 +1814,8 @@ static CmdStatus fuss_path_verb(CmdCtx *cx, const char *verb_name,
     argv[prefix_n] = (char *)"--";
     argv[prefix_n + 1U] = path;
     status = fuss_spawn(cx->ed, verb_name, argv, true, NULL, 0U, view);
-    free(argv);
-    free(path);
+    yew_xfree(argv);
+    yew_xfree(path);
     return status;
 }
 
@@ -1824,7 +1824,7 @@ static void fuss_prompt_clear(FussMode *f)
     if (f == NULL)
         return;
     f->prompt_action = FUSS_PROMPT_NONE;
-    free(f->prompt_path);
+    yew_xfree(f->prompt_path);
     f->prompt_path = NULL;
     f->prompt_untracked = false;
 }
@@ -2339,8 +2339,8 @@ static void fuss_rebase_progress_update(Ed *ed, const GitSnapshot *snap)
             bytebuf_free(&step);
         if (total_ok)
             bytebuf_free(&total);
-        free(step_path);
-        free(total_path);
+        yew_xfree(step_path);
+        yew_xfree(total_path);
         step_name = "rebase-apply/next";
         total_name = "rebase-apply/last";
         step_path = fuss_dir_path(repo->git_dir, step_name);
@@ -2362,8 +2362,8 @@ static void fuss_rebase_progress_update(Ed *ed, const GitSnapshot *snap)
         bytebuf_free(&step);
     if (total_ok)
         bytebuf_free(&total);
-    free(step_path);
-    free(total_path);
+    yew_xfree(step_path);
+    yew_xfree(total_path);
 }
 
 static CmdStatus fuss_commit_open(CmdCtx *cx, bool amend)
@@ -2395,12 +2395,12 @@ static CmdStatus fuss_commit_open(CmdCtx *cx, bool amend)
         CmdStatus status;
 
         if (path == NULL || !fuss_read_small_file(path, &message)) {
-            free(path);
+            yew_xfree(path);
             yew_msg(cx->ed, YEW_MSG_ERROR,
                     "cannot read the pending merge message");
             return YEW_CMD_ERR_IO;
         }
-        free(path);
+        yew_xfree(path);
         status = fuss_commit_begin(cx->ed, false, message.data,
                                    message.len);
         bytebuf_free(&message);
@@ -2481,7 +2481,7 @@ static CmdStatus fuss_rebase_prepare(Ed *ed, const char *base)
     fuss_prompt_clear(f);
     f->prompt_path = fuss_dup_bytes(base, base_len);
     if (f->prompt_path == NULL) {
-        free(range);
+        yew_xfree(range);
         return YEW_CMD_ERR_ARG;
     }
     argv[0] = (char *)"log";
@@ -2490,7 +2490,7 @@ static CmdStatus fuss_rebase_prepare(Ed *ed, const char *base)
     argv[3] = (char *)"--pretty=format:%h%x1f%at%x1f%an%x1f%s";
     argv[4] = NULL;
     status = fuss_spawn(ed, "log", argv, false, NULL, 0U, false);
-    free(range);
+    yew_xfree(range);
     if (status == YEW_CMD_OK) {
         f->pending_pick = FUSS_PICK_REBASE_CONFIRM;
         yew_msg(ed, YEW_MSG_INFO, "loading rebase range");
@@ -2550,8 +2550,8 @@ static CmdStatus fuss_rebase_sync(Ed *ed, const char *operation,
     spec.env_set = env;
     spec.inherit_tty = true;
     ran = yew_job_run_sync(ed, &spec, &wait, error, sizeof(error));
-    free(sequence_env);
-    free(editor_env);
+    yew_xfree(sequence_env);
+    yew_xfree(editor_env);
     if (!ran) {
         yew_msg(ed, YEW_MSG_ERROR, "%s",
                 error[0] == '\0' ? "rebase handover failed" : error);
@@ -2672,7 +2672,7 @@ static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
                     yew_git_invalidate(ed);
                     (void)yew_git_refresh(ed, true);
                 }
-                free(absolute);
+                yew_xfree(absolute);
             } else {
                 char *argv[] = {
                     (char *)"rm", (char *)"-f", (char *)"--",
@@ -2699,8 +2699,8 @@ static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
                     yew_git_invalidate(ed);
                     (void)yew_git_refresh(ed, true);
                 }
-                free(old_path);
-                free(new_path);
+                yew_xfree(old_path);
+                yew_xfree(new_path);
             } else {
                 char *argv[] = {
                     (char *)"mv", (char *)"--", f->prompt_path, value, NULL
@@ -2734,7 +2734,7 @@ static void fuss_prompt_done(Ed *ed, bool accepted, const u8 *text,
     }
     if (!accepted && action != FUSS_PROMPT_NONE)
         yew_msg(ed, YEW_MSG_INFO, "git command cancelled");
-    free(value);
+    yew_xfree(value);
     fuss_prompt_clear(f);
 }
 
@@ -2810,7 +2810,7 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     alt = f->picker_alt;
     fuss_picker_clear(f);
     if (value == NULL) {
-        free(aux);
+        yew_xfree(aux);
         return false;
     }
     switch (action) {
@@ -2820,7 +2820,7 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
         break;
     }
     case FUSS_PICK_BRANCH_DELETE:
-        free(f->prompt_path);
+        yew_xfree(f->prompt_path);
         f->prompt_path = fuss_dup_bytes(value, fuss_cstr_len(value));
         if (f->prompt_path != NULL) {
             char *argv[] = {
@@ -2829,7 +2829,7 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
             };
             if (fuss_spawn(ed, "branch-delete", argv, false, NULL, 0U,
                            false) != YEW_CMD_OK) {
-                free(f->prompt_path);
+                yew_xfree(f->prompt_path);
                 f->prompt_path = NULL;
             }
         }
@@ -2904,8 +2904,8 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     case FUSS_PICK_NONE:
         break;
     }
-    free(value);
-    free(aux);
+    yew_xfree(value);
+    yew_xfree(aux);
     return true;
 }
 
@@ -2943,8 +2943,8 @@ static void fuss_preview_destroy(void *opaque)
 
     if (owner == NULL)
         return;
-    free(owner->value);
-    free(owner);
+    yew_xfree(owner->value);
+    yew_xfree(owner);
 }
 
 static const YewJobCallbackOps fuss_preview_ops = {
@@ -2969,7 +2969,7 @@ static bool fuss_preview_start(Ed *ed, FussMode *f, const char *value)
     owner = yew_xcalloc(1U, sizeof(*owner));
     owner->value = fuss_dup_bytes(value, fuss_cstr_len(value));
     if (owner->value == NULL) {
-        free(owner);
+        yew_xfree(owner);
         return false;
     }
     argv[0] = (char *)"show";
@@ -2985,7 +2985,7 @@ static bool fuss_preview_start(Ed *ed, FussMode *f, const char *value)
         return false;
     }
     owner->job_id = job;
-    free(f->preview_value);
+    yew_xfree(f->preview_value);
     f->preview_value = fuss_dup_bytes(value, fuss_cstr_len(value));
     bytebuf_free(&f->preview_bytes);
     bytebuf_init(&f->preview_bytes);
@@ -3315,11 +3315,11 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
                     fuss_spawn(ed, "remote-check", argv, false, NULL, 0U,
                                false) == YEW_CMD_OK) {
                     f->pending_pick = FUSS_PICK_REMOTE_CHECK;
-                    free(ref);
+                    yew_xfree(ref);
                     return true;
                 }
-                free(ref);
-                free(f->picker_aux2);
+                yew_xfree(ref);
+                yew_xfree(f->picker_aux2);
                 f->picker_aux2 = NULL;
             }
         }
@@ -3344,8 +3344,8 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
                             "one remote; pushing %s to %s and setting upstream",
                             branch, remote);
             }
-            free(branch);
-            free(remote);
+            yew_xfree(branch);
+            yew_xfree(remote);
             return status == YEW_CMD_OK;
         }
         fuss_picker_open(ed, FUSS_PICK_REMOTE, "remote");
@@ -3426,7 +3426,7 @@ static void fuss_expand_clear(FussMode *f)
     f->expand_walk = NULL;
     yew_filelist_free(&f->expand_files);
     yew_filelist_init(&f->expand_files);
-    free(f->expand_path);
+    yew_xfree(f->expand_path);
     f->expand_path = NULL;
     f->expand_enter = false;
 }
@@ -3463,7 +3463,7 @@ static bool fuss_expand_start(Ed *ed, bool enter)
     opts.include_dirs = true;
     opts.max_depth = 1U;
     f->expand_walk = yew_walk_begin(root, &opts, &f->expand_files);
-    free(root);
+    yew_xfree(root);
     if (f->expand_walk == NULL) {
         fuss_expand_clear(f);
         yew_msg(ed, YEW_MSG_ERROR, "cannot scan untracked directory");
@@ -3797,15 +3797,15 @@ static CmdStatus fuss_open_path(CmdCtx *cx, bool leave)
         return YEW_CMD_ERR_ARG;
     if (!fuss_target_guard(cx, path, FUSS_TARGET_FILE,
                            leave ? "open" : "view", NULL)) {
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_STATE;
     }
     absolute = fuss_join_root(cx->ed, path);
-    free(path);
+    yew_xfree(path);
     if (absolute == NULL)
         return YEW_CMD_ERR_ARG;
     buffer = yew_ws_file_buf(cx->ed, absolute);
-    free(absolute);
+    yew_xfree(absolute);
     if (buffer == NULL)
         return YEW_CMD_ERR_IO;
     was_resident = yew_buf_resident(buffer);
@@ -3845,15 +3845,15 @@ static CmdStatus fuss_open_split(CmdCtx *cx, SplitDir dir)
     if (path == NULL)
         return YEW_CMD_ERR_ARG;
     if (!fuss_target_guard(cx, path, FUSS_TARGET_FILE, "open split", NULL)) {
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_STATE;
     }
     absolute = fuss_join_root(cx->ed, path);
-    free(path);
+    yew_xfree(path);
     if (absolute == NULL)
         return YEW_CMD_ERR_ARG;
     buffer = yew_ws_file_buf(cx->ed, absolute);
-    free(absolute);
+    yew_xfree(absolute);
     if (buffer == NULL)
         return YEW_CMD_ERR_IO;
     was_resident = yew_buf_resident(buffer);
@@ -3898,7 +3898,7 @@ CmdStatus yew_fuss_cmd_branch_switch(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "switch", argv, false, NULL, 0U,
                                 false);
         }
-        free(name);
+        yew_xfree(name);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -3915,7 +3915,7 @@ CmdStatus yew_fuss_cmd_branch_create(CmdCtx *cx)
         if (name == NULL)
             return YEW_CMD_ERR_ARG;
         if (name[0] == '-') {
-            free(name);
+            yew_xfree(name);
             yew_msg(cx->ed, YEW_MSG_ERROR,
                     "branch name must not begin with '-'");
             return YEW_CMD_ERR_ARG;
@@ -3925,7 +3925,7 @@ CmdStatus yew_fuss_cmd_branch_create(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "switch-create", argv, false, NULL,
                                 0U, false);
         }
-        free(name);
+        yew_xfree(name);
         return status;
     }
     return fuss_prompt(cx, FUSS_PROMPT_BRANCH_CREATE, NULL, NULL,
@@ -3947,7 +3947,7 @@ CmdStatus yew_fuss_cmd_branch_delete(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "branch-delete", argv, false, NULL,
                                 0U, false);
         }
-        free(name);
+        yew_xfree(name);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -3971,7 +3971,7 @@ CmdStatus yew_fuss_cmd_merge(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "merge", argv, false, NULL, 0U,
                                 false);
         }
-        free(name);
+        yew_xfree(name);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -3998,7 +3998,7 @@ CmdStatus yew_fuss_cmd_reset(CmdCtx *cx)
             ref += 5;
         }
         if (*ref == '\0') {
-            free(value);
+            yew_xfree(value);
             return YEW_CMD_ERR_ARG;
         }
         {
@@ -4006,7 +4006,7 @@ CmdStatus yew_fuss_cmd_reset(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "reset", argv, false, NULL, 0U,
                                 false);
         }
-        free(value);
+        yew_xfree(value);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -4023,7 +4023,7 @@ CmdStatus yew_fuss_cmd_rebase_interactive(CmdCtx *cx)
         if (base == NULL)
             return YEW_CMD_ERR_ARG;
         status = fuss_rebase_prepare(cx->ed, base);
-        free(base);
+        yew_xfree(base);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -4057,7 +4057,7 @@ CmdStatus yew_fuss_cmd_cherry_pick(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "cherry-pick", argv, false, NULL,
                                 0U, false);
         }
-        free(commit);
+        yew_xfree(commit);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -4080,7 +4080,7 @@ CmdStatus yew_fuss_cmd_revert(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "revert", argv, false, NULL, 0U,
                                 false);
         }
-        free(commit);
+        yew_xfree(commit);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -4109,7 +4109,7 @@ CmdStatus yew_fuss_cmd_stash_push(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "stash-push", argv, false, NULL,
                                 0U, false);
         }
-        free(message);
+        yew_xfree(message);
         return status;
     }
     return fuss_prompt(cx, FUSS_PROMPT_STASH_PUSH, NULL, NULL,
@@ -4129,7 +4129,7 @@ CmdStatus yew_fuss_cmd_stash_pop(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "stash-pop", argv, false, NULL, 0U,
                                 false);
         }
-        free(ref);
+        yew_xfree(ref);
         return status;
     }
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
@@ -4149,7 +4149,7 @@ CmdStatus yew_fuss_cmd_tag(CmdCtx *cx)
             status = fuss_spawn(cx->ed, "tag", argv, false, NULL, 0U,
                                 false);
         }
-        free(name);
+        yew_xfree(name);
         return status;
     }
     return fuss_prompt(cx, FUSS_PROMPT_TAG, NULL, NULL,
@@ -4165,12 +4165,12 @@ CmdStatus yew_fuss_cmd_discard(CmdCtx *cx)
         return YEW_CMD_ERR_ARG;
     if (!fuss_target_guard(cx, path, FUSS_TARGET_DIRTY_FILE, "discard",
                            NULL)) {
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_STATE;
     }
     status = fuss_prompt(cx, FUSS_PROMPT_DISCARD, NULL, path,
                          "type 'discard' to permanently discard the path");
-    free(path);
+    yew_xfree(path);
     return status;
 }
 
@@ -4182,12 +4182,12 @@ CmdStatus yew_fuss_cmd_file_delete(CmdCtx *cx)
     if (path == NULL)
         return YEW_CMD_ERR_ARG;
     if (!fuss_target_guard(cx, path, FUSS_TARGET_FILE, "delete", NULL)) {
-        free(path);
+        yew_xfree(path);
         return YEW_CMD_ERR_STATE;
     }
     status = fuss_prompt(cx, FUSS_PROMPT_DELETE, NULL, path,
                          "type 'delete' to permanently delete the path");
-    free(path);
+    yew_xfree(path);
     return status;
 }
 
@@ -4200,7 +4200,7 @@ CmdStatus yew_fuss_cmd_file_rename(CmdCtx *cx)
         return YEW_CMD_ERR_ARG;
     status = fuss_prompt(cx, FUSS_PROMPT_RENAME, path, path,
                          "new workspace-relative path");
-    free(path);
+    yew_xfree(path);
     return status;
 }
 

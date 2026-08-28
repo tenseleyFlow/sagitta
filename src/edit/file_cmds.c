@@ -120,7 +120,7 @@ CmdStatus yew_file_cmd_buf_open(CmdCtx *cx)
     path[cx->sarg_len] = '\0';
     old_nbufs = cx->ed->ws.nbufs;
     b = yew_ws_file_buf(cx->ed, path);
-    free(path);
+    yew_xfree(path);
     if (b == NULL)
         return YEW_CMD_ERR_IO;
     was_loaded = b->tb != NULL;
@@ -184,7 +184,7 @@ static void retarget_buffer(Ed *ed, Buffer *from, Buffer *to)
         retarget_tree(ed, tab->root, from, to);
         if (tab->buffer_id == from->id) {
             tab->buffer_id = to->id;
-            free(tab->path);
+            yew_xfree(tab->path);
             tab->path = NULL;
             if (to->path != NULL) {
                 size_t n = strlen(to->path) + 1U;
@@ -259,7 +259,7 @@ static void close_primary(Ed *ed)
         reset_primary_tree(tab->root, b);
         if (tab->buffer_id == old_id) {
             tab->buffer_id = b->id;
-            free(tab->path);
+            yew_xfree(tab->path);
             tab->path = NULL;
         }
     }

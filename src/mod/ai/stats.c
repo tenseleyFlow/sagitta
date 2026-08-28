@@ -79,13 +79,13 @@ static char *stats_path(bool ensure)
     if (dir == NULL)
         return NULL;
     if (ensure && !yew_mkdirs(dir, 0700U)) {
-        free(dir);
+        yew_xfree(dir);
         return NULL;
     }
     n = strlen(dir) + sizeof("/ai_stats.fl");
     path = yew_xmalloc(n);
     (void)snprintf(path, n, "%s/ai_stats.fl", dir);
-    free(dir);
+    yew_xfree(dir);
     return path;
 }
 
@@ -259,10 +259,10 @@ static void stats_load(AiStatsState *state)
     bytebuf_init(&bytes);
     if (!stats_read(path, &bytes, &missing)) {
         bytebuf_free(&bytes);
-        free(path);
+        yew_xfree(path);
         return;
     }
-    free(path);
+    yew_xfree(path);
     stats_doc_init(&doc);
     root = fl_data_read(&doc.vm, (const char *)bytes.data, bytes.len,
                         &doc.dc);
@@ -288,7 +288,7 @@ static void stats_load(AiStatsState *state)
         (void)memcpy(copy, name->b, name->len);
         copy[name->len] = '\0';
         row = stats_row(state, copy, true);
-        free(copy);
+        yew_xfree(copy);
         if (row != NULL)
             stats_load_row(&row->stats, (const FlMap *)value.as.o);
     }
@@ -382,7 +382,7 @@ static bool stats_save(AiStatsState *state)
     ok = yew_file_write_atomic(path, out.data, out.len, 0600) == YEW_SAVE_OK;
     bytebuf_free(&out);
     stats_doc_free(&doc);
-    free(path);
+    yew_xfree(path);
     if (ok)
         state->dirty = false;
     return ok;
@@ -406,9 +406,9 @@ void yew_ai_stats_free(Ed *ed, AiStatsState *state)
     stats_load(state);
     (void)stats_save(state);
     for (i = 0U; i < state->len; i++)
-        free(state->rows[i].backend);
-    free(state->rows);
-    free(state);
+        yew_xfree(state->rows[i].backend);
+    yew_xfree(state->rows);
+    yew_xfree(state);
 }
 
 static AiStats *stats_for(Ed *ed, const char *backend)

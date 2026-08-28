@@ -47,7 +47,7 @@ static void replace_name(char **slot, const char *name)
     n = strlen(name);
     copy = yew_xmalloc(n + 1U);
     (void)memcpy(copy, name, n + 1U);
-    free(*slot);
+    yew_xfree(*slot);
     *slot = copy;
 }
 

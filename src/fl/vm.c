@@ -130,14 +130,14 @@ void fl_vm_free(FlVm *vm)
 {
     if (vm->txn.entry_active)
         (void)vm->host->run_end(vm, false);
-    free(vm->txn.enlisted);
+    yew_xfree(vm->txn.enlisted);
     vm->txn = (FlTxn){0};
     /*
      * Root 6's registration array.  The SLOTS belong to whoever
      * registered them -- the editor's hook table outlives this VM in a
      * reload -- so only the array of pointers is ours to free.
      */
-    free(vm->host_roots.v);
+    yew_xfree(vm->host_roots.v);
     vm->host_roots.v = NULL;
     vm->host_roots.n = 0U;
     vm->host_roots.cap = 0U;

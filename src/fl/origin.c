@@ -73,9 +73,9 @@ void fl_origin_reg_free(FlOriginReg *r)
     if (r == NULL)
         return;
     for (i = 0U; i < r->n; i++)
-        free(r->v[i].label);
-    free(r->v);
-    free(r->masked);
+        yew_xfree(r->v[i].label);
+    yew_xfree(r->v);
+    yew_xfree(r->masked);
     (void)memset(r, 0, sizeof(*r));
 }
 

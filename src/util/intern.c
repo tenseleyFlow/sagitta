@@ -75,8 +75,8 @@ size_t yew_intern_count(const Interner *interner)
 void interner_free(Interner *interner)
 {
     strmap_free(&interner->map);
-    free(interner->strings);
-    free(interner->lens);
+    yew_xfree(interner->strings);
+    yew_xfree(interner->lens);
     interner->strings = NULL;
     interner->lens = NULL;
     interner->len = 0;

@@ -146,10 +146,10 @@ void yew_marks_free(MarkSet *ms)
 {
     if (ms == NULL)
         return;
-    free(ms->scratch);
-    free(ms->order);
-    free(ms->slots);
-    free(ms);
+    yew_xfree(ms->scratch);
+    yew_xfree(ms->order);
+    yew_xfree(ms->slots);
+    yew_xfree(ms);
 }
 
 MarkId yew_mark_add(MarkSet *ms, ByteOff pos, MarkBias bias)

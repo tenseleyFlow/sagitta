@@ -57,7 +57,7 @@ static void strmap_grow_slots(Strmap *map)
             YEW_BUG("string map hash table overflow");
         new_count = map->slot_count * 2;
     }
-    free(map->slots);
+    yew_xfree(map->slots);
     map->slots = yew_xcalloc(new_count, sizeof(*map->slots));
     map->slot_count = new_count;
     for (i = 0; i < map->len; i++) {
@@ -143,9 +143,9 @@ void strmap_free(Strmap *map)
     size_t i;
 
     for (i = 0; i < map->len; i++)
-        free(map->entries[i].key);
-    free(map->entries);
-    free(map->slots);
+        yew_xfree(map->entries[i].key);
+    yew_xfree(map->entries);
+    yew_xfree(map->slots);
     strmap_init(map);
 }
 

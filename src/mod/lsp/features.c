@@ -274,16 +274,16 @@ static void completion_owned_free(LspCompletionOwned *owned)
 
     if (owned == NULL)
         return;
-    free(owned->label);
-    free(owned->insert);
-    free(owned->detail);
-    free(owned->doc);
-    free(owned->sort);
+    yew_xfree(owned->label);
+    yew_xfree(owned->insert);
+    yew_xfree(owned->detail);
+    yew_xfree(owned->doc);
+    yew_xfree(owned->sort);
     for (i = 0U; i < owned->additional.len; i++)
-        free(owned->additional.data[i].text);
+        yew_xfree(owned->additional.data[i].text);
     Vec_LspCompletionEdit_free(&owned->additional);
     bytebuf_free(&owned->raw);
-    free(owned);
+    yew_xfree(owned);
 }
 
 void yew_lsp_completion_discard(ComplItem *item)
@@ -627,7 +627,7 @@ void yew_lsp_locations_free(Vec_LspLoc *locs)
     if (locs == NULL)
         return;
     for (i = 0U; i < locs->len; i++)
-        free(locs->data[i].path);
+        yew_xfree(locs->data[i].path);
     Vec_LspLoc_free(locs);
 }
 
@@ -750,14 +750,14 @@ static void symbol_document(const JsonValue *value, const char *doc_path,
         range = yew_json_get(value, "range");
     if (symbol.name == NULL || symbol.breadcrumb == NULL ||
         !symbol_range(range, &symbol)) {
-        free(symbol.name);
-        free(symbol.breadcrumb);
+        yew_xfree(symbol.name);
+        yew_xfree(symbol.breadcrumb);
         return;
     }
     symbol.path = symbol_path_copy(doc_path);
     if (symbol.path == NULL) {
-        free(symbol.name);
-        free(symbol.breadcrumb);
+        yew_xfree(symbol.name);
+        yew_xfree(symbol.breadcrumb);
         return;
     }
     symbol.kind = symbol_kind(yew_json_int(yew_json_get(value, "kind"),
@@ -790,11 +790,11 @@ static void symbol_information(const JsonValue *value,
     symbol.name = symbol_text_copy(yew_json_get(value, "name"));
     container = symbol_text_copy(yew_json_get(value, "containerName"));
     symbol.breadcrumb = symbol_breadcrumb(container, symbol.name);
-    free(container);
+    yew_xfree(container);
     if (symbol.name == NULL || symbol.breadcrumb == NULL) {
-        free(symbol.name);
-        free(symbol.breadcrumb);
-        free(loc.path);
+        yew_xfree(symbol.name);
+        yew_xfree(symbol.breadcrumb);
+        yew_xfree(loc.path);
         return;
     }
     symbol.path = loc.path;
@@ -876,9 +876,9 @@ void yew_lsp_symbols_free(Vec_LspSymbol *symbols)
     if (symbols == NULL)
         return;
     for (i = 0U; i < symbols->len; i++) {
-        free(symbols->data[i].name);
-        free(symbols->data[i].breadcrumb);
-        free(symbols->data[i].path);
+        yew_xfree(symbols->data[i].name);
+        yew_xfree(symbols->data[i].breadcrumb);
+        yew_xfree(symbols->data[i].path);
     }
     Vec_LspSymbol_free(symbols);
 }
@@ -1173,13 +1173,13 @@ bool yew_lsp_completion_resolve_apply(ComplItem *item,
     if (doc != NULL)
         doc_copy = completion_copy(doc, doc_len);
     if (detail != NULL) {
-        free(owned->detail);
+        yew_xfree(owned->detail);
         owned->detail = detail_copy;
         item->detail = owned->detail;
         item->detail_len = detail_len;
     }
     if (doc != NULL) {
-        free(owned->doc);
+        yew_xfree(owned->doc);
         owned->doc = doc_copy;
         item->doc = owned->doc;
         item->doc_len = doc_len;
@@ -1377,13 +1377,13 @@ static void completion_request_free(void *ctx)
 
     if (request == NULL)
         return;
-    free(request->stem);
-    free(request);
+    yew_xfree(request->stem);
+    yew_xfree(request);
 }
 
 static void completion_resolve_free(void *ctx)
 {
-    free(ctx);
+    yew_xfree(ctx);
 }
 
 static void completion_shadow_free(void *ctx)
@@ -1392,18 +1392,18 @@ static void completion_shadow_free(void *ctx)
 
     if (request == NULL)
         return;
-    free(request->stem);
-    free(request);
+    yew_xfree(request->stem);
+    yew_xfree(request);
 }
 
 static void panel_request_free(void *ctx)
 {
-    free(ctx);
+    yew_xfree(ctx);
 }
 
 static void navigation_request_free(void *ctx)
 {
-    free(ctx);
+    yew_xfree(ctx);
 }
 
 static void symbol_request_free(void *ctx)
@@ -1412,8 +1412,8 @@ static void symbol_request_free(void *ctx)
 
     if (request == NULL)
         return;
-    free(request->path);
-    free(request);
+    yew_xfree(request->path);
+    yew_xfree(request);
 }
 
 static void completion_cancel_id(Ed *ed, u32 server_id, u64 request)
@@ -2057,7 +2057,7 @@ static bool completion_shadow_stem(Ed *ed, const ShadowReq *request,
     return true;
 
 invalid:
-    free(*stem);
+    yew_xfree(*stem);
     *stem = NULL;
     *stem_len = 0U;
     return false;

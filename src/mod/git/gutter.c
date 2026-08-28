@@ -388,8 +388,8 @@ static void work_truncated(YewDiffWork *work)
 
 static void work_free_bisect(YewDiffWork *work)
 {
-    free(work->forward);
-    free(work->reverse);
+    yew_xfree(work->forward);
+    yew_xfree(work->reverse);
     work->forward = NULL;
     work->reverse = NULL;
     work->bisect_width = 0U;
@@ -1009,16 +1009,16 @@ void yew_diff_work_free(YewDiffWork *work)
     if (work == NULL)
         return;
     if (work->owns_sequences) {
-        free(work->left_lines);
-        free(work->right_lines);
-        free(work->left_hashes);
-        free(work->right_hashes);
+        yew_xfree(work->left_lines);
+        yew_xfree(work->right_lines);
+        yew_xfree(work->left_hashes);
+        yew_xfree(work->right_hashes);
     }
     work_free_bisect(work);
     DiffTaskVec_free(&work->tasks);
     DiffRunVec_free(&work->ops);
     GitHunkVec_free(&work->result);
-    free(work);
+    yew_xfree(work);
 }
 
 bool yew_git_hunk_sign_placement(const GitHunk *h, u64 buffer_line_count,

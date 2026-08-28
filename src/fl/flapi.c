@@ -397,7 +397,7 @@ static bool q_buf_opt_set(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         return false;
     ok = yew_opt_set_for(ed, b, NULL, YEW_OPT_SCOPE_DECLARED,
                          name->b, name->len, &value, &err);
-    free(owned_list);
+    yew_xfree(owned_list);
     if (!ok)
         return option_map_error(vm, name, err);
     *out = FL_NIL_V;
@@ -1394,8 +1394,8 @@ static void option_stages_free(FlOptStage *staged, u32 n)
     if (staged == NULL)
         return;
     for (i = 0U; i < n; i++)
-        free(staged[i].owned_list);
-    free(staged);
+        yew_xfree(staged[i].owned_list);
+    yew_xfree(staged);
 }
 
 static void option_stage_rollback(Ed *ed, FlOptStage *staged, u32 n)
@@ -1437,7 +1437,7 @@ static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out,
             const FlStr *item;
 
             if (list->v[i].t != (u8)FL_STR) {
-                free(items);
+                yew_xfree(items);
                 return fl_raise(vm, "type",
                                 "set: string-list options require only strings");
             }
@@ -1579,24 +1579,24 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
     bytebuf_init(&scratch);
     if (!marshal_command(vm, d, argv, argc, &cx, &opt_in, &opt_out,
                          &scratch, &owned_cursors)) {
-        free(owned_cursors);
+        yew_xfree(owned_cursors);
         bytebuf_free(&scratch);
         return false;
     }
     if (!invoke_command(vm, d->resolved_id, &cx, &st)) {
-        free(owned_cursors);
+        yew_xfree(owned_cursors);
         bytebuf_free(&scratch);
         return false;
     }
     if (st != YEW_CMD_OK && cx.opt_error != YEW_OPT_ERROR_NONE) {
         ok = option_command_error(vm, &cx);
-        free(owned_cursors);
+        yew_xfree(owned_cursors);
         bytebuf_free(&scratch);
         return ok;
     }
     if (st != YEW_CMD_OK) {
         ok = command_error(vm, d, st);
-        free(owned_cursors);
+        yew_xfree(owned_cursors);
         bytebuf_free(&scratch);
         return ok;
     }
@@ -1604,7 +1604,7 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
         Buffer *opened = yew_ed_doc(vm->ed);
         if (opened == NULL) {
             ok = fl_raise(vm, "io", "buf.open did not produce a buffer");
-            free(owned_cursors);
+            yew_xfree(owned_cursors);
             bytebuf_free(&scratch);
             return ok;
         }
@@ -1612,7 +1612,7 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
     } else if (strcmp(d->fl_name, "win.split") == 0) {
         if (vm->ed->win == NULL) {
             ok = fl_raise(vm, "handle", "win.split produced no window");
-            free(owned_cursors);
+            yew_xfree(owned_cursors);
             bytebuf_free(&scratch);
             return ok;
         }
@@ -1646,14 +1646,14 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
         }
         default:
             ok = fl_raise(vm, "type", "option provider returned bad type");
-            free(owned_cursors);
+            yew_xfree(owned_cursors);
             bytebuf_free(&scratch);
             return ok;
         }
     } else {
         *out = FL_NIL_V;
     }
-    free(owned_cursors);
+    yew_xfree(owned_cursors);
     bytebuf_free(&scratch);
     return true;
 }

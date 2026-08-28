@@ -131,7 +131,7 @@ void yew_timers_free(TimerHeap *timers)
 {
     if (timers == NULL)
         return;
-    free(timers->v);
+    yew_xfree(timers->v);
     (void)memset(timers, 0, sizeof(*timers));
 }
 

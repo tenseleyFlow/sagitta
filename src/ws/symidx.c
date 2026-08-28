@@ -49,8 +49,8 @@ static void posting_free_all(Strmap *map)
     while (strmap_iter_next(&it, NULL, NULL, &value)) {
         SymPosting *posting = value;
 
-        free(posting->data);
-        free(posting);
+        yew_xfree(posting->data);
+        yew_xfree(posting);
     }
 }
 
@@ -749,8 +749,8 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
             line_no == UINT64_MAX)
             break;
     }
-    free(previous_spans);
-    free(spans);
+    yew_xfree(previous_spans);
+    yew_xfree(spans);
     return count;
 }
 
@@ -876,8 +876,8 @@ void yew_symidx_workspace_free(Workspace *ws)
     Vec_SymBufIndex_free(&ws->sym_buf);
     yew_symidx_free(&ws->sym_ws);
     Vec_SymHit_free(&ws->sym_query);
-    free(ws->sym_seen);
-    free(ws->sym_slot);
+    yew_xfree(ws->sym_seen);
+    yew_xfree(ws->sym_slot);
     ws->sym_seen = NULL;
     ws->sym_slot = NULL;
     ws->sym_seen_cap = 0U;
@@ -1117,7 +1117,7 @@ static void symidx_occ_merge(SymIndex *idx, size_t split)
     }
     while (right != 0U)
         idx->occ.data[--out] = tail[--right];
-    free(tail);
+    yew_xfree(tail);
 }
 
 static bool affected_has(const SymDirty *dirty, u32 name)

@@ -818,7 +818,7 @@ static void draw_span(Grid *grid, const TextBuf *tb, Span span,
         logical.v = cells > UINT64_MAX - logical.v ? UINT64_MAX :
                                                           logical.v + cells;
         if (cluster != local)
-            free(cluster);
+            yew_xfree(cluster);
         pos = next;
     }
     (void)put_spaces(grid, row, col, right);

@@ -805,15 +805,7 @@ endif
         bench-fletch \
         test-fletch-dispatch test-fletch-gc-stress test-fletch-determinism
 
-ifeq ($(ALLOCDBG),1)
-# Sprint 57 lands the allocator core before the mechanical free-site
-# migration.  A header-offset pointer cannot be handed to the tree's legacy
-# raw free() sites, so the debug default is deliberately the focused allocator
-# contract suite until that migration is complete.  Never take timings here.
-all: test-alloc-debug
-else
 all: $(BUILD)/yew
-endif
 
 test-alloc-debug: $(BUILD)/unit_tests
 	env -u XDG_STATE_HOME $(BUILD)/unit_tests --filter alloc_

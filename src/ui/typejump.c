@@ -99,7 +99,7 @@ bool yew_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
     matched = yew_fz_rank(tj->pat, tj->len, labels, n, false, ranked);
     if (matched > 0U)
         *sel = ranked[0].idx;
-    free(labels);
-    free(ranked);
+    yew_xfree(labels);
+    yew_xfree(ranked);
     return true;
 }

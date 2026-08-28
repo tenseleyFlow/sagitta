@@ -39,7 +39,7 @@ void yew_lsp_doc_free(LspDoc *doc)
 {
     if (doc == NULL)
         return;
-    free(doc->uri);
+    yew_xfree(doc->uri);
     Vec_LspChange_free(&doc->pending);
     arena_free_all(&doc->changes);
     (void)memset(doc, 0, sizeof(*doc));

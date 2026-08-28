@@ -16,7 +16,7 @@ void bytebuf_init(Bytebuf *buf)
 
 void bytebuf_free(Bytebuf *buf)
 {
-    free(buf->data);
+    yew_xfree(buf->data);
     bytebuf_init(buf);
 }
 

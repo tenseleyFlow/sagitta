@@ -539,11 +539,11 @@ static CmdStatus indent_action(CmdCtx *cx, bool dedent)
     }
     collapse = yew_textbuf_line_start(tb, first);
     if (!apply_edits(cx, &edits, NULL)) {
-        free(covered);
+        yew_xfree(covered);
         edits_free(&edits);
         return YEW_CMD_ERR_IO;
     }
-    free(covered);
+    yew_xfree(covered);
     edits_free(&edits);
     return finish_action(cx, collapse, false);
 }

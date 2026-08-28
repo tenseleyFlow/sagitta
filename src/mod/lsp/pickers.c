@@ -177,41 +177,42 @@ static char *copy_line(const TextBuf *tb, u32 line)
 static char *read_line_file(const char *path, u32 line)
 {
     FILE *file;
-    char *text = NULL;
-    size_t cap = 0U;
-    ssize_t got;
+    char text[LSP_LOC_DETAIL_MAX + 1U];
+    size_t len = 0U;
+    size_t content_len = 0U;
     u32 at = 0U;
-    char *copy = NULL;
+    bool started = false;
+    bool found = false;
+    int ch;
 
     file = fopen(path, "rb");
     if (file == NULL)
         return NULL;
-    while ((got = getline(&text, &cap, file)) >= 0) {
-        if (at == line) {
-            size_t lo = 0U;
-            size_t hi = (size_t)got;
-            size_t len;
-
-            while (lo < hi && (text[lo] == ' ' || text[lo] == '\t'))
-                lo++;
-            while (hi > lo && (text[hi - 1U] == '\n' ||
-                               text[hi - 1U] == '\r'))
-                hi--;
-            len = hi - lo;
-            if (len > LSP_LOC_DETAIL_MAX)
-                len = LSP_LOC_DETAIL_MAX;
-            copy = yew_xmalloc(len + 1U);
-            if (len != 0U)
-                (void)memcpy(copy, text + lo, len);
-            copy[len] = '\0';
-            break;
+    while ((ch = fgetc(file)) != EOF) {
+        if (at != line) {
+            if (ch == '\n')
+                at++;
+            continue;
         }
-        at++;
+        found = true;
+        if (ch == '\n')
+            break;
+        if (!started && (ch == ' ' || ch == '\t'))
+            continue;
+        started = true;
+        if (len < LSP_LOC_DETAIL_MAX)
+            text[len++] = (char)ch;
+        content_len++;
     }
-    /* getline(3) owns this allocation contract; keep libc free here. */
-    free(text);
     (void)fclose(file);
-    return copy;
+    if (!found)
+        return NULL;
+    if (content_len <= LSP_LOC_DETAIL_MAX) {
+        while (len != 0U && text[len - 1U] == '\r')
+            len--;
+    }
+    text[len] = '\0';
+    return yew_xstrdup(text);
 }
 
 static char *location_detail(Ed *ed, const LspLoc *loc)

@@ -156,10 +156,10 @@ static void queue_path(Ed *ed, const char *rel, bool apply_fallback_skip)
     if ((apply_fallback_skip && fallback_skips(rel)) ||
         !path_join(joined, yew_ws_root(ed), rel))
         return;
-    canonical = realpath(joined, NULL);
+    canonical = yew_xrealpath(joined);
     id = yew_intern_cstr(&ed->interner,
                          canonical == NULL ? joined : canonical);
-    free(canonical);
+    yew_xfree(canonical);
     Vec_SymPath_push(&sw->queue, id);
 }
 
@@ -302,7 +302,7 @@ static void scan_file_end(Ed *ed)
     *scratch = buf->syn;
     yew_syn_buf_init(&buf->syn);
     yew_textbuf_free(buf->tb);
-    free(buf);
+    yew_xfree(buf);
     sw->scan_buf = NULL;
     sw->scan_fd = -1;
     sw->scan_size = 0U;
@@ -630,7 +630,7 @@ void yew_symwalk_dispose(Ed *ed)
     Vec_SymPath_free(&ed->ws.sym_walk.retired_jobs);
     if (ed->ws.sym_walk.scratch_syn != NULL) {
         yew_syn_detach(ed->ws.sym_walk.scratch_syn);
-        free(ed->ws.sym_walk.scratch_syn);
+        yew_xfree(ed->ws.sym_walk.scratch_syn);
         ed->ws.sym_walk.scratch_syn = NULL;
     }
 }

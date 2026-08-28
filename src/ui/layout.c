@@ -36,7 +36,7 @@ static void pane_free_rec(Pane *p)
         pane_free_rec(p->a);
         pane_free_rec(p->b);
     }
-    free(p);
+    yew_xfree(p);
 }
 
 /*
@@ -294,8 +294,8 @@ bool yew_pane_close(Ed *ed, Pane *leaf)
     /* Same reason as yew_pane_free's: the per-frame tables address
      * these nodes by index and must not outlive them. */
     yew_pane_tables_reset(ed);
-    free(sibling);
-    free(leaf);
+    yew_xfree(sibling);
+    yew_xfree(leaf);
     return true;
 }
 

@@ -98,7 +98,7 @@ static void store_reset(void)
 
 static void store_free(void)
 {
-    free(store.text);
+    yew_xfree(store.text);
     store.text = NULL;
     store.text_cap = 0U;
     store.text_len = 0U;
@@ -305,8 +305,8 @@ CmdStatus yew_find_cmd_file(CmdCtx *cx)
         store.n++;
     }
     store_fixup(label_off, detail_off);
-    free(label_off);
-    free(detail_off);
+    yew_xfree(label_off);
+    yew_xfree(detail_off);
 
     (void)memset(&spec, 0, sizeof(spec));
     spec.title = "Find file";
@@ -407,8 +407,8 @@ CmdStatus yew_find_cmd_buffer(CmdCtx *cx)
         store.n++;
     }
     store_fixup(label_off, detail_off);
-    free(label_off);
-    free(detail_off);
+    yew_xfree(label_off);
+    yew_xfree(detail_off);
 
     (void)memset(&spec, 0, sizeof(spec));
     spec.title = "Switch buffer";
@@ -527,8 +527,8 @@ CmdStatus yew_find_cmd_command(CmdCtx *cx)
         store.n++;
     }
     store_fixup(label_off, detail_off);
-    free(label_off);
-    free(detail_off);
+    yew_xfree(label_off);
+    yew_xfree(detail_off);
 
     (void)memset(&spec, 0, sizeof(spec));
     spec.title = "Command palette";
@@ -629,9 +629,9 @@ CmdStatus yew_undo_cmd_branches(CmdCtx *cx)
         store.n++;
     }
     store_fixup(label_off, detail_off);
-    free(label_off);
-    free(detail_off);
-    free(info);
+    yew_xfree(label_off);
+    yew_xfree(detail_off);
+    yew_xfree(info);
 
     (void)memset(&spec, 0, sizeof(spec));
     spec.title = "Undo branches";

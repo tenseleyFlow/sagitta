@@ -358,8 +358,8 @@ void yew_vp_free(Win *w)
 {
     if (w == NULL)
         return;
-    free(w->wrap_cache.rows);
-    free(w->wrap_cache.spans);
+    yew_xfree(w->wrap_cache.rows);
+    yew_xfree(w->wrap_cache.spans);
     memset(&w->wrap_cache, 0, sizeof(w->wrap_cache));
 }
 

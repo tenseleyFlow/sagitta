@@ -53,7 +53,7 @@ static bool group_picker_open(Ed *ed, const char *root,
 
         if (path != NULL) {
             yew_gp_preselect(path);
-            free(path);
+            yew_xfree(path);
         }
     }
     return true;
@@ -83,7 +83,7 @@ static u32 group_open_members(Ed *ed, const char *root,
             idx = yew_tab_open(ed, path);
             opened = idx >= 0;
         }
-        free(path);
+        yew_xfree(path);
         if (idx < 0)
             continue;
         /* yew_group_add_member removes an adopted tab from its old group
@@ -126,7 +126,7 @@ u32 yew_group_from_dir(Ed *ed, const char *dir,
         opts.max_members > YEW_GROUP_MAX_MEMBERS)
         opts.max_members = YEW_GROUP_MAX_MEMBERS;
 
-    root = realpath(dir, NULL);
+    root = yew_xrealpath(dir);
     if (root == NULL) {
         yew_msg(ed, YEW_MSG_ERROR, "cannot open directory %s", dir);
         return 0U;
@@ -141,7 +141,7 @@ u32 yew_group_from_dir(Ed *ed, const char *dir,
     if (walk == NULL) {
         yew_filelist_free(&files);
         yew_msg(ed, YEW_MSG_ERROR, "cannot scan directory %s", root);
-        free(root);
+        yew_xfree(root);
         return 0U;
     }
     (void)yew_walk_step(walk, 0);
@@ -157,7 +157,7 @@ u32 yew_group_from_dir(Ed *ed, const char *dir,
         gid = group_open_members(ed, root, &opts, &files);
     }
     yew_filelist_free(&files);
-    free(root);
+    yew_xfree(root);
     return gid;
 }
 
@@ -182,11 +182,11 @@ CmdStatus yew_group_cmd_from_dir(CmdCtx *cx)
     if (dir == NULL || dir[0] == '\0') {
         yew_msg(cx->ed, YEW_MSG_ERROR,
                 "select a directory to open as a group");
-        free(selected);
+        yew_xfree(selected);
         return YEW_CMD_ERR_ARG;
     }
     gid = yew_group_from_dir(cx->ed, dir, &opts);
-    free(selected);
+    yew_xfree(selected);
     if (gid != 0U || yew_gp_active())
         return YEW_CMD_OK;
     return YEW_CMD_ERR_STATE;

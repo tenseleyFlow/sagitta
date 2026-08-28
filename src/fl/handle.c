@@ -92,7 +92,7 @@ static void slot_release(FlHandleSlot *s)
 {
     if (s->kind == (u8)FL_H_RE && s->as.re.a != NULL) {
         arena_free_all(s->as.re.a);
-        free(s->as.re.a);
+        yew_xfree(s->as.re.a);
         s->as.re.a = NULL;
         s->as.re.re = NULL;
     }
@@ -106,7 +106,7 @@ void fl_h_table_free(FlHandleTable *t)
         return;
     for (i = 0U; i < t->n; i++)
         slot_release(&t->slots[i]);
-    free(t->slots);
+    yew_xfree(t->slots);
     (void)memset(t, 0, sizeof(*t));
 }
 

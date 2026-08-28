@@ -45,9 +45,9 @@ void yew_syn_builtin_registry_free(BuiltinRegistry *registry)
             arena_free_all(&registry->loaded[i].arena);
     }
     arena_free_all(&registry->first_line_arena);
-    free(registry->first_line_re);
-    free(registry->loaded);
-    free(registry->desc);
+    yew_xfree(registry->first_line_re);
+    yew_xfree(registry->loaded);
+    yew_xfree(registry->desc);
     (void)memset(registry, 0, sizeof(*registry));
 }
 

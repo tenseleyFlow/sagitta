@@ -159,7 +159,7 @@ void yew_gutter_signs_free(Win *w)
 {
     if (w == NULL)
         return;
-    free(w->gutter_signs.v);
+    yew_xfree(w->gutter_signs.v);
     (void)memset(&w->gutter_signs, 0, sizeof(w->gutter_signs));
 }
 

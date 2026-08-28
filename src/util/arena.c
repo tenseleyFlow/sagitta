@@ -109,7 +109,7 @@ void arena_free_all(Arena *arena)
 
     while (block) {
         ArenaBlock *next = block->next;
-        free(block);
+        yew_xfree(block);
         block = next;
     }
     arena_init(arena);

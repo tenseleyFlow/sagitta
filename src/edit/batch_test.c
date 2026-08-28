@@ -386,7 +386,7 @@ static bool t_file(FlVm *vm, FlValue *a, u32 n, FlValue *out)
                (got.len != 0U && memcmp(got.data, want->b, got.len) != 0)) {
         fail_bytes(vm, want, &got);
     }
-    bytebuf_free(&got); free(owned); *out = FL_NIL_V; return true;
+    bytebuf_free(&got); yew_xfree(owned); *out = FL_NIL_V; return true;
 }
 
 static const FlStr *error_kind(FlVm *vm, FlValue error)
@@ -503,18 +503,18 @@ static bool t_fixture(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (!fl_arg_str(vm, a, 0U, &name)) return false;
     if (!fixture_name_ok(name))
         return fl_raise(vm, "io", "t.fixture: name must be one path component");
-    cwd = getcwd(NULL, 0U);
+    cwd = yew_xgetcwd();
     if (cwd == NULL)
         return fl_raise(vm, "io", "t.fixture: cannot read cwd: %s", strerror(errno));
     sn = strlen(cwd) + 11U + name->len; dn = strlen(cwd) + 2U + name->len;
     source = yew_xmalloc(sn); dest = yew_xmalloc(dn);
     (void)snprintf(source, sn, "%s/fixtures/%.*s", cwd, (int)name->len, name->b);
     (void)snprintf(dest, dn, "%s/%.*s", cwd, (int)name->len, name->b);
-    ok = copy_path(source, dest); free(source); free(cwd);
-    if (!ok) { int e = errno; free(dest);
+    ok = copy_path(source, dest); yew_xfree(source); yew_xfree(cwd);
+    if (!ok) { int e = errno; yew_xfree(dest);
         return fl_raise(vm, "io", "t.fixture: copy failed: %s", strerror(e)); }
     *out = FL_OBJ_V(FL_STR, fl_str_new(vm, dest, (u32)strlen(dest)));
-    free(dest); return true;
+    yew_xfree(dest); return true;
 }
 
 static bool t_tmpdir(FlVm *vm, FlValue *a, u32 n, FlValue *out)
@@ -737,7 +737,7 @@ void yew_batch_test_free(YewBatchTestState *s)
     u32 i;
     if (s == NULL) return;
     if (active_test == s) active_test = NULL;
-    for (i = 0U; i < s->nlogs; i++) free(s->logs[i].message);
-    free(s->logs); bytebuf_free(&s->failure_records);
+    for (i = 0U; i < s->nlogs; i++) yew_xfree(s->logs[i].message);
+    yew_xfree(s->logs); bytebuf_free(&s->failure_records);
     (void)memset(s, 0, sizeof(*s));
 }

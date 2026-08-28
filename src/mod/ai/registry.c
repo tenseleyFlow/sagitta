@@ -102,8 +102,8 @@ static void string_list_free(char **list)
     if (list == NULL)
         return;
     for (i = 0U; list[i] != NULL; i++)
-        free(list[i]);
-    free(list);
+        yew_xfree(list[i]);
+    yew_xfree(list);
 }
 
 static void owned_drop(AiBackendRegistry *registry, OwnedBackend *owned)
@@ -112,12 +112,12 @@ static void owned_drop(AiBackendRegistry *registry, OwnedBackend *owned)
         return;
     if (owned->pub.endpoint != NULL && registry->release != NULL)
         registry->release(registry->prepare_ctx, owned->pub.endpoint);
-    free((char *)owned->pub.backend.name);
-    free((char *)owned->pub.url_text);
-    free((char *)owned->pub.backend.url.host);
-    free((char *)owned->pub.backend.url.path);
-    free((char *)owned->pub.backend.model);
-    free((char *)owned->pub.backend.key_env);
+    yew_xfree((char *)owned->pub.backend.name);
+    yew_xfree((char *)owned->pub.url_text);
+    yew_xfree((char *)owned->pub.backend.url.host);
+    yew_xfree((char *)owned->pub.backend.url.path);
+    yew_xfree((char *)owned->pub.backend.model);
+    yew_xfree((char *)owned->pub.backend.key_env);
     string_list_free(owned->key_cmd);
     (void)memset(owned, 0, sizeof(*owned));
 }
@@ -139,7 +139,7 @@ static bool value_string(const FlMap *map, const char *field, bool required,
                               field);
     *out = copy_fl_string((const FlStr *)value.as.o);
     if (*out == NULL || (*out)[0] == '\0') {
-        free(*out);
+        yew_xfree(*out);
         *out = NULL;
         return registry_error(err, errsz,
                               "backend field '%s' must be a non-empty string",
@@ -306,7 +306,7 @@ static bool parse_url(const char *url_text, u8 transport, HttpUrl *out,
     } else {
         ok = yew_http_url_parse(&arena, url_text, &parsed, err, errsz);
     }
-    free(translated);
+    yew_xfree(translated);
     if (!ok) {
         arena_free_all(&arena);
         return false;
@@ -425,16 +425,16 @@ static bool owned_parse(AiBackendRegistry *registry, OwnedBackend *out,
                            out->pub.backend.transport, &out->pub.endpoint,
                            err, errsz))
         goto fail;
-    free(kind);
-    free(transport);
+    yew_xfree(kind);
+    yew_xfree(transport);
     return true;
 
 fail:
-    free(kind);
-    free(transport);
-    free(url);
-    free(model);
-    free(key_env);
+    yew_xfree(kind);
+    yew_xfree(transport);
+    yew_xfree(url);
+    yew_xfree(model);
+    yew_xfree(key_env);
     owned_drop(registry, out);
     return false;
 }
@@ -471,7 +471,7 @@ void yew_ai_registry_drop(AiBackendRegistry *registry)
     entries = owned_entries(registry);
     for (i = 0U; i < registry->len; i++)
         owned_drop(registry, &entries[i]);
-    free(entries);
+    yew_xfree(entries);
     (void)memset(registry, 0, sizeof(*registry));
 }
 

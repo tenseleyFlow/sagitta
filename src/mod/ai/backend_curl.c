@@ -246,7 +246,7 @@ static void curl_secure_reserve(Bytebuf *buf, size_t need)
         (void)memcpy(data, buf->data, buf->len);
     if (buf->data != NULL) {
         yew_memzero(buf->data, buf->cap);
-        free(buf->data);
+        yew_xfree(buf->data);
     }
     buf->data = data;
     buf->cap = cap;

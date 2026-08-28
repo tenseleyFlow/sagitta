@@ -624,8 +624,8 @@ void yew_coords_index_dispose(TextBuf *tb)
     if (tb == NULL)
         return;
     pending_clear(tb);
-    free(tb->graphemes.data);
-    free(tb->graphemes.motion);
+    yew_xfree(tb->graphemes.data);
+    yew_xfree(tb->graphemes.motion);
     memset(&tb->graphemes, 0, sizeof(tb->graphemes));
 }
 
@@ -875,8 +875,8 @@ static void coords_index_apply_edit(YewGraphemeIndex *old_index,
         motion_index_push(&next, checkpoint);
     }
     next.gen = edit->new_gen;
-    free(old_index->data);
-    free(old_index->motion);
+    yew_xfree(old_index->data);
+    yew_xfree(old_index->motion);
     old_index->data = next.data;
     old_index->len = next.len;
     old_index->cap = next.cap;
