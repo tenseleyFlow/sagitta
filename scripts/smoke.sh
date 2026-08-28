@@ -33,6 +33,7 @@ unit_bin=$bin_dir/unit_tests
 script_dir=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 repo_dir=$(dirname "$script_dir")
 tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-smoke.XXXXXX")
+tmp=$(CDPATH='' cd "$tmp" && pwd -P)
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir "$tmp/state"
 
