@@ -1805,6 +1805,7 @@ perf-alloc: $(BUILD)/perf_alloc
 	@if test '$(ALLOCDBG)' != 1; then \
 		echo "perf-alloc requires ALLOCDBG=1" >&2; exit 2; \
 	fi
+	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) $(BUILD)/perf_alloc
 
 perf-shadow: $(BUILD)/perf_shadow

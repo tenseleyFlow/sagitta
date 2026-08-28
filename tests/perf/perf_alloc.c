@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -194,12 +195,19 @@ static bool check_inserts(void)
     return ok;
 }
 
-static bool make_sparse_file(char path[64])
+static bool make_sparse_file(char *path, size_t cap)
 {
+    const char *tmp = getenv("TMPDIR");
     int fd;
+    int n;
 
-    (void)memcpy(path, "build/tmp/yew-perf-alloc-XXXXXX",
-                 sizeof("build/tmp/yew-perf-alloc-XXXXXX"));
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "/tmp";
+    n = snprintf(path, cap, "%s/yew-perf-alloc-XXXXXX", tmp);
+    if (n < 0 || (size_t)n >= cap) {
+        (void)fprintf(stderr, "perf_alloc: temporary path too long\n");
+        return false;
+    }
     fd = mkstemp(path);
     if (fd < 0) {
         (void)fprintf(stderr, "perf_alloc: mkstemp: %s\n", strerror(errno));
@@ -221,14 +229,14 @@ static bool make_sparse_file(char path[64])
 
 static bool check_open(void)
 {
-    char path[64];
+    char path[PATH_MAX];
     FileMeta meta;
     TextBuf *text = NULL;
     YewLoadErr error;
     bool calls_ok;
     bool closed_ok;
 
-    if (!make_sparse_file(path))
+    if (!make_sparse_file(path, sizeof(path)))
         return false;
     yew_filemeta_init(&meta);
     yew_alloc_reset();
