@@ -266,6 +266,8 @@ static const BindRow frozen_E[] = {
 static const BindRow frozen_F[] = {
     {"<esc>", "ed.git.mode.leave", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
+    {"C-w s", "ed.git.open_split_h", 0, NULL},
+    {"C-w v", "ed.git.open_split_v", 0, NULL},
 };
 
 
@@ -362,7 +364,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 195U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 197U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
