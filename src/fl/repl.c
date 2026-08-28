@@ -443,14 +443,14 @@ static char *line_text(const FlLine *l)
     if (total != 0U && yew_textiter_begin(&it, l->tb, BYTEOFF(0U))) {
         while (copied < total) {
             const u8 *bytes = NULL;
-            size_t n = 0U;
+            u64 n = 0U;
 
             if (!yew_textiter_chunk(&it, l->tb, &bytes, &n) || n == 0U)
                 break;
-            if ((u64)n > total - copied)
-                n = (size_t)(total - copied);
-            (void)memcpy(text + copied, bytes, n);
-            copied += (u64)n;
+            if (n > total - copied)
+                n = total - copied;
+            (void)memcpy(text + copied, bytes, (size_t)n);
+            copied += n;
             if (!yew_textiter_advance(&it, l->tb))
                 break;
         }
