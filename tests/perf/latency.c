@@ -114,6 +114,14 @@ static bool make_fixture(char *root, size_t root_cap,
     return close(fd) == 0;
 }
 
+static bool make_state_dir(char *path, size_t cap, const char *root,
+                           const char *name)
+{
+    int n = snprintf(path, cap, "%s/%s", root, name);
+
+    return n >= 0 && (size_t)n < cap && mkdir(path, 0700) == 0;
+}
+
 static bool remove_tree(const char *path)
 {
     struct stat st;
@@ -761,6 +769,10 @@ int main(int argc, char **argv)
     char fixture[1024];
     char wolf[1024];
     char state[1024];
+    char key_state[1024];
+    char arrow_state[1024];
+    char paced_arrow_state[1024];
+    char wolf_edit_state[1024];
     LatencyLimits limits;
     i64 key_p99;
     i64 arrow_p99;
@@ -787,8 +799,16 @@ int main(int argc, char **argv)
     }
     if (!make_fixture(root, sizeof(root), fixture, sizeof(fixture),
                       wolf, sizeof(wolf),
-                      state, sizeof(state))) {
+                      state, sizeof(state)) ||
+        !make_state_dir(key_state, sizeof(key_state), root, "state-keys") ||
+        !make_state_dir(arrow_state, sizeof(arrow_state), root,
+                        "state-arrows") ||
+        !make_state_dir(paced_arrow_state, sizeof(paced_arrow_state), root,
+                        "state-paced-arrows") ||
+        !make_state_dir(wolf_edit_state, sizeof(wolf_edit_state), root,
+                        "state-wolf-edit")) {
         (void)fprintf(stderr, "latency: cannot create fixtures\n");
+        (void)remove_tree(root);
         return 2;
     }
     wolf_path = getenv("YEW_LATENCY_WOLF_PATH");
@@ -805,11 +825,11 @@ int main(int argc, char **argv)
         }
     }
     if (!measure_cold(argv[2], fixture, state, &cold) ||
-        !measure_keys(argv[2], fixture, state, &key_p99) ||
-        !measure_arrows(argv[2], wolf_path, state, &arrow_p99) ||
-        !measure_arrows_paced(argv[2], wolf_path, state,
+        !measure_keys(argv[2], fixture, key_state, &key_p99) ||
+        !measure_arrows(argv[2], wolf_path, arrow_state, &arrow_p99) ||
+        !measure_arrows_paced(argv[2], wolf_path, paced_arrow_state,
                               &paced_arrow_p99) ||
-        !measure_wolf_backspaces(argv[2], wolf_path, state,
+        !measure_wolf_backspaces(argv[2], wolf_path, wolf_edit_state,
                                  &wolf_first_backspace,
                                  &wolf_backspace_max)) {
         (void)fprintf(stderr, "latency: PTY measurement failed\n");
