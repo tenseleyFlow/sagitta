@@ -14,6 +14,7 @@
 #include "syn/defs.h"
 #include "syn/engine.h"
 #include "text/journal.h"
+#include "unit/stat_time.h"
 #include "util/arena.h"
 #include "util/buf.h"
 
@@ -230,8 +231,8 @@ static void touch_source(const CacheFixture *f)
     struct timespec times[2];
 
     YEW_ASSERT_EQ_I64(stat(f->source, &st), 0);
-    times[0] = st.st_atim;
-    times[1] = st.st_mtim;
+    times[0] = yew_test_stat_atime(&st);
+    times[1] = yew_test_stat_mtime(&st);
     times[1].tv_sec += 2;
     YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, f->source, times, 0), 0);
 }
@@ -348,8 +349,8 @@ void test_syn_cache_rejects_blob_copied_from_another_source(void)
     write_exact(second_source, (const u8 *)cache_source_y,
                 strlen(cache_source_y));
     YEW_ASSERT_EQ_I64(stat(f.source, &st), 0);
-    times[0] = st.st_atim;
-    times[1] = st.st_mtim;
+    times[0] = yew_test_stat_atime(&st);
+    times[1] = yew_test_stat_mtime(&st);
     YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, second_source, times, 0), 0);
     second_cache = yew_syn_cache_path("cache-fixture");
     YEW_ASSERT_NOT_NULL(second_cache);
@@ -524,7 +525,8 @@ void test_syn_cache_touch_without_content_change_avoids_recompile(void)
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "x");
     YEW_ASSERT_EQ_I64(stat(f.cache, &after), 0);
-    YEW_ASSERT(after.st_mtim.tv_sec >= before.st_mtim.tv_sec);
+    YEW_ASSERT(yew_test_stat_mtime(&after).tv_sec >=
+               yew_test_stat_mtime(&before).tv_sec);
     loaded_free(&loaded);
     fixture_free(&f);
 }

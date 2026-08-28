@@ -55,11 +55,12 @@ static void rep_read(const Ed *ed, Bytebuf *out)
         return;
     for (;;) {
         const u8 *chunk = NULL;
-        size_t n = 0U;
+        u64 n = 0U;
 
         if (!yew_textiter_chunk(&it, ed->buffer.tb, &chunk, &n) || n == 0U)
             break;
-        bytebuf_append(out, chunk, n);
+        YEW_ASSERT(n <= SIZE_MAX);
+        bytebuf_append(out, chunk, (size_t)n);
         if (!yew_textiter_advance(&it, ed->buffer.tb))
             break;
     }

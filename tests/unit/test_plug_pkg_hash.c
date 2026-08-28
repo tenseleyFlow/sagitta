@@ -12,6 +12,7 @@
 
 #include "fl/diag.h"
 #include "mod/plug/pkg.h"
+#include "unit/stat_time.h"
 #include "util/arena.h"
 
 static void hash_write(const char *path, const char *text, mode_t mode)
@@ -125,9 +126,9 @@ void test_plug_pkg_hash_directory_independence_and_scale(void)
 
     (void)snprintf(path, sizeof(path), "%s/same", left);
     YEW_ASSERT_EQ_I64(stat(path, &st), 0);
-    times[0].tv_sec = st.st_atim.tv_sec + 17;
-    times[0].tv_nsec = st.st_atim.tv_nsec;
-    times[1] = st.st_mtim;
+    times[0] = yew_test_stat_atime(&st);
+    times[0].tv_sec += 17;
+    times[1] = yew_test_stat_mtime(&st);
     YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, path, times, 0), 0);
     YEW_ASSERT(yew_pkg_tree_hash(left, h1, &dc));
     YEW_ASSERT_EQ_STR(h0, h1);

@@ -16,6 +16,7 @@
 #include "edit/option.h"
 #include "text/edit.h"
 #include "text/file.h"
+#include "unit/stat_time.h"
 
 static void policy_write(const char *path, const char *text)
 {
@@ -130,8 +131,8 @@ void test_save_policy_content_accepts_identical_mtime_change(void)
     policy_write(path, "old\n");
     YEW_ASSERT_EQ_U64(yew_file_load(path, &tb, &meta), YEW_LOAD_OK);
     YEW_ASSERT_EQ_I64(stat(path, &st), 0);
-    times[0] = st.st_atim;
-    times[1] = st.st_mtim;
+    times[0] = yew_test_stat_atime(&st);
+    times[1] = yew_test_stat_mtime(&st);
     times[1].tv_sec++;
     YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, path, times, 0), 0);
     yew_textbuf_insert(tb, BYTEOFF(yew_textbuf_len(tb)),
@@ -166,8 +167,8 @@ static void policy_content_accepts_bom_crlf_mtime_change(void)
     YEW_ASSERT(meta.had_bom);
     YEW_ASSERT_EQ_U64(meta.eol, YEW_EOL_CRLF);
     YEW_ASSERT_EQ_I64(stat(path, &st), 0);
-    times[0] = st.st_atim;
-    times[1] = st.st_mtim;
+    times[0] = yew_test_stat_atime(&st);
+    times[1] = yew_test_stat_mtime(&st);
     times[1].tv_sec++;
     YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, path, times, 0), 0);
     yew_file_save_opts_default(&opts);
