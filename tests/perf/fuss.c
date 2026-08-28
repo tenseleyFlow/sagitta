@@ -343,12 +343,27 @@ static u32 drawer_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
 static bool drawer_root_make(char *root, size_t root_cap)
 {
     const char *tmp = getenv("TMPDIR");
+    char resolved[PATH_MAX];
+    size_t len;
     int wrote;
 
     if (tmp == NULL || tmp[0] == '\0')
         tmp = "build/tmp";
     wrote = snprintf(root, root_cap, "%s/yew-perf-fuss-XXXXXX", tmp);
-    return wrote > 0 && (size_t)wrote < root_cap && mkdtemp(root) != NULL;
+    if (wrote <= 0 || (size_t)wrote >= root_cap || mkdtemp(root) == NULL)
+        return false;
+    if (realpath(root, resolved) == NULL) {
+        (void)rmdir(root);
+        return false;
+    }
+    len = strlen(resolved);
+    if (len >= root_cap) {
+        (void)rmdir(root);
+        errno = ENAMETOOLONG;
+        return false;
+    }
+    (void)memcpy(root, resolved, len + 1U);
+    return true;
 }
 
 static bool drawer_snapshot_fill(Ed *ed)
