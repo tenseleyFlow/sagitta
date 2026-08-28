@@ -1302,6 +1302,36 @@ static bool conn_advance_address(Ed *ed, HttpConn *c)
     return false;
 }
 
+static int socket_nonblocking_cloexec(int family)
+{
+#if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
+    return socket(family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+#else
+    int fd = socket(family, SOCK_STREAM, 0);
+    int flags;
+
+    if (fd < 0)
+        return -1;
+    flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+        int saved = errno;
+
+        (void)close(fd);
+        errno = saved;
+        return -1;
+    }
+    flags = fcntl(fd, F_GETFD, 0);
+    if (flags < 0 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
+        int saved = errno;
+
+        (void)close(fd);
+        errno = saved;
+        return -1;
+    }
+    return fd;
+#endif
+}
+
 static bool conn_socket(Ed *ed, HttpConn *c, i64 now)
 {
     int one = 1;
@@ -1309,8 +1339,7 @@ static bool conn_socket(Ed *ed, HttpConn *c, i64 now)
 
 again:
     http_socket_calls++;
-    c->fd = socket(c->address.ss_family,
-                   SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    c->fd = socket_nonblocking_cloexec(c->address.ss_family);
     if (c->fd < 0) {
         conn_error(c, YEW_AI_ERR_UNREACHABLE,
                    "could not create HTTP socket");
