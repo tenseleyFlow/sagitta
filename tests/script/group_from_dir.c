@@ -398,6 +398,7 @@ static void test_f_mode_g_opens_selected_directory_group(const char *parent)
 
 int main(int argc, char **argv)
 {
+    char *root;
     struct stat st;
 
     if (argc != 2) {
@@ -409,17 +410,25 @@ int main(int argc, char **argv)
                       argv[1]);
         return 2;
     }
-    test_scrambled_forty_is_deterministic(argv[1]);
-    test_open_tab_is_adopted_without_duplication(argv[1]);
-    test_other_group_adoption_compacts_both_groups(argv[1]);
-    test_five_thousand_files_open_picker_only(argv[1]);
-    test_empty_directory_reports_without_creating_group(argv[1]);
-    test_f_mode_g_opens_selected_directory_group(argv[1]);
+    root = realpath(argv[1], NULL);
+    if (root == NULL) {
+        (void)fprintf(stderr, "group_from_dir: cannot resolve %s: %s\n",
+                      argv[1], strerror(errno));
+        return 2;
+    }
+    test_scrambled_forty_is_deterministic(root);
+    test_open_tab_is_adopted_without_duplication(root);
+    test_other_group_adoption_compacts_both_groups(root);
+    test_five_thousand_files_open_picker_only(root);
+    test_empty_directory_reports_without_creating_group(root);
+    test_f_mode_g_opens_selected_directory_group(root);
     if (failures != 0U) {
         (void)fprintf(stderr, "group_from_dir: %u/%u checks failed\n",
                       failures, assertions);
+        free(root);
         return 1;
     }
     (void)printf("group_from_dir: %u assertions: ok\n", assertions);
+    free(root);
     return 0;
 }
