@@ -16,6 +16,7 @@
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
+#include "util/runtime_asset.h"
 #include "util/xdg.h"
 
 #ifndef YEW_RUNTIME_DIR_DEFAULT
@@ -873,9 +874,19 @@ static ThemeReadStatus read_file(const char *path, Bytebuf *out)
     FILE *file = fopen(path, "rb");
     u8 chunk[4096];
 
-    if (file == NULL)
-        return THEME_READ_IO;
     bytebuf_init(out);
+    if (file == NULL) {
+        int saved = errno;
+
+        if (saved == ENOENT && yew_runtime_asset_read(path, out)) {
+            if (out->len <= THEME_MAX_BYTES)
+                return THEME_READ_OK;
+            bytebuf_free(out);
+            return THEME_READ_TOO_LARGE;
+        }
+        errno = saved;
+        return THEME_READ_IO;
+    }
     while (!feof(file)) {
         size_t n = fread(chunk, 1U, sizeof(chunk), file);
 
@@ -943,9 +954,18 @@ static char *discover_path(const char *name, const char *runtime_dir)
     }
     yew_xfree(path);
     path = path_join3("runtime", "themes", filename);
-    yew_xfree(filename);
-    if (path != NULL && access(path, R_OK) == 0)
+    if (path != NULL && access(path, R_OK) == 0) {
+        yew_xfree(filename);
         return path;
+    }
+    if (path != NULL) {
+        char *embedded = yew_runtime_asset_resolve(path);
+
+        yew_xfree(path);
+        yew_xfree(filename);
+        return embedded;
+    }
+    yew_xfree(filename);
     yew_xfree(path);
     return NULL;
 }

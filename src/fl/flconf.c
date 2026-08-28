@@ -31,6 +31,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
+#include "util/runtime_asset.h"
 #include "util/xdg.h"
 #include "ws/trust.h"
 #include "ws/trust_prompt.h"
@@ -133,6 +134,9 @@ static char *runtime_path(void)
      * prefix first, so this does not weaken the shipped-artifact check. */
     if (access("runtime/init.fl", R_OK) == 0)
         return cfg_dup("runtime/init.fl");
+    path = yew_runtime_asset_resolve("init.fl");
+    if (path != NULL)
+        return path;
     return path_join(YEW_RUNTIME_DIR_DEFAULT, "init.fl");
 }
 
@@ -431,7 +435,13 @@ static CfgStatus compile_one(Ed *ed, YewConfigState *state, u32 index)
         }
         yew_trust_probe_free(&probe);
     } else {
+        const char *runtime = getenv("YEW_RUNTIME_DIR");
+
         read_status = read_file(state->unit[index].path, &source);
+        if (read_status == CFG_READ_MISSING && index == YEW_CFG_BUILTIN &&
+            (runtime == NULL || runtime[0] == '\0') &&
+            yew_runtime_asset_read(state->unit[index].path, &source))
+            read_status = CFG_READ_OK;
         if (read_status == CFG_READ_MISSING) {
             yew_log(index == YEW_CFG_BUILTIN ? YEW_LOG_ERROR : YEW_LOG_INFO,
                     "config missing: %s%s", state->unit[index].path == NULL ?

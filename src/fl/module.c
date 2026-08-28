@@ -39,6 +39,7 @@
 #include "fl/std.h"
 #include "fl/vm.h"
 #include "util/intern.h"
+#include "util/runtime_asset.h"
 #include "util/xdg.h"
 
 #ifndef YEW_RUNTIME_DIR_DEFAULT
@@ -254,10 +255,15 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
     bytebuf_init(&cand);
     dir = importer_dir(vm, o);
     if (dir != NULL) {
+        const char *runtime_env = getenv("YEW_RUNTIME_DIR");
+
         join(&cand, dir, rel, rn);
         bytebuf_append(tried, "\n  ", 3U);
         bytebuf_append(tried, cand.data, cand.len);
         real = yew_xrealpath((const char *)cand.data);
+        if (real == NULL &&
+            (runtime_env == NULL || runtime_env[0] == '\0'))
+            real = yew_runtime_asset_resolve((const char *)cand.data);
         yew_xfree(dir);
     }
     if (real == NULL) {
@@ -285,6 +291,12 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
         bytebuf_append(tried, "\n  ", 3U);
         bytebuf_append(tried, cand.data, cand.len);
         real = yew_xrealpath((const char *)cand.data);
+        if (real == NULL) {
+            const char *runtime_env = getenv("YEW_RUNTIME_DIR");
+
+            if (runtime_env == NULL || runtime_env[0] == '\0')
+                real = yew_runtime_asset_resolve(rel);
+        }
     }
     bytebuf_free(&cand);
     return real;
@@ -298,15 +310,20 @@ static bool read_source(FlVm *vm, const char *path, char **out, size_t *len)
 {
     struct stat st;
     Bytebuf bb;
+    const char *runtime = getenv("YEW_RUNTIME_DIR");
     int fd = open(path, O_RDONLY | O_CLOEXEC);
 
-    if (fd < 0)
-        return fl_raise(vm, "import", "cannot read %s", path);
+    bytebuf_init(&bb);
+    if (fd < 0) {
+        if (errno != ENOENT || (runtime != NULL && runtime[0] != '\0') ||
+            !yew_runtime_asset_read(path, &bb))
+            return fl_raise(vm, "import", "cannot read %s", path);
+        goto copy;
+    }
     if (fstat(fd, &st) != 0 || S_ISDIR(st.st_mode)) {
         (void)close(fd);
         return fl_raise(vm, "import", "cannot read %s", path);
     }
-    bytebuf_init(&bb);
     for (;;) {
         char buf[65536];
         ssize_t n = read(fd, buf, sizeof(buf));
@@ -328,6 +345,11 @@ static bool read_source(FlVm *vm, const char *path, char **out, size_t *len)
         }
     }
     (void)close(fd);
+copy:
+    if (bb.len > (size_t)MOD_MAX_BYTES) {
+        bytebuf_free(&bb);
+        return fl_raise(vm, "limit", "%s exceeds 8 MiB", path);
+    }
     /*
      * Copied into the VM arena, not handed over as a Bytebuf: DiagCtx
      * keeps the source pointer so it can render a caret line later, and
@@ -486,6 +508,7 @@ bool fl_module_eval_path(FlVm *vm, const char *path, FlOrigin origin,
 bool fl_module_load_path(FlVm *vm, const char *path, FlOrigin origin,
                          FlValue *out)
 {
+    const char *runtime = getenv("YEW_RUNTIME_DIR");
     char *real;
     char *src = NULL;
     size_t len = 0U;
@@ -496,6 +519,8 @@ bool fl_module_load_path(FlVm *vm, const char *path, FlOrigin origin,
         return false;
     *out = FL_NIL_V;
     real = yew_xrealpath(path);
+    if (real == NULL && (runtime == NULL || runtime[0] == '\0'))
+        real = yew_runtime_asset_resolve(path);
     if (real == NULL)
         return fl_raise(vm, "import", "cannot read %s", path);
     path_id = yew_intern(vm->in, real, strlen(real));

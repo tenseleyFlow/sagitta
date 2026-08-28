@@ -18,6 +18,7 @@
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/intern.h"
+#include "util/runtime_asset.h"
 
 #ifndef YEW_RUNTIME_DIR_DEFAULT
 #define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
@@ -172,8 +173,20 @@ static SynDef *load_def(const char *path, Arena *arena, DiagCtx *dc,
     SynDef *def;
 
     errno = 0;
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) ||
-        access(path, R_OK) != 0) {
+    if (stat(path, &st) != 0) {
+        const char *runtime = getenv("YEW_RUNTIME_DIR");
+        int saved = errno == 0 ? EIO : errno;
+
+        if (saved == ENOENT &&
+            (runtime == NULL || runtime[0] == '\0') &&
+            yew_runtime_asset_has(path))
+            goto load;
+        (void)fprintf(stderr, "yew syn: cannot read %s: %s\n", path,
+                      strerror(saved));
+        *status = YEW_EXIT_IO;
+        return NULL;
+    }
+    if (!S_ISREG(st.st_mode) || access(path, R_OK) != 0) {
         int saved = errno == 0 ? EIO : errno;
 
         (void)fprintf(stderr, "yew syn: cannot read %s: %s\n", path,
@@ -181,6 +194,7 @@ static SynDef *load_def(const char *path, Arena *arena, DiagCtx *dc,
         *status = YEW_EXIT_IO;
         return NULL;
     }
+load:
     fl_diag_init(dc, arena);
     fl_diag_set_sink(dc, stderr_sink, NULL);
     def = yew_syn_def_load(arena, dc, path);

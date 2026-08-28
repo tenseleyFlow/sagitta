@@ -20,6 +20,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
+#include "util/runtime_asset.h"
 #include "util/xdg.h"
 
 #ifndef YEW_RUNTIME_DIR_DEFAULT
@@ -77,6 +78,9 @@ static char *shipped_path(void)
     yew_xfree(path);
     if (access("runtime/ai-deny.fl", R_OK) == 0)
         return policy_copy("runtime/ai-deny.fl");
+    path = yew_runtime_asset_resolve("ai-deny.fl");
+    if (path != NULL)
+        return path;
     return policy_join(YEW_RUNTIME_DIR_DEFAULT, "ai-deny.fl");
 }
 
@@ -100,7 +104,17 @@ static bool read_file(const char *path, Bytebuf *out, bool *missing)
     *missing = false;
     fd = open(path, O_RDONLY);
     if (fd < 0) {
-        *missing = errno == ENOENT;
+        const char *runtime = getenv("YEW_RUNTIME_DIR");
+        int saved = errno;
+
+        if (saved == ENOENT &&
+            (runtime == NULL || runtime[0] == '\0') &&
+            yew_runtime_asset_read(path, out)) {
+            errno = saved;
+            return true;
+        }
+        errno = saved;
+        *missing = saved == ENOENT;
         return false;
     }
     for (;;) {

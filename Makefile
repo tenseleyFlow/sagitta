@@ -1515,6 +1515,8 @@ endif
 test-runtime-embedded: $(BUILD)/unit_tests runtime-embedded-budget
 	$(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
 		$(BUILD)/unit_tests --filter runtime_asset
+	$(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
+		$(BUILD)/unit_tests --filter runtime_consumer
 else
 runtime-embedded-budget test-runtime-embedded:
 	@echo '$@ requires EMBED_RUNTIME=1' >&2; exit 2

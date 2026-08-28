@@ -2,6 +2,7 @@
 
 #include "mod/ai/preset.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,8 @@
 #include "mod/ai/registry.h"
 #include "text/piece.h"
 #include "text/undo.h"
+#include "util/buf.h"
+#include "util/runtime_asset.h"
 
 #ifndef YEW_RUNTIME_DIR_DEFAULT
 #define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
@@ -27,8 +30,32 @@ static char *ai_read_file(const char *path, u32 *len)
     long size;
     char *bytes;
 
-    if (path == NULL || len == NULL || (file = fopen(path, "rb")) == NULL)
+    if (path == NULL || len == NULL)
         return NULL;
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        Bytebuf embedded;
+        const char *runtime = getenv("YEW_RUNTIME_DIR");
+        int saved = errno;
+
+        bytebuf_init(&embedded);
+        if (saved != ENOENT ||
+            (runtime != NULL && runtime[0] != '\0') ||
+            !yew_runtime_asset_read(path, &embedded) ||
+            embedded.len > UINT32_MAX) {
+            bytebuf_free(&embedded);
+            errno = saved;
+            return NULL;
+        }
+        bytes = yew_xmalloc(embedded.len + 1U);
+        if (embedded.len != 0U)
+            (void)memcpy(bytes, embedded.data, embedded.len);
+        bytes[embedded.len] = '\0';
+        *len = (u32)embedded.len;
+        bytebuf_free(&embedded);
+        errno = saved;
+        return bytes;
+    }
     if (fseek(file, 0L, SEEK_END) != 0 ||
         (size = ftell(file)) < 0L || (unsigned long)size > UINT32_MAX ||
         fseek(file, 0L, SEEK_SET) != 0) {
@@ -71,6 +98,13 @@ static char *ai_runtime_path(const char *name)
     if (access(path, R_OK) == 0)
         return path;
     yew_xfree(path);
+    path = ai_join_path(YEW_RUNTIME_DIR_DEFAULT, name);
+    if (access(path, R_OK) == 0)
+        return path;
+    yew_xfree(path);
+    path = yew_runtime_asset_resolve(name);
+    if (path != NULL)
+        return path;
     return ai_join_path(YEW_RUNTIME_DIR_DEFAULT, name);
 }
 

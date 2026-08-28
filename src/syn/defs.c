@@ -23,6 +23,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
+#include "util/runtime_asset.h"
 #include "util/sort.h"
 #include "util/xdg.h"
 
@@ -2970,12 +2971,22 @@ static bool cache_header_ok(const u8 *p, size_t n, size_t *blob_len)
     return true;
 }
 
+static struct timespec source_stat_mtime(const struct stat *st)
+{
+#if defined(__APPLE__)
+    return st->st_mtimespec;
+#else
+    return st->st_mtim;
+#endif
+}
+
 static bool cache_write(const char *path, const struct stat *st,
                         const u8 *src, size_t src_len, const u8 *blob,
                         size_t blob_len)
 {
     Bytebuf bytes;
     char *dir = yew_syn_cache_dir();
+    struct timespec mtime = source_stat_mtime(st);
     u8 header[YEW_SYN_CACHE_HEADER_SIZE];
     bool ok;
 
@@ -2993,8 +3004,8 @@ static bool cache_write(const char *path, const struct stat *st,
     put32(header + 8U, YEW_SYN_TABLE_VERSION);
     put32(header + 12U, abi_tag());
     put64(header + 16U, fnv64((const u8 *)YEW_VERSION, strlen(YEW_VERSION)));
-    put64(header + 24U, (u64)st->st_mtim.tv_sec);
-    put64(header + 32U, (u64)st->st_mtim.tv_nsec);
+    put64(header + 24U, (u64)mtime.tv_sec);
+    put64(header + 32U, (u64)mtime.tv_nsec);
     put64(header + 40U, (u64)st->st_size);
     put64(header + 48U, fnv64(src, src_len));
     put32(header + 56U, (u32)blob_len);
@@ -3106,14 +3117,27 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
     bytebuf_init(&cached);
     bytebuf_init(&packed);
     if (!source_stat(path, &src_st)) {
-        file_id = fl_diag_add_file(dc, path, "", 0U);
-        fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
-                     "cannot read syntax definition: %s", strerror(errno));
-        return NULL;
+        const char *runtime = getenv("YEW_RUNTIME_DIR");
+        int saved = errno;
+
+        if (saved == ENOENT &&
+            (runtime == NULL || runtime[0] == '\0') &&
+            yew_runtime_asset_read(path, &source)) {
+            (void)memset(&src_st, 0, sizeof(src_st));
+            source_loaded = true;
+        } else {
+            errno = saved;
+            file_id = fl_diag_add_file(dc, path, "", 0U);
+            fl_diag_emit(dc, FL_DIAG_ERROR,
+                         (FlSpan){file_id, 1U, 1U, 1U},
+                         "cannot read syntax definition: %s",
+                         strerror(errno));
+            return NULL;
+        }
     }
     expected_name = builtin_language_for_source(path);
     if (expected_name == NULL) {
-        if (!read_whole(path, &source, &src_st)) {
+        if (!source_loaded && !read_whole(path, &source, &src_st)) {
             file_id = fl_diag_add_file(dc, path, "", 0U);
             fl_diag_emit(dc, FL_DIAG_ERROR,
                          (FlSpan){file_id, 1U, 1U, 1U},
@@ -3142,8 +3166,10 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
                     path);
             cache_warned = true;
         } else if (valid_cache && !source_loaded &&
-                   get64(cached.data + 24U) == (u64)src_st.st_mtim.tv_sec &&
-                   get64(cached.data + 32U) == (u64)src_st.st_mtim.tv_nsec &&
+                   get64(cached.data + 24U) ==
+                       (u64)source_stat_mtime(&src_st).tv_sec &&
+                   get64(cached.data + 32U) ==
+                       (u64)source_stat_mtime(&src_st).tv_nsec &&
                    get64(cached.data + 40U) == (u64)src_st.st_size) {
             file_id = fl_diag_add_file(dc, path, "", 0U);
             (void)file_id;
