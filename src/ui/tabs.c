@@ -225,7 +225,28 @@ int yew_tab_open(Ed *ed, const char *path)
          * two tabs it is two claims on one save path. */
         existing = yew_tab_find_by_path(ed, path);
         if (existing >= 0) {
+            Tab *tab = yew_tab_at(ed, existing);
+            Buffer *doc = tab == NULL ? NULL :
+                          yew_ws_buf_by_id(ed, tab->buffer_id);
+            bool was_loaded = doc != NULL && doc->tb != NULL;
+
             yew_tab_switch(ed, existing);
+            /*
+             * A tab's focused pane may temporarily show a scratch buffer
+             * (macro editor, job output, diagnostics).  Reopening the
+             * tab's path asks for the file, not merely its tab metadata.
+             * Restore the stable buffer handle before returning so the
+             * next edit or save cannot target the scratch view instead.
+             */
+            if (doc == NULL || yew_buf_hydrate(ed, doc) != 0 ||
+                !yew_ed_show_buffer(ed, doc)) {
+                yew_msg(ed, YEW_MSG_ERROR, "could not open %s", path);
+                return -1;
+            }
+            if (!was_loaded)
+                yew_fl_hook_buffer(ed, FL_EV_BUF_OPEN, doc);
+            if (ed->prompt == YEW_PROMPT_NONE && doc->recovery_pending)
+                yew_ed_prompt(ed, YEW_PROMPT_RECOVER);
             return existing;
         }
     }
@@ -351,6 +372,9 @@ void yew_tab_switch(Ed *ed, int idx)
     ed->focus = t->focus;
     if (ed->focus != NULL && ed->focus->win != NULL)
         ed->win = ed->focus->win;
+    if (ed->prompt == YEW_PROMPT_NONE && ed->win != NULL &&
+        ed->win->buf != NULL && ed->win->buf->recovery_pending)
+        yew_ed_prompt(ed, YEW_PROMPT_RECOVER);
     ed->layout_dirty = true;
     ed->full_damage = true;
     yew_state_mark_dirty(ed);

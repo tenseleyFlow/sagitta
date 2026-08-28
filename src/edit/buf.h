@@ -26,6 +26,10 @@ typedef struct Buffer {
     u32 tabwidth;
     UndoTree *undo;
     Journal *jrn;
+    /* A deferred file is probed when hydration first reads it.  Keep the
+     * result until that tab is focused so background hydration cannot put
+     * a recovery question over the wrong document. */
+    bool recovery_pending;
     MarkSet *marks;
     ChangeList changes;
     /* Owns its retained line state/cache.  Any engine/definition bound

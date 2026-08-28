@@ -1250,6 +1250,7 @@ const YewTest yew_tests[] = {
     T(tabs_display_path_preserves_workspace_spelling),
     T(tabs_cap_refuses_and_mutates_nothing),
     T(tabs_modified_derives_from_undo_state),
+    T(tabs_quit_checks_the_active_buffer),
     T(tabs_switch_swaps_the_pane_tree),
     T(tabs_open_leaves_a_tab_ungrouped),
     T(groups_create_labels_from_the_directory_basename),

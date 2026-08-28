@@ -257,8 +257,12 @@ void yew_job_finish(Ed *ed, YewJob *j)
     /* "Command produced no output": a full-screen empty buffer after every
      * :!make is the most-hated behavior of every editor that skips this. */
     if (j->bytes_out + j->bytes_err == 0U) {
-        if (ed->win != NULL && ed->win->buf == j->buf)
-            (void)yew_ed_show_buffer(ed, &ed->buffer);
+        if (ed->win != NULL && ed->win->buf == j->buf) {
+            Buffer *origin = yew_ws_buf_by_id(ed, j->origin_buf_id);
+
+            (void)yew_ed_show_buffer(ed, origin != NULL ? origin :
+                                                         &ed->buffer);
+        }
         yew_msg(ed, YEW_MSG_INFO, ":!%s — no output (exit %d)",
                 j->label, j->exit_code);
         yew_ws_scratch_drop(ed, j->buf);
@@ -304,6 +308,9 @@ u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
     if (id == 0U)
         return 0U;
     j = yew_job_find(ed, id);
+    j->origin_buf_id = ed->win != NULL && ed->win->buf != NULL
+                           ? ed->win->buf->id
+                           : 0U;
     (void)snprintf(name, sizeof(name), "*job:%u %s*", (unsigned)id,
                    cmdline);
     buf = yew_ws_scratch_new(ed, name, YEW_BUF_NOUNDO);

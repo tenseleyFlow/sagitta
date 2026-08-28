@@ -3,7 +3,7 @@ size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
 [1: start-one.txt][2: start-two.txt]
-    1 startup second file                                                       
+    1 startup first file                                                        
     1                                                                           
                                                                                 
                                                                                 
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
- L  start-two.txt                                            utf-8  lf  1:1  all
+ L  start-one.txt                                            utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
 CCCCDCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
@@ -52,8 +52,8 @@ CCCCCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 CCCCCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 FFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 --- legend
-A fg=default bg=default attrs=----------
-B fg=default bg=default attrs=------r---
+A fg=default bg=default attrs=------r---
+B fg=default bg=default attrs=----------
 C fg=#4b5263 bg=#12141a attrs=----------
 D fg=#c8ccd4 bg=#12141a attrs=b---------
 E fg=#c8ccd4 bg=#12141a attrs=----------

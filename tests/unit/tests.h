@@ -1217,6 +1217,7 @@ void test_tabs_find_by_path_canonicalizes(void);
 void test_tabs_display_path_preserves_workspace_spelling(void);
 void test_tabs_cap_refuses_and_mutates_nothing(void);
 void test_tabs_modified_derives_from_undo_state(void);
+void test_tabs_quit_checks_the_active_buffer(void);
 void test_tabs_switch_swaps_the_pane_tree(void);
 void test_tabs_open_leaves_a_tab_ungrouped(void);
 void test_groups_create_labels_from_the_directory_basename(void);

@@ -179,6 +179,11 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     FussMode *f;
     Bytebuf body;
     PanelSpec spec;
+    Rect drawer;
+    u32 area_right;
+    u32 drawer_right;
+    u16 anchor_x;
+    u16 room;
 
     if (ed == NULL || buffer == NULL || ed->fuss == NULL)
         return false;
@@ -195,13 +200,21 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     spec.title = buffer->name == NULL ? "preview" : buffer->name;
     spec.body = body.data;
     spec.len = (u32)body.len;
-    spec.x = ed->win->rect.x;
+    drawer = yew_fuss_drawer_rect(ed);
+    area_right = (u32)ed->win->rect.x + ed->win->rect.w;
+    drawer_right = (u32)drawer.x + drawer.w;
+    anchor_x = ed->win->rect.x;
+    if (drawer_right > anchor_x && drawer_right <= UINT16_MAX)
+        anchor_x = (u16)drawer_right;
+    spec.x = anchor_x;
     spec.y = ed->win->rect.y;
     spec.place = YEW_PANEL_CURSOR;
-    spec.max_w = YEW_PANEL_MAX_W;
+    room = area_right > (u32)anchor_x + 2U ?
+               (u16)(area_right - anchor_x - 2U) : 0U;
+    spec.max_w = room < YEW_PANEL_MAX_W ? room : YEW_PANEL_MAX_W;
     spec.max_h = YEW_PANEL_MAX_H;
     spec.role = "git.ignored";
-    if (ed->win->rect.w < 3U && ed->grid.cols < 3U) {
+    if (room == 0U) {
         bytebuf_free(&body);
         f->viewer = true;
         f->viewer_win_id = ed->win->id;
@@ -968,7 +981,14 @@ static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
 {
     const GitSnapshot *snap;
     ThemeEnt style = fuss_base_style(ed);
-    Bytebuf counts;
+    char suffix[96] = {0};
+    const char *branch;
+    size_t suffix_len;
+    int branch_cells;
+    int suffix_cells;
+    u16 prefix_cells;
+    u16 prefix_right;
+    u16 title_right;
     u16 col = left;
 
     const char *root = yew_ws_root(ed);
@@ -980,48 +1000,90 @@ static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
         title = slash + 1;
     if (title == NULL || title[0] == '\0')
         title = "/";
-    fuss_put_lit(&ed->grid, row, &col, right, title, fuss_cstr_len(title),
-                 style.fg, style.bg, (u16)(style.attrs | YEW_ATTR_BOLD));
     if (ed->fuss->opening) {
+        fuss_put_lit(&ed->grid, row, &col, right, title,
+                     fuss_cstr_len(title), style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_BOLD));
         fuss_put_lit(&ed->grid, row, &col, right, " · loading",
                      sizeof(" · loading") - 1U, style.fg, style.bg,
                      (u16)(style.attrs | YEW_ATTR_DIM));
         return;
     }
-    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED)
+    if (yew_git_detect_state(ed) == YEW_GIT_ASYNC_FAILED) {
+        fuss_put_lit(&ed->grid, row, &col, right, title,
+                     fuss_cstr_len(title), style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_BOLD));
         return;
+    }
     snap = yew_git_snapshot(ed);
     if (snap == NULL || snap->gen == 0U) {
+        fuss_put_lit(&ed->grid, row, &col, right, title,
+                     fuss_cstr_len(title), style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_BOLD));
         fuss_put_lit(&ed->grid, row, &col, right, " · loading",
                      sizeof(" · loading") - 1U, style.fg, style.bg,
                      (u16)(style.attrs | YEW_ATTR_DIM));
         return;
     }
-    fuss_put_lit(&ed->grid, row, &col, right, " · ",
-                 sizeof(" · ") - 1U, style.fg, style.bg, style.attrs);
-    if (snap->branch != NULL)
-        fuss_put_lit(&ed->grid, row, &col, right, snap->branch,
-                     fuss_cstr_len(snap->branch), style.fg, style.bg,
-                     (u16)(style.attrs | YEW_ATTR_BOLD));
-    else
-        fuss_put_lit(&ed->grid, row, &col, right, "(detached)",
-                     sizeof("(detached)") - 1U, style.fg, style.bg,
-                     (u16)(style.attrs | YEW_ATTR_BOLD));
-    bytebuf_init(&counts);
-    bytebuf_printf(&counts, "  ↑%d ↓%d", snap->ahead < 0 ? 0 : snap->ahead,
-                   snap->behind < 0 ? 0 : snap->behind);
+    if (snap->ahead > 0 && snap->behind > 0)
+        (void)snprintf(suffix, sizeof(suffix), " ↑%d ↓%d",
+                       snap->ahead, snap->behind);
+    else if (snap->ahead > 0)
+        (void)snprintf(suffix, sizeof(suffix), " ↑%d", snap->ahead);
+    else if (snap->behind > 0)
+        (void)snprintf(suffix, sizeof(suffix), " ↓%d", snap->behind);
+    suffix_len = fuss_cstr_len(suffix);
     if (snap->state == YEW_GIT_MID_REBASE) {
+        int n;
+
         if (ed->fuss->rebase_step > 0 && ed->fuss->rebase_total > 0)
-            bytebuf_printf(&counts, "  REBASING %d/%d",
-                           ed->fuss->rebase_step,
-                           ed->fuss->rebase_total);
+            n = snprintf(suffix + suffix_len,
+                         sizeof(suffix) - suffix_len, " REBASING %d/%d",
+                         ed->fuss->rebase_step, ed->fuss->rebase_total);
         else
-            bytebuf_append(&counts, (const u8 *)"  REBASING",
-                           sizeof("  REBASING") - 1U);
+            n = snprintf(suffix + suffix_len,
+                         sizeof(suffix) - suffix_len, " REBASING");
+        if (n > 0 && (size_t)n < sizeof(suffix) - suffix_len)
+            suffix_len += (size_t)n;
     }
-    fuss_put_lit(&ed->grid, row, &col, right, (const char *)counts.data,
-                 counts.len, style.fg, style.bg, style.attrs);
-    bytebuf_free(&counts);
+    suffix_cells = yew_str_width((const u8 *)suffix, suffix_len, 1U);
+    if (suffix_cells < 0)
+        suffix_cells = 0;
+    prefix_right = right;
+    if ((u16)suffix_cells < (u16)(right - left))
+        prefix_right = (u16)(right - (u16)suffix_cells);
+    else if (suffix_cells != 0)
+        prefix_right = left;
+
+    branch = snap->branch == NULL ? "(detached)" : snap->branch;
+    branch_cells = yew_str_width((const u8 *)branch,
+                                 fuss_cstr_len(branch), 1U);
+    if (branch_cells < 0)
+        branch_cells = 0;
+    prefix_cells = (u16)(prefix_right - left);
+    title_right = prefix_right;
+    if (prefix_cells > 4U) {
+        u16 branch_budget = (u16)branch_cells;
+
+        if (branch_budget > (u16)(prefix_cells - 4U))
+            branch_budget = (u16)(prefix_cells - 4U);
+        title_right = (u16)(prefix_right - branch_budget - 3U);
+    }
+    col = left;
+    fuss_put_lit(&ed->grid, row, &col, title_right, title,
+                 fuss_cstr_len(title), style.fg, style.bg,
+                 (u16)(style.attrs | YEW_ATTR_BOLD));
+    if (title_right < prefix_right) {
+        fuss_put_lit(&ed->grid, row, &col, prefix_right, " · ",
+                     sizeof(" · ") - 1U, style.fg, style.bg,
+                     style.attrs);
+        fuss_put_lit(&ed->grid, row, &col, prefix_right, branch,
+                     fuss_cstr_len(branch), style.fg, style.bg,
+                     (u16)(style.attrs | YEW_ATTR_BOLD));
+    }
+    col = prefix_right;
+    fuss_put_lit(&ed->grid, row, &col, right, suffix, suffix_len,
+                 style.fg, style.bg, style.attrs);
 }
 
 static void fuss_marker(Ed *ed, u16 row, u16 *col, u16 right,

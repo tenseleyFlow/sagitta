@@ -3,9 +3,12 @@ size 80x24 alt=1 cursor=0,13 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
  l  1 anchorXlanguage_server item                                               
- l  1 lsp overlay two                                                           
- l  2 lsp overlay three                                                         
- l  3 lsp overlay four                                                          
+ l    lsp overlay two                                                           
+ l    lsp overlay three                                                         
+ l    lsp overlay four                                                          
+    1 real row two                                                              
+    2 real row three                                                            
+    3 real row four                                                             
     4 real row five                                                             
     5 real row six                                                              
     6 real row seven                                                            
@@ -22,15 +25,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
  I  pty-s14-s43_shadow_lsp_colors_16.txt *                   utf-8  lf  1:8  all
 --- style
-ABAACADDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ABAACADDDDDDDBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
@@ -111,6 +111,40 @@ E fg=idx:0 bg=idx:7 attrs=----------
 \x1b[0;2;37;40m
 \x1b[22m
 \x1b[2m
-\x1b[22;30;47m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22;90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[30;47m
 \x1b[37;40m
 \x1b[0;2;3;37;40m
+\x1b[22;23m
+\x1b[2;3m
+\x1b[22;23m
+\x1b[2;3m
+\x1b[22;23m

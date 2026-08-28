@@ -292,6 +292,8 @@ void test_tabs_reorder_remaps_the_active_position(void)
 void test_tabs_open_switches_when_the_path_is_already_open(void)
 {
     Ed ed;
+    Buffer *file;
+    Buffer *scratch;
     int first;
     int again;
 
@@ -299,12 +301,22 @@ void test_tabs_open_switches_when_the_path_is_already_open(void)
     first = yew_tab_open(&ed, "/tmp/yew-tab-dup.txt");
     YEW_ASSERT(first >= 0);
     YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    yew_tab_switch(&ed, first);
+    file = yew_ws_buf_by_id(&ed, yew_tab_at(&ed, first)->buffer_id);
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT(ed.win->buf == file);
+
+    scratch = yew_ws_scratch_new(&ed, "*tab-open-scratch*", 0U);
+    YEW_ASSERT_NOT_NULL(scratch);
+    YEW_ASSERT(yew_ed_show_buffer(&ed, scratch));
+    YEW_ASSERT(ed.win->buf == scratch);
 
     again = yew_tab_open(&ed, "/tmp/yew-tab-dup.txt");
     YEW_ASSERT_EQ_I64(again, first);
     /* No second tab, and it switched rather than opening. */
     YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
     YEW_ASSERT_EQ_I64(ed.tabs.active, first);
+    YEW_ASSERT(ed.win->buf == file);
     yew_ed_free(&ed);
 }
 
@@ -443,6 +455,33 @@ void test_tabs_modified_derives_from_undo_state(void)
     YEW_ASSERT(yew_redo(&ec));
     yew_ed_finish_edit(&ed, &ec);
     YEW_ASSERT(yew_tab_modified(&ed, 0));
+    yew_ed_free(&ed);
+}
+
+void test_tabs_quit_checks_the_active_buffer(void)
+{
+    Ed ed;
+    EditCtx ec;
+    Buffer *active;
+    int idx;
+
+    tb_fixture(&ed);
+    idx = yew_tab_open(&ed, NULL);
+    YEW_ASSERT(idx >= 0);
+    yew_tab_switch(&ed, idx);
+    active = yew_ed_doc(&ed);
+    YEW_ASSERT_NOT_NULL(active);
+    YEW_ASSERT(active != &ed.buffer);
+    YEW_ASSERT(!yew_buf_dirty(&ed.buffer));
+
+    ec = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"x", 1U));
+    yew_ed_finish_edit(&ed, &ec);
+    YEW_ASSERT(yew_buf_dirty(active));
+
+    YEW_ASSERT_EQ_U64(yew_ed_request_quit(&ed, false), YEW_CMD_OK);
+    YEW_ASSERT(!ed.quit);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_QUIT_DIRTY);
     yew_ed_free(&ed);
 }
 

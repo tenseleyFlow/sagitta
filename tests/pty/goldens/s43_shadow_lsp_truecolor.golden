@@ -3,9 +3,12 @@ size 80x24 alt=1 cursor=0,13 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
  l  1 anchorXlanguage_server item                                               
- l  1 lsp overlay two                                                           
- l  2 lsp overlay three                                                         
- l  3 lsp overlay four                                                          
+ l    lsp overlay two                                                           
+ l    lsp overlay three                                                         
+ l    lsp overlay four                                                          
+    1 real row two                                                              
+    2 real row three                                                            
+    3 real row four                                                             
     4 real row five                                                             
     5 real row six                                                              
     6 real row seven                                                            
@@ -22,15 +25,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
  I  pty-s14-s43_shadow_lsp_truecolor.txt *                   utf-8  lf  1:8  all
 --- style
-ABAACADDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ABAACADDDDDDDBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
@@ -111,6 +111,40 @@ E fg=#12141a bg=#98c379 attrs=----------
 \x1b[0;2;38;2;97;175;239;48;2;18;20;26m
 \x1b[22;38;2;200;204;212m
 \x1b[2;38;2;97;175;239m
-\x1b[22;38;2;18;20;26;48;2;152;195;121m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;18;20;26;48;2;152;195;121m
 \x1b[38;2;200;204;212;48;2;18;20;26m
 \x1b[0;2;3;38;2;198;120;221;48;2;18;20;26m
+\x1b[22;23;38;2;200;204;212m
+\x1b[2;3;38;2;198;120;221m
+\x1b[22;23;38;2;200;204;212m
+\x1b[2;3;38;2;198;120;221m
+\x1b[22;23;38;2;200;204;212m

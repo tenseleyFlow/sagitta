@@ -2,6 +2,7 @@
 
 #include "harness.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -320,6 +321,49 @@ static bool file_equals(const char *path, const u8 *bytes, size_t len)
         return false;
     }
     return close(fd) == 0;
+}
+
+static bool remove_test_tree(const char *path, u32 depth)
+{
+    DIR *dir;
+    struct dirent *entry;
+    bool ok = true;
+
+    if (path == NULL || depth > 16U)
+        return false;
+    dir = opendir(path);
+    if (dir == NULL)
+        return errno == ENOENT;
+    errno = 0;
+    while ((entry = readdir(dir)) != NULL) {
+        char child[PATH_MAX];
+        struct stat st;
+        int n;
+
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0)
+            continue;
+        n = snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
+        if (n <= 0 || (size_t)n >= sizeof(child) || lstat(child, &st) != 0) {
+            ok = false;
+            break;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            if (!remove_test_tree(child, depth + 1U)) {
+                ok = false;
+                break;
+            }
+        } else if (unlink(child) != 0) {
+            ok = false;
+            break;
+        }
+        errno = 0;
+    }
+    if (entry == NULL && errno != 0)
+        ok = false;
+    if (closedir(dir) != 0)
+        ok = false;
+    return ok && rmdir(path) == 0;
 }
 
 static bool fixture_path(PtyCtx *c, char *path, size_t cap)
@@ -6046,6 +6090,7 @@ static bool s50_optin_paths(PtyCtx *c, char *fixture, size_t fixture_cap,
     static const char workspace[] = "/tmp/yew-pty-ai-optin-workspace";
     char state[PATH_MAX];
     char state_yew[PATH_MAX];
+    char workspace_state[PATH_MAX];
     int nf;
     int nc;
     int nt;
@@ -6058,10 +6103,19 @@ static bool s50_optin_paths(PtyCtx *c, char *fixture, size_t fixture_cap,
     nc = snprintf(state, sizeof(state), "/tmp/yew-pty-ai-optin-xdg-%s",
                   c->test->name);
     nt = snprintf(state_yew, sizeof(state_yew), "%s/yew", state);
+    {
+        int nw = snprintf(workspace_state, sizeof(workspace_state),
+                          "%s/workspaces", state_yew);
+
+        if (nw <= 0 || (size_t)nw >= sizeof(workspace_state))
+            return false;
+    }
     if (nc <= 0 || (size_t)nc >= sizeof(state) || nt <= 0 ||
         (size_t)nt >= sizeof(state_yew) ||
         (mkdir(state, 0700) != 0 && errno != EEXIST) ||
         (mkdir(state_yew, 0700) != 0 && errno != EEXIST))
+        return false;
+    if (!remove_test_tree(workspace_state, 0U))
         return false;
     nc = snprintf(config, config_cap, "%s/init.fl", state_yew);
     nt = snprintf(trust, trust_cap, "%s/trust.fl", state_yew);
@@ -7152,6 +7206,16 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
     return !c->failed;
 }
 
+static void s52_select_path(PtyCtx *c, const char *path)
+{
+    ptc_keys(c, "/");
+    ptc_settle(c, 0);
+    ptc_bytes(c, path);
+    s52_wait_screen(c, "jump: modified");
+    ptc_keys(c, "enter");
+    ptc_settle(c, 0);
+}
+
 static void s52_finish(PtyCtx *c)
 {
     ptc_keys(c, "esc");
@@ -7227,7 +7291,6 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
 {
     Bytebuf viewer;
     VtCell *original_cells;
-    u32 i;
 
     bytebuf_init(&viewer);
     original_cells = calloc((size_t)c->vt.rows * c->vt.cols,
@@ -7238,10 +7301,7 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
     }
     if (!s52_open(c, original_cells))
         goto done;
-    for (i = 0U; i < 5U && !c->failed; i++) {
-        ptc_keys(c, "ctrl+down");
-        ptc_settle(c, 0);
-    }
+    s52_select_path(c, "modified");
     ptc_keys(c, "d");
     s52_wait_screen(c, "diff --git");
     ptc_check(c, !c->pty.reaped,
@@ -7300,14 +7360,9 @@ static void case_s52_fuss_loading(PtyCtx *c)
 
 static void case_s52_fuss_discard_confirm(PtyCtx *c)
 {
-    u32 i;
-
     if (!s52_open(c, NULL))
         return;
-    for (i = 0U; i < 5U && !c->failed; i++) {
-        ptc_keys(c, "ctrl+down");
-        ptc_settle(c, 0);
-    }
+    s52_select_path(c, "modified");
     ptc_keys(c, "x");
     s52_wait_screen(c, "type 'discard' to confirm");
     ptc_check(c, s52_screen_contains(&c->vt,
@@ -7339,8 +7394,9 @@ static void case_s52_fuss_status_rows(PtyCtx *c)
               "FUSS tree omitted the incoming row marker");
     ptc_check(c, s52_screen_contains(&c->vt, "↑1 ↓1"),
               "FUSS branch header omitted divergence counts");
-    ptc_keys(c, "T");
-    s52_wait_screen(c, "all-files tree enabled");
+    /* Sprint 56.5 made the workspace drawer all-files by default.  T now
+     * disables that view, so the old Sprint 52 setup chord selected the
+     * opposite state before checking ignored-file visibility. */
     ptc_keys(c, ".");
     s52_wait_screen(c, "hidden files shown");
     ptc_check(c, s52_screen_contains(&c->vt, "ignored.log"),

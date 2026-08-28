@@ -210,6 +210,9 @@ struct YewJob {
     i64 kill_at_ms; /* SIGTERM -> SIGKILL escalation deadline; 0 = none   */
     /* Mode (a): the scratch buffer output appends to. */
     struct Buffer *buf;
+    /* Stable id of the buffer that launched a focused output job.  The
+     * pointer may be freed while the child runs; ids are never reused. */
+    u32 origin_buf_id;
     bool follow_tail;
     bool collect_capped;
     bool framed_failed;

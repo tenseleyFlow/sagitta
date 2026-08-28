@@ -3,9 +3,12 @@ size 80x24 alt=1 cursor=0,13 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
  s  1 anchorXsymbol_index field                                                 
- s  1 index overlay two                                                         
- s  2 index overlay three                                                       
- s  3 index overlay four                                                        
+ s    index overlay two                                                         
+ s    index overlay three                                                       
+ s    index overlay four                                                        
+    1 real row two                                                              
+    2 real row three                                                            
+    3 real row four                                                             
     4 real row five                                                             
     5 real row six                                                              
     6 real row seven                                                            
@@ -22,15 +25,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
  I  pty-s14-s43_shadow_index_truecolor.txt *                 utf-8  lf  1:8  all
 --- style
-ABAACADDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ABAACADDDDDDDBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DBDDDDBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
@@ -111,5 +111,34 @@ E fg=#12141a bg=#98c379 attrs=----------
 \x1b[0;2;38;2;97;175;239;48;2;18;20;26m
 \x1b[22;38;2;200;204;212m
 \x1b[2;38;2;97;175;239m
-\x1b[22;38;2;18;20;26;48;2;152;195;121m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;200;204;212m
+\x1b[2;38;2;97;175;239m
+\x1b[22;38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;18;20;26;48;2;152;195;121m
 \x1b[38;2;200;204;212;48;2;18;20;26m

@@ -45,6 +45,25 @@ static void ed_syn_init(Buffer *b)
     yew_syn_buf_init(&b->syn);
 }
 
+static const char *ed_buffer_display_path(const Ed *ed, const Buffer *buffer)
+{
+    size_t i;
+
+    if (ed == NULL || buffer == NULL)
+        return "[no name]";
+    for (i = 0U; i < ed->tabs.v.len; i++) {
+        const Tab *tab = &ed->tabs.v.data[i];
+
+        if (tab->buffer_id == buffer->id) {
+            const char *path = yew_tab_display_path(tab);
+
+            if (path != NULL)
+                return path;
+        }
+    }
+    return buffer->path != NULL ? buffer->path : "[no name]";
+}
+
 static bool opt_string_is(const OptVal *value, const char *want)
 {
     size_t len = strlen(want);
@@ -423,6 +442,8 @@ int yew_buf_hydrate(Ed *ed, Buffer *b)
     yew_ed_syn_bind(b);
     b->undo = yew_undo_new(tb);
     yew_undo_mark_saved(b->undo);
+    b->recovery_pending = !ed->headless && b->meta.realpath != NULL &&
+                          yew_journal_probe(b->meta.realpath, &b->meta);
     if (b->marks == NULL)
         b->marks = yew_marks_new();
     /*
@@ -1756,7 +1777,7 @@ void yew_ed_prompt(Ed *ed, PromptKind prompt)
     {
         const Buffer *doc = yew_ed_doc(ed);
 
-        path = doc == NULL || doc->path == NULL ? "[no name]" : doc->path;
+        path = ed_buffer_display_path(ed, doc);
     }
     switch (prompt) {
     case YEW_PROMPT_NONE:
@@ -1823,7 +1844,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
      */
     if (doc->tb == NULL) {
         yew_msg(ed, YEW_MSG_ERROR, "%s was never loaded; nothing written",
-                doc->path);
+                ed_buffer_display_path(ed, doc));
         ed->quit_after_save = false;
         return YEW_CMD_ERR_STATE;
     }
@@ -1861,11 +1882,12 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
         else
             yew_msg(ed, YEW_MSG_ERROR,
                     "%s changed on disk; pass {force: true} to save",
-                    doc->path);
+                    ed_buffer_display_path(ed, doc));
         return YEW_CMD_ERR_IO;
     }
     if (!yew_save_committed(result)) {
-        yew_msg(ed, YEW_MSG_ERROR, "could not write %s", doc->path);
+        yew_msg(ed, YEW_MSG_ERROR, "could not write %s",
+                ed_buffer_display_path(ed, doc));
         ed->quit_after_save = false;
         return YEW_CMD_ERR_IO;
     }
@@ -1874,10 +1896,11 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
     lines = yew_textbuf_line_count(doc->tb);
     if (result == YEW_SAVE_BACKUP_FAILED)
         yew_msg(ed, YEW_MSG_WARN,
-                "wrote %s, but backup retention failed", doc->path);
+                "wrote %s, but backup retention failed",
+                ed_buffer_display_path(ed, doc));
     else
-        yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", doc->path,
-                (unsigned long long)lines);
+        yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines",
+                ed_buffer_display_path(ed, doc), (unsigned long long)lines);
     yew_lsp_buffer_save(ed, doc);
     yew_git_invalidate(ed);
     yew_symidx_workspace_replace(&ed->ws, doc);
@@ -2019,7 +2042,7 @@ CmdStatus yew_ed_request_quit(Ed *ed, bool force)
                 "crash journal failed; save or q! to discard changes");
         return YEW_CMD_ERR_IO;
     }
-    if (!force && yew_buf_dirty(&ed->buffer)) {
+    if (!force && yew_buf_dirty(yew_ed_doc(ed))) {
         yew_ed_prompt(ed, YEW_PROMPT_QUIT_DIRTY);
         return YEW_CMD_OK;
     }
@@ -2055,6 +2078,12 @@ static bool prompt_key(Ed *ed, Key key)
     }
 #endif
     if (code == YEW_KEY_ESCAPE) {
+        if (ed->prompt == YEW_PROMPT_RECOVER) {
+            Buffer *doc = yew_ed_doc(ed);
+
+            if (doc != NULL)
+                doc->recovery_pending = false;
+        }
         ed->quit_after_save = false;
         yew_ed_prompt(ed, YEW_PROMPT_NONE);
         return true;
@@ -2067,6 +2096,7 @@ static bool prompt_key(Ed *ed, Key key)
         bool recovered = yew_journal_replay_edit(doc->meta.realpath, &ec,
                                                  &doc->meta);
 
+        doc->recovery_pending = false;
         if (recovered)
             ec.jrnl = yew_journal_open(doc->meta.realpath, &doc->meta);
         yew_ed_finish_edit(ed, &ec);
@@ -2087,6 +2117,7 @@ static bool prompt_key(Ed *ed, Key key)
         bool discarded = yew_journal_discard_path(doc->meta.realpath,
                                                   &doc->meta);
 
+        doc->recovery_pending = false;
         yew_ed_prompt(ed, YEW_PROMPT_NONE);
         if (!discarded)
             yew_msg(ed, YEW_MSG_ERROR, "could not discard recovery journal");

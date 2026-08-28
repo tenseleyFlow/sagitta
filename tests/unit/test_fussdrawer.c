@@ -83,18 +83,37 @@ static void fussdrawer_click(Ed *ed, u16 col, u16 row)
 static bool fussdrawer_row_contains(const Grid *grid, u16 row,
                                     const char *needle)
 {
-    char text[81];
+    char text[81U * 8U + 1U];
+    size_t at = 0U;
     u16 col;
 
     if (grid == NULL || row >= grid->rows)
         return false;
-    for (col = 0U; col < grid->cols && col < sizeof(text) - 1U; col++) {
+    for (col = 0U; col < grid->cols && at < sizeof(text) - 1U; col++) {
         const Cell *cell = &grid->back[(size_t)row * grid->cols + col];
+        const char *bytes;
+        size_t len;
 
-        text[col] = cell->w != 0U && (cell->flags & CELL_INTERNED) == 0U &&
-                    cell->utf8[0] != 0U ? (char)cell->utf8[0] : ' ';
+        if (cell->w == 0U)
+            continue;
+        if ((cell->flags & CELL_INTERNED) != 0U) {
+            bytes = yew_intern_str(grid->gi, cell->id);
+            len = yew_intern_len(grid->gi, cell->id);
+        } else if (cell->utf8[0] != 0U) {
+            bytes = (const char *)cell->utf8;
+            len = strnlen(bytes, sizeof(cell->utf8));
+        } else {
+            bytes = " ";
+            len = 1U;
+        }
+        if (bytes == NULL)
+            continue;
+        if (len > sizeof(text) - 1U - at)
+            len = sizeof(text) - 1U - at;
+        (void)memcpy(text + at, bytes, len);
+        at += len;
     }
-    text[col] = '\0';
+    text[at] = '\0';
     return strstr(text, needle) != NULL;
 }
 
@@ -127,6 +146,31 @@ void test_fussdrawer_rect_uses_content_between_tabs_and_footer(void)
     YEW_ASSERT_EQ_U64(drawer.y, 2U);
     YEW_ASSERT_EQ_U64(drawer.w, 20U);
     YEW_ASSERT_EQ_U64(drawer.h, 26U);
+}
+
+void test_fussdrawer_header_preserves_divergence_in_compact_width(void)
+{
+    FussDrawerFix fix;
+    GitSnapshot *snap;
+    Ed ed;
+
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    fussdrawer_grid(&ed);
+    snap = yew_git_test_snapshot_mut(&ed);
+    YEW_ASSERT_NOT_NULL(snap);
+    snap->gen = 1U;
+    snap->taken_ms = yew_now_ms();
+    snap->state = YEW_GIT_OK;
+    snap->branch = (char *)"trunk";
+    snap->upstream = (char *)"origin/trunk";
+    snap->ahead = 1;
+    snap->behind = 1;
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 1U, "↑1 ↓1"));
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
 }
 
 void test_fussdrawer_entry_leave_preserves_live_pane_identity(void)
@@ -221,7 +265,7 @@ void test_fussdrawer_preview_preserves_the_live_view_exactly(void)
     YEW_ASSERT(yew_ed_open_memory(&ed, original, sizeof(original) - 1U,
                                   "live.txt"));
     ed.ws.dir = arena_strdup(&ed.arena, fix.root);
-    ed.win->rect = (Rect){0U, 0U, 80U, 24U};
+    fussdrawer_grid(&ed);
     ed.win->vp.cols = 80U;
     ed.win->vp.rows = 24U;
     ed.win->vp.top = LINENO(1U);
@@ -238,6 +282,7 @@ void test_fussdrawer_preview_preserves_the_live_view_exactly(void)
     cx.source = YEW_SRC_TEST;
     YEW_ASSERT_EQ_I64(yew_fuss_cmd_view(&cx), YEW_CMD_OK);
     YEW_ASSERT(ed.win->panel.open);
+    YEW_ASSERT(ed.win->panel.rect.x >= yew_fuss_drawer_rect(&ed).w);
     YEW_ASSERT_EQ_U64(ed.win->buf, buffer);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
     YEW_ASSERT_EQ_MEM(&ed.win->vp, &viewport, sizeof(viewport));
