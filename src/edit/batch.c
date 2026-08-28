@@ -23,6 +23,7 @@
 #include "fl/trace.h"
 #include "fl/value.h"
 #include "fl/vm.h"
+#include "mod/mods.h"
 #include "mod/plug/plug.h"
 #include "text/file.h"
 #include "text/journal.h"
@@ -639,7 +640,10 @@ int yew_batch_run(const BatchOpts *opts)
     }
 #else
     if (opts->ngrants != 0U) {
-        (void)fputs(yew_plug_module_error, stderr);
+        char err[160];
+
+        (void)yew_mod_require(YEW_MOD_PLUGINS, err, sizeof(err));
+        (void)fprintf(stderr, "%s\n", err);
         result = YEW_EXIT_ERR;
         goto done;
     }

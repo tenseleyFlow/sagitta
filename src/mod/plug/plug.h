@@ -11,13 +11,6 @@
 #include "util/base.h"
 
 /*
- * Keep the stripped-build diagnostic here so every plugin command-line
- * implementation has one byte-exact source of truth.
- */
-static const char yew_plug_module_error[] =
-    "yew: error: built without plugin support (MODULES=plugins)\n";
-
-/*
  * Plugins are Fletch running in the same VM, same process, same address
  * space as your editor.  There is no memory isolation and no resource
  * isolation: an enabled plugin can read any open buffer, burn CPU, or

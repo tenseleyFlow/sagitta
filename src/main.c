@@ -141,7 +141,10 @@ static int run_driver(const YewArgs *args)
 
 #if !YEW_WITH_PLUGINS
         if (args->ngrants != 0U) {
-            (void)fputs(yew_plug_module_error, stderr);
+            char err[160];
+
+            (void)yew_mod_require(YEW_MOD_PLUGINS, err, sizeof(err));
+            (void)fprintf(stderr, "%s\n", err);
             return YEW_EXIT_ERR;
         }
 #endif

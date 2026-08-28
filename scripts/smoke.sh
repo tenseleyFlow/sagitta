@@ -174,7 +174,7 @@ case " $smoke_modules " in
         expect_rc 1 "stripped plugin command"
         [ ! -s "$out" ] || fail "stripped plugin command wrote stdout"
         printf '%s\n' \
-            'yew: error: built without plugin support (MODULES=plugins)' \
+            'this build has no plugins module; rebuild with '\''make MODULES="… plugins"'\''' \
             >"$tmp/plugin-error.expected"
         cmp -s "$err" "$tmp/plugin-error.expected" || \
             fail "stripped plugin command diagnostic"
@@ -195,7 +195,7 @@ case " $smoke_modules " in
         expect_rc 1 "stripped pkg command"
         [ ! -s "$out" ] || fail "stripped pkg command wrote stdout"
         printf '%s\n' \
-            'yew: error: built without plugin support (MODULES=plugins)' \
+            'this build has no plugins module; rebuild with '\''make MODULES="… plugins"'\''' \
             >"$tmp/pkg-error.expected"
         cmp -s "$err" "$tmp/pkg-error.expected" || \
             fail "stripped pkg command diagnostic"
@@ -363,7 +363,7 @@ case " $smoke_modules " in
         expect_rc 1 "stripped batch plugin grant"
         [ ! -s "$out" ] || fail "stripped batch plugin grant stdout"
         printf '%s\n' \
-            'yew: error: built without plugin support (MODULES=plugins)' \
+            'this build has no plugins module; rebuild with '\''make MODULES="… plugins"'\''' \
             >"$tmp/plugin-grant-error.expected"
         cmp -s "$err" "$tmp/plugin-grant-error.expected" || \
             fail "stripped batch plugin grant diagnostic"
