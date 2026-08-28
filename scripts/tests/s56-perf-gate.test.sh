@@ -18,6 +18,8 @@ latency.typing.small.p99 le 10000000 ns calibrated designated latency
 latency.any.max record - ns raw informational diagnose_long_tail
 latency.typing.no_paint_fraction record - permille none informational expected_noops
 latency.typing.frames le 10000 frames_per_10000_keys none all frames
+latency.prof_external_delta le 250 permille none all profiler_crosscheck
+latency.prof_overhead le 150 permille none designated profiler_overhead
 startup.spawn_floor_fraction le 300 permille none all harness_sanity
 search.literal_early.1g_code le 20000000 ns calibrated designated first_match
 EOF
@@ -31,6 +33,7 @@ write_baseline()
 # calib scale_permille=1000 c1=100 c2=200 c3=300
 # metric p50_ns p99_ns max_ns rss_bytes why
 latency.typing.small.p99 3000000 $value 5000000 0 measured_runner_evidence
+latency.prof_overhead 69 69 69 0 measured_profiler_evidence
 legacy.scalar 42 preserved_scalar_reason
 EOF
 }
@@ -47,6 +50,8 @@ latency.typing.small.p99 $value ns ADVISORY
 latency.typing.small.max $((value + 1000)) ns
 latency.typing.small.no_paint 10 permille=25
 latency.typing.small.frames $frames keys=$keys
+latency.prof.typing.small.external_delta 42 permille OK
+latency.prof.typing.small.overhead 69 permille ADVISORY
 startup.spawn_floor_fraction value_permille=$fraction verdict=PASS
 search.literal_early.1g_code value_ns=$((value + 2000)) verdict=ADVISORY
 EOF

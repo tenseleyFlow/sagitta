@@ -248,7 +248,7 @@ FILENAME != ARGV[1] && FILENAME != ARGV[2] {
         split($i, p, "=")
         if (p[1] == "value_ns" || p[1] == "value_bytes" ||
             p[1] == "value_permille" || p[1] == "share_permille") value = p[2]
-        else if (p[1] == "permille") value = p[2]
+        else if (p[1] == "permille" && number(p[2])) value = p[2]
         else if (p[1] == "fps_milli") value = int((p[2] + 0) / 1000)
     }
     if (metric in budget && expected(metric))
