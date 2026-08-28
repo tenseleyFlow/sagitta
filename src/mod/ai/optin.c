@@ -82,7 +82,7 @@ static void optin_open_scope(YewAiOptin *optin)
                 "  [a] every workspace\n"
                 "  [o] this session only\n"
                 "Choice [w/a/o]:",
-                yew_ws_root(optin->ed));
+                yew_ws_display_root(optin->ed));
 }
 
 static void optin_open_session_fallback(YewAiOptin *optin)

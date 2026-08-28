@@ -78,6 +78,9 @@ typedef enum YewStartKind {
 typedef struct YewStartPlan {
     YewStartKind kind;
     char workspace[PATH_MAX];
+    /* User-facing spelling; workspace remains the canonical identity used
+     * for state, trust, jobs, and every filesystem operation. */
+    char workspace_display[PATH_MAX];
     const char *const *files;
     size_t nfiles;
     bool enter_fuss;
@@ -115,6 +118,7 @@ typedef struct Workspace {
     u32 cap;
     u32 next_buf_id;
     char *dir;
+    char *display_dir;
     SymIndex sym_ws;
     Vec_SymBufIndex sym_buf;
     Vec_SymHit sym_query;
@@ -332,6 +336,7 @@ int yew_ed_driver_opts(const char *path, const YewEdStartup *startup);
 int yew_ed_driver_files_opts(const char *const *paths, size_t npaths,
                              const YewEdStartup *startup);
 const char *yew_ws_root(const Ed *ed);
+const char *yew_ws_display_root(const Ed *ed);
 
 bool yew_buf_dirty(const Buffer *b);
 bool yew_buf_readonly(const Buffer *b);

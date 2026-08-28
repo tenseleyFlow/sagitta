@@ -162,6 +162,11 @@ static char *logical_path(const Ed *ed, const char *path,
             canonical[root_len] == '/' && canonical[root_len + 1U] != '\0')
             return yew_xstrdup(canonical + root_len + 1U);
     }
+    /* Canonical identity must follow aliases; UI text must not silently
+     * rewrite the absolute spelling the user supplied (notably Darwin's
+     * /tmp -> /private/tmp alias). */
+    if (path != NULL && path[0] == '/')
+        return yew_xstrdup(path);
     if (path != NULL && path[0] != '\0' && path[0] != '/') {
         while (path[0] == '.' && path[1] == '/')
             path += 2U;

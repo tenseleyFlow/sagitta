@@ -745,6 +745,8 @@ void yew_ed_init(Ed *ed)
     if (root == NULL)
         root = yew_xgetcwd();
     ed->ws.dir = arena_strdup(&ed->arena, root == NULL ? "." : root);
+    ed->ws.display_dir = arena_strdup(&ed->arena,
+                                       root == NULL ? "." : root);
     yew_xfree(root);
     fl_origin_reg_init(&ed->origins);
     fl_h_table_init(&ed->handles);
@@ -779,7 +781,16 @@ const char *yew_ws_root(const Ed *ed)
     return ed == NULL || ed->ws.dir == NULL ? "." : ed->ws.dir;
 }
 
-bool yew_ed_set_workspace_root(Ed *ed, const char *dir)
+const char *yew_ws_display_root(const Ed *ed)
+{
+    if (ed == NULL)
+        return ".";
+    return ed->ws.display_dir != NULL ? ed->ws.display_dir :
+           yew_ws_root(ed);
+}
+
+static bool ed_set_workspace_roots(Ed *ed, const char *dir,
+                                   const char *display_dir)
 {
     char *root;
     struct stat st;
@@ -791,8 +802,16 @@ bool yew_ed_set_workspace_root(Ed *ed, const char *dir)
     if (root == NULL)
         return false;
     ed->ws.dir = arena_strdup(&ed->arena, root);
+    ed->ws.display_dir = arena_strdup(
+        &ed->arena,
+        display_dir != NULL && display_dir[0] != '\0' ? display_dir : root);
     yew_xfree(root);
-    return true;
+    return ed->ws.dir != NULL && ed->ws.display_dir != NULL;
+}
+
+bool yew_ed_set_workspace_root(Ed *ed, const char *dir)
+{
+    return ed_set_workspace_roots(ed, dir, dir);
 }
 
 void yew_ed_free(Ed *ed)
@@ -2571,6 +2590,9 @@ bool yew_start_plan_resolve(YewStartPlan *out,
         }
         return false;
     }
+    (void)snprintf(out->workspace_display,
+                   sizeof(out->workspace_display), "%s",
+                   workspace_dir != NULL ? workspace_dir : out->workspace);
     for (i = 0U; i < npaths; i++) {
         struct stat st;
 
@@ -2597,6 +2619,9 @@ bool yew_start_plan_resolve(YewStartPlan *out,
             }
             return false;
         }
+        (void)snprintf(out->workspace_display,
+                       sizeof(out->workspace_display), "%s",
+                       paths[directory]);
         out->kind = YEW_START_DIRECTORY;
         out->enter_fuss = true;
         return true;
@@ -2638,7 +2663,8 @@ static int ed_driver_inner(const YewStartPlan *plan,
     u16 cols;
 
     yew_ed_init(&ed);
-    if (!yew_ed_set_workspace_root(&ed, plan->workspace)) {
+    if (!ed_set_workspace_roots(&ed, plan->workspace,
+                                plan->workspace_display)) {
         (void)fprintf(stderr,
                       "yew: error: workspace is not a directory: %s\n",
                       plan->workspace);

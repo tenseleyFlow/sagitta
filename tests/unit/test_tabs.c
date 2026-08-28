@@ -384,6 +384,14 @@ void test_tabs_display_path_preserves_workspace_spelling(void)
         YEW_ASSERT_EQ_STR(yew_tab_display_path(tab), "linked/note.txt");
     }
 
+    yew_tab_set_path(&ed, idx, file_path);
+    if (idx >= 0) {
+        const Tab *tab = yew_tab_at(&ed, idx);
+
+        YEW_ASSERT_EQ_STR(tab->path, file_path);
+        YEW_ASSERT_EQ_STR(yew_tab_display_path(tab), file_path);
+    }
+
     yew_ed_free(&ed);
     (void)unlink(link_path);
     (void)unlink(file_path);

@@ -42,6 +42,7 @@ static struct {
     bool edit_mode;
     GpResult result;
     char dir[YEW_GP_PATH_MAX];
+    char display_dir[YEW_GP_PATH_MAX];
     char name[YEW_GP_NAME_MAX];
     /*
      * THE TICKS.  Keys are canonical paths; the value is unused.  A
@@ -142,6 +143,42 @@ static void gp_join(const char *dir, const char *name, char *out,
      * that names a different file — it becomes no path at all. */
     if (written < 0 || (size_t)written >= cap)
         out[0] = '\0';
+}
+
+static void gp_parent(const char *dir, char *out, size_t cap)
+{
+    size_t end;
+    size_t base;
+
+    if (dir == NULL || dir[0] == '\0' || cap == 0U)
+        return;
+    out[0] = '\0';
+    end = strlen(dir);
+    while (end > 1U && dir[end - 1U] == '/')
+        end--;
+    base = end;
+    while (base > 0U && dir[base - 1U] != '/')
+        base--;
+    if (base == 0U) {
+        if (strcmp(dir, ".") == 0)
+            (void)snprintf(out, cap, "..");
+        else if (strcmp(dir, "..") == 0 ||
+                 strncmp(dir, "../", 3U) == 0)
+            gp_join(dir, "..", out, cap);
+        else
+            (void)snprintf(out, cap, ".");
+    } else if (base == 1U) {
+        (void)snprintf(out, cap, "/");
+    } else {
+        size_t len = base - 1U;
+
+        if (len >= cap) {
+            out[0] = '\0';
+            return;
+        }
+        (void)memcpy(out, dir, len);
+        out[len] = '\0';
+    }
 }
 
 static bool gp_is_ticked(const char *path)
@@ -302,14 +339,20 @@ static void gp_list_dir(void)
     }
 }
 
-static void gp_walk_to(const char *dir)
+static void gp_walk_to(const char *dir, const char *display_dir)
 {
     char canon[YEW_GP_PATH_MAX];
+    int written;
 
     gp_canonical(dir, canon, sizeof(canon));
     if (canon[0] == '\0')
         return;
     (void)snprintf(gp.dir, sizeof(gp.dir), "%s", canon);
+    written = snprintf(gp.display_dir, sizeof(gp.display_dir), "%s",
+                       display_dir != NULL && display_dir[0] != '\0' ?
+                           display_dir : canon);
+    if (written < 0 || (size_t)written >= sizeof(gp.display_dir))
+        (void)snprintf(gp.display_dir, sizeof(gp.display_dir), "%s", canon);
     /* The ticks survive: they are paths, and this only changed which
      * ones happen to be on screen. */
     gp_list_dir();
@@ -361,11 +404,14 @@ static bool gp_open(Ed *ed, const char *dir, const char *name, bool edit)
     gp.result = YEW_GP_PENDING;
     gp.on_name = false;
     gp.note[0] = '\0';
-    gp_walk_to(dir != NULL && dir[0] != '\0' ? dir : yew_ws_root(ed));
+    if (dir != NULL && dir[0] != '\0')
+        gp_walk_to(dir, dir);
+    else
+        gp_walk_to(yew_ws_root(ed), yew_ws_display_root(ed));
     if (name != NULL && name[0] != '\0')
         (void)snprintf(gp.name, sizeof(gp.name), "%s", name);
     else
-        gp_default_name(gp.dir, gp.name, sizeof(gp.name));
+        gp_default_name(gp.display_dir, gp.name, sizeof(gp.name));
     ed->full_damage = true;
     return true;
 }
@@ -484,14 +530,17 @@ void yew_gp_scroll(Ed *ed, int rows)
 static void gp_enter_row(Ed *ed, const GpRow *r)
 {
     char full[YEW_GP_PATH_MAX];
+    char display[YEW_GP_PATH_MAX];
 
     if (r->is_parent) {
         gp_join(gp.dir, "..", full, sizeof(full));
-        gp_walk_to(full);
+        gp_parent(gp.display_dir, display, sizeof(display));
+        gp_walk_to(full, display);
         return;
     }
     gp_join(gp.dir, r->name, full, sizeof(full));
-    gp_walk_to(full);
+    gp_join(gp.display_dir, r->name, display, sizeof(display));
+    gp_walk_to(full, display);
     (void)ed;
 }
 
@@ -591,9 +640,11 @@ bool yew_gp_key(Ed *ed, Key key)
     }
     if (key.code == YEW_KEY_LEFT) {
         char full[YEW_GP_PATH_MAX];
+        char display[YEW_GP_PATH_MAX];
 
         gp_join(gp.dir, "..", full, sizeof(full));
-        gp_walk_to(full);
+        gp_parent(gp.display_dir, display, sizeof(display));
+        gp_walk_to(full, display);
         return true;
     }
     r = gp.cursor >= 0 && gp.cursor < gp.n_rows ? &gp.rows[gp.cursor]
@@ -697,10 +748,11 @@ void yew_gp_draw(Ed *ed)
         size_t fit;
         int cells = 0;
 
-        fit = yew_str_clip((const u8 *)gp.dir, strlen(gp.dir),
+        fit = yew_str_clip((const u8 *)gp.display_dir,
+                           strlen(gp.display_dir),
                            w > 1U ? (int)(w - 1U) : 0, &cells);
         (void)yew_grid_puts(&ed->grid, (u16)(y0 + 2U), (u16)(x0 + 1U),
-                            (const u8 *)gp.dir, fit, dim, bg,
+                            (const u8 *)gp.display_dir, fit, dim, bg,
                             YEW_ATTR_DIM);
     }
 

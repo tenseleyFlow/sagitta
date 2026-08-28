@@ -27,6 +27,7 @@ static void start_fix_make(StartFix *f)
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->dir));
     dir = mkdtemp(f->dir);
     YEW_ASSERT_NOT_NULL(dir);
+    YEW_ASSERT(yew_test_canonicalize_path(f->dir, sizeof(f->dir)));
     n = snprintf(f->link, sizeof(f->link), "%s-link", dir);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->link));
     YEW_ASSERT_EQ_I64(symlink(dir, f->link), 0);
@@ -52,6 +53,7 @@ void test_startup_plan_resolves_resume_files_and_explicit_workspace(void)
                                       error, sizeof(error)));
     YEW_ASSERT_EQ_U64(plan.kind, YEW_START_RESUME);
     YEW_ASSERT_EQ_STR(plan.workspace, cwd);
+    YEW_ASSERT_EQ_STR(plan.workspace_display, cwd);
     YEW_ASSERT_NULL(plan.files);
     YEW_ASSERT_EQ_U64(plan.nfiles, 0U);
     YEW_ASSERT(!plan.enter_fuss);
@@ -62,12 +64,14 @@ void test_startup_plan_resolves_resume_files_and_explicit_workspace(void)
     YEW_ASSERT(plan.files == files);
     YEW_ASSERT_EQ_U64(plan.nfiles, 2U);
     YEW_ASSERT_EQ_STR(plan.workspace, cwd);
+    YEW_ASSERT_EQ_STR(plan.workspace_display, cwd);
     YEW_ASSERT(!plan.enter_fuss);
 
     YEW_ASSERT(yew_start_plan_resolve(&plan, files, 2U, f.link,
                                       error, sizeof(error)));
     YEW_ASSERT_EQ_U64(plan.kind, YEW_START_FILES);
     YEW_ASSERT_EQ_STR(plan.workspace, f.dir);
+    YEW_ASSERT_EQ_STR(plan.workspace_display, f.link);
     YEW_ASSERT(plan.files == files);
     YEW_ASSERT_EQ_U64(plan.nfiles, 2U);
     start_fix_remove(&f);
@@ -92,6 +96,7 @@ void test_startup_plan_canonicalizes_directory_and_symlink_launches(void)
                                       error, sizeof(error)));
     YEW_ASSERT_EQ_U64(plan.kind, YEW_START_DIRECTORY);
     YEW_ASSERT_EQ_STR(plan.workspace, f.dir);
+    YEW_ASSERT_EQ_STR(plan.workspace_display, dotted);
     YEW_ASSERT_NULL(plan.files);
     YEW_ASSERT_EQ_U64(plan.nfiles, 0U);
     YEW_ASSERT(plan.enter_fuss);
@@ -101,6 +106,7 @@ void test_startup_plan_canonicalizes_directory_and_symlink_launches(void)
                                       error, sizeof(error)));
     YEW_ASSERT_EQ_U64(plan.kind, YEW_START_DIRECTORY);
     YEW_ASSERT_EQ_STR(plan.workspace, f.dir);
+    YEW_ASSERT_EQ_STR(plan.workspace_display, f.link);
     YEW_ASSERT(plan.enter_fuss);
     start_fix_remove(&f);
 }

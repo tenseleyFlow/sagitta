@@ -6230,7 +6230,8 @@ static bool s50_optin_open(PtyCtx *c, char *fixture, size_t fixture_cap,
         saved_state = c->state_dir;
         c->state_dir = stable_state;
         ptc_set_cwd(c, workspace);
-        ptc_spawn(c, ptc_yew_bin(c), "ai-optin.txt", NULL);
+        ptc_spawn(c, ptc_yew_bin(c), "--workspace", workspace,
+                  "ai-optin.txt", NULL);
         ptc_set_cwd(c, c->workspace_dir);
         c->state_dir = saved_state;
     }
