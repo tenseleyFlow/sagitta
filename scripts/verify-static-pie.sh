@@ -76,8 +76,21 @@ set +e
 ldd_out=$($ldd_cmd "$binary" 2>&1)
 ldd_status=$?
 set -e
-if ! printf '%s\n' "$ldd_out" |
-     grep -E '(not a dynamic executable|statically linked)' >/dev/null; then
+ldd_is_static=false
+if printf '%s\n' "$ldd_out" |
+   grep -E '(not a dynamic executable|statically linked)' >/dev/null; then
+    ldd_is_static=true
+elif [ "$(printf '%s\n' "$ldd_out" | awk 'NF { count++ }
+              END { print count + 0 }')" -eq 1 ] &&
+     printf '%s\n' "$ldd_out" |
+     grep -E '^[[:space:]]*/lib/ld-musl-x86_64\.so\.1[[:space:]]+\(0x[[:xdigit:]]+\)[[:space:]]*$' \
+         >/dev/null; then
+    # Alpine's musl ldd reports its loader as the sole row for a valid static
+    # PIE.  NEEDED and undefined-symbol checks above remain the dependency
+    # proof, rather than assigning dynamic-link meaning to this display row.
+    ldd_is_static=true
+fi
+if [ "$ldd_is_static" != true ]; then
     fail "$ldd_cmd did not report a static executable (status $ldd_status)"
 fi
 

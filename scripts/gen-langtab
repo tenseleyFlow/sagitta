@@ -141,7 +141,10 @@ function nexttok(    c,start) {
         if (TV == "-") die("expected digits after minus")
         TK = "INT"; return
     }
-    if (c ~ /[{}\[\]:,]/) { TK = take(); TV = TK; return }
+    if (c == "{" || c == "}" || c == "[" || c == "]" ||
+        c == ":" || c == ",") {
+        TK = take(); TV = TK; return
+    }
     die("unexpected byte in pure-literal input")
 }
 
@@ -273,7 +276,7 @@ function cstr(s,    out,i,c,n) {
 }
 
 function emit_array(i, id, kind,    n,j) {
-    n = META[i, "n" kind]
+    n = META[i, "n" kind] + 0
     if (n == 0) return
     printf "static const char *const lang_%d_%s[] = {\n", id, kind
     for (j = 1; j <= n; j++)
@@ -333,7 +336,7 @@ function sort_detect(kind,    n,i,j,key,lang) {
 }
 
 function emit_detect(kind, symbol,    n,i) {
-    n = DET[kind, "n"]
+    n = DET[kind, "n"] + 0
     if (n == 0) return
     printf "static const SynDetectEntry %s[] = {\n", symbol
     for (i = 1; i <= n; i++) {

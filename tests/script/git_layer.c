@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -87,6 +88,87 @@ static bool read_all(int fd, Bytes *out)
         if (!bytes_append(out, buf, (size_t)got))
             return false;
     }
+}
+
+static bool remove_tree_fd(int dirfd)
+{
+    int scanfd;
+    DIR *dir;
+    struct dirent *entry;
+    bool ok = true;
+
+    scanfd = dup(dirfd);
+    if (scanfd < 0)
+        return false;
+    dir = fdopendir(scanfd);
+    if (dir == NULL) {
+        (void)close(scanfd);
+        return false;
+    }
+    errno = 0;
+    while ((entry = readdir(dir)) != NULL) {
+        struct stat st;
+
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0)
+            continue;
+        if (fstatat(dirfd, entry->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
+            ok = false;
+            break;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            int child = openat(dirfd, entry->d_name,
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW |
+                                   O_CLOEXEC);
+
+            if (child < 0 || !remove_tree_fd(child)) {
+                if (child >= 0)
+                    (void)close(child);
+                ok = false;
+                break;
+            }
+            if (close(child) != 0 ||
+                unlinkat(dirfd, entry->d_name, AT_REMOVEDIR) != 0) {
+                ok = false;
+                break;
+            }
+        } else if (unlinkat(dirfd, entry->d_name, 0) != 0) {
+            ok = false;
+            break;
+        }
+        errno = 0;
+    }
+    if (ok && errno != 0)
+        ok = false;
+    if (closedir(dir) != 0)
+        ok = false;
+    return ok;
+}
+
+static bool remove_long_path(const char *repo)
+{
+    int repofd;
+    int pathfd;
+    bool ok;
+
+    repofd = open(repo, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (repofd < 0)
+        return false;
+    pathfd = openat(repofd, "long-path",
+                    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (pathfd < 0) {
+        ok = errno == ENOENT;
+        (void)close(repofd);
+        return ok;
+    }
+    ok = remove_tree_fd(pathfd);
+    if (close(pathfd) != 0)
+        ok = false;
+    if (ok && unlinkat(repofd, "long-path", AT_REMOVEDIR) != 0)
+        ok = false;
+    if (close(repofd) != 0)
+        ok = false;
+    return ok;
 }
 
 static bool run_git(const char *repo, char *const *tail, Bytes *out)
@@ -809,6 +891,7 @@ int main(int argc, char **argv)
     check_info_mid_states(argv[1]);
     check_ignore_compaction(argv[1]);
     check_spawn_env(argv[1]);
+    CHECK(remove_long_path(argv[1]));
     if (failures != 0U) {
         (void)fprintf(stderr, "git_layer: %u/%u checks failed\n",
                       failures, assertions);

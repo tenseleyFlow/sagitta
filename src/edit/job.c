@@ -3,6 +3,7 @@
  * Every descriptor here is close-on-exec at creation via
  * yew_pipe_cloexec(), so an fd cannot leak into a concurrently spawned
  * job (or, once LSP and AI land, into a long-lived server). */
+#define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
 
 #include "edit/job.h"

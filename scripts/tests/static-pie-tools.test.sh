@@ -63,8 +63,11 @@ if [ "${FAKE_CASE:-}" = ldd-dynamic ]; then
     echo 'libc.so => /lib/libc.so'
     exit 0
 fi
-echo 'not a dynamic executable' >&2
-exit 1
+if [ "${FAKE_CASE:-}" = ldd-glibc-static ]; then
+    echo 'not a dynamic executable' >&2
+    exit 1
+fi
+printf '\t/lib/ld-musl-x86_64.so.1 (0x7f0000000000)\n'
 EOF
 chmod +x "$scratch/bin/file" "$scratch/bin/readelf" \
     "$scratch/bin/nm" "$scratch/bin/ldd"
@@ -79,6 +82,9 @@ verify()
 verify >"$scratch/ok"
 grep -F 'static-pie verify: ok' "$scratch/ok" >/dev/null ||
     fail 'valid static PIE did not pass'
+FAKE_CASE=ldd-glibc-static verify >"$scratch/ok-glibc"
+grep -F 'static-pie verify: ok' "$scratch/ok-glibc" >/dev/null ||
+    fail 'glibc static ldd form did not pass'
 
 for case_name in file-dynamic exec-type needed undefined execstack no-relro \
                  ldd-dynamic; do

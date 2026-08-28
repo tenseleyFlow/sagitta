@@ -409,9 +409,10 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
     if (p->at >= p->len)
         return false;
     if (isdigit((unsigned char)p->line[p->at])) {
-        u64 display;
+        u64 display = 0U;
 
-        (void)parse_u64(p->line, p->len, &p->at, &display);
+        if (!parse_u64(p->line, p->len, &p->at, &display))
+            return false;
         line = display == 0U ? -1 :
                display > (u64)INT64_MAX ? INT64_MAX :
                (i64)(display - 1U);

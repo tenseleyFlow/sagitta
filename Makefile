@@ -341,7 +341,40 @@ CFLAGS  += -DYEW_ASAN_RUNTIME='"$(ASAN_RT)"'
 endif
 endif
 
-UNIT_RUN := $(BUILD)/unit_tests
+UNIT_HOME := $(abspath $(BUILD)/tmp/home)
+UNIT_STATE_HOME := $(abspath $(BUILD)/tmp/state)
+UNIT_RUNTIME_PREP := mkdir -p '$(UNIT_HOME)' '$(UNIT_STATE_HOME)' &&
+UNIT_RUNTIME_ENV := HOME='$(UNIT_HOME)' \
+                    TMPDIR='$(abspath $(BUILD)/tmp)' \
+                    XDG_STATE_HOME='$(UNIT_STATE_HOME)' \
+                    YEW_RUNTIME_DIR='$(abspath runtime)'
+MUSL_UNIT_EXCLUDES :=
+MUSL_UNIT_PREP :=
+ifeq ($(TARGET),x86_64-linux-musl)
+# A static PIE has no dynamic loader with which to interpose faultshim.so.
+# The same four contracts remain mandatory in the glibc, sanitizer, and
+# valgrind lanes; make the musl omission named rather than silently passing.
+MUSL_UNIT_EXCLUDES := \
+  --exclude multicursor_200_insert_is_one_undo_and_one_journal_sync \
+  --exclude save_fault_shim_contract \
+  --exclude ws_save_write_is_atomic_in_order \
+  --exclude ws_save_survives_kill9_at_every_step
+MUSL_UNIT_PREP := \
+  printf '%s\n' \
+    'SKIP multicursor_200_insert_is_one_undo_and_one_journal_sync: static PIE cannot load the LD_PRELOAD fault shim' \
+    'SKIP save_fault_shim_contract: static PIE cannot load the LD_PRELOAD fault shim' \
+    'SKIP ws_save_write_is_atomic_in_order: static PIE cannot load the LD_PRELOAD fault shim' \
+    'SKIP ws_save_survives_kill9_at_every_step: static PIE cannot load the LD_PRELOAD fault shim' &&
+endif
+UNIT_RUN := $(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
+            $(BUILD)/unit_tests $(MUSL_UNIT_EXCLUDES)
+ifeq ($(TARGET),x86_64-linux-musl)
+TORTURE_LIVE_GATE = @printf '%s\n' \
+  'SKIP torture-live-check: static PIE cannot load the LD_PRELOAD fault shim'
+else
+TORTURE_LIVE_GATE = $(MAKE) --no-print-directory torture-live-check \
+  BUILD=$(BUILD) CC=$(CC) SAN=$(SAN) VALGRIND=$(VALGRIND)
+endif
 # Deferred (=, not :=) so the PTY budgets resolve at USE time, after the
 # VALGRIND/else branches below have chosen their values.  Without these
 # prefixes the plain lanes silently inherit runner.c's fallbacks.
@@ -392,9 +425,11 @@ VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
                  --child-silent-after-fork=yes
 VALGRIND_TRACE_SKIP := \
     --trace-children-skip='/bin/*,/usr/bin/*,/usr/lib/*,/sbin/*'
-UNIT_RUN := YEW_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
-            $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES) && \
-            YEW_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
+UNIT_RUN := $(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
+            YEW_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
+            $(BUILD)/unit_tests $(MUSL_UNIT_EXCLUDES) \
+            $(UNIT_DEATH_EXCLUDES) && \
+            $(UNIT_RUNTIME_ENV) YEW_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
             --trace-children=yes $(BUILD)/unit_tests \
             --filter save_fault_shim_contract
 #
@@ -459,14 +494,21 @@ ifeq ($(SAN),1)
 # The 10,000-replacement migration case is deliberately CPU-heavy under
 # per-instruction VM checks plus ASan/UBSan; this is a hang ceiling only.
 YEW_SCRIPT_BUDGET_MS ?= 120000
+else ifeq ($(TARGET),x86_64-linux-musl)
+# The same 10,000-replacement case takes about 13 seconds in Alpine's static
+# PIE profile on the pinned runner.  Keep this a hang ceiling with better than
+# 2x measured headroom; the performance lanes own latency assertions.
+YEW_SCRIPT_BUDGET_MS ?= 30000
 else
 YEW_SCRIPT_BUDGET_MS ?= 10000
 endif
 endif
 
 ifeq ($(SAN),1)
-UNIT_RUN := YEW_TORTURE_CLEAN_ONLY=1 YEW_TEST_INSTRUMENTED=1 \
-            $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES)
+UNIT_RUN := $(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
+            YEW_TORTURE_CLEAN_ONLY=1 YEW_TEST_INSTRUMENTED=1 \
+            $(BUILD)/unit_tests $(MUSL_UNIT_EXCLUDES) \
+            $(UNIT_DEATH_EXCLUDES)
 endif
 
 # Keep source and link order deterministic across filesystems.
@@ -855,7 +897,7 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all check test test-alloc-debug alloc perf-alloc clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
-        musl-verify \
+        musl-verify test-musl-hosts \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
@@ -936,9 +978,16 @@ ifeq ($(TARGET),x86_64-linux-musl)
 musl-verify: static-pie-tools-selftest $(BUILD)/yew
 	FILE='$(FILE_CMD)' READELF='$(READELF)' NM='$(NM)' LDD='$(LDD)' \
 		scripts/verify-static-pie.sh --binary '$(BUILD)/yew'
+
+test-musl-hosts: $(BUILD)/unit_tests $(FAKEHTTP)
+	UNIT_TESTS='$(BUILD)/unit_tests' FAKEHTTP='$(FAKEHTTP)' \
+		scripts/tests/musl-hosts.test.sh
 else
 musl-verify: static-pie-tools-selftest
 	@echo "musl-verify requires TARGET=x86_64-linux-musl" >&2; exit 2
+
+test-musl-hosts:
+	@echo "test-musl-hosts requires TARGET=x86_64-linux-musl" >&2; exit 2
 endif
 
 test-alloc-debug: $(BUILD)/unit_tests
@@ -1448,8 +1497,7 @@ test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch t
 	scripts/check-sigsafe.sh
 	scripts/check-plugin-docs.sh
 	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
-	$(MAKE) --no-print-directory torture-live-check BUILD=$(BUILD) \
-		CC=$(CC) SAN=$(SAN) VALGRIND=$(VALGRIND)
+	$(TORTURE_LIVE_GATE)
 
 test-pkg: $(BUILD)/yew
 	tests/pkg/run.sh $(BUILD)/yew
@@ -1640,10 +1688,12 @@ test-syn-pack-long: $(BUILD)/unit_tests
 		$(BUILD)/unit_tests --filter syn_all_new_pack_long_sanitizer_lane
 
 test-syn-assets: $(BUILD)/yew
-	scripts/check-syn-assets.sh $(BUILD)/yew
+	YEW_RUNTIME_DIR='$(abspath runtime)' \
+		scripts/check-syn-assets.sh $(BUILD)/yew
 
 syn-goldens: $(BUILD)/yew
-	scripts/gen-syn-goldens.sh $(BUILD)/yew
+	YEW_RUNTIME_DIR='$(abspath runtime)' \
+		scripts/gen-syn-goldens.sh $(BUILD)/yew
 
 syn-fuzz-seeds:
 	scripts/gen-syn-fuzz-corpus.sh
@@ -1901,8 +1951,12 @@ fl-perf-smoke: $(BUILD)/fl_smoke
 # use-after-free happen and ASan is what names the line it happened on.
 # One without the other finds much less.
 #
-fl-gc-stress: $(UNIT_RUN)
-	YEW_FL_GC_STRESS=1 $(UNIT_RUN) $(UNIT_DEATH_EXCLUDES)
+fl-gc-stress: $(BUILD)/unit_tests
+	$(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
+		YEW_FL_GC_STRESS=1 \
+		$(if $(filter 1,$(SAN)),YEW_TORTURE_CLEAN_ONLY=1 YEW_TEST_INSTRUMENTED=1,) \
+		$(if $(filter 1,$(VALGRIND)),YEW_TEST_INSTRUMENTED=1 $(VALGRIND_RUN),) \
+		$(BUILD)/unit_tests $(MUSL_UNIT_EXCLUDES) $(UNIT_DEATH_EXCLUDES)
 
 #
 # Sprint 30 DoD 5: the differential-dispatch gate.

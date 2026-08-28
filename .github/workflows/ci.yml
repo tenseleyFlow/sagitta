@@ -102,6 +102,53 @@ jobs:
             build-clang/perf_textbuf build-clang/perf_latency \
             build-clang/fuzz_cmdparse build-clang/perf_cmdcomp
 
+  # Sprint 57: pin the native musl environment instead of relying on the
+  # distro and version installed on a moving hosted image.  Run Alpine in a
+  # container from the Ubuntu host so checkout's Node runtime remains glibc-
+  # compatible while every yew compile, link, and test uses Alpine's musl.
+  musl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build, test, and reproduce the Alpine 3.20 static PIE
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            alpine:3.20 sh -ec '
+              apk add --no-cache bash build-base curl file git
+              echo "Alpine $(cat /etc/alpine-release)"
+              apk info -v bash curl git gcc musl-dev binutils
+              gcc --version | sed -n "1p"
+              ldd --version 2>&1 | sed -n "1p"
+              ld --version | sed -n "1p"
+
+              cp -a /src /work
+              chown -R nobody:nobody /work
+              su nobody -s /bin/sh -c '\''
+              cd /work
+
+              make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
+                BUILD=build-musl musl-verify
+              make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
+                BUILD=build-musl test
+              '\''
+
+              cd /work
+              make TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
+                BUILD=build-musl test-musl-hosts
+
+              su nobody -s /bin/sh -c '\''
+              cd /work
+              sha256sum build-musl/yew > /tmp/yew.first
+              make TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
+                BUILD=build-musl clean
+              make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
+                BUILD=build-musl musl-verify
+              sha256sum build-musl/yew > /tmp/yew.second
+              cmp /tmp/yew.first /tmp/yew.second
+              '\''
+            '
+
   alloc:
     runs-on: ubuntu-latest
     steps:

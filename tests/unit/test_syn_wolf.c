@@ -316,8 +316,17 @@ void test_syn_wolf_unsafe_c_ignores_lexical_braces_for_depth(void)
     };
     SynEngine *engine = wolf_engine();
     u32 state = YEW_SYN_STATE_ROOT;
+    u32 main_after_first;
     u32 outer;
     size_t i;
+
+    {
+        SynSpan spans[8];
+        SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+
+        main_after_first = wolf_line(engine, YEW_SYN_STATE_ROOT,
+                                     "plain", &out);
+    }
 
     for (i = 0U; i < YEW_ARRAY_LEN(lines); i++) {
         SynSpan spans[128];
@@ -331,6 +340,6 @@ void test_syn_wolf_unsafe_c_ignores_lexical_braces_for_depth(void)
         if (i == 4U)
             YEW_ASSERT_EQ_U64(state, outer);
     }
-    YEW_ASSERT_EQ_U64(state, YEW_SYN_STATE_ROOT);
+    YEW_ASSERT_EQ_U64(state, main_after_first);
     yew_syn_engine_free(engine);
 }

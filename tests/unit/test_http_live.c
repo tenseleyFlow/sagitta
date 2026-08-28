@@ -329,7 +329,12 @@ void test_http_live_resolver_and_address_fallback(void)
     YEW_ASSERT(yew_http_register_endpoint(&ed, &literal, &err));
     YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
     yew_test_capture_log();
-    YEW_ASSERT(yew_http_register_endpoint(&ed, &named, &err));
+    if (access("/etc/hosts", F_OK) == 0) {
+        YEW_ASSERT(yew_http_register_endpoint(&ed, &named, &err));
+    } else {
+        YEW_ASSERT(!yew_http_register_endpoint(&ed, &named, &err));
+        YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_UNREACHABLE);
+    }
     YEW_ASSERT(yew_test_log_contains(
         YEW_LOG_WARN, "resolving HTTP endpoint localhost may block"));
     resolvers++;

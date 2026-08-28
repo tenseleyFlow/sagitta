@@ -18,6 +18,7 @@
 #include "ui/region.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
+#include "util/base.h"
 
 typedef struct FussDrawerFix {
     char root[PATH_MAX];
@@ -27,6 +28,7 @@ typedef struct FussDrawerFix {
 static void fussdrawer_fix_make(FussDrawerFix *fix)
 {
     const char *tmp = getenv("TMPDIR");
+    char *resolved;
     FILE *file;
 
     if (tmp == NULL || tmp[0] == '\0')
@@ -34,6 +36,11 @@ static void fussdrawer_fix_make(FussDrawerFix *fix)
     (void)snprintf(fix->root, sizeof(fix->root),
                    "%s/yew-fussdrawer-XXXXXX", tmp);
     YEW_ASSERT_NOT_NULL(mkdtemp(fix->root));
+    resolved = yew_xrealpath(fix->root);
+    YEW_ASSERT_NOT_NULL(resolved);
+    YEW_ASSERT(strlen(resolved) < sizeof(fix->root));
+    (void)memcpy(fix->root, resolved, strlen(resolved) + 1U);
+    yew_xfree(resolved);
     (void)snprintf(fix->file, sizeof(fix->file), "%s/plain.txt",
                    fix->root);
     file = fopen(fix->file, "wb");

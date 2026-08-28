@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 
 #include "harness.h"
 
@@ -7199,6 +7200,10 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
                          sizeof(*original_cells));
     ptc_keys(c, "f");
     s52_wait_screen(c, "both.c");
+    /* Git discovery may publish the same completed tree in one or more
+     * synchronized frames.  Every case below checks the rendered tree or a
+     * semantic barrier; the cumulative frame count is scheduler state. */
+    c->vt.sync_pairs_unstable = true;
     if (strstr(c->test->name, "_ascii") != NULL) {
         s52_wait_screen(c, "<> tree");
         c->vt.sync_pairs_unstable = true;

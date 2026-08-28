@@ -22,6 +22,11 @@ if ! command -v git >/dev/null 2>&1; then
     exit 0
 fi
 real_git=$(command -v git)
+preload_faults=true
+if command -v file >/dev/null 2>&1 &&
+   file -- "$yew_bin" | grep -F 'static-pie linked' >/dev/null; then
+    preload_faults=false
+fi
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/yew-pkg.XXXXXX")
 cleanup()
@@ -649,13 +654,20 @@ test_remove_managed_plugin()
 
 test_remove_trust_failure_rolls_back()
 {
+    local trust saved
+
     begin_case remove_trust_failure_rolls_back
     make_source rollback-plugin
     install_head
-    chmod 0500 "$XDG_STATE_HOME/yew"
+    trust=$XDG_STATE_HOME/yew/trust.fl
+    saved=$case_root/trust.fl.saved
+    mv "$trust" "$saved"
+    mkdir "$trust"
     run_pkg remove rollback-plugin
-    chmod 0700 "$XDG_STATE_HOME/yew"
     assert_status 3
+    [[ -d "$trust" ]] || fail 'failed trust save replaced its directory sentinel'
+    rmdir "$trust"
+    mv "$saved" "$trust"
     [[ -d "$(plugin_dir)" ]] || fail 'failed remove did not restore plugin'
     assert_file_contains "$(lock_path)" '"rollback-plugin"'
     if find "$XDG_DATA_HOME/yew" -maxdepth 1 -name '.pkg-trash-*' | grep . >/dev/null; then
@@ -1422,10 +1434,21 @@ test_offline_update_exits_three
 test_deterministic_lock_and_reports
 test_three_install_lock_is_deterministic_across_clean_xdg_trees
 test_unmanaged_rows_are_sorted
-test_install_kill_boundaries_recover_fail_closed
-test_install_commit_recovery_syncs_lock_parent
-test_install_lock_parent_fsync_failure_recovers
-test_remove_kill_boundaries_restore_exact_policy
-test_remove_trash_parent_fsync_recovery_retries
+if [[ $preload_faults == true ]]; then
+    test_install_kill_boundaries_recover_fail_closed
+    test_install_commit_recovery_syncs_lock_parent
+    test_install_lock_parent_fsync_failure_recovers
+    test_remove_kill_boundaries_restore_exact_policy
+    test_remove_trash_parent_fsync_recovery_retries
+else
+    for name in install_kill_boundaries_recover_fail_closed \
+                install_commit_recovery_syncs_lock_parent \
+                install_lock_parent_fsync_failure_recovers \
+                remove_kill_boundaries_restore_exact_policy \
+                remove_trash_parent_fsync_recovery_retries; do
+        printf 'SKIP %s: static PIE cannot load the LD_PRELOAD fault shim\n' \
+            "$name"
+    done
+fi
 
 printf 'pkg integration: %d passed, 0 failed\n' "$passed"

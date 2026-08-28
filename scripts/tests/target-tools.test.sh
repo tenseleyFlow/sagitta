@@ -2,6 +2,11 @@
 set -eu
 
 export LC_ALL=C
+# This script deliberately probes several contradictory target/tool profiles.
+# Parent make command-line variables propagate through MAKEFLAGS and would
+# turn those isolated probes into accidental combinations with the caller.
+unset MAKEFLAGS MFLAGS MAKELEVEL GNUMAKEFLAGS
+unset TARGET CROSS CC NM SIZE STRIP AR READELF FILE_CMD LDD MUSL_CC
 
 fail()
 {

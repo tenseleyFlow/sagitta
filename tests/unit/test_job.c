@@ -479,8 +479,7 @@ void test_job_argv_resolves_path_and_preserves_explicit_paths(void)
     Ed ed;
     char dir[] = "/tmp/yew-job-path-XXXXXX";
     char probe[sizeof(dir) + 32U];
-    char *path_argv[] = {(char *)"yew-path-probe", (char *)"-c",
-                         (char *)"printf path", NULL};
+    char *path_argv[] = {(char *)"yew-path-probe", NULL};
     char *explicit_argv[] = {(char *)"/bin/sh", (char *)"-c",
                              (char *)"printf explicit", NULL};
     const char *old_path = getenv("PATH");
@@ -496,7 +495,14 @@ void test_job_argv_resolves_path_and_preserves_explicit_paths(void)
         YEW_ASSERT_NOT_NULL(saved_path);
     YEW_ASSERT_NOT_NULL(mkdtemp(dir));
     YEW_ASSERT(snprintf(probe, sizeof(probe), "%s/yew-path-probe", dir) > 0);
-    YEW_ASSERT_EQ_I64(symlink("/bin/sh", probe), 0);
+    {
+        FILE *script = fopen(probe, "wb");
+
+        YEW_ASSERT_NOT_NULL(script);
+        YEW_ASSERT(fputs("#!/bin/sh\nprintf path\n", script) >= 0);
+        YEW_ASSERT_EQ_I64(fclose(script), 0);
+        YEW_ASSERT_EQ_I64(chmod(probe, 0700), 0);
+    }
     YEW_ASSERT_EQ_I64(setenv("PATH", dir, 1), 0);
 
     id = spawn_argv(&ed, path_argv, err, sizeof(err));
