@@ -1,6 +1,12 @@
 CC      ?= cc
 BUILD   ?= build
 ALLOCDBG ?= 0
+SHIPPING ?= 0
+NM      ?= nm
+SIZE    ?= size
+STRIP   ?= strip
+STRIPFLAGS ?= -s -R .comment -R .note.ABI-tag
+SIZE_ROOT ?= build-size
 PREFIX  ?= /usr/local
 MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
@@ -128,6 +134,10 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
 
 ifeq ($(ALLOCDBG),1)
 CFLAGS += -DYEW_ALLOC_DEBUG=1
+endif
+
+ifeq ($(SHIPPING),1)
+CFLAGS += -DNDEBUG
 endif
 
 # Sprint 30 DoD 1: the Fletch VM's computed-goto dispatcher.  The label
@@ -762,6 +772,7 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables calib perf perf-components perf-symbols size \
+        size-tools-selftest size-ledger-full size-ledger-minimal \
         perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
@@ -1268,7 +1279,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c | dirs
 # has to be asked for by hand.
 #
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
-       test-syn-assets $(PKG_TEST_TARGET)
+       test-syn-assets size-tools-selftest $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -1520,11 +1531,55 @@ perf-symbols:
 	$(MAKE) --no-print-directory BUILD=build-prof \
 		EXTRA_CFLAGS=-fno-omit-frame-pointer build-prof/yew
 
-# Sprint 56 deliberately owns latency, not the binary/allocation campaign.
-# A named refusal keeps the future surface from becoming a silent stub.
-size:
-	@echo 'size: not implemented; Sprint 57 owns binary and allocation budgets' >&2
-	@exit 2
+SIZE_FULL_BUILD := $(SIZE_ROOT)/full
+SIZE_MINIMAL_BUILD := $(SIZE_ROOT)/minimal
+SIZE_LSP_BUILD := $(SIZE_ROOT)/lsp-only
+SIZE_AI_BUILD := $(SIZE_ROOT)/ai-only
+SIZE_FUSS_BUILD := $(SIZE_ROOT)/fuss-only
+SIZE_PLUGINS_BUILD := $(SIZE_ROOT)/plugins-only
+SIZE_MEASURE := $(SIZE_ROOT)/measure
+SIZE_FULL_BIN := $(SIZE_MEASURE)/full/yew
+SIZE_MINIMAL_BIN := $(SIZE_MEASURE)/minimal/yew
+SIZE_LSP_BIN := $(SIZE_MEASURE)/lsp-only/yew
+SIZE_AI_BIN := $(SIZE_MEASURE)/ai-only/yew
+SIZE_FUSS_BIN := $(SIZE_MEASURE)/fuss-only/yew
+SIZE_PLUGINS_BIN := $(SIZE_MEASURE)/plugins-only/yew
+
+size-tools-selftest:
+	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/size-tools.test.sh
+
+define size_measure_rule
+$(1): FORCE
+	$$(MAKE) --no-print-directory BUILD='$(2)' MODULES='$(3)' \
+		SHIPPING=1 '$(2)/yew'
+	mkdir -p '$$(dir $(1))'
+	cp '$(2)/yew' '$(1)'
+	$$(STRIP) $$(STRIPFLAGS) '$(1)'
+endef
+
+$(eval $(call size_measure_rule,$(SIZE_FULL_BIN),$(SIZE_FULL_BUILD),lsp ai fuss plugins))
+$(eval $(call size_measure_rule,$(SIZE_MINIMAL_BIN),$(SIZE_MINIMAL_BUILD),))
+$(eval $(call size_measure_rule,$(SIZE_LSP_BIN),$(SIZE_LSP_BUILD),lsp))
+$(eval $(call size_measure_rule,$(SIZE_AI_BIN),$(SIZE_AI_BUILD),ai))
+$(eval $(call size_measure_rule,$(SIZE_FUSS_BIN),$(SIZE_FUSS_BUILD),fuss))
+$(eval $(call size_measure_rule,$(SIZE_PLUGINS_BIN),$(SIZE_PLUGINS_BUILD),plugins))
+
+size: size-tools-selftest $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN) \
+      $(SIZE_LSP_BIN) $(SIZE_AI_BIN) $(SIZE_FUSS_BIN) $(SIZE_PLUGINS_BIN)
+	scripts/size.sh --budgets tests/size/budgets.txt \
+		full=$(SIZE_FULL_BIN) minimal=$(SIZE_MINIMAL_BIN) \
+		lsp-only=$(SIZE_LSP_BIN) ai-only=$(SIZE_AI_BIN) \
+		fuss-only=$(SIZE_FUSS_BIN) plugins-only=$(SIZE_PLUGINS_BIN)
+
+size-ledger-full: $(SIZE_FULL_BIN)
+	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+		scripts/size-ledger.sh --build '$(SIZE_FULL_BUILD)' \
+		--binary '$(SIZE_FULL_BIN)'
+
+size-ledger-minimal: $(SIZE_MINIMAL_BIN)
+	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
+		--binary '$(SIZE_MINIMAL_BIN)'
 
 calib: $(BUILD)/calib_runner
 	@set -eu; \
