@@ -91,7 +91,7 @@ void test_ai_key_env_errors_wipe(void)
     AiErr err;
     char out[32];
     char *oversize;
-    char *both_argv[] = {(char *)"/bin/false", NULL};
+    char *both_argv[] = {(char *)"/usr/bin/false", NULL};
 
     key_fixture(&ed);
     backend.name = "cloud";
@@ -211,7 +211,7 @@ void test_ai_key_cmd_errors_wipe(void)
     Ed ed;
     AiBackend backend = {0};
     AiErr err;
-    char *false_argv[] = {(char *)"/bin/false", NULL};
+    char *false_argv[] = {(char *)"/usr/bin/false", NULL};
     char *missing_argv[] = {
         (char *)"/nonexistent/yew-key-command-s48", NULL
     };
@@ -227,7 +227,7 @@ void test_ai_key_cmd_errors_wipe(void)
     YEW_ASSERT(!yew_ai_key_get(&ed, &backend, out, sizeof(out), &err));
     YEW_ASSERT(bytes_are_zero(out, sizeof(out)));
     YEW_ASSERT_EQ_I64(err.kind, YEW_AI_ERR_AUTH);
-    YEW_ASSERT_EQ_STR(err.msg, "key command '/bin/false' exited 1");
+    YEW_ASSERT_EQ_STR(err.msg, "key command '/usr/bin/false' exited 1");
     YEW_ASSERT_EQ_U64(ed.jobs.len, 0U);
 
     backend.key_cmd = missing_argv;

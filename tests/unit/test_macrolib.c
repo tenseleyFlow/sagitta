@@ -233,14 +233,14 @@ void test_macrolib_unknown_schema_skips_only_that_file(void)
 void test_macrolib_scan_order_is_bytewise_and_stable(void)
 {
     static const char *const want[] = {
-        "Alpha.first", "Zed.second", "alpha.third"
+        "Alpha.first", "Zed.second", "beta.third"
     };
     MacroLibFix f;
     YewMacroEntryView view;
     u32 i;
 
     mlf_open(&f);
-    mlf_write(&f, "alpha.fl", "fn third() { return 3 }\n");
+    mlf_write(&f, "beta.fl", "fn third() { return 3 }\n");
     mlf_write(&f, "Zed.fl", "fn second() { return 2 }\n");
     mlf_write(&f, "Alpha.fl", "fn first() { return 1 }\n");
     YEW_ASSERT_EQ_U64(mlf_scan(&f), YEW_ARRAY_LEN(want));
