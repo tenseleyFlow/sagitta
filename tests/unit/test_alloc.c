@@ -119,7 +119,7 @@ void test_alloc_debug_reset_and_fixed_overflow_site(void)
 void test_alloc_debug_exit_report(void)
 {
 #if YEW_ALLOC_DEBUG
-    char path[] = "build/tmp/alloc-report-XXXXXX";
+    char path[] = "/tmp/yew-alloc-report-XXXXXX";
     char bytes[1024];
     pid_t child;
     int fd;
