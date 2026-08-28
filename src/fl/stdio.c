@@ -129,11 +129,7 @@ static char *path_of(FlVm *vm, const FlStr *s)
         (void)fl_raise(vm, "io", "the path is empty");
         return NULL;
     }
-    p = malloc((size_t)s->len + 1U);
-    if (p == NULL) {
-        (void)fl_raise(vm, "limit", "io: out of memory for a path");
-        return NULL;
-    }
+    p = yew_xmalloc((size_t)s->len + 1U);
     (void)memcpy(p, s->b, (size_t)s->len);
     p[s->len] = '\0';
     return p;
@@ -212,10 +208,10 @@ static bool io_read(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (path == NULL)
         return false;
     if (!slurp(vm, path, &bb)) {
-        free(path);
+        yew_xfree(path);
         return false;
     }
-    free(path);
+    yew_xfree(path);
     *out = FL_OBJ_V(FL_STR, fl_str_take(vm, &bb));
     bytebuf_free(&bb);
     return true;
@@ -230,10 +226,10 @@ static bool io_read_lines(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (path == NULL)
         return false;
     if (!slurp(vm, path, &bb)) {
-        free(path);
+        yew_xfree(path);
         return false;
     }
-    free(path);
+    yew_xfree(path);
     /* str.split_lines of the content, and literally so -- see
      * fl_split_lines. */
     *out = fl_split_lines(vm, (const char *)bb.data, (u32)bb.len);
@@ -287,7 +283,7 @@ static bool io_write(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (path == NULL)
         return false;
     if (!fl_arg_str(vm, a, 1U, &body)) {
-        free(path);
+        yew_xfree(path);
         return false;
     }
     /*
@@ -300,10 +296,10 @@ static bool io_write(FlVm *vm, FlValue *a, u32 n, FlValue *out)
                               0666) != YEW_SAVE_OK) {
         bool r = io_err(vm, errno == 0 ? EIO : errno, path);
 
-        free(path);
+        yew_xfree(path);
         return r;
     }
-    free(path);
+    yew_xfree(path);
     *out = FL_NIL_V;
     return true;
 }
@@ -320,14 +316,14 @@ static bool io_append(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (path == NULL)
         return false;
     if (!fl_arg_str(vm, a, 1U, &body)) {
-        free(path);
+        yew_xfree(path);
         return false;
     }
     fd = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0666);
     if (fd < 0) {
         bool r = io_err(vm, errno, path);
 
-        free(path);
+        yew_xfree(path);
         return r;
     }
     while (off < (size_t)body->len) {
@@ -342,7 +338,7 @@ static bool io_append(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
             (void)close(fd);
             r = io_err(vm, e, path);
-            free(path);
+            yew_xfree(path);
             return r;
         }
         off += (size_t)w;
@@ -350,10 +346,10 @@ static bool io_append(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (close(fd) != 0) {
         bool r = io_err(vm, errno, path);
 
-        free(path);
+        yew_xfree(path);
         return r;
     }
-    free(path);
+    yew_xfree(path);
     *out = FL_NIL_V;
     return true;
 }
@@ -374,7 +370,7 @@ static bool io_exists(FlVm *vm, FlValue *a, u32 n, FlValue *out)
      * and a permission problem on the parent directory is still "I
      * cannot see it". */
     *out = FL_BOOL_V(stat(path, &st) == 0);
-    free(path);
+    yew_xfree(path);
     return true;
 }
 
@@ -387,7 +383,7 @@ static bool io_is_dir(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (path == NULL)
         return false;
     *out = FL_BOOL_V(stat(path, &st) == 0 && S_ISDIR(st.st_mode));
-    free(path);
+    yew_xfree(path);
     return true;
 }
 
@@ -402,10 +398,10 @@ static bool io_size(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (stat(path, &st) != 0) {
         bool r = io_err(vm, errno, path);
 
-        free(path);
+        yew_xfree(path);
         return r;
     }
-    free(path);
+    yew_xfree(path);
     *out = FL_INT_V((i64)st.st_size);
     return true;
 }
@@ -424,17 +420,17 @@ static bool io_remove(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (lstat(path, &st) != 0) {
         bool r = io_err(vm, errno, path);
 
-        free(path);
+        yew_xfree(path);
         return r;
     }
     rc = S_ISDIR(st.st_mode) ? rmdir(path) : unlink(path);
     if (rc != 0) {
         bool r = io_err(vm, errno, path);
 
-        free(path);
+        yew_xfree(path);
         return r;
     }
-    free(path);
+    yew_xfree(path);
     *out = FL_NIL_V;
     return true;
 }
@@ -481,7 +477,7 @@ static bool io_mkdir(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     } else {
         ok = true;
     }
-    free(path);
+    yew_xfree(path);
     if (!ok)
         return false;
     *out = FL_NIL_V;
@@ -508,7 +504,7 @@ static bool io_env(FlVm *vm, FlValue *a, u32 n, FlValue *out)
      * FL_GC_STRESS and YEW_FL_DUMP_BAD_CHUNK -- are developer switches
      * no Fletch program can name. */
     v = getenv(name);
-    free(name);
+    yew_xfree(name);
     *out = v == NULL ? FL_NIL_V
                      : FL_OBJ_V(FL_STR, fl_str_new(vm, v, (u32)strlen(v)));
     return true;
@@ -693,8 +689,8 @@ static void names_free(Names *ns)
     u32 i;
 
     for (i = 0U; i < ns->n; i++)
-        free(ns->v[i]);
-    free(ns->v);
+        yew_xfree(ns->v[i]);
+    yew_xfree(ns->v);
     ns->v = NULL;
     ns->n = 0U;
     ns->cap = 0U;

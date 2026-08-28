@@ -578,7 +578,7 @@ static bool regex_yaml_block_key(const YewRe *re)
 static void engine_index_aux(SynEngine *engine)
 {
     u32 i;
-    free(engine->ctx_aux);
+    yew_xfree(engine->ctx_aux);
     engine->ctx_aux = NULL;
     if (engine->def == NULL || engine->def->nctxs == 0U)
         return;
@@ -797,8 +797,8 @@ static bool class_word_byte(const YewRe *re, u32 index, u8 *out)
 
 static void word_set_free(SynWordSet *set)
 {
-    free(set->slots);
-    free(set->bytes);
+    yew_xfree(set->slots);
+    yew_xfree(set->bytes);
     (void)memset(set, 0, sizeof(*set));
 }
 
@@ -818,7 +818,7 @@ static void word_set_rehash(SynWordSet *set, u32 cap)
             at = (at + 1U) & (cap - 1U);
         slots[at] = slot;
     }
-    free(set->slots);
+    yew_xfree(set->slots);
     set->slots = slots;
     set->cap = cap;
 }
@@ -1008,15 +1008,15 @@ static void engine_free_word_sets(SynEngine *engine)
 
     for (i = 0U; i < engine->word_sets_len; i++)
         word_set_free(&engine->word_sets[i]);
-    free(engine->word_sets);
+    yew_xfree(engine->word_sets);
     engine->word_sets = NULL;
     engine->word_sets_len = 0U;
 }
 
 static void finite_set_free(SynFiniteSet *set)
 {
-    free(set->lits);
-    free(set->bytes);
+    yew_xfree(set->lits);
+    yew_xfree(set->bytes);
     (void)memset(set, 0, sizeof(*set));
 }
 
@@ -1160,7 +1160,7 @@ static void engine_free_finite_sets(SynEngine *engine)
 
     for (i = 0U; i < engine->finite_sets_len; i++)
         finite_set_free(&engine->finite_sets[i]);
-    free(engine->finite_sets);
+    yew_xfree(engine->finite_sets);
     engine->finite_sets = NULL;
     engine->finite_sets_len = 0U;
 }
@@ -1258,15 +1258,15 @@ static void regex_effective_first(const YewRe *re, u8 first[32])
             break;
         }
     }
-    free(seen);
-    free(stack);
+    yew_xfree(seen);
+    yew_xfree(stack);
 }
 
 static void engine_index_bol(SynEngine *engine)
 {
     u32 i;
 
-    free(engine->rule_bol);
+    yew_xfree(engine->rule_bol);
     engine->rule_bol = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
@@ -1297,7 +1297,7 @@ static void engine_index_wordb(SynEngine *engine)
 {
     u32 i;
 
-    free(engine->rule_wordb);
+    yew_xfree(engine->rule_wordb);
     engine->rule_wordb = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
@@ -1314,7 +1314,7 @@ static void engine_index_word_literals(SynEngine *engine)
     u32 i;
 
     engine_free_word_sets(engine);
-    free(engine->rule_word_literal);
+    yew_xfree(engine->rule_word_literal);
     engine->rule_word_literal = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
@@ -1333,8 +1333,8 @@ static void engine_index_word_literals(SynEngine *engine)
 
 static void engine_free_fortran_words(SynEngine *engine)
 {
-    free(engine->rule_fortran_word);
-    free(engine->fortran_words);
+    yew_xfree(engine->rule_fortran_word);
+    yew_xfree(engine->fortran_words);
     engine->rule_fortran_word = NULL;
     engine->fortran_words = NULL;
     engine->fortran_words_cap = 0U;
@@ -1357,7 +1357,7 @@ static void fortran_words_rehash(SynEngine *engine, u32 cap)
             at = (at + 1U) & (cap - 1U);
         slots[at] = slot;
     }
-    free(engine->fortran_words);
+    yew_xfree(engine->fortran_words);
     engine->fortran_words = slots;
     engine->fortran_words_cap = cap;
 }
@@ -1451,8 +1451,8 @@ static void engine_index_identifier_suffixes(SynEngine *engine)
 {
     u32 i;
 
-    free(engine->rule_identifier_suffix);
-    free(engine->rule_identifiers);
+    yew_xfree(engine->rule_identifier_suffix);
+    yew_xfree(engine->rule_identifiers);
     engine->rule_identifier_suffix = NULL;
     engine->rule_identifiers = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
@@ -1473,7 +1473,7 @@ static void engine_index_json_keys(SynEngine *engine)
 {
     u32 i;
 
-    free(engine->rule_json_key);
+    yew_xfree(engine->rule_json_key);
     engine->rule_json_key = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
@@ -1496,7 +1496,7 @@ static void engine_index_yaml_block_keys(SynEngine *engine)
     };
     u32 i;
 
-    free(engine->rule_yaml_block_key);
+    yew_xfree(engine->rule_yaml_block_key);
     engine->rule_yaml_block_key = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
@@ -1540,7 +1540,7 @@ static void engine_index_first(SynEngine *engine)
 {
     u32 i;
 
-    free(engine->rule_first);
+    yew_xfree(engine->rule_first);
     engine->rule_first = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
@@ -1555,7 +1555,7 @@ static void engine_index_ctx_first_nonbol(SynEngine *engine)
 {
     u32 i;
 
-    free(engine->ctx_first_nonbol);
+    yew_xfree(engine->ctx_first_nonbol);
     engine->ctx_first_nonbol = NULL;
     if (engine->def == NULL || engine->def->nctxs == 0U)
         return;
@@ -1648,8 +1648,8 @@ static void engine_index_candidates(SynEngine *engine)
     u32 out = 0U;
     u32 i;
 
-    free(engine->candidate_offsets);
-    free(engine->candidate_rules);
+    yew_xfree(engine->candidate_offsets);
+    yew_xfree(engine->candidate_rules);
     engine->candidate_offsets = NULL;
     engine->candidate_rules = NULL;
     if (engine->def == NULL || engine->def->nctxs == 0U)
@@ -1763,7 +1763,7 @@ static void state_rehash(SynStateTab *tab, u32 cap)
             at = (at + 1U) & (cap - 1U);
         slots[at] = i;
     }
-    free(tab->slots);
+    yew_xfree(tab->slots);
     tab->slots = slots;
     tab->slots_cap = cap;
 }
@@ -1789,9 +1789,9 @@ void yew_syn_state_tab_free(SynStateTab *tab)
 {
     if (tab == NULL)
         return;
-    free(tab->slots);
-    free(tab->states);
-    free(tab);
+    yew_xfree(tab->slots);
+    yew_xfree(tab->states);
+    yew_xfree(tab);
 }
 
 u32 yew_syn_state_intern(SynStateTab *tab, const SynState *state)
@@ -1905,8 +1905,8 @@ static void engine_snapshot_lang_names(SynEngine *engine)
     u32 i;
 
     for (i = 0U; i < engine->nlang_names; i++)
-        free(engine->lang_names[i].name);
-    free(engine->lang_names);
+        yew_xfree(engine->lang_names[i].name);
+    yew_xfree(engine->lang_names);
     engine->lang_names = NULL;
     engine->nlang_names = 0U;
     count = yew_syn_lang_snapshot(NULL, NULL, 0U);
@@ -1924,8 +1924,8 @@ static void engine_snapshot_lang_names(SynEngine *engine)
         engine->lang_names[i].lang = langs[i];
     }
     engine->nlang_names = count;
-    free(langs);
-    free(names);
+    yew_xfree(langs);
+    yew_xfree(names);
 }
 
 static u32 engine_lang_by_name(const SynEngine *engine, const char *name,
@@ -2016,27 +2016,27 @@ void yew_syn_engine_free(SynEngine *engine)
             yew_syn_def_unpin(runtime->def);
     }
     yew_syn_state_tab_free(engine->states);
-    free(engine->ctx_aux);
-    free(engine->rule_bol);
-    free(engine->rule_wordb);
-    free(engine->rule_word_literal);
-    free(engine->rule_identifier_suffix);
-    free(engine->rule_json_key);
-    free(engine->rule_yaml_block_key);
-    free(engine->rule_identifiers);
+    yew_xfree(engine->ctx_aux);
+    yew_xfree(engine->rule_bol);
+    yew_xfree(engine->rule_wordb);
+    yew_xfree(engine->rule_word_literal);
+    yew_xfree(engine->rule_identifier_suffix);
+    yew_xfree(engine->rule_json_key);
+    yew_xfree(engine->rule_yaml_block_key);
+    yew_xfree(engine->rule_identifiers);
     engine_free_fortran_words(engine);
     engine_free_word_sets(engine);
     engine_free_finite_sets(engine);
-    free(engine->rule_first);
-    free(engine->ctx_first_nonbol);
-    free(engine->candidate_offsets);
-    free(engine->candidate_rules);
-    free(engine->ctx_names);
+    yew_xfree(engine->rule_first);
+    yew_xfree(engine->ctx_first_nonbol);
+    yew_xfree(engine->candidate_offsets);
+    yew_xfree(engine->candidate_rules);
+    yew_xfree(engine->ctx_names);
     for (u32 i = 0U; i < engine->nlang_names; i++)
-        free(engine->lang_names[i].name);
-    free(engine->lang_names);
+        yew_xfree(engine->lang_names[i].name);
+    yew_xfree(engine->lang_names);
     yew_re_workspace_free(&engine->re_workspace);
-    free(engine);
+    yew_xfree(engine);
 }
 
 void yew_syn_engine_set_def(SynEngine *engine, SynDef *def)
@@ -2055,7 +2055,7 @@ void yew_syn_engine_set_def(SynEngine *engine, SynDef *def)
     engine->def = def;
     engine_snapshot_lang_names(engine);
     (void)memset(engine->merged_first, 0, sizeof(engine->merged_first));
-    free(engine->ctx_names);
+    yew_xfree(engine->ctx_names);
     engine->ctx_names = NULL;
     engine->defs[0] = (SynResident){
         def == NULL || def->name == NULL ? YEW_LANG_NONE :
@@ -2306,9 +2306,9 @@ void yew_syn_coverage_free(SynCoverage *coverage)
 {
     if (coverage == NULL)
         return;
-    free(coverage->contexts);
-    free(coverage->rules);
-    free(coverage->embeds);
+    yew_xfree(coverage->contexts);
+    yew_xfree(coverage->rules);
+    yew_xfree(coverage->embeds);
     (void)memset(coverage, 0, sizeof(*coverage));
 }
 
@@ -4616,14 +4616,12 @@ bool yew_syn_stack_at(SynEngine *engine, u32 entry_state, const u8 *line,
         return false;
     if (p > len)
         p = len;
-    trace = malloc(((size_t)len + 1U) * sizeof(*trace));
-    if (trace == NULL)
-        return false;
+    trace = yew_xreallocarray(NULL, (size_t)len + 1U, sizeof(*trace));
     ok = yew_syn_stack_trace(engine, entry_state, line, len, trace,
                              (size_t)len + 1U);
     if (ok)
         *out = trace[p];
-    free(trace);
+    yew_xfree(trace);
     return ok;
 }
 
@@ -4859,7 +4857,7 @@ void yew_syn_attach(SynBuf *syn, u32 lang, const TextBuf *tb)
     size_t n;
     if (syn == NULL || tb == NULL)
         YEW_BUG("syntax: invalid attach arguments");
-    free(syn->entry.data);
+    yew_xfree(syn->entry.data);
     syn->entry = (SynU32Vec){0};
     n = (size_t)yew_textbuf_line_count(tb);
     vec_reserve(&syn->entry, n);
@@ -4900,11 +4898,11 @@ void yew_syn_detach(SynBuf *syn)
         return;
     cache = syn->private_cache;
     if (cache != NULL) {
-        free(cache->line);
-        free(cache->slab);
-        free(cache);
+        yew_xfree(cache->line);
+        yew_xfree(cache->slab);
+        yew_xfree(cache);
     }
-    free(syn->entry.data);
+    yew_xfree(syn->entry.data);
     yew_syn_buf_init(syn);
 }
 

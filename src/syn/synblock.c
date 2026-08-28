@@ -46,11 +46,9 @@ static bool line_read(const TextBuf *tb, u64 line, SynBlockLine *out)
         need--;
     if (need > YEW_SYN_LINE_BYTE_CAP || need > UINT32_MAX)
         return false;
-    out->bytes = malloc((size_t)(need == 0U ? 1U : need));
-    if (out->bytes == NULL)
-        return false;
+    out->bytes = yew_xmalloc((size_t)(need == 0U ? 1U : need));
     if (need != 0U && !yew_textiter_begin(&it, tb, BYTEOFF(out->span.lo))) {
-        free(out->bytes);
+        yew_xfree(out->bytes);
         out->bytes = NULL;
         return false;
     }
@@ -68,7 +66,7 @@ static bool line_read(const TextBuf *tb, u64 line, SynBlockLine *out)
             break;
     }
     if (copied != need) {
-        free(out->bytes);
+        yew_xfree(out->bytes);
         out->bytes = NULL;
         return false;
     }
@@ -96,7 +94,7 @@ static bool state_at_line(const Buffer *buf, u64 line, u32 at,
         return false;
     ok = yew_syn_stack_at(buf->syn.engine, entry, text.bytes, text.len, at,
                           out);
-    free(text.bytes);
+    yew_xfree(text.bytes);
     return ok;
 }
 
@@ -115,12 +113,12 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
     entry = buf->syn.entry.data[line];
     if (entry == YEW_SYN_STATE_UNKNOWN || !line_read(buf->tb, line, &text))
         return false;
-    trace = malloc(((size_t)text.len + 1U) * sizeof(*trace));
-    if (trace == NULL ||
-        !yew_syn_stack_trace(buf->syn.engine, entry, text.bytes, text.len,
+    trace = yew_xreallocarray(NULL, (size_t)text.len + 1U,
+                              sizeof(*trace));
+    if (!yew_syn_stack_trace(buf->syn.engine, entry, text.bytes, text.len,
                              trace, (size_t)text.len + 1U)) {
-        free(trace);
-        free(text.bytes);
+        yew_xfree(trace);
+        yew_xfree(text.bytes);
         return false;
     }
     if (from > text.len)
@@ -129,13 +127,13 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
         if (frame_is(&trace[p], depth, def, ctx) == want) {
             *at = p;
             *found = true;
-            free(trace);
-            free(text.bytes);
+            yew_xfree(trace);
+            yew_xfree(text.bytes);
             return true;
         }
     }
-    free(trace);
-    free(text.bytes);
+    yew_xfree(trace);
+    yew_xfree(text.bytes);
     return true;
 }
 
@@ -153,12 +151,12 @@ static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
     entry = buf->syn.entry.data[line];
     if (entry == YEW_SYN_STATE_UNKNOWN || !line_read(buf->tb, line, &text))
         return false;
-    trace = malloc(((size_t)text.len + 1U) * sizeof(*trace));
-    if (trace == NULL ||
-        !yew_syn_stack_trace(buf->syn.engine, entry, text.bytes, text.len,
+    trace = yew_xreallocarray(NULL, (size_t)text.len + 1U,
+                              sizeof(*trace));
+    if (!yew_syn_stack_trace(buf->syn.engine, entry, text.bytes, text.len,
                              trace, (size_t)text.len + 1U)) {
-        free(trace);
-        free(text.bytes);
+        yew_xfree(trace);
+        yew_xfree(text.bytes);
         return false;
     }
     if (through > text.len)
@@ -172,8 +170,8 @@ static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
         }
         previous = present;
     }
-    free(trace);
-    free(text.bytes);
+    yew_xfree(trace);
+    yew_xfree(text.bytes);
     return found;
 }
 
@@ -267,7 +265,7 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
         if (!line_read(buf->tb, hi_line, &text))
             return false;
         out->hi = text.span.lo + text.len;
-        free(text.bytes);
+        yew_xfree(text.bytes);
     }
     return true;
 }
@@ -366,11 +364,7 @@ bool yew_syn_in_string_or_comment(const Buffer *buf, ByteOff off)
     local = off.v <= line.span.lo ? 0U : off.v - line.span.lo;
     if (local >= line.len && line.len != 0U)
         local = line.len - 1U;
-    spans = malloc(sizeof(*spans) * YEW_SYN_MAX_SPANS);
-    if (spans == NULL) {
-        free(line.bytes);
-        return false;
-    }
+    spans = yew_xreallocarray(NULL, YEW_SYN_MAX_SPANS, sizeof(*spans));
     out = (SynLineOut){spans, 0U, YEW_SYN_MAX_SPANS,
                        YEW_SYN_STATE_UNKNOWN, YEW_SYN_STOP_OK};
     yew_syn_line(buf->syn.engine, buf->syn.entry.data[line_no], line.bytes,
@@ -384,8 +378,8 @@ bool yew_syn_in_string_or_comment(const Buffer *buf, ByteOff off)
             }
         }
     }
-    free(spans);
-    free(line.bytes);
+    yew_xfree(spans);
+    yew_xfree(line.bytes);
     return (attr >= YEW_ATTR_STRING && attr <= YEW_ATTR_STRING_SPECIAL) ||
            (attr >= YEW_ATTR_COMMENT && attr <= YEW_ATTR_COMMENT_TODO);
 }

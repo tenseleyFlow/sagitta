@@ -67,12 +67,12 @@ static void source_free(void)
     u32 i;
 
     for (i = 0U; i < source.nrows; i++) {
-        free(source.labels[i]);
-        free(source.details[i]);
+        yew_xfree(source.labels[i]);
+        yew_xfree(source.details[i]);
     }
-    free(source.rows);
-    free(source.labels);
-    free(source.details);
+    yew_xfree(source.rows);
+    yew_xfree(source.labels);
+    yew_xfree(source.details);
     yew_lsp_locations_free(&source.locs);
     (void)memset(&source, 0, sizeof(source));
 }
@@ -82,12 +82,12 @@ static void symbol_source_free(void)
     u32 i;
 
     for (i = 0U; i < symbol_source.nrows; i++) {
-        free(symbol_source.labels[i]);
-        free(symbol_source.details[i]);
+        yew_xfree(symbol_source.labels[i]);
+        yew_xfree(symbol_source.details[i]);
     }
-    free(symbol_source.rows);
-    free(symbol_source.labels);
-    free(symbol_source.details);
+    yew_xfree(symbol_source.rows);
+    yew_xfree(symbol_source.labels);
+    yew_xfree(symbol_source.details);
     yew_lsp_symbols_free(&symbol_source.symbols);
     (void)memset(&symbol_source, 0, sizeof(symbol_source));
 }
@@ -150,7 +150,7 @@ static char *copy_line(const TextBuf *tb, u32 line)
         len = LSP_LOC_DETAIL_MAX;
     out = yew_xmalloc((size_t)len + 1U);
     if (len != 0U && !yew_textiter_begin(&it, tb, BYTEOFF(span.lo))) {
-        free(out);
+        yew_xfree(out);
         return NULL;
     }
     while (at < len) {
@@ -159,14 +159,14 @@ static char *copy_line(const TextBuf *tb, u32 line)
         u64 take;
 
         if (!yew_textiter_chunk(&it, tb, &chunk, &avail) || avail == 0U) {
-            free(out);
+            yew_xfree(out);
             return NULL;
         }
         take = avail < len - at ? avail : len - at;
         (void)memcpy(out + at, chunk, (size_t)take);
         at += take;
         if (at < len && !yew_textiter_advance(&it, tb)) {
-            free(out);
+            yew_xfree(out);
             return NULL;
         }
     }
@@ -208,6 +208,7 @@ static char *read_line_file(const char *path, u32 line)
         }
         at++;
     }
+    /* getline(3) owns this allocation contract; keep libc free here. */
     free(text);
     (void)fclose(file);
     return copy;
@@ -508,7 +509,7 @@ static char *symbol_label(const LspSymbol *symbol)
     label[1] = ' ';
     label[2] = ' ';
     (void)memcpy(label + 3U, breadcrumb, len + 1U);
-    free(breadcrumb);
+    yew_xfree(breadcrumb);
     return label;
 }
 

@@ -31,11 +31,7 @@ void fl_gc_init(FlGc *gc)
 
 static void *xalloc(size_t n)
 {
-    void *p = calloc(1U, n == 0U ? 1U : n);
-
-    if (p == NULL)
-        YEW_BUG("fletch: out of memory");
-    return p;
+    return yew_xcalloc(1U, n == 0U ? 1U : n);
 }
 
 void *fl_gc_alloc(FlVm *vm, size_t n, FlType t)
@@ -90,10 +86,8 @@ static void gray_push(FlVm *vm, FlObj *o)
 {
     if (vm->gc.ngray == vm->gc.graycap) {
         u32 cap = vm->gc.graycap == 0U ? 64U : vm->gc.graycap * 2U;
-        FlObj **grown = realloc(vm->gc.gray, (size_t)cap * sizeof(*grown));
-
-        if (grown == NULL)
-            YEW_BUG("fletch gc: out of memory growing the gray stack");
+        FlObj **grown = yew_xreallocarray(vm->gc.gray, cap,
+                                          sizeof(*grown));
         vm->gc.gray = grown;
         vm->gc.graycap = cap;
     }
@@ -336,12 +330,12 @@ void fl_gc_root_provider_remove(FlVm *vm, FlGcMarkFn mark, void *ctx)
 static void obj_free(FlVm *vm, FlObj *o)
 {
     switch ((FlType)o->t) {
-    case FL_LIST: free(((FlList *)o)->v); break;
+    case FL_LIST: yew_xfree(((FlList *)o)->v); break;
     case FL_MAP:
-        free(((FlMap *)o)->ent);
-        free(((FlMap *)o)->idx);
+        yew_xfree(((FlMap *)o)->ent);
+        yew_xfree(((FlMap *)o)->idx);
         break;
-    case FL_CLOSURE: free(((FlClosure *)o)->up); break;
+    case FL_CLOSURE: yew_xfree(((FlClosure *)o)->up); break;
     /* FL_MOTION_PROG's op array is ARENA memory, not heap: the
      * compiler builds it alongside the chunk it belongs to and it
      * dies with that arena.  Freeing it here handed an arena
@@ -353,7 +347,7 @@ static void obj_free(FlVm *vm, FlObj *o)
          * than whatever the allocator recycled into the block. */
         (void)memset(o, FL_GC_POISON, sizeof(*o));
     }
-    free(o);
+    yew_xfree(o);
 }
 
 /*
@@ -376,9 +370,7 @@ static void strtab_clear_dead(FlStrTab *t)
 
     if (t->cap == 0U)
         return;
-    survivors = calloc((size_t)t->cap, sizeof(*survivors));
-    if (survivors == NULL)
-        YEW_BUG("fletch gc: out of memory rebuilding the string table");
+    survivors = yew_xcalloc((size_t)t->cap, sizeof(*survivors));
     for (i = 0U; i < t->cap; i++) {
         if (t->v[i] != NULL && t->v[i]->h.mark != 0U)
             survivors[live++] = t->v[i];
@@ -393,7 +385,7 @@ static void strtab_clear_dead(FlStrTab *t)
         t->v[at] = sv;
     }
     t->n = live;
-    free(survivors);
+    yew_xfree(survivors);
 }
 
 static void sweep(FlVm *vm)
@@ -486,11 +478,11 @@ void fl_gc_free_all(FlVm *vm)
         o = next;
     }
     vm->gc.objects = NULL;
-    free(vm->gc.gray);
+    yew_xfree(vm->gc.gray);
     vm->gc.gray = NULL;
     vm->gc.ngray = 0U;
     vm->gc.graycap = 0U;
-    free(vm->gc.strings.v);
+    yew_xfree(vm->gc.strings.v);
     vm->gc.strings.v = NULL;
     vm->gc.strings.cap = 0U;
     vm->gc.strings.n = 0U;
@@ -510,11 +502,9 @@ void fl_gc_free_all(FlVm *vm)
 static void strtab_grow(FlStrTab *t)
 {
     u32 cap = t->cap == 0U ? 256U : t->cap * 2U;
-    FlStr **v = calloc((size_t)cap, sizeof(*v));
+    FlStr **v = yew_xcalloc((size_t)cap, sizeof(*v));
     u32 i;
 
-    if (v == NULL)
-        YEW_BUG("fletch: out of memory growing the string table");
     for (i = 0U; i < t->cap; i++) {
         FlStr *s = t->v[i];
         u32 at;
@@ -526,7 +516,7 @@ static void strtab_grow(FlStrTab *t)
             at = (at + 1U) & (cap - 1U);
         v[at] = s;
     }
-    free(t->v);
+    yew_xfree(t->v);
     t->v = v;
     t->cap = cap;
 }
@@ -624,10 +614,7 @@ bool fl_list_push(FlVm *vm, FlList *l, FlValue v)
 {
     if (l->n == l->cap) {
         u32 cap = l->cap == 0U ? 8U : l->cap * 2U;
-        FlValue *grown = realloc(l->v, (size_t)cap * sizeof(*grown));
-
-        if (grown == NULL)
-            YEW_BUG("fletch: out of memory growing a list");
+        FlValue *grown = yew_xreallocarray(l->v, cap, sizeof(*grown));
         l->v = grown;
         l->cap = cap;
         vm->gc.bytes += (size_t)(cap - l->n) * sizeof(*grown);
@@ -639,10 +626,7 @@ bool fl_list_push(FlVm *vm, FlList *l, FlValue v)
 
 FlUpval **fl_gc_upvals(FlVm *vm, u32 n)
 {
-    FlUpval **up = calloc((size_t)n, sizeof(*up));
-
-    if (up == NULL)
-        YEW_BUG("fletch: out of memory allocating upvalues");
+    FlUpval **up = yew_xcalloc((size_t)n, sizeof(*up));
     vm->gc.bytes += (size_t)n * sizeof(*up);
     return up;
 }
@@ -655,11 +639,9 @@ FlMap *fl_map_new(FlVm *vm)
 static void map_grow_index(FlVm *vm, FlMap *m)
 {
     u32 cap = m->icap == 0U ? 8U : m->icap * 2U;
-    u32 *idx = calloc((size_t)cap, sizeof(*idx));
+    u32 *idx = yew_xcalloc((size_t)cap, sizeof(*idx));
 
-    if (idx == NULL)
-        YEW_BUG("fletch: out of memory growing a map index");
-    free(m->idx);
+    yew_xfree(m->idx);
     m->idx = idx;
     m->icap = cap;
     vm->gc.bytes += (size_t)cap * sizeof(*idx);
@@ -688,10 +670,7 @@ bool fl_map_set(FlVm *vm, FlMap *m, FlValue k, FlValue v)
         map_grow_index(vm, m);
     if (m->n == m->cap) {
         u32 cap = m->cap == 0U ? 8U : m->cap * 2U;
-        FlMapEnt *grown = realloc(m->ent, (size_t)cap * sizeof(*grown));
-
-        if (grown == NULL)
-            YEW_BUG("fletch: out of memory growing a map");
+        FlMapEnt *grown = yew_xreallocarray(m->ent, cap, sizeof(*grown));
         m->ent = grown;
         m->cap = cap;
         vm->gc.bytes += (size_t)cap * sizeof(*grown);
