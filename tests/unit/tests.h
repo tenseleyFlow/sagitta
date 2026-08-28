@@ -859,6 +859,7 @@ void test_http_chunk_boundaries(void);
 void test_http_live_body_shapes(void);
 void test_http_live_timeout_classes(void);
 void test_http_live_pool_retry_and_fresh_failure(void);
+void test_http_live_resolver_and_address_fallback(void);
 void test_ai_config_rejects_literal_credential_fields(void);
 void test_ai_config_accepts_indirect_keys_and_ignores_nested_maps(void);
 void test_ai_config_rejects_url_userinfo_at_value_span(void);

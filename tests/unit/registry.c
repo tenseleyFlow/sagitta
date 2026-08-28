@@ -908,6 +908,7 @@ const YewTest yew_tests[] = {
     T(http_live_body_shapes),
     T(http_live_timeout_classes),
     T(http_live_pool_retry_and_fresh_failure),
+    T(http_live_resolver_and_address_fallback),
     T(ai_config_rejects_literal_credential_fields),
     T(ai_config_accepts_indirect_keys_and_ignores_nested_maps),
     T(ai_config_rejects_url_userinfo_at_value_span),

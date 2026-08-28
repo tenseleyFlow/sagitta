@@ -135,10 +135,11 @@ static void set_int(Ed *ed, const char *name, i64 value)
                            &option, &err));
 }
 
-static HttpConn *request_start(Ed *ed, u16 port, bool keepalive,
-                               AiErr *err, LiveCapture *capture)
+static HttpConn *request_start_host(Ed *ed, const char *host, u16 port,
+                                    bool keepalive, AiErr *err,
+                                    LiveCapture *capture)
 {
-    HttpUrl url = {"127.0.0.1", port, "/", true};
+    HttpUrl url = {host, port, "/", true};
     HttpReq request = {"POST", "/", NULL, 0U, NULL, 0U, keepalive};
     HttpConn *conn = yew_http_begin(ed, &url, &request, err);
 
@@ -148,6 +149,13 @@ static HttpConn *request_start(Ed *ed, u16 port, bool keepalive,
     capture->done = false;
     yew_http_conn_callbacks(conn, body_capture, done_capture, capture);
     return conn;
+}
+
+static HttpConn *request_start(Ed *ed, u16 port, bool keepalive,
+                               AiErr *err, LiveCapture *capture)
+{
+    return request_start_host(ed, "127.0.0.1", port, keepalive, err,
+                              capture);
 }
 
 static void capture_init(LiveCapture *capture)
@@ -299,4 +307,43 @@ void test_http_live_pool_retry_and_fresh_failure(void)
     capture_drop(&second);
     capture_drop(&first);
     yew_ed_free(&ed);
+}
+
+void test_http_live_resolver_and_address_fallback(void)
+{
+    Ed ed;
+    AiErr err;
+    LiveCapture capture;
+    HttpConn *conn;
+    HttpUrl literal = {"127.0.0.1", 9U, "/", true};
+    HttpUrl alias;
+    u64 resolvers;
+    u64 sockets;
+    u16 port;
+    pid_t server = server_start("byte", &port);
+
+    yew_ed_init(&ed);
+    capture_init(&capture);
+    resolvers = yew_http_resolver_call_count();
+    YEW_ASSERT(yew_http_register_endpoint(&ed, &literal, &err));
+    YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
+
+    alias.host = "fallback.test";
+    alias.port = port;
+    alias.path = "/";
+    alias.loopback = false;
+    YEW_ASSERT(yew_http_register_address(&ed, &alias, "127.0.0.2", &err));
+    YEW_ASSERT(yew_http_register_address(&ed, &alias, "127.0.0.1", &err));
+    sockets = yew_http_socket_call_count();
+    conn = request_start_host(&ed, alias.host, port, false, &err, &capture);
+    drive(&ed, &capture, 3000);
+    YEW_ASSERT_EQ_U64(conn->state, YEW_HC_DONE);
+    YEW_ASSERT_EQ_U64(yew_http_socket_call_count(), sockets + 2U);
+    YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
+    YEW_ASSERT_EQ_U64(capture.body.len, 5U);
+    YEW_ASSERT_EQ_MEM(capture.body.data, "hello", 5U);
+    yew_http_conn_release(&ed, conn);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+    server_wait(server);
 }

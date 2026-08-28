@@ -25,10 +25,16 @@
 #include "util/log.h"
 
 static u64 http_socket_calls;
+static u64 http_resolver_calls;
 
 u64 yew_http_socket_call_count(void)
 {
     return http_socket_calls;
+}
+
+u64 yew_http_resolver_call_count(void)
+{
+    return http_resolver_calls;
 }
 
 static const char http_tls_error[] =
@@ -1031,6 +1037,46 @@ static HttpEndpoint *endpoint_find(HttpState *state, const char *host,
     return NULL;
 }
 
+static HttpEndpoint *endpoint_last(HttpState *state)
+{
+    HttpEndpoint *it = state->endpoints;
+
+    if (it == NULL)
+        return NULL;
+    while (it->next != NULL)
+        it = it->next;
+    return it;
+}
+
+static HttpEndpoint *endpoint_add(HttpState *state, const char *host,
+                                  u16 port, const struct sockaddr *address,
+                                  socklen_t address_len)
+{
+    HttpEndpoint *endpoint;
+    HttpEndpoint *last;
+
+    for (endpoint = state->endpoints; endpoint != NULL;
+         endpoint = endpoint->next) {
+        if (endpoint->port == port && strcmp(endpoint->host, host) == 0 &&
+            endpoint->address_len == address_len &&
+            memcmp(&endpoint->address, address, address_len) == 0)
+            return endpoint;
+    }
+    endpoint = yew_xcalloc(1U, sizeof(*endpoint));
+    last = endpoint_last(state);
+
+    (void)snprintf(endpoint->host, sizeof(endpoint->host), "%s", host);
+    endpoint->port = port;
+    (void)memcpy(&endpoint->address, address, address_len);
+    endpoint->address_len = address_len;
+    endpoint->loopback = sockaddr_loopback(address);
+    if (last == NULL)
+        state->endpoints = endpoint;
+    else
+        last->next = endpoint;
+    return endpoint;
+}
+
 static bool numeric_host(const char *host)
 {
     struct in_addr in;
@@ -1040,6 +1086,40 @@ static bool numeric_host(const char *host)
            inet_pton(AF_INET6, host, &in6) == 1;
 }
 
+bool yew_http_register_address(Ed *ed, HttpUrl *u, const char *numeric,
+                               AiErr *e)
+{
+    HttpState *state = http_state(ed);
+    struct sockaddr_storage address;
+    struct sockaddr_in *in = (struct sockaddr_in *)&address;
+    struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)&address;
+    HttpEndpoint *endpoint;
+
+    ai_error_clear(e);
+    if (state == NULL || u == NULL || u->host == NULL || u->port == 0U ||
+        numeric == NULL) {
+        ai_error_set(e, YEW_AI_ERR_PROTOCOL, "invalid HTTP endpoint");
+        return false;
+    }
+    (void)memset(&address, 0, sizeof(address));
+    if (inet_pton(AF_INET, numeric, &in->sin_addr) == 1) {
+        in->sin_family = AF_INET;
+        in->sin_port = htons(u->port);
+        endpoint = endpoint_add(state, u->host, u->port,
+                                (const struct sockaddr *)in, sizeof(*in));
+    } else if (inet_pton(AF_INET6, numeric, &in6->sin6_addr) == 1) {
+        in6->sin6_family = AF_INET6;
+        in6->sin6_port = htons(u->port);
+        endpoint = endpoint_add(state, u->host, u->port,
+                                (const struct sockaddr *)in6, sizeof(*in6));
+    } else {
+        ai_error_set(e, YEW_AI_ERR_PROTOCOL, "invalid numeric HTTP address");
+        return false;
+    }
+    u->loopback = endpoint->loopback;
+    return true;
+}
+
 bool yew_http_register_endpoint(Ed *ed, HttpUrl *u, AiErr *e)
 {
     HttpState *state = http_state(ed);
@@ -1047,6 +1127,8 @@ bool yew_http_register_endpoint(Ed *ed, HttpUrl *u, AiErr *e)
     struct addrinfo hints;
     struct addrinfo *addresses = NULL;
     struct addrinfo *it;
+    HttpEndpoint *first = NULL;
+    bool all_loopback = true;
     char service[6];
     int status;
 
@@ -1060,13 +1142,18 @@ bool yew_http_register_endpoint(Ed *ed, HttpUrl *u, AiErr *e)
         u->loopback = endpoint->loopback;
         return true;
     }
+    if (numeric_host(u->host))
+        return yew_http_register_address(ed, u, u->host, e);
+
     (void)memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_NUMERICSERV;
-    if (numeric_host(u->host))
-        hints.ai_flags |= AI_NUMERICHOST;
+#ifdef AI_ADDRCONFIG
+    hints.ai_flags |= AI_ADDRCONFIG;
+#endif
     (void)snprintf(service, sizeof(service), "%u", (unsigned)u->port);
+    http_resolver_calls++;
     status = getaddrinfo(u->host, service, &hints, &addresses);
     if (status != 0) {
         ai_error_set(e, YEW_AI_ERR_UNREACHABLE,
@@ -1076,25 +1163,23 @@ bool yew_http_register_endpoint(Ed *ed, HttpUrl *u, AiErr *e)
     }
     for (it = addresses; it != NULL; it = it->ai_next) {
         if ((it->ai_family == AF_INET || it->ai_family == AF_INET6) &&
-            it->ai_addrlen <= sizeof(endpoint->address))
-            break;
+            it->ai_addrlen <= sizeof(struct sockaddr_storage)) {
+            endpoint = endpoint_add(state, u->host, u->port, it->ai_addr,
+                                    (socklen_t)it->ai_addrlen);
+            if (first == NULL)
+                first = endpoint;
+            if (!endpoint->loopback)
+                all_loopback = false;
+        }
     }
-    if (it == NULL) {
+    if (first == NULL) {
         freeaddrinfo(addresses);
         ai_error_set(e, YEW_AI_ERR_UNREACHABLE,
                      "HTTP endpoint %s has no TCP address", u->host);
         return false;
     }
-    endpoint = yew_xcalloc(1U, sizeof(*endpoint));
-    (void)snprintf(endpoint->host, sizeof(endpoint->host), "%s", u->host);
-    endpoint->port = u->port;
-    (void)memcpy(&endpoint->address, it->ai_addr, it->ai_addrlen);
-    endpoint->address_len = (socklen_t)it->ai_addrlen;
-    endpoint->loopback = sockaddr_loopback(it->ai_addr);
-    endpoint->next = state->endpoints;
-    state->endpoints = endpoint;
     freeaddrinfo(addresses);
-    u->loopback = endpoint->loopback;
+    u->loopback = all_loopback;
     return true;
 }
 
@@ -1179,11 +1264,49 @@ static void conn_error(HttpConn *c, AiErrKind kind, const char *message)
     ai_error_set(c->error, kind, "%s", message);
 }
 
-static bool conn_socket(HttpConn *c, i64 now)
+static bool endpoint_matches(const HttpEndpoint *endpoint,
+                             const HttpConn *c)
+{
+    return endpoint->port == c->port &&
+           strcmp(endpoint->host, c->host) == 0 &&
+           endpoint->address_len == c->address_len &&
+           memcmp(&endpoint->address, &c->address,
+                  c->address_len) == 0;
+}
+
+static bool conn_advance_address(Ed *ed, HttpConn *c)
+{
+    HttpState *state = http_state(ed);
+    HttpEndpoint *endpoint;
+    bool found = false;
+    bool allow_remote = option_bool(ed, "ai.allow_plain_remote", false);
+
+    if (state == NULL)
+        return false;
+    for (endpoint = state->endpoints; endpoint != NULL;
+         endpoint = endpoint->next) {
+        if (!found) {
+            found = endpoint_matches(endpoint, c);
+            continue;
+        }
+        if (endpoint->port != c->port ||
+            strcmp(endpoint->host, c->host) != 0)
+            continue;
+        if (!endpoint->loopback && !allow_remote)
+            continue;
+        c->address = endpoint->address;
+        c->address_len = endpoint->address_len;
+        return true;
+    }
+    return false;
+}
+
+static bool conn_socket(Ed *ed, HttpConn *c, i64 now)
 {
     int one = 1;
     int result;
 
+again:
     http_socket_calls++;
     c->fd = socket(c->address.ss_family,
                    SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
@@ -1215,6 +1338,9 @@ static bool conn_socket(HttpConn *c, i64 now)
         c->state = (u8)YEW_HC_CONNECTING;
         return true;
     }
+    close_fd(&c->fd);
+    if (conn_advance_address(ed, c))
+        goto again;
     conn_error(c, YEW_AI_ERR_UNREACHABLE,
                "HTTP endpoint refused the connection");
     return false;
@@ -1233,7 +1359,7 @@ static void rx_restart(HttpConn *c)
     c->stream_complete = false;
 }
 
-static bool conn_retry_fresh(HttpConn *c, i64 now)
+static bool conn_retry_fresh(Ed *ed, HttpConn *c, i64 now)
 {
     if (!c->from_pool || c->retried || c->response_seen)
         return false;
@@ -1241,7 +1367,7 @@ static bool conn_retry_fresh(HttpConn *c, i64 now)
     c->retried = true;
     c->from_pool = false;
     rx_restart(c);
-    return conn_socket(c, now);
+    return conn_socket(ed, c, now);
 }
 
 HttpConn *yew_http_begin(Ed *ed, const HttpUrl *u, const HttpReq *r,
@@ -1272,8 +1398,16 @@ HttpConn *yew_http_begin(Ed *ed, const HttpUrl *u, const HttpReq *r,
                      u->host);
         return NULL;
     }
-    if (!endpoint->loopback &&
-        !option_bool(ed, "ai.allow_plain_remote", false)) {
+    if (!option_bool(ed, "ai.allow_plain_remote", false)) {
+        while (endpoint != NULL && !endpoint->loopback) {
+            endpoint = endpoint->next;
+            if (endpoint != NULL &&
+                (endpoint->port != u->port ||
+                 strcmp(endpoint->host, u->host) != 0))
+                endpoint = NULL;
+        }
+    }
+    if (endpoint == NULL) {
         ai_error_set(e, YEW_AI_ERR_TLS,
                      "refusing to send an API key in cleartext to %s; set "
                      "ai.allow_plain_remote if this is a trusted LAN",
@@ -1323,7 +1457,7 @@ HttpConn *yew_http_begin(Ed *ed, const HttpUrl *u, const HttpReq *r,
         c->state = (u8)YEW_HC_SENDING;
         c->t_connected = now;
     } else {
-        (void)conn_socket(c, now);
+        (void)conn_socket(ed, c, now);
     }
     c->next = state->connections;
     state->connections = c;
@@ -1421,13 +1555,18 @@ static void conn_finish(Ed *ed, HttpConn *c, i64 now)
         close_fd(&c->fd);
 }
 
-static void conn_connect_ready(HttpConn *c, i64 now)
+static void conn_connect_ready(Ed *ed, HttpConn *c, i64 now)
 {
     int socket_error = 0;
     socklen_t len = sizeof(socket_error);
 
     if (getsockopt(c->fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) != 0 ||
         socket_error != 0) {
+        close_fd(&c->fd);
+        if (conn_advance_address(ed, c)) {
+            (void)conn_socket(ed, c, now);
+            return;
+        }
         conn_error(c, YEW_AI_ERR_UNREACHABLE,
                    "HTTP endpoint refused the connection");
         return;
@@ -1436,7 +1575,7 @@ static void conn_connect_ready(HttpConn *c, i64 now)
     c->t_connected = now;
 }
 
-static void conn_send(HttpConn *c, i64 now)
+static void conn_send(Ed *ed, HttpConn *c, i64 now)
 {
     u64 budget = 64U * 1024U;
 
@@ -1459,7 +1598,7 @@ static void conn_send(HttpConn *c, i64 now)
             continue;
         if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return;
-        if (!conn_retry_fresh(c, now))
+        if (!conn_retry_fresh(ed, c, now))
             conn_error(c, YEW_AI_ERR_UNREACHABLE,
                        "HTTP connection closed while sending request");
         return;
@@ -1508,7 +1647,7 @@ static void conn_receive(Ed *ed, HttpConn *c, i64 now)
             continue;
         if (got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
             return;
-        if (!c->response_seen && conn_retry_fresh(c, now))
+        if (!c->response_seen && conn_retry_fresh(ed, c, now))
             return;
         if (got == 0) {
             (void)yew_http_rx_feed(c->rx, NULL, 0U, true, c->on_body,
@@ -1597,10 +1736,10 @@ void yew_http_pump(Ed *ed, const struct pollfd *pfd, u32 n)
         revents = conn_revents(c, pfd, n);
         if (c->state == (u8)YEW_HC_CONNECTING &&
             (revents & (POLLOUT | POLLERR | POLLHUP)) != 0)
-            conn_connect_ready(c, now);
+            conn_connect_ready(ed, c, now);
         if (c->state == (u8)YEW_HC_SENDING &&
             (revents & (POLLOUT | POLLERR | POLLHUP)) != 0)
-            conn_send(c, now);
+            conn_send(ed, c, now);
         if (c->state == (u8)YEW_HC_RECVING &&
             (revents & (POLLIN | POLLERR | POLLHUP)) != 0)
             conn_receive(ed, c, now);

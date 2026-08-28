@@ -157,10 +157,17 @@ void yew_http_state_free(HttpState *state);
 /* Process-local diagnostic used by the hermetic test lane to prove that
  * an opt-out profile never reaches socket(2). */
 u64 yew_http_socket_call_count(void);
+/* Process-local diagnostic proving numeric literals bypass name service. */
+u64 yew_http_resolver_call_count(void);
+
+/* Add one caller-supplied numeric address under a logical endpoint name.
+ * Repeated calls preserve insertion order and allow resolver-free hosts. */
+bool yew_http_register_address(Ed *ed, HttpUrl *u, const char *numeric,
+                               AiErr *e);
 
 /* Named hosts must be registered before use.  Registration performs the
- * sole blocking lookup and caches one exact sockaddr; requests only copy
- * that cached address.  Numeric hosts are cached with AI_NUMERICHOST. */
+ * sole blocking lookup and caches every eligible sockaddr in resolver
+ * order.  Numeric hosts are converted directly without name service. */
 bool yew_http_register_endpoint(Ed *ed, HttpUrl *u, AiErr *e);
 HttpConn *yew_http_begin(Ed *ed, const HttpUrl *u, const HttpReq *r,
                          AiErr *e);
