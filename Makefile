@@ -1,11 +1,82 @@
+HOST_OS := $(shell uname -s)
+HOST_ARCH := $(shell uname -m)
+HOST_LIBC := $(strip $(shell \
+	if [ '$(HOST_OS)' = Linux ]; then \
+		if getconf GNU_LIBC_VERSION >/dev/null 2>&1; then printf '%s' gnu; \
+		elif ldd --version 2>&1 | grep -qi musl; then printf '%s' musl; fi; \
+	fi))
+HOST_TARGET := $(strip $(if $(filter Linux,$(HOST_OS)),\
+                 $(if $(filter x86_64,$(HOST_ARCH)),\
+                   $(if $(HOST_LIBC),x86_64-linux-$(HOST_LIBC),),\
+                   $(if $(filter aarch64 arm64,$(HOST_ARCH)),arm64-linux,)),\
+                 $(if $(and $(filter Darwin,$(HOST_OS)),\
+                            $(filter arm64,$(HOST_ARCH))),arm64-macos,)))
+SUPPORTED_TARGETS := x86_64-linux-gnu arm64-linux x86_64-linux-musl \
+                     arm64-macos
+CROSS_INPUT := $(strip $(CROSS))
+CROSS_TARGET := $(strip \
+                  $(if $(filter aarch64-linux-gnu-,$(CROSS_INPUT)),\
+                    arm64-linux,\
+                    $(if $(filter x86_64-linux-musl-,$(CROSS_INPUT)),\
+                      x86_64-linux-musl,)))
+ifeq ($(origin TARGET),undefined)
+ifneq ($(CROSS_INPUT),)
+ifeq ($(CROSS_TARGET),)
+$(error cannot infer TARGET from CROSS '$(CROSS_INPUT)'; set TARGET to one of: $(SUPPORTED_TARGETS))
+endif
+endif
+endif
+TARGET ?= $(if $(CROSS_TARGET),$(CROSS_TARGET),$(HOST_TARGET))
+ifeq ($(strip $(TARGET)),)
+$(error unsupported host $(HOST_ARCH)-$(HOST_OS); set TARGET to one of: $(SUPPORTED_TARGETS))
+endif
+ifneq ($(words $(filter $(TARGET),$(SUPPORTED_TARGETS))),1)
+$(error unsupported TARGET '$(TARGET)' (supported: $(SUPPORTED_TARGETS)))
+endif
+ifneq ($(CROSS_TARGET),)
+ifneq ($(TARGET),$(CROSS_TARGET))
+$(error CROSS '$(CROSS_INPUT)' selects TARGET '$(CROSS_TARGET)', not '$(TARGET)')
+endif
+endif
+
+# TARGET chooses the ABI/profile; CROSS keeps the compiler and every binary
+# inspection tool on one prefix.  A glibc host uses the canonical musl cross
+# prefix, while Alpine and native arm64 lanes keep CROSS empty.
+CROSS ?= $(strip \
+           $(if $(and $(filter x86_64-linux-musl,$(TARGET)),\
+                      $(filter-out x86_64-linux-musl,$(HOST_TARGET))),\
+             x86_64-linux-musl-,))
+ifneq ($(TARGET),$(HOST_TARGET))
+ifeq ($(strip $(CROSS)),)
+$(error TARGET '$(TARGET)' is not native to $(HOST_TARGET); set CROSS=<tool-prefix>)
+endif
+endif
+
 CC      ?= cc
-BUILD   ?= build
-ALLOCDBG ?= 0
-SHIPPING ?= 0
-GC_SECTIONS ?= 1
 NM      ?= nm
 SIZE    ?= size
 STRIP   ?= strip
+AR      ?= ar
+MUSL_CC ?= $(if $(strip $(CROSS)),$(CROSS)gcc,gcc)
+ifneq ($(strip $(CROSS)),)
+override CC := $(CROSS)gcc
+override NM := $(CROSS)nm
+override SIZE := $(CROSS)size
+override STRIP := $(CROSS)strip
+override AR := $(CROSS)ar
+endif
+ifeq ($(TARGET),x86_64-linux-musl)
+override CC := $(MUSL_CC)
+endif
+
+TARGET_OS := $(if $(filter arm64-macos,$(TARGET)),Darwin,Linux)
+BUILD   ?= build
+ALLOCDBG ?= 0
+SHIPPING ?= 0
+ifeq ($(TARGET),x86_64-linux-musl)
+override SHIPPING := 1
+endif
+GC_SECTIONS ?= 1
 STRIPFLAGS ?= -s -R .comment -R .note.ABI-tag
 SIZE_ROOT ?= build-size
 PREFIX  ?= /usr/local
@@ -83,7 +154,6 @@ CALIB_REFERENCE ?=
 CALIB_OUTPUT ?= $(BUILD)/calib.txt
 EXTRA_CFLAGS ?=
 PERF_S56_WORKSPACE_READY := $(BUILD)/perf-s56-many/.ready
-HOST_OS := $(shell uname -s)
 
 ifeq ($(ALLOCDBG),1)
 ifeq ($(origin BUILD),file)
@@ -140,10 +210,13 @@ endif
 
 ifeq ($(SHIPPING),1)
 CFLAGS += -DNDEBUG
-ifeq ($(HOST_OS),Linux)
+ifeq ($(TARGET_OS),Linux)
 CFLAGS += -ffunction-sections -fdata-sections \
           -fno-asynchronous-unwind-tables -fno-unwind-tables
 endif
+endif
+ifeq ($(TARGET),x86_64-linux-musl)
+CFLAGS += -fPIE -fno-plt
 endif
 
 # Sprint 30 DoD 1: the Fletch VM's computed-goto dispatcher.  The label
@@ -196,12 +269,15 @@ endif
 #
 LDFLAGS :=
 ifeq ($(SHIPPING),1)
-ifeq ($(HOST_OS),Linux)
+ifeq ($(TARGET_OS),Linux)
 ifeq ($(GC_SECTIONS),1)
 LDFLAGS += -Wl,--gc-sections
 endif
 LDFLAGS += -Wl,--build-id=none
 endif
+endif
+ifeq ($(TARGET),x86_64-linux-musl)
+LDFLAGS += -static-pie -Wl,-z,relro,-z,now,-z,noexecstack
 endif
 #
 # LDLIBS, NOT LDFLAGS, and it goes AFTER the objects.
@@ -214,7 +290,7 @@ endif
 # lanes red on push.
 #
 LDLIBS := -lm
-ifeq ($(HOST_OS),Darwin)
+ifeq ($(TARGET_OS),Darwin)
 SHARED_FLAG := -dynamiclib
 DL_LIBS :=
 else
@@ -766,9 +842,15 @@ STAMP_MODULES := $(file <$(BUILD)/mods.stamp)
 ifneq ($(STAMP_MODULES),$(MODULES))
 MODULE_FORCE := FORCE
 endif
+BUILD_PROFILE_KEY := target=$(TARGET);cc=$(CC);shipping=$(SHIPPING);gc=$(GC_SECTIONS);allocdbg=$(ALLOCDBG);san=$(SAN);valgrind=$(VALGRIND);fl_cgoto=$(FL_CGOTO);fl_checks=$(FL_CHECKS);fl_trace=$(CFLAGS_FL_TRACE);prefix=$(PREFIX);extra=$(EXTRA_CFLAGS)
+STAMP_PROFILE := $(file <$(BUILD)/profile.stamp)
+ifneq ($(STAMP_PROFILE),$(BUILD_PROFILE_KEY))
+PROFILE_FORCE := FORCE
+endif
 
 .DEFAULT_GOAL := all
 .PHONY: all check test test-alloc-debug alloc perf-alloc clean install dirs FORCE \
+        target-info target-tools-selftest \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
@@ -821,6 +903,24 @@ endif
         test-fletch-dispatch test-fletch-gc-stress test-fletch-determinism
 
 all: $(BUILD)/yew
+
+target-info:
+	@printf '%s\n' \
+		'target $(TARGET)' \
+		'host $(HOST_TARGET)' \
+		'cross $(if $(strip $(CROSS)),$(CROSS),-)' \
+		'cc $(CC)' \
+		'nm $(NM)' \
+		'size $(SIZE)' \
+		'strip $(STRIP)' \
+		'ar $(AR)' \
+		'shipping $(SHIPPING)' \
+		'static_pie $(if $(filter x86_64-linux-musl,$(TARGET)),1,0)' \
+		'profile $(BUILD_PROFILE_KEY)'
+
+target-tools-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/target-tools.test.sh
 
 test-alloc-debug: $(BUILD)/unit_tests
 	env -u XDG_STATE_HOME $(BUILD)/unit_tests --filter alloc_
@@ -1245,32 +1345,42 @@ $(TORTURE_GIT_HUNK): $(PERF_CORE_OBJ) $(TORTURE_GIT_HUNK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(TORTURE_GIT_HUNK_OBJ) $(LDLIBS)
 
-$(FAULTSHIM): tests/torture/faultshim.c | dirs
+$(FAULTSHIM): tests/torture/faultshim.c $(BUILD)/mods.stamp \
+              $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< \
 		$(DL_LIBS) $(LDLIBS)
 
-$(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
+$(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c \
+                             $(BUILD)/profile.stamp $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-$(BUILD)/gen-compdb: scripts/gen-compdb.c | dirs
+$(BUILD)/gen-compdb: scripts/gen-compdb.c $(BUILD)/profile.stamp \
+                     $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-$(FAKECLIP): tests/unit/fakeclip.c | dirs
+$(FAKECLIP): tests/unit/fakeclip.c $(BUILD)/mods.stamp \
+             $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-$(FAKELSP): tests/helpers/fakelsp.c | dirs
+$(FAKELSP): tests/helpers/fakelsp.c $(BUILD)/mods.stamp \
+            $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-$(FAKECURL): tests/helpers/fakecurl.c | dirs
+$(FAKECURL): tests/helpers/fakecurl.c $(BUILD)/mods.stamp \
+             $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-$(FAKEHTTP): tests/helpers/fakehttp.c | dirs
+$(FAKEHTTP): tests/helpers/fakehttp.c $(BUILD)/mods.stamp \
+             $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-$(MOCKAI): tests/helpers/mockai.c | dirs
+$(MOCKAI): tests/helpers/mockai.c $(BUILD)/mods.stamp \
+           $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-$(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c | dirs
+$(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
+             $(BUILD)/mods.stamp $(BUILD)/profile.stamp \
+             $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 #
@@ -1291,7 +1401,8 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c | dirs
 # has to be asked for by hand.
 #
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
-       test-syn-assets size-tools-selftest $(PKG_TEST_TARGET)
+       test-syn-assets size-tools-selftest target-tools-selftest \
+       $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -1305,7 +1416,8 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-scri
 
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \
-      test-syn-def-corpus test-syn-assets torture-build $(PKG_TEST_TARGET)
+      test-syn-def-corpus test-syn-assets target-tools-selftest torture-build \
+      $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -2296,13 +2408,22 @@ unicode-tables: $(BUILD)/gen-unicode-tables
 	$< --case ucd/16.0.0 > src/unicode/tables_case.c
 	$< --category ucd/16.0.0 > src/unicode/tables_cat.c
 
-# Check the literal selection on every invocation, but preserve the stamp's
-# mtime when it is unchanged so objects are not rebuilt spuriously.
-$(BUILD)/mods.stamp: FORCE | dirs
+# Read the literal selection on every invocation, but schedule the stamp only
+# when its content changed so objects are not rebuilt spuriously.
+$(BUILD)/mods.stamp: $(MODULE_FORCE) | dirs
 	@if ! printf '%s\n' '$(MODULES)' | cmp -s - $@; then \
 		rm -f $(OBJ) $(OBJ:.o=.d) $(UNIT_OBJ) $(UNIT_OBJ:.o=.d) \
 		      $(SYN_ENGINE_UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ:.o=.d); \
 		printf '%s\n' '$(MODULES)' > $@; \
+	fi
+
+# A BUILD tree cannot safely retain objects across target/compiler/profile
+# changes.  Unlike the module stamp, no source set changes here: forcing every
+# selected object to rebuild is enough, and avoids a second concurrent cleanup
+# recipe racing the module stamp's removal of unreachable objects.
+$(BUILD)/profile.stamp: $(PROFILE_FORCE) | dirs
+	@if ! printf '%s\n' '$(BUILD_PROFILE_KEY)' | cmp -s - $@; then \
+		printf '%s\n' '$(BUILD_PROFILE_KEY)' > $@; \
 	fi
 
 # The one file allowed out of the C11 box, and only when the
@@ -2314,15 +2435,19 @@ $(BUILD)/src/fl/vm.o: CFLAGS := \
   $(subst -std=c11,-std=gnu11,$(CFLAGS)) -Wno-pedantic
 endif
 
-$(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(MODULE_FORCE) | dirs
+$(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(BUILD)/profile.stamp \
+              $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(SYN_ENGINE_UNIT_OBJ): src/syn/engine.c $(BUILD)/mods.stamp \
-                        $(MODULE_FORCE) | dirs
+                        $(BUILD)/profile.stamp $(MODULE_FORCE) \
+                        $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) -DYEW_SYN_TEST=1 -c -o $@ $<
 
 $(STATE_LEGACY_OBJ): src/ws/state_legacy.c src/ws/fl_parse.c \
-                     src/ws/fl_emit.c $(BUILD)/mods.stamp | dirs
+                     src/ws/fl_emit.c $(BUILD)/mods.stamp \
+                     $(BUILD)/profile.stamp $(MODULE_FORCE) \
+                     $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) -DYEW_STATE_LEGACY=1 -c -o $@ $<
 
 dirs:
