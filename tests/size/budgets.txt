@@ -1,0 +1,9 @@
+# config         bytes    modules                         why
+full             1572864  lsp,ai,fuss,plugins             locked-1.5-MiB-quality-bar
+minimal           921600  none                            locked-900-KiB-quality-bar
+lsp-only         1075200  lsp                             sprint57-pinned-minimal-plus-150-KiB-cap
+ai-only          1013760  ai                              sprint57-pinned-minimal-plus-90-KiB-cap
+fuss-only        1064960  fuss                            sprint57-pinned-minimal-plus-140-KiB-cap
+plugins-only      993280  plugins                         sprint57-pinned-minimal-plus-70-KiB-cap
+musl-full        2097152  lsp,ai,fuss,plugins             sprint57-static-profile-cap
+musl-minimal     1363148  none                            sprint57-static-profile-cap

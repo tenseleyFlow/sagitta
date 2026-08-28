@@ -1,0 +1,10 @@
+The committed budgets are contract inputs, not measurements from a developer
+workstation.  `ledger-full.txt` and `ledger-minimal.txt` must be generated only
+by the pinned x86_64-linux-gnu CI measurement described by Sprint 57.  They are
+intentionally absent until that lane is wired and produces provenance-bearing
+output.
+
+The four single-module values are the Sprint 57 contract caps.  When the first
+pinned ledgers land, their `why` fields must be replaced with the measured
+minimal-plus-module derivation and rounded upward to the next 10 KiB; a local
+developer build is not acceptable provenance for that update.
