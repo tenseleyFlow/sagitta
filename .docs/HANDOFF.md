@@ -1,9 +1,9 @@
 # yew — session handoff
 
-**Written:** 2026-08-27. **Active implementation frontier:** Sprint 56.5,
-workspace startup semantics, the FUSS drawer, and non-destructive shadow
-composition. Campaign 12 is complete. Sprint 56's repository implementation is
-complete; its pinned self-hosted hardware evidence remains external and
+**Written:** 2026-08-27. **Active implementation frontier:** Sprint 57,
+binary-size budgets, allocation audit, the musl embedded profile, and target
+proof. Campaign 12 is complete. Sprint 56 and Sprint 56.5 are repository
+complete; Sprint 56's pinned self-hosted hardware evidence remains external and
 pending.
 
 ---
@@ -15,12 +15,12 @@ Read, in order:
 1. `.docs/plan/00-decisions.md`
 2. `.docs/plan/01-architecture.md`
 3. `.docs/plan/02-fletch.md`
-4. `.docs/sprints/13-performance/s56_5-workspace-interaction.md`
+4. `.docs/sprints/13-performance/s57-size-and-embedded.md`
 
-Sprint 56.5 is the binding implementation contract. It repairs the dogfooded
-workspace/FUSS/shadow interaction seams before Sprint 57 freezes binary and
-allocation budgets. Do not manufacture Sprint 56 reference vectors or promote
-this laptop as a designated runner.
+Sprint 57 is the binding implementation contract. Sprint 56.5 closed the
+dogfooded workspace/FUSS/shadow interaction seams, so size, allocation, musl,
+embedded-target, and required architecture work can proceed. Do not manufacture
+Sprint 56 reference vectors or promote this laptop as a designated runner.
 
 ## 1. Sprint 56 repository closeout
 
@@ -32,8 +32,8 @@ Unicode grapheme state while bulk-consuming proven ASCII spans, keeping the
 8 MiB ASCII-to-Unicode transition below the 5 ms motion budget.
 
 Repository verification includes the fast gate, strict GCC/Clang coordinate
-coverage, gate selftests, and the cursor performance matrix. The latest pushed
-Sprint 56 SHA is `9ebd1b4`.
+coverage, gate selftests, and the cursor performance matrix. The repository
+gates are green through the Sprint 56.5 closeout sequence.
 
 The contract's hardware-evidence rows remain deliberately open: GitHub reports
 zero registered self-hosted runners and no enabling repository variables, so
@@ -41,6 +41,14 @@ there is no honest source for promoted x86_64/arm64 calibration references,
 runner baselines, or five consecutive designated runs. Hosted timing stays
 advisory. This does not block the next repository implementation frontier, but
 it remains a release closeout prerequisite.
+
+Sprint 56.5 completed deterministic startup workspace resolution, restored
+state plus explicit-file merge, the non-Git all-files FUSS drawer, explicit
+new-tab and split destinations, and insertion-preview shadow composition.
+Closeout evidence includes the 2,385-test / 71,013,449-assertion fast gate,
+strict full/minimal GCC and Clang builds, focused ASan/UBSan and Valgrind,
+deterministic drawer PTYs, sanitized FUSS fuzzing, independent lifecycle
+approval, and green shadow/FUSS performance budgets.
 
 ## 2. Sprint 47 closeout
 
@@ -248,9 +256,9 @@ host code. Hosted CI run `33025642745` attempt 3 closed Campaign 12 green.
     and transactional baselines (repository complete; designated hardware
     evidence pending)
 16. Sprint 56.5 — workspace invocation, FUSS drawer/open behavior, and honest
-    insertion-preview shadow composition (active frontier)
+    insertion-preview shadow composition (complete)
 17. Sprint 57 — binary size, allocation audit, musl embedded profile, and
-    target proof (next)
+    target proof (active frontier)
 
 ## 6. Daily Driver remains separate and pending
 
