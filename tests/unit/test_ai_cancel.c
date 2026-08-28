@@ -69,12 +69,18 @@ static pid_t cancel_server_start(const char *mode, u16 *port)
     return pid;
 }
 
-static void cancel_server_wait(pid_t pid)
+static void cancel_server_stop(pid_t pid)
 {
     int status = 0;
+    pid_t waited;
 
-    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
-    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT(kill(pid, SIGTERM) == 0 || errno == ESRCH);
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    YEW_ASSERT_EQ_I64(waited, pid);
+    YEW_ASSERT(WIFEXITED(status) ||
+               (WIFSIGNALED(status) && WTERMSIG(status) == SIGTERM));
 }
 
 void test_ai_cancel_http_never_pools_the_connection(void)
@@ -109,7 +115,7 @@ void test_ai_cancel_http_never_pools_the_connection(void)
     YEW_ASSERT(!next->from_pool);
     yew_http_abort(&ed, next);
     yew_http_conn_release(&ed, next);
-    cancel_server_wait(server);
+    cancel_server_stop(server);
     yew_ed_free(&ed);
 }
 

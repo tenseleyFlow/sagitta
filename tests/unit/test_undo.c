@@ -3,8 +3,10 @@
 #include "harness.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -608,7 +610,8 @@ void test_undo_to_root_reproduces_loaded_bytes(void)
 
 void test_undo_save_reopens_journal_on_navigation(void)
 {
-    char state[] = "/tmp/yew-undo-save-XXXXXX";
+    char state[PATH_MAX] = "/tmp/yew-undo-save-XXXXXX";
+    char canonical[PATH_MAX];
     char source[128];
     char journal_dir[128];
     char yew_dir[112];
@@ -625,6 +628,9 @@ void test_undo_save_reopens_journal_on_navigation(void)
     int count;
 
     YEW_ASSERT_NOT_NULL(mkdtemp(state));
+    YEW_ASSERT_NOT_NULL(realpath(state, canonical));
+    YEW_ASSERT(strlen(canonical) < sizeof(state));
+    (void)strcpy(state, canonical);
     count = snprintf(source, sizeof(source), "%s/base.txt", state);
     YEW_ASSERT(count > 0 && (size_t)count < sizeof(source));
     file = fopen(source, "wb");

@@ -344,7 +344,7 @@ void test_http_live_resolver_and_address_fallback(void)
     alias.port = port;
     alias.path = "/";
     alias.loopback = false;
-    YEW_ASSERT(yew_http_register_address(&ed, &alias, "127.0.0.2", &err));
+    YEW_ASSERT(yew_http_register_address(&ed, &alias, "::1", &err));
     YEW_ASSERT(yew_http_register_address(&ed, &alias, "127.0.0.1", &err));
     sockets = yew_http_socket_call_count();
     conn = request_start_host(&ed, alias.host, port, false, &err, &capture);

@@ -17,6 +17,13 @@ static void set_ring_env(const char *value)
         YEW_ASSERT_EQ_I64(setenv("YEW_PROF_RING", value, 1), 0);
 }
 
+static void wait_for_clock_tick(void)
+{
+    u64 start = yew_now_ns();
+
+    while (yew_now_ns() == start) {}
+}
+
 void test_prof_frame_is_one_cache_line(void)
 {
     YEW_ASSERT_EQ_U64(sizeof(ProfFrame), 64U);
@@ -84,8 +91,11 @@ void test_prof_phase_reentry_and_frame_end_close(void)
     yew_prof_init(&prof, &arena, true);
     yew_prof_frame_begin(&prof);
     yew_prof_phase(&prof, YEW_PH_INPUT);
+    wait_for_clock_tick();
     yew_prof_phase(&prof, YEW_PH_JOBS);
+    wait_for_clock_tick();
     yew_prof_phase(&prof, YEW_PH_INPUT);
+    wait_for_clock_tick();
     yew_prof_frame_end(&prof, 3U, 17U, YEW_PF_JOB_IO);
     frame = &prof.ring[0];
     YEW_ASSERT(frame->ph_ns[YEW_PH_INPUT] > 0U);

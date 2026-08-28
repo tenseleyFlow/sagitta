@@ -30,6 +30,7 @@ static void sw_rm_rf(const char *path)
 static void sw_init(SymWalkFix *f)
 {
     static const char root_template[] = "/tmp/yew-symwalk-XXXXXX";
+    char canonical[sizeof(f->root)];
     const char *path = getenv("PATH");
 
     _Static_assert(sizeof(root_template) <= sizeof(f->root),
@@ -37,6 +38,9 @@ static void sw_init(SymWalkFix *f)
     (void)memset(f, 0, sizeof(*f));
     (void)memcpy(f->root, root_template, sizeof(root_template));
     YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
+    YEW_ASSERT_NOT_NULL(realpath(f->root, canonical));
+    YEW_ASSERT(strlen(canonical) < sizeof(f->root));
+    (void)strcpy(f->root, canonical);
     if (path != NULL) {
         f->old_path = yew_xmalloc(strlen(path) + 1U);
         (void)strcpy(f->old_path, path);
