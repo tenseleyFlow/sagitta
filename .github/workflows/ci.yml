@@ -102,6 +102,24 @@ jobs:
             build-clang/perf_textbuf build-clang/perf_latency \
             build-clang/fuzz_cmdparse build-clang/perf_cmdcomp
 
+  # Sprint 57 §2.4: both hosted compilers build and execute the optional
+  # single-file runtime.  The target includes the deterministic generator
+  # selftest, the 220 KiB section gate, focused consumers, and a blank-CWD
+  # process proof; the normal gcc/clang jobs above keep embedding-off gated.
+  embedded-runtime:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and test the embedded runtime with ${{ matrix.compiler }}
+        run: |
+          make -j2 CC=${{ matrix.compiler }} HOSTCC=${{ matrix.compiler }} \
+            BUILD=build-embedded-${{ matrix.compiler }} EMBED_RUNTIME=1 \
+            runtime-blob-selftest test-runtime-embedded
+
   # Sprint 57: pin the native musl environment instead of relying on the
   # distro and version installed on a moving hosted image.  Run Alpine in a
   # container from the Ubuntu host so checkout's Node runtime remains glibc-
