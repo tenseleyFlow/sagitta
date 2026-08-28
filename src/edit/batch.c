@@ -623,8 +623,14 @@ int yew_batch_run(const BatchOpts *opts)
         .trust_workspace = opts->trust_workspace
     };
     yew_config_init(&ed, &startup);
+    /* Match interactive startup: configuration may set buffer- and
+     * window-scoped options, so it needs the initial scratch model. */
+    if (!yew_ed_open_scratch(&ed)) {
+        result = YEW_EXIT_IO;
+        goto done;
+    }
     (void)yew_config_load_all(&ed, NULL);
-    if (!open_batch_files(&ed, opts)) {
+    if (opts->nfiles != 0U && !open_batch_files(&ed, opts)) {
         result = YEW_EXIT_IO;
         goto done;
     }

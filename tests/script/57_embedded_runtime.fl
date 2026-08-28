@@ -1,0 +1,20 @@
+# CONFIG
+# Sprint 57: a single-file build must consume every user-visible runtime
+# family after startup from an empty directory.
+import ed
+import list
+import opt
+import "preset.cloud.fl" as cloud
+
+# This value comes from the shipped init.fl, proving the default config ran.
+t.eq(opt.get("tabwidth"), 4)
+t.eq(list.len(cloud.watching()), 0)
+
+ed.run("ed.theme.set", {sarg: "quiver-light"})
+t.eq(opt.get("theme"), "quiver-light")
+
+ed.run("ed.ai.preset", {sarg: "local"})
+t.eq(opt.get("ai.enable"), true)
+t.eq(opt.get("ai.backend"), "local")
+t.eq(opt.get("ai.context_bytes"), 4096)
+t.eq(batch, true)

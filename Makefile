@@ -917,7 +917,7 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all check test test-alloc-debug alloc perf-alloc clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
-        runtime-blob-selftest test-runtime-embedded \
+        runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
         runtime-embedded-budget \
         musl-verify test-musl-hosts \
         test-script test-git-script \
@@ -1512,13 +1512,21 @@ else
 	fi
 endif
 
-test-runtime-embedded: $(BUILD)/unit_tests runtime-embedded-budget
+runtime-embedded-e2e: $(BUILD)/yew scripts/tests/runtime-embedded-e2e.sh \
+                      tests/script/57_embedded_runtime.fl
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) \
+		YEW_BIN=$(abspath $(BUILD)/yew) \
+		scripts/tests/runtime-embedded-e2e.sh
+
+test-runtime-embedded: $(BUILD)/unit_tests runtime-embedded-budget \
+                       runtime-embedded-e2e
 	$(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
 		$(BUILD)/unit_tests --filter runtime_asset
 	$(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
 		$(BUILD)/unit_tests --filter runtime_consumer
 else
-runtime-embedded-budget test-runtime-embedded:
+runtime-embedded-budget runtime-embedded-e2e test-runtime-embedded:
 	@echo '$@ requires EMBED_RUNTIME=1' >&2; exit 2
 endif
 
