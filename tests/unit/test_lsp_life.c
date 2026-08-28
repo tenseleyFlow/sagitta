@@ -23,6 +23,7 @@
 #include "edit/jumplist.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "edit/option.h"
 #include "term/grid.h"
 #include "ui/message.h"
 #include "ui/complmenu.h"
@@ -582,6 +583,8 @@ static bool wait_server_drained(LifeFix *f, LspServer *server,
 void test_lsp_lifecycle_completion_resolve_cancel_and_shadow(void)
 {
     const ShadowProvider *provider = yew_lsp_shadow_provider();
+    OptVal midline = {YEW_OPT_BOOL, {.b = true}};
+    const char *option_error = NULL;
     LifeFix f;
     LspServer *server;
     ShadowReq shadow = {0};
@@ -617,6 +620,8 @@ void test_lsp_lifecycle_completion_resolve_cancel_and_shadow(void)
 
     YEW_ASSERT_NOT_NULL(provider);
     YEW_ASSERT_EQ_U64(provider->prov, YEW_SHADOW_LSP);
+    YEW_ASSERT(yew_opt_set(&f.ed, YEW_OPT_SCOPE_DECLARED, "shadow.midline",
+                           14U, &midline, &option_error));
     f.ed.win->shadow.seq_next[YEW_SHADOW_LSP] = 2U;
     shadow.buf_id = f.ed.buffer.id;
     shadow.buf_gen = f.ed.buffer.tb->gen;
