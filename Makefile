@@ -2,6 +2,7 @@ CC      ?= cc
 BUILD   ?= build
 ALLOCDBG ?= 0
 SHIPPING ?= 0
+GC_SECTIONS ?= 1
 NM      ?= nm
 SIZE    ?= size
 STRIP   ?= strip
@@ -82,6 +83,7 @@ CALIB_REFERENCE ?=
 CALIB_OUTPUT ?= $(BUILD)/calib.txt
 EXTRA_CFLAGS ?=
 PERF_S56_WORKSPACE_READY := $(BUILD)/perf-s56-many/.ready
+HOST_OS := $(shell uname -s)
 
 ifeq ($(ALLOCDBG),1)
 ifeq ($(origin BUILD),file)
@@ -138,6 +140,10 @@ endif
 
 ifeq ($(SHIPPING),1)
 CFLAGS += -DNDEBUG
+ifeq ($(HOST_OS),Linux)
+CFLAGS += -ffunction-sections -fdata-sections \
+          -fno-asynchronous-unwind-tables -fno-unwind-tables
+endif
 endif
 
 # Sprint 30 DoD 1: the Fletch VM's computed-goto dispatcher.  The label
@@ -189,6 +195,14 @@ endif
 # the BSDs still need it.
 #
 LDFLAGS :=
+ifeq ($(SHIPPING),1)
+ifeq ($(HOST_OS),Linux)
+ifeq ($(GC_SECTIONS),1)
+LDFLAGS += -Wl,--gc-sections
+endif
+LDFLAGS += -Wl,--build-id=none
+endif
+endif
 #
 # LDLIBS, NOT LDFLAGS, and it goes AFTER the objects.
 #
@@ -200,7 +214,6 @@ LDFLAGS :=
 # lanes red on push.
 #
 LDLIBS := -lm
-HOST_OS := $(shell uname -s)
 ifeq ($(HOST_OS),Darwin)
 SHARED_FLAG := -dynamiclib
 DL_LIBS :=
@@ -1545,6 +1558,7 @@ SIZE_FUSS_BIN := $(SIZE_MEASURE)/fuss-only/yew
 SIZE_PLUGINS_BIN := $(SIZE_MEASURE)/plugins-only/yew
 
 size-tools-selftest:
+	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/size-tools.test.sh
 
 define size_measure_rule

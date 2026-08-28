@@ -28,9 +28,12 @@ static OptVal ai_option_get(Ed *ed, const char *name)
 void test_ai_state_lifecycle_is_owned_by_editor(void)
 {
     Ed ed;
+#if YEW_WITH_AI
     AiState *first;
+#endif
 
     yew_ed_init(&ed);
+#if YEW_WITH_AI
     YEW_ASSERT(yew_ai_state_ready(&ed));
     YEW_ASSERT_NOT_NULL(ed.ai);
     first = ed.ai;
@@ -40,6 +43,13 @@ void test_ai_state_lifecycle_is_owned_by_editor(void)
     yew_ai_state_free(&ed);
     YEW_ASSERT(!yew_ai_state_ready(&ed));
     YEW_ASSERT_NULL(ed.ai);
+#else
+    YEW_ASSERT(!yew_ai_state_ready(&ed));
+    YEW_ASSERT_NULL(ed.ai);
+    yew_ai_state_init(&ed);
+    YEW_ASSERT(!yew_ai_state_ready(&ed));
+    YEW_ASSERT_NULL(ed.ai);
+#endif
     yew_ai_state_free(&ed);
     yew_ed_free(&ed);
 }
@@ -137,7 +147,11 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
         YEW_ASSERT_EQ_U64(value.as.list.len, 0U);
         YEW_ASSERT_NULL(value.as.list.v);
     }
+#if YEW_WITH_AI
     YEW_ASSERT(yew_ai_state_key_cache_enabled(&ed));
+#else
+    YEW_ASSERT(!yew_ai_state_key_cache_enabled(&ed));
+#endif
     {
         const char *err = NULL;
         OptVal off = {YEW_OPT_BOOL, {.b = false}};

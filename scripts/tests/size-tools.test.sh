@@ -4,6 +4,7 @@ set -eu
 export LC_ALL=C
 
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+make_cmd=${MAKE:-make}
 scratch=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-size-tools.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 
@@ -185,5 +186,21 @@ status=$?
 set -e
 [ "$status" -eq 1 ] || fail 'absolute budget breach passed'
 grep -F '1 gate(s) failed' "$scratch/absolute.err" >/dev/null || fail 'absolute failure was unclear'
+
+if [ "$(uname -s)" = Linux ]; then
+    "$make_cmd" -s -n -C "$repo" BUILD="$scratch/shipping" MODULES= SHIPPING=1 \
+        "$scratch/shipping/yew" >"$scratch/shipping.flags"
+    for flag in -O2 -DNDEBUG -ffunction-sections -fdata-sections \
+                -fno-asynchronous-unwind-tables -fno-unwind-tables \
+                -Wl,--gc-sections -Wl,--build-id=none; do
+        grep -F -- "$flag" "$scratch/shipping.flags" >/dev/null ||
+            fail "shipping profile omitted $flag"
+    done
+    "$make_cmd" -s -n -C "$repo" BUILD="$scratch/no-gc" MODULES= SHIPPING=1 \
+        GC_SECTIONS=0 "$scratch/no-gc/yew" >"$scratch/no-gc.flags"
+    if grep -F -- '-Wl,--gc-sections' "$scratch/no-gc.flags" >/dev/null; then
+        fail 'GC_SECTIONS=0 retained linker garbage collection'
+    fi
+fi
 
 echo 'size tools test: ok'
