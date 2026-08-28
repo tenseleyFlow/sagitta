@@ -881,17 +881,26 @@ static void check_ignore_compaction(const char *repo)
 
 int main(int argc, char **argv)
 {
+    char *repo;
+
     if (argc != 2) {
         (void)fprintf(stderr, "usage: %s FIXTURE_REPO\n", argv[0]);
         return 2;
     }
-    check_status_fixture(argv[1]);
-    check_incoming(argv[1]);
+    repo = realpath(argv[1], NULL);
+    if (repo == NULL) {
+        (void)fprintf(stderr, "git_layer: cannot resolve %s: %s\n",
+                      argv[1], strerror(errno));
+        return 2;
+    }
+    check_status_fixture(repo);
+    check_incoming(repo);
     check_copied_entry();
-    check_info_mid_states(argv[1]);
-    check_ignore_compaction(argv[1]);
-    check_spawn_env(argv[1]);
-    CHECK(remove_long_path(argv[1]));
+    check_info_mid_states(repo);
+    check_ignore_compaction(repo);
+    check_spawn_env(repo);
+    CHECK(remove_long_path(repo));
+    free(repo);
     if (failures != 0U) {
         (void)fprintf(stderr, "git_layer: %u/%u checks failed\n",
                       failures, assertions);

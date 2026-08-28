@@ -873,6 +873,7 @@ static bool make_sandbox(const char *fixtures, char **root_out,
 {
     const char *tmp = getenv("TMPDIR");
     char *template;
+    char *canonical;
     char *work;
     char *fixture_dst;
     char *cfg;
@@ -888,6 +889,14 @@ static bool make_sandbox(const char *fixtures, char **root_out,
         free(template);
         return false;
     }
+    canonical = realpath(template, NULL);
+    if (canonical == NULL) {
+        (void)remove_tree(template);
+        free(template);
+        return false;
+    }
+    free(template);
+    template = canonical;
     work = path_join(template, "work");
     fixture_dst = work == NULL ? NULL : path_join(work, "fixtures");
     cfg = path_join(template, "cfg");
