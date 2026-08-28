@@ -1221,6 +1221,10 @@ static bool s16_word_reach(PtyCtx *c, u32 steps,
         ptc_keys(c, "right");
         ptc_settle(c, 0);
     }
+    /* A loaded runner may queue a later key before the child paints the
+     * preceding cursor move.  The final cursor cell is deterministic, but
+     * the cumulative number of otherwise identical frames is not. */
+    c->vt.sync_pairs_unstable = true;
     return true;
 }
 
