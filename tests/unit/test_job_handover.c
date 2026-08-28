@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,10 +44,10 @@ static int handover_open_pty(char *slave, size_t slave_cap,
     const char *name;
     size_t name_len;
     int master;
+    int slave_fd;
 
     master = posix_openpt(O_RDWR | O_NOCTTY);
-    if (master < 0 || grantpt(master) != 0 || unlockpt(master) != 0 ||
-        tcgetattr(master, initial) != 0)
+    if (master < 0 || grantpt(master) != 0 || unlockpt(master) != 0)
         goto fail;
     name = ptsname(master);
     if (name == NULL)
@@ -57,6 +58,17 @@ static int handover_open_pty(char *slave, size_t slave_cap,
         goto fail;
     }
     (void)memcpy(slave, name, name_len + 1U);
+    slave_fd = open(slave, O_RDWR | O_NOCTTY);
+    if (slave_fd < 0)
+        goto fail;
+    if (tcgetattr(slave_fd, initial) != 0) {
+        int saved_errno = errno;
+
+        (void)close(slave_fd);
+        errno = saved_errno;
+        goto fail;
+    }
+    (void)close(slave_fd);
     return master;
 
 fail:
@@ -76,6 +88,47 @@ static bool handover_termios_equal(const struct termios *left,
            memcmp(left->c_cc, right->c_cc, sizeof(left->c_cc)) == 0 &&
            cfgetispeed(left) == cfgetispeed(right) &&
            cfgetospeed(left) == cfgetospeed(right);
+}
+
+static pid_t handover_wait_pty(pid_t child, int master, int *status)
+{
+    struct pollfd ready = {master, POLLIN, 0};
+    char discard[256];
+    int flags;
+    int saved_errno;
+    unsigned tick;
+
+    flags = fcntl(master, F_GETFL);
+    if (flags < 0 || fcntl(master, F_SETFL, flags | O_NONBLOCK) < 0)
+        goto fail;
+    for (tick = 0U; tick < 100U; tick++) {
+        pid_t waited = waitpid(child, status, WNOHANG);
+
+        if (waited == child)
+            return waited;
+        if (waited < 0 && errno != EINTR)
+            goto fail;
+        ready.revents = 0;
+        if (poll(&ready, 1U, 50) < 0 && errno != EINTR)
+            goto fail;
+        if ((ready.revents & (POLLIN | POLLHUP | POLLERR)) != 0) {
+            ssize_t got;
+
+            do {
+                got = read(master, discard, sizeof(discard));
+            } while (got > 0 || (got < 0 && errno == EINTR));
+            if ((ready.revents & POLLHUP) != 0)
+                (void)poll(NULL, 0U, 50);
+        }
+    }
+    errno = ETIMEDOUT;
+
+fail:
+    saved_errno = errno;
+    (void)kill(child, SIGKILL);
+    while (waitpid(child, status, 0) < 0 && errno == EINTR) {}
+    errno = saved_errno;
+    return -1;
 }
 
 static bool handover_attach_slave(const char *path)
@@ -203,6 +256,7 @@ static void handover_assert_tty_case(bool fatal_mid_handover)
     pid_t child;
     pid_t waited;
     int master;
+    int slave_fd;
     int status = 0;
 
     (void)memset(&initial, 0, sizeof(initial));
@@ -220,9 +274,7 @@ static void handover_assert_tty_case(bool fatal_mid_handover)
         (void)close(master);
         return;
     }
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
+    waited = handover_wait_pty(child, master, &status);
     YEW_ASSERT_EQ_I64(waited, child);
     if (fatal_mid_handover) {
         YEW_ASSERT(WIFSIGNALED(status));
@@ -234,8 +286,11 @@ static void handover_assert_tty_case(bool fatal_mid_handover)
             YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
     }
     (void)memset(&after, 0, sizeof(after));
-    YEW_ASSERT_EQ_I64(tcgetattr(master, &after), 0);
+    slave_fd = open(slave, O_RDWR | O_NOCTTY);
+    YEW_ASSERT(slave_fd >= 0);
+    YEW_ASSERT_EQ_I64(tcgetattr(slave_fd, &after), 0);
     YEW_ASSERT(handover_termios_equal(&after, &initial));
+    YEW_ASSERT_EQ_I64(close(slave_fd), 0);
     YEW_ASSERT_EQ_I64(close(master), 0);
 }
 

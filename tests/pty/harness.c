@@ -97,6 +97,7 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
     char sname[128];
     struct termios initial_termios;
     int m;
+    int sfd;
     pid_t pid;
 
     if (p == NULL || sp == NULL || sp->path == NULL || sp->argv == NULL ||
@@ -111,9 +112,6 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
         goto fail;
     if (grantpt(m) < 0 || unlockpt(m) < 0)
         goto fail;
-    (void)memset(&initial_termios, 0, sizeof(initial_termios));
-    if (tcgetattr(m, &initial_termios) < 0)
-        goto fail;
     {
         const char *s = ptsname(m);
         size_t n;
@@ -125,6 +123,18 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
             goto fail;
         (void)memcpy(sname, s, n + 1U);
     }
+    (void)memset(&initial_termios, 0, sizeof(initial_termios));
+    sfd = open(sname, O_RDWR | O_NOCTTY);
+    if (sfd < 0)
+        goto fail;
+    if (tcgetattr(sfd, &initial_termios) < 0) {
+        int saved_errno = errno;
+
+        (void)close(sfd);
+        errno = saved_errno;
+        goto fail;
+    }
+    (void)close(sfd);
     if (nlive >= PTC_LIVE_MAX) {
         errno = EAGAIN;
         goto fail;
