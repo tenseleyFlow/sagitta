@@ -51,7 +51,7 @@ static bool cursor_byte(ReCursor *c, const YewReInput *in, u64 off, u8 *out)
     }
     if (!yew_textiter_begin(&c->it, in->tb, BYTEOFF(off)))
         return false;
-    if (!yew_textiter_chunk(&c->it, in->tb, &c->p, (size_t *)&c->n) ||
+    if (!yew_textiter_chunk(&c->it, in->tb, &c->p, &c->n) ||
         c->n == 0U)
         return false;
     c->chunk_at = off;

@@ -24,7 +24,7 @@ bool yew_re_pike_run(const YewRe *re, const YewReInput *in, u64 start,
 static bool byte_at(const YewReInput *in, TextIter *it, u64 off, u8 *out)
 {
     const u8 *chunk = NULL;
-    size_t n = 0U;
+    u64 n = 0U;
 
     if (off >= in->window.hi)
         return false;
@@ -159,7 +159,7 @@ static u64 prefilter_find(const YewRe *re, const YewReInput *in, u64 from)
     while (at < in->window.hi) {
         TextIter it;
         const u8 *chunk = NULL;
-        size_t n = 0U;
+        u64 n = 0U;
         u64 span;
         u64 hit;
         u8 carry[64];
@@ -168,7 +168,7 @@ static u64 prefilter_find(const YewRe *re, const YewReInput *in, u64 from)
         if (!yew_textiter_begin(&it, in->tb, BYTEOFF(at)) ||
             !yew_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
             return UINT64_MAX;
-        span = (u64)n;
+        span = n;
         if (at + span > in->window.hi)
             span = in->window.hi - at;
         hit = yew_lit_find(l, chunk, span);

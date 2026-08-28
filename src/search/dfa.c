@@ -271,7 +271,7 @@ static bool dfa_byte(const YewReInput *in, u64 off, u8 *out)
 {
     TextIter it;
     const u8 *chunk = NULL;
-    size_t n = 0U;
+    u64 n = 0U;
 
     if (off >= in->window.hi)
         return false;
