@@ -594,7 +594,11 @@ static void mc_sync_child(void)
  */
 static int mc_set_preload(const char *shim)
 {
-#ifdef YEW_ASAN_RUNTIME
+#if defined(__APPLE__)
+    if (setenv("DYLD_INSERT_LIBRARIES", shim, 1) != 0)
+        return -1;
+    return setenv("DYLD_FORCE_FLAT_NAMESPACE", "1", 1);
+#elif defined(YEW_ASAN_RUNTIME)
     char joined[PATH_MAX * 2];
     int n = snprintf(joined, sizeof(joined), "%s:%s", YEW_ASAN_RUNTIME,
                      shim);

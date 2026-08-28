@@ -442,6 +442,10 @@ int YEW_FAULT_INTERPOSE(close)(int fd)
     const char *source;
     const char *twin;
 
+#if defined(__APPLE__)
+    if (resolving && real_close_fn != NULL)
+        return real_close_fn(fd);
+#endif
     initialize();
     if (fd == log_fd)
         return real_close_fn(fd);

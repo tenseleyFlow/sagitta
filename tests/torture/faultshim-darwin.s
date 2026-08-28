@@ -14,3 +14,5 @@
 .quad _ftruncate
 .quad _yew_fault_fchown
 .quad _fchown
+.quad _yew_fault_close
+.quad _close

@@ -432,6 +432,7 @@ static bool inplace_backup_matches(const char *state, const char *dst,
     char path[1600];
     char backup_dir[1536];
     char prefix[32];
+    uint64_t resolved_hash;
     unsigned number;
     int n;
     bool matches = false;
@@ -439,8 +440,9 @@ static bool inplace_backup_matches(const char *state, const char *dst,
     resolved = realpath(dst, NULL);
     if (resolved == NULL)
         return false;
+    resolved_hash = path_hash(resolved);
     n = snprintf(base, sizeof(base), "%s/yew/backup/%016llx.bak",
-                 state, (unsigned long long)path_hash(resolved));
+                 state, (unsigned long long)resolved_hash);
     free(resolved);
     if (n <= 0 || (size_t)n >= sizeof(base))
         return false;
@@ -461,7 +463,7 @@ static bool inplace_backup_matches(const char *state, const char *dst,
     if (n <= 0 || (size_t)n >= sizeof(backup_dir))
         return false;
     n = snprintf(prefix, sizeof(prefix), "%016llx.",
-                 (unsigned long long)path_hash(dst));
+                 (unsigned long long)resolved_hash);
     if (n <= 0 || (size_t)n >= sizeof(prefix))
         return false;
     stream = opendir(backup_dir);
