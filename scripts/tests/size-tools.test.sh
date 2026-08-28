@@ -14,12 +14,14 @@ fail()
     exit 1
 }
 
-mkdir -p "$scratch/build/src/util" "$scratch/build/src/fl" "$scratch/build/src/mod/git" "$scratch/bin"
+mkdir -p "$scratch/build/src/util" "$scratch/build/src/fl" \
+    "$scratch/build/src/mod/git" "$scratch/build/gen" "$scratch/bin"
 printf 'lsp ai fuss plugins\n' >"$scratch/build/mods.stamp"
 printf x >"$scratch/build/src/util/a.o"
 printf x >"$scratch/build/src/fl/a.o"
 printf x >"$scratch/build/src/mod/git/a.o"
 printf x >"$scratch/build/src/mod/mods.o"
+printf x >"$scratch/build/gen/runtime_blob.o"
 dd if=/dev/zero of="$scratch/yew" bs=1 count=5000 2>/dev/null
 
 cat >"$scratch/Makefile" <<'EOF'
@@ -65,6 +67,13 @@ section size addr
 .text.registry 10 0
 OUT
 ;;
+*/gen/runtime_blob.o) cat <<'OUT'
+file :
+section size addr
+.text.accessors 12 0
+.rodata.runtime 256 0
+OUT
+;;
 *debug*) cat <<'OUT'
 file :
 section size addr
@@ -97,6 +106,7 @@ printf '%s\n' "0 $size T fl_big"
 ;;
 */src/mod/git/a.o) printf '%s\n' '0 0000000000000080 T fuss_big' ;;
 */src/mod/mods.o) printf '%s\n' '0 0000000000000010 T mods_name' ;;
+*/gen/runtime_blob.o) printf '%s\n' '0 0000000000000256 R runtime_blob' ;;
 esac
 EOF
 chmod +x "$scratch/bin/fake-size" "$scratch/bin/fake-nm"
@@ -108,12 +118,13 @@ grep -E '^core\.fl +100 +25 +0 +10 +135 ' "$scratch/ledger" >/dev/null || fail '
 grep -E '^core\.util +100 +20 +5 +0 +125 ' "$scratch/ledger" >/dev/null || fail 'did not fold suffixed sections'
 grep -E '^mod\.fuss +80 +20 +0 +0 +100 ' "$scratch/ledger" >/dev/null || fail 'did not read git-to-fuss module mapping'
 grep -E '^core\.main +10 +0 +0 +0 +10 ' "$scratch/ledger" >/dev/null || fail 'did not attribute the shared module registry to core'
+grep -E '^runtime\.embedded +12 +256 +0 +0 +268 ' "$scratch/ledger" >/dev/null || fail 'did not attribute the generated runtime blob'
 [ "$(grep -c '^  *100  core\.' "$scratch/ledger")" -eq 2 ] || fail 'top-symbol tie fixture missing'
 first_tie=$(grep '^  *100  core\.' "$scratch/ledger" | sed -n '1p')
 case $first_tie in *core.fl*) ;; *) fail 'symbol tie was not broken by bucket name' ;; esac
 grep -F '.debug_info' "$scratch/ledger" >/dev/null || fail 'non-folded section was silently discarded'
-grep -F '# unattributed-symbols 0/4 (0.0%)   limit 2.0%' "$scratch/ledger" >/dev/null || fail 'unattributed symbol ratio missing'
-grep -F '# on-disk 5000   object-file-backed 360   link-file-residue 4640' "$scratch/ledger" >/dev/null || fail 'file-backed link residue included BSS'
+grep -F '# unattributed-symbols 0/5 (0.0%)   limit 2.0%' "$scratch/ledger" >/dev/null || fail 'unattributed symbol ratio missing'
+grep -F '# on-disk 5000   object-file-backed 628   link-file-residue 4372' "$scratch/ledger" >/dev/null || fail 'file-backed link residue included BSS'
 grep -F '# final-file-backed 305   final-bss 10   object-bss 10' "$scratch/ledger" >/dev/null || fail 'BSS accounting was not explicit'
 
 set +e
@@ -122,8 +133,8 @@ ZERO_SYMBOLS=1 MAKEFILE="$scratch/Makefile" SIZE="$scratch/bin/fake-size" NM="$s
 status=$?
 set -e
 [ "$status" -eq 1 ] || fail 'unattributed ratio over 2% passed'
-grep -F '# unattributed-symbols 1/5 (20.0%)   limit 2.0%' "$scratch/unattributed.out" >/dev/null || fail 'unattributed failure ratio missing'
-grep -F 'unattributed zero-sized symbols 1/5 exceed 2%' "$scratch/unattributed.err" >/dev/null || fail 'unattributed failure was unclear'
+grep -F '# unattributed-symbols 1/6 (16.6%)   limit 2.0%' "$scratch/unattributed.out" >/dev/null || fail 'unattributed failure ratio missing'
+grep -F 'unattributed zero-sized symbols 1/6 exceed 2%' "$scratch/unattributed.err" >/dev/null || fail 'unattributed failure was unclear'
 
 cp "$scratch/ledger" "$scratch/baseline"
 MAKEFILE="$scratch/Makefile" SIZE="$scratch/bin/fake-size" NM="$scratch/bin/fake-nm" CC=false \

@@ -53,6 +53,7 @@ endif
 endif
 
 CC      ?= cc
+HOSTCC  ?= cc
 NM      ?= nm
 SIZE    ?= size
 STRIP   ?= strip
@@ -207,6 +208,7 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DYEW_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
           -DYEW_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
           -DYEW_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0) \
+          -DYEW_EMBED_RUNTIME=$(EMBED_RUNTIME) \
           $(EXTRA_CFLAGS)
 
 ifeq ($(TARGET),arm64-macos)
@@ -531,6 +533,14 @@ MOD_SRC  := src/mod/mods.c \
     $(sort $(wildcard src/mod/$(MODDIR_$(m))/shim.c)))
 SRC      := $(CORE_SRC) $(MOD_SRC)
 OBJ      := $(SRC:%.c=$(BUILD)/%.o)
+RUNTIME_BLOB_GEN := $(BUILD)/host/gen-runtime-blob
+RUNTIME_BLOB_C := $(BUILD)/gen/runtime_blob.c
+RUNTIME_BLOB_OBJ := $(BUILD)/gen/runtime_blob.o
+RUNTIME_BLOB_INPUTS := $(shell find runtime -type f -print | LC_ALL=C sort)
+RUNTIME_BLOB_DIRS := $(shell find runtime -type d -print | LC_ALL=C sort)
+ifeq ($(EMBED_RUNTIME),1)
+OBJ += $(RUNTIME_BLOB_OBJ)
+endif
 
 UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
               $(sort $(wildcard tests/unit/*.c)))
@@ -835,6 +845,7 @@ TORTURE_GIT_HUNK := $(BUILD)/git-hunk-kill9
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
+                $(RUNTIME_BLOB_GEN) $(RUNTIME_BLOB_C) \
                 $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
@@ -906,6 +917,8 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all check test test-alloc-debug alloc perf-alloc clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
+        runtime-blob-selftest test-runtime-embedded \
+        runtime-embedded-budget \
         musl-verify test-musl-hosts \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
@@ -972,6 +985,7 @@ target-info:
 		'ar $(AR)' \
 		'readelf $(READELF)' \
 		'shipping $(SHIPPING)' \
+		'embed_runtime $(EMBED_RUNTIME)' \
 		'static_pie $(if $(filter x86_64-linux-musl,$(TARGET)),1,0)' \
 		'profile $(BUILD_PROFILE_KEY)'
 
@@ -1435,6 +1449,77 @@ $(BUILD)/gen-compdb: scripts/gen-compdb.c $(BUILD)/profile.stamp \
                      $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
+$(RUNTIME_BLOB_GEN): scripts/gen-runtime-blob.c | dirs
+	$(HOSTCC) -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -O2 \
+		-o $@ $<
+
+$(RUNTIME_BLOB_C): $(RUNTIME_BLOB_GEN) $(RUNTIME_BLOB_INPUTS) \
+                   $(RUNTIME_BLOB_DIRS) | dirs
+	@set -eu; \
+	tmp='$@.tmp'; \
+	trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	$(RUNTIME_BLOB_GEN) runtime "$$tmp"; \
+	if ! cmp -s "$$tmp" '$@'; then mv "$$tmp" '$@'; fi; \
+	rm -f "$$tmp"; \
+	trap - EXIT HUP INT TERM
+
+$(RUNTIME_BLOB_OBJ): $(RUNTIME_BLOB_C) $(BUILD)/mods.stamp \
+                     $(BUILD)/profile.stamp $(MODULE_FORCE) \
+                     $(PROFILE_FORCE) | dirs
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+runtime-blob-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
+		scripts/tests/runtime-blob.test.sh
+
+ifeq ($(EMBED_RUNTIME),1)
+runtime-embedded-budget: $(RUNTIME_BLOB_OBJ)
+
+ifeq ($(TARGET),arm64-macos)
+	@set -eu; \
+	out='$(BUILD)/tmp/runtime-embedded-size.out'; \
+	if ! $(SIZE) '$(RUNTIME_BLOB_OBJ)' >"$$out"; then \
+		echo 'cannot record the macOS embedded-runtime object size' >&2; \
+		exit 1; \
+	fi; \
+	bytes=$$(awk 'NR == 2 && $$(NF - 1) ~ /^[0-9]+$$/ { print $$(NF - 1) }' "$$out"); \
+	rm -f "$$out"; \
+	if [ -z "$$bytes" ]; then \
+		echo 'cannot parse the macOS embedded-runtime object size' >&2; \
+		exit 1; \
+	fi; \
+	printf '%s\n' "runtime.embedded $$bytes bytes (macOS record; not gated)"
+else
+	@set -eu; \
+	out='$(BUILD)/tmp/runtime-embedded-size.out'; \
+	if ! $(SIZE) -A -d '$(RUNTIME_BLOB_OBJ)' >"$$out"; then \
+		echo 'cannot measure the embedded-runtime object' >&2; \
+		exit 1; \
+	fi; \
+	bytes=$$(awk 'NR > 2 && $$2 ~ /^[0-9]+$$/ && \
+		     $$1 ~ /^\.(text|rodata|data|bss)/ { n += $$2; seen = 1 } \
+		     END { if (seen) print n }' "$$out"); \
+	rm -f "$$out"; \
+	if [ -z "$$bytes" ]; then \
+		echo 'cannot parse the embedded-runtime object size' >&2; \
+		exit 1; \
+	fi; \
+	printf '%s\n' "runtime.embedded $$bytes bytes (limit 225280)"; \
+	if [ "$$bytes" -gt 225280 ]; then \
+		echo 'runtime.embedded exceeds the 220 KiB budget' >&2; \
+		exit 1; \
+	fi
+endif
+
+test-runtime-embedded: $(BUILD)/unit_tests runtime-embedded-budget
+	$(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
+		$(BUILD)/unit_tests --filter runtime_asset
+else
+runtime-embedded-budget test-runtime-embedded:
+	@echo '$@ requires EMBED_RUNTIME=1' >&2; exit 2
+endif
+
 $(FAKECLIP): tests/unit/fakeclip.c $(BUILD)/mods.stamp \
              $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
@@ -1479,7 +1564,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
 #
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
        test-syn-assets size-tools-selftest target-tools-selftest \
-       static-pie-tools-selftest \
+       static-pie-tools-selftest runtime-blob-selftest \
        $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1495,7 +1580,7 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-scri
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
-      static-pie-tools-selftest torture-build \
+      static-pie-tools-selftest runtime-blob-selftest torture-build \
       $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh

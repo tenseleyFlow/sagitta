@@ -57,7 +57,12 @@ awk '
 ' "$MAKEFILE" >"$tmpdir/modmap"
 [ -s "$tmpdir/modmap" ] || die "no MODDIR mappings found in $MAKEFILE"
 
-find "$build/src" -type f -name '*.o' -print | sort >"$tmpdir/objects"
+{
+    find "$build/src" -type f -name '*.o' -print
+    if [ -f "$build/gen/runtime_blob.o" ]; then
+        printf '%s\n' "$build/gen/runtime_blob.o"
+    fi
+} | sort >"$tmpdir/objects"
 [ -s "$tmpdir/objects" ] || die "no objects found below $build/src"
 : >"$tmpdir/sections"
 : >"$tmpdir/symbols"
