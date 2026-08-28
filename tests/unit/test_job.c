@@ -86,6 +86,25 @@ static void release_finished(Ed *ed)
     }
 }
 
+/* Prove that this fixture reaped its own child without making assumptions
+ * about subprocesses owned by another fixture.  A preceding assertion can
+ * longjmp past that fixture's cleanup; waitpid(-1) would then misattribute
+ * its still-running child to whichever job test happens to run next. */
+static void assert_job_child_reaped(Ed *ed, u32 id)
+{
+    YewJob *j = yew_job_find(ed, id);
+    pid_t waited;
+    int wait_errno;
+
+    YEW_ASSERT_NOT_NULL(j);
+    YEW_ASSERT(j->pid > 0);
+    errno = 0;
+    waited = waitpid(j->pid, NULL, WNOHANG);
+    wait_errno = errno;
+    YEW_ASSERT_EQ_I64(waited, -1);
+    YEW_ASSERT_EQ_I64(wait_errno, ECHILD);
+}
+
 static u32 spawn_argv(Ed *ed, char **argv, char *err, size_t errsz)
 {
     YewJobSpec spec = {0};
@@ -1035,6 +1054,7 @@ void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
     Ed ed;
     char *argv[3];
     char err[256] = {0};
+    u32 id;
     u32 before;
     u32 after;
     u32 i;
@@ -1044,15 +1064,17 @@ void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
     argv[1] = (char *)"x";
     argv[2] = NULL;
     /* Warm up once so one-time allocations do not count as a leak. */
-    YEW_ASSERT(run_to_completion(&ed, spawn_argv(&ed, argv, err,
-                                                 sizeof(err))));
+    id = spawn_argv(&ed, argv, err, sizeof(err));
+    YEW_ASSERT(run_to_completion(&ed, id));
+    assert_job_child_reaped(&ed, id);
     release_finished(&ed);
     before = open_fd_count();
     for (i = 0U; i < 120U; i++) {
-        u32 id = spawn_argv(&ed, argv, err, sizeof(err));
+        id = spawn_argv(&ed, argv, err, sizeof(err));
 
         YEW_ASSERT(id != 0U);
         YEW_ASSERT(run_to_completion(&ed, id));
+        assert_job_child_reaped(&ed, id);
         /* Recycle the table the way ed.job.clear_finished does. */
         release_finished(&ed);
     }
@@ -1060,9 +1082,6 @@ void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
     /* DoD 8: delta zero.  A missed close here is the hang nobody
      * diagnoses, because it presents as "that command is slow". */
     YEW_ASSERT_EQ_U64(after, before);
-    /* And no zombies: every child was reaped. */
-    YEW_ASSERT(waitpid(-1, NULL, WNOHANG) == -1);
-    YEW_ASSERT_EQ_I64(errno, ECHILD);
     yew_ed_free(&ed);
 }
 
@@ -1170,8 +1189,12 @@ void test_job_torture_spawn_kill_cycles(void)
     argv[3] = NULL;
     /* Warm up so first-touch allocations are not counted as leaks. */
     argv[2] = (char *)"printf x";
-    YEW_ASSERT(run_to_completion(&ed, spawn_argv(&ed, argv, err,
-                                                 sizeof(err))));
+    {
+        u32 id = spawn_argv(&ed, argv, err, sizeof(err));
+
+        YEW_ASSERT(run_to_completion(&ed, id));
+        assert_job_child_reaped(&ed, id);
+    }
     release_finished(&ed);
     before = open_fd_count();
 
@@ -1215,18 +1238,20 @@ void test_job_torture_spawn_kill_cycles(void)
             (void)yew_job_signal(&ed, id, SIGKILL);
         }
         YEW_ASSERT(run_to_completion(&ed, id));
+        assert_job_child_reaped(&ed, id);
         release_finished(&ed);
     }
 
     after = open_fd_count();
     YEW_ASSERT_EQ_U64(after, before);
-    /* Zero zombies at quiesce. */
-    YEW_ASSERT(waitpid(-1, NULL, WNOHANG) == -1);
-    YEW_ASSERT_EQ_I64(errno, ECHILD);
     /* The editor is still usable: one more job runs normally. */
     argv[2] = (char *)"printf 'still here\n'";
-    YEW_ASSERT(run_to_completion(&ed, spawn_argv(&ed, argv, err,
-                                                 sizeof(err))));
+    {
+        u32 id = spawn_argv(&ed, argv, err, sizeof(err));
+
+        YEW_ASSERT(run_to_completion(&ed, id));
+        assert_job_child_reaped(&ed, id);
+    }
     YEW_ASSERT_EQ_U64(ed.jobs.v[0].bytes_out, 11U);
     yew_ed_free(&ed);
 }
