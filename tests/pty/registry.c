@@ -324,6 +324,7 @@ static bool file_equals(const char *path, const u8 *bytes, size_t len)
     return close(fd) == 0;
 }
 
+#if YEW_WITH_AI
 static bool remove_test_tree(const char *path, u32 depth)
 {
     DIR *dir;
@@ -366,6 +367,7 @@ static bool remove_test_tree(const char *path, u32 depth)
         ok = false;
     return ok && rmdir(path) == 0;
 }
+#endif
 
 static bool fixture_path(PtyCtx *c, char *path, size_t cap)
 {
@@ -5460,7 +5462,7 @@ static void case_startup_multiple_files(PtyCtx *c)
 
 static void case_startup_workspace(PtyCtx *c)
 {
-    if (strcmp(c->test->name, "startup_directory_workspace") == 0)
+    if (strcmp(c->test->name, "startup_explicit_workspace") != 0)
         ptc_spawn(c, ptc_yew_bin(c), "--clean", c->workspace_dir, NULL);
     else
         ptc_spawn(c, ptc_yew_bin(c), "--clean", "--workspace",
@@ -8242,8 +8244,13 @@ const PtyCase yew_pty_cases[] = {
 #endif
     C(startup_multiple_files, modern, 24U, 80U,
       case_startup_multiple_files),
+#if YEW_WITH_FUSS
     C(startup_directory_workspace, modern, 24U, 80U,
       case_startup_workspace),
+#else
+    C(startup_directory_workspace_no_fuss, modern, 24U, 80U,
+      case_startup_workspace),
+#endif
     C(startup_explicit_workspace, modern, 24U, 80U,
       case_startup_workspace),
 #if YEW_WITH_FUSS
