@@ -81,6 +81,19 @@ scan()
     fi
 }
 
+# Every portability pattern below carries a tiny positive control.  A grep
+# gate that has silently stopped matching is worse than no gate: it leaves a
+# green lane claiming a portability property it no longer checks.
+scan_seed()
+{
+    label=$1
+    pattern=$2
+    source=$3
+    if ! printf '%s\n' "$source" | grep -nE -e "$pattern" >/dev/null 2>&1; then
+        echo "ban: the $label rule no longer fires on its own seed" >>"$hits"
+    fi
+}
+
 #
 # Sprint 31 DoD 5: no conversion in src/fl/ may take a format that is not
 # a literal in our own source.
@@ -239,12 +252,15 @@ if [ -s "$fl_abort_hits" ]; then
     cat "$fl_abort_hits" >>"$hits"
 fi
 
-scan "qsort is unstable; use yew_sort_stable" \
-    '(^|[^[:alnum:]_])qsort[[:space:]]*\(' "$all_files"
+qsort_pattern='(^|[^[:alnum:]_])qsort(_r)?[[:space:]]*\('
+scan "qsort is unstable and qsort_r is ABI-divergent; use yew_sort_stable" \
+    "$qsort_pattern" "$all_files"
+scan_seed "qsort/qsort_r" "$qsort_pattern" \
+    'void seeded(void) { qsort_r(rows, count, width, compare, ctx); }'
 scan "__attribute__ is outside the locked C11 subset" \
     '__attribute__' "$all_files"
 scan "constructor registration is forbidden; use the explicit registry" \
-    'constructor' "$c_files"
+    '(constructor|\.init_array)' "$c_files"
 scan "threads are forbidden in the single-threaded core" \
     '(threads\.h|pthread)' "$source_files"
 scan "__DATE__ and __TIME__ break reproducible builds" \
@@ -261,7 +277,35 @@ scan "libc-owned realpath allocations must use yew_xrealpath" \
     'realpath[[:space:]]*\([^,]+,[[:space:]]*NULL[[:space:]]*\)' \
     "$allocator_files"
 scan "locale-dependent Unicode APIs are forbidden" \
-    '(wcwidth|wcswidth|mbrtowc|wchar\.h|setlocale|iconv)' "$source_files"
+    '(wcwidth|wcswidth|mbrtowc|wchar\.h|langinfo\.h|setlocale|nl_langinfo|localeconv|iconv)' \
+    "$source_files"
+dynamic_loader_pattern='(^|[^[:alnum:]_])(dlopen|dlsym|dlclose|dlerror)[[:space:]]*\('
+scan "native dynamic loading is forbidden; yew plugins are Fletch-only" \
+    "$dynamic_loader_pattern" "$source_files"
+scan_seed "native-dynamic-loading" "$dynamic_loader_pattern" \
+    'void seeded(void) { (void)dlopen(path, flags); }'
+strerror_r_pattern='(^|[^[:alnum:]_])strerror_r[[:space:]]*\('
+scan "strerror_r has incompatible GNU and POSIX ABIs; use strerror" \
+    "$strerror_r_pattern" "$source_files"
+scan_seed "strerror_r" "$strerror_r_pattern" \
+    'void seeded(void) { (void)strerror_r(code, buf, sizeof(buf)); }'
+backtrace_pattern='(execinfo\.h|(^|[^[:alnum:]_])(backtrace|backtrace_symbols)[[:space:]]*\()'
+scan "glibc backtrace APIs are unavailable in the musl profile" \
+    "$backtrace_pattern" "$source_files"
+scan_seed "glibc-backtrace" "$backtrace_pattern" \
+    'void seeded(void) { (void)backtrace(frames, count); }'
+gnu_api_pattern='(^|[^[:alnum:]_])(getline|getdelim|asprintf|vasprintf|getopt_long)[[:space:]]*\(|(^|[<"])err(or)?\.h[>"]|program_invocation_name'
+scan "GNU-only libc APIs are forbidden in the portable core" \
+    "$gnu_api_pattern" "$source_files"
+scan_seed "GNU-libc-API" "$gnu_api_pattern" \
+    'void seeded(void) { (void)getopt_long(argc, argv, opts, rows, idx); }'
+scan_seed "program_invocation_name" "$gnu_api_pattern" \
+    'const char *seeded = program_invocation_name;'
+long_double_pattern='(^|[^[:alnum:]_])long[[:space:]]+double([^[:alnum:]_]|$)'
+scan "long double has different target ABIs; use the f64 model" \
+    "$long_double_pattern" "$source_files"
+scan_seed "long-double" "$long_double_pattern" \
+    'long double seeded(long double value) { return value; }'
 scan "Unicode width math belongs only in src/unicode" \
     '(0x1F3FB|0xFE0F|0x200D|EastAsian)' "$non_unicode_files"
 scan "syntax definitions emit semantic attrs, never colors" \

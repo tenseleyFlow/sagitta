@@ -50,6 +50,7 @@ if [ "$host" = x86_64-linux-musl ]; then
     has_line "$musl" 'size size'
     has_line "$musl" 'strip strip'
     has_line "$musl" 'ar ar'
+    has_line "$musl" 'readelf readelf'
 else
     has_line "$musl" 'cross x86_64-linux-musl-'
     has_line "$musl" 'cc x86_64-linux-musl-gcc'
@@ -57,6 +58,7 @@ else
     has_line "$musl" 'size x86_64-linux-musl-size'
     has_line "$musl" 'strip x86_64-linux-musl-strip'
     has_line "$musl" 'ar x86_64-linux-musl-ar'
+    has_line "$musl" 'readelf x86_64-linux-musl-readelf'
 fi
 has_line "$musl" 'shipping 1'
 has_line "$musl" 'static_pie 1'
@@ -81,12 +83,14 @@ fi
 
 cross=$($make_cmd -s -C "$repo" TARGET=arm64-linux \
     CROSS=aarch64-linux-gnu- CC=wrong NM=wrong SIZE=wrong STRIP=wrong AR=wrong \
+    READELF=wrong \
     target-info)
 has_line "$cross" 'cc aarch64-linux-gnu-gcc'
 has_line "$cross" 'nm aarch64-linux-gnu-nm'
 has_line "$cross" 'size aarch64-linux-gnu-size'
 has_line "$cross" 'strip aarch64-linux-gnu-strip'
 has_line "$cross" 'ar aarch64-linux-gnu-ar'
+has_line "$cross" 'readelf aarch64-linux-gnu-readelf'
 
 inferred=$($make_cmd -s -C "$repo" CROSS=aarch64-linux-gnu- target-info)
 has_line "$inferred" 'target arm64-linux'

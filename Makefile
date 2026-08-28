@@ -57,6 +57,9 @@ NM      ?= nm
 SIZE    ?= size
 STRIP   ?= strip
 AR      ?= ar
+READELF ?= readelf
+FILE_CMD ?= file
+LDD     ?= ldd
 MUSL_CC ?= $(if $(strip $(CROSS)),$(CROSS)gcc,gcc)
 ifneq ($(strip $(CROSS)),)
 override CC := $(CROSS)gcc
@@ -64,6 +67,7 @@ override NM := $(CROSS)nm
 override SIZE := $(CROSS)size
 override STRIP := $(CROSS)strip
 override AR := $(CROSS)ar
+override READELF := $(CROSS)readelf
 endif
 ifeq ($(TARGET),x86_64-linux-musl)
 override CC := $(MUSL_CC)
@@ -850,7 +854,8 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all check test test-alloc-debug alloc perf-alloc clean install dirs FORCE \
-        target-info target-tools-selftest \
+        target-info target-tools-selftest static-pie-tools-selftest \
+        musl-verify \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
@@ -914,6 +919,7 @@ target-info:
 		'size $(SIZE)' \
 		'strip $(STRIP)' \
 		'ar $(AR)' \
+		'readelf $(READELF)' \
 		'shipping $(SHIPPING)' \
 		'static_pie $(if $(filter x86_64-linux-musl,$(TARGET)),1,0)' \
 		'profile $(BUILD_PROFILE_KEY)'
@@ -921,6 +927,19 @@ target-info:
 target-tools-selftest:
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/target-tools.test.sh
+
+static-pie-tools-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/static-pie-tools.test.sh
+
+ifeq ($(TARGET),x86_64-linux-musl)
+musl-verify: static-pie-tools-selftest $(BUILD)/yew
+	FILE='$(FILE_CMD)' READELF='$(READELF)' NM='$(NM)' LDD='$(LDD)' \
+		scripts/verify-static-pie.sh --binary '$(BUILD)/yew'
+else
+musl-verify: static-pie-tools-selftest
+	@echo "musl-verify requires TARGET=x86_64-linux-musl" >&2; exit 2
+endif
 
 test-alloc-debug: $(BUILD)/unit_tests
 	env -u XDG_STATE_HOME $(BUILD)/unit_tests --filter alloc_
@@ -1402,6 +1421,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
 #
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
        test-syn-assets size-tools-selftest target-tools-selftest \
+       static-pie-tools-selftest \
        $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1416,7 +1436,8 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-scri
 
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \
-      test-syn-def-corpus test-syn-assets target-tools-selftest torture-build \
+      test-syn-def-corpus test-syn-assets target-tools-selftest \
+      static-pie-tools-selftest torture-build \
       $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
