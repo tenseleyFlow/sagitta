@@ -2304,6 +2304,30 @@ static void case_s18_cmdline_horizontal_scroll(PtyCtx *c)
 /* Sprint 19: shell jobs                                            */
 /* ---------------------------------------------------------------- */
 
+static bool s19_screen_contains(const VtScreen *vt, const char *needle)
+{
+    Bytebuf screen;
+    bool found;
+
+    bytebuf_init(&screen);
+    snapshot_write(vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    found = strstr((const char *)screen.data, needle) != NULL;
+    bytebuf_free(&screen);
+    return found;
+}
+
+static void s19_wait_screen(PtyCtx *c, const char *text)
+{
+    u32 i;
+
+    for (i = 0U; i < 80U && !c->failed &&
+                 !s19_screen_contains(&c->vt, text); i++)
+        ptc_settle(c, 25);
+    ptc_check(c, s19_screen_contains(&c->vt, text),
+              "Sprint 19 expected job outcome did not appear");
+}
+
 /* Job output arrives asynchronously, so a snapshot must wait for the
  * frame that carries it rather than for a fixed delay.  Elapsed time is
  * pinned by YEW_JOB_ELAPSED_MS in the pty environment so the exit footer
@@ -2386,11 +2410,11 @@ static void case_s19_exit_footer_signal(PtyCtx *c)
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    /* Emits a line, pauses so the output frame is always distinct from
-     * the completion frame, then kills its own process group.  Without
-     * the pause the two sometimes coalesce and the recorded frame count
-     * flips between runs. */
+    /* The shell can be descheduled between emitting the line and yew
+     * publishing the completion footer.  Wait for that semantic outcome
+     * instead of snapshotting whichever frame happened to arrive third. */
     s19_run_frames(c, "!printf 'up\\n'; kill -TERM $$", 3U);
+    s19_wait_screen(c, "killed by SIGTERM");
     ptc_snapshot(c, "s19_exit_footer_signal");
     s18_finish(c, path);
 }
@@ -7361,6 +7385,7 @@ static void case_s52_fuss_loading(PtyCtx *c)
     ptc_wait_sync_pairs(c, frame + 1U);
     ptc_check(c, s52_screen_contains(&c->vt, "loading"),
               "FUSS first frame did not publish its loading state");
+    c->vt.sync_pairs_unstable = true;
     ptc_snapshot_sgr(c, c->test->name);
     s52_finish(c);
 }
