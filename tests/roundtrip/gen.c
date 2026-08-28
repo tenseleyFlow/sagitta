@@ -430,6 +430,8 @@ static const RtDenied denied[] = {
     D("ed.git.file.delete", "destructive file side effect"),
     D("ed.git.file.rename", "file-system side effect"),
     D("ed.git.open", "requires live F-mode layout state"),
+    D("ed.git.open_split_h", "requires live F-mode layout state"),
+    D("ed.git.open_split_v", "requires live F-mode layout state"),
     D("ed.git.diff.view", "requires live Git workspace and layout state")
 };
 #undef D
