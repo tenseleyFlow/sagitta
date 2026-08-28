@@ -974,14 +974,14 @@ static void case_live_restore_kill(PtyCtx *c)
         return;
     ptc_allow_primary(c);
     ptc_allow_restore(c);
+    ptc_host_session(c);
     spawn_editor(c, path);
-    if (kill(c->pty.pid, SIGKILL) != 0) {
+    if (kill(c->pty.target_pid, SIGKILL) != 0) {
         ptc_check(c, false, "could not SIGKILL live editor");
         (void)unlink(path);
         return;
     }
     ptc_expect_signal(c, SIGKILL);
-    ptc_settle(c, 100);
     ptc_expect_output(c, restore_blob, sizeof(restore_blob) - 1U);
     check_terminal_restored(c,
         "SIGKILL guardian did not restore the live editor terminal");
@@ -8125,7 +8125,7 @@ static bool s54_capability_prompt_open(PtyCtx *c)
         "description: \"capability prompt fixture\" }\n";
     static const u8 source[] =
         "import io\n"
-        "fn init(ctx) { io.read(\"/etc/hostname\") }\n";
+        "fn init(ctx) { io.read(\"/dev/null\") }\n";
     char plugins[PATH_MAX];
     char plugin[PATH_MAX];
     char source_dir[PATH_MAX];

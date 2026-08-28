@@ -96,6 +96,7 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
 {
     char sname[128];
     struct termios initial_termios;
+    int pid_pipe[2] = {-1, -1};
     int m;
     int sfd;
     pid_t pid;
@@ -141,6 +142,8 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
     }
     if (fcntl(m, F_SETFL, O_NONBLOCK) < 0)
         goto fail;
+    if (sp->host_session && pipe(pid_pipe) != 0)
+        goto fail;
     pid = fork();
     if (pid < 0)
         goto fail;
@@ -170,6 +173,45 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
         if (s > STDERR_FILENO)
             (void)close(s);
         (void)close(m);
+        if (sp->host_session) {
+            pid_t target;
+            int status;
+            ssize_t written;
+
+            (void)close(pid_pipe[0]);
+            target = fork();
+            if (target < 0)
+                _exit(127);
+            if (target != 0) {
+                do {
+                    written = write(pid_pipe[1], &target, sizeof(target));
+                } while (written < 0 && errno == EINTR);
+                (void)close(pid_pipe[1]);
+                if (written != (ssize_t)sizeof(target))
+                    _exit(127);
+                while (waitpid(target, &status, 0) < 0) {
+                    if (errno != EINTR)
+                        _exit(127);
+                }
+                /* Let yew's orphaned guardian restore the PTY before this
+                 * shell-like session leader mirrors yew's status and exits. */
+                {
+                    struct timespec grace = {0, 250000000L};
+
+                    while (nanosleep(&grace, &grace) != 0 && errno == EINTR)
+                        ;
+                }
+                if (WIFSIGNALED(status)) {
+                    int sig = WTERMSIG(status);
+
+                    (void)signal(sig, SIG_DFL);
+                    (void)raise(sig);
+                    _exit(128 + sig);
+                }
+                _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 127);
+            }
+            (void)close(pid_pipe[1]);
+        }
         /* Set BEFORE execve, so the editor's workspace root is the
          * fixture rather than whatever directory the runner was
          * started in. */
@@ -177,6 +219,29 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
             _exit(127);
         execve(sp->path, sp->argv, sp->envp);
         _exit(127);
+    }
+    if (sp->host_session) {
+        ssize_t got;
+
+        (void)close(pid_pipe[1]);
+        do {
+            got = read(pid_pipe[0], &p->target_pid,
+                       sizeof(p->target_pid));
+        } while (got < 0 && errno == EINTR);
+        (void)close(pid_pipe[0]);
+        pid_pipe[0] = -1;
+        pid_pipe[1] = -1;
+        if (got != (ssize_t)sizeof(p->target_pid)) {
+            int saved_errno = got < 0 ? errno : EIO;
+
+            (void)kill(pid, SIGKILL);
+            while (waitpid(pid, NULL, 0) < 0 && errno == EINTR)
+                ;
+            errno = saved_errno;
+            goto fail;
+        }
+    } else {
+        p->target_pid = pid;
     }
     p->master = m;
     p->pid = pid;
@@ -191,6 +256,10 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp)
     return true;
 
 fail:
+    if (pid_pipe[0] >= 0)
+        (void)close(pid_pipe[0]);
+    if (pid_pipe[1] >= 0)
+        (void)close(pid_pipe[1]);
     (void)close(m);
     return false;
 }
@@ -613,6 +682,7 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
     spec.argv = argv;
     spec.envp = envp;
     spec.cwd = c->cwd;
+    spec.host_session = c->host_session;
     /*
      * The runner is invoked with a RELATIVE binary path
      * (`--yew build/yew`), and the child chdirs before
@@ -650,6 +720,7 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
         ptc_fail(c, "spawn %s: %s", bin, strerror(errno));
     else
         c->spawned = true;
+    c->host_session = false;
     ptc_env_free(envp);
     strv_free(argv);
 }
@@ -658,6 +729,12 @@ void ptc_no_altscreen(PtyCtx *c)
 {
     if (c != NULL)
         c->ready = true;
+}
+
+void ptc_host_session(PtyCtx *c)
+{
+    if (c != NULL && !c->spawned)
+        c->host_session = true;
 }
 
 static const u8 *find_bytes(const u8 *hay, size_t nhay,
@@ -1434,6 +1511,7 @@ void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
     c->test = test;
     c->pty.master = -1;
     c->pty.pid = -1;
+    c->pty.target_pid = -1;
     c->pty.status = -1;
     /*
      * ABSOLUTE, always.
@@ -1531,6 +1609,8 @@ void ptc_cleanup(PtyCtx *c)
         return;
     reap_nonblocking(c);
     if (!c->pty.reaped) {
+        if (c->pty.target_pid > 0 && c->pty.target_pid != c->pty.pid)
+            (void)kill(c->pty.target_pid, SIGKILL);
         (void)kill(c->pty.pid, SIGKILL);
         deadline = add_ms(ptc_now_ms(), PTC_KILL_BUDGET_MS);
         while (!c->pty.reaped && ptc_now_ms() < deadline) {
@@ -1653,6 +1733,7 @@ void ptc_resume(PtyCtx *c, const char *bin, ...)
     c->resumed = true;
     c->pty.master = -1;
     c->pty.pid = -1;
+    c->pty.target_pid = -1;
     c->pty.status = -1;
     c->pty.reaped = false;
 
@@ -1732,6 +1813,10 @@ bool ptc_sweep_all(void)
         int status;
         pid_t result;
 
+        if (!p->reaped) {
+            if (p->target_pid > 0 && p->target_pid != p->pid)
+                (void)kill(p->target_pid, SIGKILL);
+        }
         if (!p->reaped)
             (void)kill(p->pid, SIGKILL);
         do {

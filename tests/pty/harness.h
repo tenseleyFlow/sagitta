@@ -28,11 +28,16 @@ typedef struct PtySpec {
     u16 rows;
     u16 cols;
     i64 budget_ms;
+    /* Keep a shell-like session leader alive while the tested process dies.
+     * Darwin revokes a PTY when its session leader exits, unlike the real
+     * editor topology where the user's shell owns the session. */
+    bool host_session;
 } PtySpec;
 
 typedef struct Pty {
     int master;
     pid_t pid;
+    pid_t target_pid;
     u16 rows;
     u16 cols;
     bool reaped;
@@ -72,6 +77,7 @@ struct PtyCtx {
     bool timed_out;
     bool snapshot_taken;
     bool allow_primary;
+    bool host_session;
     /*
      * Sprint 25 DoD 2: the grid as it stood before ptc_resume reaped
      * the first process.  Resume exactness is a claim about two
@@ -147,6 +153,8 @@ void ptc_mark_resume(PtyCtx *c);
 /* Sets the child's working directory for the next spawn — the finder's
  * workspace root.  Must be called before ptc_spawn. */
 void ptc_set_cwd(PtyCtx *c, const char *dir);
+/* Give the next child a persistent shell-like session leader. */
+void ptc_host_session(PtyCtx *c);
 void ptc_resume(PtyCtx *c, const char *bin, ...);
 /* Asserts the CURRENT grid is byte-identical to the pre-resume one. */
 void ptc_check_resume_exact(PtyCtx *c);
