@@ -2,8 +2,10 @@
 
 #include "edit/cmd.h"
 #include "edit/ed.h"
+#include "mod/ai/ai.h"
 #include "mod/git/git.h"
 #include "mod/mods.h"
+#include "mod/plug/plug.h"
 #include "syn/engine.h"
 #include "ui/message.h"
 
@@ -37,6 +39,57 @@ void test_mod_require_message(void)
             YEW_ASSERT_EQ_STR(err, expected);
         }
     }
+
+#if !YEW_WITH_PLUGINS
+    {
+        static const char absent[] =
+            "this build has no plugins module; rebuild with 'make MODULES=\"… plugins\"'";
+        CmdStatus (*const commands[])(CmdCtx *) = {
+            yew_plug_cmd_list,
+            yew_plug_cmd_enable,
+            yew_plug_cmd_disable,
+            yew_plug_cmd_reload,
+            yew_plug_cmd_info
+        };
+        CmdCtx cx = {0};
+        Ed ed;
+        u32 i;
+
+        yew_ed_init(&ed);
+        cx.ed = &ed;
+        cx.count = 1U;
+        cx.source = YEW_SRC_TEST;
+        for (i = 0U; i < YEW_ARRAY_LEN(commands); i++) {
+            YEW_ASSERT_EQ_I64(commands[i](&cx), YEW_CMD_ERR_STATE);
+            YEW_ASSERT(ed.msg.active);
+            YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
+            YEW_ASSERT_EQ_STR(ed.msg.text, absent);
+            yew_msg_clear(&ed);
+        }
+        yew_ed_free(&ed);
+    }
+#endif
+
+#if !YEW_WITH_AI
+    {
+        Ed ed;
+
+        yew_ed_init(&ed);
+        yew_msg_clear(&ed);
+        YEW_ASSERT_NULL(ed.ai);
+        YEW_ASSERT(!yew_ai_state_ready(&ed));
+        YEW_ASSERT(!yew_ai_state_key_cache_enabled(&ed));
+        yew_ai_state_init(&ed);
+        YEW_ASSERT(!ed.msg.active);
+        yew_ai_state_key_cache_enable(&ed, true);
+        YEW_ASSERT_NULL(ed.ai);
+        YEW_ASSERT(!yew_ai_state_key_cache_enabled(&ed));
+        YEW_ASSERT(!ed.msg.active);
+        yew_ai_state_free(&ed);
+        YEW_ASSERT(!ed.msg.active);
+        yew_ed_free(&ed);
+    }
+#endif
 }
 
 void test_lsp_restart_crosses_module_boundary(void)
@@ -126,6 +179,9 @@ void test_git_passive_lifecycle_is_silent_when_stripped(void)
     YEW_ASSERT(yew_ed_open_scratch(&ed));
     yew_msg_clear(&ed);
 
+    YEW_ASSERT_NULL(ed.git);
+    YEW_ASSERT_EQ_U64(yew_git_avail_state(&ed), YEW_GIT_ASYNC_FAILED);
+    YEW_ASSERT_EQ_U64(yew_git_detect_state(&ed), YEW_GIT_ASYNC_FAILED);
     YEW_ASSERT(!yew_git_refresh(&ed, false));
     YEW_ASSERT(!ed.msg.active);
     yew_git_invalidate(&ed);

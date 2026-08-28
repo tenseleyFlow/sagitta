@@ -2,17 +2,12 @@
 #include "mod/git/editor.h"
 #include "mod/git/fussmode.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
 #include "mod/mods.h"
 #include "ui/message.h"
 #include "util/base.h"
-
-struct GitCtx {
-    bool ready;
-};
 
 struct FussMode {
     bool active;
@@ -205,18 +200,14 @@ bool yew_git_parse_reflog(Arena *a, const u8 *buf, u64 n,
 
 void yew_git_state_init(Ed *ed)
 {
-    if (ed == NULL || ed->git != NULL)
-        return;
-    ed->git = yew_xcalloc(1U, sizeof(*ed->git));
-    ed->git->ready = true;
+    if (ed != NULL)
+        ed->git = NULL;
 }
 
 void yew_git_state_free(Ed *ed)
 {
-    if (ed == NULL)
-        return;
-    free(ed->git);
-    ed->git = NULL;
+    if (ed != NULL)
+        ed->git = NULL;
 }
 
 void yew_fuss_state_init(Ed *ed)

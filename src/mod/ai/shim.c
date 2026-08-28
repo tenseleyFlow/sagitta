@@ -1,50 +1,37 @@
 #include "mod/ai/ai.h"
 
-#include <stdlib.h>
-
 #include "edit/ed.h"
 #include "mod/mods.h"
 #include "ui/message.h"
-#include "util/base.h"
-
-/* Preserve the same ownership and lifecycle shape without linking any AI
- * transport implementation into a stripped build. */
-struct AiState {
-    bool ready;
-    bool key_cache_enabled;
-};
 
 void yew_ai_state_init(Ed *ed)
 {
-    if (ed == NULL || ed->ai != NULL)
-        return;
-    ed->ai = yew_xcalloc(1U, sizeof(*ed->ai));
-    ed->ai->ready = true;
-    ed->ai->key_cache_enabled = true;
+    if (ed != NULL)
+        ed->ai = NULL;
 }
 
 void yew_ai_state_free(Ed *ed)
 {
-    if (ed == NULL)
-        return;
-    free(ed->ai);
-    ed->ai = NULL;
+    if (ed != NULL)
+        ed->ai = NULL;
 }
 
 bool yew_ai_state_ready(const Ed *ed)
 {
-    return ed != NULL && ed->ai != NULL && ed->ai->ready;
+    (void)ed;
+    return false;
 }
 
 void yew_ai_state_key_cache_enable(Ed *ed, bool enabled)
 {
-    if (ed != NULL && ed->ai != NULL)
-        ed->ai->key_cache_enabled = enabled;
+    (void)ed;
+    (void)enabled;
 }
 
 bool yew_ai_state_key_cache_enabled(const Ed *ed)
 {
-    return ed != NULL && ed->ai != NULL && ed->ai->key_cache_enabled;
+    (void)ed;
+    return false;
 }
 
 void yew_ai_policy_options_changed(Ed *ed)
