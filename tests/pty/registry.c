@@ -3648,10 +3648,27 @@ static void case_s25_resume_survives_resize(PtyCtx *c)
         s25_fixture_remove();
         return;
     }
-    ptc_resize(c, 30U, 100U);
-    ptc_settle(c, 0);
-    ptc_resize(c, 24U, 80U);
-    ptc_settle(c, 0);
+    /* Establish the restored 80x24 grid before delivering SIGWINCH.  A
+     * silence-only settle can return while a contended child still has its
+     * startup paint pending, making the resize race startup rather than test
+     * the persisted layout. */
+    ptc_check_resume_exact(c);
+    if (c->failed) {
+        s25_fixture_remove();
+        return;
+    }
+    {
+        u32 before = c->vt.nsync_pairs;
+
+        ptc_resize(c, 30U, 100U);
+        settle_sync_delta(c, before, 1U, 0);
+    }
+    {
+        u32 before = c->vt.nsync_pairs;
+
+        ptc_resize(c, 24U, 80U);
+        settle_sync_delta(c, before, 1U, 0);
+    }
     ptc_check_resume_exact(c);
     ptc_snapshot(c, "s25_resume_after_resize");
     force_quit(c);
