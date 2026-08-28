@@ -49,7 +49,7 @@ swift	swift	tests/syn/swift/*.swift	replace-extension	base	s42_5	4
 toml	toml	tests/syn/toml/*.toml	replace-extension	base	s42	18
 typescript	typescript	tests/syn/javascript/*.ts	replace-extension	base	s42	9
 typescript	typescript	tests/syn/embed/typescript/*.ts	replace-extension	embed	s41_5	5
-wolf	wolf	tests/syn/wolf/*.lu	replace-extension	base	s42_5	12
+wolf	wolf	tests/syn/wolf/*.lu	replace-extension	base	s42_5	13
 xml	xml	tests/syn/xml/*.xml	replace-extension	base	s42_5	4
 yaml	yaml	tests/syn/yaml/*.yml	replace-extension	base	s42	18
 zig	zig	tests/syn/zig/*.zig	replace-extension	base	s42_5	4

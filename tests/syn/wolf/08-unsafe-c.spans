@@ -6,7 +6,7 @@ line 1 entry=wolf:main exit=wolf:main
   1:14-15 attr=punct.delim context=wolf:main
   1:15-16 attr=text context=wolf:main
   1:16-17 attr=operator context=wolf:main
-  1:17-19 attr=variable context=wolf:main
+  1:17-19 attr=type.builtin context=wolf:main
   1:19-20 attr=punct.bracket context=wolf:main
   1:20-21 attr=text context=wolf:main
   1:21-22 attr=punct.bracket context=wolf:main

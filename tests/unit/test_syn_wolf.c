@@ -8,7 +8,8 @@
 #include "syn/engine.h"
 
 /*
- * Canonical bytes from wolf-lang ab23a23f2b190d6f9b45271149b5ac7032b8133e.
+ * Canonical bytes from wolf-lang ab23a23f2b190d6f9b45271149b5ac7032b8133e,
+ * re-verified byte-identical at f9ee9aaa6712eead72ede2e933d1bf57b45cf1bc.
  * SHA-256: ca543483de3e53fa455e51c24dcfb59fca5141435a59f680d2710ba051326359
  */
 static const char wolf_keywords[] =
@@ -213,6 +214,63 @@ void test_syn_wolf_numbers_comments_and_declarations_are_pinned(void)
     YEW_ASSERT_EQ_U64(wolf_attr_of(engine, decl, "value", 0U),
                       YEW_ATTR_VARIABLE);
     yew_syn_engine_free(engine);
+}
+
+void test_syn_wolf_refresh_pins_shebang_and_builtin_types(void)
+{
+    static const char *builtins[] = {
+        "bool", "byte", "f32", "f64", "i8", "i16", "i32", "i64", "int",
+        "str", "u8", "u16", "u32", "u64", "uint", "wrapping"
+    };
+    /* Load the REPO definition by path: the registry def can resolve to
+     * an installed runtime, and this test pins the checked-in file. */
+    Arena arena;
+    DiagCtx dc;
+    SynDef *def;
+    SynEngine *engine;
+    size_t i;
+
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    def = yew_syn_def_load(&arena, &dc, "runtime/syntax/wolf.fl");
+    YEW_ASSERT_NOT_NULL(def);
+    engine = yew_syn_engine_new(def);
+    YEW_ASSERT_NOT_NULL(engine);
+
+    /* [gram.lex.shebang]: trivia on the FIRST line of the file only. */
+    YEW_ASSERT_EQ_U64(wolf_attr_of(engine, "#!/usr/bin/env wolf", "#!", 0U),
+                      YEW_ATTR_COMMENT);
+    {
+        SynSpan spans[64];
+        SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+        u32 state;
+
+        state = wolf_line(engine, YEW_SYN_STATE_ROOT,
+                          "let a = 1", &out);
+        out.n = 0U;
+        (void)wolf_line(engine, state, "#! not trivia here", &out);
+        YEW_ASSERT(wolf_attr_at(&out, 0U) != YEW_ATTR_COMMENT);
+    }
+
+    /* The closed builtin-type set renders as type.builtin... */
+    for (i = 0U; i < YEW_ARRAY_LEN(builtins); i++)
+        YEW_ASSERT_EQ_U64(wolf_attr_of(engine, builtins[i],
+                                      builtins[i], 0U),
+                          YEW_ATTR_TYPE_BUILTIN);
+    /* ...whole words only, and prefixed strings keep their reading. */
+    YEW_ASSERT_EQ_U64(wolf_attr_of(engine, "f640", "f640", 0U),
+                      YEW_ATTR_VARIABLE);
+    YEW_ASSERT_EQ_U64(wolf_attr_of(engine, "str\"raw\"", "str", 0U),
+                      YEW_ATTR_TYPE);
+
+    /* Recent std surface needs no special rows: generic call/method. */
+    YEW_ASSERT_EQ_U64(wolf_attr_of(engine, "os_random(32)", "os_random", 0U),
+                      YEW_ATTR_FUNCTION);
+    YEW_ASSERT_EQ_U64(wolf_attr_of(engine, "s.chars()", ".chars", 0U),
+                      YEW_ATTR_METHOD);
+    yew_syn_engine_free(engine);
+    yew_syn_def_dispose(def);
+    arena_free_all(&arena);
 }
 
 void test_syn_wolf_contextual_words_are_position_bounded(void)

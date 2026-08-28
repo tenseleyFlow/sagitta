@@ -1,0 +1,13 @@
+#!/usr/bin/env wolf
+// the line above is [gram.lex.shebang] trivia, first line of the FILE only
+fn survey(s: str) -> !int {
+    let mean: f64 = 0.5
+    var small: u8 = 255
+    let wide = wrapping[u32]
+    let seed = os_random(32)
+    for ch in s.chars() {
+        print("{ch:>4} of {seed}")
+    }
+    small as int
+}
+#! not a shebang past line one

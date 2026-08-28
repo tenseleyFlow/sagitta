@@ -1,5 +1,5 @@
 # Wolf lexical highlighting, frozen to wolf-lang commit
-# ab23a23f2b190d6f9b45271149b5ac7032b8133e.
+# f9ee9aaa6712eead72ede2e933d1bf57b45cf1bc.
 #
 # Every ordinary string is interpolated.  Plain-string interpolation uses
 # EOL pops so malformed input cannot color the rest of the file; multiline
@@ -15,7 +15,8 @@
     syntax: 1,
     language: {
         name: "wolf",
-        extensions: ["lu"],
+        extensions: ["lu", "wolfi"],
+        shebangs: ["wolf"],
         priority: 0,
         comment: { line: "//" },
     },
@@ -24,6 +25,9 @@
 
         wolf_rules: {
             rules: [
+                # [gram.lex.shebang]: `#!` at byte offset 0 of the FILE is
+                # trivia to end of line; elsewhere `#` opens an attribute.
+                { match: "^#!.*$", attr: "comment", first_line: true },
                 { match: "//(!.*|/([^/].*)?)$", attr: "comment.doc" },
                 { match: "//.*$", attr: "comment" },
                 { match: "#\\[", attr: "attribute", push: "attribute" },
@@ -101,6 +105,12 @@
                 { match: "\\b[0-9]([0-9_]*[0-9])?[eE][+-]?[0-9]([0-9_]*[0-9])?\\b",
                   attr: "number" },
                 { match: "\\b[0-9]([0-9_]*[0-9])?\\b", attr: "number" },
+
+                # The closed builtin-type set (wolf_sema BUILTIN_TYPES;
+                # spec/10 uses the fixed-width names normatively).
+                # `wrapping` is the D56 constructor, same table.
+                { match: "\\b(bool|byte|f32|f64|i8|i16|i32|i64|int|str|u8|u16|u32|u64|uint|wrapping)\\b",
+                  attr: "type.builtin" },
 
                 { match: "(\\w+)[ \\t]*\\(",
                   captures: { 1: "function" }, consume: 1 },

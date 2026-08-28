@@ -18,7 +18,7 @@ line 5 entry=wolf:main exit=wolf:main
   5:4-9 attr=variable context=wolf:main
   5:9-10 attr=punct.delim context=wolf:main
   5:10-11 attr=text context=wolf:main
-  5:11-14 attr=variable context=wolf:main
+  5:11-14 attr=type.builtin context=wolf:main
   5:14-15 attr=punct.delim context=wolf:main
 line 6 entry=wolf:main exit=wolf:main
   6:0-1 attr=punct.bracket context=wolf:main
@@ -44,7 +44,7 @@ line 9 entry=wolf:main exit=wolf:main
   9:36-42 attr=variable context=wolf:main
   9:42-43 attr=punct.delim context=wolf:main
   9:43-44 attr=text context=wolf:main
-  9:44-47 attr=variable context=wolf:main
+  9:44-47 attr=type.builtin context=wolf:main
   9:47-48 attr=punct.bracket context=wolf:main
   9:48-49 attr=text context=wolf:main
   9:49-51 attr=operator context=wolf:main

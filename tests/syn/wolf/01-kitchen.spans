@@ -26,12 +26,12 @@ line 5 entry=wolf:main exit=wolf:main
   5:26-31 attr=variable context=wolf:main
   5:31-32 attr=punct.delim context=wolf:main
   5:32-33 attr=text context=wolf:main
-  5:33-36 attr=variable context=wolf:main
+  5:33-36 attr=type.builtin context=wolf:main
   5:36-37 attr=punct.bracket context=wolf:main
   5:37-38 attr=text context=wolf:main
   5:38-40 attr=operator context=wolf:main
   5:40-41 attr=text context=wolf:main
-  5:41-44 attr=variable context=wolf:main
+  5:41-44 attr=type.builtin context=wolf:main
   5:44-45 attr=text context=wolf:main
   5:45-46 attr=punct.bracket context=wolf:main
 line 6 entry=wolf:main exit=wolf:main

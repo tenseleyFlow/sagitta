@@ -5,12 +5,12 @@ line 1 entry=wolf:main exit=wolf:main
   1:16-26 attr=variable context=wolf:main
   1:26-27 attr=punct.delim context=wolf:main
   1:27-28 attr=text context=wolf:main
-  1:28-31 attr=variable context=wolf:main
+  1:28-31 attr=type.builtin context=wolf:main
   1:31-32 attr=punct.bracket context=wolf:main
   1:32-33 attr=text context=wolf:main
   1:33-35 attr=operator context=wolf:main
   1:35-36 attr=text context=wolf:main
-  1:36-39 attr=variable context=wolf:main
+  1:36-39 attr=type.builtin context=wolf:main
   1:39-40 attr=text context=wolf:main
   1:40-41 attr=punct.bracket context=wolf:main
 line 2 entry=wolf:main exit=wolf:main

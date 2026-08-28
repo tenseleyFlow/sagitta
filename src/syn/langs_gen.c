@@ -167,7 +167,11 @@ static const char *const lang_19_extensions[] = {
 };
 
 static const char *const lang_20_extensions[] = {
-    "lu"
+    "lu",
+    "wolfi"
+};
+static const char *const lang_20_shebangs[] = {
+    "wolf"
 };
 
 static const char *const lang_21_extensions[] = {
@@ -639,11 +643,11 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         "wolf",
         "runtime/syntax/wolf.fl",
         lang_20_extensions,
+        2U,
+        NULL,
+        0U,
+        lang_20_shebangs,
         1U,
-        NULL,
-        0U,
-        NULL,
-        0U,
         NULL,
         0,
         {"//", NULL, NULL}
@@ -1184,6 +1188,7 @@ static const SynDetectEntry builtin_extensions[] = {
     {"tpp", 21U, 3U, 0U},
     {"ts", 18U, 2U, 0U},
     {"tsx", 18U, 3U, 0U},
+    {"wolfi", 20U, 5U, 0U},
     {"xhtml", 7U, 5U, 0U},
     {"xml", 41U, 3U, 0U},
     {"xsd", 41U, 3U, 0U},
@@ -1233,6 +1238,7 @@ static const SynDetectEntry builtin_shebangs[] = {
     {"python3", 14U, 7U, 0U},
     {"ruby", 29U, 4U, 0U},
     {"sh", 16U, 2U, 0U},
+    {"wolf", 20U, 4U, 0U},
     {"zsh", 35U, 3U, 0U}
 };
 
@@ -1242,8 +1248,8 @@ static const SynDetectEntry builtin_first_lines[] = {
 
 const SynDetectIndex yew_syn_builtin_detect_index = {
     builtin_exact, 39U,
-    builtin_extensions, 105U,
+    builtin_extensions, 106U,
     builtin_globs, 11U,
-    builtin_shebangs, 24U,
+    builtin_shebangs, 25U,
     builtin_first_lines, 1U
 };
