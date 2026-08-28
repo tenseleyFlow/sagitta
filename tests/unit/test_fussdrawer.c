@@ -10,6 +10,7 @@
 
 #include "edit/ed.h"
 #include "edit/mode.h"
+#include "edit/pane_cmds.h"
 #include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
 #include "mod/git/git_int.h"
@@ -452,6 +453,67 @@ void test_fussdrawer_commit_owner_tab_close_cancels_cleanly(void)
     YEW_ASSERT(yew_tab_close(&ed, owner));
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
     YEW_ASSERT(yew_fuss_active(&ed));
+    YEW_ASSERT_NULL(yew_ws_scratch_find(&ed, "*commit*"));
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_commit_owner_pane_close_cancels_cleanly(void)
+{
+    FussDrawerFix fix;
+    GitEntry entry = {0};
+    GitSnapshot *snap;
+    CmdCtx cx = {0};
+    Ed ed;
+    u32 commit_win_id;
+    bool handled = false;
+
+    fussdrawer_fix_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ed.focus->rect = (Rect){0U, 0U, 80U, 24U};
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_pane_cmd_split_v(&cx), YEW_CMD_OK);
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    snap = yew_git_test_snapshot_mut(&ed);
+    YEW_ASSERT_NOT_NULL(snap);
+    entry.kind = GIT_E_ORDINARY;
+    entry.path = "plain.txt";
+    entry.path_len = 9U;
+    entry.staged = true;
+    snap->state = YEW_GIT_OK;
+    snap->comment_char = (char *)"#";
+    snap->comment_char_len = 1U;
+    snap->entries.data = &entry;
+    snap->entries.len = 1U;
+    snap->gen++;
+    cx.win = ed.win;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_commit(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    commit_win_id = ed.win->id;
+    cx.win = ed.win;
+    YEW_ASSERT_EQ_I64(yew_pane_cmd_close(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    YEW_ASSERT_NOT_NULL(ed.win);
+    YEW_ASSERT(ed.win->id != commit_win_id);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
+    YEW_ASSERT(yew_fuss_active(&ed));
+    YEW_ASSERT_NULL(yew_ws_scratch_find(&ed, "*commit*"));
+
+    /* A fresh commit must not be poisoned by stale deferred state. */
+    cx.win = ed.win;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_commit(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    YEW_ASSERT_NOT_NULL(yew_ws_scratch_find(&ed, "*commit*"));
+    YEW_ASSERT_EQ_I64(yew_fuss_commit_close(&ed, ed.win->buf, &handled),
+                      YEW_CMD_OK);
+    YEW_ASSERT(handled);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
     YEW_ASSERT_NULL(yew_ws_scratch_find(&ed, "*commit*"));
     YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
     yew_ed_free(&ed);

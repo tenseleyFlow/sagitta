@@ -316,7 +316,7 @@ void yew_fuss_win_releasing(Ed *ed, u32 win_id)
     (void)win_id;
 }
 
-void yew_fuss_tabs_changed(Ed *ed)
+void yew_fuss_windows_changed(Ed *ed)
 {
     (void)ed;
 }

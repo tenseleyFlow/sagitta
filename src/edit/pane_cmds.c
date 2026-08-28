@@ -11,6 +11,7 @@
 #include "edit/ed.h"
 #include "edit/shadow.h"
 #include "fl/flruntime.h"
+#include "mod/git/fussmode.h"
 #include "ui/message.h"
 #include "ui/win.h"
 #include "util/log.h"
@@ -174,6 +175,11 @@ CmdStatus yew_pane_cmd_close(CmdCtx *cx)
         ed->full_damage = true;
         yew_state_mark_dirty(ed);
     }
+    /* Window release can defer FUSS commit cancellation until no tree or
+     * focus pointer refers to the released editor.  Pane close reaches that
+     * safe point here, after collapse and refocus, just as tab close does
+     * after compaction and switch. */
+    yew_fuss_windows_changed(ed);
     return YEW_CMD_OK;
 }
 

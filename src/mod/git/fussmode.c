@@ -449,7 +449,7 @@ void yew_fuss_win_releasing(Ed *ed, u32 win_id)
     }
 }
 
-void yew_fuss_tabs_changed(Ed *ed)
+void yew_fuss_windows_changed(Ed *ed)
 {
     FussMode *f;
     Buffer *commit;
@@ -463,7 +463,8 @@ void yew_fuss_tabs_changed(Ed *ed)
     f->commit_buffer_id = 0U;
     if (commit != NULL && commit != &ed->buffer)
         yew_ws_scratch_drop(ed, commit);
-    yew_msg(ed, YEW_MSG_INFO, "commit aborted because its tab closed");
+    yew_msg(ed, YEW_MSG_INFO,
+            "commit aborted because its editor view closed");
     if (yew_mode_enter(ed, YEW_MODE_F) != YEW_CMD_OK)
         (void)yew_mode_enter(ed, YEW_MODE_L);
 }
@@ -2158,6 +2159,13 @@ static CmdStatus fuss_commit_begin(Ed *ed, bool amend, const u8 *prefill,
     if (ed == NULL || ed->fuss == NULL || !ed->fuss->active)
         return YEW_CMD_ERR_STATE;
     f = ed->fuss;
+    /*
+     * A structural command normally drains a deferred cancellation after it
+     * has installed a live focus.  Keep commit entry self-healing too: a new
+     * commit must never inherit an older editor window's pending teardown.
+     */
+    if (f->commit_cancel_pending)
+        yew_fuss_windows_changed(ed);
     snap = yew_git_snapshot(ed);
     if (!fuss_commit_guard(ed, snap))
         return YEW_CMD_ERR_STATE;

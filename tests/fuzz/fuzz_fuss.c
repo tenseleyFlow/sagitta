@@ -12,6 +12,7 @@
 #include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
 #include "mod/git/git_int.h"
+#include "ui/tabs.h"
 
 enum {
     FUSS_FUZZ_MAX_ENTRIES = 128,
@@ -166,10 +167,46 @@ static Key live_key(u8 byte)
     return key;
 }
 
-static bool live_teardown(Ed *ed, Pane *saved_root, Win *saved_win,
-                          char *why, size_t why_cap)
+static bool live_views_valid(Ed *ed)
+{
+    Tab *active;
+    size_t tab;
+
+    if (ed == NULL || ed->tabs.v.len == 0U || ed->tabs.active < 0 ||
+        (size_t)ed->tabs.active >= ed->tabs.v.len)
+        return false;
+    for (tab = 0U; tab < ed->tabs.v.len; tab++) {
+        Tab *item = &ed->tabs.v.data[tab];
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
+        u32 n = 0U;
+        u32 i;
+        bool focus_live = false;
+
+        if (item->root == NULL || item->focus == NULL)
+            return false;
+        yew_pane_collect_leaves(item->root, leaves,
+                                YEW_ARRAY_LEN(leaves), &n);
+        if (n == 0U)
+            return false;
+        for (i = 0U; i < n; i++) {
+            if (leaves[i] == NULL || !leaves[i]->is_leaf ||
+                leaves[i]->win == NULL)
+                return false;
+            if (leaves[i] == item->focus)
+                focus_live = true;
+        }
+        if (!focus_live)
+            return false;
+    }
+    active = &ed->tabs.v.data[ed->tabs.active];
+    return ed->pane_root == active->root && ed->focus == active->focus &&
+           ed->focus != NULL && ed->win == ed->focus->win;
+}
+
+static bool live_teardown(Ed *ed, char *why, size_t why_cap)
 {
     bool handled = false;
+    bool views_valid;
 
     /* Direct teardown helpers bypass the normal command-dispatch barrier.
      * Close a typing transaction exactly as a user-issued mode/close command
@@ -189,14 +226,27 @@ static bool live_teardown(Ed *ed, Pane *saved_root, Win *saved_win,
     }
     if (ed->mode != YEW_MODE_L)
         (void)yew_mode_enter(ed, YEW_MODE_L);
+    views_valid = live_views_valid(ed);
     if (ed->mode != YEW_MODE_L || yew_fuss_active(ed) ||
-        ed->pane_root != saved_root || ed->win != saved_win ||
+        !views_valid ||
         ed->keys.n == 0U || ed->keys.l[0] != &ed->mode_keys[YEW_MODE_L] ||
         (ed->keys.n >= 3U && ed->keys.l[2] != &ed->bind_keys[YEW_MODE_L]) ||
         ed->chord.n != 0U || ed->chord.layer != -1 ||
         ed->chord.count_given || ed->chord.deadline != 0) {
         (void)snprintf(why, why_cap,
-                       "F-mode teardown left mode, pane, or key-layer state");
+                       "F teardown mode=%u active=%d views=%d "
+                       "keys=%u base=%d bind=%d chord=%u/%d/%d/%lld",
+                       (unsigned)ed->mode, yew_fuss_active(ed) ? 1 : 0,
+                       views_valid ? 1 : 0, (unsigned)ed->keys.n,
+                       ed->keys.n != 0U &&
+                               ed->keys.l[0] == &ed->mode_keys[YEW_MODE_L] ?
+                           1 : 0,
+                       ed->keys.n < 3U ||
+                               ed->keys.l[2] == &ed->bind_keys[YEW_MODE_L] ?
+                           1 : 0,
+                       (unsigned)ed->chord.n, (int)ed->chord.layer,
+                       ed->chord.count_given ? 1 : 0,
+                       (long long)ed->chord.deadline);
         return false;
     }
     return true;
@@ -207,8 +257,6 @@ static bool check_live_fuss(const u8 *data, size_t len, char *why,
 {
     LiveSpawn spawn = {1000U, 0U};
     Ed ed;
-    Pane *saved_root;
-    Win *saved_win;
     size_t count = len < FUSS_FUZZ_LIVE_KEYS ? len : FUSS_FUZZ_LIVE_KEYS;
     size_t at;
     bool ok;
@@ -219,8 +267,6 @@ static bool check_live_fuss(const u8 *data, size_t len, char *why,
         (void)snprintf(why, why_cap, "live editor initialization failed");
         return false;
     }
-    saved_root = ed.pane_root;
-    saved_win = ed.win;
     yew_git_test_spawn_set(live_spawn, &spawn);
     if (yew_mode_enter(&ed, YEW_MODE_F) != YEW_CMD_OK ||
         !yew_fuss_active(&ed) || ed.mode != YEW_MODE_F) {
@@ -251,7 +297,7 @@ static bool check_live_fuss(const u8 *data, size_t len, char *why,
             return false;
         }
     }
-    ok = live_teardown(&ed, saved_root, saved_win, why, why_cap);
+    ok = live_teardown(&ed, why, why_cap);
     yew_git_test_spawn_set(NULL, NULL);
     yew_ed_free(&ed);
     return ok;
