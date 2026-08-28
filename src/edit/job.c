@@ -5,6 +5,9 @@
  * job (or, once LSP and AI land, into a long-lived server). */
 #define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
 
 #include "edit/job.h"
 
@@ -1496,7 +1499,7 @@ static void job_write_stdin(YewJob *j)
 
     while (j->in_off < total) {
         const u8 *chunk = NULL;
-        size_t chunk_len = 0U;
+        u64 chunk_len = 0U;
         ssize_t wrote;
 
         if (!yew_textiter_begin(&it, j->in_buf, BYTEOFF(base + j->in_off)))
@@ -1506,7 +1509,7 @@ static void job_write_stdin(YewJob *j)
             break;
         if ((u64)chunk_len > total - j->in_off)
             chunk_len = (size_t)(total - j->in_off);
-        wrote = write(j->in_fd, chunk, chunk_len);
+        wrote = write(j->in_fd, chunk, (size_t)chunk_len);
         if (wrote < 0) {
             if (errno == EINTR)
                 continue;
