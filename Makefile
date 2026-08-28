@@ -1,5 +1,6 @@
 CC      ?= cc
 BUILD   ?= build
+ALLOCDBG ?= 0
 PREFIX  ?= /usr/local
 MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
@@ -76,6 +77,12 @@ CALIB_OUTPUT ?= $(BUILD)/calib.txt
 EXTRA_CFLAGS ?=
 PERF_S56_WORKSPACE_READY := $(BUILD)/perf-s56-many/.ready
 
+ifeq ($(ALLOCDBG),1)
+ifeq ($(origin BUILD),file)
+BUILD := build-adbg
+endif
+endif
+
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
 $(error SAN=1 and VALGRIND=1 are mutually exclusive)
@@ -118,6 +125,10 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DYEW_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
           -DYEW_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0) \
           $(EXTRA_CFLAGS)
+
+ifeq ($(ALLOCDBG),1)
+CFLAGS += -DYEW_ALLOC_DEBUG=1
+endif
 
 # Sprint 30 DoD 1: the Fletch VM's computed-goto dispatcher.  The label
 # table is a GNU extension, so -pedantic rejects it under -std=c11 --
@@ -732,7 +743,8 @@ MODULE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test clean install dirs FORCE test-script test-git-script \
+.PHONY: all check test test-alloc-debug clean install dirs FORCE \
+        test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
@@ -782,7 +794,18 @@ endif
         bench-fletch \
         test-fletch-dispatch test-fletch-gc-stress test-fletch-determinism
 
+ifeq ($(ALLOCDBG),1)
+# Sprint 57 lands the allocator core before the mechanical free-site
+# migration.  A header-offset pointer cannot be handed to the tree's legacy
+# raw free() sites, so the debug default is deliberately the focused allocator
+# contract suite until that migration is complete.  Never take timings here.
+all: test-alloc-debug
+else
 all: $(BUILD)/yew
+endif
+
+test-alloc-debug: $(BUILD)/unit_tests
+	env -u XDG_STATE_HOME $(BUILD)/unit_tests --filter alloc_
 
 compile_commands.json: FORCE $(BUILD)/gen-compdb
 	$(BUILD)/gen-compdb "$(abspath .)" $(CC) $(CFLAGS) -- $(SRC) > $@

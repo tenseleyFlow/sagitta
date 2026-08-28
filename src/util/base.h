@@ -5,6 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef YEW_ALLOC_DEBUG
+#define YEW_ALLOC_DEBUG 0
+#endif
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -38,11 +42,45 @@ enum {
  */
 bool yew_pipe_cloexec(int fds[2]);
 
+typedef struct Bytebuf Bytebuf;
+
+typedef struct AllocSite {
+    const char *file;
+    int line;
+    u64 calls;
+    u64 bytes;
+    u64 live;
+    u64 peak_live;
+} AllocSite;
+
 /* Allocation failure is an internal error, never a recoverable NULL. */
+#if YEW_ALLOC_DEBUG
+void *yew_xmalloc_at(size_t size, const char *file, int line);
+void *yew_xrealloc_at(void *ptr, size_t size, const char *file, int line);
+void *yew_xcalloc_at(size_t count, size_t size, const char *file, int line);
+void *yew_xreallocarray_at(void *ptr, size_t count, size_t size,
+                           const char *file, int line);
+void yew_xfree_at(void *ptr, const char *file, int line);
+
+#ifndef YEW_ALLOC_IMPLEMENTATION
+#define yew_xmalloc(n) yew_xmalloc_at((n), __FILE__, __LINE__)
+#define yew_xrealloc(p, n) yew_xrealloc_at((p), (n), __FILE__, __LINE__)
+#define yew_xcalloc(c, n) yew_xcalloc_at((c), (n), __FILE__, __LINE__)
+#define yew_xreallocarray(p, c, n)                                           \
+    yew_xreallocarray_at((p), (c), (n), __FILE__, __LINE__)
+#define yew_xfree(p) yew_xfree_at((p), __FILE__, __LINE__)
+#endif
+#else
 void *yew_xmalloc(size_t size);
 void *yew_xrealloc(void *ptr, size_t size);
 void *yew_xcalloc(size_t count, size_t size);
 void *yew_xreallocarray(void *ptr, size_t count, size_t size);
+void yew_xfree(void *ptr);
+#endif
+
+void yew_alloc_reset(void);
+u64 yew_alloc_calls(void);
+void yew_alloc_report(Bytebuf *out);
 
 /*
  * Wipe bytes through a volatile-qualified pointer so an optimizing compiler

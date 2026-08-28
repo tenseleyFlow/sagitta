@@ -45,6 +45,10 @@ const YewTest yew_tests[] = {
     T(plug_options_collisions_are_atomic_and_origin_owned),
     T(plug_options_ctx_set_uses_manifest_namespace_and_lifecycle),
 #endif
+    T(alloc_release_contract),
+    T(alloc_debug_counts_and_report_order),
+    T(alloc_debug_reset_and_fixed_overflow_site),
+    T(alloc_debug_exit_report),
     T(arena_align),
     T(arena_strdup),
     T(vec_growth),

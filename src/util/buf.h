@@ -5,11 +5,11 @@
 
 #include "util/base.h"
 
-typedef struct {
+struct Bytebuf {
     u8 *data;
     size_t len;
     size_t cap;
-} Bytebuf;
+};
 
 void bytebuf_init(Bytebuf *buf);
 void bytebuf_free(Bytebuf *buf);

@@ -12,6 +12,11 @@ void test_batch_refusal_table_covers_every_interactive_command(void);
 void test_batch_memory_buffer_is_byte_exact_named_and_initially_clean(void);
 void test_batch_profiler_dumps_one_frame_per_executed_statement(void);
 
+void test_alloc_release_contract(void);
+void test_alloc_debug_counts_and_report_order(void);
+void test_alloc_debug_reset_and_fixed_overflow_site(void);
+void test_alloc_debug_exit_report(void);
+
 void test_arena_align(void);
 void test_arena_strdup(void);
 void test_vec_growth(void);
