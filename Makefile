@@ -76,6 +76,7 @@ endif
 TARGET_OS := $(if $(filter arm64-macos,$(TARGET)),Darwin,Linux)
 BUILD   ?= build
 ALLOCDBG ?= 0
+EMBED_RUNTIME ?= 0
 SHIPPING ?= 0
 ifeq ($(TARGET),x86_64-linux-musl)
 override SHIPPING := 1
@@ -207,6 +208,10 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DYEW_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
           -DYEW_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0) \
           $(EXTRA_CFLAGS)
+
+ifeq ($(TARGET),arm64-macos)
+CFLAGS += -D_DARWIN_C_SOURCE
+endif
 
 ifeq ($(ALLOCDBG),1)
 CFLAGS += -DYEW_ALLOC_DEBUG=1
@@ -884,12 +889,16 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
 # by this invocation.  The stamp recipe also removes objects not reachable
 # from the requested target (notably main.o during `make test`), so a later
 # target cannot reuse macros from the previous module selection.
-STAMP_MODULES := $(file <$(BUILD)/mods.stamp)
+# GNU Make 3.81 (the system make on macOS) predates $(file ...).  Reading
+# through the POSIX shell keeps profile reuse correct on every locked target.
+STAMP_MODULES := $(strip $(shell if test -f '$(BUILD)/mods.stamp'; then \
+	cat '$(BUILD)/mods.stamp'; fi))
 ifneq ($(STAMP_MODULES),$(MODULES))
 MODULE_FORCE := FORCE
 endif
-BUILD_PROFILE_KEY := target=$(TARGET);cc=$(CC);shipping=$(SHIPPING);gc=$(GC_SECTIONS);allocdbg=$(ALLOCDBG);san=$(SAN);valgrind=$(VALGRIND);fl_cgoto=$(FL_CGOTO);fl_checks=$(FL_CHECKS);fl_trace=$(CFLAGS_FL_TRACE);prefix=$(PREFIX);extra=$(EXTRA_CFLAGS)
-STAMP_PROFILE := $(file <$(BUILD)/profile.stamp)
+BUILD_PROFILE_KEY := target=$(TARGET);cc=$(CC);shipping=$(SHIPPING);gc=$(GC_SECTIONS);allocdbg=$(ALLOCDBG);embed_runtime=$(EMBED_RUNTIME);san=$(SAN);valgrind=$(VALGRIND);fl_cgoto=$(FL_CGOTO);fl_checks=$(FL_CHECKS);fl_trace=$(CFLAGS_FL_TRACE);prefix=$(PREFIX);extra=$(EXTRA_CFLAGS)
+STAMP_PROFILE := $(strip $(shell if test -f '$(BUILD)/profile.stamp'; then \
+	cat '$(BUILD)/profile.stamp'; fi))
 ifneq ($(STAMP_PROFILE),$(BUILD_PROFILE_KEY))
 PROFILE_FORCE := FORCE
 endif
