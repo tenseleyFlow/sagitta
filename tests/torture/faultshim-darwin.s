@@ -1,0 +1,16 @@
+.section __DATA,__interpose
+.p2align 3
+.quad _yew_fault_write
+.quad _write
+.quad _yew_fault_pwrite
+.quad _pwrite
+.quad _yew_fault_fsync
+.quad _fsync
+.quad _yew_fault_fdatasync
+.quad _fdatasync
+.quad _yew_fault_rename
+.quad _rename
+.quad _yew_fault_ftruncate
+.quad _ftruncate
+.quad _yew_fault_fchown
+.quad _fchown

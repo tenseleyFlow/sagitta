@@ -22,13 +22,41 @@ if ! command -v git >/dev/null 2>&1; then
     exit 0
 fi
 real_git=$(command -v git)
+host_os=$(uname -s)
 preload_faults=true
 if command -v file >/dev/null 2>&1 &&
    file -- "$yew_bin" | grep -F 'static-pie linked' >/dev/null; then
     preload_faults=false
 fi
 
+build_fault_shim()
+{
+    local output=$1
+
+    if [[ $host_os == Darwin ]]; then
+        ${CC:-cc} -std=c11 -fPIC -dynamiclib -o "$output" \
+            "$repo_root/tests/torture/faultshim.c" \
+            "$repo_root/tests/torture/faultshim-darwin.s"
+    else
+        ${CC:-cc} -std=c11 -fPIC -shared -o "$output" \
+            "$repo_root/tests/torture/faultshim.c" -ldl
+    fi
+}
+
+run_with_fault_shim()
+{
+    local shim=$1
+    shift
+
+    if [[ $host_os == Darwin ]]; then
+        DYLD_INSERT_LIBRARIES="$shim" DYLD_FORCE_FLAT_NAMESPACE=1 "$@"
+    else
+        LD_PRELOAD="$shim" "$@"
+    fi
+}
+
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/yew-pkg.XXXXXX")
+scratch=$(cd "$scratch" && pwd -P)
 cleanup()
 {
     rm -rf -- "$scratch"
@@ -64,6 +92,16 @@ fail()
         sed 's/^/  stderr: /' "$stderr_file" >&2
     fi
     exit 1
+}
+
+sed_rewrite()
+{
+    local expression=$1
+    local path=$2
+    local replacement=$path.sed.$$
+
+    sed "$expression" "$path" >"$replacement"
+    mv -- "$replacement" "$path"
 }
 
 begin_case()
@@ -298,7 +336,7 @@ test_historical_pin_selects_historical_manifest()
     begin_case historical_pin_selects_historical_manifest
     make_source historical-plugin
     git -C "$source_repo" tag old-name
-    sed -i 's/name: "historical-plugin"/name: "newer-plugin"/' \
+    sed_rewrite 's/name: "historical-plugin"/name: "newer-plugin"/' \
         "$source_repo/plugin.fl"
     git -C "$source_repo" add -- plugin.fl
     git -C "$source_repo" commit -q -m 'rename at head'
@@ -733,7 +771,7 @@ test_malicious_lock_name_cannot_escape_plugins()
     mkdir -p "$victim"
     printf 'keep\n' >"$victim/sentinel"
     lock=$(lock_path)
-    sed -i 's/"safe-plugin"/"..\/victim"/' "$lock"
+    sed_rewrite 's/"safe-plugin"/"..\/victim"/' "$lock"
     run_pkg remove '../victim'
     assert_status 1
     [[ -f "$victim/sentinel" ]] || fail 'remove escaped plugin root'
@@ -919,7 +957,10 @@ test_postinstall_key_is_rejected_without_execution()
 touch '$sentinel'
 EOF
     chmod +x "$source_repo/install.sh"
-    sed -i '/^}/i\  postinstall: "install.sh",' "$source_repo/plugin.fl"
+    sed_rewrite '/^}/i\
+  postinstall: "install.sh",
+' \
+        "$source_repo/plugin.fl"
     git -C "$source_repo" add -- install.sh plugin.fl
     git -C "$source_repo" commit -q -m 'rejected postinstall key'
     run_pkg install "$(source_url)"
@@ -1091,11 +1132,10 @@ test_install_kill_boundaries_recover_fail_closed()
     begin_case install_kill_boundaries_recover_fail_closed
     make_source kill-install-plugin
     shim=$case_root/faultshim.so
-    ${CC:-cc} -std=c11 -fPIC -shared -o "$shim" \
-        "$repo_root/tests/torture/faultshim.c" -ldl
+    build_fault_shim "$shim"
     wrapper=$case_root/bin
     mkdir -p "$wrapper"
-    printf '#!/bin/sh\nunset LD_PRELOAD YEW_FAULT_AT YEW_FAULT_STORAGE_ONLY\nexec %q "$@"\n' \
+    printf '#!/bin/sh\nunset LD_PRELOAD DYLD_INSERT_LIBRARIES DYLD_FORCE_FLAT_NAMESPACE YEW_FAULT_AT YEW_FAULT_STORAGE_ONLY YEW_FAULT_STORAGE_ROOT\nexec %q "$@"\n' \
         "$real_git" >"$wrapper/git"
     chmod +x "$wrapper/git"
     for at in $(seq 0 160); do
@@ -1105,8 +1145,9 @@ test_install_kill_boundaries_recover_fail_closed()
         export XDG_DATA_HOME=$attempt/data XDG_STATE_HOME=$attempt/state
         export XDG_CONFIG_HOME=$attempt/config XDG_CACHE_HOME=$attempt/cache
         set +e
-        PATH="$wrapper:$PATH" LD_PRELOAD="$shim" YEW_FAULT_AT=$at \
-            YEW_FAULT_STORAGE_ONLY=1 "$yew_bin" pkg install \
+        PATH="$wrapper:$PATH" YEW_FAULT_AT=$at YEW_FAULT_STORAGE_ONLY=1 \
+            YEW_FAULT_STORAGE_ROOT="$attempt" \
+            run_with_fault_shim "$shim" "$yew_bin" pkg install \
             "$(source_url)" --enable >"$stdout_file" 2>"$stderr_file"
         status=$?
         set -e
@@ -1158,11 +1199,10 @@ test_install_commit_recovery_syncs_lock_parent()
     begin_case install_commit_recovery_syncs_lock_parent
     make_source recover-lock-sync-plugin
     shim=$case_root/faultshim.so
-    ${CC:-cc} -std=c11 -fPIC -shared -o "$shim" \
-        "$repo_root/tests/torture/faultshim.c" -ldl
+    build_fault_shim "$shim"
     wrapper=$case_root/bin
     mkdir -p "$wrapper"
-    printf '#!/bin/sh\nunset LD_PRELOAD YEW_FAULT_AT YEW_FAULT_SAVE_META_EIO_AT YEW_FAULT_STORAGE_ONLY\nexec %q "$@"\n' \
+    printf '#!/bin/sh\nunset LD_PRELOAD DYLD_INSERT_LIBRARIES DYLD_FORCE_FLAT_NAMESPACE YEW_FAULT_AT YEW_FAULT_SAVE_META_EIO_AT YEW_FAULT_STORAGE_ONLY YEW_FAULT_STORAGE_ROOT\nexec %q "$@"\n' \
         "$real_git" >"$wrapper/git"
     chmod +x "$wrapper/git"
     for at in $(seq 0 160); do
@@ -1172,8 +1212,9 @@ test_install_commit_recovery_syncs_lock_parent()
         export XDG_DATA_HOME=$attempt/data XDG_STATE_HOME=$attempt/state
         export XDG_CONFIG_HOME=$attempt/config XDG_CACHE_HOME=$attempt/cache
         set +e
-        PATH="$wrapper:$PATH" LD_PRELOAD="$shim" YEW_FAULT_AT=$at \
-            YEW_FAULT_STORAGE_ONLY=1 "$yew_bin" pkg install \
+        PATH="$wrapper:$PATH" YEW_FAULT_AT=$at YEW_FAULT_STORAGE_ONLY=1 \
+            YEW_FAULT_STORAGE_ROOT="$attempt" \
+            run_with_fault_shim "$shim" "$yew_bin" pkg install \
             "$(source_url)" >"$stdout_file" 2>"$stderr_file"
         status=$?
         set -e
@@ -1185,8 +1226,9 @@ test_install_commit_recovery_syncs_lock_parent()
             continue
         fi
         set +e
-        LD_PRELOAD="$shim" YEW_FAULT_SAVE_META_EIO_AT=0 \
-            YEW_FAULT_STORAGE_ONLY=1 "$yew_bin" pkg list \
+        YEW_FAULT_SAVE_META_EIO_AT=0 YEW_FAULT_STORAGE_ONLY=1 \
+            YEW_FAULT_STORAGE_ROOT="$attempt" \
+            run_with_fault_shim "$shim" "$yew_bin" pkg list \
             >"$stdout_file" 2>"$stderr_file"
         status=$?
         set -e
@@ -1218,11 +1260,10 @@ test_install_lock_parent_fsync_failure_recovers()
     begin_case install_lock_parent_fsync_failure_recovers
     make_source lock-fsync-plugin
     shim=$case_root/faultshim.so
-    ${CC:-cc} -std=c11 -fPIC -shared -o "$shim" \
-        "$repo_root/tests/torture/faultshim.c" -ldl
+    build_fault_shim "$shim"
     wrapper=$case_root/bin
     mkdir -p "$wrapper"
-    printf '#!/bin/sh\nunset LD_PRELOAD YEW_FAULT_SAVE_META_EIO_AT YEW_FAULT_STORAGE_ONLY\nexec %q "$@"\n' \
+    printf '#!/bin/sh\nunset LD_PRELOAD DYLD_INSERT_LIBRARIES DYLD_FORCE_FLAT_NAMESPACE YEW_FAULT_SAVE_META_EIO_AT YEW_FAULT_STORAGE_ONLY YEW_FAULT_STORAGE_ROOT\nexec %q "$@"\n' \
         "$real_git" >"$wrapper/git"
     chmod +x "$wrapper/git"
     for at in $(seq 0 80); do
@@ -1232,8 +1273,9 @@ test_install_lock_parent_fsync_failure_recovers()
         export XDG_DATA_HOME=$attempt/data XDG_STATE_HOME=$attempt/state
         export XDG_CONFIG_HOME=$attempt/config XDG_CACHE_HOME=$attempt/cache
         set +e
-        PATH="$wrapper:$PATH" LD_PRELOAD="$shim" \
-            YEW_FAULT_SAVE_META_EIO_AT=$at YEW_FAULT_STORAGE_ONLY=1 \
+        PATH="$wrapper:$PATH" YEW_FAULT_SAVE_META_EIO_AT=$at \
+            YEW_FAULT_STORAGE_ONLY=1 YEW_FAULT_STORAGE_ROOT="$attempt" \
+            run_with_fault_shim "$shim" \
             "$yew_bin" pkg install "$(source_url)" --enable \
             >"$stdout_file" 2>"$stderr_file"
         status=$?
@@ -1270,11 +1312,10 @@ test_remove_kill_boundaries_restore_exact_policy()
     cp -a "$case_root/xdg" "$baseline"
     before=$baseline/state/yew/trust.fl
     shim=$case_root/faultshim.so
-    ${CC:-cc} -std=c11 -fPIC -shared -o "$shim" \
-        "$repo_root/tests/torture/faultshim.c" -ldl
+    build_fault_shim "$shim"
     wrapper=$case_root/bin
     mkdir -p "$wrapper"
-    printf '#!/bin/sh\nunset LD_PRELOAD YEW_FAULT_AT YEW_FAULT_STORAGE_ONLY\nexec %q "$@"\n' \
+    printf '#!/bin/sh\nunset LD_PRELOAD DYLD_INSERT_LIBRARIES DYLD_FORCE_FLAT_NAMESPACE YEW_FAULT_AT YEW_FAULT_STORAGE_ONLY YEW_FAULT_STORAGE_ROOT\nexec %q "$@"\n' \
         "$real_git" >"$wrapper/git"
     chmod +x "$wrapper/git"
     for at in $(seq 0 120); do
@@ -1283,8 +1324,9 @@ test_remove_kill_boundaries_restore_exact_policy()
         export XDG_DATA_HOME=$attempt/data XDG_STATE_HOME=$attempt/state
         export XDG_CONFIG_HOME=$attempt/config XDG_CACHE_HOME=$attempt/cache
         set +e
-        PATH="$wrapper:$PATH" LD_PRELOAD="$shim" YEW_FAULT_AT=$at \
-            YEW_FAULT_STORAGE_ONLY=1 "$yew_bin" pkg remove \
+        PATH="$wrapper:$PATH" YEW_FAULT_AT=$at YEW_FAULT_STORAGE_ONLY=1 \
+            YEW_FAULT_STORAGE_ROOT="$attempt" \
+            run_with_fault_shim "$shim" "$yew_bin" pkg remove \
             kill-remove-plugin >"$stdout_file" 2>"$stderr_file"
         status=$?
         set -e
@@ -1337,16 +1379,16 @@ test_remove_trash_parent_fsync_recovery_retries()
     baseline=$case_root/baseline
     cp -a "$case_root/xdg" "$baseline"
     shim=$case_root/faultshim.so
-    ${CC:-cc} -std=c11 -fPIC -shared -o "$shim" \
-        "$repo_root/tests/torture/faultshim.c" -ldl
+    build_fault_shim "$shim"
     for at in $(seq 0 100); do
         attempt=$case_root/probe-$at
         cp -a "$baseline" "$attempt"
         export XDG_DATA_HOME=$attempt/data XDG_STATE_HOME=$attempt/state
         export XDG_CONFIG_HOME=$attempt/config XDG_CACHE_HOME=$attempt/cache
         set +e
-        LD_PRELOAD="$shim" YEW_FAULT_SAVE_META_EIO_AT=$at \
-            YEW_FAULT_STORAGE_ONLY=1 "$yew_bin" pkg remove \
+        YEW_FAULT_SAVE_META_EIO_AT=$at YEW_FAULT_STORAGE_ONLY=1 \
+            YEW_FAULT_STORAGE_ROOT="$attempt" \
+            run_with_fault_shim "$shim" "$yew_bin" pkg remove \
             trash-fsync-plugin >"$stdout_file" 2>"$stderr_file"
         status=$?
         set -e
@@ -1365,9 +1407,11 @@ test_remove_trash_parent_fsync_recovery_retries()
     export XDG_DATA_HOME=$attempt/data XDG_STATE_HOME=$attempt/state
     export XDG_CONFIG_HOME=$attempt/config XDG_CACHE_HOME=$attempt/cache
     set +e
-    LD_PRELOAD="$shim" YEW_FAULT_SAVE_META_EIO_AT=$boundary \
+    YEW_FAULT_SAVE_META_EIO_AT=$boundary \
         YEW_FAULT_SAVE_META_EIO_AT2=$((boundary + 1)) \
-        YEW_FAULT_STORAGE_ONLY=1 "$yew_bin" pkg remove trash-fsync-plugin \
+        YEW_FAULT_STORAGE_ONLY=1 YEW_FAULT_STORAGE_ROOT="$attempt" \
+        run_with_fault_shim "$shim" \
+        "$yew_bin" pkg remove trash-fsync-plugin \
         >"$stdout_file" 2>"$stderr_file"
     status=$?
     set -e

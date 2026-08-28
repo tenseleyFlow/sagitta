@@ -304,9 +304,11 @@ LDLIBS := -lm
 ifeq ($(TARGET_OS),Darwin)
 SHARED_FLAG := -dynamiclib
 DL_LIBS :=
+FAULTSHIM_PLATFORM_SRC := tests/torture/faultshim-darwin.s
 else
 SHARED_FLAG := -shared
 DL_LIBS := -ldl
+FAULTSHIM_PLATFORM_SRC :=
 endif
 
 # Sanitized and plain objects must never mix: use SAN=1 BUILD=build-san.
@@ -1436,9 +1438,11 @@ $(TORTURE_GIT_HUNK): $(PERF_CORE_OBJ) $(TORTURE_GIT_HUNK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(TORTURE_GIT_HUNK_OBJ) $(LDLIBS)
 
-$(FAULTSHIM): tests/torture/faultshim.c $(BUILD)/mods.stamp \
+$(FAULTSHIM): tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
+              $(BUILD)/mods.stamp \
               $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
-	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< \
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ \
+		tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
 		$(DL_LIBS) $(LDLIBS)
 
 $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c \

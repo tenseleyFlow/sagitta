@@ -1,3 +1,6 @@
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE 1
+#endif
 #define _POSIX_C_SOURCE 200809L
 
 /*
@@ -26,6 +29,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#if defined(__APPLE__)
+extern int fdatasync(int);
+#endif
+
 typedef ssize_t (*WriteFn)(int, const void *, size_t);
 typedef ssize_t (*PwriteFn)(int, const void *, size_t, off_t);
 typedef int (*FsyncFn)(int);
@@ -33,6 +40,12 @@ typedef int (*RenameFn)(const char *, const char *);
 typedef int (*FtruncateFn)(int, off_t);
 typedef int (*FchownFn)(int, uid_t, gid_t);
 typedef int (*CloseFn)(int);
+
+#if defined(__APPLE__)
+#define YEW_FAULT_INTERPOSE(name) yew_fault_##name
+#else
+#define YEW_FAULT_INTERPOSE(name) name
+#endif
 
 static WriteFn real_write_fn;
 static PwriteFn real_pwrite_fn;
@@ -71,6 +84,7 @@ static void close_log(void)
     }
 }
 
+#if !defined(__APPLE__)
 static void load_symbol(void *dst, size_t dst_size, const char *name)
 {
     void *sym = dlsym(RTLD_NEXT, name);
@@ -79,6 +93,7 @@ static void load_symbol(void *dst, size_t dst_size, const char *name)
         _exit(126);
     memcpy(dst, &sym, sizeof(sym));
 }
+#endif
 
 static unsigned long long parse_ull(const char *s, unsigned long long fallback)
 {
@@ -110,6 +125,16 @@ static void initialize(void)
     if (initialized || resolving)
         return;
     resolving = 1;
+#if defined(__APPLE__)
+    real_write_fn = write;
+    real_pwrite_fn = pwrite;
+    real_fsync_fn = fsync;
+    real_fdatasync_fn = fdatasync;
+    real_rename_fn = rename;
+    real_ftruncate_fn = ftruncate;
+    real_fchown_fn = fchown;
+    real_close_fn = close;
+#else
     load_symbol(&real_write_fn, sizeof(real_write_fn), "write");
     load_symbol(&real_pwrite_fn, sizeof(real_pwrite_fn), "pwrite");
     load_symbol(&real_fsync_fn, sizeof(real_fsync_fn), "fsync");
@@ -118,6 +143,7 @@ static void initialize(void)
     load_symbol(&real_ftruncate_fn, sizeof(real_ftruncate_fn), "ftruncate");
     load_symbol(&real_fchown_fn, sizeof(real_fchown_fn), "fchown");
     load_symbol(&real_close_fn, sizeof(real_close_fn), "close");
+#endif
 
     at = getenv("YEW_FAULT_AT");
     parsed = parse_ull(at, UINT64_MAX);
@@ -151,11 +177,47 @@ static void initialize(void)
 static int storage_fd(int fd)
 {
     struct stat st;
+#if defined(__APPLE__)
+    char path[PATH_MAX];
+    const char *root;
+    size_t root_len;
+#endif
 
     if (!storage_only)
         return 1;
-    return fstat(fd, &st) == 0 &&
-           (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode));
+    if (fstat(fd, &st) != 0 || (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)))
+        return 0;
+#if defined(__APPLE__)
+    root = getenv("YEW_FAULT_STORAGE_ROOT");
+    if (root != NULL && *root != '\0') {
+        root_len = strlen(root);
+        if (fcntl(fd, F_GETPATH, path) != 0)
+            return 0;
+        return strncmp(path, root, root_len) == 0 &&
+               (path[root_len] == '\0' || path[root_len] == '/');
+    }
+#endif
+    return 1;
+}
+
+static int storage_path(const char *path)
+{
+#if defined(__APPLE__)
+    const char *root;
+    size_t root_len;
+
+    if (!storage_only)
+        return 1;
+    root = getenv("YEW_FAULT_STORAGE_ROOT");
+    if (root == NULL || *root == '\0')
+        return 1;
+    root_len = strlen(root);
+    return strncmp(path, root, root_len) == 0 &&
+           (path[root_len] == '\0' || path[root_len] == '/');
+#else
+    (void)path;
+    return 1;
+#endif
 }
 
 static int faults_enabled(void)
@@ -267,7 +329,7 @@ static const char *sync_name(int fd, const char *file_name,
     return file_name;
 }
 
-ssize_t write(int fd, const void *buf, size_t count)
+ssize_t YEW_FAULT_INTERPOSE(write)(int fd, const void *buf, size_t count)
 {
     initialize();
     if (!storage_fd(fd))
@@ -285,7 +347,8 @@ ssize_t write(int fd, const void *buf, size_t count)
     return real_write_fn(fd, buf, maybe_short(count, "write"));
 }
 
-ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
+ssize_t YEW_FAULT_INTERPOSE(pwrite)(int fd, const void *buf, size_t count,
+                                    off_t offset)
 {
     initialize();
     if (!storage_fd(fd))
@@ -296,7 +359,7 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
     return real_pwrite_fn(fd, buf, maybe_short(count, "pwrite"), offset);
 }
 
-int fsync(int fd)
+int YEW_FAULT_INTERPOSE(fsync)(int fd)
 {
     const char *name = sync_name(fd, "fsync-file", "fsync-dir");
     int result;
@@ -315,7 +378,7 @@ int fsync(int fd)
     return result;
 }
 
-int fdatasync(int fd)
+int YEW_FAULT_INTERPOSE(fdatasync)(int fd)
 {
     const char *name = sync_name(fd, "fdatasync-file", "fdatasync-dir");
 
@@ -328,8 +391,11 @@ int fdatasync(int fd)
     return real_fdatasync_fn(fd);
 }
 
-int rename(const char *old_path, const char *new_path)
+int YEW_FAULT_INTERPOSE(rename)(const char *old_path, const char *new_path)
 {
+    initialize();
+    if (!storage_path(old_path) && !storage_path(new_path))
+        return real_rename_fn(old_path, new_path);
     before_call("rename");
     if (inject_save_meta_eio("rename"))
         return -1;
@@ -344,7 +410,7 @@ int rename(const char *old_path, const char *new_path)
     return real_rename_fn(old_path, new_path);
 }
 
-int ftruncate(int fd, off_t length)
+int YEW_FAULT_INTERPOSE(ftruncate)(int fd, off_t length)
 {
     initialize();
     if (!storage_fd(fd))
@@ -355,7 +421,7 @@ int ftruncate(int fd, off_t length)
     return real_ftruncate_fn(fd, length);
 }
 
-int fchown(int fd, uid_t owner, gid_t group)
+int YEW_FAULT_INTERPOSE(fchown)(int fd, uid_t owner, gid_t group)
 {
     initialize();
     if (!storage_fd(fd))
@@ -371,7 +437,7 @@ int fchown(int fd, uid_t owner, gid_t group)
     return real_fchown_fn(fd, owner, group);
 }
 
-int close(int fd)
+int YEW_FAULT_INTERPOSE(close)(int fd)
 {
     const char *source;
     const char *twin;
