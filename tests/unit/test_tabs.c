@@ -10,9 +10,12 @@
  * So the tests hold ids across mutations and assert what the ids point
  * at afterwards, rather than asserting positions.
  */
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -324,6 +327,54 @@ void test_tabs_find_by_path_canonicalizes(void)
     YEW_ASSERT_EQ_I64(yew_tab_find_by_path(&ed, "/tmp/./."), idx);
     YEW_ASSERT_EQ_I64(yew_tab_find_by_path(&ed, "/nonexistent-xyz"), -1);
     yew_ed_free(&ed);
+}
+
+/*
+ * A workspace entry may be a symlink whose target lives outside the
+ * workspace.  File identity must follow the canonical target, while UI
+ * surfaces retain the logical spelling the user opened from the workspace.
+ */
+void test_tabs_display_path_preserves_workspace_spelling(void)
+{
+    Ed ed;
+    char root[] = "/tmp/yew-tab-root-XXXXXX";
+    char target[] = "/tmp/yew-tab-target-XXXXXX";
+    char link_path[PATH_MAX];
+    char file_path[PATH_MAX];
+    char cwd[PATH_MAX];
+    FILE *fp;
+    int idx;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    YEW_ASSERT_NOT_NULL(mkdtemp(target));
+    YEW_ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
+    (void)snprintf(link_path, sizeof(link_path), "%s/linked", root);
+    (void)snprintf(file_path, sizeof(file_path), "%s/note.txt", target);
+    fp = fopen(file_path, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    if (fp != NULL)
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_I64(symlink(target, link_path), 0);
+
+    tb_fixture(&ed);
+    YEW_ASSERT(yew_ed_set_workspace_root(&ed, root));
+    YEW_ASSERT_EQ_I64(chdir(root), 0);
+    idx = yew_tab_open(&ed, "./linked/note.txt");
+    YEW_ASSERT_EQ_I64(chdir(cwd), 0);
+
+    YEW_ASSERT(idx >= 0);
+    if (idx >= 0) {
+        const Tab *tab = yew_tab_at(&ed, idx);
+
+        YEW_ASSERT_EQ_STR(tab->path, file_path);
+        YEW_ASSERT_EQ_STR(yew_tab_display_path(tab), "linked/note.txt");
+    }
+
+    yew_ed_free(&ed);
+    (void)unlink(link_path);
+    (void)unlink(file_path);
+    (void)rmdir(root);
+    (void)rmdir(target);
 }
 
 /*

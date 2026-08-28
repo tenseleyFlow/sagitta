@@ -52,6 +52,7 @@ static void tab_destroy(Ed *ed, Tab *t)
         yew_pane_free(ed, t->root);
     }
     yew_xfree(t->path);
+    yew_xfree(t->display_path);
     (void)memset(t, 0, sizeof(*t));
 }
 
@@ -99,6 +100,13 @@ Tab *yew_tab_at(Ed *ed, int idx)
     return &ed->tabs.v.data[idx];
 }
 
+const char *yew_tab_display_path(const Tab *tab)
+{
+    if (tab == NULL)
+        return NULL;
+    return tab->display_path != NULL ? tab->display_path : tab->path;
+}
+
 int yew_tab_index_of_id(const Ed *ed, u32 id)
 {
     size_t i;
@@ -136,6 +144,33 @@ static char *canonical_path(const char *path)
     return out;
 }
 
+static char *logical_path(const Ed *ed, const char *path,
+                          const char *canonical)
+{
+    const char *root;
+    size_t root_len;
+
+    if (canonical == NULL)
+        return NULL;
+    root = yew_ws_root(ed);
+    if (root != NULL && root[0] != '\0') {
+        root_len = strlen(root);
+        if (root_len == 1U && root[0] == '/' && canonical[0] == '/' &&
+            canonical[1] != '\0')
+            return yew_xstrdup(canonical + 1U);
+        if (strncmp(canonical, root, root_len) == 0 &&
+            canonical[root_len] == '/' && canonical[root_len + 1U] != '\0')
+            return yew_xstrdup(canonical + root_len + 1U);
+    }
+    if (path != NULL && path[0] != '\0' && path[0] != '/') {
+        while (path[0] == '.' && path[1] == '/')
+            path += 2U;
+        if (path[0] != '\0')
+            return yew_xstrdup(path);
+    }
+    return yew_xstrdup(canonical);
+}
+
 int yew_tab_find_by_path(const Ed *ed, const char *path)
 {
     char *want;
@@ -162,11 +197,17 @@ int yew_tab_find_by_path(const Ed *ed, const char *path)
 void yew_tab_set_path(Ed *ed, int idx, const char *path)
 {
     Tab *t = yew_tab_at(ed, idx);
+    char *canonical;
+    char *display;
 
     if (t == NULL)
         return;
+    canonical = canonical_path(path);
+    display = logical_path(ed, path, canonical);
     yew_xfree(t->path);
-    t->path = canonical_path(path);
+    yew_xfree(t->display_path);
+    t->path = canonical;
+    t->display_path = display;
     yew_state_mark_dirty(ed);
 }
 
@@ -200,6 +241,7 @@ int yew_tab_open(Ed *ed, const char *path)
     (void)memset(&t, 0, sizeof(t));
     t.tab_id = ed->tabs.next_tab_id++;
     t.path = canonical_path(path);
+    t.display_path = logical_path(ed, path, t.path);
     /*
      * The new tab gets its OWN buffer, and a file one is born
      * NON-RESIDENT: opening it costs no read at all.  The read happens
@@ -213,6 +255,7 @@ int yew_tab_open(Ed *ed, const char *path)
     if (buf == NULL) {
         yew_ed_win_release(ed, win);
         yew_xfree(t.path);
+        yew_xfree(t.display_path);
         yew_msg(ed, YEW_MSG_ERROR, "no room for another buffer");
         return -1;
     }

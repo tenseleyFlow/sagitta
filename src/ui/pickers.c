@@ -362,21 +362,22 @@ CmdStatus yew_find_cmd_buffer(CmdCtx *cx)
     for (i = 0U; i < ed->tabs.v.len && store.n < YEW_PICKERS_MAX_ITEMS;
          i++) {
         const Tab *t = &ed->tabs.v.data[i];
-        const char *path = t->path;
+        const char *display = yew_tab_display_path(t);
         const char *slash;
         u8 flags = 0U;
 
-        label_off[store.n] = store_str(path == NULL ? "untitled" : path);
-        slash = path == NULL ? NULL : strrchr(path, '/');
+        label_off[store.n] = store_str(display == NULL ? "untitled" :
+                                                        display);
+        slash = display == NULL ? NULL : strrchr(display, '/');
         if (slash == NULL) {
             detail_off[store.n] = UINT64_MAX;
         } else {
             char dir[PATH_MAX];
-            size_t dlen = (size_t)(slash - path);
+            size_t dlen = (size_t)(slash - display);
 
             if (dlen >= sizeof(dir))
                 dlen = sizeof(dir) - 1U;
-            (void)memcpy(dir, path, dlen);
+            (void)memcpy(dir, display, dlen);
             dir[dlen] = '\0';
             /* A group member carries its group's label, so the switcher
              * shows which group a file belongs to. */

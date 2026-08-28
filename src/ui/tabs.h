@@ -36,6 +36,7 @@ typedef struct Tab {
     u32 tab_id;   /* monotonic, never reused; 0 is invalid */
     u32 buffer_id;
     char *path;   /* canonical realpath; NULL when untitled */
+    char *display_path; /* workspace/logical spelling; never authoritative */
     Pane *root;   /* this tab's pane tree */
     Pane *focus;  /* focused leaf within root */
     /*
@@ -105,6 +106,7 @@ void yew_tab_reorder(Ed *ed, int from, int to);
 bool yew_tab_modified(const Ed *ed, int idx);
 u32 yew_tab_count(const Ed *ed);
 Tab *yew_tab_at(Ed *ed, int idx);
+const char *yew_tab_display_path(const Tab *tab);
 
 /*
  * Sprint 24 §3: lazy hydration.

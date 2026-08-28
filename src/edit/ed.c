@@ -651,11 +651,14 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
          * first one is special" is not even checkable.
          */
         first.path = NULL;
+        first.display_path = NULL;
         if (ed->buffer.path != NULL) {
             size_t n = strlen(ed->buffer.path) + 1U;
 
             first.path = yew_xmalloc(n);
             (void)memcpy(first.path, ed->buffer.path, n);
+            first.display_path = yew_xmalloc(n);
+            (void)memcpy(first.display_path, ed->buffer.path, n);
         }
         TabVec_push(&ed->tabs.v, first);
         ed->tabs.active = 0;
