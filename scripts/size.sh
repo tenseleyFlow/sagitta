@@ -15,6 +15,24 @@ die()
     exit 2
 }
 
+STAT=${STAT:-stat}
+if [ -z "${STAT_FORMAT:-}" ]; then
+    case $(uname -s) in
+        Darwin) STAT_FORMAT=bsd ;;
+        *) STAT_FORMAT=gnu ;;
+    esac
+fi
+command -v "$STAT" >/dev/null 2>&1 || die "STAT tool not found: $STAT"
+
+file_size()
+{
+    case $STAT_FORMAT in
+        gnu) "$STAT" -c %s "$1" ;;
+        bsd) "$STAT" -f %z "$1" ;;
+        *) die "STAT_FORMAT must be gnu or bsd" ;;
+    esac
+}
+
 [ "${1:-}" = "--budgets" ] || usage
 [ "$#" -ge 3 ] || usage
 budgets=$2
@@ -40,7 +58,7 @@ for entry do
         END { if (found != 1) exit 1 }
     ' "$budgets") || die "expected exactly one budget for config '$config'"
     case $budget in *[!0-9]*|'') die "invalid budget for '$config': $budget" ;; esac
-    bytes=$(stat -c %s "$binary") || die "stat failed for $binary"
+    bytes=$(file_size "$binary") || die "stat failed for $binary"
     case $bytes in *[!0-9]*|'') die "stat returned a non-integer size for $binary" ;; esac
     if [ "$bytes" -le "$budget" ]; then state=ok; else state=FAIL; fi
     printf '%s\t%s\t%s\t%s\t%s\n' "$config" "$bytes" "$budget" "$state" "$binary" >>"$tmp"

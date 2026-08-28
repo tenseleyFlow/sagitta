@@ -275,12 +275,14 @@ function cstr(s,    out,i,c,n) {
     return out "\""
 }
 
-function emit_array(i, id, kind,    n,j) {
+function emit_array(i, id, kind,    n,j,suffix) {
     n = META[i, "n" kind] + 0
     if (n == 0) return
     printf "static const char *const lang_%d_%s[] = {\n", id, kind
-    for (j = 1; j <= n; j++)
-        printf "    %s%s\n", cstr(META[i, kind, j]), j == n ? "" : ","
+    for (j = 1; j <= n; j++) {
+        suffix = j == n ? "" : ","
+        printf "    %s%s\n", cstr(META[i, kind, j]), suffix
+    }
     print "};"
 }
 
@@ -335,17 +337,17 @@ function sort_detect(kind,    n,i,j,key,lang) {
     }
 }
 
-function emit_detect(kind, symbol,    n,i) {
+function emit_detect(kind, symbol,    n,i,wildcard,suffix) {
     n = DET[kind, "n"] + 0
     if (n == 0) return
     printf "static const SynDetectEntry %s[] = {\n", symbol
     for (i = 1; i <= n; i++) {
+        wildcard = index(DET[kind, i, "key"], "*")
+        wildcard = wildcard == 0 ? 0 : wildcard - 1
+        suffix = i == n ? "" : ","
         printf "    {%s, %dU, %dU, %dU}%s\n", \
                cstr(DET[kind, i, "key"]), DET[kind, i, "lang"], \
-               length(DET[kind, i, "key"]), \
-               index(DET[kind, i, "key"], "*") == 0 ? 0 : \
-                   index(DET[kind, i, "key"], "*") - 1, \
-               i == n ? "" : ","
+               length(DET[kind, i, "key"]), wildcard, suffix
     }
     print "};"
     print ""
@@ -450,21 +452,31 @@ BEGIN {
     print "const SynLangSeed yew_syn_builtin_langs[] = {"
     for (id = 1; id <= ledger_max; id++) {
         i = BY_ID[id]
+        extensions = "NULL"
+        filenames = "NULL"
+        shebangs = "NULL"
+        if (META[i, "nextensions"])
+            extensions = "lang_" id "_extensions"
+        if (META[i, "nfilenames"])
+            filenames = "lang_" id "_filenames"
+        if (META[i, "nshebangs"])
+            shebangs = "lang_" id "_shebangs"
         print "    {"
         printf "        %dU,\n", id
         printf "        %s,\n", cstr(META[i, "name"])
         printf "        %s,\n", cstr(META[i, "source"])
-        printf "        %s,\n", META[i, "nextensions"] ? "lang_" id "_extensions" : "NULL"
+        printf "        %s,\n", extensions
         printf "        %dU,\n", META[i, "nextensions"]
-        printf "        %s,\n", META[i, "nfilenames"] ? "lang_" id "_filenames" : "NULL"
+        printf "        %s,\n", filenames
         printf "        %dU,\n", META[i, "nfilenames"]
-        printf "        %s,\n", META[i, "nshebangs"] ? "lang_" id "_shebangs" : "NULL"
+        printf "        %s,\n", shebangs
         printf "        %dU,\n", META[i, "nshebangs"]
         printf "        %s,\n", nullable(META[i, "first_line"])
         printf "        %.0f,\n", META[i, "priority"]
         printf "        {%s, %s, %s}\n", nullable(META[i, "comment_line"]), \
                nullable(META[i, "block1"]), nullable(META[i, "block2"])
-        printf "    }%s\n", id == ledger_max ? "" : ","
+        suffix = id == ledger_max ? "" : ","
+        printf "    }%s\n", suffix
     }
     print "};"
     print ""
@@ -476,12 +488,22 @@ BEGIN {
     emit_detect("glob", "builtin_globs")
     emit_detect("shebang", "builtin_shebangs")
     emit_detect("first_line", "builtin_first_lines")
+    exact = "NULL"
+    extension = "NULL"
+    glob = "NULL"
+    shebang = "NULL"
+    first_line = "NULL"
+    if (DET["exact", "n"]) exact = "builtin_exact"
+    if (DET["extension", "n"]) extension = "builtin_extensions"
+    if (DET["glob", "n"]) glob = "builtin_globs"
+    if (DET["shebang", "n"]) shebang = "builtin_shebangs"
+    if (DET["first_line", "n"]) first_line = "builtin_first_lines"
     print "const SynDetectIndex yew_syn_builtin_detect_index = {"
-    printf "    %s, %dU,\n", DET["exact", "n"] ? "builtin_exact" : "NULL", DET["exact", "n"]
-    printf "    %s, %dU,\n", DET["extension", "n"] ? "builtin_extensions" : "NULL", DET["extension", "n"]
-    printf "    %s, %dU,\n", DET["glob", "n"] ? "builtin_globs" : "NULL", DET["glob", "n"]
-    printf "    %s, %dU,\n", DET["shebang", "n"] ? "builtin_shebangs" : "NULL", DET["shebang", "n"]
-    printf "    %s, %dU\n", DET["first_line", "n"] ? "builtin_first_lines" : "NULL", DET["first_line", "n"]
+    printf "    %s, %dU,\n", exact, DET["exact", "n"]
+    printf "    %s, %dU,\n", extension, DET["extension", "n"]
+    printf "    %s, %dU,\n", glob, DET["glob", "n"]
+    printf "    %s, %dU,\n", shebang, DET["shebang", "n"]
+    printf "    %s, %dU\n", first_line, DET["first_line", "n"]
     print "};"
 }
 ' "$@"

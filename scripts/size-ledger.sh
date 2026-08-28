@@ -39,10 +39,27 @@ case $top in *[!0-9]*|'') die "--top must be a non-negative integer" ;; esac
 
 NM=${NM:-nm}
 SIZE=${SIZE:-size}
+STAT=${STAT:-stat}
+if [ -z "${STAT_FORMAT:-}" ]; then
+    case $(uname -s) in
+        Darwin) STAT_FORMAT=bsd ;;
+        *) STAT_FORMAT=gnu ;;
+    esac
+fi
 MAKEFILE=${MAKEFILE:-Makefile}
 command -v "$NM" >/dev/null 2>&1 || die "NM tool not found: $NM"
 command -v "$SIZE" >/dev/null 2>&1 || die "SIZE tool not found: $SIZE"
+command -v "$STAT" >/dev/null 2>&1 || die "STAT tool not found: $STAT"
 [ -r "$MAKEFILE" ] || die "cannot read module map: $MAKEFILE"
+
+file_size()
+{
+    case $STAT_FORMAT in
+        gnu) "$STAT" -c %s "$1" ;;
+        bsd) "$STAT" -f %z "$1" ;;
+        *) die "STAT_FORMAT must be gnu or bsd" ;;
+    esac
+}
 
 tmpdir=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-ledger.XXXXXX") ||
     die "cannot create temporary directory"
@@ -133,7 +150,7 @@ done <"$tmpdir/objects"
 if awk 'NR > 2 && $1 ~ /^(\.debug|\.symtab$|\.strtab$)/ { found=1 } END { exit !found }' "$tmpdir/final-size"; then
     die "binary is not stripped: $binary"
 fi
-on_disk=$(stat -c %s "$binary") || die "stat failed for $binary"
+on_disk=$(file_size "$binary") || die "stat failed for $binary"
 case $on_disk in *[!0-9]*|'') die "stat returned a non-integer size" ;; esac
 
 awk '

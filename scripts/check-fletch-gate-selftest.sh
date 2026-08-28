@@ -55,6 +55,17 @@ expect_check() {
     cp "$SPEC" "$tmp/spec.md"
 }
 
+# POSIX sed has no in-place flag, and BSD sed interprets the GNU `-i EXPR`
+# spelling as a backup suffix.  Rewrite only scratch files explicitly.
+rewrite() {
+    expression=$1
+    file=$2
+    rewritten=$file.rewritten
+
+    sed "$expression" "$file" >"$rewritten"
+    mv "$rewritten" "$file"
+}
+
 echo "check-fletch-gate-selftest: seeding one violation per check"
 
 # 1: a spec section with no test.  Adding a section to the spec is the
@@ -72,20 +83,20 @@ printf '\n```ebnf\nseeded_production = "x" ;\n```\n' >>"$tmp/spec.md"
 expect_check 2 "a grammar production with no COVERS token"
 
 # 3: a native with no COVERS token.
-sed -i 's/ str\.cmp$//' "$tmp/tests/fletch/04-values-str.fl"
+rewrite 's/ str\.cmp$//' "$tmp/tests/fletch/04-values-str.fl"
 expect_check 3 "a native with no COVERS token"
 
 # 4: an error kind with no ERROR_KIND case.
 rm -f "$tmp/tests/fletch/errors/kind_div.fl"
-sed -i 's/^# COVERS: kind:user kind:type kind:index kind:key kind:div kind:arity$/# COVERS: kind:user kind:type kind:index kind:key kind:arity/' \
+rewrite 's/^# COVERS: kind:user kind:type kind:index kind:key kind:div kind:arity$/# COVERS: kind:user kind:type kind:index kind:key kind:arity/' \
     "$tmp/tests/fletch/09-errors.fl"
-sed -i 's/^# COVERS: expr or_e and_e eq_e rel_e add_e mul_e unary postfix primary$/# COVERS: expr or_e and_e eq_e rel_e add_e mul_e unary postfix primary/' \
+rewrite 's/^# COVERS: expr or_e and_e eq_e rel_e add_e mul_e unary postfix primary$/# COVERS: expr or_e and_e eq_e rel_e add_e mul_e unary postfix primary/' \
     "$tmp/tests/fletch/05-expressions.fl"
-sed -i 's/^# COVERS: kind:div$//' "$tmp/tests/fletch/05-expressions.fl"
+rewrite 's/^# COVERS: kind:div$//' "$tmp/tests/fletch/05-expressions.fl"
 expect_check 4 "an error kind with no case"
 
 # 5: an opcode with no COVERS token.
-sed -i 's/ op:HALT op:NOT_NIL$//' "$tmp/tests/fletch/06-statements.fl"
+rewrite 's/ op:HALT op:NOT_NIL$//' "$tmp/tests/fletch/06-statements.fl"
 expect_check 5 "an opcode with no COVERS token"
 
 # 6a: a Conformance: line naming a file that does not exist.
@@ -93,7 +104,7 @@ rm -f "$tmp/tests/fletch/16-amendments.fl"
 expect_check 6 "a Conformance: target that does not exist"
 
 # 6b: 14-example.fl drifting from the spec's own §14 block.
-sed -i '2s/^import str$/import  str/' "$tmp/tests/fletch/14-example.fl"
+rewrite '2s/^import str$/import  str/' "$tmp/tests/fletch/14-example.fl"
 expect_check 6 "14-example.fl drifting from the spec block"
 
 # 7 is the shell wrapper's git diff, so it is seeded against the
