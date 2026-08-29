@@ -186,7 +186,8 @@ MODDIR_fuss    := git
 MODDIR_plugins := plug
 
 #
-# _FORTIFY_SOURCE IS ON EVERYWHERE, DELIBERATELY.
+# _FORTIFY_SOURCE IS ON EVERYWHERE EXCEPT DARWIN SANITIZER BUILDS,
+# DELIBERATELY.
 #
 # It is what turns glibc's warn_unused_result attributes on, and those
 # are the difference between a distro whose gcc enables it by default
@@ -199,9 +200,18 @@ MODDIR_plugins := plug
 # Setting it in the one place both sides read means a developer sees
 # the same errors CI will.  It needs an optimiser, which -O2 provides;
 # the sanitizer lane drops to -O1 below and glibc simply ignores it
-# there.
+# there.  Apple clang's ASan driver instead predefines _FORTIFY_SOURCE=0;
+# overriding that definition is both unsupported and a -Werror build
+# failure, so preserve the driver-owned value in that one profile.
+FORTIFY_CFLAGS := -D_FORTIFY_SOURCE=2
+ifeq ($(TARGET_OS),Darwin)
+ifeq ($(SAN),1)
+FORTIFY_CFLAGS :=
+endif
+endif
+
 CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
-          -D_FORTIFY_SOURCE=2 \
+          $(FORTIFY_CFLAGS) \
           -DYEW_RUNTIME_DIR_DEFAULT='"$(PREFIX)/share/yew/runtime"' \
           -MMD -MP -Isrc -Itests -Itests/pty -Itests/fuzz \
           -DYEW_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
