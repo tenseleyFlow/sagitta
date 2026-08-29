@@ -1,312 +1,521 @@
-# yew — session handoff
+# yew project handoff
 
-**Written:** 2026-08-27. **Active implementation frontier:** Sprint 57,
-binary-size budgets, allocation audit, the musl embedded profile, and target
-proof. Campaign 12 is complete. Sprint 56 and Sprint 56.5 are repository
-complete; Sprint 56's pinned self-hosted hardware evidence remains external and
-pending.
+**Current checkpoint date:** 2026-08-28
 
----
+**Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
+Apple-silicon host `nomad-1`
 
-## 0. Start here
+**Transferred from:** `/home/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on the
+2026-08-27 Linux workstation
 
-Read, in order:
+**Active branch:** `trunk`
 
-1. `.docs/plan/00-decisions.md`
-2. `.docs/plan/01-architecture.md`
-3. `.docs/plan/02-fletch.md`
-4. `.docs/sprints/13-performance/s57-size-and-embedded.md`
+**Clean upstream/recovery anchor:**
+`0246f98e93fee97b9fd5df9183efeb1bf3e5222d`
 
-Sprint 57 is the binding implementation contract. Sprint 56.5 closed the
-dogfooded workspace/FUSS/shadow interaction seams, so size, allocation, musl,
-embedded-target, and required architecture work can proceed. Do not manufacture
-Sprint 56 reference vectors or promote this laptop as a designated runner.
+**Current code frontier before this handoff commit:** `1e50672`
 
-## 1. Sprint 56 repository closeout
+**Git position:** 41 local implementation commits ahead of `origin/trunk`,
+plus this handoff checkpoint once committed; nothing was pushed from the Mac
 
-Sprint 56 now provides the in-loop profiler, deterministic latency/startup/open/
-search/RSS harnesses, calibration refusal policy, hosted advisory x86_64 and
-arm64 coverage, production anti-flap and relative gates, and a transactional
-designated-only baseline update path. Cursor coordinate fallbacks preserve real
-Unicode grapheme state while bulk-consuming proven ASCII spans, keeping the
-8 MiB ASCII-to-Unicode transition below the 5 ms motion budget.
+**Active implementation frontier:** Sprint 57 local repository and
+Apple-silicon validation boundary; external target proof remains
 
-Repository verification includes the fast gate, strict GCC/Clang coordinate
-coverage, gate selftests, and the cursor performance matrix. The repository
-gates are green through the Sprint 56.5 closeout sequence.
+This document began as the exact frozen Linux-to-Mac transfer record. That
+record is retained below as provenance, but the transferred WIP has now been
+reviewed, implemented, tested, and committed. After committing this handoff,
+the main worktree is expected to be clean. The old dirty manifest in §4 is a
+historical recovery record, not the current working state.
 
-The contract's hardware-evidence rows remain deliberately open: GitHub reports
-zero registered self-hosted runners and no enabling repository variables, so
-there is no honest source for promoted x86_64/arm64 calibration references,
-runner baselines, or five consecutive designated runs. Hosted timing stays
-advisory. This does not block the next repository implementation frontier, but
-it remains a release closeout prerequisite.
+## 0. Current pickup point
 
-Sprint 56.5 completed deterministic startup workspace resolution, restored
-state plus explicit-file merge, the non-Git all-files FUSS drawer, explicit
-new-tab and split destinations, and insertion-preview shadow composition.
-Closeout evidence includes the 2,385-test / 71,013,449-assertion fast gate,
-strict full/minimal GCC and Clang builds, focused ASan/UBSan and Valgrind,
-deterministic drawer PTYs, sanitized FUSS fuzzing, independent lifecycle
-approval, and green shadow/FUSS performance budgets.
+Yew is still on **Sprint 57**. The optional embedded runtime and the native
+Apple-silicon port are repository-complete locally. Do not start Sprint 58 or
+call Sprint 57 complete until the remaining external evidence is closed:
 
-## 2. Sprint 47 closeout
+1. Reconcile the locked 900 KiB stripped minimal x86_64 Linux budget with the
+   measured roughly 1.85 MiB binary and roughly 1.48 MiB `.text + .rodata`.
+   This remains a real contract/scaffold conflict; do not weaken the gate.
+2. Run the pinned QEMU/hardware constrained-target proof that is unavailable
+   on this host.
+3. Supply Sprint 56 designated-runner evidence. Hosted timing remains
+   advisory and is not a substitute.
+4. Reconfirm the final chain with true GNU GCC on Linux. `cc`, `clang`, and
+   `/usr/bin/gcc` on this Mac are all Apple clang 21.0.0.
 
-Sprint 47 completes the 1.0 editor-facing LSP surface:
+The exact current local evidence is:
 
-- Completion and resolve feed the existing explicit menu or passive shadow
-  provider; snippets are honestly downgraded instead of partially expanded.
-- Hover and signature help use the reusable core floating panel; definition,
-  declaration, type-definition and implementation navigation use the jumplist;
-  references and hierarchical document symbols use deterministic pickers.
-- Every feature is capability-gated and generation-aware, with plain once-only
-  feedback when the active server cannot provide it.
-- Workspace rename validates the entire `WorkspaceEdit` before mutation,
-  resolves positions against each target buffer, applies edits back-to-front,
-  records exactly one `YEW_TXN_LSP` undo node per affected buffer, and rolls the
-  whole plan back on failure. It changes buffers only and never writes files.
-- Program lookup for LSP jobs is PATH-aware without invoking a shell, and the
-  checked-in compile-database generator is byte-reproducible.
-- The stripped `MODULES=""` surface preserves the core symbol-completion
-  fallback while rejecting LSP-only commands through the normal module shim.
+- Native default `make ... test`: PTY green; Fletch 38/38; scripts
+  93 tests / 919 assertions / 0 failures with one intentional skip; package
+  51/51; 432 syntax assets; 2,000 round-trip seeds; unit 2,401 tests /
+  71,035,338 assertions / 0 failures; policies, smoke checks, and live PTY
+  torture green.
+- Exact arm64 alignment profile:
+  `make test-unit CC=clang ALIGN_SAN=1 BUILD=build-align` passed the same
+  2,401 tests / 71,035,338 assertions / 0 failures. This is the Sprint 57
+  exact alignment/UBSan gate; `ALIGN_SAN=1` is arm64-only and mutually
+  exclusive with the ordinary sanitizer and Valgrind profiles.
+- Embedded runtime:
+  `make CC=clang BUILD=build-s57-arm64-embedded EMBED_RUNTIME=1 test-runtime-embedded`
+  passed. The Mach-O object record is 106,800 bytes; the blank-CWD proof
+  emitted `YEWTEST 7 0 0`; runtime asset and consumer filters passed 6 tests /
+  713 assertions / 0 failures. The separate `runtime-blob-selftest` also
+  passed its generator determinism and error-path checks.
+- Full local advisory performance suite:
+  `make perf CC=clang PERF_GATE=0 PERF_RUNNER_ID=local-arm64-macos BUILD=build-s57-arm64-perf`
+  exited 0 through the primary suite, policy selftests, three complete
+  observations, and aggregation. Final medians included 437 us small-file
+  typing, 288 us 100 MiB typing, 362 us syntax editing, 225 us many-buffer
+  navigation, 1.476 ms 100 MiB search, 461 us assisted typing, 8.193 ms
+  default first paint, and a 257-permille spawn-floor fraction. The known
+  multicursor, workspace/open, profiler-overhead, and Linux-labelled closed
+  RSS rows were WARN/advisory on this non-designated host.
+- The full native default suite and live PTY torture are green on Darwin.
+  A diagnostic full `SAN=1` PTY run built but exceeded timing/startup
+  expectations under instrumentation; it was not substituted for the sprint's
+  separate native PTY and exact alignment gates, both of which pass.
 
-Closeout evidence:
+Two arm64-only performance-harness defects were found by the definitive run
+and fixed without weakening hard invariants:
 
-- hosted CI run `32189169337` is fully green: full and stripped GCC/Clang,
-  ASan/UBSan plus every fixed fuzz campaign, PTY goldens, determinism,
-  computed-goto parity, Unicode, Fletch, scripts, torture, syntax assets,
-  structural bans, and all committed performance gates;
-- the live clangd lane reports 8/8 navigation fixtures, 6 references across
-  3 files, a two-file rename round trip back to a clean worktree, one expected
-  diagnostic, hover, and clean teardown;
-- local full/stripped fast suites are green under GCC and Clang (1,963 tests /
-  70,289,311 assertions full; 1,815 / 70,026,273 stripped), as are focused
-  rename and capability suites, all Sprint 44 completion PTYs, 50k response
-  fuzzing under GCC, Clang and ASan/UBSan, and the LSP performance gates;
-- focused Valgrind is clean for rename, capability gates, PATH-aware spawn,
-  raw prompt handling and lifecycle; the generated compile database is
-  byte-identical across repeated runs.
+- the hidden memory RSS collector now uses the normal three-sample startup
+  median instead of a noisy one-sample timing gate;
+- the AI shadow batching cap now derives from the measured monotonic stream
+  duration while remaining a hard count bound. On Darwin the nominal 4 s
+  120-tps loop took 4.868 s, delivered 120 frames, and correctly allowed at
+  most 148.
 
-## 3. Sprint 49–50 closeout
+## 1. First actions in the next session
 
-Sprint 49 completed the live AI shadow-provider path while preserving the
-off-by-default boundary:
+1. Read, in order:
+   - `AGENTS.md`
+   - `.docs/plan/00-decisions.md`
+   - `.docs/plan/01-architecture.md`
+   - `.docs/plan/02-fletch.md`
+   - `.docs/sprints/index.md`
+   - `.docs/sprints/13-performance/s57-size-and-embedded.md`
+   - this file
+2. Confirm `git status --short --branch`. The main worktree should be clean and
+   ahead of `origin/trunk`; do not push unless explicitly requested.
+3. Keep Sprint 57 active. Work the external x86_64 size and target-proof rows
+   above before moving the campaign frontier.
+4. Use separate `BUILD=` trees for default, embedded, alignment, and
+   performance profiles. The profile stamp protects normal reuse but separate
+   trees keep evidence unambiguous.
+5. Treat §2 and §§4-11 as retained transfer history where their wording says
+   “at freeze time” or “WIP”; §0 is the authoritative current status.
 
-- bounded cursor-local context and deterministic FIM/chat prompt builders feed
-  the configured backend without placing secrets in prompts, argv, or logs;
-- the AI `ShadowProvider` streams ghost text through the provider-neutral
-  shadow surface, batches delivery once per frame, preserves matching-prefix
-  streams, and cancels HTTP or curl work when input becomes stale;
-- typed-prefix acceptance, explicit accept/decline, local accepted-byte
-  accounting, error precedence, and provider lifecycle behavior are covered by
-  unit, script, fuzz, performance, and production-provider PTY tests;
-- the deterministic mock HTTP and curl paths enforce the 150 ms first-token
-  budget, while structural gates pin the single prompt/redaction seam and
-  prohibit unsafe logging or shell execution.
+## 2. Historical upstream green baseline
 
-Closeout evidence:
+`trunk`, `origin/trunk`, and `origin/le01-wolf-refresh` all pointed to:
 
-- strict full and stripped GCC/Clang suites are green; the full GCC tier
-  reports 2,050 tests / 70,761,583 assertions and the stripped tier reports
-  1,829 tests / 70,026,792 assertions;
-- focused Clang ASan/UBSan is green for 66 AI tests / 4,509 assertions and the
-  20,000-iteration shadow fuzzer; focused Valgrind is clean for the same AI
-  unit surface and both production-provider PTYs;
-- every committed PTY passes its double-run determinism gate; the Sprint 49
-  stream and mid-stream Escape cases are also green under Valgrind;
-- performance gates report context-build p99 at 3.5 microseconds, prompt-build
-  p99 at 4.1 microseconds, HTTP and curl first-token p95 at 101 ms, and live
-  stream keypress p99 at 57 microseconds.
+```text
+0246f98e93fee97b9fd5df9183efeb1bf3e5222d
+```
 
-Sprint 50 closed Campaign 10's shipping boundary: explicit opt-in, schema-3
-per-workspace grants, deny-pattern and path redaction, conservative local/cloud
-presets, the privacy page, and the four-state `[AI]` statusline badge. A fresh
-profile continues to make zero network syscalls.
+The 19-commit `le01-wolf-refresh` series was a clean fast-forward over trunk.
+It was fast-forwarded locally and `git push origin trunk` succeeded.
 
-## 4. Sprint 52–55.5 closeout
+Hosted CI for that exact SHA was fully green:
 
-Sprint 52 completes F mode:
+- GitHub Actions run: `33165592743`
+- URL: <https://github.com/tenseleyFlow/sagitta/actions/runs/33165592743>
+- Successful normal jobs: performance, bans, Unicode, Fletch dispatch,
+  allocation, torture, musl, PTY, Clang, sanitizer, Fletch, hosted arm64,
+  determinism, GCC, script, modules, and LSP.
+- Expected gated skips only: designated-runner performance and the scheduled
+  nightly fuzz/torture/Valgrind lanes.
 
-- a dirty-first, depth-aware tree preserves selection and collapsed state by
-  interned path across refreshes, with lazy untracked-directory expansion;
-- Unicode and ASCII renderings cover staged, modified, untracked, incoming,
-  conflict, and ignored states without blocking the event loop;
-- the full F keymap dispatches recordable commands, including the deferred
-  `ed.group.from_dir` word reserved for Sprint 53;
-- real panes provide diff, status, blame, history, reflog, and file viewers,
-  restoring the pre-F layout byte-identically on exit;
-- argv-only Git workflows cover stage/unstage, commit/amend, push/pull/fetch,
-  branches, merge/reset/rebase, cherry-pick/revert, stash/tag, discard,
-  delete, rename, view, and open with typed destructive confirmations.
+The last CI defect fixed at the baseline was in
+`scripts/s56-perf-gate.sh`: token scanning could overwrite a valid bare
+`permille` observation with an empty value. The fix requires a numeric value
+after `permille=` and includes exact-format regression rows.
 
-Local closeout evidence:
+Fresh evidence collected before the push/merge:
 
-- the fast tier is green at 2,176 tests / 70,773,238 assertions; strict Clang
-  and `MODULES=""` parity checks are green;
-- 50 focused FUSS unit tests / 3,837 assertions, 333 real-Git workflow
-  assertions, and 20,000 live F-mode key sequences pass;
-- all 19 FUSS PTYs pass, including CJK, emoji ZWJ, conflict, ignored, incoming,
-  ASCII status rows, both leave keys, non-repo behavior, loading, confirmation,
-  and byte-exact viewer layout restoration;
-- rebase handover restores termios across normal and synthetic SIGTERM exits;
-  the 20,000-entry tree builds in 6.629 ms and toggle p99 is 0.123 ms against
-  12 ms / 5 ms gates.
+- `make -j2 perf-s56-gate-selftest CC=gcc` passed.
+- `scripts/bans.sh` passed.
+- `git diff --check` passed.
+- The earlier fast suite passed 2,394 tests / 71,014,940 assertions / 0
+  failures.
+- `make test-pty` passed.
+- Hosted exact-SHA CI subsequently passed as described above.
 
-Sprint 53 completes Git-aware editing:
+This clean upstream SHA remains the recovery anchor for comparing the resumed
+implementation with known-good Linux behavior. The transferred work is now a
+committed 41-commit chain; do not reset to the anchor unless explicitly asked.
 
-- one persistent `git cat-file --batch` transport per workspace supplies the
-  index blob; conflict entries fall back to `HEAD`, and untracked files use an
-  empty base;
-- a collision-safe, linear-space Myers differ drives the two-cell sign column,
-  hunk motions, index-only staging, and buffer-only discard as one undo step;
-- lazy viewport blame preserves stale annotations while refreshing, and the
-  side-by-side diff view keeps aligned rows and synchronized scroll state;
-- cached branch, ahead/behind, conflict, phase, and stash state reaches the
-  statusline without spawning from render;
-- focus, save, and external-job completion invalidate Git state without a file
-  watcher, while private read workers cannot create refresh loops;
-- `ed.group.from_dir` deterministically adopts or defers directory members and
-  reads only the focused file.
+## 3. Project and sprint position
 
-Local closeout evidence:
+The repository is now named **yew**; `sagitta` remains the historical checkout
+and GitHub repository directory name. The shipped binary is `yew`, and its
+macro/configuration language is Fletch (`*.fl`).
 
-- strict full GCC and Clang suites are green at 2,243 tests / 70,983,393
-  assertions, including every deterministic PTY, 87 scripts / 770 assertions,
-  smoke, round-trip, syntax assets, structural gates, and live torture;
-- Clang ASan/UBSan with Fletch invariant checks is green at 2,224 runnable
-  tests / 70,983,075 assertions plus the complete script and PTY matrices;
-- the real-Git suites report 15,337 layer assertions, 333 FUSS workflow
-  assertions, and 20 accepted patch fixtures / 254 hunk assertions;
-- the 100 kLOC / 500-hunk gate settles in about 20–22 ms, keeps its largest
-  slice below 3.7 ms, performs viewport lookup below 0.1 microsecond, and
-  coalesces 200 edits into one diff.
+Campaigns through Sprint 55.5 are repository-complete. Sprint 56 and 56.5
+landed the profiling/performance gates and workspace/FUSS/shadow-text behavior.
+Sprint 57 is the current binding contract:
 
-Sprint 54 completed plugin manifests and deterministic XDG discovery,
-zero-residue lifecycle, the namespaced event bus, capability consent and
-containment, and the `yew plug` CLI/picker.
+- binary-size budgets and per-module ledger;
+- allocation audit and allocation-debug gates;
+- musl static-PIE embedded profile;
+- optional embedded `runtime/` asset;
+- minimal-module parity;
+- arm64 Linux/macOS and constrained-target proof.
 
-Sprint 55 completes plugin distribution and the cloud-save preset:
+Sprint 57's repository implementation now includes the size tooling,
+allocation work, target profiles, musl CI, optional `runtime/` asset, hosted
+embedded lanes, and Apple-silicon portability/validation work. Section 2.4's
+`make EMBED_RUNTIME=1` path is implemented and green locally on arm64 macOS.
 
-- `yew pkg` installs, updates, removes, lists and diagnoses Git-backed plugin
-  packages without a shell or a dependency on the FUSS Git module;
-- deterministic pure-literal lockfiles record exact revisions and a bespoke
-  content-tree drift hash, while crash intents recover installs/removals to a
-  complete before-or-after state and restore the exact prior trust policy;
-- managed-code drift revokes persisted capability grants and re-prompts on
-  first use instead of silently transferring consent to changed code;
-- the cloud preset selects in-place saves and content conflict checks only for
-  configured synced roots, retaining the normal atomic-save default elsewhere;
-- save-policy, symlink/hardlink preservation, backup rotation, recovery,
-  offline behavior, package docs, Fletch import behavior, fuzz corpora and all
-  three sprint performance budgets are covered in-tree.
+Sprint 57 must **not** yet be called complete:
 
-Local closeout evidence:
+- The locked 900 KiB stripped minimal budget appears incompatible with the
+  current implementation. Measurements were roughly 1.85 MiB stripped, with
+  `.text + .rodata` around 1.48 MiB. Treat this as a real scaffold conflict to
+  reconcile, not a reason to weaken a gate silently.
+- Pinned hardware/QEMU constrained-target proof remains external and
+  unavailable.
+- True GNU GCC is unavailable locally; the hosted Linux lanes remain the
+  compiler evidence source.
 
-- strict full GCC and Clang suites are green at 2,310 tests / 71,007,767
-  assertions, plus 89 scripts / 808 assertions, every PTY, Fletch 38/38,
-  package integration 50/50, round-trip, structural/docs gates, smoke and live
-  save torture;
-- the `MODULES=plugins` suite is green at 1,924 tests / 70,052,585 assertions
-  and exercises packages without the FUSS module;
-- Clang ASan/UBSan is green at 2,291 runnable tests / 71,007,449
-  assertions; the 5,000-iteration package-tree fuzz lane and focused package,
-  manifest, drift, save-policy and conflict-check Valgrind slices are clean;
-- tree-hash p99 is 0.723 ms against 3 ms, lock load/save p99 is 0.822 ms
-  against 1 ms, and cloud conflict-scan p99 is 0.207 ms against 2 ms;
-- the exact Wolf-file regression remains responsive while workspace indexing:
-  raw keypress p99 1.382 ms and paced arrow p99 1.624 ms against 5 ms.
-  The defect was editor-side, not a Wolf LSP: startup discovery repeatedly
-  scheduled already-due background slices. Yew now spaces completed indexing
-  slices by 8 ms and yields them behind the input grace deadline;
-- the matching Kitty CSI-u insert/delete gate enters the blank line between the
-  two Wolf functions, inserts 16 newlines, waits across the 300 ms workspace
-  idle boundary, then deletes them. The exact-file first Backspace measured
-  0.437 ms and the worst of all 16 measured 0.588 ms against 5 ms. Backspace
-  turns perform no journal `fsync`, and no Wolf LSP is configured by default.
+Sprint 56's designated hardware evidence also remains external. GitHub had no
+registered self-hosted runners or enabling repository variables. Hosted timing
+is advisory and must not be promoted into designated baselines.
 
-Sprint 55.5 then shipped the two example plugins, their author-guide
-walkthroughs, and executable coverage of the frozen plugin API without adding
-host code. Hosted CI run `33025642745` attempt 3 closed Campaign 12 green.
+The separate Sprint 42 Daily Driver field milestone remains unearned unless a
+qualifying yew session was explicitly designated and logged. Automated tests,
+generated goldens, benchmarks, or editing in another editor do not count.
 
-## 5. Campaign sequence
+## 4. Historical dirty working-tree checkpoint and resolution
 
-1. Sprint 43 — provider-neutral shadow text (complete)
-2. Sprint 44 — no-LSP buffer/workspace symbol index (complete)
-3. Sprint 45 — bespoke JSON/JSON-RPC and stdio transport (complete)
-4. Sprint 46 — LSP lifecycle, capabilities, changes, and diagnostics (complete)
-5. Sprint 47 — completion, hover, navigation, references, rename, symbols,
-   and the real-clangd milestone (complete)
-6. Sprint 48 — plain HTTP, curl TLS transport, streaming parsers, backend
-   adapters and API-key resolution (complete)
-7. Sprint 49 — context assembly and streamed AI ghost text (complete)
-8. Sprint 50 — explicit opt-in, privacy/redaction rules and default presets
-   (complete; Campaign 10 closed)
-9. Sprint 51 — asynchronous Git layer, porcelain parsers and TTL cache
-   (complete)
-10. Sprint 52 — F mode tree, navigation, viewers and Git verbs (complete)
-11. Sprint 53 — editor Git hunks, blame, diff view and groups (complete;
-    Campaign 11 closed)
-12. Sprint 54 — plugin manifests, lifecycle, events and capabilities
-    (complete)
-13. Sprint 55 — package distribution, integrity and cloud-save preset
-    (complete locally; hosted closeout gates pending)
-14. Sprint 55.5 — shipped example plugins and executable author-guide coverage
-    (complete; Campaign 12 closed)
-15. Sprint 56 — profiling, calibration, latency/startup/open/search/RSS gates,
-    and transactional baselines (repository complete; designated hardware
-    evidence pending)
-16. Sprint 56.5 — workspace invocation, FUSS drawer/open behavior, and honest
-    insertion-preview shadow composition (complete)
-17. Sprint 57 — binary size, allocation audit, musl embedded profile, and
-    target proof (active frontier)
+The following was the exact transfer manifest on 2026-08-27. It is retained
+for forensic recovery only. Every listed file was reviewed and the resulting
+implementation is committed; it is no longer the expected working state.
 
-## 6. Daily Driver remains separate and pending
+At freeze time:
 
-Sprint 42's field milestone remains `PENDING` at:
+```text
+## trunk...origin/trunk
+ M Makefile
+ M scripts/size-ledger.sh
+ M scripts/tests/size-tools.test.sh
+ M src/fl/flconf.c
+ M src/fl/module.c
+ M src/mod/ai/policy.c
+ M src/mod/ai/preset.c
+ M src/syn/defs.c
+ M src/syn/theme.c
+ M src/syncli.c
+ M tests/unit/registry.c
+ M tests/unit/tests.h
+?? scripts/gen-runtime-blob.c
+?? scripts/tests/runtime-blob.test.sh
+?? src/util/runtime_asset.c
+?? src/util/runtime_asset.h
+?? src/util/runtime_blob.h
+?? tests/unit/test_runtime_asset.c
+```
 
-- 0/10 working days;
-- 0/40 dogfood hours;
-- 0/200,000 real keystrokes;
-- 0/3 abnormal-exit trials;
-- 0/20 exact resume cycles.
+The tracked diff at freeze time was 212 insertions and 24 deletions across 12
+files. `git diff --check` passed. No full default build or embedded build has
+been run against this WIP. The focused `scripts/tests/size-tools.test.sh` test
+passed.
 
-Automated tests, generated goldens, benchmarks and editing in another editor
-never count. A future sprint contributes only if a qualifying yew session is
-designated and logged before eligible implementation edits.
+File modes at freeze time matter:
 
-## 7. Invariants and cautions
+- `scripts/tests/runtime-blob.test.sh` is executable.
+- `scripts/gen-runtime-blob.c` and all new C/header files are regular
+  non-executable source files.
 
-- Preserve byte identity, terminal restoration, deterministic rendering and
+The resumed implementation is the 41-commit range
+`0246f98e93fee97b9fd5df9183efeb1bf3e5222d..1e50672`. The major groups are:
+
+- strict type and initial macOS target portability (`f05852b` through
+  `1fe9438`);
+- optional runtime generation, fallback consumers, end-to-end proof, and
+  hosted compiler lanes (`b552fba` through `f2edfc5`);
+- Darwin script, unit, package, PTY, fault, path, FUSS, and suspend/resume
+  portability (`34d1ef1` through `0d8cff7`);
+- sanitizer/alignment and performance-harness portability (`ca6ba2a` through
+  `d5f06e4`);
+- fresh-build embedded size-output preparation (`1e50672`).
+
+Use `git log --oneline 0246f98e..1e50672` for the exact coherent commit list.
+
+Other worktrees were not touched:
+
+- `.claude/worktrees/cmdline-ux`, branch `cmdline-ux`, at
+  `9298ed9d77e3cda473118cf2322b7e6b02d84424`.
+- A prunable detached worktree record for
+  `/tmp/yew-live-manual.St1fNd/worktree`, at
+  `3034a4190582ca13f3e3fc7a3d342a8b89731e44`; its gitdir target no longer
+  exists. Do not prune it merely as part of resuming the implementation.
+
+The auxiliary `cmdline-ux` worktree metadata contains absolute Linux paths:
+its `.git` file names `/home/mfwolffe/GithubOrgs/tenseleyFlow/yew/...`, while
+the main repository's worktree record names the source `sagitta` checkout.
+Those bytes were intentionally mirrored exactly, so the auxiliary worktree is
+not directly usable on macOS. The main `trunk` checkout is valid. Repair or
+recreate the auxiliary worktree only as a separate deliberate operation after
+protecting its branch; do not let a broad `git worktree repair` or prune alter
+the active Sprint 57 checkpoint.
+
+## 5. Frozen embedded-runtime design
+
+The current `runtime/` corpus contains 55 regular files and 269,757 raw bytes,
+including 48 syntax-language files. There are no symlinks. A raw blob exceeds
+the sprint's 220 KiB budget, so deterministic compression was selected.
+
+A prototype produced approximately 101,128 packed bytes (374 permille),
+leaving roughly 124 KiB for the generated index and decoder.
+
+The compressed wire format is frozen across the generator and decoder:
+
+- LSB-first flag bits.
+- Flag bit `0` means literal; flag bit `1` means match.
+- One flag byte covers the next eight tokens.
+- Match token is little-endian `u16`.
+- `token = (distance << 4) | (length - 3)`.
+- Distance range: 1..4095.
+- Length range: 3..18.
+- Deterministic bounded hash-chain search, at most 64 candidates.
+
+Changing any of these requires updating the generator, decoder, determinism
+tests, round-trip tests, and the contract in this handoff together.
+
+The intended runtime API is:
+
+```c
+size_t yew_runtime_asset_count(void);
+const char *yew_runtime_asset_name(size_t index);
+bool yew_runtime_asset_has(const char *path);
+bool yew_runtime_asset_read(const char *path, Bytebuf *out);
+char *yew_runtime_asset_resolve(const char *path);
+```
+
+`src/util/runtime_blob.h` defines:
+
+```c
+typedef struct YewRuntimeBlobEntry {
+    const char *name;
+    u32 offset;
+    u32 packed_len;
+    u32 raw_len;
+} YewRuntimeBlobEntry;
+```
+
+and accessors for the blob data and index.
+
+Off/default builds must expose a harmless empty runtime-asset API without
+linking or referring to generated blob symbols. Embedded builds must link one
+generated blob object and retain byte-identical deterministic generation.
+
+## 6. Historical WIP file map and implemented intent
+
+This section describes what arrived uncommitted from Linux. The described
+surfaces are now implemented; the wording is retained to explain the design
+intent that constrained review.
+
+### Generator and generated interface
+
+`scripts/gen-runtime-blob.c` is the host C11/POSIX generator. Its intended CLI
+is `gen-runtime-blob ROOT OUTPUT`. It currently aims to:
+
+- recursively walk with `lstat`;
+- reject symlinks, non-regular nodes, and invalid/nonportable relative names;
+- globally byte-sort paths without `qsort`;
+- compress with the frozen LZSS format;
+- emit one `static const u8` blob and a sorted/insertion-ordered index;
+- omit timestamps and absolute source roots;
+- generate C that includes `util/runtime_blob.h` and exports
+  `yew_runtime_blob_data` / `yew_runtime_blob_index`.
+
+`scripts/tests/runtime-blob.test.sh` is the generator/determinism/error-path
+selftest. It is integrated as `runtime-blob-selftest`.
+
+### Runtime reader
+
+`src/util/runtime_asset.[ch]` is intended to compile in both off and embedded
+modes. It normalizes relative and synthetic `runtime/` paths, collapses `.` and
+repeated separators, resolves safe `..`, rejects absolute/escaping paths,
+binary-searches the sorted index, and decodes matches with strict bounds and
+overlap support. `yew_runtime_asset_read` must decode into a temporary buffer
+so caller output is unchanged on failure.
+
+`tests/unit/test_runtime_asset.c`, `tests/unit/registry.c`, and
+`tests/unit/tests.h` add off-mode behavior, embedded inventory/round-trip,
+canonicalization, invalid-path, and output-preservation coverage. These tests
+are reviewed and green in both the native suite and embedded focused run.
+
+### Make integration
+
+The `Makefile` implementation adds:
+
+- `HOSTCC ?= cc` and `EMBED_RUNTIME ?= 0`;
+- `-DYEW_EMBED_RUNTIME=$(EMBED_RUNTIME)`;
+- host-generator, generated-C, and generated-object variables;
+- conditional blob-object linking;
+- sorted runtime file and directory prerequisites, so add/delete/rename is
+  intended to invalidate generation;
+- generated directories in `BUILD_DIRS`;
+- the embed flag in `BUILD_PROFILE_KEY` and target-info output;
+- generator selftest, embedded unit, and embedded budget targets;
+- host-tool compile, deterministic `.tmp` generation, and target-compiler
+  compile stages;
+- an embedded object section budget of 225,280 bytes.
+
+This wiring is exercised by GNU Make 3.81 on `nomad-1` and by the native-off
+and embedded build trees. Hosted GCC/Clang lanes are configured but have not
+run for these unpushed commits. The size target now creates its own
+`$(BUILD)/tmp` directory, so a fresh embedded build does not depend on an
+incidental earlier target.
+
+### Size ledger
+
+`scripts/size-ledger.sh` now includes `build/gen/runtime_blob.o` in the
+`runtime.embedded` bucket. `scripts/tests/size-tools.test.sh` creates a fake
+generated object and asserts the attribution. That focused test passed before
+the freeze.
+
+### Disk-first consumer fallbacks
+
+The contract is strict: existing disk precedence remains byte-for-byte the
+default. Embedded assets are the final fallback only after the same disk
+lookup would otherwise fail. An explicit runtime environment override remains
+authoritative where it was authoritative before.
+
+The consumer implementation provides the following:
+
+- `src/fl/flconf.c`: embedded `init.fl` after installed/repository disk miss;
+  no embedded fallback when `YEW_RUNTIME_DIR` is explicitly set; `--clean`
+  still bypasses all configuration.
+- `src/fl/module.c`: stable synthetic runtime identity, relative imports from
+  embedded runtime modules, and asset-read fallback; importer directory, user
+  configuration, and runtime disk precedence remain ahead of embedded data.
+- `src/syn/defs.c`: on `stat(...)=ENOENT`, load embedded bytes, use zeroed
+  synthetic stat metadata, and force source-hash cache validation rather than
+  the mtime fast path.
+- `src/syncli.c`: compile-all's disk precheck permits known embedded assets and
+  calls the same definition loader.
+- `src/syn/theme.c`: user path, caller environment, install, and repository
+  disk candidates remain first; then embedded `themes/<name>.fl`.
+- `src/mod/ai/policy.c`: final fallback to embedded `ai-deny.fl`.
+- `src/mod/ai/preset.c`: final fallback to the embedded local/cloud preset.
+
+`docs/ai-privacy.md` is deliberately outside the runtime blob contract. Do
+not embed it unless the scaffold decision is explicitly changed.
+
+## 7. Review-point resolution
+
+The 12 implementation review points from the frozen handoff were closed during
+the 41-commit resume:
+
+- embedded lookup preserves missing/error classification; theme and decoder
+  failure paths preserve ownership and caller output;
+- disk/user/importer precedence, explicit `YEW_RUNTIME_DIR`, relative runtime
+  imports, synthetic syntax metadata, and hash validation have focused tests;
+- compile-all is the intentionally embedded-aware `syncli` seam; unrelated
+  disk-only commands were not broadened;
+- generator determinism/error paths, runtime file/directory invalidation,
+  off-mode linkage, and blank-CWD behavior are covered; hosted embedded
+  GCC/Clang coverage is wired and awaits a pushed Linux run;
+- the full strict Apple-clang build, native tests, embedded tests, exact arm64
+  alignment gate, PTY/torture tests, and advisory performance suite pass.
+
+The remaining review rule is unchanged: do not call the whole sprint complete
+while the binary-size and constrained-hardware evidence in §0/§3 is open.
+
+## 8. Current continuation and validation order
+
+1. Reproduce the minimal shipping profile on x86_64 Linux with true GNU GCC
+   and inspect the size ledger before proposing any decision-document change.
+2. Reconcile the 900 KiB contract conflict explicitly in the sprint/decision
+   scaffolding; never silently raise or bypass the gate.
+3. Run the pinned QEMU/hardware constrained-target proof and record exact
+   toolchain, architecture, artifact, and result evidence.
+4. Supply Sprint 56 designated-runner measurements separately from hosted
+   advisory evidence.
+5. Rerun the relevant Linux GCC/Clang, musl, sanitizer, and embedded lanes
+   after any size remediation.
+6. Only after those rows close, update the Sprint 57 Definition of Done and
+   advance the campaign frontier.
+
+On `nomad-1`, Apple clang is the native compiler and `/usr/bin/gcc` is an
+Apple-clang shim. Use the repository's `arm64-macos` target profile. Do not use
+the Mac as evidence for x86_64 designated performance or GNU/Linux tooling.
+GNU-specific `stat -c`, `size -A`, and strip behavior must continue through
+the existing target-specific pathways rather than being papered over in tests.
+
+## 9. Product throughlines that constrain all fixes
+
+- Preserve byte identity, terminal restoration, deterministic rendering, and
   central edit/undo laws ahead of latency or convenience.
-- Keep the bespoke HTTP transport plain-text and loopback-first; deny
-  non-loopback HTTP unless `ai.allow_plain_remote` is explicitly enabled.
-- Route every HTTPS backend through `curl`; do not add or vendor a TLS library.
-- Construct subprocesses with argv arrays. Never interpolate commands through
-  a shell, and never place API-key literals in `init.fl`, argv, logs or errors.
-- Keep all socket, subprocess and streaming work poll-driven and bounded. No
-  threads, blocking request writes, or mid-keystroke DNS resolution.
-- Keep fresh-profile AI requests off unless Sprint 50's explicit opt-in and
-  workspace-grant gates both permit them.
-- AI output may feed only the Sprint 43 ghost surface; never mutate `TextBuf`
-  before the existing explicit shadow-accept path runs.
-- Do not add Tree-sitter, TextMate, a JSON library or another dependency.
-- Keep all Git execution argv-only through the existing job layer; paths,
-  refs, commit text, and stash text never pass through a shell or formatted
-  command line.
-- Git editor diffs compare buffer bytes with the index blob, not the worktree;
-  conflict fallback is `HEAD:<path>` and untracked files use an empty base.
-- Plugin manifests are pure data literals; entry paths must resolve inside the
-  package root, and discovery/load order stays deterministic.
-- Plugins share yew's VM, process, and address space. Capability gates constrain
-  flapi I/O; they are not memory or resource isolation and must not be described
-  as a sandbox in user-facing text.
-- A failed init or disable must leave zero registrations, timers, closures, or
-  partial capability state behind.
-- Package transactions must publish code disabled, durably commit the lock and
-  exact trust policy, then enable; recovery must complete the proven commit or
-  restore the byte-exact previous state.
-- Managed plugin drift never inherits persisted grants. Hashes detect ordinary
-  drift; they are explicitly not a cryptographic authenticity mechanism.
-- Do not relax existing performance baselines outside Sprint 56 calibration;
-  a sprint may add the new baseline files its own Definition of Done requires.
-- Do not mark Daily Driver `EARNED` from automated evidence.
+- The editor is single-threaded. Concurrency is the poll loop plus subprocesses.
+- C is the repository's strict C11 subset: no VLAs, compiler attributes,
+  statement expressions, or thread-based escape hatches.
+- No new dependencies without an explicit architectural decision.
+- Build subprocess argv arrays; never interpolate user data through a shell.
+- Runtime discovery remains disk-first by default so distro packages can patch
+  their installed `runtime/` tree.
+- Embedded generation must contain no timestamps, absolute paths, locale
+  ordering, or unstable sorting.
+- Excluded feature modules hard-error honestly; they never silently no-op.
+- No silent stubs. An unimplemented route names the sprint that owns it.
+- Keep latency budgets as gates. Never weaken baselines merely to make a noisy
+  machine pass.
+- Plugins share the process and VM; capability gates are not a security
+  sandbox and must not be described as one.
+- AI stays explicitly opt-in. Secrets never enter prompts, argv, logs, or
+  errors, and generated text reaches the buffer only through explicit shadow
+  acceptance.
+
+## 10. Historical transfer environment
+
+At inspection time, `nomad-1` reported:
+
+```text
+hostname: nomad
+OS: macOS 26.4.1 / Darwin 25.4.0
+architecture: arm64 (Apple T6050)
+home: /Users/mfwolffe
+free disk: approximately 55 GiB
+git: 2.50.1 (Apple)
+make: GNU Make 3.81
+clang: Apple clang 21.0.0
+rsync: openrsync protocol 29
+```
+
+The source checkout occupies approximately 17 GiB because it contains 163
+`build*` directories. The user explicitly requested that **everything** be
+transferred, so the mirror includes `.git`, untracked Sprint 57 work, build
+trees, and the in-repository auxiliary worktree. No build directories were
+excluded to save space.
+
+The destination checkout did not exist before the transfer. Because the
+destination is new, the initial rsync does not use `--delete`.
+
+After the resume was authorized, ignored transferred build artifacts were
+removed to recover approximately 33 GiB. The active default, alignment,
+embedded, and performance evidence trees were then recreated locally; they
+remain ignored build output and are not part of the source checkpoint.
+
+## 11. Historical transfer verification record
+
+The transfer completed on 2026-08-27:
+
+- Full repository rsync: **success**, exit code 0; 17,151,230,220 bytes and
+  133,534 files transferred, with all 148,113 entries checked.
+- Destination `HEAD`: **verified** as
+  `0246f98e93fee97b9fd5df9183efeb1bf3e5222d`.
+- Destination dirty manifest: **verified** to match §4, plus this handoff file.
+- `.docs/HANDOFF.md` SHA-256: **verified** identical on source and destination
+  after the final handoff sync.
+- Source-to-destination itemized rsync dry run: **verified empty** after the
+  final reconciliation sync.
+- Destination size after transfer: approximately 16 GiB on disk, leaving
+  approximately 38 GiB free.
+
+Running `git status` independently on both machines refreshed `.git/index`
+timestamps, so the first comparison correctly reported only `.git/` directory
+metadata and `.git/index` timestamp drift. A final archive-mode reconciliation
+was run before the empty dry comparison; no repository content differed.
