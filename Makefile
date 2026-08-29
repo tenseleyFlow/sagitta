@@ -1505,6 +1505,7 @@ runtime-blob-selftest:
 
 ifeq ($(EMBED_RUNTIME),1)
 runtime-embedded-budget: $(RUNTIME_BLOB_OBJ)
+	mkdir -p $(BUILD)/tmp
 
 ifeq ($(TARGET),arm64-macos)
 	@set -eu; \
