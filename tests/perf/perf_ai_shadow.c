@@ -45,6 +45,7 @@ enum {
     AI_SHADOW_DELIVER_MAX_MS = 5,
     AI_SHADOW_KEY_SAMPLES = 480,
     AI_SHADOW_KEY_P99_NS = 5000000,
+    AI_SHADOW_FRAME_MS = 33,
     AI_SHADOW_BIG_BYTES = 100 * 1024 * 1024
 };
 
@@ -89,6 +90,11 @@ static const char *timing_verdict(u64 value, u64 budget, bool advisory)
     if (value > budget)
         return advisory ? " ADVISORY" : " REGRESSION";
     return " ok";
+}
+
+static u64 delivery_limit(u64 elapsed_ms)
+{
+    return elapsed_ms / AI_SHADOW_FRAME_MS + 1U;
 }
 
 static void fail(const char *message)
@@ -622,6 +628,9 @@ static bool measure_keypress(u64 *p99_out, bool advisory)
     struct timespec delay = {0, 8333333L};
     u64 samples[AI_SHADOW_KEY_SAMPLES];
     u64 deliveries = 0U;
+    u64 elapsed_ms = 0U;
+    u64 max_deliveries = 0U;
+    i64 started_ms;
     Ed ed;
     u32 i;
     bool deterministic_ok = false;
@@ -632,10 +641,15 @@ static bool measure_keypress(u64 *p99_out, bool advisory)
         yew_ed_free(&ed);
         return false;
     }
+    if (!set_int(&ed, "ai.frame_ms", AI_SHADOW_FRAME_MS)) {
+        yew_ed_free(&ed);
+        return false;
+    }
     synthetic_call_begin(&ed);
     for (i = 0U; i < 64U; i++)
         bytebuf_push_u8(&ed.ai->call.raw, (u8)'x');
     ed.ai->call.dirty = true;
+    started_ms = yew_now_ms();
     yew_ai_shadow_pump(&ed);
     for (i = 0U; i < AI_SHADOW_KEY_SAMPLES; i++) {
         AiCall *call = &ed.ai->call;
@@ -675,8 +689,10 @@ static bool measure_keypress(u64 *p99_out, bool advisory)
         delay.tv_nsec = 8333333L;
     }
     *p99_out = percentile(samples, AI_SHADOW_KEY_SAMPLES, 99U);
+    elapsed_ms = (u64)(yew_now_ms() - started_ms);
+    max_deliveries = delivery_limit(elapsed_ms);
     deterministic_ok = ed.ai->call.active &&
-                       ed.shadow_stats.delivered <= 4000U / 33U + 1U;
+                       ed.shadow_stats.delivered <= max_deliveries;
     ok = deterministic_ok &&
          timing_accepted(*p99_out, AI_SHADOW_KEY_P99_NS, advisory);
 
@@ -686,10 +702,11 @@ done:
         yew_ai_call_abort(&ed, &ed.ai->call, YEW_AI_ERR_CANCELLED);
     yew_ed_free(&ed);
     (void)printf("ai.shadow.keypress_120tps p99_ns=%llu budget_ns=%u "
-                 "deliveries=%llu max_deliveries=%u%s\n",
+                 "elapsed_ms=%llu deliveries=%llu max_deliveries=%llu%s\n",
                  (unsigned long long)*p99_out, AI_SHADOW_KEY_P99_NS,
+                 (unsigned long long)elapsed_ms,
                  (unsigned long long)deliveries,
-                 4000U / 33U + 1U,
+                 (unsigned long long)max_deliveries,
                  deterministic_ok ?
                      timing_verdict(*p99_out, AI_SHADOW_KEY_P99_NS,
                                     advisory) :
@@ -704,7 +721,10 @@ static int policy_selftest(void)
         !timing_accepted(116U, 115U, true) ||
         !timing_accepted(11500U, 115U, true) ||
         timing_accepted(11501U, 115U, true) ||
-        timing_accepted(0U, 115U, true)) {
+        timing_accepted(0U, 115U, true) ||
+        delivery_limit(0U) != 1U ||
+        delivery_limit(4000U) != 122U ||
+        delivery_limit(5115U) != 156U) {
         (void)fprintf(stderr, "perf_ai_shadow: advisory policy failed\n");
         return 1;
     }
