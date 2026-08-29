@@ -173,6 +173,12 @@ static bool feed_replace(YewLivePty *pty, const u8 *old, size_t old_len,
     return true;
 }
 
+static _Noreturn void feeder_fail(const char *stage)
+{
+    (void)fprintf(stderr, "yew-live-torture: feeder failed at %s\n", stage);
+    _exit(3);
+}
+
 static void feeder(YewLivePty *pty, pid_t editor, int ready_fd,
                    const u8 *old, size_t old_len,
                    const u8 *post, size_t post_len)
@@ -182,21 +188,22 @@ static void feeder(YewLivePty *pty, pid_t editor, int ready_fd,
     static const char save = 's';
     static const char quit[] = ":ed.quit_force\r";
 
-    if (!yew_live_pty_wait_frame(pty, 0U, deadline, NULL) ||
-        !feed_replace(pty, old, old_len, post, post_len, deadline))
-        _exit(3);
+    if (!yew_live_pty_wait_frame(pty, 0U, deadline, NULL))
+        feeder_fail("first frame");
+    if (!feed_replace(pty, old, old_len, post, post_len, deadline))
+        feeder_fail("replacement input");
     while (nanosleep(&escape_settle, &escape_settle) != 0 && errno == EINTR)
         ;
     if (getenv("YEW_TORTURE_NO_SHIM") == NULL &&
         kill(editor, SIGUSR2) != 0)
-        _exit(3);
+        feeder_fail("fault-arm signal");
     if (!yew_live_pty_write(pty, &save, 1U, deadline))
-        _exit(3);
+        feeder_fail("save input");
     if (ready_fd >= 0) {
         static const char ready = 'R';
 
         if (!write_all(ready_fd, &ready, 1U) || close(ready_fd) != 0)
-            _exit(3);
+            feeder_fail("readiness handoff");
     }
     {
         struct timespec settle = {0, 100000000};
@@ -207,12 +214,15 @@ static void feeder(YewLivePty *pty, pid_t editor, int ready_fd,
     deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
     (void)yew_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline);
     deadline = yew_live_pty_now_ns() + INT64_C(3000000000);
-    _exit(wait_hangup(pty, deadline) ? 0 : 3);
+    if (!wait_hangup(pty, deadline))
+        feeder_fail("quit hangup");
+    _exit(0);
 }
 
 static int live_save(const char *path, const char *post_path)
 {
     const char *binary = getenv("YEW_TORTURE_YEW");
+    const char *editor_log = getenv("YEW_TORTURE_EDITOR_LOG");
     const char *ready_env = getenv("YEW_TORTURE_READY_FD");
     u8 *old = NULL;
     u8 *post = NULL;
@@ -223,13 +233,31 @@ static int live_save(const char *path, const char *post_path)
     int ready_fd = -1;
     pid_t feeder_pid;
 
-    if (binary == NULL || *binary == '\0' ||
-        !slurp(path, &old, &old_len) ||
-        !slurp(post_path, &post, &post_len) ||
-        !isolate_workspace(path) ||
-        !yew_live_pty_open(&pty, slave, sizeof(slave),
-                           LIVE_ROWS, LIVE_COLS))
+    if (binary == NULL || *binary == '\0') {
+        (void)fprintf(stderr,
+                      "yew-live-torture: YEW_TORTURE_YEW is required\n");
         goto fail;
+    }
+    if (!slurp(path, &old, &old_len) ||
+        !slurp(post_path, &post, &post_len)) {
+        (void)fprintf(stderr,
+                      "yew-live-torture: reading fixtures failed: %s\n",
+                      strerror(errno));
+        goto fail;
+    }
+    if (!isolate_workspace(path)) {
+        (void)fprintf(stderr,
+                      "yew-live-torture: isolating workspace failed: %s\n",
+                      strerror(errno));
+        goto fail;
+    }
+    if (!yew_live_pty_open(&pty, slave, sizeof(slave),
+                           LIVE_ROWS, LIVE_COLS)) {
+        (void)fprintf(stderr,
+                      "yew-live-torture: opening PTY failed: %s\n",
+                      strerror(errno));
+        goto fail;
+    }
     if (ready_env != NULL)
         ready_fd = (int)strtol(ready_env, NULL, 10);
     feeder_pid = fork();
@@ -250,7 +278,8 @@ static int live_save(const char *path, const char *post_path)
     }
     if (setenv("TERM", "xterm-256color", 1) != 0 ||
         setenv("COLORTERM", "truecolor", 1) != 0 ||
-        setenv("YEW_LOG", "/dev/null", 1) != 0 ||
+        setenv("YEW_LOG", editor_log != NULL ? editor_log : "/dev/null",
+               1) != 0 ||
         setenv("YEW_FAULT_STORAGE_ONLY", "1", 1) != 0 ||
         setenv("YEW_FAULT_SIGNAL_ENABLE", "1", 1) != 0 ||
         !yew_live_pty_attach(&pty, slave, LIVE_ROWS, LIVE_COLS))

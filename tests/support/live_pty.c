@@ -52,6 +52,8 @@ bool yew_live_pty_open(YewLivePty *pty, char *slave, size_t slave_cap,
     size_t len;
     struct winsize ws;
     int fd;
+    int flags;
+    int slave_fd = -1;
 
     if (pty == NULL || slave == NULL || slave_cap == 0U ||
         rows == 0U || cols == 0U)
@@ -59,8 +61,12 @@ bool yew_live_pty_open(YewLivePty *pty, char *slave, size_t slave_cap,
     (void)memset(pty, 0, sizeof(*pty));
     pty->master = -1;
     pty->pid = -1;
-    fd = posix_openpt(O_RDWR | O_NOCTTY | O_CLOEXEC);
-    if (fd < 0 || grantpt(fd) != 0 || unlockpt(fd) != 0)
+    fd = posix_openpt(O_RDWR | O_NOCTTY);
+    if (fd < 0)
+        goto fail;
+    flags = fcntl(fd, F_GETFD);
+    if (flags < 0 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0 ||
+        grantpt(fd) != 0 || unlockpt(fd) != 0)
         goto fail;
     name = ptsname(fd);
     if (name == NULL)
@@ -72,14 +78,23 @@ bool yew_live_pty_open(YewLivePty *pty, char *slave, size_t slave_cap,
     (void)memset(&ws, 0, sizeof(ws));
     ws.ws_row = rows;
     ws.ws_col = cols;
-    if (ioctl(fd, TIOCSWINSZ, &ws) != 0)
+    slave_fd = open(slave, O_RDWR | O_NOCTTY);
+    if (slave_fd < 0 || ioctl(slave_fd, TIOCSWINSZ, &ws) != 0)
         goto fail;
-    if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0)
+    if (close(slave_fd) != 0) {
+        slave_fd = -1;
+        goto fail;
+    }
+    slave_fd = -1;
+    flags = fcntl(fd, F_GETFL);
+    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0)
         goto fail;
     pty->master = fd;
     return true;
 
 fail:
+    if (slave_fd >= 0)
+        (void)close(slave_fd);
     if (fd >= 0)
         (void)close(fd);
     return false;
@@ -337,9 +352,16 @@ bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
         n = read(pty->master, bytes, sizeof(bytes));
         if (n < 0 && errno == EINTR)
             continue;
-        if (n <= 0) {
+        if (n == 0 || (n < 0 && errno == EIO)) {
             int status;
-            pid_t got = waitpid(pty->pid, &status, WNOHANG);
+            pid_t got = 0;
+
+            /* Darwin can transiently report zero or EIO after the master is
+             * opened but before the future session leader opens the slave.
+             * A known, reaped child proves EOF; the live-save torture has no
+             * child pid in this process, so it must wait through startup. */
+            if (pty->pid > 0)
+                got = waitpid(pty->pid, &status, WNOHANG);
 
             if (got == pty->pid) {
                 int code = WIFEXITED(status) ? WEXITSTATUS(status) :
@@ -349,11 +371,27 @@ bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
                               "live PTY: child exited before frame (status %d)\n",
                               code);
                 pty->pid = -1;
-            } else {
-                (void)fprintf(stderr,
-                              "live PTY: read before frame failed: %s\n",
-                              strerror(errno));
+                return false;
             }
+            if (got < 0 && errno != EINTR) {
+                (void)fprintf(stderr,
+                              "live PTY: wait before frame failed: %s\n",
+                              strerror(errno));
+                return false;
+            }
+            if (yew_live_pty_now_ns() < deadline_ns) {
+                (void)poll(NULL, 0U, 1);
+                continue;
+            }
+            (void)fprintf(stderr, "live PTY: closed before frame\n");
+            return false;
+        }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            continue;
+        if (n < 0) {
+            (void)fprintf(stderr,
+                          "live PTY: read before frame failed: %s\n",
+                          strerror(errno));
             return false;
         }
         if (!consume(pty, bytes, (size_t)n, deadline_ns))
