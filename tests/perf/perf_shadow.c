@@ -47,6 +47,13 @@ typedef struct PerfResult {
 static volatile u64 perf_sink;
 static u32 provider_requests[YEW_SHADOW_NPROV];
 
+static bool perf_advisory(void)
+{
+    const char *value = getenv("YEW_PERF_ADVISORY");
+
+    return value != NULL && strcmp(value, "0") != 0;
+}
+
 #if defined(__linux__)
 static bool allocation_probe_active;
 static u64 allocation_calls;
@@ -530,6 +537,7 @@ int main(int argc, char **argv)
         {"on_edit_match", 0, 0, 0, 0, SHADOW_EDIT_P99_BUDGET_NS},
     };
     bool measure_only = argc == 2 && strcmp(argv[1], "--measure") == 0;
+    bool advisory = perf_advisory();
     size_t i;
     int status = 0;
 
@@ -566,16 +574,20 @@ int main(int argc, char **argv)
             results[i].p99_ns > results[i].baseline_p99_ns +
                                 results[i].baseline_p99_ns / 5;
         bool regression = over_absolute || over_relative;
+        bool broken = results[i].p99_ns <= 0 ||
+            results[i].p99_ns > results[i].budget_p99_ns * 100;
+        const char *verdict = broken ? " BROKEN" :
+            regression ? (advisory ? " ADVISORY" : " REGRESSION") :
+            " ok";
 
         (void)printf("shadow.%s median_ns=%lld p99_ns=%lld%s\n",
                      results[i].name, (long long)results[i].median_ns,
-                     (long long)results[i].p99_ns,
-                     regression ? " REGRESSION" : " ok");
+                     (long long)results[i].p99_ns, verdict);
         if (measure_only)
             (void)printf("%s %lld %lld\n", results[i].name,
                          (long long)results[i].median_ns,
                          (long long)results[i].p99_ns);
-        if (regression)
+        if (broken || (regression && !advisory))
             status = 1;
     }
     return status;

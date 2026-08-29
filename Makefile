@@ -1946,7 +1946,8 @@ perf-alloc: $(BUILD)/perf_alloc
 	TMPDIR=$(abspath $(BUILD)/tmp) $(BUILD)/perf_alloc
 
 perf-shadow: $(BUILD)/perf_shadow
-	YEW_SHADOW_TEST=0 $(BUILD)/perf_shadow
+	YEW_SHADOW_TEST=0 YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_shadow
 
 perf-scroll: $(BUILD)/perf_scroll
 	$(BUILD)/perf_scroll
