@@ -2328,7 +2328,7 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		$(BUILD)/perf-s56-logs/workspace.log \
 		$(BUILD)/perf-s56-logs/typing.log \
 		$(BUILD)/perf-s56-logs/assist.log
-	@YEW_PROF=1 YEW_PERF_SMOKE=1 \
+	@YEW_PROF=1 \
 		YEW_PERF_ADVISORY=1 PERF_GATE=0 \
 		YEW_PERF_LOG_DEFAULT=$(abspath $(BUILD)/perf-s56-logs/default.log) \
 		YEW_PERF_LOG_CLEAN=$(abspath $(BUILD)/perf-s56-logs/clean.log) \
