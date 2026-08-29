@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-08-28
+**Current checkpoint date:** 2026-08-29
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -13,13 +13,13 @@ Apple-silicon host `nomad-1`
 **Clean upstream/recovery anchor:**
 `0246f98e93fee97b9fd5df9183efeb1bf3e5222d`
 
-**Current code frontier before this handoff commit:** `1e50672`
+**Current code frontier before this handoff update:** `288d658`
 
-**Git position:** 41 local implementation commits ahead of `origin/trunk`,
-plus this handoff checkpoint once committed; nothing was pushed from the Mac
+**Git position:** 44 local implementation commits ahead of `origin/trunk`,
+plus this handoff update once committed; nothing was pushed from the Mac
 
-**Active implementation frontier:** Sprint 57 local repository and
-Apple-silicon validation boundary; external target proof remains
+**Active implementation frontier:** Sprint 57 x86_64 size reconciliation and
+constrained-target implementation; external hardware proof remains
 
 This document began as the exact frozen Linux-to-Mac transfer record. That
 record is retained below as provenance, but the transferred WIP has now been
@@ -36,12 +36,15 @@ call Sprint 57 complete until the remaining external evidence is closed:
 1. Reconcile the locked 900 KiB stripped minimal x86_64 Linux budget with the
    measured roughly 1.85 MiB binary and roughly 1.48 MiB `.text + .rodata`.
    This remains a real contract/scaffold conflict; do not weaken the gate.
-2. Run the pinned QEMU/hardware constrained-target proof that is unavailable
-   on this host.
+2. Implement the repository's missing `make embedded` / `embedded-gate`
+   surface and complete all twelve QEMU rows. This host can now run the pinned
+   64 MiB x86_64 shape; only the row-1 smoke proof has been run.
 3. Supply Sprint 56 designated-runner evidence. Hosted timing remains
    advisory and is not a substitute.
-4. Reconfirm the final chain with true GNU GCC on Linux. `cc`, `clang`, and
-   `/usr/bin/gcc` on this Mac are all Apple clang 21.0.0.
+4. Complete the native/default-timing Linux test chains. The exact GNU size
+   lane plus a warning-clean GCC/glibc build, product smoke and Fletch
+   conformance have now run under x86_64 TCG; the Mac host itself still has
+   only Apple clang, and emulation cannot adjudicate the hard timing rows.
 
 The exact current local evidence is:
 
@@ -74,6 +77,65 @@ The exact current local evidence is:
   A diagnostic full `SAN=1` PTY run built but exceeded timing/startup
   expectations under instrumentation; it was not substituted for the sprint's
   separate native PTY and exact alignment gates, both of which pass.
+- Exact x86_64 glibc size evidence now exists from Ubuntu 24.04 under a
+  full-system QEMU guest: GCC 13.3.0 and GNU binutils 2.42 built clean source
+  at `a3cd877`. All six hard rows fail without weakening their gates:
+  minimal 1,463,968 / 921,600 bytes; lsp-only 1,586,848 / 1,075,200;
+  ai-only 1,599,176 / 1,013,760; fuss-only 1,611,424 / 1,064,960;
+  plugins-only 1,558,176 / 993,280; full 1,947,336 / 1,572,864. The stripped
+  minimal ELF contains 1,009,394 bytes of `.text`, 268,432 of `.rodata`,
+  104,280 of `.rela.dyn`, and 54,768 of `.data.rel.ro`; this is a core-size
+  conflict, not strip metadata or one optional module.
+- Current source at `288d658` also builds warning-clean with GNU GCC 13.3.0
+  against glibc in the same Ubuntu guest. Target, static-PIE-tool and runtime
+  blob selftests pass; the complete product smoke chain passes; and Fletch is
+  38 / 38 with coverage, meta and seeded gate selftests green. The resulting
+  x86-64 dynamic PIE has only the expected `libc` and `libm` dependencies.
+  The much longer default-timing PTY/unit aggregate remains a native-runner
+  item for the same reason as the musl timing rows below.
+- The pinned Alpine 3.20.10 musl profile ran natively as x86_64 inside the
+  same guest with GCC 13.2.1, musl 1.2.5 and binutils 2.42. Full yew verifies
+  as static PIE and passes its 2 MiB size row at 2,066,320 stripped bytes.
+  Minimal verifies as static PIE but fails its 1.3 MiB row at 1,554,288 bytes
+  (191,140 bytes over). Two independent full builds are byte-identical at
+  SHA-256 `06ddbbae911a475444b47f29eb269cbfaa58a5cb2b616e33c37e6e2c19c977bb`.
+- The first musl test compile exposed `realpath` hidden behind musl's XSI
+  feature-test boundary in seven test/perf translation units. Commit
+  `288d658` defines `_XOPEN_SOURCE=700` at those call sites. Apple clang then
+  passed the affected objects, scripts 93 / 919 / 0 with one intentional
+  skip, and unit 2,401 / 71,035,338 / 0. The resumed musl compile is clean.
+  Under full-system TCG, the complete selected PTY sweep is green with a
+  measured 2x quiet-window scale, a 60 s case hang ceiling and a 2 h
+  aggregate ceiling; these are emulator completion controls, not changed CI
+  defaults. Fletch is 38 / 38. Ninety-two script cases passed in the main
+  sweep with one intentional skip; the 10,000-replacement case exceeded the
+  native musl lane's 30 s ceiling but passed separately at the repository's
+  existing 600 s instrumented ceiling (9 assertions). Round-trip (2,000
+  seeds plus fixtures), record corpus, syntax corpus, all 432 syntax assets,
+  target/static-PIE/runtime-blob selftests and package integration 46 / 0
+  also pass. The required resolver matrix is green with normal, minimal and
+  absent `/etc/hosts`.
+- Do not misreport that TCG evidence as a default-timing `make test` pass.
+  `test-syn-def-corpus` reaches its hard-coded 5 s per-input fuzz watchdog,
+  and the unit suite reaches the hard clipboard nonblocking latency gate;
+  the latter was stopped after 16 minutes because the full suite contains
+  more than 71 million assertions. The pinned native Alpine CI lane remains
+  required to adjudicate those timing gates and supply the authoritative
+  aggregate `make test` result.
+- A diagnostic minimal GCC `-flto` build was used only to test whether a
+  deferred optimization could plausibly explain the budget gap. Commit
+  `bed4fe5` initializes the first set of helper-mediated locals exposed by
+  GCC's whole-program analysis and is Apple-clang regression-clean. A second
+  broad Fletch warning set remains; Sprint 57 explicitly defers LTO, so no
+  shipping flag or measurement definition changed.
+- The Mac now has a real row-1 constrained-target smoke proof: QEMU 11.1.1,
+  `q35`, `qemu64`, 64 MiB RAM, Alpine `linux-virt` 6.6.142-r0, and
+  `busybox-static` 1.36.1-r31 booted a 1,637,146-byte deterministic initramfs.
+  Verified full-musl yew printed `yew 1.0.0-dev`, the four-module line, exited
+  0, and powered down cleanly; the init shell's `VmHWM` was 612 KiB. This is
+  feasibility plus checklist row 1, not the twelve-row milestone. The repo
+  still has no `scripts/embed-image.sh`, `make embedded`, or
+  `make embedded-gate`, so those surfaces are active implementation work.
 
 Two arm64-only performance-harness defects were found by the definitive run
 and fixed without weakening hard invariants:
