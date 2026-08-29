@@ -587,7 +587,7 @@ static bool visit_node(const Keymap *km, u32 node, KeyId *seq, u32 depth,
 
 bool yew_keymap_visit(const Keymap *km, YewKeymapVisitFn visit, void *ctx)
 {
-    KeyId seq[YEW_CHORD_MAX];
+    KeyId seq[YEW_CHORD_MAX] = {{0U}};
 
     if (!km || !visit || km->nodes.len == 0U)
         return false;

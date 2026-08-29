@@ -183,7 +183,7 @@ static bool assert_text(FlVm *vm, Buffer *buf, Span span,
 
 static bool t_text(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    Buffer *buf; const FlStr *want; (void)n; assertion(vm);
+    Buffer *buf; const FlStr *want = NULL; (void)n; assertion(vm);
     buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_str(vm, a, 1U, &want)) return false;
     return assert_text(vm, buf, (Span){0U, yew_buf_len(buf)}, want, out);
@@ -191,7 +191,8 @@ static bool t_text(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
 static bool t_line(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    Buffer *buf; const FlStr *want; i64 line; Span span; Bytebuf tail;
+    Buffer *buf; const FlStr *want = NULL; i64 line = 0;
+    Span span; Bytebuf tail;
     (void)n; assertion(vm); buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_int(vm, a, 1U, &line) ||
         !fl_arg_str(vm, a, 2U, &want)) return false;
@@ -224,7 +225,7 @@ static void cursor_pos(const Win *w, const Cursor *c, u64 *line, u64 *col)
 
 static bool t_cursor(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    Win *w; i64 wl, wc; u64 gl, gc; char msg[128];
+    Win *w; i64 wl = 0; i64 wc = 0; u64 gl, gc; char msg[128];
     (void)n; assertion(vm); w = fl_h_win(vm, a[0]);
     if (w == NULL || !fl_arg_int(vm, a, 1U, &wl) ||
         !fl_arg_int(vm, a, 2U, &wc)) return false;
@@ -250,7 +251,7 @@ static bool pair(const FlValue *v, i64 *line, i64 *col)
 
 static bool t_cursors(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    Win *w; FlList *want; u32 i; bool same = true; char msg[112];
+    Win *w; FlList *want = NULL; u32 i; bool same = true; char msg[112];
     (void)n; assertion(vm); w = fl_h_win(vm, a[0]);
     if (w == NULL || !fl_arg_list(vm, a, 1U, &want)) return false;
     if ((size_t)want->n != w->cs.curs.len) same = false;
@@ -270,7 +271,7 @@ static bool t_cursors(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
 static bool t_sel(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    Win *w; const FlStr *want; const Cursor *c; Bytebuf got; (void)n;
+    Win *w; const FlStr *want = NULL; const Cursor *c; Bytebuf got; (void)n;
     assertion(vm); w = fl_h_win(vm, a[0]);
     if (w == NULL || !fl_arg_str(vm, a, 1U, &want)) return false;
     c = &w->cs.curs.data[w->cs.primary]; bytebuf_init(&got);
@@ -309,8 +310,8 @@ static bool reg_type_is(FlValue v, u8 actual)
 
 static bool t_reg(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    const FlStr *name;
-    const FlStr *want;
+    const FlStr *name = NULL;
+    const FlStr *want = NULL;
     RegVal *reg;
     Bytebuf got;
     assertion(vm);
@@ -332,7 +333,7 @@ static bool t_reg(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
 static bool t_undo(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    Buffer *buf; i64 want; u64 live = 0U; size_t i; char msg[96];
+    Buffer *buf; i64 want = 0; u64 live = 0U; size_t i; char msg[96];
     (void)n; assertion(vm); buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_int(vm, a, 1U, &want)) return false;
     if (buf->undo != NULL)
@@ -370,7 +371,8 @@ static bool read_path(const char *path, Bytebuf *out)
 
 static bool t_file(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    const FlStr *path; const FlStr *want; Bytebuf got; char *owned;
+    const FlStr *path = NULL; const FlStr *want = NULL;
+    Bytebuf got; char *owned;
     (void)n; assertion(vm);
     if (!fl_arg_str(vm, a, 0U, &path) ||
         !fl_arg_str(vm, a, 1U, &want)) return false;
@@ -402,7 +404,8 @@ static const FlStr *error_kind(FlVm *vm, FlValue error)
 
 static bool t_raises(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    const FlStr *want; FlValue fn; FlValue ignored = FL_NIL_V;
+    const FlStr *want = NULL; FlValue fn = FL_NIL_V;
+    FlValue ignored = FL_NIL_V;
     FlValue saved = vm->err; const char *saved_caret = vm->err_caret;
     u32 saved_native = vm->cur_native; bool raised; const FlStr *got = NULL;
     (void)n; assertion(vm);
@@ -451,7 +454,8 @@ static bool contains(const char *haystack, const FlStr *needle)
 
 static bool t_log(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    YewBatchTestState *s = state_for(vm); const FlStr *level; const FlStr *sub;
+    YewBatchTestState *s = state_for(vm);
+    const FlStr *level = NULL; const FlStr *sub = NULL;
     YewLogLevel wanted; u32 i; bool found = false; (void)n; assertion(vm);
     if (!fl_arg_str(vm, a, 0U, &level) ||
         !fl_arg_str(vm, a, 1U, &sub)) return false;
@@ -498,7 +502,7 @@ static bool fixture_name_ok(const FlStr *s)
 
 static bool t_fixture(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    const FlStr *name; char *cwd; char *source; char *dest;
+    const FlStr *name = NULL; char *cwd; char *source; char *dest;
     size_t sn, dn; bool ok; (void)n;
     if (!fl_arg_str(vm, a, 0U, &name)) return false;
     if (!fixture_name_ok(name))
@@ -540,7 +544,7 @@ static bool t_pump(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         PUMP_INSTRUMENTED_SCALE = 8
     };
     Ed *ed = vm->ed;
-    i64 duration;
+    i64 duration = 0;
     i64 scale;
     i64 start;
     i64 deadline;
@@ -604,7 +608,7 @@ static bool t_pump(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 /* Exact, generic observation of subprocess stderr for integration scripts. */
 static bool t_job_stderr(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    const FlStr *want;
+    const FlStr *want = NULL;
     Bytebuf got;
     u32 i;
 
