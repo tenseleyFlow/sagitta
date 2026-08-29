@@ -77,6 +77,7 @@ endif
 TARGET_OS := $(if $(filter arm64-macos,$(TARGET)),Darwin,Linux)
 BUILD   ?= build
 ALLOCDBG ?= 0
+ALIGN_SAN ?= 0
 EMBED_RUNTIME ?= 0
 SHIPPING ?= 0
 ifeq ($(TARGET),x86_64-linux-musl)
@@ -170,6 +171,14 @@ endif
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
 $(error SAN=1 and VALGRIND=1 are mutually exclusive)
+endif
+endif
+ifeq ($(ALIGN_SAN),1)
+ifeq ($(filter $(TARGET),arm64-linux arm64-macos),)
+$(error ALIGN_SAN=1 requires TARGET=arm64-linux or arm64-macos)
+endif
+ifneq ($(filter 1,$(SAN) $(VALGRIND)),)
+$(error ALIGN_SAN=1 is mutually exclusive with SAN=1 and VALGRIND=1)
 endif
 endif
 
@@ -319,6 +328,13 @@ else
 SHARED_FLAG := -shared
 DL_LIBS := -ldl
 FAULTSHIM_PLATFORM_SRC :=
+endif
+
+# Sprint 57's arm64 alignment lane is intentionally narrower than SAN=1:
+# ASan's process-wide timing cost is irrelevant to the strict-alignment proof.
+ifeq ($(ALIGN_SAN),1)
+CFLAGS  += -fsanitize=alignment,undefined -fno-omit-frame-pointer -O1
+LDFLAGS += -fsanitize=alignment,undefined -fno-omit-frame-pointer -O1
 endif
 
 # Sanitized and plain objects must never mix: use SAN=1 BUILD=build-san.
@@ -919,7 +935,7 @@ STAMP_MODULES := $(strip $(shell if test -f '$(BUILD)/mods.stamp'; then \
 ifneq ($(STAMP_MODULES),$(MODULES))
 MODULE_FORCE := FORCE
 endif
-BUILD_PROFILE_KEY := target=$(TARGET);cc=$(CC);shipping=$(SHIPPING);gc=$(GC_SECTIONS);allocdbg=$(ALLOCDBG);embed_runtime=$(EMBED_RUNTIME);san=$(SAN);valgrind=$(VALGRIND);fl_cgoto=$(FL_CGOTO);fl_checks=$(FL_CHECKS);fl_trace=$(CFLAGS_FL_TRACE);prefix=$(PREFIX);extra=$(EXTRA_CFLAGS)
+BUILD_PROFILE_KEY := target=$(TARGET);cc=$(CC);shipping=$(SHIPPING);gc=$(GC_SECTIONS);allocdbg=$(ALLOCDBG);alignsan=$(ALIGN_SAN);embed_runtime=$(EMBED_RUNTIME);san=$(SAN);valgrind=$(VALGRIND);fl_cgoto=$(FL_CGOTO);fl_checks=$(FL_CHECKS);fl_trace=$(CFLAGS_FL_TRACE);prefix=$(PREFIX);extra=$(EXTRA_CFLAGS)
 STAMP_PROFILE := $(strip $(shell if test -f '$(BUILD)/profile.stamp'; then \
 	cat '$(BUILD)/profile.stamp'; fi))
 ifneq ($(STAMP_PROFILE),$(BUILD_PROFILE_KEY))
@@ -927,7 +943,7 @@ PROFILE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test test-alloc-debug alloc perf-alloc clean install dirs FORCE \
+.PHONY: all check test test-unit test-alloc-debug alloc perf-alloc clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
         runtime-embedded-budget \
@@ -1600,6 +1616,9 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-scri
 	scripts/check-plugin-docs.sh
 	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
+
+test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
+	$(UNIT_RUN)
 
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \

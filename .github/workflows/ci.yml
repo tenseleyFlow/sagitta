@@ -188,6 +188,8 @@ jobs:
         run: |
           make CC=gcc
           make test CC=gcc
+      - name: Run the arm64 alignment sanitizer gate
+        run: make test-unit CC=gcc ALIGN_SAN=1 BUILD=build-align
       - name: Run Sprint 56 arm64 metrics in advisory mode
         run: |
           make perf CC=gcc PERF_GATE=0 PERF_RUNNER_ID=hosted-arm64
