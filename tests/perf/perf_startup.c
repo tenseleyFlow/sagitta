@@ -125,6 +125,31 @@ static bool cup_suffix(const u8 *tail, size_t len)
     return at > 0U && tail[at] == '[' && tail[at - 1U] == 0x1bU;
 }
 
+static bool child_running(YewLivePty *pty, const char *stage)
+{
+    int status;
+    pid_t got;
+
+    do {
+        got = waitpid(pty->pid, &status, WNOHANG);
+    } while (got < 0 && errno == EINTR);
+    if (got == 0)
+        return true;
+    if (got == pty->pid) {
+        int code = WIFEXITED(status) ? WEXITSTATUS(status) :
+                   WIFSIGNALED(status) ? 128 + WTERMSIG(status) : 255;
+
+        (void)fprintf(stderr,
+                      "perf_startup: child exited during %s (status %d)\n",
+                      stage, code);
+        pty->pid = -1;
+        return false;
+    }
+    (void)fprintf(stderr, "perf_startup: waitpid during %s failed: %s\n",
+                  stage, strerror(errno));
+    return false;
+}
+
 static bool wait_marker(YewLivePty *pty, bool dumb, i64 deadline,
                         i64 *completed)
 {
@@ -150,8 +175,17 @@ static bool wait_marker(YewLivePty *pty, bool dumb, i64 deadline,
         n = read(pty->master, bytes, sizeof(bytes));
         if (n < 0 && (errno == EINTR || errno == EAGAIN))
             continue;
-        if (n <= 0)
+        if (n == 0 || (n < 0 && errno == EIO)) {
+            if (!child_running(pty, "first paint"))
+                return false;
+            (void)poll(NULL, 0U, 1);
+            continue;
+        }
+        if (n < 0) {
+            (void)fprintf(stderr, "perf_startup: read during first paint: %s\n",
+                          strerror(errno));
             return false;
+        }
         for (i = 0U; i < (size_t)n; i++) {
             if (ntail == sizeof(tail)) {
                 (void)memmove(tail, tail + 1U, sizeof(tail) - 1U);
@@ -334,13 +368,31 @@ static bool one_floor(const Options *opt, i64 *sample)
     }
     pty.pid = pid;
     deadline = started + INT64_C(3000000000);
-    while (read(pty.master, &byte, 1U) < 0) {
+    for (;;) {
         struct pollfd fd = {pty.master, POLLIN | POLLHUP, 0};
+        ssize_t n = read(pty.master, &byte, 1U);
 
-        if (errno != EAGAIN && errno != EINTR) {
+        if (n == 1)
+            break;
+        if (n == 0 || (n < 0 && errno == EIO)) {
+            if (!child_running(&pty, "spawn floor")) {
+                yew_live_pty_close(&pty);
+                return false;
+            }
+            (void)poll(NULL, 0U, 1);
+            if (yew_live_pty_now_ns() >= deadline) {
+                yew_live_pty_close(&pty);
+                return false;
+            }
+            continue;
+        } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
+            (void)fprintf(stderr,
+                          "perf_startup: read during spawn floor: %s\n",
+                          strerror(errno));
             yew_live_pty_close(&pty);
             return false;
         }
+
         if (poll(&fd, 1U, 25) < 0 && errno != EINTR) {
             yew_live_pty_close(&pty);
             return false;
@@ -380,12 +432,18 @@ static bool measure(const Options *opt, bool clean, bool dumb,
 {
     i64 samples[DEFAULT_RUNS];
     size_t runs = getenv("YEW_PERF_SMOKE") != NULL ? 1U : DEFAULT_RUNS;
+    const char *profile = floor ? "floor" : workspace ? "workspace" :
+                          clean ? "clean" : dumb ? "dumb" : "default";
     size_t i;
 
     for (i = 0U; i < runs; i++) {
         if (!(floor ? one_floor(opt, &samples[i]) :
-                      one_startup(opt, clean, dumb, workspace, &samples[i])))
+                      one_startup(opt, clean, dumb, workspace, &samples[i]))) {
+            (void)fprintf(stderr,
+                          "perf_startup: profile=%s run=%zu failed\n",
+                          profile, i + 1U);
             return false;
+        }
     }
     sort_i64(samples, runs);
     *median = samples[runs / 2U];
