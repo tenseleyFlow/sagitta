@@ -53,6 +53,14 @@ static void path_make(const char *path)
     YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
 }
 
+static void path_suffix(char *out, size_t cap, const char *root,
+                        const char *suffix)
+{
+    int n = snprintf(out, cap, "%s%s", root, suffix);
+
+    YEW_ASSERT(n >= 0 && (size_t)n < cap);
+}
+
 static void runtime_fix_init(RuntimeFix *fix)
 {
     (void)memset(fix, 0, sizeof(*fix));
@@ -65,10 +73,9 @@ static void runtime_fix_init(RuntimeFix *fix)
     (void)snprintf(fix->root, sizeof(fix->root),
                    "/tmp/yew-runtime-consumer-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(fix->root));
-    (void)snprintf(fix->home, sizeof(fix->home), "%s/home", fix->root);
-    (void)snprintf(fix->config, sizeof(fix->config), "%s/config",
-                   fix->root);
-    (void)snprintf(fix->state, sizeof(fix->state), "%s/state", fix->root);
+    path_suffix(fix->home, sizeof(fix->home), fix->root, "/home");
+    path_suffix(fix->config, sizeof(fix->config), fix->root, "/config");
+    path_suffix(fix->state, sizeof(fix->state), fix->root, "/state");
     path_make(fix->home);
     path_make(fix->config);
     path_make(fix->state);
@@ -85,16 +92,15 @@ static void runtime_fix_drop(RuntimeFix *fix)
     char path[PATH_MAX];
 
     YEW_ASSERT_EQ_I64(chdir(fix->cwd), 0);
-    (void)snprintf(path, sizeof(path), "%s/yew/fl/ai-deny.fl",
-                   fix->config);
+    path_suffix(path, sizeof(path), fix->config, "/yew/fl/ai-deny.fl");
     (void)unlink(path);
-    (void)snprintf(path, sizeof(path), "%s/yew/fl", fix->config);
+    path_suffix(path, sizeof(path), fix->config, "/yew/fl");
     (void)rmdir(path);
-    (void)snprintf(path, sizeof(path), "%s/yew", fix->config);
+    path_suffix(path, sizeof(path), fix->config, "/yew");
     (void)rmdir(path);
-    (void)snprintf(path, sizeof(path), "%s/yew/log", fix->state);
+    path_suffix(path, sizeof(path), fix->state, "/yew/log");
     (void)unlink(path);
-    (void)snprintf(path, sizeof(path), "%s/yew", fix->state);
+    path_suffix(path, sizeof(path), fix->state, "/yew");
     (void)rmdir(path);
     YEW_ASSERT_EQ_I64(rmdir(fix->state), 0);
     YEW_ASSERT_EQ_I64(rmdir(fix->config), 0);
@@ -185,11 +191,11 @@ void test_runtime_consumer_fletch_precedence_and_explicit_override(void)
           "importer");
     flfix_close(&fl);
 
-    (void)snprintf(path, sizeof(path), "%s/yew", fix.config);
+    path_suffix(path, sizeof(path), fix.config, "/yew");
     path_make(path);
-    (void)snprintf(path, sizeof(path), "%s/yew/fl", fix.config);
+    path_suffix(path, sizeof(path), fix.config, "/yew/fl");
     path_make(path);
-    (void)snprintf(path, sizeof(path), "%s/yew/fl/ai-deny.fl", fix.config);
+    path_suffix(path, sizeof(path), fix.config, "/yew/fl/ai-deny.fl");
     write_text(path, "let source = \"user\"\n");
     flfix_open(&fl);
     (void)flfix_tmpdir(&fl);
