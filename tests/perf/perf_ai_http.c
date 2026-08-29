@@ -2,6 +2,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -294,9 +295,18 @@ static bool server_start(u16 *port, pid_t *child_out)
     pid_t child;
 
     *child_out = -1;
-    listener = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener < 0)
         return false;
+    {
+        int flags = fcntl(listener, F_GETFD);
+
+        if (flags < 0 ||
+            fcntl(listener, F_SETFD, flags | FD_CLOEXEC) != 0) {
+            (void)close(listener);
+            return false;
+        }
+    }
     (void)memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
