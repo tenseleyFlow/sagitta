@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 
 /* Sprint 52: FUSS tree work must remain below the keypress budget. */
 #include <errno.h>
