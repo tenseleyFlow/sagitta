@@ -52,7 +52,11 @@ static u64 peak_rss(void)
 
     if (getrusage(RUSAGE_SELF, &ru) != 0)
         return 0U;
+#if defined(__APPLE__)
+    return (u64)ru.ru_maxrss;
+#else
     return (u64)ru.ru_maxrss * 1024ULL;
+#endif
 }
 
 static u64 env_u64(const char *name, u64 fallback)
