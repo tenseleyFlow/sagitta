@@ -2358,6 +2358,8 @@ void yew_ed_resize(Ed *ed, bool resumed)
     }
     if (!resumed && !resized)
         return;
+    if (resumed && ed->grid_ready)
+        yew_grid_invalidate(&ed->grid);
     ed->layout_dirty = true;
     ed->full_damage = true;
     ed->footer_dirty = true;

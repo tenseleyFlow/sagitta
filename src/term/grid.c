@@ -314,6 +314,19 @@ void yew_grid_clear(Grid *g)
     yew_grid_mark_all(g);
 }
 
+void yew_grid_invalidate(Grid *g)
+{
+    size_t count;
+    size_t i;
+
+    if (g == NULL)
+        return;
+    count = (size_t)g->rows * g->cols;
+    for (i = 0U; i < count; i++)
+        g->front[i].w = 0xffU;
+    yew_grid_mark_all(g);
+}
+
 u16 yew_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
                  YewColor fg, YewColor bg, u16 attrs)
 {

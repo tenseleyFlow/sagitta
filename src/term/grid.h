@@ -120,6 +120,10 @@ bool yew_grid_init(Grid *g, Interner *gi, u16 rows, u16 cols);
 void yew_grid_free(Grid *g);
 bool yew_grid_resize(Grid *g, u16 rows, u16 cols);
 void yew_grid_clear(Grid *g);
+/* Forget the physical terminal image while preserving the desired back
+ * buffer.  The next frame must emit every cell, even when model state did
+ * not change (for example after re-entering the alternate screen). */
+void yew_grid_invalidate(Grid *g);
 u16 yew_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
                  YewColor fg, YewColor bg, u16 attrs);
 u16 yew_grid_puts(Grid *g, u16 row, u16 col, const u8 *s, size_t n,

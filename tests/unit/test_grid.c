@@ -124,6 +124,31 @@ void test_grid_resize_discards_cells_and_marks_all(void)
     grid_fixture_free(&grid, &arena, &interner);
 }
 
+void test_grid_invalidate_forces_physical_repaint(void)
+{
+    Grid grid;
+    Arena arena;
+    Interner interner;
+    YewColor color = grid_default_color();
+    size_t i;
+
+    grid_fixture_init(&grid, &arena, &interner, 2U, 3U);
+    yew_grid_put(&grid, 0U, 0U, (const u8 *)"x", 1U, color, color, 0U);
+    yew_grid_flip(&grid);
+    YEW_ASSERT(yew_cell_eq(&grid.front[0], &grid.back[0]));
+    yew_grid_invalidate(&grid);
+    YEW_ASSERT_EQ_U64(grid.back[0].utf8[0], (u8)'x');
+    YEW_ASSERT_EQ_U64(grid.dmg_lo, 0U);
+    YEW_ASSERT_EQ_U64(grid.dmg_hi, 2U);
+    for (i = 0U; i < 6U; i++)
+        YEW_ASSERT_EQ_U64(grid.front[i].w, 0xffU);
+    for (i = 0U; i < 2U; i++) {
+        YEW_ASSERT_EQ_U64(grid.dmg[i].lo, 0U);
+        YEW_ASSERT_EQ_U64(grid.dmg[i].hi, 3U);
+    }
+    grid_fixture_free(&grid, &arena, &interner);
+}
+
 void test_grid_cursor_snaps_left_from_continuation(void)
 {
     Grid grid;

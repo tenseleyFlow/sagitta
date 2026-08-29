@@ -443,6 +443,7 @@ void test_grid_put_zeroes_inline_tail(void);
 void test_grid_interns_long_cluster(void);
 void test_grid_damage_unions_writes(void);
 void test_grid_resize_discards_cells_and_marks_all(void);
+void test_grid_invalidate_forces_physical_repaint(void);
 void test_grid_cursor_snaps_left_from_continuation(void);
 void test_grid_controls_are_lowered_to_printable_cells(void);
 void test_grid_printable_ascii_runs_match_scalar_writes(void);

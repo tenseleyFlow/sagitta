@@ -475,6 +475,7 @@ const YewTest yew_tests[] = {
     T(grid_interns_long_cluster),
     T(grid_damage_unions_writes),
     T(grid_resize_discards_cells_and_marks_all),
+    T(grid_invalidate_forces_physical_repaint),
     T(grid_cursor_snaps_left_from_continuation),
     T(grid_controls_are_lowered_to_printable_cells),
     T(grid_printable_ascii_runs_match_scalar_writes),
