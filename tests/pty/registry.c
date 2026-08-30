@@ -1183,12 +1183,14 @@ static void case_s15_mode_i(PtyCtx *c)
 {
     static const u8 initial[] = "insert mode\n";
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_snapshot(c, "s15_mode_i");
     force_quit(c);
     (void)unlink(path);
@@ -1237,14 +1239,18 @@ static bool s16_word_reach(PtyCtx *c, u32 steps,
         "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
         "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
         "\xf0\x9f\x91\xa6 tail\n";
+    u32 before;
+
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, path_cap))
         return false;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "w");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     for (u32 i = 0U; i < steps; i++) {
+        before = c->vt.nsync_pairs;
         ptc_keys(c, "right");
-        ptc_settle(c, 0);
+        settle_sync_delta(c, before, 1U, 0);
     }
     /* A loaded runner may queue a later key before the child paints the
      * preceding cursor move.  The final cursor cell is deterministic, but
