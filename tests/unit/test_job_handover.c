@@ -158,13 +158,13 @@ static bool handover_attach_slave(const char *path)
 }
 
 static void handover_tty_child(const char *slave_path,
-                               const struct termios *initial,
                                bool fatal_mid_handover)
 {
     Ed ed;
     YewJobSpec spec = {0};
     YewJobWait result;
     struct termios actual;
+    struct termios initial;
     struct termios raw;
     struct rlimit no_more_fds;
     char err[192];
@@ -178,6 +178,14 @@ static void handover_tty_child(const char *slave_path,
 
     if (!handover_attach_slave(slave_path))
         _exit(101);
+    /* The contract is to restore the terminal state yew inherited.  Linux
+     * is allowed to normalize a newly attached controlling terminal, and
+     * musl CI has observed that normalization between the parent's
+     * pre-setsid sample and this point.  Sample after attachment, exactly
+     * where yew_tty_open() does, so the test does not mistake kernel setup
+     * for an editor mutation. */
+    if (tcgetattr(STDIN_FILENO, &initial) != 0)
+        _exit(119);
     yew_ed_init(&ed);
     if (!yew_tty_open(&ed.tty))
         _exit(102);
@@ -188,7 +196,7 @@ static void handover_tty_child(const char *slave_path,
     if (!ed.tty.alt || !yew_tty_handover_begin(&ed.tty))
         _exit(104);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        !handover_termios_equal(&actual, initial))
+        !handover_termios_equal(&actual, &initial))
         _exit(105);
     if (fatal_mid_handover) {
         (void)raise(SIGTERM);
@@ -196,7 +204,7 @@ static void handover_tty_child(const char *slave_path,
     }
     if (!yew_tty_handover_end(&ed.tty))
         _exit(107);
-    raw = *initial;
+    raw = initial;
     yew_tty_rawios(&raw);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
         !handover_termios_equal(&actual, &raw))
@@ -243,7 +251,7 @@ static void handover_tty_child(const char *slave_path,
     }
     yew_ed_free(&ed);
     if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
-        !handover_termios_equal(&actual, initial))
+        !handover_termios_equal(&actual, &initial))
         _exit(118);
     _exit(0);
 }
@@ -268,7 +276,7 @@ static void handover_assert_tty_case(bool fatal_mid_handover)
     YEW_ASSERT(child >= 0);
     if (child == 0) {
         (void)close(master);
-        handover_tty_child(slave, &initial, fatal_mid_handover);
+        handover_tty_child(slave, fatal_mid_handover);
     }
     if (child < 0) {
         (void)close(master);
