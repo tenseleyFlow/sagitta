@@ -57,7 +57,7 @@ static void fixture_init(SynBlockFixture *f, const char *text)
     yew_syn_attach(&f->buf.syn, 1U, f->buf.tb);
     lines = yew_textbuf_line_count(f->buf.tb);
     yew_syn_settle(&f->buf.syn, f->buf.tb, LINENO(0U), LINENO(lines),
-                   INT64_C(1000000), &report);
+                   INT64_MAX, &report);
     YEW_ASSERT(report.fixpoint);
     f->unit.tb = f->buf.tb;
     f->unit.buf = &f->buf;
