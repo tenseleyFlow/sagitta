@@ -1544,7 +1544,7 @@ else
 endif
 
 runtime-embedded-e2e: $(BUILD)/yew scripts/tests/runtime-embedded-e2e.sh \
-                      tests/script/57_embedded_runtime.fl
+                      tests/script/57_ai_embedded_runtime.fl
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) \
 		YEW_BIN=$(abspath $(BUILD)/yew) \

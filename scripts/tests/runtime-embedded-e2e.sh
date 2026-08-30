@@ -34,5 +34,5 @@ unset YEW_RUNTIME_DIR
 cd "$scratch/work"
 "$yew" syn compile --all || fail 'syntax compile-all could not use the blob'
 "$yew" --batch --test --quiet \
-    "$repo/tests/script/57_embedded_runtime.fl" ||
+    "$repo/tests/script/57_ai_embedded_runtime.fl" ||
     fail 'batch runtime consumers could not use the blob'
