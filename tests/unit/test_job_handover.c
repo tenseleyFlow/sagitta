@@ -178,17 +178,14 @@ static void handover_tty_child(const char *slave_path,
 
     if (!handover_attach_slave(slave_path))
         _exit(101);
-    /* The contract is to restore the terminal state yew inherited.  Linux
-     * is allowed to normalize a newly attached controlling terminal, and
-     * musl CI has observed that normalization between the parent's
-     * pre-setsid sample and this point.  Sample after attachment, exactly
-     * where yew_tty_open() does, so the test does not mistake kernel setup
-     * for an editor mutation. */
-    if (tcgetattr(STDIN_FILENO, &initial) != 0)
-        _exit(119);
     yew_ed_init(&ed);
     if (!yew_tty_open(&ed.tty))
         _exit(102);
+    /* The handover contract is to restore the exact state yew inherited.
+     * Use the snapshot taken by yew_tty_open itself: Linux may normalize a
+     * newly attached controlling terminal between two successful tcgetattr
+     * calls, particularly in Alpine's static-PIE environment. */
+    initial = ed.tty.saved;
     ed.tty_ready = true;
     if (!yew_tty_raw(&ed.tty))
         _exit(103);
