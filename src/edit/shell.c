@@ -365,7 +365,10 @@ u32 yew_shell_read(Ed *ed, const char *cmdline, char *err, size_t errsz)
 static YewFilterResult filter_drive(Ed *ed, YewJob *j, Bytebuf *typeahead)
 {
     for (;;) {
-        struct pollfd pfd[8];
+        /* The synchronous filter shares the process-wide job table with
+         * background Git, LSP, AI, and index work.  Each job can contribute
+         * four descriptors; the tty and signal pipe need two more. */
+        struct pollfd pfd[YEW_JOB_MAX * 4U + 2U];
         u32 n = 0U;
         int tty_slot;
         int sig_slot;
