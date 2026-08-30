@@ -139,10 +139,10 @@ void test_lsp_lifecycle_restart_window_resets(void)
 void test_lsp_root_resolution_uses_nearest_marker(void)
 {
     char tmp[PATH_MAX] = "/tmp/yew-lsp-root-XXXXXX";
-    char project[256];
-    char source[256];
-    char file[256];
-    char marker[256];
+    char project[PATH_MAX + sizeof("/project")];
+    char source[PATH_MAX + sizeof("/project/src")];
+    char file[PATH_MAX + sizeof("/project/src/main.c")];
+    char marker[PATH_MAX + sizeof("/project/.clangd")];
     char *root;
     int fd;
 
