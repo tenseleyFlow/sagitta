@@ -19,6 +19,8 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 
+static int handover_tcgetattr(int fd, struct termios *out);
+
 static size_t handover_read_all(int fd, char *out, size_t cap)
 {
     size_t len = 0U;
@@ -61,7 +63,7 @@ static int handover_open_pty(char *slave, size_t slave_cap,
     slave_fd = open(slave, O_RDWR | O_NOCTTY);
     if (slave_fd < 0)
         goto fail;
-    if (tcgetattr(slave_fd, initial) != 0) {
+    if (handover_tcgetattr(slave_fd, initial) != 0) {
         int saved_errno = errno;
 
         (void)close(slave_fd);
@@ -77,17 +79,76 @@ fail:
     return -1;
 }
 
+static bool handover_cc_equal(const struct termios *left,
+                              const struct termios *right)
+{
+#define HANDOVER_CC_EQ(name)                                                \
+    do {                                                                    \
+        if (left->c_cc[name] != right->c_cc[name])                          \
+            return false;                                                   \
+    } while (0)
+
+    HANDOVER_CC_EQ(VEOF);
+    HANDOVER_CC_EQ(VEOL);
+    HANDOVER_CC_EQ(VERASE);
+    HANDOVER_CC_EQ(VINTR);
+    HANDOVER_CC_EQ(VKILL);
+    HANDOVER_CC_EQ(VMIN);
+    HANDOVER_CC_EQ(VQUIT);
+    HANDOVER_CC_EQ(VSTART);
+    HANDOVER_CC_EQ(VSTOP);
+    HANDOVER_CC_EQ(VSUSP);
+    HANDOVER_CC_EQ(VTIME);
+#ifdef VDISCARD
+    HANDOVER_CC_EQ(VDISCARD);
+#endif
+#ifdef VDSUSP
+    HANDOVER_CC_EQ(VDSUSP);
+#endif
+#ifdef VEOL2
+    HANDOVER_CC_EQ(VEOL2);
+#endif
+#ifdef VLNEXT
+    HANDOVER_CC_EQ(VLNEXT);
+#endif
+#ifdef VREPRINT
+    HANDOVER_CC_EQ(VREPRINT);
+#endif
+#ifdef VSTATUS
+    HANDOVER_CC_EQ(VSTATUS);
+#endif
+#ifdef VSWTC
+    HANDOVER_CC_EQ(VSWTC);
+#endif
+#ifdef VWERASE
+    HANDOVER_CC_EQ(VWERASE);
+#endif
+
+#undef HANDOVER_CC_EQ
+    return true;
+}
+
 static bool handover_termios_equal(const struct termios *left,
                                     const struct termios *right)
 {
-    /* tcgetattr need not initialize implementation padding. */
+    /* Linux's termios ABI has fewer kernel control-character slots than
+     * musl exposes in c_cc.  tcgetattr leaves that unused tail untouched,
+     * so compare every named semantic slot rather than indeterminate bytes. */
     return left->c_iflag == right->c_iflag &&
            left->c_oflag == right->c_oflag &&
            left->c_cflag == right->c_cflag &&
            left->c_lflag == right->c_lflag &&
-           memcmp(left->c_cc, right->c_cc, sizeof(left->c_cc)) == 0 &&
+           handover_cc_equal(left, right) &&
            cfgetispeed(left) == cfgetispeed(right) &&
            cfgetospeed(left) == cfgetospeed(right);
+}
+
+static int handover_tcgetattr(int fd, struct termios *out)
+{
+    /* Keep the ABI tail visibly nonzero so this test cannot accidentally
+     * depend on stack contents that tcgetattr is not required to replace. */
+    (void)memset(out, 0xa5, sizeof(*out));
+    return tcgetattr(fd, out);
 }
 
 static pid_t handover_wait_pty(pid_t child, int master, int *status)
@@ -192,7 +253,7 @@ static void handover_tty_child(const char *slave_path,
     yew_tty_altscreen(&ed.tty, true);
     if (!ed.tty.alt || !yew_tty_handover_begin(&ed.tty))
         _exit(104);
-    if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
         !handover_termios_equal(&actual, &initial))
         _exit(105);
     if (fatal_mid_handover) {
@@ -203,7 +264,7 @@ static void handover_tty_child(const char *slave_path,
         _exit(107);
     raw = initial;
     yew_tty_rawios(&raw);
-    if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
         !handover_termios_equal(&actual, &raw))
         _exit(108);
 
@@ -213,21 +274,21 @@ static void handover_tty_child(const char *slave_path,
     if (!yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
         result.state != YEW_JOB_EXECFAIL || result.exec_errno != ENOENT)
         _exit(109);
-    if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
         !handover_termios_equal(&actual, &raw))
         _exit(110);
     spec.argv = exit_argv;
     if (!yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
         result.state != YEW_JOB_EXITED || result.exit_code != 23)
         _exit(111);
-    if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
         !handover_termios_equal(&actual, &raw))
         _exit(112);
     spec.argv = signal_argv;
     if (!yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
         result.state != YEW_JOB_SIGNALED || result.termsig != SIGTERM)
         _exit(113);
-    if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
         !handover_termios_equal(&actual, &raw))
         _exit(114);
 
@@ -242,12 +303,12 @@ static void handover_tty_child(const char *slave_path,
         if (yew_job_run_sync(&ed, &spec, &result, err, sizeof(err)) ||
             strstr(err, "cannot create pipe") == NULL)
             _exit(116);
-        if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
             !handover_termios_equal(&actual, &raw))
             _exit(117);
     }
     yew_ed_free(&ed);
-    if (tcgetattr(STDIN_FILENO, &actual) != 0 ||
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
         !handover_termios_equal(&actual, &initial))
         _exit(118);
     _exit(0);
@@ -293,7 +354,7 @@ static void handover_assert_tty_case(bool fatal_mid_handover)
     (void)memset(&after, 0, sizeof(after));
     slave_fd = open(slave, O_RDWR | O_NOCTTY);
     YEW_ASSERT(slave_fd >= 0);
-    YEW_ASSERT_EQ_I64(tcgetattr(slave_fd, &after), 0);
+    YEW_ASSERT_EQ_I64(handover_tcgetattr(slave_fd, &after), 0);
     YEW_ASSERT(handover_termios_equal(&after, &initial));
     YEW_ASSERT_EQ_I64(close(slave_fd), 0);
     YEW_ASSERT_EQ_I64(close(master), 0);
