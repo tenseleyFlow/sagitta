@@ -533,7 +533,13 @@ static void case_notepad_move(PtyCtx *c)
         return;
     spawn_editor(c, path);
     ptc_keys(c, "down right");
-    ptc_settle(c, 0);
+    /* The two arrows may be drained in one input batch or painted in two
+     * loop iterations.  Quiet after the first frame is not proof that the
+     * second key has reached the grid on a contended runner. */
+    while (!c->failed && (c->vt.cur_r != 1 || c->vt.cur_c != 10))
+        ptc_settle(c, 20);
+    ptc_check(c, c->vt.cur_r == 1 && c->vt.cur_c == 10,
+              "arrow movement did not reach the pinned cursor position");
     ptc_snapshot(c, "notepad_move");
     quit_editor_cleanly(c);
     (void)unlink(path);
