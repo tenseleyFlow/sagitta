@@ -7257,6 +7257,7 @@ static void s52_collapse_job_frames(PtyCtx *c, size_t at)
 {
     static const u8 begin[] = "\x1b[?2026h";
     static const u8 end[] = "\x1b[?2026l";
+    static const u8 paint[] = "\x1b[?2026h\x1b[?25l";
     size_t first_end = 0U;
     size_t last_begin = 0U;
     size_t i = at;
@@ -7279,6 +7280,17 @@ static void s52_collapse_job_frames(PtyCtx *c, size_t at)
         if (finish + sizeof(end) - 1U > c->raw.len)
             break;
         finish += sizeof(end) - 1U;
+        /* A cursor-only frame can follow the final full repaint.  Treating
+         * that scheduler-dependent tail as the "last" frame drops the real
+         * repaint from one independent run but not the other, so the SGR
+         * appendix differs even though both grids are identical.  A
+         * cell-bearing synchronized frame always begins by hiding the cursor;
+         * cursor-only frames do not use that envelope. */
+        if (i + sizeof(paint) - 1U > c->raw.len ||
+            memcmp(c->raw.data + i, paint, sizeof(paint) - 1U) != 0) {
+            i = finish;
+            continue;
+        }
         frames++;
         if (frames == 1U)
             first_end = finish;
