@@ -644,6 +644,9 @@ void yew_tty_altscreen(Tty *t, bool on)
 
 bool yew_tty_handover_begin(Tty *t)
 {
+    struct termios actual;
+    int saved_errno;
+
     if (t == NULL) {
         errno = EINVAL;
         return false;
@@ -663,7 +666,27 @@ bool yew_tty_handover_begin(Tty *t)
     yew_tty_restore();
     t->raw = false;
     t->alt = false;
-    return true;
+
+    /* yew_tty_restore is signal-safe and therefore best-effort.  A
+     * synchronous child handover is allowed to check the result: confirm
+     * every bit raw mode changes with an immediate apply so TCSAFLUSH
+     * normalization on a newly attached pty cannot leak raw bits to the
+     * child. */
+    if (tcsetattr(t->rfd, TCSANOW, &g_saved) != 0) {
+        saved_errno = errno;
+    } else if (tcgetattr(t->rfd, &actual) != 0) {
+        saved_errno = errno;
+    } else if (!yew_tty_rawios_equal(&actual, &g_saved)) {
+        saved_errno = EIO;
+    } else {
+        return true;
+    }
+    /* The child will not run after a failed handover.  Reclaim raw mode so
+     * the editor can report the error without leaving its own tty state
+     * inconsistent. */
+    (void)yew_tty_handover_end(t);
+    errno = saved_errno;
+    return false;
 }
 
 bool yew_tty_handover_end(Tty *t)
