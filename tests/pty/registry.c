@@ -2357,52 +2357,32 @@ static bool s19_screen_contains(const VtScreen *vt, const char *needle)
 
 static void s19_wait_screen(PtyCtx *c, const char *text)
 {
-    u32 i;
-
-    for (i = 0U; i < 80U && !c->failed &&
-                 !s19_screen_contains(&c->vt, text); i++)
+    /* ptc_settle owns the case deadline; do not replace that configured
+     * hang ceiling with a shorter loop-local wall-clock cap. */
+    while (!c->failed && !s19_screen_contains(&c->vt, text))
         ptc_settle(c, 25);
     ptc_check(c, s19_screen_contains(&c->vt, text),
               "Sprint 19 expected job outcome did not appear");
 }
 
-/* Job output arrives asynchronously, so a snapshot must wait for the
- * frame that carries it rather than for a fixed delay.  Elapsed time is
- * pinned by YEW_JOB_ELAPSED_MS in the pty environment so the exit footer
- * is byte-stable. */
-static void s19_run_frames(PtyCtx *c, const char *command, u32 frames)
+static void s19_send_command(PtyCtx *c, const char *command)
 {
-    u32 before = c->vt.nsync_pairs;
-
     ptc_keys(c, ":");
     ptc_settle(c, 0);
     ptc_bytes(c, command);
     ptc_keys(c, "enter");
-    ptc_wait_sync_pairs(c, before + frames);
-    /* Settle to quiescence so the snapshot lands after the completion
-     * footer, not mid-flight. */
-    ptc_settle(c, 250);
-    /*
-     * The GRID is deterministic after quiescence; the frame COUNT is
-     * not.  How a child's output splits across synchronized frames is
-     * decided by when the kernel schedules its writes against our
-     * reads — under CPU load the same job lands in four frames rather
-     * than three.  Asserting it here was asserting a property of the
-     * scheduler, and it failed intermittently in exactly that way.
-     *
-     * The count is still asserted for keystroke-driven cases, where it
-     * IS an editor property.
-     */
-    c->vt.sync_pairs_unstable = true;
 }
 
-static void s19_run(PtyCtx *c, const char *command)
+/* A child can finish before the command-closing repaint, so the kernel may
+ * coalesce closure and completion into one synchronized frame or split the
+ * same outcome across several.  Wait for the terminal state each case owns,
+ * then require quiescence; repaint arithmetic is not product state. */
+static void s19_run_until(PtyCtx *c, const char *command, const char *outcome)
 {
-    /* Two frames: the command line closing, then the job's output or its
-     * completion footer.  A job whose output and footer land in separate
-     * frames must say so — the golden records the frame count, so a
-     * command that sometimes coalesces them is not snapshot-stable. */
-    s19_run_frames(c, command, 2U);
+    s19_send_command(c, command);
+    s19_wait_screen(c, outcome);
+    ptc_settle(c, 250);
+    c->vt.sync_pairs_unstable = true;
 }
 
 static void case_s19_stream_output(PtyCtx *c)
@@ -2412,7 +2392,7 @@ static void case_s19_stream_output(PtyCtx *c)
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    s19_run_frames(c, "!printf 'alpha\\nbeta\\ngamma\\n'", 3U);
+    s19_run_until(c, "!printf 'alpha\\nbeta\\ngamma\\n'", "[exit 0 in");
     ptc_snapshot(c, "s19_stream_output");
     s18_finish(c, path);
 }
@@ -2424,10 +2404,7 @@ static void case_s19_exit_footer_ok(PtyCtx *c)
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    s19_run_frames(c, "!printf 'done\\n'", 3U);
-    /* A quiet window can precede a descheduled child's completion.  The
-     * footer is the state this case asserts, so wait for that state. */
-    s19_wait_screen(c, "[exit 0 in");
+    s19_run_until(c, "!printf 'done\\n'", "[exit 0 in");
     ptc_snapshot(c, "s19_exit_footer_ok");
     s18_finish(c, path);
 }
@@ -2439,7 +2416,7 @@ static void case_s19_exit_footer_nonzero(PtyCtx *c)
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    s19_run_frames(c, "!printf 'bad\\n'; exit 3", 3U);
+    s19_run_until(c, "!printf 'bad\\n'; exit 3", "[exit 3 in");
     ptc_snapshot(c, "s19_exit_footer_nonzero");
     s18_finish(c, path);
 }
@@ -2451,11 +2428,8 @@ static void case_s19_exit_footer_signal(PtyCtx *c)
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    /* The shell can be descheduled between emitting the line and yew
-     * publishing the completion footer.  Wait for that semantic outcome
-     * instead of snapshotting whichever frame happened to arrive third. */
-    s19_run_frames(c, "!printf 'up\\n'; kill -TERM $$", 3U);
-    s19_wait_screen(c, "killed by SIGTERM");
+    s19_run_until(c, "!printf 'up\\n'; kill -TERM $$",
+                  "killed by SIGTERM");
     ptc_snapshot(c, "s19_exit_footer_signal");
     s18_finish(c, path);
 }
@@ -2480,7 +2454,7 @@ static void case_s19_no_output_message(PtyCtx *c)
         return;
     /* DoD 11: no buffer is opened and the document stays on screen; the
      * message line carries the outcome. */
-    s19_run(c, "!true");
+    s19_run_until(c, "!true", "no output (exit 0)");
     ptc_snapshot(c, "s19_no_output_message");
     s18_finish(c, path);
 }
@@ -2492,7 +2466,7 @@ static void case_s19_jobs_table(PtyCtx *c)
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    s19_run_frames(c, "!printf 'one\\n'", 3U);
+    s19_run_until(c, "!printf 'one\\n'", "[exit 0 in");
     /* The table shows live state, so it must not be opened while the job
      * is still finishing: the two harness runs would disagree about the
      * state column and the snapshot would be unstable (invariant 5). */
@@ -2558,7 +2532,7 @@ static void case_s19_filter_replaces_region(PtyCtx *c)
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    s19_run(c, "%!sort");
+    s19_run_until(c, "%!sort", "filter: 4 \xE2\x86\x92 4 lines");
     ptc_snapshot(c, "s19_filter_replaces_region");
     s18_finish(c, path);
 }
@@ -2572,7 +2546,8 @@ static void case_s19_filter_nonzero_keeps_buffer(PtyCtx *c)
         return;
     /* The buffer must look exactly as it did, with the failure reported
      * on the message line rather than pasted over the text. */
-    s19_run(c, "%!echo boom >&2; exit 2");
+    s19_run_until(c, "%!echo boom >&2; exit 2",
+                  "filter: exit 2; buffer unchanged");
     ptc_snapshot(c, "s19_filter_nonzero_keeps_buffer");
     s18_finish(c, path);
 }
@@ -2587,13 +2562,9 @@ static void case_s19_read_at_cursor(PtyCtx *c)
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     output_at = c->raw.len;
-    s19_run(c, "r !printf 'inserted\\n'");
-    /* The historical frame count also includes command-line repaint and
-     * can be satisfied before a delayed child completes.  Wait for this
-     * command's semantic completion before comparing its cursor state.
-     * s19_run already settled the completed frame; another scaled quiet
-     * window can cross the four-second info-message expiry under Valgrind
-     * and replace the very footer this case asserts with the status line. */
+    s19_run_until(c, "r !printf 'inserted\\n'", "9 bytes read");
+    /* Keep the raw-log assertion too: it proves this completion was emitted
+     * after the command, rather than inherited from an earlier repaint. */
     ptc_wait_output_since(c, output_at, completion,
                           sizeof(completion) - 1U);
     ptc_snapshot(c, "s19_read_at_cursor");
