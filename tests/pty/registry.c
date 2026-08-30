@@ -4768,6 +4768,34 @@ static void s41_wait_make_expansions(PtyCtx *c)
               "Make nested expansions did not finish highlighting");
 }
 
+static bool s41_markdown_guest_ready(const VtScreen *vt)
+{
+    const VtCell *keyword;
+    const VtCell *space;
+
+    if (vt == NULL || vt->rows <= 20 || vt->cols <= 10)
+        return false;
+    /* Row 21 is the last visible embedded-C body.  The provisional
+     * Markdown paint gives `int ` one uniform fenced-code style; the guest
+     * correction distinguishes the keyword from its following space. */
+    keyword = &vt->cells[20U * (size_t)vt->cols + 7U];
+    space = &vt->cells[20U * (size_t)vt->cols + 10U];
+    return keyword->attrs != space->attrs ||
+           memcmp(&keyword->fg, &space->fg, sizeof(keyword->fg)) != 0 ||
+           memcmp(&keyword->bg, &space->bg, sizeof(keyword->bg)) != 0;
+}
+
+static void s41_wait_markdown_guest(PtyCtx *c)
+{
+    u32 i;
+
+    for (i = 0U; i < 240U && !c->failed &&
+                 !s41_markdown_guest_ready(&c->vt); i++)
+        ptc_settle(c, 25);
+    ptc_check(c, s41_markdown_guest_ready(&c->vt),
+              "Markdown guest correction did not finish highlighting");
+}
+
 static void case_s41_kitchen(PtyCtx *c)
 {
     const char *path = s41_kitchen_path(c);
@@ -4781,6 +4809,8 @@ static void case_s41_kitchen(PtyCtx *c)
     s41_wait_syn_settled(c);
     if (strstr(c->test->name, "_make_") != NULL)
         s41_wait_make_expansions(c);
+    if (strstr(c->test->name, "_markdown_") != NULL)
+        s41_wait_markdown_guest(c);
     if (strstr(c->test->name, "colors_256") != NULL ||
         strstr(c->test->name, "colors_16") != NULL) {
         ptc_check(c, !raw_sgr_has_param_since(c, 0U, 58U),
