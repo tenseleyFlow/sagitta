@@ -613,9 +613,9 @@ void test_undo_save_reopens_journal_on_navigation(void)
 {
     char state[PATH_MAX] = "/tmp/yew-undo-save-XXXXXX";
     char canonical[PATH_MAX];
-    char source[128];
-    char journal_dir[128];
-    char yew_dir[112];
+    char source[PATH_MAX + sizeof("/base.txt")];
+    char journal_dir[PATH_MAX + sizeof("/yew/journal")];
+    char yew_dir[PATH_MAX + sizeof("/yew")];
     FileMeta meta;
     FileMeta recovered_meta;
     TextBuf *tb = NULL;

@@ -351,8 +351,8 @@ void test_tabs_display_path_preserves_workspace_spelling(void)
     Ed ed;
     char root[PATH_MAX] = "/tmp/yew-tab-root-XXXXXX";
     char target[PATH_MAX] = "/tmp/yew-tab-target-XXXXXX";
-    char link_path[PATH_MAX];
-    char file_path[PATH_MAX];
+    char link_path[PATH_MAX + sizeof("/linked")];
+    char file_path[PATH_MAX + sizeof("/note.txt")];
     char cwd[PATH_MAX];
     FILE *fp;
     int idx;
