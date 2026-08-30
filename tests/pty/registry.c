@@ -8145,16 +8145,17 @@ static void case_s53_blame(PtyCtx *c)
     }
     s53_clear_message(c);
     if (strstr(c->test->name, "stale") != NULL) {
-        /* Keep insert, edit, and Escape in one input-bearing turn.  That
-         * gives the stale cache its deterministic pre-debounce frame instead
-         * of waiting for the unrelated Git-sign refresh, by which time a
-         * fast blame subprocess may legitimately replace the stale block. */
+        /* Keep insert, edit, and Escape in one input-bearing turn, then wait
+         * for the in-process diff to publish its sign.  The diff tick runs
+         * before the asynchronous blame request, so this pins the state in
+         * which the sign is current while the preceding blame is still
+         * visibly stale. */
         ptc_keys(c, "i X esc");
-        s53_wait_screen(c, "Xshort blamed line  ▏ Yew PTY");
+        s53_wait_screen(c, "▎   1 Xshort blamed line  ▏ Yew PTY");
         ptc_check(c, s52_screen_contains(
                          &c->vt,
-                         "Xshort blamed line  ▏ Yew PTY"),
-                  "edited line did not retain stale blame");
+                         "▎   1 Xshort blamed line  ▏ Yew PTY"),
+                  "edited line did not retain stale blame after sign refresh");
         s53_wait_cursor(c, 2U, false);
         ptc_check(c, c->vt.cursor_shape == 2U &&
                          c->vt.cur_r != c->vt.rows - 1,
