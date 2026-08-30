@@ -137,7 +137,12 @@ static bool live_drive(Ed *ed, i64 *first_ms)
             *first_ms = yew_now_ms() - started;
             seen = true;
         }
-        if (seen && !ed->ai->call.active)
+        /* A partial event and the peer close can coalesce into one pump.
+         * The ghost is then delivered and correctly cleared before this
+         * observer regains control, so requiring `seen` turns socket read
+         * batching into a test result.  The caller checks the final ghost,
+         * message and buffer state for both success and error cases. */
+        if (!ed->ai->call.active)
             return true;
     }
     return false;
