@@ -402,6 +402,7 @@ MUSL_UNIT_PREP := \
     'SKIP ws_save_survives_kill9_at_every_step: static PIE cannot load the LD_PRELOAD fault shim' &&
 endif
 UNIT_RUN := $(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
+            $(if $(filter 1,$(ALIGN_SAN)),YEW_TEST_INSTRUMENTED=1,) \
             $(BUILD)/unit_tests $(MUSL_UNIT_EXCLUDES)
 ifeq ($(TARGET),x86_64-linux-musl)
 TORTURE_LIVE_GATE = @printf '%s\n' \
