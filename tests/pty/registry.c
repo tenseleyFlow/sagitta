@@ -4346,7 +4346,10 @@ static void case_s27_double_click_mode_chip(PtyCtx *c)
      * like arriving over a pty.
      */
     ptc_bytes(c, "\x1b[<0;15;1M\x1b[<0;15;1m\x1b[<0;15;1M\x1b[<0;15;1m");
-    ptc_settle(c, 120);
+    /* A quiet interval can elapse before an instrumented child is scheduled
+     * to consume the reports.  Wait for the mode transition itself so the
+     * snapshot cannot race the input-bearing frame. */
+    s19_wait_screen(c, "H\xC2\xB7W");
     ptc_snapshot(c, "s27_double_click_mode_chip");
     force_quit(c);
     (void)unlink(path);
@@ -4745,6 +4748,34 @@ static void s41_wait_syn_settled(PtyCtx *c)
     }
 }
 
+static bool s41_make_expansions_ready(const VtScreen *vt)
+{
+    const VtCell *expansion;
+    const VtCell *plain;
+
+    if (vt == NULL || vt->rows <= 7 || vt->cols <= 79)
+        return false;
+    /* Row 8 is the first recipe.  Its nested $(CC) expansion is the last
+     * Make definition component to become available; the provisional paint
+     * styles its '$(' prefix but leaves this cell as ordinary text. */
+    expansion = &vt->cells[7U * (size_t)vt->cols + 11U];
+    plain = &vt->cells[7U * (size_t)vt->cols + 79U];
+    return expansion->attrs != plain->attrs ||
+           memcmp(&expansion->fg, &plain->fg, sizeof(expansion->fg)) != 0 ||
+           memcmp(&expansion->bg, &plain->bg, sizeof(expansion->bg)) != 0;
+}
+
+static void s41_wait_make_expansions(PtyCtx *c)
+{
+    u32 i;
+
+    for (i = 0U; i < 240U && !c->failed &&
+                 !s41_make_expansions_ready(&c->vt); i++)
+        ptc_settle(c, 25);
+    ptc_check(c, s41_make_expansions_ready(&c->vt),
+              "Make nested expansions did not finish highlighting");
+}
+
 static void case_s41_kitchen(PtyCtx *c)
 {
     const char *path = s41_kitchen_path(c);
@@ -4756,6 +4787,8 @@ static void case_s41_kitchen(PtyCtx *c)
     ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
     ptc_wait_kitty_push(c, 21U);
     s41_wait_syn_settled(c);
+    if (strstr(c->test->name, "_make_") != NULL)
+        s41_wait_make_expansions(c);
     if (strstr(c->test->name, "colors_256") != NULL ||
         strstr(c->test->name, "colors_16") != NULL) {
         ptc_check(c, !raw_sgr_has_param_since(c, 0U, 58U),
@@ -8103,30 +8136,20 @@ static void case_s53_blame(PtyCtx *c)
     }
     s53_clear_message(c);
     if (strstr(c->test->name, "stale") != NULL) {
-        ptc_keys(c, "i");
-        s53_wait_cursor(c, 6U, false);
-        ptc_bytes(c, "X");
+        /* Keep insert, edit, and Escape in one input-bearing turn.  That
+         * gives the stale cache its deterministic pre-debounce frame instead
+         * of waiting for the unrelated Git-sign refresh, by which time a
+         * fast blame subprocess may legitimately replace the stale block. */
+        ptc_keys(c, "i X esc");
         s53_wait_screen(c, "Xshort blamed line  ▏ Yew PTY");
         ptc_check(c, s52_screen_contains(
                          &c->vt,
                          "Xshort blamed line  ▏ Yew PTY"),
                   "edited line did not retain stale blame");
-        ptc_keys(c, "esc");
-        /* Background index paints are allowed between a key write and its
-         * mode transition.  Wait for the state the Escape key promises,
-         * rather than mistaking the next unrelated frame for its paint. */
         s53_wait_cursor(c, 2U, false);
         ptc_check(c, c->vt.cursor_shape == 2U &&
                          c->vt.cur_r != c->vt.rows - 1,
                   "stale blame did not return to normal mode");
-        /* The edit also starts the asynchronous Git-sign refresh.  Snapshot
-         * its completed state so runner scheduling cannot decide whether the
-         * modification sign is present in this otherwise identical case. */
-        s53_wait_screen(c, "▎   1 Xshort blamed line");
-        ptc_check(c, s52_screen_contains(
-                         &c->vt,
-                         "Xshort blamed line  ▏ Yew PTY"),
-                  "stale inline blame vanished while Git signs recomputed");
     }
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);

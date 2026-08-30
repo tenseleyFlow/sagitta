@@ -1374,6 +1374,13 @@ void yew_ed_finish_edit(Ed *ed, const EditCtx *ec)
         ed->win->buf->tb == ec->tb &&
         ed->win->overlay.buf_gen != ec->tb->gen)
         yew_overlay_invalidate(&ed->win->overlay);
+    /* Inline blame caches are generation-wide: after one byte changes,
+     * every visible annotation is stale until the replacement block lands.
+     * Repaint the whole document now so untouched rows cannot retain the
+     * normal blame style until an unrelated background frame damages them. */
+    if (ed->win != NULL && ed->win->buf != NULL &&
+        ed->win->buf->tb == ec->tb && ed->win->git_blame)
+        yew_ed_damage_document(ed);
     /*
      * The journal belongs to whichever buffer the edit ran against.
      * Matching on slot 0 alone stopped being right once tabs stopped
