@@ -2425,6 +2425,9 @@ static void case_s19_exit_footer_ok(PtyCtx *c)
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     s19_run_frames(c, "!printf 'done\\n'", 3U);
+    /* A quiet window can precede a descheduled child's completion.  The
+     * footer is the state this case asserts, so wait for that state. */
+    s19_wait_screen(c, "[exit 0 in");
     ptc_snapshot(c, "s19_exit_footer_ok");
     s18_finish(c, path);
 }
