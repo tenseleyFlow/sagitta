@@ -7783,10 +7783,10 @@ static void s53_clear_message(PtyCtx *c)
 
 static void s53_wait_screen(PtyCtx *c, const char *text)
 {
-    u32 i;
-
-    for (i = 0U; i < 240U && !c->failed &&
-                 !s52_screen_contains(&c->vt, text); i++)
+    /* ptc_settle owns the per-case and whole-suite deadlines.  A local
+     * 240-iteration cap silently shortened the Git cases' explicit 10 s
+     * hang budget to 6 s, so a healthy hosted run could lose under load. */
+    while (!c->failed && !s52_screen_contains(&c->vt, text))
         ptc_settle(c, 25);
     ptc_check(c, s52_screen_contains(&c->vt, text),
               "Sprint 53 Git state did not settle");
