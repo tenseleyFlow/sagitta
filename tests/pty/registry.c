@@ -5277,6 +5277,19 @@ static void s41_open_fixture(PtyCtx *c, const char *theme, const char *path)
     s41_wait_syn_settled(c);
 }
 
+static void s41_wait_underline_wire(PtyCtx *c, bool lower,
+                                    const char *rgb)
+{
+    if (lower || c == NULL || rgb == NULL)
+        return;
+    /* The syntax badge can settle before the final diagnostic underline
+     * repaint reaches the PTY.  Observe the wire contract itself instead of
+     * assuming that a quiet completed viewport has already emitted it. */
+    ptc_wait_output(c, rgb, strlen(rgb));
+    while (!c->failed && !raw_sgr_has_param_since(c, 0U, 59U))
+        ptc_settle(c, 20);
+}
+
 static void case_s41_underline_error(PtyCtx *c)
 {
     static const u8 text[] = "const char *bad = \"\\q\";\n";
@@ -5290,6 +5303,7 @@ static void case_s41_underline_error(PtyCtx *c)
     if (!s41_fixture(c, ".c", text, sizeof(text) - 1U, path, sizeof(path)))
         return;
     s41_open_fixture(c, theme, path);
+    s41_wait_underline_wire(c, lower, rgb);
     ptc_check(c, raw_contains_since(c, 0U, rgb) != lower,
               lower ? "256-colour error emitted SGR 58"
                     : "truecolour error omitted its SGR 58 RGB");
@@ -5318,6 +5332,7 @@ static void case_s41_underline_warning(PtyCtx *c)
     if (!s41_fixture(c, ".mk", text, sizeof(text) - 1U, path, sizeof(path)))
         return;
     s41_open_fixture(c, theme, path);
+    s41_wait_underline_wire(c, lower, rgb);
     ptc_check(c, raw_contains_since(c, 0U, rgb) != lower,
               lower ? "256-colour warning emitted SGR 58"
                     : "truecolour warning omitted its SGR 58 RGB");
@@ -6726,6 +6741,27 @@ typedef struct S47RenameFix {
     size_t alpha_len;
 } S47RenameFix;
 
+static void s47_wait_screen(PtyCtx *c, const char *text,
+                            const char *failure)
+{
+    while (!c->failed && !s43_screen_contains(&c->vt, text))
+        ptc_settle(c, 25);
+    ptc_check(c, s43_screen_contains(&c->vt, text), failure);
+}
+
+static void s47_wait_ready(PtyCtx *c)
+{
+    static const char pending[] = "fakelsp\xE2\x80\xA6";
+
+    while (!c->failed &&
+           (!s43_screen_contains(&c->vt, "fakelsp") ||
+            s43_screen_contains(&c->vt, pending)))
+        ptc_settle(c, 25);
+    ptc_check(c, s43_screen_contains(&c->vt, "fakelsp") &&
+                     !s43_screen_contains(&c->vt, pending),
+              "fake LSP did not become ready for rename");
+}
+
 static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
 {
     static const u8 alpha[] = "alpha first\nalpha second\n";
@@ -6779,6 +6815,7 @@ static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
     ptc_spawn(c, yew, "--config", f->config, f->alpha, NULL);
     ptc_settle(c, 400);
     ptc_wait_kitty_push(c, 21U);
+    s47_wait_ready(c);
     return !c->failed;
 
 overflow:
@@ -6786,15 +6823,20 @@ overflow:
     return false;
 }
 
-static void s47_rename_begin(PtyCtx *c, bool dirty)
+static void s47_rename_begin(PtyCtx *c, bool dirty, const char *outcome)
 {
-    if (dirty)
-        s18_settle_after_keys(c, "right i ! esc g g");
-    s18_settle_after_keys(c, "g R");
-    s18_settle_after_keys(c, "ctrl+u");
-    s18_settle_after_bytes(c, "beta");
-    s18_settle_after_keys(c, "enter");
-    ptc_settle(c, 100);
+    if (dirty) {
+        ptc_keys(c, "right i ! esc g g");
+        s47_wait_screen(c, "alpha first!",
+                        "rename fixture edit did not become visible");
+    }
+    ptc_keys(c, "g R");
+    s47_wait_screen(c, ":alpha", "rename prompt did not become visible");
+    ptc_keys(c, "ctrl+u");
+    ptc_bytes(c, "beta");
+    s47_wait_screen(c, ":beta", "rename replacement was not visible");
+    ptc_keys(c, "enter");
+    s47_wait_screen(c, outcome, "rename response did not become visible");
 }
 
 static bool s47_screen_ordered(const VtScreen *vt, const char *first,
@@ -6830,7 +6872,7 @@ static void case_s47_rename_summary_cancel(PtyCtx *c)
 
     if (!s47_rename_open(c, "session-rename", &f))
         return;
-    s47_rename_begin(c, true);
+    s47_rename_begin(c, true, "rename 'alpha' \xE2\x86\x92 'beta'");
     ptc_snapshot(c, "lsp_feat_rename_summary");
     ptc_check(c, s43_screen_contains(
                      &c->vt, "rename 'alpha' \xE2\x86\x92 'beta'"),
@@ -6855,7 +6897,7 @@ static void case_s47_rename_diff(PtyCtx *c)
 
     if (!s47_rename_open(c, "session-rename", &f))
         return;
-    s47_rename_begin(c, true);
+    s47_rename_begin(c, true, "rename 'alpha' \xE2\x86\x92 'beta'");
     s18_settle_after_keys(c, "d");
     ptc_check(c, s43_screen_contains(&c->vt, "--- a/alpha.c") &&
                      s43_screen_contains(&c->vt, "+++ b/alpha.c") &&
@@ -6872,7 +6914,7 @@ static void case_s47_rename_apply(PtyCtx *c)
 
     if (!s47_rename_open(c, "session-rename", &f))
         return;
-    s47_rename_begin(c, true);
+    s47_rename_begin(c, true, "rename 'alpha' \xE2\x86\x92 'beta'");
     s18_settle_after_keys(c, "enter");
     ptc_check(c, s43_screen_contains(
                      &c->vt,
@@ -6895,7 +6937,7 @@ static void case_s47_rename_unknown_key(PtyCtx *c)
 
     if (!s47_rename_open(c, "session-rename", &f))
         return;
-    s47_rename_begin(c, true);
+    s47_rename_begin(c, true, "rename 'alpha' \xE2\x86\x92 'beta'");
     s18_settle_after_keys(c, "left");
     ptc_check(c, !s43_screen_contains(&c->vt, "enter apply") &&
                      !s43_screen_contains(&c->vt, "show diff"),
@@ -6913,7 +6955,9 @@ static void case_s47_rename_refusal(PtyCtx *c)
 
     if (!s47_rename_open(c, "session-rename-refuse", &f))
         return;
-    s47_rename_begin(c, false);
+    s47_rename_begin(c, false,
+        "server asked to create or delete files; refusing "
+        "(not supported in 1.0)");
     ptc_check(c, s43_screen_contains(
                      &c->vt,
                      "server asked to create or delete files; refusing "
