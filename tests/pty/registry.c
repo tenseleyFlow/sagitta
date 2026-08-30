@@ -6806,7 +6806,12 @@ static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
     n = snprintf(source, sizeof(source),
         "let lsp = {servers: {c: {id: \"fakelsp\", cmd: \"%s\", "
         "args: [\"%s\", \"%s\"], roots: [\".git\"], "
-        "init_options: nil, init_timeout_ms: 2000}}}\n",
+        /* The Valgrind lane traces both yew and this in-tree helper.  Two
+         * seconds is a production-scale startup deadline, not enough for
+         * two instrumented processes to complete their JSON-RPC handshake
+         * on a hosted runner.  Keep the fixture below the 60 s case ceiling
+         * while ensuring that a missing helper still fails boundedly. */
+        "init_options: nil, init_timeout_ms: 30000}}}\n",
         fakelsp, mode, c->workspace_dir);
     if (n <= 0 || (size_t)n >= sizeof(source))
         goto overflow;
@@ -6819,7 +6824,9 @@ static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
         return false;
     }
     ptc_spawn(c, yew, "--config", f->config, f->alpha, NULL);
-    ptc_settle(c, 400);
+    /* The kitty push is the input-readiness barrier.  A 400 ms quiet wait
+     * becomes 3.2 s under Valgrind and can be kept alive indefinitely by
+     * startup repaints, consuming the whole case before rename begins. */
     ptc_wait_kitty_push(c, 21U);
     s47_wait_ready(c);
     return !c->failed;
@@ -7298,11 +7305,12 @@ static void s52_wait_screen(PtyCtx *c, const char *text)
               "Sprint 52 expected screen state did not appear");
 }
 
-static void s52_wait_screen_gone(PtyCtx *c, const char *text)
+static void s52_wait_screen_gone(PtyCtx *c, const char *text,
+                                 u32 attempts)
 {
     u32 i;
 
-    for (i = 0U; i < 80U && !c->failed &&
+    for (i = 0U; i < attempts && !c->failed &&
                  s52_screen_contains(&c->vt, text); i++)
         ptc_settle(c, 25);
     ptc_check(c, !s52_screen_contains(&c->vt, text),
@@ -7496,7 +7504,7 @@ static void case_s52_fuss(PtyCtx *c)
     } else if (strstr(name, "jump_clears") != NULL) {
         ptc_keys(c, "/");
         s52_wait_screen(c, "jump:");
-        s52_wait_screen_gone(c, "jump:");
+        s52_wait_screen_gone(c, "jump:", 80U);
         semantic_snapshot = true;
     } else if (strstr(name, "leave_q") != NULL) {
         ptc_keys(c, "q");
@@ -7510,6 +7518,14 @@ static void case_s52_fuss(PtyCtx *c)
         c->vt.sync_pairs_unstable = true;
     } else {
         ptc_settle(c, 0);
+    }
+    if (strcmp(name, "fuss_tree_unicode_120") == 0) {
+        /* At 120 columns the complete legend fits beneath the tree.  Pin
+         * this coverage to that final footer instead of the workspace-walk
+         * notice whose expiry can straddle the two Valgrind executions. */
+        s52_wait_screen_gone(
+            c, "git discovery unavailable; using workspace walk", 240U);
+        s52_wait_screen(c, "Legend:");
     }
     if (semantic_snapshot) {
         c->vt.sync_pairs_unstable = true;
