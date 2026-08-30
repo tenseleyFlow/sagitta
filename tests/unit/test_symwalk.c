@@ -3,6 +3,7 @@
 
 #include "harness.h"
 
+#include <limits.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,7 +32,7 @@ static void sw_rm_rf(const char *path)
 static void sw_init(SymWalkFix *f)
 {
     static const char root_template[] = "/tmp/yew-symwalk-XXXXXX";
-    char canonical[sizeof(f->root)];
+    char canonical[PATH_MAX];
     const char *path = getenv("PATH");
 
     _Static_assert(sizeof(root_template) <= sizeof(f->root),
