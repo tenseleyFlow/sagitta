@@ -563,6 +563,7 @@ MOD_SRC  := src/mod/mods.c \
 SRC      := $(CORE_SRC) $(MOD_SRC)
 OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 RUNTIME_BLOB_GEN := $(BUILD)/host/gen-runtime-blob
+EMBED_INITRAMFS_GEN := $(BUILD)/host/gen-initramfs
 RUNTIME_BLOB_C := $(BUILD)/gen/runtime_blob.c
 RUNTIME_BLOB_OBJ := $(BUILD)/gen/runtime_blob.o
 RUNTIME_BLOB_INPUTS := $(shell find runtime -type f -print | LC_ALL=C sort)
@@ -874,7 +875,8 @@ TORTURE_GIT_HUNK := $(BUILD)/git-hunk-kill9
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
-                $(RUNTIME_BLOB_GEN) $(RUNTIME_BLOB_C) \
+                $(RUNTIME_BLOB_GEN) $(EMBED_INITRAMFS_GEN) \
+                $(RUNTIME_BLOB_C) \
                 $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
@@ -947,7 +949,7 @@ endif
 .PHONY: all check test test-unit test-alloc-debug alloc perf-alloc clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
-        runtime-embedded-budget \
+        runtime-embedded-budget embedded-image-selftest \
         musl-verify test-musl-hosts \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
@@ -1484,6 +1486,10 @@ $(RUNTIME_BLOB_GEN): scripts/gen-runtime-blob.c | dirs
 	$(HOSTCC) -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -O2 \
 		-o $@ $<
 
+$(EMBED_INITRAMFS_GEN): scripts/gen-initramfs.c | dirs
+	$(HOSTCC) -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -O2 \
+		-o $@ $<
+
 $(RUNTIME_BLOB_C): $(RUNTIME_BLOB_GEN) $(RUNTIME_BLOB_INPUTS) \
                    $(RUNTIME_BLOB_DIRS) | dirs
 	@set -eu; \
@@ -1503,6 +1509,11 @@ runtime-blob-selftest:
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
 		scripts/tests/runtime-blob.test.sh
+
+embedded-image-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
+		scripts/tests/embed-image.test.sh
 
 ifeq ($(EMBED_RUNTIME),1)
 runtime-embedded-budget: $(RUNTIME_BLOB_OBJ)
@@ -1607,6 +1618,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
        test-syn-assets size-tools-selftest target-tools-selftest \
        static-pie-tools-selftest runtime-blob-selftest \
+       embedded-image-selftest \
        $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1625,7 +1637,8 @@ test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
-      static-pie-tools-selftest runtime-blob-selftest torture-build \
+      static-pie-tools-selftest runtime-blob-selftest \
+      embedded-image-selftest torture-build \
       $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
