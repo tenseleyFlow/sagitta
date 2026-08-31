@@ -6780,8 +6780,12 @@ typedef struct S47RenameFix {
 static void s47_wait_screen(PtyCtx *c, const char *text,
                             const char *failure)
 {
+    /* Check after each complete frame.  A quiet wait cannot be used here:
+     * under Valgrind the incremental startup repaints may arrive often
+     * enough that the scaled quiet window never closes, even though the
+     * requested semantic state was painted long ago. */
     while (!c->failed && !s43_screen_contains(&c->vt, text))
-        ptc_settle(c, 25);
+        ptc_wait_sync_pairs(c, c->vt.nsync_pairs + 1U);
     ptc_check(c, s43_screen_contains(&c->vt, text), failure);
 }
 
@@ -6792,7 +6796,7 @@ static void s47_wait_ready(PtyCtx *c)
     while (!c->failed &&
            (!s43_screen_contains(&c->vt, "fakelsp") ||
             s43_screen_contains(&c->vt, pending)))
-        ptc_settle(c, 25);
+        ptc_wait_sync_pairs(c, c->vt.nsync_pairs + 1U);
     ptc_check(c, s43_screen_contains(&c->vt, "fakelsp") &&
                      !s43_screen_contains(&c->vt, pending),
               "fake LSP did not become ready for rename");
@@ -7474,6 +7478,13 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
         s52_wait_screen(c, "<> tree");
         c->vt.sync_pairs_unstable = true;
     }
+    /* The workspace-walk notice is deliberately transient.  Snapshotting
+     * before or after its expiry made every tree/navigation case depend on
+     * how quickly the instrumented child reached this point.  The complete
+     * footer is the stable FUSS state shared by all actions below. */
+    s52_wait_screen_gone(
+        c, "git discovery unavailable; using workspace walk", 240U);
+    s52_wait_screen(c, "Legend:");
     return !c->failed;
 }
 
@@ -7548,14 +7559,6 @@ static void case_s52_fuss(PtyCtx *c)
         c->vt.sync_pairs_unstable = true;
     } else {
         ptc_settle(c, 0);
-    }
-    if (strcmp(name, "fuss_tree_unicode_120") == 0) {
-        /* At 120 columns the complete legend fits beneath the tree.  Pin
-         * this coverage to that final footer instead of the workspace-walk
-         * notice whose expiry can straddle the two Valgrind executions. */
-        s52_wait_screen_gone(
-            c, "git discovery unavailable; using workspace walk", 240U);
-        s52_wait_screen(c, "Legend:");
     }
     if (semantic_snapshot) {
         c->vt.sync_pairs_unstable = true;

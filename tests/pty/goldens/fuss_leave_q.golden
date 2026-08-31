@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
- L git discovery unavailable; using workspace walk                              
+ L  main.c                                          utf-8  lf  1:1  all  ⎇ trunk
 --- style
 AAAABACCCDEEEEFCCCCFDFDGGGGGGDHFDFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
@@ -50,7 +50,7 @@ AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-IIIJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+IIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 --- legend
 A fg=#4b5263 bg=#12141a attrs=----------
 B fg=#c8ccd4 bg=#12141a attrs=b---------
@@ -60,8 +60,7 @@ E fg=#61afef bg=#12141a attrs=----------
 F fg=#9aa0aa bg=#12141a attrs=----------
 G fg=#c678dd bg=#12141a attrs=b---------
 H fg=#d19a66 bg=#12141a attrs=----------
-I fg=#ebf4ff bg=#266eba attrs=b---------
-J fg=#dae5f0 bg=#14304c attrs=----------
+I fg=#12141a bg=#61afef attrs=----------
 --- sgr
 \x1b[0;38;2;75;82;99;48;2;18;20;26m
 \x1b[1;38;2;200;204;212m
@@ -258,6 +257,7 @@ J fg=#dae5f0 bg=#14304c attrs=----------
 \x1b[22m
 \x1b[2m
 \x1b[22;38;2;250;235;248;48;2;177;61;155m
+\x1b[0;38;2;250;235;248;48;2;177;61;155m
 \x1b[0;38;2;75;82;99;48;2;18;20;26m
 \x1b[1;38;2;200;204;212m
 \x1b[22;38;2;75;82;99m
@@ -321,5 +321,5 @@ J fg=#dae5f0 bg=#14304c attrs=----------
 \x1b[38;2;200;204;212m
 \x1b[38;2;75;82;99m
 \x1b[38;2;200;204;212m
-\x1b[1;38;2;235;244;255;48;2;38;110;186m
-\x1b[22;38;2;218;229;240;48;2;20;48;76m
+\x1b[38;2;18;20;26;48;2;97;175;239m
+\x1b[38;2;200;204;212;48;2;18;20;26m

@@ -24,7 +24,7 @@ fussrepo · trunk     { return 0; }
                                                                                 
                                                                                 
                                                                                 
-git discovery unavailable; using workspace walk                                 
+Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict               
 ←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave                   
 --- style
 AAAAAAAABBBAAAAABBBBCDCEEEEEECFDCDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
@@ -260,3 +260,4 @@ L fg=#faebf8 bg=#b13d9b attrs=----------
 \x1b[22m
 \x1b[2m
 \x1b[22;38;2;250;235;248;48;2;177;61;155m
+\x1b[0;38;2;250;235;248;48;2;177;61;155m
