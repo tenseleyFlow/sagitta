@@ -48,6 +48,7 @@ typedef struct Pty {
 } Pty;
 
 typedef struct PtyCtx PtyCtx;
+typedef bool (*PtcWaitPredicate)(const PtyCtx *c, const void *arg);
 
 typedef struct PtyCase {
     const char *name;
@@ -129,6 +130,9 @@ void ptc_wait_output_since(PtyCtx *c, size_t at,
                            const void *bytes, size_t len);
 void ptc_wait_kitty_push(PtyCtx *c, u32 flags);
 void ptc_wait_sync_pairs(PtyCtx *c, u32 count);
+/* Pump the PTY and re-evaluate a semantic condition after every read. */
+void ptc_wait_until(PtyCtx *c, PtcWaitPredicate done, const void *arg,
+                    const char *failure);
 void ptc_keys(PtyCtx *c, const char *spec);
 void ptc_bytes(PtyCtx *c, const char *lit);
 void ptc_resize(PtyCtx *c, u16 rows, u16 cols);

@@ -6773,33 +6773,32 @@ typedef struct S47RenameFix {
     char alpha[PATH_MAX];
     char zeta[PATH_MAX];
     char config[PATH_MAX];
+    char ready[PATH_MAX];
     u8 alpha_disk[64];
     size_t alpha_len;
 } S47RenameFix;
 
+static bool s47_screen_contains(const PtyCtx *c, const void *arg)
+{
+    return s43_screen_contains(&c->vt, (const char *)arg);
+}
+
 static void s47_wait_screen(PtyCtx *c, const char *text,
                             const char *failure)
 {
-    /* Check after each complete frame.  A quiet wait cannot be used here:
-     * under Valgrind the incremental startup repaints may arrive often
-     * enough that the scaled quiet window never closes, even though the
-     * requested semantic state was painted long ago. */
-    while (!c->failed && !s43_screen_contains(&c->vt, text))
-        ptc_wait_sync_pairs(c, c->vt.nsync_pairs + 1U);
-    ptc_check(c, s43_screen_contains(&c->vt, text), failure);
+    ptc_wait_until(c, s47_screen_contains, text, failure);
 }
 
-static void s47_wait_ready(PtyCtx *c)
+static bool s47_ready_marker(const PtyCtx *c, const void *arg)
 {
-    static const char pending[] = "fakelsp\xE2\x80\xA6";
+    (void)c;
+    return access((const char *)arg, F_OK) == 0;
+}
 
-    while (!c->failed &&
-           (!s43_screen_contains(&c->vt, "fakelsp") ||
-            s43_screen_contains(&c->vt, pending)))
-        ptc_wait_sync_pairs(c, c->vt.nsync_pairs + 1U);
-    ptc_check(c, s43_screen_contains(&c->vt, "fakelsp") &&
-                     !s43_screen_contains(&c->vt, pending),
-              "fake LSP did not become ready for rename");
+static void s47_wait_ready(PtyCtx *c, const char *marker)
+{
+    ptc_wait_until(c, s47_ready_marker, marker,
+                   "fake LSP did not become ready for rename");
 }
 
 static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
@@ -6809,7 +6808,7 @@ static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
     const char *yew = ptc_yew_bin(c);
     const char *slash;
     char fakelsp[PATH_MAX];
-    char source[PATH_MAX * 3U];
+    char source[PATH_MAX * 4U];
     int n;
 
     (void)memset(f, 0, sizeof(*f));
@@ -6828,6 +6827,10 @@ static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
                  c->workspace_dir);
     if (n <= 0 || (size_t)n >= sizeof(f->config))
         goto overflow;
+    n = snprintf(f->ready, sizeof(f->ready), "%s/fakelsp.ready",
+                 c->state_dir);
+    if (n <= 0 || (size_t)n >= sizeof(f->ready))
+        goto overflow;
     slash = strrchr(yew, '/');
     if (slash == NULL) {
         ptc_check(c, false, "Sprint 47 yew path is not absolute");
@@ -6839,14 +6842,14 @@ static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
         goto overflow;
     n = snprintf(source, sizeof(source),
         "let lsp = {servers: {c: {id: \"fakelsp\", cmd: \"%s\", "
-        "args: [\"%s\", \"%s\"], roots: [\".git\"], "
+        "args: [\"%s\", \"%s\", \"%s\"], roots: [\".git\"], "
         /* The Valgrind lane traces both yew and this in-tree helper.  Two
          * seconds is a production-scale startup deadline, not enough for
          * two instrumented processes to complete their JSON-RPC handshake
          * on a hosted runner.  Keep the fixture below the 60 s case ceiling
          * while ensuring that a missing helper still fails boundedly. */
         "init_options: nil, init_timeout_ms: 30000}}}\n",
-        fakelsp, mode, c->workspace_dir);
+        fakelsp, mode, c->workspace_dir, f->ready);
     if (n <= 0 || (size_t)n >= sizeof(source))
         goto overflow;
     (void)memcpy(f->alpha_disk, alpha, sizeof(alpha) - 1U);
@@ -6862,7 +6865,10 @@ static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
      * becomes 3.2 s under Valgrind and can be kept alive indefinitely by
      * startup repaints, consuming the whole case before rename begins. */
     ptc_wait_kitty_push(c, 21U);
-    s47_wait_ready(c);
+    /* The status label may lag a completed handshake until another editor
+     * event repaints it.  Synchronize with the fake server's didOpen marker,
+     * then use semantic screen waits for the user-visible rename states. */
+    s47_wait_ready(c, f->ready);
     return !c->failed;
 
 overflow:
@@ -6910,6 +6916,7 @@ static void s47_rename_finish(PtyCtx *c, const S47RenameFix *f)
     (void)unlink(f->alpha);
     (void)unlink(f->zeta);
     (void)unlink(f->config);
+    (void)unlink(f->ready);
 }
 
 static void case_s47_rename_summary_cancel(PtyCtx *c)

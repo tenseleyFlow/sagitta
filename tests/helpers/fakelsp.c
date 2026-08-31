@@ -173,7 +173,20 @@ static bool read_until_method(const char *method, unsigned long long *id)
     return false;
 }
 
-static int run_session(const char *mode, const char *marker)
+static bool create_marker(const char *path)
+{
+    int fd;
+
+    if (path == NULL)
+        return true;
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0)
+        return false;
+    return close(fd) == 0;
+}
+
+static int run_session(const char *mode, const char *marker,
+                       const char *ready_marker)
 {
     unsigned long long id = 0U;
     const char *encoding = NULL;
@@ -275,6 +288,8 @@ static int run_session(const char *mode, const char *marker)
     if (!read_method("\"method\":\"textDocument/didOpen\"", NULL) ||
         !write_all(STDERR_FILENO, "seq:didOpen\n", 12U))
         return 15;
+    if (!create_marker(ready_marker))
+        return 64;
     if (crash) {
         (void)write_all(STDERR_FILENO, "seq:crash\n", 10U);
         (void)poll(NULL, 0U, 1000);
@@ -549,7 +564,8 @@ int main(int argc, char **argv)
     int hlen;
 
     if (strncmp(mode, "session-", 8U) == 0)
-        return run_session(mode, argc > 2 ? argv[2] : NULL);
+        return run_session(mode, argc > 2 ? argv[2] : NULL,
+                           argc > 3 ? argv[3] : NULL);
 
     if (!read_request(&request, &request_len))
         return 2;

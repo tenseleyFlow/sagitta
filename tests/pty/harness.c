@@ -871,6 +871,44 @@ void ptc_wait_sync_pairs(PtyCtx *c, u32 count)
     }
 }
 
+void ptc_wait_until(PtyCtx *c, PtcWaitPredicate done, const void *arg,
+                    const char *failure)
+{
+    i64 deadline;
+
+    if (c == NULL || done == NULL || failure == NULL || !c->spawned ||
+        c->failed)
+        return;
+    deadline = case_deadline(c);
+    while (!done(c, arg) && !c->failed) {
+        struct pollfd fd = {c->pty.master, POLLIN | POLLHUP, 0};
+        i64 left = deadline - ptc_now_ms();
+        int timeout = left <= 0 ? 0 : left > 250 ? 250 : (int)left;
+        int result;
+        bool activity = false;
+
+        reap_nonblocking(c);
+        if (left <= 0) {
+            c->timed_out = true;
+            ptc_fail(c, "%s", failure);
+            break;
+        }
+        result = poll(&fd, 1U, timeout);
+        if (result < 0 && errno == EINTR)
+            continue;
+        if (result < 0) {
+            ptc_fail(c, "poll for semantic PTY state: %s",
+                     strerror(errno));
+            break;
+        }
+        if (result > 0 &&
+            (fd.revents & (POLLIN | POLLHUP | POLLERR)) != 0)
+            (void)read_available(c, &activity);
+        if (c->eof && c->pty.reaped && !done(c, arg))
+            ptc_fail(c, "%s (child exited)", failure);
+    }
+}
+
 void ptc_bytes(PtyCtx *c, const char *lit)
 {
     size_t len;
