@@ -564,6 +564,17 @@ SRC      := $(CORE_SRC) $(MOD_SRC)
 OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 RUNTIME_BLOB_GEN := $(BUILD)/host/gen-runtime-blob
 EMBED_INITRAMFS_GEN := $(BUILD)/host/gen-initramfs
+EMBED_IMAGE := $(BUILD)/embed.cpio.gz
+EMBED_FILE_LIST := $(BUILD)/embed.files
+EMBED_FIXTURE := $(BUILD)/embedded/4m.c
+EMBED_BATCH_GOLDEN := $(BUILD)/embedded/batch.golden
+EMBED_YEW_SRC ?= $(BUILD)/yew
+EMBED_PTY_RUNNER_SRC ?= $(BUILD)/pty_runner
+EMBED_PTY_DEMO_SRC ?= $(BUILD)/demo_paint
+EMBED_KERNEL ?=
+EMBED_BUSYBOX ?=
+EMBED_QEMU ?= qemu-system-x86_64
+EMBED_QEMU_TIMEOUT ?= 900
 RUNTIME_BLOB_C := $(BUILD)/gen/runtime_blob.c
 RUNTIME_BLOB_OBJ := $(BUILD)/gen/runtime_blob.o
 RUNTIME_BLOB_INPUTS := $(shell find runtime -type f -print | LC_ALL=C sort)
@@ -950,6 +961,8 @@ endif
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
         runtime-embedded-budget embedded-image-selftest \
+        embedded-fixture-selftest embedded-gate-selftest \
+        embedded-image embedded embedded-gate \
         musl-verify test-musl-hosts \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
@@ -1515,6 +1528,15 @@ embedded-image-selftest:
 	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
 		scripts/tests/embed-image.test.sh
 
+embedded-fixture-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
+		scripts/tests/embedded-fixture.test.sh
+
+embedded-gate-selftest: embedded-image-selftest embedded-fixture-selftest
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/embedded-qemu.test.sh
+
 ifeq ($(EMBED_RUNTIME),1)
 runtime-embedded-budget: $(RUNTIME_BLOB_OBJ)
 	mkdir -p $(BUILD)/tmp
@@ -1618,7 +1640,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
        test-syn-assets size-tools-selftest target-tools-selftest \
        static-pie-tools-selftest runtime-blob-selftest \
-       embedded-image-selftest \
+       embedded-image-selftest embedded-fixture-selftest \
        $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1638,7 +1660,7 @@ test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch t
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
       static-pie-tools-selftest runtime-blob-selftest \
-      embedded-image-selftest torture-build \
+      embedded-image-selftest embedded-fixture-selftest torture-build \
       $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1928,6 +1950,120 @@ size-ledger-minimal: $(SIZE_MINIMAL_BIN)
 	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
 		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
 		--binary '$(SIZE_MINIMAL_BIN)'
+
+$(EMBED_FIXTURE): $(BUILD)/gen-bigfile scripts/gen-embedded-fixture.sh | dirs
+	mkdir -p $(dir $@)
+	scripts/gen-embedded-fixture.sh $(abspath $(BUILD)/gen-bigfile) \
+		$(abspath $@)
+
+$(EMBED_BATCH_GOLDEN): $(EMBED_YEW_SRC) $(EMBED_FIXTURE) \
+                        tests/script/57_embedded_gate.fl | dirs
+	@set -eu; \
+	dir='$(abspath $(dir $@))'; \
+	state="$$dir/host-state"; \
+	mkdir -p "$$state/config" "$$state/cache" "$$state/data"; \
+	first='$(abspath $@).first'; \
+	second='$(abspath $@).second'; \
+	trap 'rm -f "$$first" "$$second"' EXIT HUP INT TERM; \
+	for out in "$$first" "$$second"; do \
+		XDG_STATE_HOME="$$state" XDG_CONFIG_HOME="$$state/config" \
+		XDG_CACHE_HOME="$$state/cache" XDG_DATA_HOME="$$state/data" \
+		HOME="$$state" '$(abspath $(EMBED_YEW_SRC))' \
+			--batch --test --clean \
+			'$(abspath tests/script/57_embedded_gate.fl)' \
+			'$(abspath $(EMBED_FIXTURE))' >"$$out"; \
+	done; \
+	cmp -s "$$first" "$$second" || { \
+		echo 'embedded batch golden is nondeterministic' >&2; exit 1; }; \
+	mv "$$first" '$(abspath $@)'; \
+	rm -f "$$second"; \
+	trap - EXIT HUP INT TERM
+
+$(EMBED_IMAGE): $(EMBED_YEW_SRC) $(EMBED_PTY_RUNNER_SRC) \
+                $(EMBED_PTY_DEMO_SRC) $(EMBED_FIXTURE) \
+                $(EMBED_BATCH_GOLDEN) $(EMBED_INITRAMFS_GEN) \
+                scripts/embedded-init.sh scripts/embed-image.sh \
+                tests/script/57_embedded_gate.fl \
+                tests/pty/goldens/notepad_open.golden \
+                tests/pty/goldens/notepad_burst_keys.golden \
+                tests/pty/goldens/s25_resume_exact.golden \
+                tests/pty/goldens/s35_macro_replayed_edit.golden \
+                tests/pty/goldens/s57_embedded_4m_roundtrip.golden | dirs
+	@set -eu; \
+	if [ '$(TARGET)' != x86_64-linux-musl ]; then \
+		echo 'embedded image requires TARGET=x86_64-linux-musl' >&2; \
+		exit 2; \
+	fi; \
+	if [ '$(EMBED_RUNTIME)' != 1 ]; then \
+		echo 'embedded image requires EMBED_RUNTIME=1' >&2; \
+		exit 2; \
+	fi; \
+	if [ -z '$(EMBED_BUSYBOX)' ] || [ ! -f '$(EMBED_BUSYBOX)' ]; then \
+		echo 'set EMBED_BUSYBOX to Alpine busybox.static' >&2; \
+		exit 2; \
+	fi; \
+	stage='$(abspath $(BUILD))/embedded/bin'; \
+	mkdir -p "$$stage"; \
+	cp '$(EMBED_YEW_SRC)' "$$stage/yew"; \
+	cp '$(EMBED_PTY_RUNNER_SRC)' "$$stage/pty_runner"; \
+	cp '$(EMBED_PTY_DEMO_SRC)' "$$stage/demo_paint"; \
+	$(STRIP) $(STRIPFLAGS) "$$stage/yew" "$$stage/pty_runner" \
+		"$$stage/demo_paint"; \
+	scripts/embed-image.sh \
+		--generator '$(abspath $(EMBED_INITRAMFS_GEN))' \
+		--yew "$$stage/yew" --busybox '$(EMBED_BUSYBOX)' \
+		--init '$(abspath scripts/embedded-init.sh)' \
+		--copy-exec "$$stage/pty_runner" /bin/pty_runner \
+		--copy-exec "$$stage/demo_paint" /bin/demo_paint \
+		--copy '$(abspath $(EMBED_FIXTURE))' /fixtures/4m.c \
+		--copy '$(abspath $(EMBED_BATCH_GOLDEN))' /fixtures/batch.golden \
+		--copy '$(abspath tests/script/57_embedded_gate.fl)' \
+			/work/tests/script/57_embedded_gate.fl \
+		--copy '$(abspath tests/pty/goldens/notepad_open.golden)' \
+			/work/tests/pty/goldens/notepad_open.golden \
+		--copy '$(abspath tests/pty/goldens/notepad_burst_keys.golden)' \
+			/work/tests/pty/goldens/notepad_burst_keys.golden \
+		--copy '$(abspath tests/pty/goldens/s25_resume_exact.golden)' \
+			/work/tests/pty/goldens/s25_resume_exact.golden \
+		--copy '$(abspath tests/pty/goldens/s35_macro_replayed_edit.golden)' \
+			/work/tests/pty/goldens/s35_macro_replayed_edit.golden \
+		--copy '$(abspath tests/pty/goldens/s57_embedded_4m_roundtrip.golden)' \
+			/work/tests/pty/goldens/s57_embedded_4m_roundtrip.golden \
+		--output '$(abspath $(EMBED_IMAGE))' \
+		--file-list '$(abspath $(EMBED_FILE_LIST))' \
+		--max-bytes 12582912
+
+embedded-image: embedded-image-selftest embedded-fixture-selftest \
+                $(EMBED_IMAGE)
+
+embedded: embedded-image
+	@set -eu; \
+	if [ -z '$(EMBED_KERNEL)' ] || [ ! -f '$(EMBED_KERNEL)' ]; then \
+		echo 'set EMBED_KERNEL to Alpine linux-virt vmlinuz' >&2; \
+		exit 2; \
+	fi; \
+	scripts/run-embedded-qemu.sh --qemu '$(EMBED_QEMU)' \
+		--kernel '$(EMBED_KERNEL)' --initrd '$(abspath $(EMBED_IMAGE))' \
+		--output '$(abspath $(BUILD))/embedded-qemu-64.log' \
+		--memory 64 --mode full --timeout '$(EMBED_QEMU_TIMEOUT)' \
+		--enforce-rss
+
+embedded-gate: embedded
+	@set -eu; \
+	log='$(abspath $(BUILD))/embedded-qemu-64.log'; \
+	peak=$$(sed -n \
+		's/^YEW_EMBED_RSS peak_bytes=\([0-9][0-9]*\) limit_bytes=.*/\1/p' \
+		"$$log"); \
+	case $$peak in ''|*[!0-9]*) echo 'embedded gate: missing peak RSS' >&2; exit 1;; esac; \
+	if [ "$$peak" -gt 25165824 ]; then \
+		echo "embedded gate: peak RSS $$peak exceeds 25165824 bytes" >&2; \
+		exit 1; \
+	fi; \
+	scripts/run-embedded-qemu.sh --qemu '$(EMBED_QEMU)' \
+		--kernel '$(EMBED_KERNEL)' --initrd '$(abspath $(EMBED_IMAGE))' \
+		--output '$(abspath $(BUILD))/embedded-qemu-32.log' \
+		--memory 32 --mode lowmem --timeout '$(EMBED_QEMU_TIMEOUT)'; \
+	echo "embedded gate: rows 1-12 pass; peak_rss=$$peak"
 
 calib: $(BUILD)/calib_runner
 	@set -eu; \

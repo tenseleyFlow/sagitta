@@ -120,6 +120,31 @@ jobs:
             BUILD=build-embedded-${{ matrix.compiler }} EMBED_RUNTIME=1 \
             runtime-blob-selftest test-runtime-embedded
 
+  # Sprint 57 milestone: build the pinned Alpine static profile, then boot
+  # its deterministic initramfs under the exact 64/32 MiB TCG guests.
+  embedded:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run all constrained-target rows
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            alpine:3.20 sh -ec '
+              apk add --no-cache build-base busybox-static linux-virt \
+                qemu-system-x86_64
+              cp -a /src /work
+              chown -R nobody:nobody /work
+              su nobody -s /bin/sh -c '\''
+                cd /work
+                make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
+                  BUILD=build-embedded-qemu EMBED_RUNTIME=1 \
+                  EMBED_KERNEL=/boot/vmlinuz-virt \
+                  EMBED_BUSYBOX=/bin/busybox.static embedded-gate
+              '\''
+            '
+
   # Sprint 57: pin the native musl environment instead of relying on the
   # distro and version installed on a moving hosted image.  Run Alpine in a
   # container from the Ubuntu host so checkout's Node runtime remains glibc-

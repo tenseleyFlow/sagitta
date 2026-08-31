@@ -129,7 +129,7 @@ chmod 0755 "$root/bin/yew" "$root/bin/busybox" "$root/init"
 
 for applet in awk cat chmod cmp cp cut dd dmesg echo env find grep head \
               ln mkdir mount mv poweroff printf rm sed sh sleep sort stat \
-              sync tail touch tr umount wc; do
+              sha256sum sync tail time timeout touch tr umount wc; do
     ln -s busybox "$root/bin/$applet"
 done
 
