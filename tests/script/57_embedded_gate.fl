@@ -1,0 +1,64 @@
+# Sprint 57 constrained-target rows 6 and 7.  The 4 MiB fixture is also
+# opened and saved here; the guest compares its hash before and after while
+# the live PTY row independently exercises render, EOF motion, and save.
+import buf
+import ed
+import io
+import list
+import map
+import re
+import span
+import str
+
+if list.len(files) != 1 { error("embedded gate needs exactly one file") }
+let b = buf.current()
+let original_len = buf.len(b)
+t.eq(original_len, 4194304)
+
+# The marker begins 22 bytes before EOF.  Searching from byte zero makes this
+# a whole-buffer regex traversal; printing the host result gives the guest an
+# external golden rather than asking it to approve its own answer.
+let source = buf.text(b)
+let hit = re.find(source, "YEW_EMBED_SENTINEL")
+if hit == nil { error("embedded search marker was not found") }
+t.eq(map.get(hit, "lo"), 4194282)
+t.eq(map.get(hit, "hi"), 4194300)
+io.print("search", map.get(hit, "lo"), map.get(hit, "hi"))
+source = nil
+hit = nil
+
+# One edit block is one undo transaction.  Keep all 500 nodes live, undo to
+# the exact original, save it, then redo every node and verify the tail.
+let i = 0
+while i < 500 {
+    edit { buf.insert(b, buf.len(b), "x") }
+    i = i + 1
+}
+t.undo(b, 501)
+i = 0
+while i < 500 {
+    ed.run("ed.edit.undo", {})
+    i = i + 1
+}
+t.eq(buf.len(b), original_len)
+buf.save(b)
+t.eq(buf.dirty(b), false)
+io.print("roundtrip", original_len, buf.len(b))
+
+i = 0
+while i < 500 {
+    ed.run("ed.edit.redo", {})
+    i = i + 1
+}
+t.eq(buf.len(b), original_len + 500)
+let tail = buf.span(b, original_len, original_len + 500)
+t.eq(span.text(tail), str.repeat("x", 500))
+t.undo(b, 501)
+i = 0
+while i < 500 {
+    ed.run("ed.edit.undo", {})
+    i = i + 1
+}
+t.eq(buf.len(b), original_len)
+t.eq(buf.dirty(b), false)
+io.print("undo-redo", 500)
