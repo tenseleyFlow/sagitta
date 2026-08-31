@@ -1,14 +1,15 @@
 # yew Sprint Index
 
-66 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
+67 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
 bespoke-first, modal-paradigm-first terminal editor plus its language,
 Fletch. Small bites, clear milestones, testable deliverables at every
 stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-61 whole-numbered sprints plus five fractional ones (18.5, 41.5, 42.5,
-55.5, 56.5) split off during authoring — the pressure valve working as designed.
+61 whole-numbered sprints plus six fractional ones (18.5, 41.5, 42.5,
+55.5, 56.5, 57.5) split off during authoring — the pressure valve working as
+designed.
 Renumbering is forbidden once files exist, so fractional ids are permanent.
 
 Binding documents — read before any sprint:
@@ -300,6 +301,9 @@ Binding documents — read before any sprint:
 - Sprint 57 (s57-size-and-embedded.md) — Binary-size budgets per MODULES
   config, allocation audit, `x86_64-linux-musl` static embedded profile
   proven on-target. **ACTIVE.**
+- Sprint 57.5 (s57_5-fuss-compact-tree.md) — Compact line-free FUSS tree,
+  remembered expansion state, open-file ancestry, adaptive drawer width and
+  full-screen fallback, plus a bright editor/drawer divider. **QUEUED NEXT.**
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
