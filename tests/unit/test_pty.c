@@ -45,14 +45,15 @@ void test_pty_environment_exact(void)
     char *envp[YEW_PTY_ENV_COUNT + 1U] = {0};
     size_t i;
 
-    /* NO_COLOR is absent from this baseline, so one configured environment
-     * key intentionally has no corresponding expected entry. */
-    YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(expected) + 1U,
+    /* NO_COLOR and Sprint 57's two opt-in profiling variables are absent
+     * from this baseline. */
+    YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(expected) + 3U,
                       (u64)YEW_PTY_ENV_COUNT);
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
-                             NULL, "0", "/tmp/yew-runtime", "0"));
+                             NULL, "0", "/tmp/yew-runtime", "0",
+                             NULL, NULL));
     for (i = 0U; i < YEW_ARRAY_LEN(expected); i++)
         YEW_ASSERT_EQ_STR(envp[i], expected[i]);
     for (; i <= YEW_PTY_ENV_COUNT; i++)
@@ -63,21 +64,26 @@ void test_pty_environment_exact(void)
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
-                             "", "0", "/tmp/yew-runtime", "0"));
+                             "", "0", "/tmp/yew-runtime", "0",
+                             NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
-                             "0", "0", "/tmp/yew-runtime", "0"));
+                             "0", "0", "/tmp/yew-runtime", "0",
+                             NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=0");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
 
     YEW_ASSERT(ptc_env_build(envp, "dumb", "16", "/tmp/yew-pty-state",
-                             NULL, "0", "/tmp/yew-runtime", "0"));
+                             NULL, "0", "/tmp/yew-runtime", "0",
+                             "1", "/tmp/yew-rss.log"));
     YEW_ASSERT_EQ_STR(envp[0], "TERM=dumb");
+    YEW_ASSERT_EQ_STR(envp[19], "YEW_PROF=1");
+    YEW_ASSERT_EQ_STR(envp[20], "YEW_LOG=/tmp/yew-rss.log");
     ptc_env_free(envp);
 }
 

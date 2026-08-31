@@ -10,7 +10,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define YEW_PTY_ENV_COUNT 20U
+#define YEW_PTY_ENV_COUNT 22U
 
 typedef struct PtySpec {
     /*
@@ -102,7 +102,8 @@ bool yew_pty_spawn(Pty *p, const PtySpec *sp);
  * exported verbatim so presence semantics can be tested explicitly. */
 bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *state_dir, const char *no_color, const char *ascii,
-                   const char *runtime_dir, const char *shadow_test);
+                   const char *runtime_dir, const char *shadow_test,
+                   const char *prof, const char *log);
 void ptc_env_free(char **envp);
 
 void ptc_spawn(PtyCtx *c, const char *bin, ...);

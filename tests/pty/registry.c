@@ -324,6 +324,116 @@ static bool file_equals(const char *path, const u8 *bytes, size_t len)
     return close(fd) == 0;
 }
 
+#define S57_FNV64_OFFSET UINT64_C(14695981039346656037)
+#define S57_FNV64_PRIME UINT64_C(1099511628211)
+
+static bool s57_file_hash(const char *path, u64 *size, u64 *hash)
+{
+    u8 block[16384];
+    FILE *file = fopen(path, "rb");
+    u64 bytes = 0U;
+    u64 sum = S57_FNV64_OFFSET;
+
+    if (file == NULL)
+        return false;
+    for (;;) {
+        size_t n = fread(block, 1U, sizeof(block), file);
+        size_t i;
+
+        for (i = 0U; i < n; i++) {
+            sum ^= block[i];
+            sum *= S57_FNV64_PRIME;
+        }
+        bytes += (u64)n;
+        if (n != sizeof(block)) {
+            if (ferror(file)) {
+                (void)fclose(file);
+                return false;
+            }
+            break;
+        }
+    }
+    if (fclose(file) != 0)
+        return false;
+    *size = bytes;
+    *hash = sum;
+    return true;
+}
+
+static bool s57_fixture_write(FILE *file, const void *bytes, size_t len,
+                              u64 *written, u64 *hash)
+{
+    const u8 *p = bytes;
+    size_t i;
+
+    if (fwrite(bytes, 1U, len, file) != len)
+        return false;
+    for (i = 0U; i < len; i++) {
+        *hash ^= p[i];
+        *hash *= S57_FNV64_PRIME;
+    }
+    *written += (u64)len;
+    return true;
+}
+
+static bool s57_make_c_fixture(const char *path, u64 limit, u64 *hash)
+{
+    static const char tail_prefix[] = "/* YEW_EMBED_SENTINEL ";
+    static const char tail_suffix[] = " */\n";
+    FILE *file = fopen(path, "wb");
+    u64 written = 0U;
+    u64 sum = S57_FNV64_OFFSET;
+    u32 row = 0U;
+    char line[128];
+    bool ok = file != NULL;
+
+    while (ok) {
+        int n = snprintf(line, sizeof(line),
+                         "static unsigned yew_embed_%06u = %uU; "
+                         "/* syntax fixture */\n",
+                         (unsigned)row, (unsigned)(row * 17U));
+        u64 reserve = (u64)(sizeof(tail_prefix) - 1U) +
+                      (u64)(sizeof(tail_suffix) - 1U);
+
+        if (n <= 0 || (size_t)n >= sizeof(line)) {
+            ok = false;
+            break;
+        }
+        if (written + (u64)(size_t)n + reserve > limit)
+            break;
+        ok = s57_fixture_write(file, line, (size_t)n, &written, &sum);
+        row++;
+    }
+    if (ok) {
+        u64 reserve = (u64)(sizeof(tail_prefix) - 1U) +
+                      (u64)(sizeof(tail_suffix) - 1U);
+        u64 padding = limit - written - reserve;
+        static const char spaces[] =
+            "                                                                ";
+
+        ok = written <= limit && limit - written >= reserve &&
+             s57_fixture_write(file, tail_prefix,
+                               sizeof(tail_prefix) - 1U, &written, &sum);
+        while (ok && padding != 0U) {
+            size_t take = padding < sizeof(spaces) - 1U
+                              ? (size_t)padding : sizeof(spaces) - 1U;
+
+            ok = s57_fixture_write(file, spaces, take, &written, &sum);
+            padding -= (u64)take;
+        }
+        if (ok)
+            ok = s57_fixture_write(file, tail_suffix,
+                                   sizeof(tail_suffix) - 1U,
+                                   &written, &sum);
+    }
+    if (file != NULL && fclose(file) != 0)
+        ok = false;
+    if (!ok || written != limit)
+        return false;
+    *hash = sum;
+    return true;
+}
+
 #if YEW_WITH_AI
 static bool remove_test_tree(const char *path, u32 depth)
 {
@@ -927,6 +1037,41 @@ static void case_burst_keys(PtyCtx *c)
 static void case_burst_paste(PtyCtx *c)
 {
     burst_case(c, true);
+}
+
+/*
+ * Sprint 57 constrained-target rows 3 and 5.  Generating the exact 4 MiB
+ * fixture is sub-second on the ordinary hosts, keeps the checked-in golden
+ * honest, and prevents the constrained lane from selecting a special code
+ * path merely by setting an environment variable.
+ */
+static void case_s57_embedded_4m_roundtrip(PtyCtx *c)
+{
+    static const char path[] = "build/pty-s57-embedded-4m.c";
+    u64 limit = UINT64_C(4) * 1024U * 1024U;
+    u64 original_hash;
+    u64 saved_hash = 0U;
+    u64 saved_size = 0U;
+
+    (void)unlink(path);
+    if (!s57_make_c_fixture(path, limit, &original_hash)) {
+        ptc_check(c, false, "could not create Sprint 57 C fixture");
+        return;
+    }
+    spawn_editor(c, path);
+    ptc_keys(c, "G");
+    ptc_settle(c, 80);
+    /* Exercise a real edit transaction without changing the final bytes. */
+    ptc_keys(c, "i X backspace esc s");
+    ptc_settle(c, 80);
+    ptc_check(c, s57_file_hash(path, &saved_size, &saved_hash) &&
+                     saved_size == limit && saved_hash == original_hash,
+              "4 MiB save was not a byte-identical round trip");
+    ptc_keys(c, "g g");
+    ptc_settle(c, 80);
+    ptc_snapshot(c, "s57_embedded_4m_roundtrip");
+    quit_editor_cleanly(c);
+    (void)unlink(path);
 }
 
 static void check_terminal_restored(PtyCtx *c, const char *context)
@@ -8986,6 +9131,8 @@ const PtyCase yew_pty_cases[] = {
     C(notepad_preserve_unicode, modern, 24U, 80U, case_preserve_unicode),
     C(notepad_burst_keys, modern, 24U, 80U, case_burst_keys),
     C(notepad_burst_paste, modern, 24U, 80U, case_burst_paste),
+    C(s57_embedded_4m_roundtrip, modern, 24U, 80U,
+      case_s57_embedded_4m_roundtrip),
     C(notepad_restore_term, modern, 24U, 80U, case_live_restore_term),
     C(notepad_restore_segv, modern, 24U, 80U, case_live_restore_segv),
     C(notepad_restore_suspend, modern, 24U, 80U,
