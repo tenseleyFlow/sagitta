@@ -11,6 +11,7 @@ init=
 output=
 file_list=
 runtime=
+profile=full
 max_bytes=12582912
 copies=
 scratch=
@@ -26,8 +27,11 @@ fail()
 usage()
 {
     cat >&2 <<EOF
-usage: $program --generator PATH --yew PATH --busybox PATH --init PATH
-       --output PATH --file-list PATH [--runtime DIR]
+usage: $program --generator PATH --busybox PATH --init PATH
+       --output PATH --file-list PATH --profile full --yew PATH
+       [--runtime DIR]
+       $program --generator PATH --busybox PATH --init PATH
+       --output PATH --file-list PATH --profile lowmem
        [--copy SOURCE DESTINATION]... [--copy-exec SOURCE DESTINATION]...
        [--max-bytes N]
 EOF
@@ -65,6 +69,7 @@ while [ "$#" -gt 0 ]; do
         --output) [ "$#" -ge 2 ] || usage; output=$2; shift 2 ;;
         --file-list) [ "$#" -ge 2 ] || usage; file_list=$2; shift 2 ;;
         --runtime) [ "$#" -ge 2 ] || usage; runtime=$2; shift 2 ;;
+        --profile) [ "$#" -ge 2 ] || usage; profile=$2; shift 2 ;;
         --max-bytes) [ "$#" -ge 2 ] || usage; max_bytes=$2; shift 2 ;;
         --copy)
             [ "$#" -ge 3 ] || usage
@@ -84,13 +89,18 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$generator" ] || usage
-[ -n "$yew" ] || usage
+[ "$profile" = full ] || [ "$profile" = lowmem ] || usage
+if [ "$profile" = full ]; then
+    [ -n "$yew" ] || usage
+fi
 [ -n "$busybox" ] || usage
 [ -n "$init" ] || usage
 [ -n "$output" ] || usage
 [ -n "$file_list" ] || usage
 absolute_file generator "$generator"
-absolute_file yew "$yew"
+if [ "$profile" = full ]; then
+    absolute_file yew "$yew"
+fi
 absolute_file busybox "$busybox"
 absolute_file init "$init"
 case $output in /*) ;; *) fail "output must be an absolute path: $output" ;; esac
@@ -117,19 +127,23 @@ raw=$scratch/embed.cpio
 packed=$scratch/embed.cpio.gz
 list=$scratch/embed.files
 
-mkdir -p "$root/bin" "$root/dev" "$root/etc" "$root/proc" "$root/root" \
-    "$root/run" "$root/sys" "$root/tmp" "$root/work"
+mkdir -p "$root/bin" "$root/dev/pts" "$root/etc" "$root/fixtures" \
+    "$root/modules" "$root/proc" "$root/root" "$root/run" "$root/sys" \
+    "$root/tmp" "$root/work"
 chmod 0755 "$root" "$root/bin" "$root/dev" "$root/etc" "$root/proc" \
     "$root/root" "$root/run" "$root/sys" "$root/work"
 chmod 01777 "$root/tmp"
-cp "$yew" "$root/bin/yew"
 cp "$busybox" "$root/bin/busybox"
 cp "$init" "$root/init"
-chmod 0755 "$root/bin/yew" "$root/bin/busybox" "$root/init"
+chmod 0755 "$root/bin/busybox" "$root/init"
+if [ "$profile" = full ]; then
+    cp "$yew" "$root/bin/yew"
+    chmod 0755 "$root/bin/yew"
+fi
 
 for applet in awk cat chmod cmp cp cut dd dmesg echo env find grep head \
-              ln mkdir mount mv poweroff printf rm sed sh sleep sort stat \
-              sha256sum sync tail time timeout touch tr umount wc; do
+              insmod ln mkdir mktemp mount mv poweroff printf rm sed sh sleep \
+              sort stat sha256sum sync tail timeout touch tr umount wc; do
     ln -s busybox "$root/bin/$applet"
 done
 

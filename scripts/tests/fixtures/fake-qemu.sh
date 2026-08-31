@@ -18,8 +18,11 @@ case $scenario in
         echo 'YEW_EMBED_OOM status=pass'
         echo 'YEW_EMBED_RESULT mode=full status=pass failures=0'
         ;;
-    lowmem)
+    lowmem|lowmem-unnamed)
         echo 'YEW_EMBED_BEGIN mode=lowmem'
+        if [ "$scenario" = lowmem ]; then
+            echo 'yew: error: embedded 4 MiB workload requires at least 48 MiB; MemTotal=21000KiB'
+        fi
         echo 'YEW_EMBED_ROW row=12 status=refused detail=memory-preflight'
         echo 'YEW_EMBED_OOM status=pass'
         echo 'YEW_EMBED_RESULT mode=lowmem status=pass failures=0'

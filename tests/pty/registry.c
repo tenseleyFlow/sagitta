@@ -376,56 +376,59 @@ static bool s57_fixture_write(FILE *file, const void *bytes, size_t len,
     return true;
 }
 
+static u64 s57_random_next(u64 *state)
+{
+    u64 x = *state;
+
+    if (x == 0U)
+        x = UINT64_C(0x9e3779b97f4a7c15);
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    *state = x;
+    return x * UINT64_C(2685821657736338717);
+}
+
 static bool s57_make_c_fixture(const char *path, u64 limit, u64 *hash)
 {
-    static const char tail_prefix[] = "/* YEW_EMBED_SENTINEL ";
-    static const char tail_suffix[] = " */\n";
+    static const char alphabet[] =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-*/";
+    static const char keyword_chars[] = "ifreturnstructstaticvoid";
+    static const char marker[] = "\n/* YEW_EMBED_SENTINEL */\n";
     FILE *file = fopen(path, "wb");
     u64 written = 0U;
     u64 sum = S57_FNV64_OFFSET;
-    u32 row = 0U;
-    char line[128];
-    bool ok = file != NULL;
+    u64 rng = UINT64_C(0x57);
+    u64 source_limit = 0U;
+    bool ok = file != NULL && limit >= sizeof(marker) - 1U;
 
-    while (ok) {
-        int n = snprintf(line, sizeof(line),
-                         "static unsigned yew_embed_%06u = %uU; "
-                         "/* syntax fixture */\n",
-                         (unsigned)row, (unsigned)(row * 17U));
-        u64 reserve = (u64)(sizeof(tail_prefix) - 1U) +
-                      (u64)(sizeof(tail_suffix) - 1U);
+    if (ok)
+        source_limit = limit - (u64)(sizeof(marker) - 1U);
+    while (ok && written < source_limit) {
+        u64 value = s57_random_next(&rng);
+        u64 line_len = 48U + value % 33U;
+        u64 indent = (value >> 8) % 5U;
+        u64 col;
+        char line[81];
+        size_t len = 0U;
 
-        if (n <= 0 || (size_t)n >= sizeof(line)) {
-            ok = false;
-            break;
+        for (col = 0U; col < line_len &&
+                       written + (u64)len < source_limit; col++) {
+            if (col < indent * 4U)
+                line[len++] = ' ';
+            else if (col == indent * 4U)
+                line[len++] = keyword_chars[(value >> 16) % 24U];
+            else
+                line[len++] = alphabet[s57_random_next(&rng) %
+                                       (sizeof(alphabet) - 1U)];
         }
-        if (written + (u64)(size_t)n + reserve > limit)
-            break;
-        ok = s57_fixture_write(file, line, (size_t)n, &written, &sum);
-        row++;
+        if (written + (u64)len < source_limit)
+            line[len++] = '\n';
+        ok = s57_fixture_write(file, line, len, &written, &sum);
     }
-    if (ok) {
-        u64 reserve = (u64)(sizeof(tail_prefix) - 1U) +
-                      (u64)(sizeof(tail_suffix) - 1U);
-        u64 padding = limit - written - reserve;
-        static const char spaces[] =
-            "                                                                ";
-
-        ok = written <= limit && limit - written >= reserve &&
-             s57_fixture_write(file, tail_prefix,
-                               sizeof(tail_prefix) - 1U, &written, &sum);
-        while (ok && padding != 0U) {
-            size_t take = padding < sizeof(spaces) - 1U
-                              ? (size_t)padding : sizeof(spaces) - 1U;
-
-            ok = s57_fixture_write(file, spaces, take, &written, &sum);
-            padding -= (u64)take;
-        }
-        if (ok)
-            ok = s57_fixture_write(file, tail_suffix,
-                                   sizeof(tail_suffix) - 1U,
-                                   &written, &sum);
-    }
+    if (ok)
+        ok = s57_fixture_write(file, marker, sizeof(marker) - 1U,
+                               &written, &sum);
     if (file != NULL && fclose(file) != 0)
         ok = false;
     if (!ok || written != limit)
@@ -1039,39 +1042,72 @@ static void case_burst_paste(PtyCtx *c)
     burst_case(c, true);
 }
 
+static bool s57_screen_contains(const PtyCtx *c, const void *arg)
+{
+    Bytebuf screen;
+    bool found;
+
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    found = strstr((const char *)screen.data, (const char *)arg) != NULL;
+    bytebuf_free(&screen);
+    return found;
+}
+
+static bool s57_top_ready(const PtyCtx *c, const void *arg)
+{
+    return c->vt.cur_r == 0 && c->vt.cur_c == 8 &&
+           s57_screen_contains(c, arg);
+}
+
 /*
  * Sprint 57 constrained-target rows 3 and 5.  Generating the exact 4 MiB
- * fixture is sub-second on the ordinary hosts, keeps the checked-in golden
- * honest, and prevents the constrained lane from selecting a special code
- * path merely by setting an environment variable.
+ * fixture is sub-second on ordinary hosts and keeps the checked-in golden
+ * honest.  The constrained lane reuses its one exact 4 MiB source across
+ * the PTY and batch rows; only the harness owns that storage choice, while
+ * yew still opens, renders, edits, and saves the same bytes.
  */
 static void case_s57_embedded_4m_roundtrip(PtyCtx *c)
 {
     static const char path[] = "build/pty-s57-embedded-4m.c";
+    static const char wrote[] = "wrote build/pty-s57-embedded-4m.c";
+    static const char first[] = "t11Ha4XUVuOyvb8kbE+zexxBuOElUoE";
     u64 limit = UINT64_C(4) * 1024U * 1024U;
     u64 original_hash;
     u64 saved_hash = 0U;
     u64 saved_size = 0U;
+    u32 frame;
+    bool reuse = getenv("YEW_PTY_S57_REUSE") != NULL;
 
-    (void)unlink(path);
-    if (!s57_make_c_fixture(path, limit, &original_hash)) {
+    if (!reuse)
+        (void)unlink(path);
+    if ((reuse &&
+         (!s57_file_hash(path, &saved_size, &original_hash) ||
+          saved_size != limit)) ||
+        (!reuse && !s57_make_c_fixture(path, limit, &original_hash))) {
         ptc_check(c, false, "could not create Sprint 57 C fixture");
         return;
     }
     spawn_editor(c, path);
+    frame = c->vt.nsync_pairs;
     ptc_keys(c, "G");
-    ptc_settle(c, 80);
+    ptc_wait_sync_pairs(c, frame + 1U);
     /* Exercise a real edit transaction without changing the final bytes. */
     ptc_keys(c, "i X backspace esc s");
-    ptc_settle(c, 80);
+    ptc_wait_until(c, s57_screen_contains, wrote,
+                   "4 MiB save did not reach its completion frame");
     ptc_check(c, s57_file_hash(path, &saved_size, &saved_hash) &&
                      saved_size == limit && saved_hash == original_hash,
               "4 MiB save was not a byte-identical round trip");
     ptc_keys(c, "g g");
-    ptc_settle(c, 80);
+    ptc_wait_until(c, s57_top_ready, first,
+                   "4 MiB viewport did not return to the first line");
+    ptc_settle(c, 0);
     ptc_snapshot(c, "s57_embedded_4m_roundtrip");
     quit_editor_cleanly(c);
-    (void)unlink(path);
+    if (!reuse)
+        (void)unlink(path);
 }
 
 static void check_terminal_restored(PtyCtx *c, const char *context)

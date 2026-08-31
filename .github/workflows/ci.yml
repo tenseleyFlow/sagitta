@@ -121,7 +121,10 @@ jobs:
             runtime-blob-selftest test-runtime-embedded
 
   # Sprint 57 milestone: build the pinned Alpine static profile, then boot
-  # its deterministic initramfs under the exact 64/32 MiB TCG guests.
+  # its deterministic initramfs under the exact 64/32 MiB TCG guests.  The
+  # full image uses Alpine's distro kernel and modules.  Row 12 uses the
+  # newest Tiny Core distro kernel that reaches PID 1 at 32 MiB on
+  # the locked q35 machine; Tiny Core 9 and later exhaust the boot floor.
   embedded:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -132,15 +135,29 @@ jobs:
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/src:ro" \
             alpine:3.20 sh -ec '
-              apk add --no-cache build-base busybox-static linux-virt \
+              apk add --no-cache build-base busybox-static curl \
                 qemu-system-x86_64
+              alpine_apk=/tmp/linux-virt-5.15.208-r0.apk
+              alpine_root=/tmp/linux-virt-5.15.208
+              tinycore_kernel=/tmp/tinycore-8-vmlinuz64
+              curl -fsSLo "$alpine_apk" \
+                https://dl-cdn.alpinelinux.org/alpine/v3.16/main/x86_64/linux-virt-5.15.208-r0.apk
+              echo "842acc9e8e179b0fd3184949f1cd2e0c9cd6dec949f290a4b2e2cfd5cc6d7422  $alpine_apk" | sha256sum -c -
+              mkdir -p "$alpine_root"
+              tar -xzf "$alpine_apk" -C "$alpine_root"
+              curl -fsSLo "$tinycore_kernel" \
+                https://distro.ibiblio.org/tinycorelinux/8.x/x86_64/release/distribution_files/vmlinuz64
+              echo "351b28092f2e2fc3c6c7e9e64605f5ff2cf9fa03c1830a0d40329098ffc5912e  $tinycore_kernel" | sha256sum -c -
               cp -a /src /work
               chown -R nobody:nobody /work
+              chown nobody:nobody "$tinycore_kernel"
               su nobody -s /bin/sh -c '\''
                 cd /work
                 make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
                   BUILD=build-embedded-qemu EMBED_RUNTIME=1 \
-                  EMBED_KERNEL=/boot/vmlinuz-virt \
+                  EMBED_KERNEL=/tmp/linux-virt-5.15.208/boot/vmlinuz-virt \
+                  EMBED_LOWMEM_KERNEL=/tmp/tinycore-8-vmlinuz64 \
+                  EMBED_MODULES_DIR=/tmp/linux-virt-5.15.208/lib/modules/5.15.208-0-virt \
                   EMBED_BUSYBOX=/bin/busybox.static embedded-gate
               '\''
             '

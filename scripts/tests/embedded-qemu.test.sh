@@ -16,9 +16,11 @@ fail()
 touch "$scratch/kernel" "$scratch/initrd"
 runner=$repo/scripts/run-embedded-qemu.sh
 fake=$repo/scripts/tests/fixtures/fake-qemu.sh
+disk=$repo/scripts/tests/fixtures/fake-disk-generator.sh
 
 FAKE_QEMU_SCENARIO=full "$runner" --qemu "$fake" \
     --kernel "$scratch/kernel" --initrd "$scratch/initrd" \
+    --disk-generator "$disk" \
     --output "$scratch/full.log" --memory 64 --mode full \
     --timeout 2 --enforce-rss >"$scratch/full.out"
 grep -F 'peak_rss=20000000' "$scratch/full.out" >/dev/null ||
@@ -28,14 +30,30 @@ grep -F 'full rows 1-11 pass' "$scratch/full.out" >/dev/null ||
 
 FAKE_QEMU_SCENARIO=lowmem "$runner" --qemu "$fake" \
     --kernel "$scratch/kernel" --initrd "$scratch/initrd" \
+    --disk-generator "$disk" \
     --output "$scratch/lowmem.log" --memory 32 --mode lowmem \
     --timeout 2 >"$scratch/lowmem.out"
 grep -F 'lowmem row 12 pass' "$scratch/lowmem.out" >/dev/null ||
     fail 'named low-memory refusal was rejected'
 
 set +e
+FAKE_QEMU_SCENARIO=lowmem-unnamed "$runner" --qemu "$fake" \
+    --kernel "$scratch/kernel" --initrd "$scratch/initrd" \
+    --disk-generator "$disk" \
+    --output "$scratch/lowmem-unnamed.log" --memory 32 --mode lowmem \
+    --timeout 2 >"$scratch/lowmem-unnamed.out" \
+    2>"$scratch/lowmem-unnamed.err"
+rc=$?
+set -e
+[ "$rc" -eq 1 ] || fail 'unnamed low-memory refusal passed'
+grep -F 'omitted the named memory error' \
+    "$scratch/lowmem-unnamed.err" >/dev/null ||
+    fail 'unnamed-refusal failure was unclear'
+
+set +e
 FAKE_QEMU_SCENARIO=rss "$runner" --qemu "$fake" \
     --kernel "$scratch/kernel" --initrd "$scratch/initrd" \
+    --disk-generator "$disk" \
     --output "$scratch/rss.log" --memory 64 --mode full \
     --timeout 2 --enforce-rss >"$scratch/rss.out" 2>"$scratch/rss.err"
 rc=$?
@@ -47,6 +65,7 @@ grep -F 'exceeds 25165824 bytes' "$scratch/rss.err" >/dev/null ||
 set +e
 FAKE_QEMU_SCENARIO=missing "$runner" --qemu "$fake" \
     --kernel "$scratch/kernel" --initrd "$scratch/initrd" \
+    --disk-generator "$disk" \
     --output "$scratch/missing.log" --memory 64 --mode full \
     --timeout 2 >"$scratch/missing.out" 2>"$scratch/missing.err"
 rc=$?

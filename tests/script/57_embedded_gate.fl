@@ -15,17 +15,30 @@ let b = buf.current()
 let original_len = buf.len(b)
 t.eq(original_len, 4194304)
 
-# The marker begins 22 bytes before EOF.  Searching from byte zero makes this
-# a whole-buffer regex traversal; printing the host result gives the guest an
-# external golden rather than asking it to approve its own answer.
-let source = buf.text(b)
-let hit = re.find(source, "YEW_EMBED_SENTINEL")
-if hit == nil { error("embedded search marker was not found") }
-t.eq(map.get(hit, "lo"), 4194282)
-t.eq(map.get(hit, "hi"), 4194300)
-io.print("search", map.get(hit, "lo"), map.get(hit, "hi"))
-source = nil
-hit = nil
+# The marker begins 22 bytes before EOF.  Walk the entire buffer in bounded
+# overlapping spans so the constrained target proves a whole-file regex
+# traversal without materializing a second 4 MiB string in the VM.
+let at = 0
+let hit_lo = -1
+let hit_hi = -1
+while at < original_len {
+    let hi = at + 65536
+    if hi > original_len { hi = original_len }
+    let lo = at
+    if lo > 17 { lo = lo - 17 }
+    let source = span.text(buf.span(b, lo, hi))
+    let hit = re.find(source, "YEW_EMBED_SENTINEL")
+    if hit != nil {
+        hit_lo = lo + map.get(hit, "lo")
+        hit_hi = lo + map.get(hit, "hi")
+        at = original_len
+    } else {
+        at = hi
+    }
+}
+t.eq(hit_lo, 4194282)
+t.eq(hit_hi, 4194300)
+io.print("search", hit_lo, hit_hi)
 
 # One edit block is one undo transaction.  Keep all 500 nodes live, undo to
 # the exact original, save it, then redo every node and verify the tail.

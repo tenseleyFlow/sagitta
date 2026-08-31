@@ -564,15 +564,20 @@ SRC      := $(CORE_SRC) $(MOD_SRC)
 OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 RUNTIME_BLOB_GEN := $(BUILD)/host/gen-runtime-blob
 EMBED_INITRAMFS_GEN := $(BUILD)/host/gen-initramfs
+EMBED_DISK_GEN := $(BUILD)/host/gen-embedded-disk
 EMBED_IMAGE := $(BUILD)/embed.cpio.gz
 EMBED_FILE_LIST := $(BUILD)/embed.files
+EMBED_LOWMEM_IMAGE := $(BUILD)/embed-lowmem.cpio.gz
+EMBED_LOWMEM_FILE_LIST := $(BUILD)/embed-lowmem.files
 EMBED_FIXTURE := $(BUILD)/embedded/4m.c
 EMBED_BATCH_GOLDEN := $(BUILD)/embedded/batch.golden
 EMBED_YEW_SRC ?= $(BUILD)/yew
 EMBED_PTY_RUNNER_SRC ?= $(BUILD)/pty_runner
-EMBED_PTY_DEMO_SRC ?= $(BUILD)/demo_paint
+EMBED_GEN_BIGFILE_SRC ?= $(BUILD)/gen-bigfile
 EMBED_KERNEL ?=
+EMBED_LOWMEM_KERNEL ?= $(EMBED_KERNEL)
 EMBED_BUSYBOX ?=
+EMBED_MODULES_DIR ?= $(firstword $(wildcard /lib/modules/*-virt))
 EMBED_QEMU ?= qemu-system-x86_64
 EMBED_QEMU_TIMEOUT ?= 900
 RUNTIME_BLOB_C := $(BUILD)/gen/runtime_blob.c
@@ -961,8 +966,9 @@ endif
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
         runtime-embedded-budget embedded-image-selftest \
-        embedded-fixture-selftest embedded-gate-selftest \
-        embedded-image embedded embedded-gate \
+        embedded-fixture-selftest embedded-disk-selftest \
+        embedded-gate-selftest \
+        embedded-image embedded-lowmem-image embedded embedded-gate \
         musl-verify test-musl-hosts \
         test-script test-git-script \
         test-fuss-commands test-git-hunks test-group-from-dir \
@@ -1503,6 +1509,10 @@ $(EMBED_INITRAMFS_GEN): scripts/gen-initramfs.c | dirs
 	$(HOSTCC) -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -O2 \
 		-o $@ $<
 
+$(EMBED_DISK_GEN): scripts/gen-embedded-disk.c | dirs
+	$(HOSTCC) -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -O2 \
+		-o $@ $<
+
 $(RUNTIME_BLOB_C): $(RUNTIME_BLOB_GEN) $(RUNTIME_BLOB_INPUTS) \
                    $(RUNTIME_BLOB_DIRS) | dirs
 	@set -eu; \
@@ -1533,7 +1543,13 @@ embedded-fixture-selftest:
 	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
 		scripts/tests/embedded-fixture.test.sh
 
-embedded-gate-selftest: embedded-image-selftest embedded-fixture-selftest
+embedded-disk-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
+		scripts/tests/embedded-disk.test.sh
+
+embedded-gate-selftest: embedded-image-selftest embedded-fixture-selftest \
+                        embedded-disk-selftest
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/embedded-qemu.test.sh
 
@@ -1641,6 +1657,7 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-scri
        test-syn-assets size-tools-selftest target-tools-selftest \
        static-pie-tools-selftest runtime-blob-selftest \
        embedded-image-selftest embedded-fixture-selftest \
+       embedded-disk-selftest \
        $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1660,7 +1677,8 @@ test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch t
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
       static-pie-tools-selftest runtime-blob-selftest \
-      embedded-image-selftest embedded-fixture-selftest torture-build \
+      embedded-image-selftest embedded-fixture-selftest \
+      embedded-disk-selftest torture-build \
       $(PKG_TEST_TARGET)
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1980,9 +1998,11 @@ $(EMBED_BATCH_GOLDEN): $(EMBED_YEW_SRC) $(EMBED_FIXTURE) \
 	trap - EXIT HUP INT TERM
 
 $(EMBED_IMAGE): $(EMBED_YEW_SRC) $(EMBED_PTY_RUNNER_SRC) \
-                $(EMBED_PTY_DEMO_SRC) $(EMBED_FIXTURE) \
+                $(EMBED_GEN_BIGFILE_SRC) $(EMBED_FIXTURE) \
                 $(EMBED_BATCH_GOLDEN) $(EMBED_INITRAMFS_GEN) \
                 scripts/embedded-init.sh scripts/embed-image.sh \
+                scripts/embedded-yew.sh \
+                scripts/gen-embedded-fixture.sh \
                 tests/script/57_embedded_gate.fl \
                 tests/pty/goldens/notepad_open.golden \
                 tests/pty/goldens/notepad_burst_keys.golden \
@@ -2002,21 +2022,46 @@ $(EMBED_IMAGE): $(EMBED_YEW_SRC) $(EMBED_PTY_RUNNER_SRC) \
 		echo 'set EMBED_BUSYBOX to Alpine busybox.static' >&2; \
 		exit 2; \
 	fi; \
+	if [ -z '$(EMBED_MODULES_DIR)' ] || \
+	   [ ! -d '$(EMBED_MODULES_DIR)' ]; then \
+		echo 'set EMBED_MODULES_DIR to Alpine linux-virt modules' >&2; \
+		exit 2; \
+	fi; \
 	stage='$(abspath $(BUILD))/embedded/bin'; \
-	mkdir -p "$$stage"; \
+	modules='$(abspath $(BUILD))/embedded/modules'; \
+	mkdir -p "$$stage" "$$modules"; \
 	cp '$(EMBED_YEW_SRC)' "$$stage/yew"; \
 	cp '$(EMBED_PTY_RUNNER_SRC)' "$$stage/pty_runner"; \
-	cp '$(EMBED_PTY_DEMO_SRC)' "$$stage/demo_paint"; \
+	cp '$(EMBED_GEN_BIGFILE_SRC)' "$$stage/gen-bigfile"; \
+	for name in virtio_blk mbcache ext2; do \
+		source=$$(find '$(EMBED_MODULES_DIR)' -type f \
+			\( -name "$$name.ko" -o -name "$$name.ko.gz" \) \
+			-print | LC_ALL=C sort | sed -n '1p'); \
+		if [ -z "$$source" ]; then \
+			echo "linux-virt module not found: $$name" >&2; exit 2; \
+		fi; \
+		case $$source in \
+			*.gz) gzip -dc "$$source" >"$$modules/$$name.ko" ;; \
+			*) cp "$$source" "$$modules/$$name.ko" ;; \
+		esac; \
+	done; \
 	$(STRIP) $(STRIPFLAGS) "$$stage/yew" "$$stage/pty_runner" \
-		"$$stage/demo_paint"; \
+		"$$stage/gen-bigfile"; \
 	scripts/embed-image.sh \
 		--generator '$(abspath $(EMBED_INITRAMFS_GEN))' \
 		--yew "$$stage/yew" --busybox '$(EMBED_BUSYBOX)' \
 		--init '$(abspath scripts/embedded-init.sh)' \
 		--copy-exec "$$stage/pty_runner" /bin/pty_runner \
-		--copy-exec "$$stage/demo_paint" /bin/demo_paint \
-		--copy '$(abspath $(EMBED_FIXTURE))' /fixtures/4m.c \
-		--copy '$(abspath $(EMBED_BATCH_GOLDEN))' /fixtures/batch.golden \
+		--copy-exec "$$stage/gen-bigfile" /bin/gen-bigfile \
+		--copy-exec '$(abspath scripts/gen-embedded-fixture.sh)' \
+			/bin/gen-embedded-fixture \
+		--copy-exec '$(abspath scripts/embedded-yew.sh)' \
+			/bin/yew-embedded \
+		--copy "$$modules/virtio_blk.ko" /modules/virtio_blk.ko \
+		--copy "$$modules/mbcache.ko" /modules/mbcache.ko \
+		--copy "$$modules/ext2.ko" /modules/ext2.ko \
+		--copy '$(abspath $(EMBED_BATCH_GOLDEN))' \
+			/work/tests/script/batch.golden \
 		--copy '$(abspath tests/script/57_embedded_gate.fl)' \
 			/work/tests/script/57_embedded_gate.fl \
 		--copy '$(abspath tests/pty/goldens/notepad_open.golden)' \
@@ -2036,7 +2081,29 @@ $(EMBED_IMAGE): $(EMBED_YEW_SRC) $(EMBED_PTY_RUNNER_SRC) \
 embedded-image: embedded-image-selftest embedded-fixture-selftest \
                 $(EMBED_IMAGE)
 
-embedded: embedded-image
+$(EMBED_LOWMEM_IMAGE): $(EMBED_INITRAMFS_GEN) \
+                       scripts/embedded-lowmem-init.sh \
+                       scripts/embed-image.sh | dirs
+	@set -eu; \
+	if [ '$(TARGET)' != x86_64-linux-musl ]; then \
+		echo 'embedded low-memory image requires TARGET=x86_64-linux-musl' >&2; \
+		exit 2; \
+	fi; \
+	if [ -z '$(EMBED_BUSYBOX)' ] || [ ! -f '$(EMBED_BUSYBOX)' ]; then \
+		echo 'set EMBED_BUSYBOX to Alpine busybox.static' >&2; \
+		exit 2; \
+	fi; \
+	scripts/embed-image.sh --profile lowmem \
+		--generator '$(abspath $(EMBED_INITRAMFS_GEN))' \
+		--busybox '$(EMBED_BUSYBOX)' \
+		--init '$(abspath scripts/embedded-lowmem-init.sh)' \
+		--output '$(abspath $(EMBED_LOWMEM_IMAGE))' \
+		--file-list '$(abspath $(EMBED_LOWMEM_FILE_LIST))' \
+		--max-bytes 12582912
+
+embedded-lowmem-image: embedded-image-selftest $(EMBED_LOWMEM_IMAGE)
+
+embedded: embedded-image $(EMBED_DISK_GEN)
 	@set -eu; \
 	if [ -z '$(EMBED_KERNEL)' ] || [ ! -f '$(EMBED_KERNEL)' ]; then \
 		echo 'set EMBED_KERNEL to Alpine linux-virt vmlinuz' >&2; \
@@ -2044,12 +2111,18 @@ embedded: embedded-image
 	fi; \
 	scripts/run-embedded-qemu.sh --qemu '$(EMBED_QEMU)' \
 		--kernel '$(EMBED_KERNEL)' --initrd '$(abspath $(EMBED_IMAGE))' \
+		--disk-generator '$(abspath $(EMBED_DISK_GEN))' \
 		--output '$(abspath $(BUILD))/embedded-qemu-64.log' \
 		--memory 64 --mode full --timeout '$(EMBED_QEMU_TIMEOUT)' \
 		--enforce-rss
 
-embedded-gate: embedded
+embedded-gate: embedded embedded-lowmem-image
 	@set -eu; \
+	if [ -z '$(EMBED_LOWMEM_KERNEL)' ] || \
+	   [ ! -f '$(EMBED_LOWMEM_KERNEL)' ]; then \
+		echo 'set EMBED_LOWMEM_KERNEL to the 32 MiB reference vmlinuz' >&2; \
+		exit 2; \
+	fi; \
 	log='$(abspath $(BUILD))/embedded-qemu-64.log'; \
 	peak=$$(sed -n \
 		's/^YEW_EMBED_RSS peak_bytes=\([0-9][0-9]*\) limit_bytes=.*/\1/p' \
@@ -2060,7 +2133,9 @@ embedded-gate: embedded
 		exit 1; \
 	fi; \
 	scripts/run-embedded-qemu.sh --qemu '$(EMBED_QEMU)' \
-		--kernel '$(EMBED_KERNEL)' --initrd '$(abspath $(EMBED_IMAGE))' \
+		--kernel '$(EMBED_LOWMEM_KERNEL)' \
+		--initrd '$(abspath $(EMBED_LOWMEM_IMAGE))' \
+		--disk-generator '$(abspath $(EMBED_DISK_GEN))' \
 		--output '$(abspath $(BUILD))/embedded-qemu-32.log' \
 		--memory 32 --mode lowmem --timeout '$(EMBED_QEMU_TIMEOUT)'; \
 	echo "embedded gate: rows 1-12 pass; peak_rss=$$peak"

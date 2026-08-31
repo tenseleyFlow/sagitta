@@ -68,6 +68,18 @@ if grep -F "$scratch" "$scratch/image-one.files" >/dev/null; then
     fail 'host path leaked into image manifest'
 fi
 
+TMPDIR="$scratch" "$repo/scripts/embed-image.sh" --profile lowmem \
+    --generator "$scratch/gen-initramfs" \
+    --busybox "$scratch/bin/busybox" --init "$scratch/init" \
+    --output "$scratch/lowmem.cpio.gz" \
+    --file-list "$scratch/lowmem.files" --max-bytes 1048576 \
+    >"$scratch/lowmem.out"
+if grep -F 'bin/yew' "$scratch/lowmem.files" >/dev/null; then
+    fail 'low-memory preflight image carried yew'
+fi
+grep -Fqx 'f 0755 17 bin/busybox' "$scratch/lowmem.files" ||
+    fail 'low-memory preflight image omitted busybox'
+
 set +e
 TMPDIR="$scratch" "$repo/scripts/embed-image.sh" \
     --generator "$scratch/gen-initramfs" \
