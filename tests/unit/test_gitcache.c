@@ -99,6 +99,17 @@ static void gitcache_done(Ed *ed)
     yew_git_test_spawn_set(NULL, NULL);
 }
 
+static bool spawnlog_has_arg(const SpawnLog *log, const char *arg)
+{
+    size_t i;
+
+    for (i = 0U; i < log->argc; i++) {
+        if (strcmp(log->argv[i], arg) == 0)
+            return true;
+    }
+    return false;
+}
+
 static void gitcache_complete_default_comment(Ed *ed, SpawnLog *log)
 {
     YEW_ASSERT(log->last_comment != 0U);
@@ -1472,6 +1483,32 @@ static void gitcache_begin_detect(Ed *ed, SpawnLog *log)
     YEW_ASSERT(yew_git_refresh(ed, false));
     YEW_ASSERT(yew_git_test_complete(ed, log->next_id, YEW_GIT_OK, version,
                                      sizeof(version) - 1U, NULL, 0U));
+}
+
+void test_gitcache_nested_workspace_status_is_scoped_and_expanded(void)
+{
+    static const u8 version[] = "git version 2.40.1\n";
+    static const u8 nested[] =
+        "/tmp/repo/.git\ntrue\nfalse\n/tmp/repo\n";
+    Ed ed;
+    SpawnLog log = {0};
+
+    gitcache_ed(&ed, &log);
+    ed.ws.dir = (char *)"/tmp/repo/work space";
+    YEW_ASSERT(yew_git_refresh(&ed, false));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.next_id, YEW_GIT_OK,
+                                     version, sizeof(version) - 1U,
+                                     NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.next_id, YEW_GIT_OK,
+                                     nested, sizeof(nested) - 1U,
+                                     NULL, 0U));
+    YEW_ASSERT_EQ_U64(log.status_calls, 1U);
+    YEW_ASSERT(spawnlog_has_arg(&log, "--untracked-files=all"));
+    YEW_ASSERT(!spawnlog_has_arg(&log, "--untracked-files=normal"));
+    YEW_ASSERT(log.argc >= 2U);
+    YEW_ASSERT_EQ_STR(log.argv[log.argc - 2U], "--");
+    YEW_ASSERT_EQ_STR(log.argv[log.argc - 1U], ".");
+    gitcache_done(&ed);
 }
 
 void test_gitcache_bare_exit_codes_and_negative_detection_cache(void)

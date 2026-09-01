@@ -390,6 +390,70 @@ void test_fusstree_all_files_preserves_ignored_row_style(void)
     ft_drop(&t);
 }
 
+void test_fusstree_nested_workspace_strips_and_filters_repo_paths(void)
+{
+    GitEntry entries[5];
+    GitPath ignored[] = {
+        {(char *)"wolf/starting/.lu-cache/", 24U, true}
+    };
+    char *paths[] = {
+        (char *)"encode", (char *)"encode.lu",
+        (char *)".lu-cache/object"
+    };
+    u8 kinds[] = {0U, 0U, 0U};
+    GitSnapshot snap;
+    FileList files = {0};
+    FussOpts opts = {true, true};
+    FussTree tree;
+    const FussNode *node;
+
+    entries[0] = ft_entry("wolf/starting/encode");
+    entries[0].kind = GIT_E_UNTRACKED;
+    entries[0].untracked = true;
+    entries[1] = ft_entry("wolf/starting/encode.lu");
+    entries[1].unstaged = true;
+    entries[2] = ft_entry("wolf/sibling.txt");
+    entries[2].unstaged = true;
+    entries[3] = ft_entry("wolf/start/prefix-collision.txt");
+    entries[3].unstaged = true;
+    entries[4] = ft_entry("wolf/");
+    entries[4].kind = GIT_E_UNTRACKED;
+    entries[4].untracked = true;
+    entries[4].is_dir = true;
+    snap = ft_snapshot(entries, YEW_ARRAY_LEN(entries), 71U);
+    snap.ignored.data = ignored;
+    snap.ignored.len = YEW_ARRAY_LEN(ignored);
+    files.paths.data = paths;
+    files.paths.len = YEW_ARRAY_LEN(paths);
+    files.paths.cap = YEW_ARRAY_LEN(paths);
+    files.is_dir.data = kinds;
+    files.is_dir.len = YEW_ARRAY_LEN(kinds);
+    files.is_dir.cap = YEW_ARRAY_LEN(kinds);
+
+    yew_fuss_tree_init(&tree);
+    YEW_ASSERT(yew_fuss_tree_scope_roots(
+        &tree, "/tmp/repo with space",
+        "/tmp/repo with space/wolf/starting"));
+    YEW_ASSERT(yew_fuss_merge_files(&tree, &files, &snap, &opts));
+    YEW_ASSERT_NULL(ft_node(&tree, "wolf"));
+    YEW_ASSERT_NULL(ft_node(&tree, "sibling.txt"));
+    YEW_ASSERT_NULL(ft_node(&tree, "prefix-collision.txt"));
+    node = ft_node(&tree, "encode");
+    YEW_ASSERT_NOT_NULL(node);
+    YEW_ASSERT(node->untracked);
+    node = ft_node(&tree, "encode.lu");
+    YEW_ASSERT_NOT_NULL(node);
+    YEW_ASSERT(node->unstaged);
+    node = ft_node(&tree, ".lu-cache/object");
+    YEW_ASSERT_NOT_NULL(node);
+    YEW_ASSERT(node->ignored);
+    YEW_ASSERT(!yew_fuss_tree_scope_roots(
+        &tree, "/tmp/repo", "/tmp/repository/wolf/starting"));
+    yew_fuss_build(&tree, &snap, &opts);
+    YEW_ASSERT_EQ_U64(tree.items.len, 0U);
+    ft_drop(&tree);
+}
+
 void test_fusstree_items_hold_rebuild_safe_indices(void)
 {
     GitEntry e[8];

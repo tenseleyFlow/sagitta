@@ -912,9 +912,15 @@ static void fuss_apply_effective(Ed *ed)
 static void fuss_build(Ed *ed, const GitSnapshot *snap, bool force)
 {
     FussMode *f = ed->fuss;
+    const GitRepo *repo;
 
-    if (f == NULL || snap == NULL ||
-        (!force && f->tree.snap_gen == snap->gen))
+    if (f == NULL || snap == NULL)
+        return;
+    repo = yew_git_repo_cached(ed);
+    if (repo != NULL && repo->top_level != NULL)
+        (void)yew_fuss_tree_scope_roots(&f->tree, repo->top_level,
+                                         yew_ws_root(ed));
+    if (!force && f->tree.snap_gen == snap->gen)
         return;
     yew_fuss_build(&f->tree, snap, &f->opts);
     fuss_rebase_progress_update(ed, snap);

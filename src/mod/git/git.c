@@ -1535,31 +1535,54 @@ const GitRepo *yew_git_repo_cached(const Ed *ed)
 
 static bool git_spawn_ignore(Ed *ed)
 {
-    char *argv[] = {
+    char *root_argv[] = {
         (char *)"ls-files", (char *)"-z", (char *)"--others",
         (char *)"--ignored", (char *)"--exclude-standard",
         (char *)"--directory", (char *)"--no-empty-directory", NULL
     };
+    char *nested_argv[] = {
+        (char *)"ls-files", (char *)"-z", (char *)"--others",
+        (char *)"--ignored", (char *)"--exclude-standard",
+        (char *)"--directory", (char *)"--no-empty-directory",
+        (char *)"--", (char *)".", NULL
+    };
+    const GitRepo *repo = yew_git_repo_cached(ed);
+    const char *workspace = yew_ws_root(ed);
+    bool nested = repo != NULL && repo->top_level != NULL &&
+                  workspace != NULL &&
+                  strcmp(repo->top_level, workspace) != 0;
     GitReq req = {0};
     char err[128];
 
     req.kind = YEW_GREQ_IGNORE;
-    return yew_git_spawn(ed, yew_git_verb("ignore"), argv, &req, err,
+    return yew_git_spawn(ed, yew_git_verb("ignore"),
+                         nested ? nested_argv : root_argv, &req, err,
                          sizeof(err)) != 0U;
 }
 
 static bool git_spawn_status(Ed *ed)
 {
-    char *argv[] = {
+    char *root_argv[] = {
         (char *)"status", (char *)"--porcelain=v2", (char *)"--branch",
         (char *)"-z", (char *)"--untracked-files=normal",
         (char *)"--ignored=no", NULL
     };
+    char *nested_argv[] = {
+        (char *)"status", (char *)"--porcelain=v2", (char *)"--branch",
+        (char *)"-z", (char *)"--untracked-files=all",
+        (char *)"--ignored=no", (char *)"--", (char *)".", NULL
+    };
+    const GitRepo *repo = yew_git_repo_cached(ed);
+    const char *workspace = yew_ws_root(ed);
+    bool nested = repo != NULL && repo->top_level != NULL &&
+                  workspace != NULL &&
+                  strcmp(repo->top_level, workspace) != 0;
     GitReq req = {0};
     char err[128];
 
     req.kind = YEW_GREQ_STATUS;
-    return yew_git_spawn(ed, yew_git_verb("status"), argv, &req, err,
+    return yew_git_spawn(ed, yew_git_verb("status"),
+                         nested ? nested_argv : root_argv, &req, err,
                          sizeof(err)) != 0U;
 }
 

@@ -82,8 +82,11 @@ typedef struct FussTree {
     Arena a;
     FussNodeList nodes; /* nodes[0] is the unshown root. */
     FussItemList items;
+    char *repo_prefix; /* repo-relative path of the workspace root */
+    u32 repo_prefix_len;
     u32 snap_gen;
     bool opts_valid;
+    bool scope_valid;
     bool all_files;
     bool show_hidden;
     bool files_merged; /* current tree includes one completed FileList */
@@ -103,6 +106,12 @@ typedef struct FussSel {
 
 void yew_fuss_tree_init(FussTree *t);
 void yew_fuss_tree_drop(FussTree *t);
+/* Git porcelain -z paths are repository-root-relative even when Git runs
+ * with the workspace as cwd.  Set the two canonical roots before building;
+ * entries outside the workspace are then filtered and in-scope entries are
+ * stripped to workspace-relative coordinates. */
+bool yew_fuss_tree_scope_roots(FussTree *t, const char *repo_root,
+                               const char *workspace_root);
 void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o);
 /* Build the status tree and, when all-files is enabled, merge a completed
  * workspace walk.  Clean walk paths never replace snapshot status flags. */

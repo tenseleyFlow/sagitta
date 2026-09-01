@@ -192,6 +192,7 @@ void yew_fuss_tree_init(FussTree *t)
         return;
     memset(t, 0, sizeof(*t));
     arena_init(&t->a);
+    t->scope_valid = true;
 }
 
 void yew_fuss_tree_drop(FussTree *t)
@@ -199,6 +200,7 @@ void yew_fuss_tree_drop(FussTree *t)
     if (!t)
         return;
     arena_free_all(&t->a);
+    yew_xfree(t->repo_prefix);
     yew_xfree(t->nodes.data);
     yew_xfree(t->items.data);
     memset(t, 0, sizeof(*t));
@@ -210,6 +212,133 @@ static void tree_reset(FussTree *t)
     arena_init(&t->a);
     t->nodes.len = 0U;
     t->items.len = 0U;
+}
+
+static size_t root_path_len(const char *path)
+{
+    size_t len = path == NULL ? 0U : strlen(path);
+
+    while (len > 1U && path[len - 1U] == '/')
+        len--;
+    return len;
+}
+
+bool yew_fuss_tree_scope_roots(FussTree *t, const char *repo_root,
+                               const char *workspace_root)
+{
+    size_t repo_len;
+    size_t workspace_len;
+    size_t prefix_at = 0U;
+    size_t prefix_len = 0U;
+    bool valid = false;
+    bool same;
+    char *copy = NULL;
+
+    if (t == NULL || repo_root == NULL || workspace_root == NULL)
+        return false;
+    repo_len = root_path_len(repo_root);
+    workspace_len = root_path_len(workspace_root);
+    if (repo_len != 0U && workspace_len >= repo_len &&
+        memcmp(repo_root, workspace_root, repo_len) == 0) {
+        if (workspace_len == repo_len) {
+            valid = true;
+        } else if (repo_len == 1U && repo_root[0] == '/') {
+            valid = true;
+            prefix_at = 1U;
+            prefix_len = workspace_len - 1U;
+        } else if (workspace_root[repo_len] == '/') {
+            valid = true;
+            prefix_at = repo_len + 1U;
+            prefix_len = workspace_len - prefix_at;
+        }
+    }
+    if (valid && prefix_len != 0U) {
+        if (prefix_len > UINT32_MAX)
+            valid = false;
+        else {
+            copy = yew_xmalloc(prefix_len + 1U);
+            (void)memcpy(copy, workspace_root + prefix_at, prefix_len);
+            copy[prefix_len] = '\0';
+        }
+    }
+    same = t->scope_valid == valid &&
+           t->repo_prefix_len == (valid ? (u32)prefix_len : 0U) &&
+           (prefix_len == 0U ||
+            memcmp(t->repo_prefix, copy, prefix_len) == 0);
+    if (same) {
+        yew_xfree(copy);
+        return valid;
+    }
+    tree_reset(t);
+    yew_xfree(t->repo_prefix);
+    t->repo_prefix = copy;
+    t->repo_prefix_len = valid ? (u32)prefix_len : 0U;
+    t->scope_valid = valid;
+    t->snap_gen = 0U;
+    t->opts_valid = false;
+    t->files_merged = false;
+    return valid;
+}
+
+static bool scoped_path(const FussTree *t, const char *path, u32 path_len,
+                        const char **out, u32 *out_len)
+{
+    u32 prefix_len;
+
+    if (out != NULL)
+        *out = NULL;
+    if (out_len != NULL)
+        *out_len = 0U;
+    if (t == NULL || !t->scope_valid || path == NULL || path_len == 0U)
+        return false;
+    prefix_len = t->repo_prefix_len;
+    if (prefix_len == 0U) {
+        if (out != NULL)
+            *out = path;
+        if (out_len != NULL)
+            *out_len = path_len;
+        return true;
+    }
+    if (path_len <= prefix_len ||
+        memcmp(path, t->repo_prefix, prefix_len) != 0 ||
+        path[prefix_len] != '/')
+        return false;
+    path += prefix_len + 1U;
+    path_len -= prefix_len + 1U;
+    if (path_len == 0U)
+        return false;
+    if (out != NULL)
+        *out = path;
+    if (out_len != NULL)
+        *out_len = path_len;
+    return true;
+}
+
+static bool scoped_ignored(const FussTree *t, const GitIgnoreSet *set,
+                           const char *path, u32 path_len)
+{
+    size_t i;
+
+    if (set == NULL || path == NULL)
+        return false;
+    for (i = 0U; i < set->len; i++) {
+        const char *ignored;
+        u32 ignored_len;
+        bool directory;
+
+        if (!scoped_path(t, set->data[i].path, set->data[i].len,
+                         &ignored, &ignored_len))
+            continue;
+        directory = ignored_len != 0U && ignored[ignored_len - 1U] == '/';
+        if ((ignored_len == path_len &&
+             memcmp(ignored, path, path_len) == 0) ||
+            (directory && ignored_len - 1U == path_len &&
+             memcmp(ignored, path, path_len) == 0) ||
+            (directory && ignored_len <= path_len &&
+             memcmp(ignored, path, ignored_len) == 0))
+            return true;
+    }
+    return false;
 }
 
 static bool byte_equal(const char *a, u32 an, const char *b, u32 bn)
@@ -721,10 +850,15 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
     }
     for (i = 0U; i < ordered_n; i++) {
         const GitEntry *entry = ordered[i];
+        const char *path;
+        u32 path_len;
         bool ignored;
         bool dirty;
         u32 node;
 
+        if (!scoped_path(t, entry->path, entry->path_len,
+                         &path, &path_len))
+            continue;
         ignored = entry->kind == GIT_E_IGNORED ||
                   yew_git_ignored(&s->ignored, entry->path, entry->path_len);
         dirty = entry->staged || entry->unstaged || entry->untracked ||
@@ -732,9 +866,9 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
         if (!dirty && !opts.all_files)
             continue;
         if (!opts.show_hidden &&
-            (ignored || path_hidden(entry->path, entry->path_len)))
+            (ignored || path_hidden(path, path_len)))
             continue;
-        node = add_sorted_path(t, &paths, entry->path, entry->path_len,
+        node = add_sorted_path(t, &paths, path, path_len,
                                entry->is_dir ||
                                entry->path[entry->path_len - 1U] == '/');
         if (node != 0U)
@@ -800,7 +934,7 @@ bool yew_fuss_merge_files(FussTree *t, const FileList *files,
             continue;
         if (!opts.show_hidden &&
             (path_hidden(path, (u32)len) ||
-             yew_git_ignored(&s->ignored, path, (u32)len)))
+             scoped_ignored(t, &s->ignored, path, (u32)len)))
             continue;
         ordered[ordered_n++] = (char *)path;
     }
@@ -813,7 +947,7 @@ bool yew_fuss_merge_files(FussTree *t, const FileList *files,
 
             if (node != 0U)
                 t->nodes.data[node].ignored |=
-                    yew_git_ignored(&s->ignored, ordered[i], (u32)len);
+                    scoped_ignored(t, &s->ignored, ordered[i], (u32)len);
         }
     }
     yew_xfree(ordered);
