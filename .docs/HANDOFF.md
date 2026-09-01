@@ -12,15 +12,16 @@ Apple-silicon host `nomad-1`
 
 **Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
 
-**Current code frontier before this handoff update:** `3ff018c7`
+**Current code frontier before Sprint 57.6:** `9073a71c`
 
 **Git position:** 27 local implementation commits ahead of `origin/trunk`,
 plus this documentation closeout once committed; nothing in the Sprint 57
 chain has been pushed from the Mac
 
-**Active implementation frontier:** Sprint 58 adversarial audits. Sprint 57
-and Sprint 57.5 are repository-complete; hosted CI, Linux-only lanes, and
-physical Pi corroboration remain explicit release-evidence tails.
+**Active implementation frontier:** Sprint 57.6 field stability. Sprint 57
+and Sprint 57.5 are repository-complete; Sprint 58 has not begun. Hosted CI,
+Linux-only lanes, and physical Pi corroboration remain explicit
+release-evidence tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -52,11 +53,18 @@ corroboration is still pending, as is hosted CI for the current unpushed SHA.
 Both are release-blocking evidence tails under S57-A4; neither is fabricated
 from emulation or used to stall unrelated repository work.
 
-The exact next contract is
-`.docs/sprints/14-audits-release/s58-adversarial-audits.md`. Do not begin an
-audit from an unpushed or unverified baseline: first obtain the required
-hosted commit-of-record evidence, or explicitly record why a local audit
-baseline is provisional.
+Field use after this checkpoint reproduced an extensionless binary being
+misclassified as Fortran, an unwanted `fortls` spawn, multi-second dispatch
+turns in the open-buffer symbol index, a parent-repository `wolf` row leaking
+into a nested workspace, and FUSS's retired opt-in type-jump interaction. The
+binding remediation contract is
+`.docs/sprints/13-performance/s57_6-field-stability.md`.
+
+After Sprint 57.6 closes, the next contract is
+`.docs/sprints/14-audits-release/s58-adversarial-audits.md`. Refresh its
+baseline from the post-57.6 tree. Do not begin an audit from an unpushed or
+unverified baseline: first obtain the required hosted commit-of-record
+evidence, or explicitly record why a local audit baseline is provisional.
 
 Most recent Sprint 57.5 validation:
 

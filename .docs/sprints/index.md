@@ -1,14 +1,14 @@
 # yew Sprint Index
 
-67 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
+68 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
 bespoke-first, modal-paradigm-first terminal editor plus its language,
 Fletch. Small bites, clear milestones, testable deliverables at every
 stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-61 whole-numbered sprints plus six fractional ones (18.5, 41.5, 42.5,
-55.5, 56.5, 57.5) split off during authoring — the pressure valve working as
+61 whole-numbered sprints plus seven fractional ones (18.5, 41.5, 42.5,
+55.5, 56.5, 57.5, 57.6) split off during authoring — the pressure valve working as
 designed.
 Renumbering is forbidden once files exist, so fractional ids are permanent.
 
@@ -284,8 +284,8 @@ Binding documents — read before any sprint:
 - **ACTIVE.** Sprints 56, 56.5, and 57 are repository-complete. Sprint 56's
   pinned designated-hardware evidence remains pending because no self-hosted
   runner is registered; Sprint 57's Pi Zero 2 W corroboration and pushed-SHA
-  CI evidence remain release tails. Sprint 57.5 is the binding implementation
-  frontier.
+  CI evidence remain release tails. Sprint 57.6 is the binding implementation
+  frontier after reproduced binary/FUSS field failures; Sprint 58 has not begun.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -313,11 +313,17 @@ Binding documents — read before any sprint:
   deterministic FUSS fuzz/PTY, performance, and all six native size profiles
   are green; true GCC, Linux Valgrind/musl/arm64 and hosted CI remain named
   pushed-SHA evidence tails
+- Sprint 57.6 (s57_6-field-stability.md) — Binary syntax/LSP/symbol-index
+  isolation, nested-workspace Git/FUSS path normalization, and direct
+  visible-tree type-to-jump with printable actions behind `C-g`. **ACTIVE:**
+  field failures reproduced on Darwin arm64; Sprint 58 baseline deferred until
+  the fixes and proportional gates close
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs. **ACTIVE.**
+  fuzz campaigns extended, findings ledger with stable IDs. **QUEUED AFTER
+  SPRINT 57.6.**
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1
