@@ -1221,6 +1221,8 @@ void test_tabs_reorder_is_insertion_not_swap(void);
 void test_tabs_reorder_remaps_the_active_position(void);
 void test_tabs_open_switches_when_the_path_is_already_open(void);
 void test_tabs_find_by_path_canonicalizes(void);
+void test_tabs_case_aliases_follow_filesystem_identity(void);
+void test_tabs_hardlink_aliases_share_one_file(void);
 void test_tabs_display_path_preserves_workspace_spelling(void);
 void test_tabs_cap_refuses_and_mutates_nothing(void);
 void test_tabs_modified_derives_from_undo_state(void);

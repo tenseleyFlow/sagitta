@@ -1254,6 +1254,8 @@ const YewTest yew_tests[] = {
     T(tabs_reorder_remaps_the_active_position),
     T(tabs_open_switches_when_the_path_is_already_open),
     T(tabs_find_by_path_canonicalizes),
+    T(tabs_case_aliases_follow_filesystem_identity),
+    T(tabs_hardlink_aliases_share_one_file),
     T(tabs_display_path_preserves_workspace_spelling),
     T(tabs_cap_refuses_and_mutates_nothing),
     T(tabs_modified_derives_from_undo_state),

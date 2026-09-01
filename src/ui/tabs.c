@@ -13,6 +13,7 @@
 #include "edit/shadow.h"
 #include "fl/flruntime.h"
 #include "mod/git/fussmode.h"
+#include "text/file.h"
 #include "ui/groupnav.h"
 #include "ui/glyphs.h"
 #include "ui/groups.h"
@@ -190,7 +191,7 @@ int yew_tab_find_by_path(const Ed *ed, const char *path)
     for (i = 0U; i < ed->tabs.v.len; i++) {
         const Tab *t = &ed->tabs.v.data[i];
 
-        if (t->path != NULL && strcmp(t->path, want) == 0) {
+        if (t->path != NULL && yew_file_same_identity(t->path, want)) {
             found = (int)i;
             break;
         }

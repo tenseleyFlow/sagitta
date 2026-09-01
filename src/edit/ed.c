@@ -37,6 +37,7 @@
 #include "mod/plug/plug.h"
 #endif
 #include "syn/defs.h"
+#include "text/file.h"
 #include "util/log.h"
 #include "util/rss.h"
 
@@ -376,7 +377,7 @@ Buffer *yew_ws_file_buf(Ed *ed, const char *path)
             Buffer *e = ed->ws.bufs[i];
 
             if (e->name == NULL && e->path != NULL &&
-                strcmp(e->path, path) == 0)
+                yew_file_same_identity(e->path, path))
                 return e;
         }
     }

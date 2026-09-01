@@ -45,6 +45,21 @@ static bool timespec_equal(struct timespec a, struct timespec b)
     return a.tv_sec == b.tv_sec && a.tv_nsec == b.tv_nsec;
 }
 
+bool yew_file_same_identity(const char *left, const char *right)
+{
+    struct stat left_st;
+    struct stat right_st;
+
+    if (left == NULL || right == NULL)
+        return false;
+    if (strcmp(left, right) == 0)
+        return true;
+    if (stat(left, &left_st) != 0 || stat(right, &right_st) != 0)
+        return false;
+    return left_st.st_dev == right_st.st_dev &&
+           left_st.st_ino == right_st.st_ino;
+}
+
 static char *string_copy(const char *s)
 {
     size_t n = strlen(s) + 1U;

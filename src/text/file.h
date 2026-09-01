@@ -96,6 +96,8 @@ typedef struct YewAtomicWriteResult {
 } YewAtomicWriteResult;
 
 YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta);
+/* Existing paths name the same file when their device/inode identity agrees. */
+bool yew_file_same_identity(const char *left, const char *right);
 /* Sprint 24 D4 test hook: file reads performed so far.  Counting is the
  * only way to check that a deferred group costs one read, not forty. */
 u64 yew_file_load_count(void);

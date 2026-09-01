@@ -342,6 +342,89 @@ void test_tabs_find_by_path_canonicalizes(void)
 }
 
 /*
+ * Darwin's default filesystem preserves case but does not distinguish it.
+ * Linux normally does both.  In either case the tab model must follow the
+ * filesystem's identity, not guess from the spelling.
+ */
+void test_tabs_case_aliases_follow_filesystem_identity(void)
+{
+    Ed ed;
+    char root[PATH_MAX] = "/tmp/yew-tab-case-XXXXXX";
+    char upper[PATH_MAX + sizeof("/Foo.c")];
+    char lower[PATH_MAX + sizeof("/foo.c")];
+    bool aliases;
+    FILE *fp;
+    int first;
+    int second;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    (void)snprintf(upper, sizeof(upper), "%s/Foo.c", root);
+    (void)snprintf(lower, sizeof(lower), "%s/foo.c", root);
+    fp = fopen(upper, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    if (fp != NULL)
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    aliases = access(lower, F_OK) == 0;
+    if (!aliases) {
+        fp = fopen(lower, "wb");
+        YEW_ASSERT_NOT_NULL(fp);
+        if (fp != NULL)
+            YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    }
+
+    tb_fixture(&ed);
+    first = yew_tab_open(&ed, upper);
+    second = yew_tab_open(&ed, lower);
+    YEW_ASSERT(first >= 0);
+    YEW_ASSERT(second >= 0);
+    if (aliases) {
+        YEW_ASSERT_EQ_I64(second, first);
+        YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    } else {
+        YEW_ASSERT(second != first);
+        YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 3U);
+    }
+    yew_ed_free(&ed);
+
+    (void)unlink(lower);
+    (void)unlink(upper);
+    (void)rmdir(root);
+}
+
+/* Distinct pathnames for one inode are still one save destination. */
+void test_tabs_hardlink_aliases_share_one_file(void)
+{
+    Ed ed;
+    char root[PATH_MAX] = "/tmp/yew-tab-link-XXXXXX";
+    char first_path[PATH_MAX + sizeof("/first.c")];
+    char second_path[PATH_MAX + sizeof("/second.c")];
+    FILE *fp;
+    int first;
+    int second;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    (void)snprintf(first_path, sizeof(first_path), "%s/first.c", root);
+    (void)snprintf(second_path, sizeof(second_path), "%s/second.c", root);
+    fp = fopen(first_path, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    if (fp != NULL)
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_I64(link(first_path, second_path), 0);
+
+    tb_fixture(&ed);
+    first = yew_tab_open(&ed, first_path);
+    second = yew_tab_open(&ed, second_path);
+    YEW_ASSERT(first >= 0);
+    YEW_ASSERT_EQ_I64(second, first);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    yew_ed_free(&ed);
+
+    (void)unlink(second_path);
+    (void)unlink(first_path);
+    (void)rmdir(root);
+}
+
+/*
  * A workspace entry may be a symlink whose target lives outside the
  * workspace.  File identity must follow the canonical target, while UI
  * surfaces retain the logical spelling the user opened from the workspace.
