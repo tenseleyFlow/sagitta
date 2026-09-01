@@ -4427,6 +4427,35 @@ static void case_s27_click_cjk_tab(PtyCtx *c)
     (void)unlink("/tmp/yew-s27-\xe6\xbc\xa2\xe5\xad\x97.txt");
 }
 
+/* Sprint 57.8: the tab-strip tail action is a real mouse target, not
+ * decorative chrome.  The fixture basename clips to 24 cells, placing the
+ * three-cell action at columns 25..27 (SGR's one-based coordinates). */
+static void case_s57_8_click_new_tab(PtyCtx *c)
+{
+    static const u8 first[] = "first document\n";
+    char path[256];
+
+    if (!s18_open(c, first, sizeof(first) - 1U, path, sizeof(path)))
+        return;
+    s27_mouse(c, "\x1b[<0;26;1M");
+    s27_mouse(c, "\x1b[<0;26;1m");
+    ptc_check(c, s19_screen_contains(&c->vt, " 2 untitled "),
+              "clicking the tab-strip add action did not create untitled");
+
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "second document");
+    s18_settle_after_keys(c, "esc");
+    s18_settle_after_keys(c, "t p");
+    ptc_check(c, s19_screen_contains(&c->vt, "first document"),
+              "the original document was not preserved after add-tab");
+    s18_settle_after_keys(c, "t n");
+    ptc_check(c, s19_screen_contains(&c->vt, "second document"),
+              "the new untitled document was not live after tab cycling");
+    ptc_snapshot(c, "s57_8_click_new_tab");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 /*
  * The wheel over an UNFOCUSED pane.  The other pane scrolls; the focus
  * and the cursor do not move — which is the whole reason the wheel
@@ -9366,6 +9395,8 @@ const PtyCase yew_pty_cases[] = {
     C(chrome_drag_colors_16, modern, 24U, 80U, case_chrome_drag),
     C(chrome_drag_ascii, modern, 24U, 80U, case_chrome_drag),
     C(s27_click_cjk_tab, modern, 24U, 80U, case_s27_click_cjk_tab),
+    C(s57_8_click_new_tab, modern, 24U, 80U,
+      case_s57_8_click_new_tab),
     C(s27_wheel_unfocused_pane, modern, 24U, 80U,
       case_s27_wheel_unfocused_pane),
     C(s27_dwell_opens_member_strip, modern, 24U, 80U,
