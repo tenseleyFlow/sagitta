@@ -1,15 +1,15 @@
 # yew Sprint Index
 
-68 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
+71 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
 bespoke-first, modal-paradigm-first terminal editor plus its language,
 Fletch. Small bites, clear milestones, testable deliverables at every
 stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-61 whole-numbered sprints plus eight fractional ones (18.5, 41.5, 42.5,
-55.5, 56.5, 57.5, 57.6, 57.7) split off during authoring — the pressure valve working as
-designed.
+61 whole-numbered sprints plus ten fractional ones (18.5, 41.5, 42.5,
+49.5, 55.5, 56.5, 57.5, 57.6, 57.7, 57.8) split off during authoring — the
+pressure valve working as designed.
 Renumbering is forbidden once files exist, so fractional ids are permanent.
 
 Binding documents — read before any sprint:
@@ -281,12 +281,13 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **REPOSITORY COMPLETE THROUGH SPRINT 57.7.** Sprint 56's
+- **SPRINT 57.8 ACTIVE.** The repository is complete through Sprint 57.7.
+  Sprint 56's
   pinned designated-hardware evidence remains pending because no self-hosted
   runner is registered; Sprint 57's Pi Zero 2 W corroboration and pushed-SHA
-  CI evidence remain release tails. Sprint 58 has not begun; `23159853` is its
-  local post-57.7 candidate baseline, but the audit remains gated on the
-  required hosted commit-of-record evidence.
+  CI evidence remain release tails. Sprint 58 has not begun; its local
+  candidate will be refreshed from the post-57.8 tree, and the audit remains
+  gated on the required hosted commit-of-record evidence.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -328,13 +329,18 @@ Binding documents — read before any sprint:
   alignment/UBSan, deterministic FUSS fuzz/PTY, module-boundary smoke,
   performance, and all six native size profiles are green; true GNU GCC,
   Linux/x86_64 and hosted CI remain pushed-SHA evidence tails
+- Sprint 57.8 (s57_8-modern-tabs.md) — Facsimile-style padded active/inactive
+  tab surfaces, one-tab strip visibility, and a cell-exact clickable ` + ` that
+  invokes the existing untitled-tab command without disturbing tab drag,
+  overflow, groups, or FUSS-offset geometry. **ACTIVE 2026-09-01**
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
   fuzz campaigns extended, findings ledger with stable IDs. **NEXT — BASELINE
-  GATED:** local candidate `23159853` is green on Darwin arm64; push and verify
-  the contract's hosted lanes before opening a front or assigning a finding ID
+  GATED:** refresh the local candidate from the completed Sprint 57.8 tree,
+  then push and verify the contract's hosted lanes before opening a front or
+  assigning a finding ID
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1
