@@ -35,6 +35,21 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
+## Baseline status — GATED 2026-09-01
+
+`23159853` is the post-Sprint-57.7 local candidate. On Darwin arm64 it passes
+the complete default-module `make test` suite, focused ASan/UBSan and
+alignment/UBSan, FUSS fuzz/performance/PTYs, warning-clean default/FUSS-only/
+core-only shipping builds and smoke, and all six native size profiles.
+
+It has not been pushed from the Mac, so the required hosted `perf`,
+`determinism`, `lsp`, `fletch-dispatch`, GNU GCC, Linux/x86_64, and other
+commit-of-record evidence does not yet exist for this hash. Do not create an
+audit front, allocate a `YEW-F-###` ID, or call the audit window open until an
+exact post-57.7 commit is pushed and the §1 hosted baseline block can be filled
+honestly. If a follow-up changes the candidate, record the replacement hash
+here before any front begins.
+
 ## Goals
 
 Run fifteen adversarial audit fronts, one per subsystem, each executed by

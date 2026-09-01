@@ -12,17 +12,16 @@ Apple-silicon host `nomad-1`
 
 **Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
 
-**Current code frontier before Sprint 57.7:** `20eee717`
+**Current post-Sprint-57.7 code frontier:** `23159853`
 
-**Git position:** 34 local commits ahead of `origin/trunk`, plus the Sprint
-57.7 contract once committed; nothing in the Sprint 57
-chain has been pushed from the Mac
+**Git position:** 39 local commits ahead of `origin/trunk` after this closeout;
+nothing in the Sprint 57 chain has been pushed from the Mac
 
-**Active implementation frontier:** Sprint 57.7 FUSS off-canvas layout.
-Sprint 57, Sprint 57.5, and Sprint 57.6 are repository-complete; Sprint 58 has
-not begun. Its baseline must be refreshed from the post-57.7 tree. Hosted CI,
-Linux-only lanes, and physical Pi corroboration remain explicit
-release-evidence tails.
+**Active implementation frontier:** Sprint 57.7 is repository-complete. Sprint
+58 is next but its audit window is not open: `23159853` is the local candidate
+baseline and must be pushed through the required hosted commit-of-record lanes
+before any front begins. Hosted CI, Linux-only lanes, and physical Pi
+corroboration remain explicit release-evidence tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -63,18 +62,34 @@ and filtered to the workspace, removing the fabricated `wolf` row. FUSS bare
 filename characters now type-jump across visible rows, with printable actions
 behind `C-g`.
 
-Field review after Sprint 57.6 found that FUSS still overlays the live editor,
-starts below the tab strip, leaves tabs anchored at column zero, and draws its
-edge only through the final item. The binding correction is
-`.docs/sprints/13-performance/s57_7-fuss-offcanvas-layout.md`: reserve the
-drawer in layout, shift tabs/panes/footer right, start FUSS on row zero, and
-paint a distinct full-height surface and edge.
+Sprint 57.7 closes the remaining off-canvas layout defects. FUSS now reserves
+its left span in the shared layout, starts on row zero beside the shifted tab
+strip, lays out panes/documents/footer at the remaining width, and paints a
+dedicated neutral surface plus separator through the bottom row. The
+full-screen fallback remains intact, and repeated enter/leave cycles preserve
+the complete pane/tab/cursor/viewport state.
 
-After Sprint 57.7 closes, the next contract is
-`.docs/sprints/14-audits-release/s58-adversarial-audits.md`. Refresh its
-baseline from the post-57.7 tree. Do not begin an audit from an unpushed or
-unverified baseline: first obtain the required hosted commit-of-record
-evidence, or explicitly record why a local audit baseline is provisional.
+The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
+Its local candidate is `23159853`, but it remains explicitly provisional. Do
+not begin an audit from this unpushed baseline: first obtain the required
+hosted commit-of-record evidence and fill the Sprint 58 §1 baseline block.
+
+Most recent Sprint 57.7 validation:
+
+- complete default-module `make test` green: every PTY, Fletch 38/38, scripts
+  93/919, package integration 51/51, 2,000 round-trip seeds, fuzz/syntax/
+  policy/smoke/torture gates, and 2,414 unit tests / 71,034,643 assertions;
+- focused drawer/theme tests pass under plain, Darwin arm64 ASan/UBSan, and
+  alignment/UBSan; all FUSS-filtered PTYs plus the directory-startup path pass
+  from two deterministic executions;
+- default, FUSS-only, and core-only shipping builds are warning-clean, with
+  FUSS-only and core-only smoke green; deterministic FUSS fuzz passes 20,000
+  iterations;
+- all FUSS performance rows pass, including 1.763 ms drawer entry and 1.077 ms
+  open resolution;
+- all six native size profiles pass: 1,452,640 bytes minimal, 1,891,504 full,
+  1,555,088 LSP-only, 1,588,496 AI-only, 1,586,752 FUSS-only, and 1,536,096
+  plugins-only.
 
 Most recent Sprint 57.6 validation:
 

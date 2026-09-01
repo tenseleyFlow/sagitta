@@ -184,3 +184,53 @@ added.
 10. Focused unit/PTY/sanitizer/fuzz/performance gates, full `make test`, and
     all applicable native size gates pass. Sprint 58 names a post-57.7 green
     commit as its baseline.
+
+## Closeout — REPOSITORY COMPLETE 2026-09-01
+
+FUSS is now a true left off-canvas surface at ordinary widths. The drawer
+owns row zero and the full terminal height; its separator reaches the bottom
+row even for loading, empty, and one-item trees. The tab strip, pane tree,
+document viewport, and F footer consume the remaining right-hand width rather
+than drawing beneath the drawer. The dark and light shipped themes expose a
+dedicated neutral `git.drawer` surface, while the existing full-screen fallback
+keeps its full-width footer.
+
+Entering F does not rewrite the pane tree or persist a temporary narrow
+viewport. The layout skips viewport following while the drawer is active, so
+100 enter/leave cycles preserve pane pointers, ratios, tabs, buffers, cursors,
+goals, and viewport positions exactly. Preview, mouse, tab, damage, edge, and
+zero/maximum-dimension tests consume the same computed rectangles.
+
+The contract landed in `5ae5dc99`; implementation and unit coverage landed in
+`31680d61`; the FUSS PTY matrix landed in `bf58be5b`; and the directory-startup
+PTY contract follow-up landed in `23159853`. Commit `23159853` is the local
+post-57.7 green candidate baseline for Sprint 58.
+
+Local closeout evidence on Darwin arm64:
+
+- the complete supported default-module `make test` suite is green: every PTY,
+  Fletch 38/38, scripts 93 tests / 919 assertions, package integration 51/51,
+  2,000 round-trip seeds, fuzz corpora, 432 syntax assets, policy/smoke/torture
+  gates, and 2,414 unit tests / 71,034,643 assertions pass;
+- focused drawer coverage passes 18 tests / 1,876 assertions and shipped-theme
+  coverage passes 1 test / 102 assertions under plain, ASan/UBSan, and the
+  Darwin arm64 alignment/UBSan profile;
+- all FUSS-filtered PTYs plus the directory-startup path pass from two
+  deterministic executions, covering 40/64/80/120/240 columns, both shipped
+  themes, ASCII, full-screen fallback, shifted tabs/documents/footer, and exact
+  Escape restoration;
+- default, `MODULES="fuss"`, and `MODULES=""` shipping builds are
+  warning-clean; the FUSS-only and core-only product smoke suites pass;
+- deterministic FUSS fuzz passes 20,000 iterations at seed 1;
+- all FUSS performance gates pass: 1.516 ms build+flatten, 0.001 ms navigation
+  p99, 0.014 ms toggle+measure p99, 1.763 ms drawer entry, 0.002 ms
+  input-to-damage p99, and 1.077 ms open resolution;
+- native `make size` passes all six shipping profiles: 1,452,640 bytes
+  minimal, 1,891,504 full, 1,555,088 LSP-only, 1,588,496 AI-only, 1,586,752
+  FUSS-only, and 1,536,096 plugins-only.
+
+This host has Apple clang only; `/usr/bin/gcc` is its clang compatibility
+driver. True GNU GCC, Linux/x86_64, Valgrind/musl, designated-runner, and
+hosted-CI evidence are not inferred. Sprint 58 may use `23159853` as a local
+candidate only; no audit front opens until the exact post-57.7 baseline has the
+hosted commit-of-record lanes required by the Sprint 58 contract.
