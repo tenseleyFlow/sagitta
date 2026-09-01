@@ -649,9 +649,9 @@ static void case_notepad_move(PtyCtx *c)
     /* The two arrows may be drained in one input batch or painted in two
      * loop iterations.  Quiet after the first frame is not proof that the
      * second key has reached the grid on a contended runner. */
-    while (!c->failed && (c->vt.cur_r != 1 || c->vt.cur_c != 10))
+    while (!c->failed && (c->vt.cur_r != 2 || c->vt.cur_c != 10))
         ptc_settle(c, 20);
-    ptc_check(c, c->vt.cur_r == 1 && c->vt.cur_c == 10,
+    ptc_check(c, c->vt.cur_r == 2 && c->vt.cur_c == 10,
               "arrow movement did not reach the pinned cursor position");
     ptc_snapshot(c, "notepad_move");
     quit_editor_cleanly(c);
@@ -1057,7 +1057,7 @@ static bool s57_screen_contains(const PtyCtx *c, const void *arg)
 
 static bool s57_top_ready(const PtyCtx *c, const void *arg)
 {
-    return c->vt.cur_r == 0 && c->vt.cur_c == 8 &&
+    return c->vt.cur_r == 1 && c->vt.cur_c == 8 &&
            s57_screen_contains(c, arg);
 }
 
@@ -4541,7 +4541,7 @@ static void case_s27_double_click_mode_chip(PtyCtx *c)
      * Delivering them together is also what a real double-click looks
      * like arriving over a pty.
      */
-    ptc_bytes(c, "\x1b[<0;15;1M\x1b[<0;15;1m\x1b[<0;15;1M\x1b[<0;15;1m");
+    ptc_bytes(c, "\x1b[<0;15;2M\x1b[<0;15;2m\x1b[<0;15;2M\x1b[<0;15;2m");
     /* A quiet interval can elapse before an instrumented child is scheduled
      * to consume the reports.  Wait for the mode transition itself so the
      * snapshot cannot race the input-bearing frame. */
@@ -4949,13 +4949,14 @@ static bool s41_make_expansions_ready(const VtScreen *vt)
     const VtCell *expansion;
     const VtCell *plain;
 
-    if (vt == NULL || vt->rows <= 7 || vt->cols <= 79)
+    if (vt == NULL || vt->rows <= 8 || vt->cols <= 79)
         return false;
-    /* Row 8 is the first recipe.  Its nested $(CC) expansion is the last
-     * Make definition component to become available; the provisional paint
-     * styles its '$(' prefix but leaves this cell as ordinary text. */
-    expansion = &vt->cells[7U * (size_t)vt->cols + 11U];
-    plain = &vt->cells[7U * (size_t)vt->cols + 79U];
+    /* Screen row 9 is the first recipe below the one-tab strip.  Its nested
+     * $(CC) expansion is the last Make definition component to become
+     * available; the provisional paint styles its '$(' prefix but leaves
+     * this cell as ordinary text. */
+    expansion = &vt->cells[8U * (size_t)vt->cols + 11U];
+    plain = &vt->cells[8U * (size_t)vt->cols + 79U];
     return expansion->attrs != plain->attrs ||
            memcmp(&expansion->fg, &plain->fg, sizeof(expansion->fg)) != 0 ||
            memcmp(&expansion->bg, &plain->bg, sizeof(expansion->bg)) != 0;
@@ -4983,13 +4984,14 @@ static bool s41_markdown_guest_ready(const VtScreen *vt)
     const VtCell *keyword;
     const VtCell *space;
 
-    if (vt == NULL || vt->rows <= 20 || vt->cols <= 10)
+    if (vt == NULL || vt->rows <= 21 || vt->cols <= 10)
         return false;
-    /* Row 21 is the last visible embedded-C body.  The provisional
-     * Markdown paint gives `int ` one uniform fenced-code style; the guest
-     * correction distinguishes the keyword from its following space. */
-    keyword = &vt->cells[20U * (size_t)vt->cols + 7U];
-    space = &vt->cells[20U * (size_t)vt->cols + 10U];
+    /* Screen row 22 is the last visible embedded-C body below the one-tab
+     * strip.  The provisional Markdown paint gives `int ` one uniform
+     * fenced-code style; the guest correction distinguishes the keyword
+     * from its following space. */
+    keyword = &vt->cells[21U * (size_t)vt->cols + 7U];
+    space = &vt->cells[21U * (size_t)vt->cols + 10U];
     return keyword->attrs != space->attrs ||
            memcmp(&keyword->fg, &space->fg, sizeof(keyword->fg)) != 0 ||
            memcmp(&keyword->bg, &space->bg, sizeof(keyword->bg)) != 0;
@@ -5626,7 +5628,7 @@ static void case_s41_cjk_emoji_string(PtyCtx *c)
         return;
     s41_open_fixture(c, "quiver-dark", path);
     {
-        const VtCell *row = c->vt.cells;
+        const VtCell *row = c->vt.cells + (size_t)c->vt.cols;
         const u8 han[] = {0xe6U, 0xbcU, 0xa2U};
         const u8 emoji[] = {0xf0U, 0x9fU, 0x98U, 0x80U};
         int col;
@@ -5668,7 +5670,7 @@ static void case_s41_cjk_emoji_string(PtyCtx *c)
         /* `end` lands on the line-end cursor cell after the 38-column
          * source row; the six-cell gutter and cursor placement make the
          * terminal's post-draw caret column 45. */
-        ptc_check(c, c->vt.cur_r == 0 && c->vt.cur_c == 45,
+        ptc_check(c, c->vt.cur_r == 1 && c->vt.cur_c == 45,
                   "cursor geometry disagrees with CJK/emoji display width");
     }
     /* The delta above pins the key-triggered repaint.  Startup syntax
@@ -5704,7 +5706,7 @@ static void case_s41_cold_warm_identical(PtyCtx *c)
 static void case_s41_degrade_full_frame(PtyCtx *c)
 {
     static const u8 text[] = "const char *bad = \"\\q\";\n";
-    static const u8 frame_end[] = "\x1b[1;7H\x1b[?25h";
+    static const u8 frame_end[] = "\x1b[2;7H\x1b[?25h";
     char path[256];
     size_t frame_at;
     u32 before;
@@ -5903,10 +5905,10 @@ static void case_s43_shadow_provenance(PtyCtx *c)
     ptc_check(c, s43_screen_contains(&c->vt, text),
               "selected shadow provider text is not visible");
     if (!c->failed) {
-        first = &c->vt.cells[13U];
+        first = &c->vt.cells[(size_t)c->vt.cols + 13U];
         ptc_check(c, (first->attrs & attrs) == attrs,
                   "shadow provider attributes are incomplete");
-        ptc_check(c, s43_cell_is(&c->vt, 0, 1, glyph),
+        ptc_check(c, s43_cell_is(&c->vt, 1, 1, glyph),
                   "shadow provenance gutter cell is missing");
     }
     c->vt.sync_pairs_unstable = true;
@@ -5957,7 +5959,7 @@ static void case_s43_shadow_overlay_no_jump(PtyCtx *c)
               "enabling shadow text did not report its new state");
     ptc_check(c, s43_screen_contains(&c->vt, "symbol_index field"),
               "four-line shadow did not appear");
-    for (row = 4U; row <= 8U; row++)
+    for (row = 5U; row <= 9U; row++)
         ptc_check(c,
                   memcmp(baseline + (size_t)(row - 3U) *
                                         (size_t)c->vt.cols,
@@ -5998,8 +6000,8 @@ static void case_s43_shadow_accept_word(PtyCtx *c)
     ptc_check(c, s43_screen_contains(&c->vt, " field"),
               "accept-word did not redraw the shortened ghost");
     if (!c->failed) {
-        accepted = &c->vt.cells[13U];
-        remaining = &c->vt.cells[26U];
+        accepted = &c->vt.cells[(size_t)c->vt.cols + 13U];
+        remaining = &c->vt.cells[(size_t)c->vt.cols + 26U];
         ptc_check(c, (accepted->attrs & YEW_ATTR_DIM) == 0U,
                   "accepted word is still styled as ghost text");
         ptc_check(c, (remaining->attrs & YEW_ATTR_DIM) != 0U,

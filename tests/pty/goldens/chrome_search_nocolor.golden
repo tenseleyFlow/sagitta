@@ -1,7 +1,8 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=0,6 vis=1
+size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
+ 1 pty-s14-chrome_search + 
     1 alpha beta gamma
     1 delta epsilon
     2 zeta eta theta iota
@@ -24,14 +25,14 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 
 
 
-
  L  pty-s14-chrome_search_nocolor.txt                utf-8  lf  1:1  all  [1/12]
 --- style
-AAAABACAAABAAAABAABAAB
-AAAAAAAAAABAAAAAAAA
-AAAAAAAAABAAABAAAAABAAAAB
-AAAAAAABAAB
-AAAAA
+AAAAAAAAAAAAAAAAAAAAAAAABBB
+CCCCBCDCCCBCCCCBCCBCCB
+CCCCCCCCCCBCCCCCCCC
+CCCCCCCCCBCCCBCCCCCBCCCCB
+CCCCCCCBCCB
+CCCCC
 
 
 
@@ -49,9 +50,9 @@ AAAAA
 
 
 
-
-BBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
-A fg=default bg=default attrs=----------
+A fg=default bg=default attrs=------r---
 B fg=default bg=default attrs=b---------
-C fg=default bg=default attrs=---u------
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=---u------

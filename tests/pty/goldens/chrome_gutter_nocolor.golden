@@ -1,7 +1,8 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=0,6 vis=1
+size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
+ 1 pty-s14-chrome_gutter + 
     1 short
     1 a very long line that has to wrap more than once in a narrow window so the
       continuation indicator is on screen
@@ -24,14 +25,14 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 
 
 
-
  L  pty-s14-chrome_gutter_nocolor.txt                        utf-8  lf  1:1  all
 --- style
-AAAABAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAA
-AAAAA
+AAAAAAAAAAAAAAAAAAAAAAAABBB
+CCCCBCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCC
+CCCCC
 
 
 
@@ -49,8 +50,8 @@ AAAAA
 
 
 
-
-BBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
-A fg=default bg=default attrs=----------
+A fg=default bg=default attrs=------r---
 B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=----------

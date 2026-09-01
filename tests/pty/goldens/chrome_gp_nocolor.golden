@@ -1,13 +1,13 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=0,6 vis=1
+size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
+ 1 pty-s14-chrome_gp_noc + 
     1 alpha beta gamma
-    1 delta epsilon
-    2 zet New Tab Group 
-    3 kap name: yew-s24-grp/
-    4     /tmp/yew-s24-grp
-
+    1 del New Tab Group 
+    2 zet name: yew-s24-grp/
+    3 kap /tmp/yew-s24-grp
+    4
               ../
           [✓] one.txt
           [ ] three.txt
@@ -27,18 +27,16 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 
  L  pty-s14-chrome_gp_nocolor.txt                            utf-8  lf  1:1  all
 --- style
-AAAABAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAA
-AAAAAAAAABBBBBBBBBBBBBBB
-AAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAACCCCCCCCCCCCCCCC
-
-AAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAADDDDDDDDDDDDDD
-AAAAAAAAAAAAAAAAAAAAA
-
-
+AAAAAAAAAAAAAAAAAAAAAAAABBB
+CCCCBCCCCCCCCCCCCCCCCC
+CCCCCCCCCBBBBBBBBBBBBBBB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCDDDDDDDDDDDDDDDD
+CCCCC
+CCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCAAAAAAAAAAAAAA
+CCCCCCCCCCCCCCCCCCCCC
 
 
 
@@ -46,13 +44,15 @@ AAAAAAAAAAAAAAAAAAAAA
 
 
 
-AAAAAAAAABBBBBBBBBBB
-AAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 
 
-BBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+CCCCCCCCCBBBBBBBBBBB
+CCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
-A fg=default bg=default attrs=----------
+A fg=default bg=default attrs=------r---
 B fg=default bg=default attrs=b---------
-C fg=default bg=default attrs=-d--------
-D fg=default bg=default attrs=------r---
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=-d--------

@@ -2,6 +2,7 @@
 size 80x24 alt=1 cursor=23,1 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
+ 1 pty-s14-chrome_msg_no + 
     1 alpha beta gamma
     1 delta epsilon
     2 zeta eta theta iota
@@ -23,16 +24,15 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 
 
 
-
 E: unknown command 'nosuchcommand' (try Tab)                                    
 :nosuchcommand                                                                  
 --- style
-AAAABAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAA
-AAAAA
-
+AAAAAAAAAAAAAAAAAAAAAAAABBB
+CCCCBCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCC
+CCCCC
 
 
 
@@ -50,8 +50,9 @@ AAAAA
 
 
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BCCCCCCCCCCCCCABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BDDDDDDDDDDDDDCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
-A fg=default bg=default attrs=----------
+A fg=default bg=default attrs=------r---
 B fg=default bg=default attrs=b---------
-C fg=default bg=default attrs=b--u------
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=b--u------

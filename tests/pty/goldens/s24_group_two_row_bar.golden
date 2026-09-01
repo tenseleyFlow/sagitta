@@ -2,8 +2,8 @@
 size 80x24 alt=1 cursor=2,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-[1: pty-s14-s24_group_tw[yew-s24-grp/ (3)]
- one.txt three.txt two.txt
+ 1 pty-s14-s24_group_two yew-s24-grp/ (3)  +                                    
+ one.txt  three.txt  two.txt                                                    
     1 one.txt                                                                   
     1                                                                           
                                                                                 
@@ -27,8 +27,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
  L  one.txt                                                  utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
-DDDDDDDDAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BBBBBBBBBAAAAAAAAAAAAAAAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 EEEEFEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
@@ -52,10 +52,10 @@ EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 HHHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 --- legend
-A fg=#787878 bg=default attrs=-d--------
-B fg=default bg=default attrs=------r---
-C fg=default bg=default attrs=----------
-D fg=#787878 bg=default attrs=------r---
+A fg=#5c6370 bg=#1b202a attrs=-d--------
+B fg=#c8ccd4 bg=#2c313a attrs=b---------
+C fg=#61afef bg=#1b202a attrs=b---------
+D fg=#5c6370 bg=#1b202a attrs=----------
 E fg=#4b5263 bg=#12141a attrs=----------
 F fg=#c8ccd4 bg=#12141a attrs=b---------
 G fg=#c8ccd4 bg=#12141a attrs=----------
