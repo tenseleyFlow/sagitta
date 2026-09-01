@@ -186,6 +186,16 @@ void yew_ed_syn_bind(Buffer *b)
 
     if (b == NULL || b->tb == NULL)
         return;
+    /* FileMeta is authoritative here.  In particular, an extensionless
+     * binary must not reach the ambiguous-Fortran scorer: random object
+     * bytes contain enough source-like fragments to produce a language id,
+     * which in turn can start an LSP server and other source consumers. */
+    if (b->meta.binary) {
+        b->lang = NULL;
+        yew_syn_detach(&b->syn);
+        yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
+        return;
+    }
     line = ed_first_line(b->tb, &len);
     if (b->owner != NULL &&
         yew_opt_get(b->owner, b, NULL, "fortran_form", 12U, &option) &&

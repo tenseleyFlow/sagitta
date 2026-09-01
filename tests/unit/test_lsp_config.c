@@ -173,3 +173,27 @@ void test_lsp_config_defers_startup_and_does_not_retry_disabled_language(void)
     (void)unlink(document);
     (void)unlink(config);
 }
+
+void test_lsp_config_binary_buffer_never_allocates_or_starts_a_client(void)
+{
+    static const char *const args[] = {NULL};
+    LspServerCfg cfg = {"must-not-start", "fortran", "must-not-exec",
+                        args, NULL, NULL, 1000};
+    Ed ed;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ed.buffer.path = arena_strdup(&ed.arena, "/tmp/yew-binary-encode");
+    ed.buffer.lang = "fortran"; /* stale/misclassified state, defensively */
+    ed.buffer.meta.binary = true;
+    YEW_ASSERT(!yew_lsp_client_start_cfg(&ed, &ed.buffer, &cfg));
+    YEW_ASSERT(!yew_lsp_client_start(&ed, &ed.buffer));
+    YEW_ASSERT_NULL(ed.lsp);
+    yew_lsp_pump(&ed);
+    /* Config refresh owns the process-wide client table even when no
+     * document qualifies; the binary guard must keep the server table empty. */
+    YEW_ASSERT_NOT_NULL(ed.lsp);
+    YEW_ASSERT_NULL(yew_lsp_server_by_id(&ed, 1U));
+    YEW_ASSERT_NULL(yew_lsp_doc_for_buffer(&ed, &ed.buffer));
+    yew_ed_free(&ed);
+}

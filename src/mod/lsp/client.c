@@ -1092,7 +1092,8 @@ bool yew_lsp_client_start_cfg(Ed *ed, Buffer *b, const LspServerCfg *cfg)
     char *root;
     LspServer *s;
 
-    if (ed == NULL || b == NULL || cfg == NULL || b->path == NULL ||
+    if (ed == NULL || b == NULL || b->meta.binary || cfg == NULL ||
+        b->path == NULL ||
         cfg->id == NULL || cfg->lang == NULL || cfg->cmd == NULL)
         return false;
     if (ed->lsp == NULL)
@@ -1126,7 +1127,7 @@ bool yew_lsp_client_start(Ed *ed, Buffer *b)
 {
     const LspServerCfg *cfg;
 
-    if (b == NULL || b->lang == NULL)
+    if (b == NULL || b->meta.binary || b->lang == NULL)
         return false;
     cfg = yew_lsp_client_cfg(ed, b->lang);
     return cfg != NULL && yew_lsp_client_start_cfg(ed, b, cfg);

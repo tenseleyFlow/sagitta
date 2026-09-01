@@ -152,6 +152,62 @@ void test_symidx_plain_text_identifier_shape_table(void)
     fixture_free(&f, false);
 }
 
+void test_symidx_binary_buffers_never_bind_or_schedule_source_work(void)
+{
+    static const u8 bytes[] = {
+        0xcfU, 0xfaU, 0xedU, 0xfeU, 0U, 'p', 'r', 'o', 'g', 'r', 'a', 'm',
+        ' ', 'm', 'o', 'd', 'u', 'l', 'e', ' ', 'e', 'n', 'd', '\n'
+    };
+    Ed ed;
+    SymIndex direct;
+    SymIndex *stale;
+    EditCtx edit;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, bytes, sizeof(bytes),
+                                  "extensionless-binary"));
+    ed.buffer.path = arena_strdup(&ed.arena, "/tmp/yew-binary-encode");
+    ed.buffer.meta.binary = true;
+    yew_ed_syn_bind(&ed.buffer);
+    YEW_ASSERT_NULL(ed.buffer.lang);
+    YEW_ASSERT_EQ_U64(ed.buffer.syn.lang, YEW_LANG_NONE);
+    YEW_ASSERT_NULL(ed.buffer.syn.engine);
+
+    /* Defense in depth for a reload that changes classification after an
+     * index already exists. */
+    ed.buffer.meta.binary = false;
+    stale = yew_symidx_buffer(&ed.ws, ed.buffer.id, true);
+    YEW_ASSERT_NOT_NULL(stale);
+    YEW_ASSERT(yew_symidx_scan(
+                   stale, &ed.buffer,
+                   (Span){0U, yew_textbuf_len(ed.buffer.tb)}) != 0U);
+    ed.buffer.meta.binary = true;
+    yew_symidx_pump(&ed, INT64_MAX);
+    YEW_ASSERT_EQ_U64(ed.ws.sym_buf.len, 0U);
+
+    yew_symidx_init(&direct, &ed.interner);
+    YEW_ASSERT_EQ_U64(yew_symidx_scan(
+                          &direct, &ed.buffer,
+                          (Span){0U, yew_textbuf_len(ed.buffer.tb)}),
+                      0U);
+    YEW_ASSERT_EQ_U64(direct.e.len, 0U);
+    YEW_ASSERT(!yew_symidx_pending(&ed));
+    yew_symidx_pump(&ed, INT64_MAX);
+    YEW_ASSERT_EQ_U64(ed.ws.sym_buf.len, 0U);
+
+    /* Memory fixtures have no crash-journal destination; expose the path
+     * only while exercising language detection. */
+    ed.buffer.path = NULL;
+    edit = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(0U), (const u8 *)"x", 1U));
+    yew_ed_finish_edit(&ed, &edit);
+    YEW_ASSERT(!yew_symidx_pending(&ed));
+    YEW_ASSERT_EQ_U64(ed.ws.sym_buf.len, 0U);
+
+    yew_symidx_free(&direct);
+    yew_ed_free(&ed);
+}
+
 void test_symidx_plain_text_is_syntax_superset(void)
 {
     static const u8 text[] = "alpha // commentWord\n\"stringWord\" omega\n";

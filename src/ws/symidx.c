@@ -580,7 +580,8 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
     u64 previous_len = 0U;
     bool previous_valid = false;
 
-    if (idx == NULL || buf == NULL || buf->tb == NULL || idx->intern == NULL)
+    if (idx == NULL || buf == NULL || buf->tb == NULL || buf->meta.binary ||
+        idx->intern == NULL)
         return 0U;
     text_len = yew_textbuf_len(buf->tb);
     if (range.lo > text_len)
@@ -837,6 +838,8 @@ void yew_symidx_workspace_replace(Workspace *ws, Buffer *buf)
     idx->sig.len = write;
     symidx_map_rebuild(idx);
     idx->capped = false;
+    if (buf->meta.binary)
+        return;
     idx->scan_limit = YEW_SYMWALK_MAX_SYMS_PER_FILE;
     (void)yew_symidx_scan_workspace(
         idx, buf, (Span){0U, yew_textbuf_len(buf->tb)});
@@ -916,6 +919,10 @@ void yew_symidx_invalidate_buffer(Ed *ed, Buffer *buf)
 
     if (ed == NULL || ed->ws.owner != ed || buf == NULL || buf->tb == NULL)
         return;
+    if (buf->meta.binary) {
+        yew_symidx_drop_buffer(&ed->ws, buf->id);
+        return;
+    }
     (void)yew_symidx_buffer(&ed->ws, buf->id, true);
     sb = symbuf_find(&ed->ws, buf->id);
     if (sb == NULL || sb->dirty.full_rebuild)
@@ -939,6 +946,10 @@ void yew_symidx_note_pre(EditCtx *ec, u8 kind, ByteOff at, u64 len)
 
     if (ec == NULL || ec->ed == NULL || ec->buffer == NULL)
         return;
+    if (ec->buffer->meta.binary) {
+        yew_symidx_drop_buffer(&ec->ed->ws, ec->buffer->id);
+        return;
+    }
     (void)yew_symidx_buffer(&ec->ed->ws, ec->buffer->id, true);
     sb = symbuf_find(&ec->ed->ws, ec->buffer->id);
     if (sb == NULL)
@@ -1018,7 +1029,8 @@ void yew_symidx_note_post(EditCtx *ec, u8 kind, ByteOff at, u64 len)
     i64 delta;
 
     (void)kind;
-    if (ec == NULL || ec->ed == NULL || ec->buffer == NULL)
+    if (ec == NULL || ec->ed == NULL || ec->buffer == NULL ||
+        ec->buffer->meta.binary)
         return;
     sb = symbuf_find(&ec->ed->ws, ec->buffer->id);
     if (sb == NULL || sb->dirty.full_rebuild || !sb->dirty.have_pre)
@@ -1279,7 +1291,7 @@ static void symidx_seed_missing(Ed *ed)
         Buffer *buf = ed->ws.bufs[i];
         SymBufIndex *sb;
 
-        if (buf == NULL || buf->tb == NULL ||
+        if (buf == NULL || buf->tb == NULL || buf->meta.binary ||
             symbuf_find(&ed->ws, buf->id) != NULL)
             continue;
         (void)yew_symidx_buffer(&ed->ws, buf->id, true);
@@ -1302,12 +1314,23 @@ bool yew_symidx_pending(const Ed *ed)
     for (b = 0U; b < ed->ws.nbufs; b++) {
         Buffer *buf = ed->ws.bufs[b];
 
-        if (buf != NULL && buf->tb != NULL &&
+        if (buf != NULL && buf->tb != NULL && !buf->meta.binary &&
             symbuf_find_const(&ed->ws, buf->id) == NULL)
             return true;
     }
     for (i = 0U; i < ed->ws.sym_buf.len; i++) {
-        if (ed->ws.sym_buf.data[i].dirty.pending)
+        const Buffer *buf = NULL;
+        u32 j;
+
+        for (j = 0U; j < ed->ws.nbufs; j++) {
+            if (ed->ws.bufs[j] != NULL &&
+                ed->ws.bufs[j]->id == ed->ws.sym_buf.data[i].buf_id) {
+                buf = ed->ws.bufs[j];
+                break;
+            }
+        }
+        if ((buf == NULL || !buf->meta.binary) &&
+            ed->ws.sym_buf.data[i].dirty.pending)
             return true;
     }
     return false;
@@ -1320,6 +1343,20 @@ void yew_symidx_pump(Ed *ed, i64 budget_us)
 
     if (ed == NULL || !ed->model_ready || budget_us <= 0)
         return;
+    /* A buffer can become binary after an index was seeded (for example a
+     * reload).  Remove that stale source before round-robin work begins so
+     * it cannot retain candidates or a permanently pending dirty range. */
+    rounds = ed->ws.sym_buf.len;
+    while (rounds != 0U) {
+        SymBufIndex *sb;
+        Buffer *buf;
+
+        rounds--;
+        sb = &ed->ws.sym_buf.data[rounds];
+        buf = yew_ws_buf_by_id(ed, sb->buf_id);
+        if (buf != NULL && buf->meta.binary)
+            yew_symidx_drop_buffer(&ed->ws, sb->buf_id);
+    }
     symidx_seed_missing(ed);
     start = sym_now_us();
     rounds = ed->ws.sym_buf.len;

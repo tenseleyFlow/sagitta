@@ -408,7 +408,8 @@ void yew_lsp_pump(Ed *ed)
     for (i = 0U; i < ed->ws.nbufs; i++) {
         Buffer *b = ed->ws.bufs[i];
 
-        if (b != NULL && b->tb != NULL && b->path != NULL &&
+        if (b != NULL && b->tb != NULL && !b->meta.binary &&
+            b->path != NULL &&
             b->lang != NULL && yew_lsp_doc_for_buffer(ed, b) == NULL)
             (void)yew_lsp_client_start(ed, b);
     }
