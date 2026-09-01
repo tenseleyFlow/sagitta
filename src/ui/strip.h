@@ -28,6 +28,7 @@ typedef struct StripEntry {
     char label[64];
     i32 payload;
     bool dim;
+    bool modified;
 } StripEntry;
 
 typedef struct StripSpan {

@@ -80,6 +80,26 @@ static Key ms_wheel(u8 button, u16 x, u16 y, u16 mods)
     return k;
 }
 
+static bool ms_find_region(RegionKind kind, Rect within, Region *out)
+{
+    u16 y;
+
+    for (y = within.y; y < (u16)(within.y + within.h); y++) {
+        u16 x;
+
+        for (x = within.x; x < (u16)(within.x + within.w); x++) {
+            Region hit = yew_region_hit(x, y);
+
+            if (hit.kind == kind) {
+                if (out != NULL)
+                    *out = hit;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /* A frame whose only region is the pane, registered with the rect the
  * layout actually gave it. */
 static void ms_frame_pane(const Pane *leaf, i32 leaf_payload)
@@ -155,6 +175,80 @@ void test_mouse_press_arms_and_does_not_drag(void)
     }
     YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
     YEW_ASSERT_EQ_U64(ed.mouse.held, 0U);
+    yew_ed_free(&ed);
+}
+
+void test_mouse_new_tab_control_invokes_the_named_command_once(void)
+{
+    Ed ed;
+    Region add;
+    Key press;
+    Key release;
+    u32 old_id;
+
+    ms_fixture(&ed);
+    yew_region_frame_begin();
+    yew_tab_strip_draw(&ed, ed.tab_strip_rect);
+    YEW_ASSERT(ms_find_region(YEW_REGION_TAB_NEW, ed.tab_strip_rect, &add));
+    old_id = yew_tab_at(&ed, 0)->tab_id;
+    press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                  (u16)(add.rect.x + 1U), add.rect.y);
+    release = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
+                    (u16)(add.rect.x + 1U), add.rect.y);
+
+    yew_mouse_event(&ed, &press);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_ARMED);
+    yew_mouse_event(&ed, &release);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT(yew_tab_at(&ed, 1)->path == NULL);
+    YEW_ASSERT(yew_tab_at(&ed, 1)->tab_id > old_id);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
+}
+
+void test_mouse_new_tab_control_cancels_off_region_and_drag(void)
+{
+    Ed ed;
+    Region add;
+    Key press;
+    Key away;
+    Key release;
+
+    ms_fixture(&ed);
+    yew_region_frame_begin();
+    yew_tab_strip_draw(&ed, ed.tab_strip_rect);
+    YEW_ASSERT(ms_find_region(YEW_REGION_TAB_NEW, ed.tab_strip_rect, &add));
+    press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                  (u16)(add.rect.x + 1U), add.rect.y);
+    away = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
+                 (u16)(add.rect.x + add.rect.w + 1U), add.rect.y);
+    yew_mouse_event(&ed, &press);
+    yew_mouse_event(&ed, &away);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
+
+    yew_mouse_event(&ed, &press);
+    away.ev = (u8)YEW_KEY_REPEAT;
+    yew_mouse_event(&ed, &away);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_ARMED);
+    away.ev = (u8)YEW_KEY_RELEASE;
+    yew_mouse_event(&ed, &away);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+
+    /* A repaint can move the tail action between press and release.
+     * Landing on the newly placed action is not the same click. */
+    yew_mouse_event(&ed, &press);
+    yew_region_frame_begin();
+    yew_tab_strip_draw(&ed, (Rect){4U, ed.tab_strip_rect.y,
+                                   (u16)(ed.tab_strip_rect.w - 4U), 1U});
+    release = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
+                    (u16)(add.rect.x + 5U), add.rect.y);
+    YEW_ASSERT_EQ_I64(yew_region_hit(release.col, release.row).kind,
+                      YEW_REGION_TAB_NEW);
+    yew_mouse_event(&ed, &release);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
     yew_ed_free(&ed);
 }
 

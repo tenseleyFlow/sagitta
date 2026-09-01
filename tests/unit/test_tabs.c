@@ -55,6 +55,94 @@ static void tb_open_many(Ed *ed, u32 n, u32 *ids)
     }
 }
 
+void test_tabs_modern_labels_and_single_tab_strip(void)
+{
+    Ed ed;
+    StripEntry entries[4];
+    int idx;
+    int n;
+
+    tb_fixture(&ed);
+    n = yew_tab_row1_entries(&ed, entries, (int)YEW_ARRAY_LEN(entries));
+    YEW_ASSERT_EQ_I64(n, 1);
+    YEW_ASSERT_EQ_STR(entries[0].label, " 1 untitled ");
+    YEW_ASSERT(!entries[0].modified);
+    YEW_ASSERT_EQ_U64(yew_tab_strip_rows(&ed), 1U);
+
+    idx = yew_tab_open(&ed, "/tmp/yew-modern-tab.c");
+    YEW_ASSERT(idx >= 0);
+    n = yew_tab_row1_entries(&ed, entries, (int)YEW_ARRAY_LEN(entries));
+    YEW_ASSERT_EQ_I64(n, 2);
+    YEW_ASSERT_EQ_STR(entries[1].label, " 2 yew-modern-tab.c ");
+    YEW_ASSERT_EQ_I64(entries[0].label[0], ' ');
+    YEW_ASSERT_EQ_I64(entries[0].label[strlen(entries[0].label) - 1U],
+                      ' ');
+    YEW_ASSERT(strchr(entries[0].label, '[') == NULL);
+    YEW_ASSERT(strchr(entries[0].label, ':') == NULL);
+    yew_ed_free(&ed);
+}
+
+void test_tabs_new_control_uses_exact_tail_geometry(void)
+{
+    Ed ed;
+    Rect strip = {7U, 0U, 40U, 1U};
+    Region add;
+    u16 x;
+
+    tb_fixture(&ed);
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 4U, 80U));
+    ed.grid_ready = true;
+    yew_region_frame_begin();
+    yew_tab_strip_draw(&ed, strip);
+
+    add = (Region){YEW_REGION_NONE, {0U, 0U, 0U, 0U}, 0};
+    for (x = strip.x; x < (u16)(strip.x + strip.w); x++) {
+        Region hit = yew_region_hit(x, strip.y);
+
+        if (hit.kind == YEW_REGION_TAB_NEW) {
+            add = hit;
+            break;
+        }
+    }
+    YEW_ASSERT_EQ_U64((u64)add.kind, (u64)YEW_REGION_TAB_NEW);
+    YEW_ASSERT_EQ_U64(add.rect.x, 19U);
+    YEW_ASSERT_EQ_U64(add.rect.y, 0U);
+    YEW_ASSERT_EQ_U64(add.rect.w, 3U);
+    YEW_ASSERT_EQ_U64(add.rect.h, 1U);
+    YEW_ASSERT_EQ_I64(yew_strip_slot_at(add.rect.x, add.rect.y), -1);
+    YEW_ASSERT_EQ_I64(ed.grid.back[(size_t)add.rect.y * ed.grid.cols +
+                                  add.rect.x + 1U].utf8[0], '+');
+    yew_ed_free(&ed);
+}
+
+void test_tabs_new_control_yields_to_overflow(void)
+{
+    Ed ed;
+    u32 ids[3];
+    Rect strip = {5U, 0U, 18U, 1U};
+    bool saw_right = false;
+    bool saw_new = false;
+    u16 x;
+
+    tb_fixture(&ed);
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 4U, 80U));
+    ed.grid_ready = true;
+    tb_open_many(&ed, 3U, ids);
+    yew_region_frame_begin();
+    yew_tab_strip_draw(&ed, strip);
+    for (x = strip.x; x < (u16)(strip.x + strip.w); x++) {
+        Region hit = yew_region_hit(x, strip.y);
+
+        if (hit.kind == YEW_REGION_TAB_SCROLL && hit.payload > 0)
+            saw_right = true;
+        if (hit.kind == YEW_REGION_TAB_NEW)
+            saw_new = true;
+    }
+    YEW_ASSERT(saw_right);
+    YEW_ASSERT(!saw_new);
+    yew_ed_free(&ed);
+}
+
 void test_tabs_ids_are_monotonic_and_never_reused(void)
 {
     Ed ed;

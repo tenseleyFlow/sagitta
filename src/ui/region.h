@@ -35,6 +35,8 @@ typedef enum {
      */
     YEW_REGION_TAB,
     YEW_REGION_TAB_SCROLL, /* payload: +1 scroll right, -1 left     */
+    /* Sprint 57.8: the row-one ` + ` action; payload is unused. */
+    YEW_REGION_TAB_NEW,
     /*
      * Inert: owns its rectangle and means nothing.  A dialog registers
      * one so clicks on it never fall through to the pane underneath.

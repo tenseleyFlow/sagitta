@@ -21,6 +21,7 @@
 #include "ui/message.h"
 #include "ui/region.h"
 #include "ui/strip.h"
+#include "syn/theme.h"
 #include "util/log.h"
 
 void yew_tabs_init(Tabs *t)
@@ -562,12 +563,14 @@ static const char *tab_basename(const Tab *t)
 }
 
 /*
- * `[N: name*]` — N is the 1-based index the user types for goto, and
- * the `*` is asked for, never remembered (§4).
+ * Facsimile's padded, bracket-free tab pill.  N is the 1-based index
+ * the user types for goto, and the `*` is asked for, never remembered.
+ * Padding belongs to the tab's hit span; an unowned gap between tabs
+ * would make the modern strip look clickable where it is not.
  */
 static void tab_label(const Ed *ed, int idx, char *out, size_t cap)
 {
-    (void)snprintf(out, cap, "[%d: %s%s]", idx + 1,
+    (void)snprintf(out, cap, " %d %s%s ", idx + 1,
                    tab_basename(&ed->tabs.v.data[idx]),
                    yew_tab_modified(ed, idx)
                        ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
@@ -608,7 +611,7 @@ int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
         (void)memset(&out[n], 0, sizeof(out[n]));
         if (t->group_id != 0U) {
             /* Two cells shorter than the entry it goes into, so the
-             * brackets always fit. */
+             * padding always fits. */
             char label[YEW_TAB_LABEL_MAX - 4];
             bool dup = false;
             int k;
@@ -626,7 +629,7 @@ int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
             if (nseen < (int)YEW_ARRAY_LEN(seen))
                 seen[nseen++] = t->group_id;
             yew_group_label(ed, t->group_id, label, sizeof(label));
-            (void)snprintf(out[n].label, sizeof(out[n].label), "[%s]",
+            (void)snprintf(out[n].label, sizeof(out[n].label), " %s ",
                            label);
             /*
              * NEGATIVE payload.  The sign is how the click router tells
@@ -641,6 +644,7 @@ int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
         tab_label(ed, (int)i, out[n].label, sizeof(out[n].label));
         out[n].payload = (i32)i;
         out[n].dim = tab_is_orphan(ed, (int)i);
+        out[n].modified = yew_tab_modified(ed, (int)i);
         n++;
     }
     return n;
@@ -679,8 +683,9 @@ u32 yew_tab_strip_rows(const Ed *ed)
     if (ed == NULL)
         return 0U;
     n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
-    /* One lone entry needs no strip to choose between. */
-    if (n > 1)
+    /* Sprint 57.8: even one tab owns a row because its tail carries the
+     * always-reachable new-untitled action. */
+    if (n > 0)
         rows = 1U;
     /*
      * Inside a group the bar is two rows: row 1 keeps the group's own
@@ -811,7 +816,7 @@ static void apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
 
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          int active_entry, int *scroll, i32 scroll_mag,
-                         bool record_slots);
+                         bool record_slots, bool draw_new);
 
 /*
  * Row 1, with the drag preview applied and the pre-drag list recorded.
@@ -843,12 +848,67 @@ static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
         strip_pre[i].col1 = 0U;
         strip_pre[i].pre_payload = pre[i].payload;
     }
-    strip_render(ed, rect, entries, n, active_entry, scroll, 1, true);
+    strip_render(ed, rect, entries, n, active_entry, scroll, 1, true, true);
+}
+
+static ThemeEnt tab_base_style(const Ed *ed)
+{
+    const ThemeEnt *fg = yew_theme_ui_tab(ed, "fg");
+    const ThemeEnt *bg = yew_theme_ui_tab(ed, "bg");
+    ThemeEnt style = {
+        {YEW_COLOR_DEFAULT, 0U, 0U, 0U},
+        {YEW_COLOR_DEFAULT, 0U, 0U, 0U},
+        0U
+    };
+
+    if (fg != NULL) {
+        if (fg->fg.tag != YEW_COLOR_DEFAULT)
+            style.fg = fg->fg;
+        style.attrs = fg->attrs;
+    }
+    if (bg != NULL) {
+        if (bg->bg.tag != YEW_COLOR_DEFAULT)
+            style.bg = bg->bg;
+        style.attrs = (u16)(style.attrs | bg->attrs);
+    }
+    return style;
+}
+
+/*
+ * A UI role is an overlay, not a replacement: foreground-only custom
+ * roles must retain the strip surface, and background-only roles must
+ * retain readable text.  Presence still owns attrs so `mono: "plain"`
+ * can deliberately clear a colorful rendition's emphasis.
+ */
+static ThemeEnt tab_role_style(const Ed *ed, const char *role,
+                               ThemeEnt fallback)
+{
+    const ThemeEnt *themed = yew_theme_ui_tab(ed, role);
+
+    if (themed == NULL)
+        return fallback;
+    if (themed->fg.tag != YEW_COLOR_DEFAULT)
+        fallback.fg = themed->fg;
+    if (themed->bg.tag != YEW_COLOR_DEFAULT)
+        fallback.bg = themed->bg;
+    fallback.attrs = themed->attrs;
+    return fallback;
+}
+
+static Cell tab_blank(ThemeEnt style)
+{
+    Cell blank;
+
+    (void)memset(&blank, 0, sizeof(blank));
+    blank.fg = style.fg;
+    blank.bg = style.bg;
+    blank.attrs = style.attrs;
+    return blank;
 }
 
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          int active_entry, int *scroll, i32 scroll_mag,
-                         bool record_slots)
+                         bool record_slots, bool draw_new)
 {
     StripSpan spans[YEW_TAB_MAX];
     int n_spans = 0;
@@ -856,17 +916,36 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
     bool more_right = false;
     int i;
     u16 avail;
-    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
-    YewColor fg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    Cell blank;
+    u16 tail_x;
+    ThemeEnt base;
+    ThemeEnt surface;
+    ThemeEnt inactive;
+    ThemeEnt modified;
+    ThemeEnt orphan;
+    ThemeEnt active;
+    ThemeEnt add;
 
     if (rect.w == 0U || rect.h == 0U)
         return;
+    base = tab_base_style(ed);
+    surface = tab_role_style(ed, "tab.bar", base);
+    inactive = tab_role_style(ed, "tab.inactive", surface);
+    modified = surface;
+    modified.attrs = (u16)(modified.attrs | YEW_ATTR_BOLD);
+    modified = tab_role_style(ed, "tab.modified", modified);
+    orphan = surface;
+    orphan.attrs = (u16)(orphan.attrs | YEW_ATTR_DIM);
+    orphan = tab_role_style(ed, "tab.orphan", orphan);
+    active = surface;
+    active.attrs = (u16)(active.attrs | YEW_ATTR_REVERSE);
+    active = tab_role_style(ed, "tab.active", active);
+    add = surface;
+    add.attrs = (u16)(add.attrs | YEW_ATTR_BOLD);
+    add = tab_role_style(ed, "tab.add", add);
     /* Blank the row first: a shorter strip than last frame must not
      * leave the tail of the old one behind. */
-    (void)memset(&blank, 0, sizeof(blank));
-    yew_grid_fill(&ed->grid, rect.y, rect.x, (u16)(rect.x + rect.w), blank);
+    yew_grid_fill(&ed->grid, rect.y, rect.x, (u16)(rect.x + rect.w),
+                  tab_blank(surface));
     if (n <= 0)
         return;
 
@@ -877,24 +956,27 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
         avail = (u16)(avail - 1U);
     yew_strip_layout(entries, n, avail, active_entry, scroll, spans,
                      &n_spans, &more_left, &more_right);
+    tail_x = (u16)(rect.x + (more_left ? 1U : 0U));
 
     for (i = 0; i < n_spans; i++) {
         int idx = spans[i].idx;
         u16 x = (u16)(rect.x + spans[i].col0 + (more_left ? 1U : 0U));
-        u16 attrs = 0U;
+        ThemeEnt style = inactive;
         Rect span_rect;
 
         if (idx == active_entry)
-            attrs = YEW_ATTR_REVERSE;
+            style = active;
         else if (entries[idx].dim)
-            attrs = YEW_ATTR_DIM;
+            style = orphan;
+        else if (entries[idx].modified)
+            style = modified;
         /* Draw only the bytes that fit the span the layout gave us.
          * Drawing the whole label writes its tail over the next
          * entry — which is exactly what the golden caught. */
         (void)yew_grid_puts(&ed->grid, rect.y, x,
                             (const u8 *)entries[idx].label,
                             yew_strip_label_bytes(entries[idx].label),
-                            entries[idx].dim ? dim : fg, bg, attrs);
+                            style.fg, style.bg, style.attrs);
         /*
          * Registered with the SAME cells the layout produced and the
          * draw used.  Recomputing this from strlen while hit-testing is
@@ -903,6 +985,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
         span_rect = (Rect){x, rect.y,
                            (u16)(spans[i].col1 - spans[i].col0), 1U};
         yew_region_add(YEW_REGION_TAB, span_rect, entries[idx].payload);
+        tail_x = (u16)(x + span_rect.w);
         /*
          * Sprint 27 §4.  The SAME cells, against the pre-drag list —
          * `idx` is a position in the visible strip, and the pre-drag
@@ -922,8 +1005,8 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
 
         (void)yew_grid_puts(&ed->grid, rect.y, rect.x,
                             (const u8 *)yew_glyph(YEW_GLYPH_MORE_LEFT),
-                            yew_glyph_len(YEW_GLYPH_MORE_LEFT), dim, bg,
-                            YEW_ATTR_DIM);
+                            yew_glyph_len(YEW_GLYPH_MORE_LEFT), orphan.fg,
+                            surface.bg, YEW_ATTR_DIM);
         yew_region_add(YEW_REGION_TAB_SCROLL, r, -scroll_mag);
     }
     if (more_right) {
@@ -939,10 +1022,19 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
         if (w < rect.w) {
             x = (u16)(rect.x + rect.w - w);
             (void)yew_grid_puts(&ed->grid, rect.y, x, (const u8 *)more,
-                                strlen(more), dim, bg, YEW_ATTR_DIM);
+                                strlen(more), orphan.fg, surface.bg,
+                                YEW_ATTR_DIM);
             r = (Rect){x, rect.y, w, 1U};
             yew_region_add(YEW_REGION_TAB_SCROLL, r, scroll_mag);
         }
+    } else if (draw_new &&
+               (u32)tail_x + 3U <= (u32)rect.x + rect.w) {
+        Rect r = {tail_x, rect.y, 3U, 1U};
+
+        (void)yew_grid_puts(&ed->grid, rect.y, tail_x,
+                            (const u8 *)" + ", 3U,
+                            add.fg, add.bg, add.attrs);
+        yew_region_add(YEW_REGION_TAB_NEW, r, 0);
     }
 }
 
@@ -969,17 +1061,18 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
     n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     for (i = 0; i < n; i++) {
         (void)memset(&entries[i], 0, sizeof(entries[i]));
-        (void)snprintf(entries[i].label, sizeof(entries[i].label), " %s%s",
+        (void)snprintf(entries[i].label, sizeof(entries[i].label), " %s%s ",
                        tab_basename(&ed->tabs.v.data[members[i]]),
                        yew_tab_modified(ed, members[i])
                            ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
         entries[i].payload = members[i];
-        entries[i].dim = true;
+        entries[i].dim = tab_is_orphan(ed, members[i]);
+        entries[i].modified = yew_tab_modified(ed, members[i]);
         if (members[i] == ed->tabs.active)
             active_entry = i;
     }
     strip_render(ed, rect, entries, n, active_entry,
-                 &ed->tabs.member_scroll, 2, false);
+                 &ed->tabs.member_scroll, 2, false, false);
 }
 
 void yew_tab_strip_draw(Ed *ed, Rect rect)

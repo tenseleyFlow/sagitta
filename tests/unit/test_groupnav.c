@@ -78,9 +78,11 @@ void test_groupnav_row1_shows_a_group_once_at_its_first_member(void)
     /* The tab after the group keeps its own index, not a renumbered
      * one — row-1 position and tab index are different things. */
     YEW_ASSERT_EQ_I64(entries[3].payload, 5);
-    /* The label is bracketed and carries the LIVE count. */
+    /* The modern padded label carries the LIVE count. */
     YEW_ASSERT_NOT_NULL(strstr(entries[2].label, "src/ (3)"));
-    YEW_ASSERT_EQ_I64(entries[2].label[0], '[');
+    YEW_ASSERT_EQ_I64(entries[2].label[0], ' ');
+    YEW_ASSERT_EQ_I64(entries[2].label[strlen(entries[2].label) - 1U],
+                      ' ');
     yew_ed_free(&ed);
 }
 

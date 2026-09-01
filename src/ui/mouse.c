@@ -307,6 +307,7 @@ static void mouse_wheel(Ed *ed, const Key *k)
      * whole point of BLOCK is that the document underneath is inert.
      */
     case YEW_REGION_PANE_BORDER:
+    case YEW_REGION_TAB_NEW:
     case YEW_REGION_CTX_ROW:
     case YEW_REGION_BLOCK:
     case YEW_REGION_MENU_ROW:
@@ -398,6 +399,18 @@ static void invoke_named(Ed *ed, const char *name)
     cx.win = ed->win;
     cx.count = 1U;
     cx.source = YEW_SRC_KEY;
+    (void)yew_ed_invoke(ed, id, &cx);
+}
+
+static void invoke_mouse_named(Ed *ed, const char *name)
+{
+    CmdCtx cx = {0};
+    CmdId id = yew_cmd_lookup(name, strlen(name));
+
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_MOUSE;
     (void)yew_ed_invoke(ed, id, &cx);
 }
 
@@ -776,6 +789,10 @@ static void mouse_press(Ed *ed, const Key *k)
     case YEW_REGION_TAB_SCROLL:
         strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
                      hit.payload < 0 ? -1 : 1);
+        break;
+    case YEW_REGION_TAB_NEW:
+        /* Armed only.  Release-in-the-same-region invokes the command,
+         * so a press that slides away creates nothing. */
         break;
     case YEW_REGION_PICK_ROW:
         press_pick_row(ed, &hit);
@@ -1222,6 +1239,17 @@ static void mouse_release(Ed *ed, const Key *k)
         case YEW_REGION_TAB:
             click_tab(ed);
             break;
+        case YEW_REGION_TAB_NEW: {
+            Region up = yew_region_hit(k->col, k->row);
+
+            if (up.kind == YEW_REGION_TAB_NEW &&
+                up.rect.x == m->press_rgn.rect.x &&
+                up.rect.y == m->press_rgn.rect.y &&
+                up.rect.w == m->press_rgn.rect.w &&
+                up.rect.h == m->press_rgn.rect.h)
+                invoke_mouse_named(ed, "ed.tab.new");
+            break;
+        }
         case YEW_REGION_PICK_ROW:
             /*
              * Accept only when the release is in the SAME row.  A press
