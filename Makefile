@@ -2026,13 +2026,22 @@ size-update: size $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 
 ifeq ($(TARGET),x86_64-linux-musl)
 size-musl: size-tools-selftest static-pie-tools-selftest \
-           $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN)
+           $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN) \
+           $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 	FILE='$(FILE_CMD)' READELF='$(READELF)' NM='$(NM)' LDD='$(LDD)' \
 		scripts/verify-static-pie.sh --binary '$(SIZE_FULL_BIN)'
 	FILE='$(FILE_CMD)' READELF='$(READELF)' NM='$(NM)' LDD='$(LDD)' \
 		scripts/verify-static-pie.sh --binary '$(SIZE_MINIMAL_BIN)'
 	scripts/size.sh --budgets tests/size/budgets.txt \
 		musl-full=$(SIZE_FULL_BIN) musl-minimal=$(SIZE_MINIMAL_BIN)
+	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+		scripts/size-ledger.sh --build '$(SIZE_FULL_BUILD)' \
+		--binary '$(SIZE_FULL_BIN)' \
+		--without-gc '$(SIZE_FULL_NOGC_BIN)' --top 5
+	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
+		--binary '$(SIZE_MINIMAL_BIN)' \
+		--without-gc '$(SIZE_MINIMAL_NOGC_BIN)' --top 5
 else
 size-musl:
 	@echo 'size-musl requires TARGET=x86_64-linux-musl' >&2; exit 2
