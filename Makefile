@@ -901,6 +901,11 @@ TORTURE_LIVE := $(BUILD)/yew-live-torture
 TORTURE_BATCH := $(BUILD)/batch-kill9
 TORTURE_GIT_HUNK := $(BUILD)/git-hunk-kill9
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
+# The interposer must remain outside the executable's sanitizer runtime.
+# Instrumenting the injected Darwin dylib crashes sanitized child tests during
+# loader startup, before the storage contract can run.
+FAULTSHIM_SAN_FLAGS := \
+  $(if $(filter 1,$(SAN) $(ALIGN_SAN)),-fno-sanitize=all,)
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(RUNTIME_BLOB_GEN) $(EMBED_INITRAMFS_GEN) \
@@ -1512,7 +1517,8 @@ $(TORTURE_GIT_HUNK): $(PERF_CORE_OBJ) $(TORTURE_GIT_HUNK_OBJ)
 $(FAULTSHIM): tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
               $(BUILD)/mods.stamp \
               $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
-	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ \
+	$(CC) $(CFLAGS) $(LDFLAGS) $(FAULTSHIM_SAN_FLAGS) \
+		-fPIC $(SHARED_FLAG) -o $@ \
 		tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
 		$(DL_LIBS) $(LDLIBS)
 
