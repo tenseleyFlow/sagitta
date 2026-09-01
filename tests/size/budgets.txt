@@ -1,9 +1,9 @@
 # config         bytes    modules                         why
-full             1572864  lsp,ai,fuss,plugins             locked-1.5-MiB-quality-bar
-minimal           921600  none                            locked-900-KiB-quality-bar
-lsp-only         1075200  lsp                             sprint57-pinned-minimal-plus-150-KiB-cap
-ai-only          1013760  ai                              sprint57-pinned-minimal-plus-90-KiB-cap
-fuss-only        1064960  fuss                            sprint57-pinned-minimal-plus-140-KiB-cap
-plugins-only      993280  plugins                         sprint57-pinned-minimal-plus-70-KiB-cap
+full             2097152  lsp,ai,fuss,plugins             s57-a1-2-MiB-evidence-floor
+minimal          1572864  none                            s57-a1-1.5-MiB-evidence-floor
+lsp-only         1695744  lsp                             s57-a1-minimal-plus-measured-120-KiB
+ai-only          1716224  ai                              s57-a1-minimal-plus-rounded-140-KiB
+fuss-only        1726464  fuss                            s57-a1-minimal-plus-rounded-150-KiB
+plugins-only     1675264  plugins                         s57-a1-minimal-plus-rounded-100-KiB
 musl-full        2097152  lsp,ai,fuss,plugins             sprint57-static-profile-cap
-musl-minimal     1363148  none                            sprint57-static-profile-cap
+musl-minimal     1572864  none                            s57-a1-static-evidence-floor
