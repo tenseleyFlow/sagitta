@@ -41,7 +41,7 @@ fussrepo · trunk             │0; }
                                                                                                                         
                                                                                                                         
 Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict                                                       
-←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave                                                           
+←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave                                                             
 --- style
 AAAAAAAABBBAAAAABBBBBBBBBBBBBCDEFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 GGGGGGGHHGGGGGGGGGGGGGGGGGGGGCFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF

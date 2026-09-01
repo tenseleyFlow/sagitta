@@ -239,7 +239,6 @@ bind("E", "C-y", "ed.edit.redo")
 bind("E", "C-g", "ed.cmdline.cancel")
 
 bind("F", "<esc>", "ed.git.mode.leave")
-bind("F", "C-g", "ed.ui.message_expand")
 bind("F", "C-w s", "ed.git.open_split_h")
 bind("F", "C-w v", "ed.git.open_split_v")
 

@@ -318,6 +318,18 @@ void yew_fuss_jump_arm(FussJump *jump, i64 now_ms)
     jump->deadline_ms = now_ms + (i64)YEW_TYPEJUMP_RESET_MS;
 }
 
+static bool fuss_jump_printable(const Key *key)
+{
+    if (key == NULL || key->ntext != 1U)
+        return false;
+    if ((key->mods & (YEW_MOD_CTRL | YEW_MOD_ALT | YEW_MOD_SUPER |
+                      YEW_MOD_HYPER | YEW_MOD_META)) != 0U)
+        return false;
+    /* Space expands/collapses the selected directory.  Every other ordinary
+     * printable byte can occur in a filename and belongs to type-to-jump. */
+    return key->text[0] > 0x20U && key->text[0] != 0x7fU;
+}
+
 bool yew_fuss_jump_key(FussJump *jump, const Key *key, i64 now_ms,
                        const PickItem *items, u32 n, u32 *sel)
 {
@@ -327,17 +339,12 @@ bool yew_fuss_jump_key(FussJump *jump, const Key *key, i64 now_ms,
     u32 i;
     bool printable;
 
-    if (jump == NULL || key == NULL || !jump->armed)
+    if (jump == NULL || key == NULL)
         return false;
-    printable = key->ntext == 1U && key->text[0] >= 0x20U &&
-                key->text[0] != 0x7fU &&
-                (key->mods & (YEW_MOD_CTRL | YEW_MOD_ALT | YEW_MOD_SUPER |
-                              YEW_MOD_HYPER | YEW_MOD_META)) == 0U;
-    if (key->code == YEW_KEY_ESCAPE || key->code == YEW_KEY_ENTER) {
-        yew_fuss_jump_init(jump);
-        return true;
-    }
+    printable = fuss_jump_printable(key);
     if (key->code == YEW_KEY_BACKSPACE) {
+        if (!jump->armed)
+            return false;
         if (jump->type.len != 0U)
             jump->type.len--;
         jump->type.pat[jump->type.len] = '\0';
@@ -353,8 +360,8 @@ bool yew_fuss_jump_key(FussJump *jump, const Key *key, i64 now_ms,
             return false;
         }
     } else {
-        if (items == NULL || n == 0U || sel == NULL)
-            return false;
+        if (!jump->armed)
+            yew_fuss_jump_arm(jump, now_ms);
         if (jump->type.len == 0U || now_ms >= jump->deadline_ms)
             jump->type.len = 0U;
         if (jump->type.len + 1U < (u32)YEW_TYPEJUMP_PAT_MAX) {
@@ -364,6 +371,8 @@ bool yew_fuss_jump_key(FussJump *jump, const Key *key, i64 now_ms,
         jump->deadline_ms = now_ms + (i64)YEW_TYPEJUMP_RESET_MS;
         jump->type.deadline_ms = jump->deadline_ms;
     }
+    if (items == NULL || n == 0U || sel == NULL)
+        return true;
     if (*sel < n && items[*sel].label != NULL &&
         yew_fz_score(jump->type.pat, jump->type.len, items[*sel].label,
                      (u32)fuss_cstr_len(items[*sel].label), NULL) >= 10000)
@@ -1191,11 +1200,26 @@ bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms)
     if (!yew_fuss_active(ed) || key == NULL)
         return false;
     f = ed->fuss;
-    if (!f->jump.armed)
+    /* The prefix key itself clears an active jump below.  Once dispatch owns
+     * a chord, its printable tail must reach the keymap rather than begin a
+     * new search (C-g d and C-w s are the important cases). */
+    if (ed->chord.n != 0U)
+        return false;
+    if (!fuss_jump_printable(key) && key->code != YEW_KEY_BACKSPACE) {
+        if (f->jump.armed) {
+            yew_fuss_jump_init(&f->jump);
+            ed->footer_dirty = true;
+        }
+        return false;
+    }
+    if (!f->jump.armed && key->code == YEW_KEY_BACKSPACE)
         return false;
     if (!fuss_jump_items(f, &items, &n)) {
-        yew_fuss_jump_init(&f->jump);
-        return false;
+        consumed = yew_fuss_jump_key(&f->jump, key, now_ms,
+                                     NULL, 0U, NULL);
+        if (consumed)
+            fuss_damage(ed);
+        return consumed;
     }
     row = fuss_row(f) < 0 ? 0U : (u32)fuss_row(f);
     consumed = yew_fuss_jump_key(&f->jump, key, now_ms, items, n, &row);
@@ -1727,8 +1751,8 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer)
         "Legend: ^ staged  x modified  x untracked  v incoming  ! conflict" :
         "Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict";
     line2 = f->ascii_glyphs ?
-        "<> tree | ^v siblings | a stage | m commit | / jump | q leave" :
-        "←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave";
+        "<> tree | ^v siblings | type jump | C-g actions | Esc leave" :
+        "←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave";
     snap = yew_git_snapshot(ed);
     if (snap != NULL && snap->state == YEW_GIT_MID_REBASE)
         line2 = "rebase stopped · :git.rebase.continue · :git.rebase.abort";

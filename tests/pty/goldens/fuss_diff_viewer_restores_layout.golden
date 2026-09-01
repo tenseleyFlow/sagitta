@@ -260,8 +260,6 @@ J fg=#dae5f0 bg=#14304c attrs=----------
 \x1b[2m
 \x1b[22;38;2;250;235;248;48;2;177;61;155m
 \x1b[0;38;2;250;235;248;48;2;177;61;155m
-\x1b[0;1;38;2;250;235;248;48;2;177;61;155m
-\x1b[22m
 \x1b[0;38;2;200;204;212;48;2;18;20;26m
 \x1b[38;2;224;108;117m
 \x1b[38;2;200;204;212m
@@ -269,7 +267,7 @@ J fg=#dae5f0 bg=#14304c attrs=----------
 \x1b[38;2;224;108;117m
 \x1b[38;2;200;204;212m
 \x1b[1;27;38;2;250;235;248;48;2;177;61;155m
-\x1b[0;38;2;250;235;248;48;2;177;61;155m
+\x1b[22m
 \x1b[0;38;2;250;235;248;48;2;177;61;155m
 \x1b[0;38;2;92;99;112m
 \x1b[1m
@@ -367,7 +365,7 @@ fussrepo · trunk        │turn 0; }
                                                                                                     
                                                                                                     
 diff running                                                                                        
-←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave                                       
+←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave                                         
 --- style
 AAAAAAAABBBAAAAABBBBBBBBCDDDDEFGEGEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 BBBBBBBHHBBBBBBBBBBBBBBBCIIJJJJJJJJJJIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIEEEEEEEEEEEEEEEEEEEEEEEEEEEEE

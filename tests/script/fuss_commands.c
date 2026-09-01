@@ -280,7 +280,7 @@ static CmdStatus invoke_real(const char *repo, const char *name,
 
     yew_ed_init(&ed);
     CHECK(yew_ed_open_scratch(&ed));
-    ed.ws.dir = arena_strdup(&ed.arena, repo);
+    CHECK(yew_ed_set_workspace_root(&ed, repo));
     capture->repo = repo;
     yew_git_test_spawn_set(capture_and_run, capture);
     status = invoke(&ed, name, arg, arg_len);
@@ -637,7 +637,8 @@ static bool enter_fuss(const char *repo, Ed *ed)
     yew_ed_init(ed);
     if (!yew_ed_open_scratch(ed))
         return false;
-    ed->ws.dir = arena_strdup(&ed->arena, repo);
+    if (!yew_ed_set_workspace_root(ed, repo))
+        return false;
     if (yew_mode_enter(ed, YEW_MODE_F) != YEW_CMD_OK)
         return false;
     idle = run_jobs_idle(ed);
@@ -1138,7 +1139,7 @@ static void test_empty_commit_message_does_not_spawn_git(const char *repo)
 
     yew_ed_init(&ed);
     CHECK(yew_ed_open_scratch(&ed));
-    ed.ws.dir = arena_strdup(&ed.arena, repo);
+    CHECK(yew_ed_set_workspace_root(&ed, repo));
     CHECK(yew_mode_enter(&ed, YEW_MODE_F) == YEW_CMD_OK);
     CHECK(run_jobs_idle(&ed));
     CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
