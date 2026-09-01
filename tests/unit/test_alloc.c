@@ -16,6 +16,8 @@ typedef struct {
     alignas(16) unsigned char bytes[16];
 } AllocAligned16;
 
+void *yew_test_alloc_peer_site(void);
+
 void test_alloc_release_contract(void)
 {
     max_align_t *plain = yew_xmalloc(sizeof(*plain));
@@ -91,6 +93,40 @@ void test_alloc_debug_counts_and_report_order(void)
     yew_alloc_reset();
     YEW_ASSERT_EQ_U64(yew_alloc_calls(), 0U);
     YEW_ASSERT_EQ_U64(yew_alloc_live_bytes(), 0U);
+#endif
+}
+
+void test_alloc_debug_coalesces_sites_across_translation_units(void)
+{
+#if YEW_ALLOC_DEBUG
+    char same_spelling[] = "alloc-shared.c";
+    void *local;
+    void *peer;
+    Bytebuf out;
+    static const char expected_row[] =
+        "2 12 12 12 alloc-shared.c:700\n";
+    const char *row;
+
+    yew_alloc_reset();
+    local = yew_xmalloc_at(5U, same_spelling, 700);
+    peer = yew_test_alloc_peer_site();
+    YEW_ASSERT_NOT_NULL(local);
+    YEW_ASSERT_NOT_NULL(peer);
+    YEW_ASSERT_EQ_U64(yew_alloc_calls(), 2U);
+
+    bytebuf_init(&out);
+    yew_alloc_report(&out);
+    bytebuf_push_u8(&out, 0U);
+    row = strstr((const char *)out.data, expected_row);
+    YEW_ASSERT_NOT_NULL(row);
+    YEW_ASSERT_NULL(strstr(row + sizeof(expected_row) - 1U, expected_row));
+
+    yew_xfree(out.data);
+    yew_xfree(local);
+    yew_xfree(peer);
+    YEW_ASSERT_EQ_U64(yew_alloc_live_bytes(), 0U);
+#else
+    YEW_ASSERT_NULL(yew_test_alloc_peer_site());
 #endif
 }
 

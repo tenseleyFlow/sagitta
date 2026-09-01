@@ -47,6 +47,7 @@ const YewTest yew_tests[] = {
 #endif
     T(alloc_release_contract),
     T(alloc_debug_counts_and_report_order),
+    T(alloc_debug_coalesces_sites_across_translation_units),
     T(alloc_debug_reset_and_fixed_overflow_site),
     T(alloc_debug_exit_report),
     T(arena_align),

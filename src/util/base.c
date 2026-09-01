@@ -99,8 +99,19 @@ static void alloc_arm_exit(void)
 
 static size_t alloc_hash(const char *file, int line)
 {
-    uintptr_t p = (uintptr_t)(const void *)file;
-    u64 mixed = (u64)(p >> 4U) ^ (u64)(u32)line * UINT64_C(0x9e3779b1);
+    const unsigned char *p = (const unsigned char *)file;
+    u64 mixed = UINT64_C(1469598103934665603);
+
+    /* Site equality is file contents + line, not string-literal identity.
+     * Identical __FILE__ spellings in separate translation units commonly
+     * have different addresses, so hashing the pointer would make the
+     * strcmp fallback unreachable whenever an empty slot appeared first. */
+    while (*p != 0U) {
+        mixed ^= (u64)*p++;
+        mixed *= UINT64_C(1099511628211);
+    }
+    mixed ^= (u64)(u32)line;
+    mixed *= UINT64_C(1099511628211);
 
     mixed ^= mixed >> 17U;
     return (size_t)mixed & (ALLOC_SITE_CAP - 1U);
