@@ -255,6 +255,40 @@ jobs:
         run: |
           make perf CC=gcc PERF_GATE=0 PERF_RUNNER_ID=hosted-arm64
 
+  # Sprint 57's Darwin gate is native Apple silicon.  The PTY harness proves
+  # byte-level terminal behavior but is not a real terminal emulator; that
+  # boundary is carried into the Sprint 60 release checklist below.
+  arm64-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and test arm64 macOS with Clang
+        run: |
+          make CC=clang
+          make test CC=clang
+      - name: Prove default-filesystem aliases and Darwin RSS units
+        run: |
+          case_dir=$(mktemp -d)
+          touch "$case_dir/Foo.c"
+          test -e "$case_dir/foo.c"
+          rm "$case_dir/Foo.c"
+          rmdir "$case_dir"
+          build/unit_tests --filter tabs_case_aliases_follow_filesystem_identity
+          build/unit_tests --filter rss_reports_finite_nonzero_bytes
+      - name: Run the arm64 alignment sanitizer gate
+        run: |
+          make test-unit CC=clang TARGET=arm64-macos ALIGN_SAN=1 \
+            BUILD=build-align
+      - name: Record the stripped Darwin binary size
+        run: |
+          cp build/yew build/yew.stripped
+          strip -S build/yew.stripped
+          stat -f 'arm64-macos stripped bytes=%z' build/yew.stripped
+      - name: Run Sprint 56 macOS metrics in advisory mode
+        run: |
+          make perf CC=clang PERF_GATE=0 \
+            PERF_RUNNER_ID=hosted-arm64-macos
+
   # Sprint 30 DoD 1 and 5.  The computed-goto dispatcher is a SECOND
   # implementation of the interpreter, so it needs its own lane: a
   # divergence between the two shows up as a program computing a
