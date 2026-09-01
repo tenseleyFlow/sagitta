@@ -7,8 +7,8 @@ stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-61 whole-numbered sprints plus seven fractional ones (18.5, 41.5, 42.5,
-55.5, 56.5, 57.5, 57.6) split off during authoring — the pressure valve working as
+61 whole-numbered sprints plus eight fractional ones (18.5, 41.5, 42.5,
+55.5, 56.5, 57.5, 57.6, 57.7) split off during authoring — the pressure valve working as
 designed.
 Renumbering is forbidden once files exist, so fractional ids are permanent.
 
@@ -281,12 +281,13 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **REPOSITORY COMPLETE.** Sprints 56, 56.5, 57, 57.5, and 57.6 are
-  repository-complete. Sprint 56's
+- **ACTIVE.** Sprints 56, 56.5, 57, 57.5, and 57.6 are
+  repository-complete. Sprint 57.7 is the binding implementation frontier.
+  Sprint 56's
   pinned designated-hardware evidence remains pending because no self-hosted
   runner is registered; Sprint 57's Pi Zero 2 W corroboration and pushed-SHA
-  CI evidence remain release tails. Sprint 58 has not begun; it is the next
-  frontier after a post-57.6 baseline commit receives its required CI evidence.
+  CI evidence remain release tails. Sprint 58 has not begun; its baseline is
+  deferred until Sprint 57.7 and the required CI evidence close.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -321,12 +322,15 @@ Binding documents — read before any sprint:
   native suite, focused ASan/UBSan, deterministic FUSS fuzz/PTY, performance,
   FUSS-only smoke, and all six native shipping-size profiles are green; true
   GCC, Linux/x86_64 and hosted CI remain pushed-SHA evidence tails
+- Sprint 57.7 (s57_7-fuss-offcanvas-layout.md) — True off-canvas FUSS
+  geometry: shifted tab/pane/footer layout, row-zero header, full-height
+  neutral surface and separator, and exact restoration. **ACTIVE.**
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs. **NEXT:** refresh
-  and verify the audit baseline from the post-57.6 tree before opening a front
+  fuzz campaigns extended, findings ledger with stable IDs. **QUEUED AFTER
+  SPRINT 57.7:** refresh and verify the audit baseline before opening a front
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1
@@ -365,7 +369,7 @@ Binding documents — read before any sprint:
   s25 hand-writes the emitter against the frozen schema; s36 swaps the
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
-  `s56_5-…`, `s57_5-…`) are the pressure valve when a sprint
+  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`) are the pressure valve when a sprint
   splits — renumbering is forbidden once files exist.
 
 ## Sprint file format

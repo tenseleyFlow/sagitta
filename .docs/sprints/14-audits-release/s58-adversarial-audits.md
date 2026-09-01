@@ -9,10 +9,11 @@
 - Sprint 57 — `x86_64-linux-musl` static profile proven on target, binary
   size budgets per `MODULES` set, allocation audit. F15 audits its
   ratchets.
-- Sprints 57.5 and 57.6 — compact remembered FUSS trees, binary source-service
-  isolation, nested-workspace path normalization, and direct visible-tree
-  type-to-jump. The §1 baseline must include these fixes and pass the required
-  hosted lanes; no audit front may cite the pre-57.6 tree.
+- Sprints 57.5–57.7 — compact remembered FUSS trees, binary source-service
+  isolation, nested-workspace path normalization, direct visible-tree
+  type-to-jump, and true off-canvas geometry. The §1 baseline must include
+  these fixes and pass the required hosted lanes; no audit front may cite the
+  pre-57.7 tree.
 - Sprints 0–55 — everything under audit. Each front's scope names the
   sprint that owns the code; the auditor reads that sprint file first,
   because a finding is a violation of a *pinned* decision, not a

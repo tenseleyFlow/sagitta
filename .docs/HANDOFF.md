@@ -12,17 +12,17 @@ Apple-silicon host `nomad-1`
 
 **Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
 
-**Current implementation frontier before documentation closeout:** `3a6070c9`
+**Current code frontier before Sprint 57.7:** `20eee717`
 
-**Git position:** 33 local implementation commits ahead of `origin/trunk`,
-plus this documentation closeout once committed; nothing in the Sprint 57
+**Git position:** 34 local commits ahead of `origin/trunk`, plus the Sprint
+57.7 contract once committed; nothing in the Sprint 57
 chain has been pushed from the Mac
 
-**Next implementation frontier:** Sprint 58 adversarial audits, after its
-baseline is refreshed from the post-57.6 tree and the required hosted lanes
-are green. Sprint 57, Sprint 57.5, and Sprint 57.6 are repository-complete;
-Sprint 58 has not begun. Hosted CI, Linux-only lanes, and physical Pi
-corroboration remain explicit release-evidence tails.
+**Active implementation frontier:** Sprint 57.7 FUSS off-canvas layout.
+Sprint 57, Sprint 57.5, and Sprint 57.6 are repository-complete; Sprint 58 has
+not begun. Its baseline must be refreshed from the post-57.7 tree. Hosted CI,
+Linux-only lanes, and physical Pi corroboration remain explicit
+release-evidence tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -63,11 +63,18 @@ and filtered to the workspace, removing the fabricated `wolf` row. FUSS bare
 filename characters now type-jump across visible rows, with printable actions
 behind `C-g`.
 
-The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
-Refresh its baseline from the post-57.6 tree. Do not begin an audit from an
-unpushed or unverified baseline: first obtain the required hosted
-commit-of-record evidence, or explicitly record why a local audit baseline is
-provisional.
+Field review after Sprint 57.6 found that FUSS still overlays the live editor,
+starts below the tab strip, leaves tabs anchored at column zero, and draws its
+edge only through the final item. The binding correction is
+`.docs/sprints/13-performance/s57_7-fuss-offcanvas-layout.md`: reserve the
+drawer in layout, shift tabs/panes/footer right, start FUSS on row zero, and
+paint a distinct full-height surface and edge.
+
+After Sprint 57.7 closes, the next contract is
+`.docs/sprints/14-audits-release/s58-adversarial-audits.md`. Refresh its
+baseline from the post-57.7 tree. Do not begin an audit from an unpushed or
+unverified baseline: first obtain the required hosted commit-of-record
+evidence, or explicitly record why a local audit baseline is provisional.
 
 Most recent Sprint 57.6 validation:
 
