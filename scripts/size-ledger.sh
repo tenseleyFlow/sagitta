@@ -5,7 +5,7 @@ export LC_ALL=C
 
 usage()
 {
-    echo "usage: $0 --build BUILDDIR --binary PATH [--baseline FILE] [--format txt|tsv] [--top N]" >&2
+    echo "usage: $0 --build BUILDDIR --binary PATH [--without-gc PATH] [--baseline FILE] [--format txt|tsv] [--top N]" >&2
     exit 2
 }
 
@@ -18,12 +18,14 @@ die()
 build=
 binary=
 baseline=
+without_gc=
 format=txt
 top=12
 while [ "$#" -gt 0 ]; do
     case $1 in
         --build) [ "$#" -ge 2 ] || usage; build=$2; shift 2 ;;
         --binary) [ "$#" -ge 2 ] || usage; binary=$2; shift 2 ;;
+        --without-gc) [ "$#" -ge 2 ] || usage; without_gc=$2; shift 2 ;;
         --baseline) [ "$#" -ge 2 ] || usage; baseline=$2; shift 2 ;;
         --format) [ "$#" -ge 2 ] || usage; format=$2; shift 2 ;;
         --top) [ "$#" -ge 2 ] || usage; top=$2; shift 2 ;;
@@ -33,6 +35,8 @@ done
 [ -n "$build" ] && [ -n "$binary" ] || usage
 [ -d "$build/src" ] || die "object tree does not exist: $build/src"
 [ -f "$binary" ] || die "binary does not exist: $binary"
+[ -z "$without_gc" ] || [ -f "$without_gc" ] ||
+    die "without-GC binary does not exist: $without_gc"
 [ -z "$baseline" ] || [ -r "$baseline" ] || die "cannot read baseline: $baseline"
 case $format in txt|tsv) ;; *) die "format must be txt or tsv" ;; esac
 case $top in *[!0-9]*|'') die "--top must be a non-negative integer" ;; esac
@@ -117,7 +121,7 @@ while IFS= read -r obj; do
     rel=${obj#"$build"/}
     "$SIZE" -A -d "$obj" >"$tmpdir/one-size" || die "SIZE failed for $obj"
     awk -v bucket="$bucket" -v unknown="$tmpdir/unknown" '
-        NR <= 2 { next }
+        NR <= 2 || $1 == "Total" { next }
         $2 !~ /^[0-9]+$/ { next }
         {
             family=""
@@ -152,6 +156,17 @@ if awk 'NR > 2 && $1 ~ /^(\.debug|\.symtab$|\.strtab$)/ { found=1 } END { exit !
 fi
 on_disk=$(file_size "$binary") || die "stat failed for $binary"
 case $on_disk in *[!0-9]*|'') die "stat returned a non-integer size" ;; esac
+gc_saved_bytes=
+if [ -n "$without_gc" ]; then
+    without_gc_size=$(file_size "$without_gc") ||
+        die "stat failed for $without_gc"
+    case $without_gc_size in
+        *[!0-9]*|'') die "stat returned a non-integer size for $without_gc" ;;
+    esac
+    [ "$without_gc_size" -ge "$on_disk" ] ||
+        die "without-GC binary is smaller than GC binary"
+    gc_saved_bytes=$((without_gc_size - on_disk))
+fi
 
 awk '
     { key=$1 SUBSEP $2; sums[key]+=$3; buckets[$1]=1 }
@@ -226,6 +241,9 @@ if [ "$format" = txt ]; then
     printf '# toolchain: %s / %s / %s   target=%s\n' "${cc_line:-unknown cc}" "${nm_line:-unknown nm}" "${size_line:-unknown size}" "${target:-unknown}"
     printf '# on-disk %s   object-file-backed %s   link-file-residue %s\n' "$on_disk" "$object_file_backed" "$link_file_residue"
     printf '# final-file-backed %s   final-bss %s   object-bss %s\n' "$final_file_backed" "$final_bss" "$object_bss"
+    if [ -n "$gc_saved_bytes" ]; then
+        printf '# gc_saved_bytes %s   without-gc-on-disk %s\n' "$gc_saved_bytes" "$without_gc_size"
+    fi
     printf '# unattributed-symbols %s/%s (%d.%d%%)   limit 2.0%%\n' "$zero_count" "$symbol_count" "$((zero_permille / 10))" "$((zero_permille % 10))"
     printf '# non-folded-object-sections %s\n\n' "$unknown_total"
     if [ -n "$baseline" ]; then

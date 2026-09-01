@@ -23,6 +23,7 @@ printf x >"$scratch/build/src/mod/git/a.o"
 printf x >"$scratch/build/src/mod/mods.o"
 printf x >"$scratch/build/gen/runtime_blob.o"
 dd if=/dev/zero of="$scratch/yew" bs=1 count=5000 2>/dev/null
+dd if=/dev/zero of="$scratch/yew-no-gc" bs=1 count=5200 2>/dev/null
 
 cat >"$scratch/Makefile" <<'EOF'
 MODDIR_lsp     := lsp
@@ -112,7 +113,8 @@ EOF
 chmod +x "$scratch/bin/fake-size" "$scratch/bin/fake-nm"
 
 MAKEFILE="$scratch/Makefile" SIZE="$scratch/bin/fake-size" NM="$scratch/bin/fake-nm" CC=false \
-    "$repo/scripts/size-ledger.sh" --build "$scratch/build" --binary "$scratch/yew" --top 3 >"$scratch/ledger"
+    "$repo/scripts/size-ledger.sh" --build "$scratch/build" --binary "$scratch/yew" \
+    --without-gc "$scratch/yew-no-gc" --top 3 >"$scratch/ledger"
 
 grep -E '^core\.fl +100 +25 +0 +10 +135 ' "$scratch/ledger" >/dev/null || fail 'did not fold core.fl sections'
 grep -E '^core\.util +100 +20 +5 +0 +125 ' "$scratch/ledger" >/dev/null || fail 'did not fold suffixed sections'
@@ -126,6 +128,7 @@ grep -F '.debug_info' "$scratch/ledger" >/dev/null || fail 'non-folded section w
 grep -F '# unattributed-symbols 0/5 (0.0%)   limit 2.0%' "$scratch/ledger" >/dev/null || fail 'unattributed symbol ratio missing'
 grep -F '# on-disk 5000   object-file-backed 628   link-file-residue 4372' "$scratch/ledger" >/dev/null || fail 'file-backed link residue included BSS'
 grep -F '# final-file-backed 305   final-bss 10   object-bss 10' "$scratch/ledger" >/dev/null || fail 'BSS accounting was not explicit'
+grep -F '# gc_saved_bytes 200   without-gc-on-disk 5200' "$scratch/ledger" >/dev/null || fail 'linker-GC savings were not recorded'
 
 set +e
 ZERO_SYMBOLS=1 MAKEFILE="$scratch/Makefile" SIZE="$scratch/bin/fake-size" NM="$scratch/bin/fake-nm" CC=false \

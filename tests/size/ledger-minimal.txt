@@ -1,0 +1,53 @@
+# yew size ledger v1  config=minimal  binary=build-size/measure/minimal/yew  stripped=1
+# toolchain: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 / GNU nm (GNU Binutils for Ubuntu) 2.42 / GNU size (GNU Binutils for Ubuntu) 2.42   target=x86_64-linux-gnu
+# on-disk 1463968   object-file-backed 1401370   link-file-residue 62598
+# final-file-backed 1336675   final-bss 460896   object-bss 10946087
+# gc_saved_bytes 77824   without-gc-on-disk 1541792
+# unattributed-symbols 0/3578 (0.0%)   limit 2.0%
+# non-folded-object-sections 9022693
+
+bucket                  .text    .rodata      .data       .bss      total     pct
+core.fl                209993      27339      10672   10492081   10740085  86.9%
+core.ui                188327       9849       1153     390793     590122   4.7%
+core.edit              210960      47754      30248       9765     298727   2.4%
+core.unicode            25749     154532          0          1     180282   1.4%
+core.syn               111685      12508      12680         99     136972   1.1%
+core.text              102217      12473        416       3313     118419   0.9%
+core.ws                 70224       3785         80      16401      90490   0.7%
+core.search             44526       2972        208      33413      81119   0.6%
+core.term               35588       3507       1440        179      40714   0.3%
+core.main               25376       8195        168          0      33739   0.2%
+core.util               16911       2708        176         42      19837   0.1%
+mod.fuss                10659        309        144          0      11112   0.0%
+mod.ai                   2452          3          0          0       2455   0.0%
+mod.lsp                  2341         66          0          0       2407   0.0%
+mod.plugins               970          7          0          0        977   0.0%
+libc+crt                62598
+--totals             12347457
+
+-- non-folded object sections
+        8280  .comment
+      233313  .debug_abbrev
+       55600  .debug_aranges
+      194640  .debug_frame
+     4369041  .debug_info
+     1006159  .debug_line
+      123218  .debug_line_str
+     1221421  .debug_loclists
+      173228  .debug_rnglists
+     1632033  .debug_str
+        5760  .note.gnu.property
+
+-- top 12 symbols by size
+     4194304  core.fl            src/fl/vmcheck.o                 depth.1
+     4194304  core.fl            src/fl/vmcheck.o                 work.0
+     1048576  core.fl            src/fl/vmcheck.o                 seen.2
+     1048576  core.fl            src/fl/vmcheck.o                 starts.3
+      138520  core.ui            src/ui/grouppicker.o             gp
+       98336  core.ui            src/ui/pickers.o                 store
+       71696  core.ui            src/ui/macrobrowse.o             mb
+       65536  core.ui            src/ui/pickers.o                 buf.0
+       47696  core.unicode       src/unicode/tables_case.o        yew_case_recs
+       32768  core.search        src/search/parse.o               fold_table
+       31744  core.unicode       src/unicode/tables_cat.o         yew_cat_stage2
+       24832  core.unicode       src/unicode/tables_wb.o          yew_wb_stage2

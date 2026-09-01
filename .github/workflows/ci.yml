@@ -120,6 +120,22 @@ jobs:
             BUILD=build-embedded-${{ matrix.compiler }} EMBED_RUNTIME=1 \
             runtime-blob-selftest test-runtime-embedded
 
+  # Sprint 57 amendment S57-A1 pins both the measurement and its attainable
+  # limits. This lane never swaps in -Os/LTO or removes required features:
+  # it measures the shipping -O2 profile and verifies the committed ledgers.
+  size:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Record the pinned x86_64 GNU toolchain
+        run: |
+          gcc --version | sed -n '1p'
+          ld --version | sed -n '1p'
+          nm --version | sed -n '1p'
+          strip --version | sed -n '1p'
+      - name: Gate all dynamic profiles and committed ledgers
+        run: make -j2 CC=gcc size-check
+
   # Sprint 57 milestone: build the pinned Alpine static profile, then boot
   # its deterministic initramfs under the exact 64/32 MiB TCG guests.  The
   # full image uses Alpine's distro kernel and modules.  Row 12 uses the
@@ -191,6 +207,9 @@ jobs:
                 BUILD=build-musl musl-verify
               make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
                 BUILD=build-musl test
+              make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
+                BUILD=build-musl-size-tools SIZE_ROOT=build-size-musl \
+                size-musl
               '\''
 
               cd /work

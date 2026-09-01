@@ -988,6 +988,7 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables calib perf perf-components perf-symbols size \
+        size-check size-update size-musl \
         size-tools-selftest size-ledger-full size-ledger-minimal \
         perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
@@ -1931,6 +1932,10 @@ SIZE_LSP_BIN := $(SIZE_MEASURE)/lsp-only/yew
 SIZE_AI_BIN := $(SIZE_MEASURE)/ai-only/yew
 SIZE_FUSS_BIN := $(SIZE_MEASURE)/fuss-only/yew
 SIZE_PLUGINS_BIN := $(SIZE_MEASURE)/plugins-only/yew
+SIZE_FULL_NOGC_BUILD := $(SIZE_ROOT)/no-gc/full
+SIZE_MINIMAL_NOGC_BUILD := $(SIZE_ROOT)/no-gc/minimal
+SIZE_FULL_NOGC_BIN := $(SIZE_MEASURE)/no-gc/full/yew
+SIZE_MINIMAL_NOGC_BIN := $(SIZE_MEASURE)/no-gc/minimal/yew
 
 size-tools-selftest:
 	mkdir -p $(BUILD)/tmp
@@ -1952,6 +1957,18 @@ $(eval $(call size_measure_rule,$(SIZE_AI_BIN),$(SIZE_AI_BUILD),ai))
 $(eval $(call size_measure_rule,$(SIZE_FUSS_BIN),$(SIZE_FUSS_BUILD),fuss))
 $(eval $(call size_measure_rule,$(SIZE_PLUGINS_BIN),$(SIZE_PLUGINS_BUILD),plugins))
 
+define size_nogc_measure_rule
+$(1): FORCE
+	$$(MAKE) --no-print-directory BUILD='$(2)' MODULES='$(3)' \
+		SHIPPING=1 GC_SECTIONS=0 '$(2)/yew'
+	mkdir -p '$$(dir $(1))'
+	cp '$(2)/yew' '$(1)'
+	$$(STRIP) $$(STRIPFLAGS) '$(1)'
+endef
+
+$(eval $(call size_nogc_measure_rule,$(SIZE_FULL_NOGC_BIN),$(SIZE_FULL_NOGC_BUILD),lsp ai fuss plugins))
+$(eval $(call size_nogc_measure_rule,$(SIZE_MINIMAL_NOGC_BIN),$(SIZE_MINIMAL_NOGC_BUILD),))
+
 size: size-tools-selftest $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN) \
       $(SIZE_LSP_BIN) $(SIZE_AI_BIN) $(SIZE_FUSS_BIN) $(SIZE_PLUGINS_BIN)
 	scripts/size.sh --budgets tests/size/budgets.txt \
@@ -1959,15 +1976,67 @@ size: size-tools-selftest $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN) \
 		lsp-only=$(SIZE_LSP_BIN) ai-only=$(SIZE_AI_BIN) \
 		fuss-only=$(SIZE_FUSS_BIN) plugins-only=$(SIZE_PLUGINS_BIN)
 
-size-ledger-full: $(SIZE_FULL_BIN)
+size-ledger-full: $(SIZE_FULL_BIN) $(SIZE_FULL_NOGC_BIN)
 	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
 		scripts/size-ledger.sh --build '$(SIZE_FULL_BUILD)' \
-		--binary '$(SIZE_FULL_BIN)'
+		--binary '$(SIZE_FULL_BIN)' --without-gc '$(SIZE_FULL_NOGC_BIN)'
 
-size-ledger-minimal: $(SIZE_MINIMAL_BIN)
+size-ledger-minimal: $(SIZE_MINIMAL_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
 		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
-		--binary '$(SIZE_MINIMAL_BIN)'
+		--binary '$(SIZE_MINIMAL_BIN)' --without-gc '$(SIZE_MINIMAL_NOGC_BIN)'
+
+size-check: size $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
+	@set -eu; \
+	tmpdir=$$(umask 077 && mktemp -d "$${TMPDIR:-/tmp}/yew-size-check.XXXXXX"); \
+	trap 'rm -rf "$$tmpdir"' EXIT HUP INT TERM; \
+	for config in full minimal; do \
+		case $$config in \
+			full) build='$(SIZE_FULL_BUILD)'; binary='$(SIZE_FULL_BIN)'; without_gc='$(SIZE_FULL_NOGC_BIN)' ;; \
+			minimal) build='$(SIZE_MINIMAL_BUILD)'; binary='$(SIZE_MINIMAL_BIN)'; without_gc='$(SIZE_MINIMAL_NOGC_BIN)' ;; \
+		esac; \
+		ledger="tests/size/ledger-$$config.txt"; \
+		[ -f "$$ledger" ] || { echo "size-check: missing $$ledger; run make size-update" >&2; exit 1; }; \
+		NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+			scripts/size-ledger.sh --build "$$build" --binary "$$binary" \
+			--without-gc "$$without_gc" \
+			>"$$tmpdir/ledger-$$config.txt"; \
+		if ! cmp -s "$$ledger" "$$tmpdir/ledger-$$config.txt"; then \
+			echo "size-check: stale $$ledger; run make size-update" >&2; \
+			diff -u "$$ledger" "$$tmpdir/ledger-$$config.txt" >&2 || true; \
+			exit 1; \
+		fi; \
+		NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+			scripts/size-ledger.sh --build "$$build" --binary "$$binary" \
+			--without-gc "$$without_gc" \
+			--baseline "$$ledger" >"$$tmpdir/growth-$$config.txt"; \
+	done
+	@echo 'size-check: committed ledgers are current and within growth limits'
+
+size-update: size $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
+	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+		scripts/size-ledger.sh --build '$(SIZE_FULL_BUILD)' \
+		--binary '$(SIZE_FULL_BIN)' \
+		--without-gc '$(SIZE_FULL_NOGC_BIN)' >tests/size/ledger-full.txt
+	NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
+		--binary '$(SIZE_MINIMAL_BIN)' \
+		--without-gc '$(SIZE_MINIMAL_NOGC_BIN)' >tests/size/ledger-minimal.txt
+	@echo 'size-update: commit with message beginning "size: rebaseline"'
+
+ifeq ($(TARGET),x86_64-linux-musl)
+size-musl: size-tools-selftest static-pie-tools-selftest \
+           $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN)
+	FILE='$(FILE_CMD)' READELF='$(READELF)' NM='$(NM)' LDD='$(LDD)' \
+		scripts/verify-static-pie.sh --binary '$(SIZE_FULL_BIN)'
+	FILE='$(FILE_CMD)' READELF='$(READELF)' NM='$(NM)' LDD='$(LDD)' \
+		scripts/verify-static-pie.sh --binary '$(SIZE_MINIMAL_BIN)'
+	scripts/size.sh --budgets tests/size/budgets.txt \
+		musl-full=$(SIZE_FULL_BIN) musl-minimal=$(SIZE_MINIMAL_BIN)
+else
+size-musl:
+	@echo 'size-musl requires TARGET=x86_64-linux-musl' >&2; exit 2
+endif
 
 $(EMBED_FIXTURE): $(BUILD)/gen-bigfile scripts/gen-embedded-fixture.sh | dirs
 	mkdir -p $(dir $@)
