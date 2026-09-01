@@ -115,17 +115,21 @@ static Span ck_selection(ClickFixture *f)
 void test_mouse_click_window_is_399_yes_401_no(void)
 {
     ClickFixture f;
+    u16 x;
+    u16 y;
 
     ck_fixture(&f, "alpha beta gamma\n");
-    ck_click(&f, 2U, 0U, 0U);
+    x = ck_col(&f, 2U);
+    y = f.ed.pane_root->rect.y;
+    ck_click(&f, x, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 1U);
 
     f.ed.now_ms += 399;
-    ck_click(&f, 2U, 0U, 0U);
+    ck_click(&f, x, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 2U);
 
     f.ed.now_ms += 401;
-    ck_click(&f, 2U, 0U, 0U);
+    ck_click(&f, x, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 1U);
     yew_ed_free(&f.ed);
 }
@@ -135,16 +139,22 @@ void test_mouse_click_window_is_399_yes_401_no(void)
 void test_mouse_click_counter_resets_on_a_different_cell(void)
 {
     ClickFixture f;
+    u16 x2;
+    u16 x3;
+    u16 y;
 
     ck_fixture(&f, "alpha beta gamma\n");
-    ck_click(&f, 2U, 0U, 0U);
+    x2 = ck_col(&f, 2U);
+    x3 = ck_col(&f, 3U);
+    y = f.ed.pane_root->rect.y;
+    ck_click(&f, x2, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 1U);
-    ck_click(&f, 3U, 0U, 0U);
+    ck_click(&f, x3, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 1U);
-    ck_click(&f, 3U, 0U, 0U);
+    ck_click(&f, x3, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 2U);
     /* Back to the first cell: a new run, not a continuation. */
-    ck_click(&f, 2U, 0U, 0U);
+    ck_click(&f, x2, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 1U);
     yew_ed_free(&f.ed);
 }
@@ -153,11 +163,15 @@ void test_mouse_click_counter_resets_on_a_different_cell(void)
 void test_mouse_click_quad_wraps_to_one(void)
 {
     ClickFixture f;
+    u16 x;
+    u16 y;
     int i;
 
     ck_fixture(&f, "alpha beta gamma\n");
+    x = ck_col(&f, 2U);
+    y = f.ed.pane_root->rect.y;
     for (i = 0; i < 8; i++) {
-        ck_click(&f, 2U, 0U, 0U);
+        ck_click(&f, x, y, 0U);
         YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, (u64)(i % 3 + 1));
     }
     yew_ed_free(&f.ed);
@@ -168,13 +182,17 @@ void test_mouse_click_quad_wraps_to_one(void)
 void test_mouse_click_focus_out_resets_the_counter(void)
 {
     ClickFixture f;
+    u16 x;
+    u16 y;
 
     ck_fixture(&f, "alpha beta gamma\n");
-    ck_click(&f, 2U, 0U, 0U);
+    x = ck_col(&f, 2U);
+    y = f.ed.pane_root->rect.y;
+    ck_click(&f, x, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 1U);
     YEW_ASSERT(!yew_mouse_gesture_active(&f.ed));
     yew_mouse_cancel(&f.ed);
-    ck_click(&f, 2U, 0U, 0U);
+    ck_click(&f, x, y, 0U);
     YEW_ASSERT_EQ_U64(f.ed.mouse.click_n, 1U);
     yew_ed_free(&f.ed);
 }
