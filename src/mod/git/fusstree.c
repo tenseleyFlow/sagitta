@@ -27,6 +27,114 @@ u8 yew_fuss_marker_kinds(const FussNode *node, FussMarkerKind out[4])
     return n;
 }
 
+static int open_path_cmp(const char *a, u32 an, const char *b, u32 bn)
+{
+    u32 common = an < bn ? an : bn;
+    int cmp = common == 0U ? 0 : memcmp(a, b, common);
+
+    if (cmp != 0)
+        return (cmp > 0) - (cmp < 0);
+    return (an > bn) - (an < bn);
+}
+
+static u32 open_memory_find(const FussOpenMemory *m,
+                            const char *path, u32 path_len, bool *found)
+{
+    u32 lo = 0U;
+    u32 hi = m == NULL ? 0U : m->len;
+
+    while (lo < hi) {
+        u32 mid = lo + (hi - lo) / 2U;
+        const FussOpenPath *item = &m->data[mid];
+
+        if (open_path_cmp(item->path, item->path_len,
+                          path, path_len) < 0)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    if (found != NULL)
+        *found = m != NULL && lo < m->len &&
+                 open_path_cmp(m->data[lo].path, m->data[lo].path_len,
+                               path, path_len) == 0;
+    return lo;
+}
+
+void yew_fuss_open_memory_init(FussOpenMemory *m)
+{
+    if (m != NULL)
+        (void)memset(m, 0, sizeof(*m));
+}
+
+void yew_fuss_open_memory_drop(FussOpenMemory *m)
+{
+    u32 i;
+
+    if (m == NULL)
+        return;
+    for (i = 0U; i < m->len; i++)
+        yew_xfree(m->data[i].path);
+    yew_xfree(m->data);
+    (void)memset(m, 0, sizeof(*m));
+}
+
+bool yew_fuss_open_memory_has(const FussOpenMemory *m,
+                              const char *path, u32 path_len)
+{
+    bool found = false;
+
+    if (m == NULL || (path == NULL && path_len != 0U))
+        return false;
+    (void)open_memory_find(m, path, path_len, &found);
+    return found;
+}
+
+bool yew_fuss_open_memory_set(FussOpenMemory *m,
+                              const char *path, u32 path_len,
+                              bool expanded)
+{
+    bool found;
+    u32 at;
+
+    if (m == NULL || path == NULL || path_len == 0U)
+        return false;
+    at = open_memory_find(m, path, path_len, &found);
+    if (expanded) {
+        FussOpenPath item;
+
+        if (found)
+            return false;
+        if (m->len == m->cap) {
+            u32 cap = m->cap == 0U ? 8U : m->cap;
+
+            if (cap > UINT32_MAX / 2U)
+                cap = UINT32_MAX;
+            else
+                cap *= 2U;
+            if (cap <= m->len)
+                YEW_BUG("FUSS open memory exceeds UINT32_MAX paths");
+            m->data = yew_xreallocarray(m->data, cap, sizeof(*m->data));
+            m->cap = cap;
+        }
+        item.path = yew_xmalloc((size_t)path_len + 1U);
+        (void)memcpy(item.path, path, path_len);
+        item.path[path_len] = '\0';
+        item.path_len = path_len;
+        (void)memmove(&m->data[at + 1U], &m->data[at],
+                      (size_t)(m->len - at) * sizeof(*m->data));
+        m->data[at] = item;
+        m->len++;
+        return true;
+    }
+    if (!found)
+        return false;
+    yew_xfree(m->data[at].path);
+    (void)memmove(&m->data[at], &m->data[at + 1U],
+                  (size_t)(m->len - at - 1U) * sizeof(*m->data));
+    m->len--;
+    return true;
+}
+
 static void node_reserve(FussNodeList *v, size_t need)
 {
     size_t cap;
@@ -222,7 +330,7 @@ static u32 add_child(FussTree *t, u32 parent, const char *name, u32 name_len,
     node.path_len = (u32)path_len;
     node.parent = parent;
     node.is_file = is_file;
-    node.expanded = !is_file;
+    node.expanded = false;
     index = node_push(&t->nodes, node);
     if (index == 0U)
         return 0U;
@@ -566,9 +674,7 @@ static u32 node_for_path(const FussTree *t, const char *path, u32 len)
 void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
 {
     FussOpts opts = {false, false};
-    Arena collapsed_arena;
-    char **collapsed = NULL;
-    u32 collapsed_n = 0U;
+    Arena cached_arena;
     CachedUntrackedDir *cached_dirs = NULL;
     size_t cached_n = 0U;
     size_t i;
@@ -585,14 +691,12 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
         t->all_files == opts.all_files && t->show_hidden == opts.show_hidden)
         return;
 
-    arena_init(&collapsed_arena);
+    arena_init(&cached_arena);
     if (t->nodes.len != 0U) {
-        collapsed_n = yew_fuss_harvest_collapsed(t, &collapsed_arena,
-                                                  &collapsed);
         /* A lazy walk is filtered using the visibility policy active when it
          * runs.  Do not carry that result across a hidden-policy change. */
         if (!t->opts_valid || t->show_hidden == opts.show_hidden)
-            cached_n = cache_untracked_dirs(t, &collapsed_arena,
+            cached_n = cache_untracked_dirs(t, &cached_arena,
                                             &cached_dirs);
     }
     tree_reset(t);
@@ -654,11 +758,11 @@ void yew_fuss_build(FussTree *t, const GitSnapshot *s, const FussOpts *o)
             (void)yew_fuss_expand_untracked(t, node,
                                              &cached_dirs[i].children);
     }
-    if (collapsed_n != 0U)
-        yew_fuss_restore_collapsed(t, collapsed, collapsed_n);
-    else
-        yew_fuss_flatten(t);
-    arena_free_all(&collapsed_arena);
+    for (i = 1U; i < t->nodes.len; i++)
+        if (!t->nodes.data[i].is_file)
+            t->nodes.data[i].expanded = false;
+    yew_fuss_flatten(t);
+    arena_free_all(&cached_arena);
 }
 
 bool yew_fuss_merge_files(FussTree *t, const FileList *files,
@@ -754,6 +858,51 @@ void yew_fuss_flatten(FussTree *t)
         if (node != 0U)
             node = t->nodes.data[node].next_sibling;
     }
+}
+
+void yew_fuss_apply_expansion(FussTree *t,
+                              const FussOpenMemory *manual_open,
+                              const FussPathRef *open_files,
+                              u32 nopen)
+{
+    size_t i;
+
+    if (t == NULL || (open_files == NULL && nopen != 0U))
+        return;
+    for (i = 1U; i < t->nodes.len; i++) {
+        FussNode *node = &t->nodes.data[i];
+
+        if (!node->is_file)
+            node->expanded = yew_fuss_open_memory_has(
+                manual_open, node->path, node->path_len);
+    }
+    for (i = 0U; i < nopen; i++) {
+        const FussPathRef *file = &open_files[i];
+        u32 parent = 0U;
+        u32 at = 0U;
+
+        if (file->path == NULL)
+            continue;
+        while (at < file->path_len) {
+            u32 start = at;
+            u32 child;
+
+            while (at < file->path_len && file->path[at] != '/')
+                at++;
+            if (at == start) {
+                at++;
+                continue;
+            }
+            child = find_child(t, parent, file->path + start, at - start);
+            if (child == 0U)
+                break;
+            if (!t->nodes.data[child].is_file)
+                t->nodes.data[child].expanded = true;
+            parent = child;
+            at++;
+        }
+    }
+    yew_fuss_flatten(t);
 }
 
 static i32 normalized_row(const FussTree *t, i32 row)
@@ -932,75 +1081,6 @@ bool yew_fuss_expand_untracked(FussTree *t, u32 node,
     sort_children(t);
     yew_fuss_flatten(t);
     return true;
-}
-
-static int path_ptr_cmp(const void *left, const void *right, void *ctx)
-{
-    const char *const *a = left;
-    const char *const *b = right;
-    int cmp;
-    (void)ctx;
-    cmp = strcmp(*a, *b);
-    return (cmp > 0) - (cmp < 0);
-}
-
-u32 yew_fuss_harvest_collapsed(const FussTree *old, Arena *a, char ***out)
-{
-    char **paths;
-    size_t count = 0U;
-    size_t i;
-
-    if (out)
-        *out = NULL;
-    if (!old || !a || !out)
-        return 0U;
-    for (i = 1U; i < old->nodes.len; i++)
-        if (!old->nodes.data[i].is_file && !old->nodes.data[i].expanded)
-            count++;
-    if (count == 0U)
-        return 0U;
-    if (count > UINT32_MAX)
-        count = UINT32_MAX;
-    paths = arena_alloc(a, count * sizeof(*paths), _Alignof(char *));
-    count = 0U;
-    for (i = 1U; i < old->nodes.len && count < UINT32_MAX; i++) {
-        const FussNode *node = &old->nodes.data[i];
-        if (!node->is_file && !node->expanded)
-            paths[count++] = arena_strndup(a, node->path, node->path_len);
-    }
-    yew_sort_stable(paths, count, sizeof(*paths), path_ptr_cmp, NULL);
-    *out = paths;
-    return (u32)count;
-}
-
-static bool collapsed_has(char *const *paths, u32 n, const char *path)
-{
-    u32 lo = 0U;
-    u32 hi = n;
-
-    while (lo < hi) {
-        u32 mid = lo + (hi - lo) / 2U;
-        int cmp = strcmp(paths[mid], path);
-        if (cmp < 0)
-            lo = mid + 1U;
-        else
-            hi = mid;
-    }
-    return lo < n && strcmp(paths[lo], path) == 0;
-}
-
-void yew_fuss_restore_collapsed(FussTree *nw, char *const *paths, u32 n)
-{
-    size_t i;
-
-    if (!nw || (!paths && n != 0U))
-        return;
-    for (i = 1U; i < nw->nodes.len; i++) {
-        FussNode *node = &nw->nodes.data[i];
-        if (!node->is_file && collapsed_has(paths, n, node->path))
-            node->expanded = false;
-    }
-    yew_fuss_flatten(nw);
 }
 
 void yew_fuss_sel_clear(FussSel *s)

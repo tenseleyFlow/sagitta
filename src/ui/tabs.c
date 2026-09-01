@@ -214,6 +214,7 @@ void yew_tab_set_path(Ed *ed, int idx, const char *path)
     yew_xfree(t->display_path);
     t->path = canonical;
     t->display_path = display;
+    yew_fuss_windows_changed(ed);
     yew_state_mark_dirty(ed);
 }
 
@@ -291,6 +292,7 @@ int yew_tab_open(Ed *ed, const char *path)
     t.focus = t.root;
     t.buffer_id = buf->id;
     TabVec_push(&ed->tabs.v, t);
+    yew_fuss_windows_changed(ed);
     yew_state_mark_dirty(ed);
     return (int)ed->tabs.v.len - 1;
 }

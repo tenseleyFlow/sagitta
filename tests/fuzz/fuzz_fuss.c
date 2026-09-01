@@ -309,6 +309,7 @@ static bool check_fuss(const u8 *data, size_t len, char *why,
     FussFixture fixture;
     FussOpts opts = {true, true};
     FussTree tree;
+    FussOpenMemory manual;
     FussSel sel = {0};
     i32 row = -1;
     size_t at;
@@ -320,7 +321,9 @@ static bool check_fuss(const u8 *data, size_t len, char *why,
         return false;
     }
     yew_fuss_tree_init(&tree);
+    yew_fuss_open_memory_init(&manual);
     yew_fuss_build(&tree, &fixture.snap, &opts);
+    yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
     if (!tree_valid(&tree, why, why_cap))
         goto done;
     if (tree.items.len != 0U) {
@@ -339,10 +342,36 @@ static bool check_fuss(const u8 *data, size_t len, char *why,
                                    (data[at] & 1U) != 0U ? 1 : -1);
         else if (op == 3U)
             row = yew_fuss_nav_parent(&tree, row);
-        else if (op == 4U)
-            row = yew_fuss_nav_enter(&tree, row);
+        else if (op == 4U) {
+            if (row >= 0 && (size_t)row < tree.items.len) {
+                const FussItem *item = &tree.items.data[row];
+                const FussNode *node = &tree.nodes.data[item->node];
+
+                if (!node->is_file && !node->expanded) {
+                    (void)yew_fuss_open_memory_set(&manual, item->path,
+                                                    item->path_len, true);
+                    yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
+                    row = yew_fuss_row_of(&tree, &sel);
+                } else {
+                    row = yew_fuss_nav_enter(&tree, row);
+                }
+            }
+        }
         else if (op == 5U) {
-            (void)yew_fuss_nav_toggle(&tree, row);
+            if (row >= 0 && (size_t)row < tree.items.len) {
+                const FussItem *item = &tree.items.data[row];
+                const FussNode *node = &tree.nodes.data[item->node];
+
+                if (!node->is_file) {
+                    bool remembered = yew_fuss_open_memory_has(
+                        &manual, item->path, item->path_len);
+
+                    (void)yew_fuss_open_memory_set(&manual, item->path,
+                                                    item->path_len,
+                                                    !remembered);
+                    yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
+                }
+            }
             row = yew_fuss_row_of(&tree, &sel);
         } else if (op == 6U && row >= 0) {
             yew_fuss_sel_from_row(&sel, &tree, row);
@@ -372,16 +401,8 @@ static bool check_fuss(const u8 *data, size_t len, char *why,
             }
             if (item_len != 0U)
                 tree.items.data[0].depth = saved_depth;
-        } else {
-            Arena paths_arena;
-            char **paths = NULL;
-            u32 n;
-
-            arena_init(&paths_arena);
-            n = yew_fuss_harvest_collapsed(&tree, &paths_arena, &paths);
-            yew_fuss_restore_collapsed(&tree, paths, n);
-            arena_free_all(&paths_arena);
-        }
+        } else
+            yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
         if (!tree_valid(&tree, why, why_cap))
             goto done;
         if (tree.items.len == 0U) {
@@ -402,6 +423,7 @@ static bool check_fuss(const u8 *data, size_t len, char *why,
     ok = true;
 done:
     yew_fuss_sel_clear(&sel);
+    yew_fuss_open_memory_drop(&manual);
     yew_fuss_tree_drop(&tree);
     fixture_drop(&fixture);
     if (!ok)

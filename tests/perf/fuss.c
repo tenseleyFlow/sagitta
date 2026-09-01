@@ -25,7 +25,8 @@ enum {
     FUSS_PERF_DRAWER_KEYS = 1000,
     FUSS_PERF_UNCHANGED_CALLS = 5000,
     FUSS_PERF_REFRESHES = 100,
-    FUSS_PERF_COLLAPSED = 7,
+    FUSS_PERF_REMEMBERED = 7,
+    FUSS_PERF_OPEN_PATHS = 512,
     FUSS_PERF_BUILD_BUDGET_NS = 12000000,
     FUSS_PERF_KEY_BUDGET_NS = 5000000
 };
@@ -117,24 +118,37 @@ static void fixture_drop(PerfFixture *f)
 static bool measure_build(const PerfFixture *fixture, u64 *median)
 {
     const FussOpts opts = {true, true};
+    FussPathRef open[FUSS_PERF_OPEN_PATHS];
     u64 samples[FUSS_PERF_BUILD_SAMPLES];
     size_t i;
 
+    for (i = 0U; i < YEW_ARRAY_LEN(open); i++) {
+        open[i].path = fixture->entries[i].path;
+        open[i].path_len = fixture->entries[i].path_len;
+    }
+
     for (i = 0U; i < YEW_ARRAY_LEN(samples); i++) {
+        FussOpenMemory manual;
         FussTree tree;
         u64 start;
         u64 end;
 
         yew_fuss_tree_init(&tree);
+        yew_fuss_open_memory_init(&manual);
         start = now_ns();
         yew_fuss_build(&tree, &fixture->snap, &opts);
+        yew_fuss_apply_expansion(&tree, &manual, open,
+                                 YEW_ARRAY_LEN(open));
         end = now_ns();
-        if (start == 0U || end == 0U || tree.items.len < FUSS_PERF_ENTRIES) {
+        if (start == 0U || end == 0U ||
+            tree.nodes.len < FUSS_PERF_ENTRIES) {
+            yew_fuss_open_memory_drop(&manual);
             yew_fuss_tree_drop(&tree);
             return false;
         }
         samples[i] = end - start;
         fuss_perf_sink ^= tree.nodes.len + tree.items.len;
+        yew_fuss_open_memory_drop(&manual);
         yew_fuss_tree_drop(&tree);
     }
     sort_u64(samples, YEW_ARRAY_LEN(samples));
@@ -152,76 +166,54 @@ static i32 first_directory(const FussTree *tree)
     return -1;
 }
 
-static i32 last_expanded_directory(const FussTree *tree)
+static bool path_is_expanded(const FussTree *tree, const FussOpenPath *path)
 {
-    size_t i = tree->items.len;
+    size_t i;
 
-    while (i != 0U) {
-        const FussItem *item = &tree->items.data[--i];
-
-        if (!item->is_file && tree->nodes.data[item->node].expanded)
-            return (i32)i;
-    }
-    return -1;
-}
-
-static bool collapsed_equal(char *const *a, u32 an,
-                            char *const *b, u32 bn)
-{
-    u32 i;
-
-    if (an != bn)
-        return false;
-    for (i = 0U; i < an; i++)
-        if (strcmp(a[i], b[i]) != 0)
-            return false;
-    return true;
+    for (i = 1U; i < tree->nodes.len; i++)
+        if (tree->nodes.data[i].path_len == path->path_len &&
+            memcmp(tree->nodes.data[i].path, path->path,
+                   path->path_len) == 0)
+            return tree->nodes.data[i].expanded;
+    return false;
 }
 
 static bool check_refresh_stability(const PerfFixture *fixture)
 {
     const FussOpts opts = {true, true};
     GitSnapshot snap = fixture->snap;
-    Arena expected_arena;
+    FussOpenMemory manual;
     FussTree tree;
-    char **expected = NULL;
-    u32 expected_n;
     u32 i;
     bool ok = false;
 
     yew_fuss_tree_init(&tree);
+    yew_fuss_open_memory_init(&manual);
     yew_fuss_build(&tree, &snap, &opts);
-    for (i = 0U; i < FUSS_PERF_COLLAPSED; i++) {
-        i32 row = last_expanded_directory(&tree);
+    for (i = 0U; i < FUSS_PERF_REMEMBERED; i++) {
+        const FussItem *item = &tree.items.data[i];
 
-        if (row < 0 || !yew_fuss_nav_toggle(&tree, row))
+        if (item->is_file ||
+            !yew_fuss_open_memory_set(&manual, item->path,
+                                       item->path_len, true))
             goto done_tree;
     }
-    arena_init(&expected_arena);
-    expected_n = yew_fuss_harvest_collapsed(&tree, &expected_arena,
-                                             &expected);
-    if (expected_n != FUSS_PERF_COLLAPSED)
-        goto done_expected;
+    yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
     for (i = 0U; i < FUSS_PERF_REFRESHES; i++) {
-        Arena current_arena;
-        char **current = NULL;
-        u32 current_n;
+        u32 path;
 
         snap.gen++;
         yew_fuss_build(&tree, &snap, &opts);
-        arena_init(&current_arena);
-        current_n = yew_fuss_harvest_collapsed(&tree, &current_arena,
-                                                &current);
-        if (!collapsed_equal(expected, expected_n, current, current_n)) {
-            arena_free_all(&current_arena);
-            goto done_expected;
-        }
-        arena_free_all(&current_arena);
+        yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
+        if (manual.len != FUSS_PERF_REMEMBERED)
+            goto done_tree;
+        for (path = 0U; path < manual.len; path++)
+            if (!path_is_expanded(&tree, &manual.data[path]))
+                goto done_tree;
     }
     ok = true;
-done_expected:
-    arena_free_all(&expected_arena);
 done_tree:
+    yew_fuss_open_memory_drop(&manual);
     yew_fuss_tree_drop(&tree);
     return ok;
 }
@@ -232,14 +224,17 @@ static bool measure_keys(const PerfFixture *fixture, u64 *nav_p99,
     const FussOpts opts = {true, true};
     u64 nav[FUSS_PERF_KEY_SAMPLES];
     u64 toggles[33];
+    FussOpenMemory manual;
     FussTree tree;
     i32 row;
     size_t i;
 
     yew_fuss_tree_init(&tree);
+    yew_fuss_open_memory_init(&manual);
     yew_fuss_build(&tree, &fixture->snap, &opts);
     row = first_directory(&tree);
     if (row < 0) {
+        yew_fuss_open_memory_drop(&manual);
         yew_fuss_tree_drop(&tree);
         return false;
     }
@@ -263,15 +258,21 @@ static bool measure_keys(const PerfFixture *fixture, u64 *nav_p99,
 
         row = first_directory(&tree);
         if (row < 0) {
+            yew_fuss_open_memory_drop(&manual);
             yew_fuss_tree_drop(&tree);
             return false;
         }
         start = now_ns();
         yew_fuss_build(&tree, &fixture->snap, &opts);
-        if (!yew_fuss_nav_toggle(&tree, row)) {
-            yew_fuss_tree_drop(&tree);
-            return false;
+        {
+            const FussItem *item = &tree.items.data[row];
+            bool remembered = yew_fuss_open_memory_has(
+                &manual, item->path, item->path_len);
+
+            (void)yew_fuss_open_memory_set(&manual, item->path,
+                                            item->path_len, !remembered);
         }
+        yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
         toggles[i] = now_ns() - start;
         fuss_perf_sink ^= tree.items.len;
     }
@@ -279,6 +280,7 @@ static bool measure_keys(const PerfFixture *fixture, u64 *nav_p99,
     sort_u64(toggles, YEW_ARRAY_LEN(toggles));
     *nav_p99 = nav[(YEW_ARRAY_LEN(nav) * 99U + 99U) / 100U - 1U];
     *toggle_p99 = toggles[(YEW_ARRAY_LEN(toggles) * 99U + 99U) / 100U - 1U];
+    yew_fuss_open_memory_drop(&manual);
     yew_fuss_tree_drop(&tree);
     return true;
 }
@@ -506,7 +508,7 @@ int main(void)
         status = 1;
     }
     if (!check_refresh_stability(&fixture)) {
-        (void)fputs("perf_fuss: collapsed state drifted across refreshes\n",
+        (void)fputs("perf_fuss: remembered state drifted across refreshes\n",
                     stderr);
         status = 1;
     }
@@ -530,7 +532,7 @@ int main(void)
                  (double)toggle_p99 / 1000000.0);
     (void)printf("fuss unchanged-gen x5000  %.3f ms (zero rebuilds)\n",
                  (double)unchanged / 1000000.0);
-    (void)printf("fuss collapse refresh x100 stable (7 paths)\n");
+    (void)printf("fuss remembered refresh x100 stable (7 paths)\n");
     (void)printf("fuss drawer entry 20000   %.3f ms (limit 5.000 ms)%s\n",
                  (double)drawer_entry / 1000000.0,
                  advisory ? " ADVISORY" : "");

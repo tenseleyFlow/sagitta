@@ -137,15 +137,14 @@ void test_fussnav_enter_expands_then_descends(void)
     yew_fuss_tree_init(&t);
     yew_fuss_build(&t, &s, &o);
     a = fn_row(&t, "a");
-    deep = fn_row(&t, "a/deep");
-    leaf = fn_row(&t, "a/deep/leaf.c");
 
     YEW_ASSERT(a >= 0);
-    YEW_ASSERT(deep > a);
-    YEW_ASSERT(leaf > deep);
-    YEW_ASSERT(yew_fuss_nav_toggle(&t, deep));
-    YEW_ASSERT_EQ_I64(fn_row(&t, "a/deep/leaf.c"), -1);
+    YEW_ASSERT_EQ_I64(fn_row(&t, "a/deep"), -1);
+    YEW_ASSERT(yew_fuss_nav_toggle(&t, a));
     deep = fn_row(&t, "a/deep");
+    leaf = fn_row(&t, "a/deep/leaf.c");
+    YEW_ASSERT(deep > a);
+    YEW_ASSERT_EQ_I64(leaf, -1);
     YEW_ASSERT_EQ_I64(yew_fuss_nav_enter(&t, deep), deep + 1);
     YEW_ASSERT_EQ_STR(t.items.data[deep + 1].path, "a/deep/leaf.c");
     YEW_ASSERT(t.nodes.data[t.items.data[deep].node].expanded);

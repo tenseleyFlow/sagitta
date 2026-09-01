@@ -84,15 +84,6 @@ static const FussItem *ft_item(const FussTree *t, const char *path)
 
 static const FussNode *ft_node(const FussTree *t, const char *path)
 {
-    const FussItem *item = ft_item(t, path);
-
-    if (item == NULL || item->node >= t->nodes.len)
-        return NULL;
-    return &t->nodes.data[item->node];
-}
-
-static const FussNode *ft_node_raw(const FussTree *t, const char *path)
-{
     size_t i;
     size_t n = strlen(path);
 
@@ -101,6 +92,26 @@ static const FussNode *ft_node_raw(const FussTree *t, const char *path)
             memcmp(t->nodes.data[i].path, path, n) == 0)
             return &t->nodes.data[i];
     return NULL;
+}
+
+static const FussNode *ft_node_raw(const FussTree *t, const char *path)
+{
+    return ft_node(t, path);
+}
+
+static void ft_expand_all(FussTree *t)
+{
+    FussOpenMemory memory;
+    size_t i;
+
+    yew_fuss_open_memory_init(&memory);
+    for (i = 1U; i < t->nodes.len; i++)
+        if (!t->nodes.data[i].is_file)
+            (void)yew_fuss_open_memory_set(&memory,
+                                            t->nodes.data[i].path,
+                                            t->nodes.data[i].path_len, true);
+    yew_fuss_apply_expansion(t, &memory, NULL, 0U);
+    yew_fuss_open_memory_drop(&memory);
 }
 
 static void ft_fill_fixture(GitEntry e[8])
@@ -213,14 +224,14 @@ void test_fusstree_directories_or_descendant_flags(void)
     YEW_ASSERT(!src->untracked);
     YEW_ASSERT(!src->incoming);
     YEW_ASSERT(!src->conflicted);
-    YEW_ASSERT(src->expanded);
+    YEW_ASSERT(!src->expanded);
 
     YEW_ASSERT_NOT_NULL(mod);
     YEW_ASSERT(!mod->is_file);
     YEW_ASSERT(mod->staged);
     YEW_ASSERT(mod->unstaged);
     YEW_ASSERT(!mod->untracked);
-    YEW_ASSERT(mod->expanded);
+    YEW_ASSERT(!mod->expanded);
     ft_drop(&t);
 }
 
@@ -248,6 +259,8 @@ void test_fusstree_sorts_directories_before_files_deterministically(void)
     yew_fuss_tree_init(&tb);
     yew_fuss_build(&ta, &sa, &o);
     yew_fuss_build(&tb, &sb, &o);
+    ft_expand_all(&ta);
+    ft_expand_all(&tb);
 
     YEW_ASSERT_EQ_U64(ta.items.len, YEW_ARRAY_LEN(want));
     YEW_ASSERT_EQ_U64(tb.items.len, YEW_ARRAY_LEN(want));

@@ -62,6 +62,22 @@ typedef struct FussItemList {
     size_t cap;
 } FussItemList;
 
+typedef struct FussOpenPath {
+    char *path;
+    u32 path_len;
+} FussOpenPath;
+
+typedef struct FussOpenMemory {
+    FussOpenPath *data;
+    u32 len;
+    u32 cap;
+} FussOpenMemory;
+
+typedef struct FussPathRef {
+    const char *path;
+    u32 path_len;
+} FussPathRef;
+
 typedef struct FussTree {
     Arena a;
     FussNodeList nodes; /* nodes[0] is the unshown root. */
@@ -94,6 +110,18 @@ bool yew_fuss_merge_files(FussTree *t, const FileList *files,
                           const GitSnapshot *s, const FussOpts *o);
 void yew_fuss_flatten(FussTree *t);
 
+void yew_fuss_open_memory_init(FussOpenMemory *m);
+void yew_fuss_open_memory_drop(FussOpenMemory *m);
+bool yew_fuss_open_memory_has(const FussOpenMemory *m,
+                              const char *path, u32 path_len);
+bool yew_fuss_open_memory_set(FussOpenMemory *m,
+                              const char *path, u32 path_len,
+                              bool expanded);
+void yew_fuss_apply_expansion(FussTree *t,
+                              const FussOpenMemory *manual_open,
+                              const FussPathRef *open_files,
+                              u32 nopen);
+
 /* Navigation helpers return the selected row.  Invalid/empty selections are
  * normalized to row zero when rows exist and to -1 for an empty tree. */
 i32 yew_fuss_nav_step(const FussTree *t, i32 row, i32 dir);
@@ -108,9 +136,6 @@ bool yew_fuss_nav_toggle(FussTree *t, i32 row);
  * with an empty list; the model independently enforces the dotfile option. */
 bool yew_fuss_expand_untracked(FussTree *t, u32 node,
                                const GitPathList *children);
-
-u32 yew_fuss_harvest_collapsed(const FussTree *old, Arena *a, char ***out);
-void yew_fuss_restore_collapsed(FussTree *nw, char *const *paths, u32 n);
 
 void yew_fuss_sel_clear(FussSel *s);
 void yew_fuss_sel_set(FussSel *s, const char *path, u32 len);

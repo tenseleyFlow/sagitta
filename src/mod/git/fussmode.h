@@ -28,6 +28,7 @@ const char *yew_fuss_jump_pattern(const FussJump *jump, u32 *len);
 
 void yew_fuss_state_init(Ed *ed);
 void yew_fuss_state_free(Ed *ed);
+void yew_fuss_workspace_changed(Ed *ed);
 void yew_fuss_win_releasing(Ed *ed, u32 win_id);
 void yew_fuss_windows_changed(Ed *ed);
 bool yew_fuss_active(const Ed *ed);

@@ -807,6 +807,7 @@ static bool ed_set_workspace_roots(Ed *ed, const char *dir,
         &ed->arena,
         display_dir != NULL && display_dir[0] != '\0' ? display_dir : root);
     yew_xfree(root);
+    yew_fuss_workspace_changed(ed);
     return ed->ws.dir != NULL && ed->ws.display_dir != NULL;
 }
 
@@ -1143,6 +1144,7 @@ void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
     YewGitDiffRowStyleVec_free(&w->git_diff_rows);
     SpanVec_free(&w->git_diff_intra);
     yew_vp_init(w);
+    yew_fuss_windows_changed(ed);
 }
 
 void yew_ed_win_release(Ed *ed, Win *w)

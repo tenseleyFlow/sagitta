@@ -379,7 +379,7 @@ void test_fussdrawer_selected_row_keeps_the_final_component(void)
     fussdrawer_fix_drop(&fix);
 }
 
-void test_fussdrawer_directory_tree_opens_through_the_first_useful_level(void)
+void test_fussdrawer_directory_tree_starts_collapsed(void)
 {
     GitEntry entries[] = {
         {.path = "one/two/three.c", .path_len = 15U},
@@ -388,19 +388,15 @@ void test_fussdrawer_directory_tree_opens_through_the_first_useful_level(void)
     GitSnapshot snap = {0};
     FussOpts opts = {true, false};
     FussTree tree;
-    size_t i;
-    bool found = false;
 
     snap.entries.data = entries;
     snap.entries.len = YEW_ARRAY_LEN(entries);
     snap.gen = 1U;
     yew_fuss_tree_init(&tree);
     yew_fuss_build(&tree, &snap, &opts);
-    for (i = 0U; i < tree.items.len; i++)
-        if (tree.items.data[i].path_len == 15U &&
-            memcmp(tree.items.data[i].path, "one/two/three.c", 15U) == 0)
-            found = true;
-    YEW_ASSERT(found);
+    YEW_ASSERT_EQ_U64(tree.items.len, 1U);
+    YEW_ASSERT_EQ_STR(tree.items.data[0].path, "one");
+    YEW_ASSERT(!tree.nodes.data[tree.items.data[0].node].expanded);
     yew_fuss_tree_drop(&tree);
 }
 

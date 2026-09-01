@@ -39,6 +39,7 @@
 #include "unicode/grapheme.h"
 #include "unicode/width.h"
 #include "util/buf.h"
+#include "util/sort.h"
 #include "ws/state.h"
 #include "ws/walk.h"
 
@@ -84,6 +85,13 @@ enum { FUSS_OPENING_FRAME_MS = 16 };
 
 struct FussMode {
     FussTree tree;
+    FussOpenMemory manual_open;
+    FussOpenMemory open_files;
+    FussPathRef *open_scratch;
+    u32 open_scratch_len;
+    u32 open_scratch_cap;
+    FussPathRef *open_refs;
+    u32 open_refs_cap;
     FussOpts opts;
     FussSel sel;
     FussJump jump;
@@ -129,7 +137,6 @@ struct FussMode {
     FileList expand_files;
     WalkState *expand_walk;
     char *expand_path;
-    bool expand_enter;
     i32 rebase_step;
     i32 rebase_total;
 };
@@ -150,10 +157,14 @@ static void fuss_damage(Ed *ed);
 static char *fuss_join_root(const Ed *ed, const char *path);
 static void fuss_walk_restart(Ed *ed);
 static void fuss_expand_clear(FussMode *f);
-static bool fuss_expand_start(Ed *ed, bool enter);
+static bool fuss_expand_start(Ed *ed);
 static void fuss_expand_tick(Ed *ed);
 static bool fuss_buffer_bytes(const Buffer *buffer, Bytebuf *out);
 static void fuss_commit_view_close(Ed *ed);
+static i32 fuss_row(const FussMode *f);
+static void fuss_select_row(FussMode *f, i32 row);
+static bool fuss_open_files_refresh(Ed *ed);
+static void fuss_apply_effective(FussMode *f);
 
 static void fuss_viewer_close(Ed *ed)
 {
@@ -467,10 +478,20 @@ void yew_fuss_windows_changed(Ed *ed)
     FussMode *f;
     Buffer *commit;
 
-    if (ed == NULL || ed->fuss == NULL ||
-        !ed->fuss->commit_cancel_pending)
+    if (ed == NULL || ed->fuss == NULL)
         return;
     f = ed->fuss;
+    if (f->active && fuss_open_files_refresh(ed)) {
+        i32 row;
+
+        fuss_apply_effective(f);
+        row = fuss_row(f);
+        if (row >= 0)
+            fuss_select_row(f, row);
+        fuss_damage(ed);
+    }
+    if (!f->commit_cancel_pending)
+        return;
     f->commit_cancel_pending = false;
     commit = yew_ws_buf_by_id(ed, f->commit_buffer_id);
     f->commit_buffer_id = 0U;
@@ -653,26 +674,201 @@ static void fuss_select_row(FussMode *f, i32 row)
     yew_fuss_sel_from_row(&f->sel, &f->tree, row);
 }
 
+static int fuss_path_ref_cmp(const void *left, const void *right, void *ctx)
+{
+    const FussPathRef *a = left;
+    const FussPathRef *b = right;
+    u32 common = a->path_len < b->path_len ? a->path_len : b->path_len;
+    int cmp = common == 0U ? 0 : memcmp(a->path, b->path, common);
+
+    (void)ctx;
+    if (cmp != 0)
+        return (cmp > 0) - (cmp < 0);
+    return (a->path_len > b->path_len) - (a->path_len < b->path_len);
+}
+
+static bool fuss_relative_path_valid(const char *path, size_t len)
+{
+    size_t at = 0U;
+
+    if (path == NULL || len == 0U || path[0] == '/')
+        return false;
+    while (at < len) {
+        size_t start = at;
+        size_t part_len;
+
+        while (at < len && path[at] != '/')
+            at++;
+        part_len = at - start;
+        if (part_len == 0U ||
+            (part_len == 1U && path[start] == '.') ||
+            (part_len == 2U && path[start] == '.' &&
+             path[start + 1U] == '.'))
+            return false;
+        at++;
+    }
+    return path[len - 1U] != '/';
+}
+
+static void fuss_open_scratch_push(FussMode *f, const char *path,
+                                   const char *root)
+{
+    size_t path_len;
+    size_t root_len;
+    const char *relative;
+    size_t relative_len;
+
+    if (f == NULL || path == NULL || path[0] == '\0' || root == NULL)
+        return;
+    path_len = fuss_cstr_len(path);
+    root_len = fuss_cstr_len(root);
+    relative = NULL;
+    relative_len = 0U;
+    if (path[0] != '/') {
+        while (path_len >= 2U && path[0] == '.' && path[1] == '/') {
+            path += 2U;
+            path_len -= 2U;
+        }
+        relative = path;
+        relative_len = path_len;
+    } else if (root_len == 1U && root[0] == '/' && path_len > 1U) {
+        relative = path + 1U;
+        relative_len = path_len - 1U;
+    } else if (root_len != 0U && path_len > root_len + 1U &&
+               memcmp(path, root, root_len) == 0 && path[root_len] == '/') {
+        relative = path + root_len + 1U;
+        relative_len = path_len - root_len - 1U;
+    }
+    if (relative == NULL || !fuss_relative_path_valid(relative, relative_len) ||
+        relative_len > UINT32_MAX)
+        return;
+    if (f->open_scratch_len == f->open_scratch_cap) {
+        u32 cap = f->open_scratch_cap == 0U ? 16U : f->open_scratch_cap;
+
+        if (cap > UINT32_MAX / 2U)
+            cap = UINT32_MAX;
+        else
+            cap *= 2U;
+        if (cap <= f->open_scratch_len)
+            YEW_BUG("FUSS open-path scratch exceeds UINT32_MAX rows");
+        f->open_scratch = yew_xreallocarray(
+            f->open_scratch, cap, sizeof(*f->open_scratch));
+        f->open_scratch_cap = cap;
+    }
+    f->open_scratch[f->open_scratch_len++] =
+        (FussPathRef){relative, (u32)relative_len};
+}
+
+static void fuss_collect_pane_paths(FussMode *f, const Pane *root,
+                                    const char *workspace)
+{
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
+    u32 n = 0U;
+    u32 i;
+
+    if (root == NULL)
+        return;
+    yew_pane_collect_leaves((Pane *)root, leaves, YEW_ARRAY_LEN(leaves), &n);
+    for (i = 0U; i < n; i++) {
+        const Win *win = leaves[i] == NULL ? NULL : leaves[i]->win;
+        const Buffer *buffer = win == NULL ? NULL : win->buf;
+
+        if (buffer != NULL && (buffer->flags & YEW_BUF_SCRATCH) == 0U &&
+            buffer->meta.realpath != NULL)
+            fuss_open_scratch_push(f, buffer->meta.realpath, workspace);
+    }
+}
+
+static bool fuss_open_files_refresh(Ed *ed)
+{
+    FussMode *f;
+    const char *workspace;
+    u32 unique;
+    size_t tab;
+    u32 i;
+    bool changed;
+
+    if (ed == NULL || ed->fuss == NULL)
+        return false;
+    f = ed->fuss;
+    workspace = yew_ws_root(ed);
+    f->open_scratch_len = 0U;
+    for (tab = 0U; tab < ed->tabs.v.len; tab++) {
+        const Tab *item = &ed->tabs.v.data[tab];
+
+        fuss_open_scratch_push(f, item->path, workspace);
+        fuss_collect_pane_paths(f, item->root, workspace);
+    }
+    fuss_collect_pane_paths(f, ed->pane_root, workspace);
+    yew_sort_stable(f->open_scratch, f->open_scratch_len,
+                    sizeof(*f->open_scratch), fuss_path_ref_cmp, NULL);
+    unique = 0U;
+    for (i = 0U; i < f->open_scratch_len; i++) {
+        if (unique != 0U &&
+            fuss_path_ref_cmp(&f->open_scratch[unique - 1U],
+                              &f->open_scratch[i], NULL) == 0)
+            continue;
+        f->open_scratch[unique++] = f->open_scratch[i];
+    }
+    f->open_scratch_len = unique;
+    changed = f->open_files.len != unique;
+    for (i = 0U; !changed && i < unique; i++) {
+        const FussOpenPath *old = &f->open_files.data[i];
+        const FussPathRef *now = &f->open_scratch[i];
+
+        changed = old->path_len != now->path_len ||
+                  memcmp(old->path, now->path, now->path_len) != 0;
+    }
+    if (!changed)
+        return false;
+    while (f->open_files.len != 0U) {
+        const FussOpenPath *last =
+            &f->open_files.data[f->open_files.len - 1U];
+
+        (void)yew_fuss_open_memory_set(&f->open_files, last->path,
+                                        last->path_len, false);
+    }
+    for (i = 0U; i < unique; i++)
+        (void)yew_fuss_open_memory_set(&f->open_files,
+                                       f->open_scratch[i].path,
+                                       f->open_scratch[i].path_len, true);
+    return true;
+}
+
+static void fuss_apply_effective(FussMode *f)
+{
+    u32 i;
+
+    if (f == NULL)
+        return;
+    if (f->open_refs_cap < f->open_files.len) {
+        f->open_refs = yew_xreallocarray(f->open_refs, f->open_files.len,
+                                          sizeof(*f->open_refs));
+        f->open_refs_cap = f->open_files.len;
+    }
+    for (i = 0U; i < f->open_files.len; i++) {
+        f->open_refs[i].path = f->open_files.data[i].path;
+        f->open_refs[i].path_len = f->open_files.data[i].path_len;
+    }
+    yew_fuss_apply_expansion(&f->tree, &f->manual_open, f->open_refs,
+                             f->open_files.len);
+}
+
 static void fuss_build(Ed *ed, const GitSnapshot *snap, bool force)
 {
     FussMode *f = ed->fuss;
-    Arena saved;
-    char **paths = NULL;
-    u32 npaths;
 
     if (f == NULL || snap == NULL ||
         (!force && f->tree.snap_gen == snap->gen))
         return;
-    arena_init(&saved);
-    npaths = yew_fuss_harvest_collapsed(&f->tree, &saved, &paths);
     yew_fuss_build(&f->tree, snap, &f->opts);
     fuss_rebase_progress_update(ed, snap);
     if (f->opts.all_files && f->walk == NULL && f->files.paths.len != 0U)
         (void)yew_fuss_merge_files(&f->tree, &f->files, snap, &f->opts);
-    yew_fuss_restore_collapsed(&f->tree, paths, npaths);
+    (void)fuss_open_files_refresh(ed);
+    fuss_apply_effective(f);
     if (fuss_row(f) < 0 && f->tree.items.len != 0U)
         fuss_select_row(f, 0);
-    arena_free_all(&saved);
     f->scroll = 0U;
     fuss_damage(ed);
 }
@@ -690,6 +886,8 @@ void yew_fuss_state_init(Ed *ed)
         return;
     f = yew_xcalloc(1U, sizeof(*f));
     yew_fuss_tree_init(&f->tree);
+    yew_fuss_open_memory_init(&f->manual_open);
+    yew_fuss_open_memory_init(&f->open_files);
     yew_fuss_jump_init(&f->jump);
     yew_filelist_init(&f->files);
     yew_filelist_init(&f->expand_files);
@@ -730,10 +928,33 @@ void yew_fuss_state_free(Ed *ed)
     fuss_expand_clear(f);
     yew_filelist_free(&f->files);
     yew_filelist_free(&f->expand_files);
+    yew_fuss_open_memory_drop(&f->manual_open);
+    yew_fuss_open_memory_drop(&f->open_files);
+    yew_xfree(f->open_scratch);
+    yew_xfree(f->open_refs);
     yew_fuss_sel_clear(&f->sel);
     yew_fuss_tree_drop(&f->tree);
     yew_xfree(f);
     ed->fuss = NULL;
+}
+
+void yew_fuss_workspace_changed(Ed *ed)
+{
+    FussMode *f;
+
+    if (ed == NULL || ed->fuss == NULL)
+        return;
+    f = ed->fuss;
+    yew_fuss_open_memory_drop(&f->manual_open);
+    yew_fuss_open_memory_init(&f->manual_open);
+    yew_fuss_open_memory_drop(&f->open_files);
+    yew_fuss_open_memory_init(&f->open_files);
+    f->open_scratch_len = 0U;
+    if (f->active) {
+        (void)fuss_open_files_refresh(ed);
+        fuss_apply_effective(f);
+        fuss_damage(ed);
+    }
 }
 
 bool yew_fuss_active(const Ed *ed)
@@ -782,6 +1003,8 @@ CmdStatus yew_fuss_mode_enter(Ed *ed)
         if (snap != NULL && yew_fuss_merge_files(&ed->fuss->tree,
                                                   &ed->fuss->files, snap,
                                                   &ed->fuss->opts)) {
+            (void)fuss_open_files_refresh(ed);
+            fuss_apply_effective(ed->fuss);
             if (fuss_row(ed->fuss) < 0 && ed->fuss->tree.items.len != 0U)
                 fuss_select_row(ed->fuss, 0);
             fuss_damage(ed);
@@ -838,6 +1061,8 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
         if (snap != NULL &&
             yew_fuss_merge_files(&ed->fuss->tree, &ed->fuss->files, snap,
                                   &ed->fuss->opts)) {
+            (void)fuss_open_files_refresh(ed);
+            fuss_apply_effective(ed->fuss);
             if (fuss_row(ed->fuss) < 0 &&
                 ed->fuss->tree.items.len != 0U)
                 fuss_select_row(ed->fuss, 0);
@@ -3442,7 +3667,7 @@ static CmdStatus fuss_nav(CmdCtx *cx, i32 kind)
 
     if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
         return YEW_CMD_ERR_STATE;
-    if (kind == 4 && fuss_expand_start(cx->ed, true))
+    if (kind == 4 && fuss_expand_start(cx->ed))
         return YEW_CMD_OK;
     row = fuss_row(f);
     count = cx->count_given && cx->count != 0U ? cx->count : 1U;
@@ -3453,8 +3678,21 @@ static CmdStatus fuss_nav(CmdCtx *cx, i32 kind)
             row = yew_fuss_nav_raw(&f->tree, row, kind < 0 ? -1 : 1);
         else if (kind == 3)
             row = yew_fuss_nav_parent(&f->tree, row);
-        else if (kind == 4)
-            row = yew_fuss_nav_enter(&f->tree, row);
+        else if (kind == 4) {
+            const FussItem *item = fuss_item(f, row);
+            const FussNode *node = fuss_node(f, item);
+
+            if (item != NULL && node != NULL && !node->is_file &&
+                !node->expanded) {
+                (void)yew_fuss_open_memory_set(&f->manual_open,
+                                                item->path, item->path_len,
+                                                true);
+                fuss_apply_effective(f);
+                row = yew_fuss_row_of(&f->tree, &f->sel);
+            } else {
+                row = yew_fuss_nav_enter(&f->tree, row);
+            }
+        }
     }
     fuss_select_row(f, row);
     fuss_damage(cx->ed);
@@ -3490,10 +3728,9 @@ static void fuss_expand_clear(FussMode *f)
     yew_filelist_init(&f->expand_files);
     yew_xfree(f->expand_path);
     f->expand_path = NULL;
-    f->expand_enter = false;
 }
 
-static bool fuss_expand_start(Ed *ed, bool enter)
+static bool fuss_expand_start(Ed *ed)
 {
     FussMode *f;
     const FussItem *item;
@@ -3520,7 +3757,6 @@ static bool fuss_expand_start(Ed *ed, bool enter)
         return false;
     fuss_expand_clear(f);
     f->expand_path = fuss_dup_bytes(item->path, item->path_len);
-    f->expand_enter = enter;
     opts.hidden = f->opts.show_hidden;
     opts.include_dirs = true;
     opts.max_depth = 1U;
@@ -3586,7 +3822,6 @@ static void fuss_expand_tick(Ed *ed)
     Arena arena;
     i32 row;
     u32 node;
-    bool enter;
 
     if (ed == NULL || ed->fuss == NULL || ed->fuss->expand_walk == NULL)
         return;
@@ -3607,14 +3842,15 @@ static void fuss_expand_tick(Ed *ed)
         return;
     }
     node = f->tree.items.data[row].node;
-    enter = f->expand_enter;
     snap = yew_git_snapshot(ed);
     arena_init(&arena);
     if (fuss_expand_children(f, snap, &children, &arena) &&
         yew_fuss_expand_untracked(&f->tree, node, &children)) {
-        if (enter)
-            row = yew_fuss_nav_enter(&f->tree, row);
-        fuss_select_row(f, row);
+        (void)yew_fuss_open_memory_set(&f->manual_open, f->expand_path,
+                                        (u32)fuss_cstr_len(f->expand_path),
+                                        true);
+        fuss_apply_effective(f);
+        fuss_select_row(f, yew_fuss_row_of(&f->tree, &f->sel));
         fuss_damage(ed);
     }
     arena_free_all(&arena);
@@ -3685,15 +3921,33 @@ CmdStatus yew_fuss_cmd_nav_row_next(CmdCtx *cx) { return fuss_nav(cx, 2); }
 CmdStatus yew_fuss_cmd_nav_toggle(CmdCtx *cx)
 {
     FussMode *f;
+    const FussItem *item;
+    const FussNode *node;
     i32 row;
+    bool remembered;
 
     if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
         return YEW_CMD_ERR_STATE;
     row = fuss_row(f);
-    if (yew_fuss_nav_toggle(&f->tree, row)) {
-        fuss_select_row(f, yew_fuss_row_of(&f->tree, &f->sel));
-        fuss_damage(cx->ed);
+    item = fuss_item(f, row);
+    node = fuss_node(f, item);
+    if (item == NULL || node == NULL || node->is_file)
+        return YEW_CMD_OK;
+    if (fuss_expand_start(cx->ed))
+        return YEW_CMD_OK;
+    remembered = yew_fuss_open_memory_has(&f->manual_open,
+                                           item->path, item->path_len);
+    if (node->expanded && !remembered) {
+        yew_msg(cx->ed, YEW_MSG_INFO,
+                "kept open: contains an open file");
+        return YEW_CMD_OK;
     }
+    (void)yew_fuss_open_memory_set(&f->manual_open,
+                                    item->path, item->path_len,
+                                    !node->expanded);
+    fuss_apply_effective(f);
+    fuss_select_row(f, yew_fuss_row_of(&f->tree, &f->sel));
+    fuss_damage(cx->ed);
     return YEW_CMD_OK;
 }
 
@@ -3850,9 +4104,7 @@ static CmdStatus fuss_open_path(CmdCtx *cx, bool leave)
     item = fuss_item(f, row);
     node = fuss_node(f, item);
     if (cx->sarg == NULL && node != NULL && !node->is_file) {
-        (void)yew_fuss_nav_toggle(&f->tree, row);
-        fuss_damage(cx->ed);
-        return YEW_CMD_OK;
+        return yew_fuss_cmd_nav_toggle(cx);
     }
     path = fuss_selected_path(cx);
     if (path == NULL)
