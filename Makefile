@@ -710,6 +710,15 @@ SCRIPT_RUNNER_ARGS := --exclude plug_examples_
 endif
 endif
 endif
+# This 4 MiB mutation workload is invoked directly by embedded-init.sh with
+# its required file argument and host golden.  The ordinary script harness
+# intentionally opens no file, so selecting it there can only fail before its
+# first assertion.
+ifneq ($(strip $(SCRIPT_RUNNER_ARGS)),)
+SCRIPT_RUNNER_ARGS := $(SCRIPT_RUNNER_ARGS),57_embedded_gate
+else
+SCRIPT_RUNNER_ARGS := --exclude 57_embedded_gate
+endif
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
 PTY_ORACLE_OBJ := $(PTY_VT_OBJ) $(PTY_SNAPSHOT_OBJ)
