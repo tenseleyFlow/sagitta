@@ -267,6 +267,11 @@ void yew_fuss_state_free(Ed *ed)
         ed->fuss = NULL;
 }
 
+void yew_fuss_workspace_changed(Ed *ed)
+{
+    (void)ed;
+}
+
 bool yew_fuss_active(const Ed *ed)
 {
     (void)ed;
