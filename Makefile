@@ -84,7 +84,11 @@ ifeq ($(TARGET),x86_64-linux-musl)
 override SHIPPING := 1
 endif
 GC_SECTIONS ?= 1
+ifeq ($(TARGET_OS),Darwin)
+STRIPFLAGS ?= -u -r
+else
 STRIPFLAGS ?= -s -R .comment -R .note.ABI-tag
+endif
 SIZE_ROOT ?= build-size
 PREFIX  ?= /usr/local
 MODULES ?= lsp ai fuss plugins
