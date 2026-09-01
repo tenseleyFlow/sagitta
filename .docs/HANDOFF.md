@@ -12,13 +12,13 @@ Apple-silicon host `nomad-1`
 
 **Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
 
-**Current post-Sprint-57.7 code frontier:** `23159853`
+**Current post-Sprint-57.8 code frontier:** `89eefa40`
 
-**Git position:** 39 local commits ahead of `origin/trunk` after this closeout;
+**Git position:** 46 local commits ahead of `origin/trunk` after this closeout;
 nothing in the Sprint 57 chain has been pushed from the Mac
 
-**Active implementation frontier:** Sprint 57.7 is repository-complete. Sprint
-58 is next but its audit window is not open: `23159853` is the local candidate
+**Active implementation frontier:** Sprint 57.8 is repository-complete. Sprint
+58 is next but its audit window is not open: `89eefa40` is the local candidate
 baseline and must be pushed through the required hosted commit-of-record lanes
 before any front begins. Hosted CI, Linux-only lanes, and physical Pi
 corroboration remain explicit release-evidence tails.
@@ -69,10 +69,37 @@ dedicated neutral surface plus separator through the bottom row. The
 full-screen fallback remains intact, and repeated enter/leave cycles preserve
 the complete pane/tab/cursor/viewport state.
 
+Sprint 57.8 modernizes the tab strip without changing tab identity or command
+semantics. Padded bracket-free active/inactive/group/member surfaces use
+dedicated dark/light theme roles and deterministic degradation. The strip is
+visible for one tab, and an exact ` + ` tail control invokes the existing
+`ed.tab.new` command to create and activate a workspace-owned untitled tab.
+Right overflow retains priority, and ordinary click, drag, group, CJK, and
+FUSS-offset geometry remains green.
+
 The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
-Its local candidate is `23159853`, but it remains explicitly provisional. Do
+Its local candidate is `89eefa40`, but it remains explicitly provisional. Do
 not begin an audit from this unpushed baseline: first obtain the required
 hosted commit-of-record evidence and fill the Sprint 58 §1 baseline block.
+
+Most recent Sprint 57.8 validation:
+
+- complete default-module `make test` green: every PTY, Fletch 38/38, scripts
+  93/919, package integration 51/51, 2,000 round-trip seeds, fuzz/syntax/
+  policy/smoke/torture gates, and 2,419 unit tests / 71,034,731 assertions;
+- three complete post-migration PTY executions are deterministic, including
+  FUSS Git fixtures, socket-backed AI streams, all chrome degradation tiers,
+  CJK clicks, group/drag behavior, and the clicked-new-tab path;
+- focused tab/mouse/click/group/theme coverage passes 73 tests / 2,079
+  assertions under plain and Darwin arm64 ASan/UBSan; the focused click PTY is
+  also sanitizer-clean;
+- independent full and `MODULES=""` shipping builds are warning-clean, with
+  the core-only product smoke suite green;
+- every FUSS performance row passes, including 1.766 ms drawer entry and
+  1.047 ms open resolution;
+- all six native size profiles pass: 1,452,640 bytes minimal, 1,891,504 full,
+  1,571,600 LSP-only, 1,588,496 AI-only, 1,586,752 FUSS-only, and 1,536,096
+  plugins-only.
 
 Most recent Sprint 57.7 validation:
 

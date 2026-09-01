@@ -281,13 +281,13 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **SPRINT 57.8 ACTIVE.** The repository is complete through Sprint 57.7.
-  Sprint 56's
+- **REPOSITORY COMPLETE THROUGH SPRINT 57.8.** Sprint 58 is next, but its
+  audit window remains baseline-gated. Sprint 56's
   pinned designated-hardware evidence remains pending because no self-hosted
   runner is registered; Sprint 57's Pi Zero 2 W corroboration and pushed-SHA
-  CI evidence remain release tails. Sprint 58 has not begun; its local
-  candidate will be refreshed from the post-57.8 tree, and the audit remains
-  gated on the required hosted commit-of-record evidence.
+  CI evidence remain release tails. `89eefa40` is the post-57.8 local
+  candidate, but Sprint 58 has not begun and remains gated on the required
+  hosted commit-of-record evidence for that exact pushed tree.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -332,15 +332,19 @@ Binding documents — read before any sprint:
 - Sprint 57.8 (s57_8-modern-tabs.md) — Facsimile-style padded active/inactive
   tab surfaces, one-tab strip visibility, and a cell-exact clickable ` + ` that
   invokes the existing untitled-tab command without disturbing tab drag,
-  overflow, groups, or FUSS-offset geometry. **ACTIVE 2026-09-01**
+  overflow, groups, or FUSS-offset geometry. **REPOSITORY COMPLETE
+  2026-09-01:** complete native suite, deterministic PTY matrix, focused plain
+  and Darwin arm64 ASan/UBSan coverage, sanitized click PTY, strict full/core
+  shipping builds, core smoke, FUSS performance, and all six native size
+  profiles are green; true GNU GCC, Linux/x86_64 and hosted CI remain
+  pushed-SHA evidence tails
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
   fuzz campaigns extended, findings ledger with stable IDs. **NEXT — BASELINE
-  GATED:** refresh the local candidate from the completed Sprint 57.8 tree,
-  then push and verify the contract's hosted lanes before opening a front or
-  assigning a finding ID
+  GATED:** `89eefa40` is the local candidate; push that exact tree and verify
+  the contract's hosted lanes before opening a front or assigning a finding ID
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1

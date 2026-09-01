@@ -9,11 +9,11 @@
 - Sprint 57 — `x86_64-linux-musl` static profile proven on target, binary
   size budgets per `MODULES` set, allocation audit. F15 audits its
   ratchets.
-- Sprints 57.5–57.7 — compact remembered FUSS trees, binary source-service
+- Sprints 57.5–57.8 — compact remembered FUSS trees, binary source-service
   isolation, nested-workspace path normalization, direct visible-tree
-  type-to-jump, and true off-canvas geometry. The §1 baseline must include
-  these fixes and pass the required hosted lanes; no audit front may cite the
-  pre-57.7 tree.
+  type-to-jump, true off-canvas geometry, and the modern cell-exact tab/new-tab
+  strip. The §1 baseline must include these fixes and pass the required hosted
+  lanes; no audit front may cite the pre-57.8 tree.
 - Sprints 0–55 — everything under audit. Each front's scope names the
   sprint that owns the code; the auditor reads that sprint file first,
   because a finding is a violation of a *pinned* decision, not a
@@ -37,16 +37,19 @@ this sprint writes under `.docs/audits/` is committed.
 
 ## Baseline status — GATED 2026-09-01
 
-`23159853` is the post-Sprint-57.7 local candidate. On Darwin arm64 it passes
-the complete default-module `make test` suite, focused ASan/UBSan and
-alignment/UBSan, FUSS fuzz/performance/PTYs, warning-clean default/FUSS-only/
-core-only shipping builds and smoke, and all six native size profiles.
+`89eefa40` is the post-Sprint-57.8 local candidate. On Darwin arm64 it passes
+the complete default-module `make test` suite, focused plain and ASan/UBSan
+tab/mouse/group/theme coverage, a sanitized clicked-new-tab PTY, three
+deterministic complete PTY executions, FUSS performance, warning-clean
+default/core-only shipping builds and core smoke, and all six native size
+profiles. Earlier Sprint 57.7 alignment/UBSan and FUSS fuzz evidence remains
+part of the unchanged off-canvas baseline.
 
 It has not been pushed from the Mac, so the required hosted `perf`,
 `determinism`, `lsp`, `fletch-dispatch`, GNU GCC, Linux/x86_64, and other
 commit-of-record evidence does not yet exist for this hash. Do not create an
 audit front, allocate a `YEW-F-###` ID, or call the audit window open until an
-exact post-57.7 commit is pushed and the §1 hosted baseline block can be filled
+exact post-57.8 commit is pushed and the §1 hosted baseline block can be filled
 honestly. If a follow-up changes the candidate, record the replacement hash
 here before any front begins.
 

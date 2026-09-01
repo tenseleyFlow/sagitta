@@ -182,3 +182,56 @@ editing, persistence, or module surface is removed for footprint reasons.
    all applicable native size profiles remain within their existing gates.
 9. Sprint 58 names the post-57.8 local candidate and stays gated until the
    exact pushed commit has the required hosted commit-of-record evidence.
+
+## Closeout — REPOSITORY COMPLETE 2026-09-01
+
+Yew now draws facsimile-style padded, bracket-free tabs for both one-tab and
+multi-tab workspaces. Active, inactive, modified, orphan, strip, and add
+surfaces are theme roles in both shipped themes and degrade through the
+existing 16-color, mono/no-color, dumb, and ASCII paths. The one-tab strip is
+therefore visible without inventing a second layout rule.
+
+The otherwise-empty row-one tail owns a cell-exact ` + ` control only when
+three cells remain and right overflow does not own the edge. Its painted span
+and `YEW_REGION_TAB_NEW` rectangle are the same fact from the render pass, and
+the control is excluded from drag slots. A same-region left press/release
+invokes the existing `ed.tab.new` command with mouse provenance; leaving the
+region, repainting it elsewhere, dragging, or using another button creates
+nothing. Ordinary tab activation, CJK geometry, drag/reorder, groups, member
+rows, overflow, and the Sprint 57.7 FUSS inset continue to use their existing
+identities and rectangles.
+
+The sprint contract landed in `e1fcb336`; implementation and focused unit
+coverage landed in `92e72902`; the end-to-end click PTY landed in `16005b33`;
+focused modern chrome goldens landed in `81391063`; the complete one-tab PTY
+contract migration landed in `5c6217b0`; and the remaining fixed-row mouse
+tests were retargeted to computed document geometry in `89eefa40`. Commit
+`89eefa40` is the local post-Sprint-57.8 candidate baseline for Sprint 58.
+
+Local closeout evidence on Darwin arm64:
+
+- the complete supported default-module `make test` suite is green: every PTY,
+  Fletch 38/38, scripts 93 tests / 919 assertions, package integration 51/51,
+  2,000 round-trip seeds, fuzz corpora, 432 syntax assets, policy/smoke/torture
+  gates, and 2,419 unit tests / 71,034,731 assertions pass;
+- three complete post-migration PTY executions are deterministic, including
+  the FUSS Git fixtures, local-socket AI streams, dark/light/16/mono/ASCII
+  chrome, CJK clicks, tab/group drag behavior, and `s57_8_click_new_tab`;
+- focused tab, new-tab mouse, click-counter, group-navigation, and theme
+  coverage passes 73 tests / 2,079 assertions under both plain and Darwin
+  arm64 ASan/UBSan builds; the clicked-new-tab PTY also passes under
+  ASan/UBSan;
+- independent default and `MODULES=""` shipping builds are warning-clean, and
+  the core-only product smoke suite is green;
+- all FUSS performance rows pass, including 1.524 ms build+flatten, 0.001 ms
+  navigation p99, 0.014 ms toggle+measure p99, 1.766 ms drawer entry, 0.002 ms
+  input-to-damage p99, and 1.047 ms open resolution;
+- native `make size` passes all six shipping profiles: 1,452,640 bytes
+  minimal, 1,891,504 full, 1,571,600 LSP-only, 1,588,496 AI-only, 1,586,752
+  FUSS-only, and 1,536,096 plugins-only.
+
+This host has Apple clang only; `/usr/bin/gcc` is its clang compatibility
+driver. True GNU GCC, Linux/x86_64, Valgrind/musl, designated-runner, and
+hosted-CI evidence are not inferred. Sprint 58 may use `89eefa40` as a local
+candidate only; no audit front opens until that exact post-57.8 candidate is
+pushed and the hosted baseline block is filled from commit-of-record results.
