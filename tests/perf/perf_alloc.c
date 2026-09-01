@@ -468,9 +468,11 @@ static bool check_closed_lifecycle(int output_fd)
     return ok;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
 #if !YEW_ALLOC_DEBUG
+    (void)argc;
+    (void)argv;
     (void)fprintf(stderr,
                   "perf_alloc: requires make ALLOCDBG=1 BUILD=build-adbg\n");
     return 2;
@@ -478,6 +480,13 @@ int main(void)
     Bytebuf navigation;
     int output_fd;
     bool ok = true;
+
+    if (argc == 2 && strcmp(argv[1], "--render-only") == 0)
+        return check_render() ? 0 : 1;
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--render-only]\n", argv[0]);
+        return 2;
+    }
 
     output_fd = open("/dev/null", O_WRONLY);
     if (output_fd < 0) {

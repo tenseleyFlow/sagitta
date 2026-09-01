@@ -43,7 +43,11 @@ bool yew_pipe_cloexec(int fds[2])
  * fixed header changes allocation size, alignment pressure, and cache
  * behaviour, so timing results from YEW_ALLOC_DEBUG are invalid by design.
  */
-enum { ALLOC_SITE_CAP = 4096U, ALLOC_REPORT_CAP = ALLOC_SITE_CAP + 1U };
+enum {
+    ALLOC_SITE_CAP = 4096U,
+    ALLOC_REPORT_CAP = ALLOC_SITE_CAP + 1U,
+    ALLOC_HEADER_MIN = 32U
+};
 
 typedef struct {
     u32 site;
@@ -52,8 +56,9 @@ typedef struct {
     u64 magic;
 } AllocMeta;
 
-typedef struct {
-    max_align_t storage[2];
+typedef union {
+    max_align_t natural[2];
+    unsigned char metadata[ALLOC_HEADER_MIN];
 } AllocHeader;
 
 typedef struct {
@@ -63,8 +68,14 @@ typedef struct {
 #define ALLOC_MAGIC UINT64_C(0x796577616c6c6f63)
 #define ALLOC_OVERFLOW_SITE UINT32_MAX
 
-_Static_assert(sizeof(AllocHeader) == 2U * sizeof(max_align_t),
-               "allocation header size is part of the debug ABI");
+/* Darwin arm64 defines an 8-byte max_align_t, so two of them cannot hold
+ * the 24-byte metadata.  The byte member supplies that platform-independent
+ * floor; the max_align_t member keeps both the header and returned payload
+ * aligned to malloc's C11 guarantee. */
+_Static_assert(sizeof(AllocHeader) >= 2U * sizeof(max_align_t),
+               "allocation header must retain two max-align objects");
+_Static_assert(_Alignof(AllocHeader) >= _Alignof(max_align_t),
+               "allocation header must preserve maximum alignment");
 _Static_assert(sizeof(AllocMeta) <= sizeof(AllocHeader),
                "allocation metadata must fit the fixed header");
 

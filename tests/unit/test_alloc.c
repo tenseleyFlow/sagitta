@@ -3,6 +3,7 @@
 #include "harness.h"
 
 #include <fcntl.h>
+#include <stdalign.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,9 +12,14 @@
 
 #include "util/buf.h"
 
+typedef struct {
+    alignas(16) unsigned char bytes[16];
+} AllocAligned16;
+
 void test_alloc_release_contract(void)
 {
     max_align_t *plain = yew_xmalloc(sizeof(*plain));
+    AllocAligned16 *wide = yew_xmalloc(sizeof(*wide));
     u8 *zeroed = yew_xcalloc(8U, sizeof(*zeroed));
     u8 *grown = yew_xreallocarray(NULL, 4U, sizeof(*grown));
     char *copy = yew_xstrdup("tracked");
@@ -22,6 +28,7 @@ void test_alloc_release_contract(void)
     size_t i;
 
     YEW_ASSERT_EQ_U64((uintptr_t)plain % _Alignof(max_align_t), 0U);
+    YEW_ASSERT_EQ_U64((uintptr_t)wide % _Alignof(AllocAligned16), 0U);
     for (i = 0U; i < 8U; i++)
         YEW_ASSERT_EQ_U64(zeroed[i], 0U);
     grown[0] = 0xa5U;
@@ -31,6 +38,7 @@ void test_alloc_release_contract(void)
     YEW_ASSERT_NOT_NULL(resolved);
     YEW_ASSERT_NOT_NULL(cwd);
     yew_xfree(plain);
+    yew_xfree(wide);
     yew_xfree(zeroed);
     yew_xfree(grown);
     yew_xfree(copy);

@@ -321,12 +321,13 @@ void yew_alloc_report(Bytebuf *out);        /* sorted: calls desc, then   */
 - Fixed 4096 slots, no growth; overflow increments a single `overflow` site
   reported by name. An allocator that allocates to track allocations is a
   reentrancy bug waiting to happen.
-- `free` needs the size, so every block carries a header of exactly
-  `2 * sizeof(max_align_t)` (site index, size, magic) and the returned
-  pointer is offset past it. Pitfall: `alignof(max_align_t)` is the only
-  alignment `malloc` guarantees; a smaller header breaks `alignas(16)`
-  structures on x86_64 and **faults** on arm64 (s00's arena pitfall, one
-  layer up).
+- `free` needs the size, so every block carries a header large enough for
+  the site index, generation, size and magic. It retains the original two
+  `max_align_t` members and has a 32-byte minimum: Darwin arm64's
+  `sizeof(max_align_t) == 8` makes the original 16-byte spelling too small
+  for the 24-byte metadata. The returned pointer is offset past the union,
+  preserving `alignof(max_align_t)` and the tested `alignas(16)` allocation
+  on all four locked targets (s00's arena pitfall, one layer up).
 - Pitfall, stated in the file and in `tests/perf/README`: **never take a
   timing number from an `ALLOCDBG=1` build.** The header changes sizes,
   alignment and cache behaviour; it answers *who allocates*, not *how long*.

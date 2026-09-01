@@ -234,7 +234,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Build allocation accounting and run its unit contract
         run: make CC=gcc BUILD=build-adbg ALLOCDBG=1 test-alloc-debug
-      - name: Gate steady-state editor allocations
+      - name: Gate steady-state allocations and the renderer seed
         run: make CC=gcc BUILD=build-adbg ALLOCDBG=1 perf-alloc
 
   # The public hosted arm64 image is functional/advisory evidence, not the
@@ -279,6 +279,10 @@ jobs:
         run: |
           make test-unit CC=clang TARGET=arm64-macos ALIGN_SAN=1 \
             BUILD=build-align
+      - name: Prove Darwin allocation headers and the renderer seed
+        run: |
+          make -j2 CC=clang TARGET=arm64-macos BUILD=build-adbg-macos \
+            ALLOCDBG=1 test-alloc-debug perf-alloc-selftest
       - name: Record the stripped Darwin binary size
         run: |
           cp build/yew build/yew.stripped

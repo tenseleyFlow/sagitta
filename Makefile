@@ -831,6 +831,9 @@ PERF_SHADOW_ALLOC_WRAP := -Wl,--wrap=malloc -Wl,--wrap=calloc \
 endif
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
+PERF_ALLOC_SEED_RENDER_OBJ := $(BUILD)/tests/perf/render_alloc_seed.o
+PERF_ALLOC_SEED_CORE_OBJ := $(filter-out $(BUILD)/src/term/render.o,\
+                                         $(PERF_CORE_OBJ))
 PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
 PERF_RECORD_OBJ := $(BUILD)/tests/perf/perf_record.o
 PERF_SYN_OBJ := $(BUILD)/tests/perf/perf_syn.o
@@ -911,7 +914,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_LATENCY_S56_OBJ) $(PERF_ECHO_CHILD_OBJ) \
                 $(PERF_STARTUP_OBJ) $(PERF_NULLEXEC_OBJ) \
                 $(PERF_OPEN_OBJ) $(PERF_MEM_OBJ) \
-                $(PERF_ALLOC_OBJ) \
+                $(PERF_ALLOC_OBJ) $(PERF_ALLOC_SEED_RENDER_OBJ) \
                 $(PERF_S56_GATE_POLICY_OBJ) \
                 $(PERF_S56_PROF_CROSSCHECK_OBJ) \
                 $(PERF_JOBSTREAM_OBJ) $(PERF_REPATH_OBJ) \
@@ -962,7 +965,8 @@ PROFILE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test test-unit test-alloc-debug alloc perf-alloc clean install dirs FORCE \
+.PHONY: all check test test-unit test-alloc-debug alloc perf-alloc \
+        perf-alloc-selftest clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
         runtime-embedded-budget embedded-image-selftest \
@@ -1274,6 +1278,13 @@ $(BUILD)/perf_alloc: $(PERF_CORE_OBJ) $(PERF_ALLOC_OBJ) \
                      $(BUILD)/tests/unit/syn_toy.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_ALLOC_OBJ) $(BUILD)/tests/unit/syn_toy.o $(LDLIBS)
+
+$(BUILD)/perf_alloc_seed: $(PERF_ALLOC_SEED_CORE_OBJ) \
+                          $(PERF_ALLOC_SEED_RENDER_OBJ) $(PERF_ALLOC_OBJ) \
+                          $(BUILD)/tests/unit/syn_toy.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_ALLOC_SEED_CORE_OBJ) \
+		$(PERF_ALLOC_SEED_RENDER_OBJ) $(PERF_ALLOC_OBJ) \
+		$(BUILD)/tests/unit/syn_toy.o $(LDLIBS)
 
 $(BUILD)/perf_symidx: $(PERF_CORE_OBJ) $(PERF_SYMIDX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
@@ -2290,12 +2301,36 @@ alloc:
 	$(MAKE) --no-print-directory BUILD=build-adbg ALLOCDBG=1 \
 		test-alloc-debug perf-alloc
 
-perf-alloc: $(BUILD)/perf_alloc
+perf-alloc: perf-alloc-selftest $(BUILD)/perf_alloc
 	@if test '$(ALLOCDBG)' != 1; then \
 		echo "perf-alloc requires ALLOCDBG=1" >&2; exit 2; \
 	fi
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) $(BUILD)/perf_alloc
+
+perf-alloc-selftest: $(BUILD)/perf_alloc_seed
+	@if test '$(ALLOCDBG)' != 1; then \
+		echo "perf-alloc-selftest requires ALLOCDBG=1" >&2; exit 2; \
+	fi
+	@set -eu; \
+	mkdir -p $(BUILD)/tmp; \
+	out=$(BUILD)/tmp/perf-alloc-seed.out; \
+	set +e; \
+	TMPDIR=$(abspath $(BUILD)/tmp) $(BUILD)/perf_alloc_seed --render-only \
+		>"$$out" 2>&1; \
+	status=$$?; \
+	set -e; \
+	if test "$$status" -ne 1; then \
+		cat "$$out" >&2; \
+		echo "perf-alloc-selftest: seeded renderer exited $$status, expected 1" >&2; \
+		exit 1; \
+	fi; \
+	grep -E 'alloc render-frame[[:space:]]+calls=[1-9][0-9]* limit=0 FAIL' \
+		"$$out" >/dev/null || { cat "$$out" >&2; exit 1; }; \
+	grep -E '^1000 16000 0 16 src/term/render\.c:[0-9]+$$' \
+		"$$out" >/dev/null || \
+		{ cat "$$out" >&2; exit 1; }; \
+	echo 'perf alloc seed: ok'
 
 perf-shadow: $(BUILD)/perf_shadow
 	YEW_SHADOW_TEST=0 YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
@@ -3005,6 +3040,11 @@ $(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(BUILD)/profile.stamp \
               $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(PERF_ALLOC_SEED_RENDER_OBJ): src/term/render.c $(BUILD)/mods.stamp \
+                               $(BUILD)/profile.stamp $(MODULE_FORCE) \
+                               $(PROFILE_FORCE) | dirs
+	$(CC) $(CFLAGS) -DYEW_ALLOC_SEED_RENDER=1 -c -o $@ $<
+
 $(SYN_ENGINE_UNIT_OBJ): src/syn/engine.c $(BUILD)/mods.stamp \
                         $(BUILD)/profile.stamp $(MODULE_FORCE) \
                         $(PROFILE_FORCE) | dirs
@@ -3249,6 +3289,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_ECHO_CHILD_OBJ:.o=.d) $(PERF_STARTUP_OBJ:.o=.d) \
          $(PERF_NULLEXEC_OBJ:.o=.d) $(PERF_OPEN_OBJ:.o=.d) \
          $(PERF_MEM_OBJ:.o=.d) $(PERF_ALLOC_OBJ:.o=.d) \
+         $(PERF_ALLOC_SEED_RENDER_OBJ:.o=.d) \
          $(PERF_S56_GATE_POLICY_OBJ:.o=.d) \
          $(PERF_S56_PROF_CROSSCHECK_OBJ:.o=.d) \
          $(PERF_JOBSTREAM_OBJ:.o=.d) \

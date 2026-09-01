@@ -788,6 +788,11 @@ size_t yew_render_frame(Render *r, Grid *g, Bytebuf *out)
     u16 lo;
     u16 hi;
 
+#if YEW_ALLOC_DEBUG && defined(YEW_ALLOC_SEED_RENDER)
+    /* Sprint 57 positive control: compiled only into perf_alloc_seed. */
+    yew_xfree(yew_xmalloc(16U));
+#endif
+
     r->frames++;
     if (g->rows == 0u || g->cols == 0u)
         return render_finish(r, out, start, out->len);

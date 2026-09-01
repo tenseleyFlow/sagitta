@@ -62,7 +62,10 @@ would mix two different populations.
 tree, verifies its accounting contract, and runs the deterministic Sprint 57
 allocation gates. Allocation counts and live-byte deltas since the last
 counter reset are hard failures on every machine; failures print the
-contributing source sites. Never take a timing number from an `ALLOCDBG=1`
+contributing source sites. `perf-alloc-selftest` links a test-only renderer
+with a seeded per-frame allocation and proves the zero-allocation gate fails
+with its `src/term/render.c:<line>` site; shipping objects never define the
+seed. Never take a timing number from an `ALLOCDBG=1`
 build: its headers change object sizes, alignment, and cache behaviour. It
 answers *who allocates*, not *how long*.
 
