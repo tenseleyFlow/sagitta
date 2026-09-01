@@ -486,3 +486,60 @@ existing cache/walk policy decides whether its children need another scan.
 12. `make test`, PTY double-run determinism, sanitizers, Valgrind, musl,
     arm64, module parity, `make size`, and both warning-as-error compilers are
     green. No dependency or workspace-state schema field lands.
+
+## Closeout — REPOSITORY COMPLETE 2026-09-01
+
+The compact FUSS redesign is implemented. New trees start collapsed;
+session-owned positive expansion memory survives leave/reentry and rebuilds;
+open editor files force their existing ancestor chain open without polluting
+manual memory; and rows use two-cell depth with `+`/`-` indicators and no
+branch furniture. The drawer measures only visible rows, keeps at least 40
+editor cells beside an adaptive quarter-width overlay, and falls back to the
+full content rectangle when that is impossible. Overlay mode owns one bright
+edge cell, while full-screen previews use the generic centered panel surface
+without mutating the pane tree.
+
+Implementation landed in `77d692bd`, `9481e025`, and `212e0930`. Golden and
+module-shim follow-ups landed in `f423a498` and `f383278b`. Apple-silicon
+validation also exposed two pre-existing host-tool assumptions: sanitized
+child tests were injecting an instrumented durability interposer, and the
+size target passed GNU flags to Apple `strip`. `dfaf0922` and `3ff018c7`
+repair those test/build boundaries without changing editor behavior.
+
+Local closeout evidence on Darwin arm64:
+
+- full modules pass the complete native product suite, including all PTYs,
+  with 2,409 unit tests / 71,032,846 assertions / 0 failures;
+- an independent `MODULES=""` tree passes its complete applicable product
+  suite with 1,946 unit tests / 70,056,319 assertions / 0 failures, proving
+  that core editing, Fletch, syntax, search, persistence, recovery, and macros
+  remain intact outside the four optional modules;
+- the complete Clang ASan/UBSan unit run passes 2,391 tests /
+  71,032,552 assertions / 0 failures; the 20,000-iteration sanitized FUSS
+  campaign is deterministic at seed `91615317` with hash
+  `8861851834338528`;
+- all 29 FUSS PTY cases pass twice, covering 40/64/80/120/240-column layouts,
+  Unicode/ASCII indicators and edges, remembered reentry, open-file ancestry,
+  preview placement, edge inertness, and Esc restoration;
+- the 20,000-node performance gate measures 2.231 ms build+flatten,
+  0.023 ms toggle+measure p99, 2.538 ms drawer entry, and 3.819 ms open
+  resolution, all within their 5/12 ms limits; the full u16 layout sweep is
+  0.120 ms;
+- native `make size` passes all six module profiles after Apple-native
+  stripping: 1,452,640 bytes minimal, 1,891,472 full, and every single-module
+  build below its existing cap. These Mach-O numbers corroborate rather than
+  replace the binding x86_64 Linux measurements.
+
+No core feature, safety invariant, or regression surface was removed or
+weakened for footprint. Amendment S57-A1 remains the hard stop rule: if a
+future measurement cannot meet its target without observable feature loss,
+weaker durability/Unicode/terminal guarantees, or narrower tests, work pauses
+and the measured floor is reviewed in `00-decisions.md` before code changes.
+The 900 KiB planning value has already been moved to a post-1.0 optimization
+ratchet for exactly this reason. Sprint 58 front F15 and Sprint 60 release
+closeout are the next mandatory reassessment points.
+
+The unavailable local lanes are not inferred: true GNU GCC, Linux Valgrind,
+musl static PIE, arm64 Linux, and hosted CI remain external evidence tails on
+the exact pushed SHA. A failure in any of them reopens Sprint 57.5 remediation
+before release. The repository implementation frontier advances to Sprint 58.

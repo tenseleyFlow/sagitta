@@ -308,12 +308,16 @@ Binding documents — read before any sprint:
   physical Pi Zero 2 W corroboration remains a Sprint 60 release blocker
 - Sprint 57.5 (s57_5-fuss-compact-tree.md) — Compact line-free FUSS tree,
   remembered expansion state, open-file ancestry, adaptive drawer width and
-  full-screen fallback, plus a bright editor/drawer divider. **ACTIVE.**
+  full-screen fallback, plus a bright editor/drawer divider. **REPOSITORY
+  COMPLETE 2026-09-01:** native full/minimal suites, Darwin arm64 ASan/UBSan,
+  deterministic FUSS fuzz/PTY, performance, and all six native size profiles
+  are green; true GCC, Linux Valgrind/musl/arm64 and hosted CI remain named
+  pushed-SHA evidence tails
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs
+  fuzz campaigns extended, findings ledger with stable IDs. **ACTIVE.**
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1

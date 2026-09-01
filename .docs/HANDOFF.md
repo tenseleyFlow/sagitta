@@ -12,15 +12,15 @@ Apple-silicon host `nomad-1`
 
 **Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
 
-**Current code frontier before this handoff update:** `7781090`
+**Current code frontier before this handoff update:** `3ff018c7`
 
-**Git position:** 19 local implementation commits ahead of `origin/trunk`,
+**Git position:** 27 local implementation commits ahead of `origin/trunk`,
 plus this documentation closeout once committed; nothing in the Sprint 57
 chain has been pushed from the Mac
 
-**Active implementation frontier:** Sprint 57.5 compact FUSS redesign.
-Sprint 57 is repository-complete; hosted CI and physical Pi corroboration
-remain explicit release-evidence tails.
+**Active implementation frontier:** Sprint 58 adversarial audits. Sprint 57
+and Sprint 57.5 are repository-complete; hosted CI, Linux-only lanes, and
+physical Pi corroboration remain explicit release-evidence tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -28,12 +28,22 @@ is retained afterward as provenance and is explicitly superseded.
 
 ## 0. Authoritative pickup point
 
-Sprint 57 repository work is complete. The size gates use the measured
+Sprint 57 and the Sprint 57.5 compact FUSS redesign are repository-complete.
+The size gates use the measured
 S57-A1 floors without removing core behavior: pinned x86_64 stripped sizes
 are 1,463,968 bytes minimal and 1,947,336 bytes full. The full-feature native
 suite and an independent `MODULES=""` suite both pass end to end. The minimal
 suite retains editing, Fletch, syntax, search, persistence and macros; only
 the four documented optional modules are shims.
+
+Sprint 57.5 now ships collapsed-by-default FUSS trees, session expansion
+memory, forced-open ancestry for editor-open files, compact `+`/`-` rows,
+adaptive quarter-width/full-screen layout, a bright inert edge, and centered
+full-screen previews. The complete native full/minimal suites, Darwin arm64
+ASan/UBSan, 20,000-iteration sanitized FUSS fuzz, deterministic PTYs,
+performance gates, and all six native size profiles are green. Apple-specific
+repairs keep the injected durability shim outside sanitizers and use native
+Mach-O strip flags.
 
 The deterministic embedded gate passes QEMU rows 1–11 at 64 MiB with peak
 `VmHWM` 9,764,864 bytes. The 32 MiB row cleanly names the 48 MiB workload
@@ -43,27 +53,34 @@ Both are release-blocking evidence tails under S57-A4; neither is fabricated
 from emulation or used to stall unrelated repository work.
 
 The exact next contract is
-`.docs/sprints/13-performance/s57_5-fuss-compact-tree.md`: compact line-free
-tree rows, `+`/`-` expansion indicators, remembered expansion, forced-open
-ancestry for editor-open files, adaptive width/full-screen fallback, and a
-bright divider. Start there after confirming the worktree and rereading the
-binding documents.
+`.docs/sprints/14-audits-release/s58-adversarial-audits.md`. Do not begin an
+audit from an unpushed or unverified baseline: first obtain the required
+hosted commit-of-record evidence, or explicitly record why a local audit
+baseline is provisional.
 
-Most recent validation:
+Most recent Sprint 57.5 validation:
 
-- full native: 2,404 unit tests / 71,035,366 assertions / 0 failures;
+- full native: 2,409 unit tests / 71,032,846 assertions / 0 failures;
   PTY, Fletch 38/38, scripts 93/919, package 51/51, round-trip, syntax,
   policies, smoke, and live-PTY torture green;
-- minimal native: 1,945 unit tests / 70,056,311 assertions / 0 failures;
+- minimal native: 1,946 unit tests / 70,056,319 assertions / 0 failures;
   all applicable PTYs, Fletch 38/38, scripts 71/743, round-trip, syntax,
   policies, smoke, and live-PTY torture green;
-- allocation, shipping RSS, generated-artifact determinism, size-ledger,
-  module-boundary, musl/static-PIE, and Apple-silicon alignment gates green.
+- Darwin arm64 Clang ASan/UBSan: 2,391 tests / 71,032,552 assertions /
+  0 failures; sanitized FUSS fuzz seed `91615317`, 20,000 iterations, hash
+  `8861851834338528`;
+- FUSS PTY: all 29 cases pass twice; the 20,000-node performance rows remain
+  within budget, including 2.538 ms entry and 3.819 ms open resolution;
+- Apple-silicon stripped size corroboration: minimal 1,452,640 bytes, full
+  1,891,472 bytes, and all four single-module profiles under their existing
+  caps.
 
-Do not push unless explicitly requested. If hosted CI or physical Pi evidence
-fails when run, reopen Sprint 57 remediation before release. Do not weaken
-core features or stability for a footprint target; stop, measure, and amend or
-defer the target instead.
+Do not push unless explicitly requested. If hosted CI, a Linux-only Sprint
+57.5 lane, or physical Pi evidence fails when run, reopen remediation before
+release. Do not weaken core features or stability for a footprint target;
+stop, measure, and amend or defer the target instead. S57-A1 already moved the
+unrealistic 900 KiB minimal value to a post-1.0 ratchet; Sprint 58 front F15
+and Sprint 60 closeout must reassess the size/stability boundary again.
 
 ## 1. Historical 2026-08-29 pickup point — superseded
 
