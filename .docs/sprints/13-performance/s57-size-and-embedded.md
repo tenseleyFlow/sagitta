@@ -550,20 +550,26 @@ catches a different failure:
      header function that quietly stopped being declared is not — so
      `bans.sh` gains a declaration-vs-shim parity check, the same shape as
      s01's unregistered-test check.
-   - *Honesty*: each shim function calls `yew_mod_require(YEW_MOD_<X>, …)`
-     and **returns the failure**, never `true`/`0`/a zeroed struct. A shim
-     that silently succeeds is exactly what invariant 3 forbids, and it is
-     invisible to a link. `tests/unit/test_mod_shims.c` drives every shim
-     entry point in a `MODULES=""` build and asserts the failure return, the
+   - *Honesty*: every user action calls `yew_mod_require(YEW_MOD_<X>, …)`
+     and **returns the failure**, never success. A passive lifecycle hook or
+     query instead returns a neutral value/no-op and never claims that an
+     unavailable action occurred; pure module parsers return failure. This
+     distinction preserves the core event loop while still satisfying
+     invariant 3. `tests/unit/test_mod.c` enumerates the user-facing command
+     entry points in a `MODULES=""` build and asserts the failure return, the
      s00 canonical message, and that `<name>` is `lsp`/`ai`/`fuss`/`plugins`
-     respectively — **not** a generic "module missing".
+     respectively — **not** a generic "module missing". `bans.sh` rejects a
+     directly successful action shim and proves the rule with a seed.
 4. **Reachability check.** In the minimal build, `ed.mode.enter "F"`, every
-   `ed.git.*`/`ed.lsp.*`/`ed.ai.*` command, `yew pkg`, and every config
-   option those modules own must produce the canonical message through the
-   *user-facing* path — pty and `tests/script/` cases, not only unit tests.
-   The registry keeps the entries (so `:` completion still lists them with a
-   "requires module" note) rather than hiding them: a user who typed
-   `:blame` deserves to be told why, not that it does not exist.
+   `ed.git.*`/`ed.ai.*` action, every LSP action except
+   `ed.lsp.complete`, `yew pkg`, and every config option those modules own
+   must produce the canonical message through the *user-facing* path — pty
+   and `tests/script/` cases, not only unit tests. `ed.lsp.complete` retains
+   its documented core symbol-index fallback; removing that fallback to make
+   the module boundary more uniform would gut a required minimal-build
+   feature. The registry keeps the entries (so `:` completion still lists
+   them with a "requires module" note) rather than hiding them: a user who
+   typed `:blame` deserves to be told why, not that it does not exist.
 
 `scripts/smoke.sh` already asserts `modules: none` here (s01 §5); this
 sprint adds a row asserting each module name appears in exactly one refusal.

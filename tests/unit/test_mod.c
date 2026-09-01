@@ -96,31 +96,49 @@ void test_lsp_restart_crosses_module_boundary(void)
 {
     Ed ed;
     CmdCtx cx = {0};
-    CmdId restart;
 
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_scratch(&ed));
-    restart = yew_cmd_lookup("ed.lsp.restart", 14U);
-    YEW_ASSERT(restart.v != 0U);
     cx.ed = &ed;
     cx.win = ed.win;
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
 #if YEW_WITH_LSP
-    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, restart, &cx), YEW_CMD_OK);
+    {
+        CmdId restart = yew_cmd_lookup("ed.lsp.restart", 14U);
+
+        YEW_ASSERT(restart.v != 0U);
+        YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, restart, &cx), YEW_CMD_OK);
+        YEW_ASSERT(ed.msg.active);
+        YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_INFO);
+        YEW_ASSERT_EQ_STR(ed.msg.text,
+                          "no LSP server configured for this buffer");
+    }
 #else
-    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, restart, &cx), YEW_CMD_ERR_STATE);
-#endif
-    YEW_ASSERT(ed.msg.active);
-#if YEW_WITH_LSP
-    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_INFO);
-    YEW_ASSERT_EQ_STR(ed.msg.text,
-                      "no LSP server configured for this buffer");
-#else
-    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
-    YEW_ASSERT_EQ_STR(
-        ed.msg.text,
-        "this build has no lsp module; rebuild with 'make MODULES=\"… lsp\"'");
+    {
+        static const char absent[] =
+            "this build has no lsp module; rebuild with 'make MODULES=\"… lsp\"'";
+        u32 seen = 0U;
+        u32 i;
+
+        for (i = 0U; i < yew_cmd_count(); i++) {
+            const CmdDesc *desc = yew_cmd_at(i);
+            CmdId id;
+
+            if (desc == NULL || strncmp(desc->name, "ed.lsp.", 7U) != 0 ||
+                strcmp(desc->name, "ed.lsp.complete") == 0)
+                continue;
+            seen++;
+            id = yew_cmd_lookup(desc->name, (u32)strlen(desc->name));
+            YEW_ASSERT(id.v != 0U);
+            YEW_ASSERT_EQ_I64(yew_cmd_invoke(id, &cx), YEW_CMD_ERR_STATE);
+            YEW_ASSERT(ed.msg.active);
+            YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
+            YEW_ASSERT_EQ_STR(ed.msg.text, absent);
+            yew_msg_clear(&ed);
+        }
+        YEW_ASSERT(seen >= 16U);
+    }
 #endif
     yew_ed_free(&ed);
 }

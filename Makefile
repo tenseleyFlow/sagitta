@@ -988,8 +988,8 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables calib perf perf-components perf-symbols size \
-        size-check size-update size-musl size-memory-run \
-        size-tools-selftest size-memory-selftest \
+        size-check size-update size-musl size-memory-run module-boundary \
+        size-tools-selftest size-memory-selftest module-boundary-selftest \
         size-ledger-full size-ledger-minimal \
         perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
@@ -1946,6 +1946,10 @@ size-memory-selftest:
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/size-memory.test.sh
 
+module-boundary-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/module-boundary.test.sh
+
 SIZE_MEMORY_PROFILE ?= full
 
 size-memory-run: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
@@ -2015,7 +2019,12 @@ size-ledger-minimal: $(SIZE_MINIMAL_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
 		--binary '$(SIZE_MINIMAL_BIN)' --without-gc '$(SIZE_MINIMAL_NOGC_BIN)'
 
-size-check: size size-memory-selftest \
+module-boundary: $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN)
+	NM='$(NM)' scripts/module-boundary.sh \
+		--full-build '$(SIZE_FULL_BUILD)' \
+		--minimal-build '$(SIZE_MINIMAL_BUILD)'
+
+size-check: size size-memory-selftest module-boundary-selftest \
             $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 	@set -eu; \
 	tmpdir=$$(umask 077 && mktemp -d "$${TMPDIR:-/tmp}/yew-size-check.XXXXXX"); \
@@ -2041,6 +2050,7 @@ size-check: size size-memory-selftest \
 			--without-gc "$$without_gc" \
 			--baseline "$$ledger" >"$$tmpdir/growth-$$config.txt"; \
 	done
+	$(MAKE) --no-print-directory SIZE_ROOT='$(SIZE_ROOT)' module-boundary
 	$(MAKE) --no-print-directory BUILD='$(SIZE_FULL_BUILD)' \
 		MODULES='lsp ai fuss plugins' SHIPPING=1 \
 		SIZE_MEMORY_PROFILE=full size-memory-run

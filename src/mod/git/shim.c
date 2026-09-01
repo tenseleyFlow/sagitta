@@ -15,6 +15,51 @@ struct FussMode {
 
 static bool git_require(Ed *ed);
 
+void yew_fuss_jump_init(FussJump *jump)
+{
+    if (jump != NULL)
+        (void)memset(jump, 0, sizeof(*jump));
+}
+
+void yew_fuss_jump_arm(FussJump *jump, i64 now_ms)
+{
+    (void)jump;
+    (void)now_ms;
+}
+
+bool yew_fuss_jump_key(FussJump *jump, const Key *key, i64 now_ms,
+                       const PickItem *items, u32 n, u32 *sel)
+{
+    (void)jump;
+    (void)key;
+    (void)now_ms;
+    (void)items;
+    (void)n;
+    (void)sel;
+    return false;
+}
+
+bool yew_fuss_jump_tick(FussJump *jump, i64 now_ms)
+{
+    (void)jump;
+    (void)now_ms;
+    return false;
+}
+
+bool yew_fuss_jump_armed(const FussJump *jump)
+{
+    (void)jump;
+    return false;
+}
+
+const char *yew_fuss_jump_pattern(const FussJump *jump, u32 *len)
+{
+    (void)jump;
+    if (len != NULL)
+        *len = 0U;
+    return "";
+}
+
 void yew_git_editor_state_init(Ed *ed)
 {
     if (ed != NULL)
@@ -330,6 +375,12 @@ CmdStatus yew_fuss_commit_close(Ed *ed, Buffer *buffer, bool *handled)
     return YEW_CMD_ERR_STATE;
 }
 
+char *yew_fuss_selected_directory(CmdCtx *cx)
+{
+    (void)git_require(cx == NULL ? NULL : cx->ed);
+    return NULL;
+}
+
 GitAsyncState yew_git_avail_state(const Ed *ed)
 {
     (void)ed;
@@ -389,6 +440,68 @@ const GitResult *yew_git_result(const Ed *ed)
 {
     (void)ed;
     return NULL;
+}
+
+u32 yew_git_index_blob(Ed *ed, const char *path, void *owner,
+                       YewGitBlobFn callback, char *err, size_t errsz)
+{
+    (void)ed;
+    (void)path;
+    (void)owner;
+    (void)callback;
+    (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
+    return 0U;
+}
+
+u32 yew_git_head_blob(Ed *ed, const char *path, void *owner,
+                      YewGitBlobFn callback, char *err, size_t errsz)
+{
+    (void)ed;
+    (void)path;
+    (void)owner;
+    (void)callback;
+    (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
+    return 0U;
+}
+
+bool yew_git_test_blob_batch_open(Ed *ed)
+{
+    (void)ed;
+    return false;
+}
+
+bool yew_git_test_blob_batch_feed(Ed *ed, const u8 *bytes, u64 len)
+{
+    (void)ed;
+    (void)bytes;
+    (void)len;
+    return false;
+}
+
+bool yew_git_test_blob_batch_finish(Ed *ed)
+{
+    (void)ed;
+    return false;
+}
+
+u64 yew_git_test_blob_batch_tx(const Ed *ed, const u8 **bytes)
+{
+    (void)ed;
+    if (bytes != NULL)
+        *bytes = NULL;
+    return 0U;
+}
+
+u32 yew_git_test_blob_request_count(const Ed *ed)
+{
+    (void)ed;
+    return 0U;
+}
+
+u32 yew_git_test_blob_spawn_count(const Ed *ed)
+{
+    (void)ed;
+    return 0U;
 }
 
 u32 yew_git_blob(Ed *ed, const char *oid, char *err, size_t errsz)

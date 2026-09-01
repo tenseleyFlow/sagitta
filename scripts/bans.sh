@@ -306,6 +306,11 @@ scan "long double has different target ABIs; use the f64 model" \
     "$long_double_pattern" "$source_files"
 scan_seed "long-double" "$long_double_pattern" \
     'long double seeded(long double value) { return value; }'
+shim_check=$tmp/module-shims
+if ! "$repo_dir/scripts/check-module-shims.sh" >"$shim_check" 2>&1; then
+    echo "ban: disabled-module header/shim parity or honesty failed" >>"$hits"
+    cat "$shim_check" >>"$hits"
+fi
 scan "Unicode width math belongs only in src/unicode" \
     '(0x1F3FB|0xFE0F|0x200D|EastAsian)' "$non_unicode_files"
 scan "syntax definitions emit semantic attrs, never colors" \
@@ -412,7 +417,7 @@ pkg_git_calls()
     : >"$pkg_git_out"
     while IFS= read -r file; do
         case ${file#"$repo_dir"/} in
-            src/mod/plug/pkg.c|src/mod/plug/pkg.h) continue ;;
+            src/mod/plug/pkg.c|src/mod/plug/pkg.h|src/mod/plug/shim.c) continue ;;
         esac
         grep -nE -e '(^|[^[:alnum:]_])yew_pkg_git[[:space:]]*\(' \
             "$file" 2>/dev/null |
