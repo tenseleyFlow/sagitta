@@ -146,3 +146,56 @@ Work and commits proceed in this order:
    applicable minimal builds; existing size and latency gates do not regress.
 6. Handoff and sprint index name the post-57.6 Sprint 58 baseline requirement.
 
+## Closeout — REPOSITORY COMPLETE 2026-09-01
+
+The field reproducer is repaired without narrowing binary editing. The
+546,232-byte arm64 Mach-O `encode` fixture now opens as `utf-8 bin`, binds no
+source language, starts no `fortls` process, and contributes no work or stale
+entries to the source-symbol index. Its display, edit, undo, and byte-exact
+save paths remain the existing core paths. The reproduced pre-fix stall was
+dispatch work, not painting: frames spent 0.8–4.3+ seconds scanning one opaque
+binary line. The post-fix replay measured 4.846 ms p99 / 11.667 ms maximum
+dispatch during idle/background sampling and 1.049 ms maximum rendering, with
+no multi-second frame.
+
+FUSS now translates ancestor-repository porcelain paths into workspace
+coordinates and filters siblings and ancestors before tree construction. A
+live replay rooted at `~/scratch/wolf/starting` contained only the real
+workspace entries and no fabricated `wolf` row. Bare printable filename
+characters except Space now search the effective visible flattened tree with
+the existing 500 ms accumulation window; collapsed descendants are excluded.
+Printable file, Git, and tree actions remain keyboard reachable behind the
+facsimile-style `C-g` prefix, while arrows, paging, Enter, Space, Escape,
+refresh, and split chords remain direct.
+
+Implementation landed in `ecab2265`, `31810f28`, and `d0f893a3`; the sprint
+contract and downstream chord-test follow-ups landed in `a6fcf777` and
+`3a6070c9`.
+
+Local closeout evidence on Darwin arm64:
+
+- the complete default-module `make test` product suite is green: all PTYs,
+  Fletch 38/38, scripts 93 tests / 919 assertions, package integration 51/51,
+  2,000 round-trip seeds, fuzz corpora, 432 syntax assets, policy/smoke/torture
+  gates, and 2,414 unit tests / 71,033,068 assertions pass;
+- all 29 FUSS PTY cases pass twice; focused binary syntax/LSP/symbol-index,
+  nested-workspace, type-jump, drawer, navigation, expansion, chord, command,
+  and group-from-directory tests pass;
+- focused Apple-clang ASan/UBSan tests pass for binary symbol isolation,
+  binary LSP isolation, nested workspaces, and all 13 FUSS jump cases; a fresh
+  sanitized build is warning-clean;
+- the deterministic FUSS fuzz campaign passes 20,000 iterations at seed
+  `0x57f6`, corpus 5, hash `5fdbbd63231c605c`;
+- the 20,000-node FUSS performance rows remain inside their 5/12 ms budgets:
+  2.186 ms build+flatten, 0.001 ms navigation p99, 0.020 ms toggle p99,
+  2.614 ms drawer entry, and 1.408 ms open resolution;
+- native `make size` passes all six shipping profiles: 1,452,640 bytes
+  minimal, 1,891,504 full, 1,555,088 LSP-only, 1,588,496 AI-only, 1,586,752
+  FUSS-only, and 1,536,096 plugins-only. A separate FUSS-only shipping build
+  and its product smoke suite are green.
+
+This host has Apple clang only; `/usr/bin/gcc` is its clang compatibility
+driver. True GNU GCC, Linux Valgrind/musl, x86_64, and hosted CI evidence are
+therefore not inferred and remain pushed-SHA evidence tails. Sprint 58 must
+establish its audit baseline from a post-57.6 commit with those required lanes
+green; no audit result may cite the pre-57.6 tree.

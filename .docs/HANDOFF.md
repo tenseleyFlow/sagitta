@@ -12,16 +12,17 @@ Apple-silicon host `nomad-1`
 
 **Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
 
-**Current code frontier before Sprint 57.6:** `9073a71c`
+**Current implementation frontier before documentation closeout:** `3a6070c9`
 
-**Git position:** 27 local implementation commits ahead of `origin/trunk`,
+**Git position:** 33 local implementation commits ahead of `origin/trunk`,
 plus this documentation closeout once committed; nothing in the Sprint 57
 chain has been pushed from the Mac
 
-**Active implementation frontier:** Sprint 57.6 field stability. Sprint 57
-and Sprint 57.5 are repository-complete; Sprint 58 has not begun. Hosted CI,
-Linux-only lanes, and physical Pi corroboration remain explicit
-release-evidence tails.
+**Next implementation frontier:** Sprint 58 adversarial audits, after its
+baseline is refreshed from the post-57.6 tree and the required hosted lanes
+are green. Sprint 57, Sprint 57.5, and Sprint 57.6 are repository-complete;
+Sprint 58 has not begun. Hosted CI, Linux-only lanes, and physical Pi
+corroboration remain explicit release-evidence tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -53,18 +54,34 @@ corroboration is still pending, as is hosted CI for the current unpushed SHA.
 Both are release-blocking evidence tails under S57-A4; neither is fabricated
 from emulation or used to stall unrelated repository work.
 
-Field use after this checkpoint reproduced an extensionless binary being
-misclassified as Fortran, an unwanted `fortls` spawn, multi-second dispatch
-turns in the open-buffer symbol index, a parent-repository `wolf` row leaking
-into a nested workspace, and FUSS's retired opt-in type-jump interaction. The
-binding remediation contract is
-`.docs/sprints/13-performance/s57_6-field-stability.md`.
+Sprint 57.6 closes the subsequent field failures. Extensionless binary
+buffers now bind no source language, start no LSP, and enter no source-symbol
+index while retaining byte-exact editing and save behavior. The exact `encode`
+replay fell from 0.8–4.3+ second dispatch stalls to 4.846 ms p99 dispatch with
+no multi-second frames or `fortls`. Ancestor-repository Git paths are translated
+and filtered to the workspace, removing the fabricated `wolf` row. FUSS bare
+filename characters now type-jump across visible rows, with printable actions
+behind `C-g`.
 
-After Sprint 57.6 closes, the next contract is
-`.docs/sprints/14-audits-release/s58-adversarial-audits.md`. Refresh its
-baseline from the post-57.6 tree. Do not begin an audit from an unpushed or
-unverified baseline: first obtain the required hosted commit-of-record
-evidence, or explicitly record why a local audit baseline is provisional.
+The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
+Refresh its baseline from the post-57.6 tree. Do not begin an audit from an
+unpushed or unverified baseline: first obtain the required hosted
+commit-of-record evidence, or explicitly record why a local audit baseline is
+provisional.
+
+Most recent Sprint 57.6 validation:
+
+- complete default-module `make test` green: all PTYs, Fletch 38/38, scripts
+  93/919, package integration 51/51, round-trip/fuzz/syntax/policy/smoke/torture
+  gates, and 2,414 unit tests / 71,033,068 assertions;
+- exact field workspace replay contains no `wolf`, labels `encode` `utf-8 bin`,
+  starts no `fortls`, and records 4.846 ms p99 / 11.667 ms maximum dispatch;
+- all 29 FUSS PTYs pass twice; focused Apple-clang ASan/UBSan and a 20,000-run
+  deterministic FUSS fuzz campaign pass;
+- 20,000-node FUSS performance remains within every budget, including 2.614 ms
+  drawer entry and 1.408 ms open resolution;
+- all six native shipping sizes pass: 1,452,640 bytes minimal, 1,891,504 full,
+  and every single-module profile below its cap; FUSS-only product smoke passes.
 
 Most recent Sprint 57.5 validation:
 

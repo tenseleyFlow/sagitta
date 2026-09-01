@@ -281,11 +281,12 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **ACTIVE.** Sprints 56, 56.5, and 57 are repository-complete. Sprint 56's
+- **REPOSITORY COMPLETE.** Sprints 56, 56.5, 57, 57.5, and 57.6 are
+  repository-complete. Sprint 56's
   pinned designated-hardware evidence remains pending because no self-hosted
   runner is registered; Sprint 57's Pi Zero 2 W corroboration and pushed-SHA
-  CI evidence remain release tails. Sprint 57.6 is the binding implementation
-  frontier after reproduced binary/FUSS field failures; Sprint 58 has not begun.
+  CI evidence remain release tails. Sprint 58 has not begun; it is the next
+  frontier after a post-57.6 baseline commit receives its required CI evidence.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -315,15 +316,17 @@ Binding documents — read before any sprint:
   pushed-SHA evidence tails
 - Sprint 57.6 (s57_6-field-stability.md) — Binary syntax/LSP/symbol-index
   isolation, nested-workspace Git/FUSS path normalization, and direct
-  visible-tree type-to-jump with printable actions behind `C-g`. **ACTIVE:**
-  field failures reproduced on Darwin arm64; Sprint 58 baseline deferred until
-  the fixes and proportional gates close
+  visible-tree type-to-jump with printable actions behind `C-g`.
+  **REPOSITORY COMPLETE 2026-09-01:** exact Darwin arm64 field replay, full
+  native suite, focused ASan/UBSan, deterministic FUSS fuzz/PTY, performance,
+  FUSS-only smoke, and all six native shipping-size profiles are green; true
+  GCC, Linux/x86_64 and hosted CI remain pushed-SHA evidence tails
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs. **QUEUED AFTER
-  SPRINT 57.6.**
+  fuzz campaigns extended, findings ledger with stable IDs. **NEXT:** refresh
+  and verify the audit baseline from the post-57.6 tree before opening a front
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1
