@@ -367,6 +367,24 @@ static bool editor_open(Ed *ed, const u8 *bytes, size_t len, int output_fd)
     return !ed->quit;
 }
 
+static bool check_layout(int output_fd)
+{
+    static const u8 text[] = "layout allocation gate\nsecond line\n";
+    Ed ed;
+    size_t pass;
+    bool ok;
+
+    if (!editor_open(&ed, text, sizeof(text) - 1U, output_fd))
+        return false;
+    yew_ed_layout(&ed);
+    yew_alloc_reset();
+    for (pass = 0U; pass < 1000U; pass++)
+        yew_ed_layout(&ed);
+    ok = gate_calls("layout-after-warmup", 0U);
+    yew_ed_free(&ed);
+    return ok;
+}
+
 static bool check_session(const char *name, const char *path,
                           const u8 *bytes, size_t len, int output_fd)
 {
@@ -500,6 +518,7 @@ int main(int argc, char **argv)
     ok = check_regex() && ok;
     ok = check_inserts() && ok;
     ok = check_open() && ok;
+    ok = check_layout(output_fd) && ok;
     ok = check_session("typing-frames-100-10000",
                        "tests/perf/sessions/typing.keys",
                        (const u8 *)"", 0U, output_fd) && ok;

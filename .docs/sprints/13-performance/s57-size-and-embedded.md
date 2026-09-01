@@ -276,6 +276,20 @@ ledger bucket and budget row (≤ 220 KiB at the current langpack count).
 
 ### 3. The allocation audit
 
+**Amendment S57-A3 — audit the implementation Yew has, do not rewrite stable
+core to match aspirational ownership labels.** The original checklist mixed
+observable allocation requirements with proposed internal representations
+that are not the repository architecture: an arena necessarily obtains heap
+blocks; the Fletch compiler uses released geometric `Bytebuf`/`Vec` scratch;
+the VM uses fixed frames plus its GC heap; editor state has a lifetime arena,
+not a per-frame arena; and pane topology persists across allocation-free
+layout recomputation. Replacing those mature paths solely to satisfy the
+labels would expand Sprint 57 and put correctness, recovery and latency at
+risk. The binding requirements are therefore the hot-path ceilings below,
+bounded geometric/setup ownership, clean teardown, and the reviewed evidence
+in `s57-allocation-audit.md`. Representation experiments remain post-1.0
+unless a measured failure justifies a separately scoped sprint.
+
 #### 3.1 Arena-discipline review checklist
 
 One row per subsystem; each is a question a reviewer answers `yes` in the
@@ -283,18 +297,18 @@ sprint's audit note, and most map to a mechanical check.
 
 | Subsystem | Arena lifetime | Must not `malloc` | Mechanical check |
 |---|---|---|---|
-| `src/fl/` compile | one arena per compilation unit, freed after `fl_compile` | AST nodes, interned identifiers, chunk scratch | `perf_alloc` records 0 heap allocs between `fl_parse` and `arena_free_all` |
-| `src/fl/` VM | GC heap (s30) + a per-call frame arena | frames, temporaries | GC stress lane already covers lifetime; alloc counter covers churn |
+| `src/fl/` compile | AST, interned identifiers and final chunks use the runtime arena; temporary `Bytebuf`/`Vec` storage grows geometrically and is released before return | per-node heap allocation; retained compiler scratch | source audit + Fletch/GC-stress/sanitizer lanes; bounded scratch retained by S57-A3 |
+| `src/fl/` VM | GC heap + fixed stack/call-frame storage | per-call frame allocation | GC stress lane covers object lifetime; typing gate covers editor-path churn |
 | `src/term/render.c` | none — the `Bytebuf` is reused across frames | **anything, per frame** | 0 allocs per frame after warmup (§3.2 gate) |
 | `src/term/grid.c` | buffers allocated at init/resize only | per-put allocation | 0 allocs outside `init`/`resize` |
 | `src/text/piece.c` | add-buffer chunks grow geometrically; nodes from a node pool | per-edit node `malloc` | allocs per 1 000 inserts ≤ 40 (chunk growth only) |
-| `src/edit/` dispatch | per-frame scratch arena, reset each frame | per-key allocation | 0 allocs per keystroke (§3.2 gate) |
+| `src/edit/` dispatch | lifetime editor arena plus fixed/owned subsystem storage | per-key allocation | 0 allocs per keystroke (§3.2 gate) |
 | `src/syn/` | span cache + state array, sized per buffer | per-line allocation | 0 allocs per `yew_syn_line` |
-| `src/ui/` layout | per-layout arena, reset each layout | `Rect`/`Region` heap churn | 0 allocs per layout after the first |
-| `src/ws/` state | one arena per load/save | per-entry `strdup` | reset between loads |
+| `src/ui/` layout | persistent pane topology; layout recomputation uses stack/local rectangles | `Rect`/`Region` heap churn | 0 allocs per layout after topology setup |
+| `src/ws/` state | emit arena per save; parsed document arena lives until replacement/teardown | unbounded per-entry ownership; retained replaced documents | repeated load/save unit and sanitizer coverage; lifecycle live-byte gate |
 | `src/search/` | program arena per compiled regex; the matcher allocates nothing | per-match allocation | 0 allocs per `yew_re_exec` |
 | `src/mod/lsp/` | **one arena per message** (s45's decision) | per-node `malloc` in the JSON parser | 0 allocs between frame boundaries beyond the arena's own blocks |
-| `src/mod/ai/`, `git/`, `plug/` | per-request / per-invocation arena | streaming buffers reallocated per token | growth bounded, checked by RSS row |
+| `src/mod/ai/`, `git/`, `plug/` | request/invocation arenas where parsing benefits; explicit owned buffers where data survives callbacks | per-token or per-entry linear growth | growth/lifetime bounded by focused lifecycle tests and RSS rows |
 
 #### 3.2 Debug allocator with per-call-site counters
 
@@ -355,6 +369,7 @@ lane:
 | allocs per `yew_render_frame` | **0** |
 | allocs per `yew_syn_line` | **0** |
 | allocs per `yew_re_exec` | **0** |
+| allocs per warmed `yew_ed_layout` | **0** |
 | allocs per 1 000 sequential 1-byte inserts | ≤ 40 |
 | allocs during a full 100 MB open | ≤ 2 000 |
 | live bytes at `closed` − live bytes at `config` (s56 checkpoints) | ≤ 64 KiB |

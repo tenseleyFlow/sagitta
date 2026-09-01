@@ -69,6 +69,12 @@ seed. Never take a timing number from an `ALLOCDBG=1`
 build: its headers change object sizes, alignment, and cache behaviour. It
 answers *who allocates*, not *how long*.
 
+The steady-state rows cover renderer/grid mutation, syntax lines, regex
+matching, warmed layout recomputation, typing and navigation. The remaining
+rows bound geometric piece-tree growth, a 100 MiB open, and closed-editor live
+bytes. Ownership details and intentionally non-zero setup paths are reviewed
+in `.docs/sprints/13-performance/s57-allocation-audit.md`.
+
 ## Runner and calibration policy
 
 Only the pinned runners named `perf-x86_64-linux-gnu` and
