@@ -1922,7 +1922,7 @@ void test_fusstree_nested_workspace_strips_and_filters_repo_paths(void);
 void test_fussdrawer_layout_follows_the_locked_table(void);
 void test_fussdrawer_natural_width_uses_only_visible_rows(void);
 void test_fussdrawer_compact_row_and_edge_own_distinct_cells(void);
-void test_fussdrawer_rect_uses_content_between_tabs_and_footer(void);
+void test_fussdrawer_offcanvas_layout_shifts_editor_chrome(void);
 void test_fussdrawer_header_preserves_divergence_in_compact_width(void);
 void test_fussdrawer_entry_leave_preserves_live_pane_identity(void);
 void test_fussdrawer_non_git_tree_publishes_and_opens_a_file(void);

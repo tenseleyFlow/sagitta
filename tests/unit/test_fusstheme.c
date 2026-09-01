@@ -52,7 +52,7 @@ void test_fuss_theme_roles_are_shipped(void)
         "runtime/themes/quiver-dark.fl", "runtime/themes/quiver-light.fl"
     };
     static const char *const roles[] = {
-        "mode.git", "git.drawer.edge", "git.staged", "git.modified",
+        "mode.git", "git.drawer", "git.drawer.edge", "git.staged", "git.modified",
         "git.untracked",
         "git.incoming", "git.conflict", "git.ignored", "git.blame",
         "git.blame.stale", "git.sign.add", "git.sign.mod",
@@ -70,6 +70,10 @@ void test_fuss_theme_roles_are_shipped(void)
         Theme theme;
         const ThemeEnt *mode;
         const ThemeEnt *conflict;
+        const ThemeEnt *drawer;
+        const ThemeEnt *drawer256;
+        const ThemeEnt *drawer16;
+        const ThemeEnt *drawer_mono;
         const ThemeEnt *edge;
         const ThemeEnt *edge256;
         const ThemeEnt *edge16;
@@ -92,6 +96,11 @@ void test_fuss_theme_roles_are_shipped(void)
         mode = yew_theme_ui(&theme, "mode.git", YEW_THEME_TRUECOLOR);
         conflict = yew_theme_ui(&theme, "git.conflict",
                                 YEW_THEME_TRUECOLOR);
+        drawer = yew_theme_ui(&theme, "git.drawer",
+                              YEW_THEME_TRUECOLOR);
+        drawer256 = yew_theme_ui(&theme, "git.drawer", YEW_THEME_256);
+        drawer16 = yew_theme_ui(&theme, "git.drawer", YEW_THEME_16);
+        drawer_mono = yew_theme_ui(&theme, "git.drawer", YEW_THEME_MONO);
         edge = yew_theme_ui(&theme, "git.drawer.edge",
                             YEW_THEME_TRUECOLOR);
         edge256 = yew_theme_ui(&theme, "git.drawer.edge", YEW_THEME_256);
@@ -100,15 +109,26 @@ void test_fuss_theme_roles_are_shipped(void)
         YEW_ASSERT_EQ_U64(mode->bg.tag, YEW_COLOR_RGB);
         YEW_ASSERT_EQ_U64(conflict->fg.tag, YEW_COLOR_RGB);
         YEW_ASSERT((conflict->attrs & YEW_ATTR_BOLD) != 0U);
+        YEW_ASSERT_EQ_U64(drawer->bg.tag, YEW_COLOR_RGB);
+        YEW_ASSERT_EQ_U64(drawer256->bg.tag, YEW_COLOR_INDEXED);
+        YEW_ASSERT_EQ_U64(drawer16->bg.tag, YEW_COLOR_INDEXED);
+        YEW_ASSERT_EQ_U64(drawer_mono->bg.tag, YEW_COLOR_DEFAULT);
+        if (file == 0U) {
+            YEW_ASSERT_EQ_U64(drawer->bg.r, 27U);
+            YEW_ASSERT_EQ_U64(drawer->bg.g, 32U);
+            YEW_ASSERT_EQ_U64(drawer->bg.b, 42U);
+        } else {
+            YEW_ASSERT_EQ_U64(drawer->bg.r, 238U);
+            YEW_ASSERT_EQ_U64(drawer->bg.g, 241U);
+            YEW_ASSERT_EQ_U64(drawer->bg.b, 244U);
+        }
         YEW_ASSERT_EQ_U64(edge->fg.tag, YEW_COLOR_RGB);
-        YEW_ASSERT_EQ_U64(edge->fg.r, 255U);
-        YEW_ASSERT_EQ_U64(edge->fg.g, 255U);
-        YEW_ASSERT_EQ_U64(edge->fg.b, 255U);
+        YEW_ASSERT_EQ_U64(edge->fg.r, file == 0U ? 255U : 87U);
+        YEW_ASSERT_EQ_U64(edge->fg.g, file == 0U ? 255U : 96U);
+        YEW_ASSERT_EQ_U64(edge->fg.b, file == 0U ? 255U : 106U);
         YEW_ASSERT((edge->attrs & YEW_ATTR_BOLD) != 0U);
         YEW_ASSERT_EQ_U64(edge256->fg.tag, YEW_COLOR_INDEXED);
-        YEW_ASSERT_EQ_U64(edge256->fg.r, 231U);
         YEW_ASSERT_EQ_U64(edge16->fg.tag, YEW_COLOR_INDEXED);
-        YEW_ASSERT_EQ_U64(edge16->fg.r, 15U);
         YEW_ASSERT_EQ_U64(edge_mono->fg.tag, YEW_COLOR_DEFAULT);
         YEW_ASSERT((edge_mono->attrs & YEW_ATTR_BOLD) != 0U);
         yew_theme_free(&theme);

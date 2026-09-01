@@ -11,9 +11,11 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "edit/pane_cmds.h"
+#include "edit/theme_cmds.h"
 #include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
 #include "mod/git/git_int.h"
+#include "ui/groups.h"
 #include "ui/mouse.h"
 #include "ui/region.h"
 #include "ui/tabs.h"
@@ -66,15 +68,9 @@ static void fussdrawer_enter_non_git(Ed *ed, const FussDrawerFix *fix)
 
 static void fussdrawer_grid_size(Ed *ed, u16 rows, u16 cols)
 {
-    u16 footer_y = rows > 2U ? (u16)(rows - 2U) : rows;
-    u16 content_h = footer_y > 1U ? (u16)(footer_y - 1U) : 0U;
-
     YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, rows, cols));
     ed->grid_ready = true;
-    ed->tab_strip_rect = (Rect){0U, 0U, cols, rows == 0U ? 0U : 1U};
-    ed->footer_rect = (Rect){0U, footer_y, cols,
-                             rows > 1U ? 2U : rows};
-    ed->win->rect = (Rect){0U, rows == 0U ? 0U : 1U, cols, content_h};
+    yew_ed_layout(ed);
 }
 
 static void fussdrawer_grid(Ed *ed)
@@ -164,6 +160,7 @@ void test_fussdrawer_layout_follows_the_locked_table(void)
         u16 edge_col;
         bool fullscreen;
     } cases[] = {
+        {0U, 0U, 0U, 0U, UINT16_MAX, true},
         {20U, 12U, 20U, 20U, UINT16_MAX, true},
         {40U, 18U, 40U, 40U, UINT16_MAX, true},
         {64U, 18U, 24U, 23U, 23U, false},
@@ -174,7 +171,9 @@ void test_fussdrawer_layout_follows_the_locked_table(void)
         {120U, 81U, 120U, 120U, UINT16_MAX, true},
         {240U, 30U, 60U, 59U, 59U, false},
         {240U, 190U, 190U, 189U, 189U, false},
-        {240U, 201U, 240U, 240U, UINT16_MAX, true}
+        {240U, 201U, 240U, 240U, UINT16_MAX, true},
+        {UINT16_MAX, UINT16_MAX, UINT16_MAX, UINT16_MAX,
+         UINT16_MAX, true}
     };
     u32 i;
 
@@ -227,6 +226,11 @@ void test_fussdrawer_compact_row_and_edge_own_distinct_cells(void)
     FussDrawerLayout layout;
     Region row;
     Region edge;
+    Region edge_bottom;
+    Region edge_middle;
+    Region edge_top;
+    const Cell *bottom_left;
+    const ThemeEnt *surface;
     const Cell *edge_cell;
     Ed ed;
 
@@ -237,45 +241,110 @@ void test_fussdrawer_compact_row_and_edge_own_distinct_cells(void)
     yew_fuss_draw(&ed);
     layout = yew_fuss_drawer_layout(80U, 14U);
     YEW_ASSERT(!layout.fullscreen);
-    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 2U, "   plain.txt"));
-    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "├"));
-    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "└"));
-    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "▶"));
-    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "▼"));
-    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "|--"));
-    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "`--"));
-    YEW_ASSERT(fussdrawer_cell_is(&ed.grid, 2U, layout.edge_col,
+    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 1U, "   plain.txt"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 1U, "├"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 1U, "└"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 1U, "▶"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 1U, "▼"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 1U, "|--"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 1U, "`--"));
+    YEW_ASSERT(fussdrawer_cell_is(&ed.grid, 1U, layout.edge_col,
                                   "│", sizeof("│") - 1U));
-    edge_cell = &ed.grid.back[(size_t)2U * ed.grid.cols + layout.edge_col];
+    YEW_ASSERT(fussdrawer_cell_is(&ed.grid, 0U, layout.edge_col,
+                                  "│", sizeof("│") - 1U));
+    YEW_ASSERT(fussdrawer_cell_is(&ed.grid, 23U, layout.edge_col,
+                                  "│", sizeof("│") - 1U));
+    surface = yew_theme_ui_tab(&ed, "git.drawer");
+    YEW_ASSERT_NOT_NULL(surface);
+    bottom_left = &ed.grid.back[(size_t)23U * ed.grid.cols];
+    YEW_ASSERT_EQ_MEM(&bottom_left->bg, &surface->bg,
+                      sizeof(bottom_left->bg));
+    edge_cell = &ed.grid.back[(size_t)1U * ed.grid.cols + layout.edge_col];
     YEW_ASSERT((edge_cell->attrs & YEW_ATTR_BOLD) != 0U);
-    row = yew_region_hit((u16)(layout.edge_col - 1U), 2U);
-    edge = yew_region_hit(layout.edge_col, 2U);
+    row = yew_region_hit((u16)(layout.edge_col - 1U), 1U);
+    edge = yew_region_hit(layout.edge_col, 1U);
+    edge_top = yew_region_hit(layout.edge_col, 0U);
+    edge_middle = yew_region_hit(layout.edge_col, 12U);
+    edge_bottom = yew_region_hit(layout.edge_col, 23U);
     YEW_ASSERT_EQ_I64(row.kind, YEW_REGION_FUSS_ROW);
     YEW_ASSERT_EQ_I64(edge.kind, YEW_REGION_NONE);
+    YEW_ASSERT_EQ_I64(edge_top.kind, YEW_REGION_NONE);
+    YEW_ASSERT_EQ_I64(edge_middle.kind, YEW_REGION_NONE);
+    YEW_ASSERT_EQ_I64(edge_bottom.kind, YEW_REGION_NONE);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
 }
 
-void test_fussdrawer_rect_uses_content_between_tabs_and_footer(void)
+void test_fussdrawer_offcanvas_layout_shifts_editor_chrome(void)
 {
-    Ed ed = {0};
+    FussDrawerFix fix;
     Rect backdrop;
     Rect drawer;
+    Ed ed;
+    u32 group;
 
-    ed.grid.cols = 120U;
-    ed.tab_strip_rect = (Rect){0U, 0U, 120U, 2U};
-    ed.footer_rect = (Rect){0U, 28U, 120U, 2U};
+    fussdrawer_fix_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT(yew_tab_open(&ed, fix.file) >= 0);
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    yew_fuss_tick(&ed, ed.now_ms + 20);
+    fussdrawer_grid(&ed);
     backdrop = yew_fuss_backdrop_rect(&ed);
     drawer = yew_fuss_drawer_rect(&ed);
 
-    YEW_ASSERT_EQ_U64(backdrop.x, 0U);
-    YEW_ASSERT_EQ_U64(backdrop.y, 2U);
-    YEW_ASSERT_EQ_U64(backdrop.w, 120U);
-    YEW_ASSERT_EQ_U64(backdrop.h, 26U);
     YEW_ASSERT_EQ_U64(drawer.x, 0U);
-    YEW_ASSERT_EQ_U64(drawer.y, 2U);
-    YEW_ASSERT_EQ_U64(drawer.w, 30U);
-    YEW_ASSERT_EQ_U64(drawer.h, 26U);
+    YEW_ASSERT_EQ_U64(drawer.y, 0U);
+    YEW_ASSERT_EQ_U64(drawer.w, 24U);
+    YEW_ASSERT_EQ_U64(drawer.h, 24U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.x, 24U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.y, 0U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.w, 56U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.h, 1U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.x, 24U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.y, 1U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.w, 56U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.h, 21U);
+    YEW_ASSERT_EQ_U64(ed.footer_rect.x, 24U);
+    YEW_ASSERT_EQ_U64(ed.footer_rect.y, 22U);
+    YEW_ASSERT_EQ_U64(ed.footer_rect.w, 56U);
+    YEW_ASSERT_EQ_U64(ed.footer_rect.h, 2U);
+    YEW_ASSERT_EQ_U64(backdrop.x, 24U);
+    YEW_ASSERT_EQ_U64(backdrop.y, 1U);
+    YEW_ASSERT_EQ_U64(backdrop.w, 56U);
+    YEW_ASSERT_EQ_U64(backdrop.h, 21U);
+
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
+    yew_ed_layout(&ed);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.x, 0U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.w, 80U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.x, 0U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.w, 80U);
+    YEW_ASSERT_EQ_U64(ed.footer_rect.x, 0U);
+    YEW_ASSERT_EQ_U64(ed.footer_rect.w, 80U);
+
+    group = yew_group_create(&ed, fix.root, "work");
+    YEW_ASSERT(group != 0U);
+    yew_group_add_member(&ed, group, 0);
+    yew_group_add_member(&ed, group, 1);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    yew_ed_layout(&ed);
+    backdrop = yew_fuss_backdrop_rect(&ed);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.x, 24U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.y, 0U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.w, 56U);
+    YEW_ASSERT_EQ_U64(ed.tab_strip_rect.h, 2U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.x, 24U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.y, 2U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.w, 56U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->rect.h, 20U);
+    YEW_ASSERT_EQ_U64(backdrop.x, 24U);
+    YEW_ASSERT_EQ_U64(backdrop.y, 2U);
+    YEW_ASSERT_EQ_U64(backdrop.w, 56U);
+    YEW_ASSERT_EQ_U64(backdrop.h, 20U);
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
 }
 
 void test_fussdrawer_header_preserves_divergence_in_compact_width(void)
@@ -298,37 +367,58 @@ void test_fussdrawer_header_preserves_divergence_in_compact_width(void)
     snap->behind = 1;
     yew_region_frame_begin();
     yew_fuss_draw(&ed);
-    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 1U, "↑1 ↓1"));
+    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 0U, "↑1 ↓1"));
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
 }
 
 void test_fussdrawer_entry_leave_preserves_live_pane_identity(void)
 {
+    FussDrawerFix fix;
     Ed ed;
     Pane *root;
     Pane *focus;
+    Tab *tab;
     Win *win;
+    Viewport viewport;
     ByteOff cursor;
+    float ratio;
+    u32 i;
 
+    fussdrawer_fix_make(&fix);
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    fussdrawer_grid(&ed);
     root = ed.pane_root;
     focus = ed.focus;
     win = ed.win;
+    tab = yew_tab_at(&ed, ed.tabs.active);
+    viewport = ed.win->vp;
     cursor = yew_ed_cursor(&ed)->pos;
+    ratio = root->ratio;
 
-    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
-    YEW_ASSERT_EQ_U64(ed.pane_root, root);
-    YEW_ASSERT_EQ_U64(ed.focus, focus);
-    YEW_ASSERT_EQ_U64(ed.win, win);
-    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
-    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
-    YEW_ASSERT_EQ_U64(ed.pane_root, root);
-    YEW_ASSERT_EQ_U64(ed.focus, focus);
-    YEW_ASSERT_EQ_U64(ed.win, win);
-    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
+    for (i = 0U; i < 100U; i++) {
+        YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+        yew_ed_layout(&ed);
+        YEW_ASSERT_EQ_U64(ed.pane_root, root);
+        YEW_ASSERT_EQ_U64(ed.focus, focus);
+        YEW_ASSERT_EQ_U64(ed.win, win);
+        YEW_ASSERT_EQ_U64(yew_tab_at(&ed, ed.tabs.active), tab);
+        YEW_ASSERT(root->ratio == ratio);
+        YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
+        YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
+        yew_ed_layout(&ed);
+        YEW_ASSERT_EQ_U64(ed.pane_root, root);
+        YEW_ASSERT_EQ_U64(ed.focus, focus);
+        YEW_ASSERT_EQ_U64(ed.win, win);
+        YEW_ASSERT_EQ_U64(yew_tab_at(&ed, ed.tabs.active), tab);
+        YEW_ASSERT(root->ratio == ratio);
+        YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
+        YEW_ASSERT_EQ_MEM(&ed.win->vp, &viewport, sizeof(viewport));
+    }
     yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
 }
 
 void test_fussdrawer_non_git_tree_publishes_and_opens_a_file(void)
@@ -396,16 +486,16 @@ void test_fussdrawer_preview_preserves_the_live_view_exactly(void)
                                   "live.txt"));
     ed.ws.dir = arena_strdup(&ed.arena, fix.root);
     fussdrawer_grid(&ed);
-    ed.win->vp.cols = 80U;
-    ed.win->vp.rows = 24U;
-    ed.win->vp.top = LINENO(1U);
     ed.win->vp.left = (CCol){3U};
-    yew_ed_cursor(&ed)->pos = BYTEOFF(7U);
+    /* Keep the captured viewport valid under the ordinary sidescroll
+     * margin so closing FUSS does not normalize an artificial test state. */
+    yew_ed_cursor(&ed)->pos = BYTEOFF(8U);
     buffer = ed.win->buf;
     viewport = ed.win->vp;
     cursor = yew_ed_cursor(&ed)->pos;
     YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
     yew_fuss_tick(&ed, ed.now_ms + 20);
+    yew_ed_layout(&ed);
     cx.ed = &ed;
     cx.win = ed.win;
     cx.count = 1U;
@@ -415,8 +505,13 @@ void test_fussdrawer_preview_preserves_the_live_view_exactly(void)
     YEW_ASSERT(ed.win->panel.rect.x >= yew_fuss_drawer_rect(&ed).w);
     YEW_ASSERT_EQ_U64(ed.win->buf, buffer);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
-    YEW_ASSERT_EQ_MEM(&ed.win->vp, &viewport, sizeof(viewport));
+    YEW_ASSERT(ed.win->vp.cols < viewport.cols);
+    YEW_ASSERT_EQ_U64(ed.win->vp.top.v, viewport.top.v);
+    YEW_ASSERT_EQ_U64(ed.win->vp.top_sub, viewport.top_sub);
+    YEW_ASSERT_EQ_U64(ed.win->vp.left.v, viewport.left.v);
+    YEW_ASSERT_EQ_U64(ed.win->vp.wrap, viewport.wrap);
     YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
+    yew_ed_layout(&ed);
     YEW_ASSERT(!ed.win->panel.open);
     YEW_ASSERT_EQ_U64(ed.win->buf, buffer);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
@@ -437,7 +532,6 @@ void test_fussdrawer_fullscreen_preview_centers_in_content_not_pane(void)
     fussdrawer_fix_make(&fix);
     fussdrawer_enter_non_git(&ed, &fix);
     fussdrawer_grid_size(&ed, 24U, 40U);
-    ed.win->rect = (Rect){25U, 1U, 15U, 21U};
     cx.ed = &ed;
     cx.win = ed.win;
     cx.count = 1U;
@@ -530,7 +624,7 @@ void test_fussdrawer_selected_row_keeps_the_final_component(void)
     fussdrawer_grid(&ed);
     yew_region_frame_begin();
     yew_fuss_draw(&ed);
-    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 2U, "final-component.c"));
+    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 1U, "final-component.c"));
     yew_ed_free(&ed);
     YEW_ASSERT_EQ_I64(unlink(path), 0);
     fussdrawer_fix_drop(&fix);
@@ -568,21 +662,21 @@ void test_fussdrawer_mouse_double_click_uses_open_destination(void)
     yew_region_frame_begin();
     yew_fuss_draw(&ed);
     ed.now_ms = 1000;
-    fussdrawer_click(&ed, 1U, 2U);
+    fussdrawer_click(&ed, 1U, 1U);
     ed.now_ms = 1100;
     yew_region_frame_begin();
-    yew_region_add(YEW_REGION_FUSS_ROW, (Rect){0U, 2U, 20U, 1U},
+    yew_region_add(YEW_REGION_FUSS_ROW, (Rect){0U, 1U, 20U, 1U},
                    ed.mouse.last_click_payload + 1);
-    fussdrawer_click(&ed, 1U, 2U);
+    fussdrawer_click(&ed, 1U, 1U);
     YEW_ASSERT_EQ_U64(ed.mouse.click_n, 1U);
     YEW_ASSERT(yew_fuss_active(&ed));
     yew_region_frame_begin();
     yew_fuss_draw(&ed);
     ed.now_ms = 1200;
-    fussdrawer_click(&ed, 1U, 2U);
+    fussdrawer_click(&ed, 1U, 1U);
     YEW_ASSERT_EQ_U64(ed.mouse.click_n, 1U);
     ed.now_ms = 1300;
-    fussdrawer_click(&ed, 1U, 2U);
+    fussdrawer_click(&ed, 1U, 1U);
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
     YEW_ASSERT(!yew_fuss_active(&ed));
     YEW_ASSERT_NOT_NULL(ed.win);

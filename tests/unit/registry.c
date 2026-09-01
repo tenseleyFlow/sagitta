@@ -1934,7 +1934,7 @@ const YewTest yew_tests[] = {
     T(fussdrawer_layout_follows_the_locked_table),
     T(fussdrawer_natural_width_uses_only_visible_rows),
     T(fussdrawer_compact_row_and_edge_own_distinct_cells),
-    T(fussdrawer_rect_uses_content_between_tabs_and_footer),
+    T(fussdrawer_offcanvas_layout_shifts_editor_chrome),
     T(fussdrawer_header_preserves_divergence_in_compact_width),
     T(fussdrawer_entry_leave_preserves_live_pane_identity),
     T(fussdrawer_non_git_tree_publishes_and_opens_a_file),

@@ -511,7 +511,12 @@ static void layout_leaf_win(Ed *ed, Pane *leaf)
      * this inactive cursor here would immediately undo the synchronized
      * scroll.  The focused pane still follows normally, and clamping above
      * keeps an inactive peer valid across resizes. */
-    if (w->scroll_link == 0U || w == ed->win)
+    /* FUSS temporarily narrows (or fully hides) the editor.  Its cursor is
+     * inactive, so following it here would permanently rewrite the live
+     * document's horizontal scroll merely because the drawer opened.  Clamp
+     * invalid buffer positions, but resume ordinary cursor following when
+     * the user returns to an editing mode. */
+    if (!yew_fuss_active(ed) && (w->scroll_link == 0U || w == ed->win))
         yew_vp_follow(w);
     if (w == ed->win && w->panel.open)
         yew_panel_resize(ed, &w->panel);
@@ -526,20 +531,33 @@ static void layout_leaf_visit(Pane *p, void *ctx)
 void yew_layout(Ed *ed)
 {
     u16 content_rows;
+    u16 editor_left = 0U;
+    u16 editor_cols;
     u16 top = 0U;
     u16 footer_rows;
 
     if (ed == NULL || ed->win == NULL)
         YEW_BUG("editor layout: missing window");
 
+    editor_cols = ed->grid.cols;
+    if (yew_fuss_active(ed)) {
+        Rect drawer = yew_fuss_drawer_rect(ed);
+
+        editor_left = drawer.w > ed->grid.cols ? ed->grid.cols : drawer.w;
+        editor_cols = (u16)(ed->grid.cols - editor_left);
+    }
     ed->footer_rect = (Rect){0U, 0U, 0U, 0U};
     footer_rows = yew_fuss_footer_rows(ed);
     if (footer_rows == 0U)
         footer_rows = 1U;
     if (ed->grid.rows > footer_rows) {
         content_rows = (u16)(ed->grid.rows - footer_rows);
-        ed->footer_rect = (Rect){0U, content_rows, ed->grid.cols,
-                                 footer_rows};
+        if (yew_fuss_active(ed) && editor_cols == 0U)
+            ed->footer_rect = (Rect){0U, content_rows, ed->grid.cols,
+                                     footer_rows};
+        else
+            ed->footer_rect = (Rect){editor_left, content_rows, editor_cols,
+                                     footer_rows};
     } else {
         content_rows = ed->grid.rows;
     }
@@ -557,15 +575,17 @@ void yew_layout(Ed *ed)
     {
         u16 strip = (u16)yew_tab_strip_rows(ed);
 
+        if (editor_cols == 0U)
+            strip = 0U;
         if (strip > content_rows)
             strip = content_rows;
-        ed->tab_strip_rect = (Rect){0U, 0U, ed->grid.cols, strip};
+        ed->tab_strip_rect = (Rect){editor_left, 0U, editor_cols, strip};
         top = strip;
         content_rows = (u16)(content_rows - strip);
     }
     if (ed->pane_root != NULL) {
         yew_layout_compute(ed->pane_root,
-                           (Rect){0U, top, ed->grid.cols, content_rows});
+                           (Rect){editor_left, top, editor_cols, content_rows});
         yew_pane_tree_walk(ed->pane_root, layout_leaf_visit, ed);
     } else {
         Pane solo;
@@ -573,7 +593,7 @@ void yew_layout(Ed *ed)
         (void)memset(&solo, 0, sizeof(solo));
         solo.is_leaf = true;
         solo.win = ed->win;
-        solo.rect = (Rect){0U, top, ed->grid.cols, content_rows};
+        solo.rect = (Rect){editor_left, top, editor_cols, content_rows};
         layout_leaf_win(ed, &solo);
     }
     ed->layout_dirty = false;

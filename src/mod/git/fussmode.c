@@ -216,7 +216,7 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     spec.len = (u32)body.len;
     content = yew_fuss_backdrop_rect(ed);
     drawer = yew_fuss_drawer_rect(ed);
-    layout = yew_fuss_drawer_layout(content.w, f->natural_cols);
+    layout = yew_fuss_drawer_layout(ed->grid.cols, f->natural_cols);
     if (layout.fullscreen) {
         Rect area = content;
 
@@ -1275,6 +1275,13 @@ static ThemeEnt fuss_base_style(const Ed *ed)
     return style;
 }
 
+static ThemeEnt fuss_surface_style(const Ed *ed)
+{
+    const ThemeEnt *themed = yew_theme_ui_tab(ed, "git.drawer");
+
+    return themed == NULL ? fuss_base_style(ed) : *themed;
+}
+
 static ThemeEnt fuss_role_style(const Ed *ed, const char *role,
                                  ThemeEnt fallback)
 {
@@ -1290,7 +1297,7 @@ static ThemeEnt fuss_role_style(const Ed *ed, const char *role,
 static void fuss_edge(Ed *ed, Rect drawer, FussDrawerLayout layout,
                       u16 rows)
 {
-    ThemeEnt fallback = fuss_base_style(ed);
+    ThemeEnt fallback = fuss_surface_style(ed);
     ThemeEnt style;
     const char *glyph;
     size_t glyph_len;
@@ -1318,7 +1325,7 @@ static void fuss_edge(Ed *ed, Rect drawer, FussDrawerLayout layout,
 static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
 {
     const GitSnapshot *snap;
-    ThemeEnt style = fuss_base_style(ed);
+    ThemeEnt style = fuss_surface_style(ed);
     char suffix[96] = {0};
     const char *branch;
     size_t suffix_len;
@@ -1456,7 +1463,7 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
 {
     FussMode *f = ed->fuss;
     const FussNode *node = fuss_node(f, item);
-    ThemeEnt normal = fuss_base_style(ed);
+    ThemeEnt normal = fuss_surface_style(ed);
     ThemeEnt ignored = fuss_role_style(ed, "git.ignored", normal);
     ThemeEnt staged = fuss_role_style(ed, "git.staged", normal);
     ThemeEnt modified = fuss_role_style(ed, "git.modified", normal);
@@ -1631,25 +1638,37 @@ FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
 
 Rect yew_fuss_backdrop_rect(const Ed *ed)
 {
+    FussDrawerLayout layout;
+    Rect drawer;
     u16 top;
-
+    u16 bottom;
+    u16 natural;
 
     if (ed == NULL)
         return (Rect){0U, 0U, 0U, 0U};
+    natural = ed->fuss == NULL ? 0U : ed->fuss->natural_cols;
+    layout = yew_fuss_drawer_layout(ed->grid.cols, natural);
+    bottom = ed->footer_rect.h == 0U ? ed->grid.rows : ed->footer_rect.y;
+    if (layout.fullscreen)
+        return (Rect){0U, 0U, ed->grid.cols, bottom};
+    drawer = yew_fuss_drawer_rect(ed);
     top = (u16)(ed->tab_strip_rect.y + ed->tab_strip_rect.h);
-    return (Rect){0U, top, ed->grid.cols,
-                  ed->footer_rect.y > top ?
-                      (u16)(ed->footer_rect.y - top) : 0U};
+    return (Rect){drawer.w, top,
+                  ed->grid.cols > drawer.w ?
+                      (u16)(ed->grid.cols - drawer.w) : 0U,
+                  bottom > top ? (u16)(bottom - top) : 0U};
 }
 
 Rect yew_fuss_drawer_rect(const Ed *ed)
 {
-    Rect rect = yew_fuss_backdrop_rect(ed);
-    u16 natural = ed != NULL && ed->fuss != NULL ?
-                  ed->fuss->natural_cols : 0U;
+    u16 natural;
+    FussDrawerLayout layout;
 
-    rect.w = yew_fuss_drawer_layout(rect.w, natural).width;
-    return rect;
+    if (ed == NULL)
+        return (Rect){0U, 0U, 0U, 0U};
+    natural = ed->fuss == NULL ? 0U : ed->fuss->natural_cols;
+    layout = yew_fuss_drawer_layout(ed->grid.cols, natural);
+    return (Rect){0U, 0U, layout.width, ed->grid.rows};
 }
 
 bool yew_fuss_draw_dirty(const Ed *ed)
@@ -1665,11 +1684,12 @@ void yew_fuss_draw(Ed *ed)
     Rect tree;
     u16 first;
     u16 visible;
-    u16 drawn_rows = 1U;
+    u16 tree_bottom;
     u16 tree_right;
     i32 selected;
     size_t i;
     Cell blank;
+    ThemeEnt surface;
 
     if (!yew_fuss_active(ed))
         return;
@@ -1687,23 +1707,30 @@ void yew_fuss_draw(Ed *ed)
                              YEW_OVERLAY_ATTRS);
         f->backdrop_dirty = false;
     }
-    if (content.h == 0U) {
+    tree = yew_fuss_drawer_rect(ed);
+    if (tree.w == 0U || tree.h == 0U) {
         f->draw_dirty = false;
         return;
     }
-    tree = yew_fuss_drawer_rect(ed);
-    layout = yew_fuss_drawer_layout(content.w, f->natural_cols);
+    layout = yew_fuss_drawer_layout(ed->grid.cols, f->natural_cols);
     tree_right = (u16)(tree.x + layout.tree_width);
+    surface = fuss_surface_style(ed);
     blank = ed->grid.blank;
-    blank.fg = fuss_base_style(ed).fg;
-    blank.bg = fuss_base_style(ed).bg;
+    blank.fg = surface.fg;
+    blank.bg = surface.bg;
+    blank.attrs = surface.attrs;
     for (i = tree.y; i < (size_t)tree.y + tree.h; i++)
         yew_grid_fill(&ed->grid, (u16)i, tree.x,
                       (u16)(tree.x + tree.w), blank);
     fuss_header(ed, tree.y, tree.x, tree_right);
-    visible = tree.h > 1U ? (u16)(tree.h - 1U) : 0U;
+    tree_bottom = (u16)(tree.y + tree.h);
+    if (layout.fullscreen && ed->footer_rect.h != 0U &&
+        ed->footer_rect.y < tree_bottom)
+        tree_bottom = ed->footer_rect.y;
+    visible = tree_bottom > (u16)(tree.y + 1U) ?
+                  (u16)(tree_bottom - tree.y - 1U) : 0U;
     if (f->opening) {
-        fuss_edge(ed, tree, layout, drawn_rows);
+        fuss_edge(ed, tree, layout, tree.h);
         f->draw_dirty = false;
         return;
     }
@@ -1722,7 +1749,6 @@ void yew_fuss_draw(Ed *ed)
 
         fuss_tree_row(ed, row, tree.x, tree_right, item,
                       (i32)((size_t)first + i) == selected);
-        drawn_rows++;
         path_id = item == NULL ? 0U :
                   yew_intern(&ed->interner, item->path, item->path_len);
         if (path_id <= (u32)INT32_MAX)
@@ -1730,7 +1756,7 @@ void yew_fuss_draw(Ed *ed)
                            (Rect){tree.x, row, layout.tree_width, 1U},
                            (i32)path_id);
     }
-    fuss_edge(ed, tree, layout, drawn_rows);
+    fuss_edge(ed, tree, layout, tree.h);
     f->draw_dirty = false;
 }
 
