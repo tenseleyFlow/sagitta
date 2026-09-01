@@ -162,12 +162,26 @@ static void panel_wrap(Panel *p, u16 width)
     p->nrows = p->rows.len > UINT32_MAX ? UINT32_MAX : (u32)p->rows.len;
 }
 
-static Rect panel_area(const Ed *ed)
+static Rect panel_area(const Ed *ed, const Panel *p)
 {
     Rect area = {0U, 0U, 0U, 0U};
+    u32 right;
+    u32 bottom;
 
     if (ed == NULL)
         return area;
+    if (p != NULL && p->has_area) {
+        area = p->area;
+        if (area.x >= ed->grid.cols || area.y >= ed->grid.rows)
+            return (Rect){0U, 0U, 0U, 0U};
+        right = (u32)area.x + area.w;
+        bottom = (u32)area.y + area.h;
+        if (right > ed->grid.cols)
+            area.w = (u16)(ed->grid.cols - area.x);
+        if (bottom > ed->grid.rows)
+            area.h = (u16)(ed->grid.rows - area.y);
+        return area;
+    }
     if (ed->win != NULL && ed->win->rect.w != 0U &&
         ed->win->rect.h != 0U)
         return ed->win->rect;
@@ -190,7 +204,7 @@ static u16 panel_row_width(const Panel *p, Span row)
 
 static bool panel_geometry(Ed *ed, Panel *p)
 {
-    Rect area = panel_area(ed);
+    Rect area = panel_area(ed, p);
     u16 content_cap;
     u16 widest = 0U;
     u16 height_cap;
@@ -235,9 +249,25 @@ static bool panel_geometry(Ed *ed, Panel *p)
                 (u16)(p->nrows + 2U);
     if (desired_h > height_cap)
         desired_h = height_cap;
+    if (desired_h > area.h)
+        desired_h = area.h;
 
     right = (u32)area.x + area.w;
     bottom = (u32)area.y + area.h;
+    if (p->place == YEW_PANEL_CENTER) {
+        u16 panel_w = (u16)(widest + 2U);
+
+        x = (u16)(area.x + (area.w - panel_w) / 2U);
+        y = (u16)(area.y + (area.h - desired_h) / 2U);
+        p->rect = (Rect){x, y, panel_w, desired_h};
+        if (p->scroll + (u32)(p->rect.h - 2U) > p->nrows) {
+            u32 last = p->nrows > p->rect.h - 2U ?
+                       p->nrows - (p->rect.h - 2U) : 0U;
+
+            p->scroll = last > UINT16_MAX ? UINT16_MAX : (u16)last;
+        }
+        return true;
+    }
     anchor_y = p->anchor_y;
     if (anchor_y < area.y)
         anchor_y = area.y;
@@ -295,7 +325,7 @@ bool yew_panel_open(Ed *ed, Panel *p, const PanelSpec *spec)
     size_t i;
 
     if (p == NULL || spec == NULL || (spec->len != 0U && spec->body == NULL) ||
-        spec->place > YEW_PANEL_CURSOR)
+        spec->place > YEW_PANEL_CENTER)
         return false;
     yew_panel_close(ed, p);
     if (!yew_keymap_build(&p->keys, "panel", panel_keys,
@@ -313,6 +343,8 @@ bool yew_panel_open(Ed *ed, Panel *p, const PanelSpec *spec)
     p->place = spec->place;
     p->max_w = spec->max_w;
     p->max_h = spec->max_h;
+    p->area = spec->area;
+    p->has_area = spec->has_area;
     if (spec->emph != NULL) {
         for (i = 0U; i < spec->emph->len; i++)
             Vec_Span_push(&p->emph, spec->emph->data[i]);

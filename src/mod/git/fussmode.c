@@ -218,6 +218,8 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     drawer = yew_fuss_drawer_rect(ed);
     layout = yew_fuss_drawer_layout(content.w, f->natural_cols);
     if (layout.fullscreen) {
+        Rect area = content;
+
         if (content.w < 3U || content.h < 3U) {
             bytebuf_free(&body);
             f->viewer = true;
@@ -225,14 +227,21 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
             f->viewer_buffer_id = buffer->id;
             return true;
         }
-        spec.x = content.w > 4U ? (u16)(content.x + 2U) : content.x;
-        spec.y = content.h == 0U ? content.y :
-                 (u16)(content.y + content.h / 2U);
-        spec.place = YEW_PANEL_CURSOR;
-        spec.max_w = content.w > 4U ? (u16)(content.w - 4U) : content.w;
+        if (area.w > 4U) {
+            area.x = (u16)(area.x + 2U);
+            area.w = (u16)(area.w - 4U);
+        }
+        if (area.h > 4U) {
+            area.y = (u16)(area.y + 2U);
+            area.h = (u16)(area.h - 4U);
+        }
+        spec.place = YEW_PANEL_CENTER;
+        spec.area = area;
+        spec.has_area = true;
+        spec.max_w = area.w;
         if (spec.max_w > YEW_PANEL_MAX_W)
             spec.max_w = YEW_PANEL_MAX_W;
-        spec.max_h = content.h > 4U ? (u16)(content.h - 4U) : content.h;
+        spec.max_h = area.h;
         if (spec.max_h > YEW_PANEL_MAX_H)
             spec.max_h = YEW_PANEL_MAX_H;
         spec.role = "git.ignored";

@@ -200,6 +200,31 @@ void test_panel_explicit_limits_stay_inside_caps_and_resize(void)
     yew_ed_free(&ed);
 }
 
+void test_panel_center_uses_explicit_area_not_focused_window(void)
+{
+    static const u8 body[] = "centered";
+    Ed ed;
+    PanelSpec spec;
+    Rect area = {10U, 5U, 40U, 20U};
+
+    panel_fixture(&ed, 100U, 30U);
+    ed.grid.cols = 100U;
+    ed.grid.rows = 30U;
+    ed.win->rect = (Rect){70U, 0U, 30U, 30U};
+    spec = panel_spec(body, sizeof(body) - 1U, 99U, 29U,
+                      YEW_PANEL_CENTER);
+    spec.area = area;
+    spec.has_area = true;
+    YEW_ASSERT(yew_panel_open(&ed, &ed.win->panel, &spec));
+    YEW_ASSERT(rect_inside(ed.win->panel.rect, area));
+    YEW_ASSERT_EQ_U64(ed.win->panel.rect.w, 10U);
+    YEW_ASSERT_EQ_U64(ed.win->panel.rect.h, 3U);
+    YEW_ASSERT_EQ_U64(ed.win->panel.rect.x, 25U);
+    YEW_ASSERT_EQ_U64(ed.win->panel.rect.y, 13U);
+    YEW_ASSERT(ed.win->panel.rect.x < ed.win->rect.x);
+    yew_ed_free(&ed);
+}
+
 void test_panel_wraps_cjk_only_at_grapheme_boundaries(void)
 {
     static const u8 body[] =

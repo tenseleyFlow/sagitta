@@ -21,7 +21,8 @@ enum {
 typedef enum PanelPlace {
     YEW_PANEL_BELOW = 0,
     YEW_PANEL_ABOVE,
-    YEW_PANEL_CURSOR
+    YEW_PANEL_CURSOR,
+    YEW_PANEL_CENTER
 } PanelPlace;
 
 VEC_DECL(Vec_Span, Span);
@@ -35,6 +36,8 @@ typedef struct PanelSpec {
     u16 max_w, max_h;
     const char *role;
     Vec_Span *emph;
+    Rect area;
+    bool has_area;
 } PanelSpec;
 
 typedef struct Panel {
@@ -54,6 +57,8 @@ typedef struct Panel {
     u16 anchor_x, anchor_y;
     u16 max_w, max_h;
     u8 place;
+    Rect area;
+    bool has_area;
 
     /* Optional document emphasis owned by the panel lifetime.  This is
      * deliberately separate from search overlays: opening hover help must

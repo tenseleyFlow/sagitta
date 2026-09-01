@@ -64,13 +64,22 @@ static void fussdrawer_enter_non_git(Ed *ed, const FussDrawerFix *fix)
     yew_fuss_tick(ed, ed->now_ms + 20);
 }
 
+static void fussdrawer_grid_size(Ed *ed, u16 rows, u16 cols)
+{
+    u16 footer_y = rows > 2U ? (u16)(rows - 2U) : rows;
+    u16 content_h = footer_y > 1U ? (u16)(footer_y - 1U) : 0U;
+
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, rows, cols));
+    ed->grid_ready = true;
+    ed->tab_strip_rect = (Rect){0U, 0U, cols, rows == 0U ? 0U : 1U};
+    ed->footer_rect = (Rect){0U, footer_y, cols,
+                             rows > 1U ? 2U : rows};
+    ed->win->rect = (Rect){0U, rows == 0U ? 0U : 1U, cols, content_h};
+}
+
 static void fussdrawer_grid(Ed *ed)
 {
-    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, 24U, 80U));
-    ed->grid_ready = true;
-    ed->tab_strip_rect = (Rect){0U, 0U, 80U, 1U};
-    ed->footer_rect = (Rect){0U, 22U, 80U, 2U};
-    ed->win->rect = (Rect){0U, 1U, 80U, 21U};
+    fussdrawer_grid_size(ed, 24U, 80U);
 }
 
 static void fussdrawer_click(Ed *ed, u16 col, u16 row)
@@ -412,6 +421,40 @@ void test_fussdrawer_preview_preserves_the_live_view_exactly(void)
     YEW_ASSERT_EQ_U64(ed.win->buf, buffer);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor.v);
     YEW_ASSERT_EQ_MEM(&ed.win->vp, &viewport, sizeof(viewport));
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_fullscreen_preview_centers_in_content_not_pane(void)
+{
+    FussDrawerFix fix;
+    CmdCtx cx = {0};
+    Rect content;
+    Rect inset;
+    Rect panel;
+    Ed ed;
+
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    fussdrawer_grid_size(&ed, 24U, 40U);
+    ed.win->rect = (Rect){25U, 1U, 15U, 21U};
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT(yew_fuss_drawer_layout(40U, 0U).fullscreen);
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_view(&cx), YEW_CMD_OK);
+    YEW_ASSERT(ed.win->panel.open);
+    content = yew_fuss_backdrop_rect(&ed);
+    inset = (Rect){(u16)(content.x + 2U), (u16)(content.y + 2U),
+                   (u16)(content.w - 4U), (u16)(content.h - 4U)};
+    panel = ed.win->panel.rect;
+    YEW_ASSERT(panel.x >= inset.x && panel.y >= inset.y);
+    YEW_ASSERT((u32)panel.x + panel.w <= (u32)inset.x + inset.w);
+    YEW_ASSERT((u32)panel.y + panel.h <= (u32)inset.y + inset.h);
+    YEW_ASSERT_EQ_U64(panel.x, inset.x + (inset.w - panel.w) / 2U);
+    YEW_ASSERT_EQ_U64(panel.y, inset.y + (inset.h - panel.h) / 2U);
+    YEW_ASSERT(panel.x < ed.win->rect.x);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
 }
