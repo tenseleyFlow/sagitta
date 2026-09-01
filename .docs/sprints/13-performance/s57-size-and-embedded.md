@@ -717,6 +717,24 @@ correct on Darwin — not that any macOS terminal emulator was exercised.
   `getopt_long(`, `program_invocation_name`, a header function with no
   shim, and a shim returning success.
 
+**Amendment S57-A4 — repository closeout is not fabricated external
+evidence.** Sprint 57's implementation frontier may advance once every
+repository-owned deliverable and locally runnable gate is complete and the
+reproducible QEMU proof is recorded. A hosted-CI result for the current SHA
+still requires a push, and Raspberry Pi Zero 2 W corroboration still requires
+access to the designated physical target; neither can be manufactured by
+changing source or by rerunning emulation. Those two rows remain explicit,
+release-blocking evidence tails owned by Sprint 60. They do not authorize a
+false green check, weaken the Definition of Done, or justify idling unrelated
+repository work. Any failure when either row becomes runnable reopens Sprint
+57 remediation before release.
+
+This separation also applies the core-preservation stop rule: a size target
+that cannot be met without removing core behavior or weakening stability is
+rebaselined or deferred from measured evidence. The complete full-feature and
+minimal-module suites are the regression proof for that boundary, not optional
+coverage that may be discarded to make a footprint number pass.
+
 ## Definition of Done
 
 1. `make` and `make test` green on gcc and clang; the pinned GCC `make size`

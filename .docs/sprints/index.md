@@ -281,9 +281,11 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **ACTIVE.** Sprint 56 and Sprint 56.5 are repository-complete. Sprint 56's
+- **ACTIVE.** Sprints 56, 56.5, and 57 are repository-complete. Sprint 56's
   pinned designated-hardware evidence remains pending because no self-hosted
-  runner is registered. Sprint 57 is the binding implementation frontier.
+  runner is registered; Sprint 57's Pi Zero 2 W corroboration and pushed-SHA
+  CI evidence remain release tails. Sprint 57.5 is the binding implementation
+  frontier.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -300,10 +302,13 @@ Binding documents — read before any sprint:
   green; independent lifecycle review reports no findings
 - Sprint 57 (s57-size-and-embedded.md) — Binary-size budgets per MODULES
   config, allocation audit, `x86_64-linux-musl` static embedded profile
-  proven on-target. **ACTIVE.**
+  proven on-target. **REPOSITORY COMPLETE 2026-09-01:** all repository-owned
+  size, allocation, portability, module-boundary, deterministic-image and
+  64/32 MiB QEMU gates are green; hosted CI awaits an authorized push and
+  physical Pi Zero 2 W corroboration remains a Sprint 60 release blocker
 - Sprint 57.5 (s57_5-fuss-compact-tree.md) — Compact line-free FUSS tree,
   remembered expansion state, open-file ancestry, adaptive drawer width and
-  full-screen fallback, plus a bright editor/drawer divider. **QUEUED NEXT.**
+  full-screen fallback, plus a bright editor/drawer divider. **ACTIVE.**
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
@@ -329,7 +334,7 @@ Binding documents — read before any sprint:
 | Self-config | 36 | default config is Fletch; recorder round-trip law in CI |
 | **Daily driver** | 42 | field-evidence dogfood gate — implementation readiness alone does not earn it |
 | LSP live | 47 | clangd navigates yew's source in CI |
-| Embedded proof | 57 | musl static build within size budget runs on target |
+| Embedded proof | 57 | musl static build passes constrained QEMU; physical Pi release corroboration remains |
 | **v1.0.0** | 60 | all campaign closeout gates green |
 
 ## Sequencing notes
@@ -347,7 +352,7 @@ Binding documents — read before any sprint:
   s25 hand-writes the emitter against the frozen schema; s36 swaps the
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
-  `s56_5-…`) are the pressure valve when a sprint
+  `s56_5-…`, `s57_5-…`) are the pressure valve when a sprint
   splits — renumbering is forbidden once files exist.
 
 ## Sprint file format

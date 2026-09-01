@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-08-29
+**Current checkpoint date:** 2026-09-01
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -10,24 +10,65 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Clean upstream/recovery anchor:**
-`0246f98e93fee97b9fd5df9183efeb1bf3e5222d`
+**Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
 
-**Current code frontier before this handoff update:** `288d658`
+**Current code frontier before this handoff update:** `7781090`
 
-**Git position:** 44 local implementation commits ahead of `origin/trunk`,
-plus this handoff update once committed; nothing was pushed from the Mac
+**Git position:** 19 local implementation commits ahead of `origin/trunk`,
+plus this documentation closeout once committed; nothing in the Sprint 57
+chain has been pushed from the Mac
 
-**Active implementation frontier:** Sprint 57 x86_64 size reconciliation and
-constrained-target implementation; external hardware proof remains
+**Active implementation frontier:** Sprint 57.5 compact FUSS redesign.
+Sprint 57 is repository-complete; hosted CI and physical Pi corroboration
+remain explicit release-evidence tails.
 
-This document began as the exact frozen Linux-to-Mac transfer record. That
-record is retained below as provenance, but the transferred WIP has now been
-reviewed, implemented, tested, and committed. After committing this handoff,
-the main worktree is expected to be clean. The old dirty manifest in §4 is a
-historical recovery record, not the current working state.
+This document began as the exact frozen Linux-to-Mac transfer record. The
+authoritative pickup point is immediately below. The older 2026-08-29 status
+is retained afterward as provenance and is explicitly superseded.
 
-## 0. Current pickup point
+## 0. Authoritative pickup point
+
+Sprint 57 repository work is complete. The size gates use the measured
+S57-A1 floors without removing core behavior: pinned x86_64 stripped sizes
+are 1,463,968 bytes minimal and 1,947,336 bytes full. The full-feature native
+suite and an independent `MODULES=""` suite both pass end to end. The minimal
+suite retains editing, Fletch, syntax, search, persistence and macros; only
+the four documented optional modules are shims.
+
+The deterministic embedded gate passes QEMU rows 1–11 at 64 MiB with peak
+`VmHWM` 9,764,864 bytes. The 32 MiB row cleanly names the 48 MiB workload
+floor and exits without an OOM kill. Physical Raspberry Pi Zero 2 W class
+corroboration is still pending, as is hosted CI for the current unpushed SHA.
+Both are release-blocking evidence tails under S57-A4; neither is fabricated
+from emulation or used to stall unrelated repository work.
+
+The exact next contract is
+`.docs/sprints/13-performance/s57_5-fuss-compact-tree.md`: compact line-free
+tree rows, `+`/`-` expansion indicators, remembered expansion, forced-open
+ancestry for editor-open files, adaptive width/full-screen fallback, and a
+bright divider. Start there after confirming the worktree and rereading the
+binding documents.
+
+Most recent validation:
+
+- full native: 2,404 unit tests / 71,035,366 assertions / 0 failures;
+  PTY, Fletch 38/38, scripts 93/919, package 51/51, round-trip, syntax,
+  policies, smoke, and live-PTY torture green;
+- minimal native: 1,945 unit tests / 70,056,311 assertions / 0 failures;
+  all applicable PTYs, Fletch 38/38, scripts 71/743, round-trip, syntax,
+  policies, smoke, and live-PTY torture green;
+- allocation, shipping RSS, generated-artifact determinism, size-ledger,
+  module-boundary, musl/static-PIE, and Apple-silicon alignment gates green.
+
+Do not push unless explicitly requested. If hosted CI or physical Pi evidence
+fails when run, reopen Sprint 57 remediation before release. Do not weaken
+core features or stability for a footprint target; stop, measure, and amend or
+defer the target instead.
+
+## 1. Historical 2026-08-29 pickup point — superseded
+
+The following section records the earlier transfer state. Its missing-work
+claims were resolved by the authoritative checkpoint above.
 
 Yew is still on **Sprint 57**. The optional embedded runtime and the native
 Apple-silicon port are repository-complete locally. Do not start Sprint 58 or
@@ -147,7 +188,7 @@ and fixed without weakening hard invariants:
   120-tps loop took 4.868 s, delivered 120 frames, and correctly allowed at
   most 148.
 
-## 1. First actions in the next session
+### Historical first actions
 
 1. Read, in order:
    - `AGENTS.md`
