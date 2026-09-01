@@ -21,12 +21,12 @@ baseline_changed=0
 while IFS= read -r path; do
     case $path in
         src/*) source_changed=1 ;;
-        tests/perf/baselines/*) baseline_changed=1 ;;
+        tests/perf/baselines/*|tests/size/*) baseline_changed=1 ;;
     esac
 done <"$tmp"
 
 if [ "$source_changed" -eq 1 ] && [ "$baseline_changed" -eq 1 ]; then
-    echo "perf-baseline-guard: src/ and performance baselines share a commit" >&2
+    echo "perf-baseline-guard: src/ and performance/size baselines share a commit" >&2
     exit 1
 fi
 
