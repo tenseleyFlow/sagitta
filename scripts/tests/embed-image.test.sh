@@ -29,8 +29,9 @@ chmod 0755 "$scratch/bin/yew" "$scratch/bin/busybox" "$scratch/init"
 build_one()
 {
     suffix=$1
+    image_generator=$2
     TMPDIR="$scratch" "$repo/scripts/embed-image.sh" \
-        --generator "$scratch/gen-initramfs" \
+        --generator "$image_generator" \
         --yew "$scratch/bin/yew" \
         --busybox "$scratch/bin/busybox" \
         --init "$scratch/init" \
@@ -41,7 +42,7 @@ build_one()
         --max-bytes 1048576 >"$scratch/build-$suffix.out"
 }
 
-build_one one
+build_one one "$scratch/gen-initramfs"
 
 # Recreate the sources in a different directory-entry order.  The generated
 # archive and manifest must not inherit that order, mtimes, inode numbers, or
@@ -49,11 +50,33 @@ build_one one
 sleep 1
 touch "$scratch/bin/yew" "$scratch/bin/busybox" "$scratch/init" \
       "$scratch/runtime/syntax/c.fl" "$scratch/extra/input.txt"
-build_one two
+build_one two "$scratch/gen-initramfs"
 cmp -s "$scratch/image-one.cpio.gz" "$scratch/image-two.cpio.gz" ||
     fail 'image is not byte-identical across rebuilds'
 cmp -s "$scratch/image-one.files" "$scratch/image-two.files" ||
     fail 'file list is not byte-identical across rebuilds'
+
+# The initramfs writer is part of the generated-artifact boundary.  Compile
+# it strictly with both supported host compilers and prove that codegen does
+# not influence either the archive or its manifest.
+compiler_count=0
+for compiler in gcc clang; do
+    if command -v "$compiler" >/dev/null 2>&1; then
+        compiler_count=$((compiler_count + 1))
+        # shellcheck disable=SC2086
+        "$compiler" $cflags "$repo/scripts/gen-initramfs.c" \
+            -o "$scratch/gen-initramfs-$compiler" ||
+            fail "initramfs generator failed strict $compiler compile"
+        build_one "$compiler" "$scratch/gen-initramfs-$compiler"
+        cmp -s "$scratch/image-one.cpio.gz" "$scratch/image-$compiler.cpio.gz" ||
+            fail "image differs when its generator is built with $compiler"
+        cmp -s "$scratch/image-one.files" "$scratch/image-$compiler.files" ||
+            fail "file list differs when its generator is built with $compiler"
+    fi
+done
+if [ "${YEW_REQUIRE_BOTH_CC:-0}" = 1 ] && [ "$compiler_count" -ne 2 ]; then
+    fail 'gcc and clang are both required for the cross-compiler determinism gate'
+fi
 
 for row in \
     'f 0755 19 bin/yew' \

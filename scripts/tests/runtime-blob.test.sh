@@ -67,16 +67,36 @@ const YewRuntimeBlobEntry *yew_runtime_blob_index(size_t *count);
 #endif
 EOF
 
+compiler_count=0
+reference_output=
 for compiler in gcc clang; do
     if command -v "$compiler" >/dev/null 2>&1; then
+        compiler_count=$((compiler_count + 1))
         # shellcheck disable=SC2086
         "$compiler" $cflags "$repo/scripts/gen-runtime-blob.c" -o "$scratch/gen-$compiler" ||
             fail "generator failed strict $compiler compile"
+        "$scratch/gen-$compiler" "$scratch/one" "$scratch/one-$compiler.c"
+        "$scratch/gen-$compiler" "$scratch/one" "$scratch/one-$compiler-repeat.c"
+        cmp -s "$scratch/one-$compiler.c" "$scratch/one-$compiler-repeat.c" ||
+            fail "fixture output changed across $compiler runs"
+        "$scratch/gen-$compiler" "$repo/runtime" "$scratch/runtime-$compiler.c"
+        "$scratch/gen-$compiler" "$repo/runtime" "$scratch/runtime-$compiler-repeat.c"
+        cmp -s "$scratch/runtime-$compiler.c" "$scratch/runtime-$compiler-repeat.c" ||
+            fail "repository runtime output changed across $compiler runs"
+        if [ -n "$reference_output" ]; then
+            cmp -s "$reference_output" "$scratch/runtime-$compiler.c" ||
+                fail "repository runtime output differs across gcc/clang generators"
+        else
+            reference_output=$scratch/runtime-$compiler.c
+        fi
         # shellcheck disable=SC2086
-        "$compiler" $cflags -I"$scratch/include" -c "$scratch/one.c" -o "$scratch/one-$compiler.o" ||
+        "$compiler" $cflags -I"$scratch/include" -c "$scratch/one-$compiler.c" -o "$scratch/one-$compiler.o" ||
             fail "generated C failed strict $compiler compile"
     fi
 done
+if [ "${YEW_REQUIRE_BOTH_CC:-0}" = 1 ] && [ "$compiler_count" -ne 2 ]; then
+    fail 'gcc and clang are both required for the cross-compiler determinism gate'
+fi
 
 cat >"$scratch/verify.c" <<'EOF'
 #include "util/runtime_blob.h"

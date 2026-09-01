@@ -970,6 +970,7 @@ endif
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
         runtime-embedded-budget embedded-image-selftest \
+        generated-artifact-determinism \
         embedded-fixture-selftest embedded-disk-selftest \
         embedded-gate-selftest \
         embedded-image embedded-lowmem-image embedded embedded-gate \
@@ -1551,6 +1552,13 @@ embedded-image-selftest:
 	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
 		scripts/tests/embed-image.test.sh
 
+generated-artifact-determinism:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
+		YEW_REQUIRE_BOTH_CC=1 scripts/tests/runtime-blob.test.sh
+	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
+		YEW_REQUIRE_BOTH_CC=1 scripts/tests/embed-image.test.sh
+
 embedded-fixture-selftest:
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) HOSTCC='$(HOSTCC)' \
@@ -2047,13 +2055,22 @@ size-check: size size-memory-selftest module-boundary-selftest \
 		esac; \
 		ledger="tests/size/ledger-$$config.txt"; \
 		[ -f "$$ledger" ] || { echo "size-check: missing $$ledger; run make size-update" >&2; exit 1; }; \
-		NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
-			scripts/size-ledger.sh --build "$$build" --binary "$$binary" \
-			--without-gc "$$without_gc" \
-			>"$$tmpdir/ledger-$$config.txt"; \
-		if ! cmp -s "$$ledger" "$$tmpdir/ledger-$$config.txt"; then \
+		for pass in 1 2; do \
+			NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \
+				scripts/size-ledger.sh --build "$$build" --binary "$$binary" \
+				--without-gc "$$without_gc" \
+				>"$$tmpdir/ledger-$$config-$$pass.txt"; \
+		done; \
+		if ! cmp -s "$$tmpdir/ledger-$$config-1.txt" \
+		             "$$tmpdir/ledger-$$config-2.txt"; then \
+			echo "size-check: nondeterministic $$config ledger" >&2; \
+			diff -u "$$tmpdir/ledger-$$config-1.txt" \
+				"$$tmpdir/ledger-$$config-2.txt" >&2 || true; \
+			exit 1; \
+		fi; \
+		if ! cmp -s "$$ledger" "$$tmpdir/ledger-$$config-1.txt"; then \
 			echo "size-check: stale $$ledger; run make size-update" >&2; \
-			diff -u "$$ledger" "$$tmpdir/ledger-$$config.txt" >&2 || true; \
+			diff -u "$$ledger" "$$tmpdir/ledger-$$config-1.txt" >&2 || true; \
 			exit 1; \
 		fi; \
 		NM='$(NM)' SIZE='$(SIZE)' CC='$(CC)' \

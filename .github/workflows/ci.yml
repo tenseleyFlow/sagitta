@@ -669,6 +669,8 @@ jobs:
             test "$g1" = "$c2"
             echo "$profile $g1"
           done < tests/perf/fixtures.sha
+      - name: Compare Sprint 57 generators across runs and compilers
+        run: make generated-artifact-determinism
       - name: Compare test and PTY output
         run: |
           make test > /dev/null 2>&1
