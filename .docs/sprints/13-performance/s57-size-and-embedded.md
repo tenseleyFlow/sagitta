@@ -69,6 +69,16 @@ its own module honestly. Finally take the `arm64-linux` and `arm64-macos`
 lanes green. **MILESTONE: embedded proof.** Adversarial audits are Sprint
 58; packaging and reproducible release builds are Sprint 60.
 
+**Core-preservation stop rule.** Footprint work may remove unreachable code,
+fix accidental retention, or improve representation without changing observable
+behavior. It may not excise core features, narrow the supported feature matrix,
+weaken an invariant, or trade away correctness, recovery, determinism, or the
+locked latency bars. If a measured floor shows that a footprint gate cannot be
+met under those constraints, stop implementation, record the measurement and
+cause, and amend or defer the gate explicitly before continuing. S57-A1 is the
+first application of this rule; a green size lane is never evidence that a
+feature regression is acceptable.
+
 ## Deliverables
 
 ### 1. Binary-size budgets per `MODULES` — `make size`, `scripts/size.sh`

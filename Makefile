@@ -988,8 +988,9 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables calib perf perf-components perf-symbols size \
-        size-check size-update size-musl \
-        size-tools-selftest size-ledger-full size-ledger-minimal \
+        size-check size-update size-musl size-memory-run \
+        size-tools-selftest size-memory-selftest \
+        size-ledger-full size-ledger-minimal \
         perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
@@ -1941,6 +1942,34 @@ size-tools-selftest:
 	mkdir -p $(BUILD)/tmp
 	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/size-tools.test.sh
 
+size-memory-selftest:
+	mkdir -p $(BUILD)/tmp
+	TMPDIR=$(abspath $(BUILD)/tmp) scripts/tests/size-memory.test.sh
+
+SIZE_MEMORY_PROFILE ?= full
+
+size-memory-run: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
+	@set -eu; \
+	dir='$(abspath $(BUILD))/size-memory'; \
+	mkdir -p "$$dir/state"; \
+	: >"$$dir/empty.c"; \
+	rm -f "$$dir/empty.log" "$$dir/open.log"; \
+	YEW_PROF=1 YEW_PERF_SMOKE=1 YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		YEW_RUNTIME_DIR='$(abspath runtime)' \
+		YEW_PERF_LOG_CODE="$$dir/empty.log" \
+		$(BUILD)/perf_open_s56 --yew '$(abspath $(BUILD)/yew)' \
+		--state "$$dir/state" --budgets tests/perf/budgets.txt \
+		--fixture-code "$$dir/empty.c" >/dev/null; \
+	YEW_PROF=1 YEW_PERF_SMOKE=1 YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		YEW_RUNTIME_DIR='$(abspath runtime)' \
+		YEW_PERF_LOG_CODE="$$dir/open.log" \
+		$(BUILD)/perf_open_s56 --yew '$(abspath $(BUILD)/yew)' \
+		--state "$$dir/state" --budgets tests/perf/budgets.txt \
+		--fixture-code '$(abspath $(FIXTURE_DIR)/100m-code.bin)' >/dev/null; \
+	scripts/size-memory.sh --profile '$(SIZE_MEMORY_PROFILE)' \
+		--empty-log "$$dir/empty.log" --open-log "$$dir/open.log" \
+		--fixture '$(abspath $(FIXTURE_DIR)/100m-code.bin)'
+
 define size_measure_rule
 $(1): FORCE
 	$$(MAKE) --no-print-directory BUILD='$(2)' MODULES='$(3)' \
@@ -1986,7 +2015,8 @@ size-ledger-minimal: $(SIZE_MINIMAL_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
 		--binary '$(SIZE_MINIMAL_BIN)' --without-gc '$(SIZE_MINIMAL_NOGC_BIN)'
 
-size-check: size $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
+size-check: size size-memory-selftest \
+            $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 	@set -eu; \
 	tmpdir=$$(umask 077 && mktemp -d "$${TMPDIR:-/tmp}/yew-size-check.XXXXXX"); \
 	trap 'rm -rf "$$tmpdir"' EXIT HUP INT TERM; \
@@ -2011,6 +2041,11 @@ size-check: size $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 			--without-gc "$$without_gc" \
 			--baseline "$$ledger" >"$$tmpdir/growth-$$config.txt"; \
 	done
+	$(MAKE) --no-print-directory BUILD='$(SIZE_FULL_BUILD)' \
+		MODULES='lsp ai fuss plugins' SHIPPING=1 \
+		SIZE_MEMORY_PROFILE=full size-memory-run
+	$(MAKE) --no-print-directory BUILD='$(SIZE_MINIMAL_BUILD)' \
+		MODULES='' SHIPPING=1 SIZE_MEMORY_PROFILE=minimal size-memory-run
 	@echo 'size-check: committed ledgers are current and within growth limits'
 
 size-update: size $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
@@ -2025,7 +2060,7 @@ size-update: size $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 	@echo 'size-update: commit with message beginning "size: rebaseline"'
 
 ifeq ($(TARGET),x86_64-linux-musl)
-size-musl: size-tools-selftest static-pie-tools-selftest \
+size-musl: size-tools-selftest size-memory-selftest static-pie-tools-selftest \
            $(SIZE_FULL_BIN) $(SIZE_MINIMAL_BIN) \
            $(SIZE_FULL_NOGC_BIN) $(SIZE_MINIMAL_NOGC_BIN)
 	FILE='$(FILE_CMD)' READELF='$(READELF)' NM='$(NM)' LDD='$(LDD)' \
@@ -2042,6 +2077,9 @@ size-musl: size-tools-selftest static-pie-tools-selftest \
 		scripts/size-ledger.sh --build '$(SIZE_MINIMAL_BUILD)' \
 		--binary '$(SIZE_MINIMAL_BIN)' \
 		--without-gc '$(SIZE_MINIMAL_NOGC_BIN)' --top 5
+	$(MAKE) --no-print-directory BUILD='$(SIZE_FULL_BUILD)' \
+		MODULES='lsp ai fuss plugins' SHIPPING=1 \
+		SIZE_MEMORY_PROFILE=musl size-memory-run
 else
 size-musl:
 	@echo 'size-musl requires TARGET=x86_64-linux-musl' >&2; exit 2

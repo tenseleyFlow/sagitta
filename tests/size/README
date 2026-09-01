@@ -24,3 +24,17 @@ The four single-module values are the Sprint 57 contract caps. Their `why`
 fields record the pinned GCC build's on-disk delta over minimal, rounded
 upward to the next 10 KiB. A local developer build is not acceptable
 provenance for an update.
+
+`make size-check` also drives a clean PTY open for the shipping full and
+minimal binaries. `scripts/size-memory.sh` reads the `rss checkpoint=paint`
+rows and enforces a peak no greater than 1.6 times the byte size of
+`100m-code`; the minimal build additionally enforces a 6 MiB empty-buffer
+first-paint ceiling. `make size-musl` applies both gates to the static musl
+binary. Missing or malformed checkpoints are harness errors, never passes.
+
+Size gates do not authorize feature removal. Core Yew, its invariants, and
+the required minimal-build feature matrix remain fixed inputs. When their
+measured implementation floor conflicts with a planning number, the work
+stops for an evidence-backed amendment or deferral; the measurement must not
+be made green by gutting behavior, weakening stability, or changing what is
+counted.
