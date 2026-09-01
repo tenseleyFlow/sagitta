@@ -139,6 +139,7 @@ static bool measure_build(const PerfFixture *fixture, u64 *median)
         yew_fuss_build(&tree, &fixture->snap, &opts);
         yew_fuss_apply_expansion(&tree, &manual, open,
                                  YEW_ARRAY_LEN(open));
+        fuss_perf_sink ^= yew_fuss_tree_natural_width(&tree);
         end = now_ns();
         if (start == 0U || end == 0U ||
             tree.nodes.len < FUSS_PERF_ENTRIES) {
@@ -223,7 +224,7 @@ static bool measure_keys(const PerfFixture *fixture, u64 *nav_p99,
 {
     const FussOpts opts = {true, true};
     u64 nav[FUSS_PERF_KEY_SAMPLES];
-    u64 toggles[33];
+    u64 toggles[FUSS_PERF_DRAWER_KEYS];
     FussOpenMemory manual;
     FussTree tree;
     i32 row;
@@ -273,6 +274,7 @@ static bool measure_keys(const PerfFixture *fixture, u64 *nav_p99,
                                             item->path_len, !remembered);
         }
         yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
+        fuss_perf_sink ^= yew_fuss_tree_natural_width(&tree);
         toggles[i] = now_ns() - start;
         fuss_perf_sink ^= tree.items.len;
     }
@@ -325,6 +327,26 @@ static bool measure_unchanged(const PerfFixture *fixture, u64 *elapsed)
     tree.items.data[0].depth = saved_depth;
     fuss_perf_sink ^= tree.snap_gen;
     yew_fuss_tree_drop(&tree);
+    return true;
+}
+
+static bool measure_layout(u64 *elapsed)
+{
+    u64 start = now_ns();
+    u32 i;
+
+    if (start == 0U)
+        return false;
+    for (i = 0U; i <= UINT16_MAX; i++) {
+        u16 content = (u16)i;
+        u16 natural = (u16)(UINT16_MAX - i);
+        FussDrawerLayout layout = yew_fuss_drawer_layout(content, natural);
+
+        if (layout.width > content || layout.tree_width > layout.width)
+            return false;
+        fuss_perf_sink ^= (u64)layout.width << (i & 7U);
+    }
+    *elapsed = now_ns() - start;
     return true;
 }
 
@@ -495,6 +517,7 @@ int main(void)
     u64 drawer_entry = 0U;
     u64 drawer_input_p99 = 0U;
     u64 drawer_open = 0U;
+    u64 layout_elapsed = 0U;
     bool advisory = perf_advisory();
     int status = 0;
 
@@ -520,6 +543,10 @@ int main(void)
         (void)fputs("perf_fuss: unchanged generation rebuilt tree\n", stderr);
         status = 1;
     }
+    if (!measure_layout(&layout_elapsed)) {
+        (void)fputs("perf_fuss: smart layout fixture failed\n", stderr);
+        status = 1;
+    }
     if (!measure_drawer(&drawer_entry, &drawer_input_p99, &drawer_open)) {
         (void)fputs("perf_fuss: end-to-end drawer fixture failed\n", stderr);
         status = 1;
@@ -528,11 +555,13 @@ int main(void)
                  (double)build_median / 1000000.0);
     (void)printf("fuss navigation p99       %.3f ms (limit 5.000 ms)\n",
                  (double)nav_p99 / 1000000.0);
-    (void)printf("fuss toggle+flatten p99    %.3f ms (limit 5.000 ms)\n",
+    (void)printf("fuss toggle+measure p99    %.3f ms (limit 5.000 ms)\n",
                  (double)toggle_p99 / 1000000.0);
     (void)printf("fuss unchanged-gen x5000  %.3f ms (zero rebuilds)\n",
                  (double)unchanged / 1000000.0);
     (void)printf("fuss remembered refresh x100 stable (7 paths)\n");
+    (void)printf("fuss layout 0..65535       %.3f ms (O(1) each)\n",
+                 (double)layout_elapsed / 1000000.0);
     (void)printf("fuss drawer entry 20000   %.3f ms (limit 5.000 ms)%s\n",
                  (double)drawer_entry / 1000000.0,
                  advisory ? " ADVISORY" : "");

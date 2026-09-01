@@ -25,6 +25,7 @@
         "mode.git": { bg: "@magenta", fg: "@bg", mono: "bold" },
         # Compatibility for configurations that still reference the old role.
         "mode.fuss": { bg: "@red", fg: "@bg", mono: "bold" },
+        "git.drawer.edge": { fg: "#ffffff", bold: true, mono: "bold" },
         "git.staged": { fg: "@green", mono: "bold" },
         "git.modified": { fg: "@red", mono: "bold" },
         "git.untracked": { fg: "@grey", mono: "dim" },

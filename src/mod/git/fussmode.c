@@ -92,6 +92,7 @@ struct FussMode {
     u32 open_scratch_cap;
     FussPathRef *open_refs;
     u32 open_refs_cap;
+    u16 natural_cols;
     FussOpts opts;
     FussSel sel;
     FussJump jump;
@@ -164,7 +165,7 @@ static void fuss_commit_view_close(Ed *ed);
 static i32 fuss_row(const FussMode *f);
 static void fuss_select_row(FussMode *f, i32 row);
 static bool fuss_open_files_refresh(Ed *ed);
-static void fuss_apply_effective(FussMode *f);
+static void fuss_apply_effective(Ed *ed);
 
 static void fuss_viewer_close(Ed *ed)
 {
@@ -190,7 +191,9 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     FussMode *f;
     Bytebuf body;
     PanelSpec spec;
+    Rect content;
     Rect drawer;
+    FussDrawerLayout layout;
     u32 area_right;
     u32 drawer_right;
     u16 anchor_x;
@@ -211,7 +214,40 @@ static bool fuss_viewer_open(Ed *ed, Buffer *buffer)
     spec.title = buffer->name == NULL ? "preview" : buffer->name;
     spec.body = body.data;
     spec.len = (u32)body.len;
+    content = yew_fuss_backdrop_rect(ed);
     drawer = yew_fuss_drawer_rect(ed);
+    layout = yew_fuss_drawer_layout(content.w, f->natural_cols);
+    if (layout.fullscreen) {
+        if (content.w < 3U || content.h < 3U) {
+            bytebuf_free(&body);
+            f->viewer = true;
+            f->viewer_win_id = ed->win->id;
+            f->viewer_buffer_id = buffer->id;
+            return true;
+        }
+        spec.x = content.w > 4U ? (u16)(content.x + 2U) : content.x;
+        spec.y = content.h == 0U ? content.y :
+                 (u16)(content.y + content.h / 2U);
+        spec.place = YEW_PANEL_CURSOR;
+        spec.max_w = content.w > 4U ? (u16)(content.w - 4U) : content.w;
+        if (spec.max_w > YEW_PANEL_MAX_W)
+            spec.max_w = YEW_PANEL_MAX_W;
+        spec.max_h = content.h > 4U ? (u16)(content.h - 4U) : content.h;
+        if (spec.max_h > YEW_PANEL_MAX_H)
+            spec.max_h = YEW_PANEL_MAX_H;
+        spec.role = "git.ignored";
+        if (!yew_panel_open(ed, &ed->win->panel, &spec)) {
+            bytebuf_free(&body);
+            return false;
+        }
+        bytebuf_free(&body);
+        f->viewer = true;
+        f->viewer_win_id = ed->win->id;
+        f->viewer_buffer_id = buffer->id;
+        ed->full_damage = true;
+        fuss_damage(ed);
+        return true;
+    }
     area_right = (u32)ed->win->rect.x + ed->win->rect.w;
     drawer_right = (u32)drawer.x + drawer.w;
     anchor_x = ed->win->rect.x;
@@ -484,7 +520,7 @@ void yew_fuss_windows_changed(Ed *ed)
     if (f->active && fuss_open_files_refresh(ed)) {
         i32 row;
 
-        fuss_apply_effective(f);
+        fuss_apply_effective(ed);
         row = fuss_row(f);
         if (row >= 0)
             fuss_select_row(f, row);
@@ -835,12 +871,16 @@ static bool fuss_open_files_refresh(Ed *ed)
     return true;
 }
 
-static void fuss_apply_effective(FussMode *f)
+static void fuss_apply_effective(Ed *ed)
 {
+    FussMode *f;
+    u16 old_natural;
     u32 i;
 
-    if (f == NULL)
+    if (ed == NULL || ed->fuss == NULL)
         return;
+    f = ed->fuss;
+    old_natural = f->natural_cols;
     if (f->open_refs_cap < f->open_files.len) {
         f->open_refs = yew_xreallocarray(f->open_refs, f->open_files.len,
                                           sizeof(*f->open_refs));
@@ -852,6 +892,12 @@ static void fuss_apply_effective(FussMode *f)
     }
     yew_fuss_apply_expansion(&f->tree, &f->manual_open, f->open_refs,
                              f->open_files.len);
+    f->natural_cols = yew_fuss_tree_natural_width(&f->tree);
+    if (f->natural_cols != old_natural) {
+        f->backdrop_dirty = true;
+        ed->layout_dirty = true;
+        ed->full_damage = true;
+    }
 }
 
 static void fuss_build(Ed *ed, const GitSnapshot *snap, bool force)
@@ -866,7 +912,7 @@ static void fuss_build(Ed *ed, const GitSnapshot *snap, bool force)
     if (f->opts.all_files && f->walk == NULL && f->files.paths.len != 0U)
         (void)yew_fuss_merge_files(&f->tree, &f->files, snap, &f->opts);
     (void)fuss_open_files_refresh(ed);
-    fuss_apply_effective(f);
+    fuss_apply_effective(ed);
     if (fuss_row(f) < 0 && f->tree.items.len != 0U)
         fuss_select_row(f, 0);
     f->scroll = 0U;
@@ -952,7 +998,7 @@ void yew_fuss_workspace_changed(Ed *ed)
     f->open_scratch_len = 0U;
     if (f->active) {
         (void)fuss_open_files_refresh(ed);
-        fuss_apply_effective(f);
+        fuss_apply_effective(ed);
         fuss_damage(ed);
     }
 }
@@ -1004,7 +1050,7 @@ CmdStatus yew_fuss_mode_enter(Ed *ed)
                                                   &ed->fuss->files, snap,
                                                   &ed->fuss->opts)) {
             (void)fuss_open_files_refresh(ed);
-            fuss_apply_effective(ed->fuss);
+            fuss_apply_effective(ed);
             if (fuss_row(ed->fuss) < 0 && ed->fuss->tree.items.len != 0U)
                 fuss_select_row(ed->fuss, 0);
             fuss_damage(ed);
@@ -1062,7 +1108,7 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
             yew_fuss_merge_files(&ed->fuss->tree, &ed->fuss->files, snap,
                                   &ed->fuss->opts)) {
             (void)fuss_open_files_refresh(ed);
-            fuss_apply_effective(ed->fuss);
+            fuss_apply_effective(ed);
             if (fuss_row(ed->fuss) < 0 &&
                 ed->fuss->tree.items.len != 0U)
                 fuss_select_row(ed->fuss, 0);
@@ -1202,6 +1248,34 @@ static ThemeEnt fuss_role_style(const Ed *ed, const char *role,
     return fallback;
 }
 
+static void fuss_edge(Ed *ed, Rect drawer, FussDrawerLayout layout,
+                      u16 rows)
+{
+    ThemeEnt fallback = fuss_base_style(ed);
+    ThemeEnt style;
+    const char *glyph;
+    size_t glyph_len;
+    u16 row;
+
+    if (layout.fullscreen || layout.edge_col == UINT16_MAX || rows == 0U ||
+        layout.edge_col >= drawer.w)
+        return;
+    fallback.fg = (YewColor){YEW_COLOR_RGB, 255U, 255U, 255U};
+    fallback.attrs = (u16)(fallback.attrs | YEW_ATTR_BOLD);
+    style = fuss_role_style(ed, "git.drawer.edge", fallback);
+    glyph = ed->fuss->ascii_glyphs ? "|" : "│";
+    glyph_len = ed->fuss->ascii_glyphs ? 1U : sizeof("│") - 1U;
+    if (rows > drawer.h)
+        rows = drawer.h;
+    for (row = 0U; row < rows; row++) {
+        u16 col = (u16)(drawer.x + layout.edge_col);
+
+        fuss_put_lit(&ed->grid, (u16)(drawer.y + row), &col,
+                     (u16)(col + 1U), glyph, glyph_len,
+                     style.fg, style.bg, style.attrs);
+    }
+}
+
 static void fuss_header(Ed *ed, u16 row, u16 left, u16 right)
 {
     const GitSnapshot *snap;
@@ -1323,25 +1397,6 @@ static void fuss_marker(Ed *ed, u16 row, u16 *col, u16 right,
                  style.bg, attrs);
 }
 
-static const FussNode *fuss_prefix_ancestor(const FussMode *f,
-                                            const FussItem *item,
-                                            u16 depth)
-{
-    u32 node;
-    u16 climb;
-
-    if (f == NULL || item == NULL || depth >= item->depth)
-        return NULL;
-    node = item->node;
-    climb = (u16)(item->depth - depth);
-    while (climb-- != 0U) {
-        if (node >= f->tree.nodes.len)
-            return NULL;
-        node = f->tree.nodes.data[node].parent;
-    }
-    return node < f->tree.nodes.len ? &f->tree.nodes.data[node] : NULL;
-}
-
 static size_t fuss_tail_fit(const char *bytes, size_t len, u16 cells)
 {
     size_t at = 0U;
@@ -1372,27 +1427,23 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
     Cell blank = ed->grid.blank;
     u16 selected_attrs = selected ? YEW_ATTR_REVERSE : 0U;
     u16 col = left;
-    u16 depth;
-    const char *branch;
-    size_t branch_len;
     FussMarkerKind markers[4];
     u8 marker_count;
     u8 marker_i;
     u16 content_right = right;
-    u16 prefix_blocks;
-    u16 prefix_skip = 0U;
+    u32 indent_cells = (u32)item->depth * YEW_FUSS_INDENT_CELLS;
+    u32 indent_skip = 0U;
     size_t name_at = 0U;
 
     if (node == NULL)
         return;
-    prefix_blocks = (u16)(item->depth + 1U);
     marker_count = yew_fuss_marker_kinds(node, markers);
     if (selected) {
         u16 marker_cells = (u16)(marker_count * 2U);
-        u16 dir_cells = node->is_file ? 0U : 2U;
         u16 row_cells = right > left ? (u16)(right - left) : 0U;
         u16 name_cells;
         u16 name_budget;
+        u16 prefix_budget;
         int measured = yew_str_width((const u8 *)node->name,
                                      node->name_len, YEW_VP_TABWIDTH);
 
@@ -1400,58 +1451,38 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
             content_right = (u16)(right - marker_cells);
         else
             content_right = left;
-        name_budget = content_right > left + dir_cells ?
-                      (u16)(content_right - left - dir_cells) : 0U;
+        name_budget = content_right > left + 3U ?
+                      (u16)(content_right - left - 3U) : 0U;
         name_cells = measured <= 0 ? 0U :
                      measured > UINT16_MAX ? UINT16_MAX : (u16)measured;
         if (name_cells > name_budget) {
             name_at = fuss_tail_fit(node->name, node->name_len, name_budget);
-            prefix_skip = prefix_blocks;
+            indent_skip = indent_cells;
         } else {
-            u16 prefix_budget = (u16)(name_budget - name_cells);
-            u16 keep = (u16)(prefix_budget / 4U);
+            u32 keep;
 
-            if (keep < prefix_blocks)
-                prefix_skip = (u16)(prefix_blocks - keep);
+            prefix_budget = (u16)(name_budget - name_cells);
+            keep = prefix_budget < indent_cells ? prefix_budget : indent_cells;
+            indent_skip = indent_cells - keep;
         }
     }
     blank.fg = normal.fg;
     blank.bg = normal.bg;
     blank.attrs = (u16)(normal.attrs | selected_attrs);
     yew_grid_fill(&ed->grid, row, left, right, blank);
-    for (depth = 0U; depth < item->depth && col < content_right; depth++) {
-        const FussNode *ancestor = fuss_prefix_ancestor(f, item, depth);
-        bool open = ancestor != NULL && ancestor->next_sibling != 0U;
-        const char *prefix = open ? (f->ascii_glyphs ? "|   " : "│   ") :
-                                    "    ";
-        size_t prefix_len = open && !f->ascii_glyphs ?
-                            sizeof("│   ") - 1U : 4U;
-
-        if (depth >= prefix_skip)
-            fuss_put_lit(&ed->grid, row, &col, content_right, prefix,
-                         prefix_len, normal.fg, normal.bg,
-                         (u16)(normal.attrs | selected_attrs));
-    }
-    if (f->ascii_glyphs) {
-        branch = node->next_sibling == 0U ? "`-- " : "|-- ";
-        branch_len = 4U;
-    } else {
-        branch = node->next_sibling == 0U ? "└── " : "├── ";
-        branch_len = sizeof("└── ") - 1U;
-    }
-    if (prefix_skip <= item->depth)
-        fuss_put_lit(&ed->grid, row, &col, content_right, branch, branch_len,
+    fuss_put_lit(&ed->grid, row, &col, content_right, " ", 1U,
+                 normal.fg, normal.bg,
+                 (u16)(normal.attrs | selected_attrs));
+    while (indent_skip < indent_cells && col < content_right) {
+        fuss_put_lit(&ed->grid, row, &col, content_right, " ", 1U,
                      normal.fg, normal.bg,
                      (u16)(normal.attrs | selected_attrs));
-    if (!node->is_file) {
-        const char *dir = f->ascii_glyphs ? (node->expanded ? "v " : "> ") :
-                          (node->expanded ? "▼ " : "▶ ");
-        size_t dir_len = f->ascii_glyphs ? 2U : sizeof("▼ ") - 1U;
-
-        fuss_put_lit(&ed->grid, row, &col, content_right, dir, dir_len,
-                     normal.fg, normal.bg,
-                     (u16)(normal.attrs | selected_attrs));
+        indent_skip++;
     }
+    fuss_put_lit(&ed->grid, row, &col, content_right,
+                 node->is_file ? "  " : (node->expanded ? "- " : "+ "),
+                 2U, normal.fg, normal.bg,
+                 (u16)(normal.attrs | selected_attrs));
     fuss_put_lit(&ed->grid, row, &col, content_right, node->name + name_at,
                  node->name_len - name_at,
                  node->ignored ? ignored.fg : normal.fg, normal.bg,
@@ -1498,18 +1529,65 @@ static void fuss_tree_row(Ed *ed, u16 row, u16 left, u16 right,
     }
 }
 
-u16 yew_fuss_drawer_width(u16 content_cols)
+u16 yew_fuss_tree_natural_width(const FussTree *tree)
 {
-    u16 width;
+    u64 widest = 0U;
+    size_t i;
 
-    if (content_cols < 48U)
-        return (u16)(content_cols / 2U);
-    width = (u16)(content_cols / 6U);
-    if (width < 20U)
-        width = 20U;
-    if (width > 48U)
-        width = 48U;
-    return width;
+    if (tree == NULL || tree->items.len == 0U)
+        return 0U;
+    for (i = 0U; i < tree->items.len; i++) {
+        const FussItem *item = &tree->items.data[i];
+        const FussNode *node;
+        FussMarkerKind markers[4];
+        u8 marker_count;
+        int measured;
+        u64 cells;
+
+        if (item->node >= tree->nodes.len)
+            continue;
+        node = &tree->nodes.data[item->node];
+        measured = yew_str_width((const u8 *)node->name, node->name_len,
+                                 YEW_VP_TABWIDTH);
+        if (measured < 0)
+            measured = 0;
+        marker_count = yew_fuss_marker_kinds(node, markers);
+        cells = 1U + (u64)item->depth * YEW_FUSS_INDENT_CELLS + 2U +
+                (u64)measured + (u64)marker_count * 2U + 1U +
+                YEW_FUSS_DRAWER_EDGE_CELLS;
+        if (cells > widest)
+            widest = cells;
+    }
+    return widest > UINT16_MAX ? UINT16_MAX : (u16)widest;
+}
+
+FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
+                                        u16 natural_cols)
+{
+    FussDrawerLayout layout = {0U, 0U, UINT16_MAX, true};
+    u32 base = ((u32)content_cols + 3U) / 4U;
+    u32 want;
+    u32 overlay_cap;
+
+    if (base < YEW_FUSS_DRAWER_MIN_CELLS)
+        base = YEW_FUSS_DRAWER_MIN_CELLS;
+    if (base > YEW_FUSS_DRAWER_BASE_MAX_CELLS)
+        base = YEW_FUSS_DRAWER_BASE_MAX_CELLS;
+    if (base > content_cols)
+        base = content_cols;
+    want = natural_cols > base ? natural_cols : base;
+    overlay_cap = content_cols > YEW_FUSS_EDITOR_RETAIN_CELLS ?
+                  (u32)content_cols - YEW_FUSS_EDITOR_RETAIN_CELLS : 0U;
+    if (content_cols < YEW_FUSS_DRAWER_MIN_CELLS || want > overlay_cap) {
+        layout.width = content_cols;
+        layout.tree_width = content_cols;
+        return layout;
+    }
+    layout.width = (u16)want;
+    layout.tree_width = layout.width - YEW_FUSS_DRAWER_EDGE_CELLS;
+    layout.edge_col = layout.tree_width;
+    layout.fullscreen = false;
+    return layout;
 }
 
 Rect yew_fuss_backdrop_rect(const Ed *ed)
@@ -1528,8 +1606,10 @@ Rect yew_fuss_backdrop_rect(const Ed *ed)
 Rect yew_fuss_drawer_rect(const Ed *ed)
 {
     Rect rect = yew_fuss_backdrop_rect(ed);
+    u16 natural = ed != NULL && ed->fuss != NULL ?
+                  ed->fuss->natural_cols : 0U;
 
-    rect.w = yew_fuss_drawer_width(rect.w);
+    rect.w = yew_fuss_drawer_layout(rect.w, natural).width;
     return rect;
 }
 
@@ -1541,10 +1621,13 @@ bool yew_fuss_draw_dirty(const Ed *ed)
 void yew_fuss_draw(Ed *ed)
 {
     FussMode *f;
+    FussDrawerLayout layout;
     Rect content;
     Rect tree;
     u16 first;
     u16 visible;
+    u16 drawn_rows = 1U;
+    u16 tree_right;
     i32 selected;
     size_t i;
     Cell blank;
@@ -1570,15 +1653,18 @@ void yew_fuss_draw(Ed *ed)
         return;
     }
     tree = yew_fuss_drawer_rect(ed);
+    layout = yew_fuss_drawer_layout(content.w, f->natural_cols);
+    tree_right = (u16)(tree.x + layout.tree_width);
     blank = ed->grid.blank;
     blank.fg = fuss_base_style(ed).fg;
     blank.bg = fuss_base_style(ed).bg;
     for (i = tree.y; i < (size_t)tree.y + tree.h; i++)
         yew_grid_fill(&ed->grid, (u16)i, tree.x,
                       (u16)(tree.x + tree.w), blank);
-    fuss_header(ed, tree.y, tree.x, (u16)(tree.x + tree.w));
+    fuss_header(ed, tree.y, tree.x, tree_right);
     visible = tree.h > 1U ? (u16)(tree.h - 1U) : 0U;
     if (f->opening) {
+        fuss_edge(ed, tree, layout, drawn_rows);
         f->draw_dirty = false;
         return;
     }
@@ -1595,15 +1681,17 @@ void yew_fuss_draw(Ed *ed)
         const FussItem *item = fuss_item(f, (i32)((size_t)first + i));
         u32 path_id;
 
-        fuss_tree_row(ed, row, tree.x, (u16)(tree.x + tree.w), item,
+        fuss_tree_row(ed, row, tree.x, tree_right, item,
                       (i32)((size_t)first + i) == selected);
+        drawn_rows++;
         path_id = item == NULL ? 0U :
                   yew_intern(&ed->interner, item->path, item->path_len);
         if (path_id <= (u32)INT32_MAX)
             yew_region_add(YEW_REGION_FUSS_ROW,
-                           (Rect){tree.x, row, tree.w, 1U},
+                           (Rect){tree.x, row, layout.tree_width, 1U},
                            (i32)path_id);
     }
+    fuss_edge(ed, tree, layout, drawn_rows);
     f->draw_dirty = false;
 }
 
@@ -3687,7 +3775,7 @@ static CmdStatus fuss_nav(CmdCtx *cx, i32 kind)
                 (void)yew_fuss_open_memory_set(&f->manual_open,
                                                 item->path, item->path_len,
                                                 true);
-                fuss_apply_effective(f);
+                fuss_apply_effective(cx->ed);
                 row = yew_fuss_row_of(&f->tree, &f->sel);
             } else {
                 row = yew_fuss_nav_enter(&f->tree, row);
@@ -3849,7 +3937,7 @@ static void fuss_expand_tick(Ed *ed)
         (void)yew_fuss_open_memory_set(&f->manual_open, f->expand_path,
                                         (u32)fuss_cstr_len(f->expand_path),
                                         true);
-        fuss_apply_effective(f);
+        fuss_apply_effective(ed);
         fuss_select_row(f, yew_fuss_row_of(&f->tree, &f->sel));
         fuss_damage(ed);
     }
@@ -3945,7 +4033,7 @@ CmdStatus yew_fuss_cmd_nav_toggle(CmdCtx *cx)
     (void)yew_fuss_open_memory_set(&f->manual_open,
                                     item->path, item->path_len,
                                     !node->expanded);
-    fuss_apply_effective(f);
+    fuss_apply_effective(cx->ed);
     fuss_select_row(f, yew_fuss_row_of(&f->tree, &f->sel));
     fuss_damage(cx->ed);
     return YEW_CMD_OK;

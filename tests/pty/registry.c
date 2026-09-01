@@ -7518,13 +7518,16 @@ path_fail:
 
 static void s52_wait_screen(PtyCtx *c, const char *text)
 {
+    char failure[192];
     u32 i;
 
     for (i = 0U; i < 20U && !c->failed &&
                  !s52_screen_contains(&c->vt, text); i++)
         ptc_settle(c, 25);
-    ptc_check(c, s52_screen_contains(&c->vt, text),
-              "Sprint 52 expected screen state did not appear");
+    (void)snprintf(failure, sizeof(failure),
+                   "Sprint 52 expected screen state '%s' did not appear",
+                   text);
+    ptc_check(c, s52_screen_contains(&c->vt, text), failure);
 }
 
 static void s52_wait_screen_gone(PtyCtx *c, const char *text,
@@ -7670,8 +7673,7 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
      * before or after its expiry made every tree/navigation case depend on
      * how quickly the instrumented child reached this point.  The complete
      * footer is the stable FUSS state shared by all actions below. */
-    s52_wait_screen_gone(
-        c, "git discovery unavailable; using workspace walk", 240U);
+    s52_wait_screen_gone(c, "git discovery unavailable", 240U);
     s52_wait_screen(c, "Legend:");
     return !c->failed;
 }
@@ -7728,6 +7730,37 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_keys(c, "right");
     else if (strstr(name, "toggle") != NULL)
         ptc_keys(c, "space");
+    else if (strstr(name, "memory_reentry") != NULL) {
+        ptc_keys(c, "space");
+        s52_wait_screen(c, "漢字.txt");
+        ptc_keys(c, "q");
+        ptc_settle(c, 0);
+        ptc_keys(c, "f");
+        s52_wait_screen(c, "漢字.txt");
+        ptc_keys(c, "/");
+        ptc_bytes(c, "README");
+        s52_wait_screen(c, "jump: README");
+        ptc_keys(c, "enter enter");
+        ptc_settle(c, 0);
+        ptc_check(c, s52_screen_contains(&c->vt, "clean") &&
+                         !s52_screen_contains(&c->vt, "Legend:"),
+                  "opening README did not leave F mode");
+        ptc_keys(c, ":");
+        ptc_bytes(c, "ed.tab.prev");
+        ptc_keys(c, "enter");
+        ptc_settle(c, 0);
+        ptc_keys(c, ":");
+        ptc_bytes(c, "ed.tab.close");
+        ptc_keys(c, "enter");
+        ptc_settle(c, 0);
+        ptc_check(c, s52_screen_contains(&c->vt, "clean"),
+                  "closing the original tab did not restore README");
+        ptc_keys(c, "f");
+        s52_wait_screen(c, "漢字.txt");
+        ptc_check(c, !s52_screen_contains(&c->vt, "both.c"),
+                  "closing the final src descendant left src expanded");
+        semantic_snapshot = true;
+    }
     else if (strstr(name, "jump_hint") != NULL) {
         ptc_keys(c, "/");
     } else if (strstr(name, "jump_clears") != NULL) {
@@ -8747,6 +8780,10 @@ const PtyCase yew_pty_cases[] = {
     C(git_editor_status_nonrepo, modern, 24U, 160U, case_s53_statusline),
     C(fuss_tree_unicode_80, modern, 24U, 80U, case_s52_fuss),
     C(fuss_tree_unicode_120, modern, 40U, 120U, case_s52_fuss),
+    C(fuss_tree_compact_40, modern, 24U, 40U, case_s52_fuss),
+    C(fuss_tree_compact_64, modern, 24U, 64U, case_s52_fuss),
+    C(fuss_tree_compact_240, modern, 60U, 240U, case_s52_fuss),
+    C(fuss_memory_reentry, modern, 24U, 80U, case_s52_fuss),
     C(fuss_tree_ascii, modern, 24U, 80U, case_s52_fuss),
     C(fuss_nav_next, modern, 24U, 80U, case_s52_fuss),
     C(fuss_nav_prev, modern, 24U, 80U, case_s52_fuss),

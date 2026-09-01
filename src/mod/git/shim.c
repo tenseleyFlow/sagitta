@@ -311,10 +311,18 @@ u16 yew_fuss_footer_rows(const Ed *ed)
     return 0U;
 }
 
-u16 yew_fuss_drawer_width(u16 content_cols)
+u16 yew_fuss_tree_natural_width(const FussTree *tree)
+{
+    (void)tree;
+    return 0U;
+}
+
+FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
+                                        u16 natural_cols)
 {
     (void)content_cols;
-    return 0U;
+    (void)natural_cols;
+    return (FussDrawerLayout){0U, 0U, UINT16_MAX, false};
 }
 
 Rect yew_fuss_drawer_rect(const Ed *ed)

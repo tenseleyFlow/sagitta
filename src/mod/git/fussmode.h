@@ -11,12 +11,28 @@
 typedef struct Ed Ed;
 typedef struct Buffer Buffer;
 typedef struct FussMode FussMode;
+typedef struct FussTree FussTree;
 
 typedef struct FussJump {
     TypeJump type;
     bool armed;
     i64 deadline_ms;
 } FussJump;
+
+enum {
+    YEW_FUSS_INDENT_CELLS = 2,
+    YEW_FUSS_DRAWER_MIN_CELLS = 24,
+    YEW_FUSS_DRAWER_BASE_MAX_CELLS = 64,
+    YEW_FUSS_EDITOR_RETAIN_CELLS = 40,
+    YEW_FUSS_DRAWER_EDGE_CELLS = 1
+};
+
+typedef struct FussDrawerLayout {
+    u16 width;
+    u16 tree_width;
+    u16 edge_col;
+    bool fullscreen;
+} FussDrawerLayout;
 
 void yew_fuss_jump_init(FussJump *jump);
 void yew_fuss_jump_arm(FussJump *jump, i64 now_ms);
@@ -38,7 +54,9 @@ bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms);
 void yew_fuss_tick(Ed *ed, i64 now_ms);
 i64 yew_fuss_deadline(const Ed *ed, i64 now_ms);
 u16 yew_fuss_footer_rows(const Ed *ed);
-u16 yew_fuss_drawer_width(u16 content_cols);
+u16 yew_fuss_tree_natural_width(const FussTree *tree);
+FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
+                                        u16 natural_cols);
 Rect yew_fuss_drawer_rect(const Ed *ed);
 Rect yew_fuss_backdrop_rect(const Ed *ed);
 bool yew_fuss_draw_dirty(const Ed *ed);

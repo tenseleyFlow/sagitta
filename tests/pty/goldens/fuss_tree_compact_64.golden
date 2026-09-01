@@ -1,56 +1,56 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=0,0 vis=0
+size 64x24 alt=1 cursor=0,0 vis=0
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-fussrepo · trunk       |eturn 0; }                                              
- + docs x              |                                                        
- - src ^ x             |                                                        
-     both.c ^ x        |                                                        
-     main.c            |                                                        
-     modified.c x      |                                                        
-     staged.c ^        |                                                        
-   README.md           |                                                        
-   untracked.txt x     |                                                        
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-Legend: ^ staged  x modified  x untracked  v incoming  ! conflict               
-<> tree | ^v siblings | a stage | m commit | / jump | q leave                   
+fussrepo · trunk       │eturn 0; }                              
+ + docs ✗              │                                        
+ - src ↑ ✗             │                                        
+     both.c ↑ ✗        │                                        
+     main.c            │                                        
+     modified.c ✗      │                                        
+     staged.c ↑        │                                        
+   README.md           │                                        
+   untracked.txt ✗     │                                        
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflic
+←→ tree · ↑↓ siblings · a stage · m commit · / jump · q leave   
 --- style
-AAAAAAAABBBAAAAABBBBBBBCDDDDDEFGEGEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-HHHHHHHIIHHHHHHHHHHHHHHCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBJJKKBBBBBBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBJJKKBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBKKBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBJJBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBLLBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
-MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
+AAAAAAAABBBAAAAABBBBBBBCDDDDDEFGEGEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+HHHHHHHIIHHHHHHHHHHHHHHCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBJJKKBBBBBBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBJJKKBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBKKBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBJJBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBLLBBBBBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
+MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 --- legend
 A fg=#c8ccd4 bg=#12141a attrs=b---------
 B fg=#c8ccd4 bg=#12141a attrs=----------

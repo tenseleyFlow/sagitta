@@ -108,6 +108,34 @@ static bool tree_valid(const FussTree *t, char *why, size_t why_cap)
     return true;
 }
 
+static bool layout_valid(u16 content, u16 natural, char *why,
+                         size_t why_cap)
+{
+    FussDrawerLayout layout = yew_fuss_drawer_layout(content, natural);
+
+    if (layout.width > content || layout.tree_width > layout.width) {
+        (void)snprintf(why, why_cap, "drawer escaped %u-cell content",
+                       content);
+        return false;
+    }
+    if (layout.fullscreen) {
+        if (layout.width != content || layout.tree_width != content ||
+            layout.edge_col != UINT16_MAX) {
+            (void)snprintf(why, why_cap, "invalid full-screen drawer");
+            return false;
+        }
+    } else if (content < YEW_FUSS_DRAWER_MIN_CELLS ||
+               layout.width + YEW_FUSS_EDITOR_RETAIN_CELLS > content ||
+               layout.width == 0U ||
+               layout.tree_width + YEW_FUSS_DRAWER_EDGE_CELLS !=
+                   layout.width ||
+               layout.edge_col != layout.tree_width) {
+        (void)snprintf(why, why_cap, "invalid overlay drawer");
+        return false;
+    }
+    return true;
+}
+
 typedef struct LiveSpawn {
     u32 next_id;
     u32 calls;
@@ -326,6 +354,9 @@ static bool check_fuss(const u8 *data, size_t len, char *why,
     yew_fuss_apply_expansion(&tree, &manual, NULL, 0U);
     if (!tree_valid(&tree, why, why_cap))
         goto done;
+    if (!layout_valid(0U, yew_fuss_tree_natural_width(&tree),
+                      why, why_cap))
+        goto done;
     if (tree.items.len != 0U) {
         row = 0;
         yew_fuss_sel_from_row(&sel, &tree, row);
@@ -419,6 +450,21 @@ static bool check_fuss(const u8 *data, size_t len, char *why,
                 goto done;
             }
         }
+    }
+    {
+        u16 content = len == 0U ? 0U : (u16)((u16)data[0] << 8U);
+        u16 random_natural = 0U;
+        u16 measured = yew_fuss_tree_natural_width(&tree);
+
+        if (len > 1U)
+            content = (u16)(content | data[1]);
+        if (len > 2U)
+            random_natural = (u16)((u16)data[2] << 8U);
+        if (len > 3U)
+            random_natural = (u16)(random_natural | data[3]);
+        if (!layout_valid(content, measured, why, why_cap) ||
+            !layout_valid((u16)~content, random_natural, why, why_cap))
+            goto done;
     }
     ok = true;
 done:

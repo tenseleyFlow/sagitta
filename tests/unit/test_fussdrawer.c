@@ -124,13 +124,127 @@ static bool fussdrawer_row_contains(const Grid *grid, u16 row,
     return strstr(text, needle) != NULL;
 }
 
-void test_fussdrawer_width_follows_the_locked_clamp_table(void)
+static bool fussdrawer_cell_is(const Grid *grid, u16 row, u16 col,
+                               const char *want, size_t want_len)
 {
-    YEW_ASSERT_EQ_U64(yew_fuss_drawer_width(40U), 20U);
-    YEW_ASSERT_EQ_U64(yew_fuss_drawer_width(80U), 20U);
-    YEW_ASSERT_EQ_U64(yew_fuss_drawer_width(120U), 20U);
-    YEW_ASSERT_EQ_U64(yew_fuss_drawer_width(240U), 40U);
-    YEW_ASSERT_EQ_U64(yew_fuss_drawer_width(600U), 48U);
+    const Cell *cell;
+    const char *bytes;
+    size_t len;
+
+    if (grid == NULL || row >= grid->rows || col >= grid->cols)
+        return false;
+    cell = &grid->back[(size_t)row * grid->cols + col];
+    if ((cell->flags & CELL_INTERNED) != 0U) {
+        bytes = yew_intern_str(grid->gi, cell->id);
+        len = yew_intern_len(grid->gi, cell->id);
+    } else {
+        bytes = (const char *)cell->utf8;
+        len = strnlen(bytes, sizeof(cell->utf8));
+    }
+    return bytes != NULL && len == want_len &&
+           memcmp(bytes, want, want_len) == 0;
+}
+
+void test_fussdrawer_layout_follows_the_locked_table(void)
+{
+    static const struct {
+        u16 content;
+        u16 natural;
+        u16 width;
+        u16 tree_width;
+        u16 edge_col;
+        bool fullscreen;
+    } cases[] = {
+        {20U, 12U, 20U, 20U, UINT16_MAX, true},
+        {40U, 18U, 40U, 40U, UINT16_MAX, true},
+        {64U, 18U, 24U, 23U, 23U, false},
+        {80U, 34U, 34U, 33U, 33U, false},
+        {80U, 41U, 80U, 80U, UINT16_MAX, true},
+        {120U, 20U, 30U, 29U, 29U, false},
+        {120U, 70U, 70U, 69U, 69U, false},
+        {120U, 81U, 120U, 120U, UINT16_MAX, true},
+        {240U, 30U, 60U, 59U, 59U, false},
+        {240U, 190U, 190U, 189U, 189U, false},
+        {240U, 201U, 240U, 240U, UINT16_MAX, true}
+    };
+    u32 i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        FussDrawerLayout layout = yew_fuss_drawer_layout(
+            cases[i].content, cases[i].natural);
+
+        YEW_ASSERT_EQ_U64(layout.width, cases[i].width);
+        YEW_ASSERT_EQ_U64(layout.tree_width, cases[i].tree_width);
+        YEW_ASSERT_EQ_U64(layout.edge_col, cases[i].edge_col);
+        YEW_ASSERT_EQ_U64(layout.fullscreen, cases[i].fullscreen);
+    }
+}
+
+void test_fussdrawer_natural_width_uses_only_visible_rows(void)
+{
+    GitEntry entry = {
+        .path = "src/mod/file.c", .path_len = 14U, .unstaged = true
+    };
+    GitSnapshot snap = {0};
+    FussOpts opts = {true, false};
+    FussOpenMemory open;
+    FussTree tree;
+
+    snap.entries.data = &entry;
+    snap.entries.len = 1U;
+    snap.gen = 1U;
+    yew_fuss_tree_init(&tree);
+    yew_fuss_open_memory_init(&open);
+    yew_fuss_build(&tree, &snap, &opts);
+    YEW_ASSERT_EQ_U64(yew_fuss_tree_natural_width(&tree), 10U);
+    YEW_ASSERT(yew_fuss_open_memory_set(&open, "src", 3U, true));
+    yew_fuss_apply_expansion(&tree, &open, NULL, 0U);
+    YEW_ASSERT_EQ_U64(yew_fuss_tree_natural_width(&tree), 12U);
+    YEW_ASSERT(yew_fuss_open_memory_set(&open, "src/mod", 7U, true));
+    yew_fuss_apply_expansion(&tree, &open, NULL, 0U);
+    YEW_ASSERT_EQ_U64(yew_fuss_tree_natural_width(&tree), 17U);
+    YEW_ASSERT(yew_fuss_open_memory_set(&open, "src/mod", 7U, false));
+    yew_fuss_apply_expansion(&tree, &open, NULL, 0U);
+    YEW_ASSERT_EQ_U64(yew_fuss_tree_natural_width(&tree), 12U);
+    tree.items.data[0].depth = UINT16_MAX;
+    YEW_ASSERT_EQ_U64(yew_fuss_tree_natural_width(&tree), UINT16_MAX);
+    yew_fuss_open_memory_drop(&open);
+    yew_fuss_tree_drop(&tree);
+}
+
+void test_fussdrawer_compact_row_and_edge_own_distinct_cells(void)
+{
+    FussDrawerFix fix;
+    FussDrawerLayout layout;
+    Region row;
+    Region edge;
+    const Cell *edge_cell;
+    Ed ed;
+
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    fussdrawer_grid(&ed);
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    layout = yew_fuss_drawer_layout(80U, 14U);
+    YEW_ASSERT(!layout.fullscreen);
+    YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 2U, "   plain.txt"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "├"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "└"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "▶"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "▼"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "|--"));
+    YEW_ASSERT(!fussdrawer_row_contains(&ed.grid, 2U, "`--"));
+    YEW_ASSERT(fussdrawer_cell_is(&ed.grid, 2U, layout.edge_col,
+                                  "│", sizeof("│") - 1U));
+    edge_cell = &ed.grid.back[(size_t)2U * ed.grid.cols + layout.edge_col];
+    YEW_ASSERT((edge_cell->attrs & YEW_ATTR_BOLD) != 0U);
+    row = yew_region_hit((u16)(layout.edge_col - 1U), 2U);
+    edge = yew_region_hit(layout.edge_col, 2U);
+    YEW_ASSERT_EQ_I64(row.kind, YEW_REGION_FUSS_ROW);
+    YEW_ASSERT_EQ_I64(edge.kind, YEW_REGION_NONE);
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
 }
 
 void test_fussdrawer_rect_uses_content_between_tabs_and_footer(void)
@@ -151,7 +265,7 @@ void test_fussdrawer_rect_uses_content_between_tabs_and_footer(void)
     YEW_ASSERT_EQ_U64(backdrop.h, 26U);
     YEW_ASSERT_EQ_U64(drawer.x, 0U);
     YEW_ASSERT_EQ_U64(drawer.y, 2U);
-    YEW_ASSERT_EQ_U64(drawer.w, 20U);
+    YEW_ASSERT_EQ_U64(drawer.w, 30U);
     YEW_ASSERT_EQ_U64(drawer.h, 26U);
 }
 
