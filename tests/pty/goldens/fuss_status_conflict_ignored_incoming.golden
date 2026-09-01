@@ -2,62 +2,66 @@
 size 100x24 alt=1 cursor=0,0 vis=0
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-fuss-statu · trunk ↑1 ↓1│                                                                           
-   .gitignore           │                                                                           
-   conflict.c !         │                                                                           
-   ignored.log          │                                                                           
-   incoming.c ↓         │                                                                           
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-                                                                                                    
-hidden files shown                                                                                  
-←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave                                         
+fuss-statu · trunk ↑1 ↓1│▎   1 <<<<<<< HEAD                                                         
+   .gitignore           │    1 local                                                                
+   conflict.c !         │▎   2 =======                                                              
+   ignored.log          │▎   3 side                                                                 
+   incoming.c ↓         │▎   4 >>>>>>> collision                                                    
+                        │    5                                                                      
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │hidden files shown                                                         
+                        │←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave                
 --- style
-AAAAAAAAAABBBAAAAABBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-EEEEEEEEEEEEEEEEEEEEEEEECDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBFFBBBBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBGGGGGGGGGGGBBBBBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBHHBBBBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
-IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+AAAAAAAAAABBBAAAAABBBBBBCDEEEFEGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+IIIIIIIIIIIIIIIIIIIIIIIICEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBJJBBBBBBBBBCDEEEEEGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBKKKKKKKKKKKBBBBBBBBBBCDEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBLLBBBBBBBBBCDEEEEEGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+BBBBBBBBBBBBBBBBBBBBBBBBCMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
+BBBBBBBBBBBBBBBBBBBBBBBBCMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 --- legend
-A fg=#c8ccd4 bg=#12141a attrs=b---------
-B fg=#c8ccd4 bg=#12141a attrs=----------
-C fg=#ffffff bg=#12141a attrs=b---------
-D fg=#c8ccd4 bg=#12141a attrs=-d--------
-E fg=#c8ccd4 bg=#12141a attrs=------r---
-F fg=#e06c75 bg=#12141a attrs=b---------
-G fg=#5c6370 bg=#12141a attrs=----------
-H fg=#61afef bg=#12141a attrs=----------
-I fg=#faebf8 bg=#b13d9b attrs=----------
+A fg=#c8ccd4 bg=#1b202a attrs=b---------
+B fg=#c8ccd4 bg=#1b202a attrs=----------
+C fg=#ffffff bg=#1b202a attrs=b---------
+D fg=#ff79c6 bg=#12141a attrs=-d--------
+E fg=#4b5263 bg=#12141a attrs=-d--------
+F fg=#c8ccd4 bg=#12141a attrs=bd--------
+G fg=#56b6c2 bg=#12141a attrs=-d--------
+H fg=#c8ccd4 bg=#12141a attrs=-d--------
+I fg=#c8ccd4 bg=#1b202a attrs=------r---
+J fg=#e06c75 bg=#1b202a attrs=b---------
+K fg=#5c6370 bg=#1b202a attrs=----------
+L fg=#61afef bg=#1b202a attrs=----------
+M fg=#faebf8 bg=#b13d9b attrs=----------

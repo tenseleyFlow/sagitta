@@ -2,64 +2,69 @@
 size 80x24 alt=1 cursor=0,0 vis=0
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-fussrepo · loading     │eturn 0; }                                              
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-git discovery unavailable; using workspace walk                                 
-←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave                     
+fussrepo · loading     │    1 int main(void) { return 0; }                      
+                       │    1                                                   
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │git discovery unavailable; using workspace walk         
+                       │←→ tree · ↑↓ siblings · type jump · C-g actions · Esc le
 --- style
-AAAAAAAABBBBBBBBBBCCCCCDEEEEEBFGBGBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCCCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
-HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+AAAAAAAABBBBBBBBBBCCCCCDEEEEFEGGGHIIIIJGGGGJHJHKKKKKKHLJHJHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDEEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+CCCCCCCCCCCCCCCCCCCCCCCDMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
+CCCCCCCCCCCCCCCCCCCCCCCDMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 --- legend
-A fg=#c8ccd4 bg=#12141a attrs=b---------
-B fg=#c8ccd4 bg=#12141a attrs=-d--------
-C fg=#c8ccd4 bg=#12141a attrs=----------
-D fg=#ffffff bg=#12141a attrs=b---------
-E fg=#c678dd bg=#12141a attrs=bd--------
-F fg=#d19a66 bg=#12141a attrs=-d--------
-G fg=#9aa0aa bg=#12141a attrs=-d--------
-H fg=#faebf8 bg=#b13d9b attrs=----------
+A fg=#c8ccd4 bg=#1b202a attrs=b---------
+B fg=#c8ccd4 bg=#1b202a attrs=-d--------
+C fg=#c8ccd4 bg=#1b202a attrs=----------
+D fg=#ffffff bg=#1b202a attrs=b---------
+E fg=#4b5263 bg=#12141a attrs=-d--------
+F fg=#c8ccd4 bg=#12141a attrs=bd--------
+G fg=#e5c07b bg=#12141a attrs=-di-------
+H fg=#c8ccd4 bg=#12141a attrs=-d--------
+I fg=#61afef bg=#12141a attrs=-d--------
+J fg=#9aa0aa bg=#12141a attrs=-d--------
+K fg=#c678dd bg=#12141a attrs=bd--------
+L fg=#d19a66 bg=#12141a attrs=-d--------
+M fg=#faebf8 bg=#b13d9b attrs=----------
 --- sgr
 \x1b[0;38;2;75;82;99;48;2;18;20;26m
 \x1b[1;38;2;200;204;212m
@@ -126,57 +131,116 @@ H fg=#faebf8 bg=#b13d9b attrs=----------
 \x1b[38;2;200;204;212m
 \x1b[1;38;2;235;244;255;48;2;38;110;186m
 \x1b[22;38;2;218;229;240;48;2;20;48;76m
-\x1b[0;1;38;2;200;204;212;48;2;18;20;26m
+\x1b[0;1;38;2;200;204;212;48;2;27;32;42m
 \x1b[22;2m
 \x1b[22m
 \x1b[1;38;2;255;255;255m
-\x1b[2;38;2;198;120;221m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;2;38;2;75;82;99m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;200;204;212m
+\x1b[38;2;97;175;239m
+\x1b[38;2;154;160;170m
+\x1b[3;38;2;229;192;123m
+\x1b[23;38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;198;120;221m
 \x1b[22;2;38;2;200;204;212m
 \x1b[38;2;209;154;102m
 \x1b[38;2;154;160;170m
 \x1b[38;2;200;204;212m
 \x1b[38;2;154;160;170m
 \x1b[38;2;200;204;212m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
-\x1b[22m
-\x1b[2m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;2;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[22;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
+\x1b[22;38;2;250;235;248;48;2;177;61;155m
+\x1b[38;2;200;204;212;48;2;27;32;42m
+\x1b[1;38;2;255;255;255m
 \x1b[22;38;2;250;235;248;48;2;177;61;155m

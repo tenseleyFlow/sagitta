@@ -2,62 +2,64 @@
 size 80x24 alt=1 cursor=0,0 vis=0
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-fussrepo · trunk       │                                                        
- - docs ✗              │                                                        
+fussrepo · trunk       │    1 clean                                             
+ - docs ✗              │    1                                                   
      漢字.txt ✗        │                                                        
      👨‍👩‍👧‍👦.txt ✗          │                                                        
  + src ↑ ✗             │                                                        
    README.md           │                                                        
    untracked.txt ✗     │                                                        
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict               
-←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave                     
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  !
+                       │←→ tree · ↑↓ siblings · type jump · C-g actions · Esc le
 --- style
-AAAAAAAABBBAAAAABBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBEEBBBBBBBBBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBEEBBBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBEEBBBBBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBFFEEBBBBBBBBBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-GGGGGGGGGGGGGGGGGGGGGGGCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBHHBBBBBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBBBBBBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
-IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+AAAAAAAABBBAAAAABBBBBBBCDDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBGGBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBGGBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBGGBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBHHGGBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+IIIIIIIIIIIIIIIIIIIIIIICDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBJJBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+BBBBBBBBBBBBBBBBBBBBBBBCKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBBBBBBBBCKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 --- legend
-A fg=#c8ccd4 bg=#12141a attrs=b---------
-B fg=#c8ccd4 bg=#12141a attrs=----------
-C fg=#ffffff bg=#12141a attrs=b---------
-D fg=#c8ccd4 bg=#12141a attrs=-d--------
-E fg=#e06c75 bg=#12141a attrs=----------
-F fg=#98c379 bg=#12141a attrs=----------
-G fg=#c8ccd4 bg=#12141a attrs=------r---
-H fg=#5c6370 bg=#12141a attrs=----------
-I fg=#faebf8 bg=#b13d9b attrs=----------
+A fg=#c8ccd4 bg=#1b202a attrs=b---------
+B fg=#c8ccd4 bg=#1b202a attrs=----------
+C fg=#ffffff bg=#1b202a attrs=b---------
+D fg=#4b5263 bg=#12141a attrs=-d--------
+E fg=#c8ccd4 bg=#12141a attrs=bd--------
+F fg=#c8ccd4 bg=#12141a attrs=-d--------
+G fg=#e06c75 bg=#1b202a attrs=----------
+H fg=#98c379 bg=#1b202a attrs=----------
+I fg=#c8ccd4 bg=#1b202a attrs=------r---
+J fg=#5c6370 bg=#1b202a attrs=----------
+K fg=#faebf8 bg=#b13d9b attrs=----------

@@ -52,13 +52,13 @@ BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
 HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
 --- legend
-A fg=#c8ccd4 bg=#12141a attrs=b---------
-B fg=#c8ccd4 bg=#12141a attrs=----------
-C fg=#c8ccd4 bg=#12141a attrs=------r---
-D fg=#e06c75 bg=#12141a attrs=------r---
-E fg=#98c379 bg=#12141a attrs=----------
-F fg=#e06c75 bg=#12141a attrs=----------
-G fg=#5c6370 bg=#12141a attrs=----------
+A fg=#c8ccd4 bg=#1b202a attrs=b---------
+B fg=#c8ccd4 bg=#1b202a attrs=----------
+C fg=#c8ccd4 bg=#1b202a attrs=------r---
+D fg=#e06c75 bg=#1b202a attrs=------r---
+E fg=#98c379 bg=#1b202a attrs=----------
+F fg=#e06c75 bg=#1b202a attrs=----------
+G fg=#5c6370 bg=#1b202a attrs=----------
 H fg=#faebf8 bg=#b13d9b attrs=----------
 --- sgr
 \x1b[0;38;2;75;82;99;48;2;18;20;26m
@@ -126,11 +126,11 @@ H fg=#faebf8 bg=#b13d9b attrs=----------
 \x1b[38;2;200;204;212m
 \x1b[1;38;2;235;244;255;48;2;38;110;186m
 \x1b[22;38;2;218;229;240;48;2;20;48;76m
-\x1b[0;1;38;2;200;204;212;48;2;18;20;26m
+\x1b[0;1;38;2;200;204;212;48;2;27;32;42m
 \x1b[22;2m
 \x1b[22m
 \x1b[38;2;250;235;248;48;2;177;61;155m
-\x1b[0;1;38;2;200;204;212;48;2;18;20;26m
+\x1b[0;1;38;2;200;204;212;48;2;27;32;42m
 \x1b[22m
 \x1b[1m
 \x1b[22m

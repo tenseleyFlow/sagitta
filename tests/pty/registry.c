@@ -7601,8 +7601,14 @@ static void s52_collapse_job_frames(PtyCtx *c, size_t at)
 static bool s52_spawn_editor(PtyCtx *c, const char *file)
 {
     char config[PATH_MAX];
+    const char *second = strstr(c->test->name, "_tabs_") != NULL ?
+                             "README.md" : NULL;
 
-    if (strstr(c->test->name, "_ascii") != NULL) {
+    if (strstr(c->test->name, "_light_") != NULL) {
+        ptc_spawn(c, ptc_yew_bin(c), "--theme", "quiver-light", file,
+                  second, NULL);
+        c->vt.sync_pairs_unstable = true;
+    } else if (strstr(c->test->name, "_ascii") != NULL) {
         static const char ascii_source[] =
             "let lsp = {servers: {}}\n"
             "set({ \"git.ascii_glyphs\": true })\n"
@@ -7620,7 +7626,7 @@ static bool s52_spawn_editor(PtyCtx *c, const char *file)
                   "--no-workspace-config", file, NULL);
         c->vt.sync_pairs_unstable = true;
     } else {
-        ptc_spawn(c, ptc_yew_bin(c), file, NULL);
+        ptc_spawn(c, ptc_yew_bin(c), file, second, NULL);
     }
     return true;
 }
@@ -8779,6 +8785,7 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_tree_compact_40, modern, 24U, 40U, case_s52_fuss),
     C(fuss_tree_compact_64, modern, 24U, 64U, case_s52_fuss),
     C(fuss_tree_compact_240, modern, 60U, 240U, case_s52_fuss),
+    C(fuss_tree_light_tabs_80, modern, 24U, 80U, case_s52_fuss),
     C(fuss_memory_reentry, modern, 24U, 80U, case_s52_fuss),
     C(fuss_tree_ascii, modern, 24U, 80U, case_s52_fuss),
     C(fuss_nav_next, modern, 24U, 80U, case_s52_fuss),

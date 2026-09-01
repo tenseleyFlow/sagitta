@@ -1,0 +1,333 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,0 vis=0
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+fussrepo · trunk       │[1: main.c][2: README.md]
+ + docs ✗              │    1 clean                                             
+ - src ↑ ✗             │    1                                                   
+     both.c ↑ ✗        │                                                        
+     main.c            │                                                        
+     modified.c ✗      │                                                        
+     staged.c ↑        │                                                        
+   README.md           │                                                        
+   untracked.txt ✗     │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │                                                        
+                       │Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  !
+                       │←→ tree · ↑↓ siblings · type jump · C-g actions · Esc le
+--- style
+AAAAAAAABBBAAAAABBBBBBBCDDDDDDDDDDDEEEEEEEEEEEEEE
+FFFFFFFGGFFFFFFFFFFFFFFCHHHHIHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBKKLLBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBKKLLBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBLLBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBKKBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBMMBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCHHHHHHJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+BBBBBBBBBBBBBBBBBBBBBBBCNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
+BBBBBBBBBBBBBBBBBBBBBBBCNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
+--- legend
+A fg=#24292f bg=#eef1f4 attrs=b---------
+B fg=#24292f bg=#eef1f4 attrs=----------
+C fg=#57606a bg=#eef1f4 attrs=b---------
+D fg=default bg=default attrs=----------
+E fg=default bg=default attrs=------r---
+F fg=#24292f bg=#eef1f4 attrs=------r---
+G fg=#cf222e bg=#eef1f4 attrs=------r---
+H fg=#8c959f bg=#ffffff attrs=-d--------
+I fg=#24292f bg=#ffffff attrs=bd--------
+J fg=#24292f bg=#ffffff attrs=-d--------
+K fg=#116329 bg=#eef1f4 attrs=----------
+L fg=#cf222e bg=#eef1f4 attrs=----------
+M fg=#6a737d bg=#eef1f4 attrs=----------
+N fg=#faebf8 bg=#b13d9b attrs=----------
+--- sgr
+\x1b[0m
+\x1b[7m
+\x1b[27m
+\x1b[38;2;140;149;159;48;2;255;255;255m
+\x1b[1;38;2;36;41;47m
+\x1b[22;38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[1;38;2;235;244;255;48;2;38;110;186m
+\x1b[22;38;2;218;229;240;48;2;20;48;76m
+\x1b[0;1;38;2;36;41;47;48;2;238;241;244m
+\x1b[22;2m
+\x1b[22m
+\x1b[1;38;2;87;96;106m
+\x1b[0m
+\x1b[7m
+\x1b[27;38;2;36;41;47;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[1;38;2;36;41;47m
+\x1b[22;2;38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;38;2;250;235;248;48;2;177;61;155m
+\x1b[38;2;36;41;47;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;38;2;250;235;248;48;2;177;61;155m
+\x1b[0;1;38;2;36;41;47;48;2;238;241;244m
+\x1b[22m
+\x1b[1m
+\x1b[22m
+\x1b[1;38;2;87;96;106m
+\x1b[0m
+\x1b[7m
+\x1b[27m
+\x1b[7;38;2;36;41;47;48;2;238;241;244m
+\x1b[38;2;207;34;46m
+\x1b[38;2;36;41;47m
+\x1b[1;27;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[1;38;2;36;41;47m
+\x1b[22;2;38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[38;2;17;99;41m
+\x1b[38;2;207;34;46m
+\x1b[38;2;36;41;47m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[38;2;17;99;41m
+\x1b[38;2;207;34;46m
+\x1b[38;2;36;41;47m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[38;2;207;34;46m
+\x1b[38;2;36;41;47m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[38;2;17;99;41m
+\x1b[38;2;36;41;47m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[38;2;106;115;125m
+\x1b[38;2;36;41;47m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;2;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[22;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;38;2;250;235;248;48;2;177;61;155m
+\x1b[38;2;36;41;47;48;2;238;241;244m
+\x1b[1;38;2;87;96;106m
+\x1b[22;38;2;250;235;248;48;2;177;61;155m
+\x1b[0;38;2;250;235;248;48;2;177;61;155m
