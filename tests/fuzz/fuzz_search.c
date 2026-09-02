@@ -65,11 +65,13 @@ static void buf_read(const Ed *ed, Bytebuf *out)
         return;
     for (;;) {
         const u8 *chunk = NULL;
-        size_t n = 0U;
+        u64 n = 0U;
 
         if (!yew_textiter_chunk(&it, ed->buffer.tb, &chunk, &n) || n == 0U)
             break;
-        bytebuf_append(out, chunk, n);
+        if (n > (u64)SIZE_MAX)
+            YEW_BUG("fuzz_search: piece does not fit in size_t");
+        bytebuf_append(out, chunk, (size_t)n);
         if (!yew_textiter_advance(&it, ed->buffer.tb))
             break;
     }

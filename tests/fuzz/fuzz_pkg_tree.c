@@ -38,12 +38,46 @@ static bool write_fd(int fd, const u8 *data, size_t len)
     return true;
 }
 
-static bool create_file_at(int dirfd, const char *name, const u8 *data,
-                           size_t len, bool executable)
+static int create_open_at(int dirfd, const char *name)
 {
+    static const char hex[] = "0123456789abcdef";
+    char escaped[PKG_FUZZ_NAME_CAP * 3U];
+    size_t len;
+    size_t i;
+    size_t at = 0U;
     int fd = openat(dirfd, name,
                     O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
                     0600);
+
+    if (fd >= 0 || errno != EILSEQ)
+        return fd;
+
+    /* Darwin rejects malformed UTF-8 path components at the syscall
+     * boundary.  Keep feeding the original arbitrary bytes to filesystems
+     * that accept them; on stricter filesystems, give each byte a distinct
+     * ASCII spelling so the same corpus still drives name shape and order. */
+    len = strlen(name);
+    if (len >= PKG_FUZZ_NAME_CAP) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    for (i = 0U; i < len; i++) {
+        u8 b = (u8)name[i];
+
+        escaped[at++] = '~';
+        escaped[at++] = hex[b >> 4U];
+        escaped[at++] = hex[b & 0x0fU];
+    }
+    escaped[at] = '\0';
+    return openat(dirfd, escaped,
+                  O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+                  0600);
+}
+
+static bool create_file_at(int dirfd, const char *name, const u8 *data,
+                           size_t len, bool executable)
+{
+    int fd = create_open_at(dirfd, name);
     bool ok;
 
     if (fd < 0)

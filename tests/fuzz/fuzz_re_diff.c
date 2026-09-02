@@ -259,18 +259,18 @@ static void materialize(const TextBuf *tb, u8 *out, size_t cap,
 
     while (at < end && n < cap) {
         const u8 *chunk = NULL;
-        size_t got = 0U;
+        u64 got = 0U;
 
         if (!yew_textiter_begin(&it, tb, BYTEOFF(at)) ||
             !yew_textiter_chunk(&it, tb, &chunk, &got) || got == 0U)
             break;
-        if ((u64)got > end - at)
-            got = (size_t)(end - at);
-        if (n + got > cap)
-            got = cap - n;
-        (void)memcpy(out + n, chunk, got);
-        n += got;
-        at += (u64)got;
+        if (got > end - at)
+            got = end - at;
+        if (got > (u64)(cap - n))
+            got = (u64)(cap - n);
+        (void)memcpy(out + n, chunk, (size_t)got);
+        n += (size_t)got;
+        at += got;
     }
     *len_out = n;
 }
