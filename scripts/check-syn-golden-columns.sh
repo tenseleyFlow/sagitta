@@ -11,10 +11,22 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-syn-columns.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 tab=$(printf '\t')
 
+hash256()
+{
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$@"
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$@"
+    else
+        echo "syntax golden columns: need sha256sum or shasum" >&2
+        exit 1
+    fi
+}
+
 normalize_hash()
 {
     sed -E 's/(entry|exit|context)=[^ :]+:/\1=/g' "$1" |
-        sha256sum | awk '{ print $1 }'
+        hash256 | awk '{ print $1 }'
 }
 
 awk -F '|' '$1 == "embed" { print $4 }' "$ledger" > "$tmp/embed.paths"
@@ -116,7 +128,7 @@ while IFS= read -r path; do
     printf '%s  %s\n' "$hash" "$path" >> "$tmp/columns.hashes"
 done < "$tmp/all.paths"
 
-actual_columns=$(sha256sum "$tmp/columns.hashes" | awk '{ print $1 }')
+actual_columns=$(hash256 "$tmp/columns.hashes" | awk '{ print $1 }')
 expected_columns=$(awk -F '|' '$1 == "column" { print $3; exit }' "$ledger")
 if [ "$actual_columns" != "$expected_columns" ]; then
     echo "syntax golden columns: normalized pre-existing column aggregate changed" >&2
