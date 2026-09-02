@@ -2195,8 +2195,17 @@ static void case_s38_macro_indicator_burst(PtyCtx *c)
     if (gate_payload != 4000U) {
         burst[gate_payload] = 'K';
         ptc_bytes(c, burst + gate_payload);
-        ptc_settle(c, 0);
     }
+    /* On Darwin the queue-resident frame sample and the remainder are two
+     * writes.  A quiet output interval after the second write is not proof
+     * that a contended editor has drained every key.  Synchronize on the
+     * visible recording count so the shared golden still observes the full
+     * logical burst. */
+    while (!c->failed &&
+           !s57_screen_contains(c, "4001recording @a"))
+        ptc_settle(c, 20);
+    ptc_check(c, s57_screen_contains(c, "4001recording @a"),
+              "recording indicator did not consume the full key burst");
     ptc_snapshot(c, "s38_macro_indicator_burst");
     free(burst);
     force_quit(c);
