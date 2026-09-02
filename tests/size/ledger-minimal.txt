@@ -1,41 +1,41 @@
 # yew size ledger v1  config=minimal  binary=build-size/measure/minimal/yew  stripped=1
 # toolchain: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 / GNU nm (GNU Binutils for Ubuntu) 2.42 / GNU size (GNU Binutils for Ubuntu) 2.42   target=x86_64-linux-gnu
-# on-disk 1463968   object-file-backed 1401370   link-file-residue 62598
-# final-file-backed 1336675   final-bss 460896   object-bss 10946087
-# gc_saved_bytes 77824   without-gc-on-disk 1541792
-# unattributed-symbols 0/3578 (0.0%)   limit 2.0%
-# non-folded-object-sections 9022693
+# on-disk 1468064   object-file-backed 1405004   link-file-residue 63060
+# final-file-backed 1339571   final-bss 460896   object-bss 10946087
+# gc_saved_bytes 77824   without-gc-on-disk 1545888
+# unattributed-symbols 0/3634 (0.0%)   limit 2.0%
+# non-folded-object-sections 9059054
 
 bucket                  .text    .rodata      .data       .bss      total     pct
 core.fl                209993      27339      10672   10492081   10740085  86.9%
-core.ui                188327       9849       1153     390793     590122   4.7%
-core.edit              210960      47754      30248       9765     298727   2.4%
+core.ui                190162       9930       1153     390793     592038   4.7%
+core.edit              211098      47897      30184       9765     298944   2.4%
 core.unicode            25749     154532          0          1     180282   1.4%
 core.syn               111685      12508      12680         99     136972   1.1%
-core.text              102217      12473        416       3313     118419   0.9%
-core.ws                 70224       3785         80      16401      90490   0.7%
+core.text              102410      12473        416       3313     118612   0.9%
+core.ws                 70724       3785         80      16401      90990   0.7%
 core.search             44526       2972        208      33413      81119   0.6%
 core.term               35588       3507       1440        179      40714   0.3%
 core.main               25376       8195        168          0      33739   0.2%
 core.util               16911       2708        176         42      19837   0.1%
-mod.fuss                10659        309        144          0      11112   0.0%
+mod.fuss                11047        310        144          0      11501   0.0%
 mod.ai                   2452          3          0          0       2455   0.0%
 mod.lsp                  2341         66          0          0       2407   0.0%
-mod.plugins               970          7          0          0        977   0.0%
-libc+crt                62598
---totals             12347457
+mod.plugins              1389          7          0          0       1396   0.0%
+libc+crt                63060
+--totals             12351091
 
 -- non-folded object sections
         8280  .comment
-      233313  .debug_abbrev
-       55600  .debug_aranges
-      194640  .debug_frame
-     4369041  .debug_info
-     1006159  .debug_line
-      123218  .debug_line_str
-     1221421  .debug_loclists
-      173228  .debug_rnglists
-     1632033  .debug_str
+      233723  .debug_abbrev
+       56496  .debug_aranges
+      196288  .debug_frame
+     4379470  .debug_info
+     1009861  .debug_line
+      133365  .debug_line_str
+     1224726  .debug_loclists
+      174117  .debug_rnglists
+     1636968  .debug_str
         5760  .note.gnu.property
 
 -- top 12 symbols by size
