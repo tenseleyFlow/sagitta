@@ -23,6 +23,7 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 real_git=$(command -v git)
 host_os=$(uname -s)
+host_arch=$(uname -m)
 preload_faults=true
 if command -v file >/dev/null 2>&1 &&
    file -- "$yew_bin" | grep -F 'static-pie linked' >/dev/null; then
@@ -32,9 +33,16 @@ fi
 build_fault_shim()
 {
     local output=$1
+    local -a arch_flags=()
 
     if [[ $host_os == Darwin ]]; then
-        ${CC:-cc} -std=c11 -fPIC -dynamiclib -o "$output" \
+        # Current macOS uses an arm64e-only /bin/sh even when yew itself is
+        # arm64.  dyld loads an interposer before the Git wrapper can unset
+        # DYLD_INSERT_LIBRARIES, so the shim must satisfy both native slices.
+        if [[ $host_arch == arm64 || $host_arch == arm64e ]]; then
+            arch_flags=(-arch arm64 -arch arm64e)
+        fi
+        ${CC:-cc} -std=c11 -fPIC -dynamiclib "${arch_flags[@]}" -o "$output" \
             "$repo_root/tests/torture/faultshim.c" \
             "$repo_root/tests/torture/faultshim-darwin.s"
     else

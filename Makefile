@@ -328,10 +328,15 @@ ifeq ($(TARGET_OS),Darwin)
 SHARED_FLAG := -dynamiclib
 DL_LIBS :=
 FAULTSHIM_PLATFORM_SRC := tests/torture/faultshim-darwin.s
+# macOS ships an arm64e-only /bin/sh alongside an arm64 compiler target.
+# A DYLD interposer is loaded before a wrapper can clear its environment, so
+# the fault shim needs both native Apple-silicon ABI slices.
+FAULTSHIM_ARCH_FLAGS := -arch arm64 -arch arm64e
 else
 SHARED_FLAG := -shared
 DL_LIBS := -ldl
 FAULTSHIM_PLATFORM_SRC :=
+FAULTSHIM_ARCH_FLAGS :=
 endif
 
 # Sprint 57's arm64 alignment lane is intentionally narrower than SAN=1:
@@ -1522,7 +1527,7 @@ $(FAULTSHIM): tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
               $(BUILD)/mods.stamp \
               $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) $(FAULTSHIM_SAN_FLAGS) \
-		-fPIC $(SHARED_FLAG) -o $@ \
+		-fPIC $(SHARED_FLAG) $(FAULTSHIM_ARCH_FLAGS) -o $@ \
 		tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
 		$(DL_LIBS) $(LDLIBS)
 

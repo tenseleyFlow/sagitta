@@ -7361,12 +7361,16 @@ static bool s52_git_exit(PtyCtx *c, const char *dir,
     if (pid == 0) {
         int devnull = open("/dev/null", O_RDWR);
 
+        /* Fixture commits must not inherit a developer's signing policy.
+         * Editor-specific cases separately pin timestamps; ordinary FUSS
+         * fixtures only need signing disabled. */
+        if (setenv("GIT_CONFIG_COUNT", "1", 1) != 0 ||
+            setenv("GIT_CONFIG_KEY_0", "commit.gpgsign", 1) != 0 ||
+            setenv("GIT_CONFIG_VALUE_0", "false", 1) != 0)
+            _exit(125);
         if (strncmp(c->test->name, "git_editor_", 11U) == 0 &&
             (setenv("GIT_AUTHOR_DATE", "1700000000 +0000", 1) != 0 ||
-             setenv("GIT_COMMITTER_DATE", "1700000000 +0000", 1) != 0 ||
-             setenv("GIT_CONFIG_COUNT", "1", 1) != 0 ||
-             setenv("GIT_CONFIG_KEY_0", "commit.gpgsign", 1) != 0 ||
-             setenv("GIT_CONFIG_VALUE_0", "false", 1) != 0))
+             setenv("GIT_COMMITTER_DATE", "1700000000 +0000", 1) != 0))
             _exit(125);
         if (dir != NULL && chdir(dir) != 0)
             _exit(125);
@@ -7789,11 +7793,14 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_keys(c, ":");
         ptc_bytes(c, "ed.tab.prev");
         ptc_keys(c, "enter");
-        ptc_settle(c, 0);
+        /* A quiet poll can return before the tab switch repaints on a
+         * contended runner.  The next command must target the original tab,
+         * so synchronize on its document rather than scheduler timing. */
+        s52_wait_screen(c, "return 0");
         ptc_keys(c, ":");
         ptc_bytes(c, "ed.tab.close");
         ptc_keys(c, "enter");
-        ptc_settle(c, 0);
+        s52_wait_screen(c, "clean");
         ptc_check(c, s52_screen_contains(&c->vt, "clean"),
                   "closing the original tab did not restore README");
         ptc_keys(c, "f");
