@@ -6755,6 +6755,8 @@ static void case_s44_completion_below(PtyCtx *c)
         return;
     ptc_settle(c, 400);
     s18_settle_after_keys(c, "end a ctrl+space");
+    ptc_wait_until(c, s57_screen_contains, "1 of 14   index",
+                   "Sprint 44 completion menu did not finish below cursor");
     ptc_check(c, s43_screen_contains(&c->vt, "alphaOne"),
               "Sprint 44 completion menu did not open below the cursor");
     c->vt.sync_pairs_unstable = true;
@@ -6789,7 +6791,11 @@ static void case_s44_completion_flipped_doc(PtyCtx *c)
         return;
     ptc_settle(c, 400);
     s18_settle_after_keys(c, "1 8 G end a ctrl+space");
+    ptc_wait_until(c, s57_screen_contains, "1 of 5   index",
+                   "Sprint 44 flipped completion menu did not finish");
     s18_settle_after_keys(c, "ctrl+space");
+    ptc_wait_until(c, s57_screen_contains, "(no documentation)",
+                   "Sprint 44 completion documentation did not finish");
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot_sgr(c, c->test->name);
     ptc_check(c, s43_screen_contains(&c->vt, "(no documentation)"),
@@ -6808,6 +6814,8 @@ static void case_s44_completion_right_edge(PtyCtx *c)
         return;
     ptc_settle(c, 400);
     s18_settle_after_keys(c, "end a ctrl+space");
+    ptc_wait_until(c, s57_screen_contains, "1 of 3   index",
+                   "Sprint 44 right-edge completion menu did not finish");
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot_sgr(c, c->test->name);
     ptc_check(c, s43_screen_contains(&c->vt, "alpha_"),
