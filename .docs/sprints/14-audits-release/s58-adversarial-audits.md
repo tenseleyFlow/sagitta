@@ -35,9 +35,9 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — GATED 2026-09-01
+## Baseline status — ESTABLISHED 2026-09-02, AUDIT NOT STARTED
 
-`89eefa40` is the post-Sprint-57.8 local candidate. On Darwin arm64 it passes
+`e93e0ef7` is the fixed post-Sprint-57.8 code baseline. On Darwin arm64 it passes
 the complete default-module `make test` suite, focused plain and ASan/UBSan
 tab/mouse/group/theme coverage, a sanitized clicked-new-tab PTY, three
 deterministic complete PTY executions, FUSS performance, warning-clean
@@ -45,13 +45,18 @@ default/core-only shipping builds and core smoke, and all six native size
 profiles. Earlier Sprint 57.7 alignment/UBSan and FUSS fuzz evidence remains
 part of the unchanged off-canvas baseline.
 
-It has not been pushed from the Mac, so the required hosted `perf`,
-`determinism`, `lsp`, `fletch-dispatch`, GNU GCC, Linux/x86_64, and other
-commit-of-record evidence does not yet exist for this hash. Do not create an
-audit front, allocate a `YEW-F-###` ID, or call the audit window open until an
-exact post-57.8 commit is pushed and the §1 hosted baseline block can be filled
-honestly. If a follow-up changes the candidate, record the replacement hash
-here before any front begins.
+GitHub Actions run `33595465809` supplies the required hosted
+commit-of-record evidence for that exact hash. All 22 standard push jobs pass,
+including performance, determinism, LSP, Fletch dispatch, GNU GCC,
+Linux/x86_64, musl, macOS arm64, hosted arm64, sanitizer, PTY, modules, size,
+and the embedded gates. Trigger-specific Valgrind, designated-hardware
+performance, and nightly campaigns were skipped by the push trigger and are
+not inferred as successes.
+
+The baseline gate is satisfied, but no audit front or `YEW-F-###` ID has been
+opened. When Sprint 58 begins, every front uses `e93e0ef7`; if any code
+follow-up changes the candidate before then, record and requalify the
+replacement hash before opening a front.
 
 ## Goals
 

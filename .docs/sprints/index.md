@@ -282,12 +282,11 @@ Binding documents — read before any sprint:
 
 ### Campaign 13 — Performance (`13-performance/`)
 - **REPOSITORY COMPLETE THROUGH SPRINT 57.8.** Sprint 58 is next, but its
-  audit window remains baseline-gated. Sprint 56's
-  pinned designated-hardware evidence remains pending because no self-hosted
-  runner is registered; Sprint 57's Pi Zero 2 W corroboration and pushed-SHA
-  CI evidence remain release tails. `89eefa40` is the post-57.8 local
-  candidate, but Sprint 58 has not begun and remains gated on the required
-  hosted commit-of-record evidence for that exact pushed tree.
+  audit work has not begun. `e93e0ef7` is the fixed post-57.8 code baseline;
+  all 22 standard push jobs are green in hosted run `33595465809`, satisfying
+  the Sprint 58 commit-of-record gate. Sprint 56's pinned designated-hardware
+  evidence remains pending because no self-hosted runner is registered, and
+  Sprint 57's Pi Zero 2 W corroboration remains a release tail.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -306,29 +305,32 @@ Binding documents — read before any sprint:
   config, allocation audit, `x86_64-linux-musl` static embedded profile
   proven on-target. **REPOSITORY COMPLETE 2026-09-01:** all repository-owned
   size, allocation, portability, module-boundary, deterministic-image and
-  64/32 MiB QEMU gates are green; hosted CI awaits an authorized push and
-  physical Pi Zero 2 W corroboration remains a Sprint 60 release blocker
+  64/32 MiB QEMU gates are green; all standard hosted push jobs pass at
+  `e93e0ef7`, and physical Pi Zero 2 W corroboration remains a Sprint 60
+  release blocker
 - Sprint 57.5 (s57_5-fuss-compact-tree.md) — Compact line-free FUSS tree,
   remembered expansion state, open-file ancestry, adaptive drawer width and
   full-screen fallback, plus a bright editor/drawer divider. **REPOSITORY
   COMPLETE 2026-09-01:** native full/minimal suites, Darwin arm64 ASan/UBSan,
   deterministic FUSS fuzz/PTY, performance, and all six native size profiles
-  are green; true GCC, Linux Valgrind/musl/arm64 and hosted CI remain named
-  pushed-SHA evidence tails
+  are green; hosted GCC, musl, arm64, sanitizer, determinism, and performance
+  pass at `e93e0ef7`; trigger-specific Valgrind remains an evidence tail
 - Sprint 57.6 (s57_6-field-stability.md) — Binary syntax/LSP/symbol-index
   isolation, nested-workspace Git/FUSS path normalization, and direct
   visible-tree type-to-jump with printable actions behind `C-g`.
   **REPOSITORY COMPLETE 2026-09-01:** exact Darwin arm64 field replay, full
   native suite, focused ASan/UBSan, deterministic FUSS fuzz/PTY, performance,
-  FUSS-only smoke, and all six native shipping-size profiles are green; true
-  GCC, Linux/x86_64 and hosted CI remain pushed-SHA evidence tails
+  FUSS-only smoke, and all six native shipping-size profiles are green; the
+  standard hosted Linux/x86_64, GCC, arm64, and sanitizer jobs pass at
+  `e93e0ef7`
 - Sprint 57.7 (s57_7-fuss-offcanvas-layout.md) — True off-canvas FUSS
   geometry: shifted tab/pane/footer layout, row-zero header, full-height
   neutral surface and separator, and exact restoration. **REPOSITORY COMPLETE
   2026-09-01:** the complete native suite, focused Darwin arm64 ASan/UBSan and
   alignment/UBSan, deterministic FUSS fuzz/PTY, module-boundary smoke,
-  performance, and all six native size profiles are green; true GNU GCC,
-  Linux/x86_64 and hosted CI remain pushed-SHA evidence tails
+  performance, and all six native size profiles are green; the standard
+  hosted GNU GCC, Linux/x86_64, macOS arm64, hosted arm64, determinism, and
+  sanitizer jobs pass at `e93e0ef7`
 - Sprint 57.8 (s57_8-modern-tabs.md) — Facsimile-style padded active/inactive
   tab surfaces, one-tab strip visibility, and a cell-exact clickable ` + ` that
   invokes the existing untitled-tab command without disturbing tab drag,
@@ -336,15 +338,16 @@ Binding documents — read before any sprint:
   2026-09-01:** complete native suite, deterministic PTY matrix, focused plain
   and Darwin arm64 ASan/UBSan coverage, sanitized click PTY, strict full/core
   shipping builds, core smoke, FUSS performance, and all six native size
-  profiles are green; true GNU GCC, Linux/x86_64 and hosted CI remain
-  pushed-SHA evidence tails
+  profiles are green; all 22 standard push jobs pass at `e93e0ef7` in hosted
+  run `33595465809`
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
   fuzz campaigns extended, findings ledger with stable IDs. **NEXT — BASELINE
-  GATED:** `89eefa40` is the local candidate; push that exact tree and verify
-  the contract's hosted lanes before opening a front or assigning a finding ID
+  ESTABLISHED, NOT STARTED:** `e93e0ef7` is green in hosted run `33595465809`;
+  preserve that fixed code baseline when the audit window is deliberately
+  opened
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1

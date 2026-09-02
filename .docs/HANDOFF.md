@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-09-01
+**Current checkpoint date:** 2026-09-02
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -10,18 +10,19 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Clean upstream/recovery anchor:** `a21c5c88` (`origin/trunk` at closeout)
+**Hosted-green code/recovery anchor:** `e93e0ef7` (`origin/trunk` code baseline)
 
-**Current post-Sprint-57.8 code frontier:** `89eefa40`
+**Current post-Sprint-57.8 code frontier:** `e93e0ef7`
 
-**Git position:** 46 local commits ahead of `origin/trunk` after this closeout;
-nothing in the Sprint 57 chain has been pushed from the Mac
+**Git position:** the complete Sprint 57 through 57.8 chain and its hosted-CI
+remediation are pushed. GitHub Actions run `33595465809` is green for all 22
+standard push jobs at `e93e0ef7`; this handoff refresh is documentation-only.
 
 **Active implementation frontier:** Sprint 57.8 is repository-complete. Sprint
-58 is next but its audit window is not open: `89eefa40` is the local candidate
-baseline and must be pushed through the required hosted commit-of-record lanes
-before any front begins. Hosted CI, Linux-only lanes, and physical Pi
-corroboration remain explicit release-evidence tails.
+58 is next and has not begun. Its hosted commit-of-record baseline gate is now
+satisfied by `e93e0ef7` and run `33595465809`. Designated-hardware timing,
+the trigger-specific Valgrind/nightly jobs, and physical Pi corroboration remain
+explicit release-evidence tails; none was inferred from a skipped push job.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -49,9 +50,10 @@ Mach-O strip flags.
 The deterministic embedded gate passes QEMU rows 1–11 at 64 MiB with peak
 `VmHWM` 9,764,864 bytes. The 32 MiB row cleanly names the 48 MiB workload
 floor and exits without an OOM kill. Physical Raspberry Pi Zero 2 W class
-corroboration is still pending, as is hosted CI for the current unpushed SHA.
-Both are release-blocking evidence tails under S57-A4; neither is fabricated
-from emulation or used to stall unrelated repository work.
+corroboration is still pending. Hosted CI is green for `e93e0ef7` in run
+`33595465809`. Physical evidence remains a release-blocking tail under S57-A4;
+it is neither fabricated from emulation nor used to stall unrelated repository
+work.
 
 Sprint 57.6 closes the subsequent field failures. Extensionless binary
 buffers now bind no source language, start no LSP, and enter no source-symbol
@@ -78,9 +80,25 @@ Right overflow retains priority, and ordinary click, drag, group, CJK, and
 FUSS-offset geometry remains green.
 
 The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
-Its local candidate is `89eefa40`, but it remains explicitly provisional. Do
-not begin an audit from this unpushed baseline: first obtain the required
-hosted commit-of-record evidence and fill the Sprint 58 §1 baseline block.
+Its fixed code baseline is `e93e0ef7`. The required hosted commit-of-record
+evidence is green, but Sprint 58 has not begun: open its audit fronts only as
+new sprint work, preserving the fixed baseline and the reproducer-first law.
+
+Hosted Sprint 57.8 closeout evidence at `e93e0ef7`:
+
+- GitHub Actions run `33595465809` completed successfully on 2026-09-02 with
+  all 22 standard push jobs green: GCC, Clang, macOS arm64, hosted arm64,
+  musl, modules, size, performance, determinism, sanitizer, PTY, script,
+  Fletch, Fletch dispatch, LSP, embedded, allocation, torture, Unicode, and
+  structural bans;
+- the performance job includes the exact Sprint 56 profiler cross-check that
+  failed on the first pushed candidate; the macOS job includes the exact job
+  streaming fixture that failed there. The remediation gives profiler dump
+  control transport a 30-second hosted ceiling without changing any key
+  latency gate, and makes the stream fixture kill the direct pipe-owning child;
+- trigger-specific Valgrind, designated-hardware performance, fuzz-nightly,
+  perf-nightly, and torture-nightly jobs were skipped by the push trigger as
+  designed. They are not reported as executed evidence.
 
 Most recent Sprint 57.8 validation:
 
@@ -149,12 +167,13 @@ Most recent Sprint 57.5 validation:
   1,891,472 bytes, and all four single-module profiles under their existing
   caps.
 
-Do not push unless explicitly requested. If hosted CI, a Linux-only Sprint
-57.5 lane, or physical Pi evidence fails when run, reopen remediation before
-release. Do not weaken core features or stability for a footprint target;
-stop, measure, and amend or defer the target instead. S57-A1 already moved the
-unrealistic 900 KiB minimal value to a post-1.0 ratchet; Sprint 58 front F15
-and Sprint 60 closeout must reassess the size/stability boundary again.
+Future pushes still require an explicit request. If a trigger-specific
+Valgrind/designated lane or physical Pi evidence fails when run, reopen
+remediation before release. Do not weaken core features or stability for a
+footprint target; stop, measure, and amend or defer the target instead. S57-A1
+already moved the unrealistic 900 KiB minimal value to a post-1.0 ratchet;
+Sprint 58 front F15 and Sprint 60 closeout must reassess the size/stability
+boundary again.
 
 ## 1. Historical 2026-08-29 pickup point — superseded
 

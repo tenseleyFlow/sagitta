@@ -206,7 +206,11 @@ coverage landed in `92e72902`; the end-to-end click PTY landed in `16005b33`;
 focused modern chrome goldens landed in `81391063`; the complete one-tab PTY
 contract migration landed in `5c6217b0`; and the remaining fixed-row mouse
 tests were retargeted to computed document geometry in `89eefa40`. Commit
-`89eefa40` is the local post-Sprint-57.8 candidate baseline for Sprint 58.
+`89eefa40` was the first local post-Sprint-57.8 candidate. Hosted remediation
+landed in `e93e0ef7`: profiler dump control transport receives a 30-second
+hosted ceiling while the actual latency gates remain unchanged, and the job
+streaming fixture now kills its direct pipe-owning child on every POSIX host.
+`e93e0ef7` is the fixed post-Sprint-57.8 code baseline for Sprint 58.
 
 Local closeout evidence on Darwin arm64:
 
@@ -230,8 +234,18 @@ Local closeout evidence on Darwin arm64:
   minimal, 1,891,504 full, 1,571,600 LSP-only, 1,588,496 AI-only, 1,586,752
   FUSS-only, and 1,536,096 plugins-only.
 
-This host has Apple clang only; `/usr/bin/gcc` is its clang compatibility
-driver. True GNU GCC, Linux/x86_64, Valgrind/musl, designated-runner, and
-hosted-CI evidence are not inferred. Sprint 58 may use `89eefa40` as a local
-candidate only; no audit front opens until that exact post-57.8 candidate is
-pushed and the hosted baseline block is filled from commit-of-record results.
+Hosted closeout evidence:
+
+- GitHub Actions run `33595465809` is green at exact code commit `e93e0ef7`:
+  all 22 standard push jobs pass, including GNU GCC, Clang, macOS arm64,
+  hosted arm64, musl, modules, size, performance, determinism, sanitizer,
+  PTY, script, Fletch dispatch, LSP, embedded, allocation, and torture;
+- the performance lane passes the exact Sprint 56 profiler cross-check that
+  exposed the loaded-runner control timeout, and the macOS lane passes the
+  complete unit suite containing `job_stream_bypasses_safe_prefix`;
+- Valgrind, designated-runner performance, and nightly fuzz/performance/
+  torture jobs were skipped by the push trigger as designed and remain
+  separate evidence obligations rather than inferred successes.
+
+The Sprint 58 hosted baseline gate is satisfied. Sprint 58 has not begun; its
+audit fronts must preserve `e93e0ef7` as the fixed code baseline when opened.
