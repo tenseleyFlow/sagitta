@@ -977,6 +977,8 @@ static size_t raw_key_frame_gate_bytes(size_t requested)
 #endif
 }
 
+static bool s57_screen_contains(const PtyCtx *c, const void *arg);
+
 static void burst_case(PtyCtx *c, bool paste)
 {
     static const u8 initial[] = "tail\n";
@@ -1024,8 +1026,13 @@ static void burst_case(PtyCtx *c, bool paste)
     if (gate_payload != payload) {
         burst[gate_payload] = 'K';
         ptc_bytes(c, burst + gate_payload);
-        ptc_settle(c, 0);
     }
+    /* Darwin's queue-resident frame sample and the remainder are separate
+     * writes.  A quiet output interval can occur while a contended editor
+     * still has unread keys, so wait for the full logical burst to reach
+     * the visible cursor before taking the cross-run snapshot. */
+    ptc_wait_until(c, s57_screen_contains, "1:4097  all",
+                   "raw-key burst did not consume all 4096 keys");
     notepad_snapshot(c, paste ? NOTEPAD_BURST_PASTE : NOTEPAD_BURST_KEYS);
     force_quit(c);
     (void)unlink(path);
