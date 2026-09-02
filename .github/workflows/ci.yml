@@ -673,7 +673,13 @@ jobs:
         run: make generated-artifact-determinism
       - name: Compare test and PTY output
         run: |
-          make test > /dev/null 2>&1
+          if make test > warmup.txt 2>&1; then
+            :
+          else
+            status=$?
+            cat warmup.txt
+            exit "$status"
+          fi
           make test > r1.txt 2>&1
           make test > r2.txt 2>&1
           diff -u r1.txt r2.txt

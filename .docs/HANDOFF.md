@@ -10,17 +10,18 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Hosted-green code/recovery anchor:** `6d742a88` (`origin/trunk` code baseline)
+**Hosted-green code/recovery anchor:** `a41443e8` (`origin/trunk` code baseline)
 
-**Current post-Sprint-57.8 code frontier:** `6d742a88`
+**Current post-Sprint-57.8 code frontier:** `a41443e8`
 
 **Git position:** the complete Sprint 57 through 57.8 chain and its hosted-CI
-remediation are pushed. GitHub Actions run `33615806917` is green for all 22
-standard push jobs at `6d742a88`; this handoff refresh is documentation-only.
+remediation are pushed. GitHub Actions run `33647598586` attempt 2 is green for
+all 22 standard push jobs at `a41443e8`; this handoff refresh and the
+determinism warm-up diagnostic are code-neutral follow-up work.
 
 **Active implementation frontier:** Sprint 57.8 is repository-complete. Sprint
 58 is next and has not begun. Its hosted commit-of-record baseline gate is now
-satisfied by `6d742a88` and run `33615806917`. Designated-hardware timing,
+satisfied by `a41443e8` and run `33647598586` attempt 2. Designated-hardware timing,
 the trigger-specific Valgrind/nightly jobs, and physical Pi corroboration remain
 explicit release-evidence tails; none was inferred from a skipped push job.
 
@@ -50,8 +51,8 @@ Mach-O strip flags.
 The deterministic embedded gate passes QEMU rows 1–11 at 64 MiB with peak
 `VmHWM` 9,764,864 bytes. The 32 MiB row cleanly names the 48 MiB workload
 floor and exits without an OOM kill. Physical Raspberry Pi Zero 2 W class
-corroboration is still pending. Hosted CI is green for `6d742a88` in run
-`33615806917`. Physical evidence remains a release-blocking tail under S57-A4;
+corroboration is still pending. Hosted CI is green for `a41443e8` in run
+`33647598586` attempt 2. Physical evidence remains a release-blocking tail under S57-A4;
 it is neither fabricated from emulation nor used to stall unrelated repository
 work.
 
@@ -80,14 +81,14 @@ Right overflow retains priority, and ordinary click, drag, group, CJK, and
 FUSS-offset geometry remains green.
 
 The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
-Its fixed code baseline is `6d742a88`. The required hosted commit-of-record
+Its fixed code baseline is `a41443e8`. The required hosted commit-of-record
 evidence is green, but Sprint 58 has not begun: open its audit fronts only as
 new sprint work, preserving the fixed baseline and the reproducer-first law.
 
-Hosted Sprint 57.8 closeout evidence at `6d742a88`:
+Hosted Sprint 57.8 closeout evidence at `a41443e8`:
 
-- GitHub Actions run `33615806917` completed successfully on 2026-09-02 with
-  all 22 standard push jobs green: GCC, Clang, macOS arm64, hosted arm64,
+- GitHub Actions run `33647598586` attempt 2 completed successfully on
+  2026-09-02 with all 22 standard push jobs green: GCC, Clang, macOS arm64, hosted arm64,
   musl, modules, size, performance, determinism, sanitizer, PTY, script,
   Fletch, Fletch dispatch, LSP, embedded, allocation, torture, Unicode, and
   structural bans;
@@ -97,8 +98,20 @@ Hosted Sprint 57.8 closeout evidence at `6d742a88`:
   profiler dump control transport a 30-second hosted ceiling without changing
   any key latency gate, makes the stream fixture kill the direct pipe-owning
   child, honors Sprint 56 advisory timing policy across latency/plugin/package/
-  cloud probes while retaining the 100x sanity ceiling, and synchronizes the
-  Darwin split burst on its full 4096-key semantic state before snapshot;
+  cloud probes while retaining the 100x sanity ceiling, synchronizes the
+  Darwin split burst on its full 4096-key semantic state before snapshot, and
+  retries only advisory direct-latency transport failures up to three times.
+  Strict/designated timing gates and metric/sanity failures remain single-shot,
+  while the profiler cross-check retains sole ownership of its outer retry;
+- FUSS Git detection now invalidates the finished async state immediately, and
+  startup, finder, completion, status, and raw-key PTYs wait on semantic state
+  instead of guessed frame timing. Sanitized aggregate PTY execution receives
+  additional headroom without changing the per-case ceiling. The exact x86_64
+  size ledger records the resulting 136-byte FUSS growth, with no budget change
+  and no change to the full on-disk shipping binary;
+- attempt 1's determinism warm-up ended transiently after roughly 34 minutes
+  before it produced comparison artifacts. The exact rerun passed, and the
+  workflow follow-up now prints the captured warm-up log on any future failure;
 - trigger-specific Valgrind, designated-hardware performance, fuzz-nightly,
   perf-nightly, and torture-nightly jobs were skipped by the push trigger as
   designed. They are not reported as executed evidence.

@@ -282,8 +282,8 @@ Binding documents — read before any sprint:
 
 ### Campaign 13 — Performance (`13-performance/`)
 - **REPOSITORY COMPLETE THROUGH SPRINT 57.8.** Sprint 58 is next, but its
-  audit work has not begun. `6d742a88` is the fixed post-57.8 code baseline;
-  all 22 standard push jobs are green in hosted run `33615806917`, satisfying
+  audit work has not begun. `a41443e8` is the fixed post-57.8 code baseline;
+  all 22 standard push jobs are green in hosted run `33647598586` attempt 2, satisfying
   the Sprint 58 commit-of-record gate. Sprint 56's pinned designated-hardware
   evidence remains pending because no self-hosted runner is registered, and
   Sprint 57's Pi Zero 2 W corroboration remains a release tail.
@@ -306,7 +306,7 @@ Binding documents — read before any sprint:
   proven on-target. **REPOSITORY COMPLETE 2026-09-01:** all repository-owned
   size, allocation, portability, module-boundary, deterministic-image and
   64/32 MiB QEMU gates are green; all standard hosted push jobs pass at
-  `6d742a88`, and physical Pi Zero 2 W corroboration remains a Sprint 60
+  `a41443e8`, and physical Pi Zero 2 W corroboration remains a Sprint 60
   release blocker
 - Sprint 57.5 (s57_5-fuss-compact-tree.md) — Compact line-free FUSS tree,
   remembered expansion state, open-file ancestry, adaptive drawer width and
@@ -314,7 +314,7 @@ Binding documents — read before any sprint:
   COMPLETE 2026-09-01:** native full/minimal suites, Darwin arm64 ASan/UBSan,
   deterministic FUSS fuzz/PTY, performance, and all six native size profiles
   are green; hosted GCC, musl, arm64, sanitizer, determinism, and performance
-  pass at `6d742a88`; trigger-specific Valgrind remains an evidence tail
+  pass at `a41443e8`; trigger-specific Valgrind remains an evidence tail
 - Sprint 57.6 (s57_6-field-stability.md) — Binary syntax/LSP/symbol-index
   isolation, nested-workspace Git/FUSS path normalization, and direct
   visible-tree type-to-jump with printable actions behind `C-g`.
@@ -322,7 +322,7 @@ Binding documents — read before any sprint:
   native suite, focused ASan/UBSan, deterministic FUSS fuzz/PTY, performance,
   FUSS-only smoke, and all six native shipping-size profiles are green; the
   standard hosted Linux/x86_64, GCC, arm64, and sanitizer jobs pass at
-  `6d742a88`
+  `a41443e8`
 - Sprint 57.7 (s57_7-fuss-offcanvas-layout.md) — True off-canvas FUSS
   geometry: shifted tab/pane/footer layout, row-zero header, full-height
   neutral surface and separator, and exact restoration. **REPOSITORY COMPLETE
@@ -330,7 +330,7 @@ Binding documents — read before any sprint:
   alignment/UBSan, deterministic FUSS fuzz/PTY, module-boundary smoke,
   performance, and all six native size profiles are green; the standard
   hosted GNU GCC, Linux/x86_64, macOS arm64, hosted arm64, determinism, and
-  sanitizer jobs pass at `6d742a88`
+  sanitizer jobs pass at `a41443e8`
 - Sprint 57.8 (s57_8-modern-tabs.md) — Facsimile-style padded active/inactive
   tab surfaces, one-tab strip visibility, and a cell-exact clickable ` + ` that
   invokes the existing untitled-tab command without disturbing tab drag,
@@ -338,14 +338,14 @@ Binding documents — read before any sprint:
   2026-09-01:** complete native suite, deterministic PTY matrix, focused plain
   and Darwin arm64 ASan/UBSan coverage, sanitized click PTY, strict full/core
   shipping builds, core smoke, FUSS performance, and all six native size
-  profiles are green; all 22 standard push jobs pass at `6d742a88` in hosted
-  run `33615806917`
+  profiles are green; all 22 standard push jobs pass at `a41443e8` in hosted
+  run `33647598586` attempt 2
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
   fuzz campaigns extended, findings ledger with stable IDs. **NEXT — BASELINE
-  ESTABLISHED, NOT STARTED:** `6d742a88` is green in hosted run `33615806917`;
+  ESTABLISHED, NOT STARTED:** `a41443e8` is green in hosted run `33647598586` attempt 2;
   preserve that fixed code baseline when the audit window is deliberately
   opened
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,

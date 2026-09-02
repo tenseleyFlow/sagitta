@@ -214,8 +214,15 @@ Follow-up remediation in `17b60cf1` and `3bca072c` applies Sprint 56 advisory
 timing policy to the latency, plugin, package, and cloud probes while retaining
 the hard 100x sanity ceiling. Commit `6d742a88` closes the remaining Darwin PTY
 race by waiting for the full 4096-key semantic state after the queue-resident
-frame sample. `6d742a88` is the fixed post-Sprint-57.8 code baseline for Sprint
-58.
+frame sample. Commits `096b5e7f` and `573af45d` give only sanitized aggregate
+PTY execution additional headroom, repaint completed asynchronous FUSS Git
+detection immediately, and replace startup/finder/completion/status timing
+guesses with semantic waits. Commit `6a291b76` records the exact 136-byte
+x86_64 FUSS ledger increase without changing a hard size budget or the full
+on-disk shipping binary. Commit `a41443e8` adds a bounded retry for advisory
+direct-latency transport failures; strict/designated gates and metric/sanity
+failures remain single-shot, and the profiler cross-check prevents nested
+retries. `a41443e8` is the fixed post-Sprint-57.8 code baseline for Sprint 58.
 
 Local closeout evidence on Darwin arm64:
 
@@ -241,17 +248,19 @@ Local closeout evidence on Darwin arm64:
 
 Hosted closeout evidence:
 
-- GitHub Actions run `33615806917` is green at exact code commit `6d742a88`:
+- GitHub Actions run `33647598586` attempt 2 is green at exact code commit `a41443e8`:
   all 22 standard push jobs pass, including GNU GCC, Clang, macOS arm64,
   hosted arm64, musl, modules, size, performance, determinism, sanitizer,
   PTY, script, Fletch dispatch, LSP, embedded, allocation, and torture;
 - the performance lane passes the exact Sprint 56 profiler cross-check that
   exposed the loaded-runner control timeout, and the macOS lane passes the
   complete unit suite containing `job_stream_bypasses_safe_prefix`, all
-  advisory timing probes, and the synchronized raw-key burst PTY;
+  advisory timing probes, and the synchronized raw-key burst PTY. Attempt 1's
+  determinism warm-up ended transiently before comparisons; the exact rerun
+  passed, and the workflow follow-up preserves the warm-up log on failure;
 - Valgrind, designated-runner performance, and nightly fuzz/performance/
   torture jobs were skipped by the push trigger as designed and remain
   separate evidence obligations rather than inferred successes.
 
 The Sprint 58 hosted baseline gate is satisfied. Sprint 58 has not begun; its
-audit fronts must preserve `6d742a88` as the fixed code baseline when opened.
+audit fronts must preserve `a41443e8` as the fixed code baseline when opened.
