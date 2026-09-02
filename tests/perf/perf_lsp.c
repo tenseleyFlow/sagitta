@@ -196,8 +196,10 @@ static bool measure_diag_viewport(Timing *out)
     if (!yew_ed_open_memory(&ed, text.data, text.len, "perf_diag.c"))
         goto done_ed;
     (void)memset(&caps, 0, sizeof(caps));
+    /* Reserve the visible tab strip and status row outside the measured
+     * document viewport. */
     if (!yew_grid_init(&ed.grid, &ed.interner,
-                       LSP_VIEWPORT_LINES + 1U, LSP_VIEWPORT_COLS))
+                       LSP_VIEWPORT_LINES + 2U, LSP_VIEWPORT_COLS))
         goto done_ed;
     ed.grid_ready = true;
     yew_render_init(&ed.render, &caps, NULL);
