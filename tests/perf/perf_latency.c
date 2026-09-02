@@ -27,6 +27,11 @@ enum {
      * it as latency instead of mislabeling scheduler contention as a PTY
      * transport failure. */
     KEY_TIMEOUT_MS = 5000,
+    CONTROL_TIMEOUT_MS = 5000,
+    /* Serializing and atomically writing a full profiler ring is control
+     * traffic after measurement.  It must tolerate a descheduled hosted
+     * runner without weakening any key-to-paint latency verdict. */
+    PROF_DUMP_TIMEOUT_MS = 30000,
     FLOOR_SAMPLES = 1001,
     MANY_BUFFER_COUNT = 50,
     MANY_BUFFER_HYDRATED = 20
@@ -512,10 +517,12 @@ static bool stop_editor(YewLivePty *pty)
            yew_live_pty_wait_exit(pty, deadline, &code) && code == 0;
 }
 
-static bool send_editor_command(YewLivePty *pty, const char *command)
+static bool send_editor_command(YewLivePty *pty, const char *command,
+                                int timeout_ms)
 {
     char wire[1400];
-    i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
+    i64 deadline = yew_live_pty_now_ns() +
+                   (i64)timeout_ms * INT64_C(1000000);
     int n;
 
     n = snprintf(wire, sizeof(wire), "\033[27u:%s\r", command);
@@ -1058,13 +1065,13 @@ static int run_session(const char *binary, const char *script,
         return 2;
     }
     if (prof_dump != NULL &&
-        (!send_editor_command(&pty, "prof reset") ||
+        (!send_editor_command(&pty, "prof reset", CONTROL_TIMEOUT_MS) ||
          /* Opening a second command clears reset's four-second info
           * message and cancels its timer.  Otherwise that unrelated paint
           * can satisfy a key wait mid-session and merge the displaced key
           * into the following profiler frame.  nop itself is one multi-key
           * command frame and is excluded from KEYPAINT. */
-         !send_editor_command(&pty, "nop") ||
+         !send_editor_command(&pty, "nop", CONTROL_TIMEOUT_MS) ||
          !yew_live_pty_wait_quiet(
              &pty, INT64_C(500000000),
              yew_live_pty_now_ns() + INT64_C(5000000000)))) {
@@ -1110,9 +1117,18 @@ static int run_session(const char *binary, const char *script,
         char command[1200];
         int n = snprintf(command, sizeof(command), "prof dump %s", prof_dump);
 
-        if (n <= 0 || (size_t)n >= sizeof(command) ||
-            !send_editor_command(&pty, command) || !regular_file(prof_dump)) {
-            (void)fprintf(stderr, "perf_latency: cannot dump profiler\n");
+        if (n <= 0 || (size_t)n >= sizeof(command)) {
+            (void)fprintf(stderr,
+                          "perf_latency: cannot format profiler dump command\n");
+            status = 2;
+        } else if (!send_editor_command(&pty, command,
+                                        PROF_DUMP_TIMEOUT_MS)) {
+            (void)fprintf(stderr,
+                          "perf_latency: profiler dump command timed out\n");
+            status = 2;
+        } else if (!regular_file(prof_dump)) {
+            (void)fprintf(stderr,
+                          "perf_latency: profiler dump file is missing\n");
             status = 2;
         }
     }

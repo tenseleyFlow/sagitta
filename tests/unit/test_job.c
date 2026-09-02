@@ -879,8 +879,12 @@ void test_job_stream_bypasses_safe_prefix(void)
     Ed ed;
     YewJobSpec spec = {0};
     JobStreamWitness w;
+    /* This fixture tests immediate stream delivery, not descendant process
+     * groups.  Replace the shell after printf so the pipe owner we kill is
+     * the job's direct child on every POSIX target. */
     char *argv[] = {(char *)"/bin/sh", (char *)"-c",
-                    (char *)"printf '\\360\\237\\230'; sleep 30", NULL};
+                    (char *)"printf '\\360\\237\\230'; exec sleep 30",
+                    NULL};
     char err[256] = {0};
     u32 id;
     i64 start;
