@@ -2637,6 +2637,7 @@ perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 # advisory; PERF_GATE=1 remains meaningful only under run-perf-suite.sh's
 # calibrated designated-runner preflight.
 perf-latency-s56-check: $(BUILD)/perf_latency_s56 $(BUILD)/perf_echo_child
+	$(BUILD)/perf_latency_s56 --selftest-retry
 	$(BUILD)/perf_latency_s56 --check-scripts tests/perf/sessions
 	$(BUILD)/perf_latency_s56 --check-assist-vt
 	$(BUILD)/perf_latency_s56 --check-frame-tags

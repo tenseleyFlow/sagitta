@@ -32,6 +32,7 @@ enum {
      * traffic after measurement.  It must tolerate a descheduled hosted
      * runner without weakening any key-to-paint latency verdict. */
     PROF_DUMP_TIMEOUT_MS = 30000,
+    ADVISORY_ATTEMPTS = 3,
     FLOOR_SAMPLES = 1001,
     MANY_BUFFER_COUNT = 50,
     MANY_BUFFER_HYDRATED = 20
@@ -1193,6 +1194,62 @@ static int run_session(const char *binary, const char *script,
     return status;
 }
 
+static bool perf_advisory(void)
+{
+    const char *value = getenv("YEW_PERF_ADVISORY");
+
+    return value != NULL && strcmp(value, "0") != 0;
+}
+
+static bool retry_transport(bool advisory, bool single_attempt, int status,
+                            unsigned attempt)
+{
+    return advisory && !single_attempt && status == 2 &&
+           attempt < ADVISORY_ATTEMPTS;
+}
+
+static int run_session_with_retry(const char *binary, const char *script,
+                                  const char *fixture, const char *path,
+                                  const char *state, const char *many_dir,
+                                  const char *fakelsp, const char *mockai,
+                                  const char *ai_script,
+                                  const char *prof_dump,
+                                  bool single_attempt)
+{
+    bool advisory = perf_advisory();
+    unsigned attempt;
+
+    for (attempt = 1U; ; attempt++) {
+        int status = run_session(binary, script, fixture, path, state,
+                                 many_dir, fakelsp, mockai, ai_script,
+                                 prof_dump);
+
+        if (!retry_transport(advisory, single_attempt, status, attempt))
+            return status;
+        (void)fprintf(stderr,
+                      "perf_latency: retrying %s/%s after transport failure "
+                      "(attempt %u/%u)\n",
+                      script, fixture, attempt, ADVISORY_ATTEMPTS);
+    }
+}
+
+static int check_retry_policy(void)
+{
+    if (retry_transport(false, false, 2, 1U) ||
+        retry_transport(true, false, 0, 1U) ||
+        retry_transport(true, false, 1, 1U) ||
+        retry_transport(true, true, 2, 1U) ||
+        !retry_transport(true, false, 2, 1U) ||
+        !retry_transport(true, false, 2, 2U) ||
+        retry_transport(true, false, 2, 3U)) {
+        (void)fprintf(stderr,
+                      "perf_latency: advisory retry policy failed\n");
+        return 1;
+    }
+    (void)printf("latency_advisory_retry_policy OK\n");
+    return 0;
+}
+
 static bool spawn_echo(YewLivePty *pty, const char *binary)
 {
     char slave[128];
@@ -1399,10 +1456,11 @@ static void usage(const char *arg0)
         "  %s --check-scripts DIR\n"
         "  %s --check-assist-vt\n"
         "  %s --check-frame-tags\n"
+        "  %s --selftest-retry\n"
         "  %s --yew PATH --session FILE --fixture CLASS --path FILE "
         "[--state DIR] [--many-dir DIR] [--fakelsp PATH --mockai PATH "
-        "--ai-script PATH] [--prof-dump PATH]\n", arg0, arg0, arg0, arg0,
-        arg0);
+        "--ai-script PATH] [--prof-dump PATH] [--single-attempt]\n",
+        arg0, arg0, arg0, arg0, arg0, arg0);
 }
 
 int main(int argc, char **argv)
@@ -1422,6 +1480,8 @@ int main(int argc, char **argv)
     bool floor = false;
     bool assist_vt = false;
     bool frame_tags = false;
+    bool retry_selftest = false;
+    bool single_attempt = false;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -1431,6 +1491,10 @@ int main(int argc, char **argv)
             assist_vt = true;
         else if (strcmp(argv[i], "--check-frame-tags") == 0)
             frame_tags = true;
+        else if (strcmp(argv[i], "--selftest-retry") == 0)
+            retry_selftest = true;
+        else if (strcmp(argv[i], "--single-attempt") == 0)
+            single_attempt = true;
         else if (i + 1 < argc && strcmp(argv[i], "--echo") == 0)
             echo = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--check-scripts") == 0)
@@ -1460,19 +1524,27 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    if (assist_vt && !frame_tags && !floor && check == NULL && yew == NULL)
+    if (retry_selftest && !assist_vt && !frame_tags && !floor &&
+        check == NULL && yew == NULL)
+        return check_retry_policy();
+    if (assist_vt && !retry_selftest && !frame_tags && !floor &&
+        check == NULL && yew == NULL)
         return check_assist_vt();
-    if (frame_tags && !assist_vt && !floor && check == NULL && yew == NULL)
+    if (frame_tags && !retry_selftest && !assist_vt && !floor &&
+        check == NULL && yew == NULL)
         return check_frame_tags();
-    if (check != NULL && !floor && !assist_vt && !frame_tags && yew == NULL)
+    if (check != NULL && !retry_selftest && !floor && !assist_vt &&
+        !frame_tags && yew == NULL)
         return check_scripts(check);
-    if (floor && echo != NULL && check == NULL && !assist_vt && !frame_tags &&
-        yew == NULL)
+    if (floor && echo != NULL && check == NULL && !retry_selftest &&
+        !assist_vt && !frame_tags && yew == NULL)
         return run_floor(echo);
-    if (!floor && !assist_vt && !frame_tags && check == NULL && yew != NULL &&
-        script != NULL && fixture != NULL && path != NULL)
-        return run_session(yew, script, fixture, path, state, many_dir,
-                           fakelsp, mockai, ai_script, prof_dump);
+    if (!floor && !retry_selftest && !assist_vt && !frame_tags &&
+        check == NULL && yew != NULL && script != NULL && fixture != NULL &&
+        path != NULL)
+        return run_session_with_retry(yew, script, fixture, path, state,
+                                      many_dir, fakelsp, mockai, ai_script,
+                                      prof_dump, single_attempt);
     usage(argv[0]);
     return 2;
 }

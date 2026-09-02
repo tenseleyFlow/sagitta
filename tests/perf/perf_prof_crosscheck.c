@@ -165,6 +165,10 @@ static RunStatus run_latency(const Options *opts, bool prof_on,
     argv[narg++] = (char *)opts->path;
     argv[narg++] = (char *)"--state";
     argv[narg++] = (char *)opts->state;
+    /* This harness owns its bounded advisory retry policy.  Keep the child
+     * runner single-attempt so one transport fault cannot multiply into a
+     * nested 3 x 3 retry campaign. */
+    argv[narg++] = (char *)"--single-attempt";
     if (opts->many_dir != NULL) {
         argv[narg++] = (char *)"--many-dir";
         argv[narg++] = (char *)opts->many_dir;
