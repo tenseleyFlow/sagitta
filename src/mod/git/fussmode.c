@@ -104,6 +104,8 @@ struct FussMode {
     u32 viewer_win_id;
     bool draw_dirty;
     bool backdrop_dirty;
+    GitAsyncState seen_detect_state;
+    GitStatusCode seen_detect_result;
     u16 scroll;
     u32 saved_buffer_id;
     u32 viewer_buffer_id;
@@ -1060,6 +1062,8 @@ CmdStatus yew_fuss_mode_enter(Ed *ed)
         ed->fuss->saved_buffer_id = ed->win != NULL && ed->win->buf != NULL ?
                                     ed->win->buf->id : 0U;
         ed->fuss->backdrop_dirty = true;
+        ed->fuss->seen_detect_state = yew_git_detect_state(ed);
+        ed->fuss->seen_detect_result = yew_git_detect_result(ed);
         ed->layout_dirty = true;
         ed->full_damage = true;
         fuss_walk_restart(ed);
@@ -1111,6 +1115,8 @@ u16 yew_fuss_footer_rows(const Ed *ed)
 void yew_fuss_tick(Ed *ed, i64 now_ms)
 {
     const GitSnapshot *snap;
+    GitAsyncState detect_state;
+    GitStatusCode detect_result;
 
     if (ed == NULL || ed->fuss == NULL)
         return;
@@ -1119,6 +1125,18 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
         return;
     if (ed->fuss->opening && now_ms >= ed->fuss->opening_until_ms) {
         ed->fuss->opening = false;
+        fuss_damage(ed);
+    }
+    detect_state = yew_git_detect_state(ed);
+    detect_result = yew_git_detect_result(ed);
+    if (detect_state != ed->fuss->seen_detect_state ||
+        detect_result != ed->fuss->seen_detect_result) {
+        /* Repository detection owns both the FUSS header and footer.  The
+         * footer is dirtied by message publication, but a completion that
+         * lands after the opening-frame timer otherwise leaves the header's
+         * `loading` suffix cached until unrelated input causes a repaint. */
+        ed->fuss->seen_detect_state = detect_state;
+        ed->fuss->seen_detect_result = detect_result;
         fuss_damage(ed);
     }
     snap = yew_git_snapshot(ed);

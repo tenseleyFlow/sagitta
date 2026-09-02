@@ -4012,6 +4012,8 @@ static void s26_open_finder(PtyCtx *c, char *path, size_t path_cap)
      */
     s18_settle_after_bytes(c, "find ");
     s18_settle_after_keys(c, "enter");
+    ptc_wait_until(c, s57_screen_contains, "5/5   up/down move",
+                   "Sprint 26 finder did not reach its stable result");
 }
 
 /* Closes what s26_open_finder opened, after the caller's snapshot. */
@@ -5846,6 +5848,13 @@ static void case_startup_workspace(PtyCtx *c)
                   c->workspace_dir, NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+#if YEW_WITH_FUSS
+    if (strcmp(c->test->name, "startup_directory_workspace") == 0) {
+        ptc_wait_until(c, s57_screen_contains, "not a repository",
+                       "startup workspace Git discovery did not finish");
+        ptc_wait_sync_pairs(c, 1U);
+    }
+#endif
     ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
@@ -7276,6 +7285,43 @@ static bool s52_screen_contains(const VtScreen *vt, const char *needle)
     return found;
 }
 
+static bool s52_row_contains(const VtScreen *vt, int row,
+                             const char *needle)
+{
+    size_t want;
+    int col;
+
+    if (vt == NULL || needle == NULL || row < 0 || row >= vt->rows)
+        return false;
+    want = strlen(needle);
+    if (want == 0U || want > (size_t)vt->cols)
+        return false;
+    for (col = 0; col + (int)want <= vt->cols; col++) {
+        size_t at;
+
+        for (at = 0U; at < want; at++) {
+            const VtCell *cell = &vt->cells[(size_t)row *
+                                           (size_t)vt->cols +
+                                           (size_t)col + at];
+            const u8 *glyph;
+            size_t glyph_len;
+
+            glyph = vt_cell_bytes(vt, cell, &glyph_len);
+            if (glyph_len != 1U || glyph[0] != (u8)needle[at])
+                break;
+        }
+        if (at == want)
+            return true;
+    }
+    return false;
+}
+
+static bool s52_header_lacks_text(const PtyCtx *c, const void *arg)
+{
+    return c != NULL &&
+           !s52_row_contains(&c->vt, 0, (const char *)arg);
+}
+
 static void s52_wait_screen(PtyCtx *c, const char *text);
 
 static bool s56_5_drawer_file(PtyCtx *c, char *path, size_t cap)
@@ -7332,6 +7378,8 @@ static void case_s56_5_drawer(PtyCtx *c)
         ptc_settle(c, 0);
         ptc_wait_kitty_push(c, 21U);
         s52_wait_screen(c, "drawer-only.txt");
+        if (strstr(name, "startup_") != NULL)
+            s52_wait_screen(c, "not a repository");
         ptc_check(c, s52_screen_contains(&c->vt, "workspace"),
                   "drawer title omitted the workspace basename");
         ptc_check(c,
@@ -7578,15 +7626,11 @@ path_fail:
 static void s52_wait_screen(PtyCtx *c, const char *text)
 {
     char failure[192];
-    u32 i;
 
-    for (i = 0U; i < 20U && !c->failed &&
-                 !s52_screen_contains(&c->vt, text); i++)
-        ptc_settle(c, 25);
     (void)snprintf(failure, sizeof(failure),
                    "Sprint 52 expected screen state '%s' did not appear",
                    text);
-    ptc_check(c, s52_screen_contains(&c->vt, text), failure);
+    ptc_wait_until(c, s57_screen_contains, text, failure);
 }
 
 static void s52_wait_screen_gone(PtyCtx *c, const char *text,
@@ -7766,7 +7810,9 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_settle(c, 0);
         ptc_wait_kitty_push(c, 21U);
         ptc_keys(c, "f");
-        ptc_settle(c, 80);
+        s52_wait_screen(c, "not a repository");
+        ptc_wait_until(c, s52_header_lacks_text, "loading",
+                       "Sprint 52 FUSS header did not finish loading");
         ptc_check(c, !c->pty.reaped,
                   "entering F mode outside a repository exited yew");
         /* Workspace discovery may publish an otherwise identical frame
@@ -7953,7 +7999,9 @@ static void case_s52_fuss_status_rows(PtyCtx *c)
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
     ptc_keys(c, "f");
-    ptc_settle(c, 1000);
+    s52_wait_screen(c, "conflict.c !");
+    s52_wait_screen(c, ascii ? "incoming.c v" : "incoming.c ↓");
+    s52_wait_screen(c, "↑1 ↓1");
     ptc_check(c, s52_screen_contains(&c->vt, "conflict.c !"),
               "FUSS tree omitted the conflicted row marker");
     ptc_check(c, s52_screen_contains(&c->vt,
@@ -7967,6 +8015,8 @@ static void case_s52_fuss_status_rows(PtyCtx *c)
      * opposite state before checking ignored-file visibility. */
     ptc_keys(c, "ctrl+g .");
     s52_wait_screen(c, "hidden files shown");
+    s52_wait_screen(c, "ignored.log");
+    s52_wait_screen(c, "▎   1 <<<<<<< HEAD");
     ptc_check(c, s52_screen_contains(&c->vt, "ignored.log"),
               "FUSS hidden-files tree omitted the ignored row");
     ptc_check(c, !c->pty.reaped,
