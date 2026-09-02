@@ -17,6 +17,8 @@
 typedef struct Options {
     const char *runner;
     const char *yew;
+    const char *fakelsp;
+    const char *exclude;
     const char *baseline;
 } Options;
 
@@ -54,6 +56,10 @@ static bool parse_options(int argc, char **argv, Options *options)
             options->runner = argv[i + 1];
         else if (strcmp(argv[i], "--yew") == 0)
             options->yew = argv[i + 1];
+        else if (strcmp(argv[i], "--fakelsp") == 0)
+            options->fakelsp = argv[i + 1];
+        else if (strcmp(argv[i], "--exclude") == 0)
+            options->exclude = argv[i + 1];
         else if (strcmp(argv[i], "--baseline") == 0)
             options->baseline = argv[i + 1];
         else
@@ -61,6 +67,52 @@ static bool parse_options(int argc, char **argv, Options *options)
     }
     return options->runner != NULL && options->yew != NULL &&
            options->baseline != NULL;
+}
+
+static size_t build_runner_argv(const Options *options, char **argv)
+{
+    size_t argc = 0U;
+
+    argv[argc++] = (char *)options->runner;
+    if (options->exclude != NULL) {
+        argv[argc++] = (char *)"--exclude";
+        argv[argc++] = (char *)options->exclude;
+    }
+    argv[argc++] = (char *)"--yew";
+    argv[argc++] = (char *)options->yew;
+    if (options->fakelsp != NULL) {
+        argv[argc++] = (char *)"--fakelsp";
+        argv[argc++] = (char *)options->fakelsp;
+    }
+    argv[argc] = NULL;
+    return argc;
+}
+
+static bool selftest_runner_options(void)
+{
+    char *input[] = {
+        (char *)"perf-script-suite",
+        (char *)"--runner", (char *)"runner",
+        (char *)"--yew", (char *)"yew",
+        (char *)"--fakelsp", (char *)"fakelsp",
+        (char *)"--exclude", (char *)"skip",
+        (char *)"--baseline", (char *)"baseline"
+    };
+    Options options;
+    char *runner_argv[8];
+    size_t argc;
+
+    if (!parse_options(11, input, &options))
+        return false;
+    argc = build_runner_argv(&options, runner_argv);
+    return argc == 7U && strcmp(runner_argv[0], "runner") == 0 &&
+           strcmp(runner_argv[1], "--exclude") == 0 &&
+           strcmp(runner_argv[2], "skip") == 0 &&
+           strcmp(runner_argv[3], "--yew") == 0 &&
+           strcmp(runner_argv[4], "yew") == 0 &&
+           strcmp(runner_argv[5], "--fakelsp") == 0 &&
+           strcmp(runner_argv[6], "fakelsp") == 0 &&
+           runner_argv[7] == NULL;
 }
 
 static bool load_limit(const char *path, int64_t *limit)
@@ -221,11 +273,19 @@ int main(int argc, char **argv)
     int status;
     int waited;
 
-    if (argc == 2 && strcmp(argv[1], "--selftest") == 0)
+    if (argc == 2 && strcmp(argv[1], "--selftest") == 0) {
+        if (!selftest_runner_options()) {
+            (void)fprintf(stderr,
+                          "perf-script-suite: runner options selftest failed\n");
+            return 1;
+        }
+        (void)printf("perf-script-suite: runner options selftest ok\n");
         return selftest_group_timeout();
+    }
     if (!parse_options(argc, argv, &options)) {
         (void)fprintf(stderr,
                       "usage: %s --runner PATH --yew PATH "
+                      "[--fakelsp PATH] [--exclude LIST] "
                       "--baseline PATH | --selftest\n", argv[0]);
         return 2;
     }
@@ -251,10 +311,12 @@ int main(int argc, char **argv)
         return 2;
     }
     if (pid == 0) {
+        char *runner_argv[8];
+
         if (setpgid(0, 0) != 0)
             _exit(126);
-        execl(options.runner, options.runner, "--yew", options.yew,
-              (char *)NULL);
+        (void)build_runner_argv(&options, runner_argv);
+        execv(options.runner, runner_argv);
         _exit(127);
     }
     if (!establish_child_group(pid)) {

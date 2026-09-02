@@ -3203,7 +3203,8 @@ test-script-budget: $(BUILD)/perf_script_suite $(BUILD)/script_runner \
 	LC_ALL=C $(BUILD)/perf_script_suite \
 		--runner $(abspath $(BUILD)/script_runner) \
 		--yew $(abspath $(BUILD)/yew) \
-		--baseline $(SCRIPT_SUITE_BASELINE)
+		--baseline $(SCRIPT_SUITE_BASELINE) \
+		--fakelsp $(abspath $(FAKELSP)) $(SCRIPT_RUNNER_ARGS)
 
 # The conformance suite (Sprint 33).  LC_ALL=C is set rather than
 # assumed: run.c sorts with strcmp and the ledger is byte-compared.
