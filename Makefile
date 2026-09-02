@@ -529,7 +529,14 @@ else
 # headroom for shared-runner variance.  This is a wall-clock ceiling on a
 # HANG, not a latency budget — nothing measures against it, and the per-case
 # budget is what bounds a single stuck case.
+ifeq ($(SAN),1)
+# The ASan/UBSan sweep reached the plain 900 s aggregate ceiling on a hosted
+# runner while cases were still passing.  Sanitizer instrumentation needs its
+# own suite-level headroom; the strict per-case hang bound below is unchanged.
+YEW_PTY_BUDGET_MS ?= 1800000
+else
 YEW_PTY_BUDGET_MS ?= 900000
+endif
 # Git-backed editor cases execute real subprocesses.  The stale-blame case
 # completed correctly at 4.7-4.9 s under CPU contention, which leaves no
 # honest margin under the runner's 5 s fallback.  This remains a hang
