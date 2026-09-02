@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "mod/plug/pkg.h"
+#include "perf_policy.h"
 #include "util/sort.h"
 #include "util/xdg.h"
 
@@ -309,6 +310,7 @@ int main(int argc, char **argv)
     u64 hash_samples[PKG_PERF_SAMPLES];
     u64 lock_samples[PKG_PERF_SAMPLES];
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
+    bool advisory = yew_perf_advisory();
     int status = 0;
     size_t i;
 
@@ -332,19 +334,19 @@ int main(int argc, char **argv)
     summarize(hash_samples, &rows[0]);
     summarize(lock_samples, &rows[1]);
     for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
-        bool regression = rows[i].p99_ns > rows[i].budget_ns;
-
         (void)printf("pkg.%s median_ns=%llu p99_ns=%llu budget_ns=%llu%s\n",
                      rows[i].name,
                      (unsigned long long)rows[i].median_ns,
                      (unsigned long long)rows[i].p99_ns,
                      (unsigned long long)rows[i].budget_ns,
-                     regression ? " REGRESSION" : " ok");
+                     yew_perf_timing_verdict(rows[i].p99_ns,
+                                             rows[i].budget_ns, advisory));
         if (measure)
             (void)printf("%s %llu %llu\n", rows[i].name,
                          (unsigned long long)rows[i].median_ns,
                          (unsigned long long)rows[i].p99_ns);
-        if (regression)
+        if (yew_perf_timing_failed(rows[i].p99_ns, rows[i].budget_ns,
+                                   advisory))
             status = 1;
     }
     return status;

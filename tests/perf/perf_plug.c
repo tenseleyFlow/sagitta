@@ -12,6 +12,7 @@
 #include "edit/ed.h"
 #include "mod/plug/overlay.h"
 #include "mod/plug/plug.h"
+#include "perf_policy.h"
 #include "syn/attr.h"
 #include "text/piece.h"
 #include "util/buf.h"
@@ -621,6 +622,26 @@ static void summarize(u64 *samples, PlugTiming *timing)
     timing->p99_ns = samples[(PLUG_PERF_SAMPLES * 99U) / 100U];
 }
 
+static int selftest_policy(void)
+{
+    const u64 budget = UINT64_C(2000000);
+
+    if (yew_perf_timing_failed(budget, budget, false) ||
+        !yew_perf_timing_failed(budget + 1U, budget, false) ||
+        yew_perf_timing_failed(budget + 1U, budget, true) ||
+        yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, budget, true) ||
+        !yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U,
+            budget, true) ||
+        !yew_perf_timing_failed(0U, budget, true)) {
+        (void)fprintf(stderr, "perf-plug-policy: failed\n");
+        return 1;
+    }
+    (void)printf("perf-plug-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 static bool load_baselines(PlugTiming *rows, size_t count)
 {
     FILE *fp = fopen("tests/perf/baselines/plug.txt", "r");
@@ -670,13 +691,19 @@ int main(int argc, char **argv)
     u64 example_enable[PLUG_PERF_SAMPLES];
     u64 example_overlay[PLUG_PERF_SAMPLES];
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
+    bool selftest = argc == 2 && strcmp(argv[1], "--selftest-policy") == 0;
+    bool advisory;
     int status = 0;
     size_t i;
 
-    if (argc > 2 || (argc == 2 && !measure)) {
-        (void)fprintf(stderr, "usage: %s [--measure]\n", argv[0]);
+    if (argc > 2 || (argc == 2 && !measure && !selftest)) {
+        (void)fprintf(stderr,
+                      "usage: %s [--measure|--selftest-policy]\n", argv[0]);
         return 2;
     }
+    if (selftest)
+        return selftest_policy();
+    advisory = yew_perf_advisory();
     if (!fix_init(&fix)) {
         (void)fprintf(stderr, "perf_plug: fixture setup failed\n");
         return 2;
@@ -702,19 +729,19 @@ int main(int argc, char **argv)
         return 2;
     }
     for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
-        bool regression = rows[i].p99_ns > rows[i].budget_ns;
-
         (void)printf("plug.%s median_ns=%llu p99_ns=%llu budget_ns=%llu%s\n",
                      rows[i].name,
                      (unsigned long long)rows[i].median_ns,
                      (unsigned long long)rows[i].p99_ns,
                      (unsigned long long)rows[i].budget_ns,
-                     regression ? " REGRESSION" : " ok");
+                     yew_perf_timing_verdict(rows[i].p99_ns,
+                                             rows[i].budget_ns, advisory));
         if (measure)
             (void)printf("%s %llu %llu\n", rows[i].name,
                          (unsigned long long)rows[i].median_ns,
                          (unsigned long long)rows[i].p99_ns);
-        if (regression)
+        if (yew_perf_timing_failed(rows[i].p99_ns, rows[i].budget_ns,
+                                   advisory))
             status = 1;
     }
     return status;

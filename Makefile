@@ -2421,6 +2421,7 @@ perf-ai-privacy: $(BUILD)/perf_ai_privacy
 	$(BUILD)/perf_ai_privacy
 
 perf-plug: $(BUILD)/perf_plug
+	$(BUILD)/perf_plug --selftest-policy
 	$(BUILD)/perf_plug
 
 perf-pkg: $(BUILD)/perf_pkg

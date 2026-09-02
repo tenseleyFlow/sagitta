@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "support/live_pty.h"
+#include "perf_policy.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -23,7 +24,6 @@ enum {
     PACED_QUIET_NS = 1000000,
     LATENCY_LINES = 10000,
     COLD_RUNS = 9,
-    ADVISORY_SANITY_MULTIPLIER = 100,
     SCREEN_ROWS = 24,
     SCREEN_COLS = 80
 };
@@ -37,38 +37,21 @@ typedef struct LatencyLimits {
     i64 cold_ns;
 } LatencyLimits;
 
-static bool perf_advisory(void)
-{
-    const char *value = getenv("YEW_PERF_ADVISORY");
-
-    return value != NULL && strcmp(value, "0") != 0;
-}
-
-static bool timing_sane(i64 value, i64 limit)
-{
-    i64 ceiling;
-
-    if (value <= 0 || limit <= 0)
-        return false;
-    if (limit > INT64_MAX / ADVISORY_SANITY_MULTIPLIER)
-        ceiling = INT64_MAX;
-    else
-        ceiling = limit * ADVISORY_SANITY_MULTIPLIER;
-    return value <= ceiling;
-}
-
 static bool timing_failed(i64 value, i64 limit, bool advisory)
 {
-    return !timing_sane(value, limit) || (!advisory && value > limit);
+    return value <= 0 || limit <= 0 ||
+           yew_perf_timing_failed((u64)value, (u64)limit, advisory);
 }
 
 static const char *timing_verdict(i64 value, i64 limit, bool advisory)
 {
-    if (!timing_sane(value, limit))
+    const char *verdict;
+
+    if (value <= 0 || limit <= 0)
         return " SANITY-FAIL";
-    if (value > limit)
-        return advisory ? " WARN" : " FAIL";
-    return " ok";
+    verdict = yew_perf_timing_verdict((u64)value, (u64)limit, advisory);
+    return !advisory && strcmp(verdict, " REGRESSION") == 0 ?
+           " FAIL" : verdict;
 }
 
 static int selftest_advisory_policy(void)
@@ -78,8 +61,9 @@ static int selftest_advisory_policy(void)
     if (timing_failed(limit, limit, false) ||
         !timing_failed(limit + 1, limit, false) ||
         timing_failed(limit + 1, limit, true) ||
-        timing_failed(limit * ADVISORY_SANITY_MULTIPLIER, limit, true) ||
-        !timing_failed(limit * ADVISORY_SANITY_MULTIPLIER + 1, limit,
+        timing_failed(limit * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, limit,
+                      true) ||
+        !timing_failed(limit * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1, limit,
                        true) ||
         !timing_failed(0, limit, true) ||
         !timing_failed(-1, limit, true)) {
@@ -855,7 +839,7 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "latency: invalid baseline %s\n", argv[4]);
         return 2;
     }
-    advisory = perf_advisory();
+    advisory = yew_perf_advisory();
     if (!make_fixture(root, sizeof(root), fixture, sizeof(fixture),
                       wolf, sizeof(wolf),
                       state, sizeof(state)) ||

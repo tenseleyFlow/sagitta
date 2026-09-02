@@ -17,6 +17,7 @@
 #include "fl/gc.h"
 #include "fl/module.h"
 #include "fl/vm.h"
+#include "perf_policy.h"
 #include "util/buf.h"
 #include "util/sort.h"
 
@@ -348,6 +349,7 @@ int main(int argc, char **argv)
     u64 p99;
     unsigned i;
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
+    bool advisory = yew_perf_advisory();
 
     if (argc > 2 || (argc == 2 && !measure)) {
         (void)fprintf(stderr, "usage: %s [--measure]\n", argv[0]);
@@ -386,9 +388,11 @@ int main(int argc, char **argv)
                  "budget_ns=%u%s\n",
                  (unsigned long long)median, (unsigned long long)p99,
                  CLOUD_SCAN_BUDGET_NS,
-                 p99 > CLOUD_SCAN_BUDGET_NS ? " REGRESSION" : " ok");
+                 yew_perf_timing_verdict(p99, CLOUD_SCAN_BUDGET_NS,
+                                         advisory));
     if (measure)
         (void)printf("idle_scan_20 %llu %llu\n",
                      (unsigned long long)median, (unsigned long long)p99);
-    return p99 > CLOUD_SCAN_BUDGET_NS ? 1 : 0;
+    return yew_perf_timing_failed(p99, CLOUD_SCAN_BUDGET_NS, advisory) ?
+           1 : 0;
 }
