@@ -23,6 +23,7 @@ enum {
     PACED_QUIET_NS = 1000000,
     LATENCY_LINES = 10000,
     COLD_RUNS = 9,
+    ADVISORY_SANITY_MULTIPLIER = 100,
     SCREEN_ROWS = 24,
     SCREEN_COLS = 80
 };
@@ -35,6 +36,60 @@ typedef struct LatencyLimits {
     i64 wolf_backspace_max_ns;
     i64 cold_ns;
 } LatencyLimits;
+
+static bool perf_advisory(void)
+{
+    const char *value = getenv("YEW_PERF_ADVISORY");
+
+    return value != NULL && strcmp(value, "0") != 0;
+}
+
+static bool timing_sane(i64 value, i64 limit)
+{
+    i64 ceiling;
+
+    if (value <= 0 || limit <= 0)
+        return false;
+    if (limit > INT64_MAX / ADVISORY_SANITY_MULTIPLIER)
+        ceiling = INT64_MAX;
+    else
+        ceiling = limit * ADVISORY_SANITY_MULTIPLIER;
+    return value <= ceiling;
+}
+
+static bool timing_failed(i64 value, i64 limit, bool advisory)
+{
+    return !timing_sane(value, limit) || (!advisory && value > limit);
+}
+
+static const char *timing_verdict(i64 value, i64 limit, bool advisory)
+{
+    if (!timing_sane(value, limit))
+        return " SANITY-FAIL";
+    if (value > limit)
+        return advisory ? " WARN" : " FAIL";
+    return " ok";
+}
+
+static int selftest_advisory_policy(void)
+{
+    const i64 limit = INT64_C(20000000);
+
+    if (timing_failed(limit, limit, false) ||
+        !timing_failed(limit + 1, limit, false) ||
+        timing_failed(limit + 1, limit, true) ||
+        timing_failed(limit * ADVISORY_SANITY_MULTIPLIER, limit, true) ||
+        !timing_failed(limit * ADVISORY_SANITY_MULTIPLIER + 1, limit,
+                       true) ||
+        !timing_failed(0, limit, true) ||
+        !timing_failed(-1, limit, true)) {
+        (void)fprintf(stderr,
+                      "perf-latency-selftest: advisory policy failed\n");
+        return 1;
+    }
+    (void)printf("perf-latency-selftest: advisory policy ok\n");
+    return 0;
+}
 
 static bool write_all(int fd, const void *data, size_t len)
 {
@@ -781,12 +836,15 @@ int main(int argc, char **argv)
     i64 wolf_backspace_max;
     i64 cold;
     const char *wolf_path;
+    bool advisory;
     int status = 0;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-exit-drain") == 0)
         return selftest_exit_drain();
     if (argc == 2 && strcmp(argv[1], "--selftest-quiet-drain") == 0)
         return selftest_quiet_drain();
+    if (argc == 2 && strcmp(argv[1], "--selftest-advisory") == 0)
+        return selftest_advisory_policy();
     if (argc != 5 || strcmp(argv[1], "--yew") != 0 ||
         strcmp(argv[3], "--baseline") != 0) {
         (void)fprintf(stderr,
@@ -797,6 +855,7 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "latency: invalid baseline %s\n", argv[4]);
         return 2;
     }
+    advisory = perf_advisory();
     if (!make_fixture(root, sizeof(root), fixture, sizeof(fixture),
                       wolf, sizeof(wolf),
                       state, sizeof(state)) ||
@@ -843,34 +902,37 @@ int main(int argc, char **argv)
 
     (void)printf("keypress_to_paint_p99 %lld limit=%lld%s\n",
                  (long long)key_p99, (long long)limits.key_p99_ns,
-                 key_p99 <= limits.key_p99_ns ? " ok" : " FAIL");
+                 timing_verdict(key_p99, limits.key_p99_ns, advisory));
     (void)printf("cursor_arrow_to_paint_p99 %lld limit=%lld%s\n",
                  (long long)arrow_p99, (long long)limits.arrow_p99_ns,
-                 arrow_p99 <= limits.arrow_p99_ns ? " ok" : " FAIL");
+                 timing_verdict(arrow_p99, limits.arrow_p99_ns, advisory));
     (void)printf("cursor_arrow_to_paint_p99_paced %lld limit=%lld%s\n",
                  (long long)paced_arrow_p99,
                  (long long)limits.paced_arrow_p99_ns,
-                 paced_arrow_p99 <= limits.paced_arrow_p99_ns
-                     ? " ok" : " FAIL");
+                 timing_verdict(paced_arrow_p99,
+                                limits.paced_arrow_p99_ns, advisory));
     (void)printf("wolf_kitty_first_backspace_to_paint %lld limit=%lld%s\n",
                  (long long)wolf_first_backspace,
                  (long long)limits.wolf_first_backspace_ns,
-                 wolf_first_backspace <= limits.wolf_first_backspace_ns
-                     ? " ok" : " FAIL");
+                 timing_verdict(wolf_first_backspace,
+                                limits.wolf_first_backspace_ns, advisory));
     (void)printf("wolf_kitty_backspace_to_paint_max %lld limit=%lld%s\n",
                  (long long)wolf_backspace_max,
                  (long long)limits.wolf_backspace_max_ns,
-                 wolf_backspace_max <= limits.wolf_backspace_max_ns
-                     ? " ok" : " FAIL");
+                 timing_verdict(wolf_backspace_max,
+                                limits.wolf_backspace_max_ns, advisory));
     (void)printf("cold_open_to_first_paint %lld limit=%lld%s\n",
                  (long long)cold, (long long)limits.cold_ns,
-                 cold <= limits.cold_ns ? " ok" : " FAIL");
-    if (key_p99 > limits.key_p99_ns ||
-        arrow_p99 > limits.arrow_p99_ns ||
-        paced_arrow_p99 > limits.paced_arrow_p99_ns ||
-        wolf_first_backspace > limits.wolf_first_backspace_ns ||
-        wolf_backspace_max > limits.wolf_backspace_max_ns ||
-        cold > limits.cold_ns)
+                 timing_verdict(cold, limits.cold_ns, advisory));
+    if (timing_failed(key_p99, limits.key_p99_ns, advisory) ||
+        timing_failed(arrow_p99, limits.arrow_p99_ns, advisory) ||
+        timing_failed(paced_arrow_p99, limits.paced_arrow_p99_ns,
+                      advisory) ||
+        timing_failed(wolf_first_backspace,
+                      limits.wolf_first_backspace_ns, advisory) ||
+        timing_failed(wolf_backspace_max,
+                      limits.wolf_backspace_max_ns, advisory) ||
+        timing_failed(cold, limits.cold_ns, advisory))
         status = 1;
     return status;
 }

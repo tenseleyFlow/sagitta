@@ -2609,6 +2609,7 @@ perf-jobstream-selftest: $(BUILD)/perf_jobstream $(BUILD)/yew
 perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 	$(BUILD)/perf_latency --selftest-exit-drain
 	$(BUILD)/perf_latency --selftest-quiet-drain
+	$(BUILD)/perf_latency --selftest-advisory
 	@if YEW_LATENCY_KEYS=100 YEW_LATENCY_INJECT_NS=6000000 \
 		$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE); then \
@@ -2617,6 +2618,11 @@ perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 	else \
 		echo 'perf-latency-selftest: injected delay rejected'; \
 	fi
+	@YEW_PERF_ADVISORY=1 YEW_LATENCY_KEYS=100 \
+		YEW_LATENCY_INJECT_NS=6000000 \
+		$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
+		--baseline $(LATENCY_BASELINE) && \
+		echo 'perf-latency-selftest: advisory delay warned and passed'
 
 # Sprint 56's end-to-end harnesses deliberately keep their names separate
 # from the earlier per-editor latency gate.  Unknown and hosted runners are
