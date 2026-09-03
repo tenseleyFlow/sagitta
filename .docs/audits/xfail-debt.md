@@ -9,6 +9,7 @@ rows keep their XFAIL forever.
 |---|---|---|---|---|
 | YEW-F-001 | unit | `tests/audit/yew_f_001.c` | fixed-cell chrome widens under `ambiguous_wide` | open |
 | YEW-F-002 | unit | `tests/audit/yew_f_002.c` | bounded RI restart delays completed job output | open |
+| YEW-F-003 | unit | `tests/audit/yew_f_003.c` | ASCII fast path stores a keycap at the wrong width | open |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.

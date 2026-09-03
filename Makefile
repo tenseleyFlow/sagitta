@@ -811,7 +811,11 @@ FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
 F01_UNICODE_AUDIT_SRC := tests/audit/f01_unicode.c
 F01_UNICODE_AUDIT_OBJ := $(BUILD)/tests/audit/f01_unicode.o
 F01_UNICODE_AUDIT_BIN := $(BUILD)/tests/audit/f01_unicode
-AUDIT_SRC := $(sort $(filter-out $(F01_UNICODE_AUDIT_SRC),\
+F01_VT_WIDTH_AUDIT_SRC := tests/audit/f01_vt_width.c
+F01_VT_WIDTH_AUDIT_OBJ := $(BUILD)/tests/audit/f01_vt_width.o
+F01_VT_WIDTH_AUDIT_BIN := $(BUILD)/tests/audit/f01_vt_width
+AUDIT_PROBE_SRC := $(F01_UNICODE_AUDIT_SRC) $(F01_VT_WIDTH_AUDIT_SRC)
+AUDIT_SRC := $(sort $(filter-out $(AUDIT_PROBE_SRC),\
                      $(wildcard tests/audit/*.c)))
 AUDIT_OBJ := $(AUDIT_SRC:%.c=$(BUILD)/%.o)
 AUDIT_TESTS := $(BUILD)/audit_tests
@@ -931,7 +935,8 @@ FAULTSHIM_SAN_FLAGS := \
   $(if $(filter 1,$(SAN) $(ALIGN_SAN)),-fno-sanitize=all,)
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) \
-                $(F01_UNICODE_AUDIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
+                $(F01_UNICODE_AUDIT_OBJ) $(F01_VT_WIDTH_AUDIT_OBJ) \
+                $(SYN_ENGINE_UNIT_OBJ) \
                 $(RUNTIME_BLOB_GEN) $(EMBED_INITRAMFS_GEN) \
                 $(RUNTIME_BLOB_C) \
                 $(FUZZ_LIB_OBJ) \
@@ -1136,6 +1141,11 @@ $(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ)
 $(F01_UNICODE_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(F01_UNICODE_AUDIT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
 		$(F01_UNICODE_AUDIT_OBJ) $(LDLIBS)
+
+$(F01_VT_WIDTH_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(PTY_VT_OBJ) \
+                           $(F01_VT_WIDTH_AUDIT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(PTY_VT_OBJ) \
+		$(F01_VT_WIDTH_AUDIT_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_grapheme: $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ) $(LDLIBS)
@@ -1740,9 +1750,11 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-fletc
 test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 	$(UNIT_RUN)
 
-test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN)
+test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
+            $(F01_VT_WIDTH_AUDIT_BIN)
 	LC_ALL=C $(AUDIT_TESTS)
 	LC_ALL=C $(F01_UNICODE_AUDIT_BIN)
+	LC_ALL=C $(F01_VT_WIDTH_AUDIT_BIN)
 	scripts/check-findings.sh
 	scripts/check-audit-fixtures.sh
 
