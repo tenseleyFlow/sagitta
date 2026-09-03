@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "perf_policy.h"
 #include "text/cursor.h"
 
 #include <stdio.h>
@@ -28,6 +29,23 @@ static i64 now_ns(void)
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
         return -1;
     return (i64)ts.tv_sec * INT64_C(1000000000) + ts.tv_nsec;
+}
+
+static i64 timing_max(i64 first, i64 second)
+{
+    return first > second ? first : second;
+}
+
+static bool timing_failed(i64 value, i64 budget)
+{
+    return yew_perf_timing_failed((uint64_t)value, (uint64_t)budget,
+                                  yew_perf_advisory());
+}
+
+static const char *timing_verdict(i64 value, i64 budget)
+{
+    return yew_perf_timing_verdict((uint64_t)value, (uint64_t)budget,
+                                   yew_perf_advisory());
 }
 
 static bool measure(const PerfCase *pc, i64 *worst_out)
@@ -275,9 +293,10 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
                  "budget_us=5000%s\n",
                  pc->name, LONG_LINE_BYTES, PERF_ROUNDS,
                  (long long)(worst / INT64_C(1000)),
-                 worst <= budget_ns ? "" : " OVER-BUDGET");
+                 timing_verdict(worst, budget_ns));
     if (cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
-        cursor.goal_col.v != clusters - 1U || worst > budget_ns) {
+        cursor.goal_col.v != clusters - 1U ||
+        timing_failed(worst, budget_ns)) {
         yew_textbuf_free(cross_tb);
         yew_textbuf_free(tb);
         return false;
@@ -346,10 +365,10 @@ static bool measure_contextual_reverse(void)
                  LONG_LINE_BYTES,
                  (long long)(ri_elapsed / INT64_C(1000)),
                  (long long)(extend_elapsed / INT64_C(1000)),
-                 ri_elapsed <= budget_ns && extend_elapsed <= budget_ns
-                     ? ""
-                     : " OVER-BUDGET");
-    return ri_elapsed <= budget_ns && extend_elapsed <= budget_ns;
+                 timing_verdict(timing_max(ri_elapsed, extend_elapsed),
+                                budget_ns));
+    return !timing_failed(timing_max(ri_elapsed, extend_elapsed),
+                          budget_ns);
 }
 
 static bool measure_edit_position(const PerfCase *pc, u64 at)
@@ -424,9 +443,9 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
                  "worst_us=%lld budget_us=5000%s\n",
                  pc->name, (unsigned long long)at, PERF_ROUNDS,
                  (long long)(worst / INT64_C(1000)),
-                 worst <= budget_ns ? "" : " OVER-BUDGET");
+                 timing_verdict(worst, budget_ns));
     yew_textbuf_free(tb);
-    return worst <= budget_ns;
+    return !timing_failed(worst, budget_ns);
 
 fail:
     yew_textbuf_free(tb);
@@ -524,11 +543,10 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
                  pc->name, PERF_ROUNDS,
                  (long long)(worst_edit / INT64_C(1000)),
                  (long long)(worst_left / INT64_C(1000)),
-                 worst_edit <= budget_ns && worst_left <= budget_ns
-                     ? ""
-                     : " OVER-BUDGET");
+                 timing_verdict(timing_max(worst_edit, worst_left),
+                                budget_ns));
     yew_textbuf_free(tb);
-    return worst_edit <= budget_ns && worst_left <= budget_ns;
+    return !timing_failed(timing_max(worst_edit, worst_left), budget_ns);
 
 fail:
     yew_textbuf_free(tb);
@@ -627,11 +645,10 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
                  pc->name, DEFERRED_EDIT_BURST, PERF_ROUNDS,
                  (long long)(worst_edit / INT64_C(1000)),
                  (long long)(worst_query / INT64_C(1000)),
-                 worst_edit <= budget_ns && worst_query <= budget_ns
-                     ? ""
-                     : " OVER-BUDGET");
+                 timing_verdict(timing_max(worst_edit, worst_query),
+                                budget_ns));
     yew_textbuf_free(tb);
-    return worst_edit <= budget_ns && worst_query <= budget_ns;
+    return !timing_failed(timing_max(worst_edit, worst_query), budget_ns);
 
 fail:
     yew_textbuf_free(tb);
@@ -716,11 +733,10 @@ static bool measure_ascii_context_transition(void)
                  PERF_ROUNDS,
                  (long long)(worst_edit / INT64_C(1000)),
                  (long long)(worst_query / INT64_C(1000)),
-                 worst_edit <= budget_ns && worst_query <= budget_ns
-                     ? ""
-                     : " OVER-BUDGET");
+                 timing_verdict(timing_max(worst_edit, worst_query),
+                                budget_ns));
     yew_textbuf_free(tb);
-    return worst_edit <= budget_ns && worst_query <= budget_ns;
+    return !timing_failed(timing_max(worst_edit, worst_query), budget_ns);
 
 fail:
     yew_textbuf_free(tb);
@@ -788,18 +804,37 @@ static bool measure_giant_cluster_midpoint_edit(void)
                  (unsigned long long)midpoint, PERF_ROUNDS,
                  (long long)(worst_edit / INT64_C(1000)),
                  (long long)(worst_left / INT64_C(1000)),
-                 worst_edit <= budget_ns && worst_left <= budget_ns
-                     ? ""
-                     : " OVER-BUDGET");
+                 timing_verdict(timing_max(worst_edit, worst_left),
+                                budget_ns));
     yew_textbuf_free(tb);
-    return worst_edit <= budget_ns && worst_left <= budget_ns;
+    return !timing_failed(timing_max(worst_edit, worst_left), budget_ns);
 
 fail:
     yew_textbuf_free(tb);
     return false;
 }
 
-int main(void)
+static int selftest_policy(void)
+{
+    const uint64_t budget = UINT64_C(5000000);
+
+    if (yew_perf_timing_failed(budget, budget, false) ||
+        !yew_perf_timing_failed(budget + 1U, budget, false) ||
+        yew_perf_timing_failed(budget + 1U, budget, true) ||
+        yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, budget, true) ||
+        !yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U,
+            budget, true) ||
+        !yew_perf_timing_failed(0U, budget, true)) {
+        (void)fprintf(stderr, "perf-cursor-policy: failed\n");
+        return 1;
+    }
+    (void)printf("perf-cursor-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     static const u8 ascii[] = {'x'};
     static const u8 latin2[] = {0xc3U, 0xa9U};
@@ -809,6 +844,13 @@ int main(void)
     };
     bool passed = true;
     size_t i;
+
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
 
     for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
         i64 worst;

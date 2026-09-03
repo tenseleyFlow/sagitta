@@ -2443,7 +2443,8 @@ perf-ai-http-valgrind: $(BUILD)/perf_ai_http
 		--child-silent-after-fork=yes $(BUILD)/perf_ai_http --cycles-only
 
 perf-cursor: $(BUILD)/perf_cursor
-	$(BUILD)/perf_cursor
+	$(BUILD)/perf_cursor --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_cursor
 
 perf-undo: $(BUILD)/perf_undo
 	$(BUILD)/perf_undo
