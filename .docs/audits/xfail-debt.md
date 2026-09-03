@@ -7,6 +7,7 @@ rows keep their XFAIL forever.
 
 | ID | Surface | Reproducer | Reason | Status |
 |---|---|---|---|---|
+| YEW-F-001 | unit | `tests/audit/yew_f_001.c` | fixed-cell chrome widens under `ambiguous_wide` | open |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.

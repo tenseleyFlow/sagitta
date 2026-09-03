@@ -808,6 +808,9 @@ LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
+AUDIT_SRC := $(sort $(wildcard tests/audit/*.c))
+AUDIT_OBJ := $(AUDIT_SRC:%.c=$(BUILD)/%.o)
+AUDIT_TESTS := $(BUILD)/audit_tests
 FUSS_TREE_TEST_OBJ := $(BUILD)/src/mod/git/fusstree.o \
                       $(BUILD)/src/mod/git/porcelain.o \
                       $(BUILD)/src/util/arena.o $(BUILD)/src/util/base.o \
@@ -923,7 +926,7 @@ FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 FAULTSHIM_SAN_FLAGS := \
   $(if $(filter 1,$(SAN) $(ALIGN_SAN)),-fno-sanitize=all,)
 
-BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
+BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(RUNTIME_BLOB_GEN) $(EMBED_INITRAMFS_GEN) \
                 $(RUNTIME_BLOB_C) \
                 $(FUZZ_LIB_OBJ) \
@@ -995,7 +998,7 @@ PROFILE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test test-unit test-alloc-debug alloc perf-alloc \
+.PHONY: all check test test-unit test-audit test-alloc-debug alloc perf-alloc \
         perf-alloc-selftest clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
@@ -1121,6 +1124,9 @@ $(BUILD)/demo_paint: $(PTY_DEMO_LINK_OBJ)
 
 $(BUILD)/fuzz_utf8: $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ) $(LDLIBS)
+
+$(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_grapheme: $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ) $(LDLIBS)
@@ -1705,7 +1711,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
 # see the valgrind job in .github/workflows/ci.yml for when that lane
 # has to be asked for by hand.
 #
-check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
+check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-fletch test-script \
        test-syn-assets size-tools-selftest target-tools-selftest \
        static-pie-tools-selftest runtime-blob-selftest \
        embedded-image-selftest embedded-fixture-selftest \
@@ -1725,7 +1731,12 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-scri
 test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 	$(UNIT_RUN)
 
-test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
+test-audit: $(AUDIT_TESTS)
+	LC_ALL=C $(AUDIT_TESTS)
+	scripts/check-findings.sh
+	scripts/check-audit-fixtures.sh
+
+test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
       static-pie-tools-selftest runtime-blob-selftest \
