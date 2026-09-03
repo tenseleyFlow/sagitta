@@ -13,6 +13,8 @@
 # instead leaves the directory visible and the one exception effective.
 .docs/*
 !.docs/fletch-spec.md
+!.docs/audits/
+!.docs/audits/**
 .git/
 .idea/
 .vscode/
