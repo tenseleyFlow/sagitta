@@ -2468,7 +2468,8 @@ perf-syn-scroll-s56: $(BUILD)/perf_syn $(BUILD)/yew
 		$(BUILD)/perf_syn --gate-scroll-s56
 
 perf-symidx: $(BUILD)/perf_symidx
-	$(BUILD)/perf_symidx
+	$(BUILD)/perf_symidx --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_symidx
 
 perf-syn-budgets: $(BUILD)/perf_syn $(BUILD)/yew
 	$(BUILD)/perf_syn --gate-budgets

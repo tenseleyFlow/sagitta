@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "perf_policy.h"
 #include "text/edit.h"
 #include "util/sort.h"
 #include "ws/symidx.h"
@@ -389,6 +390,26 @@ static bool load_baselines(Timing *rows, size_t count)
     return true;
 }
 
+static int selftest_policy(void)
+{
+    const u64 budget = UINT64_C(400000);
+
+    if (yew_perf_timing_failed(budget, budget, false) ||
+        !yew_perf_timing_failed(budget + 1U, budget, false) ||
+        yew_perf_timing_failed(budget + 1U, budget, true) ||
+        yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, budget, true) ||
+        !yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U,
+            budget, true) ||
+        !yew_perf_timing_failed(0U, budget, true)) {
+        (void)fprintf(stderr, "perf-symidx-policy: failed\n");
+        return 1;
+    }
+    (void)printf("perf-symidx-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     Timing rows[] = {
@@ -402,13 +423,19 @@ int main(int argc, char **argv)
          SYMIDX_QUERY_P99_BUDGET_NS, false}
     };
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
+    bool selftest = argc == 2 && strcmp(argv[1], "--selftest-policy") == 0;
+    bool advisory;
     size_t i;
     int status = 0;
 
-    if (argc > 2 || (argc == 2 && !measure)) {
-        (void)fprintf(stderr, "usage: %s [--measure]\n", argv[0]);
+    if (argc > 2 || (argc == 2 && !measure && !selftest)) {
+        (void)fprintf(stderr,
+                      "usage: %s [--measure|--selftest-policy]\n", argv[0]);
         return 2;
     }
+    if (selftest)
+        return selftest_policy();
+    advisory = yew_perf_advisory();
     if (!measure_pump(&rows[0]) ||
         !measure_walk_typing(&rows[2], &rows[1]) ||
         !measure_query(&rows[3])) {
@@ -422,8 +449,6 @@ int main(int argc, char **argv)
     for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
         u64 gated = rows[i].gate_maximum ? rows[i].maximum_ns
                                          : rows[i].p99_ns;
-        bool regression = gated > rows[i].budget_p99_ns;
-
         (void)printf("symidx.%s median_ns=%llu p99_ns=%llu max_ns=%llu "
                      "budget_ns=%llu%s\n",
                      rows[i].name,
@@ -431,12 +456,15 @@ int main(int argc, char **argv)
                      (unsigned long long)rows[i].p99_ns,
                      (unsigned long long)rows[i].maximum_ns,
                      (unsigned long long)rows[i].budget_p99_ns,
-                     regression ? " REGRESSION" : " ok");
+                     yew_perf_timing_verdict(gated,
+                                             rows[i].budget_p99_ns,
+                                             advisory));
         if (measure)
             (void)printf("%s %llu %llu\n", rows[i].name,
                          (unsigned long long)rows[i].median_ns,
                          (unsigned long long)rows[i].p99_ns);
-        if (regression)
+        if (yew_perf_timing_failed(gated, rows[i].budget_p99_ns,
+                                   advisory))
             status = 1;
     }
     return status;
