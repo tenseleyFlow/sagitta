@@ -21,10 +21,15 @@ this question closes.
 
 ## Q2 — 64-codepoint backward restart bound
 
-In progress. The baseline's 65-RI unit case reaches the bound and confirms the
-documented parity approximation. Direct callers are `src/ui/panel.c`,
-`src/fl/stdstr.c`, and `src/edit/job.c`; their user-visible outcomes remain to
-be driven separately.
+Finding: `YEW-F-002`.
+
+The baseline's 65-RI unit case reaches the documented parity approximation.
+Direct callers are `src/ui/panel.c`, `src/fl/stdstr.c`, and `src/edit/job.c`.
+Panel whitespace trimming and Fletch boundary validation find a nearby safe
+restart before the bound or retain their promised boundary property. The job
+streaming caller consumes the approximate offset as an exact final-cluster
+boundary: on an odd 65-RI run it holds eight bytes rather than four, delaying
+one completed flag until the child writes again or exits.
 
 ## Q3 — escape codepoints reaching storage
 
@@ -72,4 +77,4 @@ closes.
 
 ## Count
 
-Raw 1 · deduped 1 · critical 0 · high 0 · medium 1 · low 0 · unverified 1.
+Raw 2 · deduped 2 · critical 0 · high 0 · medium 2 · low 0 · unverified 1.
