@@ -9,6 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "perf_policy.h"
 #include "text/edit.h"
 #include "util/base.h"
 
@@ -1000,14 +1001,20 @@ static int assess(const Result *result, const Baselines *baselines,
     const Baseline *baseline = compare_baseline
                                    ? baseline_find(baselines, result->name)
                                    : NULL;
-    bool absolute = false;
+    const char *timing_verdict = " ok";
+    bool timing_failed = false;
+    bool rss_failed = false;
     bool relative = false;
 
     if (!result->informational) {
-        absolute = (result->abs_p99 != 0U &&
-                    result->p99 > result->abs_p99) ||
-                   (result->abs_rss != 0U &&
-                    result->rss > result->abs_rss);
+        if (result->abs_p99 != 0U) {
+            timing_verdict = yew_perf_timing_verdict(
+                result->p99, result->abs_p99, advisory);
+            timing_failed = yew_perf_timing_failed(
+                result->p99, result->abs_p99, advisory);
+        }
+        rss_failed = result->abs_rss != 0U &&
+                     result->rss > result->abs_rss;
     }
     if (baseline != NULL && baseline->p99 != 0U)
         relative = result->p99 > baseline->p99 + baseline->p99 / 10U;
@@ -1018,8 +1025,14 @@ static int assess(const Result *result, const Baselines *baselines,
                  (unsigned long long)result->rss);
     if (result->informational)
         (void)printf(" informational");
-    if (absolute)
+    if (strcmp(timing_verdict, " SANITY-FAIL") == 0)
+        (void)printf(" ABSOLUTE-SANITY-FAIL");
+    else if (strcmp(timing_verdict, " REGRESSION") == 0)
         (void)printf(" ABSOLUTE-FAIL");
+    else if (strcmp(timing_verdict, " WARN") == 0)
+        (void)printf(" absolute-warning");
+    if (rss_failed)
+        (void)printf(" RSS-FAIL");
     if (relative)
         (void)printf(advisory ? " relative-warning" : " RELATIVE-FAIL");
     if (baseline == NULL)
@@ -1027,7 +1040,7 @@ static int assess(const Result *result, const Baselines *baselines,
     else if (result->p99 * 5U < baseline->p99 * 4U)
         (void)printf(" rebaseline-me");
     (void)putchar('\n');
-    return absolute || (relative && !advisory) ? 1 : 0;
+    return timing_failed || rss_failed || (relative && !advisory) ? 1 : 0;
 }
 
 static bool baseline_selftest_parse(const char *text, Baselines *set)
@@ -1071,6 +1084,17 @@ static int baseline_selftest(void)
     Baselines roundtrip = {0};
     const Result update_result = {
         "metric.scalar", 10U, 11U, 12U, 13U, 0U, 0U, false
+    };
+    const Result timing_over = {
+        "policy.timing", 400001U, 400001U, 400001U, 0U,
+        400000U, 0U, false
+    };
+    const Result timing_insane = {
+        "policy.sanity", 40000001U, 40000001U, 40000001U, 0U,
+        400000U, 0U, false
+    };
+    const Result rss_over = {
+        "policy.rss", 1U, 1U, 1U, 11U, 400000U, 10U, false
     };
     FILE *written = NULL;
     int failed = 0;
@@ -1132,6 +1156,13 @@ static int baseline_selftest(void)
                        !update_why_valid("") &&
                        !update_why_valid("s11 initial"),
                    "requires an explicit non-initial update why");
+    BASELINE_CHECK(assess(&timing_over, &invalid, true, false) == 0 &&
+                       assess(&timing_over, &invalid, false, false) == 1,
+                   "makes ordinary timing overruns advisory off pinned hosts");
+    BASELINE_CHECK(assess(&timing_insane, &invalid, true, false) == 1,
+                   "keeps the advisory timing sanity ceiling hard");
+    BASELINE_CHECK(assess(&rss_over, &invalid, true, false) == 1,
+                   "keeps byte limits hard in advisory mode");
     free(invalid.data);
     if (written != NULL)
         (void)fclose(written);
@@ -1139,7 +1170,7 @@ static int baseline_selftest(void)
     free(parsed.data);
 #undef BASELINE_CHECK
     if (failed == 0)
-        (void)printf("baseline-v2-selftest: 13 checks passed\n");
+        (void)printf("baseline-v2-selftest: 16 checks passed\n");
     return failed;
 }
 
@@ -1158,7 +1189,7 @@ int main(int argc, char **argv)
     Baselines baselines = {0};
     Result results[20];
     size_t result_count = 0U;
-    bool advisory = false;
+    bool advisory = yew_perf_advisory();
     bool huge = false;
     bool update = false;
     bool baseline_loaded;
@@ -1198,9 +1229,6 @@ int main(int argc, char **argv)
                       "perf_textbuf: baseline unavailable; advisory mode\n");
         advisory = true;
     }
-    if (getenv("YEW_PERF_ADVISORY") != NULL &&
-        strcmp(getenv("YEW_PERF_ADVISORY"), "0") != 0)
-        advisory = true;
     if (baselines.runner_id[0] == '\0' ||
         strcmp(baselines.runner_id, runner_id) != 0)
         advisory = true;
