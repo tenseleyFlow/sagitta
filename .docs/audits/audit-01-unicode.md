@@ -8,16 +8,24 @@ Owners read: Sprint 2, Sprint 16, Sprint 46
 
 ## Q1 — round-trip law at every consumer
 
-In progress. Baseline evidence already green:
+probed, nothing found
 
-- `fuzz_utf8: exhaustive-three-byte=16777216 ok`
-- UTF-8 focus: 24 tests, 4,776,060 assertions
-- U16 focus: 6 tests, 11,653 assertions
-- Fletch s02-corpus focus: 1 test, 338 assertions
-- JSON raw-byte focus: 1 test, 7 assertions
+- `tests/audit/f01_unicode.c` isolated every three-byte input with a newline
+  record boundary, then passed all 16,777,216 records through register
+  capture/storage, Fletch `FlStr`, JSON write/parse with
+  `YEW_JSF_RAW_BYTE`, and UTF-16 byte/column conversion.
+- Harness result: `corpus=53 three-byte=16777216
+  consumers=register,fletch,json,u16 ok` in 9.75 seconds on the arm64 audit
+  machine.
+- The same four consumer paths passed all 53 Sprint 2 golden corpus rows,
+  including NUL, CRLF, truncated sequences, surrogate encodings, ZWJ
+  families, combining stacks, and regional indicators.
+- The pre-existing focused baselines remain green: UTF-8 24 tests /
+  4,776,060 assertions; U16 6 / 11,653; Fletch corpus 1 / 338; JSON raw
+  byte 1 / 7.
 
-The combined register/Fletch/JSON/U16 corpus harness remains to be added before
-this question closes.
+The harness first applies the core decoder/re-encoder to each independent
+three-byte input, so consumer batching cannot conceal a cross-record decode.
 
 ## Q2 — 64-codepoint backward restart bound
 

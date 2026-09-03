@@ -808,7 +808,11 @@ LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
-AUDIT_SRC := $(sort $(wildcard tests/audit/*.c))
+F01_UNICODE_AUDIT_SRC := tests/audit/f01_unicode.c
+F01_UNICODE_AUDIT_OBJ := $(BUILD)/tests/audit/f01_unicode.o
+F01_UNICODE_AUDIT_BIN := $(BUILD)/tests/audit/f01_unicode
+AUDIT_SRC := $(sort $(filter-out $(F01_UNICODE_AUDIT_SRC),\
+                     $(wildcard tests/audit/*.c)))
 AUDIT_OBJ := $(AUDIT_SRC:%.c=$(BUILD)/%.o)
 AUDIT_TESTS := $(BUILD)/audit_tests
 FUSS_TREE_TEST_OBJ := $(BUILD)/src/mod/git/fusstree.o \
@@ -926,7 +930,8 @@ FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 FAULTSHIM_SAN_FLAGS := \
   $(if $(filter 1,$(SAN) $(ALIGN_SAN)),-fno-sanitize=all,)
 
-BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
+BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) \
+                $(F01_UNICODE_AUDIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(RUNTIME_BLOB_GEN) $(EMBED_INITRAMFS_GEN) \
                 $(RUNTIME_BLOB_C) \
                 $(FUZZ_LIB_OBJ) \
@@ -1127,6 +1132,10 @@ $(BUILD)/fuzz_utf8: $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
 
 $(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) $(LDLIBS)
+
+$(F01_UNICODE_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(F01_UNICODE_AUDIT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
+		$(F01_UNICODE_AUDIT_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_grapheme: $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ) $(LDLIBS)
@@ -1731,8 +1740,9 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-fletc
 test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 	$(UNIT_RUN)
 
-test-audit: $(AUDIT_TESTS)
+test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN)
 	LC_ALL=C $(AUDIT_TESTS)
+	LC_ALL=C $(F01_UNICODE_AUDIT_BIN)
 	scripts/check-findings.sh
 	scripts/check-audit-fixtures.sh
 
