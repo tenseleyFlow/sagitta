@@ -7800,6 +7800,15 @@ static void s52_finish(PtyCtx *c)
     force_quit(c);
 }
 
+static void s52_keys_repaint(PtyCtx *c, const char *keys)
+{
+    u32 repaint = c->vt.nsync_pairs + 1U;
+
+    ptc_keys(c, keys);
+    ptc_wait_sync_pairs(c, repaint);
+    ptc_settle(c, 0);
+}
+
 static void case_s52_fuss(PtyCtx *c)
 {
     const char *name = c->test->name;
@@ -7825,19 +7834,26 @@ static void case_s52_fuss(PtyCtx *c)
     }
     if (!s52_open(c, NULL))
         return;
-    if (strstr(name, "nav_next") != NULL)
-        ptc_keys(c, "down");
-    else if (strstr(name, "nav_prev") != NULL)
-        ptc_keys(c, "up");
-    else if (strstr(name, "nav_row_next") != NULL)
-        ptc_keys(c, "ctrl+down");
-    else if (strstr(name, "nav_parent") != NULL)
-        ptc_keys(c, "right left");
-    else if (strstr(name, "nav_enter") != NULL)
-        ptc_keys(c, "right");
-    else if (strstr(name, "toggle") != NULL)
-        ptc_keys(c, "space");
-    else if (strstr(name, "memory_reentry") != NULL) {
+    if (strstr(name, "nav_next") != NULL) {
+        s52_keys_repaint(c, "down");
+        semantic_snapshot = true;
+    } else if (strstr(name, "nav_prev") != NULL) {
+        s52_keys_repaint(c, "up");
+        semantic_snapshot = true;
+    } else if (strstr(name, "nav_row_next") != NULL) {
+        s52_keys_repaint(c, "ctrl+down");
+        semantic_snapshot = true;
+    } else if (strstr(name, "nav_parent") != NULL) {
+        s52_keys_repaint(c, "right");
+        s52_keys_repaint(c, "left");
+        semantic_snapshot = true;
+    } else if (strstr(name, "nav_enter") != NULL) {
+        s52_keys_repaint(c, "right");
+        semantic_snapshot = true;
+    } else if (strstr(name, "toggle") != NULL) {
+        s52_keys_repaint(c, "space");
+        semantic_snapshot = true;
+    } else if (strstr(name, "memory_reentry") != NULL) {
         ptc_keys(c, "space");
         s52_wait_screen(c, "漢字.txt");
         ptc_keys(c, "ctrl+g q");
