@@ -222,7 +222,10 @@ x86_64 FUSS ledger increase without changing a hard size budget or the full
 on-disk shipping binary. Commit `a41443e8` adds a bounded retry for advisory
 direct-latency transport failures; strict/designated gates and metric/sanity
 failures remain single-shot, and the profiler cross-check prevents nested
-retries. `a41443e8` is the fixed post-Sprint-57.8 code baseline for Sprint 58.
+retries. Commits `82c8ff77` and `731f5be0` route symbol-index and text-buffer
+wall-clock limits through that same hosted-advisory policy while keeping zero,
+over-100x, RSS/byte-count, and designated-runner failures hard. `731f5be0` is
+the fixed post-Sprint-57.8 code baseline for Sprint 58.
 
 Local closeout evidence on Darwin arm64:
 
@@ -248,19 +251,21 @@ Local closeout evidence on Darwin arm64:
 
 Hosted closeout evidence:
 
-- GitHub Actions run `33647598586` attempt 2 is green at exact code commit `a41443e8`:
-  all 22 standard push jobs pass, including GNU GCC, Clang, macOS arm64,
-  hosted arm64, musl, modules, size, performance, determinism, sanitizer,
-  PTY, script, Fletch dispatch, LSP, embedded, allocation, and torture;
+- GitHub Actions run `33700973479` attempt 1 is green at exact code commit
+  `731f5be0`: all 22 standard push jobs pass, including GNU GCC, Clang, macOS
+  arm64, hosted arm64, musl, modules, size, performance, determinism,
+  sanitizer, PTY, script, Fletch dispatch, LSP, embedded, allocation, and
+  torture;
 - the performance lane passes the exact Sprint 56 profiler cross-check that
   exposed the loaded-runner control timeout, and the macOS lane passes the
   complete unit suite containing `job_stream_bypasses_safe_prefix`, all
-  advisory timing probes, and the synchronized raw-key burst PTY. Attempt 1's
-  determinism warm-up ended transiently before comparisons; the exact rerun
-  passed, and the workflow follow-up preserves the warm-up log on failure;
+  advisory timing probes, and the synchronized raw-key burst PTY. Predecessor
+  run `33647598586` attempt 1's determinism warm-up ended transiently before
+  comparisons; the exact rerun passed, and the workflow follow-up preserves
+  the warm-up log on failure;
 - Valgrind, designated-runner performance, and nightly fuzz/performance/
   torture jobs were skipped by the push trigger as designed and remain
   separate evidence obligations rather than inferred successes.
 
 The Sprint 58 hosted baseline gate is satisfied. Sprint 58 has not begun; its
-audit fronts must preserve `a41443e8` as the fixed code baseline when opened.
+audit fronts must preserve `731f5be0` as the fixed code baseline when opened.
