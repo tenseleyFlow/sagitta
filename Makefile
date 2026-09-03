@@ -811,6 +811,11 @@ FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
 F01_UNICODE_AUDIT_SRC := tests/audit/f01_unicode.c
 F01_UNICODE_AUDIT_OBJ := $(BUILD)/tests/audit/f01_unicode.o
 F01_UNICODE_AUDIT_BIN := $(BUILD)/tests/audit/f01_unicode
+# JSON is shared by LSP and AI and therefore absent from OBJ in the fully
+# stripped build.  F01 audits the codec itself, so retain that pure consumer
+# without pulling either optional module into the product or linking it twice.
+F01_UNICODE_CODEC_OBJ := $(filter-out $(FUZZ_CORE_OBJ),\
+                           $(BUILD)/src/mod/lsp/json.o)
 F01_VT_WIDTH_AUDIT_SRC := tests/audit/f01_vt_width.c
 F01_VT_WIDTH_AUDIT_OBJ := $(BUILD)/tests/audit/f01_vt_width.o
 F01_VT_WIDTH_AUDIT_BIN := $(BUILD)/tests/audit/f01_vt_width
@@ -1138,8 +1143,10 @@ $(BUILD)/fuzz_utf8: $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
 $(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) $(LDLIBS)
 
-$(F01_UNICODE_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(F01_UNICODE_AUDIT_OBJ)
+$(F01_UNICODE_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(F01_UNICODE_CODEC_OBJ) \
+                          $(F01_UNICODE_AUDIT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
+		$(F01_UNICODE_CODEC_OBJ) \
 		$(F01_UNICODE_AUDIT_OBJ) $(LDLIBS)
 
 $(F01_VT_WIDTH_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(PTY_VT_OBJ) \
