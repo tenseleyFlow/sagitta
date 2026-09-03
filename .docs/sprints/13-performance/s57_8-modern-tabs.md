@@ -224,8 +224,15 @@ direct-latency transport failures; strict/designated gates and metric/sanity
 failures remain single-shot, and the profiler cross-check prevents nested
 retries. Commits `82c8ff77` and `731f5be0` route symbol-index and text-buffer
 wall-clock limits through that same hosted-advisory policy while keeping zero,
-over-100x, RSS/byte-count, and designated-runner failures hard. `731f5be0` is
-the fixed post-Sprint-57.8 code baseline for Sprint 58.
+over-100x, RSS/byte-count, and designated-runner failures hard. `731f5be0` was
+the first fully hosted-green post-remediation candidate. Follow-up run
+`33708407246` exposed the same missing policy integration in cursor timing;
+`d721ec2f` applies the shared verdict there and adds a policy self-test. Run
+`33710470182` then exposed FUSS navigation PTYs that could snapshot before a
+queued key repaint. Commit `41fef416` synchronizes every tested navigation key
+and compares the deterministic final terminal grid, styles, cursor, and modes
+without treating asynchronous SGR history as semantic state. `41fef416` is the
+fixed post-Sprint-57.8 code baseline for Sprint 58.
 
 Local closeout evidence on Darwin arm64:
 
@@ -251,15 +258,16 @@ Local closeout evidence on Darwin arm64:
 
 Hosted closeout evidence:
 
-- GitHub Actions run `33700973479` attempt 1 is green at exact code commit
-  `731f5be0`: all 22 standard push jobs pass, including GNU GCC, Clang, macOS
+- GitHub Actions run `33714586788` is green at exact code commit `41fef416`:
+  all 22 standard push jobs pass, including GNU GCC, Clang, macOS
   arm64, hosted arm64, musl, modules, size, performance, determinism,
   sanitizer, PTY, script, Fletch dispatch, LSP, embedded, allocation, and
   torture;
 - the performance lane passes the exact Sprint 56 profiler cross-check that
   exposed the loaded-runner control timeout, and the macOS lane passes the
   complete unit suite containing `job_stream_bypasses_safe_prefix`, all
-  advisory timing probes, and the synchronized raw-key burst PTY. Predecessor
+  advisory timing probes including cursor context transitions, the synchronized
+  raw-key burst PTY, and the post-key FUSS navigation goldens. Predecessor
   run `33647598586` attempt 1's determinism warm-up ended transiently before
   comparisons; the exact rerun passed, and the workflow follow-up preserves
   the warm-up log on failure;
@@ -268,4 +276,4 @@ Hosted closeout evidence:
   separate evidence obligations rather than inferred successes.
 
 The Sprint 58 hosted baseline gate is satisfied. Sprint 58 has not begun; its
-audit fronts must preserve `731f5be0` as the fixed code baseline when opened.
+audit fronts must preserve `41fef416` as the fixed code baseline when opened.

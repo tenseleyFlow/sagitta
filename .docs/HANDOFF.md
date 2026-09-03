@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-09-02
+**Current checkpoint date:** 2026-09-03
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -10,18 +10,19 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Hosted-green code/recovery anchor:** `731f5be0` (`origin/trunk` code baseline)
+**Hosted-green code/recovery anchor:** `41fef416` (`origin/trunk` code baseline)
 
-**Current post-Sprint-57.8 code frontier:** `731f5be0`
+**Current post-Sprint-57.8 code frontier:** `41fef416`
 
 **Git position:** the complete Sprint 57 through 57.8 chain and its hosted-CI
 remediation are pushed. GitHub Actions run `33700973479` attempt 1 is green for
-all 22 standard push jobs at `731f5be0`; this handoff refresh and the
-determinism warm-up diagnostic are code-neutral follow-up work.
+all 22 standard push jobs at the earlier `731f5be0` candidate. Follow-up CI
+remediation is green for all 22 applicable jobs at `41fef416` in run
+`33714586788`; seven trigger-specific jobs skipped as designed.
 
 **Active implementation frontier:** Sprint 57.8 is repository-complete. Sprint
 58 is next and has not begun. Its hosted commit-of-record baseline gate is now
-satisfied by `731f5be0` and run `33700973479` attempt 1. Designated-hardware
+satisfied by `41fef416` and run `33714586788`. Designated-hardware
 timing, the trigger-specific Valgrind/nightly jobs, and physical Pi
 corroboration remain explicit release-evidence tails; none was inferred from a
 skipped push job.
@@ -53,7 +54,8 @@ The deterministic embedded gate passes QEMU rows 1–11 at 64 MiB with peak
 `VmHWM` 9,764,864 bytes. The 32 MiB row cleanly names the 48 MiB workload
 floor and exits without an OOM kill. Physical Raspberry Pi Zero 2 W class
 corroboration is still pending. Hosted CI is green for `731f5be0` in run
-`33700973479` attempt 1. Physical evidence remains a release-blocking tail
+`33700973479` attempt 1 and for the final `41fef416` baseline in run
+`33714586788`. Physical evidence remains a release-blocking tail
 under S57-A4; it is neither fabricated from emulation nor used to stall
 unrelated repository work.
 
@@ -82,14 +84,14 @@ Right overflow retains priority, and ordinary click, drag, group, CJK, and
 FUSS-offset geometry remains green.
 
 The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
-Its fixed code baseline is `731f5be0`. The required hosted commit-of-record
+Its fixed code baseline is `41fef416`. The required hosted commit-of-record
 evidence is green, but Sprint 58 has not begun: open its audit fronts only as
 new sprint work, preserving the fixed baseline and the reproducer-first law.
 
-Hosted Sprint 57.8 closeout evidence at `731f5be0`:
+Hosted Sprint 57.8 closeout evidence at `41fef416`:
 
-- GitHub Actions run `33700973479` attempt 1 completed successfully on
-  2026-09-02 with all 22 standard push jobs green: GCC, Clang, macOS arm64,
+- GitHub Actions run `33714586788` completed successfully on 2026-09-03 with
+  all 22 standard push jobs green: GCC, Clang, macOS arm64,
   hosted arm64, musl, modules, size, performance, determinism, sanitizer, PTY,
   script, Fletch, Fletch dispatch, LSP, embedded, allocation, torture, Unicode,
   and structural bans;
@@ -106,6 +108,14 @@ Hosted Sprint 57.8 closeout evidence at `731f5be0`:
   policy. Strict/designated timing gates, zero/over-100x sanity failures, and
   RSS/byte limits remain hard, while the profiler cross-check retains sole
   ownership of its outer retry;
+- follow-up run `33708407246` exposed that cursor context-transition timing had
+  not yet adopted the shared hosted-advisory policy. Commit `d721ec2f` routes
+  cursor wall-clock rows through that policy and adds its self-test while
+  retaining correctness and zero/over-100x failures as hard gates. Run
+  `33710470182` then exposed stale pre-key FUSS navigation goldens; `41fef416`
+  waits for each
+  key-triggered repaint and snapshots the exact final grid, styles, cursor, and
+  modes rather than nondeterministic asynchronous SGR history;
 - FUSS Git detection now invalidates the finished async state immediately, and
   startup, finder, completion, status, and raw-key PTYs wait on semantic state
   instead of guessed frame timing. Sanitized aggregate PTY execution receives
