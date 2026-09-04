@@ -11,6 +11,8 @@
 
 enum { MAX_OPS = 64 };
 
+static u64 frames_checked;
+
 typedef struct {
     size_t bsu;
     size_t esu;
@@ -287,6 +289,7 @@ static bool check_grid(const u8 *data, size_t len,
             ok = false;
             break;
         }
+        frames_checked++;
         if (counts.bsu != counts.esu || counts.bsu > 1u ||
             (emitted != 0u && counts.bsu != 1u) ||
             (emitted == 0u && counts.bsu != 0u)) {
@@ -310,5 +313,10 @@ static bool check_grid(const u8 *data, size_t len,
 
 int main(int argc, char **argv)
 {
-    return yew_fuzz_main(argc, argv, "fuzz_grid", NULL, check_grid);
+    int result = yew_fuzz_main(argc, argv, "fuzz_grid", NULL, check_grid);
+
+    if (result == 0)
+        (void)printf("fuzz_grid: frames=%llu\n",
+                     (unsigned long long)frames_checked);
+    return result;
 }
