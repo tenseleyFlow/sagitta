@@ -403,3 +403,26 @@ void test_runtime_defaults_parse_run_style_and_options(void)
     yew_ed_free(&ed);
     bytebuf_free(&source);
 }
+
+void test_runtime_defaults_frozen_globals_and_dotted_keys_execute(void)
+{
+    static const char source[] =
+        "import win\n"
+        "import ed\n"
+        "let cursors = win.current().cursors()\n"
+        "if cursors[0].pos() != 0 { error(\"bad cursor\") }\n"
+        "set({ \"clipboard.sync\": \"yank\", "
+        "\"search.smartcase\": true })\n"
+        "bind(\"L\", \"Z\", \"ed.nop\")\n"
+        "on(\"ed.idle\", fn() nil)\n"
+        "ed.msg(\"modal globals registered\")\n";
+    Ed ed;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, source, sizeof(source) - 1U),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 1U);
+    YEW_ASSERT_EQ_STR(ed.msg.text, "modal globals registered");
+    yew_ed_free(&ed);
+}

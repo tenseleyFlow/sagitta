@@ -1,7 +1,7 @@
 # Sprint 58 findings ledger
 
 Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`  
-Next available ID: `YEW-F-004`
+Next available ID: `YEW-F-005`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -12,6 +12,7 @@ the historical row and body.
 | YEW-F-001 | M | open | F01 UNI | ambiguous-wide doubles fixed-cell chrome glyphs | tests/audit/yew_f_001.c | s27 §7 |
 | YEW-F-002 | M | open | F01 UNI | long RI output delays a completed flag cluster | tests/audit/yew_f_002.c | s19 §3 |
 | YEW-F-003 | H | open | F01 UNI | ASCII-base keycap leaves inconsistent grid width | tests/audit/yew_f_003.c | s05 §3 |
+| YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -37,6 +38,14 @@ one-cell width. The reproducer stops just before the fatal renderer call so
 the XFAIL runner can retain the other findings. It fails at the fixed baseline
 and was confirmed by hosted audit-control run `33815573832` across the same
 cross-compiler, cross-architecture matrix.
+
+`YEW-F-004` is Medium because a documented configuration shape fails loudly
+at startup but does not corrupt document bytes; quoting the option name is a
+working recovery. Root-cause hypothesis: the full expression parser treats an
+identifier map key as a single token and requires `:` immediately, while the
+pure-literal parser's entry path explicitly accepts dotted keys. The shipped
+`runtime/init.fl` quotes its dotted option names, masking the mismatch on the
+default startup path.
 
 ## Unverified observations
 

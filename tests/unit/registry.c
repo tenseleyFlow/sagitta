@@ -12,6 +12,7 @@ const YewTest yew_tests[] = {
     T(batch_profiler_dumps_one_frame_per_executed_statement),
     T(runtime_defaults_rebuild_frozen_keymap),
     T(runtime_defaults_parse_run_style_and_options),
+    T(runtime_defaults_frozen_globals_and_dotted_keys_execute),
     T(trust_prompt_routes_all_terminal_answers_through_event_loop),
     T(trust_prompt_view_is_readonly_and_reprompts_after_close),
     T(flconf_loads_builtin_user_workspace_in_precedence_order),

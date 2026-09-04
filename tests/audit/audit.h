@@ -23,5 +23,6 @@ extern const size_t yew_audit_tests_len;
 bool test_yew_f_001(char *why, size_t why_cap);
 bool test_yew_f_002(char *why, size_t why_cap);
 bool test_yew_f_003(char *why, size_t why_cap);
+bool test_yew_f_004(char *why, size_t why_cap);
 
 #endif

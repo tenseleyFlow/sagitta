@@ -2174,6 +2174,7 @@ void test_mouse_ctx_row_highlights_then_invokes(void);
 void test_option_table_has_frozen_order_types_scopes_and_defaults(void);
 void test_runtime_defaults_rebuild_frozen_keymap(void);
 void test_runtime_defaults_parse_run_style_and_options(void);
+void test_runtime_defaults_frozen_globals_and_dotted_keys_execute(void);
 void test_trust_prompt_routes_all_terminal_answers_through_event_loop(void);
 void test_trust_prompt_view_is_readonly_and_reprompts_after_close(void);
 void test_flconf_loads_builtin_user_workspace_in_precedence_order(void);
