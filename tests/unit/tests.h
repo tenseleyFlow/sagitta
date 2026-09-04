@@ -334,6 +334,7 @@ void test_keymap_layer_ownership_and_listing_determinism(void);
 void test_chord_full_prefix_timeout_and_refeed(void);
 void test_chord_dead_sequence_escape_and_release(void);
 void test_chord_top_layer_owns_sequence(void);
+void test_chord_rebind_and_two_plugins_keep_partial_ownership(void);
 void test_count_repeat_and_takes_count(void);
 void test_count_zero_reset_and_escape(void);
 void test_count_insert_mode_digits_are_keys(void);

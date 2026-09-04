@@ -366,6 +366,7 @@ const YewTest yew_tests[] = {
     T(chord_full_prefix_timeout_and_refeed),
     T(chord_dead_sequence_escape_and_release),
     T(chord_top_layer_owns_sequence),
+    T(chord_rebind_and_two_plugins_keep_partial_ownership),
     T(count_repeat_and_takes_count),
     T(count_zero_reset_and_escape),
     T(count_insert_mode_digits_are_keys),

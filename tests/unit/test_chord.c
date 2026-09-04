@@ -3,8 +3,10 @@
 #include <string.h>
 
 #include "edit/cmd.h"
+#include "edit/bind.h"
 #include "edit/dispatch.h"
 #include "edit/ed.h"
+#include "fl/origin.h"
 
 static u32 chord_short_calls;
 static u32 chord_force_calls;
@@ -210,4 +212,82 @@ void test_chord_top_layer_owns_sequence(void)
     YEW_ASSERT_EQ_U64(chord_long_calls, 0U);
     yew_keymap_free(&plugin);
     yew_dispatch_free(&ed);
+}
+
+void test_chord_rebind_and_two_plugins_keep_partial_ownership(void)
+{
+    static const BindRow mode_rows[] = {
+        {"g g", "ed.ui.next", 0, NULL},
+    };
+    Ed ed;
+    u32 builtin;
+    u32 user;
+    u32 plugin_a;
+    u32 plugin_b;
+
+    chord_register_commands();
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_keymap_free(&ed.mode_keys[YEW_MODE_L]);
+    YEW_ASSERT(yew_keymap_build(&ed.mode_keys[YEW_MODE_L], "mode:audit",
+                                mode_rows, YEW_ARRAY_LEN(mode_rows)));
+    builtin = fl_origin_register(&ed, FL_ORIGIN_BUILTIN,
+                                 "/runtime/init.fl", 0U);
+    user = fl_origin_register(&ed, FL_ORIGIN_CONFIG, "/home/init.fl", 0U);
+    plugin_a = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, "plug:a", 0U);
+    plugin_b = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, "plug:b", 0U);
+    yew_bind_batch_begin(&ed);
+    YEW_ASSERT(yew_bind_add(&ed, builtin, YEW_MODE_L, "g i",
+                            yew_cmd_lookup("ed.ui.prev", 10U), 0, NULL,
+                            FL_NIL_V) != 0U);
+    YEW_ASSERT(yew_bind_add(&ed, user, YEW_MODE_L, "g u",
+                            yew_cmd_lookup("ed.ui.close", 11U), 0, NULL,
+                            FL_NIL_V) != 0U);
+    YEW_ASSERT(yew_bind_add(&ed, plugin_a, YEW_MODE_L, "g x",
+                            yew_cmd_lookup("ed.ui.open", 10U), 0, NULL,
+                            FL_NIL_V) != 0U);
+    YEW_ASSERT(yew_bind_add(&ed, plugin_b, YEW_MODE_L, "g",
+                            yew_cmd_lookup("ed.ui.toggle", 12U), 0, NULL,
+                            FL_NIL_V) != 0U);
+    YEW_ASSERT(yew_bind_add(&ed, plugin_b, YEW_MODE_L, "g p",
+                            yew_cmd_lookup("ed.ui.prev", 10U), 0, NULL,
+                            FL_NIL_V) != 0U);
+
+    /* Every origin reaches the same validator.  In particular a plugin
+     * cannot smuggle an Escape prefix into the rebuilt config map. */
+    YEW_ASSERT_EQ_U64(yew_bind_add(&ed, builtin, YEW_MODE_L, "<esc> i",
+                                    yew_cmd_lookup("ed.nop", 6U), 0, NULL,
+                                    FL_NIL_V), 0U);
+    YEW_ASSERT_EQ_U64(yew_bind_add(&ed, user, YEW_MODE_L, "<esc> u",
+                                    yew_cmd_lookup("ed.nop", 6U), 0, NULL,
+                                    FL_NIL_V), 0U);
+    YEW_ASSERT_EQ_U64(yew_bind_add(&ed, plugin_a, YEW_MODE_L, "<esc> a",
+                                    yew_cmd_lookup("ed.nop", 6U), 0, NULL,
+                                    FL_NIL_V), 0U);
+    YEW_ASSERT_EQ_U64(yew_bind_add(&ed, plugin_b, YEW_MODE_L, "<esc> b",
+                                    yew_cmd_lookup("ed.nop", 6U), 0, NULL,
+                                    FL_NIL_V), 0U);
+    yew_bind_batch_end(&ed);
+
+    chord_probe_reset();
+    yew_dispatch_key(&ed, chord_text_key('g'), 100);
+    YEW_ASSERT_EQ_STR(yew_dispatch_owner(&ed), "config");
+    YEW_ASSERT_EQ_I64(yew_dispatch_pending(&ed)->layer, 2);
+    yew_dispatch_key(&ed, chord_text_key('g'), 101);
+    YEW_ASSERT_EQ_U64(chord_short_calls, 1U);
+    YEW_ASSERT_EQ_U64(chord_long_calls, 0U);
+    yew_dispatch_tick(&ed, 601);
+    YEW_ASSERT_EQ_U64(chord_short_calls, 2U);
+    YEW_ASSERT_EQ_U64(chord_long_calls, 0U);
+
+    yew_dispatch_key(&ed, chord_text_key('g'), 700);
+    yew_dispatch_key(&ed, chord_text_key('x'), 701);
+    YEW_ASSERT_EQ_U64(chord_force_calls, 1U);
+    yew_dispatch_key(&ed, chord_text_key('g'), 800);
+    yew_dispatch_key(&ed, chord_text_key('u'), 801);
+    YEW_ASSERT_EQ_U64(chord_refeed_calls, 1U);
+    yew_dispatch_key(&ed, chord_text_key('g'), 900);
+    yew_dispatch_key(&ed, chord_text_key('p'), 901);
+    YEW_ASSERT_EQ_U64(chord_tail_calls, 1U);
+    yew_ed_free(&ed);
 }
