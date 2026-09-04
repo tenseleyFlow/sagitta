@@ -195,88 +195,104 @@ void test_draw_selection_then_secondary_cursor_preserves_glyphs(void)
 void test_draw_rect_selected_cells_equal_deleted_span_cells(void)
 {
     static const u8 text[] =
-        "  ab\n"
-        "a\xE6\xBC\xA2" "b\n"
-        "a\tb\n"
-        "a\xFF" "b\n"
-        "x\n"
-        "   z\n";
+        "012345678\n"
+        "a\xE6\xBC\xA2\tb"
+        "\xF0\x9F\x91\xA8\xE2\x80\x8D"
+        "\xF0\x9F\x91\xA9\xE2\x80\x8D"
+        "\xF0\x9F\x91\xA7\xE2\x80\x8D"
+        "\xF0\x9F\x91\xA6" "c\n"
+        "012345678\n";
+    enum { EDGE_N = 10, TARGET_ROW = 1, THIRD_ROW_AT = 43 };
     Ed ed;
     const ThemeEnt *selection;
-    Cursor *cursor;
-    YewSelSpanVec spans = {0};
-    Bytebuf before;
-    Bytebuf expected;
-    Bytebuf after;
-    CmdCtx cx = {0};
-    EditCtx ec;
-    size_t row;
+    u32 edge0;
+    u32 edge1;
 
     yew_ed_init(&ed);
     selection = yew_theme_ui_tab(&ed, "sel");
     YEW_ASSERT_NOT_NULL(selection);
     YEW_ASSERT(yew_ed_open_scratch(&ed));
-    yew_undo_free(ed.buffer.undo);
-    yew_textbuf_free(ed.buffer.tb);
-    ed.buffer.tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
-    ed.buffer.undo = yew_undo_new(ed.buffer.tb);
     ed.buffer.tabwidth = 4U;
     ed.win->buf = &ed.buffer;
-    ed.win->rect = (Rect){0U, 0U, 16U, 6U};
-    ed.win->vp.rows = 6U;
-    ed.win->vp.cols = 16U;
+    ed.win->rect = (Rect){0U, 0U, 12U, 3U};
+    ed.win->vp.rows = 3U;
+    ed.win->vp.cols = 12U;
     ed.win->gutter_width = 0U;
-    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 7U, 16U));
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 4U, 12U));
     ed.grid_ready = true;
-    ed.mode = YEW_MODE_H;
-    ed.win->h.kind = YEW_SEL_RECT;
-    cursor = &ed.win->cs.curs.data[ed.win->cs.primary];
-    cursor->anchor = BYTEOFF(1U);  /* cell 1 on the first row */
-    cursor->pos = BYTEOFF(24U);    /* cell 3 on the final row */
 
-    yew_sel_rect_spans(ed.win, cursor, &spans);
-    YEW_ASSERT_EQ_U64(spans.len, 6U);
-    yew_draw_document_rows(&ed, ed.win, 0U, 6U);
-    for (row = 0U; row < spans.len; row++) {
-        Span line = yew_textbuf_line_span(ed.buffer.tb, LINENO(row));
-        CCol painted_lo;
-        CCol painted_hi;
-        u16 col;
+    for (edge0 = 0U; edge0 < EDGE_N; edge0++) {
+        for (edge1 = 0U; edge1 < EDGE_N; edge1++) {
+            Cursor *cursor;
+            YewSelSpanVec spans = {0};
+            Bytebuf before;
+            Bytebuf expected;
+            Bytebuf after;
+            CmdCtx cx = {0};
+            EditCtx ec;
+            Span target;
+            Span line;
+            CCol deleted_lo;
+            CCol deleted_hi;
+            u16 col;
 
-        if (line.hi > line.lo && text[line.hi - 1U] == '\n')
-            line.hi--;
-        painted_lo = yew_off_to_ccol(ed.buffer.tb, line,
-                                     BYTEOFF(spans.data[row].lo), 4U);
-        painted_hi = yew_off_to_ccol(ed.buffer.tb, line,
-                                     BYTEOFF(spans.data[row].hi), 4U);
-        for (col = 0U; col < ed.win->rect.w; col++) {
-            const Cell *cell = &ed.grid.back[row * ed.grid.cols + col];
-            bool selected = col >= painted_lo.v && col < painted_hi.v;
+            yew_undo_free(ed.buffer.undo);
+            yew_textbuf_free(ed.buffer.tb);
+            ed.buffer.tb = yew_textbuf_from_bytes(text,
+                                                  sizeof(text) - 1U);
+            ed.buffer.undo = yew_undo_new(ed.buffer.tb);
+            ed.win->buf = &ed.buffer;
+            ed.mode = YEW_MODE_H;
+            ed.win->h.kind = YEW_SEL_RECT;
+            cursor = &ed.win->cs.curs.data[ed.win->cs.primary];
+            cursor->anchor = BYTEOFF(edge0);
+            cursor->pos = BYTEOFF(THIRD_ROW_AT + edge1);
+            cursor->goal_col = (GCol){0U};
 
-            YEW_ASSERT((memcmp(&cell->bg, &selection->bg,
-                               sizeof(selection->bg)) == 0) == selected);
+            yew_sel_rect_spans(ed.win, cursor, &spans);
+            YEW_ASSERT_EQ_U64(spans.len, 3U);
+            target = spans.data[TARGET_ROW];
+            line = yew_textbuf_line_span(ed.buffer.tb,
+                                         LINENO(TARGET_ROW));
+            if (line.hi > line.lo)
+                line.hi--;
+            deleted_lo = yew_off_to_ccol(ed.buffer.tb, line,
+                                         BYTEOFF(target.lo), 4U);
+            deleted_hi = yew_off_to_ccol(ed.buffer.tb, line,
+                                         BYTEOFF(target.hi), 4U);
+
+            yew_draw_document_rows(&ed, ed.win, 0U, 3U);
+            for (col = 0U; col < ed.win->rect.w; col++) {
+                const Cell *cell = &ed.grid.back[
+                    TARGET_ROW * ed.grid.cols + col];
+                bool highlighted = memcmp(&cell->bg, &selection->bg,
+                                           sizeof(selection->bg)) == 0;
+                bool deleted = col >= deleted_lo.v && col < deleted_hi.v;
+
+                YEW_ASSERT(highlighted == deleted);
+            }
+
+            before = draw_materialize(ed.buffer.tb);
+            bytebuf_init(&expected);
+            draw_append_outside_spans(&expected, &before, &spans);
+            cx.ed = &ed;
+            cx.win = ed.win;
+            cx.count = 1U;
+            cx.source = YEW_SRC_TEST;
+            ec = yew_ed_edit_ctx(&ed);
+            yew_undo_begin(&ec, YEW_TXN_TYPE);
+            YEW_ASSERT_EQ_U64(yew_sel_cmd_delete(&cx), YEW_CMD_OK);
+            yew_undo_end(&ec);
+            after = draw_materialize(ed.buffer.tb);
+            YEW_ASSERT_EQ_U64(after.len, expected.len);
+            YEW_ASSERT_EQ_MEM(after.data, expected.data, expected.len);
+
+            bytebuf_free(&after);
+            bytebuf_free(&expected);
+            bytebuf_free(&before);
+            YewSelSpanVec_free(&spans);
         }
     }
-
-    before = draw_materialize(ed.buffer.tb);
-    bytebuf_init(&expected);
-    draw_append_outside_spans(&expected, &before, &spans);
-    cx.ed = &ed;
-    cx.win = ed.win;
-    cx.count = 1U;
-    cx.source = YEW_SRC_TEST;
-    ec = yew_ed_edit_ctx(&ed);
-    yew_undo_begin(&ec, YEW_TXN_TYPE);
-    YEW_ASSERT_EQ_U64(yew_sel_cmd_delete(&cx), YEW_CMD_OK);
-    yew_undo_end(&ec);
-    after = draw_materialize(ed.buffer.tb);
-    YEW_ASSERT_EQ_U64(after.len, expected.len);
-    YEW_ASSERT_EQ_MEM(after.data, expected.data, expected.len);
-
-    bytebuf_free(&after);
-    bytebuf_free(&expected);
-    bytebuf_free(&before);
-    YewSelSpanVec_free(&spans);
     yew_ed_free(&ed);
 }
 
