@@ -36,6 +36,14 @@ Hosted run `33826009408` passed at F02 close head `7d7aad16`, including the
 GCC, Clang, ASan/UBSan, arm64 Linux, arm64 macOS, musl, determinism, and the
 minimal `MODULES=""` profile. The product-code baseline remains immutable.
 
+Hosted run `33836915903` passed at F03 close head `b9e604d4`, including the
+new save-identity, register-routing, cross-EOL paste, and LSP-rename controls
+under GCC, Clang, ASan/UBSan, arm64 Linux, arm64 macOS, musl, determinism,
+and the minimal `MODULES=""` profile. Its predecessor exposed a
+scheduler-dependent SGR transcript in the FUSS PTY harness; `b9e604d4`
+normalizes the unobservable gap between its first and final cell-bearing
+frames. The product-code baseline remains immutable.
+
 ## External tools at opening
 
 | Tool | Version |

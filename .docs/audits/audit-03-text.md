@@ -11,6 +11,9 @@ The product-code baseline remained immutable. Audit-control changes add
 edge-specific save, register, paste, and LSP-rename coverage only.
 All five new cases passed the default arm64 macOS build and ASan/UBSan;
 the four module-independent cases also passed the `MODULES=""` build.
+Hosted run `33836915903` then passed the complete 22-job push matrix at
+close head `b9e604d4`, including the new controls on both compilers, both
+hosted arm64 targets, musl, ASan/UBSan, determinism, and `MODULES=""`.
 
 ## Q1 — byte-preserving open, edit, and save
 
