@@ -48,7 +48,7 @@ zero until its report closes; silence never counts as evidence.
 | Front | File | Status | Raw | Deduped | Crit | High | Med | Low | Unverified |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
 | F01 unicode | `audit-01-unicode.md` | closed | 3 | 3 | 0 | 1 | 2 | 0 | 3 |
-| F02 terminal | `audit-02-terminal.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F02 terminal | `audit-02-terminal.md` | awaiting CI | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | F03 text | `audit-03-text.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F04 modal | `audit-04-modal.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F05 execute | `audit-05-exec.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
