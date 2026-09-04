@@ -166,6 +166,31 @@ void test_register_delete_shift_boundary(void)
     yew_reg_free(&r);
 }
 
+void test_register_blockwise_short_delete_uses_small_delete(void)
+{
+    static const Span rows[] = {{0U, 1U}, {1U, 2U}, {2U, 3U}};
+    Registers r;
+    RegVal block;
+    size_t i;
+
+    yew_reg_init(&r);
+    r.clipboard_sync = YEW_CLIP_SYNC_OFF;
+    reg_test_value(&block, YEW_REG_BLOCKWISE, (const u8 *)"abc", 3U);
+    block.width = 8U;
+    block.ragged = true;
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++)
+        YewRegRowVec_push(&block.rows, rows[i]);
+
+    yew_reg_delete(&r, 0U, &block);
+
+    reg_assert_value(&r.small_del, YEW_REG_BLOCKWISE,
+                     (const u8 *)"abc", 3U);
+    YEW_ASSERT_EQ_U64(r.small_del.rows.len, YEW_ARRAY_LEN(rows));
+    YEW_ASSERT_EQ_U64(r.numbered[1].bytes.len, 0U);
+    yew_regval_free(&block);
+    yew_reg_free(&r);
+}
+
 void test_register_reserved_histories_ignore_explicit_names(void)
 {
     Registers r;

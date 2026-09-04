@@ -100,6 +100,28 @@ static void paste_install(Registers *r, const RegVal *v)
     yew_regval_copy(&r->unnamed, v);
 }
 
+static void paste_file_write(const char *path, const u8 *bytes, size_t len)
+{
+    FILE *file = fopen(path, "wb");
+
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT_EQ_U64(fwrite(bytes, 1U, len, file), len);
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+}
+
+static void paste_file_assert(const char *path, const u8 *want, size_t len)
+{
+    u8 bytes[64];
+    FILE *file = fopen(path, "rb");
+
+    YEW_ASSERT(len <= sizeof(bytes));
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT_EQ_U64(fread(bytes, 1U, sizeof(bytes), file), len);
+    YEW_ASSERT(!ferror(file));
+    YEW_ASSERT_EQ_MEM(bytes, want, len);
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+}
+
 void test_paste_char_before_and_after_are_one_undo_node(void)
 {
     PasteFixture before;
@@ -231,6 +253,101 @@ void test_paste_line_after_missing_final_newline_uses_destination_eol(void)
     n = snprintf(yew_dir, sizeof(yew_dir), "%s/yew", root);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(yew_dir));
     YEW_ASSERT_EQ_I64(unlink(blocker), 0);
+    YEW_ASSERT_EQ_I64(rmdir(journal_dir), 0);
+    YEW_ASSERT_EQ_I64(rmdir(yew_dir), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
+}
+
+void test_paste_crlf_into_lf_preserves_both_files_bytes(void)
+{
+    static const u8 source_bytes[] = "source\r\n";
+    static const u8 destination_bytes[] = "destination\n";
+    static const u8 expected[] = "destination\nsource\r\n";
+    char root[] = "/tmp/yew-paste-eol-XXXXXX";
+    char source_path[128];
+    char destination_path[128];
+    char journal_dir[128];
+    char yew_dir[128];
+    const char *saved_state = getenv("XDG_STATE_HOME");
+    char *saved_copy = NULL;
+    TextBuf *source = NULL;
+    TextBuf *destination = NULL;
+    FileMeta source_meta;
+    FileMeta destination_meta;
+    Registers regs;
+    RegVal line;
+    CursorSet cursors;
+    Cursor cursor = paste_cursor(0U);
+    UndoTree *undo;
+    EditCtx edit;
+    int n;
+
+    if (saved_state != NULL) {
+        size_t saved_len = strlen(saved_state) + 1U;
+
+        saved_copy = yew_xmalloc(saved_len);
+        (void)memcpy(saved_copy, saved_state, saved_len);
+    }
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    n = snprintf(source_path, sizeof(source_path), "%s/source.txt", root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(source_path));
+    n = snprintf(destination_path, sizeof(destination_path),
+                 "%s/destination.txt", root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(destination_path));
+    paste_file_write(source_path, source_bytes, sizeof(source_bytes) - 1U);
+    paste_file_write(destination_path, destination_bytes,
+                     sizeof(destination_bytes) - 1U);
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", root, 1), 0);
+
+    YEW_ASSERT_EQ_U64(yew_file_load(source_path, &source, &source_meta),
+                      YEW_LOAD_OK);
+    YEW_ASSERT_EQ_U64(yew_file_load(destination_path, &destination,
+                                    &destination_meta), YEW_LOAD_OK);
+    YEW_ASSERT_EQ_U64(source_meta.eol, YEW_EOL_CRLF);
+    YEW_ASSERT_EQ_U64(destination_meta.eol, YEW_EOL_LF);
+    yew_reg_init(&regs);
+    regs.clipboard_sync = YEW_CLIP_SYNC_OFF;
+    yew_regval_init(&line);
+    yew_regval_from_span(&line, source,
+                         (Span){0U, yew_textbuf_len(source)},
+                         YEW_REG_LINEWISE, &source_meta);
+    YEW_ASSERT_EQ_MEM(line.bytes.data, source_bytes,
+                      sizeof(source_bytes) - 1U);
+    yew_reg_yank(&regs, 0U, &line);
+    yew_cset_init(&cursors, cursor);
+    undo = yew_undo_new(destination);
+    edit = (EditCtx){destination, NULL, &cursors, 1U, NULL, undo,
+                     &destination_meta, NULL, NULL, 0, NULL, NULL,
+                     {0}, 0U};
+
+    YEW_ASSERT(yew_reg_paste(&regs, &edit, '"', false, 8U));
+    paste_assert_text(destination, (const char *)expected);
+    YEW_ASSERT_EQ_U64(yew_edit_save(&edit, destination_path), YEW_SAVE_OK);
+    YEW_ASSERT_EQ_U64(yew_file_save(source, &source_meta, source_path),
+                      YEW_SAVE_OK);
+    paste_file_assert(source_path, source_bytes, sizeof(source_bytes) - 1U);
+    paste_file_assert(destination_path, expected, sizeof(expected) - 1U);
+
+    yew_undo_free(undo);
+    yew_cset_free(&cursors);
+    yew_regval_free(&line);
+    yew_reg_free(&regs);
+    yew_textbuf_free(destination);
+    yew_textbuf_free(source);
+    yew_filemeta_dispose(&destination_meta);
+    yew_filemeta_dispose(&source_meta);
+    if (saved_copy != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_copy, 1), 0);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    }
+    free(saved_copy);
+    n = snprintf(journal_dir, sizeof(journal_dir), "%s/yew/journal", root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(journal_dir));
+    n = snprintf(yew_dir, sizeof(yew_dir), "%s/yew", root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(yew_dir));
+    YEW_ASSERT_EQ_I64(unlink(destination_path), 0);
+    YEW_ASSERT_EQ_I64(unlink(source_path), 0);
     YEW_ASSERT_EQ_I64(rmdir(journal_dir), 0);
     YEW_ASSERT_EQ_I64(rmdir(yew_dir), 0);
     YEW_ASSERT_EQ_I64(rmdir(root), 0);
