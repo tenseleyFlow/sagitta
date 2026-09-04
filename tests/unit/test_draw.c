@@ -195,14 +195,14 @@ void test_draw_selection_then_secondary_cursor_preserves_glyphs(void)
 void test_draw_rect_selected_cells_equal_deleted_span_cells(void)
 {
     static const u8 text[] =
-        "012345678\n"
+        "0123456789012345678901234567890123456789\n"
         "a\xE6\xBC\xA2\tb"
         "\xF0\x9F\x91\xA8\xE2\x80\x8D"
         "\xF0\x9F\x91\xA9\xE2\x80\x8D"
         "\xF0\x9F\x91\xA7\xE2\x80\x8D"
         "\xF0\x9F\x91\xA6" "c\n"
-        "012345678\n";
-    enum { EDGE_N = 10, TARGET_ROW = 1, THIRD_ROW_AT = 43 };
+        "0123456789012345678901234567890123456789\n";
+    enum { EDGE_N = 41, TARGET_ROW = 1, THIRD_ROW_AT = 74 };
     Ed ed;
     const ThemeEnt *selection;
     u32 edge0;
