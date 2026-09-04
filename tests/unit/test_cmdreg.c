@@ -429,6 +429,10 @@ void test_cmd_registry_enforces_cmdwords(void)
  */
 void test_cmd_registry_word_roundtrip(void)
 {
+    char err[80];
+    CmdId plugin_a;
+    CmdId plugin_b;
+    CmdId refused;
     u32 i;
     u32 n;
     u32 recordable = 0U;
@@ -436,6 +440,19 @@ void test_cmd_registry_word_roundtrip(void)
 
     yew_cmd_shutdown();
     yew_cmd_init();
+    YEW_ASSERT(yew_cmd_register_plugin(
+        "audit_a", "probe", probe_repeat, "First audit plugin command",
+        &plugin_a, err, sizeof(err)));
+    YEW_ASSERT(yew_cmd_register_plugin(
+        "audit_b", "probe", probe_repeat, "Second audit plugin command",
+        &plugin_b, err, sizeof(err)));
+    YEW_ASSERT(plugin_a.v != YEW_CMD_NONE.v);
+    YEW_ASSERT(plugin_b.v != YEW_CMD_NONE.v);
+    YEW_ASSERT(!yew_cmd_register_plugin_flags(
+        "audit_c", "record", probe_repeat, "Recordable plugin probe",
+        YEW_CMD_RECORDABLE, &refused, err, sizeof(err)));
+    YEW_ASSERT_EQ_U64(refused.v, YEW_CMD_NONE.v);
+    YEW_ASSERT_NOT_NULL(strstr(err, "invalid plugin command flags"));
     n = yew_cmd_count();
     YEW_ASSERT(n > 100U);
     for (i = 0U; i < n; i++) {
@@ -449,6 +466,12 @@ void test_cmd_registry_word_roundtrip(void)
         if (d->word == NULL)
             continue;
         worded++;
+        for (u32 j = i + 1U; j < n; j++) {
+            const CmdDesc *other = yew_cmd_at(j);
+
+            if (other->word != NULL)
+                YEW_ASSERT(strcmp(d->word, other->word) != 0);
+        }
         back = yew_cmd_by_word(d->word, (u32)strlen(d->word));
         /* Same DESCRIPTOR, not merely a command with that word: an
          * alias pair sharing a word would pass an id comparison
@@ -460,4 +483,6 @@ void test_cmd_registry_word_roundtrip(void)
     YEW_ASSERT_EQ_U64(worded, recordable);
     YEW_ASSERT_EQ_U64(yew_cmd_by_word("no_such_word", 12U).v, 0U);
     YEW_ASSERT_EQ_U64(yew_cmd_by_word(NULL, 0U).v, 0U);
+    YEW_ASSERT_NULL(yew_cmd_desc(plugin_a)->word);
+    YEW_ASSERT_NULL(yew_cmd_desc(plugin_b)->word);
 }
