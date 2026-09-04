@@ -7889,11 +7889,13 @@ static void s52_collapse_job_frames(PtyCtx *c, size_t at)
         last_begin = i;
         i = finish;
     }
-    if (frames > 2U && first_end < last_begin) {
+    if (frames > 1U && first_end < last_begin) {
         /* The first loading frame and final joined state are observable
-         * contracts.  Frames between them merely expose whether the walk
-         * or git child won a scheduler race; the grid has already consumed
-         * them, and the SGR golden must not encode that race. */
+         * contracts.  Bytes between them merely expose whether the walk,
+         * git child, or a cursor-only repaint won a scheduler race.  Strip
+         * that gap even when there are exactly two cell-bearing frames: an
+         * uncounted cursor-only frame may otherwise poison the SGR appendix
+         * while leaving the final grid identical. */
         (void)memmove(c->raw.data + first_end,
                       c->raw.data + last_begin,
                       c->raw.len - last_begin);
