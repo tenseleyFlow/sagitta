@@ -651,6 +651,7 @@ void test_block_syntax_install_accepts_disabled_provider(void);
 void test_syn_block_atom_beats_delimiters_inside_string(void);
 void test_syn_block_comment_predicate_makes_scope_exact(void);
 void test_syn_block_unsettled_and_unbound_use_plain_fallback(void);
+void test_syn_block_unit_motion_has_no_fixed_points(void);
 void test_syn_cache_path_uses_temp_xdg_root(void);
 void test_syn_cache_same_stems_have_distinct_source_namespaces(void);
 void test_syn_cache_rejects_blob_copied_from_another_source(void);

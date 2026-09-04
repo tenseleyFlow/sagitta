@@ -139,6 +139,42 @@ void test_syn_block_unsettled_and_unbound_use_plain_fallback(void)
     fixture_free(&f);
 }
 
+void test_syn_block_unit_motion_has_no_fixed_points(void)
+{
+    static const char text[] =
+        "head\n"
+        "call(\"a[b]\", { nested: true })\n"
+        "/* multi\nline */ tail\n";
+    SynBlockFixture f;
+    ByteOff p = BYTEOFF(0U);
+    u64 len;
+
+    fixture_init(&f, text);
+    len = yew_textbuf_len(f.buf.tb);
+    for (;;) {
+        for (u8 alt = 0U; alt < 2U; alt++) {
+            ByteOff next = yew_unit_block.next(&f.unit, p, alt != 0U);
+            ByteOff prev = yew_unit_block.prev(&f.unit, p, alt != 0U);
+
+            if (p.v < len) {
+                YEW_ASSERT(next.v > p.v);
+                YEW_ASSERT(next.v <= len);
+            } else {
+                YEW_ASSERT_EQ_U64(next.v, len);
+            }
+            if (p.v != 0U) {
+                YEW_ASSERT(prev.v < p.v);
+            } else {
+                YEW_ASSERT_EQ_U64(prev.v, 0U);
+            }
+        }
+        if (p.v == len)
+            break;
+        p = yew_grapheme_next_boundary(f.buf.tb, p);
+    }
+    fixture_free(&f);
+}
+
 void test_syn_stack_at_reports_prefix_without_eol_transition(void)
 {
     SynToy toy;

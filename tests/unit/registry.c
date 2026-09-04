@@ -683,6 +683,7 @@ const YewTest yew_tests[] = {
     T(syn_block_atom_beats_delimiters_inside_string),
     T(syn_block_comment_predicate_makes_scope_exact),
     T(syn_block_unsettled_and_unbound_use_plain_fallback),
+    T(syn_block_unit_motion_has_no_fixed_points),
     T(syn_cache_path_uses_temp_xdg_root),
     T(syn_cache_same_stems_have_distinct_source_namespaces),
     T(syn_cache_rejects_blob_copied_from_another_source),
