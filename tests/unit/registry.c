@@ -1053,6 +1053,7 @@ const YewTest yew_tests[] = {
     T(lsp_rename_preflight_refuses_overlapping_edits_without_mutation),
     T(lsp_rename_preflight_normalizes_changes_and_document_changes_equally),
     T(lsp_rename_apply_commits_one_lsp_undo_node_per_buffer),
+    T(lsp_rename_multiline_delete_does_not_touch_registers),
     T(lsp_rename_apply_uses_descending_original_offsets),
     T(lsp_rename_apply_six_files_undo_and_leave_disk_unchanged),
     T(lsp_rename_apply_failure_rolls_back_committed_buffers),

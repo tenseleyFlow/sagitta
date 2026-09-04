@@ -670,6 +670,62 @@ void test_lsp_rename_apply_commits_one_lsp_undo_node_per_buffer(void)
     rename_fix_free(&f);
 }
 
+void test_lsp_rename_multiline_delete_does_not_touch_registers(void)
+{
+    static const u8 expected[] =
+        "alpha omega\xF0\x9F\x8C\xB2" "B\n";
+    RenameFix f;
+    RenamePlan plan;
+    RegVal numbered;
+    RegVal small;
+    Buffer *buffer;
+    char json[1024];
+    char err[YEW_RENAME_ERROR_MAX] = {0};
+    u32 undo_before;
+
+    rename_fix_init(&f);
+    f.ed.regs.clipboard_sync = YEW_CLIP_SYNC_OFF;
+    yew_regval_init(&numbered);
+    numbered.type = YEW_REG_LINEWISE;
+    bytebuf_append(&numbered.bytes, "sentinel\n", 9U);
+    yew_reg_delete(&f.ed.regs, 0U, &numbered);
+    yew_regval_init(&small);
+    small.type = YEW_REG_CHARWISE;
+    bytebuf_append(&small.bytes, "x", 1U);
+    yew_reg_delete(&f.ed.regs, 0U, &small);
+    YEW_ASSERT_EQ_U64(f.ed.regs.ring_len, 2U);
+
+    YEW_ASSERT(snprintf(json, sizeof(json),
+        "{\"changes\":{\"file://%s\":[{\"range\":{"
+        "\"start\":{\"line\":0,\"character\":6},"
+        "\"end\":{\"line\":1,\"character\":1}},"
+        "\"newText\":\"omega\"}]}}", f.a) > 0);
+    yew_lsp_rename_plan_init(&plan);
+    YEW_ASSERT(yew_lsp_rename_preflight(&f.ed, rename_json(&f, json),
+                                         YEW_POSENC_UTF8, "alpha", "omega",
+                                         &plan, err));
+    buffer = rename_find_path(&f, f.a);
+    YEW_ASSERT_NOT_NULL(buffer);
+    undo_before = yew_undo_current(buffer->undo);
+    if (!yew_lsp_rename_apply(&f.ed, &plan, err))
+        yew_test_fail(__FILE__, __LINE__, err);
+
+    rename_assert_text(buffer->tb, expected, sizeof(expected) - 1U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(buffer->undo), undo_before + 1U);
+    YEW_ASSERT_EQ_U64(f.ed.regs.numbered[1].bytes.len, 9U);
+    YEW_ASSERT_EQ_MEM(f.ed.regs.numbered[1].bytes.data, "sentinel\n", 9U);
+    YEW_ASSERT_EQ_U64(f.ed.regs.small_del.bytes.len, 1U);
+    YEW_ASSERT_EQ_MEM(f.ed.regs.small_del.bytes.data, "x", 1U);
+    YEW_ASSERT_EQ_U64(f.ed.regs.unnamed.bytes.len, 1U);
+    YEW_ASSERT_EQ_MEM(f.ed.regs.unnamed.bytes.data, "x", 1U);
+    YEW_ASSERT_EQ_U64(f.ed.regs.ring_len, 2U);
+
+    yew_regval_free(&small);
+    yew_regval_free(&numbered);
+    yew_lsp_rename_plan_free(&plan);
+    rename_fix_free(&f);
+}
+
 void test_lsp_rename_apply_uses_descending_original_offsets(void)
 {
     static const u8 source[] = "one two three\n";
