@@ -35,6 +35,8 @@ static const char restore_blob[] =
     "\x1b[?1049l"
     "\x1b[?25h";
 
+static void check_terminal_restored(PtyCtx *c, const char *context);
+
 static void spawn_scene(PtyCtx *c, const char *scene)
 {
     ptc_spawn(c, ptc_demo_bin(c), "--scene", scene, NULL);
@@ -207,6 +209,7 @@ static void case_restore_quit(PtyCtx *c)
     ptc_snapshot(c, "restore_quit");
     quit_cleanly(c);
     ptc_expect_tail(c, restore_blob, sizeof(restore_blob) - 1U);
+    ptc_check_termios_unchanged(c);
 }
 
 static void case_restore_crash(PtyCtx *c)
@@ -230,7 +233,35 @@ static void case_restore_crash(PtyCtx *c)
     ptc_settle(c, 0);
     ptc_expect_signal(c, SIGSEGV);
     ptc_expect_tail(c, crash_tail, sizeof(crash_tail) - 1U);
+    ptc_check_termios_unchanged(c);
     ptc_snapshot(c, "restore_crash");
+}
+
+static void restore_signal_scene(PtyCtx *c, int sig)
+{
+    ptc_allow_primary(c);
+    ptc_allow_restore(c);
+    spawn_scene(c, "basic");
+    ptc_snapshot(c, "paint_basic");
+    if (kill(c->pty.pid, sig) != 0) {
+        ptc_check(c, false, "could not signal terminal audit fixture");
+        return;
+    }
+    ptc_expect_signal(c, sig);
+    ptc_expect_output(c, restore_blob, sizeof(restore_blob) - 1U);
+    check_terminal_restored(c,
+        "fatal signal did not leave the terminal in restored state");
+    ptc_check_termios_unchanged(c);
+}
+
+static void case_restore_bus(PtyCtx *c)
+{
+    restore_signal_scene(c, SIGBUS);
+}
+
+static void case_restore_abrt(PtyCtx *c)
+{
+    restore_signal_scene(c, SIGABRT);
 }
 
 static void case_restore_suspend(PtyCtx *c)
@@ -241,6 +272,7 @@ static void case_restore_suspend(PtyCtx *c)
     ptc_check(c, c->vt.alt, "alternate screen was not re-entered after resume");
     ptc_snapshot(c, "restore_suspend");
     quit_cleanly(c);
+    ptc_check_termios_unchanged(c);
 }
 
 static void input_script(PtyCtx *c)
@@ -1143,6 +1175,7 @@ static void live_signal_restore(PtyCtx *c, int signal_number,
         ptc_expect_output(c, restore_blob, sizeof(restore_blob) - 1U);
         check_terminal_restored(c,
             "fatal signal did not leave the terminal in restored state");
+        ptc_check_termios_unchanged(c);
         notepad_snapshot(c, golden);
     }
     (void)unlink(path);
@@ -1181,6 +1214,7 @@ static void case_live_restore_suspend(PtyCtx *c)
               "editor was not usable after ed.suspend + SIGCONT");
     notepad_snapshot(c, NOTEPAD_RESTORE_SUSPEND);
     quit_editor_cleanly(c);
+    ptc_check_termios_unchanged(c);
     (void)unlink(path);
 }
 
@@ -4755,6 +4789,7 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
      */
     ptc_expect_output(c, restore_blob, sizeof(restore_blob) - 1U);
     ptc_expect_tail(c, report_tail, sizeof(report_tail) - 1U);
+    ptc_check_termios_unchanged(c);
 }
 
 /* ---------------------------------------------------------------- */
@@ -9311,6 +9346,8 @@ const PtyCase yew_pty_cases[] = {
     C(osc52_reply, modern, 24U, 80U, case_osc52_reply),
     C(restore_quit, modern, 24U, 80U, case_restore_quit),
     C(restore_crash, modern, 24U, 80U, case_restore_crash),
+    C(restore_bus, modern, 24U, 80U, case_restore_bus),
+    C(restore_abrt, modern, 24U, 80U, case_restore_abrt),
     C(restore_suspend, modern, 24U, 80U, case_restore_suspend),
     C(input_keys_modern, modern, 24U, 80U, case_input_modern),
     C(input_keys_legacy, nokitty, 24U, 80U, case_input_legacy),

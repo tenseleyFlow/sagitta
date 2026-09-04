@@ -1273,6 +1273,7 @@ void ptc_expect_exit(PtyCtx *c, int code)
 void ptc_check_termios_unchanged(PtyCtx *c)
 {
     struct termios current;
+    size_t i;
 
     if (c == NULL || c->failed)
         return;
@@ -1286,8 +1287,23 @@ void ptc_check_termios_unchanged(PtyCtx *c)
                  strerror(errno));
         return;
     }
-    if (memcmp(&c->pty.initial_termios, &current, sizeof(current)) != 0)
-        ptc_fail(c, "child changed terminal state bytes");
+    if (c->pty.initial_termios.c_iflag != current.c_iflag) {
+        ptc_fail(c, "child changed terminal c_iflag");
+    } else if (c->pty.initial_termios.c_oflag != current.c_oflag) {
+        ptc_fail(c, "child changed terminal c_oflag");
+    } else if (c->pty.initial_termios.c_cflag != current.c_cflag) {
+        ptc_fail(c, "child changed terminal c_cflag");
+    } else if (c->pty.initial_termios.c_lflag != current.c_lflag) {
+        ptc_fail(c, "child changed terminal c_lflag");
+    } else if (cfgetispeed(&c->pty.initial_termios) != cfgetispeed(&current)) {
+        ptc_fail(c, "child changed terminal input speed");
+    } else if (cfgetospeed(&c->pty.initial_termios) != cfgetospeed(&current)) {
+        ptc_fail(c, "child changed terminal output speed");
+    }
+    for (i = 0U; i < NCCS && !c->failed; i++) {
+        if (c->pty.initial_termios.c_cc[i] != current.c_cc[i])
+            ptc_fail(c, "child changed terminal c_cc[%zu]", i);
+    }
 }
 
 void ptc_expect_signal(PtyCtx *c, int sig)
