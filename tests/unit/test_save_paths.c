@@ -210,6 +210,44 @@ void test_save_symlink_preserves_link_and_updates_target(void)
     remove_tree(fixture.root);
 }
 
+void test_save_symlink_into_read_only_directory_stays_in_place(void)
+{
+    static const u8 original[] = "old";
+    static const u8 expected[] = "old-new";
+    SaveFixture fixture;
+    char work[128];
+    char target[160];
+    char link_path[128];
+    struct stat before;
+    struct stat after;
+    struct stat link_st;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+
+    save_fixture_make(&fixture);
+    path_in(work, sizeof(work), fixture.root, "readonly");
+    YEW_ASSERT_EQ_I64(mkdir(work, 0700), 0);
+    path_in(target, sizeof(target), work, "target.txt");
+    path_in(link_path, sizeof(link_path), fixture.root, "link.txt");
+    save_write(target, original, sizeof(original) - 1U, 0600);
+    YEW_ASSERT_EQ_I64(symlink("readonly/target.txt", link_path), 0);
+    YEW_ASSERT_EQ_U64(yew_file_load(link_path, &tb, &meta), YEW_LOAD_OK);
+    YEW_ASSERT_EQ_I64(stat(target, &before), 0);
+    yew_textbuf_insert(tb, BYTEOFF(yew_textbuf_len(tb)),
+                       (const u8 *)"-new", 4U);
+    YEW_ASSERT_EQ_I64(chmod(work, 0500), 0);
+    YEW_ASSERT_EQ_U64(yew_file_save(tb, &meta, link_path), YEW_SAVE_OK);
+    YEW_ASSERT_EQ_I64(stat(target, &after), 0);
+    YEW_ASSERT_EQ_I64(lstat(link_path, &link_st), 0);
+    YEW_ASSERT_EQ_U64(before.st_ino, after.st_ino);
+    YEW_ASSERT(S_ISLNK(link_st.st_mode));
+    assert_saved_bytes(target, expected, sizeof(expected) - 1U);
+    YEW_ASSERT_EQ_I64(chmod(work, 0700), 0);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}
+
 void test_save_dangling_symlink_preserves_link_and_creates_target(void)
 {
     static const u8 expected[] = "created through link\n";
@@ -244,31 +282,40 @@ void test_save_hardlink_preserves_shared_inode(void)
     SaveFixture fixture;
     char first[128];
     char second[128];
+    char third[128];
     struct stat first_st;
     struct stat second_st;
+    struct stat third_st;
     FileMeta meta;
     TextBuf *tb = NULL;
 
     save_fixture_make(&fixture);
     path_in(first, sizeof(first), fixture.root, "first.txt");
     path_in(second, sizeof(second), fixture.root, "second.txt");
+    path_in(third, sizeof(third), fixture.root, "third.txt");
     save_write(first, original, sizeof(original) - 1U, 0600);
     YEW_ASSERT_EQ_I64(link(first, second), 0);
+    YEW_ASSERT_EQ_I64(link(first, third), 0);
     YEW_ASSERT_EQ_U64(yew_file_load(first, &tb, &meta), YEW_LOAD_OK);
-    YEW_ASSERT_EQ_U64(meta.nlink, 2U);
+    YEW_ASSERT_EQ_U64(meta.nlink, 3U);
     yew_textbuf_insert(tb, BYTEOFF(yew_textbuf_len(tb)),
                        (const u8 *)"-new", 4U);
     YEW_ASSERT_EQ_U64(yew_file_save(tb, &meta, first), YEW_SAVE_OK);
     YEW_ASSERT_EQ_I64(stat(first, &first_st), 0);
     YEW_ASSERT_EQ_I64(stat(second, &second_st), 0);
+    YEW_ASSERT_EQ_I64(stat(third, &third_st), 0);
     YEW_ASSERT_EQ_U64(first_st.st_ino, second_st.st_ino);
+    YEW_ASSERT_EQ_U64(first_st.st_ino, third_st.st_ino);
     yew_textbuf_insert(tb, BYTEOFF(yew_textbuf_len(tb)), (const u8 *)"!", 1U);
     YEW_ASSERT_EQ_U64(yew_file_save(tb, &meta, first), YEW_SAVE_OK);
     YEW_ASSERT_EQ_I64(stat(first, &first_st), 0);
     YEW_ASSERT_EQ_I64(stat(second, &second_st), 0);
+    YEW_ASSERT_EQ_I64(stat(third, &third_st), 0);
     YEW_ASSERT_EQ_U64(first_st.st_ino, second_st.st_ino);
+    YEW_ASSERT_EQ_U64(first_st.st_ino, third_st.st_ino);
     assert_saved_bytes(first, expected, sizeof(expected) - 1U);
     assert_saved_bytes(second, expected, sizeof(expected) - 1U);
+    assert_saved_bytes(third, expected, sizeof(expected) - 1U);
     yew_textbuf_free(tb);
     yew_filemeta_dispose(&meta);
     remove_tree(fixture.root);

@@ -138,6 +138,29 @@ static void assert_roundtrip(const u8 *disk, size_t disk_len,
     file_fixture_remove(&fixture);
 }
 
+static void assert_edit_preserves(const u8 *before, size_t before_len,
+                                  u64 insert_at, u8 inserted,
+                                  const u8 *after, size_t after_len)
+{
+    FileFixture fixture;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+    Bytebuf actual;
+
+    file_fixture_make(&fixture, "edited.bin");
+    write_fixture(fixture.path, before, before_len);
+    YEW_ASSERT_EQ_U64(yew_file_load(fixture.path, &tb, &meta), YEW_LOAD_OK);
+    yew_textbuf_insert(tb, BYTEOFF(insert_at), &inserted, 1U);
+    YEW_ASSERT_EQ_U64(yew_file_save(tb, &meta, fixture.path), YEW_SAVE_OK);
+    actual = read_fixture(fixture.path);
+    YEW_ASSERT_EQ_U64(actual.len, after_len);
+    YEW_ASSERT_EQ_MEM(actual.data, after, after_len);
+    bytebuf_free(&actual);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
+    file_fixture_remove(&fixture);
+}
+
 void test_file_load_empty_roundtrips(void)
 {
     assert_roundtrip(NULL, 0U, NULL, 0U, YEW_EOL_LF, YEW_EOL_LF, false,
@@ -253,6 +276,33 @@ void test_file_load_three_byte_file_roundtrips(void)
 
     assert_roundtrip(bytes, sizeof(bytes), bytes, sizeof(bytes), YEW_EOL_LF,
                      YEW_EOL_LF, false, false, false, true, 0U, 0U);
+}
+
+void test_file_edit_save_preserves_untouched_edge_bytes(void)
+{
+    static const u8 empty_after[] = {'x'};
+    static const u8 zwj_before[] = {
+        0xe2U, 0x80U, 0x8dU, 0xe2U, 0x80U, 0x8dU,
+        0xe2U, 0x80U, 0x8dU
+    };
+    static const u8 zwj_after[] = {
+        0xe2U, 0x80U, 0x8dU, 'x', 0xe2U, 0x80U, 0x8dU,
+        0xe2U, 0x80U, 0x8dU
+    };
+    static const u8 nul_before[] = {'a', 0U, 'b'};
+    static const u8 nul_after[] = {'a', 0U, 'x', 'b'};
+    static const u8 eof_before[] = {'t', 'a', 'i', 'l'};
+    static const u8 eof_after[] = {'t', 'a', 'i', 'l', 'x'};
+
+    assert_edit_preserves(NULL, 0U, 0U, 'x', empty_after,
+                          sizeof(empty_after));
+    assert_edit_preserves(zwj_before, sizeof(zwj_before), 3U, 'x',
+                          zwj_after, sizeof(zwj_after));
+    assert_edit_preserves(nul_before, sizeof(nul_before), 2U, 'x',
+                          nul_after, sizeof(nul_after));
+    assert_edit_preserves(eof_before, sizeof(eof_before),
+                          sizeof(eof_before), 'x', eof_after,
+                          sizeof(eof_after));
 }
 
 void test_file_load_enoent_returns_empty_new_buffer(void)
