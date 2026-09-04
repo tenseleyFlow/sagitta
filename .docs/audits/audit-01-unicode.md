@@ -6,6 +6,12 @@ Opened: 2026-09-03
 Scope: `src/unicode/`, `ucd/`, `scripts/gen-unicode-tables.c`
 Owners read: Sprint 2, Sprint 16, Sprint 46
 
+Hosted confirmation: audit-control run `33815573832` passed the F01
+hard-XPASS suite under GCC, Clang, ASan/UBSan, arm64 Linux, arm64 macOS,
+musl, and the minimal `MODULES=""` profile at `3e0edb57`. All three findings
+reproduced outside the local audit machine without changing the immutable
+product-code baseline.
+
 ## Q1 — round-trip law at every consumer
 
 probed, nothing found

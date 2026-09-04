@@ -18,14 +18,16 @@ bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
 under the wrong-but-recoverable rubric. Root-cause hypothesis: the document
 width option feeds the global Unicode width table used by chrome, while several
 layout slots remain one cell by contract. The reproducer fails at the fixed
-baseline and is awaiting second-machine confirmation.
+baseline and was confirmed by hosted audit-control run `33815573832` across
+GCC, Clang, ASan/UBSan, Linux arm64, macOS arm64, musl, and `MODULES=""`.
 
 `YEW-F-002` is visible but recoverable: all bytes eventually arrive, yet a
 completed four-byte flag cluster remains absent from a live job buffer until
 the child writes again or exits. Root-cause hypothesis: `yew_job_safe_prefix`
 uses the documented bounded `yew_gb_prev_bytes` approximation as though its
 answer were the exact final-cluster boundary. The reproducer fails at the
-fixed baseline and is awaiting second-machine confirmation.
+fixed baseline and was confirmed by hosted audit-control run `33815573832`
+across the same cross-compiler, cross-architecture matrix.
 
 `YEW-F-003` is High because valid keycap text reaches a `YEW_BUG` in the
 renderer, terminating yew with exit 4. Root-cause hypothesis: the printable
@@ -33,7 +35,8 @@ ASCII run in `yew_grid_puts` commits the base before segmentation can see its
 VS16/keycap suffix; `append_zero_width` joins the bytes but retains the base's
 one-cell width. The reproducer stops just before the fatal renderer call so
 the XFAIL runner can retain the other findings. It fails at the fixed baseline
-and is awaiting second-machine confirmation.
+and was confirmed by hosted audit-control run `33815573832` across the same
+cross-compiler, cross-architecture matrix.
 
 ## Unverified observations
 

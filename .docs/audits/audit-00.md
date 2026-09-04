@@ -23,6 +23,14 @@ The baseline built the six shipping module sets: full
 (`lsp ai fuss plugins`), minimal (`MODULES=""`), and the `lsp`, `ai`, `fuss`,
 and `plugins` single-module profiles.
 
+## Audit-harness confirmation
+
+Hosted run `33815573832` passed at audit-control head `3e0edb57`, including
+the F01 hard-XPASS suite under GCC, Clang, ASan/UBSan, arm64 Linux, arm64
+macOS, musl, and the minimal `MODULES=""` profile. The three F01 failures
+therefore have second-machine and cross-architecture confirmation; the
+product-code baseline remains the immutable commit above.
+
 ## External tools at opening
 
 | Tool | Version |
@@ -57,6 +65,6 @@ zero until its report closes; silence never counts as evidence.
 
 ## Verdict
 
-We are not ready to tag: Sprint 58 is open, none of its fifteen fronts has
-closed, the invariant sweep has not run, and no absence-of-findings claim has
-been earned.
+We are not ready to tag: Sprint 58 is open, only F01 of its fifteen fronts has
+closed, the invariant sweep has not run, and no campaign-wide
+absence-of-findings claim has been earned.
