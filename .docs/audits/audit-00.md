@@ -31,6 +31,11 @@ macOS, musl, and the minimal `MODULES=""` profile. The three F01 failures
 therefore have second-machine and cross-architecture confirmation; the
 product-code baseline remains the immutable commit above.
 
+Hosted run `33826009408` passed at F02 close head `7d7aad16`, including the
+451-case strict-VT suite, terminal restore and adversarial burst coverage,
+GCC, Clang, ASan/UBSan, arm64 Linux, arm64 macOS, musl, determinism, and the
+minimal `MODULES=""` profile. The product-code baseline remains immutable.
+
 ## External tools at opening
 
 | Tool | Version |
@@ -48,7 +53,7 @@ zero until its report closes; silence never counts as evidence.
 | Front | File | Status | Raw | Deduped | Crit | High | Med | Low | Unverified |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
 | F01 unicode | `audit-01-unicode.md` | closed | 3 | 3 | 0 | 1 | 2 | 0 | 3 |
-| F02 terminal | `audit-02-terminal.md` | awaiting CI | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
+| F02 terminal | `audit-02-terminal.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | F03 text | `audit-03-text.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F04 modal | `audit-04-modal.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F05 execute | `audit-05-exec.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -65,6 +70,6 @@ zero until its report closes; silence never counts as evidence.
 
 ## Verdict
 
-We are not ready to tag: Sprint 58 is open, only F01 of its fifteen fronts has
-closed, the invariant sweep has not run, and no campaign-wide
+We are not ready to tag: Sprint 58 is open, only F01 and F02 of its fifteen
+fronts have closed, the invariant sweep has not run, and no campaign-wide
 absence-of-findings claim has been earned.

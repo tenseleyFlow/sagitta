@@ -1,6 +1,6 @@
 # F02 TERM — terminal I/O
 
-Status: awaiting hosted confirmation
+Status: closed
 Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
 Opened: 2026-09-03
 Scope: `src/term/`, `tests/pty/`
@@ -11,7 +11,7 @@ this front add restore, termios, burst, and exact fuzz-count coverage only.
 
 ## Q1 — restore bytes and termios on every exit path
 
-probed locally, nothing found; four-target confirmation pending
+probed locally and across the hosted matrix, nothing found
 
 - The real-pty cases cover normal quit, `yew_bug` exit 4, `SIGSEGV`,
   `SIGBUS`, `SIGABRT`, `SIGTERM`, `SIGTSTP`/`SIGCONT`, and the existing
@@ -23,8 +23,9 @@ probed locally, nothing found; four-target confirmation pending
   `c_cflag`, `c_lflag`, input/output speeds, and every `c_cc` entry. This
   avoids comparing padding while making a failure name the exact field.
 - The focused local runs passed all nine `restore_` cases plus
-  `s32_bug_restores_the_terminal` on arm64 macOS. Hosted GCC, Clang, Linux
-  arm64, macOS arm64, and musl confirmation is the remaining close gate.
+  `s32_bug_restores_the_terminal` on arm64 macOS. Hosted run `33826009408`
+  then passed the full matrix under GCC, Clang, ASan/UBSan, Linux arm64,
+  macOS arm64, musl, and `MODULES=""`.
 
 ## Q2 — async-signal-safe call graph
 
@@ -46,14 +47,14 @@ probed, nothing found
 
 probed, nothing found in shipped behavior
 
-- Hosted audit-control run `33815573832` drove the then-complete 446-case
-  pty suite through the strict VT with zero parser errors under GCC, Clang,
-  ASan/UBSan, Linux arm64, macOS arm64, musl, and `MODULES=""`.
-- The registry now has 451 cases. The five additions in this front — two
-  fatal restore paths and three hostile burst paths — pass the same strict
-  VT locally. Every snapshot calls `validate_vt`, so an unknown sequence,
-  nested/unmatched synchronized update, autowrap dependency, orphan wide
-  cell, or ordinary primary-screen text is a hard failure.
+- Hosted audit-control run `33826009408` drove the complete 451-case pty
+  suite through the strict VT with zero parser errors. The five additions
+  in this front — two fatal restore paths and three hostile burst paths —
+  passed the standalone hosted PTY lane and the `MODULES=""` lane as well
+  as the focused local runs. Every snapshot calls `validate_vt`, so an
+  unknown sequence, nested/unmatched synchronized update, autowrap
+  dependency, orphan wide cell, or ordinary primary-screen text is a hard
+  failure.
 - The suite includes all seven modes, panels, completion, pickers, group
   picker, context menu, FUSS, LSP, AI, themes, and degraded terminals. The
   tutor does not exist until Sprint 59 and therefore cannot be driven here.
@@ -99,9 +100,9 @@ probed, nothing found
   replaces the winner only on strictly smaller distance, so equal distance
   remains the lower index. There is no sort, hash, locale, or iteration
   source outside those fixed arrays.
-- Hosted run `33815573832` already passed these product tests on both
-  compilers and all four target lanes; the front's new tests do not alter
-  either conversion routine.
+- Hosted runs `33815573832` and `33826009408` passed these product tests on
+  both compilers and all four target lanes; the front's new tests do not
+  alter either conversion routine.
 
 ## Q7 — primary-screen writes
 
