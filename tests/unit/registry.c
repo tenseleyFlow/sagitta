@@ -226,6 +226,7 @@ const YewTest yew_tests[] = {
     T(multicursor_overlapping_edit_skips_later_and_reports_merge),
     T(multicursor_backward_overlap_uses_original_edit_ranges),
     T(multicursor_200_insert_is_one_undo_and_one_journal_sync),
+    T(multicursor_1000_failure_at_700_rolls_back_and_syncs_once),
     T(multicursor_selection_union_semantics),
     T(multicursor_touch_and_adjacency),
     T(multicursor_deleted_cursor_collapses_and_merges),

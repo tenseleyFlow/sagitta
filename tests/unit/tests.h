@@ -194,6 +194,7 @@ void test_multicursor_adjacent_edit_ranges_both_run(void);
 void test_multicursor_overlapping_edit_skips_later_and_reports_merge(void);
 void test_multicursor_backward_overlap_uses_original_edit_ranges(void);
 void test_multicursor_200_insert_is_one_undo_and_one_journal_sync(void);
+void test_multicursor_1000_failure_at_700_rolls_back_and_syncs_once(void);
 void test_multicursor_selection_union_semantics(void);
 void test_multicursor_touch_and_adjacency(void);
 void test_multicursor_deleted_cursor_collapses_and_merges(void);

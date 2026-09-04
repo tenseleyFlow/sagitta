@@ -138,6 +138,22 @@ static CmdStatus mc_probe_fail_second(CmdCtx *cx)
     return mc_probe_insert(cx);
 }
 
+static u32 mc_audit_calls;
+static u32 mc_audit_last;
+static bool mc_audit_ascending;
+
+static CmdStatus mc_probe_fail_700(CmdCtx *cx)
+{
+    if (cx == NULL || cx->cursor_index != mc_audit_calls)
+        mc_audit_ascending = false;
+    if (cx != NULL)
+        mc_audit_last = cx->cursor_index;
+    mc_audit_calls++;
+    if (cx != NULL && cx->cursor_index == 700U)
+        return YEW_CMD_ERR_STATE;
+    return mc_probe_insert(cx);
+}
+
 static CmdId mc_probe_id(void)
 {
     static CmdId id;
@@ -168,6 +184,18 @@ static CmdId mc_probe_fail_id(void)
         id = yew_cmd_register(&desc);
     }
     return id;
+}
+
+static CmdId mc_probe_fail_700_id(void)
+{
+    static const CmdDesc desc = {
+        "ed.edit.mc.toggle", mc_probe_fail_700, YEW_ARITY_NONE,
+        YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
+        "Fail cursor 700 in the multicursor audit", NULL
+    };
+    CmdId id = yew_cmd_lookup(desc.name, (u32)strlen(desc.name));
+
+    return id.v == 0U ? yew_cmd_register(&desc) : id;
 }
 
 static void mc_ed_init(Ed *ed, Win *win, const u8 *bytes, u64 len)
@@ -609,6 +637,136 @@ static int mc_set_preload(const char *shim)
 #else
     return setenv("LD_PRELOAD", shim, 1);
 #endif
+}
+
+static void mc_audit_1000_child(void)
+{
+    const char *root = getenv("YEW_MC_AUDIT_ROOT");
+    u8 initial[2000];
+    char source[PATH_MAX];
+    FileMeta meta;
+    Ed ed;
+    CmdCtx cx = {0};
+    Journal *journal;
+    size_t i;
+    int count;
+
+    YEW_ASSERT_NOT_NULL(root);
+    for (i = 0U; i < sizeof(initial); i += 2U) {
+        initial[i] = (u8)'a';
+        initial[i + 1U] = (u8)'\n';
+    }
+    count = snprintf(source, sizeof(source), "%s/source.txt", root);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(source));
+    yew_filemeta_init(&meta);
+    meta.exists = true;
+    meta.size_on_disk = sizeof(initial);
+    journal = yew_journal_open(source, &meta);
+    YEW_ASSERT_NOT_NULL(journal);
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_undo_free(ed.buffer.undo);
+    yew_textbuf_free(ed.buffer.tb);
+    ed.buffer.tb = yew_textbuf_from_bytes(initial, sizeof(initial));
+    ed.buffer.undo = yew_undo_new(ed.buffer.tb);
+    ed.buffer.jrn = journal;
+    ed.win->buf = &ed.buffer;
+    ed.win->cs.curs.data[0] = test_cursor(0U, 0U, 0U);
+    for (i = 1U; i < 1000U; i++)
+        YEW_ASSERT(yew_cset_add(&ed.win->cs,
+                                test_cursor(i * 2U, i * 2U, i)));
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.len, 1000U);
+
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    mc_audit_calls = 0U;
+    mc_audit_last = UINT32_MAX;
+    mc_audit_ascending = true;
+    YEW_ASSERT_EQ_I64(setenv("YEW_FAULT_ENABLE", "1", 1), 0);
+    YEW_ASSERT_EQ_U64(yew_ed_invoke(&ed, mc_probe_fail_700_id(), &cx),
+                      YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_I64(setenv("YEW_FAULT_ENABLE", "0", 1), 0);
+    YEW_ASSERT(mc_audit_ascending);
+    YEW_ASSERT_EQ_U64(mc_audit_calls, 701U);
+    YEW_ASSERT_EQ_U64(mc_audit_last, 700U);
+    assert_mc_text(ed.buffer.tb, initial, sizeof(initial));
+    YEW_ASSERT_EQ_U64(ed.buffer.undo->nodes.len, 1U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.len, 1000U);
+    for (i = 0U; i < 1000U; i++)
+        assert_cursor(&ed.win->cs.curs.data[i], i * 2U, i * 2U, i);
+
+    ed.buffer.jrn = NULL;
+    yew_journal_discard(journal);
+    yew_ed_free(&ed);
+    yew_filemeta_dispose(&meta);
+}
+
+void test_multicursor_1000_failure_at_700_rolls_back_and_syncs_once(void)
+{
+    const char *child_mode = getenv("YEW_MC_AUDIT_CHILD");
+    char root[] = "/tmp/yew-mc-audit-XXXXXX";
+    char state[PATH_MAX];
+    char log[PATH_MAX];
+    char journal_dir[PATH_MAX];
+    char yew_dir[PATH_MAX];
+    char shim[PATH_MAX];
+    pid_t child;
+    pid_t waited;
+    int status;
+    int count;
+
+    if (child_mode != NULL && strcmp(child_mode, "1") == 0) {
+        mc_audit_1000_child();
+        return;
+    }
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    count = snprintf(state, sizeof(state), "%s/state", root);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(state));
+    count = snprintf(log, sizeof(log), "%s/intercept.log", root);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(log));
+    YEW_ASSERT_EQ_I64(mkdir(state, 0700), 0);
+    mc_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
+
+    child = fork();
+    YEW_ASSERT(child >= 0);
+    if (child == 0) {
+        if (setenv("YEW_MC_AUDIT_CHILD", "1", 1) != 0 ||
+            setenv("YEW_MC_AUDIT_ROOT", root, 1) != 0 ||
+            setenv("XDG_STATE_HOME", state, 1) != 0 ||
+            setenv("YEW_FAULT_LOG", log, 1) != 0 ||
+            setenv("YEW_FAULT_ENABLE", "0", 1) != 0 ||
+            setenv("YEW_LOG", "/dev/null", 1) != 0 ||
+            mc_set_preload(shim) != 0)
+            _exit(126);
+        execl(yew_test_program_path(), yew_test_program_path(), "--filter",
+              "multicursor_1000_failure_at_700_rolls_back_and_syncs_once",
+              (char *)NULL);
+        _exit(126);
+    }
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    YEW_ASSERT_EQ_I64(waited, child);
+    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+    YEW_ASSERT_EQ_U64(mc_log_count(log, "fsync-file pass"), 1U);
+    YEW_ASSERT_EQ_U64(mc_log_count(log, "fdatasync-file pass"), 0U);
+
+    count = snprintf(journal_dir, sizeof(journal_dir),
+                     "%s/yew/journal", state);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(journal_dir));
+    count = snprintf(yew_dir, sizeof(yew_dir), "%s/yew", state);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(yew_dir));
+    YEW_ASSERT_EQ_I64(unlink(log), 0);
+    YEW_ASSERT_EQ_I64(rmdir(journal_dir), 0);
+    YEW_ASSERT_EQ_I64(rmdir(yew_dir), 0);
+    YEW_ASSERT_EQ_I64(rmdir(state), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
 }
 
 void test_multicursor_200_insert_is_one_undo_and_one_journal_sync(void)
