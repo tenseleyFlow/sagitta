@@ -1081,6 +1081,162 @@ static void case_burst_paste(PtyCtx *c)
     burst_case(c, true);
 }
 
+static void case_audit_terminal_paste_256k(PtyCtx *c)
+{
+    static const u8 initial[] = "tail\n";
+    const size_t payload = 256U * 1024U;
+    const size_t prefix = sizeof("\x1b[200~") - 1U;
+    const size_t suffix = sizeof("\x1b[201~") - 1U;
+    char path[256];
+    char *burst;
+    unsigned before;
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U,
+                      path, sizeof(path)))
+        return;
+    burst = malloc(prefix + payload + suffix + 1U);
+    if (burst == NULL) {
+        ptc_check(c, false, "allocating 256 KiB terminal audit paste");
+        (void)unlink(path);
+        return;
+    }
+    (void)memcpy(burst, "\x1b[200~", prefix);
+    (void)memset(burst + prefix, 'P', payload);
+    (void)memcpy(burst + prefix + payload, "\x1b[201~", suffix);
+    burst[prefix + payload + suffix] = '\0';
+    spawn_editor(c, path);
+    ptc_keys(c, "i");
+    ptc_settle(c, 0);
+    before = c->vt.nsync_pairs;
+    ptc_bytes(c, burst);
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, c->vt.nsync_pairs == before + 1U,
+              "256 KiB paste rendered more than one frame");
+    ptc_wait_until(c, s57_screen_contains, "1:262145  all",
+                   "256 KiB paste did not reach its final cursor");
+    ptc_snapshot(c, "audit_terminal_paste_256k");
+    force_quit(c);
+    (void)unlink(path);
+    free(burst);
+}
+
+static bool audit_stop_child(PtyCtx *c)
+{
+    int status;
+    pid_t waited;
+
+    if (kill(c->pty.pid, SIGSTOP) != 0) {
+        ptc_check(c, false, "stopping child for resize burst audit");
+        return false;
+    }
+    do {
+        waited = waitpid(c->pty.pid, &status, WUNTRACED);
+    } while (waited < 0 && errno == EINTR);
+    if (waited != c->pty.pid || !WIFSTOPPED(status)) {
+        ptc_check(c, false, "child did not stop for resize burst audit");
+        return false;
+    }
+    return true;
+}
+
+static void case_audit_terminal_burst_resize(PtyCtx *c)
+{
+    static const u8 initial[] = "tail\n";
+    const size_t prefix = sizeof("\x1b[200~") - 1U;
+    const size_t suffix = sizeof("\x1b[201~") - 1U;
+    char path[256];
+    char first[64U + sizeof("\x1b[200~")];
+    char second[64U + sizeof("\x1b[201~")];
+    unsigned resize_frames;
+    unsigned burst_frames;
+    unsigned before;
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U,
+                      path, sizeof(path)))
+        return;
+    (void)memcpy(first, "\x1b[200~", prefix);
+    (void)memset(first + prefix, 'R', 64U);
+    first[prefix + 64U] = '\0';
+    (void)memset(second, 'R', 64U);
+    (void)memcpy(second + 64U, "\x1b[201~", suffix);
+    second[64U + suffix] = '\0';
+    spawn_editor(c, path);
+    ptc_keys(c, "i");
+    ptc_settle(c, 0);
+
+    /* SIGCONT is itself a lifecycle event, so establish its resize-only
+     * frame cost before adding input.  The adversarial burst must add
+     * exactly one input frame beyond that mandatory resize/repaint work. */
+    before = c->vt.nsync_pairs;
+    if (audit_stop_child(c)) {
+        ptc_resize(c, 26U, 90U);
+        if (kill(c->pty.pid, SIGCONT) != 0)
+            ptc_check(c, false, "continuing resize-only control child");
+    }
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    resize_frames = c->vt.nsync_pairs - before;
+
+    before = c->vt.nsync_pairs;
+    if (audit_stop_child(c)) {
+        ptc_bytes(c, first);
+        ptc_resize(c, 30U, 100U);
+        ptc_bytes(c, second);
+        if (kill(c->pty.pid, SIGCONT) != 0)
+            ptc_check(c, false, "continuing child after resize burst audit");
+    }
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    burst_frames = c->vt.nsync_pairs - before;
+    if (burst_frames != resize_frames + 1U) {
+        char failure[160];
+
+        (void)snprintf(failure, sizeof(failure),
+                       "paste/resize frames=%u, resize-only frames=%u",
+                       burst_frames, resize_frames);
+        ptc_check(c, false, failure);
+    }
+    ptc_wait_until(c, s57_screen_contains, "1:129  all",
+                   "resize-spanning paste did not reach its final cursor");
+    ptc_snapshot(c, "audit_terminal_burst_resize");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_audit_terminal_hostile_paste_undo(PtyCtx *c)
+{
+    static const u8 initial[] = "tail\n";
+    static const char hostile[] =
+        "\x1b[200~PASTE\x1b[201~keys";
+    char path[256];
+    unsigned before;
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U,
+                      path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_keys(c, "i");
+    ptc_settle(c, 0);
+    before = c->vt.nsync_pairs;
+    ptc_bytes(c, hostile);
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, c->vt.nsync_pairs == before + 1U,
+              "hostile paste rendered more than one input frame");
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    ptc_keys(c, "u");
+    ptc_settle(c, 0);
+    ptc_keys(c, "s");
+    ptc_settle(c, 0);
+    ptc_check(c, file_equals(path, initial, sizeof(initial) - 1U),
+              "hostile paste exceeded one undo transaction");
+    ptc_snapshot(c, "audit_terminal_hostile_paste_undo");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static bool s57_screen_contains(const PtyCtx *c, const void *arg)
 {
     Bytebuf screen;
@@ -9372,6 +9528,12 @@ const PtyCase yew_pty_cases[] = {
     C(notepad_preserve_unicode, modern, 24U, 80U, case_preserve_unicode),
     C(notepad_burst_keys, modern, 24U, 80U, case_burst_keys),
     C(notepad_burst_paste, modern, 24U, 80U, case_burst_paste),
+    C(audit_terminal_paste_256k, modern, 24U, 80U,
+      case_audit_terminal_paste_256k),
+    C(audit_terminal_burst_resize, modern, 24U, 80U,
+      case_audit_terminal_burst_resize),
+    C(audit_terminal_hostile_paste_undo, modern, 24U, 80U,
+      case_audit_terminal_hostile_paste_undo),
     C(s57_embedded_4m_roundtrip, modern, 24U, 80U,
       case_s57_embedded_4m_roundtrip),
     C(notepad_restore_term, modern, 24U, 80U, case_live_restore_term),
