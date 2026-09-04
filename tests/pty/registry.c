@@ -1199,6 +1199,15 @@ static void case_audit_terminal_burst_resize(PtyCtx *c)
     }
     ptc_wait_until(c, s57_screen_contains, "1:129  all",
                    "resize-spanning paste did not reach its final cursor");
+
+    /* The queued input and SIGWINCH may be observed in either order.  Both
+     * orders must leave the logical cursor at 1:129, but they can choose
+     * different valid horizontal scroll origins.  Normalize that viewport
+     * only after measuring the adversarial burst so the golden is portable. */
+    ptc_keys(c, "home");
+    ptc_wait_until(c, s57_screen_contains, "1:1  all",
+                   "viewport normalization did not reach line start");
+    ptc_settle(c, 0);
     ptc_snapshot(c, "audit_terminal_burst_resize");
     force_quit(c);
     (void)unlink(path);

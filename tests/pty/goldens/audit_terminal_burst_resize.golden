@@ -1,9 +1,9 @@
 # yew pty golden v1
-size 100x30 alt=1 cursor=1,84 vis=1
+size 100x30 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
  1 pty-s14-audit_termina +                                                                          
-    1 RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRtail            
+    1 RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
     1                                                                                               
                                                                                                     
                                                                                                     
@@ -31,7 +31,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                                     
                                                                                                     
                                                                                                     
- I  pty-s14-audit_terminal_burst_resize.txt *                                  utf-8  lf  1:129  all
+ I  pty-s14-audit_terminal_burst_resize.txt *                                    utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
