@@ -14,28 +14,21 @@
 #include "util/base.h"
 #include "util/buf.h"
 
-/* Runs `printf %s <quoted>` under /bin/sh and returns its stdout. */
-static bool sh_roundtrip(const u8 *src, size_t len, Bytebuf *out)
+/* Runs one NUL-terminated command under /bin/sh and captures stdout. */
+static bool sh_capture(const Bytebuf *cmd, Bytebuf *out)
 {
-    Bytebuf cmd;
     int fds[2];
     pid_t pid;
+    int status = 0;
     bool ok = true;
 
-    bytebuf_init(&cmd);
-    bytebuf_append(&cmd, "printf %s ", 10U);
-    yew_shell_quote(&cmd, src, len);
-    bytebuf_push_u8(&cmd, 0U);
-
     if (!yew_pipe_cloexec(fds)) {
-        bytebuf_free(&cmd);
         return false;
     }
     pid = fork();
     if (pid < 0) {
         (void)close(fds[0]);
         (void)close(fds[1]);
-        bytebuf_free(&cmd);
         return false;
     }
     if (pid == 0) {
@@ -46,7 +39,7 @@ static bool sh_roundtrip(const u8 *src, size_t len, Bytebuf *out)
         (void)close(fds[1]);
         argv[0] = (char *)"/bin/sh";
         argv[1] = (char *)"-c";
-        argv[2] = (char *)cmd.data;
+        argv[2] = (char *)cmd->data;
         argv[3] = NULL;
         (void)execv("/bin/sh", argv);
         _exit(127);
@@ -66,7 +59,23 @@ static bool sh_roundtrip(const u8 *src, size_t len, Bytebuf *out)
         break;
     }
     (void)close(fds[0]);
-    (void)waitpid(pid, NULL, 0);
+    if (waitpid(pid, &status, 0) != pid || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != 0)
+        ok = false;
+    return ok;
+}
+
+/* Runs `printf %s <quoted>` under /bin/sh and returns its stdout. */
+static bool sh_roundtrip(const u8 *src, size_t len, Bytebuf *out)
+{
+    Bytebuf cmd;
+    bool ok;
+
+    bytebuf_init(&cmd);
+    bytebuf_append(&cmd, "printf %s ", 10U);
+    yew_shell_quote(&cmd, src, len);
+    bytebuf_push_u8(&cmd, 0U);
+    ok = sh_capture(&cmd, out);
     bytebuf_free(&cmd);
     return ok;
 }
@@ -145,30 +154,54 @@ void test_shell_quote_roundtrips_hard_cases(void)
 
 void test_shell_quote_roundtrips_random_bytes(void)
 {
+    enum { CASES = 100000, BATCH_CASES = 256 };
     /* Deterministic LCG: the corpus must be identical on every run
      * (invariant 3), so no time or pid seeding. */
     u64 seed = 0x5A617A19ULL;
     u32 iter;
+    Bytebuf cmd;
+    Bytebuf expected;
 
     /* NUL cannot survive an argv round trip — the shell would truncate —
      * so the generator draws from 1..255, which is what a command line can
      * actually carry. */
-    for (iter = 0U; iter < 400U; iter++) {
+    bytebuf_init(&cmd);
+    bytebuf_init(&expected);
+    for (iter = 0U; iter < CASES; iter++) {
         u8 src[64];
         size_t len = (size_t)(seed % 33U);
         size_t k;
-        Bytebuf got;
 
         for (k = 0U; k < len; k++) {
             seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
             src[k] = (u8)(1U + (seed >> 33) % 255U);
         }
         seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
-        bytebuf_init(&got);
-        YEW_ASSERT(sh_roundtrip(src, len, &got));
-        YEW_ASSERT_EQ_U64((u64)got.len, (u64)len);
-        if (len != 0U)
-            YEW_ASSERT_EQ_MEM(got.data, src, len);
-        bytebuf_free(&got);
+
+        /* One real shell parses every emitted form.  The NUL is generated
+         * by printf rather than embedded in argv and makes each case's
+         * boundary part of the byte-exact comparison. */
+        bytebuf_append(&cmd, "printf %s ", 10U);
+        yew_shell_quote(&cmd, src, len);
+        bytebuf_append(&cmd, "; printf '\\000'\n",
+                       sizeof("; printf '\\000'\n") - 1U);
+        bytebuf_append(&expected, src, len);
+        bytebuf_push_u8(&expected, 0U);
+
+        if ((iter + 1U) % BATCH_CASES == 0U || iter + 1U == CASES) {
+            Bytebuf got;
+
+            bytebuf_init(&got);
+            bytebuf_push_u8(&cmd, 0U);
+            YEW_ASSERT(sh_capture(&cmd, &got));
+            YEW_ASSERT_EQ_U64((u64)got.len, (u64)expected.len);
+            YEW_ASSERT_EQ_MEM(got.data, expected.data, expected.len);
+            bytebuf_free(&got);
+            cmd.len = 0U;
+            expected.len = 0U;
+        }
     }
+    YEW_ASSERT_EQ_U64(iter, CASES);
+    bytebuf_free(&expected);
+    bytebuf_free(&cmd);
 }
