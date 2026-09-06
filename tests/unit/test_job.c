@@ -1079,7 +1079,9 @@ void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
     assert_job_child_reaped(&ed, id);
     release_finished(&ed);
     before = open_fd_count();
-    for (i = 0U; i < 120U; i++) {
+    /* Sprint 58 F05 Q2: the release audit raises the original lifecycle
+     * sample to the contracted 500 complete spawn/reap/release cycles. */
+    for (i = 0U; i < 500U; i++) {
         id = spawn_argv(&ed, argv, err, sizeof(err));
 
         YEW_ASSERT(id != 0U);
