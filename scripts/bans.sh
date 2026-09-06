@@ -336,6 +336,11 @@ scan "generated edit campaigns must use xorshift64*, not libc randomness" \
     "$deterministic_fuzz_files"
 scan "clipboard subprocesses must never invoke a shell" \
     '(^|[^[:alnum:]_])(popen|system)[[:space:]]*\(' "$source_files"
+job_interpolation_pattern='bytebuf_printf.*cmdline|sprintf.*shell'
+scan "programmatic job data must not be interpolated into shell text" \
+    "$job_interpolation_pattern" "$source_files"
+scan_seed "job-command-interpolation" "$job_interpolation_pattern" \
+    'bytebuf_printf(&cmdline, "%s", path);'
 scan "OSC 52 clipboard queries are forbidden" \
     '52;[^[:space:]]*\?' "$source_files"
 
