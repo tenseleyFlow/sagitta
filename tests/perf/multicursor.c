@@ -9,6 +9,7 @@
 
 #include "edit/ed.h"
 #include "edit/multicursor.h"
+#include "perf_policy.h"
 #include "term/render.h"
 #include "text/edit.h"
 #include "ui/draw.h"
@@ -147,6 +148,7 @@ static size_t prepare_paint(Ed *ed, Win *win)
 static bool measure(size_t cursor_count, i64 budget_ns)
 {
     i64 samples[PERF_ROUNDS];
+    uint64_t p99_ns;
     size_t round;
 
     for (round = 0U; round < PERF_ROUNDS; round++) {
@@ -207,18 +209,49 @@ static bool measure(size_t cursor_count, i64 budget_ns)
         }
         samples[at] = value;
     }
-    (void)printf("perf-multicursor: cursors=%zu p99_ms=%.3f budget_ms=%.3f\n",
+    p99_ns = (uint64_t)samples[PERF_ROUNDS - 1U];
+    (void)printf("perf-multicursor: cursors=%zu p99_ms=%.3f "
+                 "budget_ms=%.3f%s\n",
                  cursor_count,
-                 (double)samples[PERF_ROUNDS - 1U] / 1000000.0,
-                 (double)budget_ns / 1000000.0);
-    return samples[PERF_ROUNDS - 1U] <= budget_ns;
+                 (double)p99_ns / 1000000.0,
+                 (double)budget_ns / 1000000.0,
+                 yew_perf_timing_verdict(p99_ns, (uint64_t)budget_ns,
+                                         yew_perf_advisory()));
+    return !yew_perf_timing_failed(p99_ns, (uint64_t)budget_ns,
+                                   yew_perf_advisory());
 }
 
-int main(void)
+static int selftest_policy(void)
+{
+    const uint64_t budget = UINT64_C(50000000);
+
+    if (yew_perf_timing_failed(budget, budget, false) ||
+        !yew_perf_timing_failed(budget + 1U, budget, false) ||
+        yew_perf_timing_failed(budget + 1U, budget, true) ||
+        yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, budget, true) ||
+        !yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U,
+            budget, true) ||
+        !yew_perf_timing_failed(0U, budget, true)) {
+        (void)fprintf(stderr, "perf-multicursor-policy: failed\n");
+        return 1;
+    }
+    (void)printf("perf-multicursor-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     struct sigaction action;
     bool ok;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
     (void)memset(&action, 0, sizeof(action));
     action.sa_handler = timeout_handler;
     (void)sigemptyset(&action.sa_mask);
@@ -227,6 +260,6 @@ int main(void)
     ok = measure(1000U, INT64_C(5000000));
     ok = measure(10000U, INT64_C(50000000)) && ok;
     if (!ok)
-        (void)fprintf(stderr, "perf-multicursor: latency budget exceeded\n");
+        (void)fprintf(stderr, "perf-multicursor: timing policy failed\n");
     return ok ? 0 : 1;
 }

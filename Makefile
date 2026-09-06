@@ -2493,7 +2493,8 @@ perf-units: $(BUILD)/perf_units
 	$(BUILD)/perf_units
 
 perf-multicursor: $(BUILD)/perf_multicursor
-	$(BUILD)/perf_multicursor
+	$(BUILD)/perf_multicursor --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_multicursor
 
 perf-cmdcomp: $(BUILD)/perf_cmdcomp
 	$(BUILD)/perf_cmdcomp
