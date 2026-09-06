@@ -1218,6 +1218,8 @@ static void case_audit_terminal_hostile_paste_undo(PtyCtx *c)
     static const u8 initial[] = "tail\n";
     static const char hostile[] =
         "\x1b[200~PASTE\x1b[201~keys";
+    static const char wrote[] =
+        "wrote build/pty-s14-audit_terminal_hostile_paste_undo.txt";
     char path[256];
     unsigned before;
 
@@ -1238,6 +1240,12 @@ static void case_audit_terminal_hostile_paste_undo(PtyCtx *c)
     ptc_keys(c, "u");
     ptc_settle(c, 0);
     ptc_keys(c, "s");
+    /* The destination already contains `initial`, so file_equals below is
+     * not a save-completion barrier.  Wait for the actual completion frame;
+     * otherwise the two independent PTY runs can snapshot opposite sides
+     * of the save message under a loaded hosted runner. */
+    ptc_wait_until(c, s57_screen_contains, wrote,
+                   "hostile-paste save did not reach its completion frame");
     ptc_settle(c, 0);
     ptc_check(c, file_equals(path, initial, sizeof(initial) - 1U),
               "hostile paste exceeded one undo transaction");
