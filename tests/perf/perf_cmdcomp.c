@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "perf_policy.h"
 #include "term/grid.h"
 #include "ui/cmdcomp.h"
 #include "ui/cmdline.h"
@@ -48,6 +49,24 @@ enum {
 };
 
 static volatile u64 perf_comp_sink;
+
+static bool result_failed(i64 p99_ns, u64 opendirs, bool advisory)
+{
+    return opendirs > 1U ||
+           yew_perf_timing_failed((uint64_t)p99_ns,
+                                  (uint64_t)PERF_COMP_BUDGET_NS,
+                                  advisory);
+}
+
+static const char *result_verdict(i64 p99_ns, u64 opendirs,
+                                  bool advisory)
+{
+    if (opendirs > 1U)
+        return " OPENDIR-FAIL";
+    return yew_perf_timing_verdict((uint64_t)p99_ns,
+                                   (uint64_t)PERF_COMP_BUDGET_NS,
+                                   advisory);
+}
 
 static i64 now_ns(void)
 {
@@ -205,7 +224,28 @@ done:
     return ok;
 }
 
-int main(void)
+static int selftest_policy(void)
+{
+    const i64 budget = PERF_COMP_BUDGET_NS;
+
+    if (result_failed(budget, 1U, false) ||
+        !result_failed(budget + 1, 1U, false) ||
+        result_failed(budget + 1, 1U, true) ||
+        !result_failed(budget, 2U, true) ||
+        result_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, 1U, true) ||
+        !result_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1,
+            1U, true) ||
+        !result_failed(0, 1U, true)) {
+        (void)fprintf(stderr, "perf-cmdcomp-policy: failed\n");
+        return 1;
+    }
+    (void)printf("perf-cmdcomp-policy: strict/advisory/sanity/opendir ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     char root[64];
     i64 samples[PERF_COMP_SAMPLES];
@@ -218,6 +258,12 @@ int main(void)
     i64 median;
     int status = 0;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
     if (!fixture_create(root)) {
         if (root[0] != '\0')
             (void)fixture_remove(root);
@@ -275,9 +321,8 @@ int main(void)
                  (unsigned)worst_key, PERF_COMP_PREFIX[worst_key],
                  (unsigned)worst_opendirs,
                  (double)PERF_COMP_BUDGET_NS / 1000000.0,
-                 p99 <= PERF_COMP_BUDGET_NS && worst_opendirs <= 1U
-                     ? " ok"
-                     : " FAIL");
+                 result_verdict(p99, worst_opendirs,
+                                yew_perf_advisory()));
     /* Per-key worst, always printed: a single p99 over a prefix whose
      * keys have wildly different costs hides which regime moved.  This is
      * the line that shows one expensive scan followed by cheap re-ranks
@@ -287,7 +332,7 @@ int main(void)
         (void)printf("%s%.3f", i == 0U ? "" : ",",
                      (double)worst_by_key[i] / 1000000.0);
     (void)printf("\n");
-    if (p99 > PERF_COMP_BUDGET_NS || worst_opendirs > 1U)
+    if (result_failed(p99, worst_opendirs, yew_perf_advisory()))
         status = 1;
 
 done:

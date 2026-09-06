@@ -2497,7 +2497,8 @@ perf-multicursor: $(BUILD)/perf_multicursor
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_multicursor
 
 perf-cmdcomp: $(BUILD)/perf_cmdcomp
-	$(BUILD)/perf_cmdcomp
+	$(BUILD)/perf_cmdcomp --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_cmdcomp
 
 perf-record: $(BUILD)/perf_record
 	$(BUILD)/perf_record $(if $(filter 1,$(PERF_GATE)),--gate,)
