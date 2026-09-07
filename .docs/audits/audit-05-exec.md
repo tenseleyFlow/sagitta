@@ -148,6 +148,14 @@ probed, nothing found
 
 None.
 
+## Verification
+
+The final Apple-silicon `make test` gate passed: the full PTY matrix, 93
+script cases, 51 package-integration cases, Fletch conformance, round-trip
+and fuzz corpora, syntax assets, 2,430 unit tests with 71,093,473 assertions,
+static bans, smoke checks, and clean-child torture. The localhost mock cases
+were run with their required loopback-listener permission.
+
 ## Count
 
 Raw 0 · deduped 0 · critical 0 · high 0 · medium 0 · low 0 · unverified 0.
