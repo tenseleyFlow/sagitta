@@ -44,6 +44,11 @@ scheduler-dependent SGR transcript in the FUSS PTY harness; `b9e604d4`
 normalizes the unobservable gap between its first and final cell-bearing
 frames. The product-code baseline remains immutable.
 
+Hosted run `34011188190` passed at F04 close head `de70ed63`, including all
+22 standard push jobs: GCC, Clang, ASan/UBSan, arm64 Linux, arm64 macOS,
+musl, determinism, LSP, Fletch dispatch, and the minimal `MODULES=""`
+profile. The product-code baseline remains immutable.
+
 ## External tools at opening
 
 | Tool | Version |
@@ -64,7 +69,7 @@ zero until its report closes; silence never counts as evidence.
 | F02 terminal | `audit-02-terminal.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | F03 text | `audit-03-text.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
 | F04 modal | `audit-04-modal.md` | closed | 1 | 1 | 0 | 0 | 1 | 0 | 1 |
-| F05 execute | `audit-05-exec.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F05 execute | `audit-05-exec.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F06 regex | `audit-06-regex.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F07 UI/workspace | `audit-07-ui.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F08 Fletch | `audit-08-fletch.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -78,6 +83,6 @@ zero until its report closes; silence never counts as evidence.
 
 ## Verdict
 
-We are not ready to tag: Sprint 58 is open, only F01 through F04 of its fifteen
+We are not ready to tag: Sprint 58 is open, only F01 through F05 of its fifteen
 fronts have closed, the invariant sweep has not run, and no campaign-wide
 absence-of-findings claim has been earned.
