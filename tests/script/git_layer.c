@@ -677,7 +677,8 @@ static void check_spawn_env(const char *repo)
         "GIT_PAGER", "PAGER", "GIT_FLUSH", "GIT_TRACE",
         "GIT_TRACE2_EVENT", "GIT_TRACE_PACKET", "GIT_TRACE_PERFORMANCE",
         "GIT_CURL_VERBOSE", "GIT_TRANSFER_TRACE", "LC_ALL",
-        "GIT_OPTIONAL_LOCKS",
+        "GIT_OPTIONAL_LOCKS", "YEW_FILE", "YEW_LINE", "YEW_COL",
+        "YEW_WORKSPACE", "YEW_JOB", "COLUMNS", "LINES",
         "GIT_LITERAL_PATHSPECS"
     };
     static const struct {
@@ -711,7 +712,14 @@ static void check_spawn_env(const char *repo)
         {"GIT_TRACE_PACKET", "parent-packet"},
         {"GIT_TRACE_PERFORMANCE", "parent-performance"},
         {"GIT_CURL_VERBOSE", "parent-curl"},
-        {"GIT_TRANSFER_TRACE", "parent-transfer"}
+        {"GIT_TRANSFER_TRACE", "parent-transfer"},
+        {"YEW_FILE", "parent-file"},
+        {"YEW_LINE", "800"},
+        {"YEW_COL", "900"},
+        {"YEW_WORKSPACE", "parent-workspace"},
+        {"YEW_JOB", "parent-job"},
+        {"COLUMNS", "132"},
+        {"LINES", "43"}
     };
     static char *const tail[] = {(char *)"init", NULL};
     SavedEnv saved[sizeof(names) / sizeof(names[0])];
@@ -818,6 +826,13 @@ static void check_spawn_env(const char *repo)
     CHECK(dump_value_eq(&dump, "GIT_SEQUENCE_EDITOR", "false"));
     CHECK(dump_value_eq(&dump, "GIT_PAGER", "cat"));
     CHECK(dump_value_eq(&dump, "PAGER", "cat"));
+    CHECK(dump_value_eq(&dump, "YEW_FILE", ""));
+    CHECK(dump_value_eq(&dump, "YEW_LINE", "1"));
+    CHECK(dump_value_eq(&dump, "YEW_COL", "1"));
+    CHECK(dump_value_eq(&dump, "YEW_WORKSPACE", repo));
+    CHECK(dump_value_eq(&dump, "YEW_JOB", "1"));
+    CHECK(dump_value(&dump, "COLUMNS") == NULL);
+    CHECK(dump_value(&dump, "LINES") == NULL);
     CHECK(dump_value_eq(&dump, "GIT_FLUSH", "1"));
     CHECK(dump_value_eq(&dump, "LC_ALL", "C"));
     CHECK(dump_value_eq(&dump, "GIT_LITERAL_PATHSPECS", "1"));
