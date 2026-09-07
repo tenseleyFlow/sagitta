@@ -2968,6 +2968,31 @@ static void case_s19_filter_nonzero_keeps_buffer(PtyCtx *c)
     s18_finish(c, path);
 }
 
+static void case_s19_filter_typeahead_replays_after_completion(PtyCtx *c)
+{
+    static const u8 initial[] = "keep me\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* Sprint 58 F05 Q7: keep the synchronous filter inside its restricted
+     * loop long enough to queue an entire modal edit behind it.  None of
+     * these bytes may be dispatched while the child is live; after the
+     * filter commits they must replay, in order, as i + QUEUED + Escape. */
+    s19_send_command(c, "%!sleep 1; cat");
+    ptc_keys(c, "i Q U E U E D esc");
+    ptc_settle(c, 100);
+    ptc_check(c, !s19_screen_contains(&c->vt, "QUEUED"),
+              "filter typeahead dispatched before completion");
+    s19_wait_screen(c, "filter: 2 \xE2\x86\x92 2 lines");
+    ptc_settle(c, 250);
+    ptc_check(c, s19_screen_contains(&c->vt, "QUEUED"),
+              "filter typeahead was not replayed in order");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s19_filter_typeahead_replays_after_completion");
+    s18_finish(c, path);
+}
+
 static void case_s19_read_at_cursor(PtyCtx *c)
 {
     static const u8 initial[] = "before\nafter\n";
@@ -9505,6 +9530,8 @@ const PtyCase yew_pty_cases[] = {
       case_s19_filter_replaces_region),
     C(s19_filter_nonzero_keeps_buffer, modern, 24U, 80U,
       case_s19_filter_nonzero_keeps_buffer),
+    C(s19_filter_typeahead_replays_after_completion, modern, 24U, 80U,
+      case_s19_filter_typeahead_replays_after_completion),
     C(s19_read_at_cursor, modern, 24U, 80U, case_s19_read_at_cursor),
     C(s19_term_is_not_a_feature, modern, 24U, 80U,
       case_s19_term_is_not_a_feature),
