@@ -380,6 +380,10 @@ void test_job_environment_overrides_are_copied_and_name_exact(void)
 
 void test_job_standard_environment_is_exact_and_parent_unchanged(void)
 {
+    static const u8 text[] =
+        "a\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6z\n";
     static const char *const names[] = {
         "YEW_FILE", "YEW_LINE", "YEW_COL", "YEW_WORKSPACE", "YEW_JOB",
         "PAGER", "GIT_PAGER", "COLUMNS", "LINES"
@@ -412,10 +416,16 @@ void test_job_standard_environment_is_exact_and_parent_unchanged(void)
         saved[i] = job_test_env_copy(names[i]);
         YEW_ASSERT_EQ_I64(setenv(names[i], hostile[i], 1), 0);
     }
-    job_fixture(&ed);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, sizeof(text) - 1U,
+                                  "job-env"));
+    ed.win->cs.curs.data[ed.win->cs.primary].pos = BYTEOFF(26U);
+    ed.win->cs.curs.data[ed.win->cs.primary].anchor = BYTEOFF(26U);
     job_callback_witness_init(&w);
     bytebuf_init(&expected);
-    bytebuf_printf(&expected, "|1|1|%s|1|cat|cat|unset|unset",
+    /* At byte 26 the cursor follows two graphemes: ASCII `a` and the
+     * 25-byte ZWJ family.  YEW_COL is their 1-based grapheme column, 3. */
+    bytebuf_printf(&expected, "|1|3|%s|1|cat|cat|unset|unset",
                    yew_ws_root(&ed));
     spec.argv = argv;
     spec.sink = YEW_SINK_CALLBACK;
