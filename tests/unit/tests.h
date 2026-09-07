@@ -843,6 +843,8 @@ void test_job_shell_resolution_prefers_env(void);
 void test_job_callback_waits_for_reap_and_both_eofs_then_releases(void);
 void test_job_callback_collect_max_and_destroy_on_teardown(void);
 void test_job_environment_overrides_are_copied_and_name_exact(void);
+void test_job_standard_environment_is_exact_and_parent_unchanged(void);
+void test_filter_nonzero_preserves_text_undo_and_journal(void);
 void test_ai_commands_cross_module_boundary(void);
 void test_ai_open_explains_the_ghost_only_surface(void);
 void test_ai_commands_backends_log_and_reload(void);

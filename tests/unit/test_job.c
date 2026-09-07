@@ -18,12 +18,37 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "edit/shell.h"
+#include "text/journal.h"
 #include "ws/symidx.h"
 
 static void job_fixture(Ed *ed)
 {
     yew_ed_init(ed);
     YEW_ASSERT(yew_ed_open_scratch(ed));
+}
+
+static void job_assert_text(const TextBuf *tb, const u8 *want, size_t len)
+{
+    TextIter it;
+    size_t done = 0U;
+
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(tb), len);
+    if (len == 0U)
+        return;
+    YEW_ASSERT(yew_textiter_begin(&it, tb, BYTEOFF(0U)));
+    while (done < len) {
+        const u8 *bytes;
+        u64 avail;
+        size_t take;
+
+        YEW_ASSERT(yew_textiter_chunk(&it, tb, &bytes, &avail));
+        take = avail < (u64)(len - done) ? (size_t)avail : len - done;
+        YEW_ASSERT_EQ_MEM(bytes, want + done, take);
+        done += take;
+        if (done < len)
+            YEW_ASSERT(yew_textiter_advance(&it, tb));
+    }
 }
 
 /*
@@ -351,6 +376,116 @@ void test_job_environment_overrides_are_copied_and_name_exact(void)
     job_test_env_restore("YEW_JOB_ENV_EXACT", saved_exact);
     job_test_env_restore("YEW_JOB_ENV_EXACTLY", saved_exactly);
     job_test_env_restore("YEW_JOB_ENV_PREFIX_ONE", saved_prefix);
+}
+
+void test_job_standard_environment_is_exact_and_parent_unchanged(void)
+{
+    static const char *const names[] = {
+        "YEW_FILE", "YEW_LINE", "YEW_COL", "YEW_WORKSPACE", "YEW_JOB",
+        "PAGER", "GIT_PAGER", "COLUMNS", "LINES"
+    };
+    static const char *const hostile[] = {
+        "parent-file", "800", "900", "parent-workspace", "parent-job",
+        "parent-pager", "parent-git-pager", "132", "43"
+    };
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobCallbackWitness w;
+    Bytebuf expected;
+    char *saved[YEW_ARRAY_LEN(names)];
+    char *argv[] = {
+        (char *)"/bin/sh", (char *)"-c",
+        (char *)"printf '%s|%s|%s|%s|%s|%s|%s|%s|%s' "
+                 "\"$YEW_FILE\" \"$YEW_LINE\" \"$YEW_COL\" "
+                 "\"$YEW_WORKSPACE\" \"$YEW_JOB\" \"$PAGER\" "
+                 "\"$GIT_PAGER\" \"${COLUMNS-unset}\" "
+                 "\"${LINES-unset}\"",
+        NULL
+    };
+    char err[256] = {0};
+    u32 id;
+    size_t i;
+
+    _Static_assert(YEW_ARRAY_LEN(names) == YEW_ARRAY_LEN(hostile),
+                   "job environment fixture rows");
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        saved[i] = job_test_env_copy(names[i]);
+        YEW_ASSERT_EQ_I64(setenv(names[i], hostile[i], 1), 0);
+    }
+    job_fixture(&ed);
+    job_callback_witness_init(&w);
+    bytebuf_init(&expected);
+    bytebuf_printf(&expected, "|1|1|%s|1|cat|cat|unset|unset",
+                   yew_ws_root(&ed));
+    spec.argv = argv;
+    spec.sink = YEW_SINK_CALLBACK;
+    spec.callback_owner = &w;
+    spec.callback_ops = &job_callback_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++)
+        YEW_ASSERT_EQ_STR(getenv(names[i]), hostile[i]);
+    YEW_ASSERT(run_until_released(&ed, id));
+    YEW_ASSERT_EQ_MEM(w.out.data, expected.data, expected.len);
+    YEW_ASSERT_EQ_U64(w.err.len, 0U);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++)
+        YEW_ASSERT_EQ_STR(getenv(names[i]), hostile[i]);
+    bytebuf_free(&expected);
+    yew_ed_free(&ed);
+    job_callback_witness_free(&w);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++)
+        job_test_env_restore(names[i], saved[i]);
+}
+
+void test_filter_nonzero_preserves_text_undo_and_journal(void)
+{
+    static const u8 initial[] = "keep \xff bytes\n";
+    char path[] = "/tmp/yew-filter-rollback-XXXXXX";
+    Ed ed;
+    Buffer *buffer;
+    Bytebuf stderr_out;
+    YewFilterResult result;
+    u64 text_gen;
+    u64 undo_gen;
+    u32 undo_cur;
+    size_t undo_nodes;
+    size_t undo_ops;
+    int fd;
+
+    fd = mkstemp(path);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(write(fd, initial, sizeof(initial) - 1U),
+                      sizeof(initial) - 1U);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    yew_ed_init(&ed);
+    YEW_ASSERT_EQ_U64(yew_ed_open(&ed, path), YEW_LOAD_OK);
+    buffer = yew_ed_doc(&ed);
+    YEW_ASSERT_NOT_NULL(buffer);
+    YEW_ASSERT_NULL(buffer->jrn);
+    text_gen = buffer->tb->gen;
+    undo_gen = buffer->undo->gen;
+    undo_cur = buffer->undo->cur;
+    undo_nodes = buffer->undo->nodes.len;
+    undo_ops = buffer->undo->ops.len;
+    bytebuf_init(&stderr_out);
+
+    result = yew_shell_filter(&ed, ed.win,
+                              (Span){0U, sizeof(initial) - 1U},
+                              "printf changed; exit 9", &stderr_out);
+
+    YEW_ASSERT_EQ_U64(result, YEW_FILT_NONZERO);
+    job_assert_text(buffer->tb, initial, sizeof(initial) - 1U);
+    YEW_ASSERT_EQ_U64(buffer->tb->gen, text_gen);
+    YEW_ASSERT_EQ_U64(buffer->undo->gen, undo_gen);
+    YEW_ASSERT_EQ_U64(buffer->undo->cur, undo_cur);
+    YEW_ASSERT_EQ_U64(buffer->undo->depth, 0U);
+    YEW_ASSERT_EQ_U64(buffer->undo->nodes.len, undo_nodes);
+    YEW_ASSERT_EQ_U64(buffer->undo->ops.len, undo_ops);
+    YEW_ASSERT_NULL(buffer->jrn);
+    YEW_ASSERT(!yew_journal_probe(buffer->meta.realpath, &buffer->meta));
+    bytebuf_free(&stderr_out);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
 }
 
 void test_job_buffer_append_updates_syntax(void)

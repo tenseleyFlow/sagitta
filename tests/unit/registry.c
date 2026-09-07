@@ -873,6 +873,8 @@ const YewTest yew_tests[] = {
     T(job_callback_waits_for_reap_and_both_eofs_then_releases),
     T(job_callback_collect_max_and_destroy_on_teardown),
     T(job_environment_overrides_are_copied_and_name_exact),
+    T(job_standard_environment_is_exact_and_parent_unchanged),
+    T(filter_nonzero_preserves_text_undo_and_journal),
     T(ai_commands_cross_module_boundary),
     T(ai_open_explains_the_ghost_only_surface),
     T(ai_commands_backends_log_and_reload),
