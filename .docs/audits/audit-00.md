@@ -49,6 +49,23 @@ Hosted run `34011188190` passed at F04 close head `de70ed63`, including all
 musl, determinism, LSP, Fletch dispatch, and the minimal `MODULES=""`
 profile. The product-code baseline remains immutable.
 
+Hosted run `34283504177` passed all 22 standard push jobs at post-F05
+audit-control head `ef14ff7e`. It includes the F05 execute controls, strict
+452-case PTY coverage, five determinism repeats, both hosted arm64 targets,
+musl, the strict performance lane, and the complete fixed-depth sanitizer
+fuzz graph. The AI-shadow sanitizer campaign retained seed 1 and 20,000
+iterations, used its bounded 30-second per-input watchdog, and completed with
+hash `7000f4676382f7ac`. The product-code baseline remains immutable, and this
+run qualifies the control head for opening F06.
+
+The successful sanitizer log also emitted a recover-mode UBSan diagnostic at
+`src/edit/sel_actions.c:289` while
+`draw_rect_selected_cells_equal_deleted_span_cells` passed. Apple clang does
+not reproduce it in the focused `halt_on_error=1` run. This is an explicit
+out-of-scope handoff to F07 for the product path and F15 for gate honesty; it
+is not counted as a finding until the reproducer-first and confirmation rules
+are satisfied.
+
 ## External tools at opening
 
 | Tool | Version |
