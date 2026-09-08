@@ -82,8 +82,10 @@ probed, nothing found
   byte column 262,145.
 - `audit_terminal_burst_resize` establishes the mandatory stopped/resumed
   resize repaint as a control, then repeats the lifecycle with a paste
-  divided around the resize. The paste contributes exactly one additional
-  input frame and the resized 100×30 grid lands at byte column 129.
+  divided around the resize. Tty and signal readiness may share one poll
+  turn or occupy adjacent turns, so the paste shares the resize frame or
+  contributes exactly one additional frame, never more; the resized 100×30
+  grid lands at byte column 129 in either ordering.
 - `audit_terminal_hostile_paste_undo` places a literal `CSI 201~` terminator
   before trailing key bytes. The exposed tail remains insert-mode text;
   one undo followed by save restores the original file byte-for-byte.

@@ -1166,8 +1166,7 @@ static void case_audit_terminal_burst_resize(PtyCtx *c)
     ptc_settle(c, 0);
 
     /* SIGCONT is itself a lifecycle event, so establish its resize-only
-     * frame cost before adding input.  The adversarial burst must add
-     * exactly one input frame beyond that mandatory resize/repaint work. */
+     * frame cost before adding input. */
     before = c->vt.nsync_pairs;
     if (audit_stop_child(c)) {
         ptc_resize(c, 26U, 90U);
@@ -1189,12 +1188,16 @@ static void case_audit_terminal_burst_resize(PtyCtx *c)
     ptc_wait_sync_pairs(c, before + 1U);
     ptc_settle(c, 0);
     burst_frames = c->vt.nsync_pairs - before;
-    if (burst_frames != resize_frames + 1U) {
+    /* The tty and signal self-pipe may become ready in one poll return or
+     * in adjacent returns.  One return intentionally renders once, so the
+     * paste may share the resize repaint or add one frame, never more. */
+    if (burst_frames < resize_frames ||
+        burst_frames > resize_frames + 1U) {
         char failure[160];
 
         (void)snprintf(failure, sizeof(failure),
-                       "paste/resize frames=%u, resize-only frames=%u",
-                       burst_frames, resize_frames);
+                       "paste/resize frames=%u outside resize range %u..%u",
+                       burst_frames, resize_frames, resize_frames + 1U);
         ptc_check(c, false, failure);
     }
     ptc_wait_until(c, s57_screen_contains, "1:129  all",

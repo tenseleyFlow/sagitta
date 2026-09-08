@@ -524,18 +524,19 @@ else
 # brushed, not a hang.
 #
 # Sprint 53 grew this to 421 cases.  Two independent hosted lanes reached
-# the old 600 s aggregate ceiling while cases were still passing normally;
-# the per-case deadline remained healthy.  Give the complete sweep 50%
-# headroom for shared-runner variance.  This is a wall-clock ceiling on a
-# HANG, not a latency budget — nothing measures against it, and the per-case
-# budget is what bounds a single stuck case.
+# the old 600 s aggregate ceiling while cases were still passing normally.
+# Sprint 58 then grew the sweep to 452 cases; hosted run 34243666785 consumed
+# all 900 s while cases were still passing and gave the next case only 181 ms.
+# Preserve the measured 50% headroom for shared-runner variance.  This is a
+# wall-clock ceiling on a HANG, not a latency budget — nothing measures
+# against it, and the per-case budget is what bounds a single stuck case.
 ifeq ($(SAN),1)
 # The ASan/UBSan sweep reached the plain 900 s aggregate ceiling on a hosted
 # runner while cases were still passing.  Sanitizer instrumentation needs its
 # own suite-level headroom; the strict per-case hang bound below is unchanged.
 YEW_PTY_BUDGET_MS ?= 1800000
 else
-YEW_PTY_BUDGET_MS ?= 900000
+YEW_PTY_BUDGET_MS ?= 1350000
 endif
 # Git-backed editor cases execute real subprocesses.  The stale-blame case
 # completed correctly at 4.7-4.9 s under CPU contention, which leaves no
