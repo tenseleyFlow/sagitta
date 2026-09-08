@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@
 
 enum {
     YEW_FUZZ_DEFAULT_ITERS = 200000,
+    YEW_FUZZ_DEFAULT_WATCHDOG_SECONDS = 5,
     YEW_FUZZ_MAX_INPUT = 65536,
     YEW_FUZZ_WHY_CAP = 256
 };
@@ -46,6 +48,7 @@ typedef struct {
     size_t iterations;
     u64 seconds;
     u64 deadline_ms;
+    unsigned int watchdog_seconds;
     bool corpus_only;
     const char *target;
     YewFuzzCheck check;
@@ -742,7 +745,7 @@ static bool checked(FuzzRun *run, const FuzzBuf *buf,
     if (buf->len != 0U)
         (void)memcpy(exact, buf->data, buf->len);
     watchdog_iteration = (sig_atomic_t)run->iteration;
-    (void)alarm(5U);
+    (void)alarm(run->watchdog_seconds);
     ok = run->check(exact, buf->len, why, YEW_FUZZ_WHY_CAP);
     (void)alarm(0U);
     free(exact);
@@ -893,6 +896,7 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
     (void)memset(&run, 0, sizeof(run));
     run.seed = 1U;
     run.iterations = YEW_FUZZ_DEFAULT_ITERS;
+    run.watchdog_seconds = YEW_FUZZ_DEFAULT_WATCHDOG_SECONDS;
     run.target = target;
     run.check = check;
     for (i = 1U; i < (size_t)argc; i++) {
@@ -903,13 +907,23 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
         if (parse_u64_option(argv[i], "--seconds=", &run.seconds) &&
             run.seconds != 0U)
             continue;
+        {
+            u64 watchdog_seconds;
+
+            if (parse_u64_option(argv[i], "--watchdog-seconds=",
+                                 &watchdog_seconds) &&
+                watchdog_seconds != 0U && watchdog_seconds <= UINT_MAX) {
+                run.watchdog_seconds = (unsigned int)watchdog_seconds;
+                continue;
+            }
+        }
         if (strcmp(argv[i], "--corpus-only") == 0) {
             run.corpus_only = true;
             continue;
         }
         (void)fprintf(stderr,
                       "usage: %s [--seed=N] [--iters=N] [--seconds=N] "
-                      "[--corpus-only]\n",
+                      "[--watchdog-seconds=N] [--corpus-only]\n",
                       argv[0]);
         return 2;
     }

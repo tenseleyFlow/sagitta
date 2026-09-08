@@ -95,6 +95,11 @@ MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
 FUZZ_SEED  ?= 1
 FUZZ_SECONDS ?=
+# ASan/UBSan makes the AI shadow's allocation-heavy worst cases much slower
+# than plain builds.  Keep the normal five-second per-input hang detector,
+# but give that one instrumented campaign bounded headroom without reducing
+# its iteration count or sanitizer coverage.
+AI_SHADOW_FUZZ_WATCHDOG_SECONDS ?= $(if $(filter 1,$(SAN)),30,5)
 PLUG_FUZZ_SECONDS ?= 3600
 LSP_RESP_FUZZ_ITERS ?= 50000
 LSP_RESP_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
@@ -1024,7 +1029,7 @@ endif
         embedded-gate-selftest \
         embedded-image embedded-lowmem-image embedded embedded-gate \
         musl-verify test-musl-hosts \
-        test-script test-git-script \
+        test-script test-git-script fuzzlib-selftest \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
@@ -1739,6 +1744,7 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
 # has to be asked for by hand.
 #
 check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-fletch test-script \
+       fuzzlib-selftest \
        test-syn-assets size-tools-selftest target-tools-selftest \
        static-pie-tools-selftest runtime-blob-selftest \
        embedded-image-selftest embedded-fixture-selftest \
@@ -1766,7 +1772,27 @@ test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
 	scripts/check-findings.sh
 	scripts/check-audit-fixtures.sh
 
+fuzzlib-selftest: $(BUILD)/fuzz_utf8
+	@set -eu; \
+	mkdir -p $(BUILD)/tmp; \
+	out=$(BUILD)/tmp/fuzzlib-watchdog-invalid.out; \
+	$(BUILD)/fuzz_utf8 --iters=1 --seed=1 \
+		--watchdog-seconds=1 >/dev/null; \
+	for value in 0 nope 4294967296; do \
+		if $(BUILD)/fuzz_utf8 --iters=1 \
+			--watchdog-seconds=$$value >$$out 2>&1; then \
+			echo "fuzzlib-selftest: accepted invalid watchdog $$value" >&2; \
+			exit 1; \
+		else \
+			rc=$$?; \
+			test $$rc -eq 2 || exit $$rc; \
+		fi; \
+	done; \
+	grep -F -- '--watchdog-seconds=N' $$out >/dev/null; \
+	echo "fuzzlib-selftest: ok"
+
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script \
+      fuzzlib-selftest \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
       static-pie-tools-selftest runtime-blob-selftest \
@@ -1839,7 +1865,8 @@ fuzz-ai: $(BUILD)/fuzz_http $(BUILD)/fuzz_ai_stream \
          $(BUILD)/fuzz_ai_shadow $(BUILD)/fuzz_ai_redact
 	$(BUILD)/fuzz_http --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_ai_stream --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
-	$(BUILD)/fuzz_ai_shadow --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_ai_shadow --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED) \
+		--watchdog-seconds=$(AI_SHADOW_FUZZ_WATCHDOG_SECONDS)
 	$(BUILD)/fuzz_ai_redact --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 fuzz-groups: $(BUILD)/fuzz_groups
