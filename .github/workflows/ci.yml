@@ -672,19 +672,36 @@ jobs:
       - name: Compare Sprint 57 generators across runs and compilers
         run: make generated-artifact-determinism
       - name: Compare test and PTY output
+        # This step deliberately runs five PTY-containing sweeps back to back:
+        # three through `make test`, then two isolated output comparisons.  A
+        # single hosted sweep measures about 800 s, but the repeated lane has
+        # more runner variance than the isolated PTY job.  Keep the 10 s
+        # per-case hang bound and give only the aggregate sweep more headroom.
+        env:
+          YEW_PTY_BUDGET_MS: 1800000
         run: |
-          if make test > warmup.txt 2>&1; then
-            :
-          else
-            status=$?
-            cat warmup.txt
-            exit "$status"
-          fi
-          make test > r1.txt 2>&1
-          make test > r2.txt 2>&1
+          capture() {
+            label=$1
+            output=$2
+            shift 2
+            printf 'determinism: %s\n' "$label"
+            if "$@" > "$output" 2>&1; then
+              return 0
+            else
+              status=$?
+              printf 'determinism: %s failed (exit %s)\n' "$label" "$status"
+              cat "$output"
+              return "$status"
+            fi
+          }
+          capture warmup warmup.txt make test
+          capture full-suite-1 r1.txt make test
+          capture full-suite-2 r2.txt make test
+          printf 'determinism: compare full-suite output\n'
           diff -u r1.txt r2.txt
-          make test-pty > pty-1.txt 2>&1
-          make test-pty > pty-2.txt 2>&1
+          capture pty-1 pty-1.txt make test-pty
+          capture pty-2 pty-2.txt make test-pty
+          printf 'determinism: compare PTY output\n'
           diff -u pty-1.txt pty-2.txt
       - name: Compare clean rebuilds
         run: |
