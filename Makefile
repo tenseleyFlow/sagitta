@@ -2452,7 +2452,8 @@ perf-fuss: $(BUILD)/perf_fuss
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_fuss
 
 perf-git-gutter: $(BUILD)/perf_git_gutter
-	$(BUILD)/perf_git_gutter --gate
+	$(BUILD)/perf_git_gutter --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_git_gutter --gate
 
 perf-lsp: $(BUILD)/perf_lsp
 	$(BUILD)/perf_lsp

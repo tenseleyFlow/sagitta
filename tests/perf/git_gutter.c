@@ -15,6 +15,8 @@
 #include "util/base.h"
 #include "util/buf.h"
 
+#include "perf_policy.h"
+
 enum {
     GUTTER_LINES = 100000,
     GUTTER_HUNKS = 500,
@@ -35,6 +37,32 @@ typedef struct Samples {
 } Samples;
 
 static volatile u64 gutter_sink;
+
+static bool timing_failed(u64 value, u64 budget, bool gate, bool advisory)
+{
+    return gate && yew_perf_timing_failed(value, budget, advisory);
+}
+
+static int selftest_policy(void)
+{
+    const u64 budget = UINT64_C(4000000);
+
+    if (timing_failed(budget, budget, true, false) ||
+        !timing_failed(budget + 1U, budget, true, false) ||
+        timing_failed(budget + 1U, budget, true, true) ||
+        timing_failed(budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER,
+                      budget, true, true) ||
+        !timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U,
+            budget, true, true) ||
+        !timing_failed(0U, budget, true, true) ||
+        timing_failed(UINT64_MAX, budget, false, false)) {
+        (void)fprintf(stderr, "perf-git-gutter-policy: failed\n");
+        return 1;
+    }
+    (void)printf("perf-git-gutter-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
 
 static u64 now_ns(void)
 {
@@ -238,11 +266,17 @@ int main(int argc, char **argv)
     bool debounce_ok = false;
     bool debounce_checked = false;
     bool gate = argc == 2 && strcmp(argv[1], "--gate") == 0;
+    bool selftest = argc == 2 &&
+                    strcmp(argv[1], "--selftest-policy") == 0;
+    bool advisory = yew_perf_advisory();
     bool ok = true;
     size_t i;
 
+    if (selftest)
+        return selftest_policy();
     if (argc > 2 || (argc == 2 && !gate)) {
-        (void)fprintf(stderr, "usage: %s [--gate]\n", argv[0]);
+        (void)fprintf(stderr,
+                      "usage: %s [--gate|--selftest-policy]\n", argv[0]);
         return 2;
     }
     fixture_make(&base, &live);
@@ -263,9 +297,15 @@ int main(int argc, char **argv)
         yew_git_editor_stats(&ed, &stats);
         hunks = yew_git_editor_test_hunks(&ed, &ed.buffer);
         if (hunks == NULL || hunks->h.len != GUTTER_HUNKS ||
-            stats.diff_started != 1U || stats.diff_published != 1U ||
-            stats.diff_max_slice_us > YEW_DIFF_BUDGET_US)
+            stats.diff_started != 1U || stats.diff_published != 1U) {
+            (void)fprintf(stderr,
+                          "perf_git_gutter: diff invariant failed "
+                          "sample=%zu hunks=%zu started=%llu published=%llu\n",
+                          i + 1U, hunks == NULL ? 0U : hunks->h.len,
+                          (unsigned long long)stats.diff_started,
+                          (unsigned long long)stats.diff_published);
             ok = false;
+        }
         if (stats.diff_max_slice_us > max_slice_us)
             max_slice_us = stats.diff_max_slice_us;
         if (i + 1U == YEW_ARRAY_LEN(diff_samples) && hunks != NULL) {
@@ -290,7 +330,7 @@ int main(int argc, char **argv)
     (void)printf("git_gutter diff_100k_500_median_ns=%llu "
                  "slice_max_us=%llu keypress_p99_ns=%llu "
                  "idle_tick_p99_ns=%llu lookup_p99_ns=%llu "
-                 "edits=%u diff_starts=%u sink=%llu\n",
+                 "edits=%u debounce_ok=%u sink=%llu\n",
                  (unsigned long long)(ok ?
                      diff_samples[YEW_ARRAY_LEN(diff_samples) / 2U] :
                      UINT64_MAX),
@@ -300,17 +340,36 @@ int main(int argc, char **argv)
                  (unsigned long long)lookup_p99, GUTTER_EDITS,
                  debounce_ok ? 1U : 0U,
                  (unsigned long long)gutter_sink);
+    if (gate) {
+        (void)printf("git_gutter policy mode=%s diff%s slice%s "
+                     "keypress%s lookup%s\n",
+                     advisory ? "ADVISORY" : "GATING",
+                     yew_perf_timing_verdict(
+                         ok ? diff_samples[YEW_ARRAY_LEN(diff_samples) / 2U] :
+                              UINT64_MAX,
+                         GUTTER_DIFF_BUDGET_NS, advisory),
+                     yew_perf_timing_verdict(max_slice_us,
+                                             YEW_DIFF_BUDGET_US, advisory),
+                     yew_perf_timing_verdict(keypress_p99,
+                                             GUTTER_KEYPRESS_BUDGET_NS,
+                                             advisory),
+                     yew_perf_timing_verdict(lookup_p99,
+                                             GUTTER_LOOKUP_BUDGET_NS,
+                                             advisory));
+    }
     if (debounce_checked && !debounce_ok) {
         (void)fprintf(stderr,
                       "perf_git_gutter: 200 edits did not debounce once\n");
         ok = false;
     }
-    if (gate && ok &&
-        (diff_samples[YEW_ARRAY_LEN(diff_samples) / 2U] >
-             GUTTER_DIFF_BUDGET_NS ||
-         max_slice_us > YEW_DIFF_BUDGET_US ||
-         keypress_p99 > GUTTER_KEYPRESS_BUDGET_NS ||
-         lookup_p99 > GUTTER_LOOKUP_BUDGET_NS)) {
+    if (ok &&
+        (timing_failed(diff_samples[YEW_ARRAY_LEN(diff_samples) / 2U],
+                       GUTTER_DIFF_BUDGET_NS, gate, advisory) ||
+         timing_failed(max_slice_us, YEW_DIFF_BUDGET_US, gate, advisory) ||
+         timing_failed(keypress_p99, GUTTER_KEYPRESS_BUDGET_NS,
+                       gate, advisory) ||
+         timing_failed(lookup_p99, GUTTER_LOOKUP_BUDGET_NS,
+                       gate, advisory))) {
         (void)fprintf(stderr,
                       "perf_git_gutter: budget exceeded "
                       "(diff <= %u ns, slice <= %u us, keypress <= %u ns, "
