@@ -32,6 +32,7 @@ latency.prof_external_delta le 250 permille none all profiler_crosscheck
 latency.prof_overhead le 150 permille none designated profiler_overhead
 startup.spawn_floor_fraction le 300 permille none all harness_sanity
 search.literal_early.1g_code le 20000000 ns calibrated designated first_match
+mem.closed_growth.100m_code.linux le 4194304 bytes none designated closed_buffer_leak
 EOF
 
 write_baseline()
@@ -44,6 +45,7 @@ write_baseline()
 # metric p50_ns p99_ns max_ns rss_bytes why
 latency.typing.small.p99 3000000 $value 5000000 0 measured_runner_evidence
 latency.prof_overhead 69 69 69 0 measured_profiler_evidence
+mem.closed_growth.100m_code.linux 0 0 0 1024 current_rss_linux
 legacy.scalar 42 preserved_scalar_reason
 EOF
 }
@@ -64,6 +66,7 @@ latency.prof.typing.small.external_delta 42 permille OK
 latency.prof.typing.small.overhead 69 permille ADVISORY
 startup.spawn_floor_fraction value_permille=$fraction verdict=PASS
 search.literal_early.1g_code value_ns=$((value + 2000)) verdict=ADVISORY
+mem.closed_growth.100m_code.linux value_bytes=1024 verdict=PASS
 EOF
     done
 }
@@ -124,10 +127,28 @@ set -e
 [ "$status" -eq 2 ] || fail 'incomplete observation set was accepted'
 
 write_observations 5000000 5000000 5000000
+sed_rewrite '/mem.closed_growth.100m_code.linux/d' "$scratch/obs2"
+set +e
+run_gate advisory >"$scratch/linux-omitted.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail 'Linux current-RSS observation was accepted missing'
+
+write_observations 5000000 5000000 5000000
 "$gate" --scope quick --budgets "$scratch/budgets" --baseline - \
     --runner-id hosted-x86_64-linux --scale 1000 --mode advisory \
     --obs "$scratch/obs1" --obs "$scratch/obs2" --obs "$scratch/obs3" \
     >"$scratch/no-baseline.out" || fail 'hosted advisory required a baseline'
+
+write_observations 5000000 5000000 5000000
+sed_rewrite '/mem.closed_growth.100m_code.linux/d' "$scratch/obs1"
+sed_rewrite '/mem.closed_growth.100m_code.linux/d' "$scratch/obs2"
+sed_rewrite '/mem.closed_growth.100m_code.linux/d' "$scratch/obs3"
+"$gate" --scope quick --budgets "$scratch/budgets" --baseline - \
+    --runner-id hosted-arm64-macos --scale 1000 --mode advisory \
+    --obs "$scratch/obs1" --obs "$scratch/obs2" --obs "$scratch/obs3" \
+    >"$scratch/darwin-no-current-rss.out" ||
+    fail 'Darwin advisory required the Linux current-RSS observation'
 
 write_observations 5000000 5000000 1100000000
 set +e

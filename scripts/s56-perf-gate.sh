@@ -148,6 +148,10 @@ function baseline_value(metric, unit) {
     return base_p99[metric]
 }
 function expected(metric) {
+    # Darwin exposes a process peak, not current RSS.  The named Linux row
+    # proves close-after-open release only where a current checkpoint exists.
+    if (metric == "mem.closed_growth.100m_code.linux" && runner !~ /linux/)
+        return 0
     if (scope == "huge") return metric ~ /^search\./
     if (scope == "all")
         return metric ~ /^latency\./ || metric ~ /^startup\./ ||
