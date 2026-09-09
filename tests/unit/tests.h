@@ -1266,6 +1266,7 @@ void test_groups_reorder_block_stays_contiguous_past_other_tabs(void);
 void test_groups_reorder_block_keeps_the_active_tab(void);
 void test_groups_reorder_block_clamps_the_destination(void);
 void test_groups_membership_storm_matches_a_naive_oracle(void);
+void test_groups_audit_storm_100k_survives_restore_and_walk_dissolve(void);
 void test_groups_opening_a_forty_file_group_reads_one_file(void);
 void test_groups_defer_and_hydrate_round_trip(void);
 void test_groups_save_refuses_a_non_resident_tab(void);

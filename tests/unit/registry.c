@@ -1300,6 +1300,7 @@ const YewTest yew_tests[] = {
     T(groups_reorder_block_keeps_the_active_tab),
     T(groups_reorder_block_clamps_the_destination),
     T(groups_membership_storm_matches_a_naive_oracle),
+    T(groups_audit_storm_100k_survives_restore_and_walk_dissolve),
     T(groups_opening_a_forty_file_group_reads_one_file),
     T(groups_defer_and_hydrate_round_trip),
     T(groups_save_refuses_a_non_resident_tab),

@@ -25,6 +25,8 @@
 #include "edit/ed.h"
 #include "ui/groups.h"
 #include "ui/tabs.h"
+#include "util/buf.h"
+#include "ws/state.h"
 
 static void gp_fixture(Ed *ed)
 {
@@ -761,6 +763,304 @@ static void gp_files_remove(GpFiles *f)
     for (i = 0; i < f->n; i++)
         (void)unlink(f->paths[i]);
     YEW_ASSERT_EQ_I64(rmdir(f->dir), 0);
+}
+
+/*
+ * F07's long-form membership audit. Unlike the short in-memory storm above,
+ * this one uses real files and periodically reconstructs the editor through
+ * state.fl, so the oracle must survive fresh tab and group ids.
+ */
+enum {
+    AUDIT_STORM_FILES = 16,
+    AUDIT_STORM_OPS = 100000,
+    AUDIT_STORM_RESTORE_EVERY = 1000
+};
+
+static int audit_file_slot(const GpFiles *f, const char *path)
+{
+    int i;
+
+    if (path == NULL)
+        return -1;
+    for (i = 0; i < f->n; i++) {
+        if (yew_file_same_identity(f->paths[i], path))
+            return i;
+    }
+    return -1;
+}
+
+static int audit_open_count(const bool *opened, int n)
+{
+    int i;
+    int count = 0;
+
+    for (i = 0; i < n; i++)
+        if (opened[i])
+            count++;
+    return count;
+}
+
+static int audit_pick_slot(const bool *opened, int n, bool want_open,
+                           u32 *seed)
+{
+    int count = 0;
+    int i;
+    int wanted;
+
+    for (i = 0; i < n; i++) {
+        if (opened[i] == want_open)
+            count++;
+    }
+    if (count == 0)
+        return -1;
+    wanted = (int)(storm_rand(seed) % (u32)count);
+    for (i = 0; i < n; i++) {
+        if (opened[i] != want_open)
+            continue;
+        if (wanted == 0)
+            return i;
+        wanted--;
+    }
+    return -1;
+}
+
+static int audit_tab_for_slot(const Ed *ed, const GpFiles *f, int slot)
+{
+    if (slot < 0 || slot >= f->n)
+        return -1;
+    return yew_tab_find_by_path(ed, f->paths[slot]);
+}
+
+/*
+ * Save the current membership state, rebuild a fresh editor, then bind the
+ * id-based oracle to the fresh ids by the fixture paths it owns. Group vector
+ * order is the schema's insertion order, so it is the stable bridge across
+ * the intentional live-id remapping.
+ */
+static void audit_restore_midsequence(Ed *ed, const GpFiles *f, Oracle *o,
+                                      const bool *opened)
+{
+    u32 slots[ORACLE_MAX_GROUPS][ORACLE_MAX_TABS];
+    Bytebuf doc;
+    u32 i;
+    int j;
+
+    YEW_ASSERT_EQ_I64((int)ed->groups.v.len, o->n_groups);
+    for (i = 0U; i < (u32)o->n_groups; i++) {
+        for (j = 0; j < o->n_members[i]; j++) {
+            int idx = yew_tab_index_of_id(ed, o->members[i][j]);
+            const Tab *tab;
+
+            YEW_ASSERT(idx >= 0);
+            tab = yew_tab_at(ed, idx);
+            YEW_ASSERT_NOT_NULL(tab);
+            slots[i][j] = (u32)audit_file_slot(f, tab->path);
+            YEW_ASSERT(slots[i][j] < (u32)f->n);
+        }
+    }
+    bytebuf_init(&doc);
+    yew_state_emit(ed, &doc);
+    yew_ed_free(ed);
+    gp_fixture(ed);
+    YEW_ASSERT_EQ_I64(yew_state_apply(ed, doc.data, doc.len),
+                      YEW_WS_RESTORED);
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_I64((int)ed->groups.v.len, o->n_groups);
+    for (i = 0U; i < (u32)o->n_groups; i++) {
+        int members[ORACLE_MAX_TABS];
+        int n = yew_group_members(ed, ed->groups.v.data[i].id, members,
+                                  ORACLE_MAX_TABS);
+
+        YEW_ASSERT_EQ_I64(n, o->n_members[i]);
+        for (j = 0; j < n; j++) {
+            const Tab *tab = yew_tab_at(ed, members[j]);
+            int actual_slot = tab == NULL ? -1 :
+                              audit_file_slot(f, tab->path);
+            int k;
+            bool found = false;
+
+            for (k = 0; k < o->n_members[i]; k++) {
+                if (actual_slot == (int)slots[i][k])
+                    found = true;
+            }
+            /* The stress control continues through a remapped session only
+             * after proving no member disappeared or crossed groups.  The
+             * dedicated state-order audit owns ordinal persistence. */
+            YEW_ASSERT(found);
+        }
+        o->gid[i] = ed->groups.v.data[i].id;
+        for (j = 0; j < n; j++)
+            o->members[i][j] = yew_tab_at(ed, members[j])->tab_id;
+    }
+    for (j = 0; j < f->n; j++) {
+        int idx = audit_tab_for_slot(ed, f, j);
+
+        YEW_ASSERT((idx >= 0) == opened[j]);
+    }
+    bytebuf_free(&doc);
+}
+
+void test_groups_audit_storm_100k_survives_restore_and_walk_dissolve(void)
+{
+    Ed ed;
+    GpFiles f;
+    Oracle o;
+    bool opened[AUDIT_STORM_FILES];
+    u32 seed = 0xF07A5710U;
+    int i;
+    int op;
+
+    gp_files_make(&f, AUDIT_STORM_FILES);
+    gp_fixture(&ed);
+    (void)memset(&o, 0, sizeof(o));
+    (void)memset(opened, 0, sizeof(opened));
+    for (i = 0; i < AUDIT_STORM_FILES; i++) {
+        YEW_ASSERT(yew_tab_open(&ed, f.paths[i]) >= 0);
+        opened[i] = true;
+    }
+
+    for (op = 0; op < AUDIT_STORM_OPS; op++) {
+        u32 r = storm_rand(&seed);
+        int slot;
+
+        switch (r % 8U) {
+        case 0: /* create a populated group */
+            slot = audit_pick_slot(opened, f.n, true, &seed);
+            if (slot >= 0 && o.n_groups < ORACLE_MAX_GROUPS) {
+                int idx = audit_tab_for_slot(&ed, &f, slot);
+                u32 gid = yew_group_create(&ed, f.dir, "audit");
+                u32 tid;
+
+                YEW_ASSERT(idx >= 0);
+                tid = yew_tab_at(&ed, idx)->tab_id;
+                yew_group_add_member(&ed, gid, idx);
+                oracle_remove(&o, tid);
+                o.gid[o.n_groups] = gid;
+                o.members[o.n_groups][0] = tid;
+                o.n_members[o.n_groups] = 1;
+                o.n_groups++;
+            }
+            break;
+        case 1: /* join an existing group */
+            slot = audit_pick_slot(opened, f.n, true, &seed);
+            if (slot >= 0 && o.n_groups > 0) {
+                int gi = (int)(storm_rand(&seed) % (u32)o.n_groups);
+                int idx = audit_tab_for_slot(&ed, &f, slot);
+                u32 gid = o.gid[gi];
+                u32 tid;
+
+                YEW_ASSERT(idx >= 0);
+                tid = yew_tab_at(&ed, idx)->tab_id;
+                if (yew_tab_at(&ed, idx)->group_id != gid) {
+                    yew_group_add_member(&ed, gid, idx);
+                    oracle_remove(&o, tid);
+                    gi = oracle_find(&o, gid);
+                    YEW_ASSERT(gi >= 0);
+                    o.members[gi][o.n_members[gi]] = tid;
+                    o.n_members[gi]++;
+                }
+            }
+            break;
+        case 2: /* leave */
+            slot = audit_pick_slot(opened, f.n, true, &seed);
+            if (slot >= 0) {
+                int idx = audit_tab_for_slot(&ed, &f, slot);
+                u32 tid;
+
+                YEW_ASSERT(idx >= 0);
+                tid = yew_tab_at(&ed, idx)->tab_id;
+                yew_group_remove_member(&ed, idx);
+                oracle_remove(&o, tid);
+            }
+            break;
+        case 3: /* close the active file tab */
+            if (audit_open_count(opened, f.n) > 1) {
+                int idx;
+                u32 tid;
+
+                slot = audit_pick_slot(opened, f.n, true, &seed);
+                idx = audit_tab_for_slot(&ed, &f, slot);
+                YEW_ASSERT(idx >= 0);
+                yew_tab_switch(&ed, idx);
+                tid = yew_tab_at(&ed, ed.tabs.active)->tab_id;
+                YEW_ASSERT(yew_tab_close(&ed, ed.tabs.active));
+                oracle_remove(&o, tid);
+                opened[slot] = false;
+            }
+            break;
+        case 4: /* reopen a closed file */
+            slot = audit_pick_slot(opened, f.n, false, &seed);
+            if (slot >= 0) {
+                YEW_ASSERT(yew_tab_open(&ed, f.paths[slot]) >= 0);
+                opened[slot] = true;
+            }
+            break;
+        case 5: /* reorder within a group */
+            slot = audit_pick_slot(opened, f.n, true, &seed);
+            if (slot >= 0) {
+                int idx = audit_tab_for_slot(&ed, &f, slot);
+                u32 gid = yew_tab_at(&ed, idx)->group_id;
+                int gi = oracle_find(&o, gid);
+
+                if (gi >= 0 && o.n_members[gi] > 0) {
+                    int n = o.n_members[gi];
+                    int pos = (int)(storm_rand(&seed) % (u32)n) + 1;
+                    u32 tid = yew_tab_at(&ed, idx)->tab_id;
+                    int at = 0;
+                    int k;
+
+                    yew_group_set_ordinal(&ed, idx, pos);
+                    for (k = 0; k < n; k++) {
+                        if (o.members[gi][k] == tid)
+                            at = k;
+                    }
+                    (void)memmove(&o.members[gi][at],
+                                  &o.members[gi][at + 1],
+                                  (size_t)(n - at - 1) *
+                                      sizeof(o.members[gi][0]));
+                    for (k = n - 1; k > pos - 1; k--)
+                        o.members[gi][k] = o.members[gi][k - 1];
+                    o.members[gi][pos - 1] = tid;
+                }
+            }
+            break;
+        case 6: /* reorder one full block among ungrouped file tabs */
+            if (o.n_groups > 0) {
+                int gi = (int)(storm_rand(&seed) % (u32)o.n_groups);
+                int to = (int)(storm_rand(&seed) %
+                               (u32)(audit_open_count(opened, f.n) + 3)) - 1;
+
+                yew_group_reorder_block(&ed, o.gid[gi], to);
+            }
+            break;
+        default: /* dissolve while a copied member walk is in progress */
+            if (o.n_groups > 0) {
+                int gi = (int)(storm_rand(&seed) % (u32)o.n_groups);
+                int members[ORACLE_MAX_TABS];
+                int n = yew_group_members(&ed, o.gid[gi], members,
+                                          ORACLE_MAX_TABS);
+                int j;
+
+                YEW_ASSERT(n > 0);
+                for (j = 0; j < n; j++) {
+                    if (j == 0) {
+                        yew_group_dissolve(&ed, o.gid[gi]);
+                        oracle_drop_group(&o, gi);
+                    }
+                    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, members[j])->group_id,
+                                      0U);
+                    YEW_ASSERT_EQ_U64(
+                        yew_tab_at(&ed, members[j])->group_ordinal, 0U);
+                }
+            }
+            break;
+        }
+        if ((op + 1) % AUDIT_STORM_RESTORE_EVERY == 0)
+            audit_restore_midsequence(&ed, &f, &o, opened);
+        storm_check(&ed, &o);
+    }
+    yew_ed_free(&ed);
+    gp_files_remove(&f);
 }
 
 /*
