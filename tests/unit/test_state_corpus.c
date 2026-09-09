@@ -39,11 +39,15 @@
 
 #include "edit/cmd.h"
 #include "edit/ed.h"
+#include "fl/data.h"
+#include "fl/diag.h"
+#include "fl/vm.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/buf.h"
+#include "util/intern.h"
 #include "util/sort.h"
 #include "ws/fllit.h"
 #include "ws/state.h"
@@ -66,6 +70,35 @@ static bool corpus_read(const char *path, Bytebuf *out)
         bytebuf_append(out, chunk, n);
     (void)fclose(fp);
     return true;
+}
+
+/*
+ * The frozen corpus is the format contract after the state-legacy codec is
+ * retired. Keep both sides of this check on the shipping Fletch data path:
+ * the adapter supplies the schema-facing FlLit view and fl_data_write proves
+ * the real data writer lands on the frozen canonical bytes.
+ */
+static bool corpus_fletch_reemit(Arena *a, const u8 *src, u64 len,
+                                 Bytebuf *out, FlParseErr *err)
+{
+    Interner in;
+    DiagCtx dc;
+    FlVm vm;
+    FlValue value;
+    bool ok;
+
+    if (yew_fl_parse_fletch(a, src, len, err) == NULL)
+        return false;
+    interner_init(&in, a);
+    fl_diag_init(&dc, a);
+    (void)fl_vm_init(&vm, a, &in, &dc);
+    value = fl_data_read(&vm, (const char *)src, (size_t)len, &dc);
+    ok = fl_diag_errors(&dc) == 0U;
+    if (ok)
+        fl_data_write(out, value, 0U);
+    fl_vm_free(&vm);
+    interner_free(&in);
+    return ok;
 }
 
 typedef struct CorpusList {
@@ -690,10 +723,9 @@ void test_state_corpus_has_at_least_twenty_documents(void)
  * THE PROMISE: for every canonical document, emit(parse(d)) is
  * byte-identical to d.
  *
- * This is the one Sprint 36 inherits.  If it holds for the hand-written
- * implementation and for the Fletch data path, the two agree about the
- * format; if it holds for neither, the corpus is describing something
- * nobody produces.
+ * This is the one retained guard after the legacy comparison is retired.
+ * It exercises the shipping Fletch data reader and writer against every
+ * frozen canonical document.
  */
 void test_state_corpus_round_trips_byte_for_byte(void)
 {
@@ -708,8 +740,7 @@ void test_state_corpus_round_trips_byte_for_byte(void)
         Bytebuf out;
         Arena a;
         FlParseErr err;
-        FlLit *lit;
-        FlEmit e;
+        bool reemitted;
 
         (void)snprintf(path, sizeof(path), "%s/%s", CORPUS_DIR,
                        list.names[i]);
@@ -718,16 +749,13 @@ void test_state_corpus_round_trips_byte_for_byte(void)
         arena_init(&a);
         YEW_ASSERT(corpus_read(path, &raw));
         (void)memset(&err, 0, sizeof(err));
-        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
-        if (lit == NULL) {
+        reemitted = corpus_fletch_reemit(&a, raw.data, raw.len, &out, &err);
+        if (!reemitted) {
             (void)fprintf(stderr, "%s: parse failed at %u:%u: %s\n", path,
                           err.line, err.col,
                           err.msg == NULL ? "?" : err.msg);
         }
-        YEW_ASSERT_NOT_NULL(lit);
-        yew_fl_emit_init(&e, &out);
-        yew_fl_emit_lit(&e, NULL, lit);
-        yew_fl_emit_done(&e);
+        YEW_ASSERT(reemitted);
         if (out.len != raw.len ||
             memcmp(out.data, raw.data, raw.len) != 0) {
             (void)fprintf(stderr,
@@ -763,7 +791,7 @@ void test_state_corpus_documents_are_valid_v1(void)
         bytebuf_init(&raw);
         arena_init(&a);
         YEW_ASSERT(corpus_read(path, &raw));
-        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+        lit = yew_fl_parse_fletch(&a, raw.data, raw.len, &err);
         YEW_ASSERT_NOT_NULL(lit);
         YEW_ASSERT_EQ_I64(lit->kind, FL_LIT_MAP);
         YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "version"), 0), 1);
@@ -914,7 +942,7 @@ void test_state_corpus_noncanonical_documents_parse(void)
         arena_init(&a);
         YEW_ASSERT(corpus_read(path, &raw));
         (void)memset(&err, 0, sizeof(err));
-        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+        lit = yew_fl_parse_fletch(&a, raw.data, raw.len, &err);
         if (lit == NULL)
             (void)fprintf(stderr, "%s: parse failed at %u:%u: %s\n", path,
                           err.line, err.col,
@@ -940,8 +968,6 @@ void test_state_corpus_noncanonical_reemits_to_canonical(void)
     Bytebuf out;
     Arena a;
     FlParseErr err;
-    FlLit *lit;
-    FlEmit e;
 
     (void)snprintf(path, sizeof(path), "%s/noncanonical/comments.fl",
                    CORPUS_DIR);
@@ -949,11 +975,7 @@ void test_state_corpus_noncanonical_reemits_to_canonical(void)
     bytebuf_init(&out);
     arena_init(&a);
     YEW_ASSERT(corpus_read(path, &raw));
-    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
-    YEW_ASSERT_NOT_NULL(lit);
-    yew_fl_emit_init(&e, &out);
-    yew_fl_emit_lit(&e, NULL, lit);
-    yew_fl_emit_done(&e);
+    YEW_ASSERT(corpus_fletch_reemit(&a, raw.data, raw.len, &out, &err));
     bytebuf_push_u8(&out, 0U);
     out.len--;
     /* The comments are gone... */
@@ -967,11 +989,8 @@ void test_state_corpus_noncanonical_reemits_to_canonical(void)
         Bytebuf twice;
 
         bytebuf_init(&twice);
-        lit = yew_fl_parse(&a, out.data, out.len, &err);
-        YEW_ASSERT_NOT_NULL(lit);
-        yew_fl_emit_init(&e, &twice);
-        yew_fl_emit_lit(&e, NULL, lit);
-        yew_fl_emit_done(&e);
+        YEW_ASSERT(corpus_fletch_reemit(&a, out.data, out.len, &twice,
+                                         &err));
         YEW_ASSERT_EQ_U64(twice.len, out.len);
         YEW_ASSERT_EQ_MEM(twice.data, out.data, out.len);
         bytebuf_free(&twice);
@@ -982,13 +1001,11 @@ void test_state_corpus_noncanonical_reemits_to_canonical(void)
 }
 
 /*
- * Unknown keys survive parse -> emit VERBATIM.
+ * Unknown keys survive pure-data parse -> emit VERBATIM.
  *
- * This is the whole of v1's forward compatibility: there is no
- * migration framework, and the answer to "what does an older yew do
- * with a newer document" is "keeps what it does not understand".  An
- * older build that dropped them would make the loss permanent on its
- * first save.
+ * This pins the shipping Fletch data codec's forward-compatible behavior.
+ * The schema application's retention boundary is separate: F07's
+ * YEW-F-006 reproducer covers its currently failing root/workspace path.
  */
 void test_state_corpus_unknown_keys_survive_reemission(void)
 {
@@ -997,8 +1014,6 @@ void test_state_corpus_unknown_keys_survive_reemission(void)
     Bytebuf out;
     Arena a;
     FlParseErr err;
-    FlLit *lit;
-    FlEmit e;
 
     (void)snprintf(path, sizeof(path), "%s/noncanonical/unknown-keys.fl",
                    CORPUS_DIR);
@@ -1006,11 +1021,7 @@ void test_state_corpus_unknown_keys_survive_reemission(void)
     bytebuf_init(&out);
     arena_init(&a);
     YEW_ASSERT(corpus_read(path, &raw));
-    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
-    YEW_ASSERT_NOT_NULL(lit);
-    yew_fl_emit_init(&e, &out);
-    yew_fl_emit_lit(&e, NULL, lit);
-    yew_fl_emit_done(&e);
+    YEW_ASSERT(corpus_fletch_reemit(&a, raw.data, raw.len, &out, &err));
     bytebuf_push_u8(&out, 0U);
     out.len--;
     YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "from.the.future"));
@@ -1059,7 +1070,7 @@ void test_state_corpus_invalid_documents_are_rejected(void)
         arena_init(&a);
         YEW_ASSERT(corpus_read(path, &raw));
         (void)memset(&err, 0, sizeof(err));
-        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+        lit = yew_fl_parse_fletch(&a, raw.data, raw.len, &err);
         /*
          * Rejected either by the PARSER (syntax) or by the SCHEMA
          * (a v1 document must be a map at version 1).  Both are
@@ -1134,8 +1145,6 @@ void test_state_corpus_reemission_is_idempotent(void)
         Bytebuf twice;
         Arena a;
         FlParseErr err;
-        FlLit *lit;
-        FlEmit e;
 
         (void)snprintf(path, sizeof(path), "%s/%s", CORPUS_DIR,
                        list.names[i]);
@@ -1144,16 +1153,10 @@ void test_state_corpus_reemission_is_idempotent(void)
         bytebuf_init(&twice);
         arena_init(&a);
         YEW_ASSERT(corpus_read(path, &raw));
-        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
-        YEW_ASSERT_NOT_NULL(lit);
-        yew_fl_emit_init(&e, &once);
-        yew_fl_emit_lit(&e, NULL, lit);
-        yew_fl_emit_done(&e);
-        lit = yew_fl_parse(&a, once.data, once.len, &err);
-        YEW_ASSERT_NOT_NULL(lit);
-        yew_fl_emit_init(&e, &twice);
-        yew_fl_emit_lit(&e, NULL, lit);
-        yew_fl_emit_done(&e);
+        YEW_ASSERT(corpus_fletch_reemit(&a, raw.data, raw.len, &once,
+                                         &err));
+        YEW_ASSERT(corpus_fletch_reemit(&a, once.data, once.len, &twice,
+                                         &err));
         YEW_ASSERT_EQ_U64(twice.len, once.len);
         YEW_ASSERT_EQ_MEM(twice.data, once.data, once.len);
         arena_free_all(&a);

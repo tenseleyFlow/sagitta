@@ -245,7 +245,7 @@ void test_ws_save_writes_a_parseable_document(void)
     /* What landed on disk is what the parser accepts — the emitter
      * being self-consistent in memory is not the same claim. */
     arena_init(&a);
-    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+    lit = yew_fl_parse_fletch(&a, raw.data, raw.len, &err);
     YEW_ASSERT_NOT_NULL(lit);
     YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "version"), 0), 1);
     arena_free_all(&a);
@@ -1044,7 +1044,7 @@ static bool ws_state_is_whole(const char *path)
     (void)fclose(fp);
     arena_init(&a);
     (void)memset(&err, 0, sizeof(err));
-    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+    lit = yew_fl_parse_fletch(&a, raw.data, raw.len, &err);
     ok = lit != NULL && lit->kind == FL_LIT_MAP &&
          yew_fl_int_or(yew_fl_get(lit, "version"), 0) == 1;
     if (!ok)

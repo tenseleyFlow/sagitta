@@ -303,7 +303,7 @@ static bool run_one(const u8 *bytes, u64 len, char *why, size_t why_cap)
 
     arena_init(&a);
     (void)memset(&err, 0, sizeof(err));
-    lit = yew_fl_parse(&a, bytes, len, &err);
+    lit = yew_fl_parse_fletch(&a, bytes, len, &err);
     if (lit != NULL) {
         u64 nodes = 0U;
 

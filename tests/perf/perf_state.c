@@ -177,7 +177,7 @@ static int measure_parse(const Bytebuf *doc, i64 *out_ns)
 
         arena_init(&a);
         start = now_ns();
-        lit = yew_fl_parse(&a, doc->data, doc->len, &err);
+        lit = yew_fl_parse_fletch(&a, doc->data, doc->len, &err);
         end = now_ns();
         if (lit == NULL) {
             (void)fprintf(stderr, "perf_state: corpus parse failed\n");

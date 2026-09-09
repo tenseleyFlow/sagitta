@@ -53,7 +53,7 @@ void test_state_options_bool_overlay_preserves_unknown_literals(void)
     arena_init(&a);
     bytebuf_init(&out);
     yew_state_emit(&ed, &out);
-    root = yew_fl_parse(&a, out.data, out.len, &err);
+    root = yew_fl_parse_fletch(&a, out.data, out.len, &err);
     YEW_ASSERT_NOT_NULL(root);
     YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(root, "version"), 0), 1);
     options = yew_fl_get(root, "options");

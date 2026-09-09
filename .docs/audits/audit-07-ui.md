@@ -59,9 +59,9 @@ The final legacy-versus-Fletch 2x2 differential ran before deletion:
 - state_diff_generated_500_matrix completed the generated 500-document
   matrix: 1 test, 4,500 assertions, 0 failures.
 
-The test-only legacy wrapper is still present while the retirement patch is
-prepared. The retained Sprint 25 corpus round-trip will be the remaining
-format guard after removal.
+The test-only legacy wrapper and its differential-only tests have been
+removed. The retained Sprint 25 corpus round-trip now exercises the shipping
+Fletch data reader and writer as the remaining frozen-format guard.
 
 ## Count
 

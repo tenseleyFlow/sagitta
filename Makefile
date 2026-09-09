@@ -570,8 +570,7 @@ UNIT_RUN := $(UNIT_RUNTIME_PREP) $(MUSL_UNIT_PREP) $(UNIT_RUNTIME_ENV) \
 endif
 
 # Keep source and link order deterministic across filesystems.
-CORE_SRC := $(filter-out src/ws/fl_emit.c src/ws/fl_parse.c \
-                         src/ws/state_legacy.c, \
+CORE_SRC := $(filter-out src/ws/fl_emit.c src/ws/fl_parse.c, \
               $(shell find src -path 'src/mod/*' -prune -o -name '*.c' \
                 -print | sort))
 JSON_SRC := src/mod/lsp/json.c
@@ -670,12 +669,7 @@ UNIT_SRC := $(filter-out $(UNIT_PLUG_SRC),$(UNIT_SRC))
 endif
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
 SYN_ENGINE_UNIT_OBJ := $(BUILD)/tests/unit/syn_engine.o
-STATE_LEGACY_OBJ := $(BUILD)/tests/unit/state_legacy.o
 
-# Sprint 36: activate the independent Fletch arm in the frozen-corpus
-# differential.  The hand-written parser remains visible only to tests.
-$(BUILD)/tests/unit/test_state_differential.o: CFLAGS += \
-  -DYEW_HAVE_FLETCH_STATE=1
 $(BUILD)/tests/unit/test_syn_embed_runtime.o: CFLAGS += -DYEW_SYN_TEST=1
 FAKECLIP := $(BUILD)/fakeclip
 FAKELSP := $(BUILD)/tests/helpers/fakelsp
@@ -763,7 +757,7 @@ UNIT_LINK_OBJ := $(filter-out $(BUILD)/src/main.o \
                  $(BUILD)/src/syn/engine.o,$(OBJ)) \
                  $(SYN_ENGINE_UNIT_OBJ) $(UNIT_OBJ) \
                  $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ) \
-                 $(TEXT_FUZZ_SUPPORT_OBJ) $(STATE_LEGACY_OBJ)
+                 $(TEXT_FUZZ_SUPPORT_OBJ)
 
 FUZZ_LIB_OBJ := $(BUILD)/tests/fuzz/fuzzlib.o
 FUZZ_UTF8_OBJ := $(BUILD)/tests/fuzz/fuzz_utf8.o
@@ -1264,9 +1258,9 @@ $(BUILD)/fuzz_fuzzy: $(FUZZ_LINK_OBJ) $(FUZZ_FUZZY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_FUZZY_OBJ) $(LDLIBS)
 
-$(BUILD)/fuzz_state: $(FUZZ_LINK_OBJ) $(FUZZ_STATE_OBJ) $(STATE_LEGACY_OBJ)
+$(BUILD)/fuzz_state: $(FUZZ_LINK_OBJ) $(FUZZ_STATE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_STATE_OBJ) $(STATE_LEGACY_OBJ) $(LDLIBS)
+		$(FUZZ_STATE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_gitignore: $(FUZZ_LINK_OBJ) $(FUZZ_GITIGNORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -1538,9 +1532,9 @@ $(BUILD)/perf_cmdcomp: $(PERF_CORE_OBJ) $(PERF_CMDCOMP_OBJ)
 $(BUILD)/fl_smoke: $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ) $(LDLIBS)
 
-$(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ) $(STATE_LEGACY_OBJ)
+$(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_STATE_OBJ) $(STATE_LEGACY_OBJ) $(LDLIBS)
+		$(PERF_STATE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_mouse: $(PERF_CORE_OBJ) $(PERF_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
@@ -3179,12 +3173,6 @@ $(SYN_ENGINE_UNIT_OBJ): src/syn/engine.c $(BUILD)/mods.stamp \
                         $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) -DYEW_SYN_TEST=1 -c -o $@ $<
 
-$(STATE_LEGACY_OBJ): src/ws/state_legacy.c src/ws/fl_parse.c \
-                     src/ws/fl_emit.c $(BUILD)/mods.stamp \
-                     $(BUILD)/profile.stamp $(MODULE_FORCE) \
-                     $(PROFILE_FORCE) | dirs
-	$(CC) $(CFLAGS) -DYEW_STATE_LEGACY=1 -c -o $@ $<
-
 dirs:
 	mkdir -p $(BUILD_DIRS)
 
@@ -3381,7 +3369,6 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
 -include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(SYN_ENGINE_UNIT_OBJ:.o=.d) \
-         $(STATE_LEGACY_OBJ:.o=.d) \
          $(FUZZ_LIB_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
          $(FUZZ_INPUT_OBJ:.o=.d) $(FUZZ_GRID_OBJ:.o=.d) \

@@ -26,10 +26,14 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "fl/data.h"
+#include "fl/diag.h"
+#include "fl/vm.h"
 #include "ui/groups.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/buf.h"
+#include "util/intern.h"
 #include "ws/fllit.h"
 #include "ws/state.h"
 
@@ -140,7 +144,7 @@ static FlLit *ss_emit_parse(Ed *ed, Arena *a, Bytebuf *out)
 
     out->len = 0U;
     yew_state_emit(ed, out);
-    lit = yew_fl_parse(a, out->data, out->len, &err);
+    lit = yew_fl_parse_fletch(a, out->data, out->len, &err);
     if (lit == NULL)
         (void)fprintf(stderr, "parse failed at %u:%u: %s\n", err.line,
                       err.col, err.msg == NULL ? "?" : err.msg);
@@ -505,8 +509,10 @@ void test_state_schema_emission_is_deterministic(void)
     Bytebuf one;
     Bytebuf two;
     Bytebuf again;
-    FlLit *lit;
-    FlEmit e;
+    Interner in;
+    DiagCtx dc;
+    FlVm vm;
+    FlValue value;
 
     ss_fixture(&ed);
     YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-ss-det.txt") >= 0);
@@ -522,19 +528,18 @@ void test_state_schema_emission_is_deterministic(void)
     YEW_ASSERT_EQ_U64(one.len, two.len);
     YEW_ASSERT_EQ_I64(memcmp(one.data, two.data, one.len), 0);
 
-    /* parse -> emit lands on the same bytes. */
-    {
-        FlParseErr err;
-
-        lit = yew_fl_parse(&a, one.data, one.len, &err);
-        YEW_ASSERT_NOT_NULL(lit);
-    }
-    yew_fl_emit_init(&e, &again);
-    yew_fl_emit_lit(&e, NULL, lit);
-    yew_fl_emit_done(&e);
+    /* The shipping Fletch data reader and writer land on the same bytes. */
+    interner_init(&in, &a);
+    fl_diag_init(&dc, &a);
+    (void)fl_vm_init(&vm, &a, &in, &dc);
+    value = fl_data_read(&vm, (const char *)one.data, one.len, &dc);
+    YEW_ASSERT_EQ_U64(fl_diag_errors(&dc), 0U);
+    fl_data_write(&again, value, 0U);
     YEW_ASSERT_EQ_U64(again.len, one.len);
     YEW_ASSERT_EQ_I64(memcmp(again.data, one.data, one.len), 0);
 
+    fl_vm_free(&vm);
+    interner_free(&in);
     bytebuf_free(&one);
     bytebuf_free(&two);
     bytebuf_free(&again);

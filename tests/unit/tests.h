@@ -1639,18 +1639,6 @@ void test_fl_lex_caret_block_renders_the_source_line(void);
 void test_fl_diag_registered_paths_are_arena_owned(void);
 void test_fl_lex_keep_comments_is_opt_in(void);
 void test_fl_lex_spellings_cover_every_kind(void);
-void test_fl_lit_emits_the_canonical_layout(void);
-void test_fl_lit_round_trip_is_a_fixpoint(void);
-void test_fl_lit_escape_table_round_trips(void);
-void test_fl_lit_carries_invalid_utf8_and_nul_paths(void);
-void test_fl_lit_accepts_comments_and_drops_them(void);
-void test_fl_lit_preserves_unknown_keys_in_order(void);
-void test_fl_lit_accepts_quoted_and_dotted_keys(void);
-void test_fl_lit_caps_are_corruption(void);
-void test_fl_lit_rejects_unknown_escapes(void);
-void test_fl_lit_rejects_out_of_range_integers(void);
-void test_fl_lit_readers_are_type_safe(void);
-void test_fl_lit_rejects_garbage_totally(void);
 void test_state_schema_remaps_group_ids(void);
 void test_state_schema_id_map_grows(void);
 void test_state_schema_permille_is_a_fixpoint(void);
@@ -1774,16 +1762,7 @@ void test_state_corpus_invalid_documents_are_rejected(void);
 void test_state_corpus_invalid_documents_reach_a_result(void);
 void test_state_corpus_reemission_is_idempotent(void);
 
-/* Sprint 25 DoD 13 / Sprint 36's named DoD item. */
-void test_state_differential_canonical_corpus(void);
-void test_state_differential_noncanonical_corpus(void);
-void test_state_differential_invalid_corpus(void);
-void test_state_differential_comparison_detects_differences(void);
-void test_state_differential_byte_comparison_is_not_redundant(void);
-void test_state_differential_names_sprint_36(void);
-
-/* Sprint 36 §7: real Fletch data path and generated differential. */
-void test_state_diff_generated_500_matrix(void);
+/* Sprint 36 §7: retained shipping data-codec controls. */
 void test_state_diff_data_writer_quotes_non_identifier_keys(void);
 void test_state_diff_pure_literal_runs_nothing(void);
 void test_state_options_bool_overlay_preserves_unknown_literals(void);

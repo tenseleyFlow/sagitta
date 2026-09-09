@@ -649,8 +649,8 @@ void test_ws_restore_save_restore_save_is_a_fixpoint(void)
         FlParseErr err;
 
         arena_init(&ar);
-        la = yew_fl_parse(&ar, first.data, first.len, &err);
-        lb = yew_fl_parse(&ar, second.data, second.len, &err);
+        la = yew_fl_parse_fletch(&ar, first.data, first.len, &err);
+        lb = yew_fl_parse_fletch(&ar, second.data, second.len, &err);
         YEW_ASSERT_NOT_NULL(la);
         YEW_ASSERT_NOT_NULL(lb);
         YEW_ASSERT_EQ_U64(yew_fl_len(yew_fl_get(la, "tabs")),
