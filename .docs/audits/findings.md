@@ -1,7 +1,7 @@
 # Sprint 58 findings ledger
 
 Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`  
-Next available ID: `YEW-F-005`
+Next available ID: `YEW-F-006`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -13,6 +13,7 @@ the historical row and body.
 | YEW-F-002 | M | open | F01 UNI | long RI output delays a completed flag cluster | tests/audit/yew_f_002.c | s19 §3 |
 | YEW-F-003 | H | open | F01 UNI | ASCII-base keycap leaves inconsistent grid width | tests/audit/yew_f_003.c | s05 §3 |
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
+| YEW-F-005 | H | open | F06 RE | multi-cursor replacement exits inside a Fletch edit transaction | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -46,6 +47,16 @@ identifier map key as a single token and requires `:` immediately, while the
 pure-literal parser's entry path explicitly accepts dotted keys. The shipped
 `runtime/init.fl` quotes its dotted option names, masking the mismatch on the
 default startup path.
+
+`YEW-F-005` is High because a valid Fletch `edit {}` block containing a
+buffer-range replacement with two live cursors reaches `yew_bug()` and exits
+4. The reproducer opens the same outer `YEW_TXN_MACRO` boundary as Fletch,
+then invokes the real replacement command with the live cursor set. The plan
+does not own a replacement transaction at nonzero depth, so its first edit
+encounters the multi-cursor requirement while the pending reason is MACRO.
+Correct behavior is a normal, one-undo replacement that restores exact text
+and both cursor positions on undo. This remains open for Sprint 59; no product
+source changes during Sprint 58.
 
 ## Unverified observations
 

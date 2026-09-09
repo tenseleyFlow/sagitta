@@ -134,8 +134,8 @@ void test_re_empty_width_loop_terminates(void)
     /*
      * DoD 9.  `(a*)*` chains SPLIT/JMP without consuming input.  This
      * completes only because addthread's sparse_has check lives INSIDE
-     * its loop; moving that check to the call site makes this test hang
-     * rather than fail, which is why it is called out by name.
+     * its loop. The deep-subject control below protects that placement
+     * against an accidentally shallow-only regression.
      */
     arena_init(&arena);
     re = yew_re_compile(&arena, "(a*)*", 5U, 0U, NULL);
@@ -152,6 +152,37 @@ void test_re_empty_width_loop_terminates(void)
     YEW_ASSERT_NOT_NULL(re);
     YEW_ASSERT(!yew_re_search(re, &in, BYTEOFF(0U), &m));
     arena_free_all(&arena);
+}
+
+void test_re_empty_width_deep_subject(void)
+{
+    enum { DEEP_SUBJECT_BYTES = 100000U };
+    Arena arena;
+    YewRe *re;
+    YewReMatch m;
+    YewReInput in;
+    TextBuf *tb;
+    u8 *subject;
+
+    /* Sprint 58 F06 Q2: run the empty-width closure through the TextIter
+     * path over the stated 100,000-byte subject, not only a toy literal. */
+    subject = yew_xmalloc(DEEP_SUBJECT_BYTES);
+    (void)memset(subject, 'a', DEEP_SUBJECT_BYTES);
+    tb = yew_textbuf_from_bytes(subject, DEEP_SUBJECT_BYTES);
+    yew_xfree(subject);
+    YEW_ASSERT_NOT_NULL(tb);
+
+    arena_init(&arena);
+    re = yew_re_compile(&arena, "(a*)*", 5U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    in = yew_re_input_textbuf(tb);
+    (void)memset(&m, 0, sizeof(m));
+    YEW_ASSERT(yew_re_search(re, &in, BYTEOFF(0U), &m));
+    YEW_ASSERT_EQ_U64(m.g[0].lo, 0U);
+    YEW_ASSERT_EQ_U64(m.g[0].hi, DEEP_SUBJECT_BYTES);
+
+    arena_free_all(&arena);
+    yew_textbuf_free(tb);
 }
 
 void test_re_match_at_is_anchored(void)

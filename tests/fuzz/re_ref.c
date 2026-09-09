@@ -610,9 +610,9 @@ YewRefResult yew_ref_search(const char *pat, size_t patlen, const u8 *hay,
     p.ngroups = 1U; /* group 0 */
     root = parse_alt(&p);
     if (p.unsupported)
-        return YEW_REF_UNKNOWN;
+        return YEW_REF_OUTSIDE;
     if (root < 0 || p.failed || p.at != patlen)
-        return YEW_REF_UNKNOWN; /* the engine may still reject it */
+        return YEW_REF_OUTSIDE;
 
     for (start = from; start <= haylen; start++) {
         u64 end = 0U;
@@ -639,7 +639,7 @@ YewRefResult yew_ref_search(const char *pat, size_t patlen, const u8 *hay,
             return YEW_REF_MATCH;
         }
         if (r.budget_out)
-            return YEW_REF_UNKNOWN;
+            return YEW_REF_BUDGET;
         /* Only advance to the next codepoint boundary. */
         if (start < haylen) {
             u32 len = 0U;

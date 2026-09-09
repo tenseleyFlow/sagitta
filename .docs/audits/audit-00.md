@@ -87,7 +87,7 @@ zero until its report closes; silence never counts as evidence.
 | F03 text | `audit-03-text.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
 | F04 modal | `audit-04-modal.md` | closed | 1 | 1 | 0 | 0 | 1 | 0 | 1 |
 | F05 execute | `audit-05-exec.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| F06 regex | `audit-06-regex.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F06 regex | `audit-06-regex.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
 | F07 UI/workspace | `audit-07-ui.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F08 Fletch | `audit-08-fletch.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F09 recorder | `audit-09-recorder.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -100,6 +100,7 @@ zero until its report closes; silence never counts as evidence.
 
 ## Verdict
 
-We are not ready to tag: Sprint 58 is open, only F01 through F05 of its fifteen
+We are not ready to tag: Sprint 58 is open, only F01 through F06 of its fifteen
 fronts have closed, the invariant sweep has not run, and no campaign-wide
-absence-of-findings claim has been earned.
+absence-of-findings claim has been earned. F06 adds an open High finding
+(`YEW-F-005`): a valid Fletch multi-cursor replacement can exit 4.

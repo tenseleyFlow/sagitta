@@ -292,6 +292,35 @@ void test_replace_ten_thousand_matches_is_one_undo_step(void)
     yew_ed_free(&ed);
 }
 
+/* Sprint 58 F06 Q7: one fixture carries both boundary traps at once: its
+ * first line is empty and its last line has no final newline. */
+void test_replace_zero_width_empty_first_and_unterminated_last(void)
+{
+    static const char original[] = "\nlast";
+    static const char replaced[] = "> \n> last";
+    Ed ed;
+    Bytebuf got;
+    EditCtx ec;
+    u32 n;
+
+    rep_fixture(&ed, original);
+    n = rep_run(&ed, "^", "> ", G);
+    YEW_ASSERT_EQ_U64(n, 2U);
+    rep_read(&ed, &got);
+    YEW_ASSERT_EQ_U64(got.len, sizeof(replaced) - 1U);
+    YEW_ASSERT(memcmp(got.data, replaced, got.len) == 0);
+    bytebuf_free(&got);
+
+    ec = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_undo(&ec));
+    yew_ed_finish_edit(&ed, &ec);
+    rep_read(&ed, &got);
+    YEW_ASSERT_EQ_U64(got.len, sizeof(original) - 1U);
+    YEW_ASSERT(memcmp(got.data, original, got.len) == 0);
+    bytebuf_free(&got);
+    yew_ed_free(&ed);
+}
+
 /* DoD 8: every unknown escape is an error, named. */
 void test_replace_rejects_unknown_escapes(void)
 {

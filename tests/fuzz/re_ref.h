@@ -27,9 +27,12 @@ enum { YEW_REF_MAX_GROUPS = 8 };
 typedef enum {
     YEW_REF_NO_MATCH = 0,
     YEW_REF_MATCH = 1,
-    /* Step budget exhausted, or the pattern used a construct outside the
-     * shared subset: the caller must skip, not fail. */
-    YEW_REF_UNKNOWN = -1
+    /* The independent matcher exhausted its work budget.  The caller may
+     * skip this pathological oracle case, but must report it. */
+    YEW_REF_BUDGET = -1,
+    /* The generator left the documented shared subset.  This is a harness
+     * error, not an oracle skip: callers must fail it visibly. */
+    YEW_REF_OUTSIDE = -2
 } YewRefResult;
 
 typedef struct YewRefMatch {

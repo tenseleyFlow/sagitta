@@ -275,7 +275,7 @@ static void materialize(const TextBuf *tb, u8 *out, size_t cap,
     *len_out = n;
 }
 
-static u64 skipped;
+static u64 budget_skipped;
 static u64 compared;
 
 static bool one_case(Rng *rng, char *why, size_t why_cap)
@@ -289,6 +289,7 @@ static bool one_case(Rng *rng, char *why, size_t why_cap)
     TextBuf *tb = tb_of(raw, rawlen, rng);
     Arena arena;
     YewRe *re;
+    YewReErr re_err = {0U, NULL};
     YewReInput in;
     YewReMatch m;
     YewRefMatch ref;
@@ -300,24 +301,29 @@ static bool one_case(Rng *rng, char *why, size_t why_cap)
     materialize(tb, text, sizeof(text), &len);
 
     arena_init(&arena);
-    re = yew_re_compile(&arena, pat, patlen, 0U, NULL);
+    re = yew_re_compile(&arena, pat, patlen, 0U, &re_err);
     if (re == NULL) {
-        /* The generator can emit something the engine rejects (a bare
-         * `^*`, say); the oracle is not consulted about those. */
-        skipped++;
+        (void)snprintf(why, why_cap,
+                       "generated shared-subset /%s/ did not compile at "
+                       "%u: %s",
+                       pat, (unsigned)re_err.off,
+                       re_err.msg == NULL ? "unknown error" : re_err.msg);
+        goto fail;
+    }
+    want = yew_ref_search(pat, patlen, text, len, 0U, &ref);
+    if (want == YEW_REF_BUDGET) {
+        /* Only computationally pathological reference cases are skipped.
+         * A generator/oracle subset disagreement fails below instead of
+         * silently diluting the campaign. */
+        budget_skipped++;
         arena_free_all(&arena);
         yew_textbuf_free(tb);
         return true;
     }
-    want = yew_ref_search(pat, patlen, text, len, 0U, &ref);
-    if (want == YEW_REF_UNKNOWN) {
-        /* Budget exhausted or a construct outside the shared subset —
-         * skip, never fail: the oracle running out of road says nothing
-         * about the engine. */
-        skipped++;
-        arena_free_all(&arena);
-        yew_textbuf_free(tb);
-        return true;
+    if (want == YEW_REF_OUTSIDE) {
+        (void)snprintf(why, why_cap,
+                       "generated /%s/ is outside the oracle subset", pat);
+        goto fail;
     }
 
     in = yew_re_input_bytes(text, (u64)len);
@@ -429,12 +435,13 @@ int main(int argc, char **argv)
 
     /* DoD 6 wants the skip rate reported, not hidden: a campaign that
      * skips most of its cases is not the coverage it appears to be. */
-    if (compared + skipped != 0U) {
-        (void)printf("fuzz_re_diff: %llu compared, %llu skipped (%.1f%%)\n",
+    if (compared + budget_skipped != 0U) {
+        (void)printf("fuzz_re_diff: %llu compared, %llu oracle-budget "
+                     "skipped (%.6f%%)\n",
                      (unsigned long long)compared,
-                     (unsigned long long)skipped,
-                     100.0 * (double)skipped /
-                         (double)(compared + skipped));
+                     (unsigned long long)budget_skipped,
+                     100.0 * (double)budget_skipped /
+                         (double)(compared + budget_skipped));
     }
     return status;
 }
