@@ -624,7 +624,9 @@ void test_ws_save_kill9_stale_lock_is_taken_over(void)
         (void)close(ready[0]);
         yew_state_open(&f.ed);
         claimed = f.ed.state.writer ? 1U : 0U;
-        (void)write(ready[1], &claimed, sizeof(claimed));
+        if (write(ready[1], &claimed, sizeof(claimed)) !=
+            (ssize_t)sizeof(claimed))
+            _exit(3);
         if (claimed == 0)
             _exit(2);
         for (;;)
