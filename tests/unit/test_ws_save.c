@@ -602,6 +602,52 @@ void test_ws_save_stale_lock_is_taken_over(void)
     sf_remove(&f);
 }
 
+/*
+ * The real stale-lock path: a session has claimed the lock and then takes
+ * SIGKILL before its normal close can unlink it.  A later session must test
+ * the recorded pid, claim the dead owner's lock, and be able to save.
+ */
+void test_ws_save_kill9_stale_lock_is_taken_over(void)
+{
+    SaveFix f;
+    int ready[2];
+    pid_t child;
+    u8 claimed = 0U;
+    int status = 0;
+
+    sf_make(&f);
+    sf_key_only(&f);
+    YEW_ASSERT_EQ_I64(pipe(ready), 0);
+    child = fork();
+    YEW_ASSERT(child >= 0);
+    if (child == 0) {
+        (void)close(ready[0]);
+        yew_state_open(&f.ed);
+        claimed = f.ed.state.writer ? 1U : 0U;
+        (void)write(ready[1], &claimed, sizeof(claimed));
+        if (claimed == 0)
+            _exit(2);
+        for (;;)
+            (void)pause();
+    }
+    YEW_ASSERT_EQ_I64(close(ready[1]), 0);
+    YEW_ASSERT_EQ_I64(read(ready[0], &claimed, sizeof(claimed)),
+                      (i64)sizeof(claimed));
+    YEW_ASSERT_EQ_I64(close(ready[0]), 0);
+    YEW_ASSERT_EQ_I64(claimed, 1U);
+    YEW_ASSERT_EQ_I64(kill(child, SIGKILL), 0);
+    while (waitpid(child, &status, 0) < 0)
+        ;
+    YEW_ASSERT(WIFSIGNALED(status));
+    YEW_ASSERT_EQ_I64(WTERMSIG(status), SIGKILL);
+
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.writer);
+    YEW_ASSERT(yew_state_save(&f.ed));
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    sf_remove(&f);
+}
+
 /* A lock naming US is ours — a restart in the same process is not a
  * conflict with itself. */
 void test_ws_save_own_pid_lock_is_reclaimed(void)

@@ -31,11 +31,36 @@ finding YEW-F-007
 
 ## Q3 — group and restore file-read counts
 
-in progress
+probed, nothing found
+
+- `groups_opening_a_forty_file_group_reads_one_file` passed with 169
+  assertions. Creating the 40-member group made no file reads; viewing the
+  first member incremented `yew_file_load_count()` exactly once, viewing a
+  second member made the second read, and revisiting the resident first tab
+  made none.
+- `ws_restore_of_forty_tabs_reads_one_file` passed with 92 assertions. A
+  fresh restore created 41 tabs (the scratch tab plus the 40 saved paths) and
+  made exactly one file read for the active member; switching to another
+  member incremented the same test hook to two.
+- Both controls count at `text/file.c`'s test hook rather than inferring I/O
+  from elapsed time, so a warm filesystem cache cannot hide eager hydration.
 
 ## Q4 — state ordering and ratio fixpoint
 
-in progress
+probed, nothing found apart from `YEW-F-006`
+
+- `state_schema_emits_a_parseable_v1_document`,
+  `state_schema_writes_groups_before_tabs`, and
+  `state_schema_emission_is_deterministic` passed (9, 6, and 7 assertions).
+  They confirm the shipping Fletch data writer emits a parseable v1 document,
+  preserves the root/group/tab order, and emits byte-identically when state
+  has not changed.
+- `state_schema_permille_is_a_fixpoint` passed all 999 legal values (1,004
+  assertions), and `state_corpus_contains_no_floats` passed 12,192 assertions.
+  Ratios therefore remain integer permille through the persisted format.
+- `state_corpus_reemission_is_idempotent` passed 110 assertions. The separate
+  root/workspace unknown-key loss is the critical `YEW-F-006` finding under
+  Q5, not an ordering or ratio drift.
 
 ## Q5 — corrupt-state discipline and unknown-key retention
 
@@ -51,10 +76,28 @@ finding YEW-F-006
 - This is Critical under the Sprint 58 rubric: a future workspace key is
   user-owned data silently deleted by a normal save. The remediation belongs
   to Sprint 59; no product source changed for this finding.
+- The existing malformed-state controls remain healthy:
+  `state_corpus_invalid_documents_are_rejected` and
+  `state_corpus_invalid_documents_reach_a_result` passed with 56 and 101
+  assertions. `state_corpus_unknown_keys_survive_reemission` also passed its
+  options-subtree fixture (8 assertions), which is why the new probe places
+  equivalent keys at root and workspace depth rather than confusing that
+  narrower control with full forward retention.
 
 ## Q6 — stale workspace-lock ownership
 
-in progress
+probed, nothing found
+
+- `ws_save_live_lock_demotes_us_to_a_reader` confirmed that a live owner is
+  respected; the reader never writes over its state.
+- The existing stale-pid control and the new
+  `ws_save_kill9_stale_lock_is_taken_over` control both passed. The latter
+  forks a real editor session, waits until it claims the on-disk PID lock,
+  kills it with `SIGKILL`, then opens a fresh editor. The new session becomes
+  the writer and completes one state write (18 assertions).
+- This exercises the exact stale-lock condition rather than treating mere
+  lock-file existence as an owner, and proves the recovery is based on the
+  recorded PID.
 
 ## Q7 — repository pollution
 

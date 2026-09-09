@@ -1702,6 +1702,7 @@ const YewTest yew_tests[] = {
     T(ws_save_reader_leaves_the_owners_lock_alone),
     T(ws_save_ownership_message_is_shown_once),
     T(ws_save_stale_lock_is_taken_over),
+    T(ws_save_kill9_stale_lock_is_taken_over),
     T(ws_save_own_pid_lock_is_reclaimed),
     T(ws_save_unparseable_lock_is_taken_over),
     T(ws_save_empty_lock_is_taken_over),

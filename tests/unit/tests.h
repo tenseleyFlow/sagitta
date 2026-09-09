@@ -1670,6 +1670,7 @@ void test_ws_save_live_lock_demotes_us_to_a_reader(void);
 void test_ws_save_reader_leaves_the_owners_lock_alone(void);
 void test_ws_save_ownership_message_is_shown_once(void);
 void test_ws_save_stale_lock_is_taken_over(void);
+void test_ws_save_kill9_stale_lock_is_taken_over(void);
 void test_ws_save_own_pid_lock_is_reclaimed(void);
 void test_ws_save_unparseable_lock_is_taken_over(void);
 void test_ws_save_empty_lock_is_taken_over(void);
