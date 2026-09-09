@@ -6403,25 +6403,16 @@ static bool s49_ai_open(PtyCtx *c, pid_t *server, char *path,
     return !c->failed;
 }
 
-static bool s49_ai_wait_for(PtyCtx *c, const char *text, u32 max_frames)
+static bool s49_ai_screen_contains(const PtyCtx *c, const void *arg)
 {
-    u32 frame;
-
-    for (frame = 0U; frame < max_frames && !c->failed; frame++) {
-        u32 before = c->vt.nsync_pairs;
-
-        if (s43_screen_contains(&c->vt, text))
-            return true;
-        ptc_wait_sync_pairs(c, before + 1U);
-    }
-    return !c->failed && s43_screen_contains(&c->vt, text);
+    return s43_screen_contains(&c->vt, (const char *)arg);
 }
 
 static bool s49_ai_first_frame(PtyCtx *c)
 {
     ptc_keys(c, "end a X");
-    ptc_check(c, s49_ai_wait_for(c, "anchorXint ", 32U),
-              "Sprint 49 intermediate AI ghost did not appear");
+    ptc_wait_until(c, s49_ai_screen_contains, "anchorXint ",
+                   "Sprint 49 intermediate AI ghost did not appear");
     ptc_check(c, !s43_screen_contains(&c->vt, "answer = 42;"),
               "Sprint 49 stream skipped its intermediate frame");
     return !c->failed;
@@ -6450,8 +6441,8 @@ static void case_s49_ai_stream(PtyCtx *c)
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, "s49_ai_stream");
 
-    ptc_check(c, s49_ai_wait_for(c, "anchorXint answer = 42;", 6U),
-              "Sprint 49 final AI ghost did not arrive");
+    ptc_wait_until(c, s49_ai_screen_contains, "anchorXint answer = 42;",
+                   "Sprint 49 final AI ghost did not arrive");
     ptc_settle(c, 0);
     bytebuf_append(&c->snapshot, "--- final\n", 10U);
     snapshot_write(&c->vt, &c->snapshot);
@@ -6645,8 +6636,8 @@ static void case_s50_ai_badge(PtyCtx *c)
     if (state == S50_BADGE_STREAMING) {
         if (remote) {
             s18_settle_after_keys(c, "Y");
-            ptc_check(c, s49_ai_wait_for(c, "anchorXYint ", 6U),
-                      "Sprint 50 remote AI stream did not start");
+            ptc_wait_until(c, s49_ai_screen_contains, "anchorXYint ",
+                           "Sprint 50 remote AI stream did not start");
         } else if (!s49_ai_first_frame(c)) {
             goto out;
         }
