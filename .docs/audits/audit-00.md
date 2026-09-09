@@ -88,7 +88,7 @@ zero until its report closes; silence never counts as evidence.
 | F04 modal | `audit-04-modal.md` | closed | 1 | 1 | 0 | 0 | 1 | 0 | 1 |
 | F05 execute | `audit-05-exec.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F06 regex | `audit-06-regex.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
-| F07 UI/workspace | `audit-07-ui.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F07 UI/workspace | `audit-07-ui.md` | in progress | 1 | 1 | 1 | 0 | 0 | 0 | 0 |
 | F08 Fletch | `audit-08-fletch.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F09 recorder | `audit-09-recorder.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F10 syntax | `audit-10-syntax.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |

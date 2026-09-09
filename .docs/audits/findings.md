@@ -1,7 +1,7 @@
 # Sprint 58 findings ledger
 
 Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`  
-Next available ID: `YEW-F-006`
+Next available ID: `YEW-F-007`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -14,6 +14,7 @@ the historical row and body.
 | YEW-F-003 | H | open | F01 UNI | ASCII-base keycap leaves inconsistent grid width | tests/audit/yew_f_003.c | s05 §3 |
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
 | YEW-F-005 | H | open | F06 RE | multi-cursor replacement exits inside a Fletch edit transaction | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
+| YEW-F-006 | C | open | F07 UI | workspace re-emission drops unknown root and workspace keys | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -57,6 +58,14 @@ encounters the multi-cursor requirement while the pending reason is MACRO.
 Correct behavior is a normal, one-undo replacement that restores exact text
 and both cursor positions on undo. This remains open for Sprint 59; no product
 source changes during Sprint 58.
+
+`YEW-F-006` is Critical: unknown workspace data belongs to the user and a
+normal parse followed by save silently deletes it. The hard-XPASS reproducer
+shows that an unknown option survives, while equivalent unknown root and
+workspace keys do not. Root-cause hypothesis: state_parse.c retains only the
+options subtree and state_emit.c reconstructs root and workspace maps from
+known fields. This violates Sprint 25's forward-compatibility retention
+contract and remains open for Sprint 59; no product source changed.
 
 ## Unverified observations
 
