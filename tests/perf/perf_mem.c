@@ -273,10 +273,15 @@ static bool consume_logs(const Options *opt)
         else if (i == 2U) {
             if (log.seen[3])
                 set_value("mem.clean_open.100m_code", log.peak[3]);
+#if defined(__linux__)
+            /* `yew_rss_bytes()` is a current-RSS measurement on Linux.  On
+             * Darwin it intentionally falls back to the process peak, which
+             * cannot prove that closing a buffer returned memory. */
             if (log.seen[1] && log.seen[5])
                 set_value("mem.closed_growth.100m_code.linux",
                           log.current[5] > log.current[1] ?
                           log.current[5] - log.current[1] : 0U);
+#endif
         } else if (i == 3U && log.seen[3]) {
             set_value("mem.clean_open.100m_utf8", log.peak[3]);
         } else if (i == 4U && log.seen[3]) {
