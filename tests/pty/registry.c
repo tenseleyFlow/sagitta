@@ -7566,7 +7566,8 @@ static bool s56_5_drawer_open_ready(const PtyCtx *c, const void *arg)
 
     return c != NULL && target != NULL &&
            s52_screen_contains(&c->vt, target) &&
-           !s52_screen_contains(&c->vt, "tree \xC2\xB7");
+           !s52_screen_contains(&c->vt, "tree \xC2\xB7") &&
+           c->vt.cur_vis;
 }
 
 static bool s56_5_drawer_file(PtyCtx *c, char *path, size_t cap)
@@ -7642,7 +7643,8 @@ static void case_s56_5_drawer(PtyCtx *c)
             /* Opening from the drawer may leave the key handler before the
              * selected deferred tab hydrates.  A quiet 50 ms interval only
              * proves that no bytes arrived in that interval; it does not
-             * prove that the file-open frame has reached the grid. */
+             * prove that the file-open frame and its final cursor state have
+             * reached the grid. */
             ptc_wait_until(c, s56_5_drawer_open_ready,
                            "drawer startup target",
                            "drawer open did not finish hydration and leave "
