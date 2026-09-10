@@ -12,6 +12,12 @@
  * FL_CAP_ALL).  The replayed macro can consequently write this file although
  * the plugin manifest requests no fs.write capability.
  */
+#ifndef YEW_WITH_PLUGINS
+#define YEW_WITH_PLUGINS 0
+#endif
+
+#if YEW_WITH_PLUGINS
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "audit.h"
@@ -252,3 +258,19 @@ bool test_yew_f_008(char *why, size_t why_cap)
      * initialization.  On the immutable baseline this is false (XFAIL). */
     return !enabled && !escaped;
 }
+
+#else
+
+#include "audit.h"
+
+/* The stripped profile has no plugin entry point to attack.  The audit
+ * registry omits this XFAIL there; retaining a stub keeps the fixture source
+ * independently compilable in every shipping module profile. */
+bool test_yew_f_008(char *why, size_t why_cap)
+{
+    (void)why;
+    (void)why_cap;
+    return true;
+}
+
+#endif /* YEW_WITH_PLUGINS */

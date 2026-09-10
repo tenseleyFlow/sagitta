@@ -102,7 +102,9 @@ finding `YEW-F-008`
   `capabilities: []`. Its `init` uses `ed.run("ed.reg.set", ...)` to store
   `io.write` source in register `a`, then calls
   `ed.run("ed.macro.replay", ...)`. The isolated baseline run enables the
-  plugin and creates the temporary `escaped.txt` file.
+  plugin and creates the temporary `escaped.txt` file. The XFAIL is registered
+  only in profiles that include the optional plugin module; stripped profiles
+  have no plugin entry point to attack and compile the fixture's inert stub.
 - The audited call chain is `fl_api_ed_run` → `yew_flapi_cmd_reg_set` →
   `yew_macro_replay` → `fl_macro_compile_cached` → `fl_compile_str`.
   `fl_compile_str` assigns its trusted config `runtime_origin`, so the
