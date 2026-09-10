@@ -198,6 +198,41 @@ void test_fl_txn_nested_edit_flattens_to_one_undo(void)
     txn_fix_close(&f);
 }
 
+/*
+ * F08 audit control: the transaction depth must flatten mutations, not just
+ * a toy pair.  These are real text edits inside two nested edit boundaries;
+ * one undo must restore all 100,000 bytes in one step.
+ */
+void test_fl_txn_audit_100k_nested_mutations_make_one_undo(void)
+{
+    enum { MUTATIONS = 100000 };
+    TxnFix f;
+    TxnBuf b;
+    u32 i;
+
+    txn_fix_open(&f);
+    txn_buf_open(&b, "");
+    YEW_ASSERT(f.vm.host->run_begin(&f.vm));
+    YEW_ASSERT(f.vm.host->edit_begin(&f.vm));
+    YEW_ASSERT(f.vm.host->edit_begin(&f.vm));
+    YEW_ASSERT(fl_txn_enlist(&f.vm, &b.ec));
+    for (i = 0U; i < MUTATIONS; i++) {
+        u64 at = yew_textbuf_len(b.tb);
+
+        YEW_ASSERT(yew_edit_insert(&b.ec, BYTEOFF(at), (const u8 *)"x", 1U));
+    }
+    YEW_ASSERT(f.vm.host->edit_end(&f.vm, true));
+    YEW_ASSERT(f.vm.host->edit_end(&f.vm, true));
+    YEW_ASSERT(f.vm.host->run_end(&f.vm, true));
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(b.tb), MUTATIONS);
+    YEW_ASSERT_EQ_U64(txn_dump_node_count(b.undo), 2U);
+    YEW_ASSERT(yew_undo(&b.ec));
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(b.tb), 0U);
+    YEW_ASSERT(!yew_undo(&b.ec));
+    txn_buf_close(&b);
+    txn_fix_close(&f);
+}
+
 void test_fl_txn_error_crossing_outer_edit_rolls_back(void)
 {
     TxnFix f;
@@ -382,5 +417,24 @@ void test_fl_txn_vm_is_reusable_after_rollback(void)
     YEW_ASSERT(!f.vm.txn.entry_active);
     FL_EQ(&f, "edit { mutate() }", "nil");
     YEW_ASSERT_EQ_U64(yew_textbuf_len(b.tb), 1U);
+    txn_script_close(&f, &b);
+}
+
+/* An escaping error must retain its original value even when it crosses two
+ * edit boundaries, while both boundaries abort their staged text. */
+void test_fl_txn_audit_nested_escape_rolls_back_and_reraises(void)
+{
+    FlFix f;
+    Ed ed;
+    TxnBuf b;
+
+    txn_script_open(&f, &ed, &b);
+    FL_EQ(&f, "edit { edit { mutate(); error(\"audit escape\") } }",
+          "!user: audit escape");
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(b.tb), 0U);
+    YEW_ASSERT_EQ_U64(txn_dump_node_count(b.undo), 1U);
+    YEW_ASSERT_EQ_U64(f.vm.edit_depth, 0U);
+    YEW_ASSERT_EQ_U64(f.vm.txn.depth, 0U);
+    YEW_ASSERT(!f.vm.txn.entry_active);
     txn_script_close(&f, &b);
 }

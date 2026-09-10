@@ -1,7 +1,7 @@
 # Sprint 58 findings ledger
 
 Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`  
-Next available ID: `YEW-F-008`
+Next available ID: `YEW-F-009`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -16,6 +16,7 @@ the historical row and body.
 | YEW-F-005 | H | open | F06 RE | multi-cursor replacement exits inside a Fletch edit transaction | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
 | YEW-F-006 | C | open | F07 UI | workspace re-emission drops unknown root and workspace keys | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 | YEW-F-007 | C | open | F07 UI | workspace restore reorders group members from tab-array order | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
+| YEW-F-008 | H | open | F08 FL | unprivileged plugin macro replay inherits config authority | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -76,6 +77,15 @@ ordinals, but state_parse.c applies each one immediately: an early ordinal 3
 clamps against a partial group before lower ordinals arrive, destroying the
 saved ordering. This violates the frozen workspace restore contract and
 remains open for Sprint 59; no product source changed.
+
+`YEW-F-008` is High because a plugin declaring `capabilities: []` can write
+an arbitrary file by storing Fletch source in a macro register through
+`ed.run("ed.reg.set", ...)` and replaying it. The hard-XPASS reproducer
+creates only an isolated temporary file; it does not run a shell command or
+touch user data. During replay, the plugin-supplied source is compiled through
+the config-origin `fl_compile_str` path and consequently receives config's
+`FL_CAP_ALL` authority. This violates spec §13's defining-module rule. It
+remains open for Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 

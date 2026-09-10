@@ -96,7 +96,7 @@ zero until its report closes; silence never counts as evidence.
 | F05 execute | `audit-05-exec.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F06 regex | `audit-06-regex.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
 | F07 UI/workspace | `audit-07-ui.md` | closed | 2 | 2 | 2 | 0 | 0 | 0 | 1 |
-| F08 Fletch | `audit-08-fletch.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F08 Fletch | `audit-08-fletch.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
 | F09 recorder | `audit-09-recorder.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F10 syntax | `audit-10-syntax.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F11 LSP | `audit-11-lsp.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -114,3 +114,9 @@ absence-of-findings claim has been earned. F06 adds an open High finding
 findings (`YEW-F-006`, `YEW-F-007`): normal persistence can drop future keys
 and reorder a group member sequence. Its tutor-inclusive repository-pollution
 session remains one explicit Sprint 59 unverified observation.
+
+F08 adds an open High capability finding (`YEW-F-008`): a plugin granted no
+capabilities can route macro source through replay and receive config
+authority. The product-code baseline remains immutable; its two explicitly
+unverified observations are the destructive GC-root crash request and the
+parts of the literal 4-by-4 capability matrix that have no 1.0 native surface.
