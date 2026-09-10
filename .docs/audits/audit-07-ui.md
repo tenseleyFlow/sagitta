@@ -1,6 +1,6 @@
 # F07 UI — panes, tabs, groups, workspace persistence
 
-Status: in progress
+Status: closed
 Baseline: 41fef4166fe6bf127f36b8b9f6eb653a454a28c1
 Opened: 2026-09-09
 Scope: src/ui/, src/ws/
@@ -8,7 +8,26 @@ Owners read: Sprint 22 through Sprint 27, Sprint 25
 
 ## Q1 — shared Rect draw and hit-test cells
 
-in progress
+probed, nothing found
+
+- The new four-size render control,
+  `layout_draw_and_hit_share_every_clickable_cell_at_audit_sizes`, passed
+  with 142,876 assertions under both clang and gcc. It builds a real
+  three-leaf tree at 80x24, 81x24, 121x24, and 200x50, resets the grid's
+  prior-frame damage, renders panes and the tab strip, then walks every
+  cell. Each clickable hit lies within the draw pass's fresh damage span and
+  within its returned `Rect`.
+- Pane hits resolve through the per-frame leaf table to exactly the rendered
+  leaf `Rect`; border hits resolve through the split table to the exact
+  one-cell divider `Rect` computed by the renderer; tab, scroll, and new-tab
+  spans are all contained by the rendered tab-strip `Rect`. This covers the
+  odd-width and wide-terminal coordinates where duplicate layout arithmetic
+  would drift first.
+- Existing focused controls cover the modal rectangles rendered after the
+  base frame: panel block rects, picker rows and preview blocks, completion
+  rows/panels, context-menu rows, and FUSS rows. The full PTY suite remains
+  the terminal-output guard; this in-process control is the companion that
+  can inspect the process-local region table cell by cell.
 
 ## Q2 — group membership churn
 
@@ -101,7 +120,19 @@ probed, nothing found
 
 ## Q7 — repository pollution
 
-in progress
+unverified observation — tutor is Sprint 59 scope
+
+- The available controls pass: `ws_save_never_writes_into_the_workspace` and
+  `ws_save_leaves_a_git_checkout_clean` exercise a real repository and state
+  save; plugin lifecycle controls keep their state under XDG paths; and the
+  live Fletch/LSP suite owns and tears down its fake-server sessions without
+  workspace writes.
+- The attack question specifically requires one full session *including
+  tutor*. `yew tutor` is an explicit Sprint 59 deliverable and is absent from
+  the immutable Sprint 58 baseline, so that named full-session transcript
+  cannot be honestly executed here. This is not a product finding because
+  the surface is not yet reachable; it is carried as one unverified
+  observation for Sprint 59's tutor fixture rather than claimed as a pass.
 
 ## Q8 — picker payload identity across refilters
 
@@ -139,4 +170,4 @@ Fletch data reader and writer as the remaining frozen-format guard.
 
 ## Count
 
-Raw 2 · deduped 2 · critical 2 · high 0 · medium 0 · low 0 · unverified 0.
+Raw 2 · deduped 2 · critical 2 · high 0 · medium 0 · low 0 · unverified 1.

@@ -1207,6 +1207,7 @@ void test_layout_split_refuses_past_the_leaf_cap(void);
 void test_layout_tree_invariants_survive_split_and_close(void);
 void test_layout_root_leaf_refuses_to_close(void);
 void test_layout_leaf_at_agrees_with_every_rect(void);
+void test_layout_draw_and_hit_share_every_clickable_cell_at_audit_sizes(void);
 void test_layout_focus_on_a_four_pane_grid(void);
 void test_layout_focus_on_a_three_pane_t(void);
 void test_layout_focus_next_cycles_in_tree_order(void);

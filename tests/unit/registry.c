@@ -1241,6 +1241,7 @@ const YewTest yew_tests[] = {
     T(layout_tree_invariants_survive_split_and_close),
     T(layout_root_leaf_refuses_to_close),
     T(layout_leaf_at_agrees_with_every_rect),
+    T(layout_draw_and_hit_share_every_clickable_cell_at_audit_sizes),
     T(layout_focus_on_a_four_pane_grid),
     T(layout_focus_on_a_three_pane_t),
     T(layout_focus_next_cycles_in_tree_order),

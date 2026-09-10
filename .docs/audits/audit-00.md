@@ -88,7 +88,7 @@ zero until its report closes; silence never counts as evidence.
 | F04 modal | `audit-04-modal.md` | closed | 1 | 1 | 0 | 0 | 1 | 0 | 1 |
 | F05 execute | `audit-05-exec.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F06 regex | `audit-06-regex.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
-| F07 UI/workspace | `audit-07-ui.md` | in progress | 2 | 2 | 2 | 0 | 0 | 0 | 0 |
+| F07 UI/workspace | `audit-07-ui.md` | closed | 2 | 2 | 2 | 0 | 0 | 0 | 1 |
 | F08 Fletch | `audit-08-fletch.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F09 recorder | `audit-09-recorder.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F10 syntax | `audit-10-syntax.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -100,9 +100,10 @@ zero until its report closes; silence never counts as evidence.
 
 ## Verdict
 
-We are not ready to tag: Sprint 58 is open, only F01 through F06 of its fifteen
+We are not ready to tag: Sprint 58 is open, only F01 through F07 of its fifteen
 fronts have closed, the invariant sweep has not run, and no campaign-wide
 absence-of-findings claim has been earned. F06 adds an open High finding
-(`YEW-F-005`), while the in-progress F07 has two open Critical workspace-state
+(`YEW-F-005`), while closed F07 records two open Critical workspace-state
 findings (`YEW-F-006`, `YEW-F-007`): normal persistence can drop future keys
-and reorder a group member sequence.
+and reorder a group member sequence. Its tutor-inclusive repository-pollution
+session remains one explicit Sprint 59 unverified observation.

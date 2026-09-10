@@ -14,7 +14,11 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/pane_cmds.h"
+#include "term/grid.h"
+#include "ui/draw.h"
 #include "ui/layout.h"
+#include "ui/region.h"
 
 static void ly_fixture(Ed *ed)
 {
@@ -375,6 +379,120 @@ void test_layout_leaf_at_agrees_with_every_rect(void)
     YEW_ASSERT_NULL(yew_pane_leaf_at(ed.pane_root, 80U, 0U));
     YEW_ASSERT_NULL(yew_pane_leaf_at(ed.pane_root, 0U, 24U));
     yew_ed_free(&ed);
+}
+
+/*
+ * F07 Q1: the draw pass is the one source of clickable geometry.  Render a
+ * real three-leaf tree at the four adversarial terminal sizes, then walk
+ * every cell which the region registry says is clickable.  Each such cell
+ * must have been repainted in this frame and its region must resolve through
+ * the exact Pane/Rect consumed by the renderer and the mouse router.
+ *
+ * `Grid::dmg` is intentionally inspected after `yew_grid_flip()`: the flip
+ * empties the prior frame's damage, so containment here is evidence of this
+ * draw rather than initial-grid allocation damage.
+ */
+void test_layout_draw_and_hit_share_every_clickable_cell_at_audit_sizes(void)
+{
+    static const struct {
+        u16 cols;
+        u16 rows;
+    } sizes[] = {
+        {80U, 24U},
+        {81U, 24U},
+        {121U, 24U},
+        {200U, 50U}
+    };
+    size_t si;
+
+    for (si = 0U; si < YEW_ARRAY_LEN(sizes); si++) {
+        Ed ed;
+        Pane *right;
+        u32 pane_cells = 0U;
+        u32 border_cells = 0U;
+        u32 strip_cells = 0U;
+        u16 y;
+
+        ly_fixture(&ed);
+        YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, sizes[si].rows,
+                                 sizes[si].cols));
+        ed.grid_ready = true;
+        yew_layout(&ed);
+        right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+        YEW_ASSERT_NOT_NULL(right);
+        yew_layout(&ed);
+        YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, right, YEW_SPLIT_V));
+        yew_layout(&ed);
+
+        yew_grid_flip(&ed.grid);
+        yew_draw_panes(&ed);
+        for (y = 0U; y < ed.grid.rows; y++) {
+            u16 x;
+
+            for (x = 0U; x < ed.grid.cols; x++) {
+                Region hit = yew_region_hit(x, y);
+
+                if (hit.kind == YEW_REGION_NONE)
+                    continue;
+                YEW_ASSERT(x >= hit.rect.x);
+                YEW_ASSERT(x < (u32)hit.rect.x + hit.rect.w);
+                YEW_ASSERT(y >= hit.rect.y);
+                YEW_ASSERT(y < (u32)hit.rect.y + hit.rect.h);
+                YEW_ASSERT(ed.grid.dmg[y].lo <= x);
+                YEW_ASSERT(x < ed.grid.dmg[y].hi);
+                switch (hit.kind) {
+                case YEW_REGION_PANE: {
+                    Pane *leaf = yew_pane_leaf_by_index(&ed, hit.payload);
+
+                    YEW_ASSERT_NOT_NULL(leaf);
+                    YEW_ASSERT(leaf->is_leaf);
+                    YEW_ASSERT(rect_eq(hit.rect, leaf->rect));
+                    pane_cells++;
+                    break;
+                }
+                case YEW_REGION_PANE_BORDER: {
+                    Pane *split = yew_pane_split_by_index(&ed, hit.payload);
+                    Rect expected;
+
+                    YEW_ASSERT_NOT_NULL(split);
+                    YEW_ASSERT(!split->is_leaf);
+                    if (split->dir == YEW_SPLIT_H)
+                        expected = (Rect){
+                            (u16)(split->a->rect.x + split->a->rect.w),
+                            split->rect.y, 1U, split->rect.h};
+                    else
+                        expected = (Rect){
+                            split->rect.x,
+                            (u16)(split->a->rect.y + split->a->rect.h),
+                            split->rect.w, 1U};
+                    YEW_ASSERT(rect_eq(hit.rect, expected));
+                    border_cells++;
+                    break;
+                }
+                case YEW_REGION_TAB:
+                case YEW_REGION_TAB_SCROLL:
+                case YEW_REGION_TAB_NEW:
+                    YEW_ASSERT(hit.rect.y >= ed.tab_strip_rect.y);
+                    YEW_ASSERT((u32)hit.rect.y + hit.rect.h <=
+                               (u32)ed.tab_strip_rect.y +
+                                   ed.tab_strip_rect.h);
+                    YEW_ASSERT(hit.rect.x >= ed.tab_strip_rect.x);
+                    YEW_ASSERT((u32)hit.rect.x + hit.rect.w <=
+                               (u32)ed.tab_strip_rect.x +
+                                   ed.tab_strip_rect.w);
+                    strip_cells++;
+                    break;
+                default:
+                    YEW_ASSERT(false);
+                    break;
+                }
+            }
+        }
+        YEW_ASSERT(pane_cells != 0U);
+        YEW_ASSERT(border_cells != 0U);
+        YEW_ASSERT(strip_cells != 0U);
+        yew_ed_free(&ed);
+    }
 }
 
 /* Spatial focus on a four-pane grid, against hand-computed answers. */
