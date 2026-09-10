@@ -66,6 +66,13 @@ out-of-scope handoff to F07 for the product path and F15 for gate honesty; it
 is not counted as a finding until the reproducer-first and confirmation rules
 are satisfied.
 
+Hosted run `34514196947` passed at F07 close head `d5b95578`, including the
+new four-size rendered-region control under GCC, Clang, ASan/UBSan, arm64
+Linux, arm64 macOS, musl, determinism, PTY, and the minimal `MODULES=""`
+profile. The two F07 Critical workspace-state findings and its explicit
+Sprint 59 tutor observation remain recorded; the product-code baseline
+remains immutable.
+
 ## External tools at opening
 
 | Tool | Version |
