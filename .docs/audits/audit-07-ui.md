@@ -105,7 +105,23 @@ in progress
 
 ## Q8 — picker payload identity across refilters
 
-in progress
+probed, nothing found
+
+- The generic picker control `picker_selection_survives_a_refilter` passed,
+  confirming that a refilter retains the selected payload rather than the
+  previously selected row. The existing file finder, buffer switcher, group
+  picker, diagnostic picker, and nested symbol-picker controls cover their
+  respective payload domains and selection paths.
+- The new end-to-end plugin-picker control,
+  `plug_lifecycle_picker_refilter_keeps_plugin_identity`, passed with 132
+  assertions under both clang and gcc. It selected `bingo` by the stable
+  `PlugSys->v` index used as its picker payload, refiltered through the real
+  keyboard path, pressed Enter, and proved that only `bingo` toggled while
+  the other plugins remained discovered.
+- This is the important integration case: refiltering only changes the
+  generic picker rows, whereas plugin acceptance resolves the preserved
+  payload against the unchanged plugin vector. No examined picker consumer
+  confuses selection identity with visual row position.
 
 ## Inbound obligation — legacy state codec retirement preflight
 

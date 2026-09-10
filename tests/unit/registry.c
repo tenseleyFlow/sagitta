@@ -2222,6 +2222,7 @@ const YewTest yew_tests[] = {
     T(plug_lifecycle_fifth_hook_error_auto_disables_plugin),
     T(plug_lifecycle_generic_hook_limit_cannot_preempt_plugin_limit),
     T(plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event),
+    T(plug_lifecycle_picker_refilter_keeps_plugin_identity),
     T(plug_lifecycle_command_errors_share_plugin_limit),
     T(plug_lifecycle_bound_errors_share_plugin_limit),
     T(plug_lifecycle_hostile_surface_fires_and_tears_down_cleanly),

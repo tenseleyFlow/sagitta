@@ -14,6 +14,10 @@
 #include "fl/flruntime.h"
 #include "fl/module.h"
 #include "mod/plug/internal.h"
+#include "term/grid.h"
+#include "term/input.h"
+#include "ui/layout.h"
+#include "ui/picker.h"
 #include "util/buf.h"
 #include "util/xdg.h"
 #include "ws/trust.h"
@@ -726,6 +730,67 @@ void test_plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event(void)
     YEW_ASSERT_EQ_U64(second->err_count, 5U);
     YEW_ASSERT_EQ_U64(first->st, PLUG_DISABLED);
     YEW_ASSERT_EQ_U64(second->st, PLUG_DISABLED);
+    life_close(&f);
+}
+
+/*
+ * F07 Q8: the generic picker owns selection by payload, and the plugin
+ * picker supplies an index into its stable PlugSys vector as that payload.
+ * Refiltering must therefore still toggle the plugin that was selected,
+ * rather than whichever row moved under the old index.
+ */
+void test_plug_lifecycle_picker_refilter_keeps_plugin_identity(void)
+{
+    static const char source[] = "fn init(ctx) { nil }\n";
+    LifecycleFix f;
+    CmdCtx cx = {0};
+    Key key = {0};
+    Plug *target;
+    u32 target_idx = UINT32_MAX;
+    u32 i;
+
+    life_open(&f, "amber", "[]", source, NULL);
+    life_add_plugin(&f, "bingo", "[]", source);
+    life_add_plugin(&f, "cab", "[]", source);
+    yew_plug_free(&f.ed);
+    YEW_ASSERT(yew_plug_discover_with_policy(&f.ed, true, &f.trust,
+                                              &f.dc));
+    target = yew_plug_find(&f.ed, "bingo");
+    YEW_ASSERT_NOT_NULL(target);
+    for (i = 0U; i < f.ed.plug->n; i++)
+        if (f.ed.plug->v[i] == target)
+            target_idx = i;
+    YEW_ASSERT(target_idx < f.ed.plug->n);
+
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
+    f.ed.grid_ready = true;
+    yew_layout_compute(f.ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    cx.ed = &f.ed;
+    cx.source = YEW_SRC_TEST;
+    cx.count = 1U;
+    YEW_ASSERT_EQ_U64(yew_plug_cmd_list(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 3U);
+
+    yew_picker_select_payload(&f.ed, (i32)target_idx);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), (i64)target_idx);
+    key.code = (u32)'/';
+    key.text[0] = (u8)'/';
+    key.ntext = 1U;
+    YEW_ASSERT(yew_picker_key(&f.ed, &key));
+    key.code = (u32)'b';
+    key.text[0] = (u8)'b';
+    YEW_ASSERT(yew_picker_key(&f.ed, &key));
+    YEW_ASSERT(yew_picker_shown(&f.ed) >= 2U);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), (i64)target_idx);
+
+    (void)memset(&key, 0, sizeof(key));
+    key.code = YEW_KEY_ENTER;
+    YEW_ASSERT(yew_picker_key(&f.ed, &key));
+    YEW_ASSERT(!yew_picker_active(&f.ed));
+    YEW_ASSERT_EQ_U64(target->st, PLUG_ENABLED);
+    for (i = 0U; i < f.ed.plug->n; i++)
+        if (f.ed.plug->v[i] != target)
+            YEW_ASSERT_EQ_U64(f.ed.plug->v[i]->st, PLUG_DISCOVERED);
     life_close(&f);
 }
 
