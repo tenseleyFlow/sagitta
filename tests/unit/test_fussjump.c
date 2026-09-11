@@ -1,4 +1,4 @@
-/* Sprint 57.6: bare filename characters search; actions use C-g chords. */
+/* FUSS: bare filename characters search; actions use Alt chords. */
 #include "harness.h"
 
 #include <string.h>
@@ -38,11 +38,11 @@ static Key fj_special(u32 code)
     return key;
 }
 
-static Key fj_ctrl(char c)
+static Key fj_alt(char c)
 {
     Key key = fj_char(c);
 
-    key.mods = YEW_MOD_CTRL;
+    key.mods = YEW_MOD_ALT;
     key.ntext = 0U;
     return key;
 }
@@ -306,33 +306,33 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         {"C-w v", "ed.git.open_split_v"},
         {"C-<up>", "ed.git.nav.row_prev"},
         {"C-<down>", "ed.git.nav.row_next"},
-        {"C-g a", "ed.git.stage"}, {"C-g u", "ed.git.unstage"},
-        {"C-g S", "ed.git.stage.all"},
-        {"C-g U", "ed.git.unstage.all"},
-        {"C-g m", "ed.git.commit"},
-        {"C-g M", "ed.git.commit.amend"},
-        {"C-g p", "ed.git.push"}, {"C-g l", "ed.git.pull"},
-        {"C-g f", "ed.git.fetch"}, {"C-g d", "ed.git.diff"},
-        {"C-g D", "ed.git.diff.view"},
-        {"C-g s", "ed.git.status"}, {"C-g w", "ed.git.blame"},
-        {"C-g h", "ed.git.history"}, {"C-g L", "ed.git.reflog"},
-        {"C-g c", "ed.git.view"},
-        {"C-g b", "ed.git.branch.switch"},
-        {"C-g n", "ed.git.branch.create"},
-        {"C-g R", "ed.git.branch.delete"},
-        {"C-g G", "ed.git.merge"}, {"C-g O", "ed.git.reset"},
-        {"C-g I", "ed.git.rebase.interactive"},
-        {"C-g y", "ed.git.cherry_pick"},
-        {"C-g v", "ed.git.revert"},
-        {"C-g z", "ed.git.stash.push"},
-        {"C-g Z", "ed.git.stash.pop"},
-        {"C-g t", "ed.git.tag"}, {"C-g x", "ed.git.discard"},
-        {"C-g r", "ed.git.file.delete"},
-        {"C-g N", "ed.git.file.rename"},
-        {"<cr>", "ed.git.open"}, {"C-g g", "ed.group.from_dir"},
-        {"C-g T", "ed.git.tree.all"},
-        {"C-g .", "ed.git.tree.hidden"},
-        {"C-r", "ed.git.refresh"}, {"C-g q", "ed.git.mode.leave"},
+        {"A-a", "ed.git.stage"}, {"A-u", "ed.git.unstage"},
+        {"A-S", "ed.git.stage.all"},
+        {"A-U", "ed.git.unstage.all"},
+        {"A-m", "ed.git.commit"},
+        {"A-M", "ed.git.commit.amend"},
+        {"A-p", "ed.git.push"}, {"A-l", "ed.git.pull"},
+        {"A-f", "ed.git.fetch"}, {"A-d", "ed.git.diff"},
+        {"A-D", "ed.git.diff.view"},
+        {"A-s", "ed.git.status"}, {"A-w", "ed.git.blame"},
+        {"A-h", "ed.git.history"}, {"A-L", "ed.git.reflog"},
+        {"A-c", "ed.git.view"},
+        {"A-b", "ed.git.branch.switch"},
+        {"A-n", "ed.git.branch.create"},
+        {"A-R", "ed.git.branch.delete"},
+        {"A-G", "ed.git.merge"}, {"A-O", "ed.git.reset"},
+        {"A-I", "ed.git.rebase.interactive"},
+        {"A-y", "ed.git.cherry_pick"},
+        {"A-v", "ed.git.revert"},
+        {"A-z", "ed.git.stash.push"},
+        {"A-Z", "ed.git.stash.pop"},
+        {"A-t", "ed.git.tag"}, {"A-x", "ed.git.discard"},
+        {"A-r", "ed.git.file.delete"},
+        {"A-N", "ed.git.file.rename"},
+        {"<cr>", "ed.git.open"}, {"A-g", "ed.group.from_dir"},
+        {"A-T", "ed.git.tree.all"},
+        {"A-.", "ed.git.tree.hidden"},
+        {"C-r", "ed.git.refresh"}, {"A-q", "ed.git.mode.leave"},
         {"<esc>", "ed.git.mode.leave"}
     };
     Ed ed = {0};
@@ -365,14 +365,11 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         YEW_ASSERT(desc->help[0] != '\0');
         YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
         YEW_ASSERT_EQ_I64(ed.chord.layer, -1);
-        if (strncmp(rows[i].seq, "C-g ", 4U) == 0) {
-            Key prefix = fj_ctrl('g');
-            Key tail = fj_char(rows[i].seq[4]);
+        if (strncmp(rows[i].seq, "A-", 2U) == 0) {
+            Key action = fj_alt(rows[i].seq[2]);
 
             ed.last_cmd.v = 0U;
-            yew_dispatch_key(&ed, prefix, 1000 + (i64)i * 2);
-            YEW_ASSERT_EQ_U64(ed.chord.n, 1U);
-            yew_dispatch_key(&ed, tail, 1001 + (i64)i * 2);
+            yew_dispatch_key(&ed, action, 1000 + (i64)i);
             YEW_ASSERT_EQ_U64(ed.last_cmd.v, binding->cmd.v);
             YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
         }
@@ -394,19 +391,14 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         }
     }
     {
-        KeyId keys[2];
+        KeyId key;
         const Binding *binding = NULL;
-        const CmdDesc *desc;
 
-        YEW_ASSERT_EQ_U64(yew_key_parse_seq("C-g ?", keys,
-                                            YEW_ARRAY_LEN(keys)), 2U);
-        YEW_ASSERT_EQ_I64(yew_keymap_lookup(ed.keys.l[0], keys, 2U,
+        YEW_ASSERT_EQ_U64(yew_key_parse_seq("C-g", &key, 1U), 1U);
+        YEW_ASSERT_EQ_I64(yew_keymap_lookup(ed.keys.l[0], &key, 1U,
                                             NULL, &binding),
-                          YEW_MATCH_FULL);
-        YEW_ASSERT_NOT_NULL(binding);
-        desc = yew_cmd_desc(binding->cmd);
-        YEW_ASSERT_NOT_NULL(desc);
-        YEW_ASSERT_EQ_STR(desc->name, "ed.ui.message_expand");
+                          YEW_MATCH_NONE);
+        YEW_ASSERT_NULL(binding);
     }
     yew_dispatch_free(&ed);
 }

@@ -350,7 +350,7 @@ static bool run_jobs_idle(Ed *ed)
     return true;
 }
 
-static void test_f_mode_ctrl_g_g_opens_selected_directory_group(
+static void test_f_mode_alt_g_opens_selected_directory_group(
     const char *parent)
 {
     char repo[4096];
@@ -360,7 +360,7 @@ static void test_f_mode_ctrl_g_g_opens_selected_directory_group(
     char *init[] = {(char *)"init", (char *)"-q", (char *)"-b",
                     (char *)"trunk", NULL};
     CmdCtx cx = {0};
-    Key prefix;
+    Key action;
     char *picked;
     Ed ed;
 
@@ -385,11 +385,10 @@ static void test_f_mode_ctrl_g_g_opens_selected_directory_group(
     picked = yew_fuss_selected_directory(&cx);
     CHECK(picked != NULL && strcmp(picked, selected) == 0);
     free(picked);
-    prefix = key_press((u32)'g');
-    prefix.mods = YEW_MOD_CTRL;
-    prefix.ntext = 0U;
-    yew_ed_handle_key(&ed, prefix, yew_now_ms());
-    yew_ed_handle_key(&ed, key_press((u32)'g'), yew_now_ms());
+    action = key_press((u32)'g');
+    action.mods = YEW_MOD_ALT;
+    action.ntext = 0U;
+    yew_ed_handle_key(&ed, action, yew_now_ms());
     CHECK(ed.last_cmd.v == yew_cmd_lookup("ed.group.from_dir", 17U).v);
     CHECK(ed.last_status == YEW_CMD_OK);
     CHECK(ed.groups.v.len == 1U);
@@ -428,7 +427,7 @@ int main(int argc, char **argv)
     test_other_group_adoption_compacts_both_groups(root);
     test_five_thousand_files_open_picker_only(root);
     test_empty_directory_reports_without_creating_group(root);
-    test_f_mode_ctrl_g_g_opens_selected_directory_group(root);
+    test_f_mode_alt_g_opens_selected_directory_group(root);
     if (failures != 0U) {
         (void)fprintf(stderr, "group_from_dir: %u/%u checks failed\n",
                       failures, assertions);
