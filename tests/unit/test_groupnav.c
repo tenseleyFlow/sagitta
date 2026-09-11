@@ -23,7 +23,9 @@
 #include "ui/groupnav.h"
 #include "ui/groups.h"
 #include "ui/strip.h"
+#include "ui/region.h"
 #include "ui/tabs.h"
+#include "term/grid.h"
 
 /*
  * Builds [t1, G{a,b,c}, t2] and returns the group id.
@@ -597,9 +599,12 @@ void test_groupnav_digit_jump_swallows_an_out_of_range_digit(void)
 }
 
 /*
- * Landing inside a group changes what the next digit means: it picks
- * that group's Nth member by ordinal, which is what row 2 is showing
- * while the user counts.
+ * Sprint 57.10 rewrites the landing rule.  `alt+3` from row 1 ENTERS
+ * the group (its row-1 entry is number 3), and the window it arms is a
+ * row-1 window.  A further ALT digit is not a continuation of that —
+ * the bar is now showing members, and alt counts the row you are on —
+ * so the window clears and the key dispatches as its own jump, which
+ * picks the member.
  */
 void test_groupnav_digit_jump_picks_a_group_member(void)
 {
@@ -609,14 +614,21 @@ void test_groupnav_digit_jump_picks_a_group_member(void)
     g = nav_fixture(&ed);
     (void)g;
     ed.now_ms = 1000;
-    /* Tab 3 (1-based) is the group's first member. */
+    /* Row-1 entry 3 is the group; entering resumes at the first member
+     * because nothing has been noted yet. */
     nav_goto(&ed, 3);
     YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
     YEW_ASSERT(yew_tab_jump_armed());
 
     ed.now_ms = 1100;
-    /* `2` means the SECOND member, not tab 32. */
-    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('2', 0U)));
+    /* NOT consumed: the window was a row-1 window and alt now means
+     * members.  It cleared, and the key goes on to the keymap. */
+    YEW_ASSERT(!yew_tab_jump_key(&ed, nav_digit('2', YEW_MOD_ALT)));
+    YEW_ASSERT(!yew_tab_jump_armed());
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    /* ...where `alt+2` is ed.tab.goto 2, and inside the group that is
+     * the SECOND member. */
+    nav_goto(&ed, 2);
     YEW_ASSERT_EQ_I64(ed.tabs.active, 3);
     yew_ed_free(&ed);
 }
@@ -627,10 +639,13 @@ void test_groupnav_digit_jump_group_member_out_of_range(void)
     Ed ed;
 
     (void)nav_fixture(&ed);
+    yew_tab_switch(&ed, 2);
     ed.now_ms = 1000;
-    nav_goto(&ed, 3);
+    /* Inside the group: member 1. */
+    nav_goto(&ed, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
     ed.now_ms = 1100;
-    /* The group has three members; there is no ninth. */
+    /* The group has three members; there is no nineteenth. */
     YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('9', 0U)));
     YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
     YEW_ASSERT(!yew_tab_jump_armed());
@@ -650,5 +665,297 @@ void test_groupnav_digit_jump_deadline_is_a_timer(void)
     /* No keys at all — just the clock reaching the deadline. */
     yew_timers_fire(&ed.timers, &ed, 1000 + YEW_JUMP_WINDOW_MS);
     YEW_ASSERT(!yew_tab_jump_armed());
+    yew_ed_free(&ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.10: positional numbering and row-aware jumps           */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The fixture's row 1 is [scratch, t1, G, t2].  Every entry carries its
+ * POSITION, group included: with the flat index the bar would read
+ * 1, 2, src/, 6 and `alt+4` would land on a tab labelled 6.
+ */
+void test_groupnav_row1_numbers_entries_by_position(void)
+{
+    Ed ed;
+    StripEntry entries[16];
+    int n;
+
+    (void)nav_fixture(&ed);
+    n = yew_tab_row1_entries(&ed, entries, (int)YEW_ARRAY_LEN(entries));
+    YEW_ASSERT_EQ_I64(n, 4);
+    YEW_ASSERT_EQ_STR(entries[0].label, " 1 untitled ");
+    YEW_ASSERT_EQ_STR(entries[1].label, " 2 yew-nav-0.txt ");
+    YEW_ASSERT_EQ_STR(entries[2].label, " 3 src/ (3) ");
+    YEW_ASSERT_EQ_STR(entries[3].label, " 4 yew-nav-4.txt ");
+    yew_ed_free(&ed);
+}
+
+/* The text of grid row `y`, single-byte cells only, right-trimmed. */
+static void nav_row_text(const Ed *ed, u16 y, char *out, size_t cap)
+{
+    size_t n = 0U;
+    u16 x;
+
+    for (x = 0U; x < ed->grid.cols && n + 1U < cap; x++) {
+        const Cell *c = &ed->grid.back[(size_t)y * ed->grid.cols + x];
+
+        out[n++] = (char)(c->utf8[0] >= 32U && c->utf8[0] < 127U
+                              ? c->utf8[0] : ' ');
+    }
+    while (n > 0U && out[n - 1U] == ' ')
+        n--;
+    out[n] = '\0';
+}
+
+/* Row 2 numbers the members 1..n by ordinal — the number `alt+N`
+ * inside the group addresses. */
+void test_groupnav_row2_numbers_members_by_ordinal(void)
+{
+    Ed ed;
+    char row[128];
+    u32 g;
+
+    g = nav_fixture(&ed);
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 4U, 80U));
+    ed.grid_ready = true;
+    yew_tab_switch(&ed, 3);
+    yew_region_frame_begin();
+    yew_tab_member_strip_draw(&ed, (Rect){0U, 0U, 80U, 1U}, g);
+    nav_row_text(&ed, 0U, row, sizeof(row));
+    YEW_ASSERT_EQ_STR(row,
+                      " 1 yew-nav-1.txt  2 yew-nav-2.txt  3 yew-nav-3.txt");
+    yew_ed_free(&ed);
+}
+
+static CmdStatus nav_goto_status(Ed *ed, const char *name, i64 n)
+{
+    CmdId id = yew_cmd_lookup(name, strlen(name));
+    CmdCtx cx;
+
+    YEW_ASSERT(id.v != 0U);
+    (void)memset(&cx, 0, sizeof(cx));
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.iarg = n;
+    cx.source = YEW_SRC_TEST;
+    return yew_ed_invoke(ed, id, &cx);
+}
+
+/* Inside a group `alt+N` counts row 2: member N, nothing else. */
+void test_groupnav_goto_inside_a_group_picks_the_member(void)
+{
+    Ed ed;
+
+    (void)nav_fixture(&ed);
+    yew_tab_switch(&ed, 2);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 2), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 3);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 3), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 4);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 1), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    /* Member 4 does not exist; `4` is NOT row-1 entry 4 (t2) from in
+     * here, and the jump refuses rather than leaving the group. */
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 4),
+                      YEW_CMD_ERR_ARG);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    /* 0 is the tenth key; there is no tenth member either. */
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 0),
+                      YEW_CMD_ERR_ARG);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    yew_ed_free(&ed);
+}
+
+/*
+ * Outside a group `alt+N` counts row 1, and a group entry is ENTERED —
+ * the same resume-at-last-active route `t <down>` takes, so number,
+ * chord and click cannot land on three different members.
+ */
+void test_groupnav_goto_outside_a_group_counts_row1(void)
+{
+    Ed ed;
+
+    (void)nav_fixture(&ed);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 4), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 5); /* t2: entry 4, index 5 */
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 5),
+                      YEW_CMD_ERR_ARG);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 5);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 3), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2); /* entered at the first member */
+    YEW_ASSERT_EQ_I64(yew_active_group_id(&ed) != 0U, 1);
+    yew_ed_free(&ed);
+}
+
+/*
+ * `ctrl+N` is row 1 from ANYWHERE.  Leaving a group by number notes the
+ * position, so coming back by number resumes on the member you left.
+ */
+void test_groupnav_goto_bar_counts_row1_from_inside_a_group(void)
+{
+    Ed ed;
+
+    (void)nav_fixture(&ed);
+    yew_tab_switch(&ed, 3); /* member b */
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 1),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0); /* scratch, not member 1 */
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 3),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 3); /* back on b, not a */
+    /* The group's own entry from inside it: stays put. */
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 3),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 3);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 4),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 5);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 5),
+                      YEW_CMD_ERR_ARG);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 5);
+    yew_ed_free(&ed);
+}
+
+/* Leaving by `alt+N` from inside is impossible (alt counts members),
+ * but leaving by `ctrl+N` and returning by `alt+N` resumes too. */
+void test_groupnav_goto_resumes_the_member_left_by_number(void)
+{
+    Ed ed;
+
+    (void)nav_fixture(&ed);
+    yew_tab_switch(&ed, 4); /* member c */
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 2),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto", 3), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 4);
+    yew_ed_free(&ed);
+}
+
+/* `0` is the tenth key on the digit row for the bar command too. */
+void test_groupnav_goto_bar_maps_zero_to_ten(void)
+{
+    Ed ed;
+
+    nav_many_tabs(&ed, 12);
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 0),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 9);
+    yew_ed_free(&ed);
+}
+
+/* Twelve members, so a two-digit member number has somewhere to land. */
+static u32 nav_big_group(Ed *ed)
+{
+    u32 g;
+    int i;
+
+    nav_many_tabs(ed, 16);
+    g = yew_group_create(ed, "/big", NULL);
+    for (i = 1; i <= 12; i++)
+        yew_group_add_member(ed, g, i);
+    yew_tab_switch(ed, 1);
+    return g;
+}
+
+/* Inside a group the window extends the MEMBER number: `alt+1` `2` is
+ * member 12, and the hint says so. */
+void test_groupnav_digit_jump_extends_member_numbers(void)
+{
+    Ed ed;
+
+    (void)nav_big_group(&ed);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT(yew_tab_jump_armed());
+    YEW_ASSERT_NOT_NULL(strstr((const char *)ed.msg.text, "member 1"));
+    ed.now_ms = 1100;
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('2', YEW_MOD_ALT)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 12); /* member 12 */
+    YEW_ASSERT(yew_tab_jump_armed());
+    /* Member 120 does not exist: swallowed, the jump stands. */
+    ed.now_ms = 1200;
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('0', 0U)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 12);
+    YEW_ASSERT(!yew_tab_jump_armed());
+    yew_ed_free(&ed);
+}
+
+/* A row-1 window extends row-1 numbers even when the jump entered a
+ * group: `ctrl+1` `2` is entry 12, wherever entry 1 led. */
+void test_groupnav_digit_jump_extends_row1_numbers_across_a_group(void)
+{
+    Ed ed;
+    u32 g;
+    int i;
+
+    nav_many_tabs(&ed, 16);
+    g = yew_group_create(&ed, "/big", NULL);
+    for (i = 1; i <= 3; i++)
+        yew_group_add_member(&ed, g, i);
+    yew_tab_switch(&ed, 0);
+    /* Row 1: [scratch, G, t4, t5, ..., t15] — fourteen entries. */
+    ed.now_ms = 1000;
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 2),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1); /* entered G */
+    ed.now_ms = 1100;
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('1', YEW_MOD_CTRL)));
+    /* Entry 21 does not exist; consumed, the first jump stands. */
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT(!yew_tab_jump_armed());
+
+    ed.now_ms = 2000;
+    YEW_ASSERT_EQ_I64(nav_goto_status(&ed, "ed.tab.goto_bar", 1),
+                      YEW_CMD_OK);
+    ed.now_ms = 2100;
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('2', 0U)));
+    /* Entry 12 is t13: index 13 (scratch, three members, t4..). */
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 13);
+    yew_ed_free(&ed);
+}
+
+/*
+ * Modifier discipline.  A held `ctrl` continues only a row-1 window; a
+ * held `alt` continues only a window of the kind alt would open now.
+ * Anything else clears the window and lets the key be its own jump.
+ */
+void test_groupnav_digit_jump_modifier_discipline(void)
+{
+    Ed ed;
+    u32 g;
+
+    (void)nav_big_group(&ed);
+    ed.now_ms = 1000;
+    /* Member window; a ctrl digit is a row-1 jump, not member 14. */
+    nav_goto(&ed, 1);
+    ed.now_ms = 1100;
+    YEW_ASSERT(!yew_tab_jump_key(&ed, nav_digit('4', YEW_MOD_CTRL)));
+    YEW_ASSERT(!yew_tab_jump_armed());
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
+
+    yew_ed_free(&ed);
+
+    /* Row-1 window opened from outside; still outside, so alt continues
+     * it: `alt+1` `alt+2` is entry 12.  Row 1 here is
+     * [scratch, G{t1,t2}, t3, ..., t19], so entry k >= 3 is index k. */
+    nav_many_tabs(&ed, 20);
+    g = yew_group_create(&ed, "/two", NULL);
+    yew_group_add_member(&ed, g, 1);
+    yew_group_add_member(&ed, g, 2);
+    yew_tab_switch(&ed, 0);
+    ed.now_ms = 2000;
+    nav_goto(&ed, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
+    ed.now_ms = 2100;
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('2', YEW_MOD_ALT)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 12);
+    YEW_ASSERT(yew_tab_jump_armed());
     yew_ed_free(&ed);
 }
