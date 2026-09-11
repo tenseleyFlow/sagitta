@@ -36,10 +36,11 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — REQUALIFICATION REQUIRED, AUDIT NOT STARTED
+## Baseline status — PAUSED AFTER F08; REQUALIFICATION REQUIRED
 
-`41fef416` is the superseded post-Sprint-57.8 code baseline. On Darwin arm64 it passes
-the complete default-module `make test` suite, focused plain and ASan/UBSan
+`41fef416` is the original post-Sprint-57.8 product baseline used by F01–F08.
+On Darwin arm64 it passes the complete default-module `make test` suite,
+focused plain and ASan/UBSan
 tab/mouse/group/theme coverage, a sanitized clicked-new-tab PTY, three
 deterministic complete PTY executions, FUSS performance, warning-clean
 default/core-only shipping builds and core smoke, and all six native size
@@ -58,9 +59,18 @@ state instead of asynchronous SGR history. Trigger-specific Valgrind,
 designated-hardware performance, and nightly campaigns were skipped by the
 push trigger and are not inferred as successes.
 
-No audit front or `YEW-F-###` ID has been opened. Sprint 57.9 is the final
-field-repair window. When it closes, record and requalify its replacement hash
-before opening a front; every Sprint 58 front then uses that one fixed hash.
+F01–F08 closed against that original fixed baseline and opened findings
+`YEW-F-001` through `YEW-F-008`. Sprint 57.9 deliberately reopened product
+code to repair field-reported B-mode and FUSS group-picker defects, so the
+audit campaign is paused before F09. The original reports and evidence remain
+historical and must not be rewritten as if they ran on the replacement tree.
+
+Before F09 opens, push the exact post-57.9 commit, obtain the complete hosted
+matrix, replace the build matrix of record, and record a delta-applicability
+review for every closed front F01–F08. Re-run focused controls for affected
+modal and UI/workspace surfaces; explicitly record unaffected fronts. F09–F15
+then use that one replacement fixed baseline. This requalification does not
+remediate or renumber any existing finding.
 
 ## Goals
 

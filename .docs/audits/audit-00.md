@@ -6,9 +6,16 @@ Baseline hosted run: `33714586788` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-The product-code baseline is immutable for every front. Audit tooling,
-reproducers, evidence, and the two Sprint 58 inbound obligations may advance
-on `trunk`; a front always reproduces against the baseline commit above.
+**Campaign status: PAUSED AFTER F08 FOR SPRINT 57.9 REQUALIFICATION.**
+
+F01–F08 ran against the baseline above; their reports, findings, and hosted
+evidence remain immutable historical records. Sprint 57.9 deliberately
+reopened product code before F09 to repair field-reported B-mode and FUSS
+group-picker defects. Its replacement product SHA is pending push and hosted
+qualification. No remaining front may open until the build matrix is replaced
+and a delta-applicability review of F01–F08 is recorded. Audit tooling,
+reproducers, evidence, and the two Sprint 58 inbound obligations may continue
+to advance without rewriting the original front provenance.
 
 ## Build matrix of record
 
@@ -114,9 +121,10 @@ zero until its report closes; silence never counts as evidence.
 
 ## Verdict
 
-We are not ready to tag: Sprint 58 is open, only F01 through F07 of its fifteen
-fronts have closed, the invariant sweep has not run, and no campaign-wide
-absence-of-findings claim has been earned. F06 adds an open High finding
+We are not ready to tag: Sprint 58 is paused for its post-57.9 replacement
+baseline, only F01 through F08 of its fifteen fronts have closed, the invariant
+sweep has not run, and no campaign-wide absence-of-findings claim has been
+earned. F06 adds an open High finding
 (`YEW-F-005`), while closed F07 records two open Critical workspace-state
 findings (`YEW-F-006`, `YEW-F-007`): normal persistence can drop future keys
 and reorder a group member sequence. Its tutor-inclusive repository-pollution

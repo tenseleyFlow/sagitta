@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-09-03
+**Current checkpoint date:** 2026-09-11
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -10,22 +10,24 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Hosted-green code/recovery anchor:** `41fef416` (`origin/trunk` code baseline)
+**Hosted-green code/recovery anchor:** `da04f30c` (`origin/trunk`)
 
-**Current post-Sprint-57.8 code frontier:** `41fef416`
+**Current Sprint-57.9 code frontier:** `a3366d66` (local; not pushed)
 
-**Git position:** the complete Sprint 57 through 57.8 chain and its hosted-CI
-remediation are pushed. GitHub Actions run `33700973479` attempt 1 is green for
-all 22 standard push jobs at the earlier `731f5be0` candidate. Follow-up CI
-remediation is green for all 22 applicable jobs at `41fef416` in run
-`33714586788`; seven trigger-specific jobs skipped as designed.
+**Git position:** `origin/trunk` is `da04f30c`; GitHub Actions run
+`34624021506` is green for all 22 standard push jobs there, with seven
+trigger-specific jobs skipped as designed. The local branch is five coherent
+Sprint 57.9 implementation/contract commits ahead. Future pushes still require
+an explicit request.
 
-**Active implementation frontier:** Sprint 57.8 is repository-complete. Sprint
-58 is next and has not begun. Its hosted commit-of-record baseline gate is now
-satisfied by `41fef416` and run `33714586788`. Designated-hardware
-timing, the trigger-specific Valgrind/nightly jobs, and physical Pi
-corroboration remain explicit release-evidence tails; none was inferred from a
-skipped push job.
+**Active implementation frontier:** Sprint 57.9 is locally implemented and
+native-qualified but awaits push and hosted closeout. Sprint 58 is paused after
+F08, not unopened: F01–F08 closed on the original `41fef416` fixed product
+baseline and recorded findings `YEW-F-001` through `YEW-F-008`. Before F09,
+Sprint 57.9 must establish a hosted-green replacement baseline and the closed
+fronts must receive the contract's delta-applicability review. Designated-
+hardware timing, trigger-specific Valgrind/nightly jobs, and physical Pi
+corroboration remain explicit release-evidence tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -83,10 +85,36 @@ visible for one tab, and an exact ` + ` tail control invokes the existing
 Right overflow retains priority, and ordinary click, drag, group, CJK, and
 FUSS-offset geometry remains green.
 
-The next contract is `.docs/sprints/14-audits-release/s58-adversarial-audits.md`.
-Its fixed code baseline is `41fef416`. The required hosted commit-of-record
-evidence is green, but Sprint 58 has not begun: open its audit fronts only as
-new sprint work, preserving the fixed baseline and the reproducer-first law.
+Sprint 57.9 repairs two field failures without weakening the modal core. B-mode
+previous/next traversal now rejects enclosing fallback spans and visits every
+adjacent top-level Wolf-style declaration in order, independent of LSP. In
+FUSS, `Alt+g` now opens the shared group picker on the selected directory with
+zero files selected; only confirmation creates the group, Escape is inert, and
+the programmatic bulk-open API remains intact. The picker renders in the true
+overlay pass so the off-canvas drawer cannot paint over it.
+
+The current contract remains
+`.docs/sprints/13-performance/s57_9-block-and-group-field-repair.md` until its
+exact SHA is pushed and hosted-green. Sprint 58's audit contract is paused
+after F08. Preserve its original reports as historical evidence, establish the
+post-57.9 replacement matrix, record the F01–F08 delta requalification, and
+then resume at F09 under the reproducer-first/no-fixes law.
+
+Most recent Sprint 57.9 local validation:
+
+- complete native component-equivalent default matrix green: all 454 PTYs,
+  scripts 93/927 with one intentional skip, package/Fletch/round-trip/syntax/
+  policy/smoke/torture gates, and 2,422 unit tests / 73,449,016 assertions;
+- focused Darwin arm64 ASan/UBSan block, directory-group, picker, and FUSS
+  coverage is clean; the independent `MODULES=""` build and core smoke pass,
+  proving the B-mode repair has no LSP dependency;
+- four deterministic 200,000-operation block fuzz seeds pass; block and FUSS
+  performance remain within every budget, with zero block motions over 5 ms;
+- all six Darwin shipping-size profiles pass without changing a budget:
+  1,452,656 bytes minimal, 1,891,536 full, 1,571,616 LSP-only, 1,588,528
+  AI-only, 1,586,768 FUSS-only, and 1,536,128 plugins-only. The exact
+  symbol/section ledger remains a GNU/ELF hosted gate because Apple `nm` does
+  not report Mach-O symbol sizes.
 
 Hosted Sprint 57.8 closeout evidence at `41fef416`:
 

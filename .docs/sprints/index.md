@@ -281,10 +281,11 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **REPOSITORY COMPLETE THROUGH SPRINT 57.8; SPRINT 57.9 ACTIVE.** Sprint 58's
-  audit work has not begun. The prior `41fef416` post-57.8 baseline is green,
-  but a field-reported block-motion/group-picker repair must land and replace
-  it before the audit window opens. Sprint 56's pinned
+- **SPRINT 57.9 LOCAL IMPLEMENTATION COMPLETE; HOSTED CLOSEOUT PENDING.**
+  Sprint 58 is paused after F08. Its original `41fef416` fixed product
+  baseline and F01–F08 reports remain historical evidence, but the
+  field-reported block-motion/group-picker repair must be pushed, pass hosted
+  CI, and become the replacement baseline before F09 opens. Sprint 56's pinned
   designated-hardware evidence remains pending because no self-hosted runner is
   registered, and Sprint 57's Pi Zero 2 W corroboration remains a release tail.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
@@ -344,16 +345,19 @@ Binding documents — read before any sprint:
   post-key semantic screen state
 - Sprint 57.9 (s57_9-block-and-group-field-repair.md) — Exact adjacent B-mode
   traversal for Wolf-shaped top-level scopes and a Facsimile-style `Alt+g`
-  path that opens the shared group picker with an empty selection. **ACTIVE:**
-  field reproducer confirmed; Sprint 58 remains unopened until this repair is
-  implemented, validated, pushed, and green on hosted CI
+  path that opens the shared group picker with an empty selection. **LOCAL
+  IMPLEMENTATION COMPLETE 2026-09-11:** default/core builds, complete native
+  component gates, focused ASan/UBSan, deterministic PTY, fuzz, block/FUSS
+  performance, and all six native shipping-size profiles are green. Push and
+  hosted CI remain required before closeout and Sprint 58 requalification
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs. **QUEUED — NOT
-  STARTED:** establish a replacement post-57.9 green baseline, then preserve
-  that fixed code baseline when the audit window is deliberately opened
+  fuzz campaigns extended, findings ledger with stable IDs. **PAUSED AFTER
+  F08:** F01–F08 closed on the original fixed baseline and opened findings
+  `YEW-F-001` through `YEW-F-008`. Establish a green post-57.9 replacement,
+  record the F01–F08 delta requalification, then resume at F09
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1
