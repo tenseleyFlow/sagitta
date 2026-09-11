@@ -256,6 +256,57 @@ CmdStatus yew_group_cmd_dissolve(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+CmdStatus yew_group_cmd_close(CmdCtx *cx)
+{
+    Ed *ed;
+    u32 gid;
+    int members[YEW_TAB_MAX];
+    u32 doomed[YEW_TAB_MAX];
+    int n;
+    int i;
+
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    gid = yew_active_group_id(ed);
+    if (gid == 0U)
+        return yew_tab_cmd_close(cx);
+    n = yew_group_members(ed, gid, members,
+                          (int)YEW_ARRAY_LEN(members));
+    if (n <= 0)
+        YEW_BUG("active group has no members");
+    /* A close is one gesture.  Refuse before mutation when it would either
+     * empty the editor or need several independent dirty-tab answers. */
+    if ((u32)n >= yew_tab_count(ed)) {
+        yew_msg(ed, YEW_MSG_ERROR,
+                "cannot close group: it contains every tab");
+        return YEW_CMD_ERR_STATE;
+    }
+    for (i = 0; i < n; i++) {
+        const Tab *tab = yew_tab_at(ed, members[i]);
+
+        if (tab == NULL)
+            YEW_BUG("group member index went stale before close");
+        doomed[i] = tab->tab_id;
+        if (yew_tab_modified(ed, members[i])) {
+            yew_msg(ed, YEW_MSG_ERROR,
+                    "unsaved changes in group; save or force first");
+            return YEW_CMD_ERR_STATE;
+        }
+    }
+    /* Every close compacts the tab array.  Resolve the captured ids after
+     * each mutation instead of letting an index slide onto another file. */
+    for (i = 0; i < n; i++) {
+        int idx = yew_tab_index_of_id(ed, doomed[i]);
+
+        if (idx >= 0)
+            (void)yew_tab_close(ed, idx);
+    }
+    ed->layout_dirty = true;
+    ed->full_damage = true;
+    return YEW_CMD_OK;
+}
+
 CmdStatus yew_group_cmd_remove_tab(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)

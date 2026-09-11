@@ -46,6 +46,7 @@ CmdStatus yew_file_cmd_prev(CmdCtx *cx);
 CmdStatus yew_group_cmd_enter(CmdCtx *cx);
 CmdStatus yew_group_cmd_leave(CmdCtx *cx);
 CmdStatus yew_group_cmd_dissolve(CmdCtx *cx);
+CmdStatus yew_group_cmd_close(CmdCtx *cx);
 CmdStatus yew_group_cmd_remove_tab(CmdCtx *cx);
 /*
  * Sprint 27 §5/§8.  add_tab is the keyboard twin of dropping a tab into

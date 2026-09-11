@@ -56,6 +56,20 @@ static u32 nav_fixture(Ed *ed)
     return g;
 }
 
+static CmdStatus nav_invoke(Ed *ed, const char *name)
+{
+    CmdId id = yew_cmd_lookup(name, strlen(name));
+    CmdCtx cx;
+
+    YEW_ASSERT(id.v != 0U);
+    (void)memset(&cx, 0, sizeof(cx));
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    return yew_ed_invoke(ed, id, &cx);
+}
+
 /* ---------------------------------------------------------------- */
 /* Row 1: the entry list                                            */
 /* ---------------------------------------------------------------- */
@@ -322,6 +336,104 @@ void test_groupnav_walking_into_a_member_hydrates_it(void)
     yew_file_step(&ed, 1);
     YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
     YEW_ASSERT(yew_tab_is_resident(&ed, 2));
+    yew_ed_free(&ed);
+}
+
+void test_groupnav_close_closes_every_clean_member_by_id(void)
+{
+    Ed ed;
+    u32 gid;
+    u32 doomed[3];
+
+    gid = nav_fixture(&ed);
+    for (int i = 0; i < 3; i++)
+        doomed[i] = yew_tab_at(&ed, i + 2)->tab_id;
+    yew_tab_switch(&ed, 3);
+    YEW_ASSERT_EQ_I64(nav_invoke(&ed, "ed.group.close"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 3U);
+    YEW_ASSERT_EQ_I64(yew_group_find(&ed, gid), -1);
+    for (int i = 0; i < 3; i++)
+        YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&ed, doomed[i]), -1);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
+    yew_ed_free(&ed);
+}
+
+void test_groupnav_close_refuses_dirty_group_without_partial_close(void)
+{
+    Ed ed;
+    EditCtx ec;
+    u32 gid;
+    u32 members[3];
+
+    gid = nav_fixture(&ed);
+    for (int i = 0; i < 3; i++)
+        members[i] = yew_tab_at(&ed, i + 2)->tab_id;
+    yew_tab_switch(&ed, 3);
+    ec = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"x", 1U));
+    yew_ed_finish_edit(&ed, &ec);
+    YEW_ASSERT(yew_tab_modified(&ed, 3));
+    YEW_ASSERT_EQ_I64(nav_invoke(&ed, "ed.group.close"),
+                      YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 6U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 3);
+    for (int i = 0; i < 3; i++)
+        YEW_ASSERT(yew_tab_index_of_id(&ed, members[i]) >= 0);
+    YEW_ASSERT(!ed.tab_prompt.active);
+    yew_ed_free(&ed);
+}
+
+void test_groupnav_close_ungrouped_delegates_to_tab_close(void)
+{
+    Ed ed;
+    u32 gid;
+    u32 tab_id;
+
+    gid = nav_fixture(&ed);
+    tab_id = yew_tab_at(&ed, 1)->tab_id;
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
+    YEW_ASSERT_EQ_I64(nav_invoke(&ed, "ed.group.close"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&ed, tab_id), -1);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 5U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 3);
+    yew_ed_free(&ed);
+}
+
+void test_groupnav_close_ungrouped_retains_dirty_tab_prompt(void)
+{
+    Ed ed;
+    EditCtx ec;
+    u32 tab_id;
+
+    (void)nav_fixture(&ed);
+    tab_id = yew_tab_at(&ed, 1)->tab_id;
+    ec = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"x", 1U));
+    yew_ed_finish_edit(&ed, &ec);
+    YEW_ASSERT_EQ_I64(nav_invoke(&ed, "ed.group.close"), YEW_CMD_OK);
+    YEW_ASSERT(ed.tab_prompt.active);
+    YEW_ASSERT_EQ_U64(ed.tab_prompt.tab_id, tab_id);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 6U);
+    YEW_ASSERT(yew_tab_prompt_key(&ed, 0x1BU));
+    YEW_ASSERT(yew_tab_index_of_id(&ed, tab_id) >= 0);
+    yew_ed_free(&ed);
+}
+
+void test_groupnav_close_refuses_when_group_contains_every_tab(void)
+{
+    Ed ed;
+    u32 gid;
+
+    gid = nav_fixture(&ed);
+    yew_group_add_member(&ed, gid, 0);
+    yew_group_add_member(&ed, gid, 1);
+    yew_group_add_member(&ed, gid, 5);
+    yew_tab_switch(&ed, 0);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 6);
+    YEW_ASSERT_EQ_I64(nav_invoke(&ed, "ed.group.close"),
+                      YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 6U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 6);
     yew_ed_free(&ed);
 }
 

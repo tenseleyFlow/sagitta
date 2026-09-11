@@ -207,6 +207,25 @@ void test_cmdparse_fl_preserves_source_as_one_argument(void)
     parse_fixture_free(&f);
 }
 
+void test_cmdparse_group_close_full_name_and_abbrev(void)
+{
+    static const char *const lines[] = {
+        ":group.close", ":ed.group.close", ":gclose"
+    };
+    ParseFixture f;
+
+    parse_fixture_init(&f);
+    for (u32 i = 0U; i < YEW_ARRAY_LEN(lines); i++) {
+        CmdParse parsed;
+
+        YEW_ASSERT(yew_cmd_parse(&f.ed, lines[i], strlen(lines[i]),
+                                 &f.arena, &parsed));
+        YEW_ASSERT_EQ_U64(parsed.argv.n, 1U);
+        YEW_ASSERT_EQ_STR(parsed.argv.v[0], "ed.group.close");
+    }
+    parse_fixture_free(&f);
+}
+
 void test_cmdparse_prof_subcommands_route_to_registry(void)
 {
     static const struct {
