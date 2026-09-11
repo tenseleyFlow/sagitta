@@ -140,6 +140,7 @@ static const InteractiveRow interactive_rows[] = {
     /* Sprint 51 registers the complete Git command vocabulary so scripts,
      * completion, and stripped builds agree before the Sprint 52/53 UI
      * lands.  Prompt-backed Git actions remain terminal-only. */
+    {"ed.git.actions", "no batch alternative"},
     {"ed.git.commit", "no batch alternative"},
     {"ed.git.commit.amend", "no batch alternative"},
     {"ed.git.push", "no batch alternative"},

@@ -114,7 +114,7 @@ void test_batch_refusal_table_covers_every_interactive_command(void)
         }
     }
     YEW_ASSERT(interactive >= 39U);
-    YEW_ASSERT_EQ_U64(git_interactive, 18U);
+    YEW_ASSERT_EQ_U64(git_interactive, 19U);
 }
 
 void test_batch_memory_buffer_is_byte_exact_named_and_initially_clean(void)
