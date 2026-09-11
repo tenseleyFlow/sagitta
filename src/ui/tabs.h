@@ -199,17 +199,26 @@ typedef struct TabPrompt {
 bool yew_tab_prompt_key(Ed *ed, u8 answer);
 
 /*
- * Sprint 24 §7: the 500 ms digit-extension window.
+ * Sprint 24 §7 / 57.10: numbered jumps and the 500 ms digit-extension
+ * window.
+ *
+ * A NUMBER ADDRESSES A ROW.  Row 1 numbers its entries left to right
+ * with a group as one entry; row 2 numbers the active group's members.
+ * `ed.tab.goto` (alt+N) counts the row the active tab lives on — a
+ * member inside a group, a row-1 entry outside.  `ed.tab.goto_bar`
+ * (ctrl+N) always counts row 1, and a group entry is ENTERED at its
+ * last-active member.  The labels carry the same numbers.
  *
  * JUMP IMMEDIATELY, THEN ARM.  Waiting half a second to see whether a
  * second digit is coming would put that lag on the overwhelmingly
  * common single-digit case; superseding a jump already made costs
- * nothing.
+ * nothing.  A further digit extends in the MODE of the jump it follows:
+ * `ctrl+1` `2` is row-1 entry 12, `alt+1` `5` inside a group is member
+ * 15.
  *
  * yew_tab_jump_key returns true when it CONSUMED the key.  A digit
  * arriving inside the window is part of a chord, so an out-of-range one
- * is swallowed rather than inserted into the document — a surprise edit
- * while navigating is worse than a dropped key.
+ * is swallowed rather than inserted into the document.
  */
 enum {
     YEW_JUMP_WINDOW_MS = 500
@@ -226,6 +235,8 @@ CmdStatus yew_tab_cmd_close(CmdCtx *cx);
 CmdStatus yew_tab_cmd_next(CmdCtx *cx);
 CmdStatus yew_tab_cmd_prev(CmdCtx *cx);
 CmdStatus yew_tab_cmd_goto(CmdCtx *cx);
+/* Sprint 57.10: row-1 entry N from anywhere — see the window comment. */
+CmdStatus yew_tab_cmd_goto_bar(CmdCtx *cx);
 CmdStatus yew_tab_cmd_move(CmdCtx *cx);
 /* Sprint 27 §5: the tab context menu's rows.  Commands, not menu-only
  * handlers, so the mouse and the keyboard reach the same code. */

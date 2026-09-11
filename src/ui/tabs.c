@@ -1228,8 +1228,24 @@ CmdStatus yew_tab_cmd_prev(CmdCtx *cx)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 24 §7: the 500 ms digit-extension window                  */
+/* Sprint 24 §7 / 57.10: numbered jumps and the 500 ms window       */
 /* ---------------------------------------------------------------- */
+
+/*
+ * A number addresses a ROW.  Row 1 counts its entries left to right —
+ * a group is one entry — and row 2 counts the active group's members.
+ * `alt+N` addresses the row the active tab lives on; `ctrl+N` always
+ * addresses row 1, which is how it walks between groups from anywhere.
+ *
+ * Both rows number what the user is looking at, which is the whole
+ * reason the numbering is positional rather than the array index: with
+ * a group in the middle of the bar the flat indices skip, and `alt+4`
+ * would land on a tab labelled 5.
+ */
+typedef enum JumpMode {
+    JUMP_ROW1,
+    JUMP_MEMBER
+} JumpMode;
 
 /*
  * Module-local, because nothing outside this file has any business
@@ -1237,7 +1253,7 @@ CmdStatus yew_tab_cmd_prev(CmdCtx *cx)
  */
 static i64 jump_value;
 static i64 jump_deadline_ms;
-static u32 jump_group;
+static JumpMode jump_mode;
 static bool jump_on;
 static TimerId jump_timer;
 
@@ -1255,7 +1271,46 @@ void yew_tab_jump_clear(Ed *ed)
     jump_on = false;
     jump_value = 0;
     jump_deadline_ms = 0;
-    jump_group = 0U;
+    jump_mode = JUMP_ROW1;
+}
+
+/*
+ * Row-1 entry `pos` (1-based).  An ungrouped entry is switched to; a
+ * group entry is ENTERED — resume at its last-active member, exactly
+ * as `t <down>` and a row-1 click do, so three routes into a group
+ * cannot land on three different members.  False when there is no such
+ * entry, and nothing has moved.
+ *
+ * The position is noted BEFORE the switch: leaving a group by number is
+ * still leaving it, and coming back must resume here.
+ */
+static bool jump_to_row1(Ed *ed, i64 pos)
+{
+    StripEntry entries[YEW_TAB_MAX];
+    int n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
+    i32 payload;
+
+    if (pos < 1 || pos > (i64)n)
+        return false;
+    payload = entries[pos - 1].payload;
+    yew_group_note_position(ed);
+    if (payload < 0)
+        yew_group_enter(ed, (u32)-payload);
+    else
+        yew_tab_switch(ed, payload);
+    return true;
+}
+
+/* Member `pos` (1-based, by ordinal) of `gid` — what row 2 shows. */
+static bool jump_to_member(Ed *ed, u32 gid, i64 pos)
+{
+    int members[YEW_TAB_MAX];
+    int n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
+
+    if (pos < 1 || pos > (i64)n)
+        return false;
+    yew_tab_switch(ed, members[pos - 1]);
+    return true;
 }
 
 /*
@@ -1276,43 +1331,35 @@ static void jump_expire(Ed *ed, void *ctx)
     ed->footer_dirty = true;
 }
 
-/* Announces what a further digit would do.  The window must never feel
- * like a lost keystroke. */
-static void jump_arm(Ed *ed, int idx)
+/*
+ * Announces what a further digit would do.  The window must never feel
+ * like a lost keystroke — and the hint names the ROW, so the status
+ * line never promises a tab when a member is meant.
+ */
+static void jump_arm(Ed *ed, JumpMode mode, i64 value)
 {
-    const Tab *t = yew_tab_at(ed, idx);
-
-    if (t == NULL)
-        return;
     yew_tab_jump_clear(ed);
     jump_on = true;
-    jump_value = idx + 1;
+    jump_mode = mode;
+    jump_value = value;
     jump_deadline_ms = ed->now_ms + YEW_JUMP_WINDOW_MS;
-    jump_group = t->group_id;
     jump_timer = yew_timer_add(&ed->timers, jump_deadline_ms, jump_expire,
                                NULL);
-    if (jump_group != 0U) {
-        int n = yew_group_member_count(ed, jump_group);
-
-        yew_msg(ed, YEW_MSG_INFO, "tab %lld — a digit picks a member (1-%d)",
-                (long long)jump_value, n);
-    } else {
-        yew_msg(ed, YEW_MSG_INFO, "tab %lld — a digit extends to %lld_",
-                (long long)jump_value, (long long)jump_value);
-    }
+    yew_msg(ed, YEW_MSG_INFO, "%s %lld — a digit extends to %lld_",
+            mode == JUMP_MEMBER ? "member" : "tab", (long long)value,
+            (long long)value);
 }
 
-/* 0 is the TENTH key on the digit row, not the zeroth thing. */
-static int digit_ordinal(u32 code)
+/* The mode `alt+N` would pick right now: the row the active tab is on. */
+static JumpMode jump_mode_for_alt(const Ed *ed)
 {
-    int d = (int)(code - (u32)'0');
-
-    return d == 0 ? 10 : d;
+    return yew_active_group_id(ed) != 0U ? JUMP_MEMBER : JUMP_ROW1;
 }
 
 bool yew_tab_jump_key(Ed *ed, Key key)
 {
-    int digit;
+    i64 target;
+    bool ok;
 
     if (ed == NULL || !jump_on)
         return false;
@@ -1327,50 +1374,46 @@ bool yew_tab_jump_key(Ed *ed, Key key)
         yew_tab_jump_clear(ed);
         return false;
     }
-    /*
-     * Bare `5`, and also `alt+5` / `ctrl+5`: holding the modifier down
-     * is the natural way to type `alt+1` `5`, and accepting only the
-     * bare form sent the second digit to the main dispatch as its own
-     * jump — tab 1 then tab 5, never tab 15.
-     */
     if (key.code < (u32)'0' || key.code > (u32)'9') {
         yew_tab_jump_clear(ed);
         return false;
     }
-    digit = digit_ordinal(key.code);
-
-    if (jump_group != 0U) {
-        int members[YEW_TAB_MAX];
-        int n = yew_group_members(ed, jump_group, members,
-                                  (int)YEW_ARRAY_LEN(members));
-
-        /* The digit counts what ROW 2 shows, which is what the user is
-         * looking at while counting. */
-        if (digit >= 1 && digit <= n) {
-            yew_tab_switch(ed, members[digit - 1]);
-            yew_tab_jump_clear(ed);
-            yew_msg_clear(ed);
-        } else {
-            yew_msg(ed, YEW_MSG_ERROR, "this group has %d members", n);
-            yew_tab_jump_clear(ed);
-        }
-        return true;
+    /*
+     * Bare `5` continues whatever window is open: `alt+1` `5` is tab
+     * 15.  A HELD modifier continues only a window of its own kind —
+     * `ctrl` digits are row-1 numbers, `alt` digits count the row the
+     * active tab is on — and otherwise the window clears and the key
+     * dispatches as the fresh jump it reads as.  That is what makes
+     * `alt+3` (entering a group from row 1) then `alt+2` pick the
+     * group's second member, which is what the bar is now showing.
+     */
+    if ((key.mods & YEW_MOD_CTRL) != 0U && jump_mode != JUMP_ROW1) {
+        yew_tab_jump_clear(ed);
+        return false;
     }
+    if ((key.mods & YEW_MOD_ALT) != 0U && jump_mode != jump_mode_for_alt(ed)) {
+        yew_tab_jump_clear(ed);
+        return false;
+    }
+    /* Here the digit is a DIGIT, not the tenth key: `1` then `0` is
+     * entry 10, and `1` then `5` is entry 15. */
+    target = jump_value * 10 + (i64)(key.code - (u32)'0');
+    if (jump_mode == JUMP_MEMBER) {
+        u32 gid = yew_active_group_id(ed);
 
-    {
-        /* Here the digit is a DIGIT, not the tenth key: `1` then `0` is
-         * tab 10, and `1` then `5` is tab 15. */
-        i64 target = jump_value * 10 + (i64)(key.code - (u32)'0');
-        int idx = (int)target - 1;
-
-        if (idx >= 0 && idx < (int)yew_tab_count(ed)) {
-            yew_tab_switch(ed, idx);
-            /* Re-armed, so three digits work. */
-            jump_arm(ed, idx);
-        } else {
+        ok = gid != 0U && jump_to_member(ed, gid, target);
+        if (!ok)
+            yew_msg(ed, YEW_MSG_ERROR, "no member %lld", (long long)target);
+    } else {
+        ok = jump_to_row1(ed, target);
+        if (!ok)
             yew_msg(ed, YEW_MSG_ERROR, "no tab %lld", (long long)target);
-            yew_tab_jump_clear(ed);
-        }
+    }
+    if (ok) {
+        /* Re-armed, so three digits work. */
+        jump_arm(ed, jump_mode, target);
+    } else {
+        yew_tab_jump_clear(ed);
     }
     /*
      * Consumed either way.  The digit was part of a chord, so it must
@@ -1379,34 +1422,58 @@ bool yew_tab_jump_key(Ed *ed, Key key)
     return true;
 }
 
+/* The number a goto command was given: iarg, a count overriding it, and
+ * 0 meaning 10 — the digit row reads 1..9 then 0, so `0` is the tenth
+ * key, not the zeroth thing. */
+static i64 goto_want(const CmdCtx *cx)
+{
+    i64 want = cx->iarg;
+
+    if (cx->count_given && cx->count != 0U)
+        want = (i64)cx->count;
+    return want == 0 ? 10 : want;
+}
+
 /*
  * Jumps NOW and arms the window (§7).  The switch is the whole command;
  * arming is what lets a second digit supersede it without the first
  * jump having waited for one.
  */
+static CmdStatus goto_row1(Ed *ed, i64 want)
+{
+    if (!jump_to_row1(ed, want)) {
+        yew_msg(ed, YEW_MSG_ERROR, "no tab %lld", (long long)want);
+        return YEW_CMD_ERR_ARG;
+    }
+    jump_arm(ed, JUMP_ROW1, want);
+    return YEW_CMD_OK;
+}
+
 CmdStatus yew_tab_cmd_goto(CmdCtx *cx)
 {
     i64 want;
-    int idx;
+    u32 gid;
 
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
-    want = cx->iarg;
-    if (cx->count_given && cx->count != 0U)
-        want = (i64)cx->count;
-    /* 0 means tab 10: the digit row reads 1..9 then 0, so `0` is the
-     * tenth key, not the zeroth tab. */
-    if (want == 0)
-        want = 10;
-    idx = (int)want - 1;
-    if (idx < 0 || idx >= (int)yew_tab_count(cx->ed)) {
-        yew_msg(cx->ed, YEW_MSG_ERROR, "no tab %lld",
-                (long long)want);
+    want = goto_want(cx);
+    gid = yew_active_group_id(cx->ed);
+    if (gid == 0U)
+        return goto_row1(cx->ed, want);
+    /* Inside a group the number counts row 2 — the members. */
+    if (!jump_to_member(cx->ed, gid, want)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "no member %lld", (long long)want);
         return YEW_CMD_ERR_ARG;
     }
-    yew_tab_switch(cx->ed, idx);
-    jump_arm(cx->ed, idx);
+    jump_arm(cx->ed, JUMP_MEMBER, want);
     return YEW_CMD_OK;
+}
+
+CmdStatus yew_tab_cmd_goto_bar(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    return goto_row1(cx->ed, goto_want(cx));
 }
 
 CmdStatus yew_tab_cmd_move(CmdCtx *cx)

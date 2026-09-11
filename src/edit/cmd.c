@@ -658,7 +658,12 @@ static const CmdDesc builtins[] = {
     {"ed.buf.prev", yew_tab_cmd_prev, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE, "Activate the previous buffer tab", NULL},
     {"ed.tab.goto", yew_tab_cmd_goto, YEW_ARITY_OPT_INT,
-     YEW_CMD_TAKES_COUNT, "Activate a numbered tab (0 = tab 10)", NULL},
+     YEW_CMD_TAKES_COUNT,
+     "Activate numbered entry N on the active tab row (0 = 10)", NULL},
+    {"ed.tab.goto_bar", yew_tab_cmd_goto_bar, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT,
+     "Activate numbered row-1 tab or group N from anywhere (0 = 10)",
+     NULL},
     {"ed.tab.new", yew_tab_cmd_new, YEW_ARITY_NONE, 0U,
      "Open an untitled tab", NULL},
     {"ed.tab.open", yew_tab_cmd_open, YEW_ARITY_STR, 0U,
@@ -1291,7 +1296,9 @@ static bool command_name_valid(const char *name)
         "refresh", "reset", "revert", "row_next", "row_prev", "switch",
         "tag", "unstage", "view", "ours", "theirs",
         /* Sprint 56: in-loop profiler report and raw data surfaces. */
-        "report", "dump", "frames", "mark"};
+        "report", "dump", "frames", "mark",
+        /* Sprint 57.10: row-1 numbered jump from inside a group. */
+        "goto_bar"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
