@@ -8167,6 +8167,31 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_check(c, s52_screen_contains(&c->vt, "漢字.txt"),
                   "confirmed FUSS group omitted the selected member");
         semantic_snapshot = true;
+    } else if (strstr(name, "group_close") != NULL) {
+        ptc_bytes(c, "docs");
+        s52_wait_screen(c, "jump: docs");
+        ptc_keys(c, "alt+g");
+        s52_wait_screen(c, "New Tab Group");
+        ptc_keys(c, "down");
+        ptc_bytes(c, " ");
+        s52_wait_screen(c, "1 selected");
+        ptc_keys(c, "enter");
+        s52_wait_screen(c, "docs/ (1)");
+        ptc_keys(c, "esc");
+        ptc_settle(c, 0);
+        ptc_keys(c, ":");
+        ptc_bytes(c, "group.enter");
+        ptc_keys(c, "enter");
+        s52_wait_screen(c, "changed cjk");
+        ptc_keys(c, ":");
+        ptc_bytes(c, "group.close");
+        ptc_keys(c, "enter");
+        s52_wait_screen(c, "return 0");
+        ptc_check(c, !s52_screen_contains(&c->vt, "docs/ (1)"),
+                  ":group.close left the active group open");
+        ptc_check(c, !s52_screen_contains(&c->vt, "changed cjk"),
+                  ":group.close left its selected member active");
+        semantic_snapshot = true;
     } else if (strstr(name, "actions_palette") != NULL) {
         ptc_keys(c, "ctrl+shift+/");
         s52_wait_screen(c, "FUSS actions");
@@ -9210,6 +9235,7 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_jump_hint, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
     C(fuss_group_picker, modern, 24U, 100U, case_s52_fuss),
+    C(fuss_group_close, modern, 24U, 100U, case_s52_fuss),
     C(fuss_actions_palette, modern, 24U, 100U, case_s52_fuss),
     C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
       case_s52_fuss_diff_viewer),

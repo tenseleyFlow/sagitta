@@ -114,9 +114,9 @@ commit-of-record; its no-fixes audit rule remains unchanged.
   retains its deterministic bulk-open behavior.
 - PTY: open FUSS on a directory, invoke `Alt+g`, verify the chooser surface,
   select a subset, create the group, and prove the chosen members are live.
-- Unit/script: grouped `ed.group.close` closes every clean member by id,
-  refuses atomically when any member is dirty, and delegates ungrouped dirty
-  and clean cases to `ed.tab.close`.
+- Unit/PTY: grouped `ed.group.close` closes every clean member by id,
+  refuses atomically when any member is dirty, delegates ungrouped dirty and
+  clean cases to `ed.tab.close`, and is exercised through its E-mode spelling.
 - Build/regression: warning-clean Clang and GCC, default and `MODULES=""`;
   complete unit/script/PTY suites; ASan/UBSan focused block/group coverage;
   deterministic PTY and existing block/FUSS performance gates.
