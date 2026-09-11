@@ -1930,6 +1930,7 @@ void test_fussdrawer_preview_preserves_the_live_view_exactly(void);
 void test_fussdrawer_fullscreen_preview_centers_in_content_not_pane(void);
 void test_fussdrawer_selection_damage_stays_local(void);
 void test_fussdrawer_typejump_selection_damage_stays_local(void);
+void test_fussdrawer_actions_list_uses_only_effective_reachable_keys(void);
 void test_fussdrawer_selected_row_keeps_the_final_component(void);
 void test_fussdrawer_directory_tree_starts_collapsed(void);
 void test_fussdrawer_mouse_double_click_uses_open_destination(void);

@@ -649,6 +649,7 @@ CmdStatus yew_git_cmd_log(CmdCtx *cx)
     }
 
 FUSS_SHIM(yew_fuss_cmd_init)
+FUSS_SHIM(yew_fuss_cmd_actions)
 FUSS_SHIM(yew_fuss_cmd_leave)
 FUSS_SHIM(yew_fuss_cmd_tree_all)
 FUSS_SHIM(yew_fuss_cmd_tree_hidden)

@@ -70,6 +70,7 @@ CmdStatus yew_fuss_commit_close(Ed *ed, Buffer *buffer, bool *handled);
 char *yew_fuss_selected_directory(CmdCtx *cx);
 
 CmdStatus yew_fuss_cmd_init(CmdCtx *cx);
+CmdStatus yew_fuss_cmd_actions(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_leave(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_tree_all(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_tree_hidden(CmdCtx *cx);

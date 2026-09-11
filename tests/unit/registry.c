@@ -1945,6 +1945,7 @@ const YewTest yew_tests[] = {
     T(fussdrawer_fullscreen_preview_centers_in_content_not_pane),
     T(fussdrawer_selection_damage_stays_local),
     T(fussdrawer_typejump_selection_damage_stays_local),
+    T(fussdrawer_actions_list_uses_only_effective_reachable_keys),
     T(fussdrawer_selected_row_keeps_the_final_component),
     T(fussdrawer_directory_tree_starts_collapsed),
     T(fussdrawer_mouse_double_click_uses_open_destination),

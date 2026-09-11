@@ -917,6 +917,8 @@ static const CmdDesc builtins[] = {
      "Show local AI request statistics", NULL},
     {"ed.git.info", yew_git_cmd_info, YEW_ARITY_NONE, 0U,
      "Show repository, branch, state, and snapshot age", NULL},
+    {"ed.git.actions", yew_fuss_cmd_actions, YEW_ARITY_NONE,
+     YEW_CMD_PROMPTS, "List effective F-mode actions by key", NULL},
     {"ed.git.refresh", yew_git_cmd_refresh, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE, "Force an asynchronous Git snapshot refresh",
      "git_refresh"},
@@ -1279,7 +1281,7 @@ static bool command_name_valid(const char *name)
         "privacy", "preset",
         /* Sprint 51: the complete Git command surface is registered before
          * the Sprint 52/53 viewers and mutating actions land. */
-        "abort", "all", "amend", "arm", "blame", "cherry_pick",
+        "abort", "actions", "all", "amend", "arm", "blame", "cherry_pick",
         "commit", "continue", "create", "diff", "discard", "fetch",
         "first", "force", "hidden", "history", "init", "interactive",
         "last", "merge", "parent", "pop", "pull", "push", "reflog",

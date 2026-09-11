@@ -335,6 +335,7 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         {"C-r", "ed.git.refresh"}, {"A-q", "ed.git.mode.leave"},
         {"<esc>", "ed.git.mode.leave"}
     };
+    static const char *const action_help[] = {"C-S-/", "C-?", "C-_"};
     Ed ed = {0};
     u32 i;
 
@@ -373,6 +374,22 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
             YEW_ASSERT_EQ_U64(ed.last_cmd.v, binding->cmd.v);
             YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
         }
+    }
+    for (i = 0U; i < YEW_ARRAY_LEN(action_help); i++) {
+        KeyId key;
+        const Binding *binding = NULL;
+        const CmdDesc *desc;
+
+        YEW_ASSERT_EQ_U64(yew_key_parse_seq(action_help[i], &key, 1U), 1U);
+        YEW_ASSERT_EQ_I64(yew_keymap_lookup(ed.keys.l[0], &key, 1U,
+                                            NULL, &binding),
+                          YEW_MATCH_FULL);
+        YEW_ASSERT_NOT_NULL(binding);
+        desc = yew_cmd_desc(binding->cmd);
+        YEW_ASSERT_NOT_NULL(desc);
+        YEW_ASSERT_EQ_STR(desc->name, "ed.git.actions");
+        YEW_ASSERT((desc->flags & YEW_CMD_RECORDABLE) == 0U);
+        YEW_ASSERT((desc->flags & YEW_CMD_PROMPTS) != 0U);
     }
     {
         static const char bare[] =

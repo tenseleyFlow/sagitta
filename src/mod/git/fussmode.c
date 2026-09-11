@@ -60,6 +60,7 @@ typedef enum FussPromptAction {
 
 typedef enum FussPickAction {
     FUSS_PICK_NONE,
+    FUSS_PICK_ACTIONS,
     FUSS_PICK_BRANCH_SWITCH,
     FUSS_PICK_BRANCH_DELETE,
     FUSS_PICK_MERGE,
@@ -148,6 +149,7 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
                                const GitResult *result);
 static void fuss_picker_open(Ed *ed, FussPickAction action,
                              const char *title);
+static void fuss_actions_open(Ed *ed);
 static CmdStatus fuss_commit_begin(Ed *ed, bool amend, const u8 *prefill,
                                    size_t prefill_len);
 static bool fuss_commit_guard(Ed *ed, const GitSnapshot *snap);
@@ -2164,6 +2166,85 @@ static bool fuss_picker_add(FussMode *f, const char *label, size_t label_len,
     return true;
 }
 
+typedef struct FussActionBuild {
+    Ed *ed;
+    FussMode *f;
+    bool ok;
+} FussActionBuild;
+
+static bool fuss_action_reachable(const KeyId *seq, u32 n)
+{
+    const u16 command_mods = YEW_MOD_CTRL | YEW_MOD_ALT | YEW_MOD_SUPER |
+                             YEW_MOD_HYPER | YEW_MOD_META;
+    u32 code;
+    u16 mods;
+
+    if (seq == NULL || n == 0U)
+        return false;
+    code = (u32)(seq[0].v >> 16U);
+    mods = (u16)(seq[0].v & UINT16_MAX);
+    /* These rows are consumed by FUSS type-to-jump before dispatch.  Space
+     * remains structural and is deliberately reachable. */
+    return code >= YEW_KEY_BASE || (mods & command_mods) != 0U ||
+           code <= 0x20U || code == 0x7fU;
+}
+
+static bool fuss_action_visit(const KeyId *seq, u32 n,
+                              const Binding *binding, void *opaque)
+{
+    FussActionBuild *build = opaque;
+    const Binding *effective = NULL;
+    const CmdDesc *desc;
+    KeyMatch match;
+    Bytebuf label;
+    bool added;
+
+    if (build == NULL || binding == NULL)
+        return false;
+    match = yew_keystack_lookup(&build->ed->keys, seq, n, NULL, NULL,
+                                &effective);
+    if ((match != YEW_MATCH_FULL && match != YEW_MATCH_FULL_PREFIX) ||
+        effective != binding || !fuss_action_reachable(seq, n))
+        return true;
+    desc = yew_cmd_desc(binding->cmd);
+    if (desc == NULL || (desc->flags & YEW_CMD_INTERNAL) != 0U ||
+        strcmp(desc->name, "ed.git.actions") == 0 ||
+        (strncmp(desc->name, "ed.git.", sizeof("ed.git.") - 1U) != 0 &&
+         strcmp(desc->name, "ed.group.from_dir") != 0))
+        return true;
+    bytebuf_init(&label);
+    yew_key_format_seq(seq, n, &label);
+    added = fuss_picker_add(build->f, (const char *)label.data, label.len,
+                            desc->help, strlen(desc->help), desc->name,
+                            strlen(desc->name));
+    bytebuf_free(&label);
+    if (!added)
+        build->ok = false;
+    return added;
+}
+
+static void fuss_actions_sort(FussMode *f)
+{
+    u32 i;
+
+    for (i = 1U; i < f->picker_count; i++) {
+        PickItem item = f->picker_items[i];
+        char *value = f->picker_values[i];
+        u32 at = i;
+
+        while (at != 0U &&
+               strcmp(f->picker_items[at - 1U].label, item.label) > 0) {
+            f->picker_items[at] = f->picker_items[at - 1U];
+            f->picker_values[at] = f->picker_values[at - 1U];
+            at--;
+        }
+        f->picker_items[at] = item;
+        f->picker_values[at] = value;
+    }
+    for (i = 0U; i < f->picker_count; i++)
+        f->picker_items[i].payload = (i32)i;
+}
+
 static const PickItem *fuss_picker_items(void *ctx, u32 *n)
 {
     FussMode *f = ctx;
@@ -3272,6 +3353,24 @@ static bool fuss_picker_accept(Ed *ed, void *ctx, i32 payload, u8 how)
         return false;
     }
     switch (action) {
+    case FUSS_PICK_ACTIONS: {
+        CmdId id = yew_cmd_lookup(value, (u32)strlen(value));
+        const CmdDesc *desc = yew_cmd_desc(id);
+        CmdCtx cx = {0};
+
+        if (id.v == 0U || desc == NULL ||
+            (desc->flags & YEW_CMD_INTERNAL) != 0U ||
+            strcmp(desc->name, "ed.git.actions") == 0)
+            break;
+        cx.ed = ed;
+        cx.win = ed->win;
+        cx.count = 1U;
+        cx.source = YEW_SRC_KEY;
+        ed->last_cmd = id;
+        ed->last_status = yew_ed_invoke(ed, id, &cx);
+        ed->dispatch_count++;
+        break;
+    }
     case FUSS_PICK_BRANCH_SWITCH: {
         char *argv[] = {(char *)"switch", (char *)"--", value, NULL};
         (void)fuss_spawn(ed, "switch", argv, false, NULL, 0U, false);
@@ -3528,6 +3627,38 @@ static void fuss_picker_open(Ed *ed, FussPickAction action,
     spec.footer = action == FUSS_PICK_STASH ?
                   "Enter pop · C-v apply · Esc cancel" : NULL;
     spec.path_mode = false;
+    spec.ctx = f;
+    yew_picker_open(ed, &spec);
+}
+
+static void fuss_actions_open(Ed *ed)
+{
+    FussMode *f = ed->fuss;
+    FussActionBuild build = {ed, f, true};
+    PickerSpec spec = {0};
+    u32 i;
+
+    fuss_picker_clear(f);
+    for (i = 0U; i < ed->keys.n && build.ok; i++) {
+        if (yew_keymap_binding_count(ed->keys.l[i]) != 0U &&
+            !yew_keymap_visit(ed->keys.l[i], fuss_action_visit, &build) &&
+            build.ok)
+            build.ok = false;
+    }
+    if (!build.ok || f->picker_count == 0U) {
+        yew_msg(ed, YEW_MSG_WARN, "%s",
+                build.ok ? "no FUSS actions are bound" :
+                           "cannot build FUSS action list");
+        fuss_picker_clear(f);
+        return;
+    }
+    fuss_actions_sort(f);
+    f->picker_action = FUSS_PICK_ACTIONS;
+    spec.title = "FUSS actions";
+    spec.items = fuss_picker_items;
+    spec.accept = fuss_picker_accept;
+    spec.footer = "Enter run · / filter · Esc close";
+    spec.filter_requires_slash = true;
     spec.ctx = f;
     yew_picker_open(ed, &spec);
 }
@@ -3820,6 +3951,7 @@ static bool fuss_picker_result(Ed *ed, FussPickAction action,
     case FUSS_PICK_REVERT: fuss_picker_open(ed, action, "commit"); break;
     case FUSS_PICK_STASH: fuss_picker_open(ed, action, "stash"); break;
     case FUSS_PICK_REMOTE: fuss_picker_open(ed, action, "remote"); break;
+    case FUSS_PICK_ACTIONS:
     case FUSS_PICK_COMMIT_AMEND:
     case FUSS_PICK_REBASE_CONFIRM:
     case FUSS_PICK_REMOTE_CHECK:
@@ -4035,6 +4167,16 @@ CmdStatus yew_fuss_cmd_init(CmdCtx *cx)
     return fuss_require(cx, NULL) == YEW_CMD_OK ?
            fuss_spawn(cx->ed, "init", argv, false, NULL, 0U, false) :
            YEW_CMD_ERR_STATE;
+}
+
+CmdStatus yew_fuss_cmd_actions(CmdCtx *cx)
+{
+    FussMode *f;
+
+    if (fuss_require(cx, &f) != YEW_CMD_OK || !f->active)
+        return YEW_CMD_ERR_STATE;
+    fuss_actions_open(cx->ed);
+    return yew_picker_active(cx->ed) ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_fuss_cmd_leave(CmdCtx *cx)

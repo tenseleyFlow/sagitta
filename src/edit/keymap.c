@@ -156,9 +156,16 @@ static bool parse_atom(const char *s, size_t n, KeyId *out)
             return false;
     }
     if (!named && code < YEW_KEY_BASE && (mods & YEW_MOD_SHIFT) != 0U) {
-        if (code >= (u32)'a' && code <= (u32)'z')
+        if (code >= (u32)'a' && code <= (u32)'z') {
             code -= (u32)'a' - (u32)'A';
-        mods = (u16)(mods & (u16)~YEW_MOD_SHIFT);
+            mods = (u16)(mods & (u16)~YEW_MOD_SHIFT);
+        } else if ((mods & (YEW_MOD_CTRL | YEW_MOD_ALT |
+                            YEW_MOD_SUPER)) == 0U) {
+            /* An ordinary shifted printable is already represented by the
+             * character it produces.  With a command modifier, CSI-u
+             * reports the physical Shift bit and it remains significant. */
+            mods = (u16)(mods & (u16)~YEW_MOD_SHIFT);
+        }
     }
     if ((mods & YEW_MOD_CTRL) != 0U && code >= (u32)'A' &&
         code <= (u32)'Z')

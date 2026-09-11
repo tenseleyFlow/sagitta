@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/keymap.h"
 #include "edit/mode.h"
 #include "edit/pane_cmds.h"
 #include "edit/theme_cmds.h"
@@ -17,6 +18,7 @@
 #include "mod/git/git_int.h"
 #include "ui/groups.h"
 #include "ui/mouse.h"
+#include "ui/picker.h"
 #include "ui/region.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
@@ -602,6 +604,44 @@ void test_fussdrawer_typejump_selection_damage_stays_local(void)
     YEW_ASSERT(!ed.layout_dirty);
     YEW_ASSERT(ed.footer_dirty);
     YEW_ASSERT(yew_fuss_draw_dirty(&ed));
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
+void test_fussdrawer_actions_list_uses_only_effective_reachable_keys(void)
+{
+    static const BindRow overrides[] = {
+        {"A-a", "ed.nop", 0, NULL},
+        {"j", "ed.git.status", 0, NULL}
+    };
+    FussDrawerFix fix;
+    CmdCtx cx = {0};
+    Ed ed;
+    u32 baseline;
+
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    fussdrawer_grid(&ed);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_actions(&cx), YEW_CMD_OK);
+    YEW_ASSERT(yew_picker_active(&ed));
+    baseline = yew_picker_total(&ed);
+    YEW_ASSERT(baseline > 30U);
+    yew_picker_close(&ed, false);
+
+    yew_keymap_free(&ed.bind_keys[YEW_MODE_F]);
+    YEW_ASSERT(yew_keymap_build(&ed.bind_keys[YEW_MODE_F], "test config",
+                                overrides, YEW_ARRAY_LEN(overrides)));
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_actions(&cx), YEW_CMD_OK);
+    YEW_ASSERT(yew_picker_active(&ed));
+    /* A-a's non-FUSS override shadows the built-in stage row.  The bare j
+     * action is unreachable because type-to-jump owns it, so neither row is
+     * falsely advertised. */
+    YEW_ASSERT_EQ_U64(yew_picker_total(&ed), baseline - 1U);
+    yew_picker_close(&ed, false);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
 }

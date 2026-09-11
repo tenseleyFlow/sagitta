@@ -61,6 +61,7 @@ void test_keyseq_printable_canonicalization_and_errors(void)
         {"a", "a"}, {"!", "!"}, {"4", "4"}, {"<lt>", "<lt>"},
         {"C-r", "C-r"}, {"C-A-<up>", "C-A-<up>"},
         {"C-A", "C-a"}, {"S-a", "A"}, {"S-!", "!"},
+        {"C-S-/", "C-S-/"},
         {"g g", "g g"}, {"q !", "q !"}, {"é", "é"},
     };
     static const char *const invalid[] = {
