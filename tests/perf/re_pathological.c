@@ -28,8 +28,13 @@
 enum {
     SCALE_SMALL = 10000,
     SCALE_LARGE = 100000,
+    SAMPLE_REPEATS = 32,
+    SCALING_TRIALS = 3,
     RATIO_LIMIT = 15
 };
+
+_Static_assert(SCALING_TRIALS == 3,
+               "the scaling median requires exactly three trials");
 
 static i64 now_ns(void)
 {
@@ -79,6 +84,8 @@ static bool time_run(const char *pat, size_t n, i64 *ns_out, bool *matched)
     u8 *hay;
     i64 start;
     i64 end;
+    int i;
+    bool any_match = false;
 
     arena_init(&arena);
     re = yew_re_compile(&arena, pat, strlen(pat), 0U, &err);
@@ -96,34 +103,79 @@ static bool time_run(const char *pat, size_t n, i64 *ns_out, bool *matched)
     (void)memset(hay, 'a', n);
     in = yew_re_input_bytes(hay, (u64)n);
     start = now_ns();
-    *matched = yew_re_search(re, &in, BYTEOFF(0U), NULL);
+    for (i = 0; i < SAMPLE_REPEATS; i++) {
+        if (yew_re_search(re, &in, BYTEOFF(0U), NULL))
+            any_match = true;
+    }
     end = now_ns();
     free(hay);
     arena_free_all(&arena);
     if (start < 0 || end < 0)
         return false;
-    *ns_out = end - start;
+    *matched = any_match;
+    *ns_out = (end - start) / SAMPLE_REPEATS;
+    if (*ns_out == 0)
+        *ns_out = 1;
     return true;
 }
 
-/* Best of three.  A single sample of a sub-millisecond run is mostly
- * scheduler noise, and noise in the denominator turns a linear engine
- * into a failing ratio. */
-static bool time_best(const char *pat, size_t n, i64 *ns_out)
+static size_t median_ratio_index(const double ratios[SCALING_TRIALS])
 {
-    i64 best = 0;
-    int i;
+    double a = ratios[0];
+    double b = ratios[1];
+    double c = ratios[2];
 
-    for (i = 0; i < 3; i++) {
-        i64 ns = 0;
-        bool m = false;
+    if ((a <= b && b <= c) || (c <= b && b <= a))
+        return 1U;
+    if ((b <= a && a <= c) || (c <= a && a <= b))
+        return 0U;
+    return 2U;
+}
 
-        if (!time_run(pat, n, &ns, &m))
+/* Three interleaved small/large pairs, with 32 searches per clock sample.
+ * The longer samples dilute scheduler preemption; pairing keeps frequency
+ * drift from charging only the numerator; the median rejects one bad pair.
+ * A truly super-linear engine still fails all three observations. */
+static bool time_scaling(const char *pat, i64 *small_out, i64 *large_out,
+                         i64 *best_large_out)
+{
+    i64 small[SCALING_TRIALS] = {0, 0, 0};
+    i64 large[SCALING_TRIALS] = {0, 0, 0};
+    double ratios[SCALING_TRIALS] = {0.0, 0.0, 0.0};
+    i64 best_large = 0;
+    size_t i;
+    size_t median;
+
+    for (i = 0U; i < SCALING_TRIALS; i++) {
+        bool small_matched = false;
+        bool large_matched = false;
+        bool ok;
+
+        if (i == 1U) {
+            ok = time_run(pat, SCALE_LARGE, &large[i], &large_matched) &&
+                 time_run(pat, SCALE_SMALL, &small[i], &small_matched);
+        } else {
+            ok = time_run(pat, SCALE_SMALL, &small[i], &small_matched) &&
+                 time_run(pat, SCALE_LARGE, &large[i], &large_matched);
+        }
+        if (!ok)
             return false;
-        if (i == 0 || ns < best)
-            best = ns;
+        if (small_matched || large_matched) {
+            (void)fprintf(stderr,
+                          "re_pathological: /%s/ unexpectedly matched\n",
+                          pat);
+            return false;
+        }
+        if (small[i] < 1000)
+            small[i] = 1000;
+        ratios[i] = (double)large[i] / (double)small[i];
+        if (i == 0U || large[i] < best_large)
+            best_large = large[i];
     }
-    *ns_out = best;
+    median = median_ratio_index(ratios);
+    *small_out = small[median];
+    *large_out = large[median];
+    *best_large_out = best_large;
     return true;
 }
 
@@ -132,24 +184,20 @@ static bool scaling_case(const char *pat, i64 hard_ns, i64 ratio_limit,
 {
     i64 small = 0;
     i64 large = 0;
+    i64 best_large = 0;
     double ratio;
 
-    if (!time_best(pat, SCALE_SMALL, &small) ||
-        !time_best(pat, SCALE_LARGE, &large))
+    if (!time_scaling(pat, &small, &large, &best_large))
         return false;
-    /* Guard the quotient: a sub-microsecond small run makes the ratio
-     * meaningless rather than impressive. */
-    if (small < 1000)
-        small = 1000;
     ratio = (double)large / (double)small;
     (void)printf("re.pathological /%-12s/ 10^4=%8lld ns  10^5=%9lld ns  "
                  "ratio=%.2f\n",
                  pat, (long long)small, (long long)large, ratio);
-    if (large > hard_ns) {
+    if (best_large > hard_ns) {
         (void)fprintf(stderr,
                       "re_pathological: /%s/ took %lld ns at 10^5, "
                       "limit %lld ns\n",
-                      pat, (long long)large, (long long)hard_ns);
+                      pat, (long long)best_large, (long long)hard_ns);
         *status = 1;
     }
     if (ratio > (double)ratio_limit) {

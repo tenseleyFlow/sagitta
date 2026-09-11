@@ -235,10 +235,13 @@ static bool perf_advisory(void)
     return value != NULL && strcmp(value, "0") != 0;
 }
 
-static bool retry_transport(bool advisory, RunStatus status,
-                            unsigned attempt)
+/* A hosted scheduler pause can trip the child's 100x sanity bound just as it
+ * can break the pty transport.  Give either failure two fresh observations;
+ * designated runs fail immediately, and a third advisory failure stays hard. */
+static bool retry_advisory_run(bool advisory, RunStatus status,
+                               unsigned attempt)
 {
-    return advisory && status == RUN_TRANSPORT_FAILED &&
+    return advisory && status != RUN_OK &&
            attempt < ADVISORY_ATTEMPTS;
 }
 
@@ -259,13 +262,16 @@ static RunStatus measure_latency(const Options *opts, bool prof_on,
         if (status == RUN_OK && prof_on &&
             !parse_prof_keypaint(dump_path, prof_p99_ns, prof_calls))
             status = RUN_TRANSPORT_FAILED;
-        if (!retry_transport(advisory, status, attempt))
+        if (!retry_advisory_run(advisory, status, attempt))
             return status;
         (void)fprintf(stderr,
                       "perf_prof_crosscheck: retrying %s/%s profiler=%s "
-                      "after transport failure (attempt %u/%u)\n",
+                      "after %s failure (attempt %u/%u)\n",
                       opts->session, opts->fixture,
-                      prof_on ? "on" : "off", attempt,
+                      prof_on ? "on" : "off",
+                      status == RUN_METRIC_FAILED ?
+                          "latency sanity" : "transport",
+                      attempt,
                       ADVISORY_ATTEMPTS);
     }
 }
@@ -353,12 +359,15 @@ static int policy_selftest(void)
         265U, 242U, 291U
     };
 
-    if (retry_transport(false, RUN_TRANSPORT_FAILED, 1U) ||
-        retry_transport(true, RUN_OK, 1U) ||
-        retry_transport(true, RUN_METRIC_FAILED, 1U) ||
-        !retry_transport(true, RUN_TRANSPORT_FAILED, 1U) ||
-        !retry_transport(true, RUN_TRANSPORT_FAILED, 2U) ||
-        retry_transport(true, RUN_TRANSPORT_FAILED, 3U)) {
+    if (retry_advisory_run(false, RUN_TRANSPORT_FAILED, 1U) ||
+        retry_advisory_run(false, RUN_METRIC_FAILED, 1U) ||
+        retry_advisory_run(true, RUN_OK, 1U) ||
+        !retry_advisory_run(true, RUN_METRIC_FAILED, 1U) ||
+        !retry_advisory_run(true, RUN_METRIC_FAILED, 2U) ||
+        retry_advisory_run(true, RUN_METRIC_FAILED, 3U) ||
+        !retry_advisory_run(true, RUN_TRANSPORT_FAILED, 1U) ||
+        !retry_advisory_run(true, RUN_TRANSPORT_FAILED, 2U) ||
+        retry_advisory_run(true, RUN_TRANSPORT_FAILED, 3U)) {
         (void)fprintf(stderr,
                       "perf_prof_crosscheck: advisory retry policy failed\n");
         return 1;
@@ -376,7 +385,7 @@ static int policy_selftest(void)
         return 1;
     }
     (void)printf("perf-prof-crosscheck-policy: "
-                 "median3/designated-crosscheck/advisory-wallclock/transport ok\n");
+                 "median3/designated-crosscheck/advisory-bounded-retry ok\n");
     return 0;
 }
 

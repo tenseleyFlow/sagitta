@@ -189,6 +189,12 @@ comparison.  Hosted runs need no baseline and keep timing advisory, but
 sanity bound remain hard.  A designated run refuses a missing, incomplete,
 zero-calibration, or runner/ISA-mismatched baseline with exit 75.
 
+The profiler cross-check gives a hosted observation at most three attempts
+when its child loses transport or crosses that 100x sanity bound.  This is a
+bounded sampling policy, not a wider bound: a third failure still fails, and
+designated runs never retry.  Its paired profiler-off/profiler-on verdict is
+still the median of three completed observations.
+
 `make perf-update` is designated-runner-only. It measures the legacy 100 MiB
 and 1 GiB text-buffer rows, three quick Sprint 56 ledgers, and three huge
 ledgers into a same-directory transaction. The baseline is replaced only
