@@ -563,14 +563,19 @@ static const char *tab_basename(const Tab *t)
 }
 
 /*
- * Facsimile's padded, bracket-free tab pill.  N is the 1-based index
- * the user types for goto, and the `*` is asked for, never remembered.
- * Padding belongs to the tab's hit span; an unowned gap between tabs
- * would make the modern strip look clickable where it is not.
+ * Facsimile's padded, bracket-free tab pill.  `num` is the 1-based
+ * number the user types for goto — the tab's POSITION ON ITS ROW, not
+ * its index in the array (Sprint 57.10: a group in the middle of the
+ * bar would otherwise leave a visible gap in the numbering and make
+ * `alt+4` land on a tab labelled 5).  The `*` is asked for, never
+ * remembered.  Padding belongs to the tab's hit span; an unowned gap
+ * between tabs would make the modern strip look clickable where it is
+ * not.
  */
-static void tab_label(const Ed *ed, int idx, char *out, size_t cap)
+static void tab_label(const Ed *ed, int idx, int num, char *out,
+                      size_t cap)
 {
-    (void)snprintf(out, cap, " %d %s%s ", idx + 1,
+    (void)snprintf(out, cap, " %d %s%s ", num,
                    tab_basename(&ed->tabs.v.data[idx]),
                    yew_tab_modified(ed, idx)
                        ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
@@ -629,8 +634,11 @@ int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
             if (nseen < (int)YEW_ARRAY_LEN(seen))
                 seen[nseen++] = t->group_id;
             yew_group_label(ed, t->group_id, label, sizeof(label));
-            (void)snprintf(out[n].label, sizeof(out[n].label), " %s ",
-                           label);
+            /* Numbered like its neighbours: the row-1 position is what
+             * `ctrl+N` (and `alt+N` from outside a group) addresses, so
+             * a group must show the number that reaches it. */
+            (void)snprintf(out[n].label, sizeof(out[n].label), " %d %s ",
+                           n + 1, label);
             /*
              * NEGATIVE payload.  The sign is how the click router tells
              * a group from a tab without a second region kind — the
@@ -641,7 +649,7 @@ int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
             n++;
             continue;
         }
-        tab_label(ed, (int)i, out[n].label, sizeof(out[n].label));
+        tab_label(ed, (int)i, n + 1, out[n].label, sizeof(out[n].label));
         out[n].payload = (i32)i;
         out[n].dim = tab_is_orphan(ed, (int)i);
         out[n].modified = yew_tab_modified(ed, (int)i);
@@ -1061,7 +1069,10 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
     n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     for (i = 0; i < n; i++) {
         (void)memset(&entries[i], 0, sizeof(entries[i]));
-        (void)snprintf(entries[i].label, sizeof(entries[i].label), " %s%s ",
+        /* Sprint 57.10: numbered 1..n so `alt+N` inside the group has
+         * a visible target — the digit counts what row 2 shows. */
+        (void)snprintf(entries[i].label, sizeof(entries[i].label),
+                       " %d %s%s ", i + 1,
                        tab_basename(&ed->tabs.v.data[members[i]]),
                        yew_tab_modified(ed, members[i])
                            ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
