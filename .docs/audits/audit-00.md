@@ -73,6 +73,13 @@ profile. The two F07 Critical workspace-state findings and its explicit
 Sprint 59 tutor observation remain recorded; the product-code baseline
 remains immutable.
 
+Hosted run `34550652527` passed at F08 audit-control head `6247804a`,
+including the F008 hard-XFAIL under GCC, Clang, ASan/UBSan, arm64 Linux,
+arm64 macOS, musl, determinism, PTY, Fletch dispatch, and the minimal
+`MODULES=""` profile. It also confirms that the F008 isolated-file
+diagnostic is byte-stable across the repeated full-suite comparison. The
+product-code baseline remains immutable.
+
 ## External tools at opening
 
 | Tool | Version |
