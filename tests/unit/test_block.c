@@ -381,6 +381,80 @@ void test_block_wolf_top_level_prev_visits_each_scope(void)
     block_fixture_free(&fixture);
 }
 
+void test_block_wolf_tail_paragraph_climbs_scope_before_file_start(void)
+{
+    static const char text[] =
+        "//! check: run(exit=0)\n"
+        "//! phase: run\n"
+        "\n"
+        "fn main() -> !int {\n"
+        "    print(\"{day_of_year(2, 1, false)}\")\n"
+        "    \n"
+        "    0\n"
+        "}\n"
+        "\n"
+        "fn day_of_year(month: int, day: int, leap: bool) -> int {\n"
+        "    var total = 0\n"
+        "    total += sum_months(month, leap)\n"
+        "    total += day\n"
+        "    \n"
+        "    total\n"
+        "}\n"
+        "\n"
+        "fn sum_months(month: int, leap: bool) -> int {\n"
+        "    var total = 0\n"
+        "    for i in 0..month { total += days_in(i, leap) }\n"
+        "    total\n"
+        "}\n"
+        "\n"
+        "fn days_in(month: int, leap: bool) -> int {\n"
+        "    match month {\n"
+        "        0  => 31,\n"
+        "        1  => if leap { 29 } else { 28 },\n"
+        "        2  => 31,\n"
+        "        3  => 30,\n"
+        "        4  => 31,\n"
+        "        5  => 30,\n"
+        "        6  => 31,\n"
+        "        7  => 31,\n"
+        "        8  => 30,\n"
+        "        9  => 31,\n"
+        "        10  => 30,\n"
+        "        11  => 31,\n"
+        "        _ => 0,\n"
+        "    }\n"
+        "}";
+    BlockFixture fixture;
+    ByteOff at = BYTEOFF(sizeof(text) - 1U);
+    u64 day_open = text_off(
+        text, "fn day_of_year(month: int, day: int, leap: bool) -> int {") +
+        strlen("fn day_of_year(month: int, day: int, leap: bool) -> int ");
+    u64 main_open = text_off(text, "fn main() -> !int {") +
+                    strlen("fn main() -> !int ");
+    const u64 expected[] = {
+        text_off(text, "fn days_in(month: int, leap: bool) -> int "),
+        text_off(text, "fn sum_months(month: int, leap: bool) -> int "),
+        text_off(text, "    total\n}\n\nfn sum"),
+        day_open,
+        text_off(text, "    0\n}\n\nfn day"),
+        text_off(text, "print(\"") + strlen("print"),
+        text_off(text, "    print"),
+        main_open,
+        0U,
+    };
+
+    block_fixture_text(&fixture, text);
+    for (u32 i = 0U; i < YEW_ARRAY_LEN(expected); i++) {
+        at = yew_unit_block.prev(&fixture.unit, at, false);
+        YEW_ASSERT_EQ_U64(at.v, expected[i]);
+    }
+    at = yew_unit_block.prev(&fixture.unit,
+                             BYTEOFF(text_off(text, "    total\n}\n\nfn sum")),
+                             false);
+    YEW_ASSERT_EQ_U64(at.v, day_open);
+    block_fixture_free(&fixture);
+}
+
 void test_block_syntax_install_accepts_disabled_provider(void)
 {
     static const char text[] = "one\n\n  two\n    three\n";

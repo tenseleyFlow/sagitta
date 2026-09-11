@@ -879,6 +879,24 @@ static bool block_prev_sibling(UnitCtx *u, ByteOff p, Span current,
     return true;
 }
 
+static bool block_prev_near_scope_parent(UnitCtx *u, ByteOff p,
+                                         Span current, ByteOff *out)
+{
+    Span pair;
+
+    if (!scope_pair(u, p, (Span){p.v, p.v}, &pair, NULL, NULL) ||
+        pair.lo >= current.lo || pair.hi < p.v || pair.hi >= current.hi)
+        return false;
+    /* Paragraph units include their final line ending; delimiter units end
+     * immediately after the closer.  When a tail paragraph contains `}` and
+     * its newline, that harmless whitespace overhang must not erase the
+     * enclosing function from the upward walk. */
+    if (skip_white_next(u->tb, BYTEOFF(pair.hi)).v < current.hi)
+        return false;
+    *out = BYTEOFF(pair.lo);
+    return true;
+}
+
 static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
 {
     Span current;
@@ -904,6 +922,8 @@ static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
                                &sibling))
             return sibling;
     }
+    if (block_prev_near_scope_parent(u, p, current, &sibling))
+        return sibling;
     (void)yew_block_level(u, p, 1U, &parent);
     if (parent.lo < p.v)
         return BYTEOFF(parent.lo);
