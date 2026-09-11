@@ -9,11 +9,12 @@
 - Sprint 57 — `x86_64-linux-musl` static profile proven on target, binary
   size budgets per `MODULES` set, allocation audit. F15 audits its
   ratchets.
-- Sprints 57.5–57.8 — compact remembered FUSS trees, binary source-service
+- Sprints 57.5–57.9 — compact remembered FUSS trees, binary source-service
   isolation, nested-workspace path normalization, direct visible-tree
   type-to-jump, true off-canvas geometry, and the modern cell-exact tab/new-tab
-  strip. The §1 baseline must include these fixes and pass the required hosted
-  lanes; no audit front may cite the pre-57.8 tree.
+  strip, exact adjacent B-mode scope traversal, and the directory group
+  chooser. The §1 baseline must include these fixes and pass the required
+  hosted lanes; no audit front may cite the pre-57.9 tree.
 - Sprints 0–55 — everything under audit. Each front's scope names the
   sprint that owns the code; the auditor reads that sprint file first,
   because a finding is a violation of a *pinned* decision, not a
@@ -35,9 +36,9 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — ESTABLISHED 2026-09-03, AUDIT NOT STARTED
+## Baseline status — REQUALIFICATION REQUIRED, AUDIT NOT STARTED
 
-`41fef416` is the fixed post-Sprint-57.8 code baseline. On Darwin arm64 it passes
+`41fef416` is the superseded post-Sprint-57.8 code baseline. On Darwin arm64 it passes
 the complete default-module `make test` suite, focused plain and ASan/UBSan
 tab/mouse/group/theme coverage, a sanitized clicked-new-tab PTY, three
 deterministic complete PTY executions, FUSS performance, warning-clean
@@ -57,10 +58,9 @@ state instead of asynchronous SGR history. Trigger-specific Valgrind,
 designated-hardware performance, and nightly campaigns were skipped by the
 push trigger and are not inferred as successes.
 
-The baseline gate is satisfied, but no audit front or `YEW-F-###` ID has been
-opened. When Sprint 58 begins, every front uses `41fef416`; if any code
-follow-up changes the candidate before then, record and requalify the
-replacement hash before opening a front.
+No audit front or `YEW-F-###` ID has been opened. Sprint 57.9 is the final
+field-repair window. When it closes, record and requalify its replacement hash
+before opening a front; every Sprint 58 front then uses that one fixed hash.
 
 ## Goals
 

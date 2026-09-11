@@ -1,14 +1,14 @@
 # yew Sprint Index
 
-71 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
+72 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
 bespoke-first, modal-paradigm-first terminal editor plus its language,
 Fletch. Small bites, clear milestones, testable deliverables at every
 stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-61 whole-numbered sprints plus ten fractional ones (18.5, 41.5, 42.5,
-49.5, 55.5, 56.5, 57.5, 57.6, 57.7, 57.8) split off during authoring — the
+61 whole-numbered sprints plus eleven fractional ones (18.5, 41.5, 42.5,
+49.5, 55.5, 56.5, 57.5, 57.6, 57.7, 57.8, 57.9) split off during authoring — the
 pressure valve working as designed.
 Renumbering is forbidden once files exist, so fractional ids are permanent.
 
@@ -281,10 +281,10 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **REPOSITORY COMPLETE THROUGH SPRINT 57.8.** Sprint 58 is next, but its
-  audit work has not begun. `41fef416` is the fixed post-57.8 code baseline;
-  all 22 standard push jobs are green in hosted run `33714586788`,
-  satisfying the Sprint 58 commit-of-record gate. Sprint 56's pinned
+- **REPOSITORY COMPLETE THROUGH SPRINT 57.8; SPRINT 57.9 ACTIVE.** Sprint 58's
+  audit work has not begun. The prior `41fef416` post-57.8 baseline is green,
+  but a field-reported block-motion/group-picker repair must land and replace
+  it before the audit window opens. Sprint 56's pinned
   designated-hardware evidence remains pending because no self-hosted runner is
   registered, and Sprint 57's Pi Zero 2 W corroboration remains a release tail.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
@@ -342,14 +342,18 @@ Binding documents — read before any sprint:
   run `33714586788`. Final CI remediation applies the shared hosted-advisory
   policy to cursor timings and synchronizes FUSS navigation PTYs on their
   post-key semantic screen state
+- Sprint 57.9 (s57_9-block-and-group-field-repair.md) — Exact adjacent B-mode
+  traversal for Wolf-shaped top-level scopes and a Facsimile-style `Alt+g`
+  path that opens the shared group picker with an empty selection. **ACTIVE:**
+  field reproducer confirmed; Sprint 58 remains unopened until this repair is
+  implemented, validated, pushed, and green on hosted CI
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs. **NEXT — BASELINE
-  ESTABLISHED, NOT STARTED:** `41fef416` is green in hosted run `33714586788`;
-  preserve that fixed code baseline when the audit window is
-  deliberately opened
+  fuzz campaigns extended, findings ledger with stable IDs. **QUEUED — NOT
+  STARTED:** establish a replacement post-57.9 green baseline, then preserve
+  that fixed code baseline when the audit window is deliberately opened
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1
@@ -388,7 +392,7 @@ Binding documents — read before any sprint:
   s25 hand-writes the emitter against the frozen schema; s36 swaps the
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
-  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`) are the pressure valve when a sprint
+  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`) are the pressure valve when a sprint
   splits — renumbering is forbidden once files exist.
 
 ## Sprint file format
