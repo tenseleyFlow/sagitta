@@ -68,7 +68,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 43)
+t.eq(seen, 44)
 
 # Hunk discard stopped being prompt-backed when Sprint 53 made it a direct,
 # undoable buffer edit.  It is still intentionally unavailable in batch mode,
