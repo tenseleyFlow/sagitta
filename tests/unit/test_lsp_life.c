@@ -257,6 +257,11 @@ typedef struct LifeFix {
     char marker[256];
 } LifeFix;
 
+/* A sanitizer worker can be descheduled while the restarted helper execs.
+ * This is a test-harness deadline; the server's own init budget remains
+ * pinned by LifeFix.cfg.init_timeout_ms. */
+#define LIFE_RESTART_READY_TIMEOUT_MS 10000
+
 static bool wait_server_drained(LifeFix *f, LspServer *server,
                                 i64 timeout_ms);
 static bool bytes_contain(const u8 *bytes, size_t len, const char *needle);
@@ -1497,7 +1502,7 @@ void test_lsp_lifecycle_diagnostics_follow_live_document_version(void)
     YEW_ASSERT(!doc->full_sync);
     YEW_ASSERT(!doc->insert_waiting);
     YEW_ASSERT_EQ_U64(doc->pending.len, 0U);
-    YEW_ASSERT(wait_new_ready(&f, old_job, 3000));
+    YEW_ASSERT(wait_new_ready(&f, old_job, LIFE_RESTART_READY_TIMEOUT_MS));
     YEW_ASSERT_EQ_I64(doc->version, 1);
     dispatch_diag(&f, server, 1);
     YEW_ASSERT_NOT_NULL(f.ed.buffer.diag);
@@ -1530,7 +1535,7 @@ void test_lsp_lifecycle_automatic_restart_reopens_documents(void)
     doc->full_sync = true;
     Vec_LspChange_push(&doc->pending, ((LspChange){0}));
     old_job = server->job;
-    YEW_ASSERT(wait_new_ready(&f, old_job, 3000));
+    YEW_ASSERT(wait_new_ready(&f, old_job, LIFE_RESTART_READY_TIMEOUT_MS));
     YEW_ASSERT_NULL(f.ed.buffer.diag);
     YEW_ASSERT(doc->open);
     YEW_ASSERT_EQ_I64(doc->version, 1);
@@ -1581,7 +1586,7 @@ void test_lsp_lifecycle_restart_message_severities(void)
     YEW_ASSERT_EQ_U64(f.ed.msg.sev, YEW_MSG_INFO);
     YEW_ASSERT_EQ_STR(f.ed.msg.text, "fakelsp restarted");
     server->next_try_ms = f.ed.now_ms;
-    YEW_ASSERT(wait_new_ready(&f, old_job, 2000));
+    YEW_ASSERT(wait_new_ready(&f, old_job, LIFE_RESTART_READY_TIMEOUT_MS));
 
     yew_msg_clear(&f.ed);
     server->restarts = 2U;
@@ -1592,7 +1597,7 @@ void test_lsp_lifecycle_restart_message_severities(void)
     YEW_ASSERT_EQ_U64(f.ed.msg.sev, YEW_MSG_WARN);
     YEW_ASSERT_EQ_STR(f.ed.msg.text, "fakelsp restarted (3)");
     server->next_try_ms = f.ed.now_ms;
-    YEW_ASSERT(wait_new_ready(&f, old_job, 2000));
+    YEW_ASSERT(wait_new_ready(&f, old_job, LIFE_RESTART_READY_TIMEOUT_MS));
     yew_lsp_client_stop(&f.ed, server, true);
     YEW_ASSERT(wait_server_drained(&f, server, 2000));
     life_fix_free(&f);
