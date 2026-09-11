@@ -360,9 +360,15 @@ void test_fussjump_f_mode_dispatch_table_is_complete(void)
         desc = yew_cmd_desc(binding->cmd);
         YEW_ASSERT_NOT_NULL(desc);
         YEW_ASSERT_EQ_STR(desc->name, rows[i].cmd);
-        YEW_ASSERT((desc->flags & YEW_CMD_RECORDABLE) != 0U);
-        YEW_ASSERT_NOT_NULL(desc->word);
-        YEW_ASSERT(desc->word[0] != '\0');
+        if (strcmp(desc->name, "ed.group.from_dir") == 0) {
+            YEW_ASSERT((desc->flags & YEW_CMD_RECORDABLE) == 0U);
+            YEW_ASSERT((desc->flags & YEW_CMD_PROMPTS) != 0U);
+            YEW_ASSERT_NULL(desc->word);
+        } else {
+            YEW_ASSERT((desc->flags & YEW_CMD_RECORDABLE) != 0U);
+            YEW_ASSERT_NOT_NULL(desc->word);
+            YEW_ASSERT(desc->word[0] != '\0');
+        }
         YEW_ASSERT(desc->help[0] != '\0');
         YEW_ASSERT_EQ_U64(ed.chord.n, 0U);
         YEW_ASSERT_EQ_I64(ed.chord.layer, -1);
