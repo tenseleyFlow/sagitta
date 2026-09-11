@@ -7878,6 +7878,13 @@ static void s52_wait_screen(PtyCtx *c, const char *text)
     ptc_wait_until(c, s57_screen_contains, text, failure);
 }
 
+static bool s52_screen_contains_visible_cursor(const PtyCtx *c,
+                                                const void *arg)
+{
+    return c != NULL && c->vt.cur_vis &&
+           s52_screen_contains(&c->vt, (const char *)arg);
+}
+
 static void s52_wait_screen_gone(PtyCtx *c, const char *text,
                                  u32 attempts)
 {
@@ -8146,7 +8153,11 @@ static void case_s52_fuss(PtyCtx *c)
         s52_wait_screen(c, "FUSS actions");
         ptc_keys(c, "/");
         ptc_bytes(c, "A-g");
-        s52_wait_screen(c, "A-g");
+        /* A-g is already present in the unfiltered action list.  Wait for
+         * the filter prompt and its cursor so both deterministic passes
+         * observe the complete input repaint. */
+        ptc_wait_until(c, s52_screen_contains_visible_cursor, ":A-g",
+                       "FUSS action picker filter did not settle");
         ptc_check(c, s52_screen_contains(&c->vt, "A-g"),
                   "FUSS action picker omitted the group action key");
     } else if (strstr(name, "leave_q") != NULL) {
