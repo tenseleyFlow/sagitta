@@ -4709,6 +4709,46 @@ static void case_s57_8_click_new_tab(PtyCtx *c)
     (void)unlink(path);
 }
 
+static void case_s57_9_block_days_rows(PtyCtx *c)
+{
+    static const u8 days[] =
+        "//! check: run(exit=0)\n"
+        "//! phase: run\n"
+        "\n"
+        "fn main() -> !int {\n"
+        "    print(\"{day_of_year(2, 1, false)}\")\n"
+        "    \n"
+        "    0\n"
+        "}\n"
+        "\n"
+        "fn day_of_year(month: int, day: int, leap: bool) -> int {\n"
+        "    var total = 0\n"
+        "    total += sum_months(month, leap)\n"
+        "    total += day\n"
+        "    \n"
+        "    total\n"
+        "}\n";
+    char path[256];
+    int n = snprintf(path, sizeof(path), "build/pty-%s.lu",
+                     c->test->name);
+
+    if (n <= 0 || (size_t)n >= sizeof(path) ||
+        !write_bytes(path, days, sizeof(days) - 1U)) {
+        ptc_check(c, false, "Sprint 57.9 block fixture creation failed");
+        return;
+    }
+    spawn_editor(c, path);
+    s18_settle_after_keys(c, "1 0 G");
+    s18_settle_after_keys(c, "b");
+    s18_settle_after_keys(c, "up");
+    s18_settle_after_keys(c, "up");
+    s18_settle_after_keys(c, "up");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s57_9_block_days_rows");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 /*
  * The wheel over an UNFOCUSED pane.  The other pane scrolls; the focus
  * and the cursor do not move — which is the whole reason the wheel
@@ -9819,6 +9859,8 @@ const PtyCase yew_pty_cases[] = {
     C(s27_click_cjk_tab, modern, 24U, 80U, case_s27_click_cjk_tab),
     C(s57_8_click_new_tab, modern, 24U, 80U,
       case_s57_8_click_new_tab),
+    C(s57_9_block_days_rows, modern, 24U, 80U,
+      case_s57_9_block_days_rows),
     C(s27_wheel_unfocused_pane, modern, 24U, 80U,
       case_s27_wheel_unfocused_pane),
     C(s27_dwell_opens_member_strip, modern, 24U, 80U,

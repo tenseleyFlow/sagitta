@@ -41,6 +41,23 @@ static TextBuf *make_fixture(void)
     return yew_textbuf_from_owned_bytes(bytes, len);
 }
 
+static TextBuf *make_source_fixture(bool comma_rows)
+{
+    static const u8 statement[] = "    total += value;\n";
+    static const u8 comma[] = "        0 => 31,\n";
+    const u8 *row = comma_rows ? comma : statement;
+    const size_t row_len = comma_rows ? sizeof(comma) - 1U :
+                                         sizeof(statement) - 1U;
+    const size_t len = row_len * PERF_UNIT_LINES;
+    u8 *bytes = malloc(len);
+
+    if (bytes == NULL)
+        return NULL;
+    for (size_t line = 0U; line < PERF_UNIT_LINES; line++)
+        (void)memcpy(bytes + line * row_len, row, row_len);
+    return yew_textbuf_from_owned_bytes(bytes, len);
+}
+
 static bool measure_engine(UnitCtx *u, const UnitOps *ops)
 {
     ByteOff p = BYTEOFF(0U);
@@ -143,6 +160,66 @@ static bool measure_nested(void)
     return true;
 }
 
+static bool measure_source_rows(bool comma_rows)
+{
+    TextBuf *tb = make_source_fixture(comma_rows);
+    Buffer buffer = {0};
+    UnitCtx u;
+    ByteOff p;
+    const int calls = comma_rows ? 1000 : PERF_UNIT_CALLS;
+    i64 total_start;
+    i64 max_elapsed = 0;
+    u32 over_budget = 0U;
+
+    if (tb == NULL)
+        return false;
+    buffer.tb = tb;
+    buffer.lang = comma_rows ? "wolf" : "c";
+    buffer.tabwidth = 4U;
+    u = (UnitCtx){tb, &buffer, NULL};
+    p = BYTEOFF((u64)(PERF_UNIT_LINES / 2) *
+                (comma_rows ? sizeof("        0 => 31,\n") - 1U :
+                              sizeof("    total += value;\n") - 1U));
+    total_start = now_ns();
+    if (total_start < 0) {
+        yew_textbuf_free(tb);
+        return false;
+    }
+    for (int call = 0; call < calls; call++) {
+        i64 start = now_ns();
+        ByteOff next;
+        i64 elapsed;
+
+        if (p.v == yew_textbuf_len(tb))
+            p = BYTEOFF(0U);
+        next = yew_unit_block.next(&u, p, false);
+        elapsed = now_ns() - start;
+        if (elapsed < 0 || next.v <= p.v ||
+            next.v > yew_textbuf_len(tb)) {
+            yew_textbuf_free(tb);
+            return false;
+        }
+        if (elapsed > max_elapsed)
+            max_elapsed = elapsed;
+        if (elapsed > PERF_UNIT_KEY_NS)
+            over_budget++;
+        p = next;
+        perf_unit_sink ^= p.v + (u64)call;
+    }
+    {
+        i64 total_elapsed = now_ns() - total_start;
+
+        (void)printf("perf-units: block-%-6s calls=%d total_ms=%.3f "
+                     "ns/op=%.1f max_ms=%.3f over_5ms=%u\n",
+                     comma_rows ? "comma" : "source", calls,
+                     (double)total_elapsed / 1000000.0,
+                     (double)total_elapsed / (double)calls,
+                     (double)max_elapsed / 1000000.0, over_budget);
+    }
+    yew_textbuf_free(tb);
+    return over_budget <= (u32)calls / 100U;
+}
+
 int main(void)
 {
     static const UnitOps *const engines[] = {
@@ -164,6 +241,10 @@ int main(void)
             ok = false;
     yew_textbuf_free(tb);
     if (!measure_nested())
+        ok = false;
+    if (!measure_source_rows(false))
+        ok = false;
+    if (!measure_source_rows(true))
         ok = false;
     if (!ok)
         (void)fprintf(stderr, "perf-units: keystroke budget exceeded\n");

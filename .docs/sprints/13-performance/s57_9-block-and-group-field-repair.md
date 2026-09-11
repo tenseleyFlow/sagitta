@@ -12,13 +12,13 @@
 
 ## Status
 
-Local implementation and native qualification completed 2026-09-11. The
-Wolf-shaped bidirectional and exact `ch4/days.lu` tail block reproducers,
-prompt-backed FUSS group picker, direct bulk-open compatibility, modal overlay
-ordering, and atomic active-group close command are implemented. Default and
-`MODULES=""` builds, the complete native component matrix, focused ASan/UBSan,
-deterministic PTY, fuzz, performance, structural, torture, and six-profile
-native size gates are green.
+The initial local implementation and native qualification completed
+2026-09-11. A same-day follow-on field audit reopened the B-mode portion after
+the exact `ch4/days.lu` workflow exposed duplicate intra-line stops, skipped
+one-line statements, asymmetric Up/Down order, formatting-dependent EOF
+behavior, and confusing half-open edge ownership. The broader generic repair,
+Wolf/C/fallback unit matrix, real-key PTY, and expanded performance gates are
+implemented and focused-green; complete requalification is in progress.
 
 The sprint is not closed: its exact commit-of-record has not been pushed or
 qualified by hosted CI. Sprint 58 is paused after F08 until that closeout and
@@ -27,37 +27,53 @@ the replacement-baseline requalification described in its contract.
 ## Goals
 
 Close the field defects found in the Wolf workspace before Sprint 58 fixes its
-audit baseline. Repeated B-mode Up/Down motion must visit adjacent structural
-blocks without collapsing from a valid sibling to byte zero, including a tail
-paragraph whose closing-brace line ending extends one byte past its delimiter
-scope. In FUSS, `Alt+g` on a directory must open the existing tab-group picker
-rooted at that directory, with no files selected, rather than immediately
-opening every file. E mode must also expose one close gesture for the active
-group, falling back to the active tab when no group is active.
+audit baseline. Repeated B-mode Up/Down motion must traverse one canonical,
+document-ordered set of source block rows in both directions. It may neither
+collapse from a valid row to byte zero nor manufacture a second stop inside
+the same line. Compact one-line statements remain rows; formatting-only
+continuations and delimiter-only lines do not. In FUSS, `Alt+g` on a directory
+must open the existing tab-group picker rooted at that directory, with no files
+selected, rather than immediately opening every file. E mode must also expose
+one close gesture for the active group, falling back to the active tab when no
+group is active.
 
 This is editor-core and FUSS UI work. Wolf LSP is not part of B-mode motion;
 the reproducer must remain green with LSP disabled and with `MODULES=""`.
 
 ## Deliverables
 
-### 1. Exact adjacent B-mode traversal — `src/edit/block.c`
+### 1. Cohesive four-direction B mode — `src/edit/block.c`
 
-Pin the field shape with several top-level Wolf-style brace blocks separated
-by one blank line. Starting at EOF, consecutive `yew_unit_block.prev()` calls
-visit the line containing each preceding top-level opening boundary in order.
-The mirror walk with `next()` returns through the same boundaries to EOF.
+For a source buffer with a detected language, Up/Down traverse canonical
+physical-line homes in document order. A nonblank logical statement or
+declaration is one row. Consecutive line comments remain one row; delimiter-
+only layout lines, operator continuations, and parenthesized/bracketed argument
+continuations are skipped. Same-indent statements are siblings rather than one
+merged indentation unit. The first/last rows lead to byte zero/EOF, and adding
+or removing the final newline does not change the interior row sequence.
 
-Sibling discovery must compare blocks in a coordinate that includes their
-leading declaration lines. A fallback paragraph or whole-buffer span may not
-hide a nearer delimiter scope merely because the cursor is sitting on that
-scope's opening boundary. Existing syntax `unit: atom`/`unit: span`, nested
-delimiter, indentation, paragraph, scan-cap, monotonicity, and half-open span
-contracts remain unchanged.
+`prev()` and `next()` must be exact mirrors on those rows. In the exact
+`ch4/days.lu` shape, Up from line 10 visits lines 7, 5, and 4—not `print(` and
+then the same print line again. The `for ... { ... }` one-liner on line 20 and
+each match arm are rows. From the line-15 tail, Up visits lines 13, 12, 11, and
+10 in order instead of jumping to byte zero or an arbitrary delimiter.
 
-The exact `ch4/days.lu` tail shape is a second reproducer. From its final
-`total` paragraph, Up visits the enclosing `day_of_year` opening brace before
-the previous function's final expression; it may not skip directly to byte
-zero merely because the paragraph owns the newline after the closing brace.
+The source-row policy is generic editor behavior, not Wolf or LSP behavior.
+Pin the same structural shape through the real Wolf and C syntax definitions
+and through a detected-language fixture with no syntax engine. Also pin a
+reformatted C function so split parameters, a split assignment, and brace-only
+lines do not introduce stops that its compact equivalent lacks.
+
+Left/Right retain their Sprint 16 meaning: the level-zero provider span's
+home/end. Provider spans use half-open point ownership, so arriving at an
+exclusive end transfers ownership to the following/enclosing unit rather than
+reselecting the unit that just ended. A no-op is valid only when the cursor is
+already at the requested edge. Syntax `unit: atom`/`unit: span`, nested
+delimiter matching, containment expansion, paragraph fallback, scan caps,
+monotonicity, and selection-stack replay remain intact.
+
+Buffers without a detected language preserve paragraph/gap vertical motion;
+they do not pay the source-row classifier or turn prose into line motion.
 
 ### 2. `Alt+g` opens the shared chooser — `src/ui/groupfromdir.c`
 
@@ -104,15 +120,21 @@ commit-of-record; its no-fixes audit rule remains unchanged.
 
 ## Testing Strategy
 
-- Unit: exact Wolf-shaped previous/next block boundary sequence; nested scope
-  and paragraph regression suite; exact `days.lu` tail-paragraph climb;
-  monotonicity and scan budget unchanged.
+- Unit: exhaustive mirrored block-row sequences for the exact `days.lu` text
+  and a C equivalent, both final-newline states, both alternate values, real
+  syntax definitions, and syntax-free detected-language fallback.
+- Unit: reformatted/compact C equivalence, same-indent siblings, one-line
+  scope statements, comment runs, delimiter-only lines, operator and argument
+  continuations, horizontal half-open endpoints, nested scopes, paragraphs,
+  monotonicity, purity, grapheme boundaries, and scan caps.
 - Unit: `ed.group.from_dir` opens the group picker on a selected directory,
   starts at zero selected files, Escape makes no group, and confirmation opens
   only ticked files.
 - Script/FUSS: `Alt+g` dispatches the named command and opens the picker rather
   than creating a group immediately; a direct `yew_group_from_dir()` call
   retains its deterministic bulk-open behavior.
+- PTY: open the exact Wolf source at line 10 and perform three real B-mode Up
+  keys, pinning line 4 column 1 without a duplicate print-line stop.
 - PTY: open FUSS on a directory, invoke `Alt+g`, verify the chooser surface,
   select a subset, create the group, and prove the chosen members are live.
 - Unit/PTY: grouped `ed.group.close` closes every clean member by id,
@@ -120,14 +142,19 @@ commit-of-record; its no-fixes audit rule remains unchanged.
   clean cases to `ed.tab.close`, and is exercised through its E-mode spelling.
 - Build/regression: warning-clean Clang and GCC, default and `MODULES=""`;
   complete unit/script/PTY suites; ASan/UBSan focused block/group coverage;
-  deterministic PTY and existing block/FUSS performance gates.
+  deterministic PTY and block/FUSS performance gates. The block gate includes
+  ordinary detected-source rows and comma-terminated structural rows in
+  addition to provider-heavy prose and nested containment.
 
 ## Definition of Done
 
-- The checked-in Wolf-shaped reproducer walks every adjacent top-level block
-  in both directions, and the exact tail-paragraph reproducer climbs through
-  its enclosing function rather than byte zero; both pass without any LSP
-  process or configuration.
+- The exact Wolf and equivalent C reproducers walk one complete, mirrored row
+  sequence in both EOF styles. The print call occurs once, the one-line loop
+  and match arms occur once, tail statements are not skipped, and the result
+  is identical without a syntax engine or LSP process.
+- Split parameters/expressions and delimiter-only lines are not rows; compact
+  one-line statements are. Left/Right provider edges obey half-open ownership
+  without an in-range Right fixed point after a returned end.
 - `Alt+g` opens the shared group picker with zero selected files and does not
   create a group until confirmation; cancel is side-effect free.
 - Programmatic directory bulk-open, group adoption, ordinals, lazy hydration,

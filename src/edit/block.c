@@ -24,6 +24,7 @@ typedef struct {
 
 typedef struct {
     Span span;
+    ByteOff first;
     u64 indent;
     bool blank;
 } LineInfo;
@@ -38,9 +39,12 @@ static bool indent_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
                              Span *out);
 static bool paragraph_enclosing(void *ctx, UnitCtx *u, ByteOff p,
                                 Span inner, Span *out);
+static u8 block_line_comment_kind(UnitCtx *u, const LineInfo *line);
 
 static bool span_contains(Span outer, Span inner)
 {
+    if (inner.lo == inner.hi)
+        return outer.lo <= inner.lo && inner.lo < outer.hi;
     return outer.lo <= inner.lo && outer.hi >= inner.hi;
 }
 
@@ -188,9 +192,11 @@ static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
                        : 4U;
 
     out->span = span;
+    out->first = at;
     out->blank = true;
     out->indent = 0U;
     if (line_ascii_first_nonwhite(u->tb, span, &first, &out->blank)) {
+        out->first = first;
         if (!out->blank && first.v != span.lo)
             out->indent =
                 yew_off_to_ccol(u->tb, span, first, tabwidth).v;
@@ -208,8 +214,10 @@ static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
         }
         at = BYTEOFF(cluster.bytes.hi);
     }
-    if (!out->blank)
+    if (!out->blank) {
+        out->first = first;
         out->indent = yew_off_to_ccol(u->tb, span, first, tabwidth).v;
+    }
     return true;
 }
 
@@ -489,7 +497,7 @@ static bool indent_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     {
         Span candidate;
 
-        (void)indent_candidate(u, target, target_info.indent, true,
+        (void)indent_candidate(u, target, target_info.indent, false,
                                &candidate);
         if (span_strictly_contains(candidate, inner)) {
             best = candidate;
@@ -718,7 +726,7 @@ static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
                     ScopeOpen open = stack.data[--stack.len];
                     Span candidate = {open.off, line_span.lo + i + 1U};
 
-                    if (candidate.lo <= p.v && candidate.hi >= p.v &&
+                    if (candidate.lo <= p.v && p.v < candidate.hi &&
                         span_strictly_contains(candidate, inner) &&
                         (!have_best ||
                          span_size(candidate) < span_size(best))) {
@@ -768,36 +776,6 @@ bool yew_block_match(UnitCtx *u, ByteOff p, bool next, ByteOff *out)
     return true;
 }
 
-static bool cluster_white_at(const TextBuf *tb, ByteOff at)
-{
-    Span line = yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, at));
-    YewTextCluster cluster;
-
-    return yew_text_cluster_next(tb, line, at, &cluster) &&
-           yew_unicode_is_white_space(cluster.base_cp);
-}
-
-static ByteOff skip_white_next(const TextBuf *tb, ByteOff at)
-{
-    u64 len = yew_textbuf_len(tb);
-
-    while (at.v < len && cluster_white_at(tb, at))
-        at = yew_grapheme_next_boundary(tb, at);
-    return at;
-}
-
-static ByteOff skip_white_prev(const TextBuf *tb, ByteOff at)
-{
-    while (at.v != 0U) {
-        ByteOff prev = yew_grapheme_prev_boundary(tb, at);
-
-        if (!cluster_white_at(tb, prev))
-            break;
-        at = prev;
-    }
-    return at;
-}
-
 static Span block_span(UnitCtx *u, ByteOff p, bool alt)
 {
     Span span;
@@ -805,6 +783,217 @@ static Span block_span(UnitCtx *u, ByteOff p, bool alt)
     (void)alt;
     (void)yew_block_level(u, p, 0U, &span);
     return span;
+}
+
+static bool block_line_delimiters_only(UnitCtx *u, Span line)
+{
+    TextIter it;
+    u64 consumed = 0U;
+    bool saw_delimiter = false;
+
+    if (line.lo == line.hi ||
+        !yew_textiter_begin(&it, u->tb, BYTEOFF(line.lo)))
+        return false;
+    while (consumed < line.hi - line.lo) {
+        const u8 *bytes;
+        u64 n;
+        u64 take;
+
+        if (!yew_textiter_chunk(&it, u->tb, &bytes, &n))
+            return false;
+        take = line.hi - line.lo - consumed;
+        if (take > n)
+            take = n;
+        for (u64 i = 0U; i < take; i++) {
+            const u8 byte = bytes[i];
+
+            if (ascii_white(byte))
+                continue;
+            if (is_open(byte) || byte == (u8)')' || byte == (u8)']' ||
+                byte == (u8)'}' || byte == (u8)';' || byte == (u8)',') {
+                saw_delimiter = true;
+                continue;
+            }
+            return false;
+        }
+        consumed += take;
+        if (consumed != line.hi - line.lo &&
+            !yew_textiter_advance(&it, u->tb))
+            return false;
+    }
+    return saw_delimiter;
+}
+
+static bool block_byte_at(const TextBuf *tb, u64 off, u8 *out)
+{
+    TextIter it;
+    const u8 *bytes;
+    u64 n;
+
+    return yew_textiter_begin(&it, tb, BYTEOFF(off)) &&
+           yew_textiter_chunk(&it, tb, &bytes, &n) && n != 0U &&
+           (*out = bytes[0], true);
+}
+
+static bool block_line_last_nonwhite(UnitCtx *u, Span line, u8 *out)
+{
+    u64 at = line.hi;
+
+    while (at != line.lo) {
+        u8 byte;
+
+        at--;
+        if (!block_byte_at(u->tb, at, &byte))
+            return false;
+        if (!ascii_white(byte)) {
+            *out = byte;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool block_continuation_byte(u8 byte)
+{
+    switch (byte) {
+    case (u8)'\\':
+    case (u8)'.':
+    case (u8)'=':
+    case (u8)'+':
+    case (u8)'-':
+    case (u8)'*':
+    case (u8)'/':
+    case (u8)'%':
+    case (u8)'&':
+    case (u8)'|':
+    case (u8)'^':
+    case (u8)'!':
+    case (u8)'?':
+    case (u8)'<':
+    case (u8)'>':
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool block_line_in_round_or_square_scope(UnitCtx *u,
+                                                const LineInfo *line)
+{
+    Span pair;
+    u64 open;
+    u8 byte;
+
+    return scope_pair(u, line->first, (Span){line->first.v, line->first.v},
+                      &pair, &open, NULL) &&
+           open < line->span.lo && block_byte_at(u->tb, open, &byte) &&
+           (byte == (u8)'(' || byte == (u8)'[');
+}
+
+static bool block_line_is_continuation(UnitCtx *u, u64 line,
+                                       const LineInfo *current)
+{
+    LineInfo previous;
+    u8 last;
+    u8 first;
+
+    if (line == 0U)
+        return false;
+    (void)line_info(u, LINENO(line - 1U), &previous);
+    if (previous.blank ||
+        !block_line_last_nonwhite(u, previous.span, &last))
+        return false;
+    if (block_line_comment_kind(u, &previous) != 0U ||
+        yew_syn_in_string_or_comment(u->buf, previous.first))
+        return false;
+    if (block_continuation_byte(last) ||
+        ((last == (u8)'(' || last == (u8)'[' || last == (u8)',') &&
+         block_line_in_round_or_square_scope(u, current)))
+        return true;
+    return current->indent > previous.indent &&
+           block_byte_at(u->tb, current->first.v, &first) &&
+           block_continuation_byte(first);
+}
+
+static u8 block_line_comment_kind(UnitCtx *u, const LineInfo *line)
+{
+    u8 first;
+    u8 second;
+
+    if (line->blank || !block_byte_at(u->tb, line->first.v, &first))
+        return 0U;
+    if (first == (u8)';')
+        return first;
+    if (first != (u8)'/' ||
+        line->first.v + 1U >= line->span.hi ||
+        !block_byte_at(u->tb, line->first.v + 1U, &second) ||
+        second != first)
+        return 0U;
+    return first;
+}
+
+static bool block_navigation_row(UnitCtx *u, u64 line, ByteOff *out)
+{
+    LineInfo info;
+    u8 comment;
+
+    (void)line_info(u, LINENO(line), &info);
+    if (info.blank || block_line_delimiters_only(u, info.span) ||
+        block_line_is_continuation(u, line, &info))
+        return false;
+    comment = block_line_comment_kind(u, &info);
+    if (comment != 0U && line != 0U) {
+        LineInfo previous;
+
+        (void)line_info(u, LINENO(line - 1U), &previous);
+        if (block_line_comment_kind(u, &previous) == comment)
+            return false;
+    }
+    if (yew_syn_in_string_or_comment(u->buf, info.first)) {
+        Span unit = block_span(u, BYTEOFF(info.span.lo), false);
+        LineNo home_line =
+            yew_textbuf_line_of(u->tb, BYTEOFF(unit.lo));
+
+        if (home_line.v != line)
+            return false;
+    }
+    *out = BYTEOFF(info.span.lo);
+    return true;
+}
+
+static ByteOff block_plain_next(UnitCtx *u, ByteOff p)
+{
+    const u64 len = yew_textbuf_len(u->tb);
+    const u64 line = yew_textbuf_line_of(u->tb, p).v;
+    Span run;
+
+    (void)paragraph_run(u, line, &run, NULL, NULL);
+    if (run.hi > p.v)
+        return BYTEOFF(run.hi);
+    if (p.v >= len)
+        return BYTEOFF(len);
+    return yew_grapheme_next_boundary(u->tb, p);
+}
+
+static ByteOff block_plain_prev(UnitCtx *u, ByteOff p)
+{
+    u64 line;
+    Span line_span;
+    Span run;
+
+    if (p.v == 0U)
+        return BYTEOFF(0U);
+    line = yew_textbuf_line_of(u->tb, p).v;
+    line_span = yew_textbuf_line_span(u->tb, LINENO(line));
+    if (line_span.lo >= p.v) {
+        if (line == 0U)
+            return BYTEOFF(0U);
+        line--;
+    }
+    (void)paragraph_run(u, line, &run, NULL, NULL);
+    if (run.lo < p.v)
+        return BYTEOFF(run.lo);
+    return BYTEOFF(0U);
 }
 
 static ByteOff block_home(UnitCtx *u, ByteOff p, bool alt)
@@ -819,114 +1008,49 @@ static ByteOff block_end(UnitCtx *u, ByteOff p, bool alt)
 
 static ByteOff block_next(UnitCtx *u, ByteOff p, bool alt)
 {
-    u64 len = yew_textbuf_len(u->tb);
-    Span current;
-    ByteOff probe;
-    Span sibling;
-    Span parent;
+    const u64 len = yew_textbuf_len(u->tb);
+    const u64 count = yew_textbuf_line_count(u->tb);
+    const u64 current = yew_textbuf_line_of(u->tb, p).v;
 
     (void)alt;
     if (p.v >= len)
         return BYTEOFF(len);
-    current = block_span(u, p, false);
-    if (current.lo == 0U && current.hi == len)
-        return BYTEOFF(len);
-    probe = skip_white_next(u->tb, BYTEOFF(current.hi));
-    if (probe.v < len && yew_block_level(u, probe, 0U, &sibling) &&
-        sibling.lo > p.v)
-        return BYTEOFF(sibling.lo);
-    (void)yew_block_level(u, p, 1U, &parent);
-    if (parent.hi > p.v)
-        return BYTEOFF(parent.hi);
-    return BYTEOFF(len);
-}
+    if (u->buf == NULL || u->buf->lang == NULL)
+        return block_plain_next(u, p);
+    for (u64 line = current + 1U; line < count; line++) {
+        ByteOff home;
 
-static bool block_prev_sibling(UnitCtx *u, ByteOff p, Span current,
-                               ByteOff before, u64 adjacent_lo,
-                               ByteOff *out)
-{
-    ByteOff probe = skip_white_prev(u->tb, before);
-    ByteOff best = BYTEOFF(UINT64_MAX);
-
-    if (probe.v == 0U)
-        return false;
-    probe = yew_grapheme_prev_boundary(u->tb, probe);
-    for (u32 level = 0U; level < YEW_SEL_DEPTH; level++) {
-        Span sibling;
-        ByteOff after;
-
-        if (!yew_block_level(u, probe, level, &sibling) ||
-            sibling.lo >= p.v)
-            break;
-        after = skip_white_next(u->tb, BYTEOFF(sibling.hi));
-        /* A parent or whole-buffer fallback around the declaration prefix
-         * is not a previous sibling.  It used to win here because its end
-         * is necessarily after current.lo, sending the next Up to byte 0. */
-        if (sibling.hi <= adjacent_lo && after.v >= adjacent_lo)
-            best = BYTEOFF(sibling.lo);
-        else if (best.v == UINT64_MAX && before.v == current.lo &&
-                 sibling.lo < current.lo && sibling.hi == current.hi)
-            /* A paragraph can add the declaration prefix to a delimiter
-             * scope without adding a byte at its far edge.  That is the
-             * current block's visible home, not an enclosing file fallback. */
-            best = BYTEOFF(sibling.lo);
-        if (sibling.lo == 0U || sibling.hi >= current.hi)
-            break;
+        if (block_navigation_row(u, line, &home))
+            return home;
     }
-    if (best.v == UINT64_MAX)
-        return false;
-    *out = best;
-    return true;
-}
-
-static bool block_prev_near_scope_parent(UnitCtx *u, ByteOff p,
-                                         Span current, ByteOff *out)
-{
-    Span pair;
-
-    if (!scope_pair(u, p, (Span){p.v, p.v}, &pair, NULL, NULL) ||
-        pair.lo >= current.lo || pair.hi < p.v || pair.hi >= current.hi)
-        return false;
-    /* Paragraph units include their final line ending; delimiter units end
-     * immediately after the closer.  When a tail paragraph contains `}` and
-     * its newline, that harmless whitespace overhang must not erase the
-     * enclosing function from the upward walk. */
-    if (skip_white_next(u->tb, BYTEOFF(pair.hi)).v < current.hi)
-        return false;
-    *out = BYTEOFF(pair.lo);
-    return true;
+    return BYTEOFF(len);
 }
 
 static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
 {
-    Span current;
-    ByteOff sibling;
-    Span parent;
+    const u64 len = yew_textbuf_len(u->tb);
+    u64 line;
 
     (void)alt;
     if (p.v == 0U)
         return BYTEOFF(0U);
-    current = block_span(u, p, false);
-    if (block_prev_sibling(u, p, current, BYTEOFF(current.lo),
-                           current.lo, &sibling))
-        return sibling;
-    {
-        Span line = yew_textbuf_line_span(
-            u->tb, yew_textbuf_line_of(u->tb, BYTEOFF(current.lo)));
-
-        /* Delimiter scopes begin at `{`, while their declaration begins at
-         * the line edge.  Retry from that edge so `fn name() {` does not hide
-         * the preceding top-level scope behind its non-whitespace prefix. */
-        if (line.lo < current.lo &&
-            block_prev_sibling(u, p, current, BYTEOFF(line.lo), line.lo,
-                               &sibling))
-            return sibling;
+    if (u->buf == NULL || u->buf->lang == NULL)
+        return block_plain_prev(u, p);
+    line = yew_textbuf_line_of(u->tb, p).v;
+    if (p.v != len) {
+        if (line == 0U)
+            return BYTEOFF(0U);
+        line--;
     }
-    if (block_prev_near_scope_parent(u, p, current, &sibling))
-        return sibling;
-    (void)yew_block_level(u, p, 1U, &parent);
-    if (parent.lo < p.v)
-        return BYTEOFF(parent.lo);
+    for (;;) {
+        ByteOff home;
+
+        if (block_navigation_row(u, line, &home))
+            return home;
+        if (line == 0U)
+            break;
+        line--;
+    }
     return BYTEOFF(0U);
 }
 

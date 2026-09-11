@@ -1,0 +1,70 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=4,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s57_9_block_days_ +                                                      
+    3 //! check: run(exit=0)                                                    
+    2 //! phase: run                                                            
+    1                                                                           
+    4 fn main() -> !int {                                                       
+    1     print("{day_of_year(2, 1, false)}")                                   
+    2                                                                           
+    3     0                                                                     
+    4 }                                                                         
+    5                                                                           
+    6 fn day_of_year(month: int, day: int, leap: bool) -> int {                 
+    7     var total = 0                                                         
+    8     total += sum_months(month, leap)                                      
+    9     total += day                                                          
+   10                                                                           
+   11     total                                                                 
+   12 }                                                                         
+   13                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ B  pty-s57_9_block_days_rows.lu                             utf-8  lf  4:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDDDDEEEEEEEEEEEEEEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDEEEEEEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDGDHHHIIIIJJFKKFKLLLFJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFIIIIIJMNFFFFFFFFFFFJOKFOKFFFFFFJNMJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFOFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDHHHIIIIIIIIIIIJFFFFFJFLLLJFFFFJFLLLJFFFFFJFLLLLJFKKFLLLFJFFFFFFFFFFFFFFFFF
+DDDDDDFFFFHHHHFFFFFFKFOFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFKKFIIIIIIIIIIJFFFFFJFFFFFJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+PPPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+--- legend
+A fg=#c8ccd4 bg=#2c313a attrs=b---------
+B fg=#61afef bg=#1b202a attrs=b---------
+C fg=#5c6370 bg=#1b202a attrs=----------
+D fg=#4b5263 bg=#12141a attrs=----------
+E fg=#7f8c98 bg=#12141a attrs=--i-------
+F fg=#c8ccd4 bg=#12141a attrs=----------
+G fg=#c8ccd4 bg=#12141a attrs=b---------
+H fg=#c678dd bg=#12141a attrs=--i-------
+I fg=#61afef bg=#12141a attrs=----------
+J fg=#9aa0aa bg=#12141a attrs=----------
+K fg=#56b6c2 bg=#12141a attrs=----------
+L fg=#e5c07b bg=#12141a attrs=--i-------
+M fg=#98c379 bg=#12141a attrs=----------
+N fg=#ff79c6 bg=#12141a attrs=----------
+O fg=#d19a66 bg=#12141a attrs=----------
+P fg=#12141a bg=#c678dd attrs=----------
