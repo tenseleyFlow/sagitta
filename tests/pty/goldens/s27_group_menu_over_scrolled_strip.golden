@@ -2,8 +2,8 @@
 size 80x24 alt=1 cursor=2,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
- 1 pty-s14-s27_group_men yew-s24-grp/ (3)  +                                    
- one.txt  three.txt  two.txt                                                    
+ 1 pty-s14-s27_group_men 2 yew-s24-grp/ (3)  +                                  
+ 1 one.txt  2 three.txt  3 two.txt                                              
  Edit Group...                                                                  
  Rename Group...                                                                
 ------------------                                                              
@@ -27,8 +27,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
  L  one.txt                                                  utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBBBBBBBBAAAAAAAAAAAAAAAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BBBBBBBBBBBAAAAAAAAAAAAAAAAAAAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 EFFFFFFFFFFFFFEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEEEEEEEEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 HHHHHHHHHHHHHHHHHHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG

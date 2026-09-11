@@ -2,8 +2,8 @@
 size 80x24 alt=1 cursor=2,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
- yew-s24-grp/ (3)  1 pty-s14-s27_dwell_ope +                                    
- one.txt  three.txt  two.txt                                                    
+ 2 yew-s24-grp/ (3)  1 pty-s14-s27_dwell_ope +                                  
+ 1 one.txt  2 three.txt  3 two.txt                                              
     1 alpha beta gamma                                                          
     1 delta epsilon                                                             
     2 zeta eta theta iota                                                       
@@ -27,8 +27,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
  L  pty-s14-s27_dwell_opens_member_strip.txt                 utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-DDDDDDDDDDDDDDDDDDDDDDDDDDDDDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 EEEEFEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG

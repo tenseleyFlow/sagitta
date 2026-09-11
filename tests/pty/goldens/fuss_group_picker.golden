@@ -2,7 +2,7 @@
 size 100x24 alt=1 cursor=0,0 vis=0
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-fussrepo · trunk        │ 1 main.c  docs/ (1)  +                                                    
+fussrepo · trunk        │ 1 main.c  2 docs/ (1)  +                                                  
  - docs ✗               │    1 int main(void) { return 0; }                                         
      漢字.txt ✗         │    1                                                                      
      👨‍👩‍👧‍👦.txt ✗           │                                                                           
@@ -27,7 +27,7 @@ fussrepo · trunk        │ 1 main.c  docs/ (1)  +
                         │Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict          
                         │type jump · Alt+key actions · C-S-/ list · Esc leave                       
 --- style
-AAAAAAAABBBAAAAABBBBBBBBCDDDDDDDDDDEEEEEEEEEEEFFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAAABBBAAAAABBBBBBBBCDDDDDDDDDDEEEEEEEEEEEEEFFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 GGGGGGGHHGGGGGGGGGGGGGGGCIIIIJIKKKLMMMMNKKKKNLNLOOOOOOLPNLNLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBBBBBBBBBQQBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBBBBBBBQQBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
