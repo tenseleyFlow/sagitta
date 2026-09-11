@@ -13,11 +13,12 @@
 ## Status
 
 Local implementation and native qualification completed 2026-09-11. The
-Wolf-shaped bidirectional block reproducer, prompt-backed FUSS group picker,
-direct bulk-open compatibility, and modal overlay ordering are implemented.
-Default and `MODULES=""` builds, the complete native component matrix, focused
-ASan/UBSan, deterministic PTY, fuzz, performance, structural, torture, and
-six-profile native size gates are green.
+Wolf-shaped bidirectional and exact `ch4/days.lu` tail block reproducers,
+prompt-backed FUSS group picker, direct bulk-open compatibility, modal overlay
+ordering, and atomic active-group close command are implemented. Default and
+`MODULES=""` builds, the complete native component matrix, focused ASan/UBSan,
+deterministic PTY, fuzz, performance, structural, torture, and six-profile
+native size gates are green.
 
 The sprint is not closed: its exact commit-of-record has not been pushed or
 qualified by hosted CI. Sprint 58 is paused after F08 until that closeout and

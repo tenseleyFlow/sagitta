@@ -344,12 +344,14 @@ Binding documents — read before any sprint:
   policy to cursor timings and synchronizes FUSS navigation PTYs on their
   post-key semantic screen state
 - Sprint 57.9 (s57_9-block-and-group-field-repair.md) — Exact adjacent B-mode
-  traversal for Wolf-shaped top-level scopes and a Facsimile-style `Alt+g`
-  path that opens the shared group picker with an empty selection. **LOCAL
-  IMPLEMENTATION COMPLETE 2026-09-11:** default/core builds, complete native
-  component gates, focused ASan/UBSan, deterministic PTY, fuzz, block/FUSS
-  performance, and all six native shipping-size profiles are green. Push and
-  hosted CI remain required before closeout and Sprint 58 requalification
+  traversal for Wolf-shaped top-level scopes and tail paragraphs, a
+  Facsimile-style `Alt+g` path that opens the shared group picker with an empty
+  selection, and atomic `ed.group.close` with ungrouped tab-close fallback.
+  **LOCAL IMPLEMENTATION COMPLETE 2026-09-11:** default/core builds, complete
+  native component gates, focused ASan/UBSan, deterministic PTY, fuzz,
+  block/FUSS performance, and all six native shipping-size profiles are green.
+  Push and hosted CI remain required before closeout and Sprint 58
+  requalification
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem

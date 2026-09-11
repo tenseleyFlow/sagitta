@@ -11,9 +11,10 @@ UCD version: 16.0.0
 F01–F08 ran against the baseline above; their reports, findings, and hosted
 evidence remain immutable historical records. Sprint 57.9 deliberately
 reopened product code before F09 to repair field-reported B-mode and FUSS
-group-picker defects. Its replacement product SHA is pending push and hosted
-qualification. No remaining front may open until the build matrix is replaced
-and a delta-applicability review of F01–F08 is recorded. Audit tooling,
+group-picker defects and complete the active-group close lifecycle. Its
+replacement product SHA is pending push and hosted qualification. No remaining
+front may open until the build matrix is replaced and a delta-applicability
+review of F01–F08 is recorded. Audit tooling,
 reproducers, evidence, and the two Sprint 58 inbound obligations may continue
 to advance without rewriting the original front provenance.
 

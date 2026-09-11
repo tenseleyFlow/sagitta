@@ -12,11 +12,11 @@ Apple-silicon host `nomad-1`
 
 **Hosted-green code/recovery anchor:** `da04f30c` (`origin/trunk`)
 
-**Current Sprint-57.9 code frontier:** `a3366d66` (local; not pushed)
+**Current Sprint-57.9 code frontier:** `4d462162` (local; not pushed)
 
 **Git position:** `origin/trunk` is `da04f30c`; GitHub Actions run
 `34624021506` is green for all 22 standard push jobs there, with seven
-trigger-specific jobs skipped as designed. The local branch is five coherent
+trigger-specific jobs skipped as designed. The local branch is ten coherent
 Sprint 57.9 implementation/contract commits ahead. Future pushes still require
 an explicit request.
 
@@ -85,13 +85,19 @@ visible for one tab, and an exact ` + ` tail control invokes the existing
 Right overflow retains priority, and ordinary click, drag, group, CJK, and
 FUSS-offset geometry remains green.
 
-Sprint 57.9 repairs two field failures without weakening the modal core. B-mode
-previous/next traversal now rejects enclosing fallback spans and visits every
-adjacent top-level Wolf-style declaration in order, independent of LSP. In
+Sprint 57.9 repairs the field failures without weakening the modal core.
+B-mode previous/next traversal now rejects enclosing fallback spans and visits
+every adjacent top-level Wolf-style declaration in order, independent of LSP.
+Its exact `ch4/days.lu` tail case also treats a delimiter scope as the parent
+when a paragraph owns only the trailing newline beyond that scope, so Up from
+`total` climbs to the `day_of_year` opening brace instead of byte zero. In
 FUSS, `Alt+g` now opens the shared group picker on the selected directory with
 zero files selected; only confirmation creates the group, Escape is inert, and
 the programmatic bulk-open API remains intact. The picker renders in the true
-overlay pass so the off-canvas drawer cannot paint over it.
+overlay pass so the off-canvas drawer cannot paint over it. E mode now exposes
+`:group.close`, `:ed.group.close`, and `:gclose`: a clean active group closes
+atomically by stable tab id, a dirty group refuses before mutation, and an
+ungrouped tab retains the existing close/prompt/last-tab behavior.
 
 The current contract remains
 `.docs/sprints/13-performance/s57_9-block-and-group-field-repair.md` until its
@@ -102,16 +108,17 @@ then resume at F09 under the reproducer-first/no-fixes law.
 
 Most recent Sprint 57.9 local validation:
 
-- complete native component-equivalent default matrix green: all 454 PTYs,
+- complete native component-equivalent default matrix green: all 455 PTYs,
   scripts 93/927 with one intentional skip, package/Fletch/round-trip/syntax/
-  policy/smoke/torture gates, and 2,422 unit tests / 73,449,016 assertions;
-- focused Darwin arm64 ASan/UBSan block, directory-group, picker, and FUSS
-  coverage is clean; the independent `MODULES=""` build and core smoke pass,
-  proving the B-mode repair has no LSP dependency;
+  policy/smoke/torture gates, and 2,429 unit tests / 73,449,119 assertions;
+- focused Darwin arm64 ASan/UBSan block, directory-group, group-close, picker,
+  parser, and FUSS coverage is clean; the independent `MODULES=""` build and
+  core smoke pass, proving the B-mode repair has no LSP dependency;
 - four deterministic 200,000-operation block fuzz seeds pass; block and FUSS
-  performance remain within every budget, with zero block motions over 5 ms;
+  performance remain within every budget; the post-tail-fix block run executes
+  100,000 calls in 18.912 seconds with a 1.917 ms maximum and zero over 5 ms;
 - all six Darwin shipping-size profiles pass without changing a budget:
-  1,452,656 bytes minimal, 1,891,536 full, 1,571,616 LSP-only, 1,588,528
+  1,452,672 bytes minimal, 1,891,536 full, 1,571,632 LSP-only, 1,588,544
   AI-only, 1,586,768 FUSS-only, and 1,536,128 plugins-only. The exact
   symbol/section ledger remains a GNU/ELF hosted gate because Apple `nm` does
   not report Mach-O symbol sizes.

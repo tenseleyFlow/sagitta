@@ -12,9 +12,10 @@
 - Sprints 57.5–57.9 — compact remembered FUSS trees, binary source-service
   isolation, nested-workspace path normalization, direct visible-tree
   type-to-jump, true off-canvas geometry, and the modern cell-exact tab/new-tab
-  strip, exact adjacent B-mode scope traversal, and the directory group
-  chooser. The §1 baseline must include these fixes and pass the required
-  hosted lanes; no audit front may cite the pre-57.9 tree.
+  strip, exact adjacent B-mode scope/tail traversal, the directory group
+  chooser, and atomic active-group close with ungrouped tab-close fallback.
+  The §1 baseline must include these fixes and pass the required hosted lanes;
+  no audit front may cite the pre-57.9 tree.
 - Sprints 0–55 — everything under audit. Each front's scope names the
   sprint that owns the code; the auditor reads that sprint file first,
   because a finding is a violation of a *pinned* decision, not a
@@ -61,9 +62,10 @@ push trigger and are not inferred as successes.
 
 F01–F08 closed against that original fixed baseline and opened findings
 `YEW-F-001` through `YEW-F-008`. Sprint 57.9 deliberately reopened product
-code to repair field-reported B-mode and FUSS group-picker defects, so the
-audit campaign is paused before F09. The original reports and evidence remain
-historical and must not be rewritten as if they ran on the replacement tree.
+code to repair field-reported B-mode and FUSS group-picker defects and complete
+the active-group close lifecycle, so the audit campaign is paused before F09.
+The original reports and evidence remain historical and must not be rewritten
+as if they ran on the replacement tree.
 
 Before F09 opens, push the exact post-57.9 commit, obtain the complete hosted
 matrix, replace the build matrix of record, and record a delta-applicability
