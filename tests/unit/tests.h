@@ -1309,6 +1309,7 @@ void test_groupfromdir_sorted_recursive_ignored_and_one_read(void);
 void test_groupfromdir_nonrecursive_and_default_label(void);
 void test_groupfromdir_adopts_without_duplicate_and_repairs_ordinals(void);
 void test_groupfromdir_empty_reports_and_oversize_waits_for_confirm(void);
+void test_groupfromdir_command_opens_empty_picker_and_cancel_is_inert(void);
 void test_ws_key_hash_matches_the_published_vectors(void);
 void test_ws_key_is_stable_across_calls(void);
 void test_ws_key_paths_hang_off_the_state_dir(void);

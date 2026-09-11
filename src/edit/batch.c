@@ -119,6 +119,7 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.group.rename", "pass a name to a non-interactive group command"},
     {"ed.group.new", "construct the group with explicit arguments"},
     {"ed.group.edit", "no batch alternative"},
+    {"ed.group.from_dir", "construct the group with explicit arguments"},
     {"ed.find.file", "use io.glob(pattern)"},
     {"ed.find.buffer", "use buf.list()"},
     {"ed.find.symbol", "no batch alternative"},

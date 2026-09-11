@@ -1165,9 +1165,6 @@ void yew_draw_panes(Ed *ed)
     /* After the panes, so a strip span shadows the document beneath it
      * on overlap — last added wins. */
     yew_tab_strip_draw(ed, ed->tab_strip_rect);
-    /* Last of all: the picker is modal, so its BLOCK region must shadow
-     * every span drawn beneath it (last added wins). */
-    yew_gp_draw(ed);
 }
 
 bool yew_draw_pane_is_focused(const Ed *ed, const Win *w)

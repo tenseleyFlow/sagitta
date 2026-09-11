@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "edit/ed.h"
 #if YEW_WITH_FUSS
@@ -163,12 +164,10 @@ u32 yew_group_from_dir(Ed *ed, const char *dir,
 
 CmdStatus yew_group_cmd_from_dir(CmdCtx *cx)
 {
-    GroupFromDirOpts opts = {
-        true, true, YEW_GROUP_MAX_MEMBERS, NULL
-    };
+    struct stat st;
     char *selected = NULL;
+    char *root;
     const char *dir;
-    u32 gid;
 
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
@@ -185,9 +184,22 @@ CmdStatus yew_group_cmd_from_dir(CmdCtx *cx)
         yew_xfree(selected);
         return YEW_CMD_ERR_ARG;
     }
-    gid = yew_group_from_dir(cx->ed, dir, &opts);
+    root = yew_xrealpath(dir);
+    if (root == NULL || stat(root, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR,
+                "cannot open group picker for %s", dir);
+        yew_xfree(root);
+        yew_xfree(selected);
+        return YEW_CMD_ERR_ARG;
+    }
+    if (!yew_gp_show(cx->ed, root)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR,
+                "cannot open group picker for %s", root);
+        yew_xfree(root);
+        yew_xfree(selected);
+        return YEW_CMD_ERR_STATE;
+    }
+    yew_xfree(root);
     yew_xfree(selected);
-    if (gid != 0U || yew_gp_active())
-        return YEW_CMD_OK;
-    return YEW_CMD_ERR_STATE;
+    return YEW_CMD_OK;
 }

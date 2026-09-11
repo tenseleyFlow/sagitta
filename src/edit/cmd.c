@@ -709,7 +709,7 @@ static const CmdDesc builtins[] = {
     {"ed.group.edit", yew_gp_cmd_edit, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Edit the active group's membership", NULL},
     {"ed.group.from_dir", yew_group_cmd_from_dir, YEW_ARITY_OPT_STR,
-     YEW_CMD_RECORDABLE, "open a directory as a tab group (F-mode)", "from_dir"},
+     YEW_CMD_PROMPTS, "Choose files from a directory for a tab group", NULL},
     {"ed.group.next", yew_file_cmd_next, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE, "Walk to the next tab group or file", NULL},
     {"ed.group.prev", yew_file_cmd_prev, YEW_ARITY_NONE,

@@ -1343,6 +1343,7 @@ const YewTest yew_tests[] = {
     T(groupfromdir_nonrecursive_and_default_label),
     T(groupfromdir_adopts_without_duplicate_and_repairs_ordinals),
     T(groupfromdir_empty_reports_and_oversize_waits_for_confirm),
+    T(groupfromdir_command_opens_empty_picker_and_cancel_is_inert),
     T(ws_key_hash_matches_the_published_vectors),
     T(ws_key_is_stable_across_calls),
     T(ws_key_paths_hang_off_the_state_dir),

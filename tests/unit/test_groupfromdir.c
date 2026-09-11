@@ -222,3 +222,41 @@ void test_groupfromdir_empty_reports_and_oversize_waits_for_confirm(void)
     gd_remove(&tree);
     (void)rmdir(empty);
 }
+
+void test_groupfromdir_command_opens_empty_picker_and_cancel_is_inert(void)
+{
+    GroupDirTree tree;
+    CmdCtx cx = {0};
+    Ed ed;
+    u32 tabs_before;
+
+    gd_make(&tree);
+    gd_ed(&ed);
+    tabs_before = yew_tab_count(&ed);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.sarg = tree.root;
+    cx.sarg_len = (u32)strlen(tree.root);
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_group_cmd_from_dir(&cx), YEW_CMD_OK);
+    YEW_ASSERT(yew_gp_active());
+    YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_PENDING);
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 0);
+    YEW_ASSERT_NOT_NULL(strstr(yew_gp_name(), "yew-group-dir-"));
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 0U);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), tabs_before);
+    YEW_ASSERT(yew_gp_key(&ed, gd_key(YEW_KEY_ESCAPE)));
+    yew_gp_apply(&ed);
+    YEW_ASSERT(!yew_gp_active());
+    YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_CANCELLED);
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 0U);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), tabs_before);
+
+    cx.sarg = tree.a;
+    cx.sarg_len = (u32)strlen(tree.a);
+    YEW_ASSERT_EQ_I64(yew_group_cmd_from_dir(&cx), YEW_CMD_ERR_ARG);
+    YEW_ASSERT(!yew_gp_active());
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "cannot open group picker"));
+    yew_ed_free(&ed);
+    gd_remove(&tree);
+}

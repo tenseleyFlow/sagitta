@@ -391,6 +391,14 @@ static void test_f_mode_alt_g_opens_selected_directory_group(
     yew_ed_handle_key(&ed, action, yew_now_ms());
     CHECK(ed.last_cmd.v == yew_cmd_lookup("ed.group.from_dir", 17U).v);
     CHECK(ed.last_status == YEW_CMD_OK);
+    CHECK(yew_gp_active());
+    CHECK(yew_gp_count() == 0);
+    CHECK(ed.groups.v.len == 0U);
+    CHECK(yew_tab_find_by_path(&ed, nested) < 0);
+    yew_ed_handle_key(&ed, key_press(YEW_KEY_DOWN), yew_now_ms());
+    yew_ed_handle_key(&ed, key_press((u32)' '), yew_now_ms());
+    yew_ed_handle_key(&ed, key_press(YEW_KEY_ENTER), yew_now_ms());
+    CHECK(!yew_gp_active());
     CHECK(ed.groups.v.len == 1U);
     CHECK(yew_group_member_count(&ed, ed.groups.v.data[0].id) == 1);
     CHECK(yew_tab_find_by_path(&ed, nested) >= 0);

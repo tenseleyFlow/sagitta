@@ -2520,15 +2520,16 @@ void yew_ed_render(Ed *ed)
     yew_shadow_draw_panes(ed);
 draw_overlays:
     /*
-     * The picker draws LAST, after the footer, cursor preparation, and
-     * passive shadow text.
+     * Modal pickers draw after the footer, cursor preparation, FUSS drawer,
+     * and passive shadow text.
      *
-     * It is modal and owns its rectangle, and its filter line IS the
-     * command line — so drawing it inside yew_draw_panes meant the
-     * footer then painted the same widget at the bottom of the screen
-     * and left the picker's copy blank.  One widget, one place, and the
-     * modal thing on top.
+     * Each owns its rectangle. Drawing either inside yew_draw_panes lets
+     * later chrome overwrite it: the footer covers the list picker's filter
+     * line, and an active FUSS drawer covers the left side of the group
+     * picker. One widget, one place, and modal surfaces on top.
      */
+    if (yew_gp_active())
+        yew_gp_draw(ed);
     if (yew_picker_active(ed))
         yew_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
     /*

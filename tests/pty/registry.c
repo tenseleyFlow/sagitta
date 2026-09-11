@@ -8148,6 +8148,25 @@ static void case_s52_fuss(PtyCtx *c)
         s52_wait_screen(c, "jump:");
         s52_wait_screen_gone(c, "jump:", 80U);
         semantic_snapshot = true;
+    } else if (strstr(name, "group_picker") != NULL) {
+        ptc_bytes(c, "docs");
+        s52_wait_screen(c, "jump: docs");
+        ptc_keys(c, "alt+g");
+        s52_wait_screen(c, "New Tab Group");
+        ptc_check(c, s52_screen_contains(&c->vt, "0 selected"),
+                  "FUSS Alt-g preselected files without user input");
+        ptc_check(c, s52_screen_contains(&c->vt, "漢字.txt"),
+                  "FUSS Alt-g picker did not use the selected directory");
+        ptc_keys(c, "down");
+        ptc_bytes(c, " ");
+        s52_wait_screen(c, "1 selected");
+        ptc_keys(c, "enter");
+        s52_wait_screen(c, "docs/ (1)");
+        ptc_check(c, !s52_screen_contains(&c->vt, "New Tab Group"),
+                  "confirmed FUSS group picker remained open");
+        ptc_check(c, s52_screen_contains(&c->vt, "漢字.txt"),
+                  "confirmed FUSS group omitted the selected member");
+        semantic_snapshot = true;
     } else if (strstr(name, "actions_palette") != NULL) {
         ptc_keys(c, "ctrl+shift+/");
         s52_wait_screen(c, "FUSS actions");
@@ -9190,6 +9209,7 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_tree_toggle, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_hint, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_group_picker, modern, 24U, 100U, case_s52_fuss),
     C(fuss_actions_palette, modern, 24U, 100U, case_s52_fuss),
     C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
       case_s52_fuss_diff_viewer),
