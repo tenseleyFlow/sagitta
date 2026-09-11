@@ -841,35 +841,68 @@ static ByteOff block_next(UnitCtx *u, ByteOff p, bool alt)
     return BYTEOFF(len);
 }
 
+static bool block_prev_sibling(UnitCtx *u, ByteOff p, Span current,
+                               ByteOff before, u64 adjacent_lo,
+                               ByteOff *out)
+{
+    ByteOff probe = skip_white_prev(u->tb, before);
+    ByteOff best = BYTEOFF(UINT64_MAX);
+
+    if (probe.v == 0U)
+        return false;
+    probe = yew_grapheme_prev_boundary(u->tb, probe);
+    for (u32 level = 0U; level < YEW_SEL_DEPTH; level++) {
+        Span sibling;
+        ByteOff after;
+
+        if (!yew_block_level(u, probe, level, &sibling) ||
+            sibling.lo >= p.v)
+            break;
+        after = skip_white_next(u->tb, BYTEOFF(sibling.hi));
+        /* A parent or whole-buffer fallback around the declaration prefix
+         * is not a previous sibling.  It used to win here because its end
+         * is necessarily after current.lo, sending the next Up to byte 0. */
+        if (sibling.hi <= adjacent_lo && after.v >= adjacent_lo)
+            best = BYTEOFF(sibling.lo);
+        else if (best.v == UINT64_MAX && before.v == current.lo &&
+                 sibling.lo < current.lo && sibling.hi == current.hi)
+            /* A paragraph can add the declaration prefix to a delimiter
+             * scope without adding a byte at its far edge.  That is the
+             * current block's visible home, not an enclosing file fallback. */
+            best = BYTEOFF(sibling.lo);
+        if (sibling.lo == 0U || sibling.hi >= current.hi)
+            break;
+    }
+    if (best.v == UINT64_MAX)
+        return false;
+    *out = best;
+    return true;
+}
+
 static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
 {
     Span current;
-    ByteOff probe;
-    ByteOff best = BYTEOFF(UINT64_MAX);
+    ByteOff sibling;
     Span parent;
 
     (void)alt;
     if (p.v == 0U)
         return BYTEOFF(0U);
     current = block_span(u, p, false);
-    probe = skip_white_prev(u->tb, BYTEOFF(current.lo));
-    if (probe.v != 0U) {
-        probe = yew_grapheme_prev_boundary(u->tb, probe);
-        for (u32 level = 0U; level < YEW_SEL_DEPTH; level++) {
-            Span sibling;
-            ByteOff after;
+    if (block_prev_sibling(u, p, current, BYTEOFF(current.lo),
+                           current.lo, &sibling))
+        return sibling;
+    {
+        Span line = yew_textbuf_line_span(
+            u->tb, yew_textbuf_line_of(u->tb, BYTEOFF(current.lo)));
 
-            if (!yew_block_level(u, probe, level, &sibling) ||
-                sibling.lo >= p.v)
-                break;
-            after = skip_white_next(u->tb, BYTEOFF(sibling.hi));
-            if (after.v >= current.lo)
-                best = BYTEOFF(sibling.lo);
-            if (sibling.lo == 0U || sibling.hi >= current.hi)
-                break;
-        }
-        if (best.v != UINT64_MAX)
-            return best;
+        /* Delimiter scopes begin at `{`, while their declaration begins at
+         * the line edge.  Retry from that edge so `fn name() {` does not hide
+         * the preceding top-level scope behind its non-whitespace prefix. */
+        if (line.lo < current.lo &&
+            block_prev_sibling(u, p, current, BYTEOFF(line.lo), line.lo,
+                               &sibling))
+            return sibling;
     }
     (void)yew_block_level(u, p, 1U, &parent);
     if (parent.lo < p.v)

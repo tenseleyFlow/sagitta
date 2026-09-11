@@ -647,6 +647,7 @@ void test_block_plain_text_has_three_distinct_containment_levels(void);
 void test_block_scan_budget_falls_through_before_distant_pair(void);
 void test_block_matching_delimiters_ignores_nested_and_suppressed_pairs(void);
 void test_block_selection_chain_saturates_at_buffer_for_stack_replay(void);
+void test_block_wolf_top_level_prev_visits_each_scope(void);
 void test_block_syntax_install_accepts_disabled_provider(void);
 void test_syn_block_atom_beats_delimiters_inside_string(void);
 void test_syn_block_comment_predicate_makes_scope_exact(void);

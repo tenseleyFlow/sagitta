@@ -325,6 +325,62 @@ void test_block_selection_chain_saturates_at_buffer_for_stack_replay(void)
     block_fixture_free(&fixture);
 }
 
+void test_block_wolf_top_level_prev_visits_each_scope(void)
+{
+    static const char text[] =
+        "//! check: run(exit=0)\n"
+        "//! phase: run\n"
+        "\n"
+        "fn tax(cents: int) -> int { cents + cents / 20 }\n"
+        "\n"
+        "fn lp(s: str) -> int {\n"
+        "    loop {\n"
+        "        if s[0] == \",\" { break }\n"
+        "    }\n"
+        "    0\n"
+        "}\n"
+        "\n"
+        "fn gcd(a: int, b: int) -> int {\n"
+        "    if b == 0 { a } else { gcd(b, a % b) }\n"
+        "}\n"
+        "\n"
+        "fn rtrim(s: str) -> str {\n"
+        "    while false { break }\n"
+        "    s\n"
+        "}\n"
+        "\n"
+        "fn main() -> !int {\n"
+        "    print(\"{gcd(12, 18)}\")\n"
+        "    0\n"
+        "}";
+    static const char *const signatures[] = {
+        "fn main() -> !int ",
+        "fn rtrim(s: str) -> str ",
+        "fn gcd(a: int, b: int) -> int ",
+        "fn lp(s: str) -> int ",
+        "fn tax(cents: int) -> int ",
+    };
+    BlockFixture fixture;
+    ByteOff at = BYTEOFF(sizeof(text) - 1U);
+
+    block_fixture_text(&fixture, text);
+    for (size_t i = 0U; i < YEW_ARRAY_LEN(signatures); i++) {
+        u64 expected = text_off(text, signatures[i]);
+
+        at = yew_unit_block.prev(&fixture.unit, at, false);
+        YEW_ASSERT_EQ_U64(at.v, expected);
+    }
+    for (size_t i = YEW_ARRAY_LEN(signatures); i-- > 1U;) {
+        u64 expected = text_off(text, signatures[i - 1U]);
+
+        at = yew_unit_block.next(&fixture.unit, at, false);
+        YEW_ASSERT_EQ_U64(at.v, expected);
+    }
+    at = yew_unit_block.next(&fixture.unit, at, false);
+    YEW_ASSERT_EQ_U64(at.v, sizeof(text) - 1U);
+    block_fixture_free(&fixture);
+}
+
 void test_block_syntax_install_accepts_disabled_provider(void)
 {
     static const char text[] = "one\n\n  two\n    three\n";

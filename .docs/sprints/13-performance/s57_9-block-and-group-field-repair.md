@@ -27,8 +27,8 @@ the reproducer must remain green with LSP disabled and with `MODULES=""`.
 
 Pin the field shape with several top-level Wolf-style brace blocks separated
 by one blank line. Starting at EOF, consecutive `yew_unit_block.prev()` calls
-visit the opening brace of each preceding top-level block in order. The mirror
-walk with `next()` returns through the same boundaries to EOF.
+visit the line containing each preceding top-level opening boundary in order.
+The mirror walk with `next()` returns through the same boundaries to EOF.
 
 Sibling discovery must compare blocks in a coordinate that includes their
 leading declaration lines. A fallback paragraph or whole-buffer span may not

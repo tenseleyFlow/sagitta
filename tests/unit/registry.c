@@ -680,6 +680,7 @@ const YewTest yew_tests[] = {
     T(block_scan_budget_falls_through_before_distant_pair),
     T(block_matching_delimiters_ignores_nested_and_suppressed_pairs),
     T(block_selection_chain_saturates_at_buffer_for_stack_replay),
+    T(block_wolf_top_level_prev_visits_each_scope),
     T(block_syntax_install_accepts_disabled_provider),
     T(syn_block_atom_beats_delimiters_inside_string),
     T(syn_block_comment_predicate_makes_scope_exact),
