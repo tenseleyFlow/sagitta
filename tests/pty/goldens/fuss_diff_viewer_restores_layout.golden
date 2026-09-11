@@ -481,7 +481,7 @@ fussrepo · trunk        │ 1 main.c  +
                         │                                                                           
                         │                                                                           
                         │diff running                                                               
-                        │←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave                
+                        │type jump · Alt+key actions · C-S-/ list · Esc leave                       
 --- style
 AAAAAAAABBBAAAAABBBBBBBBCDDDDDDDDDDEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 BBBBBBBGGBBBBBBBBBBBBBBBCHHHHIHJJJKLLLLMJJJJMKMKNNNNNNKOMKMKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK

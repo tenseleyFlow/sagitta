@@ -8022,7 +8022,7 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
      * semantic barrier; the cumulative frame count is scheduler state. */
     c->vt.sync_pairs_unstable = true;
     if (strstr(c->test->name, "_ascii") != NULL) {
-        s52_wait_screen(c, "<> tree");
+        s52_wait_screen(c, "jump | Alt+key");
         c->vt.sync_pairs_unstable = true;
     }
     /* The workspace-walk notice is deliberately transient.  Snapshotting
@@ -8103,7 +8103,7 @@ static void case_s52_fuss(PtyCtx *c)
     } else if (strstr(name, "memory_reentry") != NULL) {
         ptc_keys(c, "space");
         s52_wait_screen(c, "漢字.txt");
-        ptc_keys(c, "ctrl+g q");
+        ptc_keys(c, "alt+q");
         ptc_settle(c, 0);
         ptc_keys(c, "f");
         s52_wait_screen(c, "漢字.txt");
@@ -8141,10 +8141,18 @@ static void case_s52_fuss(PtyCtx *c)
         s52_wait_screen(c, "jump:");
         s52_wait_screen_gone(c, "jump:", 80U);
         semantic_snapshot = true;
+    } else if (strstr(name, "actions_palette") != NULL) {
+        ptc_keys(c, "ctrl+shift+/");
+        s52_wait_screen(c, "FUSS actions");
+        ptc_keys(c, "/");
+        ptc_bytes(c, "A-g");
+        s52_wait_screen(c, "A-g");
+        ptc_check(c, s52_screen_contains(&c->vt, "A-g"),
+                  "FUSS action picker omitted the group action key");
     } else if (strstr(name, "leave_q") != NULL) {
-        ptc_keys(c, "ctrl+g q");
+        ptc_keys(c, "alt+q");
         ptc_settle(c, 0);
-        ptc_check(c, !c->pty.reaped, "C-g q in F mode exited yew");
+        ptc_check(c, !c->pty.reaped, "Alt-q in F mode exited yew");
         c->vt.sync_pairs_unstable = true;
     } else if (strstr(name, "leave_esc") != NULL) {
         ptc_keys(c, "esc");
@@ -8178,7 +8186,7 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
     if (!s52_open(c, original_cells))
         goto done;
     s52_select_path(c, "modified");
-    ptc_keys(c, "ctrl+g d");
+    ptc_keys(c, "alt+d");
     s52_wait_screen(c, "diff --git");
     ptc_check(c, !c->pty.reaped,
               "opening the FUSS diff viewer exited yew");
@@ -8240,7 +8248,7 @@ static void case_s52_fuss_discard_confirm(PtyCtx *c)
     if (!s52_open(c, NULL))
         return;
     s52_select_path(c, "modified");
-    ptc_keys(c, "ctrl+g x");
+    ptc_keys(c, "alt+x");
     s52_wait_screen(c, "type 'discard' to confirm");
     ptc_check(c, s52_screen_contains(&c->vt,
                                      "use hunk discard for an undoable version"),
@@ -8276,7 +8284,7 @@ static void case_s52_fuss_status_rows(PtyCtx *c)
     /* Sprint 56.5 made the workspace drawer all-files by default.  T now
      * disables that view, so the old Sprint 52 setup chord selected the
      * opposite state before checking ignored-file visibility. */
-    ptc_keys(c, "ctrl+g .");
+    ptc_keys(c, "alt+.");
     s52_wait_screen(c, "hidden files shown");
     s52_wait_screen(c, "ignored.log");
     s52_wait_screen(c, "▎   1 <<<<<<< HEAD");
@@ -9171,6 +9179,7 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_tree_toggle, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_hint, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
+    C(fuss_actions_palette, modern, 24U, 100U, case_s52_fuss),
     C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
       case_s52_fuss_diff_viewer),
     C(fuss_loading_first_frame, modern, 24U, 80U,

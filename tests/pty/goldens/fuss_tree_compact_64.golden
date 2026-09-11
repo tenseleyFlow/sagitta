@@ -25,7 +25,7 @@ fussrepo · trunk       │ 1 main.c  +
                        │                                        
                        │                                        
                        │Legend: ↑ staged  ✗ modified  ✗ untracke
-                       │←→ tree · ↑↓ siblings · type jump · C-g 
+                       │type jump · Alt+key actions · C-S-/ list
 --- style
 AAAAAAAABBBAAAAABBBBBBBCDDDDDDDDDDEEEFFFFFFFFFFFFFFFFFFFFFFFFFFF
 GGGGGGGHHGGGGGGGGGGGGGGCIIIIJIKKKLMMMMNKKKKNLNLOOOOOOLPNLNLLLLLL

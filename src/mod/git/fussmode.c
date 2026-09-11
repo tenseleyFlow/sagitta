@@ -1220,9 +1220,9 @@ bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms)
     if (!yew_fuss_active(ed) || key == NULL)
         return false;
     f = ed->fuss;
-    /* The prefix key itself clears an active jump below.  Once dispatch owns
-     * a chord, its printable tail must reach the keymap rather than begin a
-     * new search (C-g d and C-w s are the important cases). */
+    /* Once dispatch owns a structural chord, its printable tail must reach
+     * the keymap rather than begin a new search (C-w s is the important
+     * shipped case). */
     if (ed->chord.n != 0U)
         return false;
     if (!fuss_jump_printable(key) && key->code != YEW_KEY_BACKSPACE) {
@@ -1797,8 +1797,8 @@ void yew_fuss_draw_footer(Ed *ed, Rect footer)
         "Legend: ^ staged  x modified  x untracked  v incoming  ! conflict" :
         "Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict";
     line2 = f->ascii_glyphs ?
-        "<> tree | ^v siblings | type jump | C-g actions | Esc leave" :
-        "←→ tree · ↑↓ siblings · type jump · C-g actions · Esc leave";
+        "type jump | Alt+key actions | C-S-/ list | Esc leave" :
+        "type jump · Alt+key actions · C-S-/ list · Esc leave";
     snap = yew_git_snapshot(ed);
     if (snap != NULL && snap->state == YEW_GIT_MID_REBASE)
         line2 = "rebase stopped · :git.rebase.continue · :git.rebase.abort";

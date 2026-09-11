@@ -25,7 +25,7 @@ fussrepo · trunk       │ 1 main.c  2 README.md  +
                        │                                                        
                        │                                                        
                        │Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  !
-                       │←→ tree · ↑↓ siblings · type jump · C-g actions · Esc le
+                       │type jump · Alt+key actions · C-S-/ list · Esc leave    
 --- style
 AAAAAAAABBBAAAAABBBBBBBCDDDDDDDDDDEEEEEEEEEEEEEFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 GGGGGGGHHGGGGGGGGGGGGGGCIIIIJIKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK

@@ -618,6 +618,10 @@ void test_fussdrawer_actions_list_uses_only_effective_reachable_keys(void)
     CmdCtx cx = {0};
     Ed ed;
     u32 baseline;
+    u64 dispatch_before;
+    Key key = {0};
+    const char filter[] = "A-q";
+    size_t i;
 
     fussdrawer_fix_make(&fix);
     fussdrawer_enter_non_git(&ed, &fix);
@@ -641,7 +645,24 @@ void test_fussdrawer_actions_list_uses_only_effective_reachable_keys(void)
      * action is unreachable because type-to-jump owns it, so neither row is
      * falsely advertised. */
     YEW_ASSERT_EQ_U64(yew_picker_total(&ed), baseline - 1U);
-    yew_picker_close(&ed, false);
+    key.kind = (u16)YEW_EV_KEY;
+    key.ev = (u8)YEW_KEY_PRESS;
+    key.code = (u32)'/';
+    key.ntext = 1U;
+    key.text[0] = (u8)'/';
+    YEW_ASSERT(yew_picker_key(&ed, &key));
+    for (i = 0U; i < sizeof(filter) - 1U; i++) {
+        key.code = (u32)(u8)filter[i];
+        key.text[0] = (u8)filter[i];
+        YEW_ASSERT(yew_picker_key(&ed, &key));
+    }
+    YEW_ASSERT_EQ_U64(yew_picker_shown(&ed), 1U);
+    dispatch_before = ed.dispatch_count;
+    YEW_ASSERT(yew_picker_accept(&ed));
+    YEW_ASSERT(!yew_picker_active(&ed));
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+    YEW_ASSERT_EQ_STR(yew_cmd_desc(ed.last_cmd)->name, "ed.git.mode.leave");
+    YEW_ASSERT_EQ_U64(ed.dispatch_count, dispatch_before + 1U);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
 }
