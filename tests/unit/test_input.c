@@ -416,6 +416,12 @@ void test_input_kitty_keys(void)
                             YEW_KEY_PRESS, 0, 1, {'A'}}},
         {"\x1b[97;5u", {97, YEW_EV_KEY, YEW_MOD_CTRL, 0, 0,
                          YEW_KEY_PRESS, 0, 0, {0}}},
+        /* Sprint 57.10: ctrl+digit and alt+digit are the numbered tab
+         * jumps, and only the kitty protocol can deliver the first. */
+        {"\x1b[49;5u", {'1', YEW_EV_KEY, YEW_MOD_CTRL, 0, 0,
+                         YEW_KEY_PRESS, 0, 0, {0}}},
+        {"\x1b[48;3u", {'0', YEW_EV_KEY, YEW_MOD_ALT, 0, 0,
+                         YEW_KEY_PRESS, 0, 0, {0}}},
         {"\x1b[27u", {YEW_KEY_ESCAPE, YEW_EV_KEY, 0, 0, 0,
                        YEW_KEY_PRESS, 0, 0, {0}}},
         {"\x1b[13u", {YEW_KEY_ENTER, YEW_EV_KEY, 0, 0, 0,
