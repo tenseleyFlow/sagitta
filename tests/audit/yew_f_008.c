@@ -250,8 +250,7 @@ bool test_yew_f_008(char *why, size_t why_cap)
               (u64)st.st_size == sizeof("owned") - 1U;
     if (enabled && escaped && why != NULL && why_cap > 0U) {
         (void)snprintf(why, why_cap,
-                       "plugin with capabilities: [] wrote %s via macro replay",
-                       f.escaped);
+                       "plugin with capabilities: [] wrote an escaped file via macro replay");
     }
     f008_close(&f);
     /* The only correct result is no unauthorized file and a failed plugin
