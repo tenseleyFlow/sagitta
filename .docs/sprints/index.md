@@ -352,6 +352,10 @@ Binding documents — read before any sprint:
   block/FUSS performance, and all six native shipping-size profiles are green.
   Push and hosted CI remain required before closeout and Sprint 58
   requalification
+- Sprint 57.10 (s57_10-group-aware-tab-jumps.md) — Positional numbering on
+  both tab-bar rows, row-aware `alt+N` (member inside a group, row-1 entry
+  outside), `ctrl+N` → `ed.tab.goto_bar` for row-1 entries from anywhere, and
+  a two-mode digit-extension window. Branch `tab-group-jump`, 2026-09-11.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
@@ -398,7 +402,7 @@ Binding documents — read before any sprint:
   s25 hand-writes the emitter against the frozen schema; s36 swaps the
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
-  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`) are the pressure valve when a sprint
+  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`, `s57_10-…`) are the pressure valve when a sprint
   splits — renumbering is forbidden once files exist.
 
 ## Sprint file format
