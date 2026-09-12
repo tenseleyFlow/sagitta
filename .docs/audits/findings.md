@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-017`
+Next available ID: `YEW-F-019`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -29,6 +29,8 @@ recorded in `audit-00.md`.
 | YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
 | YEW-F-015 | M | open | F11 LSP | snippet-policy grep gate matches unrelated core code | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
 | YEW-F-016 | M | open | F11 LSP | required 1-based display edges violate the LSP +/-1 gate | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
+| YEW-F-017 | M | open | F13 GIT | interactive rebase bypasses the Git verb and environment boundary | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
+| YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -171,6 +173,27 @@ three matches, all at user-facing display/error edges; protocol positions
 remain zero-based. The visible behavior is correct, but the frozen gate
 rejects its required implementation and cannot support a release claim. It
 remains open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-017` is Medium because interactive rebase is the one Git execution
+path outside the static verb inventory and the shared environment builder.
+Its direct synchronous job safely uses an argv array and terminal handover,
+but it omits `GIT_TERMINAL_PROMPT=0`, `GIT_FLUSH=1`, and the trace-variable
+removals required on every verb; only the two editor variables were permitted
+to differ. The operation fails visibly rather than corrupting document bytes.
+The source-backed reproducer records both halves of the bypass at the fixed
+replacement baseline. It remains open for Sprint 59; no product source
+changed during the audit.
+
+`YEW-F-018` is Medium because the Git module's mandatory clock-source gate is
+not empty and FUSS picker detail reads the process wall clock through
+`time(NULL)` instead of an injected yew clock. That makes exact picker output
+uncontrollable under clock steps and contradicts the subsystem's deterministic
+clock discipline, while leaving document bytes safe. The literal source gate
+also matches four permitted helper declarations/definitions whose names end
+in `clock`, so its promised empty result is independently unattainable. The
+source-backed reproducer records all five matches at the fixed replacement
+baseline. It remains open for Sprint 59; no product source changed during the
+audit.
 
 ## Unverified observations
 
