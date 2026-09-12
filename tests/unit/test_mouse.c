@@ -1212,10 +1212,12 @@ void test_mouse_ctx_row_highlights_then_invokes(void)
     yew_mouse_menu_draw(&ed);
     {
         Rect box = yew_ctx_box();
+        /* Rows start one cell inside the frame: row i is at
+         * box.y + 1 + i, and the border is nobody's row. */
         Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
-                          (u16)(box.x + 1U), (u16)(box.y + 3U));
+                          (u16)(box.x + 1U), (u16)(box.y + 4U));
         Key wrong = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
-                          (u16)(box.x + 1U), box.y);
+                          (u16)(box.x + 1U), (u16)(box.y + 1U));
 
         yew_mouse_event(&ed, &press);
         /* Row 3 is `Copy Path`; the press highlighted it. */
@@ -1230,9 +1232,9 @@ void test_mouse_ctx_row_highlights_then_invokes(void)
     {
         Rect box = yew_ctx_box();
         Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
-                          (u16)(box.x + 1U), (u16)(box.y + 3U));
+                          (u16)(box.x + 1U), (u16)(box.y + 4U));
         Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
-                       (u16)(box.x + 2U), (u16)(box.y + 3U));
+                       (u16)(box.x + 2U), (u16)(box.y + 4U));
 
         yew_mouse_event(&ed, &press);
         yew_mouse_event(&ed, &up);
