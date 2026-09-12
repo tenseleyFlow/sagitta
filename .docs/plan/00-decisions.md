@@ -96,6 +96,20 @@ hard gates for the implemented 1.0 feature matrix. The displaced 1.5 MiB /
 made green by changing measurement, dropping required features, or silently
 enabling Sprint 57's deferred `-Os`/LTO/lazy-langpack work.
 
+**Amendment S57-A5 (2026-09-12) — the musl-minimal gate follows required
+core growth.** The last green pre-Sprint-57.12 hosted static build measured
+1,562,480 bytes minimal and 2,082,704 bytes full. The pushed Sprint 57.12
+candidate measured 1,582,960 bytes minimal and 2,090,896 bytes full. Its
+pinned glibc minimal build remains below the general 1.5 MiB gate at
+1,488,544 bytes, and its ledger attributes only 3,680 bytes of new object
+sections to the required selection, clipboard, and safe job-return work; the
+20,480-byte static-file step is predominantly ELF page/layout amplification,
+not accidental module retention. Removing those core editor features would
+violate the core-preservation stop rule. The musl-minimal gate alone therefore
+moves to the next 64 KiB boundary above the measured floor: 1,600 KiB
+(1,638,400 bytes). The 2 MiB full gate, 1.5 MiB glibc minimal gate, measurement
+recipe, feature matrix, and post-1.0 optimization ratchets are unchanged.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

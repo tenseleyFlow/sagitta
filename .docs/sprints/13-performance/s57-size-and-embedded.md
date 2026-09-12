@@ -104,7 +104,7 @@ package manager and a user's disk both see.
 | fuss-only | `fuss` | ≤ 1 686 KiB | minimal + measured delta rounded to 150 KiB |
 | plugins-only | `plugins` | ≤ 1 636 KiB | minimal + measured delta rounded to 100 KiB |
 | musl static-PIE, full | `lsp ai fuss plugins` | ≤ 2.0 MiB | §4; a static build carries libc |
-| musl static-PIE, minimal | *(empty)* | ≤ 1.5 MiB | amended S57-A1 evidence floor |
+| musl static-PIE, minimal | *(empty)* | ≤ 1 600 KiB | amended S57-A5 required-core floor |
 
 - The four single-module budgets are **derived, not invented**: the amended
   minimal gate plus that module's measured on-disk delta over the minimal
@@ -126,6 +126,19 @@ package manager and a user's disk both see.
 - Pitfall: do not gate on `-Os`. We ship `-O2`; measuring a size we do not
   ship is a gate on a fiction. If `-O2` will not fit, the answer is less
   code, not a different flag.
+
+**Amendment S57-A5 — rebaseline static minimal, preserve the editor.** The
+hosted `x86_64-linux-musl` lane at `ae7bc870` measured 1,562,480 bytes minimal
+and 2,082,704 bytes full. After required Sprint 57.12 core work, `b6638a3b`
+measured 1,582,960 bytes minimal and 2,090,896 bytes full. The same revision's
+pinned glibc ledger measured 1,488,544 bytes minimal and attributed 3,680 bytes
+of object-section growth to `core.edit` and `core.text`; no optional module
+crossed the boundary. The larger static on-disk step is normal page/layout
+amplification. Under the core-preservation stop rule, Shift+Arrow selection,
+explicit clipboard aliases, and safe job-output return may not be excised to
+recover an obsolete floor. The musl-minimal cap is therefore the next 64 KiB
+boundary above the observed binary, 1,600 KiB (1,638,400 bytes). All other
+caps and the shipping measurement remain unchanged.
 
 ### 2. The per-module size ledger
 

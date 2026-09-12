@@ -12,13 +12,13 @@ choices affect only the shipping profile; ordinary, sanitizer, and
 `GC_SECTIONS=0` exists only to measure and record the linker-GC delta. The
 committed ledgers name that delta as `gc_saved_bytes`.
 
-Sprint 57 amendment S57-A1 sets the achievable hard bars at 2 MiB full and
-1.5 MiB minimal. The amendment is based on the pinned x86_64 GCC/glibc
-measurement plus an independent native x86_64 musl rebuild; in both minimal
-profiles `.text + .rodata` alone exceeded the old whole-file cap. The former
-1.5 MiB full / 900 KiB minimal planning values remain post-1.0 optimization
-ratchets. They are not alternate measurements and must not be selected by a
-CI flag.
+Sprint 57 amendment S57-A1 sets the achievable glibc hard bars at 2 MiB full
+and 1.5 MiB minimal. Amendment S57-A5 raises only the musl static-PIE minimal
+bar to 1,600 KiB after required Sprint 57.12 core work moved its hosted
+measurement from 1,562,480 to 1,582,960 bytes without retaining an optional
+module. The full musl bar remains 2 MiB. The former 1.5 MiB full / 900 KiB
+minimal planning values remain post-1.0 optimization ratchets. They are not
+alternate measurements and must not be selected by a CI flag.
 
 The four single-module values are the Sprint 57 contract caps. Their `why`
 fields record the pinned GCC build's on-disk delta over minimal, rounded

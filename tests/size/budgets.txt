@@ -6,4 +6,4 @@ ai-only          1716224  ai                              s57-a1-minimal-plus-ro
 fuss-only        1726464  fuss                            s57-a1-minimal-plus-rounded-150-KiB
 plugins-only     1675264  plugins                         s57-a1-minimal-plus-rounded-100-KiB
 musl-full        2097152  lsp,ai,fuss,plugins             sprint57-static-profile-cap
-musl-minimal     1572864  none                            s57-a1-static-evidence-floor
+musl-minimal     1638400  none                            s57-a5-required-core-next-64-KiB
