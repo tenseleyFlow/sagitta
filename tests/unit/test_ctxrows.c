@@ -170,7 +170,7 @@ void test_ctxrows_doc_rows_match_the_contract(void)
         "",
         "Split Right", "Split Below", "Close Pane",
         "",
-        "Save", "Reload",
+        "Save", "Save As...", "Reload",
         "",
         "Command Palette...", "Find File...", "Go to Line...",
         "Toggle Wrap"
@@ -194,6 +194,7 @@ void test_ctxrows_doc_rows_match_the_contract(void)
     YEW_ASSERT_EQ_U64(cr_priority("Split Below"), 2U);
     YEW_ASSERT_EQ_U64(cr_priority("Close Pane"), 2U);
     YEW_ASSERT_EQ_U64(cr_priority("Save"), 1U);
+    YEW_ASSERT_EQ_U64(cr_priority("Save As..."), 2U);
     YEW_ASSERT_EQ_U64(cr_priority("Reload"), 3U);
     YEW_ASSERT_EQ_U64(cr_priority("Command Palette..."), 0U);
     YEW_ASSERT_EQ_U64(cr_priority("Find File..."), 1U);
@@ -589,7 +590,12 @@ void test_ctxrows_overlay_rows_match_the_contract(void)
         "Cancel"
     };
     static const char *const one_close[] = {"Close"};
-    static const char *const one_cancel[] = {"Cancel"};
+    static const char *const gp_row[] = {
+        "Toggle",
+        "",
+        "Confirm", "Cancel"
+    };
+    static const char *const gp_box[] = {"Confirm", "Cancel"};
     Ed ed;
 
     cr_fixture(&ed);
@@ -610,10 +616,52 @@ void test_ctxrows_overlay_rows_match_the_contract(void)
     cr_build(&ed, YEW_CTX_KIND_COMPL_ROW, 3U);
     cr_rows_are(compl_rows, YEW_ARRAY_LEN(compl_rows));
     YEW_ASSERT_EQ_U64(yew_ctx_target_id(), 3U);
+    /*
+     * The group picker's two shapes.  `Toggle` is a ROW's row — it
+     * ticks the path the pointer is over — so it exists only on
+     * GP_ROW, and its target is the LISTING INDEX the region carries.
+     * `Confirm` and `Cancel` are the dialog's and are on both.
+     */
     cr_build(&ed, YEW_CTX_KIND_GP_ROW, 2U);
-    cr_rows_are(one_cancel, YEW_ARRAY_LEN(one_cancel));
+    cr_rows_are(gp_row, YEW_ARRAY_LEN(gp_row));
+    YEW_ASSERT_EQ_U64(yew_ctx_target_id(), 2U);
+    YEW_ASSERT_EQ_U64(cr_priority("Toggle"), 0U);
+    YEW_ASSERT_EQ_U64(cr_priority("Confirm"), 0U);
+    YEW_ASSERT_EQ_U64(cr_priority("Cancel"), 0U);
     cr_build(&ed, YEW_CTX_KIND_GP, 0U);
-    cr_rows_are(one_cancel, YEW_ARRAY_LEN(one_cancel));
+    cr_rows_are(gp_box, YEW_ARRAY_LEN(gp_box));
+    yew_ctx_close();
+    yew_ed_free(&ed);
+}
+
+/*
+ * ONE PANEL SLOT, TWO SHAPES.
+ *
+ * Hover and signature help have nothing to answer, so their menu is
+ * the bare `Close`.  The rename confirmation is a question, and it gets
+ * its three answers — and deliberately NOT `Close`, which would close
+ * the panel and leave the rename waiting, so the user's next Enter
+ * would apply a rename they believe they dismissed.
+ *
+ * The rename half needs a live language server, so it lives with the
+ * other LSP row tests; what is checked unconditionally here is that the
+ * plain panel shape is exactly one row and that it is the closing one.
+ */
+void test_ctxrows_panel_without_a_rename_is_a_bare_close(void)
+{
+    static const char *const one_close[] = {"Close"};
+    Ed ed;
+    u32 action;
+
+    cr_fixture(&ed);
+    cr_build(&ed, YEW_CTX_KIND_PANEL, 0U);
+    cr_rows_are(one_close, YEW_ARRAY_LEN(one_close));
+    action = yew_ctx_row_action(0U);
+    YEW_ASSERT_EQ_U64(action, (u64)CTXA_OVERLAY_CLOSE);
+    /* The closing row is the one action with no command, by design. */
+    YEW_ASSERT(yew_ctx_actions[action].cmd == NULL);
+    YEW_ASSERT(!cr_has("Apply"));
+    YEW_ASSERT(!cr_has("Show Diff"));
     yew_ctx_close();
     yew_ed_free(&ed);
 }
@@ -727,7 +775,7 @@ void test_ctxrows_fuss_file_rows_follow_git_status(void)
         "",
         "Diff", "Blame",
         "",
-        "Rename...", "Delete..."
+        "Rename...", "Delete...", "Copy Path"
     };
     CrFussFix fix;
     GitEntry entry;
@@ -757,6 +805,7 @@ void test_ctxrows_fuss_file_rows_follow_git_status(void)
     YEW_ASSERT_EQ_U64(cr_priority("Blame"), 2U);
     YEW_ASSERT_EQ_U64(cr_priority("Rename..."), 3U);
     YEW_ASSERT_EQ_U64(cr_priority("Delete..."), 3U);
+    YEW_ASSERT_EQ_U64(cr_priority("Copy Path"), 3U);
 
     /* STAGED: the mirror image, and the shape is identical. */
     entry = cr_entry("plain.txt", true, false, false);
@@ -791,6 +840,8 @@ void test_ctxrows_fuss_file_rows_follow_git_status(void)
     YEW_ASSERT(cr_enabled("Open"));
     YEW_ASSERT(cr_enabled("Diff"));
     YEW_ASSERT(cr_enabled("Blame"));
+    /* Copying a name asks git nothing, so it survives every status. */
+    YEW_ASSERT(cr_enabled("Copy Path"));
     yew_ctx_close();
     yew_ed_free(&ed);
     cr_fuss_drop(&fix);
@@ -824,7 +875,9 @@ void test_ctxrows_fuss_dir_rows_follow_expansion_and_subtree(void)
         const char *want[] = {
             "Open as Group...", target.expanded ? "Collapse" : "Expand",
             "",
-            "Stage All Below", "Unstage All Below"
+            "Stage All Below", "Unstage All Below",
+            "",
+            "Copy Path"
         };
 
         cr_rows_are(want, YEW_ARRAY_LEN(want));
@@ -835,6 +888,8 @@ void test_ctxrows_fuss_dir_rows_follow_expansion_and_subtree(void)
     YEW_ASSERT_EQ_U64(cr_priority("Open as Group..."), 0U);
     YEW_ASSERT_EQ_U64(cr_priority("Stage All Below"), 1U);
     YEW_ASSERT_EQ_U64(cr_priority("Unstage All Below"), 1U);
+    YEW_ASSERT_EQ_U64(cr_priority("Copy Path"), 3U);
+    YEW_ASSERT(cr_enabled("Copy Path"));
 
     /* Staged below: the other half of both rows. */
     entries[0] = cr_entry("sub/deep.txt", true, false, false);
