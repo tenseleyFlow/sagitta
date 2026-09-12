@@ -2182,6 +2182,23 @@ void test_ctxmenu_separators_never_lead_trail_or_double(void);
 void test_ctxmenu_width_clamp_drops_accels_before_clipping_labels(void);
 void test_ctxmenu_draw_frames_the_box_and_clips_inside_it(void);
 void test_ctxmenu_captures_a_target_rect(void);
+void test_ctxrows_doc_rows_match_the_contract(void);
+void test_ctxrows_doc_enables_follow_the_live_state(void);
+void test_ctxrows_doc_optional_sections_are_absent_not_greyed(void);
+void test_ctxrows_tab_rows_match_the_contract(void);
+void test_ctxrows_group_rows_match_the_contract(void);
+void test_ctxrows_strip_and_editor_share_one_row_set(void);
+void test_ctxrows_border_rows_need_a_second_pane(void);
+void test_ctxrows_footer_names_the_current_number_style(void);
+void test_ctxrows_overlay_rows_match_the_contract(void);
+#if YEW_WITH_FUSS
+void test_ctxrows_fuss_file_rows_follow_git_status(void);
+void test_ctxrows_fuss_dir_rows_follow_expansion_and_subtree(void);
+void test_ctxrows_fuss_blank_rows_match_the_contract(void);
+void test_ctxrows_fuss_unknown_path_greys_the_status_rows(void);
+#endif
+void test_ctxrows_every_row_resolves_to_a_registry_command(void);
+void test_ctxrows_the_action_table_is_wholly_resolvable(void);
 void test_mouse_click_window_is_399_yes_401_no(void);
 void test_mouse_click_counter_resets_on_a_different_cell(void);
 void test_mouse_click_quad_wraps_to_one(void);
