@@ -3,6 +3,7 @@
 #include "harness.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -20,6 +21,24 @@
 #ifndef YEW_TEST_FAKEHTTP
 #define YEW_TEST_FAKEHTTP "build/tests/helpers/fakehttp"
 #endif
+
+static u64 cancel_open_fd_count(void)
+{
+    long limit = sysconf(_SC_OPEN_MAX);
+    u64 count = 0U;
+    int fd;
+
+    if (limit < 0)
+        limit = 1024;
+    if (limit > 65536)
+        limit = 65536;
+    for (fd = 0; fd < (int)limit; fd++) {
+        errno = 0;
+        if (fcntl(fd, F_GETFD) >= 0 || errno != EBADF)
+            count++;
+    }
+    return count;
+}
 
 static void cancel_call_init(Ed *ed, AiCall *call)
 {
@@ -231,8 +250,11 @@ void test_ai_cancel_curl_reaps_five_hundred_cycles(void)
     char error[192];
     Ed ed;
     u32 cycle;
+    u64 open_fds;
+    int status = 0;
 
     yew_ed_init(&ed);
+    open_fds = cancel_open_fd_count();
     spec.argv = argv;
     spec.sink = YEW_SINK_COLLECT;
     for (cycle = 0U; cycle < 500U; cycle++) {
@@ -258,5 +280,9 @@ void test_ai_cancel_curl_reaps_five_hundred_cycles(void)
         YEW_ASSERT_EQ_U64(ed.jobs.len, 0U);
         YEW_ASSERT_EQ_U64(ed.ai->nretired_jobs, 0U);
     }
+    YEW_ASSERT_EQ_U64(cancel_open_fd_count(), open_fds);
+    errno = 0;
+    YEW_ASSERT_EQ_I64(waitpid(-1, &status, WNOHANG), -1);
+    YEW_ASSERT_EQ_I64(errno, ECHILD);
     yew_ed_free(&ed);
 }
