@@ -43,23 +43,53 @@ static int g_wfd = -1;
 static int g_sigpipe_w = -1;
 static int g_guard_wfd = -1;
 static bool g_atexit_armed;
+/* Sprint 57.11: mode 1003 (any-motion tracking) is armed only while a
+ * context menu is open.  The flag selects which restore blob is written,
+ * so every restore path — normal, atexit, fatal signal, SIGTSTP, and the
+ * guard sibling — disables 1003 exactly when it was enabled. */
+static volatile sig_atomic_t g_mouse_motion;
+
+#define YEW_TTY_RESTORE_HEAD                                                 \
+    "\x1b[<u"                                                               \
+    "\x1b[?2004l"
+#define YEW_TTY_RESTORE_TAIL                                                 \
+    "\x1b[?1002l"                                                           \
+    "\x1b[?1006l"                                                           \
+    "\x1b[?1004l"                                                           \
+    "\x1b[?2026l"                                                           \
+    "\x1b[0m"                                                               \
+    "\x1b[0 q"                                                              \
+    "\x1b[?1049l"                                                           \
+    "\x1b[?25h"
 
 static const char YEW_TTY_RESTORE_BLOB[] =
-    "\x1b[<u"
-    "\x1b[?2004l"
-    "\x1b[?1002l"
-    "\x1b[?1006l"
-    "\x1b[?1004l"
-    "\x1b[?2026l"
-    "\x1b[0m"
-    "\x1b[0 q"
-    "\x1b[?1049l"
-    "\x1b[?25h";
+    YEW_TTY_RESTORE_HEAD
+    YEW_TTY_RESTORE_TAIL;
+static const char YEW_TTY_RESTORE_BLOB_MOTION[] =
+    YEW_TTY_RESTORE_HEAD
+    "\x1b[?1003l"
+    YEW_TTY_RESTORE_TAIL;
+static const char YEW_TTY_MOTION_ON[] = "\x1b[?1003h";
+static const char YEW_TTY_MOTION_OFF[] = "\x1b[?1003l";
 
+/* One byte per guard note.  CLEAN also forgets MOTION: a restore that
+ * reached the terminal disabled 1003 along with everything else. */
 enum {
     YEW_TTY_GUARD_RAW = 'R',
-    YEW_TTY_GUARD_CLEAN = 'C'
+    YEW_TTY_GUARD_CLEAN = 'C',
+    YEW_TTY_GUARD_MOTION = 'M',
+    YEW_TTY_GUARD_STILL = 'S'
 };
+
+static const char *yew_tty_restore_pick(size_t *len)
+{
+    if (g_mouse_motion) {
+        *len = sizeof(YEW_TTY_RESTORE_BLOB_MOTION) - 1U;
+        return YEW_TTY_RESTORE_BLOB_MOTION;
+    }
+    *len = sizeof(YEW_TTY_RESTORE_BLOB) - 1U;
+    return YEW_TTY_RESTORE_BLOB;
+}
 
 /* BEGIN ASYNC-SIGNAL-SAFE — allowlist: write tcsetattr sigaction signal
  * raise kill sigemptyset sigaddset sigprocmask. */
@@ -99,10 +129,13 @@ void yew_tty_restore(void)
     yew_tty_lifecycle_mask(&blocked);
     masked = sigprocmask(SIG_BLOCK, &blocked, &saved) == 0;
     if (g_raw) {
-        (void)!write(g_wfd, YEW_TTY_RESTORE_BLOB,
-                     sizeof(YEW_TTY_RESTORE_BLOB) - 1U);
+        size_t blob_len;
+        const char *blob = yew_tty_restore_pick(&blob_len);
+
+        (void)!write(g_wfd, blob, blob_len);
         (void)tcsetattr(g_tfd, TCSAFLUSH, &g_saved);
         g_raw = 0;
+        g_mouse_motion = 0;
         yew_tty_guard_note(YEW_TTY_GUARD_CLEAN);
     }
     if (masked)
@@ -203,6 +236,7 @@ static void guard_child(int read_fd, const struct termios *saved)
 {
     u8 states[64];
     bool raw = false;
+    bool motion = false;
     bool ok = true;
 
     (void)setpgid(0, 0);
@@ -219,10 +253,16 @@ static void guard_child(int read_fd, const struct termios *saved)
 
         if (n > 0) {
             for (i = 0; i < n; i++) {
-                if (states[i] == YEW_TTY_GUARD_RAW)
+                if (states[i] == YEW_TTY_GUARD_RAW) {
                     raw = true;
-                else if (states[i] == YEW_TTY_GUARD_CLEAN)
+                } else if (states[i] == YEW_TTY_GUARD_CLEAN) {
                     raw = false;
+                    motion = false;
+                } else if (states[i] == YEW_TTY_GUARD_MOTION) {
+                    motion = true;
+                } else if (states[i] == YEW_TTY_GUARD_STILL) {
+                    motion = false;
+                }
             }
             continue;
         }
@@ -233,8 +273,12 @@ static void guard_child(int read_fd, const struct termios *saved)
         break;
     }
     if (raw) {
-        ok = yew_tty_write_all(STDOUT_FILENO, YEW_TTY_RESTORE_BLOB,
-                               sizeof(YEW_TTY_RESTORE_BLOB) - 1U) && ok;
+        const char *blob = motion ? YEW_TTY_RESTORE_BLOB_MOTION
+                                  : YEW_TTY_RESTORE_BLOB;
+        size_t blob_len = motion ? sizeof(YEW_TTY_RESTORE_BLOB_MOTION) - 1U
+                                 : sizeof(YEW_TTY_RESTORE_BLOB) - 1U;
+
+        ok = yew_tty_write_all(STDOUT_FILENO, blob, blob_len) && ok;
         if (tcsetattr(STDIN_FILENO, TCSAFLUSH, saved) != 0)
             ok = false;
     }
@@ -807,6 +851,36 @@ void yew_tty_suspend(Tty *t)
     (void)kill(0, SIGTSTP);
 }
 
+void yew_tty_mouse_motion(bool on)
+{
+    sigset_t blocked;
+    sigset_t saved;
+    bool masked;
+
+    if ((g_mouse_motion != 0) == on)
+        return;
+    /* The flag and the byte that makes it true must not be split by a
+     * restore: a SIGTSTP between them would either leave 1003 armed
+     * behind a cleared flag or clear a flag the terminal never saw. */
+    yew_tty_lifecycle_mask(&blocked);
+    masked = sigprocmask(SIG_BLOCK, &blocked, &saved) == 0;
+    g_mouse_motion = on ? 1 : 0;
+    if (g_wfd >= 0) {
+        (void)yew_tty_write_all(g_wfd, on ? YEW_TTY_MOTION_ON
+                                          : YEW_TTY_MOTION_OFF,
+                                sizeof(YEW_TTY_MOTION_ON) - 1U);
+    }
+    yew_tty_guard_note(on ? (u8)YEW_TTY_GUARD_MOTION
+                          : (u8)YEW_TTY_GUARD_STILL);
+    if (masked)
+        (void)sigprocmask(SIG_SETMASK, &saved, NULL);
+}
+
+bool yew_tty_mouse_motion_active(void)
+{
+    return g_mouse_motion != 0;
+}
+
 static bool yew_tty_streq(const char *left, const char *right)
 {
     return left != NULL && strcmp(left, right) == 0;
@@ -1353,7 +1427,10 @@ TtyBackground yew_tty_probe_background(const Tty *t)
 
 const u8 *yew_tty_restore_blob(size_t *len)
 {
+    size_t blob_len;
+    const char *blob = yew_tty_restore_pick(&blob_len);
+
     if (len != NULL)
-        *len = sizeof(YEW_TTY_RESTORE_BLOB) - 1U;
-    return (const u8 *)YEW_TTY_RESTORE_BLOB;
+        *len = blob_len;
+    return (const u8 *)blob;
 }
