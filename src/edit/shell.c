@@ -1,4 +1,5 @@
 /* Sprint 19: the three consumption modes and the *jobs* table. */
+#define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
 
 #include "edit/shell.h"
