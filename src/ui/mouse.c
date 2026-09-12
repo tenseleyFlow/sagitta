@@ -1520,10 +1520,92 @@ static void drag_dwell(Ed *ed, int slot, bool on_row1)
     }
 }
 
+/*
+ * The row-1 slot the held entry started in, or -1 when the thing being
+ * carried has no row-1 entry at all — a member lifted off row 2.
+ *
+ * Resolved from the PRE-DRAG payloads, which is the only list that
+ * still knows where it was: a grouped tab's index never appears as a
+ * row-1 payload, so the two cannot be confused.
+ */
+static int held_pre_slot(const Ed *ed)
+{
+    int i;
+
+    for (i = 0; i < yew_strip_slot_count(); i++) {
+        i32 pre = 0;
+
+        if (yew_strip_pre_payload(i, &pre) &&
+            pre == ed->mouse.press_rgn.payload)
+            return i;
+    }
+    return -1;
+}
+
+/*
+ * WHERE THE DRAG IS AIMING — read from the entry the pointer is
+ * CARRYING, not from the one cell the pointer is on.
+ *
+ * The float is drawn at `press_x − press_rgn.rect.x` behind the
+ * pointer (§2, the grip the press established), so with a wide tab
+ * grabbed near its right edge the carried entry sits squarely on top of
+ * its neighbour while the pointer is still inside the tab's own slot.
+ * Targeting from the pointer then leaves every other entry standing
+ * still under something that is visibly on top of them, until the
+ * pointer finally crosses a whole tab-width later and the strip jumps.
+ *
+ * The rule is the one every tab strip uses: the carried entry changes
+ * places with a neighbour once it has travelled HALF that neighbour's
+ * width over it.  That threshold is also what makes the answer stable —
+ * the swap moves the carried entry exactly onto the cells that justified
+ * it, so the reverse test cannot fire at the same pointer position and
+ * the preview cannot oscillate between two frames (invariant 5's
+ * "same state, same picture" applied to a picture that is its own
+ * input).
+ */
+static int drag_target_slot(Ed *ed, u16 col)
+{
+    MouseState *m = &ed->mouse;
+    int n = yew_strip_slot_count();
+    int to;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 lead;
+    i32 trail;
+    i32 grab;
+
+    if (n <= 0)
+        return -1;
+    to = m->drag_to_valid ? m->drag_to_slot : held_pre_slot(ed);
+    /* Nothing of ours is on row 1 — a member off row 2, or an entry the
+     * strip scrolled away — so the pointer's own cell is all there is. */
+    if (to < 0 || to >= n || !yew_strip_slot_cells(to, &c0, &c1))
+        return yew_strip_slot_at(col, ed->tab_strip_rect.y);
+    grab = m->press_x > m->press_rgn.rect.x
+               ? (i32)m->press_x - (i32)m->press_rgn.rect.x : 0;
+    lead = (i32)col - grab;
+    if (lead < (i32)ed->tab_strip_rect.x)
+        lead = (i32)ed->tab_strip_rect.x;
+    trail = lead + ((i32)c1 - (i32)c0);
+    if (lead < (i32)c0) {
+        while (to > 0 && yew_strip_slot_cells(to - 1, &a0, &a1) &&
+               lead < (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+            to--;
+    } else if (lead > (i32)c0) {
+        while (to < n - 1 && yew_strip_slot_cells(to + 1, &a0, &a1) &&
+               trail > (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+            to++;
+    }
+    return to;
+}
+
 static void drag_strip_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
-    int slot;
+    bool on_row1 = k->row == ed->tab_strip_rect.y;
+    int slot = -1;
 
     /*
      * The array is frozen for the drag's lifetime, so a changed count
@@ -1535,22 +1617,15 @@ static void drag_strip_motion(Ed *ed, const Key *k)
         yew_mouse_cancel(ed);
         return;
     }
-    slot = yew_strip_slot_at(k->col, k->row);
-    if (slot >= 0) {
-        if (!m->drag_to_valid || m->drag_to_slot != slot || m->drag_to_tail) {
-            m->drag_to_slot = slot;
-            m->drag_to_valid = true;
-            m->drag_to_tail = false;
-            ed->full_damage = true;
-        }
-    } else if (yew_strip_slot_count() > 0 &&
-               k->row == ed->tab_strip_rect.y &&
-               k->col >= yew_strip_tail_x()) {
+    if (on_row1 && yew_strip_slot_count() > 0 &&
+        k->col >= yew_strip_tail_x()) {
         /*
          * The blank tail past the last entry — row 1's, whatever row
          * the press came from: a member dragged UP out of row 2 aims at
          * row 1's empty space, and that gesture is the whole reason the
-         * tail is a drop target.
+         * tail is a drop target.  Checked FIRST now that every other
+         * cell of the row resolves a slot; no slot can contain a column
+         * at or past the tail, so the two still never overlap.
          */
         if (!m->drag_to_tail) {
             m->drag_to_slot = yew_strip_slot_count() - 1;
@@ -1558,8 +1633,18 @@ static void drag_strip_motion(Ed *ed, const Key *k)
             m->drag_to_tail = true;
             ed->full_damage = true;
         }
+    } else if (on_row1) {
+        slot = drag_target_slot(ed, k->col);
+        if (slot >= 0 &&
+            (!m->drag_to_valid || m->drag_to_slot != slot ||
+             m->drag_to_tail)) {
+            m->drag_to_slot = slot;
+            m->drag_to_valid = true;
+            m->drag_to_tail = false;
+            ed->full_damage = true;
+        }
     }
-    drag_dwell(ed, slot, k->row == ed->tab_strip_rect.y);
+    drag_dwell(ed, slot, on_row1);
 }
 
 /* The tab-array index a row-1 slot names, resolved against the PRE-DRAG
