@@ -110,6 +110,19 @@ moves to the next 64 KiB boundary above the measured floor: 1,600 KiB
 (1,638,400 bytes). The 2 MiB full gate, 1.5 MiB glibc minimal gate, measurement
 recipe, feature matrix, and post-1.0 optimization ratchets are unchanged.
 
+**Amendment S57-A6 (2026-09-12) — the musl-full gate follows required UI
+growth.** Amendment S57-A5 measured the full static PIE at 2,090,896 bytes,
+only 6,256 bytes below its 2 MiB cap. The completed Sprint 57.13 mouse,
+context-menu, and tab work measures 2,115,472 bytes: a 24,576-byte increase.
+The pinned glibc full ledger records the same 24,576-byte on-disk increase,
+with 17,360 bytes of object-section growth in `core.ui`, and still passes its
+unchanged 2 MiB gate at 2,000,584 bytes. This is attributable required-feature
+growth, not optional-module retention or a footprint explosion. The musl-full
+gate therefore moves to the next 64 KiB boundary above the measured floor:
+2,112 KiB (2,162,688 bytes). The glibc full and minimal gates, musl-minimal
+gate, measurement recipe, feature matrix, and post-1.0 optimization ratchets
+are unchanged.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

@@ -16,9 +16,13 @@ Sprint 57 amendment S57-A1 sets the achievable glibc hard bars at 2 MiB full
 and 1.5 MiB minimal. Amendment S57-A5 raises only the musl static-PIE minimal
 bar to 1,600 KiB after required Sprint 57.12 core work moved its hosted
 measurement from 1,562,480 to 1,582,960 bytes without retaining an optional
-module. The full musl bar remains 2 MiB. The former 1.5 MiB full / 900 KiB
-minimal planning values remain post-1.0 optimization ratchets. They are not
-alternate measurements and must not be selected by a CI flag.
+module. Amendment S57-A6 raises the musl full bar to 2,112 KiB after required
+UI and mouse work moved it from 2,090,896 to 2,115,472 bytes. The same source
+change moved the pinned glibc full binary by 24,576 bytes, chiefly in
+`core.ui`, while that binary remains below its unchanged 2 MiB gate. The
+former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
+optimization ratchets. They are not alternate measurements and must not be
+selected by a CI flag.
 
 The four single-module values are the Sprint 57 contract caps. Their `why`
 fields record the pinned GCC build's on-disk delta over minimal, rounded

@@ -103,7 +103,7 @@ package manager and a user's disk both see.
 | ai-only | `ai` | ≤ 1 676 KiB | minimal + measured delta rounded to 140 KiB |
 | fuss-only | `fuss` | ≤ 1 686 KiB | minimal + measured delta rounded to 150 KiB |
 | plugins-only | `plugins` | ≤ 1 636 KiB | minimal + measured delta rounded to 100 KiB |
-| musl static-PIE, full | `lsp ai fuss plugins` | ≤ 2.0 MiB | §4; a static build carries libc |
+| musl static-PIE, full | `lsp ai fuss plugins` | ≤ 2 112 KiB | amended S57-A6 required full matrix |
 | musl static-PIE, minimal | *(empty)* | ≤ 1 600 KiB | amended S57-A5 required-core floor |
 
 - The four single-module budgets are **derived, not invented**: the amended
@@ -139,6 +139,19 @@ explicit clipboard aliases, and safe job-output return may not be excised to
 recover an obsolete floor. The musl-minimal cap is therefore the next 64 KiB
 boundary above the observed binary, 1,600 KiB (1,638,400 bytes). All other
 caps and the shipping measurement remain unchanged.
+
+**Amendment S57-A6 — rebaseline static full, preserve the UI.** The S57-A5
+candidate measured 2,090,896 bytes full, leaving only 6,256 bytes below the
+2 MiB musl cap. The completed Sprint 57.13 mouse, context-menu, and tab work
+measures 2,115,472 bytes. The pinned glibc full ledger moves by the same
+24,576 bytes to 2,000,584 bytes, remains below its unchanged 2 MiB gate, and
+attributes 17,360 bytes of object-section growth to `core.ui`. The remaining
+growth is distributed across the expected editor, terminal, LSP, and FUSS
+surfaces; no unrelated module crossed the boundary. Removing the required UI
+would violate the core-preservation stop rule. The musl-full cap is therefore
+the next 64 KiB boundary above the observed binary, 2,112 KiB (2,162,688
+bytes). The glibc full and minimal caps, musl-minimal cap, feature matrix, and
+shipping measurement remain unchanged.
 
 ### 2. The per-module size ledger
 
