@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-024`
+Next available ID: `YEW-F-027`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -36,6 +36,9 @@ recorded in `audit-00.md`.
 | YEW-F-021 | M | open | F14 PLUG | plugin teardown retains raw hook and ledger lengths | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
 | YEW-F-022 | M | open | F14 PLUG | plugin trust wording gate rejects its required warning | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
 | YEW-F-023 | M | open | F14 PLUG | plugin commands cannot enter the recorder CMDWORD space | tests/audit/yew_f_023.c | s58 F14 q8 |
+| YEW-F-024 | M | open | F15 CI | cross-surface XFAIL debt table stops at F004 | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
+| YEW-F-025 | M | open | F15 CI | script tests have no XFAIL or hard-XPASS state | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
+| YEW-F-026 | M | open | F15 CI | PTY cases have no XFAIL or hard-XPASS state | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -243,6 +246,28 @@ command named `up` is accepted beside core's `up` instead of reaching the
 required collision check. This is visible as a macro that omits the plugin
 action rather than a byte-loss path, so it is Medium. It remains open for
 Sprint 59; no product source changed during the audit.
+
+`YEW-F-024` is Medium because Sprint 58 calls
+`.docs/audits/xfail-debt.md` the authoritative cross-surface debt table and
+requires every live finding to remain there until closure, but it lists only
+`YEW-F-001` through `YEW-F-004` while the finding ledger and enforced audit
+registry run through `YEW-F-023`. The expected failures still execute, so
+this is tracking/control drift rather than a silently green product failure.
+It remains open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-025` is Medium because the script runner has no syntax or state for an
+expected failure. A seeded `# XFAIL: YEW-F-NNN` is only a Fletch comment;
+failure remains an ordinary `FAIL`, and success remains `PASS`, so hard XPASS
+cannot be represented on this required surface. The unit audit runner and
+Fletch conformance runner do implement hard XPASS. It remains open for Sprint
+59; no product source changed during the audit.
+
+`YEW-F-026` is Medium because Sprint 58 explicitly requires
+`PtyCase.xfail_id`, but the structure has only name/profile/geometry/function
+fields and the runner has no expected-failure classification. A seeded golden
+mismatch remains an ordinary failure and a later matching golden cannot be
+reported as XPASS. It remains open for Sprint 59; no product source changed
+during the audit.
 
 ## Unverified observations
 
