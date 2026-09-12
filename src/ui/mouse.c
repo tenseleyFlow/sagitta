@@ -1634,28 +1634,6 @@ static int held_pre_slot(const Ed *ed)
 }
 
 /*
- * WHERE THE DRAG IS AIMING — read from the entry the pointer is
- * CARRYING, not from the one cell the pointer is on.
- *
- * The float is drawn at `press_x − press_rgn.rect.x` behind the
- * pointer (§2, the grip the press established), so with a wide tab
- * grabbed near its right edge the carried entry sits squarely on top of
- * its neighbour while the pointer is still inside the tab's own slot.
- * Targeting from the pointer then leaves every other entry standing
- * still under something that is visibly on top of them, until the
- * pointer finally crosses a whole tab-width later and the strip jumps.
- *
- * The rule is the one every tab strip uses: the carried entry changes
- * places with a neighbour once it has travelled HALF that neighbour's
- * width over it — see swap_threshold for the one exception, a group
- * entry's central hover band.  That threshold is also what makes the answer stable —
- * the swap moves the carried entry exactly onto the cells that justified
- * it, so the reverse test cannot fire at the same pointer position and
- * the preview cannot oscillate between two frames (invariant 5's
- * "same state, same picture" applied to a picture that is its own
- * input).
- */
-/*
  * Sprint 57.14 field repair: A GROUP ENTRY'S HOVER BAND.
  *
  * The threshold at which the carried entry changes places with the
@@ -1706,6 +1684,28 @@ static i32 swap_threshold(int slot, u16 a0, u16 a1, bool rightwards)
     return rightwards ? (i32)a1 - w / 4 : (i32)a0 + w / 4;
 }
 
+/*
+ * WHERE THE DRAG IS AIMING — read from the entry the pointer is
+ * CARRYING, not from the one cell the pointer is on.
+ *
+ * The float is drawn at `press_x − press_rgn.rect.x` behind the
+ * pointer (§2, the grip the press established), so with a wide tab
+ * grabbed near its right edge the carried entry sits squarely on top of
+ * its neighbour while the pointer is still inside the tab's own slot.
+ * Targeting from the pointer then leaves every other entry standing
+ * still under something that is visibly on top of them, until the
+ * pointer finally crosses a whole tab-width later and the strip jumps.
+ *
+ * The rule is the one every tab strip uses: the carried entry changes
+ * places with a neighbour once it has travelled HALF that neighbour's
+ * width over it — see swap_threshold for the one exception, a group
+ * entry's central hover band.  That threshold is also what makes the
+ * answer stable — the swap moves the carried entry exactly onto the
+ * cells that justified it, so the reverse test cannot fire at the same
+ * pointer position and the preview cannot oscillate between two frames
+ * (invariant 5's "same state, same picture" applied to a picture that
+ * is its own input).
+ */
 static int drag_target_slot(Ed *ed, u16 col)
 {
     MouseState *m = &ed->mouse;
@@ -1765,9 +1765,8 @@ static int drag_target_slot(Ed *ed, u16 col)
  */
 static int held_member_slot(Ed *ed, u32 gid)
 {
-    const Tab *t = yew_tab_at_const(ed,
-                                    yew_tab_index_of_id(ed,
-                                                        ed->mouse.drag_tab_id));
+    int idx = yew_tab_index_of_id(ed, ed->mouse.drag_tab_id);
+    const Tab *t = yew_tab_at_const(ed, idx);
 
     if (t == NULL || t->group_id != gid || t->group_ordinal == 0U)
         return -1;
