@@ -225,3 +225,28 @@ router's source still contains no allocation token.
 7. gcc and clang build warning-free under `-std=c11 -pedantic -Wall -Wextra
    -Werror`; ASan/UBSan, `MODULES=""`, perf-mouse, fuzz-mouse and the full PTY
    suite pass.
+
+## Closeout — REPOSITORY COMPLETE 2026-09-12
+
+All three deliverables shipped on branch `tab-drag-feel`.
+
+- Row 1 is the exit: `drop_out_of_group` resolves the destination to a tab
+  index from the pre-drag slot table BEFORE the removal, then re-derives `from`
+  from the tab id and clamps. The sole-member test drops onto a slot to the
+  group's right, the group dissolves under the drop, and the tab still lands
+  where it was aimed.
+- The float is `strip_draw_float`, drawn last in `yew_tab_strip_draw` from
+  `yew_grid_puts` and nothing else; `yew_strip_float_rect` lets the test
+  hit-test every cell it covers and find `YEW_REGION_NONE`.
+- The dwell is 250 ms with quarters at 62/124/186; the cue is a pure function
+  of `ed->now_ms − dwell_since_ms`, and `yew_mouse_deadline` returns each edge.
+  `m->flash_phase` marks damage only, three times across the whole dwell.
+
+Lanes: gcc and clang `-Werror` clean; `unit 2538/0`; `MODULES="" 2050/0`;
+`SAN=1 2520/0`; `pty 468 cases, 0 mismatches`; `perf-mouse` burst 0.007 ms and
+`router_allocations=none`; `fuzz-mouse` four seeds; `fletch 38/38`;
+`script 93/0`; check-input, bans, check-cmd-dispatch, check-sigsafe ok.
+
+Goldens re-recorded: `chrome_drag`, `chrome_drag_nocolor`,
+`chrome_drag_colors_16`, `chrome_drag_ascii`, `s27_dwell_opens_member_strip` —
+each loses the ghost entry from row 1 and gains the float at the pointer.
