@@ -76,6 +76,11 @@ endif
 
 TARGET_OS := $(if $(filter arm64-macos,$(TARGET)),Darwin,Linux)
 BUILD   ?= build
+COV ?= 0
+COV_CC ?= clang
+ifeq ($(COV),1)
+override BUILD := build-cov
+endif
 ALLOCDBG ?= 0
 ALIGN_SAN ?= 0
 EMBED_RUNTIME ?= 0
@@ -239,6 +244,15 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DYEW_EMBED_RUNTIME=$(EMBED_RUNTIME) \
           $(EXTRA_CFLAGS)
 
+ifeq ($(COV),1)
+COV_TRACE_FLAG := -fsanitize-coverage=trace-pc-guard
+CFLAGS += -DYEW_COV=1 $(COV_TRACE_FLAG)
+LDFLAGS_COV := $(COV_TRACE_FLAG)
+else
+CFLAGS += -DYEW_COV=0
+LDFLAGS_COV :=
+endif
+
 ifeq ($(TARGET),arm64-macos)
 CFLAGS += -D_DARWIN_C_SOURCE
 endif
@@ -307,6 +321,7 @@ endif
 # the BSDs still need it.
 #
 LDFLAGS :=
+LDFLAGS += $(LDFLAGS_COV)
 ifeq ($(SHIPPING),1)
 ifeq ($(TARGET_OS),Linux)
 ifeq ($(GC_SECTIONS),1)
@@ -611,7 +626,7 @@ ifeq ($(EMBED_RUNTIME),1)
 OBJ += $(RUNTIME_BLOB_OBJ)
 endif
 
-UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
+UNIT_SRC := $(filter-out tests/unit/fakeclip.c tests/unit/test_cov.c, \
               $(sort $(wildcard tests/unit/*.c)))
 UNIT_JSON_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
                  tests/unit/test_jsonw.c
@@ -765,6 +780,9 @@ UNIT_LINK_OBJ := $(filter-out $(BUILD)/src/main.o \
                  $(TEXT_FUZZ_SUPPORT_OBJ)
 
 FUZZ_LIB_OBJ := $(BUILD)/tests/fuzz/fuzzlib.o
+FUZZ_COV_OBJ := $(if $(filter 1,$(COV)),$(BUILD)/tests/fuzz/cov.o)
+FUZZ_COV_TEST_OBJ := $(BUILD)/tests/unit/test_cov.o
+FUZZ_COV_TEST := $(BUILD)/cov_selftest
 FUZZ_UTF8_OBJ := $(BUILD)/tests/fuzz/fuzz_utf8.o
 FUZZ_GRAPHEME_OBJ := $(BUILD)/tests/fuzz/fuzz_grapheme.o
 FUZZ_INPUT_OBJ := $(BUILD)/tests/fuzz/fuzz_input.o
@@ -812,7 +830,7 @@ LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
 LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
-FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
+FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ) $(FUZZ_COV_OBJ)
 F01_UNICODE_AUDIT_SRC := tests/audit/f01_unicode.c
 F01_UNICODE_AUDIT_OBJ := $(BUILD)/tests/audit/f01_unicode.o
 F01_UNICODE_AUDIT_BIN := $(BUILD)/tests/audit/f01_unicode
@@ -957,7 +975,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) \
                 $(SYN_ENGINE_UNIT_OBJ) \
                 $(RUNTIME_BLOB_GEN) $(EMBED_INITRAMFS_GEN) \
                 $(RUNTIME_BLOB_C) \
-                $(FUZZ_LIB_OBJ) \
+                $(FUZZ_LIB_OBJ) $(FUZZ_COV_OBJ) $(FUZZ_COV_TEST_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
                 $(FUZZ_TEXTBUF_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
@@ -1018,7 +1036,7 @@ STAMP_MODULES := $(strip $(shell if test -f '$(BUILD)/mods.stamp'; then \
 ifneq ($(STAMP_MODULES),$(MODULES))
 MODULE_FORCE := FORCE
 endif
-BUILD_PROFILE_KEY := target=$(TARGET);cc=$(CC);shipping=$(SHIPPING);gc=$(GC_SECTIONS);allocdbg=$(ALLOCDBG);alignsan=$(ALIGN_SAN);embed_runtime=$(EMBED_RUNTIME);san=$(SAN);valgrind=$(VALGRIND);fl_cgoto=$(FL_CGOTO);fl_checks=$(FL_CHECKS);fl_trace=$(CFLAGS_FL_TRACE);prefix=$(PREFIX);extra=$(EXTRA_CFLAGS)
+BUILD_PROFILE_KEY := target=$(TARGET);cc=$(CC);shipping=$(SHIPPING);gc=$(GC_SECTIONS);allocdbg=$(ALLOCDBG);alignsan=$(ALIGN_SAN);embed_runtime=$(EMBED_RUNTIME);san=$(SAN);valgrind=$(VALGRIND);cov=$(COV);fl_cgoto=$(FL_CGOTO);fl_checks=$(FL_CHECKS);fl_trace=$(CFLAGS_FL_TRACE);prefix=$(PREFIX);extra=$(EXTRA_CFLAGS)
 STAMP_PROFILE := $(strip $(shell if test -f '$(BUILD)/profile.stamp'; then \
 	cat '$(BUILD)/profile.stamp'; fi))
 ifneq ($(STAMP_PROFILE),$(BUILD_PROFILE_KEY))
@@ -1037,6 +1055,7 @@ endif
         embedded-image embedded-lowmem-image embedded embedded-gate \
         musl-verify test-musl-hosts \
         test-script fletch-script-coverage test-git-script fuzzlib-selftest \
+        fuzz-cov cov-selftest \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
@@ -1152,6 +1171,10 @@ $(BUILD)/demo_paint: $(PTY_DEMO_LINK_OBJ)
 
 $(BUILD)/fuzz_utf8: $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ) $(LDLIBS)
+
+$(FUZZ_COV_TEST): $(FUZZ_COV_OBJ) $(FUZZ_COV_TEST_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_COV_OBJ) \
+		$(FUZZ_COV_TEST_OBJ) $(LDLIBS)
 
 $(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) $(AUDIT_SUPPORT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) \
@@ -1806,6 +1829,14 @@ fuzzlib-selftest: $(BUILD)/fuzz_utf8
 	done; \
 	grep -F -- '--watchdog-seconds=N' $$out >/dev/null; \
 	echo "fuzzlib-selftest: ok"
+
+ifeq ($(COV),1)
+cov-selftest: $(FUZZ_COV_TEST)
+	$(FUZZ_COV_TEST)
+else
+cov-selftest:
+	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' cov-selftest
+endif
 
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script \
       fuzzlib-selftest \
@@ -3182,6 +3213,13 @@ $(BUILD)/profile.stamp: $(PROFILE_FORCE) | dirs
 ifeq ($(FL_CGOTO),1)
 $(BUILD)/src/fl/vm.o: CFLAGS := \
   $(subst -std=c11,-std=gnu11,$(CFLAGS)) -Wno-pedantic
+endif
+
+# The callbacks and their direct self-test must not instrument themselves.
+# Removing the trace flag here avoids callback recursion before main.
+ifeq ($(COV),1)
+$(FUZZ_COV_OBJ) $(FUZZ_COV_TEST_OBJ): CFLAGS := \
+  $(filter-out $(COV_TRACE_FLAG),$(CFLAGS))
 endif
 
 $(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(BUILD)/profile.stamp \
