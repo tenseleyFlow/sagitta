@@ -208,14 +208,27 @@ PairAction yew_pairs_decide(Buffer *b, ByteOff at, u8 byte, u8 *closer)
      */
     for (i = (u32)b->pairs.n; i-- > 0U;) {
         const PairMark *entry = &b->pairs.v[i];
+        u8 here = 0U;
 
         if (!pairs_alive(b, entry))
             continue;
-        if (entry->closer == byte &&
-            yew_mark_pos(b->marks, entry->close).v == at.v) {
+        if (entry->closer != byte ||
+            yew_mark_pos(b->marks, entry->close).v != at.v)
+            continue;
+        /*
+         * A mark inside a deleted range CLAMPS to the deletion point
+         * rather than dying (text/mark.c adjust_delete), so a remembered
+         * closer can end up pointing at a byte that is not that closer.
+         * Skipping there would advance the caret over someone else's
+         * byte — invariant 2.  Verify the byte, and retire the entry when
+         * it lies.
+         */
+        if (!pairs_byte_at(b->tb, at.v, &here) || here != byte) {
             pairs_drop_at(b, i);
-            return YEW_PAIR_SKIP;
+            continue;
         }
+        pairs_drop_at(b, i);
+        return YEW_PAIR_SKIP;
     }
 
     table = pairs_table(b, &n);

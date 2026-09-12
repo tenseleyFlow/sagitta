@@ -116,6 +116,9 @@ UNITS_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
 MULTICURSOR_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                           0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 MULTICURSOR_FUZZ_OPS ?= 100000
+INSERT_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                     0x9e3779b97f4a7c15 0xd1b54a32d192ed03
+INSERT_FUZZ_ITERS ?= 2000
 SHADOW_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                     0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 SHADOW_FUZZ_ITERS ?= 50000
@@ -774,6 +777,7 @@ FUZZ_UNDO_OBJ := $(BUILD)/tests/fuzz/fuzz_undo.o
 FUZZ_TEXTBUF_OBJ := $(BUILD)/tests/fuzz/fuzz_textbuf.o
 FUZZ_UNITS_OBJ := $(BUILD)/tests/fuzz/fuzz_units.o
 FUZZ_MULTICURSOR_OBJ := $(BUILD)/tests/fuzz/fuzz_multicursor.o
+FUZZ_INSERT_OBJ := $(BUILD)/tests/fuzz/fuzz_insert.o
 FUZZ_CMDPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_cmdparse.o
 FUZZ_RECOMPILE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_compile.o
 FUZZ_REQUOTE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_quote.o
@@ -964,6 +968,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) \
                 $(FUZZ_TEXTBUF_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
                 $(FUZZ_UNITS_OBJ) \
                 $(FUZZ_MULTICURSOR_OBJ) \
+                $(FUZZ_INSERT_OBJ) \
                 $(FUZZ_SHADOW_OBJ) \
                 $(FUZZ_CMDPARSE_OBJ) $(FUZZ_RECOMPILE_OBJ) \
                 $(FUZZ_REDIFF_OBJ) $(RE_REF_OBJ) \
@@ -1040,7 +1045,8 @@ endif
         test-script test-git-script fuzzlib-selftest \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
-        fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
+        fuzz-textbuf fuzz-units fuzz-multicursor fuzz-insert \
+        fuzz-cmdparse fuzz-long \
         fuzz-plug-manifest fuzz-pkg-tree fuzz-pkg-tree-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
@@ -1203,6 +1209,10 @@ $(BUILD)/fuzz_units: $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ)
 $(BUILD)/fuzz_multicursor: $(FUZZ_LINK_OBJ) $(FUZZ_MULTICURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_MULTICURSOR_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_insert: $(FUZZ_LINK_OBJ) $(FUZZ_INSERT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_INSERT_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_fl_lex: $(FUZZ_LINK_OBJ) $(FUZZ_FLLEX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -1843,7 +1853,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_lex $(BUILD)/fuzz_fl_parse \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
-      fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
+      fuzz-textbuf fuzz-units fuzz-multicursor fuzz-insert fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
       fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
       $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET) $(PKG_FUZZ_TARGET)
@@ -1919,6 +1929,13 @@ fuzz-units: $(BUILD)/fuzz_units
 # Sanitizer contention can push a valid case past fuzzlib's per-input
 # watchdog, so instrumented seeds run serially while the plain lane stays
 # parallel.
+fuzz-insert: $(BUILD)/fuzz_insert
+	@set -eu; \
+	for seed in $(INSERT_FUZZ_SEEDS); do \
+		$(BUILD)/fuzz_insert --iters=$(INSERT_FUZZ_ITERS) \
+			--seed=$$seed; \
+	done
+
 fuzz-multicursor: $(BUILD)/fuzz_multicursor
 	@set -eu; \
 	iters=$$(( ($(MULTICURSOR_FUZZ_OPS) + 127) / 128 )); \
@@ -3415,6 +3432,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \
          $(FUZZ_TEXTBUF_OBJ:.o=.d) $(TEXT_FUZZ_SUPPORT_OBJ:.o=.d) \
          $(FUZZ_MULTICURSOR_OBJ:.o=.d) \
+         $(FUZZ_INSERT_OBJ:.o=.d) \
          $(FUZZ_SHADOW_OBJ:.o=.d) \
          $(FUZZ_FLAPI_OBJ:.o=.d) $(FUZZ_RECORD_OBJ:.o=.d) \
          $(FUZZ_SYN_OBJ:.o=.d) \
