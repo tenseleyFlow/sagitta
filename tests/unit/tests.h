@@ -2526,6 +2526,8 @@ void test_syn_all_eight_languages_four_seeds_100k_edits(void);
 void test_syn_all_new_pack_two_seeds_2000_edits(void);
 void test_syn_all_state_heavy_four_seeds_25000_edits(void);
 void test_syn_all_new_pack_long_sanitizer_lane(void);
+void test_syn_all_48_definitions_depth_cap_and_firstbyte_sets(void);
+void test_syn_all_48_modes_four_seeds_100k_edits_audit(void);
 void test_syn_fletch_spec14_tokens_match_runtime_definition(void);
 void test_theme_defaults_compile_with_full_attr_coverage(void);
 void test_theme_partial_fallback_and_colour_forms(void);

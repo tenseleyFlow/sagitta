@@ -2498,6 +2498,8 @@ const YewTest yew_tests[] = {
     T(syn_all_new_pack_two_seeds_2000_edits),
     T(syn_all_state_heavy_four_seeds_25000_edits),
     T(syn_all_new_pack_long_sanitizer_lane),
+    T(syn_all_48_definitions_depth_cap_and_firstbyte_sets),
+    T(syn_all_48_modes_four_seeds_100k_edits_audit),
     T(syn_fletch_spec14_tokens_match_runtime_definition),
     T(theme_defaults_compile_with_full_attr_coverage),
     T(theme_partial_fallback_and_colour_forms),

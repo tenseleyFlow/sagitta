@@ -6,12 +6,114 @@
 
 #include "syn/defs.h"
 #include "syn/engine.h"
+#include "syn/langs_gen.h"
 #include "text/piece.h"
 
 typedef struct PackCase {
     const char *language;
     const char *path;
 } PackCase;
+
+static const PackCase all_packs[] = {
+    {"c", "tests/syn/c/01-kitchen.c"},
+    {"cmake", "tests/syn/cmake/01-kitchen.cmake"},
+    {"cpp", "tests/syn/cpp/01-kitchen.cpp"},
+    {"csharp", "tests/syn/csharp/01-kitchen.cs"},
+    {"css", "tests/syn/css/01-standalone.css"},
+    {"dart", "tests/syn/dart/01-kitchen.dart"},
+    {"diff", "tests/syn/diff/01-unified.diff"},
+    {"dockerfile", "tests/syn/dockerfile/01-kitchen.Dockerfile"},
+    {"fish", "tests/syn/fish/01-kitchen.fish"},
+    {"fletch", "tests/syn/fletch/01-spec-14.fl"},
+    {"fortran", "tests/syn/fortran/01-kitchen.f90"},
+    {"fortran-fixed", "tests/syn/fortran/10-kitchen.f"},
+    {"go", "tests/syn/go/01-kitchen.go"},
+    {"graphql", "tests/syn/graphql/01-kitchen.graphql"},
+    {"haskell", "tests/syn/haskell/01-kitchen.hs"},
+    {"hcl", "tests/syn/hcl/01-kitchen.tf"},
+    {"html", "tests/syn/html/01-standalone.html"},
+    {"ini", "tests/syn/ini/01-basics.ini"},
+    {"java", "tests/syn/java/01-kitchen.java"},
+    {"javascript", "tests/syn/javascript/01-kitchen.js"},
+    {"json", "tests/syn/json/01-kitchen.json"},
+    {"jsonc", "tests/syn/json/10-kitchen.jsonc"},
+    {"julia", "tests/syn/julia/01-kitchen.jl"},
+    {"kotlin", "tests/syn/kotlin/01-kitchen.kt"},
+    {"lua", "tests/syn/lua/01-kitchen.lua"},
+    {"make", "tests/syn/make/01-comments.mk"},
+    {"markdown", "tests/syn/markdown/01-atx.md"},
+    {"meson", "tests/syn/meson/01-kitchen.build"},
+    {"nix", "tests/syn/nix/01-kitchen.nix"},
+    {"objective-c", "tests/syn/objective_c/01-kitchen.m"},
+    {"ocaml", "tests/syn/ocaml/01-kitchen.ml"},
+    {"perl", "tests/syn/perl/01-kitchen.pl"},
+    {"powershell", "tests/syn/powershell/01-kitchen.ps1"},
+    {"protobuf", "tests/syn/protobuf/01-kitchen.proto"},
+    {"python", "tests/syn/python/01-kitchen.py"},
+    {"r", "tests/syn/r/01-kitchen.r"},
+    {"ruby", "tests/syn/ruby/01-kitchen.rb"},
+    {"rust", "tests/syn/rust/01-kitchen.rs"},
+    {"sh", "tests/syn/sh/01-comments.sh"},
+    {"sql", "tests/syn/sql/01-kitchen.sql"},
+    {"swift", "tests/syn/swift/01-kitchen.swift"},
+    {"toml", "tests/syn/toml/01-kitchen.toml"},
+    {"typescript", "tests/syn/javascript/10-kitchen.ts"},
+    {"wolf", "tests/syn/wolf/01-kitchen.lu"},
+    {"xml", "tests/syn/xml/01-kitchen.xml"},
+    {"yaml", "tests/syn/yaml/01-kitchen.yml"},
+    {"zig", "tests/syn/zig/01-kitchen.zig"},
+    {"zsh", "tests/syn/zsh/01-kitchen.zsh"},
+};
+
+static bool pack_def_can_embed(const SynDef *def)
+{
+    u32 rule;
+
+    for (rule = 0U; rule < def->nrules; rule++)
+        if (def->rules[rule].embed.lang_kind != SYN_EMBED_LANG_NONE)
+            return true;
+    return false;
+}
+
+static void pack_validate_states(SynEngine *engine)
+{
+    const SynDef *root = yew_syn_engine_def(engine);
+    SynStateTab *tab = yew_syn_engine_states(engine);
+    const SynFrame zero = {0U, 0U, 0U};
+    bool can_embed = pack_def_can_embed(root);
+    u32 state_count = yew_syn_state_count(tab);
+    u32 id;
+
+    for (id = YEW_SYN_STATE_ROOT; id < state_count; id++) {
+        const SynState *state = yew_syn_state_get(tab, id);
+        u8 frame;
+        u8 keep;
+        u8 slot;
+
+        YEW_ASSERT_NOT_NULL(state);
+        YEW_ASSERT(state->depth >= 1U &&
+                   state->depth <= YEW_SYN_DEPTH_MAX);
+        YEW_ASSERT(state->ndef >= 1U && state->ndef <= YEW_SYN_DEF_MAX);
+        for (frame = 0U; frame < state->depth; frame++) {
+            YEW_ASSERT(state->f[frame].def < state->ndef);
+            YEW_ASSERT_NOT_NULL(yew_syn_engine_def_at(
+                engine, state->f[frame].def));
+            if (!can_embed)
+                YEW_ASSERT_EQ_U64(state->f[frame].def, 0U);
+        }
+        for (; frame < YEW_SYN_DEPTH_MAX; frame++)
+            YEW_ASSERT_EQ_MEM(&state->f[frame], &zero, sizeof(zero));
+        keep = state->ndef;
+        if (((state->flags & YEW_SYN_F_EMBED_PEND) != 0U ||
+             (state->f[state->depth - 1U].fl & YEW_SYN_FR_DEFER) != 0U) &&
+            keep < YEW_SYN_DEF_MAX)
+            keep++;
+        for (slot = keep; slot < YEW_SYN_DEF_MAX; slot++)
+            YEW_ASSERT_EQ_U64(state->aux[slot], 0U);
+        if (!can_embed)
+            YEW_ASSERT_EQ_U64(state->ndef, 1U);
+    }
+}
 
 static u64 pack_rand(u64 *state)
 {
@@ -144,11 +246,75 @@ static void pack_run(const PackCase *pack, u64 seed, u32 edits)
     yew_syn_attach(&fresh, 1U, tb);
     pack_settle(&fresh, tb);
     pack_compare(&incremental, &fresh, engine, tb);
+    pack_validate_states(engine);
     yew_syn_detach(&fresh);
     yew_syn_detach(&incremental);
     yew_syn_engine_free(engine);
     yew_textbuf_free(tb);
     free(data);
+}
+
+void test_syn_all_48_definitions_depth_cap_and_firstbyte_sets(void)
+{
+    size_t language;
+
+    _Static_assert(YEW_ARRAY_LEN(all_packs) == 48U,
+                   "audit matrix must cover all 48 syntax definitions");
+    YEW_ASSERT_EQ_U64(yew_syn_builtin_langs_len, YEW_ARRAY_LEN(all_packs));
+    for (language = 0U; language < YEW_ARRAY_LEN(all_packs); language++) {
+        const SynDef *def = yew_syn_def_for(
+            yew_syn_lang_named(all_packs[language].language));
+        SynEngine *engine;
+        SynStateTab *tab;
+        const SynState *root;
+        SynState state;
+        u32 entry;
+        u32 push;
+
+        YEW_ASSERT_NOT_NULL(def);
+        YEW_ASSERT_EQ_STR(def->name, all_packs[language].language);
+        YEW_ASSERT(yew_syn_def_firstbyte_check(def, NULL, NULL));
+        engine = yew_syn_engine_new((SynDef *)def);
+        YEW_ASSERT_NOT_NULL(engine);
+        tab = yew_syn_engine_states(engine);
+        root = yew_syn_state_get(tab, YEW_SYN_STATE_ROOT);
+        YEW_ASSERT_NOT_NULL(root);
+        state = *root;
+        entry = yew_syn_state_intern(tab, &state);
+        YEW_ASSERT_EQ_U64(entry, YEW_SYN_STATE_ROOT);
+        for (push = 0U; push < 40U; push++)
+            yew_syn_state_push(&state, (u16)(push + 1U));
+        for (push = 0U; push < 40U; push++)
+            yew_syn_state_pop(&state, 1U);
+        YEW_ASSERT_EQ_U64(yew_syn_state_intern(tab, &state), entry);
+        YEW_ASSERT_EQ_MEM(&state, root, sizeof(state));
+        pack_validate_states(engine);
+        yew_syn_engine_free(engine);
+    }
+}
+
+void test_syn_all_48_modes_four_seeds_100k_edits_audit(void)
+{
+    static const u64 seeds[] = {
+        UINT64_C(0x58a1100000000001),
+        UINT64_C(0x58a1100000000002),
+        UINT64_C(0x58a1100000000003),
+        UINT64_C(0x58a1100000000004),
+    };
+    const char *enabled = getenv("YEW_SYN_AUDIT_ALL48");
+    size_t language;
+    size_t seed;
+
+    if (enabled == NULL || strcmp(enabled, "1") != 0) {
+        YEW_ASSERT(true);
+        return;
+    }
+    for (language = 0U; language < YEW_ARRAY_LEN(all_packs); language++) {
+        (void)fprintf(stderr, "syn audit: %zu/48 %s\n", language + 1U,
+                      all_packs[language].language);
+        for (seed = 0U; seed < YEW_ARRAY_LEN(seeds); seed++)
+            pack_run(&all_packs[language], seeds[seed], 100000U);
+    }
 }
 
 void test_syn_all_eight_languages_four_seeds_100k_edits(void)
