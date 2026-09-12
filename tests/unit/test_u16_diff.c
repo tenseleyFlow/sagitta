@@ -2,7 +2,9 @@
 
 #include <stdlib.h>
 
+#if YEW_WITH_LSP
 #include "mod/lsp/sync.h"
+#endif
 #include "unicode/u16.h"
 
 /* Deliberately independent of the product UTF-8 decoder.  The audit corpus
@@ -76,14 +78,17 @@ static void audit_line(const TextBuf *tb, const u8 *bytes, size_t len,
 
     YEW_ASSERT_EQ_U64(span.lo, base);
     for (off = 0U; off <= len; off++) {
+#if YEW_WITH_LSP
         i64 line8;
         i64 col8;
         i64 line16;
         i64 col16;
+#endif
         u64 want16 = ref_u16_prefix(bytes, len, off, false);
         u64 wrong16 = ref_u16_prefix(bytes, len, off, true);
         size_t scalar = ref_scalar_start(bytes, len, off);
 
+#if YEW_WITH_LSP
         yew_lsp_pos_of_off(YEW_POSENC_UTF8, tb, BYTEOFF(base + off),
                            &line8, &col8);
         yew_lsp_pos_of_off(YEW_POSENC_UTF16, tb, BYTEOFF(base + off),
@@ -99,15 +104,21 @@ static void audit_line(const TextBuf *tb, const u8 *bytes, size_t len,
         YEW_ASSERT_EQ_U64(yew_lsp_off_of_pos(
             YEW_POSENC_UTF16, tb, LINENO(row), (u64)col16).v,
             base + scalar);
+#else
+        /* UTF-8 protocol coordinates are byte offsets within the line. */
+        YEW_ASSERT_EQ_U64(base + off, span.lo + off);
+#endif
         YEW_ASSERT_EQ_U64(yew_u16col_to_off(
             tb, span, U16COL(want16)).v, base + scalar);
         if (want16 != wrong16)
             *wrong_witness = true;
     }
+#if YEW_WITH_LSP
     YEW_ASSERT_EQ_U64(yew_lsp_off_of_pos(
         YEW_POSENC_UTF8, tb, LINENO(row), UINT64_MAX).v, base + len);
     YEW_ASSERT_EQ_U64(yew_lsp_off_of_pos(
         YEW_POSENC_UTF16, tb, LINENO(row), UINT64_MAX).v, base + len);
+#endif
 }
 
 void test_u16_differential_200_lines(void)
