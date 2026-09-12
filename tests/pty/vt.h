@@ -33,10 +33,12 @@ enum {
     VT_MODE_FOCUS = 1u << 3,
     /*
      * Sprint 57.13 §1: ANY-MOTION reporting, armed only while a context
-     * menu is open.  Tracked rather than merely tolerated, because the
-     * whole point of the mode is that it is transient — a golden that
-     * accepted 1003h and never noticed a missing 1003l would let the
-     * terminal be left streaming motion reports (invariant 6).
+     * menu is open.  It is mutually exclusive with BUTTON_MOUSE, just as
+     * modes 1000..1003 are in a real terminal; SGR_MOUSE is the separate
+     * coordinate encoding.  Tracked rather than merely tolerated, because
+     * the whole point of the mode is that it is transient — a golden that
+     * accepted 1003h and never noticed a missing 1003l + 1002h transition
+     * would let the terminal stop reporting button events (invariant 6).
      */
     VT_MODE_ANY_MOTION_MOUSE = 1u << 4
 };

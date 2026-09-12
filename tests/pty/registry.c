@@ -9295,6 +9295,72 @@ static void case_s57_13_ctrl_click_menu(PtyCtx *c)
     (void)unlink(path);
 }
 
+/*
+ * Regression for the dogfood sequence that exposed a terminal-protocol
+ * hole: choose Save As from a document menu, cancel the seeded command line,
+ * then Ctrl-click both a member tab and its group entry.  DEC pointer modes
+ * 1002 and 1003 are mutually exclusive, so every menu close must actively
+ * restore 1002; merely writing 1003l leaves a conforming terminal with no
+ * mouse reporting and every subsequent click appears dead.
+ */
+static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
+{
+    const u32 resting = VT_MODE_BRACKETED_PASTE | VT_MODE_BUTTON_MOUSE |
+                        VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
+    const u32 menu = VT_MODE_BRACKETED_PASTE | VT_MODE_ANY_MOTION_MOUSE |
+                     VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
+    char path[256];
+
+    s24_fixture_make();
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s24_make_group(c);
+    /* Match the report: start on the last member of the active group. */
+    s18_settle_after_keys(c, "t right t right");
+
+    /* Open the document menu, then click its `Save As...` row. */
+    s27_mouse(c, "\x1b[<2;11;6M");
+    s27_mouse(c, "\x1b[<2;11;6m");
+    ptc_check(c, c->vt.modes == menu,
+              "document context menu did not select any-motion tracking");
+    s22_click(c, 15U, 15U);
+    ptc_check(c, c->vt.modes == resting,
+              "Save As menu action did not restore button tracking");
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, c->vt.modes == resting,
+              "cancelling Save As changed the resting mouse protocol");
+
+    /* Ctrl-click the active member tab, dismiss, then prove an ordinary
+     * click can still activate the first member. */
+    s27_mouse(c, "\x1b[<16;31;2M");
+    s27_mouse(c, "\x1b[<16;31;2m");
+    ptc_check(c, c->vt.modes == menu,
+              "member-tab context menu did not select any-motion tracking");
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, c->vt.modes == resting,
+              "member-tab context menu did not restore button tracking");
+    s22_click(c, 5U, 1U);
+    s19_wait_screen(c, "L  one.txt");
+
+    /* Repeat against the row-1 group entry, then use the recovered mouse to
+     * return to the final member. */
+    s27_mouse(c, "\x1b[<16;31;1M");
+    s27_mouse(c, "\x1b[<16;31;1m");
+    ptc_check(c, c->vt.modes == menu,
+              "group context menu did not select any-motion tracking");
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, c->vt.modes == resting,
+              "group context menu did not restore button tracking");
+    s22_click(c, 30U, 1U);
+    s19_wait_screen(c, "L  two.txt");
+
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
 /* The footer menu, including the row that NAMES the current number
  * style rather than the one it will move to. */
 static void case_s57_13_footer_menu(PtyCtx *c)
@@ -10268,6 +10334,8 @@ const PtyCase yew_pty_cases[] = {
     C(s57_13_doc_menu_ascii, modern, 24U, 80U, case_s57_13_doc_menu),
     C(s57_13_ctrl_click_menu, modern, 24U, 80U,
       case_s57_13_ctrl_click_menu),
+    C(s57_13_save_as_group_mouse_recovers, modern, 24U, 80U,
+      case_s57_13_save_as_group_mouse_recovers),
     C(s57_13_footer_menu, modern, 24U, 80U, case_s57_13_footer_menu),
     C(s57_13_menu_sheds_rows, modern, 10U, 80U,
       case_s57_13_menu_sheds_rows),

@@ -506,7 +506,11 @@ static bool menu_open_at(Ed *ed, const CtxContext *c, u16 anchor_x,
         menu_close(ed);
         return false;
     }
-    yew_tty_mouse_motion(true);
+    /* A keyboard-opened menu remains keyboard-only when YEW_MOUSE=0.
+     * Otherwise closing it would restore 1002 even though startup
+     * deliberately never enabled mouse reporting. */
+    if (yew_mouse_enabled())
+        yew_tty_mouse_motion(true);
     ed->full_damage = true;
     return true;
 }

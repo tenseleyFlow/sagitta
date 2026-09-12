@@ -44,9 +44,11 @@ static int g_sigpipe_w = -1;
 static int g_guard_wfd = -1;
 static bool g_atexit_armed;
 /* Sprint 57.13: mode 1003 (any-motion tracking) is armed only while a
- * context menu is open.  The flag selects which restore blob is written,
- * so every restore path — normal, atexit, fatal signal, SIGTSTP, and the
- * guard sibling — disables 1003 exactly when it was enabled. */
+ * context menu is open.  Modes 1002 and 1003 are mutually exclusive, so
+ * opening a menu selects 1003 and closing it must select 1002 again.  The
+ * flag selects which restore blob is written, so every restore path —
+ * normal, atexit, fatal signal, SIGTSTP, and the guard sibling — disables
+ * 1003 exactly when it was enabled. */
 static volatile sig_atomic_t g_mouse_motion;
 
 #define YEW_TTY_RESTORE_HEAD                                                 \
@@ -69,10 +71,14 @@ static const char YEW_TTY_RESTORE_BLOB_MOTION[] =
     YEW_TTY_RESTORE_HEAD
     "\x1b[?1003l"
     YEW_TTY_RESTORE_TAIL;
-static const char YEW_TTY_MOTION_ON[] = "\x1b[?1003h";
-static const char YEW_TTY_MOTION_OFF[] = "\x1b[?1003l";
+static const char YEW_TTY_MOTION_ON[] =
+    "\x1b[?1002l"
+    "\x1b[?1003h";
+static const char YEW_TTY_MOTION_OFF[] =
+    "\x1b[?1003l"
+    "\x1b[?1002h";
 _Static_assert(sizeof(YEW_TTY_MOTION_ON) == sizeof(YEW_TTY_MOTION_OFF),
-               "1003 h/l differ only in the final byte");
+               "mouse protocol transitions must remain paired");
 
 /* One byte per guard note.  CLEAN also forgets MOTION: a restore that
  * reached the terminal disabled 1003 along with everything else. */
@@ -861,15 +867,16 @@ void yew_tty_mouse_motion(bool on)
 
     if ((g_mouse_motion != 0) == on)
         return;
-    /* The flag and the byte that makes it true must not be split by a
+    /* The flag and the bytes that make it true must not be split by a
      * restore: a SIGTSTP between them would either leave 1003 armed
      * behind a cleared flag or clear a flag the terminal never saw. */
     yew_tty_lifecycle_mask(&blocked);
     masked = sigprocmask(SIG_BLOCK, &blocked, &saved) == 0;
     /* Both records over-approximate what the terminal has armed: they are
-     * written before 1003h and dropped only after 1003l.  A crash in the
-     * middle then leaves a restore that emits one 1003l too many, which
-     * costs nothing, rather than one too few, which strands the mode. */
+     * written before the 1002 -> 1003 transition and dropped only after
+     * the 1003 -> 1002 transition.  A crash in the middle then leaves a
+     * restore that emits one 1003l too many, which costs nothing, rather
+     * than one too few, which strands the mode. */
     if (on) {
         g_mouse_motion = 1;
         yew_tty_guard_note((u8)YEW_TTY_GUARD_MOTION);

@@ -1706,6 +1706,27 @@ void test_mouse_motion_tracking_mirrors_the_open_menu(void)
     YEW_ASSERT_EQ_U64((u64)yew_mouse_cmd_disable(&cx), (u64)YEW_CMD_OK);
     YEW_ASSERT(!yew_ctx_active());
     YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* A keyboard menu is still reachable with the mouse disabled, but it
+     * must remain keyboard-only.  Arming 1003 here and restoring 1002 on
+     * close would undo YEW_MOUSE=0 at the terminal boundary. */
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
+    cx.iarg = 0;
+    YEW_ASSERT_EQ_U64((u64)yew_ui_cmd_context_menu(&cx),
+                      (u64)YEW_CMD_OK);
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    {
+        Key esc;
+
+        (void)memset(&esc, 0, sizeof(esc));
+        esc.kind = (u16)YEW_EV_KEY;
+        esc.code = YEW_KEY_ESCAPE;
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &esc));
+    }
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
     yew_mouse_set_enabled(true);
     yew_ed_free(&ed);
 }

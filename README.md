@@ -92,8 +92,9 @@ its lowest-priority rows instead of refusing to open.
 
 The pointer highlights rows as it moves over an open menu; arrow keys, Home,
 End, Enter and Esc drive the same menu from the keyboard. While a menu is
-open yew enables any-motion mouse reporting (DEC private mode 1003) and
-disables it again on close, on suspend, and on exit.
+open yew switches from button-event reporting (DEC private mode 1002) to
+any-motion reporting (1003), then restores 1002 on close. Suspend and exit
+disable both protocols.
 
 **Other gestures:** click to place the cursor, drag to select, double-click
 for a word and triple-click for a line (Alt for whitespace-delimited words

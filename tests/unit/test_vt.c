@@ -71,6 +71,9 @@ void test_vt_closed_set_and_modes(void)
     VtScreen v;
     u32 all_modes = VT_MODE_BRACKETED_PASTE | VT_MODE_BUTTON_MOUSE |
                     VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
+    u32 motion_modes = VT_MODE_BRACKETED_PASTE |
+                       VT_MODE_ANY_MOTION_MOUSE |
+                       VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
 
     vt_init(&v, 3, 8);
     feed_lit(&v, "\0337\033[?1049h\033[?2004h\033[?1002h\033[?1006h"
@@ -85,6 +88,13 @@ void test_vt_closed_set_and_modes(void)
     YEW_ASSERT(!v.cur_vis);
     YEW_ASSERT_EQ_U64(v.cursor_shape, 6u);
     YEW_ASSERT_EQ_U64(v.nsync_pairs, 1u);
+    /* 1002 and 1003 are protocols in one mutually-exclusive set, not
+     * independent flags.  1006 remains armed because it is the separate
+     * coordinate encoding used by either protocol. */
+    feed_lit(&v, "\033[?1003h");
+    YEW_ASSERT_EQ_U64(v.modes, motion_modes);
+    feed_lit(&v, "\033[?1003l\033[?1002h");
+    YEW_ASSERT_EQ_U64(v.modes, all_modes);
     feed_lit(&v, "\033[0 q\033[<u\033[?2004l\033[?1002l\033[?1006l\033[?1004l"
                  "\033[?1049l\0338");
     YEW_ASSERT_EQ_U64(v.modes, 0u);

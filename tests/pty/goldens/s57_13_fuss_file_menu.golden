@@ -1,6 +1,6 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=0,0 vis=0
-modes 2004,1002,1006,1004,1003 kitty=21 sync_pairs=n/a
+modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
 --- text
 fussrepo · trunk       │ 1 main.c  +                                            
  + docs ✗              │    1 int main(void) { return 0; }                      

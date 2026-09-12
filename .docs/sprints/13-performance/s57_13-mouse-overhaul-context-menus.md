@@ -69,11 +69,15 @@ Mode 1003 is enabled **only while a context menu is open**:
 
 ```c
 /* src/term/tty.h */
-void yew_tty_mouse_motion(bool on);      /* writes CSI ? 1003 h / l */
+void yew_tty_mouse_motion(bool on);      /* switches 1002 <-> 1003 */
 bool yew_tty_mouse_motion_active(void);  /* test seam */
 ```
 
-The router calls it from the menu open/close paths (§3). Teardown
+DEC pointer protocols 1002 and 1003 are mutually exclusive. Opening therefore
+selects 1003 (after disabling 1002), and closing disables 1003 and explicitly
+restores baseline 1002. Merely writing `1003l` on close leaves a conforming
+terminal with no pointer protocol enabled. The router calls the transition
+from the menu open/close paths (§3). Teardown
 (`yew_tty_restore` / the atexit + signal-safe restore blob) always emits
 `1003l` when the flag is set — invariant 6. Suspend (`ed.suspend`) and
 `ed.mouse.disable` clear it too. **Pitfall:** the restore blob is written from

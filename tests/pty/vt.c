@@ -473,6 +473,24 @@ static void set_mode(VtScreen *v, u32 bit, bool enabled)
         v->modes &= ~bit;
 }
 
+/*
+ * Xterm's pointer protocols (1000..1003) are one mutually-exclusive set;
+ * 1006 is a separate coordinate encoding.  A terminal that accepts 1003h
+ * therefore stops reporting in 1002, even if it never saw an explicit
+ * 1002l.  Modelling them as independent bits hid the exact class of bug in
+ * which an application wrote 1003l on menu close and accidentally left no
+ * pointer protocol armed at all.
+ */
+static void set_mouse_protocol(VtScreen *v, u32 bit, bool enabled)
+{
+    if (enabled) {
+        v->modes &= ~(VT_MODE_BUTTON_MOUSE | VT_MODE_ANY_MOTION_MOUSE);
+        v->modes |= bit;
+    } else {
+        v->modes &= ~bit;
+    }
+}
+
 static void csi_dispatch(VtScreen *v)
 {
     const u8 *body = v->seq + 2u;
@@ -510,9 +528,9 @@ static void csi_dispatch(VtScreen *v)
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?2004")) {
         set_mode(v, VT_MODE_BRACKETED_PASTE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1002")) {
-        set_mode(v, VT_MODE_BUTTON_MOUSE, final == 'h');
+        set_mouse_protocol(v, VT_MODE_BUTTON_MOUSE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1003")) {
-        set_mode(v, VT_MODE_ANY_MOTION_MOUSE, final == 'h');
+        set_mouse_protocol(v, VT_MODE_ANY_MOTION_MOUSE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1006")) {
         set_mode(v, VT_MODE_SGR_MOUSE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1004")) {
