@@ -207,24 +207,25 @@ void test_ctxrows_doc_rows_match_the_contract(void)
 /*
  * The enable conditions, each in BOTH states.
  *
- * A scratch buffer starts clean, unselected, writable and with an empty
- * register, so the first build is the "everything off" half and the
- * changes below are the other.
+ * A scratch buffer starts clean, unselected and writable, so the first
+ * build is the "everything off" half and the changes below are the
+ * other.  PASTE IS THE ONE EXCEPTION: it is live from the first frame
+ * because what the system clipboard holds cannot be asked from a menu
+ * build (see `build_doc`).
  */
 void test_ctxrows_doc_enables_follow_the_live_state(void)
 {
     Ed ed;
-    RegVal v;
     Cursor *c;
 
     cr_fixture(&ed);
 
-    /* No selection, nothing in the register, nothing to undo. */
+    /* No selection, nothing to undo. */
     cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
     YEW_ASSERT(!cr_enabled("Cut"));
     YEW_ASSERT(!cr_enabled("Copy"));
     YEW_ASSERT(!cr_enabled("Delete"));
-    YEW_ASSERT(!cr_enabled("Paste"));
+    YEW_ASSERT(cr_enabled("Paste"));
     YEW_ASSERT(!cr_enabled("Undo"));
     YEW_ASSERT(!cr_enabled("Redo"));
     YEW_ASSERT(!cr_enabled("Save"));
@@ -246,22 +247,41 @@ void test_ctxrows_doc_enables_follow_the_live_state(void)
     c->anchor = (ByteOff){0U};
     c->pos = (ByteOff){5U};
     cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
-    YEW_ASSERT(cr_enabled("Cut"));
-    YEW_ASSERT(cr_enabled("Copy"));
-    YEW_ASSERT(cr_enabled("Delete"));
+    /*
+     * STILL GREY, because the mode is still L.  An anchor away from the
+     * caret outside Highlight is not drawn and `ed.clip.cut` /
+     * `ed.clip.copy` refuse there, so the row may not offer it.
+     */
+    YEW_ASSERT(!cr_enabled("Cut"));
+    YEW_ASSERT(!cr_enabled("Copy"));
+    YEW_ASSERT(!cr_enabled("Delete"));
     /* The insert made it dirty and gave it something to undo. */
     YEW_ASSERT(cr_enabled("Save"));
     YEW_ASSERT(cr_enabled("Undo"));
     YEW_ASSERT(!cr_enabled("Redo"));
 
-    /* H mode is a selection even with pos == anchor: H over one
-     * grapheme IS a selection of one. */
-    c->anchor = c->pos;
-    cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
-    YEW_ASSERT(!cr_enabled("Copy"));
+    /* H is what makes it a selection. */
     ed.mode = YEW_MODE_H;
     cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
+    YEW_ASSERT(cr_enabled("Cut"));
     YEW_ASSERT(cr_enabled("Copy"));
+    YEW_ASSERT(cr_enabled("Delete"));
+
+    /* H over one grapheme IS a selection of one, pos == anchor and
+     * all. */
+    c->anchor = c->pos;
+    cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
+    YEW_ASSERT(cr_enabled("Copy"));
+
+    /* Read-only locks every row that writes, and locks NONE of the
+     * rows that only read. */
+    ed.buffer.flags |= (u32)YEW_BUF_READONLY;
+    cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
+    YEW_ASSERT(!cr_enabled("Paste"));
+    YEW_ASSERT(!cr_enabled("Cut"));
+    YEW_ASSERT(!cr_enabled("Delete"));
+    YEW_ASSERT(cr_enabled("Copy")); /* reading is always allowed */
+    ed.buffer.flags &= ~(u32)YEW_BUF_READONLY;
     ed.mode = YEW_MODE_L;
 
     /* Undone: now there is a redo and no undo. */
@@ -274,26 +294,6 @@ void test_ctxrows_doc_enables_follow_the_live_state(void)
     cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
     YEW_ASSERT(!cr_enabled("Undo"));
     YEW_ASSERT(cr_enabled("Redo"));
-
-    /* Register `"` non-empty unlocks Paste; read-only locks every row
-     * that writes, and locks NONE of the rows that only read. */
-    yew_regval_init(&v);
-    bytebuf_append(&v.bytes, (const u8 *)"clip", 4U);
-    v.type = (u8)YEW_REG_CHARWISE;
-    yew_reg_set(&ed.regs, (u8)'"', &v);
-    yew_regval_free(&v);
-    c->anchor = (ByteOff){0U};
-    c->pos = (ByteOff){3U};
-    cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
-    YEW_ASSERT(cr_enabled("Paste"));
-    YEW_ASSERT(cr_enabled("Cut"));
-    ed.buffer.flags |= YEW_BUF_READONLY;
-    cr_build(&ed, YEW_CTX_KIND_DOC, (u32)cr_leaf(&ed));
-    YEW_ASSERT(!cr_enabled("Paste"));
-    YEW_ASSERT(!cr_enabled("Cut"));
-    YEW_ASSERT(!cr_enabled("Delete"));
-    YEW_ASSERT(cr_enabled("Copy")); /* reading is always allowed */
-    ed.buffer.flags &= ~(u32)YEW_BUF_READONLY;
 
     /* A second leaf unlocks Close Pane. */
     {
