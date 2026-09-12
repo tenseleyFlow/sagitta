@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-023`
+Next available ID: `YEW-F-024`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -35,6 +35,7 @@ recorded in `audit-00.md`.
 | YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
 | YEW-F-021 | M | open | F14 PLUG | plugin teardown retains raw hook and ledger lengths | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
 | YEW-F-022 | M | open | F14 PLUG | plugin trust wording gate rejects its required warning | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
+| YEW-F-023 | M | open | F14 PLUG | plugin commands cannot enter the recorder CMDWORD space | tests/audit/yew_f_023.c | s58 F14 q8 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -233,6 +234,15 @@ capability gates do not create a sandbox, so the literal release gate fails on
 the one sentence that most directly prevents a misleading isolation claim.
 The product text is honest; the defect is a self-contradictory release control.
 It remains open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-023` is Medium because plugin commands execute normally but can never
+be represented by the recorder. The plugin registration path excludes
+`YEW_CMD_RECORDABLE`, always supplies a NULL CMDWORD, and the author guide
+calls `recordable` host-only. With no word to enter in the global map, a plugin
+command named `up` is accepted beside core's `up` instead of reaching the
+required collision check. This is visible as a macro that omits the plugin
+action rather than a byte-loss path, so it is Medium. It remains open for
+Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 
