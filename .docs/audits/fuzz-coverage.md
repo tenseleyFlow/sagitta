@@ -1,6 +1,6 @@
 # Fuzz coverage ledger
 
-Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
+Baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 
 No coverage-instrumented run has completed. Edge totals are populated only by
 `make fuzz-cov`; zeros are not inferred for unmeasured targets.

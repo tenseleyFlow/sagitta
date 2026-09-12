@@ -401,11 +401,10 @@ Binding documents — read before any sprint:
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs. **PAUSED AFTER
-  F08:** F01–F08 closed on the original fixed baseline and opened findings
-  `YEW-F-001` through `YEW-F-008`. The `c07791cc` structural repair is the
-  locally qualified candidate; establish its green pushed successor,
-  record the F01–F08 delta requalification, then resume at F09
+  fuzz campaigns extended, findings ledger with stable IDs. **ACTIVE AFTER
+  F15:** all fifteen fronts are closed with `YEW-F-001` through
+  `YEW-F-075`; cross-front dedup, coverage/soak work, and the ten invariant
+  sessions remain
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1

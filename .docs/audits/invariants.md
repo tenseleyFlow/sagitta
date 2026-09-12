@@ -1,9 +1,9 @@
 # Invariant re-verification
 
-Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
+Baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 
-The ten cross-cutting sessions run only after all fifteen fronts close. None
-has begun; a pending row is not a verdict.
+All fifteen fronts are closed, so the ten cross-cutting sessions may now
+begin. None has begun; a pending row is not a verdict.
 
 | # | Invariant | Status | Verdict | Findings |
 |---:|---|---|---|---|

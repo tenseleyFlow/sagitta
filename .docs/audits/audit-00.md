@@ -7,7 +7,7 @@ Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: ACTIVE AT F15.**
+**Campaign status: ACTIVE — ALL FRONTS CLOSED; DEDUP AND INVARIANT SWEEP NEXT.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -144,12 +144,12 @@ zero until its report closes; silence never counts as evidence.
 | F12 AI | `audit-12-ai.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F13 git/FUSS | `audit-13-git.md` | closed | 4 | 4 | 0 | 0 | 4 | 0 | 0 |
 | F14 plugins | `audit-14-plugins.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
-| F15 CI | `audit-15-ci.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F15 CI | `audit-15-ci.md` | closed | 52 | 52 | 1 | 1 | 50 | 0 | 4 |
 
 ## Verdict
 
-We are not ready to tag: F01 through F14 of Sprint 58's fifteen fronts have
-closed, the invariant sweep has not run, and no campaign-wide
+We are not ready to tag: all fifteen Sprint 58 fronts have closed, but the
+cross-front dedup and invariant sweep have not run, and no campaign-wide
 absence-of-findings claim has been earned. F06 adds an open High finding
 (`YEW-F-005`), while closed F07 records two open Critical workspace-state
 findings (`YEW-F-006`, `YEW-F-007`): normal persistence can drop future keys
@@ -212,4 +212,18 @@ user-facing text and quoting the required honest non-isolation warning.
 space or collide-check against core words. Manifest containment, callback
 capability provenance, closure collection, trust corruption, package
 verification, error-limit teardown, and save-hook rollback pass. The
-product-code baseline remains immutable. F15 remains open.
+product-code baseline remains immutable.
+
+F15 adds fifty open Medium control findings, one High reproducible-build
+finding, and one Critical stripped-module finding. `YEW-F-024`–`026` record
+the incomplete cross-surface debt/XPASS machinery. `YEW-F-027`–`071` show
+that forty-five textual bans accept plausible intent-forbidden refactors;
+these are gate defects, not claims that the seeded code exists in yew.
+`YEW-F-072` records unusable designated-runner calibration evidence, and
+`YEW-F-073` records that baseline history policy is not enforced.
+`YEW-F-074` records nondeterministic arm64 macOS output caused by Mach-O UUID
+generation; `YEW-F-075` records excluded-module options accepted as inert
+state instead of canonical hard errors. The Sprint 37 `.fl` coverage
+obligation is discharged with deterministic per-file statement counts. The
+campaign now proceeds to cross-front dedup, C/H severity review, fuzz
+coverage/soak completion, and the ten invariant sessions.

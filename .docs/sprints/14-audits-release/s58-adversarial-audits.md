@@ -93,7 +93,10 @@ changes. F13 subsequently closed with four Medium findings
 (`YEW-F-017`–`YEW-F-020`), no unverified observations, and no product-code
 changes. F14 subsequently closed with three Medium findings
 (`YEW-F-021`–`YEW-F-023`), no unverified observations, and no product-code
-changes. F15 is the active front.
+changes. F15 subsequently closed with fifty Medium findings
+(`YEW-F-024`–`073`), one High finding (`YEW-F-074`), one Critical finding
+(`YEW-F-075`), and four unverified observations. All fifteen fronts are
+closed; cross-front dedup and the ten invariant sessions are now eligible.
 
 ## Goals
 
