@@ -2030,3 +2030,470 @@ void test_mouse_menu_path_target_carries_the_captured_path(void)
     yew_tty_mouse_motion(false);
     yew_ed_free(&ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.15: the chevron actually scrolls, and hovering reveals  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * A real strip, painted through the real renderer.
+ *
+ * These rows cannot hand-register regions the way the older ones do:
+ * the whole bug is that the RENDER walked the offset back, so the test
+ * has to draw a frame to see it.  A narrow grid, so both chevrons
+ * exist and the reveal has somewhere to go.
+ */
+typedef struct HovFixture {
+    Ed ed;
+} HovFixture;
+
+static void hv_fixture(HovFixture *f, u32 extra_tabs, u16 cols)
+{
+    u32 i;
+
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&f->ed);
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
+    YEW_ASSERT(yew_grid_init(&f->ed.grid, &f->ed.interner, 24U, cols));
+    f->ed.grid_ready = true;
+    for (i = 0U; i < extra_tabs; i++) {
+        char path[64];
+
+        (void)snprintf(path, sizeof(path), "/tmp/yew-hover-%u.txt",
+                       (unsigned)i);
+        YEW_ASSERT(yew_tab_open(&f->ed, path) >= 0);
+    }
+    yew_ed_layout(&f->ed);
+    f->ed.now_ms = 1000;
+}
+
+static void hv_paint(HovFixture *f)
+{
+    if (f->ed.layout_dirty)
+        yew_ed_layout(&f->ed);
+    yew_region_frame_begin();
+    yew_tab_strip_draw(&f->ed, f->ed.tab_strip_rect);
+}
+
+/* The first cell on `row` carrying a chevron pointing `right`. */
+static bool hv_chevron_x(u16 row, bool right, u16 cols, u16 *out)
+{
+    u16 x;
+
+    for (x = 0U; x < cols; x++) {
+        Region hit = yew_region_hit(x, row);
+
+        if (hit.kind != YEW_REGION_TAB_SCROLL)
+            continue;
+        if ((hit.payload > 0) != right)
+            continue;
+        *out = x;
+        return true;
+    }
+    return false;
+}
+
+static Key hv_motion(u16 x, u16 y)
+{
+    return ms_ev((u8)YEW_MB_NONE, (u8)YEW_KEY_REPEAT, x, y);
+}
+
+/*
+ * THE REGRESSION THIS SPRINT EXISTS FOR.
+ *
+ * A chevron click with the active tab FAR AWAY.  Before Sprint 57.15
+ * the layout's follow-the-active clamp overwrote the new offset on the
+ * very next render and the strip snapped back, which is why the chevron
+ * looked like it did nothing at all — and why it looked like it worked
+ * whenever the active entry happened to sit beside it.
+ */
+void test_mouse_chevron_click_scrolls_and_stays(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    int i;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+
+    for (i = 1; i <= 3; i++) {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, chev, 0U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, chev, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &up);
+        YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, i);
+        /* THE RENDER is the test: it used to eat exactly this. */
+        hv_paint(&f);
+        YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, i);
+        YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    }
+    /* The active tab is off-screen and that is a legitimate view. */
+    YEW_ASSERT_EQ_I64(f.ed.tabs.active, 0);
+
+    /* Back with the LEFT chevron, which only exists once scrolled. */
+    YEW_ASSERT(hv_chevron_x(0U, false, 40U, &chev));
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, chev, 0U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, chev, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &up);
+    }
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 2);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 2);
+
+    /* And a switch hands the strip back to the follow. */
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    yew_ed_free(&f.ed);
+}
+
+/* A wheel notch over the strip is the same claim by a different
+ * gesture, and it used to be undone by the same clamp. */
+void test_mouse_wheel_over_the_strip_survives_the_render(void)
+{
+    HovFixture f;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    {
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 2U, 0U, 0U);
+
+        yew_mouse_event(&f.ed, &w);
+    }
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 1);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 1);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 1);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * Row 2's chevron scrolls row 2 and leaves row 1 where it was: the
+ * payload's MAGNITUDE names the row, and both rows own their offsets
+ * separately (s24's law, now with separate ownership too).
+ */
+void test_mouse_chevron_click_on_row_two_stays_on_row_two(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    u32 g;
+    int row1_before;
+    int i;
+
+    hv_fixture(&f, 9U, 40U);
+    g = yew_group_create(&f.ed, "/src", NULL);
+    for (i = 2; i <= 9; i++)
+        yew_group_add_member(&f.ed, g, i);
+    yew_tab_switch(&f.ed, 2);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&f.ed), g);
+    YEW_ASSERT(f.ed.tab_strip_rect.h >= 2U);
+    YEW_ASSERT(hv_chevron_x(1U, true, 40U, &chev));
+    /* Row 1 is wherever the follow put it to reveal the group's entry;
+     * what matters is that row 2's chevron does not move it. */
+    row1_before = f.ed.tabs.scroll;
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, chev, 1U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, chev, 1U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &up);
+    }
+    YEW_ASSERT_EQ_I64(f.ed.tabs.member_scroll, 1);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, row1_before);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.member_scroll, 1);
+    YEW_ASSERT(f.ed.tabs.member_scroll_user);
+    YEW_ASSERT(!f.ed.tabs.scroll_user);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * THE HOVER, on the clock.
+ *
+ * One entry per YEW_HOVER_SCROLL_MS while the pointer rests, and not
+ * one per motion report: a thousand reports at one instant must move
+ * the strip exactly nothing, because how many reports a terminal emits
+ * is not something the user can see.
+ *
+ * Absolute timestamps throughout, because yew_mouse_tick advances the
+ * editor's own clock — reading it back would drift a window per call
+ * and prove nothing about the cadence.
+ */
+void test_mouse_chevron_hover_reveals_one_entry_per_window(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    i64 t0;
+    int i;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    t0 = f.ed.now_ms;
+
+    for (i = 0; i < 1000; i++) {
+        Key m = hv_motion(chev, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    /* Arrival arms a CLOCK and nothing else — the first step is a whole
+     * window away so a pointer crossing on its way elsewhere reveals
+     * nothing at all. */
+    YEW_ASSERT(f.ed.mouse.hover_chevron);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, t0),
+                      (i64)YEW_HOVER_SCROLL_MS);
+
+    yew_mouse_tick(&f.ed, t0 + YEW_HOVER_SCROLL_MS - 1);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    yew_mouse_tick(&f.ed, t0 + YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 1);
+    YEW_ASSERT(f.ed.tabs.scroll_user);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 1);
+
+    yew_mouse_tick(&f.ed, t0 + YEW_HOVER_SCROLL_MS + 1);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 1);
+    yew_mouse_tick(&f.ed, t0 + 2 * YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 2);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 2);
+    yew_ed_free(&f.ed);
+}
+
+/* Leaving stops it in the same event, and cancels the deadline with
+ * it — a reveal that outlived the pointer would scroll a strip nobody
+ * is pointing at. */
+void test_mouse_chevron_hover_stops_when_the_pointer_leaves(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    i64 t0;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    t0 = f.ed.now_ms;
+    {
+        Key m = hv_motion(chev, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(f.ed.mouse.hover_chevron);
+    {
+        /* Onto a tab span, still on the strip. */
+        Key m = hv_motion(1U, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(!f.ed.mouse.hover_chevron);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, t0), -1);
+    yew_mouse_tick(&f.ed, t0 + 10 * YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * REACHING THE END STOPS IT, and the chevron stops being drawn — which
+ * must not strand the scheduled tick.  Two ways it can end and both are
+ * exercised: the offset stops moving, and the region goes away under a
+ * pointer that never moved.
+ */
+void test_mouse_chevron_hover_stops_at_the_end_of_the_strip(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    i64 t;
+    int step;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    t = f.ed.now_ms;
+    {
+        Key m = hv_motion(chev, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    for (step = 0; step < 20; step++) {
+        t += YEW_HOVER_SCROLL_MS;
+        yew_mouse_tick(&f.ed, t);
+        hv_paint(&f);
+        if (!f.ed.mouse.hover_chevron)
+            break;
+    }
+    /* It stopped on its own, with nothing left to reveal on the right. */
+    YEW_ASSERT(!f.ed.mouse.hover_chevron);
+    YEW_ASSERT(!hv_chevron_x(0U, true, 40U, &chev));
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, t), -1);
+    /* A tick after the end changes nothing. */
+    {
+        int settled = f.ed.tabs.scroll;
+
+        yew_mouse_tick(&f.ed, t + 10 * YEW_HOVER_SCROLL_MS);
+        YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, settled);
+    }
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * The chevron VANISHING under a parked pointer — a tab closed, say —
+ * cancels the pending tick rather than scrolling a row whose chevron no
+ * longer exists.  The region table is the one answer to "is it still
+ * there" (Sprint 22's law), and this is the row that proves the tick
+ * asks it.
+ */
+void test_mouse_chevron_hover_tick_cancels_when_the_chevron_goes(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    i64 t0;
+    int i;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    t0 = f.ed.now_ms;
+    {
+        Key m = hv_motion(chev, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(f.ed.mouse.hover_chevron);
+
+    /* Everything but two tabs closes, so the strip fits and draws no
+     * chevron at all.  The pointer has not moved. */
+    for (i = 9; i >= 2; i--)
+        YEW_ASSERT(yew_tab_close(&f.ed, i));
+    hv_paint(&f);
+    YEW_ASSERT(!hv_chevron_x(0U, true, 40U, &chev));
+
+    yew_mouse_tick(&f.ed, t0 + YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT(!f.ed.mouse.hover_chevron);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, t0), -1);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * MODE 1003, and the if-and-only-if.
+ *
+ * Two owners, one arming path.  A chevron on screen arms it with no
+ * menu anywhere; a strip that fits disarms it; and — the case the one
+ * owner exists for — a MENU CLOSING over a strip that still has a
+ * chevron must leave the mode armed, or the hover would silently stop
+ * working after every right-click.
+ */
+void test_mouse_motion_tracking_follows_the_chevrons_too(void)
+{
+    HovFixture f;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* A chevron is drawn: armed, with no menu open. */
+    hv_paint(&f);
+    YEW_ASSERT(yew_mouse_chevron_drawn());
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    YEW_ASSERT(!yew_ctx_active());
+
+    /* A menu on top of it, then closed again.  The strip still wants
+     * motion, so the close must not take it away. */
+    YEW_ASSERT(yew_mouse_open_tab_menu(&f.ed, yew_tab_at(&f.ed, 0)->tab_id,
+                                       2U, 0U));
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    {
+        Key esc;
+
+        (void)memset(&esc, 0, sizeof(esc));
+        esc.kind = (u16)YEW_EV_KEY;
+        esc.code = YEW_KEY_ESCAPE;
+        (void)yew_mouse_menu_key(&f.ed, &esc);
+    }
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+
+    /* The strip fits again: neither owner wants it, so it comes down. */
+    {
+        int i;
+
+        for (i = 9; i >= 2; i--)
+            YEW_ASSERT(yew_tab_close(&f.ed, i));
+    }
+    hv_paint(&f);
+    YEW_ASSERT(!yew_mouse_chevron_drawn());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* And a menu over a strip with no chevron still arms it, then
+     * gives it back. */
+    YEW_ASSERT(yew_mouse_open_tab_menu(&f.ed, yew_tab_at(&f.ed, 0)->tab_id,
+                                       2U, 0U));
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    {
+        Key esc;
+
+        (void)memset(&esc, 0, sizeof(esc));
+        esc.kind = (u16)YEW_EV_KEY;
+        esc.code = YEW_KEY_ESCAPE;
+        (void)yew_mouse_menu_key(&f.ed, &esc);
+    }
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * A motion report that reveals nothing REPAINTS nothing.  That is
+ * invariant 4's half of arming 1003 for the strip: the mode is on far
+ * more of the time now, so a hover that marked damage per report would
+ * turn a pointer crossing the screen into a slideshow.
+ * tests/perf/mouse.c holds the same line with a clock on it.
+ */
+void test_mouse_motion_off_a_chevron_marks_no_damage(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    int i;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    f.ed.full_damage = false;
+    f.ed.overlay_dirty = false;
+    f.ed.layout_dirty = false;
+    for (i = 0; i < 200; i++) {
+        Key m = hv_motion((u16)(1U + (u16)(i % 20)), (u16)(i % 2));
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(!f.ed.full_damage);
+    YEW_ASSERT(!f.ed.overlay_dirty);
+    YEW_ASSERT(!f.ed.layout_dirty);
+    /* And parked ON it, which arms the clock but still paints nothing
+     * until the clock fires. */
+    for (i = 0; i < 200; i++) {
+        Key m = hv_motion(chev, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(f.ed.mouse.hover_chevron);
+    YEW_ASSERT(!f.ed.full_damage);
+    YEW_ASSERT(!f.ed.overlay_dirty);
+    yew_ed_free(&f.ed);
+}
