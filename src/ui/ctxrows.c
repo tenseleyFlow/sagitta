@@ -155,12 +155,14 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
     /* CTXA_FUSS_RENAME      */ {"ed.git.file.rename", CTX_TGT_PATH, 0},
     /* CTXA_FUSS_DELETE      */ {"ed.git.file.delete", CTX_TGT_PATH, 0},
     /*
-     * Expand/Collapse reads the SELECTED row, so the path target moves
-     * the selection to the clicked row before it runs — which is what
-     * CTX_TGT_PATH does for every FUSS row, so a menu acted on is a
-     * menu whose row is also the one the tree now points at.
+     * Expand/Collapse reads the SELECTED row, and `ed.git.nav.toggle`
+     * takes NO argument — a command invoked with an `sarg` its arity
+     * does not accept is refused by `yew_cmd_prepare` before it runs,
+     * which is a row that silently does nothing.  CTX_TGT_FUSS_ROW is
+     * the half of CTX_TGT_PATH this row needs: move the selection to
+     * the clicked row, pass nothing.
      */
-    /* CTXA_FUSS_TOGGLE      */ {"ed.git.nav.toggle", CTX_TGT_PATH, 0},
+    /* CTXA_FUSS_TOGGLE      */ {"ed.git.nav.toggle", CTX_TGT_FUSS_ROW, 0},
     /* CTXA_FUSS_GROUP_FROM_DIR */
     {"ed.group.from_dir", CTX_TGT_FUSS_ROW, 0},
     /* CTXA_FUSS_REFRESH     */ {"ed.git.refresh", CTX_TGT_NONE, 0},

@@ -35,7 +35,9 @@
 #include "ui/groups.h"
 #include "ui/gutter.h"
 #include "ui/layout.h"
+#include "term/tty.h"
 #include "ui/mouse.h"
+#include "ui/region.h"
 #include "ui/tabs.h"
 #include "ui/win.h"
 #if YEW_WITH_LSP
@@ -868,6 +870,75 @@ void test_ctxrows_fuss_dir_rows_follow_expansion_and_subtree(void)
     cr_fuss_drop(&fix);
 }
 
+/*
+ * THE ROW THE MENU WAS OPENED ON IS THE ROW THAT ACTS.
+ *
+ * `Expand` / `Collapse` reads the SELECTED tree row, not an argument,
+ * so the path target has to move the selection to the clicked row
+ * before the command runs — otherwise a right-click on `sub` would
+ * expand whatever the keyboard happened to be on.  This drives the
+ * whole path: build, show, hover, Enter, through the router.
+ */
+void test_ctxrows_fuss_dir_menu_acts_on_the_clicked_row(void)
+{
+    CrFussFix fix;
+    GitEntry entries[1];
+    Ed ed;
+    u32 dir_id;
+    u32 file_id;
+    FussTarget before;
+    FussTarget after;
+    u32 row;
+    u32 rows;
+    bool found = false;
+
+    cr_fuss_make(&fix);
+    cr_fuss_enter(&ed, &fix);
+    entries[0] = cr_entry("sub/deep.txt", false, true, false);
+    cr_fuss_status(&ed, entries, 1U);
+    dir_id = cr_path_id(&ed, "sub");
+    file_id = cr_path_id(&ed, "plain.txt");
+    /* The selection starts somewhere ELSE, which is the only way this
+     * test can tell "acted on the clicked row" from "acted on whatever
+     * was selected". */
+    yew_fuss_select_path(&ed, file_id);
+    YEW_ASSERT(yew_fuss_path_target(&ed, dir_id, &before));
+
+    cr_build(&ed, YEW_CTX_KIND_FUSS_DIR, dir_id);
+    YEW_ASSERT(yew_ctx_show(2U, 2U,
+                            (Rect){0U, 0U, ed.grid.cols,
+                                   (u16)(ed.grid.rows - 1U)}));
+    rows = yew_ctx_rows();
+    for (row = 0U; row < rows; row++) {
+        const char *label = yew_ctx_row_label(row);
+
+        if (strcmp(label, "Expand") == 0 ||
+            strcmp(label, "Collapse") == 0) {
+            yew_ctx_hover((i32)row);
+            found = true;
+            break;
+        }
+    }
+    YEW_ASSERT(found);
+    {
+        Key enter;
+
+        (void)memset(&enter, 0, sizeof(enter));
+        enter.kind = (u16)YEW_EV_KEY;
+        enter.code = YEW_KEY_ENTER;
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &enter));
+    }
+    /* Balanced on the way out, whatever the row did. */
+    YEW_ASSERT(!yew_region_frozen());
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(yew_fuss_path_target(&ed, dir_id, &after));
+    YEW_ASSERT(after.expanded != before.expanded);
+    yew_ctx_close();
+    yew_tty_mouse_motion(false);
+    yew_ed_free(&ed);
+    cr_fuss_drop(&fix);
+}
+
 void test_ctxrows_fuss_blank_rows_match_the_contract(void)
 {
     static const char *const want[] = {
@@ -1018,8 +1089,18 @@ void test_ctxrows_every_row_resolves_to_a_registry_command(void)
 
 /*
  * The whole table, not only the rows a fixture happens to build: an
- * action added without a command, or with a misspelt one, fails here
- * even if no builder uses it yet.
+ * action added without a command, or with a misspelt one, or with a
+ * target its command's ARITY cannot accept, fails here even if no
+ * builder uses it yet.
+ *
+ * THE ARITY HALF IS NOT PEDANTRY.  `yew_cmd_prepare` refuses a command
+ * invoked with an `sarg` its arity does not declare — before the
+ * command runs and without a message the user sees — so a
+ * CTX_TGT_PATH row on a no-argument command is a row that silently
+ * does nothing.  Deliverable 4 shipped exactly that bug once (the FUSS
+ * `Expand` / `Collapse` row, which reads the selection and takes no
+ * argument); CTX_TGT_FUSS_ROW is what it became, and this is what
+ * would have caught it.
  */
 void test_ctxrows_the_action_table_is_wholly_resolvable(void)
 {
@@ -1029,16 +1110,26 @@ void test_ctxrows_the_action_table_is_wholly_resolvable(void)
     cr_fixture(&ed);
     for (a = 1U; a < (u32)CTXA__N; a++) {
         const CtxActionDesc *d = &yew_ctx_actions[a];
+        const CmdDesc *desc;
+        CmdId id;
 
         if (d->cmd == NULL) {
             YEW_ASSERT(d->target == CTX_TGT_NONE ||
                        d->target == CTX_TGT_PICK);
             continue;
         }
-        {
-            CmdId id = yew_cmd_lookup(d->cmd, strlen(d->cmd));
-
-            YEW_ASSERT(id.v != YEW_CMD_NONE.v);
+        id = yew_cmd_lookup(d->cmd, strlen(d->cmd));
+        YEW_ASSERT(id.v != YEW_CMD_NONE.v);
+        desc = yew_cmd_desc(id);
+        YEW_ASSERT_NOT_NULL(desc);
+        if (d->target == CTX_TGT_PATH) {
+            YEW_ASSERT(desc->arity == (u8)YEW_ARITY_STR ||
+                       desc->arity == (u8)YEW_ARITY_OPT_STR);
+        } else {
+            /* Every other target passes no argument, so a command that
+             * REQUIRES one would be refused the same way. */
+            YEW_ASSERT(desc->arity != (u8)YEW_ARITY_STR &&
+                       desc->arity != (u8)YEW_ARITY_INT);
         }
     }
     yew_ed_free(&ed);

@@ -2203,6 +2203,7 @@ const YewTest yew_tests[] = {
 #if YEW_WITH_FUSS
     T(ctxrows_fuss_file_rows_follow_git_status),
     T(ctxrows_fuss_dir_rows_follow_expansion_and_subtree),
+    T(ctxrows_fuss_dir_menu_acts_on_the_clicked_row),
     T(ctxrows_fuss_blank_rows_match_the_contract),
     T(ctxrows_fuss_unknown_path_greys_the_status_rows),
 #endif

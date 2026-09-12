@@ -2197,6 +2197,7 @@ void test_ctxrows_doc_lsp_section_appears_with_a_server(void);
 #if YEW_WITH_FUSS
 void test_ctxrows_fuss_file_rows_follow_git_status(void);
 void test_ctxrows_fuss_dir_rows_follow_expansion_and_subtree(void);
+void test_ctxrows_fuss_dir_menu_acts_on_the_clicked_row(void);
 void test_ctxrows_fuss_blank_rows_match_the_contract(void);
 void test_ctxrows_fuss_unknown_path_greys_the_status_rows(void);
 #endif
