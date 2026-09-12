@@ -134,6 +134,24 @@ bool yew_lsp_rename_key(Ed *ed, const Key *key)
     return false;
 }
 
+bool yew_lsp_rename_answer(Ed *ed, LspRenameAnswer answer)
+{
+    (void)ed;
+    (void)answer;
+    /* No module, no rename in flight: the three `ed.lsp.rename.*`
+     * commands stay in the registry (invariant 3) and refuse with the
+     * same message they give an enabled build with nothing to confirm. */
+    return false;
+}
+
+bool yew_lsp_rename_confirm_active(const Ed *ed)
+{
+    (void)ed;
+    /* Whatever panel is up, it is not a rename confirmation, so the
+     * PANEL menu keeps its bare `Close` row (Sprint 57.11 §4). */
+    return false;
+}
+
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len)
 {

@@ -1,6 +1,7 @@
 #include "edit/lsp_cmds.h"
 
 #include "mod/lsp/lsp.h"
+#include "ui/message.h"
 #include "ui/win.h"
 
 static CmdStatus status_of(bool ok)
@@ -120,6 +121,41 @@ CmdStatus yew_lsp_cmd_rename(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL || cx->win == NULL)
         return YEW_CMD_ERR_STATE;
     return status_of(yew_lsp_rename(cx->ed, cx->win));
+}
+
+/*
+ * REFUSES CLEANLY when there is nothing to answer.
+ *
+ * A menu row is not the only caller: these are ordinary registry
+ * commands, so the palette and a Fletch script can reach them with no
+ * rename in flight, and a command that returned OK having done nothing
+ * would be indistinguishable from one that applied a rename.
+ */
+static CmdStatus rename_answer(CmdCtx *cx, LspRenameAnswer answer)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    if (!yew_lsp_rename_answer(cx->ed, answer)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR,
+                "no rename is waiting for confirmation");
+        return YEW_CMD_ERR_STATE;
+    }
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_lsp_cmd_rename_apply(CmdCtx *cx)
+{
+    return rename_answer(cx, YEW_LSP_RENAME_APPLY);
+}
+
+CmdStatus yew_lsp_cmd_rename_diff(CmdCtx *cx)
+{
+    return rename_answer(cx, YEW_LSP_RENAME_DIFF);
+}
+
+CmdStatus yew_lsp_cmd_rename_cancel(CmdCtx *cx)
+{
+    return rename_answer(cx, YEW_LSP_RENAME_CANCEL);
 }
 
 CmdStatus yew_lsp_cmd_symbols(CmdCtx *cx)
