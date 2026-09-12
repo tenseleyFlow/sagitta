@@ -1205,7 +1205,7 @@ void test_cmdline_save_as_seeds_the_write_line_with_the_current_path(void)
 
     cmdline_fixture_init(&fixture);
     (void)snprintf(path, sizeof(path), "%s/named.txt", fixture.state);
-    fixture.ed.buffer.path = yew_xstrdup(path);
+    fixture.ed.buffer.path = arena_strdup(&fixture.ed.arena, path);
 
     YEW_ASSERT(!fixture.ed.cmdline.active);
     YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_file_cmd_save_as),
