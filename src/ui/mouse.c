@@ -8,6 +8,7 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "edit/pane_cmds.h"
+#include "term/tty.h"
 #include "text/piece.h"
 #include "ui/cmdline.h"
 #include "ui/ctxmenu.h"
@@ -1561,6 +1562,12 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx)
      * down forever. */
     yew_mouse_cancel(cx->ed);
     yew_ctx_close();
+    /* Sprint 57.11: the menu the close above may have dismissed armed
+     * any-motion tracking.  Disarm it here rather than inside
+     * yew_ctx_close() so the widget stays editor- and terminal-ignorant,
+     * and so this is the single site that turns the mode off outside a
+     * restore. */
+    yew_tty_mouse_motion(false);
     mouse_enabled = false;
     yew_msg(cx->ed, YEW_MSG_INFO, "mouse off");
     return YEW_CMD_OK;
