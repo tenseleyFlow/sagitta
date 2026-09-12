@@ -2450,6 +2450,31 @@ static void perf_frame_tag(Ed *ed, size_t visible_bytes)
                                   (u32)ed->frame.len;
 }
 
+/*
+ * Sprint 57.11 §3: is this frame ONLY an open menu's highlight moving?
+ *
+ * Every other overlay's cells are already in the grid and its regions
+ * are already in the table — which was NOT cleared, because nothing
+ * called yew_region_frame_begin this pass.  So a menu-only frame draws
+ * the menu and nothing else: redrawing the picker or the panel here
+ * would re-register their regions on top of the copies still standing,
+ * and a thousand motion reports would push the table past its ceiling.
+ *
+ * It also has to be the ONLY overlay up, so the order the overlays are
+ * drawn in cannot differ between this pass and a full one — same state,
+ * same cells (invariant 5).
+ */
+static bool menu_only_frame(const Ed *ed, const Win *win)
+{
+    if (!ed->overlay_dirty || ed->full_damage || ed->footer_dirty)
+        return false;
+    if (ed->doc_damage_lo < ed->doc_damage_hi)
+        return false;
+    if (!yew_ctx_active() || yew_gp_active() || yew_picker_active(ed))
+        return false;
+    return win == NULL || (!win->compl.open && !win->panel.open);
+}
+
 void yew_ed_render(Ed *ed)
 {
     Win *win;
@@ -2457,6 +2482,7 @@ void yew_ed_render(Ed *ed)
     bool cursor_line_changed;
     bool view_changed;
     bool fuss;
+    bool menu_only;
 
     if (ed == NULL || !ed->grid_ready || !ed->render_ready ||
         !ed->model_ready)
@@ -2465,6 +2491,7 @@ void yew_ed_render(Ed *ed)
     fuss = yew_fuss_active(ed);
     cursor_line = LINENO(0U);
     if (fuss) {
+        menu_only = menu_only_frame(ed, win) && !yew_fuss_draw_dirty(ed);
         if (ed->full_damage) {
             yew_draw_panes(ed);
             yew_grid_mark_all(&ed->grid);
@@ -2518,6 +2545,9 @@ void yew_ed_render(Ed *ed)
     }
     if (win->shadow.live)
         ed->full_damage = true;
+    /* After the damage above is derived, so a frame that turned out to
+     * owe a repaint is never mistaken for a hover. */
+    menu_only = menu_only_frame(ed, win);
     if (ed->full_damage) {
         /*
          * Every leaf plus the borders their splits own.  With a single
@@ -2552,10 +2582,13 @@ draw_overlays:
      * line, and an active FUSS drawer covers the left side of the group
      * picker. One widget, one place, and modal surfaces on top.
      */
-    if (yew_gp_active())
-        yew_gp_draw(ed);
-    if (yew_picker_active(ed))
-        yew_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
+    if (!menu_only) {
+        if (yew_gp_active())
+            yew_gp_draw(ed);
+        if (yew_picker_active(ed))
+            yew_picker_draw(ed,
+                            (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
+    }
     /*
      * Sprint 27 §5: the context menu is drawn after everything, for the
      * same reason and with the same consequence — its BLOCK and CTX_ROW
@@ -2564,14 +2597,18 @@ draw_overlays:
      */
     if (yew_ctx_active())
         yew_mouse_menu_draw(ed);
-    /* Sprint 44: the non-modal completion popup is the final overlay and
-     * therefore owns the last-added hit regions for its exact boxes. */
-    if (win->compl.open)
-        yew_compl_draw(ed, win, &ed->grid);
-    /* Sprint 47: the floating panel is the final overlay.  Its draw pass
-     * registers the stored rect as the last-added BLOCK region. */
-    if (win->panel.open)
-        yew_panel_draw(ed, &win->panel, &ed->grid);
+    if (!menu_only) {
+        /* Sprint 44: the non-modal completion popup is the final overlay
+         * and therefore owns the last-added hit regions for its exact
+         * boxes. */
+        if (win->compl.open)
+            yew_compl_draw(ed, win, &ed->grid);
+        /* Sprint 47: the floating panel is the final overlay.  Its draw
+         * pass registers the stored rect as the last-added BLOCK
+         * region. */
+        if (win->panel.open)
+            yew_panel_draw(ed, &win->panel, &ed->grid);
+    }
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
     perf_frame_tag(ed, ed->frame.len);
@@ -2593,6 +2630,7 @@ draw_overlays:
     yew_grid_flip(&ed->grid);
     ed->full_damage = false;
     ed->footer_dirty = false;
+    ed->overlay_dirty = false;
     ed->doc_damage_lo = ed->grid.rows;
     ed->doc_damage_hi = 0U;
     if (!fuss) {
