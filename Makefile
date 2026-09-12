@@ -543,11 +543,13 @@ YEW_PTY_BUDGET_MS ?= 1800000
 else
 YEW_PTY_BUDGET_MS ?= 1350000
 endif
-# Git-backed editor cases execute real subprocesses.  The stale-blame case
-# completed correctly at 4.7-4.9 s under CPU contention, which leaves no
-# honest margin under the runner's 5 s fallback.  This remains a hang
-# ceiling; PTY latency is asserted by semantic barriers and dedicated gates.
-YEW_PTY_CASE_BUDGET_MS ?= 10000
+# Git-backed editor cases execute real subprocesses.  The FUSS diff case
+# reached the old 10 s ceiling on an arm64 macOS hosted runner while the same
+# two-execution case completed in 8.5 s on a quiet M-series machine.  Preserve
+# better than 2x per-execution headroom for shared-runner contention.  This
+# remains a hang ceiling; PTY latency is asserted by semantic barriers and
+# dedicated gates, so passing cases do not wait any longer.
+YEW_PTY_CASE_BUDGET_MS ?= 20000
 ifeq ($(SAN),1)
 # The 10,000-replacement migration case is deliberately CPU-heavy under
 # per-instruction VM checks plus ASan/UBSan; this is a hang ceiling only.
