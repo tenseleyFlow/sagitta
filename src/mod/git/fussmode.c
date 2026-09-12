@@ -28,6 +28,7 @@
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "text/piece.h"
+#include "text/register.h"
 #include "text/undo.h"
 #include "ui/draw.h"
 #include "ui/message.h"
@@ -4990,6 +4991,39 @@ CmdStatus yew_fuss_cmd_file_rename(CmdCtx *cx)
                          "new workspace-relative path");
     yew_xfree(path);
     return status;
+}
+
+/*
+ * The FUSS menus' `Copy Path`, and the only `ed.git.*` verb that
+ * touches no repository at all: a path is a path whether git has heard
+ * of it or not, so there is no `fuss_target_guard` here.  The path
+ * still comes through `fuss_selected_path`, which is what makes the
+ * row honour `sarg` (the menu's captured path) and fall back to the
+ * selected row for the keyboard route — and what rejects an absolute
+ * path or one containing `..`.
+ */
+CmdStatus yew_fuss_cmd_copy_path(CmdCtx *cx)
+{
+    char *path = fuss_selected_path(cx);
+    RegVal v;
+
+    if (path == NULL) {
+        if (cx != NULL && cx->ed != NULL)
+            yew_msg(cx->ed, YEW_MSG_ERROR, "no path is selected");
+        return YEW_CMD_ERR_ARG;
+    }
+    yew_regval_init(&v);
+    bytebuf_append(&v.bytes, (const u8 *)path, strlen(path));
+    v.type = (u8)YEW_REG_CHARWISE;
+    /* Register `+` is the system clipboard, so this also travels out
+     * through Sprint 12's OSC 52 path — the same register and the same
+     * kind `ed.tab.copy_path` writes, because two spellings of "the
+     * clipboard" is how a paste comes to find the wrong one. */
+    yew_reg_yank(&cx->ed->regs, (u8)'+', &v);
+    yew_regval_free(&v);
+    yew_msg(cx->ed, YEW_MSG_INFO, "copied %s", path);
+    yew_xfree(path);
+    return YEW_CMD_OK;
 }
 
 CmdStatus yew_fuss_cmd_open(CmdCtx *cx) { return fuss_open_path(cx, true); }

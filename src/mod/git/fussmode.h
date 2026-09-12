@@ -175,5 +175,16 @@ CmdStatus yew_fuss_cmd_file_rename(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open_split_h(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open_split_v(CmdCtx *cx);
+/*
+ * Sprint 57.11 §4: the FUSS menus' `Copy Path` row.
+ *
+ * `ed.tab.copy_path` copies the ACTIVE TAB's path and takes no
+ * argument, so it cannot answer "copy the path of the row I pointed
+ * at" — copying a different file's name than the one the row was opened
+ * over is the one failure a clipboard row must never have.  This takes
+ * the path the same way every other `ed.git.*` row does, and yanks it
+ * into register `+` exactly as the tab command does.
+ */
+CmdStatus yew_fuss_cmd_copy_path(CmdCtx *cx);
 
 #endif

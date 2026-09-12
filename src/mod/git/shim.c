@@ -736,5 +736,6 @@ FUSS_SHIM(yew_fuss_cmd_file_rename)
 FUSS_SHIM(yew_fuss_cmd_open)
 FUSS_SHIM(yew_fuss_cmd_open_split_h)
 FUSS_SHIM(yew_fuss_cmd_open_split_v)
+FUSS_SHIM(yew_fuss_cmd_copy_path)
 
 #undef FUSS_SHIM
