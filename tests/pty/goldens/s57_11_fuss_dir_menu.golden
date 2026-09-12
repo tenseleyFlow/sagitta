@@ -10,9 +10,9 @@ fussrepo · trunk       │ 1 main.c  +
      ├───────────────────┤                                                      
      │ Stage All Below   │                                                      
    RE│ Unstage All Below │                                                      
-   un└───────────────────┘                                                      
-                       │                                                        
-                       │                                                        
+   un├───────────────────┤                                                      
+     │ Copy Path         │                                                      
+     └───────────────────┘                                                      
                        │                                                        
                        │                                                        
                        │                                                        
@@ -36,8 +36,8 @@ BBBBBQQQQQQQQQQQQQQQQQQQQQIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBQBBBBBBBBBBBBBBBBBBBQIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBQRRRRRRRRRRRRRRRRRRRQIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBQQQQQQQQQQQQQQQQQQQQQIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
-BBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
-BBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBQBBBBBBBBBBBBBBBBBBBQIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBQQQQQQQQQQQQQQQQQQQQQIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 BBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
