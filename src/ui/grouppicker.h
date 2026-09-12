@@ -87,4 +87,23 @@ void yew_gp_apply(Ed *ed);
 CmdStatus yew_gp_cmd_new(CmdCtx *cx);
 CmdStatus yew_gp_cmd_edit(CmdCtx *cx);
 
+/*
+ * Sprint 57.11 §4: the dialog's `Toggle` and `Confirm` rows.
+ *
+ * The picker was keyed entirely through `yew_gp_key`, so its menu rows
+ * had no command to carry and shipped as nothing.  These share one
+ * implementation with the key handler — Space and Enter land in the
+ * same two functions — and refuse with a message when the dialog is
+ * down.  Both run `yew_gp_apply` the way the key loop does.
+ */
+CmdStatus yew_gp_cmd_toggle(CmdCtx *cx);
+CmdStatus yew_gp_cmd_confirm(CmdCtx *cx);
+
+/*
+ * Moves the focus to a LISTING INDEX — what a GP_ROW region's payload
+ * is, and what the context menu spends its captured target on before
+ * `Toggle` runs.  False when the dialog is down or the row has gone.
+ */
+bool yew_gp_select_row(Ed *ed, int idx);
+
 #endif
