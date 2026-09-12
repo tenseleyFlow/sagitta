@@ -1595,6 +1595,16 @@ static CmdStatus insert_newline_indent(CmdCtx *cx, const u8 *eol,
     old_lines = yew_textbuf_line_count(tb);
     if (!yew_indent_info(tb, span, edit_tabwidth(win), &info))
         return YEW_CMD_ERR_STATE;
+    /*
+     * The indent carried forward is the leading whitespace TRUNCATED at
+     * the caret.  Splitting inside the indent already leaves the rest of
+     * it on the new line, so carrying the whole run would push the text
+     * right by however much the caret had passed.  Truncating keeps the
+     * content in the column it was in.
+     *
+     * `strip`: the part staying behind is whitespace only, so it is
+     * deleted rather than committed as a trailing-blank line.
+     */
     carry_hi = info.first.v < cursor->pos.v ? info.first.v : cursor->pos.v;
     head.lo = span.lo;
     head.hi = cursor->pos.v;
