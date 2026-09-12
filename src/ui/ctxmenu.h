@@ -50,6 +50,7 @@
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "term/input.h"
+#include "ui/ctxrows.h"
 #include "ui/layout.h"
 #include "util/base.h"
 
@@ -65,11 +66,13 @@ enum {
     YEW_CTX_PRIORITY_MAX = 3
 };
 
-typedef enum {
-    YEW_CTX_KIND_NONE = 0,
-    YEW_CTX_KIND_TAB,
-    YEW_CTX_KIND_GROUP
-} CtxKind;
+/*
+ * `CtxKind`, `CtxContext` and the action table live in ui/ctxrows.h —
+ * WHICH rows a surface deserves is editor policy, and this module knows
+ * none.  It is included rather than forward-declared only because the
+ * kind is this module's `yew_ctx_begin` argument; nothing here reads a
+ * kind's meaning, and ctxrows.h is as editor-ignorant as this file is.
+ */
 
 /*
  * The menu's look, resolved by the CALLER from the theme's `menu.*`

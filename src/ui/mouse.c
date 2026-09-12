@@ -8,14 +8,18 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "edit/pane_cmds.h"
+#include "mod/git/fussmode.h"
 #include "term/tty.h"
 #include "text/piece.h"
 #include "ui/cmdline.h"
+#include "ui/complmenu.h"
 #include "ui/ctxmenu.h"
+#include "ui/ctxrows.h"
 #include "ui/groupnav.h"
 #include "ui/grouppicker.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
+#include "ui/panel.h"
 #include "ui/picker.h"
 #include "ui/tabs.h"
 #include "ui/viewport.h"
@@ -40,6 +44,14 @@ static i32 wheel_dir(u8 button)
                ? -1
                : 1;
 }
+
+/*
+ * Declared here because the WHEEL needs them and the wheel is routed
+ * before §5 defines them: a wheel dismisses an open menu, and it
+ * scrolls the FUSS drawer by geometry rather than by region.
+ */
+static void menu_close(Ed *ed);
+static bool rect_has(Rect r, u16 x, u16 y);
 
 void yew_mouse_init(MouseState *m)
 {
@@ -281,8 +293,26 @@ static void mouse_wheel(Ed *ed, const Key *k)
      */
     if ((k->mods & (u16)YEW_MOD_CTRL) != 0U)
         return;
+    /*
+     * A wheel DISMISSES an open menu and is then routed normally.
+     * Scrolling the thing under a pop-up while the pop-up stays put is
+     * how a menu ends up pointing at a row that has moved; closing
+     * first keeps the capture-at-open law honest.
+     */
+    if (yew_ctx_active())
+        menu_close(ed);
     if (yew_mouse_claimed_by_menu(ed, *k))
         return;
+    /*
+     * 57.11 §3: THE WHEEL SCROLLS THE TREE, over its rows and over the
+     * blank drawer below them alike — a list that only scrolled where
+     * it happened to have drawn a row would feel like it had holes.
+     */
+    if (yew_fuss_active(ed) &&
+        rect_has(yew_fuss_drawer_rect(ed), k->col, k->row)) {
+        yew_fuss_scroll(ed, wheel_dir(k->button) * YEW_WHEEL_ROWS);
+        return;
+    }
     hit = yew_region_hit(k->col, k->row);
     switch (hit.kind) {
     case YEW_REGION_PANE:
@@ -325,19 +355,12 @@ static void mouse_wheel(Ed *ed, const Key *k)
 
 /*
  * The rows are OPAQUE ACTIONS to ctxmenu.c, which is what lets that
- * module stay below the editor in the dependency graph.  The meaning
- * lives here, with the caller, exactly as §5 requires.
+ * module stay below the editor in the dependency graph.  Their meaning
+ * is `yew_ctx_actions` in ui/ctxrows.h, and the row sets themselves are
+ * built in ui/ctxrows.c: THIS FILE MAY NOT ALLOCATE (tests/perf/mouse.c
+ * reads its source and fails on a `malloc(`), and a row set is strings
+ * and a copied path.
  */
-enum {
-    CTXA_NONE = 0,
-    CTXA_TAB_CLOSE,
-    CTXA_TAB_CLOSE_OTHERS,
-    CTXA_TAB_COPY_PATH,
-    CTXA_TAB_LEAVE_GROUP,
-    CTXA_GROUP_EDIT,
-    CTXA_GROUP_RENAME,
-    CTXA_GROUP_DISSOLVE
-};
 
 /* Where a menu may be placed: everything above the footer. */
 static Rect menu_allowed(const Ed *ed)
@@ -417,59 +440,281 @@ static CtxStyle menu_style(const Ed *ed)
     return s;
 }
 
+/* ---------------------------------------------------------------- */
+/* Opening and closing                                              */
+/* ---------------------------------------------------------------- */
+
+/*
+ * THE ONE CLOSE PATH.
+ *
+ * Any-motion reporting (DEC 1003) is armed only while a menu is up, and
+ * "only" is a claim about EVERY way a menu can go away — a row fired, a
+ * key, Esc, a click outside, a wheel, the mouse being disabled.  Five
+ * close sites would be five chances to leave the terminal streaming
+ * motion reports at an editor that has nothing to do with them, which
+ * is invariant 6's failure mode in slow motion.  So there is one, and
+ * `fuzz_mouse` asserts the flag is false whenever no menu is open.
+ *
+ * It is safe to call when nothing is open: `yew_ctx_close` is a memset
+ * and `yew_tty_mouse_motion` is idempotent.
+ */
+static void menu_close(Ed *ed)
+{
+    yew_ctx_close();
+    /* Disarmed HERE rather than inside yew_ctx_close() so the widget
+     * stays editor- and terminal-ignorant. */
+    yew_tty_mouse_motion(false);
+    if (ed != NULL)
+        ed->full_damage = true;
+}
+
+/*
+ * The widget can also deactivate itself — Esc through `yew_ctx_key`, or
+ * a row being chosen.  This is what keeps the 1003 claim true across
+ * those paths without teaching ctxmenu.c about the terminal.
+ */
+static void menu_settle(Ed *ed)
+{
+    if (!yew_ctx_active())
+        menu_close(ed);
+}
+
+/*
+ * Opens the menu for `c` at the pointer.
+ *
+ * The clicked CELL is captured after the build, as the target rect: a
+ * CtxContext carries the region's rectangle (the pane's, for DOC), and
+ * a document row that places the cursor where the user pointed needs
+ * the cell itself.  A 1x1 rect rather than two u16s because that is the
+ * shape ctxmenu.c already stores.
+ *
+ * The ANCHOR is separate from that cell because the strip's menus hang
+ * one row clear of the strip (Sprint 27's placement, and the goldens'):
+ * everywhere else the two are the same cell.
+ */
+static bool menu_open_at(Ed *ed, const CtxContext *c, u16 anchor_x,
+                        u16 anchor_y, u16 cell_x, u16 cell_y)
+{
+    menu_close(ed);
+    yew_ctx_build(ed, c);
+    yew_ctx_target_rect((Rect){cell_x, cell_y, 1U, 1U});
+    if (!yew_ctx_show(anchor_x, anchor_y, menu_allowed(ed))) {
+        /* Nothing opened: the build refused (its target went away) or
+         * the box cannot fit even its priority-0 rows.  The close above
+         * already left 1003 disarmed; say so explicitly rather than
+         * relying on the reader to remember. */
+        menu_close(ed);
+        return false;
+    }
+    yew_tty_mouse_motion(true);
+    ed->full_damage = true;
+    return true;
+}
+
 bool yew_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y)
 {
-    int idx = yew_tab_index_of_id(ed, tab_id);
-    Tab *t = yew_tab_at(ed, idx);
+    CtxContext c;
 
-    if (t == NULL)
+    if (ed == NULL)
         return false;
-    yew_ctx_begin((u32)YEW_CTX_KIND_TAB);
-    /*
-     * The target, captured NOW: the tab_id and the canonical path.
-     * Every row re-finds the tab from the id when it is invoked,
-     * because the strip can scroll and tabs can close while the menu is
-     * up — and then the entry at those cells is a different file.
-     */
-    yew_ctx_target(tab_id, t->path);
-    yew_ctx_item("Close Tab", "C-w", CTXA_TAB_CLOSE,
-                 yew_tab_count(ed) > 1U, 0U);
-    /* Disabled rows are GREYED, never hidden, so the menu keeps its
-     * shape and a row does not move under the pointer between one
-     * right-click and the next. */
-    yew_ctx_item("Close Other Tabs", NULL, CTXA_TAB_CLOSE_OTHERS,
-                 yew_tab_count(ed) > 1U, 0U);
-    yew_ctx_sep();
-    yew_ctx_item("Copy Path", NULL, CTXA_TAB_COPY_PATH, t->path != NULL,
-                 0U);
-    yew_ctx_item("Remove from Group", NULL, CTXA_TAB_LEAVE_GROUP,
-                 t->group_id != 0U, 0U);
-    return yew_ctx_show(x, y, menu_allowed(ed));
+    (void)memset(&c, 0, sizeof(c));
+    c.kind = YEW_CTX_KIND_TAB;
+    c.id = tab_id;
+    return menu_open_at(ed, &c, x, y, x, y);
 }
 
 bool yew_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y)
 {
-    if (yew_group_at(ed, gid) == NULL)
+    CtxContext c;
+
+    if (ed == NULL)
         return false;
-    yew_ctx_begin((u32)YEW_CTX_KIND_GROUP);
-    yew_ctx_target(gid, NULL);
-    yew_ctx_item("Edit Group...", NULL, CTXA_GROUP_EDIT, true, 0U);
-    yew_ctx_item("Rename Group...", NULL, CTXA_GROUP_RENAME, true, 0U);
-    yew_ctx_sep();
-    yew_ctx_item("Dissolve Group", NULL, CTXA_GROUP_DISSOLVE, true, 0U);
-    return yew_ctx_show(x, y, menu_allowed(ed));
+    (void)memset(&c, 0, sizeof(c));
+    c.kind = YEW_CTX_KIND_GROUP;
+    c.id = gid;
+    return menu_open_at(ed, &c, x, y, x, y);
 }
 
-static void invoke_named(Ed *ed, const char *name)
-{
-    CmdCtx cx = {0};
-    CmdId id = yew_cmd_lookup(name, strlen(name));
+/* ---------------------------------------------------------------- */
+/* §3: what is under the pointer                                    */
+/* ---------------------------------------------------------------- */
 
-    cx.ed = ed;
-    cx.win = ed->win;
-    cx.count = 1U;
-    cx.source = YEW_SRC_KEY;
-    (void)yew_ed_invoke(ed, id, &cx);
+static bool rect_has(Rect r, u16 x, u16 y)
+{
+    return r.w != 0U && r.h != 0U && x >= r.x &&
+           x < (u16)(r.x + r.w) && y >= r.y && y < (u16)(r.y + r.h);
+}
+
+/*
+ * ONE PURE FUNCTION, unit-tested directly.
+ *
+ * Every surface's menu comes from here, so "right-click opens the wrong
+ * menu over the FUSS drawer" is a test rather than a bug report.  It
+ * reads the region table and the layout rectangles and nothing else:
+ * no state changes, no allocation, and the same answer every time it is
+ * asked about the same frame (invariant 5).
+ *
+ * A REGION HIT WINS, because the renderer registered it in the same
+ * statement that drew it (Sprint 22's law).  Only a NONE hit falls
+ * through to geometry, and then in the order the sprint fixes: the FUSS
+ * drawer and its backdrop, the footer, the tab strip, the editor.  The
+ * order matters where the rectangles overlap — a fullscreen drawer
+ * covers cells the strip rectangle also claims, and the drawer is what
+ * the user sees there.
+ */
+CtxContext yew_mouse_context_at(const Ed *ed, u16 x, u16 y)
+{
+    CtxContext c;
+    Region hit;
+
+    (void)memset(&c, 0, sizeof(c));
+    c.kind = YEW_CTX_KIND_EDITOR;
+    if (ed == NULL)
+        return c;
+    hit = yew_region_hit(x, y);
+    c.payload = hit.payload;
+    c.rect = hit.rect;
+    /*
+     * THE OPEN MENU ANSWERS FOR ITS OWN CELLS.  Checked before the
+     * region kinds because the menu's BLOCK covers its border and its
+     * gaps, and a right-click there must mean "the menu", not "whatever
+     * the box is sitting on top of".  NONE is the answer: there is no
+     * menu to open for a menu, and the router's close-and-reopen rule
+     * (§3) is what actually handles the press.
+     */
+    if (yew_ctx_active() && rect_has(yew_ctx_box(), x, y)) {
+        c.kind = YEW_CTX_KIND_NONE;
+        c.rect = yew_ctx_box();
+        return c;
+    }
+    switch (hit.kind) {
+    case YEW_REGION_PANE:
+        c.kind = YEW_CTX_KIND_DOC;
+        c.id = (u32)hit.payload; /* the leaf index, for CTX_TGT_PANE */
+        return c;
+    case YEW_REGION_PANE_BORDER:
+        c.kind = YEW_CTX_KIND_BORDER;
+        c.id = (u32)hit.payload;
+        return c;
+    case YEW_REGION_TAB:
+        /* The row-1 payload convention, once, here: >= 0 is a tab
+         * index and < 0 is a negated gid (ui/region.h). */
+        if (hit.payload < 0) {
+            c.kind = YEW_CTX_KIND_GROUP;
+            c.id = (u32)(-hit.payload);
+        } else {
+            const Tab *t = yew_tab_at_const(ed, hit.payload);
+
+            /* IDENTITY, not the index: the strip can scroll and tabs
+             * can close before a row fires. */
+            c.kind = YEW_CTX_KIND_TAB;
+            c.id = t != NULL ? t->tab_id : 0U;
+        }
+        return c;
+    case YEW_REGION_TAB_SCROLL:
+    case YEW_REGION_TAB_NEW:
+        c.kind = YEW_CTX_KIND_STRIP;
+        return c;
+    case YEW_REGION_FUSS_ROW: {
+        bool is_dir = false;
+
+        c.id = (u32)hit.payload; /* the interned path id */
+        /*
+         * FILE or DIRECTORY is the tree's to say, not the payload's:
+         * the two menus differ and a guess from the path text would be
+         * wrong for an extensionless file and for a directory the tree
+         * has not walked.  Unknown — a stripped FUSS, a path the tree
+         * no longer holds — is neither, and the blank-drawer menu is
+         * the honest answer.
+         */
+        if (!yew_fuss_path_is_dir(ed, (u32)hit.payload, &is_dir))
+            c.kind = YEW_CTX_KIND_FUSS_BLANK;
+        else
+            c.kind = is_dir ? YEW_CTX_KIND_FUSS_DIR
+                            : YEW_CTX_KIND_FUSS_FILE;
+        return c;
+    }
+    case YEW_REGION_PICK_ROW:
+        c.kind = YEW_CTX_KIND_PICK_ROW;
+        c.id = (u32)hit.payload; /* the item payload, for CTX_TGT_PICK */
+        return c;
+    case YEW_REGION_COMPL_ROW:
+        c.kind = YEW_CTX_KIND_COMPL_ROW;
+        c.id = (u32)hit.payload;
+        return c;
+    case YEW_REGION_GP_ROW:
+        c.kind = YEW_CTX_KIND_GP_ROW;
+        c.id = (u32)hit.payload;
+        return c;
+    case YEW_REGION_GP_NAME:
+        c.kind = YEW_CTX_KIND_GP;
+        return c;
+    case YEW_REGION_CTX_ROW:
+        /* Handled by the box test above; reachable only if a stale row
+         * region outlived its menu, and then it means nothing. */
+        c.kind = YEW_CTX_KIND_NONE;
+        return c;
+    case YEW_REGION_BLOCK:
+        /*
+         * BLOCK is INERT BY DESIGN and shared by every modal, so which
+         * one it belongs to is decided by what is open — innermost
+         * first.  The panel additionally has to contain the cell,
+         * because it is the one overlay that can be open beside
+         * another.
+         */
+        if (ed->win != NULL && ed->win->panel.open &&
+            rect_has(ed->win->panel.rect, x, y)) {
+            c.kind = YEW_CTX_KIND_PANEL;
+            return c;
+        }
+        if (yew_picker_active(ed)) {
+            c.kind = YEW_CTX_KIND_PICKER;
+            return c;
+        }
+        if (yew_gp_active()) {
+            c.kind = YEW_CTX_KIND_GP;
+            return c;
+        }
+        if (ed->win != NULL && ed->win->compl.open) {
+            c.kind = YEW_CTX_KIND_COMPL_ROW;
+            return c;
+        }
+        c.kind = YEW_CTX_KIND_EDITOR;
+        return c;
+    case YEW_REGION_MENU_ROW:
+    case YEW_REGION_NONE:
+    default:
+        break;
+    }
+    /*
+     * GEOMETRY, only for a cell no region claimed.  Each rectangle is
+     * the one the layout computed, so "the pointer is in the footer"
+     * cannot drift from where the footer was drawn.  A stripped FUSS
+     * returns zero rectangles from the shim and falls straight through.
+     */
+    c.rect = yew_fuss_drawer_rect(ed);
+    if (rect_has(c.rect, x, y)) {
+        c.kind = YEW_CTX_KIND_FUSS_BLANK;
+        return c;
+    }
+    c.rect = yew_fuss_backdrop_rect(ed);
+    if (rect_has(c.rect, x, y)) {
+        c.kind = YEW_CTX_KIND_FUSS_BLANK;
+        return c;
+    }
+    if (rect_has(ed->footer_rect, x, y)) {
+        c.kind = YEW_CTX_KIND_FOOTER;
+        c.rect = ed->footer_rect;
+        return c;
+    }
+    if (rect_has(ed->tab_strip_rect, x, y)) {
+        c.kind = YEW_CTX_KIND_STRIP;
+        c.rect = ed->tab_strip_rect;
+        return c;
+    }
+    c.kind = YEW_CTX_KIND_EDITOR;
+    c.rect = (Rect){0U, 0U, ed->grid.cols, ed->grid.rows};
+    return c;
 }
 
 static void invoke_mouse_named(Ed *ed, const char *name)
@@ -510,23 +755,16 @@ static void invoke_fuss_open(Ed *ed, i32 payload)
 }
 
 /*
- * Runs whatever row was chosen, against the target the menu captured.
- *
- * The region table is FROZEN for the duration: a row handler that
- * reached for a payload would be re-resolving the target from cells
- * that may since have come to mean a different file, and freezing turns
- * that from a rule into an abort (ui/region.h).
+ * Puts the captured target in place, and says whether it is still
+ * there.  False means the thing the menu was opened on is gone — a tab
+ * closed by a job, a group dissolved by a script — and then NOTHING
+ * runs: a row that fired against whatever inherited the identity would
+ * act on a file the user never pointed at.
  */
-static void apply_menu_action(Ed *ed)
+static bool apply_target(Ed *ed, const CtxActionDesc *d, u32 id, Rect cell)
 {
-    u32 action = yew_ctx_take();
-    u32 kind = yew_ctx_kind();
-    u32 target = yew_ctx_target_id();
-
-    if (action == CTXA_NONE)
-        return;
-    yew_region_freeze(true);
-    if (kind == (u32)YEW_CTX_KIND_TAB) {
+    switch (d->target) {
+    case CTX_TGT_TAB: {
         /*
          * The target becomes active first, resolved from its ID.  A
          * right-click on a tab is an act of pointing at it, so acting
@@ -534,45 +772,152 @@ static void apply_menu_action(Ed *ed)
          * be the ordinary registry commands rather than a second
          * implementation that takes a tab argument.
          */
-        int idx = yew_tab_index_of_id(ed, target);
+        int idx = yew_tab_index_of_id(ed, id);
 
-        if (idx >= 0) {
-            yew_tab_switch(ed, idx);
-            switch (action) {
-            case CTXA_TAB_CLOSE:
-                invoke_named(ed, "ed.tab.close");
-                break;
-            case CTXA_TAB_CLOSE_OTHERS:
-                invoke_named(ed, "ed.tab.close_others");
-                break;
-            case CTXA_TAB_COPY_PATH:
-                invoke_named(ed, "ed.tab.copy_path");
-                break;
-            case CTXA_TAB_LEAVE_GROUP:
-                invoke_named(ed, "ed.group.remove_tab");
-                break;
-            default:
-                break;
-            }
-        }
-    } else if (kind == (u32)YEW_CTX_KIND_GROUP) {
-        u32 was = yew_active_group_id(ed);
+        if (idx < 0)
+            return false;
+        yew_tab_switch(ed, idx);
+        return true;
+    }
+    case CTX_TGT_GROUP:
+        if (yew_group_at(ed, id) == NULL)
+            return false;
+        if (yew_active_group_id(ed) != id)
+            yew_group_enter(ed, id);
+        return true;
+    case CTX_TGT_PANE: {
+        Pane *leaf = yew_pane_leaf_by_index(ed, (i32)id);
 
-        if (was != target)
-            yew_group_enter(ed, target);
-        switch (action) {
-        case CTXA_GROUP_EDIT:
-            invoke_named(ed, "ed.group.edit");
-            break;
-        case CTXA_GROUP_RENAME:
-            invoke_named(ed, "ed.group.rename");
-            break;
-        case CTXA_GROUP_DISSOLVE:
-            invoke_named(ed, "ed.group.dissolve");
-            break;
-        default:
-            break;
-        }
+        if (leaf == NULL)
+            return false;
+        /*
+         * yew_pane_click is the keyboard-free route to the same place
+         * and CANNOT be used here: it re-resolves the leaf from the
+         * region table, which is frozen, and asking it anything while
+         * frozen aborts.  The leaf index and the clicked cell were both
+         * captured at open time precisely so this path needs neither.
+         */
+        yew_pane_refocus(ed, leaf);
+        if (leaf->win != NULL && leaf->win->buf != NULL)
+            yew_win_click_to_cursor(leaf->win, cell.x, cell.y);
+        return true;
+    }
+    case CTX_TGT_PICK:
+        if (!yew_picker_active(ed))
+            return false;
+        yew_picker_select_payload(ed, (i32)id);
+        /* The accept IS the action for a picker row, and `iarg` is the
+         * accept MODE (here / vsplit / hsplit) — the same three the
+         * keyboard has. */
+        return yew_picker_accept_how(ed, (u8)d->iarg);
+    case CTX_TGT_COMPL:
+        if (ed->win == NULL || !ed->win->compl.open)
+            return false;
+        yew_compl_select(ed, ed->win, (i32)id);
+        return true;
+    case CTX_TGT_PATH:
+        /* The path travels as `cx.sarg`; nothing has to move first. */
+        return true;
+    case CTX_TGT_NONE:
+    default:
+        return true;
+    }
+}
+
+/*
+ * The rows that close an overlay.
+ *
+ * No registry command owns "make this transient thing go away", and
+ * inventing four whose only caller is a menu row would be four more
+ * names in the palette for something the Esc key already does.  WHICH
+ * overlay is not guessed from what happens to be open: it is the MENU'S
+ * OWN KIND, captured when the pointer was over it.
+ */
+static void close_overlay_for(Ed *ed, u32 kind)
+{
+    switch ((CtxKind)kind) {
+    case YEW_CTX_KIND_PANEL:
+        if (ed->win != NULL && ed->win->panel.open)
+            yew_panel_close(ed, &ed->win->panel);
+        break;
+    case YEW_CTX_KIND_PICK_ROW:
+    case YEW_CTX_KIND_PICKER:
+        if (yew_picker_active(ed))
+            yew_picker_close(ed, false);
+        break;
+    case YEW_CTX_KIND_COMPL_ROW:
+        if (ed->win != NULL && ed->win->compl.open)
+            yew_compl_close(ed, ed->win);
+        break;
+    case YEW_CTX_KIND_GP_ROW:
+    case YEW_CTX_KIND_GP:
+        if (yew_gp_active())
+            yew_gp_close(ed);
+        break;
+    default:
+        break;
+    }
+}
+
+static void invoke_desc(Ed *ed, const CtxActionDesc *d, const char *path)
+{
+    CmdCtx cx = {0};
+    CmdId id = yew_cmd_lookup(d->cmd, strlen(d->cmd));
+
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.iarg = d->iarg;
+    /*
+     * YEW_SRC_MOUSE, and Sprint 27's YEW_SRC_KEY here was simply wrong:
+     * a command that asks where it came from — the recorder, a policy
+     * gate — was told a menu row was a keystroke.
+     */
+    cx.source = YEW_SRC_MOUSE;
+    if (d->target == CTX_TGT_PATH) {
+        size_t n = path != NULL ? strlen(path) : 0U;
+
+        if (n == 0U || n > UINT32_MAX)
+            return; /* a path-addressed row with no path does nothing */
+        cx.sarg = path;
+        cx.sarg_len = (u32)n;
+    }
+    (void)yew_ed_invoke(ed, id, &cx);
+}
+
+/*
+ * Runs whatever row was chosen, against the target the menu captured.
+ *
+ * TABLE-DRIVEN (57.11 §3).  Sprint 27 spent a switch per menu kind on
+ * this, so each new kind grew a second switch somewhere else and the
+ * two drifted; a row's meaning is now the data in `yew_ctx_actions` and
+ * this is its only reader.
+ *
+ * The region table is FROZEN for the duration: a row handler that
+ * reached for a payload would be re-resolving the target from cells
+ * that may since have come to mean a different file, and freezing turns
+ * that from a rule into an abort (ui/region.h).  IT IS UNFROZEN ON
+ * EVERY PATH OUT — `fuzz_mouse` asserts the table is thawed before each
+ * event, so a single early return between the two is a fuzz failure.
+ */
+static void apply_menu_action(Ed *ed)
+{
+    u32 action = yew_ctx_take();
+    u32 kind = yew_ctx_kind();
+    u32 target = yew_ctx_target_id();
+    const char *path = yew_ctx_target_path();
+    Rect cell = yew_ctx_target_rect_get();
+    const CtxActionDesc *d;
+
+    if (action == (u32)CTXA_NONE || action >= (u32)CTXA__N)
+        return;
+    d = &yew_ctx_actions[action];
+    yew_region_freeze(true);
+    if (apply_target(ed, d, target, cell)) {
+        if (d->cmd != NULL)
+            invoke_desc(ed, d, path);
+        else if (d->target == CTX_TGT_NONE)
+            close_overlay_for(ed, kind);
     }
     yew_region_freeze(false);
     ed->layout_dirty = true;
@@ -588,6 +933,9 @@ bool yew_mouse_menu_key(Ed *ed, const Key *k)
     if (!yew_ctx_key(k))
         return false;
     apply_menu_action(ed);
+    /* Esc and Enter both leave the widget inactive; this is what makes
+     * 1003 follow them out. */
+    menu_settle(ed);
     ed->full_damage = true;
     return true;
 }
@@ -598,6 +946,22 @@ void yew_mouse_menu_draw(Ed *ed)
 
     if (ed == NULL)
         return;
+    /*
+     * The menu's own registrations go first, because a hover repaint
+     * does NOT run yew_region_frame_begin — that clears the table, and
+     * the panes, the strip and the FUSS rows were not redrawn, so
+     * clearing it would leave the frame with nothing but a menu to
+     * click on.  Re-adding without removing is the other half of the
+     * trap: 1000 motion reports would push the table past its 256-entry
+     * ceiling and the drop warning would be the only symptom.
+     *
+     * CTX_ROW by kind, because the menu is the only owner of it.  The
+     * BLOCK by RECT, because BLOCK is shared with every other modal and
+     * removing the kind would take the picker's swallow-the-gap
+     * rectangle with it.
+     */
+    yew_region_remove_kind(YEW_REGION_CTX_ROW);
+    yew_region_remove_rect(YEW_REGION_BLOCK, yew_ctx_box());
     /* Resolved ONCE per draw, from the theme — the widget knows no
      * colours of its own (57.11 §6). */
     style = menu_style(ed);
@@ -793,41 +1157,72 @@ static void press_pick_row(Ed *ed, const Region *hit)
     yew_picker_select_payload(ed, hit->payload);
 }
 
+/*
+ * THE MENU GESTURE: the right button, or the left one with Ctrl.
+ *
+ * Ctrl+left exists because a trackpad's second button is a setting and
+ * a single-button mouse has none, and because an editor whose context
+ * menu needs hardware the user may not own has made the mouse a
+ * requirement rather than an accelerator (invariant 9, from the other
+ * side).
+ */
+static bool press_opens_menu(const Key *k)
+{
+    return k->button == (u8)YEW_MB_RIGHT ||
+           (k->button == (u8)YEW_MB_LEFT &&
+            (k->mods & (u16)YEW_MOD_CTRL) != 0U);
+}
+
+static void press_menu(Ed *ed, const Key *k)
+{
+    CtxContext c;
+    u16 anchor_y;
+
+    if (yew_ctx_active()) {
+        /*
+         * Resolved BEFORE the close, because `yew_mouse_context_at`
+         * answers NONE for the open menu's own cells and that is how
+         * "the press landed on the menu" is told apart from "the press
+         * landed on what the menu was covering".
+         */
+        CtxKind over = yew_mouse_context_at(ed, k->col, k->row).kind;
+
+        menu_close(ed);
+        /* On the menu itself — a row, its border, a gap — the press
+         * DISMISSES and stops.  Re-opening a menu on top of itself is
+         * what every menu everywhere refuses to do, and invoking the
+         * row under a right-click would be the worst reading of it. */
+        if (over == YEW_CTX_KIND_NONE)
+            return;
+    }
+    c = yew_mouse_context_at(ed, k->col, k->row);
+    if (c.kind == YEW_CTX_KIND_NONE)
+        return;
+    /* Sprint 27 hung the strip's menus one row below the strip, and the
+     * goldens are drawn that way; every other surface anchors on the
+     * cell the user clicked. */
+    anchor_y = (c.kind == YEW_CTX_KIND_TAB || c.kind == YEW_CTX_KIND_GROUP)
+                   ? (u16)(k->row + 1U) : k->row;
+    (void)menu_open_at(ed, &c, k->col, anchor_y, k->col, k->row);
+    ed->full_damage = true;
+}
+
 static void mouse_press(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
-    Region hit = yew_region_hit(k->col, k->row);
+    Region hit;
 
-    if (k->button == (u8)YEW_MB_RIGHT) {
-        /*
-         * §9: a right-click inside a pane is UNBOUND and does nothing.
-         * The document context menu is post-1.0 and is named here so
-         * nobody invents one; a stub menu would be worse than none.
-         */
-        if (yew_ctx_active()) {
-            /* A right-click anywhere closes an open menu — including on
-             * the menu itself, which is how every menu everywhere
-             * behaves. */
-            yew_ctx_close();
-            ed->full_damage = true;
-            return;
-        }
-        if (hit.kind != YEW_REGION_TAB)
-            return;
-        if (hit.payload < 0) {
-            (void)yew_mouse_open_group_menu(ed, (u32)(-hit.payload),
-                                            k->col, (u16)(k->row + 1U));
-        } else {
-            Tab *t = yew_tab_at(ed, hit.payload);
-
-            if (t != NULL) {
-                (void)yew_mouse_open_tab_menu(ed, t->tab_id, k->col,
-                                              (u16)(k->row + 1U));
-            }
-        }
-        ed->full_damage = true;
+    /*
+     * FIRST, and it never touches the phase machine.  Ctrl+left must
+     * not arm a drag or enter H mode behind the menu it opens: a
+     * selection the user never asked for, left live under a pop-up, is
+     * the bug this ordering exists to make impossible.
+     */
+    if (press_opens_menu(k)) {
+        press_menu(ed, k);
         return;
     }
+    hit = yew_region_hit(k->col, k->row);
     if (k->button == (u8)YEW_MB_MIDDLE) {
         press_middle(ed, &hit, k);
         return;
@@ -874,6 +1269,15 @@ static void mouse_press(Ed *ed, const Key *k)
         press_pick_row(ed, &hit);
         break;
     case YEW_REGION_FUSS_ROW:
+        /*
+         * 57.11 §3: A SINGLE CLICK SELECTS.  The survey found this
+         * missing and it is the one thing that made the tree feel
+         * broken: every other list in the program moves its cursor to
+         * where you point.  Opening is still the DOUBLE click, counted
+         * below — a tree where one click opened a file could not be
+         * browsed at all.
+         */
+        yew_fuss_select_path(ed, (u32)hit.payload);
         (void)click_advance(ed, k, &hit);
         break;
     case YEW_REGION_GP_ROW:
@@ -897,10 +1301,9 @@ static void mouse_press(Ed *ed, const Key *k)
          * doing so — the click that dismisses a menu must not also do
          * whatever is underneath. */
         if (yew_ctx_active()) {
-            yew_ctx_close();
+            menu_close(ed);
             m->phase = YEW_MP_IDLE;
             m->held = 0U;
-            ed->full_damage = true;
         }
         break;
     default:
@@ -1227,6 +1630,24 @@ static void mouse_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
 
+    if (k->button == (u8)YEW_MB_NONE) {
+        /*
+         * §3: HOVER.  Motion with no button held only exists while a
+         * menu is open, because that is the only time yew asks the
+         * terminal for it (mode 1003, §1).  With no menu the event is
+         * DROPPED here — no render, no allocation, no phase change:
+         * a pointer merely crossing the screen must cost nothing, and
+         * tests/perf/mouse.c is the gate that says so.
+         *
+         * `yew_ctx_hover_at` maps the cell by the box's geometry rather
+         * than through the region table, which may be mid-frame, and
+         * returns true ONLY when the highlight moved — so a hundred
+         * reports across one row mark no repaint at all.
+         */
+        if (yew_ctx_active() && yew_ctx_hover_at(k->col, k->row))
+            ed->overlay_dirty = true;
+        return;
+    }
     if (m->phase == YEW_MP_IDLE)
         return;
     m->at_x = k->col;
@@ -1349,6 +1770,7 @@ static void mouse_release(Ed *ed, const Key *k)
                 up.payload == m->press_rgn.payload) {
                 yew_ctx_invoke(up.payload);
                 apply_menu_action(ed);
+                menu_settle(ed);
             }
             ed->full_damage = true;
             break;
@@ -1556,31 +1978,21 @@ void yew_mouse_event(Ed *ed, const Key *k)
 /* ---------------------------------------------------------------- */
 
 /*
- * Invariant 9's entry into the menu: opens it for the FOCUSED tab or
- * group, anchored at the strip rather than at a pointer that may not
- * exist.  Without this the menu rows would be mouse-only, and every one
- * of them would be a feature the keyboard could not reach.
+ * Invariant 9's entry into the menu: the keyboard opens the SAME menu,
+ * for whatever the keyboard is on, with no pointer anywhere.  Without
+ * this every row would be a feature the keyboard could not reach.
  *
- * Sprint 57.11 §5: the command now takes an OPTIONAL int.  `iarg 1`
- * means the TAB STRIP, and that is what a bare invocation still does
- * as well -- the focus-context routing that 0/absent will select is
- * Sprint 57.11 Phase 3, and until it exists the two spellings have to
- * agree rather than have one of them refuse.  Widening the arity now
- * is what lets `t m` keep its meaning while a strip-specific binding
- * becomes expressible.
+ * `iarg 1` is the TAB STRIP — Sprint 27's behaviour, kept addressable
+ * so a binding can ask for it on purpose.  `iarg 0` or absent is the
+ * FOCUS: the FUSS row when F mode is up, the picker row when a picker
+ * is, else the document at the cursor cell.  `t m` is the latter, which
+ * is what makes the document menu keyboard-reachable (57.11 §5).
  */
-CmdStatus yew_ui_cmd_context_menu(CmdCtx *cx)
+static CmdStatus open_strip_menu(Ed *ed)
 {
-    Ed *ed;
     u32 gid;
-    u16 y;
+    u16 y = (u16)(ed->tab_strip_rect.y + ed->tab_strip_rect.h);
 
-    if (cx == NULL || cx->ed == NULL)
-        return YEW_CMD_ERR_STATE;
-    ed = cx->ed;
-    if (ed->tabs.active < 0)
-        return YEW_CMD_ERR_STATE;
-    y = (u16)(ed->tab_strip_rect.y + ed->tab_strip_rect.h);
     gid = yew_active_group_id(ed);
     if (gid != 0U) {
         if (!yew_mouse_open_group_menu(ed, gid, ed->tab_strip_rect.x, y))
@@ -1593,6 +2005,95 @@ CmdStatus yew_ui_cmd_context_menu(CmdCtx *cx)
                                      y))
             return YEW_CMD_ERR_STATE;
     }
+    return YEW_CMD_OK;
+}
+
+/*
+ * The focused leaf's index in THIS frame's leaf table.
+ *
+ * The captured target is an index into that table, because the region
+ * payloads are, and a menu row that re-found its pane any other way
+ * would be a second derivation of the layout (Sprint 22's law).  -1
+ * means no frame has registered a pane, and then there is nothing on
+ * screen for a document menu to point at.
+ */
+static i32 focused_leaf_index(Ed *ed)
+{
+    u32 i;
+
+    for (i = 0U; i < ed->nleaf_tab; i++) {
+        if (yew_pane_leaf_by_index(ed, (i32)i) == ed->focus)
+            return (i32)i;
+    }
+    return -1;
+}
+
+static CmdStatus open_focus_menu(Ed *ed)
+{
+    CtxContext c;
+    u16 x = 0U;
+    u16 y = 0U;
+    u32 path_id = 0U;
+
+    (void)memset(&c, 0, sizeof(c));
+    if (yew_fuss_active(ed)) {
+        bool is_dir = false;
+
+        if (!yew_fuss_selected_anchor(ed, &path_id, &x, &y))
+            return YEW_CMD_ERR_STATE;
+        c.id = path_id;
+        c.payload = (i32)path_id;
+        if (!yew_fuss_path_is_dir(ed, path_id, &is_dir))
+            c.kind = YEW_CTX_KIND_FUSS_BLANK;
+        else
+            c.kind = is_dir ? YEW_CTX_KIND_FUSS_DIR
+                            : YEW_CTX_KIND_FUSS_FILE;
+    } else if (yew_picker_active(ed)) {
+        if (!yew_picker_sel_cell(ed, &x, &y))
+            return YEW_CMD_ERR_STATE;
+        c.kind = YEW_CTX_KIND_PICK_ROW;
+        c.payload = yew_picker_selected(ed);
+        c.id = (u32)c.payload;
+    } else {
+        i32 leaf = focused_leaf_index(ed);
+
+        if (leaf < 0 || ed->focus == NULL)
+            return YEW_CMD_ERR_STATE;
+        c.kind = YEW_CTX_KIND_DOC;
+        c.id = (u32)leaf;
+        c.payload = leaf;
+        c.rect = ed->focus->rect;
+        /*
+         * THE CURSOR CELL, as the renderer last placed it — the same
+         * cell the user is looking at.  When it is hidden (a modal has
+         * taken it) the pane's own corner is the honest fallback.
+         */
+        if (ed->grid.cur_vis) {
+            x = ed->grid.cur_col;
+            y = ed->grid.cur_row;
+        } else {
+            x = ed->focus->rect.x;
+            y = ed->focus->rect.y;
+        }
+    }
+    if (!menu_open_at(ed, &c, x, y, x, y))
+        return YEW_CMD_ERR_STATE;
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_ui_cmd_context_menu(CmdCtx *cx)
+{
+    Ed *ed;
+    CmdStatus st;
+
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    if (ed->tabs.active < 0)
+        return YEW_CMD_ERR_STATE;
+    st = cx->iarg == 1 ? open_strip_menu(ed) : open_focus_menu(ed);
+    if (st != YEW_CMD_OK)
+        return st;
     ed->full_damage = true;
     return YEW_CMD_OK;
 }
@@ -1644,13 +2145,9 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx)
      * receiving events mid-drag would sit with the button logically
      * down forever. */
     yew_mouse_cancel(cx->ed);
-    yew_ctx_close();
-    /* Sprint 57.11: the menu the close above may have dismissed armed
-     * any-motion tracking.  Disarm it here rather than inside
-     * yew_ctx_close() so the widget stays editor- and terminal-ignorant,
-     * and so this is the single site that turns the mode off outside a
-     * restore. */
-    yew_tty_mouse_motion(false);
+    /* Through THE one close path, so the menu the disable dismisses
+     * takes any-motion tracking with it (§1/§3). */
+    menu_close(cx->ed);
     mouse_enabled = false;
     yew_msg(cx->ed, YEW_MSG_INFO, "mouse off");
     return YEW_CMD_OK;
