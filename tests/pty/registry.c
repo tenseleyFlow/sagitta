@@ -8238,6 +8238,7 @@ static void case_s52_fuss(PtyCtx *c)
         s52_wait_screen(c, "jump: docs");
         ptc_keys(c, "alt+g");
         s52_wait_screen(c, "New Tab Group");
+        s52_wait_screen(c, "0 selected");
         ptc_check(c, s52_screen_contains(&c->vt, "0 selected"),
                   "FUSS Alt-g preselected files without user input");
         ptc_check(c, s52_screen_contains(&c->vt, "漢字.txt"),
@@ -8247,6 +8248,8 @@ static void case_s52_fuss(PtyCtx *c)
         s52_wait_screen(c, "1 selected");
         ptc_keys(c, "enter");
         s52_wait_screen(c, "docs/ (1)");
+        s52_wait_screen(c, "漢字.txt");
+        ptc_settle(c, 0);
         ptc_check(c, !s52_screen_contains(&c->vt, "New Tab Group"),
                   "confirmed FUSS group picker remained open");
         ptc_check(c, s52_screen_contains(&c->vt, "漢字.txt"),
@@ -8303,6 +8306,16 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_settle(c, 0);
     }
     if (semantic_snapshot) {
+        /*
+         * An invisible cursor has no semantic screen position.  Incremental
+         * repaints can leave it at the last changed cell, so two valid frame
+         * histories may otherwise disagree despite identical visible state.
+         * FUSS semantic goldens deliberately canonicalize that position.
+         */
+        if (!c->vt.cur_vis) {
+            c->vt.cur_r = 0;
+            c->vt.cur_c = 0;
+        }
         c->vt.sync_pairs_unstable = true;
         ptc_snapshot(c, name);
     } else {
