@@ -77,6 +77,38 @@ Rect yew_fuss_backdrop_rect(const Ed *ed);
  */
 bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir);
 /*
+ * Sprint 57.11 §4: everything a FUSS row's menu turns on, in one
+ * answer.
+ *
+ * The row set for a file depends on its git status — `Stage` is dead
+ * for an already-staged file, `Unstage` is dead for one that is not,
+ * `Discard...` is dead for an untracked one — and a directory's on
+ * whether it is expanded and whether anything below it is staged.
+ * Those flags already exist on the tree node; this is the const window
+ * onto them, so ui/ctxrows.c never learns the tree's shape.
+ *
+ * FLAGS ON A DIRECTORY ARE AGGREGATES of everything below it, which is
+ * exactly what `Stage All Below` and `Unstage All Below` mean.
+ *
+ * False means UNKNOWN — no F mode, a stripped build, a path the tree no
+ * longer holds — and `*out` is zeroed: the caller greys the rows it
+ * cannot justify rather than guessing at them.
+ */
+typedef struct FussTarget {
+    bool known;
+    bool status_known;
+    bool is_file;
+    bool staged;
+    bool unstaged;
+    bool untracked;
+    bool incoming;
+    bool conflicted;
+    /* Directories only; false for a file and for an unknown path. */
+    bool expanded;
+} FussTarget;
+
+bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out);
+/*
  * The selected row's interned path and the cell it is drawn at, so
  * `ed.ui.context_menu` can open the FUSS menu with no pointer involved
  * (invariant 9).  False when F mode is down, the tree is empty, or the

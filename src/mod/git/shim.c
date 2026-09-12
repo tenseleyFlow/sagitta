@@ -350,6 +350,17 @@ bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir)
     return false;
 }
 
+bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out)
+{
+    (void)ed;
+    (void)path_id;
+    if (out != NULL)
+        (void)memset(out, 0, sizeof(*out));
+    /* No tree, no status: every FUSS section is omitted in this build
+     * and no caller ever reads the zeroes (Sprint 57.11 §4). */
+    return false;
+}
+
 bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
 {
     (void)ed;

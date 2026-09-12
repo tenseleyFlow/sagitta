@@ -1738,6 +1738,37 @@ bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir)
     return true;
 }
 
+bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out)
+{
+    const FussItem *item = fuss_item_by_path_id(ed, path_id);
+    const FussNode *node;
+
+    if (out == NULL)
+        return false;
+    (void)memset(out, 0, sizeof(*out));
+    if (item == NULL)
+        return false;
+    node = fuss_node(ed->fuss, item);
+    if (node == NULL)
+        return false;
+    out->known = true;
+    /*
+     * STATUS IS KNOWN BECAUSE THE NODE IS IN THE TREE, not because
+     * anything below it is dirty: a clean file answers false to every
+     * flag, and a menu that read that as "unknown" would grey `Stage`
+     * on the one file the user just edited and unstaged.
+     */
+    out->status_known = true;
+    out->is_file = node->is_file;
+    out->staged = node->staged;
+    out->unstaged = node->unstaged;
+    out->untracked = node->untracked;
+    out->incoming = node->incoming;
+    out->conflicted = node->conflicted;
+    out->expanded = !node->is_file && node->expanded;
+    return true;
+}
+
 bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
 {
     FussMode *f;
@@ -2059,21 +2090,20 @@ static char *fuss_selected_path(CmdCtx *cx)
     return fuss_dup_bytes(item->path, item->path_len);
 }
 
-typedef struct FussTarget {
-    bool known;
-    bool status_known;
-    bool is_file;
-    bool staged;
-    bool unstaged;
-    bool untracked;
-    bool incoming;
-    bool conflicted;
-} FussTarget;
-
+/* `FussTarget` itself is in fussmode.h: the context menus turn on the
+ * same flags these guards do, and two spellings of one answer is how a
+ * greyed row and a refused command come to disagree. */
 typedef enum FussTargetGuard {
     FUSS_TARGET_ANY,
     FUSS_TARGET_FILE,
-    FUSS_TARGET_STAGED_FILE,
+    /*
+     * Staged, FILE OR DIRECTORY.  `git restore --staged -- dir` is a
+     * valid unstage of everything below it, and 57.11 §4's FUSS
+     * directory menu offers exactly that as `Unstage All Below`; the
+     * flags on a directory node are aggregates of its subtree, so the
+     * "nothing staged" refusal below reads correctly for both.
+     */
+    FUSS_TARGET_STAGED,
     FUSS_TARGET_DIRTY_FILE
 } FussTargetGuard;
 
@@ -2135,11 +2165,12 @@ static bool fuss_target_guard(CmdCtx *cx, const char *path,
         yew_msg(cx->ed, YEW_MSG_ERROR, "select a valid workspace path");
         return false;
     }
-    if (guard != FUSS_TARGET_ANY && !found.is_file) {
+    if (guard != FUSS_TARGET_ANY && guard != FUSS_TARGET_STAGED &&
+        !found.is_file) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "select a file to %s", action);
         return false;
     }
-    if (guard == FUSS_TARGET_STAGED_FILE && found.status_known &&
+    if (guard == FUSS_TARGET_STAGED && found.status_known &&
         !found.staged) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "nothing staged to unstage");
         return false;
@@ -4416,7 +4447,7 @@ CmdStatus yew_fuss_cmd_unstage(CmdCtx *cx)
 {
     char *prefix[] = {(char *)"restore", (char *)"--staged"};
     return fuss_path_verb(cx, "unstage", prefix, YEW_ARRAY_LEN(prefix),
-                          FUSS_TARGET_STAGED_FILE, false);
+                          FUSS_TARGET_STAGED, false);
 }
 
 CmdStatus yew_fuss_cmd_stage_all(CmdCtx *cx)
