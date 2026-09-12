@@ -692,6 +692,7 @@ const YewTest yew_tests[] = {
     T(edit_tab_navigates_then_indents_then_inserts),
     T(edit_tab_emits_spaces_under_expandtab),
     T(edit_backspace_in_leading_whitespace_eats_one_level),
+    T(pairs_a_clamped_mark_never_skips_someone_elses_byte),
     T(pairs_ordinary_characters_never_reach_the_syntax_query),
     T(pairs_open_inserts_the_closer_and_lands_between_them),
     T(pairs_type_over_survives_editing_between_the_delimiters),

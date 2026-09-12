@@ -659,6 +659,7 @@ void test_edit_autoindent_off_keeps_the_literal_insert_bytes(void);
 void test_edit_tab_navigates_then_indents_then_inserts(void);
 void test_edit_tab_emits_spaces_under_expandtab(void);
 void test_edit_backspace_in_leading_whitespace_eats_one_level(void);
+void test_pairs_a_clamped_mark_never_skips_someone_elses_byte(void);
 void test_pairs_ordinary_characters_never_reach_the_syntax_query(void);
 void test_pairs_open_inserts_the_closer_and_lands_between_them(void);
 void test_pairs_type_over_survives_editing_between_the_delimiters(void);

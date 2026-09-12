@@ -110,6 +110,18 @@ static void pair_backspace(PairFixture *fx)
     YEW_ASSERT_EQ_I64(yew_ed_invoke(&fx->ed, id, &cx), YEW_CMD_OK);
 }
 
+static void pair_delete_forward(PairFixture *fx)
+{
+    CmdId id = yew_cmd_lookup("ed.edit.delete.grapheme", 23U);
+    CmdCtx cx = {0};
+
+    YEW_ASSERT(id.v != 0U);
+    cx.win = &fx->win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&fx->ed, id, &cx), YEW_CMD_OK);
+}
+
 static void pair_assert_text(const PairFixture *fx, const char *want)
 {
     TextIter it;
@@ -471,5 +483,42 @@ void test_pairs_ordinary_characters_never_reach_the_syntax_query(void)
     }
     YEW_ASSERT_EQ_U64(yew_syn_in_string_or_comment_calls(), (u64)openers);
     YEW_ASSERT_EQ_U64(openers, 20U);
+    pair_free(&fx);
+}
+
+void test_pairs_a_clamped_mark_never_skips_someone_elses_byte(void)
+{
+    PairFixture fx;
+
+    /*
+     * A mark inside a deleted range clamps to the deletion point rather
+     * than dying (text/mark.c adjust_delete), so a remembered closer can
+     * end up naming a byte that is not that closer — or no byte at all.
+     * Skipping there would move the caret over text the user never asked
+     * to pass, which is byte confusion.  The entry must be retired and the
+     * keystroke must insert.
+     */
+    pair_init(&fx, "");
+    pair_type(&fx, "(");
+    pair_assert_text(&fx, "()");
+    pair_delete_forward(&fx);
+    pair_assert_text(&fx, "(");
+    YEW_ASSERT_EQ_U64(pair_caret(&fx), 1U);
+    pair_type(&fx, ")");
+    pair_assert_text(&fx, "()");
+    YEW_ASSERT_EQ_U64(pair_caret(&fx), 2U);
+    pair_free(&fx);
+
+    /* Same shape with other text under the clamped mark. */
+    pair_init(&fx, "zz");
+    pair_place(&fx, 0U);
+    pair_type(&fx, "[");
+    pair_assert_text(&fx, "[]zz");
+    pair_delete_forward(&fx);
+    pair_assert_text(&fx, "[zz");
+    YEW_ASSERT_EQ_U64(pair_caret(&fx), 1U);
+    pair_type(&fx, "]");
+    pair_assert_text(&fx, "[]zz");
+    YEW_ASSERT_EQ_U64(pair_caret(&fx), 2U);
     pair_free(&fx);
 }
