@@ -2353,6 +2353,7 @@ const YewTest yew_tests[] = {
     T(plug_lifecycle_command_errors_share_plugin_limit),
     T(plug_lifecycle_bound_errors_share_plugin_limit),
     T(plug_lifecycle_callbacks_keep_undeclared_capability_denied),
+    T(plug_lifecycle_throwing_save_hook_writes_pre_hook_bytes),
     T(plug_lifecycle_hostile_surface_fires_and_tears_down_cleanly),
     T(plug_completion_maps_lifecycle_args_and_lists_winners),
     T(plug_completion_hides_unregistered_plugin_commands),

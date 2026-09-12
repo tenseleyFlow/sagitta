@@ -16,6 +16,7 @@
 #include "mod/plug/internal.h"
 #include "term/grid.h"
 #include "term/input.h"
+#include "text/piece.h"
 #include "ui/layout.h"
 #include "ui/picker.h"
 #include "util/buf.h"
@@ -1033,6 +1034,47 @@ void test_plug_lifecycle_callbacks_keep_undeclared_capability_denied(void)
     YEW_ASSERT_NOT_NULL(strstr(f.plug->last_error,
                                "did not declare shell"));
     YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ENABLED);
+    life_close(&f);
+}
+
+void test_plug_lifecycle_throwing_save_hook_writes_pre_hook_bytes(void)
+{
+    static const char source[] =
+        "import buf\n"
+        "fn fail(b) {\n"
+        "  edit {\n"
+        "    buf.insert(b, 0, \"bad\")\n"
+        "    error(\"save exploded\")\n"
+        "  }\n"
+        "}\n"
+        "fn init(ctx) { ctx.on(\"buf.save\", fail) }\n";
+    static const char stable[] = "stable\n";
+    LifecycleFix f;
+    char path[320];
+    char bytes[32] = {0};
+    FILE *file;
+    int n;
+
+    life_open(&f, "life-save-error", "[\"buf.save\"]", source, NULL);
+    YEW_ASSERT(yew_plug_enable(&f.ed, f.plug, &f.dc));
+    yew_textbuf_insert(f.ed.win->buf->tb, BYTEOFF(0U),
+                       (const u8 *)stable, sizeof(stable) - 1U);
+    n = snprintf(path, sizeof(path), "%s/saved.txt", f.root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(path));
+
+    YEW_ASSERT_EQ_U64(yew_ed_file_write_to(&f.ed, path, false),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ENABLED);
+    YEW_ASSERT_EQ_U64(f.plug->err_count, 1U);
+    YEW_ASSERT_NOT_NULL(strstr(f.plug->last_error, "save exploded"));
+    YEW_ASSERT_EQ_U64(yew_buf_len(yew_ed_doc(&f.ed)),
+                      sizeof(stable) - 1U);
+    file = fopen(path, "rb");
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT_EQ_U64(fread(bytes, 1U, sizeof(bytes), file),
+                      sizeof(stable) - 1U);
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+    YEW_ASSERT_EQ_MEM(bytes, stable, sizeof(stable) - 1U);
     life_close(&f);
 }
 
