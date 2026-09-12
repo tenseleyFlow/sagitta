@@ -2165,6 +2165,7 @@ void test_mouse_wheel_over_the_strip_survives_the_render(void);
 void test_mouse_chevron_click_on_row_two_stays_on_row_two(void);
 void test_mouse_chevron_hover_reveals_one_entry_per_window(void);
 void test_mouse_chevron_hover_stops_when_the_pointer_leaves(void);
+void test_mouse_chevron_hover_waits_for_the_menu_to_close(void);
 void test_mouse_chevron_hover_stops_at_the_end_of_the_strip(void);
 void test_mouse_chevron_hover_tick_cancels_when_the_chevron_goes(void);
 void test_mouse_motion_tracking_follows_the_chevrons_too(void);

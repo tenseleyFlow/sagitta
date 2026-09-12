@@ -204,7 +204,7 @@ i64 yew_mouse_deadline(const Ed *ed, i64 now_ms);
  *
  * Idempotent; the terminal is only touched when the answer changes.
  */
-void yew_mouse_note_chevrons(Ed *ed, bool any);
+void yew_mouse_note_chevrons(bool any);
 /* What the last strip draw reported — the seam fuzz_mouse asserts the
  * if-and-only-if against. */
 bool yew_mouse_chevron_drawn(void);

@@ -491,9 +491,8 @@ static void motion_sync(void)
                          (yew_ctx_active() || motion_want_strip));
 }
 
-void yew_mouse_note_chevrons(Ed *ed, bool any)
+void yew_mouse_note_chevrons(bool any)
 {
-    (void)ed;
     if (motion_want_strip == any)
         return;
     motion_want_strip = any;
@@ -1777,7 +1776,15 @@ static void hover_track(Ed *ed, u16 x, u16 y)
 
     m->hover_x = x;
     m->hover_y = y;
-    if (!hover_chevron_at(x, y, &row2, &delta)) {
+    /*
+     * AN OPEN MENU OWNS THE HOVER.  The wheel dismisses a menu before
+     * scrolling anything, for the reason mouse_wheel spells out — a
+     * pop-up left pointing at a view that moved under it.  A hover
+     * cannot dismiss the menu (the pointer only drifted), so it does
+     * the other half instead and reveals nothing until the menu is
+     * gone.
+     */
+    if (yew_ctx_active() || !hover_chevron_at(x, y, &row2, &delta)) {
         /* Leaving stops it immediately, and cancels the pending
          * deadline by being the whole of the arming state. */
         m->hover_chevron = false;

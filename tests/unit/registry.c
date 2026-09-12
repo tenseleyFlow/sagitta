@@ -2171,6 +2171,7 @@ const YewTest yew_tests[] = {
     T(mouse_chevron_click_on_row_two_stays_on_row_two),
     T(mouse_chevron_hover_reveals_one_entry_per_window),
     T(mouse_chevron_hover_stops_when_the_pointer_leaves),
+    T(mouse_chevron_hover_waits_for_the_menu_to_close),
     T(mouse_chevron_hover_stops_at_the_end_of_the_strip),
     T(mouse_chevron_hover_tick_cancels_when_the_chevron_goes),
     T(mouse_motion_tracking_follows_the_chevrons_too),

@@ -759,7 +759,7 @@ void yew_ed_init(Ed *ed)
      * while a chevron was still on screen, and nothing dirty would have
      * redrawn it to notice.
      */
-    yew_mouse_note_chevrons(ed, false);
+    yew_mouse_note_chevrons(false);
     yew_shadow_test_install();
     yew_block_provider_syntax_install(true);
     root = yew_xrealpath(".");

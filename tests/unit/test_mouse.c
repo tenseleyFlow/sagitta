@@ -2497,3 +2497,54 @@ void test_mouse_motion_off_a_chevron_marks_no_damage(void)
     YEW_ASSERT(!f.ed.overlay_dirty);
     yew_ed_free(&f.ed);
 }
+
+/*
+ * An OPEN MENU owns the hover.
+ *
+ * The wheel dismisses a menu before it scrolls anything, because a
+ * pop-up left pointing at a view that moved under it is the bug the
+ * capture-at-open law exists for.  A hover cannot dismiss it — the
+ * pointer only drifted — so it reveals nothing instead, and the strip
+ * stays where the menu was opened over it.
+ */
+void test_mouse_chevron_hover_waits_for_the_menu_to_close(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    i64 t0;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    t0 = f.ed.now_ms;
+    YEW_ASSERT(yew_mouse_open_tab_menu(&f.ed, yew_tab_at(&f.ed, 0)->tab_id,
+                                       2U, 0U));
+    {
+        Key m = hv_motion(chev, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(!f.ed.mouse.hover_chevron);
+    yew_mouse_tick(&f.ed, t0 + 10 * YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+
+    /* Closed: the very next report arms it again. */
+    {
+        Key esc;
+
+        (void)memset(&esc, 0, sizeof(esc));
+        esc.kind = (u16)YEW_EV_KEY;
+        esc.code = YEW_KEY_ESCAPE;
+        (void)yew_mouse_menu_key(&f.ed, &esc);
+    }
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    {
+        Key m = hv_motion(chev, 0U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(f.ed.mouse.hover_chevron);
+    yew_ed_free(&f.ed);
+}

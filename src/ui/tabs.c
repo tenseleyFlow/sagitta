@@ -1236,7 +1236,7 @@ void yew_tab_strip_draw(Ed *ed, Rect rect)
      */
     strip_any_chevron = false;
     strip_draw_rows(ed, rect);
-    yew_mouse_note_chevrons(ed, strip_any_chevron);
+    yew_mouse_note_chevrons(strip_any_chevron);
 }
 
 /*
