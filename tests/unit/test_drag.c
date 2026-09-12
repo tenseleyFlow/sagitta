@@ -1484,3 +1484,257 @@ void test_drag_dwell_preview_survives_the_pointer_on_row_2(void)
     YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
     yew_ed_free(&f.ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* The neighbours get out of the way                                 */
+/* ---------------------------------------------------------------- */
+
+/* Stable identity for a row-1 entry: a group's id, or a tab's id lifted
+ * clear of it.  Tab INDICES move when a drop commits, so a payload
+ * cannot be compared across one. */
+static u32 dg_entry_key(Ed *ed, i32 payload)
+{
+    if (payload < 0)
+        return (u32)(-payload);
+    return 0x10000U + yew_tab_at(ed, (int)payload)->tab_id;
+}
+
+/* Row 1's entries, left to right, as they are DRAWN.  The held entry is
+ * a gap and registers nothing, so a drag's answer omits it. */
+static int dg_row1_keys(DragFixture *f, u32 *out, int cap)
+{
+    int n = 0;
+    u16 x;
+
+    for (x = 0U; x < f->ed.grid.cols; x++) {
+        Region hit = yew_region_hit(x, 0U);
+        u32 key;
+
+        if (hit.kind != (u16)YEW_REGION_TAB)
+            continue;
+        key = dg_entry_key(&f->ed, hit.payload);
+        if (n > 0 && out[n - 1] == key)
+            continue;
+        YEW_ASSERT(n < cap);
+        out[n++] = key;
+    }
+    return n;
+}
+
+/* The leftmost cell the entry with this payload is drawn at, or -1. */
+static int dg_entry_x(i32 payload)
+{
+    u16 x;
+
+    for (x = 0U; x < 80U; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == (u16)YEW_REGION_TAB && hit.payload == payload)
+            return (int)x;
+    }
+    return -1;
+}
+
+/* The half-open cell range row-1 slot `slot` currently occupies. */
+static void dg_slot_span(int slot, u16 *c0, u16 *c1)
+{
+    u16 x;
+    bool seen = false;
+
+    *c0 = 0U;
+    *c1 = 0U;
+    for (x = 0U; x < 80U; x++) {
+        if (yew_strip_slot_at(x, 0U) != slot)
+            continue;
+        if (!seen) {
+            *c0 = x;
+            seen = true;
+        }
+        *c1 = (u16)(x + 1U);
+    }
+    YEW_ASSERT(seen);
+}
+
+/*
+ * DOGFOOD BUG: "non active tabs aren't dynamic during the drag".
+ *
+ * The float is drawn at `press_x − press_rgn.rect.x` behind the
+ * pointer, so the entry the user is carrying covers whatever is under
+ * THOSE cells — but the target was resolved from the bare pointer cell.
+ * Grab a wide tab near its right edge and the carried entry sits
+ * squarely on top of its neighbour while the strip insists nothing has
+ * happened; the neighbour only moves once the POINTER has crossed, a
+ * whole tab-width later, and then everything jumps at once.
+ *
+ * The strip is the user's exact one: `untitled`, two groups, and the
+ * tab being dragged left across them.
+ */
+void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
+{
+    DragFixture f;
+    u32 ga;
+    u32 gb;
+    u32 held;
+    u16 c0;
+    u16 c1;
+    u16 press_x;
+    int xa0;
+    int xb0;
+
+    dg_fixture(&f, 5U);
+    ga = dg_make_group(&f, 1, 2);
+    gb = dg_make_group(&f, 3, 4);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    /* untitled, group a, group b, the tab being dragged. */
+    YEW_ASSERT_EQ_I64(yew_strip_slot_count(), 4);
+    held = yew_tab_at(&f.ed, 5)->tab_id;
+    xa0 = dg_entry_x(-(i32)ga);
+    xb0 = dg_entry_x(-(i32)gb);
+    YEW_ASSERT(xa0 > 0 && xb0 > xa0);
+
+    /* Grabbed one cell in from its RIGHT edge, which is what makes the
+     * float and the pointer disagree. */
+    dg_slot_span(3, &c0, &c1);
+    press_x = (u16)(c1 - 2U);
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, press_x, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+    }
+    /*
+     * Far enough left that the carried entry covers the second group
+     * past its midpoint — but not so far that the POINTER has left the
+     * tab's own slot.  Before the fix nothing moved at all here.
+     */
+    {
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, (u16)(c0 + 2U), 0U);
+
+        yew_mouse_event(&f.ed, &motion);
+    }
+    dg_paint(&f);
+    YEW_ASSERT(f.ed.mouse.drag_to_valid);
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 2);
+    /* The second group slid RIGHT to make room; the first has not
+     * moved, because the carried entry has not reached it. */
+    YEW_ASSERT(dg_entry_x(-(i32)gb) > xb0);
+    YEW_ASSERT_EQ_I64(dg_entry_x(-(i32)ga), xa0);
+
+    /* Keep sliding left, past the first group: both groups now sit to
+     * the right of where they started, in their original order. */
+    {
+        u16 a0;
+        u16 a1;
+        Key motion;
+
+        dg_slot_span(1, &a0, &a1);
+        motion = dg_ev((u8)YEW_KEY_REPEAT, (u16)(a0 + 2U), 0U);
+        yew_mouse_event(&f.ed, &motion);
+        dg_paint(&f);
+        YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 1);
+        YEW_ASSERT(dg_entry_x(-(i32)ga) > xa0);
+        YEW_ASSERT(dg_entry_x(-(i32)gb) > dg_entry_x(-(i32)ga));
+    }
+    /* And releasing there lands exactly the strip that was drawn. */
+    {
+        u16 a0;
+        u16 a1;
+        Key up;
+
+        dg_slot_span(1, &a0, &a1);
+        up = dg_ev((u8)YEW_KEY_RELEASE, (u16)(a0 + 2U), 0U);
+        yew_mouse_event(&f.ed, &up);
+    }
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, held), 1);
+    dg_paint(&f);
+    {
+        u32 keys[8];
+        int n = dg_row1_keys(&f, keys, (int)YEW_ARRAY_LEN(keys));
+
+        YEW_ASSERT_EQ_I64(n, 4);
+        YEW_ASSERT_EQ_U64(keys[1], 0x10000U + held);
+        YEW_ASSERT_EQ_U64(keys[2], ga);
+        YEW_ASSERT_EQ_U64(keys[3], gb);
+    }
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * THE PRE-DRAG SLOT TABLE'S WHOLE JOB: the strip the user is looking at
+ * and the list the release commits are the same answer.
+ *
+ * Swept cell by cell across the whole strip, each pointer position
+ * driven on its own fixture so the release is against exactly the frame
+ * that was drawn.  A targeting rule that reads the carried entry's
+ * cells rather than the pointer's has to keep this, or the gap becomes
+ * a lie.
+ */
+void test_drag_every_previewed_gap_is_where_the_drop_lands(void)
+{
+    u16 x;
+    u16 tail_x;
+    u16 press_x;
+
+    {
+        DragFixture probe;
+        u16 c0;
+        u16 c1;
+
+        dg_fixture(&probe, 3U);
+        dg_paint(&probe);
+        dg_slot_span(3, &c0, &c1);
+        press_x = (u16)(c1 - 2U);
+        tail_x = yew_strip_tail_x();
+        yew_ed_free(&probe.ed);
+    }
+    for (x = 0U; x < tail_x; x++) {
+        DragFixture f;
+        u32 during[8];
+        u32 after[8];
+        u32 held_key;
+        int n_during;
+        int n_after;
+        int to;
+        int i;
+        int j;
+
+        /* The press cell itself: the pointer never left it, so this is
+         * a click and there is no drag to agree with. */
+        if (x == press_x)
+            continue;
+        dg_fixture(&f, 3U);
+        dg_paint(&f);
+        held_key = 0x10000U + yew_tab_at(&f.ed, 3)->tab_id;
+        {
+            Key press = dg_ev((u8)YEW_KEY_PRESS, press_x, 0U);
+            Key motion = dg_ev((u8)YEW_KEY_REPEAT, x, 0U);
+
+            yew_mouse_event(&f.ed, &press);
+            yew_mouse_event(&f.ed, &motion);
+        }
+        dg_paint(&f);
+        YEW_ASSERT(f.ed.mouse.drag_to_valid);
+        YEW_ASSERT(!f.ed.mouse.drag_to_tail);
+        to = f.ed.mouse.drag_to_slot;
+        n_during = dg_row1_keys(&f, during, (int)YEW_ARRAY_LEN(during));
+        {
+            Key up = dg_ev((u8)YEW_KEY_RELEASE, x, 0U);
+
+            yew_mouse_event(&f.ed, &up);
+        }
+        dg_paint(&f);
+        n_after = dg_row1_keys(&f, after, (int)YEW_ARRAY_LEN(after));
+        /* The gap was one entry wide, and it was the held one. */
+        YEW_ASSERT_EQ_I64(n_after, n_during + 1);
+        YEW_ASSERT_EQ_U64(after[to], held_key);
+        /* Everything else kept the order the drag had drawn. */
+        for (i = 0, j = 0; i < n_after; i++) {
+            if (i == to)
+                continue;
+            YEW_ASSERT_EQ_U64(after[i], during[j]);
+            j++;
+        }
+        yew_ed_free(&f.ed);
+    }
+}
