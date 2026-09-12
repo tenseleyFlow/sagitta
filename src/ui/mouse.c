@@ -357,9 +357,9 @@ static void mouse_wheel(Ed *ed, const Key *k)
  * The rows are OPAQUE ACTIONS to ctxmenu.c, which is what lets that
  * module stay below the editor in the dependency graph.  Their meaning
  * is `yew_ctx_actions` in ui/ctxrows.h, and the row sets themselves are
- * built in ui/ctxrows.c: THIS FILE MAY NOT ALLOCATE (tests/perf/mouse.c
- * reads its source and fails on a `malloc(`), and a row set is strings
- * and a copied path.
+ * built in ui/ctxrows.c: THIS FILE MAY NOT ALLOCATE — tests/perf/mouse.c
+ * reads its source and fails on any allocation call it finds — and a
+ * row set is strings and a copied path.
  */
 
 /* Where a menu may be placed: everything above the footer. */

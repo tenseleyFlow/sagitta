@@ -25,12 +25,17 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
+#include "term/render.h"
+#include "ui/ctxmenu.h"
+#include "ui/ctxrows.h"
 #include "ui/layout.h"
 #include "ui/mouse.h"
 #include "ui/region.h"
@@ -40,7 +45,14 @@
 enum {
     PERF_MOUSE_EVENTS = 1000,
     PERF_MOUSE_TRIALS = 11,
-    PERF_MOUSE_BUDGET_NS = 5000000
+    PERF_MOUSE_BUDGET_NS = 5000000,
+    /*
+     * Sprint 57.11 §3's second gate.  A pointer crossing an open menu
+     * may cost ONE frame per row it actually lands on, and not one per
+     * motion report — the terminal decides how many of those there are.
+     * Twenty rows is the budget because the menu under test has twenty.
+     */
+    PERF_MOUSE_MENU_ROWS = 20
 };
 
 static i64 now_ns(void)
@@ -116,6 +128,75 @@ static i64 measure_burst(Ed *ed, u64 *renders)
     return elapsed;
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.11 §3: hovering an open menu                           */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The same burst, with a menu up — the one case where a no-button
+ * motion report is not dropped.
+ *
+ * The loop is emulated rather than called: it renders when something
+ * marked damage, and what is being measured is how often the ROUTER
+ * marks any.  A hover that set `full_damage` would repaint every pane,
+ * the strip and the footer per report, which is the slideshow this
+ * gate exists to prevent; a hover that marked nothing would leave the
+ * highlight behind the pointer.
+ */
+static u64 measure_menu_hover(Ed *ed, i64 *elapsed_ns)
+{
+    Rect box;
+    u64 before;
+    i64 start;
+    int i;
+
+    yew_ctx_begin((u32)YEW_CTX_KIND_DOC);
+    for (i = 0; i < PERF_MOUSE_MENU_ROWS; i++) {
+        char label[32];
+
+        (void)snprintf(label, sizeof(label), "Row %02d", i);
+        yew_ctx_item(label, "C-x", (u32)CTXA_PALETTE, true, 0U);
+    }
+    if (!yew_ctx_show(0U, 0U,
+                      (Rect){0U, 0U, ed->grid.cols,
+                             (u16)(ed->grid.rows - 1U)})) {
+        (void)fprintf(stderr, "perf_mouse: the menu would not open\n");
+        return (u64)-1;
+    }
+    yew_region_frame_begin();
+    yew_mouse_menu_draw(ed);
+    box = yew_ctx_box();
+    ed->full_damage = false;
+    ed->overlay_dirty = false;
+    ed->footer_dirty = false;
+    before = ed->render.frames;
+    start = now_ns();
+    for (i = 0; i < PERF_MOUSE_EVENTS; i++) {
+        /*
+         * ONE SWEEP down the box: fifty reports per row, so the
+         * highlight moves exactly PERF_MOUSE_MENU_ROWS times however
+         * many reports the terminal chose to send.  A jittering
+         * left-right component, because a real pointer never travels
+         * in a perfectly straight line and a hover keyed on the cell
+         * rather than the row would count every wobble.
+         */
+        Key m = motion_at((u16)(box.x + 1U + (u16)(i % 3)),
+                          (u16)(box.y + 1U +
+                                (u16)((i * PERF_MOUSE_MENU_ROWS) /
+                                      PERF_MOUSE_EVENTS)));
+
+        /* NO BUTTON HELD: base 35, the only motion a terminal reports
+         * under 1003 and the only one the router does not drop. */
+        m.button = (u8)YEW_MB_NONE;
+        yew_mouse_event(ed, &m);
+        if (ed->overlay_dirty || ed->full_damage || ed->footer_dirty)
+            yew_ed_render(ed);
+    }
+    *elapsed_ns = now_ns() - start;
+    yew_ctx_close();
+    return ed->render.frames - before;
+}
+
 /* DoD 13's second half, read out of the source it is a claim about. */
 static bool router_allocates(const char **what)
 {
@@ -189,6 +270,35 @@ int main(void)
     }
     sort_i64(samples, (size_t)PERF_MOUSE_TRIALS);
     median = samples[PERF_MOUSE_TRIALS / 2];
+
+    {
+        Render render;
+        TtyCaps caps;
+        i64 hover_ns = 0;
+        u64 hover_renders;
+        int devnull = open("/dev/null", O_WRONLY);
+
+        (void)memset(&caps, 0, sizeof(caps));
+        yew_render_init(&render, &caps, NULL);
+        ed.render = render;
+        ed.render_ready = true;
+        ed.tty.wfd = devnull;
+        hover_renders = measure_menu_hover(&ed, &hover_ns);
+        (void)printf("perf-mouse: menu_hover burst=%d renders=%llu "
+                     "(budget %d) ms=%.3f%s\n",
+                     PERF_MOUSE_EVENTS,
+                     (unsigned long long)hover_renders,
+                     PERF_MOUSE_MENU_ROWS,
+                     (double)hover_ns / 1000000.0,
+                     hover_renders <= (u64)PERF_MOUSE_MENU_ROWS ? " ok"
+                                                                : " FAIL");
+        if (hover_renders > (u64)PERF_MOUSE_MENU_ROWS)
+            status = 1;
+        if (devnull >= 0)
+            (void)close(devnull);
+        ed.render_ready = false;
+        ed.tty.wfd = -1;
+    }
 
     allocates = router_allocates(&offender);
     (void)printf("perf-mouse: burst=%d events_ms=%.3f (budget %.3f) "

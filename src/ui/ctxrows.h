@@ -11,10 +11,10 @@
  *   deliberately editor-ignorant — it must stay below the editor in the
  *   dependency graph because the renderer uses it.
  *
- *   ui/mouse.c owns the router, and is deliberately ALLOCATION-FREE
- *   (tests/perf/mouse.c reads its source and fails on a `malloc(`), so
- *   it cannot be where menu rows are built: a row set is strings and a
- *   captured path.
+ *   ui/mouse.c owns the router, and is deliberately ALLOCATION-FREE —
+ *   tests/perf/mouse.c reads its source and fails on any allocation
+ *   call it finds — so it cannot be where menu rows are built: a row
+ *   set is strings and a captured path.
  *
  * So the vocabulary — the kinds, the context, the target discipline and
  * the action table — lives in this header, which knows only `Ed *` by
