@@ -9404,6 +9404,95 @@ static void case_s57_13_menu_sheds_rows(PtyCtx *c)
     (void)unlink(path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.15: the chevron scrolls, and hovering it reveals        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * SIX TABS in eighty columns: four fit, two do not, so row 1 carries a
+ * `>2` and the strip has somewhere to go.  `ctrl+1` then puts the
+ * ACTIVE tab back on entry 1, at the far end of the bar from the
+ * chevron — which is the arrangement the bug needed to be visible at
+ * all.
+ */
+static void s57_15_overflowing_strip(PtyCtx *c)
+{
+    int i;
+
+    s23_open_tabs(c, 5);
+    /*
+     * Back to entry 1 with `t p`, the audit table's own row for this
+     * (invariant 9) — and NOT with `ctrl+1`, whose digit-extension
+     * window is a 500 ms clock that would leave a footer message in the
+     * golden or not depending on how fast the case ran.
+     */
+    for (i = 0; i < 5; i++)
+        s18_settle_after_keys(c, "t p");
+}
+
+/*
+ * THE REPORTED BUG, end to end.
+ *
+ * One click on `>` with the active tab far away.  Before Sprint 57.15
+ * the layout's follow-the-active clamp wrote the offset back on the
+ * very next render, so the strip snapped home and the chevron looked
+ * inert; this golden is the strip STILL scrolled, with `<` on the left
+ * and the active tab off-screen, which is a legitimate view.
+ *
+ * The modes line is the second half of the case: `1003` is armed
+ * because a chevron is drawn, with no menu anywhere.
+ */
+static void case_s57_15_chevron_click_scrolls(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    /* The `>N` indicator ends at the last column, whatever N is. */
+    s27_mouse(c, "\x1b[<0;80;1M");
+    s27_mouse(c, "\x1b[<0;80;1m");
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * THE HOVER REVEAL.
+ *
+ * ONE motion report with no button held — SGR base 35, which only mode
+ * 1003 produces and which the strip now arms 1003 for — and then the
+ * CLOCK does the rest.  No further input is sent: if the reveal were
+ * driven by motion reports rather than by the timer heap, nothing at
+ * all would happen here.
+ *
+ * The end state is what makes the golden deterministic rather than a
+ * race against the settle.  Two entries are hidden, so the reveal takes
+ * exactly two steps and then STOPS — the `>` stops being drawn, the
+ * region disappears, and the pending tick finds nothing and cancels.
+ * However many windows the settle happens to span, the strip lands in
+ * the same place.
+ */
+static void case_s57_15_chevron_hover_reveals(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    ptc_bytes(c, "\x1b[<35;80;1M");
+    /* Two reveal steps at YEW_HOVER_SCROLL_MS each, then quiet.  The
+     * settle PUMPS rather than sleeps, and it returns once the strip
+     * has stopped repainting — which is the reveal reaching the end. */
+    ptc_settle(c, 900);
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #if YEW_WITH_PLUGINS
 /* ---------------------------------------------------------------- */
 /* Sprint 54: plugin picker lifecycle                               */
@@ -10339,6 +10428,10 @@ const PtyCase yew_pty_cases[] = {
     C(s57_13_footer_menu, modern, 24U, 80U, case_s57_13_footer_menu),
     C(s57_13_menu_sheds_rows, modern, 10U, 80U,
       case_s57_13_menu_sheds_rows),
+    C(s57_15_chevron_click_scrolls, modern, 24U, 80U,
+      case_s57_15_chevron_click_scrolls),
+    C(s57_15_chevron_hover_reveals, modern, 24U, 80U,
+      case_s57_15_chevron_hover_reveals),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
       case_s27_double_click_mode_chip),
     C(s32_repl_session, modern, 24U, 80U, case_s32_repl_session),
