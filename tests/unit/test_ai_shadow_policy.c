@@ -3,6 +3,7 @@
 #include "harness.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -104,12 +105,24 @@ static Key policy_text_key(u8 byte)
 
 static int policy_child(void)
 {
+    char curl_root[] = "/tmp/yew-ai-off-curl-XXXXXX";
+    char curl_link[sizeof(curl_root) + sizeof("/curl")];
+    char curl_counter[sizeof(curl_root) + sizeof("/starts")];
+    char curl_target[PATH_MAX];
     char status[512];
     Ed ed;
     AiBackendEntry *entry;
     u64 sockets;
 
-    if (setenv("YEW_AI_MOCK", "1", 1) != 0 ||
+    if (realpath("build/tests/helpers/fakecurl", curl_target) == NULL ||
+        mkdtemp(curl_root) == NULL ||
+        snprintf(curl_link, sizeof(curl_link), "%s/curl", curl_root) <= 0 ||
+        snprintf(curl_counter, sizeof(curl_counter), "%s/starts",
+                 curl_root) <= 0 ||
+        symlink(curl_target, curl_link) != 0 ||
+        setenv("PATH", curl_root, 1) != 0 ||
+        setenv("YEW_FAKECURL_COUNTER", curl_counter, 1) != 0 ||
+        setenv("YEW_AI_MOCK", "1", 1) != 0 ||
         unsetenv("YEW_SHADOW_TEST") != 0)
         return 10;
     yew_ai_shadow_init(NULL);
@@ -133,7 +146,9 @@ static int policy_child(void)
         yew_ed_handle_key(&ed, policy_text_key((u8)'x'), (i64)i);
     ed.now_ms = 850;
     yew_timers_fire(&ed.timers, &ed, ed.now_ms);
-    if (ed.msg.active || ed.ai->call.active ||
+    if (ed.msg.active || ed.ai->call.active || ed.jobs.len != 0U ||
+        ed.ai->curl.state != (u8)YEW_CURL_UNKNOWN ||
+        access(curl_counter, F_OK) == 0 || errno != ENOENT ||
         yew_http_socket_call_count() != sockets)
         return 15;
 
@@ -207,6 +222,8 @@ static int policy_child(void)
         return 27;
 
     yew_ed_free(&ed);
+    if (unlink(curl_link) != 0 || rmdir(curl_root) != 0)
+        return 28;
     return 0;
 }
 
