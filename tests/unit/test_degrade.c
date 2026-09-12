@@ -23,7 +23,9 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/theme_cmds.h"
 #include "term/render.h"
+#include "ui/ctxmenu.h"
 #include "ui/draw.h"
 #include "ui/glyphs.h"
 #include "ui/groups.h"
@@ -410,6 +412,186 @@ void test_degrade_ascii_keeps_every_element_meaningful(void)
     /* A vertical border is still not a horizontal one. */
     YEW_ASSERT(strcmp(yew_glyph(YEW_GLYPH_BORDER_V),
                       yew_glyph(YEW_GLYPH_BORDER_H)) != 0);
+    yew_glyph_reset();
+    bytebuf_free(&frame);
+    yew_ed_free(&ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.11 §6: the context menu, at every tier                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The menu takes its colours from the theme's `menu.*` roles, which
+ * means it degrades exactly the way the rest of the chrome does — and
+ * that has to be checked with a THEME LOADED and the editor's own
+ * Render in place, because `yew_theme_ui_tab` picks the rendition from
+ * `ed->render`.  Handing the roles their truecolor values and then
+ * rendering to a 16-colour terminal would test the renderer, not the
+ * menu.
+ */
+static void dg_menu_fixture(Ed *ed, Render *r)
+{
+    char error[192];
+
+    dg_fixture(ed, 24U, 80U, 3);
+    (void)memset(r, 0, sizeof(*r));
+    yew_render_init(r, NULL, dg_env);
+    ed->render = *r;
+    ed->render_ready = true;
+    YEW_ASSERT(yew_theme_apply(ed, "quiver-dark", error, sizeof(error)));
+    YEW_ASSERT(yew_mouse_open_tab_menu(ed, yew_tab_at(ed, 1)->tab_id,
+                                       4U, 1U));
+    YEW_ASSERT(yew_ctx_active());
+    /* The first enabled row takes the highlight at open. */
+    YEW_ASSERT_EQ_I64(yew_ctx_cursor(), 0);
+}
+
+/* One frame with the menu over it. */
+static void dg_menu_frame(Ed *ed, Render *r, Bytebuf *out)
+{
+    yew_region_frame_begin();
+    yew_draw_panes(ed);
+    if (ed->tab_strip_rect.h != 0U)
+        yew_tab_strip_draw(ed, ed->tab_strip_rect);
+    yew_draw_footer(ed, ed->win);
+    yew_mouse_menu_draw(ed);
+    out->len = 0U;
+    yew_grid_mark_all(&ed->grid);
+    (void)yew_render_frame(r, &ed->grid, out);
+    bytebuf_append(out, (const u8 *)"", 1U);
+}
+
+static const Cell *dg_cell(const Ed *ed, u16 row, u16 col)
+{
+    return &ed->grid.back[(size_t)row * ed->grid.cols + col];
+}
+
+/* The first label cell of drawn row `i`: past the border and the pad. */
+static const Cell *dg_menu_row_cell(const Ed *ed, u32 i)
+{
+    Rect box = yew_ctx_box();
+
+    return dg_cell(ed, (u16)(box.y + 1U + i), (u16)(box.x + 2U));
+}
+
+void test_degrade_no_color_menu_keeps_its_hover_and_frame(void)
+{
+    Ed ed;
+    Render r;
+    Bytebuf frame;
+    const Cell *hover;
+    const char *s;
+
+    bytebuf_init(&frame);
+    (void)setenv("NO_COLOR", "1", 1);
+    dg_menu_fixture(&ed, &r);
+    YEW_ASSERT(r.no_color);
+    dg_menu_frame(&ed, &r, &frame);
+
+    s = (const char *)frame.data;
+    YEW_ASSERT(strstr(s, "38;2") == NULL);
+    YEW_ASSERT(strstr(s, "48;2") == NULL);
+    YEW_ASSERT(strstr(s, "38;5") == NULL);
+    YEW_ASSERT(strstr(s, "48;5") == NULL);
+
+    /*
+     * LEGIBLE, not merely colourless: `menu.hover`'s mono rendition is
+     * reverse video, and that is the whole of what says "this row is
+     * the one Enter will take" once the palette is gone.
+     */
+    hover = dg_menu_row_cell(&ed, 0U);
+    YEW_ASSERT((hover->attrs & YEW_ATTR_REVERSE) != 0U);
+    YEW_ASSERT_EQ_U64((u64)hover->fg.tag, (u64)YEW_COLOR_DEFAULT);
+    YEW_ASSERT_EQ_U64((u64)hover->bg.tag, (u64)YEW_COLOR_DEFAULT);
+    /* And the greyed row is still greyed, by DIM. */
+    YEW_ASSERT((dg_menu_row_cell(&ed, 4U)->attrs & YEW_ATTR_DIM) != 0U);
+    /* The frame is still a frame. */
+    YEW_ASSERT(memcmp(dg_cell(&ed, yew_ctx_box().y, yew_ctx_box().x)->utf8,
+                      yew_glyph(YEW_GLYPH_BORDER_TL),
+                      yew_glyph_len(YEW_GLYPH_BORDER_TL)) == 0);
+
+    yew_ctx_close();
+    (void)unsetenv("NO_COLOR");
+    bytebuf_free(&frame);
+    yew_ed_free(&ed);
+}
+
+void test_degrade_16_colour_menu_stays_distinguishable(void)
+{
+    Ed ed;
+    Render r;
+    Bytebuf frame;
+    const Cell *hover;
+    const Cell *plain;
+    const char *s;
+
+    bytebuf_init(&frame);
+    (void)unsetenv("NO_COLOR");
+    (void)setenv("YEW_COLORS", "16", 1);
+    dg_menu_fixture(&ed, &r);
+    YEW_ASSERT_EQ_U64(r.tier, (u64)YEW_RENDER_TIER_16);
+    dg_menu_frame(&ed, &r, &frame);
+
+    s = (const char *)frame.data;
+    YEW_ASSERT(strstr(s, "38;2") == NULL);
+    YEW_ASSERT(strstr(s, "48;2") == NULL);
+    YEW_ASSERT(strstr(s, "38;5") == NULL);
+    YEW_ASSERT(strstr(s, "48;5") == NULL);
+
+    /*
+     * At sixteen colours an accent and a dim are not reliably
+     * distinguishable, so the highlighted row has to differ from an
+     * ordinary one by something the terminal cannot flatten.
+     */
+    hover = dg_menu_row_cell(&ed, 0U);
+    plain = dg_menu_row_cell(&ed, 3U);
+    YEW_ASSERT(hover->attrs != plain->attrs ||
+               memcmp(&hover->fg, &plain->fg, sizeof(hover->fg)) != 0 ||
+               memcmp(&hover->bg, &plain->bg, sizeof(hover->bg)) != 0);
+    /* And the greyed row still differs from the enabled one. */
+    YEW_ASSERT(memcmp(dg_menu_row_cell(&ed, 4U), plain,
+                      sizeof(Cell)) != 0);
+
+    yew_ctx_close();
+    (void)unsetenv("YEW_COLORS");
+    bytebuf_free(&frame);
+    yew_ed_free(&ed);
+}
+
+/*
+ * The border comes out of the glyph table, so a terminal with no UTF-8
+ * gets a box rather than a field of replacement characters.
+ */
+void test_degrade_ascii_menu_is_still_a_box(void)
+{
+    Ed ed;
+    Render r;
+    Bytebuf frame;
+    Rect box;
+    size_t i;
+
+    bytebuf_init(&frame);
+    (void)unsetenv("NO_COLOR");
+    yew_glyph_force_ascii(true);
+    dg_menu_fixture(&ed, &r);
+    dg_menu_frame(&ed, &r, &frame);
+    for (i = 0U; i < frame.len; i++)
+        YEW_ASSERT(frame.data[i] < 0x80U);
+
+    box = yew_ctx_box();
+    YEW_ASSERT(memcmp(dg_cell(&ed, box.y, box.x)->utf8,
+                      yew_glyph(YEW_GLYPH_BORDER_TL),
+                      yew_glyph_len(YEW_GLYPH_BORDER_TL)) == 0);
+    YEW_ASSERT(memcmp(dg_cell(&ed, (u16)(box.y + box.h - 1U),
+                              (u16)(box.x + box.w - 1U))->utf8,
+                      yew_glyph(YEW_GLYPH_BORDER_BR),
+                      yew_glyph_len(YEW_GLYPH_BORDER_BR)) == 0);
+    /* A corner is still not an edge: the fallbacks stay distinct. */
+    YEW_ASSERT(strcmp(yew_glyph(YEW_GLYPH_BORDER_TL),
+                      yew_glyph(YEW_GLYPH_BORDER_H)) != 0);
+
+    yew_ctx_close();
     yew_glyph_reset();
     bytebuf_free(&frame);
     yew_ed_free(&ed);
