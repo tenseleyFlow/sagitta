@@ -7,7 +7,7 @@ Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: ACTIVE AT F14.**
+**Campaign status: ACTIVE AT F15.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -143,12 +143,12 @@ zero until its report closes; silence never counts as evidence.
 | F11 LSP | `audit-11-lsp.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
 | F12 AI | `audit-12-ai.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F13 git/FUSS | `audit-13-git.md` | closed | 4 | 4 | 0 | 0 | 4 | 0 | 0 |
-| F14 plugins | `audit-14-plugins.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F14 plugins | `audit-14-plugins.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
 | F15 CI | `audit-15-ci.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ## Verdict
 
-We are not ready to tag: F01 through F12 of Sprint 58's fifteen fronts have
+We are not ready to tag: F01 through F14 of Sprint 58's fifteen fronts have
 closed, the invariant sweep has not run, and no campaign-wide
 absence-of-findings claim has been earned. F06 adds an open High finding
 (`YEW-F-005`), while closed F07 records two open Critical workspace-state
@@ -175,8 +175,7 @@ size and nanosecond mtime can bypass the authoritative syntax-source hash.
 zero-tail state law. `YEW-F-013` records that the JS/TS known-wrong fixtures
 lack their required heuristic comment. The product-code baseline remains
 immutable. Tutor `NO_COLOR` behavior is F10's one unverified observation
-because that Sprint 59 surface does not yet exist. F14 and F15 remain
-open.
+because that Sprint 59 surface does not yet exist.
 
 F11 adds three open Medium contract/control findings. `YEW-F-014` records
 that stripped `ed.lsp.complete` bypasses the exact module hard error.
@@ -203,4 +202,14 @@ the formatting gate rejects seven legitimate non-argv display builders. The
 byte-exact filename matrix, backward clock step, 200 killed refreshes,
 lock/state probes, hostile parent environment, remembered expansion, group
 opening, and action-discovery replay pass. The product-code baseline remains
-immutable. F14 and F15 remain open.
+immutable.
+
+F14 adds three open Medium findings. `YEW-F-021` records bounded inactive
+hook and registration-ledger tombstones that violate the literal zero-residue
+contract. `YEW-F-022` records the conflict between banning `sandbox` from
+user-facing text and quoting the required honest non-isolation warning.
+`YEW-F-023` records that plugin commands cannot enter the recorder/CMDWORD
+space or collide-check against core words. Manifest containment, callback
+capability provenance, closure collection, trust corruption, package
+verification, error-limit teardown, and save-hook rollback pass. The
+product-code baseline remains immutable. F15 remains open.
