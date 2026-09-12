@@ -7,7 +7,7 @@ Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: ACTIVE — ALL FRONTS CLOSED; DEDUP AND INVARIANT SWEEP NEXT.**
+**Campaign status: ACTIVE — DEDUP COMPLETE; INVARIANT SWEEP NEXT.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -145,11 +145,38 @@ zero until its report closes; silence never counts as evidence.
 | F13 git/FUSS | `audit-13-git.md` | closed | 4 | 4 | 0 | 0 | 4 | 0 | 0 |
 | F14 plugins | `audit-14-plugins.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
 | F15 CI | `audit-15-ci.md` | closed | 52 | 52 | 1 | 1 | 50 | 0 | 4 |
+| **Total** | — | **15 closed** | **75** | **75** | **3** | **4** | **68** | **0** | **20** |
+
+## Cross-front dedup and C/H severity review
+
+All 75 findings were compared by violated contract, user-visible failure,
+reproducer, and repair boundary. No two share the same root cause, so the
+deduped total remains 75 and no alias row is required. In particular,
+`YEW-F-014` is an intentional LSP completion-shim exception while
+`YEW-F-075` is missing module ownership in the core option table;
+`YEW-F-033` is a source-ban omission while `YEW-F-074` is actual Mach-O UUID
+nondeterminism. Similar symptoms do not make either pair one defect.
+
+Every Critical and High finding was re-scored against Sprint 58 §2:
+
+| ID | Retained severity | Rubric boundary |
+|---|---|---|
+| `YEW-F-003` | High | one valid grapheme produces internally inconsistent deterministic grid width |
+| `YEW-F-005` | High | valid multi-cursor replacement exits through `yew_bug`/status 4 |
+| `YEW-F-006` | Critical | normal state re-emission drops user-owned future keys |
+| `YEW-F-007` | Critical | normal restore reorders the user-owned group member sequence |
+| `YEW-F-008` | High | a documented capability boundary is bypassed by macro replay |
+| `YEW-F-074` | High | consecutive clean Darwin builds are not byte-identical |
+| `YEW-F-075` | Critical | user-reachable excluded-module settings silently become inert state |
+
+No downgrade is justified. The remaining 68 findings meet the Medium
+definition: recoverable product behavior, a documented mechanism absent from
+the implementation, or a CI control claiming evidence it cannot establish.
 
 ## Verdict
 
-We are not ready to tag: all fifteen Sprint 58 fronts have closed, but the
-cross-front dedup and invariant sweep have not run, and no campaign-wide
+We are not ready to tag: all fifteen Sprint 58 fronts have closed and the
+cross-front dedup is complete, but the invariant sweep has not run and no campaign-wide
 absence-of-findings claim has been earned. F06 adds an open High finding
 (`YEW-F-005`), while closed F07 records two open Critical workspace-state
 findings (`YEW-F-006`, `YEW-F-007`): normal persistence can drop future keys

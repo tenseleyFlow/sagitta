@@ -403,8 +403,8 @@ Binding documents — read before any sprint:
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
   fuzz campaigns extended, findings ledger with stable IDs. **ACTIVE AFTER
   F15:** all fifteen fronts are closed with `YEW-F-001` through
-  `YEW-F-075`; cross-front dedup, coverage/soak work, and the ten invariant
-  sessions remain
+  `YEW-F-075`, and dedup retained all 75; coverage/soak work and the ten
+  invariant sessions remain
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1
