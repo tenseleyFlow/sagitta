@@ -13,12 +13,14 @@
 #include "edit/sel_actions.h"
 #include "edit/word.h"
 #include "ui/message.h"
+#include "ui/cmdline.h"
 #include "ui/cmdparse.h"
 #include "ui/viewport.h"
 #include "unicode/coords.h"
 #include "util/log.h"
 
 static CmdStatus delete_span(CmdCtx *cx, Span span);
+static bool edit_is_cmdline(const CmdCtx *cx);
 
 static bool edit_window_at(CmdCtx *cx, Win **win, TextBuf **tb,
                            Cursor **cursor, u32 *index)
@@ -1399,7 +1401,8 @@ CmdStatus yew_edit_cmd_insert_text(CmdCtx *cx)
 
     if (cx == NULL || cx->sarg == NULL)
         return YEW_CMD_ERR_ARG;
-    if (cx->sarg_len != 1U || !yew_pairs_interesting((u8)cx->sarg[0]))
+    if (cx->sarg_len != 1U || edit_is_cmdline(cx) ||
+        !yew_pairs_interesting((u8)cx->sarg[0]))
         return insert_bytes(cx, (const u8 *)cx->sarg, cx->sarg_len);
     if (!edit_window_at(cx, &win, &tb, &cursor, &index))
         return YEW_CMD_ERR_STATE;
@@ -1536,6 +1539,18 @@ static bool edit_byte_at(const TextBuf *tb, u64 off, u8 *out)
            (*out = bytes[0], true);
 }
 
+/*
+ * Sprint 57.16 defers auto-close and indent comfort in the command line,
+ * and E mode reaches the document's own insert and delete commands.  So
+ * the comfort layer asks who it is editing before it does anything but
+ * insert the literal bytes.
+ */
+static bool edit_is_cmdline(const CmdCtx *cx)
+{
+    return cx->ed != NULL && cx->ed->cmdline.active &&
+           cx->win == yew_cmdline_target(cx->ed);
+}
+
 static u32 edit_tabwidth(const Win *win)
 {
     return win->buf->tabwidth != 0U ? win->buf->tabwidth
@@ -1632,7 +1647,8 @@ CmdStatus yew_edit_cmd_insert_newline(CmdCtx *cx)
     if (cx == NULL || cx->win == NULL || cx->win->buf == NULL)
         return YEW_CMD_ERR_STATE;
     yew_filemeta_eol_bytes(&cx->win->buf->meta, &bytes, &len);
-    if (!yew_opt_buffer_bool(cx->win->buf, "autoindent", 10U))
+    if (edit_is_cmdline(cx) ||
+        !yew_opt_buffer_bool(cx->win->buf, "autoindent", 10U))
         return insert_bytes(cx, bytes, (u64)len);
     return insert_newline_indent(cx, bytes, (u64)len);
 }
@@ -1672,7 +1688,8 @@ CmdStatus yew_edit_cmd_insert_tab(CmdCtx *cx)
     /* `expandtab` decides what one level EMITS and applies always; the
      * navigate-and-indent-the-line behaviour is autoindent's, so with both
      * off Tab still inserts exactly one '\t' at the caret. */
-    if (!yew_opt_buffer_bool(win->buf, "autoindent", 10U))
+    if (edit_is_cmdline(cx) ||
+        !yew_opt_buffer_bool(win->buf, "autoindent", 10U))
         return insert_bytes(cx, unit, n);
     if (!info.blank && cursor->pos.v < info.first.v) {
         cursor->pos = info.first;
@@ -1801,6 +1818,9 @@ CmdStatus yew_edit_cmd_delete_grapheme_left(CmdCtx *cx)
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
+    if (edit_is_cmdline(cx))
+        return delete_span(cx, (Span){
+            yew_grapheme_prev_boundary(tb, cursor->pos).v, cursor->pos.v});
     /* Sprint 57.16 §4: one Backspace between a fresh empty pair takes
      * both delimiters. */
     if (yew_pairs_backspace(win->buf, cursor->pos, &both))

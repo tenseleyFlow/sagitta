@@ -1267,3 +1267,44 @@ void test_cmdline_save_as_refuses_without_a_window(void)
     YEW_ASSERT_EQ_U64(yew_file_cmd_save_as(NULL), YEW_CMD_ERR_STATE);
     cmdline_fixture_free(&fixture);
 }
+
+void test_cmdline_does_not_auto_pair_or_indent(void)
+{
+    CmdlineFixture fixture;
+    CmdCtx context = {0};
+    Bytebuf text;
+
+    /*
+     * Sprint 57.16 defers auto-close in the command line, and E mode
+     * reaches the document's own insert and delete commands, so the
+     * exemption has to be explicit.
+     */
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "");
+    context.ed = &fixture.ed;
+    context.win = yew_cmdline_target(&fixture.ed);
+    context.count = 1U;
+    context.source = YEW_SRC_TEST;
+    context.sarg = "(";
+    context.sarg_len = 1U;
+    YEW_ASSERT_EQ_U64(yew_ed_invoke(&fixture.ed,
+                                    yew_cmd_lookup("ed.edit.insert.text",
+                                                   19U), &context),
+                      YEW_CMD_OK);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "(");
+    bytebuf_free(&text);
+
+    /* And Backspace takes exactly one grapheme, not a pair. */
+    context.sarg = NULL;
+    context.sarg_len = 0U;
+    YEW_ASSERT_EQ_U64(
+        yew_ed_invoke(&fixture.ed,
+                      yew_cmd_lookup("ed.edit.delete.grapheme_left", 28U),
+                      &context), YEW_CMD_OK);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "");
+    bytebuf_free(&text);
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
