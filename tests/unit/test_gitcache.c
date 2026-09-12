@@ -4,6 +4,7 @@
 
 #include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -279,6 +280,25 @@ void test_gitcache_ttl_uses_monotonic_wall_milliseconds(void)
     YEW_ASSERT(!yew_git_cache_fresh(1000, 999));
 }
 
+void test_gitcache_backwards_wall_clock_forces_refresh(void)
+{
+    Ed ed;
+    SpawnLog log = {0};
+    char *tmp = gitcache_tmp_template("yew-git-clock-step");
+    u32 before;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    gitcache_ed(&ed, &log);
+    gitcache_ready(&ed, &log, tmp, 700000);
+    before = log.status_calls;
+    yew_git_test_now_set(&ed, 100000);
+    (void)yew_git_snapshot(&ed);
+    YEW_ASSERT_EQ_U64(log.status_calls, before + 1U);
+    gitcache_done(&ed);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
+}
+
 void test_gitcache_state_strings_cover_taxonomy(void)
 {
     static const char *const expected[] = {
@@ -361,6 +381,45 @@ static void gitcache_write(const char *dir, const char *name,
     if (fd >= 0)
         YEW_ASSERT_EQ_I64(close(fd), 0);
     free(path);
+}
+
+static u32 gitcache_owned_job_id(Ed *ed)
+{
+    u32 found = 0U;
+    u32 i;
+
+    for (i = 0U; i < ed->jobs.len; i++) {
+        u32 id = ed->jobs.v[i].id;
+
+        if (!yew_git_job_owned(ed, id))
+            continue;
+        YEW_ASSERT_EQ_U64(found, 0U);
+        found = id;
+    }
+    return found;
+}
+
+static void gitcache_pump_jobs(Ed *ed, int timeout_ms)
+{
+    struct pollfd pfd[YEW_JOB_MAX * 4U];
+    u32 n = 0U;
+
+    yew_job_collect_fds(ed, pfd, &n);
+    if (n != 0U)
+        (void)poll(pfd, (nfds_t)n, timeout_ms);
+    yew_job_pump(ed, pfd, n);
+    yew_job_reap(ed);
+    yew_job_tick(ed, yew_now_ms());
+    (void)yew_job_settle(ed);
+}
+
+static bool gitcache_wait_job_gone(Ed *ed, u32 id)
+{
+    i64 started = yew_now_ms();
+
+    while (yew_job_find(ed, id) != NULL && yew_now_ms() - started < 5000)
+        gitcache_pump_jobs(ed, 5);
+    return yew_job_find(ed, id) == NULL;
 }
 
 void test_gitcache_filesystem_taxonomy_is_message_free(void)
@@ -1143,6 +1202,112 @@ void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void)
     (void)yew_git_snapshot(&ed);
     YEW_ASSERT_EQ_U64(log.status_calls, baseline + 3U);
     gitcache_done(&ed);
+    YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
+    free(tmp);
+}
+
+void test_gitcache_killed_refresh_200_instants_preserves_snapshot(void)
+{
+    static const u8 status[] =
+        "# branch.oid 0123456789012345678901234567890123456789\0"
+        "# branch.head trunk\0"
+        "1 M. N... 100644 100644 100644 "
+        "0123456789012345678901234567890123456789 "
+        "1123456789012345678901234567890123456789 tracked.c\0";
+    static const char script[] =
+        "#!/bin/sh\n"
+        "i=0\n"
+        "while :; do\n"
+        "  printf '? interrupted-%08d\\000' \"$i\"\n"
+        "  i=$((i + 1))\n"
+        "done\n";
+    Ed ed;
+    SpawnLog log = {0};
+    GitSnapshot baseline;
+    GitEntry baseline_entry;
+    const GitSnapshot *published;
+    char *tmp = gitcache_tmp_template("yew-git-kill-refresh");
+    char fake_dir[1024];
+    char fake_git[1024];
+    char branch[32];
+    char head_oid[65];
+    char comment[8];
+    char path[64];
+    const char *old_path = getenv("PATH");
+    char *saved_path = old_path == NULL ? NULL : strdup(old_path);
+    u32 random = UINT32_C(0x51f13a7d);
+    u32 cycle;
+
+    YEW_ASSERT(old_path == NULL || saved_path != NULL);
+    YEW_ASSERT_NOT_NULL(mkdtemp(tmp));
+    yew_ed_init(&ed);
+    yew_git_test_spawn_set(gitcache_spawn, &log);
+    ed.ws.dir = arena_strdup(&ed.arena, tmp);
+    gitcache_ready(&ed, &log, tmp, 700000);
+    YEW_ASSERT(yew_git_refresh(&ed, true));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_status, YEW_GIT_OK,
+                                     status, sizeof(status) - 1U,
+                                     NULL, 0U));
+    YEW_ASSERT(yew_git_test_complete(&ed, log.last_ignore, YEW_GIT_OK,
+                                     NULL, 0U, NULL, 0U));
+    gitcache_complete_default_comment(&ed, &log);
+    published = yew_git_snapshot_cached(&ed);
+    YEW_ASSERT_NOT_NULL(published);
+    YEW_ASSERT_EQ_U64(published->entries.len, 1U);
+    baseline = *published;
+    baseline_entry = published->entries.data[0];
+    (void)snprintf(branch, sizeof(branch), "%s", published->branch);
+    (void)snprintf(head_oid, sizeof(head_oid), "%s", published->head_oid);
+    (void)snprintf(comment, sizeof(comment), "%s", published->comment_char);
+    (void)snprintf(path, sizeof(path), "%s", published->entries.data[0].path);
+
+    YEW_ASSERT(snprintf(fake_dir, sizeof(fake_dir), "%s/fake-bin", tmp) > 0);
+    YEW_ASSERT_EQ_I64(mkdir(fake_dir, 0700), 0);
+    gitcache_write(fake_dir, "git", script);
+    YEW_ASSERT(snprintf(fake_git, sizeof(fake_git), "%s/git", fake_dir) > 0);
+    YEW_ASSERT_EQ_I64(chmod(fake_git, 0700), 0);
+    YEW_ASSERT_EQ_I64(setenv("PATH", fake_dir, 1), 0);
+    yew_git_test_spawn_set(NULL, NULL);
+
+    for (cycle = 0U; cycle < 200U; cycle++) {
+        const GitSnapshot *after;
+        u32 rounds;
+        u32 round;
+        u32 id;
+
+        YEW_ASSERT(yew_git_refresh(&ed, true));
+        id = gitcache_owned_job_id(&ed);
+        YEW_ASSERT(id != 0U);
+        random = random * UINT32_C(1664525) + UINT32_C(1013904223);
+        rounds = random >> 29;
+        for (round = 0U; round < rounds; round++) {
+            gitcache_pump_jobs(&ed, 1);
+            YEW_ASSERT_NOT_NULL(yew_job_find(&ed, id));
+        }
+        YEW_ASSERT(yew_job_signal(&ed, id, SIGKILL));
+        YEW_ASSERT(gitcache_wait_job_gone(&ed, id));
+        after = yew_git_snapshot_cached(&ed);
+        YEW_ASSERT(after == published);
+        YEW_ASSERT_EQ_U64(after->gen, baseline.gen);
+        YEW_ASSERT_EQ_MEM(after, &baseline, sizeof(baseline));
+        YEW_ASSERT_EQ_MEM(&after->entries.data[0], &baseline_entry,
+                          sizeof(baseline_entry));
+        YEW_ASSERT_EQ_STR(after->branch, branch);
+        YEW_ASSERT_EQ_STR(after->head_oid, head_oid);
+        YEW_ASSERT_EQ_STR(after->comment_char, comment);
+        YEW_ASSERT_EQ_STR(after->entries.data[0].path, path);
+    }
+
+    if (saved_path == NULL)
+        YEW_ASSERT_EQ_I64(unsetenv("PATH"), 0);
+    else {
+        YEW_ASSERT_EQ_I64(setenv("PATH", saved_path, 1), 0);
+        free(saved_path);
+    }
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(unlink(fake_git), 0);
+    YEW_ASSERT_EQ_I64(rmdir(fake_dir), 0);
     YEW_ASSERT_EQ_I64(rmdir(tmp), 0);
     free(tmp);
 }
