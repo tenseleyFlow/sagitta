@@ -1275,7 +1275,13 @@ static void strip_draw_float(Ed *ed)
         x0 = (u16)(ed->grid.cols - w);
     if (py >= ed->grid.rows)
         py = (u16)(ed->grid.rows - 1U);
-    style = tab_role_style(ed, "tab.active", tab_base_style(ed));
+    /* The same chain the strip's own active entry is built from — base,
+     * then the bar's surface, then the active role — so a theme that
+     * colours only the foreground of `tab.active` keeps the bar under
+     * the float instead of falling back to the editor's default. */
+    style = tab_role_style(
+        ed, "tab.active",
+        tab_role_style(ed, "tab.bar", tab_base_style(ed)));
     style.attrs = (u16)(style.attrs | YEW_ATTR_REVERSE | YEW_ATTR_BOLD);
     end = yew_grid_puts(&ed->grid, py, x0, (const u8 *)label,
                         yew_strip_label_bytes(label), style.fg, style.bg,
