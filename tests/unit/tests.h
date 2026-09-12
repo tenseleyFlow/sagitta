@@ -1064,6 +1064,7 @@ void test_lsp_lifecycle_restart_window_resets(void);
 void test_lsp_root_resolution_uses_nearest_marker(void);
 void test_lsp_default_server_table_is_complete(void);
 void test_lsp_lifecycle_drops_stale_response_before_callback(void);
+void test_lsp_lifecycle_drops_every_stale_feature_response(void);
 void test_lsp_lifecycle_completion_resolve_cancel_and_shadow(void);
 void test_lsp_lifecycle_method_not_found_clears_completion(void);
 void test_lsp_lifecycle_hover_signature_panels_and_auto_trigger(void);

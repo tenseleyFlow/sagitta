@@ -250,6 +250,76 @@ void test_lsp_lifecycle_drops_stale_response_before_callback(void)
     yew_textbuf_free(buffer.tb);
 }
 
+void test_lsp_lifecycle_drops_every_stale_feature_response(void)
+{
+    static const char *const methods[] = {
+        "textDocument/completion",
+        "completionItem/resolve",
+        "textDocument/hover",
+        "textDocument/signatureHelp",
+        "textDocument/definition",
+        "textDocument/declaration",
+        "textDocument/typeDefinition",
+        "textDocument/implementation",
+        "textDocument/references",
+        "textDocument/documentHighlight",
+        "textDocument/documentSymbol",
+        "textDocument/rename",
+    };
+    Ed ed;
+    Buffer buffer;
+    Buffer *bufs[1];
+    LspServer server;
+    RpcPending pending = {0};
+    StaleSeen seen = {0};
+    u64 ids[YEW_ARRAY_LEN(methods)];
+    Arena arena;
+    size_t i;
+
+    (void)memset(&ed, 0, sizeof(ed));
+    (void)memset(&buffer, 0, sizeof(buffer));
+    (void)memset(&server, 0, sizeof(server));
+    buffer.id = 19U;
+    buffer.tb = yew_textbuf_from_bytes((const u8 *)"before", 6U);
+    bufs[0] = &buffer;
+    ed.model_ready = true;
+    ed.ws.bufs = bufs;
+    ed.ws.nbufs = 1U;
+    server.owner = &ed;
+    server.state = YEW_LSP_READY;
+    yew_rpc_conn_init(&server.rpc);
+    server.rpc_live = true;
+    pending.buf_id = buffer.id;
+    pending.gen = buffer.tb->gen;
+    pending.cb = stale_callback;
+    pending.ctx = &seen;
+    for (i = 0U; i < YEW_ARRAY_LEN(methods); i++) {
+        ids[i] = yew_rpc_call(&server.rpc, methods[i],
+                              (const u8 *)"{}", 2U, &pending);
+        YEW_ASSERT(ids[i] != 0U);
+        YEW_ASSERT_NOT_NULL(yew_rpc_pending(&server.rpc, ids[i]));
+    }
+    yew_textbuf_insert(buffer.tb, BYTEOFF(0U), (const u8 *)"x", 1U);
+    arena_init(&arena);
+    for (i = 0U; i < YEW_ARRAY_LEN(methods); i++) {
+        char json[96];
+        JsonValue *response;
+
+        (void)snprintf(json, sizeof(json),
+                       "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":null}",
+                       (unsigned long long)ids[i]);
+        response = parse(&arena, json);
+        YEW_ASSERT(!yew_lsp_dispatch_response(&server, response));
+        YEW_ASSERT_NULL(yew_rpc_pending(&server.rpc, ids[i]));
+    }
+    YEW_ASSERT_EQ_U64(seen.calls, 0U);
+    YEW_ASSERT_EQ_U64(server.dropped_stale, YEW_ARRAY_LEN(methods));
+    arena_free_all(&arena);
+    yew_rpc_conn_free(&server.rpc);
+    server.rpc_live = false;
+    yew_textbuf_free(buffer.tb);
+}
+
 typedef struct LifeFix {
     Ed ed;
     LspServerCfg cfg;

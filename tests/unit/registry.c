@@ -1115,6 +1115,7 @@ const YewTest yew_tests[] = {
     T(lsp_root_resolution_uses_nearest_marker),
     T(lsp_default_server_table_is_complete),
     T(lsp_lifecycle_drops_stale_response_before_callback),
+    T(lsp_lifecycle_drops_every_stale_feature_response),
     T(lsp_lifecycle_completion_resolve_cancel_and_shadow),
     T(lsp_lifecycle_method_not_found_clears_completion),
     T(lsp_lifecycle_hover_signature_panels_and_auto_trigger),
