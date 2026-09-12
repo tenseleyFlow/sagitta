@@ -250,3 +250,74 @@ Lanes: gcc and clang `-Werror` clean; `unit 2538/0`; `MODULES="" 2050/0`;
 Goldens re-recorded: `chrome_drag`, `chrome_drag_nocolor`,
 `chrome_drag_colors_16`, `chrome_drag_ascii`, `s27_dwell_opens_member_strip` —
 each loses the ghost entry from row 1 and gains the float at the pointer.
+
+## Field repair — 2026-09-12
+
+Two defects found dogfooding the shipped branch against a real workspace
+(`1 untitled`, the directory groups `ch4/` and `ch5/`, and a loose `.lu`
+tab). Both were reproduced by a failing test before either was touched.
+
+### The dwell preview stuck to the first group it opened
+
+`preview_gid` was assigned in exactly one place — `yew_mouse_tick`'s open
+— and nothing ever put it back to 0 short of the gesture ending. So the
+pointer could walk off a group and row 2 kept listing the group it had
+left; and because both `yew_mouse_dwell_flash` and the open stand down
+while `preview_gid == dwell_gid`, coming BACK to that group announced
+nothing and re-opened nothing, which is the "I don't see the double
+flash" half of the report.
+
+`drag_dwell` now retracts the preview when the pointer is on ROW 1 and
+that row's target is not the previewed group — `layout_dirty`, because a
+strip-row count change is the layout's. Only from row 1: row 2 is the
+preview's own surface and the place the join is aimed at, so the pointer
+arriving there must not close the strip it was sent to use.
+
+- `drag_dwell_preview_retracts_when_the_pointer_leaves`
+- `drag_dwell_reopens_a_group_the_pointer_returns_to`
+- `drag_dwell_preview_survives_the_pointer_on_row_2`
+- `drag_dwell_flash_is_visible_on_the_active_group_entry` — the cue was
+  running all along and the XOR does not cancel on the active entry; the
+  invisibility was the stuck preview suppressing it.
+
+### The neighbours did not get out of the carried tab's way
+
+The float is drawn at `press_x − press_rgn.rect.x` BEHIND the pointer
+(§2's grip), but `drag_strip_motion` resolved its target from the bare
+pointer cell. Grab a wide tab near its right edge and the entry being
+carried sits squarely on top of its neighbour while the strip insists
+nothing has happened — the neighbour only moves once the POINTER has
+crossed, a whole tab-width later, and then the row jumps.
+
+`drag_target_slot` answers from the cells the carried entry covers:
+its leading edge is `col − grab_dx`, clamped into the strip, and it
+changes places with a neighbour once it has travelled half that
+neighbour's width over it. That threshold is also what makes the answer
+stable — the swap lands the carried entry exactly on the cells that
+justified it, so the reverse test cannot fire at the same pointer
+position and the preview cannot oscillate. Every cell of row 1 now
+resolves an insertion point, including the cells left of the first entry
+that answered nothing before; the blank tail is checked first and keeps
+its own meaning.
+
+`yew_strip_slot_cells` (tabs.h) exposes a slot's cell range, returning
+false for a slot the layout scrolled off, which is what stops the search
+at the edge of what is drawn.
+
+- `drag_neighbours_slide_out_of_the_carried_tabs_way` — the reproducer:
+  the pointer is still inside the tab's own slot and the carried entry
+  is already over the second group past its midpoint.
+- `drag_every_previewed_gap_is_where_the_drop_lands` and
+  `drag_the_dogfood_strip_reorders_at_every_step` — the reported strip
+  swept cell by cell, right to left, each position on its own fixture:
+  the target only ever moves left, the gap is where the release lands,
+  and the entries the carried one passed keep their order.
+
+Unchanged: `drag_to_valid` is still set only from row 1, so a release
+over a pane still cancels; the drop still resolves through
+`slot_to_tab_index` against the pre-drag table.
+
+Lanes: gcc and clang `-Werror` clean; `unit 2545/0`; `MODULES="" 2056/0`;
+`SAN=1 2526/0`; full PTY green with no golden re-recorded; `perf-mouse`
+burst 0.008 ms and `router_allocations=none`; `fuzz-mouse` four seeds;
+check-input, bans, check-cmd-dispatch, check-sigsafe ok.

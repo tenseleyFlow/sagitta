@@ -203,6 +203,18 @@ int yew_tab_row1_active(const Ed *ed, const StripEntry *entries, int n);
  */
 int yew_strip_slot_at(u16 x, u16 y);              /* -1 when off row 1 */
 bool yew_strip_pre_payload(int slot, i32 *payload);
+/*
+ * The half-open CELL RANGE the slot currently occupies, false when the
+ * slot is off screen — a scrolled strip records no cells for the
+ * entries it did not draw.
+ *
+ * A drag aims with the cells the entry it is CARRYING covers, not with
+ * the one cell the pointer is on: the float is drawn at the grip the
+ * press established, so the two are a whole grab-offset apart and a
+ * target read from the pointer leaves the neighbours standing still
+ * under a tab that is visibly on top of them.
+ */
+bool yew_strip_slot_cells(int slot, u16 *col0, u16 *col1);
 /* Slots the last row-1 render produced. */
 int yew_strip_slot_count(void);
 /* The cell just past the last rendered entry — where "the blank tail"

@@ -843,6 +843,20 @@ bool yew_strip_pre_payload(int slot, i32 *payload)
     return true;
 }
 
+bool yew_strip_slot_cells(int slot, u16 *col0, u16 *col1)
+{
+    if (slot < 0 || slot >= strip_pre_n || col0 == NULL || col1 == NULL)
+        return false;
+    /* Zero width is "the layout scrolled this one off", not "an empty
+     * entry": strip_render_row1 clears the range and only the spans it
+     * actually drew fill one in. */
+    if (strip_pre[slot].col1 <= strip_pre[slot].col0)
+        return false;
+    *col0 = strip_pre[slot].col0;
+    *col1 = strip_pre[slot].col1;
+    return true;
+}
+
 int yew_strip_slot_count(void)
 {
     return strip_pre_n;
