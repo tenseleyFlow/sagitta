@@ -850,6 +850,13 @@ void yew_cmdline_edited(Ed *ed)
     yew_hist_cur_reset(&ed->cmdline.hist, draft);
     yew_xfree(draft);
     clear_error(ed);
+    /*
+     * Sprint 57.17 §2: typing puts the caret back in charge.  The
+     * SELECTION survives (it is held by identity across the refilter),
+     * so one `<up>` picks the pager up again where it was left -- but
+     * the arrows belong to the prompt until it is asked for.
+     */
+    yew_menu_blur(&ed->cmdline.menu);
     cmdline_refilter(ed);
     ed->footer_dirty = true;
     /* Search-as-you-type: the `/` and `?` prompts preview on every
@@ -992,6 +999,38 @@ static CmdStatus completion_cycle(Ed *ed, bool previous)
     return YEW_CMD_OK;
 }
 
+/*
+ * Sprint 57.17 §2: move the pager's selection WITHOUT touching the
+ * prompt.
+ *
+ * The whole difference from completion_cycle, which inserts the newly
+ * selected candidate on every move: this is a LOOK.  DoD 3 pins that
+ * looking cannot change what Enter would run, which is what makes
+ * arrowing up into the list to read it before choosing possible at all.
+ *
+ * `previous` off the FIRST row leaves the pager instead of wrapping:
+ * the rows stay on screen, the choice is dropped so §6's Enter rule
+ * sees none, and the next `<up>` is history again.
+ */
+static CmdStatus menu_preview(Ed *ed, bool previous)
+{
+    Menu *menu = &ed->cmdline.menu;
+
+    if (menu->items.len == 0U)
+        return YEW_CMD_OK;
+    if (!yew_menu_focused(menu)) {
+        if (!yew_menu_focus(menu))
+            return YEW_CMD_OK;
+    } else if (previous && menu->sel == 0) {
+        yew_menu_unselect(menu);
+    } else {
+        (void)yew_menu_move(menu, previous ? -1 : 1, false);
+    }
+    ed->full_damage = true;
+    ed->footer_dirty = true;
+    return YEW_CMD_OK;
+}
+
 static CmdStatus complete(Ed *ed, bool previous)
 {
     CmdLine *line = &ed->cmdline;
@@ -1131,6 +1170,55 @@ static CmdStatus menu_page(Ed *ed, bool previous)
         return YEW_CMD_ERR_IO;
     ed->full_damage = true;
     return YEW_CMD_OK;
+}
+
+CmdStatus yew_cmdline_cmd_menu_next(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    return menu_preview(cx->ed, false);
+}
+
+CmdStatus yew_cmdline_cmd_menu_prev(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    return menu_preview(cx->ed, true);
+}
+
+/*
+ * Sprint 57.17 §2: `<up>` and `<down>` choose between the pager and the
+ * history.
+ *
+ * ONE rule, stated once.  `<up>` asks the pager for the arrows whenever
+ * a list is open and non-empty; `<down>` moves in the pager only while
+ * the pager already HAS them.  Focus comes back on Escape, or on `<up>`
+ * off the first row -- so history stays reachable with a list on
+ * screen: one `<up>` takes the list, one more hands it back, the next
+ * is history.
+ *
+ * Sprint 18.5 §6 gave Up to history outright because a live menu is
+ * open the whole time a command name is being typed and the arrow would
+ * otherwise never reach history.  That argument survives here: an EMPTY
+ * prompt -- reaching for history blind, which is the case it named --
+ * has no menu at all, because an empty token completes nothing.
+ */
+CmdStatus yew_cmdline_cmd_up(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    if (cx->ed->cmdline.menu.items.len != 0U)
+        return menu_preview(cx->ed, true);
+    return history_move(cx, true);
+}
+
+CmdStatus yew_cmdline_cmd_down(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    if (yew_menu_focused(&cx->ed->cmdline.menu))
+        return menu_preview(cx->ed, false);
+    return history_move(cx, false);
 }
 
 CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx)

@@ -1267,3 +1267,166 @@ void test_cmdline_save_as_refuses_without_a_window(void)
     YEW_ASSERT_EQ_U64(yew_file_cmd_save_as(NULL), YEW_CMD_ERR_STATE);
     cmdline_fixture_free(&fixture);
 }
+
+/*
+ * Sprint 57.17 §2: `<up>` chooses between the pager and the history.
+ *
+ * Driven through the KEYMAP, not by calling the commands, because the
+ * whole deliverable is which command the arrow reaches -- calling
+ * yew_cmdline_cmd_up directly would pass with the binding still on
+ * hist_prev.
+ */
+void test_cmdline_up_is_history_when_no_pager_is_open(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    yew_hist_add(fixture.ed.cmdline.history, "redraw");
+    /*
+     * A bare `:` completes nothing, so there is no list to enter -- the
+     * case Sprint 18.5 §6 named, reaching for history blind at the
+     * start of a line.
+     */
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "redraw");
+    bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_up_enters_the_pager_without_touching_the_prompt(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf before;
+    Bytebuf after;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    yew_hist_add(fixture.ed.cmdline.history, "redraw");
+    cmdline_type(&fixture, "fil");
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+    YEW_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+    before = cmdline_text(&fixture.ed.cmdline);
+
+    /* Up takes the list, landing on the best match. */
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    YEW_ASSERT(yew_menu_focused(&fixture.ed.cmdline.menu));
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    YEW_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+
+    /* Down walks it.  DoD 3: the prompt text never moves -- this is the
+     * difference from Tab and C-n, which insert on every move. */
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_DOWN), 1);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 1);
+    after = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)after.data,
+                      (const char *)before.data);
+    bytebuf_free(&after);
+
+    /* And history did not move either. */
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.hist.idx, -1);
+    bytebuf_free(&before);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_leaving_the_pager_restores_history_to_up(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    yew_hist_add(fixture.ed.cmdline.history, "filibuster");
+    cmdline_type(&fixture, "fil");
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    YEW_ASSERT(yew_menu_focused(&fixture.ed.cmdline.menu));
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+
+    /*
+     * Up off the FIRST row leaves the pager: the rows stay, the choice
+     * is dropped so §6's Enter rule sees none, and the arrows go back
+     * to the prompt.
+     */
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    YEW_ASSERT(!yew_menu_focused(&fixture.ed.cmdline.menu));
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
+    YEW_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "fil");
+    bytebuf_free(&text);
+
+    /*
+     * The pager is still on screen, so the next `<up>` takes it again
+     * rather than jumping to history -- history is one more press away,
+     * exactly as it is from a fresh list.
+     */
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    YEW_ASSERT(yew_menu_focused(&fixture.ed.cmdline.menu));
+
+    /* Escape is the other way out, and it takes the rows with it; from
+     * there `<up>` is history. */
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_ESCAPE), 1);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "filibuster");
+    bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+}
+
+/*
+ * Sprint 57.17 §2: entering the pager marks the selection explicit, so
+ * Sprint 18.5 §6's Enter rule already accepts the highlighted row
+ * instead of executing.  Verified, not duplicated.
+ */
+void test_cmdline_enter_on_a_pager_row_accepts_without_executing(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+    char chosen[128];
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "fil");
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    YEW_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT_NOT_NULL(yew_menu_selected(&fixture.ed.cmdline.menu));
+    (void)snprintf(chosen, sizeof(chosen), "%s ",
+                   yew_menu_selected(&fixture.ed.cmdline.menu)->text);
+
+    /* The prompt stays open with the row in it -- the line was not
+     * executed, which is the property s18 pinned. */
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, chosen);
+    bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+}
+
+/* Typing hands the arrows back to the prompt without dropping the row
+ * the pager was on -- one `<up>` picks it up where it was left. */
+void test_cmdline_typing_blurs_the_pager_but_keeps_the_row(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "fil");
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    YEW_ASSERT(yew_menu_focused(&fixture.ed.cmdline.menu));
+
+    cmdline_type(&fixture, "e");
+    YEW_ASSERT(!yew_menu_focused(&fixture.ed.cmdline.menu));
+    YEW_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+    cmdline_fixture_free(&fixture);
+}

@@ -277,18 +277,26 @@ static const BindRow frozen_E[] = {
     {"C-w", "ed.del.word_prev", 0, NULL},
     {"C-u", "ed.del.to_home", 0, NULL},
     {"C-k", "ed.del.to_end", 0, NULL},
-    {"<up>", "ed.cmdline.hist_prev", 0, NULL},
-    {"<down>", "ed.cmdline.hist_next", 0, NULL},
+    /*
+     * Sprint 57.17 §2.  The arrows are dispatchers now, not history
+     * outright: `<up>` enters an open pager and is history when none is
+     * open, `<down>` moves in the pager only while it has focus.
+     *
+     * Sprint 18.5 §6 gave Up to history because a live menu is open the
+     * whole time a command name is being typed, and the arrow would
+     * otherwise never reach history -- "you reach for it blind, at the
+     * start of a line, which is when the list is fullest".  That case
+     * still works: an EMPTY prompt completes nothing, so there is no
+     * menu to enter and `<up>` is history.  With a list up, one `<up>`
+     * takes it, one more hands it back, and the next is history.
+     */
+    {"<up>", "ed.cmdline.up", 0, NULL},
+    {"<down>", "ed.cmdline.down", 0, NULL},
     {"<tab>", "ed.cmdline.complete_next", 0, NULL},
     {"S-<tab>", "ed.cmdline.complete_prev", 0, NULL},
-    /*
-     * Sprint 18.5 §6.  The menu moves on Tab/S-Tab and C-n/C-p, and NOT
-     * on the arrow keys: a live menu is open the whole time a command
-     * name is being typed, so giving Up to the menu would make history
-     * unreachable exactly when it is most wanted -- you reach for it
-     * blind, at the start of a line, which is when the list is fullest.
-     * Keymap data, so flipping this is two lines plus goldens.
-     */
+    /* Tab/S-Tab and C-n/C-p INSERT as they move; the arrows only
+     * preview.  Keymap data, so flipping this is two lines plus
+     * goldens. */
     {"C-n", "ed.cmdline.complete_next", 0, NULL},
     {"C-p", "ed.cmdline.complete_prev", 0, NULL},
     {"<pgdn>", "ed.cmdline.menu.page_next", 0, NULL},

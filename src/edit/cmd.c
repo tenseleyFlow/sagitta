@@ -636,14 +636,28 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.ghost.accept", yew_cmdline_cmd_ghost_accept,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Accept the inline suggestion, or move one grapheme right", NULL},
-    /* Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
-     * and the goldens already use; these are the same behaviours under
-     * the menu's own namespace, plus the two the old menu could not do. */
-    {"ed.cmdline.menu.next", yew_cmdline_cmd_complete_next, YEW_ARITY_NONE,
-     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL, "Select the next menu row", NULL},
-    {"ed.cmdline.menu.prev", yew_cmdline_cmd_complete_prev, YEW_ARITY_NONE,
+    /*
+     * Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
+     * and the goldens already use.
+     *
+     * Sprint 57.17 §2: these two are no longer aliases of them.  Tab
+     * and C-n INSERT the newly selected candidate on every move; these
+     * only MOVE, which is what makes the pager a preview you can read
+     * before committing to it.
+     */
+    {"ed.cmdline.menu.next", yew_cmdline_cmd_menu_next, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
-     "Select the previous menu row", NULL},
+     "Select the next menu row without inserting it", NULL},
+    {"ed.cmdline.menu.prev", yew_cmdline_cmd_menu_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Select the previous menu row without inserting it", NULL},
+    /* Sprint 57.17 §2: the arrows, which pick between the two. */
+    {"ed.cmdline.up", yew_cmdline_cmd_up, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Enter the completion pager, or walk history back", NULL},
+    {"ed.cmdline.down", yew_cmdline_cmd_down, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Move down the completion pager, or walk history forward", NULL},
     {"ed.cmdline.menu.page_next", yew_cmdline_cmd_menu_page_next,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Move one visible page down the menu", NULL},
