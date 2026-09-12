@@ -1067,6 +1067,49 @@ static void rename_prompt_done(Ed *ed, bool accepted, const u8 *text,
     state->request = request;
 }
 
+/*
+ * The confirm phase without a transport (rename.h explains why).
+ *
+ * Everything after the response arrives, in the order
+ * `rename_response_done` does it: install the state, preflight the
+ * WorkspaceEdit, open the summary.  A refusal at either step unwinds
+ * through `rename_state_finish`, so a failed seam leaves `ed->lsp_rename`
+ * NULL exactly as a failed response does.
+ */
+bool yew_lsp_rename_test_confirm(Ed *ed, Win *w,
+                                 const JsonValue *workspace_edit,
+                                 u8 pos_enc, const char *old_name,
+                                 const char *new_name)
+{
+    LspRenameState *state;
+    char err[YEW_RENAME_ERROR_MAX];
+
+    if (ed == NULL || w == NULL || w->buf == NULL || ed->lsp_rename != NULL ||
+        old_name == NULL || new_name == NULL)
+        return false;
+    state = yew_xcalloc(1U, sizeof(*state));
+    yew_lsp_rename_plan_init(&state->plan);
+    state->old_name = yew_xstrdup(old_name);
+    state->new_name = yew_xstrdup(new_name);
+    state->old_len = (u32)strlen(old_name);
+    state->new_len = (u32)strlen(new_name);
+    state->win_id = w->id;
+    state->buf_id = w->buf->id;
+    state->pos_enc = pos_enc;
+    state->phase = (u8)RENAME_REQUEST;
+    ed->lsp_rename = state;
+    if (!yew_lsp_rename_preflight(ed, workspace_edit, pos_enc, old_name,
+                                  new_name, &state->plan, err)) {
+        rename_state_finish(ed, true);
+        return false;
+    }
+    if (!rename_summary_open(ed, state)) {
+        rename_state_finish(ed, true);
+        return false;
+    }
+    return true;
+}
+
 bool yew_lsp_rename_request(Ed *ed, Win *win)
 {
     LspRenameState *state;
