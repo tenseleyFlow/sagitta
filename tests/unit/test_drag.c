@@ -1321,3 +1321,166 @@ void test_drag_dwell_flash_marks_damage_only_at_an_edge(void)
     YEW_ASSERT_EQ_I64(edges, 3);
     yew_ed_free(&f.ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* The preview belongs to the pointer                                */
+/* ---------------------------------------------------------------- */
+
+/*
+ * DOGFOOD BUG: the dwell's preview stuck to the first group it opened.
+ *
+ * `preview_gid` was assigned in exactly one place — yew_mouse_tick's
+ * open — and nothing ever put it back to 0 short of the gesture ending.
+ * So the pointer could walk off a group, across the whole strip, and
+ * row 2 kept showing the group it had left; and because
+ * yew_mouse_dwell_flash and the open both stand down while
+ * `preview_gid == dwell_gid`, coming BACK to that group announced
+ * nothing and re-opened nothing.  Row 2 is a picture of where the
+ * pointer is, so leaving the group has to take it away.
+ */
+void test_drag_dwell_preview_retracts_when_the_pointer_leaves(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+    int plain;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    plain = dg_slot_of_payload(2);
+    YEW_ASSERT(gslot >= 0);
+    YEW_ASSERT(plain >= 0);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_U64(yew_tab_strip_rows(&f.ed), 2U);
+
+    /* Off the group, onto an ordinary row-1 slot: row 2 goes with it. */
+    f.ed.layout_dirty = false;
+    f.ed.full_damage = false;
+    {
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, plain), 0U);
+
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, 0U);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), 0U);
+    /* A strip-row count change is the layout's, not a repaint's. */
+    YEW_ASSERT(f.ed.layout_dirty);
+    YEW_ASSERT(f.ed.full_damage);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_U64(yew_tab_strip_rows(&f.ed), 1U);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * And coming back announces itself again.
+ *
+ * This is the half of the bug the user actually described: with the
+ * preview stuck, a second hover over the SAME group was the one case
+ * where `preview_gid == dwell_gid`, so the cue never lit and the strip
+ * never re-opened — it was already open, showing a group the pointer
+ * had left minutes ago.
+ */
+void test_drag_dwell_reopens_a_group_the_pointer_returns_to(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+    int plain;
+    i64 t;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    plain = dg_slot_of_payload(2);
+    YEW_ASSERT(gslot >= 0);
+    YEW_ASSERT(plain >= 0);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    t = f.ed.now_ms;
+    yew_mouse_tick(&f.ed, t + YEW_DRAG_DWELL_MS);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    dg_paint(&f);
+    {
+        Key away = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, plain), 0U);
+
+        f.ed.now_ms = t + YEW_DRAG_DWELL_MS;
+        yew_mouse_event(&f.ed, &away);
+    }
+    dg_paint(&f);
+    /* Back onto the same group: the cue runs from the top and the open
+     * happens again on its own clock. */
+    {
+        Key back = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        f.ed.now_ms = t + 2 * YEW_DRAG_DWELL_MS;
+        yew_mouse_event(&f.ed, &back);
+    }
+    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), 0U);
+    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), g);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms),
+                      YEW_DRAG_FLASH_MS);
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * Row 2 is the preview's OWN surface, so the pointer arriving on it
+ * must not close the thing it was sent to use.  This is the clause that
+ * keeps the join gesture — dwell on row 1, drop on row 2 — alive.
+ */
+void test_drag_dwell_preview_survives_the_pointer_on_row_2(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    YEW_ASSERT(gslot >= 0);
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    dg_paint(&f);
+    {
+        Key down = dg_ev((u8)YEW_KEY_REPEAT, 2U, 1U);
+
+        yew_mouse_event(&f.ed, &down);
+    }
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    yew_ed_free(&f.ed);
+}
