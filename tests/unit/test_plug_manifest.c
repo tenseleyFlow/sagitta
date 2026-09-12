@@ -188,11 +188,11 @@ void test_plug_manifest_entry_parent_escape_names_resolved_path(void)
     char outside[384];
     static const char source[] =
         "{ name: \"escape\", version: \"1.0.0\", api: 1, "
-        "entry: \"../outside.fl\", capabilities: [], events: [] }\n";
+        "entry: \"src/../../evil.fl\", capabilities: [], events: [] }\n";
     int n;
 
     manifest_fix_init(&f, "escape", source);
-    n = snprintf(outside, sizeof(outside), "%s/outside.fl", f.root);
+    n = snprintf(outside, sizeof(outside), "%s/evil.fl", f.root);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(outside));
     manifest_write(outside, "nil\n");
     YEW_ASSERT(!manifest_read(&f, &mf));
@@ -206,22 +206,32 @@ void test_plug_manifest_entry_symlink_escape_is_rejected(void)
 {
     ManifestFix f;
     PlugManifest mf;
-    char outside[384];
     static const char source[] =
         "{ name: \"escape\", version: \"1.0.0\", api: 1, "
         "entry: \"src/main.fl\", capabilities: [], events: [] }\n";
-    int n;
 
     manifest_fix_init(&f, "escape", source);
-    n = snprintf(outside, sizeof(outside), "%s/outside.fl", f.root);
-    YEW_ASSERT(n > 0 && (size_t)n < sizeof(outside));
-    manifest_write(outside, "nil\n");
     YEW_ASSERT_EQ_I64(unlink(f.entry), 0);
-    YEW_ASSERT_EQ_I64(symlink(outside, f.entry), 0);
+    YEW_ASSERT_EQ_I64(symlink("/etc/passwd", f.entry), 0);
     YEW_ASSERT(!manifest_read(&f, &mf));
     YEW_ASSERT(strstr(f.diag, "escapes directory") != NULL);
-    YEW_ASSERT(strstr(f.diag, outside) != NULL);
-    YEW_ASSERT_EQ_I64(unlink(outside), 0);
+    YEW_ASSERT(strstr(f.diag, "/etc/passwd") != NULL);
+    manifest_fix_done(&f);
+}
+
+void test_plug_manifest_entry_embedded_nul_is_rejected(void)
+{
+    ManifestFix f;
+    PlugManifest mf;
+    static const char source[] =
+        "{ name: \"nul-entry\", version: \"1.0.0\", api: 1, "
+        "entry: \"src/main.fl\\0../../evil.fl\", capabilities: [], "
+        "events: [] }\n";
+
+    manifest_fix_init(&f, "nul-entry", source);
+    YEW_ASSERT(!manifest_read(&f, &mf));
+    YEW_ASSERT(strstr(f.diag,
+                      "manifest entry must be a relative path") != NULL);
     manifest_fix_done(&f);
 }
 

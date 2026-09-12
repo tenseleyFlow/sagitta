@@ -2341,6 +2341,7 @@ void test_plug_manifest_unknown_key_suggests_one_edit(void);
 void test_plug_manifest_name_must_match_directory(void);
 void test_plug_manifest_entry_parent_escape_names_resolved_path(void);
 void test_plug_manifest_entry_symlink_escape_is_rejected(void);
+void test_plug_manifest_entry_embedded_nul_is_rejected(void);
 void test_plug_manifest_capability_set_is_closed(void);
 void test_plug_manifest_event_set_is_frozen(void);
 void test_plug_manifest_rejects_newer_api(void);

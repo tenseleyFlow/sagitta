@@ -2308,6 +2308,7 @@ const YewTest yew_tests[] = {
     T(plug_manifest_name_must_match_directory),
     T(plug_manifest_entry_parent_escape_names_resolved_path),
     T(plug_manifest_entry_symlink_escape_is_rejected),
+    T(plug_manifest_entry_embedded_nul_is_rejected),
     T(plug_manifest_capability_set_is_closed),
     T(plug_manifest_event_set_is_frozen),
     T(plug_manifest_rejects_newer_api),
