@@ -297,5 +297,6 @@ static bool check_input(const u8 *data, size_t len,
 
 int main(int argc, char **argv)
 {
-    return yew_fuzz_main(argc, argv, "fuzz_http", NULL, check_input);
+    return yew_fuzz_main(argc, argv, "fuzz_http",
+                         "tests/fuzz/corpus/http", check_input);
 }
