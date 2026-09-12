@@ -719,6 +719,13 @@ static const CmdDesc builtins[] = {
      "Close every tab but the active one", NULL},
     {"ed.tab.copy_path", yew_tab_cmd_copy_path, YEW_ARITY_NONE, 0U,
      "Copy the active tab's canonical path to the clipboard", NULL},
+    /* Sprint 57.11 §4: the tab menu's two "open in split" rows. */
+    {"ed.tab.open_split_h", yew_tab_cmd_open_split_h, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN,
+     "Open the active tab's buffer in a horizontal split", NULL},
+    {"ed.tab.open_split_v", yew_tab_cmd_open_split_v, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN,
+     "Open the active tab's buffer in a vertical split", NULL},
     /* Sprint 24 §6: the continuous line.  next/prev walk EVERY open
      * file — members of the active group first, then the row-1 entry
      * beside it — so left/right never dead-ends inside a group. */
@@ -1157,6 +1164,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.group.add_tab", "s", YEW_RP_FORBID, "gadd"},
     {"ed.tab.close_others", "", YEW_RP_FORBID, "tabonly"},
     {"ed.tab.copy_path", "", YEW_RP_FORBID, "copypath"},
+    /* Sprint 57.11 §4: named after :tabnew / :tabonly, not after the
+     * pane commands, because the subject is the tab's buffer. */
+    {"ed.tab.open_split_h", "", YEW_RP_FORBID, "tabsplit"},
+    {"ed.tab.open_split_v", "", YEW_RP_FORBID, "tabvsplit"},
     {"ed.group.remove_tab", "", YEW_RP_FORBID, "gremove"},
     {"ed.group.enter", "", YEW_RP_FORBID, "genter"},
     {"ed.group.leave", "", YEW_RP_FORBID, "gleave"},

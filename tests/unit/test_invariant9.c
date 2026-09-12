@@ -724,7 +724,8 @@ void test_invariant9_every_new_command_is_registered(void)
         "ed.group.dissolve",   "ed.ui.context_menu", "ed.group.add_tab",
         "ed.mouse.enable",     "ed.mouse.disable",
         /* Sprint 57.11 §4: the document-menu row commands. */
-        "ed.sel.cut",          "ed.edit.paste",     "ed.sel.all"
+        "ed.sel.cut",          "ed.edit.paste",     "ed.sel.all",
+        "ed.tab.open_split_h", "ed.tab.open_split_v"
     };
     size_t i;
 

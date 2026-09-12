@@ -242,5 +242,7 @@ CmdStatus yew_tab_cmd_move(CmdCtx *cx);
  * handlers, so the mouse and the keyboard reach the same code. */
 CmdStatus yew_tab_cmd_close_others(CmdCtx *cx);
 CmdStatus yew_tab_cmd_copy_path(CmdCtx *cx);
+CmdStatus yew_tab_cmd_open_split_h(CmdCtx *cx);
+CmdStatus yew_tab_cmd_open_split_v(CmdCtx *cx);
 
 #endif

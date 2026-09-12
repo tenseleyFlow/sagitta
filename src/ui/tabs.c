@@ -1668,6 +1668,77 @@ CmdStatus yew_tab_cmd_copy_path(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+/*
+ * Sprint 57.11 §4: the tab menu's `Open in Split Right` / `Open in
+ * Split Below` rows.
+ *
+ * The buffer comes from the ACTIVE TAB, not from the focused pane.
+ * They are usually the same, but a pane can be showing a scratch view
+ * (job output, a diff, the macro editor) while the tab still owns the
+ * file — and "open this tab in a split" then has to mean the file, or
+ * the new pane is a second copy of the scratch the user was trying to
+ * get away from.
+ *
+ * yew_pane_split clones the focused Win, so the split starts on the
+ * focused pane's buffer; yew_ed_win_set_buffer then points it at the
+ * tab's.  Two panes on one buffer is the supported case (the tab model
+ * forbids two TABS on one path, not two views).
+ */
+static CmdStatus tab_open_split(CmdCtx *cx, SplitDir dir)
+{
+    Ed *ed;
+    const Tab *tab;
+    Buffer *buffer;
+    Pane *split;
+
+    if (cx == NULL || cx->ed == NULL || cx->ed->focus == NULL)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    tab = yew_tab_at(ed, ed->tabs.active);
+    if (tab == NULL)
+        return YEW_CMD_ERR_STATE;
+    /*
+     * `buffer_id`, not yew_tab_buffer(): the latter answers "what is
+     * this tab's focused pane showing", which is the very thing a
+     * parked scratch view makes wrong.  buffer_id is the stable handle
+     * the tab was opened on, and the same one yew_tab_open restores a
+     * parked pane from.
+     */
+    buffer = yew_ws_buf_by_id(ed, tab->buffer_id);
+    if (buffer == NULL)
+        return YEW_CMD_ERR_STATE;
+    /* Deferred tabs carry no text until something asks; a split that
+     * showed an empty buffer would look like a truncated file. */
+    if (yew_buf_hydrate(ed, buffer) != 0) {
+        yew_msg(ed, YEW_MSG_ERROR, "could not read %s",
+                tab->path != NULL ? tab->path : "untitled");
+        return YEW_CMD_ERR_IO;
+    }
+    split = yew_pane_split(ed, ed->focus, dir);
+    if (split == NULL) {
+        if (yew_pane_leaf_count(ed->pane_root) >=
+            (u32)YEW_PANE_MAX_LEAVES)
+            yew_msg(ed, YEW_MSG_ERROR, "too many panes (max %d)",
+                    YEW_PANE_MAX_LEAVES);
+        else
+            yew_msg(ed, YEW_MSG_ERROR, "no room to split");
+        return YEW_CMD_ERR_STATE;
+    }
+    yew_ed_win_set_buffer(ed, split->win, buffer);
+    yew_pane_refocus(ed, split);
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_tab_cmd_open_split_h(CmdCtx *cx)
+{
+    return tab_open_split(cx, YEW_SPLIT_H);
+}
+
+CmdStatus yew_tab_cmd_open_split_v(CmdCtx *cx)
+{
+    return tab_open_split(cx, YEW_SPLIT_V);
+}
+
 bool yew_tab_prompt_key(Ed *ed, u8 answer)
 {
     int idx;
