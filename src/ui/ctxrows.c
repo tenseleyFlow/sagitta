@@ -30,6 +30,7 @@
 #include "ui/ctxmenu.h"
 #include "ui/groups.h"
 #include "ui/tabs.h"
+#include "util/intern.h"
 
 /*
  * THE DISPATCH, as data.
@@ -50,7 +51,9 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
     /* CTXA_GROUP_EDIT      */ {"ed.group.edit", CTX_TGT_GROUP, 0},
     /* CTXA_GROUP_RENAME    */ {"ed.group.rename", CTX_TGT_GROUP, 0},
     /* CTXA_GROUP_DISSOLVE  */ {"ed.group.dissolve", CTX_TGT_GROUP, 0},
-    /* CTXA_PALETTE         */ {"ed.find.command", CTX_TGT_NONE, 0}
+    /* CTXA_PALETTE         */ {"ed.find.command", CTX_TGT_NONE, 0},
+    /* CTXA_PALETTE_HERE    */ {"ed.find.command", CTX_TGT_PANE, 0},
+    /* CTXA_FUSS_OPEN       */ {"ed.git.open", CTX_TGT_PATH, 0}
 };
 
 /* ---------------------------------------------------------------- */
@@ -120,10 +123,22 @@ static void build_group(Ed *ed, const CtxContext *c)
  */
 static void build_placeholder(Ed *ed, const CtxContext *c)
 {
-    (void)ed;
+    const char *path = NULL;
+
     yew_ctx_begin((u32)c->kind);
-    yew_ctx_target(c->id, NULL);
-    yew_ctx_item("Command Palette...", NULL, (u32)CTXA_PALETTE, true, 0U);
+    if (c->kind == YEW_CTX_KIND_FUSS_FILE ||
+        c->kind == YEW_CTX_KIND_FUSS_DIR) {
+        /* The path, COPIED, because the tree that owns the original is
+         * rebuilt by every status result. */
+        path = yew_intern_str(&ed->interner, c->id);
+    }
+    yew_ctx_target(c->id, path);
+    if (c->kind == YEW_CTX_KIND_FUSS_FILE)
+        yew_ctx_item("Open", NULL, (u32)CTXA_FUSS_OPEN, path != NULL, 0U);
+    yew_ctx_item("Command Palette...", NULL,
+                 c->kind == YEW_CTX_KIND_DOC ? (u32)CTXA_PALETTE_HERE
+                                             : (u32)CTXA_PALETTE,
+                 true, 0U);
 }
 
 void yew_ctx_build(Ed *ed, const CtxContext *c)

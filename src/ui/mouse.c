@@ -692,15 +692,23 @@ CtxContext yew_mouse_context_at(const Ed *ed, u16 x, u16 y)
      * cannot drift from where the footer was drawn.  A stripped FUSS
      * returns zero rectangles from the shim and falls straight through.
      */
-    c.rect = yew_fuss_drawer_rect(ed);
-    if (rect_has(c.rect, x, y)) {
-        c.kind = YEW_CTX_KIND_FUSS_BLANK;
-        return c;
-    }
-    c.rect = yew_fuss_backdrop_rect(ed);
-    if (rect_has(c.rect, x, y)) {
-        c.kind = YEW_CTX_KIND_FUSS_BLANK;
-        return c;
+    if (yew_fuss_active(ed)) {
+        /*
+         * GATED ON F MODE BEING UP, because the drawer's rectangle is
+         * computed from the terminal width alone and is non-empty even
+         * when nothing is drawn in it — an ungated read would claim the
+         * left quarter of every screen for a drawer that is not there.
+         */
+        c.rect = yew_fuss_drawer_rect(ed);
+        if (rect_has(c.rect, x, y)) {
+            c.kind = YEW_CTX_KIND_FUSS_BLANK;
+            return c;
+        }
+        c.rect = yew_fuss_backdrop_rect(ed);
+        if (rect_has(c.rect, x, y)) {
+            c.kind = YEW_CTX_KIND_FUSS_BLANK;
+            return c;
+        }
     }
     if (rect_has(ed->footer_rect, x, y)) {
         c.kind = YEW_CTX_KIND_FOOTER;

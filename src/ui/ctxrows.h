@@ -115,6 +115,17 @@ typedef enum CtxAction {
     CTXA_GROUP_RENAME,
     CTXA_GROUP_DISSOLVE,
     CTXA_PALETTE,
+    /*
+     * The palette row of a DOCUMENT menu, which focuses the pane the
+     * user pointed at and puts the caret on the clicked cell first —
+     * every §4 document row does, and a palette opened for a pane the
+     * user did not point at would be the wrong buffer's palette.
+     */
+    CTXA_PALETTE_HERE,
+    /* §4's FUSS_FILE row 0, and the one path-addressed row Deliverable
+     * 3 needs in order for CTX_TGT_PATH to be reachable rather than
+     * dead. */
+    CTXA_FUSS_OPEN,
     CTXA__N
 } CtxAction;
 
