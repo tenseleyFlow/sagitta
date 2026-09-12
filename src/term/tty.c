@@ -71,6 +71,8 @@ static const char YEW_TTY_RESTORE_BLOB_MOTION[] =
     YEW_TTY_RESTORE_TAIL;
 static const char YEW_TTY_MOTION_ON[] = "\x1b[?1003h";
 static const char YEW_TTY_MOTION_OFF[] = "\x1b[?1003l";
+_Static_assert(sizeof(YEW_TTY_MOTION_ON) == sizeof(YEW_TTY_MOTION_OFF),
+               "1003 h/l differ only in the final byte");
 
 /* One byte per guard note.  CLEAN also forgets MOTION: a restore that
  * reached the terminal disabled 1003 along with everything else. */
@@ -864,14 +866,23 @@ void yew_tty_mouse_motion(bool on)
      * behind a cleared flag or clear a flag the terminal never saw. */
     yew_tty_lifecycle_mask(&blocked);
     masked = sigprocmask(SIG_BLOCK, &blocked, &saved) == 0;
-    g_mouse_motion = on ? 1 : 0;
+    /* Both records over-approximate what the terminal has armed: they are
+     * written before 1003h and dropped only after 1003l.  A crash in the
+     * middle then leaves a restore that emits one 1003l too many, which
+     * costs nothing, rather than one too few, which strands the mode. */
+    if (on) {
+        g_mouse_motion = 1;
+        yew_tty_guard_note((u8)YEW_TTY_GUARD_MOTION);
+    }
     if (g_wfd >= 0) {
         (void)yew_tty_write_all(g_wfd, on ? YEW_TTY_MOTION_ON
                                           : YEW_TTY_MOTION_OFF,
                                 sizeof(YEW_TTY_MOTION_ON) - 1U);
     }
-    yew_tty_guard_note(on ? (u8)YEW_TTY_GUARD_MOTION
-                          : (u8)YEW_TTY_GUARD_STILL);
+    if (!on) {
+        g_mouse_motion = 0;
+        yew_tty_guard_note((u8)YEW_TTY_GUARD_STILL);
+    }
     if (masked)
         (void)sigprocmask(SIG_SETMASK, &saved, NULL);
 }
