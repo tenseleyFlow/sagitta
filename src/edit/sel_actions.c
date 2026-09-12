@@ -137,6 +137,11 @@ static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
         return false;
     if (first != NULL && edits->len != 0U)
         *first = BYTEOFF(edits->data[0].span.lo);
+    /* Aggregate selection commands own their fan-out instead of passing
+     * through yew_mc_run.  Give them the same one-shot viewport, syntax,
+     * and redraw finalization so an in-mode paste cannot change the model
+     * while leaving the old document cells on screen. */
+    yew_ed_damage_batch_begin(cx->ed, cx->win);
     for (i = 0U; ok && i < edits->len; i++) {
         SelEdit *edit = &edits->data[i];
         u64 removed = edit->span.hi - edit->span.lo;
@@ -159,6 +164,7 @@ static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
         }
     }
     yew_ed_finish_edit(cx->ed, &ec);
+    yew_ed_damage_batch_end(cx->ed);
     return ok;
 }
 

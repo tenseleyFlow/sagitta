@@ -518,7 +518,8 @@ static const char *shadow_test_for(const PtyCtx *c)
 bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *state_dir, const char *no_color, const char *ascii,
                    const char *runtime_dir, const char *shadow_test,
-                   const char *prof, const char *log)
+                   const char *prof, const char *log,
+                   const char *clipboard)
 {
     static const char *const keys[] = {
         "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
@@ -535,7 +536,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "YEW_SHADOW_TEST", "YEW_AI_MOCK", "GIT_CEILING_DIRECTORIES",
         /* Sprint 57's constrained-target lane reads yew's own HWM rather
          * than accidentally measuring this runner process. */
-        "YEW_PROF", "YEW_LOG"
+        "YEW_PROF", "YEW_LOG", "YEW_CLIPBOARD"
     };
     const char *values[] = {
         term, colors, "1", "500", "25", state_dir, state_dir,
@@ -551,7 +552,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         /* Sprint 26: pins the undo picker's relative timestamps. */
         "1700000000",
         no_color, ascii, runtime_dir, state_dir, shadow_test, "1", state_dir,
-        prof, log
+        prof, log, clipboard
     };
     size_t i;
     size_t out_i = 0U;
@@ -673,7 +674,9 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
                        no_color_for(c), ascii_for(c),
                        runtime_dir == NULL ? "" : runtime_dir,
                        shadow_test_for(c), getenv("YEW_PROF"),
-                       getenv("YEW_LOG"))) {
+                       getenv("YEW_LOG"),
+                       strncmp(c->test->name, "s57_12_clipboard_", 17U) == 0
+                           ? getenv("YEW_CLIPBOARD") : NULL)) {
         free(runtime_dir);
         strv_free(argv);
         ptc_fail(c, "allocating pinned environment");

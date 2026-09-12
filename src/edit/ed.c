@@ -37,6 +37,7 @@
 #include "mod/plug/plug.h"
 #endif
 #include "syn/defs.h"
+#include "text/clipboard.h"
 #include "text/file.h"
 #include "util/log.h"
 #include "util/rss.h"
@@ -880,6 +881,9 @@ void yew_ed_free(Ed *ed)
             yew_input_disable(ed->tty.wfd);
         yew_input_free(&ed->in);
     }
+    /* The clipboard owns helper children and pipe descriptors for the
+     * editor session; no queued write may outlive terminal teardown. */
+    yew_clip_shutdown();
     yew_term_oob_clear();
     if (ed->dispatch_ready)
         yew_dispatch_free(ed);
@@ -2559,6 +2563,11 @@ draw_overlays:
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
     perf_frame_tag(ed, ed->frame.len);
+    /* Start/pump clipboard writers only after the synchronized frame has
+     * closed.  OSC 52 is appended out-of-band here for the same reason. */
+    yew_clip_after_render(&ed->frame, ed->now_ms);
+    ed->perf_frame_output_bytes = ed->frame.len > UINT32_MAX ? UINT32_MAX :
+                                  (u32)ed->frame.len;
     yew_prof_phase(&ed->prof, YEW_PH_WRITE);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {
         ed->quit = true;

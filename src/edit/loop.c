@@ -29,6 +29,7 @@
 #endif
 #include "term/input.h"
 #include "term/tty.h"
+#include "text/clipboard.h"
 #include "util/log.h"
 #include "util/rss.h"
 #include "ws/symidx.h"
@@ -321,6 +322,8 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
     /* Filter timeouts and SIGTERM->SIGKILL escalation are deadlines too:
      * without this the loop could sleep past a job's kill window. */
     deadline = deadline_min(deadline, yew_job_deadline(ed, now_ms));
+    deadline = deadline_min(
+        deadline, absolute_deadline(yew_clip_deadline(), now_ms));
     deadline = deadline_min(deadline, yew_ai_deadline(ed, now_ms));
     deadline = deadline_min(deadline, yew_fuss_deadline(ed, now_ms));
     deadline = deadline_min(deadline, yew_git_editor_deadline(ed, now_ms));
@@ -499,8 +502,10 @@ int yew_loop_run(Ed *ed)
     if (ed == NULL)
         return YEW_EXIT_BUG;
     for (;;) {
-        /* Two fixed slots (tty, signal pipe) plus up to four per job. */
-        struct pollfd fds[2U + YEW_JOB_MAX * 4U + YEW_HTTP_POOL_MAX];
+        /* Two fixed slots (tty, signal pipe), up to four per job, the HTTP
+         * pool, and one asynchronous clipboard writer/status descriptor. */
+        struct pollfd
+            fds[3U + YEW_JOB_MAX * 4U + YEW_HTTP_POOL_MAX];
         u32 nfds = 2U;
         i64 now = yew_now_ms();
         int result;
@@ -535,6 +540,18 @@ int yew_loop_run(Ed *ed)
         fds[1].revents = 0;
         yew_job_collect_fds(ed, fds, &nfds);
         yew_ai_collect_fds(ed, fds, &nfds);
+        {
+            int clip_fd = yew_clip_write_fd();
+
+            if (clip_fd >= 0) {
+                fds[nfds].fd = clip_fd;
+                /* write_fd needs POLLOUT; once the payload is sent the
+                 * same API exposes the exec-status read end instead. */
+                fds[nfds].events = POLLIN | POLLOUT | POLLHUP;
+                fds[nfds].revents = 0;
+                nfds++;
+            }
+        }
         yew_prof_phase(&ed->prof, YEW_PH_POLL);
         result = poll(fds, (nfds_t)nfds, yew_loop_deadline(ed, now));
         if (result < 0 && errno != EINTR)
@@ -574,6 +591,9 @@ int yew_loop_run(Ed *ed)
         if (chld)
             yew_job_reap(ed);
         yew_job_tick(ed, now);
+        /* Clipboard writes are deliberately outside the input path.  Pump
+         * after poll so pipe readiness and the timeout both make progress. */
+        yew_clip_pump(now);
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */
         (void)yew_loop_settle_jobs(ed);

@@ -212,6 +212,7 @@ void test_sel_actions_clip_copy_and_cut_use_explicit_system_register(void)
     YEW_ASSERT_EQ_U64(f.ed.buffer.undo->nodes.data[
                           f.ed.buffer.undo->nodes.len - 1U].reason,
                       YEW_TXN_CUT);
+    YEW_ASSERT_EQ_U64(f.ed.damage_batch_finalizations, 1U);
     fixture_free(&f);
     restore_clipboard_env(saved);
 }
@@ -235,6 +236,7 @@ void test_sel_actions_clip_paste_replaces_all_highlights_once(void)
     YEW_ASSERT_EQ_U64(f.ed.buffer.undo->nodes.data[
                           f.ed.buffer.undo->nodes.len - 1U].reason,
                       YEW_TXN_PASTE);
+    YEW_ASSERT_EQ_U64(f.ed.damage_batch_finalizations, 1U);
     fixture_free(&f);
     YEW_ASSERT_EQ_I64(unlink(input), 0);
     restore_clipboard_env(saved);

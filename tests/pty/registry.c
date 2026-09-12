@@ -2816,6 +2816,106 @@ static void case_s19_stream_output(PtyCtx *c)
     s18_finish(c, path);
 }
 
+static void case_s57_12_shift_arrow_highlight(PtyCtx *c)
+{
+    static const u8 initial[] = "a\xc3\xa9\xe7\x95\x8cz\nsecond\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "shift+right shift+right");
+    ptc_snapshot(c, "s57_12_shift_arrow_highlight");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_12_clipboard_cut_paste(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha beta\n";
+    static const u8 copied[] = "alpha";
+    const char *old = getenv("YEW_CLIPBOARD");
+    char *saved = old != NULL ? strdup(old) : NULL;
+    char *fake = realpath("build/fakeclip", NULL);
+    char clip[] = "/tmp/yew-pty-s57-clip-XXXXXX";
+    char setting[PATH_MAX * 3U];
+    char path[256];
+    int fd;
+    int n;
+
+    if (old != NULL && saved == NULL) {
+        ptc_check(c, false, "could not save clipboard environment");
+        return;
+    }
+    if (fake == NULL) {
+        free(saved);
+        ptc_check(c, false, "could not resolve fake clipboard helper");
+        return;
+    }
+    fd = mkstemp(clip);
+    if (fd < 0 || close(fd) != 0 || unlink(clip) != 0) {
+        free(fake);
+        free(saved);
+        ptc_check(c, false, "could not create clipboard fixture path");
+        return;
+    }
+    n = snprintf(setting, sizeof(setting), "cmd:%s %s write|%s %s read",
+                 fake, clip, fake, clip);
+    free(fake);
+    if (n < 0 || (size_t)n >= sizeof(setting) ||
+        setenv("YEW_CLIPBOARD", setting, 1) != 0) {
+        free(saved);
+        ptc_check(c, false, "could not configure fake clipboard");
+        return;
+    }
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path))) {
+        if (saved != NULL)
+            (void)setenv("YEW_CLIPBOARD", saved, 1);
+        else
+            (void)unsetenv("YEW_CLIPBOARD");
+        free(saved);
+        (void)unlink(clip);
+        return;
+    }
+    if (saved != NULL)
+        (void)setenv("YEW_CLIPBOARD", saved, 1);
+    else
+        (void)unsetenv("YEW_CLIPBOARD");
+    free(saved);
+
+    s17_settle_after_keys(
+        c, "shift+right shift+right shift+right shift+right shift+right");
+    s17_settle_after_keys(c, "ctrl+x");
+    while (!c->failed && !file_equals(clip, copied, sizeof(copied) - 1U))
+        ptc_settle(c, 25);
+    ptc_check(c, file_equals(clip, copied, sizeof(copied) - 1U),
+              "Ctrl-X did not write the system clipboard");
+    s17_settle_after_keys(c, "right");
+    s17_settle_after_keys(c, "ctrl+v");
+    ptc_check(c, s19_screen_contains(&c->vt, " betaalpha"),
+              "Ctrl-V did not paste the system clipboard");
+    ptc_snapshot(c, "s57_12_clipboard_cut_paste");
+    force_quit(c);
+    (void)unlink(path);
+    (void)unlink(clip);
+}
+
+static void case_s57_12_job_output_quit_returns(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s19_run_until(c, "!printf 'job output\\n'", "[exit 0 in");
+    s19_send_command(c, "q");
+    s19_wait_screen(c, "job output hidden; :jobs to reopen");
+    ptc_settle(c, 100);
+    ptc_check(c, s19_screen_contains(&c->vt, "document"),
+              ":q from job output did not restore the document");
+    ptc_snapshot(c, "s57_12_job_output_quit_returns");
+    s18_finish(c, path);
+}
+
 static void case_s57_11_shell_self_open(PtyCtx *c)
 {
     static const u8 initial[] = "original document\n";
@@ -9734,6 +9834,12 @@ const PtyCase yew_pty_cases[] = {
       case_s21_global_is_a_non_goal),
     C(s57_11_shell_self_open, modern, 24U, 80U,
       case_s57_11_shell_self_open),
+    C(s57_12_shift_arrow_highlight, modern, 24U, 80U,
+      case_s57_12_shift_arrow_highlight),
+    C(s57_12_clipboard_cut_paste, modern, 24U, 80U,
+      case_s57_12_clipboard_cut_paste),
+    C(s57_12_job_output_quit_returns, modern, 24U, 80U,
+      case_s57_12_job_output_quit_returns),
     C(s19_stream_output, modern, 24U, 80U, case_s19_stream_output),
     C(s19_exit_footer_ok, modern, 24U, 80U, case_s19_exit_footer_ok),
     C(s19_exit_footer_nonzero, modern, 24U, 80U,
