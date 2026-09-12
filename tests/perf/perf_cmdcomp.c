@@ -380,6 +380,16 @@ static bool measure_exec_trial(const char *root, i64 *samples, u64 *opendirs)
             goto done;
         samples[i] = elapsed;
         perf_comp_sink ^= (u64)ed.grid.cur_col + ed.grid.cur_row;
+        /*
+         * The idle path, driven exactly where the event loop drives it:
+         * AFTER the keystroke is timed, because that is the point of
+         * slicing the scan.  Without it the first $PATH element eats the
+         * whole first slice and the second is never opened -- so the
+         * opendir count below would be 1 and would prove nothing about
+         * a resumed multi-element scan.
+         */
+        while (yew_cmdline_comp_tick(&ed))
+            ;
     }
     if (ed.cmdline.menu.items.len == 0U) {
         (void)fprintf(stderr, "perf_cmdcomp: exec menu was empty\n");
