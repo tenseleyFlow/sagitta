@@ -124,16 +124,24 @@ static void attrs_write(Bytebuf *out, u16 attrs)
 
 static void modes_write(const VtScreen *v, Bytebuf *out)
 {
-    static const u32 bits[4] = {
+    /*
+     * APPENDED, never reordered: the modes line is a golden's, and
+     * moving 1003 in front of 1004 would rewrite every snapshot that
+     * has neither.  1003 (any-motion mouse) is here because Sprint
+     * 57.11 arms it while a context menu is open and invariant 6 says
+     * it is never left on — a claim only a golden that can SEE the mode
+     * can make end to end.
+     */
+    static const u32 bits[5] = {
         VT_MODE_BRACKETED_PASTE, VT_MODE_BUTTON_MOUSE,
-        VT_MODE_SGR_MOUSE, VT_MODE_FOCUS
+        VT_MODE_SGR_MOUSE, VT_MODE_FOCUS, VT_MODE_ANY_MOTION_MOUSE
     };
-    static const unsigned names[4] = {2004u, 1002u, 1006u, 1004u};
+    static const unsigned names[5] = {2004u, 1002u, 1006u, 1004u, 1003u};
     size_t i;
     bool any = false;
 
     put_text(out, "modes ");
-    for (i = 0u; i < 4u; i++) {
+    for (i = 0u; i < 5u; i++) {
         if ((v->modes & bits[i]) == 0u)
             continue;
         if (any)
@@ -567,6 +575,7 @@ static bool modes_line_read(const SnapLines *lines, VtScreen *out)
             else if (value == 1002u) out->modes |= VT_MODE_BUTTON_MOUSE;
             else if (value == 1006u) out->modes |= VT_MODE_SGR_MOUSE;
             else if (value == 1004u) out->modes |= VT_MODE_FOCUS;
+            else if (value == 1003u) out->modes |= VT_MODE_ANY_MOTION_MOUSE;
             else return false;
             if (p >= end || *p != ',') break;
             p++;

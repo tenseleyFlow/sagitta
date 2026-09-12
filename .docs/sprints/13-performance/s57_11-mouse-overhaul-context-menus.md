@@ -98,7 +98,7 @@ Keep the module editor-ignorant (no `edit/ed.h`). Changes:
 | Placement | Clamp, never flip (unchanged). Anchor = the click cell; the box's top-left is the cell **below-right** of the pointer so the row under the pointer at open is the border, not a row (no accidental activation on release). |
 | Hover | `yew_ctx_hover(i32 row)` unchanged semantics; a new `bool yew_ctx_hover_at(u16 x, u16 y)` maps a cell to a row via the box geometry (no region lookup — the table may be mid-frame) and returns whether the highlight moved, so the router repaints only on change. |
 | Keys | Up/Down/Enter/Esc unchanged; add Home/End; everything else still swallowed. |
-| Theme | `yew_ctx_draw(Grid *, const CtxStyle *)` — the caller supplies a `CtxStyle{ ThemeEnt surface, row, hover, disabled, accel, sep, border; }` resolved by the router from the roles in §6. No hardcoded colours remain. |
+| Theme | `yew_ctx_draw(Grid *, const CtxStyle *)` — the caller supplies a `CtxStyle{ ThemeEnt surface, row, hover, disabled, accel, sep; }` resolved by the router from the roles in §6. No hardcoded colours remain. |
 | Regions | `YEW_REGION_BLOCK` over the whole box (border included) then `YEW_REGION_CTX_ROW` per drawn row. Unchanged law. |
 | Target | `yew_ctx_target(u32 id, const char *path)` unchanged; add `yew_ctx_target_rect(Rect)` + getter for pane-relative targets (which leaf, which cell) so the document menu can place the cursor where the click was. |
 
@@ -310,6 +310,13 @@ gains `invariant9_document_menu_rows_are_keyboard_reachable` and
 | `menu.disabled` | greyed row | `fg: "@grey", dim: true, mono: "dim"` |
 | `menu.accel` | accelerator text | `fg: "@grey", mono: "dim"` |
 | `menu.sep` | separator rule | `fg: "#4b5263", mono: "dim"` |
+
+There is deliberately **no `menu.border` role** and no `border` field on
+`CtxStyle`. `menu.surface` already carries both halves of the frame — its
+`bg` fills the box and its `fg` draws the border — and `menu.row` owns the
+text; a seventh role would be a second definition of one surface, and two
+definitions of one surface are how a themed box comes to have a frame that
+does not match the ground it is drawn on.
 
 The router resolves them once per draw with `yew_theme_ui_tab` and the same
 overlay-merge idiom as `tab_role_style`. `degrade_*` tests cover the 16-colour
