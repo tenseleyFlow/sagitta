@@ -824,10 +824,18 @@ F01_UNICODE_CODEC_OBJ := $(filter-out $(FUZZ_CORE_OBJ),\
 F01_VT_WIDTH_AUDIT_SRC := tests/audit/f01_vt_width.c
 F01_VT_WIDTH_AUDIT_OBJ := $(BUILD)/tests/audit/f01_vt_width.o
 F01_VT_WIDTH_AUDIT_BIN := $(BUILD)/tests/audit/f01_vt_width
-AUDIT_PROBE_SRC := $(F01_UNICODE_AUDIT_SRC) $(F01_VT_WIDTH_AUDIT_SRC)
+F09_REC_VM_AUDIT_SRC := tests/audit/f09_record_vm.c
+F09_REC_VM_AUDIT_OBJ := $(BUILD)/tests/audit/f09_record_vm.o
+F09_REC_VM_AUDIT_RECORD_OBJ := $(BUILD)/tests/audit/f09_record_stub.o
+F09_REC_VM_AUDIT_BIN := $(BUILD)/tests/audit/f09_record_vm
+F09_REC_VM_AUDIT_CORE_OBJ := $(filter-out $(BUILD)/src/main.o \
+                              $(BUILD)/src/fl/record.o,$(OBJ))
+AUDIT_PROBE_SRC := $(F01_UNICODE_AUDIT_SRC) $(F01_VT_WIDTH_AUDIT_SRC) \
+                   $(F09_REC_VM_AUDIT_SRC)
 AUDIT_SRC := $(sort $(filter-out $(AUDIT_PROBE_SRC),\
                      $(wildcard tests/audit/*.c)))
 AUDIT_OBJ := $(AUDIT_SRC:%.c=$(BUILD)/%.o)
+AUDIT_SUPPORT_OBJ := $(BUILD)/tests/roundtrip/gen.o
 AUDIT_TESTS := $(BUILD)/audit_tests
 FUSS_TREE_TEST_OBJ := $(BUILD)/src/mod/git/fusstree.o \
                       $(BUILD)/src/mod/git/porcelain.o \
@@ -1145,8 +1153,9 @@ $(BUILD)/demo_paint: $(PTY_DEMO_LINK_OBJ)
 $(BUILD)/fuzz_utf8: $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ) $(LDLIBS)
 
-$(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) $(LDLIBS)
+$(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) $(AUDIT_SUPPORT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) \
+		$(AUDIT_SUPPORT_OBJ) $(LDLIBS)
 
 $(F01_UNICODE_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(F01_UNICODE_CODEC_OBJ) \
                           $(F01_UNICODE_AUDIT_OBJ)
@@ -1158,6 +1167,13 @@ $(F01_VT_WIDTH_AUDIT_BIN): $(FUZZ_CORE_OBJ) $(PTY_VT_OBJ) \
                            $(F01_VT_WIDTH_AUDIT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(PTY_VT_OBJ) \
 		$(F01_VT_WIDTH_AUDIT_OBJ) $(LDLIBS)
+
+$(F09_REC_VM_AUDIT_BIN): $(F09_REC_VM_AUDIT_CORE_OBJ) \
+                         $(F09_REC_VM_AUDIT_RECORD_OBJ) \
+                         $(F09_REC_VM_AUDIT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(F09_REC_VM_AUDIT_CORE_OBJ) \
+		$(F09_REC_VM_AUDIT_RECORD_OBJ) $(F09_REC_VM_AUDIT_OBJ) \
+		$(LDLIBS)
 
 $(BUILD)/fuzz_grapheme: $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ) $(LDLIBS)
@@ -1764,10 +1780,11 @@ test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 	$(UNIT_RUN)
 
 test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
-            $(F01_VT_WIDTH_AUDIT_BIN)
+            $(F01_VT_WIDTH_AUDIT_BIN) $(F09_REC_VM_AUDIT_BIN)
 	LC_ALL=C $(AUDIT_TESTS)
 	LC_ALL=C $(F01_UNICODE_AUDIT_BIN)
 	LC_ALL=C $(F01_VT_WIDTH_AUDIT_BIN)
+	LC_ALL=C $(F09_REC_VM_AUDIT_BIN)
 	scripts/check-findings.sh
 	scripts/check-audit-fixtures.sh
 
@@ -3180,6 +3197,11 @@ $(SYN_ENGINE_UNIT_OBJ): src/syn/engine.c $(BUILD)/mods.stamp \
                         $(BUILD)/profile.stamp $(MODULE_FORCE) \
                         $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) -DYEW_SYN_TEST=1 -c -o $@ $<
+
+$(F09_REC_VM_AUDIT_RECORD_OBJ): src/fl/record.c $(BUILD)/mods.stamp \
+                                $(BUILD)/profile.stamp $(MODULE_FORCE) \
+                                $(PROFILE_FORCE) | dirs
+	$(CC) $(CFLAGS) -Dfl_call_chunk=yew_audit_fl_call_chunk -c -o $@ $<
 
 dirs:
 	mkdir -p $(BUILD_DIRS)

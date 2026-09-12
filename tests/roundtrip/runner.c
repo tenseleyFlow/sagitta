@@ -20,9 +20,14 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "edit/bind.h"
+#include "edit/dispatch.h"
 #include "edit/ed.h"
+#include "edit/flapi_cmds.h"
 #include "edit/mode.h"
 #include "fl/diag.h"
+#include "fl/flruntime.h"
+#include "fl/origin.h"
 #include "fl/parse.h"
 #include "fl/record.h"
 #include "gen.h"
@@ -160,6 +165,64 @@ static bool editor_open(Ed *ed, const Bytebuf *fixture, u8 mode)
     cursor->anchor = BYTEOFF(0U);
     cursor->goal_col = (GCol){0U};
     return yew_mode_enter(ed, (Mode)mode) == YEW_CMD_OK;
+}
+
+static bool load_runtime_keymap(Ed *ed)
+{
+    FILE *fp;
+    Bytebuf source;
+    u8 chunk[4096];
+    size_t n;
+    bool read_ok;
+    bool close_ok;
+    bool eval_ok;
+
+    fp = fopen("runtime/init.fl", "rb");
+    if (fp == NULL)
+        return false;
+    bytebuf_init(&source);
+    while ((n = fread(chunk, 1U, sizeof(chunk), fp)) != 0U)
+        bytebuf_append(&source, chunk, n);
+    read_ok = !ferror(fp);
+    close_ok = fclose(fp) == 0;
+    if (!read_ok || !close_ok) {
+        bytebuf_free(&source);
+        return false;
+    }
+    yew_bind_batch_begin(ed);
+    eval_ok = yew_fl_eval(ed, (const char *)source.data,
+                          (u32)source.len) == YEW_CMD_OK;
+    yew_bind_batch_end(ed);
+    bytebuf_free(&source);
+    return eval_ok;
+}
+
+static Key rt_text_key(u8 ch)
+{
+    Key key = {0};
+
+    key.code = ch;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.ntext = 1U;
+    key.text[0] = ch;
+    return key;
+}
+
+static Key rt_named_key(u32 code)
+{
+    Key key = {0};
+
+    key.code = code;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    return key;
+}
+
+static bool dispatch_ok(Ed *ed, Key key, i64 now_ms)
+{
+    yew_dispatch_key(ed, key, now_ms);
+    return ed->last_status == YEW_CMD_OK;
 }
 
 static bool invoke_event(Ed *ed, const RtEvent *ev)
@@ -576,6 +639,116 @@ done:
     bytebuf_free(&before);
     bytebuf_free(&fixture);
     rt_session_free(&session);
+    return ok;
+}
+
+/* F09 Q6: record through the shipped runtime keymap, then replay after every
+ * input key used by the session has been shadowed by a different command.
+ * Macro source contains resolved commands, never input keys, so buffer,
+ * cursor set, register file, and mode must remain identical. */
+static bool run_cross_keymap_fixture(void)
+{
+    Bytebuf fixture;
+    Bytebuf source;
+    Ed recorded;
+    Ed replayed;
+    const RegVal *stored;
+    const char *why = "unknown divergence";
+    CmdId nop;
+    u32 rebound_origin;
+    bool recorded_open = false;
+    bool replayed_open = false;
+    bool ok = false;
+
+    bytebuf_init(&fixture);
+    bytebuf_init(&source);
+    if (!editor_open(&recorded, &fixture, (u8)YEW_MODE_L))
+        goto done;
+    recorded_open = true;
+    if (!load_runtime_keymap(&recorded) ||
+        !yew_record_start(&recorded, (u8)'a') ||
+        !dispatch_ok(&recorded, rt_text_key((u8)'i'), 1) ||
+        !dispatch_ok(&recorded, rt_text_key((u8)'x'), 2) ||
+        !dispatch_ok(&recorded, rt_named_key(YEW_KEY_ESCAPE), 3) ||
+        yew_record_stop(&recorded) != YEW_CMD_OK)
+        goto done;
+    stored = yew_reg_get(&recorded.regs, (u8)'a');
+    if (stored == NULL || stored->bytes.len == 0U)
+        goto done;
+    bytebuf_append(&source, stored->bytes.data, stored->bytes.len);
+
+    if (!editor_open(&replayed, &fixture, (u8)YEW_MODE_L))
+        goto done;
+    replayed_open = true;
+    if (!load_runtime_keymap(&replayed))
+        goto done;
+    nop = yew_cmd_lookup("ed.nop", (u32)strlen("ed.nop"));
+    rebound_origin = fl_origin_register(&replayed, FL_ORIGIN_WORKSPACE,
+                                        "audit:cross-keymap", 0U);
+    if (nop.v == 0U || rebound_origin == 0U)
+        goto done;
+    yew_bind_batch_begin(&replayed);
+    if (yew_bind_add(&replayed, rebound_origin, YEW_MODE_L, "i", nop,
+                     0, NULL, FL_NIL_V) == 0U ||
+        yew_bind_add(&replayed, rebound_origin, YEW_MODE_I, "x", nop,
+                     0, NULL, FL_NIL_V) == 0U ||
+        yew_bind_add(&replayed, rebound_origin, YEW_MODE_I, "<esc>", nop,
+                     0, NULL, FL_NIL_V) == 0U) {
+        yew_bind_batch_end(&replayed);
+        goto done;
+    }
+    yew_bind_batch_end(&replayed);
+    if (!install_macro(&replayed, &source) ||
+        yew_macro_replay(&replayed, (u8)'a', 1U) != YEW_CMD_OK ||
+        !editors_equal(&recorded, &replayed, &why))
+        goto done;
+    ok = true;
+
+done:
+    if (!ok)
+        (void)fprintf(stderr,
+                      "roundtrip: cross-keymap fixture failed: %s\n", why);
+    if (replayed_open)
+        yew_ed_free(&replayed);
+    if (recorded_open)
+        yew_ed_free(&recorded);
+    bytebuf_free(&source);
+    bytebuf_free(&fixture);
+    return ok;
+}
+
+static bool run_third_command_rollback_fixture(void)
+{
+    static const u8 source[] =
+        "@[ i\"first\" ]\n"
+        "@[ i\"second\" ]\n"
+        "missing_function()\n";
+    Bytebuf fixture;
+    RtBytes after;
+    Ed ed;
+    bool opened = false;
+    bool ok = false;
+
+    bytebuf_init(&fixture);
+    bytes_init(&after);
+    if (!editor_open(&ed, &fixture, (u8)YEW_MODE_L))
+        goto done;
+    opened = true;
+    if (yew_flapi_reg_write(&ed, (u8)'a', source,
+                            (u32)(sizeof(source) - 1U), false) != YEW_CMD_OK ||
+        yew_macro_replay(&ed, (u8)'a', 1U) != YEW_CMD_ERR_STATE ||
+        !buffer_bytes(ed.buffer.tb, &after) || after.b.len != 0U)
+        goto done;
+    ok = true;
+
+done:
+    if (!ok)
+        (void)fprintf(stderr,
+                      "roundtrip: third-command rollback fixture failed\n");
+    if (opened)
+        yew_ed_free(&ed);
+    bytes_free(&after);
+    bytebuf_free(&fixture);
     return ok;
 }
 
@@ -1087,6 +1260,14 @@ int main(int argc, char **argv)
         yew_cmd_shutdown();
         return 1;
     }
+    if (!run_cross_keymap_fixture()) {
+        yew_cmd_shutdown();
+        return 1;
+    }
+    if (!run_third_command_rollback_fixture()) {
+        yew_cmd_shutdown();
+        return 1;
+    }
     seeds = env_seeds();
     base_seed = env_base_seed();
     for (i = 0U; i < seeds; i++) {
@@ -1101,7 +1282,8 @@ int main(int argc, char **argv)
     }
     yew_cmd_shutdown();
     (void)printf("roundtrip: ok seeds=%u base=%llu fixtures=6 corpus=%u "
-                 "count-sentinel=1 edit-store-noop=1 P1-P5\n",
+                 "count-sentinel=1 edit-store-noop=1 cross-keymap=1 "
+                 "third-command-rollback=1 P1-P5\n",
                  (unsigned)seeds,
                  (unsigned long long)base_seed, (unsigned)corpus_count);
     return 0;

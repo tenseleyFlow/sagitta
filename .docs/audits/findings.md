@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-009`
+Next available ID: `YEW-F-011`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -22,6 +22,8 @@ hard XFAILs after the replacement-baseline requalification recorded in
 | YEW-F-006 | C | open | F07 UI | workspace re-emission drops unknown root and workspace keys | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 | YEW-F-007 | C | open | F07 UI | workspace restore reorders group members from tab-array order | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
 | YEW-F-008 | H | open | F08 FL | unprivileged plugin macro replay inherits config authority | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
+| YEW-F-009 | M | open | F09 REC | recorder folding self-test no longer reaches its injected fault | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
+| YEW-F-010 | M | open | F09 REC | macro store accepts source that fails on first replay | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -91,6 +93,26 @@ touch user data. During replay, the plugin-supplied source is compiled through
 the config-origin `fl_compile_str` path and consequently receives config's
 `FL_CAP_ALL` authority. This violates spec §13's defining-module rule. It
 remains open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-009` is Medium because the recorder's mandatory shrinker self-test no
+longer exercises its injected divergence, leaving a release-control claim
+unproved without changing user bytes or product behavior. Generator-pool
+growth changed seed 20764's prefix from the pinned pair of buffer-end motions
+and insert into an unrelated unit motion. `YEW_RT_SELFTEST=1` consequently
+exits 2 before fault injection instead of reporting and shrinking the planted
+failure. The reproducer asserts the documented prefix and fails at the
+replacement baseline. It remains open for Sprint 59; no product source
+changed during the audit.
+
+`YEW-F-010` is Medium because storing an invalid macro reports success, but
+its first replay fails. The failure is recoverable: the VM transaction rolls
+back the partial edit and preserves document bytes. `yew_macro_store`
+performs compile-only validation, so a syntactically valid program containing
+an unresolved global is accepted even though it cannot execute. The
+reproducer stores a macro that inserts text and then calls a missing function;
+store succeeds, replay returns `YEW_CMD_ERR_STATE`, and the buffer remains
+unchanged. It remains open for Sprint 59; no product source changed during
+the audit.
 
 ## Unverified observations
 
