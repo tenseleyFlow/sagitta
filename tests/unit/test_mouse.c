@@ -1643,6 +1643,16 @@ void test_mouse_motion_tracking_mirrors_the_open_menu(void)
     leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     yew_region_frame_begin();
     yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
+    /*
+     * From a known-disarmed start.  Sibling tests open menus through
+     * yew_mouse_open_*_menu and dismiss them with yew_ctx_close(),
+     * which is the WIDGET's half of a close and deliberately knows
+     * nothing about the terminal; the global claim — 1003 is never
+     * armed with no menu open — is the fuzz harness's, asserted after
+     * every event of every session.  What this test owns is the
+     * individual paths.
+     */
+    yew_tty_mouse_motion(false);
     YEW_ASSERT(!yew_tty_mouse_motion_active());
 
     /* Opened by pointer, closed by Esc. */
