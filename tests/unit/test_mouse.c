@@ -31,6 +31,7 @@
 #include "edit/pane_cmds.h"
 #include "mod/git/fussmode.h"
 #include "term/tty.h"
+#include "text/register.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
 #include "ui/ctxmenu.h"
@@ -1774,6 +1775,77 @@ void test_mouse_menu_targets_switch_enter_and_focus(void)
     YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), g);
     if (yew_gp_active())
         yew_gp_close(&ed);
+    yew_ed_free(&ed);
+}
+
+/*
+ * CTX_TGT_LEAF: the rows that consume a SELECTION do not move the
+ * caret.
+ *
+ * This is the seventh target Deliverable 4 had to add, and it exists
+ * because of exactly this sequence: select some text, right-click it,
+ * choose `Copy`.  With CTX_TGT_PANE the caret would be placed at the
+ * clicked cell first — which sets anchor = pos — and `Copy` would yank
+ * an empty span.  The row set would look perfect and the feature would
+ * be dead.
+ */
+void test_mouse_menu_leaf_target_keeps_the_selection(void)
+{
+    Ed ed;
+    i32 leaf;
+    Cursor *c;
+    const RegVal *reg;
+    u32 row;
+    u32 rows;
+    bool found = false;
+
+    ms_fixture(&ed);
+    ms_fill_lines(&ed, 8U);
+    yew_ed_layout(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    ms_frame_pane(ed.pane_root, leaf);
+    c = yew_ed_cursor(&ed);
+    c->anchor = (ByteOff){0U};
+    c->pos = (ByteOff){4U};
+    {
+        /* A right press well away from the selection: the row must act
+         * on what is SELECTED, not on what is under the pointer. */
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS,
+                          (u16)(ed.pane_root->rect.x + 8U),
+                          (u16)(ed.pane_root->rect.y + 5U));
+
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(yew_ctx_active());
+    rows = yew_ctx_rows();
+    for (row = 0U; row < rows; row++)
+        if (strcmp(yew_ctx_row_label(row), "Copy") == 0) {
+            YEW_ASSERT(yew_ctx_row_enabled(row));
+            yew_ctx_hover((i32)row);
+            found = true;
+            break;
+        }
+    YEW_ASSERT(found);
+    {
+        Key enter;
+
+        (void)memset(&enter, 0, sizeof(enter));
+        enter.kind = (u16)YEW_EV_KEY;
+        enter.code = YEW_KEY_ENTER;
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &enter));
+    }
+    YEW_ASSERT(!yew_region_frozen());
+    /* The caret is where the selection left it, NOT on the clicked
+     * cell, and the register holds the four bytes that were selected. */
+    c = yew_ed_cursor(&ed);
+    YEW_ASSERT_EQ_U64(c->anchor.v, 0U);
+    reg = yew_reg_get(&ed.regs, (u8)'"');
+    YEW_ASSERT_NOT_NULL(reg);
+    YEW_ASSERT_EQ_U64(reg->bytes.len, 4U);
+    YEW_ASSERT_EQ_MEM(reg->bytes.data, "line", 4U);
+    yew_ctx_close();
+    yew_tty_mouse_motion(false);
     yew_ed_free(&ed);
 }
 

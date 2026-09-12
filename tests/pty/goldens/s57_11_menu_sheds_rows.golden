@@ -1,0 +1,35 @@
+# yew pty golden v1
+size 80x10 alt=1 cursor=1,6 vis=1
+modes 2004,1002,1006,1004,1003 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s14-s57_11_menu_s +                                                      
+    1 alpha beta gamma                                                          
+    1 delta epsilon zeta                                                        
+    2 ┌────────────────────┐                                                    
+    3 │ Cut                │                                                    
+    4 │ Copy               │                                                    
+      │ Paste              │                                                    
+      │ Command Palette... │                                                    
+      └────────────────────┘                                                    
+ L  pty-s14-s57_11_menu_sheds_rows.txt                       utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDGGGGGGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDGHHHHHHHHHHHHHHHHHHHHGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDGHHHHHHHHHHHHHHHHHHHHGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDGHHHHHHHHHHHHHHHHHHHHGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDGAAAAAAAAAAAAAAAAAAAAGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDGGGGGGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+IIIFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+--- legend
+A fg=#c8ccd4 bg=#2c313a attrs=b---------
+B fg=#61afef bg=#1b202a attrs=b---------
+C fg=#5c6370 bg=#1b202a attrs=----------
+D fg=#4b5263 bg=#12141a attrs=----------
+E fg=#c8ccd4 bg=#12141a attrs=b---------
+F fg=#c8ccd4 bg=#12141a attrs=----------
+G fg=#4b5263 bg=#1b202a attrs=----------
+H fg=#5c6370 bg=#1b202a attrs=-d--------
+I fg=#12141a bg=#61afef attrs=----------

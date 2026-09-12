@@ -2257,6 +2257,7 @@ const YewTest yew_tests[] = {
     T(mouse_hover_repaints_only_when_the_row_changes),
     T(mouse_motion_tracking_mirrors_the_open_menu),
     T(mouse_menu_targets_switch_enter_and_focus),
+    T(mouse_menu_leaf_target_keeps_the_selection),
     T(mouse_menu_pane_target_places_the_cursor),
     T(mouse_menu_path_target_carries_the_captured_path),
     T(mouse_pick_row_selects_then_accepts_the_same_row),

@@ -2251,6 +2251,7 @@ void test_mouse_wheel_closes_the_menu_then_scrolls(void);
 void test_mouse_hover_repaints_only_when_the_row_changes(void);
 void test_mouse_motion_tracking_mirrors_the_open_menu(void);
 void test_mouse_menu_targets_switch_enter_and_focus(void);
+void test_mouse_menu_leaf_target_keeps_the_selection(void);
 void test_mouse_menu_pane_target_places_the_cursor(void);
 void test_mouse_menu_path_target_carries_the_captured_path(void);
 void test_mouse_pick_row_selects_then_accepts_the_same_row(void);
