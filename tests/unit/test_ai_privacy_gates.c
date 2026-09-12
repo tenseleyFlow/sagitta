@@ -1,5 +1,8 @@
 #include "harness.h"
 
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
@@ -112,7 +115,12 @@ static void privacy_probe_remove(PrivacyProbe *probe)
 void test_ai_privacy_cloud_redaction_transmits_zero_bytes_on_both_transports(void)
 {
     static const u8 source[] =
-        "line one\nAuthorization: Bearer abcdefghijklmnop\n";
+        "api_key = sk-0123456789abcdefghijklmnop\n"
+        "PASSWORD=correct-horse-battery-staple\n"
+        "-----BEGIN PRIVATE KEY-----\n"
+        "private bytes that must not leave the process\n";
+    const char *home = getenv("HOME");
+    char path[PATH_MAX];
     PrivacyProbe probe;
     Ed ed;
     ShadowReq request;
@@ -120,7 +128,12 @@ void test_ai_privacy_cloud_redaction_transmits_zero_bytes_on_both_transports(voi
 
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_memory(&ed, source, sizeof(source) - 1U,
-                                  "cloud-secret.c"));
+                                  "cloud-matrix.c"));
+    YEW_ASSERT_NOT_NULL(home);
+    YEW_ASSERT(yew_ed_set_workspace_root(&ed, home));
+    YEW_ASSERT(snprintf(path, sizeof(path), "%s/yew-f12-audit/cloud.c",
+                        home) > 0);
+    ed.win->buf->path = path;
     privacy_enable_backend(&ed, true);
     privacy_probe_install(&probe);
 
@@ -129,7 +142,9 @@ void test_ai_privacy_cloud_redaction_transmits_zero_bytes_on_both_transports(voi
     YEW_ASSERT_EQ_U64(probe.context_builds, 1U);
     YEW_ASSERT_EQ_U64(probe.curl_starts, 0U);
     YEW_ASSERT_EQ_U64(probe.curl_bytes, 0U);
-    YEW_ASSERT(strstr(ed.msg.text, "line 2 matches 'bearer-token'") != NULL);
+    YEW_ASSERT_EQ_U64(probe.body.len, 0U);
+    YEW_ASSERT(strstr(ed.msg.text,
+                      "line 3 matches 'pem-private-key'") != NULL);
 
     entry = yew_ai_registry_find_mut(&ed.ai->backends, "cloud");
     YEW_ASSERT_NOT_NULL(entry);
@@ -140,6 +155,7 @@ void test_ai_privacy_cloud_redaction_transmits_zero_bytes_on_both_transports(voi
     YEW_ASSERT_EQ_U64(probe.http_starts, 0U);
     YEW_ASSERT_EQ_U64(probe.http_bytes, 0U);
     YEW_ASSERT_EQ_U64(probe.curl_bytes, 0U);
+    YEW_ASSERT_EQ_U64(probe.body.len, 0U);
 
     privacy_probe_remove(&probe);
     yew_ed_free(&ed);
@@ -153,18 +169,24 @@ void test_ai_privacy_loopback_elision_reaches_exact_request_body(void)
         "{\"model\":\"qwen2.5-coder:7b\","
         "\"prompt\":\"before <redacted:openai-key> after\","
         "\"suffix\":\"\","
-        "\"system\":\"File: src/redact.c\\nLanguage: c\\n\","
+        "\"system\":\"File: yew-f12-audit/src/redact.c\\nLanguage: c\\n\","
         "\"stream\":true,\"raw\":false,"
         "\"options\":{\"num_predict\":256,\"temperature\":0.01,"
         "\"stop\":[\"\\n\\n\",\"\\n}\",\"```\"]}}";
     PrivacyProbe probe;
     Ed ed;
     ShadowReq request;
+    const char *home = getenv("HOME");
+    char path[PATH_MAX];
 
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_memory(&ed, source, sizeof(source) - 1U,
                                   "loopback-secret.c"));
-    ed.win->buf->path = "src/redact.c";
+    YEW_ASSERT_NOT_NULL(home);
+    YEW_ASSERT(yew_ed_set_workspace_root(&ed, home));
+    YEW_ASSERT(snprintf(path, sizeof(path),
+                        "%s/yew-f12-audit/src/redact.c", home) > 0);
+    ed.win->buf->path = path;
     ed.win->buf->lang = "c";
     privacy_enable_backend(&ed, false);
     privacy_probe_install(&probe);
@@ -179,6 +201,7 @@ void test_ai_privacy_loopback_elision_reaches_exact_request_body(void)
                                "before <redacted:openai-key> after"));
     YEW_ASSERT_NULL(strstr((const char *)probe.body.data,
                            "sk-0123456789abcdefghijklmnop"));
+    YEW_ASSERT_NULL(strstr((const char *)probe.body.data, home));
 
     privacy_probe_remove(&probe);
     yew_ed_free(&ed);
