@@ -1471,7 +1471,7 @@ static u32 held_tab_group(Ed *ed)
  * so the clock restarts every time the hovered group changes and the
  * open happens in yew_mouse_tick.
  */
-static void drag_dwell(Ed *ed, int slot)
+static void drag_dwell(Ed *ed, int slot, bool on_row1)
 {
     MouseState *m = &ed->mouse;
     i32 pre = 0;
@@ -1493,6 +1493,30 @@ static void drag_dwell(Ed *ed, int slot)
         /* A new target starts its cue at the first quarter, lit: the
          * clock restarting and the cue restarting are the same event. */
         m->flash_phase = 0U;
+    }
+    /*
+     * ROW 2 IS A PICTURE OF WHERE THE POINTER IS, so leaving the group
+     * takes it away again.
+     *
+     * Without this `preview_gid` only ever grew a value: the opened
+     * strip outlived the hover that asked for it, row 2 kept listing a
+     * group the pointer had walked away from, and — because both the
+     * cue and the open stand down while `preview_gid == dwell_gid` —
+     * coming BACK to that group announced nothing and re-opened
+     * nothing.  A drag past three groups then showed the first one
+     * until the button came up.
+     *
+     * ONLY FROM ROW 1.  Row 2 is the preview's own surface and the
+     * place the join is aimed at, so the pointer arriving there must
+     * not close the strip it was sent to use; and a pointer out over a
+     * pane is on its way somewhere the drop cancels anyway.
+     */
+    if (on_row1 && m->preview_gid != 0U && m->preview_gid != gid) {
+        m->preview_gid = 0U;
+        /* The strip just gave a row back, which the layout owns — the
+         * pane tree below has to take it. */
+        ed->layout_dirty = true;
+        ed->full_damage = true;
     }
 }
 
@@ -1535,7 +1559,7 @@ static void drag_strip_motion(Ed *ed, const Key *k)
             ed->full_damage = true;
         }
     }
-    drag_dwell(ed, slot);
+    drag_dwell(ed, slot, k->row == ed->tab_strip_rect.y);
 }
 
 /* The tab-array index a row-1 slot names, resolved against the PRE-DRAG
