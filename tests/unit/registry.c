@@ -2342,6 +2342,8 @@ const YewTest yew_tests[] = {
     T(plug_lifecycle_failing_init_leaves_zero_residue_and_trace),
     T(plug_lifecycle_ctx_on_rejects_event_missing_from_manifest),
     T(plug_lifecycle_reverse_disable_leaves_zero_registry_residue),
+    T(plug_lifecycle_twenty_by_twenty_reclaims_every_closure),
+    T(plug_lifecycle_throwing_disable_observer_cannot_abort_teardown),
     T(plug_lifecycle_reenable_keeps_imported_helper_principal),
     T(plug_lifecycle_fifth_hook_error_auto_disables_plugin),
     T(plug_lifecycle_generic_hook_limit_cannot_preempt_plugin_limit),

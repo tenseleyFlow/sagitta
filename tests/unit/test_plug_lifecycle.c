@@ -378,6 +378,31 @@ static u32 life_principal_modules(const LifecycleFix *f, u8 state)
     return count;
 }
 
+static bool life_gc_contains(const FlVm *vm, const void *object)
+{
+    const FlObj *at;
+
+    for (at = vm->gc.objects; at != NULL; at = at->gc_next)
+        if ((const void *)at == object)
+            return true;
+    return false;
+}
+
+static const void *life_command_closure(const LifecycleFix *f,
+                                        u32 origin_id)
+{
+    u32 i;
+
+    for (i = 0U; i < f->ed.plug->ncmds; i++) {
+        const PlugCmd *command = &f->ed.plug->cmds[i];
+
+        if (command->active && command->origin_id == origin_id &&
+            command->fn.t == (u8)FL_CLOSURE)
+            return command->fn.as.o;
+    }
+    return NULL;
+}
+
 static void life_rediscover_caps(LifecycleFix *f, const char *name,
                                  const char *caps, const char *events,
                                  const char *source)
@@ -573,6 +598,120 @@ void test_plug_lifecycle_reverse_disable_leaves_zero_registry_residue(void)
     YEW_ASSERT_EQ_U64(f.ed.hooks.ledger.v[second - 1U].kind, REG_HOOK);
     YEW_ASSERT(yew_plug_disable(&f.ed, f.plug));
     YEW_ASSERT_EQ_U64(f.plug->st, PLUG_DISABLED);
+    life_assert_counts(life_counts(&f), before);
+    life_close(&f);
+}
+
+void test_plug_lifecycle_twenty_by_twenty_reclaims_every_closure(void)
+{
+    static const char source[] =
+        "fn init(ctx) {\n"
+        "  ctx.command(\"cycle\", fn() nil)\n"
+        "  ctx.on(\"ed.idle\", fn() nil)\n"
+        "  ctx.bind(\"L\", \"z\", fn() nil)\n"
+        "  ctx.set({enabled: true})\n"
+        "  ctx.attr(\"warning\")\n"
+        "  ctx.overlay(fn(w, b, lo, hi) [])\n"
+        "}\n";
+    LifecycleFix f;
+    LifecycleCounts before;
+    const void *closures[20];
+    u32 raw_commands;
+    u32 raw_values;
+    u32 raw_hooks;
+    u32 raw_ledger;
+    u32 cycle;
+    u32 i;
+
+    life_open(&f, "life-many-00", "[\"ed.idle\"]", source, NULL);
+    for (i = 1U; i < YEW_ARRAY_LEN(closures); i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "life-many-%02u", (unsigned)i);
+        life_add_plugin(&f, name, "[\"ed.idle\"]", source);
+    }
+    yew_plug_free(&f.ed);
+    YEW_ASSERT(yew_plug_discover_with_policy(&f.ed, true, &f.trust,
+                                              &f.dc));
+    YEW_ASSERT_EQ_U64(f.ed.plug->n, YEW_ARRAY_LEN(closures));
+    before = life_counts(&f);
+    raw_commands = f.ed.plug->ncmds;
+    raw_values = f.ed.plug->nregs;
+    raw_hooks = f.ed.hooks.n;
+    raw_ledger = f.ed.hooks.ledger.n;
+
+    for (cycle = 0U; cycle < 20U; cycle++) {
+        for (i = 0U; i < f.ed.plug->n; i++) {
+            Plug *plug = f.ed.plug->v[i];
+
+            YEW_ASSERT(yew_plug_enable(&f.ed, plug, &f.dc));
+            closures[i] = life_command_closure(&f, plug->origin_id);
+            YEW_ASSERT_NOT_NULL(closures[i]);
+        }
+        YEW_ASSERT_EQ_U64(life_counts(&f).commands,
+                          before.commands + YEW_ARRAY_LEN(closures));
+        YEW_ASSERT_EQ_U64(life_counts(&f).binds,
+                          before.binds + YEW_ARRAY_LEN(closures));
+        YEW_ASSERT_EQ_U64(life_counts(&f).hooks,
+                          before.hooks + YEW_ARRAY_LEN(closures));
+        for (i = f.ed.plug->n; i != 0U; i--)
+            YEW_ASSERT(yew_plug_disable(&f.ed, f.ed.plug->v[i - 1U]));
+        life_assert_counts(life_counts(&f), before);
+        YEW_ASSERT_EQ_U64(f.ed.plug->ncmds, raw_commands);
+        YEW_ASSERT_EQ_U64(f.ed.plug->nregs, raw_values);
+        /* YEW-F-021 pins the stricter zero-length contract.  Until its
+         * Sprint 59 remediation, tombstones must at least plateau after
+         * the first cycle rather than growing over all 400 enables. */
+        YEW_ASSERT_EQ_U64(f.ed.hooks.n,
+                          raw_hooks + YEW_ARRAY_LEN(closures));
+        YEW_ASSERT_EQ_U64(f.ed.hooks.ledger.n,
+                          raw_ledger + 6U * YEW_ARRAY_LEN(closures));
+        for (i = 0U; i < YEW_ARRAY_LEN(closures); i++)
+            YEW_ASSERT(!life_gc_contains(yew_fl_vm(&f.ed), closures[i]));
+    }
+    life_close(&f);
+}
+
+void test_plug_lifecycle_throwing_disable_observer_cannot_abort_teardown(void)
+{
+    static const char observer_source[] =
+        "fn init(ctx) {\n"
+        "  ctx.on(\"plug.disable\", fn(name) error(\"disable exploded\"))\n"
+        "}\n";
+    static const char target_source[] =
+        "fn init(ctx) {\n"
+        "  ctx.command(\"target\", fn() nil)\n"
+        "  ctx.on(\"ed.idle\", fn() nil)\n"
+        "  ctx.bind(\"L\", \"q\", fn() nil)\n"
+        "}\n";
+    LifecycleFix f;
+    LifecycleCounts before;
+    Plug *observer;
+    Plug *target;
+
+    life_open(&f, "life-observer", "[\"plug.disable\"]",
+              observer_source, NULL);
+    life_add_plugin(&f, "life-target", "[\"ed.idle\"]", target_source);
+    yew_plug_free(&f.ed);
+    YEW_ASSERT(yew_plug_discover_with_policy(&f.ed, true, &f.trust,
+                                              &f.dc));
+    observer = yew_plug_find(&f.ed, "life-observer");
+    target = yew_plug_find(&f.ed, "life-target");
+    YEW_ASSERT_NOT_NULL(observer);
+    YEW_ASSERT_NOT_NULL(target);
+    before = life_counts(&f);
+    YEW_ASSERT(yew_plug_enable(&f.ed, observer, &f.dc));
+    YEW_ASSERT(yew_plug_enable(&f.ed, target, &f.dc));
+
+    YEW_ASSERT(yew_plug_disable(&f.ed, target));
+    YEW_ASSERT_EQ_U64(target->st, PLUG_DISABLED);
+    YEW_ASSERT_EQ_U64(yew_bind_origin_count(&f.ed, target->origin_id), 0U);
+    YEW_ASSERT_EQ_U64(life_active_ledger(&f.ed), 1U);
+    YEW_ASSERT_EQ_U64(observer->st, PLUG_ENABLED);
+    YEW_ASSERT_EQ_U64(observer->err_count, 1U);
+    YEW_ASSERT_NOT_NULL(strstr(observer->last_error, "disable exploded"));
+
+    YEW_ASSERT(yew_plug_disable(&f.ed, observer));
     life_assert_counts(life_counts(&f), before);
     life_close(&f);
 }

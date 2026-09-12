@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-021`
+Next available ID: `YEW-F-022`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -33,6 +33,7 @@ recorded in `audit-00.md`.
 | YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
 | YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
 | YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
+| YEW-F-021 | M | open | F14 PLUG | plugin teardown retains raw hook and ledger lengths | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -214,6 +215,15 @@ the literal mandatory gate. The argv hook and hostile-filename matrix still
 prove the product behavior. The source-backed reproducer pins the gate's
 seven-match baseline for Sprint 59; no product source changed during the
 audit.
+
+`YEW-F-021` is Medium because plugin teardown clears every active hook and
+registration and the collector reclaims their closures, but the raw hook and
+ledger lengths remain at their first-cycle high-water marks instead of
+returning to the pre-enable values required by Sprint 54 and F14. The retained
+rows are inert and reused: the 20-plugin by 20-cycle control plateaus after the
+first cycle, so this is bounded bookkeeping residue rather than executable
+callback leakage. It remains open for Sprint 59; no product source changed
+during the audit.
 
 ## Unverified observations
 
