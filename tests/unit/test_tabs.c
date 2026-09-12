@@ -82,6 +82,33 @@ void test_tabs_modern_labels_and_single_tab_strip(void)
     yew_ed_free(&ed);
 }
 
+void test_tabs_group_label_clips_before_trailing_padding(void)
+{
+    Ed ed;
+    StripEntry entries[16];
+    u32 ids[9];
+    u32 gid;
+    int n;
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 9U, ids);
+    gid = yew_group_create(
+        &ed, "/tmp",
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    YEW_ASSERT(gid != 0U);
+    yew_group_add_member(&ed, gid, 9);
+    n = yew_tab_row1_entries(&ed, entries, (int)YEW_ARRAY_LEN(entries));
+    YEW_ASSERT_EQ_I64(n, 10);
+    YEW_ASSERT(strncmp(entries[9].label, " 10 ", 4U) == 0);
+    YEW_ASSERT_EQ_U64(strlen(entries[9].label),
+                      sizeof(entries[9].label) - 1U);
+    YEW_ASSERT_EQ_I64(entries[9].label[sizeof(entries[9].label) - 2U],
+                      ' ');
+    YEW_ASSERT_EQ_I64(entries[9].label[sizeof(entries[9].label) - 1U],
+                      '\0');
+    yew_ed_free(&ed);
+}
+
 void test_tabs_new_control_uses_exact_tail_geometry(void)
 {
     Ed ed;

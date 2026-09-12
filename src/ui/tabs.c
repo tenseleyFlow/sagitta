@@ -581,6 +581,40 @@ static void tab_label(const Ed *ed, int idx, int num, char *out,
                        ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
 }
 
+static void tab_group_label(int number, const char *label, char *out,
+                            size_t cap)
+{
+    char prefix[16];
+    int wrote;
+    size_t at;
+    size_t keep;
+
+    if (out == NULL || cap == 0U)
+        return;
+    out[0] = '\0';
+    wrote = snprintf(prefix, sizeof(prefix), " %d ", number);
+    if (wrote < 0)
+        return;
+    at = (size_t)wrote;
+    if (at >= sizeof(prefix))
+        at = sizeof(prefix) - 1U;
+    if (at >= cap)
+        at = cap - 1U;
+    (void)memcpy(out, prefix, at);
+    if (at + 1U >= cap) {
+        out[at] = '\0';
+        return;
+    }
+    keep = label == NULL ? 0U : strlen(label);
+    if (keep > cap - at - 2U)
+        keep = cap - at - 2U;
+    if (keep != 0U)
+        (void)memcpy(out + at, label, keep);
+    at += keep;
+    out[at++] = ' ';
+    out[at] = '\0';
+}
+
 /*
  * Orphans — files outside the workspace root — render dim.  Both sides
  * are already canonical (the tab's path from yew_tab_open, the root
@@ -637,8 +671,8 @@ int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
             /* Numbered like its neighbours: the row-1 position is what
              * `ctrl+N` (and `alt+N` from outside a group) addresses, so
              * a group must show the number that reaches it. */
-            (void)snprintf(out[n].label, sizeof(out[n].label), " %d %s ",
-                           n + 1, label);
+            tab_group_label(n + 1, label, out[n].label,
+                            sizeof(out[n].label));
             /*
              * NEGATIVE payload.  The sign is how the click router tells
              * a group from a tab without a second region kind — the

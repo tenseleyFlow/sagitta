@@ -1271,6 +1271,7 @@ const YewTest yew_tests[] = {
     T(layout_close_repairs_focus_on_the_freed_sibling),
     T(tabs_ids_are_monotonic_and_never_reused),
     T(tabs_modern_labels_and_single_tab_strip),
+    T(tabs_group_label_clips_before_trailing_padding),
     T(tabs_new_control_uses_exact_tail_geometry),
     T(tabs_new_control_yields_to_overflow),
     T(tabs_ids_survive_a_close_storm),

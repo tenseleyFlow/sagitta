@@ -1237,6 +1237,7 @@ void test_layout_drag_moves_by_delta_and_esc_restores(void);
 void test_layout_close_repairs_focus_on_the_freed_sibling(void);
 void test_tabs_ids_are_monotonic_and_never_reused(void);
 void test_tabs_modern_labels_and_single_tab_strip(void);
+void test_tabs_group_label_clips_before_trailing_padding(void);
 void test_tabs_new_control_uses_exact_tail_geometry(void);
 void test_tabs_new_control_yields_to_overflow(void);
 void test_tabs_ids_survive_a_close_storm(void);
