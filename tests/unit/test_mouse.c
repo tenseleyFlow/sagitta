@@ -2391,6 +2391,139 @@ void test_mouse_chevron_hover_tick_cancels_when_the_chevron_goes(void)
 }
 
 /*
+ * DOGFOOD BUG: a row-2 chevron hover scrolled ROW 1.
+ *
+ * Reported as "I hover a chevron in a tab group expecting the hidden
+ * members to come in, and row 1 slides left instead".  Both rows
+ * overflow here, so both carry a `>N`, and the pointer is parked on
+ * row 2's.
+ *
+ * The rows scroll independently — Sprint 24 made that a law — so the
+ * assertion is a PAIR: row 2 moved, and row 1 did not.  Either half
+ * alone would pass while the bug was live.
+ */
+static u32 hv_group_fixture(HovFixture *f, u32 extra_tabs, u32 members,
+                            u16 cols)
+{
+    u32 g;
+    u32 i;
+
+    hv_fixture(f, extra_tabs, cols);
+    g = yew_group_create(&f->ed, "/src", "grp");
+    YEW_ASSERT(g != 0U);
+    for (i = 1U; i <= members; i++)
+        yew_group_add_member(&f->ed, g, (int)i);
+    /* Active INSIDE the group, so row 2 is the pinned member strip. */
+    yew_tab_switch(&f->ed, 1);
+    yew_ed_layout(&f->ed);
+    return g;
+}
+
+void test_mouse_row2_chevron_hover_scrolls_row_2_and_not_row_1(void)
+{
+    HovFixture f;
+    u32 g;
+    u16 chev = 0U;
+    i64 t0;
+
+    g = hv_group_fixture(&f, 13U, 7U, 40U);
+    hv_paint(&f);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&f.ed), g);
+    YEW_ASSERT_EQ_I64(f.ed.tab_strip_rect.h, 2);
+    /* Both rows overflow, so the confusion is expressible at all. */
+    YEW_ASSERT(hv_chevron_x(0U, true, 40U, &chev));
+    YEW_ASSERT(hv_chevron_x(1U, true, 40U, &chev));
+
+    t0 = f.ed.now_ms;
+    {
+        Key m = hv_motion(chev, 1U);
+
+        yew_mouse_event(&f.ed, &m);
+    }
+    YEW_ASSERT(f.ed.mouse.hover_chevron);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.member_scroll, 0);
+
+    yew_mouse_tick(&f.ed, t0 + YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.member_scroll, 1);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    YEW_ASSERT(f.ed.tabs.member_scroll_user);
+    YEW_ASSERT(!f.ed.tabs.scroll_user);
+    /* THE RENDER is half the test: the offset has to survive it. */
+    hv_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.member_scroll, 1);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    yew_ed_free(&f.ed);
+}
+
+/* The first cell on `row` carrying an ordinary tab region. */
+static bool hv_tab_x(u16 row, u16 cols, u16 *out, i32 *payload)
+{
+    u16 x;
+
+    for (x = 0U; x < cols; x++) {
+        Region hit = yew_region_hit(x, row);
+
+        if (hit.kind != YEW_REGION_TAB)
+            continue;
+        *out = x;
+        *payload = hit.payload;
+        return true;
+    }
+    return false;
+}
+
+/*
+ * DOGFOOD BUG, the other half: a DRAG parked on row 2's chevron
+ * scrolled row 1.
+ *
+ * The hover reveal reads the payload's MAGNITUDE for the row and its
+ * sign for the direction.  The drag autoscroll read only the sign and
+ * then named the row itself — `strip_scroll(ed, false, delta)` — so
+ * every chevron in the editor autoscrolled row 1, including row 2's.
+ * That is the reported "row 1 slides left" exactly: the pointer is on
+ * the member strip's `>N`, and the row above it moves.
+ *
+ * The limit is the second half.  Row 2 shows the group the DWELL is
+ * previewing when there is one, so a scroll clamped against the ACTIVE
+ * group's member count clamps the wrong list — to zero when the drag
+ * carried the active tab out of any group at all.
+ */
+void test_mouse_drag_autoscroll_moves_the_row_under_the_pointer(void)
+{
+    HovFixture f;
+    u16 chev = 0U;
+    u16 tabx = 0U;
+    i32 payload = 0;
+    i64 t0;
+
+    (void)hv_group_fixture(&f, 13U, 7U, 40U);
+    hv_paint(&f);
+    YEW_ASSERT(hv_chevron_x(1U, true, 40U, &chev));
+    /* A row-1 entry to pick up; any of them, so long as it is not the
+     * chevron. */
+    YEW_ASSERT(hv_tab_x(0U, 40U, &tabx, &payload));
+
+    t0 = f.ed.now_ms;
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, tabx, 0U);
+        Key motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, chev, 1U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.member_scroll, 0);
+
+    yew_mouse_tick(&f.ed, t0 + YEW_DRAG_SCROLL_MS);
+    /* THE PAIR: row 2 moved, row 1 did not. */
+    YEW_ASSERT_EQ_I64(f.ed.tabs.member_scroll, 1);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
+    yew_ed_free(&f.ed);
+}
+
+/*
  * MODE 1003, and the if-and-only-if.
  *
  * Two owners, one arming path.  A chevron on screen arms it with no

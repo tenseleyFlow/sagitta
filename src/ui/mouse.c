@@ -256,6 +256,20 @@ static void wheel_pane(Ed *ed, const Region *hit, const Key *k)
     ed->full_damage = true;
 }
 
+/*
+ * THE GROUP ROW 2 IS SHOWING.
+ *
+ * The dwell's preview when there is one, the active tab's group
+ * otherwise — the same rule strip_draw_rows paints by and
+ * drop_target_row2 commits by, stated once so the three cannot
+ * disagree about which list row 2 holds.
+ */
+static u32 row2_group(const Ed *ed)
+{
+    return ed->mouse.preview_gid != 0U ? ed->mouse.preview_gid
+                                       : yew_active_group_id(ed);
+}
+
 /* Row 1 or row 2?  The strip rect is registered state, not a
  * re-derivation of the layout — see region.h's law. */
 static bool region_is_member_row(const Ed *ed, const Region *hit)
@@ -283,8 +297,15 @@ static bool strip_scroll(Ed *ed, bool row2, i32 delta)
     int limit = (int)ed->tabs.v.len;
     int to = *scroll + delta;
 
+    /*
+     * Clamped against the list row 2 is SHOWING, which during a drag is
+     * the dwell's preview and not the active group — see row2_group.
+     * Clamping against the active group's members instead clamped the
+     * wrong list, and clamped it to nothing whenever the active tab was
+     * in no group at all.
+     */
     if (row2)
-        limit = yew_group_member_count(ed, yew_active_group_id(ed));
+        limit = yew_group_member_count(ed, row2_group(ed));
     if (to < 0)
         to = 0;
     if (to >= limit)
@@ -1801,8 +1822,7 @@ static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
     if (ed->tab_strip_rect.h < 2U ||
         k->row != (u16)(ed->tab_strip_rect.y + 1U))
         return false;
-    *gid = ed->mouse.preview_gid != 0U ? ed->mouse.preview_gid
-                                       : yew_active_group_id(ed);
+    *gid = row2_group(ed);
     if (*gid == 0U)
         return false;
     hit = yew_region_hit(k->col, k->row);
@@ -1905,15 +1925,20 @@ static void drag_strip_drop(Ed *ed, const Key *k)
 }
 
 /*
- * Sprint 57.15 §2: is the pointer on a chevron, and which way does it
- * point?
+ * Sprint 57.15 §2: is the pointer on a chevron — which ROW, and which
+ * way does it point?
  *
  * Answered from the REGION TABLE, which is Sprint 22's law: the strip's
  * placement is established once, while drawing, and never re-derived.
  * The payload's magnitude names the row (1 or 2) and its sign the
  * direction, exactly as the click and the wheel read it.
+ *
+ * THE ONE READER of that convention for both clocks.  The drag
+ * autoscroll used to have its own copy that kept the sign and dropped
+ * the magnitude, which is how a drag parked on row 2's chevron ended up
+ * scrolling row 1.
  */
-static bool hover_chevron_at(u16 x, u16 y, bool *row2, i32 *delta)
+static bool chevron_at(u16 x, u16 y, bool *row2, i32 *delta)
 {
     Region hit = yew_region_hit(x, y);
 
@@ -1954,7 +1979,7 @@ static void hover_track(Ed *ed, u16 x, u16 y)
      * the other half instead and reveals nothing until the menu is
      * gone.
      */
-    if (yew_ctx_active() || !hover_chevron_at(x, y, &row2, &delta)) {
+    if (yew_ctx_active() || !chevron_at(x, y, &row2, &delta)) {
         /* Leaving stops it immediately, and cancels the pending
          * deadline by being the whole of the arming state. */
         m->hover_chevron = false;
@@ -2210,16 +2235,6 @@ void yew_mouse_cancel(Ed *ed)
 /* §4: the clocks                                                   */
 /* ---------------------------------------------------------------- */
 
-static bool drag_over_chevron(Ed *ed, i32 *delta)
-{
-    Region hit = yew_region_hit(ed->mouse.at_x, ed->mouse.at_y);
-
-    if (hit.kind != YEW_REGION_TAB_SCROLL)
-        return false;
-    *delta = hit.payload < 0 ? -1 : 1;
-    return true;
-}
-
 /*
  * Sprint 57.14 §3: which QUARTER of the dwell `elapsed` falls in.
  *
@@ -2285,7 +2300,7 @@ static void hover_tick(Ed *ed, i64 now_ms)
 
     if (!m->hover_chevron)
         return;
-    if (!hover_chevron_at(m->hover_x, m->hover_y, &row2, &delta)) {
+    if (!chevron_at(m->hover_x, m->hover_y, &row2, &delta)) {
         m->hover_chevron = false;
         return;
     }
@@ -2300,6 +2315,7 @@ void yew_mouse_tick(Ed *ed, i64 now_ms)
 {
     MouseState *m;
     i32 delta = 0;
+    bool row2 = false;
 
     if (ed == NULL)
         return;
@@ -2340,10 +2356,18 @@ void yew_mouse_tick(Ed *ed, i64 now_ms)
      * a strip that scrolled per report would fly past the target at a
      * speed that depends on how the terminal batches its reports.
      */
-    if (drag_over_chevron(ed, &delta) &&
+    if (chevron_at(m->at_x, m->at_y, &row2, &delta) &&
         now_ms - m->autoscroll_ms >= YEW_DRAG_SCROLL_MS) {
         m->autoscroll_ms = now_ms;
-        (void)strip_scroll(ed, false, delta);
+        /*
+         * THE ROW UNDER THE POINTER.  This read the payload's SIGN and
+         * then named the row itself — `strip_scroll(ed, false, …)` — so
+         * a drag parked on row 2's `>N` scrolled row 1 out from under
+         * the gesture.  chevron_at is now the one reader of the ±1/±2
+         * convention, which is what stops the two clocks from
+         * disagreeing about it again.
+         */
+        (void)strip_scroll(ed, row2, delta);
     }
 }
 
