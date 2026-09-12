@@ -77,6 +77,12 @@ context menu at the pointer, on every surface:**
 | Completion row | Accept, Toggle Docs · Cancel |
 | Hover/signature panel, group picker | Close / Cancel |
 
+The document menu's `Cut`, `Copy` and `Paste` are the *system* clipboard —
+the same `ed.clip.cut` / `ed.clip.copy` / `ed.clip.paste` that ctrl+X /
+ctrl+C / ctrl+V run — so what you copy is there for the next window over.
+`Cut` and `Copy` need a highlight; `Paste` says so when the clipboard turns
+out to be empty.
+
 Rows that do not apply right now are greyed rather than removed, so a menu
 keeps its shape between two right-clicks on the same thing. A whole *section*
 does disappear when its feature is unavailable — no language server attached
