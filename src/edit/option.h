@@ -85,6 +85,14 @@ bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
                       const OptVal *value, const char **err);
 bool yew_opt_get(Ed *ed, Buffer *buffer, Win *win,
                  const char *name, u32 len, OptVal *out);
+/*
+ * Sprint 57.16: const buffer-scope boolean read for the edit path, which
+ * holds a `const Buffer *` and must not take the mutable editor to answer
+ * "is expandtab on for this buffer".  Resolves the buffer override, then
+ * the global store, then the table default.  Returns false for a name that
+ * is absent or not a bool.
+ */
+bool yew_opt_buffer_bool(const Buffer *buffer, const char *name, u32 len);
 bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
                  const OptVal *value, const char **err);
 /* Set against explicit receiver state; global options ignore buffer/window. */
