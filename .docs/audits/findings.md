@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-020`
+Next available ID: `YEW-F-021`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -32,6 +32,7 @@ recorded in `audit-00.md`.
 | YEW-F-017 | M | open | F13 GIT | interactive rebase bypasses the Git verb and environment boundary | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
 | YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
 | YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
+| YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -204,6 +205,15 @@ entries and original-path bytes asserted by the existing test. The manual
 mutant passed 16 assertions. The source-independent reproducer models that
 stream advance and records the indistinguishable entry count. It remains
 open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-020` is Medium because Sprint 51's formatting grep cannot establish
+the narrower argv-safety rule it is meant to enforce. Seven
+`bytebuf_printf` calls outside `porcelain.c` format owned status, patch, and
+picker-detail text; none constructs a Git argv element, but every one fails
+the literal mandatory gate. The argv hook and hostile-filename matrix still
+prove the product behavior. The source-backed reproducer pins the gate's
+seven-match baseline for Sprint 59; no product source changed during the
+audit.
 
 ## Unverified observations
 
