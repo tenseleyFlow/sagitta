@@ -102,6 +102,13 @@ Tab *yew_tab_at(Ed *ed, int idx)
     return &ed->tabs.v.data[idx];
 }
 
+const Tab *yew_tab_at_const(const Ed *ed, int idx)
+{
+    if (ed == NULL || idx < 0 || (size_t)idx >= ed->tabs.v.len)
+        return NULL;
+    return &ed->tabs.v.data[idx];
+}
+
 const char *yew_tab_display_path(const Tab *tab)
 {
     if (tab == NULL)

@@ -716,6 +716,38 @@ bool yew_picker_accept(Ed *ed)
     return accept_selected(ed, (u8)YEW_PICK_ACCEPT_HERE);
 }
 
+bool yew_picker_accept_how(Ed *ed, u8 how)
+{
+    if (!pk.active || ed == NULL)
+        return false;
+    if (how != (u8)YEW_PICK_ACCEPT_HERE &&
+        how != (u8)YEW_PICK_ACCEPT_VSPLIT &&
+        how != (u8)YEW_PICK_ACCEPT_HSPLIT)
+        how = (u8)YEW_PICK_ACCEPT_HERE;
+    return accept_selected(ed, how);
+}
+
+bool yew_picker_sel_cell(const Ed *ed, u16 *x, u16 *y)
+{
+    u32 cur;
+
+    if (!pk.active || ed == NULL || x == NULL || y == NULL)
+        return false;
+    if (pk.box.w == 0U || pk.box.h == 0U)
+        return false;
+    cur = sel_row();
+    if (cur < pk.scroll)
+        return false;
+    /* The +3 is the title, the filter line and the rule above the
+     * list — the same arithmetic the draw uses to place a row and its
+     * region, derived once. */
+    if ((u32)(cur - pk.scroll) + 3U >= (u32)pk.box.h)
+        return false;
+    *x = (u16)(pk.box.x + 1U);
+    *y = (u16)(pk.box.y + 3U + (cur - pk.scroll));
+    return true;
+}
+
 void yew_picker_scroll(Ed *ed, i32 rows)
 {
     if (!pk.active || ed == NULL || rows == 0)
