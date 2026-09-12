@@ -159,7 +159,7 @@ void yew_pairs_clear(Buffer *b)
 
 void yew_pairs_note_edit(Buffer *b, LineNo line)
 {
-    if (b == NULL || !b->pairs.syn_valid)
+    if (b == NULL || b->tb == NULL || !b->pairs.syn_valid)
         return;
     if (b->pairs.syn_line == line.v ||
         b->pairs.syn_lines != yew_textbuf_line_count(b->tb))
