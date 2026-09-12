@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/mode.h"
 #include "edit/pane_cmds.h"
 #include "mod/git/fussmode.h"
 #include "term/tty.h"
@@ -1805,6 +1806,10 @@ void test_mouse_menu_leaf_target_keeps_the_selection(void)
     yew_pane_tables_reset(&ed);
     leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
+    /* Highlight, because that is what makes a selection real: the
+     * `Copy` row runs `ed.clip.copy`, which refuses outside H. */
+    YEW_ASSERT_EQ_U64(yew_mode_enter_highlight(&ed, YEW_MODE_I, false),
+                      YEW_CMD_OK);
     c = yew_ed_cursor(&ed);
     c->anchor = (ByteOff){0U};
     c->pos = (ByteOff){4U};
@@ -1837,10 +1842,12 @@ void test_mouse_menu_leaf_target_keeps_the_selection(void)
     }
     YEW_ASSERT(!yew_region_frozen());
     /* The caret is where the selection left it, NOT on the clicked
-     * cell, and the register holds the four bytes that were selected. */
+     * cell, and the SYSTEM register holds the four bytes that were
+     * selected — `Copy` is `ed.clip.copy`, so `+` is the register the
+     * row is about. */
     c = yew_ed_cursor(&ed);
     YEW_ASSERT_EQ_U64(c->anchor.v, 0U);
-    reg = yew_reg_get(&ed.regs, (u8)'"');
+    reg = yew_reg_get(&ed.regs, (u8)'+');
     YEW_ASSERT_NOT_NULL(reg);
     YEW_ASSERT_EQ_U64(reg->bytes.len, 4U);
     YEW_ASSERT_EQ_MEM(reg->bytes.data, "line", 4U);
