@@ -52,9 +52,9 @@ bool yew_indent_info(const TextBuf *tb, Span line, u32 tabwidth,
 u32 yew_indent_unit(const Buffer *b, u8 *out, u32 cap);
 void yew_indent_unit_append(const Buffer *b, Bytebuf *out);
 
-/* Appends `line`'s leading whitespace to `out` verbatim. */
-void yew_indent_lead_append(const TextBuf *tb, Span line,
-                            const IndentInfo *info, Bytebuf *out);
+/* Appends the byte range `lead` to `out` verbatim; the indent callers pass
+ * [line.lo, IndentInfo.first) or a prefix of it. */
+void yew_indent_lead_append(const TextBuf *tb, Span lead, Bytebuf *out);
 
 /*
  * The line's last byte that is not ASCII whitespace.  False when the line

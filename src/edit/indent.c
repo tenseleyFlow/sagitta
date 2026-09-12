@@ -166,19 +166,16 @@ void yew_indent_unit_append(const Buffer *b, Bytebuf *out)
         bytebuf_append(out, unit, (size_t)n);
 }
 
-void yew_indent_lead_append(const TextBuf *tb, Span line,
-                            const IndentInfo *info, Bytebuf *out)
+void yew_indent_lead_append(const TextBuf *tb, Span lead, Bytebuf *out)
 {
     TextIter it;
     u64 want;
     u64 done = 0U;
 
-    if (tb == NULL || info == NULL || out == NULL)
+    if (tb == NULL || out == NULL || lead.hi <= lead.lo)
         return;
-    if (info->first.v <= line.lo)
-        return;
-    want = info->first.v - line.lo;
-    if (!yew_textiter_begin(&it, tb, BYTEOFF(line.lo)))
+    want = lead.hi - lead.lo;
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(lead.lo)))
         YEW_BUG("indent: cannot start leading-whitespace iterator");
     while (done < want) {
         const u8 *chunk;

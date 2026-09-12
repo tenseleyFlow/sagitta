@@ -5,8 +5,10 @@
 
 #include "edit/block.h"
 #include "edit/ed.h"
+#include "edit/indent.h"
 #include "edit/mode.h"
 #include "edit/motion.h"
+#include "edit/option.h"
 #include "edit/sel_actions.h"
 #include "edit/word.h"
 #include "ui/message.h"
@@ -17,7 +19,8 @@
 
 static CmdStatus delete_span(CmdCtx *cx, Span span);
 
-static bool edit_window(CmdCtx *cx, Win **win, TextBuf **tb, Cursor **cursor)
+static bool edit_window_at(CmdCtx *cx, Win **win, TextBuf **tb,
+                           Cursor **cursor, u32 *index)
 {
     u32 cursor_index;
 
@@ -39,7 +42,18 @@ static bool edit_window(CmdCtx *cx, Win **win, TextBuf **tb, Cursor **cursor)
     *win = cx->win;
     *tb = cx->win->buf->tb;
     *cursor = &cx->win->cs.curs.data[cursor_index];
+    if (index != NULL)
+        *index = cursor_index;
     return true;
+}
+
+/*
+ * The cursor pointer is only valid until the next edit, so commands that
+ * reposition their caret after editing re-fetch it by index.
+ */
+static bool edit_window(CmdCtx *cx, Win **win, TextBuf **tb, Cursor **cursor)
+{
+    return edit_window_at(cx, win, tb, cursor, NULL);
 }
 
 static void damage_offsets(Ed *ed, ByteOff first, ByteOff second)
@@ -1320,7 +1334,8 @@ CmdStatus yew_edit_cmd_cursor_collapse(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
-static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
+static CmdStatus insert_bytes_at(CmdCtx *cx, ByteOff at, const u8 *bytes,
+                                 u64 len)
 {
     Win *win;
     TextBuf *tb;
@@ -1336,7 +1351,7 @@ static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
     line = yew_textbuf_line_of(tb, cursor->pos);
     old_line_count = yew_textbuf_line_count(tb);
     ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
-    if (!yew_edit_insert(&ec, cursor->pos, bytes, len)) {
+    if (!yew_edit_insert(&ec, at, bytes, len)) {
         yew_ed_finish_edit(cx->ed, &ec);
         yew_msg(cx->ed, YEW_MSG_ERROR,
                 "cannot persist edit to crash journal");
@@ -1350,6 +1365,17 @@ static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
     yew_ed_damage_line(cx->ed, line,
                        old_line_count != yew_textbuf_line_count(tb));
     return YEW_CMD_OK;
+}
+
+static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return YEW_CMD_ERR_STATE;
+    return insert_bytes_at(cx, cursor->pos, bytes, len);
 }
 
 CmdStatus yew_edit_cmd_insert_text(CmdCtx *cx)
@@ -1440,6 +1466,120 @@ CmdStatus yew_edit_cmd_cursor_set(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+static u8 edit_pair_closer(u8 opener)
+{
+    switch (opener) {
+    case (u8)'{':
+        return (u8)'}';
+    case (u8)'[':
+        return (u8)']';
+    case (u8)'(':
+        return (u8)')';
+    default:
+        return 0U;
+    }
+}
+
+static bool edit_byte_at(const TextBuf *tb, u64 off, u8 *out)
+{
+    TextIter it;
+    const u8 *bytes;
+    u64 n;
+
+    return off < yew_textbuf_len(tb) &&
+           yew_textiter_begin(&it, tb, BYTEOFF(off)) &&
+           yew_textiter_chunk(&it, tb, &bytes, &n) && n != 0U &&
+           (*out = bytes[0], true);
+}
+
+static u32 edit_tabwidth(const Win *win)
+{
+    return win->buf->tabwidth != 0U ? win->buf->tabwidth
+                                    : (u32)YEW_VP_TABWIDTH;
+}
+
+/*
+ * Sprint 57.16 §2.  The EOL and the indent are ONE insert of one
+ * contiguous payload: two inserts at non-contiguous offsets produce two
+ * undo ops (test_undo_explicit_type_keeps_noncontiguous_insert_ops), and
+ * the three-line brace case would otherwise be three.  The only second
+ * edit is the deletion of the whitespace the caret abandons, which is a
+ * different op by nature and shares the transaction.
+ */
+static CmdStatus insert_newline_indent(CmdCtx *cx, const u8 *eol,
+                                       u64 eol_len)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    EditCtx ec;
+    IndentInfo info;
+    Bytebuf payload;
+    Span span;
+    Span head;
+    LineNo line;
+    u64 old_lines;
+    u64 carry_hi;
+    u64 caret;
+    u64 at;
+    u32 index = 0U;
+    u8 last = 0U;
+    u8 next = 0U;
+    bool block = false;
+    bool strip;
+    bool ok;
+
+    if (!edit_window_at(cx, &win, &tb, &cursor, &index))
+        return YEW_CMD_ERR_STATE;
+    line = yew_textbuf_line_of(tb, cursor->pos);
+    span = yew_textbuf_line_span(tb, line);
+    old_lines = yew_textbuf_line_count(tb);
+    if (!yew_indent_info(tb, span, edit_tabwidth(win), &info))
+        return YEW_CMD_ERR_STATE;
+    carry_hi = info.first.v < cursor->pos.v ? info.first.v : cursor->pos.v;
+    head.lo = span.lo;
+    head.hi = cursor->pos.v;
+    strip = carry_hi == cursor->pos.v && cursor->pos.v > span.lo;
+    at = strip ? span.lo : cursor->pos.v;
+
+    bytebuf_init(&payload);
+    bytebuf_append(&payload, eol, (size_t)eol_len);
+    yew_indent_lead_append(tb, (Span){span.lo, carry_hi}, &payload);
+    if (yew_indent_last_nonwhite(tb, head, &last) &&
+        edit_pair_closer(last) != 0U) {
+        yew_indent_unit_append(win->buf, &payload);
+        block = edit_byte_at(tb, cursor->pos.v, &next) &&
+                next == edit_pair_closer(last);
+    }
+    caret = at + payload.len;
+    if (block) {
+        bytebuf_append(&payload, eol, (size_t)eol_len);
+        yew_indent_lead_append(tb, (Span){span.lo, carry_hi}, &payload);
+    }
+
+    ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
+    ok = !strip || yew_edit_delete(&ec, (Span){span.lo, cursor->pos.v});
+    if (ok)
+        ok = yew_edit_insert(&ec, BYTEOFF(at), payload.data,
+                             (u64)payload.len);
+    bytebuf_free(&payload);
+    if (!ok) {
+        yew_ed_finish_edit(cx->ed, &ec);
+        yew_msg(cx->ed, YEW_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return YEW_CMD_ERR_IO;
+    }
+    yew_ed_finish_edit(cx->ed, &ec);
+    cursor = &win->cs.curs.data[index];
+    cursor->pos = BYTEOFF(caret);
+    cursor->anchor = cursor->pos;
+    win->wrap_goal_valid = false;
+    cx->ed->cursor_follow_pending = true;
+    yew_ed_damage_line(cx->ed, line,
+                       old_lines != yew_textbuf_line_count(tb));
+    return YEW_CMD_OK;
+}
+
 CmdStatus yew_edit_cmd_insert_newline(CmdCtx *cx)
 {
     const u8 *bytes;
@@ -1448,14 +1588,61 @@ CmdStatus yew_edit_cmd_insert_newline(CmdCtx *cx)
     if (cx == NULL || cx->win == NULL || cx->win->buf == NULL)
         return YEW_CMD_ERR_STATE;
     yew_filemeta_eol_bytes(&cx->win->buf->meta, &bytes, &len);
-    return insert_bytes(cx, bytes, (u64)len);
+    if (!yew_opt_buffer_bool(cx->win->buf, "autoindent", 10U))
+        return insert_bytes(cx, bytes, (u64)len);
+    return insert_newline_indent(cx, bytes, (u64)len);
 }
 
+/*
+ * Sprint 57.16 §3.  Tab is registered YEW_CMD_CHANGES_BUFFER, so
+ * yew_ed_invoke has already opened a transaction by the time we learn the
+ * caret only wants to move.  We leave that transaction EMPTY rather than
+ * re-shaping the registration: yew_undo_end commits nothing when no op was
+ * recorded (undo.c leaves `open` at zero), and dropping the flag would
+ * take the command out of the multi-cursor fan-out that the two indenting
+ * cases need.  A navigating Tab therefore makes no undo node and does not
+ * break the surrounding insert run, which is what an unmodified caret move
+ * inside leading whitespace should do.
+ */
 CmdStatus yew_edit_cmd_insert_tab(CmdCtx *cx)
 {
-    static const u8 tab = (u8)'\t';
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    IndentInfo info;
+    Span span;
+    LineNo line;
+    u8 unit[YEW_INDENT_UNIT_MAX];
+    u32 n;
+    u32 index = 0U;
 
-    return insert_bytes(cx, &tab, 1U);
+    if (!edit_window_at(cx, &win, &tb, &cursor, &index))
+        return YEW_CMD_ERR_STATE;
+    line = yew_textbuf_line_of(tb, cursor->pos);
+    span = yew_textbuf_line_span(tb, line);
+    if (!yew_indent_info(tb, span, edit_tabwidth(win), &info))
+        return YEW_CMD_ERR_STATE;
+    n = yew_indent_unit(win->buf, unit, (u32)sizeof(unit));
+    if (n == 0U)
+        return YEW_CMD_ERR_STATE;
+    if (!info.blank && cursor->pos.v < info.first.v) {
+        cursor->pos = info.first;
+        cursor->anchor = cursor->pos;
+        win->wrap_goal_valid = false;
+        cx->ed->cursor_follow_pending = true;
+        return YEW_CMD_OK;
+    }
+    if (!info.blank && cursor->pos.v == info.first.v) {
+        CmdStatus status = insert_bytes_at(cx, BYTEOFF(span.lo), unit, n);
+
+        if (status == YEW_CMD_OK) {
+            cursor = &win->cs.curs.data[index];
+            cursor->pos = BYTEOFF(info.first.v + n);
+            cursor->anchor = cursor->pos;
+        }
+        return status;
+    }
+    return insert_bytes(cx, unit, n);
 }
 
 CmdStatus yew_edit_cmd_insert_after(CmdCtx *cx)
@@ -1564,7 +1751,20 @@ CmdStatus yew_edit_cmd_delete_grapheme_left(CmdCtx *cx)
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
-    prev = yew_grapheme_prev_boundary(tb, cursor->pos);
+    /*
+     * Sprint 57.16 §3: inside leading whitespace one Backspace removes one
+     * indent level.  yew_indent_back answers the previous grapheme
+     * boundary everywhere else, so the literal path is unchanged and stays
+     * the only behaviour when autoindent is off.
+     */
+    if (yew_opt_buffer_bool(win->buf, "autoindent", 10U)) {
+        LineNo line = yew_textbuf_line_of(tb, cursor->pos);
+
+        prev = yew_indent_back(tb, yew_textbuf_line_span(tb, line),
+                               edit_tabwidth(win), cursor->pos);
+    } else {
+        prev = yew_grapheme_prev_boundary(tb, cursor->pos);
+    }
     return delete_span(cx, (Span){prev.v, cursor->pos.v});
 }
 
