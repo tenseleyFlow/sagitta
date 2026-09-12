@@ -39,6 +39,9 @@ FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
 /* Batch-profiler variant: emits explicit top-level statement markers. */
 FlFn *fl_compile_script_profiled(FlRuntime *rt, const u8 *source, size_t len,
                                  const char *realpath_label);
+/* Sprint 58 audit variant: marks statements at every nesting depth. */
+FlFn *fl_compile_script_covered(FlRuntime *rt, const u8 *source, size_t len,
+                                const char *realpath_label);
 
 /* Execute a compiled script in the persistent editor VM.  A call made from
  * inside Fletch nests without resetting the caller's frames; a host call is

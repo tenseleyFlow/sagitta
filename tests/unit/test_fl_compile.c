@@ -92,6 +92,18 @@ static FlFn *cf_compile_profiled(CFix *f, const char *src)
     return fl_compile_profiled(&f->vm, &f->dc, &p, 0U, origin);
 }
 
+static FlFn *cf_compile_covered(CFix *f, const char *src)
+{
+    FlProgram p;
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U, 0U};
+
+    (void)fl_diag_add_file(&f->dc, "covered.fl", src, strlen(src));
+    p = fl_parse(&f->arena, &f->dc, &f->in, src, strlen(src), 0U);
+    if (p.had_error)
+        return NULL;
+    return fl_compile_covered(&f->vm, &f->dc, &p, 0U, origin);
+}
+
 static u32 cf_count_op(const FlFn *fn, FlOp wanted)
 {
     u32 count = 0U;
@@ -743,6 +755,7 @@ void test_fl_compile_profile_markers_are_explicit_and_executed(void)
         "let skipped = 3\n";
     CFix ordinary;
     CFix profiled;
+    CFix covered;
     FlFn *plain;
     FlFn *marked;
     FlFn *nested = NULL;
@@ -778,4 +791,33 @@ void test_fl_compile_profile_markers_are_explicit_and_executed(void)
     YEW_ASSERT_EQ_U64(seen.line[0], 1U);
     YEW_ASSERT_EQ_U64(seen.line[1], 3U);
     cf_close(&profiled);
+
+    cf_open(&covered);
+    marked = cf_compile_covered(&covered,
+        "fn nested() {\n"
+        "    let hidden = 1\n"
+        "    return hidden\n"
+        "}\n"
+        "return nested()\n");
+    YEW_ASSERT_NOT_NULL(marked);
+    YEW_ASSERT_EQ_U64(cf_count_op(marked, FL_OP_TRACE_LINE), 2U);
+    nested = NULL;
+    for (i = 0U; i < marked->ch.nconsts; i++) {
+        if (marked->ch.consts[i].t == (u8)FL_FN) {
+            nested = (FlFn *)marked->ch.consts[i].as.o;
+            break;
+        }
+    }
+    YEW_ASSERT_NOT_NULL(nested);
+    YEW_ASSERT_EQ_U64(cf_count_op(nested, FL_OP_TRACE_LINE), 2U);
+    seen.n = 0U;
+    fl_vm_set_line_observer(&covered.vm, cf_line_seen, &seen);
+    YEW_ASSERT(fl_vm_run(&covered.vm, marked, &result));
+    fl_vm_set_line_observer(&covered.vm, NULL, NULL);
+    YEW_ASSERT_EQ_U64(seen.n, 4U);
+    YEW_ASSERT_EQ_U64(seen.line[0], 1U);
+    YEW_ASSERT_EQ_U64(seen.line[1], 5U);
+    YEW_ASSERT_EQ_U64(seen.line[2], 2U);
+    YEW_ASSERT_EQ_U64(seen.line[3], 3U);
+    cf_close(&covered);
 }

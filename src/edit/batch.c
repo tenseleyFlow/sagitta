@@ -45,14 +45,22 @@ typedef struct InteractiveRow {
     const char *alternative;
 } InteractiveRow;
 
-static void batch_prof_statement(void *ctx, u16 line)
-{
-    Ed *ed = ctx;
+typedef struct BatchLineCtx {
+    Ed *ed;
+    YewBatchTestState *test;
+} BatchLineCtx;
 
-    (void)line;
-    yew_prof_frame_end(&ed->prof, 0U, 0U, 0U);
-    yew_prof_frame_begin(&ed->prof);
-    yew_prof_phase(&ed->prof, YEW_PH_DISPATCH);
+static void batch_statement(void *ctx, u16 line)
+{
+    BatchLineCtx *line_ctx = ctx;
+    Ed *ed = line_ctx->ed;
+
+    if (ed->prof.on) {
+        yew_prof_frame_end(&ed->prof, 0U, 0U, 0U);
+        yew_prof_frame_begin(&ed->prof);
+        yew_prof_phase(&ed->prof, YEW_PH_DISPATCH);
+    }
+    yew_batch_test_coverage_statement(line_ctx->test, line);
 }
 
 static char *batch_prof_path(void)
@@ -586,11 +594,13 @@ int yew_batch_run(const BatchOpts *opts)
     Ed ed;
     FlFn *script;
     YewBatchTestState test_state;
+    BatchLineCtx line_ctx;
     int result = YEW_EXIT_ERR;
     bool ed_ready = false;
     bool test_ready = false;
     bool test_installed = false;
     bool workspace_hook = false;
+    bool coverage = false;
 
     if (opts == NULL || opts->script == NULL)
         return YEW_EXIT_ERR;
@@ -609,6 +619,7 @@ int yew_batch_run(const BatchOpts *opts)
     if (opts->test) {
         yew_batch_test_init(&test_state);
         test_ready = true;
+        coverage = yew_batch_test_coverage_enabled(&test_state);
     }
     log_ctx = (BatchLogCtx){opts->quiet,
                             test_ready ? &test_state : NULL};
@@ -669,17 +680,21 @@ int yew_batch_run(const BatchOpts *opts)
             YEW_BUG("cannot install batch assertion host");
         test_installed = true;
     }
-    script = ed.prof.on ?
-        fl_compile_script_profiled(ed.fl, source.data, source.len,
-                                   script_path) :
-        fl_compile_script(ed.fl, source.data, source.len, script_path);
+    script = coverage ?
+        fl_compile_script_covered(ed.fl, source.data, source.len,
+                                  script_path) :
+        ed.prof.on ? fl_compile_script_profiled(ed.fl, source.data,
+                                                source.len, script_path) :
+                     fl_compile_script(ed.fl, source.data, source.len,
+                                       script_path);
     if (script == NULL) {
         result = YEW_EXIT_BATCH;
         goto done;
     }
-    if (ed.prof.on) {
+    if (ed.prof.on || coverage) {
         ed.prof.batch = true;
-        fl_vm_set_line_observer(yew_fl_vm(&ed), batch_prof_statement, &ed);
+        line_ctx = (BatchLineCtx){&ed, test_ready ? &test_state : NULL};
+        fl_vm_set_line_observer(yew_fl_vm(&ed), batch_statement, &line_ctx);
     }
     if (!fl_call_chunk(ed.fl, script, YEW_SRC_FLETCH)) {
         fl_vm_set_line_observer(yew_fl_vm(&ed), NULL, NULL);

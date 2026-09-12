@@ -39,7 +39,9 @@
 enum {
     DEFAULT_BUDGET_MS = 10000,
     RESULT_FD = 3,
-    CAPTURE_LIMIT = 16 * 1024 * 1024
+    CAPTURE_LIMIT = 16 * 1024 * 1024,
+    COVERAGE_NATIVE_MAX = 32,
+    COVERAGE_NAME_MAX = 32
 };
 
 typedef struct Bytes {
@@ -70,15 +72,31 @@ typedef struct Protocol {
     bool valid;
 } Protocol;
 
+typedef struct CoverageNative {
+    char name[COVERAGE_NAME_MAX];
+    size_t calls;
+} CoverageNative;
+
+typedef struct Coverage {
+    size_t statements;
+    CoverageNative natives[COVERAGE_NATIVE_MAX];
+    size_t nnatives;
+    bool valid;
+} Coverage;
+
 typedef struct RunResult {
     Bytes out;
     Bytes err;
     Bytes protocol;
+    Bytes coverage;
     int status;
     bool waited;
     bool timed_out;
     bool setup_failed;
 } RunResult;
+
+static bool selected_test(const char *name, const char *filter,
+                          const char *exclude);
 
 static bool mark_fd_cloexec(int fd)
 {
@@ -682,20 +700,26 @@ static bool set_result_fd_environment(void)
 }
 
 static bool child_environment(const char *root, const char *work,
-                              const char *fakelsp)
+                              const char *fakelsp, bool coverage)
 {
     char *cfg = path_join(root, "cfg");
     char *state = path_join(root, "state");
     char *data = path_join(root, "data");
     char *cache = path_join(root, "cache");
     char *runtime = realpath("runtime", NULL);
+    char *coverage_path = coverage ? path_join(root, "fl-coverage.tsv") :
+                                     NULL;
     bool fake_ok = fakelsp == NULL ? unsetenv("YEW_TEST_FAKELSP") == 0 :
                    setenv("YEW_TEST_FAKELSP", fakelsp, 1) == 0;
+    bool coverage_ok = coverage ? coverage_path != NULL :
+                                  unsetenv("YEW_FL_COVERAGE_OUT") == 0;
     bool ok = cfg != NULL && state != NULL && data != NULL && cache != NULL &&
-              runtime != NULL && fake_ok;
+              runtime != NULL && fake_ok && coverage_ok;
 
     if (ok)
-        ok = setenv("HOME", root, 1) == 0 &&
+        ok = (!coverage || setenv("YEW_FL_COVERAGE_OUT", coverage_path,
+                                  1) == 0) &&
+             setenv("HOME", root, 1) == 0 &&
              setenv("XDG_CONFIG_HOME", cfg, 1) == 0 &&
              setenv("XDG_STATE_HOME", state, 1) == 0 &&
              setenv("XDG_DATA_HOME", data, 1) == 0 &&
@@ -710,6 +734,7 @@ static bool child_environment(const char *root, const char *work,
     free(data);
     free(cache);
     free(runtime);
+    free(coverage_path);
     return ok;
 }
 
@@ -741,7 +766,8 @@ static void child_exec(const char *yew, const char *script,
                        const char *root, const char *work,
                        bool config, const char *config_path,
                        bool grant_examples,
-                       const char *fakelsp, int out_pipe[2], int err_pipe[2],
+                       const char *fakelsp, bool coverage,
+                       int out_pipe[2], int err_pipe[2],
                        int result_pipe[2])
 {
     int fds[6];
@@ -766,7 +792,7 @@ static void child_exec(const char *yew, const char *script,
     for (i = 0U; i < sizeof(fds) / sizeof(fds[0]); i++)
         if (fds[i] > RESULT_FD)
             (void)close(fds[i]);
-    if (!child_environment(root, work, fakelsp)) {
+    if (!child_environment(root, work, fakelsp, coverage)) {
         (void)dprintf(STDERR_FILENO,
                       "script: cannot prepare sandbox: %s\n",
                       strerror(errno));
@@ -948,7 +974,7 @@ static bool stage_example_plugins(const char *root)
 
 static bool run_test(const char *yew, const char *fixtures,
                      const char *fakelsp, const TestFile *test,
-                     char **sandbox, RunResult *result)
+                     bool coverage, char **sandbox, RunResult *result)
 {
     int out_pipe[2] = {-1, -1};
     int err_pipe[2] = {-1, -1};
@@ -989,7 +1015,7 @@ static bool run_test(const char *yew, const char *fixtures,
         child_exec(yew, test->path, *sandbox, work,
                    test->config, test->config_path,
                    strcmp(test->name, "plug_examples_matrix") == 0,
-                   fakelsp,
+                   fakelsp, coverage,
                    out_pipe, err_pipe, result_pipe);
     if (setpgid(child, child) != 0 && errno != EACCES && errno != ESRCH) {
         (void)kill(child, SIGKILL);
@@ -1019,6 +1045,16 @@ static bool run_test(const char *yew, const char *fixtures,
     }
     if (!ok)
         result->setup_failed = true;
+    if (coverage) {
+        char *coverage_path = path_join(*sandbox, "fl-coverage.tsv");
+
+        if (coverage_path == NULL ||
+            !bytes_read_path(coverage_path, &result->coverage)) {
+            result->setup_failed = true;
+            ok = false;
+        }
+        free(coverage_path);
+    }
     free(work);
     return ok;
 }
@@ -1042,6 +1078,182 @@ static bool parse_size(const char *text, size_t *value)
     }
     *value = parsed;
     return true;
+}
+
+static Coverage parse_coverage(const Bytes *bytes)
+{
+    Coverage parsed = {0};
+    char *copy;
+    char *line;
+    char *save = NULL;
+    bool saw_statements = false;
+
+    if (bytes->overflow || bytes->len == 0U ||
+        bytes->data[bytes->len - 1U] != '\n' ||
+        memchr(bytes->data, '\0', bytes->len) != NULL)
+        return parsed;
+    copy = malloc(bytes->len + 1U);
+    if (copy == NULL)
+        return parsed;
+    memcpy(copy, bytes->data, bytes->len + 1U);
+    for (line = strtok_r(copy, "\n", &save); line != NULL;
+         line = strtok_r(NULL, "\n", &save)) {
+        char *tab = strchr(line, '\t');
+        size_t name_len;
+        size_t count;
+
+        if (tab == NULL || strchr(tab + 1U, '\t') != NULL ||
+            !parse_size(tab + 1U, &count))
+            break;
+        *tab = '\0';
+        if (!saw_statements && strcmp(line, "statements") == 0) {
+            parsed.statements = count;
+            saw_statements = true;
+            continue;
+        }
+        name_len = strlen(line);
+        if (!saw_statements || parsed.nnatives >= COVERAGE_NATIVE_MAX ||
+            name_len < 3U || name_len >= COVERAGE_NAME_MAX ||
+            line[0] != 't' || line[1] != '.')
+            break;
+        (void)memcpy(parsed.natives[parsed.nnatives].name, line,
+                     name_len + 1U);
+        parsed.natives[parsed.nnatives].calls = count;
+        parsed.nnatives++;
+    }
+    parsed.valid = saw_statements && parsed.nnatives != 0U && line == NULL;
+    free(copy);
+    return parsed;
+}
+
+static bool coverage_layout_matches(const Coverage *left,
+                                    const Coverage *right)
+{
+    size_t i;
+
+    if (!left->valid || !right->valid || left->nnatives != right->nnatives)
+        return false;
+    for (i = 0U; i < left->nnatives; i++)
+        if (strcmp(left->natives[i].name, right->natives[i].name) != 0)
+            return false;
+    return true;
+}
+
+static bool write_coverage_report(const char *path, const TestList *tests,
+                                  const Coverage *rows,
+                                  const char *filter, const char *exclude)
+{
+    Coverage totals = {0};
+    char *temporary;
+    FILE *file;
+    size_t first = SIZE_MAX;
+    size_t zero = 0U;
+    size_t i;
+    int need;
+    bool log_unused = false;
+    bool ok = true;
+
+    for (i = 0U; i < tests->len; i++) {
+        if (!selected_test(tests->data[i].name, filter, exclude))
+            continue;
+        if (first == SIZE_MAX) {
+            first = i;
+            totals = rows[i];
+            totals.statements = 0U;
+            for (size_t n = 0U; n < totals.nnatives; n++)
+                totals.natives[n].calls = 0U;
+        } else if (!coverage_layout_matches(&rows[first], &rows[i])) {
+            return false;
+        }
+        if (!rows[i].valid)
+            return false;
+        totals.statements += rows[i].statements;
+        if (rows[i].statements == 0U)
+            zero++;
+        for (size_t n = 0U; n < totals.nnatives; n++)
+            totals.natives[n].calls += rows[i].natives[n].calls;
+    }
+    if (first == SIZE_MAX)
+        return false;
+    need = snprintf(NULL, 0, "%s.tmp.%ld", path, (long)getpid());
+    if (need < 0)
+        return false;
+    temporary = malloc((size_t)need + 1U);
+    if (temporary == NULL)
+        return false;
+    (void)snprintf(temporary, (size_t)need + 1U, "%s.tmp.%ld", path,
+                   (long)getpid());
+    file = fopen(temporary, "wb");
+    if (file == NULL) {
+        free(temporary);
+        return false;
+    }
+    (void)fprintf(file,
+                  "# Fletch script coverage\n\n"
+                  "Generated by `build/script_runner --coverage`. Statement "
+                  "events come from the VM line-run markers emitted only for "
+                  "this audit lane.\n\n"
+                  "| Script | Executed statement events | `t.*` calls |\n"
+                  "|---|---:|---:|\n");
+    for (i = 0U; i < tests->len; i++) {
+        size_t calls = 0U;
+        size_t n;
+
+        if (!selected_test(tests->data[i].name, filter, exclude))
+            continue;
+        for (n = 0U; n < rows[i].nnatives; n++)
+            calls += rows[i].natives[n].calls;
+        (void)fprintf(file, "| `tests/script/%s.fl` | %zu | %zu |\n",
+                      tests->data[i].name, rows[i].statements, calls);
+    }
+    (void)fprintf(file, "| **Total** | **%zu** | **",
+                  totals.statements);
+    {
+        size_t calls = 0U;
+
+        for (i = 0U; i < totals.nnatives; i++)
+            calls += totals.natives[i].calls;
+        (void)fprintf(file, "%zu** |\n\n", calls);
+    }
+    (void)fputs("## Never-executed `t.*` surfaces in the discovered suite\n\n",
+                file);
+    {
+        bool any = false;
+
+        for (i = 0U; i < totals.nnatives; i++) {
+            if (totals.natives[i].calls != 0U)
+                continue;
+            (void)fprintf(file, "- `%s`\n", totals.natives[i].name);
+            if (strcmp(totals.natives[i].name, "t.log") == 0)
+                log_unused = true;
+            any = true;
+        }
+        if (!any)
+            (void)fputs("None.\n", file);
+    }
+    if (log_unused)
+        (void)fputs("\n`t.log` does execute in the runner's deliberately "
+                    "failing `tests/script/meta/assertion_failures.fl` "
+                    "self-test; it has no passing discovered-suite use.\n",
+                    file);
+    (void)fputs("\n## Script tests with zero executed statements\n\n", file);
+    if (zero == 0U) {
+        (void)fputs("None.\n", file);
+    } else {
+        for (i = 0U; i < tests->len; i++)
+            if (selected_test(tests->data[i].name, filter, exclude) &&
+                rows[i].statements == 0U)
+                (void)fprintf(file, "- `tests/script/%s.fl`\n",
+                              tests->data[i].name);
+    }
+    if (ferror(file) || fclose(file) != 0)
+        ok = false;
+    if (ok && rename(temporary, path) != 0)
+        ok = false;
+    if (!ok)
+        (void)unlink(temporary);
+    free(temporary);
+    return ok;
 }
 
 static Protocol parse_protocol(const Bytes *bytes)
@@ -1285,6 +1497,7 @@ static char *fakelsp_beside_yew(const char *yew)
 static bool parse_cli(int argc, char **argv, const char **filter,
                       const char **exclude,
                       const char **yew, const char **fakelsp,
+                      const char **coverage,
                       bool *list, bool *selftest)
 {
     int i;
@@ -1293,6 +1506,7 @@ static bool parse_cli(int argc, char **argv, const char **filter,
     *exclude = NULL;
     *yew = "build/yew";
     *fakelsp = NULL;
+    *coverage = NULL;
     *list = false;
     *selftest = false;
     for (i = 1; i < argc; i++) {
@@ -1327,6 +1541,13 @@ static bool parse_cli(int argc, char **argv, const char **filter,
                 return false;
             }
             *fakelsp = argv[i];
+        } else if (strcmp(argv[i], "--coverage") == 0) {
+            if (++i >= argc) {
+                (void)fprintf(stderr,
+                              "script: --coverage requires an output path\n");
+                return false;
+            }
+            *coverage = argv[i];
         } else {
             (void)fprintf(stderr, "script: unknown option '%s'\n", argv[i]);
             return false;
@@ -1612,7 +1833,7 @@ static bool selftest_negative_assertion_host(const char *yew,
 
     if (script != NULL) {
         attempted = true;
-        ran = run_test(yew, fixtures, NULL, &test, &sandbox, &result);
+        ran = run_test(yew, fixtures, NULL, &test, false, &sandbox, &result);
     }
     if (ran) {
         protocol = parse_protocol(&result.protocol);
@@ -1684,6 +1905,7 @@ int main(int argc, char **argv)
     const char *exclude;
     const char *yew_arg;
     const char *fakelsp_arg;
+    const char *coverage_path;
     bool list_only;
     bool selftest;
     char *root;
@@ -1692,6 +1914,7 @@ int main(int argc, char **argv)
     char *yew;
     char *fakelsp = NULL;
     TestList tests = {0};
+    Coverage *coverage_rows = NULL;
     size_t selected = 0U;
     size_t suite_assertions = 0U;
     size_t suite_failures = 0U;
@@ -1705,6 +1928,7 @@ int main(int argc, char **argv)
         return 1;
     }
     if (!parse_cli(argc, argv, &filter, &exclude, &yew_arg, &fakelsp_arg,
+                   &coverage_path,
                    &list_only, &selftest))
         return 1;
     root = getcwd(NULL, 0U);
@@ -1745,8 +1969,20 @@ int main(int argc, char **argv)
         free(root);
         free(script_dir);
         free(fixtures);
+        free(coverage_rows);
         list_free(&tests);
         return 1;
+    }
+    if (coverage_path != NULL) {
+        coverage_rows = calloc(tests.len, sizeof(*coverage_rows));
+        if (coverage_rows == NULL) {
+            (void)fprintf(stderr, "script: cannot allocate coverage rows\n");
+            free(root);
+            free(script_dir);
+            free(fixtures);
+            list_free(&tests);
+            return 1;
+        }
     }
     selected = selected_count(&tests, filter, exclude);
     if (selection_status(selected) != 0) {
@@ -1754,6 +1990,7 @@ int main(int argc, char **argv)
         free(root);
         free(script_dir);
         free(fixtures);
+        free(coverage_rows);
         list_free(&tests);
         return selection_status(selected);
     }
@@ -1764,6 +2001,7 @@ int main(int argc, char **argv)
         free(root);
         free(script_dir);
         free(fixtures);
+        free(coverage_rows);
         list_free(&tests);
         return 0;
     }
@@ -1774,6 +2012,7 @@ int main(int argc, char **argv)
         free(root);
         free(script_dir);
         free(fixtures);
+        free(coverage_rows);
         list_free(&tests);
         return 1;
     }
@@ -1797,6 +2036,7 @@ int main(int argc, char **argv)
                 free(root);
                 free(script_dir);
                 free(fixtures);
+                free(coverage_rows);
                 list_free(&tests);
                 return 1;
             }
@@ -1812,6 +2052,7 @@ int main(int argc, char **argv)
         free(root);
         free(script_dir);
         free(fixtures);
+        free(coverage_rows);
         list_free(&tests);
         return 1;
     }
@@ -1827,9 +2068,14 @@ int main(int argc, char **argv)
 
         if (!selected_test(tests.data[i].name, filter, exclude))
             continue;
-        (void)run_test(yew, fixtures, fakelsp, &tests.data[i], &sandbox,
-                       &result);
+        (void)run_test(yew, fixtures, fakelsp, &tests.data[i],
+                       coverage_path != NULL, &sandbox, &result);
         protocol = parse_protocol(&result.protocol);
+        if (coverage_path != NULL) {
+            coverage_rows[i] = parse_coverage(&result.coverage);
+            if (!coverage_rows[i].valid)
+                result.setup_failed = true;
+        }
         if (protocol.valid)
             suite_assertions += protocol.assertions;
         reason = failure_reason(&result, &protocol,
@@ -1881,6 +2127,8 @@ int main(int argc, char **argv)
             print_capture("stderr", &result.err);
             if (!protocol.valid)
                 print_capture("protocol", &result.protocol);
+            if (coverage_path != NULL && !coverage_rows[i].valid)
+                print_capture("coverage", &result.coverage);
             if (sandbox != NULL)
                 (void)printf("  sandbox preserved: %s\n", sandbox);
             suite_failures++;
@@ -1889,6 +2137,7 @@ int main(int argc, char **argv)
         bytes_free(&result.out);
         bytes_free(&result.err);
         bytes_free(&result.protocol);
+        bytes_free(&result.coverage);
         bytes_free(&expected_stdout);
         (void)fflush(stdout);
     }
@@ -1897,6 +2146,13 @@ int main(int argc, char **argv)
                      "(need >= 40 tests and >= 400 assertions; "
                      "got %zu and %zu)\n",
                      selected, suite_assertions);
+        suite_failures++;
+    }
+    if (coverage_path != NULL &&
+        !write_coverage_report(coverage_path, &tests, coverage_rows,
+                               filter, exclude)) {
+        (void)printf("FAIL script_coverage_report                "
+                     "(cannot write %s)\n", coverage_path);
         suite_failures++;
     }
     (void)printf("script: %zu tests, %zu assertions, %zu failure%s, "
@@ -1909,6 +2165,7 @@ int main(int argc, char **argv)
     free(root);
     free(script_dir);
     free(fixtures);
+    free(coverage_rows);
     list_free(&tests);
     return suite_failures == 0U ? 0 : 1;
 }

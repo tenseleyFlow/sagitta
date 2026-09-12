@@ -22,6 +22,12 @@ VEC_DECL(FlLineVec, FlLineRun);
 
 enum { FL_MAX_LOOPS = 64, FL_MAX_BREAKS = 64 };
 
+typedef enum TraceStatements {
+    TRACE_STATEMENTS_NONE,
+    TRACE_STATEMENTS_TOP,
+    TRACE_STATEMENTS_ALL
+} TraceStatements;
+
 typedef struct Loop {
     u32 start;                    /* pc of the condition                  */
     u32 breaks[FL_MAX_BREAKS];
@@ -66,6 +72,7 @@ struct Compiler {
     u32 name_id;
     u8 arity;
     bool failed;
+    u8 trace_statements;
     /*
      * The defining module's origin, inherited by every nested
      * function.
@@ -741,6 +748,10 @@ static u32 comp_nil_run(Compiler *c, FlNode *const *items, u32 n, u32 at)
     u32 run = 0U;
     u32 i;
 
+    /* Coverage needs one marker per source statement; coalescing would hide
+     * every uninitialised let after the first. */
+    if (c->trace_statements == (u8)TRACE_STATEMENTS_ALL)
+        return 0U;
     while (at + run < n) {
         const FlNode *s = items[at + run];
 
@@ -905,6 +916,7 @@ static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
     sub.origin = enclosing->origin;
     sub.name_id = name_id;
     sub.arity = (u8)n->as.fn.nparams;
+    sub.trace_statements = enclosing->trace_statements;
     bytebuf_init(&sub.code);
     sub.scope_depth = 0;
 
@@ -1078,6 +1090,12 @@ static void comp_stmt(Compiler *c, const FlNode *n)
 {
     if (n == NULL || c->failed)
         return;
+    if (c->trace_statements == (u8)TRACE_STATEMENTS_ALL &&
+        (FlAstKind)n->kind != FL_A_BLOCK) {
+        emit_op(c, FL_OP_TRACE_LINE, n->sp);
+        emit_u16(c, n->sp.line > UINT16_MAX ? UINT16_MAX :
+                                                    (u16)n->sp.line);
+    }
     switch ((FlAstKind)n->kind) {
     case FL_A_LET:
         if (at_module_top(c)) {
@@ -1308,7 +1326,7 @@ static void comp_stmt(Compiler *c, const FlNode *n)
 
 static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                              u32 file_id, FlOrigin origin, u8 fnkind,
-                             bool trace_statements)
+                             TraceStatements trace_statements)
 {
     Compiler top;
     FlFn *fn;
@@ -1321,6 +1339,7 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     top.dc = dc;
     top.file_id = file_id;
     top.origin = origin;
+    top.trace_statements = (u8)trace_statements;
     bytebuf_init(&top.code);
     add_hidden_local(&top, end);   /* slot 0: the top-level "callee" */
     push_depth(&top, 1);
@@ -1328,7 +1347,7 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     for (i = 0U; i < p->n; i++) {
         const FlNode *st = p->stmts[i];
 
-        if (trace_statements) {
+        if (trace_statements == TRACE_STATEMENTS_TOP) {
             emit_op(&top, FL_OP_TRACE_LINE, st->sp);
             emit_u16(&top, st->sp.line > UINT16_MAX ? UINT16_MAX :
                                                         (u16)st->sp.line);
@@ -1427,19 +1446,26 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
                  FlOrigin origin)
 {
     return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
-                           false);
+                           TRACE_STATEMENTS_NONE);
 }
 
 FlFn *fl_compile_profiled(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                           u32 file_id, FlOrigin origin)
 {
     return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
-                           true);
+                           TRACE_STATEMENTS_TOP);
+}
+
+FlFn *fl_compile_covered(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                         u32 file_id, FlOrigin origin)
+{
+    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
+                           TRACE_STATEMENTS_ALL);
 }
 
 FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
                       FlOrigin origin)
 {
     return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_REPL,
-                           false);
+                           TRACE_STATEMENTS_NONE);
 }

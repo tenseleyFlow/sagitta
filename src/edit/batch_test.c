@@ -22,6 +22,7 @@
 #include "fl/value.h"
 #include "fl/vm.h"
 #include "mod/lsp/lsp.h"
+#include "text/file.h"
 #include "text/piece.h"
 #include "text/register.h"
 #include "text/undo.h"
@@ -38,6 +39,16 @@ typedef struct TestNativeDef {
     u8 min_ar;
     u8 max_ar;
 } TestNativeDef;
+
+typedef enum TestNativeId {
+    TEST_EQ, TEST_NE, TEST_TEXT, TEST_LINE, TEST_CURSOR, TEST_CURSORS,
+    TEST_SEL, TEST_REG, TEST_UNDO, TEST_FILE, TEST_RAISES, TEST_LOG,
+    TEST_FIXTURE, TEST_TMPDIR, TEST_PUMP, TEST_JOB_STDERR, TEST_SKIP,
+    TEST_NATIVE_COUNT
+} TestNativeId;
+
+_Static_assert(TEST_NATIVE_COUNT <= 32,
+               "batch coverage call table exceeds its fixed state");
 
 static YewBatchTestState *state_for(FlVm *vm)
 {
@@ -80,7 +91,20 @@ static void fail_n(FlVm *vm, const char *text, size_t len)
 }
 
 static void fail(FlVm *vm, const char *text) { fail_n(vm, text, strlen(text)); }
-static void assertion(FlVm *vm) { state_for(vm)->assertions++; }
+static void used(FlVm *vm, TestNativeId id)
+{
+    YewBatchTestState *s = state_for(vm);
+
+    if ((u32)id >= (u32)TEST_NATIVE_COUNT)
+        YEW_BUG("batch assertion id is outside the native table");
+    s->coverage_calls[id]++;
+}
+
+static void assertion(FlVm *vm, TestNativeId id)
+{
+    used(vm, id);
+    state_for(vm)->assertions++;
+}
 
 static bool repr(FlVm *vm, FlValue value, Bytebuf *out)
 {
@@ -109,7 +133,7 @@ static void fail_values(FlVm *vm, FlValue want, FlValue got,
 static bool t_eq(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     const FlStr *note = NULL;
-    assertion(vm);
+    assertion(vm, TEST_EQ);
     if (n == 3U && !fl_arg_str(vm, a, 2U, &note)) return false;
     if (!fl_equal(a[0], a[1])) fail_values(vm, a[1], a[0], note);
     *out = FL_NIL_V; return true;
@@ -117,7 +141,7 @@ static bool t_eq(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
 static bool t_ne(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    (void)n; assertion(vm);
+    (void)n; assertion(vm, TEST_NE);
     if (fl_equal(a[0], a[1])) fail_values(vm, a[1], a[0], NULL);
     *out = FL_NIL_V; return true;
 }
@@ -183,7 +207,8 @@ static bool assert_text(FlVm *vm, Buffer *buf, Span span,
 
 static bool t_text(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    Buffer *buf; const FlStr *want = NULL; (void)n; assertion(vm);
+    Buffer *buf; const FlStr *want = NULL; (void)n;
+    assertion(vm, TEST_TEXT);
     buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_str(vm, a, 1U, &want)) return false;
     return assert_text(vm, buf, (Span){0U, yew_buf_len(buf)}, want, out);
@@ -193,7 +218,7 @@ static bool t_line(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Buffer *buf; const FlStr *want = NULL; i64 line = 0;
     Span span; Bytebuf tail;
-    (void)n; assertion(vm); buf = fl_h_buf(vm, a[0]);
+    (void)n; assertion(vm, TEST_LINE); buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_int(vm, a, 1U, &line) ||
         !fl_arg_str(vm, a, 2U, &want)) return false;
     if (buf->tb == NULL || line < 1 || (u64)line > yew_buf_line_count(buf)) {
@@ -226,7 +251,7 @@ static void cursor_pos(const Win *w, const Cursor *c, u64 *line, u64 *col)
 static bool t_cursor(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Win *w; i64 wl = 0; i64 wc = 0; u64 gl, gc; char msg[128];
-    (void)n; assertion(vm); w = fl_h_win(vm, a[0]);
+    (void)n; assertion(vm, TEST_CURSOR); w = fl_h_win(vm, a[0]);
     if (w == NULL || !fl_arg_int(vm, a, 1U, &wl) ||
         !fl_arg_int(vm, a, 2U, &wc)) return false;
     cursor_pos(w, &w->cs.curs.data[w->cs.primary], &gl, &gc);
@@ -252,7 +277,7 @@ static bool pair(const FlValue *v, i64 *line, i64 *col)
 static bool t_cursors(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Win *w; FlList *want = NULL; u32 i; bool same = true; char msg[112];
-    (void)n; assertion(vm); w = fl_h_win(vm, a[0]);
+    (void)n; assertion(vm, TEST_CURSORS); w = fl_h_win(vm, a[0]);
     if (w == NULL || !fl_arg_list(vm, a, 1U, &want)) return false;
     if ((size_t)want->n != w->cs.curs.len) same = false;
     for (i = 0U; same && i < want->n; i++) {
@@ -272,7 +297,7 @@ static bool t_cursors(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static bool t_sel(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Win *w; const FlStr *want = NULL; const Cursor *c; Bytebuf got; (void)n;
-    assertion(vm); w = fl_h_win(vm, a[0]);
+    assertion(vm, TEST_SEL); w = fl_h_win(vm, a[0]);
     if (w == NULL || !fl_arg_str(vm, a, 1U, &want)) return false;
     c = &w->cs.curs.data[w->cs.primary]; bytebuf_init(&got);
     if (c->pos.v != c->anchor.v) {
@@ -314,7 +339,7 @@ static bool t_reg(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     const FlStr *want = NULL;
     RegVal *reg;
     Bytebuf got;
-    assertion(vm);
+    assertion(vm, TEST_REG);
     if (!fl_arg_str(vm, a, 0U, &name) ||
         !fl_arg_str(vm, a, 1U, &want)) return false;
     if (name->len != 1U || vm->ed == NULL ||
@@ -334,7 +359,7 @@ static bool t_reg(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static bool t_undo(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Buffer *buf; i64 want = 0; u64 live = 0U; size_t i; char msg[96];
-    (void)n; assertion(vm); buf = fl_h_buf(vm, a[0]);
+    (void)n; assertion(vm, TEST_UNDO); buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_int(vm, a, 1U, &want)) return false;
     if (buf->undo != NULL)
         for (i = 0U; i < buf->undo->nodes.len; i++)
@@ -373,7 +398,7 @@ static bool t_file(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     const FlStr *path = NULL; const FlStr *want = NULL;
     Bytebuf got; char *owned;
-    (void)n; assertion(vm);
+    (void)n; assertion(vm, TEST_FILE);
     if (!fl_arg_str(vm, a, 0U, &path) ||
         !fl_arg_str(vm, a, 1U, &want)) return false;
     if (has_nul(path)) { fail(vm, "file path contains NUL"); *out = FL_NIL_V; return true; }
@@ -408,7 +433,7 @@ static bool t_raises(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     FlValue ignored = FL_NIL_V;
     FlValue saved = vm->err; const char *saved_caret = vm->err_caret;
     u32 saved_native = vm->cur_native; bool raised; const FlStr *got = NULL;
-    (void)n; assertion(vm);
+    (void)n; assertion(vm, TEST_RAISES);
     if (!fl_arg_str(vm, a, 0U, &want) || !fl_arg_fn(vm, a, 1U, &fn))
         return false;
     raised = !fl_call(vm, fn, NULL, 0U, &ignored);
@@ -456,7 +481,8 @@ static bool t_log(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     YewBatchTestState *s = state_for(vm);
     const FlStr *level = NULL; const FlStr *sub = NULL;
-    YewLogLevel wanted; u32 i; bool found = false; (void)n; assertion(vm);
+    YewLogLevel wanted; u32 i; bool found = false; (void)n;
+    assertion(vm, TEST_LOG);
     if (!fl_arg_str(vm, a, 0U, &level) ||
         !fl_arg_str(vm, a, 1U, &sub)) return false;
     if (!parse_level(level, &wanted)) fail(vm, "unknown log level");
@@ -504,6 +530,7 @@ static bool t_fixture(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     const FlStr *name = NULL; char *cwd; char *source; char *dest;
     size_t sn, dn; bool ok; (void)n;
+    used(vm, TEST_FIXTURE);
     if (!fl_arg_str(vm, a, 0U, &name)) return false;
     if (!fixture_name_ok(name))
         return fl_raise(vm, "io", "t.fixture: name must be one path component");
@@ -524,6 +551,7 @@ static bool t_fixture(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static bool t_tmpdir(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     const char *path = getenv("YEW_SCRIPT_TMPDIR"); (void)a; (void)n;
+    used(vm, TEST_TMPDIR);
     if (path == NULL || path[0] == '\0') path = getenv("TMPDIR");
     if (path == NULL || path[0] == '\0') path = "/tmp";
     *out = FL_OBJ_V(FL_STR, fl_str_new(vm, path, (u32)strlen(path))); return true;
@@ -551,6 +579,7 @@ static bool t_pump(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     bool first = true;
 
     (void)n;
+    used(vm, TEST_PUMP);
     if (!fl_arg_int(vm, a, 0U, &duration))
         return false;
     if (duration < 0 || duration > PUMP_MAX_MS)
@@ -613,7 +642,7 @@ static bool t_job_stderr(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     u32 i;
 
     (void)n;
-    assertion(vm);
+    assertion(vm, TEST_JOB_STDERR);
     if (!fl_arg_str(vm, a, 0U, &want))
         return false;
     bytebuf_init(&got);
@@ -635,6 +664,7 @@ static bool t_job_stderr(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static bool t_skip(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     const FlStr *reason; (void)n;
+    used(vm, TEST_SKIP);
     if (!fl_arg_str(vm, a, 0U, &reason)) return false;
     (void)reason; state_for(vm)->skipped = true; *out = FL_NIL_V; return true;
 }
@@ -651,10 +681,29 @@ static const TestNativeDef TEST_NATIVES[] = {
     {"skip", t_skip, 1U, 1U}
 };
 
+_Static_assert(YEW_ARRAY_LEN(TEST_NATIVES) == TEST_NATIVE_COUNT,
+               "batch native ids and definitions must stay aligned");
+
 void yew_batch_test_init(YewBatchTestState *s)
 {
+    const char *coverage;
+
     if (s == NULL) YEW_BUG("batch test init: NULL state");
     (void)memset(s, 0, sizeof(*s)); bytebuf_init(&s->failure_records);
+    coverage = getenv("YEW_FL_COVERAGE_OUT");
+    s->coverage = coverage != NULL && coverage[0] != '\0';
+}
+
+bool yew_batch_test_coverage_enabled(const YewBatchTestState *s)
+{
+    return s != NULL && s->coverage;
+}
+
+void yew_batch_test_coverage_statement(YewBatchTestState *s, u16 line)
+{
+    (void)line;
+    if (s != NULL && s->coverage)
+        s->coverage_statements++;
 }
 
 bool yew_batch_test_install(YewBatchTestState *s, FlVm *vm)
@@ -712,6 +761,28 @@ static int result_fd(int fd)
     return (int)parsed;
 }
 
+static bool write_coverage(const YewBatchTestState *s)
+{
+    const char *path = getenv("YEW_FL_COVERAGE_OUT");
+    Bytebuf out;
+    YewSaveErr saved;
+    u32 i;
+
+    if (!s->coverage)
+        return true;
+    if (path == NULL || path[0] == '\0')
+        return false;
+    bytebuf_init(&out);
+    bytebuf_printf(&out, "statements\t%llu\n",
+                   (unsigned long long)s->coverage_statements);
+    for (i = 0U; i < YEW_ARRAY_LEN(TEST_NATIVES); i++)
+        bytebuf_printf(&out, "t.%s\t%llu\n", TEST_NATIVES[i].name,
+                       (unsigned long long)s->coverage_calls[i]);
+    saved = yew_file_write_atomic(path, out.data, out.len, 0600U);
+    bytebuf_free(&out);
+    return saved == YEW_SAVE_OK;
+}
+
 bool yew_batch_test_finish(YewBatchTestState *s, int fd)
 {
     Bytebuf summary; u64 failures; bool io_ok = true;
@@ -722,6 +793,8 @@ bool yew_batch_test_finish(YewBatchTestState *s, int fd)
         s->failures++; bytebuf_append(&s->failure_records, none, sizeof(none) - 1U);
     }
     s->finished = true; failures = s->skipped ? 0U : s->failures;
+    if (!write_coverage(s))
+        io_ok = false;
     fd = result_fd(fd);
     if (!s->skipped)
         io_ok = write_all(fd, s->failure_records.data, s->failure_records.len);

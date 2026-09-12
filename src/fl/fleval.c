@@ -32,9 +32,15 @@ static FlOrigin runtime_origin(void)
     return (FlOrigin){(u8)FL_ORIGIN_CONFIG, 0U, FL_CAP_ALL, 0U};
 }
 
+enum {
+    COMPILE_PLAIN,
+    COMPILE_PROFILED,
+    COMPILE_COVERED
+};
+
 static FlFn *compile_owned(FlRuntime *rt, const u8 *source, size_t len,
                            const char *label, FlOrigin origin,
-                           bool trace_statements)
+                           u8 marker_mode)
 {
     static const u8 empty_source[] = "";
     const char *owned;
@@ -58,15 +64,20 @@ static FlFn *compile_owned(FlRuntime *rt, const u8 *source, size_t len,
                        file_id);
     if (program.had_error || program.incomplete)
         return NULL;
-    return trace_statements ?
-        fl_compile_profiled(&rt->vm, &rt->diag, &program, file_id, origin) :
-        fl_compile(&rt->vm, &rt->diag, &program, file_id, origin);
+    if (marker_mode == COMPILE_COVERED)
+        return fl_compile_covered(&rt->vm, &rt->diag, &program, file_id,
+                                  origin);
+    if (marker_mode == COMPILE_PROFILED)
+        return fl_compile_profiled(&rt->vm, &rt->diag, &program, file_id,
+                                   origin);
+    return fl_compile(&rt->vm, &rt->diag, &program, file_id, origin);
 }
 
 FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
                      const char *label)
 {
-    return compile_owned(rt, source, len, label, runtime_origin(), false);
+    return compile_owned(rt, source, len, label, runtime_origin(),
+                         COMPILE_PLAIN);
 }
 
 FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
@@ -81,7 +92,8 @@ FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
                                    strlen(realpath_label)),
                         FL_CAP_ALL, 0U};
     rt->vm.root_origin = origin;
-    return compile_owned(rt, source, len, realpath_label, origin, false);
+    return compile_owned(rt, source, len, realpath_label, origin,
+                         COMPILE_PLAIN);
 }
 
 FlFn *fl_compile_script_profiled(FlRuntime *rt, const u8 *source, size_t len,
@@ -96,7 +108,24 @@ FlFn *fl_compile_script_profiled(FlRuntime *rt, const u8 *source, size_t len,
                                    strlen(realpath_label)),
                         FL_CAP_ALL, 0U};
     rt->vm.root_origin = origin;
-    return compile_owned(rt, source, len, realpath_label, origin, true);
+    return compile_owned(rt, source, len, realpath_label, origin,
+                         COMPILE_PROFILED);
+}
+
+FlFn *fl_compile_script_covered(FlRuntime *rt, const u8 *source, size_t len,
+                                const char *realpath_label)
+{
+    FlOrigin origin;
+
+    if (rt == NULL || realpath_label == NULL)
+        return NULL;
+    origin = (FlOrigin){(u8)FL_ORIGIN_CLI,
+                        yew_intern(&rt->interner, realpath_label,
+                                   strlen(realpath_label)),
+                        FL_CAP_ALL, 0U};
+    rt->vm.root_origin = origin;
+    return compile_owned(rt, source, len, realpath_label, origin,
+                         COMPILE_COVERED);
 }
 
 static bool call_chunk_result(FlRuntime *rt, FlFn *fn, CmdSource source,

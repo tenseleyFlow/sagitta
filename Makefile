@@ -1036,7 +1036,7 @@ endif
         embedded-gate-selftest \
         embedded-image embedded-lowmem-image embedded embedded-gate \
         musl-verify test-musl-hosts \
-        test-script test-git-script fuzzlib-selftest \
+        test-script fletch-script-coverage test-git-script fuzzlib-selftest \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
@@ -3246,6 +3246,24 @@ test-script: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP) \
 		$(SCRIPT_RUNNER_ARGS) \
 		--yew $(abspath $(BUILD)/yew) \
 		--fakelsp $(abspath $(FAKELSP))
+
+fletch-script-coverage: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP) \
+                        $(FUSS_SCRIPT_TARGET)
+	@set -eu; \
+	tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
+	for pass in 1 2; do \
+		LC_ALL=C YEW_SCRIPT_BUDGET_MS=$(YEW_SCRIPT_BUDGET_MS) \
+			$(BUILD)/script_runner $(SCRIPT_RUNNER_ARGS) \
+			--coverage "$$tmp/coverage-$$pass.md" \
+			--yew $(abspath $(BUILD)/yew) \
+			--fakelsp $(abspath $(FAKELSP)) \
+			>"$$tmp/run-$$pass"; \
+	done; \
+	diff -u "$$tmp/run-1" "$$tmp/run-2"; \
+	diff -u "$$tmp/coverage-1.md" "$$tmp/coverage-2.md"; \
+	cp "$$tmp/coverage-1.md" .docs/audits/fl-coverage.md; \
+	echo 'fletch-script-coverage: deterministic report written'
 
 test-git-script: $(BUILD)/git_script tests/fixtures/git/mkrepo.sh \
                  tests/fixtures/git/hashes.txt

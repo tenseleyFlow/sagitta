@@ -24,7 +24,10 @@ typedef struct YewBatchTestState {
     u32 caplogs;
     u64 assertions;
     u64 failures;
+    u64 coverage_statements;
+    u64 coverage_calls[32];
     bool skipped;
+    bool coverage;
     bool installed;
     bool finished;
 } YewBatchTestState;
@@ -32,6 +35,8 @@ typedef struct YewBatchTestState {
 /* One batch test runs in one process, so only one installed state is active. */
 void yew_batch_test_init(YewBatchTestState *state);
 bool yew_batch_test_install(YewBatchTestState *state, FlVm *vm);
+bool yew_batch_test_coverage_enabled(const YewBatchTestState *state);
+void yew_batch_test_coverage_statement(YewBatchTestState *state, u16 line);
 void yew_batch_test_note_log(YewBatchTestState *state, YewLogLevel level,
                              const char *message);
 

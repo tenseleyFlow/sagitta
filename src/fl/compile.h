@@ -61,4 +61,9 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
 FlFn *fl_compile_profiled(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                           u32 file_id, FlOrigin origin);
 
+/* Sprint 58 F15: emit the existing TRACE_LINE marker for every statement,
+ * including statements in blocks and nested functions. */
+FlFn *fl_compile_covered(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                         u32 file_id, FlOrigin origin);
+
 #endif /* YEW_FL_COMPILE_H */
