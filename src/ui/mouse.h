@@ -221,9 +221,12 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
  *   routed through THIS router and THIS registry.  F mode itself still
  *   hard-errors naming 52, so there is nothing to click yet.
  *
- * - LSP HOVER-ON-POINTER and diagnostics tooltips → Sprint 47.  Motion
- *   with no button held is not even decoded (Sprint 4 rejects the
- *   no-button motion report), so there is no hover event to misroute.
+ * - LSP HOVER-ON-POINTER and diagnostics tooltips → Sprint 47.  Sprint
+ *   57.11 does decode motion with no button held (SGR base 35, a mouse
+ *   REPEAT carrying YEW_MB_NONE), but a terminal only reports it under
+ *   mode 1003, which yew arms solely while a context menu is open, and
+ *   the router drops the event whenever no menu is open.  There is still
+ *   no hover event to misroute; there is now a shape to build one from.
  *
  * - PIXEL-PRECISE / KITTY-PROTOCOL MOUSE EXTENSIONS → NEVER.  The cell
  *   is the unit of everything in this program, and sub-cell coordinates
