@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-027`
+Next available ID: `YEW-F-045`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -39,6 +39,24 @@ recorded in `audit-00.md`.
 | YEW-F-024 | M | open | F15 CI | cross-surface XFAIL debt table stops at F004 | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
 | YEW-F-025 | M | open | F15 CI | script tests have no XFAIL or hard-XPASS state | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
 | YEW-F-026 | M | open | F15 CI | PTY cases have no XFAIL or hard-XPASS state | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
+| YEW-F-027 | M | open | F15 CI | Fletch format ban accepts macro-forwarded nonliteral formats | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
+| YEW-F-028 | M | open | F15 CI | Fletch abort ban accepts macro-forwarded abort | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
+| YEW-F-029 | M | open | F15 CI | stable-sort ban accepts macro-forwarded qsort | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-030 | M | open | F15 CI | C11-subset ban accepts token-pasted attribute syntax | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-031 | M | open | F15 CI | explicit-registry ban accepts token-pasted constructors | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
+| YEW-F-032 | M | open | F15 CI | single-thread ban accepts token-pasted pthread calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-033 | M | open | F15 CI | reproducibility ban omits `__TIMESTAMP__` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-034 | M | open | F15 CI | mmap ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-035 | M | open | F15 CI | allocator ban accepts macro-forwarded libc allocation | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-036 | M | open | F15 CI | cwd-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-037 | M | open | F15 CI | realpath-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-038 | M | open | F15 CI | locale-dependent Unicode ban omits `mbtowc` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
+| YEW-F-039 | M | open | F15 CI | native-loader ban omits `dlvsym` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
+| YEW-F-040 | M | open | F15 CI | strerror_r ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
+| YEW-F-041 | M | open | F15 CI | musl backtrace ban omits `backtrace_symbols_fd` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
+| YEW-F-042 | M | open | F15 CI | GNU-libc ban omits `getopt_long_only` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
+| YEW-F-043 | M | open | F15 CI | long-double ban misses valid continued declarations | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
+| YEW-F-044 | M | open | F15 CI | shim-honesty gate accepts parenthesized success | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -268,6 +286,91 @@ fields and the runner has no expected-failure classification. A seeded golden
 mismatch remains an ordinary failure and a later matching golden cannot be
 reported as XPASS. It remains open for Sprint 59; no product source changed
 during the audit.
+
+`YEW-F-027` is Medium because the Fletch format scanner recognizes direct
+printf-family call tokens but accepts a macro-forwarded call carrying a
+nonliteral user-controlled format. The isolated fixture runs the actual gate
+and exits green. This weakens a documented control without proving a product
+violation, so the finding is Medium and remains open for Sprint 59.
+
+`YEW-F-028` is Medium because the VM abort scanner accepts `abort()` reached
+through a plainly named macro. The compiler still emits the forbidden abort
+path while the gate reports green. This is a release-control gap, not a
+confirmed product crash, and remains open for Sprint 59.
+
+`YEW-F-029` is Medium because the stable-sort ban accepts `qsort` behind a
+macro even though the resulting call retains the unstable cross-libc ordering
+the rule forbids. The isolated actual-gate probe is green and remains an open
+Sprint 59 control finding.
+
+`YEW-F-030` is Medium because token pasting produces the forbidden
+`__attribute__` spelling only after preprocessing. The source grep reports
+green although the compiler sees syntax outside the locked C11 subset. No
+such source is present in yew; the gate finding remains open for Sprint 59.
+
+`YEW-F-031` is Medium because the constructor check can be bypassed by token
+pasting both the attribute and `constructor` name. That reintroduces implicit
+registration while the explicit-registry gate stays green. The seeded control
+finding remains open for Sprint 59.
+
+`YEW-F-032` is Medium because token-pasted `pthread_create` reaches the
+forbidden threading API without leaving the contiguous `pthread` text the
+gate searches for. The product tree is not shown to spawn a thread; the
+single-thread release control is incomplete and remains open for Sprint 59.
+
+`YEW-F-033` is Medium because `__TIMESTAMP__` embeds filesystem-dependent
+build time just as surely as the two macros currently banned, yet is omitted
+from the reproducibility scan. The actual gate accepts the isolated seed. It
+remains open for Sprint 59.
+
+`YEW-F-034` is Medium because a macro-forwarded `mmap` call survives the
+source ban while preserving the truncate/SIGBUS hazard the rule exists to
+exclude. This is a gate finding only and remains open for Sprint 59.
+
+`YEW-F-035` is Medium because the audited-allocation scan keys on a direct
+libc function token followed by `(` and accepts a macro-forwarded `malloc`.
+The isolated seed does not establish an allocation in the product tree. The
+control gap remains open for Sprint 59.
+
+`YEW-F-036` and `YEW-F-037` are Medium because the two libc-owned allocation
+checks require `NULL` to appear literally at the call site. Passing a pointer
+variable initialized to NULL retains `getcwd`/`realpath` ownership semantics
+but passes both actual gates. They remain separate rule findings for Sprint
+59; no product source changed.
+
+`YEW-F-038` is Medium because the locale-dependent Unicode list includes
+`mbrtowc` but omits its older stateful sibling `mbtowc`. The latter has the
+same forbidden locale dependence and passes the actual gate. This control
+finding remains open for Sprint 59.
+
+`YEW-F-039` is Medium because the native-loader list covers `dlsym` but omits
+the GNU versioned lookup `dlvsym`. A Fletch-only plugin policy cannot be
+established by that list while a native symbol resolver passes. It remains
+open for Sprint 59.
+
+`YEW-F-040` is Medium because a macro-forwarded `strerror_r` call preserves
+the incompatible ABI surface while evading the direct-call regex. The product
+tree has no demonstrated violation; the portability control remains open for
+Sprint 59.
+
+`YEW-F-041` is Medium because `backtrace_symbols_fd` is part of the same
+glibc/execinfo family but is absent from the musl-compatibility pattern. The
+actual gate accepts a direct call, so the release claim is incomplete and
+remains open for Sprint 59.
+
+`YEW-F-042` is Medium because `getopt_long_only` is a GNU extension adjacent
+to the listed `getopt_long`, but the word-boundary shape lets the longer name
+pass. The musl portability control remains open for Sprint 59.
+
+`YEW-F-043` is Medium because C line continuation permits `long double` to
+span physical source lines before preprocessing while grep evaluates each
+line separately. The ABI-divergent type passes the actual gate and the
+control finding remains open for Sprint 59.
+
+`YEW-F-044` is Medium because the shim honesty parser recognizes only a few
+literal return expressions. A disabled action returning `(YEW_CMD_OK)` has
+identical success semantics but passes `check-module-shims.sh`. No production
+shim was changed; the control finding remains open for Sprint 59.
 
 ## Unverified observations
 

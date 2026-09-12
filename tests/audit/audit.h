@@ -46,5 +46,23 @@ bool test_yew_f_023(char *why, size_t why_cap);
 bool test_yew_f_024(char *why, size_t why_cap);
 bool test_yew_f_025(char *why, size_t why_cap);
 bool test_yew_f_026(char *why, size_t why_cap);
+bool test_yew_f_027(char *why, size_t why_cap);
+bool test_yew_f_028(char *why, size_t why_cap);
+bool test_yew_f_029(char *why, size_t why_cap);
+bool test_yew_f_030(char *why, size_t why_cap);
+bool test_yew_f_031(char *why, size_t why_cap);
+bool test_yew_f_032(char *why, size_t why_cap);
+bool test_yew_f_033(char *why, size_t why_cap);
+bool test_yew_f_034(char *why, size_t why_cap);
+bool test_yew_f_035(char *why, size_t why_cap);
+bool test_yew_f_036(char *why, size_t why_cap);
+bool test_yew_f_037(char *why, size_t why_cap);
+bool test_yew_f_038(char *why, size_t why_cap);
+bool test_yew_f_039(char *why, size_t why_cap);
+bool test_yew_f_040(char *why, size_t why_cap);
+bool test_yew_f_041(char *why, size_t why_cap);
+bool test_yew_f_042(char *why, size_t why_cap);
+bool test_yew_f_043(char *why, size_t why_cap);
+bool test_yew_f_044(char *why, size_t why_cap);
 
 #endif
