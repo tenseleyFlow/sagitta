@@ -138,12 +138,15 @@ void test_ai_cancel_http_never_pools_the_connection(void)
     yew_ed_free(&ed);
 }
 
-/* Guard A: even with provider cancellation stubbed to a no-op, the shared
- * shadow generation floor rejects a response that was already queued. */
+/* Guard A: even with provider cancellation stubbed to a no-op, sequence,
+ * generation, and byte revalidation independently reject queued replies. */
 void test_ai_cancel_guard_sequence_floor_rejects_late_delivery(void)
 {
     Ed ed;
     ShadowSug suggestion = {0};
+    TextIter iter;
+    const u8 *bytes;
+    u64 available;
 
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U, "ai-sequence-guard"));
@@ -160,6 +163,64 @@ void test_ai_cancel_guard_sequence_floor_rejects_late_delivery(void)
     yew_shadow_deliver(&ed, &suggestion);
     YEW_ASSERT(!ed.win->shadow.live);
     YEW_ASSERT_EQ_U64(ed.shadow_stats.dropped_stale, 1U);
+    yew_ed_free(&ed);
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U, "ai-generation-guard"));
+    ed.now_ms = 1000;
+    (void)memset(&suggestion, 0, sizeof(suggestion));
+    suggestion.seq = 1U;
+    suggestion.prov = (u8)YEW_SHADOW_AI;
+    suggestion.buf_id = ed.win->buf->id;
+    suggestion.buf_gen = ed.win->buf->tb->gen;
+    suggestion.pos = BYTEOFF(0U);
+    suggestion.text = (const u8 *)"late";
+    suggestion.len = 4U;
+    ed.win->shadow.seq_next[YEW_SHADOW_AI] = 2U;
+    yew_textbuf_insert(ed.win->buf->tb, BYTEOFF(0U),
+                       (const u8 *)"x", 1U);
+    ed.now_ms += 400;
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.dropped_gen, 1U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.win->buf->tb), 1U);
+    YEW_ASSERT(yew_textiter_begin(&iter, ed.win->buf->tb, BYTEOFF(0U)));
+    YEW_ASSERT(yew_textiter_chunk(&iter, ed.win->buf->tb, &bytes,
+                                  &available));
+    YEW_ASSERT(available >= 1U);
+    YEW_ASSERT_EQ_U64(bytes[0], (u8)'x');
+    yew_ed_free(&ed);
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U,
+                                   "ai-revalidation-guard"));
+    (void)memset(&suggestion, 0, sizeof(suggestion));
+    suggestion.seq = 1U;
+    suggestion.prov = (u8)YEW_SHADOW_AI;
+    suggestion.buf_id = ed.win->buf->id;
+    suggestion.buf_gen = ed.win->buf->tb->gen;
+    suggestion.pos = BYTEOFF(0U);
+    suggestion.text = (const u8 *)"ghost";
+    suggestion.len = 5U;
+    ed.win->shadow.seq_next[YEW_SHADOW_AI] = 2U;
+    yew_shadow_deliver(&ed, &suggestion);
+    YEW_ASSERT(ed.win->shadow.live);
+    yew_textbuf_insert(ed.win->buf->tb, BYTEOFF(0U),
+                       (const u8 *)"x", 1U);
+    ed.win->cs.curs.data[0].pos = BYTEOFF(1U);
+    ed.win->cs.curs.data[0].anchor = BYTEOFF(1U);
+    YEW_ASSERT_EQ_I64(yew_shadow_revalidate(ed.win->buf->tb,
+                                             &ed.win->shadow.sug,
+                                             BYTEOFF(1U)), -1);
+    YEW_ASSERT(!yew_shadow_accept_all(&ed, ed.win));
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.revalidate_fail, 1U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.win->buf->tb), 1U);
+    YEW_ASSERT(yew_textiter_begin(&iter, ed.win->buf->tb, BYTEOFF(0U)));
+    YEW_ASSERT(yew_textiter_chunk(&iter, ed.win->buf->tb, &bytes,
+                                  &available));
+    YEW_ASSERT(available >= 1U);
+    YEW_ASSERT_EQ_U64(bytes[0], (u8)'x');
     yew_ed_free(&ed);
 }
 
