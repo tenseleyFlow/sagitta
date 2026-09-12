@@ -43,6 +43,9 @@ static const BindRow frozen_L[] = {
     {"o", "ed.edit.line.open_below", 0, NULL},
     {"O", "ed.edit.line.open_above", 0, NULL},
     {"x", "ed.edit.delete.grapheme", 0, NULL},
+    /* Sprint 57.11 §4: the document context menu's `Paste` row needs a
+     * key, and `p` was unspent in L. */
+    {"p", "ed.edit.paste", 0, NULL},
     {"d d", "ed.edit.line.delete", 0, NULL},
     {"u", "ed.edit.undo", 0, NULL},
     {"C-r", "ed.edit.redo", 0, NULL},
@@ -397,7 +400,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 226U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 227U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

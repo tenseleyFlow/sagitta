@@ -422,6 +422,12 @@ static const CmdDesc builtins[] = {
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
          YEW_CMD_CHANGES_BUFFER,
      "Alias for deleting the next grapheme", "del_next"},
+    /* Sprint 57.11 §4: the `Paste` context-menu row.  MULTI_AGGREGATE
+     * because the register API pastes once, at the primary cursor. */
+    {"ed.edit.paste", yew_edit_cmd_paste, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
+         YEW_CMD_CHANGES_BUFFER | YEW_CMD_MULTI_AGGREGATE,
+     "Insert register \" at the cursor", "paste"},
     {"ed.edit.undo", yew_edit_cmd_undo, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Undo the last edit transaction", "undo"},
@@ -1128,6 +1134,8 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.quit", "", YEW_RP_FORBID, "q"},
     {"ed.redraw", "", YEW_RP_FORBID, "redraw"},
     {"ed.edit.line.delete", "", YEW_RP_LINE, "d"},
+    /* Sprint 57.11 §4: `:paste` is the E-mode spelling of L-mode `p`. */
+    {"ed.edit.paste", "", YEW_RP_FORBID, "paste"},
     {"ed.file.open", "f", YEW_RP_FORBID, "e"},
     {"ed.file.write", "f", YEW_RP_FORBID, "w"},
     {"ed.file.write_quit", "f", YEW_RP_FORBID, "wq"},

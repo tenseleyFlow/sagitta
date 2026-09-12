@@ -1636,6 +1636,15 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool shadow_accept;
     bool clipboard_paste;
     bool clipboard_cut;
+    /*
+     * Sprint 57.11 §4: ed.edit.paste opens YEW_TXN_PASTE inside itself
+     * (yew_reg_paste owns paste geometry).  yew_undo_begin BUGs on a
+     * nested reason mismatch, so the wrapper this dispatcher opens has
+     * to name the same reason -- including when several cursors would
+     * otherwise have made it MULTI, because the command is
+     * MULTI_AGGREGATE and edits once at the primary cursor.
+     */
+    bool paste_txn;
     bool shadow_motion;
     bool shadow_quiet;
     bool shadow_holdoff_before;
@@ -1663,6 +1672,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
                     strcmp(desc->name, "ed.compl.accept") == 0;
     clipboard_paste = strcmp(desc->name, "ed.clip.paste") == 0;
     clipboard_cut = strcmp(desc->name, "ed.clip.cut") == 0;
+    paste_txn = strcmp(desc->name, "ed.edit.paste") == 0;
     shadow_motion = document_target &&
                     strncmp(desc->name, "ed.move.", 8U) == 0;
     shadow_quiet = document_target &&
@@ -1684,12 +1694,13 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     }
 
     if (started_in_insert &&
-        (!changes || newline || shadow_accept || clipboard_paste))
+        (!changes || newline || shadow_accept || clipboard_paste ||
+         paste_txn))
         yew_ed_insert_barrier(ed);
     if (changes && ed->model_ready) {
         ec = yew_ed_edit_ctx_for(ed, cx->win);
         if (started_in_insert && !newline && !shadow_accept &&
-            !clipboard_paste) {
+            !clipboard_paste && !paste_txn) {
             if (!ed->insert_txn) {
                 yew_undo_begin(&ec,
                                multiple ? YEW_TXN_MULTI : YEW_TXN_TYPE);
@@ -1708,7 +1719,8 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
              */
             yew_undo_begin(
                 &ec,
-                (shadow_accept || clipboard_paste) ? YEW_TXN_PASTE
+                (shadow_accept || clipboard_paste || paste_txn)
+                          ? YEW_TXN_PASTE
                       : (clipboard_cut ? YEW_TXN_CUT
                       : (multiple ? YEW_TXN_MULTI
                       : (strcmp(desc->name, "ed.search.replace") == 0
@@ -1748,7 +1760,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
                 yew_undo_promote_multi(&ec);
             ed->insert_txn = true;
         } else if ((!started_in_insert || newline || shadow_accept ||
-                    clipboard_paste) &&
+                    clipboard_paste || paste_txn) &&
                    opened) {
             yew_undo_end(&ec);
         }
