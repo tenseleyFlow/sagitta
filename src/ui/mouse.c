@@ -1637,6 +1637,52 @@ static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
     return true;
 }
 
+/*
+ * Sprint 57.14 §1: ROW 1 IS THE EXIT.
+ *
+ * `to` was resolved from the PRE-DRAG slot table, before any of this
+ * ran, and that ordering is the deliverable.  yew_group_remove_member
+ * DISSOLVES a group whose last member has just left, which deletes a
+ * row-1 entry and renumbers every slot to its right — so a slot number
+ * re-read afterwards names a different thing.  A tab INDEX survives,
+ * because dissolving rewrites group_id and edits the groups vector and
+ * never reorders Tabs.v.
+ *
+ * `from` is re-derived from the id all the same: identity across a
+ * mutation is Sprint 23's law, and a removal is a mutation even when it
+ * happens to move nothing.
+ */
+static void drop_out_of_group(Ed *ed, int to)
+{
+    MouseState *m = &ed->mouse;
+    int from = yew_tab_index_of_id(ed, m->drag_tab_id);
+    bool left_group = false;
+
+    if (from < 0)
+        return;
+    if (held_tab_group(ed) != 0U) {
+        yew_group_remove_member(ed, from);
+        left_group = true;
+        from = yew_tab_index_of_id(ed, m->drag_tab_id);
+        if (from < 0)
+            return;
+        if (to >= (int)yew_tab_count(ed))
+            to = (int)yew_tab_count(ed) - 1;
+        if (to < 0)
+            return;
+    }
+    yew_tab_reorder(ed, from, to);
+    if (left_group) {
+        /*
+         * The tab that left may have been the active one, and its group
+         * may be gone entirely — either way row 2 is no longer owed, and
+         * a strip-row count change belongs to the layout rather than to
+         * a repaint.
+         */
+        ed->layout_dirty = true;
+    }
+}
+
 static void drag_strip_drop(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
@@ -1653,26 +1699,25 @@ static void drag_strip_drop(Ed *ed, const Key *k)
     }
     if (!m->drag_to_valid)
         return; /* released somewhere with no target: nothing changes */
+    /*
+     * Resolved HERE, while the group still exists — see
+     * drop_out_of_group for what a removal does to a slot number.
+     */
     to = m->drag_to_tail ? (int)yew_tab_count(ed) - 1
                          : slot_to_tab_index(ed, m->drag_to_slot);
     if (to < 0)
         return;
-    if (m->phase == YEW_MP_DRAG_GROUP) {
+    if (m->phase == YEW_MP_DRAG_GROUP)
         yew_group_reorder_block(ed, m->drag_gid, to);
-    } else {
-        int from = yew_tab_index_of_id(ed, m->drag_tab_id);
-
-        if (from < 0)
-            return;
+    else
         /*
-         * Dropping on the blank tail carries the tab OUT of its group —
-         * the one gesture that can, when the group is the only row-1
-         * entry left to aim at.
+         * EVERY row-1 slot carries the tab out of its group, not just
+         * the blank tail.  The tail is drawn only in strip_render's
+         * `draw_new` arm, which an overflowing row 1 never reaches — so
+         * a member in a busy workspace had no exit at all, and the one
+         * documented gesture for leaving a group was unaimable.
          */
-        if (m->drag_to_tail && held_tab_group(ed) != 0U)
-            yew_group_remove_member(ed, from);
-        yew_tab_reorder(ed, from, to);
-    }
+        drop_out_of_group(ed, to);
     yew_state_mark_dirty(ed);
     ed->full_damage = true;
 }

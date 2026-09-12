@@ -801,3 +801,196 @@ void test_drag_a_group_moves_the_whole_block(void)
     }
     yew_ed_free(&f.ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.14 §1: row 1 is the group exit                          */
+/* ---------------------------------------------------------------- */
+
+/* The middle of the row-2 member entry whose payload is `want`. */
+static u16 dg_row2_x(DragFixture *f, i32 want)
+{
+    u16 x;
+
+    (void)f;
+    for (x = 0U; x < 80U; x++) {
+        Region hit = yew_region_hit(x, 1U);
+
+        if (hit.kind == YEW_REGION_TAB && hit.payload == want)
+            return x;
+    }
+    YEW_ASSERT(false);
+    return 0U;
+}
+
+/*
+ * A member dropped on an ordinary row-1 slot LEAVES its group.
+ *
+ * Row 1 is the ungrouped bar, so landing on it means "live here"; row 2
+ * is the only place a drop JOINS.  Before 57.14 the blank tail was the
+ * only exit, and §1 explains why that was a lockout rather than a
+ * preference.
+ */
+void test_drag_row1_slot_extracts_a_member_from_its_group(void)
+{
+    DragFixture f;
+    u32 g;
+    u32 held;
+    int target;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 4);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    held = yew_tab_at(&f.ed, 4)->tab_id;
+    target = dg_slot_of_payload(1);
+    YEW_ASSERT(target >= 0);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_row2_x(&f, 4), 1U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, target), 0U);
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, dg_slot_x(&f, target), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+        YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+        dg_paint(&f);
+        yew_mouse_event(&f.ed, &up);
+    }
+    {
+        int idx = yew_tab_index_of_id(&f.ed, held);
+
+        YEW_ASSERT_EQ_I64(idx, 1);
+        YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, idx)->group_id, 0U);
+    }
+    /* The group survives, with the member that stayed. */
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&f.ed, g), 1);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * THE DISSOLVE.  The extracted tab was its group's LAST member, so
+ * yew_group_remove_member deletes the group — and with it a row-1 entry,
+ * which renumbers every slot to its right.  The drop was aimed at a slot
+ * to the group's right, so a destination re-read after the removal would
+ * name the wrong tab.  Resolving to a tab INDEX first is what makes this
+ * land where the user pointed.
+ */
+void test_drag_extracting_a_sole_member_onto_a_slot_to_its_right(void)
+{
+    DragFixture f;
+    u32 g;
+    u32 held;
+    u32 passed_a;
+    u32 passed_b;
+    int target;
+
+    dg_fixture(&f, 3U);
+    g = yew_group_create(&f.ed, "/src", "grp");
+    YEW_ASSERT(g != 0U);
+    yew_group_add_member(&f.ed, g, 1);
+    yew_tab_switch(&f.ed, 1);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    /* Four row-1 entries: tab 0, the group, tabs 2 and 3. */
+    YEW_ASSERT_EQ_I64(yew_strip_slot_count(), 4);
+    held = yew_tab_at(&f.ed, 1)->tab_id;
+    passed_a = yew_tab_at(&f.ed, 2)->tab_id;
+    passed_b = yew_tab_at(&f.ed, 3)->tab_id;
+    target = dg_slot_of_payload(3);
+    YEW_ASSERT_EQ_I64(target, 3);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_row2_x(&f, 1), 1U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, target), 0U);
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, dg_slot_x(&f, target), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+        dg_paint(&f);
+        yew_mouse_event(&f.ed, &up);
+    }
+    /* The group is gone, and the tab landed on the slot it was aimed
+     * at — the two it passed keeping their relative order. */
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&f.ed, g), 0);
+    YEW_ASSERT_EQ_I64(yew_group_find(&f.ed, g), -1);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, passed_a), 1);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, passed_b), 2);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, held), 3);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, 3)->group_id, 0U);
+    /* And row 1 is one entry SHORTER than it was: the dissolve deleted
+     * the group's entry and renumbered everything to its right. */
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_I64(yew_strip_slot_count(), 4);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * THE LOCKOUT, tested where it bit.  strip_render draws the tail control
+ * only in its `draw_new` arm, which an overflowing row 1 never reaches —
+ * so with the strip overflowing there was NOTHING to aim at, and a group
+ * member could not be dragged out at all.  Every visible slot is an exit
+ * now, so the gesture works with no tail on screen.
+ */
+void test_drag_row1_exit_works_when_the_strip_overflows(void)
+{
+    DragFixture f;
+    u32 g;
+    u32 held;
+    int target = -1;
+    u16 x;
+    bool tail = false;
+    bool chevron = false;
+
+    dg_fixture(&f, 7U);
+    /* The group sits EARLY, with plenty of entries to its right, so the
+     * strip overflows to the right and strip_render's `draw_new` arm —
+     * the only place the tail is drawn — is never reached. */
+    g = dg_make_group(&f, 1, 2);
+    yew_tab_switch(&f.ed, 1);
+    /* Narrow enough that row 1 overflows.  RESIZE rather than a second
+     * init, which would leak the first's buffers. */
+    YEW_ASSERT(yew_grid_resize(&f.ed.grid, 24U, 24U));
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    for (x = 0U; x < 24U; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB_NEW)
+            tail = true;
+        if (hit.kind == YEW_REGION_TAB_SCROLL)
+            chevron = true;
+    }
+    /* The premise: overflow, and therefore no tail to aim at. */
+    YEW_ASSERT(chevron);
+    YEW_ASSERT(!tail);
+
+    held = yew_tab_at(&f.ed, 1)->tab_id;
+    for (x = 0U; x < 24U && target < 0; x++) {
+        int slot = yew_strip_slot_at(x, 0U);
+        i32 pre = 0;
+
+        if (slot >= 0 && yew_strip_pre_payload(slot, &pre) && pre >= 0)
+            target = slot;
+    }
+    YEW_ASSERT(target >= 0);
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_row2_x(&f, 1), 1U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, target), 0U);
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, dg_slot_x(&f, target), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+        dg_paint(&f);
+        yew_mouse_event(&f.ed, &up);
+    }
+    {
+        int idx = yew_tab_index_of_id(&f.ed, held);
+
+        YEW_ASSERT(idx >= 0);
+        YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, idx)->group_id, 0U);
+    }
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&f.ed, g), 1);
+    yew_ed_free(&f.ed);
+}
