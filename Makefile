@@ -2892,9 +2892,11 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 		--fixture-allnl $(abspath $(FIXTURE_DIR)/100m-allnl.bin)
 
 perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
+                        $(BUILD)/perf_startup_s56 \
                         $(BUILD)/perf_prof_crosscheck \
                         perf-baseline-selftest
 	$(BUILD)/s56_gate_policy_selftest
+	$(BUILD)/perf_startup_s56 --selftest-policy
 	$(BUILD)/perf_prof_crosscheck --selftest-policy
 	scripts/tests/s56-perf-gate.test.sh
 	scripts/tests/run-perf-suite.test.sh

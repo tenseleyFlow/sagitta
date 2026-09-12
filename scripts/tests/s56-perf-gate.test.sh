@@ -119,6 +119,17 @@ set -e
 [ "$status" -eq 1 ] || fail 'enforcement=all budget passed advisory mode'
 
 write_observations 5000000 5000000 5000000
+sed_rewrite \
+    's/value_permille=100 verdict=PASS/value_permille=400 verdict=FAIL/' \
+    "$scratch/obs1"
+run_gate advisory >"$scratch/all-one-outlier.out" ||
+    fail 'one enforcement=all outlier bypassed the two-of-three policy'
+grep -F \
+    'startup.spawn_floor_fraction median=100 absolute_over=1/3 relative_over=0/3 PASS' \
+    "$scratch/all-one-outlier.out" >/dev/null ||
+    fail 'one enforcement=all outlier did not report a passing aggregate'
+
+write_observations 5000000 5000000 5000000
 sed_rewrite '/startup.spawn_floor_fraction/d' "$scratch/obs2"
 set +e
 run_gate advisory >"$scratch/omitted.out" 2>&1

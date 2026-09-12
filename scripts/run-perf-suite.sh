@@ -149,7 +149,7 @@ if [ "$suite_status" -eq 0 ] && [ "$evaluate" = 1 ]; then
     run=1
     while [ "$run" -le 3 ]; do
         output=$build/perf-s56-observation-$run.txt
-        if YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+        if YEW_PERF_ADVISORY=1 PERF_GATE=0 YEW_PERF_AGGREGATE=1 \
             "$make_bin" --no-print-directory "$observation_target" \
             BUILD="$build" PERF_RUNNER_ID="$runner_id" \
             PERF_ADVISORY=1 PERF_GATE=0 >"$output" 2>&1; then

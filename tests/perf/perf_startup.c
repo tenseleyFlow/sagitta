@@ -32,7 +32,8 @@ static void usage(FILE *out)
 {
     (void)fputs(
         "usage: perf_startup --yew PATH --nullexec PATH --fixture PATH "
-        "--state DIR --budgets PATH [--workspace DIR] [--batch-script PATH]\n",
+        "--state DIR --budgets PATH [--workspace DIR] [--batch-script PATH]\n"
+        "       perf_startup --selftest-policy\n",
         out);
 }
 
@@ -465,6 +466,47 @@ static bool report_time(const char *metric, i64 value, u64 limit,
     return !broken && !failed;
 }
 
+static bool aggregate_observation(void)
+{
+    const char *value = getenv("YEW_PERF_AGGREGATE");
+
+    /* Only run-perf-suite.sh's three-observation collector sets this. */
+    return value != NULL && strcmp(value, "0") != 0;
+}
+
+static bool spawn_fraction_fails_process(u64 fraction, u64 limit)
+{
+    return fraction > limit && !aggregate_observation();
+}
+
+static int selftest_policy(void)
+{
+    if (unsetenv("YEW_PERF_AGGREGATE") != 0)
+        return 2;
+    if (!spawn_fraction_fails_process(UINT64_C(301), UINT64_C(300)) ||
+        spawn_fraction_fails_process(UINT64_C(300), UINT64_C(300))) {
+        (void)fprintf(stderr,
+                      "perf-startup-policy: standalone gate failed\n");
+        return 1;
+    }
+    if (setenv("YEW_PERF_AGGREGATE", "1", 1) != 0)
+        return 2;
+    if (spawn_fraction_fails_process(UINT64_MAX, UINT64_C(300))) {
+        (void)fprintf(stderr,
+                      "perf-startup-policy: aggregate deferral failed\n");
+        return 1;
+    }
+    if (setenv("YEW_PERF_AGGREGATE", "0", 1) != 0)
+        return 2;
+    if (!spawn_fraction_fails_process(UINT64_C(301), UINT64_C(300))) {
+        (void)fprintf(stderr,
+                      "perf-startup-policy: disabled aggregate failed\n");
+        return 1;
+    }
+    (void)puts("perf-startup-policy: standalone/aggregate gate ok");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     Options opt;
@@ -483,6 +525,8 @@ int main(int argc, char **argv)
                         strcmp(getenv("YEW_PERF_ADVISORY"), "0") != 0);
     bool ok = true;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (!parse_options(argc, argv, &opt)) {
         usage(stderr);
         return 2;
@@ -518,7 +562,7 @@ int main(int argc, char **argv)
                  (unsigned long long)fraction,
                  (unsigned long long)fraction_limit,
                  fraction <= fraction_limit ? "PASS" : "FAIL");
-    ok = fraction <= fraction_limit && ok;
+    ok = !spawn_fraction_fails_process(fraction, fraction_limit) && ok;
     if (opt.workspace != NULL) {
         i64 workspace;
         u64 limit;

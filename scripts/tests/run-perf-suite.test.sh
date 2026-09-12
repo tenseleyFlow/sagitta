@@ -74,6 +74,10 @@ case $target in
         echo 'fake Sprint 56 checks passed'
         ;;
     perf-s56-observation)
+        [ "${YEW_PERF_AGGREGATE:-0}" = 1 ] || {
+            echo 'observation aggregate marker missing' >&2
+            exit 98
+        }
         obs_count_file=$FAKE_ROOT/obs-count
         obs_count=0
         [ ! -f "$obs_count_file" ] || obs_count=$(cat "$obs_count_file")
