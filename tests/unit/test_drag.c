@@ -1499,6 +1499,30 @@ void test_drag_dwell_preview_survives_the_pointer_on_row_2(void)
 /* The neighbours get out of the way                                 */
 /* ---------------------------------------------------------------- */
 
+/*
+ * The reported workspace: `1 untitled`, group `ch4/`, group `ch5/`, and
+ * the tab being dragged — or the same strip with four plain tabs, which
+ * is the same geometry with nothing to dwell on.
+ */
+static void dg_grouped_fixture(DragFixture *f, bool grouped)
+{
+    if (!grouped) {
+        dg_fixture(f, 3U);
+        return;
+    }
+    dg_fixture(f, 5U);
+    (void)dg_make_group(f, 1, 2);
+    (void)dg_make_group(f, 3, 4);
+    yew_tab_switch(&f->ed, 0);
+    yew_ed_layout(&f->ed);
+}
+
+/* The tab-array index of the entry that gets dragged in that fixture. */
+static int dg_held_index(bool grouped)
+{
+    return grouped ? 5 : 3;
+}
+
 /* Stable identity for a row-1 entry: a group's id, or a tab's id lifted
  * clear of it.  Tab INDICES move when a drop commits, so a payload
  * cannot be compared across one. */
@@ -1696,25 +1720,28 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
  * cells rather than the pointer's has to keep this, or the gap becomes
  * a lie.
  */
-void test_drag_every_previewed_gap_is_where_the_drop_lands(void)
+static void dg_sweep_preview_matches_drop(bool grouped)
 {
     u16 x;
     u16 tail_x;
     u16 press_x;
+    int prev_to = -1;
 
     {
         DragFixture probe;
         u16 c0;
         u16 c1;
 
-        dg_fixture(&probe, 3U);
+        dg_grouped_fixture(&probe, grouped);
         dg_paint(&probe);
+        YEW_ASSERT_EQ_I64(yew_strip_slot_count(), 4);
         dg_slot_span(3, &c0, &c1);
         press_x = (u16)(c1 - 2U);
         tail_x = yew_strip_tail_x();
         yew_ed_free(&probe.ed);
     }
-    for (x = 0U; x < tail_x; x++) {
+    /* Right to left, which is the direction the report was about. */
+    for (x = tail_x; x-- > 0U;) {
         DragFixture f;
         u32 during[8];
         u32 after[8];
@@ -1729,9 +1756,9 @@ void test_drag_every_previewed_gap_is_where_the_drop_lands(void)
          * a click and there is no drag to agree with. */
         if (x == press_x)
             continue;
-        dg_fixture(&f, 3U);
+        dg_grouped_fixture(&f, grouped);
         dg_paint(&f);
-        held_key = 0x10000U + yew_tab_at(&f.ed, 3)->tab_id;
+        held_key = 0x10000U + yew_tab_at(&f.ed, dg_held_index(grouped))->tab_id;
         {
             Key press = dg_ev((u8)YEW_KEY_PRESS, press_x, 0U);
             Key motion = dg_ev((u8)YEW_KEY_REPEAT, x, 0U);
@@ -1743,6 +1770,14 @@ void test_drag_every_previewed_gap_is_where_the_drop_lands(void)
         YEW_ASSERT(f.ed.mouse.drag_to_valid);
         YEW_ASSERT(!f.ed.mouse.drag_to_tail);
         to = f.ed.mouse.drag_to_slot;
+        /*
+         * MONOTONE.  Carrying the entry further left can only move its
+         * landing place left; a target that jumped back would be the
+         * strip fighting the pointer.
+         */
+        if (prev_to >= 0)
+            YEW_ASSERT(to <= prev_to);
+        prev_to = to;
         n_during = dg_row1_keys(&f, during, (int)YEW_ARRAY_LEN(during));
         {
             Key up = dg_ev((u8)YEW_KEY_RELEASE, x, 0U);
@@ -1763,6 +1798,25 @@ void test_drag_every_previewed_gap_is_where_the_drop_lands(void)
         }
         yew_ed_free(&f.ed);
     }
+    /* The sweep reached the far left: the entry can be carried to the
+     * head of the strip, which is where the report ended. */
+    YEW_ASSERT_EQ_I64(prev_to, 0);
+}
+
+void test_drag_every_previewed_gap_is_where_the_drop_lands(void)
+{
+    dg_sweep_preview_matches_drop(false);
+}
+
+/*
+ * THE REPORTED STRIP, swept: `1 untitled`, two directory groups, and the
+ * tab being carried left across both of them.  Every pointer position
+ * has an insertion point, the groups only ever slide right and keep
+ * their order, and the release lands exactly the row that was drawn.
+ */
+void test_drag_the_dogfood_strip_reorders_at_every_step(void)
+{
+    dg_sweep_preview_matches_drop(true);
 }
 
 /*

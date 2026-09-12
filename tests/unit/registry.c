@@ -2190,6 +2190,7 @@ const YewTest yew_tests[] = {
     T(drag_dwell_preview_survives_the_pointer_on_row_2),
     T(drag_neighbours_slide_out_of_the_carried_tabs_way),
     T(drag_every_previewed_gap_is_where_the_drop_lands),
+    T(drag_the_dogfood_strip_reorders_at_every_step),
     T(drag_dwell_flash_is_visible_on_the_active_group_entry),
     T(ctxmenu_placement_clamps_at_all_four_edges),
     T(ctxmenu_refuses_a_space_it_cannot_fit),

@@ -2184,6 +2184,7 @@ void test_drag_dwell_reopens_a_group_the_pointer_returns_to(void);
 void test_drag_dwell_preview_survives_the_pointer_on_row_2(void);
 void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void);
 void test_drag_every_previewed_gap_is_where_the_drop_lands(void);
+void test_drag_the_dogfood_strip_reorders_at_every_step(void);
 void test_drag_dwell_flash_is_visible_on_the_active_group_entry(void);
 void test_ctxmenu_placement_clamps_at_all_four_edges(void);
 void test_ctxmenu_refuses_a_space_it_cannot_fit(void);
