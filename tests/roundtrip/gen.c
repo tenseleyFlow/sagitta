@@ -45,6 +45,10 @@ static const RtGenCmd gen_cmds[] = {
     {"ed.mode.enter", RT_GEN_MODE},
     {"ed.mode.escape", RT_GEN_SELECTION},
     {"ed.sel.expand", RT_GEN_SELECTION},
+    {"ed.sel.extend.left", RT_GEN_SELECTION},
+    {"ed.sel.extend.right", RT_GEN_SELECTION},
+    {"ed.sel.extend.up", RT_GEN_SELECTION},
+    {"ed.sel.extend.down", RT_GEN_SELECTION},
     {"ed.sel.yank", RT_GEN_YANK}
 };
 
@@ -142,13 +146,31 @@ static bool append_named(RtSession *session, const char *name,
     return true;
 }
 
-static bool append_highlight_scenario(RtSession *session, bool yank)
+static bool is_shift_extend(const RtGenCmd *gc)
+{
+    static const char prefix[] = "ed.sel.extend.";
+
+    return gc != NULL &&
+           strncmp(gc->name, prefix, sizeof(prefix) - 1U) == 0;
+}
+
+static u32 highlight_scenario_len(const RtGenCmd *gc)
+{
+    return is_shift_extend(gc) ? 2U : 4U;
+}
+
+static bool append_highlight_scenario(RtSession *session,
+                                      const RtGenCmd *gc)
 {
     static const u8 highlight[] = {'H'};
 
+    if (is_shift_extend(gc))
+        return append_named(session, gc->name, NULL, 0U) &&
+               append_named(session, "ed.mode.escape", NULL, 0U);
     return append_named(session, "ed.mode.enter", highlight, 1U) &&
            append_named(session, "ed.move.unit.next", NULL, 0U) &&
-           append_named(session, yank ? "ed.sel.yank" : "ed.sel.expand",
+           append_named(session, gc->kind == RT_GEN_YANK ? "ed.sel.yank" :
+                                                        "ed.sel.expand",
                         NULL, 0U) &&
            append_named(session, "ed.mode.escape", NULL, 0U);
 }
@@ -239,9 +261,9 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
         u32 available = target - (u32)session->events.len - reserve;
 
         if ((chosen->kind == RT_GEN_SELECTION ||
-             chosen->kind == RT_GEN_YANK) && available >= 4U) {
-            if (!append_highlight_scenario(session,
-                                           chosen->kind == RT_GEN_YANK))
+             chosen->kind == RT_GEN_YANK) &&
+            available >= highlight_scenario_len(chosen)) {
+            if (!append_highlight_scenario(session, chosen))
                 return false;
         } else {
             const RtGenCmd *one = chosen;
@@ -334,6 +356,9 @@ static const RtDenied denied[] = {
     D("ed.sel.unit.contract", "selection stack history is outside E0"),
     D("ed.sel.kind", "argument-specific geometry needs a dedicated pool"),
     D("ed.sel.swap_ends", "redundant selection permutation"),
+    D("ed.clip.copy", "system clipboard I/O is outside generated E0"),
+    D("ed.clip.cut", "system clipboard I/O is outside generated E0"),
+    D("ed.clip.paste", "system clipboard I/O is outside generated E0"),
     D("ed.sel.delete", "covered indirectly; register deletion needs seeded paste"),
     D("ed.sel.change", "enters insert mode and is not mode-closed"),
     D("ed.sel.case_upper", "locale/case fixture needs a dedicated pool"),
@@ -493,11 +518,5 @@ bool rt_generator_coverage(bool verbose)
             (void)printf("deny %s: %s\n", d->name, reason);
         }
     }
-    /* Sprint text names paste, but this registry currently exposes no
-     * recordable paste command.  Once one lands it is not auto-denied: the
-     * exact-table audit above fails until the generator handles it or a
-     * specific reviewed exclusion is added. */
-    if (verbose && yew_cmd_by_word("paste", 5U).v == 0U)
-        (void)printf("unavailable paste: no recordable registry command\n");
     return ok;
 }
