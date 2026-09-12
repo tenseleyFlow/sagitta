@@ -16,9 +16,20 @@ The initial local implementation and native qualification completed
 2026-09-11. A same-day follow-on field audit reopened the B-mode portion after
 the exact `ch4/days.lu` workflow exposed duplicate intra-line stops, skipped
 one-line statements, asymmetric Up/Down order, formatting-dependent EOF
-behavior, and confusing half-open edge ownership. The broader generic repair,
-Wolf/C/fallback unit matrix, real-key PTY, and expanded performance gates are
-implemented and focused-green; complete requalification is in progress.
+behavior, and confusing half-open edge ownership. The broader generic repair
+landed in `bb431836`. Its Wolf/C/fallback unit matrix, real-key PTY, sanitizer,
+alignment, fuzz, performance, core-only, and complete native default gates are
+green. The final default run qualified the clean combined frontier `7d05f79a`
+after the queued Sprint 57.10 tab-jump commits landed.
+
+Local evidence includes 2,441 default unit tests / 73,450,393 assertions, the
+complete PTY/script/package/round-trip/syntax/policy/smoke/live-torture matrix,
+and 1,971 core-only unit tests / 72,471,915 assertions. Four deterministic
+200,000-operation block fuzz seeds pass. The detected-source 100,000-motion
+gate completes in 18.089 ms with a 0.043 ms maximum; the comma-structural
+1,000-motion gate completes in 26.378 ms with a 0.108 ms maximum. Focused
+Darwin arm64 ASan/UBSan and alignment/UBSan runs are clean. Apple clang is the
+only native compiler available on this host, so GNU GCC remains a hosted row.
 
 The sprint is not closed: its exact commit-of-record has not been pushed or
 qualified by hosted CI. Sprint 58 is paused after F08 until that closeout and
