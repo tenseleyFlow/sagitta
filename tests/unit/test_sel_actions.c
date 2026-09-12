@@ -952,3 +952,81 @@ void test_sel_actions_cut_is_bound_to_x_in_highlight_mode(void)
     YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
     fixture_free(&f);
 }
+
+/*
+ * Sprint 57.11 §4: select-all spans the buffer and lands in H.
+ *
+ * Invoked from L, because that is where `g a` lives: the command has to
+ * enter H itself, not assume it is already there.
+ */
+void test_sel_actions_select_all_spans_the_buffer_in_char_highlight(void)
+{
+    static const u8 bytes[] = "aa\nbb\ncc\n";
+    SelActionFixture f;
+    Cursor extra = {BYTEOFF(4U), {0U}, BYTEOFF(4U)};
+    RegVal *reg;
+
+    fixture_init(&f, bytes, sizeof(bytes) - 1U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&f.ed, YEW_MODE_L), YEW_CMD_OK);
+    YEW_ASSERT(yew_cset_add(&f.ed.win->cs, extra));
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.len, 2U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.sel.all", NULL, 0U),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    YEW_ASSERT_EQ_U64(f.ed.win->h.kind, YEW_SEL_CHAR);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.len, 1U);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].anchor.v, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].pos.v,
+                      sizeof(bytes) - 1U);
+
+    /* The span an operator sees is the whole buffer, byte for byte. */
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.sel.yank", NULL, 0U),
+                      YEW_CMD_OK);
+    reg = yew_reg_get(&f.ed.regs, '"');
+    YEW_ASSERT_EQ_U64(reg->type, YEW_REG_CHARWISE);
+    YEW_ASSERT_EQ_U64(reg->bytes.len, sizeof(bytes) - 1U);
+    YEW_ASSERT_EQ_MEM(reg->bytes.data, bytes, sizeof(bytes) - 1U);
+    fixture_free(&f);
+}
+
+void test_sel_actions_select_all_on_an_empty_buffer_is_an_empty_span(void)
+{
+    SelActionFixture f;
+
+    fixture_init(&f, (const u8 *)"", 0U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&f.ed, YEW_MODE_L), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.sel.all", NULL, 0U),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].anchor.v, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].pos.v, 0U);
+    fixture_free(&f);
+}
+
+/* Invariant 9: `g a` in L mode reaches it. */
+void test_sel_actions_select_all_is_bound_to_g_a_in_line_mode(void)
+{
+    static const u8 bytes[] = "alpha";
+    SelActionFixture f;
+    Key g = {0};
+    Key a = {0};
+
+    fixture_init(&f, bytes, sizeof(bytes) - 1U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&f.ed, YEW_MODE_L), YEW_CMD_OK);
+    g.code = (u32)'g';
+    g.kind = YEW_EV_KEY;
+    g.ev = YEW_KEY_PRESS;
+    g.ntext = 1U;
+    g.text[0] = (u8)'g';
+    a = g;
+    a.code = (u32)'a';
+    a.text[0] = (u8)'a';
+    yew_dispatch_key(&f.ed, g, 0);
+    yew_dispatch_key(&f.ed, a, 1);
+    YEW_ASSERT_EQ_U64(f.ed.last_status, YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].anchor.v, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].pos.v,
+                      sizeof(bytes) - 1U);
+    fixture_free(&f);
+}

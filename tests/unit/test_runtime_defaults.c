@@ -50,6 +50,8 @@ static const BindRow frozen_L[] = {
     {"u", "ed.edit.undo", 0, NULL},
     {"C-r", "ed.edit.redo", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
+    /* Sprint 57.11 §4: `Select All` needs a key; `g a` was free. */
+    {"g a", "ed.sel.all", 0, NULL},
     {"g g", "ed.move.buf.home", 0, NULL},
     /* Sprint 21 §5.  Ctrl-O/Ctrl-I are the jumplist's two directions;
      * g; / g, walk the changelist. */
@@ -400,7 +402,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 227U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 228U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

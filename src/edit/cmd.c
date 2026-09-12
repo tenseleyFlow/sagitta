@@ -490,6 +490,9 @@ static const CmdDesc builtins[] = {
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
      "Delete the active selections", "sel_delete"},
+    {"ed.sel.all", yew_sel_cmd_all, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Select the whole buffer", "sel_all"},
     {"ed.sel.cut", yew_sel_cmd_cut, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,

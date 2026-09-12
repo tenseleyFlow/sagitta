@@ -515,6 +515,51 @@ CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+/*
+ * Sprint 57.11 §4: the `Select All` menu row, and L-mode `g a`.
+ *
+ * H is entered through yew_mode_enter_highlight rather than by poking
+ * ed->mode: that call is what installs the H key table, sets the unit
+ * ops and the selection kind, and fires the mode transition.  A
+ * hand-rolled entry would leave the keymap belonging to whichever mode
+ * the user came from, and the selection would be unoperable.
+ *
+ * The CHARACTER unit, so the arrows extend by grapheme from here; a
+ * line unit would snap the whole-buffer span to line edges the moment
+ * the user pressed one.
+ */
+CmdStatus yew_sel_cmd_all(CmdCtx *cx)
+{
+    Ed *ed;
+    Win *win;
+    Cursor *cursor;
+    CmdStatus status;
+
+    if (cx == NULL || cx->ed == NULL || cx->ed->win == NULL ||
+        cx->ed->win->buf == NULL || cx->ed->win->buf->tb == NULL ||
+        cx->ed->win->cs.curs.len == 0U)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    status = yew_mode_enter_highlight(ed, YEW_MODE_I, false);
+    if (status != YEW_CMD_OK)
+        return status;
+    win = ed->win;
+    win->h.kind = YEW_SEL_CHAR;
+    /*
+     * One selection, not one per cursor: "the whole buffer" is a single
+     * span, and N cursors holding N copies of it would make every
+     * operator run N times over the same bytes.
+     */
+    yew_cset_remove_all_but_primary(&win->cs);
+    cursor = &win->cs.curs.data[0];
+    cursor->anchor = BYTEOFF(0U);
+    cursor->pos = BYTEOFF(yew_textbuf_len(win->buf->tb));
+    cursor->goal_col = (GCol){YEW_GCOL_EOL};
+    yew_cset_normalize(win->buf->tb, &win->cs);
+    yew_ed_damage_document(ed);
+    return YEW_CMD_OK;
+}
+
 static CmdStatus change_case(CmdCtx *cx, YewCaseKind kind)
 {
     Win *win;
