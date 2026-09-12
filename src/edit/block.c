@@ -996,8 +996,8 @@ static bool block_indent_header(UnitCtx *u, u64 line,
                                 const LineInfo *current)
 {
     u64 count = yew_textbuf_line_count(u->tb);
-    u8 first;
-    u8 last;
+    u8 first = 0U;
+    u8 last = 0U;
 
     if (current->blank ||
         !block_byte_at(u->tb, current->first.v, &first) ||
