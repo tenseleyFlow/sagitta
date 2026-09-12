@@ -7,7 +7,7 @@ Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: ACTIVE AT F13.**
+**Campaign status: ACTIVE AT F14.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -142,7 +142,7 @@ zero until its report closes; silence never counts as evidence.
 | F10 syntax | `audit-10-syntax.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 1 |
 | F11 LSP | `audit-11-lsp.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
 | F12 AI | `audit-12-ai.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| F13 git/FUSS | `audit-13-git.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F13 git/FUSS | `audit-13-git.md` | closed | 4 | 4 | 0 | 0 | 4 | 0 | 0 |
 | F14 plugins | `audit-14-plugins.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F15 CI | `audit-15-ci.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
@@ -175,7 +175,7 @@ size and nanosecond mtime can bypass the authoritative syntax-source hash.
 zero-tail state law. `YEW-F-013` records that the JS/TS known-wrong fixtures
 lack their required heuristic comment. The product-code baseline remains
 immutable. Tutor `NO_COLOR` behavior is F10's one unverified observation
-because that Sprint 59 surface does not yet exist. F13 through F15 remain
+because that Sprint 59 surface does not yet exist. F14 and F15 remain
 open.
 
 F11 adds three open Medium contract/control findings. `YEW-F-014` records
@@ -192,4 +192,15 @@ off-by-default transport silence, the pre-transport privacy boundary, all
 required loopback spellings and redirect refusal, hostile chunked-parser
 coverage, exact cancellation resource accounting, AI-specific stale-shadow
 rejection, and every stripped `ed.ai.*` command surface. The product-code
-baseline remains immutable. F13 through F15 remain open.
+baseline remains immutable.
+
+F13 adds four open Medium findings. `YEW-F-017` records that interactive
+rebase bypasses the static verb inventory and shared environment policy.
+`YEW-F-018` records the uninjectable FUSS `time(NULL)` display edge and the
+clock gate's helper-name false positives. `YEW-F-019` records that the pinned
+rename test survives its mandatory one-NUL mutation. `YEW-F-020` records that
+the formatting gate rejects seven legitimate non-argv display builders. The
+byte-exact filename matrix, backward clock step, 200 killed refreshes,
+lock/state probes, hostile parent environment, remembered expansion, group
+opening, and action-discovery replay pass. The product-code baseline remains
+immutable. F14 and F15 remain open.

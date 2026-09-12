@@ -38,7 +38,7 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — REQUALIFIED; ACTIVE AT F13
+## Baseline status — REQUALIFIED; ACTIVE AT F14
 
 `41fef416` is the original post-Sprint-57.8 product baseline used by F01–F08.
 On Darwin arm64 it passes the complete default-module `make test` suite,
@@ -89,7 +89,9 @@ closed with three Medium findings (`YEW-F-011`–`YEW-F-013`) and no product-cod
 changes. F11 subsequently closed with three Medium findings
 (`YEW-F-014`–`YEW-F-016`) and no product-code changes. F12 subsequently
 closed with no findings, no unverified observations, and no product-code
-changes. F13 is the active front.
+changes. F13 subsequently closed with four Medium findings
+(`YEW-F-017`–`YEW-F-020`), no unverified observations, and no product-code
+changes. F14 is the active front.
 
 ## Goals
 
