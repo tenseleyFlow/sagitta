@@ -4700,7 +4700,14 @@ static void case_chrome_ctxmenu(PtyCtx *c)
                   sizeof(path)))
         return;
     s23_open_tabs(c, 2);
-    s18_settle_after_keys(c, "t m");
+    /*
+     * `iarg 1` is the TAB STRIP.  Sprint 57.11 §5 gave `t m` — 0 or
+     * absent — to the keyboard FOCUS, which is the document here; this
+     * case is about the TAB menu, so it asks for the strip by name.
+     */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.ui.context_menu 1");
+    s18_settle_after_keys(c, "enter");
     chrome_snapshot(c);
     s18_settle_after_keys(c, "esc");
     force_quit(c);
@@ -5027,7 +5034,10 @@ static void case_s27_group_menu_over_scrolled_strip(PtyCtx *c)
                   sizeof(path)))
         return;
     s24_make_group(c);
-    s18_settle_after_keys(c, "t m");
+    /* The strip spelling, for the reason in case_chrome_ctxmenu. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.ui.context_menu 1");
+    s18_settle_after_keys(c, "enter");
     ptc_snapshot(c, "s27_group_menu_over_scrolled_strip");
     s18_settle_after_keys(c, "esc");
     force_quit(c);

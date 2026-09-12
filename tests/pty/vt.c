@@ -511,6 +511,8 @@ static void csi_dispatch(VtScreen *v)
         set_mode(v, VT_MODE_BRACKETED_PASTE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1002")) {
         set_mode(v, VT_MODE_BUTTON_MOUSE, final == 'h');
+    } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1003")) {
+        set_mode(v, VT_MODE_ANY_MOTION_MOUSE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1006")) {
         set_mode(v, VT_MODE_SGR_MOUSE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1004")) {
