@@ -4,7 +4,7 @@
 # final-file-backed 1833114   final-bss 657880   object-bss 11143042
 # gc_saved_bytes 61440   without-gc-on-disk 2037448
 # unattributed-symbols 0/4633 (0.0%)   limit 2.0%
-# non-folded-object-sections 12326368
+# non-folded-object-sections 12321968
 
 bucket                  .text    .rodata      .data       .bss      total     pct
 core.fl                210786      27506      10672   10492081   10741045  82.5%
@@ -32,7 +32,7 @@ libc+crt               100807
       258584  .debug_frame
      5968954  .debug_info
      1388408  .debug_line
-      176534  .debug_line_str
+      172134  .debug_line_str
      1725644  .debug_loclists
       234781  .debug_rnglists
      2184839  .debug_str
