@@ -29,10 +29,10 @@
  *   furniture.  Shape stability then holds per (kind, availability),
  *   which is the strongest promise an optional feature can keep.
  *
- * ELLIPSES ARE THREE ASCII DOTS, not U+2026.  The sprint writes `…` as
- * typography; Sprint 27's shipped rows spell it `...` and the ASCII
- * rendition (`degrade` / the `_ascii` PTY lane) has to survive without
- * a fallback table for one glyph that appears in a dozen labels.
+ * ELLIPSES ARE THREE ASCII DOTS, not the Unicode ellipsis.  Although the
+ * sprint uses the typographic glyph, Sprint 27's shipped rows spell it `...`.
+ * The ASCII rendition (`degrade` / the `_ascii` PTY lane) has to survive
+ * without a fallback table for one glyph that appears in a dozen labels.
  */
 
 #include "ui/ctxrows.h"
