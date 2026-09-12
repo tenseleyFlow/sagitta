@@ -8294,14 +8294,20 @@ static void case_s52_fuss(PtyCtx *c)
                   "FUSS action picker omitted the group action key");
     } else if (strstr(name, "leave_q") != NULL) {
         ptc_keys(c, "alt+q");
-        ptc_settle(c, 0);
+        ptc_wait_until(c, s52_screen_contains_visible_cursor,
+                       "int main(void)",
+                       "Alt-q did not restore visible layout mode");
+        s52_wait_screen_gone(c, "Legend:", 240U);
         ptc_check(c, !c->pty.reaped, "Alt-q in F mode exited yew");
-        c->vt.sync_pairs_unstable = true;
+        semantic_snapshot = true;
     } else if (strstr(name, "leave_esc") != NULL) {
         ptc_keys(c, "esc");
-        ptc_settle(c, 0);
+        ptc_wait_until(c, s52_screen_contains_visible_cursor,
+                       "int main(void)",
+                       "Esc did not restore visible layout mode");
+        s52_wait_screen_gone(c, "Legend:", 240U);
         ptc_check(c, !c->pty.reaped, "Esc in F mode exited yew");
-        c->vt.sync_pairs_unstable = true;
+        semantic_snapshot = true;
     } else {
         ptc_settle(c, 0);
     }
@@ -8351,7 +8357,10 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
         goto done;
     snapshot_write(&c->vt, &viewer);
     ptc_keys(c, "esc");
-    ptc_settle(c, 0);
+    ptc_wait_until(c, s52_screen_contains_visible_cursor,
+                   "int main(void)",
+                   "leaving FUSS did not restore visible layout mode");
+    s52_wait_screen_gone(c, "diff --git", 240U);
     ptc_check(c, !c->pty.reaped,
               "leaving the FUSS diff viewer exited yew");
     ptc_check(c, s52_screen_contains(&c->vt, "int main(void)"),
@@ -8366,7 +8375,11 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
     if (c->failed)
         goto done;
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot_sgr(c, c->test->name);
+    /* The final layout and the captured viewer below assert both semantic
+     * screens, including every cell style.  Raw SGR order between those
+     * screens depends on whether an asynchronous FUSS repaint wins the
+     * scheduler race with the diff child and is not an editor contract. */
+    ptc_snapshot(c, c->test->name);
     bytebuf_append(&c->snapshot, "--- viewer before leave\n", 24U);
     bytebuf_append(&c->snapshot, viewer.data, viewer.len);
     force_quit(c);
