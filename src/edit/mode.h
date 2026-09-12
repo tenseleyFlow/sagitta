@@ -30,6 +30,7 @@ typedef struct ModeDesc {
 extern const ModeDesc yew_modes[YEW_MODE__N];
 
 CmdStatus yew_mode_enter(Ed *ed, Mode mode);
+CmdStatus yew_mode_enter_execute(Ed *ed, const char *seed);
 CmdStatus yew_mode_enter_highlight(Ed *ed, Mode unit, bool sticky);
 CmdStatus yew_mode_escape(Ed *ed);
 

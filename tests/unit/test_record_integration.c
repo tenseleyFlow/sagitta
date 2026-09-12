@@ -200,6 +200,21 @@ void test_record_tap_drops_replay_source(void)
     /* Cancelling contributes no committed CMDLINE command. */
     YEW_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
     YEW_ASSERT_EQ_I64(yew_record_stop(&f.ed), YEW_CMD_OK);
+
+    YEW_ASSERT(yew_record_start(&f.ed, (u8)'g'));
+    cx.sarg = NULL;
+    cx.sarg_len = 0U;
+    cx.source = YEW_SRC_KEY;
+    yew_record_tap(yew_cmd_lookup("ed.shell.open", 13U), &cx);
+    YEW_ASSERT(f.ed.rec.in_prompt);
+    YEW_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
+    yew_cmdline_open(&f.ed, YEW_PROMPT_CMD, "!");
+    cx.source = YEW_SRC_CMDLINE;
+    yew_record_tap(yew_cmd_lookup("ed.move.unit.next", 17U), &cx);
+    YEW_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
+    YEW_ASSERT_EQ_U64(f.ed.rec.ev.data[0].src, YEW_SRC_CMDLINE);
+    yew_cmdline_close(&f.ed, false);
+    YEW_ASSERT_EQ_I64(yew_record_stop(&f.ed), YEW_CMD_OK);
     rf_close(&f);
 }
 

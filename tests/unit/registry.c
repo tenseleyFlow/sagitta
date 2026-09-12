@@ -560,6 +560,7 @@ const YewTest yew_tests[] = {
     T(modes_escape_from_insert_enters_line_and_repaints),
     T(modes_escape_in_line_is_repaint_noop),
     T(modes_deferred_entries_name_their_sprints),
+    T(modes_bang_seeds_shell_command_from_command_modes),
     T(modes_only_line_and_insert_are_enterable_in_sprint14),
     T(hmode_borrows_l_w_b_and_i_char_units),
     T(hmode_sticky_entry_parses_unit_in_one_string_argument),

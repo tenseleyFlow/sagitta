@@ -17,6 +17,7 @@ static const BindRow panic_L[] = {
     {"q", "ed.quit", 0, NULL},
     {"q !", "ed.quit_force", 0, NULL},
     {":", "ed.mode.enter", 0, "E"},
+    {"!", "ed.shell.open", 0, NULL},
 };
 
 static const BindRow panic_E[] = {

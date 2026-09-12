@@ -57,6 +57,7 @@ static const BindRow keys_H[] = {
     {"S-<up>", "ed.sel.extend.up", 0, NULL},
     {"S-<down>", "ed.sel.extend.down", 0, NULL},
     {":", "ed.mode.enter", 0, "E"},
+    {"!", "ed.shell.open", 0, NULL},
     {"C-c", "ed.clip.copy", 0, NULL},
     {"C-x", "ed.clip.cut", 0, NULL},
     {"C-v", "ed.clip.paste", 0, NULL},

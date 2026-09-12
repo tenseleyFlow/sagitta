@@ -148,6 +148,37 @@ void test_modes_deferred_entries_name_their_sprints(void)
     yew_ed_free(&ed);
 }
 
+void test_modes_bang_seeds_shell_command_from_command_modes(void)
+{
+    static const Mode sources[] = {
+        YEW_MODE_L, YEW_MODE_W, YEW_MODE_B, YEW_MODE_H,
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(sources); i++) {
+        const u8 *bytes;
+        u64 len;
+        TextIter iter;
+        Ed ed;
+
+        modes_editor(&ed);
+        if (sources[i] != YEW_MODE_L)
+            YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, sources[i]), YEW_CMD_OK);
+        yew_ed_handle_key(&ed, modes_key((u32)'!'), 10);
+        YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_E);
+        YEW_ASSERT(ed.cmdline.active);
+        YEW_ASSERT_EQ_U64(ed.cmdline.kind, YEW_PROMPT_CMD);
+        YEW_ASSERT_EQ_U64(ed.cmdline.return_mode, sources[i]);
+        YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.cmdline.buf), 1U);
+        YEW_ASSERT(yew_textiter_begin(&iter, ed.cmdline.buf, BYTEOFF(0U)));
+        YEW_ASSERT(yew_textiter_chunk(&iter, ed.cmdline.buf, &bytes, &len));
+        YEW_ASSERT_EQ_U64(len, 1U);
+        YEW_ASSERT_EQ_U64(bytes[0], (u8)'!');
+        yew_ed_free(&ed);
+    }
+}
+
 void test_modes_only_line_and_insert_are_enterable_in_sprint14(void)
 {
     Ed ed;

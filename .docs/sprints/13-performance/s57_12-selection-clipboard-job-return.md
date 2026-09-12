@@ -126,6 +126,14 @@ cursor/viewport when the Sprint 19 scratch buffer temporarily occupies a
 window is follow-up view-model work; this sprint guarantees restoration to
 the correct buffer and quit safety.
 
+### 5. Direct shell-command entry
+
+Bare `!` opens the same E-mode command bar as `:`, seeded with `!` and the
+cursor placed after it. It is available in exactly the same command-capable
+L, W, B, and H contexts as `:`; E, I, and F retain their existing input
+ownership. The panic L-mode keymap carries the same escape hatch so a broken
+runtime cannot make shell entry depend on typing `:` first.
+
 ## Testing Strategy
 
 - Unit H-mode matrix: first and repeated Shift+Arrow from L/W/B/I, reverse
@@ -167,3 +175,5 @@ the correct buffer and quit safety.
    output view.
 10. Focused unit/PTY, ASan/UBSan, existing regressions, and strict default and
     `MODULES=""` GCC/Clang builds are green on the committed SHA.
+11. Bare `!` from L/W/B/H opens E with command-line text exactly `!`; the
+    existing `:` path and Highlight range seed are unchanged.

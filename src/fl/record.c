@@ -213,6 +213,7 @@ void yew_record_tap(CmdId id, const CmdCtx *cx)
     }
     if (cx->source != YEW_SRC_CMDLINE &&
         ((desc != NULL && (desc->flags & YEW_CMD_PROMPTS) != 0U) ||
+         (desc != NULL && strcmp(desc->name, "ed.shell.open") == 0) ||
          (desc != NULL && strcmp(desc->name, "ed.mode.enter") == 0 &&
           cx->sarg_len == 1U && cx->sarg != NULL && cx->sarg[0] == 'E'))) {
         rec->in_prompt = true;

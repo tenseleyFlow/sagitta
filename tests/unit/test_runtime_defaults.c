@@ -158,6 +158,7 @@ static const BindRow frozen_L[] = {
     {"b", "ed.mode.enter", 0, "B"},
     {"h", "ed.mode.enter", 0, "H"},
     {":", "ed.mode.enter", 0, "E"},
+    {"!", "ed.shell.open", 0, NULL},
     {"e", "ed.mode.enter", 0, "E"},
     {"f", "ed.mode.enter", 0, "F"},
 };
@@ -187,6 +188,7 @@ static const BindRow frozen_W[] = {
     {"<end>", "ed.move.unit.end", 0, NULL},
     {"h", "ed.mode.enter", 0, "H"},
     {":", "ed.mode.enter", 0, "E"},
+    {"!", "ed.shell.open", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
     {"q", "ed.macro.record", 0, NULL},
@@ -217,6 +219,7 @@ static const BindRow frozen_B[] = {
     {"A-[", "ed.shadow.prev", 0, NULL},
     {"h", "ed.mode.enter", 0, "H"},
     {":", "ed.mode.enter", 0, "E"},
+    {"!", "ed.shell.open", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
     {"q", "ed.macro.record", 0, NULL},
@@ -397,13 +400,13 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 226U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 229U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
         assert_frozen_mode(&ed, (Mode)mode, rows[mode], counts[mode]);
     }
-    YEW_ASSERT_EQ_U64(panic_rows, 59U);
+    YEW_ASSERT_EQ_U64(panic_rows, 60U);
     yew_ed_free(&ed);
     bytebuf_free(&source);
 }

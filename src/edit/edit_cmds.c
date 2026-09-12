@@ -1712,6 +1712,13 @@ CmdStatus yew_edit_cmd_mode_enter(CmdCtx *cx)
     return YEW_CMD_ERR_ARG;
 }
 
+CmdStatus yew_edit_cmd_shell_prompt(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_ARG;
+    return yew_mode_enter_execute(cx->ed, "!");
+}
+
 CmdStatus yew_edit_cmd_mode_escape(CmdCtx *cx)
 {
     if (cx == NULL)

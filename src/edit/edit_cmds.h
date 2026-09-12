@@ -76,6 +76,7 @@ CmdStatus yew_edit_cmd_redo(CmdCtx *cx);
 CmdStatus yew_edit_cmd_undo_barrier(CmdCtx *cx);
 
 CmdStatus yew_edit_cmd_mode_enter(CmdCtx *cx);
+CmdStatus yew_edit_cmd_shell_prompt(CmdCtx *cx);
 CmdStatus yew_edit_cmd_mode_escape(CmdCtx *cx);
 CmdStatus yew_edit_cmd_insert_at(CmdCtx *cx);
 CmdStatus yew_edit_cmd_delete_span(CmdCtx *cx);

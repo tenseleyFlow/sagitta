@@ -367,8 +367,9 @@ Binding documents — read before any sprint:
   fallback, stable-tab reuse, and conservative shell-syntax fallthrough.
 - Sprint 57.12 (s57_12-selection-clipboard-job-return.md) — Character-precise
   Shift+Arrow entry into Highlight, explicit Ctrl+C/X/V system-clipboard
-  aliases over the existing selection/register engine, and safe unforced
-  `:q` return from transient job output to its originating file.
+  aliases over the existing selection/register engine, safe unforced `:q`
+  return from transient job output to its originating file, and direct bare
+  `!` entry into a shell-prefixed command line.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem

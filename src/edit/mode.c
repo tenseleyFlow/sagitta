@@ -32,6 +32,18 @@ const ModeDesc yew_modes[YEW_MODE__N] = {
     [YEW_MODE_F] = {"F", "fuss", false, false, YEW_MODE_F},
 };
 
+CmdStatus yew_mode_enter_execute(Ed *ed, const char *seed)
+{
+    if (ed == NULL)
+        return YEW_CMD_ERR_ARG;
+    if (ed->mode != YEW_MODE_E && ed->win != NULL)
+        yew_shadow_dismiss(ed, ed->win);
+    if (ed->mode == YEW_MODE_I)
+        yew_ed_insert_barrier(ed);
+    yew_cmdline_open(ed, YEW_PROMPT_CMD, seed);
+    return YEW_CMD_OK;
+}
+
 CmdStatus yew_mode_enter(Ed *ed, Mode mode)
 {
     size_t i;
@@ -44,21 +56,19 @@ CmdStatus yew_mode_enter(Ed *ed, Mode mode)
 
         return yew_mode_enter_highlight(ed, unit, false);
     }
-    if (ed->mode != mode && ed->win != NULL)
-        yew_shadow_dismiss(ed, ed->win);
     if (mode == YEW_MODE_E) {
         const char *seed = NULL;
-        if (ed->mode == YEW_MODE_I)
-            yew_ed_insert_barrier(ed);
+
         if (ed->mode == YEW_MODE_H && ed->win != NULL &&
             ed->win->cs.curs.len != 0U &&
             ed->win->cs.primary < ed->win->cs.curs.len &&
             ed->win->cs.curs.data[ed->win->cs.primary].anchor.v !=
                 ed->win->cs.curs.data[ed->win->cs.primary].pos.v)
             seed = "'<,'>";
-        yew_cmdline_open(ed, YEW_PROMPT_CMD, seed);
-        return YEW_CMD_OK;
+        return yew_mode_enter_execute(ed, seed);
     }
+    if (ed->mode != mode && ed->win != NULL)
+        yew_shadow_dismiss(ed, ed->win);
     if (mode == YEW_MODE_F) {
         status = yew_fuss_mode_enter(ed);
         if (status != YEW_CMD_OK)
