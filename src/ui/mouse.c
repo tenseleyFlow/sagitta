@@ -433,16 +433,17 @@ bool yew_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y)
      */
     yew_ctx_target(tab_id, t->path);
     yew_ctx_item("Close Tab", "C-w", CTXA_TAB_CLOSE,
-                 yew_tab_count(ed) > 1U);
+                 yew_tab_count(ed) > 1U, 0U);
     /* Disabled rows are GREYED, never hidden, so the menu keeps its
      * shape and a row does not move under the pointer between one
      * right-click and the next. */
     yew_ctx_item("Close Other Tabs", NULL, CTXA_TAB_CLOSE_OTHERS,
-                 yew_tab_count(ed) > 1U);
+                 yew_tab_count(ed) > 1U, 0U);
     yew_ctx_sep();
-    yew_ctx_item("Copy Path", NULL, CTXA_TAB_COPY_PATH, t->path != NULL);
+    yew_ctx_item("Copy Path", NULL, CTXA_TAB_COPY_PATH, t->path != NULL,
+                 0U);
     yew_ctx_item("Remove from Group", NULL, CTXA_TAB_LEAVE_GROUP,
-                 t->group_id != 0U);
+                 t->group_id != 0U, 0U);
     return yew_ctx_show(x, y, menu_allowed(ed));
 }
 
@@ -452,10 +453,10 @@ bool yew_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y)
         return false;
     yew_ctx_begin((u32)YEW_CTX_KIND_GROUP);
     yew_ctx_target(gid, NULL);
-    yew_ctx_item("Edit Group...", NULL, CTXA_GROUP_EDIT, true);
-    yew_ctx_item("Rename Group...", NULL, CTXA_GROUP_RENAME, true);
+    yew_ctx_item("Edit Group...", NULL, CTXA_GROUP_EDIT, true, 0U);
+    yew_ctx_item("Rename Group...", NULL, CTXA_GROUP_RENAME, true, 0U);
     yew_ctx_sep();
-    yew_ctx_item("Dissolve Group", NULL, CTXA_GROUP_DISSOLVE, true);
+    yew_ctx_item("Dissolve Group", NULL, CTXA_GROUP_DISSOLVE, true, 0U);
     return yew_ctx_show(x, y, menu_allowed(ed));
 }
 
@@ -593,8 +594,14 @@ bool yew_mouse_menu_key(Ed *ed, const Key *k)
 
 void yew_mouse_menu_draw(Ed *ed)
 {
-    if (ed != NULL)
-        yew_ctx_draw(&ed->grid);
+    CtxStyle style;
+
+    if (ed == NULL)
+        return;
+    /* Resolved ONCE per draw, from the theme — the widget knows no
+     * colours of its own (57.11 §6). */
+    style = menu_style(ed);
+    yew_ctx_draw(&ed->grid, &style);
 }
 
 /* ---------------------------------------------------------------- */
