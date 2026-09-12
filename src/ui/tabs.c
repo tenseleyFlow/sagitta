@@ -1536,6 +1536,16 @@ void yew_tab_strip_draw(Ed *ed, Rect rect)
      * would otherwise leave the router armed against last frame.
      */
     strip_any_chevron = false;
+    /*
+     * Row 2's table is cleared at frame BEGIN, never at frame end, and
+     * for region.c's reason: a frame that does not draw row 2 at all —
+     * no group, a one-row strip — must not leave the last one's
+     * positions answering for cells nobody can point at.  Clearing here
+     * makes the stale window empty by construction.  Row 1's is refilled
+     * unconditionally by strip_render_row1 and needs no such reset.
+     */
+    strip_row2.n = 0;
+    strip_row2.tail_x = 0U;
     strip_draw_rows(ed, rect);
     yew_mouse_note_chevrons(strip_any_chevron);
 }
