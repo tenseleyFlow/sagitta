@@ -49,6 +49,7 @@ static const RtGenCmd gen_cmds[] = {
     {"ed.sel.extend.right", RT_GEN_SELECTION},
     {"ed.sel.extend.up", RT_GEN_SELECTION},
     {"ed.sel.extend.down", RT_GEN_SELECTION},
+    {"ed.sel.all", RT_GEN_SELECTION},
     {"ed.sel.yank", RT_GEN_YANK}
 };
 
@@ -170,7 +171,7 @@ static bool append_highlight_scenario(RtSession *session,
     return append_named(session, "ed.mode.enter", highlight, 1U) &&
            append_named(session, "ed.move.unit.next", NULL, 0U) &&
            append_named(session, gc->kind == RT_GEN_YANK ? "ed.sel.yank" :
-                                                        "ed.sel.expand",
+                                                           gc->name,
                         NULL, 0U) &&
            append_named(session, "ed.mode.escape", NULL, 0U);
 }
@@ -393,6 +394,7 @@ static const RtDenied denied[] = {
     D("ed.view.goto_line", "TAKES_COUNT is covered by emitter unit tests"),
     D("ed.view.toggle_wrap", "viewport option is outside compared E0"),
     D("ed.view.number_style", "viewport option is outside compared E0"),
+    D("ed.view.number_cycle", "viewport option is outside compared E0"),
     D("ed.search.next", "search query state is outside E0"),
     D("ed.search.prev", "search query state is outside E0"),
     D("ed.search.word_next", "search query state is outside E0"),
