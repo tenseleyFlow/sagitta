@@ -748,8 +748,14 @@ static const CmdDesc builtins[] = {
     {"ed.group.remove_tab", yew_group_cmd_remove_tab, YEW_ARITY_NONE, 0U,
      "Remove the active tab from its group", NULL},
     /* Sprint 27 §5/§9. */
-    {"ed.ui.context_menu", yew_ui_cmd_context_menu, YEW_ARITY_NONE, 0U,
-     "Open the context menu for the focused tab or group", NULL},
+    /*
+     * Sprint 57.11 §5 widens the arity: iarg 1 names the TAB STRIP
+     * context explicitly, so a binding can ask for it once the bare
+     * form starts meaning "whatever the keyboard focus is on".  Both
+     * spellings still open the strip menu today.
+     */
+    {"ed.ui.context_menu", yew_ui_cmd_context_menu, YEW_ARITY_OPT_INT,
+     0U, "Open the context menu for the focused tab or group", NULL},
     {"ed.mouse.enable", yew_mouse_cmd_enable, YEW_ARITY_NONE, 0U,
      "Turn mouse reporting on for this session", NULL},
     {"ed.mouse.disable", yew_mouse_cmd_disable, YEW_ARITY_NONE, 0U,

@@ -715,6 +715,60 @@ void test_invariant9_menu_and_its_rows_are_keyboard_reachable(void)
     yew_ed_free(&keys);
 }
 
+/*
+ * Sprint 57.11 §5: ed.ui.context_menu takes an OPTIONAL int.
+ *
+ * `iarg 1` names the tab strip explicitly; absent still means the same
+ * thing until Phase 3 routes the bare form to the keyboard focus.  The
+ * point of pinning it now is that a binding can already pass the arg,
+ * so `t m` keeps working when the default changes under it.
+ */
+void test_invariant9_context_menu_takes_an_optional_strip_arg(void)
+{
+    Ed keys;
+    u32 target;
+    const CmdDesc *desc;
+
+    i9_keys_only();
+    i9_fixture(&keys, 3);
+    yew_tab_switch(&keys, 1);
+    target = yew_tab_at(&keys, 1)->tab_id;
+    yew_ed_layout(&keys);
+
+    desc = yew_cmd_desc(yew_cmd_lookup("ed.ui.context_menu",
+                                       (u32)strlen("ed.ui.context_menu")));
+    YEW_ASSERT_NOT_NULL(desc);
+    YEW_ASSERT_EQ_U64(desc->arity, (u64)YEW_ARITY_OPT_INT);
+
+    /* iarg 1: the strip. */
+    {
+        CmdCtx cx = {0};
+        CmdId id = yew_cmd_lookup("ed.ui.context_menu",
+                                  (u32)strlen("ed.ui.context_menu"));
+
+        cx.ed = &keys;
+        cx.win = keys.win;
+        cx.count = 1U;
+        cx.iarg = 1;
+        cx.source = YEW_SRC_KEY;
+        YEW_ASSERT_EQ_U64(yew_ed_invoke(&keys, id, &cx), (u64)YEW_CMD_OK);
+    }
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_TAB);
+    YEW_ASSERT_EQ_U64(yew_ctx_target_id(), target);
+    yew_ctx_close();
+
+    /* Absent: the same menu on the same target. */
+    YEW_ASSERT_EQ_U64(i9_run(&keys, "ed.ui.context_menu", 0U, NULL),
+                      (u64)YEW_CMD_OK);
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_TAB);
+    YEW_ASSERT_EQ_U64(yew_ctx_target_id(), target);
+    yew_ctx_close();
+    i9_mouse_on();
+    yew_ed_free(&keys);
+}
+
 /* Each of the four new menu commands exists in the registry and is
  * reachable by name — the audit's last column. */
 void test_invariant9_every_new_command_is_registered(void)

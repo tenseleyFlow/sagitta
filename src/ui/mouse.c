@@ -1485,6 +1485,14 @@ void yew_mouse_event(Ed *ed, const Key *k)
  * group, anchored at the strip rather than at a pointer that may not
  * exist.  Without this the menu rows would be mouse-only, and every one
  * of them would be a feature the keyboard could not reach.
+ *
+ * Sprint 57.11 §5: the command now takes an OPTIONAL int.  `iarg 1`
+ * means the TAB STRIP, and that is what a bare invocation still does
+ * as well -- the focus-context routing that 0/absent will select is
+ * Sprint 57.11 Phase 3, and until it exists the two spellings have to
+ * agree rather than have one of them refuse.  Widening the arity now
+ * is what lets `t m` keep its meaning while a strip-specific binding
+ * becomes expressible.
  */
 CmdStatus yew_ui_cmd_context_menu(CmdCtx *cx)
 {
