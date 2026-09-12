@@ -7,7 +7,7 @@ Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: ACTIVE AT F12.**
+**Campaign status: ACTIVE AT F13.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -141,14 +141,14 @@ zero until its report closes; silence never counts as evidence.
 | F09 recorder | `audit-09-recorder.md` | closed | 2 | 2 | 0 | 0 | 2 | 0 | 1 |
 | F10 syntax | `audit-10-syntax.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 1 |
 | F11 LSP | `audit-11-lsp.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
-| F12 AI | `audit-12-ai.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F12 AI | `audit-12-ai.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F13 git/FUSS | `audit-13-git.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F14 plugins | `audit-14-plugins.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F15 CI | `audit-15-ci.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ## Verdict
 
-We are not ready to tag: F01 through F11 of Sprint 58's fifteen fronts have
+We are not ready to tag: F01 through F12 of Sprint 58's fifteen fronts have
 closed, the invariant sweep has not run, and no campaign-wide
 absence-of-findings claim has been earned. F06 adds an open High finding
 (`YEW-F-005`), while closed F07 records two open Critical workspace-state
@@ -175,7 +175,7 @@ size and nanosecond mtime can bypass the authoritative syntax-source hash.
 zero-tail state law. `YEW-F-013` records that the JS/TS known-wrong fixtures
 lack their required heuristic comment. The product-code baseline remains
 immutable. Tutor `NO_COLOR` behavior is F10's one unverified observation
-because that Sprint 59 surface does not yet exist. F12 through F15 remain
+because that Sprint 59 surface does not yet exist. F13 through F15 remain
 open.
 
 F11 adds three open Medium contract/control findings. `YEW-F-014` records
@@ -185,4 +185,11 @@ core placeholders. `YEW-F-016` records the conflict between Sprint 46's
 repository-wide line-number adjustment ban and Sprint 47's required 1-based
 display edges. Position conversion, pre-op sync, stale-response admission,
 rename rollback, and 200,000 malformed-response iterations passed; the
-product-code baseline remains immutable. F12 through F15 remain open.
+product-code baseline remains immutable.
+
+F12 closes with no findings or unverified observations. Its controls prove
+off-by-default transport silence, the pre-transport privacy boundary, all
+required loopback spellings and redirect refusal, hostile chunked-parser
+coverage, exact cancellation resource accounting, AI-specific stale-shadow
+rejection, and every stripped `ed.ai.*` command surface. The product-code
+baseline remains immutable. F13 through F15 remain open.
