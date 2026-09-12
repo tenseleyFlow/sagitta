@@ -26,7 +26,6 @@ CmdStatus yew_edit_cmd_view_goto_line(CmdCtx *cx);
 CmdStatus yew_edit_cmd_view_toggle_wrap(CmdCtx *cx);
 CmdStatus yew_edit_cmd_view_number_style(CmdCtx *cx);
 CmdStatus yew_edit_cmd_view_number_cycle(CmdCtx *cx);
-CmdStatus yew_edit_cmd_paste(CmdCtx *cx);
 CmdStatus yew_edit_cmd_message_expand(CmdCtx *cx);
 CmdStatus yew_edit_cmd_ui_cancel(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_char_prev(CmdCtx *cx);

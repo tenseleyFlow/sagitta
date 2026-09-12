@@ -428,24 +428,6 @@ CmdStatus yew_sel_cmd_delete(CmdCtx *cx)
  * which rewrites `"` with the identical bytes -- the same value twice,
  * never a different one.
  */
-CmdStatus yew_sel_cmd_cut(CmdCtx *cx)
-{
-    Win *win;
-    TextBuf *tb;
-    Cursor *cursor;
-    RegVal value;
-
-    if (!action_context(cx, &win, &tb, &cursor))
-        return YEW_CMD_ERR_STATE;
-    (void)tb;
-    (void)cursor;
-    yew_regval_init(&value);
-    capture_selection(&value, win);
-    yew_reg_yank(&cx->ed->regs, (u8)'+', &value);
-    yew_regval_free(&value);
-    return delete_or_change(cx, false);
-}
-
 CmdStatus yew_sel_cmd_change(CmdCtx *cx)
 {
     return delete_or_change(cx, true, 0U);

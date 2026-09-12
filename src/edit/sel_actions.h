@@ -8,7 +8,6 @@ CmdStatus yew_sel_cmd_clip_copy(CmdCtx *cx);
 CmdStatus yew_sel_cmd_clip_cut(CmdCtx *cx);
 CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx);
 CmdStatus yew_sel_cmd_delete(CmdCtx *cx);
-CmdStatus yew_sel_cmd_cut(CmdCtx *cx);
 CmdStatus yew_sel_cmd_all(CmdCtx *cx);
 CmdStatus yew_sel_cmd_change(CmdCtx *cx);
 CmdStatus yew_sel_cmd_case_upper(CmdCtx *cx);

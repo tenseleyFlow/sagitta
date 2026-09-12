@@ -1600,56 +1600,6 @@ CmdStatus yew_edit_cmd_delete_line(CmdCtx *cx)
     return delete_span(cx, span);
 }
 
-/*
- * Sprint 57.11 §4: the `Paste` menu row, and L-mode `p`.
- *
- * One call into the register module, because that is where paste
- * geometry already lives: charwise lands inline after the cursor
- * grapheme, linewise opens a new line below, blockwise pads a column.
- * Re-deriving any of it here would be a second answer to "where do
- * these bytes go", and the two answers would drift -- invariant 2.
- *
- * `yew_reg_paste` opens its own YEW_TXN_PASTE.  yew_ed_invoke therefore
- * wraps this command in that same reason (see the paste_txn branch in
- * ed.c): a TYPE wrapper around a PASTE body is a nesting mismatch and
- * aborts the transaction.
- *
- * MULTI_AGGREGATE because the register API pastes at the PRIMARY
- * cursor once.  Running it per cursor would paste N copies whose
- * offsets the loop would then have to fix up -- a per-cursor paste is
- * Sprint 12's deferral, not something to fake here.
- */
-CmdStatus yew_edit_cmd_paste(CmdCtx *cx)
-{
-    Win *win;
-    TextBuf *tb;
-    Cursor *cursor;
-    EditCtx ec;
-    u32 tabwidth;
-    bool pasted;
-
-    if (!edit_window(cx, &win, &tb, &cursor))
-        return YEW_CMD_ERR_STATE;
-    (void)tb;
-    (void)cursor;
-    if (yew_buf_readonly(win->buf)) {
-        yew_msg(cx->ed, YEW_MSG_ERROR, "buffer is read-only");
-        return YEW_CMD_ERR_STATE;
-    }
-    tabwidth = win->buf->tabwidth == 0U ? (u32)YEW_VP_TABWIDTH :
-                                          win->buf->tabwidth;
-    ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
-    if (ec.tb == NULL || ec.cset == NULL)
-        return YEW_CMD_ERR_STATE;
-    pasted = yew_reg_paste(&cx->ed->regs, &ec, (u8)'"', false, tabwidth);
-    yew_ed_finish_edit(cx->ed, &ec);
-    if (!pasted) {
-        yew_msg(cx->ed, YEW_MSG_ERROR, "nothing to paste");
-        return YEW_CMD_ERR_STATE;
-    }
-    return YEW_CMD_OK;
-}
-
 CmdStatus yew_edit_cmd_undo(CmdCtx *cx)
 {
     Win *win;

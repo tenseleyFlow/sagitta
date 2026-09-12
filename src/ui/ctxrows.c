@@ -47,7 +47,6 @@
 #include "mod/git/fussmode.h"
 #include "mod/git/git.h"
 #include "mod/lsp/lsp.h"
-#include "text/register.h"
 #include "text/undo.h"
 #include "ui/ctxmenu.h"
 #include "ui/groups.h"
@@ -93,9 +92,17 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
      * definition of the word that was pointed at.  See ctxrows.h for
      * why the caret may not move under the first group.
      */
-    /* CTXA_DOC_CUT          */ {"ed.sel.cut", CTX_TGT_LEAF, 0},
-    /* CTXA_DOC_COPY         */ {"ed.sel.yank", CTX_TGT_LEAF, 0},
-    /* CTXA_DOC_PASTE        */ {"ed.edit.paste", CTX_TGT_PANE, 0},
+    /*
+     * Cut / Copy / Paste are the SYSTEM clipboard's, not the register
+     * file's.  A user who clicks a row labelled `Copy` expects the
+     * bytes in the terminal's clipboard a moment later, ready for the
+     * browser next to it — `ed.sel.yank` would have filled register `"`
+     * and left the clipboard untouched, which is a different feature
+     * wearing the same word.
+     */
+    /* CTXA_DOC_CUT          */ {"ed.clip.cut", CTX_TGT_LEAF, 0},
+    /* CTXA_DOC_COPY         */ {"ed.clip.copy", CTX_TGT_LEAF, 0},
+    /* CTXA_DOC_PASTE        */ {"ed.clip.paste", CTX_TGT_PANE, 0},
     /* CTXA_DOC_DELETE       */ {"ed.sel.delete", CTX_TGT_LEAF, 0},
     /* CTXA_DOC_SELECT_ALL   */ {"ed.sel.all", CTX_TGT_LEAF, 0},
     /* CTXA_DOC_UNDO         */ {"ed.edit.undo", CTX_TGT_LEAF, 0},
@@ -260,29 +267,18 @@ static Buffer *doc_buf(Win *w)
 /*
  * Is there something to cut?
  *
- * H mode counts even with pos == anchor, because H over a single
- * grapheme IS a selection of one — the same rule `ed.sel.*` applies
- * when it runs.
+ * HIGHLIGHT MODE IS THE WHOLE TEST, and pos == anchor still counts: H
+ * over a single grapheme IS a selection of one.  What does NOT count is
+ * a cursor outside H whose anchor happens to sit somewhere else — that
+ * anchor is not drawn, so a menu that offered to cut it would be
+ * offering to delete bytes the user cannot see.  It is also exactly
+ * what `ed.clip.cut` and `ed.clip.copy` refuse: both return
+ * YEW_CMD_ERR_STATE outside H, and a row enabled onto a refusal is
+ * worse than a greyed one.
  */
 static bool has_selection(const Ed *ed, const Win *w)
 {
-    const Cursor *c;
-
-    if (w == NULL || w->cs.curs.len == 0U)
-        return false;
-    if (ed->mode == YEW_MODE_H)
-        return true;
-    c = &w->cs.curs.data[w->cs.primary];
-    return c->pos.v != c->anchor.v;
-}
-
-/* Register `"` is what `ed.edit.paste` pastes; empty means the row has
- * nothing to insert. */
-static bool register_has_text(Ed *ed)
-{
-    const RegVal *v = yew_reg_get(&ed->regs, (u8)'"');
-
-    return v != NULL && v->bytes.len != 0U;
+    return w != NULL && w->cs.curs.len != 0U && ed->mode == YEW_MODE_H;
 }
 
 static bool can_undo(const Buffer *b)
@@ -356,8 +352,20 @@ static void build_doc(Ed *ed, const CtxContext *c)
 
     yew_ctx_item("Cut", NULL, (u32)CTXA_DOC_CUT, sel && !ro, 0U);
     yew_ctx_item("Copy", NULL, (u32)CTXA_DOC_COPY, sel, 0U);
-    yew_ctx_item("Paste", NULL, (u32)CTXA_DOC_PASTE,
-                 !ro && register_has_text(ed), 0U);
+    /*
+     * PASTE IS ENABLED WHENEVER THE BUFFER CAN TAKE BYTES, and the
+     * emptiness of the clipboard is left to the command to report.
+     *
+     * `ed.clip.paste` reads the SYSTEM clipboard, and the only way to
+     * know what is in it is to spawn `wl-paste`/`xclip`/`pbpaste` and
+     * wait — which a menu build, on the render path, may not do.  The
+     * in-editor `+` register is not the answer either: it holds only
+     * what THIS session copied, so a fresh session with a full desktop
+     * clipboard would grey the one row the user came for.  Unknowable
+     * therefore means offered, and `ed.clip.paste` says "system
+     * clipboard is empty" when it turns out to be.
+     */
+    yew_ctx_item("Paste", NULL, (u32)CTXA_DOC_PASTE, !ro, 0U);
     yew_ctx_item("Delete", NULL, (u32)CTXA_DOC_DELETE, sel && !ro, 1U);
     yew_ctx_item("Select All", NULL, (u32)CTXA_DOC_SELECT_ALL, true, 1U);
     yew_ctx_sep();

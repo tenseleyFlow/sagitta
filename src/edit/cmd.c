@@ -422,12 +422,6 @@ static const CmdDesc builtins[] = {
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
          YEW_CMD_CHANGES_BUFFER,
      "Alias for deleting the next grapheme", "del_next"},
-    /* Sprint 57.11 §4: the `Paste` context-menu row.  MULTI_AGGREGATE
-     * because the register API pastes once, at the primary cursor. */
-    {"ed.edit.paste", yew_edit_cmd_paste, YEW_ARITY_NONE,
-     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
-         YEW_CMD_CHANGES_BUFFER | YEW_CMD_MULTI_AGGREGATE,
-     "Insert register \" at the cursor", "paste"},
     {"ed.edit.undo", yew_edit_cmd_undo, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Undo the last edit transaction", "undo"},
@@ -493,11 +487,6 @@ static const CmdDesc builtins[] = {
     {"ed.sel.all", yew_sel_cmd_all, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Select the whole buffer", "sel_all"},
-    {"ed.sel.cut", yew_sel_cmd_cut, YEW_ARITY_NONE,
-     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
-         YEW_CMD_MULTI_AGGREGATE,
-     "Yank the active selections to the clipboard, then delete them",
-     "cut"},
     {"ed.sel.change", yew_sel_cmd_change, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
@@ -1193,8 +1182,6 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.quit", "", YEW_RP_FORBID, "q"},
     {"ed.redraw", "", YEW_RP_FORBID, "redraw"},
     {"ed.edit.line.delete", "", YEW_RP_LINE, "d"},
-    /* Sprint 57.11 §4: `:paste` is the E-mode spelling of L-mode `p`. */
-    {"ed.edit.paste", "", YEW_RP_FORBID, "paste"},
     {"ed.file.open", "f", YEW_RP_FORBID, "e"},
     {"ed.file.write", "f", YEW_RP_FORBID, "w"},
     {"ed.file.write_quit", "f", YEW_RP_FORBID, "wq"},
@@ -1404,7 +1391,7 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.10: row-1 numbered jump from inside a group. */
         "goto_bar",
         /* Sprint 57.11 §4: the context-menu row commands. */
-        "cut", "number_cycle",
+        "number_cycle",
         /* Sprint 57.11 Deliverable 4: the four rows that had no command
          * — `Save As...`, the rename panel's two answers, and the group
          * picker's confirm. */
