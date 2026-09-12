@@ -2191,6 +2191,7 @@ void test_ctxrows_strip_and_editor_share_one_row_set(void);
 void test_ctxrows_border_rows_need_a_second_pane(void);
 void test_ctxrows_footer_names_the_current_number_style(void);
 void test_ctxrows_overlay_rows_match_the_contract(void);
+void test_ctxrows_panel_without_a_rename_is_a_bare_close(void);
 #if YEW_WITH_LSP
 void test_ctxrows_doc_lsp_section_appears_with_a_server(void);
 #endif
