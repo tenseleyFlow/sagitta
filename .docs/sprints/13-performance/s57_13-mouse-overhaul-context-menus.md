@@ -276,8 +276,6 @@ added to `tests/unit/test_runtime_defaults.c`'s frozen table):
 
 | Command | Does | Binding |
 |---|---|---|
-| `ed.sel.cut` | yank to `"` (and `+`) then delete the selection | H: `x` |
-| `ed.edit.paste` | insert register `"` at the cursor (charwise/linewise by register kind) | L: `p` |
 | `ed.sel.all` | select the whole buffer (enters H, char kind) | L: `g a` |
 | `ed.tab.open_split_h` / `ed.tab.open_split_v` | open the active tab's buffer in a new split | — |
 | `ed.view.number_cycle` | cycle number style | — |
@@ -288,6 +286,22 @@ blame/file.rename/file.delete`, `ed.group.from_dir`, `ed.git.tree.*`,
 `ed.git.commit/push/pull/fetch/status/history`, `ed.git.mode.leave`,
 `ed.find.*`, `ed.pane.*`, `ed.lsp.*`, `ed.compl.*`, `ed.group.*`,
 `ed.tab.*` already exist and are used as-is.
+
+**AMENDED after Sprint 57.12 landed.** This sprint originally specified
+`ed.sel.cut` (H: `x`) and `ed.edit.paste` (L: `p`) for the `Cut` and
+`Paste` rows, over the register file. Sprint 57.12 shipped
+`ed.clip.copy` / `ed.clip.cut` / `ed.clip.paste` over the SYSTEM
+clipboard, bound to `C-c` / `C-x` / `C-v`, while this branch was out.
+A menu row labelled `Cut` means the system clipboard to the hand that
+clicks it, so the three document rows point at Sprint 57.12's commands
+and this sprint's two duplicates are withdrawn. `ed.sel.all` has no
+57.12 equivalent and ships as specified.
+
+Two consequences for the rows: `Cut` and `Copy` are greyed outside
+Highlight, because `ed.clip.cut` / `ed.clip.copy` refuse there; and
+`Paste` is enabled on any writable buffer, because the system
+clipboard cannot be read without spawning a subprocess, which a menu
+build on the render path may not do.
 
 ### 5. Keyboard route — `ed.ui.context_menu`
 
