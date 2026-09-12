@@ -31,6 +31,7 @@ const YewAuditTest yew_audit_tests[] = {
     A("YEW-F-020", YEW_AUDIT_XFAIL, test_yew_f_020)
 #if YEW_WITH_PLUGINS
     , A("YEW-F-021", YEW_AUDIT_XFAIL, test_yew_f_021)
+    , A("YEW-F-022", YEW_AUDIT_XFAIL, test_yew_f_022)
 #endif
 };
 
