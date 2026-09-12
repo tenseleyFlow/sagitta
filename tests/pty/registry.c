@@ -22,6 +22,9 @@
 #ifndef YEW_TEST_MOCKAI
 #define YEW_TEST_MOCKAI "build/tests/helpers/mockai"
 #endif
+#ifndef YEW_TEST_FAKECLIP
+#define YEW_TEST_FAKECLIP "build/fakeclip"
+#endif
 
 static const char restore_blob[] =
     "\x1b[<u"
@@ -2835,7 +2838,7 @@ static void case_s57_12_clipboard_cut_paste(PtyCtx *c)
     static const u8 copied[] = "alpha";
     const char *old = getenv("YEW_CLIPBOARD");
     char *saved = old != NULL ? strdup(old) : NULL;
-    char *fake = realpath("build/fakeclip", NULL);
+    char *fake = realpath(YEW_TEST_FAKECLIP, NULL);
     char clip[] = "/tmp/yew-pty-s57-clip-XXXXXX";
     char setting[PATH_MAX * 3U];
     char path[256];

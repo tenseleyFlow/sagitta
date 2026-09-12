@@ -744,6 +744,9 @@ PTY_HARNESS_OBJ := $(BUILD)/tests/pty/harness.o
 PTY_REGISTRY_OBJ := $(BUILD)/tests/pty/registry.o
 PTY_RUNNER_OBJ := $(BUILD)/tests/pty/runner.o
 PTY_DEMO_OBJ := $(BUILD)/tests/pty/demo_paint.o
+$(PTY_REGISTRY_OBJ): CFLAGS += \
+  -DYEW_TEST_FAKECLIP='"$(abspath $(FAKECLIP))"'
+$(PTY_REGISTRY_OBJ): $(FAKECLIP)
 ifneq ($(filter ai,$(MODULES)),)
 $(PTY_REGISTRY_OBJ): CFLAGS += \
   -DYEW_TEST_MOCKAI='"$(abspath $(MOCKAI))"'
