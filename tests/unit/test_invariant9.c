@@ -99,6 +99,20 @@ static CmdStatus i9_run(Ed *ed, const char *name, u32 count,
     return yew_ed_invoke(ed, id, &cx);
 }
 
+/* The same, with the command's optional integer argument. */
+static CmdStatus i9_run_iarg(Ed *ed, const char *name, i64 iarg)
+{
+    CmdCtx cx = {0};
+    CmdId id = yew_cmd_lookup(name, strlen(name));
+
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.iarg = iarg;
+    cx.source = YEW_SRC_KEY;
+    return yew_ed_invoke(ed, id, &cx);
+}
+
 static Key i9_mouse(u8 button, u8 ev, u16 x, u16 y)
 {
     Key k;
@@ -675,14 +689,18 @@ void test_invariant9_menu_and_its_rows_are_keyboard_reachable(void)
     YEW_ASSERT_EQ_U64(yew_ctx_target_id(), target);
     yew_ctx_close();
 
-    /* Keys only: the same menu, on the same target, with no
-     * coordinates involved anywhere. */
+    /*
+     * Keys only: the same menu, on the same target, with no
+     * coordinates involved anywhere.  `iarg 1` is the STRIP — Sprint
+     * 57.11 §5 gave 0/absent to the keyboard FOCUS instead, so the
+     * strip has to be asked for by name now.
+     */
     i9_keys_only();
     i9_fixture(&keys, 4);
     yew_tab_switch(&keys, 2);
     target = yew_tab_at(&keys, 2)->tab_id;
     yew_ed_layout(&keys);
-    YEW_ASSERT_EQ_U64(i9_run(&keys, "ed.ui.context_menu", 0U, NULL),
+    YEW_ASSERT_EQ_U64(i9_run_iarg(&keys, "ed.ui.context_menu", 1),
                       (u64)YEW_CMD_OK);
     YEW_ASSERT(yew_ctx_active());
     YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_TAB);
@@ -741,29 +759,25 @@ void test_invariant9_context_menu_takes_an_optional_strip_arg(void)
     YEW_ASSERT_EQ_U64(desc->arity, (u64)YEW_ARITY_OPT_INT);
 
     /* iarg 1: the strip. */
-    {
-        CmdCtx cx = {0};
-        CmdId id = yew_cmd_lookup("ed.ui.context_menu",
-                                  (u32)strlen("ed.ui.context_menu"));
-
-        cx.ed = &keys;
-        cx.win = keys.win;
-        cx.count = 1U;
-        cx.iarg = 1;
-        cx.source = YEW_SRC_KEY;
-        YEW_ASSERT_EQ_U64(yew_ed_invoke(&keys, id, &cx), (u64)YEW_CMD_OK);
-    }
+    YEW_ASSERT_EQ_U64(i9_run_iarg(&keys, "ed.ui.context_menu", 1),
+                      (u64)YEW_CMD_OK);
     YEW_ASSERT(yew_ctx_active());
     YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_TAB);
     YEW_ASSERT_EQ_U64(yew_ctx_target_id(), target);
     yew_ctx_close();
 
-    /* Absent: the same menu on the same target. */
+    /*
+     * Absent: the keyboard FOCUS, which here is the document — the
+     * point of §5's widening.  `t m` reaches this spelling, so the
+     * document menu has a keyboard route and invariant 9 holds for
+     * every row in it.
+     */
+    yew_pane_tables_reset(&keys);
+    YEW_ASSERT_EQ_I64(yew_pane_table_add_leaf(&keys, keys.pane_root), 0);
     YEW_ASSERT_EQ_U64(i9_run(&keys, "ed.ui.context_menu", 0U, NULL),
                       (u64)YEW_CMD_OK);
     YEW_ASSERT(yew_ctx_active());
-    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_TAB);
-    YEW_ASSERT_EQ_U64(yew_ctx_target_id(), target);
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_DOC);
     yew_ctx_close();
     i9_mouse_on();
     yew_ed_free(&keys);

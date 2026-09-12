@@ -29,6 +29,7 @@
 
 #include "edit/ed.h"
 #include "edit/pane_cmds.h"
+#include "term/tty.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
 #include "ui/ctxmenu.h"
@@ -428,11 +429,12 @@ void test_mouse_block_region_swallows_everything(void)
 }
 
 /*
- * §9: a right-click inside a pane is UNBOUND.  Named as a test rather
- * than as a comment so nobody quietly wires a document context menu to
- * it before Sprint 52 has decided what belongs in one.
+ * Sprint 57.11 supersedes Sprint 27 §9.  A right-click inside a pane
+ * opens the DOCUMENT menu — and, just as importantly, it still does not
+ * touch the phase machine: the menu gesture is resolved before arming,
+ * so no drag is pending and no selection is live behind the pop-up.
  */
-void test_mouse_right_click_in_a_pane_does_nothing(void)
+void test_mouse_right_click_in_a_pane_opens_the_document_menu(void)
 {
     Ed ed;
     i32 leaf;
@@ -448,9 +450,16 @@ void test_mouse_right_click_in_a_pane_does_nothing(void)
 
         yew_mouse_event(&ed, &press);
     }
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_DOC);
     YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
     YEW_ASSERT_EQ_U64(ed.mouse.held, 0U);
+    /* Opening a menu on a pane does not FOCUS it: the rows do that, and
+     * only the ones that need to. */
     YEW_ASSERT(ed.focus == before);
+    yew_mouse_cancel(&ed);
+    yew_ctx_close();
+    yew_tty_mouse_motion(false);
     yew_ed_free(&ed);
 }
 

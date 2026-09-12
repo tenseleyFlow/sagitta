@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/pane_cmds.h"
 #include "ui/ctxmenu.h"
 #include "ui/glyphs.h"
 #include "ui/groups.h"
@@ -405,15 +406,24 @@ void test_ctxmenu_group_menu_captures_the_gid(void)
 }
 
 /*
- * §9: a right-click inside a PANE opens nothing.  Named as a test so
- * nobody quietly wires a document context menu to it before the
- * post-1.0 decision about what belongs in one.
+ * Sprint 57.11 supersedes Sprint 27 §9: a right-click inside a PANE
+ * opens the DOCUMENT menu.
+ *
+ * The old test pinned the deferral ("opens nothing, so nobody wires a
+ * menu to it before the decision is made"); the decision is made, and
+ * the row set is §4's.  What this pins now is the shape the rest of the
+ * sprint depends on: the menu opens, it opens for the DOC kind, and it
+ * captured the leaf and the clicked cell so a row can put the cursor
+ * where the user pointed.
  */
-void test_ctxmenu_right_click_in_a_pane_opens_nothing(void)
+void test_ctxmenu_right_click_in_a_pane_opens_the_document_menu(void)
 {
     Ed ed;
+    Rect cell;
 
     cx_fixture(&ed, 1);
+    yew_pane_tables_reset(&ed);
+    YEW_ASSERT_EQ_I64(yew_pane_table_add_leaf(&ed, ed.pane_root), 0);
     yew_region_frame_begin();
     yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, 0);
     {
@@ -427,7 +437,16 @@ void test_ctxmenu_right_click_in_a_pane_opens_nothing(void)
         press.row = 5U;
         yew_mouse_event(&ed, &press);
     }
-    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_DOC);
+    /* The leaf index, and the cell — not the pane rect, because the row
+     * that places the cursor needs the cell the user clicked. */
+    YEW_ASSERT_EQ_U64(yew_ctx_target_id(), 0U);
+    cell = yew_ctx_target_rect_get();
+    YEW_ASSERT_EQ_U64(cell.x, 10U);
+    YEW_ASSERT_EQ_U64(cell.y, 5U);
+    YEW_ASSERT(yew_ctx_rows() > 0U);
+    yew_ctx_close();
     yew_ed_free(&ed);
 }
 
