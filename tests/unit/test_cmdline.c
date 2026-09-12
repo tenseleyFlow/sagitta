@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/file_cmds.h"
 #include "edit/mode.h"
 #include "ui/cmdline.h"
 #include "ui/region.h"
@@ -1180,5 +1181,89 @@ void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void)
     YEW_ASSERT_NULL(fixture.ed.cmdline.hist.stem);
     YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hist.draft, "write!");
     bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+}
+
+/*
+ * Sprint 57.11 Deliverable 4: `ed.file.save_as`, the document menu's
+ * `Save As...` row.
+ *
+ * IT IS A PROMPT AND NOT A WRITE.  `ed.file.write` already takes the
+ * destination as an argument; what this command adds is the QUESTION,
+ * which a menu row has no way to ask.  So the whole of its contract is
+ * the line it leaves open — E mode, the command prompt, seeded `w ` and
+ * the path the buffer already has — and that is what these pin.  A seed
+ * that lost the path would make the user retype a directory to change
+ * one character of a basename, and a seed that lost the `w ` would open
+ * a prompt that writes nothing when the user presses Enter.
+ */
+void test_cmdline_save_as_seeds_the_write_line_with_the_current_path(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+    char path[128];
+
+    cmdline_fixture_init(&fixture);
+    (void)snprintf(path, sizeof(path), "%s/named.txt", fixture.state);
+    fixture.ed.buffer.path = yew_xstrdup(path);
+
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_file_cmd_save_as),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.kind, YEW_PROMPT_CMD);
+    YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_E);
+    text = cmdline_text(&fixture.ed.cmdline);
+    {
+        char want[160];
+
+        YEW_ASSERT(snprintf(want, sizeof(want), "w %s", path) > 0);
+        YEW_ASSERT_EQ_STR((const char *)text.data, want);
+    }
+    bytebuf_free(&text);
+    /* Nothing was written: the command only asked. */
+    YEW_ASSERT(!yew_buf_dirty(&fixture.ed.buffer));
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
+
+/*
+ * A SCRATCH BUFFER STILL GETS THE PROMPT.  "Write this somewhere else"
+ * is most often asked of a buffer that has nowhere yet, which is why
+ * the row is enabled unconditionally (ctxrows.c); the seed is then the
+ * bare verb and the user types the whole path.
+ */
+void test_cmdline_save_as_on_a_pathless_buffer_seeds_the_bare_verb(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+
+    cmdline_fixture_init(&fixture);
+    YEW_ASSERT_NULL(fixture.ed.buffer.path);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_file_cmd_save_as),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "w ");
+    bytebuf_free(&text);
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
+
+/* REFUSES WITHOUT A WINDOW, rather than opening a prompt about no
+ * buffer.  `YEW_CMD_NEEDS_WIN` states the same thing to the dispatcher;
+ * this is the command honouring it on its own. */
+void test_cmdline_save_as_refuses_without_a_window(void)
+{
+    CmdlineFixture fixture;
+    CmdCtx context = {0};
+
+    cmdline_fixture_init(&fixture);
+    context.ed = &fixture.ed;
+    context.win = NULL;
+    context.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_U64(yew_file_cmd_save_as(&context), YEW_CMD_ERR_STATE);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(yew_file_cmd_save_as(NULL), YEW_CMD_ERR_STATE);
     cmdline_fixture_free(&fixture);
 }

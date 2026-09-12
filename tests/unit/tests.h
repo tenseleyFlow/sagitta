@@ -823,6 +823,9 @@ void test_cmdline_ghost_is_never_in_the_buffer(void);
 void test_cmdline_ghost_accept_matches_a_menu_accept(void);
 void test_cmdline_ghost_accept_is_a_motion_when_nothing_is_suggested(void);
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void);
+void test_cmdline_save_as_seeds_the_write_line_with_the_current_path(void);
+void test_cmdline_save_as_on_a_pathless_buffer_seeds_the_bare_verb(void);
+void test_cmdline_save_as_refuses_without_a_window(void);
 
 void test_buflist_document_occupies_slot_zero(void);
 void test_buflist_scratch_new_sets_flags_and_name(void);
