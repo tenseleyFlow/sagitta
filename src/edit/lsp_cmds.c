@@ -135,12 +135,10 @@ static CmdStatus rename_answer(CmdCtx *cx, LspRenameAnswer answer)
 {
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
-    if (!yew_lsp_rename_answer(cx->ed, answer)) {
-        yew_msg(cx->ed, YEW_MSG_ERROR,
-                "no rename is waiting for confirmation");
-        return YEW_CMD_ERR_STATE;
-    }
-    return YEW_CMD_OK;
+    /* The message is the callee's: "nothing to confirm" from the
+     * module, "no lsp module" from the shim. */
+    return yew_lsp_rename_answer(cx->ed, answer) ? YEW_CMD_OK
+                                                 : YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_lsp_cmd_rename_apply(CmdCtx *cx)

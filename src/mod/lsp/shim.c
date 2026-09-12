@@ -136,12 +136,11 @@ bool yew_lsp_rename_key(Ed *ed, const Key *key)
 
 bool yew_lsp_rename_answer(Ed *ed, LspRenameAnswer answer)
 {
-    (void)ed;
     (void)answer;
-    /* No module, no rename in flight: the three `ed.lsp.rename.*`
-     * commands stay in the registry (invariant 3) and refuse with the
-     * same message they give an enabled build with nothing to confirm. */
-    return false;
+    /* The three `ed.lsp.rename.*` commands stay in the registry
+     * (invariant 3) and hard-error naming the module they need, like
+     * every other LSP entry point in this file. */
+    return require_lsp(ed);
 }
 
 bool yew_lsp_rename_confirm_active(const Ed *ed)

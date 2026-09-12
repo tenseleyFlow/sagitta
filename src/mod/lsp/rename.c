@@ -1385,12 +1385,26 @@ static LspRenameState *rename_awaiting(Ed *ed)
     return state;
 }
 
+/*
+ * THE REFUSAL MESSAGE LIVES HERE, not in the command wrapper.
+ *
+ * `ed.lsp.rename.apply` / `.diff` / `.cancel` stay in the registry in a
+ * build with no LSP module (invariant 3), and there the SHIM answers
+ * this call — it has to say "this build has no lsp module", which a
+ * wrapper that overwrote every refusal with "nothing to confirm" would
+ * have hidden.  One message per reason, each from the code that knows
+ * the reason.
+ */
 bool yew_lsp_rename_answer(Ed *ed, LspRenameAnswer answer)
 {
     LspRenameState *state = rename_awaiting(ed);
 
-    if (state == NULL)
+    if (state == NULL) {
+        if (ed != NULL)
+            yew_msg(ed, YEW_MSG_ERROR,
+                    "no rename is waiting for confirmation");
         return false;
+    }
     rename_answer_apply(ed, state, answer);
     ed->full_damage = true;
     return true;
