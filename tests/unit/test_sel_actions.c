@@ -2,6 +2,7 @@
 
 #include "harness.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 
 #include "edit/ed.h"
 #include "edit/sel_actions.h"
+#include "text/clipboard.h"
 
 typedef struct SelActionFixture {
     Ed ed;
@@ -122,6 +124,174 @@ static CmdStatus invoke_registered(SelActionFixture *f, const char *name,
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
     return yew_ed_invoke(&f->ed, id, &cx);
+}
+
+static char *save_clipboard_env(void)
+{
+    const char *value = getenv("YEW_CLIPBOARD");
+
+    return value != NULL ? strdup(value) : NULL;
+}
+
+static void restore_clipboard_env(char *saved)
+{
+    yew_clip_shutdown();
+    if (saved != NULL)
+        YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", saved, 1), 0);
+    else
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_CLIPBOARD"), 0);
+    free(saved);
+    yew_clip_reset();
+}
+
+static void use_fake_clipboard_reader(char path[PATH_MAX],
+                                      const u8 *bytes, size_t len)
+{
+    const char *program = yew_test_program_path();
+    const char *slash = strrchr(program, '/');
+    char fake[PATH_MAX];
+    char value[PATH_MAX * 3U];
+    FILE *fp;
+    int fd;
+    int n;
+
+    if (slash != NULL) {
+        size_t prefix = (size_t)(slash - program);
+
+        YEW_ASSERT(prefix + sizeof("/fakeclip") <= sizeof(fake));
+        (void)memcpy(fake, program, prefix);
+        (void)memcpy(fake + prefix, "/fakeclip", sizeof("/fakeclip"));
+    } else {
+        (void)snprintf(fake, sizeof(fake), "./fakeclip");
+    }
+    (void)snprintf(path, PATH_MAX, "/tmp/yew-selclip-XXXXXX");
+    fd = mkstemp(path);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    fp = fopen(path, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite(bytes, 1U, len, fp), len);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    n = snprintf(value, sizeof(value), "cmd:/bin/true|%s %s read", fake,
+                 path);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(value));
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", value, 1), 0);
+    yew_clip_reset();
+}
+
+void test_sel_actions_clip_copy_and_cut_use_explicit_system_register(void)
+{
+    static const u8 bytes[] = "ab cd";
+    SelActionFixture f;
+    RegVal *reg;
+    char *saved = save_clipboard_env();
+
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "none", 1), 0);
+    yew_clip_reset();
+    fixture_init(&f, bytes, sizeof(bytes) - 1U);
+    f.ed.regs.clipboard_sync = YEW_CLIP_SYNC_OFF;
+    set_selection(&f, YEW_SEL_CHAR, 0U, 2U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.clip.copy", NULL, 0U),
+                      YEW_CMD_OK);
+    assert_text(&f, bytes, sizeof(bytes) - 1U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    reg = yew_reg_get(&f.ed.regs, '+');
+    YEW_ASSERT_EQ_U64(reg->bytes.len, 2U);
+    YEW_ASSERT_EQ_MEM(reg->bytes.data, "ab", 2U);
+    YEW_ASSERT_EQ_MEM(yew_reg_get(&f.ed.regs, '"')->bytes.data, "ab", 2U);
+    YEW_ASSERT_EQ_MEM(yew_reg_get(&f.ed.regs, '0')->bytes.data, "ab", 2U);
+
+    set_selection(&f, YEW_SEL_CHAR, 3U, 5U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.clip.cut", NULL, 0U),
+                      YEW_CMD_OK);
+    assert_text(&f, (const u8 *)"ab ", 3U);
+    reg = yew_reg_get(&f.ed.regs, '+');
+    YEW_ASSERT_EQ_U64(reg->bytes.len, 2U);
+    YEW_ASSERT_EQ_MEM(reg->bytes.data, "cd", 2U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.undo->nodes.data[
+                          f.ed.buffer.undo->nodes.len - 1U].reason,
+                      YEW_TXN_CUT);
+    fixture_free(&f);
+    restore_clipboard_env(saved);
+}
+
+void test_sel_actions_clip_paste_replaces_all_highlights_once(void)
+{
+    static const u8 bytes[] = "ab cd";
+    SelActionFixture f;
+    char input[PATH_MAX];
+    char *saved = save_clipboard_env();
+
+    use_fake_clipboard_reader(input, (const u8 *)"XY", 2U);
+    fixture_init(&f, bytes, sizeof(bytes) - 1U);
+    set_selection(&f, YEW_SEL_CHAR, 0U, 2U);
+    add_selection(&f, 3U, 5U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.clip.paste", NULL, 0U),
+                      YEW_CMD_OK);
+    assert_text(&f, (const u8 *)"XY XY", 5U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.len, 2U);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.undo->nodes.data[
+                          f.ed.buffer.undo->nodes.len - 1U].reason,
+                      YEW_TXN_PASTE);
+    fixture_free(&f);
+    YEW_ASSERT_EQ_I64(unlink(input), 0);
+    restore_clipboard_env(saved);
+}
+
+void test_sel_actions_clip_paste_splits_insert_typing_transaction(void)
+{
+    SelActionFixture f;
+    char input[PATH_MAX];
+    char *saved = save_clipboard_env();
+
+    use_fake_clipboard_reader(input, (const u8 *)"XY", 2U);
+    fixture_init(&f, (const u8 *)"ab", 2U);
+    f.ed.win->cs.curs.data[0] = make_selection(1U, 1U);
+    yew_cset_normalize(f.ed.buffer.tb, &f.ed.win->cs);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&f.ed, YEW_MODE_I), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.edit.insert.text", "q", 1U),
+                      YEW_CMD_OK);
+    YEW_ASSERT(f.ed.insert_txn);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.clip.paste", NULL, 0U),
+                      YEW_CMD_OK);
+    assert_text(&f, (const u8 *)"aqXYb", 5U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    YEW_ASSERT(!f.ed.insert_txn);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.undo->nodes.data[1].reason, YEW_TXN_TYPE);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.undo->nodes.data[2].reason, YEW_TXN_PASTE);
+    fixture_free(&f);
+    YEW_ASSERT_EQ_I64(unlink(input), 0);
+    restore_clipboard_env(saved);
+}
+
+void test_sel_actions_clip_paste_failure_and_empty_are_atomic(void)
+{
+    static const u8 bytes[] = "abcd";
+    SelActionFixture f;
+    char input[PATH_MAX];
+    char *saved = save_clipboard_env();
+
+    use_fake_clipboard_reader(input, NULL, 0U);
+    fixture_init(&f, bytes, sizeof(bytes) - 1U);
+    set_selection(&f, YEW_SEL_CHAR, 1U, 3U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.clip.paste", NULL, 0U),
+                      YEW_CMD_ERR_STATE);
+    assert_text(&f, bytes, sizeof(bytes) - 1U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].anchor.v, 1U);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].pos.v, 3U);
+
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "none", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.clip.paste", NULL, 0U),
+                      YEW_CMD_ERR_STATE);
+    assert_text(&f, bytes, sizeof(bytes) - 1U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    fixture_free(&f);
+    YEW_ASSERT_EQ_I64(unlink(input), 0);
+    restore_clipboard_env(saved);
 }
 
 void test_sel_actions_yank_uses_char_line_and_block_register_types(void)

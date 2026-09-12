@@ -5,7 +5,9 @@
 
 #include "edit/ed.h"
 #include "edit/select.h"
+#include "text/clipboard.h"
 #include "text/register.h"
+#include "ui/message.h"
 #include "unicode/case.h"
 #include "unicode/grapheme.h"
 #include "unicode/utf8.h"
@@ -326,7 +328,25 @@ CmdStatus yew_sel_cmd_yank(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
-static CmdStatus delete_or_change(CmdCtx *cx, bool change)
+CmdStatus yew_sel_cmd_clip_copy(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    RegVal value;
+
+    if (!action_context(cx, &win, &tb, &cursor) || cx->ed->mode != YEW_MODE_H)
+        return YEW_CMD_ERR_STATE;
+    (void)tb;
+    (void)cursor;
+    yew_regval_init(&value);
+    capture_selection(&value, win);
+    yew_reg_yank(&cx->ed->regs, '+', &value);
+    yew_regval_free(&value);
+    return YEW_CMD_OK;
+}
+
+static CmdStatus delete_or_change(CmdCtx *cx, bool change, u8 reg_name)
 {
     Win *win;
     TextBuf *tb;
@@ -351,7 +371,7 @@ static CmdStatus delete_or_change(CmdCtx *cx, bool change)
         yew_regval_free(&value);
         return YEW_CMD_ERR_IO;
     }
-    yew_reg_delete(&cx->ed->regs, 0U, &value);
+    yew_reg_delete(&cx->ed->regs, reg_name, &value);
     edits_free(&edits);
     if (win->h.kind == YEW_SEL_RECT && change) {
         /* Rectangular change keeps one insertion caret per affected row. */
@@ -382,12 +402,76 @@ static CmdStatus delete_or_change(CmdCtx *cx, bool change)
 
 CmdStatus yew_sel_cmd_delete(CmdCtx *cx)
 {
-    return delete_or_change(cx, false);
+    return delete_or_change(cx, false, 0U);
 }
 
 CmdStatus yew_sel_cmd_change(CmdCtx *cx)
 {
-    return delete_or_change(cx, true);
+    return delete_or_change(cx, true, 0U);
+}
+
+CmdStatus yew_sel_cmd_clip_cut(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->ed->mode != YEW_MODE_H)
+        return YEW_CMD_ERR_STATE;
+    return delete_or_change(cx, false, '+');
+}
+
+CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    RegVal *value;
+    YewSelSpanVec spans = {0};
+    SelEditVec edits = {0};
+    ByteOff first = {0U};
+    bool replace;
+    size_t i;
+
+    if (!action_context(cx, &win, &tb, &cursor))
+        return YEW_CMD_ERR_STATE;
+    (void)tb;
+    (void)cursor;
+    yew_clip_set_read_max(cx->ed->regs.clip_read_max);
+    value = &cx->ed->regs.system;
+    if (!yew_clip_read(value, '+')) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "system clipboard is not readable");
+        return YEW_CMD_ERR_STATE;
+    }
+    if (value->bytes.len == 0U) {
+        yew_msg(cx->ed, YEW_MSG_WARN, "system clipboard is empty");
+        return YEW_CMD_ERR_STATE;
+    }
+
+    replace = cx->ed->mode == YEW_MODE_H;
+    if (replace) {
+        all_selection_spans(win, &spans);
+    } else {
+        for (i = 0U; i < win->cs.curs.len; i++) {
+            Span at = {win->cs.curs.data[i].pos.v,
+                       win->cs.curs.data[i].pos.v};
+
+            YewSelSpanVec_push(&spans, at);
+        }
+    }
+    for (i = 0U; i < spans.len; i++) {
+        SelEdit *edit = edit_push(&edits, spans.data[i]);
+
+        bytebuf_append(&edit->replacement, value->bytes.data,
+                       value->bytes.len);
+    }
+    if (!apply_edits(cx, &edits, &first)) {
+        edits_free(&edits);
+        YewSelSpanVec_free(&spans);
+        return YEW_CMD_ERR_IO;
+    }
+    edits_free(&edits);
+    YewSelSpanVec_free(&spans);
+    if (replace)
+        return finish_action(cx, first, false);
+    collapse_all(win);
+    return YEW_CMD_OK;
 }
 
 static CmdStatus change_case(CmdCtx *cx, YewCaseKind kind)

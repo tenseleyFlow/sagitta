@@ -225,8 +225,12 @@ static void require_reason(EditCtx *ec, YewTxnReason reason)
         if (ec->cset == NULL || ec->cset->curs.len < 2U)
             YEW_BUG("multi-cursor transaction requires multiple cursors");
         yew_cset_check_text(ec->tb, ec->cset);
-    } else if (ec->cset != NULL)
-        yew_cset_require_single_edit(ec->cset);
+    } else if (ec->cset != NULL) {
+        if (reason == YEW_TXN_CUT || reason == YEW_TXN_PASTE)
+            yew_cset_check_text(ec->tb, ec->cset);
+        else
+            yew_cset_require_single_edit(ec->cset);
+    }
 }
 
 static void reserve_hot_transaction(UndoTree *ut)

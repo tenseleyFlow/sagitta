@@ -469,6 +469,17 @@ static const CmdDesc builtins[] = {
     {"ed.sel.yank", yew_sel_cmd_yank, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_MULTI_AGGREGATE,
      "Yank the active selections", "yank"},
+    {"ed.clip.copy", yew_sel_cmd_clip_copy, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_MULTI_AGGREGATE,
+     "Copy the active selections to the system clipboard", "clip_copy"},
+    {"ed.clip.cut", yew_sel_cmd_clip_cut, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Cut the active selections to the system clipboard", "clip_cut"},
+    {"ed.clip.paste", yew_sel_cmd_clip_paste, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Paste the system clipboard", "clip_paste"},
     {"ed.sel.delete", yew_sel_cmd_delete, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
@@ -1230,7 +1241,7 @@ static bool command_name_valid(const char *name)
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
         "cmdline", "del", "shell", "opt", "fl", "config", "syn",
-        "theme", "shadow", "compl", "prof",
+        "theme", "shadow", "compl", "prof", "clip",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
@@ -1245,6 +1256,7 @@ static bool command_name_valid(const char *name)
         "mouse"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
+        "copy", "cut",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
         "open", "close", "save", "new", "enter", "leave", "grow",
         "shrink", "expand", "contract", "list", "reload", "cancel",

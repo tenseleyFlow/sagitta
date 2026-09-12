@@ -23,6 +23,7 @@ static const BindRow frozen_L[] = {
     {"S-<right>", "ed.sel.extend.right", 0, NULL},
     {"S-<up>", "ed.sel.extend.up", 0, NULL},
     {"S-<down>", "ed.sel.extend.down", 0, NULL},
+    {"C-v", "ed.clip.paste", 0, NULL},
     {"A-<left>", "ed.move.unit.home_alt", 0, NULL},
     {"A-<right>", "ed.shadow.accept_word", 0, NULL},
     {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
@@ -170,6 +171,7 @@ static const BindRow frozen_W[] = {
     {"S-<right>", "ed.sel.extend.right", 0, NULL},
     {"S-<up>", "ed.sel.extend.up", 0, NULL},
     {"S-<down>", "ed.sel.extend.down", 0, NULL},
+    {"C-v", "ed.clip.paste", 0, NULL},
     {"A-<left>", "ed.move.unit.prev_alt", 0, NULL},
     {"A-<right>", "ed.shadow.accept_word", 0, NULL},
     {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
@@ -202,6 +204,7 @@ static const BindRow frozen_B[] = {
     {"S-<right>", "ed.sel.extend.right", 0, NULL},
     {"S-<up>", "ed.sel.extend.up", 0, NULL},
     {"S-<down>", "ed.sel.extend.down", 0, NULL},
+    {"C-v", "ed.clip.paste", 0, NULL},
     {"A-<left>", "ed.move.block.match_prev", 0, NULL},
     {"A-<right>", "ed.shadow.accept_word", 0, NULL},
     {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
@@ -246,6 +249,7 @@ static const BindRow frozen_I[] = {
     {"S-<right>", "ed.sel.extend.right", 0, NULL},
     {"S-<up>", "ed.sel.extend.up", 0, NULL},
     {"S-<down>", "ed.sel.extend.down", 0, NULL},
+    {"C-v", "ed.clip.paste", 0, NULL},
     {"<home>", "ed.move.line.home", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
 };
@@ -393,7 +397,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 222U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 226U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

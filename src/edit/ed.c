@@ -1630,6 +1630,8 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool durability_command;
     bool newline;
     bool shadow_accept;
+    bool clipboard_paste;
+    bool clipboard_cut;
     bool shadow_motion;
     bool shadow_quiet;
     bool shadow_holdoff_before;
@@ -1655,6 +1657,8 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
               strcmp(desc->name, "ed.edit.insert.newline") == 0;
     shadow_accept = strncmp(desc->name, "ed.shadow.accept_", 17U) == 0 ||
                     strcmp(desc->name, "ed.compl.accept") == 0;
+    clipboard_paste = strcmp(desc->name, "ed.clip.paste") == 0;
+    clipboard_cut = strcmp(desc->name, "ed.clip.cut") == 0;
     shadow_motion = document_target &&
                     strncmp(desc->name, "ed.move.", 8U) == 0;
     shadow_quiet = document_target &&
@@ -1675,11 +1679,13 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         return YEW_CMD_ERR_IO;
     }
 
-    if (started_in_insert && (!changes || newline || shadow_accept))
+    if (started_in_insert &&
+        (!changes || newline || shadow_accept || clipboard_paste))
         yew_ed_insert_barrier(ed);
     if (changes && ed->model_ready) {
         ec = yew_ed_edit_ctx_for(ed, cx->win);
-        if (started_in_insert && !newline && !shadow_accept) {
+        if (started_in_insert && !newline && !shadow_accept &&
+            !clipboard_paste) {
             if (!ed->insert_txn) {
                 yew_undo_begin(&ec,
                                multiple ? YEW_TXN_MULTI : YEW_TXN_TYPE);
@@ -1698,15 +1704,16 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
              */
             yew_undo_begin(
                 &ec,
-                multiple ? YEW_TXN_MULTI
-                      : (shadow_accept ? YEW_TXN_PASTE
+                (shadow_accept || clipboard_paste) ? YEW_TXN_PASTE
+                      : (clipboard_cut ? YEW_TXN_CUT
+                      : (multiple ? YEW_TXN_MULTI
                       : (strcmp(desc->name, "ed.search.replace") == 0
                              ? YEW_TXN_REPLACE
                       : (strstr(desc->name, ".delete.") != NULL ||
                                  strcmp(desc->name,
                                         "ed.edit.line.delete") == 0
                              ? YEW_TXN_ERASE
-                             : YEW_TXN_TYPE))));
+                             : YEW_TXN_TYPE)))));
             opened = true;
         }
     }
@@ -1736,7 +1743,8 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
             if (ed->win != NULL && ed->win->cs.curs.len > 1U)
                 yew_undo_promote_multi(&ec);
             ed->insert_txn = true;
-        } else if ((!started_in_insert || newline || shadow_accept) &&
+        } else if ((!started_in_insert || newline || shadow_accept ||
+                    clipboard_paste) &&
                    opened) {
             yew_undo_end(&ec);
         }

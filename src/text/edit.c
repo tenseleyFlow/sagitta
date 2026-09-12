@@ -57,10 +57,15 @@ static u8 *copy_range(const TextBuf *tb, Span range)
 
 static void require_edit_wrapped(const EditCtx *ec)
 {
+    bool aggregate;
+
     if (ec->cset == NULL || ec->cset->curs.len <= 1U)
         return;
-    if (ec->undo == NULL || ec->undo->depth == 0U ||
-        ec->undo->pending_reason != YEW_TXN_MULTI)
+    aggregate = ec->undo != NULL && ec->undo->depth != 0U &&
+                (ec->undo->pending_reason == YEW_TXN_MULTI ||
+                 ec->undo->pending_reason == YEW_TXN_CUT ||
+                 ec->undo->pending_reason == YEW_TXN_PASTE);
+    if (!aggregate)
         yew_cset_require_single_edit(ec->cset);
     if (!ec->cset->batching)
         yew_cset_check_text(ec->tb, ec->cset);
