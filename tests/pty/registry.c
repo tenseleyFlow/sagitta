@@ -2832,6 +2832,87 @@ static void case_s57_12_shift_arrow_highlight(PtyCtx *c)
     (void)unlink(path);
 }
 
+/*
+ * Sprint 57.16.  The fixture is a .txt file, so no language binds and the
+ * pairing syntax query fails open — exactly the state a scratch buffer is
+ * in, and the one these goldens pin.
+ */
+static void case_s57_16_autoindent_block(PtyCtx *c)
+{
+    static const u8 initial[] = "\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    /*
+     * Typed as a person types it: `(` brings its closer, `)` skips over
+     * that closer instead of doubling it, `{` brings its own, and Enter
+     * between the braces opens the three-line block with the caret on the
+     * indented middle line.
+     */
+    ptc_bytes(c, "int main(void) {");
+    ptc_settle(c, 0);
+    s17_settle_after_keys(c, "enter");
+    ptc_bytes(c, "return 0;");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, "s57_16_autoindent_block");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_16_pair_typeover(PtyCtx *c)
+{
+    static const u8 initial[] = "\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    /* The opener brings its closer; the typed closer skips over it rather
+     * than doubling it, and the caret ends past a single pair. */
+    ptc_bytes(c, "f(ab)");
+    ptc_settle(c, 0);
+    ptc_bytes(c, ";");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, "s57_16_pair_typeover");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_16_tab_navigates_indent(PtyCtx *c)
+{
+    static const u8 initial[] = "        alpha\nbeta\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* Caret at column 1 inside the indent: Tab moves to the text and
+     * changes no bytes, so the status column is the whole evidence. */
+    s17_settle_after_keys(c, "i");
+    s17_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_16_tab_navigates_indent");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_16_tab_indents_the_line(PtyCtx *c)
+{
+    static const u8 initial[] = "        alpha\nbeta\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* The first Tab navigates to the first non-blank byte; from there the
+     * second indents the LINE and the caret keeps its place in the text. */
+    s17_settle_after_keys(c, "i");
+    s17_settle_after_keys(c, "tab");
+    s17_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_16_tab_indents_the_line");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static void case_s57_12_clipboard_cut_paste(PtyCtx *c)
 {
     static const u8 initial[] = "alpha beta\n";
@@ -10235,6 +10316,15 @@ const PtyCase yew_pty_cases[] = {
       case_s57_12_shift_arrow_highlight),
     C(s57_12_clipboard_cut_paste, modern, 24U, 80U,
       case_s57_12_clipboard_cut_paste),
+    C(s57_16_autoindent_block, modern, 24U, 80U,
+      case_s57_16_autoindent_block),
+    C(s57_16_pair_typeover, modern, 24U, 80U,
+      case_s57_16_pair_typeover),
+    C(s57_16_tab_navigates_indent, modern, 24U, 80U,
+      case_s57_16_tab_navigates_indent),
+    C(s57_16_tab_indents_the_line, modern, 24U, 80U,
+      case_s57_16_tab_indents_the_line),
+
     C(s57_12_job_output_quit_returns, modern, 24U, 80U,
       case_s57_12_job_output_quit_returns),
     C(s19_stream_output, modern, 24U, 80U, case_s19_stream_output),

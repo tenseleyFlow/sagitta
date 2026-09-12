@@ -4,6 +4,7 @@
 /* The editor's ordinary buffer model. */
 
 #include "edit/jumplist.h"
+#include "edit/pairs.h"
 #include "syn/engine.h"
 #include "text/edit.h"
 #include "util/strmap.h"
@@ -36,6 +37,8 @@ typedef struct Buffer {
      * through SynBuf is borrowed and must outlive this Buffer; dispose
      * detaches syntax before releasing the TextBuf. */
     SynBuf syn;
+    /* Sprint 57.16 §4: what auto-pairing closed and has not forgotten. */
+    PairState pairs;
     MarkId named[26];
     bool named_set[26];
     u64 pending_marks[26];

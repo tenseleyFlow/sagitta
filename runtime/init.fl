@@ -11,6 +11,8 @@
 set({
     tabwidth: 4,
     expandtab: false,
+    autoindent: true,
+    autopair: true,
     wrap: false,
     scrolloff: 3,
     number: "both",

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/indent.h"
 #include "unicode/coords.h"
 #include "unicode/wordbreak.h"
 #include "util/log.h"
@@ -133,89 +134,29 @@ static u64 line_content_hi(const u8 *bytes, Span span)
     return len;
 }
 
-static bool ascii_white(u8 byte)
-{
-    return byte == (u8)' ' || byte == (u8)'\t' || byte == (u8)'\n' ||
-           byte == (u8)'\r' || byte == (u8)'\v' || byte == (u8)'\f';
-}
-
-/* Most source and prose lines reveal their indentation entirely in ASCII.
- * Keep column calculation in unicode/coords.c, but avoid constructing a
- * grapheme reader for every unindented ASCII line in a large paragraph. */
-static bool line_ascii_first_nonwhite(const TextBuf *tb, Span span,
-                                      ByteOff *first, bool *blank)
-{
-    TextIter it;
-    u64 consumed = 0U;
-
-    *first = BYTEOFF(span.lo);
-    *blank = true;
-    if (span.lo == span.hi)
-        return true;
-    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
-        YEW_BUG("block line classifier cannot start iterator");
-    while (consumed < span.hi - span.lo) {
-        const u8 *chunk;
-        u64 chunk_len;
-        u64 take;
-
-        if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len))
-            YEW_BUG("block line classifier cannot read iterator");
-        take = span.hi - span.lo - consumed;
-        if (take > chunk_len)
-            take = chunk_len;
-        for (u64 i = 0U; i < take; i++) {
-            if (chunk[i] >= 0x80U)
-                return false;
-            if (!ascii_white(chunk[i])) {
-                *first = BYTEOFF(span.lo + consumed + i);
-                *blank = false;
-                return true;
-            }
-        }
-        consumed += take;
-        if (consumed != span.hi - span.lo &&
-            !yew_textiter_advance(&it, tb))
-            YEW_BUG("block line classifier iterator ended early");
-    }
-    return true;
-}
-
+/* Sprint 57.16 §1: the classifier moved to src/edit/indent.c so the edit
+ * path and the block units answer this question the same way.  The mapping
+ * below keeps LineInfo's historical shape: a blank line reports indent 0
+ * and `first` at the line start, which the paragraph and indent providers
+ * and their hand-computed fixtures depend on. */
 static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
 {
     Span span = yew_textbuf_line_span(u->tb, line);
-    ByteOff at = BYTEOFF(span.lo);
-    ByteOff first = at;
     u32 tabwidth = u->buf != NULL && u->buf->tabwidth != 0U
                        ? u->buf->tabwidth
                        : 4U;
+    IndentInfo info;
 
     out->span = span;
-    out->first = at;
+    out->first = BYTEOFF(span.lo);
     out->blank = true;
     out->indent = 0U;
-    if (line_ascii_first_nonwhite(u->tb, span, &first, &out->blank)) {
-        out->first = first;
-        if (!out->blank && first.v != span.lo)
-            out->indent =
-                yew_off_to_ccol(u->tb, span, first, tabwidth).v;
+    if (!yew_indent_info(u->tb, span, tabwidth, &info))
         return true;
-    }
-    while (at.v < span.hi) {
-        YewTextCluster cluster;
-
-        if (!yew_text_cluster_next(u->tb, span, at, &cluster))
-            break;
-        if (!yew_unicode_is_white_space(cluster.base_cp)) {
-            out->blank = false;
-            first = at;
-            break;
-        }
-        at = BYTEOFF(cluster.bytes.hi);
-    }
-    if (!out->blank) {
-        out->first = first;
-        out->indent = yew_off_to_ccol(u->tb, span, first, tabwidth).v;
+    out->blank = info.blank;
+    if (!info.blank) {
+        out->first = info.first;
+        out->indent = info.width.v;
     }
     return true;
 }
@@ -861,20 +802,7 @@ static bool block_byte_at(const TextBuf *tb, u64 off, u8 *out)
 
 static bool block_line_last_nonwhite(UnitCtx *u, Span line, u8 *out)
 {
-    u64 at = line.hi;
-
-    while (at != line.lo) {
-        u8 byte;
-
-        at--;
-        if (!block_byte_at(u->tb, at, &byte))
-            return false;
-        if (!ascii_white(byte)) {
-            *out = byte;
-            return true;
-        }
-    }
-    return false;
+    return yew_indent_last_nonwhite(u->tb, line, out);
 }
 
 static bool block_continuation_byte(u8 byte)

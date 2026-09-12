@@ -344,6 +344,18 @@ void yew_block_provider_syntax_install(bool enabled)
     yew_block_register(provider);
 }
 
+static u64 syn_in_string_or_comment_calls;
+
+u64 yew_syn_in_string_or_comment_calls(void)
+{
+    return syn_in_string_or_comment_calls;
+}
+
+void yew_syn_in_string_or_comment_calls_reset(void)
+{
+    syn_in_string_or_comment_calls = 0U;
+}
+
 bool yew_syn_in_string_or_comment(const Buffer *buf, ByteOff off)
 {
     SynBlockLine line = {0};
@@ -353,6 +365,7 @@ bool yew_syn_in_string_or_comment(const Buffer *buf, ByteOff off)
     u64 local;
     u8 attr = YEW_ATTR_TEXT;
 
+    syn_in_string_or_comment_calls++;
     if (buf == NULL || buf->tb == NULL || buf->syn.lang == YEW_LANG_NONE ||
         buf->syn.engine == NULL || buf->syn.degraded)
         return false;

@@ -471,7 +471,8 @@ void test_fl_runtime_cmdline_mode_hooks_fire_once_per_transition(void)
 void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
 {
     static const char *const names[] = {
-        "tabwidth", "expandtab", "wrap", "scrolloff", "number",
+        "tabwidth", "expandtab", "autoindent", "autopair", "wrap",
+        "scrolloff", "number",
         "statusline.column", "errorbells", "ambiguous_wide", "subword",
         "fortran_form", "chord_timeout_ms", "undo.break_on_newline",
         "undo.bytes_max", "undo.min_nodes", "undo.persist_bytes_max",

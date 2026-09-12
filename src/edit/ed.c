@@ -498,6 +498,7 @@ void yew_buf_defer(Ed *ed, Buffer *b)
      */
     yew_undo_free(b->undo);
     b->undo = NULL;
+    yew_pairs_clear(b);
     yew_marks_free(b->marks);
     b->marks = NULL;
     yew_syn_detach(&b->syn);

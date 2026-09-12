@@ -1,6 +1,7 @@
 #include "edit/notify.h"
 
 #include "edit/ed.h"
+#include "edit/pairs.h"
 #include "edit/shadow.h"
 #include "mod/lsp/lsp.h"
 #include "util/log.h"
@@ -71,6 +72,7 @@ void yew_edit_notify_post(EditCtx *ec, u8 kind, ByteOff at, u64 len)
             yew_syn_attach(&ec->buffer->syn, ec->buffer->syn.lang, ec->tb);
         }
     }
+    yew_pairs_note_edit(ec->buffer, ec->notify_line);
     yew_shadow_on_edit(ec, kind, at, len);
     yew_symidx_note_post(ec, kind, at, len);
 }
