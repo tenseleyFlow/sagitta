@@ -9496,6 +9496,44 @@ static void case_s57_15_chevron_hover_reveals(PtyCtx *c)
     (void)unlink(path);
 }
 
+/*
+ * Sprints 57.14 and 57.15 in ONE frame, which neither could record on
+ * its own.
+ *
+ * The strip is scrolled by a chevron click, so the offset is the
+ * user's and the active tab is off-screen.  A drag is then started
+ * inside a visible entry and left mid-gesture, so the same row carries
+ * the `<` and `>N` chevrons, the GAP where the held entry was, and the
+ * FLOAT at the pointer — and the modes line still says 1003, because
+ * the float registers nothing and cannot take the chevron answer away.
+ *
+ * The half that would be a race is the one deliberately avoided: no
+ * group is under the pointer, so no dwell is in flight and no flash is
+ * being computed from the clock.  The pointer is parked mid-row rather
+ * than on a chevron, so the 120 ms drag autoscroll never arms either,
+ * and the frame is a pure function of the events sent.
+ */
+static void case_s57_14_15_float_over_a_scrolled_strip(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    /* The `>N` indicator ends at the last column, whatever N is. */
+    s27_mouse(c, "\x1b[<0;80;1M");
+    s27_mouse(c, "\x1b[<0;80;1m");
+    /* Press inside the first entry the scrolled strip shows, and carry
+     * it to a column that is an entry rather than a chevron. */
+    s27_mouse(c, "\x1b[<0;5;1M");
+    s27_mouse(c, "\x1b[<32;40;1M");
+    ptc_snapshot(c, c->test->name);
+    s27_mouse(c, "\x1b[<0;40;1m");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #if YEW_WITH_PLUGINS
 /* ---------------------------------------------------------------- */
 /* Sprint 54: plugin picker lifecycle                               */
@@ -10446,6 +10484,8 @@ const PtyCase yew_pty_cases[] = {
       case_s57_15_chevron_click_scrolls),
     C(s57_15_chevron_hover_reveals, modern, 24U, 80U,
       case_s57_15_chevron_hover_reveals),
+    C(s57_14_15_float_over_a_scrolled_strip, modern, 24U, 80U,
+      case_s57_14_15_float_over_a_scrolled_strip),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
       case_s27_double_click_mode_chip),
     C(s32_repl_session, modern, 24U, 80U, case_s32_repl_session),
