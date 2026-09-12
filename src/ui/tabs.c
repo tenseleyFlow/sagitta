@@ -815,10 +815,26 @@ typedef struct StripPreSlot {
     i32 pre_payload;
 } StripPreSlot;
 
-static StripPreSlot strip_pre[YEW_TAB_MAX];
-static int strip_pre_n;
-static u16 strip_pre_y;
-static u16 strip_tail_x;
+/*
+ * One table per ROW.  The two rows scroll and permute independently
+ * (Sprint 24 made that a law), so a single table would answer for
+ * whichever row rendered last — and row 2 renders second.
+ *
+ * Row 1's holds the PRE-DRAG payloads, because the dwell has to ask
+ * what was under the pointer before the preview moved it.  Row 2's
+ * records CELLS ONLY: the member strip's targeting never needs to
+ * un-permute a payload, and a `pre_payload` that nothing reads is a
+ * field that can rot.
+ */
+typedef struct StripSlots {
+    StripPreSlot v[YEW_TAB_MAX];
+    int n;
+    u16 y;
+    u16 tail_x;
+} StripSlots;
+
+static StripSlots strip_row1;
+static StripSlots strip_row2;
 
 int yew_strip_slot_at(u16 x, u16 y)
 {
@@ -826,10 +842,10 @@ int yew_strip_slot_at(u16 x, u16 y)
 
     /* The table only ever holds row 1, so the row is checked once
      * rather than stored per slot. */
-    if (strip_pre_n == 0 || y != strip_pre_y)
+    if (strip_row1.n == 0 || y != strip_row1.y)
         return -1;
-    for (i = 0; i < strip_pre_n; i++) {
-        if (x >= strip_pre[i].col0 && x < strip_pre[i].col1)
+    for (i = 0; i < strip_row1.n; i++) {
+        if (x >= strip_row1.v[i].col0 && x < strip_row1.v[i].col1)
             return i;
     }
     return -1;
@@ -837,34 +853,65 @@ int yew_strip_slot_at(u16 x, u16 y)
 
 bool yew_strip_pre_payload(int slot, i32 *payload)
 {
-    if (slot < 0 || slot >= strip_pre_n || payload == NULL)
+    if (slot < 0 || slot >= strip_row1.n || payload == NULL)
         return false;
-    *payload = strip_pre[slot].pre_payload;
+    *payload = strip_row1.v[slot].pre_payload;
     return true;
 }
 
 bool yew_strip_slot_cells(int slot, u16 *col0, u16 *col1)
 {
-    if (slot < 0 || slot >= strip_pre_n || col0 == NULL || col1 == NULL)
+    if (slot < 0 || slot >= strip_row1.n || col0 == NULL || col1 == NULL)
         return false;
     /* Zero width is "the layout scrolled this one off", not "an empty
      * entry": strip_render_row1 clears the range and only the spans it
      * actually drew fill one in. */
-    if (strip_pre[slot].col1 <= strip_pre[slot].col0)
+    if (strip_row1.v[slot].col1 <= strip_row1.v[slot].col0)
         return false;
-    *col0 = strip_pre[slot].col0;
-    *col1 = strip_pre[slot].col1;
+    *col0 = strip_row1.v[slot].col0;
+    *col1 = strip_row1.v[slot].col1;
     return true;
 }
 
 int yew_strip_slot_count(void)
 {
-    return strip_pre_n;
+    return strip_row1.n;
 }
 
 u16 yew_strip_tail_x(void)
 {
-    return strip_tail_x;
+    return strip_row1.tail_x;
+}
+
+/*
+ * Sprint 57.14 field repair: ROW 2'S SLOT TABLE.
+ *
+ * The positions the member strip drew, in the order it drew them —
+ * including the GAP the carried tab is holding open, which is a
+ * position like any other because that is where it lands.  Same law as
+ * row 1's: placement is established once, while drawing, and the drag
+ * aims with it rather than re-deriving it.
+ */
+int yew_strip_member_slot_count(void)
+{
+    return strip_row2.n;
+}
+
+bool yew_strip_member_slot_cells(int slot, u16 *col0, u16 *col1)
+{
+    if (slot < 0 || slot >= strip_row2.n || col0 == NULL || col1 == NULL)
+        return false;
+    if (strip_row2.v[slot].col1 <= strip_row2.v[slot].col0)
+        return false; /* scrolled off, exactly as row 1 means it */
+    *col0 = strip_row2.v[slot].col0;
+    *col1 = strip_row2.v[slot].col1;
+    return true;
+}
+
+/* Where row 2's blank tail begins — "put it last", aimable. */
+u16 yew_strip_member_tail_x(void)
+{
+    return strip_row2.tail_x;
 }
 
 /*
@@ -937,7 +984,7 @@ static int apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
 
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          int active_entry, int *scroll, bool user_scroll,
-                         i32 scroll_mag, bool record_slots, bool draw_new,
+                         i32 scroll_mag, StripSlots *slots, bool draw_new,
                          int held_idx);
 
 /*
@@ -975,16 +1022,16 @@ static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
     /* Cleared before the render fills the cell ranges in: a slot the
      * layout scrolled out of view must not keep last frame's cells and
      * answer for a position nobody can point at. */
-    strip_pre_n = n;
-    strip_pre_y = rect.y;
-    strip_tail_x = rect.x;
+    strip_row1.n = n;
+    strip_row1.y = rect.y;
+    strip_row1.tail_x = rect.x;
     for (i = 0; i < n; i++) {
-        strip_pre[i].col0 = 0U;
-        strip_pre[i].col1 = 0U;
-        strip_pre[i].pre_payload = pre[i].payload;
+        strip_row1.v[i].col0 = 0U;
+        strip_row1.v[i].col1 = 0U;
+        strip_row1.v[i].pre_payload = pre[i].payload;
     }
     strip_render(ed, rect, entries, n, active_entry, scroll, user_scroll,
-                 1, true, true, held);
+                 1, &strip_row1, true, held);
 }
 
 static ThemeEnt tab_base_style(const Ed *ed)
@@ -1052,7 +1099,7 @@ static Cell tab_blank(ThemeEnt style)
  */
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          int active_entry, int *scroll, bool user_scroll,
-                         i32 scroll_mag, bool record_slots, bool draw_new,
+                         i32 scroll_mag, StripSlots *slots, bool draw_new,
                          int held_idx)
 {
     StripSpan spans[YEW_TAB_MAX];
@@ -1163,11 +1210,11 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
          * second derivation of where a slot sits is the multibyte
          * click-shift the Sprint 22 law forbids.
          */
-        if (record_slots && idx >= 0 && idx < strip_pre_n) {
-            strip_pre[idx].col0 = x;
-            strip_pre[idx].col1 = (u16)(x + span_rect.w);
-            if (strip_pre[idx].col1 > strip_tail_x)
-                strip_tail_x = strip_pre[idx].col1;
+        if (slots != NULL && idx >= 0 && idx < slots->n) {
+            slots->v[idx].col0 = x;
+            slots->v[idx].col1 = (u16)(x + span_rect.w);
+            if (slots->v[idx].col1 > slots->tail_x)
+                slots->tail_x = slots->v[idx].col1;
         }
     }
     if (more_left) {
@@ -1224,7 +1271,9 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
 {
     StripEntry entries[YEW_TAB_MAX];
     int members[YEW_TAB_MAX];
+    int order[YEW_TAB_MAX];
     int n;
+    int n_draw;
     int i;
     int active_entry = -1;
     int held = -1;
@@ -1233,40 +1282,112 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
     u16 fy = 0U;
     u16 grab = 0U;
     bool floating;
+    u32 want_gid = 0U;
+    int to = -1;
 
     if (ed == NULL || gid == 0U)
         return;
     /*
      * Row 2 hides the held member for the same reason row 1 does: a tab
      * dragged off the member strip is being carried at the pointer, and
-     * it may not also be sitting in the row it was lifted from.  There
-     * is no permutation here — row 2 is not a drop-ordering surface, so
-     * the gap simply stays where the member was.
+     * it may not also be sitting in the row it was lifted from.
      */
     floating = yew_mouse_drag_float(ed, &held_payload, &fx, &fy, &grab);
     n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
-    for (i = 0; i < n; i++) {
+    for (i = 0; i < n; i++)
+        order[i] = members[i];
+    n_draw = n;
+    /*
+     * Sprint 57.14 field repair: THE GAP, on row 2 as well.
+     *
+     * Row 2 already accepted a drop and showed nothing about it, so the
+     * picture and the outcome disagreed.  The members now open a space
+     * exactly where the release lands — permuted when the carried tab is
+     * already a member of this group, INSERTED when it is joining from
+     * outside, because in that case the list it lands in is one longer
+     * than the one on screen.
+     *
+     * Only while ROW 2 OWNS THE PREVIEW: `yew_mouse_drag_member_preview`
+     * is false the moment the pointer goes back to row 1, and then this
+     * row closes up again.
+     */
+    if (floating && held_payload >= 0 && n_draw < (int)YEW_ARRAY_LEN(order) &&
+        yew_mouse_drag_member_preview(ed, &want_gid, &to) &&
+        want_gid == gid) {
+        int from = -1;
+
+        for (i = 0; i < n_draw; i++) {
+            if (order[i] == held_payload) {
+                from = i;
+                break;
+            }
+        }
+        if (from >= 0) {
+            /* A reorder inside the group: the list keeps its length. */
+            if (to < 0)
+                to = 0;
+            if (to > n_draw - 1)
+                to = n_draw - 1;
+            if (from < to) {
+                (void)memmove(&order[from], &order[from + 1],
+                              sizeof(order[0]) * (size_t)(to - from));
+            } else if (to < from) {
+                (void)memmove(&order[to + 1], &order[to],
+                              sizeof(order[0]) * (size_t)(from - to));
+            }
+        } else {
+            /* A JOIN: the list grows by the entry being carried in. */
+            if (to < 0)
+                to = 0;
+            if (to > n_draw)
+                to = n_draw;
+            (void)memmove(&order[to + 1], &order[to],
+                          sizeof(order[0]) * (size_t)(n_draw - to));
+            n_draw++;
+        }
+        order[to] = held_payload;
+        held = to;
+    }
+    for (i = 0; i < n_draw; i++) {
         (void)memset(&entries[i], 0, sizeof(entries[i]));
-        /* Sprint 57.10: numbered 1..n so `alt+N` inside the group has
-         * a visible target — the digit counts what row 2 shows. */
+        /*
+         * Sprint 57.10: numbered 1..n so `alt+N` inside the group has a
+         * visible target — the digit counts what row 2 SHOWS, which is
+         * why the labels are built after the permutation and not before
+         * it.  A gap that kept its old number would name a position it
+         * is no longer in.
+         */
         (void)snprintf(entries[i].label, sizeof(entries[i].label),
                        " %d %s%s ", i + 1,
-                       tab_basename(&ed->tabs.v.data[members[i]]),
-                       yew_tab_modified(ed, members[i])
+                       tab_basename(&ed->tabs.v.data[order[i]]),
+                       yew_tab_modified(ed, order[i])
                            ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
-        entries[i].payload = members[i];
-        entries[i].dim = tab_is_orphan(ed, members[i]);
-        entries[i].modified = yew_tab_modified(ed, members[i]);
-        if (members[i] == ed->tabs.active)
+        entries[i].payload = order[i];
+        entries[i].dim = tab_is_orphan(ed, order[i]);
+        entries[i].modified = yew_tab_modified(ed, order[i]);
+        if (order[i] == ed->tabs.active)
             active_entry = i;
-        if (floating && held_payload >= 0 && entries[i].payload == held_payload)
+        if (held < 0 && floating && held_payload >= 0 &&
+            entries[i].payload == held_payload)
             held = i;
     }
-    strip_render(ed, rect, entries, n, active_entry,
+    /* Cleared before the render fills the cell ranges in, exactly as
+     * row 1 does it: a position the layout scrolled out of view must not
+     * keep last frame's cells. */
+    strip_row2.n = n_draw;
+    strip_row2.y = rect.y;
+    strip_row2.tail_x = rect.x;
+    for (i = 0; i < n_draw; i++) {
+        strip_row2.v[i].col0 = 0U;
+        strip_row2.v[i].col1 = 0U;
+        strip_row2.v[i].pre_payload = order[i];
+    }
+    strip_render(ed, rect, entries, n_draw, active_entry,
                  &ed->tabs.member_scroll,
                  yew_tabs_scroll_is_owned(&ed->tabs, true),
-                 2, false, false, held);
+                 2, &strip_row2, false, held);
 }
+
 
 /* ---------------------------------------------------------------- */
 /* Sprint 57.14 §2: the float                                        */

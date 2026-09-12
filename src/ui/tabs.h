@@ -223,6 +223,28 @@ int yew_strip_slot_count(void);
 u16 yew_strip_tail_x(void);
 
 /*
+ * Sprint 57.14 field repair: ROW 2'S SLOT TABLE.
+ *
+ * The same law as row 1's — placement is established once, while
+ * drawing, and the drag aims with it rather than re-deriving it — for
+ * the row that was previously targetable but not previewable.
+ *
+ * A "member slot" is a POSITION IN THE ROW AS DRAWN, the gap the
+ * carried tab holds open included, because that gap is a position like
+ * any other: it is where the release lands.  So the count is one more
+ * than the group's membership while an outsider is being carried over
+ * it, and equal to it while a member is merely being reordered.
+ *
+ * Cells only.  Row 2 never needs to un-permute a payload the way the
+ * dwell does on row 1, and a pre-drag field nothing reads is a field
+ * that can rot.
+ */
+int yew_strip_member_slot_count(void);
+bool yew_strip_member_slot_cells(int slot, u16 *col0, u16 *col1);
+/* Where row 2's blank tail begins — "put it last", aimable. */
+u16 yew_strip_member_tail_x(void);
+
+/*
  * Sprint 57.14 §2: the cells the last render's FLOAT covered; w == 0
  * when no drag is in flight.  The float is drawn and never registered —
  * this is how a test asks where it was without the registry knowing.

@@ -1752,6 +1752,15 @@ static void dg_carry_to(DragFixture *f, u16 col)
     dg_paint(f);
 }
 
+/* The same, onto row 2. */
+static void dg_carry_to_row2(DragFixture *f, u16 col)
+{
+    Key motion = dg_ev((u8)YEW_KEY_REPEAT, col, 1U);
+
+    yew_mouse_event(&f->ed, &motion);
+    dg_paint(f);
+}
+
 /*
  * The pointer column that puts the carried entry's crossing edge
  * exactly on `want`.  Pressed at slot 0's left edge, so the grip is 0
@@ -1893,6 +1902,218 @@ void test_drag_a_plain_neighbour_still_swaps_at_half_its_width(void)
     dg_carry_to(&f, dg_col_for_trail(&f, (i32)a0 + w / 2 + 1));
     YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 1);
     yew_ed_free(&f.ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Row 2 previews the drop too                                       */
+/* ---------------------------------------------------------------- */
+
+/*
+ * DOGFOOD BUG: "when hovering drag in a tab group, the row 2 tabs don't
+ * shift like we just spent time getting the row 1 tabs shifting
+ * left/right in response to the dragged tab."
+ *
+ * Row 2 already ACCEPTED a drop — `drop_target_row2` computed a group
+ * and an ordinal — while showing nothing at all about where the tab
+ * would land.  The picture and the outcome disagreed, which this
+ * codebase treats as a bug in the picture.
+ */
+
+/* The leftmost cell row 2 draws the entry with this payload at, or -1. */
+static int dg_row2_entry_x(i32 payload)
+{
+    u16 x;
+
+    for (x = 0U; x < 80U; x++) {
+        Region hit = yew_region_hit(x, 1U);
+
+        if (hit.kind == (u16)YEW_REGION_TAB && hit.payload == payload)
+            return (int)x;
+    }
+    return -1;
+}
+
+/*
+ * THE GAP, read off the picture: the row-2 position whose cells carry
+ * no region.  The held entry keeps its cells and loses its ink and its
+ * region (57.14 §2), so the one slot the registry does not answer for
+ * is where the drop is aimed.
+ */
+static int dg_row2_gap_slot(void)
+{
+    int i;
+
+    for (i = 0; i < yew_strip_member_slot_count(); i++) {
+        u16 a0 = 0U;
+        u16 a1 = 0U;
+
+        if (!yew_strip_member_slot_cells(i, &a0, &a1))
+            continue;
+        if (yew_region_hit(a0, 1U).kind == (u16)YEW_REGION_NONE)
+            return i;
+    }
+    return -1;
+}
+
+/* Scratch, three loose tabs, a two-member group, one more loose tab —
+ * and the ACTIVE tab inside the group, so row 2 is pinned. */
+static u32 dg_row2_fixture(DragFixture *f)
+{
+    u32 g;
+
+    dg_fixture(f, 5U);
+    g = dg_make_group(f, 3, 4);
+    yew_tab_switch(&f->ed, 3);
+    yew_ed_layout(&f->ed);
+    dg_paint(f);
+    YEW_ASSERT_EQ_I64(f->ed.tab_strip_rect.h, 2);
+    YEW_ASSERT_EQ_I64(yew_strip_member_slot_count(), 2);
+    return g;
+}
+
+void test_drag_row2_opens_a_gap_where_the_member_will_land(void)
+{
+    DragFixture f;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    int at_rest_3;
+    int at_rest_4;
+
+    (void)dg_row2_fixture(&f);
+    at_rest_3 = dg_row2_entry_x(3);
+    at_rest_4 = dg_row2_entry_x(4);
+    YEW_ASSERT(at_rest_3 >= 0 && at_rest_4 > at_rest_3);
+    YEW_ASSERT(yew_strip_member_slot_cells(0, &a0, &a1));
+
+    {
+        /* A loose row-1 tab, grabbed at its left edge. */
+        u16 c0 = 0U;
+        u16 c1 = 0U;
+        Key press;
+
+        dg_slot_span(0, &c0, &c1);
+        press = dg_ev((u8)YEW_KEY_PRESS, c0, 0U);
+        yew_mouse_event(&f.ed, &press);
+    }
+    /* Onto row 2, aimed at the FIRST member: both members slide right
+     * to open a space in front of them. */
+    dg_carry_to_row2(&f, a0);
+    YEW_ASSERT_EQ_I64(dg_row2_gap_slot(), 0);
+    YEW_ASSERT(dg_row2_entry_x(3) > at_rest_3);
+    YEW_ASSERT(dg_row2_entry_x(4) > at_rest_4);
+
+    /* Aimed past them all: they close back up and the gap is last. */
+    dg_carry_to_row2(&f, (u16)(yew_strip_member_tail_x() + 1U));
+    YEW_ASSERT_EQ_I64(dg_row2_gap_slot(), 2);
+    YEW_ASSERT_EQ_I64(dg_row2_entry_x(3), at_rest_3);
+    YEW_ASSERT_EQ_I64(dg_row2_entry_x(4), at_rest_4);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * WHICH ROW OWNS THE PREVIEW.  Row 1 while the pointer is on row 1, row
+ * 2 while it is on row 2, and the handover in both directions is the
+ * whole of this row: a tab carried back up to row 1 must stop previewing
+ * a member position, or row 2 keeps a space open for a drop that is no
+ * longer aimed at it.
+ */
+void test_drag_moving_between_rows_hands_the_preview_over(void)
+{
+    DragFixture f;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    int at_rest_3;
+
+    (void)dg_row2_fixture(&f);
+    at_rest_3 = dg_row2_entry_x(3);
+    YEW_ASSERT(yew_strip_member_slot_cells(0, &a0, &a1));
+    {
+        u16 c0 = 0U;
+        u16 c1 = 0U;
+        Key press;
+
+        dg_slot_span(0, &c0, &c1);
+        press = dg_ev((u8)YEW_KEY_PRESS, c0, 0U);
+        yew_mouse_event(&f.ed, &press);
+    }
+    /* Row 1 owns it: row 2 is untouched, and there is no gap on it. */
+    dg_carry_to(&f, dg_slot_x(&f, 2));
+    YEW_ASSERT_EQ_I64(dg_row2_gap_slot(), -1);
+    YEW_ASSERT_EQ_I64(dg_row2_entry_x(3), at_rest_3);
+
+    /* Row 2 takes it. */
+    dg_carry_to_row2(&f, a0);
+    YEW_ASSERT_EQ_I64(dg_row2_gap_slot(), 0);
+    YEW_ASSERT(dg_row2_entry_x(3) > at_rest_3);
+
+    /* And gives it back on the way up. */
+    dg_carry_to(&f, dg_slot_x(&f, 2));
+    YEW_ASSERT_EQ_I64(dg_row2_gap_slot(), -1);
+    YEW_ASSERT_EQ_I64(dg_row2_entry_x(3), at_rest_3);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * ROW 2'S HALF OF THE AGREEMENT, swept cell by cell.
+ *
+ * Each column on its own fixture, so the release is against exactly the
+ * frame that was drawn: the gap the user is looking at and the ordinal
+ * `drop_target_row2` commits are the same number, everywhere on the row.
+ */
+void test_drag_row2_previewed_gap_is_the_ordinal_the_drop_commits(void)
+{
+    u16 x;
+    u16 tail_x;
+    u16 press_x;
+    u32 seen = 0U;
+
+    {
+        DragFixture probe;
+        u16 c0 = 0U;
+        u16 c1 = 0U;
+
+        (void)dg_row2_fixture(&probe);
+        dg_slot_span(0, &c0, &c1);
+        press_x = c0;
+        tail_x = (u16)(yew_strip_member_tail_x() + 3U);
+        yew_ed_free(&probe.ed);
+    }
+    for (x = 0U; x < tail_x; x++) {
+        DragFixture f;
+        u32 g;
+        u32 held;
+        int gap;
+
+        g = dg_row2_fixture(&f);
+        held = yew_tab_at(&f.ed, 0)->tab_id;
+        {
+            Key press = dg_ev((u8)YEW_KEY_PRESS, press_x, 0U);
+
+            yew_mouse_event(&f.ed, &press);
+        }
+        dg_carry_to_row2(&f, x);
+        gap = dg_row2_gap_slot();
+        YEW_ASSERT(gap >= 0);
+        seen = (u32)(seen | (1U << (unsigned)gap));
+        {
+            Key up = dg_ev((u8)YEW_KEY_RELEASE, x, 1U);
+
+            yew_mouse_event(&f.ed, &up);
+        }
+        {
+            int idx = yew_tab_index_of_id(&f.ed, held);
+
+            YEW_ASSERT(idx >= 0);
+            YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, idx)->group_id, g);
+            /* THE AGREEMENT: the gap the frame showed, 1-based. */
+            YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, idx)->group_ordinal,
+                              (u32)gap + 1U);
+        }
+        yew_ed_free(&f.ed);
+    }
+    /* Every one of the three positions was actually reached, or the
+     * sweep proved agreement about a single answer. */
+    YEW_ASSERT_EQ_U64(seen, 0x7U);
 }
 
 /*

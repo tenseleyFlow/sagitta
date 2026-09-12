@@ -145,6 +145,17 @@ typedef struct MouseState {
     i32 last_click_payload;
     u8 click_n;
 
+    /*
+     * Sprint 57.14 field repair: ROW 2'S target.  `drag_row2_pos` is a
+     * 0-based position in the group's FINAL member list; the ordinal
+     * committed is one more.  Kept beside row 1's rather than sharing
+     * it: the two rows mean different things by a position, and the
+     * handover between them is exactly the moment one must go quiet.
+     */
+    int drag_row2_pos;
+    bool drag_row2_valid;
+    u32 drag_row2_gid;
+
     /* Dwell over a group while dragging (§4). */
     i64 dwell_since_ms;
     u32 dwell_gid;
@@ -216,6 +227,25 @@ bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot);
  */
 bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
                           u16 *grab_dx);
+
+/*
+ * Sprint 57.14 field repair: ROW 2'S PREVIEW — the group the carried
+ * tab is aimed at and the 0-based position it would take in that
+ * group's FINAL member list.  False whenever row 2 does not own the
+ * preview.
+ *
+ * WHICH ROW OWNS THE PREVIEW, stated once: the row the POINTER is on.
+ * Row 1 while it is on row 1 (`yew_mouse_drag_preview`), row 2 while it
+ * is on row 2 (this), and never both — a pointer that leaves row 2
+ * clears this in the same motion, so the members close back up rather
+ * than holding a space open for a drop no longer aimed at them.
+ *
+ * The ordinal the drop commits is `pos + 1`, read from here rather than
+ * re-hit-tested at release: the drawn row is PERMUTED by this very
+ * preview, so hit-testing it would answer "you are over the thing you
+ * are holding" — the same trap row 1's pre-drag slot table exists for.
+ */
+bool yew_mouse_drag_member_preview(const Ed *ed, u32 *gid, int *pos);
 
 /* §4: the group whose member strip a dwell has opened; 0 when none. */
 u32 yew_mouse_preview_group(const Ed *ed);

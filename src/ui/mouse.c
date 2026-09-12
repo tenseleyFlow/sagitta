@@ -1744,6 +1744,93 @@ static int drag_target_slot(Ed *ed, u16 col)
     return to;
 }
 
+/*
+ * Sprint 57.14 field repair: WHERE ON ROW 2 THE DRAG IS AIMING.
+ *
+ * The answer is a position in the group's FINAL member list, and it is
+ * resolved with the SAME rule row 1 uses: from the cells the carried
+ * entry covers — its leading edge is `col − grab_dx` — changing places
+ * with a neighbour once it has travelled half that neighbour's width.
+ * There is no hover band here: row 2 holds members, and a member is a
+ * plain tab with nothing to dwell on.
+ *
+ * The seed is where the carried entry ALREADY sits on this row: the
+ * position last frame previewed it at, or — the first time the pointer
+ * arrives — the member's own place, which is `group_ordinal − 1`
+ * because yew_group_members orders by ordinal.  A tab from OUTSIDE the
+ * group has no place yet, so that case falls through to a plain
+ * insertion scan and may answer `n`: the list it lands in is one longer
+ * than the one on screen, and the position past the last member is
+ * where "put it last" lives.
+ */
+static int held_member_slot(Ed *ed, u32 gid)
+{
+    const Tab *t = yew_tab_at_const(ed,
+                                    yew_tab_index_of_id(ed,
+                                                        ed->mouse.drag_tab_id));
+
+    if (t == NULL || t->group_id != gid || t->group_ordinal == 0U)
+        return -1;
+    return (int)t->group_ordinal - 1;
+}
+
+static int drag_target_member(Ed *ed, u16 col, u32 gid)
+{
+    MouseState *m = &ed->mouse;
+    int n = yew_strip_member_slot_count();
+    int to;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 lead;
+    i32 trail;
+    i32 grab;
+
+    if (n <= 0)
+        return 0; /* an empty row: the first position is the only one */
+    grab = m->press_x > m->press_rgn.rect.x
+               ? (i32)m->press_x - (i32)m->press_rgn.rect.x : 0;
+    lead = (i32)col - grab;
+    if (lead < (i32)ed->tab_strip_rect.x)
+        lead = (i32)ed->tab_strip_rect.x;
+    to = m->drag_row2_valid && m->drag_row2_gid == gid
+             ? m->drag_row2_pos : held_member_slot(ed, gid);
+    if (to < 0 || to >= n || !yew_strip_member_slot_cells(to, &c0, &c1)) {
+        for (to = 0; to < n; to++) {
+            if (yew_strip_member_slot_cells(to, &a0, &a1) &&
+                lead < (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+                return to;
+        }
+        return n;
+    }
+    trail = lead + ((i32)c1 - (i32)c0);
+    if (lead < (i32)c0) {
+        while (to > 0 && yew_strip_member_slot_cells(to - 1, &a0, &a1) &&
+               lead < (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+            to--;
+    } else if (lead > (i32)c0) {
+        while (to < n - 1 && yew_strip_member_slot_cells(to + 1, &a0, &a1) &&
+               trail > (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+            to++;
+    }
+    return to;
+}
+
+/* Row 2 stops previewing.  Called from every path that is not a tab
+ * drag over row 2 — see the header's "which row owns the preview". */
+static void drag_row2_clear(Ed *ed)
+{
+    MouseState *m = &ed->mouse;
+
+    if (!m->drag_row2_valid)
+        return;
+    m->drag_row2_valid = false;
+    m->drag_row2_gid = 0U;
+    m->drag_row2_pos = 0;
+    ed->full_damage = true;
+}
+
 static void drag_strip_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
@@ -1786,6 +1873,37 @@ static void drag_strip_motion(Ed *ed, const Key *k)
             m->drag_to_tail = false;
             ed->full_damage = true;
         }
+    }
+    /*
+     * THE HANDOVER.  The row the pointer is on owns the preview: row 1
+     * above, row 2 here, never both.  Coming down opens a space in the
+     * member strip; going back up closes it, because a gap held open for
+     * a drop that is no longer aimed at row 2 is the same lie this
+     * repair exists to remove.
+     *
+     * A GROUP drag is excluded: dropping a group into a group does not
+     * exist (Sprint 57.14 §4), so there is nothing to preview.
+     */
+    if (!on_row1 && m->phase == YEW_MP_DRAG_TAB &&
+        ed->tab_strip_rect.h >= 2U &&
+        k->row == (u16)(ed->tab_strip_rect.y + 1U)) {
+        u32 gid = row2_group(ed);
+        int pos;
+
+        if (gid == 0U) {
+            drag_row2_clear(ed);
+        } else {
+            pos = drag_target_member(ed, k->col, gid);
+            if (!m->drag_row2_valid || m->drag_row2_gid != gid ||
+                m->drag_row2_pos != pos) {
+                m->drag_row2_valid = true;
+                m->drag_row2_gid = gid;
+                m->drag_row2_pos = pos;
+                ed->full_damage = true;
+            }
+        }
+    } else {
+        drag_row2_clear(ed);
     }
     drag_dwell(ed, slot, on_row1);
 }
@@ -1869,25 +1987,29 @@ static void drop_into_group(Ed *ed, u32 gid, int pos)
  */
 static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
 {
-    Region hit;
-
     if (ed->tab_strip_rect.h < 2U ||
         k->row != (u16)(ed->tab_strip_rect.y + 1U))
         return false;
     *gid = row2_group(ed);
     if (*gid == 0U)
         return false;
-    hit = yew_region_hit(k->col, k->row);
-    if (hit.kind == YEW_REGION_TAB && hit.payload >= 0) {
-        Tab *t = yew_tab_at(ed, hit.payload);
-
-        if (t != NULL && t->group_id == *gid) {
-            *pos = (int)t->group_ordinal;
-            return true;
-        }
+    /*
+     * THE PREVIEW'S OWN ANSWER, and not a fresh hit-test.
+     *
+     * The row under the pointer is the PERMUTED one — the gap is already
+     * drawn where the tab lands — so hit-testing it at release would
+     * answer "you are over the thing you are holding", which is the trap
+     * row 1's pre-drag slot table exists for.  The motion that drew the
+     * frame resolved this against the slot table; committing anything
+     * else makes the picture a lie.
+     */
+    if (ed->mouse.drag_row2_valid && ed->mouse.drag_row2_gid == *gid) {
+        *pos = ed->mouse.drag_row2_pos + 1; /* ordinals are 1-based */
+        return true;
     }
-    /* The blank tail of row 2: append. */
-    *pos = yew_group_member_count(ed, *gid) + 1;
+    /* A release on this row with no motion that reached it: resolve the
+     * column now, by the same rule. */
+    *pos = drag_target_member(ed, k->col, *gid) + 1;
     return true;
 }
 
@@ -2505,6 +2627,17 @@ bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
     *grab_dx = m->press_x > m->press_rgn.rect.x
                    ? (u16)(m->press_x - m->press_rgn.rect.x) : 0U;
     return true;
+}
+
+bool yew_mouse_drag_member_preview(const Ed *ed, u32 *gid, int *pos)
+{
+    if (ed == NULL || gid == NULL || pos == NULL)
+        return false;
+    if (ed->mouse.phase != YEW_MP_DRAG_TAB || !ed->mouse.drag_row2_valid)
+        return false;
+    *gid = ed->mouse.drag_row2_gid;
+    *pos = ed->mouse.drag_row2_pos;
+    return *gid != 0U;
 }
 
 u32 yew_mouse_preview_group(const Ed *ed)
