@@ -2302,6 +2302,7 @@ const YewTest yew_tests[] = {
 #if YEW_WITH_PLUGINS
     T(plug_trust_defaults_and_all_exact_capabilities_round_trip),
     T(plug_trust_schema2_unknowns_and_sorted_output_round_trip),
+    T(plug_trust_every_truncation_starts_with_empty_policy),
     T(plug_manifest_valid_literal_is_owned_and_uninterned),
     T(plug_manifest_pure_literal_executes_nothing),
     T(plug_manifest_unknown_key_suggests_one_edit),

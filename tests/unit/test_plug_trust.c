@@ -2,11 +2,14 @@
 
 #include "harness.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "edit/ed.h"
+#include "fl/flconf.h"
 #include "ws/trust.h"
 
 typedef struct PlugTrustFix {
@@ -35,6 +38,24 @@ static void pt_write(const char *path, const char *text)
     YEW_ASSERT_NOT_NULL(fp);
     YEW_ASSERT_EQ_U64(fwrite(text, 1U, n, fp), n);
     YEW_ASSERT_EQ_I64(fclose(fp), 0);
+}
+
+static void pt_write_n(const char *path, const char *text, size_t len)
+{
+    size_t off = 0U;
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+
+    YEW_ASSERT(fd >= 0);
+    while (fd >= 0 && off < len) {
+        ssize_t n = write(fd, text + off, len - off);
+
+        YEW_ASSERT(n > 0);
+        if (n <= 0)
+            break;
+        off += (size_t)n;
+    }
+    if (fd >= 0)
+        YEW_ASSERT_EQ_I64(close(fd), 0);
 }
 
 static char *pt_read(const char *path)
@@ -214,5 +235,49 @@ void test_plug_trust_schema2_unknowns_and_sorted_output_round_trip(void)
                strstr(alpha, "shell:") > zeta);
     free(first);
     yew_trust_db_free(&db);
+    pt_remove(&f);
+}
+
+void test_plug_trust_every_truncation_starts_with_empty_policy(void)
+{
+    static const char valid[] =
+        "{schema: 3, root_future: {keep: true}, dirs: {}, plugins: {\n"
+        "  omega: {net: \"deny\", future: [1, 2]},\n"
+        "  alpha: {fs: \"allow\", enabled: true},\n"
+        "}}\n";
+    PlugTrustFix f;
+    char yew[208];
+    char path[256];
+    char log_path[256];
+    const char *current = getenv("XDG_STATE_HOME");
+    char *old = current == NULL ? NULL : strdup(current);
+    size_t cut;
+
+    pt_make(&f);
+    (void)snprintf(yew, sizeof(yew), "%s/yew", f.root);
+    (void)snprintf(path, sizeof(path), "%s/trust.fl", yew);
+    (void)snprintf(log_path, sizeof(log_path), "%s/log", yew);
+    YEW_ASSERT_EQ_I64(mkdir(yew, 0700), 0);
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f.root, 1), 0);
+
+    for (cut = 0U; cut + 1U < sizeof(valid); cut++) {
+        Ed ed;
+
+        pt_write_n(path, valid, cut);
+        yew_ed_init(&ed);
+        yew_config_init(&ed, NULL);
+        YEW_ASSERT_NOT_NULL(ed.config);
+        yew_ed_free(&ed);
+    }
+
+    if (old == NULL)
+        YEW_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    else {
+        YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", old, 1), 0);
+        free(old);
+    }
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    YEW_ASSERT_EQ_I64(unlink(log_path), 0);
+    YEW_ASSERT_EQ_I64(rmdir(yew), 0);
     pt_remove(&f);
 }

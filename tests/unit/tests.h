@@ -2335,6 +2335,7 @@ void test_ai_trust3_writes_sorted_atomically_and_deterministically(void);
 void test_ai_trust3_replacement_clears_state_and_ai(void);
 void test_plug_trust_defaults_and_all_exact_capabilities_round_trip(void);
 void test_plug_trust_schema2_unknowns_and_sorted_output_round_trip(void);
+void test_plug_trust_every_truncation_starts_with_empty_policy(void);
 void test_plug_manifest_valid_literal_is_owned_and_uninterned(void);
 void test_plug_manifest_pure_literal_executes_nothing(void);
 void test_plug_manifest_unknown_key_suggests_one_edit(void);
