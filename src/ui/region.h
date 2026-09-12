@@ -97,6 +97,15 @@ enum {
 void yew_region_frame_begin(void);
 /* Rebuild one overlay's rows without invalidating live pane/tab regions. */
 void yew_region_remove_kind(RegionKind kind);
+/*
+ * The same, for a kind SHARED by several overlays: removes only the
+ * entries that own exactly `rect`.  YEW_REGION_BLOCK is registered by
+ * the picker, the group picker, a panel, the completion popup and the
+ * context menu, so an overlay that redraws itself between two frame
+ * begins (Sprint 57.11's hover repaint) can take back its own without
+ * taking the others' with it.
+ */
+void yew_region_remove_rect(RegionKind kind, Rect rect);
 void yew_region_add(RegionKind kind, Rect rect, i32 payload);
 /* Last-added wins, so overlays drawn after the document shadow it. */
 Region yew_region_hit(u16 x, u16 y);
