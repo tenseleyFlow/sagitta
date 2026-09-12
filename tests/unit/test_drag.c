@@ -1722,6 +1722,179 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
     yew_ed_free(&f.ed);
 }
 
+/* ---------------------------------------------------------------- */
+/* A group entry's hover band                                        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * DOGFOOD BUG: a group entry moved out from under the pointer that was
+ * trying to REST on it.
+ *
+ * "Tab groups should have some space for allowing hover over without
+ * shifting, in addition to the trigger points to shift in place
+ * left/right that a standard tab has.  Currently the tab group wants to
+ * move left/right of where I am hovering because it is assuming I want
+ * to shift left right, not hover."
+ *
+ * The half-width rule and the dwell want opposite things from the same
+ * cells: the dwell asks the user to hold still over a group for half a
+ * second, and the swap slides that group away the moment the carried
+ * entry covers half of it.  A group therefore gets a CENTRAL DEAD BAND
+ * — its middle half — where nothing shifts, and keeps the ordinary
+ * rule outside it.  Plain tabs are untouched, which the row below
+ * pins.
+ */
+static void dg_carry_to(DragFixture *f, u16 col)
+{
+    Key motion = dg_ev((u8)YEW_KEY_REPEAT, col, 0U);
+
+    yew_mouse_event(&f->ed, &motion);
+    dg_paint(f);
+}
+
+/*
+ * The pointer column that puts the carried entry's crossing edge
+ * exactly on `want`.  Pressed at slot 0's left edge, so the grip is 0
+ * and the carried entry's leading edge IS the pointer; the trailing
+ * edge trails it by the carried entry's width.
+ */
+static u16 dg_col_for_trail(DragFixture *f, i32 want)
+{
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+
+    (void)f;
+    dg_slot_span(0, &c0, &c1);
+    YEW_ASSERT(want - (i32)(c1 - c0) >= 0);
+    return (u16)(want - (i32)(c1 - c0));
+}
+
+void test_drag_a_group_entry_holds_still_inside_its_hover_band(void)
+{
+    DragFixture f;
+    u32 g;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 w;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 1, 2);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    /* untitled, the group, and the three loose tabs after it. */
+    YEW_ASSERT_EQ_I64(dg_slot_of_payload(-(i32)g), 1);
+    dg_slot_span(0, &c0, &c1);
+    dg_slot_span(1, &a0, &a1);
+    w = (i32)a1 - (i32)a0;
+    /* A band needs room to exist; below four cells there is none and the
+     * half-width rule stands. */
+    YEW_ASSERT(w >= 8);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, c0, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+    }
+    /*
+     * PAST THE GROUP'S MIDPOINT and inside its middle half.  The old
+     * rule swapped here, which is the report: the group slid left out
+     * from under a pointer that had come to rest on it.
+     */
+    dg_carry_to(&f, dg_col_for_trail(&f, (i32)a0 + w / 2 + 1));
+    YEW_ASSERT(f.ed.mouse.drag_to_valid);
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 0);
+
+    /* The far edge of the band: the outer quarter is an ordinary swap
+     * trigger, so pushing past it still moves the group. */
+    dg_carry_to(&f, dg_col_for_trail(&f, (i32)a1 - w / 4 + 1));
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 1);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * The same band, approached from the RIGHT.  The crossing edge is the
+ * carried entry's leading one, and the band is the same middle half of
+ * the group it is moving over.
+ */
+void test_drag_a_group_entry_holds_still_coming_from_the_right(void)
+{
+    DragFixture f;
+    u32 g;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 w;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 2, 3);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_I64(dg_slot_of_payload(-(i32)g), 2);
+    dg_slot_span(3, &c0, &c1);
+    dg_slot_span(2, &a0, &a1);
+    w = (i32)a1 - (i32)a0;
+    YEW_ASSERT(w >= 8);
+
+    {
+        /* Pressed at its LEFT edge, so the grip is 0 and the pointer is
+         * the leading edge. */
+        Key press = dg_ev((u8)YEW_KEY_PRESS, c0, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+    }
+    /* Inside the middle half, coming left: nothing shifts. */
+    dg_carry_to(&f, (u16)((i32)a0 + w / 2 - 1));
+    YEW_ASSERT(f.ed.mouse.drag_to_valid);
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 3);
+    /* Past the band's left edge, into the outer quarter: it swaps. */
+    dg_carry_to(&f, (u16)((i32)a0 + w / 4 - 1));
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 2);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * THE CONTRAST, and the half of the deliverable that is a promise not
+ * to change anything else: a PLAIN neighbour still swaps at half its
+ * width, one cell past the midpoint, with no band anywhere.
+ */
+void test_drag_a_plain_neighbour_still_swaps_at_half_its_width(void)
+{
+    DragFixture f;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 w;
+
+    dg_fixture(&f, 5U);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    dg_slot_span(0, &c0, &c1);
+    dg_slot_span(1, &a0, &a1);
+    w = (i32)a1 - (i32)a0;
+    YEW_ASSERT(w >= 8);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, c0, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+    }
+    /* One cell short of the midpoint: still where it was. */
+    dg_carry_to(&f, dg_col_for_trail(&f, (i32)a0 + w / 2));
+    YEW_ASSERT(f.ed.mouse.drag_to_valid);
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 0);
+    /* One cell past it: swapped — no band, exactly as before. */
+    dg_carry_to(&f, dg_col_for_trail(&f, (i32)a0 + w / 2 + 1));
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 1);
+    yew_ed_free(&f.ed);
+}
+
 /*
  * THE PRE-DRAG SLOT TABLE'S WHOLE JOB: the strip the user is looking at
  * and the list the release commits are the same answer.

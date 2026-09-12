@@ -1647,13 +1647,65 @@ static int held_pre_slot(const Ed *ed)
  *
  * The rule is the one every tab strip uses: the carried entry changes
  * places with a neighbour once it has travelled HALF that neighbour's
- * width over it.  That threshold is also what makes the answer stable —
+ * width over it — see swap_threshold for the one exception, a group
+ * entry's central hover band.  That threshold is also what makes the answer stable —
  * the swap moves the carried entry exactly onto the cells that justified
  * it, so the reverse test cannot fire at the same pointer position and
  * the preview cannot oscillate between two frames (invariant 5's
  * "same state, same picture" applied to a picture that is its own
  * input).
  */
+/*
+ * Sprint 57.14 field repair: A GROUP ENTRY'S HOVER BAND.
+ *
+ * The threshold at which the carried entry changes places with the
+ * neighbour occupying the half-open cells [a0, a1).  `rightwards` says
+ * which edge is doing the crossing: the carried entry's TRAILING edge
+ * when it is moving right onto this neighbour, its LEADING edge when it
+ * is moving left.
+ *
+ * A plain tab keeps the half-width rule exactly — half of the
+ * neighbour covered and they change places, which is what every tab
+ * strip does and what this code has always done.
+ *
+ * A GROUP does not, because the half-width rule and the dwell want
+ * opposite things from the same cells.  The dwell asks the user to hold
+ * still over a group entry for half a second to open it; the swap
+ * slides that entry away the moment the carried tab covers half of it.
+ * So the group's middle half is a DEAD BAND: the crossing edge can rest
+ * anywhere in it and nothing shifts, and the swap fires only once the
+ * edge reaches the outer quarter on the far side.
+ *
+ * WHY A QUARTER, AND WHY THE MIDDLE HALF.  The group labels in the
+ * reported workspace are 8 to 18 cells wide, so a quarter is two to
+ * four cells — wide enough that a hand resting on the entry stays
+ * inside it, narrow enough that a drag actually aiming past the group
+ * crosses it without a detour.  Anything larger and the group stops
+ * being reorderable by drag at all; anything smaller and the band is
+ * one cell and does not exist at the widths that matter.  The band is
+ * CENTRED because the two directions have to agree: the same middle
+ * half answers whichever edge arrives, so approaching from the left and
+ * from the right have mirror-image thresholds rather than two rules.
+ *
+ * Below four cells there is no room to divide and the half-width rule
+ * stands — a band of zero width would mean "cross the whole entry",
+ * which is a worse answer than the one it replaced.
+ *
+ * The AGREEMENT is untouched: this only moves WHERE the target changes,
+ * never what the target means.  The preview and the drop both read
+ * `drag_to_slot`, so the gap is still exactly where the release lands —
+ * `drag_every_previewed_gap_is_where_the_drop_lands` sweeps it.
+ */
+static i32 swap_threshold(int slot, u16 a0, u16 a1, bool rightwards)
+{
+    i32 w = (i32)a1 - (i32)a0;
+    i32 pre = 0;
+
+    if (w < 4 || !yew_strip_pre_payload(slot, &pre) || pre >= 0)
+        return (i32)a0 + w / 2; /* a plain tab, or too narrow to divide */
+    return rightwards ? (i32)a1 - w / 4 : (i32)a0 + w / 4;
+}
+
 static int drag_target_slot(Ed *ed, u16 col)
 {
     MouseState *m = &ed->mouse;
@@ -1682,11 +1734,11 @@ static int drag_target_slot(Ed *ed, u16 col)
     trail = lead + ((i32)c1 - (i32)c0);
     if (lead < (i32)c0) {
         while (to > 0 && yew_strip_slot_cells(to - 1, &a0, &a1) &&
-               lead < (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+               lead < swap_threshold(to - 1, a0, a1, false))
             to--;
     } else if (lead > (i32)c0) {
         while (to < n - 1 && yew_strip_slot_cells(to + 1, &a0, &a1) &&
-               trail > (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+               trail > swap_threshold(to + 1, a0, a1, true))
             to++;
     }
     return to;
