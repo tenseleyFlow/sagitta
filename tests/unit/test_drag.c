@@ -1128,7 +1128,6 @@ void test_drag_held_entry_leaves_a_gap_in_the_strip(void)
     char during[128];
     u16 x;
     bool held_region = false;
-    int slot;
 
     dg_fixture(&f, 5U);
     dg_paint(&f);
@@ -1150,10 +1149,6 @@ void test_drag_held_entry_leaves_a_gap_in_the_strip(void)
     }
     /* No entry, and no target for it. */
     YEW_ASSERT(!held_region);
-    /* The gap sits at the TARGET slot, not where the tab was lifted: the
-     * strip is showing where the drop lands. */
-    slot = yew_strip_slot_at((u16)yew_strip_float_rect().x, 0U);
-    (void)slot;
     {
         int at = -1;
         int i;
