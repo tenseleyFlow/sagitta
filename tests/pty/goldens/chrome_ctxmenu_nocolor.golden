@@ -1,20 +1,20 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=1,6 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+modes 2004,1002,1006,1004,1003 kitty=21 sync_pairs=n/a
 --- text
  1 pty-s14-chrome_ctxmen 2 yew-pty-0.txt  3 yew-pty-1.txt  + 
     1
- ┌───────────────────┐
- │ Close Tab     C-w │
- │ Close Other Tabs  │
- ├───────────────────┤
- │ Copy Path         │
- │ Remove from Group │
- └───────────────────┘
-
-
-
-
+ ┌─────────────────────┐
+ │ Close Tab       C-w │
+ │ Close Other Tabs    │
+ ├─────────────────────┤
+ │ Copy Path           │
+ │ Remove from Group   │
+ ├─────────────────────┤
+ │ New Tab             │
+ │ Open in Split Right │
+ │ Open in Split Below │
+ └─────────────────────┘
 
 
 
@@ -29,17 +29,17 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBCCC
 DDDDC
-DDDDDDDDDDDDDDDDDDDDDD
-DDBBBBBBBBBBBBBBBBBBBD
-DDDDDDDDDDDDDDDDDDDDDD
-DDAAAAAAAAAAAAAAAAAAAD
-DDDDDDDDDDDDDDDDDDDDDD
-DDAAAAAAAAAAAAAAAAAAAD
-DDDDDDDDDDDDDDDDDDDDDD
-
-
-
-
+DDDDDDDDDDDDDDDDDDDDDDDD
+DDBBBBBBBBBBBBBBBBBBBBBD
+DDDDDDDDDDDDDDDDDDDDDDDD
+DDAAAAAAAAAAAAAAAAAAAAAD
+DDDDDDDDDDDDDDDDDDDDDDDD
+DDAAAAAAAAAAAAAAAAAAAAAD
+DDAAAAAAAAAAAAAAAAAAAAAD
+DDDDDDDDDDDDDDDDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDD
 
 
 

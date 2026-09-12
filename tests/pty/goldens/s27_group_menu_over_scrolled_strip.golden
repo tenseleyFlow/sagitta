@@ -1,6 +1,6 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=2,6 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+modes 2004,1002,1006,1004,1003 kitty=21 sync_pairs=n/a
 --- text
  1 pty-s14-s27_group_men 2 yew-s24-grp/ (3)  +                                  
  1 one.txt  2 three.txt  3 two.txt                                              
@@ -9,9 +9,9 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
  │ Edit Group...   │                                                            
  │ Rename Group... │                                                            
  ├─────────────────┤                                                            
+ │ Close Group     │                                                            
  │ Dissolve Group  │                                                            
  └─────────────────┘                                                            
-                                                                                
                                                                                 
                                                                                 
                                                                                 
@@ -35,8 +35,8 @@ EHBBBBBBBBBBBBBBBBBHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EHIIIIIIIIIIIIIIIIIHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EHHHHHHHHHHHHHHHHHHHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EHIIIIIIIIIIIIIIIIIHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EHIIIIIIIIIIIIIIIIIHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EHHHHHHHHHHHHHHHHHHHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
