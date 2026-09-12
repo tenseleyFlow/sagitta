@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
   file.open                    Open a file                                      
   file.prev                    Walk to the previous open file                   
   file.save                    Atomically save the active file                  
-> file.close                   Close the active file                        6/16
+> file.close                   Close the active file                        6/17
 :file.close                                                                     
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
