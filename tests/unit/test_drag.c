@@ -1333,116 +1333,6 @@ void test_drag_dwell_flash_marks_damage_only_at_an_edge(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* 57.14 × 57.15: the float and the user-owned scroll                */
-/* ---------------------------------------------------------------- */
-
-/* The first cell of the `>N` chevron on row 1, or 0xFFFF when none. */
-static u16 dg_chevron_x(u16 cols)
-{
-    u16 x;
-
-    for (x = 0U; x < cols; x++) {
-        Region hit = yew_region_hit(x, 0U);
-
-        if (hit.kind == YEW_REGION_TAB_SCROLL && hit.payload > 0)
-            return x;
-    }
-    return 0xFFFFU;
-}
-
-/*
- * Sprint 57.14 §2 meets Sprint 57.15 §1.
- *
- * The float is drawn from the PAYLOAD at the pointer, and the gap is a
- * position in the entry list — neither is a function of the offset, so
- * a strip the user scrolled away from the active tab must carry both
- * unchanged.  The interesting half is the other direction: a drag
- * renders row 1 every time the pointer crosses a cell, and each of
- * those renders hands `&ed->tabs.scroll` to the one placement engine,
- * which writes the value back.  If the drag's renders forgot that the
- * offset was the user's, the strip would walk back to the active entry
- * mid-gesture and the drop would land somewhere the user was not
- * looking.
- */
-void test_drag_float_survives_a_user_scrolled_strip(void)
-{
-    DragFixture f;
-    u16 chev;
-    int scrolled;
-    int held_slot = -1;
-    int to_slot = -1;
-    int i;
-    i32 held_payload = 0;
-    bool held_region = false;
-    Rect fl;
-    u16 x;
-
-    dg_fixture(&f, 7U);
-    /* Tab 0 stays active and far to the left, so "follow the active
-     * entry" and "the offset the user chose" disagree. */
-    yew_tab_switch(&f.ed, 0);
-    /* Wide enough for two entries beside the chevron — the drag needs
-     * two visible slots — and narrow enough to overflow.  RESIZE rather
-     * than a second init, which would leak the first's buffers. */
-    YEW_ASSERT(yew_grid_resize(&f.ed.grid, 24U, 44U));
-    yew_ed_layout(&f.ed);
-    dg_paint(&f);
-    chev = dg_chevron_x(44U);
-    YEW_ASSERT(chev != 0xFFFFU);
-    /* Two clicks on the chevron: the offset is now the user's. */
-    for (i = 0; i < 2; i++) {
-        YEW_ASSERT(yew_tab_strip_click(&f.ed, chev, 0U));
-        dg_paint(&f);
-    }
-    scrolled = f.ed.tabs.scroll;
-    YEW_ASSERT(scrolled > 0);
-    YEW_ASSERT(yew_tabs_scroll_is_owned(&f.ed.tabs, false));
-
-    /* Two visible slots to drag between, both of them tabs. */
-    for (x = 0U; x < 44U; x++) {
-        int slot = yew_strip_slot_at(x, 0U);
-        i32 pre = 0;
-
-        if (slot < 0 || !yew_strip_pre_payload(slot, &pre) || pre < 0)
-            continue;
-        if (held_slot < 0)
-            held_slot = slot;
-        else if (slot != held_slot)
-            to_slot = slot;
-    }
-    YEW_ASSERT(held_slot >= 0);
-    YEW_ASSERT(to_slot >= 0);
-    YEW_ASSERT(yew_strip_pre_payload(held_slot, &held_payload));
-    {
-        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, held_slot), 0U);
-        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, to_slot), 0U);
-
-        yew_mouse_event(&f.ed, &press);
-        yew_mouse_event(&f.ed, &motion);
-    }
-    YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
-    dg_paint(&f);
-    /* The render did not walk the offset back toward tab 0. */
-    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, scrolled);
-    YEW_ASSERT(yew_tabs_scroll_is_owned(&f.ed.tabs, false));
-    /* The float is at the pointer and claims nothing. */
-    fl = yew_strip_float_rect();
-    YEW_ASSERT(fl.w > 0U);
-    for (x = fl.x; x < (u16)(fl.x + fl.w); x++)
-        YEW_ASSERT_EQ_U64((u64)yew_region_hit(x, fl.y).kind,
-                          (u64)YEW_REGION_NONE);
-    /* And the gap: the held entry has no region on the scrolled row. */
-    for (x = 0U; x < 44U; x++) {
-        Region hit = yew_region_hit(x, 0U);
-
-        if (hit.kind == YEW_REGION_TAB && hit.payload == held_payload)
-            held_region = true;
-    }
-    YEW_ASSERT(!held_region);
-    /* A second paint of the same state is the same offset (invariant
-     * 5): the walk-back would have shown up here if anywhere. */
-    dg_paint(&f);
-    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, scrolled);
 /* The preview belongs to the pointer                                */
 /* ---------------------------------------------------------------- */
 
@@ -1821,36 +1711,6 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
 }
 
 /*
- * The drag AUTOSCROLL (Sprint 27) is one of Sprint 57.15's explicit
- * gestures: holding the pointer on the chevron is the user asking for
- * the offset, so `strip_scroll` takes ownership and the strip stays
- * where the drop landed instead of snapping back to an active tab the
- * user dragged away from.  On `tab-drag-feel` alone the very next
- * render walked it back, which is the defect 57.15 §1 exists for.
- *
- * Nothing here has to clear the flag afterwards: the drop reorders the
- * tab and does not change which tab is ACTIVE, and `yew_tab_switch` —
- * the one funnel every change of the active entry comes through — is
- * what resumes the follow.  Asserted at the bottom.
- */
-void test_drag_autoscroll_keeps_the_strip_where_the_drop_landed(void)
-{
-    DragFixture f;
-    u16 chev;
-    i64 t0;
-    int scrolled;
-
-    dg_fixture(&f, 7U);
-    yew_tab_switch(&f.ed, 0);
-    YEW_ASSERT(yew_grid_resize(&f.ed.grid, 24U, 24U));
-    yew_ed_layout(&f.ed);
-    dg_paint(&f);
-    YEW_ASSERT(!yew_tabs_scroll_is_owned(&f.ed.tabs, false));
-    chev = dg_chevron_x(24U);
-    YEW_ASSERT(chev != 0xFFFFU);
-    {
-        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
-        Key motion = dg_ev((u8)YEW_KEY_REPEAT, chev, 0U);
  * THE PRE-DRAG SLOT TABLE'S WHOLE JOB: the strip the user is looking at
  * and the list the release commits are the same answer.
  *
@@ -2001,6 +1861,169 @@ void test_drag_dwell_flash_is_visible_on_the_active_group_entry(void)
         yew_mouse_event(&f.ed, &press);
         yew_mouse_event(&f.ed, &motion);
     }
+    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
+    t0 = f.ed.now_ms;
+    f.ed.now_ms = t0;
+    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), g);
+    dg_paint(&f);
+    lit = dg_entry_reversed(&f, g);
+    f.ed.now_ms = t0 + YEW_DRAG_FLASH_MS;
+    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), 0U);
+    dg_paint(&f);
+    dark = dg_entry_reversed(&f, g);
+    /* The two quarters do not paint the same cells — which is the whole
+     * claim the word "flash" makes — and the dark quarter is the entry's
+     * ordinary active look, so the cue neither cancels out nor leaves a
+     * stuck highlight behind. */
+    YEW_ASSERT_EQ_U64(lit, !base);
+    YEW_ASSERT_EQ_U64(dark, base);
+    yew_ed_free(&f.ed);
+}
+
+static u16 dg_chevron_x(u16 cols)
+{
+    u16 x;
+
+    for (x = 0U; x < cols; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB_SCROLL && hit.payload > 0)
+            return x;
+    }
+    return 0xFFFFU;
+}
+
+/*
+ * Sprint 57.14 §2 meets Sprint 57.15 §1.
+ *
+ * The float is drawn from the PAYLOAD at the pointer, and the gap is a
+ * position in the entry list — neither is a function of the offset, so
+ * a strip the user scrolled away from the active tab must carry both
+ * unchanged.  The interesting half is the other direction: a drag
+ * renders row 1 every time the pointer crosses a cell, and each of
+ * those renders hands `&ed->tabs.scroll` to the one placement engine,
+ * which writes the value back.  If the drag's renders forgot that the
+ * offset was the user's, the strip would walk back to the active entry
+ * mid-gesture and the drop would land somewhere the user was not
+ * looking.
+ */
+void test_drag_float_survives_a_user_scrolled_strip(void)
+{
+    DragFixture f;
+    u16 chev;
+    int scrolled;
+    int held_slot = -1;
+    int to_slot = -1;
+    int i;
+    i32 held_payload = 0;
+    bool held_region = false;
+    Rect fl;
+    u16 x;
+
+    dg_fixture(&f, 7U);
+    /* Tab 0 stays active and far to the left, so "follow the active
+     * entry" and "the offset the user chose" disagree. */
+    yew_tab_switch(&f.ed, 0);
+    /* Wide enough for two entries beside the chevron — the drag needs
+     * two visible slots — and narrow enough to overflow.  RESIZE rather
+     * than a second init, which would leak the first's buffers. */
+    YEW_ASSERT(yew_grid_resize(&f.ed.grid, 24U, 44U));
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    chev = dg_chevron_x(44U);
+    YEW_ASSERT(chev != 0xFFFFU);
+    /* Two clicks on the chevron: the offset is now the user's. */
+    for (i = 0; i < 2; i++) {
+        YEW_ASSERT(yew_tab_strip_click(&f.ed, chev, 0U));
+        dg_paint(&f);
+    }
+    scrolled = f.ed.tabs.scroll;
+    YEW_ASSERT(scrolled > 0);
+    YEW_ASSERT(yew_tabs_scroll_is_owned(&f.ed.tabs, false));
+
+    /* Two visible slots to drag between, both of them tabs. */
+    for (x = 0U; x < 44U; x++) {
+        int slot = yew_strip_slot_at(x, 0U);
+        i32 pre = 0;
+
+        if (slot < 0 || !yew_strip_pre_payload(slot, &pre) || pre < 0)
+            continue;
+        if (held_slot < 0)
+            held_slot = slot;
+        else if (slot != held_slot)
+            to_slot = slot;
+    }
+    YEW_ASSERT(held_slot >= 0);
+    YEW_ASSERT(to_slot >= 0);
+    YEW_ASSERT(yew_strip_pre_payload(held_slot, &held_payload));
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, held_slot), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, to_slot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+    dg_paint(&f);
+    /* The render did not walk the offset back toward tab 0. */
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, scrolled);
+    YEW_ASSERT(yew_tabs_scroll_is_owned(&f.ed.tabs, false));
+    /* The float is at the pointer and claims nothing. */
+    fl = yew_strip_float_rect();
+    YEW_ASSERT(fl.w > 0U);
+    for (x = fl.x; x < (u16)(fl.x + fl.w); x++)
+        YEW_ASSERT_EQ_U64((u64)yew_region_hit(x, fl.y).kind,
+                          (u64)YEW_REGION_NONE);
+    /* And the gap: the held entry has no region on the scrolled row. */
+    for (x = 0U; x < 44U; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB && hit.payload == held_payload)
+            held_region = true;
+    }
+    YEW_ASSERT(!held_region);
+    /* A second paint of the same state is the same offset (invariant
+     * 5): the walk-back would have shown up here if anywhere. */
+    dg_paint(&f);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, scrolled);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * The drag AUTOSCROLL (Sprint 27) is one of Sprint 57.15's explicit
+ * gestures: holding the pointer on the chevron is the user asking for
+ * the offset, so `strip_scroll` takes ownership and the strip stays
+ * where the drop landed instead of snapping back to an active tab the
+ * user dragged away from.  On `tab-drag-feel` alone the very next
+ * render walked it back, which is the defect 57.15 §1 exists for.
+ *
+ * Nothing here has to clear the flag afterwards: the drop reorders the
+ * tab and does not change which tab is ACTIVE, and `yew_tab_switch` —
+ * the one funnel every change of the active entry comes through — is
+ * what resumes the follow.  Asserted at the bottom.
+ */
+void test_drag_autoscroll_keeps_the_strip_where_the_drop_landed(void)
+{
+    DragFixture f;
+    u16 chev;
+    i64 t0;
+    int scrolled;
+
+    dg_fixture(&f, 7U);
+    yew_tab_switch(&f.ed, 0);
+    YEW_ASSERT(yew_grid_resize(&f.ed.grid, 24U, 24U));
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    YEW_ASSERT(!yew_tabs_scroll_is_owned(&f.ed.tabs, false));
+    chev = dg_chevron_x(24U);
+    YEW_ASSERT(chev != 0xFFFFU);
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, chev, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
     t0 = f.ed.now_ms;
     yew_mouse_tick(&f.ed, t0 + YEW_DRAG_SCROLL_MS);
     yew_mouse_tick(&f.ed, t0 + 2 * YEW_DRAG_SCROLL_MS);
@@ -2142,21 +2165,5 @@ void test_drag_float_does_not_disturb_the_chevron_answer(void)
     dg_paint(&f);
     YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 0);
     YEW_ASSERT(!yew_mouse_chevron_drawn());
-    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
-    t0 = f.ed.now_ms;
-    f.ed.now_ms = t0;
-    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), g);
-    dg_paint(&f);
-    lit = dg_entry_reversed(&f, g);
-    f.ed.now_ms = t0 + YEW_DRAG_FLASH_MS;
-    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), 0U);
-    dg_paint(&f);
-    dark = dg_entry_reversed(&f, g);
-    /* The two quarters do not paint the same cells — which is the whole
-     * claim the word "flash" makes — and the dark quarter is the entry's
-     * ordinary active look, so the cue neither cancels out nor leaves a
-     * stuck highlight behind. */
-    YEW_ASSERT_EQ_U64(lit, !base);
-    YEW_ASSERT_EQ_U64(dark, base);
     yew_ed_free(&f.ed);
 }
