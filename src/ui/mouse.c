@@ -1728,6 +1728,7 @@ static void drag_strip_drop(Ed *ed, const Key *k)
 static void mouse_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
+    bool moved_cell;
 
     if (k->button == (u8)YEW_MB_NONE) {
         /*
@@ -1749,6 +1750,13 @@ static void mouse_motion(Ed *ed, const Key *k)
     }
     if (m->phase == YEW_MP_IDLE)
         return;
+    /*
+     * Sprint 57.14 §2: the float follows the POINTER, so a drag repaints
+     * when the pointer changes CELL and not when a report arrives.  A
+     * terminal emits as many reports per cell as it likes, and repainting
+     * per report is the slideshow §3's hover rule exists to prevent.
+     */
+    moved_cell = k->col != m->at_x || k->row != m->at_y;
     m->at_x = k->col;
     m->at_y = k->row;
     if (m->phase == YEW_MP_ARMED) {
@@ -1771,6 +1779,8 @@ static void mouse_motion(Ed *ed, const Key *k)
     case YEW_MP_DRAG_TAB:
     case YEW_MP_DRAG_GROUP:
         drag_strip_motion(ed, k);
+        if (moved_cell)
+            ed->full_damage = true;
         break;
     case YEW_MP_IDLE:
     case YEW_MP_ARMED:
@@ -1894,6 +1904,10 @@ static void mouse_release(Ed *ed, const Key *k)
     case YEW_MP_DRAG_TAB:
     case YEW_MP_DRAG_GROUP:
         drag_strip_drop(ed, k);
+        /* Even a drop that changed nothing repaints: the float was drawn
+         * at the pointer, and putting the button down is what takes it
+         * off the screen. */
+        ed->full_damage = true;
         break;
     case YEW_MP_IDLE:
     default:
@@ -1937,7 +1951,10 @@ void yew_mouse_cancel(Ed *ed)
     if (ed->mouse.preview_gid != 0U) {
         ed->layout_dirty = true;
         ed->full_damage = true;
-    } else if (ed->mouse.drag_to_valid) {
+    } else if (ed->mouse.phase == YEW_MP_DRAG_TAB ||
+               ed->mouse.phase == YEW_MP_DRAG_GROUP) {
+        /* The float and its gap are both pictures of a gesture that is
+         * ending, and neither goes away without a repaint. */
         ed->full_damage = true;
     }
     yew_mouse_init(&ed->mouse);

@@ -1084,6 +1084,31 @@ void test_drag_float_is_drawn_and_registers_no_region(void)
     /* The float has no number: the numbers address POSITIONS on a row,
      * and a float is between them. */
     YEW_ASSERT(strstr(row + fl.x, " 2 yew-drag-0.txt") == NULL);
+    /*
+     * Moving the pointer inside ONE cell repaints nothing; crossing into
+     * the next cell repaints, because that is where the float now is.
+     */
+    f.ed.full_damage = false;
+    {
+        Key same = dg_ev((u8)YEW_KEY_REPEAT, 60U, 3U);
+        Key next = dg_ev((u8)YEW_KEY_REPEAT, 61U, 3U);
+
+        yew_mouse_event(&f.ed, &same);
+        YEW_ASSERT(!f.ed.full_damage);
+        yew_mouse_event(&f.ed, &next);
+        YEW_ASSERT(f.ed.full_damage);
+    }
+    /* And the release takes it off the screen, even though this drag
+     * never named a target and changes nothing. */
+    f.ed.full_damage = false;
+    {
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, 61U, 3U);
+
+        yew_mouse_event(&f.ed, &up);
+    }
+    YEW_ASSERT(f.ed.full_damage);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_U64(yew_strip_float_rect().w, 0U);
     yew_ed_free(&f.ed);
 }
 
