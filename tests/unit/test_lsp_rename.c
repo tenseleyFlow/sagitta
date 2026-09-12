@@ -1116,17 +1116,29 @@ void test_lsp_rename_apply_command_commits_the_plan_and_ends_the_rename(void)
 void test_lsp_rename_cancel_command_discards_the_plan_without_mutation(void)
 {
     RenameFix f;
+    u32 buffers_before;
+    size_t tabs_before;
 
     rename_fix_init(&f);
     yew_cmd_shutdown();
     yew_cmd_init();
+    buffers_before = f.ed.ws.nbufs;
+    tabs_before = f.ed.tabs.v.len;
     rename_confirm_up(&f);
+    /* Phase 2 hydrates b.c into one ordinary tab.  Sprint 47 explicitly
+     * makes rename-opened files ordinary buffers rather than temporaries. */
+    YEW_ASSERT_EQ_U64(f.ed.ws.nbufs, (u64)buffers_before + 1U);
+    YEW_ASSERT_EQ_U64(f.ed.tabs.v.len, (u64)tabs_before + 1U);
     YEW_ASSERT_EQ_I64(rename_run(&f, "ed.lsp.rename.cancel"), YEW_CMD_OK);
     YEW_ASSERT_NULL(f.ed.lsp_rename);
     YEW_ASSERT(!yew_lsp_rename_confirm_active(&f.ed));
     /* The panel went with it — that is what makes `Cancel` the rename
      * shape's close, and `Close` absent from it. */
     YEW_ASSERT(!f.ed.win->panel.open);
+    /* Cancelling discards the plan, not those ordinary tabs: one hydrated
+     * buffer and one tab remain open, with byte identity preserved. */
+    YEW_ASSERT_EQ_U64(f.ed.ws.nbufs, (u64)buffers_before + 1U);
+    YEW_ASSERT_EQ_U64(f.ed.tabs.v.len, (u64)tabs_before + 1U);
     rename_assert_sources_unchanged(&f);
     rename_assert_fixture_disk(&f);
     rename_fix_free(&f);
