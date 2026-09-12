@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-014`
+Next available ID: `YEW-F-016`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -26,6 +26,8 @@ recorded in `audit-00.md`.
 | YEW-F-011 | M | open | F10 SYN | matching source metadata can retain stale syntax tables | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
 | YEW-F-012 | M | open | F10 SYN | pending embeds occupy a canonical state tail slot | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
 | YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
+| YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
+| YEW-F-015 | M | open | F11 LSP | snippet-policy grep gate matches unrelated core code | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -142,6 +144,23 @@ naming the value-flag heuristic. Descriptions elsewhere do not satisfy the
 fixture-local documentation contract, so future reviewers cannot distinguish
 intentional heuristic debt from a regression at the point of evidence. It
 remains open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-014` is Medium because a stripped build gives one `ed.lsp.*` command
+different module-boundary semantics from every other command in its domain.
+`yew_lsp_complete` reports an informational message and opens core index
+completion instead of returning the exact `yew_mod_require` error required by
+Sprints 45, 47, and F11; the minimal-module unit control explicitly excludes
+that command. The fallback is useful and recoverable, but it contradicts the
+locked surface and makes the advertised module boundary inaccurate. It
+remains open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-015` is Medium because Sprint 47's mandatory repository-wide
+`tabstop|placeholder` scan cannot establish its claimed absence condition.
+The LSP policy paragraph is one match, but ordinary core implementation names
+and comments contribute ten more matching lines at the baseline. The product
+still downgrades the choice snippet deterministically; the defect is in a
+release gate that promises a specific result it cannot produce. It remains
+open for Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 
