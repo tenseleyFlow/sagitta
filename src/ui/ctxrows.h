@@ -111,7 +111,23 @@ typedef enum CtxTarget {
      */
     CTX_TGT_FUSS_ROW,
     CTX_TGT_PICK,     /* select the captured payload, then accept by iarg */
-    CTX_TGT_COMPL     /* select the captured completion item first */
+    CTX_TGT_COMPL,    /* select the captured completion item first */
+    /*
+     * Move the GROUP PICKER's focus to the captured listing index, then
+     * invoke with no argument.
+     *
+     * A NINTH TARGET RATHER THAN A REUSED ONE.  CTX_TGT_PICK is the
+     * fuzzy picker and its accept modes — a different widget with a
+     * different selection model — and CTX_TGT_COMPL is the completion
+     * menu's; neither knows the group dialog exists, and teaching one
+     * of them to would be a target that means two things depending on
+     * what happens to be open.  The payload here is a LISTING INDEX,
+     * which is the one identity the GP_ROW region carries, so the
+     * capture has to be spent through `yew_gp_select_row` — the same
+     * function `yew_gp_click` uses — before `Toggle` can tick the row
+     * the user actually pointed at rather than the focused one.
+     */
+    CTX_TGT_GP_ROW
 } CtxTarget;
 
 typedef struct CtxActionDesc {
@@ -175,6 +191,7 @@ typedef enum CtxAction {
     CTXA_DOC_CLOSE_PANE,
     /* Document: the file rows. */
     CTXA_DOC_SAVE,
+    CTXA_DOC_SAVE_AS,
     CTXA_DOC_RELOAD,
     /* Document: the LSP section (omitted whole with no server). */
     CTXA_DOC_LSP_DEF,
@@ -222,6 +239,7 @@ typedef enum CtxAction {
     CTXA_FUSS_RENAME,
     CTXA_FUSS_DELETE,
     CTXA_FUSS_TOGGLE,
+    CTXA_FUSS_COPY_PATH,
     CTXA_FUSS_GROUP_FROM_DIR,
     /* FUSS drawer, header and backdrop: the repository rows. */
     CTXA_FUSS_REFRESH,
@@ -240,6 +258,18 @@ typedef enum CtxAction {
     CTXA_COMPL_ACCEPT,
     CTXA_COMPL_DOCS,
     CTXA_COMPL_CANCEL,
+
+    /*
+     * The rename-confirm panel's three answers, and the group picker's
+     * two rows: Deliverable 4's other half, the rows that shipped as
+     * nothing because the state machines behind them were raw key
+     * handlers with no commands.
+     */
+    CTXA_RENAME_APPLY,
+    CTXA_RENAME_DIFF,
+    CTXA_RENAME_CANCEL,
+    CTXA_GP_TOGGLE,
+    CTXA_GP_CONFIRM,
     /*
      * The one action with no command: closing a transient overlay.  No
      * registry command owns "make this go away" — Esc does — and

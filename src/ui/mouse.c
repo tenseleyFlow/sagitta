@@ -832,6 +832,15 @@ static bool apply_target(Ed *ed, const CtxActionDesc *d, u32 id, Rect cell)
             return false;
         yew_compl_select(ed, ed->win, (i32)id);
         return true;
+    case CTX_TGT_GP_ROW:
+        /*
+         * The captured id is the group dialog's LISTING INDEX, and the
+         * row it named can be gone — the dialog re-lists on every walk
+         * — so a failed select means NOTHING RUNS.  `Toggle` against a
+         * re-listed directory would tick whatever file inherited the
+         * index, which is the one mistake a tick set cannot survive.
+         */
+        return yew_gp_select_row(ed, (int)id);
     case CTX_TGT_PATH:
     case CTX_TGT_FUSS_ROW:
         /*

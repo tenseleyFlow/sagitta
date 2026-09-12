@@ -104,6 +104,14 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
     /* CTXA_DOC_SPLIT_BELOW  */ {"ed.pane.split_v", CTX_TGT_PANE, 0},
     /* CTXA_DOC_CLOSE_PANE   */ {"ed.pane.close", CTX_TGT_PANE, 0},
     /* CTXA_DOC_SAVE         */ {"ed.file.save", CTX_TGT_PANE, 0},
+    /*
+     * `Save As...` PROMPTS: the command opens the E-mode line seeded
+     * `w <current path>` and the write happens when the user presses
+     * Enter.  CTX_TGT_PANE because the prompt has to be about the
+     * buffer that was pointed at, and the cmdline's target is the
+     * focused window.
+     */
+    /* CTXA_DOC_SAVE_AS      */ {"ed.file.save_as", CTX_TGT_PANE, 0},
     /* CTXA_DOC_RELOAD       */ {"ed.file.reload", CTX_TGT_PANE, 0},
     /* CTXA_DOC_LSP_DEF      */ {"ed.lsp.goto_def", CTX_TGT_PANE, 0},
     /* CTXA_DOC_LSP_REFS     */ {"ed.lsp.references", CTX_TGT_PANE, 0},
@@ -169,6 +177,15 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
      * the clicked row, pass nothing.
      */
     /* CTXA_FUSS_TOGGLE      */ {"ed.git.nav.toggle", CTX_TGT_FUSS_ROW, 0},
+    /*
+     * CTX_TGT_PATH, not CTX_TGT_FUSS_ROW: the row has to copy the path
+     * it was opened over even when the tree has since re-sorted under
+     * a status refresh, and the captured path is the only thing that
+     * still names it.  `ed.git.copy_path` is OPT_STR precisely so this
+     * target is legal for it — the arity half of
+     * `ctxrows_the_action_table_is_wholly_resolvable`.
+     */
+    /* CTXA_FUSS_COPY_PATH   */ {"ed.git.copy_path", CTX_TGT_PATH, 0},
     /* CTXA_FUSS_GROUP_FROM_DIR */
     {"ed.group.from_dir", CTX_TGT_FUSS_ROW, 0},
     /* CTXA_FUSS_REFRESH     */ {"ed.git.refresh", CTX_TGT_NONE, 0},
@@ -195,6 +212,30 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
     /* CTXA_COMPL_ACCEPT     */ {"ed.compl.accept", CTX_TGT_COMPL, 0},
     /* CTXA_COMPL_DOCS       */ {"ed.compl.doc_toggle", CTX_TGT_NONE, 0},
     /* CTXA_COMPL_CANCEL     */ {"ed.compl.cancel", CTX_TGT_NONE, 0},
+
+    /*
+     * The rename panel and the group picker, whose rows the router
+     * cannot handle inline the way it does `Close`: these are STATE
+     * MACHINE TRANSITIONS — apply a plan, walk back to the summary,
+     * tick a path — and the only correct implementation of each is the
+     * one the key handler already runs.  The commands are that
+     * implementation, reached from both routes.
+     */
+    /* CTXA_RENAME_APPLY     */
+    {"ed.lsp.rename.apply", CTX_TGT_NONE, 0},
+    /* CTXA_RENAME_DIFF      */ {"ed.lsp.rename.diff", CTX_TGT_NONE, 0},
+    /* CTXA_RENAME_CANCEL    */
+    {"ed.lsp.rename.cancel", CTX_TGT_NONE, 0},
+    /* CTXA_GP_TOGGLE        */
+    {"ed.group.pick.toggle", CTX_TGT_GP_ROW, 0},
+    /*
+     * CONFIRM TAKES NO TARGET, on either GP menu.  Confirming is about
+     * the whole tick SET, which the dialog owns and which no row is;
+     * moving the focus to the pointed-at row first would only change
+     * which row a later Space would tick.
+     */
+    /* CTXA_GP_CONFIRM       */
+    {"ed.group.pick.confirm", CTX_TGT_NONE, 0},
     /* CTXA_OVERLAY_CLOSE    */ {NULL, CTX_TGT_NONE, 0}
 };
 
@@ -330,14 +371,13 @@ static void build_doc(Ed *ed, const CtxContext *c)
     yew_ctx_sep();
     yew_ctx_item("Save", NULL, (u32)CTXA_DOC_SAVE, yew_buf_dirty(b), 1U);
     /*
-     * §4's `Save As...` is NOT here.  Every other row on this menu is a
-     * registry command with a keyboard route (DoD 3), and nothing in
-     * the registry opens a "write to which path?" prompt: `ed.file.write`
-     * takes the path as an argument the E-mode line supplies, and a
-     * menu row has no way to ask for one.  A row that saved to the path
-     * the file already has would be `Save` wearing another label, which
-     * is worse than an absent row.  It lands with the command.
+     * ALWAYS ENABLED, unlike `Save` and `Reload`.  "Write this
+     * somewhere else" is answerable for a scratch buffer with no path
+     * and for a clean one — those are the two cases the row is most
+     * often reached for — and the only state it needs is a window,
+     * which a document menu has by construction.
      */
+    yew_ctx_item("Save As...", NULL, (u32)CTXA_DOC_SAVE_AS, true, 2U);
     yew_ctx_item("Reload", NULL, (u32)CTXA_DOC_RELOAD,
                  b != NULL && b->path != NULL, 3U);
 
@@ -552,14 +592,10 @@ static void build_fuss_file(Ed *ed, const CtxContext *c)
     yew_ctx_sep();
     yew_ctx_item("Rename...", NULL, (u32)CTXA_FUSS_RENAME, have, 3U);
     yew_ctx_item("Delete...", NULL, (u32)CTXA_FUSS_DELETE, have, 3U);
-    /*
-     * §4's `Copy Path` is NOT here, and neither is the directory
-     * menu's.  `ed.tab.copy_path` copies the ACTIVE TAB's path — it
-     * takes no argument — and nothing in the registry puts an arbitrary
-     * path in register `+`.  A row that copied a different file's name
-     * than the one it was opened over is the one failure a clipboard
-     * row must never have, so it waits for its command.
-     */
+    /* Enabled on `have` alone: copying a name asks git nothing, so an
+     * untracked file and one the status walk has not reached yet both
+     * answer it. */
+    yew_ctx_item("Copy Path", NULL, (u32)CTXA_FUSS_COPY_PATH, have, 3U);
 }
 
 static void build_fuss_dir(Ed *ed, const CtxContext *c)
@@ -588,6 +624,8 @@ static void build_fuss_dir(Ed *ed, const CtxContext *c)
                  have && known && (t.unstaged || t.untracked), 1U);
     yew_ctx_item("Unstage All Below", NULL, (u32)CTXA_FUSS_UNSTAGE,
                  have && known && t.staged, 1U);
+    yew_ctx_sep();
+    yew_ctx_item("Copy Path", NULL, (u32)CTXA_FUSS_COPY_PATH, have, 3U);
 }
 
 /* The drawer's header, its blank tail and the backdrop behind it: the
@@ -655,35 +693,62 @@ static void build_compl_row(Ed *ed, const CtxContext *c)
 /*
  * The hover / signature / rename-confirm panel.
  *
- * §4 asks for `Apply`, `Show Diff` and `Cancel` on the rename-confirm
- * panel specifically.  The rename confirmation is a KEY HANDLER
- * (`yew_lsp_rename_key`) with no registry commands behind its three
- * answers, so those rows have no action to carry and are not built; the
- * row that is always true — put the panel away — is.  They land with
- * the commands.
+ * ONE PANEL SLOT, TWO SHAPES.  Hover and signature help are READ-ONLY
+ * — there is nothing to answer, so the only honest row is the one that
+ * puts the panel away.  The rename confirmation is a QUESTION, and §4
+ * gives it the three answers its key handler has.
+ *
+ * WHY THE RENAME SHAPE HAS NO `Close`.  `Close` is
+ * `CTXA_OVERLAY_CLOSE`, which closes the PANEL and nothing else — and
+ * a rename confirmation whose panel is gone is still a rename waiting
+ * for an answer, so the user's next Enter would apply a rename they
+ * believe they dismissed.  `Cancel` is that panel's close: it ends the
+ * rename and takes the panel with it.  Two rows that look alike and
+ * differ in whether they leave a live rename behind is the one thing
+ * this menu must not offer.
  */
 static void build_panel(Ed *ed, const CtxContext *c)
 {
-    (void)ed;
+    /* No feature conditional: the stripped shim answers false, so a
+     * MODULES="" build takes the bare-`Close` path by construction
+     * rather than by a second spelling of the same question. */
+    bool renaming = yew_lsp_rename_confirm_active(ed);
+
     (void)c;
     yew_ctx_begin((u32)YEW_CTX_KIND_PANEL);
     yew_ctx_target(0U, NULL);
-    yew_ctx_item("Close", NULL, (u32)CTXA_OVERLAY_CLOSE, true, 0U);
+    if (!renaming) {
+        yew_ctx_item("Close", NULL, (u32)CTXA_OVERLAY_CLOSE, true, 0U);
+        return;
+    }
+    yew_ctx_item("Apply", NULL, (u32)CTXA_RENAME_APPLY, true, 0U);
+    yew_ctx_item("Show Diff", NULL, (u32)CTXA_RENAME_DIFF, true, 1U);
+    yew_ctx_sep();
+    yew_ctx_item("Cancel", NULL, (u32)CTXA_RENAME_CANCEL, true, 0U);
 }
 
 /*
  * The group picker, rows and box.
  *
- * §4 asks for `Toggle` and `Confirm` as well.  The dialog is keyed
- * entirely through `yew_gp_key` — ticking a row and confirming a group
- * are not registry commands — so, as with the rename panel, the rows
- * that have no command are not invented here.
+ * `Toggle` IS A ROW'S ROW: it ticks the path the pointer is over, so it
+ * exists only on GP_ROW and its captured target is the LISTING INDEX
+ * the region carries (CTX_TGT_GP_ROW — see ctxrows.h for why that is a
+ * target of its own).  `Confirm` and `Cancel` are the DIALOG's, so they
+ * are on both shapes and carry no target: they are about the tick set,
+ * which no single row is.
  */
 static void build_gp(Ed *ed, const CtxContext *c)
 {
+    bool row = c->kind == YEW_CTX_KIND_GP_ROW;
+
     (void)ed;
     yew_ctx_begin((u32)c->kind);
     yew_ctx_target(c->id, NULL);
+    if (row) {
+        yew_ctx_item("Toggle", NULL, (u32)CTXA_GP_TOGGLE, true, 0U);
+        yew_ctx_sep();
+    }
+    yew_ctx_item("Confirm", NULL, (u32)CTXA_GP_CONFIRM, true, 0U);
     yew_ctx_item("Cancel", NULL, (u32)CTXA_OVERLAY_CLOSE, true, 0U);
 }
 
