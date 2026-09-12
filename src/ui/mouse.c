@@ -51,8 +51,6 @@ static i32 wheel_dir(u8 button)
  * scrolls the FUSS drawer by geometry rather than by region.
  */
 static void menu_close(Ed *ed);
-static void motion_sync(void);
-static void motion_forget_chevrons(void);
 static bool rect_has(Rect r, u16 x, u16 y);
 
 void yew_mouse_init(MouseState *m)
@@ -61,15 +59,6 @@ void yew_mouse_init(MouseState *m)
         return;
     (void)memset(m, 0, sizeof(*m));
     m->drag_to_slot = -1;
-    /*
-     * Sprint 57.15 §2: the strip's claim on mode 1003 belongs to the
-     * LAST DRAW, and a fresh MouseState means there has not been one —
-     * a new editor, or a gesture cancelled out from under the frame
-     * that made the claim.  Carrying it over would leave the terminal
-     * armed for a chevron nothing is drawing; the next draw republishes
-     * within the frame either way.
-     */
-    motion_forget_chevrons();
 }
 
 /*
@@ -509,11 +498,6 @@ void yew_mouse_note_chevrons(Ed *ed, bool any)
         return;
     motion_want_strip = any;
     motion_sync();
-}
-
-static void motion_forget_chevrons(void)
-{
-    yew_mouse_note_chevrons(NULL, false);
 }
 
 bool yew_mouse_chevron_drawn(void)
