@@ -526,6 +526,8 @@ const YewTest yew_tests[] = {
     T(pty_spawn_clears_signal_mask),
     T(pty_timeout_reaps_child),
     T(pty_post_snapshot_protocol_error_fails_cleanup),
+    T(pty_wait_never_observes_a_torn_frame),
+    T(pty_snapshot_refuses_an_open_frame),
     T(vt_closed_set_and_modes),
     T(vt_probe_profiles),
     T(vt_sgr_closed_rows),
