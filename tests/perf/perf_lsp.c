@@ -21,6 +21,7 @@
 #include "term/render.h"
 #include "ui/draw.h"
 #include "util/sort.h"
+#include "perf/perf_policy.h"
 
 enum {
     LSP_NOTE_SAMPLES = 1001,
@@ -638,6 +639,26 @@ static bool load_baselines(Timing *rows, size_t count)
     return true;
 }
 
+static int selftest_policy(void)
+{
+    const u64 budget = LSP_NOTE_P99_BUDGET_NS;
+
+    if (yew_perf_timing_failed(budget, budget, false) ||
+        !yew_perf_timing_failed(budget + 1U, budget, false) ||
+        yew_perf_timing_failed(budget + 1U, budget, true) ||
+        yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, budget, true) ||
+        !yew_perf_timing_failed(
+            budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U,
+            budget, true) ||
+        !yew_perf_timing_failed(0U, budget, true)) {
+        (void)fprintf(stderr, "perf-lsp-policy: failed\n");
+        return 1;
+    }
+    (void)printf("perf-lsp-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     Timing rows[] = {
@@ -654,15 +675,22 @@ int main(int argc, char **argv)
     };
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
     bool server = argc == 2 && strcmp(argv[1], "--server") == 0;
+    bool selftest = argc == 2 && strcmp(argv[1], "--selftest-policy") == 0;
+    bool advisory;
     size_t i;
     int status = 0;
 
     if (server)
         return run_stream_server();
-    if (argc > 2 || (argc == 2 && !measure)) {
-        (void)fprintf(stderr, "usage: %s [--measure|--server]\n", argv[0]);
+    if (argc > 2 || (argc == 2 && !measure && !selftest)) {
+        (void)fprintf(stderr,
+                      "usage: %s [--measure|--server|--selftest-policy]\n",
+                      argv[0]);
         return 2;
     }
+    if (selftest)
+        return selftest_policy();
+    advisory = yew_perf_advisory();
     if (!measure_note_edit(YEW_POSENC_UTF8, &rows[0])) {
         (void)fprintf(stderr, "perf_lsp: utf-8 note-edit invariant failed\n");
         return 2;
@@ -688,8 +716,6 @@ int main(int argc, char **argv)
         return 2;
     }
     for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
-        bool regression = rows[i].p99_ns > rows[i].budget_p99_ns;
-
         (void)printf("lsp.%s median_ns=%llu p99_ns=%llu max_ns=%llu "
                      "budget_ns=%llu%s\n",
                      rows[i].name,
@@ -697,12 +723,15 @@ int main(int argc, char **argv)
                      (unsigned long long)rows[i].p99_ns,
                      (unsigned long long)rows[i].maximum_ns,
                      (unsigned long long)rows[i].budget_p99_ns,
-                     regression ? " REGRESSION" : " ok");
+                     yew_perf_timing_verdict(rows[i].p99_ns,
+                                             rows[i].budget_p99_ns,
+                                             advisory));
         if (measure)
             (void)printf("%s %llu %llu\n", rows[i].name,
                          (unsigned long long)rows[i].median_ns,
                          (unsigned long long)rows[i].p99_ns);
-        if (regression)
+        if (yew_perf_timing_failed(rows[i].p99_ns,
+                                   rows[i].budget_p99_ns, advisory))
             status = 1;
     }
     return status;

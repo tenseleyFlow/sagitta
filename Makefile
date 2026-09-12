@@ -2480,7 +2480,8 @@ perf-git-gutter: $(BUILD)/perf_git_gutter
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_git_gutter --gate
 
 perf-lsp: $(BUILD)/perf_lsp
-	$(BUILD)/perf_lsp
+	$(BUILD)/perf_lsp --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_lsp
 
 perf-ai-http: $(BUILD)/perf_ai_http
 	$(BUILD)/perf_ai_http
