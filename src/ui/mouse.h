@@ -32,6 +32,7 @@
 #include "edit/motion.h"
 #include "term/input.h"
 #include "text/coords.h"
+#include "ui/ctxrows.h"
 #include "ui/region.h"
 #include "util/base.h"
 
@@ -166,9 +167,25 @@ void yew_mouse_tick(Ed *ed, i64 now_ms);
 i64 yew_mouse_deadline(const Ed *ed, i64 now_ms);
 
 /*
- * §5: the two menus.  Built here rather than in ui/ctxmenu.c because
- * WHICH rows exist and what they mean is editor policy, and ctxmenu.c
- * is deliberately ignorant of the editor.
+ * Sprint 57.11 §3: WHAT IS UNDER THE POINTER.
+ *
+ * PURE, and unit-tested directly — every surface's menu comes from this
+ * one answer, so "right-click opens the wrong menu over the drawer" is
+ * a test rather than a bug report.  A region hit wins (Sprint 22's
+ * layout/hit-test identity law); only an unclaimed cell falls through
+ * to geometry, in the order drawer, backdrop, footer, strip, editor.
+ *
+ * YEW_CTX_KIND_NONE means the pointer is on the OPEN MENU itself, and
+ * the router's answer to that is to dismiss it, never to reopen.
+ */
+CtxContext yew_mouse_context_at(const Ed *ed, u16 x, u16 y);
+
+/*
+ * §5: the two strip menus, kept as named entry points because the
+ * keyboard route and the degrade tests open them without a pointer.
+ * WHICH rows exist is ui/ctxrows.c's — not ctxmenu.c's, which is
+ * deliberately ignorant of the editor, and not this file's, which may
+ * not allocate.
  */
 bool yew_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y);
 bool yew_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y);
@@ -206,10 +223,24 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
  * than nothing: it teaches a gesture that will change meaning, and the
  * sprint that finally implements it has to break the habit it created.
  *
- * - A DOCUMENT CONTEXT MENU (right-click inside a pane) → post-1.0.
- *   The right-click is unbound and does nothing at all; what belongs in
- *   such a menu is a decision nobody has made yet.  Proved by
- *   test_mouse_right_click_in_a_pane_does_nothing.
+ * - A DOCUMENT CONTEXT MENU → SHIPPED, Sprint 57.11.  Sprint 27 filed
+ *   it post-1.0 "until somebody decides what belongs in one"; 57.11 §4
+ *   decided, and the deferral is superseded.  A right-click — or a
+ *   ctrl+left-click, for the hardware that has no second button —
+ *   opens a menu ANYWHERE: document, gutter, pane border, tab, group,
+ *   strip tail, footer, FUSS row or drawer, picker row, completion
+ *   row, LSP panel, group picker, bare backdrop.  What is under the
+ *   pointer is one pure function (yew_mouse_context_at), which rows
+ *   that deserves is ui/ctxrows.c, and what a row DOES is the table in
+ *   ui/ctxrows.h — not a switch here.  Proved by
+ *   test_mouse_right_click_in_a_pane_opens_the_document_menu.
+ *
+ * - SUBMENUS, A SCROLLING MENU, MNEMONIC LETTERS, CTRL+WHEEL, MENU
+ *   DRAG-AND-DROP → post-1.0, named in Sprint 57.11 §8 so nobody
+ *   invents them.  Shedding replaces the scrolling menu: a box that
+ *   cannot fit drops its lowest-priority rows rather than growing a
+ *   scrollbar nobody can aim at.  Ctrl+wheel stays unbound because it
+ *   is the terminal emulator's font-size gesture.
  *
  * - DRAGGING A TAB INTO A PANE, to open it there → post-1.0.  The drag
  *   already carries its target by identity rather than by index, which
@@ -223,10 +254,13 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
  *
  * - LSP HOVER-ON-POINTER and diagnostics tooltips → Sprint 47.  Sprint
  *   57.11 does decode motion with no button held (SGR base 35, a mouse
- *   REPEAT carrying YEW_MB_NONE), but a terminal only reports it under
- *   mode 1003, which yew arms solely while a context menu is open, and
- *   the router drops the event whenever no menu is open.  There is still
- *   no hover event to misroute; there is now a shape to build one from.
+ *   REPEAT carrying YEW_MB_NONE), and routes it — to the OPEN MENU'S
+ *   highlight and nowhere else.  A terminal only reports it under mode
+ *   1003, which yew arms solely while a menu is up and disarms through
+ *   the router's one close path; with no menu open the event is dropped
+ *   before it can allocate or repaint.  There is still no hover event
+ *   over the document to misroute; there is now a shape to build one
+ *   from.
  *
  * - PIXEL-PRECISE / KITTY-PROTOCOL MOUSE EXTENSIONS → NEVER.  The cell
  *   is the unit of everything in this program, and sub-cell coordinates
