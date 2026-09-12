@@ -369,6 +369,12 @@ Binding documents — read before any sprint:
   Shift+Arrow entry into Highlight, explicit Ctrl+C/X/V system-clipboard
   aliases over the existing selection/register engine, and safe unforced
   `:q` return from transient job output to its originating file.
+- Sprint 57.11 (s57_11-mouse-overhaul-context-menus.md) — Context menus
+  everywhere: right-click / ctrl+click at the pointer on every surface (document,
+  strip, footer, FUSS rows, pickers, panels), hover highlight via mode 1003 while
+  open, priority-based row shedding, themed bordered box, table-driven dispatch,
+  FUSS click-select and wheel. Supersedes s27 §9's deferral. Branch
+  `mouse-overhaul`, planned 2026-09-11.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
