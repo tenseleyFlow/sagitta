@@ -29,16 +29,20 @@
 
 #include "edit/ed.h"
 #include "edit/pane_cmds.h"
+#include "mod/git/fussmode.h"
 #include "term/tty.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
 #include "ui/ctxmenu.h"
+#include "ui/ctxrows.h"
 #include "ui/grouppicker.h"
 #include "ui/mouse.h"
 #include "ui/picker.h"
 #include "ui/region.h"
 #include "ui/tabs.h"
 #include "ui/viewport.h"
+#include "ui/win.h"
+#include "util/intern.h"
 
 /* ---------------------------------------------------------------- */
 /* Fixture                                                          */
@@ -1256,5 +1260,612 @@ void test_mouse_ctx_row_highlights_then_invokes(void)
         YEW_ASSERT(v->bytes.len != 0U);
     }
     yew_ctx_close();
+    yew_ed_free(&ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.11 §3: context resolution, opening, hover, dispatch     */
+/* ---------------------------------------------------------------- */
+
+/*
+ * ONE PURE FUNCTION, asked directly.
+ *
+ * Every surface's menu comes from this answer, so testing it here is
+ * cheaper and far more complete than opening fifteen menus and reading
+ * their rows: a kind that resolved wrong would otherwise only show up
+ * as "right-click over the drawer gives me the tab menu", months later
+ * and from a user.
+ */
+void test_mouse_context_at_names_every_region_kind(void)
+{
+    Ed ed;
+    i32 leaf;
+    u32 tab_id;
+    u32 g;
+
+    ms_fixture(&ed);
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-mouse-ctx0.txt") >= 0);
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-mouse-ctx1.txt") >= 0);
+    tab_id = yew_tab_at(&ed, 1)->tab_id;
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, (Rect){0U, 2U, 40U, 10U}, leaf);
+    yew_region_add(YEW_REGION_PANE_BORDER, (Rect){40U, 2U, 1U, 10U}, 0);
+    yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, 1);
+    yew_region_add(YEW_REGION_TAB, (Rect){8U, 0U, 8U, 1U}, -(i32)g);
+    yew_region_add(YEW_REGION_TAB_SCROLL, (Rect){16U, 0U, 2U, 1U}, 1);
+    yew_region_add(YEW_REGION_TAB_NEW, (Rect){18U, 0U, 3U, 1U}, 0);
+    yew_region_add(YEW_REGION_FUSS_ROW, (Rect){41U, 2U, 20U, 1U}, 7);
+    yew_region_add(YEW_REGION_PICK_ROW, (Rect){41U, 3U, 20U, 1U}, 42);
+    yew_region_add(YEW_REGION_COMPL_ROW, (Rect){41U, 4U, 20U, 1U}, 5);
+    yew_region_add(YEW_REGION_GP_ROW, (Rect){41U, 5U, 20U, 1U}, 2);
+    yew_region_add(YEW_REGION_GP_NAME, (Rect){41U, 6U, 20U, 1U}, 0);
+    yew_region_add(YEW_REGION_BLOCK, (Rect){41U, 7U, 20U, 1U}, 0);
+
+    {
+        CtxContext c = yew_mouse_context_at(&ed, 5U, 5U);
+
+        YEW_ASSERT_EQ_U64((u64)c.kind, (u64)YEW_CTX_KIND_DOC);
+        /* The LEAF INDEX, so a row can focus the pane that was pointed
+         * at rather than the one that happens to be focused. */
+        YEW_ASSERT_EQ_U64(c.id, (u64)leaf);
+    }
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 40U, 5U).kind,
+                      (u64)YEW_CTX_KIND_BORDER);
+    {
+        CtxContext c = yew_mouse_context_at(&ed, 2U, 0U);
+
+        /* IDENTITY, not the payload index: the strip renumbers. */
+        YEW_ASSERT_EQ_U64((u64)c.kind, (u64)YEW_CTX_KIND_TAB);
+        YEW_ASSERT_EQ_U64(c.id, tab_id);
+    }
+    {
+        CtxContext c = yew_mouse_context_at(&ed, 10U, 0U);
+
+        YEW_ASSERT_EQ_U64((u64)c.kind, (u64)YEW_CTX_KIND_GROUP);
+        YEW_ASSERT_EQ_U64(c.id, g);
+    }
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 17U, 0U).kind,
+                      (u64)YEW_CTX_KIND_STRIP);
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 19U, 0U).kind,
+                      (u64)YEW_CTX_KIND_STRIP);
+    /* The tree cannot say what path 7 is — F mode is not up — and an
+     * UNKNOWN row is the drawer, not a guess at file or directory. */
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 45U, 2U).kind,
+                      (u64)YEW_CTX_KIND_FUSS_BLANK);
+    {
+        CtxContext c = yew_mouse_context_at(&ed, 45U, 3U);
+
+        YEW_ASSERT_EQ_U64((u64)c.kind, (u64)YEW_CTX_KIND_PICK_ROW);
+        YEW_ASSERT_EQ_I64(c.payload, 42);
+    }
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 45U, 4U).kind,
+                      (u64)YEW_CTX_KIND_COMPL_ROW);
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 45U, 5U).kind,
+                      (u64)YEW_CTX_KIND_GP_ROW);
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 45U, 6U).kind,
+                      (u64)YEW_CTX_KIND_GP);
+    /* A BLOCK with no modal open belongs to nobody, and the editor
+     * menu is the honest answer rather than nothing at all. */
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 45U, 7U).kind,
+                      (u64)YEW_CTX_KIND_EDITOR);
+    /* A BLOCK the PANEL owns is the panel's, and only inside its
+     * rectangle — it is the one overlay that can be open beside
+     * another. */
+    ed.win->panel.open = true;
+    ed.win->panel.rect = (Rect){41U, 7U, 20U, 1U};
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 45U, 7U).kind,
+                      (u64)YEW_CTX_KIND_PANEL);
+    ed.win->panel.open = false;
+    yew_ed_free(&ed);
+}
+
+/*
+ * A cell no region claimed falls through to GEOMETRY, in the order the
+ * sprint fixes.  This is the half that makes "right-click on the bare
+ * backdrop opens something" true — and the half that would silently
+ * regress to EDITOR everywhere if the rectangles were read in the
+ * wrong order.
+ */
+void test_mouse_context_at_falls_through_to_geometry(void)
+{
+    Ed ed;
+
+    ms_fixture(&ed);
+    yew_region_frame_begin();
+    /* One region, far away, so the table is not empty (an empty table
+     * is its own diagnosed bug) and claims none of the cells below. */
+    yew_region_add(YEW_REGION_BLOCK, (Rect){79U, 23U, 1U, 1U}, 0);
+
+    YEW_ASSERT(ed.footer_rect.h != 0U);
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, ed.footer_rect.x,
+                                                ed.footer_rect.y).kind,
+                      (u64)YEW_CTX_KIND_FOOTER);
+    YEW_ASSERT(ed.tab_strip_rect.h != 0U);
+    YEW_ASSERT_EQ_U64(
+        (u64)yew_mouse_context_at(&ed, ed.tab_strip_rect.x,
+                                  ed.tab_strip_rect.y).kind,
+        (u64)YEW_CTX_KIND_STRIP);
+    /* Everything else is the editor — never NONE, which is reserved
+     * for the open menu's own cells. */
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 40U, 10U).kind,
+                      (u64)YEW_CTX_KIND_EDITOR);
+    /*
+     * THE TRAP, pinned: the drawer's rectangle is derived from the
+     * terminal width alone and is NON-empty with F mode down, so the
+     * fall-through has to ask whether the drawer is actually up.  An
+     * ungated read would hand the left quarter of every screen to a
+     * drawer menu.  (Under the shim the rectangle is empty and this
+     * cell resolves the same way for the other reason.)
+     */
+    YEW_ASSERT(!yew_fuss_active(&ed));
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_context_at(&ed, 1U, 10U).kind,
+                      (u64)YEW_CTX_KIND_EDITOR);
+    yew_ed_free(&ed);
+}
+
+/*
+ * CTRL+LEFT OPENS, AND NEVER ARMS.
+ *
+ * The second half is the one that matters: a ctrl+click that reached
+ * the phase machine would arm a drag and, on the first motion report,
+ * enter H mode and start a selection BEHIND the menu it just opened.
+ * The user would close the menu and find the buffer highlighted.
+ */
+void test_mouse_ctrl_left_opens_a_menu_and_never_arms(void)
+{
+    Ed ed;
+    i32 leaf;
+    ByteOff before;
+
+    ms_fixture(&ed);
+    ms_fill_lines(&ed, 20U);
+    yew_ed_layout(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    ms_frame_pane(ed.pane_root, leaf);
+    before = yew_ed_cursor(&ed)->pos;
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                          (u16)(ed.pane_root->rect.x + 4U),
+                          (u16)(ed.pane_root->rect.y + 3U));
+        Key motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT,
+                           (u16)(ed.pane_root->rect.x + 9U),
+                           (u16)(ed.pane_root->rect.y + 5U));
+
+        press.mods = (u16)YEW_MOD_CTRL;
+        motion.mods = (u16)YEW_MOD_CTRL;
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT(yew_ctx_active());
+        YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_DOC);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+        YEW_ASSERT_EQ_U64(ed.mouse.held, 0U);
+        /* A held-button motion after it finds nothing armed, so no
+         * selection begins and the mode is untouched. */
+        yew_mouse_event(&ed, &motion);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+        YEW_ASSERT_EQ_U64((u64)ed.mode, (u64)YEW_MODE_L);
+        YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, before.v);
+    }
+    yew_ctx_close();
+    yew_tty_mouse_motion(false);
+    yew_ed_free(&ed);
+}
+
+/*
+ * A right press ON the open menu DISMISSES it and stops there.
+ *
+ * Anywhere else it closes and REOPENS for what is really under the
+ * pointer — which is what every menu everywhere does, and what makes
+ * "I right-clicked the wrong thing" cost one gesture instead of two.
+ */
+void test_mouse_right_press_on_an_open_menu_only_closes_it(void)
+{
+    Ed ed;
+    i32 leaf;
+    Rect box;
+
+    ms_fixture(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
+    yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, 0);
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 10U, 5U);
+
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(yew_ctx_active());
+    box = yew_ctx_box();
+    yew_mouse_menu_draw(&ed);
+    {
+        /* Inside the box, on a row: dismissed, nothing invoked. */
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS,
+                          (u16)(box.x + 1U), (u16)(box.y + 1U));
+
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* And a right press somewhere else closes AND reopens, for the
+     * thing that is actually there. */
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 10U, 5U);
+
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT(yew_ctx_active());
+        press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 2U, 0U);
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_TAB);
+    yew_ctx_close();
+    yew_tty_mouse_motion(false);
+    yew_ed_free(&ed);
+}
+
+/*
+ * A WHEEL DISMISSES THE MENU AND IS THEN ROUTED NORMALLY.
+ *
+ * Scrolling the thing under a pop-up while the pop-up stays put is how
+ * a menu comes to name a row that has moved: the capture-at-open law
+ * says the target is fixed, and the only honest answer to "the view
+ * moved" is that the menu is gone.
+ */
+void test_mouse_wheel_closes_the_menu_then_scrolls(void)
+{
+    Ed ed;
+    i32 leaf;
+    LineNo top_before;
+
+    ms_fixture(&ed);
+    ms_fill_lines(&ed, 200U);
+    yew_ed_layout(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    ms_frame_pane(ed.pane_root, leaf);
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS,
+                          (u16)(ed.pane_root->rect.x + 2U),
+                          (u16)(ed.pane_root->rect.y + 2U));
+
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    top_before = yew_win_view_top(ed.win);
+    {
+        Key wheel = ms_wheel((u8)YEW_MB_WHEEL_UP,
+                             (u16)(ed.pane_root->rect.x + 2U),
+                             (u16)(ed.pane_root->rect.y + 6U), 0U);
+
+        yew_mouse_event(&ed, &wheel);
+    }
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    /* Closed AND scrolled: the wheel is not swallowed by the dismissal,
+     * because a notch that did nothing would read as a dropped event. */
+    YEW_ASSERT(top_before.v >= YEW_WHEEL_ROWS);
+    YEW_ASSERT_EQ_U64(yew_win_view_top(ed.win).v,
+                      top_before.v - YEW_WHEEL_ROWS);
+    yew_ed_free(&ed);
+}
+
+/*
+ * HOVER REPAINTS ON A ROW CHANGE AND NEVER OTHERWISE.
+ *
+ * A terminal emits motion reports as fast as it can write them —
+ * hundreds between two frames — and a router that marked damage per
+ * report would turn a pointer crossing a menu into a slideshow on
+ * exactly the machines that emit the most.  `overlay_dirty` is the
+ * observable: set once per row the highlight actually moves to.
+ */
+void test_mouse_hover_repaints_only_when_the_row_changes(void)
+{
+    Ed ed;
+    Rect box;
+    u32 marks = 0U;
+    u16 x;
+    int i;
+
+    ms_fixture(&ed);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, 0);
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-mouse-hover.txt") >= 0);
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 2U, 0U);
+
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(yew_ctx_active());
+    yew_mouse_menu_draw(&ed);
+    box = yew_ctx_box();
+    ed.full_damage = false;
+    ed.overlay_dirty = false;
+    /* Row 0 already has the highlight at open, so sweeping it marks
+     * nothing at all. */
+    for (i = 0; i < 20; i++) {
+        Key hover = ms_ev((u8)YEW_MB_NONE, (u8)YEW_KEY_REPEAT,
+                          (u16)(box.x + 1U + (u16)(i % 3)),
+                          (u16)(box.y + 1U));
+
+        yew_mouse_event(&ed, &hover);
+        if (ed.overlay_dirty) {
+            marks++;
+            ed.overlay_dirty = false;
+        }
+    }
+    YEW_ASSERT_EQ_U64(marks, 0U);
+    YEW_ASSERT(!ed.full_damage);
+    /* Moving to row 1 marks exactly once, however many reports the
+     * terminal sends while the pointer sits there. */
+    x = (u16)(box.x + 1U);
+    for (i = 0; i < 20; i++) {
+        Key hover = ms_ev((u8)YEW_MB_NONE, (u8)YEW_KEY_REPEAT, x,
+                          (u16)(box.y + 2U));
+
+        yew_mouse_event(&ed, &hover);
+        if (ed.overlay_dirty) {
+            marks++;
+            ed.overlay_dirty = false;
+        }
+    }
+    YEW_ASSERT_EQ_U64(marks, 1U);
+    YEW_ASSERT_EQ_I64(yew_ctx_cursor(), 1);
+    /* And it is a MENU repaint, not a pane one. */
+    YEW_ASSERT(!ed.full_damage);
+    yew_ctx_close();
+    yew_tty_mouse_motion(false);
+    yew_ed_free(&ed);
+}
+
+/*
+ * MODE 1003 MIRRORS THE MENU, on every path either can take.
+ *
+ * Invariant 6 in miniature: a terminal left streaming motion reports at
+ * an editor with nothing to do with them is a terminal yew did not
+ * restore.  The fuzz harness asserts the same thing after every event;
+ * this names the individual paths so a regression says which one broke.
+ */
+void test_mouse_motion_tracking_mirrors_the_open_menu(void)
+{
+    Ed ed;
+    i32 leaf;
+    CmdCtx cx = {0};
+
+    ms_fixture(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* Opened by pointer, closed by Esc. */
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 10U, 5U);
+        Key esc;
+
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT(yew_tty_mouse_motion_active());
+        (void)memset(&esc, 0, sizeof(esc));
+        esc.kind = (u16)YEW_EV_KEY;
+        esc.code = YEW_KEY_ESCAPE;
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &esc));
+    }
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* Closed by a left press outside the box. */
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 10U, 5U);
+
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT(yew_tty_mouse_motion_active());
+    }
+    yew_region_frame_begin();
+    yew_mouse_menu_draw(&ed);
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 79U, 23U);
+
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* Closed by `ed.mouse.disable`, which must not be able to leave it
+     * armed behind a router that no longer receives events. */
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 10U, 5U);
+
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT(yew_tty_mouse_motion_active());
+    }
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_U64((u64)yew_mouse_cmd_disable(&cx), (u64)YEW_CMD_OK);
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    yew_mouse_set_enabled(true);
+    yew_ed_free(&ed);
+}
+
+/*
+ * THE ACTION TABLE APPLIES ITS TARGET before the command runs.
+ *
+ * Sprint 27 spent a switch per menu kind on this; the table is what
+ * keeps a new kind from growing a second one somewhere else.  What is
+ * pinned here is that each CtxTarget actually does its half — switch,
+ * enter, focus-and-place — because a target that silently did nothing
+ * would leave every row acting on whatever was already active.
+ */
+void test_mouse_menu_targets_switch_enter_and_focus(void)
+{
+    Ed ed;
+    u32 target;
+    u32 g;
+    int i;
+
+    ms_fixture(&ed);
+    for (i = 0; i < 3; i++) {
+        char path[64];
+
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-t%d.txt", i);
+        YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
+    }
+    target = yew_tab_at(&ed, 3)->tab_id;
+    yew_tab_switch(&ed, 0);
+
+    /* CTX_TGT_TAB: the captured tab becomes active first, so the row
+     * can be the ordinary registry command. */
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 3);
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 22U, 0U);
+        Key enter;
+
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT(yew_ctx_active());
+        (void)memset(&enter, 0, sizeof(enter));
+        enter.kind = (u16)YEW_EV_KEY;
+        enter.code = YEW_KEY_ENTER;
+        /* Row 0 is Close Tab. */
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &enter));
+    }
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&ed, target), -1);
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* CTX_TGT_GROUP: the captured group is entered first. */
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, -(i32)g);
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 2U, 0U);
+        Key enter;
+
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_GROUP);
+        (void)memset(&enter, 0, sizeof(enter));
+        enter.kind = (u16)YEW_EV_KEY;
+        enter.code = YEW_KEY_ENTER;
+        /* Row 0 is Edit Group..., which opens the group picker. */
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &enter));
+    }
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), g);
+    if (yew_gp_active())
+        yew_gp_close(&ed);
+    yew_ed_free(&ed);
+}
+
+/*
+ * CTX_TGT_PANE, through the table, with the region table FROZEN.
+ *
+ * The freeze is what makes the capture law enforceable, and it is also
+ * the trap: yew_pane_click — the obvious way to focus a leaf and place
+ * a cursor — re-resolves both from the region table and would abort.
+ * The leaf index and the clicked cell are captured at open time for
+ * exactly this reason, and this is the test that would catch it.
+ */
+void test_mouse_menu_pane_target_places_the_cursor(void)
+{
+    Ed ed;
+    i32 leaf;
+    u16 cell_x;
+    u16 cell_y;
+    ByteOff before;
+    ByteOff want;
+
+    ms_fixture(&ed);
+    ms_fill_lines(&ed, 40U);
+    yew_ed_layout(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    ms_frame_pane(ed.pane_root, leaf);
+    cell_x = (u16)(ed.pane_root->rect.x + 6U);
+    cell_y = (u16)(ed.pane_root->rect.y + 4U);
+    before = yew_ed_cursor(&ed)->pos;
+    /* Where the click cell IS, resolved the ordinary way so the test
+     * does not re-derive the layout arithmetic it is checking. */
+    yew_win_click_to_cursor(ed.win, cell_x, cell_y);
+    want = yew_ed_cursor(&ed)->pos;
+    YEW_ASSERT(want.v != before.v);
+    yew_ed_cursor(&ed)->pos = before;
+    yew_ed_cursor(&ed)->anchor = before;
+
+    {
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, cell_x,
+                          cell_y);
+
+        yew_mouse_event(&ed, &press);
+    }
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_DOC);
+    {
+        Key enter;
+
+        (void)memset(&enter, 0, sizeof(enter));
+        enter.kind = (u16)YEW_EV_KEY;
+        enter.code = YEW_KEY_ENTER;
+        /* The placeholder's only row is the palette, and it is PANE
+         * targeted: focus the leaf that was pointed at, caret on the
+         * cell that was clicked, THEN the command. */
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &enter));
+    }
+    /* The freeze is balanced on the way out, whatever the row did. */
+    YEW_ASSERT(!yew_region_frozen());
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, want.v);
+    /* The palette is up, which is the command half having run. */
+    YEW_ASSERT(yew_picker_active(&ed));
+    yew_picker_close(&ed, false);
+    yew_ed_free(&ed);
+}
+
+/*
+ * CTX_TGT_PATH: the captured path travels as `cx.sarg`.
+ *
+ * A path-addressed row is the only kind that can act on a file the
+ * editor has not opened, and the path is COPIED at open time because
+ * the tree that owns the original is rebuilt by every status result.
+ */
+void test_mouse_menu_path_target_carries_the_captured_path(void)
+{
+    Ed ed;
+    CtxContext c;
+    u32 path_id;
+
+    ms_fixture(&ed);
+    path_id = yew_intern(&ed.interner, "src/ui/mouse.c",
+                         sizeof("src/ui/mouse.c") - 1U);
+    YEW_ASSERT(path_id != 0U);
+    (void)memset(&c, 0, sizeof(c));
+    c.kind = YEW_CTX_KIND_FUSS_FILE;
+    c.id = path_id;
+    c.payload = (i32)path_id;
+    yew_ctx_build(&ed, &c);
+    YEW_ASSERT(yew_ctx_show(2U, 2U,
+                            (Rect){0U, 0U, ed.grid.cols,
+                                   (u16)(ed.grid.rows - 1U)}));
+    /* Captured, not aliased: the interner's copy could be freed with
+     * the tree that put it there. */
+    YEW_ASSERT_NOT_NULL(yew_ctx_target_path());
+    YEW_ASSERT_EQ_STR(yew_ctx_target_path(), "src/ui/mouse.c");
+    YEW_ASSERT_EQ_U64(yew_ctx_target_id(), path_id);
+    /* Row 0 is `Open`, the one path-addressed row Deliverable 3
+     * carries; Deliverable 4 fills in the rest of §4's FUSS list. */
+    YEW_ASSERT(yew_ctx_row_enabled(0U));
+    yew_ctx_close();
+    yew_tty_mouse_motion(false);
     yew_ed_free(&ed);
 }
