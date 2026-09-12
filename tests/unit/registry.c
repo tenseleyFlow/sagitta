@@ -468,6 +468,7 @@ const YewTest yew_tests[] = {
     T(input_kitty_keys),
     T(input_paste_framing),
     T(input_mouse_and_focus),
+    T(input_mouse_motion_without_button),
     T(input_chunking_independence),
     T(input_escape_deadlines),
     T(input_enable_blobs),

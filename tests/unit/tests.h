@@ -435,6 +435,7 @@ void test_input_ss3_keys(void);
 void test_input_kitty_keys(void);
 void test_input_paste_framing(void);
 void test_input_mouse_and_focus(void);
+void test_input_mouse_motion_without_button(void);
 void test_input_chunking_independence(void);
 void test_input_escape_deadlines(void);
 void test_input_enable_blobs(void);

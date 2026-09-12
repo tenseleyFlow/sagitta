@@ -895,31 +895,72 @@ void test_mouse_tab_dropped_on_a_pane_cancels(void)
 }
 
 /*
- * Sprint 47's hover has nothing to misroute: motion with NO button held
- * is not decoded at all (Sprint 4 rejects the no-button report), so a
- * pointer merely crossing the screen produces no event and no work.
+ * Sprint 57.11 §1 rewrote the Sprint 4 fact this test used to pin.
+ * Motion with NO button held (SGR base 35, mode 1003) IS decoded now —
+ * a mouse REPEAT carrying YEW_MB_NONE — because an open context menu
+ * needs it to highlight the row under the pointer.  The router drops it
+ * whenever no menu is open: a pointer merely crossing the screen must
+ * still produce no cursor motion, no gesture, and no render.  (The
+ * menu-open hover half of the contract is pinned beside the widget.)
  */
 void test_mouse_hover_without_a_button_is_not_an_event(void)
 {
     In in;
     TtyCaps caps;
     Key key;
-    bool got;
+    Ed ed;
+    ByteOff cursor_before;
+    i32 leaf;
 
     (void)memset(&caps, 0, sizeof(caps));
     yew_input_init(&in, &caps);
     /* cb 35 == motion with no button held, which is what a terminal
-     * sends while the pointer is simply moving. */
+     * sends under 1003 while the pointer is simply moving. */
     yew_input_feed(&in, (const u8 *)"\x1b[<35;10;5M", 11U);
-    got = yew_input_next(&in, 0, &key);
-    YEW_ASSERT(!got || key.kind != (u16)YEW_EV_MOUSE);
-    /* And a held-button motion IS decoded, so the test above is about
-     * the no-button case rather than about a broken feed. */
+    YEW_ASSERT(yew_input_next(&in, 0, &key));
+    YEW_ASSERT_EQ_U64((u64)key.kind, (u64)YEW_EV_MOUSE);
+    YEW_ASSERT_EQ_U64(key.button, (u64)YEW_MB_NONE);
+    YEW_ASSERT_EQ_U64(key.ev, (u64)YEW_KEY_REPEAT);
+    YEW_ASSERT_EQ_U64(key.col, 9U);
+    YEW_ASSERT_EQ_U64(key.row, 4U);
+    YEW_ASSERT_EQ_U64(key.mods, 0U);
+    /* And a held-button motion still decodes as before, so the shape
+     * above is a deliberate distinction rather than a broken feed. */
     yew_input_feed(&in, (const u8 *)"\x1b[<32;10;5M", 11U);
     YEW_ASSERT(yew_input_next(&in, 0, &key));
     YEW_ASSERT_EQ_U64((u64)key.kind, (u64)YEW_EV_MOUSE);
+    YEW_ASSERT_EQ_U64(key.button, (u64)YEW_MB_LEFT);
     YEW_ASSERT_EQ_U64(key.ev, (u64)YEW_KEY_REPEAT);
     yew_input_free(&in);
+
+    /* The router, with no menu open, drops the no-button motion on the
+     * floor: no phase change, no cursor change, no damage marked. */
+    ms_fixture(&ed);
+    ms_fill_lines(&ed, 20U);
+    yew_ed_layout(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
+    ed.full_damage = false;
+    ed.layout_dirty = false;
+    cursor_before = yew_ed_cursor(&ed)->pos;
+    YEW_ASSERT(!yew_ctx_active());
+    {
+        Key hover = ms_ev((u8)YEW_MB_NONE, (u8)YEW_KEY_REPEAT,
+                          (u16)(ed.pane_root->rect.x + 5U),
+                          (u16)(ed.pane_root->rect.y + 5U));
+
+        yew_mouse_event(&ed, &hover);
+        hover.mods = YEW_MOD_CTRL;
+        yew_mouse_event(&ed, &hover);
+    }
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor_before.v);
+    YEW_ASSERT(!ed.full_damage);
+    YEW_ASSERT(!ed.layout_dirty);
+    YEW_ASSERT(!yew_ctx_active());
+    yew_ed_free(&ed);
 }
 
 /*

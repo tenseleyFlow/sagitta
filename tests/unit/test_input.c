@@ -648,6 +648,67 @@ void test_input_mouse_and_focus(void)
                    sizeof("\x1b[<3;1;1M") - 1U);
 }
 
+/*
+ * Sprint 57.11 §1: SGR base 35 is motion with NO button held, which a
+ * terminal reports only under mode 1003.  It decodes to a mouse REPEAT
+ * carrying YEW_MB_NONE, with the modifier bits (4 shift, 8 alt, 16 ctrl)
+ * folded into mods exactly as for a held-button motion.  Every modifier
+ * combination is pinned so a future "base" mask change cannot silently
+ * turn a shifted hover into a drop.
+ */
+void test_input_mouse_motion_without_button(void)
+{
+    static const struct { unsigned cb; u16 mods; } rows[] = {
+        {35, 0},
+        {39, YEW_MOD_SHIFT},
+        {43, YEW_MOD_ALT},
+        {51, YEW_MOD_CTRL},
+        {47, YEW_MOD_SHIFT | YEW_MOD_ALT},
+        {55, YEW_MOD_SHIFT | YEW_MOD_CTRL},
+        {59, YEW_MOD_ALT | YEW_MOD_CTRL},
+        {63, YEW_MOD_SHIFT | YEW_MOD_ALT | YEW_MOD_CTRL}
+    };
+    size_t i;
+    char seq[32];
+
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
+        int len = snprintf(seq, sizeof(seq), "\x1b[<%u;1;1M", rows[i].cb);
+        Expected e = {0};
+
+        e.kind = YEW_EV_MOUSE;
+        e.mods = rows[i].mods;
+        e.ev = YEW_KEY_REPEAT;
+        e.button = YEW_MB_NONE;
+        check_vector((const u8 *)seq, (size_t)len, &e, false);
+    }
+    {
+        /* Coordinates are 1-based on the wire and 0-based in the Key. */
+        static const u8 at[] = "\x1b[<35;10;5M";
+        Expected e = {0};
+
+        e.kind = YEW_EV_MOUSE;
+        e.col = 9U;
+        e.row = 4U;
+        e.ev = YEW_KEY_REPEAT;
+        e.button = YEW_MB_NONE;
+        check_vector(at, sizeof(at) - 1U, &e, false);
+    }
+    {
+        /* The shared decoder gives the X10 encoding of the same report
+         * (cb byte 32 + 35) the identical Key. */
+        const u8 x10[] = {0x1B, '[', 'M', 32 + 35, 33, 33};
+        Expected e = {0};
+
+        e.kind = YEW_EV_MOUSE;
+        e.ev = YEW_KEY_REPEAT;
+        e.button = YEW_MB_NONE;
+        check_vector(x10, sizeof(x10), &e, false);
+    }
+    /* No button means no release: a final 'm' on base 35 stays dropped. */
+    assert_dropped((const u8 *)"\x1b[<35;1;1m",
+                   sizeof("\x1b[<35;1;1m") - 1U);
+}
+
 void test_input_chunking_independence(void)
 {
     static const u8 combined[] =
