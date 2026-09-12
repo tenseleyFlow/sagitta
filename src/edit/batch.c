@@ -169,6 +169,8 @@ static const InteractiveRow interactive_rows[] = {
      * but it still needs an editor buffer and has no headless equivalent. */
     {"ed.git.hunk.discard", "no batch alternative"},
     {"ed.mode.enter", "use ed.run(name, args)"},
+    /* Sprint 57.18 §4: handing a child the terminal needs a terminal. */
+    {"ed.shell.term_run", "use ed.shell.run; --batch has no terminal"},
 };
 
 static void flush_stdout(void)

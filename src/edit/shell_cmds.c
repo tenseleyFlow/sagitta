@@ -74,6 +74,47 @@ static bool range_span(CmdCtx *cx, Span *out)
     return false;
 }
 
+/*
+ * Sprint 57.18 §4: run one command with the real terminal and say what
+ * happened to it.
+ *
+ * Shared by `ed.shell.term_run` and by the `:!!` spelling, so the two
+ * cannot drift into reporting the same exit differently.
+ */
+static CmdStatus shell_term_run(Ed *ed, const char *cmdline)
+{
+    YewJobWait wait = {0};
+    char err[256] = {0};
+    char label[96];
+
+    (void)snprintf(label, sizeof(label), "%s", cmdline);
+    if (!yew_shell_term_run(ed, cmdline, &wait, err, sizeof(err))) {
+        yew_msg(ed, YEW_MSG_ERROR, "%s",
+                err[0] == '\0' ? "interactive command failed" : err);
+        return YEW_CMD_ERR_STATE;
+    }
+    /*
+     * The child owned the screen, so the only trace it leaves is this
+     * line.  yew_job_run_sync has already restored the terminal, put the
+     * input modes back and marked a full repaint.
+     */
+    if (wait.state == YEW_JOB_EXECFAIL) {
+        yew_msg(ed, YEW_MSG_ERROR, "%s: %s", label,
+                strerror(wait.exec_errno));
+        return YEW_CMD_ERR_STATE;
+    }
+    if (wait.state == YEW_JOB_SIGNALED) {
+        yew_msg(ed, YEW_MSG_WARN, "%s killed by signal %d", label,
+                wait.termsig);
+        return YEW_CMD_OK;
+    }
+    if (wait.exit_code != 0)
+        yew_msg(ed, YEW_MSG_WARN, "%s exited %d", label, wait.exit_code);
+    else
+        yew_msg(ed, YEW_MSG_INFO, "%s exited 0", label);
+    return YEW_CMD_OK;
+}
+
 CmdStatus yew_shell_cmd_run(CmdCtx *cx)
 {
     const char *cmdline = shell_arg(cx);
@@ -84,6 +125,30 @@ CmdStatus yew_shell_cmd_run(CmdCtx *cx)
     if (cmdline == NULL) {
         yew_msg(cx->ed, YEW_MSG_ERROR, ":! needs a command");
         return YEW_CMD_ERR_ARG;
+    }
+    /*
+     * Sprint 57.18 §4: `:!!cmd`.
+     *
+     * READ HERE, NOT IN THE PARSER, DELIBERATELY.  yew_cmd_parse still
+     * hands `:!!top` to this command as the single verbatim argument
+     * `!top`, byte for byte what it produced before this sprint -- which
+     * is what keeps pipes, quotes and redirection working and is pinned
+     * by test_cmdparse_bang_execution_is_unchanged.  What the second
+     * bang MEANS is a property of ed.shell.run, so it is decided here.
+     *
+     * Nothing is taken away: `sh -c "!top"` asked the shell to run a
+     * command literally named `!top`, which does not exist.  POSIX `!`
+     * negates a pipeline only as a separate word, so `:! ! cmd` still
+     * reaches the shell untouched.
+     */
+    if (cmdline[0] == '!') {
+        if (cx->range.given) {
+            yew_msg(cx->ed, YEW_MSG_ERROR,
+                    ":!! takes no range: the child owns the screen, so "
+                    "there is no region to pipe through it");
+            return YEW_CMD_ERR_ARG;
+        }
+        return shell_term_run(cx->ed, cmdline + 1U);
     }
     /* A range turns :! into the §5 filter: `:%!sort` and `:'<,'>!fmt` are
      * the same command with a region attached. */
@@ -266,13 +331,34 @@ CmdStatus yew_job_cmd_rerun(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+CmdStatus yew_shell_cmd_term_run(CmdCtx *cx)
+{
+    const char *cmdline = shell_arg(cx);
+
+    if (cmdline == NULL) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, ":!! needs a command");
+        return YEW_CMD_ERR_ARG;
+    }
+    return shell_term_run(cx->ed, cmdline);
+}
+
 CmdStatus yew_shell_cmd_term(CmdCtx *cx)
 {
-    /* A permanent non-goal, not a sprint deferral: an interactive
-     * pty-backed buffer is a different subsystem (terminal emulation,
-     * resize propagation, CR/backspace/ANSI interpretation) and 1.0 does
-     * not ship one. */
+    /*
+     * A permanent non-goal, not a sprint deferral: a TERMINAL EMULATOR --
+     * a pty-backed buffer with resize propagation and CR/backspace/ANSI
+     * interpretation -- is a different subsystem and 1.0 does not ship
+     * one.
+     *
+     * Sprint 57.18 amends what follows from that, and the two must not be
+     * read as contradicting each other.  Refusing to EMULATE a terminal
+     * never meant refusing to LEND one: `:!!cmd` hands the child yew's
+     * own terminal through Sprint 19's existing handover and takes it
+     * back when the child exits.  So an interactive command has a route,
+     * and it is not this one.
+     */
     yew_msg(cx->ed, YEW_MSG_ERROR,
-            "interactive terminals are not a 1.0 feature (jobs are: see :!)");
+            "yew does not emulate a terminal; run one command in this one "
+            "with :!!cmd, or stream output with :!");
     return YEW_CMD_ERR_STATE;
 }

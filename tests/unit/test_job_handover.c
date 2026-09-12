@@ -18,6 +18,7 @@
 
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/shell.h"
 
 static int handover_tcgetattr(int fd, struct termios *out);
 
@@ -452,4 +453,154 @@ void test_job_handover_inherits_stdio_and_reports_all_outcomes(void)
 
     handover_assert_tty_case(false);
     handover_assert_tty_case(true);
+}
+
+/*
+ * Sprint 57.18 §4 / DoD 4: `:!!` gets a real terminal and yew gets it
+ * back, on EVERY exit path.
+ *
+ * Against a real pty in a forked child, because that is the only way to
+ * ask the question honestly: the claim is about termios, the alternate
+ * screen and the input modes, and a process with no controlling terminal
+ * cannot answer it.  The PTY GOLDEN harness cannot cover this -- it
+ * drives a whole editor and compares a cell grid, and the child here
+ * OWNS the screen while it runs, so there is no grid to compare and
+ * nothing deterministic to snapshot.  So the restore is proved by unit
+ * test, as the sprint's testing strategy allows, and the goldens cover
+ * the completion half.
+ *
+ * Every case re-asserts equality with yew's RAW termios afterwards, not
+ * merely "not the child's": a handover that came back to the inherited
+ * cooked state would leave the editor unable to read a keystroke.
+ */
+static void handover_shell_child(const char *slave_path)
+{
+    Ed ed;
+    YewJobWait wait;
+    struct termios actual;
+    struct termios initial;
+    struct termios raw;
+    char err[192];
+    char winch[128];
+
+    if (!handover_attach_slave(slave_path))
+        _exit(101);
+    yew_ed_init(&ed);
+    if (!yew_tty_open(&ed.tty))
+        _exit(102);
+    initial = ed.tty.saved;
+    ed.tty_ready = true;
+    if (!yew_tty_raw(&ed.tty))
+        _exit(103);
+    yew_tty_altscreen(&ed.tty, true);
+    if (!ed.tty.alt)
+        _exit(104);
+    raw = initial;
+    yew_tty_rawios(&raw);
+
+    /* Normal exit. */
+    if (!yew_shell_term_run(&ed, "exit 0", &wait, err, sizeof(err)) ||
+        wait.state != YEW_JOB_EXITED || wait.exit_code != 0)
+        _exit(105);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &raw) || !ed.tty.alt)
+        _exit(106);
+
+    /* Non-zero exit. */
+    if (!yew_shell_term_run(&ed, "exit 23", &wait, err, sizeof(err)) ||
+        wait.state != YEW_JOB_EXITED || wait.exit_code != 23)
+        _exit(107);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &raw) || !ed.tty.alt)
+        _exit(108);
+
+    /* Signal death of the child. */
+    if (!yew_shell_term_run(&ed, "kill -TERM $$", &wait, err, sizeof(err)) ||
+        wait.state != YEW_JOB_SIGNALED || wait.termsig != SIGTERM)
+        _exit(109);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &raw) || !ed.tty.alt)
+        _exit(110);
+
+    /* A command the shell cannot exec.  `sh -c` itself started, so this
+     * is the shell's 127 rather than YEW_JOB_EXECFAIL -- the true
+     * exec failure is the missing-binary case above, which reaches the
+     * same resume epilogue. */
+    if (!yew_shell_term_run(&ed, "/definitely/not/yew-s5718", &wait, err,
+                            sizeof(err)) ||
+        wait.state != YEW_JOB_EXITED || wait.exit_code != 127)
+        _exit(111);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &raw) || !ed.tty.alt)
+        _exit(112);
+
+    /*
+     * SIGWINCH during the run.  The child signals its PARENT -- this
+     * process, sitting in waitpid -- which returns EINTR and must loop
+     * rather than abandon the wait with the terminal still handed over.
+     */
+    (void)snprintf(winch, sizeof(winch),
+                   "kill -WINCH %ld; exit 7", (long)getpid());
+    if (!yew_shell_term_run(&ed, winch, &wait, err, sizeof(err)) ||
+        wait.state != YEW_JOB_EXITED || wait.exit_code != 7)
+        _exit(113);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &raw) || !ed.tty.alt)
+        _exit(114);
+
+    /* An empty command never reaches the handover at all. */
+    if (yew_shell_term_run(&ed, "   ", &wait, err, sizeof(err)) ||
+        strstr(err, "needs a command") == NULL)
+        _exit(115);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &raw))
+        _exit(116);
+
+    yew_ed_free(&ed);
+    /* And teardown leaves the terminal exactly as yew inherited it
+     * (invariant 6). */
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &initial))
+        _exit(117);
+    _exit(0);
+}
+
+void test_shell_term_run_restores_the_terminal_on_every_exit(void)
+{
+    char slave[128];
+    struct termios initial;
+    struct termios after;
+    pid_t child;
+    pid_t waited;
+    int master;
+    int slave_fd;
+    int status = 0;
+
+    (void)memset(&initial, 0, sizeof(initial));
+    master = handover_open_pty(slave, sizeof(slave), &initial);
+    YEW_ASSERT(master >= 0);
+    if (master < 0)
+        return;
+    child = fork();
+    YEW_ASSERT(child >= 0);
+    if (child == 0) {
+        (void)close(master);
+        handover_shell_child(slave);
+    }
+    if (child < 0) {
+        (void)close(master);
+        return;
+    }
+    waited = handover_wait_pty(child, master, &status);
+    YEW_ASSERT_EQ_I64(waited, child);
+    YEW_ASSERT(WIFEXITED(status));
+    if (WIFEXITED(status))
+        YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+    (void)memset(&after, 0, sizeof(after));
+    slave_fd = open(slave, O_RDWR | O_NOCTTY);
+    YEW_ASSERT(slave_fd >= 0);
+    YEW_ASSERT_EQ_I64(handover_tcgetattr(slave_fd, &after), 0);
+    YEW_ASSERT(handover_termios_equal(&after, &initial));
+    YEW_ASSERT_EQ_I64(close(slave_fd), 0);
+    YEW_ASSERT_EQ_I64(close(master), 0);
 }

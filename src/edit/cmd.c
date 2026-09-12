@@ -927,7 +927,13 @@ static const CmdDesc builtins[] = {
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Pipe a region through a shell command and replace it", "filter"},
     {"ed.shell.term", yew_shell_cmd_term, YEW_ARITY_NONE, 0U,
-     "Interactive terminals are not a 1.0 feature", NULL},
+     "yew does not emulate a terminal; see :!!", NULL},
+    /* Sprint 57.18 §4.  INTERACTIVE because its whole content is "give
+     * this child the terminal", which --batch does not have; the batch
+     * refusal table names the alternative. */
+    {"ed.shell.term_run", yew_shell_cmd_term_run, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_INTERACTIVE,
+     "Run one command with the real terminal (:!!)", "shell_term"},
     {"ed.job.list", yew_job_cmd_list, YEW_ARITY_NONE, 0U,
      "Open the job table", NULL},
     {"ed.job.kill", yew_job_cmd_kill, YEW_ARITY_OPT_INT,
@@ -1256,6 +1262,9 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.job.list", "", YEW_RP_FORBID, "jobs"},
     {"ed.job.kill", "", YEW_RP_FORBID, NULL},
     {"ed.shell.term", "", YEW_RP_FORBID, "term"},
+    /* One arbitrary command line, like :!; the range is forbidden
+     * because a child that owns the screen has nothing to filter. */
+    {"ed.shell.term_run", "s", YEW_RP_FORBID, NULL},
     {"ed.plug.enable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.disable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.reload", "p", YEW_RP_FORBID, NULL},
@@ -1412,7 +1421,10 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.13 Deliverable 4: the four rows that had no command
          * — `Save As...`, the rename panel's two answers, and the group
          * picker's confirm. */
-        "save_as", "apply", "confirm"};
+        "save_as", "apply", "confirm",
+        /* Sprint 57.18 §4: `:!!` -- one command, the real terminal.
+         * Distinct from "term", which stays the refusal. */
+        "term_run"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
