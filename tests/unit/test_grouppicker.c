@@ -50,8 +50,21 @@ static void gpt_write(const char *path)
 
 static void gpt_make(GpTree *t)
 {
+    char *resolved;
+
     (void)snprintf(t->root, sizeof(t->root), "/tmp/yew-gp-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(t->root));
+    /*
+     * CANONICAL FROM THE START.  The picker stores ticks as canonical
+     * paths, so on a platform where /tmp is a symlink (macOS) a fixture
+     * path and a ticked path are different strings for one file, and a
+     * test that compares them reads as a bug in the picker.
+     */
+    resolved = yew_xrealpath(t->root);
+    YEW_ASSERT_NOT_NULL(resolved);
+    YEW_ASSERT(strlen(resolved) < sizeof(t->root));
+    (void)memcpy(t->root, resolved, strlen(resolved) + 1U);
+    yew_xfree(resolved);
     (void)snprintf(t->sub, sizeof(t->sub), "%s/sub", t->root);
     YEW_ASSERT_EQ_I64(mkdir(t->sub, 0700), 0);
     (void)snprintf(t->a, sizeof(t->a), "%s/a.txt", t->root);
@@ -487,6 +500,269 @@ void test_grouppicker_lists_only_directories_and_regular_files(void)
     }
     YEW_ASSERT_EQ_I64(rows_with_fifo, 0);
     (void)unlink(fifo);
+    yew_ed_free(&ed);
+    gpt_remove(&t);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.11 Deliverable 4: the dialog's rows, as commands        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The listing for `t.root` is deterministic — `../` pinned on top, then
+ * directories, then files, each case-insensitively sorted — so the
+ * indices a GP_ROW region carries are these:
+ */
+enum {
+    GPT_ROW_PARENT = 0, /* ../     */
+    GPT_ROW_SUB = 1,    /* sub/    */
+    GPT_ROW_A = 2,      /* a.txt   */
+    GPT_ROW_B = 3       /* b.txt   */
+};
+
+/*
+ * Confirms through the KEY route (tab to the name field, Enter), which
+ * is how the existing tests read a tick set: `yew_gp_key` leaves the
+ * result standing for `yew_gp_count`, while the command route runs
+ * `yew_gp_apply` itself and that consumes the result by design.  So a
+ * test about WHAT GOT TICKED confirms this way, and a test about the
+ * confirm command asserts on the group it created.
+ */
+static void gpt_read_ticks(Ed *ed)
+{
+    YEW_ASSERT(yew_gp_key(ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(ed, gpk(YEW_KEY_ENTER)));
+}
+
+static CmdStatus gpt_run(Ed *ed, CmdStatus (*fn)(CmdCtx *))
+{
+    CmdCtx cx = {0};
+
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1;
+    cx.source = YEW_SRC_TEST;
+    return fn(&cx);
+}
+
+/*
+ * `Toggle` TICKS THE ROW THE POINTER WAS OVER, not the focused one.
+ *
+ * That is the whole reason `CTX_TGT_GP_ROW` is a target of its own: the
+ * GP_ROW region's payload is a LISTING INDEX, and the menu spends it
+ * through `yew_gp_select_row` before the command runs.  A `Toggle` that
+ * acted on the focus would tick whatever row the cursor happened to be
+ * on — which, after the dialog re-lists, is not the row the user
+ * right-clicked.
+ */
+void test_grouppicker_toggle_command_ticks_the_selected_row(void)
+{
+    Ed ed;
+    GpTree t;
+
+    gpt_make(&t);
+    gpt_ed(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    /* The cursor starts on `../`; the menu was opened over `b.txt`. */
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_B));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    gpt_read_ticks(&ed);
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 1);
+    YEW_ASSERT_EQ_STR(yew_gp_path(0), t.b);
+    yew_gp_close(&ed);
+
+    /* And it is a TOGGLE: the same row twice leaves nothing ticked, so
+     * the confirm is refused for an empty selection. */
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_B));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_B));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_confirm), YEW_CMD_OK);
+    YEW_ASSERT(yew_gp_active());
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 0U);
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
+    gpt_remove(&t);
+}
+
+/*
+ * ONE IMPLEMENTATION, TWO ROUTES.  Space and the command land in the
+ * same function, so a row and a keystroke cannot drift — including the
+ * advance-one-row that makes a run of files tickable without moving the
+ * other hand.
+ */
+void test_grouppicker_toggle_command_and_space_are_the_same_act(void)
+{
+    Ed ed;
+    GpTree t;
+
+    gpt_make(&t);
+    gpt_ed(&ed);
+
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_A));
+    YEW_ASSERT(yew_gp_key(&ed, gpk((u32)' ')));
+    /* Space advanced onto b.txt, so a second Space ticks it too. */
+    YEW_ASSERT(yew_gp_key(&ed, gpk((u32)' ')));
+    gpt_read_ticks(&ed);
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 2);
+    YEW_ASSERT_EQ_STR(yew_gp_path(0), t.a);
+    YEW_ASSERT_EQ_STR(yew_gp_path(1), t.b);
+    yew_gp_close(&ed);
+
+    /* The command route, from the same starting row, twice. */
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_A));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    gpt_read_ticks(&ed);
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 2);
+    YEW_ASSERT_EQ_STR(yew_gp_path(0), t.a);
+    YEW_ASSERT_EQ_STR(yew_gp_path(1), t.b);
+
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
+    gpt_remove(&t);
+}
+
+/* A DIRECTORY row is walked, not ticked — from the row command exactly
+ * as from Space, because a group is a set of files. */
+void test_grouppicker_toggle_command_walks_a_directory_row(void)
+{
+    Ed ed;
+    GpTree t;
+
+    gpt_make(&t);
+    gpt_ed(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_SUB));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    /* We are in `sub/` now, whose rows are `../`, c.txt, d.txt -- so
+     * index 2 names d.txt, a file that did not exist in the listing the
+     * toggle started from. */
+    YEW_ASSERT(yew_gp_select_row(&ed, 2));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    gpt_read_ticks(&ed);
+    /* One tick, and it is the file -- the directory row added nothing. */
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 1);
+    YEW_ASSERT_EQ_STR(yew_gp_path(0), t.d);
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
+    gpt_remove(&t);
+}
+
+/*
+ * `Confirm` CONFIRMS, even with a directory row focused.
+ *
+ * This is why the command calls `gp_confirm` and not the Enter branch
+ * of `yew_gp_key`: Enter on a directory WALKS INTO IT, and a row
+ * labelled `Confirm` that changed directory instead of creating the
+ * group would be the label lying.
+ */
+void test_grouppicker_confirm_command_confirms_over_a_directory_row(void)
+{
+    Ed ed;
+    GpTree t;
+
+    gpt_make(&t);
+    gpt_ed(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    yew_gp_preselect(t.a);
+    /* Focus a directory: Enter here would walk into `sub/`. */
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_SUB));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_confirm), YEW_CMD_OK);
+    /* The dialog is DOWN -- it confirmed rather than walking into
+     * `sub/`, which is what Enter on that row would have done. */
+    YEW_ASSERT(!yew_gp_active());
+    /*
+     * The command runs `yew_gp_apply` the way the key loop does, so the
+     * group already exists -- and apply consumes the result by design,
+     * which is why this asserts on the group and not on
+     * `yew_gp_count`.
+     */
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 1U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, ed.groups.v.data[0].id),
+                      1);
+    YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_PENDING);
+    yew_ed_free(&ed);
+    gpt_remove(&t);
+}
+
+/* An empty selection is refused by the command exactly as by Enter: the
+ * dialog stays up wearing its own note, which is where the user is
+ * already looking. */
+void test_grouppicker_confirm_command_refuses_an_empty_selection(void)
+{
+    Ed ed;
+    GpTree t;
+
+    gpt_make(&t);
+    gpt_ed(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_confirm), YEW_CMD_OK);
+    YEW_ASSERT(yew_gp_active());
+    YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_PENDING);
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 0U);
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
+    gpt_remove(&t);
+}
+
+/*
+ * BOTH REFUSE WITH THE DIALOG DOWN.
+ *
+ * `YEW_CMD_INTERNAL` is deliberately not set on either (cmd.c), so the
+ * palette and a Fletch script reach them with nothing open.  Returning
+ * OK having done nothing would be indistinguishable from having ticked
+ * a row — which is exactly the confusion a tick set cannot survive.
+ */
+void test_grouppicker_row_commands_refuse_when_the_dialog_is_down(void)
+{
+    Ed ed;
+    GpTree t;
+
+    gpt_make(&t);
+    gpt_ed(&ed);
+    YEW_ASSERT(!yew_gp_active());
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_confirm), YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 0U);
+    /* The focus mover the menu's target spends says the same. */
+    YEW_ASSERT(!yew_gp_select_row(&ed, 0));
+    yew_ed_free(&ed);
+    gpt_remove(&t);
+}
+
+/*
+ * A ROW THAT HAS GONE MOVES NOTHING AND RUNS NOTHING.
+ *
+ * The dialog re-lists on every walk, so a captured listing index can
+ * name a row that no longer exists.  `yew_gp_select_row` answering
+ * false is what makes `apply_target` abandon the invocation — ticking
+ * whatever file inherited the index is the one mistake a tick set
+ * cannot survive.
+ */
+void test_grouppicker_select_row_rejects_an_index_that_is_gone(void)
+{
+    Ed ed;
+    GpTree t;
+
+    gpt_make(&t);
+    gpt_ed(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    /* Four rows: ../, sub/, a.txt, b.txt. */
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_B));
+    YEW_ASSERT(!yew_gp_select_row(&ed, 4));
+    YEW_ASSERT(!yew_gp_select_row(&ed, -1));
+    /* Walk into `sub/`, which has three rows: index 3 is now gone. */
+    YEW_ASSERT(yew_gp_select_row(&ed, GPT_ROW_SUB));
+    YEW_ASSERT_EQ_I64(gpt_run(&ed, yew_gp_cmd_toggle), YEW_CMD_OK);
+    YEW_ASSERT(!yew_gp_select_row(&ed, 3));
+    /* The refused select left the focus where it was, so nothing that
+     * follows acts on a row the user never pointed at. */
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 0);
+    yew_gp_close(&ed);
     yew_ed_free(&ed);
     gpt_remove(&t);
 }
