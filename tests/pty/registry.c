@@ -2745,6 +2745,141 @@ static void case_s57_17_pager_tail_row(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.18: completion inside `:!`.
+ *
+ * The fixtures live in the case's own isolated workspace and $PATH is a
+ * RELATIVE directory inside it, so both the rows and the detail column
+ * are fixed strings: an absolute $PATH would put the runner's temporary
+ * state directory on screen and no two runs would agree (invariant 5).
+ */
+static bool s57_18_make(PtyCtx *c, const char *bin, const char *const *names,
+                        size_t nnames, const char *const *files,
+                        size_t nfiles)
+{
+    char path[PATH_MAX];
+    size_t i;
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.18 case needs an isolated workspace");
+        return false;
+    }
+    if (bin != NULL) {
+        if (snprintf(path, sizeof(path), "%s/%s", c->workspace_dir, bin) >=
+            (int)sizeof(path)) {
+            ptc_check(c, false, "Sprint 57.18 bin path overflow");
+            return false;
+        }
+        if (mkdir(path, 0700) != 0) {
+            ptc_check(c, false, "creating Sprint 57.18 bin directory");
+            return false;
+        }
+        for (i = 0U; i < nnames; i++) {
+            if (snprintf(path, sizeof(path), "%s/%s/%s", c->workspace_dir,
+                         bin, names[i]) >= (int)sizeof(path)) {
+                ptc_check(c, false, "Sprint 57.18 bin path overflow");
+                return false;
+            }
+            if (!write_bytes(path, (const u8 *)"#!/bin/sh\nexit 0\n", 17U) ||
+                chmod(path, 0700) != 0) {
+                ptc_check(c, false, "creating Sprint 57.18 executable");
+                return false;
+            }
+        }
+        c->exec_path = bin;
+    }
+    for (i = 0U; i < nfiles; i++) {
+        if (snprintf(path, sizeof(path), "%s/%s", c->workspace_dir,
+                     files[i]) >= (int)sizeof(path)) {
+            ptc_check(c, false, "Sprint 57.18 file path overflow");
+            return false;
+        }
+        if (!write_bytes(path, (const u8 *)"body\n", 5U)) {
+            ptc_check(c, false, "creating Sprint 57.18 fixture file");
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * §1+§2+§3 together: Tab's territory reaches inside `:!` at last.
+ *
+ * `loose_name` used to stop at the bang, so `yew_comp_query_at` refused
+ * every token in a bang body and this prompt showed nothing at all.  The
+ * rows here are executables on $PATH, ranked and drawn by 57.17's pager
+ * — no second widget — with the $PATH element that would win in the
+ * detail column.
+ */
+static void case_s57_18_bang_completes_exec(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha", "chk-beta",
+                                       "chk-gamma"};
+    static const u8 initial[] = "bang completion fixture\n";
+    char path[256];
+
+    if (!s57_18_make(c, "s5718bin", bins, YEW_ARRAY_LEN(bins), NULL, 0U))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!chk");
+    ptc_snapshot(c, "s57_18_bang_completes_exec");
+    s18_finish(c, path);
+}
+
+/*
+ * §3's second half: word 0 of a bang body completes executables, and
+ * everything after it completes PATHS.  Same prompt, same pager, one
+ * space apart.
+ */
+static void case_s57_18_bang_completes_path(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha"};
+    static const char *const files[] = {"s5718-one.txt", "s5718-two.txt"};
+    static const u8 initial[] = "bang path fixture\n";
+    char path[256];
+
+    if (!s57_18_make(c, "s5718bin", bins, YEW_ARRAY_LEN(bins), files,
+                     YEW_ARRAY_LEN(files)))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!chk-alpha s5718-");
+    ptc_snapshot(c, "s57_18_bang_completes_path");
+    s18_finish(c, path);
+}
+
+/*
+ * DoD 2: a completion inserted into a bang body is re-quoted.
+ *
+ * The stem is read WITHOUT quotes and written back WITH them, so what
+ * lands in the prompt is one shell word — which is the only reason a
+ * path with a space in it is completable inside `:!` at all.
+ */
+static void case_s57_18_bang_quotes_a_spacey_path(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha"};
+    static const char *const files[] = {"wordy spacey.txt"};
+    static const u8 initial[] = "bang quoting fixture\n";
+    char path[256];
+
+    if (!s57_18_make(c, "s5718bin", bins, YEW_ARRAY_LEN(bins), files,
+                     YEW_ARRAY_LEN(files)))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    /* `wordy` shares no prefix with the $PATH directory this case also
+     * creates, so the filter is left with exactly one row and Tab takes
+     * it outright -- which is the insertion whose quoting is the point. */
+    s18_settle_after_bytes(c, "!chk-alpha wordy");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_18_bang_quotes_a_spacey_path");
+    s18_finish(c, path);
+}
+
 /* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
  * from the same tolerant parse the menu filtered with. */
 static void case_s18_5_cmdline_hint(PtyCtx *c)
@@ -10334,6 +10469,12 @@ const PtyCase yew_pty_cases[] = {
       case_s57_17_pager_arrow_up),
     C(s57_17_pager_tail_row, modern, 24U, 80U,
       case_s57_17_pager_tail_row),
+    C(s57_18_bang_completes_exec, modern, 24U, 80U,
+      case_s57_18_bang_completes_exec),
+    C(s57_18_bang_completes_path, modern, 24U, 80U,
+      case_s57_18_bang_completes_path),
+    C(s57_18_bang_quotes_a_spacey_path, modern, 24U, 80U,
+      case_s57_18_bang_quotes_a_spacey_path),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,

@@ -9,9 +9,14 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include "edit/ed.h"
 #include "edit/file_cmds.h"
 #include "edit/mode.h"
+#include "ui/cmdcomp.h"
 #include "ui/cmdline.h"
 #include "ui/region.h"
 #include "util/buf.h"
@@ -1570,4 +1575,105 @@ void test_cmdline_fuzzy_execute_declines_a_resolved_name(void)
     YEW_ASSERT(fixture.ed.cmdline.active);
     YEW_ASSERT(fixture.ed.cmdline.err.msg[0] != '\0');
     cmdline_fixture_free(&fixture);
+}
+
+/*
+ * Sprint 57.18 DoD 1: `:!` completes in 57.17's PAGER, with 57.17's keys.
+ *
+ * The claim that needs a test rather than a golden is that there is no
+ * second widget and no second key path: the rows arrive in
+ * `ed.cmdline.menu`, `<up>` enters it without touching the prompt, and
+ * Tab writes the chosen row back into the bang body.  A snapshot shows
+ * the rows; only this shows which machinery drew them.
+ */
+void test_cmdline_bang_completions_use_the_same_pager(void)
+{
+    CmdlineFixture fixture;
+    char root[64];
+    char bin[128];
+    char path[192];
+    char *saved = NULL;
+    const char *env;
+    Bytebuf before;
+    Bytebuf after;
+    size_t i;
+    static const char *const names[] = {"s5718c-alpha", "s5718c-beta",
+                                        "s5718c-gamma"};
+
+    (void)strcpy(root, "/tmp/yew-cmdbang-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    (void)snprintf(bin, sizeof(bin), "%s/bin", root);
+    YEW_ASSERT_EQ_I64(mkdir(bin, 0700), 0);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        int fd;
+
+        (void)snprintf(path, sizeof(path), "%s/%s", bin, names[i]);
+        fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0700);
+        YEW_ASSERT(fd >= 0);
+        YEW_ASSERT_EQ_I64(close(fd), 0);
+        YEW_ASSERT_EQ_I64(chmod(path, 0700), 0);
+    }
+    env = getenv("PATH");
+    saved = env == NULL ? NULL : cmdline_dup(env);
+    YEW_ASSERT_EQ_I64(setenv("PATH", bin, 1), 0);
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    yew_hist_add(fixture.ed.cmdline.history, "redraw");
+    /* Before this sprint `loose_name` stopped at the bang and this
+     * prompt filtered nothing at all. */
+    cmdline_type(&fixture, "!s5718c");
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len,
+                      YEW_ARRAY_LEN(names));
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.items.data[0].kind,
+                      YEW_COMP_EXEC);
+    before = cmdline_text(&fixture.ed.cmdline);
+
+    /* 57.17's `<up>`: enters the pager, prompt unchanged, history still
+     * where it was. */
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_UP), 1);
+    YEW_ASSERT(yew_menu_focused(&fixture.ed.cmdline.menu));
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_DOWN), 1);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 1);
+    after = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)after.data, (const char *)before.data);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.hist.idx, -1);
+    bytebuf_free(&after);
+    bytebuf_free(&before);
+
+    /* And Tab writes the chosen row back into the bang BODY, replacing
+     * the word under the caret and nothing else. */
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
+    after = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_I64(strncmp((const char *)after.data, "!s5718c-", 8U), 0);
+    bytebuf_free(&after);
+
+    /* An argument after the command word completes as a PATH, from the
+     * same prompt and the same menu. */
+    yew_cmdline_close(&fixture.ed, false);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    fixture.ed.ws.dir = root;
+    cmdline_type(&fixture, "!s5718c-alpha b");
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.items.data[0].kind,
+                      YEW_COMP_PATH);
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.menu.items.data[0].text, "bin/");
+    fixture.ed.ws.dir = NULL;
+    cmdline_fixture_free(&fixture);
+
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        (void)snprintf(path, sizeof(path), "%s/%s", bin, names[i]);
+        YEW_ASSERT_EQ_I64(unlink(path), 0);
+    }
+    YEW_ASSERT_EQ_I64(rmdir(bin), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
+    if (saved != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("PATH", saved, 1), 0);
+        free(saved);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("PATH"), 0);
+    }
 }

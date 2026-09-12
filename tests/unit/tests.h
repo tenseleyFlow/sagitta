@@ -831,6 +831,7 @@ void test_cmdline_fuzzy_execute_declines_a_resolved_name(void);
 void test_cmdline_up_is_history_when_no_pager_is_open(void);
 void test_cmdline_up_enters_the_pager_without_touching_the_prompt(void);
 void test_cmdline_leaving_the_pager_restores_history_to_up(void);
+void test_cmdline_bang_completions_use_the_same_pager(void);
 void test_cmdline_enter_on_a_pager_row_accepts_without_executing(void);
 void test_cmdline_typing_blurs_the_pager_but_keeps_the_row(void);
 void test_cmdline_menu_page_moves_by_a_page(void);

@@ -357,8 +357,11 @@ CmdStatus yew_shell_cmd_term(CmdCtx *cx)
      * back when the child exits.  So an interactive command has a route,
      * and it is not this one.
      */
+    /* Short enough to fit an 80-column footer whole: a refusal that is
+     * truncated to "yew does not emulate a terminal; run one command in
+     * this o…" hides the half that tells the user what to do instead. */
     yew_msg(cx->ed, YEW_MSG_ERROR,
-            "yew does not emulate a terminal; run one command in this one "
-            "with :!!cmd, or stream output with :!");
+            "yew does not emulate a terminal; use :!!cmd for one, "
+            ":! to stream");
     return YEW_CMD_ERR_STATE;
 }

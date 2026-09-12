@@ -1,9 +1,9 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=23,1 vis=1
+size 80x24 alt=1 cursor=23,31 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
- 1 pty-s14-s19_term_is_n +                                                      
-    1 document                                                                  
+ 1 pty-s14-s57_18_bang_q +                                                      
+    1 bang quoting fixture                                                      
     1                                                                           
                                                                                 
                                                                                 
@@ -24,8 +24,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-E: yew does not emulate a terminal; use :!!cmd for one, :! to stream            
-:term                                                                           
+                                                                                
+:!chk-alpha "wordy spacey.txt"                                                  
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -49,8 +49,8 @@ DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-HIIIIJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+GHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 --- legend
 A fg=#c8ccd4 bg=#2c313a attrs=b---------
 B fg=#61afef bg=#1b202a attrs=b---------
@@ -58,7 +58,6 @@ C fg=#5c6370 bg=#1b202a attrs=----------
 D fg=#4b5263 bg=#12141a attrs=----------
 E fg=#c8ccd4 bg=#12141a attrs=b---------
 F fg=#c8ccd4 bg=#12141a attrs=----------
-G fg=idx:196 bg=#4e2a0f attrs=b---------
-H fg=#2f1806 bg=#e77d24 attrs=b---------
-I fg=#f7e0cc bg=idx:196 attrs=b--u------
-J fg=#f7e0cc bg=#4e2a0f attrs=b---------
+G fg=#2f1806 bg=#e77d24 attrs=b---------
+H fg=#f7e0cc bg=#4e2a0f attrs=----------
+I fg=#f7e0cc bg=#4e2a0f attrs=b---------

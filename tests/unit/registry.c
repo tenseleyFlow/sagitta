@@ -864,6 +864,7 @@ const YewTest yew_tests[] = {
     T(cmdline_up_is_history_when_no_pager_is_open),
     T(cmdline_up_enters_the_pager_without_touching_the_prompt),
     T(cmdline_leaving_the_pager_restores_history_to_up),
+    T(cmdline_bang_completions_use_the_same_pager),
     T(cmdline_enter_on_a_pager_row_accepts_without_executing),
     T(cmdline_typing_blurs_the_pager_but_keeps_the_row),
     T(cmdline_menu_page_moves_by_a_page),
