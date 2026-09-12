@@ -381,6 +381,21 @@ void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
         }
 }
 
+bool yew_lsp_attached(const Ed *ed, const Buffer *b)
+{
+    const LspServer *server = NULL;
+
+    /*
+     * ATTACHED, not READY.  A server that is still initialising will
+     * answer the menu's requests by the time the user has read the
+     * rows, and a section that appears a second after the menu opened
+     * moves every row under the pointer — shape stability per (kind,
+     * availability) is what the section-omission rule buys.
+     */
+    return ed != NULL && b != NULL &&
+           yew_lsp_doc_find(ed, b->id, &server) != NULL && server != NULL;
+}
+
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap)
 {

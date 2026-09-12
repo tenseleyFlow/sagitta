@@ -143,6 +143,15 @@ void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
     (void)len;
 }
 
+bool yew_lsp_attached(const Ed *ed, const Buffer *b)
+{
+    (void)ed;
+    (void)b;
+    /* No module, no server: the document menu's LSP section is omitted
+     * whole rather than shown greyed (Sprint 57.11 §4). */
+    return false;
+}
+
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap)
 {
