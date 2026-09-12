@@ -82,6 +82,10 @@ void yew_group_label(const Ed *ed, u32 gid, char *buf, size_t n);
  * assigned raw in several places and a cached copy drifts away from it
  * silently. */
 u32 yew_active_group_id(const Ed *ed);
+/* Most-specific group root containing PATH; equal roots prefer the active
+ * group and otherwise retain insertion order.  This suggests a destination
+ * for self-open without turning dir_path into a membership constraint. */
+u32 yew_group_for_path(const Ed *ed, const char *path);
 void yew_group_prune_empty(Ed *ed);
 
 /*

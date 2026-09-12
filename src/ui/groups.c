@@ -310,6 +310,50 @@ u32 yew_active_group_id(const Ed *ed)
     return ed->tabs.v.data[ed->tabs.active].group_id;
 }
 
+static bool group_path_below(const char *path, const char *root)
+{
+    size_t n;
+
+    if (path == NULL || root == NULL || root[0] == '\0')
+        return false;
+    n = strlen(root);
+    while (n > 1U && root[n - 1U] == '/')
+        n--;
+    if (strlen(path) <= n || strncmp(path, root, n) != 0)
+        return false;
+    if (n == 1U && root[0] == '/')
+        return path[0] == '/';
+    return path[n] == '/';
+}
+
+u32 yew_group_for_path(const Ed *ed, const char *path)
+{
+    u32 best = 0U;
+    u32 active;
+    size_t best_len = 0U;
+    size_t i;
+
+    if (ed == NULL || path == NULL || path[0] == '\0')
+        return 0U;
+    active = yew_active_group_id(ed);
+    for (i = 0U; i < ed->groups.v.len; i++) {
+        const TabGroup *g = &ed->groups.v.data[i];
+        size_t n;
+
+        if (!group_path_below(path, g->dir_path))
+            continue;
+        n = strlen(g->dir_path);
+        while (n > 1U && g->dir_path[n - 1U] == '/')
+            n--;
+        if (n > best_len ||
+            (n == best_len && g->id == active && best != active)) {
+            best = g->id;
+            best_len = n;
+        }
+    }
+    return best;
+}
+
 void yew_group_prune_empty(Ed *ed)
 {
     size_t i = 0U;

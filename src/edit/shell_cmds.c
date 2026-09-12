@@ -79,6 +79,7 @@ CmdStatus yew_shell_cmd_run(CmdCtx *cx)
     const char *cmdline = shell_arg(cx);
     char err[256] = {0};
     Span region;
+    YewShellSelfResult self;
 
     if (cmdline == NULL) {
         yew_msg(cx->ed, YEW_MSG_ERROR, ":! needs a command");
@@ -91,6 +92,15 @@ CmdStatus yew_shell_cmd_run(CmdCtx *cx)
                                              cmdline, NULL);
 
         return r == YEW_FILT_OK ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
+    }
+    if (!cx->range.given) {
+        self = yew_shell_try_self_open(cx->ed, cmdline, err, sizeof(err));
+        if (self == YEW_SHELL_SELF_OPENED)
+            return YEW_CMD_OK;
+        if (self == YEW_SHELL_SELF_ERROR) {
+            yew_msg(cx->ed, YEW_MSG_ERROR, "%s", err);
+            return YEW_CMD_ERR_STATE;
+        }
     }
     if (yew_shell_run(cx->ed, cmdline, true, err, sizeof(err)) == 0U) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "%s", err);

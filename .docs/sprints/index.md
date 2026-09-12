@@ -1,15 +1,15 @@
 # yew Sprint Index
 
-72 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
+74 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
 bespoke-first, modal-paradigm-first terminal editor plus its language,
 Fletch. Small bites, clear milestones, testable deliverables at every
 stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-61 whole-numbered sprints plus eleven fractional ones (18.5, 41.5, 42.5,
-49.5, 55.5, 56.5, 57.5, 57.6, 57.7, 57.8, 57.9) split off during authoring — the
-pressure valve working as designed.
+61 whole-numbered sprints plus thirteen fractional ones (18.5, 41.5, 42.5,
+49.5, 55.5, 56.5, 57.5, 57.6, 57.7, 57.8, 57.9, 57.10, 57.11) split
+off during authoring — the pressure valve working as designed.
 Renumbering is forbidden once files exist, so fractional ids are permanent.
 
 Binding documents — read before any sprint:
@@ -361,6 +361,10 @@ Binding documents — read before any sprint:
   both tab-bar rows, row-aware `alt+N` (member inside a group, row-1 entry
   outside), `ctrl+N` → `ed.tab.goto_bar` for row-1 entries from anywhere, and
   a two-mode digit-extension window. Branch `tab-group-jump`, 2026-09-11.
+- Sprint 57.11 (s57_11-shell-self-open.md) — Exact no-range `:!yew FILE`
+  handoff into the current session, workspace-relative and outside-workspace
+  path opening, most-specific tab-group placement, rightmost ungrouped
+  fallback, stable-tab reuse, and conservative shell-syntax fallthrough.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
@@ -408,8 +412,9 @@ Binding documents — read before any sprint:
   s25 hand-writes the emitter against the frozen schema; s36 swaps the
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
-  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`, `s57_10-…`) are the pressure valve when a sprint
-  splits — renumbering is forbidden once files exist.
+  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`,
+  `s57_10-…`, `s57_11-…`) are the pressure valve when a sprint splits —
+  renumbering is forbidden once files exist.
 
 ## Sprint file format
 

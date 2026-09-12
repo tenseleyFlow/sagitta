@@ -23,6 +23,17 @@ typedef enum {
     YEW_FILT_SPAWN
 } YewFilterResult;
 
+typedef enum {
+    YEW_SHELL_SELF_NOT_HANDLED,
+    YEW_SHELL_SELF_OPENED,
+    YEW_SHELL_SELF_ERROR
+} YewShellSelfResult;
+
+/* Exact no-range `:!yew FILE` handoff.  Ambiguous shell grammar returns
+ * NOT_HANDLED so Sprint 19's ordinary $SHELL -c path keeps ownership. */
+YewShellSelfResult yew_shell_try_self_open(Ed *ed, const char *cmdline,
+                                            char *err, size_t errsz);
+
 /* Mode (a): stream a command's output into a job buffer. */
 u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
                   size_t errsz);

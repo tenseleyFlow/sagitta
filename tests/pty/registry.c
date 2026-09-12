@@ -2816,6 +2816,33 @@ static void case_s19_stream_output(PtyCtx *c)
     s18_finish(c, path);
 }
 
+static void case_s57_11_shell_self_open(PtyCtx *c)
+{
+    static const u8 initial[] = "original document\n";
+    static const u8 target_text[] = "self-open target\n";
+    static const char target[] = "build/pty-s57-self-open-target.txt";
+    char path[256];
+
+    if (!write_bytes(target, target_text, sizeof(target_text) - 1U)) {
+        ptc_check(c, false, "could not create self-open target");
+        return;
+    }
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path))) {
+        (void)unlink(target);
+        return;
+    }
+    s19_send_command(c, "!yew build/pty-s57-self-open-target.txt");
+    s19_wait_screen(c, "self-open target");
+    ptc_settle(c, 100);
+    ptc_check(c, !s19_screen_contains(&c->vt, "*job:"),
+              "self-open created a job buffer");
+    ptc_check(c, !s19_screen_contains(&c->vt, "[exit "),
+              "self-open displayed a child completion footer");
+    ptc_snapshot(c, "s57_11_shell_self_open");
+    s18_finish(c, path);
+    (void)unlink(target);
+}
+
 static void case_s19_exit_footer_ok(PtyCtx *c)
 {
     static const u8 initial[] = "document\n";
@@ -9705,6 +9732,8 @@ const PtyCase yew_pty_cases[] = {
       case_s21_named_mark_round_trip),
     C(s21_global_is_a_non_goal, modern, 24U, 80U,
       case_s21_global_is_a_non_goal),
+    C(s57_11_shell_self_open, modern, 24U, 80U,
+      case_s57_11_shell_self_open),
     C(s19_stream_output, modern, 24U, 80U, case_s19_stream_output),
     C(s19_exit_footer_ok, modern, 24U, 80U, case_s19_exit_footer_ok),
     C(s19_exit_footer_nonzero, modern, 24U, 80U,

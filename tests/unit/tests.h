@@ -824,6 +824,10 @@ void test_job_buffer_append_updates_syntax(void);
 void test_shell_quote_algorithm(void);
 void test_shell_quote_roundtrips_hard_cases(void);
 void test_shell_quote_roundtrips_random_bytes(void);
+void test_shell_self_recognizes_only_exact_safe_argv(void);
+void test_shell_self_resolves_workspace_and_outside_tabs(void);
+void test_shell_self_places_groups_by_root_and_stable_membership(void);
+void test_shell_self_errors_roll_back_tabs_buffers_and_focus(void);
 
 void test_job_echo_lifecycle(void);
 void test_job_internal_ids_do_not_advance_public_ids(void);

@@ -4,11 +4,13 @@
 #include "edit/shell.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
@@ -16,9 +18,12 @@
 #include "term/input.h"
 #include "term/tty.h"
 #include "text/piece.h"
+#include "ui/groups.h"
 #include "ui/message.h"
+#include "ui/tabs.h"
 #include "ui/viewport.h"
 #include "util/log.h"
+#include "ws/workspace.h"
 
 #define YEW_JOBS_TABLE_NAME "*jobs*"
 
@@ -289,6 +294,354 @@ void yew_job_finish(Ed *ed, YewJob *j)
                     YEW_MSG_INFO : YEW_MSG_WARN,
             ":!%s %s", j->label, foot);
     yew_ed_damage_document(ed);
+}
+
+typedef enum {
+    SELF_WORD_END,
+    SELF_WORD_OK,
+    SELF_WORD_AMBIGUOUS,
+    SELF_WORD_BAD
+} SelfWordResult;
+
+static bool self_hspace(char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+static bool self_unquoted_special(char c)
+{
+    return c == '|' || c == '&' || c == ';' || c == '<' || c == '>' ||
+           c == '(' || c == ')' || c == '$' || c == '`' || c == '*' ||
+           c == '?' || c == '[' || c == ']' || c == '{' || c == '}';
+}
+
+/* Deliberately incomplete: accept only words whose value is knowable without
+ * asking the configured shell to expand or interpret anything. */
+static SelfWordResult self_word(const char **cursor, Bytebuf *out)
+{
+    const char *p = *cursor;
+
+    while (self_hspace(*p))
+        p++;
+    if (*p == '\0') {
+        *cursor = p;
+        return SELF_WORD_END;
+    }
+    out->len = 0U;
+    while (*p != '\0' && !self_hspace(*p)) {
+        char c = *p++;
+
+        if (c == '\n' || c == '\r')
+            return SELF_WORD_AMBIGUOUS;
+        if (c == '\'') {
+            while (*p != '\0' && *p != '\'') {
+                if (*p == '\n' || *p == '\r')
+                    return SELF_WORD_AMBIGUOUS;
+                bytebuf_push_u8(out, (u8)*p++);
+            }
+            if (*p != '\'')
+                return SELF_WORD_BAD;
+            p++;
+            continue;
+        }
+        if (c == '"') {
+            while (*p != '\0' && *p != '"') {
+                c = *p++;
+                if (c == '\n' || c == '\r' || c == '$' || c == '`')
+                    return SELF_WORD_AMBIGUOUS;
+                if (c == '\\') {
+                    char next = *p++;
+
+                    if (next == '\0')
+                        return SELF_WORD_BAD;
+                    if (next == '\n' || next == '\r')
+                        return SELF_WORD_AMBIGUOUS;
+                    if (next != '"' && next != '\\' && next != '$' &&
+                        next != '`')
+                        return SELF_WORD_AMBIGUOUS;
+                    c = next;
+                }
+                bytebuf_push_u8(out, (u8)c);
+            }
+            if (*p != '"')
+                return SELF_WORD_BAD;
+            p++;
+            continue;
+        }
+        if (c == '\\') {
+            if (*p == '\0')
+                return SELF_WORD_BAD;
+            c = *p++;
+            if (c == '\n' || c == '\r')
+                return SELF_WORD_AMBIGUOUS;
+            bytebuf_push_u8(out, (u8)c);
+            continue;
+        }
+        if (self_unquoted_special(c) || c == '#' ||
+            ((c == '~' || c == '=') && out->len == 0U))
+            return SELF_WORD_AMBIGUOUS;
+        bytebuf_push_u8(out, (u8)c);
+    }
+    *cursor = p;
+    return SELF_WORD_OK;
+}
+
+/* Collapse dot components in an absolute spelling without changing cwd. */
+static bool self_lexical_absolute(const char *path, char out[PATH_MAX])
+{
+    const char *p = path;
+    size_t len = 1U;
+
+    if (path == NULL || path[0] != '/')
+        return false;
+    out[0] = '/';
+    out[1] = '\0';
+    while (*p != '\0') {
+        const char *start;
+        size_t n;
+
+        while (*p == '/')
+            p++;
+        start = p;
+        while (*p != '\0' && *p != '/')
+            p++;
+        n = (size_t)(p - start);
+        if (n == 0U)
+            break;
+        if (n == 1U && start[0] == '.')
+            continue;
+        if (n == 2U && start[0] == '.' && start[1] == '.') {
+            while (len > 1U && out[len - 1U] != '/')
+                len--;
+            if (len > 1U)
+                len--;
+            out[len] = '\0';
+            continue;
+        }
+        if (len > 1U) {
+            if (len + 1U >= PATH_MAX)
+                return false;
+            out[len++] = '/';
+        }
+        if (n >= PATH_MAX - len)
+            return false;
+        (void)memcpy(out + len, start, n);
+        len += n;
+        out[len] = '\0';
+    }
+    return true;
+}
+
+/* Existing files resolve in one realpath call.  For a new file, resolve the
+ * deepest existing ancestor first, then normalize only the unresolved tail.
+ * This preserves symlink semantics in the parent without requiring chdir. */
+static bool self_canonical_absolute(const char *path, char out[PATH_MAX])
+{
+    char probe[PATH_MAX];
+    char resolved[PATH_MAX];
+    char joined[PATH_MAX];
+    size_t path_len;
+
+    if (path == NULL || path[0] != '/')
+        return false;
+    path_len = strlen(path);
+    if (path_len >= sizeof(probe))
+        return false;
+    if (realpath(path, resolved) != NULL) {
+        (void)snprintf(out, PATH_MAX, "%s", resolved);
+        return true;
+    }
+    (void)memcpy(probe, path, path_len + 1U);
+    for (;;) {
+        char *slash = strrchr(probe, '/');
+        size_t prefix_len;
+        int n;
+
+        if (slash == NULL)
+            return false;
+        if (slash == probe) {
+            probe[1] = '\0';
+            prefix_len = 1U;
+        } else {
+            prefix_len = (size_t)(slash - probe);
+            *slash = '\0';
+        }
+        if (realpath(probe, resolved) != NULL) {
+            const char *tail = path + prefix_len;
+
+            if (strcmp(resolved, "/") == 0 && tail[0] == '/')
+                tail++;
+            if (strcmp(resolved, "/") == 0)
+                n = snprintf(joined, sizeof(joined), "/%s", tail);
+            else
+                n = snprintf(joined, sizeof(joined), "%s%s", resolved,
+                             tail);
+            if (n < 0 || (size_t)n >= sizeof(joined))
+                return false;
+            return self_lexical_absolute(joined, out);
+        }
+        if (slash == probe)
+            return false;
+    }
+}
+
+static bool self_path_in_workspace(const Ed *ed, const char *path)
+{
+    const char *root = yew_ws_root(ed);
+    size_t n;
+
+    if (root == NULL || path == NULL || root[0] != '/' || path[0] != '/')
+        return false;
+    n = strlen(root);
+    while (n > 1U && root[n - 1U] == '/')
+        n--;
+    if (strncmp(path, root, n) != 0)
+        return false;
+    if (n == 1U)
+        return path[1] != '\0';
+    return path[n] == '/' && path[n + 1U] != '\0';
+}
+
+static bool self_open_path(const Ed *ed, const char *operand,
+                           char out[PATH_MAX], char *err, size_t errsz)
+{
+    char joined[PATH_MAX];
+    const char *root;
+    int n;
+
+    if (operand[0] == '/') {
+        n = snprintf(joined, sizeof(joined), "%s", operand);
+    } else {
+        root = yew_ws_root(ed);
+        if (strcmp(root, "/") == 0)
+            n = snprintf(joined, sizeof(joined), "/%s", operand);
+        else
+            n = snprintf(joined, sizeof(joined), "%s/%s", root, operand);
+    }
+    if (n < 0 || (size_t)n >= sizeof(joined) ||
+        !self_canonical_absolute(joined, out)) {
+        (void)snprintf(err, errsz, "self-open path is too long");
+        return false;
+    }
+    return true;
+}
+
+YewShellSelfResult yew_shell_try_self_open(Ed *ed, const char *cmdline,
+                                            char *err, size_t errsz)
+{
+    const char *at = cmdline;
+    Bytebuf word;
+    Bytebuf operand;
+    SelfWordResult result;
+    char path[PATH_MAX];
+    struct stat st;
+    bool separated = false;
+    int existing;
+    int idx;
+    Buffer *created_buf;
+    u32 buffer_count_before;
+    u32 origin_tab_id;
+    u32 gid;
+
+    if (ed == NULL || cmdline == NULL)
+        return YEW_SHELL_SELF_NOT_HANDLED;
+    bytebuf_init(&word);
+    bytebuf_init(&operand);
+    result = self_word(&at, &word);
+    if (result != SELF_WORD_OK) {
+        bytebuf_free(&word);
+        bytebuf_free(&operand);
+        return YEW_SHELL_SELF_NOT_HANDLED;
+    }
+    bytebuf_push_u8(&word, 0U);
+    if (strcmp((const char *)word.data, "yew") != 0)
+        goto not_handled;
+    result = self_word(&at, &operand);
+    if (result == SELF_WORD_END) {
+        (void)snprintf(err, errsz, ":!yew needs a file");
+        bytebuf_free(&word);
+        bytebuf_free(&operand);
+        return YEW_SHELL_SELF_ERROR;
+    }
+    if (result != SELF_WORD_OK)
+        goto not_handled;
+    bytebuf_push_u8(&operand, 0U);
+    if (strcmp((const char *)operand.data, "--") == 0) {
+        operand.len = 0U;
+        separated = true;
+        result = self_word(&at, &operand);
+        if (result == SELF_WORD_END) {
+            (void)snprintf(err, errsz, ":!yew needs a file after --");
+            bytebuf_free(&word);
+            bytebuf_free(&operand);
+            return YEW_SHELL_SELF_ERROR;
+        }
+        if (result != SELF_WORD_OK)
+            goto not_handled;
+        bytebuf_push_u8(&operand, 0U);
+    }
+    while (self_hspace(*at))
+        at++;
+    if (*at != '\0' || (!separated && operand.data[0] == (u8)'-'))
+        goto not_handled;
+    if (operand.len == 1U) {
+        (void)snprintf(err, errsz, ":!yew needs a non-empty file");
+        bytebuf_free(&word);
+        bytebuf_free(&operand);
+        return YEW_SHELL_SELF_ERROR;
+    }
+    if (!self_open_path(ed, (const char *)operand.data, path, err, errsz)) {
+        bytebuf_free(&word);
+        bytebuf_free(&operand);
+        return YEW_SHELL_SELF_ERROR;
+    }
+    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode))
+        goto not_handled;
+    existing = yew_tab_find_by_path(ed, path);
+    origin_tab_id = ed->tabs.active >= 0
+                        ? ed->tabs.v.data[ed->tabs.active].tab_id
+                        : 0U;
+    gid = existing < 0 && self_path_in_workspace(ed, path)
+              ? yew_group_for_path(ed, path)
+              : 0U;
+    buffer_count_before = ed->ws.nbufs;
+    idx = yew_tab_open(ed, path);
+    if (idx < 0) {
+        int origin = yew_tab_index_of_id(ed, origin_tab_id);
+
+        if (origin >= 0)
+            yew_tab_switch(ed, origin);
+        (void)snprintf(err, errsz, "could not open %s", path);
+        bytebuf_free(&word);
+        bytebuf_free(&operand);
+        return YEW_SHELL_SELF_ERROR;
+    }
+    created_buf = existing < 0 ? yew_tab_buffer(ed, idx) : NULL;
+    if (existing < 0 && yew_tab_hydrate(ed, idx) != 0) {
+        int origin;
+
+        (void)yew_tab_close(ed, idx);
+        if (ed->ws.nbufs > buffer_count_before)
+            yew_ws_scratch_drop(ed, created_buf);
+        origin = yew_tab_index_of_id(ed, origin_tab_id);
+        if (origin >= 0)
+            yew_tab_switch(ed, origin);
+        (void)snprintf(err, errsz, "could not open %s", path);
+        bytebuf_free(&word);
+        bytebuf_free(&operand);
+        return YEW_SHELL_SELF_ERROR;
+    }
+    if (existing < 0 && gid != 0U)
+        yew_group_add_member(ed, gid, idx);
+    yew_tab_switch(ed, idx);
+    bytebuf_free(&word);
+    bytebuf_free(&operand);
+    return YEW_SHELL_SELF_OPENED;
+
+not_handled:
+    bytebuf_free(&word);
+    bytebuf_free(&operand);
+    return YEW_SHELL_SELF_NOT_HANDLED;
 }
 
 u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
