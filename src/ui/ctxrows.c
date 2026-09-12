@@ -83,9 +83,15 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
     /* CTXA_FUSS_OPEN        */ {"ed.git.open", CTX_TGT_PATH, 0},
 
     /*
-     * The document rows.  CTX_TGT_LEAF for the three that consume the
-     * selection, CTX_TGT_PANE for everything that means "here" — see
-     * ctxrows.h for why the caret may not move under the first three.
+     * The document rows.
+     *
+     * CTX_TGT_LEAF for the rows whose subject is the BUFFER's current
+     * state — the three that consume the selection, `Select All`, and
+     * undo/redo, which move the caret to the edit they replay and would
+     * only be fighting a placement.  CTX_TGT_PANE for every row that
+     * means "here": paste at the click, split this pane, go to the
+     * definition of the word that was pointed at.  See ctxrows.h for
+     * why the caret may not move under the first group.
      */
     /* CTXA_DOC_CUT          */ {"ed.sel.cut", CTX_TGT_LEAF, 0},
     /* CTXA_DOC_COPY         */ {"ed.sel.yank", CTX_TGT_LEAF, 0},
