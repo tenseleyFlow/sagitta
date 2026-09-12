@@ -376,6 +376,14 @@ Binding documents — read before any sprint:
   open, priority-based row shedding, themed bordered box, table-driven dispatch,
   FUSS click-select and wheel. Supersedes s27 §9's deferral. Branch
   `mouse-overhaul`, planned 2026-09-11.
+- Sprint 57.14 (s57_14-tab-drag-feel.md) — A floating dragged tab with
+  insertion shift, group exit by the group's own row-1 entry (the blank tail is
+  unreachable when row 1 overflows), and a perceptible 250 ms dwell with a
+  two-flash cue. Branch `tab-drag-feel`.
+- Sprint 57.15 (s57_15-strip-scrolling.md) — Explicit strip scroll survives the
+  layout's follow-the-active clamp (the chevron-does-nothing bug), chevron hover
+  reveal on both rows, and mode 1003 armed whenever a chevron is drawn. Branch
+  `strip-scrolling`.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
@@ -424,7 +432,7 @@ Binding documents — read before any sprint:
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
   `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`,
-  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`) are the pressure valve
+  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`, `s57_14-…`, `s57_15-…`) are the pressure valve
   when a sprint splits — renumbering is forbidden once files exist.
 
 ## Sprint file format
