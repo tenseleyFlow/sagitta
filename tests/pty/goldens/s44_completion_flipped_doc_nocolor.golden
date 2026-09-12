@@ -1,0 +1,76 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=18,9 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s14-s44_completio + 
+   17 alphaOne alphaTwo alphaThree alphaFour alphaFive
+   16 filler row
+   15 filler row
+   14 filler row
+   13 filler row
+   12 filler row
+   11 filler row
+   10 filler row
+    9 filler row
+    8 filler row
+    7 filler row
+    6 filler row
+    5 filler row
+    4 filler row
+    3 filler row
+    2 filler row
+    1 filler row
+   18 alp
+    1 +--------------------------------------------------------++--------------------------+
+      |w alphaOne                                              ||(no documentation)        |
+      +--------------------------------------------------------++--------------------------+
+      1 of 5   index
+ I no ready LSP server for this buffer; using index completion
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCC
+CCCBBCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCAADDDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCC
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=------r---
+B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=b-----r---
+--- sgr
+\x1b[0;7m
+\x1b[1;27m
+\x1b[22m
+\x1b[1m
+\x1b[22m
+\x1b[1m
+\x1b[22m
+\x1b[0m
+\x1b[1m
+\x1b[22m
+\x1b[7m
+\x1b[1m
+\x1b[22m
+\x1b[27m
+\x1b[1m
+\x1b[22m
+\x1b[0m

@@ -1,0 +1,78 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=1,13 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s14-s43_shadow_in + 
+ s  1 anchorXsymbol_index field
+ s    index overlay two
+ s    index overlay three
+ s    index overlay four
+    1 real row two
+    2 real row three
+    3 real row four
+    4 real row five
+    5 real row six
+    6 real row seven
+    7 real row eight
+    8 real row nine
+    9
+
+
+
+
+
+
+
+
+
+ I  pty-s14-s43_shadow_index_nocolor.txt *                   utf-8  lf  1:8  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBB
+CDCCBCCCCCCCCDDDDDDDDDDDDDDDDDD
+CDCCCCDDDDDDDDDDDDDDDDD
+CDCCCCDDDDDDDDDDDDDDDDDDD
+CDCCCCDDDDDDDDDDDDDDDDDD
+CCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCC
+CCCCC
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=------r---
+B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=-d--------
+--- sgr
+\x1b[0;7m
+\x1b[1;27m
+\x1b[22m
+\x1b[1m
+\x1b[22m
+\x1b[1m
+\x1b[22m
+\x1b[0;2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[2m
+\x1b[22m
+\x1b[1m
+\x1b[22m

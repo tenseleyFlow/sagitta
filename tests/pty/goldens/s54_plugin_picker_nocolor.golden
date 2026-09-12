@@ -1,0 +1,76 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=1,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 untitled  + 
+    1
+  Plugins 
+  / filter
+
+  ● picker-demo 1.2.3                               deterministic picker fixtu
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  1/1   enter toggle . r reload . i info . / filter . esc
+
+ L  [no name]                                                utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAABBB
+CCCCB
+CBBBBBBBBB
+CDDDDDDDDD
+
+CCAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDD
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=------r---
+B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=-d--------
+--- sgr
+\x1b[0;7m
+\x1b[1;27m
+\x1b[22m
+\x1b[1m
+\x1b[22m
+\x1b[1m
+\x1b[22m
+\x1b[0;1m
+\x1b[0;1;2m
+\x1b[22m
+\x1b[0;1m
+\x1b[22;2m
+\x1b[22;7m
+\x1b[2;27m
+\x1b[22m
+\x1b[1m
+\x1b[22m

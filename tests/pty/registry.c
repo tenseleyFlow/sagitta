@@ -7458,7 +7458,10 @@ static void case_lsp_diag_picker(PtyCtx *c)
                      s43_screen_contains(&c->vt, "warning diagnostic") &&
                      s43_screen_contains(&c->vt, "hint diagnostic"),
               "diagnostic picker omitted its chrome or sorted rows");
-    ptc_snapshot(c, "lsp_diag_picker");
+    if (strstr(c->test->name, "_nocolor") != NULL)
+        ptc_snapshot_sgr(c, c->test->name);
+    else
+        ptc_snapshot(c, "lsp_diag_picker");
     quit_cleanly(c);
 }
 
@@ -9470,7 +9473,10 @@ static void case_s54_plugin_picker(PtyCtx *c)
 {
     if (!s54_plugin_picker_open(c))
         return;
-    ptc_snapshot(c, "s54_plugin_picker");
+    if (strstr(c->test->name, "_nocolor") != NULL)
+        ptc_snapshot_sgr(c, c->test->name);
+    else
+        ptc_snapshot(c, "s54_plugin_picker");
     force_quit(c);
 }
 
@@ -9656,6 +9662,8 @@ const PtyCase yew_pty_cases[] = {
     C(s54_capability_deny_always, modern, 24U, 80U,
       case_s54_capability_deny_always),
     C(s54_plugin_picker, modern, 24U, 80U, case_s54_plugin_picker),
+    C(s54_plugin_picker_nocolor, modern, 24U, 80U,
+      case_s54_plugin_picker),
     C(s54_plugin_toggle, modern, 24U, 80U, case_s54_plugin_toggle),
 #endif
     C(startup_multiple_files, modern, 24U, 80U,
@@ -9816,10 +9824,14 @@ const PtyCase yew_pty_cases[] = {
     C(lsp_diag_hint_restore, modern, 24U, 80U,
       case_lsp_diag_hint_restore),
     C(lsp_diag_picker, modern, 24U, 80U, case_lsp_diag_picker),
+    C(lsp_diag_picker_nocolor, modern, 24U, 80U,
+      case_lsp_diag_picker),
 #endif
     C(s44_completion_below, modern, 24U, 80U,
       case_s44_completion_below),
     C(s44_completion_flipped_doc, modern, 24U, 100U,
+      case_s44_completion_flipped_doc),
+    C(s44_completion_flipped_doc_nocolor, modern, 24U, 100U,
       case_s44_completion_flipped_doc),
     C(s44_completion_right_edge, modern, 16U, 32U,
       case_s44_completion_right_edge),
@@ -9828,6 +9840,8 @@ const PtyCase yew_pty_cases[] = {
     C(s43_shadow_index_colors_256, modern, 24U, 80U,
       case_s43_shadow_provenance),
     C(s43_shadow_index_colors_16, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_index_nocolor, modern, 24U, 80U,
       case_s43_shadow_provenance),
     C(s43_shadow_lsp_truecolor, modern, 24U, 80U,
       case_s43_shadow_provenance),
