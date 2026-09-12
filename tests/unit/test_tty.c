@@ -207,6 +207,79 @@ void test_tty_restore_blob(void)
     YEW_ASSERT_EQ_MEM(actual, expected, sizeof(expected) - 1U);
 }
 
+/*
+ * Sprint 57.11 §1: mode 1003 is armed only while a context menu is open,
+ * and invariant 6 says whatever was armed must be disarmed by every
+ * teardown path.  The restore blob is the one sequence all of them write
+ * — normal restore, atexit, the fatal-signal and SIGTSTP handlers, and
+ * the guard sibling — so pinning the blob pins them all: 1003l rides in
+ * it exactly when the flag is set, and the rest of the bytes do not move.
+ */
+void test_tty_mouse_motion_restore_blob(void)
+{
+    static const u8 armed[] =
+        "\x1b[<u"
+        "\x1b[?2004l"
+        "\x1b[?1003l"
+        "\x1b[?1002l"
+        "\x1b[?1006l"
+        "\x1b[?1004l"
+        "\x1b[?2026l"
+        "\x1b[0m"
+        "\x1b[0 q"
+        "\x1b[?1049l"
+        "\x1b[?25h";
+    static const u8 idle[] =
+        "\x1b[<u"
+        "\x1b[?2004l"
+        "\x1b[?1002l"
+        "\x1b[?1006l"
+        "\x1b[?1004l"
+        "\x1b[?2026l"
+        "\x1b[0m"
+        "\x1b[0 q"
+        "\x1b[?1049l"
+        "\x1b[?25h";
+    const u8 *actual;
+    size_t len;
+
+    /* Disarmed is the resting state, and the blob is the Sprint 4 one. */
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    actual = yew_tty_restore_blob(&len);
+    YEW_ASSERT_NOT_NULL(actual);
+    YEW_ASSERT_EQ_U64(len, sizeof(idle) - 1U);
+    YEW_ASSERT_EQ_MEM(actual, idle, sizeof(idle) - 1U);
+
+    yew_tty_mouse_motion(true);
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    actual = yew_tty_restore_blob(&len);
+    YEW_ASSERT_EQ_U64(len, sizeof(armed) - 1U);
+    YEW_ASSERT_EQ_MEM(actual, armed, sizeof(armed) - 1U);
+
+    /* Idempotent: arming twice is arming once.  The router opens a menu
+     * over an open menu (close-and-reopen) and must not be made to
+     * count. */
+    yew_tty_mouse_motion(true);
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    actual = yew_tty_restore_blob(&len);
+    YEW_ASSERT_EQ_U64(len, sizeof(armed) - 1U);
+    YEW_ASSERT_EQ_MEM(actual, armed, sizeof(armed) - 1U);
+
+    yew_tty_mouse_motion(false);
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    actual = yew_tty_restore_blob(&len);
+    YEW_ASSERT_EQ_U64(len, sizeof(idle) - 1U);
+    YEW_ASSERT_EQ_MEM(actual, idle, sizeof(idle) - 1U);
+
+    /* And disarming twice, which ed.mouse.disable does to a session that
+     * never opened a menu at all. */
+    yew_tty_mouse_motion(false);
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    actual = yew_tty_restore_blob(&len);
+    YEW_ASSERT_EQ_U64(len, sizeof(idle) - 1U);
+    YEW_ASSERT_EQ_MEM(actual, idle, sizeof(idle) - 1U);
+}
+
 void test_tty_poison_marks_terminal_unusable(void)
 {
     Tty t;
