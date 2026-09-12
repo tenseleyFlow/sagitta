@@ -756,6 +756,14 @@ void test_ctxmenu_width_clamp_drops_accels_before_clipping_labels(void)
     YEW_ASSERT(yew_ctx_show(0U, 0U, (Rect){0U, 0U, 24U, 20U}));
     YEW_ASSERT(yew_ctx_accels_hidden());
     YEW_ASSERT_EQ_U64(yew_ctx_box().w, 24U);
+
+    /* A menu with no accelerators at all, squeezed the same way, has
+     * hidden nothing — the seam says what it means. */
+    yew_ctx_begin((u32)YEW_CTX_KIND_TAB);
+    yew_ctx_item("Absolutely Enormous Label Here", NULL, CX_A, true, 0U);
+    YEW_ASSERT(yew_ctx_show(0U, 0U, (Rect){0U, 0U, 24U, 20U}));
+    YEW_ASSERT(!yew_ctx_accels_hidden());
+    YEW_ASSERT_EQ_U64(yew_ctx_box().w, 24U);
     yew_ctx_close();
 }
 

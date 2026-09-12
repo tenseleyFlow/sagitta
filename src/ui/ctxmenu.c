@@ -306,10 +306,13 @@ bool yew_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
      */
     w = box_width_for(widest_row(true));
     if (w > allowed.w) {
-        ctx.accels_hidden = true;
-        w = box_width_for(widest_row(false));
-        if (w > allowed.w)
-            w = allowed.w;
+        u16 bare = box_width_for(widest_row(false));
+
+        /* Only claim the column was dropped when dropping it actually
+         * bought a cell: a menu with no accelerators at all, squeezed
+         * by a narrow rectangle, has not hidden anything. */
+        ctx.accels_hidden = bare < w;
+        w = bare > allowed.w ? allowed.w : bare;
     }
     /*
      * CLAMP, NEVER FLIP.  Sliding the box back inside `allowed` keeps
