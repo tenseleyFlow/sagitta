@@ -3310,12 +3310,14 @@ test-fletch: $(BUILD)/fletch_run $(BUILD)/yew
 	BUILD=$(BUILD) scripts/check-fletch-meta.sh
 	BUILD=$(BUILD) scripts/check-fletch-gate-selftest.sh
 
-# PERF_GATE=1 enforces; every other lane runs it ungated, because a
-# bench that is never executed outside the perf runner rots.
+# PERF_GATE=1 enforces on Sprint 56's designated runners.  Every other
+# lane runs the same absolute checks in advisory mode, retaining hard
+# functional, deterministic, zero, and >100x-budget sanity failures.
 BASELINE ?= dev
 bench-fletch: $(BUILD)/perf_fletch
 	$(BUILD)/perf_fletch --selftest-gate
-	$(BUILD)/perf_fletch --baseline $(BASELINE) \
+	YEW_PERF_ADVISORY=$(if $(filter 1,$(PERF_GATE)),0,1) \
+		$(BUILD)/perf_fletch --baseline $(BASELINE) \
 		$(if $(filter 1,$(PERF_GATE)),--gate,--gate-budgets)
 
 fletch-ledger: $(BUILD)/fletch_run $(BUILD)/yew

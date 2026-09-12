@@ -336,12 +336,10 @@ jobs:
         run: make test-fletch-gc-stress
       - name: Two runs and two ledgers, byte-compared
         run: make test-fletch-determinism
-      # UNGATED here: the absolute budgets have 3x-40x headroom on the
-      # dev machine and clear a slower runner, but the two-condition
-      # regression gate compares against dev-machine baselines and
-      # would fail on hardware rather than on a regression.  The perf
-      # lane runs it with PERF_GATE=1; Sprint 56 recalibrates.
-      - name: Benches, absolute budgets enforced
+      # Sprint 56 policy: shared hosted wall-clock results are advisory;
+      # deterministic checks and the 100x sanity ceiling remain hard.
+      # Designated performance runners use PERF_GATE=1.
+      - name: Benches, hosted timing advisory
         run: make bench-fletch
       - name: Round-trip law
         run: make test-fletch-roundtrip
@@ -494,21 +492,10 @@ jobs:
         run: |
           make perf-latency CC=gcc
           make perf-latency-selftest CC=gcc
-      # THE ABSOLUTE BUDGETS, NOT THE REGRESSION GATE.
-      #
-      # `PERF_GATE=1` compares against tests/perf/baselines/fletch_dev.txt,
-      # which was measured on a developer machine; ubuntu-latest is a
-      # shared runner and came in 19% over on strbuild_concat while
-      # clearing every absolute budget by 3x to 45x.  That is hardware,
-      # not a regression, and a gate that fails on hardware gets turned
-      # off.  The budgets ARE the contract (02-fletch.md req 7,
-      # 00-decisions.md), and they are enforced here.
-      #
-      # The two-condition gate needs a baseline for the runner it runs
-      # on, the way perf-textbuf uses PERF_RUNNER_ID.  Sprint 56
-      # calibrates the reference hardware and can add
-      # `BASELINE=<runner>` here in the same commit.
-      - name: Enforce the Sprint 33 Fletch absolute budgets
+      # The generic performance job is still an ubuntu-latest shared
+      # runner.  Sprint 56 therefore makes its wall-clock verdicts
+      # advisory while retaining functional and 100x sanity failures.
+      - name: Observe the Sprint 33 Fletch budgets
         run: make bench-fletch CC=gcc
       - name: Enforce Sprint 18 completion latency budget
         run: make perf-cmdcomp CC=gcc

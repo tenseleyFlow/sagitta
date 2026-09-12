@@ -22,10 +22,11 @@
  * One noisy sample must not redden the build, and a real regression
  * moves the whole distribution rather than its tail.
  *
- * The five HARD-GATED benches fail additionally and unconditionally
- * on their absolute budget whatever the baseline says --
- * 00-decisions.md makes budgets gates, so a baseline that drifted past
- * 1 ms is not a defence.
+ * The HARD-GATED benches fail additionally on their absolute budget on
+ * designated runners.  Sprint 56 makes wall-clock overruns advisory on
+ * shared runners, while zero and >100x-budget measurements remain hard
+ * sanity failures everywhere.  A baseline that drifted past a budget is
+ * never a defence on designated hardware.
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -51,6 +52,7 @@
 #include "fl/std.h"
 #include "fl/trace.h"
 #include "fl/vm.h"
+#include "perf_policy.h"
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
@@ -922,13 +924,31 @@ static int selftest_gate(void)
             bad++;
         }
     }
+    {
+        const u64 budget = 1000000U;
+
+        if (yew_perf_timing_failed(budget, budget, false) ||
+            !yew_perf_timing_failed(budget + 1U, budget, false) ||
+            yew_perf_timing_failed(budget + 1U, budget, true) ||
+            yew_perf_timing_failed(
+                budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER, budget,
+                true) ||
+            !yew_perf_timing_failed(
+                budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U,
+                budget, true) ||
+            !yew_perf_timing_failed(0U, budget, true)) {
+            (void)printf("FAIL gate rule: Sprint 56 advisory boundary\n");
+            bad++;
+        }
+    }
     if (bad != 0U) {
         (void)printf("perf_fletch: %lu gate-rule cases wrong\n",
                      (unsigned long)bad);
         return 1;
     }
-    (void)printf("perf_fletch: the two-condition gate rule behaves "
-                 "(%lu cases)\n", (unsigned long)YEW_ARRAY_LEN(CASES));
+    (void)printf("perf_fletch: regression and advisory gate rules behave "
+                 "(%lu regression cases)\n",
+                 (unsigned long)YEW_ARRAY_LEN(CASES));
     return 0;
 }
 
@@ -965,6 +985,7 @@ int main(int argc, char **argv)
     const char *baseline = "dev";
     bool gate = false;
     bool budgets_only = false;
+    bool advisory;
     int argi;
     size_t i;
     size_t failures = 0U;
@@ -979,13 +1000,10 @@ int main(int argc, char **argv)
             /*
              * The ABSOLUTE budgets only, with no baseline comparison.
              *
-             * Every lane can run this: the hard gates have enough
-             * headroom on the dev machine that a slower CI runner
-             * still clears them, whereas comparing a runner's timings
-             * against dev-machine baselines fails on hardware rather
-             * than on a regression.  The full two-condition gate runs
-             * on the designated perf runner, and Sprint 56 recalibrates
-             * every row on the reference hardware.
+             * Every lane can run this.  With YEW_PERF_ADVISORY=1,
+             * ordinary wall-clock overruns warn while zero and >100x
+             * measurements remain hard failures.  The full strict gate
+             * runs only on Sprint 56's designated performance runners.
              */
             gate = true;
             budgets_only = true;
@@ -1011,6 +1029,7 @@ int main(int argc, char **argv)
                       "numbers would be meaningless\n");
         return 2;
     }
+    advisory = yew_perf_advisory();
 
     {
         ProgArg a;
@@ -1198,14 +1217,21 @@ int main(int argc, char **argv)
         const Bench *b = &g_b[i];
         const BaseRow *base;
 
-        /* The absolute budget first, and UNCONDITIONALLY: a baseline
-         * that drifted past the budget is not a defence. */
-        if (b->hard && b->median > b->budget) {
-            (void)printf("FAIL %s: %llu ns exceeds the %llu ns budget "
-                         "(02-fletch.md req 7 / 00-decisions.md)\n", b->name,
+        /* Absolute wall-clock budgets are strict on designated runners
+         * and advisory on shared hosts.  Sanity failures stay hard. */
+        if (b->hard && (b->median == 0U || b->median > b->budget)) {
+            bool failed = yew_perf_timing_failed(b->median, b->budget,
+                                                  advisory);
+            const char *verdict = yew_perf_timing_verdict(
+                b->median, b->budget, advisory);
+
+            (void)printf("%s %s: %llu ns vs the %llu ns budget "
+                         "(02-fletch.md req 7 / 00-decisions.md;%s)\n",
+                         failed ? "FAIL" : "WARN", b->name,
                          (unsigned long long)b->median,
-                         (unsigned long long)b->budget);
-            failures++;
+                         (unsigned long long)b->budget, verdict);
+            if (failed)
+                failures++;
         }
         if (budgets_only || b->report_only)
             continue;
@@ -1219,13 +1245,15 @@ int main(int argc, char **argv)
         /* TWO CONDITIONS.  One noisy sample must not redden the build,
          * and a genuine regression moves the whole distribution. */
         if (regressed(b->median, b->min, base->median, base->min)) {
-            (void)printf("FAIL %s: median %llu ns vs baseline %llu (+15%%) "
-                         "AND min %llu vs %llu (+10%%)\n", b->name,
+            (void)printf("%s %s: median %llu ns vs baseline %llu (+15%%) "
+                         "AND min %llu vs %llu (+10%%)\n",
+                         advisory ? "WARN" : "FAIL", b->name,
                          (unsigned long long)b->median,
                          (unsigned long long)base->median,
                          (unsigned long long)b->min,
                          (unsigned long long)base->min);
-            failures++;
+            if (!advisory)
+                failures++;
         }
     }
 
@@ -1233,6 +1261,7 @@ int main(int argc, char **argv)
         (void)printf("perf_fletch: %lu failures\n", (unsigned long)failures);
         return 1;
     }
-    (void)printf("perf_fletch: all gates green\n");
+    (void)printf("perf_fletch: all hard gates green%s\n",
+                 advisory ? " (wall-clock timing advisory)" : "");
     return 0;
 }

@@ -18,17 +18,18 @@
 #
 # The two-condition regression gate (median +15% AND min +10%) is
 # therefore only meaningful on hardware like this one, and runs on the
-# designated perf runner.  EVERY OTHER LANE runs --gate-budgets, which
-# enforces the absolute budgets and nothing else — they have enough
-# headroom here for the designated CI class to clear them.
+# designated perf runner.  EVERY OTHER LANE runs --gate-budgets under
+# Sprint 56's advisory policy: ordinary wall-clock overruns warn, while
+# zero and >100x-budget sanity failures remain hard.
 #
 # Sprint 56 re-calibrates every row on the reference hardware.  The
-# gate mechanism does not change, only the numbers.
+# gate keeps these developer baselines for compatibility; designated
+# Sprint 56 runners carry the authoritative calibrated verdicts.
 #
 # MEASURED: ubuntu-latest came in 19% over this file on
 # strbuild_concat while clearing every absolute budget by 3x to 45x.
-# That is why CI runs --gate-budgets and why the relative gate needs a
-# per-runner baseline file, the way perf-textbuf uses PERF_RUNNER_ID.
+# That is why hosted CI runs --gate-budgets in advisory mode and why a
+# strict relative gate requires a designated, per-runner baseline.
 # ---------------------------------------------------------------------
 #
 # The seven hard-gated rows and their budgets:
