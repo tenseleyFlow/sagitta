@@ -2,15 +2,14 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-011`
+Next available ID: `YEW-F-014`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
 the historical row and body.
 
-All eight findings filed against the original baseline remain reproducible as
-hard XFAILs after the replacement-baseline requalification recorded in
-`audit-00.md`.
+All findings remain reproducible as hard XFAILs at the applicable baseline
+recorded in `audit-00.md`.
 
 | ID | Sev | Status | Front | Title | Reproducer | Violates |
 |---|---|---|---|---|---|---|
@@ -24,6 +23,9 @@ hard XFAILs after the replacement-baseline requalification recorded in
 | YEW-F-008 | H | open | F08 FL | unprivileged plugin macro replay inherits config authority | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 | YEW-F-009 | M | open | F09 REC | recorder folding self-test no longer reaches its injected fault | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
 | YEW-F-010 | M | open | F09 REC | macro store accepts source that fails on first replay | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
+| YEW-F-011 | M | open | F10 SYN | matching source metadata can retain stale syntax tables | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
+| YEW-F-012 | M | open | F10 SYN | pending embeds occupy a canonical state tail slot | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
+| YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -113,6 +115,33 @@ reproducer stores a macro that inserts text and then calls a missing function;
 store succeeds, replay returns `YEW_CMD_ERR_STATE`, and the buffer remains
 unchanged. It remains open for Sprint 59; no product source changed during
 the audit.
+
+`YEW-F-011` is Medium because an equal-size syntax source replacement whose
+nanosecond mtime is restored can retain the old compiled table. Highlighting
+is stale but recoverable, and document bytes remain intact. The cache header
+records the source hash as the authority, but `yew_syn_def_load` accepts an
+in-memory entry on matching size and mtime before hashing the source. The
+reproducer installs an isolated builtin-shaped `runtime/syntax/ini.fl`, loads
+an `x` rule, replaces it with an equal-size `y` rule, restores the exact
+timestamp, and observes zero recompiles plus the stale `x` rule. It remains
+open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-012` is Medium because the documented canonical state law and the
+pending-embed mechanism disagree, weakening the promised equality and cache
+invariants and potentially retaining an otherwise unreachable definition.
+Before JavaScript is resident, an HTML `<script>` opener leaves `ndef == 1`
+while storing the pending definition in `aux[1]`; `syn_state_canon`
+deliberately preserves that future slot even though Sprint 41.5 requires every
+tail slot from `ndef` onward to be zero. The isolated reproducer records the
+exact state without changing product behavior. It remains open for Sprint 59.
+
+`YEW-F-013` is Medium because the release-control fixture required by Sprint
+42 is absent: the JS and TypeScript known-wrong golden rows use an identifier
+named `knownWrong`, but neither fixture contains the required adjacent comment
+naming the value-flag heuristic. Descriptions elsewhere do not satisfy the
+fixture-local documentation contract, so future reviewers cannot distinguish
+intentional heuristic debt from a regression at the point of evidence. It
+remains open for Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 

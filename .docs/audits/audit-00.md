@@ -7,7 +7,7 @@ Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: ACTIVE AT F10.**
+**Campaign status: ACTIVE AT F11.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -139,7 +139,7 @@ zero until its report closes; silence never counts as evidence.
 | F07 UI/workspace | `audit-07-ui.md` | closed | 2 | 2 | 2 | 0 | 0 | 0 | 1 |
 | F08 Fletch | `audit-08-fletch.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
 | F09 recorder | `audit-09-recorder.md` | closed | 2 | 2 | 0 | 0 | 2 | 0 | 1 |
-| F10 syntax | `audit-10-syntax.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F10 syntax | `audit-10-syntax.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 1 |
 | F11 LSP | `audit-11-lsp.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F12 AI | `audit-12-ai.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F13 git/FUSS | `audit-13-git.md` | pending | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -148,7 +148,7 @@ zero until its report closes; silence never counts as evidence.
 
 ## Verdict
 
-We are not ready to tag: F01 through F09 of Sprint 58's fifteen fronts have
+We are not ready to tag: F01 through F10 of Sprint 58's fifteen fronts have
 closed, the invariant sweep has not run, and no campaign-wide
 absence-of-findings claim has been earned. F06 adds an open High finding
 (`YEW-F-005`), while closed F07 records two open Critical workspace-state
@@ -166,5 +166,14 @@ F09 adds two open Medium findings. `YEW-F-009` records that generator growth
 invalidated the pinned recorder fault seed, so the shrinker self-test exits
 before injection. `YEW-F-010` records that macro store accepts source whose
 unresolved global makes first replay fail; replay rollback still preserves
-document bytes. F10 through F15 remain open, and the exact cross-target
-emitted-source artifact comparison is F09's one unverified observation.
+document bytes. The exact cross-target emitted-source artifact comparison is
+F09's one unverified observation.
+
+F10 adds three open Medium findings. `YEW-F-011` records that matching source
+size and nanosecond mtime can bypass the authoritative syntax-source hash.
+`YEW-F-012` records the pending-embed mechanism's conflict with the canonical
+zero-tail state law. `YEW-F-013` records that the JS/TS known-wrong fixtures
+lack their required heuristic comment. The product-code baseline remains
+immutable. Tutor `NO_COLOR` behavior is F10's one unverified observation
+because that Sprint 59 surface does not yet exist. F11 through F15 remain
+open.
