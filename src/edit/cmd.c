@@ -484,6 +484,11 @@ static const CmdDesc builtins[] = {
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
      "Delete the active selections", "sel_delete"},
+    {"ed.sel.cut", yew_sel_cmd_cut, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Yank the active selections to the clipboard, then delete them",
+     "cut"},
     {"ed.sel.change", yew_sel_cmd_change, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
@@ -1322,7 +1327,9 @@ static bool command_name_valid(const char *name)
         /* Sprint 56: in-loop profiler report and raw data surfaces. */
         "report", "dump", "frames", "mark",
         /* Sprint 57.10: row-1 numbered jump from inside a group. */
-        "goto_bar"};
+        "goto_bar",
+        /* Sprint 57.11 §4: the context-menu row commands. */
+        "cut"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

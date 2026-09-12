@@ -62,6 +62,9 @@ static const BindRow keys_H[] = {
     {"C-v", "ed.clip.paste", 0, NULL},
     {"y", "ed.sel.yank", 0, NULL},
     {"d", "ed.sel.delete", 0, NULL},
+    /* Sprint 57.11 §4: cut.  `x` was free in H -- L mode spends it on
+     * ed.edit.delete.grapheme, which H has no use for. */
+    {"x", "ed.sel.cut", 0, NULL},
     {"<del>", "ed.sel.delete", 0, NULL},
     {"c", "ed.sel.change", 0, NULL},
     {"U", "ed.sel.case_upper", 0, NULL},

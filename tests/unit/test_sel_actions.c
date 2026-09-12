@@ -865,3 +865,90 @@ void test_sel_actions_delete_hands_the_journal_to_the_buffer(void)
     free(saved_copy);
     (void)unlink(source);
 }
+
+/*
+ * Sprint 57.11 §4: cut is yank-then-delete.
+ *
+ * Pinned as both halves, because a "cut" that forgot either one is a
+ * data-loss bug in one direction and a silent no-op in the other.
+ */
+void test_sel_actions_cut_yanks_to_clipboard_then_deletes(void)
+{
+    static const u8 bytes[] = "alpha beta";
+    SelActionFixture f;
+    RegVal *unnamed;
+    RegVal *clip;
+
+    fixture_init(&f, bytes, sizeof(bytes) - 1U);
+    set_selection(&f, YEW_SEL_CHAR, 0U, 6U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.sel.cut", NULL, 0U),
+                      YEW_CMD_OK);
+    assert_text(&f, (const u8 *)"beta", 4U);
+    unnamed = yew_reg_get(&f.ed.regs, '"');
+    YEW_ASSERT_NOT_NULL(unnamed);
+    YEW_ASSERT_EQ_U64(unnamed->type, YEW_REG_CHARWISE);
+    YEW_ASSERT_EQ_U64(unnamed->bytes.len, 6U);
+    YEW_ASSERT_EQ_MEM(unnamed->bytes.data, "alpha ", 6U);
+    clip = yew_reg_get(&f.ed.regs, '+');
+    YEW_ASSERT_NOT_NULL(clip);
+    YEW_ASSERT_EQ_U64(clip->bytes.len, 6U);
+    YEW_ASSERT_EQ_MEM(clip->bytes.data, "alpha ", 6U);
+    YEW_ASSERT_EQ_U64(f.ed.win->cs.curs.data[0].pos.v, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    fixture_free(&f);
+}
+
+void test_sel_actions_cut_line_and_rect_keep_their_register_geometry(void)
+{
+    SelActionFixture f;
+    RegVal *unnamed;
+    RegVal *clip;
+
+    fixture_init(&f, (const u8 *)"aa\nbb\ncc\n", 9U);
+    set_selection(&f, YEW_SEL_LINE, 3U, 4U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.sel.cut", NULL, 0U),
+                      YEW_CMD_OK);
+    assert_text(&f, (const u8 *)"aa\ncc\n", 6U);
+    unnamed = yew_reg_get(&f.ed.regs, '"');
+    YEW_ASSERT_EQ_U64(unnamed->type, YEW_REG_LINEWISE);
+    YEW_ASSERT_EQ_MEM(unnamed->bytes.data, "bb\n", 3U);
+    fixture_free(&f);
+
+    /* Rectangular cut goes through the rect helpers, so the clipboard
+     * copy is row-shaped exactly like ed.sel.delete's. */
+    fixture_init(&f, (const u8 *)"ab\ncd\nef", 8U);
+    set_selection(&f, YEW_SEL_RECT, 1U, 8U);
+    YEW_ASSERT_EQ_U64(invoke_registered(&f, "ed.sel.cut", NULL, 0U),
+                      YEW_CMD_OK);
+    assert_text(&f, (const u8 *)"a\nc\ne", 5U);
+    clip = yew_reg_get(&f.ed.regs, '+');
+    YEW_ASSERT_EQ_U64(clip->type, YEW_REG_BLOCKWISE);
+    YEW_ASSERT_EQ_U64(clip->rows.len, 3U);
+    YEW_ASSERT_EQ_U64(clip->width, 1U);
+    YEW_ASSERT_EQ_MEM(clip->bytes.data, "bdf", 3U);
+    unnamed = yew_reg_get(&f.ed.regs, '"');
+    YEW_ASSERT_EQ_U64(unnamed->type, YEW_REG_BLOCKWISE);
+    YEW_ASSERT_EQ_U64(unnamed->rows.len, 3U);
+    fixture_free(&f);
+}
+
+/* Invariant 9: the row has a key.  `x` in H mode reaches the command. */
+void test_sel_actions_cut_is_bound_to_x_in_highlight_mode(void)
+{
+    SelActionFixture f;
+    Key key = {0};
+
+    fixture_init(&f, (const u8 *)"alpha beta", 10U);
+    set_selection(&f, YEW_SEL_CHAR, 0U, 6U);
+    key.code = (u32)'x';
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.ntext = 1U;
+    key.text[0] = (u8)'x';
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    yew_dispatch_key(&f.ed, key, 0);
+    YEW_ASSERT_EQ_U64(f.ed.last_status, YEW_CMD_OK);
+    assert_text(&f, (const u8 *)"beta", 4U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    fixture_free(&f);
+}

@@ -411,6 +411,41 @@ CmdStatus yew_sel_cmd_delete(CmdCtx *cx)
     return delete_or_change(cx, false, 0U);
 }
 
+/*
+ * Sprint 57.11 §4: the `Cut` menu row, and H-mode `x`.
+ *
+ * Cut is exactly yank-then-delete, in that order, and it is written as
+ * those two steps rather than as a third capture path: a bespoke
+ * "capture and remove" would be a second place that has to agree with
+ * capture_selection about rectangular rows, ragged widths and raw
+ * bytes, and the first time the two disagreed the user would lose the
+ * text (invariants 1 and 2).
+ *
+ * The explicit `+` is what `ed.tab.copy_path` uses: yew_reg_yank fills
+ * the system register and the unnamed `"` from one value, so the cut
+ * text reaches the clipboard AND the register the paste command reads.
+ * delete_or_change then runs its own capture and calls yew_reg_delete,
+ * which rewrites `"` with the identical bytes -- the same value twice,
+ * never a different one.
+ */
+CmdStatus yew_sel_cmd_cut(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    RegVal value;
+
+    if (!action_context(cx, &win, &tb, &cursor))
+        return YEW_CMD_ERR_STATE;
+    (void)tb;
+    (void)cursor;
+    yew_regval_init(&value);
+    capture_selection(&value, win);
+    yew_reg_yank(&cx->ed->regs, (u8)'+', &value);
+    yew_regval_free(&value);
+    return delete_or_change(cx, false);
+}
+
 CmdStatus yew_sel_cmd_change(CmdCtx *cx)
 {
     return delete_or_change(cx, true, 0U);
