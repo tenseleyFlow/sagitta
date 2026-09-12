@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-074`
+Next available ID: `YEW-F-076`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -86,6 +86,8 @@ recorded in `audit-00.md`.
 | YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
 | YEW-F-073 | M | open | F15 CI | baseline history policy is not enforced | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
+| YEW-F-074 | H | open | F15 CI | Darwin shipping clean rebuilds differ by Mach-O UUID | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
+| YEW-F-075 | C | open | F15 CI | stripped builds accept module-only config as inert state | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -533,6 +535,27 @@ message or numerical diff, so an isolated baseline-only commit titled
 found many modified baseline commits without the required old-to-new record;
 the exact table is retained in `audit-15-ci.md`. The control finding remains
 open for Sprint 59.
+
+`YEW-F-074` is High because invariant 5 requires byte-identical builds and
+all four single-module profiles (`lsp`, `ai`, `fuss`, `plugins`) produced
+different SHA-256 hashes across consecutive clean builds of the fixed product
+baseline on arm64 macOS. The unstripped binary embeds changing object
+timestamps; after `strip -S`, the remaining delta is `LC_UUID` plus the
+ad-hoc signature derived from it. Rebuilding and stripping twice with
+`-Wl,-no_uuid` produced the same hash
+`99d3e903f772158f0c7903b9cdb98d52a8d762703be492c2e3febc69d14bd031`.
+This is nondeterministic release output and therefore High under the rubric.
+It remains open for Sprint 59/60; no product or build fix landed in the audit.
+
+`YEW-F-075` is Critical because the `MODULES=""` build accepts writes to
+`ai.enable`, `lsp.open_in`, and `git.ascii_glyphs` even though their modules
+are absent; their stored values cannot activate the excluded behavior.
+Plugin-only options take the other inconsistent path and report generic
+`unknown option` rather than the canonical module refusal. F15 q7 explicitly
+requires canonical hard errors on the config-key surface, and the severity
+rubric classifies a user-reachable silent stub as Critical. One option table
+without module ownership is the shared root cause. The finding remains open
+for Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 
