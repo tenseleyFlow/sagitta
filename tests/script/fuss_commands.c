@@ -17,6 +17,7 @@
 #include "edit/loop.h"
 #include "edit/mode.h"
 #include "mod/git/fussmode.h"
+#include "mod/git/fusstree.h"
 #include "mod/git/git_int.h"
 
 typedef struct Bytes {
@@ -42,6 +43,10 @@ static u32 next_job_id = 8000U;
 
 static bool setup_repo(const char *repo);
 static bool enter_fuss(const char *repo, Ed *ed);
+static bool child_repo_path(const char *parent, const char *name,
+                            char *path, size_t path_size);
+static CmdStatus invoke_active_real(const char *repo, const char *name,
+                                    const char *arg, SpawnCapture *capture);
 
 static bool isolate_git_environment(void)
 {
@@ -326,6 +331,38 @@ static bool write_repo_file(const char *repo, const char *path,
     return close(fd) == 0 && ok;
 }
 
+static bool index_blob_without_worktree_file(const char *repo,
+                                             const char *path)
+{
+    char *update_tail[] = {
+        (char *)"update-index", (char *)"--add", (char *)"--cacheinfo",
+        (char *)"100644", NULL, (char *)path, NULL
+    };
+    char *hash_argv[] = {
+        (char *)"git", (char *)"hash-object", (char *)"-w",
+        (char *)"--stdin", NULL
+    };
+    static const u8 contents[] = "matrix-before\n";
+    Bytes oid = {0};
+    Bytes ignored = {0};
+    int code = -1;
+    bool ok;
+
+    ok = run_process(repo, hash_argv, contents, sizeof(contents) - 1U,
+                     &oid, &code, false) && code == 0 && oid.len > 1U;
+    if (ok && oid.data[oid.len - 1U] == (u8)'\n') {
+        oid.len--;
+        oid.data[oid.len] = 0U;
+    }
+    if (ok) {
+        update_tail[4] = (char *)oid.data;
+        ok = run_git(repo, update_tail, &ignored, &code) && code == 0;
+    }
+    bytes_drop(&ignored);
+    bytes_drop(&oid);
+    return ok;
+}
+
 static bool child_repo_path(const char *parent, const char *name,
                             char *path, size_t path_size)
 {
@@ -405,6 +442,47 @@ static bool cached_path_is(const char *repo, const char *path, bool staged)
     return ok;
 }
 
+static bool z_paths_has(const Bytes *bytes, const char *path, size_t path_len)
+{
+    size_t at = 0U;
+
+    while (at < bytes->len) {
+        size_t end = at;
+
+        while (end < bytes->len && bytes->data[end] != 0U)
+            end++;
+        if (end - at == path_len &&
+            memcmp(bytes->data + at, path, path_len) == 0)
+            return true;
+        at = end + (end < bytes->len ? 1U : 0U);
+    }
+    return false;
+}
+
+static bool snapshot_has_path(const GitSnapshot *snap, const char *path,
+                              size_t path_len)
+{
+    size_t i;
+
+    for (i = 0U; i < snap->entries.len; i++)
+        if (snap->entries.data[i].path_len == path_len &&
+            memcmp(snap->entries.data[i].path, path, path_len) == 0)
+            return true;
+    return false;
+}
+
+static bool tree_has_path(const FussTree *tree, const char *path,
+                          size_t path_len)
+{
+    size_t i;
+
+    for (i = 0U; i < tree->nodes.len; i++)
+        if (tree->nodes.data[i].path_len == path_len &&
+            memcmp(tree->nodes.data[i].path, path, path_len) == 0)
+            return true;
+    return false;
+}
+
 static bool setup_repo(const char *repo)
 {
     char *init[] = {(char *)"init", (char *)"-q", (char *)"-b",
@@ -469,6 +547,160 @@ static void test_unstage_preserves_hostile_paths(const char *repo)
         CHECK(capture.literal_paths);
         CHECK(dash != SIZE_MAX && argv_index(&capture, paths[i]) > dash);
         CHECK(cached_path_is(repo, paths[i], false));
+        capture_drop(&capture);
+    }
+}
+
+static void test_f13_filename_matrix_roundtrips_every_git_surface(
+    const char *parent)
+{
+    static char invalid_name[] = {'a', (char)0x80, 'b', '\0'};
+    static const char *const names[] = {
+        "a b", "a\nb", "a\"b", "\xce\xb1", invalid_name
+    };
+    static char *const status_tail[] = {
+        (char *)"-c", (char *)"core.quotepath=false",
+        (char *)"-c", (char *)"status.renames=true",
+        (char *)"status", (char *)"--porcelain=v2", (char *)"--branch",
+        (char *)"-z", (char *)"--untracked-files=normal",
+        (char *)"--ignored=no", NULL
+    };
+    static char *const head_paths[] = {
+        (char *)"ls-tree", (char *)"-r", (char *)"-z",
+        (char *)"--name-only", (char *)"HEAD", NULL
+    };
+    char repo[4096];
+    GitSnapshot snap;
+    GitParseErr parse_err = {0};
+    FussOpts opts = {false, false};
+    FussTree tree;
+    Bytes status = {0};
+    Bytes committed = {0};
+    bool materialized[YEW_ARRAY_LEN(names)] = {false};
+    size_t i;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "f13-filename-matrix", repo,
+                          sizeof(repo)));
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        SpawnCapture capture = {0};
+        size_t dash;
+
+        materialized[i] = write_repo_file(repo, names[i],
+                                          "matrix-before\n");
+        CHECK(materialized[i] || i + 1U == YEW_ARRAY_LEN(names));
+        if (!materialized[i])
+            CHECK(index_blob_without_worktree_file(repo, names[i]));
+        CHECK(invoke_real(repo, "ed.git.stage", names[i],
+                          (u32)strlen(names[i]), &capture) == YEW_CMD_OK);
+        dash = argv_index(&capture, "--");
+        CHECK(capture.calls == 1U && capture.exit_code == 0);
+        CHECK(capture.literal_paths && dash != SIZE_MAX);
+        CHECK(argv_index(&capture, names[i]) > dash);
+        capture_drop(&capture);
+
+        (void)memset(&capture, 0, sizeof(capture));
+        if (!materialized[i])
+            CHECK(index_blob_without_worktree_file(repo, names[i]));
+        CHECK((materialized[i] ?
+               invoke_real(repo, "ed.git.unstage", names[i],
+                           (u32)strlen(names[i]), &capture) :
+               invoke_active_real(repo, "ed.git.unstage", names[i],
+                                  &capture)) == YEW_CMD_OK);
+        dash = argv_index(&capture, "--");
+        CHECK(capture.calls == 1U && capture.exit_code == 0);
+        CHECK(capture.literal_paths && dash != SIZE_MAX);
+        CHECK(argv_index(&capture, names[i]) > dash);
+        capture_drop(&capture);
+
+        (void)memset(&capture, 0, sizeof(capture));
+        if (!materialized[i])
+            CHECK(index_blob_without_worktree_file(repo, names[i]));
+        CHECK(invoke_real(repo, "ed.git.stage", names[i],
+                          (u32)strlen(names[i]), &capture) == YEW_CMD_OK);
+        CHECK(capture.calls == 1U && capture.exit_code == 0);
+        capture_drop(&capture);
+        if (!materialized[i])
+            CHECK(index_blob_without_worktree_file(repo, names[i]));
+    }
+
+    CHECK(run_git(repo, status_tail, &status, &code) && code == 0);
+    yew_git_snapshot_init(&snap);
+    CHECK(yew_git_parse_status(&snap, status.data, (u64)status.len,
+                               &parse_err));
+    yew_fuss_tree_init(&tree);
+    yew_fuss_build(&tree, &snap, &opts);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        size_t len = strlen(names[i]);
+
+        CHECK(snapshot_has_path(&snap, names[i], len));
+        CHECK(tree_has_path(&tree, names[i], len));
+    }
+    yew_fuss_tree_drop(&tree);
+    yew_git_snapshot_drop(&snap);
+    bytes_drop(&status);
+
+    {
+        static const char message[] = "F13 filename matrix\n";
+        SpawnCapture capture = {0};
+        Buffer *commit;
+        bool handled = false;
+        Ed ed;
+
+        CHECK(enter_fuss(repo, &ed));
+        CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
+        commit = ed.win == NULL ? NULL : ed.win->buf;
+        CHECK(commit != NULL && commit->tb != NULL);
+        if (commit != NULL && commit->tb != NULL) {
+            yew_textbuf_delete(commit->tb,
+                               (Span){0U, yew_textbuf_len(commit->tb)});
+            yew_textbuf_insert(commit->tb, BYTEOFF(0U),
+                               (const u8 *)message, sizeof(message) - 1U);
+        }
+        capture.repo = repo;
+        yew_git_test_spawn_set(capture_and_run, &capture);
+        CHECK(yew_fuss_commit_save(&ed, commit, &handled) == YEW_CMD_OK);
+        yew_git_test_spawn_set(NULL, NULL);
+        CHECK(handled && capture.calls == 1U && capture.exit_code == 0);
+        capture_drop(&capture);
+        yew_ed_free(&ed);
+    }
+    CHECK(run_git(repo, head_paths, &committed, &code) && code == 0);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++)
+        CHECK(z_paths_has(&committed, names[i], strlen(names[i])));
+    bytes_drop(&committed);
+
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        static const char *const commands[] = {
+            "ed.git.diff", "ed.git.blame"
+        };
+        size_t j;
+
+        CHECK(!materialized[i] ||
+              write_repo_file(repo, names[i], "matrix-after\n"));
+        for (j = 0U; j < YEW_ARRAY_LEN(commands); j++) {
+            SpawnCapture capture = {0};
+            size_t dash;
+
+            CHECK(invoke_active_real(repo, commands[j], names[i],
+                                     &capture) == YEW_CMD_OK);
+            dash = argv_index(&capture, "--");
+            CHECK(capture.calls == 1U);
+            CHECK(capture.exit_code == 0 ||
+                  (!materialized[i] &&
+                   strcmp(commands[j], "ed.git.blame") == 0));
+            CHECK(capture.literal_paths && dash != SIZE_MAX);
+            CHECK(argv_index(&capture, names[i]) > dash);
+            capture_drop(&capture);
+        }
+    }
+    {
+        SpawnCapture capture = {0};
+
+        CHECK(invoke_active_real(repo, "ed.git.status", NULL, &capture) ==
+              YEW_CMD_OK);
+        CHECK(capture.calls == 1U && capture.exit_code == 0);
+        CHECK(argv_index(&capture, "status") != SIZE_MAX);
         capture_drop(&capture);
     }
 }
@@ -1363,6 +1595,7 @@ int main(int argc, char **argv)
     CHECK(setup_repo(argv[1]));
     test_stage_preserves_hostile_paths(argv[1]);
     test_unstage_preserves_hostile_paths(argv[1]);
+    test_f13_filename_matrix_roundtrips_every_git_surface(argv[1]);
     test_stage_all_stages_every_change(argv[1]);
     test_unstage_all_clears_the_index(argv[1]);
     test_branch_create_uses_the_exact_argument(argv[1]);

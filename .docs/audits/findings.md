@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-019`
+Next available ID: `YEW-F-020`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -31,6 +31,7 @@ recorded in `audit-00.md`.
 | YEW-F-016 | M | open | F11 LSP | required 1-based display edges violate the LSP +/-1 gate | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
 | YEW-F-017 | M | open | F13 GIT | interactive rebase bypasses the Git verb and environment boundary | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
 | YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
+| YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -194,6 +195,15 @@ in `clock`, so its promised empty result is independently unattainable. The
 source-backed reproducer records all five matches at the fixed replacement
 baseline. It remains open for Sprint 59; no product source changed during the
 audit.
+
+`YEW-F-019` is Medium because the mandatory porcelain-v2 mutation control
+does not detect the exact desynchronisation it claims to pin. With both
+rename advances changed from two NULs to one, the source pathname becomes an
+unknown record and is silently skipped; the parser still returns the seven
+entries and original-path bytes asserted by the existing test. The manual
+mutant passed 16 assertions. The source-independent reproducer models that
+stream advance and records the indistinguishable entry count. It remains
+open for Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 
