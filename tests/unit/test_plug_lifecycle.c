@@ -972,6 +972,70 @@ void test_plug_lifecycle_bound_errors_share_plugin_limit(void)
     life_close(&f);
 }
 
+void test_plug_lifecycle_callbacks_keep_undeclared_capability_denied(void)
+{
+    static const char source[] =
+        "import ed\n"
+        "fn denied() { ed.run(\"ed.shell.run\", {sarg: \"true\"}) }\n"
+        "fn init(ctx) {\n"
+        "  ctx.command(\"denied\", denied)\n"
+        "  ctx.on(\"ed.idle\", denied)\n"
+        "  ctx.bind(\"L\", \"z\", denied)\n"
+        "}\n";
+    LifecycleFix f;
+    CmdId command;
+    CmdId closure;
+    CmdCtx cx = {0};
+    u32 ledger_id = 0U;
+    u32 i;
+
+    life_open(&f, "life-cap-callbacks", "[]", "fn init(ctx) nil\n",
+              NULL);
+    life_rediscover_caps(&f, "life-cap-callbacks", "[\"fs\"]",
+                         "[\"ed.idle\"]", source);
+    f.plug->session_allow = 1U << YEW_CAP_FS;
+    YEW_ASSERT(yew_plug_enable(&f.ed, f.plug, &f.dc));
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+
+    command = yew_cmd_lookup("ed.plug.life_cap_callbacks.denied",
+                             strlen("ed.plug.life_cap_callbacks.denied"));
+    YEW_ASSERT(command.v != YEW_CMD_NONE.v);
+    cx.source = YEW_SRC_TEST;
+    cx.count = 1U;
+    YEW_ASSERT_EQ_U64(yew_ed_invoke(&f.ed, command, &cx),
+                      YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(f.plug->err_count, 1U);
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT_NOT_NULL(strstr(f.plug->last_error,
+                               "did not declare shell"));
+
+    yew_fl_hook_fire(&f.ed, FL_EV_ED_IDLE, NULL, 0U);
+    YEW_ASSERT_EQ_U64(f.plug->err_count, 2U);
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT_NOT_NULL(strstr(f.plug->last_error,
+                               "did not declare shell"));
+
+    for (i = 0U; i < f.ed.hooks.ledger.n; i++)
+        if (f.ed.hooks.ledger.v[i].active &&
+            f.ed.hooks.ledger.v[i].origin_id == f.plug->origin_id &&
+            f.ed.hooks.ledger.v[i].kind == (u8)REG_BIND) {
+            ledger_id = i + 1U;
+            break;
+        }
+    YEW_ASSERT(ledger_id != 0U);
+    closure = yew_cmd_lookup("ed.fl.closure", strlen("ed.fl.closure"));
+    YEW_ASSERT(closure.v != YEW_CMD_NONE.v);
+    cx.iarg = (i64)ledger_id;
+    YEW_ASSERT_EQ_U64(yew_ed_invoke(&f.ed, closure, &cx),
+                      YEW_CMD_ERR_STATE);
+    YEW_ASSERT_EQ_U64(f.plug->err_count, 3U);
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT_NOT_NULL(strstr(f.plug->last_error,
+                               "did not declare shell"));
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ENABLED);
+    life_close(&f);
+}
+
 void test_plug_lifecycle_hostile_surface_fires_and_tears_down_cleanly(void)
 {
     Bytebuf source;

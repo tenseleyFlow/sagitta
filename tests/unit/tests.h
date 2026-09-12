@@ -2385,6 +2385,7 @@ void test_plug_lifecycle_drains_every_plugin_reaching_limit_in_one_event(void);
 void test_plug_lifecycle_picker_refilter_keeps_plugin_identity(void);
 void test_plug_lifecycle_command_errors_share_plugin_limit(void);
 void test_plug_lifecycle_bound_errors_share_plugin_limit(void);
+void test_plug_lifecycle_callbacks_keep_undeclared_capability_denied(void);
 void test_plug_lifecycle_hostile_surface_fires_and_tears_down_cleanly(void);
 
 void test_macro_header_parses_all_five_fields(void);
