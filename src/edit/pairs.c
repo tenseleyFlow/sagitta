@@ -131,6 +131,24 @@ static void pairs_drop_from(Buffer *b, u32 first)
     b->pairs.n = (u8)first;
 }
 
+/*
+ * Forgets ONE entry.  Entries above it are not necessarily nested inside
+ * it: with several cursors the stack interleaves sibling pairs, and
+ * dropping the tail would make every other cursor's closer duplicate
+ * instead of skip.  A stale inner entry is harmless — its mark simply
+ * never matches again, and the stack bound retires it.
+ */
+static void pairs_drop_at(Buffer *b, u32 at)
+{
+    if (b->marks != NULL && yew_mark_alive(b->marks, b->pairs.v[at].close))
+        yew_mark_del(b->marks, b->pairs.v[at].close);
+    if (at + 1U < (u32)b->pairs.n)
+        (void)memmove(&b->pairs.v[at], &b->pairs.v[at + 1U],
+                      sizeof(b->pairs.v[0]) *
+                          (size_t)((u32)b->pairs.n - at - 1U));
+    b->pairs.n = (u8)(b->pairs.n - 1U);
+}
+
 void yew_pairs_clear(Buffer *b)
 {
     if (b == NULL)
@@ -186,8 +204,7 @@ PairAction yew_pairs_decide(Buffer *b, ByteOff at, u8 byte, u8 *closer)
 
     /*
      * Type-over first, so a quote (whose opener IS its closer) skips an
-     * auto-inserted partner instead of opening a second pair.  Everything
-     * remembered above the match is nested inside it and goes too.
+     * auto-inserted partner instead of opening a second pair.
      */
     for (i = (u32)b->pairs.n; i-- > 0U;) {
         const PairMark *entry = &b->pairs.v[i];
@@ -196,7 +213,7 @@ PairAction yew_pairs_decide(Buffer *b, ByteOff at, u8 byte, u8 *closer)
             continue;
         if (entry->closer == byte &&
             yew_mark_pos(b->marks, entry->close).v == at.v) {
-            pairs_drop_from(b, i);
+            pairs_drop_at(b, i);
             return YEW_PAIR_SKIP;
         }
     }
@@ -277,7 +294,7 @@ bool yew_pairs_backspace(Buffer *b, ByteOff at, Span *both)
         if (entry->closer != here ||
             yew_mark_pos(b->marks, entry->close).v != at.v)
             continue;
-        pairs_drop_from(b, i);
+        pairs_drop_at(b, i);
         both->lo = at.v - 1U;
         both->hi = at.v + 1U;
         return true;
