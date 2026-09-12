@@ -9,6 +9,7 @@
 #include "edit/mode.h"
 #include "edit/motion.h"
 #include "edit/option.h"
+#include "edit/pairs.h"
 #include "edit/sel_actions.h"
 #include "edit/word.h"
 #include "ui/message.h"
@@ -1378,10 +1379,53 @@ static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
     return insert_bytes_at(cx, cursor->pos, bytes, len);
 }
 
+/*
+ * Sprint 57.16 §4.  The pair module is consulted only when the typed byte
+ * can appear in some pair table, so an ordinary character costs one switch
+ * and never reaches the syntax query.  A type-over moves the caret and
+ * makes no edit, leaving the transaction yew_ed_invoke opened empty for the
+ * same reason a navigating Tab does.
+ */
 CmdStatus yew_edit_cmd_insert_text(CmdCtx *cx)
 {
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    CmdStatus status;
+    ByteOff at;
+    u8 both[2];
+    u8 closer = 0U;
+    u32 index = 0U;
+
     if (cx == NULL || cx->sarg == NULL)
         return YEW_CMD_ERR_ARG;
+    if (cx->sarg_len != 1U || !yew_pairs_interesting((u8)cx->sarg[0]))
+        return insert_bytes(cx, (const u8 *)cx->sarg, cx->sarg_len);
+    if (!edit_window_at(cx, &win, &tb, &cursor, &index))
+        return YEW_CMD_ERR_STATE;
+    at = cursor->pos;
+    switch (yew_pairs_decide(win->buf, at, (u8)cx->sarg[0], &closer)) {
+    case YEW_PAIR_SKIP:
+        cursor->pos = BYTEOFF(at.v + 1U);
+        cursor->anchor = cursor->pos;
+        win->wrap_goal_valid = false;
+        cx->ed->cursor_follow_pending = true;
+        return YEW_CMD_OK;
+    case YEW_PAIR_CLOSE:
+        both[0] = (u8)cx->sarg[0];
+        both[1] = closer;
+        status = insert_bytes_at(cx, at, both, 2U);
+        if (status != YEW_CMD_OK)
+            return status;
+        cursor = &win->cs.curs.data[index];
+        cursor->pos = BYTEOFF(at.v + 1U);
+        cursor->anchor = cursor->pos;
+        yew_pairs_remember(win->buf, BYTEOFF(at.v + 1U), closer);
+        return YEW_CMD_OK;
+    case YEW_PAIR_LITERAL:
+    default:
+        break;
+    }
     return insert_bytes(cx, (const u8 *)cx->sarg, cx->sarg_len);
 }
 
@@ -1753,9 +1797,14 @@ CmdStatus yew_edit_cmd_delete_grapheme_left(CmdCtx *cx)
     TextBuf *tb;
     Cursor *cursor;
     ByteOff prev;
+    Span both;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
+    /* Sprint 57.16 §4: one Backspace between a fresh empty pair takes
+     * both delimiters. */
+    if (yew_pairs_backspace(win->buf, cursor->pos, &both))
+        return delete_span(cx, both);
     /*
      * Sprint 57.16 §3: inside leading whitespace one Backspace removes one
      * indent level.  yew_indent_back answers the previous grapheme
