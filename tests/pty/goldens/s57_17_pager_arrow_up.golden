@@ -1,9 +1,9 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=23,10 vis=1
+size 80x24 alt=1 cursor=23,4 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
- 1 pty-s14-s18_5_cmdline +                                                      
-    1 click fixture                                                             
+ 1 pty-s14-s57_17_pager_ +                                                      
+    1 pager fixture                                                             
     1                                                                           
                                                                                 
                                                                                 
@@ -20,12 +20,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-  file.new                     Create an empty buffer, optionally naming its fil
+> file.new                     Create an empty buffer, optionally naming its fil
   file.next                    Walk to the next open file                       
-> file.open                    Open a file                                      
+  file.open                    Open a file                                      
   file.prev                    Walk to the previous open file                   
   … and 13 more                                                                 
-:file.open                                                                      
+:file.new                                                                       
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -46,11 +46,11 @@ DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 GGHHHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-GGHHHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 IIJJJIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
-GGHHHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+IIJJJIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+IIJJJIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-LMMMMMMMMMGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+LMMMKKKKKIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 --- legend
 A fg=#c8ccd4 bg=#2c313a attrs=b---------
 B fg=#61afef bg=#1b202a attrs=b---------
@@ -58,10 +58,10 @@ C fg=#5c6370 bg=#1b202a attrs=----------
 D fg=#4b5263 bg=#12141a attrs=----------
 E fg=#c8ccd4 bg=#12141a attrs=b---------
 F fg=#c8ccd4 bg=#12141a attrs=----------
-G fg=#f7e0cc bg=#4e2a0f attrs=b---------
-H fg=#f7e0cc bg=#4e2a0f attrs=b--u------
-I fg=#4e2a0f bg=#f7e0cc attrs=b---------
-J fg=#4e2a0f bg=#f7e0cc attrs=b--u------
+G fg=#4e2a0f bg=#f7e0cc attrs=b---------
+H fg=#4e2a0f bg=#f7e0cc attrs=b--u------
+I fg=#f7e0cc bg=#4e2a0f attrs=b---------
+J fg=#f7e0cc bg=#4e2a0f attrs=b--u------
 K fg=#f7e0cc bg=#4e2a0f attrs=bd--------
 L fg=#2f1806 bg=#e77d24 attrs=b---------
 M fg=#f7e0cc bg=#4e2a0f attrs=----------

@@ -158,6 +158,15 @@ bool yew_menu_focused(const Menu *m);
  * set is still arriving the footer wins and no tail is drawn, because a
  * tail over a list that is still growing would be a lie by the time it
  * was read.
+ *
+ * The cost, recorded so it is a choice and not an accident: while the
+ * window is scrolled the precise "%u/%u" position is not on screen.
+ * Keeping it would put "3/82" beside "… and 78 more" -- two totals of
+ * two different things on one row, which is the confusion the rule
+ * exists to prevent, and making them agree would mean teaching the
+ * footer a second denominator for the capped case.  The tail's N is
+ * measured from `items` and `top` alone, so there is nothing for a
+ * later change to make it disagree WITH.
  */
 void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style);
 

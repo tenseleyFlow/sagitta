@@ -2677,6 +2677,74 @@ static void case_s18_5_cmdline_menu_scrolled(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.17 §1: a fuzzy stem that leaves exactly ONE row executes.
+ *
+ * `nmbc` is a prefix of nothing, so Sprint 18's resolve_name refuses it,
+ * and it is a unique fuzzy match for view.number_cycle.  The numbered
+ * gutter in this snapshot is the proof that Enter ran the row the user
+ * could already see -- before this sprint the same keys produced
+ * `unknown command 'nmbc' (try Tab)`.
+ */
+static void case_s57_17_fuzzy_one_executes(PtyCtx *c)
+{
+    static const u8 initial[] = "fuzzy execute fixture\nsecond line\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "nmbc");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s57_17_fuzzy_one_executes");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * Sprint 57.17 §2: `<up>` enters the pager rather than walking history,
+ * and the PROMPT DOES NOT MOVE -- the line still reads `:fil` with the
+ * first row highlighted.  Tab in the same place writes the row into the
+ * line, which is the whole difference this golden exists to hold.
+ */
+static void case_s57_17_pager_arrow_up(PtyCtx *c)
+{
+    static const u8 initial[] = "pager fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "fil");
+    s18_settle_after_keys(c, "up");
+    ptc_snapshot(c, "s57_17_pager_arrow_up");
+    s18_finish(c, path);
+}
+
+/*
+ * Sprint 57.17 §3: the honest tail.
+ *
+ * Four candidates and `… and N more` rather than five rows that hide the
+ * rest in silence.  Arrowing down onto what would be the tail scrolls by
+ * one and KEEPS it, so this snapshot has a non-zero `top` and a tail at
+ * once -- and no footer, because menu.h's rule gives the last row
+ * exactly one count.
+ */
+static void case_s57_17_pager_tail_row(PtyCtx *c)
+{
+    static const u8 initial[] = "tail fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "fil");
+    s18_settle_after_keys(c, "up");
+    s18_settle_after_keys(c, "down down down down");
+    ptc_snapshot(c, "s57_17_pager_tail_row");
+    s18_finish(c, path);
+}
+
 /* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
  * from the same tolerant parse the menu filtered with. */
 static void case_s18_5_cmdline_hint(PtyCtx *c)
@@ -10260,6 +10328,12 @@ const PtyCase yew_pty_cases[] = {
     C(s18_5_cmdline_menu_scrolled, modern, 24U, 80U,
       case_s18_5_cmdline_menu_scrolled),
     C(s18_5_cmdline_hint, modern, 24U, 80U, case_s18_5_cmdline_hint),
+    C(s57_17_fuzzy_one_executes, modern, 24U, 80U,
+      case_s57_17_fuzzy_one_executes),
+    C(s57_17_pager_arrow_up, modern, 24U, 80U,
+      case_s57_17_pager_arrow_up),
+    C(s57_17_pager_tail_row, modern, 24U, 80U,
+      case_s57_17_pager_tail_row),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
