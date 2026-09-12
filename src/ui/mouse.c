@@ -256,6 +256,20 @@ static void wheel_pane(Ed *ed, const Region *hit, const Key *k)
     ed->full_damage = true;
 }
 
+/*
+ * THE GROUP ROW 2 IS SHOWING.
+ *
+ * The dwell's preview when there is one, the active tab's group
+ * otherwise — the same rule strip_draw_rows paints by and
+ * drop_target_row2 commits by, stated once so the three cannot
+ * disagree about which list row 2 holds.
+ */
+static u32 row2_group(const Ed *ed)
+{
+    return ed->mouse.preview_gid != 0U ? ed->mouse.preview_gid
+                                       : yew_active_group_id(ed);
+}
+
 /* Row 1 or row 2?  The strip rect is registered state, not a
  * re-derivation of the layout — see region.h's law. */
 static bool region_is_member_row(const Ed *ed, const Region *hit)
@@ -264,22 +278,44 @@ static bool region_is_member_row(const Ed *ed, const Region *hit)
            hit->rect.y == (u16)(ed->tab_strip_rect.y + 1U);
 }
 
-static void strip_scroll(Ed *ed, bool row2, i32 delta)
+/*
+ * THE ROUTER'S ONE SCROLL — a chevron click, a wheel notch, the drag
+ * autoscroll, the hover reveal.
+ *
+ * Returns whether the offset actually MOVED.  The hover reveal (§2)
+ * needs that answer to stop itself at the end of the list in the same
+ * millisecond it arrives there, rather than waking once more to be told
+ * by a render that the chevron has gone.
+ *
+ * Every one of those gestures is EXPLICIT, so the offset becomes the
+ * user's (Sprint 57.15 §1) and the layout stops following the active
+ * entry until something changes it.
+ */
+static bool strip_scroll(Ed *ed, bool row2, i32 delta)
 {
     int *scroll = row2 ? &ed->tabs.member_scroll : &ed->tabs.scroll;
     int limit = (int)ed->tabs.v.len;
     int to = *scroll + delta;
 
+    /*
+     * Clamped against the list row 2 is SHOWING, which during a drag is
+     * the dwell's preview and not the active group — see row2_group.
+     * Clamping against the active group's members instead clamped the
+     * wrong list, and clamped it to nothing whenever the active tab was
+     * in no group at all.
+     */
     if (row2)
-        limit = yew_group_member_count(ed, yew_active_group_id(ed));
+        limit = yew_group_member_count(ed, row2_group(ed));
     if (to < 0)
         to = 0;
     if (to >= limit)
         to = limit > 0 ? limit - 1 : 0;
+    yew_tabs_scroll_owned(&ed->tabs, row2);
     if (*scroll == to)
-        return;
+        return false;
     *scroll = to;
     ed->full_damage = true;
+    return true;
 }
 
 static void mouse_wheel(Ed *ed, const Key *k)
@@ -319,11 +355,12 @@ static void mouse_wheel(Ed *ed, const Key *k)
         wheel_pane(ed, &hit, k);
         break;
     case YEW_REGION_TAB:
-        strip_scroll(ed, region_is_member_row(ed, &hit), wheel_dir(k->button));
+        (void)strip_scroll(ed, region_is_member_row(ed, &hit),
+                           wheel_dir(k->button));
         break;
     case YEW_REGION_TAB_SCROLL:
-        strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
-                     wheel_dir(k->button));
+        (void)strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
+                           wheel_dir(k->button));
         break;
     case YEW_REGION_PICK_ROW:
         yew_picker_scroll(ed, wheel_dir(k->button) * YEW_WHEEL_ROWS);
@@ -445,15 +482,58 @@ static CtxStyle menu_style(const Ed *ed)
 /* ---------------------------------------------------------------- */
 
 /*
+ * THE ONE 1003 OWNER — Sprint 57.13 §1, extended by Sprint 57.15 §2.
+ *
+ * Any-motion reporting (DEC 1003) has TWO customers now: an open
+ * context menu, which highlights the row under the pointer, and a strip
+ * CHEVRON, which reveals hidden entries while the pointer rests on it.
+ * Neither may arm or disarm the mode itself.  A menu closing while a
+ * chevron is still drawn must not silence the strip, and a strip whose
+ * chevron scrolls away must not silence an open menu — two owners each
+ * calling yew_tty_mouse_motion(false) on their own way out is exactly
+ * that bug, twice.
+ *
+ * So the mode is a FUNCTION of the two wants, recomputed here and
+ * nowhere else.  Every path that changes either want ends in
+ * motion_sync().  `fuzz_mouse` asserts the mode is armed if and only if
+ * one of them is true, and the tty's restore blob still carries `1003l`
+ * whenever the flag is set (invariant 6), so a crash between the two
+ * leaves one extra disarm rather than a stranded mode.
+ *
+ * YEW_MOUSE=0 suppresses arming entirely: a keyboard-opened menu in a
+ * session that never enabled mouse reporting must not turn it on, and
+ * closing it must not restore 1002 the terminal was never put into.
+ */
+static bool motion_want_strip;
+
+static void motion_sync(void)
+{
+    yew_tty_mouse_motion(yew_mouse_enabled() &&
+                         (yew_ctx_active() || motion_want_strip));
+}
+
+void yew_mouse_note_chevrons(bool any)
+{
+    if (motion_want_strip == any)
+        return;
+    motion_want_strip = any;
+    motion_sync();
+}
+
+bool yew_mouse_chevron_drawn(void)
+{
+    return motion_want_strip;
+}
+
+/*
  * THE ONE CLOSE PATH.
  *
- * Any-motion reporting (DEC 1003) is armed only while a menu is up, and
- * "only" is a claim about EVERY way a menu can go away — a row fired, a
- * key, Esc, a click outside, a wheel, the mouse being disabled.  Five
- * close sites would be five chances to leave the terminal streaming
- * motion reports at an editor that has nothing to do with them, which
- * is invariant 6's failure mode in slow motion.  So there is one, and
- * `fuzz_mouse` asserts the flag is false whenever no menu is open.
+ * "The menu is gone" is a claim about EVERY way a menu can go away — a
+ * row fired, a key, Esc, a click outside, a wheel, the mouse being
+ * disabled.  Five close sites would be five chances to get the mode
+ * wrong, which is invariant 6's failure mode in slow motion.  So there
+ * is one, and it asks the owner above to recompute rather than
+ * disarming on its own authority.
  *
  * It is safe to call when nothing is open: `yew_ctx_close` is a memset
  * and `yew_tty_mouse_motion` is idempotent.
@@ -461,9 +541,9 @@ static CtxStyle menu_style(const Ed *ed)
 static void menu_close(Ed *ed)
 {
     yew_ctx_close();
-    /* Disarmed HERE rather than inside yew_ctx_close() so the widget
+    /* Recomputed HERE rather than inside yew_ctx_close() so the widget
      * stays editor- and terminal-ignorant. */
-    yew_tty_mouse_motion(false);
+    motion_sync();
     if (ed != NULL)
         ed->full_damage = true;
 }
@@ -515,11 +595,9 @@ static bool menu_open_at(Ed *ed, const CtxContext *c, u16 anchor_x,
         menu_close(ed);
         return false;
     }
-    /* A keyboard-opened menu remains keyboard-only when YEW_MOUSE=0.
-     * Otherwise closing it would restore 1002 even though startup
-     * deliberately never enabled mouse reporting. */
-    if (yew_mouse_enabled())
-        yew_tty_mouse_motion(true);
+    /* Through the owner: a chevron may already have it armed, and a
+     * keyboard-opened menu stays keyboard-only when YEW_MOUSE=0. */
+    motion_sync();
     ed->full_damage = true;
     return true;
 }
@@ -1257,6 +1335,19 @@ static void mouse_press(Ed *ed, const Key *k)
     Region hit;
 
     /*
+     * Sprint 57.15 §2's reveal is a NO-BUTTON clock, and a press is the
+     * end of no-button.  `hover_track` only runs on unheld motion, so
+     * hover_x/hover_y freeze at the last cell the pointer visited
+     * unheld; left armed, the reveal would go on firing every 300 ms
+     * against that stale cell for as long as the button is down — the
+     * strip running away under a drag that is nowhere near it, and
+     * fighting the drag's own 120 ms autoscroll for the same offset.
+     * Before every early return below, because a press is a press
+     * whatever it goes on to route to.  The next unheld motion report
+     * arms it again.
+     */
+    m->hover_chevron = false;
+    /*
      * FIRST, and it never touches the phase machine.  Ctrl+left must
      * not arm a drag or enter H mode behind the menu it opens: a
      * selection the user never asked for, left live under a pop-up, is
@@ -1310,8 +1401,8 @@ static void mouse_press(Ed *ed, const Key *k)
         press_tab(ed, &hit);
         break;
     case YEW_REGION_TAB_SCROLL:
-        strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
-                     hit.payload < 0 ? -1 : 1);
+        (void)strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
+                           hit.payload < 0 ? -1 : 1);
         break;
     case YEW_REGION_TAB_NEW:
         /* Armed only.  Release-in-the-same-region invokes the command,
@@ -1471,7 +1562,7 @@ static u32 held_tab_group(Ed *ed)
  * so the clock restarts every time the hovered group changes and the
  * open happens in yew_mouse_tick.
  */
-static void drag_dwell(Ed *ed, int slot)
+static void drag_dwell(Ed *ed, int slot, bool on_row1)
 {
     MouseState *m = &ed->mouse;
     i32 pre = 0;
@@ -1490,13 +1581,335 @@ static void drag_dwell(Ed *ed, int slot)
     if (gid != m->dwell_gid) {
         m->dwell_gid = gid;
         m->dwell_since_ms = gid != 0U ? ed->now_ms : 0;
+        /* A new target starts its cue at the first quarter, lit: the
+         * clock restarting and the cue restarting are the same event. */
+        m->flash_phase = 0U;
     }
+    /*
+     * ROW 2 IS A PICTURE OF WHERE THE POINTER IS, so leaving the group
+     * takes it away again.
+     *
+     * Without this `preview_gid` only ever grew a value: the opened
+     * strip outlived the hover that asked for it, row 2 kept listing a
+     * group the pointer had walked away from, and — because both the
+     * cue and the open stand down while `preview_gid == dwell_gid` —
+     * coming BACK to that group announced nothing and re-opened
+     * nothing.  A drag past three groups then showed the first one
+     * until the button came up.
+     *
+     * ONLY FROM ROW 1.  Row 2 is the preview's own surface and the
+     * place the join is aimed at, so the pointer arriving there must
+     * not close the strip it was sent to use; and a pointer out over a
+     * pane is on its way somewhere the drop cancels anyway.
+     */
+    if (on_row1 && m->preview_gid != 0U && m->preview_gid != gid) {
+        m->preview_gid = 0U;
+        /* The strip just gave a row back, which the layout owns — the
+         * pane tree below has to take it. */
+        ed->layout_dirty = true;
+        ed->full_damage = true;
+    }
+}
+
+/*
+ * The row-1 slot the held entry started in, or -1 when the thing being
+ * carried has no row-1 entry at all — a member lifted off row 2.
+ *
+ * Resolved from the PRE-DRAG payloads, which is the only list that
+ * still knows where it was: a grouped tab's index never appears as a
+ * row-1 payload, so the two cannot be confused.
+ */
+static int held_pre_slot(const Ed *ed)
+{
+    int i;
+
+    for (i = 0; i < yew_strip_slot_count(); i++) {
+        i32 pre = 0;
+
+        if (yew_strip_pre_payload(i, &pre) &&
+            pre == ed->mouse.press_rgn.payload)
+            return i;
+    }
+    return -1;
+}
+
+/*
+ * Sprint 57.14 field repair: A GROUP ENTRY'S HOVER BAND.
+ *
+ * The threshold at which the carried entry changes places with the
+ * neighbour occupying the half-open cells [a0, a1).  `rightwards` says
+ * which edge is doing the crossing: the carried entry's TRAILING edge
+ * when it is moving right onto this neighbour, its LEADING edge when it
+ * is moving left.
+ *
+ * A plain tab keeps the half-width rule exactly — half of the
+ * neighbour covered and they change places, which is what every tab
+ * strip does and what this code has always done.
+ *
+ * A GROUP does not, because the half-width rule and the dwell want
+ * opposite things from the same cells.  The dwell asks the user to hold
+ * still over a group entry for half a second to open it; the swap
+ * slides that entry away the moment the carried tab covers half of it.
+ * So the group's middle half is a DEAD BAND: the crossing edge can rest
+ * anywhere in it and nothing shifts, and the swap fires only once the
+ * edge reaches the outer quarter on the far side.
+ *
+ * WHY A QUARTER, AND WHY THE MIDDLE HALF.  The group labels in the
+ * reported workspace are 8 to 18 cells wide, so a quarter is two to
+ * four cells — wide enough that a hand resting on the entry stays
+ * inside it, narrow enough that a drag actually aiming past the group
+ * crosses it without a detour.  Anything larger and the group stops
+ * being reorderable by drag at all; anything smaller and the band is
+ * one cell and does not exist at the widths that matter.  The band is
+ * CENTRED because the two directions have to agree: the same middle
+ * half answers whichever edge arrives, so approaching from the left and
+ * from the right have mirror-image thresholds rather than two rules.
+ *
+ * Below four cells there is no room to divide and the half-width rule
+ * stands — a band of zero width would mean "cross the whole entry",
+ * which is a worse answer than the one it replaced.
+ *
+ * The AGREEMENT is untouched: this only moves WHERE the target changes,
+ * never what the target means.  The preview and the drop both read
+ * `drag_to_slot`, so the gap is still exactly where the release lands —
+ * `drag_every_previewed_gap_is_where_the_drop_lands` sweeps it.
+ */
+static i32 swap_threshold(int slot, u16 a0, u16 a1, bool rightwards)
+{
+    i32 w = (i32)a1 - (i32)a0;
+    i32 pre = 0;
+
+    if (w < 4 || !yew_strip_pre_payload(slot, &pre) || pre >= 0)
+        return (i32)a0 + w / 2; /* a plain tab, or too narrow to divide */
+    return rightwards ? (i32)a1 - w / 4 : (i32)a0 + w / 4;
+}
+
+/*
+ * WHERE THE DRAG IS AIMING — read from the entry the pointer is
+ * CARRYING, not from the one cell the pointer is on.
+ *
+ * The float is drawn at `press_x − press_rgn.rect.x` behind the
+ * pointer (§2, the grip the press established), so with a wide tab
+ * grabbed near its right edge the carried entry sits squarely on top of
+ * its neighbour while the pointer is still inside the tab's own slot.
+ * Targeting from the pointer then leaves every other entry standing
+ * still under something that is visibly on top of them, until the
+ * pointer finally crosses a whole tab-width later and the strip jumps.
+ *
+ * The rule is the one every tab strip uses: the carried entry changes
+ * places with a neighbour once it has travelled HALF that neighbour's
+ * width over it — see swap_threshold for the one exception, a group
+ * entry's central hover band.  That threshold is also what makes the
+ * answer stable — the swap moves the carried entry exactly onto the
+ * cells that justified it, so the reverse test cannot fire at the same
+ * pointer position and the preview cannot oscillate between two frames
+ * (invariant 5's "same state, same picture" applied to a picture that
+ * is its own input).
+ */
+/*
+ * The CELLS THE CARRIED ENTRY COVERS at pointer column `col`, and the
+ * slot its gap currently occupies.
+ *
+ * False when nothing of ours is on row 1 — a member lifted off row 2,
+ * or an entry the strip scrolled away — and then the pointer's own cell
+ * is all there is.  Three readers share it so the grip arithmetic
+ * exists once: the reorder target, the dwell, and nothing else.
+ */
+static bool carried_span(Ed *ed, u16 col, int *slot, u16 *c0, u16 *c1,
+                         i32 *lead, i32 *trail)
+{
+    MouseState *m = &ed->mouse;
+    int n = yew_strip_slot_count();
+    int to = m->drag_to_valid ? m->drag_to_slot : held_pre_slot(ed);
+    i32 grab;
+
+    if (n <= 0 || to < 0 || to >= n || !yew_strip_slot_cells(to, c0, c1))
+        return false;
+    grab = m->press_x > m->press_rgn.rect.x
+               ? (i32)m->press_x - (i32)m->press_rgn.rect.x : 0;
+    *lead = (i32)col - grab;
+    if (*lead < (i32)ed->tab_strip_rect.x)
+        *lead = (i32)ed->tab_strip_rect.x;
+    *trail = *lead + ((i32)*c1 - (i32)*c0);
+    *slot = to;
+    return true;
+}
+
+static int drag_target_slot(Ed *ed, u16 col)
+{
+    int n = yew_strip_slot_count();
+    int to = -1;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 lead = 0;
+    i32 trail = 0;
+
+    if (n <= 0)
+        return -1;
+    if (!carried_span(ed, col, &to, &c0, &c1, &lead, &trail))
+        return yew_strip_slot_at(col, ed->tab_strip_rect.y);
+    if (lead < (i32)c0) {
+        while (to > 0 && yew_strip_slot_cells(to - 1, &a0, &a1) &&
+               lead < swap_threshold(to - 1, a0, a1, false))
+            to--;
+    } else if (lead > (i32)c0) {
+        while (to < n - 1 && yew_strip_slot_cells(to + 1, &a0, &a1) &&
+               trail > swap_threshold(to + 1, a0, a1, true))
+            to++;
+    }
+    return to;
+}
+
+/*
+ * WHAT THE CARRIED ENTRY IS RESTING ON — the slot it OVERLAPS MOST.
+ *
+ * A different question from `drag_target_slot`'s, and the group hover
+ * band is what made the two stop having the same answer.  The band
+ * exists so a carried tab can come to rest ON a group; the dwell is
+ * what resting on a group is FOR.  A dwell that kept reading the
+ * reorder target would read the carried tab's own slot for the whole
+ * width of the band, and the one place a tab can join a group would be
+ * the one place the pointer is not allowed to linger.
+ *
+ * Overlap rather than a single cell — a midpoint, or the leading edge —
+ * because the carried entry and the entry under it are both a dozen
+ * cells wide and either edge can be over a neighbour while the bulk of
+ * the entry is not.  "Most of what I am holding is over this one" is
+ * what the eye reads, and it is the same answer as today's once the
+ * target HAS moved: the gap is then drawn on the entry's old cells and
+ * overlaps them entirely.
+ *
+ * Ties keep the leftmost, so the answer is a function of the state and
+ * not of the loop order (invariant 5).
+ */
+static int drag_dwell_slot(Ed *ed, u16 col)
+{
+    int n = yew_strip_slot_count();
+    int to = -1;
+    int best = -1;
+    i32 best_over = 0;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 lead = 0;
+    i32 trail = 0;
+    int i;
+
+    if (n <= 0)
+        return -1;
+    if (!carried_span(ed, col, &to, &c0, &c1, &lead, &trail))
+        return yew_strip_slot_at(col, ed->tab_strip_rect.y);
+    for (i = 0; i < n; i++) {
+        i32 lo;
+        i32 hi;
+
+        if (!yew_strip_slot_cells(i, &a0, &a1))
+            continue;
+        lo = lead > (i32)a0 ? lead : (i32)a0;
+        hi = trail < (i32)a1 ? trail : (i32)a1;
+        if (hi - lo > best_over) {
+            best_over = hi - lo;
+            best = i;
+        }
+    }
+    return best;
+}
+
+/*
+ * Sprint 57.14 field repair: WHERE ON ROW 2 THE DRAG IS AIMING.
+ *
+ * The answer is a position in the group's FINAL member list, and it is
+ * resolved with the SAME rule row 1 uses: from the cells the carried
+ * entry covers — its leading edge is `col − grab_dx` — changing places
+ * with a neighbour once it has travelled half that neighbour's width.
+ * There is no hover band here: row 2 holds members, and a member is a
+ * plain tab with nothing to dwell on.
+ *
+ * The seed is where the carried entry ALREADY sits on this row: the
+ * position last frame previewed it at, or — the first time the pointer
+ * arrives — the member's own place, which is `group_ordinal − 1`
+ * because yew_group_members orders by ordinal.  A tab from OUTSIDE the
+ * group has no place yet, so that case falls through to a plain
+ * insertion scan and may answer `n`: the list it lands in is one longer
+ * than the one on screen, and the position past the last member is
+ * where "put it last" lives.
+ */
+static int held_member_slot(Ed *ed, u32 gid)
+{
+    int idx = yew_tab_index_of_id(ed, ed->mouse.drag_tab_id);
+    const Tab *t = yew_tab_at_const(ed, idx);
+
+    if (t == NULL || t->group_id != gid || t->group_ordinal == 0U)
+        return -1;
+    return (int)t->group_ordinal - 1;
+}
+
+static int drag_target_member(Ed *ed, u16 col, u32 gid)
+{
+    MouseState *m = &ed->mouse;
+    int n = yew_strip_member_slot_count();
+    int to;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 lead;
+    i32 trail;
+    i32 grab;
+
+    if (n <= 0)
+        return 0; /* an empty row: the first position is the only one */
+    grab = m->press_x > m->press_rgn.rect.x
+               ? (i32)m->press_x - (i32)m->press_rgn.rect.x : 0;
+    lead = (i32)col - grab;
+    if (lead < (i32)ed->tab_strip_rect.x)
+        lead = (i32)ed->tab_strip_rect.x;
+    to = m->drag_row2_valid && m->drag_row2_gid == gid
+             ? m->drag_row2_pos : held_member_slot(ed, gid);
+    if (to < 0 || to >= n || !yew_strip_member_slot_cells(to, &c0, &c1)) {
+        for (to = 0; to < n; to++) {
+            if (yew_strip_member_slot_cells(to, &a0, &a1) &&
+                lead < (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+                return to;
+        }
+        return n;
+    }
+    trail = lead + ((i32)c1 - (i32)c0);
+    if (lead < (i32)c0) {
+        while (to > 0 && yew_strip_member_slot_cells(to - 1, &a0, &a1) &&
+               lead < (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+            to--;
+    } else if (lead > (i32)c0) {
+        while (to < n - 1 && yew_strip_member_slot_cells(to + 1, &a0, &a1) &&
+               trail > (i32)a0 + ((i32)a1 - (i32)a0) / 2)
+            to++;
+    }
+    return to;
+}
+
+/* Row 2 stops previewing.  Called from every path that is not a tab
+ * drag over row 2 — see the header's "which row owns the preview". */
+static void drag_row2_clear(Ed *ed)
+{
+    MouseState *m = &ed->mouse;
+
+    if (!m->drag_row2_valid)
+        return;
+    m->drag_row2_valid = false;
+    m->drag_row2_gid = 0U;
+    m->drag_row2_pos = 0;
+    ed->full_damage = true;
 }
 
 static void drag_strip_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
-    int slot;
+    bool on_row1 = k->row == ed->tab_strip_rect.y;
+    int slot = -1;
+    int dwell_slot = -1;
 
     /*
      * The array is frozen for the drag's lifetime, so a changed count
@@ -1508,22 +1921,15 @@ static void drag_strip_motion(Ed *ed, const Key *k)
         yew_mouse_cancel(ed);
         return;
     }
-    slot = yew_strip_slot_at(k->col, k->row);
-    if (slot >= 0) {
-        if (!m->drag_to_valid || m->drag_to_slot != slot || m->drag_to_tail) {
-            m->drag_to_slot = slot;
-            m->drag_to_valid = true;
-            m->drag_to_tail = false;
-            ed->full_damage = true;
-        }
-    } else if (yew_strip_slot_count() > 0 &&
-               k->row == ed->tab_strip_rect.y &&
-               k->col >= yew_strip_tail_x()) {
+    if (on_row1 && yew_strip_slot_count() > 0 &&
+        k->col >= yew_strip_tail_x()) {
         /*
          * The blank tail past the last entry — row 1's, whatever row
          * the press came from: a member dragged UP out of row 2 aims at
          * row 1's empty space, and that gesture is the whole reason the
-         * tail is a drop target.
+         * tail is a drop target.  Checked FIRST now that every other
+         * cell of the row resolves a slot; no slot can contain a column
+         * at or past the tail, so the two still never overlap.
          */
         if (!m->drag_to_tail) {
             m->drag_to_slot = yew_strip_slot_count() - 1;
@@ -1531,8 +1937,53 @@ static void drag_strip_motion(Ed *ed, const Key *k)
             m->drag_to_tail = true;
             ed->full_damage = true;
         }
+    } else if (on_row1) {
+        slot = drag_target_slot(ed, k->col);
+        /* Resolved from the SAME frame the target was, before the
+         * target is written back — the two are different questions
+         * about one picture, not a before and an after. */
+        dwell_slot = drag_dwell_slot(ed, k->col);
+        if (slot >= 0 &&
+            (!m->drag_to_valid || m->drag_to_slot != slot ||
+             m->drag_to_tail)) {
+            m->drag_to_slot = slot;
+            m->drag_to_valid = true;
+            m->drag_to_tail = false;
+            ed->full_damage = true;
+        }
     }
-    drag_dwell(ed, slot);
+    /*
+     * THE HANDOVER.  The row the pointer is on owns the preview: row 1
+     * above, row 2 here, never both.  Coming down opens a space in the
+     * member strip; going back up closes it, because a gap held open for
+     * a drop that is no longer aimed at row 2 is the same lie this
+     * repair exists to remove.
+     *
+     * A GROUP drag is excluded: dropping a group into a group does not
+     * exist (Sprint 57.14 §4), so there is nothing to preview.
+     */
+    if (!on_row1 && m->phase == YEW_MP_DRAG_TAB &&
+        ed->tab_strip_rect.h >= 2U &&
+        k->row == (u16)(ed->tab_strip_rect.y + 1U)) {
+        u32 gid = row2_group(ed);
+        int pos;
+
+        if (gid == 0U) {
+            drag_row2_clear(ed);
+        } else {
+            pos = drag_target_member(ed, k->col, gid);
+            if (!m->drag_row2_valid || m->drag_row2_gid != gid ||
+                m->drag_row2_pos != pos) {
+                m->drag_row2_valid = true;
+                m->drag_row2_gid = gid;
+                m->drag_row2_pos = pos;
+                ed->full_damage = true;
+            }
+        }
+    } else {
+        drag_row2_clear(ed);
+    }
+    drag_dwell(ed, dwell_slot, on_row1);
 }
 
 /* The tab-array index a row-1 slot names, resolved against the PRE-DRAG
@@ -1614,27 +2065,76 @@ static void drop_into_group(Ed *ed, u32 gid, int pos)
  */
 static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
 {
-    Region hit;
-
     if (ed->tab_strip_rect.h < 2U ||
         k->row != (u16)(ed->tab_strip_rect.y + 1U))
         return false;
-    *gid = ed->mouse.preview_gid != 0U ? ed->mouse.preview_gid
-                                       : yew_active_group_id(ed);
+    *gid = row2_group(ed);
     if (*gid == 0U)
         return false;
-    hit = yew_region_hit(k->col, k->row);
-    if (hit.kind == YEW_REGION_TAB && hit.payload >= 0) {
-        Tab *t = yew_tab_at(ed, hit.payload);
-
-        if (t != NULL && t->group_id == *gid) {
-            *pos = (int)t->group_ordinal;
-            return true;
-        }
+    /*
+     * THE PREVIEW'S OWN ANSWER, and not a fresh hit-test.
+     *
+     * The row under the pointer is the PERMUTED one — the gap is already
+     * drawn where the tab lands — so hit-testing it at release would
+     * answer "you are over the thing you are holding", which is the trap
+     * row 1's pre-drag slot table exists for.  The motion that drew the
+     * frame resolved this against the slot table; committing anything
+     * else makes the picture a lie.
+     */
+    if (ed->mouse.drag_row2_valid && ed->mouse.drag_row2_gid == *gid) {
+        *pos = ed->mouse.drag_row2_pos + 1; /* ordinals are 1-based */
+        return true;
     }
-    /* The blank tail of row 2: append. */
-    *pos = yew_group_member_count(ed, *gid) + 1;
+    /* A release on this row with no motion that reached it: resolve the
+     * column now, by the same rule. */
+    *pos = drag_target_member(ed, k->col, *gid) + 1;
     return true;
+}
+
+/*
+ * Sprint 57.14 §1: ROW 1 IS THE EXIT.
+ *
+ * `to` was resolved from the PRE-DRAG slot table, before any of this
+ * ran, and that ordering is the deliverable.  yew_group_remove_member
+ * DISSOLVES a group whose last member has just left, which deletes a
+ * row-1 entry and renumbers every slot to its right — so a slot number
+ * re-read afterwards names a different thing.  A tab INDEX survives,
+ * because dissolving rewrites group_id and edits the groups vector and
+ * never reorders Tabs.v.
+ *
+ * `from` is re-derived from the id all the same: identity across a
+ * mutation is Sprint 23's law, and a removal is a mutation even when it
+ * happens to move nothing.
+ */
+static void drop_out_of_group(Ed *ed, int to)
+{
+    MouseState *m = &ed->mouse;
+    int from = yew_tab_index_of_id(ed, m->drag_tab_id);
+    bool left_group = false;
+
+    if (from < 0)
+        return;
+    if (held_tab_group(ed) != 0U) {
+        yew_group_remove_member(ed, from);
+        left_group = true;
+        from = yew_tab_index_of_id(ed, m->drag_tab_id);
+        if (from < 0)
+            return;
+        if (to >= (int)yew_tab_count(ed))
+            to = (int)yew_tab_count(ed) - 1;
+        if (to < 0)
+            return;
+    }
+    yew_tab_reorder(ed, from, to);
+    if (left_group) {
+        /*
+         * The tab that left may have been the active one, and its group
+         * may be gone entirely — either way row 2 is no longer owed, and
+         * a strip-row count change belongs to the layout rather than to
+         * a repaint.
+         */
+        ed->layout_dirty = true;
+    }
 }
 
 static void drag_strip_drop(Ed *ed, const Key *k)
@@ -1653,33 +2153,101 @@ static void drag_strip_drop(Ed *ed, const Key *k)
     }
     if (!m->drag_to_valid)
         return; /* released somewhere with no target: nothing changes */
+    /*
+     * Resolved HERE, while the group still exists — see
+     * drop_out_of_group for what a removal does to a slot number.
+     */
     to = m->drag_to_tail ? (int)yew_tab_count(ed) - 1
                          : slot_to_tab_index(ed, m->drag_to_slot);
     if (to < 0)
         return;
-    if (m->phase == YEW_MP_DRAG_GROUP) {
+    if (m->phase == YEW_MP_DRAG_GROUP)
         yew_group_reorder_block(ed, m->drag_gid, to);
-    } else {
-        int from = yew_tab_index_of_id(ed, m->drag_tab_id);
-
-        if (from < 0)
-            return;
+    else
         /*
-         * Dropping on the blank tail carries the tab OUT of its group —
-         * the one gesture that can, when the group is the only row-1
-         * entry left to aim at.
+         * EVERY row-1 slot carries the tab out of its group, not just
+         * the blank tail.  The tail is drawn only in strip_render's
+         * `draw_new` arm, which an overflowing row 1 never reaches — so
+         * a member in a busy workspace had no exit at all, and the one
+         * documented gesture for leaving a group was unaimable.
          */
-        if (m->drag_to_tail && held_tab_group(ed) != 0U)
-            yew_group_remove_member(ed, from);
-        yew_tab_reorder(ed, from, to);
-    }
+        drop_out_of_group(ed, to);
     yew_state_mark_dirty(ed);
     ed->full_damage = true;
+}
+
+/*
+ * Sprint 57.15 §2: is the pointer on a chevron — which ROW, and which
+ * way does it point?
+ *
+ * Answered from the REGION TABLE, which is Sprint 22's law: the strip's
+ * placement is established once, while drawing, and never re-derived.
+ * The payload's magnitude names the row (1 or 2) and its sign the
+ * direction, exactly as the click and the wheel read it.
+ *
+ * THE ONE READER of that convention for both clocks.  The drag
+ * autoscroll used to have its own copy that kept the sign and dropped
+ * the magnitude, which is how a drag parked on row 2's chevron ended up
+ * scrolling row 1.
+ */
+static bool chevron_at(u16 x, u16 y, bool *row2, i32 *delta)
+{
+    Region hit = yew_region_hit(x, y);
+
+    if (hit.kind != YEW_REGION_TAB_SCROLL)
+        return false;
+    *row2 = hit.payload == 2 || hit.payload == -2;
+    *delta = hit.payload < 0 ? -1 : 1;
+    return true;
+}
+
+/*
+ * A no-button motion report, tracked for the reveal.
+ *
+ * COSTS NOTHING BY ITSELF.  No render is marked, no scroll happens, no
+ * allocation: the pointer arriving on a chevron only starts a CLOCK,
+ * and the clock is what moves the strip.  tests/perf/mouse.c is the
+ * gate that says a thousand reports parked here repaint at most once
+ * per reveal step, and a thousand reports anywhere else repaint not at
+ * all.
+ *
+ * The first step is a whole window away, because `hover_scroll_ms` is
+ * stamped on ARRIVAL: a pointer merely crossing the chevron on its way
+ * somewhere else must not move the strip under it.
+ */
+static void hover_track(Ed *ed, u16 x, u16 y)
+{
+    MouseState *m = &ed->mouse;
+    bool row2 = false;
+    i32 delta = 0;
+
+    m->hover_x = x;
+    m->hover_y = y;
+    /*
+     * AN OPEN MENU OWNS THE HOVER.  The wheel dismisses a menu before
+     * scrolling anything, for the reason mouse_wheel spells out — a
+     * pop-up left pointing at a view that moved under it.  A hover
+     * cannot dismiss the menu (the pointer only drifted), so it does
+     * the other half instead and reveals nothing until the menu is
+     * gone.
+     */
+    if (yew_ctx_active() || !chevron_at(x, y, &row2, &delta)) {
+        /* Leaving stops it immediately, and cancels the pending
+         * deadline by being the whole of the arming state. */
+        m->hover_chevron = false;
+        return;
+    }
+    if (m->hover_chevron)
+        return; /* still on it: the cadence is the clock's, not the
+                 * report rate's */
+    m->hover_chevron = true;
+    m->hover_scroll_ms = ed->now_ms;
 }
 
 static void mouse_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
+    bool moved_cell;
 
     if (k->button == (u8)YEW_MB_NONE) {
         /*
@@ -1697,10 +2265,18 @@ static void mouse_motion(Ed *ed, const Key *k)
          */
         if (yew_ctx_active() && yew_ctx_hover_at(k->col, k->row))
             ed->overlay_dirty = true;
+        hover_track(ed, k->col, k->row);
         return;
     }
     if (m->phase == YEW_MP_IDLE)
         return;
+    /*
+     * Sprint 57.14 §2: the float follows the POINTER, so a drag repaints
+     * when the pointer changes CELL and not when a report arrives.  A
+     * terminal emits as many reports per cell as it likes, and repainting
+     * per report is the slideshow §3's hover rule exists to prevent.
+     */
+    moved_cell = k->col != m->at_x || k->row != m->at_y;
     m->at_x = k->col;
     m->at_y = k->row;
     if (m->phase == YEW_MP_ARMED) {
@@ -1723,6 +2299,8 @@ static void mouse_motion(Ed *ed, const Key *k)
     case YEW_MP_DRAG_TAB:
     case YEW_MP_DRAG_GROUP:
         drag_strip_motion(ed, k);
+        if (moved_cell)
+            ed->full_damage = true;
         break;
     case YEW_MP_IDLE:
     case YEW_MP_ARMED:
@@ -1846,6 +2424,10 @@ static void mouse_release(Ed *ed, const Key *k)
     case YEW_MP_DRAG_TAB:
     case YEW_MP_DRAG_GROUP:
         drag_strip_drop(ed, k);
+        /* Even a drop that changed nothing repaints: the float was drawn
+         * at the pointer, and putting the button down is what takes it
+         * off the screen. */
+        ed->full_damage = true;
         break;
     case YEW_MP_IDLE:
     default:
@@ -1876,6 +2458,9 @@ void yew_mouse_cancel(Ed *ed)
      */
     ed->mouse.click_n = 0U;
     ed->mouse.last_click_ms = 0;
+    /* Sprint 57.15 §2: FOCUS_OUT calls this, and a pointer that left
+     * the window is not resting on anything. */
+    ed->mouse.hover_chevron = false;
     if (ed->mouse.phase == YEW_MP_IDLE)
         return;
     if (ed->mouse.phase == YEW_MP_DRAG_BORDER)
@@ -1889,7 +2474,10 @@ void yew_mouse_cancel(Ed *ed)
     if (ed->mouse.preview_gid != 0U) {
         ed->layout_dirty = true;
         ed->full_damage = true;
-    } else if (ed->mouse.drag_to_valid) {
+    } else if (ed->mouse.phase == YEW_MP_DRAG_TAB ||
+               ed->mouse.phase == YEW_MP_DRAG_GROUP) {
+        /* The float and its gap are both pictures of a gesture that is
+         * ending, and neither goes away without a repaint. */
         ed->full_damage = true;
     }
     yew_mouse_init(&ed->mouse);
@@ -1899,27 +2487,113 @@ void yew_mouse_cancel(Ed *ed)
 /* §4: the clocks                                                   */
 /* ---------------------------------------------------------------- */
 
-static bool drag_over_chevron(Ed *ed, i32 *delta)
+/*
+ * Sprint 57.14 §3: which QUARTER of the dwell `elapsed` falls in.
+ *
+ * Quarters 0 and 2 are lit, so the cue reads as two flashes.  The last
+ * quarter is CLAMPED rather than divided out, because FLASH is an
+ * integer quarter of DWELL and the division only comes out even when
+ * the dwell is a multiple of four: at 250 ms, 4·FLASH was 248 and the
+ * arithmetic rolled into a fifth, lit quarter for the two milliseconds
+ * immediately before the strip opened.  500 ms divides exactly, so the
+ * clamp is currently unreachable — it stays because the number is a
+ * FEEL setting and the next tuning pass must not have to rediscover
+ * this.
+ */
+static u8 dwell_quarter(i64 elapsed)
 {
-    Region hit = yew_region_hit(ed->mouse.at_x, ed->mouse.at_y);
+    i64 q;
 
-    if (hit.kind != YEW_REGION_TAB_SCROLL)
-        return false;
-    *delta = hit.payload < 0 ? -1 : 1;
-    return true;
+    if (elapsed <= 0)
+        return 0U;
+    q = elapsed / YEW_DRAG_FLASH_MS;
+    return q >= 3 ? 3U : (u8)q;
+}
+
+u32 yew_mouse_dwell_flash(const Ed *ed)
+{
+    const MouseState *m;
+    i64 elapsed;
+
+    if (ed == NULL)
+        return 0U;
+    m = &ed->mouse;
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
+        return 0U;
+    /* Nothing to announce once the strip it was announcing is open. */
+    if (m->dwell_gid == 0U || m->preview_gid == m->dwell_gid)
+        return 0U;
+    elapsed = ed->now_ms - m->dwell_since_ms;
+    if (elapsed >= YEW_DRAG_DWELL_MS)
+        return 0U;
+    return (dwell_quarter(elapsed) % 2U) == 0U ? m->dwell_gid : 0U;
+}
+
+/*
+ * Sprint 57.15 §2: the HOVER reveal's step.
+ *
+ * Three ways it stops, and each is a bug this sprint filed:
+ *
+ *  - the pointer LEFT — `hover_chevron` is already false and nothing
+ *    scheduled us;
+ *  - the chevron is GONE from under a parked pointer, because the
+ *    reveal reached the end or a tab closed.  The region table is the
+ *    one answer to "is it still there", so a tick that finds nothing
+ *    disarms rather than scrolling a row whose chevron no longer
+ *    exists;
+ *  - the offset did not MOVE, which is the end of the list arriving in
+ *    the same millisecond rather than one wakeup later.
+ */
+static void hover_tick(Ed *ed, i64 now_ms)
+{
+    MouseState *m = &ed->mouse;
+    bool row2 = false;
+    i32 delta = 0;
+
+    if (!m->hover_chevron)
+        return;
+    if (!chevron_at(m->hover_x, m->hover_y, &row2, &delta)) {
+        m->hover_chevron = false;
+        return;
+    }
+    if (now_ms - m->hover_scroll_ms < YEW_HOVER_SCROLL_MS)
+        return;
+    m->hover_scroll_ms = now_ms;
+    if (!strip_scroll(ed, row2, delta))
+        m->hover_chevron = false;
 }
 
 void yew_mouse_tick(Ed *ed, i64 now_ms)
 {
     MouseState *m;
     i32 delta = 0;
+    bool row2 = false;
 
     if (ed == NULL)
         return;
     m = &ed->mouse;
+    /*
+     * The hover runs in the IDLE phase, which is exactly where the drag
+     * clocks below do not, so it is handled before the phase gate
+     * rather than inside it.
+     */
+    ed->now_ms = now_ms;
+    hover_tick(ed, now_ms);
     if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return;
-    ed->now_ms = now_ms;
+    /*
+     * The cue's damage, and ONLY its damage: the frame itself is computed
+     * from the clock by yew_mouse_dwell_flash, so this cannot make two
+     * paints of the same instant differ.
+     */
+    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid) {
+        u8 quarter = dwell_quarter(now_ms - m->dwell_since_ms);
+
+        if (quarter != m->flash_phase) {
+            m->flash_phase = quarter;
+            ed->full_damage = true;
+        }
+    }
     if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid &&
         now_ms - m->dwell_since_ms >= YEW_DRAG_DWELL_MS) {
         m->preview_gid = m->dwell_gid;
@@ -1934,10 +2608,18 @@ void yew_mouse_tick(Ed *ed, i64 now_ms)
      * a strip that scrolled per report would fly past the target at a
      * speed that depends on how the terminal batches its reports.
      */
-    if (drag_over_chevron(ed, &delta) &&
+    if (chevron_at(m->at_x, m->at_y, &row2, &delta) &&
         now_ms - m->autoscroll_ms >= YEW_DRAG_SCROLL_MS) {
         m->autoscroll_ms = now_ms;
-        strip_scroll(ed, false, delta);
+        /*
+         * THE ROW UNDER THE POINTER.  This read the payload's SIGN and
+         * then named the row itself — `strip_scroll(ed, false, …)` — so
+         * a drag parked on row 2's `>N` scrolled row 1 out from under
+         * the gesture.  chevron_at is now the one reader of the ±1/±2
+         * convention, which is what stops the two clocks from
+         * disagreeing about it again.
+         */
+        (void)strip_scroll(ed, row2, delta);
     }
 }
 
@@ -1949,15 +2631,36 @@ i64 yew_mouse_deadline(const Ed *ed, i64 now_ms)
     if (ed == NULL)
         return -1;
     m = &ed->mouse;
-    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
-        return -1;
-    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid)
-        next = m->dwell_since_ms + YEW_DRAG_DWELL_MS;
-    if (yew_region_hit(m->at_x, m->at_y).kind == YEW_REGION_TAB_SCROLL) {
-        i64 at = m->autoscroll_ms + YEW_DRAG_SCROLL_MS;
+    /* Sprint 57.15 §2: the hover's clock, which runs with no button
+     * held and therefore before the drag phases are consulted. */
+    if (m->hover_chevron)
+        next = m->hover_scroll_ms + YEW_HOVER_SCROLL_MS;
+    if (m->phase == YEW_MP_DRAG_TAB || m->phase == YEW_MP_DRAG_GROUP) {
+        if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid) {
+            /*
+             * EVERY phase edge, not just the open: the cue is a picture
+             * the loop has to be told to repaint, and the alternative to
+             * a deadline per edge is spinning (invariant 4).  Edges that
+             * would change nothing are not scheduled — past the third
+             * quarter the next thing to happen is the open itself.
+             */
+            i64 elapsed = now_ms - m->dwell_since_ms;
+            i64 quarter = elapsed <= 0 ? 0 : elapsed / YEW_DRAG_FLASH_MS;
+            i64 at = quarter >= 3
+                         ? m->dwell_since_ms + YEW_DRAG_DWELL_MS
+                         : m->dwell_since_ms +
+                               (quarter + 1) * YEW_DRAG_FLASH_MS;
 
-        if (next < 0 || at < next)
-            next = at;
+            if (next < 0 || at < next)
+                next = at;
+        }
+        if (yew_region_hit(m->at_x, m->at_y).kind ==
+            YEW_REGION_TAB_SCROLL) {
+            i64 at = m->autoscroll_ms + YEW_DRAG_SCROLL_MS;
+
+            if (next < 0 || at < next)
+                next = at;
+        }
     }
     if (next < 0)
         return -1;
@@ -1976,6 +2679,43 @@ bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot)
     *payload = ed->mouse.press_rgn.payload;
     *to_slot = ed->mouse.drag_to_slot;
     return true;
+}
+
+bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
+                          u16 *grab_dx)
+{
+    const MouseState *m;
+
+    if (ed == NULL || payload == NULL || x == NULL || y == NULL ||
+        grab_dx == NULL)
+        return false;
+    m = &ed->mouse;
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
+        return false;
+    *payload = m->press_rgn.payload;
+    *x = m->at_x;
+    *y = m->at_y;
+    /*
+     * The press's region is the one captured at press (the law at the
+     * top of this file), so the grip survives everything the strip does
+     * underneath — scrolling, an auto-scroll, a repaint.  A press that
+     * somehow landed left of its own region grips the left edge rather
+     * than wrapping into a huge unsigned offset.
+     */
+    *grab_dx = m->press_x > m->press_rgn.rect.x
+                   ? (u16)(m->press_x - m->press_rgn.rect.x) : 0U;
+    return true;
+}
+
+bool yew_mouse_drag_member_preview(const Ed *ed, u32 *gid, int *pos)
+{
+    if (ed == NULL || gid == NULL || pos == NULL)
+        return false;
+    if (ed->mouse.phase != YEW_MP_DRAG_TAB || !ed->mouse.drag_row2_valid)
+        return false;
+    *gid = ed->mouse.drag_row2_gid;
+    *pos = ed->mouse.drag_row2_pos;
+    return *gid != 0U;
 }
 
 u32 yew_mouse_preview_group(const Ed *ed)
@@ -2177,6 +2917,9 @@ void yew_mouse_set_enabled(bool on)
 {
     mouse_resolved = true;
     mouse_enabled = on;
+    /* The owner's third input.  Turning the mouse off must silence a
+     * strip that still has a chevron drawn, not only a menu. */
+    motion_sync();
 }
 
 CmdStatus yew_mouse_cmd_enable(CmdCtx *cx)
@@ -2184,6 +2927,7 @@ CmdStatus yew_mouse_cmd_enable(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
     mouse_enabled = true;
+    motion_sync();
     yew_msg(cx->ed, YEW_MSG_INFO, "mouse on");
     return YEW_CMD_OK;
 }
@@ -2200,6 +2944,9 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx)
      * takes any-motion tracking with it (§1/§3). */
     menu_close(cx->ed);
     mouse_enabled = false;
+    /* ...and again after the flag flips, because the strip's chevron
+     * want outlives the menu and only the owner knows that. */
+    motion_sync();
     yew_msg(cx->ed, YEW_MSG_INFO, "mouse off");
     return YEW_CMD_OK;
 }

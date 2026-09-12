@@ -52,7 +52,22 @@ enum {
      * motion report — the terminal decides how many of those there are.
      * Twenty rows is the budget because the menu under test has twenty.
      */
-    PERF_MOUSE_MENU_ROWS = 20
+    PERF_MOUSE_MENU_ROWS = 20,
+    /*
+     * Sprint 57.15 §2's gate.  Mode 1003 is now armed whenever a
+     * chevron is drawn, so the router sees no-button motion reports for
+     * most of a session rather than only under a menu — and a pointer
+     * PARKED ON a chevron is the worst of them, because it is the one
+     * cell where a report has something to do.
+     *
+     * The budget is one frame per REVEAL STEP and not one per report.
+     * The reveal is a clock (invariant 5: the render is a function of
+     * state and now_ms), so the burst drives now_ms itself, ten steps
+     * across a thousand reports.  Anything above ten means a motion
+     * report repainted, which is the slideshow this file exists to
+     * prevent.
+     */
+    PERF_MOUSE_HOVER_STEPS = 10
 };
 
 static i64 now_ns(void)
@@ -197,6 +212,66 @@ static u64 measure_menu_hover(Ed *ed, i64 *elapsed_ns)
     return ed->render.frames - before;
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.15 §2: parked on a chevron                             */
+/* ---------------------------------------------------------------- */
+
+/*
+ * A thousand reports on the one cell where a hover means something.
+ *
+ * The clock is driven, never slept on: a wall-clock wait would make the
+ * step count depend on how fast the machine ran the loop, and the whole
+ * point of the throttle is that it does not.  The reveal stops itself
+ * at the end of the strip, so the real step count is at most the ten
+ * this drives — which is exactly the claim.
+ */
+static u64 measure_chevron_hover(Ed *ed, i64 *elapsed_ns)
+{
+    u16 chev = 0U;
+    u16 x;
+    bool found = false;
+    u64 before;
+    i64 start;
+    int i;
+
+    yew_region_frame_begin();
+    yew_tab_strip_draw(ed, ed->tab_strip_rect);
+    for (x = 0U; x < ed->grid.cols; x++) {
+        Region hit = yew_region_hit(x, ed->tab_strip_rect.y);
+
+        if (hit.kind == YEW_REGION_TAB_SCROLL && hit.payload > 0) {
+            chev = x;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        (void)fprintf(stderr, "perf_mouse: the strip drew no chevron\n");
+        return (u64)-1;
+    }
+    ed->full_damage = false;
+    ed->overlay_dirty = false;
+    ed->footer_dirty = false;
+    before = ed->render.frames;
+    start = now_ns();
+    for (i = 0; i < PERF_MOUSE_EVENTS; i++) {
+        Key m = motion_at(chev, ed->tab_strip_rect.y);
+
+        /* NO BUTTON HELD: base 35, what a terminal reports under 1003
+         * and what the strip now arms 1003 to receive. */
+        m.button = (u8)YEW_MB_NONE;
+        yew_mouse_event(ed, &m);
+        if ((i + 1) % (PERF_MOUSE_EVENTS / PERF_MOUSE_HOVER_STEPS) == 0) {
+            ed->now_ms += YEW_HOVER_SCROLL_MS;
+            yew_mouse_tick(ed, ed->now_ms);
+        }
+        if (ed->overlay_dirty || ed->full_damage || ed->footer_dirty)
+            yew_ed_render(ed);
+    }
+    *elapsed_ns = now_ns() - start;
+    return ed->render.frames - before;
+}
+
 /* DoD 13's second half, read out of the source it is a claim about. */
 static bool router_allocates(const char **what)
 {
@@ -294,6 +369,21 @@ int main(void)
                                                                 : " FAIL");
         if (hover_renders > (u64)PERF_MOUSE_MENU_ROWS)
             status = 1;
+        {
+            i64 chev_ns = 0;
+            u64 chev_renders = measure_chevron_hover(&ed, &chev_ns);
+
+            (void)printf("perf-mouse: chevron_hover burst=%d renders=%llu "
+                         "(budget %d) ms=%.3f%s\n",
+                         PERF_MOUSE_EVENTS,
+                         (unsigned long long)chev_renders,
+                         PERF_MOUSE_HOVER_STEPS,
+                         (double)chev_ns / 1000000.0,
+                         chev_renders <= (u64)PERF_MOUSE_HOVER_STEPS
+                             ? " ok" : " FAIL");
+            if (chev_renders > (u64)PERF_MOUSE_HOVER_STEPS)
+                status = 1;
+        }
         if (devnull >= 0)
             (void)close(devnull);
         ed.render_ready = false;

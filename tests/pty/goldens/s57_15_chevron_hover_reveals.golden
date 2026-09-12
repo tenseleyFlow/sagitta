@@ -1,9 +1,8 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=2,6 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+size 80x24 alt=1 cursor=1,6 vis=1
+modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
 --- text
- 2 yew-s24-grp/ (3)         pty-s14-s27_dwell_opens                             
- 1 one.txt  2 three.txt  3 two.txt                                              
+< 3 yew-pty-1.txt  4 yew-pty-2.txt  5 yew-pty-3.txt  6 yew-pty-4.txt  +         
     1 alpha beta gamma                                                          
     1 delta epsilon                                                             
     2 zeta eta theta iota                                                       
@@ -25,11 +24,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
- L  pty-s14-s27_dwell_opens_member_strip.txt                 utf-8  lf  1:1  all
+                                                                                
+ L  pty-s14-s57_15_chevron_hover_reveals.txt                 utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCC
 DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -52,9 +52,9 @@ DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 GGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 --- legend
-A fg=#5c6370 bg=#1b202a attrs=----------
-B fg=#c8ccd4 bg=#2c313a attrs=b-----r---
-C fg=#5c6370 bg=#1b202a attrs=-d--------
+A fg=#5c6370 bg=#1b202a attrs=-d--------
+B fg=#61afef bg=#1b202a attrs=b---------
+C fg=#5c6370 bg=#1b202a attrs=----------
 D fg=#4b5263 bg=#12141a attrs=----------
 E fg=#c8ccd4 bg=#12141a attrs=b---------
 F fg=#c8ccd4 bg=#12141a attrs=----------

@@ -1,9 +1,13 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=1,6 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
 --- text
- 2 yew-pty-0.txt  3 yew-pty-1.txt                        pty-s14-chrome_drag_col
-    1                                                                           
+< 2 yew-pty-0.txt  3 yew-pty-1.txt  4 yew-pty-2.txt  5 yew-pty-3.txt          >1
+    1 alpha beta gamma                                                          
+    1 delta epsilon                                                             
+    2 zeta eta theta iota                                                       
+    3 kappa                                                                     
+    4                                                                           
                                                                                 
                                                                                 
                                                                                 
@@ -21,14 +25,10 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-                                                                                
- L  yew-pty-1.txt                                            utf-8  lf  1:1  all
+ L  pty-s14-s57_15_chevron_click_scrolls.txt                 utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDD
-CCCCBCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBAA
+CCCCDCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 CCCCCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 CCCCCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 CCCCCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
@@ -52,9 +52,9 @@ CCCCCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 CCCCCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 FFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 --- legend
-A fg=idx:8 bg=idx:0 attrs=-d--------
-B fg=idx:7 bg=idx:0 attrs=b---------
-C fg=idx:8 bg=idx:0 attrs=----------
-D fg=idx:7 bg=idx:0 attrs=b-----r---
-E fg=idx:7 bg=idx:0 attrs=----------
-F fg=idx:0 bg=idx:7 attrs=----------
+A fg=#5c6370 bg=#1b202a attrs=-d--------
+B fg=#5c6370 bg=#1b202a attrs=----------
+C fg=#4b5263 bg=#12141a attrs=----------
+D fg=#c8ccd4 bg=#12141a attrs=b---------
+E fg=#c8ccd4 bg=#12141a attrs=----------
+F fg=#12141a bg=#61afef attrs=----------

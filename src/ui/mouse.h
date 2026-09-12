@@ -45,8 +45,32 @@ enum {
     YEW_WHEEL_ROWS = 3,
     /* Shift+wheel, when wrap is off. */
     YEW_WHEEL_COLS = 6,
-    YEW_DRAG_DWELL_MS = 400,
+    /*
+     * Sprint 57.14 §3, retuned in the field.  400 ms read as the editor
+     * having stopped responding; 250 ms answered too eagerly — a drag
+     * merely crossing a group entry on its way past kept opening it, so
+     * the strip grew and lost a row under a pointer that was only
+     * travelling.  500 ms is long enough that resting is a DECISION and
+     * short enough that the two-flash cue below covers the wait.
+     */
+    YEW_DRAG_DWELL_MS = 500,
+    /*
+     * DERIVED, so the cue and the open cannot disagree: on, off, on, then
+     * settle — two flashes, and the fourth quarter is quiet so the member
+     * strip does not appear mid-blink.  The derivation is also what keeps
+     * the cue honest at 500 ms: the two flashes SPREAD across the longer
+     * window rather than finishing early and leaving the rest silent.
+     */
+    YEW_DRAG_FLASH_MS = YEW_DRAG_DWELL_MS / 4,
     YEW_DRAG_SCROLL_MS = 120,
+    /*
+     * Sprint 57.15 §2: one entry per this while the pointer RESTS on a
+     * chevron with no button held.  Slower than the drag autoscroll on
+     * purpose — a drag is aimed, a hover is often just a pointer
+     * passing through, and the first step deliberately costs a whole
+     * window so crossing the chevron reveals nothing at all.
+     */
+    YEW_HOVER_SCROLL_MS = 300,
     YEW_CLICK_MULTI_MS = 400
 };
 
@@ -97,6 +121,23 @@ typedef struct MouseState {
     i64 autoscroll_ms;
     u16 at_x, at_y;
 
+    /*
+     * Sprint 57.15 §2: the HOVER reveal, with no button held.
+     *
+     * Kept apart from `at_x`/`at_y` above, which belong to the drag:
+     * the two clocks run in different phases (a drag is never IDLE, a
+     * hover always is) and sharing the cell would make a cancelled drag
+     * silently inherit a hover the pointer is not performing.
+     *
+     * `hover_chevron` is the whole arming state — true only while the
+     * pointer sits on a YEW_REGION_TAB_SCROLL cell.  Leaving the
+     * chevron clears it, which cancels the pending deadline by
+     * construction rather than by remembering to.
+     */
+    u16 hover_x, hover_y;
+    bool hover_chevron;
+    i64 hover_scroll_ms;
+
     /* Multi-click (§6). */
     i64 last_click_ms;
     u16 last_click_x, last_click_y;
@@ -104,10 +145,30 @@ typedef struct MouseState {
     i32 last_click_payload;
     u8 click_n;
 
+    /*
+     * Sprint 57.14 field repair: ROW 2'S target.  `drag_row2_pos` is a
+     * 0-based position in the group's FINAL member list; the ordinal
+     * committed is one more.  Kept beside row 1's rather than sharing
+     * it: the two rows mean different things by a position, and the
+     * handover between them is exactly the moment one must go quiet.
+     */
+    int drag_row2_pos;
+    bool drag_row2_valid;
+    u32 drag_row2_gid;
+
     /* Dwell over a group while dragging (§4). */
     i64 dwell_since_ms;
     u32 dwell_gid;
     u32 preview_gid; /* the member strip a dwell opened; 0 = none */
+    /*
+     * Sprint 57.14 §3: the flash quarter the tick last SAW, and nothing
+     * else.  It exists to mark damage at a phase edge; what the cue looks
+     * like is computed from (now_ms − dwell_since_ms) at render time, so
+     * a missed wake-up costs a late repaint and never a different frame
+     * (invariant 5).  A per-render counter here would make the picture
+     * depend on how often the screen happened to be painted.
+     */
+    u8 flash_phase;
 
     /* Selection drag (§6). */
     const UnitOps *sel_unit;
@@ -153,8 +214,50 @@ bool yew_mouse_gesture_active(const Ed *ed);
  */
 bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot);
 
+/*
+ * Sprint 57.14 §2: the FLOAT — the held entry, and where the pointer has
+ * it.  True for the whole life of a tab/group drag, target or no target,
+ * because the thing being carried is visible from the moment it is
+ * lifted; `yew_mouse_drag_preview` answers the narrower question of
+ * where it would LAND, and the strip's gap follows that one.
+ *
+ * `grab_dx` is the column the press landed on within the entry, so the
+ * float keeps the grip the user took instead of snapping its left edge
+ * to the pointer.
+ */
+bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
+                          u16 *grab_dx);
+
+/*
+ * Sprint 57.14 field repair: ROW 2'S PREVIEW — the group the carried
+ * tab is aimed at and the 0-based position it would take in that
+ * group's FINAL member list.  False whenever row 2 does not own the
+ * preview.
+ *
+ * WHICH ROW OWNS THE PREVIEW, stated once: the row the POINTER is on.
+ * Row 1 while it is on row 1 (`yew_mouse_drag_preview`), row 2 while it
+ * is on row 2 (this), and never both — a pointer that leaves row 2
+ * clears this in the same motion, so the members close back up rather
+ * than holding a space open for a drop no longer aimed at them.
+ *
+ * The ordinal the drop commits is `pos + 1`, read from here rather than
+ * re-hit-tested at release: the drawn row is PERMUTED by this very
+ * preview, so hit-testing it would answer "you are over the thing you
+ * are holding" — the same trap row 1's pre-drag slot table exists for.
+ */
+bool yew_mouse_drag_member_preview(const Ed *ed, u32 *gid, int *pos);
+
 /* §4: the group whose member strip a dwell has opened; 0 when none. */
 u32 yew_mouse_preview_group(const Ed *ed);
+
+/*
+ * §57.14 §3: the group whose row-1 entry is FLASHED at ed->now_ms, or 0.
+ *
+ * Pure in (state, now_ms) — the renderer asks it per frame and gets the
+ * same answer for the same clock, which is what keeps a blinking cue
+ * inside invariant 5.
+ */
+u32 yew_mouse_dwell_flash(const Ed *ed);
 
 /*
  * Called from the loop's timer path: dwell and auto-scroll are clocks,
@@ -165,6 +268,24 @@ u32 yew_mouse_preview_group(const Ed *ed);
 void yew_mouse_tick(Ed *ed, i64 now_ms);
 /* When the router next needs the clock, or 0 when it does not. */
 i64 yew_mouse_deadline(const Ed *ed, i64 now_ms);
+
+/*
+ * Sprint 57.15 §2: THE STRIP'S HALF OF MODE 1003.
+ *
+ * The row-1/row-2 renderer reports, once per strip draw, whether EITHER
+ * row put a chevron on screen.  The router is the one owner of DEC 1003
+ * (see mouse.c): it arms whenever a chevron is drawn or a menu is open
+ * and disarms when neither holds, so a closing menu cannot silence a
+ * strip that still wants motion and a vanishing chevron cannot silence
+ * an open menu.  Without motion reports a hover produces no events at
+ * all, which is why this is not optional chrome.
+ *
+ * Idempotent; the terminal is only touched when the answer changes.
+ */
+void yew_mouse_note_chevrons(bool any);
+/* What the last strip draw reported — the seam fuzz_mouse asserts the
+ * if-and-only-if against. */
+bool yew_mouse_chevron_drawn(void);
 
 /*
  * Sprint 57.13 §3: WHAT IS UNDER THE POINTER.
