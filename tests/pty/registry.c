@@ -8313,15 +8313,13 @@ static void case_s52_fuss(PtyCtx *c)
     }
     if (semantic_snapshot) {
         /*
-         * An invisible cursor has no semantic screen position.  Incremental
-         * repaints can leave it at the last changed cell, so two valid frame
-         * histories may otherwise disagree despite identical visible state.
-         * FUSS semantic goldens deliberately canonicalize that position.
+         * The cursor position is NOT canonicalized here.  Every cell-bearing
+         * frame ends with an absolute CUP to the grid cursor, so a completed
+         * frame always leaves the terminal cursor where the editor put it —
+         * 0,0 while FUSS owns the screen.  The position only ever disagreed
+         * when a snapshot was read mid-frame, which the harness no longer
+         * permits, and pinning it is what would catch that regression.
          */
-        if (!c->vt.cur_vis) {
-            c->vt.cur_r = 0;
-            c->vt.cur_c = 0;
-        }
         c->vt.sync_pairs_unstable = true;
         ptc_snapshot(c, name);
     } else {
