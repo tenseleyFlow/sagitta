@@ -3,14 +3,14 @@ size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
  1 pty-s14-chrome_ctxmen 2 yew-pty-0.txt  3 yew-pty-1.txt  + 
- Close Tab     C-w
- Close Other Tabs
--------------------
- Copy Path
- Remove from Group
-
-
-
+    1
+ ┌───────────────────┐
+ │ Close Tab     C-w │
+ │ Close Other Tabs  │
+ ├───────────────────┤
+ │ Copy Path         │
+ │ Remove from Group │
+ └───────────────────┘
 
 
 
@@ -28,14 +28,14 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
  L  yew-pty-1.txt                                            utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBCCC
-DBBBBBBBBBDDDDDAAA
-DDDDDDDDDDDDDDDDD
-AAAAAAAAAAAAAAAAAAA
-DDDDDDDDDD
-DAAAAAAAAAAAAAAAAA
-
-
-
+DDDDC
+DDDDDDDDDDDDDDDDDDDDDD
+DDBBBBBBBBBBBBBBBBBBBD
+DDDDDDDDDDDDDDDDDDDDDD
+DDAAAAAAAAAAAAAAAAAAAD
+DDDDDDDDDDDDDDDDDDDDDD
+DDAAAAAAAAAAAAAAAAAAAD
+DDDDDDDDDDDDDDDDDDDDDD
 
 
 
