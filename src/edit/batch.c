@@ -116,6 +116,11 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.cmdline.accept", "use ed.run(name, args)"},
     {"ed.cmdline.cancel", "use ed.run(name, args)"},
     {"ed.file.open", "use buf.open(path)"},
+    /* Sprint 57.11 section 4: `Save As...` is the QUESTION "write to
+     * which path?" and nothing else - it opens the E-mode line seeded
+     * with `w <path>`.  A script already has the answer in hand, so the
+     * alternative is the write it would have edited its way to. */
+    {"ed.file.save_as", "use buf.save(b, path)"},
     {"ed.group.rename", "pass a name to a non-interactive group command"},
     {"ed.group.new", "construct the group with explicit arguments"},
     {"ed.group.edit", "no batch alternative"},
