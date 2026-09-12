@@ -343,7 +343,7 @@ static int dg_slot_of_payload(i32 want)
     return -1;
 }
 
-void test_drag_dwell_opens_a_group_at_400ms_and_not_at_399(void)
+void test_drag_dwell_opens_a_group_at_250ms_and_not_at_249(void)
 {
     DragFixture f;
     u32 g;
@@ -366,13 +366,13 @@ void test_drag_dwell_opens_a_group_at_400ms_and_not_at_399(void)
     }
     YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
 
-    /* 399 ms: still counting.  A drag that merely PASSES over a group
+    /* 249 ms: still counting.  A drag that merely PASSES over a group
      * must not make its members flash open. */
-    yew_mouse_tick(&f.ed, f.ed.now_ms + 399);
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS - 1);
     YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), 0U);
 
-    /* 400 ms: open. */
-    yew_mouse_tick(&f.ed, f.ed.now_ms + 400);
+    /* 250 ms: open. */
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
     YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
     yew_ed_free(&f.ed);
 }
@@ -430,10 +430,11 @@ void test_drag_passing_over_three_groups_opens_none(void)
  * THE fixture where the two answers disagree.
  *
  * A drag is in flight and the preview has moved the held entry under
- * the pointer, so the REGION at those cells names the held tab.  The
- * pre-drag list still says a group is there.  The dwell must read the
- * pre-drag list, or it would never fire at all — the pointer would
- * always be "over the thing it is holding".
+ * the pointer, so the REGION at those cells is the held entry's — since
+ * 57.14 §2 that means nothing at all, because the gap it leaves is drawn
+ * and never registered.  The pre-drag list still says a group is there.
+ * The dwell must read the pre-drag list, or it would never fire — the
+ * pointer is always over the thing it is holding.
  */
 void test_drag_dwell_reads_the_pre_drag_list_not_the_region(void)
 {
@@ -464,11 +465,16 @@ void test_drag_dwell_reads_the_pre_drag_list_not_the_region(void)
         Region hit = yew_region_hit(dg_slot_x(&f, gslot), 0U);
         i32 pre = 0;
 
-        /* The two now disagree, which is the whole point of the
-         * fixture: the region says the held tab, the pre-drag list says
-         * the group. */
-        YEW_ASSERT_EQ_U64((u64)hit.kind, (u64)YEW_REGION_TAB);
-        YEW_ASSERT_EQ_I64(hit.payload, 0);
+        /*
+         * The two now disagree, which is the whole point of the fixture.
+         * Sprint 27 had the region name the held tab here; since 57.14
+         * §2 the held entry is a GAP that registers nothing at all — so
+         * the registry answers NONE where the pre-drag list still says a
+         * group is.  Either way the region table cannot answer the
+         * dwell's question, and the pre-drag list is the only thing that
+         * can.
+         */
+        YEW_ASSERT_EQ_U64((u64)hit.kind, (u64)YEW_REGION_NONE);
         YEW_ASSERT(yew_strip_pre_payload(gslot, &pre));
         YEW_ASSERT_EQ_I64(pre, -(i32)g);
     }
@@ -721,7 +727,7 @@ void test_drag_autoscroll_is_throttled_to_one_entry_per_window(void)
  * pointer resting on a group emits no further events, so the loop has
  * to be told to wake up.
  */
-void test_drag_reports_a_deadline_while_dwelling(void)
+void test_drag_reports_a_deadline_at_every_flash_edge(void)
 {
     DragFixture f;
     u32 g;
@@ -744,13 +750,32 @@ void test_drag_reports_a_deadline_while_dwelling(void)
         yew_mouse_event(&f.ed, &press);
         yew_mouse_event(&f.ed, &motion);
     }
+    /*
+     * EVERY phase edge, because each one repaints the cue: the three
+     * quarter boundaries, then the open.  Sprint 27 waited only for the
+     * open, which is why a cue was not expressible then.
+     */
     YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms),
-                      YEW_DRAG_DWELL_MS);
-    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms + 399), 1);
-    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms + 400), 0);
+                      YEW_DRAG_FLASH_MS);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed,
+                                         f.ed.now_ms + YEW_DRAG_FLASH_MS),
+                      YEW_DRAG_FLASH_MS);
+    YEW_ASSERT_EQ_I64(
+        yew_mouse_deadline(&f.ed, f.ed.now_ms + 2 * YEW_DRAG_FLASH_MS),
+        YEW_DRAG_FLASH_MS);
+    /* Past the third quarter the next thing to happen is the open, so
+     * the settle is one sleep and not two. */
+    YEW_ASSERT_EQ_I64(
+        yew_mouse_deadline(&f.ed, f.ed.now_ms + 3 * YEW_DRAG_FLASH_MS),
+        YEW_DRAG_DWELL_MS - 3 * YEW_DRAG_FLASH_MS);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed,
+                                         f.ed.now_ms + YEW_DRAG_DWELL_MS - 1),
+                      1);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed,
+                                         f.ed.now_ms + YEW_DRAG_DWELL_MS), 0);
     /* Once it has fired there is nothing left to wait for. */
-    yew_mouse_tick(&f.ed, f.ed.now_ms + 400);
-    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms + 400), -1);
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms), -1);
     yew_ed_free(&f.ed);
 }
 
@@ -799,5 +824,500 @@ void test_drag_a_group_moves_the_whole_block(void)
         YEW_ASSERT_EQ_I64(b, a + 1);
         YEW_ASSERT(a > 0);
     }
+    yew_ed_free(&f.ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.14 §1: row 1 is the group exit                          */
+/* ---------------------------------------------------------------- */
+
+/* The middle of the row-2 member entry whose payload is `want`. */
+static u16 dg_row2_x(DragFixture *f, i32 want)
+{
+    u16 x;
+
+    (void)f;
+    for (x = 0U; x < 80U; x++) {
+        Region hit = yew_region_hit(x, 1U);
+
+        if (hit.kind == YEW_REGION_TAB && hit.payload == want)
+            return x;
+    }
+    YEW_ASSERT(false);
+    return 0U;
+}
+
+/*
+ * A member dropped on an ordinary row-1 slot LEAVES its group.
+ *
+ * Row 1 is the ungrouped bar, so landing on it means "live here"; row 2
+ * is the only place a drop JOINS.  Before 57.14 the blank tail was the
+ * only exit, and §1 explains why that was a lockout rather than a
+ * preference.
+ */
+void test_drag_row1_slot_extracts_a_member_from_its_group(void)
+{
+    DragFixture f;
+    u32 g;
+    u32 held;
+    int target;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 4);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    held = yew_tab_at(&f.ed, 4)->tab_id;
+    target = dg_slot_of_payload(1);
+    YEW_ASSERT(target >= 0);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_row2_x(&f, 4), 1U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, target), 0U);
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, dg_slot_x(&f, target), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+        YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+        dg_paint(&f);
+        yew_mouse_event(&f.ed, &up);
+    }
+    {
+        int idx = yew_tab_index_of_id(&f.ed, held);
+
+        YEW_ASSERT_EQ_I64(idx, 1);
+        YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, idx)->group_id, 0U);
+    }
+    /* The group survives, with the member that stayed. */
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&f.ed, g), 1);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * THE DISSOLVE.  The extracted tab was its group's LAST member, so
+ * yew_group_remove_member deletes the group — and with it a row-1 entry,
+ * which renumbers every slot to its right.  The drop was aimed at a slot
+ * to the group's right, so a destination re-read after the removal would
+ * name the wrong tab.  Resolving to a tab INDEX first is what makes this
+ * land where the user pointed.
+ */
+void test_drag_extracting_a_sole_member_onto_a_slot_to_its_right(void)
+{
+    DragFixture f;
+    u32 g;
+    u32 held;
+    u32 passed_a;
+    u32 passed_b;
+    int target;
+
+    dg_fixture(&f, 3U);
+    g = yew_group_create(&f.ed, "/src", "grp");
+    YEW_ASSERT(g != 0U);
+    yew_group_add_member(&f.ed, g, 1);
+    yew_tab_switch(&f.ed, 1);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    /* Four row-1 entries: tab 0, the group, tabs 2 and 3. */
+    YEW_ASSERT_EQ_I64(yew_strip_slot_count(), 4);
+    held = yew_tab_at(&f.ed, 1)->tab_id;
+    passed_a = yew_tab_at(&f.ed, 2)->tab_id;
+    passed_b = yew_tab_at(&f.ed, 3)->tab_id;
+    target = dg_slot_of_payload(3);
+    YEW_ASSERT_EQ_I64(target, 3);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_row2_x(&f, 1), 1U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, target), 0U);
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, dg_slot_x(&f, target), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+        dg_paint(&f);
+        yew_mouse_event(&f.ed, &up);
+    }
+    /* The group is gone, and the tab landed on the slot it was aimed
+     * at — the two it passed keeping their relative order. */
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&f.ed, g), 0);
+    YEW_ASSERT_EQ_I64(yew_group_find(&f.ed, g), -1);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, passed_a), 1);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, passed_b), 2);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, held), 3);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, 3)->group_id, 0U);
+    /* And row 1 is one entry SHORTER than it was: the dissolve deleted
+     * the group's entry and renumbered everything to its right. */
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_I64(yew_strip_slot_count(), 4);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * THE LOCKOUT, tested where it bit.  strip_render draws the tail control
+ * only in its `draw_new` arm, which an overflowing row 1 never reaches —
+ * so with the strip overflowing there was NOTHING to aim at, and a group
+ * member could not be dragged out at all.  Every visible slot is an exit
+ * now, so the gesture works with no tail on screen.
+ */
+void test_drag_row1_exit_works_when_the_strip_overflows(void)
+{
+    DragFixture f;
+    u32 g;
+    u32 held;
+    int target = -1;
+    u16 x;
+    bool tail = false;
+    bool chevron = false;
+
+    dg_fixture(&f, 7U);
+    /* The group sits EARLY, with plenty of entries to its right, so the
+     * strip overflows to the right and strip_render's `draw_new` arm —
+     * the only place the tail is drawn — is never reached. */
+    g = dg_make_group(&f, 1, 2);
+    yew_tab_switch(&f.ed, 1);
+    /* Narrow enough that row 1 overflows.  RESIZE rather than a second
+     * init, which would leak the first's buffers. */
+    YEW_ASSERT(yew_grid_resize(&f.ed.grid, 24U, 24U));
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    for (x = 0U; x < 24U; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB_NEW)
+            tail = true;
+        if (hit.kind == YEW_REGION_TAB_SCROLL)
+            chevron = true;
+    }
+    /* The premise: overflow, and therefore no tail to aim at. */
+    YEW_ASSERT(chevron);
+    YEW_ASSERT(!tail);
+
+    held = yew_tab_at(&f.ed, 1)->tab_id;
+    for (x = 0U; x < 24U && target < 0; x++) {
+        int slot = yew_strip_slot_at(x, 0U);
+        i32 pre = 0;
+
+        if (slot >= 0 && yew_strip_pre_payload(slot, &pre) && pre >= 0)
+            target = slot;
+    }
+    YEW_ASSERT(target >= 0);
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_row2_x(&f, 1), 1U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, target), 0U);
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, dg_slot_x(&f, target), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+        dg_paint(&f);
+        yew_mouse_event(&f.ed, &up);
+    }
+    {
+        int idx = yew_tab_index_of_id(&f.ed, held);
+
+        YEW_ASSERT(idx >= 0);
+        YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, idx)->group_id, 0U);
+    }
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&f.ed, g), 1);
+    yew_ed_free(&f.ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.14 §2: the float and the gap                            */
+/* ---------------------------------------------------------------- */
+
+/* The text of grid row `y`, single-byte cells only. */
+static void dg_row_text(const Ed *ed, u16 y, char *out, size_t cap)
+{
+    size_t n = 0U;
+    u16 x;
+
+    for (x = 0U; x < ed->grid.cols && n + 1U < cap; x++) {
+        const Cell *c = &ed->grid.back[(size_t)y * ed->grid.cols + x];
+
+        out[n++] = (char)(c->utf8[0] >= 32U && c->utf8[0] < 127U
+                              ? c->utf8[0] : ' ');
+    }
+    out[n] = '\0';
+}
+
+/*
+ * THE FLOAT IS DRAWN AND NEVER REGISTERED.
+ *
+ * Drawn: its cells carry the held tab's name.  Never registered: the
+ * registry answers nothing over any of them.  A region there would make
+ * the pointer hover whatever it is holding, wherever it went — the same
+ * failure the pre-drag slot table exists to keep out of the dwell.
+ */
+void test_drag_float_is_drawn_and_registers_no_region(void)
+{
+    DragFixture f;
+    Rect fl;
+    char row[128];
+    u16 x;
+
+    dg_fixture(&f, 5U);
+    dg_paint(&f);
+    /* Nothing in flight: no float. */
+    YEW_ASSERT_EQ_U64(yew_strip_float_rect().w, 0U);
+    {
+        /* Grabbed one cell into the entry, and carried to a column far
+         * from every entry so the cells under it are unclaimed. */
+        Key press = dg_ev((u8)YEW_KEY_PRESS, (u16)(dg_slot_x(&f, 1) + 1U),
+                          0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, 60U, 3U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+    dg_paint(&f);
+    fl = yew_strip_float_rect();
+    YEW_ASSERT(fl.w > 0U);
+    YEW_ASSERT_EQ_U64(fl.y, 3U);
+    /* It follows the pointer's grip, not the pointer's left edge. */
+    YEW_ASSERT_EQ_U64(fl.x, 59U);
+    dg_row_text(&f.ed, fl.y, row, sizeof(row));
+    YEW_ASSERT_NOT_NULL(strstr(row, "yew-drag-0.txt"));
+    /* And the registry knows nothing about any of it. */
+    for (x = fl.x; x < (u16)(fl.x + fl.w); x++)
+        YEW_ASSERT_EQ_U64((u64)yew_region_hit(x, fl.y).kind,
+                          (u64)YEW_REGION_NONE);
+    /* The float has no number: the numbers address POSITIONS on a row,
+     * and a float is between them. */
+    YEW_ASSERT(strstr(row + fl.x, " 2 yew-drag-0.txt") == NULL);
+    /*
+     * Moving the pointer inside ONE cell repaints nothing; crossing into
+     * the next cell repaints, because that is where the float now is.
+     */
+    f.ed.full_damage = false;
+    {
+        Key same = dg_ev((u8)YEW_KEY_REPEAT, 60U, 3U);
+        Key next = dg_ev((u8)YEW_KEY_REPEAT, 61U, 3U);
+
+        yew_mouse_event(&f.ed, &same);
+        YEW_ASSERT(!f.ed.full_damage);
+        yew_mouse_event(&f.ed, &next);
+        YEW_ASSERT(f.ed.full_damage);
+    }
+    /* And the release takes it off the screen, even though this drag
+     * never named a target and changes nothing. */
+    f.ed.full_damage = false;
+    {
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, 61U, 3U);
+
+        yew_mouse_event(&f.ed, &up);
+    }
+    YEW_ASSERT(f.ed.full_damage);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_U64(yew_strip_float_rect().w, 0U);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * The held entry exists EXACTLY ONCE.
+ *
+ * The insertion shift still permutes the list — that is the whole point
+ * of Sprint 27's preview, and the gap is where the drop lands — but the
+ * entry itself is no longer drawn there, and no region carries its
+ * payload.  The pre-drag slot table still does, because that is what the
+ * drop aims with.
+ */
+void test_drag_held_entry_leaves_a_gap_in_the_strip(void)
+{
+    DragFixture f;
+    char before[128];
+    char during[128];
+    u16 x;
+    bool held_region = false;
+
+    dg_fixture(&f, 5U);
+    dg_paint(&f);
+    dg_row_text(&f.ed, 0U, before, sizeof(before));
+    YEW_ASSERT_NOT_NULL(strstr(before, "yew-drag-0.txt"));
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 1), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, 3), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    dg_paint(&f);
+    for (x = 0U; x < 80U; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB && hit.payload == 1)
+            held_region = true;
+    }
+    /* No entry, and no target for it. */
+    YEW_ASSERT(!held_region);
+    {
+        int at = -1;
+        int i;
+
+        for (i = 0; i < yew_strip_slot_count(); i++) {
+            i32 pre = 0;
+
+            if (yew_strip_pre_payload(i, &pre) && pre == 1)
+                at = i;
+        }
+        /* The pre-drag table still names the held tab at its ORIGINAL
+         * slot — that list never moves, which is exactly why the dwell
+         * and the drop read it. */
+        YEW_ASSERT_EQ_I64(at, 1);
+    }
+    dg_row_text(&f.ed, 0U, during, sizeof(during));
+    /* Drawn once: the strip row no longer carries it at all, only the
+     * float does — and the float is on the same row here. */
+    {
+        Rect fl = yew_strip_float_rect();
+        char strip_only[128];
+        u16 i;
+
+        YEW_ASSERT_EQ_U64(fl.y, 0U);
+        (void)memcpy(strip_only, during, sizeof(strip_only));
+        for (i = fl.x; i < (u16)(fl.x + fl.w) && i < 80U; i++)
+            strip_only[i] = '.';
+        YEW_ASSERT(strstr(strip_only, "yew-drag-0.txt") == NULL);
+    }
+    yew_ed_free(&f.ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.14 §3: the dwell's two-flash cue                        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Does the group's row-1 entry render reversed right now?
+ *
+ * Found through the REGION the render registered, not through the
+ * pre-drag slot table: the preview has permuted the strip, so the cells
+ * a slot number names are not where that entry is currently drawn.
+ */
+static bool dg_entry_reversed(DragFixture *f, u32 gid)
+{
+    u16 x;
+
+    for (x = 0U; x < f->ed.grid.cols; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB && hit.payload == -(i32)gid)
+            return (f->ed.grid.back[x].attrs & YEW_ATTR_REVERSE) != 0U;
+    }
+    YEW_ASSERT(false);
+    return false;
+}
+
+/*
+ * A quarter of the dwell, lit, dark, lit, dark — then the strip opens.
+ *
+ * THE CUE IS A FUNCTION OF THE CLOCK, not of a paint counter: the test
+ * paints the SAME instant twice at two points and gets the same cells,
+ * which is invariant 5 applied to something that blinks.  Nothing here
+ * sleeps; ed->now_ms is the clock.
+ */
+void test_drag_dwell_flashes_twice_before_opening(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+    i64 t0;
+    bool unlit;
+    int i;
+    static const struct {
+        i64 at;
+        bool lit;
+    } phases[] = {
+        {0, true},          /* the cue starts immediately */
+        {1, true},
+        {YEW_DRAG_FLASH_MS - 1, true},
+        {YEW_DRAG_FLASH_MS, false},      /* first gap */
+        {2 * YEW_DRAG_FLASH_MS, true},   /* second flash */
+        {3 * YEW_DRAG_FLASH_MS, false},  /* settle */
+        /* The clamp: 4·FLASH is 248, inside the dwell, and an unclamped
+         * quarter would light the cue for the two milliseconds before
+         * the strip opens. */
+        {4 * YEW_DRAG_FLASH_MS, false},
+        {YEW_DRAG_DWELL_MS - 1, false}
+    };
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    YEW_ASSERT(gslot >= 0);
+    /* What the entry looks like with no dwell on it, to compare against. */
+    unlit = dg_entry_reversed(&f, g);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
+    t0 = f.ed.now_ms;
+    for (i = 0; i < (int)YEW_ARRAY_LEN(phases); i++) {
+        f.ed.now_ms = t0 + phases[i].at;
+        YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed),
+                          phases[i].lit ? g : 0U);
+        dg_paint(&f);
+        YEW_ASSERT_EQ_U64(dg_entry_reversed(&f, g),
+                          phases[i].lit ? !unlit : unlit);
+        /* The same instant, painted again: byte-identical. */
+        dg_paint(&f);
+        YEW_ASSERT_EQ_U64(dg_entry_reversed(&f, g),
+                          phases[i].lit ? !unlit : unlit);
+    }
+    /* Once the strip is open the cue is done — the members ARE the
+     * answer, and a blinking entry above them would still be asking. */
+    f.ed.now_ms = t0 + YEW_DRAG_DWELL_MS;
+    yew_mouse_tick(&f.ed, f.ed.now_ms);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), 0U);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * The cue marks damage exactly once per edge.
+ *
+ * The loop paints when something says it must; ticking inside a quarter
+ * must say nothing, or a dwell becomes a repaint storm on whatever
+ * cadence the loop happens to wake on.
+ */
+void test_drag_dwell_flash_marks_damage_only_at_an_edge(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+    i64 t0;
+    int i;
+    int edges = 0;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    YEW_ASSERT(gslot >= 0);
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    t0 = f.ed.now_ms;
+    /* One tick per millisecond across the whole dwell: three quarter
+     * boundaries, and not one repaint anywhere else. */
+    for (i = 0; i < YEW_DRAG_DWELL_MS; i++) {
+        f.ed.full_damage = false;
+        yew_mouse_tick(&f.ed, t0 + i);
+        if (f.ed.full_damage)
+            edges++;
+    }
+    YEW_ASSERT_EQ_I64(edges, 3);
     yew_ed_free(&f.ed);
 }

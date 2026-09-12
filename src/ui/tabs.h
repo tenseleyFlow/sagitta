@@ -176,6 +176,13 @@ int yew_strip_slot_count(void);
  * nothing else to aim at. */
 u16 yew_strip_tail_x(void);
 
+/*
+ * Sprint 57.14 §2: the cells the last render's FLOAT covered; w == 0
+ * when no drag is in flight.  The float is drawn and never registered —
+ * this is how a test asks where it was without the registry knowing.
+ */
+Rect yew_strip_float_rect(void);
+
 /* Rows the strip needs; layout reserves them like the footer row. */
 u32 yew_tab_strip_rows(const Ed *ed);
 void yew_tab_strip_draw(Ed *ed, Rect rect);

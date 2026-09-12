@@ -1490,6 +1490,9 @@ static void drag_dwell(Ed *ed, int slot)
     if (gid != m->dwell_gid) {
         m->dwell_gid = gid;
         m->dwell_since_ms = gid != 0U ? ed->now_ms : 0;
+        /* A new target starts its cue at the first quarter, lit: the
+         * clock restarting and the cue restarting are the same event. */
+        m->flash_phase = 0U;
     }
 }
 
@@ -1637,6 +1640,52 @@ static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
     return true;
 }
 
+/*
+ * Sprint 57.14 §1: ROW 1 IS THE EXIT.
+ *
+ * `to` was resolved from the PRE-DRAG slot table, before any of this
+ * ran, and that ordering is the deliverable.  yew_group_remove_member
+ * DISSOLVES a group whose last member has just left, which deletes a
+ * row-1 entry and renumbers every slot to its right — so a slot number
+ * re-read afterwards names a different thing.  A tab INDEX survives,
+ * because dissolving rewrites group_id and edits the groups vector and
+ * never reorders Tabs.v.
+ *
+ * `from` is re-derived from the id all the same: identity across a
+ * mutation is Sprint 23's law, and a removal is a mutation even when it
+ * happens to move nothing.
+ */
+static void drop_out_of_group(Ed *ed, int to)
+{
+    MouseState *m = &ed->mouse;
+    int from = yew_tab_index_of_id(ed, m->drag_tab_id);
+    bool left_group = false;
+
+    if (from < 0)
+        return;
+    if (held_tab_group(ed) != 0U) {
+        yew_group_remove_member(ed, from);
+        left_group = true;
+        from = yew_tab_index_of_id(ed, m->drag_tab_id);
+        if (from < 0)
+            return;
+        if (to >= (int)yew_tab_count(ed))
+            to = (int)yew_tab_count(ed) - 1;
+        if (to < 0)
+            return;
+    }
+    yew_tab_reorder(ed, from, to);
+    if (left_group) {
+        /*
+         * The tab that left may have been the active one, and its group
+         * may be gone entirely — either way row 2 is no longer owed, and
+         * a strip-row count change belongs to the layout rather than to
+         * a repaint.
+         */
+        ed->layout_dirty = true;
+    }
+}
+
 static void drag_strip_drop(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
@@ -1653,26 +1702,25 @@ static void drag_strip_drop(Ed *ed, const Key *k)
     }
     if (!m->drag_to_valid)
         return; /* released somewhere with no target: nothing changes */
+    /*
+     * Resolved HERE, while the group still exists — see
+     * drop_out_of_group for what a removal does to a slot number.
+     */
     to = m->drag_to_tail ? (int)yew_tab_count(ed) - 1
                          : slot_to_tab_index(ed, m->drag_to_slot);
     if (to < 0)
         return;
-    if (m->phase == YEW_MP_DRAG_GROUP) {
+    if (m->phase == YEW_MP_DRAG_GROUP)
         yew_group_reorder_block(ed, m->drag_gid, to);
-    } else {
-        int from = yew_tab_index_of_id(ed, m->drag_tab_id);
-
-        if (from < 0)
-            return;
+    else
         /*
-         * Dropping on the blank tail carries the tab OUT of its group —
-         * the one gesture that can, when the group is the only row-1
-         * entry left to aim at.
+         * EVERY row-1 slot carries the tab out of its group, not just
+         * the blank tail.  The tail is drawn only in strip_render's
+         * `draw_new` arm, which an overflowing row 1 never reaches — so
+         * a member in a busy workspace had no exit at all, and the one
+         * documented gesture for leaving a group was unaimable.
          */
-        if (m->drag_to_tail && held_tab_group(ed) != 0U)
-            yew_group_remove_member(ed, from);
-        yew_tab_reorder(ed, from, to);
-    }
+        drop_out_of_group(ed, to);
     yew_state_mark_dirty(ed);
     ed->full_damage = true;
 }
@@ -1680,6 +1728,7 @@ static void drag_strip_drop(Ed *ed, const Key *k)
 static void mouse_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
+    bool moved_cell;
 
     if (k->button == (u8)YEW_MB_NONE) {
         /*
@@ -1701,6 +1750,13 @@ static void mouse_motion(Ed *ed, const Key *k)
     }
     if (m->phase == YEW_MP_IDLE)
         return;
+    /*
+     * Sprint 57.14 §2: the float follows the POINTER, so a drag repaints
+     * when the pointer changes CELL and not when a report arrives.  A
+     * terminal emits as many reports per cell as it likes, and repainting
+     * per report is the slideshow §3's hover rule exists to prevent.
+     */
+    moved_cell = k->col != m->at_x || k->row != m->at_y;
     m->at_x = k->col;
     m->at_y = k->row;
     if (m->phase == YEW_MP_ARMED) {
@@ -1723,6 +1779,8 @@ static void mouse_motion(Ed *ed, const Key *k)
     case YEW_MP_DRAG_TAB:
     case YEW_MP_DRAG_GROUP:
         drag_strip_motion(ed, k);
+        if (moved_cell)
+            ed->full_damage = true;
         break;
     case YEW_MP_IDLE:
     case YEW_MP_ARMED:
@@ -1846,6 +1904,10 @@ static void mouse_release(Ed *ed, const Key *k)
     case YEW_MP_DRAG_TAB:
     case YEW_MP_DRAG_GROUP:
         drag_strip_drop(ed, k);
+        /* Even a drop that changed nothing repaints: the float was drawn
+         * at the pointer, and putting the button down is what takes it
+         * off the screen. */
+        ed->full_damage = true;
         break;
     case YEW_MP_IDLE:
     default:
@@ -1889,7 +1951,10 @@ void yew_mouse_cancel(Ed *ed)
     if (ed->mouse.preview_gid != 0U) {
         ed->layout_dirty = true;
         ed->full_damage = true;
-    } else if (ed->mouse.drag_to_valid) {
+    } else if (ed->mouse.phase == YEW_MP_DRAG_TAB ||
+               ed->mouse.phase == YEW_MP_DRAG_GROUP) {
+        /* The float and its gap are both pictures of a gesture that is
+         * ending, and neither goes away without a repaint. */
         ed->full_damage = true;
     }
     yew_mouse_init(&ed->mouse);
@@ -1909,6 +1974,44 @@ static bool drag_over_chevron(Ed *ed, i32 *delta)
     return true;
 }
 
+/*
+ * Sprint 57.14 §3: which QUARTER of the dwell `elapsed` falls in.
+ *
+ * Quarters 0 and 2 are lit, so the cue reads as two flashes.  The last
+ * quarter is clamped rather than divided out: 3·FLASH is 186 and the
+ * dwell is 250, so the arithmetic would otherwise roll into a fifth
+ * quarter at 248 ms and light the cue for two milliseconds immediately
+ * before the strip opens.
+ */
+static u8 dwell_quarter(i64 elapsed)
+{
+    i64 q;
+
+    if (elapsed <= 0)
+        return 0U;
+    q = elapsed / YEW_DRAG_FLASH_MS;
+    return q >= 3 ? 3U : (u8)q;
+}
+
+u32 yew_mouse_dwell_flash(const Ed *ed)
+{
+    const MouseState *m;
+    i64 elapsed;
+
+    if (ed == NULL)
+        return 0U;
+    m = &ed->mouse;
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
+        return 0U;
+    /* Nothing to announce once the strip it was announcing is open. */
+    if (m->dwell_gid == 0U || m->preview_gid == m->dwell_gid)
+        return 0U;
+    elapsed = ed->now_ms - m->dwell_since_ms;
+    if (elapsed >= YEW_DRAG_DWELL_MS)
+        return 0U;
+    return (dwell_quarter(elapsed) % 2U) == 0U ? m->dwell_gid : 0U;
+}
+
 void yew_mouse_tick(Ed *ed, i64 now_ms)
 {
     MouseState *m;
@@ -1920,6 +2023,19 @@ void yew_mouse_tick(Ed *ed, i64 now_ms)
     if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return;
     ed->now_ms = now_ms;
+    /*
+     * The cue's damage, and ONLY its damage: the frame itself is computed
+     * from the clock by yew_mouse_dwell_flash, so this cannot make two
+     * paints of the same instant differ.
+     */
+    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid) {
+        u8 quarter = dwell_quarter(now_ms - m->dwell_since_ms);
+
+        if (quarter != m->flash_phase) {
+            m->flash_phase = quarter;
+            ed->full_damage = true;
+        }
+    }
     if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid &&
         now_ms - m->dwell_since_ms >= YEW_DRAG_DWELL_MS) {
         m->preview_gid = m->dwell_gid;
@@ -1951,8 +2067,21 @@ i64 yew_mouse_deadline(const Ed *ed, i64 now_ms)
     m = &ed->mouse;
     if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return -1;
-    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid)
-        next = m->dwell_since_ms + YEW_DRAG_DWELL_MS;
+    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid) {
+        /*
+         * EVERY phase edge, not just the open: the cue is a picture the
+         * loop has to be told to repaint, and the alternative to a
+         * deadline per edge is spinning (invariant 4).  Edges that would
+         * change nothing are not scheduled — past the third quarter the
+         * next thing to happen is the open itself.
+         */
+        i64 elapsed = now_ms - m->dwell_since_ms;
+        i64 quarter = elapsed <= 0 ? 0 : elapsed / YEW_DRAG_FLASH_MS;
+
+        next = quarter >= 3
+                   ? m->dwell_since_ms + YEW_DRAG_DWELL_MS
+                   : m->dwell_since_ms + (quarter + 1) * YEW_DRAG_FLASH_MS;
+    }
     if (yew_region_hit(m->at_x, m->at_y).kind == YEW_REGION_TAB_SCROLL) {
         i64 at = m->autoscroll_ms + YEW_DRAG_SCROLL_MS;
 
@@ -1975,6 +2104,32 @@ bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot)
         return false;
     *payload = ed->mouse.press_rgn.payload;
     *to_slot = ed->mouse.drag_to_slot;
+    return true;
+}
+
+bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
+                          u16 *grab_dx)
+{
+    const MouseState *m;
+
+    if (ed == NULL || payload == NULL || x == NULL || y == NULL ||
+        grab_dx == NULL)
+        return false;
+    m = &ed->mouse;
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
+        return false;
+    *payload = m->press_rgn.payload;
+    *x = m->at_x;
+    *y = m->at_y;
+    /*
+     * The press's region is the one captured at press (the law at the
+     * top of this file), so the grip survives everything the strip does
+     * underneath — scrolling, an auto-scroll, a repaint.  A press that
+     * somehow landed left of its own region grips the left edge rather
+     * than wrapping into a huge unsigned offset.
+     */
+    *grab_dx = m->press_x > m->press_rgn.rect.x
+                   ? (u16)(m->press_x - m->press_rgn.rect.x) : 0U;
     return true;
 }
 
