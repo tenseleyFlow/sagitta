@@ -384,6 +384,19 @@ Binding documents — read before any sprint:
   layout's follow-the-active clamp (the chevron-does-nothing bug), chevron hover
   reveal on both rows, and mode 1003 armed whenever a chevron is drawn. Branch
   `strip-scrolling`.
+- Sprint 57.16 (s57_16-insert-comfort.md) — Auto-indent on Enter, Tab that
+  navigates existing indent, Backspace by indent level, and syntax-aware auto
+  pairs with Mark-backed type-over. Gives `expandtab` its first consumers.
+  Branch `insert-comfort`.
+- Sprint 57.17 (s57_17-cmdline-pager.md) — An unambiguous fuzzy match executes
+  on Enter, `<up>` enters the completion pager when open and stays history when
+  not, and the pager scrolls with a fish-style `… and N more` tail. Branch
+  `cmdline-pager`.
+- Sprint 57.18 (s57_18-shell-completion.md) — Tab completion inside `:!`
+  (executables then paths) rendered in 57.17's pager, plus interactive commands
+  routed through the existing tty handover. Amends Sprint 19's terminal
+  non-goal without building an emulator. Depends on 57.17. Branch
+  `shell-completion`.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
@@ -432,7 +445,7 @@ Binding documents — read before any sprint:
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
   `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`,
-  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`, `s57_14-…`, `s57_15-…`) are the pressure valve
+  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`, `s57_14-…`, `s57_15-…`, `s57_16-…`, `s57_17-…`, `s57_18-…`) are the pressure valve
   when a sprint splits — renumbering is forbidden once files exist.
 
 ## Sprint file format
