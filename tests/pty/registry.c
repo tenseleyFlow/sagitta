@@ -4703,7 +4703,14 @@ static void case_chrome_ctxmenu(PtyCtx *c)
                   sizeof(path)))
         return;
     s23_open_tabs(c, 2);
-    s18_settle_after_keys(c, "t m");
+    /*
+     * `iarg 1` is the TAB STRIP.  Sprint 57.13 §5 gave `t m` — 0 or
+     * absent — to the keyboard FOCUS, which is the document here; this
+     * case is about the TAB menu, so it asks for the strip by name.
+     */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.ui.context_menu 1");
+    s18_settle_after_keys(c, "enter");
     chrome_snapshot(c);
     s18_settle_after_keys(c, "esc");
     force_quit(c);
@@ -5030,7 +5037,10 @@ static void case_s27_group_menu_over_scrolled_strip(PtyCtx *c)
                   sizeof(path)))
         return;
     s24_make_group(c);
-    s18_settle_after_keys(c, "t m");
+    /* The strip spelling, for the reason in case_chrome_ctxmenu. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.ui.context_menu 1");
+    s18_settle_after_keys(c, "enter");
     ptc_snapshot(c, "s27_group_menu_over_scrolled_strip");
     s18_settle_after_keys(c, "esc");
     force_quit(c);
@@ -9155,7 +9165,178 @@ static void case_s53_blame(PtyCtx *c)
     ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.13: the FUSS context menus                             */
+/* ---------------------------------------------------------------- */
+
+/*
+ * A right-click on a FILE row.
+ *
+ * `modified.c` is unstaged and tracked, so `Stage` and `Discard...` are
+ * live while `Unstage` is greyed — the row set is the same either way,
+ * which is the greyed-never-hidden law where it is easiest to get
+ * wrong.  The golden also carries the terminal modes, so it is where
+ * `1003` being ARMED while the menu is up is proved end to end.
+ */
+static void case_s57_13_fuss_file_menu(PtyCtx *c)
+{
+    if (!s52_open(c, NULL))
+        return;
+    /* Row 5 of the drawer is `modified.c` (see fuss_tree_unicode_80). */
+    s27_mouse(c, "\x1b[<2;11;6M");
+    s27_mouse(c, "\x1b[<2;11;6m");
+    ptc_snapshot(c, c->test->name);
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    s52_finish(c);
+}
+
+/*
+ * A right-click on a DIRECTORY row.
+ *
+ * `docs` is collapsed, so the toggle row reads `Expand` — ONE row whose
+ * label is the state, never two of which one is always dead.
+ */
+static void case_s57_13_fuss_dir_menu(PtyCtx *c)
+{
+    if (!s52_open(c, NULL))
+        return;
+    /* Row 1 of the drawer is ` + docs`. */
+    s27_mouse(c, "\x1b[<2;5;2M");
+    s27_mouse(c, "\x1b[<2;5;2m");
+    ptc_snapshot(c, c->test->name);
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    s52_finish(c);
+}
+
 #endif
+
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.13: the document, footer and shedding menus            */
+/* ---------------------------------------------------------------- */
+
+static const u8 s57_13_doc[] =
+    "alpha beta gamma\n"
+    "delta epsilon zeta\n"
+    "eta theta iota kappa\n"
+    "lambda mu nu\n";
+
+/*
+ * THE DOCUMENT MENU, with a row under the pointer.
+ *
+ * Two things are being pinned that only a PTY can pin.  First, the box:
+ * its top-left is the cell BELOW-RIGHT of the click, so the cell that
+ * opened the menu is a border cell and the release that follows
+ * activates nothing.  Second, the HOVER — fed as a real base-35 motion
+ * report, the kind a terminal only sends under mode 1003, which the
+ * modes line of this same golden shows armed.
+ *
+ * The box is 22 rows tall in a 23-row allowed rectangle, so it clamps
+ * upward to row 1 and its rows start at row 2; the motion below aims at
+ * the third of them.
+ */
+static void case_s57_13_doc_menu(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    /*
+     * A SELECTION FIRST, so `Cut`, `Copy` and `Delete` are live while
+     * `Undo`, `Redo` and `Save` are greyed: one golden with both
+     * renditions of a row in it.  It also pins that a right-click does
+     * not destroy the selection the rows are about.
+     *
+     * `Paste` is live too and says nothing about the clipboard: it runs
+     * `ed.clip.paste`, which reads the system clipboard when it fires
+     * and cannot be asked at menu-build time.
+     */
+    s18_settle_after_keys(c, "h");
+    s18_settle_after_keys(c, "right right right");
+    /* Right press inside the text, at the 0-based cell (10,5). */
+    s27_mouse(c, "\x1b[<2;11;6M");
+    s27_mouse(c, "\x1b[<2;11;6m");
+    /*
+     * Motion with NO button held: SGR base 35, the report a terminal
+     * only sends under mode 1003.  It lands on `Split Right` — an
+     * enabled row that is NOT the one the menu opened on, so the golden
+     * shows the highlight having MOVED rather than where it started.
+     */
+    s27_mouse(c, "\x1b[<35;15;12M");
+    chrome_snapshot(c);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * CTRL+LEFT opens the same menu, for the hardware that has no second
+ * button — and it must never arm a drag or start a selection on the way
+ * (invariant 9 from the other side: the mouse is an accelerator, and a
+ * one-button mouse may not be a second-class one).
+ */
+static void case_s57_13_ctrl_click_menu(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    /* cb 16 is button 0 with the ctrl bit. */
+    s27_mouse(c, "\x1b[<16;11;6M");
+    s27_mouse(c, "\x1b[<16;11;6m");
+    ptc_snapshot(c, c->test->name);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The footer menu, including the row that NAMES the current number
+ * style rather than the one it will move to. */
+static void case_s57_13_footer_menu(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    /* The statusline is the LAST row of a 24-row terminal; row 23 is
+     * still the pane, and a menu opened there would be the document's. */
+    s27_mouse(c, "\x1b[<2;6;24M");
+    s27_mouse(c, "\x1b[<2;6;24m");
+    ptc_snapshot(c, c->test->name);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * A TEN-ROW TERMINAL still opens the document menu.
+ *
+ * The box cannot hold twenty rows in nine, so the menu sheds whole
+ * priority levels — 3, then 2, then 1 — and opens with its priority-0
+ * rows rather than refusing.  Refusing is the outcome this golden
+ * exists to forbid: a gesture that works on a tall screen and silently
+ * does nothing on a short one is worse than one that never worked.
+ */
+static void case_s57_13_menu_sheds_rows(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s27_mouse(c, "\x1b[<2;6;4M");
+    s27_mouse(c, "\x1b[<2;6;4m");
+    ptc_snapshot(c, c->test->name);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+}
 
 #if YEW_WITH_PLUGINS
 /* ---------------------------------------------------------------- */
@@ -9475,6 +9656,10 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_tree_toggle, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_hint, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
+    C(s57_13_fuss_file_menu, modern, 24U, 80U,
+      case_s57_13_fuss_file_menu),
+    C(s57_13_fuss_dir_menu, modern, 24U, 80U,
+      case_s57_13_fuss_dir_menu),
     C(fuss_group_picker, modern, 24U, 100U, case_s52_fuss),
     C(fuss_group_close, modern, 24U, 100U, case_s52_fuss),
     C(fuss_actions_palette, modern, 24U, 100U, case_s52_fuss),
@@ -10078,6 +10263,14 @@ const PtyCase yew_pty_cases[] = {
       case_s27_dwell_opens_member_strip),
     C(s27_group_menu_over_scrolled_strip, modern, 24U, 80U,
       case_s27_group_menu_over_scrolled_strip),
+    C(s57_13_doc_menu, modern, 24U, 80U, case_s57_13_doc_menu),
+    C(s57_13_doc_menu_nocolor, modern, 24U, 80U, case_s57_13_doc_menu),
+    C(s57_13_doc_menu_ascii, modern, 24U, 80U, case_s57_13_doc_menu),
+    C(s57_13_ctrl_click_menu, modern, 24U, 80U,
+      case_s57_13_ctrl_click_menu),
+    C(s57_13_footer_menu, modern, 24U, 80U, case_s57_13_footer_menu),
+    C(s57_13_menu_sheds_rows, modern, 10U, 80U,
+      case_s57_13_menu_sheds_rows),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
       case_s27_double_click_mode_chip),
     C(s32_repl_session, modern, 24U, 80U, case_s32_repl_session),

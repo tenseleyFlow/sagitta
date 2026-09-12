@@ -106,6 +106,9 @@ void yew_tab_reorder(Ed *ed, int from, int to);
 bool yew_tab_modified(const Ed *ed, int idx);
 u32 yew_tab_count(const Ed *ed);
 Tab *yew_tab_at(Ed *ed, int idx);
+/* The read-only twin, for the pure hit-test in ui/mouse.c: resolving a
+ * strip payload to a tab_id must not need a mutable editor. */
+const Tab *yew_tab_at_const(const Ed *ed, int idx);
 const char *yew_tab_display_path(const Tab *tab);
 
 /*
@@ -242,5 +245,7 @@ CmdStatus yew_tab_cmd_move(CmdCtx *cx);
  * handlers, so the mouse and the keyboard reach the same code. */
 CmdStatus yew_tab_cmd_close_others(CmdCtx *cx);
 CmdStatus yew_tab_cmd_copy_path(CmdCtx *cx);
+CmdStatus yew_tab_cmd_open_split_h(CmdCtx *cx);
+CmdStatus yew_tab_cmd_open_split_v(CmdCtx *cx);
 
 #endif

@@ -30,7 +30,15 @@ enum {
     VT_MODE_BRACKETED_PASTE = 1u << 0,
     VT_MODE_BUTTON_MOUSE = 1u << 1,
     VT_MODE_SGR_MOUSE = 1u << 2,
-    VT_MODE_FOCUS = 1u << 3
+    VT_MODE_FOCUS = 1u << 3,
+    /*
+     * Sprint 57.13 §1: ANY-MOTION reporting, armed only while a context
+     * menu is open.  Tracked rather than merely tolerated, because the
+     * whole point of the mode is that it is transient — a golden that
+     * accepted 1003h and never noticed a missing 1003l would let the
+     * terminal be left streaming motion reports (invariant 6).
+     */
+    VT_MODE_ANY_MOTION_MOUSE = 1u << 4
 };
 
 enum {

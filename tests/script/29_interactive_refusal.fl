@@ -6,6 +6,9 @@ let alternatives = {
     "ed.cmdline.accept": "use ed.run(name, args)",
     "ed.cmdline.cancel": "use ed.run(name, args)",
     "ed.file.open": "use buf.open(path)",
+    # Sprint 57.13 Deliverable 4: `Save As...` is the question "write to
+    # which path?", and a script already has the answer.
+    "ed.file.save_as": "use buf.save(b, path)",
     "ed.group.rename": "pass a name to a non-interactive group command",
     "ed.group.new": "construct the group with explicit arguments",
     "ed.group.edit": "no batch alternative",
@@ -68,7 +71,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 44)
+t.eq(seen, 45)
 
 # Hunk discard stopped being prompt-backed when Sprint 53 made it a direct,
 # undoable buffer edit.  It is still intentionally unavailable in batch mode,

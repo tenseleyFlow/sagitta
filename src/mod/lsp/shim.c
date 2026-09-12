@@ -134,6 +134,23 @@ bool yew_lsp_rename_key(Ed *ed, const Key *key)
     return false;
 }
 
+bool yew_lsp_rename_answer(Ed *ed, LspRenameAnswer answer)
+{
+    (void)answer;
+    /* The three `ed.lsp.rename.*` commands stay in the registry
+     * (invariant 3) and hard-error naming the module they need, like
+     * every other LSP entry point in this file. */
+    return require_lsp(ed);
+}
+
+bool yew_lsp_rename_confirm_active(const Ed *ed)
+{
+    (void)ed;
+    /* Whatever panel is up, it is not a rename confirmation, so the
+     * PANEL menu keeps its bare `Close` row (Sprint 57.13 §4). */
+    return false;
+}
+
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len)
 {
@@ -141,6 +158,15 @@ void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
     (void)w;
     (void)text;
     (void)len;
+}
+
+bool yew_lsp_attached(const Ed *ed, const Buffer *b)
+{
+    (void)ed;
+    (void)b;
+    /* No module, no server: the document menu's LSP section is omitted
+     * whole rather than shown greyed (Sprint 57.13 §4). */
+    return false;
 }
 
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,

@@ -28,6 +28,7 @@
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "text/piece.h"
+#include "text/register.h"
 #include "text/undo.h"
 #include "ui/draw.h"
 #include "ui/message.h"
@@ -1691,6 +1692,167 @@ Rect yew_fuss_drawer_rect(const Ed *ed)
     return (Rect){0U, 0U, layout.width, ed->grid.rows};
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.13 §3: the mouse router's three seams                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The row a YEW_REGION_FUSS_ROW payload names, or NULL.
+ *
+ * The payload is an INTERNED PATH, not a row index, because the tree
+ * rebuilds under the pointer — a background status result reorders it,
+ * a walk merges files into it — and an index captured at paint time
+ * names a different file by the press.  Resolving through the path is
+ * what makes a click land on what was pointed at.
+ */
+static const FussItem *fuss_item_by_path_id(const Ed *ed, u32 path_id)
+{
+    const FussMode *f;
+    const char *path;
+    size_t len;
+    size_t i;
+
+    if (!yew_fuss_active(ed) || path_id == 0U)
+        return NULL;
+    f = ed->fuss;
+    path = yew_intern_str(&ed->interner, path_id);
+    len = yew_intern_len(&ed->interner, path_id);
+    if (path == NULL || len == 0U)
+        return NULL;
+    for (i = 0U; i < f->tree.items.len; i++) {
+        const FussItem *item = &f->tree.items.data[i];
+
+        if (item->path_len == (u32)len &&
+            memcmp(item->path, path, len) == 0)
+            return item;
+    }
+    return NULL;
+}
+
+bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir)
+{
+    const FussItem *item = fuss_item_by_path_id(ed, path_id);
+
+    if (item == NULL || is_dir == NULL)
+        return false;
+    *is_dir = !item->is_file;
+    return true;
+}
+
+bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out)
+{
+    const FussItem *item = fuss_item_by_path_id(ed, path_id);
+    const FussNode *node;
+
+    if (out == NULL)
+        return false;
+    (void)memset(out, 0, sizeof(*out));
+    if (item == NULL)
+        return false;
+    node = fuss_node(ed->fuss, item);
+    if (node == NULL)
+        return false;
+    out->known = true;
+    /*
+     * STATUS IS KNOWN BECAUSE THE NODE IS IN THE TREE, not because
+     * anything below it is dirty: a clean file answers false to every
+     * flag, and a menu that read that as "unknown" would grey `Stage`
+     * on the one file the user just edited and unstaged.
+     */
+    out->status_known = true;
+    out->is_file = node->is_file;
+    out->staged = node->staged;
+    out->unstaged = node->unstaged;
+    out->untracked = node->untracked;
+    out->incoming = node->incoming;
+    out->conflicted = node->conflicted;
+    out->expanded = !node->is_file && node->expanded;
+    return true;
+}
+
+bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
+{
+    FussMode *f;
+    Rect tree;
+    i32 row;
+    const FussItem *item;
+    u32 id;
+    u32 offset;
+
+    if (!yew_fuss_active(ed) || path_id == NULL || x == NULL || y == NULL)
+        return false;
+    f = ed->fuss;
+    tree = yew_fuss_drawer_rect(ed);
+    if (tree.w == 0U || tree.h == 0U)
+        return false;
+    row = yew_fuss_row_of(&f->tree, &f->sel);
+    item = fuss_item(f, row);
+    if (item == NULL || (u32)row < f->scroll)
+        return false;
+    /*
+     * The +1 is the drawer's header row, and it is the SAME arithmetic
+     * yew_fuss_draw uses to place each row's region — deriving it twice
+     * is how a menu comes to open one row off the thing it names.
+     */
+    offset = (u32)row - f->scroll;
+    if (offset + 1U >= (u32)tree.h)
+        return false;
+    id = yew_intern(&ed->interner, item->path, item->path_len);
+    if (id == 0U || id > (u32)INT32_MAX)
+        return false;
+    *path_id = id;
+    *x = tree.x;
+    *y = (u16)(tree.y + 1U + offset);
+    return true;
+}
+
+void yew_fuss_select_path(Ed *ed, u32 path_id)
+{
+    const FussItem *item = fuss_item_by_path_id(ed, path_id);
+
+    if (item == NULL)
+        return;
+    /*
+     * Selecting is not opening.  A single click moves the cursor and
+     * nothing else — the double-click that opens is a separate gesture,
+     * and a tree where one click opened a file would make browsing it
+     * impossible.
+     */
+    yew_fuss_sel_set(&ed->fuss->sel, item->path, item->path_len);
+    fuss_damage(ed);
+}
+
+void yew_fuss_scroll(Ed *ed, i32 rows)
+{
+    FussMode *f;
+    i32 row;
+    i32 last;
+
+    if (!yew_fuss_active(ed) || rows == 0)
+        return;
+    f = ed->fuss;
+    if (f->tree.items.len == 0U)
+        return;
+    /*
+     * THROUGH THE SELECTION, exactly as the picker's wheel is (s26 §5).
+     * The drawer has no independent scroll offset to move: `f->scroll`
+     * is DERIVED from the selected row every time the tree is drawn, so
+     * a wheel that moved the offset alone would be snapped back on the
+     * next frame and the tree would look frozen.
+     */
+    last = (i32)f->tree.items.len - 1;
+    row = yew_fuss_row_of(&f->tree, &f->sel);
+    if (row < 0)
+        row = 0;
+    row += rows;
+    if (row < 0)
+        row = 0;
+    if (row > last)
+        row = last;
+    fuss_select_row(f, row);
+    fuss_damage(ed);
+}
+
 bool yew_fuss_draw_dirty(const Ed *ed)
 {
     return yew_fuss_active(ed) && ed->fuss->draw_dirty;
@@ -1929,21 +2091,20 @@ static char *fuss_selected_path(CmdCtx *cx)
     return fuss_dup_bytes(item->path, item->path_len);
 }
 
-typedef struct FussTarget {
-    bool known;
-    bool status_known;
-    bool is_file;
-    bool staged;
-    bool unstaged;
-    bool untracked;
-    bool incoming;
-    bool conflicted;
-} FussTarget;
-
+/* `FussTarget` itself is in fussmode.h: the context menus turn on the
+ * same flags these guards do, and two spellings of one answer is how a
+ * greyed row and a refused command come to disagree. */
 typedef enum FussTargetGuard {
     FUSS_TARGET_ANY,
     FUSS_TARGET_FILE,
-    FUSS_TARGET_STAGED_FILE,
+    /*
+     * Staged, FILE OR DIRECTORY.  `git restore --staged -- dir` is a
+     * valid unstage of everything below it, and 57.13 §4's FUSS
+     * directory menu offers exactly that as `Unstage All Below`; the
+     * flags on a directory node are aggregates of its subtree, so the
+     * "nothing staged" refusal below reads correctly for both.
+     */
+    FUSS_TARGET_STAGED,
     FUSS_TARGET_DIRTY_FILE
 } FussTargetGuard;
 
@@ -2005,11 +2166,12 @@ static bool fuss_target_guard(CmdCtx *cx, const char *path,
         yew_msg(cx->ed, YEW_MSG_ERROR, "select a valid workspace path");
         return false;
     }
-    if (guard != FUSS_TARGET_ANY && !found.is_file) {
+    if (guard != FUSS_TARGET_ANY && guard != FUSS_TARGET_STAGED &&
+        !found.is_file) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "select a file to %s", action);
         return false;
     }
-    if (guard == FUSS_TARGET_STAGED_FILE && found.status_known &&
+    if (guard == FUSS_TARGET_STAGED && found.status_known &&
         !found.staged) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "nothing staged to unstage");
         return false;
@@ -4286,7 +4448,7 @@ CmdStatus yew_fuss_cmd_unstage(CmdCtx *cx)
 {
     char *prefix[] = {(char *)"restore", (char *)"--staged"};
     return fuss_path_verb(cx, "unstage", prefix, YEW_ARRAY_LEN(prefix),
-                          FUSS_TARGET_STAGED_FILE, false);
+                          FUSS_TARGET_STAGED, false);
 }
 
 CmdStatus yew_fuss_cmd_stage_all(CmdCtx *cx)
@@ -4829,6 +4991,39 @@ CmdStatus yew_fuss_cmd_file_rename(CmdCtx *cx)
                          "new workspace-relative path");
     yew_xfree(path);
     return status;
+}
+
+/*
+ * The FUSS menus' `Copy Path`, and the only `ed.git.*` verb that
+ * touches no repository at all: a path is a path whether git has heard
+ * of it or not, so there is no `fuss_target_guard` here.  The path
+ * still comes through `fuss_selected_path`, which is what makes the
+ * row honour `sarg` (the menu's captured path) and fall back to the
+ * selected row for the keyboard route — and what rejects an absolute
+ * path or one containing `..`.
+ */
+CmdStatus yew_fuss_cmd_copy_path(CmdCtx *cx)
+{
+    char *path = fuss_selected_path(cx);
+    RegVal v;
+
+    if (path == NULL) {
+        if (cx != NULL && cx->ed != NULL)
+            yew_msg(cx->ed, YEW_MSG_ERROR, "no path is selected");
+        return YEW_CMD_ERR_ARG;
+    }
+    yew_regval_init(&v);
+    bytebuf_append(&v.bytes, (const u8 *)path, strlen(path));
+    v.type = (u8)YEW_REG_CHARWISE;
+    /* Register `+` is the system clipboard, so this also travels out
+     * through Sprint 12's OSC 52 path — the same register and the same
+     * kind `ed.tab.copy_path` writes, because two spellings of "the
+     * clipboard" is how a paste comes to find the wrong one. */
+    yew_reg_yank(&cx->ed->regs, (u8)'+', &v);
+    yew_regval_free(&v);
+    yew_msg(cx->ed, YEW_MSG_INFO, "copied %s", path);
+    yew_xfree(path);
+    return YEW_CMD_OK;
 }
 
 CmdStatus yew_fuss_cmd_open(CmdCtx *cx) { return fuss_open_path(cx, true); }

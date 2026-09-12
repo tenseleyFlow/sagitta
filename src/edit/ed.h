@@ -241,6 +241,16 @@ struct Ed {
     bool layout_dirty;
     bool full_damage;
     bool footer_dirty;
+    /*
+     * Sprint 57.13 §3: the MENU MOVED AND NOTHING ELSE DID.
+     *
+     * A pointer crossing an open context menu changes one highlighted
+     * row.  Marking `full_damage` for that would repaint every pane,
+     * the strip and the footer on every hovered row — the exact
+     * slideshow the motion-burst gate exists to prevent — so this flag
+     * asks yew_ed_render for the overlay pass alone.
+     */
+    bool overlay_dirty;
     bool cursor_follow_pending;
     u16 doc_damage_lo;
     u16 doc_damage_hi;

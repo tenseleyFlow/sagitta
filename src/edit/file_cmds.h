@@ -8,6 +8,8 @@
 CmdStatus yew_file_cmd_save(Ed *ed, bool force);
 CmdStatus yew_file_cmd_save_current(CmdCtx *cx);
 CmdStatus yew_file_cmd_write(CmdCtx *cx);
+/* Sprint 57.13 §4: opens the E-mode line seeded `w <current path>`. */
+CmdStatus yew_file_cmd_save_as(CmdCtx *cx);
 CmdStatus yew_file_cmd_write_quit(CmdCtx *cx);
 CmdStatus yew_file_cmd_new(CmdCtx *cx);
 CmdStatus yew_file_cmd_reload(CmdCtx *cx);

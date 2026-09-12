@@ -11,11 +11,20 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "edit/cmd.h"
 #include "edit/ed.h"
+#include "mod/lsp/lsp.h"
 #include "mod/lsp/rename.h"
 #include "mod/lsp/sync.h"
 #include "text/piece.h"
 #include "text/undo.h"
+/* Sprint 57.13 Deliverable 4: the confirmation is a context-menu shape
+ * as well as a keystroke, so this file builds the PANEL menu too. */
+#include "ui/ctxmenu.h"
+#include "ui/ctxrows.h"
+#include "ui/layout.h"
+#include "ui/panel.h"
+#include "ui/win.h"
 #include "util/arena.h"
 #include "util/buf.h"
 
@@ -975,4 +984,266 @@ void test_lsp_rename_apply_failure_rolls_back_committed_buffers(void)
         yew_lsp_rename_plan_free(&noop_plan);
         rename_fix_free(&noop);
     }
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.13 Deliverable 4: the confirmation's three answers      */
+/* ---------------------------------------------------------------- */
+
+/*
+ * WHAT THESE PIN.  `Apply`, `Show Diff` and `Cancel` are menu rows now,
+ * and a menu row is a command — so each of the three has to do from the
+ * registry exactly what its keystroke does from the panel, and each has
+ * to REFUSE, visibly, when no rename is waiting.  A command that
+ * returned OK having done nothing is the failure mode a confirmation
+ * dialog cannot have: the user reads "applied" into the silence.
+ *
+ * The PANEL menu's rename shape is pinned here rather than in
+ * test_ctxrows.c because only this file can reach RENAME_CONFIRM.
+ * test_ctxrows.c owns the other shape (the bare `Close`).
+ */
+
+/* A laid-out window, which `rename_summary_open` needs to anchor the
+ * panel to the cursor cell. */
+static void rename_confirm_layout(RenameFix *f)
+{
+    YEW_ASSERT(yew_grid_init(&f->ed.grid, &f->ed.interner, 24U, 80U));
+    f->ed.grid_ready = true;
+    yew_ed_layout(&f->ed);
+    f->ed.now_ms = 1000;
+}
+
+/* Drives the real preflight and the real summary panel to RENAME_CONFIRM
+ * over `alpha` -> `omega` in a.c and b.c. */
+static void rename_confirm_up(RenameFix *f)
+{
+    char json[2048];
+
+    rename_confirm_layout(f);
+    YEW_ASSERT(snprintf(json, sizeof(json),
+        "{\"changes\":{\"file://%s\":[{\"range\":{"
+        "\"start\":{\"line\":0,\"character\":0},"
+        "\"end\":{\"line\":0,\"character\":5}},\"newText\":\"omega\"}],"
+        "\"file://%s\":[{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":0},\"end\":{\"line\":0,\"character\":5}},"
+        "\"newText\":\"omega\"}]}}", f->b, f->a) > 0);
+    YEW_ASSERT(yew_lsp_rename_test_confirm(&f->ed, f->ed.win,
+                                           rename_json(f, json),
+                                           YEW_POSENC_UTF8, "alpha",
+                                           "omega"));
+    YEW_ASSERT(yew_lsp_rename_confirm_active(&f->ed));
+    YEW_ASSERT(f->ed.win->panel.open);
+}
+
+static CmdStatus rename_run(RenameFix *f, const char *name)
+{
+    CmdId id = yew_cmd_lookup(name, strlen(name));
+    CmdCtx cx = {0};
+
+    YEW_ASSERT(id.v != YEW_CMD_NONE.v);
+    cx.ed = &f->ed;
+    cx.win = f->ed.win;
+    cx.count = 1;
+    cx.source = YEW_SRC_TEST;
+    return yew_cmd_desc(id)->fn(&cx);
+}
+
+/*
+ * THE REFUSAL, which is the half a menu row never exercises: the
+ * palette and a Fletch script reach all three with nothing in flight.
+ */
+void test_lsp_rename_answers_refuse_when_no_rename_is_waiting(void)
+{
+    static const char *const names[] = {
+        "ed.lsp.rename.apply", "ed.lsp.rename.diff", "ed.lsp.rename.cancel"
+    };
+    RenameFix f;
+    size_t i;
+
+    rename_fix_init(&f);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    rename_confirm_layout(&f);
+    YEW_ASSERT_NULL(f.ed.lsp_rename);
+    YEW_ASSERT(!yew_lsp_rename_confirm_active(&f.ed));
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        /* ERR_STATE, not OK: the status is what a script branches on,
+         * and the message is what a user reads. */
+        YEW_ASSERT_EQ_I64(rename_run(&f, names[i]), YEW_CMD_ERR_STATE);
+        YEW_ASSERT_NULL(f.ed.lsp_rename);
+    }
+    /* And the seam the commands sit on says the same thing directly. */
+    YEW_ASSERT(!yew_lsp_rename_answer(&f.ed, YEW_LSP_RENAME_APPLY));
+    YEW_ASSERT(!yew_lsp_rename_answer(&f.ed, YEW_LSP_RENAME_DIFF));
+    YEW_ASSERT(!yew_lsp_rename_answer(&f.ed, YEW_LSP_RENAME_CANCEL));
+    rename_fix_free(&f);
+}
+
+/* `ed.lsp.rename.apply` lands the plan and ends the rename, exactly as
+ * Enter does. */
+void test_lsp_rename_apply_command_commits_the_plan_and_ends_the_rename(void)
+{
+    RenameFix f;
+    Buffer *a;
+    Buffer *b;
+
+    rename_fix_init(&f);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    rename_confirm_up(&f);
+    YEW_ASSERT_EQ_I64(rename_run(&f, "ed.lsp.rename.apply"), YEW_CMD_OK);
+    a = rename_find_path(&f, f.a);
+    b = rename_find_path(&f, f.b);
+    YEW_ASSERT_NOT_NULL(a);
+    YEW_ASSERT_NOT_NULL(b);
+    rename_assert_text(a->tb,
+                       (const u8 *)"omega alpha\nA\xF0\x9F\x8C\xB2" "B\n",
+                       sizeof("omega alpha\nA\xF0\x9F\x8C\xB2" "B\n") - 1U);
+    rename_assert_text(b->tb, (const u8 *)"omega beta alpha\n",
+                       sizeof("omega beta alpha\n") - 1U);
+    /* The rename is OVER — a second Apply has nothing to apply. */
+    YEW_ASSERT_NULL(f.ed.lsp_rename);
+    YEW_ASSERT(!yew_lsp_rename_confirm_active(&f.ed));
+    YEW_ASSERT_EQ_I64(rename_run(&f, "ed.lsp.rename.apply"),
+                      YEW_CMD_ERR_STATE);
+    /* Disk is untouched: applying edits buffers, not files. */
+    rename_assert_disk(f.a, rename_a_text, sizeof(rename_a_text) - 1U);
+    rename_assert_disk(f.b, rename_b_text, sizeof(rename_b_text) - 1U);
+    rename_fix_free(&f);
+}
+
+/* `ed.lsp.rename.cancel` throws the plan away and changes no byte. */
+void test_lsp_rename_cancel_command_discards_the_plan_without_mutation(void)
+{
+    RenameFix f;
+
+    rename_fix_init(&f);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    rename_confirm_up(&f);
+    YEW_ASSERT_EQ_I64(rename_run(&f, "ed.lsp.rename.cancel"), YEW_CMD_OK);
+    YEW_ASSERT_NULL(f.ed.lsp_rename);
+    YEW_ASSERT(!yew_lsp_rename_confirm_active(&f.ed));
+    /* The panel went with it — that is what makes `Cancel` the rename
+     * shape's close, and `Close` absent from it. */
+    YEW_ASSERT(!f.ed.win->panel.open);
+    rename_assert_sources_unchanged(&f);
+    rename_assert_fixture_disk(&f);
+    rename_fix_free(&f);
+}
+
+/*
+ * `ed.lsp.rename.diff` moves to the diff view and LEAVES THE RENAME
+ * LIVE — the same toggle `d` is, which is why the row is `Show Diff`
+ * and not an answer.
+ */
+void test_lsp_rename_diff_command_keeps_the_rename_waiting(void)
+{
+    RenameFix f;
+
+    rename_fix_init(&f);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    rename_confirm_up(&f);
+    YEW_ASSERT_EQ_I64(rename_run(&f, "ed.lsp.rename.diff"), YEW_CMD_OK);
+    /* Still waiting for an answer... */
+    YEW_ASSERT_NOT_NULL(f.ed.lsp_rename);
+    YEW_ASSERT(yew_lsp_rename_answer(&f.ed, YEW_LSP_RENAME_CANCEL));
+    YEW_ASSERT_NULL(f.ed.lsp_rename);
+    /* ...and nothing was edited on the way through. */
+    rename_assert_sources_unchanged(&f);
+    rename_assert_fixture_disk(&f);
+    rename_fix_free(&f);
+}
+
+/*
+ * `yew_lsp_rename_confirm_active` is the PANEL builder's whole question,
+ * and it must be false for a panel that is not this rename's — otherwise
+ * a hover window beside a rename would offer `Apply`.
+ */
+void test_lsp_rename_confirm_active_is_false_without_the_summary_panel(void)
+{
+    RenameFix f;
+
+    rename_fix_init(&f);
+    rename_confirm_up(&f);
+    /* Close the panel and leave the rename standing: this is exactly
+     * the state `Close` would have produced, and the reason the rename
+     * shape does not offer it. */
+    yew_panel_close(&f.ed, &f.ed.win->panel);
+    YEW_ASSERT(!yew_lsp_rename_confirm_active(&f.ed));
+    YEW_ASSERT_NOT_NULL(f.ed.lsp_rename);
+    YEW_ASSERT(yew_lsp_rename_answer(&f.ed, YEW_LSP_RENAME_CANCEL));
+    rename_assert_sources_unchanged(&f);
+    rename_fix_free(&f);
+}
+
+/*
+ * THE RENAME SHAPE OF THE PANEL MENU, by exact label list.
+ *
+ * The other shape — the bare `Close` that hover and signature help get
+ * — is pinned in test_ctxrows.c; this is the half that needs a live
+ * confirmation to exist at all.
+ */
+void test_lsp_rename_panel_menu_offers_the_three_answers(void)
+{
+    static const char *const want[] = {
+        "Apply", "Show Diff",
+        "",
+        "Cancel"
+    };
+    static const struct {
+        const char *label;
+        CtxAction action;
+        u8 priority;
+    } rows[] = {
+        {"Apply", CTXA_RENAME_APPLY, 0U},
+        {"Show Diff", CTXA_RENAME_DIFF, 1U},
+        {"Cancel", CTXA_RENAME_CANCEL, 0U}
+    };
+    RenameFix f;
+    CtxContext c;
+    u32 i;
+    u32 at = 0U;
+
+    rename_fix_init(&f);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    rename_confirm_up(&f);
+
+    (void)memset(&c, 0, sizeof(c));
+    c.kind = YEW_CTX_KIND_PANEL;
+    yew_ctx_close();
+    yew_ctx_build(&f.ed, &c);
+
+    YEW_ASSERT_EQ_U64(yew_ctx_rows(), YEW_ARRAY_LEN(want));
+    for (i = 0U; i < YEW_ARRAY_LEN(want); i++) {
+        if (want[i][0] == '\0') {
+            YEW_ASSERT(yew_ctx_row_is_sep(i));
+            continue;
+        }
+        YEW_ASSERT(!yew_ctx_row_is_sep(i));
+        YEW_ASSERT_EQ_STR(yew_ctx_row_label(i), want[i]);
+        YEW_ASSERT_EQ_STR(yew_ctx_row_label(i), rows[at].label);
+        YEW_ASSERT_EQ_U64(yew_ctx_row_action(i), (u64)rows[at].action);
+        YEW_ASSERT_EQ_U64(yew_ctx_priority(i), rows[at].priority);
+        /* Every answer is always answerable: nothing here is greyed. */
+        YEW_ASSERT(yew_ctx_row_enabled(i));
+        /* And every one of them carries a real command — the whole
+         * point of Deliverable 4. */
+        YEW_ASSERT_NOT_NULL(yew_ctx_actions[rows[at].action].cmd);
+        at++;
+    }
+    /*
+     * NO `Close` ON THIS SHAPE.  `CTXA_OVERLAY_CLOSE` closes the panel
+     * and nothing else, so it would leave a live rename the next Enter
+     * would apply.  `Cancel` is this panel's close.
+     */
+    for (i = 0U; i < yew_ctx_rows(); i++)
+        if (!yew_ctx_row_is_sep(i))
+            YEW_ASSERT(strcmp(yew_ctx_row_label(i), "Close") != 0);
+
+    yew_ctx_close();
+    YEW_ASSERT(yew_lsp_rename_answer(&f.ed, YEW_LSP_RENAME_CANCEL));
+    rename_fix_free(&f);
 }

@@ -122,6 +122,17 @@ int yew_tty_signal_fd(const Tty *t);
 void yew_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld);
 void yew_tty_suspend(Tty *t);
 
+/*
+ * Sprint 57.13: any-motion tracking (DEC mode 1003) is armed only while a
+ * context menu is open, so the terminal reports pointer motion with no
+ * button held (SGR base 35) and the router can highlight the row under
+ * the pointer.  Idempotent.  The flag is what every restore path
+ * consults: 1003l rides in the restore blob whenever it is set and never
+ * otherwise, and a restore that reached the terminal clears it.
+ */
+void yew_tty_mouse_motion(bool on);
+bool yew_tty_mouse_motion_active(void);  /* test seam */
+
 void yew_tty_probe_start(Tty *t, i64 now_ms);
 void yew_tty_probe_config(Tty *t, i64 now_ms,
                           const char *(*getv)(const char *));
@@ -138,7 +149,9 @@ TtyBackground yew_tty_probe_background(const Tty *t);
 
 bool yew_tty_detect_truecolor(const char *(*getv)(const char *));
 
-/* Pure access for the deterministic restore-blob unit test. */
+/* Pure access for the deterministic restore-blob unit test: the exact
+ * bytes yew_tty_restore would write right now, 1003l included when
+ * yew_tty_mouse_motion_active(). */
 const u8 *yew_tty_restore_blob(size_t *len);
 
 #endif

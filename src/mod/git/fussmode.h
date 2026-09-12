@@ -59,6 +59,64 @@ FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
                                         u16 natural_cols);
 Rect yew_fuss_drawer_rect(const Ed *ed);
 Rect yew_fuss_backdrop_rect(const Ed *ed);
+
+/*
+ * Sprint 57.13 §3: the three seams the mouse router needs and only it.
+ *
+ * `yew_fuss_path_is_dir` answers the ONE question a FUSS row's context
+ * menu turns on — file menu or directory menu — and answers it from the
+ * tree rather than from the path text, which is wrong for an
+ * extensionless file.  False means UNKNOWN (no F mode, a stripped
+ * build, a path the tree no longer holds) and `*is_dir` is untouched:
+ * the caller falls back to the drawer menu rather than guessing.  It is
+ * const because the router's context resolution is a pure function.
+ *
+ * `yew_fuss_select_path` is the single-click select the survey found
+ * missing, and `yew_fuss_scroll` is the wheel.  Both are no-ops under
+ * the shim, so the router needs no #ifdef.
+ */
+bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir);
+/*
+ * Sprint 57.13 §4: everything a FUSS row's menu turns on, in one
+ * answer.
+ *
+ * The row set for a file depends on its git status — `Stage` is dead
+ * for an already-staged file, `Unstage` is dead for one that is not,
+ * `Discard...` is dead for an untracked one — and a directory's on
+ * whether it is expanded and whether anything below it is staged.
+ * Those flags already exist on the tree node; this is the const window
+ * onto them, so ui/ctxrows.c never learns the tree's shape.
+ *
+ * FLAGS ON A DIRECTORY ARE AGGREGATES of everything below it, which is
+ * exactly what `Stage All Below` and `Unstage All Below` mean.
+ *
+ * False means UNKNOWN — no F mode, a stripped build, a path the tree no
+ * longer holds — and `*out` is zeroed: the caller greys the rows it
+ * cannot justify rather than guessing at them.
+ */
+typedef struct FussTarget {
+    bool known;
+    bool status_known;
+    bool is_file;
+    bool staged;
+    bool unstaged;
+    bool untracked;
+    bool incoming;
+    bool conflicted;
+    /* Directories only; false for a file and for an unknown path. */
+    bool expanded;
+} FussTarget;
+
+bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out);
+/*
+ * The selected row's interned path and the cell it is drawn at, so
+ * `ed.ui.context_menu` can open the FUSS menu with no pointer involved
+ * (invariant 9).  False when F mode is down, the tree is empty, or the
+ * selection is scrolled out of the drawer.
+ */
+bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y);
+void yew_fuss_select_path(Ed *ed, u32 path_id);
+void yew_fuss_scroll(Ed *ed, i32 rows);
 bool yew_fuss_draw_dirty(const Ed *ed);
 void yew_fuss_draw(Ed *ed);
 void yew_fuss_draw_footer(Ed *ed, Rect footer);
@@ -117,5 +175,16 @@ CmdStatus yew_fuss_cmd_file_rename(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open_split_h(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open_split_v(CmdCtx *cx);
+/*
+ * Sprint 57.13 §4: the FUSS menus' `Copy Path` row.
+ *
+ * `ed.tab.copy_path` copies the ACTIVE TAB's path and takes no
+ * argument, so it cannot answer "copy the path of the row I pointed
+ * at" — copying a different file's name than the one the row was opened
+ * over is the one failure a clipboard row must never have.  This takes
+ * the path the same way every other `ed.git.*` row does, and yanks it
+ * into register `+` exactly as the tab command does.
+ */
+CmdStatus yew_fuss_cmd_copy_path(CmdCtx *cx);
 
 #endif

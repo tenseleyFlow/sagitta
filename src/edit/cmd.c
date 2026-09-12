@@ -487,6 +487,9 @@ static const CmdDesc builtins[] = {
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
      "Delete the active selections", "sel_delete"},
+    {"ed.sel.all", yew_sel_cmd_all, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Select the whole buffer", "sel_all"},
     {"ed.sel.change", yew_sel_cmd_change, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
@@ -598,6 +601,10 @@ static const CmdDesc builtins[] = {
     {"ed.view.number_style", yew_edit_cmd_view_number_style, YEW_ARITY_STR,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Set line numbers to none, abs, rel, or hybrid", "number_style"},
+    /* Sprint 57.13 §4: the footer menu's line-number row. */
+    {"ed.view.number_cycle", yew_edit_cmd_view_number_cycle,
+     YEW_ARITY_NONE, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Cycle line numbers none, abs, rel, hybrid", "number_cycle"},
     {"ed.ui.message_expand", yew_edit_cmd_message_expand, YEW_ARITY_NONE,
      YEW_CMD_PROMPTS, "Expand the current message", NULL},
     {"ed.ui.cancel", yew_edit_cmd_ui_cancel, YEW_ARITY_NONE, 0U,
@@ -673,6 +680,13 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN, "Write the active buffer and quit", NULL},
     {"ed.file.save", yew_file_cmd_save_current, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN, "Atomically save the active file", NULL},
+    /* Sprint 57.13 §4: the document menu's `Save As...`.  It PROMPTS —
+     * it opens the E-mode line seeded with `w <current path>` — rather
+     * than writing anything itself, so `ed.file.write` stays the one
+     * implementation of "write to a path". */
+    {"ed.file.save_as", yew_file_cmd_save_as, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS,
+     "Ask where to write the active buffer", NULL},
     {"ed.file.new", yew_file_cmd_new, YEW_ARITY_OPT_STR, 0U,
      "Create an empty buffer, optionally naming its file", NULL},
     {"ed.file.reload", yew_file_cmd_reload, YEW_ARITY_NONE,
@@ -708,6 +722,13 @@ static const CmdDesc builtins[] = {
      "Close every tab but the active one", NULL},
     {"ed.tab.copy_path", yew_tab_cmd_copy_path, YEW_ARITY_NONE, 0U,
      "Copy the active tab's canonical path to the clipboard", NULL},
+    /* Sprint 57.13 §4: the tab menu's two "open in split" rows. */
+    {"ed.tab.open_split_h", yew_tab_cmd_open_split_h, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN,
+     "Open the active tab's buffer in a horizontal split", NULL},
+    {"ed.tab.open_split_v", yew_tab_cmd_open_split_v, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN,
+     "Open the active tab's buffer in a vertical split", NULL},
     /* Sprint 24 §6: the continuous line.  next/prev walk EVERY open
      * file — members of the active group first, then the row-1 entry
      * beside it — so left/right never dead-ends inside a group. */
@@ -726,8 +747,14 @@ static const CmdDesc builtins[] = {
     {"ed.group.remove_tab", yew_group_cmd_remove_tab, YEW_ARITY_NONE, 0U,
      "Remove the active tab from its group", NULL},
     /* Sprint 27 §5/§9. */
-    {"ed.ui.context_menu", yew_ui_cmd_context_menu, YEW_ARITY_NONE, 0U,
-     "Open the context menu for the focused tab or group", NULL},
+    /*
+     * Sprint 57.13 §5 widens the arity: iarg 1 names the TAB STRIP
+     * context explicitly, so a binding can ask for it once the bare
+     * form starts meaning "whatever the keyboard focus is on".  Both
+     * spellings still open the strip menu today.
+     */
+    {"ed.ui.context_menu", yew_ui_cmd_context_menu, YEW_ARITY_OPT_INT,
+     0U, "Open the context menu for the focused tab or group", NULL},
     {"ed.mouse.enable", yew_mouse_cmd_enable, YEW_ARITY_NONE, 0U,
      "Turn mouse reporting on for this session", NULL},
     {"ed.mouse.disable", yew_mouse_cmd_disable, YEW_ARITY_NONE, 0U,
@@ -741,6 +768,18 @@ static const CmdDesc builtins[] = {
      "Assemble a new tab group", NULL},
     {"ed.group.edit", yew_gp_cmd_edit, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Edit the active group's membership", NULL},
+    /*
+     * Sprint 57.13 §4: the group picker's own two rows.
+     *
+     * INTERNAL is deliberately NOT set — the dialog is modal, but so is
+     * the cmdline, and a command the palette cannot see is a command
+     * invariant 9's audit cannot count.  They refuse with a message
+     * when the dialog is down, which is what makes them safe to expose.
+     */
+    {"ed.group.pick.toggle", yew_gp_cmd_toggle, YEW_ARITY_NONE, 0U,
+     "Tick or untick the group picker's selected row", NULL},
+    {"ed.group.pick.confirm", yew_gp_cmd_confirm, YEW_ARITY_NONE, 0U,
+     "Confirm the group picker's selection", NULL},
     {"ed.group.from_dir", yew_group_cmd_from_dir, YEW_ARITY_OPT_STR,
      YEW_CMD_PROMPTS, "Choose files from a directory for a tab group", NULL},
     {"ed.group.next", yew_file_cmd_next, YEW_ARITY_NONE,
@@ -918,6 +957,21 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
      "Rename the symbol under the cursor", NULL},
+    /*
+     * Sprint 57.13 §4: the rename confirmation's three answers.
+     *
+     * `apply` CHANGES BUFFERS across the workspace — it is the moment
+     * the plan lands — while `diff` only shows a scratch view and
+     * `cancel` throws the plan away, so only the first carries the
+     * buffer-changing flags `ed.lsp.rename` does.
+     */
+    {"ed.lsp.rename.apply", yew_lsp_cmd_rename_apply, YEW_ARITY_NONE,
+     YEW_CMD_CHANGES_BUFFER | YEW_CMD_MULTI_AGGREGATE,
+     "Apply the pending rename", NULL},
+    {"ed.lsp.rename.diff", yew_lsp_cmd_rename_diff, YEW_ARITY_NONE, 0U,
+     "Show the pending rename as a diff", NULL},
+    {"ed.lsp.rename.cancel", yew_lsp_cmd_rename_cancel, YEW_ARITY_NONE,
+     0U, "Abandon the pending rename", NULL},
     {"ed.lsp.symbols", yew_lsp_cmd_symbols, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS, "List document symbols", NULL},
     {"ed.lsp.signature", yew_lsp_cmd_signature, YEW_ARITY_NONE,
@@ -1074,6 +1128,11 @@ static const CmdDesc builtins[] = {
     {"ed.git.open_split_v", yew_fuss_cmd_open_split_v, YEW_ARITY_OPT_STR,
      YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE,
      "Open the selected path in a vertical split", "git_open_split_v"},
+    /* Sprint 57.13 §4: the FUSS menus' `Copy Path`.  Path-addressed
+     * like every other FUSS row command, which is what `ed.tab.copy_path`
+     * — the active tab's path, no argument — cannot be. */
+    {"ed.git.copy_path", yew_fuss_cmd_copy_path, YEW_ARITY_OPT_STR, 0U,
+     "Copy the selected path to the clipboard register", NULL},
     {"ed.git.hunk.next", yew_git_cmd_hunk_next, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN, "Jump to next changed hunk", NULL},
     {"ed.git.hunk.prev", yew_git_cmd_hunk_prev, YEW_ARITY_NONE,
@@ -1131,6 +1190,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.file.write_quit", "f", YEW_RP_FORBID, "wq"},
     {"ed.file.new", "f", YEW_RP_FORBID, "new"},
     {"ed.file.reload", "", YEW_RP_FORBID, "reload"},
+    /* Sprint 57.13 §4: `:saveas` takes NO argument — it opens `:w
+     * <current path>` for editing, which is the whole of what it does.
+     * An argspec would offer a second way to spell `:w`. */
+    {"ed.file.save_as", "", YEW_RP_FORBID, "saveas"},
     {"ed.file.close", "", YEW_RP_FORBID, "close"},
     {"ed.search.open", "s", YEW_RP_FORBID, "search"},
     {"ed.tab.new", "", YEW_RP_FORBID, "tabnew"},
@@ -1144,6 +1207,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.group.add_tab", "s", YEW_RP_FORBID, "gadd"},
     {"ed.tab.close_others", "", YEW_RP_FORBID, "tabonly"},
     {"ed.tab.copy_path", "", YEW_RP_FORBID, "copypath"},
+    /* Sprint 57.13 §4: named after :tabnew / :tabonly, not after the
+     * pane commands, because the subject is the tab's buffer. */
+    {"ed.tab.open_split_h", "", YEW_RP_FORBID, "tabsplit"},
+    {"ed.tab.open_split_v", "", YEW_RP_FORBID, "tabvsplit"},
     {"ed.group.remove_tab", "", YEW_RP_FORBID, "gremove"},
     {"ed.group.enter", "", YEW_RP_FORBID, "genter"},
     {"ed.group.leave", "", YEW_RP_FORBID, "gleave"},
@@ -1325,7 +1392,13 @@ static bool command_name_valid(const char *name)
         /* Sprint 56: in-loop profiler report and raw data surfaces. */
         "report", "dump", "frames", "mark",
         /* Sprint 57.10: row-1 numbered jump from inside a group. */
-        "goto_bar"};
+        "goto_bar",
+        /* Sprint 57.13 §4: the context-menu row commands. */
+        "number_cycle",
+        /* Sprint 57.13 Deliverable 4: the four rows that had no command
+         * — `Save As...`, the rename panel's two answers, and the group
+         * picker's confirm. */
+        "save_as", "apply", "confirm"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

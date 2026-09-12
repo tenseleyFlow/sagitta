@@ -161,6 +161,19 @@ i32 yew_picker_selected(const Ed *ed);
 void yew_picker_select_payload(Ed *ed, i32 payload);
 /* Accepts what is under the cursor, exactly as Enter does. */
 bool yew_picker_accept(Ed *ed);
+/*
+ * The same, with the accept MODE the keyboard's split-accepts use
+ * (YEW_PICK_ACCEPT_HERE / _VSPLIT / _HSPLIT).  Sprint 57.13's picker
+ * context menu has an "Open in Split Right" row and no other way to
+ * say it.
+ */
+bool yew_picker_accept_how(Ed *ed, u8 how);
+/*
+ * The selected row's screen cell, so `ed.ui.context_menu` can anchor a
+ * picker's menu on the row the keyboard is on (invariant 9).  False
+ * when no picker is up or the list has not been drawn.
+ */
+bool yew_picker_sel_cell(const Ed *ed, u16 *x, u16 *y);
 /* Wheel.  Moves the SELECTION, because that is what the list's scroll
  * is derived from — there is no independent scroll offset to desync. */
 void yew_picker_scroll(Ed *ed, i32 rows);

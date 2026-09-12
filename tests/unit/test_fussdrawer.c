@@ -16,6 +16,7 @@
 #include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
 #include "mod/git/git_int.h"
+#include "text/register.h"
 #include "ui/groups.h"
 #include "ui/mouse.h"
 #include "ui/picker.h"
@@ -23,6 +24,7 @@
 #include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/base.h"
+#include "util/intern.h"
 
 typedef struct FussDrawerFix {
     char root[PATH_MAX];
@@ -878,4 +880,355 @@ void test_fussdrawer_commit_owner_pane_close_cancels_cleanly(void)
     YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.13 §3: the two feel fixes the survey found missing      */
+/* ---------------------------------------------------------------- */
+
+typedef struct FussFeelFix {
+    char root[PATH_MAX];
+    char a[PATH_MAX + sizeof("/aaa.txt")];
+    char b[PATH_MAX + sizeof("/bbb.txt")];
+    char c[PATH_MAX + sizeof("/ccc.txt")];
+} FussFeelFix;
+
+static void fussfeel_write(const char *path)
+{
+    FILE *file = fopen(path, "wb");
+
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT(fputs("not a git repository\n", file) >= 0);
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+}
+
+/* Three rows, because one row cannot show a selection MOVING and two
+ * cannot show a wheel notch clamping. */
+static void fussfeel_make(FussFeelFix *fix)
+{
+    const char *tmp = getenv("TMPDIR");
+    char *resolved;
+
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "build/tmp";
+    (void)snprintf(fix->root, sizeof(fix->root), "%s/yew-fussfeel-XXXXXX",
+                   tmp);
+    YEW_ASSERT_NOT_NULL(mkdtemp(fix->root));
+    resolved = yew_xrealpath(fix->root);
+    YEW_ASSERT_NOT_NULL(resolved);
+    YEW_ASSERT(strlen(resolved) < sizeof(fix->root));
+    (void)memcpy(fix->root, resolved, strlen(resolved) + 1U);
+    yew_xfree(resolved);
+    (void)snprintf(fix->a, sizeof(fix->a), "%s/aaa.txt", fix->root);
+    (void)snprintf(fix->b, sizeof(fix->b), "%s/bbb.txt", fix->root);
+    (void)snprintf(fix->c, sizeof(fix->c), "%s/ccc.txt", fix->root);
+    fussfeel_write(fix->a);
+    fussfeel_write(fix->b);
+    fussfeel_write(fix->c);
+}
+
+static void fussfeel_drop(const FussFeelFix *fix)
+{
+    YEW_ASSERT_EQ_I64(unlink(fix->a), 0);
+    YEW_ASSERT_EQ_I64(unlink(fix->b), 0);
+    YEW_ASSERT_EQ_I64(unlink(fix->c), 0);
+    YEW_ASSERT_EQ_I64(rmdir(fix->root), 0);
+}
+
+/* The selected row's workspace-relative path, through the seam the
+ * keyboard route uses — so the test reads the same answer the menu
+ * would. */
+static const char *fussfeel_selected(Ed *ed)
+{
+    u32 id = 0U;
+    u16 x = 0U;
+    u16 y = 0U;
+
+    if (!yew_fuss_selected_anchor(ed, &id, &x, &y))
+        return NULL;
+    return yew_intern_str(&ed->interner, id);
+}
+
+static void fussfeel_press(Ed *ed, u16 col, u16 row)
+{
+    Key key = {0};
+
+    key.kind = (u16)YEW_EV_MOUSE;
+    key.button = (u8)YEW_MB_LEFT;
+    key.col = col;
+    key.row = row;
+    key.ev = (u8)YEW_KEY_PRESS;
+    yew_mouse_event(ed, &key);
+}
+
+/*
+ * A SINGLE CLICK SELECTS.
+ *
+ * The survey found this missing and it is the one thing that made the
+ * tree feel broken: every other list in the program moves its cursor to
+ * where you point, and a tree that only responded to double-clicks read
+ * as unresponsive rather than as deliberate.
+ */
+void test_fussdrawer_single_click_selects_the_row(void)
+{
+    FussFeelFix fix;
+    Ed ed;
+
+    fussfeel_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    yew_fuss_tick(&ed, ed.now_ms + 20);
+    fussdrawer_grid(&ed);
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    ed.now_ms = 1000;
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+
+    /* Row 0 is the header; the tree's rows start one below it. */
+    fussfeel_press(&ed, 1U, 3U);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "ccc.txt");
+    /* Selecting is NOT opening: F mode is still up and the buffer has
+     * not changed.  A tree where one click opened a file could not be
+     * browsed at all. */
+    YEW_ASSERT(yew_fuss_active(&ed));
+    YEW_ASSERT_EQ_U64(ed.mouse.click_n, 1U);
+
+    fussfeel_press(&ed, 1U, 2U);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "bbb.txt");
+    YEW_ASSERT(yew_fuss_active(&ed));
+    yew_ed_free(&ed);
+    fussfeel_drop(&fix);
+}
+
+/*
+ * THE WHEEL SCROLLS THE TREE, over its rows and over the blank drawer
+ * below them alike — a list that only scrolled where it happened to
+ * have drawn a row would feel like it had holes.
+ *
+ * It moves the SELECTION, exactly as the picker's wheel does (s26 §5):
+ * the drawer has no independent scroll offset, `f->scroll` is derived
+ * from the selected row on every draw, and a wheel that moved the
+ * offset alone would be snapped back on the next frame.
+ */
+void test_fussdrawer_wheel_scrolls_the_tree(void)
+{
+    FussFeelFix fix;
+    Ed ed;
+    Key wheel = {0};
+
+    fussfeel_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    yew_fuss_tick(&ed, ed.now_ms + 20);
+    fussdrawer_grid(&ed);
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    ed.now_ms = 1000;
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+
+    wheel.kind = (u16)YEW_EV_MOUSE;
+    wheel.ev = (u8)YEW_KEY_PRESS;
+    wheel.button = (u8)YEW_MB_WHEEL_DOWN;
+    /* Over the BLANK part of the drawer, well below the last row. */
+    wheel.col = 1U;
+    wheel.row = 15U;
+    yew_mouse_event(&ed, &wheel);
+    /* YEW_WHEEL_ROWS is 3 and there are 3 rows, so a notch lands on the
+     * last one rather than past it. */
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "ccc.txt");
+    /* And the wheel never touches the phase machine: it has no release,
+     * so a state machine keyed on press-without-release would hang. */
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+
+    wheel.button = (u8)YEW_MB_WHEEL_UP;
+    wheel.row = 2U;
+    yew_mouse_event(&ed, &wheel);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+    /* Clamped, not wrapped: a list that wrapped at the top would carry
+     * the eye somewhere it did not ask to go. */
+    yew_mouse_event(&ed, &wheel);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+    yew_ed_free(&ed);
+    fussfeel_drop(&fix);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.13 Deliverable 4: `Copy Path`                          */
+/* ---------------------------------------------------------------- */
+
+/*
+ * WHY THIS COMMAND EXISTS AT ALL.  `ed.tab.copy_path` copies the ACTIVE
+ * TAB's path and takes no argument, so it cannot answer "copy the path
+ * of the row I pointed at" — and copying a different file's name than
+ * the one the row was opened over is the one failure a clipboard row
+ * must never have.  The `sarg` case below is that difference, stated as
+ * a test.
+ */
+
+/* The clipboard write `yew_reg_yank` makes for `+` is best-effort and
+ * would otherwise reach the developer's real pasteboard.  `none` keeps
+ * the register half — which is what the command is about — and makes
+ * the external half a no-op. */
+typedef struct FussClipEnv {
+    char *saved;
+    bool had;
+} FussClipEnv;
+
+static void fuss_clip_mute(FussClipEnv *env)
+{
+    const char *old = getenv("YEW_CLIPBOARD");
+
+    env->had = old != NULL;
+    env->saved = old == NULL ? NULL : yew_xstrdup(old);
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "none", 1), 0);
+}
+
+static void fuss_clip_restore(FussClipEnv *env)
+{
+    if (env->had) {
+        YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", env->saved, 1), 0);
+        yew_xfree(env->saved);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_CLIPBOARD"), 0);
+    }
+}
+
+static void fuss_assert_plus_register(Ed *ed, const char *want)
+{
+    RegVal *v = yew_reg_get(&ed->regs, (u8)'+');
+
+    YEW_ASSERT_NOT_NULL(v);
+    /* CHARWISE, like `ed.tab.copy_path`: a linewise path would paste as
+     * its own line and carry a newline nothing asked for. */
+    YEW_ASSERT_EQ_U64(v->type, (u64)YEW_REG_CHARWISE);
+    YEW_ASSERT_EQ_U64(v->bytes.len, strlen(want));
+    YEW_ASSERT_EQ_MEM(v->bytes.data, want, strlen(want));
+}
+
+void test_fussdrawer_copy_path_yanks_the_selected_row(void)
+{
+    FussDrawerFix fix;
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+
+    fuss_clip_mute(&env);
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_OK);
+    /* The tree's paths are repository-relative, and that is what a
+     * `Copy Path` is for — the name you would type or paste into a
+     * command, not the absolute one. */
+    fuss_assert_plus_register(&ed, "plain.txt");
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+    fuss_clip_restore(&env);
+}
+
+/*
+ * THE `sarg` CASE, which is the whole point: the menu captures the path
+ * it was opened over, and the row has to copy THAT even when the
+ * selection has since moved (a status refresh re-sorts the tree under
+ * the pointer).  `CTX_TGT_PATH` is how the captured path arrives, and
+ * `ed.git.copy_path` is `YEW_ARITY_OPT_STR` precisely so that target is
+ * legal for it.
+ */
+void test_fussdrawer_copy_path_prefers_the_captured_path(void)
+{
+    FussDrawerFix fix;
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+
+    fuss_clip_mute(&env);
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    cx.sarg = "sub/deep.txt";
+    cx.sarg_len = sizeof("sub/deep.txt") - 1U;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_OK);
+    fuss_assert_plus_register(&ed, "sub/deep.txt");
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+    fuss_clip_restore(&env);
+}
+
+/*
+ * REFUSES an escaping path rather than copying it.  `fuss_safe_path`
+ * is the same gate every other `ed.git.*` row command passes its
+ * argument through, and a clipboard row is not the place to relax it:
+ * the copied name is about to be pasted into a command.
+ */
+void test_fussdrawer_copy_path_refuses_an_unsafe_argument(void)
+{
+    static const char *const bad[] = {"/etc/passwd", "../outside.txt",
+                                      "sub/../../escape.txt"};
+    FussDrawerFix fix;
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+    size_t i;
+
+    fuss_clip_mute(&env);
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    for (i = 0U; i < YEW_ARRAY_LEN(bad); i++) {
+        RegVal *v;
+
+        cx.sarg = bad[i];
+        cx.sarg_len = strlen(bad[i]);
+        YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_ERR_ARG);
+        v = yew_reg_get(&ed.regs, (u8)'+');
+        /* Refused means NOTHING WAS COPIED — not the bad path, and not
+         * the selected row as a consolation. */
+        YEW_ASSERT(v == NULL || v->bytes.len == 0U);
+    }
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+    fuss_clip_restore(&env);
+}
+
+/*
+ * REFUSES WITH FUSS DOWN.  This is an ordinary registry command, so the
+ * palette and a Fletch script reach it from L mode with no drawer and
+ * no selection; returning OK having copied nothing would leave the
+ * previous clipboard contents looking like the answer.
+ */
+void test_fussdrawer_copy_path_refuses_outside_fuss(void)
+{
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+
+    fuss_clip_mute(&env);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    /* The drawer STRUCT outlives F mode (it is allocated with the
+     * editor), so "is FUSS up?" is `yew_fuss_active`, and the refusal
+     * comes from there being no selected row rather than no drawer. */
+    YEW_ASSERT(!yew_fuss_active(&ed));
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_ERR_ARG);
+    YEW_ASSERT(yew_reg_get(&ed.regs, (u8)'+') == NULL ||
+               yew_reg_get(&ed.regs, (u8)'+')->bytes.len == 0U);
+    yew_ed_free(&ed);
+    fuss_clip_restore(&env);
 }

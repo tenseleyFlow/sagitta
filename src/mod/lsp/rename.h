@@ -75,6 +75,29 @@ bool yew_lsp_rename_apply(Ed *ed, RenamePlan *plan,
 void yew_lsp_rename_plan_test_fail_at(RenamePlan *plan, size_t file_index,
                                       size_t edit_index);
 
+/*
+ * Deterministic unit-test seam for the CONFIRM PHASE (Sprint 57.13
+ * Deliverable 4).
+ *
+ * Reaching RENAME_CONFIRM in production needs a ready language server
+ * and a `textDocument/rename` response, which no unit lane has — yet
+ * the confirmation is exactly what the PANEL menu's `Apply` /
+ * `Show Diff` / `Cancel` rows and the three `ed.lsp.rename.*` commands
+ * act on, so it has to be reachable from a test or those rows ship
+ * unchecked.  This runs the REAL preflight and the REAL summary-panel
+ * open — the same two calls `rename_response_done` makes — and skips
+ * only the server and generation checks that precede them.  It is not
+ * a second implementation of the phase; it is the production one with
+ * the transport removed.
+ *
+ * Returns false, having installed nothing, if a rename is already in
+ * flight or either step refuses.
+ */
+bool yew_lsp_rename_test_confirm(Ed *ed, Win *w,
+                                 const JsonValue *workspace_edit,
+                                 u8 pos_enc, const char *old_name,
+                                 const char *new_name);
+
 bool yew_lsp_rename_request(Ed *ed, Win *w);
 bool yew_lsp_rename_key(Ed *ed, const Key *key);
 void yew_lsp_rename_shutdown(Ed *ed);

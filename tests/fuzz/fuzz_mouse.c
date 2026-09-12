@@ -40,6 +40,7 @@
 
 #include "edit/ed.h"
 #include "term/input.h"
+#include "term/tty.h"
 #include "ui/ctxmenu.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
@@ -124,6 +125,11 @@ static u32 fz_coord(Rng *r, u32 limit)
     return 1U + rng_below(r, limit);
 }
 
+enum {
+    /* The SGR modifier bit a terminal sets for Ctrl. */
+    FZ_MOD_CTRL = 16U
+};
+
 static void emit_random_event(Rng *r, Bytebuf *out)
 {
     u32 shape = rng_below(r, 100U);
@@ -131,25 +137,41 @@ static void emit_random_event(Rng *r, Bytebuf *out)
     u32 y = fz_coord(r, FZ_ROWS);
     u32 mods = rng_below(r, 8U) * 4U; /* shift/alt/ctrl bits */
 
-    if (shape < 25U) {
+    if (shape < 20U) {
         emit_sgr(out, 0U | mods, x, y, false); /* left press */
-    } else if (shape < 45U) {
+    } else if (shape < 30U) {
         emit_sgr(out, 32U | mods, x, y, false); /* motion, button held */
-    } else if (shape < 60U) {
+    } else if (shape < 40U) {
+        /*
+         * Sprint 57.13 §1: MOTION WITH NO BUTTON HELD, base 35 — what a
+         * terminal streams under mode 1003, which yew arms only while a
+         * menu is open.  A tenth of the stream, because the burst of
+         * reports a pointer crossing the screen produces is exactly
+         * where a hover path that allocated or repainted would show.
+         */
+        emit_sgr(out, 35U | mods, x, y, false);
+    } else if (shape < 46U) {
+        /*
+         * CTRL+LEFT, the second way to open a menu.  It must never
+         * reach the phase machine, so a stream full of them must still
+         * leave the router idle and never arm a drag.
+         */
+        emit_sgr(out, 0U | FZ_MOD_CTRL, x, y, false);
+    } else if (shape < 58U) {
         /* A release, often with no matching press. */
         emit_sgr(out, rng_below(r, 3U) | mods, x, y, true);
-    } else if (shape < 78U) {
+    } else if (shape < 74U) {
         /* Wheel bursts: several notches with no release between. */
         u32 n = 1U + rng_below(r, 6U);
         u32 i;
 
         for (i = 0U; i < n; i++)
             emit_sgr(out, 64U + rng_below(r, 4U) + mods, x, y, false);
-    } else if (shape < 86U) {
+    } else if (shape < 84U) {
         emit_sgr(out, 2U | mods, x, y, false); /* right press */
-    } else if (shape < 92U) {
+    } else if (shape < 90U) {
         emit_sgr(out, 1U | mods, x, y, false); /* middle press */
-    } else if (shape < 97U) {
+    } else if (shape < 96U) {
         emit_x10(out, rng_below(r, 96U), x, y);
     } else {
         /* Malformed: a truncated SGR introducer, which the decoder has
@@ -278,6 +300,23 @@ static bool run_session(const u8 *data, size_t len, char *why,
                 ok = false;
                 break;
             }
+            /*
+             * Sprint 57.13 §1/DoD 6: MODE 1003 IS NEVER LEFT ON.
+             *
+             * Checked before the event as well as after, so a stream
+             * that armed it and then took a path which forgot to disarm
+             * is caught at the next event rather than at the end of the
+             * session, where it could not be attributed.  A terminal
+             * left streaming motion reports at an editor with nothing
+             * to do with them is a terminal yew did not restore.
+             */
+            if (!yew_ctx_active() && yew_tty_mouse_motion_active()) {
+                (void)snprintf(why, why_cap,
+                               "1003 armed with no menu open, event %u",
+                               (unsigned)event);
+                ok = false;
+                break;
+            }
             if (key.ev == (u8)YEW_KEY_PRESS &&
                 key.button == (u8)YEW_MB_LEFT) {
                 held = snap_take(&ed);
@@ -330,10 +369,29 @@ static bool run_session(const u8 *data, size_t len, char *why,
             }
             ed.now_ms += 1 + (i64)rng_below(&rng, 200U);
             yew_mouse_tick(&ed, ed.now_ms);
-            /* Menus opened by right-clicks are closed again, so the
-             * next iteration starts from a comparable state. */
-            if (yew_ctx_active())
-                yew_ctx_close();
+            /*
+             * Menus opened by right- and ctrl-clicks are closed again,
+             * so the next iteration starts from a comparable state —
+             * THROUGH THE ROUTER'S OWN Esc path rather than by calling
+             * yew_ctx_close() behind its back, because disarming 1003
+             * is the router's half of a close and a fuzzer that skipped
+             * it would be proving the assertion above against itself.
+             */
+            if (yew_ctx_active()) {
+                Key esc;
+
+                (void)memset(&esc, 0, sizeof(esc));
+                esc.kind = (u16)YEW_EV_KEY;
+                esc.code = YEW_KEY_ESCAPE;
+                (void)yew_mouse_menu_key(&ed, &esc);
+            }
+            if (yew_tty_mouse_motion_active()) {
+                (void)snprintf(why, why_cap,
+                               "1003 survived a menu close, event %u",
+                               (unsigned)event);
+                ok = false;
+                break;
+            }
             /* Occasionally close a tab under the gesture: a click
              * resolved against a freed tab must find nothing. */
             if (rng_below(&rng, 512U) == 0U && yew_tab_count(&ed) > 1U)

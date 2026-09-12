@@ -52,6 +52,55 @@ side-by-side diff, and opens F-mode directories as tab groups. See the
 [Git-aware editing guide](.docs/git-editor.md) for the commands, statusline
 badges, refresh policy, and byte-honest filter behavior.
 
+## Mouse
+
+The mouse is an accelerator, never a requirement: every row of every menu
+below is a registry command with a keyboard route, and `t m`
+(`ed.ui.context_menu`) opens the same menu for whatever the keyboard is
+focused on. `ed.mouse.disable` turns reporting off entirely.
+
+**Right-click — or ctrl+left-click, for hardware with one button — opens a
+context menu at the pointer, on every surface:**
+
+| Under the pointer | Rows |
+|---|---|
+| Document text or gutter | Cut, Copy, Paste, Delete, Select All · Undo, Redo · Split Right, Split Below, Close Pane · Save, Reload · *(language server, when one is attached to that buffer)* Go to Definition, Find References, Rename, Hover · *(git, inside a repository)* Toggle Blame, Diff · Command Palette, Find File, Go to Line, Toggle Wrap |
+| Pane border | Close Pane, Grow, Shrink · Focus Next |
+| Tab entry | Close Tab, Close Other Tabs · Copy Path, Remove from Group · New Tab, Open in Split Right, Open in Split Below |
+| Group entry | Edit Group, Rename Group · Close Group, Dissolve Group |
+| Tab strip tail, or the bare backdrop | New Tab, Open File, New Group · Command Palette, Find Buffer |
+| Statusline / message row | Command Palette, Go to Line · Toggle Wrap, Line Numbers (cycles none → abs → rel → hybrid) · Disable Mouse |
+| F-mode file row | Open, Open in Split Right, Open in Split Below, Preview · Stage, Unstage, Discard · Diff, Blame · Rename, Delete |
+| F-mode directory row | Open as Group, Expand/Collapse · Stage All Below, Unstage All Below |
+| F-mode header, blank drawer or backdrop | Refresh, Commit · Push, Pull, Fetch · Status, History · Leave FUSS |
+| Picker row | Open, Open in Split Right, Open in Split Below · Close |
+| Completion row | Accept, Toggle Docs · Cancel |
+| Hover/signature panel, group picker | Close / Cancel |
+
+The document menu's `Cut`, `Copy` and `Paste` are the *system* clipboard —
+the same `ed.clip.cut` / `ed.clip.copy` / `ed.clip.paste` that ctrl+X /
+ctrl+C / ctrl+V run — so what you copy is there for the next window over.
+`Cut` and `Copy` need a highlight; `Paste` says so when the clipboard turns
+out to be empty.
+
+Rows that do not apply right now are greyed rather than removed, so a menu
+keeps its shape between two right-clicks on the same thing. A whole *section*
+does disappear when its feature is unavailable — no language server attached
+to that buffer, no git repository, or a build without the module — rather than
+standing as rows that can never be used. On a short terminal the menu sheds
+its lowest-priority rows instead of refusing to open.
+
+The pointer highlights rows as it moves over an open menu; arrow keys, Home,
+End, Enter and Esc drive the same menu from the keyboard. While a menu is
+open yew enables any-motion mouse reporting (DEC private mode 1003) and
+disables it again on close, on suspend, and on exit.
+
+**Other gestures:** click to place the cursor, drag to select, double-click
+for a word and triple-click for a line (Alt for whitespace-delimited words
+and whole display lines); click a tab to switch and drag it to reorder;
+drag a pane border to resize; wheel to scroll the pane, the picker, or the
+F-mode tree; single click selects an F-mode row and double-click opens it.
+
 ## Build
 
 ```sh

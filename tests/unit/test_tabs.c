@@ -973,3 +973,98 @@ void test_tabs_negative_region_payload_enters_the_group(void)
     YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
     yew_ed_free(&ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.13 §4: ed.tab.open_split_h / _v                        */
+/* ---------------------------------------------------------------- */
+
+static u32 tb_leaves(Ed *ed, Pane **out, u32 cap)
+{
+    u32 n = 0U;
+
+    yew_pane_collect_leaves(ed->pane_root, out, cap, &n);
+    return n;
+}
+
+void test_tabs_open_split_shows_the_active_tab_buffer_in_a_new_leaf(void)
+{
+    Ed ed;
+    Pane *leaves[4];
+    Buffer *doc;
+    Win *before;
+
+    tb_fixture(&ed);
+    doc = yew_tab_buffer(&ed, ed.tabs.active);
+    YEW_ASSERT_NOT_NULL(doc);
+    YEW_ASSERT_EQ_U64(tb_leaves(&ed, leaves, 4U), 1U);
+    before = ed.win;
+
+    YEW_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.open_split_h", 0, NULL),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(tb_leaves(&ed, leaves, 4U), 2U);
+    /* The new leaf takes focus and shows the same buffer -- two views,
+     * one document. */
+    YEW_ASSERT(ed.win != before);
+    YEW_ASSERT(ed.focus != NULL && ed.focus->is_leaf);
+    YEW_ASSERT(ed.focus->win == ed.win);
+    YEW_ASSERT(ed.win->buf == doc);
+    YEW_ASSERT(leaves[0]->win->buf == doc);
+    YEW_ASSERT(leaves[1]->win->buf == doc);
+
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.open_split_v", 0, NULL),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(tb_leaves(&ed, leaves, 4U), 3U);
+    YEW_ASSERT(ed.win->buf == doc);
+    yew_ed_free(&ed);
+}
+
+/*
+ * The subject is the TAB's buffer, not whatever the focused pane
+ * happens to be showing.
+ */
+void test_tabs_open_split_prefers_the_tab_buffer_over_the_pane_view(void)
+{
+    Ed ed;
+    Pane *leaves[4];
+    Buffer *first;
+    Buffer *other;
+    int idx;
+
+    tb_fixture(&ed);
+    idx = yew_tab_open(&ed, "/tmp/yew-tab-split-other.txt");
+    YEW_ASSERT(idx >= 0);
+    other = yew_tab_buffer(&ed, idx);
+    YEW_ASSERT_NOT_NULL(other);
+    yew_tab_switch(&ed, 0);
+    first = yew_tab_buffer(&ed, ed.tabs.active);
+    YEW_ASSERT_NOT_NULL(first);
+    YEW_ASSERT(first != other);
+
+    /* The focused pane is parked on a foreign buffer, the way a job or
+     * diff view leaves it. */
+    yew_ed_win_set_buffer(&ed, ed.win, other);
+    YEW_ASSERT(ed.win->buf == other);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+
+    YEW_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.open_split_h", 0, NULL),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(tb_leaves(&ed, leaves, 4U), 2U);
+    YEW_ASSERT(ed.win->buf == first);
+    yew_ed_free(&ed);
+}
+
+void test_tabs_open_split_refuses_when_there_is_no_room(void)
+{
+    Ed ed;
+    Pane *leaves[4];
+
+    tb_fixture(&ed);
+    /* One row cannot hold two panes plus a border. */
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 1U});
+    YEW_ASSERT(tb_invoke(&ed, "ed.tab.open_split_v", 0, NULL) !=
+               YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(tb_leaves(&ed, leaves, 4U), 1U);
+    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
+    yew_ed_free(&ed);
+}

@@ -69,6 +69,25 @@ void yew_region_remove_kind(RegionKind kind)
     regions.len = write;
 }
 
+void yew_region_remove_rect(RegionKind kind, Rect rect)
+{
+    u32 read;
+    u32 write = 0U;
+
+    for (read = 0U; read < regions.len; read++) {
+        const Region *r = &regions.v[read];
+
+        if (r->kind == kind && r->rect.x == rect.x &&
+            r->rect.y == rect.y && r->rect.w == rect.w &&
+            r->rect.h == rect.h)
+            continue;
+        if (write != read)
+            regions.v[write] = regions.v[read];
+        write++;
+    }
+    regions.len = write;
+}
+
 void yew_region_freeze(bool on)
 {
     regions.frozen = on;

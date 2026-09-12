@@ -19,6 +19,12 @@ CmdStatus yew_lsp_cmd_goto_type(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_goto_impl(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_references(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_rename(CmdCtx *cx);
+/* Sprint 57.13 §4: the rename confirmation's three answers, which the
+ * PANEL menu's `Apply` / `Show Diff` / `Cancel` rows invoke and the key
+ * handler reaches through the same implementation. */
+CmdStatus yew_lsp_cmd_rename_apply(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_rename_diff(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_rename_cancel(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_symbols(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx);
 

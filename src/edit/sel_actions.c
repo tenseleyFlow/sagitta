@@ -411,6 +411,23 @@ CmdStatus yew_sel_cmd_delete(CmdCtx *cx)
     return delete_or_change(cx, false, 0U);
 }
 
+/*
+ * Sprint 57.13 §4: the `Cut` menu row, and H-mode `x`.
+ *
+ * Cut is exactly yank-then-delete, in that order, and it is written as
+ * those two steps rather than as a third capture path: a bespoke
+ * "capture and remove" would be a second place that has to agree with
+ * capture_selection about rectangular rows, ragged widths and raw
+ * bytes, and the first time the two disagreed the user would lose the
+ * text (invariants 1 and 2).
+ *
+ * The explicit `+` is what `ed.tab.copy_path` uses: yew_reg_yank fills
+ * the system register and the unnamed `"` from one value, so the cut
+ * text reaches the clipboard AND the register the paste command reads.
+ * delete_or_change then runs its own capture and calls yew_reg_delete,
+ * which rewrites `"` with the identical bytes -- the same value twice,
+ * never a different one.
+ */
 CmdStatus yew_sel_cmd_change(CmdCtx *cx)
 {
     return delete_or_change(cx, true, 0U);
@@ -477,6 +494,51 @@ CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
     if (replace)
         return finish_action(cx, first, false);
     collapse_all(win);
+    return YEW_CMD_OK;
+}
+
+/*
+ * Sprint 57.13 §4: the `Select All` menu row, and L-mode `g a`.
+ *
+ * H is entered through yew_mode_enter_highlight rather than by poking
+ * ed->mode: that call is what installs the H key table, sets the unit
+ * ops and the selection kind, and fires the mode transition.  A
+ * hand-rolled entry would leave the keymap belonging to whichever mode
+ * the user came from, and the selection would be unoperable.
+ *
+ * The CHARACTER unit, so the arrows extend by grapheme from here; a
+ * line unit would snap the whole-buffer span to line edges the moment
+ * the user pressed one.
+ */
+CmdStatus yew_sel_cmd_all(CmdCtx *cx)
+{
+    Ed *ed;
+    Win *win;
+    Cursor *cursor;
+    CmdStatus status;
+
+    if (cx == NULL || cx->ed == NULL || cx->ed->win == NULL ||
+        cx->ed->win->buf == NULL || cx->ed->win->buf->tb == NULL ||
+        cx->ed->win->cs.curs.len == 0U)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    status = yew_mode_enter_highlight(ed, YEW_MODE_I, false);
+    if (status != YEW_CMD_OK)
+        return status;
+    win = ed->win;
+    win->h.kind = YEW_SEL_CHAR;
+    /*
+     * One selection, not one per cursor: "the whole buffer" is a single
+     * span, and N cursors holding N copies of it would make every
+     * operator run N times over the same bytes.
+     */
+    yew_cset_remove_all_but_primary(&win->cs);
+    cursor = &win->cs.curs.data[0];
+    cursor->anchor = BYTEOFF(0U);
+    cursor->pos = BYTEOFF(yew_textbuf_len(win->buf->tb));
+    cursor->goal_col = (GCol){YEW_GCOL_EOL};
+    yew_cset_normalize(win->buf->tb, &win->cs);
+    yew_ed_damage_document(ed);
     return YEW_CMD_OK;
 }
 

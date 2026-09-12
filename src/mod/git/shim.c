@@ -342,6 +342,46 @@ Rect yew_fuss_backdrop_rect(const Ed *ed)
     return (Rect){0U, 0U, 0U, 0U};
 }
 
+bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir)
+{
+    (void)ed;
+    (void)path_id;
+    (void)is_dir;
+    return false;
+}
+
+bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out)
+{
+    (void)ed;
+    (void)path_id;
+    if (out != NULL)
+        (void)memset(out, 0, sizeof(*out));
+    /* No tree, no status: every FUSS section is omitted in this build
+     * and no caller ever reads the zeroes (Sprint 57.13 §4). */
+    return false;
+}
+
+bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
+{
+    (void)ed;
+    (void)path_id;
+    (void)x;
+    (void)y;
+    return false;
+}
+
+void yew_fuss_select_path(Ed *ed, u32 path_id)
+{
+    (void)ed;
+    (void)path_id;
+}
+
+void yew_fuss_scroll(Ed *ed, i32 rows)
+{
+    (void)ed;
+    (void)rows;
+}
+
 bool yew_fuss_draw_dirty(const Ed *ed)
 {
     (void)ed;
@@ -696,5 +736,6 @@ FUSS_SHIM(yew_fuss_cmd_file_rename)
 FUSS_SHIM(yew_fuss_cmd_open)
 FUSS_SHIM(yew_fuss_cmd_open_split_h)
 FUSS_SHIM(yew_fuss_cmd_open_split_v)
+FUSS_SHIM(yew_fuss_cmd_copy_path)
 
 #undef FUSS_SHIM

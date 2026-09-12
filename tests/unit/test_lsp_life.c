@@ -26,6 +26,9 @@
 #include "edit/loop.h"
 #include "edit/option.h"
 #include "term/grid.h"
+#include "edit/pane_cmds.h"
+#include "ui/ctxmenu.h"
+#include "ui/ctxrows.h"
 #include "ui/message.h"
 #include "ui/complmenu.h"
 #include "ui/picker.h"
@@ -1658,4 +1661,64 @@ void test_lsp_server_requests_receive_protocol_results(void)
     arena_free_all(&arena);
     yew_rpc_conn_free(&server.rpc);
     server.rpc_live = false;
+}
+
+/*
+ * Sprint 57.13 §4: the OTHER half of the section-omission rule.
+ *
+ * `ctxrows_doc_optional_sections_are_absent_not_greyed` proves the
+ * four LSP rows are absent with no server; this proves they appear —
+ * and that they appear as a SECTION, behind its own separator, rather
+ * than scattered among the rows that are always there.  It lives in the
+ * lifecycle file because this is the only fixture in the tree with a
+ * real attached server.
+ */
+void test_ctxrows_doc_lsp_section_appears_with_a_server(void)
+{
+    LifeFix f;
+    CtxContext c;
+    i32 leaf;
+    u32 rows;
+    u32 i;
+    u32 def = UINT32_MAX;
+    u32 sep_above = UINT32_MAX;
+
+    life_fix_init(&f, "session-features", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    YEW_ASSERT(yew_lsp_attached(&f.ed, &f.ed.buffer));
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
+    f.ed.grid_ready = true;
+    yew_ed_layout(&f.ed);
+    yew_pane_tables_reset(&f.ed);
+    leaf = yew_pane_table_add_leaf(&f.ed, f.ed.focus);
+    YEW_ASSERT(leaf >= 0);
+    (void)memset(&c, 0, sizeof(c));
+    c.kind = YEW_CTX_KIND_DOC;
+    c.id = (u32)leaf;
+    yew_ctx_close();
+    yew_ctx_build(&f.ed, &c);
+    rows = yew_ctx_rows();
+    for (i = 0U; i < rows; i++)
+        if (strcmp(yew_ctx_row_label(i), "Go to Definition") == 0) {
+            def = i;
+            break;
+        }
+    YEW_ASSERT(def != UINT32_MAX);
+    YEW_ASSERT(def > 0U);
+    sep_above = def - 1U;
+    YEW_ASSERT(yew_ctx_row_is_sep(sep_above));
+    YEW_ASSERT_EQ_STR(yew_ctx_row_label(def + 1U), "Find References...");
+    YEW_ASSERT_EQ_STR(yew_ctx_row_label(def + 2U), "Rename...");
+    YEW_ASSERT_EQ_STR(yew_ctx_row_label(def + 3U), "Hover");
+    YEW_ASSERT(yew_ctx_row_enabled(def));
+    YEW_ASSERT(yew_ctx_row_enabled(def + 3U));
+    /* Rename... is the one LSP row a read-only buffer cannot use. */
+    f.ed.buffer.flags |= YEW_BUF_READONLY;
+    yew_ctx_close();
+    yew_ctx_build(&f.ed, &c);
+    YEW_ASSERT(!yew_ctx_row_enabled(def + 2U));
+    YEW_ASSERT(yew_ctx_row_enabled(def));
+    f.ed.buffer.flags &= ~(u32)YEW_BUF_READONLY;
+    yew_ctx_close();
+    life_fix_free(&f);
 }

@@ -568,6 +568,45 @@ static void gp_toggle_row(Ed *ed, const GpRow *r)
     gp_cursor_to(gp.cursor + 1);
 }
 
+/*
+ * Sprint 57.13 Deliverable 4: the two answers the GP menu rows offer,
+ * factored out of `yew_gp_key` so a row and a keystroke cannot drift.
+ *
+ * `gp_toggle_current` is exactly what Space does — tick the focused
+ * row, or walk into it when it is a directory — and `gp_confirm` is
+ * exactly what Enter does on a file or on the name field.  The command
+ * wrappers below add only the "is the dialog even up?" refusal and the
+ * `yew_gp_apply` the key loop does for the keyboard.
+ */
+static bool gp_toggle_current(Ed *ed)
+{
+    if (!gp.active || gp.cursor < 0 || gp.cursor >= gp.n_rows)
+        return false;
+    gp.on_name = false;
+    gp_toggle_row(ed, &gp.rows[gp.cursor]);
+    return true;
+}
+
+/*
+ * Move the focus to a LISTING INDEX.
+ *
+ * The GP_ROW region's payload is that index, so this is what a menu
+ * opened over a row spends its captured target on — `yew_gp_click`
+ * does the same thing with the same arithmetic before it toggles, and
+ * a menu that acted on the focused row instead would tick whichever
+ * row the cursor happened to be on rather than the one pointed at.
+ */
+bool yew_gp_select_row(Ed *ed, int idx)
+{
+    if (!gp.active || idx < 0 || idx >= gp.n_rows)
+        return false;
+    gp.on_name = false;
+    gp_cursor_to(idx);
+    if (ed != NULL)
+        ed->full_damage = true;
+    return true;
+}
+
 static void gp_name_key(Ed *ed, Key key)
 {
     size_t n = strlen(gp.name);
@@ -651,7 +690,7 @@ bool yew_gp_key(Ed *ed, Key key)
                                                 : NULL;
     if (key.code == (u32)' ') {
         if (r != NULL)
-            gp_toggle_row(ed, r);
+            (void)gp_toggle_current(ed);
         return true;
     }
     if (key.code == YEW_KEY_ENTER || key.code == YEW_KEY_RIGHT) {
@@ -830,14 +869,12 @@ bool yew_gp_click(Ed *ed, u16 x, u16 y)
     }
     if (hit.kind == YEW_REGION_GP_ROW) {
         /* The same row->index mapping the renderer used, asked for by
-         * the same function. */
+         * the same function, and then the same two steps the GP_ROW
+         * menu's `Toggle` row takes. */
         int idx = gp_row_at(y);
 
-        if (idx >= 0) {
-            gp.on_name = false;
-            gp_cursor_to(idx);
-            gp_toggle_row(ed, &gp.rows[idx]);
-        }
+        if (yew_gp_select_row(ed, idx))
+            (void)gp_toggle_current(ed);
         return true;
     }
     /* Anything else inside the dialog is swallowed by its BLOCK. */
@@ -1051,5 +1088,71 @@ CmdStatus yew_gp_cmd_edit(CmdCtx *cx)
         if (yew_tab_modified(ed, members[i]))
             yew_gp_mark_dirty(t->path);
     }
+    return YEW_CMD_OK;
+}
+
+/* ---------------------------------------------------------------- */
+/* The dialog's own rows, as commands (Sprint 57.13 §4)             */
+/* ---------------------------------------------------------------- */
+
+/*
+ * REFUSES CLEANLY when the dialog is down.
+ *
+ * These are ordinary registry commands, so the palette and a Fletch
+ * script reach them with nothing open; returning OK having done nothing
+ * would be indistinguishable from having ticked a row.
+ */
+static CmdStatus gp_require(CmdCtx *cx, Ed **out)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    if (!gp.active) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "no group picker is open");
+        return YEW_CMD_ERR_STATE;
+    }
+    *out = cx->ed;
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_gp_cmd_toggle(CmdCtx *cx)
+{
+    Ed *ed = NULL;
+    CmdStatus status = gp_require(cx, &ed);
+
+    if (status != YEW_CMD_OK)
+        return status;
+    if (!gp_toggle_current(ed)) {
+        yew_msg(ed, YEW_MSG_ERROR, "no row is selected");
+        return YEW_CMD_ERR_STATE;
+    }
+    ed->full_damage = true;
+    /*
+     * Ticking cannot confirm, so this call is a no-op today — but the
+     * key loop runs it after EVERY key the dialog consumed
+     * (edit/ed.c), and a command route that skipped it would be the
+     * one path where a confirmed result sat unapplied until the next
+     * keystroke.  Same shape, same guarantee.
+     */
+    yew_gp_apply(ed);
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_gp_cmd_confirm(CmdCtx *cx)
+{
+    Ed *ed = NULL;
+    CmdStatus status = gp_require(cx, &ed);
+
+    if (status != YEW_CMD_OK)
+        return status;
+    /*
+     * `gp_confirm`, not the Enter branch of `yew_gp_key`: Enter on a
+     * directory row WALKS INTO IT, and a row labelled `Confirm` that
+     * changed directory instead of creating the group would be the
+     * label lying.  Refusals — no ticks, no name — come back as the
+     * dialog's own note, which is where the user is already looking.
+     */
+    gp_confirm(ed);
+    ed->full_damage = true;
+    yew_gp_apply(ed);
     return YEW_CMD_OK;
 }

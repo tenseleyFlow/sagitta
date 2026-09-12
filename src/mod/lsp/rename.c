@@ -14,6 +14,7 @@
 #include "edit/ed.h"
 #include "edit/motion.h"
 #include "mod/lsp/client.h"
+#include "mod/lsp/lsp.h"
 #include "mod/lsp/sync.h"
 #include "term/input.h"
 #include "text/edit.h"
@@ -1066,6 +1067,49 @@ static void rename_prompt_done(Ed *ed, bool accepted, const u8 *text,
     state->request = request;
 }
 
+/*
+ * The confirm phase without a transport (rename.h explains why).
+ *
+ * Everything after the response arrives, in the order
+ * `rename_response_done` does it: install the state, preflight the
+ * WorkspaceEdit, open the summary.  A refusal at either step unwinds
+ * through `rename_state_finish`, so a failed seam leaves `ed->lsp_rename`
+ * NULL exactly as a failed response does.
+ */
+bool yew_lsp_rename_test_confirm(Ed *ed, Win *w,
+                                 const JsonValue *workspace_edit,
+                                 u8 pos_enc, const char *old_name,
+                                 const char *new_name)
+{
+    LspRenameState *state;
+    char err[YEW_RENAME_ERROR_MAX];
+
+    if (ed == NULL || w == NULL || w->buf == NULL || ed->lsp_rename != NULL ||
+        old_name == NULL || new_name == NULL)
+        return false;
+    state = yew_xcalloc(1U, sizeof(*state));
+    yew_lsp_rename_plan_init(&state->plan);
+    state->old_name = yew_xstrdup(old_name);
+    state->new_name = yew_xstrdup(new_name);
+    state->old_len = (u32)strlen(old_name);
+    state->new_len = (u32)strlen(new_name);
+    state->win_id = w->id;
+    state->buf_id = w->buf->id;
+    state->pos_enc = pos_enc;
+    state->phase = (u8)RENAME_REQUEST;
+    ed->lsp_rename = state;
+    if (!yew_lsp_rename_preflight(ed, workspace_edit, pos_enc, old_name,
+                                  new_name, &state->plan, err)) {
+        rename_state_finish(ed, true);
+        return false;
+    }
+    if (!rename_summary_open(ed, state)) {
+        rename_state_finish(ed, true);
+        return false;
+    }
+    return true;
+}
+
 bool yew_lsp_rename_request(Ed *ed, Win *win)
 {
     LspRenameState *state;
@@ -1285,26 +1329,26 @@ static void rename_apply_confirmed(Ed *ed, LspRenameState *state)
             (unsigned)edits, (unsigned long long)files);
 }
 
-bool yew_lsp_rename_key(Ed *ed, const Key *key)
+/*
+ * THE THREE ANSWERS, once.
+ *
+ * `yew_lsp_rename_key` used to hold this inline, so the menu rows §4
+ * asks for had nothing to invoke.  Both routes now land here: the key
+ * handler translates Enter / `d` / Esc into an answer, and the three
+ * `ed.lsp.rename.*` commands pass one straight in.  `d` is deliberately
+ * the SAME TOGGLE from both — show the diff from the summary, return to
+ * the summary from the diff — because the label the menu carries
+ * (`Show Diff`) is only ever offered on the summary panel, and the
+ * keystroke has meant both since Sprint 45.
+ */
+static void rename_answer_apply(Ed *ed, LspRenameState *state,
+                                LspRenameAnswer answer)
 {
-    LspRenameState *state;
-
-    if (ed == NULL || key == NULL || ed->lsp_rename == NULL)
-        return false;
-    state = ed->lsp_rename;
-    if (state->phase != RENAME_CONFIRM && state->phase != RENAME_DIFF)
-        return false;
-    if (key->ev == YEW_KEY_RELEASE)
-        return true;
-    if (key->code == YEW_KEY_ESCAPE) {
-        rename_state_finish(ed, true);
-        return true;
-    }
-    if (key->code == YEW_KEY_ENTER || key->code == YEW_KEY_KP_ENTER) {
+    switch (answer) {
+    case YEW_LSP_RENAME_APPLY:
         rename_apply_confirmed(ed, state);
-        return true;
-    }
-    if (key->mods == 0U && key->code == (u32)'d') {
+        return;
+    case YEW_LSP_RENAME_DIFF:
         if (state->phase == RENAME_CONFIRM) {
             Win *win = yew_ed_win_by_id(ed, state->win_id);
 
@@ -1318,6 +1362,95 @@ bool yew_lsp_rename_key(Ed *ed, const Key *key)
             yew_msg(ed, YEW_MSG_INFO,
                     "return to the rename window before reopening summary");
         }
+        return;
+    case YEW_LSP_RENAME_CANCEL:
+    default:
+        rename_state_finish(ed, true);
+        return;
+    }
+}
+
+/* The confirm phase, from the outside: the state exists and is waiting
+ * for one of the three answers.  RENAME_DIFF counts — it is the same
+ * question asked over a different view of the same plan. */
+static LspRenameState *rename_awaiting(Ed *ed)
+{
+    LspRenameState *state;
+
+    if (ed == NULL || ed->lsp_rename == NULL)
+        return NULL;
+    state = ed->lsp_rename;
+    if (state->phase != RENAME_CONFIRM && state->phase != RENAME_DIFF)
+        return NULL;
+    return state;
+}
+
+/*
+ * THE REFUSAL MESSAGE LIVES HERE, not in the command wrapper.
+ *
+ * `ed.lsp.rename.apply` / `.diff` / `.cancel` stay in the registry in a
+ * build with no LSP module (invariant 3), and there the SHIM answers
+ * this call — it has to say "this build has no lsp module", which a
+ * wrapper that overwrote every refusal with "nothing to confirm" would
+ * have hidden.  One message per reason, each from the code that knows
+ * the reason.
+ */
+bool yew_lsp_rename_answer(Ed *ed, LspRenameAnswer answer)
+{
+    LspRenameState *state = rename_awaiting(ed);
+
+    if (state == NULL) {
+        if (ed != NULL)
+            yew_msg(ed, YEW_MSG_ERROR,
+                    "no rename is waiting for confirmation");
+        return false;
+    }
+    rename_answer_apply(ed, state, answer);
+    ed->full_damage = true;
+    return true;
+}
+
+bool yew_lsp_rename_confirm_active(const Ed *ed)
+{
+    const LspRenameState *state;
+    const Win *win;
+
+    if (ed == NULL || ed->lsp_rename == NULL || ed->win == NULL)
+        return false;
+    state = ed->lsp_rename;
+    /*
+     * CONFIRM only, and only for the window the summary was opened in.
+     * The diff phase has no panel (it was closed before the diff buffer
+     * was shown), and a panel in some OTHER window is a hover or a
+     * signature that happens to be up beside the rename.
+     */
+    if (state->phase != RENAME_CONFIRM)
+        return false;
+    win = ed->win;
+    return win->id == state->win_id && win->panel.open;
+}
+
+bool yew_lsp_rename_key(Ed *ed, const Key *key)
+{
+    LspRenameState *state;
+
+    if (ed == NULL || key == NULL)
+        return false;
+    state = rename_awaiting(ed);
+    if (state == NULL)
+        return false;
+    if (key->ev == YEW_KEY_RELEASE)
+        return true;
+    if (key->code == YEW_KEY_ESCAPE) {
+        rename_answer_apply(ed, state, YEW_LSP_RENAME_CANCEL);
+        return true;
+    }
+    if (key->code == YEW_KEY_ENTER || key->code == YEW_KEY_KP_ENTER) {
+        rename_answer_apply(ed, state, YEW_LSP_RENAME_APPLY);
+        return true;
+    }
+    if (key->mods == 0U && key->code == (u32)'d') {
+        rename_answer_apply(ed, state, YEW_LSP_RENAME_DIFF);
         return true;
     }
     if (state->phase == RENAME_CONFIRM) {

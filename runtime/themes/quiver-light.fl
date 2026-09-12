@@ -22,6 +22,14 @@
         "tab.modified": { bg: "#eef1f4", fg: "@gold", bold: true, mono: "bold" },
         "tab.orphan": { bg: "#eef1f4", fg: "@grey", dim: true, mono: "dim" },
         "tab.add": { bg: "#eef1f4", fg: "@blue", bold: true, mono: "bold" },
+        # Context menus (s57.13 §6).  `menu.surface` paints the box and its
+        # border; the widget itself knows no colours.
+        "menu.surface": { bg: "#eef1f4", fg: "#8c959f", mono: "plain" },
+        "menu.row": { fg: "@fg", mono: "plain" },
+        "menu.hover": { bg: "#dbeafe", fg: "@fg", bold: true, mono: "reverse" },
+        "menu.disabled": { fg: "@grey", dim: true, mono: "dim" },
+        "menu.accel": { fg: "@grey", mono: "dim" },
+        "menu.sep": { fg: "#8c959f", mono: "dim" },
         "mode.line": { bg: "@blue", fg: "@bg", mono: "bold" },
         "mode.word": { bg: "@green", fg: "@bg", mono: "bold" },
         "mode.block": { bg: "@violet", fg: "@bg", mono: "bold" },

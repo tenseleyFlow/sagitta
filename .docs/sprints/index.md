@@ -370,6 +370,12 @@ Binding documents — read before any sprint:
   aliases over the existing selection/register engine, safe unforced `:q`
   return from transient job output to its originating file, and direct bare
   `!` entry into a shell-prefixed command line.
+- Sprint 57.13 (s57_13-mouse-overhaul-context-menus.md) — Context menus
+  everywhere: right-click / ctrl+click at the pointer on every surface (document,
+  strip, footer, FUSS rows, pickers, panels), hover highlight via mode 1003 while
+  open, priority-based row shedding, themed bordered box, table-driven dispatch,
+  FUSS click-select and wheel. Supersedes s27 §9's deferral. Branch
+  `mouse-overhaul`, planned 2026-09-11.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
@@ -418,8 +424,8 @@ Binding documents — read before any sprint:
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
   `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`,
-  `s57_10-…`, `s57_11-…`, `s57_12-…`) are the pressure valve when a sprint splits —
-  renumbering is forbidden once files exist.
+  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`) are the pressure valve
+  when a sprint splits — renumbering is forbidden once files exist.
 
 ## Sprint file format
 

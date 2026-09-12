@@ -34,10 +34,55 @@ bool yew_lsp_references(Ed *ed, Win *w);
 bool yew_lsp_rename(Ed *ed, Win *w);
 bool yew_lsp_symbols(Ed *ed, Win *w);
 bool yew_lsp_rename_key(Ed *ed, const Key *key);
+
+/*
+ * Sprint 57.13 Deliverable 4: the rename confirmation's three answers,
+ * as something other than a keystroke.
+ *
+ * The confirmation is a RAW KEY HANDLER — Enter applies, `d` shows the
+ * diff, Esc cancels — so its rows had no registry command to carry and
+ * shipped as nothing.  `yew_lsp_rename_answer` is now the one
+ * implementation of all three, and `yew_lsp_rename_key` is a second
+ * ROUTE to it rather than a second copy of the phase logic: a menu row
+ * and a keystroke that disagreed about what `d` does would be two
+ * rename dialogs wearing one panel.
+ *
+ * Returns false when the confirm phase is not up; the commands turn
+ * that into a message rather than a silent no-op.
+ */
+typedef enum LspRenameAnswer {
+    YEW_LSP_RENAME_APPLY = 0,
+    YEW_LSP_RENAME_DIFF,
+    YEW_LSP_RENAME_CANCEL
+} LspRenameAnswer;
+
+bool yew_lsp_rename_answer(Ed *ed, LspRenameAnswer answer);
+/*
+ * Is the panel the FOCUSED window is showing the rename confirmation?
+ *
+ * The panel slot also hosts hover and signature help, which keep the
+ * bare `Close` row, so the PANEL menu builder has to be able to tell
+ * them apart (57.13 §4).  False in the diff phase: the summary panel is
+ * closed before the diff buffer is shown, so there is no panel to
+ * right-click.
+ */
+bool yew_lsp_rename_confirm_active(const Ed *ed);
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len);
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap);
+/*
+ * Sprint 57.13 §4: is a server attached to THIS buffer?
+ *
+ * The document menu's LSP section is omitted whole when the answer is
+ * no (the section-omission rule), so the question has to be answerable
+ * without starting anything, without allocating and without a Win — a
+ * menu is built for the pane that was pointed at, which is not
+ * necessarily the focused one.  The shim answers false, which is what
+ * makes a MODULES="" build simply have no LSP section rather than a
+ * section of dead rows.
+ */
+bool yew_lsp_attached(const Ed *ed, const Buffer *b);
 void yew_lsp_shadow_install(void);
 
 /* Module-neutral editor lifecycle.  The stripped shim implements the same

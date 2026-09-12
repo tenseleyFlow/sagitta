@@ -78,7 +78,9 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
         "git.diff.add", "git.diff.del", "git.diff.mod",
         "git.diff.filler", "git.diff.intra.add", "git.diff.intra.del",
         "tab.bar", "tab.active", "tab.inactive", "tab.modified",
-        "tab.orphan", "tab.add"
+        "tab.orphan", "tab.add",
+        "menu.surface", "menu.row", "menu.hover", "menu.disabled",
+        "menu.accel", "menu.sep"
     };
     ThemeFix f;
     u32 file;
