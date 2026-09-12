@@ -4978,8 +4978,10 @@ static void case_s27_dwell_opens_member_strip(PtyCtx *c)
     s27_mouse(c, "\x1b[<0;3;1M");
     s27_mouse(c, "\x1b[<32;30;1M");
     /* The dwell is a CLOCK, so the case has to wait it out rather than
-     * send another event. */
-    ptc_settle(c, 500);
+     * send another event.  Comfortably PAST the 500 ms dwell, not on
+     * it: a golden recorded on the edge would be a wall-clock race, and
+     * the cue has to be finished before the frame is taken. */
+    ptc_settle(c, 900);
     ptc_snapshot(c, "s27_dwell_opens_member_strip");
     s27_mouse(c, "\x1b[<0;30;1m");
     force_quit(c);

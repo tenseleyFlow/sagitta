@@ -343,7 +343,17 @@ static int dg_slot_of_payload(i32 want)
     return -1;
 }
 
-void test_drag_dwell_opens_a_group_at_250ms_and_not_at_249(void)
+/*
+ * The NAME above carries a number, so the number is pinned here: a
+ * retune that leaves the name behind fails to compile rather than
+ * quietly lying about what it proves.
+ */
+_Static_assert(YEW_DRAG_DWELL_MS == 500,
+               "the dwell boundary row is named for 500 ms");
+_Static_assert(YEW_DRAG_FLASH_MS == 125,
+               "the cue is a derived quarter of the dwell");
+
+void test_drag_dwell_opens_a_group_at_500ms_and_not_at_499(void)
 {
     DragFixture f;
     u32 g;
@@ -366,12 +376,12 @@ void test_drag_dwell_opens_a_group_at_250ms_and_not_at_249(void)
     }
     YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
 
-    /* 249 ms: still counting.  A drag that merely PASSES over a group
+    /* 499 ms: still counting.  A drag that merely PASSES over a group
      * must not make its members flash open. */
     yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS - 1);
     YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), 0U);
 
-    /* 250 ms: open. */
+    /* 500 ms: open. */
     yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
     YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
     yew_ed_free(&f.ed);
@@ -1242,9 +1252,10 @@ void test_drag_dwell_flashes_twice_before_opening(void)
         {YEW_DRAG_FLASH_MS, false},      /* first gap */
         {2 * YEW_DRAG_FLASH_MS, true},   /* second flash */
         {3 * YEW_DRAG_FLASH_MS, false},  /* settle */
-        /* The clamp: 4·FLASH is 248, inside the dwell, and an unclamped
-         * quarter would light the cue for the two milliseconds before
-         * the strip opens. */
+        /* The fourth boundary.  At 500 ms it IS the dwell, so the cue
+         * is already done; the row stays because the quarter clamp is
+         * what keeps it dark for any dwell that does not divide by
+         * four (250 ms rolled into a fifth, lit quarter at 248). */
         {4 * YEW_DRAG_FLASH_MS, false},
         {YEW_DRAG_DWELL_MS - 1, false}
     };
@@ -1320,8 +1331,9 @@ void test_drag_dwell_flash_marks_damage_only_at_an_edge(void)
         yew_mouse_event(&f.ed, &motion);
     }
     t0 = f.ed.now_ms;
-    /* One tick per millisecond across the whole dwell: three quarter
-     * boundaries, and not one repaint anywhere else. */
+    /* One tick per millisecond across the whole 500 ms dwell: three
+     * quarter boundaries at 125/250/375, and not one repaint anywhere
+     * else. */
     for (i = 0; i < YEW_DRAG_DWELL_MS; i++) {
         f.ed.full_damage = false;
         yew_mouse_tick(&f.ed, t0 + i);

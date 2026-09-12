@@ -46,16 +46,20 @@ enum {
     /* Shift+wheel, when wrap is off. */
     YEW_WHEEL_COLS = 6,
     /*
-     * Sprint 57.14 §3.  400 ms was long enough that a pause over a group
-     * read as the editor having stopped responding; 250 ms is short
-     * enough to feel like an answer, and the two-flash cue below is what
-     * makes even that much waiting legible.
+     * Sprint 57.14 §3, retuned in the field.  400 ms read as the editor
+     * having stopped responding; 250 ms answered too eagerly — a drag
+     * merely crossing a group entry on its way past kept opening it, so
+     * the strip grew and lost a row under a pointer that was only
+     * travelling.  500 ms is long enough that resting is a DECISION and
+     * short enough that the two-flash cue below covers the wait.
      */
-    YEW_DRAG_DWELL_MS = 250,
+    YEW_DRAG_DWELL_MS = 500,
     /*
      * DERIVED, so the cue and the open cannot disagree: on, off, on, then
      * settle — two flashes, and the fourth quarter is quiet so the member
-     * strip does not appear mid-blink.
+     * strip does not appear mid-blink.  The derivation is also what keeps
+     * the cue honest at 500 ms: the two flashes SPREAD across the longer
+     * window rather than finishing early and leaving the rest silent.
      */
     YEW_DRAG_FLASH_MS = YEW_DRAG_DWELL_MS / 4,
     YEW_DRAG_SCROLL_MS = 120,

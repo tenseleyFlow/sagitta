@@ -2180,7 +2180,7 @@ void test_drag_cancel_restores_nothing_because_nothing_moved(void);
 void test_drag_drop_reorders_by_insertion(void);
 void test_drag_drop_where_it_started_changes_nothing(void);
 void test_drag_a_changed_tab_count_cancels(void);
-void test_drag_dwell_opens_a_group_at_250ms_and_not_at_249(void);
+void test_drag_dwell_opens_a_group_at_500ms_and_not_at_499(void);
 void test_drag_passing_over_three_groups_opens_none(void);
 void test_drag_dwell_reads_the_pre_drag_list_not_the_region(void);
 void test_drag_never_dwells_into_its_own_group(void);

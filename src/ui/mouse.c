@@ -2224,10 +2224,14 @@ static bool drag_over_chevron(Ed *ed, i32 *delta)
  * Sprint 57.14 §3: which QUARTER of the dwell `elapsed` falls in.
  *
  * Quarters 0 and 2 are lit, so the cue reads as two flashes.  The last
- * quarter is clamped rather than divided out: 3·FLASH is 186 and the
- * dwell is 250, so the arithmetic would otherwise roll into a fifth
- * quarter at 248 ms and light the cue for two milliseconds immediately
- * before the strip opens.
+ * quarter is CLAMPED rather than divided out, because FLASH is an
+ * integer quarter of DWELL and the division only comes out even when
+ * the dwell is a multiple of four: at 250 ms, 4·FLASH was 248 and the
+ * arithmetic rolled into a fifth, lit quarter for the two milliseconds
+ * immediately before the strip opened.  500 ms divides exactly, so the
+ * clamp is currently unreachable — it stays because the number is a
+ * FEEL setting and the next tuning pass must not have to rediscover
+ * this.
  */
 static u8 dwell_quarter(i64 elapsed)
 {
