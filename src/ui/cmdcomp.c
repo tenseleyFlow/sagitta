@@ -686,6 +686,19 @@ typedef struct DirListing {
 static DirListing comp_listing;
 static u64 comp_opendirs;
 
+/*
+ * Sprint 57.18 §2: an optional per-entry filter, applied while the slice
+ * is being read.
+ *
+ * The path source keeps every name and decides what a name MEANS later;
+ * the $PATH source has to know during the scan, because "is this an
+ * executable" costs syscalls and those syscalls belong inside the slice
+ * budget that the scan is already yielding on.  One readdir loop with a
+ * predicate, rather than a second copy of the slicing rule.
+ */
+typedef bool (*ListingKeep)(const char *scan_dir, const char *name,
+                            unsigned char dtype);
+
 static const char *listing_name(const DirListing *l, u32 i)
 {
     return l->blob + l->offs[i];
@@ -707,9 +720,18 @@ static void listing_dispose(DirListing *l)
     (void)memset(l, 0, sizeof(*l));
 }
 
+static void exec_cache_free(void);
+
 void yew_comp_listing_invalidate(void)
 {
     listing_dispose(&comp_listing);
+    /*
+     * The $PATH cache dies with the directory listing, for the same
+     * reason and at the same moment: this is the "the prompt closed,
+     * start over" hook, and a cache that outlived it would answer a
+     * later prompt with a $PATH that has since changed.
+     */
+    exec_cache_free();
 }
 
 static char *dup_cstr(const char *s)
@@ -791,87 +813,109 @@ typedef enum ListingState {
  * takes — perf-cmdcomp asserts opendirs=1 and would catch a version that
  * reopened per slice.
  */
-static ListingState listing_step(const char *scan_dir, i64 slice_us)
+static ListingState listing_step(DirListing *l, const char *scan_dir,
+                                 i64 slice_us, ListingKeep keep)
 {
     i64 started;
     struct dirent *entry;
     u32 checked = 0U;
 
-    if (comp_listing.dir != NULL &&
-        strcmp(comp_listing.dir, scan_dir) == 0) {
-        if (comp_listing.overflow)
+    if (l->dir != NULL && strcmp(l->dir, scan_dir) == 0) {
+        if (l->overflow)
             return LISTING_UNUSABLE;
-        if (comp_listing.complete)
+        if (l->complete)
             return LISTING_COMPLETE;
     } else {
         DIR *dir;
 
-        yew_comp_listing_invalidate();
+        listing_dispose(l);
         dir = opendir(scan_dir);
         comp_opendirs++;
         if (dir == NULL)
             return LISTING_UNUSABLE;
-        comp_listing.dir_handle = dir;
-        comp_listing.dir = dup_cstr(scan_dir);
+        l->dir_handle = dir;
+        l->dir = dup_cstr(scan_dir);
     }
     started = slice_us > 0 ? comp_now_us() : 0;
-    while ((entry = readdir(comp_listing.dir_handle)) != NULL) {
+    while ((entry = readdir(l->dir_handle)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0)
             continue;
         /* Dot files are kept and filtered at RANK time: whether they are
          * wanted depends on the pattern, which changes per keystroke, and
          * a listing that already dropped them could not answer ".git". */
-        if (!listing_push(&comp_listing, entry->d_name, (u8)entry->d_type,
-                          &comp_listing.cap)) {
+        checked++;
+        if (keep != NULL && !keep(l->dir, entry->d_name,
+                                  (unsigned char)entry->d_type))
+            goto tick;
+        if (!listing_push(l, entry->d_name, (u8)entry->d_type, &l->cap)) {
             /*
              * Too big to hold.  Drop the partial blob rather than let a
              * PREFIX of the directory masquerade as all of it — narrowing
              * from it would silently lose rows.
              *
-             * The key is MOVED across the invalidate rather than freed
-             * and re-duplicated: yew_comp_listing_advance resumes by
-             * passing comp_listing.dir straight back in, so `scan_dir`
-             * can BE this pointer, and disposing it here would leave the
+             * The key is MOVED across the dispose rather than freed and
+             * re-duplicated: yew_comp_listing_advance resumes by passing
+             * l->dir straight back in, so `scan_dir` can BE this
+             * pointer, and disposing it here would leave the
              * re-duplication reading freed memory.
              */
-            char *keep = comp_listing.dir;
+            char *key = l->dir;
 
-            comp_listing.dir = NULL;
-            yew_comp_listing_invalidate();
-            comp_listing.dir = keep;
-            comp_listing.overflow = true;
-            comp_listing.complete = true;
+            l->dir = NULL;
+            listing_dispose(l);
+            l->dir = key;
+            l->overflow = true;
+            l->complete = true;
             return LISTING_UNUSABLE;
         }
+tick:
         /* Clock read every 256 entries, not every one: the syscall would
-         * otherwise cost more than the readdir it is timing. */
-        checked++;
+         * otherwise cost more than the readdir it is timing.  Counted
+         * over entries READ rather than entries KEPT, because a filtered
+         * entry still cost the stat that the budget is bounding. */
         if (slice_us > 0 && (checked & 0xFFU) == 0U &&
             comp_now_us() - started >= slice_us)
             return LISTING_PARTIAL;
     }
-    (void)closedir(comp_listing.dir_handle);
-    comp_listing.dir_handle = NULL;
-    comp_listing.complete = true;
+    (void)closedir(l->dir_handle);
+    l->dir_handle = NULL;
+    l->complete = true;
     return LISTING_COMPLETE;
 }
 
+static bool listing_pending(const DirListing *l)
+{
+    return l->dir_handle != NULL && !l->complete;
+}
+
+static bool exec_scan_pending(void);
+static bool exec_scan_advance(i64 slice_us);
+
 bool yew_comp_listing_pending(void)
 {
-    return comp_listing.dir_handle != NULL && !comp_listing.complete;
+    return listing_pending(&comp_listing) || exec_scan_pending();
 }
 
 bool yew_comp_listing_advance(i64 slice_us)
 {
     char *dir = comp_listing.dir;
 
-    if (!yew_comp_listing_pending())
-        return false;
-    /* `dir` is the cache's own key, and listing_step compares against it
-     * by value; passing it back in is the "same directory, keep going"
-     * case by construction. */
-    return listing_step(dir, slice_us) == LISTING_PARTIAL;
+    /*
+     * ONE idle-tick driver for both sliced scans.  yew_loop_deadline
+     * stops sleeping on yew_comp_listing_pending, so a second pending
+     * predicate the tick did not drain would busy-loop the event loop.
+     */
+    if (listing_pending(&comp_listing)) {
+        /* `dir` is the cache's own key, and listing_step compares against
+         * it by value; passing it back in is the "same directory, keep
+         * going" case by construction. */
+        if (listing_step(&comp_listing, dir, slice_us, NULL) ==
+            LISTING_PARTIAL)
+            return true;
+        return exec_scan_pending();
+    }
+    return exec_scan_advance(slice_us);
 }
 
 /* Rank one candidate name into the bounded heap.  Shared by the cached
@@ -939,7 +983,8 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
     if (!req->allow_cache)
         yew_comp_listing_invalidate();
     if (req->allow_cache &&
-        listing_step(scan_dir, req->budget_us) != LISTING_UNUSABLE) {
+        listing_step(&comp_listing, scan_dir, req->budget_us, NULL) !=
+            LISTING_UNUSABLE) {
         /*
          * The common path: at most one slice of readdir, then a re-rank
          * of what is held.  A complete listing does no syscall at all.
@@ -980,6 +1025,523 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
     yew_xfree(scan_dir);
     yew_xfree(expanded);
     yew_xfree(head);
+    return total;
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.18 §2: the $PATH executable source                     */
+/* ---------------------------------------------------------------- */
+
+/* Defined with the live filter below; the two are the same "copy this
+ * many bytes and NUL-terminate" and a second one would be noise. */
+static char *dup_range(const char *s, size_t len);
+
+/*
+ * One PATH element and what was read out of it.
+ *
+ * The listing is the SAME sliced DirListing the path source uses, one
+ * per element, so a $PATH with a slow network mount on it yields to the
+ * live budget and resumes on the idle tick exactly as a big directory
+ * does.  (dev, ino, mtime) is the cache key the sprint asks for: an
+ * element whose stat is unchanged is never re-read, however often the
+ * source is asked.  Second-granularity mtime is the known limit -- a
+ * binary installed within the same second as the last scan is missed
+ * until the next prompt, which is the same bargain every shell's command
+ * hash makes, and strictly better than the shell's because a new prompt
+ * always re-stats.
+ */
+typedef struct ExecDir {
+    DirListing listing;
+    char *dir; /* the element as $PATH spells it; "" is "." per POSIX */
+    dev_t dev;
+    ino_t ino;
+    time_t mtime;
+    bool stat_ok;
+    /* Read to the end, or refused (unopenable, or past
+     * YEW_COMP_LIST_MAX).  Either way there is nothing more to read. */
+    bool done;
+} ExecDir;
+
+/*
+ * The merged, deduplicated name set the ranker sees.
+ *
+ * Deduplicated by basename with the FIRST element winning, which is what
+ * the shell would actually run.  Held as one blob addressed by offset
+ * for the same reason DirListing is: a few thousand names is a few
+ * thousand mallocs the other way, and that alone costs more than the
+ * readdir it is meant to amortize.
+ *
+ * `slots` is an open-addressed index over the blob.  It exists so the
+ * merge is linear rather than quadratic, and so the <= YEW_COMP_MAX
+ * survivors can be told which element they came from without a second
+ * pass over every name.
+ */
+typedef struct ExecCache {
+    char *path_env;
+    ExecDir *dirs;
+    u32 n;
+    char *blob;
+    size_t blob_len;
+    size_t blob_cap;
+    u32 *offs;
+    u32 *from;
+    u32 n_names;
+    u32 *slots;
+    u32 nslots;
+    bool merged;
+} ExecCache;
+
+static ExecCache exec_cache;
+
+/* A #define, not an enum: an enumerator has to fit in an int, and this
+ * is deliberately the whole u32 range's top value. */
+#define EXEC_NO_SLOT 0xFFFFFFFFU
+
+static void exec_merged_free(void)
+{
+    yew_xfree(exec_cache.blob);
+    yew_xfree(exec_cache.offs);
+    yew_xfree(exec_cache.from);
+    yew_xfree(exec_cache.slots);
+    exec_cache.blob = NULL;
+    exec_cache.offs = NULL;
+    exec_cache.from = NULL;
+    exec_cache.slots = NULL;
+    exec_cache.blob_len = 0U;
+    exec_cache.blob_cap = 0U;
+    exec_cache.n_names = 0U;
+    exec_cache.nslots = 0U;
+    exec_cache.merged = false;
+}
+
+static void exec_dirs_free(ExecDir *dirs, u32 n)
+{
+    u32 i;
+
+    for (i = 0U; i < n; i++) {
+        listing_dispose(&dirs[i].listing);
+        yew_xfree(dirs[i].dir);
+    }
+    yew_xfree(dirs);
+}
+
+static void exec_cache_free(void)
+{
+    exec_dirs_free(exec_cache.dirs, exec_cache.n);
+    exec_cache.dirs = NULL;
+    exec_cache.n = 0U;
+    yew_xfree(exec_cache.path_env);
+    exec_cache.path_env = NULL;
+    exec_merged_free();
+}
+
+static bool exec_scan_pending(void)
+{
+    u32 i;
+
+    for (i = 0U; i < exec_cache.n; i++) {
+        if (!exec_cache.dirs[i].done)
+            return true;
+    }
+    return false;
+}
+
+/*
+ * Is this entry something the shell would run?
+ *
+ * `access(X_OK)` is the authority on "executable by THIS user" -- a mode
+ * bit test would offer root's binaries to everyone -- and the stat is
+ * what excludes a directory, which is X_OK by virtue of being
+ * searchable.  Two syscalls per entry is the honest price; they are paid
+ * inside listing_step's slice, so a 3 000-entry /usr/bin yields to the
+ * live budget rather than landing on one keystroke.
+ */
+static bool exec_keep(const char *scan_dir, const char *name,
+                      unsigned char dtype)
+{
+    char *with_slash;
+    char *path;
+    struct stat st;
+    bool ok;
+
+    if (force_dtype_unknown)
+        dtype = DT_UNKNOWN;
+    /* A d_type that is already decisive saves the syscalls.  DT_REG,
+     * DT_LNK and DT_UNKNOWN all still need the stat: a symlink's target
+     * decides, and DT_UNKNOWN says nothing. */
+    if (dtype != DT_REG && dtype != DT_LNK && dtype != DT_UNKNOWN)
+        return false;
+    with_slash = join2(scan_dir,
+                       scan_dir[0] != '\0' &&
+                       scan_dir[strlen(scan_dir) - 1U] == '/' ? "" : "/");
+    path = join2(with_slash, name);
+    yew_xfree(with_slash);
+    ok = stat(path, &st) == 0 && S_ISREG(st.st_mode) &&
+         access(path, X_OK) == 0;
+    yew_xfree(path);
+    return ok;
+}
+
+/*
+ * Read one slice across the elements that still need reading.
+ *
+ * The budget is spent across ELEMENTS, not per element: `$PATH` is one
+ * answer, and giving each of a dozen directories its own 1500 us would
+ * make the first keystroke after `:!` cost eighteen milliseconds.
+ */
+static ListingState exec_scan_step(i64 slice_us)
+{
+    i64 started = slice_us > 0 ? comp_now_us() : 0;
+    u32 i;
+
+    for (i = 0U; i < exec_cache.n; i++) {
+        ExecDir *d = &exec_cache.dirs[i];
+        ListingState state;
+        i64 left = 0;
+
+        if (d->done)
+            continue;
+        if (slice_us > 0) {
+            left = slice_us - (comp_now_us() - started);
+            if (left <= 0)
+                return LISTING_PARTIAL;
+        }
+        state = listing_step(&d->listing, d->dir, left, exec_keep);
+        exec_cache.merged = false;
+        if (state == LISTING_PARTIAL)
+            return LISTING_PARTIAL;
+        /*
+         * COMPLETE or UNUSABLE, and both mean "nothing more here".  An
+         * element that cannot be opened contributes nothing, which is
+         * what the shell does with it too; one holding more than
+         * YEW_COMP_LIST_MAX executables is not a $PATH element, and the
+         * path source's streaming fallback exists for a directory the
+         * user asked about by name, which this is not.
+         */
+        d->done = true;
+    }
+    return LISTING_COMPLETE;
+}
+
+static bool exec_scan_advance(i64 slice_us)
+{
+    if (!exec_scan_pending())
+        return false;
+    return exec_scan_step(slice_us) == LISTING_PARTIAL;
+}
+
+/* FNV-1a over a NUL-terminated name.  A hash, not a checksum: it indexes
+ * the merge's dedup slots and nothing is stored under it. */
+static u32 exec_hash(const char *s)
+{
+    u32 h = 2166136261U;
+
+    while (*s != '\0') {
+        h ^= (u32)(unsigned char)*s++;
+        h *= 16777619U;
+    }
+    return h;
+}
+
+static const char *exec_name(u32 i)
+{
+    return exec_cache.blob + exec_cache.offs[i];
+}
+
+/* The slot this name occupies or would occupy.  Linear probing over a
+ * power-of-two table kept at most half full, so the probe is short. */
+static u32 exec_slot_of(const char *name)
+{
+    u32 mask = exec_cache.nslots - 1U;
+    u32 at = exec_hash(name) & mask;
+
+    for (;;) {
+        u32 held = exec_cache.slots[at];
+
+        if (held == EXEC_NO_SLOT || strcmp(exec_name(held), name) == 0)
+            return at;
+        at = (at + 1U) & mask;
+    }
+}
+
+static bool exec_lookup_from(const char *name, u32 *from)
+{
+    u32 at;
+    u32 held;
+
+    if (exec_cache.nslots == 0U)
+        return false;
+    at = exec_slot_of(name);
+    held = exec_cache.slots[at];
+    if (held == EXEC_NO_SLOT)
+        return false;
+    *from = exec_cache.from[held];
+    return true;
+}
+
+static void exec_merge_push(const char *name, u32 from)
+{
+    size_t len = strlen(name) + 1U;
+    u32 at;
+
+    at = exec_slot_of(name);
+    if (exec_cache.slots[at] != EXEC_NO_SLOT)
+        return; /* an earlier $PATH element already won this name */
+    if (exec_cache.blob_len + len > exec_cache.blob_cap) {
+        size_t next = exec_cache.blob_cap == 0U ? 8192U
+                                                : exec_cache.blob_cap * 2U;
+
+        while (next < exec_cache.blob_len + len)
+            next *= 2U;
+        exec_cache.blob = yew_xrealloc(exec_cache.blob, next);
+        exec_cache.blob_cap = next;
+    }
+    exec_cache.offs[exec_cache.n_names] = (u32)exec_cache.blob_len;
+    exec_cache.from[exec_cache.n_names] = from;
+    (void)memcpy(exec_cache.blob + exec_cache.blob_len, name, len);
+    exec_cache.blob_len += len;
+    exec_cache.slots[at] = exec_cache.n_names;
+    exec_cache.n_names++;
+}
+
+/*
+ * Merge every element's listing into one deduplicated set.
+ *
+ * Rebuilt whenever a scan slice added names and never otherwise, so the
+ * steady state -- the user typing into an already-scanned $PATH -- does
+ * this exactly once and then re-ranks from memory.
+ */
+static void exec_merge(void)
+{
+    size_t total = 0U;
+    size_t slots = 16U;
+    u32 i;
+    u32 j;
+
+    if (exec_cache.merged)
+        return;
+    exec_merged_free();
+    for (i = 0U; i < exec_cache.n; i++)
+        total += exec_cache.dirs[i].listing.n;
+    exec_cache.merged = true;
+    if (total == 0U)
+        return;
+    /* At most half full: linear probing degrades sharply past that, and
+     * the table is thrown away with the cache. */
+    while (slots < total * 2U)
+        slots *= 2U;
+    exec_cache.nslots = (u32)slots;
+    exec_cache.slots = yew_xmalloc(slots * sizeof(*exec_cache.slots));
+    for (i = 0U; i < exec_cache.nslots; i++)
+        exec_cache.slots[i] = EXEC_NO_SLOT;
+    exec_cache.offs = yew_xmalloc(total * sizeof(*exec_cache.offs));
+    exec_cache.from = yew_xmalloc(total * sizeof(*exec_cache.from));
+    for (i = 0U; i < exec_cache.n; i++) {
+        const DirListing *l = &exec_cache.dirs[i].listing;
+
+        for (j = 0U; j < l->n; j++)
+            exec_merge_push(listing_name(l, j), i);
+    }
+}
+
+/* How many ':'-separated elements `env` names.  An empty element is the
+ * current directory, exactly as POSIX says, so it still counts. */
+static u32 exec_path_count(const char *env)
+{
+    u32 n = 1U;
+    const char *at;
+
+    for (at = env; *at != '\0'; at++) {
+        if (*at == ':')
+            n++;
+    }
+    return n;
+}
+
+static void exec_dir_stat(ExecDir *d)
+{
+    struct stat st;
+
+    d->stat_ok = stat(d->dir, &st) == 0;
+    if (!d->stat_ok) {
+        d->dev = 0;
+        d->ino = 0;
+        d->mtime = 0;
+        return;
+    }
+    d->dev = st.st_dev;
+    d->ino = st.st_ino;
+    d->mtime = st.st_mtime;
+}
+
+static bool exec_dir_unchanged(const ExecDir *d)
+{
+    struct stat st;
+
+    if (!d->stat_ok)
+        return false;
+    if (stat(d->dir, &st) != 0)
+        return false;
+    return st.st_dev == d->dev && st.st_ino == d->ino &&
+           st.st_mtime == d->mtime;
+}
+
+/*
+ * Bring the element vector in line with the current $PATH.
+ *
+ * A changed $PATH rebuilds the vector wholesale -- the answer it
+ * produces is a function of the whole variable, and salvage that got the
+ * ORDER wrong would offer the name the shell would not run.  What is
+ * salvaged is the expensive part: an element that appears in both and
+ * whose (dev, ino, mtime) still matches keeps its listing, so changing
+ * $PATH costs one opendir per genuinely new directory and none for the
+ * rest.  Elements are also re-stat'd when $PATH did NOT change, which is
+ * what makes a binary installed while the editor is running appear.
+ */
+static void exec_reconcile(void)
+{
+    const char *env = getenv("PATH");
+    ExecDir *fresh;
+    u32 n;
+    u32 i;
+    u32 at;
+    const char *scan;
+
+    if (env == NULL)
+        env = "";
+    if (exec_cache.path_env != NULL &&
+        strcmp(exec_cache.path_env, env) == 0) {
+        bool changed = false;
+
+        for (i = 0U; i < exec_cache.n; i++) {
+            if (exec_dir_unchanged(&exec_cache.dirs[i]))
+                continue;
+            listing_dispose(&exec_cache.dirs[i].listing);
+            exec_dir_stat(&exec_cache.dirs[i]);
+            exec_cache.dirs[i].done = false;
+            changed = true;
+        }
+        if (changed)
+            exec_cache.merged = false;
+        return;
+    }
+    if (env[0] == '\0') {
+        /* No $PATH is no candidates, not the compiled-in default: the
+         * shell yew spawns inherits this same empty variable. */
+        exec_cache_free();
+        exec_cache.path_env = dup_cstr(env);
+        return;
+    }
+    n = exec_path_count(env);
+    fresh = yew_xcalloc(n, sizeof(*fresh));
+    scan = env;
+    for (i = 0U; i < n; i++) {
+        const char *end = strchr(scan, ':');
+        size_t len = end == NULL ? strlen(scan) : (size_t)(end - scan);
+
+        fresh[i].dir = len == 0U ? dup_cstr(".") : dup_range(scan, len);
+        scan = end == NULL ? scan + len : end + 1U;
+        exec_dir_stat(&fresh[i]);
+        for (at = 0U; at < exec_cache.n; at++) {
+            ExecDir *old = &exec_cache.dirs[at];
+
+            if (old->dir == NULL || strcmp(old->dir, fresh[i].dir) != 0)
+                continue;
+            if (!old->stat_ok || !fresh[i].stat_ok ||
+                old->dev != fresh[i].dev || old->ino != fresh[i].ino ||
+                old->mtime != fresh[i].mtime)
+                break;
+            /* Unchanged on disk: move the listing rather than re-read it.
+             * The old slot is left with an empty listing, which
+             * exec_dirs_free disposes harmlessly. */
+            fresh[i].listing = old->listing;
+            fresh[i].done = old->done;
+            (void)memset(&old->listing, 0, sizeof(old->listing));
+            break;
+        }
+    }
+    exec_dirs_free(exec_cache.dirs, exec_cache.n);
+    exec_cache.dirs = fresh;
+    exec_cache.n = n;
+    yew_xfree(exec_cache.path_env);
+    exec_cache.path_env = dup_cstr(env);
+    exec_merged_free();
+}
+
+static void exec_candidates_finish(const CompReq *req,
+                                   PathCandidateVec *paths,
+                                   Vec_CompItem *out)
+{
+    Arena *arena = req->arena;
+    const char *stem = req->stem;
+    size_t stem_len = strlen(stem);
+    size_t i;
+
+    yew_sort_stable(paths->data, paths->len, sizeof(paths->data[0]),
+                    path_candidate_cmp, NULL);
+    out->len = 0U;
+    Vec_CompItem_reserve(out, paths->len);
+    for (i = 0U; i < paths->len; i++) {
+        PathCandidate *path = &paths->data[i];
+        CompItem item;
+        u32 from = 0U;
+
+        /* Quoted on the way out like a path: an executable with a space
+         * in its name is legal, and the prompt must be able to read back
+         * what the menu inserts (DoD 2). */
+        item.text = yew_comp_quote(arena, path->name);
+        item.detail = exec_lookup_from(path->name, &from) &&
+                              from < exec_cache.n
+                          ? arena_strdup(arena, exec_cache.dirs[from].dir)
+                          : NULL;
+        item.kind = (u8)YEW_COMP_EXEC;
+        item.is_dir = false;
+        item.deferred = false;
+        item.score = path->score;
+        /* Rescored for its match positions, exactly as the path source
+         * does: the heap deliberately does not carry them. */
+        (void)comp_key(stem, stem_len, path->name, &item.m);
+        item.match = arena_strdup(arena, path->name);
+        if (strcmp(item.text, item.match) != 0) {
+            /* Quoting inserted a `"` and escapes, so there is no honest
+             * byte mapping back to the ranked name. */
+            item.m.n_pos = 0U;
+            item.match_off = (u16)YEW_COMP_NO_HIGHLIGHT;
+        } else {
+            item.match_off = 0U;
+        }
+        Vec_CompItem_push(out, item);
+    }
+    path_candidates_dispose(paths);
+}
+
+static u32 enumerate_exec(const CompReq *req, Vec_CompItem *out)
+{
+    PathCandidateVec paths = {0};
+    const char *stem = req->stem;
+    size_t stem_len = strlen(stem);
+    u32 total = 0U;
+    u32 i;
+
+    /* A fresh request RETIRES the cache, as the path source's does:
+     * whoever asked for one did so because $PATH or its directories may
+     * have changed underneath. */
+    if (!req->allow_cache)
+        exec_cache_free();
+    exec_reconcile();
+    (void)exec_scan_step(req->allow_cache ? req->budget_us : 0);
+    exec_merge();
+    /*
+     * Ranking a PARTIAL scan is deliberate, exactly as it is for a
+     * partial directory listing: the menu shows the best of what has
+     * been read and yew_cmdline_comp_tick brings the rest on the idle
+     * path.  Blocking until a dozen directories are read is the
+     * multi-millisecond keystroke the slicing exists to remove.
+     */
+    for (i = 0U; i < exec_cache.n_names; i++)
+        path_rank_one(&paths, exec_name(i), (u8)DT_REG, stem, stem_len,
+                      &total);
+    exec_candidates_finish(req, &paths, out);
     return total;
 }
 
@@ -1047,6 +1609,11 @@ static void comp_init(void)
          YEW_COMP_SRC_CACHEABLE},
         {YEW_COMP_PLUGIN, "plugin", enumerate_plugins,
          YEW_COMP_SRC_CACHEABLE},
+        /* Sprint 57.18 §2.  SLOW for the same reason the path source is:
+         * a $PATH element may hold thousands of entries, and each one
+         * costs a stat before it can be called executable. */
+        {YEW_COMP_EXEC, "exec", enumerate_exec,
+         YEW_COMP_SRC_CACHEABLE | YEW_COMP_SRC_SLOW},
     };
     size_t i;
 
@@ -1335,7 +1902,7 @@ const CompItem *yew_comp_sole(const Vec_CompItem *items, YewCompKind kind)
 }
 
 bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
-                       YewCompKind *kind)
+                       bool bang_body, YewCompKind *kind)
 {
     const char *spec;
     size_t len;
@@ -1345,6 +1912,12 @@ bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
 
     if (kind == NULL)
         return false;
+    /* Sprint 57.18 §3; see the header for why this precedes the argspec
+     * rather than being spelled as a new argspec letter. */
+    if (bang_body) {
+        *kind = token_index == 0U ? YEW_COMP_EXEC : YEW_COMP_PATH;
+        return true;
+    }
     if (token_index == 0U) {
         *kind = YEW_COMP_CMD;
         return true;
@@ -1388,12 +1961,16 @@ bool yew_comp_query_at(Ed *ed, const CmdParsePoint *point,
     (void)ed;
     if (out == NULL || point == NULL)
         return false;
-    if (point->token_index != 0U) {
+    /* A bang body needs no resolved command: `:!` never resolves one
+     * (loose_name stops at the bang), and the body's own word index is
+     * the whole question. */
+    if (!point->bang_body && point->token_index != 0U) {
         if (!point->command_known)
             return false;
         entry = yew_cmd_entry(point->command);
     }
-    if (!yew_comp_kind_for(entry, point->token_index, &kind))
+    if (!yew_comp_kind_for(entry, point->token_index, point->bang_body,
+                           &kind))
         return false;
     out->kind = kind;
     out->source = yew_comp_source(kind);
