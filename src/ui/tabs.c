@@ -823,34 +823,42 @@ u16 yew_strip_tail_x(void)
  * relative order — the same rule yew_tab_reorder commits with, applied
  * to the picture so the drop holds no surprise.
  */
-static void apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
-                               int *active_entry)
+static int apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
+                              int *active_entry)
 {
-    i32 held;
+    i32 held = 0;
+    i32 ignored = 0;
+    u16 fx = 0U;
+    u16 fy = 0U;
+    u16 grab = 0U;
     int to;
     int from = -1;
     int i;
     StripEntry moved;
 
-    if (!yew_mouse_drag_preview(ed, &held, &to) || n <= 1)
-        return;
+    /*
+     * The FLOAT decides whether an entry is held, not the target: a drag
+     * whose pointer has not yet named a slot is still carrying
+     * something, and the strip must not show it in two places.
+     */
+    if (!yew_mouse_drag_float(ed, &held, &fx, &fy, &grab))
+        return -1;
     for (i = 0; i < n; i++) {
         if (entries[i].payload == held) {
             from = i;
             break;
         }
     }
+    /* A member dragged off row 2 has no row-1 entry to hold open. */
     if (from < 0)
-        return;
+        return -1;
+    if (n <= 1 || !yew_mouse_drag_preview(ed, &ignored, &to))
+        return from; /* no target yet: the gap stays where it was lifted */
     if (to < 0)
         to = 0;
     if (to >= n)
         to = n - 1;
     moved = entries[from];
-    /* The ghost: dim marks the entry as travelling rather than
-     * settled, so a drop that lands where it started is visibly a
-     * no-op instead of looking like nothing happened. */
-    moved.dim = true;
     if (from < to) {
         (void)memmove(&entries[from], &entries[from + 1],
                       sizeof(entries[0]) * (size_t)(to - from));
@@ -861,11 +869,18 @@ static void apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
     entries[to] = moved;
     if (active_entry != NULL && *active_entry >= 0)
         *active_entry = yew_tab_shifted_index(*active_entry, from, to);
+    /*
+     * The GAP.  Sprint 27 drew this entry dim, in place, as a ghost;
+     * 57.14 draws it at the pointer instead and leaves the permuted
+     * position blank, so the strip shows exactly where the drop lands
+     * and the held entry exists exactly once.
+     */
+    return to;
 }
 
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          int active_entry, int *scroll, i32 scroll_mag,
-                         bool record_slots, bool draw_new);
+                         bool record_slots, bool draw_new, int held_idx);
 
 /*
  * Row 1, with the drag preview applied and the pre-drag list recorded.
@@ -879,13 +894,14 @@ static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
                               int n, int active_entry, int *scroll)
 {
     StripEntry pre[YEW_TAB_MAX];
+    int held;
     int i;
 
     if (n > (int)YEW_ARRAY_LEN(pre))
         n = (int)YEW_ARRAY_LEN(pre);
     if (n > 0)
         (void)memcpy(pre, entries, sizeof(pre[0]) * (size_t)n);
-    apply_drag_preview(ed, entries, n, &active_entry);
+    held = apply_drag_preview(ed, entries, n, &active_entry);
     /* Cleared before the render fills the cell ranges in: a slot the
      * layout scrolled out of view must not keep last frame's cells and
      * answer for a position nobody can point at. */
@@ -897,7 +913,8 @@ static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
         strip_pre[i].col1 = 0U;
         strip_pre[i].pre_payload = pre[i].payload;
     }
-    strip_render(ed, rect, entries, n, active_entry, scroll, 1, true, true);
+    strip_render(ed, rect, entries, n, active_entry, scroll, 1, true, true,
+                 held);
 }
 
 static ThemeEnt tab_base_style(const Ed *ed)
@@ -957,7 +974,7 @@ static Cell tab_blank(ThemeEnt style)
 
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          int active_entry, int *scroll, i32 scroll_mag,
-                         bool record_slots, bool draw_new)
+                         bool record_slots, bool draw_new, int held_idx)
 {
     StripSpan spans[YEW_TAB_MAX];
     int n_spans = 0;
@@ -1019,21 +1036,31 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
             style = orphan;
         else if (entries[idx].modified)
             style = modified;
-        /* Draw only the bytes that fit the span the layout gave us.
-         * Drawing the whole label writes its tail over the next
-         * entry — which is exactly what the golden caught. */
-        (void)yew_grid_puts(&ed->grid, rect.y, x,
-                            (const u8 *)entries[idx].label,
-                            yew_strip_label_bytes(entries[idx].label),
-                            style.fg, style.bg, style.attrs);
-        /*
-         * Registered with the SAME cells the layout produced and the
-         * draw used.  Recomputing this from strlen while hit-testing is
-         * the multibyte click-shift the Sprint 22 law forbids.
-         */
         span_rect = (Rect){x, rect.y,
                            (u16)(spans[i].col1 - spans[i].col0), 1U};
-        yew_region_add(YEW_REGION_TAB, span_rect, entries[idx].payload);
+        if (idx != held_idx) {
+            /* Draw only the bytes that fit the span the layout gave us.
+             * Drawing the whole label writes its tail over the next
+             * entry — which is exactly what the golden caught. */
+            (void)yew_grid_puts(&ed->grid, rect.y, x,
+                                (const u8 *)entries[idx].label,
+                                yew_strip_label_bytes(entries[idx].label),
+                                style.fg, style.bg, style.attrs);
+            /*
+             * Registered with the SAME cells the layout produced and the
+             * draw used.  Recomputing this from strlen while hit-testing
+             * is the multibyte click-shift the Sprint 22 law forbids.
+             */
+            yew_region_add(YEW_REGION_TAB, span_rect, entries[idx].payload);
+        }
+        /*
+         * Sprint 57.14 §2: the held entry keeps its CELLS and loses its
+         * ink and its region.  The row was blanked above, so what is
+         * left is a gap exactly its width, sitting where the drop lands;
+         * registering it would hand the pointer a target for the thing
+         * it is already holding.  The pre-drag slot below is still
+         * recorded, because that is what the drag aims with.
+         */
         tail_x = (u16)(x + span_rect.w);
         /*
          * Sprint 27 §4.  The SAME cells, against the pre-drag list —
@@ -1104,9 +1131,23 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
     int n;
     int i;
     int active_entry = -1;
+    int held = -1;
+    i32 held_payload = 0;
+    u16 fx = 0U;
+    u16 fy = 0U;
+    u16 grab = 0U;
+    bool floating;
 
     if (ed == NULL || gid == 0U)
         return;
+    /*
+     * Row 2 hides the held member for the same reason row 1 does: a tab
+     * dragged off the member strip is being carried at the pointer, and
+     * it may not also be sitting in the row it was lifted from.  There
+     * is no permutation here — row 2 is not a drop-ordering surface, so
+     * the gap simply stays where the member was.
+     */
+    floating = yew_mouse_drag_float(ed, &held_payload, &fx, &fy, &grab);
     n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     for (i = 0; i < n; i++) {
         (void)memset(&entries[i], 0, sizeof(entries[i]));
@@ -1122,9 +1163,109 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
         entries[i].modified = yew_tab_modified(ed, members[i]);
         if (members[i] == ed->tabs.active)
             active_entry = i;
+        if (floating && held_payload >= 0 && entries[i].payload == held_payload)
+            held = i;
     }
     strip_render(ed, rect, entries, n, active_entry,
-                 &ed->tabs.member_scroll, 2, false, false);
+                 &ed->tabs.member_scroll, 2, false, false, held);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.14 §2: the float                                        */
+/* ---------------------------------------------------------------- */
+
+static Rect strip_float;
+
+Rect yew_strip_float_rect(void)
+{
+    return strip_float;
+}
+
+/*
+ * The float's label, built from the payload rather than lifted from the
+ * strip's entry list — a member dragged off row 2 has no row-1 entry to
+ * copy, and the float must look the same whichever row it came from.
+ *
+ * No leading NUMBER, unlike every label on a row: the numbers address
+ * positions, and a float is between positions.  One that carried a
+ * number would be naming a slot it is not in.
+ */
+static void strip_float_label(const Ed *ed, i32 payload, char *out,
+                              size_t cap)
+{
+    if (out == NULL || cap == 0U)
+        return;
+    out[0] = '\0';
+    if (payload < 0) {
+        char label[YEW_TAB_LABEL_MAX - 4];
+
+        yew_group_label(ed, (u32)(-payload), label, sizeof(label));
+        (void)snprintf(out, cap, " %s ", label);
+        return;
+    }
+    {
+        const Tab *t = yew_tab_at_const(ed, (int)payload);
+
+        if (t == NULL)
+            return;
+        (void)snprintf(out, cap, " %s%s ", tab_basename(t),
+                       yew_tab_modified(ed, (int)payload)
+                           ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
+    }
+}
+
+/*
+ * Drawn LAST, after both rows, so the row the pointer happens to be over
+ * cannot paint over the thing the pointer is carrying.
+ *
+ * IT REGISTERS NO REGION, and that is not an oversight in the Sprint 22
+ * law: a region maps a cell to something the user can aim at, and these
+ * cells are already in the user's hand.  Registering them would make the
+ * pointer hover the held entry wherever it went, which is exactly the
+ * "you are hovering the thing you are holding" failure the pre-drag slot
+ * table exists to avoid.  `yew_strip_float_rect` exists so a test can
+ * hit-test every cell it covers and prove the registry stayed quiet.
+ */
+static void strip_draw_float(Ed *ed)
+{
+    char label[YEW_TAB_LABEL_MAX];
+    i32 payload = 0;
+    u16 px = 0U;
+    u16 py = 0U;
+    u16 grab = 0U;
+    u16 w;
+    u16 x0;
+    u16 end;
+    ThemeEnt style;
+
+    strip_float = (Rect){0U, 0U, 0U, 0U};
+    if (ed == NULL || !ed->grid_ready || ed->grid.cols == 0U ||
+        ed->grid.rows == 0U)
+        return;
+    if (!yew_mouse_drag_float(ed, &payload, &px, &py, &grab))
+        return;
+    strip_float_label(ed, payload, label, sizeof(label));
+    if (label[0] == '\0')
+        return;
+    w = yew_strip_label_cells(label);
+    if (w == 0U)
+        return;
+    if (w > ed->grid.cols)
+        w = ed->grid.cols;
+    /* The grip the press took, clamped into the grid on both axes: a
+     * float half off the screen reads as a rendering fault rather than
+     * as a tab held near the edge. */
+    x0 = px > grab ? (u16)(px - grab) : 0U;
+    if ((u32)x0 + (u32)w > (u32)ed->grid.cols)
+        x0 = (u16)(ed->grid.cols - w);
+    if (py >= ed->grid.rows)
+        py = (u16)(ed->grid.rows - 1U);
+    style = tab_role_style(ed, "tab.active", tab_base_style(ed));
+    style.attrs = (u16)(style.attrs | YEW_ATTR_REVERSE | YEW_ATTR_BOLD);
+    end = yew_grid_puts(&ed->grid, py, x0, (const u8 *)label,
+                        yew_strip_label_bytes(label), style.fg, style.bg,
+                        style.attrs);
+    strip_float = (Rect){x0, py, (u16)(end > x0 ? end - x0 : 0), 1U};
 }
 
 void yew_tab_strip_draw(Ed *ed, Rect rect)
@@ -1153,6 +1294,8 @@ void yew_tab_strip_draw(Ed *ed, Rect rect)
                                   (Rect){rect.x, (u16)(rect.y + 1U),
                                          rect.w, 1U},
                                   gid);
+    /* Last, and over everything the strip just drew. */
+    strip_draw_float(ed);
 }
 
 /*

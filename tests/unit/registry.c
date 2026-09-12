@@ -2181,6 +2181,8 @@ const YewTest yew_tests[] = {
     T(drag_row1_slot_extracts_a_member_from_its_group),
     T(drag_extracting_a_sole_member_onto_a_slot_to_its_right),
     T(drag_row1_exit_works_when_the_strip_overflows),
+    T(drag_float_is_drawn_and_registers_no_region),
+    T(drag_held_entry_leaves_a_gap_in_the_strip),
     T(ctxmenu_placement_clamps_at_all_four_edges),
     T(ctxmenu_refuses_a_space_it_cannot_fit),
     T(ctxmenu_is_at_least_the_minimum_width),

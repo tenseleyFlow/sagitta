@@ -2023,6 +2023,32 @@ bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot)
     return true;
 }
 
+bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
+                          u16 *grab_dx)
+{
+    const MouseState *m;
+
+    if (ed == NULL || payload == NULL || x == NULL || y == NULL ||
+        grab_dx == NULL)
+        return false;
+    m = &ed->mouse;
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
+        return false;
+    *payload = m->press_rgn.payload;
+    *x = m->at_x;
+    *y = m->at_y;
+    /*
+     * The press's region is the one captured at press (the law at the
+     * top of this file), so the grip survives everything the strip does
+     * underneath — scrolling, an auto-scroll, a repaint.  A press that
+     * somehow landed left of its own region grips the left edge rather
+     * than wrapping into a huge unsigned offset.
+     */
+    *grab_dx = m->press_x > m->press_rgn.rect.x
+                   ? (u16)(m->press_x - m->press_rgn.rect.x) : 0U;
+    return true;
+}
+
 u32 yew_mouse_preview_group(const Ed *ed)
 {
     return ed != NULL ? ed->mouse.preview_gid : 0U;

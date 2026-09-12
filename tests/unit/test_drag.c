@@ -430,10 +430,11 @@ void test_drag_passing_over_three_groups_opens_none(void)
  * THE fixture where the two answers disagree.
  *
  * A drag is in flight and the preview has moved the held entry under
- * the pointer, so the REGION at those cells names the held tab.  The
- * pre-drag list still says a group is there.  The dwell must read the
- * pre-drag list, or it would never fire at all — the pointer would
- * always be "over the thing it is holding".
+ * the pointer, so the REGION at those cells is the held entry's — since
+ * 57.14 §2 that means nothing at all, because the gap it leaves is drawn
+ * and never registered.  The pre-drag list still says a group is there.
+ * The dwell must read the pre-drag list, or it would never fire — the
+ * pointer is always over the thing it is holding.
  */
 void test_drag_dwell_reads_the_pre_drag_list_not_the_region(void)
 {
@@ -464,11 +465,16 @@ void test_drag_dwell_reads_the_pre_drag_list_not_the_region(void)
         Region hit = yew_region_hit(dg_slot_x(&f, gslot), 0U);
         i32 pre = 0;
 
-        /* The two now disagree, which is the whole point of the
-         * fixture: the region says the held tab, the pre-drag list says
-         * the group. */
-        YEW_ASSERT_EQ_U64((u64)hit.kind, (u64)YEW_REGION_TAB);
-        YEW_ASSERT_EQ_I64(hit.payload, 0);
+        /*
+         * The two now disagree, which is the whole point of the fixture.
+         * Sprint 27 had the region name the held tab here; since 57.14
+         * §2 the held entry is a GAP that registers nothing at all — so
+         * the registry answers NONE where the pre-drag list still says a
+         * group is.  Either way the region table cannot answer the
+         * dwell's question, and the pre-drag list is the only thing that
+         * can.
+         */
+        YEW_ASSERT_EQ_U64((u64)hit.kind, (u64)YEW_REGION_NONE);
         YEW_ASSERT(yew_strip_pre_payload(gslot, &pre));
         YEW_ASSERT_EQ_I64(pre, -(i32)g);
     }
@@ -992,5 +998,146 @@ void test_drag_row1_exit_works_when_the_strip_overflows(void)
         YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, idx)->group_id, 0U);
     }
     YEW_ASSERT_EQ_I64(yew_group_member_count(&f.ed, g), 1);
+    yew_ed_free(&f.ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.14 §2: the float and the gap                            */
+/* ---------------------------------------------------------------- */
+
+/* The text of grid row `y`, single-byte cells only. */
+static void dg_row_text(const Ed *ed, u16 y, char *out, size_t cap)
+{
+    size_t n = 0U;
+    u16 x;
+
+    for (x = 0U; x < ed->grid.cols && n + 1U < cap; x++) {
+        const Cell *c = &ed->grid.back[(size_t)y * ed->grid.cols + x];
+
+        out[n++] = (char)(c->utf8[0] >= 32U && c->utf8[0] < 127U
+                              ? c->utf8[0] : ' ');
+    }
+    out[n] = '\0';
+}
+
+/*
+ * THE FLOAT IS DRAWN AND NEVER REGISTERED.
+ *
+ * Drawn: its cells carry the held tab's name.  Never registered: the
+ * registry answers nothing over any of them.  A region there would make
+ * the pointer hover whatever it is holding, wherever it went — the same
+ * failure the pre-drag slot table exists to keep out of the dwell.
+ */
+void test_drag_float_is_drawn_and_registers_no_region(void)
+{
+    DragFixture f;
+    Rect fl;
+    char row[128];
+    u16 x;
+
+    dg_fixture(&f, 5U);
+    dg_paint(&f);
+    /* Nothing in flight: no float. */
+    YEW_ASSERT_EQ_U64(yew_strip_float_rect().w, 0U);
+    {
+        /* Grabbed one cell into the entry, and carried to a column far
+         * from every entry so the cells under it are unclaimed. */
+        Key press = dg_ev((u8)YEW_KEY_PRESS, (u16)(dg_slot_x(&f, 1) + 1U),
+                          0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, 60U, 3U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+    dg_paint(&f);
+    fl = yew_strip_float_rect();
+    YEW_ASSERT(fl.w > 0U);
+    YEW_ASSERT_EQ_U64(fl.y, 3U);
+    /* It follows the pointer's grip, not the pointer's left edge. */
+    YEW_ASSERT_EQ_U64(fl.x, 59U);
+    dg_row_text(&f.ed, fl.y, row, sizeof(row));
+    YEW_ASSERT_NOT_NULL(strstr(row, "yew-drag-0.txt"));
+    /* And the registry knows nothing about any of it. */
+    for (x = fl.x; x < (u16)(fl.x + fl.w); x++)
+        YEW_ASSERT_EQ_U64((u64)yew_region_hit(x, fl.y).kind,
+                          (u64)YEW_REGION_NONE);
+    /* The float has no number: the numbers address POSITIONS on a row,
+     * and a float is between them. */
+    YEW_ASSERT(strstr(row + fl.x, " 2 yew-drag-0.txt") == NULL);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * The held entry exists EXACTLY ONCE.
+ *
+ * The insertion shift still permutes the list — that is the whole point
+ * of Sprint 27's preview, and the gap is where the drop lands — but the
+ * entry itself is no longer drawn there, and no region carries its
+ * payload.  The pre-drag slot table still does, because that is what the
+ * drop aims with.
+ */
+void test_drag_held_entry_leaves_a_gap_in_the_strip(void)
+{
+    DragFixture f;
+    char before[128];
+    char during[128];
+    u16 x;
+    bool held_region = false;
+    int slot;
+
+    dg_fixture(&f, 5U);
+    dg_paint(&f);
+    dg_row_text(&f.ed, 0U, before, sizeof(before));
+    YEW_ASSERT_NOT_NULL(strstr(before, "yew-drag-0.txt"));
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 1), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, 3), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    dg_paint(&f);
+    for (x = 0U; x < 80U; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB && hit.payload == 1)
+            held_region = true;
+    }
+    /* No entry, and no target for it. */
+    YEW_ASSERT(!held_region);
+    /* The gap sits at the TARGET slot, not where the tab was lifted: the
+     * strip is showing where the drop lands. */
+    slot = yew_strip_slot_at((u16)yew_strip_float_rect().x, 0U);
+    (void)slot;
+    {
+        int at = -1;
+        int i;
+
+        for (i = 0; i < yew_strip_slot_count(); i++) {
+            i32 pre = 0;
+
+            if (yew_strip_pre_payload(i, &pre) && pre == 1)
+                at = i;
+        }
+        /* The pre-drag table still names the held tab at its ORIGINAL
+         * slot — that list never moves, which is exactly why the dwell
+         * and the drop read it. */
+        YEW_ASSERT_EQ_I64(at, 1);
+    }
+    dg_row_text(&f.ed, 0U, during, sizeof(during));
+    /* Drawn once: the strip row no longer carries it at all, only the
+     * float does — and the float is on the same row here. */
+    {
+        Rect fl = yew_strip_float_rect();
+        char strip_only[128];
+        u16 i;
+
+        YEW_ASSERT_EQ_U64(fl.y, 0U);
+        (void)memcpy(strip_only, during, sizeof(strip_only));
+        for (i = fl.x; i < (u16)(fl.x + fl.w) && i < 80U; i++)
+            strip_only[i] = '.';
+        YEW_ASSERT(strstr(strip_only, "yew-drag-0.txt") == NULL);
+    }
     yew_ed_free(&f.ed);
 }

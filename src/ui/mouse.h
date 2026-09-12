@@ -153,6 +153,20 @@ bool yew_mouse_gesture_active(const Ed *ed);
  */
 bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot);
 
+/*
+ * Sprint 57.14 §2: the FLOAT — the held entry, and where the pointer has
+ * it.  True for the whole life of a tab/group drag, target or no target,
+ * because the thing being carried is visible from the moment it is
+ * lifted; `yew_mouse_drag_preview` answers the narrower question of
+ * where it would LAND, and the strip's gap follows that one.
+ *
+ * `grab_dx` is the column the press landed on within the entry, so the
+ * float keeps the grip the user took instead of snapping its left edge
+ * to the pointer.
+ */
+bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
+                          u16 *grab_dx);
+
 /* §4: the group whose member strip a dwell has opened; 0 when none. */
 u32 yew_mouse_preview_group(const Ed *ed);
 

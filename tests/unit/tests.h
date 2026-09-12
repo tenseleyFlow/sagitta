@@ -2175,6 +2175,8 @@ void test_drag_a_group_moves_the_whole_block(void);
 void test_drag_row1_slot_extracts_a_member_from_its_group(void);
 void test_drag_extracting_a_sole_member_onto_a_slot_to_its_right(void);
 void test_drag_row1_exit_works_when_the_strip_overflows(void);
+void test_drag_float_is_drawn_and_registers_no_region(void);
+void test_drag_held_entry_leaves_a_gap_in_the_strip(void);
 void test_ctxmenu_placement_clamps_at_all_four_edges(void);
 void test_ctxmenu_refuses_a_space_it_cannot_fit(void);
 void test_ctxmenu_is_at_least_the_minimum_width(void);
