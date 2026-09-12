@@ -9244,9 +9244,13 @@ static void case_s57_13_doc_menu(PtyCtx *c)
         return;
     /*
      * A SELECTION FIRST, so `Cut`, `Copy` and `Delete` are live while
-     * `Paste`, `Undo` and `Save` are greyed: one golden with both
+     * `Undo`, `Redo` and `Save` are greyed: one golden with both
      * renditions of a row in it.  It also pins that a right-click does
      * not destroy the selection the rows are about.
+     *
+     * `Paste` is live too and says nothing about the clipboard: it runs
+     * `ed.clip.paste`, which reads the system clipboard when it fires
+     * and cannot be asked at menu-build time.
      */
     s18_settle_after_keys(c, "h");
     s18_settle_after_keys(c, "right right right");
