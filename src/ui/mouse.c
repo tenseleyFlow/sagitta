@@ -793,7 +793,8 @@ static bool apply_target(Ed *ed, const CtxActionDesc *d, u32 id, Rect cell)
         if (yew_active_group_id(ed) != id)
             yew_group_enter(ed, id);
         return true;
-    case CTX_TGT_PANE: {
+    case CTX_TGT_PANE:
+    case CTX_TGT_LEAF: {
         Pane *leaf = yew_pane_leaf_by_index(ed, (i32)id);
 
         if (leaf == NULL)
@@ -806,7 +807,15 @@ static bool apply_target(Ed *ed, const CtxActionDesc *d, u32 id, Rect cell)
          * captured at open time precisely so this path needs neither.
          */
         yew_pane_refocus(ed, leaf);
-        if (leaf->win != NULL && leaf->win->buf != NULL)
+        /*
+         * CTX_TGT_LEAF STOPS HERE.  Placing the caret sets anchor =
+         * pos, which collapses the selection — so the rows that exist
+         * to act on a selection (`Cut`, `Copy`, `Delete`) would run on
+         * an empty one.  The rows that mean "here" take CTX_TGT_PANE
+         * and get the cell (ui/ctxrows.h).
+         */
+        if (d->target == CTX_TGT_PANE && leaf->win != NULL &&
+            leaf->win->buf != NULL)
             yew_win_click_to_cursor(leaf->win, cell.x, cell.y);
         return true;
     }
@@ -824,7 +833,17 @@ static bool apply_target(Ed *ed, const CtxActionDesc *d, u32 id, Rect cell)
         yew_compl_select(ed, ed->win, (i32)id);
         return true;
     case CTX_TGT_PATH:
-        /* The path travels as `cx.sarg`; nothing has to move first. */
+    case CTX_TGT_FUSS_ROW:
+        /*
+         * The path travels as `cx.sarg` (CTX_TGT_PATH), and the FUSS
+         * SELECTION MOVES TO IT FIRST — for the rows whose command
+         * reads the selection rather than an argument (`Expand` /
+         * `Collapse`, `Open as Group...`), and because a tree that
+         * still points somewhere else after a menu acted on this row
+         * would leave the next keystroke operating on a different file.
+         * A no-op when F mode is down or the build has no FUSS.
+         */
+        yew_fuss_select_path(ed, id);
         return true;
     case CTX_TGT_NONE:
     default:

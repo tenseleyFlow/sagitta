@@ -1822,13 +1822,27 @@ void test_mouse_menu_pane_target_places_the_cursor(void)
     YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_DOC);
     {
         Key enter;
+        u32 row;
+        u32 rows = yew_ctx_rows();
+        bool found = false;
 
+        /*
+         * The palette row, by NAME.  It is PANE targeted — focus the
+         * leaf that was pointed at, caret on the cell that was clicked,
+         * THEN the command — while the rows above it are LEAF targeted
+         * precisely so they do not move the caret (57.11 §4), which is
+         * the distinction this test exists to hold.
+         */
+        for (row = 0U; row < rows; row++)
+            if (strcmp(yew_ctx_row_label(row), "Command Palette...") == 0) {
+                yew_ctx_hover((i32)row);
+                found = true;
+                break;
+            }
+        YEW_ASSERT(found);
         (void)memset(&enter, 0, sizeof(enter));
         enter.kind = (u16)YEW_EV_KEY;
         enter.code = YEW_KEY_ENTER;
-        /* The placeholder's only row is the palette, and it is PANE
-         * targeted: focus the leaf that was pointed at, caret on the
-         * cell that was clicked, THEN the command. */
         YEW_ASSERT(yew_mouse_menu_key(&ed, &enter));
     }
     /* The freeze is balanced on the way out, whatever the row did. */
