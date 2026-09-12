@@ -1824,6 +1824,57 @@ void test_drag_a_group_entry_holds_still_inside_its_hover_band(void)
 }
 
 /*
+ * THE BAND AND THE DWELL ARE THE SAME GESTURE.
+ *
+ * The band exists so a carried tab can COME TO REST on a group; the
+ * dwell is what resting on a group is for.  If the dwell kept reading
+ * the reorder target it would read the carried tab's own slot while the
+ * band held the group still, and the one place a tab can join a group
+ * would be the one place the pointer is not allowed to linger.
+ *
+ * So the dwell reads what the carried entry OVERLAPS MOST, and the
+ * reorder target stays what it was.  Both halves are asserted here,
+ * because either alone is the bug.
+ */
+void test_drag_resting_in_a_group_band_still_opens_it(void)
+{
+    DragFixture f;
+    u32 g;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 w;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 1, 2);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    YEW_ASSERT_EQ_I64(dg_slot_of_payload(-(i32)g), 1);
+    dg_slot_span(0, &c0, &c1);
+    dg_slot_span(1, &a0, &a1);
+    w = (i32)a1 - (i32)a0;
+    YEW_ASSERT(w >= 8);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, c0, 0U);
+
+        yew_mouse_event(&f.ed, &press);
+    }
+    /* The far edge of the band: as far onto the group as the pointer can
+     * go without the strip moving, which is where a user who means to
+     * rest on it ends up. */
+    dg_carry_to(&f, dg_col_for_trail(&f, (i32)a1 - w / 4));
+    YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 0); /* nothing shifted */
+    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);    /* and it is counting */
+
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    yew_ed_free(&f.ed);
+}
+
+/*
  * The same band, approached from the RIGHT.  The crossing edge is the
  * carried entry's leading one, and the band is the same middle half of
  * the group it is moving over.

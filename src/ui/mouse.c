@@ -1706,32 +1706,50 @@ static i32 swap_threshold(int slot, u16 a0, u16 a1, bool rightwards)
  * (invariant 5's "same state, same picture" applied to a picture that
  * is its own input).
  */
-static int drag_target_slot(Ed *ed, u16 col)
+/*
+ * The CELLS THE CARRIED ENTRY COVERS at pointer column `col`, and the
+ * slot its gap currently occupies.
+ *
+ * False when nothing of ours is on row 1 — a member lifted off row 2,
+ * or an entry the strip scrolled away — and then the pointer's own cell
+ * is all there is.  Three readers share it so the grip arithmetic
+ * exists once: the reorder target, the dwell, and nothing else.
+ */
+static bool carried_span(Ed *ed, u16 col, int *slot, u16 *c0, u16 *c1,
+                         i32 *lead, i32 *trail)
 {
     MouseState *m = &ed->mouse;
     int n = yew_strip_slot_count();
-    int to;
+    int to = m->drag_to_valid ? m->drag_to_slot : held_pre_slot(ed);
+    i32 grab;
+
+    if (n <= 0 || to < 0 || to >= n || !yew_strip_slot_cells(to, c0, c1))
+        return false;
+    grab = m->press_x > m->press_rgn.rect.x
+               ? (i32)m->press_x - (i32)m->press_rgn.rect.x : 0;
+    *lead = (i32)col - grab;
+    if (*lead < (i32)ed->tab_strip_rect.x)
+        *lead = (i32)ed->tab_strip_rect.x;
+    *trail = *lead + ((i32)*c1 - (i32)*c0);
+    *slot = to;
+    return true;
+}
+
+static int drag_target_slot(Ed *ed, u16 col)
+{
+    int n = yew_strip_slot_count();
+    int to = -1;
     u16 c0 = 0U;
     u16 c1 = 0U;
     u16 a0 = 0U;
     u16 a1 = 0U;
-    i32 lead;
-    i32 trail;
-    i32 grab;
+    i32 lead = 0;
+    i32 trail = 0;
 
     if (n <= 0)
         return -1;
-    to = m->drag_to_valid ? m->drag_to_slot : held_pre_slot(ed);
-    /* Nothing of ours is on row 1 — a member off row 2, or an entry the
-     * strip scrolled away — so the pointer's own cell is all there is. */
-    if (to < 0 || to >= n || !yew_strip_slot_cells(to, &c0, &c1))
+    if (!carried_span(ed, col, &to, &c0, &c1, &lead, &trail))
         return yew_strip_slot_at(col, ed->tab_strip_rect.y);
-    grab = m->press_x > m->press_rgn.rect.x
-               ? (i32)m->press_x - (i32)m->press_rgn.rect.x : 0;
-    lead = (i32)col - grab;
-    if (lead < (i32)ed->tab_strip_rect.x)
-        lead = (i32)ed->tab_strip_rect.x;
-    trail = lead + ((i32)c1 - (i32)c0);
     if (lead < (i32)c0) {
         while (to > 0 && yew_strip_slot_cells(to - 1, &a0, &a1) &&
                lead < swap_threshold(to - 1, a0, a1, false))
@@ -1742,6 +1760,62 @@ static int drag_target_slot(Ed *ed, u16 col)
             to++;
     }
     return to;
+}
+
+/*
+ * WHAT THE CARRIED ENTRY IS RESTING ON — the slot it OVERLAPS MOST.
+ *
+ * A different question from `drag_target_slot`'s, and the group hover
+ * band is what made the two stop having the same answer.  The band
+ * exists so a carried tab can come to rest ON a group; the dwell is
+ * what resting on a group is FOR.  A dwell that kept reading the
+ * reorder target would read the carried tab's own slot for the whole
+ * width of the band, and the one place a tab can join a group would be
+ * the one place the pointer is not allowed to linger.
+ *
+ * Overlap rather than a single cell — a midpoint, or the leading edge —
+ * because the carried entry and the entry under it are both a dozen
+ * cells wide and either edge can be over a neighbour while the bulk of
+ * the entry is not.  "Most of what I am holding is over this one" is
+ * what the eye reads, and it is the same answer as today's once the
+ * target HAS moved: the gap is then drawn on the entry's old cells and
+ * overlaps them entirely.
+ *
+ * Ties keep the leftmost, so the answer is a function of the state and
+ * not of the loop order (invariant 5).
+ */
+static int drag_dwell_slot(Ed *ed, u16 col)
+{
+    int n = yew_strip_slot_count();
+    int to = -1;
+    int best = -1;
+    i32 best_over = 0;
+    u16 c0 = 0U;
+    u16 c1 = 0U;
+    u16 a0 = 0U;
+    u16 a1 = 0U;
+    i32 lead = 0;
+    i32 trail = 0;
+    int i;
+
+    if (n <= 0)
+        return -1;
+    if (!carried_span(ed, col, &to, &c0, &c1, &lead, &trail))
+        return yew_strip_slot_at(col, ed->tab_strip_rect.y);
+    for (i = 0; i < n; i++) {
+        i32 lo;
+        i32 hi;
+
+        if (!yew_strip_slot_cells(i, &a0, &a1))
+            continue;
+        lo = lead > (i32)a0 ? lead : (i32)a0;
+        hi = trail < (i32)a1 ? trail : (i32)a1;
+        if (hi - lo > best_over) {
+            best_over = hi - lo;
+            best = i;
+        }
+    }
+    return best;
 }
 
 /*
@@ -1835,6 +1909,7 @@ static void drag_strip_motion(Ed *ed, const Key *k)
     MouseState *m = &ed->mouse;
     bool on_row1 = k->row == ed->tab_strip_rect.y;
     int slot = -1;
+    int dwell_slot = -1;
 
     /*
      * The array is frozen for the drag's lifetime, so a changed count
@@ -1864,6 +1939,10 @@ static void drag_strip_motion(Ed *ed, const Key *k)
         }
     } else if (on_row1) {
         slot = drag_target_slot(ed, k->col);
+        /* Resolved from the SAME frame the target was, before the
+         * target is written back — the two are different questions
+         * about one picture, not a before and an after. */
+        dwell_slot = drag_dwell_slot(ed, k->col);
         if (slot >= 0 &&
             (!m->drag_to_valid || m->drag_to_slot != slot ||
              m->drag_to_tail)) {
@@ -1904,7 +1983,7 @@ static void drag_strip_motion(Ed *ed, const Key *k)
     } else {
         drag_row2_clear(ed);
     }
-    drag_dwell(ed, slot, on_row1);
+    drag_dwell(ed, dwell_slot, on_row1);
 }
 
 /* The tab-array index a row-1 slot names, resolved against the PRE-DRAG

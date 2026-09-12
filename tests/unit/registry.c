@@ -2214,6 +2214,7 @@ const YewTest yew_tests[] = {
     T(drag_neighbours_slide_out_of_the_carried_tabs_way),
     T(drag_a_group_entry_holds_still_inside_its_hover_band),
     T(drag_a_group_entry_holds_still_coming_from_the_right),
+    T(drag_resting_in_a_group_band_still_opens_it),
     T(drag_a_plain_neighbour_still_swaps_at_half_its_width),
     T(drag_row2_opens_a_gap_where_the_member_will_land),
     T(drag_moving_between_rows_hands_the_preview_over),

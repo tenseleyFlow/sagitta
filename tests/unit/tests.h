@@ -2208,6 +2208,7 @@ void test_drag_dwell_preview_survives_the_pointer_on_row_2(void);
 void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void);
 void test_drag_a_group_entry_holds_still_inside_its_hover_band(void);
 void test_drag_a_group_entry_holds_still_coming_from_the_right(void);
+void test_drag_resting_in_a_group_band_still_opens_it(void);
 void test_drag_a_plain_neighbour_still_swaps_at_half_its_width(void);
 void test_drag_row2_opens_a_gap_where_the_member_will_land(void);
 void test_drag_moving_between_rows_hands_the_preview_over(void);
