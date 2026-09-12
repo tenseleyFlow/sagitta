@@ -349,6 +349,74 @@ static Rect menu_allowed(const Ed *ed)
     return (Rect){0U, 0U, ed->grid.cols, rows};
 }
 
+/*
+ * Sprint 57.11 §6: the menu's look, from the theme's `menu.*` roles.
+ *
+ * A UI role is an OVERLAY, not a replacement — the same idiom as the
+ * tab strip's `tab_role_style`: a foreground-only role keeps the menu
+ * surface behind it, a background-only one keeps readable text, and
+ * presence owns the attributes so `mono: "plain"` can deliberately
+ * clear a colourful rendition's emphasis.  With no theme loaded every
+ * role falls back to the editor's `fg`/`bg` and to attributes alone —
+ * reverse for the hovered row, dim for greyed rows, accelerators and
+ * rules — so the menu is legible before any theme is, and under
+ * NO_COLOR.
+ */
+static ThemeEnt menu_role_style(const Ed *ed, const char *role,
+                                ThemeEnt fallback)
+{
+    const ThemeEnt *themed = yew_theme_ui_tab(ed, role);
+
+    if (themed == NULL)
+        return fallback;
+    if (themed->fg.tag != YEW_COLOR_DEFAULT)
+        fallback.fg = themed->fg;
+    if (themed->bg.tag != YEW_COLOR_DEFAULT)
+        fallback.bg = themed->bg;
+    fallback.attrs = themed->attrs;
+    return fallback;
+}
+
+static ThemeEnt menu_base_style(const Ed *ed)
+{
+    const ThemeEnt *fg = yew_theme_ui_tab(ed, "fg");
+    const ThemeEnt *bg = yew_theme_ui_tab(ed, "bg");
+    ThemeEnt style = {
+        {YEW_COLOR_DEFAULT, 0U, 0U, 0U},
+        {YEW_COLOR_DEFAULT, 0U, 0U, 0U},
+        0U
+    };
+
+    if (fg != NULL && fg->fg.tag != YEW_COLOR_DEFAULT)
+        style.fg = fg->fg;
+    if (bg != NULL && bg->bg.tag != YEW_COLOR_DEFAULT)
+        style.bg = bg->bg;
+    return style;
+}
+
+static ThemeEnt menu_emphasis(ThemeEnt base, u16 attrs)
+{
+    base.attrs = (u16)(base.attrs | attrs);
+    return base;
+}
+
+static CtxStyle menu_style(const Ed *ed)
+{
+    CtxStyle s;
+
+    s.surface = menu_role_style(ed, "menu.surface", menu_base_style(ed));
+    s.row = menu_role_style(ed, "menu.row", s.surface);
+    s.hover = menu_role_style(ed, "menu.hover",
+                              menu_emphasis(s.surface, YEW_ATTR_REVERSE));
+    s.disabled = menu_role_style(ed, "menu.disabled",
+                                 menu_emphasis(s.surface, YEW_ATTR_DIM));
+    s.accel = menu_role_style(ed, "menu.accel",
+                              menu_emphasis(s.surface, YEW_ATTR_DIM));
+    s.sep = menu_role_style(ed, "menu.sep",
+                            menu_emphasis(s.surface, YEW_ATTR_DIM));
+    return s;
+}
+
 bool yew_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y)
 {
     int idx = yew_tab_index_of_id(ed, tab_id);
