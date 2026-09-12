@@ -100,6 +100,18 @@ CmdStatus yew_cmdline_cmd_literal_next(CmdCtx *cx);
 bool yew_cmdline_menu_click(Ed *ed, i32 row);
 bool yew_cmdline_menu_scroll(Ed *ed, i32 delta);
 
+/*
+ * Sprint 57.17 §2: the pager's pure preview moves -- the selection
+ * changes, the prompt text does not.  Bound to nothing by default; the
+ * arrow dispatchers below and Fletch reach them.
+ */
+CmdStatus yew_cmdline_cmd_menu_next(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_menu_prev(CmdCtx *cx);
+/* `<up>` / `<down>`: the pager when it is open and has focus, the
+ * command-line history otherwise. */
+CmdStatus yew_cmdline_cmd_up(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_down(CmdCtx *cx);
+
 CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_page_prev(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_accept(CmdCtx *cx);

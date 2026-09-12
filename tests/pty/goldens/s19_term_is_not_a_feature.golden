@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
-E: interactive terminals are not a 1.0 feature (jobs are: see :!)               
+E: yew does not emulate a terminal; use :!!cmd for one, :! to stream            
 :term                                                                           
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC

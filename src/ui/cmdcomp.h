@@ -41,6 +41,9 @@ typedef enum {
     YEW_COMP_OPTION,
     YEW_COMP_VALUE,
     YEW_COMP_PLUGIN,
+    /* Sprint 57.18 §2: an executable on $PATH.  Appended rather than
+     * inserted -- the source registry is indexed by this enum. */
+    YEW_COMP_EXEC,
     YEW_COMP_KIND__N
 } YewCompKind;
 
@@ -210,9 +213,38 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
                         const YewCompQuery *q, i64 budget_us,
                         Vec_CompItem *out);
 
-/* Resolve an argspec position. token_index is zero for the command name. */
+/*
+ * Sprint 57.17 §1: did the filter leave EXACTLY ONE row?
+ *
+ * The predicate the menu shows and the parser lacks.  `resolve_name`'s
+ * "exactly one" is a unique PREFIX and stays that way -- a name that
+ * already resolves by prefix must keep winning, or this would change
+ * the meaning of commands that work today.  This is the OTHER "exactly
+ * one": one survivor of the RANKED set, which is what the user is
+ * looking at when the list has narrowed to a single row.
+ *
+ * Returns that sole item, or NULL when zero or more than one survived.
+ * `kind` restricts the answer to one completion kind; pass
+ * YEW_COMP_KIND__N to accept whatever the set holds.  One definition,
+ * because two would disagree the first time either grew a rule.
+ */
+const CompItem *yew_comp_sole(const Vec_CompItem *items, YewCompKind kind);
+
+/*
+ * Resolve an argspec position. token_index is zero for the command name.
+ *
+ * Sprint 57.18 §3: `bang_body` says the caret is inside a `:!` body, in
+ * which case the argspec has nothing to say -- ed.shell.run's single
+ * 's' means "an arbitrary command line", and the question is which WORD
+ * of that line the caret is on.  Word 0 is what the shell will execute
+ * and completes from $PATH; 1+ are operands and complete as paths.
+ *
+ * Keyed off the bang body rather than off ed.shell.run, deliberately:
+ * `:r !cmd` and `:%!cmd` are the same situation under different command
+ * ids, and an ordinary 's' argument elsewhere must stay uncompleted.
+ */
 bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
-                       YewCompKind *kind);
+                       bool bang_body, YewCompKind *kind);
 
 /* Tolerant command-line source selection at the cursor. */
 bool yew_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,

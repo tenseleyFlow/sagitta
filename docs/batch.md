@@ -140,6 +140,7 @@ alternative.
 | `ed.macro.record` | No alternative: recording requires keys. Replay is available. |
 | `ed.ai.open` | No batch alternative. |
 | `ed.mode.enter` with mode `E` | Call the intended command directly with `ed.run(name, args)`. |
+| `ed.shell.term_run` (`:!!cmd`) | `ed.shell.run`: `:!!` hands a child the real terminal, and `--batch` has none. |
 
 Scripts may catch these refusals with `try`/`catch`. A newly registered
 interactive command without a refusal-table entry is an internal bug rather

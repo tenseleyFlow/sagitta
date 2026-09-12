@@ -43,6 +43,15 @@ typedef struct Menu {
      */
     i32 sel;
     bool explicit_sel;
+    /*
+     * Sprint 57.17 §2: the list holds keyboard FOCUS -- the arrows are
+     * the list's rather than the host's.  Distinct from `explicit_sel`,
+     * which records that a row was chosen by ANY means (Tab, a click,
+     * arrowing in); focus records who the next arrow belongs to, which
+     * is what lets `<up>` be the pager when the list has it and history
+     * when it does not.
+     */
+    bool focus;
     u32 top; /* first visible row */
     Span replace;
     u32 total; /* pre-cap match count, for the footer */
@@ -74,8 +83,16 @@ void yew_menu_free(Menu *m);
  */
 void yew_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace);
 
-/* Moves the selection by `delta` rows (or pages), marking it explicit.
- * Returns false when there is nothing to move through. */
+/*
+ * Moves the selection by `delta` rows (or pages), marking it explicit,
+ * and scrolls `top` so the new selection stays visible.  Returns false
+ * when there is nothing to move through.
+ *
+ * Sprint 57.17 §3: the scroll is the SAME rule the draw applies, so a
+ * move and the paint that follows it cannot disagree about `top`.  The
+ * move only knows `spec.max_rows`; the draw refines it with the height
+ * it actually got.
+ */
 bool yew_menu_move(Menu *m, i32 delta, bool page);
 /* Selects a row outright -- what a click does.  Explicit, like any other
  * deliberate move.  False when the index is not a row. */
@@ -88,14 +105,68 @@ bool yew_menu_select(Menu *m, i32 index);
 bool yew_menu_scroll(Menu *m, i32 delta, u16 height);
 /* Rows the menu would draw in an area `height` cells tall. */
 u16 yew_menu_rows(const Menu *m, u16 height);
+/*
+ * Sprint 57.17 §3: how many of those rows carry CANDIDATES.  One fewer
+ * than `yew_menu_rows` whenever the window does not reach the end of the
+ * list, because the last row is then the `… and N more` tail.
+ */
+u16 yew_menu_candidate_rows(const Menu *m, u16 height);
+/*
+ * Candidates hidden below the window -- the N the tail row counts.  Zero
+ * means no tail is drawn.  Exposed so a test (and a second host) can ask
+ * the question the draw answers, instead of re-deriving it.
+ */
+u32 yew_menu_hidden(const Menu *m, u16 height);
 const CompItem *yew_menu_selected(const Menu *m);
 void yew_menu_dismiss(Menu *m);
 
 /*
+ * Sprint 57.17 §2: the pager's focus, usable by any host.
+ *
+ * `focus` takes the arrows for the list, selecting the first row when
+ * nothing is selected yet; false when there is nothing to focus.
+ * `blur` hands the arrows back but leaves the selection alone -- what
+ * editing the host's text does.  `unselect` hands them back AND drops
+ * the choice, leaving the rows on screen with nothing chosen, which is
+ * what leaving the pager upwards does: §6's Enter rule must then see
+ * no choice at all.
+ */
+bool yew_menu_focus(Menu *m);
+void yew_menu_blur(Menu *m);
+void yew_menu_unselect(Menu *m);
+bool yew_menu_focused(const Menu *m);
+
+/*
  * Draws bottom-aligned inside `area` and registers one
- * YEW_REGION_MENU_ROW per drawn row from the same Rect it drew with,
- * plus a YEW_REGION_BLOCK over the whole list so a click on a gap does
- * not fall through to the pane beneath (Sprint 22's law).
+ * YEW_REGION_MENU_ROW per drawn CANDIDATE row from the same Rect it drew
+ * with, plus a YEW_REGION_BLOCK over the whole list so a click on a gap
+ * does not fall through to the pane beneath (Sprint 22's law).  The tail
+ * row gets no MENU_ROW: it names no candidate, so a click on it must do
+ * nothing rather than select whatever row index it happens to sit at.
+ *
+ * Sprint 57.17 §3 -- THE LAST DRAWN ROW CARRIES EXACTLY ONE COUNT.
+ *
+ * When the window does not reach the end of the list that row is the
+ * tail, `… and N more`, N being the candidates hidden below it, and the
+ * right-aligned footer is not drawn.  Otherwise the row is an ordinary
+ * candidate and the footer carries the precise count ("%u/%u",
+ * "%u+ of %u").  Never both: a tail counting what is BELOW the window
+ * beside a footer counting the WHOLE ranked set reads as two counts
+ * disagreeing, and a golden would then pin the disagreement.
+ *
+ * "scanning…" is the one exception, and it is not a count: while the
+ * set is still arriving the footer wins and no tail is drawn, because a
+ * tail over a list that is still growing would be a lie by the time it
+ * was read.
+ *
+ * The cost, recorded so it is a choice and not an accident: while the
+ * window is scrolled the precise "%u/%u" position is not on screen.
+ * Keeping it would put "3/82" beside "… and 78 more" -- two totals of
+ * two different things on one row, which is the confusion the rule
+ * exists to prevent, and making them agree would mean teaching the
+ * footer a second denominator for the capped case.  The tail's N is
+ * measured from `items` and `top` alone, so there is nothing for a
+ * later change to make it disagree WITH.
  */
 void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style);
 

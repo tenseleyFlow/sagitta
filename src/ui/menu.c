@@ -58,18 +58,66 @@ static void menu_hold(Menu *m)
     }
 }
 
+/* Rows the widget would draw in an area of its own maximum height --
+ * what a move knows before the draw tells it what it actually got. */
+static u16 menu_spec_rows(const Menu *m)
+{
+    return m->spec.max_rows == 0U ? (u16)YEW_MENU_DEFAULT_ROWS
+                                  : m->spec.max_rows;
+}
+
+/*
+ * Sprint 57.17 §3: how many of `rows` drawn rows carry candidates when
+ * the window starts at `top`.
+ *
+ * ONE function, so the draw, the scroll clamp and the click regions
+ * cannot disagree about which row is the tail.  Three copies of "is
+ * there a tail?" is a click that selects the row the tail is covering.
+ */
+static u16 menu_candidate_rows_at(const Menu *m, u32 top, u16 rows)
+{
+    /* A one-row window spent on a tail would show no candidates at all,
+     * and "scanning…" is a state rather than a count -- see menu.h. */
+    if (rows < 2U || m->scanning)
+        return rows;
+    return (u64)top + rows >= m->items.len ? rows : (u16)(rows - 1U);
+}
+
 static void menu_scroll_to_selection(Menu *m, u16 rows)
 {
+    u32 sel;
+    u32 max_top;
+    u32 want;
+    u16 cand;
+
     if (rows == 0U || m->sel < 0) {
         m->top = 0U;
         return;
     }
-    if ((u32)m->sel < m->top)
-        m->top = (u32)m->sel;
-    else if ((u32)m->sel >= m->top + rows)
-        m->top = (u32)m->sel - rows + 1U;
-    if (m->top + rows > m->items.len)
-        m->top = m->items.len > rows ? (u32)(m->items.len - rows) : 0U;
+    sel = (u32)m->sel;
+    max_top = m->items.len > rows ? (u32)(m->items.len - rows) : 0U;
+    if (sel < m->top) {
+        m->top = sel;
+    } else {
+        /*
+         * Room for CANDIDATES, not for rows.  The last row becomes the
+         * tail whenever anything is left below, so a scrolled window
+         * holds one candidate fewer than it has rows -- and a move onto
+         * what would be the tail therefore scrolls by one instead,
+         * which is exactly §3's "moving down onto it scrolls by one and
+         * keeps the tail".
+         */
+        want = sel + 1U >= rows ? sel + 1U - rows : 0U;
+        cand = menu_candidate_rows_at(m, want, rows);
+        if (cand < rows)
+            want = sel + 1U >= cand ? sel + 1U - cand : 0U;
+        if (want > max_top)
+            want = max_top;
+        if (m->top < want)
+            m->top = want;
+    }
+    if (m->top > max_top)
+        m->top = max_top;
 }
 
 void yew_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace)
@@ -106,6 +154,9 @@ void yew_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace)
      */
     if (m->sel < 0) {
         m->explicit_sel = false;
+        /* Focus over nothing is not focus: the arrows would have no row
+         * to move and §6's Enter rule no choice to accept. */
+        m->focus = false;
         yew_xfree(m->held);
         m->held = NULL;
     }
@@ -124,6 +175,30 @@ u16 yew_menu_rows(const Menu *m, u16 height)
     if ((u64)want > m->items.len)
         want = (u16)m->items.len;
     return want;
+}
+
+u16 yew_menu_candidate_rows(const Menu *m, u16 height)
+{
+    u16 rows;
+
+    if (m == NULL)
+        return 0U;
+    rows = yew_menu_rows(m, height);
+    return rows == 0U ? 0U : menu_candidate_rows_at(m, m->top, rows);
+}
+
+u32 yew_menu_hidden(const Menu *m, u16 height)
+{
+    u16 rows;
+    u16 cand;
+
+    if (m == NULL)
+        return 0U;
+    rows = yew_menu_rows(m, height);
+    cand = rows == 0U ? 0U : menu_candidate_rows_at(m, m->top, rows);
+    if (rows == 0U || cand == rows)
+        return 0U;
+    return (u32)(m->items.len - m->top - cand);
 }
 
 bool yew_menu_move(Menu *m, i32 delta, bool page)
@@ -155,6 +230,11 @@ bool yew_menu_move(Menu *m, i32 delta, bool page)
     m->sel = next;
     m->explicit_sel = true;
     menu_hold(m);
+    /* Sprint 57.17 §3: the selection drags the window with it.  The
+     * draw re-applies the same rule with the height it really got; this
+     * is what makes `top` correct for a caller that asks BEFORE the
+     * next paint. */
+    menu_scroll_to_selection(m, menu_spec_rows(m));
     return true;
 }
 
@@ -165,7 +245,47 @@ bool yew_menu_select(Menu *m, i32 index)
     m->sel = index;
     m->explicit_sel = true;
     menu_hold(m);
+    menu_scroll_to_selection(m, menu_spec_rows(m));
     return true;
+}
+
+bool yew_menu_focus(Menu *m)
+{
+    if (m == NULL || m->items.len == 0U)
+        return false;
+    if (m->sel < 0) {
+        /* Enter at the best match, the row Tab lands on -- and the row
+         * one more `<up>` then leaves the pager from. */
+        m->sel = 0;
+        m->explicit_sel = true;
+        menu_hold(m);
+        menu_scroll_to_selection(m, menu_spec_rows(m));
+    }
+    m->focus = true;
+    return true;
+}
+
+void yew_menu_blur(Menu *m)
+{
+    if (m != NULL)
+        m->focus = false;
+}
+
+void yew_menu_unselect(Menu *m)
+{
+    if (m == NULL)
+        return;
+    m->focus = false;
+    m->sel = -1;
+    m->explicit_sel = false;
+    m->top = 0U;
+    yew_xfree(m->held);
+    m->held = NULL;
+}
+
+bool yew_menu_focused(const Menu *m)
+{
+    return m != NULL && m->focus && m->items.len != 0U && m->sel >= 0;
 }
 
 bool yew_menu_scroll(Menu *m, i32 delta, u16 height)
@@ -207,6 +327,7 @@ void yew_menu_dismiss(Menu *m)
     m->held = NULL;
     m->sel = -1;
     m->explicit_sel = false;
+    m->focus = false;
     m->top = 0U;
     m->total = 0U;
     m->scanning = false;
@@ -278,9 +399,35 @@ static void highlight_match(Grid *grid, u16 row, u16 col0, u16 right,
     }
 }
 
+/*
+ * Sprint 57.17 §3: the honest tail.
+ *
+ * `… and N more` rather than a silently truncated list.  It is drawn
+ * where a candidate would be, in the row style but dimmed, indented to
+ * the label column so it lines up with the names above it, and it
+ * registers NO region: it names no candidate, so a click must fall
+ * through to the inert block rather than select the row it covers.
+ */
+static void draw_tail(Ed *ed, u16 row, u16 x, u16 right, u32 hidden,
+                      const YewUiStyle *style)
+{
+    YewUiStyle tail_style = *style;
+    char text[64];
+
+    tail_style.attrs |= YEW_ATTR_DIM;
+    yew_grid_fill(&ed->grid, row, x, right, styled_blank(&tail_style));
+    (void)snprintf(text, sizeof(text), "  \xE2\x80\xA6 and %u more",
+                   (unsigned)hidden);
+    (void)yew_grid_puts(&ed->grid, row, x, (const u8 *)text, strlen(text),
+                        tail_style.row_fg, tail_style.row_bg,
+                        tail_style.attrs);
+}
+
 void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
 {
     u16 rows;
+    u16 cand_rows;
+    u32 hidden;
     u16 first_row;
     u16 right;
     u16 i;
@@ -293,6 +440,9 @@ void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
     right = (u32)area.x + area.w > ed->grid.cols ? ed->grid.cols
                                                  : (u16)(area.x + area.w);
     menu_scroll_to_selection(m, rows);
+    cand_rows = menu_candidate_rows_at(m, m->top, rows);
+    hidden = cand_rows == rows ? 0U
+                               : (u32)(m->items.len - m->top - cand_rows);
     first_row = (u16)(area.y + area.h - rows);
     /* One inert block under the whole list, added FIRST so the per-row
      * regions added after it win the overlap (last-added-wins). */
@@ -310,6 +460,12 @@ void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
         u16 col;
         bool selected;
 
+        if (i >= cand_rows) {
+            /* The last row is the tail, and it is the whole row: no
+             * label, no detail, no footer.  menu.h states the rule. */
+            draw_tail(ed, row, area.x, right, hidden, style);
+            break;
+        }
         if (index >= m->items.len)
             break;
         item = &m->items.data[index];

@@ -46,6 +46,25 @@ YewFilterResult yew_shell_filter(Ed *ed, Win *w, Span region,
 /* Mode (c): collect a command's output and insert it at the cursor. */
 u32 yew_shell_read(Ed *ed, const char *cmdline, char *err, size_t errsz);
 
+/*
+ * Sprint 57.18 §4: mode (d) -- hand the child the REAL terminal.
+ *
+ * Not terminal emulation, and not a step towards it.  This is Sprint
+ * 19's synchronous inherited-tty child (`yew_job_run_sync` with
+ * `inherit_tty`, wrapped in `yew_tty_handover_begin`), the same route
+ * the interactive rebase already takes, pointed at an arbitrary `:!!`
+ * command line.  Output is NOT captured: the child owned the screen
+ * while it ran, so there is nothing to stream into a job buffer.
+ *
+ * The terminal is restored on EVERY exit path -- normal exit, non-zero
+ * exit, signal death, failed exec, a SIGWINCH mid-run -- because
+ * yew_job_run_sync's single resume epilogue is the only way out of it
+ * (invariant 6).  `wait` carries what happened; a false return is a
+ * parent-side setup failure and `err` says what.
+ */
+bool yew_shell_term_run(Ed *ed, const char *cmdline, YewJobWait *wait,
+                        char *err, size_t errsz);
+
 /* The *jobs* table (§8); re-rendered whenever a job changes state. */
 void yew_jobs_table_refresh(Ed *ed);
 Buffer *yew_jobs_table_open(Ed *ed);

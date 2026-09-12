@@ -8,6 +8,7 @@ CmdStatus yew_shell_cmd_run_bg(CmdCtx *cx);
 CmdStatus yew_shell_cmd_read(CmdCtx *cx);
 CmdStatus yew_shell_cmd_filter(CmdCtx *cx);
 CmdStatus yew_shell_cmd_term(CmdCtx *cx);
+CmdStatus yew_shell_cmd_term_run(CmdCtx *cx);
 
 CmdStatus yew_job_cmd_list(CmdCtx *cx);
 CmdStatus yew_job_cmd_kill(CmdCtx *cx);
