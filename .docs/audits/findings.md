@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-072`
+Next available ID: `YEW-F-074`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -84,6 +84,8 @@ recorded in `audit-00.md`.
 | YEW-F-069 | M | open | F15 CI | PTY minimum-case gate skips a missing registry | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
 | YEW-F-070 | M | open | F15 CI | PTY golden gate accepts computed missing names | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
+| YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
+| YEW-F-073 | M | open | F15 CI | baseline history policy is not enforced | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -514,6 +516,23 @@ the static gate passes. It remains open for Sprint 59.
 preprocessor. A `C(orphan)` row under `#if 0` persuades the gate that an orphan
 golden is live even though the compiler removes the row. It remains open for
 Sprint 59.
+
+`YEW-F-072` is Medium because the two designated lanes cannot currently
+produce a performance verdict: both committed calibration references and the
+arm64 baseline are absent, while the x86_64 baseline still carries an all-zero
+template calibration vector. Hosted lanes continue to execute the harnesses
+and hard sanity checks, but they are advisory by contract. With no designated
+measurements, F15 cannot recompute a 30-run noise floor or compare a threshold
+to it. This is an invariant-4 control mismatch, not evidence that a user-facing
+budget is exceeded, and remains open for Sprint 59.
+
+`YEW-F-073` is Medium because `perf-baseline-guard.sh` reads only the changed
+path list. It rejects a source-and-baseline commit but never reads the commit
+message or numerical diff, so an isolated baseline-only commit titled
+`Refresh numbers` can double every value and still pass. Historical review
+found many modified baseline commits without the required old-to-new record;
+the exact table is retained in `audit-15-ci.md`. The control finding remains
+open for Sprint 59.
 
 ## Unverified observations
 
