@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-045`
+Next available ID: `YEW-F-072`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -57,6 +57,33 @@ recorded in `audit-00.md`.
 | YEW-F-042 | M | open | F15 CI | GNU-libc ban omits `getopt_long_only` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-043 | M | open | F15 CI | long-double ban misses valid continued declarations | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
 | YEW-F-044 | M | open | F15 CI | shim-honesty gate accepts parenthesized success | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
+| YEW-F-045 | M | open | F15 CI | Unicode-width ban accepts decimal local tables | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
+| YEW-F-046 | M | open | F15 CI | syntax-color ban accepts packed decimal colors | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
+| YEW-F-047 | M | open | F15 CI | syntax-width ban accepts local width arithmetic | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
+| YEW-F-048 | M | open | F15 CI | PTY-creation ban omits direct `posix_openpt` callers | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
+| YEW-F-049 | M | open | F15 CI | CI golden-update ban depends on contiguous spelling | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
+| YEW-F-050 | M | open | F15 CI | piece-tree I/O ban omits `pread` | tests/audit/f15_ban_misses.c | s08 I/O ownership; s58 F15 q2 |
+| YEW-F-051 | M | open | F15 CI | shadow-preview ban accepts manual destructive fill | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
+| YEW-F-052 | M | open | F15 CI | FUSS drawer ban accepts indirect pane-root replacement | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
+| YEW-F-053 | M | open | F15 CI | deterministic-fuzz ban omits `random` | tests/audit/f15_ban_misses.c | s02 deterministic seeds; s58 F15 q2 |
+| YEW-F-054 | M | open | F15 CI | clipboard shell ban omits direct shell exec | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
+| YEW-F-055 | M | open | F15 CI | job-interpolation ban accepts raw append into shell text | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
+| YEW-F-056 | M | open | F15 CI | OSC 52 query ban accepts split string literals | tests/audit/f15_ban_misses.c | s24 write-only OSC 52; s58 F15 q2 |
+| YEW-F-057 | M | open | F15 CI | terminal-syscall ban omits `tcflush` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
+| YEW-F-058 | M | open | F15 CI | register choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 register routing; s58 F15 q2 |
+| YEW-F-059 | M | open | F15 CI | option choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
+| YEW-F-060 | M | open | F15 CI | package-git ban accepts allowed-file wrappers on startup | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
+| YEW-F-061 | M | open | F15 CI | register-width ban accepts local lookup tables | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
+| YEW-F-062 | M | open | F15 CI | register-column ban depends on historical variable names | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
+| YEW-F-063 | M | open | F15 CI | register-helper presence gate accepts comments | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
+| YEW-F-064 | M | open | F15 CI | oracle-independence ban accepts copied renamed models | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
+| YEW-F-065 | M | open | F15 CI | generated-table ban verifies only a retained marker | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
+| YEW-F-066 | M | open | F15 CI | termination-site ban omits `_Exit` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
+| YEW-F-067 | M | open | F15 CI | AI-body logging ban depends on variable names | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
+| YEW-F-068 | M | open | F15 CI | unit-registry ban omits static test definitions | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
+| YEW-F-069 | M | open | F15 CI | PTY minimum-case gate skips a missing registry | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
+| YEW-F-070 | M | open | F15 CI | PTY golden gate accepts computed missing names | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
+| YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -371,6 +398,122 @@ control finding remains open for Sprint 59.
 literal return expressions. A disabled action returning `(YEW_CMD_OK)` has
 identical success semantics but passes `check-module-shims.sh`. No production
 shim was changed; the control finding remains open for Sprint 59.
+
+`YEW-F-045` is Medium because the non-Unicode width gate searches four
+symbolic/hex spellings, while the same code points in decimal form a local
+width table that passes. The source-independent width ownership claim is
+therefore not established and remains open for Sprint 59.
+
+`YEW-F-046` is Medium because a syntax definition can emit a packed decimal
+foreground color without matching hex, RGB, or terminal escape spellings.
+The semantic-attrs-only control accepts the seed and remains open for Sprint
+59.
+
+`YEW-F-047` is Medium because syntax-local cell width arithmetic needs none of
+the two helper names the gate scans. A simple wide-threshold calculation
+passes even though syntax is required to own byte spans only. It remains open
+for Sprint 59.
+
+`YEW-F-048` is Medium because the PTY rule says creation must use the audited
+`posix_openpt` harness but does not scan for `posix_openpt` itself. A direct
+caller in another PTY test passes the gate. The harness control remains open
+for Sprint 59.
+
+`YEW-F-049` is Medium because shell token concatenation constructs the golden
+update environment name at execution time while preventing its contiguous
+appearance in workflow source. CI could therefore enable updates while the
+gate stays green. It remains open for Sprint 59.
+
+`YEW-F-050` is Medium because the piece-tree I/O ban lists `open`, `fopen`, and
+`read`, but direct `pread` retains the forbidden file-I/O ownership and passes.
+No product I/O was found; the release control remains open for Sprint 59.
+
+`YEW-F-051` is Medium because the insertion-preview rule bans one fill helper,
+not destructive fill behavior. A loop assigning every grid cell directly
+passes while violating the same compositional rendering contract. It remains
+open for Sprint 59.
+
+`YEW-F-052` is Medium because taking the address of `pane_root` and assigning
+through that pointer replaces the live root without matching the direct
+assignment pattern. The FUSS drawer control remains open for Sprint 59.
+
+`YEW-F-053` is Medium because deterministic fuzzing bans `rand`, `srand`, and
+one `time` spelling but omits the libc `random()` generator. A direct call
+passes the actual gate. It remains open for Sprint 59.
+
+`YEW-F-054` is Medium because the clipboard no-shell rule scans only `popen`
+and `system`; executing `/bin/sh -c` directly with `execl` has the same
+forbidden behavior and passes. No such product path was established, and the
+control remains open for Sprint 59.
+
+`YEW-F-055` is Medium because the job-data rule recognizes two formatting
+shapes while a raw byte append into a buffer named `shell` performs equivalent
+interpolation and passes. The argv-boundary control remains open for Sprint
+59.
+
+`YEW-F-056` is Medium because adjacent C literals construct an OSC 52 query
+whose semicolon and question mark are separated only in source. The terminal
+receives the forbidden query while grep reports green. It remains open for
+Sprint 59.
+
+`YEW-F-057` is Medium because the terminal boundary lists four calls but omits
+`tcflush`, another direct terminal-control syscall. An out-of-boundary call
+passes the actual gate. It remains open for Sprint 59.
+
+`YEW-F-058`, `YEW-F-059`, and `YEW-F-060` are separate Medium boundary
+findings. Each allow-list exempts an implementation file, and each can be
+defeated by adding a raw wrapper there and calling that wrapper from forbidden
+code. The register write, option write, and package-git startup policies all
+pass their isolated seeds and remain open for Sprint 59.
+
+`YEW-F-061` is Medium because register-local Unicode width calculation can use
+a decimal lookup table without importing or naming a yew width helper. The
+actual gate accepts the duplicated ownership and remains open for Sprint 59.
+
+`YEW-F-062` is Medium because the register column-arithmetic rule searches
+three historical variable names followed by `.v`. Equivalent `CellCol`
+addition under renamed locals passes. It remains open for Sprint 59.
+
+`YEW-F-063` is Medium because the four required-helper checks accept names in
+comments as proof of routing. A register implementation containing only those
+comments and a local calculation passes. It remains open for Sprint 59.
+
+`YEW-F-064` is Medium because oracle independence cannot be established by
+banning two implementation names. A copied, renamed piece model passes while
+retaining the correlated implementation structure the rule forbids. It
+remains open for Sprint 59.
+
+`YEW-F-065` is Medium because retaining the generated-file marker after a
+manual table edit satisfies the entire generated-UCD check. The gate neither
+regenerates nor compares the table, so provenance is unproved. It remains
+open for Sprint 59.
+
+`YEW-F-066` is Medium because `_Exit` terminates the process outside
+`yew_bug` without matching the lowercase `exit()` scanner. This is a control
+gap rather than a product termination path and remains open for Sprint 59.
+
+`YEW-F-067` is Medium because the AI privacy scanner infers body data from a
+small list of identifier substrings. Renaming the bytes and logging them
+directly passes the gate. No user payload was logged by the audit; the control
+remains open for Sprint 59.
+
+`YEW-F-068` is Medium because the explicit unit registry inventory recognizes
+only definitions beginning exactly with `void`. Adding ordinary `static`
+linkage hides a test definition from the inventory and lets it remain
+unregistered. It remains open for Sprint 59.
+
+`YEW-F-069` is Medium because the PTY minimum-count check is conditional on
+the registry file existing. Deleting the registry skips the check entirely
+and the actual ban suite exits green. It remains open for Sprint 59.
+
+`YEW-F-070` is Medium because a snapshot name held in a variable is invisible
+to the missing-golden extractor. The runtime names a nonexistent golden while
+the static gate passes. It remains open for Sprint 59.
+
+`YEW-F-071` is Medium because the PTY case extractor does not honor the C
+preprocessor. A `C(orphan)` row under `#if 0` persuades the gate that an orphan
+golden is live even though the compiler removes the row. It remains open for
+Sprint 59.
 
 ## Unverified observations
 

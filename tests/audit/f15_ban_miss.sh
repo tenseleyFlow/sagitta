@@ -8,8 +8,9 @@ trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 repo=$scratch/repo
 
 mkdir -p "$repo/scripts" "$repo/src/fl" "$repo/src/text" \
-    "$repo/src/unicode" "$repo/src/syn" "$repo/src/mod/git" \
-    "$repo/src/mod/plug" "$repo/src/ui" "$repo/src/edit" \
+    "$repo/src/unicode" "$repo/src/syn" "$repo/src/mod/ai" \
+    "$repo/src/mod/git" "$repo/src/mod/plug" "$repo/src/ui" \
+    "$repo/src/edit" \
     "$repo/tests/unit" "$repo/tests/pty/goldens" "$repo/tests/fuzz" \
     "$repo/tests/perf" "$repo/.github"
 cp scripts/bans.sh "$repo/scripts/bans.sh"
@@ -162,6 +163,194 @@ case $id in
             exit 1
         fi
         exit 0
+        ;;
+    YEW-F-045)
+        printf '%s\n' \
+            'static const unsigned modifiers[] = { 127995U, 65039U, 8205U };' \
+            'unsigned seeded(unsigned cp) { return cp == modifiers[0] ? 2U : 1U; }' \
+            >"$repo/src/edit/seed.c"
+        ;;
+    YEW-F-046)
+        printf '%s\n' \
+            'static const unsigned foreground = 16711680U;' \
+            'unsigned seeded(void) { return foreground; }' \
+            >"$repo/src/syn/seed.c"
+        ;;
+    YEW-F-047)
+        printf '%s\n' \
+            'unsigned seeded(unsigned cp) { return cp >= 0x1100U ? 2U : 1U; }' \
+            >"$repo/src/syn/seed.c"
+        ;;
+    YEW-F-048)
+        printf '%s\n' \
+            'int seeded(void) { return posix_openpt(0); }' \
+            >"$repo/tests/pty/seed.c"
+        ;;
+    YEW-F-049)
+        printf '%s\n' \
+            '#!/bin/sh' \
+            'export YEW_PTY_"UPDATE"=1' \
+            >"$repo/.github/seed.sh"
+        ;;
+    YEW-F-050)
+        printf '%s\n' \
+            'long seeded(int fd, void *p, unsigned long n) { return pread(fd, p, n, 0); }' \
+            >"$repo/src/text/piece.c"
+        ;;
+    YEW-F-051)
+        printf '%s\n' \
+            'void seeded(Grid *g, Cell blank)' \
+            '{' \
+            '    size_t x;' \
+            '    for (x = 0; x < g->cols; x++) g->cells[x] = blank;' \
+            '}' >"$repo/src/ui/shadowdraw.c"
+        ;;
+    YEW-F-052)
+        printf '%s\n' \
+            'void seeded(Editor *ed, PaneNode *drawer)' \
+            '{' \
+            '    PaneNode **slot = &ed->panes.pane_root;' \
+            '    *slot = drawer;' \
+            '}' >"$repo/src/mod/git/fussmode.c"
+        ;;
+    YEW-F-053)
+        printf '%s\n' \
+            'long seeded(void) { return random(); }' \
+            >"$repo/tests/fuzz/seed.c"
+        ;;
+    YEW-F-054)
+        printf '%s\n' \
+            'void seeded(const char *cmd) { execl("/bin/sh", "sh", "-c", cmd, NULL); }' \
+            >"$repo/src/text/seed.c"
+        ;;
+    YEW-F-055)
+        printf '%s\n' \
+            'void seeded(Bytebuf *shell, const char *path)' \
+            '{' \
+            '    bytebuf_append(shell, path, strlen(path));' \
+            '}' >"$repo/src/edit/seed.c"
+        ;;
+    YEW-F-056)
+        printf '%s\n' \
+            'static const char query[] = "\\033]52;" "?\\a";' \
+            'const char *seeded(void) { return query; }' \
+            >"$repo/src/term_seed.c"
+        ;;
+    YEW-F-057)
+        printf '%s\n' \
+            'int seeded(int fd) { return tcflush(fd, TCIFLUSH); }' \
+            >"$repo/src/edit/seed.c"
+        ;;
+    YEW-F-058)
+        printf '%s\n' \
+            'void base(void)' \
+            '{' \
+            '    yew_off_to_ccol(); yew_ccol_to_off_padded();' \
+            '    yew_ccol_shortfall(); yew_ccol_max();' \
+            '}' \
+            'void yew_reg_store_raw(void) { yew_reg_set(regs, name, value); }' \
+            >"$repo/src/text/register.c"
+        printf '%s\n' \
+            'void seeded(void) { yew_reg_store_raw(); }' \
+            >"$repo/src/edit/seed.c"
+        ;;
+    YEW-F-059)
+        printf '%s\n' \
+            'void yew_opt_store_raw(void) { yew_opt_set(ed, 0, "x", 1, v, err); }' \
+            >"$repo/src/edit/option.c"
+        printf '%s\n' \
+            'void seeded(void) { yew_opt_store_raw(); }' \
+            >"$repo/src/edit/seed.c"
+        ;;
+    YEW-F-060)
+        printf '%s\n' \
+            'void yew_pkg_git_raw(void) { yew_pkg_git(argv, 1, 1, true, run); }' \
+            >"$repo/src/mod/plug/pkg.c"
+        printf '%s\n' \
+            'void seeded(void) { yew_pkg_git_raw(); }' \
+            >"$repo/src/edit/seed.c"
+        ;;
+    YEW-F-061)
+        printf '%s\n' \
+            'static const unsigned local_widths[] = { 127995U, 65039U };' \
+            'void base(void)' \
+            '{' \
+            '    yew_off_to_ccol(); yew_ccol_to_off_padded();' \
+            '    yew_ccol_shortfall(); yew_ccol_max();' \
+            '    if (local_widths[0] != 0U) cell_advance += 2U;' \
+            '}' >"$repo/src/text/register.c"
+        ;;
+    YEW-F-062)
+        printf '%s\n' \
+            'void base(CellCol cursor, CellCol indent)' \
+            '{' \
+            '    CellCol goal = { cursor.v + indent.v };' \
+            '    yew_off_to_ccol(); yew_ccol_to_off_padded();' \
+            '    yew_ccol_shortfall(); yew_ccol_max();' \
+            '    (void)goal;' \
+            '}' >"$repo/src/text/register.c"
+        ;;
+    YEW-F-063)
+        printf '%s\n' \
+            '/* yew_off_to_ccol yew_ccol_to_off_padded */' \
+            '/* yew_ccol_shortfall yew_ccol_max */' \
+            'void base(void) { local_column_math(); }' \
+            >"$repo/src/text/register.c"
+        ;;
+    YEW-F-064)
+        printf '%s\n' \
+            'typedef struct ModelPiece {' \
+            '    const unsigned char *base;' \
+            '    size_t start;' \
+            '    size_t length;' \
+            '} ModelPiece;' \
+            'unsigned char model_byte(const ModelPiece *p, size_t i)' \
+            '{' \
+            '    return p->base[p->start + i];' \
+            '}' >"$repo/tests/fuzz/oracle.c"
+        ;;
+    YEW-F-065)
+        printf '%s\n' \
+            '/* GENERATED by scripts/gen-unicode-tables from UCD 16.0.0 */' \
+            'static const unsigned generated_table[] = { 99U }; /* hand edited */' \
+            >"$repo/src/unicode/tables.c"
+        ;;
+    YEW-F-066)
+        printf '%s\n' \
+            'void seeded(void) { _Exit(4); }' >"$repo/src/seed.c"
+        ;;
+    YEW-F-067)
+        printf '%s\n' \
+            'void seeded(const char *request_bytes)' \
+            '{' \
+            '    yew_log(YEW_LOG_INFO, "request bytes: %s", request_bytes);' \
+            '}' >"$repo/src/mod/ai/seed.c"
+        ;;
+    YEW-F-068)
+        printf '%s\n' \
+            'static void test_orphan(void) {}' \
+            >"$repo/tests/unit/test_seed.c"
+        ;;
+    YEW-F-069)
+        rm -f "$repo/tests/pty/registry.c"
+        ;;
+    YEW-F-070)
+        printf '%s\n' \
+            'C(case01)' 'C(case02)' 'C(case03)' 'C(case04)' \
+            'C(case05)' 'C(case06)' 'C(case07)' 'C(case08)' \
+            'C(case09)' 'C(case10)' 'C(case11)' 'C(case12)' \
+            'const char *snapshot_name = "missing";' \
+            'void seeded(PtyCtx *c) { ptc_snapshot(c, snapshot_name); }' \
+            >"$repo/tests/pty/registry.c"
+        ;;
+    YEW-F-071)
+        printf '%s\n' \
+            'C(case01)' 'C(case02)' 'C(case03)' 'C(case04)' \
+            'C(case05)' 'C(case06)' 'C(case07)' 'C(case08)' \
+            'C(case09)' 'C(case10)' 'C(case11)' 'C(case12)' \
+            '#if 0' 'C(orphan)' '#endif' \
+            >"$repo/tests/pty/registry.c"
+        : >"$repo/tests/pty/goldens/orphan.golden"
         ;;
     *)
         printf 'unknown F15 ban probe: %s\n' "$id" >&2
