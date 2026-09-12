@@ -317,7 +317,12 @@ void test_http_live_resolver_and_address_fallback(void)
     HttpConn *conn;
     HttpUrl literal = {"127.0.0.1", 9U, "/", true};
     HttpUrl named = {"localhost", 9U, "/", true};
+    HttpUrl ipv6 = {"::1", 9U, "/", true};
+    HttpUrl hex = {"0x7f000001", 9U, "/", false};
+    HttpUrl dns_loopback = {"loopback.audit.invalid", 9U, "/", false};
+    HttpUrl remote = {"remote.audit.invalid", 9U, "/", false};
     HttpUrl alias;
+    HttpReq request = {"POST", "/", NULL, 0U, NULL, 0U, false};
     u64 resolvers;
     u64 sockets;
     u16 port;
@@ -339,6 +344,28 @@ void test_http_live_resolver_and_address_fallback(void)
         YEW_LOG_WARN, "resolving HTTP endpoint localhost may block"));
     resolvers++;
     YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
+    YEW_ASSERT(named.loopback);
+
+    YEW_ASSERT(yew_http_register_endpoint(&ed, &ipv6, &err));
+    YEW_ASSERT(ipv6.loopback);
+    YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
+
+    YEW_ASSERT(yew_http_register_endpoint(&ed, &hex, &err));
+    resolvers++;
+    YEW_ASSERT(hex.loopback);
+    YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
+
+    YEW_ASSERT(yew_http_register_address(&ed, &dns_loopback,
+                                          "127.0.0.1", &err));
+    YEW_ASSERT(dns_loopback.loopback);
+    YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
+
+    YEW_ASSERT(yew_http_register_address(&ed, &remote, "192.0.2.1", &err));
+    sockets = yew_http_socket_call_count();
+    YEW_ASSERT_NULL(yew_http_begin(&ed, &remote, &request, &err));
+    YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_TLS);
+    YEW_ASSERT_NOT_NULL(strstr(err.msg, "refusing to send an API key"));
+    YEW_ASSERT_EQ_U64(yew_http_socket_call_count(), sockets);
 
     alias.host = "fallback.test";
     alias.port = port;
@@ -354,6 +381,25 @@ void test_http_live_resolver_and_address_fallback(void)
     YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
     YEW_ASSERT_EQ_U64(capture.body.len, 5U);
     YEW_ASSERT_EQ_MEM(capture.body.data, "hello", 5U);
+    yew_http_conn_release(&ed, conn);
+    capture_drop(&capture);
+    yew_ed_free(&ed);
+    server_wait(server);
+
+    /* Redirects are ordinary responses.  The bespoke client never resolves
+     * or follows Location, so a loopback endpoint cannot bounce a request to
+     * a cleartext remote host. */
+    server = server_start("redirect", &port);
+    yew_ed_init(&ed);
+    capture_init(&capture);
+    sockets = yew_http_socket_call_count();
+    conn = request_start(&ed, port, false, &err, &capture);
+    drive(&ed, &capture, 3000);
+    YEW_ASSERT_EQ_U64(conn->state, YEW_HC_DONE);
+    YEW_ASSERT_EQ_U64(conn->rx->status, 302U);
+    YEW_ASSERT_EQ_U64(capture.body.len, 0U);
+    YEW_ASSERT_EQ_U64(yew_http_socket_call_count(), sockets + 1U);
+    YEW_ASSERT_EQ_U64(yew_http_resolver_call_count(), resolvers);
     yew_http_conn_release(&ed, conn);
     capture_drop(&capture);
     yew_ed_free(&ed);

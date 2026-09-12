@@ -156,6 +156,13 @@ int main(int argc, char **argv)
             "{\"error\":\"slow down\"}";
 
         write_all(fd, response, sizeof(response) - 1U, false);
+    } else if (strcmp(mode, "redirect") == 0) {
+        static const char response[] =
+            "HTTP/1.1 302 Found\r\nContent-Length: 0\r\n"
+            "Location: http://192.0.2.1/private\r\n"
+            "Connection: close\r\n\r\n";
+
+        write_all(fd, response, sizeof(response) - 1U, false);
     } else if (strcmp(mode, "close") == 0) {
         static const char response[] =
             "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello";
