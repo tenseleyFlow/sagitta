@@ -2204,6 +2204,7 @@ const YewTest yew_tests[] = {
     T(drag_dwell_flash_marks_damage_only_at_an_edge),
     T(drag_float_survives_a_user_scrolled_strip),
     T(drag_autoscroll_keeps_the_strip_where_the_drop_landed),
+    T(drag_a_press_ends_the_hover_reveal),
     T(drag_float_does_not_disturb_the_chevron_answer),
     T(ctxmenu_placement_clamps_at_all_four_edges),
     T(ctxmenu_refuses_a_space_it_cannot_fit),

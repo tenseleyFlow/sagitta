@@ -1314,6 +1314,19 @@ static void mouse_press(Ed *ed, const Key *k)
     Region hit;
 
     /*
+     * Sprint 57.15 §2's reveal is a NO-BUTTON clock, and a press is the
+     * end of no-button.  `hover_track` only runs on unheld motion, so
+     * hover_x/hover_y freeze at the last cell the pointer visited
+     * unheld; left armed, the reveal would go on firing every 300 ms
+     * against that stale cell for as long as the button is down — the
+     * strip running away under a drag that is nowhere near it, and
+     * fighting the drag's own 120 ms autoscroll for the same offset.
+     * Before every early return below, because a press is a press
+     * whatever it goes on to route to.  The next unheld motion report
+     * arms it again.
+     */
+    m->hover_chevron = false;
+    /*
      * FIRST, and it never touches the phase machine.  Ctrl+left must
      * not arm a drag or enter H mode behind the menu it opens: a
      * selection the user never asked for, left live under a pop-up, is

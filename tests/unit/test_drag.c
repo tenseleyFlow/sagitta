@@ -1497,6 +1497,66 @@ void test_drag_autoscroll_keeps_the_strip_where_the_drop_landed(void)
 }
 
 /*
+ * Sprint 57.15 §2's reveal is a NO-BUTTON clock, and a press is the end
+ * of no-button.
+ *
+ * `hover_track` only ever runs on a motion report with no button held,
+ * so once a button goes down `hover_x`/`hover_y` freeze at the last
+ * cell the pointer visited unheld.  If that cell was a chevron, the
+ * reveal keeps firing every 300 ms against a stale position for as long
+ * as the button is down — the strip runs away under a drag that is
+ * nowhere near it, and it fights the drag's own 120 ms autoscroll for
+ * the same offset.  The press ends the hover; the next unheld motion
+ * report is what arms it again.
+ */
+void test_drag_a_press_ends_the_hover_reveal(void)
+{
+    DragFixture f;
+    u16 chev;
+    i64 t0;
+    int after_hover;
+
+    dg_fixture(&f, 7U);
+    yew_tab_switch(&f.ed, 0);
+    YEW_ASSERT(yew_grid_resize(&f.ed.grid, 24U, 24U));
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    chev = dg_chevron_x(24U);
+    YEW_ASSERT(chev != 0xFFFFU);
+    t0 = f.ed.now_ms;
+    {
+        Key hover = dg_ev((u8)YEW_KEY_REPEAT, chev, 0U);
+
+        hover.button = (u8)YEW_MB_NONE;
+        yew_mouse_event(&f.ed, &hover);
+    }
+    YEW_ASSERT(f.ed.mouse.hover_chevron);
+    /* One reveal step, to prove the clock is live before the press. */
+    yew_mouse_tick(&f.ed, t0 + YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, 1);
+    dg_paint(&f);
+    after_hover = f.ed.tabs.scroll;
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, after_hover),
+                          0U);
+
+        yew_mouse_event(&f.ed, &press);
+    }
+    YEW_ASSERT(!f.ed.mouse.hover_chevron);
+    /*
+     * Two whole reveal windows with the button down and the pointer
+     * never returning: the strip does not move, and the deadline does
+     * not ask the loop to wake for a reveal that is not running.
+     */
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, t0 + YEW_HOVER_SCROLL_MS),
+                      -1);
+    yew_mouse_tick(&f.ed, t0 + 2 * YEW_HOVER_SCROLL_MS);
+    yew_mouse_tick(&f.ed, t0 + 3 * YEW_HOVER_SCROLL_MS);
+    YEW_ASSERT_EQ_I64(f.ed.tabs.scroll, after_hover);
+    yew_ed_free(&f.ed);
+}
+
+/*
  * Sprint 57.15 §2's mode-1003 owner reads a product of the render, and
  * Sprint 57.14 added a float to that render which is drawn LAST and
  * registers nothing.  The float must therefore leave the chevron

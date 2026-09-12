@@ -2198,6 +2198,7 @@ void test_drag_dwell_flashes_twice_before_opening(void);
 void test_drag_dwell_flash_marks_damage_only_at_an_edge(void);
 void test_drag_float_survives_a_user_scrolled_strip(void);
 void test_drag_autoscroll_keeps_the_strip_where_the_drop_landed(void);
+void test_drag_a_press_ends_the_hover_reveal(void);
 void test_drag_float_does_not_disturb_the_chevron_answer(void);
 void test_ctxmenu_placement_clamps_at_all_four_edges(void);
 void test_ctxmenu_refuses_a_space_it_cannot_fit(void);
