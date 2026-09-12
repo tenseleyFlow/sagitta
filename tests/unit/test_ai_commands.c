@@ -36,6 +36,7 @@
 typedef struct {
     const char *name;
     u32 sprint;
+    bool full_smoke;
 } AiCommandRow;
 
 #if YEW_WITH_AI
@@ -227,18 +228,24 @@ static void ai_curl_fixture_remove(const char *dir)
 void test_ai_commands_cross_module_boundary(void)
 {
     static const AiCommandRow rows[] = {
-        {"ed.ai.backends", 0U},
-        {"ed.ai.models", 0U},
-        {"ed.ai.ping", 0U},
-        {"ed.ai.log", 0U},
-        {"ed.ai.reload", 0U},
-        {"ed.ai.enable", 0U},
-        {"ed.ai.disable", 0U},
-        {"ed.ai.stats", 0U}
+        {"ed.ai.backends", 0U, true},
+        {"ed.ai.models", 0U, true},
+        {"ed.ai.ping", 0U, true},
+        {"ed.ai.log", 0U, true},
+        {"ed.ai.reload", 0U, true},
+        {"ed.ai.enable", 0U, true},
+        {"ed.ai.disable", 0U, true},
+        {"ed.ai.forget", 0U, false},
+        {"ed.ai.privacy", 0U, false},
+        {"ed.ai.preset", 0U, false},
+        {"ed.ai.status", 0U, false},
+        {"ed.ai.stats", 0U, true},
+        {"ed.ai.open", 0U, false}
     };
     Ed ed;
     CmdCtx cx = {0};
     size_t i;
+    u32 registry_ai = 0U;
 #if YEW_WITH_AI
     YewEdStartup startup = {0};
     char root[] = "/tmp/yew-ai-commands-XXXXXX";
@@ -253,9 +260,28 @@ void test_ai_commands_cross_module_boundary(void)
 #if YEW_WITH_AI
     yew_config_init(&ed, &startup);
 #endif
+    YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U,
+                                   "ai-command-boundary"));
     cx.ed = &ed;
+    cx.win = ed.win;
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
+    for (u32 j = 0U; j < yew_cmd_count(); j++) {
+        const CmdDesc *registered = yew_cmd_at(j);
+        bool found = false;
+
+        if (registered == NULL ||
+            strncmp(registered->name, "ed.ai.", 6U) != 0)
+            continue;
+        registry_ai++;
+        for (i = 0U; i < YEW_ARRAY_LEN(rows); i++)
+            if (strcmp(rows[i].name, registered->name) == 0) {
+                found = true;
+                break;
+            }
+        YEW_ASSERT(found);
+    }
+    YEW_ASSERT_EQ_U64(registry_ai, YEW_ARRAY_LEN(rows));
     for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
         CmdId id = yew_cmd_lookup(rows[i].name, (u32)strlen(rows[i].name));
         const CmdDesc *desc;
@@ -263,6 +289,9 @@ void test_ai_commands_cross_module_boundary(void)
         YEW_ASSERT(id.v != 0U);
         desc = yew_cmd_desc(id);
         YEW_ASSERT_NOT_NULL(desc);
+        cx.sarg = strcmp(rows[i].name, "ed.ai.preset") == 0 ? "local" :
+                                                                    NULL;
+        cx.sarg_len = cx.sarg == NULL ? 0U : (u32)strlen(cx.sarg);
 #if YEW_WITH_AI
         if (rows[i].sprint != 0U) {
             char sprint[24];
@@ -285,6 +314,8 @@ void test_ai_commands_cross_module_boundary(void)
             YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR, diagnostic));
         } else {
             YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
+            if (!rows[i].full_smoke)
+                continue;
             if (strcmp(rows[i].name, "ed.ai.stats") == 0) {
                 YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
                                   YEW_CMD_OK);
