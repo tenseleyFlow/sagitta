@@ -408,6 +408,24 @@ test_doctor_clean()
     pass_case
 }
 
+test_doctor_reports_lock_head_mismatch()
+{
+    local lock_before
+
+    begin_case doctor_reports_lock_head_mismatch
+    make_source lock-mismatch-plugin
+    install_head
+    lock_before=$case_root/lock.before
+    cp "$(lock_path)" "$lock_before"
+    git -C "$(plugin_dir)" commit -q --allow-empty -m 'head-only drift'
+    run_pkg doctor lock-mismatch-plugin
+    assert_status 1
+    assert_output_contains rev-mismatch
+    cmp -s "$lock_before" "$(lock_path)" ||
+        fail 'read-only mismatch check rewrote lockfile'
+    pass_case
+}
+
 test_update_noop()
 {
     local before
@@ -912,6 +930,44 @@ EOF
     assert_status 3
     assert_stdout_exact ''
     assert_stderr_exact $'yew pkg: error: git clone failed (exit 128)\ngit said:\n  fixture network unavailable\n'
+    pass_case
+}
+
+test_install_rejects_truncated_git_transfer()
+{
+    local old_path
+
+    begin_case install_rejects_truncated_git_transfer
+    plugin_name=truncated-plugin
+    mkdir -p "$case_root/bin"
+    cat >"$case_root/bin/git" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "--version" ]]; then
+    exec "$YEW_TEST_REAL_GIT" "$@"
+fi
+for arg in "$@"; do
+    if [[ "$arg" == "clone" ]]; then
+        destination=${@: -1}
+        mkdir -p "$destination/src"
+        printf 'truncated transport\n' >"$destination/src/partial"
+        exit 0
+    fi
+done
+exec "$YEW_TEST_REAL_GIT" "$@"
+EOF
+    chmod +x "$case_root/bin/git"
+    old_path=$PATH
+    export YEW_TEST_REAL_GIT=$real_git
+    PATH="$case_root/bin:$old_path"
+    run_pkg install https://invalid.example/truncated-plugin.git --timeout 5
+    PATH=$old_path
+    unset YEW_TEST_REAL_GIT
+    assert_status 3
+    assert_output_contains 'git rev-parse failed'
+    [[ ! -e "$(plugin_dir)" ]] ||
+        fail 'truncated transfer published a plugin directory'
+    assert_file_lacks "$(lock_path)" '"truncated-plugin"'
+    assert_no_staging 'truncated transfer left a staging directory'
     pass_case
 }
 
@@ -1448,6 +1504,7 @@ test_install_rev
 test_install_branch
 test_list_porcelain
 test_doctor_clean
+test_doctor_reports_lock_head_mismatch
 test_update_noop
 test_update_fast_forward
 test_update_dry_run
@@ -1475,6 +1532,7 @@ test_force_relock_discards_corrupt_lock
 test_timeout_argument_validation
 test_network_timeout_kills_stalled_git
 test_unreachable_remote_exits_three_without_timeout
+test_install_rejects_truncated_git_transfer
 test_install_executes_no_repository_code
 test_install_warns_once_for_uninitialized_submodules
 test_postinstall_key_is_rejected_without_execution
