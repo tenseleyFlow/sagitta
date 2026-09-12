@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-016`
+Next available ID: `YEW-F-017`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -28,6 +28,7 @@ recorded in `audit-00.md`.
 | YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
 | YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
 | YEW-F-015 | M | open | F11 LSP | snippet-policy grep gate matches unrelated core code | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
+| YEW-F-016 | M | open | F11 LSP | required 1-based display edges violate the LSP +/-1 gate | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -161,6 +162,15 @@ and comments contribute ten more matching lines at the baseline. The product
 still downgrades the choice snippet deterministically; the defect is in a
 release gate that promises a specific result it cannot produce. It remains
 open for Sprint 59; no product source changed during the audit.
+
+`YEW-F-016` is Medium because two locked LSP contracts cannot both satisfy
+their literal release controls. Sprint 46 requires a repository scan for
+`line + 1`, `line - 1`, and `.v + 1` under `src/mod/lsp/` to be empty, while
+Sprint 47 requires 1-based picker display at that layer. The baseline has
+three matches, all at user-facing display/error edges; protocol positions
+remain zero-based. The visible behavior is correct, but the frozen gate
+rejects its required implementation and cannot support a release claim. It
+remains open for Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 

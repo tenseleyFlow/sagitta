@@ -35,5 +35,6 @@ bool test_yew_f_012(char *why, size_t why_cap);
 bool test_yew_f_013(char *why, size_t why_cap);
 bool test_yew_f_014(char *why, size_t why_cap);
 bool test_yew_f_015(char *why, size_t why_cap);
+bool test_yew_f_016(char *why, size_t why_cap);
 
 #endif
