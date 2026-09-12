@@ -321,3 +321,120 @@ Lanes: gcc and clang `-Werror` clean; `unit 2545/0`; `MODULES="" 2056/0`;
 `SAN=1 2526/0`; full PTY green with no golden re-recorded; `perf-mouse`
 burst 0.008 ms and `router_allocations=none`; `fuzz-mouse` four seeds;
 check-input, bans, check-cmd-dispatch, check-sigsafe ok.
+
+## Field repair — 2026-09-12 (second round)
+
+Four more defects from dogfooding the merged `tab-drag-feel` +
+`strip-scrolling` branches. Each was reproduced by a failing test
+before anything was touched.
+
+### The dwell was too eager — 250 ms → 500 ms
+
+250 ms opened a group under a pointer that was only travelling past
+it: the strip grew a row, the layout gave one away, and the picture
+moved under a gesture that had not asked for anything.
+`YEW_DRAG_DWELL_MS` is 500 and `YEW_DRAG_FLASH_MS` is still the
+derived quarter, so the two flashes SPREAD across the longer window
+instead of finishing early. Quarters are 125/250/375.
+
+- `drag_dwell_opens_a_group_at_500ms_and_not_at_499` — renamed from
+  the 250 ms row, and it now `_Static_assert`s the numbers its name
+  promises, so a future retune fails to compile rather than lying.
+- `dwell_quarter`'s clamp is unreachable at 500 (4·FLASH is exactly
+  the dwell) and stays: 250 rolled into a fifth, lit quarter at 248,
+  and the next tuning pass must not have to rediscover that.
+- The `s27_dwell_opens_member_strip` PTY case settles 900 ms rather
+  than 500 — a golden recorded on the dwell's own edge is a race.
+
+### A group entry fought the pointer trying to rest on it
+
+"Tab groups should have some space for allowing hover over without
+shifting... currently the tab group wants to move left/right of where
+I am hovering because it is assuming I want to shift left right, not
+hover."
+
+The half-width swap and the dwell wanted opposite things from the same
+cells. `swap_threshold` (src/ui/mouse.c) keeps the half-width rule for
+a plain tab and gives a GROUP entry a central dead band: its middle
+half shifts nothing, its outer quarters are ordinary swap triggers.
+
+The split is the outer quarter each side. The reported workspace's
+group labels run 8 to 18 cells, so a quarter is two to four cells —
+wide enough that a resting hand stays inside it, narrow enough that a
+drag aiming past the group crosses it without a detour. The band is
+CENTRED so the two directions are mirror images rather than two rules,
+and below four cells there is no room to divide and the half rule
+stands.
+
+- `drag_a_group_entry_holds_still_inside_its_hover_band`
+- `drag_a_group_entry_holds_still_coming_from_the_right`
+- `drag_a_plain_neighbour_still_swaps_at_half_its_width` — the promise
+  that nothing else moved.
+
+Only WHERE the target changes moved; what a target means did not, so
+`drag_every_previewed_gap_is_where_the_drop_lands` still holds.
+
+### A row-2 chevron scrolled row 1
+
+"If I hover a chevron in a tab group (row 2 chevron) expecting tabs
+hidden right to appear in the row 2 space... what actually happens is
+row 1 slides left."
+
+The HOVER reveal was innocent — `chevron_at` reads the payload's
+magnitude for the row and its sign for the direction, and a hover on
+row 2's `>N` scrolls row 2. The DRAG autoscroll had its own copy of
+that read (`drag_over_chevron`, src/ui/mouse.c:2213) which kept the
+sign and dropped the magnitude, then named the row itself:
+`strip_scroll(ed, false, delta)` at src/ui/mouse.c:2344. Every chevron
+in the editor autoscrolled row 1, row 2's included.
+
+`drag_over_chevron` is gone; `chevron_at` is the one reader of the
+±1/±2 convention for both clocks. `strip_scroll`'s row-2 limit also
+came from `yew_active_group_id`, while row 2 may be showing the
+DWELL PREVIEW group — `row2_group` now states that rule once, and
+`drop_target_row2` reads it too.
+
+- `mouse_drag_autoscroll_moves_the_row_under_the_pointer` — the
+  reproducer, asserted as a PAIR (row 2 moved, row 1 did not): before
+  the fix `tabs.scroll` went to 1 and `member_scroll` stayed at 0.
+- `mouse_row2_chevron_hover_scrolls_row_2_and_not_row_1` — the hover
+  half, which passed all along and pins it.
+
+### Row 2 accepted a drop and showed nothing about it
+
+"When hovering drag in a tab group, the row 2 tabs don't shift like we
+just spent time getting the row 1 tabs shifting left/right."
+
+`drag_target_slot` resolved only against row 1's slot table, so row 2
+had a drop target and no preview — the picture and the outcome
+disagreed. Row 2 now gets row 1's whole treatment:
+
+- `strip_row2` (src/ui/tabs.c), a second slot table filled by the same
+  `strip_render`, which takes a `StripSlots *` instead of a
+  `record_slots` flag. Cells only: row 2 never un-permutes a payload
+  the way the dwell does on row 1.
+- `drag_target_member` resolves the target from the carried tab's
+  LEADING edge by the same half-width rule — no dead band, because row
+  2 holds members and a member is a plain tab. Seeded from where the
+  carried entry already sits (`group_ordinal − 1` on first arrival,
+  since `yew_group_members` orders by ordinal), or by a plain insertion
+  scan when the tab is joining from outside.
+- `yew_tab_member_strip_draw` permutes the entry for a member being
+  reordered and INSERTS one for a joiner — the list it lands in is one
+  longer than the one on screen — then hides it, which is the gap.
+  Labels are built after the permutation so the digits count what row
+  2 shows.
+- `drop_target_row2` reads that target rather than hit-testing the
+  release column: the drawn row is permuted by the preview, so a fresh
+  hit-test would answer "you are over the thing you are holding".
+
+WHICH ROW OWNS THE PREVIEW: the row the pointer is on. Row 1 while it
+is on row 1, row 2 while it is on row 2, never both — leaving row 2
+clears it in the same motion, so the members close back up.
+
+- `drag_row2_opens_a_gap_where_the_member_will_land`
+- `drag_moving_between_rows_hands_the_preview_over` — both directions.
+- `drag_row2_previewed_gap_is_the_ordinal_the_drop_commits` — every
+  column of the row on its own fixture, asserting the gap the frame
+  drew equals the ordinal the release committed, and that all three
+  positions were actually reached.
