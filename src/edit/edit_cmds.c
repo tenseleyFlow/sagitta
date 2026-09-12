@@ -1625,6 +1625,11 @@ CmdStatus yew_edit_cmd_insert_tab(CmdCtx *cx)
     n = yew_indent_unit(win->buf, unit, (u32)sizeof(unit));
     if (n == 0U)
         return YEW_CMD_ERR_STATE;
+    /* `expandtab` decides what one level EMITS and applies always; the
+     * navigate-and-indent-the-line behaviour is autoindent's, so with both
+     * off Tab still inserts exactly one '\t' at the caret. */
+    if (!yew_opt_buffer_bool(win->buf, "autoindent", 10U))
+        return insert_bytes(cx, unit, n);
     if (!info.blank && cursor->pos.v < info.first.v) {
         cursor->pos = info.first;
         cursor->anchor = cursor->pos;

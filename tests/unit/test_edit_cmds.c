@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/option.h"
 
 #define FAMILY                                                              \
     "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"                \
@@ -749,3 +750,246 @@ void test_edit_view_number_cycle_walks_none_abs_rel_hybrid(void)
 }
 
 #undef FAMILY
+
+/* ---- Sprint 57.16: insert-mode comfort ------------------------------- */
+
+static void edit_set_bool(Ed *ed, const char *name, bool on)
+{
+    OptVal value = {(u8)YEW_OPT_BOOL, {0}};
+    const char *err = NULL;
+
+    value.as.b = on;
+    YEW_ASSERT(yew_opt_set_for(ed, yew_ed_doc(ed), NULL,
+                               YEW_OPT_SCOPE_DECLARED, name,
+                               (u32)strlen(name), &value, &err));
+    YEW_ASSERT_NULL(err);
+}
+
+static u32 edit_undo_ops(const Ed *ed)
+{
+    u64 current = yew_undo_current(ed->buffer.undo);
+
+    YEW_ASSERT(current != 0U);
+    return ed->buffer.undo->nodes.data[current - 1U].n_ops;
+}
+
+static void edit_enter(Ed *ed)
+{
+    YEW_ASSERT_EQ_U64(yew_mode_enter(ed, YEW_MODE_I), YEW_CMD_OK);
+    yew_ed_handle_key(ed, edit_key(YEW_KEY_ENTER), 0);
+    YEW_ASSERT_EQ_U64(ed->last_status, YEW_CMD_OK);
+}
+
+void test_edit_enter_carries_indent_and_adds_a_level_after_an_opener(void)
+{
+    static const u8 indented[] = "    alpha\n";
+    static const u8 carried[] = "    alpha\n    \n";
+    static const u8 opener[] = "if (x) {\n";
+    static const u8 opened[] = "if (x) {\n\t\n";
+    static const u8 spaced[] = "if (x) {\n    \n";
+    Ed ed;
+
+    edit_fixture(&ed, indented, sizeof(indented) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 9U);
+    edit_enter(&ed);
+    edit_assert_text(&ed, carried, sizeof(carried) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 14U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    /* The EOL and the indent are one insert, hence one op. */
+    YEW_ASSERT_EQ_U64(edit_undo_ops(&ed), 1U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false, NULL, 0U),
+                      YEW_CMD_OK);
+    edit_assert_text(&ed, indented, sizeof(indented) - 1U);
+    yew_ed_free(&ed);
+
+    edit_fixture(&ed, opener, sizeof(opener) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 8U);
+    edit_enter(&ed);
+    edit_assert_text(&ed, opened, sizeof(opened) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 10U);
+    YEW_ASSERT_EQ_U64(edit_undo_ops(&ed), 1U);
+    yew_ed_free(&ed);
+
+    /* expandtab is what decides the bytes the extra level emits. */
+    edit_fixture(&ed, opener, sizeof(opener) - 1U, YEW_EOL_LF);
+    edit_set_bool(&ed, "expandtab", true);
+    edit_place(&ed, 8U);
+    edit_enter(&ed);
+    edit_assert_text(&ed, spaced, sizeof(spaced) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 13U);
+    yew_ed_free(&ed);
+}
+
+void test_edit_enter_between_a_matched_pair_opens_three_lines(void)
+{
+    static const u8 before[] = "fn() {}\n";
+    static const u8 after[] = "fn() {\n\t\n}\n";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 6U);
+    edit_enter(&ed);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    /* Caret on the indented middle line, closer alone at the opener's
+     * indent. */
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 8U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    YEW_ASSERT_EQ_U64(edit_undo_ops(&ed), 1U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false, NULL, 0U),
+                      YEW_CMD_OK);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    yew_ed_free(&ed);
+}
+
+void test_edit_enter_strips_the_whitespace_it_abandons(void)
+{
+    static const u8 before[] = "alpha\n    \n";
+    static const u8 after[] = "alpha\n\n    \n";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 10U);
+    edit_enter(&ed);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 11U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    /* The strip is a delete, so this is the one case with two ops; both
+     * live in the single newline transaction. */
+    YEW_ASSERT_EQ_U64(edit_undo_ops(&ed), 2U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false, NULL, 0U),
+                      YEW_CMD_OK);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    yew_ed_free(&ed);
+}
+
+void test_edit_autoindent_off_keeps_the_literal_insert_bytes(void)
+{
+    static const u8 before[] = "    alpha\n";
+    static const u8 after[] = "    alpha\n\n";
+    static const u8 tabbed[] = "  \t  alpha\n";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_set_bool(&ed, "autoindent", false);
+    edit_place(&ed, 9U);
+    edit_enter(&ed);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 10U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    yew_ed_free(&ed);
+
+    /* Tab inside the indent still inserts one literal tab, and Backspace
+     * still eats one byte. */
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_set_bool(&ed, "autoindent", false);
+    edit_place(&ed, 2U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_I), YEW_CMD_OK);
+    yew_ed_handle_key(&ed, edit_key(YEW_KEY_TAB), 0);
+    YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_OK);
+    edit_assert_text(&ed, tabbed, sizeof(tabbed) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 3U);
+    yew_ed_handle_key(&ed, edit_key(YEW_KEY_BACKSPACE), 0);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 2U);
+    yew_ed_free(&ed);
+}
+
+void test_edit_tab_navigates_then_indents_then_inserts(void)
+{
+    static const u8 before[] = "    alpha\n";
+    static const u8 line_indented[] = "\t    alpha\n";
+    static const u8 mid[] = "    al\tpha\n";
+    static const u8 blank[] = "\n";
+    static const u8 blank_tabbed[] = "\t\n";
+    Ed ed;
+
+    /* Inside the leading whitespace Tab only moves, and leaves the undo
+     * tree untouched. */
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 2U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 4U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root);
+
+    /* At the first non-blank byte Tab indents the LINE, and the caret keeps
+     * its place relative to the text. */
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, line_indented, sizeof(line_indented) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 5U);
+    YEW_ASSERT_EQ_U64(yew_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    yew_ed_free(&ed);
+
+    /* Past the first non-blank byte Tab inserts at the caret. */
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 6U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, mid, sizeof(mid) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 7U);
+    yew_ed_free(&ed);
+
+    /* An entirely blank line inserts one unit. */
+    edit_fixture(&ed, blank, sizeof(blank) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 0U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, blank_tabbed, sizeof(blank_tabbed) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 1U);
+    yew_ed_free(&ed);
+}
+
+void test_edit_tab_emits_spaces_under_expandtab(void)
+{
+    static const u8 before[] = "alpha\n";
+    static const u8 after[] = "    alpha\n";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_set_bool(&ed, "expandtab", true);
+    edit_place(&ed, 0U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 4U);
+    yew_ed_free(&ed);
+}
+
+void test_edit_backspace_in_leading_whitespace_eats_one_level(void)
+{
+    static const u8 before[] = "        alpha\n";
+    static const u8 once[] = "    alpha\n";
+    static const u8 twice[] = "alpha\n";
+    static const u8 ragged[] = "     alpha\n";
+    static const u8 snapped[] = "    alpha\n";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 8U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_I), YEW_CMD_OK);
+    yew_ed_handle_key(&ed, edit_key(YEW_KEY_BACKSPACE), 0);
+    edit_assert_text(&ed, once, sizeof(once) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 4U);
+    yew_ed_handle_key(&ed, edit_key(YEW_KEY_BACKSPACE), 0);
+    edit_assert_text(&ed, twice, sizeof(twice) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 0U);
+    /* Past the indent it is one grapheme again. */
+    yew_ed_handle_key(&ed, edit_key(YEW_KEY_ESCAPE), 0);
+    yew_ed_free(&ed);
+
+    edit_fixture(&ed, ragged, sizeof(ragged) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 5U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_I), YEW_CMD_OK);
+    yew_ed_handle_key(&ed, edit_key(YEW_KEY_BACKSPACE), 0);
+    edit_assert_text(&ed, snapped, sizeof(snapped) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 4U);
+    yew_ed_free(&ed);
+}
