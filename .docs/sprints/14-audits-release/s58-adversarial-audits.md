@@ -12,8 +12,9 @@
 - Sprints 57.5–57.9 — compact remembered FUSS trees, binary source-service
   isolation, nested-workspace path normalization, direct visible-tree
   type-to-jump, true off-canvas geometry, and the modern cell-exact tab/new-tab
-  strip, exact adjacent B-mode scope/tail traversal, the directory group
-  chooser, and atomic active-group close with ungrouped tab-close fallback.
+  strip, mirrored B-mode traversal over structural brace/suite landmarks with
+  enclosing-scope horizontal motion, the directory group chooser, and atomic
+  active-group close with ungrouped tab-close fallback.
   The §1 baseline must include these fixes and pass the required hosted lanes;
   no audit front may cite the pre-57.9 tree.
 - Sprints 0–55 — everything under audit. Each front's scope names the
@@ -66,6 +67,14 @@ code to repair field-reported B-mode and FUSS group-picker defects and complete
 the active-group close lifecycle, so the audit campaign is paused before F09.
 The original reports and evidence remain historical and must not be rewritten
 as if they ran on the replacement tree.
+
+The structural B-mode replacement is locally qualified at `c07791cc`: the
+complete default and core-only unit matrices, exact real-key Wolf PTYs,
+Wolf/C/syntax-free structural sequences, focused Darwin sanitizers, four
+deterministic motion-fuzz seeds, and bounded block performance rows pass. This
+is a candidate only. It does not become the audit baseline until its pushed
+successor passes the complete hosted matrix and the F01–F08 applicability
+record is committed.
 
 Before F09 opens, push the exact post-57.9 commit, obtain the complete hosted
 matrix, replace the build matrix of record, and record a delta-applicability

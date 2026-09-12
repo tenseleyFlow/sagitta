@@ -22,15 +22,18 @@ use showed that it had overcorrected: every ordinary source statement and
 every match arm had become a vertical stop. Its local and hosted runs are moot
 as Sprint 57.9 behavior qualification.
 
-Sprint 57.9 is reopened. The replacement policy restores structural B-mode:
-brace-body openers and indentation-suite headers are landmarks; assignments,
-returns, calls, and match arms are not. The exact real-key `days.lu` Up and
-trailing-EOF Left cases, Wolf/C/fallback matrices, and proportional gates must
-replace the superseded evidence before this sprint can close.
+The replacement policy restores structural B-mode: brace-body openers and
+indentation-suite headers are landmarks; assignments, returns, calls, and
+match arms are not. Its implementation is locally qualified at `c07791cc`.
+The exact real-key `days.lu` Up and trailing-EOF Left cases, Wolf/C/fallback
+matrices, default/core aggregates, focused sanitizers, four deterministic fuzz
+seeds, and bounded performance rows are green. This evidence replaces the
+superseded statement-row qualification.
 
-The sprint is not closed: its exact commit-of-record has not been pushed or
-qualified by hosted CI. Sprint 58 is paused after F08 until that closeout and
-the replacement-baseline requalification described in its contract.
+The sprint is not closed: the documentation commit-of-record has not yet been
+pushed or qualified by hosted CI. Sprint 58 is paused after F08 until that
+closeout and the replacement-baseline requalification described in its
+contract.
 
 ## Goals
 

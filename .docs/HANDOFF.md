@@ -10,29 +10,34 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Hosted-green code/recovery anchor:** `da04f30c` (`origin/trunk`)
+**Hosted-green code/recovery anchor:** `da04f30c` (last complete green push)
 
-**Current Sprint-57.9 block-repair frontier:** `bb431836` (local; not pushed)
+**Current Sprint-57.9 structural block-repair frontier:** `c07791cc` (local;
+not pushed)
 
-**Current combined local frontier:** `7d05f79a` (local; not pushed)
+**Current combined local frontier:** current `HEAD` (local; not pushed)
 
-**Git position:** `origin/trunk` is `da04f30c`; GitHub Actions run
-`34624021506` is green for all 22 standard push jobs there, with seven
-trigger-specific jobs skipped as designed. The local branch is 18 coherent
-commits ahead, including the Sprint 57.9 repair and queued Sprint 57.10
-group-aware tab-jump work. Future pushes still require an explicit request.
+**Git position:** `origin/trunk` is `a7da188f`; the local branch contains the
+`c07791cc` structural repair plus this handoff refresh. The broad statement-row
+B-mode policy pushed in
+`a7da188f` is rejected field behavior, and its GitHub Actions run
+`34660528390` is moot as Sprint 57.9 qualification. The last hosted-green
+recovery anchor remains `da04f30c` / run `34624021506` until the structural
+replacement is pushed and green. The combined tree includes the queued Sprint
+57.10 group-aware tab-jump work. The user has explicitly requested this
+replacement push.
 
-**Active implementation frontier:** Sprint 57.9 is locally implemented and
-native-qualified but awaits push and hosted closeout. Its broad B-mode field
-audit is complete at `bb431836`; the clean combined `7d05f79a` frontier also
-contains the queued Sprint 57.10 group-aware tab-jump work and passes the full
-native gate. Sprint 58 is paused after F08, not unopened: F01–F08 closed on the
-original `41fef416` fixed product baseline and recorded findings `YEW-F-001`
-through `YEW-F-008`. Before F09, Sprint 57.9 must establish a hosted-green
-replacement baseline and the closed fronts must receive the contract's delta-
-applicability review. Designated-hardware timing, trigger-specific Valgrind/
-nightly jobs, and physical Pi corroboration remain explicit release-evidence
-tails.
+**Active implementation frontier:** Sprint 57.9's structural replacement is
+locally implemented and qualified at `c07791cc`, but awaits push and hosted
+closeout. The rejected `bb431836` source-row policy is not qualification
+evidence. The clean combined frontier also contains the queued Sprint 57.10
+group-aware tab-jump work. Sprint 58 is paused after F08,
+not unopened: F01–F08 closed on the original `41fef416` fixed product baseline
+and recorded findings `YEW-F-001` through `YEW-F-008`. Before F09, Sprint 57.9
+must establish a hosted-green replacement baseline and the closed fronts must
+receive the contract's delta-applicability review. Designated-hardware timing,
+trigger-specific Valgrind/nightly jobs, and physical Pi corroboration remain
+explicit release-evidence tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
 authoritative pickup point is immediately below. The older 2026-08-29 status
@@ -91,21 +96,25 @@ Right overflow retains priority, and ordinary click, drag, group, CJK, and
 FUSS-offset geometry remains green.
 
 Sprint 57.9 repairs the field failures without weakening the modal core.
-B-mode Up/Down now traverse one canonical ordered set of source rows in exact
-mirror order, independent of LSP or the syntax engine. Same-indent siblings
-remain distinct; delimiter-only and expression-continuation layout rows are
-skipped; compact one-line statements and match arms remain stops. A destination
-has one line-home stop, final-newline style does not alter interior order, and
-half-open provider ownership removes horizontal end-point fixed points. The
-exact `ch4/days.lu` shape is pinned through Wolf syntax, equivalent C, and a
-detected-language syntax-free fallback. In FUSS, `Alt+g` now opens the shared
-group picker on the selected directory with zero files selected; only
-confirmation creates the group, Escape is inert, and the programmatic bulk-
-open API remains intact. The picker renders in the true overlay pass so the
-off-canvas drawer cannot paint over it. E mode now exposes `:group.close`,
-`:ed.group.close`, and `:gclose`: a clean active group closes atomically by
-stable tab id, a dirty group refuses before mutation, and an ungrouped tab
-retains the existing close/prompt/last-tab behavior.
+B-mode Up/Down now traverse one canonical ordered set of structural landmarks
+in exact mirror order, independent of LSP or the syntax engine. Brace-body
+openers and indentation-suite headers are stops; assignments, calls, return
+values, and individual match arms are not. Compact one-line constructs remain
+reachable, source braces inside syntax atoms are suppressed, and the bounded
+fallback recognizes the same structure without a syntax engine. Final-newline
+style does not alter the interior sequence. Left/Right prefer the nearest real
+enclosing delimiter scope in source, with trailing EOF whitespace owned by the
+terminal scope, so Left at the end of `days.lu` lands on the final function's
+opening brace rather than column zero. The exact `ch4/days.lu` shape is pinned
+through Wolf syntax, equivalent C, and a detected-language syntax-free
+fallback. In FUSS, `Alt+g` now opens the shared group picker on the selected
+directory with zero files selected; only confirmation creates the group,
+Escape is inert, and the programmatic bulk-open API remains intact. The picker
+renders in the true overlay pass so the off-canvas drawer cannot paint over it.
+E mode now exposes `:group.close`, `:ed.group.close`, and `:gclose`: a clean
+active group closes atomically by stable tab id, a dirty group refuses before
+mutation, and an ungrouped tab retains the existing
+close/prompt/last-tab behavior.
 
 The current contract remains
 `.docs/sprints/13-performance/s57_9-block-and-group-field-repair.md` until its
@@ -114,29 +123,40 @@ after F08. Preserve its original reports as historical evidence, establish the
 post-57.9 replacement matrix, record the F01–F08 delta requalification, and
 then resume at F09 under the reproducer-first/no-fixes law.
 
-Most recent Sprint 57.9 local validation:
+Most recent Sprint 57.9 structural-replacement local validation:
 
-- complete uncontended native default matrix green at the clean combined
-  `7d05f79a` frontier: every PTY (including the real-key `days.lu` walk),
-  scripts 93/927 with one intentional skip, package/Fletch/round-trip/syntax/
-  policy/smoke/live-torture gates, and 2,441 unit tests / 73,450,393 assertions;
-- focused Darwin arm64 ASan/UBSan and alignment/UBSan block coverage is clean;
-  the independent `MODULES=""` build passes 1,971 unit tests / 72,471,915
-  assertions, proving the repair has no LSP or optional-module dependency;
-- four deterministic 200,000-operation block fuzz seeds pass. The detected-
-  source 100,000-motion gate completes in 18.089 ms with a 0.043 ms maximum;
-  the comma-structural 1,000-motion gate completes in 26.378 ms with a 0.108 ms
-  maximum. The provider-heavy 100,000-motion gate has a 0.437 ms maximum and
-  zero calls over 5 ms; every block/FUSS performance budget remains green;
-- the exact Wolf sequence, equivalent C sequence, both EOF styles, real syntax
-  and syntax-free detected-language paths, reformatted C continuations, and
-  half-open horizontal edges are exhaustive unit contracts. Apple clang is
-  warning-clean; GNU GCC is not installed locally and remains a hosted row;
-- all six Darwin shipping-size profiles pass without changing a budget:
-  1,452,672 bytes minimal, 1,891,536 full, 1,571,632 LSP-only, 1,588,544
-  AI-only, 1,586,768 FUSS-only, and 1,536,128 plugins-only. The exact
-  symbol/section ledger remains a GNU/ELF hosted gate because Apple `nm` does
-  not report Mach-O symbol sizes.
+- complete uncontended native default matrix green at `c07791cc`: every PTY,
+  including exact real-key Up and Left-at-EOF `days.lu` cases; Fletch 38/38;
+  scripts 93/927 with one intentional skip; package integration 51/51; all
+  round-trip, syntax, audit, policy, smoke, and live-torture gates; and 2,442
+  unit tests / 73,449,892 assertions;
+- independent `MODULES=""` build is warning-clean and passes 1,972 unit tests /
+  72,471,414 assertions. Its focused block/unit laws pass 47 tests / 8,452
+  assertions, proving the structural policy has no LSP, FUSS, or other
+  optional-module dependency;
+- focused Darwin arm64 ASan/UBSan and alignment/UBSan each pass all block/unit
+  coverage. The plain focused rows pass 39 block tests / 1,099 assertions and
+  eight unit-law tests / 7,353 assertions;
+- all four deterministic 200,000-operation unit-motion fuzz seeds pass. The
+  detected-source 100,000-motion row completes in 29.617 ms with a 0.023 ms
+  maximum; the 1,000 bounded statement/match-arm-only scans complete in
+  307.482 ms with a 0.481 ms maximum. The provider-heavy 100,000-motion row has
+  a 3.807 ms maximum and zero calls over 5 ms;
+- the exact Wolf and equivalent C structural sequences, both EOF styles, real
+  syntax and syntax-free detected-language paths, compact/Allman C,
+  indentation-suite headers, statement exclusion, mirrored traversal, and
+  trailing-EOF horizontal ownership are executable unit contracts. Apple
+  clang is warning-clean; GNU GCC and the post-repair size/symbol rows remain
+  hosted gates. The earlier `a7da188f` size measurements are not substituted
+  for qualification of the structural replacement.
+
+Test cadence for subsequent work is proportional. During an edit loop, run a
+warning-clean incremental build, affected unit filters, and exact reproducer
+PTYs. At a coherent checkpoint, add the relevant script/PTY family, focused
+sanitizers, and bounded performance rows. Run the complete default/core matrix
+once at a push or sprint-close boundary. Long randomized fuzz, Valgrind,
+extended torture, and repeated performance campaigns remain nightly or
+designated evidence unless the touched subsystem specifically requires them.
 
 Hosted Sprint 57.8 closeout evidence at `41fef416`:
 

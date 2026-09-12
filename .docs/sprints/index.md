@@ -281,7 +281,8 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **SPRINT 57.9 LOCAL IMPLEMENTATION COMPLETE; HOSTED CLOSEOUT PENDING.**
+- **SPRINT 57.9 STRUCTURAL REPLACEMENT LOCALLY QUALIFIED; HOSTED CLOSEOUT
+  PENDING.**
   Sprint 58 is paused after F08. Its original `41fef416` fixed product
   baseline and F01–F08 reports remain historical evidence, but the
   field-reported block-motion/group-picker repair must be pushed, pass hosted
@@ -343,15 +344,19 @@ Binding documents — read before any sprint:
   run `33714586788`. Final CI remediation applies the shared hosted-advisory
   policy to cursor timings and synchronizes FUSS navigation PTYs on their
   post-key semantic screen state
-- Sprint 57.9 (s57_9-block-and-group-field-repair.md) — Exact adjacent B-mode
-  traversal for Wolf-shaped top-level scopes and tail paragraphs, a
+- Sprint 57.9 (s57_9-block-and-group-field-repair.md) — Mirrored B-mode
+  traversal over brace-body and indentation-suite landmarks, excluding
+  ordinary statements and match arms, with enclosing-scope Left/Right and
+  trailing-EOF ownership; a
   Facsimile-style `Alt+g` path that opens the shared group picker with an empty
   selection, and atomic `ed.group.close` with ungrouped tab-close fallback.
-  **LOCAL IMPLEMENTATION COMPLETE 2026-09-11:** default/core builds, complete
-  native component gates, focused ASan/UBSan, deterministic PTY, fuzz,
-  block/FUSS performance, and all six native shipping-size profiles are green.
-  Push and hosted CI remain required before closeout and Sprint 58
-  requalification
+  **STRUCTURAL REPLACEMENT LOCALLY QUALIFIED 2026-09-11:** the complete native
+  default matrix, warning-clean core-only aggregate, exact real-key Wolf PTYs,
+  Wolf/C/fallback/formatting unit matrices, focused ASan/UBSan and
+  alignment/UBSan, four deterministic 200,000-operation fuzz seeds, and
+  bounded block performance rows are green at `c07791cc`. Post-repair size,
+  GNU GCC, and the remaining hosted lanes must pass after push before closeout
+  and Sprint 58 requalification
 - Sprint 57.10 (s57_10-group-aware-tab-jumps.md) — Positional numbering on
   both tab-bar rows, row-aware `alt+N` (member inside a group, row-1 entry
   outside), `ctrl+N` → `ed.tab.goto_bar` for row-1 entries from anywhere, and
@@ -362,7 +367,8 @@ Binding documents — read before any sprint:
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
   fuzz campaigns extended, findings ledger with stable IDs. **PAUSED AFTER
   F08:** F01–F08 closed on the original fixed baseline and opened findings
-  `YEW-F-001` through `YEW-F-008`. Establish a green post-57.9 replacement,
+  `YEW-F-001` through `YEW-F-008`. The `c07791cc` structural repair is the
+  locally qualified candidate; establish its green pushed successor,
   record the F01–F08 delta requalification, then resume at F09
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
