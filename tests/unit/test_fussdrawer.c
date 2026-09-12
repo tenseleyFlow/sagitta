@@ -16,6 +16,7 @@
 #include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
 #include "mod/git/git_int.h"
+#include "text/register.h"
 #include "ui/groups.h"
 #include "ui/mouse.h"
 #include "ui/picker.h"
@@ -1053,4 +1054,181 @@ void test_fussdrawer_wheel_scrolls_the_tree(void)
     YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
     yew_ed_free(&ed);
     fussfeel_drop(&fix);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.11 Deliverable 4: `Copy Path`                          */
+/* ---------------------------------------------------------------- */
+
+/*
+ * WHY THIS COMMAND EXISTS AT ALL.  `ed.tab.copy_path` copies the ACTIVE
+ * TAB's path and takes no argument, so it cannot answer "copy the path
+ * of the row I pointed at" — and copying a different file's name than
+ * the one the row was opened over is the one failure a clipboard row
+ * must never have.  The `sarg` case below is that difference, stated as
+ * a test.
+ */
+
+/* The clipboard write `yew_reg_yank` makes for `+` is best-effort and
+ * would otherwise reach the developer's real pasteboard.  `none` keeps
+ * the register half — which is what the command is about — and makes
+ * the external half a no-op. */
+typedef struct FussClipEnv {
+    char *saved;
+    bool had;
+} FussClipEnv;
+
+static void fuss_clip_mute(FussClipEnv *env)
+{
+    const char *old = getenv("YEW_CLIPBOARD");
+
+    env->had = old != NULL;
+    env->saved = old == NULL ? NULL : yew_xstrdup(old);
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "none", 1), 0);
+}
+
+static void fuss_clip_restore(FussClipEnv *env)
+{
+    if (env->had) {
+        YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", env->saved, 1), 0);
+        yew_xfree(env->saved);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_CLIPBOARD"), 0);
+    }
+}
+
+static void fuss_assert_plus_register(Ed *ed, const char *want)
+{
+    RegVal *v = yew_reg_get(&ed->regs, (u8)'+');
+
+    YEW_ASSERT_NOT_NULL(v);
+    /* CHARWISE, like `ed.tab.copy_path`: a linewise path would paste as
+     * its own line and carry a newline nothing asked for. */
+    YEW_ASSERT_EQ_U64(v->type, (u64)YEW_REG_CHARWISE);
+    YEW_ASSERT_EQ_U64(v->bytes.len, strlen(want));
+    YEW_ASSERT_EQ_MEM(v->bytes.data, want, strlen(want));
+}
+
+void test_fussdrawer_copy_path_yanks_the_selected_row(void)
+{
+    FussDrawerFix fix;
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+
+    fuss_clip_mute(&env);
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_OK);
+    /* The tree's paths are repository-relative, and that is what a
+     * `Copy Path` is for — the name you would type or paste into a
+     * command, not the absolute one. */
+    fuss_assert_plus_register(&ed, "plain.txt");
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+    fuss_clip_restore(&env);
+}
+
+/*
+ * THE `sarg` CASE, which is the whole point: the menu captures the path
+ * it was opened over, and the row has to copy THAT even when the
+ * selection has since moved (a status refresh re-sorts the tree under
+ * the pointer).  `CTX_TGT_PATH` is how the captured path arrives, and
+ * `ed.git.copy_path` is `YEW_ARITY_OPT_STR` precisely so that target is
+ * legal for it.
+ */
+void test_fussdrawer_copy_path_prefers_the_captured_path(void)
+{
+    FussDrawerFix fix;
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+
+    fuss_clip_mute(&env);
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    cx.sarg = "sub/deep.txt";
+    cx.sarg_len = sizeof("sub/deep.txt") - 1U;
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_OK);
+    fuss_assert_plus_register(&ed, "sub/deep.txt");
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+    fuss_clip_restore(&env);
+}
+
+/*
+ * REFUSES an escaping path rather than copying it.  `fuss_safe_path`
+ * is the same gate every other `ed.git.*` row command passes its
+ * argument through, and a clipboard row is not the place to relax it:
+ * the copied name is about to be pasted into a command.
+ */
+void test_fussdrawer_copy_path_refuses_an_unsafe_argument(void)
+{
+    static const char *const bad[] = {"/etc/passwd", "../outside.txt",
+                                      "sub/../../escape.txt"};
+    FussDrawerFix fix;
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+    size_t i;
+
+    fuss_clip_mute(&env);
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    for (i = 0U; i < YEW_ARRAY_LEN(bad); i++) {
+        RegVal *v;
+
+        cx.sarg = bad[i];
+        cx.sarg_len = strlen(bad[i]);
+        YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_ERR_ARG);
+        v = yew_reg_get(&ed.regs, (u8)'+');
+        /* Refused means NOTHING WAS COPIED — not the bad path, and not
+         * the selected row as a consolation. */
+        YEW_ASSERT(v == NULL || v->bytes.len == 0U);
+    }
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+    fuss_clip_restore(&env);
+}
+
+/*
+ * REFUSES WITH FUSS DOWN.  This is an ordinary registry command, so the
+ * palette and a Fletch script reach it from L mode with no drawer and
+ * no selection; returning OK having copied nothing would leave the
+ * previous clipboard contents looking like the answer.
+ */
+void test_fussdrawer_copy_path_refuses_outside_fuss(void)
+{
+    FussClipEnv env;
+    CmdCtx cx = {0};
+    Ed ed;
+
+    fuss_clip_mute(&env);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    /* The drawer STRUCT outlives F mode (it is allocated with the
+     * editor), so "is FUSS up?" is `yew_fuss_active`, and the refusal
+     * comes from there being no selected row rather than no drawer. */
+    YEW_ASSERT(!yew_fuss_active(&ed));
+    YEW_ASSERT_EQ_I64(yew_fuss_cmd_copy_path(&cx), YEW_CMD_ERR_ARG);
+    YEW_ASSERT(yew_reg_get(&ed.regs, (u8)'+') == NULL ||
+               yew_reg_get(&ed.regs, (u8)'+')->bytes.len == 0U);
+    yew_ed_free(&ed);
+    fuss_clip_restore(&env);
 }
