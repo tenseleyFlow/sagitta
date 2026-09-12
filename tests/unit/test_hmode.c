@@ -20,6 +20,14 @@ static Key h_key(u32 code)
     return key;
 }
 
+static Key h_mod_key(u32 code, u16 mods)
+{
+    Key key = h_key(code);
+
+    key.mods = mods;
+    return key;
+}
+
 static void h_editor(Ed *ed, const char *text)
 {
     yew_ed_init(ed);
@@ -414,5 +422,67 @@ void test_hmode_keyboard_extension_damages_only_old_new_selection_union(void)
     YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 2U);
     YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 5U);
     YEW_ASSERT(ed.doc_damage_hi < ed.win->rect.h);
+    yew_ed_free(&ed);
+}
+
+void test_hmode_shift_arrows_start_character_selection_from_every_edit_mode(void)
+{
+    static const Mode sources[] = {
+        YEW_MODE_L, YEW_MODE_W, YEW_MODE_B, YEW_MODE_I
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(sources); i++) {
+        Ed ed;
+        Cursor *cursor;
+
+        h_editor(&ed, "a\xC3\xA9\xE7\x95\x8C\n");
+        h_place(&ed, 1U, 1U);
+        YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, sources[i]), YEW_CMD_OK);
+        yew_ed_handle_key(&ed,
+                          h_mod_key(YEW_KEY_RIGHT, YEW_MOD_SHIFT), 10);
+        cursor = &ed.win->cs.curs.data[ed.win->cs.primary];
+        YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_H);
+        YEW_ASSERT_EQ_U64(ed.win->h.from, YEW_MODE_I);
+        YEW_ASSERT_EQ_U64(ed.win->h.unit, &yew_unit_char);
+        YEW_ASSERT_EQ_U64(ed.win->h.kind, YEW_SEL_CHAR);
+        YEW_ASSERT_EQ_U64(cursor->anchor.v, 1U);
+        YEW_ASSERT_EQ_U64(cursor->pos.v, 3U);
+
+        yew_ed_handle_key(&ed,
+                          h_mod_key(YEW_KEY_RIGHT, YEW_MOD_SHIFT), 11);
+        YEW_ASSERT_EQ_U64(cursor->anchor.v, 1U);
+        YEW_ASSERT_EQ_U64(cursor->pos.v, 6U);
+        yew_ed_handle_key(&ed,
+                          h_mod_key(YEW_KEY_LEFT, YEW_MOD_SHIFT), 12);
+        YEW_ASSERT_EQ_U64(cursor->anchor.v, 1U);
+        YEW_ASSERT_EQ_U64(cursor->pos.v, 3U);
+        yew_ed_free(&ed);
+    }
+}
+
+void test_hmode_shift_vertical_keeps_anchor_and_goal_column(void)
+{
+    Ed ed;
+    Cursor *cursor;
+
+    h_editor(&ed, "abcd\nx\nwxyz\n");
+    h_place(&ed, 3U, 3U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
+    yew_ed_handle_key(&ed, h_mod_key(YEW_KEY_DOWN, YEW_MOD_SHIFT), 10);
+    cursor = &ed.win->cs.curs.data[ed.win->cs.primary];
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_H);
+    YEW_ASSERT_EQ_U64(cursor->anchor.v, 3U);
+    YEW_ASSERT_EQ_U64(cursor->pos.v, 6U);
+    YEW_ASSERT_EQ_U64(cursor->goal_col.v, 3U);
+
+    yew_ed_handle_key(&ed, h_mod_key(YEW_KEY_DOWN, YEW_MOD_SHIFT), 11);
+    YEW_ASSERT_EQ_U64(cursor->anchor.v, 3U);
+    YEW_ASSERT_EQ_U64(cursor->pos.v, 10U);
+    YEW_ASSERT_EQ_U64(cursor->goal_col.v, 3U);
+    yew_ed_handle_key(&ed, h_mod_key(YEW_KEY_UP, YEW_MOD_SHIFT), 12);
+    YEW_ASSERT_EQ_U64(cursor->anchor.v, 3U);
+    YEW_ASSERT_EQ_U64(cursor->pos.v, 6U);
+    YEW_ASSERT_EQ_U64(cursor->goal_col.v, 3U);
     yew_ed_free(&ed);
 }

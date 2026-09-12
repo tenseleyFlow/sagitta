@@ -572,6 +572,8 @@ const YewTest yew_tests[] = {
     T(hmode_keyboard_entry_is_reachable_from_each_source_mode),
     T(hmode_replace_captures_exactly_one_text_key_and_escape_cancels),
     T(hmode_keyboard_extension_damages_only_old_new_selection_union),
+    T(hmode_shift_arrows_start_character_selection_from_every_edit_mode),
+    T(hmode_shift_vertical_keeps_anchor_and_goal_column),
     T(edit_l_motion_table_handles_unicode_crlf_and_viewport_counts),
     T(edit_12G_dispatch_lands_on_one_based_line_twelve),
     T(edit_delete_zwj_grapheme_removes_exactly_twenty_five_bytes),

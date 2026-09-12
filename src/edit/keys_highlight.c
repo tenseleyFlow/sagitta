@@ -52,6 +52,10 @@ static const BindRow keys_H_C[] = {
 };
 
 static const BindRow keys_H[] = {
+    {"S-<left>", "ed.sel.extend.left", 0, NULL},
+    {"S-<right>", "ed.sel.extend.right", 0, NULL},
+    {"S-<up>", "ed.sel.extend.up", 0, NULL},
+    {"S-<down>", "ed.sel.extend.down", 0, NULL},
     {":", "ed.mode.enter", 0, "E"},
     {"y", "ed.sel.yank", 0, NULL},
     {"d", "ed.sel.delete", 0, NULL},

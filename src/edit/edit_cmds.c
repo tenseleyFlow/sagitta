@@ -529,10 +529,15 @@ CmdStatus yew_edit_cmd_move_char_prev(CmdCtx *cx)
     Win *win;
     TextBuf *tb;
     Cursor *cursor;
+    ByteOff anchor;
+    ByteOff old_pos;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
+    anchor = cursor->anchor;
+    old_pos = cursor->pos;
     yew_cursor_left(tb, cursor);
+    finish_direct_motion(cx, cursor, anchor, old_pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
     return YEW_CMD_OK;
@@ -543,13 +548,64 @@ CmdStatus yew_edit_cmd_move_char_next(CmdCtx *cx)
     Win *win;
     TextBuf *tb;
     Cursor *cursor;
+    ByteOff anchor;
+    ByteOff old_pos;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
+    anchor = cursor->anchor;
+    old_pos = cursor->pos;
     yew_cursor_right(tb, cursor);
+    finish_direct_motion(cx, cursor, anchor, old_pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
     return YEW_CMD_OK;
+}
+
+static CmdStatus shift_highlight_begin(CmdCtx *cx)
+{
+    size_t i;
+
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL || cx->win->buf->tb == NULL ||
+        cx->win->cs.curs.len == 0U)
+        return YEW_CMD_ERR_STATE;
+    if (cx->ed->mode == YEW_MODE_H)
+        return YEW_CMD_OK;
+    /* Shift-selection always starts at each caret.  A stale anchor outside
+     * H is not visible state and must not make the first Shift+Arrow select
+     * bytes the user did not ask for. */
+    for (i = 0U; i < cx->win->cs.curs.len; i++)
+        cx->win->cs.curs.data[i].anchor = cx->win->cs.curs.data[i].pos;
+    return yew_mode_enter_highlight(cx->ed, YEW_MODE_I, false);
+}
+
+CmdStatus yew_edit_cmd_sel_extend_left(CmdCtx *cx)
+{
+    CmdStatus status = shift_highlight_begin(cx);
+
+    return status == YEW_CMD_OK ? yew_edit_cmd_move_char_prev(cx) : status;
+}
+
+CmdStatus yew_edit_cmd_sel_extend_right(CmdCtx *cx)
+{
+    CmdStatus status = shift_highlight_begin(cx);
+
+    return status == YEW_CMD_OK ? yew_edit_cmd_move_char_next(cx) : status;
+}
+
+CmdStatus yew_edit_cmd_sel_extend_up(CmdCtx *cx)
+{
+    CmdStatus status = shift_highlight_begin(cx);
+
+    return status == YEW_CMD_OK ? yew_edit_cmd_move_line_up(cx) : status;
+}
+
+CmdStatus yew_edit_cmd_sel_extend_down(CmdCtx *cx)
+{
+    CmdStatus status = shift_highlight_begin(cx);
+
+    return status == YEW_CMD_OK ? yew_edit_cmd_move_line_down(cx) : status;
 }
 
 typedef enum {
