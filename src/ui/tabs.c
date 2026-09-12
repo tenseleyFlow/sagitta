@@ -1190,7 +1190,8 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
             active_entry = i;
     }
     strip_render(ed, rect, entries, n, active_entry,
-                 &ed->tabs.member_scroll, ed->tabs.member_scroll_user,
+                 &ed->tabs.member_scroll,
+                 yew_tabs_scroll_is_owned(&ed->tabs, true),
                  2, false, false);
 }
 
@@ -1205,7 +1206,7 @@ static void strip_draw_rows(Ed *ed, Rect rect)
     n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
     strip_render_row1(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
                       yew_tab_row1_active(ed, entries, n), &ed->tabs.scroll,
-                      ed->tabs.scroll_user);
+                      yew_tabs_scroll_is_owned(&ed->tabs, false));
     gid = yew_active_group_id(ed);
     /*
      * Sprint 27 §4: a dwell opens a group's member strip as a drop
