@@ -1,5 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "edit/file_cmds.h"
 
+#include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,6 +16,7 @@
 #include "mod/git/fussmode.h"
 #include "mod/lsp/lsp.h"
 #include "text/journal.h"
+#include "ui/cmdline.h"
 #include "ui/layout.h"
 #include "ui/macrobrowse.h"
 #include "ui/viewport.h"
@@ -74,6 +79,45 @@ CmdStatus yew_file_cmd_write(CmdCtx *cx)
         cx->win->buf->macro_reg != 0U)
         return yew_macro_store(cx->ed, cx->win->buf);
     return yew_ed_file_save_win(cx->ed, cx->win, cx->bang);
+}
+
+/*
+ * Sprint 57.11 §4: the document menu's `Save As...` row.
+ *
+ * WHY THIS IS A PROMPT AND NOT A WRITE.  `ed.file.write` already takes
+ * the destination as an argument, and the one thing this command adds
+ * is the QUESTION — "write to which path?" — which a menu row has no
+ * way to ask.  So it does what the command palette does when it accepts
+ * a row whose command needs an argument (`find_command_accept`,
+ * ui/pickers.c): it opens the E-mode line pre-seeded with the write
+ * command and the path the buffer already has, and the user edits the
+ * tail and presses Enter.  One implementation of "write to a path",
+ * one set of diagnostics, one completion.
+ *
+ * SEEDED WITH `w ` AND THE CURRENT PATH, not with the bare verb: a
+ * Save As whose field starts empty makes the user retype a directory
+ * they were already in to change one character of the basename, and
+ * the path is also the only thing on the line that says what is about
+ * to be overwritten if they just press Enter.
+ */
+CmdStatus yew_file_cmd_save_as(CmdCtx *cx)
+{
+    char seed[PATH_MAX + 8];
+    const Buffer *b;
+    const char *path;
+    int n;
+
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    b = cx->win->buf;
+    path = b == NULL || b->path == NULL ? "" : b->path;
+    n = snprintf(seed, sizeof(seed), "w %s", path);
+    if (n < 0 || (size_t)n >= sizeof(seed)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "path is too long to edit");
+        return YEW_CMD_ERR_STATE;
+    }
+    yew_cmdline_open(cx->ed, YEW_PROMPT_CMD, seed);
+    return YEW_CMD_OK;
 }
 
 CmdStatus yew_file_cmd_write_quit(CmdCtx *cx)
