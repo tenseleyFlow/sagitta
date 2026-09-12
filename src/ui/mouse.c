@@ -51,6 +51,8 @@ static i32 wheel_dir(u8 button)
  * scrolls the FUSS drawer by geometry rather than by region.
  */
 static void menu_close(Ed *ed);
+static void motion_sync(void);
+static void motion_forget_chevrons(void);
 static bool rect_has(Rect r, u16 x, u16 y);
 
 void yew_mouse_init(MouseState *m)
@@ -59,6 +61,15 @@ void yew_mouse_init(MouseState *m)
         return;
     (void)memset(m, 0, sizeof(*m));
     m->drag_to_slot = -1;
+    /*
+     * Sprint 57.15 §2: the strip's claim on mode 1003 belongs to the
+     * LAST DRAW, and a fresh MouseState means there has not been one —
+     * a new editor, or a gesture cancelled out from under the frame
+     * that made the claim.  Carrying it over would leave the terminal
+     * armed for a chevron nothing is drawing; the next draw republishes
+     * within the frame either way.
+     */
+    motion_forget_chevrons();
 }
 
 /*
@@ -461,15 +472,64 @@ static CtxStyle menu_style(const Ed *ed)
 /* ---------------------------------------------------------------- */
 
 /*
+ * THE ONE 1003 OWNER — Sprint 57.13 §1, extended by Sprint 57.15 §2.
+ *
+ * Any-motion reporting (DEC 1003) has TWO customers now: an open
+ * context menu, which highlights the row under the pointer, and a strip
+ * CHEVRON, which reveals hidden entries while the pointer rests on it.
+ * Neither may arm or disarm the mode itself.  A menu closing while a
+ * chevron is still drawn must not silence the strip, and a strip whose
+ * chevron scrolls away must not silence an open menu — two owners each
+ * calling yew_tty_mouse_motion(false) on their own way out is exactly
+ * that bug, twice.
+ *
+ * So the mode is a FUNCTION of the two wants, recomputed here and
+ * nowhere else.  Every path that changes either want ends in
+ * motion_sync().  `fuzz_mouse` asserts the mode is armed if and only if
+ * one of them is true, and the tty's restore blob still carries `1003l`
+ * whenever the flag is set (invariant 6), so a crash between the two
+ * leaves one extra disarm rather than a stranded mode.
+ *
+ * YEW_MOUSE=0 suppresses arming entirely: a keyboard-opened menu in a
+ * session that never enabled mouse reporting must not turn it on, and
+ * closing it must not restore 1002 the terminal was never put into.
+ */
+static bool motion_want_strip;
+
+static void motion_sync(void)
+{
+    yew_tty_mouse_motion(yew_mouse_enabled() &&
+                         (yew_ctx_active() || motion_want_strip));
+}
+
+void yew_mouse_note_chevrons(Ed *ed, bool any)
+{
+    (void)ed;
+    if (motion_want_strip == any)
+        return;
+    motion_want_strip = any;
+    motion_sync();
+}
+
+static void motion_forget_chevrons(void)
+{
+    yew_mouse_note_chevrons(NULL, false);
+}
+
+bool yew_mouse_chevron_drawn(void)
+{
+    return motion_want_strip;
+}
+
+/*
  * THE ONE CLOSE PATH.
  *
- * Any-motion reporting (DEC 1003) is armed only while a menu is up, and
- * "only" is a claim about EVERY way a menu can go away — a row fired, a
- * key, Esc, a click outside, a wheel, the mouse being disabled.  Five
- * close sites would be five chances to leave the terminal streaming
- * motion reports at an editor that has nothing to do with them, which
- * is invariant 6's failure mode in slow motion.  So there is one, and
- * `fuzz_mouse` asserts the flag is false whenever no menu is open.
+ * "The menu is gone" is a claim about EVERY way a menu can go away — a
+ * row fired, a key, Esc, a click outside, a wheel, the mouse being
+ * disabled.  Five close sites would be five chances to get the mode
+ * wrong, which is invariant 6's failure mode in slow motion.  So there
+ * is one, and it asks the owner above to recompute rather than
+ * disarming on its own authority.
  *
  * It is safe to call when nothing is open: `yew_ctx_close` is a memset
  * and `yew_tty_mouse_motion` is idempotent.
@@ -477,9 +537,9 @@ static CtxStyle menu_style(const Ed *ed)
 static void menu_close(Ed *ed)
 {
     yew_ctx_close();
-    /* Disarmed HERE rather than inside yew_ctx_close() so the widget
+    /* Recomputed HERE rather than inside yew_ctx_close() so the widget
      * stays editor- and terminal-ignorant. */
-    yew_tty_mouse_motion(false);
+    motion_sync();
     if (ed != NULL)
         ed->full_damage = true;
 }
@@ -531,11 +591,9 @@ static bool menu_open_at(Ed *ed, const CtxContext *c, u16 anchor_x,
         menu_close(ed);
         return false;
     }
-    /* A keyboard-opened menu remains keyboard-only when YEW_MOUSE=0.
-     * Otherwise closing it would restore 1002 even though startup
-     * deliberately never enabled mouse reporting. */
-    if (yew_mouse_enabled())
-        yew_tty_mouse_motion(true);
+    /* Through the owner: a chevron may already have it armed, and a
+     * keyboard-opened menu stays keyboard-only when YEW_MOUSE=0. */
+    motion_sync();
     ed->full_damage = true;
     return true;
 }
@@ -1693,6 +1751,61 @@ static void drag_strip_drop(Ed *ed, const Key *k)
     ed->full_damage = true;
 }
 
+/*
+ * Sprint 57.15 §2: is the pointer on a chevron, and which way does it
+ * point?
+ *
+ * Answered from the REGION TABLE, which is Sprint 22's law: the strip's
+ * placement is established once, while drawing, and never re-derived.
+ * The payload's magnitude names the row (1 or 2) and its sign the
+ * direction, exactly as the click and the wheel read it.
+ */
+static bool hover_chevron_at(u16 x, u16 y, bool *row2, i32 *delta)
+{
+    Region hit = yew_region_hit(x, y);
+
+    if (hit.kind != YEW_REGION_TAB_SCROLL)
+        return false;
+    *row2 = hit.payload == 2 || hit.payload == -2;
+    *delta = hit.payload < 0 ? -1 : 1;
+    return true;
+}
+
+/*
+ * A no-button motion report, tracked for the reveal.
+ *
+ * COSTS NOTHING BY ITSELF.  No render is marked, no scroll happens, no
+ * allocation: the pointer arriving on a chevron only starts a CLOCK,
+ * and the clock is what moves the strip.  tests/perf/mouse.c is the
+ * gate that says a thousand reports parked here repaint at most once
+ * per reveal step, and a thousand reports anywhere else repaint not at
+ * all.
+ *
+ * The first step is a whole window away, because `hover_scroll_ms` is
+ * stamped on ARRIVAL: a pointer merely crossing the chevron on its way
+ * somewhere else must not move the strip under it.
+ */
+static void hover_track(Ed *ed, u16 x, u16 y)
+{
+    MouseState *m = &ed->mouse;
+    bool row2 = false;
+    i32 delta = 0;
+
+    m->hover_x = x;
+    m->hover_y = y;
+    if (!hover_chevron_at(x, y, &row2, &delta)) {
+        /* Leaving stops it immediately, and cancels the pending
+         * deadline by being the whole of the arming state. */
+        m->hover_chevron = false;
+        return;
+    }
+    if (m->hover_chevron)
+        return; /* still on it: the cadence is the clock's, not the
+                 * report rate's */
+    m->hover_chevron = true;
+    m->hover_scroll_ms = ed->now_ms;
+}
+
 static void mouse_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
@@ -1713,6 +1826,7 @@ static void mouse_motion(Ed *ed, const Key *k)
          */
         if (yew_ctx_active() && yew_ctx_hover_at(k->col, k->row))
             ed->overlay_dirty = true;
+        hover_track(ed, k->col, k->row);
         return;
     }
     if (m->phase == YEW_MP_IDLE)
@@ -1892,6 +2006,9 @@ void yew_mouse_cancel(Ed *ed)
      */
     ed->mouse.click_n = 0U;
     ed->mouse.last_click_ms = 0;
+    /* Sprint 57.15 §2: FOCUS_OUT calls this, and a pointer that left
+     * the window is not resting on anything. */
+    ed->mouse.hover_chevron = false;
     if (ed->mouse.phase == YEW_MP_IDLE)
         return;
     if (ed->mouse.phase == YEW_MP_DRAG_BORDER)
@@ -1925,6 +2042,40 @@ static bool drag_over_chevron(Ed *ed, i32 *delta)
     return true;
 }
 
+/*
+ * Sprint 57.15 §2: the HOVER reveal's step.
+ *
+ * Three ways it stops, and each is a bug this sprint filed:
+ *
+ *  - the pointer LEFT — `hover_chevron` is already false and nothing
+ *    scheduled us;
+ *  - the chevron is GONE from under a parked pointer, because the
+ *    reveal reached the end or a tab closed.  The region table is the
+ *    one answer to "is it still there", so a tick that finds nothing
+ *    disarms rather than scrolling a row whose chevron no longer
+ *    exists;
+ *  - the offset did not MOVE, which is the end of the list arriving in
+ *    the same millisecond rather than one wakeup later.
+ */
+static void hover_tick(Ed *ed, i64 now_ms)
+{
+    MouseState *m = &ed->mouse;
+    bool row2 = false;
+    i32 delta = 0;
+
+    if (!m->hover_chevron)
+        return;
+    if (!hover_chevron_at(m->hover_x, m->hover_y, &row2, &delta)) {
+        m->hover_chevron = false;
+        return;
+    }
+    if (now_ms - m->hover_scroll_ms < YEW_HOVER_SCROLL_MS)
+        return;
+    m->hover_scroll_ms = now_ms;
+    if (!strip_scroll(ed, row2, delta))
+        m->hover_chevron = false;
+}
+
 void yew_mouse_tick(Ed *ed, i64 now_ms)
 {
     MouseState *m;
@@ -1933,9 +2084,15 @@ void yew_mouse_tick(Ed *ed, i64 now_ms)
     if (ed == NULL)
         return;
     m = &ed->mouse;
+    /*
+     * The hover runs in the IDLE phase, which is exactly where the drag
+     * clocks below do not, so it is handled before the phase gate
+     * rather than inside it.
+     */
+    ed->now_ms = now_ms;
+    hover_tick(ed, now_ms);
     if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return;
-    ed->now_ms = now_ms;
     if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid &&
         now_ms - m->dwell_since_ms >= YEW_DRAG_DWELL_MS) {
         m->preview_gid = m->dwell_gid;
@@ -1965,15 +2122,24 @@ i64 yew_mouse_deadline(const Ed *ed, i64 now_ms)
     if (ed == NULL)
         return -1;
     m = &ed->mouse;
-    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
-        return -1;
-    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid)
-        next = m->dwell_since_ms + YEW_DRAG_DWELL_MS;
-    if (yew_region_hit(m->at_x, m->at_y).kind == YEW_REGION_TAB_SCROLL) {
-        i64 at = m->autoscroll_ms + YEW_DRAG_SCROLL_MS;
+    /* Sprint 57.15 §2: the hover's clock, which runs with no button
+     * held and therefore before the drag phases are consulted. */
+    if (m->hover_chevron)
+        next = m->hover_scroll_ms + YEW_HOVER_SCROLL_MS;
+    if (m->phase == YEW_MP_DRAG_TAB || m->phase == YEW_MP_DRAG_GROUP) {
+        if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid) {
+            i64 at = m->dwell_since_ms + YEW_DRAG_DWELL_MS;
 
-        if (next < 0 || at < next)
-            next = at;
+            if (next < 0 || at < next)
+                next = at;
+        }
+        if (yew_region_hit(m->at_x, m->at_y).kind ==
+            YEW_REGION_TAB_SCROLL) {
+            i64 at = m->autoscroll_ms + YEW_DRAG_SCROLL_MS;
+
+            if (next < 0 || at < next)
+                next = at;
+        }
     }
     if (next < 0)
         return -1;
@@ -2193,6 +2359,9 @@ void yew_mouse_set_enabled(bool on)
 {
     mouse_resolved = true;
     mouse_enabled = on;
+    /* The owner's third input.  Turning the mouse off must silence a
+     * strip that still has a chevron drawn, not only a menu. */
+    motion_sync();
 }
 
 CmdStatus yew_mouse_cmd_enable(CmdCtx *cx)
@@ -2200,6 +2369,7 @@ CmdStatus yew_mouse_cmd_enable(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
     mouse_enabled = true;
+    motion_sync();
     yew_msg(cx->ed, YEW_MSG_INFO, "mouse on");
     return YEW_CMD_OK;
 }
@@ -2216,6 +2386,9 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx)
      * takes any-motion tracking with it (§1/§3). */
     menu_close(cx->ed);
     mouse_enabled = false;
+    /* ...and again after the flag flips, because the strip's chevron
+     * want outlives the menu and only the owner knows that. */
+    motion_sync();
     yew_msg(cx->ed, YEW_MSG_INFO, "mouse off");
     return YEW_CMD_OK;
 }

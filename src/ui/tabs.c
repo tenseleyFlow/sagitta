@@ -911,6 +911,17 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          i32 scroll_mag, bool record_slots, bool draw_new);
 
 /*
+ * Sprint 57.15 §2: did EITHER row put a chevron on screen this draw?
+ *
+ * A product of the render, like the region table and the pre-drag slot
+ * table, and set at the same statement that registers the scroll
+ * region — so "a chevron is drawn" and "there is something to hover"
+ * cannot drift apart.  yew_tab_strip_draw resets it and hands the
+ * answer to the router, which owns mode 1003.
+ */
+static bool strip_any_chevron;
+
+/*
  * Row 1, with the drag preview applied and the pre-drag list recorded.
  *
  * `pre` is the list BEFORE the permutation; `entries` is what gets
@@ -1110,6 +1121,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                             yew_glyph_len(YEW_GLYPH_MORE_LEFT), orphan.fg,
                             surface.bg, YEW_ATTR_DIM);
         yew_region_add(YEW_REGION_TAB_SCROLL, r, -scroll_mag);
+        strip_any_chevron = true;
     }
     if (more_right) {
         char more[16];
@@ -1128,6 +1140,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                                 YEW_ATTR_DIM);
             r = (Rect){x, rect.y, w, 1U};
             yew_region_add(YEW_REGION_TAB_SCROLL, r, scroll_mag);
+            strip_any_chevron = true;
         }
     } else if (draw_new &&
                (u32)tail_x + 3U <= (u32)rect.x + rect.w) {
@@ -1181,13 +1194,13 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
                  2, false, false);
 }
 
-void yew_tab_strip_draw(Ed *ed, Rect rect)
+static void strip_draw_rows(Ed *ed, Rect rect)
 {
     StripEntry entries[YEW_TAB_MAX];
     int n;
     u32 gid;
 
-    if (ed == NULL || rect.w == 0U || rect.h == 0U)
+    if (rect.w == 0U || rect.h == 0U)
         return;
     n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
     strip_render_row1(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
@@ -1208,6 +1221,22 @@ void yew_tab_strip_draw(Ed *ed, Rect rect)
                                   (Rect){rect.x, (u16)(rect.y + 1U),
                                          rect.w, 1U},
                                   gid);
+}
+
+void yew_tab_strip_draw(Ed *ed, Rect rect)
+{
+    if (ed == NULL)
+        return;
+    /*
+     * Reset BEFORE the guard inside strip_draw_rows, and report after
+     * it whatever happened: a strip with no rows reserved draws no
+     * chevron, and mode 1003 must come down for that as surely as for a
+     * chevron that scrolled away.  A `return` in the middle of the draw
+     * would otherwise leave the router armed against last frame.
+     */
+    strip_any_chevron = false;
+    strip_draw_rows(ed, rect);
+    yew_mouse_note_chevrons(ed, strip_any_chevron);
 }
 
 /*
