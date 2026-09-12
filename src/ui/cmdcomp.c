@@ -1325,6 +1325,15 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
     }
 }
 
+const CompItem *yew_comp_sole(const Vec_CompItem *items, YewCompKind kind)
+{
+    if (items == NULL || items->len != 1U)
+        return NULL;
+    if (kind != YEW_COMP_KIND__N && items->data[0].kind != (u8)kind)
+        return NULL;
+    return &items->data[0];
+}
+
 bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
                        YewCompKind *kind)
 {

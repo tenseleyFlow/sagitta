@@ -1127,6 +1127,8 @@ bool yew_cmd_parse_point(Ed *ed, const char *line, size_t len,
     memset(out, 0, sizeof(*out));
     p = (Parser){ed, line, len, 0U, a, &ignored};
     (void)loose_name(&p, cursor, &name, &name_tok, &out->range);
+    out->name = name == NULL ? arena_strdup(a, "") : name;
+    out->name_tok = name_tok;
     if (name != NULL && name[0] != '\0') {
         CmdErr saved = ignored;
 

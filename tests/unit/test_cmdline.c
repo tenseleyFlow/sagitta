@@ -1430,3 +1430,144 @@ void test_cmdline_typing_blurs_the_pager_but_keeps_the_row(void)
     YEW_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
     cmdline_fixture_free(&fixture);
 }
+
+/*
+ * Sprint 57.17 §1: an unambiguous fuzzy match executes.
+ *
+ * `rdrw` is a prefix of nothing, so Sprint 18's resolve_name refuses
+ * it, and yet the live menu has narrowed to exactly one row.  Being
+ * able to see the answer and not take it is the gap this closes.
+ */
+void test_cmdline_one_fuzzy_match_executes(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "rdrw");
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 1U);
+    /* Filtering alone, so §6's Enter rule does not fire -- this really
+     * is the execute path and not a row being accepted. */
+    YEW_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_L);
+
+    /* The RESOLVED name is what history keeps: replaying `rdrw` later
+     * would depend on the registry still ranking it the same way. */
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_hist_prev),
+                      YEW_CMD_OK);
+    {
+        Bytebuf text = cmdline_text(&fixture.ed.cmdline);
+
+        YEW_ASSERT_EQ_STR((const char *)text.data, "redraw");
+        bytebuf_free(&text);
+    }
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
+
+/* Arguments typed after the fuzzy stem survive and are re-parsed against
+ * the resolved command, so `:mkst a` behaves as the full name would. */
+void test_cmdline_fuzzy_execute_keeps_arguments(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "mkst a");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+
+    /*
+     * ed.mark.set takes exactly one argument, so an OK status is itself
+     * proof the argument arrived -- and history shows the whole line
+     * with only the NAME rewritten.
+     */
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_hist_prev),
+                      YEW_CMD_OK);
+    {
+        Bytebuf text = cmdline_text(&fixture.ed.cmdline);
+
+        YEW_ASSERT_EQ_STR((const char *)text.data, "mark.set a");
+        bytebuf_free(&text);
+    }
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
+
+/* More than one row and Enter behaves exactly as it did: parse error,
+ * prompt open, the offending token marked. */
+void test_cmdline_several_fuzzy_matches_keep_the_parse_error(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "qut");
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_ERR_ARG);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    /* The caret points at what the USER typed, not at any rewrite. */
+    YEW_ASSERT(fixture.ed.cmdline.err.msg[0] != '\0');
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_lo, 0U);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_hi, 3U);
+    cmdline_fixture_free(&fixture);
+}
+
+/*
+ * A name that resolves by PREFIX keeps winning: the fuzzy fallback only
+ * runs once ordinary resolution has failed, so this can never change the
+ * meaning of a command that already worked.
+ */
+void test_cmdline_prefix_resolution_is_unaffected(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "redr");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+
+    /* History keeps what was TYPED, because nothing was rewritten. */
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_hist_prev),
+                      YEW_CMD_OK);
+    {
+        Bytebuf text = cmdline_text(&fixture.ed.cmdline);
+
+        YEW_ASSERT_EQ_STR((const char *)text.data, "redr");
+        bytebuf_free(&text);
+    }
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
+
+/* A line that fails for a reason OTHER than the name -- here an arity
+ * error -- keeps its own error; the fallback declines because the name
+ * resolved perfectly well. */
+void test_cmdline_fuzzy_execute_declines_a_resolved_name(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "mark.set a b");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_ERR_ARG);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    YEW_ASSERT(fixture.ed.cmdline.err.msg[0] != '\0');
+    cmdline_fixture_free(&fixture);
+}

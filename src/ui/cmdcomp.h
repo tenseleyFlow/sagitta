@@ -210,6 +210,23 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
                         const YewCompQuery *q, i64 budget_us,
                         Vec_CompItem *out);
 
+/*
+ * Sprint 57.17 §1: did the filter leave EXACTLY ONE row?
+ *
+ * The predicate the menu shows and the parser lacks.  `resolve_name`'s
+ * "exactly one" is a unique PREFIX and stays that way -- a name that
+ * already resolves by prefix must keep winning, or this would change
+ * the meaning of commands that work today.  This is the OTHER "exactly
+ * one": one survivor of the RANKED set, which is what the user is
+ * looking at when the list has narrowed to a single row.
+ *
+ * Returns that sole item, or NULL when zero or more than one survived.
+ * `kind` restricts the answer to one completion kind; pass
+ * YEW_COMP_KIND__N to accept whatever the set holds.  One definition,
+ * because two would disagree the first time either grew a rule.
+ */
+const CompItem *yew_comp_sole(const Vec_CompItem *items, YewCompKind kind);
+
 /* Resolve an argspec position. token_index is zero for the command name. */
 bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
                        YewCompKind *kind);
