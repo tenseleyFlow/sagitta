@@ -679,6 +679,37 @@ u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
     return id;
 }
 
+bool yew_shell_dismiss_output(Ed *ed)
+{
+    Buffer *focused;
+    Buffer *target = NULL;
+    u32 i;
+
+    if (ed == NULL || ed->win == NULL || ed->win->buf == NULL)
+        return false;
+    focused = ed->win->buf;
+    for (i = 0U; i < ed->jobs.len; i++) {
+        YewJob *job = &ed->jobs.v[i];
+
+        if (job->internal || job->sink != YEW_SINK_BUFFER ||
+            job->buf != focused)
+            continue;
+        target = yew_ws_buf_by_id(ed, job->origin_buf_id);
+        if (target == NULL && ed->tabs.active >= 0) {
+            Tab *tab = yew_tab_at(ed, ed->tabs.active);
+
+            if (tab != NULL)
+                target = yew_ws_buf_by_id(ed, tab->buffer_id);
+        }
+        if (target == NULL)
+            target = &ed->buffer;
+        if (target == focused || target->tb == NULL)
+            return false;
+        return yew_ed_show_buffer(ed, target);
+    }
+    return false;
+}
+
 /* ------------------------------------------------------------------ */
 /* Mode (c): read output at the cursor (§6)                           */
 /* ------------------------------------------------------------------ */

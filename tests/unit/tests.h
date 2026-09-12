@@ -827,6 +827,7 @@ void test_job_stream_eof_flushes_invalid_tail(void);
 void test_job_stream_hold_cap_flushes(void);
 void test_job_stream_empty_and_null(void);
 void test_job_buffer_append_updates_syntax(void);
+void test_job_output_dismiss_and_quit_restore_dirty_origin(void);
 void test_shell_quote_algorithm(void);
 void test_shell_quote_roundtrips_hard_cases(void);
 void test_shell_quote_roundtrips_random_bytes(void);

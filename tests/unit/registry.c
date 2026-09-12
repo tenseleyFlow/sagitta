@@ -858,6 +858,7 @@ const YewTest yew_tests[] = {
     T(job_stream_hold_cap_flushes),
     T(job_stream_empty_and_null),
     T(job_buffer_append_updates_syntax),
+    T(job_output_dismiss_and_quit_restore_dirty_origin),
     T(shell_quote_algorithm),
     T(shell_quote_roundtrips_hard_cases),
     T(shell_quote_roundtrips_random_bytes),

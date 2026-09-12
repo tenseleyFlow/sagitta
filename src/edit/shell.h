@@ -37,6 +37,8 @@ YewShellSelfResult yew_shell_try_self_open(Ed *ed, const char *cmdline,
 /* Mode (a): stream a command's output into a job buffer. */
 u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
                   size_t errsz);
+/* Hide a focused public job buffer without releasing it. */
+bool yew_shell_dismiss_output(Ed *ed);
 /* Mode (b): pipe `region` through `cmdline` and replace it.  Exactly one
  * undo transaction; every failure leaves the buffer byte-identical. */
 YewFilterResult yew_shell_filter(Ed *ed, Win *w, Span region,

@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/file_cmds.h"
 #include "edit/job.h"
 #include "edit/loop.h"
 #include "edit/shell.h"
@@ -239,6 +240,65 @@ static void job_test_env_restore(const char *name, char *saved)
     } else {
         YEW_ASSERT_EQ_I64(unsetenv(name), 0);
     }
+}
+
+void test_job_output_dismiss_and_quit_restore_dirty_origin(void)
+{
+    Ed ed;
+    EditCtx ec;
+    Buffer *origin;
+    Buffer *output;
+    CmdCtx cx = {0};
+    char err[256] = {0};
+    u32 id;
+
+    job_fixture(&ed);
+    origin = ed.win->buf;
+    ec = yew_ed_edit_ctx(&ed);
+    yew_undo_begin(&ec, YEW_TXN_TYPE);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"dirty", 5U));
+    yew_undo_end(&ec);
+    yew_ed_finish_edit(&ed, &ec);
+    YEW_ASSERT(yew_buf_dirty(origin));
+
+    id = yew_shell_run(&ed, "printf output", true, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT_EQ_STR(err, "");
+    output = ed.win->buf;
+    YEW_ASSERT(output != origin);
+    YEW_ASSERT_NOT_NULL(yew_job_find(&ed, id));
+    YEW_ASSERT_EQ_U64(yew_job_find(&ed, id)->origin_buf_id, origin->id);
+
+    /* Running output can be hidden and keeps streaming into the same buf. */
+    YEW_ASSERT(yew_shell_dismiss_output(&ed));
+    YEW_ASSERT(ed.win->buf == origin);
+    YEW_ASSERT(yew_job_find(&ed, id)->buf == output);
+    YEW_ASSERT(run_to_completion(&ed, id));
+
+    /* The retained, completed output obeys the same return contract. */
+    YEW_ASSERT(yew_ed_show_buffer(&ed, output));
+    YEW_ASSERT(yew_shell_dismiss_output(&ed));
+    YEW_ASSERT(ed.win->buf == origin);
+    YEW_ASSERT(yew_job_find(&ed, id)->buf == output);
+
+    cx.ed = &ed;
+    cx.win = ed.win;
+    YEW_ASSERT(yew_ed_show_buffer(&ed, output));
+    YEW_ASSERT_EQ_U64(yew_file_cmd_quit(&cx), YEW_CMD_OK);
+    YEW_ASSERT(!ed.quit);
+    YEW_ASSERT(ed.win->buf == origin);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT(strstr(ed.msg.text, ":jobs to reopen") != NULL);
+
+    /* A second q reaches the real document and cannot evade its guard. */
+    cx.win = ed.win;
+    YEW_ASSERT_EQ_U64(yew_file_cmd_quit(&cx), YEW_CMD_OK);
+    YEW_ASSERT(!ed.quit);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_QUIT_DIRTY);
+    cx.bang = true;
+    YEW_ASSERT_EQ_U64(yew_file_cmd_quit(&cx), YEW_CMD_OK);
+    YEW_ASSERT(ed.quit);
+    yew_ed_free(&ed);
 }
 
 void test_job_callback_waits_for_reap_and_both_eofs_then_releases(void)

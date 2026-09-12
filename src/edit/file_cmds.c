@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "edit/multicursor.h"
 #include "edit/option.h"
+#include "edit/shell.h"
 #include "fl/flruntime.h"
 #include "fl/fltxn.h"
 #include "mod/git/fussmode.h"
@@ -352,6 +353,11 @@ CmdStatus yew_file_cmd_quit(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_ARG;
+    if (!cx->bang && yew_shell_dismiss_output(cx->ed)) {
+        yew_msg(cx->ed, YEW_MSG_INFO,
+                "job output hidden; :jobs to reopen");
+        return YEW_CMD_OK;
+    }
     return yew_ed_request_quit(cx->ed, cx->bang);
 }
 
