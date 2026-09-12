@@ -210,6 +210,21 @@ static bool snap_eq(const Snap *a, const Snap *b)
 
 /* A frame, so the region table and the strip's slot table are live.  A
  * router queried against an empty table is not being tested. */
+/*
+ * Sprint 57.15 §2: who wants mode 1003 right now.
+ *
+ * The router arms it for an open menu OR a strip chevron, and for
+ * nothing else; YEW_MOUSE=0 suppresses both.  Spelled out here rather
+ * than asked of the router, so the fuzzer is checking the claim rather
+ * than the implementation of it.
+ */
+static bool motion_wanted(const Ed *ed)
+{
+    (void)ed;
+    return yew_mouse_enabled() &&
+           (yew_ctx_active() || yew_mouse_chevron_drawn());
+}
+
 static void fz_paint(Ed *ed)
 {
     yew_region_frame_begin();
@@ -301,18 +316,30 @@ static bool run_session(const u8 *data, size_t len, char *why,
                 break;
             }
             /*
-             * Sprint 57.13 §1/DoD 6: MODE 1003 IS NEVER LEFT ON.
+             * Sprint 57.13 §1/DoD 6, tightened by Sprint 57.15 §2:
+             * MODE 1003 IS ARMED IF AND ONLY IF someone wants it.
+             *
+             * Two owners now — an open menu, and a strip chevron the
+             * hover reveal needs motion for — and one arming path
+             * between them.  The if-and-only-if is what makes that one
+             * path testable: an owner that armed on its own way in, or
+             * disarmed on its own way out, breaks one half or the
+             * other.  A terminal left streaming motion reports at an
+             * editor with nothing to do with them is a terminal yew did
+             * not restore.
              *
              * Checked before the event as well as after, so a stream
-             * that armed it and then took a path which forgot to disarm
-             * is caught at the next event rather than at the end of the
-             * session, where it could not be attributed.  A terminal
-             * left streaming motion reports at an editor with nothing
-             * to do with them is a terminal yew did not restore.
+             * that got it wrong is caught at the next event rather than
+             * at the end of the session, where it could not be
+             * attributed.
              */
-            if (!yew_ctx_active() && yew_tty_mouse_motion_active()) {
+            if (motion_wanted(&ed) != yew_tty_mouse_motion_active()) {
                 (void)snprintf(why, why_cap,
-                               "1003 armed with no menu open, event %u",
+                               "1003 %s but %s a chevron or menu, event %u",
+                               yew_tty_mouse_motion_active() ? "armed"
+                                                             : "disarmed",
+                               motion_wanted(&ed) ? "there is"
+                                                  : "there is no",
                                (unsigned)event);
                 ok = false;
                 break;
@@ -385,7 +412,8 @@ static bool run_session(const u8 *data, size_t len, char *why,
                 esc.code = YEW_KEY_ESCAPE;
                 (void)yew_mouse_menu_key(&ed, &esc);
             }
-            if (yew_tty_mouse_motion_active()) {
+            if (yew_tty_mouse_motion_active() &&
+                !yew_mouse_chevron_drawn()) {
                 (void)snprintf(why, why_cap,
                                "1003 survived a menu close, event %u",
                                (unsigned)event);

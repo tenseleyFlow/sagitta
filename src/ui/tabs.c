@@ -33,6 +33,35 @@ void yew_tabs_init(Tabs *t)
     t->active = -1;
 }
 
+/*
+ * Sprint 57.15 §1.  See tabs.h for why the flag exists and why there
+ * are two of them.
+ */
+void yew_tabs_scroll_owned(Tabs *t, bool row2)
+{
+    if (t == NULL)
+        return;
+    if (row2)
+        t->member_scroll_user = true;
+    else
+        t->scroll_user = true;
+}
+
+void yew_tabs_follow_active(Tabs *t)
+{
+    if (t == NULL)
+        return;
+    t->scroll_user = false;
+    t->member_scroll_user = false;
+}
+
+bool yew_tabs_scroll_is_owned(const Tabs *t, bool row2)
+{
+    if (t == NULL)
+        return false;
+    return row2 ? t->member_scroll_user : t->scroll_user;
+}
+
 static void tab_destroy(Ed *ed, Tab *t)
 {
     if (t == NULL)
@@ -300,6 +329,10 @@ int yew_tab_open(Ed *ed, const char *path)
     t.focus = t.root;
     t.buffer_id = buf->id;
     TabVec_push(&ed->tabs.v, t);
+    /* Sprint 57.15 §1: an OPEN changes the entry list under the offset.
+     * yew_tab_switch is not on this path — a tab opened for a group is
+     * never switched to — so the follow is resumed here. */
+    yew_tabs_follow_active(&ed->tabs);
     yew_fuss_windows_changed(ed);
     yew_state_mark_dirty(ed);
     return (int)ed->tabs.v.len - 1;
@@ -362,6 +395,16 @@ void yew_tab_switch(Ed *ed, int idx)
 
     if (ed == NULL)
         return;
+    /*
+     * Sprint 57.15 §1: THE ACTIVE ENTRY IS MOVING, so the strip resumes
+     * following it.  Unconditional, and before the `t == NULL` bail:
+     * closing the last tab leaves no active entry at all, which is as
+     * much a change as any other, and every route to a different tab —
+     * switch, close, open, group enter/leave, a jump, a picker — comes
+     * through here.  Clearing at the one funnel is why no gesture has
+     * to remember to.
+     */
+    yew_tabs_follow_active(&ed->tabs);
     before = ed->win;
     t = yew_tab_at(ed, idx);
     if (t == NULL) {
@@ -879,8 +922,20 @@ static int apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
 }
 
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
-                         int active_entry, int *scroll, i32 scroll_mag,
-                         bool record_slots, bool draw_new, int held_idx);
+                         int active_entry, int *scroll, bool user_scroll,
+                         i32 scroll_mag, bool record_slots, bool draw_new,
+                         int held_idx);
+
+/*
+ * Sprint 57.15 §2: did EITHER row put a chevron on screen this draw?
+ *
+ * A product of the render, like the region table and the pre-drag slot
+ * table, and set at the same statement that registers the scroll
+ * region — so "a chevron is drawn" and "there is something to hover"
+ * cannot drift apart.  yew_tab_strip_draw resets it and hands the
+ * answer to the router, which owns mode 1003.
+ */
+static bool strip_any_chevron;
 
 /*
  * Row 1, with the drag preview applied and the pre-drag list recorded.
@@ -891,7 +946,8 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
  * them apart to prove it reads the right one.
  */
 static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
-                              int n, int active_entry, int *scroll)
+                              int n, int active_entry, int *scroll,
+                              bool user_scroll)
 {
     StripEntry pre[YEW_TAB_MAX];
     int held;
@@ -913,8 +969,8 @@ static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
         strip_pre[i].col1 = 0U;
         strip_pre[i].pre_payload = pre[i].payload;
     }
-    strip_render(ed, rect, entries, n, active_entry, scroll, 1, true, true,
-                 held);
+    strip_render(ed, rect, entries, n, active_entry, scroll, user_scroll,
+                 1, true, true, held);
 }
 
 static ThemeEnt tab_base_style(const Ed *ed)
@@ -972,9 +1028,18 @@ static Cell tab_blank(ThemeEnt style)
     return blank;
 }
 
+/*
+ * Sprint 57.15 §1: `user_scroll` says the offset belongs to the user,
+ * and the layout is then told there is no entry to follow (−1).  The
+ * highlight still uses `active_entry`, because which entry is active
+ * and which entry the placement chases are two different questions —
+ * conflating them is what made an explicit scroll last exactly one
+ * frame.  See ui/strip.h.
+ */
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
-                         int active_entry, int *scroll, i32 scroll_mag,
-                         bool record_slots, bool draw_new, int held_idx)
+                         int active_entry, int *scroll, bool user_scroll,
+                         i32 scroll_mag, bool record_slots, bool draw_new,
+                         int held_idx)
 {
     StripSpan spans[YEW_TAB_MAX];
     int n_spans = 0;
@@ -1027,8 +1092,8 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
     avail = rect.w;
     if (*scroll > 0 && avail > 1U)
         avail = (u16)(avail - 1U);
-    yew_strip_layout(entries, n, avail, active_entry, scroll, spans,
-                     &n_spans, &more_left, &more_right);
+    yew_strip_layout(entries, n, avail, user_scroll ? -1 : active_entry,
+                     scroll, spans, &n_spans, &more_left, &more_right);
     tail_x = (u16)(rect.x + (more_left ? 1U : 0U));
 
     for (i = 0; i < n_spans; i++) {
@@ -1099,6 +1164,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                             yew_glyph_len(YEW_GLYPH_MORE_LEFT), orphan.fg,
                             surface.bg, YEW_ATTR_DIM);
         yew_region_add(YEW_REGION_TAB_SCROLL, r, -scroll_mag);
+        strip_any_chevron = true;
     }
     if (more_right) {
         char more[16];
@@ -1117,6 +1183,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                                 YEW_ATTR_DIM);
             r = (Rect){x, rect.y, w, 1U};
             yew_region_add(YEW_REGION_TAB_SCROLL, r, scroll_mag);
+            strip_any_chevron = true;
         }
     } else if (draw_new &&
                (u32)tail_x + 3U <= (u32)rect.x + rect.w) {
@@ -1182,7 +1249,9 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
             held = i;
     }
     strip_render(ed, rect, entries, n, active_entry,
-                 &ed->tabs.member_scroll, 2, false, false, held);
+                 &ed->tabs.member_scroll,
+                 yew_tabs_scroll_is_owned(&ed->tabs, true),
+                 2, false, false, held);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1289,17 +1358,18 @@ static void strip_draw_float(Ed *ed)
     strip_float = (Rect){x0, py, (u16)(end > x0 ? end - x0 : 0), 1U};
 }
 
-void yew_tab_strip_draw(Ed *ed, Rect rect)
+static void strip_draw_rows(Ed *ed, Rect rect)
 {
     StripEntry entries[YEW_TAB_MAX];
     int n;
     u32 gid;
 
-    if (ed == NULL || rect.w == 0U || rect.h == 0U)
+    if (rect.w == 0U || rect.h == 0U)
         return;
     n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
     strip_render_row1(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
-                      yew_tab_row1_active(ed, entries, n), &ed->tabs.scroll);
+                      yew_tab_row1_active(ed, entries, n), &ed->tabs.scroll,
+                      yew_tabs_scroll_is_owned(&ed->tabs, false));
     gid = yew_active_group_id(ed);
     /*
      * Sprint 27 §4: a dwell opens a group's member strip as a drop
@@ -1317,6 +1387,22 @@ void yew_tab_strip_draw(Ed *ed, Rect rect)
                                   gid);
     /* Last, and over everything the strip just drew. */
     strip_draw_float(ed);
+}
+
+void yew_tab_strip_draw(Ed *ed, Rect rect)
+{
+    if (ed == NULL)
+        return;
+    /*
+     * Reset BEFORE the guard inside strip_draw_rows, and report after
+     * it whatever happened: a strip with no rows reserved draws no
+     * chevron, and mode 1003 must come down for that as surely as for a
+     * chevron that scrolled away.  A `return` in the middle of the draw
+     * would otherwise leave the router armed against last frame.
+     */
+    strip_any_chevron = false;
+    strip_draw_rows(ed, rect);
+    yew_mouse_note_chevrons(strip_any_chevron);
 }
 
 /*
@@ -1348,6 +1434,9 @@ bool yew_tab_strip_click(Ed *ed, u16 x, u16 y)
         if (to >= limit)
             to = limit > 0 ? limit - 1 : 0;
         *scroll = to;
+        /* Sprint 57.15 §1: the user aimed at the chevron, so this
+         * offset is theirs until the active entry moves. */
+        yew_tabs_scroll_owned(&ed->tabs, row2);
         ed->full_damage = true;
         return true;
     }

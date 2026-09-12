@@ -59,6 +59,14 @@ enum {
      */
     YEW_DRAG_FLASH_MS = YEW_DRAG_DWELL_MS / 4,
     YEW_DRAG_SCROLL_MS = 120,
+    /*
+     * Sprint 57.15 §2: one entry per this while the pointer RESTS on a
+     * chevron with no button held.  Slower than the drag autoscroll on
+     * purpose — a drag is aimed, a hover is often just a pointer
+     * passing through, and the first step deliberately costs a whole
+     * window so crossing the chevron reveals nothing at all.
+     */
+    YEW_HOVER_SCROLL_MS = 300,
     YEW_CLICK_MULTI_MS = 400
 };
 
@@ -108,6 +116,23 @@ typedef struct MouseState {
      * no motion event has arrived — that is the whole point of it. */
     i64 autoscroll_ms;
     u16 at_x, at_y;
+
+    /*
+     * Sprint 57.15 §2: the HOVER reveal, with no button held.
+     *
+     * Kept apart from `at_x`/`at_y` above, which belong to the drag:
+     * the two clocks run in different phases (a drag is never IDLE, a
+     * hover always is) and sharing the cell would make a cancelled drag
+     * silently inherit a hover the pointer is not performing.
+     *
+     * `hover_chevron` is the whole arming state — true only while the
+     * pointer sits on a YEW_REGION_TAB_SCROLL cell.  Leaving the
+     * chevron clears it, which cancels the pending deadline by
+     * construction rather than by remembering to.
+     */
+    u16 hover_x, hover_y;
+    bool hover_chevron;
+    i64 hover_scroll_ms;
 
     /* Multi-click (§6). */
     i64 last_click_ms;
@@ -209,6 +234,24 @@ u32 yew_mouse_dwell_flash(const Ed *ed);
 void yew_mouse_tick(Ed *ed, i64 now_ms);
 /* When the router next needs the clock, or 0 when it does not. */
 i64 yew_mouse_deadline(const Ed *ed, i64 now_ms);
+
+/*
+ * Sprint 57.15 §2: THE STRIP'S HALF OF MODE 1003.
+ *
+ * The row-1/row-2 renderer reports, once per strip draw, whether EITHER
+ * row put a chevron on screen.  The router is the one owner of DEC 1003
+ * (see mouse.c): it arms whenever a chevron is drawn or a menu is open
+ * and disarms when neither holds, so a closing menu cannot silence a
+ * strip that still wants motion and a vanishing chevron cannot silence
+ * an open menu.  Without motion reports a hover produces no events at
+ * all, which is why this is not optional chrome.
+ *
+ * Idempotent; the terminal is only touched when the answer changes.
+ */
+void yew_mouse_note_chevrons(bool any);
+/* What the last strip draw reported — the seam fuzz_mouse asserts the
+ * if-and-only-if against. */
+bool yew_mouse_chevron_drawn(void);
 
 /*
  * Sprint 57.13 §3: WHAT IS UNDER THE POINTER.
