@@ -163,6 +163,7 @@ static void pack_compare(SynBuf *incremental, SynBuf *fresh,
 {
     u64 line_count = yew_textbuf_line_count(tb);
     u64 line;
+    bool can_embed = pack_def_can_embed(yew_syn_engine_def(engine));
 
     YEW_ASSERT_EQ_U64(incremental->entry.len, fresh->entry.len);
     YEW_ASSERT_EQ_MEM(incremental->entry.data, fresh->entry.data,
@@ -187,12 +188,14 @@ static void pack_compare(SynBuf *incremental, SynBuf *fresh,
                                  a.exit_state);
         YEW_ASSERT_NOT_NULL(entry);
         YEW_ASSERT_NOT_NULL(exit);
-        YEW_ASSERT_EQ_U64(entry->ndef, 1U);
-        YEW_ASSERT_EQ_U64(exit->ndef, 1U);
-        for (u8 depth = 0U; depth < entry->depth; depth++)
-            YEW_ASSERT_EQ_U64(entry->f[depth].def, 0U);
-        for (u8 depth = 0U; depth < exit->depth; depth++)
-            YEW_ASSERT_EQ_U64(exit->f[depth].def, 0U);
+        if (!can_embed) {
+            YEW_ASSERT_EQ_U64(entry->ndef, 1U);
+            YEW_ASSERT_EQ_U64(exit->ndef, 1U);
+            for (u8 depth = 0U; depth < entry->depth; depth++)
+                YEW_ASSERT_EQ_U64(entry->f[depth].def, 0U);
+            for (u8 depth = 0U; depth < exit->depth; depth++)
+                YEW_ASSERT_EQ_U64(exit->f[depth].def, 0U);
+        }
     }
 }
 
@@ -261,6 +264,17 @@ void test_syn_all_48_definitions_depth_cap_and_firstbyte_sets(void)
     _Static_assert(YEW_ARRAY_LEN(all_packs) == 48U,
                    "audit matrix must cover all 48 syntax definitions");
     YEW_ASSERT_EQ_U64(yew_syn_builtin_langs_len, YEW_ARRAY_LEN(all_packs));
+    for (language = 0U; language < yew_syn_builtin_langs_len; language++) {
+        size_t candidate;
+        u32 matches = 0U;
+
+        for (candidate = 0U; candidate < YEW_ARRAY_LEN(all_packs);
+             candidate++)
+            if (strcmp(yew_syn_builtin_langs[language].name,
+                       all_packs[candidate].language) == 0)
+                matches++;
+        YEW_ASSERT_EQ_U64(matches, 1U);
+    }
     for (language = 0U; language < YEW_ARRAY_LEN(all_packs); language++) {
         const SynDef *def = yew_syn_def_for(
             yew_syn_lang_named(all_packs[language].language));

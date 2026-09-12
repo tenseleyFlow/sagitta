@@ -77,6 +77,7 @@ void test_syn_embed_runtime_self_inline_exit_precedes_guest(void)
     exit = yew_syn_state_get(yew_syn_engine_states(fix.engine),
                              out.exit_state);
     YEW_ASSERT_NOT_NULL(exit);
+    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
     YEW_ASSERT_EQ_U64(exit->depth, 1U);
     YEW_ASSERT_EQ_U64(exit->ndef, 1U);
     YEW_ASSERT_EQ_U64(runtime_attr_at(&out, 5U), YEW_ATTR_KEYWORD);
@@ -109,6 +110,7 @@ void test_syn_embed_runtime_deferred_self_enters_at_eol(void)
     state = yew_syn_state_get(yew_syn_engine_states(fix.engine),
                               out.exit_state);
     YEW_ASSERT_NOT_NULL(state);
+    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
     YEW_ASSERT_EQ_U64(state->depth, 1U);
     YEW_ASSERT_EQ_U64(state->ndef, 1U);
     YEW_ASSERT_EQ_U64(state->aux[1], 0U);
@@ -137,6 +139,7 @@ void test_syn_embed_runtime_unknown_uses_fallback_and_balances(void)
     exit = yew_syn_state_get(yew_syn_engine_states(fix.engine),
                              out.exit_state);
     YEW_ASSERT_NOT_NULL(exit);
+    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
     YEW_ASSERT_EQ_U64(runtime_attr_at(&out, 4U), YEW_ATTR_CODE);
     YEW_ASSERT_EQ_U64(exit->depth, 1U);
     YEW_ASSERT_EQ_U64(exit->ndef, 1U);
@@ -174,6 +177,7 @@ void test_syn_embed_runtime_line_host_eol_returns_after_guest(void)
     exit = yew_syn_state_get(yew_syn_engine_states(fix.engine),
                              out.exit_state);
     YEW_ASSERT_NOT_NULL(exit);
+    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
     YEW_ASSERT_EQ_U64(exit->depth, 1U);
     YEW_ASSERT_EQ_U64(exit->ndef, 1U);
     runtime_close(&fix);
@@ -629,6 +633,8 @@ void test_syn_embed_runtime_inline_root_defers_outer_exit_until_guest_root(void)
         "bridge:{rules:[{match:\"[}]\",pop:1,end:true}]}}}";
     RuntimeFix fix;
     SynState trace[9];
+    SynSpan spans[16];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
 
     runtime_open(&fix, src);
     YEW_ASSERT_EQ_U64(fix.def->ctxs[2].embed.end,
@@ -640,6 +646,9 @@ void test_syn_embed_runtime_inline_root_defers_outer_exit_until_guest_root(void)
     YEW_ASSERT_EQ_U64(trace[7].ndef, 2U);
     YEW_ASSERT_EQ_U64(trace[8].depth, 1U);
     YEW_ASSERT_EQ_U64(trace[8].ndef, 1U);
+    yew_syn_line(fix.engine, YEW_SYN_STATE_ROOT,
+                 (const u8 *)"OPEN{x}}", 8U, &out);
+    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
     runtime_close(&fix);
 }
 
@@ -675,6 +684,7 @@ void test_syn_embed_runtime_line_continuation_keeps_unprefixed_guest(void)
     state = yew_syn_state_get(yew_syn_engine_states(fix.engine),
                               out.exit_state);
     YEW_ASSERT_NOT_NULL(state);
+    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
     YEW_ASSERT_EQ_U64(state->depth, 1U);
     YEW_ASSERT_EQ_U64(state->ndef, 1U);
     {

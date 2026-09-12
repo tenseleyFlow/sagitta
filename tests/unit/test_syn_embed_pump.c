@@ -157,6 +157,7 @@ void test_syn_embed_pump_keeps_one_line_request_after_balanced_exit(void)
                  (const u8 *)"OPENbodyEND", 11U, &out);
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_NOT_NULL(exit);
+    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
     YEW_ASSERT_EQ_U64(exit->depth, 1U);
     YEW_ASSERT_EQ_U64(exit->ndef, 1U);
     YEW_ASSERT((exit->flags & YEW_SYN_F_EMBED_PEND) == 0U);
