@@ -1206,6 +1206,16 @@ static bool dg_entry_reversed(DragFixture *f, u32 gid)
     return false;
 }
 
+/* The row-1 entry index the strip is drawing as active. */
+static int dg_active_entry(DragFixture *f)
+{
+    StripEntry entries[YEW_TAB_MAX];
+    int n = yew_tab_row1_entries(&f->ed, entries,
+                                 (int)YEW_ARRAY_LEN(entries));
+
+    return yew_tab_row1_active(&f->ed, entries, n);
+}
+
 /*
  * A quarter of the dwell, lit, dark, lit, dark — then the strip opens.
  *
@@ -1521,6 +1531,19 @@ static int dg_row1_keys(DragFixture *f, u32 *out, int cap)
     return n;
 }
 
+/* The grip the press established: how far behind the pointer the float
+ * — and so the carried entry — is drawn. */
+static u16 dg_grab_dx(DragFixture *f)
+{
+    i32 payload = 0;
+    u16 fx = 0U;
+    u16 fy = 0U;
+    u16 grab = 0U;
+
+    YEW_ASSERT(yew_mouse_drag_float(&f->ed, &payload, &fx, &fy, &grab));
+    return grab;
+}
+
 /* The leftmost cell the entry with this payload is drawn at, or -1. */
 static int dg_entry_x(i32 payload)
 {
@@ -1578,6 +1601,7 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
     u16 c0;
     u16 c1;
     u16 press_x;
+    u16 drop_x = 0U;
     int xa0;
     int xb0;
 
@@ -1594,9 +1618,10 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
     xb0 = dg_entry_x(-(i32)gb);
     YEW_ASSERT(xa0 > 0 && xb0 > xa0);
 
-    /* Grabbed one cell in from its RIGHT edge, which is what makes the
-     * float and the pointer disagree. */
+    /* Grabbed near its RIGHT edge, which is what makes the float and the
+     * pointer disagree. */
     dg_slot_span(3, &c0, &c1);
+    YEW_ASSERT_EQ_I64((int)(c1 - c0), 18);
     press_x = (u16)(c1 - 2U);
     {
         Key press = dg_ev((u8)YEW_KEY_PRESS, press_x, 0U);
@@ -1604,12 +1629,15 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
         yew_mouse_event(&f.ed, &press);
     }
     /*
-     * Far enough left that the carried entry covers the second group
-     * past its midpoint — but not so far that the POINTER has left the
-     * tab's own slot.  Before the fix nothing moved at all here.
+     * Two cells left.  THE POINTER IS STILL INSIDE THE TAB'S OWN SLOT —
+     * and the entry it is carrying is already sitting over the second
+     * group past that group's midpoint, because the float trails the
+     * pointer by the grip the press took.  Before the fix this moved
+     * nothing at all.
      */
+    YEW_ASSERT_EQ_I64(yew_strip_slot_at((u16)(press_x - 14U), 0U), 3);
     {
-        Key motion = dg_ev((u8)YEW_KEY_REPEAT, (u16)(c0 + 2U), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, (u16)(press_x - 14U), 0U);
 
         yew_mouse_event(&f.ed, &motion);
     }
@@ -1621,15 +1649,17 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
     YEW_ASSERT(dg_entry_x(-(i32)gb) > xb0);
     YEW_ASSERT_EQ_I64(dg_entry_x(-(i32)ga), xa0);
 
-    /* Keep sliding left, past the first group: both groups now sit to
-     * the right of where they started, in their original order. */
+    /* Keep sliding left until the carried entry's own left edge is on
+     * the first group: both groups now sit to the right of where they
+     * started, in their original order. */
     {
         u16 a0;
         u16 a1;
         Key motion;
 
         dg_slot_span(1, &a0, &a1);
-        motion = dg_ev((u8)YEW_KEY_REPEAT, (u16)(a0 + 2U), 0U);
+        drop_x = (u16)(a0 + dg_grab_dx(&f));
+        motion = dg_ev((u8)YEW_KEY_REPEAT, drop_x, 0U);
         yew_mouse_event(&f.ed, &motion);
         dg_paint(&f);
         YEW_ASSERT_EQ_I64(f.ed.mouse.drag_to_slot, 1);
@@ -1638,12 +1668,8 @@ void test_drag_neighbours_slide_out_of_the_carried_tabs_way(void)
     }
     /* And releasing there lands exactly the strip that was drawn. */
     {
-        u16 a0;
-        u16 a1;
-        Key up;
+        Key up = dg_ev((u8)YEW_KEY_RELEASE, drop_x, 0U);
 
-        dg_slot_span(1, &a0, &a1);
-        up = dg_ev((u8)YEW_KEY_RELEASE, (u16)(a0 + 2U), 0U);
         yew_mouse_event(&f.ed, &up);
     }
     YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, held), 1);
@@ -1737,4 +1763,65 @@ void test_drag_every_previewed_gap_is_where_the_drop_lands(void)
         }
         yew_ed_free(&f.ed);
     }
+}
+
+/*
+ * THE CUE IS VISIBLE ON THE ACTIVE ENTRY TOO.
+ *
+ * §3 toggles YEW_ATTR_REVERSE rather than substituting a style exactly
+ * so that a group which is already the active row-1 entry — drawn
+ * reversed — still announces the dwell, by losing the reverse for a
+ * quarter instead of gaining it.  A cue that painted "active" over the
+ * active entry would announce nothing, which is the one way this could
+ * be running and still be invisible.
+ */
+void test_drag_dwell_flash_is_visible_on_the_active_group_entry(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+    i64 t0;
+    bool base;
+    bool lit;
+    bool dark;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    /* The ACTIVE tab is one of the group's members, so the group's own
+     * row-1 entry is the active entry. */
+    yew_tab_switch(&f.ed, 4);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    YEW_ASSERT(gslot >= 0);
+    /* The premise: this entry is the row-1 ACTIVE one. */
+    YEW_ASSERT_EQ_I64(dg_active_entry(&f), gslot);
+    base = dg_entry_reversed(&f, g);
+
+    /* An UNGROUPED tab carried onto it: a member of the group would
+     * have nothing to join and would never dwell. */
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
+    t0 = f.ed.now_ms;
+    f.ed.now_ms = t0;
+    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), g);
+    dg_paint(&f);
+    lit = dg_entry_reversed(&f, g);
+    f.ed.now_ms = t0 + YEW_DRAG_FLASH_MS;
+    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), 0U);
+    dg_paint(&f);
+    dark = dg_entry_reversed(&f, g);
+    /* The two quarters do not paint the same cells — which is the whole
+     * claim the word "flash" makes — and the dark quarter is the entry's
+     * ordinary active look, so the cue neither cancels out nor leaves a
+     * stuck highlight behind. */
+    YEW_ASSERT_EQ_U64(lit, !base);
+    YEW_ASSERT_EQ_U64(dark, base);
+    yew_ed_free(&f.ed);
 }
