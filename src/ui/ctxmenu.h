@@ -164,6 +164,18 @@ bool yew_ctx_row_enabled(u32 row);
 /* Rows (items and separators) shed at the last show. */
 u32 yew_ctx_shed_count(void);
 u8 yew_ctx_priority(u32 row);
+/*
+ * A row's label, its action and whether it is a rule.  Sprint 57.11 §4
+ * pins every builder's row list by EXACT LABEL, in order, with its
+ * separators — a menu is a promise about where the pointer has to go,
+ * and a row that moves between two right-clicks breaks it — so the
+ * labels have to be readable by a test rather than only by a golden.
+ * `yew_ctx_row_label` returns "" for a separator and for a row that is
+ * not there.
+ */
+const char *yew_ctx_row_label(u32 row);
+u32 yew_ctx_row_action(u32 row);
+bool yew_ctx_row_is_sep(u32 row);
 /* True when the width clamp dropped the accelerator column. */
 bool yew_ctx_accels_hidden(void);
 

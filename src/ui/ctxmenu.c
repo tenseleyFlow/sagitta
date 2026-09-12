@@ -388,6 +388,23 @@ u8 yew_ctx_priority(u32 row)
     return row < ctx.n ? ctx.rows[row].priority : 0U;
 }
 
+const char *yew_ctx_row_label(u32 row)
+{
+    if (row >= ctx.n || ctx.rows[row].separator)
+        return "";
+    return ctx.rows[row].label;
+}
+
+u32 yew_ctx_row_action(u32 row)
+{
+    return row < ctx.n ? ctx.rows[row].action : 0U;
+}
+
+bool yew_ctx_row_is_sep(u32 row)
+{
+    return row < ctx.n && ctx.rows[row].separator;
+}
+
 bool yew_ctx_accels_hidden(void)
 {
     return ctx.accels_hidden;
