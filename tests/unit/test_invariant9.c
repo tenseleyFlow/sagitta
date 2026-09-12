@@ -794,7 +794,18 @@ void test_invariant9_every_new_command_is_registered(void)
         /* Sprint 57.11 §4: the document-menu row commands. */
         "ed.sel.cut",          "ed.edit.paste",     "ed.sel.all",
         "ed.tab.open_split_h", "ed.tab.open_split_v",
-        "ed.view.number_cycle"
+        "ed.view.number_cycle",
+        /*
+         * Sprint 57.11 Deliverable 4: the four rows that shipped as
+         * nothing because the state machines behind them were raw key
+         * handlers.  A row whose command is not in the registry is a
+         * row the keyboard cannot reach, which is the whole of what
+         * invariant 9 forbids.
+         */
+        "ed.file.save_as",     "ed.git.copy_path",
+        "ed.lsp.rename.apply", "ed.lsp.rename.diff",
+        "ed.lsp.rename.cancel",
+        "ed.group.pick.toggle", "ed.group.pick.confirm"
     };
     size_t i;
 
