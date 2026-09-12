@@ -5,23 +5,23 @@ modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
  1 pty-s14-s57_13_menu_s +                                                      
     1 alpha beta gamma                                                          
     1 delta epsilon zeta                                                        
-    2 ┌────────────────────┐                                                    
-    3 │ Cut                │                                                    
-    4 │ Copy               │                                                    
-      │ Paste              │                                                    
-      │ Command Palette... │                                                    
-      └────────────────────┘                                                    
+    2┌────────────────────┐                                                     
+    3│ Cut                │                                                     
+    4│ Copy               │                                                     
+     │ Paste              │                                                     
+     │ Command Palette... │                                                     
+     └────────────────────┘                                                     
  L  pty-s14-s57_13_menu_sheds_rows.txt                       utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDGGGGGGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDGHHHHHHHHHHHHHHHHHHHHGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDGHHHHHHHHHHHHHHHHHHHHGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDGAAAAAAAAAAAAAAAAAAAAGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDGIIIIIIIIIIIIIIIIIIIIGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDGGGGGGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDGGGGGGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDGHHHHHHHHHHHHHHHHHHHHGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDGHHHHHHHHHHHHHHHHHHHHGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDGAAAAAAAAAAAAAAAAAAAAGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDGIIIIIIIIIIIIIIIIIIIIGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDGGGGGGGGGGGGGGGGGGGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 JJJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 --- legend
 A fg=#c8ccd4 bg=#2c313a attrs=b---------

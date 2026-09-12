@@ -280,12 +280,10 @@ static i32 next_usable(i32 from, int step)
     return -1;
 }
 
-bool yew_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
+static bool ctx_show_placed(i32 x, i32 y, Rect allowed)
 {
     u16 w;
     u16 h;
-    i32 x;
-    i32 y;
 
     ctx.active = false;
     ctx.shed = 0U;
@@ -314,18 +312,8 @@ bool yew_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
         ctx.accels_hidden = bare < w;
         w = bare > allowed.w ? allowed.w : bare;
     }
-    /*
-     * CLAMP, NEVER FLIP.  Sliding the box back inside `allowed` keeps
-     * the row the user aimed at under the pointer; flipping it above
-     * the anchor puts a different row there, and the click that follows
-     * opens something the user never chose.
-     *
-     * The corner goes BELOW-RIGHT of the anchor: the cell the pointer is
-     * on is then the top-left border cell, so a release on the cell
-     * that opened the menu activates nothing.
-     */
-    x = (i32)anchor_x + 1;
-    y = (i32)anchor_y + 1;
+    /* CLAMP, NEVER FLIP.  The caller chooses the desired corner; this
+     * function only slides the box back inside its allowed rectangle. */
     if (x + (i32)w > (i32)allowed.x + (i32)allowed.w)
         x = (i32)allowed.x + (i32)allowed.w - (i32)w;
     if (x < (i32)allowed.x)
@@ -339,6 +327,20 @@ bool yew_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
     ctx.chosen = 0U;
     ctx.cursor = next_usable(-1, 1);
     return true;
+}
+
+bool yew_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
+{
+    /* Keyboard focus is not a pointer: keep the menu clear of the cell
+     * it describes, matching the original Sprint 27 placement. */
+    return ctx_show_placed((i32)anchor_x + 1, (i32)anchor_y + 1, allowed);
+}
+
+bool yew_ctx_show_at(u16 x, u16 y, Rect allowed)
+{
+    /* Pointer menus put their top-left BORDER cell exactly under the
+     * opening press.  A release there still cannot invoke a row. */
+    return ctx_show_placed((i32)x, (i32)y, allowed);
 }
 
 bool yew_ctx_active(void)

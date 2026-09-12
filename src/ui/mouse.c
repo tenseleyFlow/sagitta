@@ -480,7 +480,7 @@ static void menu_settle(Ed *ed)
 }
 
 /*
- * Opens the menu for `c` at the pointer.
+ * Opens the menu for `c` at an anchor or pointer cell.
  *
  * The clicked CELL is captured after the build, as the target rect: a
  * CtxContext carries the region's rectangle (the pane's, for DOC), and
@@ -488,17 +488,26 @@ static void menu_settle(Ed *ed)
  * the cell itself.  A 1x1 rect rather than two u16s because that is the
  * shape ctxmenu.c already stores.
  *
- * The ANCHOR is separate from that cell because the strip's menus hang
- * one row clear of the strip (Sprint 27's placement, and the goldens'):
- * everywhere else the two are the same cell.
+ * The ANCHOR is separate from the captured target cell because keyboard
+ * menus retain Sprint 27's below-right placement.  Pointer menus place
+ * the box corner on the click cell; that corner is a border, so the
+ * opening release remains inert.
  */
+typedef enum MenuPlacement {
+    MENU_PLACE_AFTER_ANCHOR = 0,
+    MENU_PLACE_AT_POINTER
+} MenuPlacement;
+
 static bool menu_open_at(Ed *ed, const CtxContext *c, u16 anchor_x,
-                        u16 anchor_y, u16 cell_x, u16 cell_y)
+                         u16 anchor_y, u16 cell_x, u16 cell_y,
+                         MenuPlacement placement)
 {
     menu_close(ed);
     yew_ctx_build(ed, c);
     yew_ctx_target_rect((Rect){cell_x, cell_y, 1U, 1U});
-    if (!yew_ctx_show(anchor_x, anchor_y, menu_allowed(ed))) {
+    if (!(placement == MENU_PLACE_AT_POINTER
+              ? yew_ctx_show_at(anchor_x, anchor_y, menu_allowed(ed))
+              : yew_ctx_show(anchor_x, anchor_y, menu_allowed(ed)))) {
         /* Nothing opened: the build refused (its target went away) or
          * the box cannot fit even its priority-0 rows.  The close above
          * already left 1003 disarmed; say so explicitly rather than
@@ -524,7 +533,7 @@ bool yew_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y)
     (void)memset(&c, 0, sizeof(c));
     c.kind = YEW_CTX_KIND_TAB;
     c.id = tab_id;
-    return menu_open_at(ed, &c, x, y, x, y);
+    return menu_open_at(ed, &c, x, y, x, y, MENU_PLACE_AFTER_ANCHOR);
 }
 
 bool yew_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y)
@@ -536,7 +545,7 @@ bool yew_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y)
     (void)memset(&c, 0, sizeof(c));
     c.kind = YEW_CTX_KIND_GROUP;
     c.id = gid;
-    return menu_open_at(ed, &c, x, y, x, y);
+    return menu_open_at(ed, &c, x, y, x, y, MENU_PLACE_AFTER_ANCHOR);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1216,7 +1225,6 @@ static bool press_opens_menu(const Key *k)
 static void press_menu(Ed *ed, const Key *k)
 {
     CtxContext c;
-    u16 anchor_y;
 
     if (yew_ctx_active()) {
         /*
@@ -1238,12 +1246,8 @@ static void press_menu(Ed *ed, const Key *k)
     c = yew_mouse_context_at(ed, k->col, k->row);
     if (c.kind == YEW_CTX_KIND_NONE)
         return;
-    /* Sprint 27 hung the strip's menus one row below the strip, and the
-     * goldens are drawn that way; every other surface anchors on the
-     * cell the user clicked. */
-    anchor_y = (c.kind == YEW_CTX_KIND_TAB || c.kind == YEW_CTX_KIND_GROUP)
-                   ? (u16)(k->row + 1U) : k->row;
-    (void)menu_open_at(ed, &c, k->col, anchor_y, k->col, k->row);
+    (void)menu_open_at(ed, &c, k->col, k->row, k->col, k->row,
+                       MENU_PLACE_AT_POINTER);
     ed->full_damage = true;
 }
 
@@ -1262,6 +1266,14 @@ static void mouse_press(Ed *ed, const Key *k)
         press_menu(ed, k);
         return;
     }
+    /* A context menu is modal only inside its own box.  An ordinary
+     * left press anywhere else dismisses it BEFORE region routing, so
+     * a tab still activates and a document click still places the
+     * cursor.  Deferring this to the NONE case made clicks on every
+     * useful underlying region leave the menu stuck on screen. */
+    if (k->button == (u8)YEW_MB_LEFT && yew_ctx_active() &&
+        !rect_has(yew_ctx_box(), k->col, k->row))
+        menu_close(ed);
     hit = yew_region_hit(k->col, k->row);
     if (k->button == (u8)YEW_MB_MIDDLE) {
         press_middle(ed, &hit, k);
@@ -1337,9 +1349,8 @@ static void mouse_press(Ed *ed, const Key *k)
         break;
     case YEW_REGION_MENU_ROW:
     case YEW_REGION_NONE:
-        /* A left-click outside an open menu closes it, and is consumed
-         * doing so — the click that dismisses a menu must not also do
-         * whatever is underneath. */
+        /* Safety net for an unclaimed cell.  Claimed cells closed the
+         * context menu before routing and continue normally above. */
         if (yew_ctx_active()) {
             menu_close(ed);
             m->phase = YEW_MP_IDLE;
@@ -2116,7 +2127,7 @@ static CmdStatus open_focus_menu(Ed *ed)
             y = ed->focus->rect.y;
         }
     }
-    if (!menu_open_at(ed, &c, x, y, x, y))
+    if (!menu_open_at(ed, &c, x, y, x, y, MENU_PLACE_AFTER_ANCHOR))
         return YEW_CMD_ERR_STATE;
     return YEW_CMD_OK;
 }

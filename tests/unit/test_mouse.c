@@ -1680,14 +1680,22 @@ void test_mouse_motion_tracking_mirrors_the_open_menu(void)
         YEW_ASSERT(yew_tty_mouse_motion_active());
     }
     yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
     yew_mouse_menu_draw(&ed);
     {
-        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 79U, 23U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 60U, 5U);
+        Key release = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 60U,
+                            5U);
 
         yew_mouse_event(&ed, &press);
+        /* Dismissal does not consume the click: the pane press reached
+         * the ordinary phase machine. */
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_ARMED);
+        yew_mouse_event(&ed, &release);
     }
     YEW_ASSERT(!yew_ctx_active());
     YEW_ASSERT(!yew_tty_mouse_motion_active());
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
 
     /* Closed by `ed.mouse.disable`, which must not be able to leave it
      * armed behind a router that no longer receives events. */
@@ -1728,6 +1736,35 @@ void test_mouse_motion_tracking_mirrors_the_open_menu(void)
     YEW_ASSERT(!yew_ctx_active());
     YEW_ASSERT(!yew_tty_mouse_motion_active());
     yew_mouse_set_enabled(true);
+    yew_ed_free(&ed);
+}
+
+/* Pointer menus use the click cell as their top-left border cell.  This
+ * pins the router's placement choice, not only the widget geometry. */
+void test_mouse_pointer_menu_origin_tracks_the_click_cell(void)
+{
+    Ed ed;
+    Key press;
+    Rect box;
+
+    ms_fixture(&ed);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 0);
+    press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 22U, 0U);
+    press.mods = (u16)YEW_MOD_CTRL;
+    yew_mouse_event(&ed, &press);
+    YEW_ASSERT(yew_ctx_active());
+    box = yew_ctx_box();
+    YEW_ASSERT_EQ_U64(box.x, 22U);
+    YEW_ASSERT_EQ_U64(box.y, 0U);
+    {
+        Key esc;
+
+        (void)memset(&esc, 0, sizeof(esc));
+        esc.kind = (u16)YEW_EV_KEY;
+        esc.code = YEW_KEY_ESCAPE;
+        YEW_ASSERT(yew_mouse_menu_key(&ed, &esc));
+    }
     yew_ed_free(&ed);
 }
 

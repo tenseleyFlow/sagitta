@@ -9331,16 +9331,16 @@ static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
     ptc_check(c, c->vt.modes == resting,
               "cancelling Save As changed the resting mouse protocol");
 
-    /* Ctrl-click the active member tab, dismiss, then prove an ordinary
-     * click can still activate the first member. */
+    /* Ctrl-click the active member tab, then dismiss BY CLICKING the
+     * first member.  The same press must close the menu, restore 1002,
+     * and continue through ordinary tab routing. */
     s27_mouse(c, "\x1b[<16;31;2M");
     s27_mouse(c, "\x1b[<16;31;2m");
     ptc_check(c, c->vt.modes == menu,
               "member-tab context menu did not select any-motion tracking");
-    s18_settle_after_keys(c, "esc");
-    ptc_check(c, c->vt.modes == resting,
-              "member-tab context menu did not restore button tracking");
     s22_click(c, 5U, 1U);
+    ptc_check(c, c->vt.modes == resting,
+              "click-away did not restore button tracking");
     s19_wait_screen(c, "L  one.txt");
 
     /* Repeat against the row-1 group entry, then use the recovered mouse to

@@ -2,54 +2,54 @@
 size 80x24 alt=1 cursor=1,22 vis=1
 modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
 --- text
- 1 pty-s14-┌────────────────────┐
-    1 alpha│ Cut                │
-    1 delta│ Copy               │
-    2 eta t│ Paste              │
-    3 lambd│ Delete             │
-    4      │ Select All         │
-           ├────────────────────┤
-           │ Undo               │
-           │ Redo               │
-           ├────────────────────┤
-           │ Split Right        │
-           │ Split Below        │
-           │ Close Pane         │
-           ├────────────────────┤
-           │ Save               │
-           │ Save As...         │
-           │ Reload             │
-           ├────────────────────┤
-           │ Command Palette... │
-           │ Find File...       │
-           │ Go to Line...      │
-           │ Toggle Wrap        │
-           └────────────────────┘
+ 1 pty-s14┌────────────────────┐
+    1 alph│ Cut                │
+    1 delt│ Copy               │
+    2 eta │ Paste              │
+    3 lamb│ Delete             │
+    4     │ Select All         │
+          ├────────────────────┤
+          │ Undo               │
+          │ Redo               │
+          ├────────────────────┤
+          │ Split Right        │
+          │ Split Below        │
+          │ Close Pane         │
+          ├────────────────────┤
+          │ Save               │
+          │ Save As...         │
+          │ Reload             │
+          ├────────────────────┤
+          │ Command Palette... │
+          │ Find File...       │
+          │ Go to Line...      │
+          │ Toggle Wrap        │
+          └────────────────────┘
  H·L  pty-s14-s57_13_doc_menu_nocolor.txt                   utf-8  lf  1:17  all
 --- style
-AAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBB
-BBBBCBAAAAABBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBAAAAAAAAAAAAAAAAAAAAB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAABBBBBBBBBBBBBBBBBBBBBB
+BBBBCBAAAABBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBAAAAAAAAAAAAAAAAAAAAB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBDDDDDDDDDDDDDDDDDDDDB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 CCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=------r---

@@ -2,54 +2,54 @@
 size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
 --- text
- 1 pty-s14-┌────────────────────┐                                               
-    1 alpha│ Cut                │                                               
-    1 delta│ Copy               │                                               
-    2 eta t│ Paste              │                                               
-    3 lambd│ Delete             │                                               
-    4      │ Select All         │                                               
-           ├────────────────────┤                                               
-           │ Undo               │                                               
-           │ Redo               │                                               
-           ├────────────────────┤                                               
-           │ Split Right        │                                               
-           │ Split Below        │                                               
-           │ Close Pane         │                                               
-           ├────────────────────┤                                               
-           │ Save               │                                               
-           │ Save As...         │                                               
-           │ Reload             │                                               
-           ├────────────────────┤                                               
-           │ Command Palette... │                                               
-           │ Find File...       │                                               
-           │ Go to Line...      │                                               
-           │ Toggle Wrap        │                                               
-           └────────────────────┘                                               
+ 1 pty-s14┌────────────────────┐                                                
+    1 alph│ Cut                │                                                
+    1 delt│ Copy               │                                                
+    2 eta │ Paste              │                                                
+    3 lamb│ Delete             │                                                
+    4     │ Select All         │                                                
+          ├────────────────────┤                                                
+          │ Undo               │                                                
+          │ Redo               │                                                
+          ├────────────────────┤                                                
+          │ Split Right        │                                                
+          │ Split Below        │                                                
+          │ Close Pane         │                                                
+          ├────────────────────┤                                                
+          │ Save               │                                                
+          │ Save As...         │                                                
+          │ Reload             │                                                
+          ├────────────────────┤                                                
+          │ Command Palette... │                                                
+          │ Find File...       │                                                
+          │ Go to Line...      │                                                
+          │ Toggle Wrap        │                                                
+          └────────────────────┘                                                
  L  pty-s14-s57_13_ctrl_click_menu.txt                       utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-DDDDEDFFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBAAAAAAAAAAAAAAAAAAAABFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-DDDDDDFFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDDEDFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBAAAAAAAAAAAAAAAAAAAABFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBGGGGGGGGGGGGGGGGGGGGBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBHHHHHHHHHHHHHHHHHHHHBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFBBBBBBBBBBBBBBBBBBBBBBFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 IIIFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 --- legend
 A fg=#c8ccd4 bg=#2c313a attrs=b---------

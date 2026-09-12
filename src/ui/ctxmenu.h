@@ -118,12 +118,13 @@ Rect yew_ctx_target_rect_get(void);
  * priorities are shed until the box fits, the width is clamped to the
  * allowed rectangle (accelerators go first, then labels are clipped).
  *
- * PLACEMENT CLAMPS, NEVER FLIPS.  Sliding the box back inside the
- * allowed rectangle keeps the row the user aimed at under the pointer;
- * flipping the menu above the anchor puts a DIFFERENT row there, and
- * the click that follows opens something the user never chose.
+ * PLACEMENT CLAMPS, NEVER FLIPS.  `yew_ctx_show` places the corner one
+ * cell below-right of a keyboard/focus anchor.  `yew_ctx_show_at`
+ * places it exactly at a pointer cell.  Both slide the box inside the
+ * allowed rectangle when an edge leaves insufficient room.
  */
 bool yew_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed);
+bool yew_ctx_show_at(u16 x, u16 y, Rect allowed);
 
 bool yew_ctx_active(void);
 void yew_ctx_close(void);

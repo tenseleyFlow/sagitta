@@ -545,6 +545,22 @@ void test_ctxmenu_box_is_bordered_below_right_of_the_anchor(void)
     yew_ctx_close();
 }
 
+/* A pointer is already an exact screen location.  Its menu starts on
+ * that cell, unlike the deliberately offset keyboard/focus anchor. */
+void test_ctxmenu_pointer_origin_is_the_click_cell(void)
+{
+    Rect box;
+
+    cx_three_rows();
+    YEW_ASSERT(yew_ctx_show_at(10U, 4U, (Rect){0U, 0U, 80U, 23U}));
+    box = yew_ctx_box();
+    YEW_ASSERT_EQ_U64(box.x, 10U);
+    YEW_ASSERT_EQ_U64(box.y, 4U);
+    /* The click cell is the corner border, not an actionable row. */
+    YEW_ASSERT(!yew_ctx_hover_at(10U, 4U));
+    yew_ctx_close();
+}
+
 void test_ctxmenu_hover_at_maps_cells_by_the_box_geometry(void)
 {
     Rect box;
