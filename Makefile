@@ -849,6 +849,7 @@ PERF_SHADOW_OBJ := $(BUILD)/tests/perf/perf_shadow.o
 PERF_SCROLL_OBJ := $(BUILD)/tests/perf/scroll.o
 PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
+PERF_INSERT_OBJ := $(BUILD)/tests/perf/perf_insert.o
 PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
 PERF_TEXTBUF_OBJ := $(BUILD)/tests/perf/perf_textbuf.o
 PERF_LATENCY_OBJ := $(BUILD)/tests/perf/latency.o
@@ -1057,7 +1058,7 @@ endif
         size-check size-update size-musl size-memory-run module-boundary \
         size-tools-selftest size-memory-selftest module-boundary-selftest \
         size-ledger-full size-ledger-minimal \
-        perf-unicode perf-render perf-piece perf-cursor \
+        perf-unicode perf-render perf-piece perf-cursor perf-insert \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-git-status perf-fuss perf-git-gutter \
         perf-ai-shadow perf-ai-privacy perf-plug perf-pkg perf-cloud \
@@ -1480,6 +1481,9 @@ $(BUILD)/perf_piece: $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 
 $(BUILD)/perf_cursor: $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_insert: $(PERF_CORE_OBJ) $(PERF_INSERT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_INSERT_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ) $(LDLIBS)
@@ -2480,7 +2484,7 @@ perf:
 		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
 		scripts/run-perf-suite.sh '$(MAKE)'
 
-perf-components: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
+perf-components: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor perf-insert perf-undo perf-textbuf \
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
@@ -2531,6 +2535,10 @@ perf-ai-http-valgrind: $(BUILD)/perf_ai_http
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor --selftest-policy
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_cursor
+
+perf-insert: $(BUILD)/perf_insert
+	$(BUILD)/perf_insert --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_insert
 
 perf-undo: $(BUILD)/perf_undo
 	$(BUILD)/perf_undo

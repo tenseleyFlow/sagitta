@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "edit/block.h"
 #include "edit/ed.h"
 #include "edit/multicursor.h"
 #include "edit/option.h"
@@ -441,5 +442,34 @@ void test_pairs_autopair_off_inserts_one_literal_byte(void)
     pair_backspace(&fx);
     pair_assert_text(&fx, "(");
     yew_opt_free(&fx.ed);
+    pair_free(&fx);
+}
+
+void test_pairs_ordinary_characters_never_reach_the_syntax_query(void)
+{
+    static const char letters[] = "abcdefghijklmnopqrstuvwxyz";
+    PairFixture fx;
+    char one[2] = {0, 0};
+    u32 i;
+    u32 openers = 0U;
+
+    /* The query heap-allocates and re-lexes the caret's line.  It may be
+     * asked when an opener is typed and at no other time. */
+    pair_init_lang(&fx, "int main(void)\n", "c", true);
+    pair_place(&fx, 15U);
+    yew_syn_in_string_or_comment_calls_reset();
+    for (i = 0U; i < 200U; i++) {
+        if (i % 10U == 0U) {
+            openers++;
+            pair_type(&fx, "(");
+        } else if (i % 10U == 1U) {
+            pair_type(&fx, ")");
+        } else {
+            one[0] = letters[i % (u32)(sizeof(letters) - 1U)];
+            pair_type(&fx, one);
+        }
+    }
+    YEW_ASSERT_EQ_U64(yew_syn_in_string_or_comment_calls(), (u64)openers);
+    YEW_ASSERT_EQ_U64(openers, 20U);
     pair_free(&fx);
 }
