@@ -67,6 +67,11 @@ void yew_strip_layout(const StripEntry *entries, int n, u16 width,
      * visible entry forward one at a time until the active entry fits,
      * rather than jumping to "active - something": the minimal answer
      * is the one that does not move entries the user is looking at.
+     *
+     * `active < 0` skips the whole walk, which is Sprint 57.15's
+     * "the offset is the user's" — see strip.h.  The clamp above still
+     * runs, because an offset past the end of a shrunken list is not a
+     * view anybody chose.
      */
     if (active >= 0 && active < n) {
         if (active < first) {

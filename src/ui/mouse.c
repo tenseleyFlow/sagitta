@@ -264,7 +264,20 @@ static bool region_is_member_row(const Ed *ed, const Region *hit)
            hit->rect.y == (u16)(ed->tab_strip_rect.y + 1U);
 }
 
-static void strip_scroll(Ed *ed, bool row2, i32 delta)
+/*
+ * THE ROUTER'S ONE SCROLL — a chevron click, a wheel notch, the drag
+ * autoscroll, the hover reveal.
+ *
+ * Returns whether the offset actually MOVED.  The hover reveal (§2)
+ * needs that answer to stop itself at the end of the list in the same
+ * millisecond it arrives there, rather than waking once more to be told
+ * by a render that the chevron has gone.
+ *
+ * Every one of those gestures is EXPLICIT, so the offset becomes the
+ * user's (Sprint 57.15 §1) and the layout stops following the active
+ * entry until something changes it.
+ */
+static bool strip_scroll(Ed *ed, bool row2, i32 delta)
 {
     int *scroll = row2 ? &ed->tabs.member_scroll : &ed->tabs.scroll;
     int limit = (int)ed->tabs.v.len;
@@ -276,10 +289,12 @@ static void strip_scroll(Ed *ed, bool row2, i32 delta)
         to = 0;
     if (to >= limit)
         to = limit > 0 ? limit - 1 : 0;
+    yew_tabs_scroll_owned(&ed->tabs, row2);
     if (*scroll == to)
-        return;
+        return false;
     *scroll = to;
     ed->full_damage = true;
+    return true;
 }
 
 static void mouse_wheel(Ed *ed, const Key *k)
@@ -319,11 +334,12 @@ static void mouse_wheel(Ed *ed, const Key *k)
         wheel_pane(ed, &hit, k);
         break;
     case YEW_REGION_TAB:
-        strip_scroll(ed, region_is_member_row(ed, &hit), wheel_dir(k->button));
+        (void)strip_scroll(ed, region_is_member_row(ed, &hit),
+                           wheel_dir(k->button));
         break;
     case YEW_REGION_TAB_SCROLL:
-        strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
-                     wheel_dir(k->button));
+        (void)strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
+                           wheel_dir(k->button));
         break;
     case YEW_REGION_PICK_ROW:
         yew_picker_scroll(ed, wheel_dir(k->button) * YEW_WHEEL_ROWS);
@@ -1310,8 +1326,8 @@ static void mouse_press(Ed *ed, const Key *k)
         press_tab(ed, &hit);
         break;
     case YEW_REGION_TAB_SCROLL:
-        strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
-                     hit.payload < 0 ? -1 : 1);
+        (void)strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
+                           hit.payload < 0 ? -1 : 1);
         break;
     case YEW_REGION_TAB_NEW:
         /* Armed only.  Release-in-the-same-region invokes the command,
@@ -1937,7 +1953,7 @@ void yew_mouse_tick(Ed *ed, i64 now_ms)
     if (drag_over_chevron(ed, &delta) &&
         now_ms - m->autoscroll_ms >= YEW_DRAG_SCROLL_MS) {
         m->autoscroll_ms = now_ms;
-        strip_scroll(ed, false, delta);
+        (void)strip_scroll(ed, false, delta);
     }
 }
 

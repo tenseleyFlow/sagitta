@@ -78,10 +78,44 @@ typedef struct Tabs {
      * have different lengths, so one shared offset would scroll a row
      * the user was not looking at. */
     int member_scroll;
+    /*
+     * Sprint 57.15: WHOSE OFFSET IS THIS?
+     *
+     * False — the strip FOLLOWS the active entry, minimally, which is
+     * what it must do on every switch, close, open and group
+     * enter/leave.  True — the USER chose this offset (a chevron, a
+     * wheel notch, a hover reveal) and the layout must not walk it
+     * back, even when the active entry is off-screen.  An off-screen
+     * active tab is a legitimate view; a strip that snaps back the
+     * instant it is scrolled is the bug this flag exists to kill.
+     *
+     * ONE PER ROW, because s24 made the two offsets independent: a
+     * shared flag would resume following on a row the user never
+     * touched, and row 2's member list is a different length anyway.
+     *
+     * Cleared by yew_tabs_follow_active, which yew_tab_switch calls —
+     * the funnel every active-entry change goes through.
+     */
+    bool scroll_user;
+    bool member_scroll_user;
 } Tabs;
 
 void yew_tabs_init(Tabs *t);
 void yew_tabs_free(Ed *ed);
+
+/*
+ * Sprint 57.15 §1: the offset on this row is now the USER'S — the
+ * layout stops following the active entry until something changes it.
+ * Every explicit scroll goes through here so there is one place the
+ * claim is made rather than one per gesture.
+ */
+void yew_tabs_scroll_owned(Tabs *t, bool row2);
+/* ...and back to following, BOTH rows.  An event that moved the active
+ * entry moved it on whichever row shows it, and the other row's list
+ * changed shape under the same event. */
+void yew_tabs_follow_active(Tabs *t);
+/* What the layout is told: −1 for a user-owned row. */
+bool yew_tabs_scroll_is_owned(const Tabs *t, bool row2);
 
 /* Returns the index, or -1 when refused.  The return value is NOT
  * decoration: a silent cap failure in facsimile made callers load the
