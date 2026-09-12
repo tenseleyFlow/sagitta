@@ -712,6 +712,7 @@ const YewTest yew_tests[] = {
     T(syn_cache_touch_without_content_change_avoids_recompile),
     T(syn_cache_content_change_recompiles),
     T(syn_cache_truncation_recompiles_safely),
+    T(syn_cache_zero_length_recompiles_safely),
     T(syn_cache_bad_magic_recompiles_safely),
     T(syn_cache_bad_version_recompiles_safely),
     T(syn_cache_bad_crc_recompiles_safely),

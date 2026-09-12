@@ -567,6 +567,23 @@ void test_syn_cache_truncation_recompiles_safely(void)
     fixture_free(&f);
 }
 
+void test_syn_cache_zero_length_recompiles_safely(void)
+{
+    CacheFixture f;
+    LoadedDef loaded;
+
+    fixture_init(&f);
+    build_cold_cache(&f);
+    write_exact(f.cache, NULL, 0U);
+    yew_syn_compile_count_reset();
+    load_def(&loaded, &f);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
+    YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "x");
+    assert_loaded_regex_executes(&loaded, 'x');
+    loaded_free(&loaded);
+    fixture_free(&f);
+}
+
 void test_syn_cache_bad_magic_recompiles_safely(void)
 {
     CacheFixture f;

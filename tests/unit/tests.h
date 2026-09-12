@@ -679,6 +679,7 @@ void test_syn_cache_warm_load_preserves_aux_literals_and_mutable_aux(void);
 void test_syn_cache_touch_without_content_change_avoids_recompile(void);
 void test_syn_cache_content_change_recompiles(void);
 void test_syn_cache_truncation_recompiles_safely(void);
+void test_syn_cache_zero_length_recompiles_safely(void);
 void test_syn_cache_bad_magic_recompiles_safely(void);
 void test_syn_cache_bad_version_recompiles_safely(void);
 void test_syn_cache_bad_crc_recompiles_safely(void);
