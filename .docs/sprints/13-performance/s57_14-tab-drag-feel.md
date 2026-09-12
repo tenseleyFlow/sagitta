@@ -374,6 +374,29 @@ stands.
 Only WHERE the target changes moved; what a target means did not, so
 `drag_every_previewed_gap_is_where_the_drop_lands` still holds.
 
+**What the band broke, and the second half of the fix.** `drag_dwell`
+read the REORDER TARGET's pre-drag payload, so "resting on a group"
+and "the target is the group" had been the same fact. The band makes
+them different on purpose — and then the dwell stopped seeing the
+group the user had come to rest on, which would have made the one
+place a tab can join a group the one place the pointer is not allowed
+to linger.
+
+`drag_dwell_slot` answers the other question: the slot the carried
+entry OVERLAPS MOST. Overlap rather than a single cell — a midpoint or
+a leading edge — because the carried entry and the entry under it are
+both a dozen cells wide and either edge can be over a neighbour while
+the bulk of the entry is not. Once the target HAS moved it gives
+today's answer, since the gap is then drawn on the entry's old cells
+and overlaps them entirely. Ties keep the leftmost, so the answer is a
+function of state and not of loop order (invariant 5). `carried_span`
+now holds the grip arithmetic the two readers share.
+
+- `drag_resting_in_a_group_band_still_opens_it` — the carried tab
+  parked at the band's far edge: nothing shifted AND the dwell is
+  counting, then the strip opens at 500 ms. Both halves, because
+  either alone is the bug.
+
 ### A row-2 chevron scrolled row 1
 
 "If I hover a chevron in a tab group (row 2 chevron) expecting tabs
