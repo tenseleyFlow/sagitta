@@ -52,7 +52,8 @@ tail. It must do so for EVERY row-1 slot target: dropping a member anywhere on
 row 1 means "leave the group and live here".
 
 ```c
-static int drop_row1_index(Ed *ed, int *from);   /* resolves BEFORE removal */
+/* `to` is already resolved; this is the removal and the move. */
+static void drop_out_of_group(Ed *ed, int to);
 ```
 
 The order is the whole deliverable:
@@ -108,6 +109,11 @@ Rect yew_strip_float_rect(void);
 - THE FLOAT REGISTERS NO REGION. It is drawn from `yew_grid_puts` and nothing
   else; `yew_strip_float_rect` exists so a test can hit-test every cell it
   covers and prove the registry never answers for it.
+- A drag repaints when the pointer changes CELL, and on release. Not per motion
+  report: a terminal emits as many of those per cell as it likes, and one
+  repaint each is the slideshow §3's hover rule already refuses. The release
+  repaints even when the drop changed nothing — putting the button down is what
+  takes the float off the screen.
 
 The drag's TARGETING is unaffected: it reads the pre-drag slot table, which is
 recorded for the held slot exactly as before.
@@ -171,6 +177,8 @@ Unit (`tests/unit/test_drag.c`, registered in `tests/unit/registry.c`):
 - `drag_dwell_opens_a_group_at_250ms_and_not_at_249` (renamed from the 400 ms
   row) and `drag_dwell_flashes_twice_before_opening` — the phase table below,
   driven by `ed->now_ms`, never by a sleep.
+- `drag_dwell_flash_marks_damage_only_at_an_edge` — one tick per millisecond
+  across the whole dwell marks damage exactly three times.
 - `drag_reports_a_deadline_at_every_flash_edge` — the deadline sequence
   62/124/186/250 and −1 once opened.
 
@@ -188,8 +196,11 @@ twin) and `tests/unit/test_theme.c` (no new role, so the list is unchanged).
 
 PTY: `chrome_drag` and its `nocolor` / `colors_16` / `ascii` siblings are
 re-recorded — they snapshot a drag mid-gesture, which is now a gap plus a
-float. No golden may capture a dwell in flight: the flash is a function of the
-clock, and a golden of it would be a timing race.
+float — and so is `s27_dwell_opens_member_strip`, whose row 1 loses the held
+entry the same way. No golden may capture a dwell IN FLIGHT: the flash is a
+function of the clock, and a golden of it would be a timing race. That case is
+safe because it settles 500 ms, well past the open, and the cue stops when the
+member strip it was announcing appears.
 
 Fuzz: `make fuzz-mouse` — the float and the exit path take no new allocation
 and must survive the existing corpus.
