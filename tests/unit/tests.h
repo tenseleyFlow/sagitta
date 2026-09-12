@@ -2191,6 +2191,9 @@ void test_ctxrows_strip_and_editor_share_one_row_set(void);
 void test_ctxrows_border_rows_need_a_second_pane(void);
 void test_ctxrows_footer_names_the_current_number_style(void);
 void test_ctxrows_overlay_rows_match_the_contract(void);
+#if YEW_WITH_LSP
+void test_ctxrows_doc_lsp_section_appears_with_a_server(void);
+#endif
 #if YEW_WITH_FUSS
 void test_ctxrows_fuss_file_rows_follow_git_status(void);
 void test_ctxrows_fuss_dir_rows_follow_expansion_and_subtree(void);

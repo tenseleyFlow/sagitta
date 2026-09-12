@@ -2197,6 +2197,9 @@ const YewTest yew_tests[] = {
     T(ctxrows_border_rows_need_a_second_pane),
     T(ctxrows_footer_names_the_current_number_style),
     T(ctxrows_overlay_rows_match_the_contract),
+#if YEW_WITH_LSP
+    T(ctxrows_doc_lsp_section_appears_with_a_server),
+#endif
 #if YEW_WITH_FUSS
     T(ctxrows_fuss_file_rows_follow_git_status),
     T(ctxrows_fuss_dir_rows_follow_expansion_and_subtree),
