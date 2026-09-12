@@ -45,7 +45,19 @@ enum {
     YEW_WHEEL_ROWS = 3,
     /* Shift+wheel, when wrap is off. */
     YEW_WHEEL_COLS = 6,
-    YEW_DRAG_DWELL_MS = 400,
+    /*
+     * Sprint 57.14 §3.  400 ms was long enough that a pause over a group
+     * read as the editor having stopped responding; 250 ms is short
+     * enough to feel like an answer, and the two-flash cue below is what
+     * makes even that much waiting legible.
+     */
+    YEW_DRAG_DWELL_MS = 250,
+    /*
+     * DERIVED, so the cue and the open cannot disagree: on, off, on, then
+     * settle — two flashes, and the fourth quarter is quiet so the member
+     * strip does not appear mid-blink.
+     */
+    YEW_DRAG_FLASH_MS = YEW_DRAG_DWELL_MS / 4,
     YEW_DRAG_SCROLL_MS = 120,
     YEW_CLICK_MULTI_MS = 400
 };
@@ -108,6 +120,15 @@ typedef struct MouseState {
     i64 dwell_since_ms;
     u32 dwell_gid;
     u32 preview_gid; /* the member strip a dwell opened; 0 = none */
+    /*
+     * Sprint 57.14 §3: the flash quarter the tick last SAW, and nothing
+     * else.  It exists to mark damage at a phase edge; what the cue looks
+     * like is computed from (now_ms − dwell_since_ms) at render time, so
+     * a missed wake-up costs a late repaint and never a different frame
+     * (invariant 5).  A per-render counter here would make the picture
+     * depend on how often the screen happened to be painted.
+     */
+    u8 flash_phase;
 
     /* Selection drag (§6). */
     const UnitOps *sel_unit;
@@ -169,6 +190,15 @@ bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
 
 /* §4: the group whose member strip a dwell has opened; 0 when none. */
 u32 yew_mouse_preview_group(const Ed *ed);
+
+/*
+ * §57.14 §3: the group whose row-1 entry is FLASHED at ed->now_ms, or 0.
+ *
+ * Pure in (state, now_ms) — the renderer asks it per frame and gets the
+ * same answer for the same clock, which is what keeps a blinking cue
+ * inside invariant 5.
+ */
+u32 yew_mouse_dwell_flash(const Ed *ed);
 
 /*
  * Called from the loop's timer path: dwell and auto-scroll are clocks,

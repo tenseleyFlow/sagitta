@@ -1490,6 +1490,9 @@ static void drag_dwell(Ed *ed, int slot)
     if (gid != m->dwell_gid) {
         m->dwell_gid = gid;
         m->dwell_since_ms = gid != 0U ? ed->now_ms : 0;
+        /* A new target starts its cue at the first quarter, lit: the
+         * clock restarting and the cue restarting are the same event. */
+        m->flash_phase = 0U;
     }
 }
 
@@ -1954,6 +1957,44 @@ static bool drag_over_chevron(Ed *ed, i32 *delta)
     return true;
 }
 
+/*
+ * Sprint 57.14 §3: which QUARTER of the dwell `elapsed` falls in.
+ *
+ * Quarters 0 and 2 are lit, so the cue reads as two flashes.  The last
+ * quarter is clamped rather than divided out: 3·FLASH is 186 and the
+ * dwell is 250, so the arithmetic would otherwise roll into a fifth
+ * quarter at 248 ms and light the cue for two milliseconds immediately
+ * before the strip opens.
+ */
+static u8 dwell_quarter(i64 elapsed)
+{
+    i64 q;
+
+    if (elapsed <= 0)
+        return 0U;
+    q = elapsed / YEW_DRAG_FLASH_MS;
+    return q >= 3 ? 3U : (u8)q;
+}
+
+u32 yew_mouse_dwell_flash(const Ed *ed)
+{
+    const MouseState *m;
+    i64 elapsed;
+
+    if (ed == NULL)
+        return 0U;
+    m = &ed->mouse;
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
+        return 0U;
+    /* Nothing to announce once the strip it was announcing is open. */
+    if (m->dwell_gid == 0U || m->preview_gid == m->dwell_gid)
+        return 0U;
+    elapsed = ed->now_ms - m->dwell_since_ms;
+    if (elapsed >= YEW_DRAG_DWELL_MS)
+        return 0U;
+    return (dwell_quarter(elapsed) % 2U) == 0U ? m->dwell_gid : 0U;
+}
+
 void yew_mouse_tick(Ed *ed, i64 now_ms)
 {
     MouseState *m;
@@ -1965,6 +2006,19 @@ void yew_mouse_tick(Ed *ed, i64 now_ms)
     if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return;
     ed->now_ms = now_ms;
+    /*
+     * The cue's damage, and ONLY its damage: the frame itself is computed
+     * from the clock by yew_mouse_dwell_flash, so this cannot make two
+     * paints of the same instant differ.
+     */
+    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid) {
+        u8 quarter = dwell_quarter(now_ms - m->dwell_since_ms);
+
+        if (quarter != m->flash_phase) {
+            m->flash_phase = quarter;
+            ed->full_damage = true;
+        }
+    }
     if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid &&
         now_ms - m->dwell_since_ms >= YEW_DRAG_DWELL_MS) {
         m->preview_gid = m->dwell_gid;
@@ -1996,8 +2050,21 @@ i64 yew_mouse_deadline(const Ed *ed, i64 now_ms)
     m = &ed->mouse;
     if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return -1;
-    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid)
-        next = m->dwell_since_ms + YEW_DRAG_DWELL_MS;
+    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid) {
+        /*
+         * EVERY phase edge, not just the open: the cue is a picture the
+         * loop has to be told to repaint, and the alternative to a
+         * deadline per edge is spinning (invariant 4).  Edges that would
+         * change nothing are not scheduled — past the third quarter the
+         * next thing to happen is the open itself.
+         */
+        i64 elapsed = now_ms - m->dwell_since_ms;
+        i64 quarter = elapsed <= 0 ? 0 : elapsed / YEW_DRAG_FLASH_MS;
+
+        next = quarter >= 3
+                   ? m->dwell_since_ms + YEW_DRAG_DWELL_MS
+                   : m->dwell_since_ms + (quarter + 1) * YEW_DRAG_FLASH_MS;
+    }
     if (yew_region_hit(m->at_x, m->at_y).kind == YEW_REGION_TAB_SCROLL) {
         i64 at = m->autoscroll_ms + YEW_DRAG_SCROLL_MS;
 

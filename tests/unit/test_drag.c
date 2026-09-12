@@ -343,7 +343,7 @@ static int dg_slot_of_payload(i32 want)
     return -1;
 }
 
-void test_drag_dwell_opens_a_group_at_400ms_and_not_at_399(void)
+void test_drag_dwell_opens_a_group_at_250ms_and_not_at_249(void)
 {
     DragFixture f;
     u32 g;
@@ -366,13 +366,13 @@ void test_drag_dwell_opens_a_group_at_400ms_and_not_at_399(void)
     }
     YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
 
-    /* 399 ms: still counting.  A drag that merely PASSES over a group
+    /* 249 ms: still counting.  A drag that merely PASSES over a group
      * must not make its members flash open. */
-    yew_mouse_tick(&f.ed, f.ed.now_ms + 399);
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS - 1);
     YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), 0U);
 
-    /* 400 ms: open. */
-    yew_mouse_tick(&f.ed, f.ed.now_ms + 400);
+    /* 250 ms: open. */
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
     YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
     yew_ed_free(&f.ed);
 }
@@ -727,7 +727,7 @@ void test_drag_autoscroll_is_throttled_to_one_entry_per_window(void)
  * pointer resting on a group emits no further events, so the loop has
  * to be told to wake up.
  */
-void test_drag_reports_a_deadline_while_dwelling(void)
+void test_drag_reports_a_deadline_at_every_flash_edge(void)
 {
     DragFixture f;
     u32 g;
@@ -750,13 +750,32 @@ void test_drag_reports_a_deadline_while_dwelling(void)
         yew_mouse_event(&f.ed, &press);
         yew_mouse_event(&f.ed, &motion);
     }
+    /*
+     * EVERY phase edge, because each one repaints the cue: the three
+     * quarter boundaries, then the open.  Sprint 27 waited only for the
+     * open, which is why a cue was not expressible then.
+     */
     YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms),
-                      YEW_DRAG_DWELL_MS);
-    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms + 399), 1);
-    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms + 400), 0);
+                      YEW_DRAG_FLASH_MS);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed,
+                                         f.ed.now_ms + YEW_DRAG_FLASH_MS),
+                      YEW_DRAG_FLASH_MS);
+    YEW_ASSERT_EQ_I64(
+        yew_mouse_deadline(&f.ed, f.ed.now_ms + 2 * YEW_DRAG_FLASH_MS),
+        YEW_DRAG_FLASH_MS);
+    /* Past the third quarter the next thing to happen is the open, so
+     * the settle is one sleep and not two. */
+    YEW_ASSERT_EQ_I64(
+        yew_mouse_deadline(&f.ed, f.ed.now_ms + 3 * YEW_DRAG_FLASH_MS),
+        YEW_DRAG_DWELL_MS - 3 * YEW_DRAG_FLASH_MS);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed,
+                                         f.ed.now_ms + YEW_DRAG_DWELL_MS - 1),
+                      1);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed,
+                                         f.ed.now_ms + YEW_DRAG_DWELL_MS), 0);
     /* Once it has fired there is nothing left to wait for. */
-    yew_mouse_tick(&f.ed, f.ed.now_ms + 400);
-    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms + 400), -1);
+    yew_mouse_tick(&f.ed, f.ed.now_ms + YEW_DRAG_DWELL_MS);
+    YEW_ASSERT_EQ_I64(yew_mouse_deadline(&f.ed, f.ed.now_ms), -1);
     yew_ed_free(&f.ed);
 }
 
@@ -1139,5 +1158,146 @@ void test_drag_held_entry_leaves_a_gap_in_the_strip(void)
             strip_only[i] = '.';
         YEW_ASSERT(strstr(strip_only, "yew-drag-0.txt") == NULL);
     }
+    yew_ed_free(&f.ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.14 §3: the dwell's two-flash cue                        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Does the group's row-1 entry render reversed right now?
+ *
+ * Found through the REGION the render registered, not through the
+ * pre-drag slot table: the preview has permuted the strip, so the cells
+ * a slot number names are not where that entry is currently drawn.
+ */
+static bool dg_entry_reversed(DragFixture *f, u32 gid)
+{
+    u16 x;
+
+    for (x = 0U; x < f->ed.grid.cols; x++) {
+        Region hit = yew_region_hit(x, 0U);
+
+        if (hit.kind == YEW_REGION_TAB && hit.payload == -(i32)gid)
+            return (f->ed.grid.back[x].attrs & YEW_ATTR_REVERSE) != 0U;
+    }
+    YEW_ASSERT(false);
+    return false;
+}
+
+/*
+ * A quarter of the dwell, lit, dark, lit, dark — then the strip opens.
+ *
+ * THE CUE IS A FUNCTION OF THE CLOCK, not of a paint counter: the test
+ * paints the SAME instant twice at two points and gets the same cells,
+ * which is invariant 5 applied to something that blinks.  Nothing here
+ * sleeps; ed->now_ms is the clock.
+ */
+void test_drag_dwell_flashes_twice_before_opening(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+    i64 t0;
+    bool unlit;
+    int i;
+    static const struct {
+        i64 at;
+        bool lit;
+    } phases[] = {
+        {0, true},          /* the cue starts immediately */
+        {1, true},
+        {YEW_DRAG_FLASH_MS - 1, true},
+        {YEW_DRAG_FLASH_MS, false},      /* first gap */
+        {2 * YEW_DRAG_FLASH_MS, true},   /* second flash */
+        {3 * YEW_DRAG_FLASH_MS, false},  /* settle */
+        /* The clamp: 4·FLASH is 248, inside the dwell, and an unclamped
+         * quarter would light the cue for the two milliseconds before
+         * the strip opens. */
+        {4 * YEW_DRAG_FLASH_MS, false},
+        {YEW_DRAG_DWELL_MS - 1, false}
+    };
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    YEW_ASSERT(gslot >= 0);
+    /* What the entry looks like with no dwell on it, to compare against. */
+    unlit = dg_entry_reversed(&f, g);
+
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    YEW_ASSERT_EQ_U64(f.ed.mouse.dwell_gid, g);
+    t0 = f.ed.now_ms;
+    for (i = 0; i < (int)YEW_ARRAY_LEN(phases); i++) {
+        f.ed.now_ms = t0 + phases[i].at;
+        YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed),
+                          phases[i].lit ? g : 0U);
+        dg_paint(&f);
+        YEW_ASSERT_EQ_U64(dg_entry_reversed(&f, g),
+                          phases[i].lit ? !unlit : unlit);
+        /* The same instant, painted again: byte-identical. */
+        dg_paint(&f);
+        YEW_ASSERT_EQ_U64(dg_entry_reversed(&f, g),
+                          phases[i].lit ? !unlit : unlit);
+    }
+    /* Once the strip is open the cue is done — the members ARE the
+     * answer, and a blinking entry above them would still be asking. */
+    f.ed.now_ms = t0 + YEW_DRAG_DWELL_MS;
+    yew_mouse_tick(&f.ed, f.ed.now_ms);
+    YEW_ASSERT_EQ_U64(yew_mouse_preview_group(&f.ed), g);
+    YEW_ASSERT_EQ_U64(yew_mouse_dwell_flash(&f.ed), 0U);
+    yew_ed_free(&f.ed);
+}
+
+/*
+ * The cue marks damage exactly once per edge.
+ *
+ * The loop paints when something says it must; ticking inside a quarter
+ * must say nothing, or a dwell becomes a repaint storm on whatever
+ * cadence the loop happens to wake on.
+ */
+void test_drag_dwell_flash_marks_damage_only_at_an_edge(void)
+{
+    DragFixture f;
+    u32 g;
+    int gslot;
+    i64 t0;
+    int i;
+    int edges = 0;
+
+    dg_fixture(&f, 5U);
+    g = dg_make_group(&f, 4, 5);
+    yew_tab_switch(&f.ed, 0);
+    yew_ed_layout(&f.ed);
+    dg_paint(&f);
+    gslot = dg_slot_of_payload(-(i32)g);
+    YEW_ASSERT(gslot >= 0);
+    {
+        Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+        Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, gslot), 0U);
+
+        yew_mouse_event(&f.ed, &press);
+        yew_mouse_event(&f.ed, &motion);
+    }
+    t0 = f.ed.now_ms;
+    /* One tick per millisecond across the whole dwell: three quarter
+     * boundaries, and not one repaint anywhere else. */
+    for (i = 0; i < YEW_DRAG_DWELL_MS; i++) {
+        f.ed.full_damage = false;
+        yew_mouse_tick(&f.ed, t0 + i);
+        if (f.ed.full_damage)
+            edges++;
+    }
+    YEW_ASSERT_EQ_I64(edges, 3);
     yew_ed_free(&f.ed);
 }

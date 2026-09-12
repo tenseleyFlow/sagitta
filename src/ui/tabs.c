@@ -990,9 +990,16 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
     ThemeEnt orphan;
     ThemeEnt active;
     ThemeEnt add;
+    u32 flash_gid;
 
     if (rect.w == 0U || rect.h == 0U)
         return;
+    /*
+     * Sprint 57.14 §3: the dwell's cue.  Asked once per render and
+     * computed from ed->now_ms, never from a frame counter — the same
+     * state and the same clock must paint the same cells (invariant 5).
+     */
+    flash_gid = yew_mouse_dwell_flash(ed);
     base = tab_base_style(ed);
     surface = tab_role_style(ed, "tab.bar", base);
     inactive = tab_role_style(ed, "tab.inactive", surface);
@@ -1036,6 +1043,14 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
             style = orphan;
         else if (entries[idx].modified)
             style = modified;
+        /*
+         * The cue TOGGLES reverse rather than substituting a style, so
+         * it is visible whether or not the group is the active entry —
+         * a flash that painted "active" over the active entry would
+         * announce nothing at all.
+         */
+        if (flash_gid != 0U && entries[idx].payload == -(i32)flash_gid)
+            style.attrs = (u16)(style.attrs ^ YEW_ATTR_REVERSE);
         span_rect = (Rect){x, rect.y,
                            (u16)(spans[i].col1 - spans[i].col0), 1U};
         if (idx != held_idx) {
