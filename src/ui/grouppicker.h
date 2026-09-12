@@ -88,7 +88,7 @@ CmdStatus yew_gp_cmd_new(CmdCtx *cx);
 CmdStatus yew_gp_cmd_edit(CmdCtx *cx);
 
 /*
- * Sprint 57.11 §4: the dialog's `Toggle` and `Confirm` rows.
+ * Sprint 57.13 §4: the dialog's `Toggle` and `Confirm` rows.
  *
  * The picker was keyed entirely through `yew_gp_key`, so its menu rows
  * had no command to carry and shipped as nothing.  These share one

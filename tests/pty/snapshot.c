@@ -128,7 +128,7 @@ static void modes_write(const VtScreen *v, Bytebuf *out)
      * APPENDED, never reordered: the modes line is a golden's, and
      * moving 1003 in front of 1004 would rewrite every snapshot that
      * has neither.  1003 (any-motion mouse) is here because Sprint
-     * 57.11 arms it while a context menu is open and invariant 6 says
+     * 57.13 arms it while a context menu is open and invariant 6 says
      * it is never left on — a claim only a golden that can SEE the mode
      * can make end to end.
      */

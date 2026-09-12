@@ -148,7 +148,7 @@ bool yew_lsp_rename_confirm_active(const Ed *ed)
 {
     (void)ed;
     /* Whatever panel is up, it is not a rename confirmation, so the
-     * PANEL menu keeps its bare `Close` row (Sprint 57.11 §4). */
+     * PANEL menu keeps its bare `Close` row (Sprint 57.13 §4). */
     return false;
 }
 
@@ -166,7 +166,7 @@ bool yew_lsp_attached(const Ed *ed, const Buffer *b)
     (void)ed;
     (void)b;
     /* No module, no server: the document menu's LSP section is omitted
-     * whole rather than shown greyed (Sprint 57.11 §4). */
+     * whole rather than shown greyed (Sprint 57.13 §4). */
     return false;
 }
 

@@ -418,7 +418,7 @@ void test_degrade_ascii_keeps_every_element_meaningful(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §6: the context menu, at every tier                  */
+/* Sprint 57.13 §6: the context menu, at every tier                  */
 /* ---------------------------------------------------------------- */
 
 /*

@@ -1,4 +1,4 @@
-# Sprint 57.11: Mouse Overhaul — Context Menus Everywhere
+# Sprint 57.13: Mouse Overhaul — Context Menus Everywhere
 
 ## Prerequisites
 
@@ -325,7 +325,7 @@ and NO_COLOR renditions of the menu.
 ### 7. Docs and comments
 
 `mouse.h` deferral comment rewritten; `.docs/sprints/05-ui-workspace/s27-mouse-and-feel.md`
-§9 gets a one-line "superseded by Sprint 57.11" note; `README.md` mouse
+§9 gets a one-line "superseded by Sprint 57.13" note; `README.md` mouse
 section (if present) lists right-click / ctrl+click.
 
 ### 8. Defer
@@ -356,10 +356,10 @@ asks (`YEW_BUG`-free: refuse with a message).
   extended); new commands' behaviour (cut/paste/select-all, split-open,
   number cycle).
 - **PTY:** regenerate `chrome_ctxmenu*` and `s27_group_menu_over_scrolled_strip`
-  (bordered, themed); new cases: `s57_11_doc_menu` (right-click in text,
-  hover one row via a 35-motion report, snapshot), `s57_11_ctrl_click_menu`,
-  `s57_11_fuss_file_menu`, `s57_11_fuss_dir_menu`, `s57_11_footer_menu`,
-  `s57_11_menu_sheds_rows` (10-row terminal), plus `_nocolor` / `_ascii`
+  (bordered, themed); new cases: `s57_13_doc_menu` (right-click in text,
+  hover one row via a 35-motion report, snapshot), `s57_13_ctrl_click_menu`,
+  `s57_13_fuss_file_menu`, `s57_13_fuss_dir_menu`, `s57_13_footer_menu`,
+  `s57_13_menu_sheds_rows` (10-row terminal), plus `_nocolor` / `_ascii`
   variants for the doc menu. `check-render.sh` and the determinism lane run
   them twice.
 - **Perf:** `tests/perf/mouse.c` unchanged gate (no allocation tokens in

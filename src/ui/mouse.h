@@ -167,7 +167,7 @@ void yew_mouse_tick(Ed *ed, i64 now_ms);
 i64 yew_mouse_deadline(const Ed *ed, i64 now_ms);
 
 /*
- * Sprint 57.11 §3: WHAT IS UNDER THE POINTER.
+ * Sprint 57.13 §3: WHAT IS UNDER THE POINTER.
  *
  * PURE, and unit-tested directly — every surface's menu comes from this
  * one answer, so "right-click opens the wrong menu over the drawer" is
@@ -223,8 +223,8 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
  * than nothing: it teaches a gesture that will change meaning, and the
  * sprint that finally implements it has to break the habit it created.
  *
- * - A DOCUMENT CONTEXT MENU → SHIPPED, Sprint 57.11.  Sprint 27 filed
- *   it post-1.0 "until somebody decides what belongs in one"; 57.11 §4
+ * - A DOCUMENT CONTEXT MENU → SHIPPED, Sprint 57.13.  Sprint 27 filed
+ *   it post-1.0 "until somebody decides what belongs in one"; 57.13 §4
  *   decided, and the deferral is superseded.  A right-click — or a
  *   ctrl+left-click, for the hardware that has no second button —
  *   opens a menu ANYWHERE: document, gutter, pane border, tab, group,
@@ -236,7 +236,7 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
  *   test_mouse_right_click_in_a_pane_opens_the_document_menu.
  *
  * - SUBMENUS, A SCROLLING MENU, MNEMONIC LETTERS, CTRL+WHEEL, MENU
- *   DRAG-AND-DROP → post-1.0, named in Sprint 57.11 §8 so nobody
+ *   DRAG-AND-DROP → post-1.0, named in Sprint 57.13 §8 so nobody
  *   invents them.  Shedding replaces the scrolling menu: a box that
  *   cannot fit drops its lowest-priority rows rather than growing a
  *   scrollbar nobody can aim at.  Ctrl+wheel stays unbound because it
@@ -253,7 +253,7 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
  *   hard-errors naming 52, so there is nothing to click yet.
  *
  * - LSP HOVER-ON-POINTER and diagnostics tooltips → Sprint 47.  Sprint
- *   57.11 does decode motion with no button held (SGR base 35, a mouse
+ *   57.13 does decode motion with no button held (SGR base 35, a mouse
  *   REPEAT carrying YEW_MB_NONE), and routes it — to the OPEN MENU'S
  *   highlight and nowhere else.  A terminal only reports it under mode
  *   1003, which yew arms solely while a menu is up and disarms through

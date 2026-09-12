@@ -505,7 +505,7 @@ void test_grouppicker_lists_only_directories_and_regular_files(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 Deliverable 4: the dialog's rows, as commands        */
+/* Sprint 57.13 Deliverable 4: the dialog's rows, as commands        */
 /* ---------------------------------------------------------------- */
 
 /*

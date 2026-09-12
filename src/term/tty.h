@@ -123,7 +123,7 @@ void yew_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld);
 void yew_tty_suspend(Tty *t);
 
 /*
- * Sprint 57.11: any-motion tracking (DEC mode 1003) is armed only while a
+ * Sprint 57.13: any-motion tracking (DEC mode 1003) is armed only while a
  * context menu is open, so the terminal reports pointer motion with no
  * button held (SGR base 35) and the router can highlight the row under
  * the pointer.  Idempotent.  The flag is what every restore path

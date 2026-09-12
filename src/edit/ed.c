@@ -2439,7 +2439,7 @@ static void perf_frame_tag(Ed *ed, size_t visible_bytes)
 }
 
 /*
- * Sprint 57.11 §3: is this frame ONLY an open menu's highlight moving?
+ * Sprint 57.13 §3: is this frame ONLY an open menu's highlight moving?
  *
  * Every other overlay's cells are already in the grid and its regions
  * are already in the table — which was NOT cleared, because nothing

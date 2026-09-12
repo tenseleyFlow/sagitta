@@ -357,7 +357,7 @@ bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out)
     if (out != NULL)
         (void)memset(out, 0, sizeof(*out));
     /* No tree, no status: every FUSS section is omitted in this build
-     * and no caller ever reads the zeroes (Sprint 57.11 §4). */
+     * and no caller ever reads the zeroes (Sprint 57.13 §4). */
     return false;
 }
 

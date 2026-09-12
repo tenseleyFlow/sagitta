@@ -975,7 +975,7 @@ void test_tabs_negative_region_payload_enters_the_group(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §4: ed.tab.open_split_h / _v                        */
+/* Sprint 57.13 §4: ed.tab.open_split_h / _v                        */
 /* ---------------------------------------------------------------- */
 
 static u32 tb_leaves(Ed *ed, Pane **out, u32 cap)

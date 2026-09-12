@@ -2,7 +2,7 @@
 #define YEW_UI_CTXMENU_H
 
 /*
- * Sprint 27 §5, reshaped by Sprint 57.11 §2: context menus.
+ * Sprint 27 §5, reshaped by Sprint 57.13 §2: context menus.
  *
  * This module owns geometry, drawing, hit-testing and key navigation
  * and nothing else.  It deliberately does NOT include edit/ed.h: the
@@ -31,14 +31,14 @@
  * for the duration of an invocation and yew_region_hit aborts if it is
  * asked anything while it is (see ui/region.h).
  *
- * THE BOX (57.11).  Facsimile-style: a one-cell border on every side,
+ * THE BOX (57.13).  Facsimile-style: a one-cell border on every side,
  * no title.  `box.h = rows + 2`, `box.w = widest + 2·pad + 2`.  The
  * box's top-left corner is the cell BELOW-RIGHT of the anchor, so the
  * cell the pointer is on when the menu opens is a border cell, never a
  * row — a release on the very cell that opened the menu activates
  * nothing.
  *
- * SHEDDING (57.11).  Every row carries a priority, 0 = never shed …
+ * SHEDDING (57.13).  Every row carries a priority, 0 = never shed …
  * 3 = shed first.  When the allowed rectangle cannot hold the box the
  * priority-3 rows go, then 2, then 1, a whole level at a time, and
  * the menu refuses only when the priority-0 rows alone do not fit.
@@ -60,7 +60,7 @@ enum {
     YEW_CTX_MAX_ROWS = 32,
     /* Narrower than this and the labels clip to meaninglessness — the
      * box is never made narrower than this by its OWN contents; a
-     * narrower allowed rectangle still clamps it (57.11). */
+     * narrower allowed rectangle still clamps it (57.13). */
     YEW_CTX_MIN_WIDTH = 18,
     /* Highest priority a row may carry: shed first. */
     YEW_CTX_PRIORITY_MAX = 3
@@ -76,7 +76,7 @@ enum {
 
 /*
  * The menu's look, resolved by the CALLER from the theme's `menu.*`
- * roles (Sprint 57.11 §6) — this module knows no colours of its own.
+ * roles (Sprint 57.13 §6) — this module knows no colours of its own.
  * `surface` paints the box background and its border; `row` an enabled
  * row; `hover` the highlighted row; `disabled` a greyed row; `accel`
  * the accelerator column; `sep` a separator rule.
@@ -165,7 +165,7 @@ bool yew_ctx_row_enabled(u32 row);
 u32 yew_ctx_shed_count(void);
 u8 yew_ctx_priority(u32 row);
 /*
- * A row's label, its action and whether it is a rule.  Sprint 57.11 §4
+ * A row's label, its action and whether it is a rule.  Sprint 57.13 §4
  * pins every builder's row list by EXACT LABEL, in order, with its
  * separators — a menu is a promise about where the pointer has to go,
  * and a row that moves between two right-clicks breaks it — so the

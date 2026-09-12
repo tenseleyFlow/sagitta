@@ -18,7 +18,7 @@
 #include "mod/lsp/sync.h"
 #include "text/piece.h"
 #include "text/undo.h"
-/* Sprint 57.11 Deliverable 4: the confirmation is a context-menu shape
+/* Sprint 57.13 Deliverable 4: the confirmation is a context-menu shape
  * as well as a keystroke, so this file builds the PANEL menu too. */
 #include "ui/ctxmenu.h"
 #include "ui/ctxrows.h"
@@ -987,7 +987,7 @@ void test_lsp_rename_apply_failure_rolls_back_committed_buffers(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 Deliverable 4: the confirmation's three answers      */
+/* Sprint 57.13 Deliverable 4: the confirmation's three answers      */
 /* ---------------------------------------------------------------- */
 
 /*

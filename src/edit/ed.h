@@ -242,7 +242,7 @@ struct Ed {
     bool full_damage;
     bool footer_dirty;
     /*
-     * Sprint 57.11 §3: the MENU MOVED AND NOTHING ELSE DID.
+     * Sprint 57.13 §3: the MENU MOVED AND NOTHING ELSE DID.
      *
      * A pointer crossing an open context menu changes one highlighted
      * row.  Marking `full_damage` for that would repaint every pane,

@@ -2,7 +2,7 @@
 #define YEW_UI_CTXROWS_H
 
 /*
- * Sprint 57.11 §3/§4: WHAT IS UNDER THE POINTER, and WHICH ROWS THAT
+ * Sprint 57.13 §3/§4: WHAT IS UNDER THE POINTER, and WHICH ROWS THAT
  * DESERVES.
  *
  * Two modules meet here and neither may include the other's world:
@@ -90,7 +90,7 @@ typedef enum CtxTarget {
     /*
      * Focus the captured leaf and LEAVE THE CARET ALONE.
      *
-     * Sprint 57.11 §3 listed six targets and Deliverable 4 found it
+     * Sprint 57.13 §3 listed six targets and Deliverable 4 found it
      * needed a seventh: placing the caret where the click was COLLAPSES
      * THE SELECTION (yew_win_click_to_cursor sets anchor = pos), so
      * `Cut`, `Copy` and `Delete` — the three rows a user right-clicks a
@@ -163,7 +163,7 @@ typedef enum CtxAction {
     CTXA_FUSS_OPEN,
 
     /*
-     * Sprint 57.11 §4 proper.
+     * Sprint 57.13 §4 proper.
      *
      * WHY SOME ROWS APPEAR TWICE (CTXA_GOTO_LINE and
      * CTXA_DOC_GOTO_LINE, CTXA_FIND_FILE and CTXA_DOC_FIND_FILE …):

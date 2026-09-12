@@ -102,7 +102,7 @@ void yew_region_remove_kind(RegionKind kind);
  * entries that own exactly `rect`.  YEW_REGION_BLOCK is registered by
  * the picker, the group picker, a panel, the completion popup and the
  * context menu, so an overlay that redraws itself between two frame
- * begins (Sprint 57.11's hover repaint) can take back its own without
+ * begins (Sprint 57.13's hover repaint) can take back its own without
  * taking the others' with it.
  */
 void yew_region_remove_rect(RegionKind kind, Rect rect);

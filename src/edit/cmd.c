@@ -598,7 +598,7 @@ static const CmdDesc builtins[] = {
     {"ed.view.number_style", yew_edit_cmd_view_number_style, YEW_ARITY_STR,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Set line numbers to none, abs, rel, or hybrid", "number_style"},
-    /* Sprint 57.11 §4: the footer menu's line-number row. */
+    /* Sprint 57.13 §4: the footer menu's line-number row. */
     {"ed.view.number_cycle", yew_edit_cmd_view_number_cycle,
      YEW_ARITY_NONE, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Cycle line numbers none, abs, rel, hybrid", "number_cycle"},
@@ -677,7 +677,7 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN, "Write the active buffer and quit", NULL},
     {"ed.file.save", yew_file_cmd_save_current, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN, "Atomically save the active file", NULL},
-    /* Sprint 57.11 §4: the document menu's `Save As...`.  It PROMPTS —
+    /* Sprint 57.13 §4: the document menu's `Save As...`.  It PROMPTS —
      * it opens the E-mode line seeded with `w <current path>` — rather
      * than writing anything itself, so `ed.file.write` stays the one
      * implementation of "write to a path". */
@@ -719,7 +719,7 @@ static const CmdDesc builtins[] = {
      "Close every tab but the active one", NULL},
     {"ed.tab.copy_path", yew_tab_cmd_copy_path, YEW_ARITY_NONE, 0U,
      "Copy the active tab's canonical path to the clipboard", NULL},
-    /* Sprint 57.11 §4: the tab menu's two "open in split" rows. */
+    /* Sprint 57.13 §4: the tab menu's two "open in split" rows. */
     {"ed.tab.open_split_h", yew_tab_cmd_open_split_h, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN,
      "Open the active tab's buffer in a horizontal split", NULL},
@@ -745,7 +745,7 @@ static const CmdDesc builtins[] = {
      "Remove the active tab from its group", NULL},
     /* Sprint 27 §5/§9. */
     /*
-     * Sprint 57.11 §5 widens the arity: iarg 1 names the TAB STRIP
+     * Sprint 57.13 §5 widens the arity: iarg 1 names the TAB STRIP
      * context explicitly, so a binding can ask for it once the bare
      * form starts meaning "whatever the keyboard focus is on".  Both
      * spellings still open the strip menu today.
@@ -766,7 +766,7 @@ static const CmdDesc builtins[] = {
     {"ed.group.edit", yew_gp_cmd_edit, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Edit the active group's membership", NULL},
     /*
-     * Sprint 57.11 §4: the group picker's own two rows.
+     * Sprint 57.13 §4: the group picker's own two rows.
      *
      * INTERNAL is deliberately NOT set — the dialog is modal, but so is
      * the cmdline, and a command the palette cannot see is a command
@@ -955,7 +955,7 @@ static const CmdDesc builtins[] = {
          YEW_CMD_MULTI_AGGREGATE,
      "Rename the symbol under the cursor", NULL},
     /*
-     * Sprint 57.11 §4: the rename confirmation's three answers.
+     * Sprint 57.13 §4: the rename confirmation's three answers.
      *
      * `apply` CHANGES BUFFERS across the workspace — it is the moment
      * the plan lands — while `diff` only shows a scratch view and
@@ -1125,7 +1125,7 @@ static const CmdDesc builtins[] = {
     {"ed.git.open_split_v", yew_fuss_cmd_open_split_v, YEW_ARITY_OPT_STR,
      YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE,
      "Open the selected path in a vertical split", "git_open_split_v"},
-    /* Sprint 57.11 §4: the FUSS menus' `Copy Path`.  Path-addressed
+    /* Sprint 57.13 §4: the FUSS menus' `Copy Path`.  Path-addressed
      * like every other FUSS row command, which is what `ed.tab.copy_path`
      * — the active tab's path, no argument — cannot be. */
     {"ed.git.copy_path", yew_fuss_cmd_copy_path, YEW_ARITY_OPT_STR, 0U,
@@ -1187,7 +1187,7 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.file.write_quit", "f", YEW_RP_FORBID, "wq"},
     {"ed.file.new", "f", YEW_RP_FORBID, "new"},
     {"ed.file.reload", "", YEW_RP_FORBID, "reload"},
-    /* Sprint 57.11 §4: `:saveas` takes NO argument — it opens `:w
+    /* Sprint 57.13 §4: `:saveas` takes NO argument — it opens `:w
      * <current path>` for editing, which is the whole of what it does.
      * An argspec would offer a second way to spell `:w`. */
     {"ed.file.save_as", "", YEW_RP_FORBID, "saveas"},
@@ -1204,7 +1204,7 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.group.add_tab", "s", YEW_RP_FORBID, "gadd"},
     {"ed.tab.close_others", "", YEW_RP_FORBID, "tabonly"},
     {"ed.tab.copy_path", "", YEW_RP_FORBID, "copypath"},
-    /* Sprint 57.11 §4: named after :tabnew / :tabonly, not after the
+    /* Sprint 57.13 §4: named after :tabnew / :tabonly, not after the
      * pane commands, because the subject is the tab's buffer. */
     {"ed.tab.open_split_h", "", YEW_RP_FORBID, "tabsplit"},
     {"ed.tab.open_split_v", "", YEW_RP_FORBID, "tabvsplit"},
@@ -1390,9 +1390,9 @@ static bool command_name_valid(const char *name)
         "report", "dump", "frames", "mark",
         /* Sprint 57.10: row-1 numbered jump from inside a group. */
         "goto_bar",
-        /* Sprint 57.11 §4: the context-menu row commands. */
+        /* Sprint 57.13 §4: the context-menu row commands. */
         "number_cycle",
-        /* Sprint 57.11 Deliverable 4: the four rows that had no command
+        /* Sprint 57.13 Deliverable 4: the four rows that had no command
          * — `Save As...`, the rename panel's two answers, and the group
          * picker's confirm. */
         "save_as", "apply", "confirm"};

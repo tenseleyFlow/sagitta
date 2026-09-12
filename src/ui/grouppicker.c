@@ -569,7 +569,7 @@ static void gp_toggle_row(Ed *ed, const GpRow *r)
 }
 
 /*
- * Sprint 57.11 Deliverable 4: the two answers the GP menu rows offer,
+ * Sprint 57.13 Deliverable 4: the two answers the GP menu rows offer,
  * factored out of `yew_gp_key` so a row and a keystroke cannot drift.
  *
  * `gp_toggle_current` is exactly what Space does — tick the focused
@@ -1092,7 +1092,7 @@ CmdStatus yew_gp_cmd_edit(CmdCtx *cx)
 }
 
 /* ---------------------------------------------------------------- */
-/* The dialog's own rows, as commands (Sprint 57.11 §4)             */
+/* The dialog's own rows, as commands (Sprint 57.13 §4)             */
 /* ---------------------------------------------------------------- */
 
 /*

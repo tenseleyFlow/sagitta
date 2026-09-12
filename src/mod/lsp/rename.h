@@ -76,7 +76,7 @@ void yew_lsp_rename_plan_test_fail_at(RenamePlan *plan, size_t file_index,
                                       size_t edit_index);
 
 /*
- * Deterministic unit-test seam for the CONFIRM PHASE (Sprint 57.11
+ * Deterministic unit-test seam for the CONFIRM PHASE (Sprint 57.13
  * Deliverable 4).
  *
  * Reaching RENAME_CONFIRM in production needs a ready language server

@@ -61,7 +61,7 @@ Rect yew_fuss_drawer_rect(const Ed *ed);
 Rect yew_fuss_backdrop_rect(const Ed *ed);
 
 /*
- * Sprint 57.11 §3: the three seams the mouse router needs and only it.
+ * Sprint 57.13 §3: the three seams the mouse router needs and only it.
  *
  * `yew_fuss_path_is_dir` answers the ONE question a FUSS row's context
  * menu turns on — file menu or directory menu — and answers it from the
@@ -77,7 +77,7 @@ Rect yew_fuss_backdrop_rect(const Ed *ed);
  */
 bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir);
 /*
- * Sprint 57.11 §4: everything a FUSS row's menu turns on, in one
+ * Sprint 57.13 §4: everything a FUSS row's menu turns on, in one
  * answer.
  *
  * The row set for a file depends on its git status — `Stage` is dead
@@ -176,7 +176,7 @@ CmdStatus yew_fuss_cmd_open(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open_split_h(CmdCtx *cx);
 CmdStatus yew_fuss_cmd_open_split_v(CmdCtx *cx);
 /*
- * Sprint 57.11 §4: the FUSS menus' `Copy Path` row.
+ * Sprint 57.13 §4: the FUSS menus' `Copy Path` row.
  *
  * `ed.tab.copy_path` copies the ACTIVE TAB's path and takes no
  * argument, so it cannot answer "copy the path of the row I pointed

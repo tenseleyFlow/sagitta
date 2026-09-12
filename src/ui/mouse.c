@@ -304,7 +304,7 @@ static void mouse_wheel(Ed *ed, const Key *k)
     if (yew_mouse_claimed_by_menu(ed, *k))
         return;
     /*
-     * 57.11 §3: THE WHEEL SCROLLS THE TREE, over its rows and over the
+     * 57.13 §3: THE WHEEL SCROLLS THE TREE, over its rows and over the
      * blank drawer below them alike — a list that only scrolled where
      * it happened to have drawn a row would feel like it had holes.
      */
@@ -373,7 +373,7 @@ static Rect menu_allowed(const Ed *ed)
 }
 
 /*
- * Sprint 57.11 §6: the menu's look, from the theme's `menu.*` roles.
+ * Sprint 57.13 §6: the menu's look, from the theme's `menu.*` roles.
  *
  * A UI role is an OVERLAY, not a replacement — the same idiom as the
  * tab strip's `tab_role_style`: a foreground-only role keeps the menu
@@ -924,7 +924,7 @@ static void invoke_desc(Ed *ed, const CtxActionDesc *d, const char *path)
 /*
  * Runs whatever row was chosen, against the target the menu captured.
  *
- * TABLE-DRIVEN (57.11 §3).  Sprint 27 spent a switch per menu kind on
+ * TABLE-DRIVEN (57.13 §3).  Sprint 27 spent a switch per menu kind on
  * this, so each new kind grew a second switch somewhere else and the
  * two drifted; a row's meaning is now the data in `yew_ctx_actions` and
  * this is its only reader.
@@ -999,7 +999,7 @@ void yew_mouse_menu_draw(Ed *ed)
     yew_region_remove_kind(YEW_REGION_CTX_ROW);
     yew_region_remove_rect(YEW_REGION_BLOCK, yew_ctx_box());
     /* Resolved ONCE per draw, from the theme — the widget knows no
-     * colours of its own (57.11 §6). */
+     * colours of its own (57.13 §6). */
     style = menu_style(ed);
     yew_ctx_draw(&ed->grid, &style);
 }
@@ -1306,7 +1306,7 @@ static void mouse_press(Ed *ed, const Key *k)
         break;
     case YEW_REGION_FUSS_ROW:
         /*
-         * 57.11 §3: A SINGLE CLICK SELECTS.  The survey found this
+         * 57.13 §3: A SINGLE CLICK SELECTS.  The survey found this
          * missing and it is the one thing that made the tree feel
          * broken: every other list in the program moves its cursor to
          * where you point.  Opening is still the DOUBLE click, counted
@@ -2022,7 +2022,7 @@ void yew_mouse_event(Ed *ed, const Key *k)
  * so a binding can ask for it on purpose.  `iarg 0` or absent is the
  * FOCUS: the FUSS row when F mode is up, the picker row when a picker
  * is, else the document at the cursor cell.  `t m` is the latter, which
- * is what makes the document menu keyboard-reachable (57.11 §5).
+ * is what makes the document menu keyboard-reachable (57.13 §5).
  */
 static CmdStatus open_strip_menu(Ed *ed)
 {

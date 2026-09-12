@@ -1664,7 +1664,7 @@ void test_lsp_server_requests_receive_protocol_results(void)
 }
 
 /*
- * Sprint 57.11 §4: the OTHER half of the section-omission rule.
+ * Sprint 57.13 §4: the OTHER half of the section-omission rule.
  *
  * `ctxrows_doc_optional_sections_are_absent_not_greyed` proves the
  * four LSP rows are absent with no server; this proves they appear —

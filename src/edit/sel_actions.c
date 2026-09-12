@@ -412,7 +412,7 @@ CmdStatus yew_sel_cmd_delete(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.11 §4: the `Cut` menu row, and H-mode `x`.
+ * Sprint 57.13 §4: the `Cut` menu row, and H-mode `x`.
  *
  * Cut is exactly yank-then-delete, in that order, and it is written as
  * those two steps rather than as a third capture path: a bespoke
@@ -498,7 +498,7 @@ CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.11 §4: the `Select All` menu row, and L-mode `g a`.
+ * Sprint 57.13 §4: the `Select All` menu row, and L-mode `g a`.
  *
  * H is entered through yew_mode_enter_highlight rather than by poking
  * ed->mode: that call is what installs the H key table, sets the unit

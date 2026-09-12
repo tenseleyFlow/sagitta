@@ -434,7 +434,7 @@ void test_mouse_block_region_swallows_everything(void)
 }
 
 /*
- * Sprint 57.11 supersedes Sprint 27 §9.  A right-click inside a pane
+ * Sprint 57.13 supersedes Sprint 27 §9.  A right-click inside a pane
  * opens the DOCUMENT menu — and, just as importantly, it still does not
  * touch the phase machine: the menu gesture is resolved before arming,
  * so no drag is pending and no selection is live behind the pop-up.
@@ -909,7 +909,7 @@ void test_mouse_tab_dropped_on_a_pane_cancels(void)
 }
 
 /*
- * Sprint 57.11 §1 rewrote the Sprint 4 fact this test used to pin.
+ * Sprint 57.13 §1 rewrote the Sprint 4 fact this test used to pin.
  * Motion with NO button held (SGR base 35, mode 1003) IS decoded now —
  * a mouse REPEAT carrying YEW_MB_NONE — because an open context menu
  * needs it to highlight the row under the pointer.  The router drops it
@@ -1265,7 +1265,7 @@ void test_mouse_ctx_row_highlights_then_invokes(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §3: context resolution, opening, hover, dispatch     */
+/* Sprint 57.13 §3: context resolution, opening, hover, dispatch     */
 /* ---------------------------------------------------------------- */
 
 /*
@@ -1902,7 +1902,7 @@ void test_mouse_menu_pane_target_places_the_cursor(void)
          * The palette row, by NAME.  It is PANE targeted — focus the
          * leaf that was pointed at, caret on the cell that was clicked,
          * THEN the command — while the rows above it are LEAF targeted
-         * precisely so they do not move the caret (57.11 §4), which is
+         * precisely so they do not move the caret (57.13 §4), which is
          * the distinction this test exists to hold.
          */
         for (row = 0U; row < rows; row++)

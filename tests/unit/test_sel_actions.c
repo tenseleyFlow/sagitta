@@ -867,7 +867,7 @@ void test_sel_actions_delete_hands_the_journal_to_the_buffer(void)
 }
 
 /*
- * Sprint 57.11 §4: select-all spans the buffer and lands in H.
+ * Sprint 57.13 §4: select-all spans the buffer and lands in H.
  *
  * Invoked from L, because that is where `g a` lives: the command has to
  * enter H itself, not assume it is already there.

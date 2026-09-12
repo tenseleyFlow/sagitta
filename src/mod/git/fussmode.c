@@ -1693,7 +1693,7 @@ Rect yew_fuss_drawer_rect(const Ed *ed)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §3: the mouse router's three seams                  */
+/* Sprint 57.13 §3: the mouse router's three seams                  */
 /* ---------------------------------------------------------------- */
 
 /*
@@ -2099,7 +2099,7 @@ typedef enum FussTargetGuard {
     FUSS_TARGET_FILE,
     /*
      * Staged, FILE OR DIRECTORY.  `git restore --staged -- dir` is a
-     * valid unstage of everything below it, and 57.11 §4's FUSS
+     * valid unstage of everything below it, and 57.13 §4's FUSS
      * directory menu offers exactly that as `Unstage All Below`; the
      * flags on a directory node are aggregates of its subtree, so the
      * "nothing staged" refusal below reads correctly for both.

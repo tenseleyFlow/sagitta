@@ -406,7 +406,7 @@ void test_ctxmenu_group_menu_captures_the_gid(void)
 }
 
 /*
- * Sprint 57.11 supersedes Sprint 27 §9: a right-click inside a PANE
+ * Sprint 57.13 supersedes Sprint 27 §9: a right-click inside a PANE
  * opens the DOCUMENT menu.
  *
  * The old test pinned the deferral ("opens nothing, so nobody wires a
@@ -517,7 +517,7 @@ void test_ctxmenu_a_row_handler_reading_a_payload_is_a_bug(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §2: the bordered box                                 */
+/* Sprint 57.13 §2: the bordered box                                 */
 /* ---------------------------------------------------------------- */
 
 /*
@@ -612,7 +612,7 @@ void test_ctxmenu_home_and_end_reach_the_first_and_last_rows(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §2: shedding                                         */
+/* Sprint 57.13 §2: shedding                                         */
 /* ---------------------------------------------------------------- */
 
 void test_ctxmenu_sheds_the_lowest_priorities_first(void)
@@ -748,7 +748,7 @@ void test_ctxmenu_separators_never_lead_trail_or_double(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §2: the width clamp                                  */
+/* Sprint 57.13 §2: the width clamp                                  */
 /* ---------------------------------------------------------------- */
 
 void test_ctxmenu_width_clamp_drops_accels_before_clipping_labels(void)

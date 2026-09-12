@@ -208,7 +208,7 @@ void test_tty_restore_blob(void)
 }
 
 /*
- * Sprint 57.11 §1: mode 1003 is armed only while a context menu is open,
+ * Sprint 57.13 §1: mode 1003 is armed only while a context menu is open,
  * and invariant 6 says whatever was armed must be disarmed by every
  * teardown path.  The restore blob is the one sequence all of them write
  * — normal restore, atexit, the fatal-signal and SIGTSTP handlers, and

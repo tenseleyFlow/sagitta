@@ -1676,7 +1676,7 @@ CmdStatus yew_tab_cmd_copy_path(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.11 §4: the tab menu's `Open in Split Right` / `Open in
+ * Sprint 57.13 §4: the tab menu's `Open in Split Right` / `Open in
  * Split Below` rows.
  *
  * The buffer comes from the ACTIVE TAB, not from the focused pane.

@@ -692,7 +692,7 @@ void test_invariant9_menu_and_its_rows_are_keyboard_reachable(void)
     /*
      * Keys only: the same menu, on the same target, with no
      * coordinates involved anywhere.  `iarg 1` is the STRIP — Sprint
-     * 57.11 §5 gave 0/absent to the keyboard FOCUS instead, so the
+     * 57.13 §5 gave 0/absent to the keyboard FOCUS instead, so the
      * strip has to be asked for by name now.
      */
     i9_keys_only();
@@ -734,7 +734,7 @@ void test_invariant9_menu_and_its_rows_are_keyboard_reachable(void)
 }
 
 /*
- * Sprint 57.11 §5: ed.ui.context_menu takes an OPTIONAL int.
+ * Sprint 57.13 §5: ed.ui.context_menu takes an OPTIONAL int.
  *
  * `iarg 1` names the tab strip explicitly; absent still means the same
  * thing until Phase 3 routes the bare form to the keyboard focus.  The
@@ -791,12 +791,12 @@ void test_invariant9_every_new_command_is_registered(void)
         "ed.tab.close_others", "ed.tab.copy_path",  "ed.group.rename",
         "ed.group.dissolve",   "ed.ui.context_menu", "ed.group.add_tab",
         "ed.mouse.enable",     "ed.mouse.disable",
-        /* Sprint 57.11 §4: the document-menu row commands. */
+        /* Sprint 57.13 §4: the document-menu row commands. */
         "ed.sel.all",
         "ed.tab.open_split_h", "ed.tab.open_split_v",
         "ed.view.number_cycle",
         /*
-         * Sprint 57.11 Deliverable 4: the four rows that shipped as
+         * Sprint 57.13 Deliverable 4: the four rows that shipped as
          * nothing because the state machines behind them were raw key
          * handlers.  A row whose command is not in the registry is a
          * row the keyboard cannot reach, which is the whole of what

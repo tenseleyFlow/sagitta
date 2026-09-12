@@ -1,5 +1,5 @@
 /*
- * Sprint 27 §5, Sprint 57.11 §2.  See ctxmenu.h for the capture-at-open
+ * Sprint 27 §5, Sprint 57.13 §2.  See ctxmenu.h for the capture-at-open
  * law this file exists to enforce, and for the box, shedding and
  * placement contracts.  Deliberately no edit/ed.h.
  */

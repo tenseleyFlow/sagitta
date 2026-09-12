@@ -369,7 +369,7 @@ Binding documents — read before any sprint:
   Shift+Arrow entry into Highlight, explicit Ctrl+C/X/V system-clipboard
   aliases over the existing selection/register engine, and safe unforced
   `:q` return from transient job output to its originating file.
-- Sprint 57.11 (s57_11-mouse-overhaul-context-menus.md) — Context menus
+- Sprint 57.13 (s57_13-mouse-overhaul-context-menus.md) — Context menus
   everywhere: right-click / ctrl+click at the pointer on every surface (document,
   strip, footer, FUSS rows, pickers, panels), hover highlight via mode 1003 while
   open, priority-based row shedding, themed bordered box, table-driven dispatch,
@@ -423,8 +423,8 @@ Binding documents — read before any sprint:
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
   `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`,
-  `s57_10-…`, `s57_11-…`, `s57_12-…`) are the pressure valve when a sprint splits —
-  renumbering is forbidden once files exist.
+  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`) are the pressure valve
+  when a sprint splits — renumbering is forbidden once files exist.
 
 ## Sprint file format
 

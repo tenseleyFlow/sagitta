@@ -364,7 +364,7 @@ static bool decode_mouse(Key *out, u32 cb, u32 cx, u32 cy, u8 final)
         out->button = (u8)(YEW_MB_LEFT + base - 32U);
         out->ev = YEW_KEY_REPEAT;
     } else if (final == (u8)'M' && base == 35U) {
-        /* Sprint 57.11: motion with NO button held.  A terminal only
+        /* Sprint 57.13: motion with NO button held.  A terminal only
          * reports it under mode 1003, which yew arms solely while a
          * context menu is open; the router drops it otherwise. */
         out->button = (u8)YEW_MB_NONE;

@@ -47,7 +47,7 @@ enum {
     PERF_MOUSE_TRIALS = 11,
     PERF_MOUSE_BUDGET_NS = 5000000,
     /*
-     * Sprint 57.11 §3's second gate.  A pointer crossing an open menu
+     * Sprint 57.13 §3's second gate.  A pointer crossing an open menu
      * may cost ONE frame per row it actually lands on, and not one per
      * motion report — the terminal decides how many of those there are.
      * Twenty rows is the budget because the menu under test has twenty.
@@ -129,7 +129,7 @@ static i64 measure_burst(Ed *ed, u64 *renders)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §3: hovering an open menu                           */
+/* Sprint 57.13 §3: hovering an open menu                           */
 /* ---------------------------------------------------------------- */
 
 /*

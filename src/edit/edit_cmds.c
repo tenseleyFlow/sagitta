@@ -505,7 +505,7 @@ CmdStatus yew_edit_cmd_view_number_style(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.11 §4: the footer menu's `Line Numbers: <style>` row, and
+ * Sprint 57.13 §4: the footer menu's `Line Numbers: <style>` row, and
  * the keyboard twin of clicking it.
  *
  * The cycle order is the NumStyle declaration order (none, abs, rel,

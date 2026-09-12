@@ -649,7 +649,7 @@ void test_input_mouse_and_focus(void)
 }
 
 /*
- * Sprint 57.11 §1: SGR base 35 is motion with NO button held, which a
+ * Sprint 57.13 §1: SGR base 35 is motion with NO button held, which a
  * terminal reports only under mode 1003.  It decodes to a mouse REPEAT
  * carrying YEW_MB_NONE, with the modifier bits (4 shift, 8 alt, 16 ctrl)
  * folded into mods exactly as for a held-button motion.  Every modifier

@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * Sprint 57.11 §4: one builder per context kind.
+ * Sprint 57.13 §4: one builder per context kind.
  *
  * WHY THIS IS NOT IN ui/mouse.c.  The router is an allocation-free file
  * by gate (tests/perf/mouse.c reads its source), and capturing a menu's
@@ -23,7 +23,7 @@
  *   two right-clicks on the same thing is a menu the hand cannot learn.
  *
  *   A SECTION is OMITTED WHOLE when its FEATURE is not available in
- *   this build or for this buffer (57.11 §4): no LSP server attached,
+ *   this build or for this buffer (57.13 §4): no LSP server attached,
  *   no git repository, FUSS compiled out.  Four greyed rows naming a
  *   language server that will never exist teach nothing; they are just
  *   furniture.  Shape stability then holds per (kind, availability),

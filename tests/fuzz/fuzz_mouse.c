@@ -143,7 +143,7 @@ static void emit_random_event(Rng *r, Bytebuf *out)
         emit_sgr(out, 32U | mods, x, y, false); /* motion, button held */
     } else if (shape < 40U) {
         /*
-         * Sprint 57.11 §1: MOTION WITH NO BUTTON HELD, base 35 — what a
+         * Sprint 57.13 §1: MOTION WITH NO BUTTON HELD, base 35 — what a
          * terminal streams under mode 1003, which yew arms only while a
          * menu is open.  A tenth of the stream, because the burst of
          * reports a pointer crossing the screen produces is exactly
@@ -301,7 +301,7 @@ static bool run_session(const u8 *data, size_t len, char *why,
                 break;
             }
             /*
-             * Sprint 57.11 §1/DoD 6: MODE 1003 IS NEVER LEFT ON.
+             * Sprint 57.13 §1/DoD 6: MODE 1003 IS NEVER LEFT ON.
              *
              * Checked before the event as well as after, so a stream
              * that armed it and then took a path which forgot to disarm

@@ -36,7 +36,7 @@ bool yew_lsp_symbols(Ed *ed, Win *w);
 bool yew_lsp_rename_key(Ed *ed, const Key *key);
 
 /*
- * Sprint 57.11 Deliverable 4: the rename confirmation's three answers,
+ * Sprint 57.13 Deliverable 4: the rename confirmation's three answers,
  * as something other than a keystroke.
  *
  * The confirmation is a RAW KEY HANDLER — Enter applies, `d` shows the
@@ -62,7 +62,7 @@ bool yew_lsp_rename_answer(Ed *ed, LspRenameAnswer answer);
  *
  * The panel slot also hosts hover and signature help, which keep the
  * bare `Close` row, so the PANEL menu builder has to be able to tell
- * them apart (57.11 §4).  False in the diff phase: the summary panel is
+ * them apart (57.13 §4).  False in the diff phase: the summary panel is
  * closed before the diff buffer is shown, so there is no panel to
  * right-click.
  */
@@ -72,7 +72,7 @@ void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap);
 /*
- * Sprint 57.11 §4: is a server attached to THIS buffer?
+ * Sprint 57.13 §4: is a server attached to THIS buffer?
  *
  * The document menu's LSP section is omitted whole when the answer is
  * no (the section-omission rule), so the question has to be answerable

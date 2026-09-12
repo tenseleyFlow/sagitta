@@ -47,7 +47,7 @@ static const BindRow frozen_L[] = {
     {"u", "ed.edit.undo", 0, NULL},
     {"C-r", "ed.edit.redo", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
-    /* Sprint 57.11 §4: `Select All` needs a key; `g a` was free. */
+    /* Sprint 57.13 §4: `Select All` needs a key; `g a` was free. */
     {"g a", "ed.sel.all", 0, NULL},
     {"g g", "ed.move.buf.home", 0, NULL},
     /* Sprint 21 §5.  Ctrl-O/Ctrl-I are the jumplist's two directions;

@@ -163,7 +163,7 @@ void yew_picker_select_payload(Ed *ed, i32 payload);
 bool yew_picker_accept(Ed *ed);
 /*
  * The same, with the accept MODE the keyboard's split-accepts use
- * (YEW_PICK_ACCEPT_HERE / _VSPLIT / _HSPLIT).  Sprint 57.11's picker
+ * (YEW_PICK_ACCEPT_HERE / _VSPLIT / _HSPLIT).  Sprint 57.13's picker
  * context menu has an "Open in Split Right" row and no other way to
  * say it.
  */

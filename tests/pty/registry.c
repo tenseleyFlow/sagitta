@@ -4701,7 +4701,7 @@ static void case_chrome_ctxmenu(PtyCtx *c)
         return;
     s23_open_tabs(c, 2);
     /*
-     * `iarg 1` is the TAB STRIP.  Sprint 57.11 §5 gave `t m` — 0 or
+     * `iarg 1` is the TAB STRIP.  Sprint 57.13 §5 gave `t m` — 0 or
      * absent — to the keyboard FOCUS, which is the document here; this
      * case is about the TAB menu, so it asks for the strip by name.
      */
@@ -9164,7 +9164,7 @@ static void case_s53_blame(PtyCtx *c)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11: the FUSS context menus                             */
+/* Sprint 57.13: the FUSS context menus                             */
 /* ---------------------------------------------------------------- */
 
 /*
@@ -9176,7 +9176,7 @@ static void case_s53_blame(PtyCtx *c)
  * wrong.  The golden also carries the terminal modes, so it is where
  * `1003` being ARMED while the menu is up is proved end to end.
  */
-static void case_s57_11_fuss_file_menu(PtyCtx *c)
+static void case_s57_13_fuss_file_menu(PtyCtx *c)
 {
     if (!s52_open(c, NULL))
         return;
@@ -9195,7 +9195,7 @@ static void case_s57_11_fuss_file_menu(PtyCtx *c)
  * `docs` is collapsed, so the toggle row reads `Expand` — ONE row whose
  * label is the state, never two of which one is always dead.
  */
-static void case_s57_11_fuss_dir_menu(PtyCtx *c)
+static void case_s57_13_fuss_dir_menu(PtyCtx *c)
 {
     if (!s52_open(c, NULL))
         return;
@@ -9212,10 +9212,10 @@ static void case_s57_11_fuss_dir_menu(PtyCtx *c)
 
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11: the document, footer and shedding menus            */
+/* Sprint 57.13: the document, footer and shedding menus            */
 /* ---------------------------------------------------------------- */
 
-static const u8 s57_11_doc[] =
+static const u8 s57_13_doc[] =
     "alpha beta gamma\n"
     "delta epsilon zeta\n"
     "eta theta iota kappa\n"
@@ -9235,11 +9235,11 @@ static const u8 s57_11_doc[] =
  * upward to row 1 and its rows start at row 2; the motion below aims at
  * the third of them.
  */
-static void case_s57_11_doc_menu(PtyCtx *c)
+static void case_s57_13_doc_menu(PtyCtx *c)
 {
     char path[256];
 
-    if (!s18_open(c, s57_11_doc, sizeof(s57_11_doc) - 1U, path,
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
                   sizeof(path)))
         return;
     /*
@@ -9272,11 +9272,11 @@ static void case_s57_11_doc_menu(PtyCtx *c)
  * (invariant 9 from the other side: the mouse is an accelerator, and a
  * one-button mouse may not be a second-class one).
  */
-static void case_s57_11_ctrl_click_menu(PtyCtx *c)
+static void case_s57_13_ctrl_click_menu(PtyCtx *c)
 {
     char path[256];
 
-    if (!s18_open(c, s57_11_doc, sizeof(s57_11_doc) - 1U, path,
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
                   sizeof(path)))
         return;
     /* cb 16 is button 0 with the ctrl bit. */
@@ -9290,11 +9290,11 @@ static void case_s57_11_ctrl_click_menu(PtyCtx *c)
 
 /* The footer menu, including the row that NAMES the current number
  * style rather than the one it will move to. */
-static void case_s57_11_footer_menu(PtyCtx *c)
+static void case_s57_13_footer_menu(PtyCtx *c)
 {
     char path[256];
 
-    if (!s18_open(c, s57_11_doc, sizeof(s57_11_doc) - 1U, path,
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
                   sizeof(path)))
         return;
     /* The statusline is the LAST row of a 24-row terminal; row 23 is
@@ -9316,11 +9316,11 @@ static void case_s57_11_footer_menu(PtyCtx *c)
  * exists to forbid: a gesture that works on a tall screen and silently
  * does nothing on a short one is worse than one that never worked.
  */
-static void case_s57_11_menu_sheds_rows(PtyCtx *c)
+static void case_s57_13_menu_sheds_rows(PtyCtx *c)
 {
     char path[256];
 
-    if (!s18_open(c, s57_11_doc, sizeof(s57_11_doc) - 1U, path,
+    if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
                   sizeof(path)))
         return;
     s27_mouse(c, "\x1b[<2;6;4M");
@@ -9649,10 +9649,10 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_tree_toggle, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_hint, modern, 24U, 80U, case_s52_fuss),
     C(fuss_jump_clears, modern, 24U, 80U, case_s52_fuss),
-    C(s57_11_fuss_file_menu, modern, 24U, 80U,
-      case_s57_11_fuss_file_menu),
-    C(s57_11_fuss_dir_menu, modern, 24U, 80U,
-      case_s57_11_fuss_dir_menu),
+    C(s57_13_fuss_file_menu, modern, 24U, 80U,
+      case_s57_13_fuss_file_menu),
+    C(s57_13_fuss_dir_menu, modern, 24U, 80U,
+      case_s57_13_fuss_dir_menu),
     C(fuss_group_picker, modern, 24U, 100U, case_s52_fuss),
     C(fuss_group_close, modern, 24U, 100U, case_s52_fuss),
     C(fuss_actions_palette, modern, 24U, 100U, case_s52_fuss),
@@ -10256,14 +10256,14 @@ const PtyCase yew_pty_cases[] = {
       case_s27_dwell_opens_member_strip),
     C(s27_group_menu_over_scrolled_strip, modern, 24U, 80U,
       case_s27_group_menu_over_scrolled_strip),
-    C(s57_11_doc_menu, modern, 24U, 80U, case_s57_11_doc_menu),
-    C(s57_11_doc_menu_nocolor, modern, 24U, 80U, case_s57_11_doc_menu),
-    C(s57_11_doc_menu_ascii, modern, 24U, 80U, case_s57_11_doc_menu),
-    C(s57_11_ctrl_click_menu, modern, 24U, 80U,
-      case_s57_11_ctrl_click_menu),
-    C(s57_11_footer_menu, modern, 24U, 80U, case_s57_11_footer_menu),
-    C(s57_11_menu_sheds_rows, modern, 10U, 80U,
-      case_s57_11_menu_sheds_rows),
+    C(s57_13_doc_menu, modern, 24U, 80U, case_s57_13_doc_menu),
+    C(s57_13_doc_menu_nocolor, modern, 24U, 80U, case_s57_13_doc_menu),
+    C(s57_13_doc_menu_ascii, modern, 24U, 80U, case_s57_13_doc_menu),
+    C(s57_13_ctrl_click_menu, modern, 24U, 80U,
+      case_s57_13_ctrl_click_menu),
+    C(s57_13_footer_menu, modern, 24U, 80U, case_s57_13_footer_menu),
+    C(s57_13_menu_sheds_rows, modern, 10U, 80U,
+      case_s57_13_menu_sheds_rows),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
       case_s27_double_click_mode_chip),
     C(s32_repl_session, modern, 24U, 80U, case_s32_repl_session),

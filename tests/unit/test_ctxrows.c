@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * Sprint 57.11 §4: the row sets, pinned.
+ * Sprint 57.13 §4: the row sets, pinned.
  *
  * WHAT THIS FILE IS FOR.  A context menu is a promise about WHERE the
  * pointer has to go: the hand learns that `Copy` is the second row and

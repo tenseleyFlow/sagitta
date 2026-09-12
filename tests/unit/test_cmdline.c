@@ -1185,7 +1185,7 @@ void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void)
 }
 
 /*
- * Sprint 57.11 Deliverable 4: `ed.file.save_as`, the document menu's
+ * Sprint 57.13 Deliverable 4: `ed.file.save_as`, the document menu's
  * `Save As...` row.
  *
  * IT IS A PROMPT AND NOT A WRITE.  `ed.file.write` already takes the

@@ -721,7 +721,7 @@ void test_edit_unit_selection_multicursor_has_independent_stacks(void)
 }
 
 /*
- * Sprint 57.11 §4: ed.view.number_cycle walks the NumStyle order and
+ * Sprint 57.13 §4: ed.view.number_cycle walks the NumStyle order and
  * wraps -- four presses come back to where they started.
  */
 void test_edit_view_number_cycle_walks_none_abs_rel_hybrid(void)

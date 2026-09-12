@@ -140,7 +140,7 @@ typedef enum {
 
 /*
  * YEW_MB_NONE is not only the zero value: a mouse REPEAT carrying it is
- * motion with NO button held (SGR base 35), which Sprint 57.11 decodes.
+ * motion with NO button held (SGR base 35), which Sprint 57.13 decodes.
  * Only DEC mode 1003 makes a terminal report it, and yew arms 1003 solely
  * while a context menu is open (yew_tty_mouse_motion), so the router
  * drops the event at every other time.  X10 never reports it at all.

@@ -43,7 +43,7 @@ static int g_wfd = -1;
 static int g_sigpipe_w = -1;
 static int g_guard_wfd = -1;
 static bool g_atexit_armed;
-/* Sprint 57.11: mode 1003 (any-motion tracking) is armed only while a
+/* Sprint 57.13: mode 1003 (any-motion tracking) is armed only while a
  * context menu is open.  The flag selects which restore blob is written,
  * so every restore path — normal, atexit, fatal signal, SIGTSTP, and the
  * guard sibling — disables 1003 exactly when it was enabled. */

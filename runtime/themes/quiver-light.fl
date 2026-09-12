@@ -22,7 +22,7 @@
         "tab.modified": { bg: "#eef1f4", fg: "@gold", bold: true, mono: "bold" },
         "tab.orphan": { bg: "#eef1f4", fg: "@grey", dim: true, mono: "dim" },
         "tab.add": { bg: "#eef1f4", fg: "@blue", bold: true, mono: "bold" },
-        # Context menus (s57.11 §6).  `menu.surface` paints the box and its
+        # Context menus (s57.13 §6).  `menu.surface` paints the box and its
         # border; the widget itself knows no colours.
         "menu.surface": { bg: "#eef1f4", fg: "#8c959f", mono: "plain" },
         "menu.row": { fg: "@fg", mono: "plain" },

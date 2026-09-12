@@ -883,7 +883,7 @@ void test_fussdrawer_commit_owner_pane_close_cancels_cleanly(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 §3: the two feel fixes the survey found missing      */
+/* Sprint 57.13 §3: the two feel fixes the survey found missing      */
 /* ---------------------------------------------------------------- */
 
 typedef struct FussFeelFix {
@@ -1057,7 +1057,7 @@ void test_fussdrawer_wheel_scrolls_the_tree(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.11 Deliverable 4: `Copy Path`                          */
+/* Sprint 57.13 Deliverable 4: `Copy Path`                          */
 /* ---------------------------------------------------------------- */
 
 /*

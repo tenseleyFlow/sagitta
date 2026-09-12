@@ -82,7 +82,7 @@ CmdStatus yew_file_cmd_write(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.11 §4: the document menu's `Save As...` row.
+ * Sprint 57.13 §4: the document menu's `Save As...` row.
  *
  * WHY THIS IS A PROMPT AND NOT A WRITE.  `ed.file.write` already takes
  * the destination as an argument, and the one thing this command adds
