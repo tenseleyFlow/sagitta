@@ -565,6 +565,7 @@ void test_edit_paste_line_opens_a_new_line_below(void);
 void test_edit_paste_refuses_on_a_read_only_buffer(void);
 void test_edit_paste_with_an_empty_register_changes_nothing(void);
 void test_edit_paste_is_bound_to_p_in_line_mode(void);
+void test_edit_view_number_cycle_walks_none_abs_rel_hybrid(void);
 void test_viewport_follow_vertical_rules(void);
 void test_viewport_short_document_and_scrolloff_degrade(void);
 void test_viewport_horizontal_follow_wide_glyph(void);

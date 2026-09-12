@@ -598,6 +598,7 @@ const YewTest yew_tests[] = {
     T(edit_paste_refuses_on_a_read_only_buffer),
     T(edit_paste_with_an_empty_register_changes_nothing),
     T(edit_paste_is_bound_to_p_in_line_mode),
+    T(edit_view_number_cycle_walks_none_abs_rel_hybrid),
     T(viewport_follow_vertical_rules),
     T(viewport_short_document_and_scrolloff_degrade),
     T(viewport_horizontal_follow_wide_glyph),

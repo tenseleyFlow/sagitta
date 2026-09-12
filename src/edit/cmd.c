@@ -609,6 +609,10 @@ static const CmdDesc builtins[] = {
     {"ed.view.number_style", yew_edit_cmd_view_number_style, YEW_ARITY_STR,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Set line numbers to none, abs, rel, or hybrid", "number_style"},
+    /* Sprint 57.11 §4: the footer menu's line-number row. */
+    {"ed.view.number_cycle", yew_edit_cmd_view_number_cycle,
+     YEW_ARITY_NONE, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Cycle line numbers none, abs, rel, hybrid", "number_cycle"},
     {"ed.ui.message_expand", yew_edit_cmd_message_expand, YEW_ARITY_NONE,
      YEW_CMD_PROMPTS, "Expand the current message", NULL},
     {"ed.ui.cancel", yew_edit_cmd_ui_cancel, YEW_ARITY_NONE, 0U,
@@ -1351,7 +1355,7 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.10: row-1 numbered jump from inside a group. */
         "goto_bar",
         /* Sprint 57.11 §4: the context-menu row commands. */
-        "cut"};
+        "cut", "number_cycle"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

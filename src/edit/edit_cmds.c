@@ -504,6 +504,27 @@ CmdStatus yew_edit_cmd_view_number_style(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+/*
+ * Sprint 57.11 §4: the footer menu's `Line Numbers: <style>` row, and
+ * the keyboard twin of clicking it.
+ *
+ * The cycle order is the NumStyle declaration order (none, abs, rel,
+ * hybrid), so the enum stays the single statement of what the styles
+ * are and in what order -- a hand-written next-style table here would
+ * be a second one, and adding a style would silently skip it.
+ */
+CmdStatus yew_edit_cmd_view_number_cycle(CmdCtx *cx)
+{
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    cx->win->number_style =
+        (NumStyle)(((u32)cx->win->number_style + 1U) %
+                   ((u32)YEW_NUM_HYBRID + 1U));
+    cx->ed->layout_dirty = true;
+    cx->ed->full_damage = true;
+    return YEW_CMD_OK;
+}
+
 CmdStatus yew_edit_cmd_message_expand(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)

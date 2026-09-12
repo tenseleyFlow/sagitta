@@ -824,4 +824,32 @@ void test_edit_paste_is_bound_to_p_in_line_mode(void)
     yew_ed_free(&ed);
 }
 
+/*
+ * Sprint 57.11 §4: ed.view.number_cycle walks the NumStyle order and
+ * wraps -- four presses come back to where they started.
+ */
+void test_edit_view_number_cycle_walks_none_abs_rel_hybrid(void)
+{
+    static const u8 text[] = "aa\nbb\n";
+    static const NumStyle order[] = {
+        YEW_NUM_ABS, YEW_NUM_REL, YEW_NUM_HYBRID, YEW_NUM_NONE
+    };
+    Ed ed;
+    u32 i;
+
+    edit_fixture(&ed, text, sizeof(text) - 1U, YEW_EOL_LF);
+    ed.win->number_style = YEW_NUM_NONE;
+    for (i = 0U; i < YEW_ARRAY_LEN(order); i++) {
+        YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.view.number_cycle", 1U,
+                                      false, NULL, 0U), YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(ed.win->number_style, order[i]);
+    }
+    /* It starts from wherever the window already is, not from none. */
+    ed.win->number_style = YEW_NUM_REL;
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.view.number_cycle", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_HYBRID);
+    yew_ed_free(&ed);
+}
+
 #undef FAMILY
