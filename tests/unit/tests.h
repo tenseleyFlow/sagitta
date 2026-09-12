@@ -495,6 +495,8 @@ void test_pty_environment_exact(void);
 void test_pty_spawn_clears_signal_mask(void);
 void test_pty_timeout_reaps_child(void);
 void test_pty_post_snapshot_protocol_error_fails_cleanup(void);
+void test_pty_wait_never_observes_a_torn_frame(void);
+void test_pty_snapshot_refuses_an_open_frame(void);
 void test_vt_closed_set_and_modes(void);
 void test_vt_probe_profiles(void);
 void test_vt_sgr_closed_rows(void);
