@@ -342,6 +342,35 @@ Rect yew_fuss_backdrop_rect(const Ed *ed)
     return (Rect){0U, 0U, 0U, 0U};
 }
 
+bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir)
+{
+    (void)ed;
+    (void)path_id;
+    (void)is_dir;
+    return false;
+}
+
+bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
+{
+    (void)ed;
+    (void)path_id;
+    (void)x;
+    (void)y;
+    return false;
+}
+
+void yew_fuss_select_path(Ed *ed, u32 path_id)
+{
+    (void)ed;
+    (void)path_id;
+}
+
+void yew_fuss_scroll(Ed *ed, i32 rows)
+{
+    (void)ed;
+    (void)rows;
+}
+
 bool yew_fuss_draw_dirty(const Ed *ed)
 {
     (void)ed;

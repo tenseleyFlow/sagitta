@@ -1691,6 +1691,136 @@ Rect yew_fuss_drawer_rect(const Ed *ed)
     return (Rect){0U, 0U, layout.width, ed->grid.rows};
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.11 §3: the mouse router's three seams                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The row a YEW_REGION_FUSS_ROW payload names, or NULL.
+ *
+ * The payload is an INTERNED PATH, not a row index, because the tree
+ * rebuilds under the pointer — a background status result reorders it,
+ * a walk merges files into it — and an index captured at paint time
+ * names a different file by the press.  Resolving through the path is
+ * what makes a click land on what was pointed at.
+ */
+static const FussItem *fuss_item_by_path_id(const Ed *ed, u32 path_id)
+{
+    const FussMode *f;
+    const char *path;
+    size_t len;
+    size_t i;
+
+    if (!yew_fuss_active(ed) || path_id == 0U)
+        return NULL;
+    f = ed->fuss;
+    path = yew_intern_str(&ed->interner, path_id);
+    len = yew_intern_len(&ed->interner, path_id);
+    if (path == NULL || len == 0U)
+        return NULL;
+    for (i = 0U; i < f->tree.items.len; i++) {
+        const FussItem *item = &f->tree.items.data[i];
+
+        if (item->path_len == (u32)len &&
+            memcmp(item->path, path, len) == 0)
+            return item;
+    }
+    return NULL;
+}
+
+bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir)
+{
+    const FussItem *item = fuss_item_by_path_id(ed, path_id);
+
+    if (item == NULL || is_dir == NULL)
+        return false;
+    *is_dir = !item->is_file;
+    return true;
+}
+
+bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
+{
+    FussMode *f;
+    Rect tree;
+    i32 row;
+    const FussItem *item;
+    u32 id;
+    u32 offset;
+
+    if (!yew_fuss_active(ed) || path_id == NULL || x == NULL || y == NULL)
+        return false;
+    f = ed->fuss;
+    tree = yew_fuss_drawer_rect(ed);
+    if (tree.w == 0U || tree.h == 0U)
+        return false;
+    row = yew_fuss_row_of(&f->tree, &f->sel);
+    item = fuss_item(f, row);
+    if (item == NULL || (u32)row < f->scroll)
+        return false;
+    /*
+     * The +1 is the drawer's header row, and it is the SAME arithmetic
+     * yew_fuss_draw uses to place each row's region — deriving it twice
+     * is how a menu comes to open one row off the thing it names.
+     */
+    offset = (u32)row - f->scroll;
+    if (offset + 1U >= (u32)tree.h)
+        return false;
+    id = yew_intern(&ed->interner, item->path, item->path_len);
+    if (id == 0U || id > (u32)INT32_MAX)
+        return false;
+    *path_id = id;
+    *x = tree.x;
+    *y = (u16)(tree.y + 1U + offset);
+    return true;
+}
+
+void yew_fuss_select_path(Ed *ed, u32 path_id)
+{
+    const FussItem *item = fuss_item_by_path_id(ed, path_id);
+
+    if (item == NULL)
+        return;
+    /*
+     * Selecting is not opening.  A single click moves the cursor and
+     * nothing else — the double-click that opens is a separate gesture,
+     * and a tree where one click opened a file would make browsing it
+     * impossible.
+     */
+    yew_fuss_sel_set(&ed->fuss->sel, item->path, item->path_len);
+    fuss_damage(ed);
+}
+
+void yew_fuss_scroll(Ed *ed, i32 rows)
+{
+    FussMode *f;
+    i32 row;
+    i32 last;
+
+    if (!yew_fuss_active(ed) || rows == 0)
+        return;
+    f = ed->fuss;
+    if (f->tree.items.len == 0U)
+        return;
+    /*
+     * THROUGH THE SELECTION, exactly as the picker's wheel is (s26 §5).
+     * The drawer has no independent scroll offset to move: `f->scroll`
+     * is DERIVED from the selected row every time the tree is drawn, so
+     * a wheel that moved the offset alone would be snapped back on the
+     * next frame and the tree would look frozen.
+     */
+    last = (i32)f->tree.items.len - 1;
+    row = yew_fuss_row_of(&f->tree, &f->sel);
+    if (row < 0)
+        row = 0;
+    row += rows;
+    if (row < 0)
+        row = 0;
+    if (row > last)
+        row = last;
+    fuss_select_row(f, row);
+    fuss_damage(ed);
+}
+
 bool yew_fuss_draw_dirty(const Ed *ed)
 {
     return yew_fuss_active(ed) && ed->fuss->draw_dirty;

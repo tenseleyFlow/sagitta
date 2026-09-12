@@ -59,6 +59,32 @@ FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
                                         u16 natural_cols);
 Rect yew_fuss_drawer_rect(const Ed *ed);
 Rect yew_fuss_backdrop_rect(const Ed *ed);
+
+/*
+ * Sprint 57.11 §3: the three seams the mouse router needs and only it.
+ *
+ * `yew_fuss_path_is_dir` answers the ONE question a FUSS row's context
+ * menu turns on — file menu or directory menu — and answers it from the
+ * tree rather than from the path text, which is wrong for an
+ * extensionless file.  False means UNKNOWN (no F mode, a stripped
+ * build, a path the tree no longer holds) and `*is_dir` is untouched:
+ * the caller falls back to the drawer menu rather than guessing.  It is
+ * const because the router's context resolution is a pure function.
+ *
+ * `yew_fuss_select_path` is the single-click select the survey found
+ * missing, and `yew_fuss_scroll` is the wheel.  Both are no-ops under
+ * the shim, so the router needs no #ifdef.
+ */
+bool yew_fuss_path_is_dir(const Ed *ed, u32 path_id, bool *is_dir);
+/*
+ * The selected row's interned path and the cell it is drawn at, so
+ * `ed.ui.context_menu` can open the FUSS menu with no pointer involved
+ * (invariant 9).  False when F mode is down, the tree is empty, or the
+ * selection is scrolled out of the drawer.
+ */
+bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y);
+void yew_fuss_select_path(Ed *ed, u32 path_id);
+void yew_fuss_scroll(Ed *ed, i32 rows);
 bool yew_fuss_draw_dirty(const Ed *ed);
 void yew_fuss_draw(Ed *ed);
 void yew_fuss_draw_footer(Ed *ed, Rect footer);
