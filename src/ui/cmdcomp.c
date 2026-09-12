@@ -1445,7 +1445,11 @@ static void exec_reconcile(void)
         for (at = 0U; at < exec_cache.n; at++) {
             ExecDir *old = &exec_cache.dirs[at];
 
-            if (old->dir == NULL || strcmp(old->dir, fresh[i].dir) != 0)
+            /* `listing.dir == NULL` means this slot's listing has
+             * already been moved to an earlier duplicate of the same
+             * element -- `$PATH` may name a directory twice. */
+            if (old->dir == NULL || old->listing.dir == NULL ||
+                strcmp(old->dir, fresh[i].dir) != 0)
                 continue;
             if (!old->stat_ok || !fresh[i].stat_ok ||
                 old->dev != fresh[i].dev || old->ino != fresh[i].ino ||
