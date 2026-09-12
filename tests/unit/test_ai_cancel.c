@@ -13,6 +13,7 @@
 
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/mode.h"
 #include "edit/shadow.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/http.h"
@@ -251,6 +252,84 @@ void test_ai_cancel_guard_transport_abort_discards_pending_bytes(void)
     yew_ed_free(&ed);
 }
 
+static int cancel_key_child(void)
+{
+    char *argv[] = {(char *)"/bin/sh", (char *)"-c",
+                    (char *)"sleep 30", NULL};
+    YewJobSpec spec = {0};
+    char error[192] = {0};
+    ShadowSug suggestion = {0};
+    Key key = {0};
+    Ed ed;
+    AiCall *call;
+    u32 id;
+    i64 started;
+    int result = 0;
+
+    yew_ai_shadow_init(NULL);
+    yew_ed_init(&ed);
+    if (!yew_ed_open_memory(&ed, NULL, 0U, "ai-cancel-key") ||
+        yew_mode_enter(&ed, YEW_MODE_I) != YEW_CMD_OK) {
+        yew_ed_free(&ed);
+        return 10;
+    }
+    call = &ed.ai->call;
+    cancel_call_init(&ed, call);
+    call->seq = 1U;
+    call->buf_id = ed.win->buf->id;
+    call->buf_gen = ed.win->buf->tb->gen;
+    call->pos = BYTEOFF(0U);
+    spec.argv = argv;
+    spec.sink = YEW_SINK_COLLECT;
+    id = yew_job_spawn(&ed, &spec, error, sizeof(error));
+    if (id == 0U) {
+        yew_ed_free(&ed);
+        return 11;
+    }
+    call->job = id;
+
+    suggestion.seq = 1U;
+    suggestion.prov = (u8)YEW_SHADOW_AI;
+    suggestion.buf_id = ed.win->buf->id;
+    suggestion.buf_gen = ed.win->buf->tb->gen;
+    suggestion.pos = BYTEOFF(0U);
+    suggestion.text = (const u8 *)"ghost";
+    suggestion.len = 5U;
+    ed.win->shadow.seq_next[YEW_SHADOW_AI] = 2U;
+    yew_shadow_deliver(&ed, &suggestion);
+    if (!ed.win->shadow.live)
+        result = 12;
+
+    key.code = (u32)'x';
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.ntext = 1U;
+    key.text[0] = (u8)'x';
+    yew_ed_handle_key(&ed, key, 1);
+    if (result == 0 && (call->active || ed.win->shadow.live ||
+                        yew_textbuf_len(ed.win->buf->tb) != 1U ||
+                        ed.ai->nretired_jobs != 1U))
+        result = 13;
+    if (call->active)
+        yew_ai_call_abort(&ed, call, YEW_AI_ERR_CANCELLED);
+
+    started = yew_now_ms();
+    while (yew_job_find(&ed, id) != NULL &&
+           yew_now_ms() - started < 3000) {
+        (void)poll(NULL, 0U, 1);
+        yew_job_reap(&ed);
+        yew_job_tick(&ed, yew_now_ms());
+        yew_job_settle(&ed);
+        yew_ai_shadow_pump(&ed);
+    }
+    if (result == 0 && (yew_job_find(&ed, id) != NULL ||
+                        ed.jobs.len != 0U ||
+                        ed.ai->nretired_jobs != 0U))
+        result = 14;
+    yew_ed_free(&ed);
+    return result;
+}
+
 void test_ai_cancel_curl_detaches_then_reaps_without_callbacks(void)
 {
     char *argv[] = {(char *)"/bin/sh", (char *)"-c",
@@ -260,8 +339,22 @@ void test_ai_cancel_curl_detaches_then_reaps_without_callbacks(void)
     Ed ed;
     AiCall *call;
     YewJob *job;
+    pid_t child;
+    pid_t waited;
+    int status = 0;
     u32 id;
     i64 started;
+
+    child = fork();
+    YEW_ASSERT(child >= 0);
+    if (child == 0)
+        _exit(cancel_key_child());
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    YEW_ASSERT_EQ_I64(waited, child);
+    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
 
     yew_ed_init(&ed);
     call = &ed.ai->call;
