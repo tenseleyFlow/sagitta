@@ -39,7 +39,6 @@ static bool indent_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
                              Span *out);
 static bool paragraph_enclosing(void *ctx, UnitCtx *u, ByteOff p,
                                 Span inner, Span *out);
-static u8 block_line_comment_kind(UnitCtx *u, const LineInfo *line);
 
 static bool span_contains(Span outer, Span inner)
 {
@@ -497,7 +496,7 @@ static bool indent_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     {
         Span candidate;
 
-        (void)indent_candidate(u, target, target_info.indent, false,
+        (void)indent_candidate(u, target, target_info.indent, true,
                                &candidate);
         if (span_strictly_contains(candidate, inner)) {
             best = candidate;
@@ -776,52 +775,77 @@ bool yew_block_match(UnitCtx *u, ByteOff p, bool next, ByteOff *out)
     return true;
 }
 
+static bool cluster_white_at(const TextBuf *tb, ByteOff at)
+{
+    Span line = yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, at));
+    YewTextCluster cluster;
+
+    return yew_text_cluster_next(tb, line, at, &cluster) &&
+           yew_unicode_is_white_space(cluster.base_cp);
+}
+
+static ByteOff skip_white_next(const TextBuf *tb, ByteOff at)
+{
+    u64 len = yew_textbuf_len(tb);
+
+    while (at.v < len && cluster_white_at(tb, at))
+        at = yew_grapheme_next_boundary(tb, at);
+    return at;
+}
+
+static ByteOff skip_white_prev(const TextBuf *tb, ByteOff at)
+{
+    while (at.v != 0U) {
+        ByteOff prev = yew_grapheme_prev_boundary(tb, at);
+
+        if (!cluster_white_at(tb, prev))
+            break;
+        at = prev;
+    }
+    return at;
+}
+
 static Span block_span(UnitCtx *u, ByteOff p, bool alt)
 {
     Span span;
+    u64 len = yew_textbuf_len(u->tb);
 
     (void)alt;
+    if (u->buf != NULL && u->buf->lang != NULL &&
+        !yew_syn_in_string_or_comment(u->buf, p)) {
+        if (p.v < len &&
+            scope_pair(u, p, (Span){p.v, p.v}, &span, NULL, NULL))
+            return span;
+        if (p.v != 0U) {
+            ByteOff before = skip_white_prev(u->tb, p);
+
+            if (before.v != 0U) {
+                ByteOff probe = yew_grapheme_prev_boundary(u->tb, before);
+
+                if (scope_pair(u, probe, (Span){probe.v, probe.v}, &span,
+                               NULL, NULL)) {
+                    ByteOff after =
+                        skip_white_next(u->tb, BYTEOFF(span.hi));
+
+                    if (after.v > p.v ||
+                        (p.v == len && after.v == p.v)) {
+                        span.hi = after.v;
+                        return span;
+                    }
+                }
+            }
+        }
+    }
     (void)yew_block_level(u, p, 0U, &span);
     return span;
 }
 
-static bool block_line_delimiters_only(UnitCtx *u, Span line)
+static bool block_syntax_exact_on_line(UnitCtx *u, u64 line)
 {
-    TextIter it;
-    u64 consumed = 0U;
-    bool saw_delimiter = false;
-
-    if (line.lo == line.hi ||
-        !yew_textiter_begin(&it, u->tb, BYTEOFF(line.lo)))
-        return false;
-    while (consumed < line.hi - line.lo) {
-        const u8 *bytes;
-        u64 n;
-        u64 take;
-
-        if (!yew_textiter_chunk(&it, u->tb, &bytes, &n))
-            return false;
-        take = line.hi - line.lo - consumed;
-        if (take > n)
-            take = n;
-        for (u64 i = 0U; i < take; i++) {
-            const u8 byte = bytes[i];
-
-            if (ascii_white(byte))
-                continue;
-            if (is_open(byte) || byte == (u8)')' || byte == (u8)']' ||
-                byte == (u8)'}' || byte == (u8)';' || byte == (u8)',') {
-                saw_delimiter = true;
-                continue;
-            }
-            return false;
-        }
-        consumed += take;
-        if (consumed != line.hi - line.lo &&
-            !yew_textiter_advance(&it, u->tb))
-            return false;
-    }
-    return saw_delimiter;
+    return u->buf != NULL && u->buf->syn.lang != YEW_LANG_NONE &&
+           u->buf->syn.engine != NULL && !u->buf->syn.degraded &&
+           u->buf->syn.entry.len == yew_textbuf_line_count(u->tb) &&
+           u->buf->syn.settled_to.v > line;
 }
 
 static bool block_byte_at(const TextBuf *tb, u64 off, u8 *out)
@@ -877,88 +901,135 @@ static bool block_continuation_byte(u8 byte)
     }
 }
 
-static bool block_line_in_round_or_square_scope(UnitCtx *u,
-                                                const LineInfo *line)
+static bool block_source_brace(UnitCtx *u, u64 line_no,
+                               const LineInfo *line, ByteOff *out)
 {
-    Span pair;
-    u64 open;
-    u8 byte;
+    u64 len = line->span.hi - line->span.lo;
+    u8 *bytes = yew_xmalloc((size_t)(len == 0U ? 1U : len));
+    bool syntax_exact = block_syntax_exact_on_line(u, line_no);
+    bool block_comment = false;
+    bool arm = false;
+    u64 singles;
+    u64 doubles;
+    u8 quote = 0U;
 
-    return scope_pair(u, line->first, (Span){line->first.v, line->first.v},
-                      &pair, &open, NULL) &&
-           open < line->span.lo && block_byte_at(u->tb, open, &byte) &&
-           (byte == (u8)'(' || byte == (u8)'[');
+    if (len == 0U || !read_span(u->tb, line->span, bytes)) {
+        yew_xfree(bytes);
+        return false;
+    }
+    len = line_content_hi(bytes, line->span);
+    singles = quote_count(bytes, len, (u8)'\'');
+    doubles = quote_count(bytes, len, (u8)'"');
+    for (u64 i = 0U; i < len; i++) {
+        u8 byte = bytes[i];
+
+        if (syntax_exact) {
+            if (byte == (u8)'=' && i + 1U < len &&
+                bytes[i + 1U] == (u8)'>' &&
+                !yew_syn_in_string_or_comment(
+                    u->buf, BYTEOFF(line->span.lo + i)))
+                arm = true;
+            if (byte == (u8)'{' && !arm &&
+                !yew_syn_in_string_or_comment(
+                    u->buf, BYTEOFF(line->span.lo + i))) {
+                *out = BYTEOFF(line->span.lo + i);
+                yew_xfree(bytes);
+                return true;
+            }
+            continue;
+        }
+        if (block_comment) {
+            if (byte == (u8)'*' && i + 1U < len &&
+                bytes[i + 1U] == (u8)'/') {
+                block_comment = false;
+                i++;
+            }
+            continue;
+        }
+        if (quote != 0U) {
+            if (byte == (u8)'\\' && i + 1U < len) {
+                i++;
+                continue;
+            }
+            if (byte == quote)
+                quote = 0U;
+            continue;
+        }
+        if (byte == (u8)'/' && i + 1U < len &&
+            bytes[i + 1U] == (u8)'*') {
+            block_comment = true;
+            i++;
+            continue;
+        }
+        if ((byte == (u8)'/' && i + 1U < len &&
+             bytes[i + 1U] == (u8)'/') ||
+            (byte == (u8)'-' && i + 1U < len &&
+             bytes[i + 1U] == (u8)'-' &&
+             line->span.lo + i == line->first.v) ||
+            ((byte == (u8)'#' || byte == (u8)';') &&
+             line->span.lo + i == line->first.v))
+            break;
+        if ((byte == (u8)'\'' && singles != 0U &&
+             (singles & 1U) == 0U) ||
+            (byte == (u8)'"' && doubles != 0U &&
+             (doubles & 1U) == 0U)) {
+            quote = byte;
+            continue;
+        }
+        if (byte == (u8)'=' && i + 1U < len &&
+            bytes[i + 1U] == (u8)'>') {
+            arm = true;
+            i++;
+            continue;
+        }
+        if (byte == (u8)'{' && !arm) {
+            *out = BYTEOFF(line->span.lo + i);
+            yew_xfree(bytes);
+            return true;
+        }
+    }
+    yew_xfree(bytes);
+    return false;
 }
 
-static bool block_line_is_continuation(UnitCtx *u, u64 line,
-                                       const LineInfo *current)
+static bool block_indent_header(UnitCtx *u, u64 line,
+                                const LineInfo *current)
 {
-    LineInfo previous;
+    u64 count = yew_textbuf_line_count(u->tb);
+    u8 first;
     u8 last;
-    u8 first;
 
-    if (line == 0U)
+    if (current->blank ||
+        !block_byte_at(u->tb, current->first.v, &first) ||
+        first == (u8)'}' || first == (u8)')' || first == (u8)']' ||
+        !block_line_last_nonwhite(u, current->span, &last) ||
+        block_continuation_byte(last) || last == (u8)'(' ||
+        last == (u8)'[' || last == (u8)',')
         return false;
-    (void)line_info(u, LINENO(line - 1U), &previous);
-    if (previous.blank ||
-        !block_line_last_nonwhite(u, previous.span, &last))
-        return false;
-    if (block_line_comment_kind(u, &previous) != 0U ||
-        yew_syn_in_string_or_comment(u->buf, previous.first))
-        return false;
-    if (block_continuation_byte(last) ||
-        ((last == (u8)'(' || last == (u8)'[' || last == (u8)',') &&
-         block_line_in_round_or_square_scope(u, current)))
-        return true;
-    return current->indent > previous.indent &&
-           block_byte_at(u->tb, current->first.v, &first) &&
-           block_continuation_byte(first);
+    for (u64 at = line + 1U; at < count; at++) {
+        LineInfo next;
+
+        (void)line_info(u, LINENO(at), &next);
+        if (!next.blank)
+            return next.indent > current->indent;
+    }
+    return false;
 }
 
-static u8 block_line_comment_kind(UnitCtx *u, const LineInfo *line)
-{
-    u8 first;
-    u8 second;
-
-    if (line->blank || !block_byte_at(u->tb, line->first.v, &first))
-        return 0U;
-    if (first == (u8)';')
-        return first;
-    if (first != (u8)'/' ||
-        line->first.v + 1U >= line->span.hi ||
-        !block_byte_at(u->tb, line->first.v + 1U, &second) ||
-        second != first)
-        return 0U;
-    return first;
-}
-
-static bool block_navigation_row(UnitCtx *u, u64 line, ByteOff *out)
+static bool block_source_landmark(UnitCtx *u, u64 line, ByteOff *out)
 {
     LineInfo info;
-    u8 comment;
 
     (void)line_info(u, LINENO(line), &info);
-    if (info.blank || block_line_delimiters_only(u, info.span) ||
-        block_line_is_continuation(u, line, &info))
+    if (info.blank)
         return false;
-    comment = block_line_comment_kind(u, &info);
-    if (comment != 0U && line != 0U) {
-        LineInfo previous;
-
-        (void)line_info(u, LINENO(line - 1U), &previous);
-        if (block_line_comment_kind(u, &previous) == comment)
-            return false;
+    if (block_source_brace(u, line, &info, out))
+        return true;
+    if (block_indent_header(u, line, &info)) {
+        *out = info.first;
+        return true;
     }
-    if (yew_syn_in_string_or_comment(u->buf, info.first)) {
-        Span unit = block_span(u, BYTEOFF(info.span.lo), false);
-        LineNo home_line =
-            yew_textbuf_line_of(u->tb, BYTEOFF(unit.lo));
-
-        if (home_line.v != line)
-            return false;
-    }
-    *out = BYTEOFF(info.span.lo);
-    return true;
+    return false;
 }
 
 static ByteOff block_plain_next(UnitCtx *u, ByteOff p)
@@ -1011,16 +1082,19 @@ static ByteOff block_next(UnitCtx *u, ByteOff p, bool alt)
     const u64 len = yew_textbuf_len(u->tb);
     const u64 count = yew_textbuf_line_count(u->tb);
     const u64 current = yew_textbuf_line_of(u->tb, p).v;
+    u64 scanned = 0U;
 
     (void)alt;
     if (p.v >= len)
         return BYTEOFF(len);
     if (u->buf == NULL || u->buf->lang == NULL)
         return block_plain_next(u, p);
-    for (u64 line = current + 1U; line < count; line++) {
+    for (u64 line = current; line < count; line++) {
         ByteOff home;
 
-        if (block_navigation_row(u, line, &home))
+        if (++scanned > YEW_BLOCK_SCAN_LINES)
+            break;
+        if (block_source_landmark(u, line, &home) && home.v > p.v)
             return home;
     }
     return BYTEOFF(len);
@@ -1028,8 +1102,8 @@ static ByteOff block_next(UnitCtx *u, ByteOff p, bool alt)
 
 static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
 {
-    const u64 len = yew_textbuf_len(u->tb);
     u64 line;
+    u64 scanned = 0U;
 
     (void)alt;
     if (p.v == 0U)
@@ -1037,15 +1111,12 @@ static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
     if (u->buf == NULL || u->buf->lang == NULL)
         return block_plain_prev(u, p);
     line = yew_textbuf_line_of(u->tb, p).v;
-    if (p.v != len) {
-        if (line == 0U)
-            return BYTEOFF(0U);
-        line--;
-    }
     for (;;) {
         ByteOff home;
 
-        if (block_navigation_row(u, line, &home))
+        if (++scanned > YEW_BLOCK_SCAN_LINES)
+            break;
+        if (block_source_landmark(u, line, &home) && home.v < p.v)
             return home;
         if (line == 0U)
             break;

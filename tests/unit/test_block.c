@@ -377,36 +377,39 @@ static u64 line_offset(const char *text, u64 len, u32 wanted)
     return 0U;
 }
 
-static void assert_block_navigation_lines(BlockFixture *fixture,
-                                          const char *text, u64 len,
-                                          const u32 *lines, u32 count)
+static u64 text_char_after(const char *text, const char *needle, char wanted)
 {
-    u64 *rows = malloc((size_t)count * sizeof(*rows));
+    const char *start = strstr(text, needle);
+    const char *found;
 
-    YEW_ASSERT_NOT_NULL(rows);
-    for (u32 i = 0U; i < count; i++)
-        rows[i] = line_offset(text, len, lines[i]);
+    YEW_ASSERT_NOT_NULL(start);
+    found = strchr(start, wanted);
+    YEW_ASSERT_NOT_NULL(found);
+    return (u64)(found - text);
+}
+
+static void assert_block_navigation_offsets(BlockFixture *fixture, u64 len,
+                                            const u64 *stops, u32 count)
+{
     for (u8 alt = 0U; alt < 2U; alt++) {
         ByteOff at = BYTEOFF(0U);
 
-        YEW_ASSERT_EQ_U64(rows[0], 0U);
-        for (u32 i = 1U; i < count; i++) {
+        for (u32 i = 0U; i < count; i++) {
             at = yew_unit_block.next(&fixture->unit, at, alt != 0U);
-            YEW_ASSERT_EQ_U64(at.v, rows[i]);
+            YEW_ASSERT_EQ_U64(at.v, stops[i]);
         }
         at = yew_unit_block.next(&fixture->unit, at, alt != 0U);
         YEW_ASSERT_EQ_U64(at.v, len);
         for (u32 i = count; i-- > 0U;) {
             at = yew_unit_block.prev(&fixture->unit, at, alt != 0U);
-            YEW_ASSERT_EQ_U64(at.v, rows[i]);
+            YEW_ASSERT_EQ_U64(at.v, stops[i]);
         }
         YEW_ASSERT_EQ_U64(
             yew_unit_block.prev(&fixture->unit, at, alt != 0U).v, 0U);
     }
-    free(rows);
 }
 
-void test_block_wolf_statement_rows_are_mirrored(void)
+void test_block_wolf_structural_landmarks_are_mirrored(void)
 {
     static const char text[] =
         "//! check: run(exit=0)\n"
@@ -434,19 +437,25 @@ void test_block_wolf_statement_rows_are_mirrored(void)
         "    print(\"{gcd(12, 18)}\")\n"
         "    0\n"
         "}";
-    static const u32 lines[] = {
-        1U, 4U, 6U, 7U, 8U, 10U, 13U, 14U, 17U, 18U, 19U, 22U, 23U,
-        24U,
-    };
+    u64 stops[9];
     BlockFixture fixture;
 
+    stops[0] = text_char_after(text, "fn tax", '{');
+    stops[1] = text_char_after(text, "fn lp", '{');
+    stops[2] = text_char_after(text, "loop", '{');
+    stops[3] = text_char_after(text, "if s[0]", '{');
+    stops[4] = text_char_after(text, "fn gcd", '{');
+    stops[5] = text_char_after(text, "if b ==", '{');
+    stops[6] = text_char_after(text, "fn rtrim", '{');
+    stops[7] = text_char_after(text, "while false", '{');
+    stops[8] = text_char_after(text, "fn main", '{');
     block_fixture_lang(&fixture, text, "wolf");
-    assert_block_navigation_lines(&fixture, text, strlen(text), lines,
-                                  YEW_ARRAY_LEN(lines));
+    assert_block_navigation_offsets(&fixture, strlen(text), stops,
+                                    YEW_ARRAY_LEN(stops));
     block_fixture_free(&fixture);
 }
 
-void test_block_days_rows_cross_language_and_eof_style(void)
+void test_block_days_structures_cross_language_and_eof_style(void)
 {
     static const char wolf[] =
         "//! check: run(exit=0)\n"
@@ -530,17 +539,27 @@ void test_block_days_rows_cross_language_and_eof_style(void)
         "        default: return 0;\n"
         "    }\n"
         "}\n";
-    static const u32 lines[] = {
-        1U, 4U, 5U, 7U, 10U, 11U, 12U, 13U, 15U, 18U, 19U, 20U,
-        21U, 24U, 25U, 26U, 27U, 28U, 29U, 30U, 31U, 32U, 33U, 34U,
-        35U, 36U, 37U, 38U,
-    };
     const char *const texts[] = {wolf, c};
     const char *const langs[] = {"wolf", "c"};
     BlockFixture fixture;
 
     for (u32 source = 0U; source < YEW_ARRAY_LEN(texts); source++) {
         u64 full_len = strlen(texts[source]);
+        u64 stops[6];
+
+        stops[0] = text_char_after(texts[source],
+                                   source == 0U ? "fn main" : "int main",
+                                   '{');
+        stops[1] = text_char_after(texts[source], "day_of_year", '{');
+        stops[2] = text_char_after(texts[source], "sum_months", '{');
+        stops[3] = text_char_after(texts[source],
+                                   source == 0U ? "for i" : "for (int",
+                                   '{');
+        stops[4] = text_char_after(texts[source], "days_in", '{');
+        stops[5] = text_char_after(texts[source],
+                                   source == 0U ? "match month" :
+                                                  "switch (month)",
+                                   '{');
 
         for (u8 final_newline = 0U; final_newline < 2U;
              final_newline++) {
@@ -548,19 +567,25 @@ void test_block_days_rows_cross_language_and_eof_style(void)
 
             block_fixture_lang_n(&fixture, texts[source], len,
                                  langs[source]);
-            assert_block_navigation_lines(&fixture, texts[source], len,
-                                          lines, YEW_ARRAY_LEN(lines));
+            assert_block_navigation_offsets(&fixture, len, stops,
+                                            YEW_ARRAY_LEN(stops));
+            YEW_ASSERT_EQ_U64(
+                yew_unit_block.prev(
+                    &fixture.unit,
+                    BYTEOFF(line_offset(texts[source], len, 38U)),
+                    false).v,
+                stops[5]);
             block_fixture_free(&fixture);
         }
         block_fixture_text(&fixture, texts[source]);
         fixture.buffer.lang = langs[source];
-        assert_block_navigation_lines(&fixture, texts[source], full_len,
-                                      lines, YEW_ARRAY_LEN(lines));
+        assert_block_navigation_offsets(&fixture, full_len, stops,
+                                        YEW_ARRAY_LEN(stops));
         block_fixture_free(&fixture);
     }
 }
 
-void test_block_c_layout_continuations_are_not_extra_rows(void)
+void test_block_c_formatting_keeps_structural_landmarks(void)
 {
     static const char text[] =
         "int expanded(\n"
@@ -580,46 +605,96 @@ void test_block_c_layout_continuations_are_not_extra_rows(void)
         "    if (total > 0) { total++; }\n"
         "    return total;\n"
         "}\n";
-    static const u32 lines[] = {
-        1U, 5U, 7U, 8U, 10U, 13U, 14U, 15U, 16U,
-    };
+    u64 stops[4];
     BlockFixture fixture;
 
+    stops[0] = text_char_after(text, "int expanded", '{');
+    stops[1] = text_char_after(text, "if (total > 0)", '{');
+    stops[2] = text_char_after(text, "int compact", '{');
+    stops[3] = text_char_after(text + stops[2], "if (total > 0)", '{') +
+               stops[2];
     block_fixture_lang(&fixture, text, "c");
-    assert_block_navigation_lines(&fixture, text, strlen(text), lines,
-                                  YEW_ARRAY_LEN(lines));
+    assert_block_navigation_offsets(&fixture, strlen(text), stops,
+                                    YEW_ARRAY_LEN(stops));
+    YEW_ASSERT_EQ_U64(
+        yew_unit_block.next(
+            &fixture.unit, BYTEOFF(text_off(text, "    int total =")),
+            false).v,
+        stops[1]);
+    YEW_ASSERT_EQ_U64(
+        yew_unit_block.prev(
+            &fixture.unit, BYTEOFF(text_off(text, "        total++;")),
+            false).v,
+        stops[1]);
     block_fixture_free(&fixture);
 }
 
-void test_block_horizontal_edges_are_half_open(void)
+void test_block_indent_language_headers_not_statements(void)
+{
+    static const char text[] =
+        "def outer():\n"
+        "    total = 0\n"
+        "    if ready:\n"
+        "        total += 1\n"
+        "    total += 2\n"
+        "result = outer()\n";
+    u64 stops[1];
+    BlockFixture fixture;
+
+    stops[0] = text_off(text, "if ready:");
+    block_fixture_text(&fixture, text);
+    fixture.buffer.lang = "python";
+    assert_block_navigation_offsets(&fixture, strlen(text), stops,
+                                    YEW_ARRAY_LEN(stops));
+    YEW_ASSERT_EQ_U64(
+        yew_unit_block.prev(
+            &fixture.unit, BYTEOFF(text_off(text, "    total += 2")),
+            false).v,
+        stops[0]);
+    YEW_ASSERT_EQ_U64(
+        yew_unit_block.next(
+            &fixture.unit, BYTEOFF(text_off(text, "    total = 0")),
+            false).v,
+        stops[0]);
+    block_fixture_free(&fixture);
+}
+
+void test_block_horizontal_uses_enclosing_scope_and_trailing_eof(void)
 {
     static const char text[] =
         "fn main() {\n"
-        "    print(\"value\")\n"
-        "    0\n"
+        "    var total = 0\n"
+        "    match total {\n"
+        "        _ => 0,\n"
+        "    }\n"
         "}\n";
-    static const char *const needles[] = {"fn main", "    print", "    0"};
     BlockFixture fixture;
+    u64 outer_open = text_char_after(text, "fn main", '{');
+    u64 inner_open = text_char_after(text, "match total", '{');
+    u64 inner_close = text_off(text, "    }\n") + 5U;
+    u64 outer_close =
+        inner_close + text_char_after(text + inner_close, "}\n", '}') + 1U;
+    ByteOff at;
+    ByteOff end;
 
     block_fixture_lang(&fixture, text, "wolf");
-    for (u32 i = 0U; i < YEW_ARRAY_LEN(needles); i++) {
-        ByteOff at = BYTEOFF(text_off(text, needles[i]));
-        ByteOff end = yew_unit_block.end(&fixture.unit, at, false);
-
-        YEW_ASSERT(end.v > at.v);
-        if (end.v < strlen(text))
-            YEW_ASSERT(yew_unit_block.end(&fixture.unit, end, false).v >
-                       end.v);
-    }
-    {
-        ByteOff open = BYTEOFF(text_off(text, "print(") + strlen("print"));
-        ByteOff end = yew_unit_block.end(&fixture.unit, open, false);
-
-        YEW_ASSERT_EQ_U64(yew_unit_block.home(&fixture.unit, open, false).v,
-                          open.v);
-        YEW_ASSERT(end.v > open.v);
-        YEW_ASSERT(yew_unit_block.end(&fixture.unit, end, false).v > end.v);
-    }
+    at = BYTEOFF(text_off(text, "var total"));
+    YEW_ASSERT_EQ_U64(yew_unit_block.home(&fixture.unit, at, false).v,
+                      outer_open);
+    YEW_ASSERT_EQ_U64(yew_unit_block.end(&fixture.unit, at, false).v,
+                      outer_close);
+    at = BYTEOFF(text_off(text, "_ =>"));
+    YEW_ASSERT_EQ_U64(yew_unit_block.home(&fixture.unit, at, false).v,
+                      inner_open);
+    YEW_ASSERT_EQ_U64(yew_unit_block.end(&fixture.unit, at, false).v,
+                      inner_close);
+    end = yew_unit_block.end(&fixture.unit, at, false);
+    YEW_ASSERT(yew_unit_block.end(&fixture.unit, end, false).v > end.v);
+    at = BYTEOFF(strlen(text));
+    YEW_ASSERT_EQ_U64(yew_unit_block.home(&fixture.unit, at, false).v,
+                      outer_open);
+    YEW_ASSERT_EQ_U64(yew_unit_block.end(&fixture.unit, at, false).v,
+                      strlen(text));
     block_fixture_free(&fixture);
 }
 

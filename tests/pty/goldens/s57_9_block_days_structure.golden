@@ -1,0 +1,68 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=6,22 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s57_9_block_days_ +                                                      
+    5     for i in 0..month { total += days_in(i, leap) }                       
+    4     total                                                                 
+    3 }                                                                         
+    2                                                                           
+    1 fn days_in(month: int, leap: bool) -> int {                               
+   25     match month {                                                         
+    1         0  => 31,                                                         
+    2         1  => if leap { 29 } else { 28 },                                 
+    3         2  => 31,                                                         
+    4         3  => 30,                                                         
+    5         4  => 31,                                                         
+    6         5  => 30,                                                         
+    7         6  => 31,                                                         
+    8         7  => 31,                                                         
+    9         8  => 30,                                                         
+   10         9  => 31,                                                         
+   11         10  => 30,                                                        
+   12         11  => 31,                                                        
+   13         _ => 0,                                                           
+   14     }                                                                     
+   15 }                                                                         
+   16                                                                           
+ B  pty-s57_9_block_days_structure.lu                      utf-8  lf  25:17  bot
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDDDDEEEEFFFEEEGGEHGGEEEEEEIEEEEEEEGGEJJJJJJJIEIEEEEEIEIEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDKKKJJJJJJJIEEEEEIELLLIEEEEEIELLLLIEGGELLLEIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDMMDEEEEFFFFFEEEEEEEIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEFFEEEEEEIEHHEIEFFFFEIEHHEIIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEHHEEGGEHHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEEEGGEHIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+NNNEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=#c8ccd4 bg=#2c313a attrs=b---------
+B fg=#61afef bg=#1b202a attrs=b---------
+C fg=#5c6370 bg=#1b202a attrs=----------
+D fg=#4b5263 bg=#12141a attrs=----------
+E fg=#c8ccd4 bg=#12141a attrs=----------
+F fg=#c678dd bg=#12141a attrs=b---------
+G fg=#56b6c2 bg=#12141a attrs=----------
+H fg=#d19a66 bg=#12141a attrs=----------
+I fg=#9aa0aa bg=#12141a attrs=----------
+J fg=#61afef bg=#12141a attrs=----------
+K fg=#c678dd bg=#12141a attrs=--i-------
+L fg=#e5c07b bg=#12141a attrs=--i-------
+M fg=#c8ccd4 bg=#12141a attrs=b---------
+N fg=#12141a bg=#c678dd attrs=----------

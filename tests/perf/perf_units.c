@@ -43,7 +43,7 @@ static TextBuf *make_fixture(void)
 
 static TextBuf *make_source_fixture(bool comma_rows)
 {
-    static const u8 statement[] = "    total += value;\n";
+    static const u8 statement[] = "    if ready { total }\n";
     static const u8 comma[] = "        0 => 31,\n";
     const u8 *row = comma_rows ? comma : statement;
     const size_t row_len = comma_rows ? sizeof(comma) - 1U :
@@ -179,7 +179,7 @@ static bool measure_source_rows(bool comma_rows)
     u = (UnitCtx){tb, &buffer, NULL};
     p = BYTEOFF((u64)(PERF_UNIT_LINES / 2) *
                 (comma_rows ? sizeof("        0 => 31,\n") - 1U :
-                              sizeof("    total += value;\n") - 1U));
+                              sizeof("    if ready { total }\n") - 1U));
     total_start = now_ns();
     if (total_start < 0) {
         yew_textbuf_free(tb);

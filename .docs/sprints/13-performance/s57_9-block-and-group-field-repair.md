@@ -15,21 +15,18 @@
 The initial local implementation and native qualification completed
 2026-09-11. A same-day follow-on field audit reopened the B-mode portion after
 the exact `ch4/days.lu` workflow exposed duplicate intra-line stops, skipped
-one-line statements, asymmetric Up/Down order, formatting-dependent EOF
-behavior, and confusing half-open edge ownership. The broader generic repair
-landed in `bb431836`. Its Wolf/C/fallback unit matrix, real-key PTY, sanitizer,
-alignment, fuzz, performance, core-only, and complete native default gates are
-green. The final default run qualified the clean combined frontier `7d05f79a`
-after the queued Sprint 57.10 tab-jump commits landed.
+one-line constructs, asymmetric Up/Down order, formatting-dependent EOF
+behavior, and confusing half-open edge ownership. The first broad repair
+landed in `bb431836` and was pushed as part of `a7da188f`, but subsequent field
+use showed that it had overcorrected: every ordinary source statement and
+every match arm had become a vertical stop. Its local and hosted runs are moot
+as Sprint 57.9 behavior qualification.
 
-Local evidence includes 2,441 default unit tests / 73,450,393 assertions, the
-complete PTY/script/package/round-trip/syntax/policy/smoke/live-torture matrix,
-and 1,971 core-only unit tests / 72,471,915 assertions. Four deterministic
-200,000-operation block fuzz seeds pass. The detected-source 100,000-motion
-gate completes in 18.089 ms with a 0.043 ms maximum; the comma-structural
-1,000-motion gate completes in 26.378 ms with a 0.108 ms maximum. Focused
-Darwin arm64 ASan/UBSan and alignment/UBSan runs are clean. Apple clang is the
-only native compiler available on this host, so GNU GCC remains a hosted row.
+Sprint 57.9 is reopened. The replacement policy restores structural B-mode:
+brace-body openers and indentation-suite headers are landmarks; assignments,
+returns, calls, and match arms are not. The exact real-key `days.lu` Up and
+trailing-EOF Left cases, Wolf/C/fallback matrices, and proportional gates must
+replace the superseded evidence before this sprint can close.
 
 The sprint is not closed: its exact commit-of-record has not been pushed or
 qualified by hosted CI. Sprint 58 is paused after F08 until that closeout and
@@ -39,10 +36,12 @@ the replacement-baseline requalification described in its contract.
 
 Close the field defects found in the Wolf workspace before Sprint 58 fixes its
 audit baseline. Repeated B-mode Up/Down motion must traverse one canonical,
-document-ordered set of source block rows in both directions. It may neither
-collapse from a valid row to byte zero nor manufacture a second stop inside
-the same line. Compact one-line statements remain rows; formatting-only
-continuations and delimiter-only lines do not. In FUSS, `Alt+g` on a directory
+document-ordered set of structural landmarks in both directions. It may
+neither collapse from a valid block to byte zero nor turn ordinary statements
+into blocks. Brace-bodied functions and control constructs remain landmarks
+even when compacted to one line; match arms and expression statements do not.
+Indentation-based languages use suite headers rather than body statements.
+In FUSS, `Alt+g` on a directory
 must open the existing tab-group picker rooted at that directory, with no files
 selected, rather than immediately opening every file. E mode must also expose
 one close gesture for the active group, falling back to the active tab when no
@@ -56,32 +55,36 @@ the reproducer must remain green with LSP disabled and with `MODULES=""`.
 ### 1. Cohesive four-direction B mode — `src/edit/block.c`
 
 For a source buffer with a detected language, Up/Down traverse canonical
-physical-line homes in document order. A nonblank logical statement or
-declaration is one row. Consecutive line comments remain one row; delimiter-
-only layout lines, operator continuations, and parenthesized/bracketed argument
-continuations are skipped. Same-indent statements are siblings rather than one
-merged indentation unit. The first/last rows lead to byte zero/EOF, and adding
-or removing the final newline does not change the interior row sequence.
+structural landmarks in document order. The first unsuppressed `{` on a source
+line is the line's brace-body landmark. Braces inside strings/comments and
+braces following a match-arm `=>` are not landmarks. A line followed by a
+deeper-indented nonblank line is an indentation-suite header unless it is an
+expression continuation or closing delimiter. There is at most one vertical
+landmark per physical line. The bounded scan retains Sprint 16's 2,000-line
+latency ceiling and moves to the buffer edge when no landmark is found.
 
-`prev()` and `next()` must be exact mirrors on those rows. In the exact
-`ch4/days.lu` shape, Up from line 10 visits lines 7, 5, and 4—not `print(` and
-then the same print line again. The `for ... { ... }` one-liner on line 20 and
-each match arm are rows. From the line-15 tail, Up visits lines 13, 12, 11, and
-10 in order instead of jumping to byte zero or an arbitrary delimiter.
+`prev()` and `next()` must be exact mirrors on those landmarks. In the exact
+`ch4/days.lu` shape, functions, `match month {`, and the compact
+`for ... { ... }` are stops. `var total`, `total += ...`, return-value lines,
+and the individual match arms are not. Up from the bottom or the final match
+arm lands on the `match` opener, not every arm. Adding or removing the final
+newline does not change the interior sequence.
 
-The source-row policy is generic editor behavior, not Wolf or LSP behavior.
-Pin the same structural shape through the real Wolf and C syntax definitions
-and through a detected-language fixture with no syntax engine. Also pin a
-reformatted C function so split parameters, a split assignment, and brace-only
-lines do not introduce stops that its compact equivalent lacks.
+The structural-landmark policy is generic editor behavior, not Wolf or LSP
+behavior. Pin the same shape through the real Wolf and C syntax definitions
+and through a detected-language fixture with no syntax engine. Pin compact and
+Allman-style C bodies, split parameters/expressions, same-indent statements,
+and an indentation-language fallback so formatting cannot manufacture
+statement blocks.
 
-Left/Right retain their Sprint 16 meaning: the level-zero provider span's
-home/end. Provider spans use half-open point ownership, so arriving at an
-exclusive end transfers ownership to the following/enclosing unit rather than
-reselecting the unit that just ended. A no-op is valid only when the cursor is
-already at the requested edge. Syntax `unit: atom`/`unit: span`, nested
-delimiter matching, containment expansion, paragraph fallback, scan caps,
-monotonicity, and selection-stack replay remain intact.
+Left/Right use the nearest enclosing structural provider span. In detected
+source outside a syntax atom, a real delimiter scope wins over incidental
+paragraph or statement indentation. Trailing whitespace and final EOL bytes
+remain attached to the preceding terminal scope for Left, so EOF in `days.lu`
+homes to the final function opener rather than column zero. Half-open ownership
+still advances at in-range returned ends; syntax `unit: atom`/`unit: span`,
+nested delimiter matching, containment expansion, paragraph fallback, scan
+caps, monotonicity, and selection-stack replay remain intact.
 
 Buffers without a detected language preserve paragraph/gap vertical motion;
 they do not pay the source-row classifier or turn prose into line motion.
@@ -131,21 +134,23 @@ commit-of-record; its no-fixes audit rule remains unchanged.
 
 ## Testing Strategy
 
-- Unit: exhaustive mirrored block-row sequences for the exact `days.lu` text
-  and a C equivalent, both final-newline states, both alternate values, real
-  syntax definitions, and syntax-free detected-language fallback.
-- Unit: reformatted/compact C equivalence, same-indent siblings, one-line
-  scope statements, comment runs, delimiter-only lines, operator and argument
-  continuations, horizontal half-open endpoints, nested scopes, paragraphs,
-  monotonicity, purity, grapheme boundaries, and scan caps.
+- Unit: exhaustive mirrored structural-landmark sequences for the exact
+  `days.lu` text and a C equivalent, both final-newline states, both alternate
+  values, real syntax definitions, and syntax-free detected-language fallback.
+- Unit: compact and Allman C bodies, same-indent statements, one-line control
+  scopes, match-arm exclusion, indentation-suite headers, expression
+  continuations, trailing-EOF horizontal scope ownership, nested scopes,
+  paragraphs, monotonicity, purity, grapheme boundaries, and scan caps.
 - Unit: `ed.group.from_dir` opens the group picker on a selected directory,
   starts at zero selected files, Escape makes no group, and confirmation opens
   only ticked files.
 - Script/FUSS: `Alt+g` dispatches the named command and opens the picker rather
   than creating a group immediately; a direct `yew_group_from_dir()` call
   retains its deterministic bulk-open behavior.
-- PTY: open the exact Wolf source at line 10 and perform three real B-mode Up
-  keys, pinning line 4 column 1 without a duplicate print-line stop.
+- PTY: open the complete exact Wolf source at EOF and perform a real B-mode Up,
+  pinning the `match month {` opener without visiting any match arm.
+- PTY: open the complete exact Wolf source at EOF and perform a real B-mode
+  Left, pinning the final function's `{` rather than buffer column zero.
 - PTY: open FUSS on a directory, invoke `Alt+g`, verify the chooser surface,
   select a subset, create the group, and prove the chosen members are live.
 - Unit/PTY: grouped `ed.group.close` closes every clean member by id,
@@ -154,18 +159,20 @@ commit-of-record; its no-fixes audit rule remains unchanged.
 - Build/regression: warning-clean Clang and GCC, default and `MODULES=""`;
   complete unit/script/PTY suites; ASan/UBSan focused block/group coverage;
   deterministic PTY and block/FUSS performance gates. The block gate includes
-  ordinary detected-source rows and comma-terminated structural rows in
+  dense source landmarks and match-arm/statement-only bounded scans in
   addition to provider-heavy prose and nested containment.
 
 ## Definition of Done
 
-- The exact Wolf and equivalent C reproducers walk one complete, mirrored row
-  sequence in both EOF styles. The print call occurs once, the one-line loop
-  and match arms occur once, tail statements are not skipped, and the result
-  is identical without a syntax engine or LSP process.
-- Split parameters/expressions and delimiter-only lines are not rows; compact
-  one-line statements are. Left/Right provider edges obey half-open ownership
-  without an in-range Right fixed point after a returned end.
+- The exact Wolf and equivalent C reproducers walk one complete, mirrored
+  structural-landmark sequence in both EOF styles. Functions, `match`, and the
+  one-line loop occur once; assignments, return-value statements, calls, and
+  match arms never occur. The result is identical without a syntax engine or
+  LSP process.
+- Compact/Allman braces and indentation-suite headers are stable structural
+  stops; split parameters/expressions and same-indent body statements are not.
+  Left at trailing EOF resolves the terminal brace scope, and Right has no
+  in-range fixed point after a returned end.
 - `Alt+g` opens the shared group picker with zero selected files and does not
   create a group until confirmation; cancel is side-effect free.
 - Programmatic directory bulk-open, group adoption, ordinals, lazy hydration,

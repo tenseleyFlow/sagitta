@@ -4709,7 +4709,7 @@ static void case_s57_8_click_new_tab(PtyCtx *c)
     (void)unlink(path);
 }
 
-static void case_s57_9_block_days_rows(PtyCtx *c)
+static bool s57_9_open_days(PtyCtx *c, char *path, size_t path_cap)
 {
     static const u8 days[] =
         "//! check: run(exit=0)\n"
@@ -4727,24 +4727,69 @@ static void case_s57_9_block_days_rows(PtyCtx *c)
         "    total += day\n"
         "    \n"
         "    total\n"
+        "}\n"
+        "\n"
+        "fn sum_months(month: int, leap: bool) -> int {\n"
+        "    var total = 0\n"
+        "    for i in 0..month { total += days_in(i, leap) }\n"
+        "    total\n"
+        "}\n"
+        "\n"
+        "fn days_in(month: int, leap: bool) -> int {\n"
+        "    match month {\n"
+        "        0  => 31,\n"
+        "        1  => if leap { 29 } else { 28 },\n"
+        "        2  => 31,\n"
+        "        3  => 30,\n"
+        "        4  => 31,\n"
+        "        5  => 30,\n"
+        "        6  => 31,\n"
+        "        7  => 31,\n"
+        "        8  => 30,\n"
+        "        9  => 31,\n"
+        "        10  => 30,\n"
+        "        11  => 31,\n"
+        "        _ => 0,\n"
+        "    }\n"
         "}\n";
-    char path[256];
-    int n = snprintf(path, sizeof(path), "build/pty-%s.lu",
+    int n = snprintf(path, path_cap, "build/pty-%s.lu",
                      c->test->name);
 
-    if (n <= 0 || (size_t)n >= sizeof(path) ||
+    if (n <= 0 || (size_t)n >= path_cap ||
         !write_bytes(path, days, sizeof(days) - 1U)) {
         ptc_check(c, false, "Sprint 57.9 block fixture creation failed");
-        return;
+        return false;
     }
     spawn_editor(c, path);
-    s18_settle_after_keys(c, "1 0 G");
+    return true;
+}
+
+static void case_s57_9_block_days_structure(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s57_9_open_days(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "G");
     s18_settle_after_keys(c, "b");
     s18_settle_after_keys(c, "up");
-    s18_settle_after_keys(c, "up");
-    s18_settle_after_keys(c, "up");
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot(c, "s57_9_block_days_rows");
+    ptc_snapshot(c, "s57_9_block_days_structure");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_9_block_days_left_eof(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s57_9_open_days(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "G");
+    s18_settle_after_keys(c, "b");
+    s18_settle_after_keys(c, "left");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s57_9_block_days_left_eof");
     force_quit(c);
     (void)unlink(path);
 }
@@ -9859,8 +9904,10 @@ const PtyCase yew_pty_cases[] = {
     C(s27_click_cjk_tab, modern, 24U, 80U, case_s27_click_cjk_tab),
     C(s57_8_click_new_tab, modern, 24U, 80U,
       case_s57_8_click_new_tab),
-    C(s57_9_block_days_rows, modern, 24U, 80U,
-      case_s57_9_block_days_rows),
+    C(s57_9_block_days_structure, modern, 24U, 80U,
+      case_s57_9_block_days_structure),
+    C(s57_9_block_days_left_eof, modern, 24U, 80U,
+      case_s57_9_block_days_left_eof),
     C(s27_wheel_unfocused_pane, modern, 24U, 80U,
       case_s27_wheel_unfocused_pane),
     C(s27_dwell_opens_member_strip, modern, 24U, 80U,
