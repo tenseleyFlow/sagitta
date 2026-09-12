@@ -23,6 +23,7 @@
 #include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/base.h"
+#include "util/intern.h"
 
 typedef struct FussDrawerFix {
     char root[PATH_MAX];
@@ -878,4 +879,178 @@ void test_fussdrawer_commit_owner_pane_close_cancels_cleanly(void)
     YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
     yew_ed_free(&ed);
     fussdrawer_fix_drop(&fix);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.11 §3: the two feel fixes the survey found missing      */
+/* ---------------------------------------------------------------- */
+
+typedef struct FussFeelFix {
+    char root[PATH_MAX];
+    char a[PATH_MAX + sizeof("/aaa.txt")];
+    char b[PATH_MAX + sizeof("/bbb.txt")];
+    char c[PATH_MAX + sizeof("/ccc.txt")];
+} FussFeelFix;
+
+static void fussfeel_write(const char *path)
+{
+    FILE *file = fopen(path, "wb");
+
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT(fputs("not a git repository\n", file) >= 0);
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+}
+
+/* Three rows, because one row cannot show a selection MOVING and two
+ * cannot show a wheel notch clamping. */
+static void fussfeel_make(FussFeelFix *fix)
+{
+    const char *tmp = getenv("TMPDIR");
+    char *resolved;
+
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "build/tmp";
+    (void)snprintf(fix->root, sizeof(fix->root), "%s/yew-fussfeel-XXXXXX",
+                   tmp);
+    YEW_ASSERT_NOT_NULL(mkdtemp(fix->root));
+    resolved = yew_xrealpath(fix->root);
+    YEW_ASSERT_NOT_NULL(resolved);
+    YEW_ASSERT(strlen(resolved) < sizeof(fix->root));
+    (void)memcpy(fix->root, resolved, strlen(resolved) + 1U);
+    yew_xfree(resolved);
+    (void)snprintf(fix->a, sizeof(fix->a), "%s/aaa.txt", fix->root);
+    (void)snprintf(fix->b, sizeof(fix->b), "%s/bbb.txt", fix->root);
+    (void)snprintf(fix->c, sizeof(fix->c), "%s/ccc.txt", fix->root);
+    fussfeel_write(fix->a);
+    fussfeel_write(fix->b);
+    fussfeel_write(fix->c);
+}
+
+static void fussfeel_drop(const FussFeelFix *fix)
+{
+    YEW_ASSERT_EQ_I64(unlink(fix->a), 0);
+    YEW_ASSERT_EQ_I64(unlink(fix->b), 0);
+    YEW_ASSERT_EQ_I64(unlink(fix->c), 0);
+    YEW_ASSERT_EQ_I64(rmdir(fix->root), 0);
+}
+
+/* The selected row's workspace-relative path, through the seam the
+ * keyboard route uses — so the test reads the same answer the menu
+ * would. */
+static const char *fussfeel_selected(Ed *ed)
+{
+    u32 id = 0U;
+    u16 x = 0U;
+    u16 y = 0U;
+
+    if (!yew_fuss_selected_anchor(ed, &id, &x, &y))
+        return NULL;
+    return yew_intern_str(&ed->interner, id);
+}
+
+static void fussfeel_press(Ed *ed, u16 col, u16 row)
+{
+    Key key = {0};
+
+    key.kind = (u16)YEW_EV_MOUSE;
+    key.button = (u8)YEW_MB_LEFT;
+    key.col = col;
+    key.row = row;
+    key.ev = (u8)YEW_KEY_PRESS;
+    yew_mouse_event(ed, &key);
+}
+
+/*
+ * A SINGLE CLICK SELECTS.
+ *
+ * The survey found this missing and it is the one thing that made the
+ * tree feel broken: every other list in the program moves its cursor to
+ * where you point, and a tree that only responded to double-clicks read
+ * as unresponsive rather than as deliberate.
+ */
+void test_fussdrawer_single_click_selects_the_row(void)
+{
+    FussFeelFix fix;
+    Ed ed;
+
+    fussfeel_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    yew_fuss_tick(&ed, ed.now_ms + 20);
+    fussdrawer_grid(&ed);
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    ed.now_ms = 1000;
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+
+    /* Row 0 is the header; the tree's rows start one below it. */
+    fussfeel_press(&ed, 1U, 3U);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "ccc.txt");
+    /* Selecting is NOT opening: F mode is still up and the buffer has
+     * not changed.  A tree where one click opened a file could not be
+     * browsed at all. */
+    YEW_ASSERT(yew_fuss_active(&ed));
+    YEW_ASSERT_EQ_U64(ed.mouse.click_n, 1U);
+
+    fussfeel_press(&ed, 1U, 2U);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "bbb.txt");
+    YEW_ASSERT(yew_fuss_active(&ed));
+    yew_ed_free(&ed);
+    fussfeel_drop(&fix);
+}
+
+/*
+ * THE WHEEL SCROLLS THE TREE, over its rows and over the blank drawer
+ * below them alike — a list that only scrolled where it happened to
+ * have drawn a row would feel like it had holes.
+ *
+ * It moves the SELECTION, exactly as the picker's wheel does (s26 §5):
+ * the drawer has no independent scroll offset, `f->scroll` is derived
+ * from the selected row on every draw, and a wheel that moved the
+ * offset alone would be snapped back on the next frame.
+ */
+void test_fussdrawer_wheel_scrolls_the_tree(void)
+{
+    FussFeelFix fix;
+    Ed ed;
+    Key wheel = {0};
+
+    fussfeel_make(&fix);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ed.ws.dir = arena_strdup(&ed.arena, fix.root);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_F), YEW_CMD_OK);
+    yew_fuss_tick(&ed, ed.now_ms + 20);
+    fussdrawer_grid(&ed);
+    yew_region_frame_begin();
+    yew_fuss_draw(&ed);
+    ed.now_ms = 1000;
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+
+    wheel.kind = (u16)YEW_EV_MOUSE;
+    wheel.ev = (u8)YEW_KEY_PRESS;
+    wheel.button = (u8)YEW_MB_WHEEL_DOWN;
+    /* Over the BLANK part of the drawer, well below the last row. */
+    wheel.col = 1U;
+    wheel.row = 15U;
+    yew_mouse_event(&ed, &wheel);
+    /* YEW_WHEEL_ROWS is 3 and there are 3 rows, so a notch lands on the
+     * last one rather than past it. */
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "ccc.txt");
+    /* And the wheel never touches the phase machine: it has no release,
+     * so a state machine keyed on press-without-release would hang. */
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+
+    wheel.button = (u8)YEW_MB_WHEEL_UP;
+    wheel.row = 2U;
+    yew_mouse_event(&ed, &wheel);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+    /* Clamped, not wrapped: a list that wrapped at the top would carry
+     * the eye somewhere it did not ask to go. */
+    yew_mouse_event(&ed, &wheel);
+    YEW_ASSERT_EQ_STR(fussfeel_selected(&ed), "aaa.txt");
+    yew_ed_free(&ed);
+    fussfeel_drop(&fix);
 }

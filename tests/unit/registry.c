@@ -1997,6 +1997,8 @@ const YewTest yew_tests[] = {
     T(fussdrawer_selected_row_keeps_the_final_component),
     T(fussdrawer_directory_tree_starts_collapsed),
     T(fussdrawer_mouse_double_click_uses_open_destination),
+    T(fussdrawer_single_click_selects_the_row),
+    T(fussdrawer_wheel_scrolls_the_tree),
     T(fussdrawer_preview_owner_tab_can_close),
     T(fussdrawer_commit_owner_tab_close_cancels_cleanly),
     T(fussdrawer_commit_owner_pane_close_cancels_cleanly),

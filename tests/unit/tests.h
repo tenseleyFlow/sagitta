@@ -1982,6 +1982,8 @@ void test_fussdrawer_actions_list_uses_only_effective_reachable_keys(void);
 void test_fussdrawer_selected_row_keeps_the_final_component(void);
 void test_fussdrawer_directory_tree_starts_collapsed(void);
 void test_fussdrawer_mouse_double_click_uses_open_destination(void);
+void test_fussdrawer_single_click_selects_the_row(void);
+void test_fussdrawer_wheel_scrolls_the_tree(void);
 void test_fussdrawer_preview_owner_tab_can_close(void);
 void test_fussdrawer_commit_owner_tab_close_cancels_cleanly(void);
 void test_fussdrawer_commit_owner_pane_close_cancels_cleanly(void);
