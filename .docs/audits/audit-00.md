@@ -1,35 +1,61 @@
 # Sprint 58 adversarial audit index
 
 Audit opened: 2026-09-03  
-Baseline commit: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`  
-Baseline hosted run: `33714586788` (22 standard push jobs passed)  
+Replacement baseline established: 2026-09-12
+Baseline commit: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
+Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: PAUSED AFTER F08 FOR SPRINT 57.9 REQUALIFICATION.**
+**Campaign status: ACTIVE AT F09.**
 
-F01–F08 ran against the baseline above; their reports, findings, and hosted
-evidence remain immutable historical records. Sprint 57.9 deliberately
-reopened product code before F09 to repair field-reported B-mode and FUSS
-group-picker defects and complete the active-group close lifecycle. Its
-replacement product SHA is pending push and hosted qualification. No remaining
-front may open until the build matrix is replaced and a delta-applicability
-review of F01–F08 is recorded. Audit tooling,
-reproducers, evidence, and the two Sprint 58 inbound obligations may continue
-to advance without rewriting the original front provenance.
+F01–F08 ran against the original baseline
+`41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
+hosted evidence remain immutable historical records. Sprint 57.9 and the
+subsequent field work deliberately reopened product code before F09. The
+replacement product commit above passed the complete hosted matrix, and the
+required F01–F08 delta-applicability review and focused controls are recorded
+below. F09–F15 use the replacement baseline.
 
 ## Build matrix of record
 
 | Target lane | Commit of record | Evidence |
 |---|---|---|
-| `x86_64-linux-gnu` | `41fef4166fe6bf127f36b8b9f6eb653a454a28c1` | hosted run `33714586788` |
-| `arm64-linux` | `41fef4166fe6bf127f36b8b9f6eb653a454a28c1` | hosted run `33714586788` |
-| `x86_64-linux-musl` | `41fef4166fe6bf127f36b8b9f6eb653a454a28c1` | hosted run `33714586788` |
-| `arm64-macos` | `41fef4166fe6bf127f36b8b9f6eb653a454a28c1` | hosted run `33714586788` |
+| `x86_64-linux-gnu` | `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3` | hosted run `34699266067` |
+| `arm64-linux` | `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3` | hosted run `34699266067` |
+| `x86_64-linux-musl` | `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3` | hosted run `34699266067` |
+| `arm64-macos` | `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3` | hosted run `34699266067` |
 
 The baseline built the six shipping module sets: full
 (`lsp ai fuss plugins`), minimal (`MODULES=""`), and the `lsp`, `ai`, `fuss`,
 and `plugins` single-module profiles.
+
+## Replacement-baseline delta requalification
+
+The replacement contains the Sprint 57.9 structural motion/group repair and
+later field work through selection/clipboard/job return, in-process
+`:!yew`, FUSS action gating, and the mouse/context-menu surface. The following
+review classifies applicability; it does not reopen, rewrite, remediate, or
+renumber a closed front.
+
+| Front | Delta applicability | Focused replacement control |
+|---|---|---|
+| F01 unicode | `src/unicode/` is byte-identical to the original baseline; terminal/UI consumers changed | complete F01 consumer corpus (53 corpus cases plus all 2²⁴ three-byte inputs) and 10,000-cluster model/VT comparison pass; `YEW-F-001`–`003` remain XFAIL |
+| F02 terminal | affected: SGR no-button motion decoding and the temporary DEC 1003 lifecycle changed | terminal/input unit filters and all three `audit_terminal_*` PTYs pass, including restore-blob coverage |
+| F03 text | affected: aggregate cut/paste transaction admission and undo handling changed | multicursor, selection-action, save, undo, job-return, and audit hard-XFAIL controls pass; no F03 finding changes status |
+| F04 modal | affected: B-mode structural traversal, Shift+Arrow highlight entry, key normalization, command registry, and E/F prompt routing changed | block/H/multicursor/selection unit filters and `s57_9_block_*` plus `s57_12_shift_arrow_highlight` PTYs pass; `YEW-F-004` remains XFAIL |
+| F05 execute | affected: safe `:!yew` self-open, bare `!`, and transient job-buffer return changed shell/job flow | shell/job unit filters and `s57_11_shell_self_open`, `s57_12_job_output_quit_returns`, and hostile-paste PTYs pass |
+| F06 regex | `src/search/` is byte-identical to the F06-close tree; selection and LSP-rename consumers changed | replace, smartcase, selection, and LSP-rename unit filters pass; `YEW-F-005` remains XFAIL |
+| F07 UI/workspace | affected: group picker/close, positional tabs, FUSS drawer actions, tabs, regions, mouse routing, and context menus changed; state parse/emit/save is byte-identical to the F07-close tree | group storm, layout-region, context-row/menu, FUSS/group and all `s57_13_*` PTYs pass; `YEW-F-006` and `YEW-F-007` remain XFAIL |
+| F08 Fletch | affected at the recorder prompt boundary and by registry/batch growth; VM, origin, GC, and capability implementation did not change | recorder/macro/Fletch-transaction unit filters and audit hard-XFAIL controls pass; `YEW-F-008` remains XFAIL |
+
+Local controls ran at `d6c740f0`, whose only delta from the replacement product
+commit is `.docs/sprints/index.md`. `make test-audit` passed 8 hard-XFAIL
+reproducers, the F01 corpus and VT probes, and both ledger checks. Focused unit
+filters passed 555 invocations and 5,038,739 assertions; the 20 focused PTY
+cases above matched their committed final-screen goldens. The complete hosted
+run remains the cross-compiler and cross-architecture proof for the exact
+product baseline.
 
 ## Audit-harness confirmation
 

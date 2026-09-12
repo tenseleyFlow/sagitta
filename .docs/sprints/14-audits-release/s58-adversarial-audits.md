@@ -38,7 +38,7 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — PAUSED AFTER F08; REQUALIFICATION REQUIRED
+## Baseline status — REQUALIFIED; ACTIVE AT F09
 
 `41fef416` is the original post-Sprint-57.8 product baseline used by F01–F08.
 On Darwin arm64 it passes the complete default-module `make test` suite,
@@ -64,24 +64,25 @@ push trigger and are not inferred as successes.
 F01–F08 closed against that original fixed baseline and opened findings
 `YEW-F-001` through `YEW-F-008`. Sprint 57.9 deliberately reopened product
 code to repair field-reported B-mode and FUSS group-picker defects and complete
-the active-group close lifecycle, so the audit campaign is paused before F09.
-The original reports and evidence remain historical and must not be rewritten
-as if they ran on the replacement tree.
+the active-group close lifecycle. That was the pause point before F09. The
+original reports and evidence remain historical and were not rewritten as if
+they ran on the replacement tree.
 
 The structural B-mode replacement is locally qualified at `c07791cc`: the
 complete default and core-only unit matrices, exact real-key Wolf PTYs,
 Wolf/C/syntax-free structural sequences, focused Darwin sanitizers, four
-deterministic motion-fuzz seeds, and bounded block performance rows pass. This
-is a candidate only. It does not become the audit baseline until its pushed
-successor passes the complete hosted matrix and the F01–F08 applicability
-record is committed.
+deterministic motion-fuzz seeds, and bounded block performance rows pass. It
+became an ancestor of the pushed replacement baseline below; it is retained
+here as the local qualification checkpoint, not as a second active baseline.
 
-Before F09 opens, push the exact post-57.9 commit, obtain the complete hosted
-matrix, replace the build matrix of record, and record a delta-applicability
-review for every closed front F01–F08. Re-run focused controls for affected
-modal and UI/workspace surfaces; explicitly record unaffected fronts. F09–F15
-then use that one replacement fixed baseline. This requalification does not
-remediate or renumber any existing finding.
+The replacement baseline is
+`b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`. GitHub Actions run
+`34699266067` passed all 22 standard push jobs for that exact commit. The
+build matrix of record, F01–F08 delta-applicability review, and focused Darwin
+arm64 controls are recorded in `.docs/audits/audit-00.md`. All eight existing
+findings remain hard XFAILs. F09–F15 use this one replacement fixed baseline;
+the original F01–F08 reports remain historical and were not rewritten. This
+requalification did not remediate or renumber any existing finding.
 
 ## Goals
 

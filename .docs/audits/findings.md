@@ -1,11 +1,16 @@
 # Sprint 58 findings ledger
 
-Baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`  
+Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
+F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
 Next available ID: `YEW-F-009`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
 the historical row and body.
+
+All eight findings filed against the original baseline remain reproducible as
+hard XFAILs after the replacement-baseline requalification recorded in
+`audit-00.md`.
 
 | ID | Sev | Status | Front | Title | Reproducer | Violates |
 |---|---|---|---|---|---|---|
