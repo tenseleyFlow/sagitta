@@ -7,6 +7,10 @@
 #include "edit/motion.h"
 #include "unicode/coords.h"
 
+#if YEW_COV
+#include "cov.h"
+#endif
+
 enum { UNIT_FUZZ_BYTES = 2048, UNIT_FUZZ_MIN_ITERS = 100000 };
 
 typedef struct {
@@ -181,6 +185,7 @@ int main(int argc, char **argv)
     };
     u64 seed = 1U;
     u64 iterations = UNIT_FUZZ_MIN_ITERS;
+    bool coverage_report = false;
     FuzzRun run;
     TextBuf *tb;
     Buffer buffer = {0};
@@ -192,10 +197,25 @@ int main(int argc, char **argv)
         if (parse_u64(argv[argi], "--seed=", &seed) ||
             parse_u64(argv[argi], "--iters=", &iterations))
             continue;
-        (void)fprintf(stderr, "usage: %s [--seed=N] [--iters=N]\n",
+        if (strcmp(argv[argi], "--coverage-report") == 0) {
+            coverage_report = true;
+            continue;
+        }
+        (void)fprintf(stderr, "usage: %s [--seed=N] [--iters=N] "
+                      "[--coverage-report]\n",
                       argv[0]);
         return 2;
     }
+#if !YEW_COV
+    if (coverage_report) {
+        (void)fprintf(stderr,
+                      "fuzz_units: coverage options require a COV=1 build\n");
+        return 2;
+    }
+#else
+    if (coverage_report)
+        yew_cov_reset();
+#endif
     if (iterations < UNIT_FUZZ_MIN_ITERS)
         iterations = UNIT_FUZZ_MIN_ITERS;
     run = (FuzzRun){seed == 0U ? UINT64_C(0x9e3779b97f4a7c15) : seed,
@@ -237,5 +257,13 @@ int main(int argc, char **argv)
                  (unsigned long long)seed,
                  (unsigned long long)iterations,
                  (unsigned long long)run.hash);
+#if YEW_COV
+    if (coverage_report) {
+        yew_cov_merge();
+        (void)printf("fuzz_units: ");
+        yew_cov_report(stdout);
+        (void)printf(" corpus=0 admitted=0 new_edges=0\n");
+    }
+#endif
     return 0;
 }
