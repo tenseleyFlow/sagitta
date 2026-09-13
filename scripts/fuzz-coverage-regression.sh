@@ -27,19 +27,28 @@ FILENAME == ARGV[1] && $4 ~ /fuzz_/ {
 }
 FILENAME == ARGV[2] && $2 ~ /fuzz_/ {
     target = trim($2)
-    current = trim($3) + 0
     if (!(target in seen)) seen_count++
     seen[target] = 1
-    if (!(target in baseline)) {
-        print "fuzz-coverage-regression: no baseline for " target > "/dev/stderr"
-        errors++
-    } else if (current < baseline[target]) {
-        print "fuzz-coverage-regression: " target " decreased " \
-              baseline[target] " -> " current > "/dev/stderr"
-        errors++
-    }
+    current[target] = trim($3) + 0
+    next
+}
+FILENAME == ARGV[2] && $4 ~ /fuzz_/ {
+    target = trim($4)
+    if (!(target in seen)) seen_count++
+    seen[target] = 1
+    current[target] = trim($8) + 0
 }
 END {
+    for (target in current) {
+        if (!(target in baseline)) {
+            print "fuzz-coverage-regression: no baseline for " target > "/dev/stderr"
+            errors++
+        } else if (current[target] < baseline[target]) {
+            print "fuzz-coverage-regression: " target " decreased " \
+                  baseline[target] " -> " current[target] > "/dev/stderr"
+            errors++
+        }
+    }
     for (target in baseline) {
         if (!(target in seen)) {
             print "fuzz-coverage-regression: snapshot omitted " target > "/dev/stderr"

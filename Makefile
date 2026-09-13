@@ -103,8 +103,10 @@ FUZZ_SEED  ?= 1
 FUZZ_SECONDS ?=
 FUZZ_CAMPAIGN_TARGET ?= fuzz_input
 FUZZ_NIGHTLY_SECONDS ?= 1800
+FUZZ_WEEKLY_SECONDS ?= 14400
 SOAK_SECONDS ?= 259200
 SOAK_SEED ?=
+SOAK_STREAMS ?= 4
 SOAK_LEDGER ?= .docs/audits/fuzz-coverage.md
 SOAK_ADMIT_DIR ?= tests/fuzz/corpus/$(FUZZ_CAMPAIGN_TARGET)
 # ASan/UBSan makes the AI shadow's allocation-heavy worst cases much slower
@@ -1893,14 +1895,13 @@ fuzz-cov:
 		FUZZ_COV_REPORT='$(FUZZ_COV_REPORT)' fuzz-cov
 endif
 
-fuzz-cov-weekly: fuzz-cov
-	scripts/fuzz-coverage-regression.sh \
-		.docs/audits/fuzz-coverage.md $(FUZZ_COV_REPORT)
-
 fuzz-cov-regression-selftest:
 	@scripts/fuzz-coverage-regression.sh \
 		scripts/tests/fuzz-coverage/ledger.md \
 		scripts/tests/fuzz-coverage/snapshot-ok.md >/dev/null
+	@scripts/fuzz-coverage-regression.sh \
+		scripts/tests/fuzz-coverage/ledger.md \
+		scripts/tests/fuzz-coverage/ledger-current.md >/dev/null
 	@if scripts/fuzz-coverage-regression.sh \
 		scripts/tests/fuzz-coverage/ledger.md \
 		scripts/tests/fuzz-coverage/snapshot-regressed.md >/dev/null 2>&1; then \
@@ -1910,6 +1911,12 @@ fuzz-cov-regression-selftest:
 	@echo "fuzz-cov-regression-selftest: ok"
 
 ifeq ($(COV),1)
+fuzz-cov-weekly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
+	@seed=$$(date -u +%Y%m%d); \
+		scripts/fuzz-weekly.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
+		'$(FUZZ_WEEKLY_SECONDS)' "$$seed" '$(SOAK_LEDGER)' \
+		'$(SOAK_ADMIT_DIR)'
+
 fuzz-nightly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 	@seed=$$(date -u +%Y%m%d); \
 		scripts/fuzz-soak.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
@@ -1919,11 +1926,11 @@ fuzz-nightly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 soak: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 	@seed='$(SOAK_SEED)'; \
 	if [ -z "$$seed" ]; then \
-		seed=$$(od -An -N8 -tu8 /dev/urandom | tr -d ' '); \
+		seed=$$(od -An -N4 -tu4 /dev/urandom | tr -d ' '); \
 	fi; \
-	scripts/fuzz-soak.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
-		'$(SOAK_SECONDS)' "$$seed" '$(SOAK_LEDGER)' \
-		'$(SOAK_ADMIT_DIR)'
+	scripts/fuzz-streams.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
+		'$(SOAK_SECONDS)' "$$seed" '$(SOAK_STREAMS)' \
+		'$(SOAK_LEDGER)' '$(SOAK_ADMIT_DIR)'
 
 soak-rc:
 	@test -n '$(RC_COMMIT)' || \
@@ -1933,12 +1940,20 @@ soak-rc:
 	@$(MAKE) --no-print-directory COV=1 COV_BUILD='$(BUILD)' \
 		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
 		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
+		SOAK_STREAMS='$(SOAK_STREAMS)' \
 		SOAK_LEDGER='$(SOAK_LEDGER)' \
 		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' soak
 
 soak-selftest: $(BUILD)/fuzz_input
 	scripts/fuzz-soak-selftest.sh $(BUILD)/fuzz_input
 else
+fuzz-cov-weekly:
+	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
+		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
+		FUZZ_WEEKLY_SECONDS='$(FUZZ_WEEKLY_SECONDS)' \
+		SOAK_LEDGER='$(SOAK_LEDGER)' \
+		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' fuzz-cov-weekly
+
 fuzz-nightly:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
 		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
@@ -1950,6 +1965,7 @@ soak:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
 		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
 		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
+		SOAK_STREAMS='$(SOAK_STREAMS)' \
 		SOAK_LEDGER='$(SOAK_LEDGER)' \
 		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' soak
 
@@ -1957,6 +1973,7 @@ soak-rc:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
 		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
 		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
+		SOAK_STREAMS='$(SOAK_STREAMS)' \
 		SOAK_LEDGER='$(SOAK_LEDGER)' \
 		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' \
 		RC_COMMIT='$(RC_COMMIT)' soak-rc

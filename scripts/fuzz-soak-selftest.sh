@@ -15,12 +15,22 @@ admit_dir=$tmp_dir/admit
 seed=580001
 short_commit=$(git rev-parse --short=8 HEAD)
 
-: >"$ledger"
+{
+    echo '| Date | Commit | Target | Iterations | Seed | New edges | Total edges | Corpus size | Findings |'
+    echo '|---|---|---|---:|---|---:|---:|---:|---|'
+    echo
+    echo '## Pinned schedule'
+} >"$ledger"
 scripts/fuzz-soak.sh "$(dirname "$binary")" fuzz_input 60 "$seed" \
     "$ledger" "$admit_dir"
 rows=$(grep -c '| `fuzz_input` |' "$ledger" || true)
 if [ "$rows" -ne 1 ] || ! grep -F "| $seed |" "$ledger" >/dev/null ||
-   ! grep -F "\`$short_commit\`" "$ledger" >/dev/null; then
+   ! grep -F "\`$short_commit\`" "$ledger" >/dev/null ||
+   ! awk '
+       /\| `fuzz_input` \|/ { row = NR }
+       /^## Pinned schedule$/ { marker = NR }
+       END { exit !(row != 0 && marker != 0 && row < marker) }
+   ' "$ledger"; then
     echo "soak-selftest: worker did not append exactly one correct row" >&2
     cat "$ledger" >&2
     exit 1
