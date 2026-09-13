@@ -2250,6 +2250,7 @@ void test_degrade_no_color_menu_keeps_its_hover_and_frame(void);
 void test_degrade_16_colour_menu_stays_distinguishable(void);
 void test_degrade_ascii_menu_is_still_a_box(void);
 void test_invariant2_adversarial_columns_and_all_units(void);
+void test_invariant2_end_to_end_byte_pipeline(void);
 void test_invariant9_click_a_pane_equals_focus_right(void);
 void test_invariant9_drag_a_border_equals_grow(void);
 void test_invariant9_click_a_tab_equals_tab_goto(void);

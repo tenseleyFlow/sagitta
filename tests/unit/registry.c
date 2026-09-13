@@ -2256,6 +2256,7 @@ const YewTest yew_tests[] = {
     T(degrade_16_colour_menu_stays_distinguishable),
     T(degrade_ascii_menu_is_still_a_box),
     T(invariant2_adversarial_columns_and_all_units),
+    T(invariant2_end_to_end_byte_pipeline),
     T(invariant9_click_a_pane_equals_focus_right),
     T(invariant9_drag_a_border_equals_grow),
     T(invariant9_click_a_tab_equals_tab_goto),
