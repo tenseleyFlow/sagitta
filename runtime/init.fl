@@ -42,8 +42,11 @@ set({
     "shadow.ai_debounce_ms": 350,
     "compl.auto_trigger": false,
     "compl.trigger_chars": ". -> ::",
-    "lsp.open_in": "here",
 })
+
+# YEW-F-075: module-owned options keep their descriptor defaults here.  A
+# user config may set them when that module is built, but this core default
+# file must also execute unchanged when every optional module is excluded.
 
 # -- 2. unit modes (L line, W word, B block) ----------------------------
 bind("L", "<left>", "ed.move.unit.home")
