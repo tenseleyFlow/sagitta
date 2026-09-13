@@ -17,6 +17,7 @@
 #include "fl/gc.h"
 #include "fl/value.h"
 #include "fl/vm.h"
+#include "mod/mods.h"
 
 typedef struct ConfigFix {
     Ed ed;
@@ -207,11 +208,18 @@ void test_flconf_workspace_cannot_weaken_ai_redaction(void)
              "set({errorbells: true, \"ai.on_redact\": \"off\"})\n");
     YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_RUN);
     value = cf_opt(&f, "ai.on_redact");
-    YEW_ASSERT_EQ_U64(value.as.str.len, sizeof("elide") - 1U);
-    YEW_ASSERT_EQ_MEM(value.as.str.s, "elide", value.as.str.len);
+    if (yew_mod_enabled(YEW_MOD_AI)) {
+        YEW_ASSERT_EQ_U64(value.as.str.len, sizeof("elide") - 1U);
+        YEW_ASSERT_EQ_MEM(value.as.str.s, "elide", value.as.str.len);
+        YEW_ASSERT(cf_error_contains(&f, "FL_ORIGIN_WORKSPACE"));
+        YEW_ASSERT(cf_error_contains(&f, "workspace config"));
+    } else {
+        YEW_ASSERT_EQ_U64(value.as.str.len, sizeof("block") - 1U);
+        YEW_ASSERT_EQ_MEM(value.as.str.s, "block", value.as.str.len);
+        YEW_ASSERT(cf_error_contains(&f, "FL_ORIGIN_WORKSPACE"));
+        YEW_ASSERT(cf_error_contains(&f, "workspace config"));
+    }
     YEW_ASSERT(!cf_opt(&f, "errorbells").as.b);
-    YEW_ASSERT(cf_error_contains(&f, "FL_ORIGIN_WORKSPACE"));
-    YEW_ASSERT(cf_error_contains(&f, "workspace config"));
     cf_free(&f);
 }
 
