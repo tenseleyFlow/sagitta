@@ -7,7 +7,8 @@ Baseline hosted run: `34699266067` (22 standard push jobs passed)
 Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`  
 UCD version: 16.0.0
 
-**Campaign status: ACTIVE — INVARIANTS 2–10 COMPLETE; INVARIANT 1 NEXT.**
+**Campaign status: ACTIVE — ALL TEN INVARIANTS COMPLETE; FIRST SOAK CYCLE
+BLOCKED ON AN UNREGISTERED DESIGNATED RUNNER.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -132,7 +133,7 @@ zero until its report closes; silence never counts as evidence.
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
 | F01 unicode | `audit-01-unicode.md` | closed | 3 | 3 | 0 | 1 | 2 | 0 | 3 |
 | F02 terminal | `audit-02-terminal.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
-| F03 text | `audit-03-text.md` | closed + invariant addendum | 2 | 2 | 0 | 0 | 2 | 0 | 2 |
+| F03 text | `audit-03-text.md` | closed + invariant addendum | 3 | 3 | 0 | 0 | 3 | 0 | 2 |
 | F04 modal | `audit-04-modal.md` | closed | 1 | 1 | 0 | 0 | 1 | 0 | 1 |
 | F05 execute | `audit-05-exec.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F06 regex | `audit-06-regex.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
@@ -145,15 +146,17 @@ zero until its report closes; silence never counts as evidence.
 | F13 git/FUSS | `audit-13-git.md` | closed | 4 | 4 | 0 | 0 | 4 | 0 | 0 |
 | F14 plugins | `audit-14-plugins.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
 | F15 CI | `audit-15-ci.md` | closed | 52 | 52 | 1 | 1 | 50 | 0 | 4 |
-| **Total** | — | **15 closed** | **77** | **77** | **3** | **4** | **70** | **0** | **20** |
+| **Total** | — | **15 closed** | **78** | **78** | **3** | **4** | **71** | **0** | **20** |
 
 ## Cross-front dedup and C/H severity review
 
 The initial 76 findings were compared by violated contract, user-visible
 failure, reproducer, and repair boundary. No two shared a root cause. The
-later invariant-2 session added `YEW-F-077`, whose rectangular-register
-storage defect is distinct from the existing Unicode renderer findings, so
-the deduped total is 77 and no alias row is required. In particular,
+invariant sessions added `YEW-F-077`, whose rectangular-register storage
+defect is distinct from the existing Unicode renderer findings, and
+`YEW-F-078`, whose journal-base authentication defect is distinct from both
+the text findings and F07's workspace-state persistence defects. The deduped
+total is 78 and no alias row is required. In particular,
 `YEW-F-014` is an intentional LSP completion-shim exception while
 `YEW-F-075` is missing module ownership in the core option table;
 `YEW-F-033` is a source-ban omission while `YEW-F-074` is actual Mach-O UUID
@@ -171,18 +174,21 @@ Every Critical and High finding was re-scored against Sprint 58 §2:
 | `YEW-F-074` | High | consecutive clean Darwin builds are not byte-identical |
 | `YEW-F-075` | Critical | user-reachable excluded-module settings silently become inert state |
 
-No downgrade is justified. The remaining 70 findings meet the Medium
+No downgrade is justified. The remaining 71 findings meet the Medium
 definition: recoverable product behavior, a documented mechanism absent from
 the implementation, or a CI control claiming evidence it cannot establish.
 
 ## Verdict
 
-We are not ready to tag: all fifteen Sprint 58 fronts have closed, cross-front
-dedup is complete, and invariant sessions 2–10 are complete, but invariant 1
-still remains. The invariant-2 session retains F01's Unicode findings and
-adds `YEW-F-077`, a Medium rectangular-register geometry defect. F03 now has
-two Medium findings: `YEW-F-076` for accepted undo-sidecar byte
-canonicalization and `YEW-F-077` for omitted rectangular padding. F06 adds
+We are not ready to tag: all fifteen Sprint 58 fronts, cross-front dedup, and
+all ten invariant sessions are complete, but the designated 72-hour soak
+runner is not registered and its first cycle has not started. Invariant 1 is
+violated by F07's two Critical workspace-state defects and by `YEW-F-078`, a
+Medium journal-base identity defect. The invariant-2 session retains F01's
+Unicode findings and adds `YEW-F-077`, a Medium rectangular-register geometry
+defect. F03 now has three Medium findings: `YEW-F-076` for accepted undo-sidecar
+byte canonicalization, `YEW-F-077` for omitted rectangular padding, and
+`YEW-F-078` for accepting a same-metadata replacement inode. F06 adds
 an open High finding (`YEW-F-005`), while closed F07 records two open Critical
 workspace-state findings (`YEW-F-006`, `YEW-F-007`): normal persistence can
 drop future keys and reorder a group member sequence. Its tutor-inclusive

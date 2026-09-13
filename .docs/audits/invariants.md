@@ -2,12 +2,13 @@
 
 Baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 
-All fifteen fronts are closed and cross-cutting verification is in progress.
-A pending row is not a verdict.
+All fifteen fronts and all ten cross-cutting verification sessions are
+complete. These verdicts do not imply that the separate 72-hour soak gate has
+run.
 
 | # | Invariant | Status | Verdict | Findings |
 |---:|---|---|---|---|
-| 1 | No data loss, ever | pending | — | — |
+| 1 | No data loss, ever | complete | VIOLATED | YEW-F-006, YEW-F-007, YEW-F-078 |
 | 2 | No byte confusion | complete | VIOLATED | YEW-F-001, YEW-F-002, YEW-F-003, YEW-F-077 |
 | 3 | No silent stubs | complete | VIOLATED | YEW-F-014, YEW-F-075 |
 | 4 | Latency budgets are CI gates | complete | VIOLATED | YEW-F-072, YEW-F-073 |
@@ -17,6 +18,51 @@ A pending row is not a verdict.
 | 8 | Single-threaded core | complete | HOLDS WITH FINDINGS | YEW-F-032 |
 | 9 | Modal paradigm first | complete | HOLDS | — |
 | 10 | Recorder/Fletch round-trip | complete | VIOLATED | YEW-F-023 |
+
+## 1. No data loss, ever
+
+Verdict: **VIOLATED: YEW-F-006, YEW-F-007, YEW-F-078**.
+
+The large-file lane created an exact 1.5 GiB sparse APFS file, two additional
+hardlinks, and a symlink entry, then changed the target directory to mode
+0500. A shipping batch edit inserted `X` at byte zero and saved in 9.2
+seconds. The symlink remained a symlink, all three target names remained one
+inode with link count three, and a complete byte comparison against an
+independently constructed `X`-plus-zeroes oracle passed at 1,610,612,737
+bytes. A separately measured 10,000-cursor transaction remained inside its
+50 ms gate at p99 15.669 ms.
+
+The disk-full lane repeated the exact file size and topology on a disposable
+2 GiB ext4 loop filesystem in an x86_64 Linux VM. `fallocate` raised measured
+use to 99.9006% (2,021,568,512 bytes used, 2,027,520 available). The real
+load/journal/edit/save path failed loudly with status 3, retained a 91-byte
+durable journal, and left every target name at the exact old SHA-256
+`b7a1ca05cae9eefbf2deee895f4fb34c8d8ffc5d6665982424e0b2711c79ed1d`.
+Once the filler was removed, the checker replayed that journal to the exact
+1,610,612,737-byte post-edit oracle. The disposable filesystem was unmounted
+and removed after the successful check.
+
+The existing s08 state-machine torture exhaustively killed every syscall
+boundary for the small atomic and in-place images, including hardlink and
+durable-backup paths, and its two live/API campaigns each completed 5,000
+externally timed kills without a partial destination. The in-place `fsync`
+EIO sweep passed all 16 metadata-fault boundaries; the added ENOSPC seam
+failed a storage write, preserved the exact old destination, and replayed the
+journal to the exact post image. The literal cross-product over roughly
+24,576 large-file write boundaries was not rerun because it would move tens
+of tebibytes while exercising the same audited state transitions. The exact
+large-file, cursor, replacement, kill, disk-full, and `fsync` axes were
+therefore composed as independent lanes and are not misreported as a literal
+cross-product.
+
+The replacement axis found `YEW-F-078`: journal identity is only canonical
+path, size, and nanosecond mtime. A different inode with different same-size
+bytes and restored mtime is accepted, yielding `Xomega\n` rather than the
+intended `Xalpha\n`. Two existing Critical persistence findings independently
+break the same promise: `YEW-F-006` drops user-owned unknown workspace keys
+on normal re-emission, and `YEW-F-007` reorders a saved tab-group member
+sequence on restore. All three remain deferred to Sprint 59; Sprint 58
+changed audit tests, torture infrastructure, and documentation only.
 
 ## 2. No byte confusion
 

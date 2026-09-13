@@ -174,6 +174,42 @@ register nevertheless reports `ragged = false`, so paste loses the selected
 rectangle's width on short rows. `tests/audit/yew_f_077.c` pins the two-row
 `a`/`bb` case as a hard XFAIL for Sprint 59.
 
+`YEW-F-078` was discovered during the invariant-1 interaction session. A
+durable journal records the canonical path, byte size, and nanosecond mtime
+of its base but not the base inode or a content digest. After another process
+installs different same-size bytes and restores that mtime, probe and replay
+accept the new inode and apply the old edit to it. The hard-XFAIL retains two
+hardlinks to the original base and requires recovery of `Xalpha\n`; the
+baseline instead produces `Xomega\n`. The intended image remains recoverable
+from those links and replay does not alter disk, so the finding is Medium.
+
+## Invariant-1 execution addendum
+
+- An exact 1.5 GiB sparse file on APFS was opened through a symlink to a
+  three-link target in a directory changed to mode 0500. The shipping batch
+  edit path inserted one byte and saved in 9.2 seconds. All three names kept
+  one inode, the symlink survived, and a complete comparison against an
+  independent `X`-plus-zeroes oracle passed at 1,610,612,737 bytes.
+- On an x86_64 Linux VM, the same 1.5 GiB topology was placed on a disposable
+  2 GiB ext4 loop filesystem and a filler raised usage to 99.9006%. The real
+  load/journal/edit/save path failed loudly with status 3, retained a
+  91-byte durable journal, and left all three target names byte-identical to
+  the old SHA-256 `b7a1ca05cae9eefbf2deee895f4fb34c8d8ffc5d6665982424e0b2711c79ed1d`.
+  After the filler was removed, replay reconstructed the independent
+  1,610,612,737-byte post-edit oracle exactly.
+- The existing exhaustive small-image torture still kills every atomic and
+  in-place save syscall boundary, including hardlink/backup paths. Its
+  `fsync` EIO sweep passed 16 in-place metadata boundaries. The new ENOSPC
+  seam proves a storage write failure preserves the old destination and a
+  replayable journal. The exact 10,000-cursor performance control separately
+  passed at p99 15.669 ms against its 50 ms budget.
+- The literal product of roughly 24,576 large-file write boundaries, a
+  10,000-cursor transaction, replacement races, and every failure mode was
+  not repeated: it would reread and rewrite tens of tebibytes without adding
+  a distinct transition to the exhaustive state machine. Each axis was run
+  exactly as above. The replacement race itself already produces
+  `YEW-F-078`, so invariant 1 is false independent of that decomposition.
+
 ## Unverified observations
 
 - An exact 2 GiB file was not read, edited, and written end-to-end on the
@@ -188,4 +224,4 @@ rectangle's width on short rows. `tests/audit/yew_f_077.c` pins the two-row
 
 ## Count
 
-Raw 2 · deduped 2 · critical 0 · high 0 · medium 2 · low 0 · unverified 2.
+Raw 3 · deduped 3 · critical 0 · high 0 · medium 3 · low 0 · unverified 2.

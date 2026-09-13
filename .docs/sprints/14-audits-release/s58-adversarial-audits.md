@@ -38,7 +38,7 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — REQUALIFIED; ACTIVE AT F15
+## Baseline status — REQUALIFIED; ACTIVE AT THE SOAK GATE
 
 `41fef416` is the original post-Sprint-57.8 product baseline used by F01–F08.
 On Darwin arm64 it passes the complete default-module `make test` suite,

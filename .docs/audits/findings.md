@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-078`
+Next available ID: `YEW-F-079`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -90,6 +90,7 @@ recorded in `audit-00.md`.
 | YEW-F-075 | C | open | F15 CI | stripped builds accept module-only config as inert state | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
 | YEW-F-077 | M | open | F03 TEXT | rectangular yank omits required short-row padding | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
+| YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -576,6 +577,16 @@ selection the user yanked. The hard-XFAIL selects columns `[0, 2)` across
 `a` and `bb`. The original buffer remains intact and the result is
 recoverable, so this is Medium rather than data loss. It remains open for
 Sprint 59; no product source changed during the audit.
+
+`YEW-F-078` is Medium because a durable journal authenticates its base with
+the canonical path, byte size, and nanosecond mtime, but not file identity or
+content. Another process can install different same-size bytes at that path
+and restore the recorded mtime; probe and replay then splice the old file's
+edit into the replacement instead of recovering the exact intended buffer.
+The reproducer retains two hardlinks to the original base, so both the
+mismatch and the correct recovery source remain observable and recoverable.
+No disk file is silently overwritten by replay, making this Medium rather
+than Critical. It remains open for Sprint 59; no product source changed.
 
 ## Unverified observations
 
