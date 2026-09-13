@@ -14,7 +14,7 @@ begin. A pending row is not a verdict.
 | 5 | Deterministic rendering | pending | — | — |
 | 6 | Terminal restore | pending | — | — |
 | 7 | Bespoke first | complete | HOLDS | — |
-| 8 | Single-threaded core | pending | — | — |
+| 8 | Single-threaded core | complete | HOLDS WITH FINDINGS | YEW-F-032 |
 | 9 | Modal paradigm first | complete | HOLDS | — |
 | 10 | Recorder/Fletch round-trip | complete | VIOLATED | YEW-F-023 |
 
@@ -159,6 +159,43 @@ Dependency-adjacent behavior also passed its missing-binary checks:
 The Makefile's sole product library argument is `-lm`; `-ldl` belongs only to
 the Linux fault-injection test helper. The source and build review found no
 hidden product link dependency and no invariant-7 finding remains open.
+
+## 8. Single-threaded core
+
+Verdict: **HOLDS WITH FINDINGS: YEW-F-032**.
+
+The sprint's exact source scan,
+`grep -rn 'pthread\|threads\.h\|_Thread_local\|atomic_' src/`, found no
+thread API. Its matches are the five `volatile sig_atomic_t` signal flags in
+`src/term/tty.c` and identifiers describing atomic file replacement in the
+text, plugin-package, and workspace-trust paths. `sig_atomic_t` is the C
+signal-handler scalar type, not the C11 atomic or thread API. The arm64 macOS
+shipping binary's undefined-symbol inventory likewise contains no pthread,
+thread, dispatch, or atomic symbol.
+
+The cross-subsystem runtime proof was built from exact audit-control commit
+`3db370c6` with GCC 13.3.0 on an x86_64 Ubuntu 24.04 guest. In one real `Ed`
+process it held all of the following active at the observation point:
+
+- the `fakelsp` subprocess had completed initialization and reached
+  `YEW_LSP_READY` for a real C file;
+- an HTTP AI request had received its first NDJSON token, exposed a live
+  ghost, and remained open behind a 30-second server delay;
+- `yew_git_refresh` had an in-flight job in yew's job table; and
+- three additional `/bin/sh -c "sleep 30"` jobs remained live in that same
+  job table.
+
+Only after those conditions were simultaneously true did the child parse
+`/proc/self/status`. It observed `Threads: 1`. The permanent regression test
+reported `PASS invariant_single_threaded_live_subsystems` and `1 tests, 3
+assertions, 0 failures`; its macOS build supplies a platform stub because the
+normative kernel observation is Linux `/proc`.
+
+`YEW-F-032` prevents an unconditional clean verdict. Its XFAIL proves that
+the release ban can miss a token-pasted `pthread_create`, so the product tree
+holds the invariant while its textual enforcement control remains incomplete.
+That Medium gate-honesty finding remains Sprint 59 work; this session found no
+product thread and no hidden library thread.
 
 ## 10. Recorder/Fletch round-trip
 
