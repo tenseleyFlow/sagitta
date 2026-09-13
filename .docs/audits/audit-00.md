@@ -132,7 +132,7 @@ zero until its report closes; silence never counts as evidence.
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
 | F01 unicode | `audit-01-unicode.md` | closed | 3 | 3 | 0 | 1 | 2 | 0 | 3 |
 | F02 terminal | `audit-02-terminal.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
-| F03 text | `audit-03-text.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
+| F03 text | `audit-03-text.md` | closed + coverage addendum | 1 | 1 | 0 | 0 | 1 | 0 | 2 |
 | F04 modal | `audit-04-modal.md` | closed | 1 | 1 | 0 | 0 | 1 | 0 | 1 |
 | F05 execute | `audit-05-exec.md` | closed | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | F06 regex | `audit-06-regex.md` | closed | 1 | 1 | 0 | 1 | 0 | 0 | 2 |
@@ -145,13 +145,13 @@ zero until its report closes; silence never counts as evidence.
 | F13 git/FUSS | `audit-13-git.md` | closed | 4 | 4 | 0 | 0 | 4 | 0 | 0 |
 | F14 plugins | `audit-14-plugins.md` | closed | 3 | 3 | 0 | 0 | 3 | 0 | 0 |
 | F15 CI | `audit-15-ci.md` | closed | 52 | 52 | 1 | 1 | 50 | 0 | 4 |
-| **Total** | — | **15 closed** | **75** | **75** | **3** | **4** | **68** | **0** | **20** |
+| **Total** | — | **15 closed** | **76** | **76** | **3** | **4** | **69** | **0** | **20** |
 
 ## Cross-front dedup and C/H severity review
 
-All 75 findings were compared by violated contract, user-visible failure,
+All 76 findings were compared by violated contract, user-visible failure,
 reproducer, and repair boundary. No two share the same root cause, so the
-deduped total remains 75 and no alias row is required. In particular,
+deduped total remains 76 and no alias row is required. In particular,
 `YEW-F-014` is an intentional LSP completion-shim exception while
 `YEW-F-075` is missing module ownership in the core option table;
 `YEW-F-033` is a source-ban omission while `YEW-F-074` is actual Mach-O UUID
@@ -169,7 +169,7 @@ Every Critical and High finding was re-scored against Sprint 58 §2:
 | `YEW-F-074` | High | consecutive clean Darwin builds are not byte-identical |
 | `YEW-F-075` | Critical | user-reachable excluded-module settings silently become inert state |
 
-No downgrade is justified. The remaining 68 findings meet the Medium
+No downgrade is justified. The remaining 69 findings meet the Medium
 definition: recoverable product behavior, a documented mechanism absent from
 the implementation, or a CI control claiming evidence it cannot establish.
 

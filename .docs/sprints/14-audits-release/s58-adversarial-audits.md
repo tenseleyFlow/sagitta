@@ -96,8 +96,10 @@ changes. F14 subsequently closed with three Medium findings
 changes. F15 subsequently closed with fifty Medium findings
 (`YEW-F-024`–`073`), one High finding (`YEW-F-074`), one Critical finding
 (`YEW-F-075`), and four unverified observations. All fifteen fronts are
-closed. Cross-front dedup retained all 75 findings with no aliases or severity
-downgrades; the ten invariant sessions are now eligible.
+closed. Cross-front dedup retained all 75 front-close findings with no aliases
+or severity downgrades. Coverage-guided corpus work subsequently added the
+Medium undo-sidecar finding `YEW-F-076`; the ten invariant sessions are now
+eligible.
 
 ## Goals
 
