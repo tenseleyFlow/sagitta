@@ -3668,6 +3668,11 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
 -include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(SYN_ENGINE_UNIT_OBJ:.o=.d) \
+         $(AUDIT_OBJ:.o=.d) $(F01_UNICODE_CODEC_OBJ:.o=.d) \
+         $(F01_UNICODE_AUDIT_OBJ:.o=.d) \
+         $(F01_VT_WIDTH_AUDIT_OBJ:.o=.d) \
+         $(F09_REC_VM_AUDIT_OBJ:.o=.d) \
+         $(F09_REC_VM_AUDIT_RECORD_OBJ:.o=.d) \
          $(FUZZ_LIB_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
          $(FUZZ_INPUT_OBJ:.o=.d) $(FUZZ_GRID_OBJ:.o=.d) \
