@@ -5,6 +5,7 @@
 #include "edit/ed.h"
 #include "edit/option.h"
 #include "mod/ai/ai.h"
+#include "mod/mods.h"
 #include "ui/message.h"
 
 typedef struct AiOptionDefault {
@@ -95,21 +96,29 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
             OptVal edge = {YEW_OPT_INT, {.i = row->min}};
 
             YEW_ASSERT_EQ_I64(value.as.i, row->integer);
-            YEW_ASSERT(yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
-                                        (u32)strlen(row->name), &edge,
-                                        &err));
-            edge.as.i = row->max;
-            YEW_ASSERT(yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
-                                        (u32)strlen(row->name), &edge,
-                                        &err));
-            edge.as.i = row->min - 1;
-            YEW_ASSERT(!yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
-                                         (u32)strlen(row->name), &edge,
-                                         &err));
-            edge.as.i = row->max + 1;
-            YEW_ASSERT(!yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
-                                         (u32)strlen(row->name), &edge,
-                                         &err));
+            if (yew_mod_enabled(YEW_MOD_AI)) {
+                YEW_ASSERT(yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
+                                            (u32)strlen(row->name), &edge,
+                                            &err));
+                edge.as.i = row->max;
+                YEW_ASSERT(yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
+                                            (u32)strlen(row->name), &edge,
+                                            &err));
+                edge.as.i = row->min - 1;
+                YEW_ASSERT(!yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
+                                             (u32)strlen(row->name), &edge,
+                                             &err));
+                edge.as.i = row->max + 1;
+                YEW_ASSERT(!yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
+                                             (u32)strlen(row->name), &edge,
+                                             &err));
+            } else {
+                YEW_ASSERT(!yew_opt_validate(&ed, YEW_OPT_GLOBAL, row->name,
+                                             (u32)strlen(row->name), &edge,
+                                             &err));
+                YEW_ASSERT_NOT_NULL(strstr(
+                    err, "this build has no ai module"));
+            }
         }
     }
     {
@@ -156,8 +165,17 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
         const char *err = NULL;
         OptVal off = {YEW_OPT_BOOL, {.b = false}};
 
-        YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_GLOBAL, "ai.key_cache",
-                               sizeof("ai.key_cache") - 1U, &off, &err));
+        if (yew_mod_enabled(YEW_MOD_AI)) {
+            YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_GLOBAL, "ai.key_cache",
+                                   sizeof("ai.key_cache") - 1U, &off,
+                                   &err));
+        } else {
+            YEW_ASSERT(!yew_opt_set(&ed, YEW_OPT_GLOBAL, "ai.key_cache",
+                                    sizeof("ai.key_cache") - 1U, &off,
+                                    &err));
+            YEW_ASSERT_NOT_NULL(strstr(
+                err, "this build has no ai module"));
+        }
         YEW_ASSERT(!yew_ai_state_key_cache_enabled(&ed));
     }
     yew_ed_free(&ed);

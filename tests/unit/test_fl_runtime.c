@@ -481,9 +481,7 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
         "search.smartcase", "hooks.error_limit", "save.strategy",
         "save.check_disk", "save.check_disk_max", "save.backup_keep",
         "save.backup_dir",
-#if YEW_WITH_PLUGINS
         "plug.error_limit", "plug.verify_on_load",
-#endif
         "theme", "theme_auto", "macro.dir", "shadow.enable",
         "shadow.providers",
         "shadow.max_lines", "shadow.midline", "shadow.lsp_debounce_ms",
