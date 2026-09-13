@@ -14,6 +14,10 @@
 #include "text/edit.h"
 #include "unicode/coords.h"
 
+#if YEW_COV
+#include "cov.h"
+#endif
+
 enum {
     YEW_TEXT_FUZZ_DEFAULT_ITERS = 200000,
     YEW_TEXT_FUZZ_MAX_LIVE = 64 * 1024,
@@ -1455,7 +1459,8 @@ static void usage(const char *program)
 {
     (void)fprintf(stderr,
                   "usage: %s [--iters=N] [--seconds=N] [--seed=N] "
-                  "[--mix=typing|paste|undo|lines] [--trace-out=PATH]\n"
+                  "[--mix=typing|paste|undo|lines] [--trace-out=PATH] "
+                  "[--coverage-report]\n"
                   "       %s --replay PATH\n",
                   program, program);
 }
@@ -1469,6 +1474,8 @@ int main(int argc, char **argv)
     const char *trace_out = NULL;
     const char *replay = NULL;
     const char *env;
+    bool coverage_report = false;
+    int result;
     size_t i;
 
     env = getenv("YEW_FUZZ_SEED");
@@ -1502,16 +1509,41 @@ int main(int argc, char **argv)
             replay = argv[++i];
             continue;
         }
+        if (strcmp(argv[i], "--coverage-report") == 0) {
+            coverage_report = true;
+            continue;
+        }
         usage(argv[0]);
         return 2;
     }
+#if !YEW_COV
+    if (coverage_report) {
+        (void)fprintf(stderr,
+                      "fuzz_textbuf: coverage options require a COV=1 build\n");
+        return 2;
+    }
+#else
+    if (coverage_report)
+        yew_cov_reset();
+#endif
     if (replay != NULL)
-        return replay_file(replay);
-    if (iterations_u64 > SIZE_MAX || iterations_u64 < 6U ||
-        seconds > UINT64_MAX / UINT64_C(1000000000)) {
-        usage(argv[0]);
-        return 2;
+        result = replay_file(replay);
+    else {
+        if (iterations_u64 > SIZE_MAX || iterations_u64 < 6U ||
+            seconds > UINT64_MAX / UINT64_C(1000000000)) {
+            usage(argv[0]);
+            return 2;
+        }
+        result = run_generated(seed, mix, (size_t)iterations_u64, seconds,
+                               trace_out);
     }
-    return run_generated(seed, mix, (size_t)iterations_u64, seconds,
-                         trace_out);
+#if YEW_COV
+    if (result == 0 && coverage_report) {
+        yew_cov_merge();
+        (void)printf("fuzz_textbuf: ");
+        yew_cov_report(stdout);
+        (void)printf(" corpus=0 admitted=0 new_edges=0\n");
+    }
+#endif
+    return result;
 }

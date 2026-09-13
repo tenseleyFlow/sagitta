@@ -5,6 +5,10 @@
 
 #include "text/edit.h"
 
+#if YEW_COV
+#include "cov.h"
+#endif
+
 enum {
     YEW_UNDO_FUZZ_MIN_ITERS = 10000,
     YEW_UNDO_FUZZ_MAX_TEXT = 128
@@ -383,6 +387,7 @@ int main(int argc, char **argv)
 {
     u64 seed = 1U;
     size_t iterations = YEW_UNDO_FUZZ_MIN_ITERS;
+    bool coverage_report = false;
     Run run;
     size_t op;
     size_t i;
@@ -392,10 +397,25 @@ int main(int argc, char **argv)
             continue;
         if (parse_size(argv[i], "--iters=", &iterations))
             continue;
-        (void)fprintf(stderr, "usage: %s [--seed=N] [--iters=N]\n",
+        if (strcmp(argv[i], "--coverage-report") == 0) {
+            coverage_report = true;
+            continue;
+        }
+        (void)fprintf(stderr, "usage: %s [--seed=N] [--iters=N] "
+                      "[--coverage-report]\n",
                       argv[0]);
         return 2;
     }
+#if !YEW_COV
+    if (coverage_report) {
+        (void)fprintf(stderr,
+                      "fuzz_undo: coverage options require a COV=1 build\n");
+        return 2;
+    }
+#else
+    if (coverage_report)
+        yew_cov_reset();
+#endif
     if (iterations < YEW_UNDO_FUZZ_MIN_ITERS)
         iterations = YEW_UNDO_FUZZ_MIN_ITERS;
     (void)memset(&run, 0, sizeof(run));
@@ -441,5 +461,13 @@ int main(int argc, char **argv)
         return 1;
     }
     dispose(&run);
+#if YEW_COV
+    if (coverage_report) {
+        yew_cov_merge();
+        (void)printf("fuzz_undo: ");
+        yew_cov_report(stdout);
+        (void)printf(" corpus=0 admitted=0 new_edges=0\n");
+    }
+#endif
     return 0;
 }

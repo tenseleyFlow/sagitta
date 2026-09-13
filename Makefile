@@ -831,6 +831,23 @@ FUZZ_AI_SHADOW_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_shadow.o
 FUZZ_AI_REDACT_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_redact.o
 FUZZ_PKG_TREE_OBJ := $(BUILD)/tests/fuzz/fuzz_pkg_tree.o
 FUZZ_THEME_OBJ := $(BUILD)/tests/fuzz/fuzz_theme.o
+FUZZ_UNDO_SERIAL_OBJ := $(BUILD)/tests/fuzz/fuzz_undo_serial.o
+FUZZ_COV_SHARED_NAMES := fuzz_utf8 fuzz_grapheme fuzz_input fuzz_grid \
+                         fuzz_vt fuzz_multicursor fuzz_fl_lex fuzz_fl_parse \
+                         fuzz_fl_vm fuzz_flapi fuzz_pkg_tree fuzz_record \
+                         fuzz_syn fuzz_syn_def fuzz_fl_std fuzz_tabs \
+                         fuzz_shadow fuzz_groups fuzz_panes fuzz_search \
+                         fuzz_re_quote fuzz_re_compile fuzz_re_diff \
+                         fuzz_cmdparse fuzz_fuzzy fuzz_state fuzz_gitignore \
+                         fuzz_porcelain fuzz_fuss fuzz_git_diff fuzz_mouse \
+                         fuzz_symidx fuzz_json fuzz_jsonrpc fuzz_lsp_msg \
+                         fuzz_lsp_resp fuzz_http fuzz_ai_stream \
+                         fuzz_ai_shadow fuzz_ai_redact fuzz_theme \
+                         fuzz_undo_serial
+FUZZ_COV_STANDALONE_NAMES := fuzz_undo fuzz_textbuf fuzz_units
+FUZZ_COV_NAMES := $(FUZZ_COV_SHARED_NAMES) $(FUZZ_COV_STANDALONE_NAMES)
+FUZZ_COV_BINS := $(addprefix $(BUILD)/,$(FUZZ_COV_NAMES))
+FUZZ_COV_REPORT ?= build/fuzz-coverage.md
 LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
 LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
@@ -1075,7 +1092,7 @@ endif
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
         fuzz-porcelain fuzz-git-diff \
-        fuzz-theme \
+        fuzz-theme fuzz-undo-serial \
         fuzz-ai \
         test-lsp-live \
         fuzz-syn-long \
@@ -1224,16 +1241,19 @@ $(BUILD)/fuzz_vt: $(FUZZ_LINK_OBJ) $(PTY_VT_OBJ) $(FUZZ_VT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(PTY_VT_OBJ) \
 		$(FUZZ_VT_OBJ) $(LDLIBS)
 
-$(BUILD)/fuzz_undo: $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ) $(LDLIBS)
+$(BUILD)/fuzz_undo: $(FUZZ_CORE_OBJ) $(FUZZ_COV_OBJ) $(FUZZ_UNDO_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_COV_OBJ) \
+		$(FUZZ_UNDO_OBJ) $(LDLIBS)
 
-$(BUILD)/fuzz_textbuf: $(FUZZ_CORE_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
+$(BUILD)/fuzz_textbuf: $(FUZZ_CORE_OBJ) $(FUZZ_COV_OBJ) \
+                       $(TEXT_FUZZ_SUPPORT_OBJ) \
                        $(FUZZ_TEXTBUF_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_COV_OBJ) \
 		$(TEXT_FUZZ_SUPPORT_OBJ) $(FUZZ_TEXTBUF_OBJ) $(LDLIBS)
 
-$(BUILD)/fuzz_units: $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ) $(LDLIBS)
+$(BUILD)/fuzz_units: $(FUZZ_CORE_OBJ) $(FUZZ_COV_OBJ) $(FUZZ_UNITS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_COV_OBJ) \
+		$(FUZZ_UNITS_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_multicursor: $(FUZZ_LINK_OBJ) $(FUZZ_MULTICURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -1382,6 +1402,10 @@ $(BUILD)/fuzz_ai_redact: $(FUZZ_LINK_OBJ) $(FUZZ_AI_REDACT_OBJ)
 $(BUILD)/fuzz_theme: $(FUZZ_LINK_OBJ) $(FUZZ_THEME_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_THEME_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_undo_serial: $(FUZZ_LINK_OBJ) $(FUZZ_UNDO_SERIAL_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_UNDO_SERIAL_OBJ) $(LDLIBS)
 
 $(LSP_LIVE_BIN): $(FUZZ_CORE_OBJ) $(LSP_LIVE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
@@ -1857,9 +1881,22 @@ fuzzlib-selftest: $(BUILD)/fuzz_utf8
 ifeq ($(COV),1)
 cov-selftest: $(FUZZ_COV_TEST)
 	$(FUZZ_COV_TEST)
+
+fuzz-cov: cov-selftest $(FUZZ_COV_BINS)
+	FUZZ_COV_SHARED_TARGETS='$(FUZZ_COV_SHARED_NAMES)' \
+	FUZZ_COV_STANDALONE_TARGETS='$(FUZZ_COV_STANDALONE_NAMES)' \
+		scripts/fuzz-coverage.sh build $(BUILD) $(FUZZ_COV_REPORT)
 else
 cov-selftest:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' cov-selftest
+
+fuzz-cov:
+	$(MAKE) --no-print-directory COV=0 BUILD=build \
+		MODULES='lsp ai fuss plugins' \
+		$(addprefix build/,$(FUZZ_COV_NAMES))
+	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
+		MODULES='lsp ai fuss plugins' \
+		FUZZ_COV_REPORT='$(FUZZ_COV_REPORT)' fuzz-cov
 endif
 
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script \
@@ -1894,7 +1931,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_lex $(BUILD)/fuzz_fl_parse \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
-      $(BUILD)/fuzz_theme \
+      $(BUILD)/fuzz_theme $(BUILD)/fuzz_undo_serial \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-insert fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
       fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
@@ -1920,6 +1957,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_fl_vm --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_flapi --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_theme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_undo_serial --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 		$(BUILD)/fuzz_fl_parse --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
@@ -2016,6 +2054,9 @@ fuzz-jsonrpc: $(BUILD)/fuzz_jsonrpc
 
 fuzz-theme: $(BUILD)/fuzz_theme
 	$(BUILD)/fuzz_theme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+fuzz-undo-serial: $(BUILD)/fuzz_undo_serial
+	$(BUILD)/fuzz_undo_serial --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 fuzz-lsp-msg: $(BUILD)/fuzz_lsp_msg
 	$(BUILD)/fuzz_lsp_msg --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
