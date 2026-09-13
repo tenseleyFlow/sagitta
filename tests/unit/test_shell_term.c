@@ -123,7 +123,11 @@ void test_shell_term_run_reports_every_outcome(void)
     YEW_ASSERT_EQ_I64(f.ed.msg.sev, YEW_MSG_WARN);
     YEW_ASSERT_EQ_U64(f.ed.jobs.len, 0U);
 
-    YEW_ASSERT_EQ_I64(term_run_line(&f, ":!!kill -TERM $$"), YEW_CMD_OK);
+    /* The editor deliberately uses the user's shell.  Delegate the signal
+     * fixture to POSIX sh so this remains exact when $SHELL is fish. */
+    YEW_ASSERT_EQ_I64(
+        term_run_line(&f, ":!!exec /bin/sh -c 'kill -TERM $$'"),
+        YEW_CMD_OK);
     YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "killed by signal"));
     YEW_ASSERT_EQ_U64(f.ed.jobs.len, 0U);
 

@@ -515,7 +515,8 @@ static void handover_shell_child(const char *slave_path)
         _exit(108);
 
     /* Signal death of the child. */
-    if (!yew_shell_term_run(&ed, "kill -TERM $$", &wait, err, sizeof(err)) ||
+    if (!yew_shell_term_run(&ed, "exec /bin/sh -c 'kill -TERM $$'", &wait,
+                            err, sizeof(err)) ||
         wait.state != YEW_JOB_SIGNALED || wait.termsig != SIGTERM)
         _exit(109);
     if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
