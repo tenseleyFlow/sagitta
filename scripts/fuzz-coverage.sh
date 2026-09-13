@@ -20,6 +20,7 @@ fi
 
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/yew-fuzz-cov.XXXXXX")
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
+run_id=0
 
 mkdir -p "$(dirname "$report")"
 {
@@ -31,15 +32,30 @@ mkdir -p "$(dirname "$report")"
     echo "|---|---:|---|---:|"
 } >"$report"
 
+run_target()
+{
+    run_output=$1
+    shift
+    run_id=$((run_id + 1))
+    run_root=$tmp_dir/run-$run_id
+    mkdir -p "$run_root/state" "$run_root/config" "$run_root/cache"
+    XDG_STATE_HOME=$run_root/state \
+    XDG_CONFIG_HOME=$run_root/config \
+    XDG_CACHE_HOME=$run_root/cache \
+        "$@" >"$run_output" 2>"$run_output.err"
+}
+
 check_neutrality()
 {
     target=$1
     shift
-    "$plain_build/$target" "$@" >"$tmp_dir/plain"
-    "$coverage_build/$target" "$@" >"$tmp_dir/coverage"
-    if ! cmp -s "$tmp_dir/plain" "$tmp_dir/coverage"; then
+    run_target "$tmp_dir/plain" "$plain_build/$target" "$@"
+    run_target "$tmp_dir/coverage" "$coverage_build/$target" "$@"
+    if ! cmp -s "$tmp_dir/plain" "$tmp_dir/coverage" ||
+       ! cmp -s "$tmp_dir/plain.err" "$tmp_dir/coverage.err"; then
         echo "fuzz-coverage: instrumentation changed $target output" >&2
         diff -u "$tmp_dir/plain" "$tmp_dir/coverage" >&2 || true
+        diff -u "$tmp_dir/plain.err" "$tmp_dir/coverage.err" >&2 || true
         exit 1
     fi
 }
@@ -48,7 +64,8 @@ append_report()
 {
     target=$1
     shift
-    "$coverage_build/$target" "$@" --coverage-report >"$tmp_dir/report"
+    run_target "$tmp_dir/report" "$coverage_build/$target" "$@" \
+        --coverage-report
     values=$(LC_ALL=C awk '
         /coverage edges=/ {
             edges = hash = corpus = ""
