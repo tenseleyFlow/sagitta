@@ -8,7 +8,7 @@ Audit-control head at opening: `6272b0932aeccb00c880d014559ce5a790edf6f8`
 UCD version: 16.0.0
 
 **Campaign status: ACTIVE — ALL TEN INVARIANTS COMPLETE; FIRST SOAK CYCLE
-BLOCKED ON AN UNREGISTERED DESIGNATED RUNNER.**
+RUNNING ON THE EXACT-PROFILE LOCAL RUNNER.**
 
 F01–F08 ran against the original baseline
 `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`; their reports, findings, and
@@ -181,8 +181,10 @@ the implementation, or a CI control claiming evidence it cannot establish.
 ## Verdict
 
 We are not ready to tag: all fifteen Sprint 58 fronts, cross-front dedup, and
-all ten invariant sessions are complete, but the designated 72-hour soak
-runner is not registered and its first cycle has not started. Invariant 1 is
+all ten invariant sessions are complete, and the first tier-1 soak cycle is
+running from `ba72c3a0` on the exact arm64 macOS / Apple clang 21.0.0 profile.
+Formal Sprint 58 close still requires all fourteen target results; hosted
+runner registration remains an automation tail. Invariant 1 is
 violated by F07's two Critical workspace-state defects and by `YEW-F-078`, a
 Medium journal-base identity defect. The invariant-2 session retains F01's
 Unicode findings and adds `YEW-F-077`, a Medium rectangular-register geometry

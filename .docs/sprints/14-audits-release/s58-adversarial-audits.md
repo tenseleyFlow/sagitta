@@ -38,7 +38,7 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — REQUALIFIED; ACTIVE AT THE SOAK GATE
+## Baseline status — REQUALIFIED; FIRST SOAK CYCLE RUNNING
 
 `41fef416` is the original post-Sprint-57.8 product baseline used by F01–F08.
 On Darwin arm64 it passes the complete default-module `make test` suite,
@@ -100,6 +100,14 @@ closed. Cross-front dedup retained all 75 front-close findings with no aliases
 or severity downgrades. Coverage-guided corpus work subsequently added the
 Medium undo-sidecar finding `YEW-F-076`; the ten invariant sessions are now
 eligible.
+
+The first tier-1 soak cycle started on 2026-09-13 in an isolated worktree at
+`ba72c3a0`, on the pinned arm64 macOS / Apple clang 21.0.0 profile. Its first
+target runs four sanitizer-instrumented 18-hour streams with base seed
+`2218013357`; the remaining targets follow serially so Sprint 59 remediation
+can proceed on `trunk` without changing the campaign checkout. Hosted
+`yew-fuzz-cov` runner registration remains an automation tail, not evidence
+for this in-progress local cycle.
 
 ## Goals
 
