@@ -477,7 +477,7 @@ static bool wait_stopped(Trial *trial)
     return true;
 }
 
-static bool send_edit(Trial *trial, bool wait_frame)
+static bool send_edit(Trial *trial)
 {
     static const char insert[] = "iX";
     static const char escape = '\x1b';
@@ -487,8 +487,6 @@ static bool send_edit(Trial *trial, bool wait_frame)
     if (!yew_live_pty_write(&trial->pty, insert, sizeof(insert) - 1U,
                             deadline))
         return false;
-    if (!wait_frame)
-        return yew_live_pty_write(&trial->pty, &escape, 1U, deadline);
     if (!yew_live_pty_wait_frame(&trial->pty, frame, deadline, NULL))
         return false;
     if (!yew_live_pty_write(&trial->pty, &escape, 1U, deadline))
@@ -497,6 +495,17 @@ static bool send_edit(Trial *trial, bool wait_frame)
      * profile until esc_timeout expires.  Waiting for merely one frame can
      * consume an unrelated git/LSP repaint and leave the editor in I mode. */
     return yew_live_pty_wait_quiet(&trial->pty, INT64_C(50000000), deadline);
+}
+
+static bool trigger_resize(Trial *trial)
+{
+    struct winsize size;
+
+    (void)memset(&size, 0, sizeof(size));
+    size.ws_row = RESTORE_ROWS + 1U;
+    size.ws_col = RESTORE_COLS;
+    return ioctl(trial->pty.master, TIOCSWINSZ, &size) == 0 &&
+           kill(trial->target, SIGWINCH) == 0;
 }
 
 static bool drain_signal(Trial *trial, int *status_out)
@@ -712,11 +721,16 @@ static bool run_trial(const char *moment, const SignalCase *sig,
     if (!wait_initial_frame(&trial))
         goto done;
 
+    stage = "edit";
+    if (!send_edit(&trial))
+        goto done;
+    checkpoint = trial.output.len;
+
     if (strcmp(moment, "mid-render") == 0) {
         stage = "mid-render-stop";
         moment_checkpoint = trial.output.len;
         if (kill(trial.target, SIGUSR2) != 0 ||
-            !send_edit(&trial, false) || !wait_stopped(&trial))
+            !trigger_resize(&trial) || !wait_stopped(&trial))
             goto done;
         if (!sync_open_since(&trial.output, moment_checkpoint)) {
             stage = "mid-render-boundary";
@@ -725,10 +739,6 @@ static bool run_trial(const char *moment, const SignalCase *sig,
         stopped = true;
         checkpoint = trial.output.len;
     } else {
-        stage = "edit";
-        if (!send_edit(&trial, true))
-            goto done;
-        checkpoint = trial.output.len;
         if (strcmp(moment, "second-signal") == 0) {
             stage = "restore-stop";
             if (kill(trial.target, SIGUSR2) != 0 ||
