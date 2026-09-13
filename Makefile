@@ -3309,7 +3309,7 @@ perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
 
 torture-build: $(BUILD)/yew $(TORTURE_CHILD) $(TORTURE_LIVE) \
                $(TORTURE_DRIVER) $(TORTURE_BATCH) $(TORTURE_TTY_RESTORE) \
-               $(FAULTSHIM) \
+               $(FAULTSHIM) $(FAKELSP) \
                $(if $(filter fuss,$(MODULES)),$(TORTURE_GIT_HUNK),)
 
 torture-live-check: torture-build
