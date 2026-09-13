@@ -16,8 +16,10 @@
  * YEW_FAULT_SAVE_META_EIO_AT2=N injects a second EIO in the same process.
  * The invariant-6 terminal audit arms with SIGUSR2, then uses
  * YEW_FAULT_TTY_STOP_AFTER_BSU=1 or YEW_FAULT_TTY_STOP_IN_RESTORE=1 to stop
- * the editor at a byte-exact lifecycle boundary.  These controls never alter
- * storage calls and are inherited inertly by the guardian subprocess.
+ * the editor at a byte-exact lifecycle boundary.  Its pre-opened
+ * YEW_FAULT_TTY_ARMED_MARKER acknowledges that SIGUSR2 without unsafe signal-
+ * handler setup.  These controls never alter storage calls and are inherited
+ * inertly by the guardian subprocess.
  */
 
 #include <dlfcn.h>
@@ -75,11 +77,16 @@ static unsigned long long save_meta_no;
 static volatile sig_atomic_t signal_enabled;
 static pid_t initialized_pid;
 static int tty_stop_done;
+static int tty_arm_fd = -1;
 
 static void enable_faults(int sig)
 {
+    static const char armed = 'A';
+
     (void)sig;
     signal_enabled = 1;
+    if (tty_arm_fd >= 0 && real_write_fn != NULL)
+        (void)real_write_fn(tty_arm_fd, &armed, 1U);
 }
 
 static void close_log(void)
@@ -161,6 +168,9 @@ static void initialize(void)
     short_writes = env_is_one("YEW_FAULT_SHORT");
     storage_only = env_is_one("YEW_FAULT_STORAGE_ONLY");
     initialized_pid = getpid();
+    at = getenv("YEW_FAULT_TTY_ARMED_MARKER");
+    if (at != NULL && *at != '\0')
+        tty_arm_fd = open(at, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
     log_path = getenv("YEW_FAULT_LOG");
     if (log_path != NULL && *log_path != '\0') {
         log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,

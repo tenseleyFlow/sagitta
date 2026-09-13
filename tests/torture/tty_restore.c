@@ -62,6 +62,7 @@ typedef struct Trial {
     char config[384];
     char ready[384];
     char marker[384];
+    char armed[384];
     char slave[128];
     pid_t target;
     pid_t filter_pgid;
@@ -247,7 +248,7 @@ static bool trial_termios_restored(const Trial *trial)
     return ok;
 }
 
-static bool trial_prepare(Trial *trial, const char *fakelsp)
+static bool trial_prepare(Trial *trial, const char *fakelsp, bool with_lsp)
 {
     static const u8 initial[] = "base\n";
     static const u8 post[] = "Xbase\n";
@@ -281,15 +282,23 @@ static bool trial_prepare(Trial *trial, const char *fakelsp)
                    "lsp-ready") ||
         !make_path(trial->marker, sizeof(trial->marker), trial->root,
                    "moment-ready") ||
+        !make_path(trial->armed, sizeof(trial->armed), trial->root,
+                   "signal-armed") ||
         !write_file(trial->source, initial, sizeof(initial) - 1U) ||
         !write_file(trial->old_file, initial, sizeof(initial) - 1U) ||
         !write_file(trial->post_file, post, sizeof(post) - 1U))
         return false;
-    n = snprintf(config_text, sizeof(config_text),
-        "let lsp = {servers: {c: {id: \"fakelsp\", cmd: \"%s\", "
-        "args: [\"session-shutdown-delay\", \"%s\", \"%s\"], "
-        "roots: [\".git\"], init_options: nil, init_timeout_ms: 3000}}}\n",
-        fakelsp, trial->marker, trial->ready);
+    if (with_lsp) {
+        n = snprintf(config_text, sizeof(config_text),
+            "let lsp = {servers: {c: {id: \"fakelsp\", cmd: \"%s\", "
+            "args: [\"session-shutdown-delay\", \"%s\", \"%s\"], "
+            "roots: [\".git\"], init_options: nil, "
+            "init_timeout_ms: 3000}}}\n",
+            fakelsp, trial->marker, trial->ready);
+    } else {
+        n = snprintf(config_text, sizeof(config_text),
+                     "let lsp = {servers: {}}\n");
+    }
     return n > 0 && (size_t)n < sizeof(config_text) &&
            write_file(trial->config, config_text, (size_t)n);
 }
@@ -325,14 +334,14 @@ static void child_environment(const Trial *trial, const char *runtime,
         _exit(126);
     if (setenv("YEW_FAULT_STORAGE_ONLY", "1", 1) != 0 ||
         setenv("YEW_FAULT_SIGNAL_ENABLE", "1", 1) != 0 ||
+        setenv("YEW_FAULT_TTY_ARMED_MARKER", trial->armed, 1) != 0 ||
         setenv("YEW_FAULT_TTY_STOP_MARKER", trial->marker, 1) != 0 ||
         setenv(stop_control, "1", 1) != 0)
         _exit(126);
 }
 
 static bool trial_spawn(Trial *trial, const char *yew, const char *runtime,
-                        const char *shim, const char *stop_control,
-                        bool with_lsp)
+                        const char *shim, const char *stop_control)
 {
     int pid_pipe[2] = {-1, -1};
     int fd;
@@ -371,15 +380,14 @@ static bool trial_spawn(Trial *trial, const char *yew, const char *runtime,
         if (target < 0)
             _exit(126);
         if (target == 0) {
-            char *plain[] = {(char *)yew, trial->source, NULL};
-            char *lsp[] = {(char *)yew, (char *)"--config", trial->config,
-                           trial->source, NULL};
+            char *args[] = {(char *)yew, (char *)"--config", trial->config,
+                            trial->source, NULL};
 
             (void)close(pid_pipe[1]);
             child_environment(trial, runtime, shim, stop_control);
             if (chdir(trial->workspace) != 0)
                 _exit(126);
-            yew_live_pty_exec_argv(yew, with_lsp ? lsp : plain);
+            yew_live_pty_exec_argv(yew, args);
         }
         do {
             written = write(pid_pipe[1], &target, sizeof(target));
@@ -438,6 +446,27 @@ static bool wait_file(Trial *trial, const char *path, i64 seconds)
         (void)yew_live_pty_wait_quiet(&trial->pty, INT64_C(2000000), slice);
     }
     return access(path, F_OK) == 0;
+}
+
+static bool wait_nonempty_file(Trial *trial, const char *path, i64 seconds)
+{
+    i64 deadline = yew_live_pty_now_ns() + seconds * INT64_C(1000000000);
+    struct stat st;
+
+    while (yew_live_pty_now_ns() < deadline) {
+        i64 slice = yew_live_pty_now_ns() + INT64_C(50000000);
+
+        if (stat(path, &st) == 0 && st.st_size > 0)
+            return true;
+        (void)yew_live_pty_wait_quiet(&trial->pty, INT64_C(2000000), slice);
+    }
+    return stat(path, &st) == 0 && st.st_size > 0;
+}
+
+static bool arm_faults(Trial *trial)
+{
+    return kill(trial->target, SIGUSR2) == 0 &&
+           wait_nonempty_file(trial, trial->armed, 3);
 }
 
 static bool read_pid_file(const char *path, pid_t *pid)
@@ -712,10 +741,10 @@ static bool run_trial(const char *moment, const SignalCase *sig,
         stop = "YEW_FAULT_TTY_STOP_AFTER_BSU";
     else if (strcmp(moment, "second-signal") == 0)
         stop = "YEW_FAULT_TTY_STOP_IN_RESTORE";
-    if (!trial_prepare(&trial, fakelsp))
+    if (!trial_prepare(&trial, fakelsp, with_lsp))
         goto done;
     stage = "spawn";
-    if (!trial_spawn(&trial, yew, runtime, shim, stop, with_lsp))
+    if (!trial_spawn(&trial, yew, runtime, shim, stop))
         goto done;
     stage = "initial-frame";
     if (!wait_initial_frame(&trial))
@@ -729,7 +758,7 @@ static bool run_trial(const char *moment, const SignalCase *sig,
     if (strcmp(moment, "mid-render") == 0) {
         stage = "mid-render-stop";
         moment_checkpoint = trial.output.len;
-        if (kill(trial.target, SIGUSR2) != 0 ||
+        if (!arm_faults(&trial) ||
             !trigger_resize(&trial) || !wait_stopped(&trial))
             goto done;
         if (!sync_open_since(&trial.output, moment_checkpoint)) {
@@ -741,7 +770,7 @@ static bool run_trial(const char *moment, const SignalCase *sig,
     } else {
         if (strcmp(moment, "second-signal") == 0) {
             stage = "restore-stop";
-            if (kill(trial.target, SIGUSR2) != 0 ||
+            if (!arm_faults(&trial) ||
                 kill(trial.target, SIGTERM) != 0 ||
                 !wait_stopped(&trial))
                 goto done;
