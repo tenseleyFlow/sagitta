@@ -13,6 +13,7 @@
 #include "fl/macrolib.h"
 #include "fl/vm.h"
 #include "mod/ai/ai.h"
+#include "mod/mods.h"
 #if YEW_WITH_PLUGINS
 #include "mod/plug/plug.h"
 #endif
@@ -103,6 +104,16 @@ static const char *const save_check_disk_values[] = {
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
 static char theme_option_error[192];
+static char module_option_error[192];
+
+_Static_assert(YEW_OPT_MODULE_LSP == YEW_MOD_LSP + 1,
+               "option/LSP module mapping drifted");
+_Static_assert(YEW_OPT_MODULE_AI == YEW_MOD_AI + 1,
+               "option/AI module mapping drifted");
+_Static_assert(YEW_OPT_MODULE_FUSS == YEW_MOD_FUSS + 1,
+               "option/FUSS module mapping drifted");
+_Static_assert(YEW_OPT_MODULE_PLUGINS == YEW_MOD_PLUGINS + 1,
+               "option/plugins module mapping drifted");
 
 static bool shadow_providers_validate(const OptVal *value, const char **err)
 {
@@ -184,198 +195,246 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
 
 const OptDesc yew_opts[] = {
     {"tabwidth", YEW_OPT_INT, YEW_OPT_BUFFER, OPT_INT(4), NULL, 1, 16,
-     NULL, option_changed, "Indent and tab display width (1..16)"},
+     NULL, option_changed, "Indent and tab display width (1..16)",
+     YEW_OPT_MODULE_CORE},
     {"expandtab", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(false), NULL, 0, 0,
-     NULL, option_changed, "Insert spaces when indentation emits a tab"},
+     NULL, option_changed, "Insert spaces when indentation emits a tab",
+     YEW_OPT_MODULE_CORE},
     {"autoindent", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(true), NULL, 0, 0,
-     NULL, option_changed, "Carry indentation onto the line Enter opens"},
+     NULL, option_changed, "Carry indentation onto the line Enter opens",
+     YEW_OPT_MODULE_CORE},
     {"autopair", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(true), NULL, 0, 0,
-     NULL, option_changed, "Close brackets and quotes as they are typed"},
+     NULL, option_changed, "Close brackets and quotes as they are typed",
+     YEW_OPT_MODULE_CORE},
     {"wrap", YEW_OPT_BOOL, YEW_OPT_WINDOW, OPT_BOOL(false), NULL, 0, 0,
-     NULL, option_changed, "Wrap long lines in this window"},
+     NULL, option_changed, "Wrap long lines in this window",
+     YEW_OPT_MODULE_CORE},
     {"scrolloff", YEW_OPT_INT, YEW_OPT_WINDOW, OPT_INT(3), NULL, 0, 99,
-     NULL, option_changed, "Minimum screen rows around the cursor"},
+     NULL, option_changed, "Minimum screen rows around the cursor",
+     YEW_OPT_MODULE_CORE},
     {"number", YEW_OPT_ENUM, YEW_OPT_WINDOW, OPT_ENUM("both"), number_values,
-     0, 0, NULL, option_changed, "Line numbers: off, abs, rel, or both"},
+     0, 0, NULL, option_changed, "Line numbers: off, abs, rel, or both",
+     YEW_OPT_MODULE_CORE},
     {"statusline.column", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("gcol"),
      status_column_values, 0, 0, NULL, option_changed,
-     "Show grapheme column or grapheme and cell columns"},
+     "Show grapheme column or grapheme and cell columns",
+     YEW_OPT_MODULE_CORE},
     {"errorbells", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL, 0, 0,
-     NULL, option_changed, "Ring the terminal bell for editor errors"},
+     NULL, option_changed, "Ring the terminal bell for editor errors",
+     YEW_OPT_MODULE_CORE},
     {"ambiguous_wide", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
      0, 0, NULL, option_changed,
-     "Render East Asian ambiguous characters as two cells"},
+     "Render East Asian ambiguous characters as two cells",
+     YEW_OPT_MODULE_CORE},
     {"subword", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(false), NULL, 0, 0,
-     NULL, option_changed, "Use subword boundaries for word navigation"},
+     NULL, option_changed, "Use subword boundaries for word navigation",
+     YEW_OPT_MODULE_CORE},
     {"fortran_form", YEW_OPT_ENUM, YEW_OPT_BUFFER, OPT_ENUM("auto"),
      fortran_form_values, 0, 0, NULL, option_changed,
-     "Fortran source form: auto, free, or fixed"},
+     "Fortran source form: auto, free, or fixed", YEW_OPT_MODULE_CORE},
     {"chord_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(YEW_CHORD_TIMEOUT_DEFAULT_MS), NULL, 0, 5000, NULL,
-     option_changed, "Milliseconds to wait for a key chord"},
+     option_changed, "Milliseconds to wait for a key chord",
+     YEW_OPT_MODULE_CORE},
     {"undo.break_on_newline", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(true),
      NULL, 0, 0, NULL, option_changed,
-     "End an insert undo group at a newline"},
+     "End an insert undo group at a newline", YEW_OPT_MODULE_CORE},
     {"undo.bytes_max", YEW_OPT_INT, YEW_OPT_BUFFER,
      OPT_INT((i64)YEW_UNDO_BYTES_MAX), NULL, 1, INT64_MAX, NULL,
-     option_changed, "Maximum in-memory undo bytes per buffer"},
+     option_changed, "Maximum in-memory undo bytes per buffer",
+     YEW_OPT_MODULE_CORE},
     {"undo.min_nodes", YEW_OPT_INT, YEW_OPT_BUFFER,
      OPT_INT((i64)YEW_UNDO_MIN_NODES), NULL, 0, INT64_MAX, NULL,
-     option_changed, "Minimum undo nodes retained per buffer"},
+     option_changed, "Minimum undo nodes retained per buffer",
+     YEW_OPT_MODULE_CORE},
     {"undo.persist_bytes_max", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT((i64)YEW_UNDO_PERSIST_BYTES_MAX), NULL, 1, INT64_MAX, NULL,
-     option_changed, "Maximum persisted undo bytes"},
+     option_changed, "Maximum persisted undo bytes", YEW_OPT_MODULE_CORE},
     {"registers.ring_depth", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT((i64)YEW_KILL_RING_DEPTH_DEFAULT), NULL, 0, YEW_KILL_RING_MAX,
-     NULL, option_changed, "Number of entries retained in the kill ring"},
+     NULL, option_changed, "Number of entries retained in the kill ring",
+     YEW_OPT_MODULE_CORE},
     {"registers.ring_bytes_max", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT((i64)YEW_KILL_RING_BYTES_DEFAULT), NULL, 1, INT64_MAX, NULL,
-     option_changed, "Maximum bytes retained in the kill ring"},
+     option_changed, "Maximum bytes retained in the kill ring",
+     YEW_OPT_MODULE_CORE},
     {"registers.clip_read_max", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(INT64_C(64) * 1024 * 1024), NULL, 1, INT64_MAX, NULL,
-     option_changed, "Maximum bytes read from the system clipboard"},
+     option_changed, "Maximum bytes read from the system clipboard",
+     YEW_OPT_MODULE_CORE},
     {"clipboard.sync", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("yank"),
      clipboard_values, 0, 0, NULL, option_changed,
-     "System clipboard synchronization policy"},
+     "System clipboard synchronization policy", YEW_OPT_MODULE_CORE},
     {"search.ignorecase", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
-     NULL, 0, 0, NULL, option_changed, "Ignore case in searches"},
+     NULL, 0, 0, NULL, option_changed, "Ignore case in searches",
+     YEW_OPT_MODULE_CORE},
     {"search.smartcase", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
      0, 0, NULL, option_changed,
-     "Restore case sensitivity when a pattern has uppercase literals"},
+     "Restore case sensitivity when a pattern has uppercase literals",
+     YEW_OPT_MODULE_CORE},
     {"hooks.error_limit", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(YEW_HOOK_ERROR_LIMIT_DEFAULT), NULL, 1, 100, NULL,
-     option_changed, "Disable a failing hook after this many errors"},
+     option_changed, "Disable a failing hook after this many errors",
+     YEW_OPT_MODULE_CORE},
     {"save.strategy", YEW_OPT_ENUM, YEW_OPT_BUFFER,
      OPT_ENUM(YEW_SAVE_STRATEGY_DEFAULT_TEXT),
      save_strategy_values, 0, 0, NULL, option_changed,
-     "Save using auto, atomic, or in-place strategy"},
+     "Save using auto, atomic, or in-place strategy", YEW_OPT_MODULE_CORE},
     {"save.check_disk", YEW_OPT_ENUM, YEW_OPT_BUFFER,
      OPT_ENUM(YEW_SAVE_CHECK_DISK_DEFAULT_TEXT),
      save_check_disk_values, 0, 0, NULL, option_changed,
-     "External-change check: off, metadata, or exact content"},
+     "External-change check: off, metadata, or exact content",
+     YEW_OPT_MODULE_CORE},
     {"save.check_disk_max", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT((i64)YEW_SAVE_CHECK_DISK_MAX_DEFAULT), NULL, 0,
      (i64)YEW_SAVE_CHECK_DISK_MAX_LIMIT, NULL, option_changed,
-     "Maximum bytes compared by save.check_disk=content"},
+     "Maximum bytes compared by save.check_disk=content",
+     YEW_OPT_MODULE_CORE},
     {"save.backup_keep", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(YEW_SAVE_BACKUP_KEEP_DEFAULT), NULL, 0,
      YEW_SAVE_BACKUP_KEEP_MAX, NULL, option_changed,
-     "In-place save backups retained per file"},
+     "In-place save backups retained per file", YEW_OPT_MODULE_CORE},
     {"save.backup_dir", YEW_OPT_STR, YEW_OPT_GLOBAL,
      OPT_STR(YEW_SAVE_BACKUP_DIR_DEFAULT), NULL,
      0, 0, NULL, option_changed,
-     "Directory for in-place save backups"},
-#if YEW_WITH_PLUGINS
+     "Directory for in-place save backups", YEW_OPT_MODULE_CORE},
     {"plug.error_limit", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(5), NULL,
      1, 100, NULL, option_changed,
-     "Disable a failing plugin after this many errors"},
+     "Disable a failing plugin after this many errors",
+     YEW_OPT_MODULE_PLUGINS},
     {"plug.verify_on_load", YEW_OPT_BOOL, YEW_OPT_GLOBAL,
      OPT_BOOL(YEW_PLUG_VERIFY_ON_LOAD_DEFAULT), NULL, 0, 0, NULL,
      option_changed,
-     "Verify installed plugin content before loading"},
-#endif
+     "Verify installed plugin content before loading",
+     YEW_OPT_MODULE_PLUGINS},
     {"theme", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR("quiver-dark"), NULL,
-     0, 0, NULL, option_changed, "Active theme name"},
+     0, 0, NULL, option_changed, "Active theme name", YEW_OPT_MODULE_CORE},
     {"theme_auto", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
      0, 0, NULL, option_changed,
-     "Select a dark or light theme from the terminal background"},
+     "Select a dark or light theme from the terminal background",
+     YEW_OPT_MODULE_CORE},
     {"macro.dir", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
-     0, 0, NULL, option_changed, "Macro library directory"},
+     0, 0, NULL, option_changed, "Macro library directory",
+     YEW_OPT_MODULE_CORE},
     {"shadow.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
-     0, 0, NULL, option_changed, "Enable passive shadow suggestions"},
+     0, 0, NULL, option_changed, "Enable passive shadow suggestions",
+     YEW_OPT_MODULE_CORE},
     {"shadow.providers", YEW_OPT_STR, YEW_OPT_GLOBAL,
      OPT_STR("index lsp ai"), NULL, 0, 0, shadow_providers_validate,
-     option_changed, "Ordered passive suggestion providers"},
+     option_changed, "Ordered passive suggestion providers",
+     YEW_OPT_MODULE_CORE},
     {"shadow.max_lines", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(8), NULL,
-     1, 8, NULL, option_changed, "Maximum overlaid suggestion lines"},
+     1, 8, NULL, option_changed, "Maximum overlaid suggestion lines",
+     YEW_OPT_MODULE_CORE},
     {"shadow.midline", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
-     0, 0, NULL, option_changed, "Allow suggestions inside non-space text"},
+     0, 0, NULL, option_changed, "Allow suggestions inside non-space text",
+     YEW_OPT_MODULE_CORE},
     {"shadow.lsp_debounce_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(120),
-     NULL, 0, 5000, NULL, option_changed, "LSP suggestion idle delay"},
+     NULL, 0, 5000, NULL, option_changed, "LSP suggestion idle delay",
+     YEW_OPT_MODULE_CORE},
     {"shadow.ai_debounce_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(350),
-     NULL, 0, 5000, NULL, option_changed, "AI suggestion idle delay"},
+     NULL, 0, 5000, NULL, option_changed, "AI suggestion idle delay",
+     YEW_OPT_MODULE_CORE},
     {"compl.auto_trigger", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
      NULL, 0, 0, NULL, option_changed,
-     "Open completion after configured trigger text"},
+     "Open completion after configured trigger text", YEW_OPT_MODULE_CORE},
     {"compl.trigger_chars", YEW_OPT_STR, YEW_OPT_GLOBAL,
      OPT_STR(". -> ::"), NULL, 0, 0, NULL, option_changed,
-     "Whitespace-separated completion trigger text"},
+     "Whitespace-separated completion trigger text", YEW_OPT_MODULE_CORE},
     {"lsp.open_in", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("here"),
      lsp_open_in_values, 0, 0, NULL, option_changed,
-     "Open LSP navigation targets here, in a split, or in a tab"},
+     "Open LSP navigation targets here, in a split, or in a tab",
+     YEW_OPT_MODULE_LSP},
     {"git.ascii_glyphs", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
      NULL, 0, 0, NULL, option_changed,
-     "Use ASCII-only FUSS tree and status glyphs"},
+     "Use ASCII-only FUSS tree and status glyphs", YEW_OPT_MODULE_FUSS},
     {"ai.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
-     0, 0, NULL, option_changed, "Enable AI features after disclosure"},
+     0, 0, NULL, option_changed, "Enable AI features after disclosure",
+     YEW_OPT_MODULE_AI},
     {"ai.backend", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
-     0, 0, NULL, option_changed, "Selected AI backend name"},
+     0, 0, NULL, option_changed, "Selected AI backend name",
+     YEW_OPT_MODULE_AI},
     {"ai.default_workspace", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("ask"),
      ai_default_workspace_values, 0, 0, NULL, option_changed,
-     "Policy for workspaces without an explicit AI grant"},
+     "Policy for workspaces without an explicit AI grant",
+     YEW_OPT_MODULE_AI},
     {"ai.context_bytes", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(4096), NULL,
      256, 65536, NULL, option_changed,
-     "Maximum prefix and suffix context bytes"},
+     "Maximum prefix and suffix context bytes", YEW_OPT_MODULE_AI},
     {"ai.context_prefix_pct", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(75),
      NULL, 10, 95, NULL, option_changed,
-     "Percentage of AI context reserved for the prefix"},
+     "Percentage of AI context reserved for the prefix",
+     YEW_OPT_MODULE_AI},
     {"ai.max_tokens", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(256), NULL,
-     16, 4096, NULL, option_changed, "Maximum AI completion tokens"},
+     16, 4096, NULL, option_changed, "Maximum AI completion tokens",
+     YEW_OPT_MODULE_AI},
     {"ai.max_lines", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(8), NULL,
-     1, 8, NULL, option_changed, "Maximum AI ghost lines"},
+     1, 8, NULL, option_changed, "Maximum AI ghost lines",
+     YEW_OPT_MODULE_AI},
     {"ai.temperature", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(10), NULL,
      0, 100, NULL, option_changed,
-     "AI temperature in thousandths (10 means 0.010)"},
+     "AI temperature in thousandths (10 means 0.010)",
+     YEW_OPT_MODULE_AI},
     {"ai.frame_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(33), NULL,
      0, 200, NULL, option_changed,
-     "Minimum milliseconds between AI ghost deliveries"},
+     "Minimum milliseconds between AI ghost deliveries",
+     YEW_OPT_MODULE_AI},
     {"ai.fim", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("auto"),
      ai_fim_values, 0, 0, NULL, option_changed,
-     "Fill-in-the-middle policy: auto, on, or off"},
+     "Fill-in-the-middle policy: auto, on, or off", YEW_OPT_MODULE_AI},
     {"ai.on_redact", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("block"),
      ai_on_redact_values, 0, 0, NULL, option_changed,
-     "Action when AI context matches a secret deny rule"},
+     "Action when AI context matches a secret deny rule",
+     YEW_OPT_MODULE_AI},
     {"ai.deny_replace", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
      NULL, 0, 0, NULL, option_changed,
-     "Replace shipped AI deny rules instead of appending user rules"},
+     "Replace shipped AI deny rules instead of appending user rules",
+     YEW_OPT_MODULE_AI},
     {"ai.exclude_replace", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
      NULL, 0, 0, NULL, option_changed,
-     "Replace shipped AI path exclusions instead of appending user rows"},
+     "Replace shipped AI path exclusions instead of appending user rows",
+     YEW_OPT_MODULE_AI},
     {"ai.exclude_paths", YEW_OPT_STRLIST, YEW_OPT_GLOBAL, OPT_STRLIST(),
      NULL, 0, 0, ai_exclude_paths_validate, option_changed,
-     "Additional workspace-relative paths excluded from AI context"},
+     "Additional workspace-relative paths excluded from AI context",
+     YEW_OPT_MODULE_AI},
     {"ai.badge", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("on"),
      ai_badge_values, 0, 0, NULL, option_changed,
-     "Show the AI statusline badge for local backends"},
+     "Show the AI statusline badge for local backends",
+     YEW_OPT_MODULE_AI},
     {"ai.badge_host_max", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(20), NULL,
      1, 255, NULL, option_changed,
-     "Maximum remote AI hostname cells shown in the statusline badge"},
+     "Maximum remote AI hostname cells shown in the statusline badge",
+     YEW_OPT_MODULE_AI},
     {"ai.debug_bodies", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
      NULL, 0, 0, NULL, option_changed,
-     "Allow AI prompt and completion logging with YEW_AI_DEBUG=1"},
+     "Allow AI prompt and completion logging with YEW_AI_DEBUG=1",
+     YEW_OPT_MODULE_AI},
     {"ai.allow_plain_remote", YEW_OPT_BOOL, YEW_OPT_GLOBAL,
      OPT_BOOL(false), NULL, 0, 0, NULL, option_changed,
-     "Allow plain HTTP AI endpoints outside the local host"},
+     "Allow plain HTTP AI endpoints outside the local host",
+     YEW_OPT_MODULE_AI},
     {"ai.key_cache", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
-     0, 0, NULL, option_changed, "Cache resolved AI keys for this session"},
+     0, 0, NULL, option_changed, "Cache resolved AI keys for this session",
+     YEW_OPT_MODULE_AI},
     {"ai.connect_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(2000),
      NULL, 1, 600000, NULL, option_changed,
-     "AI connection timeout in milliseconds"},
+     "AI connection timeout in milliseconds", YEW_OPT_MODULE_AI},
     {"ai.first_byte_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(10000), NULL, 1, 600000, NULL, option_changed,
-     "AI first-response-byte timeout in milliseconds"},
+     "AI first-response-byte timeout in milliseconds", YEW_OPT_MODULE_AI},
     {"ai.stream_idle_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(20000), NULL, 1, 600000, NULL, option_changed,
-     "AI streaming idle timeout in milliseconds"},
+     "AI streaming idle timeout in milliseconds", YEW_OPT_MODULE_AI},
     {"ai.total_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(120000),
      NULL, 1, 3600000, NULL, option_changed,
-     "AI request wall-clock timeout in milliseconds"},
+     "AI request wall-clock timeout in milliseconds", YEW_OPT_MODULE_AI},
     {"ai.keepalive_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(30000), NULL,
      0, 600000, NULL, option_changed,
-     "AI idle connection lifetime in milliseconds"},
+     "AI idle connection lifetime in milliseconds", YEW_OPT_MODULE_AI},
     {"ai.backoff_max_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(60000),
      NULL, 1000, 3600000, NULL, option_changed,
-     "Maximum AI backend cooldown in milliseconds"}
+     "Maximum AI backend cooldown in milliseconds", YEW_OPT_MODULE_AI}
 };
 
 const u32 yew_opts_len = (u32)YEW_ARRAY_LEN(yew_opts);
@@ -445,6 +504,24 @@ const OptDesc *yew_opt_desc_for(Ed *ed, const char *name, u32 len)
     YewDynamicOpt *dynamic = dynamic_find(ed, name, len);
 
     return dynamic == NULL ? yew_opt_desc(name, len) : &dynamic->desc;
+}
+
+static bool option_module_available(const OptDesc *desc, const char **err)
+{
+    YewMod module;
+
+    if (desc->module == (u8)YEW_OPT_MODULE_CORE)
+        return true;
+    if (desc->module > (u8)YEW_OPT_MODULE_PLUGINS)
+        YEW_BUG("option '%s' has an invalid module owner", desc->name);
+    module = (YewMod)(desc->module - 1U);
+    /* YEW-F-075: retain excluded-module descriptors for discovery, but
+     * refuse every write before it can become inert configuration state. */
+    if (yew_mod_require(module, module_option_error,
+                        sizeof(module_option_error)))
+        return true;
+    *err = module_option_error;
+    return false;
 }
 
 static void stored_clear(struct OptStored *stored)
@@ -1022,6 +1099,8 @@ bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
         *err = "unknown option";
         return false;
     }
+    if (!option_module_available(desc, err))
+        return false;
     if (scope_hint != (u8)YEW_OPT_SCOPE_DECLARED &&
         scope_hint != desc->scope) {
         *err = desc->scope == (u8)YEW_OPT_GLOBAL ?
@@ -1077,6 +1156,8 @@ bool yew_opt_set_for(Ed *ed, Buffer *buffer, Win *win, u8 scope_hint,
         *err = "unknown option";
         return false;
     }
+    if (!option_module_available(desc, err))
+        return false;
     if (scope_hint != (u8)YEW_OPT_SCOPE_DECLARED &&
         scope_hint != desc->scope) {
         *err = desc->scope == (u8)YEW_OPT_GLOBAL ?
@@ -1195,6 +1276,8 @@ u32 yew_opt_checkpoint(Ed *ed, const char *name, u32 len,
         *err = "unknown option";
         return 0U;
     }
+    if (!option_module_available(desc, err))
+        return 0U;
     buffer = current_buffer(ed);
     win = ed->win;
     if (desc->scope == (u8)YEW_OPT_BUFFER && buffer == NULL) {
@@ -1559,7 +1642,8 @@ static bool dynamic_declare(Ed *ed, u32 origin_id,
     }
     dynamic->desc = (OptDesc){
         dynamic->name, value->type, YEW_OPT_GLOBAL, dynamic->dflt.value,
-        NULL, INT64_MIN, INT64_MAX, NULL, NULL, "Plugin-declared option"
+        NULL, INT64_MIN, INT64_MAX, NULL, NULL, "Plugin-declared option",
+        YEW_OPT_MODULE_CORE
     };
     dynamic->origin_id = origin_id;
     dynamic->active = true;

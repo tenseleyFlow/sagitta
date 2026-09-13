@@ -32,6 +32,7 @@ const YewTest yew_tests[] = {
     T(bind_origin_ownership_copies_rows_and_batches_one_rebuild),
     T(bind_later_origin_shadows_then_teardown_reveals_prior),
     T(option_table_has_frozen_order_types_scopes_and_defaults),
+    T(option_module_ownership_gates_every_config_write),
     T(option_validators_reject_wrong_types_ranges_and_enums),
     T(option_scope_and_side_effects_share_one_setter),
     T(option_fletch_set_map_is_atomic_and_cmdline_is_identical),
