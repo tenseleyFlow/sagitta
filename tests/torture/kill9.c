@@ -907,6 +907,31 @@ static void injected_eintr(const char *driver, const char *shim,
     (void)printf("retry EINTR ok\n");
 }
 
+static void injected_enospc(const char *driver, const char *shim,
+                            const char *root, unsigned long long *serial)
+{
+    char dst[512], old[512], post[512], log[512];
+    int code;
+
+    case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
+               log, sizeof(log), root, "enospc", (*serial)++);
+    make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(old, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(post, post_bytes, sizeof(post_bytes) - 1U);
+    if (setenv("YEW_FAULT_ENOSPC_AT", "0", 1) != 0)
+        die("setenv ENOSPC fault");
+    code = wait_child(start_save(driver, shim, dst, post, log, 17U,
+                                 -1, -1));
+    (void)unsetenv("YEW_FAULT_ENOSPC_AT");
+    if (code != 3 || !run_check(driver, dst, old, post) ||
+        !file_equals_bytes(dst, old_bytes, sizeof(old_bytes) - 1U)) {
+        (void)fprintf(stderr,
+                      "torture: injected ENOSPC did not preserve/recover\n");
+        exit(1);
+    }
+    (void)printf("storage ENOSPC preserves old+journal ok\n");
+}
+
 static void clean_child_check(const char *driver, const char *shim,
                               const char *root, unsigned long long *serial)
 {
@@ -1133,6 +1158,7 @@ int main(int argc, char **argv)
         inplace_meta_fault_sweep(argv[1], argv[2], root, state, &serial);
     }
     injected_eintr(argv[1], argv[2], root, &serial);
+    injected_enospc(argv[1], argv[2], root, &serial);
     determinism_check(argv[1], argv[2], root, &serial);
     external_kills(argv[1], argv[2], root, signal_iterations, &serial);
     if (getenv("YEW_TORTURE_KEEP") != NULL)

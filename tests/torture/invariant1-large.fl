@@ -1,0 +1,9 @@
+# Sprint 58 invariant 1: make one minimal edit through the real batch/edit
+# choke point and save through the ordinary durable file policy.  The driver
+# supplies the 1.5 GiB symlink/three-hardlink/read-only-directory topology.
+import buf
+import span
+
+let b = buf.current()
+span.replace(buf.span(b, 0, 0), "X")
+buf.save(b)

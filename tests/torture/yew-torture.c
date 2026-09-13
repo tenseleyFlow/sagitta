@@ -194,6 +194,46 @@ io_fail:
     return 3;
 }
 
+/* Sprint 58 invariant 1's large/disk-full lane cannot materialize a second
+ * 1.5 GiB image merely to describe a one-byte edit.  Exercise the same load,
+ * journal, edit, and save APIs while keeping only the source TextBuf resident.
+ * On save failure, _exit retains the durable journal for the parent checker,
+ * exactly like save_case above. */
+static int save_insert_case(const char *path)
+{
+    static const u8 inserted = (u8)'X';
+    FileMeta meta;
+    TextBuf *tb = NULL;
+    Journal *journal = NULL;
+    YewSaveErr save_err;
+
+    if (yew_file_load(path, &tb, &meta) != YEW_LOAD_OK)
+        return 3;
+    journal = yew_journal_open(meta.realpath, &meta);
+    if (journal == NULL)
+        goto fail;
+    yew_journal_record(journal, YEW_JOURNAL_INS, 0U, &inserted, 1U);
+    yew_textbuf_insert(tb, BYTEOFF(0U), &inserted, 1U);
+    yew_journal_sync(journal);
+    if (!yew_journal_ok(journal))
+        goto fail;
+    if (setenv("YEW_FAULT_ENABLE", "1", 1) != 0)
+        goto fail;
+    save_err = yew_file_save(tb, &meta, path);
+    if (save_err != YEW_SAVE_OK)
+        _exit(3);
+    yew_journal_discard(journal);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
+    return 0;
+
+fail:
+    yew_journal_close(journal);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
+    return 3;
+}
+
 static int check_case(const char *path, const char *old_path,
                       const char *post_path)
 {
@@ -297,6 +337,8 @@ int main(int argc, char **argv)
 {
     if (argc == 4 && strcmp(argv[1], "--save") == 0)
         return save_case(argv[2], argv[3]);
+    if (argc == 3 && strcmp(argv[1], "--save-insert") == 0)
+        return save_insert_case(argv[2]);
     if (argc == 5 && strcmp(argv[1], "--check") == 0)
         return check_case(argv[2], argv[3], argv[4]);
     if (argc == 5 && strcmp(argv[1], "--check-batch") == 0)
@@ -304,7 +346,8 @@ int main(int argc, char **argv)
     if (argc == 3 && strcmp(argv[1], "--atomic-result") == 0)
         return atomic_result_case(argv[2]);
     (void)fprintf(stderr,
-                  "usage: %s --save PATH POST | --check PATH OLD POST | "
+                  "usage: %s --save PATH POST | --save-insert PATH | "
+                  "--check PATH OLD POST | "
                   "--check-batch PATH OLD POST | --atomic-result PATH\n",
                   argv[0]);
     return 2;

@@ -5,7 +5,8 @@
 
 /*
  * Public controls are YEW_FAULT_AT, YEW_FAULT_SHORT, YEW_FAULT_SEED and
- * YEW_FAULT_LOG.  The harness also uses YEW_FAULT_ENABLE=0 as its durable-
+ * YEW_FAULT_LOG.  YEW_FAULT_ENOSPC_AT=N returns ENOSPC once at intercepted
+ * storage call N.  The harness also uses YEW_FAULT_ENABLE=0 as its durable-
  * journal barrier, YEW_FAULT_RENAME_EXDEV=1 for decision-table row 5,
  * YEW_FAULT_FCHOWN_EPERM=1 for row 6, YEW_FAULT_EINTR_AT=N to return EINTR
  * once at intercepted call N, and YEW_FAULT_STORAGE_ONLY=1 to keep a live
@@ -318,6 +319,20 @@ static int inject_eintr(const char *name)
     return 1;
 }
 
+static int inject_enospc(const char *name)
+{
+    unsigned long long at;
+
+    if (!faults_enabled())
+        return 0;
+    at = parse_ull(getenv("YEW_FAULT_ENOSPC_AT"), UINT64_MAX);
+    if (call_no == 0U || at != call_no - 1U)
+        return 0;
+    log_call(name, "errno=ENOSPC");
+    errno = ENOSPC;
+    return 1;
+}
+
 static int inject_save_meta_eio(const char *name)
 {
     unsigned long long at;
@@ -436,6 +451,8 @@ ssize_t YEW_FAULT_INTERPOSE(write)(int fd, const void *buf, size_t count)
     if (!storage_fd(fd))
         return real_write_fn(fd, buf, count);
     before_call("write");
+    if (inject_enospc("write"))
+        return -1;
     if (env_is_one("YEW_FAULT_WRITE_EIO_AFTER_DIRSYNC") && dirsync_seen &&
         !write_eio_done) {
         write_eio_done = 1;
@@ -455,6 +472,8 @@ ssize_t YEW_FAULT_INTERPOSE(pwrite)(int fd, const void *buf, size_t count,
     if (!storage_fd(fd))
         return real_pwrite_fn(fd, buf, count, offset);
     before_call("pwrite");
+    if (inject_enospc("pwrite"))
+        return -1;
     if (inject_eintr("pwrite"))
         return -1;
     return real_pwrite_fn(fd, buf, maybe_short(count, "pwrite"), offset);
@@ -469,6 +488,8 @@ int YEW_FAULT_INTERPOSE(fsync)(int fd)
     if (!storage_fd(fd))
         return real_fsync_fn(fd);
     before_call(name);
+    if (inject_enospc(name))
+        return -1;
     if (inject_save_meta_eio(name))
         return -1;
     if (inject_eintr(name))
@@ -487,6 +508,8 @@ int YEW_FAULT_INTERPOSE(fdatasync)(int fd)
     if (!storage_fd(fd))
         return real_fdatasync_fn(fd);
     before_call(name);
+    if (inject_enospc(name))
+        return -1;
     if (inject_eintr(name))
         return -1;
     return real_fdatasync_fn(fd);
@@ -498,6 +521,8 @@ int YEW_FAULT_INTERPOSE(rename)(const char *old_path, const char *new_path)
     if (!storage_path(old_path) && !storage_path(new_path))
         return real_rename_fn(old_path, new_path);
     before_call("rename");
+    if (inject_enospc("rename"))
+        return -1;
     if (inject_save_meta_eio("rename"))
         return -1;
     if (env_is_one("YEW_FAULT_RENAME_EXDEV") && !rename_exdev_done) {
@@ -517,6 +542,8 @@ int YEW_FAULT_INTERPOSE(ftruncate)(int fd, off_t length)
     if (!storage_fd(fd))
         return real_ftruncate_fn(fd, length);
     before_call("ftruncate");
+    if (inject_enospc("ftruncate"))
+        return -1;
     if (inject_eintr("ftruncate"))
         return -1;
     return real_ftruncate_fn(fd, length);
@@ -528,6 +555,8 @@ int YEW_FAULT_INTERPOSE(fchown)(int fd, uid_t owner, gid_t group)
     if (!storage_fd(fd))
         return real_fchown_fn(fd, owner, group);
     before_call("fchown");
+    if (inject_enospc("fchown"))
+        return -1;
     if (env_is_one("YEW_FAULT_FCHOWN_EPERM")) {
         log_call("fchown", "errno=EPERM");
         errno = EPERM;
@@ -553,6 +582,8 @@ int YEW_FAULT_INTERPOSE(close)(int fd)
     if (!storage_fd(fd))
         return real_close_fn(fd);
     before_call("close");
+    if (inject_enospc("close"))
+        return -1;
     source = getenv("YEW_FAULT_LINK_SOURCE");
     twin = getenv("YEW_FAULT_LINK_TWIN");
     if (!link_done && source != NULL && twin != NULL) {
