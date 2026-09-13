@@ -1,7 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "edit/ed.h"
 #include "edit/motion.h"
@@ -17,6 +20,17 @@ typedef struct {
     u64 rng;
     u64 hash;
 } FuzzRun;
+
+static bool monotonic_ms(u64 *out)
+{
+    struct timespec now;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+        return false;
+    *out = (u64)now.tv_sec * UINT64_C(1000) +
+           (u64)now.tv_nsec / UINT64_C(1000000);
+    return true;
+}
 
 static u64 random_next(FuzzRun *run)
 {
@@ -185,6 +199,8 @@ int main(int argc, char **argv)
     };
     u64 seed = 1U;
     u64 iterations = UNIT_FUZZ_MIN_ITERS;
+    u64 seconds = 0U;
+    u64 deadline_ms = 0U;
     bool coverage_report = false;
     FuzzRun run;
     TextBuf *tb;
@@ -197,11 +213,14 @@ int main(int argc, char **argv)
         if (parse_u64(argv[argi], "--seed=", &seed) ||
             parse_u64(argv[argi], "--iters=", &iterations))
             continue;
+        if (parse_u64(argv[argi], "--seconds=", &seconds) && seconds != 0U)
+            continue;
         if (strcmp(argv[argi], "--coverage-report") == 0) {
             coverage_report = true;
             continue;
         }
         (void)fprintf(stderr, "usage: %s [--seed=N] [--iters=N] "
+                      "[--seconds=N] "
                       "[--coverage-report]\n",
                       argv[0]);
         return 2;
@@ -216,8 +235,22 @@ int main(int argc, char **argv)
     if (coverage_report)
         yew_cov_reset();
 #endif
-    if (iterations < UNIT_FUZZ_MIN_ITERS)
+    if (seconds != 0U) {
+        u64 start_ms;
+        u64 span_ms;
+
+        if (seconds > UINT64_MAX / UINT64_C(1000) ||
+            !monotonic_ms(&start_ms)) {
+            (void)fprintf(stderr, "fuzz_units: invalid duration\n");
+            return 2;
+        }
+        span_ms = seconds * UINT64_C(1000);
+        deadline_ms = start_ms > UINT64_MAX - span_ms ?
+                      UINT64_MAX : start_ms + span_ms;
+        iterations = UINT64_MAX;
+    } else if (iterations < UNIT_FUZZ_MIN_ITERS) {
         iterations = UNIT_FUZZ_MIN_ITERS;
+    }
     run = (FuzzRun){seed == 0U ? UINT64_C(0x9e3779b97f4a7c15) : seed,
                     UINT64_C(1469598103934665603)};
     tb = random_buffer(&run);
@@ -236,6 +269,17 @@ int main(int argc, char **argv)
                         : yew_grapheme_prev(tb, raw);
         bool alt = (random_next(&run) & 1U) != 0U;
 
+        if (seconds != 0U && op != 0U && (op & 4095U) == 0U) {
+            u64 now_ms;
+
+            if (!monotonic_ms(&now_ms)) {
+                yew_textbuf_free(tb);
+                return 2;
+            }
+            if (now_ms >= deadline_ms)
+                break;
+        }
+
         if (!check_one(&run, &u, ops, p, alt, op)) {
             yew_textbuf_free(tb);
             return 1;
@@ -253,10 +297,19 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "fuzz_units: 1 MiB single-line check failed\n");
         return 1;
     }
-    (void)printf("fuzz_units: seed=%llu ops=%llu hash=%016llx ok\n",
-                 (unsigned long long)seed,
-                 (unsigned long long)iterations,
-                 (unsigned long long)run.hash);
+    if (seconds != 0U) {
+        (void)printf("fuzz_units: seed=%llu seconds=%llu iters=%llu "
+                     "hash=%016llx ok\n",
+                     (unsigned long long)seed,
+                     (unsigned long long)seconds,
+                     (unsigned long long)op,
+                     (unsigned long long)run.hash);
+    } else {
+        (void)printf("fuzz_units: seed=%llu ops=%llu hash=%016llx ok\n",
+                     (unsigned long long)seed,
+                     (unsigned long long)iterations,
+                     (unsigned long long)run.hash);
+    }
 #if YEW_COV
     if (coverage_report) {
         yew_cov_merge();
