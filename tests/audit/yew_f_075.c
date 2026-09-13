@@ -1,10 +1,11 @@
 /*
  * YEW-F-075 — stripped builds accept module-only config as inert state.
  *
- * Every module-owned descriptor remains discoverable in all build profiles.
- * Writes succeed when its module exists and otherwise reject through
- * yew_mod_require's canonical module error.  The inventory check prevents a
- * sibling key from escaping the same boundary without an owner.
+ * Correct behavior: every module-owned descriptor remains discoverable in
+ * all build profiles.  Writes succeed when its module exists and otherwise
+ * reject through yew_mod_require's canonical module error.  The inventory
+ * check prevents a sibling key from escaping the same boundary without an
+ * owner.
  */
 #include "audit.h"
 
