@@ -2,8 +2,8 @@
 
 Baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 
-All fifteen fronts are closed, so the ten cross-cutting sessions may now
-begin. A pending row is not a verdict.
+All fifteen fronts are closed and cross-cutting verification is in progress.
+A pending row is not a verdict.
 
 | # | Invariant | Status | Verdict | Findings |
 |---:|---|---|---|---|
@@ -12,7 +12,7 @@ begin. A pending row is not a verdict.
 | 3 | No silent stubs | complete | VIOLATED | YEW-F-014, YEW-F-075 |
 | 4 | Latency budgets are CI gates | pending | — | — |
 | 5 | Deterministic rendering | pending | — | — |
-| 6 | Terminal restore | pending | — | — |
+| 6 | Terminal restore | complete | HOLDS | — |
 | 7 | Bespoke first | complete | HOLDS | — |
 | 8 | Single-threaded core | complete | HOLDS WITH FINDINGS | YEW-F-032 |
 | 9 | Modal paradigm first | complete | HOLDS | — |
@@ -76,6 +76,51 @@ The minimal audit run reproduced both as hard XFAILs. `YEW-F-075` is the
 Critical user-reachable silent stub; all other exercised absent-module routes
 failed loudly and the stale-Sprint-message review from F15 q9 found no landed
 surface still presented as deferred.
+
+## 6. Terminal restore
+
+Verdict: **HOLDS** on the audited baseline.
+
+The permanent `make torture-tty-restore` target exercised the exact 8 × 4
+signal/moment matrix on arm64 macOS and x86_64 Linux. All 32 trials passed on
+each platform (64 executions total) for `SIGSEGV`, `SIGBUS`, `SIGABRT`,
+`SIGTERM`, `SIGINT`, `SIGQUIT`, `SIGHUP`, and `SIGKILL` at these boundaries:
+
+| Moment | Live-boundary proof |
+|---|---|
+| Mid-render | An unsaved edit and its journal were settled first. A resize then forced a distinct repaint; the torture interposer wrote through BSU (`ESC[?2026h`) and stopped yew before ESU. The parent proved the final frame state was an unmatched BSU before sending the tested signal. |
+| Inside the fatal handler | `SIGTERM` entered the real fatal path. The interposer stopped its first restore write immediately after the kitty-keyboard pop (`ESC[<u`) and before the complete restore blob, then the parent delivered each tested signal as the second signal. An explicit async-signal-safe acknowledgement removes signal-order assumptions from this boundary. |
+| Filter holding typeahead | A real `/bin/sh` filter published its process group, slept, and kept `cat` live. The parent injected literal `iQUEUED` typeahead and proved it was neither rendered nor dispatched before delivering the signal. |
+| LSP shutdown budget | The isolated fake LSP completed initialization, received `shutdown`, published that boundary, and delayed its response for one second—beyond yew's 500 ms shutdown budget—while the signal was delivered. |
+
+Every trial captured the terminal stream from its boundary and required the
+complete ordered restore sequence: kitty keyboard pop; bracketed-paste,
+mouse, focus, and synchronized-update disable; SGR reset; block-cursor reset;
+alternate-screen exit; and cursor show. The harness also compared the final
+input, output, control, and local termios flags, input/output speeds, and every
+control character with the exact pre-yew values. Non-LSP rows used an explicit
+empty-server config, so no host `clangd` or user configuration could perturb
+the result.
+
+`SIGKILL` cannot be handled by the editor process. In all four `SIGKILL`
+moments the independent terminal guardian emitted the same complete restore
+sequence and restored termios. A fresh shell-side `reset` on the same PTY then
+exited successfully. Finally, the torture checker reopened the journal state
+and recovered the exact unsaved `Xbase\n` bytes over the still-on-disk
+`base\n`; all four journal-recovery checks passed on both platforms.
+
+The x86_64 run used GCC 13.3.0 in the existing Ubuntu 24.04 audit guest. The
+committed harness archive was SHA-256
+`3b5ee0ace5629be60477ffb1fb5876070f16afcd3aa60a667d06025c5a2edb0c`;
+the guest verified that hash before extracting it. The arm64 run used Apple
+clang 21. The module-free warning-clean `torture-build` also passed, while the
+runtime target correctly skips profiles without LSP and static musl profiles
+that cannot preload the test interposer.
+
+The pre-existing nine-case `restore_` PTY slice passed, covering ordinary
+quit, crash, bus error, abort, suspend/resume, notepad-mode termination,
+segmentation, suspension, and kill. `scripts/check-sigsafe.sh` also passed.
+No terminal-restore exception or invariant-6 finding remains open.
 
 ## 9. Modal paradigm first
 
