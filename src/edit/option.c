@@ -187,6 +187,10 @@ const OptDesc yew_opts[] = {
      NULL, option_changed, "Indent and tab display width (1..16)"},
     {"expandtab", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(false), NULL, 0, 0,
      NULL, option_changed, "Insert spaces when indentation emits a tab"},
+    {"autoindent", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(true), NULL, 0, 0,
+     NULL, option_changed, "Carry indentation onto the line Enter opens"},
+    {"autopair", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(true), NULL, 0, 0,
+     NULL, option_changed, "Close brackets and quotes as they are typed"},
     {"wrap", YEW_OPT_BOOL, YEW_OPT_WINDOW, OPT_BOOL(false), NULL, 0, 0,
      NULL, option_changed, "Wrap long lines in this window"},
     {"scrolloff", YEW_OPT_INT, YEW_OPT_WINDOW, OPT_INT(3), NULL, 0, 99,
@@ -1034,6 +1038,21 @@ bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
         return false;
     }
     return value_validate(ed, desc, value, &normalized, err);
+}
+
+bool yew_opt_buffer_bool(const Buffer *buffer, const char *name, u32 len)
+{
+    const OptDesc *desc = yew_opt_desc(name, len);
+    const struct OptStored *stored = NULL;
+    const Ed *ed = buffer == NULL ? NULL : buffer->owner;
+
+    if (desc == NULL || desc->type != (u8)YEW_OPT_BOOL)
+        return false;
+    if (buffer != NULL)
+        stored = scope_stored(&buffer->opt_overrides, name, len);
+    if (stored == NULL && ed != NULL && ed->opt_globals != NULL)
+        stored = &ed->opt_globals[desc_index(desc)];
+    return stored == NULL ? desc->dflt.as.b : stored->value.as.b;
 }
 
 bool yew_opt_set_for(Ed *ed, Buffer *buffer, Win *win, u8 scope_hint,

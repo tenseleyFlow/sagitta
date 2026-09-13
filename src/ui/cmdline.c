@@ -850,6 +850,13 @@ void yew_cmdline_edited(Ed *ed)
     yew_hist_cur_reset(&ed->cmdline.hist, draft);
     yew_xfree(draft);
     clear_error(ed);
+    /*
+     * Sprint 57.17 §2: typing puts the caret back in charge.  The
+     * SELECTION survives (it is held by identity across the refilter),
+     * so one `<up>` picks the pager up again where it was left -- but
+     * the arrows belong to the prompt until it is asked for.
+     */
+    yew_menu_blur(&ed->cmdline.menu);
     cmdline_refilter(ed);
     ed->footer_dirty = true;
     /* Search-as-you-type: the `/` and `?` prompts preview on every
@@ -992,6 +999,38 @@ static CmdStatus completion_cycle(Ed *ed, bool previous)
     return YEW_CMD_OK;
 }
 
+/*
+ * Sprint 57.17 §2: move the pager's selection WITHOUT touching the
+ * prompt.
+ *
+ * The whole difference from completion_cycle, which inserts the newly
+ * selected candidate on every move: this is a LOOK.  DoD 3 pins that
+ * looking cannot change what Enter would run, which is what makes
+ * arrowing up into the list to read it before choosing possible at all.
+ *
+ * `previous` off the FIRST row leaves the pager instead of wrapping:
+ * the rows stay on screen, the choice is dropped so §6's Enter rule
+ * sees none, and the next `<up>` is history again.
+ */
+static CmdStatus menu_preview(Ed *ed, bool previous)
+{
+    Menu *menu = &ed->cmdline.menu;
+
+    if (menu->items.len == 0U)
+        return YEW_CMD_OK;
+    if (!yew_menu_focused(menu)) {
+        if (!yew_menu_focus(menu))
+            return YEW_CMD_OK;
+    } else if (previous && menu->sel == 0) {
+        yew_menu_unselect(menu);
+    } else {
+        (void)yew_menu_move(menu, previous ? -1 : 1, false);
+    }
+    ed->full_damage = true;
+    ed->footer_dirty = true;
+    return YEW_CMD_OK;
+}
+
 static CmdStatus complete(Ed *ed, bool previous)
 {
     CmdLine *line = &ed->cmdline;
@@ -1036,7 +1075,9 @@ static CmdStatus complete(Ed *ed, bool previous)
         yew_xfree(text);
         return YEW_CMD_OK;
     }
-    if (items.len == 1U) {
+    /* §1's predicate, not a second spelling of it: one survivor of the
+     * ranked set is the same question here and at Enter. */
+    if (yew_comp_sole(&items, YEW_COMP_KIND__N) != NULL) {
         bool ok = insert_completion(ed, query.replace, &items.data[0], true);
 
         Vec_CompItem_free(&items);
@@ -1131,6 +1172,55 @@ static CmdStatus menu_page(Ed *ed, bool previous)
         return YEW_CMD_ERR_IO;
     ed->full_damage = true;
     return YEW_CMD_OK;
+}
+
+CmdStatus yew_cmdline_cmd_menu_next(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    return menu_preview(cx->ed, false);
+}
+
+CmdStatus yew_cmdline_cmd_menu_prev(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    return menu_preview(cx->ed, true);
+}
+
+/*
+ * Sprint 57.17 §2: `<up>` and `<down>` choose between the pager and the
+ * history.
+ *
+ * ONE rule, stated once.  `<up>` asks the pager for the arrows whenever
+ * a list is open and non-empty; `<down>` moves in the pager only while
+ * the pager already HAS them.  Focus comes back on Escape, or on `<up>`
+ * off the first row -- so history stays reachable with a list on
+ * screen: one `<up>` takes the list, one more hands it back, the next
+ * is history.
+ *
+ * Sprint 18.5 §6 gave Up to history outright because a live menu is
+ * open the whole time a command name is being typed and the arrow would
+ * otherwise never reach history.  That argument survives here: an EMPTY
+ * prompt -- reaching for history blind, which is the case it named --
+ * has no menu at all, because an empty token completes nothing.
+ */
+CmdStatus yew_cmdline_cmd_up(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    if (cx->ed->cmdline.menu.items.len != 0U)
+        return menu_preview(cx->ed, true);
+    return history_move(cx, true);
+}
+
+CmdStatus yew_cmdline_cmd_down(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    if (yew_menu_focused(&cx->ed->cmdline.menu))
+        return menu_preview(cx->ed, false);
+    return history_move(cx, false);
 }
 
 CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx)
@@ -1452,6 +1542,76 @@ static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
     set_error(ed, &error);
 }
 
+/*
+ * Sprint 57.17 §1: resolve a command name through the FILTER when the
+ * parser could not resolve it.
+ *
+ * `resolve_name` resolves by unique PREFIX.  When that fails the menu
+ * may still be showing exactly one command -- `fwq` is a prefix of
+ * nothing but a unique fuzzy match for `file.write_quit` -- and the
+ * user can see the answer without being able to take it.  Ranking the
+ * command source against the same stem the live menu ranked, and
+ * accepting only a SOLE survivor (yew_comp_sole, the one definition of
+ * that predicate), is the answer they can see.
+ *
+ * The question is asked of TOKEN 0 wherever the caret happens to be:
+ * `:fwq somefile` leaves the caret on an argument, and the arguments
+ * are exactly what §1 requires to survive.  `CmdParsePoint.name` is the
+ * name token from the same loose scan, so there is no second lexical
+ * rule here to drift from the parser's.
+ *
+ * Returns a heap command line with the name token replaced and every
+ * other byte -- range, bang, arguments -- preserved, or NULL when the
+ * filter did not leave exactly one command.  It reads NOTHING of
+ * `line->menu`: the caller runs it before invoking anything, and the
+ * command it goes on to run may replace the whole prompt.
+ */
+static char *cmdline_fuzzy_line(Ed *ed, const char *text, size_t len)
+{
+    Arena scratch;
+    CmdParsePoint point;
+    Vec_CompItem items = {0};
+    const CompItem *sole;
+    char *out = NULL;
+
+    arena_init(&scratch);
+    if (yew_cmd_parse_point(ed, text, len, len, &scratch, &point) &&
+        !point.command_known && point.name != NULL &&
+        point.name[0] != '\0' &&
+        (size_t)point.name_tok.hi <= len &&
+        point.name_tok.hi > point.name_tok.lo) {
+        CompReq req;
+
+        (void)memset(&req, 0, sizeof(req));
+        req.kind = YEW_COMP_CMD;
+        req.stem = point.name;
+        req.ed = ed;
+        req.arena = &scratch;
+        /* Enter is an explicit question, like Tab: the user is waiting
+         * for the answer, so there is no budget to respect. */
+        req.budget_us = 0;
+        req.allow_cache = false;
+        (void)yew_comp_request(&req, &items);
+        sole = yew_comp_sole(&items, YEW_COMP_CMD);
+        if (sole != NULL && sole->text != NULL) {
+            Bytebuf rewritten;
+
+            bytebuf_init(&rewritten);
+            bytebuf_append(&rewritten, text, (size_t)point.name_tok.lo);
+            bytebuf_append(&rewritten, sole->text, strlen(sole->text));
+            bytebuf_append(&rewritten, text + point.name_tok.hi,
+                           len - (size_t)point.name_tok.hi);
+            bytebuf_push_u8(&rewritten, 0U);
+            out = yew_xmalloc(rewritten.len);
+            (void)memcpy(out, rewritten.data, rewritten.len);
+            bytebuf_free(&rewritten);
+        }
+    }
+    Vec_CompItem_free(&items);
+    arena_free_all(&scratch);
+    return out;
+}
+
 CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
 {
     Ed *ed;
@@ -1522,12 +1682,38 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
         return YEW_CMD_OK;
     }
     arena_init(&arena);
-    if (!yew_cmd_parse(ed, text, (size_t)yew_textbuf_len(line->buf),
-                       &arena, &parsed)) {
-        set_error(ed, &parsed.err);
+    if (!yew_cmd_parse(ed, text, strlen(text), &arena, &parsed)) {
+        /*
+         * §1: ordinary resolution failed, so ask the filter.  The
+         * user's OWN error is kept aside -- when the fallback declines,
+         * or when the row it found does not parse either, the caret has
+         * to point at the line they typed and not at a rewrite they
+         * never saw.
+         */
+        CmdErr typed_err = parsed.err;
+        char *fuzzy = cmdline_fuzzy_line(ed, text, strlen(text));
+        bool resolved = false;
+
         arena_free_all(&arena);
-        yew_xfree(text);
-        return YEW_CMD_ERR_ARG;
+        arena_init(&arena);
+        if (fuzzy != NULL) {
+            resolved = yew_cmd_parse(ed, fuzzy, strlen(fuzzy), &arena,
+                                     &parsed);
+            if (resolved) {
+                /* The RESOLVED line is the one that runs, so it is also
+                 * the one that enters history and the `:` register. */
+                yew_xfree(text);
+                text = fuzzy;
+            } else {
+                yew_xfree(fuzzy);
+            }
+        }
+        if (!resolved) {
+            set_error(ed, &typed_err);
+            arena_free_all(&arena);
+            yew_xfree(text);
+            return YEW_CMD_ERR_ARG;
+        }
     }
     invoke = (YewCmdInvoke){parsed.range, parsed.argv, 0, parsed.bang,
                             ed->win};

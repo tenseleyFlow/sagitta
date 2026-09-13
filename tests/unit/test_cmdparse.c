@@ -340,3 +340,156 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
                  ":file.open requires 1 argument");
     parse_fixture_free(&f);
 }
+
+/*
+ * Sprint 57.18 §1 / DoD 3: the EXECUTING parser is byte-identical.
+ *
+ * The pinned property, asserted rather than assumed.  Every `:!` form
+ * this table names still produces one verbatim argument spanning the
+ * whole body -- pipes, quotes, redirection, `%` and the second bang of
+ * `:!!` included -- and the argument span still runs to the end of the
+ * line.  The point parser learned to split that same text in this
+ * sprint; if that split ever leaks into yew_cmd_parse, this fails.
+ */
+void test_cmdparse_bang_execution_is_unchanged(void)
+{
+    static const struct {
+        const char *line;
+        const char *command;
+        const char *arg;
+        u32 arg_lo;
+    } rows[] = {
+        {":!ls", "ed.shell.run", "ls", 2U},
+        {":!  ls -l", "ed.shell.run", "ls -l", 4U},
+        {":!ls | grep x > out", "ed.shell.run", "ls | grep x > out", 2U},
+        {":!echo \"a b\"", "ed.shell.run", "echo \"a b\"", 2U},
+        {":!echo 'a b'", "ed.shell.run", "echo 'a b'", 2U},
+        {":!echo a\\ b", "ed.shell.run", "echo a\\ b", 2U},
+        {":!echo %", "ed.shell.run", "echo %", 2U},
+        {":!!top", "ed.shell.run", "!top", 2U},
+        {":!!", "ed.shell.run", "!", 2U},
+        {":%!sort", "ed.shell.run", "sort", 3U},
+        {":1,2!fmt -w 40", "ed.shell.run", "fmt -w 40", 5U},
+        {":r !date", "ed.shell.read", "date", 4U},
+        {":r !!date", "ed.shell.read", "!date", 4U}
+    };
+    ParseFixture f;
+    size_t i;
+
+    parse_fixture_init(&f);
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
+        CmdParse parsed;
+        size_t len = strlen(rows[i].line);
+
+        YEW_ASSERT(yew_cmd_parse(&f.ed, rows[i].line, len, &f.arena,
+                                 &parsed));
+        YEW_ASSERT_EQ_STR(parsed.argv.v[0], rows[i].command);
+        YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+        YEW_ASSERT_EQ_STR(parsed.argv.v[1], rows[i].arg);
+        YEW_ASSERT_EQ_U64(parsed.arg_tok[1].lo, rows[i].arg_lo);
+        YEW_ASSERT_EQ_U64(parsed.arg_tok[1].hi, len);
+    }
+    /* And the refusals are still refusals, at the same spans. */
+    assert_error(&f, ":!", "ed.shell.run needs a command");
+    assert_error(&f, ":r !", "ed.shell.read needs a command");
+    parse_fixture_free(&f);
+}
+
+/*
+ * Sprint 57.18 §1: the POINT parser locates the caret's word inside a
+ * bang body, which is what `yew_comp_query_at` needs and never had.
+ *
+ * `token_index` counts SHELL words here: 0 is the command the shell
+ * will run and 1+ are its operands, which is the whole reason
+ * `bang_body` is reported alongside it.
+ */
+void test_cmdparse_bang_point_splits_the_shell_body(void)
+{
+    static const struct {
+        const char *line;
+        size_t cursor;
+        u32 index;
+        const char *stem;
+        u32 lo;
+        u32 hi;
+    } rows[] = {
+        /* Word 0 is the command word, at the caret or at the body start. */
+        {":!", 2U, 0U, "", 2U, 2U},
+        {":!ch", 4U, 0U, "ch", 2U, 4U},
+        {":!  ch", 6U, 0U, "ch", 4U, 6U},
+        {":!ch", 3U, 0U, "c", 2U, 3U},
+        /* A range or the read spelling opens the same body. */
+        {":%!so", 5U, 0U, "so", 3U, 5U},
+        {":1,2!so", 7U, 0U, "so", 5U, 7U},
+        {":r !da", 6U, 0U, "da", 4U, 6U},
+        /* §4's `:!!` prefix is not part of the command word. */
+        {":!!to", 5U, 0U, "to", 3U, 5U},
+        /* Operands. */
+        {":!ls ", 5U, 1U, "", 5U, 5U},
+        {":!ls sr", 7U, 1U, "sr", 5U, 7U},
+        {":!ls a b", 8U, 2U, "b", 7U, 8U},
+        /* Quoting: the stem comes back without its quotes. */
+        {":!cat \"my fi", 12U, 1U, "my fi", 6U, 12U},
+        {":!cat 'my fi", 12U, 1U, "my fi", 6U, 12U},
+        {":!cat \"my file\" ne", 18U, 2U, "ne", 16U, 18U},
+        {":!cat my\\ fi", 12U, 1U, "my fi", 6U, 12U},
+        {":!cat \"a\\\"b", 11U, 1U, "a\"b", 6U, 11U},
+        /* SHELL rules, not Sprint 18's: `%` is a percent sign. */
+        {":!echo %", 8U, 1U, "%", 7U, 8U},
+        /* Deferred by name: `|` is an ordinary byte, so the word after
+         * it is an operand and completes as a path. */
+        {":!ls | gr", 9U, 2U, "gr", 7U, 9U},
+        /* A caret in the whitespace run before a word is a fresh word. */
+        {":!ls   x", 5U, 1U, "", 5U, 5U}
+    };
+    ParseFixture f;
+    CmdParsePoint point;
+    size_t i;
+
+    parse_fixture_init(&f);
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
+        size_t len = strlen(rows[i].line);
+
+        YEW_ASSERT(yew_cmd_parse_point(&f.ed, rows[i].line, len,
+                                       rows[i].cursor, &f.arena, &point));
+        YEW_ASSERT(point.bang_body);
+        YEW_ASSERT_EQ_U64(point.token_index, rows[i].index);
+        YEW_ASSERT_EQ_STR(point.stem, rows[i].stem);
+        YEW_ASSERT_EQ_U64(point.token.lo, rows[i].lo);
+        YEW_ASSERT_EQ_U64(point.token.hi, rows[i].hi);
+    }
+    parse_fixture_free(&f);
+}
+
+/*
+ * The other half of §1: what is NOT a bang body.
+ *
+ * `:w! file` is Sprint 18's bang FLAG glued to a command name, and
+ * reading it as a shell body would break every `:x!` in the editor.  A
+ * caret on or before the bang is still the command name.
+ */
+void test_cmdparse_bang_body_does_not_swallow_the_bang_flag(void)
+{
+    ParseFixture f;
+    CmdParsePoint point;
+
+    parse_fixture_init(&f);
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":w! fil", 7U, 7U, &f.arena,
+                                   &point));
+    YEW_ASSERT(!point.bang_body);
+    YEW_ASSERT_EQ_U64(point.token_index, 1U);
+    YEW_ASSERT_EQ_STR(point.stem, "fil");
+    /* A caret before the bang completes commands, not executables. */
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":!ls", 4U, 1U, &f.arena,
+                                   &point));
+    YEW_ASSERT(!point.bang_body);
+    YEW_ASSERT_EQ_U64(point.token_index, 0U);
+    YEW_ASSERT_EQ_STR(point.stem, "");
+    /* And an ordinary command's arguments are untouched. */
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":ui.open val", 12U, 12U,
+                                   &f.arena, &point));
+    YEW_ASSERT(!point.bang_body);
+    YEW_ASSERT_EQ_U64(point.token_index, 1U);
+    YEW_ASSERT_EQ_STR(point.stem, "val");
+    parse_fixture_free(&f);
+}

@@ -78,10 +78,44 @@ typedef struct Tabs {
      * have different lengths, so one shared offset would scroll a row
      * the user was not looking at. */
     int member_scroll;
+    /*
+     * Sprint 57.15: WHOSE OFFSET IS THIS?
+     *
+     * False — the strip FOLLOWS the active entry, minimally, which is
+     * what it must do on every switch, close, open and group
+     * enter/leave.  True — the USER chose this offset (a chevron, a
+     * wheel notch, a hover reveal) and the layout must not walk it
+     * back, even when the active entry is off-screen.  An off-screen
+     * active tab is a legitimate view; a strip that snaps back the
+     * instant it is scrolled is the bug this flag exists to kill.
+     *
+     * ONE PER ROW, because s24 made the two offsets independent: a
+     * shared flag would resume following on a row the user never
+     * touched, and row 2's member list is a different length anyway.
+     *
+     * Cleared by yew_tabs_follow_active, which yew_tab_switch calls —
+     * the funnel every active-entry change goes through.
+     */
+    bool scroll_user;
+    bool member_scroll_user;
 } Tabs;
 
 void yew_tabs_init(Tabs *t);
 void yew_tabs_free(Ed *ed);
+
+/*
+ * Sprint 57.15 §1: the offset on this row is now the USER'S — the
+ * layout stops following the active entry until something changes it.
+ * Every explicit scroll goes through here so there is one place the
+ * claim is made rather than one per gesture.
+ */
+void yew_tabs_scroll_owned(Tabs *t, bool row2);
+/* ...and back to following, BOTH rows.  An event that moved the active
+ * entry moved it on whichever row shows it, and the other row's list
+ * changed shape under the same event. */
+void yew_tabs_follow_active(Tabs *t);
+/* What the layout is told: −1 for a user-owned row. */
+bool yew_tabs_scroll_is_owned(const Tabs *t, bool row2);
 
 /* Returns the index, or -1 when refused.  The return value is NOT
  * decoration: a silent cap failure in facsimile made callers load the
@@ -169,12 +203,53 @@ int yew_tab_row1_active(const Ed *ed, const StripEntry *entries, int n);
  */
 int yew_strip_slot_at(u16 x, u16 y);              /* -1 when off row 1 */
 bool yew_strip_pre_payload(int slot, i32 *payload);
+/*
+ * The half-open CELL RANGE the slot currently occupies, false when the
+ * slot is off screen — a scrolled strip records no cells for the
+ * entries it did not draw.
+ *
+ * A drag aims with the cells the entry it is CARRYING covers, not with
+ * the one cell the pointer is on: the float is drawn at the grip the
+ * press established, so the two are a whole grab-offset apart and a
+ * target read from the pointer leaves the neighbours standing still
+ * under a tab that is visibly on top of them.
+ */
+bool yew_strip_slot_cells(int slot, u16 *col0, u16 *col1);
 /* Slots the last row-1 render produced. */
 int yew_strip_slot_count(void);
 /* The cell just past the last rendered entry — where "the blank tail"
  * begins.  The drop target that carries a tab out of a sole group has
  * nothing else to aim at. */
 u16 yew_strip_tail_x(void);
+
+/*
+ * Sprint 57.14 field repair: ROW 2'S SLOT TABLE.
+ *
+ * The same law as row 1's — placement is established once, while
+ * drawing, and the drag aims with it rather than re-deriving it — for
+ * the row that was previously targetable but not previewable.
+ *
+ * A "member slot" is a POSITION IN THE ROW AS DRAWN, the gap the
+ * carried tab holds open included, because that gap is a position like
+ * any other: it is where the release lands.  So the count is one more
+ * than the group's membership while an outsider is being carried over
+ * it, and equal to it while a member is merely being reordered.
+ *
+ * Cells only.  Row 2 never needs to un-permute a payload the way the
+ * dwell does on row 1, and a pre-drag field nothing reads is a field
+ * that can rot.
+ */
+int yew_strip_member_slot_count(void);
+bool yew_strip_member_slot_cells(int slot, u16 *col0, u16 *col1);
+/* Where row 2's blank tail begins — "put it last", aimable. */
+u16 yew_strip_member_tail_x(void);
+
+/*
+ * Sprint 57.14 §2: the cells the last render's FLOAT covered; w == 0
+ * when no drag is in flight.  The float is drawn and never registered —
+ * this is how a test asks where it was without the registry knowing.
+ */
+Rect yew_strip_float_rect(void);
 
 /* Rows the strip needs; layout reserves them like the footer row. */
 u32 yew_tab_strip_rows(const Ed *ed);

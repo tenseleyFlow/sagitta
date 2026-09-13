@@ -43,6 +43,25 @@ typedef struct StripSpan {
  * MINIMALLY to keep `active` visible — scrolling further than needed
  * makes the strip jump under the user for no reason.
  *
+ * SPRINT 57.15: `active < 0` MEANS "DO NOT FOLLOW".
+ *
+ * The follow is correct when the active entry CHANGES and wrong as a
+ * permanent clamp: `*scroll` is written back, so an offset the user
+ * chose — a chevron click, a wheel notch, a hover reveal — was
+ * overwritten on the very next render and the strip snapped back.  That
+ * is the whole of the "the chevron does nothing" bug, and it only
+ * looked like it worked when the active entry happened to sit next to
+ * the chevron.
+ *
+ * The fix is at the CALLER, not here: ui/tabs.c passes −1 for `active`
+ * once the row's offset is user-owned.  Two answers were available —
+ * this, or a third parameter — and this is the one that leaves ONE
+ * placement engine with ONE rule, because "keep the entry I named
+ * visible" and "I named no entry" are already the same sentence.  A
+ * caller that stops following still knows which entry is active and
+ * still draws it as such; only the layout is told to leave the offset
+ * alone.  Do NOT add a second clamp at a call site to compensate.
+ *
  * `more_left` / `more_right` report whether entries fall outside, so
  * the renderer can draw the `<` and `>N` indicators.
  */

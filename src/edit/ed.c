@@ -498,6 +498,7 @@ void yew_buf_defer(Ed *ed, Buffer *b)
      */
     yew_undo_free(b->undo);
     b->undo = NULL;
+    yew_pairs_clear(b);
     yew_marks_free(b->marks);
     b->marks = NULL;
     yew_syn_detach(&b->syn);
@@ -751,6 +752,15 @@ void yew_ed_init(Ed *ed)
     yew_git_editor_state_init(ed);
     yew_fuss_state_init(ed);
     yew_mouse_init(&ed->mouse);
+    /*
+     * Sprint 57.15 §2: the strip's claim on mode 1003 is a product of
+     * the last strip DRAW, and a fresh editor has not drawn one.  Reset
+     * here rather than in yew_mouse_init, which every RELEASE routes
+     * through (gesture_reset): clearing there dropped motion reporting
+     * while a chevron was still on screen, and nothing dirty would have
+     * redrawn it to notice.
+     */
+    yew_mouse_note_chevrons(false);
     yew_shadow_test_install();
     yew_block_provider_syntax_install(true);
     root = yew_xrealpath(".");

@@ -2677,6 +2677,209 @@ static void case_s18_5_cmdline_menu_scrolled(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.17 §1: a fuzzy stem that leaves exactly ONE row executes.
+ *
+ * `nmbc` is a prefix of nothing, so Sprint 18's resolve_name refuses it,
+ * and it is a unique fuzzy match for view.number_cycle.  The numbered
+ * gutter in this snapshot is the proof that Enter ran the row the user
+ * could already see -- before this sprint the same keys produced
+ * `unknown command 'nmbc' (try Tab)`.
+ */
+static void case_s57_17_fuzzy_one_executes(PtyCtx *c)
+{
+    static const u8 initial[] = "fuzzy execute fixture\nsecond line\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "nmbc");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s57_17_fuzzy_one_executes");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * Sprint 57.17 §2: `<up>` enters the pager rather than walking history,
+ * and the PROMPT DOES NOT MOVE -- the line still reads `:fil` with the
+ * first row highlighted.  Tab in the same place writes the row into the
+ * line, which is the whole difference this golden exists to hold.
+ */
+static void case_s57_17_pager_arrow_up(PtyCtx *c)
+{
+    static const u8 initial[] = "pager fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "fil");
+    s18_settle_after_keys(c, "up");
+    ptc_snapshot(c, "s57_17_pager_arrow_up");
+    s18_finish(c, path);
+}
+
+/*
+ * Sprint 57.17 §3: the honest tail.
+ *
+ * Four candidates and `… and N more` rather than five rows that hide the
+ * rest in silence.  Arrowing down onto what would be the tail scrolls by
+ * one and KEEPS it, so this snapshot has a non-zero `top` and a tail at
+ * once -- and no footer, because menu.h's rule gives the last row
+ * exactly one count.
+ */
+static void case_s57_17_pager_tail_row(PtyCtx *c)
+{
+    static const u8 initial[] = "tail fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "fil");
+    s18_settle_after_keys(c, "up");
+    s18_settle_after_keys(c, "down down down down");
+    ptc_snapshot(c, "s57_17_pager_tail_row");
+    s18_finish(c, path);
+}
+
+/*
+ * Sprint 57.18: completion inside `:!`.
+ *
+ * The fixtures live in the case's own isolated workspace and $PATH is a
+ * RELATIVE directory inside it, so both the rows and the detail column
+ * are fixed strings: an absolute $PATH would put the runner's temporary
+ * state directory on screen and no two runs would agree (invariant 5).
+ */
+static bool s57_18_make(PtyCtx *c, const char *bin, const char *const *names,
+                        size_t nnames, const char *const *files,
+                        size_t nfiles)
+{
+    char path[PATH_MAX];
+    size_t i;
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.18 case needs an isolated workspace");
+        return false;
+    }
+    if (bin != NULL) {
+        if (snprintf(path, sizeof(path), "%s/%s", c->workspace_dir, bin) >=
+            (int)sizeof(path)) {
+            ptc_check(c, false, "Sprint 57.18 bin path overflow");
+            return false;
+        }
+        if (mkdir(path, 0700) != 0) {
+            ptc_check(c, false, "creating Sprint 57.18 bin directory");
+            return false;
+        }
+        for (i = 0U; i < nnames; i++) {
+            if (snprintf(path, sizeof(path), "%s/%s/%s", c->workspace_dir,
+                         bin, names[i]) >= (int)sizeof(path)) {
+                ptc_check(c, false, "Sprint 57.18 bin path overflow");
+                return false;
+            }
+            if (!write_bytes(path, (const u8 *)"#!/bin/sh\nexit 0\n", 17U) ||
+                chmod(path, 0700) != 0) {
+                ptc_check(c, false, "creating Sprint 57.18 executable");
+                return false;
+            }
+        }
+        c->exec_path = bin;
+    }
+    for (i = 0U; i < nfiles; i++) {
+        if (snprintf(path, sizeof(path), "%s/%s", c->workspace_dir,
+                     files[i]) >= (int)sizeof(path)) {
+            ptc_check(c, false, "Sprint 57.18 file path overflow");
+            return false;
+        }
+        if (!write_bytes(path, (const u8 *)"body\n", 5U)) {
+            ptc_check(c, false, "creating Sprint 57.18 fixture file");
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * §1+§2+§3 together: Tab's territory reaches inside `:!` at last.
+ *
+ * `loose_name` used to stop at the bang, so `yew_comp_query_at` refused
+ * every token in a bang body and this prompt showed nothing at all.  The
+ * rows here are executables on $PATH, ranked and drawn by 57.17's pager
+ * — no second widget — with the $PATH element that would win in the
+ * detail column.
+ */
+static void case_s57_18_bang_completes_exec(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha", "chk-beta",
+                                       "chk-gamma"};
+    static const u8 initial[] = "bang completion fixture\n";
+    char path[256];
+
+    if (!s57_18_make(c, "s5718bin", bins, YEW_ARRAY_LEN(bins), NULL, 0U))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!chk");
+    ptc_snapshot(c, "s57_18_bang_completes_exec");
+    s18_finish(c, path);
+}
+
+/*
+ * §3's second half: word 0 of a bang body completes executables, and
+ * everything after it completes PATHS.  Same prompt, same pager, one
+ * space apart.
+ */
+static void case_s57_18_bang_completes_path(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha"};
+    static const char *const files[] = {"s5718-one.txt", "s5718-two.txt"};
+    static const u8 initial[] = "bang path fixture\n";
+    char path[256];
+
+    if (!s57_18_make(c, "s5718bin", bins, YEW_ARRAY_LEN(bins), files,
+                     YEW_ARRAY_LEN(files)))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!chk-alpha s5718-");
+    ptc_snapshot(c, "s57_18_bang_completes_path");
+    s18_finish(c, path);
+}
+
+/*
+ * DoD 2: a completion inserted into a bang body is re-quoted.
+ *
+ * The stem is read WITHOUT quotes and written back WITH them, so what
+ * lands in the prompt is one shell word — which is the only reason a
+ * path with a space in it is completable inside `:!` at all.
+ */
+static void case_s57_18_bang_quotes_a_spacey_path(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha"};
+    static const char *const files[] = {"wordy spacey.txt"};
+    static const u8 initial[] = "bang quoting fixture\n";
+    char path[256];
+
+    if (!s57_18_make(c, "s5718bin", bins, YEW_ARRAY_LEN(bins), files,
+                     YEW_ARRAY_LEN(files)))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    /* `wordy` shares no prefix with the $PATH directory this case also
+     * creates, so the filter is left with exactly one row and Tab takes
+     * it outright -- which is the insertion whose quoting is the point. */
+    s18_settle_after_bytes(c, "!chk-alpha wordy");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_18_bang_quotes_a_spacey_path");
+    s18_finish(c, path);
+}
+
 /* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
  * from the same tolerant parse the menu filtered with. */
 static void case_s18_5_cmdline_hint(PtyCtx *c)
@@ -2828,6 +3031,87 @@ static void case_s57_12_shift_arrow_highlight(PtyCtx *c)
         return;
     s17_settle_after_keys(c, "shift+right shift+right");
     ptc_snapshot(c, "s57_12_shift_arrow_highlight");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * Sprint 57.16.  The fixture is a .txt file, so no language binds and the
+ * pairing syntax query fails open — exactly the state a scratch buffer is
+ * in, and the one these goldens pin.
+ */
+static void case_s57_16_autoindent_block(PtyCtx *c)
+{
+    static const u8 initial[] = "\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    /*
+     * Typed as a person types it: `(` brings its closer, `)` skips over
+     * that closer instead of doubling it, `{` brings its own, and Enter
+     * between the braces opens the three-line block with the caret on the
+     * indented middle line.
+     */
+    ptc_bytes(c, "int main(void) {");
+    ptc_settle(c, 0);
+    s17_settle_after_keys(c, "enter");
+    ptc_bytes(c, "return 0;");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, "s57_16_autoindent_block");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_16_pair_typeover(PtyCtx *c)
+{
+    static const u8 initial[] = "\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    /* The opener brings its closer; the typed closer skips over it rather
+     * than doubling it, and the caret ends past a single pair. */
+    ptc_bytes(c, "f(ab)");
+    ptc_settle(c, 0);
+    ptc_bytes(c, ";");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, "s57_16_pair_typeover");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_16_tab_navigates_indent(PtyCtx *c)
+{
+    static const u8 initial[] = "        alpha\nbeta\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* Caret at column 1 inside the indent: Tab moves to the text and
+     * changes no bytes, so the status column is the whole evidence. */
+    s17_settle_after_keys(c, "i");
+    s17_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_16_tab_navigates_indent");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_16_tab_indents_the_line(PtyCtx *c)
+{
+    static const u8 initial[] = "        alpha\nbeta\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* The first Tab navigates to the first non-blank byte; from there the
+     * second indents the LINE and the caret keeps its place in the text. */
+    s17_settle_after_keys(c, "i");
+    s17_settle_after_keys(c, "tab");
+    s17_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_16_tab_indents_the_line");
     force_quit(c);
     (void)unlink(path);
 }
@@ -4978,8 +5262,10 @@ static void case_s27_dwell_opens_member_strip(PtyCtx *c)
     s27_mouse(c, "\x1b[<0;3;1M");
     s27_mouse(c, "\x1b[<32;30;1M");
     /* The dwell is a CLOCK, so the case has to wait it out rather than
-     * send another event. */
-    ptc_settle(c, 500);
+     * send another event.  Comfortably PAST the 500 ms dwell, not on
+     * it: a golden recorded on the edge would be a wall-clock race, and
+     * the cue has to be finished before the frame is taken. */
+    ptc_settle(c, 900);
     ptc_snapshot(c, "s27_dwell_opens_member_strip");
     s27_mouse(c, "\x1b[<0;30;1m");
     force_quit(c);
@@ -8456,15 +8742,13 @@ static void case_s52_fuss(PtyCtx *c)
     }
     if (semantic_snapshot) {
         /*
-         * An invisible cursor has no semantic screen position.  Incremental
-         * repaints can leave it at the last changed cell, so two valid frame
-         * histories may otherwise disagree despite identical visible state.
-         * FUSS semantic goldens deliberately canonicalize that position.
+         * The cursor position is NOT canonicalized here.  Every cell-bearing
+         * frame ends with an absolute CUP to the grid cursor, so a completed
+         * frame always leaves the terminal cursor where the editor put it —
+         * 0,0 while FUSS owns the screen.  The position only ever disagreed
+         * when a snapshot was read mid-frame, which the harness no longer
+         * permits, and pinning it is what would catch that regression.
          */
-        if (!c->vt.cur_vis) {
-            c->vt.cur_r = 0;
-            c->vt.cur_c = 0;
-        }
         c->vt.sync_pairs_unstable = true;
         ptc_snapshot(c, name);
     } else {
@@ -9407,6 +9691,133 @@ static void case_s57_13_menu_sheds_rows(PtyCtx *c)
     (void)unlink(path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.15: the chevron scrolls, and hovering it reveals        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * SIX TABS in eighty columns: four fit, two do not, so row 1 carries a
+ * `>2` and the strip has somewhere to go.  `ctrl+1` then puts the
+ * ACTIVE tab back on entry 1, at the far end of the bar from the
+ * chevron — which is the arrangement the bug needed to be visible at
+ * all.
+ */
+static void s57_15_overflowing_strip(PtyCtx *c)
+{
+    int i;
+
+    s23_open_tabs(c, 5);
+    /*
+     * Back to entry 1 with `t p`, the audit table's own row for this
+     * (invariant 9) — and NOT with `ctrl+1`, whose digit-extension
+     * window is a 500 ms clock that would leave a footer message in the
+     * golden or not depending on how fast the case ran.
+     */
+    for (i = 0; i < 5; i++)
+        s18_settle_after_keys(c, "t p");
+}
+
+/*
+ * THE REPORTED BUG, end to end.
+ *
+ * One click on `>` with the active tab far away.  Before Sprint 57.15
+ * the layout's follow-the-active clamp wrote the offset back on the
+ * very next render, so the strip snapped home and the chevron looked
+ * inert; this golden is the strip STILL scrolled, with `<` on the left
+ * and the active tab off-screen, which is a legitimate view.
+ *
+ * The modes line is the second half of the case: `1003` is armed
+ * because a chevron is drawn, with no menu anywhere.
+ */
+static void case_s57_15_chevron_click_scrolls(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    /* The `>N` indicator ends at the last column, whatever N is. */
+    s27_mouse(c, "\x1b[<0;80;1M");
+    s27_mouse(c, "\x1b[<0;80;1m");
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * THE HOVER REVEAL.
+ *
+ * ONE motion report with no button held — SGR base 35, which only mode
+ * 1003 produces and which the strip now arms 1003 for — and then the
+ * CLOCK does the rest.  No further input is sent: if the reveal were
+ * driven by motion reports rather than by the timer heap, nothing at
+ * all would happen here.
+ *
+ * The end state is what makes the golden deterministic rather than a
+ * race against the settle.  Two entries are hidden, so the reveal takes
+ * exactly two steps and then STOPS — the `>` stops being drawn, the
+ * region disappears, and the pending tick finds nothing and cancels.
+ * However many windows the settle happens to span, the strip lands in
+ * the same place.
+ */
+static void case_s57_15_chevron_hover_reveals(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    ptc_bytes(c, "\x1b[<35;80;1M");
+    /* Two reveal steps at YEW_HOVER_SCROLL_MS each, then quiet.  The
+     * settle PUMPS rather than sleeps, and it returns once the strip
+     * has stopped repainting — which is the reveal reaching the end. */
+    ptc_settle(c, 900);
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * Sprints 57.14 and 57.15 in ONE frame, which neither could record on
+ * its own.
+ *
+ * The strip is scrolled by a chevron click, so the offset is the
+ * user's and the active tab is off-screen.  A drag is then started
+ * inside a visible entry and left mid-gesture, so the same row carries
+ * the `<` and `>N` chevrons, the GAP where the held entry was, and the
+ * FLOAT at the pointer — and the modes line still says 1003, because
+ * the float registers nothing and cannot take the chevron answer away.
+ *
+ * The half that would be a race is the one deliberately avoided: no
+ * group is under the pointer, so no dwell is in flight and no flash is
+ * being computed from the clock.  The pointer is parked mid-row rather
+ * than on a chevron, so the 120 ms drag autoscroll never arms either,
+ * and the frame is a pure function of the events sent.
+ */
+static void case_s57_14_15_float_over_a_scrolled_strip(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    /* The `>N` indicator ends at the last column, whatever N is. */
+    s27_mouse(c, "\x1b[<0;80;1M");
+    s27_mouse(c, "\x1b[<0;80;1m");
+    /* Press inside the first entry the scrolled strip shows, and carry
+     * it to a column that is an entry rather than a chevron. */
+    s27_mouse(c, "\x1b[<0;5;1M");
+    s27_mouse(c, "\x1b[<32;40;1M");
+    ptc_snapshot(c, c->test->name);
+    s27_mouse(c, "\x1b[<0;40;1m");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #if YEW_WITH_PLUGINS
 /* ---------------------------------------------------------------- */
 /* Sprint 54: plugin picker lifecycle                               */
@@ -10106,6 +10517,15 @@ const PtyCase yew_pty_cases[] = {
       case_s57_12_shift_arrow_highlight),
     C(s57_12_clipboard_cut_paste, modern, 24U, 80U,
       case_s57_12_clipboard_cut_paste),
+    C(s57_16_autoindent_block, modern, 24U, 80U,
+      case_s57_16_autoindent_block),
+    C(s57_16_pair_typeover, modern, 24U, 80U,
+      case_s57_16_pair_typeover),
+    C(s57_16_tab_navigates_indent, modern, 24U, 80U,
+      case_s57_16_tab_navigates_indent),
+    C(s57_16_tab_indents_the_line, modern, 24U, 80U,
+      case_s57_16_tab_indents_the_line),
+
     C(s57_12_job_output_quit_returns, modern, 24U, 80U,
       case_s57_12_job_output_quit_returns),
     C(s19_stream_output, modern, 24U, 80U, case_s19_stream_output),
@@ -10274,6 +10694,18 @@ const PtyCase yew_pty_cases[] = {
     C(s18_5_cmdline_menu_scrolled, modern, 24U, 80U,
       case_s18_5_cmdline_menu_scrolled),
     C(s18_5_cmdline_hint, modern, 24U, 80U, case_s18_5_cmdline_hint),
+    C(s57_17_fuzzy_one_executes, modern, 24U, 80U,
+      case_s57_17_fuzzy_one_executes),
+    C(s57_17_pager_arrow_up, modern, 24U, 80U,
+      case_s57_17_pager_arrow_up),
+    C(s57_17_pager_tail_row, modern, 24U, 80U,
+      case_s57_17_pager_tail_row),
+    C(s57_18_bang_completes_exec, modern, 24U, 80U,
+      case_s57_18_bang_completes_exec),
+    C(s57_18_bang_completes_path, modern, 24U, 80U,
+      case_s57_18_bang_completes_path),
+    C(s57_18_bang_quotes_a_spacey_path, modern, 24U, 80U,
+      case_s57_18_bang_quotes_a_spacey_path),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
@@ -10353,6 +10785,12 @@ const PtyCase yew_pty_cases[] = {
     C(s57_13_footer_menu, modern, 24U, 80U, case_s57_13_footer_menu),
     C(s57_13_menu_sheds_rows, modern, 10U, 80U,
       case_s57_13_menu_sheds_rows),
+    C(s57_15_chevron_click_scrolls, modern, 24U, 80U,
+      case_s57_15_chevron_click_scrolls),
+    C(s57_15_chevron_hover_reveals, modern, 24U, 80U,
+      case_s57_15_chevron_hover_reveals),
+    C(s57_14_15_float_over_a_scrolled_strip, modern, 24U, 80U,
+      case_s57_14_15_float_over_a_scrolled_strip),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
       case_s27_double_click_mode_chip),
     C(s32_repl_session, modern, 24U, 80U, case_s32_repl_session),

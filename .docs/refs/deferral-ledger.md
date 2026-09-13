@@ -60,12 +60,44 @@ canonical; simultaneous-process state merge remains post-1.0.
 | Workspace-wide LSP `workspace/symbol` | Current-document symbols and the local index ship; workspace-wide server querying does not. |
 | Simultaneous-process workspace-state merge | Each process saves through the existing atomic XDG state path; cross-process semantic merge is post-1.0. |
 | LSP snippet tab stops/placeholders | Snippets are safely downgraded to insertion-ready plain text. |
-| Interactive terminal emulator | Shell jobs, filters, and captured output ship; `ed.shell.term` explains the boundary. |
+| Interactive terminal emulator | Shell jobs, filters, and captured output ship; `ed.shell.term` explains the boundary. Sprint 57.18 amends what follows from that (below): commands that need a terminal are LENT yew's own through `:!!`, which is not emulation. |
 | AI prompt/conversation UI | Ghost-text completions ship; prompt UI reports that it is outside 1.0. |
 | Document context menu and tab-to-pane drag | Keyboard/pane/tab operations ship; these mouse extensions remain post-1.0. |
 | Interleaved syntax embeds | Properly nested embedded languages ship; `embed.interleave` is rejected. |
 | Unicode 17 data update | Unicode 16.0.0 remains pinned for deterministic 1.0 behavior. |
 | Per-hunk unstage and conflict-resolution UI | Whole-file unstage and editor/F-mode diff workflows ship. |
+
+## Amendment S57.18-A1 (2026-09-12) — lending a terminal is not emulating one
+
+Sprint 19 registered `ed.shell.term` only to refuse, and its comment said an
+interactive pty-backed buffer "is a different subsystem ... and 1.0 does not
+ship one". That stands, unchanged and permanently: yew does not interpret
+CR/backspace/ANSI on a child's behalf, does not propagate resizes into a
+pseudo-terminal it owns, and ships no terminal buffer.
+
+What Sprint 57.18 adds is the other half of the sentence, which Sprint 19
+never actually said: refusing to EMULATE a terminal was never a reason to
+refuse to LEND one. `:!!cmd` runs a single command with yew's OWN terminal,
+through `yew_job_run_sync` with `inherit_tty` inside
+`yew_tty_handover_begin` / `yew_tty_handover_end` — the handover Sprint 19
+built and Sprint 52's interactive rebase has used since. No new terminal
+state, no second restore path, no emulation.
+
+- Opt-in by SPELLING, never by guessing a command's name. A script called
+  `top` in someone's `~/bin` would be guessed wrong the first time it ran,
+  and the failure mode is an editor that appears to have locked up.
+- Output is not captured; the child owned the screen. On return yew reports
+  what exited and with what status, then repaints fully.
+- `:!` is unchanged: asynchronous, piped, streamed into a job buffer,
+  dismissed with `:q`. `yew_cmd_parse` is byte-identical — `:!!top` still
+  parses to `ed.shell.run` with the single verbatim argument `!top`, and
+  `ed.shell.run` is what reads the second bang.
+- `ed.shell.term` still refuses. Its wording now distinguishes the refusal
+  (no emulator) from the route (`:!!`), so the two cannot be read as
+  contradicting each other.
+- `--batch` has no terminal to hand over, so `ed.shell.term_run` is
+  `YEW_CMD_INTERACTIVE` and the batch refusal table names `ed.shell.run` as
+  the alternative. It is refused by name rather than degraded into `:!`.
 
 ## Permanent non-goals
 

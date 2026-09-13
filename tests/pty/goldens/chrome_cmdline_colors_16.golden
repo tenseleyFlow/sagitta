@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
   find                         find.file                                        
   fl.eval                      Evaluate Fletch in the persistent editor runtime 
   file.new                     Create an empty buffer, optionally naming its fil
-  file.next                    Walk to the next open file                   1/82
+  … and 78 more                                                                 
 :fl                                                                             
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
@@ -49,8 +49,8 @@ DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 FFGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 FFGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 FFGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-FFGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-HIIFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+IJJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 --- legend
 A fg=idx:7 bg=idx:0 attrs=b---------
 B fg=idx:8 bg=idx:0 attrs=----------
@@ -59,5 +59,6 @@ D fg=idx:1 bg=idx:7 attrs=b---------
 E fg=idx:1 bg=idx:7 attrs=b--u------
 F fg=idx:7 bg=idx:1 attrs=b---------
 G fg=idx:7 bg=idx:1 attrs=b--u------
-H fg=idx:0 bg=idx:3 attrs=b---------
-I fg=idx:7 bg=idx:1 attrs=----------
+H fg=idx:7 bg=idx:1 attrs=bd--------
+I fg=idx:0 bg=idx:3 attrs=b---------
+J fg=idx:7 bg=idx:1 attrs=----------

@@ -394,6 +394,34 @@ static i64 quiet_scale(void)
     return scale;
 }
 
+/*
+ * Whether the screen may be READ right now.
+ *
+ * Every cell-bearing frame the editor writes is bracketed in DECSET 2026
+ * (synchronized update) precisely so that no observer ever sees half of
+ * one: a real terminal keeps showing the previous image until the closing
+ * `2026l` arrives, then swaps the whole frame in at once.  The harness VT
+ * has no such buffer — it applies cells as the bytes land — so between the
+ * two halves `c->vt` holds a grid that is a PREFIX of the new frame
+ * stitched onto the tail of the old one, a state no user could observe.
+ *
+ * Sampling there is what made fuss_group_picker flaky: the tab strip of
+ * the confirmed group (written first, at the top of the frame) satisfied
+ * a wait while the rows of the dismissed dialog (overwritten later, at the
+ * bottom) were still on screen.  The case then snapshotted that torn grid,
+ * and the second execution, whose reads split elsewhere, snapshotted a
+ * different one.
+ *
+ * So every SEMANTIC observation — a wait predicate, a snapshot, the end of
+ * a settle — is taken at a frame boundary, which is the same instant a
+ * terminal would reveal it.  Nothing about what a case asserts changes;
+ * only the moment the assertion is allowed to look.
+ */
+static bool frame_complete(const PtyCtx *c)
+{
+    return c == NULL || !c->vt.in_sync;
+}
+
 static void pump_quiet(PtyCtx *c, i64 quiet_ms, bool need_ready)
 {
     i64 quiet_deadline;
@@ -426,7 +454,8 @@ static void pump_quiet(PtyCtx *c, i64 quiet_ms, bool need_ready)
                      (long long)effective_ms);
             break;
         }
-        if ((!need_ready || c->ready || c->eof) && now >= quiet_deadline)
+        if ((!need_ready || c->ready || c->eof) && now >= quiet_deadline &&
+            frame_complete(c))
             break;
         left = until - now;
         timeout = left <= 0 ? 0 : left > 250 ? 250 : (int)left;
@@ -521,7 +550,8 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *prof, const char *log,
                    const char *clipboard, const char *audit_lang,
                    const char *audit_tz, const char *audit_colorterm,
-                   const char *audit_term_program)
+                   const char *audit_term_program,
+                   const char *exec_path)
 {
     static const char *const keys[] = {
         "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
@@ -542,7 +572,10 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         /* Sprint 58 invariant 5: opt-in hostile environment values.  These
          * are absent in routine PTY runs so the hermetic default does not
          * inherit a developer's shell. */
-        "TZ", "COLORTERM", "TERM_PROGRAM"
+        "TZ", "COLORTERM", "TERM_PROGRAM",
+        /* Sprint 57.18 §2: absent unless a case asks for it, so no
+         * golden recorded before this sprint can move. */
+        "PATH"
     };
     const char *values[] = {
         term, colors, "1", "500", "25", state_dir, state_dir,
@@ -559,7 +592,8 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         /* Sprint 26: pins the undo picker's relative timestamps. */
         "1700000000",
         no_color, ascii, runtime_dir, state_dir, shadow_test, "1", state_dir,
-        prof, log, clipboard, audit_tz, audit_colorterm, audit_term_program
+        prof, log, clipboard, audit_tz, audit_colorterm, audit_term_program,
+        exec_path
     };
     size_t i;
     size_t out_i = 0U;
@@ -687,7 +721,8 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
                        getenv("YEW_PTY_AUDIT_LANG"),
                        getenv("YEW_PTY_AUDIT_TZ"),
                        getenv("YEW_PTY_AUDIT_COLORTERM"),
-                       getenv("YEW_PTY_AUDIT_TERM_PROGRAM"))) {
+                       getenv("YEW_PTY_AUDIT_TERM_PROGRAM"),
+                       c->exec_path)) {
         free(runtime_dir);
         strv_free(argv);
         ptc_fail(c, "allocating pinned environment");
@@ -900,7 +935,7 @@ void ptc_wait_until(PtyCtx *c, PtcWaitPredicate done, const void *arg,
         c->failed)
         return;
     deadline = case_deadline(c);
-    while (!done(c, arg) && !c->failed) {
+    while (!(frame_complete(c) && done(c, arg)) && !c->failed) {
         struct pollfd fd = {c->pty.master, POLLIN | POLLHUP, 0};
         i64 left = deadline - ptc_now_ms();
         int timeout = left <= 0 ? 0 : left > 250 ? 250 : (int)left;
@@ -924,7 +959,8 @@ void ptc_wait_until(PtyCtx *c, PtcWaitPredicate done, const void *arg,
         if (result > 0 &&
             (fd.revents & (POLLIN | POLLHUP | POLLERR)) != 0)
             (void)read_available(c, &activity);
-        if (c->eof && c->pty.reaped && !done(c, arg))
+        if (c->eof && c->pty.reaped &&
+            !(frame_complete(c) && done(c, arg)))
             ptc_fail(c, "%s (child exited)", failure);
     }
 }
@@ -1201,6 +1237,10 @@ void ptc_snapshot(PtyCtx *c, const char *golden_name)
         return;
     if (c->snapshot_taken) {
         ptc_fail(c, "case took more than one snapshot per execution");
+        return;
+    }
+    if (!frame_complete(c)) {
+        ptc_fail(c, "snapshot taken inside an unfinished synchronized frame");
         return;
     }
     validate_vt(c);

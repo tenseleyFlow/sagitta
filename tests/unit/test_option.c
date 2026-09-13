@@ -48,7 +48,8 @@ static u32 opt_register(Ed *ed, u32 origin, const char *name, OptVal value)
 void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
 {
     static const char *const names[] = {
-        "tabwidth", "expandtab", "wrap", "scrolloff", "number",
+        "tabwidth", "expandtab", "autoindent", "autopair", "wrap",
+        "scrolloff", "number",
         "statusline.column", "errorbells", "ambiguous_wide", "subword",
         "fortran_form", "chord_timeout_ms", "undo.break_on_newline", "undo.bytes_max",
         "undo.min_nodes", "undo.persist_bytes_max", "registers.ring_depth",

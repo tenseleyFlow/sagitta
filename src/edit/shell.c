@@ -645,6 +645,68 @@ not_handled:
     return YEW_SHELL_SELF_NOT_HANDLED;
 }
 
+/*
+ * Sprint 57.18 §4: `:!!cmd` -- run a command that wants a terminal.
+ *
+ * THE AMENDMENT, on the record.  `ed.shell.term` still refuses, and it
+ * still refuses the same thing: yew does not emulate a terminal, does
+ * not host a pty-backed buffer, and 1.0 does not ship one.  What this
+ * does instead is give the child yew's OWN terminal for the duration and
+ * take it back afterwards, which is the handover Sprint 19 already built
+ * and Sprint 52 already proved -- the interactive rebase has run through
+ * it since.  No new terminal state, no second restore path.
+ *
+ * Opt-in by spelling, never by guessing the command's name: a script
+ * called `top` in someone's ~/bin would be guessed wrong the first time
+ * it ran, and the failure mode is a locked-up editor.
+ *
+ * Invariant 6 lives in yew_job_run_sync's single `resume:` epilogue,
+ * which is reached from every exit: handover failure, pipe failure, fork
+ * failure, wait failure, exec failure, non-zero exit and signal death
+ * alike.  It calls yew_tty_handover_end, re-enables the input modes
+ * (1003, bracketed paste, the kitty stack), re-reads the window size --
+ * a SIGWINCH during the child changes it and yew never saw the event --
+ * and marks a full repaint.  Nothing here duplicates any of that.
+ */
+bool yew_shell_term_run(Ed *ed, const char *cmdline, YewJobWait *wait,
+                        char *err, size_t errsz)
+{
+    YewJobSpec spec = {0};
+
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    if (ed == NULL || cmdline == NULL || wait == NULL) {
+        (void)snprintf(err, errsz, "invalid interactive command");
+        return false;
+    }
+    (void)memset(wait, 0, sizeof(*wait));
+    while (*cmdline == ' ' || *cmdline == '\t')
+        cmdline++;
+    if (*cmdline == '\0') {
+        (void)snprintf(err, errsz, ":!! needs a command");
+        return false;
+    }
+    /*
+     * Headless has no terminal to hand over, and a child that reads
+     * stdin there would block a batch script forever.  Refused by name
+     * rather than degraded into `:!`, which would be a different command
+     * than the one the script asked for (invariant 3).
+     */
+    if (ed->headless) {
+        (void)snprintf(err, errsz,
+                       ":!! requires a terminal and is not available "
+                       "under --batch; use ed.shell.run");
+        return false;
+    }
+    spec.cmdline = cmdline;
+    spec.cwd = yew_ws_root(ed);
+    /* DISCARD is not a choice: yew_job_run_sync refuses a sink, because
+     * the child writes straight to the terminal it was handed. */
+    spec.sink = YEW_SINK_DISCARD;
+    spec.inherit_tty = true;
+    return yew_job_run_sync(ed, &spec, wait, err, errsz);
+}
+
 u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
                   size_t errsz)
 {

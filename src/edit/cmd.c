@@ -636,14 +636,28 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.ghost.accept", yew_cmdline_cmd_ghost_accept,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Accept the inline suggestion, or move one grapheme right", NULL},
-    /* Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
-     * and the goldens already use; these are the same behaviours under
-     * the menu's own namespace, plus the two the old menu could not do. */
-    {"ed.cmdline.menu.next", yew_cmdline_cmd_complete_next, YEW_ARITY_NONE,
-     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL, "Select the next menu row", NULL},
-    {"ed.cmdline.menu.prev", yew_cmdline_cmd_complete_prev, YEW_ARITY_NONE,
+    /*
+     * Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
+     * and the goldens already use.
+     *
+     * Sprint 57.17 §2: these two are no longer aliases of them.  Tab
+     * and C-n INSERT the newly selected candidate on every move; these
+     * only MOVE, which is what makes the pager a preview you can read
+     * before committing to it.
+     */
+    {"ed.cmdline.menu.next", yew_cmdline_cmd_menu_next, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
-     "Select the previous menu row", NULL},
+     "Select the next menu row without inserting it", NULL},
+    {"ed.cmdline.menu.prev", yew_cmdline_cmd_menu_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Select the previous menu row without inserting it", NULL},
+    /* Sprint 57.17 §2: the arrows, which pick between the two. */
+    {"ed.cmdline.up", yew_cmdline_cmd_up, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Enter the completion pager, or walk history back", NULL},
+    {"ed.cmdline.down", yew_cmdline_cmd_down, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Move down the completion pager, or walk history forward", NULL},
     {"ed.cmdline.menu.page_next", yew_cmdline_cmd_menu_page_next,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Move one visible page down the menu", NULL},
@@ -913,7 +927,13 @@ static const CmdDesc builtins[] = {
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Pipe a region through a shell command and replace it", "filter"},
     {"ed.shell.term", yew_shell_cmd_term, YEW_ARITY_NONE, 0U,
-     "Interactive terminals are not a 1.0 feature", NULL},
+     "yew does not emulate a terminal; see :!!", NULL},
+    /* Sprint 57.18 §4.  INTERACTIVE because its whole content is "give
+     * this child the terminal", which --batch does not have; the batch
+     * refusal table names the alternative. */
+    {"ed.shell.term_run", yew_shell_cmd_term_run, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_INTERACTIVE,
+     "Run one command with the real terminal (:!!)", "shell_term"},
     {"ed.job.list", yew_job_cmd_list, YEW_ARITY_NONE, 0U,
      "Open the job table", NULL},
     {"ed.job.kill", yew_job_cmd_kill, YEW_ARITY_OPT_INT,
@@ -1242,6 +1262,9 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.job.list", "", YEW_RP_FORBID, "jobs"},
     {"ed.job.kill", "", YEW_RP_FORBID, NULL},
     {"ed.shell.term", "", YEW_RP_FORBID, "term"},
+    /* One arbitrary command line, like :!; the range is forbidden
+     * because a child that owns the screen has nothing to filter. */
+    {"ed.shell.term_run", "s", YEW_RP_FORBID, NULL},
     {"ed.plug.enable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.disable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.reload", "p", YEW_RP_FORBID, NULL},
@@ -1398,7 +1421,10 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.13 Deliverable 4: the four rows that had no command
          * — `Save As...`, the rename panel's two answers, and the group
          * picker's confirm. */
-        "save_as", "apply", "confirm"};
+        "save_as", "apply", "confirm",
+        /* Sprint 57.18 §4: `:!!` -- one command, the real terminal.
+         * Distinct from "term", which stays the refusal. */
+        "term_run"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

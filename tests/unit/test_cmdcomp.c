@@ -98,22 +98,36 @@ void test_cmdcomp_source_selection_and_score(void)
     Arena scratch;
     YewCompQuery query;
 
-    YEW_ASSERT(yew_comp_kind_for(NULL, 0U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(NULL, 0U, false, &kind));
     YEW_ASSERT_EQ_I64(kind, YEW_COMP_CMD);
-    YEW_ASSERT(yew_comp_kind_for(&entry, 1U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(&entry, 1U, false, &kind));
     YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
-    YEW_ASSERT(yew_comp_kind_for(&entry, 2U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(&entry, 2U, false, &kind));
     YEW_ASSERT_EQ_I64(kind, YEW_COMP_BUFFER);
-    YEW_ASSERT(yew_comp_kind_for(&entry, 3U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(&entry, 3U, false, &kind));
     YEW_ASSERT_EQ_I64(kind, YEW_COMP_OPTION);
-    YEW_ASSERT(yew_comp_kind_for(&entry, 4U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(&entry, 4U, false, &kind));
     YEW_ASSERT_EQ_I64(kind, YEW_COMP_VALUE);
-    YEW_ASSERT(!yew_comp_kind_for(&entry, 5U, &kind));
-    YEW_ASSERT(yew_comp_kind_for(&repeat, 1U, &kind));
+    YEW_ASSERT(!yew_comp_kind_for(&entry, 5U, false, &kind));
+    YEW_ASSERT(yew_comp_kind_for(&repeat, 1U, false, &kind));
     YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
-    YEW_ASSERT(yew_comp_kind_for(&repeat, 9U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(&repeat, 9U, false, &kind));
     YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
-    YEW_ASSERT(!yew_comp_kind_for(&free_string, 1U, &kind));
+    YEW_ASSERT(!yew_comp_kind_for(&free_string, 1U, false, &kind));
+    /*
+     * Sprint 57.18 §3: inside a bang body the argspec is bypassed
+     * entirely -- word 0 is what the shell runs, 1+ are its operands --
+     * and the same 's' argspec that completes NOTHING above still
+     * completes nothing when the caret is not in a bang body.
+     */
+    YEW_ASSERT(yew_comp_kind_for(NULL, 0U, true, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_EXEC);
+    YEW_ASSERT(yew_comp_kind_for(&free_string, 0U, true, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_EXEC);
+    YEW_ASSERT(yew_comp_kind_for(&free_string, 1U, true, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
+    YEW_ASSERT(yew_comp_kind_for(NULL, 7U, true, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
     /*
      * Sprint 18.5 §2 closed the yew_comp_score seam; ranking is now
      * yew_fz_score's.  The sentinel moved from -1 to YEW_FZ_NO_MATCH,
@@ -886,4 +900,369 @@ void test_cmdcomp_listing_overflow_midslice_keeps_its_key(void)
         fixture_unlink(&fixture, name, false);
     }
     fixture_dispose(&fixture);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sprint 57.18 §2: the $PATH executable source                        */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    char root[128];
+    char a[192];
+    char b[192];
+    char saved_path[4096];
+    bool had_path;
+    Ed ed;
+} ExecFixture;
+
+static void exec_mkexe(const char *dir, const char *name, mode_t mode)
+{
+    char path[512];
+    int fd;
+
+    (void)snprintf(path, sizeof(path), "%s/%s", dir, name);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT(write(fd, "#!/bin/sh\n", 10U) == 10);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    /* open()'s mode is masked by umask; the exec bit is the whole
+     * point of the fixture, so set it explicitly. */
+    YEW_ASSERT_EQ_I64(chmod(path, mode), 0);
+}
+
+static void exec_rm(const char *dir, const char *name)
+{
+    char path[512];
+
+    (void)snprintf(path, sizeof(path), "%s/%s", dir, name);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+}
+
+static void exec_set_path(const ExecFixture *f, const char *value)
+{
+    (void)f;
+    YEW_ASSERT_EQ_I64(setenv("PATH", value, 1), 0);
+    /* $PATH changed under a live cache: the source revalidates on its
+     * own, but the FILTER caches the ranked set by pattern and would
+     * otherwise answer from the old one. */
+    yew_comp_listing_invalidate();
+}
+
+static void exec_fixture_init(ExecFixture *f)
+{
+    const char *path = getenv("PATH");
+
+    (void)memset(f, 0, sizeof(*f));
+    f->had_path = path != NULL;
+    if (path != NULL)
+        (void)snprintf(f->saved_path, sizeof(f->saved_path), "%s", path);
+    (void)strcpy(f->root, "/tmp/yew-cmdexec-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
+    (void)snprintf(f->a, sizeof(f->a), "%s/a", f->root);
+    (void)snprintf(f->b, sizeof(f->b), "%s/b", f->root);
+    YEW_ASSERT_EQ_I64(mkdir(f->a, 0700), 0);
+    YEW_ASSERT_EQ_I64(mkdir(f->b, 0700), 0);
+    arena_init(&f->ed.arena);
+    f->ed.ws.dir = f->root;
+}
+
+static void exec_fixture_dispose(ExecFixture *f)
+{
+    yew_comp_listing_invalidate();
+    arena_free_all(&f->ed.arena);
+    YEW_ASSERT_EQ_I64(rmdir(f->a), 0);
+    YEW_ASSERT_EQ_I64(rmdir(f->b), 0);
+    YEW_ASSERT_EQ_I64(rmdir(f->root), 0);
+    if (f->had_path)
+        YEW_ASSERT_EQ_I64(setenv("PATH", f->saved_path, 1), 0);
+    else
+        YEW_ASSERT_EQ_I64(unsetenv("PATH"), 0);
+    yew_comp_listing_invalidate();
+}
+
+static YewCompQuery exec_query(const char *stem)
+{
+    YewCompQuery q;
+
+    (void)memset(&q, 0, sizeof(q));
+    q.kind = YEW_COMP_EXEC;
+    q.source = yew_comp_source(YEW_COMP_EXEC);
+    q.stem = stem;
+    return q;
+}
+
+/*
+ * §2's inventory rule: regular-or-symlink AND executable by this user,
+ * deduplicated by basename with the FIRST $PATH element winning --
+ * which is what the shell would actually run.
+ */
+void test_cmdcomp_exec_lists_only_runnable_names(void)
+{
+    ExecFixture f;
+    Vec_CompItem items = {0};
+    char both[512];
+    char sub[512];
+
+    exec_fixture_init(&f);
+    exec_mkexe(f.a, "chk-alpha", 0700);
+    exec_mkexe(f.a, "chk-dup", 0700);
+    exec_mkexe(f.a, "chk-plain", 0600);  /* not executable */
+    exec_mkexe(f.b, "chk-beta", 0700);
+    exec_mkexe(f.b, "chk-dup", 0700);
+    (void)snprintf(sub, sizeof(sub), "%s/chk-dir", f.a);
+    YEW_ASSERT_EQ_I64(mkdir(sub, 0700), 0);
+    (void)snprintf(both, sizeof(both), "%s:%s", f.a, f.b);
+    exec_set_path(&f, both);
+
+    /* Three DISTINCT names survive: chk-dup exists in both elements and
+     * is deduplicated before it is ever ranked. */
+    YEW_ASSERT_EQ_U64(yew_comp_enumerate(&f.ed, YEW_COMP_EXEC, "chk",
+                                         &items), 3U);
+    YEW_ASSERT_NOT_NULL(find_item(&items, "chk-alpha"));
+    YEW_ASSERT_NOT_NULL(find_item(&items, "chk-beta"));
+    YEW_ASSERT_NOT_NULL(find_item(&items, "chk-dup"));
+    /* A mode without the exec bit, and a directory that is X_OK only
+     * because it is searchable, are both refused. */
+    YEW_ASSERT_NULL(find_item(&items, "chk-plain"));
+    YEW_ASSERT_NULL(find_item(&items, "chk-dir"));
+    /* Deduplicated, and the row that survived names the element that
+     * won: the first one on $PATH. */
+    {
+        const CompItem *dup = find_item(&items, "chk-dup");
+        size_t seen = 0U;
+        size_t i;
+
+        for (i = 0U; i < items.len; i++) {
+            if (strcmp(items.data[i].text, "chk-dup") == 0)
+                seen++;
+        }
+        YEW_ASSERT_EQ_U64(seen, 1U);
+        YEW_ASSERT_NOT_NULL(dup);
+        YEW_ASSERT_NOT_NULL(dup->detail);
+        YEW_ASSERT_EQ_I64(strcmp(dup->detail, f.a), 0);
+        YEW_ASSERT_EQ_I64(dup->kind, YEW_COMP_EXEC);
+    }
+
+    Vec_CompItem_free(&items);
+    (void)rmdir(sub);
+    exec_rm(f.a, "chk-alpha");
+    exec_rm(f.a, "chk-dup");
+    exec_rm(f.a, "chk-plain");
+    exec_rm(f.b, "chk-beta");
+    exec_rm(f.b, "chk-dup");
+    exec_fixture_dispose(&f);
+}
+
+/*
+ * §2's cache rule, and the one the perf gate measures: the opendir
+ * COUNT stays at one per $PATH element however many keystrokes follow.
+ *
+ * A latency number cannot prove this -- a fast filesystem hides a
+ * rescan -- which is why the count is what is asserted.
+ */
+void test_cmdcomp_exec_opendir_count_stays_bounded(void)
+{
+    ExecFixture f;
+    CompFilter filter;
+    Arena arena;
+    Vec_CompItem items = {0};
+    YewCompQuery q;
+    char both[512];
+    char more[768];
+    u64 before;
+    u32 i;
+
+    exec_fixture_init(&f);
+    for (i = 0U; i < 40U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "chk%02u", (unsigned)i);
+        exec_mkexe(f.a, name, 0700);
+    }
+    exec_mkexe(f.b, "chkzz", 0700);
+    (void)snprintf(both, sizeof(both), "%s:%s", f.a, f.b);
+    exec_set_path(&f, both);
+    arena_init(&arena);
+    yew_comp_filter_init(&filter);
+
+    /* Type `chk0`, one key at a time, exactly as the live filter does. */
+    before = yew_comp_listing_opendirs();
+    q = exec_query("c");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &items);
+    YEW_ASSERT(items.len != 0U);
+    q = exec_query("ch");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &items);
+    q = exec_query("chk");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &items);
+    q = exec_query("chk0");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &items);
+    YEW_ASSERT(items.len != 0U);
+    /* Two elements, two opendirs, four keystrokes. */
+    YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 2U);
+
+    /*
+     * A changed $PATH rebuilds the answer but salvages the directories
+     * it already read: the element that is still on $PATH and unchanged
+     * on disk costs no opendir, and only the genuinely new one does.
+     */
+    (void)snprintf(more, sizeof(more), "%s:%s:%s", f.a, f.b, f.root);
+    YEW_ASSERT_EQ_I64(setenv("PATH", more, 1), 0);
+    yew_comp_filter_invalidate(&filter);
+    before = yew_comp_listing_opendirs();
+    q = exec_query("chk");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &items);
+    YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 1U);
+
+    Vec_CompItem_free(&items);
+    yew_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    for (i = 0U; i < 40U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "chk%02u", (unsigned)i);
+        exec_rm(f.a, name);
+    }
+    exec_rm(f.b, "chkzz");
+    exec_fixture_dispose(&f);
+}
+
+/*
+ * §2's slicing, shown the way the path source's is: a 1 us budget stops
+ * at the first clock check, the handle stays open, and the idle path
+ * drains it to exactly what an unbudgeted scan would have answered.
+ */
+void test_cmdcomp_exec_slices_and_resumes(void)
+{
+    ExecFixture f;
+    CompFilter filter;
+    Arena arena;
+    Vec_CompItem sliced = {0};
+    Vec_CompItem whole = {0};
+    YewCompQuery q;
+    char both[512];
+    u64 before;
+    u32 slices = 0U;
+    u32 i;
+
+    exec_fixture_init(&f);
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "chk%03u", (unsigned)i);
+        exec_mkexe(i < 300U ? f.a : f.b, name, 0700);
+    }
+    (void)snprintf(both, sizeof(both), "%s:%s", f.a, f.b);
+    exec_set_path(&f, both);
+    arena_init(&arena);
+    yew_comp_filter_init(&filter);
+
+    before = yew_comp_listing_opendirs();
+    q = exec_query("chk");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 1, &sliced);
+    YEW_ASSERT(yew_comp_listing_pending());
+    /* Partial is still useful, and the second element has not been
+     * opened yet -- the budget is spent across elements, not per one. */
+    YEW_ASSERT(sliced.len != 0U);
+    YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 1U);
+
+    while (yew_comp_listing_advance(1)) {
+        if (++slices >= 200U)
+            break;
+    }
+    YEW_ASSERT(slices < 200U);
+    YEW_ASSERT(slices != 0U);
+    YEW_ASSERT(!yew_comp_listing_pending());
+    /* One opendir per element for the whole scan, however many slices. */
+    YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 2U);
+
+    yew_comp_filter_invalidate(&filter);
+    q = exec_query("chk");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &sliced);
+    (void)yew_comp_enumerate(&f.ed, YEW_COMP_EXEC, "chk", &whole);
+    YEW_ASSERT(whole.len != 0U);
+    YEW_ASSERT_EQ_U64(sliced.len, whole.len);
+    for (i = 0U; i < (u32)sliced.len; i++)
+        YEW_ASSERT_EQ_I64(strcmp(sliced.data[i].text, whole.data[i].text),
+                          0);
+
+    Vec_CompItem_free(&whole);
+    Vec_CompItem_free(&sliced);
+    yew_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "chk%03u", (unsigned)i);
+        exec_rm(i < 300U ? f.a : f.b, name);
+    }
+    exec_fixture_dispose(&f);
+}
+
+/*
+ * DoD 1/2 end to end through the tolerant parse: Tab inside `:!`
+ * completes executables for word 0 and paths after it, and a name that
+ * needs quoting round-trips -- yew_comp_quote writes it, and Sprint 18's
+ * tokenizer reads it back as ONE argument.
+ */
+void test_cmdcomp_bang_query_routes_exec_then_path(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    YewCompQuery q;
+    Vec_CompItem items = {0};
+    char one[512];
+
+    exec_fixture_init(&f);
+    exec_mkexe(f.a, "chk-runner", 0700);
+    exec_mkexe(f.a, "chk spacey", 0700);
+    (void)snprintf(one, sizeof(one), "%s", f.a);
+    exec_set_path(&f, one);
+    arena_init(&scratch);
+
+    /* Word 0 of a bang body: executables. */
+    YEW_ASSERT(yew_comp_query(&f.ed, ":!chk", 5U, 5U, &scratch, &q));
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_STR(q.stem, "chk");
+    YEW_ASSERT_EQ_U64(q.replace.lo, 2U);
+    YEW_ASSERT_EQ_U64(q.replace.hi, 5U);
+    /* Word 1: a path. */
+    YEW_ASSERT(yew_comp_query(&f.ed, ":!chk-runner sr", 15U, 15U, &scratch,
+                              &q));
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_PATH);
+    YEW_ASSERT_EQ_STR(q.stem, "sr");
+    /* `:%!` and `:r !` route the same way. */
+    YEW_ASSERT(yew_comp_query(&f.ed, ":%!chk", 6U, 6U, &scratch, &q));
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    YEW_ASSERT(yew_comp_query(&f.ed, ":r !chk", 7U, 7U, &scratch, &q));
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    /* §4's `:!!` prefix completes its command word too. */
+    YEW_ASSERT(yew_comp_query(&f.ed, ":!!chk", 6U, 6U, &scratch, &q));
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_STR(q.stem, "chk");
+    YEW_ASSERT_EQ_U64(q.replace.lo, 3U);
+    /* An ordinary 's' argument is still not completed. */
+    YEW_ASSERT(!yew_comp_query(&f.ed, ":theme dar", 10U, 10U, &scratch, &q));
+
+    /* DoD 2: the spacey name comes back quoted, and the quoted form
+     * retokenizes to exactly the name. */
+    (void)yew_comp_enumerate(&f.ed, YEW_COMP_EXEC, "chk s", &items);
+    {
+        const CompItem *spacey = find_item(&items, "\"chk spacey\"");
+        CmdParse parsed;
+        char line[64];
+
+        YEW_ASSERT_NOT_NULL(spacey);
+        (void)snprintf(line, sizeof(line), ":file.open %s",
+                       spacey == NULL ? "" : spacey->text);
+        YEW_ASSERT(yew_cmd_parse(&f.ed, line, strlen(line), &scratch,
+                                 &parsed));
+        YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+        YEW_ASSERT_EQ_STR(parsed.argv.v[1], "chk spacey");
+    }
+
+    Vec_CompItem_free(&items);
+    arena_free_all(&scratch);
+    exec_rm(f.a, "chk-runner");
+    exec_rm(f.a, "chk spacey");
+    exec_fixture_dispose(&f);
 }
