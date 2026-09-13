@@ -707,7 +707,13 @@ static void apply_groups(Ed *ed, const FlLit *doc, IdMapVec *gids)
 static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
                        IdMapVec *tids, int *first_out)
 {
+    typedef struct PendingOrdinal {
+        int tab_idx;
+        int ordinal;
+    } PendingOrdinal;
     const FlLit *list = yew_fl_get(doc, "tabs");
+    PendingOrdinal pending[YEW_STATE_MAX_TABS];
+    u32 pending_len = 0U;
     u32 n = yew_fl_len(list);
     u32 i;
     u32 dropped = 0U;
@@ -764,14 +770,25 @@ static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
                 i64 ord = yew_fl_int_or(yew_fl_get(rec, "group_ordinal"), 0);
 
                 yew_group_add_member(ed, gid, idx);
-                if (ord > 0)
-                    yew_group_set_ordinal(ed, idx, (int)ord);
+                if (ord > 0 && pending_len < YEW_ARRAY_LEN(pending)) {
+                    pending[pending_len].tab_idx = idx;
+                    pending[pending_len].ordinal =
+                        ord > (i64)YEW_STATE_MAX_TABS
+                            ? YEW_STATE_MAX_TABS
+                            : (int)ord;
+                    pending_len++;
+                }
             }
         }
         buf = yew_ws_buf_by_id(ed, t->buffer_id);
         if (buf != NULL)
             apply_wins(ed, t, rec, buf);
     }
+    /* YEW-F-007: applying an ordinal to a partial group clamps it to the
+     * current member count and permanently loses the saved order. Attach
+     * every tab first, then order against the complete groups. */
+    for (i = 0U; i < pending_len; i++)
+        yew_group_set_ordinal(ed, pending[i].tab_idx, pending[i].ordinal);
     if (dropped > 0U)
         yew_log(YEW_LOG_INFO, "workspace state: %u tab record(s) dropped",
                 (unsigned)dropped);
