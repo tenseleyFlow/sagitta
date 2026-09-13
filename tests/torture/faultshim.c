@@ -14,6 +14,10 @@
  * directory fsync, exercising rollback after a durable backup is published.
  * YEW_FAULT_SAVE_META_EIO_AT=N returns EIO at the Nth rename/fsync boundary;
  * YEW_FAULT_SAVE_META_EIO_AT2=N injects a second EIO in the same process.
+ * The invariant-6 terminal audit arms with SIGUSR2, then uses
+ * YEW_FAULT_TTY_STOP_AFTER_BSU=1 or YEW_FAULT_TTY_STOP_IN_RESTORE=1 to stop
+ * the editor at a byte-exact lifecycle boundary.  These controls never alter
+ * storage calls and are inherited inertly by the guardian subprocess.
  */
 
 #include <dlfcn.h>
@@ -69,6 +73,8 @@ static int dirsync_seen;
 static int write_eio_done;
 static unsigned long long save_meta_no;
 static volatile sig_atomic_t signal_enabled;
+static pid_t initialized_pid;
+static int tty_stop_done;
 
 static void enable_faults(int sig)
 {
@@ -154,6 +160,7 @@ static void initialize(void)
         rng_state = UINT64_C(0x9e3779b97f4a7c15);
     short_writes = env_is_one("YEW_FAULT_SHORT");
     storage_only = env_is_one("YEW_FAULT_STORAGE_ONLY");
+    initialized_pid = getpid();
     log_path = getenv("YEW_FAULT_LOG");
     if (log_path != NULL && *log_path != '\0') {
         log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
@@ -329,9 +336,93 @@ static const char *sync_name(int fd, const char *file_name,
     return file_name;
 }
 
+static const unsigned char *find_sequence(const void *buf, size_t count,
+                                          const char *sequence,
+                                          size_t sequence_len)
+{
+    const unsigned char *bytes = buf;
+    size_t i;
+
+    if (sequence_len > count)
+        return NULL;
+    for (i = 0U; i <= count - sequence_len; i++)
+        if (memcmp(bytes + i, sequence, sequence_len) == 0)
+            return bytes + i;
+    return NULL;
+}
+
+static void terminal_stop_marker(void)
+{
+    static const char byte = 'S';
+    const char *path = getenv("YEW_FAULT_TTY_STOP_MARKER");
+    int fd;
+
+    if (path == NULL || *path == '\0')
+        return;
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0)
+        return;
+    (void)real_write_fn(fd, &byte, 1U);
+    (void)real_close_fn(fd);
+}
+
+/* Return -2 when this is not the one terminal write selected by the audit.
+ * A selected call writes through the boundary before SIGSTOP, allowing the
+ * parent to prove it killed yew inside a BSU/ESU pair or inside restore
+ * itself without adding a hook to the shipping editor. */
+static ssize_t terminal_pause_write(int fd, const void *buf, size_t count)
+{
+    static const char bsu[] = "\x1b[?2026h";
+    static const char restore[] = "\x1b[<u";
+    const unsigned char *found = NULL;
+    size_t marker_len = 0U;
+    size_t prefix;
+    size_t done;
+    ssize_t written;
+
+    if (tty_stop_done || !signal_enabled || getpid() != initialized_pid ||
+        !isatty(fd))
+        return -2;
+    if (env_is_one("YEW_FAULT_TTY_STOP_AFTER_BSU")) {
+        marker_len = sizeof(bsu) - 1U;
+        found = find_sequence(buf, count, bsu, marker_len);
+    } else if (env_is_one("YEW_FAULT_TTY_STOP_IN_RESTORE")) {
+        marker_len = sizeof(restore) - 1U;
+        found = find_sequence(buf, count, restore, marker_len);
+    }
+    if (found == NULL)
+        return -2;
+    prefix = (size_t)(found - (const unsigned char *)buf) + marker_len;
+    written = real_write_fn(fd, buf, prefix);
+    if (written <= 0 || (size_t)written != prefix)
+        return written;
+    tty_stop_done = 1;
+    terminal_stop_marker();
+    if (kill(getpid(), SIGSTOP) != 0)
+        return written;
+    done = prefix;
+    while (done < count) {
+        written = real_write_fn(fd, (const unsigned char *)buf + done,
+                                count - done);
+        if (written > 0) {
+            done += (size_t)written;
+        } else if (written < 0 && errno == EINTR) {
+            continue;
+        } else {
+            return done == 0U ? written : (ssize_t)done;
+        }
+    }
+    return (ssize_t)done;
+}
+
 ssize_t YEW_FAULT_INTERPOSE(write)(int fd, const void *buf, size_t count)
 {
+    ssize_t paused;
+
     initialize();
+    paused = terminal_pause_write(fd, buf, count);
+    if (paused != -2)
+        return paused;
     if (!storage_fd(fd))
         return real_write_fn(fd, buf, count);
     before_call("write");

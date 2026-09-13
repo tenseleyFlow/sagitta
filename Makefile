@@ -989,12 +989,14 @@ TORTURE_DRIVER_OBJ := $(BUILD)/tests/torture/kill9.o
 TORTURE_LIVE_OBJ := $(BUILD)/tests/torture/yew-live-torture.o
 TORTURE_BATCH_OBJ := $(BUILD)/tests/torture/batch_kill9.o
 TORTURE_GIT_HUNK_OBJ := $(BUILD)/tests/torture/git_hunk_kill9.o
+TORTURE_TTY_RESTORE_OBJ := $(BUILD)/tests/torture/tty_restore.o
 TORTURE_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 TORTURE_CHILD := $(BUILD)/yew-torture
 TORTURE_DRIVER := $(BUILD)/kill9
 TORTURE_LIVE := $(BUILD)/yew-live-torture
 TORTURE_BATCH := $(BUILD)/batch-kill9
 TORTURE_GIT_HUNK := $(BUILD)/git-hunk-kill9
+TORTURE_TTY_RESTORE := $(BUILD)/tty-restore
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 # The interposer must remain outside the executable's sanitizer runtime.
 # Instrumenting the injected Darwin dylib crashes sanitized child tests during
@@ -1054,6 +1056,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(TORTURE_GIT_HUNK_OBJ) \
+                $(TORTURE_TTY_RESTORE_OBJ) \
                 $(GIT_HUNKS_OBJ) $(GROUP_FROM_DIR_OBJ) \
                 $(FAULTSHIM) $(FAKELSP)))
 
@@ -1135,7 +1138,7 @@ endif
         perf-startup-s56 perf-open-s56 perf-mem-s56 \
         perf-s56-gate-selftest perf-prof-crosscheck-s56 \
         torture torture-build torture-live-check torture-batch \
-        torture-git-hunk \
+        torture-git-hunk torture-tty-restore \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
         test-fletch test-roundtrip test-roundtrip-coverage \
         test-fletch-roundtrip fletch-ledger \
@@ -1646,6 +1649,10 @@ $(TORTURE_LIVE): $(TORTURE_LIVE_OBJ) $(LIVE_PTY_OBJ)
 
 $(TORTURE_BATCH): $(TORTURE_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_BATCH_OBJ) $(LDLIBS)
+
+$(TORTURE_TTY_RESTORE): $(TORTURE_TTY_RESTORE_OBJ) $(LIVE_PTY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_TTY_RESTORE_OBJ) \
+		$(LIVE_PTY_OBJ) $(LDLIBS)
 
 $(TORTURE_GIT_HUNK): $(PERF_CORE_OBJ) $(TORTURE_GIT_HUNK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
@@ -3301,7 +3308,8 @@ perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
 	fi
 
 torture-build: $(BUILD)/yew $(TORTURE_CHILD) $(TORTURE_LIVE) \
-               $(TORTURE_DRIVER) $(TORTURE_BATCH) $(FAULTSHIM) \
+               $(TORTURE_DRIVER) $(TORTURE_BATCH) $(TORTURE_TTY_RESTORE) \
+               $(FAULTSHIM) \
                $(if $(filter fuss,$(MODULES)),$(TORTURE_GIT_HUNK),)
 
 torture-live-check: torture-build
@@ -3317,7 +3325,7 @@ torture-batch: torture-build
 	$(TORTURE_BATCH) --yew $(abspath $(BUILD)/yew) \
 		--checker $(abspath $(TORTURE_CHILD))
 
-torture: torture-build $(FUSS_TORTURE_TARGET)
+torture: torture-build torture-tty-restore $(FUSS_TORTURE_TARGET)
 	YEW_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_CHILD)) \
 		$(abspath $(FAULTSHIM))
@@ -3330,6 +3338,25 @@ torture: torture-build $(FUSS_TORTURE_TARGET)
 		$(abspath $(FAULTSHIM))
 	$(TORTURE_BATCH) --yew $(abspath $(BUILD)/yew) \
 		--checker $(abspath $(TORTURE_CHILD))
+
+torture-tty-restore: torture-build
+ifeq ($(filter 1,$(SAN) $(ALIGN_SAN)),)
+ifneq ($(filter lsp,$(MODULES)),)
+ifneq ($(TARGET),x86_64-linux-musl)
+	$(TORTURE_TTY_RESTORE) --yew $(abspath $(BUILD)/yew) \
+		--shim $(abspath $(FAULTSHIM)) \
+		--fakelsp $(abspath $(FAKELSP)) \
+		--checker $(abspath $(TORTURE_CHILD)) \
+		--runtime $(abspath runtime)
+else
+	@echo 'SKIP invariant-6 terminal restore: static PIE cannot load shim'
+endif
+else
+	@echo 'SKIP invariant-6 terminal restore: LSP module unavailable'
+endif
+else
+	@echo 'SKIP invariant-6 terminal restore: run the plain torture profile'
+endif
 
 torture-git-hunk: $(TORTURE_GIT_HUNK)
 	@if ! command -v git >/dev/null 2>&1; then \
@@ -3675,6 +3702,6 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d) \
-	 $(TORTURE_BATCH_OBJ:.o=.d)
+	 $(TORTURE_BATCH_OBJ:.o=.d) $(TORTURE_TTY_RESTORE_OBJ:.o=.d)
 
 FORCE:

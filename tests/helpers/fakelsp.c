@@ -238,6 +238,7 @@ static int run_session(const char *mode, const char *marker,
         strcmp(mode, "session-unversioned") == 0 ||
         strcmp(mode, "session-stale") == 0 ||
         strcmp(mode, "session-resistant") == 0 ||
+        strcmp(mode, "session-shutdown-delay") == 0 ||
         strcmp(mode, "session-crash-restart") == 0)
         encoding = ",\"positionEncoding\":\"utf-8\"";
     else if (strcmp(mode, "session-utf16") == 0)
@@ -541,6 +542,14 @@ static int run_session(const char *mode, const char *marker,
               read_method("\"method\":\"shutdown\"", &id)) || id == 0U ||
         !write_all(STDERR_FILENO, "seq:shutdown\n", 13U))
         return 16;
+    if (strcmp(mode, "session-shutdown-delay") == 0) {
+        if (!create_marker(marker))
+            return 65;
+        /* Invariant 6 kills yew while its documented 500 ms shutdown wait
+         * is live.  Stay beyond that budget unless the editor dies first;
+         * the helper is a subprocess and never changes yew's thread count. */
+        (void)poll(NULL, 0U, 1000);
+    }
     n = snprintf(response, sizeof(response),
                  "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":null}",
                  id);
