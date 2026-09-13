@@ -64,7 +64,22 @@ Coverage commit: `1990241d32d720a8d4f97a5a5d4a983e512e34e6`.
 | Lane | Cadence | Budget | State |
 |---|---|---|---|
 | `fuzz` | every push | 200,000 iterations per target, seed 1 | existing |
-| `fuzz-nightly` | nightly | 30 minutes per target, recorded date seed | pending Sprint 58 wiring |
-| `soak` | continuous | 72 hours per tier-1 target, four seed streams | not started |
-| `fuzz-cov-weekly` | weekly | four hours per target, monotonic edge counts | baseline established; scheduler pending |
-| `soak-rc` | each release candidate | 72 hours tier 1 + 12 hours tier 2 | release blocker |
+| `fuzz-nightly` | nightly | 30 minutes per target, recorded date seed | scheduled across all 45 targets; admissions and ledger attached per target |
+| `soak` | continuous | 72 aggregate hours per tier-1 target, four 18-hour seed streams | driver and scheduler wired; no coverage runner registered; first cycle not started |
+| `fuzz-cov-weekly` | weekly | four hours per target, monotonic edge counts | baseline and scheduler wired; fail-closed on Apple clang 21.0.0; no matching runner registered |
+| `soak-rc` | each release candidate | 72 aggregate hours tier 1 + 12 aggregate hours tier 2 | exact-commit four-stream release blocker wired; designated runner not registered |
+
+The campaign workflow keeps every worker below 24 hours: tier 1 is four
+parallel 18-hour streams and tier 2 is four parallel 3-hour streams. This
+preserves the pinned aggregate target budgets while keeping end-of-run corpus
+artifacts inside the Actions token lifetime. The coverage baseline is compiler
+sensitive, so the weekly and continuous jobs require the matching macOS arm64
+Apple clang 21.0.0 runner instead of comparing unrelated hosted-compiler guard
+maps.
+
+An Actions API capacity check on 2026-09-13 found no repository variables and
+no registered self-hosted runners. The workflow therefore leaves scheduled
+coverage/soak jobs skipped and makes manual requests fail explicitly until
+`YEW_FUZZ_COV_ENABLED=1` and the `yew-fuzz-cov` runner exist. The RC lane uses
+the existing `YEW_PERF_X86_64_ENABLED` / `yew-perf-x86_64` identity and likewise
+cannot be mistaken for a completed release gate while that runner is absent.

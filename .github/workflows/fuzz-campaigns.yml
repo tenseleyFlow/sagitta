@@ -1,0 +1,233 @@
+name: Fuzz campaigns
+
+on:
+  schedule:
+    - cron: '37 7 * * *'
+    - cron: '23 6 * * 0'
+    - cron: '53 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Campaign lane to run
+        type: choice
+        options: [nightly, weekly, soak, soak-rc]
+        default: nightly
+      rc_commit:
+        description: Full exact commit for soak-rc
+        type: string
+        required: false
+
+concurrency:
+  group: fuzz-campaigns-${{ github.event.schedule || inputs.lane || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  campaign-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      all: ${{ steps.targets.outputs.all }}
+      tier1: ${{ steps.targets.outputs.tier1 }}
+      rc: ${{ steps.targets.outputs.rc }}
+    steps:
+      - id: targets
+        name: Pin Sprint 58 target sets
+        run: |
+          echo 'all=["fuzz_utf8","fuzz_grapheme","fuzz_input","fuzz_grid","fuzz_vt","fuzz_multicursor","fuzz_fl_lex","fuzz_fl_parse","fuzz_fl_vm","fuzz_flapi","fuzz_pkg_tree","fuzz_record","fuzz_syn","fuzz_syn_def","fuzz_fl_std","fuzz_tabs","fuzz_shadow","fuzz_groups","fuzz_panes","fuzz_search","fuzz_re_quote","fuzz_re_compile","fuzz_re_diff","fuzz_cmdparse","fuzz_fuzzy","fuzz_state","fuzz_gitignore","fuzz_porcelain","fuzz_fuss","fuzz_git_diff","fuzz_mouse","fuzz_symidx","fuzz_json","fuzz_jsonrpc","fuzz_lsp_msg","fuzz_lsp_resp","fuzz_http","fuzz_ai_stream","fuzz_ai_shadow","fuzz_ai_redact","fuzz_theme","fuzz_undo_serial","fuzz_undo","fuzz_textbuf","fuzz_units"]' >> "$GITHUB_OUTPUT"
+          echo 'tier1=["fuzz_utf8","fuzz_grapheme","fuzz_textbuf","fuzz_undo_serial","fuzz_re_compile","fuzz_re_diff","fuzz_fl_parse","fuzz_fl_vm","fuzz_syn_def","fuzz_json","fuzz_jsonrpc","fuzz_state","fuzz_porcelain","fuzz_input"]' >> "$GITHUB_OUTPUT"
+          echo 'rc={"include":[{"target":"fuzz_utf8","seconds":259200},{"target":"fuzz_grapheme","seconds":259200},{"target":"fuzz_input","seconds":259200},{"target":"fuzz_grid","seconds":43200},{"target":"fuzz_vt","seconds":43200},{"target":"fuzz_multicursor","seconds":43200},{"target":"fuzz_fl_lex","seconds":43200},{"target":"fuzz_fl_parse","seconds":259200},{"target":"fuzz_fl_vm","seconds":259200},{"target":"fuzz_flapi","seconds":43200},{"target":"fuzz_pkg_tree","seconds":43200},{"target":"fuzz_record","seconds":43200},{"target":"fuzz_syn","seconds":43200},{"target":"fuzz_syn_def","seconds":259200},{"target":"fuzz_fl_std","seconds":43200},{"target":"fuzz_tabs","seconds":43200},{"target":"fuzz_shadow","seconds":43200},{"target":"fuzz_groups","seconds":43200},{"target":"fuzz_panes","seconds":43200},{"target":"fuzz_search","seconds":43200},{"target":"fuzz_re_quote","seconds":43200},{"target":"fuzz_re_compile","seconds":259200},{"target":"fuzz_re_diff","seconds":259200},{"target":"fuzz_cmdparse","seconds":43200},{"target":"fuzz_fuzzy","seconds":43200},{"target":"fuzz_state","seconds":259200},{"target":"fuzz_gitignore","seconds":43200},{"target":"fuzz_porcelain","seconds":259200},{"target":"fuzz_fuss","seconds":43200},{"target":"fuzz_git_diff","seconds":43200},{"target":"fuzz_mouse","seconds":43200},{"target":"fuzz_symidx","seconds":43200},{"target":"fuzz_json","seconds":259200},{"target":"fuzz_jsonrpc","seconds":259200},{"target":"fuzz_lsp_msg","seconds":43200},{"target":"fuzz_lsp_resp","seconds":43200},{"target":"fuzz_http","seconds":43200},{"target":"fuzz_ai_stream","seconds":43200},{"target":"fuzz_ai_shadow","seconds":43200},{"target":"fuzz_ai_redact","seconds":43200},{"target":"fuzz_theme","seconds":43200},{"target":"fuzz_undo_serial","seconds":259200},{"target":"fuzz_undo","seconds":43200},{"target":"fuzz_textbuf","seconds":259200},{"target":"fuzz_units","seconds":43200}]}' >> "$GITHUB_OUTPUT"
+
+  nightly:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '37 7 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.lane == 'nightly')
+    needs: campaign-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        target: ${{ fromJSON(needs.campaign-matrix.outputs.all) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run 30-minute date-seeded campaign
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          week=$(date -u +%V | sed 's/^0*//')
+          san=$((week % 2))
+          mkdir -p "build-campaign-artifacts/$TARGET"
+          cp .docs/audits/fuzz-coverage.md \
+            "build-campaign-artifacts/$TARGET/fuzz-coverage.md"
+          make COV=1 SAN="$san" COV_BUILD=build-campaign \
+            FUZZ_CAMPAIGN_TARGET="$TARGET" FUZZ_NIGHTLY_SECONDS=1800 \
+            SOAK_LEDGER="build-campaign-artifacts/$TARGET/fuzz-coverage.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" \
+            fuzz-nightly
+      - name: Attach ledger, admissions, and minimized failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ matrix.target }}-${{ github.run_id }}
+          path: |
+            build-campaign-artifacts/${{ matrix.target }}/
+            tests/fuzz/crashes/*
+          if-no-files-found: ignore
+
+  coverage-runner-required:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.lane == 'weekly' || inputs.lane == 'soak') &&
+      vars.YEW_FUZZ_COV_ENABLED != '1'
+    needs: campaign-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo 'YEW_FUZZ_COV_ENABLED=1 and the self-hosted macOS ARM64 yew-fuzz-cov runner are required.' >&2
+          exit 1
+
+  weekly:
+    if: >-
+      vars.YEW_FUZZ_COV_ENABLED == '1' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '23 6 * * 0') ||
+       (github.event_name == 'workflow_dispatch' && inputs.lane == 'weekly'))
+    needs: campaign-matrix
+    runs-on: [self-hosted, macOS, ARM64, yew-fuzz-cov]
+    timeout-minutes: 260
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        target: ${{ fromJSON(needs.campaign-matrix.outputs.all) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify the authoritative coverage profile
+        run: |
+          test "$(uname -m)" = arm64
+          clang --version | head -n 1 | grep -F 'Apple clang version 21.0.0'
+      - name: Run four-hour coverage campaign and monotonicity gate
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p "build-campaign-artifacts/$TARGET"
+          cp .docs/audits/fuzz-coverage.md \
+            "build-campaign-artifacts/$TARGET/fuzz-coverage.md"
+          make COV=1 CC=clang COV_BUILD=build-campaign \
+            FUZZ_CAMPAIGN_TARGET="$TARGET" FUZZ_WEEKLY_SECONDS=14400 \
+            SOAK_LEDGER="build-campaign-artifacts/$TARGET/fuzz-coverage.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" \
+            fuzz-cov-weekly
+      - name: Attach ledger, admissions, and minimized failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-${{ matrix.target }}-${{ github.run_id }}
+          path: |
+            build-campaign-artifacts/${{ matrix.target }}/
+            tests/fuzz/crashes/*
+          if-no-files-found: ignore
+
+  continuous-soak:
+    if: >-
+      vars.YEW_FUZZ_COV_ENABLED == '1' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '53 7 * * 1') ||
+       (github.event_name == 'workflow_dispatch' && inputs.lane == 'soak'))
+    needs: campaign-matrix
+    runs-on: [self-hosted, macOS, ARM64, yew-fuzz-cov]
+    timeout-minutes: 1100
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        target: ${{ fromJSON(needs.campaign-matrix.outputs.tier1) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify the authoritative coverage profile
+        run: |
+          test "$(uname -m)" = arm64
+          clang --version | head -n 1 | grep -F 'Apple clang version 21.0.0'
+      - name: Run four disjoint 18-hour seed streams
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          week=$(date -u +%V | sed 's/^0*//')
+          san=$((week % 2))
+          seed=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
+          mkdir -p "build-campaign-artifacts/$TARGET"
+          cp .docs/audits/fuzz-coverage.md \
+            "build-campaign-artifacts/$TARGET/fuzz-coverage.md"
+          make COV=1 CC=clang SAN="$san" COV_BUILD=build-campaign \
+            FUZZ_CAMPAIGN_TARGET="$TARGET" SOAK_SECONDS=259200 \
+            SOAK_STREAMS=4 SOAK_SEED="$seed" SOAK_LANE=soak \
+            SOAK_LEDGER="build-campaign-artifacts/$TARGET/fuzz-coverage.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" soak
+      - name: Attach ledger, admissions, and minimized failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-${{ matrix.target }}-${{ github.run_id }}
+          path: |
+            build-campaign-artifacts/${{ matrix.target }}/
+            tests/fuzz/crashes/*
+          if-no-files-found: ignore
+
+  rc-runner-required:
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.lane == 'soak-rc' &&
+      vars.YEW_PERF_X86_64_ENABLED != '1'
+    needs: campaign-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo 'YEW_PERF_X86_64_ENABLED=1 and the designated x86_64 runner are required.' >&2
+          exit 1
+
+  soak-rc:
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.lane == 'soak-rc' &&
+      vars.YEW_PERF_X86_64_ENABLED == '1'
+    needs: campaign-matrix
+    runs-on: [self-hosted, linux, x64, yew-perf-x86_64]
+    timeout-minutes: 1100
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.campaign-matrix.outputs.rc) }}
+    steps:
+      - name: Require a full exact RC commit
+        env:
+          RC_COMMIT: ${{ inputs.rc_commit }}
+        run: |
+          printf '%s\n' "$RC_COMMIT" | grep -E '^[0-9a-f]{40}$'
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.rc_commit }}
+      - name: Run the exact-commit tier budget in four streams
+        env:
+          RC_COMMIT: ${{ inputs.rc_commit }}
+          TARGET: ${{ matrix.target }}
+          TOTAL_SECONDS: ${{ matrix.seconds }}
+        run: |
+          week=$(date -u +%V | sed 's/^0*//')
+          san=$((week % 2))
+          seed=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
+          mkdir -p "build-campaign-artifacts/$TARGET"
+          cp .docs/audits/fuzz-coverage.md \
+            "build-campaign-artifacts/$TARGET/release-soak.md"
+          make COV=1 CC=clang SAN="$san" COV_BUILD=build-campaign \
+            RC_COMMIT="$RC_COMMIT" FUZZ_CAMPAIGN_TARGET="$TARGET" \
+            SOAK_SECONDS="$TOTAL_SECONDS" SOAK_STREAMS=4 SOAK_SEED="$seed" \
+            SOAK_LEDGER="build-campaign-artifacts/$TARGET/release-soak.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" soak-rc
+      - name: Attach release evidence, admissions, and minimized failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-rc-${{ matrix.target }}-${{ github.run_id }}
+          path: |
+            build-campaign-artifacts/${{ matrix.target }}/
+            tests/fuzz/crashes/*
+          if-no-files-found: ignore
