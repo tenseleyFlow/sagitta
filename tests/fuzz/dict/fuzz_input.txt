@@ -1,0 +1,6 @@
+# Terminal input state-machine openings.
+\x1b[
+\x1b[200~
+\x1b[<0;1;1M
+\x1b[?2026;2$y
+\x1b[>21u

@@ -831,6 +831,10 @@ LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ) $(FUZZ_COV_OBJ)
+# The runner calls the coverage API but is not itself part of the subject.
+# Keeping its control flow out of the map prevents harness edges from being
+# admitted as target coverage.
+$(FUZZ_LIB_OBJ): CFLAGS := $(filter-out $(COV_TRACE_FLAG),$(CFLAGS))
 F01_UNICODE_AUDIT_SRC := tests/audit/f01_unicode.c
 F01_UNICODE_AUDIT_OBJ := $(BUILD)/tests/audit/f01_unicode.o
 F01_UNICODE_AUDIT_BIN := $(BUILD)/tests/audit/f01_unicode

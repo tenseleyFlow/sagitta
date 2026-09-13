@@ -1,0 +1,7 @@
+# Git porcelain-v2 record openings and byte separators.
+1 .M
+2 R.
+\x23 branch.ab
+u UU
+\x00
+\x1f
