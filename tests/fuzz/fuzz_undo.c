@@ -1,7 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "text/edit.h"
 
@@ -39,6 +42,17 @@ typedef struct {
     size_t redos;
     size_t branches;
 } Run;
+
+static bool monotonic_ms(u64 *out)
+{
+    struct timespec now;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+        return false;
+    *out = (u64)now.tv_sec * UINT64_C(1000) +
+           (u64)now.tv_nsec / UINT64_C(1000000);
+    return true;
+}
 
 static u64 random_next(Run *run)
 {
@@ -387,6 +401,8 @@ int main(int argc, char **argv)
 {
     u64 seed = 1U;
     size_t iterations = YEW_UNDO_FUZZ_MIN_ITERS;
+    u64 seconds = 0U;
+    u64 deadline_ms = 0U;
     bool coverage_report = false;
     Run run;
     size_t op;
@@ -397,11 +413,14 @@ int main(int argc, char **argv)
             continue;
         if (parse_size(argv[i], "--iters=", &iterations))
             continue;
+        if (parse_u64(argv[i], "--seconds=", &seconds) && seconds != 0U)
+            continue;
         if (strcmp(argv[i], "--coverage-report") == 0) {
             coverage_report = true;
             continue;
         }
         (void)fprintf(stderr, "usage: %s [--seed=N] [--iters=N] "
+                      "[--seconds=N] "
                       "[--coverage-report]\n",
                       argv[0]);
         return 2;
@@ -416,8 +435,22 @@ int main(int argc, char **argv)
     if (coverage_report)
         yew_cov_reset();
 #endif
-    if (iterations < YEW_UNDO_FUZZ_MIN_ITERS)
+    if (seconds != 0U) {
+        u64 start_ms;
+        u64 span_ms;
+
+        if (seconds > UINT64_MAX / UINT64_C(1000) ||
+            !monotonic_ms(&start_ms)) {
+            (void)fprintf(stderr, "fuzz_undo: invalid duration\n");
+            return 2;
+        }
+        span_ms = seconds * UINT64_C(1000);
+        deadline_ms = start_ms > UINT64_MAX - span_ms ?
+                      UINT64_MAX : start_ms + span_ms;
+        iterations = SIZE_MAX;
+    } else if (iterations < YEW_UNDO_FUZZ_MIN_ITERS) {
         iterations = YEW_UNDO_FUZZ_MIN_ITERS;
+    }
     (void)memset(&run, 0, sizeof(run));
     if (!initialize(&run, seed)) {
         dispose(&run);
@@ -426,6 +459,17 @@ int main(int argc, char **argv)
     for (op = 0U; op < iterations; op++) {
         size_t choice = choose(&run, 100U);
         bool ok;
+
+        if (seconds != 0U && op != 0U && (op & 4095U) == 0U) {
+            u64 now_ms;
+
+            if (!monotonic_ms(&now_ms)) {
+                dispose(&run);
+                return 2;
+            }
+            if (now_ms >= deadline_ms)
+                break;
+        }
 
         if (op == 0U || op == 2U)
             ok = edit_once(&run);
@@ -450,11 +494,21 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    (void)printf("fuzz_undo: seed=%llu iters=%zu hash=%016llx "
-                 "edits=%zu undo=%zu redo=%zu branches=%zu ok\n",
-                 (unsigned long long)seed, iterations,
-                 (unsigned long long)run.hash, run.edits, run.undos,
-                 run.redos, run.branches);
+    if (seconds != 0U) {
+        (void)printf("fuzz_undo: seed=%llu seconds=%llu iters=%zu "
+                     "hash=%016llx edits=%zu undo=%zu redo=%zu "
+                     "branches=%zu ok\n",
+                     (unsigned long long)seed,
+                     (unsigned long long)seconds, op,
+                     (unsigned long long)run.hash, run.edits, run.undos,
+                     run.redos, run.branches);
+    } else {
+        (void)printf("fuzz_undo: seed=%llu iters=%zu hash=%016llx "
+                     "edits=%zu undo=%zu redo=%zu branches=%zu ok\n",
+                     (unsigned long long)seed, iterations,
+                     (unsigned long long)run.hash, run.edits, run.undos,
+                     run.redos, run.branches);
+    }
     if (run.edits == 0U || run.undos == 0U || run.redos == 0U ||
         run.branches == 0U) {
         dispose(&run);
