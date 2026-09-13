@@ -827,6 +827,7 @@ FUZZ_AI_SHADOW_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_shadow.o
 FUZZ_AI_REDACT_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_redact.o
 FUZZ_PKG_TREE_OBJ := $(BUILD)/tests/fuzz/fuzz_pkg_tree.o
 FUZZ_THEME_OBJ := $(BUILD)/tests/fuzz/fuzz_theme.o
+FUZZ_UNDO_SERIAL_OBJ := $(BUILD)/tests/fuzz/fuzz_undo_serial.o
 LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
 LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
@@ -1068,7 +1069,7 @@ endif
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
         fuzz-porcelain fuzz-git-diff \
-        fuzz-theme \
+        fuzz-theme fuzz-undo-serial \
         fuzz-ai \
         test-lsp-live \
         fuzz-syn-long \
@@ -1371,6 +1372,10 @@ $(BUILD)/fuzz_ai_redact: $(FUZZ_LINK_OBJ) $(FUZZ_AI_REDACT_OBJ)
 $(BUILD)/fuzz_theme: $(FUZZ_LINK_OBJ) $(FUZZ_THEME_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_THEME_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_undo_serial: $(FUZZ_LINK_OBJ) $(FUZZ_UNDO_SERIAL_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_UNDO_SERIAL_OBJ) $(LDLIBS)
 
 $(LSP_LIVE_BIN): $(FUZZ_CORE_OBJ) $(LSP_LIVE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
@@ -1880,7 +1885,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_lex $(BUILD)/fuzz_fl_parse \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
-      $(BUILD)/fuzz_theme \
+      $(BUILD)/fuzz_theme $(BUILD)/fuzz_undo_serial \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
       fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
@@ -1906,6 +1911,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_fl_vm --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_flapi --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_theme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_undo_serial --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 		$(BUILD)/fuzz_fl_parse --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
@@ -1995,6 +2001,9 @@ fuzz-jsonrpc: $(BUILD)/fuzz_jsonrpc
 
 fuzz-theme: $(BUILD)/fuzz_theme
 	$(BUILD)/fuzz_theme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+fuzz-undo-serial: $(BUILD)/fuzz_undo_serial
+	$(BUILD)/fuzz_undo_serial --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 fuzz-lsp-msg: $(BUILD)/fuzz_lsp_msg
 	$(BUILD)/fuzz_lsp_msg --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
