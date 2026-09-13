@@ -11,7 +11,7 @@ A pending row is not a verdict.
 | 2 | No byte confusion | pending | — | — |
 | 3 | No silent stubs | complete | VIOLATED | YEW-F-014, YEW-F-075 |
 | 4 | Latency budgets are CI gates | complete | VIOLATED | YEW-F-072, YEW-F-073 |
-| 5 | Deterministic rendering | pending | — | — |
+| 5 | Deterministic rendering | complete | VIOLATED | YEW-F-074 |
 | 6 | Terminal restore | complete | HOLDS | — |
 | 7 | Bespoke first | complete | HOLDS | — |
 | 8 | Single-threaded core | complete | HOLDS WITH FINDINGS | YEW-F-032 |
@@ -120,6 +120,66 @@ The complete audit reproducer run retained both rows as XFAIL and reported 76
 tests with zero harness failures. This verdict does **not** claim that yew
 misses a user-facing latency budget; it says the current tree cannot prove or
 reliably preserve such a verdict. Remediation remains assigned to Sprint 59.
+
+## 5. Deterministic rendering
+
+Verdict: **VIOLATED: YEW-F-074**.
+
+The rendering side of the promise held across the exercised matrix. Exact-
+baseline CI run `34699266067` was green in the standard GCC and Clang lanes,
+the GCC and Clang `FL_CGOTO=1` lanes, the Alpine 3.20 musl-static lane, and
+arm64 macOS. Its determinism job ran one warmup and two complete `make test`
+sweeps, byte-diffed the latter pair's output, then ran and byte-diffed two
+more complete PTY sweeps. Thus five PTY-containing sweeps ran back to back.
+The generated-artifact, edit-trace, replay, command-parser, and fixture-hash
+cross-compiler comparisons were also byte-identical.
+
+The PTY harness previously constructed a fixed child environment and silently
+dropped caller locale and terminal-identification variables. The audit added
+a default-off test seam for literal `LANG`/`LC_ALL`, `TZ`, `COLORTERM`, and
+`TERM_PROGRAM` values. The default environment remains unchanged. On arm64
+macOS with Apple clang 21, the complete PTY registry passed in each installed
+locale/timezone pairing below while both terminal-identification values
+contained a hostile semicolon suffix:
+
+| `LANG` / `LC_ALL` | `TZ` | Full PTY result |
+|---|---|---|
+| `C` | `UTC` | green |
+| `de_DE.UTF-8` | `America/New_York` | green |
+| `tr_TR.UTF-8` | `Asia/Tokyo` | green |
+| `ja_JP.UTF-8` | `Pacific/Kiritimati` | green |
+
+Every row used `COLORTERM=truecolor;false-hostile` and
+`TERM_PROGRAM=WezTerm;false-hostile`. This exercises the locale-sensitive
+Turkish case boundary, a C locale, two East Asian/western UTF-8 locales, DST,
+UTC, and the UTC+14 date boundary. An earlier full C/UTC attempt timed out once
+waiting for `fuss_diff_viewer_restores_layout`; its preserved state contained
+no product error, and both the baseline and hostile isolated case passed in
+8.6 seconds. The complete C/UTC repeat passed that case and the rest of the
+registry under the unchanged 20-second case budget, so the non-reproducing
+load event is not a finding.
+
+Binary bytes break the invariant. The exact-baseline Linux determinism job
+produced identical default-build hashes across clean glibc rebuilds, and the
+Alpine lane did the same for the musl static PIE. On arm64 macOS, however,
+consecutive clean builds of all four single-module profiles differed. After
+stripping at the same path, the remaining delta is the Mach-O `LC_UUID` and
+its derived ad-hoc signature:
+
+| `MODULES` | First SHA-256 | Second SHA-256 |
+|---|---|---|
+| `lsp` | `75b5811bcbde132bcbd9e0fa5105423e130f519fdff9f02d8d9df1ce6289aefb` | `d688c9e9f617d789b272dd4a4e7516d22ede062f3ca95ef85938641c6e7e9bc2` |
+| `ai` | `176114c816003fd3eda9dd49d6dff3ae712954a5a16196e84d07c1b1dabb19d6` | `ca4ad5ae12e4de747f43316d570e8be048f149b0fede966ea65649465474f518` |
+| `fuss` | `14b0bfa973b170a387c283163262ad080d23042d4df3928c0577a4ad10fe0329` | `0cb9736f263f331e3e5f257dd4ba9c6e27cadee85db0e400395827f75f406871` |
+| `plugins` | `e30bda8489c39a9071e5b01407126c3b03a7180a351f4bac60fdc8bc85df7f5d` | `1b746ed05fbb7c8638f788ed252646dfd1165bb13d116b87fe99ee3f915af3af` |
+
+As a diagnosis only, adding `-Wl,-no_uuid` and stripping made two `lsp`
+builds identical at SHA-256
+`99d3e903f772158f0c7903b9cdb98d52a8d762703be492c2e3febc69d14bd031`.
+The shipping link does not use that flag. Exact same-target hashes from two
+independent builders remain unavailable, as F15 records, but the four local
+clean-build failures already decide the invariant. The High finding remains
+open for Sprint 59/60; no product or release-build fix landed in Sprint 58.
 
 ## 6. Terminal restore
 
