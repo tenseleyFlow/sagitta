@@ -9,7 +9,7 @@ begin. A pending row is not a verdict.
 |---:|---|---|---|---|
 | 1 | No data loss, ever | pending | — | — |
 | 2 | No byte confusion | pending | — | — |
-| 3 | No silent stubs | pending | — | — |
+| 3 | No silent stubs | complete | VIOLATED | YEW-F-014, YEW-F-075 |
 | 4 | Latency budgets are CI gates | pending | — | — |
 | 5 | Deterministic rendering | pending | — | — |
 | 6 | Terminal restore | pending | — | — |
@@ -17,6 +17,65 @@ begin. A pending row is not a verdict.
 | 8 | Single-threaded core | pending | — | — |
 | 9 | Modal paradigm first | complete | HOLDS | — |
 | 10 | Recorder/Fletch round-trip | complete | VIOLATED | YEW-F-023 |
+
+## 3. No silent stubs
+
+Verdict: **VIOLATED: YEW-F-014, YEW-F-075**.
+
+The interaction session built all 16 subsets of `lsp ai fuss plugins` in
+isolated build trees on arm64 macOS with Apple clang 21. Each build ran its
+complete compiled unit suite, every applicable audit fixture, and the CLI
+smoke suite. Bit positions below are LSP, AI, FUSS, and plugins respectively.
+
+| Mask | Modules | Commands | Natives | Unit tests | Audit tests |
+|---|---|---:|---:|---:|---:|
+| `0000` | none | 374 | 181 | 2,046 | 72 |
+| `0001` | plugins | 374 | 181 | 2,110 | 76 |
+| `0010` | fuss | 374 | 181 | 2,217 | 72 |
+| `0011` | fuss, plugins | 374 | 181 | 2,281 | 76 |
+| `0100` | ai | 374 | 181 | 2,163 | 72 |
+| `0101` | ai, plugins | 374 | 181 | 2,227 | 76 |
+| `0110` | ai, fuss | 374 | 181 | 2,334 | 72 |
+| `0111` | ai, fuss, plugins | 374 | 181 | 2,398 | 76 |
+| `1000` | lsp | 374 | 181 | 2,204 | 72 |
+| `1001` | lsp, plugins | 374 | 181 | 2,268 | 76 |
+| `1010` | lsp, fuss | 374 | 181 | 2,375 | 72 |
+| `1011` | lsp, fuss, plugins | 374 | 181 | 2,439 | 76 |
+| `1100` | lsp, ai | 374 | 181 | 2,308 | 72 |
+| `1101` | lsp, ai, plugins | 374 | 181 | 2,372 | 76 |
+| `1110` | lsp, ai, fuss | 374 | 181 | 2,479 | 72 |
+| `1111` | lsp, ai, fuss, plugins | 374 | 181 | 2,543 | 76 |
+
+The aggregate was 36,764 unit-test executions and 1,168,505,592 assertions,
+with zero unexpected failures, plus 1,184 audit-fixture executions with zero
+harness failures. The 374-line command inventory and 181-line native inventory
+were byte-identical across all profiles (SHA-256
+`34decd9ff81d218695f565ab59947601880ad36af5c75379fabe06a1dd03a344` and
+`b465ae074dbb94f31cc1a49b8f677c604865edfb7305580168cd8207a2e5c200`).
+
+The session separately invoked every `fl` frontend form and every `syn`
+subcommand, including the deliberately incomplete syntax-coverage diagnostic,
+in every build. It invoked all `plug` and `pkg` verbs in every build as well;
+profiles without plugins returned the canonical module error for every verb.
+The option-table inventory and command-boundary units ran in each profile.
+The default-profile conformance rerun passed 38/38 Fletch files and all seven
+native/spec/grammar/error/opcode/target/ledger coverage checks; the script
+coverage report regenerated deterministically.
+
+The broad matrix does not erase two exact exceptions:
+
+- `YEW-F-014`: when LSP is stripped, `ed.lsp.complete` opens core index
+  completion instead of returning the module hard error required of the
+  `ed.lsp.*` surface.
+- `YEW-F-075`: when a module is stripped, module-owned options remain
+  inconsistent. `ai.enable`, `lsp.open_in`, and `git.ascii_glyphs` are
+  accepted and stored as inert state, while `plug.verify_on_load` reports a
+  generic unknown option instead of the plugins-module refusal.
+
+The minimal audit run reproduced both as hard XFAILs. `YEW-F-075` is the
+Critical user-reachable silent stub; all other exercised absent-module routes
+failed loudly and the stale-Sprint-message review from F15 q9 found no landed
+surface still presented as deferred.
 
 ## 9. Modal paradigm first
 
