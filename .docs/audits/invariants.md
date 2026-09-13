@@ -13,7 +13,7 @@ begin. A pending row is not a verdict.
 | 4 | Latency budgets are CI gates | pending | — | — |
 | 5 | Deterministic rendering | pending | — | — |
 | 6 | Terminal restore | pending | — | — |
-| 7 | Bespoke first | pending | — | — |
+| 7 | Bespoke first | complete | HOLDS | — |
 | 8 | Single-threaded core | pending | — | — |
 | 9 | Modal paradigm first | complete | HOLDS | — |
 | 10 | Recorder/Fletch round-trip | complete | VIOLATED | YEW-F-023 |
@@ -111,6 +111,54 @@ mouse event was available to make an otherwise unreachable surface pass.
 The tutor is not a shipped 1.0 surface: F04 recorded it as Sprint 59 work, so
 it is not silently credited here. No shipped surface tested in this session
 requires a mouse and no invariant-9 finding remains open.
+
+## 7. Bespoke first
+
+Verdict: **HOLDS** on the audited baseline.
+
+The product link was inspected on every supported release target. The dynamic
+GNU/Linux build has only `libc.so.6` and `libm.so.6` as `DT_NEEDED` entries;
+the latter is the platform C math library required by `src/fl/stdmath.c`, not
+a third-party dependency. The musl release is a static PIE with no `NEEDED`
+entries or undefined symbols. On arm64 macOS, both `otool -L` and the load
+commands show only `/usr/lib/libSystem.B.dylib`.
+
+| Target | Evidence | Runtime dependency result |
+|---|---|---|
+| x86_64 Linux/glibc | `ldd` plus `readelf -d` in the existing Linux audit guest | libc, libm, ELF loader only |
+| arm64 Linux/glibc | exact successful link command from CI run `34699266067`, job `103568015395` | project objects plus `-lm`; no external link input |
+| x86_64 Linux/musl | CI job `103568015285`; `verify-static-pie.sh` | static PIE; no `NEEDED`, undefined, or executable-stack entry |
+| arm64 macOS | local `otool -L`, load commands, and full linker map | libSystem only |
+
+The local arm64 map contains 12,003 lines. Its complete object inventory is
+the project's objects followed only by Apple SDK text-based stubs for libm,
+libSystem, compiler-rt, dyld, and the libc/kernel/malloc components that make
+up libSystem. No Homebrew, package-manager, or other third-party object,
+archive, dylib, or symbol provider appears. The hosted arm64 Linux link line
+was used because the pre-existing local arm64 Linux VM entered its VZ running
+state but could not bring up guest SSH; it was returned to its prior stopped
+state without changing the guest. The successful hosted job is pinned to the
+same baseline and exposes the entire final link command.
+
+Dependency-adjacent behavior also passed its missing-binary checks:
+
+- `curl`: `ai_curl_probe_messages_and_cache` passed 108 assertions and pins
+  the actionable `curl ... not in $PATH` diagnostic plus the local-model
+  alternative.
+- `git`: `symwalk_fallback_caps_skips_and_repeat_interning` passed 76,384
+  assertions with `PATH=/definitely/no/git`, reported the fallback, and still
+  populated the workspace symbol index; the runtime taxonomy separately
+  reached and named the `git unavailable` state.
+- `$SHELL`: `job_shell_resolution_prefers_env` proves that a nonempty
+  environment value is the selected executable and that an empty value falls
+  through safely. `job_exec_failure_is_not_exit_127` proves a missing selected
+  executable becomes `YEW_JOB_EXECFAIL` with `ENOENT`, rather than masquerading
+  as exit 127; the shell result renderer formats that state as
+  `cannot run <command>: <system error>`.
+
+The Makefile's sole product library argument is `-lm`; `-ldl` belongs only to
+the Linux fault-injection test helper. The source and build review found no
+hidden product link dependency and no invariant-7 finding remains open.
 
 ## 10. Recorder/Fletch round-trip
 
