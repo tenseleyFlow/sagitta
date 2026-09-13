@@ -19,7 +19,7 @@ recorded in `audit-00.md`.
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
 | YEW-F-005 | H | open | F06 RE | multi-cursor replacement exits inside a Fletch edit transaction | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
 | YEW-F-006 | C | fixed | F07 UI | ~~workspace re-emission drops unknown root and workspace keys~~ — fixed 2026-09-13 in `9e829cd9` | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
-| YEW-F-007 | C | open | F07 UI | workspace restore reorders group members from tab-array order | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
+| YEW-F-007 | C | fixed | F07 UI | ~~workspace restore reorders group members from tab-array order~~ — fixed 2026-09-13 in `bea3990b` | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
 | YEW-F-008 | H | open | F08 FL | unprivileged plugin macro replay inherits config authority | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 | YEW-F-009 | M | open | F09 REC | recorder folding self-test no longer reaches its injected fault | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
 | YEW-F-010 | M | open | F09 REC | macro store accepts source that fails on first replay | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
@@ -151,14 +151,20 @@ records exhibited the same reconstruction loss and were filed first as
 `YEW-F-079`; the remaining nested record sites are included in that retained
 record-family investigation rather than silently declared clean.
 
-`YEW-F-007` is Critical: a normal save and restore silently reorders the
-user's group-member sequence. The hard-XPASS reproducer writes a group whose
-tab records occur in ordinal order 3, 2, 1 while the group's intended order
-is f0, f1, f2; restore returns f0, f2, f1. The writer records the correct
-ordinals, but state_parse.c applies each one immediately: an early ordinal 3
-clamps against a partial group before lower ordinals arrive, destroying the
-saved ordering. This violates the frozen workspace restore contract and
-remains open for Sprint 59; no product source changed.
+`YEW-F-007` was Critical: a normal save and restore silently reordered the
+user's group-member sequence. Commit `bea3990b` records the requested
+ordinals while tabs are opened, then applies them only after every member has
+joined its group. The hard-XPASS reproducer's descending tab-array order now
+restores as the intended f0, f1, f2 sequence and is an ordinary passing audit
+test. Oversized positive ordinals are bounded before the C integer conversion
+and retain the existing final-list clamp semantics.
+
+Cluster hunt: every production `yew_group_add_member` and
+`yew_group_set_ordinal` pairing was checked. Mouse moves operate on a complete
+destination group, group navigation appends explicitly at the complete
+group's end, and the picker/from-directory/self-open paths only append. Pane
+restore builds all window slots before resolving focus. No second
+partial-collection positional setter was found.
 
 `YEW-F-008` is High because a plugin declaring `capabilities: []` can write
 an arbitrary file by storing Fletch source in a macro register through
