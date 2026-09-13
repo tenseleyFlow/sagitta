@@ -45,5 +45,10 @@ hold the independently repeated child indefinitely.
 Terminal profiles are deterministic (`modern`, `nokitty`, `nosync`, `dumb`).
 The child receives only the exact pinned environment from Sprint 06; the
 developer shell environment, including `COLORTERM`, is never inherited.
+Sprint 58's invariant-5 audit may override only the child's `LANG`/`LC_ALL`,
+`TZ`, `COLORTERM`, and `TERM_PROGRAM` through the explicit
+`YEW_PTY_AUDIT_LANG`, `YEW_PTY_AUDIT_TZ`, `YEW_PTY_AUDIT_COLORTERM`, and
+`YEW_PTY_AUDIT_TERM_PROGRAM` inputs. They are absent by default and are never
+copied implicitly from the parent environment.
 Failures preserve their per-execution `XDG_STATE_HOME` under `build/` so the
 debug log remains available. Passing state directories are removed.

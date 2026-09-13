@@ -519,7 +519,9 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *state_dir, const char *no_color, const char *ascii,
                    const char *runtime_dir, const char *shadow_test,
                    const char *prof, const char *log,
-                   const char *clipboard)
+                   const char *clipboard, const char *audit_lang,
+                   const char *audit_tz, const char *audit_colorterm,
+                   const char *audit_term_program)
 {
     static const char *const keys[] = {
         "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
@@ -536,11 +538,16 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "YEW_SHADOW_TEST", "YEW_AI_MOCK", "GIT_CEILING_DIRECTORIES",
         /* Sprint 57's constrained-target lane reads yew's own HWM rather
          * than accidentally measuring this runner process. */
-        "YEW_PROF", "YEW_LOG", "YEW_CLIPBOARD"
+        "YEW_PROF", "YEW_LOG", "YEW_CLIPBOARD",
+        /* Sprint 58 invariant 5: opt-in hostile environment values.  These
+         * are absent in routine PTY runs so the hermetic default does not
+         * inherit a developer's shell. */
+        "TZ", "COLORTERM", "TERM_PROGRAM"
     };
     const char *values[] = {
         term, colors, "1", "500", "25", state_dir, state_dir,
-        "C.UTF-8", "C.UTF-8", "debug",
+        audit_lang == NULL ? "C.UTF-8" : audit_lang,
+        audit_lang == NULL ? "C.UTF-8" : audit_lang, "debug",
         /* Pin job elapsed time: it is the only nondeterministic thing a
          * job prints, and goldens are byte-compared (invariant 5). */
         "1240",
@@ -552,7 +559,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         /* Sprint 26: pins the undo picker's relative timestamps. */
         "1700000000",
         no_color, ascii, runtime_dir, state_dir, shadow_test, "1", state_dir,
-        prof, log, clipboard
+        prof, log, clipboard, audit_tz, audit_colorterm, audit_term_program
     };
     size_t i;
     size_t out_i = 0U;
@@ -676,7 +683,11 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
                        shadow_test_for(c), getenv("YEW_PROF"),
                        getenv("YEW_LOG"),
                        strncmp(c->test->name, "s57_12_clipboard_", 17U) == 0
-                           ? getenv("YEW_CLIPBOARD") : NULL)) {
+                           ? getenv("YEW_CLIPBOARD") : NULL,
+                       getenv("YEW_PTY_AUDIT_LANG"),
+                       getenv("YEW_PTY_AUDIT_TZ"),
+                       getenv("YEW_PTY_AUDIT_COLORTERM"),
+                       getenv("YEW_PTY_AUDIT_TERM_PROGRAM"))) {
         free(runtime_dir);
         strv_free(argv);
         ptc_fail(c, "allocating pinned environment");
