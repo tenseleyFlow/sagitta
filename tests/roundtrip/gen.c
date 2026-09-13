@@ -403,6 +403,7 @@ static const RtDenied denied[] = {
     D("ed.macro.replay_last", "macro recursion/cache is separately tested"),
     D("ed.shell.run", "external process side effect"),
     D("ed.shell.run_bg", "external process side effect"),
+    D("ed.shell.term_run", "interactive external process side effect"),
     D("ed.shell.read", "external process side effect"),
     D("ed.shell.filter", "external process side effect"),
     /* These commands still participate in the word bijection, but the
