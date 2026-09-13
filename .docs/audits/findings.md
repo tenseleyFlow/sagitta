@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-077`
+Next available ID: `YEW-F-078`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -89,6 +89,7 @@ recorded in `audit-00.md`.
 | YEW-F-074 | H | open | F15 CI | Darwin shipping clean rebuilds differ by Mach-O UUID | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
 | YEW-F-075 | C | open | F15 CI | stripped builds accept module-only config as inert state | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
+| YEW-F-077 | M | open | F03 TEXT | rectangular yank omits required short-row padding | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -565,6 +566,16 @@ the accepted-file byte round-trip required by Sprint 58 section 6.4 is false.
 Coverage-guided mutation flipped one bit at header offset 40; the standalone
 reproducer deterministically rebuilds that input and remains open for Sprint
 59. No product source changed during the audit.
+
+`YEW-F-077` is Medium because an ordinary rectangular yank clips short rows
+to their natural byte length but labels the resulting register non-ragged.
+Sprint 12 requires those rows to be right-padded to the rectangle's `CCol`
+width at store time, so a later paste reproduces different geometry from the
+selection the user yanked. The hard-XFAIL selects columns `[0, 2)` across
+`a` and `bb`: the required rows are `a ` and `bb`, while the baseline stores
+`a` and `bb`. The original buffer remains intact and the result is
+recoverable, so this is Medium rather than data loss. It remains open for
+Sprint 59; no product source changed during the audit.
 
 ## Unverified observations
 

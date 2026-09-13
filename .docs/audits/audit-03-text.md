@@ -167,6 +167,13 @@ The live document and undo tree remain intact, so this is Medium rather than
 a data-loss finding. `tests/audit/yew_f_076.c` pins the accepted-file
 byte-round-trip violation as a hard XFAIL for Sprint 59.
 
+`YEW-F-077` was discovered during the invariant-2 interaction session. An
+ordinary rectangular yank clips a short row to its content but does not add
+the padding required for a non-ragged register by Sprint 12 section 5. The
+register nevertheless reports `ragged = false`, so paste loses the selected
+rectangle's width on short rows. `tests/audit/yew_f_077.c` pins the two-row
+`a`/`bb` case as a hard XFAIL for Sprint 59.
+
 ## Unverified observations
 
 - An exact 2 GiB file was not read, edited, and written end-to-end on the
@@ -181,4 +188,4 @@ byte-round-trip violation as a hard XFAIL for Sprint 59.
 
 ## Count
 
-Raw 1 · deduped 1 · critical 0 · high 0 · medium 1 · low 0 · unverified 2.
+Raw 2 · deduped 2 · critical 0 · high 0 · medium 2 · low 0 · unverified 2.

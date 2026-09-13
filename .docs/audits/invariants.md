@@ -8,7 +8,7 @@ A pending row is not a verdict.
 | # | Invariant | Status | Verdict | Findings |
 |---:|---|---|---|---|
 | 1 | No data loss, ever | pending | — | — |
-| 2 | No byte confusion | pending | — | — |
+| 2 | No byte confusion | complete | VIOLATED | YEW-F-001, YEW-F-002, YEW-F-003, YEW-F-077 |
 | 3 | No silent stubs | complete | VIOLATED | YEW-F-014, YEW-F-075 |
 | 4 | Latency budgets are CI gates | complete | VIOLATED | YEW-F-072, YEW-F-073 |
 | 5 | Deterministic rendering | complete | VIOLATED | YEW-F-074 |
@@ -17,6 +17,61 @@ A pending row is not a verdict.
 | 8 | Single-threaded core | complete | HOLDS WITH FINDINGS | YEW-F-032 |
 | 9 | Modal paradigm first | complete | HOLDS | — |
 | 10 | Recorder/Fletch round-trip | complete | VIOLATED | YEW-F-023 |
+
+## 2. No byte confusion
+
+Verdict: **VIOLATED: YEW-F-001, YEW-F-002, YEW-F-003, YEW-F-077**.
+
+The dedicated control constructs one 981-byte document whose seven lines
+contain, in order, a 25-byte ZWJ family, 65 regional indicators, `e` plus 300
+combining marks, the lone surrogate encoding `ED A0 80`, all 2/3/4-byte
+overlong forms, `crlf` followed by a CRLF split between the piece tree's add
+and original stores, and two BOMs followed by 66 ASCII cells. The oracle is a
+literal table in the test rather than values derived from yew:
+
+| Line | Content byte range | Chars | Graphemes | Cells |
+|---:|---:|---:|---:|---:|
+| ZWJ family | `[0, 25)` | 7 | 1 | 2 |
+| 65 RI | `[26, 286)` | 65 | 33 | 66 |
+| 300 marks | `[287, 888)` | 301 | 1 | 1 |
+| lone surrogate | `[889, 892)` | 3 | 3 | 12 |
+| overlong forms | `[893, 902)` | 9 | 9 | 36 |
+| split CRLF prefix | `[903, 907)` | 4 | 4 | 4 |
+| BOM pair + pad | `[909, 981)` | 68 | 68 | 66 |
+
+At every cluster boundary the control checks reported grapheme and cell
+columns, cluster byte extents, and strict forward progress. It checks each
+line's terminal character, grapheme, and cell column against the hand table.
+Line, word, block, and character unit engines then traverse the entire file
+forward and backward in both normal and alternate forms; every step must make
+strict progress, stay in range, and land on a grapheme boundary.
+
+The editor-level half writes and opens the exact bytes, observes both invalid
+UTF-8 and mixed-EOL metadata, and recreates the CR/LF boundary through the
+real edit choke point so CR resides in add storage while LF remains original.
+A 66-cell rectangular selection across every line captures all 974 non-EOL
+bytes with the hand-counted row lengths `25, 260, 601, 3, 9, 4, 72` and does
+not mutate the document. The resulting block register is pasted and undone;
+the whole buffer is passed through the real `cat` shell filter; `crlf` is
+regex-replaced and undone; a Fletch macro inserts `Q` and is undone; and the
+file is saved, read byte-for-byte from disk, closed, reopened, and compared
+again. Every untouched byte remains identical throughout.
+
+The two controls pass 3,059 assertions in the default build, the fully
+stripped `MODULES=""` build, and an ASan/UBSan build on arm64 macOS. This
+establishes the byte-preservation and coordinate pipeline for the prescribed
+worst case, but it cannot overturn four existing hard-XFAILs:
+
+- `YEW-F-001`: ambiguous-wide mode widens fixed-cell chrome glyphs.
+- `YEW-F-002`: a completed regional-indicator cluster can remain withheld
+  from live job output until another write or process exit.
+- `YEW-F-003`: a valid ASCII-base keycap produces inconsistent grid widths
+  and reaches the renderer's internal-error path.
+- `YEW-F-077`: an ordinary rectangular yank omits required padding on short
+  rows while marking the block non-ragged, so later paste loses its geometry.
+
+All four remain deferred to Sprint 59; Sprint 58 changed audit tests and
+documentation only.
 
 ## 3. No silent stubs
 
