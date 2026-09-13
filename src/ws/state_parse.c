@@ -950,6 +950,13 @@ YewWsResult yew_state_apply(Ed *ed, const u8 *bytes, u64 len)
                     "workspace state was written for %s; restoring into %s",
                     saved, root);
     }
+    /*
+     * YEW-F-006: retain the parsed containers that can carry fields added
+     * by a newer writer. Reconstructing only today's schema silently deleted
+     * unknown root/workspace data on the next ordinary state save.
+     */
+    ed->state.root = doc;
+    ed->state.workspace = yew_fl_get(doc, "workspace");
     /* Step 2: options kept verbatim for Sprint 36. */
     ed->state.options = yew_fl_get(doc, "options");
 

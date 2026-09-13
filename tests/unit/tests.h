@@ -1811,6 +1811,7 @@ void test_ws_restore_group_survives_a_missing_member(void);
 void test_ws_restore_treats_a_directory_as_missing(void);
 void test_ws_restore_save_restore_save_is_a_fixpoint(void);
 void test_ws_restore_preserves_unknown_options(void);
+void test_ws_restore_preserves_unknown_root_and_workspace_fields(void);
 void test_ws_restore_marks_cost_no_read_until_hydration(void);
 void test_ws_restore_reads_what_save_wrote(void);
 void test_ws_restore_absent_state_is_fresh(void);

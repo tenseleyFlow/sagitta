@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-079`
+Next available ID: `YEW-F-080`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -18,7 +18,7 @@ recorded in `audit-00.md`.
 | YEW-F-003 | H | open | F01 UNI | ASCII-base keycap leaves inconsistent grid width | tests/audit/yew_f_003.c | s05 §3 |
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
 | YEW-F-005 | H | open | F06 RE | multi-cursor replacement exits inside a Fletch edit transaction | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
-| YEW-F-006 | C | open | F07 UI | workspace re-emission drops unknown root and workspace keys | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
+| YEW-F-006 | C | fixed | F07 UI | ~~workspace re-emission drops unknown root and workspace keys~~ — fixed 2026-09-13 in `9e829cd9` | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 | YEW-F-007 | C | open | F07 UI | workspace restore reorders group members from tab-array order | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
 | YEW-F-008 | H | open | F08 FL | unprivileged plugin macro replay inherits config authority | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 | YEW-F-009 | M | open | F09 REC | recorder folding self-test no longer reaches its injected fault | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
@@ -91,6 +91,7 @@ recorded in `audit-00.md`.
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
 | YEW-F-077 | M | open | F03 TEXT | rectangular yank omits required short-row padding | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 | YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
+| YEW-F-079 | C | open | F07 UI | workspace re-emission drops unknown group and tab record keys | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -135,13 +136,20 @@ Correct behavior is a normal, one-undo replacement that restores exact text
 and both cursor positions on undo. This remains open for Sprint 59; no product
 source changes during Sprint 58.
 
-`YEW-F-006` is Critical: unknown workspace data belongs to the user and a
-normal parse followed by save silently deletes it. The hard-XPASS reproducer
-shows that an unknown option survives, while equivalent unknown root and
-workspace keys do not. Root-cause hypothesis: state_parse.c retains only the
-options subtree and state_emit.c reconstructs root and workspace maps from
-known fields. This violates Sprint 25's forward-compatibility retention
-contract and remains open for Sprint 59; no product source changed.
+`YEW-F-006` was Critical: unknown workspace data belongs to the user and a
+normal parse followed by save silently deleted it. Commit `9e829cd9` retains
+the parsed root and workspace maps for the lifetime of the state arena and
+re-emits their unknown fields after canonical live fields, so known values
+win without deleting future data. The hard-XPASS reproducer is now an ordinary
+passing audit test, with a nested-literal unit regression alongside it.
+
+Cluster hunt: root, workspace, options, groups, tabs, pane trees, windows,
+cursors, views, jumps, file records, marks, changes, and undo records were
+checked at the parse/emit boundary. Options already retained their whole map;
+the root/workspace singleton loss is fixed. Identity-bearing group and tab
+records exhibited the same reconstruction loss and were filed first as
+`YEW-F-079`; the remaining nested record sites are included in that retained
+record-family investigation rather than silently declared clean.
 
 `YEW-F-007` is Critical: a normal save and restore silently reorders the
 user's group-member sequence. The hard-XPASS reproducer writes a group whose
@@ -587,6 +595,16 @@ The reproducer retains two hardlinks to the original base, so both the
 mismatch and the correct recovery source remain observable and recoverable.
 No disk file is silently overwritten by replay, making this Medium rather
 than Critical. It remains open for Sprint 59; no product source changed.
+
+`YEW-F-079` is Critical because Sprint 25's forward-compatibility contract is
+not limited to singleton maps: group and tab records also carry user-owned
+workspace state. The hard-XPASS reproducer restores one grouped file whose
+group and tab records each contain a future nested field, then performs a
+normal emit; both fields disappear. Source inspection found the same
+reconstruction pattern in pane/window/view/jump/file subrecords, so the
+remediation must define a stable identity-to-retained-record mapping and audit
+the complete record family rather than patch only the two probe keys. This was
+filed by the `YEW-F-006` Critical cluster hunt and remains open for Sprint 59.
 
 ## Unverified observations
 

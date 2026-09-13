@@ -232,6 +232,36 @@ static void state_options(StateEmit *e, const WsState *s)
     state_map_close(e);
 }
 
+static bool state_lit_key_eq(const FlLit *map, u32 i, const char *key)
+{
+    size_t len;
+
+    if (map == NULL || map->kind != FL_LIT_MAP || i >= map->len ||
+        key == NULL)
+        return false;
+    len = strlen(key);
+    return map->keylens[i] == (u64)len &&
+           memcmp(map->keys[i], key, len) == 0;
+}
+
+static void state_unknown_fields(StateEmit *e, const FlLit *map,
+                                 const char *const *known, u32 known_len)
+{
+    u32 i;
+
+    if (map == NULL || map->kind != FL_LIT_MAP)
+        return;
+    for (i = 0U; i < map->len; i++) {
+        u32 k;
+
+        for (k = 0U; k < known_len; k++)
+            if (state_lit_key_eq(map, i, known[k]))
+                break;
+        if (k == known_len)
+            state_lit(e, map->keys[i], map->items[i]);
+    }
+}
+
 void yew_idmap_init(IdMapVec *m)
 {
     if (m != NULL)
@@ -620,6 +650,11 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
 
 void yew_state_emit(const Ed *ed, Bytebuf *out)
 {
+    static const char *const root_known[] = {
+        "version", "writer", "workspace", "options", "groups", "tabs",
+        "active_tab", "files"
+    };
+    static const char *const workspace_known[] = {"path", "saved_at"};
     StateEmit e;
     u32 i;
     int n;
@@ -639,6 +674,10 @@ void yew_state_emit(const Ed *ed, Bytebuf *out)
                    root == NULL ? 0U : (u64)strlen(root));
         /* Display only; nothing reads it back to make a decision. */
         state_int(&e, "saved_at", (i64)time(NULL));
+        /* YEW-F-006: append unknown fields in retained insertion order. Known
+         * fields remain canonical and live state always wins. */
+        state_unknown_fields(&e, ed->state.workspace, workspace_known,
+                             YEW_ARRAY_LEN(workspace_known));
     }
     state_map_close(&e);
 
@@ -689,6 +728,8 @@ void yew_state_emit(const Ed *ed, Bytebuf *out)
                                                     : (i64)active->tab_id);
     }
     emit_file_records(&e, ed);
+    state_unknown_fields(&e, ed->state.root, root_known,
+                         YEW_ARRAY_LEN(root_known));
     state_map_close(&e);
     state_emit_done(&e);
 }

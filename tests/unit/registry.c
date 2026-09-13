@@ -1841,6 +1841,7 @@ const YewTest yew_tests[] = {
     T(ws_restore_treats_a_directory_as_missing),
     T(ws_restore_save_restore_save_is_a_fixpoint),
     T(ws_restore_preserves_unknown_options),
+    T(ws_restore_preserves_unknown_root_and_workspace_fields),
     T(ws_restore_marks_cost_no_read_until_hydration),
     T(ws_restore_reads_what_save_wrote),
     T(ws_restore_absent_state_is_fresh),
