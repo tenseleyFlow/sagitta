@@ -1501,6 +1501,7 @@ static void strip_draw_rows(Ed *ed, Rect rect)
 
     if (rect.w == 0U || rect.h == 0U)
         return;
+    (void)memset(entries, 0, sizeof(entries));
     n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
     strip_render_row1(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
                       yew_tab_row1_active(ed, entries, n), &ed->tabs.scroll,

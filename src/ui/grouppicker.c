@@ -302,12 +302,18 @@ static void gp_list_dir(void)
     while ((e = readdir(d)) != NULL && gp.n_rows < GP_ROWS_MAX) {
         GpRow *r;
         char full[YEW_GP_PATH_MAX];
+        size_t name_len;
         struct stat st;
 
         if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0)
             continue;
         if (e->d_name[0] == '.')
             continue; /* dotfiles stay out of the way */
+        name_len = strlen(e->d_name);
+        /* A truncated row could name a different file when selected.
+         * Reject anything this picker cannot represent losslessly. */
+        if (name_len >= sizeof(gp.rows[0].name))
+            continue;
         gp_join(gp.dir, e->d_name, full, sizeof(full));
         /* stat rather than d_type: d_type is DT_UNKNOWN on several
          * filesystems, and a directory listed as a file would be
@@ -326,7 +332,7 @@ static void gp_list_dir(void)
             continue;
         r = &gp.rows[gp.n_rows];
         (void)memset(r, 0, sizeof(*r));
-        (void)snprintf(r->name, sizeof(r->name), "%s", e->d_name);
+        (void)memcpy(r->name, e->d_name, name_len + 1U);
         r->is_dir = S_ISDIR(st.st_mode);
         gp.n_rows++;
     }
