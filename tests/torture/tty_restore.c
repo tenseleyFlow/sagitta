@@ -681,7 +681,7 @@ static bool enter_filter_moment(Trial *trial)
         (void)fprintf(stderr, "invariant-6: filter command write failed\n");
         return false;
     }
-    if (!wait_file(trial, trial->marker, 3)) {
+    if (!wait_nonempty_file(trial, trial->marker, 3)) {
         (void)fprintf(stderr, "invariant-6: filter marker timeout\n");
         return false;
     }
