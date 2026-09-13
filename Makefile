@@ -78,8 +78,9 @@ TARGET_OS := $(if $(filter arm64-macos,$(TARGET)),Darwin,Linux)
 BUILD   ?= build
 COV ?= 0
 COV_CC ?= clang
+COV_BUILD ?= build-cov
 ifeq ($(COV),1)
-override BUILD := build-cov
+override BUILD := $(COV_BUILD)
 endif
 ALLOCDBG ?= 0
 ALIGN_SAN ?= 0
@@ -100,6 +101,12 @@ MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
 FUZZ_SEED  ?= 1
 FUZZ_SECONDS ?=
+FUZZ_CAMPAIGN_TARGET ?= fuzz_input
+FUZZ_NIGHTLY_SECONDS ?= 1800
+SOAK_SECONDS ?= 259200
+SOAK_SEED ?=
+SOAK_LEDGER ?= .docs/audits/fuzz-coverage.md
+SOAK_ADMIT_DIR ?= tests/fuzz/corpus/$(FUZZ_CAMPAIGN_TARGET)
 # ASan/UBSan makes the AI shadow's allocation-heavy worst cases much slower
 # than plain builds.  Keep the normal five-second per-input hang detector,
 # but give that one instrumented campaign bounded headroom without reducing
@@ -1077,7 +1084,8 @@ endif
         embedded-image embedded-lowmem-image embedded embedded-gate \
         musl-verify test-musl-hosts \
         test-script fletch-script-coverage test-git-script fuzzlib-selftest \
-        fuzz-cov cov-selftest \
+        fuzz-cov fuzz-cov-weekly fuzz-cov-regression-selftest cov-selftest \
+        fuzz-nightly soak soak-rc soak-selftest \
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
@@ -1883,6 +1891,78 @@ fuzz-cov:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
 		MODULES='lsp ai fuss plugins' \
 		FUZZ_COV_REPORT='$(FUZZ_COV_REPORT)' fuzz-cov
+endif
+
+fuzz-cov-weekly: fuzz-cov
+	scripts/fuzz-coverage-regression.sh \
+		.docs/audits/fuzz-coverage.md $(FUZZ_COV_REPORT)
+
+fuzz-cov-regression-selftest:
+	@scripts/fuzz-coverage-regression.sh \
+		scripts/tests/fuzz-coverage/ledger.md \
+		scripts/tests/fuzz-coverage/snapshot-ok.md >/dev/null
+	@if scripts/fuzz-coverage-regression.sh \
+		scripts/tests/fuzz-coverage/ledger.md \
+		scripts/tests/fuzz-coverage/snapshot-regressed.md >/dev/null 2>&1; then \
+		echo "fuzz-cov-regression-selftest: accepted edge regression" >&2; \
+		exit 1; \
+	fi
+	@echo "fuzz-cov-regression-selftest: ok"
+
+ifeq ($(COV),1)
+fuzz-nightly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
+	@seed=$$(date -u +%Y%m%d); \
+		scripts/fuzz-soak.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
+		'$(FUZZ_NIGHTLY_SECONDS)' "$$seed" '$(SOAK_LEDGER)' \
+		'$(SOAK_ADMIT_DIR)'
+
+soak: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
+	@seed='$(SOAK_SEED)'; \
+	if [ -z "$$seed" ]; then \
+		seed=$$(od -An -N8 -tu8 /dev/urandom | tr -d ' '); \
+	fi; \
+	scripts/fuzz-soak.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
+		'$(SOAK_SECONDS)' "$$seed" '$(SOAK_LEDGER)' \
+		'$(SOAK_ADMIT_DIR)'
+
+soak-rc:
+	@test -n '$(RC_COMMIT)' || \
+		{ echo "soak-rc: RC_COMMIT is required" >&2; exit 2; }
+	@test "$$(git rev-parse HEAD)" = '$(RC_COMMIT)' || \
+		{ echo "soak-rc: checkout is not exact RC_COMMIT" >&2; exit 2; }
+	@$(MAKE) --no-print-directory COV=1 COV_BUILD='$(BUILD)' \
+		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
+		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
+		SOAK_LEDGER='$(SOAK_LEDGER)' \
+		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' soak
+
+soak-selftest: $(BUILD)/fuzz_input
+	scripts/fuzz-soak-selftest.sh $(BUILD)/fuzz_input
+else
+fuzz-nightly:
+	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
+		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
+		FUZZ_NIGHTLY_SECONDS='$(FUZZ_NIGHTLY_SECONDS)' \
+		SOAK_LEDGER='$(SOAK_LEDGER)' \
+		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' fuzz-nightly
+
+soak:
+	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
+		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
+		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
+		SOAK_LEDGER='$(SOAK_LEDGER)' \
+		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' soak
+
+soak-rc:
+	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
+		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
+		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
+		SOAK_LEDGER='$(SOAK_LEDGER)' \
+		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' \
+		RC_COMMIT='$(RC_COMMIT)' soak-rc
+
+soak-selftest:
+	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' soak-selftest
 endif
 
 test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script \
