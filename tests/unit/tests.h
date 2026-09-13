@@ -971,6 +971,7 @@ void test_ai_shadow_live_streams_all_adapters(void);
 void test_ai_shadow_live_accepts_word_and_all_as_single_undo(void);
 void test_ai_shadow_live_error_event_clears_without_inserting(void);
 void test_ai_shadow_live_early_close_clears_without_inserting(void);
+void test_invariant_single_threaded_live_subsystems(void);
 void test_ai_shadow_provider_declines_silently_and_starts_no_socket(void);
 void test_ai_key_env_resolution(void);
 void test_ai_key_env_errors_wipe(void);

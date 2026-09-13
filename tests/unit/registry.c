@@ -1020,6 +1020,7 @@ const YewTest yew_tests[] = {
     T(ai_shadow_live_accepts_word_and_all_as_single_undo),
     T(ai_shadow_live_error_event_clears_without_inserting),
     T(ai_shadow_live_early_close_clears_without_inserting),
+    T(invariant_single_threaded_live_subsystems),
     T(ai_shadow_provider_declines_silently_and_starts_no_socket),
     T(ai_key_env_resolution),
     T(ai_key_env_errors_wipe),

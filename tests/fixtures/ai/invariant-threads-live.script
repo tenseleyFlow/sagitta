@@ -1,0 +1,9 @@
+# Sprint 58 invariant 8: leave a real AI stream in flight long enough for
+# /proc/self/status to be inspected while LSP, git, and shell jobs are live.
+status 200
+header content-type: application/x-ndjson
+framing ndjson
+emit {"response":"int ","done":false}\n
+delay 30000
+emit {"response":"answer = 42;","done":false}\n
+emit {"response":"","done":true}\n
