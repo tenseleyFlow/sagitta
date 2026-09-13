@@ -2379,6 +2379,7 @@ void test_mouse_wheel_over_a_pick_row_scrolls_the_list(void);
 void test_mouse_gp_rows_reach_the_group_picker(void);
 void test_mouse_ctx_row_highlights_then_invokes(void);
 void test_option_table_has_frozen_order_types_scopes_and_defaults(void);
+void test_option_module_ownership_gates_every_config_write(void);
 void test_runtime_defaults_rebuild_frozen_keymap(void);
 void test_runtime_defaults_parse_run_style_and_options(void);
 void test_runtime_defaults_frozen_globals_and_dotted_keys_execute(void);

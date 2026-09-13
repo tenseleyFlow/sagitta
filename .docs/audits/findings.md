@@ -87,7 +87,7 @@ recorded in `audit-00.md`.
 | YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
 | YEW-F-073 | M | open | F15 CI | baseline history policy is not enforced | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
 | YEW-F-074 | H | open | F15 CI | Darwin shipping clean rebuilds differ by Mach-O UUID | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
-| YEW-F-075 | C | open | F15 CI | stripped builds accept module-only config as inert state | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
+| YEW-F-075 | C | fixed | F15 CI | ~~stripped builds accept module-only config as inert state~~ — fixed 2026-09-13 in `ee6f9894` | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
 | YEW-F-077 | M | open | F03 TEXT | rectangular yank omits required short-row padding | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 | YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
@@ -564,15 +564,23 @@ ad-hoc signature derived from it. Rebuilding and stripping twice with
 This is nondeterministic release output and therefore High under the rubric.
 It remains open for Sprint 59/60; no product or build fix landed in the audit.
 
-`YEW-F-075` is Critical because the `MODULES=""` build accepts writes to
-`ai.enable`, `lsp.open_in`, and `git.ascii_glyphs` even though their modules
-are absent; their stored values cannot activate the excluded behavior.
-Plugin-only options take the other inconsistent path and report generic
-`unknown option` rather than the canonical module refusal. F15 q7 explicitly
-requires canonical hard errors on the config-key surface, and the severity
-rubric classifies a user-reachable silent stub as Critical. One option table
-without module ownership is the shared root cause. The finding remains open
-for Sprint 59; no product source changed during the audit.
+`YEW-F-075` was Critical because excluded-module option writes either became
+inert state or reported a generic unknown-option error. Commit `ee6f9894`
+adds explicit module ownership to the option descriptor table, keeps every
+owned key discoverable in all profiles, and gates validation, direct writes,
+and transactional checkpoints through the canonical `yew_mod_require`
+diagnostic before mutation. The hard-XPASS reproducer now inventories every
+owned descriptor and passes in both the default and `MODULES=""` profiles.
+Commit `0da3de82` also removes the redundant LSP option write from the shipped
+core init file, whose descriptor default remains `here`, so the same default
+configuration executes with or without optional modules.
+
+Cluster hunt: checked all static and dynamic option descriptors, every
+module-key prefix, direct/validated/transactional write paths, the shipped
+runtime config, AI presets, and plugin config consumers; clean. The only
+sibling was the redundant `lsp.open_in` row in `runtime/init.fl`, fixed in
+`0da3de82`. `shadow.*` debounce and `compl.*` options remain core-owned by
+their core arbitration and symbol-index completion contracts.
 
 `YEW-F-076` is Medium because a corrupt but unused anchor-hash field in an
 unsaved undo sidecar is accepted as current and then silently canonicalized

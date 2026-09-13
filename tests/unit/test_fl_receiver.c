@@ -29,8 +29,15 @@ static void receiver_close(ReceiverFix *f)
 void test_fl_receiver_field_get_calls_bound_handle(void)
 {
     ReceiverFix f;
+    const char *ai_result;
 
     receiver_open(&f);
+#if YEW_WITH_AI
+    ai_result = "2";
+#else
+    ai_result = "!type: this build has no ai module; rebuild with 'make "
+                "MODULES=\"… ai\"'";
+#endif
     FL_EQ(&f.fl,
           "import buf\n"
           "let b = buf.current()\n"
@@ -48,7 +55,7 @@ void test_fl_receiver_field_get_calls_bound_handle(void)
           "let paths = b.opt(\"ai.exclude_paths\")\n"
           "if paths[0] != \"*.wolf-key\" { error(\"bad first path\") }\n"
           "if paths[1] != \"generated/?\" { error(\"bad second path\") }\n"
-          "return 2\n", "2");
+          "return 2\n", ai_result);
     receiver_close(&f);
 }
 

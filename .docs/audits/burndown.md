@@ -10,3 +10,4 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-09-13 | File `YEW-F-079` from the F006 cluster hunt (`79cb5c3b`) | 4 | 4 | 71 | 0 | 79 |
 | 2026-09-13 | Fix `YEW-F-006` (`9e829cd9`) | 3 | 4 | 71 | 0 | 78 |
 | 2026-09-13 | Fix `YEW-F-007` (`bea3990b`) | 2 | 4 | 71 | 0 | 77 |
+| 2026-09-13 | Fix `YEW-F-075` (`ee6f9894`) | 1 | 4 | 71 | 0 | 76 |

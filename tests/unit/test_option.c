@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "edit/option.h"
 #include "fl/flruntime.h"
+#include "mod/mods.h"
 #include "text/register.h"
 #include "text/undo.h"
 #include "ui/cmdcomp.h"
@@ -58,9 +59,7 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "hooks.error_limit",
         "save.strategy", "save.check_disk", "save.check_disk_max",
         "save.backup_keep", "save.backup_dir",
-#if YEW_WITH_PLUGINS
         "plug.error_limit", "plug.verify_on_load",
-#endif
         "theme", "theme_auto",
         "macro.dir",
         "shadow.enable", "shadow.providers", "shadow.max_lines",
@@ -134,6 +133,52 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
     yew_ed_free(&ed);
 }
 
+static u8 expected_option_module(const char *name)
+{
+    if (strncmp(name, "ai.", 3U) == 0)
+        return (u8)YEW_OPT_MODULE_AI;
+    if (strncmp(name, "plug.", 5U) == 0)
+        return (u8)YEW_OPT_MODULE_PLUGINS;
+    if (strcmp(name, "lsp.open_in") == 0)
+        return (u8)YEW_OPT_MODULE_LSP;
+    if (strcmp(name, "git.ascii_glyphs") == 0)
+        return (u8)YEW_OPT_MODULE_FUSS;
+    return (u8)YEW_OPT_MODULE_CORE;
+}
+
+void test_option_module_ownership_gates_every_config_write(void)
+{
+    Ed ed;
+    u32 i;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    for (i = 0U; i < yew_opts_len; i++) {
+        const OptDesc *desc = &yew_opts[i];
+        const char *err = NULL;
+        char canonical[192] = "";
+        u8 expected = expected_option_module(desc->name);
+        bool accepted;
+        YewMod module;
+
+        YEW_ASSERT_EQ_U64(desc->module, expected);
+        if (expected == (u8)YEW_OPT_MODULE_CORE)
+            continue;
+        module = (YewMod)(expected - 1U);
+        accepted = opt_set(&ed, desc->scope, desc->name, desc->dflt, &err);
+        if (yew_mod_enabled(module)) {
+            YEW_ASSERT(accepted);
+            YEW_ASSERT_NULL(err);
+        } else {
+            YEW_ASSERT(!accepted);
+            YEW_ASSERT(!yew_mod_require(module, canonical,
+                                        sizeof(canonical)));
+            YEW_ASSERT_EQ_STR(err, canonical);
+        }
+    }
+    yew_ed_free(&ed);
+}
+
 void test_option_validators_reject_wrong_types_ranges_and_enums(void)
 {
     Ed ed;
@@ -181,7 +226,8 @@ void test_option_validators_reject_wrong_types_ranges_and_enums(void)
             YEW_ASSERT_NOT_NULL(err);
         }
     }
-    for (i = 0U; i < YEW_ARRAY_LEN(open_in); i++) {
+    for (i = 0U; yew_mod_enabled(YEW_MOD_LSP) &&
+                i < YEW_ARRAY_LEN(open_in); i++) {
         OptVal value = {YEW_OPT_STR,
                         {.str = {open_in[i], (u32)strlen(open_in[i])}}};
 

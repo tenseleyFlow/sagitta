@@ -30,6 +30,16 @@ typedef enum OptScope {
     YEW_OPT_SCOPE_DECLARED = 255
 } OptScope;
 
+/* Zero is core so static and plugin-declared descriptors default safely.
+ * Nonzero values are intentionally YewMod + 1; option.c pins the mapping. */
+typedef enum OptModule {
+    YEW_OPT_MODULE_CORE = 0,
+    YEW_OPT_MODULE_LSP,
+    YEW_OPT_MODULE_AI,
+    YEW_OPT_MODULE_FUSS,
+    YEW_OPT_MODULE_PLUGINS
+} OptModule;
+
 typedef struct OptStr {
     const char *s;                 /* borrowed for the duration of a call */
     u32 len;
@@ -60,6 +70,7 @@ typedef struct OptDesc {
     void (*on_change)(Ed *ed, const struct OptDesc *desc,
                       const OptVal *old, const OptVal *nu);
     const char *help;
+    u8 module;                     /* OptModule */
 } OptDesc;
 
 extern const OptDesc yew_opts[];
