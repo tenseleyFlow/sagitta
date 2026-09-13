@@ -1,0 +1,8 @@
+# Sprint 58 parser tokens.  Backslashes are literal unless they form \xNN.
+[:alpha:]
+\b
+\w
+{1,1000}
+(?
+\x{
+\u{10FFFF}

@@ -16,6 +16,10 @@
 
 #include "unicode/utf8.h"
 
+#if YEW_COV
+#include "cov.h"
+#endif
+
 enum {
     YEW_FUZZ_DEFAULT_ITERS = 200000,
     YEW_FUZZ_DEFAULT_WATCHDOG_SECONDS = 5,
@@ -50,9 +54,17 @@ typedef struct {
     u64 deadline_ms;
     unsigned int watchdog_seconds;
     bool corpus_only;
+    bool coverage_report;
+    const char *admit_dir;
+    char guided_dir[256];
     const char *target;
     YewFuzzCheck check;
     Corpus corpus;
+    Corpus dictionary;
+#if YEW_COV
+    size_t admitted;
+    u64 admitted_edges;
+#endif
 } FuzzRun;
 
 static volatile sig_atomic_t watchdog_iteration;
@@ -470,6 +482,60 @@ static bool load_file_lines(Corpus *corpus, const char *path)
     return ok;
 }
 
+static bool path_has_suffix(const char *path, const char *suffix)
+{
+    size_t path_len = strlen(path);
+    size_t suffix_len = strlen(suffix);
+
+    return path_len >= suffix_len &&
+           strcmp(path + path_len - suffix_len, suffix) == 0;
+}
+
+static bool load_raw_file(Corpus *corpus, const char *path)
+{
+    FILE *fp = fopen(path, "rb");
+    FuzzBuf bytes = {0};
+    u8 chunk[4096];
+    bool ok = true;
+
+    if (fp == NULL) {
+        (void)fprintf(stderr, "fuzz: cannot open corpus %s: %s\n", path,
+                      strerror(errno));
+        return false;
+    }
+    for (;;) {
+        size_t room = YEW_FUZZ_MAX_INPUT - bytes.len;
+        size_t want = room < sizeof(chunk) ? room : sizeof(chunk);
+        size_t got;
+
+        if (want == 0U)
+            break;
+        got = fread(chunk, 1U, want, fp);
+        if (got != 0U)
+            buf_insert(&bytes, bytes.len, chunk, got);
+        if (got != want)
+            break;
+    }
+    if (ferror(fp)) {
+        (void)fprintf(stderr, "fuzz: cannot read corpus %s: %s\n", path,
+                      strerror(errno == 0 ? EIO : errno));
+        ok = false;
+    } else if (bytes.len == YEW_FUZZ_MAX_INPUT && fgetc(fp) != EOF) {
+        (void)fprintf(stderr, "fuzz: corpus entry exceeds %u bytes: %s\n",
+                      (unsigned int)YEW_FUZZ_MAX_INPUT, path);
+        ok = false;
+    }
+    if (fclose(fp) != 0) {
+        (void)fprintf(stderr, "fuzz: cannot close corpus %s: %s\n", path,
+                      strerror(errno));
+        ok = false;
+    }
+    if (ok)
+        corpus_add(corpus, path, bytes.data, bytes.len);
+    free(bytes.data);
+    return ok;
+}
+
 static bool load_dir(Corpus *corpus, const char *path)
 {
     DIR *dir = opendir(path);
@@ -516,15 +582,131 @@ static bool load_dir(Corpus *corpus, const char *path)
                 ok = false;
                 break;
             }
-        } else if (S_ISREG(st.st_mode) &&
-                   !load_file_lines(corpus, child)) {
-            ok = false;
-            break;
+        } else if (S_ISREG(st.st_mode)) {
+            bool loaded = path_has_suffix(child, ".bin") ?
+                          load_raw_file(corpus, child) :
+                          load_file_lines(corpus, child);
+
+            if (!loaded) {
+                ok = false;
+                break;
+            }
         }
     }
     if (closedir(dir) != 0) {
         (void)fprintf(stderr, "fuzz: cannot close corpus directory %s: %s\n",
                       path, strerror(errno));
+        ok = false;
+    }
+    return ok;
+}
+
+static bool load_optional_dir(Corpus *corpus, const char *path)
+{
+    struct stat st;
+
+    if (stat(path, &st) != 0) {
+        if (errno == ENOENT)
+            return true;
+        (void)fprintf(stderr, "fuzz: cannot stat corpus %s: %s\n", path,
+                      strerror(errno));
+        return false;
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        (void)fprintf(stderr, "fuzz: corpus path is not a directory: %s\n",
+                      path);
+        return false;
+    }
+    return load_dir(corpus, path);
+}
+
+static bool decode_dictionary_token(const char *line, size_t len,
+                                    FuzzBuf *token)
+{
+    size_t i;
+
+    token->len = 0U;
+    for (i = 0U; i < len; i++) {
+        u8 byte = (u8)line[i];
+
+        if (byte == (u8)'\\' && i + 1U < len) {
+            char escaped = line[i + 1U];
+
+            if (escaped == 'x' && i + 3U < len) {
+                u8 high;
+                u8 low;
+
+                if (hex_nibble(line[i + 2U], &high) &&
+                    hex_nibble(line[i + 3U], &low)) {
+                    byte = (u8)((high << 4) | low);
+                    i += 3U;
+                }
+            } else if (escaped == 'n' || escaped == 'r' ||
+                       escaped == 't' || escaped == '\\') {
+                byte = escaped == 'n' ? (u8)'\n' :
+                       escaped == 'r' ? (u8)'\r' :
+                       escaped == 't' ? (u8)'\t' : (u8)'\\';
+                i++;
+            }
+        }
+        buf_insert(token, token->len, &byte, 1U);
+    }
+    return token->len != 0U;
+}
+
+static bool load_dictionary(Corpus *dictionary, const char *target)
+{
+    char path[256];
+    FILE *fp;
+    char *line = NULL;
+    size_t line_cap = 0U;
+    size_t line_no = 0U;
+    ssize_t got;
+    bool ok = true;
+
+    if (snprintf(path, sizeof(path), "tests/fuzz/dict/%s.txt", target) >=
+        (int)sizeof(path)) {
+        (void)fprintf(stderr, "fuzz: dictionary path is too long: %s\n",
+                      target);
+        return false;
+    }
+    fp = fopen(path, "rb");
+    if (fp == NULL)
+        return errno == ENOENT;
+    while ((got = getline(&line, &line_cap, fp)) >= 0) {
+        size_t len = (size_t)got;
+        size_t first = 0U;
+        FuzzBuf token = {0};
+        char name[320];
+
+        line_no++;
+        while (len != 0U && (line[len - 1U] == '\n' ||
+                             line[len - 1U] == '\r'))
+            len--;
+        while (first < len && (line[first] == ' ' || line[first] == '\t'))
+            first++;
+        if (first == len || line[first] == '#')
+            continue;
+        if (!decode_dictionary_token(line + first, len - first, &token)) {
+            (void)fprintf(stderr, "fuzz: empty dictionary token %s:%zu\n",
+                          path, line_no);
+            free(token.data);
+            ok = false;
+            break;
+        }
+        (void)snprintf(name, sizeof(name), "%s:%zu", path, line_no);
+        corpus_add(dictionary, name, token.data, token.len);
+        free(token.data);
+    }
+    if (ferror(fp)) {
+        (void)fprintf(stderr, "fuzz: cannot read dictionary %s: %s\n", path,
+                      strerror(errno == 0 ? EIO : errno));
+        ok = false;
+    }
+    free(line);
+    if (fclose(fp) != 0) {
+        (void)fprintf(stderr, "fuzz: cannot close dictionary %s: %s\n", path,
+                      strerror(errno));
         ok = false;
     }
     return ok;
@@ -691,9 +873,18 @@ static void mutate_surrogate(FuzzRun *run, FuzzBuf *buf)
                sizeof(surrogate));
 }
 
+static void mutate_dictionary(FuzzRun *run, FuzzBuf *buf)
+{
+    const FuzzBuf *token =
+        &run->dictionary.entries[choose(run, run->dictionary.len)].bytes;
+
+    buf_insert(buf, choose(run, buf->len + 1U), token->data, token->len);
+}
+
 static const char *mutate(FuzzRun *run, FuzzBuf *buf)
 {
-    size_t op = choose(run, 10U);
+    size_t op_count = run->dictionary.len == 0U ? 10U : 11U;
+    size_t op = choose(run, op_count);
 
     switch (op) {
     case 0U: mutate_flip(run, buf); return "byte-flip";
@@ -705,7 +896,8 @@ static const char *mutate(FuzzRun *run, FuzzBuf *buf)
     case 6U: mutate_split_utf8(run, buf); return "utf8-split";
     case 7U: mutate_lead_class(run, buf); return "lead-class";
     case 8U: mutate_continuation(run, buf); return "lone-continuation";
-    default: mutate_surrogate(run, buf); return "surrogate-inject";
+    case 9U: mutate_surrogate(run, buf); return "surrogate-inject";
+    default: mutate_dictionary(run, buf); return "dictionary-splice";
     }
 }
 
@@ -723,6 +915,189 @@ static void hash_bytes(FuzzRun *run, const FuzzBuf *buf)
         run->hash *= UINT64_C(1099511628211);
     }
 }
+
+#if YEW_COV
+typedef struct {
+    u32 state[8];
+    u64 bit_len;
+    u8 block[64];
+    size_t block_len;
+} FuzzSha256;
+
+static u32 sha_rotr(u32 value, u32 count)
+{
+    return (value >> count) | (value << (32U - count));
+}
+
+static void sha256_block(FuzzSha256 *sha, const u8 block[64])
+{
+    static const u32 constants[64] = {
+        0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U,
+        0x3956c25bU, 0x59f111f1U, 0x923f82a4U, 0xab1c5ed5U,
+        0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
+        0x72be5d74U, 0x80deb1feU, 0x9bdc06a7U, 0xc19bf174U,
+        0xe49b69c1U, 0xefbe4786U, 0x0fc19dc6U, 0x240ca1ccU,
+        0x2de92c6fU, 0x4a7484aaU, 0x5cb0a9dcU, 0x76f988daU,
+        0x983e5152U, 0xa831c66dU, 0xb00327c8U, 0xbf597fc7U,
+        0xc6e00bf3U, 0xd5a79147U, 0x06ca6351U, 0x14292967U,
+        0x27b70a85U, 0x2e1b2138U, 0x4d2c6dfcU, 0x53380d13U,
+        0x650a7354U, 0x766a0abbU, 0x81c2c92eU, 0x92722c85U,
+        0xa2bfe8a1U, 0xa81a664bU, 0xc24b8b70U, 0xc76c51a3U,
+        0xd192e819U, 0xd6990624U, 0xf40e3585U, 0x106aa070U,
+        0x19a4c116U, 0x1e376c08U, 0x2748774cU, 0x34b0bcb5U,
+        0x391c0cb3U, 0x4ed8aa4aU, 0x5b9cca4fU, 0x682e6ff3U,
+        0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
+        0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U
+    };
+    u32 words[64];
+    u32 a;
+    u32 b;
+    u32 c;
+    u32 d;
+    u32 e;
+    u32 f;
+    u32 g;
+    u32 h;
+    size_t i;
+
+    for (i = 0U; i < 16U; i++) {
+        size_t off = i * 4U;
+
+        words[i] = ((u32)block[off] << 24) |
+                   ((u32)block[off + 1U] << 16) |
+                   ((u32)block[off + 2U] << 8) |
+                   (u32)block[off + 3U];
+    }
+    for (i = 16U; i < 64U; i++) {
+        u32 x = words[i - 15U];
+        u32 y = words[i - 2U];
+        u32 s0 = sha_rotr(x, 7U) ^ sha_rotr(x, 18U) ^ (x >> 3);
+        u32 s1 = sha_rotr(y, 17U) ^ sha_rotr(y, 19U) ^ (y >> 10);
+
+        words[i] = words[i - 16U] + s0 + words[i - 7U] + s1;
+    }
+    a = sha->state[0];
+    b = sha->state[1];
+    c = sha->state[2];
+    d = sha->state[3];
+    e = sha->state[4];
+    f = sha->state[5];
+    g = sha->state[6];
+    h = sha->state[7];
+    for (i = 0U; i < 64U; i++) {
+        u32 sum1 = sha_rotr(e, 6U) ^ sha_rotr(e, 11U) ^ sha_rotr(e, 25U);
+        u32 choose_word = (e & f) ^ ((~e) & g);
+        u32 temp1 = h + sum1 + choose_word + constants[i] + words[i];
+        u32 sum0 = sha_rotr(a, 2U) ^ sha_rotr(a, 13U) ^ sha_rotr(a, 22U);
+        u32 majority = (a & b) ^ (a & c) ^ (b & c);
+        u32 temp2 = sum0 + majority;
+
+        h = g;
+        g = f;
+        f = e;
+        e = d + temp1;
+        d = c;
+        c = b;
+        b = a;
+        a = temp1 + temp2;
+    }
+    sha->state[0] += a;
+    sha->state[1] += b;
+    sha->state[2] += c;
+    sha->state[3] += d;
+    sha->state[4] += e;
+    sha->state[5] += f;
+    sha->state[6] += g;
+    sha->state[7] += h;
+}
+
+static void sha256_init(FuzzSha256 *sha)
+{
+    static const u32 initial[8] = {
+        0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0xa54ff53aU,
+        0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0x5be0cd19U
+    };
+
+    (void)memset(sha, 0, sizeof(*sha));
+    (void)memcpy(sha->state, initial, sizeof(initial));
+}
+
+static void sha256_update(FuzzSha256 *sha, const u8 *data, size_t len)
+{
+    size_t off = 0U;
+
+    while (off < len) {
+        size_t take = sizeof(sha->block) - sha->block_len;
+
+        if (take > len - off)
+            take = len - off;
+        (void)memcpy(sha->block + sha->block_len, data + off, take);
+        sha->block_len += take;
+        off += take;
+        if (sha->block_len == sizeof(sha->block)) {
+            sha256_block(sha, sha->block);
+            sha->bit_len += UINT64_C(512);
+            sha->block_len = 0U;
+        }
+    }
+}
+
+static void sha256_final(FuzzSha256 *sha, u8 digest[32])
+{
+    u64 bits = sha->bit_len + (u64)sha->block_len * 8U;
+    size_t i;
+
+    sha->block[sha->block_len++] = 0x80U;
+    if (sha->block_len > 56U) {
+        (void)memset(sha->block + sha->block_len, 0,
+                     sizeof(sha->block) - sha->block_len);
+        sha256_block(sha, sha->block);
+        sha->block_len = 0U;
+    }
+    (void)memset(sha->block + sha->block_len, 0, 56U - sha->block_len);
+    for (i = 0U; i < 8U; i++)
+        sha->block[63U - i] = (u8)(bits >> (i * 8U));
+    sha256_block(sha, sha->block);
+    for (i = 0U; i < 8U; i++) {
+        digest[i * 4U] = (u8)(sha->state[i] >> 24);
+        digest[i * 4U + 1U] = (u8)(sha->state[i] >> 16);
+        digest[i * 4U + 2U] = (u8)(sha->state[i] >> 8);
+        digest[i * 4U + 3U] = (u8)sha->state[i];
+    }
+}
+
+static void sha256_prefix(const FuzzBuf *buf, char hex[33])
+{
+    static const char digits[] = "0123456789abcdef";
+    FuzzSha256 sha;
+    u8 digest[32];
+    size_t i;
+
+    sha256_init(&sha);
+    sha256_update(&sha, buf->data, buf->len);
+    sha256_final(&sha, digest);
+    for (i = 0U; i < 16U; i++) {
+        hex[i * 2U] = digits[digest[i] >> 4];
+        hex[i * 2U + 1U] = digits[digest[i] & 0x0fU];
+    }
+    hex[32] = '\0';
+}
+
+static bool sha256_selftest(void)
+{
+    static const u8 abc[] = {'a', 'b', 'c'};
+    FuzzBuf input = {0};
+    char hex[33];
+
+    sha256_prefix(&input, hex);
+    if (strcmp(hex, "e3b0c44298fc1c149afbf4c8996fb924") != 0)
+        return false;
+    input.data = (u8 *)abc;
+    input.len = sizeof(abc);
+    sha256_prefix(&input, hex);
+    return strcmp(hex, "ba7816bf8f01cfea414140de5dae2223") == 0;
+}
+#endif
 
 static void watchdog(int signo)
 {
@@ -789,6 +1164,136 @@ static void minimize(FuzzRun *run, FuzzBuf *buf)
     }
 }
 
+#if YEW_COV
+static void minimize_coverage(FuzzRun *run, FuzzBuf *buf)
+{
+    size_t granularity = 2U;
+    char why[YEW_FUZZ_WHY_CAP];
+
+    while (buf->len != 0U) {
+        size_t chunk = (buf->len + granularity - 1U) / granularity;
+        bool reduced = false;
+        size_t at;
+
+        for (at = 0U; at < buf->len; at += chunk) {
+            FuzzBuf candidate = {0};
+            size_t take = chunk;
+
+            if (take > buf->len - at)
+                take = buf->len - at;
+            buf_assign(&candidate, buf->data, buf->len);
+            buf_delete(&candidate, at, take);
+            yew_cov_reset();
+            if (checked(run, &candidate, why) && yew_cov_new_edges() != 0U) {
+                buf_assign(buf, candidate.data, candidate.len);
+                reduced = true;
+                free(candidate.data);
+                granularity = granularity > 2U ? granularity - 1U : 2U;
+                break;
+            }
+            free(candidate.data);
+        }
+        if (reduced)
+            continue;
+        if (granularity >= buf->len)
+            break;
+        granularity *= 2U;
+        if (granularity > buf->len)
+            granularity = buf->len;
+    }
+}
+
+static bool file_matches(const char *path, const FuzzBuf *buf)
+{
+    int fd = open(path, O_RDONLY);
+    size_t off = 0U;
+    u8 bytes[4096];
+
+    if (fd < 0)
+        return false;
+    for (;;) {
+        ssize_t got = read(fd, bytes, sizeof(bytes));
+
+        if (got < 0 && errno == EINTR)
+            continue;
+        if (got < 0 || (size_t)got > buf->len - off ||
+            (got != 0 && memcmp(bytes, buf->data + off, (size_t)got) != 0)) {
+            (void)close(fd);
+            return false;
+        }
+        if (got == 0)
+            break;
+        off += (size_t)got;
+    }
+    if (close(fd) != 0)
+        return false;
+    return off == buf->len;
+}
+
+static bool save_admission(FuzzRun *run, const FuzzBuf *buf, bool *created)
+{
+    char digest[33];
+    char path[1024];
+    int fd;
+    size_t off = 0U;
+    bool ok = true;
+
+    *created = false;
+    if (mkdir(run->admit_dir, 0777) != 0 && errno != EEXIST) {
+        (void)fprintf(stderr, "fuzz: cannot create admission directory %s: "
+                      "%s\n", run->admit_dir, strerror(errno));
+        return false;
+    }
+    sha256_prefix(buf, digest);
+    if (snprintf(path, sizeof(path), "%s/%s.bin", run->admit_dir, digest) >=
+        (int)sizeof(path)) {
+        (void)fprintf(stderr, "fuzz: admission path is too long: %s\n",
+                      run->admit_dir);
+        return false;
+    }
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0666);
+    if (fd < 0 && errno == EEXIST) {
+        if (!file_matches(path, buf)) {
+            (void)fprintf(stderr,
+                          "fuzz: SHA-256 prefix collision at %s\n", path);
+            return false;
+        }
+        return true;
+    }
+    if (fd < 0) {
+        (void)fprintf(stderr, "fuzz: cannot write admission %s: %s\n", path,
+                      strerror(errno));
+        return false;
+    }
+    while (off < buf->len) {
+        ssize_t wrote = write(fd, buf->data + off, buf->len - off);
+
+        if (wrote < 0 && errno == EINTR)
+            continue;
+        if (wrote <= 0) {
+            ok = false;
+            break;
+        }
+        off += (size_t)wrote;
+    }
+    if (ok && fsync(fd) != 0)
+        ok = false;
+    if (close(fd) != 0)
+        ok = false;
+    if (!ok) {
+        int saved_errno = errno == 0 ? EIO : errno;
+
+        (void)unlink(path);
+        (void)fprintf(stderr, "fuzz: cannot finish admission %s: %s\n", path,
+                      strerror(saved_errno));
+        return false;
+    }
+    corpus_add(&run->corpus, path, buf->data, buf->len);
+    *created = true;
+    return true;
+}
+#endif
+
 static void save_crash(FuzzRun *run, const FuzzBuf *buf)
 {
     char path[256];
@@ -842,6 +1347,30 @@ static bool crashes_empty(void)
     return empty;
 }
 
+static bool replay_corpus(FuzzRun *run)
+{
+    size_t i;
+
+    for (i = 0U; i < run->corpus.len; i++) {
+        const CorpusEntry *entry = &run->corpus.entries[i];
+        char why[YEW_FUZZ_WHY_CAP] = {0};
+
+        run->iteration = i;
+#if YEW_COV
+        yew_cov_reset();
+#endif
+        if (!checked(run, &entry->bytes, why)) {
+            (void)fprintf(stderr, "%s: FAIL corpus=%s: %s\n",
+                          run->target, entry->name, why);
+            return false;
+        }
+#if YEW_COV
+        yew_cov_merge();
+#endif
+    }
+    return true;
+}
+
 static bool parse_u64_option(const char *arg, const char *prefix, u64 *out)
 {
     char *end;
@@ -886,6 +1415,12 @@ static void add_builtin_corpus(Corpus *corpus)
     corpus_add(corpus, "builtin/grapheme", grapheme, sizeof(grapheme));
 }
 
+static void fuzz_run_free(FuzzRun *run)
+{
+    corpus_free(&run->corpus);
+    corpus_free(&run->dictionary);
+}
+
 int yew_fuzz_main(int argc, char **argv, const char *target,
                   const char *corpus_dir, YewFuzzCheck check)
 {
@@ -899,6 +1434,15 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
     run.watchdog_seconds = YEW_FUZZ_DEFAULT_WATCHDOG_SECONDS;
     run.target = target;
     run.check = check;
+    if (snprintf(run.guided_dir, sizeof(run.guided_dir),
+                 "tests/fuzz/corpus/%s", target) >=
+        (int)sizeof(run.guided_dir)) {
+        (void)fprintf(stderr, "%s: guided corpus path is too long\n", target);
+        return 2;
+    }
+#if YEW_COV
+    run.admit_dir = run.guided_dir;
+#endif
     for (i = 1U; i < (size_t)argc; i++) {
         if (parse_u64_option(argv[i], "--seed=", &run.seed))
             continue;
@@ -921,12 +1465,35 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
             run.corpus_only = true;
             continue;
         }
+        if (strcmp(argv[i], "--coverage-report") == 0) {
+            run.coverage_report = true;
+            continue;
+        }
+        if (strncmp(argv[i], "--admit-dir=", 12U) == 0 && argv[i][12] != '\0') {
+            run.admit_dir = argv[i] + 12U;
+            continue;
+        }
         (void)fprintf(stderr,
                       "usage: %s [--seed=N] [--iters=N] [--seconds=N] "
-                      "[--watchdog-seconds=N] [--corpus-only]\n",
+                      "[--watchdog-seconds=N] [--corpus-only] "
+                      "[--coverage-report] [--admit-dir=PATH]\n",
                       argv[0]);
         return 2;
     }
+#if !YEW_COV
+    if (run.coverage_report || run.admit_dir != NULL) {
+        (void)fprintf(stderr,
+                      "%s: coverage options require a COV=1 build\n",
+                      target);
+        return 2;
+    }
+#else
+    if (!sha256_selftest()) {
+        (void)fprintf(stderr, "%s: SHA-256 admission self-test failed\n",
+                      target);
+        return 2;
+    }
+#endif
     if (!crashes_empty()) {
         (void)fprintf(stderr,
                       "%s: tests/fuzz/crashes contains a crashing input\n",
@@ -935,7 +1502,18 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
     }
     add_builtin_corpus(&run.corpus);
     if (corpus_dir != NULL && !load_dir(&run.corpus, corpus_dir)) {
-        corpus_free(&run.corpus);
+        fuzz_run_free(&run);
+        return 2;
+    }
+    if (!load_optional_dir(&run.corpus, run.guided_dir) ||
+        (run.admit_dir != NULL && run.admit_dir != run.guided_dir &&
+         strcmp(run.admit_dir, run.guided_dir) != 0 &&
+         !load_optional_dir(&run.corpus, run.admit_dir))) {
+        fuzz_run_free(&run);
+        return 2;
+    }
+    if (!load_dictionary(&run.dictionary, target)) {
+        fuzz_run_free(&run);
         return 2;
     }
     corpus_sort(&run.corpus);
@@ -947,7 +1525,7 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
 
         if (run.seconds > UINT64_MAX / 1000U) {
             (void)fprintf(stderr, "%s: duration is too large\n", target);
-            corpus_free(&run.corpus);
+            fuzz_run_free(&run);
             return 2;
         }
         span = run.seconds * 1000U;
@@ -960,25 +1538,33 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
     if (sigaction(SIGALRM, &action, NULL) != 0) {
         (void)fprintf(stderr, "%s: sigaction: %s\n", target,
                       strerror(errno));
-        corpus_free(&run.corpus);
+        fuzz_run_free(&run);
         return 2;
     }
+#if YEW_COV
+    if (!replay_corpus(&run)) {
+        fuzz_run_free(&run);
+        return 1;
+    }
+#endif
     if (run.corpus_only) {
-        for (run.iteration = 0U; run.iteration < run.corpus.len;
-             run.iteration++) {
-            const CorpusEntry *entry = &run.corpus.entries[run.iteration];
-            char why[YEW_FUZZ_WHY_CAP] = {0};
-
-            if (!checked(&run, &entry->bytes, why)) {
-                (void)fprintf(stderr, "%s: FAIL corpus=%s: %s\n",
-                              target, entry->name, why);
-                corpus_free(&run.corpus);
-                return 1;
-            }
+#if !YEW_COV
+        if (!replay_corpus(&run)) {
+            fuzz_run_free(&run);
+            return 1;
         }
+#endif
         (void)printf("%s: corpus=%zu exact replay ok\n", target,
                      run.corpus.len);
-        corpus_free(&run.corpus);
+#if YEW_COV
+        if (run.coverage_report) {
+            (void)printf("%s: ", target);
+            yew_cov_report(stdout);
+            (void)printf(" corpus=%zu admitted=0 new_edges=0\n",
+                         run.corpus.len);
+        }
+#endif
+        fuzz_run_free(&run);
         return 0;
     }
     for (run.iteration = 0U; run.iteration < run.iterations;
@@ -999,6 +1585,9 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
         for (m = 0U; m < mutations; m++)
             op = mutate(&run, &input);
         hash_bytes(&run, &input);
+#if YEW_COV
+        yew_cov_reset();
+#endif
         if (!checked(&run, &input, why)) {
             (void)fprintf(stderr,
                           "%s: FAIL seed=%llu iter=%zu corpus=%s op=%s: %s\n",
@@ -1007,9 +1596,48 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
             minimize(&run, &input);
             save_crash(&run, &input);
             free(input.data);
-            corpus_free(&run.corpus);
+            fuzz_run_free(&run);
             return 1;
         }
+#if YEW_COV
+        {
+            u32 new_edges = yew_cov_new_edges();
+
+            if (new_edges != 0U) {
+                bool created = false;
+
+                minimize_coverage(&run, &input);
+                yew_cov_reset();
+                if (!checked(&run, &input, why)) {
+                    (void)fprintf(stderr,
+                                  "%s: coverage minimizer made input fail: "
+                                  "%s\n", target, why);
+                    free(input.data);
+                    fuzz_run_free(&run);
+                    return 2;
+                }
+                new_edges = yew_cov_new_edges();
+                if (new_edges == 0U) {
+                    (void)fprintf(stderr,
+                                  "%s: coverage minimizer lost novel edge\n",
+                                  target);
+                    free(input.data);
+                    fuzz_run_free(&run);
+                    return 2;
+                }
+                yew_cov_merge();
+                run.admitted_edges += new_edges;
+                if (run.admit_dir != NULL &&
+                    !save_admission(&run, &input, &created)) {
+                    free(input.data);
+                    fuzz_run_free(&run);
+                    return 2;
+                }
+                if (created)
+                    run.admitted++;
+            }
+        }
+#endif
         free(input.data);
     }
     if (run.seconds != 0U) {
@@ -1023,6 +1651,15 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
                      target, (unsigned long long)run.seed, run.iterations,
                      run.corpus.len, (unsigned long long)run.hash);
     }
-    corpus_free(&run.corpus);
+#if YEW_COV
+    if (run.coverage_report) {
+        (void)printf("%s: ", target);
+        yew_cov_report(stdout);
+        (void)printf(" corpus=%zu admitted=%zu new_edges=%llu\n",
+                     run.corpus.len, run.admitted,
+                     (unsigned long long)run.admitted_edges);
+    }
+#endif
+    fuzz_run_free(&run);
     return 0;
 }
