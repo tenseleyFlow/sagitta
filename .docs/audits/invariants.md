@@ -10,7 +10,7 @@ A pending row is not a verdict.
 | 1 | No data loss, ever | pending | — | — |
 | 2 | No byte confusion | pending | — | — |
 | 3 | No silent stubs | complete | VIOLATED | YEW-F-014, YEW-F-075 |
-| 4 | Latency budgets are CI gates | pending | — | — |
+| 4 | Latency budgets are CI gates | complete | VIOLATED | YEW-F-072, YEW-F-073 |
 | 5 | Deterministic rendering | pending | — | — |
 | 6 | Terminal restore | complete | HOLDS | — |
 | 7 | Bespoke first | complete | HOLDS | — |
@@ -76,6 +76,50 @@ The minimal audit run reproduced both as hard XFAILs. `YEW-F-075` is the
 Critical user-reachable silent stub; all other exercised absent-module routes
 failed loudly and the stale-Sprint-message review from F15 q9 found no landed
 surface still presented as deferred.
+
+## 4. Latency budgets are CI gates
+
+Verdict: **VIOLATED: YEW-F-072, YEW-F-073**.
+
+The sprint's designated-runner session cannot produce a performance verdict
+from the committed tree. Both normative entry points were invoked in strict
+mode before any advisory substitution:
+
+| Runner ID | Strict result |
+|---|---|
+| `perf-x86_64-linux-gnu` | exit 75: `designated calibration reference is unavailable; no verdict` |
+| `perf-arm64-linux` | exit 75: `designated runner baseline is unavailable: tests/perf/baselines/perf-arm64-linux.txt; no verdict` |
+
+The failure is structural. `tests/perf/calib-reference.txt` and
+`tests/perf/calib-reference-arm64.txt` do not exist, the committed x86_64
+baseline declares `scale_permille=0 c1=0 c2=0 c3=0`, and the arm64 baseline
+does not exist. Both designated workflow jobs are additionally disabled
+unless repository variables opt them in. Consequently the required 30-run
+noise-floor calculation cannot begin, and neither the 200,000-keystroke
+worst-state session nor its fake-clock comment-bomb counterpart can receive a
+hard designated verdict. This is `YEW-F-072`; treating the hosted advisory
+measurements as equivalent would conceal rather than resolve it.
+
+The gate machinery below that broken evidence chain does behave as designed.
+`make perf-s56-gate-selftest` passed all 12 deterministic policy cases plus
+the startup, profiler cross-check, aggregate-gate, update, run-suite, and
+baseline-guard self-tests. In particular, seeded extra-frame and 2 ms
+regressions fail in designated mode, while advisory timing overruns only
+warn. The current hosted performance lane and the exact-baseline CI run are
+useful functional/sanity evidence, but by contract they are not latency
+evidence for release.
+
+`YEW-F-073` independently breaks the immutability side of the gate promise.
+Its hard XFAIL creates an isolated baseline-only commit named `Refresh
+numbers`, doubles the recorded measurements without an old-to-new rationale,
+and proves that the real history guard accepts it. A threshold that can move
+without the required evidence is not a stable CI gate even if its comparison
+algorithm is correct.
+
+The complete audit reproducer run retained both rows as XFAIL and reported 76
+tests with zero harness failures. This verdict does **not** claim that yew
+misses a user-facing latency budget; it says the current tree cannot prove or
+reliably preserve such a verdict. Remediation remains assigned to Sprint 59.
 
 ## 6. Terminal restore
 
