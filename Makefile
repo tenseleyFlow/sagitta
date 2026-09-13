@@ -107,6 +107,7 @@ FUZZ_WEEKLY_SECONDS ?= 14400
 SOAK_SECONDS ?= 259200
 SOAK_SEED ?=
 SOAK_STREAMS ?= 4
+SOAK_LANE ?= soak
 SOAK_LEDGER ?= .docs/audits/fuzz-coverage.md
 SOAK_ADMIT_DIR ?= tests/fuzz/corpus/$(FUZZ_CAMPAIGN_TARGET)
 # ASan/UBSan makes the AI shadow's allocation-heavy worst cases much slower
@@ -1919,7 +1920,8 @@ fuzz-cov-weekly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 
 fuzz-nightly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 	@seed=$$(date -u +%Y%m%d); \
-		scripts/fuzz-soak.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
+		YEW_SOAK_LANE=fuzz-nightly scripts/fuzz-soak.sh \
+		$(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
 		'$(FUZZ_NIGHTLY_SECONDS)' "$$seed" '$(SOAK_LEDGER)' \
 		'$(SOAK_ADMIT_DIR)'
 
@@ -1928,7 +1930,8 @@ soak: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 	if [ -z "$$seed" ]; then \
 		seed=$$(od -An -N4 -tu4 /dev/urandom | tr -d ' '); \
 	fi; \
-	scripts/fuzz-streams.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
+	YEW_SOAK_LANE='$(SOAK_LANE)' scripts/fuzz-streams.sh \
+		$(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
 		'$(SOAK_SECONDS)' "$$seed" '$(SOAK_STREAMS)' \
 		'$(SOAK_LEDGER)' '$(SOAK_ADMIT_DIR)'
 
@@ -1941,6 +1944,7 @@ soak-rc:
 		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
 		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
 		SOAK_STREAMS='$(SOAK_STREAMS)' \
+		SOAK_LANE=soak-rc \
 		SOAK_LEDGER='$(SOAK_LEDGER)' \
 		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' soak
 
@@ -1966,6 +1970,7 @@ soak:
 		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
 		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
 		SOAK_STREAMS='$(SOAK_STREAMS)' \
+		SOAK_LANE='$(SOAK_LANE)' \
 		SOAK_LEDGER='$(SOAK_LEDGER)' \
 		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' soak
 
@@ -1974,6 +1979,7 @@ soak-rc:
 		FUZZ_CAMPAIGN_TARGET='$(FUZZ_CAMPAIGN_TARGET)' \
 		SOAK_SECONDS='$(SOAK_SECONDS)' SOAK_SEED='$(SOAK_SEED)' \
 		SOAK_STREAMS='$(SOAK_STREAMS)' \
+		SOAK_LANE='$(SOAK_LANE)' \
 		SOAK_LEDGER='$(SOAK_LEDGER)' \
 		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' \
 		RC_COMMIT='$(RC_COMMIT)' soak-rc

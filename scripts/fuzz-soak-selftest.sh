@@ -16,8 +16,8 @@ seed=580001
 short_commit=$(git rev-parse --short=8 HEAD)
 
 {
-    echo '| Date | Commit | Target | Iterations | Seed | New edges | Total edges | Corpus size | Findings |'
-    echo '|---|---|---|---:|---|---:|---:|---:|---|'
+    echo '| Date | Commit | Lane | Target | Iterations | Seed | New edges | Total edges | Corpus size | Findings |'
+    echo '|---|---|---|---|---:|---|---:|---:|---:|---|'
     echo
     echo '## Pinned schedule'
 } >"$ledger"

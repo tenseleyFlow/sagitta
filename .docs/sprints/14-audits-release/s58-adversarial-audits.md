@@ -931,9 +931,11 @@ Rules that make the schedule mean something:
 - A soak is **stateful**: it starts from the committed corpus and its
   admissions are committed at the end of each run. A soak that starts
   from an empty corpus every time is a benchmark, not a campaign.
-- Every soak run appends one row to `fuzz-coverage.md`: date, commit,
-  target, iterations, new edges, total edges, corpus size, findings. The
-  weekly lane's monotonicity check reads this file.
+- Every soak run appends one row to `fuzz-coverage.md`: date, commit, lane,
+  target, iterations, new edges, total edges, corpus size, findings. The lane
+  field keeps sanitizer and release-candidate edge maps out of the authoritative
+  baseline/weekly series; raw compiler guard counts are not cross-profile
+  measurements. The weekly lane's monotonicity check reads this file.
 - **A plateau is data, not success.** Three consecutive weekly runs with
   zero new edges on a tier-1 target is an Observation on F15 asking
   whether the mutators can reach the remaining code at all.

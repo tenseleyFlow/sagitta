@@ -97,9 +97,13 @@ date_utc=$(date -u +%F)
 commit=$(git rev-parse HEAD)
 short_commit=$(printf '%s' "$commit" | cut -c1-8)
 findings=${YEW_SOAK_FINDINGS:-—}
+lane=${YEW_SOAK_LANE:-soak}
+case $lane in
+    ''|*[!A-Za-z0-9_-]*) echo "fuzz-soak: invalid lane $lane" >&2; exit 2 ;;
+esac
 row_file=$tmp_dir/row
-printf '| %s | `%s` | `%s` | %s | %s | %s | %s | %s | %s |\n' \
-    "$date_utc" "$short_commit" "$target" "$2" "$seed" "$3" "$4" \
-    "$5" "$findings" >"$row_file"
+printf '| %s | `%s` | `%s` | `%s` | %s | %s | %s | %s | %s | %s |\n' \
+    "$date_utc" "$short_commit" "$lane" "$target" "$2" "$seed" "$3" \
+    "$4" "$5" "$findings" >"$row_file"
 scripts/fuzz-ledger-append.sh "$ledger" "$row_file"
 echo "fuzz-soak: appended one ledger row to $ledger"

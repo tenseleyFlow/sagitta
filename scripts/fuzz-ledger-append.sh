@@ -28,7 +28,7 @@ rows=$tmp_dir/rows
 : >"$rows"
 for row_file do
     if [ "$(wc -l <"$row_file" | tr -d ' ')" -ne 1 ] ||
-       ! grep -E '^\| [0-9]{4}-[0-9]{2}-[0-9]{2} \| `[^`]+` \| `fuzz_[A-Za-z0-9_]+` \|' \
+       ! grep -E '^\| [0-9]{4}-[0-9]{2}-[0-9]{2} \| `[^`]+` \| `[^`]+` \| `fuzz_[A-Za-z0-9_]+` \|' \
            "$row_file" >/dev/null; then
         echo "fuzz-ledger-append: malformed row file $row_file" >&2
         exit 2

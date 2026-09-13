@@ -20,7 +20,8 @@ current=$tmp_dir/current.md
 
 cp "$ledger" "$baseline"
 cp "$ledger" "$current"
-scripts/fuzz-soak.sh "$build_dir" "$target" "$seconds" "$seed" \
+YEW_SOAK_LANE=fuzz-cov-weekly \
+    scripts/fuzz-soak.sh "$build_dir" "$target" "$seconds" "$seed" \
     "$current" "$admit_dir"
 scripts/fuzz-coverage-regression.sh "$baseline" "$current"
 cp "$current" "$ledger"

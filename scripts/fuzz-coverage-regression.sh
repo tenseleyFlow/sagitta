@@ -20,9 +20,11 @@ function trim(s) {
     gsub(/`/, "", s)
     return s
 }
-FILENAME == ARGV[1] && $4 ~ /fuzz_/ {
-    target = trim($4)
-    baseline[target] = trim($8) + 0
+FILENAME == ARGV[1] && $5 ~ /fuzz_/ {
+    lane = trim($4)
+    if (lane != "baseline" && lane != "fuzz-cov-weekly") next
+    target = trim($5)
+    baseline[target] = trim($9) + 0
     next
 }
 FILENAME == ARGV[2] && $2 ~ /fuzz_/ {
@@ -32,11 +34,13 @@ FILENAME == ARGV[2] && $2 ~ /fuzz_/ {
     current[target] = trim($3) + 0
     next
 }
-FILENAME == ARGV[2] && $4 ~ /fuzz_/ {
-    target = trim($4)
+FILENAME == ARGV[2] && $5 ~ /fuzz_/ {
+    lane = trim($4)
+    if (lane != "baseline" && lane != "fuzz-cov-weekly") next
+    target = trim($5)
     if (!(target in seen)) seen_count++
     seen[target] = 1
-    current[target] = trim($8) + 0
+    current[target] = trim($9) + 0
 }
 END {
     for (target in current) {
