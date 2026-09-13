@@ -273,10 +273,12 @@ void yew_state_dispose(Ed *ed)
     }
     lock_release(s);
     if (s->doc_ready) {
-        /* The retained options tree lives in this arena, so it dies
-         * with it — and `options` must not outlive its bytes. */
+        /* The retained literal trees live in this arena, so no pointer into
+         * the parsed document may outlive its bytes. */
         arena_free_all(&s->doc);
         s->doc_ready = false;
+        s->root = NULL;
+        s->workspace = NULL;
         s->options = NULL;
     }
     for (i = 0U; i < s->bool_options_len; i++)

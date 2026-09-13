@@ -103,7 +103,7 @@ typedef struct WsState {
     u64 writes;
 
     /*
-     * §6 step 2: the options map, held VERBATIM.
+     * §4/§6: parsed forward-compatible fields, held VERBATIM.
      *
      * The option model is Sprint 36's.  Until it exists this build must
      * not delete settings it does not understand — an older yew
@@ -113,6 +113,8 @@ typedef struct WsState {
      * re-emitted unchanged.
      */
     Arena doc;
+    const FlLit *root;
+    const FlLit *workspace;
     const FlLit *options;
     bool doc_ready;
     /* Mutable known booleans overlay the immutable retained literal map.

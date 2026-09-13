@@ -723,6 +723,44 @@ void test_ws_restore_preserves_unknown_options(void)
     rs_remove(&f);
 }
 
+void test_ws_restore_preserves_unknown_root_and_workspace_fields(void)
+{
+    RsFix f;
+    Ed b;
+    Bytebuf doc;
+    Bytebuf out;
+    const char *text =
+        "{\n  version: 1,\n"
+        "  workspace: { path: \"\", saved_at: 0, "
+        "future_workspace: { leaf: [1, true, nil,], }, },\n"
+        "  options: {},\n  groups: [],\n  tabs: [],\n"
+        "  active_tab: 0,\n  files: [],\n"
+        "  future_root: { leaf: [2, false, nil,], },\n}\n";
+
+    rs_make(&f);
+    bytebuf_init(&doc);
+    bytebuf_init(&out);
+    bytebuf_append(&doc, (const u8 *)text, strlen(text));
+
+    YEW_ASSERT_EQ_U64(rs_apply(&f, &b, &doc), YEW_WS_FRESH);
+    YEW_ASSERT_NOT_NULL(b.state.root);
+    YEW_ASSERT_NOT_NULL(b.state.workspace);
+    yew_state_emit(&b, &out);
+    bytebuf_push_u8(&out, 0U);
+    out.len--;
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "future_workspace"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "future_root"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data,
+                               "leaf: [\n        1,"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data,
+                               "leaf: [\n      2,"));
+
+    bytebuf_free(&doc);
+    bytebuf_free(&out);
+    yew_ed_free(&b);
+    rs_remove(&f);
+}
+
 /* ---------------------------------------------------------------- */
 /* Marks                                                            */
 /* ---------------------------------------------------------------- */
