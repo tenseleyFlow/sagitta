@@ -241,6 +241,9 @@ static const CmdDesc builtins[] = {
      YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Accept the next alternate suggested unit", "shadow_word_alt"},
+    {"ed.shadow.accept_or_word", yew_shadow_cmd_accept_or_word,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Accept the next suggested unit, or move one word right", NULL},
     {"ed.shadow.accept_line", yew_shadow_cmd_accept_line, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Accept the next suggested line", "shadow_line"},
@@ -1435,7 +1438,7 @@ static bool command_name_valid(const char *name)
         "save_as", "apply", "confirm",
         /* Sprint 57.19: Home alternates between the indent and column 0
          * without disturbing the unit alternates. */
-        "home_toggle",
+        "home_toggle", "accept_or_word",
         /* Sprint 57.18 §4: `:!!` -- one command, the real terminal.
          * Distinct from "term", which stays the refusal. */
         "term_run"};

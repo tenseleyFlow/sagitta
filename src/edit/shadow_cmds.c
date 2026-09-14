@@ -24,6 +24,43 @@ CmdStatus yew_shadow_cmd_accept_word_alt(CmdCtx *cx)
                          yew_shadow_accept_word(cx->ed, cx->win, true));
 }
 
+/*
+ * Sprint 57.19: Alt+Right in Insert mode, in the shape of
+ * `yew_cmdline_cmd_ghost_accept` -- accept the suggestion when one is
+ * there, and be the ordinary motion when it is not, so the key is never
+ * dead under the finger.
+ *
+ * "A suggestion is showing" is the shadow's OWN drawn predicate, the one
+ * yew_shadow_draw tests: live, and not suppressed by an open completion
+ * menu.  It is not a guess, and it is not "did accept_word succeed" --
+ * a stale ghost's accept fails after dismissing and reporting, and the
+ * user should not also be moved for having pressed the key.
+ *
+ * The name deliberately stays in the `ed.shadow.` namespace.  Naming it
+ * `ed.move.*` would be fatal: yew_ed_invoke dismisses the ghost before
+ * dispatching anything whose name begins "ed.move.", so the accepting
+ * half could never run.
+ *
+ * Both halves go back through yew_ed_invoke rather than calling the
+ * command function, so the recordable command that actually ran is the
+ * one a macro captures -- this dispatcher is INTERNAL plumbing and has
+ * no motion word of its own.
+ */
+CmdStatus yew_shadow_cmd_accept_or_word(CmdCtx *cx)
+{
+    bool showing;
+    CmdId id;
+
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    showing = cx->win->shadow.live && !cx->win->shadow.suppressed;
+    id = showing ? yew_cmd_lookup("ed.shadow.accept_word", 21U)
+                 : yew_cmd_lookup("ed.move.word.next", 17U);
+    if (id.v == 0U)
+        YEW_BUG("shadow accept-or-word: target command is missing");
+    return yew_ed_invoke(cx->ed, id, cx);
+}
+
 CmdStatus yew_shadow_cmd_accept_line(CmdCtx *cx)
 {
     return accept_status(cx != NULL &&

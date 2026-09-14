@@ -186,7 +186,11 @@ bind("B", "C-g", "ed.ui.message_expand")
 bind("I", "A-h", "ed.mode.enter", { sarg: "H" })
 bind("I", "<esc>", "ed.shadow.dismiss")
 bind("I", "C-g", "ed.ui.message_expand")
-bind("I", "A-<right>", "ed.shadow.accept_word")
+# Alt+arrow is the word jump in I mode.  Alt+Right stays contextual: it
+# accepts one word of a suggestion only while one is showing, and is
+# the word jump otherwise, so the key is never dead.
+bind("I", "A-<left>", "ed.move.word.prev")
+bind("I", "A-<right>", "ed.shadow.accept_or_word")
 bind("I", "A-S-<right>", "ed.shadow.accept_word_alt")
 bind("I", "A-<down>", "ed.shadow.accept_line")
 bind("I", "A-<cr>", "ed.shadow.accept_all")
