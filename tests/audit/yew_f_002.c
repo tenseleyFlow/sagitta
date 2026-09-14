@@ -5,9 +5,9 @@
  * emits the first 64 and holds only the final four-byte RI, which the next
  * read could extend into a flag pair.
  *
- * Baseline failure: the bounded backward restart mis-parities the odd run,
- * so yew_job_safe_prefix holds the final two RIs (eight bytes) and delays a
- * completed flag until more output arrives or the pipe reaches EOF.
+ * Regression: the job stream uses an exact edge within its bounded read
+ * window, so the navigation helper's bounded restart cannot mis-pair the
+ * odd run and delay a completed flag.
  */
 #include "audit.h"
 

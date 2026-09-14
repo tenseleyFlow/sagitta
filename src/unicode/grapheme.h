@@ -44,7 +44,10 @@ void yew_gb_init(YewGbState *st);
 bool yew_gb_boundary(YewGbState *st, u32 cp);
 
 size_t yew_gb_next_bytes(const u8 *s, size_t len, size_t pos);
+/* Bounded reverse navigation may approximate after 64 codepoints. */
 size_t yew_gb_prev_bytes(const u8 *s, size_t len, size_t pos);
+/* Exact final-cluster edge for already bounded byte windows. */
+size_t yew_gb_prev_bytes_exact(const u8 *s, size_t len, size_t pos);
 size_t yew_gb_count_bytes(const u8 *s, size_t len);
 
 #define YEW_CLUSTER_TAB 255u

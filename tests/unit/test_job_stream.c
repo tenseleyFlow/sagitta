@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/job.h"
+#include "unicode/utf8.h"
 #include "util/buf.h"
 
 /* Every fixture is a byte string whose clusters must survive splitting. */
@@ -145,6 +146,33 @@ void test_job_stream_holds_incomplete_utf8(void)
 
         YEW_ASSERT_EQ_U64(yew_job_safe_prefix(mixed, 4U, false), 2U);
     }
+}
+
+static void fill_ri_run(u8 *out, size_t count)
+{
+    size_t i;
+
+    for (i = 0U; i < count; i++) {
+        u8 encoded[YEW_UTF8_MAX];
+        size_t n = yew_utf8_encode(0x1F1E6U + (u32)(i % 26U), encoded);
+
+        YEW_ASSERT_EQ_U64(n, 4U);
+        (void)memcpy(out + i * 4U, encoded, n);
+    }
+}
+
+void test_job_stream_long_ri_run_holds_only_open_cluster(void)
+{
+    u8 odd[65U * 4U];
+    u8 even[66U * 4U];
+
+    fill_ri_run(odd, 65U);
+    fill_ri_run(even, 66U);
+    /* An odd run leaves one open RI; an even run retains its final pair. */
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(odd, sizeof(odd), false),
+                      64U * 4U);
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(even, sizeof(even), false),
+                      64U * 4U);
 }
 
 void test_job_stream_newline_holds_nothing(void)

@@ -191,7 +191,11 @@ u64 yew_job_safe_prefix(const u8 *b, u64 n, bool at_eof)
     if (cut == n && n != 0U && b[n - 1U] == (u8)'\n')
         return n;
     if (cut != 0U) {
-        u64 prev = (u64)yew_gb_prev_bytes(b, (size_t)cut, (size_t)cut);
+        /* YEW-F-002: the bounded reverse-navigation approximation can
+         * mis-pair a long odd RI run.  Job reads are bounded already, so
+         * find the exact final cluster before deciding what to retain. */
+        u64 prev = (u64)yew_gb_prev_bytes_exact(b, (size_t)cut,
+                                                (size_t)cut);
 
         if (prev < cut)
             cut = prev;
