@@ -2060,6 +2060,7 @@ const YewTest yew_tests[] = {
     T(fusstree_all_files_preserves_ignored_row_style),
     T(fusstree_nested_workspace_strips_and_filters_repo_paths),
     T(fussdrawer_layout_follows_the_locked_table),
+    T(fussdrawer_relative_time_uses_editor_anchor),
     T(fussdrawer_natural_width_uses_only_visible_rows),
     T(fussdrawer_compact_row_and_edge_own_distinct_cells),
     T(fussdrawer_offcanvas_layout_shifts_editor_chrome),
