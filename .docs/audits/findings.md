@@ -50,7 +50,7 @@ recorded in `audit-00.md`.
 | YEW-F-035 | M | fixed | F15 CI | ~~allocator ban accepts macro-forwarded libc allocation~~ — fixed 2026-09-14 in `066041c3` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-036 | M | fixed | F15 CI | ~~cwd-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-037 | M | fixed | F15 CI | ~~realpath-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
-| YEW-F-038 | M | open | F15 CI | locale-dependent Unicode ban omits `mbtowc` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
+| YEW-F-038 | M | fixed | F15 CI | ~~locale-dependent Unicode ban omits `mbtowc`~~ — fixed 2026-09-14 in `af94a8c1` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
 | YEW-F-039 | M | open | F15 CI | native-loader ban omits `dlvsym` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
 | YEW-F-040 | M | open | F15 CI | strerror_r ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
 | YEW-F-041 | M | open | F15 CI | musl backtrace ban omits `backtrace_symbols_fd` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
@@ -429,10 +429,10 @@ checks required `NULL` to appear literally at the call site. Commit
 Internal positive controls pin both APIs, and the two isolated variable-alias
 reproducers now fail the real gate.
 
-`YEW-F-038` is Medium because the locale-dependent Unicode list includes
-`mbrtowc` but omits its older stateful sibling `mbtowc`. The latter has the
-same forbidden locale dependence and passes the actual gate. This control
-finding remains open for Sprint 59.
+`YEW-F-038` was Medium because the locale-dependent Unicode list included
+`mbrtowc` but omitted its older stateful sibling `mbtowc`. Commit `af94a8c1`
+adds the omitted API to the same bespoke-Unicode boundary and pins it with an
+explicit positive control.
 
 `YEW-F-039` is Medium because the native-loader list covers `dlsym` but omits
 the GNU versioned lookup `dlvsym`. A Fletch-only plugin policy cannot be
