@@ -596,6 +596,53 @@ shadow_draw_files=$tmp/shadow-draw-files
 printf '%s\n' "$repo_dir/src/ui/shadowdraw.c" >"$shadow_draw_files"
 scan "shadow insertion preview must compose without destructive row fill" \
     'yew_grid_fill[[:space:]]*\(' "$shadow_draw_files"
+# YEW-F-051: a caller can spell a destructive full-row fill as an ordinary
+# loop and never name yew_grid_fill.  Match the behavior without rejecting
+# shadow_blank_cells, whose nonzero bounded ranges implement composition.
+shadow_full_fill_calls()
+{
+    shadow_list=$1
+    shadow_out=$2
+    : >"$shadow_out"
+    while IFS= read -r file; do
+        [ -f "$file" ] || continue
+        awk '
+        { line[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                if (line[i] !~ /for[ \t]*\(/)
+                    continue
+                body = line[i] " " line[i+1] " " line[i+2] " " \
+                       line[i+3] " " line[i+4] " " line[i+5] " " \
+                       line[i+6] " " line[i+7]
+                if (body ~ /for[ \t]*\([^;]*=[ \t]*0[uU]*[ \t]*;[^;]*<[ \t]*[^;]*(->|\.)[ \t]*cols[ \t]*;/ &&
+                    body ~ /((->|\.)[ \t]*(cells|back|front)|(^|[^[:alnum:]_])(cells|back|front))[ \t]*\[[^]]+\][ \t]*=/)
+                    printf "%d:%s\n", i, line[i]
+            }
+        }' "$file" | sed "s|^|${file#"$repo_dir"/}:|" >>"$shadow_out" || :
+    done <"$shadow_list"
+}
+
+shadow_full_fill_calls "$shadow_draw_files" "$tmp/shadow-full-fill-hits"
+if [ -s "$tmp/shadow-full-fill-hits" ]; then
+    echo "ban: shadow insertion preview must not replace a complete grid row" \
+        >>"$hits"
+    cat "$tmp/shadow-full-fill-hits" >>"$hits"
+fi
+shadow_fill_seed=$tmp/seeded-shadow-full-fill.c
+printf '%s\n' \
+    'void seeded(Grid *g, Cell blank)' \
+    '{' \
+    '    size_t x;' \
+    '    for (x = 0; x < g->cols; x++) g->cells[x] = blank;' \
+    '}' >"$shadow_fill_seed"
+printf '%s\n' "$shadow_fill_seed" >"$tmp/shadow-fill-seed-list"
+shadow_full_fill_calls "$tmp/shadow-fill-seed-list" \
+    "$tmp/shadow-fill-seed-hits"
+if [ "$(wc -l <"$tmp/shadow-fill-seed-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the shadow full-row rule no longer fires on its own seed" \
+        >>"$hits"
+fi
 fuss_mode_files=$tmp/fuss-mode-files
 printf '%s\n' "$repo_dir/src/mod/git/fussmode.c" >"$fuss_mode_files"
 scan "F mode is a drawer and must not replace the live pane root" \

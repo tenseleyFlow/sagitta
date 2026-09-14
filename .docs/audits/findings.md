@@ -63,7 +63,7 @@ recorded in `audit-00.md`.
 | YEW-F-048 | M | fixed | F15 CI | ~~PTY-creation ban omits direct `posix_openpt` callers~~ — fixed 2026-09-14 in `674574eb` | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
 | YEW-F-049 | M | fixed | F15 CI | ~~CI golden-update ban depends on contiguous spelling~~ — fixed 2026-09-14 in `58684ebb` | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
 | YEW-F-050 | M | fixed | F15 CI | ~~piece-tree I/O ban omits `pread`~~ — fixed 2026-09-14 in `6cf5e51c` | tests/audit/f15_ban_misses.c | s08 I/O ownership; s58 F15 q2 |
-| YEW-F-051 | M | open | F15 CI | shadow-preview ban accepts manual destructive fill | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
+| YEW-F-051 | M | fixed | F15 CI | ~~shadow-preview ban accepts manual destructive fill~~ — fixed 2026-09-14 in `910ea6be` | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
 | YEW-F-052 | M | open | F15 CI | FUSS drawer ban accepts indirect pane-root replacement | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
 | YEW-F-053 | M | open | F15 CI | deterministic-fuzz ban omits `random` | tests/audit/f15_ban_misses.c | s02 deterministic seeds; s58 F15 q2 |
 | YEW-F-054 | M | open | F15 CI | clipboard shell ban omits direct shell exec | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
@@ -504,8 +504,9 @@ bounded ownership gate and adds an internal positive control for the spelling.
 
 `YEW-F-051` is Medium because the insertion-preview rule bans one fill helper,
 not destructive fill behavior. A loop assigning every grid cell directly
-passes while violating the same compositional rendering contract. It remains
-open for Sprint 59.
+passed while violating the same compositional rendering contract. Commit
+`910ea6be` detects zero-to-column-bound full-row loops that assign backing
+cells, while preserving the bounded range shifts required for composition.
 
 `YEW-F-052` is Medium because taking the address of `pane_root` and assigning
 through that pointer replaces the live root without matching the direct
