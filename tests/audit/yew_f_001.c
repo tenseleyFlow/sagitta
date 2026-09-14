@@ -6,8 +6,9 @@
  * The UTF-8 and ASCII vocabularies must therefore have identical widths
  * under both option values.
  *
- * Baseline failure: `•`, box-drawing borders, disclosure arrows, and other
- * fixed-slot glyphs widen from one to two cells when `ambiguous_wide=true`.
+ * Regression: `•`, box-drawing borders, disclosure arrows, and other
+ * ambiguous-width rows fall back centrally when they would outgrow the
+ * fixed slot; document glyph measurement remains option-sensitive.
  */
 #include "audit.h"
 

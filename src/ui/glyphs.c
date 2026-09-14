@@ -58,6 +58,8 @@ _Static_assert(YEW_ARRAY_LEN(glyphs) == (size_t)YEW_GLYPH__N,
 
 static bool ascii_resolved;
 static bool ascii_on;
+static bool wide_fallback_resolved;
+static bool wide_fallback[YEW_GLYPH__N];
 
 /* True when `s` names a UTF-8 locale.  Case-insensitive on the tail,
  * because "UTF-8", "utf8" and "UTF8" are all in the wild. */
@@ -126,12 +128,39 @@ void yew_glyph_force_ascii(bool on)
     ascii_on = on;
 }
 
+static void resolve_wide_fallbacks(void)
+{
+    u32 i;
+
+    if (wide_fallback_resolved)
+        return;
+    wide_fallback_resolved = true;
+    for (i = 0U; i < (u32)YEW_GLYPH__N; i++) {
+        int utf8_cells = yew_str_width((const u8 *)glyphs[i].utf8,
+                                       strlen(glyphs[i].utf8), 1U);
+        int ascii_cells = yew_str_width((const u8 *)glyphs[i].ascii,
+                                        strlen(glyphs[i].ascii), 1U);
+
+        wide_fallback[i] = utf8_cells != ascii_cells;
+    }
+}
+
 const char *yew_glyph(YewGlyph g)
 {
     if ((u32)g >= (u32)YEW_GLYPH__N)
         YEW_BUG("yew_glyph: glyph %u is not in the table", (unsigned)g);
     resolve();
-    return ascii_on ? glyphs[g].ascii : glyphs[g].utf8;
+    if (ascii_on)
+        return glyphs[g].ascii;
+    if (yew_width_ambiguous_wide()) {
+        resolve_wide_fallbacks();
+        /* YEW-F-001: a terminal applies ambiguous-wide policy to chrome as
+         * well as document text.  Use the same-width ASCII row when the
+         * Unicode row no longer fits its fixed layout slot. */
+        if (wide_fallback[g])
+            return glyphs[g].ascii;
+    }
+    return glyphs[g].utf8;
 }
 
 size_t yew_glyph_len(YewGlyph g)

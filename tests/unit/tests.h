@@ -2337,6 +2337,8 @@ void test_mouse_middle_click_paste_is_off_by_default(void);
 void test_glyphs_every_row_has_both_vocabularies(void);
 void test_glyphs_grip_and_tick_are_one_cell(void);
 void test_glyphs_are_the_same_width_in_both_vocabularies(void);
+void test_glyphs_preserve_slots_under_ambiguous_wide(void);
+void test_glyphs_ambiguous_fallback_preserves_grid_neighbor(void);
 void test_glyphs_arrows_point_the_way_the_thing_moves(void);
 void test_glyphs_ascii_is_auto_from_the_locale(void);
 void test_glyphs_the_vocabulary_is_decided_once(void);
