@@ -42,7 +42,11 @@ enum {
     NAV_L4_END = 43U
 };
 
-static void nav_fixture(Ed *ed)
+/* One word per gap, so every word start is an obvious offset:
+ * alpha 0, beta 6, gamma 11, delta 17 (on the second line). */
+static const u8 nav_words[] = "alpha beta gamma\ndelta";
+
+static void nav_fixture_bytes(Ed *ed, const u8 *bytes, size_t len)
 {
     Cursor *cursor;
 
@@ -51,7 +55,7 @@ static void nav_fixture(Ed *ed)
     yew_test_load_runtime(ed);
     yew_undo_free(ed->buffer.undo);
     yew_textbuf_free(ed->buffer.tb);
-    ed->buffer.tb = yew_textbuf_from_bytes(nav_text, sizeof(nav_text) - 1U);
+    ed->buffer.tb = yew_textbuf_from_bytes(bytes, len);
     ed->buffer.undo = yew_undo_new(ed->buffer.tb);
     ed->buffer.meta.eol = YEW_EOL_LF;
     ed->buffer.meta.dominant_eol = YEW_EOL_LF;
@@ -65,6 +69,16 @@ static void nav_fixture(Ed *ed)
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
     cursor->goal_col = (GCol){0U};
+}
+
+static void nav_fixture(Ed *ed)
+{
+    nav_fixture_bytes(ed, nav_text, sizeof(nav_text) - 1U);
+}
+
+static void nav_word_fixture(Ed *ed)
+{
+    nav_fixture_bytes(ed, nav_words, sizeof(nav_words) - 1U);
 }
 
 static void nav_at(Ed *ed, u64 off)
@@ -408,5 +422,46 @@ void test_nav_ctrl_arrows_reach_the_line_ends_in_insert_mode(void)
     nav_expect_cmd(&ed, "ed.move.word.sub_prev");
     nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_CTRL), 2);
     nav_expect_cmd(&ed, "ed.move.word.sub_next");
+    yew_ed_free(&ed);
+}
+
+/*
+ * The word unit's own motions, reachable from any mode.  W mode gets word
+ * stepping from `ed.move.unit.next/prev` because its UNIT is the word;
+ * Insert mode's unit is the grapheme, so its Alt arrows need a motion that
+ * names the word outright.
+ */
+void test_nav_word_motions_step_between_word_starts(void)
+{
+    Ed ed;
+
+    nav_word_fixture(&ed);
+    nav_at(&ed, 0U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.next"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 6U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.next"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 11U);
+    /* Across the newline, because a word jump is not a line motion. */
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.next"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 17U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.next"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 22U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.next"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 22U);
+
+    /* Backwards: from mid-word to this word's start, then the one before. */
+    nav_at(&ed, 13U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.prev"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 11U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.prev"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 6U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.prev"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 0U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.prev"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 0U);
+
+    nav_at(&ed, 17U);
+    YEW_ASSERT_EQ_U64(nav_invoke(&ed, "ed.move.word.prev"), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 11U);
     yew_ed_free(&ed);
 }

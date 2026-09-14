@@ -257,6 +257,7 @@ const YewTest yew_tests[] = {
     T(nav_home_key_toggles_on_the_command_line),
     T(nav_home_key_leaves_secondary_cursors_alone),
     T(nav_ctrl_arrows_reach_the_line_ends_in_insert_mode),
+    T(nav_word_motions_step_between_word_starts),
     T(file_load_empty_roundtrips),
     T(file_load_lf_roundtrips),
     T(file_load_missing_final_newline_roundtrips),

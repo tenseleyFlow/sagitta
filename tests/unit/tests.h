@@ -224,6 +224,7 @@ void test_nav_home_key_toggles_under_every_highlight_unit(void);
 void test_nav_home_key_toggles_on_the_command_line(void);
 void test_nav_home_key_leaves_secondary_cursors_alone(void);
 void test_nav_ctrl_arrows_reach_the_line_ends_in_insert_mode(void);
+void test_nav_word_motions_step_between_word_starts(void);
 void test_file_load_empty_roundtrips(void);
 void test_file_load_lf_roundtrips(void);
 void test_file_load_missing_final_newline_roundtrips(void);
