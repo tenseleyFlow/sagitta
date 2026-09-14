@@ -44,7 +44,7 @@ recorded in `audit-00.md`.
 | YEW-F-029 | M | fixed | F15 CI | ~~stable-sort ban accepts macro-forwarded qsort~~ — fixed 2026-09-14 in `0e2ab552` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-030 | M | fixed | F15 CI | ~~C11-subset ban accepts token-pasted attribute syntax~~ — fixed 2026-09-14 in `ccfc924c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-031 | M | fixed | F15 CI | ~~explicit-registry ban accepts token-pasted constructors~~ — fixed 2026-09-14 in `ccfc924c` | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
-| YEW-F-032 | M | open | F15 CI | single-thread ban accepts token-pasted pthread calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-032 | M | fixed | F15 CI | ~~single-thread ban accepts token-pasted pthread calls~~ — fixed 2026-09-14 in `a294794c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-033 | M | open | F15 CI | reproducibility ban omits `__TIMESTAMP__` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-034 | M | open | F15 CI | mmap ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-035 | M | open | F15 CI | allocator ban accepts macro-forwarded libc allocation | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
@@ -400,10 +400,11 @@ token-pasting both the attribute and `constructor` name. The same
 constructor extension can exist, and the isolated paired-paste reproducer now
 fails the real gate.
 
-`YEW-F-032` is Medium because token-pasted `pthread_create` reaches the
+`YEW-F-032` was Medium because token-pasted `pthread_create` reached the
 forbidden threading API without leaving the contiguous `pthread` text the
-gate searches for. The product tree is not shown to spawn a thread; the
-single-thread release control is incomplete and remains open for Sprint 59.
+gate searched for. Commit `a294794c` also rejects the `thread_*` API stem,
+which has no valid use in yew source, and pins the pasted call with a positive
+control while retaining the direct `pthread` and `threads.h` checks.
 
 `YEW-F-033` is Medium because `__TIMESTAMP__` embeds filesystem-dependent
 build time just as surely as the two macros currently banned, yet is omitted
