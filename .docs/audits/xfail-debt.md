@@ -87,7 +87,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-074 | audit | `tests/audit/yew_f_074.c` | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed in `16761aba` | fixed |
 | YEW-F-075 | audit | `tests/audit/yew_f_075.c` | ~~stripped builds accept module-only config as inert state~~ — fixed in `ee6f9894` | fixed |
 | YEW-F-076 | audit | `tests/audit/yew_f_076.c` | accepted unsaved undo sidecars are not byte-canonical | open |
-| YEW-F-077 | audit | `tests/audit/yew_f_077.c` | rectangular yank omits required short-row padding | open |
+| YEW-F-077 | audit | `tests/audit/yew_f_077.c` | ~~rectangular yank omits required short-row padding~~ — fixed in `792e32d8` | fixed |
 | YEW-F-078 | audit | `tests/audit/yew_f_078.c` | crash journal admits a same-metadata replacement inode | open |
 | YEW-F-079 | audit | `tests/audit/yew_f_079.c` | ~~workspace re-emission drops unknown entity-record fields~~ — fixed in `9222b491` | fixed |
 

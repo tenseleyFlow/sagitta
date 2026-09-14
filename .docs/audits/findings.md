@@ -89,7 +89,7 @@ recorded in `audit-00.md`.
 | YEW-F-074 | H | fixed | F15 CI | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed 2026-09-13 in `16761aba` | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
 | YEW-F-075 | C | fixed | F15 CI | ~~stripped builds accept module-only config as inert state~~ — fixed 2026-09-13 in `ee6f9894` | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
-| YEW-F-077 | M | open | F03 TEXT | rectangular yank omits required short-row padding | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
+| YEW-F-077 | M | fixed | F03 TEXT | ~~rectangular yank omits required short-row padding~~ — fixed 2026-09-14 in `792e32d8` | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 | YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 
@@ -670,15 +670,18 @@ Coverage-guided mutation flipped one bit at header offset 40; the standalone
 reproducer deterministically rebuilds that input and remains open for Sprint
 59. No product source changed during the audit.
 
-`YEW-F-077` is Medium because an ordinary rectangular yank clips short rows
-to their natural byte length but labels the resulting register non-ragged.
+`YEW-F-077` was Medium because an ordinary rectangular yank clipped short rows
+to their natural byte length but labeled the resulting register non-ragged.
 Sprint 12 requires those rows to be right-padded to the rectangle's `CCol`
 width at store time, so a later paste reproduces different geometry from the
 selection the user yanked. The hard-XFAIL selects columns `[0, 2)` across
 `a` and `bb`: the required rows are `a ` and `bb`, while the baseline stores
 `a` and `bb`. The original buffer remains intact and the result is
-recoverable, so this is Medium rather than data loss. It remains open for
-Sprint 59; no product source changed during the audit.
+recoverable, so this is Medium rather than data loss. Commit `792e32d8`
+measures each clipped row in source `CCol` space and synthesizes only its
+missing right-padding spaces at store time. Rows widened around indivisible
+tabs, wide glyphs, or escaped invalid bytes remain byte-exact and are never
+mistaken for short rows.
 
 `YEW-F-078` is Medium because a durable journal authenticates its base with
 the canonical path, byte size, and nanosecond mtime, but not file identity or

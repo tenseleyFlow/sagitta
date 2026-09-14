@@ -87,7 +87,7 @@ const YewAuditTest yew_audit_tests[] = {
     , A("YEW-F-074", YEW_AUDIT_PASS, test_yew_f_074)
     , A("YEW-F-075", YEW_AUDIT_PASS, test_yew_f_075)
     , A("YEW-F-076", YEW_AUDIT_XFAIL, test_yew_f_076)
-    , A("YEW-F-077", YEW_AUDIT_XFAIL, test_yew_f_077)
+    , A("YEW-F-077", YEW_AUDIT_PASS, test_yew_f_077)
     , A("YEW-F-078", YEW_AUDIT_XFAIL, test_yew_f_078)
     , A("YEW-F-079", YEW_AUDIT_PASS, test_yew_f_079)
 };

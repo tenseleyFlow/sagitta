@@ -683,6 +683,7 @@ const YewTest yew_tests[] = {
     T(select_rect_row_rejects_lines_outside_selection),
     T(select_rect_spans_exclude_crlf_and_reach_final_unterminated_line),
     T(sel_actions_yank_uses_char_line_and_block_register_types),
+    T(sel_actions_yank_pads_short_rect_rows_by_cell_width),
     T(sel_actions_clip_copy_and_cut_use_explicit_system_register),
     T(sel_actions_clip_paste_replaces_all_highlights_once),
     T(sel_actions_clip_paste_splits_insert_typing_transaction),

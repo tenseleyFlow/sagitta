@@ -361,7 +361,12 @@ static u32 inv2_replace_ascii(Ed *ed, const char *pat, const char *replacement)
 void test_invariant2_end_to_end_byte_pipeline(void)
 {
     static const char macro[] = "@[ i\"Q\" ]\n";
-    static const u64 row_bytes[] = {25U, 260U, 601U, 3U, 9U, 4U, 72U};
+    static const u64 source_row_bytes[] = {
+        25U, 260U, 601U, 3U, 9U, 4U, 72U,
+    };
+    static const u64 stored_row_bytes[] = {
+        89U, 260U, 666U, 57U, 39U, 66U, 72U,
+    };
     char path[] = "/tmp/yew-invariant2-XXXXXX";
     char state[] = "/tmp/yew-invariant2-state-XXXXXX";
     const char *state_env = getenv("XDG_STATE_HOME");
@@ -420,11 +425,20 @@ void test_invariant2_end_to_end_byte_pipeline(void)
     YEW_ASSERT_NOT_NULL(reg);
     YEW_ASSERT_EQ_U64(reg->type, YEW_REG_BLOCKWISE);
     YEW_ASSERT_EQ_U64(reg->width, 66U);
-    YEW_ASSERT_EQ_U64(reg->rows.len, YEW_ARRAY_LEN(row_bytes));
-    YEW_ASSERT_EQ_U64(reg->bytes.len, 974U);
-    for (i = 0U; i < YEW_ARRAY_LEN(row_bytes); i++)
+    YEW_ASSERT_EQ_U64(reg->rows.len, YEW_ARRAY_LEN(source_row_bytes));
+    YEW_ASSERT_EQ_U64(reg->bytes.len, 1249U);
+    for (i = 0U; i < YEW_ARRAY_LEN(source_row_bytes); i++) {
+        u64 j;
+
         YEW_ASSERT_EQ_U64(reg->rows.data[i].hi - reg->rows.data[i].lo,
-                          row_bytes[i]);
+                          stored_row_bytes[i]);
+        YEW_ASSERT_EQ_MEM(reg->bytes.data + reg->rows.data[i].lo,
+                          want.data + inv2_lines[i].lo,
+                          source_row_bytes[i]);
+        for (j = source_row_bytes[i]; j < stored_row_bytes[i]; j++)
+            YEW_ASSERT_EQ_U64(reg->bytes.data[reg->rows.data[i].lo + j],
+                              (u8)' ');
+    }
     inv2_assert_bytes(ed.buffer.tb, &want);
 
     YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_L), YEW_CMD_OK);
