@@ -41,7 +41,7 @@ recorded in `audit-00.md`.
 | YEW-F-026 | M | fixed | F15 CI | ~~PTY cases have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `86ccb661` | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
 | YEW-F-027 | M | fixed | F15 CI | ~~Fletch format ban accepts macro-forwarded nonliteral formats~~ — fixed 2026-09-14 in `c371b5a4` | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
 | YEW-F-028 | M | fixed | F15 CI | ~~Fletch abort ban accepts macro-forwarded abort~~ — fixed 2026-09-14 in `f6c8075d` | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
-| YEW-F-029 | M | open | F15 CI | stable-sort ban accepts macro-forwarded qsort | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-029 | M | fixed | F15 CI | ~~stable-sort ban accepts macro-forwarded qsort~~ — fixed 2026-09-14 in `0e2ab552` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-030 | M | open | F15 CI | C11-subset ban accepts token-pasted attribute syntax | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-031 | M | open | F15 CI | explicit-registry ban accepts token-pasted constructors | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
 | YEW-F-032 | M | open | F15 CI | single-thread ban accepts token-pasted pthread calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
@@ -382,10 +382,11 @@ reject object-like aliases naming `abort` or `assert` as well as direct calls,
 and carries a positive macro-forwarding control so a later direct-call-only
 regression fails the gate.
 
-`YEW-F-029` is Medium because the stable-sort ban accepts `qsort` behind a
-macro even though the resulting call retains the unstable cross-libc ordering
-the rule forbids. The isolated actual-gate probe is green and remains an open
-Sprint 59 control finding.
+`YEW-F-029` was Medium because the stable-sort ban accepted `qsort` behind a
+macro even though the resulting call retained the unstable cross-libc ordering
+the rule forbids. Commit `0e2ab552` rejects object-like aliases naming `qsort`
+or `qsort_r` and adds an alias-specific positive control alongside the existing
+direct-call control.
 
 `YEW-F-030` is Medium because token pasting produces the forbidden
 `__attribute__` spelling only after preprocessing. The source grep reports

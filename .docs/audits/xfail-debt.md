@@ -39,7 +39,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-026 | audit | `tests/audit/yew_f_026.c` | ~~PTY cases have no XFAIL or hard-XPASS state~~ — fixed in `86ccb661` | fixed |
 | YEW-F-027 | audit | `tests/audit/f15_ban_misses.c` | ~~Fletch format ban accepts macro-forwarded nonliteral formats~~ — fixed in `c371b5a4` | fixed |
 | YEW-F-028 | audit | `tests/audit/f15_ban_misses.c` | ~~Fletch abort ban accepts macro-forwarded abort~~ — fixed in `f6c8075d` | fixed |
-| YEW-F-029 | audit | `tests/audit/f15_ban_misses.c` | stable-sort ban accepts macro-forwarded qsort | open |
+| YEW-F-029 | audit | `tests/audit/f15_ban_misses.c` | ~~stable-sort ban accepts macro-forwarded qsort~~ — fixed in `0e2ab552` | fixed |
 | YEW-F-030 | audit | `tests/audit/f15_ban_misses.c` | C11-subset ban accepts token-pasted attribute syntax | open |
 | YEW-F-031 | audit | `tests/audit/f15_ban_misses.c` | explicit-registry ban accepts token-pasted constructors | open |
 | YEW-F-032 | audit | `tests/audit/f15_ban_misses.c` | single-thread ban accepts token-pasted pthread calls | open |
