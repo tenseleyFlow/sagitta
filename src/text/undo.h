@@ -135,6 +135,7 @@ typedef struct UndoTree {
     u64 bytes_max;
     u64 persist_bytes_max;
     u32 min_nodes;
+    bool persist_truncated;
     YewTxnReason pending_reason;
     bool boundary;
     bool over_budget_logged;

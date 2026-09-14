@@ -356,6 +356,7 @@ const YewTest yew_tests[] = {
     T(undo_serial_rejects_every_64_byte_truncation),
     T(undo_serial_rejects_unknown_version),
     T(undo_serial_validates_current_anchor_and_stale_content),
+    T(undo_serial_rejects_noncanonical_unsaved_anchor_hash),
     T(undo_serial_persist_budget_does_not_mutate_memory_tree),
     T(undo_serial_persist_budget_preserves_surviving_branches),
     T(undo_serial_virtual_reroot_preserves_saved_branch),
