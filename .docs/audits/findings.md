@@ -58,7 +58,7 @@ recorded in `audit-00.md`.
 | YEW-F-043 | M | fixed | F15 CI | ~~long-double ban misses valid continued declarations~~ — fixed 2026-09-14 in `4b2b0f02` | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
 | YEW-F-044 | M | fixed | F15 CI | ~~shim-honesty gate accepts parenthesized success~~ — fixed 2026-09-14 in `75bfedf5` | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
 | YEW-F-045 | M | fixed | F15 CI | ~~Unicode-width ban accepts decimal local tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
-| YEW-F-046 | M | open | F15 CI | syntax-color ban accepts packed decimal colors | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
+| YEW-F-046 | M | fixed | F15 CI | ~~syntax-color ban accepts packed decimal colors~~ — fixed 2026-09-14 in `76f2fed1` | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
 | YEW-F-047 | M | open | F15 CI | syntax-width ban accepts local width arithmetic | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
 | YEW-F-048 | M | open | F15 CI | PTY-creation ban omits direct `posix_openpt` callers | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
 | YEW-F-049 | M | open | F15 CI | CI golden-update ban depends on contiguous spelling | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
@@ -474,8 +474,9 @@ form with an internal positive control.
 
 `YEW-F-046` is Medium because a syntax definition can emit a packed decimal
 foreground color without matching hex, RGB, or terminal escape spellings.
-The semantic-attrs-only control accepts the seed and remains open for Sprint
-59.
+Commit `76f2fed1` closes the alternate spelling by rejecting color-role names
+outside the excluded theme owner and pins the decimal form with an internal
+positive control.
 
 `YEW-F-047` is Medium because syntax-local cell width arithmetic needs none of
 the two helper names the gate scans. A simple wide-threshold calculation
