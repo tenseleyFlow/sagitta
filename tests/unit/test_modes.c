@@ -218,3 +218,45 @@ void test_modes_only_line_and_insert_are_enterable_in_sprint14(void)
 #endif
     yew_ed_free(&ed);
 }
+
+/*
+ * Sprint 57.19: every unit mode reaches every other with ONE keypress.
+ *
+ * Word and Block are arrow-driven, so before this their only letter was
+ * `h`: getting from Block back to Line meant Escape first, and Escape is
+ * a different intent — it abandons what you were doing. A mode switch
+ * should not have to be spelled as a cancel.
+ *
+ * Driven through yew_ed_handle_key against the real runtime bindings,
+ * so this pins the keymap the user actually gets rather than the table
+ * a test built for itself.
+ */
+void test_modes_every_unit_mode_switches_in_one_key(void)
+{
+    static const struct {
+        Mode from;
+        u32 key;
+        Mode want;
+    } steps[] = {
+        {YEW_MODE_L, (u32)'w', YEW_MODE_W},
+        {YEW_MODE_L, (u32)'b', YEW_MODE_B},
+        {YEW_MODE_W, (u32)'l', YEW_MODE_L},
+        {YEW_MODE_W, (u32)'b', YEW_MODE_B},
+        {YEW_MODE_W, (u32)'i', YEW_MODE_I},
+        {YEW_MODE_B, (u32)'l', YEW_MODE_L},
+        {YEW_MODE_B, (u32)'w', YEW_MODE_W},
+        {YEW_MODE_B, (u32)'i', YEW_MODE_I}
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(steps); i++) {
+        Ed ed;
+
+        modes_editor(&ed);
+        YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, steps[i].from), YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(ed.mode, steps[i].from);
+        yew_ed_handle_key(&ed, modes_key(steps[i].key), 10);
+        YEW_ASSERT_EQ_U64(ed.mode, steps[i].want);
+        yew_ed_free(&ed);
+    }
+}

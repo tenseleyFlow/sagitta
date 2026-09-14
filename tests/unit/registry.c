@@ -563,6 +563,7 @@ const YewTest yew_tests[] = {
     T(s14_journal_open_failure_preserves_complete_edit_state),
     T(s14_journal_append_failure_preserves_complete_edit_state),
     T(modes_escape_cancels_chord_before_prompt_or_mode),
+    T(modes_every_unit_mode_switches_in_one_key),
     T(modes_escape_cancels_count_before_prompt_or_mode),
     T(modes_escape_closes_prompt_before_changing_mode),
     T(modes_escape_from_insert_enters_line_and_repaints),
