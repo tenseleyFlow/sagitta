@@ -96,12 +96,14 @@ The editor-level half writes and opens the exact bytes, observes both invalid
 UTF-8 and mixed-EOL metadata, and recreates the CR/LF boundary through the
 real edit choke point so CR resides in add storage while LF remains original.
 A 66-cell rectangular selection across every line captures all 974 non-EOL
-bytes with the hand-counted row lengths `25, 260, 601, 3, 9, 4, 72` and does
-not mutate the document. The resulting block register is pasted and undone;
-the whole buffer is passed through the real `cat` shell filter; `crlf` is
-regex-replaced and undone; a Fletch macro inserts `Q` and is undone; and the
-file is saved, read byte-for-byte from disk, closed, reopened, and compared
-again. Every untouched byte remains identical throughout.
+source bytes with the hand-counted row lengths `25, 260, 601, 3, 9, 4, 72`
+and does not mutate the document. Its non-ragged block register retains those
+bytes exactly and right-pads short visual rows with literal spaces, producing
+stored row lengths `89, 260, 666, 57, 39, 66, 72`. The resulting block is
+pasted and undone; the whole buffer is passed through the real `cat` shell
+filter; `crlf` is regex-replaced and undone; a Fletch macro inserts `Q` and is
+undone; and the file is saved, read byte-for-byte from disk, closed, reopened,
+and compared again. Every untouched byte remains identical throughout.
 
 The two controls pass 3,059 assertions in the default build, the fully
 stripped `MODULES=""` build, and an ASan/UBSan build on arm64 macOS. This
