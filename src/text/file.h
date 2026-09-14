@@ -37,6 +37,8 @@ typedef struct FileMeta {
     /* Pinned last-loaded/saved bytes for exact save.check_disk=content. */
     TextSnap disk_snapshot;
     bool disk_snapshot_valid;
+    /* A crash-journal base hardlink is internal, not save topology. */
+    bool journal_pinned;
 } FileMeta;
 
 typedef enum {

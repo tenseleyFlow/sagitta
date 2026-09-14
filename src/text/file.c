@@ -617,7 +617,10 @@ static YewSaveErr destination_matches(const FileMeta *meta, const char *path,
         }
         if (!metadata_matches)
             meta_accept_stat(accepted, &st);
-        *needs_inplace = st.st_nlink > 1;
+        /* The journal pins this inode with one internal recovery link.
+         * Discount exactly that link; every other hardlink is user topology
+         * and still requires an in-place save. */
+        *needs_inplace = st.st_nlink > (meta->journal_pinned ? 2 : 1);
         return YEW_SAVE_OK;
     }
     if (errno == ENOENT) {
@@ -1521,6 +1524,9 @@ fail:
 static void refresh_saved_meta(FileMeta *meta, const struct stat *st,
                                char *saved_path, bool via_symlink)
 {
+    bool journal_pinned = meta->journal_pinned &&
+                          meta->dev == st->st_dev && meta->ino == st->st_ino;
+
     yew_xfree(meta->realpath);
     meta->realpath = saved_path;
     meta->exists = true;
@@ -1533,6 +1539,9 @@ static void refresh_saved_meta(FileMeta *meta, const struct stat *st,
     meta->ino = st->st_ino;
     meta->mtime = stat_mtime(st);
     meta->size_on_disk = (u64)st->st_size;
+    /* An atomic save installs a new inode, so the old journal hardlink no
+     * longer contributes to this destination's topology. */
+    meta->journal_pinned = journal_pinned;
 }
 
 static YewSaveErr accept_destination(FileMeta *accepted, const char *path)

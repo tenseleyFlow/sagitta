@@ -333,11 +333,11 @@ static bool journal_header_complete(const unsigned char fixed[16],
     uint64_t path_len;
 
     if (memcmp(fixed, "YEWJ", 4U) != 0 ||
-        header_u32_le(fixed + 4U) != 1U)
+        header_u32_le(fixed + 4U) != 2U)
         return false;
     path_len = header_u64_le(fixed + 8U);
-    return path_len <= UINTMAX_MAX - 36U &&
-           file_size >= 36U + (uintmax_t)path_len;
+    return path_len <= UINTMAX_MAX - 60U &&
+           file_size >= 60U + (uintmax_t)path_len;
 }
 
 static bool file_has_complete_journal_header(const char *path,
@@ -369,15 +369,15 @@ static bool file_has_complete_journal_header(const char *path,
 static void journal_header_classifier_selfcheck(void)
 {
     static const unsigned char killed_after_first_write[16] = {
-        'Y', 'E', 'W', 'J', 1U, 0U, 0U, 0U,
+        'Y', 'E', 'W', 'J', 2U, 0U, 0U, 0U,
         53U, 0U, 0U, 0U, 0U, 0U, 0U, 0U
     };
     unsigned char bad[16];
     uintmax_t cut;
 
-    for (cut = 0U; cut <= 90U; cut++) {
+    for (cut = 0U; cut <= 114U; cut++) {
         if (journal_header_complete(killed_after_first_write, cut) !=
-            (cut >= 89U)) {
+            (cut >= 113U)) {
             (void)fprintf(stderr,
                           "batch-kill9: journal header self-check failed\n");
             exit(2);
@@ -385,14 +385,14 @@ static void journal_header_classifier_selfcheck(void)
     }
     (void)memcpy(bad, killed_after_first_write, sizeof(bad));
     bad[0] = 'X';
-    if (journal_header_complete(bad, 89U)) {
+    if (journal_header_complete(bad, 113U)) {
         (void)fprintf(stderr,
                       "batch-kill9: journal magic self-check failed\n");
         exit(2);
     }
     (void)memcpy(bad, killed_after_first_write, sizeof(bad));
-    bad[4] = 2U;
-    if (journal_header_complete(bad, 89U)) {
+    bad[4] = 1U;
+    if (journal_header_complete(bad, 113U)) {
         (void)fprintf(stderr,
                       "batch-kill9: journal version self-check failed\n");
         exit(2);
