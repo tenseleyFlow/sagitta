@@ -45,7 +45,7 @@ recorded in `audit-00.md`.
 | YEW-F-030 | M | fixed | F15 CI | ~~C11-subset ban accepts token-pasted attribute syntax~~ — fixed 2026-09-14 in `ccfc924c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-031 | M | fixed | F15 CI | ~~explicit-registry ban accepts token-pasted constructors~~ — fixed 2026-09-14 in `ccfc924c` | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
 | YEW-F-032 | M | fixed | F15 CI | ~~single-thread ban accepts token-pasted pthread calls~~ — fixed 2026-09-14 in `a294794c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-033 | M | open | F15 CI | reproducibility ban omits `__TIMESTAMP__` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-033 | M | fixed | F15 CI | ~~reproducibility ban omits `__TIMESTAMP__`~~ — fixed 2026-09-14 in `381bddf0` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-034 | M | open | F15 CI | mmap ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-035 | M | open | F15 CI | allocator ban accepts macro-forwarded libc allocation | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-036 | M | open | F15 CI | cwd-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
@@ -406,10 +406,10 @@ gate searched for. Commit `a294794c` also rejects the `thread_*` API stem,
 which has no valid use in yew source, and pins the pasted call with a positive
 control while retaining the direct `pthread` and `threads.h` checks.
 
-`YEW-F-033` is Medium because `__TIMESTAMP__` embeds filesystem-dependent
-build time just as surely as the two macros currently banned, yet is omitted
-from the reproducibility scan. The actual gate accepts the isolated seed. It
-remains open for Sprint 59.
+`YEW-F-033` was Medium because `__TIMESTAMP__` embeds filesystem-dependent
+build time just as surely as the two macros already banned. Commit `381bddf0`
+adds it to the compiler-time pattern, updates the diagnostic to cover the
+whole class, and adds a positive control for the formerly omitted macro.
 
 `YEW-F-034` is Medium because a macro-forwarded `mmap` call survives the
 source ban while preserving the truncate/SIGBUS hazard the rule exists to
