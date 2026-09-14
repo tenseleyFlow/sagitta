@@ -60,7 +60,7 @@ recorded in `audit-00.md`.
 | YEW-F-045 | M | fixed | F15 CI | ~~Unicode-width ban accepts decimal local tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
 | YEW-F-046 | M | fixed | F15 CI | ~~syntax-color ban accepts packed decimal colors~~ — fixed 2026-09-14 in `76f2fed1` | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
 | YEW-F-047 | M | fixed | F15 CI | ~~syntax-width ban accepts local width arithmetic~~ — fixed 2026-09-14 in `41512e2c` | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
-| YEW-F-048 | M | open | F15 CI | PTY-creation ban omits direct `posix_openpt` callers | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
+| YEW-F-048 | M | fixed | F15 CI | ~~PTY-creation ban omits direct `posix_openpt` callers~~ — fixed 2026-09-14 in `674574eb` | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
 | YEW-F-049 | M | open | F15 CI | CI golden-update ban depends on contiguous spelling | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
 | YEW-F-050 | M | open | F15 CI | piece-tree I/O ban omits `pread` | tests/audit/f15_ban_misses.c | s08 I/O ownership; s58 F15 q2 |
 | YEW-F-051 | M | open | F15 CI | shadow-preview ban accepts manual destructive fill | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
@@ -486,8 +486,9 @@ forms and pins the local calculation with an internal positive control.
 
 `YEW-F-048` is Medium because the PTY rule says creation must use the audited
 `posix_openpt` harness but does not scan for `posix_openpt` itself. A direct
-caller in another PTY test passes the gate. The harness control remains open
-for Sprint 59.
+caller in another PTY test passed the gate. Commit `674574eb` recognizes all
+three PTY creation APIs plus `-lutil`, retains the original all-tests scan,
+and restricts them to the four audited fixtures that require direct ownership.
 
 `YEW-F-049` is Medium because shell token concatenation constructs the golden
 update environment name at execution time while preventing its contiguous
