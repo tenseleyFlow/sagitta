@@ -3205,12 +3205,7 @@ static CmdStatus fuss_rebase_sync(Ed *ed, const char *operation,
                                   const char *base)
 {
     const char *self = yew_job_self_exe();
-    const char *env[6];
-    char *sequence_env;
-    char *editor_env;
-    size_t self_len;
-    char *argv[7];
-    YewJobSpec spec = {0};
+    char *argv[4];
     YewJobWait wait = {0};
     char error[192];
     size_t at = 0U;
@@ -3221,45 +3216,20 @@ static CmdStatus fuss_rebase_sync(Ed *ed, const char *operation,
                 "rebase handover failed: cannot resolve yew executable");
         return YEW_CMD_ERR_IO;
     }
-    self_len = fuss_cstr_len(self);
-    sequence_env = yew_xmalloc(sizeof("GIT_SEQUENCE_EDITOR=") + self_len);
-    editor_env = yew_xmalloc(sizeof("GIT_EDITOR=") + self_len);
-    (void)memcpy(sequence_env, "GIT_SEQUENCE_EDITOR=",
-                 sizeof("GIT_SEQUENCE_EDITOR=") - 1U);
-    (void)memcpy(sequence_env + sizeof("GIT_SEQUENCE_EDITOR=") - 1U,
-                 self, self_len + 1U);
-    (void)memcpy(editor_env, "GIT_EDITOR=", sizeof("GIT_EDITOR=") - 1U);
-    (void)memcpy(editor_env + sizeof("GIT_EDITOR=") - 1U, self,
-                 self_len + 1U);
-    env[0] = sequence_env;
-    env[1] = editor_env;
-    env[2] = "GIT_PAGER=cat";
-    env[3] = "PAGER=cat";
-    env[4] = "LC_ALL=C";
-    env[5] = NULL;
-
-    argv[at++] = (char *)"git";
-    argv[at++] = (char *)"--no-pager";
     argv[at++] = (char *)"rebase";
     argv[at++] = (char *)operation;
     if (base != NULL)
         argv[at++] = (char *)base;
     argv[at] = NULL;
-    spec.argv = argv;
-    spec.cwd = yew_ws_root(ed);
-    spec.sink = YEW_SINK_DISCARD;
-    spec.env_set = env;
-    spec.inherit_tty = true;
-    ran = yew_job_run_sync(ed, &spec, &wait, error, sizeof(error));
-    yew_xfree(sequence_env);
-    yew_xfree(editor_env);
+    /* YEW-F-017: this descriptor call retains terminal handover while the
+     * Git layer supplies canonical argv and environment policy. */
+    ran = yew_git_run_terminal(ed, yew_git_verb("rebase"), argv, self,
+                               &wait, error, sizeof(error));
     if (!ran) {
         yew_msg(ed, YEW_MSG_ERROR, "%s",
                 error[0] == '\0' ? "rebase handover failed" : error);
         return YEW_CMD_ERR_IO;
     }
-    yew_git_invalidate(ed);
-    (void)yew_git_refresh(ed, true);
     if (wait.state != YEW_JOB_EXITED || wait.exit_code != 0) {
         if (wait.state == YEW_JOB_SIGNALED)
             yew_msg(ed, YEW_MSG_ERROR, "rebase stopped by signal %d",

@@ -1963,6 +1963,7 @@ void test_gitcache_internal_read_job_completion_does_not_self_invalidate(void);
 void test_gitcache_state_strings_cover_taxonomy(void);
 void test_gitcache_filesystem_taxonomy_is_message_free(void);
 void test_gitcache_verb_table_and_argv_are_structural(void);
+void test_gitcache_terminal_rebase_inherits_canonical_boundary(void);
 void test_gitcache_coalesces_and_caps_inflight(void);
 void test_gitcache_environment_fingerprint_tracks_passthrough(void);
 void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void);

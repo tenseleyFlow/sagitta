@@ -1979,6 +1979,7 @@ const YewTest yew_tests[] = {
     T(gitcache_state_strings_cover_taxonomy),
     T(gitcache_filesystem_taxonomy_is_message_free),
     T(gitcache_verb_table_and_argv_are_structural),
+    T(gitcache_terminal_rebase_inherits_canonical_boundary),
     T(gitcache_coalesces_and_caps_inflight),
     T(gitcache_environment_fingerprint_tracks_passthrough),
     T(gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure),

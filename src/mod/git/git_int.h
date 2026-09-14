@@ -32,6 +32,10 @@ struct GitReq {
 typedef u32 (*GitTestSpawnFn)(Ed *ed, const GitVerb *verb,
                               char *const *argv, const GitReq *req,
                               void *opaque, char *err, size_t errsz);
+typedef bool (*GitTestRunSyncFn)(Ed *ed, const GitVerb *verb,
+                                const YewJobSpec *spec,
+                                YewJobWait *result, void *opaque,
+                                char *err, size_t errsz);
 
 /* Pure cache/taxonomy helpers and explicit test seams.  Production calls
  * use yew_now_ms() and the generic job layer; tests can replace either
@@ -40,6 +44,7 @@ bool yew_git_cache_fresh(i64 taken_ms, i64 now_ms);
 GitStatusCode yew_git_probe_state(const GitRepo *repo);
 void yew_git_test_now_set(Ed *ed, i64 now_ms);
 void yew_git_test_spawn_set(GitTestSpawnFn spawn, void *opaque);
+void yew_git_test_run_sync_set(GitTestRunSyncFn run, void *opaque);
 bool yew_git_test_complete(Ed *ed, u32 job_id, GitStatusCode state,
                            const u8 *out, u64 out_len,
                            const u8 *err, u64 err_len);

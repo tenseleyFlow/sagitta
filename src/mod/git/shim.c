@@ -615,6 +615,16 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     return 0U;
 }
 
+bool yew_git_run_terminal(Ed *ed, const GitVerb *verb, char *const *argv,
+                          const char *editor, YewJobWait *result,
+                          char *err, size_t errsz)
+{
+    (void)verb; (void)argv; (void)editor; (void)result;
+    (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
+    (void)git_require(ed);
+    return false;
+}
+
 u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,
                            char *const *argv, void *owner,
                            const YewJobCallbackOps *ops,
