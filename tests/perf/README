@@ -116,6 +116,21 @@ machine metadata, and promotes the result as:
 - `calib-reference.txt` for `perf-x86_64-linux-gnu`;
 - `calib-reference-arm64.txt` for `perf-arm64-linux`.
 
+The runner IDs are hardware-environment identities, not portable labels:
+
+- `perf-x86_64-linux-gnu` is pinned to `hasu`, an Intel Core i7-12700KF
+  host running NixOS. The calibration reference records its exact memory,
+  kernel, libc, compiler, governor, SMT, and ASLR state.
+- `perf-arm64-linux` is pinned to the dedicated `yew-perf-arm64` Lima/VZ
+  guest on the recorded Apple M5 Pro host. The guest definition is 8 vCPUs,
+  16 GiB RAM, a 30 GiB sparse disk, no host mounts, no container runtime,
+  and Ubuntu 26.04 arm64. This is native arm64 execution on virtual hardware;
+  it is not evidence for an arbitrary hosted or developer VM.
+
+Changing either physical host or the ARM guest definition invalidates the
+corresponding reference and baseline until the bootstrap and 30-run noise
+campaign are repeated. A matching runner ID alone never transfers the pin.
+
 Never infer, copy across ISAs, or manufacture a reference vector. Promotion
 and both initial baseline commits require evidence from the named hardware.
 
