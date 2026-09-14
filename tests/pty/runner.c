@@ -29,6 +29,26 @@ enum {
     CASE_BUDGET_MS = 5000
 };
 
+typedef enum PtyCaseRun {
+    PTY_CASE_PASS = 0,
+    PTY_CASE_GOLDEN_MISMATCH,
+    PTY_CASE_HARD_FAIL
+} PtyCaseRun;
+
+typedef enum PtyVerdict {
+    PTY_VERDICT_PASS = 0,
+    PTY_VERDICT_FAIL,
+    PTY_VERDICT_XFAIL,
+    PTY_VERDICT_XPASS
+} PtyVerdict;
+
+typedef enum XfailDebtStatus {
+    XFAIL_DEBT_IO = 0,
+    XFAIL_DEBT_ABSENT,
+    XFAIL_DEBT_ACTIVE,
+    XFAIL_DEBT_FIXED
+} XfailDebtStatus;
+
 static bool env_truthy(const char *name)
 {
     const char *value = getenv(name);
@@ -74,6 +94,76 @@ static char *path_join(const char *left, const char *right)
         path[nl++] = '/';
     (void)memcpy(path + nl, right, nr + 1U);
     return path;
+}
+
+static XfailDebtStatus xfail_debt_line_status(const char *line,
+                                               const char *id)
+{
+    char prefix[32];
+    const char *last;
+    const char *status;
+    size_t status_len;
+    int n = snprintf(prefix, sizeof(prefix), "| %s |", id);
+
+    if (n < 0 || (size_t)n >= sizeof(prefix) ||
+        strncmp(line, prefix, (size_t)n) != 0)
+        return XFAIL_DEBT_ABSENT;
+    last = strrchr(line, '|');
+    if (last == NULL || last == line)
+        return XFAIL_DEBT_ABSENT;
+    status = last;
+    while (status != line && status[-1] != '|')
+        status--;
+    if (status == line)
+        return XFAIL_DEBT_ABSENT;
+    while (status < last && (*status == ' ' || *status == '\t'))
+        status++;
+    status_len = (size_t)(last - status);
+    while (status_len != 0U &&
+           (status[status_len - 1U] == ' ' ||
+            status[status_len - 1U] == '\t'))
+        status_len--;
+    if (status_len == 5U && memcmp(status, "fixed", 5U) == 0)
+        return XFAIL_DEBT_FIXED;
+    if ((status_len == 4U && memcmp(status, "open", 4U) == 0) ||
+        (status_len == 8U && memcmp(status, "deferred", 8U) == 0) ||
+        (status_len == 7U && memcmp(status, "wontfix", 7U) == 0))
+        return XFAIL_DEBT_ACTIVE;
+    return XFAIL_DEBT_ABSENT;
+}
+
+static XfailDebtStatus xfail_debt_status(const char *id)
+{
+    char line[4096];
+    FILE *file = fopen(".docs/audits/xfail-debt.md", "rb");
+    XfailDebtStatus status = XFAIL_DEBT_ABSENT;
+
+    if (file == NULL)
+        return XFAIL_DEBT_IO;
+    while (fgets(line, sizeof(line), file) != NULL) {
+        XfailDebtStatus found = xfail_debt_line_status(line, id);
+
+        if (found != XFAIL_DEBT_ABSENT) {
+            status = found;
+            break;
+        }
+    }
+    if (ferror(file) || fclose(file) != 0)
+        return XFAIL_DEBT_IO;
+    return status;
+}
+
+static PtyVerdict pty_verdict(const PtyCase *test, PtyCaseRun run)
+{
+    if (test->xfail_id == NULL)
+        return run == PTY_CASE_PASS ? PTY_VERDICT_PASS : PTY_VERDICT_FAIL;
+    if (run == PTY_CASE_PASS)
+        return PTY_VERDICT_XPASS;
+    /* YEW-F-026: only a deterministic comparison against an existing
+     * golden satisfies XFAIL; setup, execution, stability, and hygiene
+     * failures remain hard failures. */
+    return run == PTY_CASE_GOLDEN_MISMATCH ? PTY_VERDICT_XFAIL
+                                           : PTY_VERDICT_FAIL;
 }
 
 static bool remove_tree(const char *path)
@@ -267,7 +357,7 @@ static bool compare_independent(const PtyCtx *first, const PtyCtx *second,
 }
 
 static bool compare_golden(const PtyCtx *got, bool update, bool *updated,
-                           Bytebuf *diff)
+                           bool *mismatched, Bytebuf *diff)
 {
     char filename[256];
     Bytebuf want;
@@ -276,6 +366,7 @@ static bool compare_golden(const PtyCtx *got, bool update, bool *updated,
     int n;
 
     *updated = false;
+    *mismatched = false;
     if (!valid_golden_name(got->golden_name)) {
         bytebuf_printf(diff, "invalid golden name");
         return false;
@@ -303,6 +394,7 @@ static bool compare_golden(const PtyCtx *got, bool update, bool *updated,
         equal = false;
     } else {
         equal = snapshot_compare(&got->snapshot, &want, diff);
+        *mismatched = !equal;
     }
     if (!equal && update) {
         if ((mkdir("tests/pty/goldens", 0777) != 0 && errno != EEXIST) ||
@@ -327,9 +419,10 @@ static void preserve_failure(const PtyCtx *ctx)
     (void)fprintf(stderr, "pty state preserved: %s\n", ctx->state_dir);
 }
 
-static bool run_case(const PtyCase *test, const char *demo,
-                     const char *yew, i64 case_budget,
-                     i64 global_deadline, bool update, bool *any_updated)
+static PtyCaseRun run_case(const PtyCase *test, const char *demo,
+                           const char *yew, i64 case_budget,
+                           i64 global_deadline, bool update,
+                           bool *any_updated)
 {
     PtyCtx first;
     PtyCtx second;
@@ -340,7 +433,11 @@ static bool run_case(const PtyCase *test, const char *demo,
     bool stable = false;
     bool golden_ok = false;
     bool updated = false;
+    bool golden_mismatch = false;
+    bool expected_mismatch;
+    bool cleanup_ok = true;
     bool ok;
+    PtyCaseRun result;
 
     (void)memset(&first, 0, sizeof(first));
     (void)memset(&second, 0, sizeof(second));
@@ -360,16 +457,22 @@ static bool run_case(const PtyCase *test, const char *demo,
                 (void)fputc('\n', stderr);
         } else {
             diff.len = 0U;
-            golden_ok = compare_golden(&first, update, &updated, &diff);
+            golden_ok = compare_golden(&first, update, &updated,
+                                       &golden_mismatch, &diff);
             if (!golden_ok) {
-                (void)fprintf(stderr, "pty: %s: golden mismatch\n", test->name);
-                print_buf(stderr, &diff);
-                if (diff.len == 0U || diff.data[diff.len - 1U] != '\n')
-                    (void)fputc('\n', stderr);
+                if (test->xfail_id == NULL || !golden_mismatch) {
+                    (void)fprintf(stderr, "pty: %s: golden mismatch\n",
+                                  test->name);
+                    print_buf(stderr, &diff);
+                    if (diff.len == 0U || diff.data[diff.len - 1U] != '\n')
+                        (void)fputc('\n', stderr);
+                }
             }
         }
     }
     ok = first_ok && second_ok && stable && golden_ok;
+    expected_mismatch = !update && first_ok && second_ok && stable &&
+                        golden_mismatch;
     if (!first_ok) {
         (void)fprintf(stderr, "pty: %s: %s\n", test->name,
                       first.failure[0] == '\0' ? "first execution failed"
@@ -382,11 +485,11 @@ static bool run_case(const PtyCase *test, const char *demo,
     }
     if (updated)
         *any_updated = true;
-    if (ok) {
+    if (ok || (test->xfail_id != NULL && expected_mismatch)) {
         if (!remove_tree(first.state_dir) || !remove_tree(second.state_dir)) {
             (void)fprintf(stderr, "pty: %s: could not remove state dirs\n",
                           test->name);
-            ok = false;
+            cleanup_ok = false;
         }
     } else {
         if (first.state_dir != NULL)
@@ -398,21 +501,64 @@ static bool run_case(const PtyCase *test, const char *demo,
         (void)fprintf(stderr,
                       "pty: %s: live child cleanup exceeded one second\n",
                       test->name);
-        ok = false;
+        cleanup_ok = false;
     }
     if (!ptc_fd_hygiene(&fdmsg)) {
         (void)fprintf(stderr, "pty: %s: ", test->name);
         print_buf(stderr, &fdmsg);
         (void)fputc('\n', stderr);
-        ok = false;
+        cleanup_ok = false;
     }
-    if (ok && !update)
+    if (ok && cleanup_ok && !update && test->xfail_id == NULL)
         (void)printf("pty: %s: ok\n", test->name);
+    if (!cleanup_ok)
+        result = PTY_CASE_HARD_FAIL;
+    else if (ok)
+        result = PTY_CASE_PASS;
+    else if (expected_mismatch)
+        result = PTY_CASE_GOLDEN_MISMATCH;
+    else
+        result = PTY_CASE_HARD_FAIL;
     ptc_dispose(&first);
     ptc_dispose(&second);
     bytebuf_free(&diff);
     bytebuf_free(&fdmsg);
-    return ok;
+    return result;
+}
+
+static bool selftest_xfail_verdict(void)
+{
+    static const char active[] =
+        "| YEW-F-026 | pty | `case` | reason | open |\n";
+    static const char fixed[] =
+        "| YEW-F-026 | pty | `case` | reason | fixed |\n";
+    PtyCase plain = {"plain", "modern", 24U, 80U, NULL, NULL};
+    PtyCase marked = {
+        "marked", "modern", 24U, 80U, NULL, "YEW-F-026"
+    };
+
+    return xfail_debt_line_status(active, "YEW-F-026") ==
+               XFAIL_DEBT_ACTIVE &&
+           xfail_debt_line_status(fixed, "YEW-F-026") ==
+               XFAIL_DEBT_FIXED &&
+           pty_verdict(&plain, PTY_CASE_PASS) == PTY_VERDICT_PASS &&
+           pty_verdict(&plain, PTY_CASE_GOLDEN_MISMATCH) ==
+               PTY_VERDICT_FAIL &&
+           pty_verdict(&marked, PTY_CASE_GOLDEN_MISMATCH) ==
+               PTY_VERDICT_XFAIL &&
+           pty_verdict(&marked, PTY_CASE_PASS) == PTY_VERDICT_XPASS &&
+           pty_verdict(&marked, PTY_CASE_HARD_FAIL) == PTY_VERDICT_FAIL;
+}
+
+static int run_selftests(void)
+{
+    bool ok = selftest_xfail_verdict();
+
+    (void)printf("%s pty_xfail_and_xpass_are_distinct\n",
+                 ok ? "PASS" : "FAIL");
+    (void)printf("pty-runner-selftest: 1 test, %u failure%s\n",
+                 ok ? 0U : 1U, ok ? "s" : "");
+    return ok ? 0 : 1;
 }
 
 static bool parse_cli(int argc, char **argv, const char **demo,
@@ -448,8 +594,12 @@ int main(int argc, char **argv)
     bool any_updated = false;
     bool any_selected = false;
     bool ok = true;
+    size_t xfailed = 0U;
+    size_t xpassed = 0U;
     size_t i;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest") == 0)
+        return run_selftests();
     if (!parse_cli(argc, argv, &demo, &yew)) {
         (void)fprintf(stderr,
                       "usage: pty_runner --demo <path> --yew <path>\n");
@@ -466,21 +616,68 @@ int main(int argc, char **argv)
     global_deadline = budget > INT64_MAX - global_deadline
                           ? INT64_MAX : global_deadline + budget;
     for (i = 0U; yew_pty_cases[i].name != NULL; i++) {
+        PtyCaseRun run;
+        PtyVerdict verdict;
+
         if (excluded(yew_pty_cases[i].name, exclude))
             continue;
         if (filter != NULL && *filter != '\0' &&
             strstr(yew_pty_cases[i].name, filter) == NULL)
             continue;
         any_selected = true;
+        if (yew_pty_cases[i].xfail_id != NULL) {
+            XfailDebtStatus debt =
+                xfail_debt_status(yew_pty_cases[i].xfail_id);
+
+            if (update) {
+                (void)fprintf(stderr,
+                              "CONFIG %s: cannot update an XFAIL case\n",
+                              yew_pty_cases[i].name);
+                ok = false;
+                continue;
+            }
+            if (debt != XFAIL_DEBT_ACTIVE) {
+                if (debt == XFAIL_DEBT_FIXED)
+                    (void)fprintf(stderr,
+                                  "CONFIG %s: XFAIL id %s is already fixed\n",
+                                  yew_pty_cases[i].name,
+                                  yew_pty_cases[i].xfail_id);
+                else if (debt == XFAIL_DEBT_ABSENT)
+                    (void)fprintf(stderr,
+                                  "CONFIG %s: unknown XFAIL id %s\n",
+                                  yew_pty_cases[i].name,
+                                  yew_pty_cases[i].xfail_id);
+                else
+                    (void)fprintf(stderr,
+                                  "CONFIG %s: cannot read XFAIL debt ledger\n",
+                                  yew_pty_cases[i].name);
+                ok = false;
+                continue;
+            }
+        }
         if (ptc_now_ms() >= global_deadline) {
             (void)fprintf(stderr, "pty: global budget exhausted after %lld ms\n",
                           (long long)budget);
             ok = false;
             break;
         }
-        if (!run_case(&yew_pty_cases[i], demo, yew, case_budget,
-                      global_deadline, update, &any_updated))
+        run = run_case(&yew_pty_cases[i], demo, yew, case_budget,
+                       global_deadline, update, &any_updated);
+        verdict = pty_verdict(&yew_pty_cases[i], run);
+        if (verdict == PTY_VERDICT_XFAIL) {
+            (void)printf("XFAIL %s [%s] (golden mismatch)\n",
+                         yew_pty_cases[i].name,
+                         yew_pty_cases[i].xfail_id);
+            xfailed++;
+        } else if (verdict == PTY_VERDICT_XPASS) {
+            (void)printf("XPASS %s [%s] (golden matched; remove XFAIL)\n",
+                         yew_pty_cases[i].name,
+                         yew_pty_cases[i].xfail_id);
+            xpassed++;
             ok = false;
+        } else if (verdict == PTY_VERDICT_FAIL) {
+            ok = false;
+        }
     }
     if (!any_selected) {
         (void)fprintf(stderr, "pty: filter selected no cases\n");
@@ -491,6 +688,8 @@ int main(int argc, char **argv)
                       "pty: live child cleanup exceeded one second at exit\n");
         ok = false;
     }
+    if (xfailed != 0U || xpassed != 0U)
+        (void)printf("pty: xfailed=%zu xpassed=%zu\n", xfailed, xpassed);
     if (update) {
         if (!any_updated)
             (void)fprintf(stderr,

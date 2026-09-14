@@ -3681,6 +3681,7 @@ test-fletch-roundtrip: test-roundtrip
 
 test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
           $(AI_TEST_HELPERS)
+	$(PTY_PREP) $(PTY_RUN) --selftest $(PTY_LOG_REDIRECT)
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
