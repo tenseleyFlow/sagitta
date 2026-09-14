@@ -310,8 +310,13 @@ scan "threads are forbidden in the single-threaded core" \
     "$thread_pattern" "$source_files"
 scan_seed "token-pasted pthread API" "$thread_pattern" \
     'void seeded(void) { JOIN(p, thread_create)(t, 0, f, 0); }'
-scan "__DATE__ and __TIME__ break reproducible builds" \
-    '(__DATE__|__TIME__)' "$source_files"
+# YEW-F-033: __TIMESTAMP__ embeds filesystem modification time and is just
+# as unreproducible as the compilation date/time macros.
+repro_time_pattern='(__DATE__|__TIME__|__TIMESTAMP__)'
+scan "compiler time macros break reproducible builds" \
+    "$repro_time_pattern" "$source_files"
+scan_seed "compiler time macros" "$repro_time_pattern" \
+    'const char *seeded = __TIMESTAMP__;'
 scan "mmap risks SIGBUS after truncation" \
     '(^|[^[:alnum:]_])mmap[[:space:]]*\(' "$source_files"
 scan "source allocations must use the audited yew allocator" \
