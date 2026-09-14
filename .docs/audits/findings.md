@@ -79,7 +79,7 @@ recorded in `audit-00.md`.
 | YEW-F-064 | M | fixed | F15 CI | ~~oracle-independence ban accepts copied renamed models~~ — fixed 2026-09-14 in `e79f2414` | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
 | YEW-F-065 | M | fixed | F15 CI | ~~generated-table ban verifies only a retained marker~~ — fixed 2026-09-14 in `471a5064` | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
 | YEW-F-066 | M | fixed | F15 CI | ~~termination-site ban omits `_Exit`~~ — fixed 2026-09-14 in `4dc257b5` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
-| YEW-F-067 | M | open | F15 CI | AI-body logging ban depends on variable names | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
+| YEW-F-067 | M | fixed | F15 CI | ~~AI-body logging ban depends on variable names~~ — fixed 2026-09-14 in `13eca642` | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
 | YEW-F-068 | M | open | F15 CI | unit-registry ban omits static test definitions | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
 | YEW-F-069 | M | open | F15 CI | PTY minimum-case gate skips a missing registry | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
 | YEW-F-070 | M | open | F15 CI | PTY golden gate accepts computed missing names | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
@@ -590,10 +590,10 @@ local regeneration of all four vendored-UCD outputs was byte-identical.
 checks both spellings by exact function owner while preserving audited
 post-fork `_exit` calls.
 
-`YEW-F-067` is Medium because the AI privacy scanner infers body data from a
-small list of identifier substrings. Renaming the bytes and logging them
-directly passes the gate. No user payload was logged by the audit; the control
-remains open for Sprint 59.
+`YEW-F-067` was Medium because the AI privacy scanner inferred body data from
+a small list of identifier substrings. Commit `13eca642` replaces that guess
+with an exact owner list for every ordinary AI log call; all other body-capable
+logging must use the existing dual-gated debug sink.
 
 `YEW-F-068` is Medium because the explicit unit registry inventory recognizes
 only definitions beginning exactly with `void`. Adding ordinary `static`
