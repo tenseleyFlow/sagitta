@@ -536,8 +536,46 @@ scan "syntax owns byte spans; width math belongs in src/unicode" \
     "$syntax_width_pattern" "$syn_files"
 scan_seed "syntax-local width threshold" "$syntax_width_pattern" \
     'unsigned seeded(unsigned cp) { return cp >= 0x1100U ? 2U : 1U; }'
-scan "pty creation must use the audited posix_openpt harness" \
-    '(forkpty|openpty|-lutil)' "$pty_files"
+# YEW-F-048: posix_openpt is the portable PTY-creation primitive, so omitting
+# it left the ownership rule unable to reject a new ad hoc harness.  These
+# four C files are the complete audited owner set: golden tests, shared live
+# tests, terminal handover, and the raw-mode syscall fixture.  The shell audit
+# fixture is data that emits the forbidden call into an isolated repository.
+pty_creation_pattern='(^|[^[:alnum:]_])(forkpty|openpty|posix_openpt)[[:space:]]*\(|-lutil([^[:alnum:]_]|$)'
+pty_creation_calls()
+{
+    pty_list=$1
+    pty_out=$2
+    : >"$pty_out"
+    while IFS= read -r file; do
+        case ${file#"$repo_dir"/} in
+            tests/audit/f15_ban_miss.sh)
+                continue
+                ;;
+            tests/pty/harness.c|tests/support/live_pty.c|\
+            tests/unit/test_job_handover.c|tests/unit/test_tty.c)
+                continue
+                ;;
+        esac
+        grep -nE -e "$pty_creation_pattern" "$file" 2>/dev/null |
+            sed "s|^|${file#"$repo_dir"/}:|" >>"$pty_out" || :
+    done <"$pty_list"
+}
+
+pty_creation_calls "$pty_files" "$tmp/pty-creation-hits"
+if [ -s "$tmp/pty-creation-hits" ]; then
+    echo "ban: PTY creation must stay in the four audited test owners" \
+        >>"$hits"
+    cat "$tmp/pty-creation-hits" >>"$hits"
+fi
+pty_seed=$tmp/seeded-pty-call.c
+echo 'int seeded(void) { return posix_openpt(0); }' >"$pty_seed"
+printf '%s\n' "$pty_seed" >"$tmp/pty-seed-list"
+pty_creation_calls "$tmp/pty-seed-list" "$tmp/pty-seed-hits"
+if [ "$(wc -l <"$tmp/pty-seed-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the PTY-creation ownership rule no longer fires on its seed" \
+        >>"$hits"
+fi
 scan "golden updates are forbidden in CI" \
     'YEW_PTY_UPDATE' "$ci_files"
 scan "piece tree file I/O belongs to Sprint 8" \
