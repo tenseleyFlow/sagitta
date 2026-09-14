@@ -522,8 +522,13 @@ scan "Unicode width math belongs only in src/unicode" \
     "$unicode_width_pattern" "$non_unicode_files"
 scan_seed "decimal Unicode width constants" "$unicode_width_pattern" \
     'static const unsigned seeded[] = { 127995U, 65039U, 8205U };'
+# YEW-F-046: a packed decimal value contains no hex or RGB spelling, but a
+# syntax-side color role still violates the semantic-attribute boundary.
+syntax_color_pattern='(#[0-9a-fA-F]{6}|[Rr][Gg][Bb]|38;2|48;5|(^|[^[:alnum:]_])([Ff][Gg]|[Bb][Gg]|[Ff]oreground|[Bb]ackground|[Cc]olor|[Cc]olour)([^[:alnum:]_]|$))'
 scan "syntax definitions emit semantic attrs, never colors" \
-    '(#[0-9a-fA-F]{6}|[Rr][Gg][Bb]|38;2|48;5)' "$syn_files"
+    "$syntax_color_pattern" "$syn_files"
+scan_seed "packed decimal syntax color" "$syntax_color_pattern" \
+    'static const unsigned foreground = 16711680U;'
 scan "syntax owns byte spans; width math belongs in src/unicode" \
     'yew_(cp|str)_width' "$syn_files"
 scan "pty creation must use the audited posix_openpt harness" \
