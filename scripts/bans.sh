@@ -396,11 +396,15 @@ scan "locale-dependent Unicode APIs are forbidden" \
     "$locale_api_pattern" "$source_files"
 scan_seed "locale-dependent mbtowc" "$locale_api_pattern" \
     'int seeded(void) { return mbtowc(w, s, n); }'
-dynamic_loader_pattern='(^|[^[:alnum:]_])(dlopen|dlsym|dlclose|dlerror)[[:space:]]*\('
+# YEW-F-039: dlvsym is GNU's versioned native symbol lookup and violates the
+# same Fletch-only plugin boundary as dlsym.
+dynamic_loader_pattern='(^|[^[:alnum:]_])(dlopen|dlsym|dlvsym|dlclose|dlerror)[[:space:]]*\('
 scan "native dynamic loading is forbidden; yew plugins are Fletch-only" \
     "$dynamic_loader_pattern" "$source_files"
 scan_seed "native-dynamic-loading" "$dynamic_loader_pattern" \
     'void seeded(void) { (void)dlopen(path, flags); }'
+scan_seed "versioned native-symbol loading" "$dynamic_loader_pattern" \
+    'void seeded(void) { (void)dlvsym(handle, "name", "V1"); }'
 strerror_r_pattern='(^|[^[:alnum:]_])strerror_r[[:space:]]*\('
 scan "strerror_r has incompatible GNU and POSIX ABIs; use strerror" \
     "$strerror_r_pattern" "$source_files"
