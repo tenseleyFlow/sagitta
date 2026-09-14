@@ -28,7 +28,7 @@ recorded in `audit-00.md`.
 | YEW-F-013 | M | fixed | F10 SYN | ~~JS/TS known-wrong golden rows lack the heuristic comment~~ — fixed 2026-09-13 in `838fd7e1` | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
 | YEW-F-014 | M | fixed | F11 LSP | ~~stripped LSP completion bypasses the module hard error~~ — fixed 2026-09-13 in `114f99fb` | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
 | YEW-F-015 | M | fixed | F11 LSP | ~~snippet-policy grep gate matches unrelated core code~~ — fixed 2026-09-13 in `59d318cf` | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
-| YEW-F-016 | M | open | F11 LSP | required 1-based display edges violate the LSP +/-1 gate | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
+| YEW-F-016 | M | fixed | F11 LSP | ~~required 1-based display edges violate the LSP +/-1 gate~~ — fixed 2026-09-13 in `07ee554b` | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
 | YEW-F-017 | M | open | F13 GIT | interactive rebase bypasses the Git verb and environment boundary | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
 | YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
 | YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
@@ -261,14 +261,13 @@ jump target—without changing behavior. The policy paragraph carries an
 ID-bearing uniqueness note, and the literal source scan now returns exactly
 that one line as its release contract requires.
 
-`YEW-F-016` is Medium because two locked LSP contracts cannot both satisfy
-their literal release controls. Sprint 46 requires a repository scan for
-`line + 1`, `line - 1`, and `.v + 1` under `src/mod/lsp/` to be empty, while
-Sprint 47 requires 1-based picker display at that layer. The baseline has
-three matches, all at user-facing display/error edges; protocol positions
-remain zero-based. The visible behavior is correct, but the frozen gate
-rejects its required implementation and cannot support a release claim. It
-remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-016` was Medium because the literal no-line-arithmetic gate rejected
+three required one-based picker/error display edges even though protocol
+positions remained zero-based. Commit `07ee554b` centralizes the explicit
+zero-based-to-display conversion in the shared coordinate layer and routes
+all three LSP presentation sites through it. Boundary tests cover zero, one,
+and `UINT32_MAX`; picker labels and rename errors remain one-based while the
+Sprint 46 scan over `src/mod/lsp/` is now empty.
 
 `YEW-F-017` is Medium because interactive rebase is the one Git execution
 path outside the static verb inventory and the shared environment builder.
