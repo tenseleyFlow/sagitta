@@ -1151,7 +1151,11 @@ done <"$defs"
 
 pty_registry=$repo_dir/tests/pty/registry.c
 golden_dir=$repo_dir/tests/pty/goldens
-if [ -f "$pty_registry" ]; then
+# YEW-F-069: the explicit PTY inventory is itself required evidence.  Its
+# absence must fail closed instead of bypassing every case and golden check.
+if [ ! -f "$pty_registry" ]; then
+    echo "ban: PTY registry is missing" >>"$hits"
+else
     pty_cases=$tmp/pty-cases
     golden_refs=$tmp/golden-refs
     sed -n 's/^[[:space:]]*C[[:space:]]*([[:space:]]*\([[:alnum:]_]*\).*/\1/p' \
