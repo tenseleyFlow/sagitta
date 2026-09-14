@@ -1103,3 +1103,33 @@ void test_edit_tab_adopts_the_established_indent(void)
     edit_assert_text(&ed, none_want, sizeof(none_want) - 1U);
     yew_ed_free(&ed);
 }
+
+/*
+ * Down is vertical even when the last unit mode was Insert.
+ *
+ * FIELD REPORT: type a return value, leave Insert, press Down, and the
+ * caret lands ON the closing brace instead of past it. Not a goal-column
+ * fault — both vertical paths clamp correctly. `move_unit` picks the
+ * CHAR unit whenever `prev_unit == YEW_MODE_I`, and L mode binds Down to
+ * `ed.move.unit.next`, so Down became "next character": one step from
+ * the newline onto the brace.
+ *
+ * That override is right for the horizontal pair, where after typing you
+ * want to step by character rather than by block. It is wrong for the
+ * vertical pair, which has no character meaning at all.
+ */
+void test_edit_down_is_vertical_after_leaving_insert(void)
+{
+    static const u8 body[] = "fn main() -> !int {\n\n\t0\n}";
+    Ed ed;
+
+    edit_fixture(&ed, body, sizeof(body) - 1U, YEW_EOL_LF);
+    /* Caret after the `0`: tab at 21, zero at 22, newline at 23. */
+    edit_place(&ed, 23U);
+    ed.prev_unit = YEW_MODE_I;
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.unit.next", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    /* The brace line is the single byte 24; Down must land past it. */
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 25U);
+    yew_ed_free(&ed);
+}

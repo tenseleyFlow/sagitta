@@ -735,9 +735,23 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
+    /*
+     * Coming out of Insert, the HORIZONTAL pair steps by character:
+     * after typing, moving by block or by word is not what the arrow
+     * keys mean any more.
+     *
+     * The VERTICAL pair keeps the mode's own unit. A character has no
+     * up or down, so borrowing it there turned L mode's Down into "next
+     * character" -- one step from a line's newline onto the first byte
+     * of the next line, which reads as the caret refusing to pass a
+     * closing brace. Down is vertical in every mode, whatever was typed
+     * before it.
+     */
     ops = cx->ed->mode == YEW_MODE_H ? win->h.unit :
-          cx->ed->prev_unit == YEW_MODE_I ? &yew_unit_char :
-          yew_unit_of_mode(cx->ed->mode);
+          (cx->ed->prev_unit == YEW_MODE_I &&
+           motion != UNIT_NEXT && motion != UNIT_PREV)
+              ? &yew_unit_char
+              : yew_unit_of_mode(cx->ed->mode);
     if (ops == NULL)
         return YEW_CMD_ERR_STATE;
     line_vertical = ops == &yew_unit_line &&

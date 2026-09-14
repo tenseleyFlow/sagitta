@@ -569,3 +569,51 @@ void test_units_down_from_a_short_line_lands_after_the_brace(void)
     unit_ctx_free(&ctx);
 }
 
+
+/*
+ * The reported file, byte for byte.
+ *
+ * ~/scratch/wolf/ch5/fold.lu ends `\t0\n}` with NO trailing newline, and
+ * that final detail is the whole bug: the earlier fixture for this shape
+ * ended `}\n`, so the case that actually ships was never covered. A line
+ * terminated by a newline has somewhere past its text for the caret to
+ * rest; the last line of a file does not, and only the padded clamp
+ * supplies it.
+ *
+ * Caret after the `0` is offset 62 (tab, zero, newline at 60..62). The
+ * brace line is a single byte at 63, so Down must land at 64 -- past the
+ * brace -- not on it.
+ */
+void test_units_down_onto_an_unterminated_brace_line(void)
+{
+    static const u8 body[] =
+        "//! check: run(exit=0)\n//! phase: run\n\n"
+        "fn main() -> !int {\n\n\t0\n}";
+    static const UnitFixture fixture = {body, sizeof(body) - 1U};
+    UnitTestCtx ctx;
+    Cursor cursor;
+
+    YEW_ASSERT_EQ_U64(sizeof(body) - 1U, 64U);
+    unit_ctx_init(&ctx, &fixture);
+    (void)memset(&cursor, 0, sizeof(cursor));
+    cursor.pos = BYTEOFF(62U);
+    cursor.anchor = cursor.pos;
+    cursor.goal_col = (CCol){YEW_CCOL_HERE};
+    ctx.win.cs.curs.data = &cursor;
+    ctx.win.cs.curs.len = 1U;
+    ctx.win.cs.primary = 0U;
+
+    /* The line unit, which L mode's Down uses. */
+    YEW_ASSERT_EQ_U64(yew_unit_line.next(&ctx.unit, cursor.pos, false).v,
+                      64U);
+
+    /* And the cursor path, which W and I modes use. */
+    cursor.pos = BYTEOFF(62U);
+    cursor.goal_col = (CCol){YEW_CCOL_HERE};
+    yew_cursor_down(ctx.buffer.tb, &cursor, 4U);
+    YEW_ASSERT_EQ_U64(cursor.pos.v, 64U);
+
+    ctx.win.cs.curs.data = NULL;
+    ctx.win.cs.curs.len = 0U;
+    unit_ctx_free(&ctx);
+}
