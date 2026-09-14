@@ -21,7 +21,7 @@ recorded in `audit-00.md`.
 | YEW-F-006 | C | fixed | F07 UI | ~~workspace re-emission drops unknown root and workspace keys~~ — fixed 2026-09-13 in `9e829cd9` | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 | YEW-F-007 | C | fixed | F07 UI | ~~workspace restore reorders group members from tab-array order~~ — fixed 2026-09-13 in `bea3990b` | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
 | YEW-F-008 | H | fixed | F08 FL | ~~unprivileged plugin macro replay inherits config authority~~ — fixed 2026-09-13 in `8995bb1f` | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
-| YEW-F-009 | M | open | F09 REC | recorder folding self-test no longer reaches its injected fault | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
+| YEW-F-009 | M | fixed | F09 REC | ~~recorder folding self-test no longer reaches its injected fault~~ — fixed 2026-09-13 in `1c11ebee` | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
 | YEW-F-010 | M | open | F09 REC | macro store accepts source that fails on first replay | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
 | YEW-F-011 | M | open | F10 SYN | matching source metadata can retain stale syntax tables | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
 | YEW-F-012 | M | open | F10 SYN | pending embeds occupy a canonical state tail slot | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
@@ -200,15 +200,15 @@ are covered. A same-byte host rewrite invalidates the provenance-sensitive
 cache and restores config authority, while a plugin rewrite retains its
 principal and zero-capability mask after the writer's frame has returned.
 
-`YEW-F-009` is Medium because the recorder's mandatory shrinker self-test no
-longer exercises its injected divergence, leaving a release-control claim
+`YEW-F-009` was Medium because the recorder's mandatory shrinker self-test no
+longer exercised its injected divergence, leaving a release-control claim
 unproved without changing user bytes or product behavior. Generator-pool
 growth changed seed 20764's prefix from the pinned pair of buffer-end motions
-and insert into an unrelated unit motion. `YEW_RT_SELFTEST=1` consequently
-exits 2 before fault injection instead of reporting and shrinking the planted
-failure. The reproducer asserts the documented prefix and fails at the
-replacement baseline. It remains open for Sprint 59; no product source
-changed during the audit.
+and insert into an unrelated unit motion. Commit `1c11ebee` replaces that
+random-seed dependency with a purpose-built session shared by the sentinel
+and audit. `make test-roundtrip` now runs the planted fault and requires it to
+exit through `SELFTEST/P1`, shrink from 96 to at most three events, and name
+`ed.move.buf.end`; the ordinary legal-folding sentinel remains green.
 
 `YEW-F-010` is Medium because storing an invalid macro reports success, but
 its first replay fails. The failure is recoverable: the VM transaction rolls
