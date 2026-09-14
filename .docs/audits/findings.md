@@ -26,7 +26,7 @@ recorded in `audit-00.md`.
 | YEW-F-011 | M | fixed | F10 SYN | ~~matching source metadata can retain stale syntax tables~~ — fixed 2026-09-13 in `2c9c7431` | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
 | YEW-F-012 | M | fixed | F10 SYN | ~~pending embeds occupy a canonical state tail slot~~ — fixed 2026-09-13 in `43a82533` | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
 | YEW-F-013 | M | fixed | F10 SYN | ~~JS/TS known-wrong golden rows lack the heuristic comment~~ — fixed 2026-09-13 in `838fd7e1` | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
-| YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
+| YEW-F-014 | M | fixed | F11 LSP | ~~stripped LSP completion bypasses the module hard error~~ — fixed 2026-09-13 in `114f99fb` | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
 | YEW-F-015 | M | open | F11 LSP | snippet-policy grep gate matches unrelated core code | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
 | YEW-F-016 | M | open | F11 LSP | required 1-based display edges violate the LSP +/-1 gate | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
 | YEW-F-017 | M | open | F13 GIT | interactive rebase bypasses the Git verb and environment boundary | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
@@ -246,14 +246,12 @@ row to carry the explanation locally. The pre-Sprint-41.5 golden guard now
 pins these two intentional comment-only changes as explicit old/new hash rows;
 the remaining 226 historical goldens retain a separate unchanged aggregate.
 
-`YEW-F-014` is Medium because a stripped build gives one `ed.lsp.*` command
-different module-boundary semantics from every other command in its domain.
-`yew_lsp_complete` reports an informational message and opens core index
-completion instead of returning the exact `yew_mod_require` error required by
-Sprints 45, 47, and F11; the minimal-module unit control explicitly excludes
-that command. The fallback is useful and recoverable, but it contradicts the
-locked surface and makes the advertised module boundary inaccurate. It
-remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-014` was Medium because a stripped build gave `ed.lsp.complete`
+different module-boundary semantics from every sibling command. Commit
+`114f99fb` routes the stripped completion shim through `yew_mod_require` and
+removes the unit test's special-case exclusion. Core index completion remains
+available through `ed.compl.open`; invoking an LSP-named command without the
+module now returns the exact documented error across the full command set.
 
 `YEW-F-015` is Medium because Sprint 47's mandatory repository-wide
 `tabstop|placeholder` scan cannot establish its claimed absence condition.
