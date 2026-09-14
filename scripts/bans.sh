@@ -1080,16 +1080,35 @@ scan_seed "process-termination ownership" "$exit_pattern" \
     'void seeded(void) { _Exit(4); }'
 
 # AI request and completion bytes have one audited sink.  That sink enforces
-# the environment + typed-option dual gate; keeping its surface tiny makes a
-# new unconditional body log a build failure rather than a privacy regression.
+# the environment + typed-option dual gate.  YEW-F-067 showed that guessing
+# payload variable names was not a boundary, so ordinary AI logs are now an
+# exact function-owner set; any new logging surface requires privacy review.
 ai_body_hits=$tmp/ai-body-log
-: >"$ai_body_hits"
-grep -rnE 'yew_log[^;]*(ctx->prefix|ctx->suffix|->text\b|prompt|completion|body)' \
-    "$repo_dir/src" --include='*.c' 2>/dev/null |
-    grep -v 'yew_ai_debug_body' >"$ai_body_hits" || :
+ai_source_files=$tmp/ai-source-files
+: >"$ai_source_files"
+while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/mod/ai/*.c) printf '%s\n' "$file" >>"$ai_source_files" ;;
+    esac
+done <"$source_files"
+c_call_owners "$ai_source_files" \
+    '(^|[^[:alnum:]_])yew_log[[:space:]]*[(]' \
+    'src/mod/ai/ai.c:yew_ai_redact_option_changed,src/mod/ai/backend.c:log_secret_header,src/mod/ai/backend.c:yew_ai_log_headers,src/mod/ai/backend.c:event_type_mismatch,src/mod/ai/config.c:emit_credential_diag,src/mod/ai/http.c:rx_headers_done,src/mod/ai/http.c:yew_http_register_endpoint,src/mod/ai/policy.c:diag_log,src/mod/ai/policy.c:warn_deny_replaced,src/mod/ai/policy.c:parse_doc,src/mod/ai/policy.c:yew_ai_policy_load_paths' \
+    "$ai_body_hits"
 if [ -s "$ai_body_hits" ]; then
-    echo "ban: AI prompt/completion bodies must use yew_ai_debug_body" >>"$hits"
+    echo "ban: AI logging must use an audited metadata owner or yew_ai_debug_body" \
+        >>"$hits"
     cat "$ai_body_hits" >>"$hits"
+fi
+ai_log_seed=$tmp/seeded-ai-log.c
+echo 'void seeded(const char *bytes) { yew_log(1, "%s", bytes); }' \
+    >"$ai_log_seed"
+printf '%s\n' "$ai_log_seed" >"$tmp/ai-log-seed-list"
+c_call_owners "$tmp/ai-log-seed-list" \
+    '(^|[^[:alnum:]_])yew_log[[:space:]]*[(]' '' \
+    "$tmp/ai-log-seed-hits"
+if [ "$(wc -l <"$tmp/ai-log-seed-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the AI log-owner rule no longer fires on its own seed" >>"$hits"
 fi
 ai_debug_body_refs=$(grep -rn 'yew_ai_debug_body' "$repo_dir/src" 2>/dev/null |
     wc -l | tr -d ' ')
