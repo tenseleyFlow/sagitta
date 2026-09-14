@@ -57,7 +57,7 @@ recorded in `audit-00.md`.
 | YEW-F-042 | M | fixed | F15 CI | ~~GNU-libc ban omits `getopt_long_only`~~ — fixed 2026-09-14 in `aec0fe6b` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-043 | M | fixed | F15 CI | ~~long-double ban misses valid continued declarations~~ — fixed 2026-09-14 in `4b2b0f02` | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
 | YEW-F-044 | M | fixed | F15 CI | ~~shim-honesty gate accepts parenthesized success~~ — fixed 2026-09-14 in `75bfedf5` | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
-| YEW-F-045 | M | open | F15 CI | Unicode-width ban accepts decimal local tables | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
+| YEW-F-045 | M | fixed | F15 CI | ~~Unicode-width ban accepts decimal local tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
 | YEW-F-046 | M | open | F15 CI | syntax-color ban accepts packed decimal colors | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
 | YEW-F-047 | M | open | F15 CI | syntax-width ban accepts local width arithmetic | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
 | YEW-F-048 | M | open | F15 CI | PTY-creation ban omits direct `posix_openpt` callers | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
@@ -73,7 +73,7 @@ recorded in `audit-00.md`.
 | YEW-F-058 | M | open | F15 CI | register choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 register routing; s58 F15 q2 |
 | YEW-F-059 | M | open | F15 CI | option choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
 | YEW-F-060 | M | open | F15 CI | package-git ban accepts allowed-file wrappers on startup | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
-| YEW-F-061 | M | open | F15 CI | register-width ban accepts local lookup tables | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
+| YEW-F-061 | M | fixed | F15 CI | ~~register-width ban accepts local lookup tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
 | YEW-F-062 | M | open | F15 CI | register-column ban depends on historical variable names | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
 | YEW-F-063 | M | open | F15 CI | register-helper presence gate accepts comments | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
 | YEW-F-064 | M | open | F15 CI | oracle-independence ban accepts copied renamed models | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
@@ -468,8 +468,9 @@ and multiply-parenthesized internal positive controls.
 
 `YEW-F-045` is Medium because the non-Unicode width gate searches four
 symbolic/hex spellings, while the same code points in decimal form a local
-width table that passes. The source-independent width ownership claim is
-therefore not established and remains open for Sprint 59.
+width table that passed. Commit `31497135` recognizes the exact decimal and
+hexadecimal code-point spellings with token boundaries and pins the decimal
+form with an internal positive control.
 
 `YEW-F-046` is Medium because a syntax definition can emit a packed decimal
 foreground color without matching hex, RGB, or terminal escape spellings.
@@ -535,7 +536,9 @@ pass their isolated seeds and remain open for Sprint 59.
 
 `YEW-F-061` is Medium because register-local Unicode width calculation can use
 a decimal lookup table without importing or naming a yew width helper. The
-actual gate accepts the duplicated ownership and remains open for Sprint 59.
+shared Unicode-ownership correction in `31497135` catches that same lookup
+table before the register-specific helper check, closing both findings with
+one boundary rule.
 
 `YEW-F-062` is Medium because the register column-arithmetic rule searches
 three historical variable names followed by `.v`. Equivalent `CellCol`
