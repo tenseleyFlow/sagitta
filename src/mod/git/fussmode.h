@@ -57,6 +57,10 @@ u16 yew_fuss_footer_rows(const Ed *ed);
 u16 yew_fuss_tree_natural_width(const FussTree *tree);
 FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
                                         u16 natural_cols);
+/* Format picker age from the editor's startup wall-time anchor plus its
+ * monotonic clock.  Zero means the anchor is unavailable. */
+size_t yew_fuss_relative_time(const Ed *ed, char *dst, size_t cap,
+                              i64 author_epoch);
 Rect yew_fuss_drawer_rect(const Ed *ed);
 Rect yew_fuss_backdrop_rect(const Ed *ed);
 

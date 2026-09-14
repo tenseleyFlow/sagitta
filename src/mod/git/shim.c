@@ -330,6 +330,16 @@ FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
     return (FussDrawerLayout){0U, 0U, UINT16_MAX, false};
 }
 
+size_t yew_fuss_relative_time(const Ed *ed, char *dst, size_t cap,
+                              i64 author_epoch)
+{
+    (void)ed;
+    (void)author_epoch;
+    if (dst != NULL && cap != 0U)
+        dst[0] = '\0';
+    return 0U;
+}
+
 Rect yew_fuss_drawer_rect(const Ed *ed)
 {
     (void)ed;

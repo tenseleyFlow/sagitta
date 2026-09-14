@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
@@ -23,6 +22,7 @@
 #include "fl/flruntime.h"
 #include "mod/git/fusscommit.h"
 #include "mod/git/fusstree.h"
+#include "mod/git/editor.h"
 #include "mod/git/git.h"
 #include "mod/git/git_int.h"
 #include "syn/theme.h"
@@ -3825,24 +3825,26 @@ static void fuss_detail_part(Bytebuf *detail, const char *text, size_t len)
     bytebuf_append(detail, (const u8 *)text, len);
 }
 
-static void fuss_detail_relative(Bytebuf *detail, const char *text,
-                                 size_t len)
+size_t yew_fuss_relative_time(const Ed *ed, char *dst, size_t cap,
+                              i64 author_epoch)
 {
-    i64 stamp;
-    i64 now;
+    i64 now = yew_git_editor_wall_now(ed);
     i64 age;
     i64 count;
     const char *unit;
+    int n;
 
-    if (!fuss_parse_epoch(text, len, &stamp))
-        return;
-    now = (i64)time(NULL);
-    age = now > stamp ? now - stamp : 0;
+    if (dst == NULL || cap == 0U)
+        return 0U;
+    dst[0] = '\0';
+    if (now <= 0 || author_epoch < 0)
+        return 0U;
+    /* YEW-F-018: picker age derives from yew's startup wall anchor and
+     * monotonic editor time; rendering never consults the system clock. */
+    age = now > author_epoch ? now - author_epoch : 0;
     if (age < 60) {
-        fuss_detail_part(detail, "now", sizeof("now") - 1U);
-        return;
-    }
-    if (age < 60 * 60) {
+        n = snprintf(dst, cap, "now");
+    } else if (age < 60 * 60) {
         count = age / 60;
         unit = "minute";
     } else if (age < 24 * 60 * 60) {
@@ -3861,10 +3863,29 @@ static void fuss_detail_relative(Bytebuf *detail, const char *text,
         count = age / (365 * 24 * 60 * 60);
         unit = "year";
     }
-    if (detail->len != 0U)
-        bytebuf_append(detail, (const u8 *)" · ", sizeof(" · ") - 1U);
-    bytebuf_printf(detail, "%lld %s%s ago", (long long)count, unit,
-                   count == 1 ? "" : "s");
+    if (age >= 60) {
+        n = snprintf(dst, cap, "%lld %s%s ago", (long long)count, unit,
+                     count == 1 ? "" : "s");
+    }
+    if (n < 0) {
+        dst[0] = '\0';
+        return 0U;
+    }
+    return (size_t)n < cap ? (size_t)n : cap - 1U;
+}
+
+static void fuss_detail_relative(Ed *ed, Bytebuf *detail, const char *text,
+                                 size_t len)
+{
+    char relative[64];
+    i64 stamp;
+    size_t relative_len;
+
+    if (!fuss_parse_epoch(text, len, &stamp))
+        return;
+    relative_len = yew_fuss_relative_time(ed, relative, sizeof(relative),
+                                           stamp);
+    fuss_detail_part(detail, relative, relative_len);
 }
 
 static bool fuss_parse_records(Ed *ed, FussMode *f, FussPickAction action,
@@ -3915,7 +3936,7 @@ static bool fuss_parse_records(Ed *ed, FussMode *f, FussPickAction action,
             if (nfield > 1U)
                 fuss_detail_part(&detail, fields[1], lens[1]);
             if (nfield > 2U)
-                fuss_detail_relative(&detail, fields[2], lens[2]);
+                fuss_detail_relative(ed, &detail, fields[2], lens[2]);
             if (include)
                 (void)fuss_picker_add(f, fields[0], lens[0],
                                       detail.len == 0U ? NULL :
@@ -3931,7 +3952,7 @@ static bool fuss_parse_records(Ed *ed, FussMode *f, FussPickAction action,
 
             bytebuf_init(&detail);
             if (nfield > 2U)
-                fuss_detail_relative(&detail, fields[2], lens[2]);
+                fuss_detail_relative(ed, &detail, fields[2], lens[2]);
             if (nfield > 3U)
                 fuss_detail_part(&detail, fields[3], lens[3]);
             (void)fuss_picker_add(f, fields[1], lens[1],
@@ -3945,7 +3966,7 @@ static bool fuss_parse_records(Ed *ed, FussMode *f, FussPickAction action,
 
             bytebuf_init(&detail);
             if (nfield > 1U)
-                fuss_detail_relative(&detail, fields[1], lens[1]);
+                fuss_detail_relative(ed, &detail, fields[1], lens[1]);
             if (nfield > 2U)
                 fuss_detail_part(&detail, fields[2], lens[2]);
             (void)fuss_picker_add(f, fields[0], lens[0],
