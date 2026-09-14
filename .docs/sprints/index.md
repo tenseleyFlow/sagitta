@@ -397,6 +397,11 @@ Binding documents — read before any sprint:
   routed through the existing tty handover. Amends Sprint 19's terminal
   non-goal without building an emulator. Depends on 57.17. Branch
   `shell-completion`.
+- Sprint 57.20 (s57_20-runtime-staleness.md) — `yew --version` reports the
+  resolved runtime directory and its origin, a runtime older than the binary
+  warns once naming the fix, and `--check-runtime` reports and exits non-zero.
+  Every default binding is config, not code, so a stale installed `init.fl`
+  silently drops new keys — observed in the field 2026-09-13.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
@@ -446,7 +451,7 @@ Binding documents — read before any sprint:
   implementation, not the format.
 - Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
   `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`,
-  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`, `s57_14-…`, `s57_15-…`, `s57_16-…`, `s57_17-…`, `s57_18-…`) are the pressure valve
+  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`, `s57_14-…`, `s57_15-…`, `s57_16-…`, `s57_17-…`, `s57_18-…`, `s57_20-…`) are the pressure valve
   when a sprint splits — renumbering is forbidden once files exist.
 
 ## Sprint file format
