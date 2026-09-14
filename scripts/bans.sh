@@ -323,9 +323,13 @@ mmap_pattern='(^|[^[:alnum:]_])mmap[[:space:]]*\(|^[[:space:]]*#[[:space:]]*defi
 scan "mmap risks SIGBUS after truncation" \
     "$mmap_pattern" "$source_files"
 scan_seed "mmap macro forwarding" "$mmap_pattern" '#define MAP_FILE mmap'
+# YEW-F-035: an object-like alias to a libc allocator still bypasses the
+# audited yew allocation boundary; reject forwarding definitions too.
+allocator_pattern='(^|[^[:alnum:]_])(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)([^[:alnum:]_]|$)'
 scan "source allocations must use the audited yew allocator" \
-    '(^|[^[:alnum:]_])(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)[[:space:]]*\(' \
-    "$allocator_files"
+    "$allocator_pattern" "$allocator_files"
+scan_seed "libc allocator macro forwarding" "$allocator_pattern" \
+    '#define ALLOCATE malloc'
 scan "libc-owned cwd allocations must use yew_xgetcwd" \
     'getcwd[[:space:]]*\([[:space:]]*NULL[[:space:]]*,' \
     "$allocator_files"
