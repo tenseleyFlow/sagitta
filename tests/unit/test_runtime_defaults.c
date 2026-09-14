@@ -193,6 +193,7 @@ static const BindRow frozen_W[] = {
     {"i", "ed.mode.enter", 0, "I"},
     {"h", "ed.mode.enter", 0, "H"},
     {"f", "ed.mode.enter", 0, "F"},
+    {"e", "ed.mode.enter", 0, "E"},
     {":", "ed.mode.enter", 0, "E"},
     {"!", "ed.shell.open", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
@@ -228,6 +229,7 @@ static const BindRow frozen_B[] = {
     {"i", "ed.mode.enter", 0, "I"},
     {"h", "ed.mode.enter", 0, "H"},
     {"f", "ed.mode.enter", 0, "F"},
+    {"e", "ed.mode.enter", 0, "E"},
     {":", "ed.mode.enter", 0, "E"},
     {"!", "ed.shell.open", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
@@ -418,7 +420,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 238U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 240U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
