@@ -795,9 +795,15 @@ static void cursor_to_row(Win *w, u16 target)
             target_row.lo < target_row.hi)
             pos = yew_grapheme_prev_boundary(tb, pos);
     } else {
-        pos = yew_ccol_to_off_padded(
-            tb, span, yew_cursor_goal(tb, cursor, vp_goal_tabwidth(w)),
-            vp_goal_tabwidth(w));
+        CCol goal = yew_cursor_goal(tb, cursor, vp_goal_tabwidth(w));
+
+        /* Materialise: a scroll that pushes the caret onto another line
+         * must not let an unresolved goal re-read itself from wherever
+         * it was pushed to.  Identical to a no-op when the goal already
+         * held a column, which is the behaviour this branch had. */
+        cursor->goal_col = goal;
+        pos = yew_ccol_to_off_padded(tb, span, goal,
+                                     vp_goal_tabwidth(w));
     }
     cursor->pos = pos;
     if (w->vp.wrap)
