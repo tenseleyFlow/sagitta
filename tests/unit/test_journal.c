@@ -18,7 +18,9 @@ typedef struct {
     char state[64];
     char source[128];
     char journal[192];
+    char base[208];
     char stale[208];
+    char base_stale[224];
 } JournalFixture;
 
 void test_journal_crc32_known_vectors_and_streaming(void)
@@ -59,9 +61,15 @@ static void journal_fixture_make(JournalFixture *fixture)
                      "%s/yew/journal/%016" PRIx64 ".yewj",
                      fixture->state, journal_test_fnv64(fixture->source));
     YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture->journal));
+    count = snprintf(fixture->base, sizeof(fixture->base), "%s.base",
+                     fixture->journal);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture->base));
     count = snprintf(fixture->stale, sizeof(fixture->stale), "%s.stale",
                      fixture->journal);
     YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture->stale));
+    count = snprintf(fixture->base_stale, sizeof(fixture->base_stale),
+                     "%s.stale", fixture->base);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture->base_stale));
     YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture->state, 1), 0);
 }
 
@@ -69,14 +77,20 @@ static void journal_fixture_remove(JournalFixture *fixture)
 {
     char journal_dir[128];
     char yew_dir[112];
+    char log_path[128];
 
     (void)unlink(fixture->journal);
+    (void)unlink(fixture->base);
     (void)unlink(fixture->stale);
+    (void)unlink(fixture->base_stale);
     (void)unlink(fixture->source);
     (void)snprintf(journal_dir, sizeof(journal_dir), "%s/yew/journal",
                    fixture->state);
     (void)snprintf(yew_dir, sizeof(yew_dir), "%s/yew",
                    fixture->state);
+    (void)snprintf(log_path, sizeof(log_path), "%s/yew/log",
+                   fixture->state);
+    (void)unlink(log_path);
     YEW_ASSERT_EQ_I64(rmdir(journal_dir), 0);
     YEW_ASSERT_EQ_I64(rmdir(yew_dir), 0);
     YEW_ASSERT_EQ_I64(rmdir(fixture->state), 0);
@@ -249,7 +263,7 @@ void test_journal_truncated_at_every_byte_replays_valid_prefix(void)
     journal_fixture_make(&fixture);
     journal_meta_init(&meta, fixture.source);
     complete = make_three_record_journal(&fixture, &meta);
-    header_end = 36U + strlen(fixture.source);
+    header_end = 60U + strlen(fixture.source);
     first_end = header_end + 21U + 3U;
     second_end = first_end + 21U + 2U;
     third_end = second_end + 21U + 1U;
@@ -293,7 +307,7 @@ void test_journal_crc_failure_stops_before_corrupt_record(void)
     journal_fixture_make(&fixture);
     journal_meta_init(&meta, fixture.source);
     complete = make_three_record_journal(&fixture, &meta);
-    header_end = 36U + strlen(fixture.source);
+    header_end = 60U + strlen(fixture.source);
     ends[0] = header_end + 24U;
     ends[1] = ends[0] + 23U;
     ends[2] = ends[1] + 22U;
@@ -502,5 +516,196 @@ void test_journal_obsolete_leftover_is_replaced_not_fatal(void)
     }
 
     yew_filemeta_dispose(&meta);
+    journal_fixture_remove(&fixture);
+}
+
+void test_journal_recovers_replaced_file_from_pinned_base(void)
+{
+    static const u8 original[] = "alpha\n";
+    static const u8 replacement[] = "omega\n";
+    JournalFixture fixture;
+    FileMeta original_meta;
+    FileMeta replacement_meta;
+    TextBuf *original_tb = NULL;
+    TextBuf *replacement_tb = NULL;
+    Journal *journal;
+    Journal *adopted;
+    struct stat source_st;
+    struct stat base_st;
+    struct timespec times[2];
+    char incoming[160];
+    dev_t original_dev;
+    ino_t original_ino;
+    int count;
+
+    journal_fixture_make(&fixture);
+    journal_write(fixture.source, original, sizeof(original) - 1U);
+    YEW_ASSERT_EQ_U64(yew_file_load(fixture.source, &original_tb,
+                                    &original_meta), YEW_LOAD_OK);
+    count = snprintf(fixture.journal, sizeof(fixture.journal),
+                     "%s/yew/journal/%016" PRIx64 ".yewj", fixture.state,
+                     journal_test_fnv64(original_meta.realpath));
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.journal));
+    count = snprintf(fixture.base, sizeof(fixture.base), "%s.base",
+                     fixture.journal);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.base));
+    original_dev = original_meta.dev;
+    original_ino = original_meta.ino;
+    journal = yew_journal_open(original_meta.realpath, &original_meta);
+    YEW_ASSERT_NOT_NULL(journal);
+    YEW_ASSERT_EQ_I64(stat(fixture.source, &source_st), 0);
+    YEW_ASSERT_EQ_I64(stat(fixture.base, &base_st), 0);
+    YEW_ASSERT_EQ_U64(source_st.st_nlink, 2U);
+    YEW_ASSERT_EQ_U64(base_st.st_ino, source_st.st_ino);
+    YEW_ASSERT(original_meta.journal_pinned);
+    YEW_ASSERT(yew_journal_record(journal, YEW_JOURNAL_INS, 0U,
+                                  (const u8 *)"X", 1U));
+    YEW_ASSERT(yew_journal_sync(journal));
+    yew_journal_close(journal);
+
+    count = snprintf(incoming, sizeof(incoming), "%s/incoming",
+                     fixture.state);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(incoming));
+    journal_write(incoming, replacement, sizeof(replacement) - 1U);
+    times[0] = original_meta.mtime;
+    times[1] = original_meta.mtime;
+    YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, incoming, times, 0), 0);
+    YEW_ASSERT_EQ_I64(rename(incoming, fixture.source), 0);
+    YEW_ASSERT_EQ_U64(yew_file_load(fixture.source, &replacement_tb,
+                                    &replacement_meta), YEW_LOAD_OK);
+    YEW_ASSERT(replacement_meta.ino != original_ino);
+    YEW_ASSERT(yew_journal_probe(fixture.source, &replacement_meta));
+    YEW_ASSERT(yew_journal_replay(fixture.source, replacement_tb,
+                                  &replacement_meta));
+    journal_assert_text(replacement_tb, "Xalpha\n");
+    YEW_ASSERT_EQ_U64(replacement_meta.dev, original_dev);
+    YEW_ASSERT_EQ_U64(replacement_meta.ino, original_ino);
+
+    adopted = yew_journal_open(replacement_meta.realpath,
+                               &replacement_meta);
+    YEW_ASSERT_NOT_NULL(adopted);
+    yew_journal_discard(adopted);
+    YEW_ASSERT(!replacement_meta.journal_pinned);
+    YEW_ASSERT(access(fixture.journal, F_OK) != 0);
+    YEW_ASSERT(access(fixture.base, F_OK) != 0);
+    yew_filemeta_dispose(&replacement_meta);
+    yew_filemeta_dispose(&original_meta);
+    yew_textbuf_free(replacement_tb);
+    yew_textbuf_free(original_tb);
+    journal_fixture_remove(&fixture);
+}
+
+void test_journal_preserves_legacy_log_and_base(void)
+{
+    static const u8 original[] = "alpha\n";
+    JournalFixture fixture;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+    Journal *journal;
+    Bytebuf before;
+    Bytebuf stale;
+    struct stat source_st;
+    struct stat stale_base_st;
+    u8 legacy_version[4] = {1U, 0U, 0U, 0U};
+    int fd;
+    int count;
+
+    journal_fixture_make(&fixture);
+    journal_write(fixture.source, original, sizeof(original) - 1U);
+    YEW_ASSERT_EQ_U64(yew_file_load(fixture.source, &tb, &meta),
+                      YEW_LOAD_OK);
+    count = snprintf(fixture.journal, sizeof(fixture.journal),
+                     "%s/yew/journal/%016" PRIx64 ".yewj", fixture.state,
+                     journal_test_fnv64(meta.realpath));
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.journal));
+    count = snprintf(fixture.base, sizeof(fixture.base), "%s.base",
+                     fixture.journal);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.base));
+    count = snprintf(fixture.stale, sizeof(fixture.stale), "%s.stale",
+                     fixture.journal);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.stale));
+    count = snprintf(fixture.base_stale, sizeof(fixture.base_stale),
+                     "%s.stale", fixture.base);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.base_stale));
+
+    journal = yew_journal_open(meta.realpath, &meta);
+    YEW_ASSERT_NOT_NULL(journal);
+    YEW_ASSERT(yew_journal_record(journal, YEW_JOURNAL_INS, 0U,
+                                  (const u8 *)"X", 1U));
+    YEW_ASSERT(yew_journal_sync(journal));
+    yew_journal_close(journal);
+    fd = open(fixture.journal, O_WRONLY);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(pwrite(fd, legacy_version, sizeof(legacy_version), 4),
+                      (i64)sizeof(legacy_version));
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    before = journal_read(fixture.journal);
+
+    journal = yew_journal_open(meta.realpath, &meta);
+    YEW_ASSERT_NOT_NULL(journal);
+    stale = journal_read(fixture.stale);
+    YEW_ASSERT_EQ_U64(stale.len, before.len);
+    YEW_ASSERT_EQ_MEM(stale.data, before.data, before.len);
+    YEW_ASSERT_EQ_I64(stat(fixture.source, &source_st), 0);
+    YEW_ASSERT_EQ_I64(stat(fixture.base_stale, &stale_base_st), 0);
+    YEW_ASSERT_EQ_U64(stale_base_st.st_ino, source_st.st_ino);
+    yew_journal_discard(journal);
+    bytebuf_free(&stale);
+    bytebuf_free(&before);
+    yew_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    journal_fixture_remove(&fixture);
+}
+
+void test_journal_pin_keeps_single_link_save_atomic(void)
+{
+    static const u8 original[] = "alpha\n";
+    JournalFixture fixture;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+    Journal *journal;
+    Bytebuf saved;
+    struct stat before;
+    struct stat after;
+    struct stat base;
+    int count;
+
+    journal_fixture_make(&fixture);
+    journal_write(fixture.source, original, sizeof(original) - 1U);
+    YEW_ASSERT_EQ_U64(yew_file_load(fixture.source, &tb, &meta),
+                      YEW_LOAD_OK);
+    count = snprintf(fixture.journal, sizeof(fixture.journal),
+                     "%s/yew/journal/%016" PRIx64 ".yewj", fixture.state,
+                     journal_test_fnv64(meta.realpath));
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.journal));
+    count = snprintf(fixture.base, sizeof(fixture.base), "%s.base",
+                     fixture.journal);
+    YEW_ASSERT(count > 0 && (size_t)count < sizeof(fixture.base));
+    journal = yew_journal_open(meta.realpath, &meta);
+    YEW_ASSERT_NOT_NULL(journal);
+    YEW_ASSERT(meta.journal_pinned);
+    YEW_ASSERT_EQ_I64(stat(fixture.source, &before), 0);
+    YEW_ASSERT_EQ_I64(stat(fixture.base, &base), 0);
+    YEW_ASSERT_EQ_U64(before.st_ino, base.st_ino);
+
+    yew_textbuf_insert(tb, BYTEOFF(yew_textbuf_len(tb)),
+                       (const u8 *)"saved\n", 6U);
+    YEW_ASSERT_EQ_U64(yew_file_save(tb, &meta, fixture.source),
+                      YEW_SAVE_OK);
+    YEW_ASSERT(!meta.journal_pinned);
+    YEW_ASSERT_EQ_I64(stat(fixture.source, &after), 0);
+    YEW_ASSERT(after.st_ino != before.st_ino);
+    YEW_ASSERT_EQ_I64(stat(fixture.base, &base), 0);
+    YEW_ASSERT_EQ_U64(base.st_ino, before.st_ino);
+    saved = journal_read(fixture.source);
+    YEW_ASSERT_EQ_U64(saved.len, sizeof(original) - 1U + 6U);
+    YEW_ASSERT_EQ_MEM(saved.data, "alpha\nsaved\n", saved.len);
+    bytebuf_free(&saved);
+
+    yew_journal_discard(journal);
+    YEW_ASSERT(!meta.journal_pinned);
+    YEW_ASSERT(access(fixture.base, F_OK) != 0);
+    yew_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
     journal_fixture_remove(&fixture);
 }
