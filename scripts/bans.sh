@@ -292,8 +292,15 @@ scan_seed "qsort/qsort_r" "$qsort_pattern" \
     'void seeded(void) { qsort_r(rows, count, width, compare, ctx); }'
 scan_seed "qsort/qsort_r macro forwarding" "$qsort_pattern" \
     '#define SORT_ROWS qsort'
+# YEW-F-030 / YEW-F-031: token pasting `__attribute` with a trailing `__`
+# must not hide GNU attribute or constructor syntax from the locked C11 gate.
+# The incomplete stem has no valid place in this codebase, while matching it
+# also retains the direct `__attribute__` check.
+attribute_pattern='__attribute'
 scan "__attribute__ is outside the locked C11 subset" \
-    '__attribute__' "$all_files"
+    "$attribute_pattern" "$all_files"
+scan_seed "token-pasted __attribute__" "$attribute_pattern" \
+    'JOIN(__attribute, __)((unused)) static int seeded;'
 scan "constructor registration is forbidden; use the explicit registry" \
     '(constructor|\.init_array)' "$c_files"
 scan "threads are forbidden in the single-threaded core" \
