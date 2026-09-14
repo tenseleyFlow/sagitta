@@ -147,6 +147,38 @@ static bool append_named(RtSession *session, const char *name,
     return true;
 }
 
+bool rt_session_init_count_folding(RtSession *session, u32 length)
+{
+    static const u8 insert[] = {'x'};
+    const char *name;
+    u32 i;
+
+    rt_session_init(session);
+    if (length < 3U)
+        return false;
+    session->seed = UINT64_C(0x534147434f554e54);
+    session->fixture = 2U;
+    session->generated_len = length;
+    session->start_mode = (u8)YEW_MODE_L;
+
+    if (!append_named(session, "ed.move.buf.end", NULL, 0U) ||
+        !append_named(session, "ed.move.buf.end", NULL, 0U) ||
+        !append_named(session, "ed.edit.insert.text", insert,
+                      (u32)sizeof(insert)))
+        goto fail;
+    for (i = 3U; i < length; i++) {
+        name = (i & 1U) == 0U ? "ed.move.unit.next" :
+                                "ed.move.unit.prev";
+        if (!append_named(session, name, NULL, 0U))
+            goto fail;
+    }
+    return true;
+
+fail:
+    rt_session_free(session);
+    return false;
+}
+
 static bool is_shift_extend(const RtGenCmd *gc)
 {
     static const char prefix[] = "ed.sel.extend.";

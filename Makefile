@@ -3661,6 +3661,18 @@ test-fletch-determinism: $(BUILD)/fletch_run $(BUILD)/yew
 
 test-roundtrip: $(BUILD)/roundtrip_runner
 	YEW_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner
+	@set +e; \
+	YEW_RT_SELFTEST=1 YEW_RT_TMP=$(BUILD)/tmp LC_ALL=C \
+		$(BUILD)/roundtrip_runner >$(BUILD)/roundtrip-selftest.txt 2>&1; \
+	status=$$?; set -e; \
+	test $$status -eq 1; \
+	grep -Fq 'property=SELFTEST/P1' $(BUILD)/roundtrip-selftest.txt; \
+	grep -Eq 'diverged at event [0-9]+ of [123]; shrunk from 96' \
+		$(BUILD)/roundtrip-selftest.txt; \
+	grep -Fq 'op: ed.move.buf.end' $(BUILD)/roundtrip-selftest.txt; \
+	grep -Fq 'detail: TAKES_COUNT run was illegally folded' \
+		$(BUILD)/roundtrip-selftest.txt
+	@echo 'test-roundtrip: planted folding fault shrank to the right operation'
 
 test-roundtrip-coverage: $(BUILD)/roundtrip_runner
 	YEW_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner --coverage

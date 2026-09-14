@@ -1,10 +1,10 @@
 /*
  * YEW-F-009 — the recorder folding self-test no longer reaches its fault.
  *
- * Correct behavior: Sprint 35's pinned self-test seed generates two adjacent,
- * uncounted ed.move.buf.end events followed by insertion of "x".  The
- * self-test can then corrupt that prefix into `2buf_end`, execute it through
- * the VM, shrink the divergence to three events, and name the right command.
+ * Correct behavior: Sprint 35's self-test constructs two adjacent, uncounted
+ * ed.move.buf.end events followed by insertion of "x" independently of the
+ * random generator pool.  It can then corrupt that prefix into `2buf_end`,
+ * execute it through the VM, and shrink the divergence to three events.
  *
  * Baseline failure: later generator-pool growth changed the deterministic
  * command selection for seed 20764.  YEW_RT_SELFTEST therefore exits 2 before
@@ -29,13 +29,11 @@ static bool event_is(const RtSession *session, u32 at, const char *name)
 
 bool test_yew_f_009(char *why, size_t why_cap)
 {
-    const u64 seed = UINT64_C(20764);
     RtSession session;
     bool correct;
 
-    rt_session_init(&session);
-    correct = rt_session_generate(&session, seed, 2U, 96U) &&
-              session.events.len >= 3U &&
+    correct = rt_session_init_count_folding(&session, 96U) &&
+              session.events.len == 96U &&
               event_is(&session, 0U, "ed.move.buf.end") &&
               event_is(&session, 1U, "ed.move.buf.end") &&
               !session.events.data[0].count_given &&
@@ -50,7 +48,7 @@ bool test_yew_f_009(char *why, size_t why_cap)
                                yew_cmd_desc(session.events.data[0].cmd);
 
         (void)snprintf(why, why_cap,
-                       "seed 20764 begins with %s; self-test exits 2 before fault injection",
+                       "count-folding fixture begins with %s; self-test cannot inject its fault",
                        first == NULL ? "<no command>" : first->name);
     }
     rt_session_free(&session);

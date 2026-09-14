@@ -34,6 +34,8 @@ void rt_session_init(RtSession *session);
 void rt_session_free(RtSession *session);
 bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
                          u32 forced_len);
+/* Purpose-built input for the count-folding shrinker self-test. */
+bool rt_session_init_count_folding(RtSession *session, u32 length);
 
 /* Audits both halves of Sprint 35 DoD 9/10. */
 bool rt_generator_coverage(bool verbose);
