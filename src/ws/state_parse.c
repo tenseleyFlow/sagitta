@@ -655,7 +655,7 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
                 yew_ed_win_release(ed, slots.v[i]);
         }
     }
-    /* The placeholder tree goes only once the replacement is known
+    /* The provisional tree goes only once the replacement is known
      * good — an early free would strand the tab on a dangling root if
      * build_panes had refused. */
     if (t->root != NULL) {

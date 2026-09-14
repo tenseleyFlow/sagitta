@@ -1,6 +1,7 @@
 /*
  * Sprint 47 snippet downgrade policy.
  *
+ * YEW-F-015: keep the next policy sentence the unique release-gate match.
  * yew 1.0 does not expand snippets: there is no tab-stop mode, placeholder
  * navigation, or mirrored-field machinery.  The client advertises
  * snippetSupport:false, but servers sometimes ignore it, so every

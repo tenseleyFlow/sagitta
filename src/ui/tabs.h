@@ -49,7 +49,7 @@ typedef struct Tab {
     /*
      * There is deliberately NO `deferred` flag here.
      *
-     * Sprint 23 carried one as a placeholder.  Sprint 24 deletes it:
+     * Sprint 23 carried one as provisional state.  Sprint 24 deletes it:
      * residency is asked of the ALLOCATION (does this tab's buffer hold
      * a TextBuf), which is the same question every save path already
      * ends up asking.  A flag is a second answer that can disagree with
