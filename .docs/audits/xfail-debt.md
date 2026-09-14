@@ -48,7 +48,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-035 | audit | `tests/audit/f15_ban_misses.c` | ~~allocator ban accepts macro-forwarded libc allocation~~ — fixed in `066041c3` | fixed |
 | YEW-F-036 | audit | `tests/audit/f15_ban_misses.c` | ~~cwd-allocation ban requires literal NULL spelling~~ — fixed in `16441f04` | fixed |
 | YEW-F-037 | audit | `tests/audit/f15_ban_misses.c` | ~~realpath-allocation ban requires literal NULL spelling~~ — fixed in `16441f04` | fixed |
-| YEW-F-038 | audit | `tests/audit/f15_ban_misses.c` | locale-dependent Unicode ban omits `mbtowc` | open |
+| YEW-F-038 | audit | `tests/audit/f15_ban_misses.c` | ~~locale-dependent Unicode ban omits `mbtowc`~~ — fixed in `af94a8c1` | fixed |
 | YEW-F-039 | audit | `tests/audit/f15_ban_misses.c` | native-loader ban omits `dlvsym` | open |
 | YEW-F-040 | audit | `tests/audit/f15_ban_misses.c` | strerror_r ban accepts macro-forwarded calls | open |
 | YEW-F-041 | audit | `tests/audit/f15_ban_misses.c` | musl backtrace ban omits `backtrace_symbols_fd` | open |
