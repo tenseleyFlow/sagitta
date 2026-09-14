@@ -17,7 +17,9 @@ cp scripts/bans.sh "$repo/scripts/bans.sh"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$repo/scripts/check-module-shims.sh"
 chmod +x "$repo/scripts/check-module-shims.sh"
 : >"$repo/Makefile"
-: >"$repo/tests/fuzz/oracle.c"
+# YEW-F-064 seals the reviewed oracle, so the neutral fixture must carry that
+# exact implementation before an individual finding mutates it.
+cp tests/fuzz/oracle.c "$repo/tests/fuzz/oracle.c"
 : >"$repo/tests/unit/registry.c"
 printf '%s\n' \
     'void base(void)' \
