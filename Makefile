@@ -3153,7 +3153,10 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
 	$(BUILD)/perf_startup_s56 --selftest-policy
 	$(BUILD)/perf_prof_crosscheck --selftest-policy
 	scripts/tests/s56-perf-gate.test.sh
-	scripts/tests/run-perf-suite.test.sh
+	BUILD=/inherited-build CALIB_REFERENCE=/inherited-reference \
+		PERF_BASELINE=/inherited-baseline PERF_GATE=1 \
+		PERF_RUNNER_ID=perf-arm64-linux PERF_S56_EVALUATE=1 \
+		scripts/tests/run-perf-suite.test.sh
 	scripts/tests/update-perf-suite.test.sh
 	scripts/tests/perf-noise-floor.test.sh
 	scripts/tests/s56-baseline-guard.test.sh

@@ -2,6 +2,14 @@
 
 set -eu
 
+# YEW-F-072: this selftest also runs inside perf-update, whose designated
+# transaction variables must not change the hosted-policy cases below.
+unset BUILD CALIB_REFERENCE PERF_ADVISORY PERF_BASELINE PERF_BUDGETS \
+    PERF_COMPONENT_LIMITS PERF_GATE PERF_RUNNER_ID PERF_S56_EVALUATE \
+    YEW_CALIB_C1_NS YEW_CALIB_C2_NS YEW_CALIB_C3_NS \
+    YEW_CALIB_SCALE_PERMILLE YEW_PERF_ADVISORY YEW_PERF_AGGREGATE \
+    YEW_PERF_UPDATE_WHY
+
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 runner=$repo/scripts/run-perf-suite.sh
 scratch=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-perf-suite-test.XXXXXX")
