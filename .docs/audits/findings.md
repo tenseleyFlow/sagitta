@@ -66,7 +66,7 @@ recorded in `audit-00.md`.
 | YEW-F-051 | M | fixed | F15 CI | ~~shadow-preview ban accepts manual destructive fill~~ — fixed 2026-09-14 in `910ea6be` | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
 | YEW-F-052 | M | fixed | F15 CI | ~~FUSS drawer ban accepts indirect pane-root replacement~~ — fixed 2026-09-14 in `6db23a13` | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
 | YEW-F-053 | M | fixed | F15 CI | ~~deterministic-fuzz ban omits `random`~~ — fixed 2026-09-14 in `fff0404d` | tests/audit/f15_ban_misses.c | s02 deterministic seeds; s58 F15 q2 |
-| YEW-F-054 | M | open | F15 CI | clipboard shell ban omits direct shell exec | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
+| YEW-F-054 | M | fixed | F15 CI | ~~clipboard shell ban omits direct shell exec~~ — fixed 2026-09-14 in `702b5e92` | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
 | YEW-F-055 | M | open | F15 CI | job-interpolation ban accepts raw append into shell text | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
 | YEW-F-056 | M | open | F15 CI | OSC 52 query ban accepts split string literals | tests/audit/f15_ban_misses.c | s24 write-only OSC 52; s58 F15 q2 |
 | YEW-F-057 | M | open | F15 CI | terminal-syscall ban omits `tcflush` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
@@ -521,8 +521,10 @@ positive controls for each form.
 
 `YEW-F-054` is Medium because the clipboard no-shell rule scans only `popen`
 and `system`; executing `/bin/sh -c` directly with `execl` has the same
-forbidden behavior and passes. No such product path was established, and the
-control remains open for Sprint 59.
+forbidden behavior and passes. No such product path was established. Commit
+`702b5e92` brings direct variadic exec of common shell paths with `-c` under
+the same gate and adds a positive control, while retaining argv-based
+clipboard execution.
 
 `YEW-F-055` is Medium because the job-data rule recognizes two formatting
 shapes while a raw byte append into a buffer named `shell` performs equivalent
