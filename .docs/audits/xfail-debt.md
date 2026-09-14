@@ -58,7 +58,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-045 | audit | `tests/audit/f15_ban_misses.c` | ~~Unicode-width ban accepts decimal local tables~~ — fixed in `31497135` | fixed |
 | YEW-F-046 | audit | `tests/audit/f15_ban_misses.c` | ~~syntax-color ban accepts packed decimal colors~~ — fixed in `76f2fed1` | fixed |
 | YEW-F-047 | audit | `tests/audit/f15_ban_misses.c` | ~~syntax-width ban accepts local width arithmetic~~ — fixed in `41512e2c` | fixed |
-| YEW-F-048 | audit | `tests/audit/f15_ban_misses.c` | PTY-creation ban omits direct `posix_openpt` callers | open |
+| YEW-F-048 | audit | `tests/audit/f15_ban_misses.c` | ~~PTY-creation ban omits direct `posix_openpt` callers~~ — fixed in `674574eb` | fixed |
 | YEW-F-049 | audit | `tests/audit/f15_ban_misses.c` | CI golden-update ban depends on contiguous spelling | open |
 | YEW-F-050 | audit | `tests/audit/f15_ban_misses.c` | piece-tree I/O ban omits `pread` | open |
 | YEW-F-051 | audit | `tests/audit/f15_ban_misses.c` | shadow-preview ban accepts manual destructive fill | open |
