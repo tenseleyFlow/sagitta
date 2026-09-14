@@ -6,11 +6,11 @@
  * turn the register's source into user-config code.  The replay must retain
  * the plugin defining origin, so io.write raises "capability".
  *
- * Baseline failure: ed.run accepts the internal ed.reg.set command from a
- * Fletch caller.  yew_macro_replay then compiles that plugin-supplied source
- * through fl_compile_str, which assigns runtime_origin() (trusted config,
- * FL_CAP_ALL).  The replayed macro can consequently write this file although
- * the plugin manifest requests no fs.write capability.
+ * Regression: ed.run accepts the internal ed.reg.set command from a Fletch
+ * caller.  Macro replay used to compile that plugin-supplied source through
+ * fl_compile_str, assigning runtime_origin() (trusted config, FL_CAP_ALL).
+ * The replayed macro could consequently write this file although the plugin
+ * manifest requested no fs.write capability.
  */
 #ifndef YEW_WITH_PLUGINS
 #define YEW_WITH_PLUGINS 0

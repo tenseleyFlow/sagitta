@@ -205,6 +205,21 @@ void fl_macro_cache_invalidate(FlRuntime *rt, u8 reg)
     entry->hash = 0U;
 }
 
+void fl_macro_source_written(FlRuntime *rt, u8 reg)
+{
+    FlMacroCache *entry;
+
+    if (rt == NULL || reg < (u8)'a' || reg > (u8)'z')
+        return;
+    entry = &rt->macro_cache[reg - (u8)'a'];
+    /* YEW-F-008: register text becomes executable on replay.  Preserve the
+     * defining caller now; after ed.run returns there is no frame from which
+     * to recover whether config, workspace, CLI, or a plugin wrote it. */
+    entry->origin = rt->vm.nframes == 0U ? runtime_origin() :
+                    fl_cap_origin(&rt->vm);
+    fl_macro_cache_invalidate(rt, reg);
+}
+
 FlFn *fl_macro_compile_cached(FlRuntime *rt, u8 reg,
                               const u8 *source, size_t len)
 {
@@ -223,7 +238,8 @@ FlFn *fl_macro_compile_cached(FlRuntime *rt, u8 reg,
         (len == 0U || memcmp(entry->source, source, len) == 0))
         return (FlFn *)entry->fn.as.o;
     (void)snprintf(label, sizeof(label), "<macro:%c>", (char)reg);
-    fn = fl_compile_str(rt, source, len, label);
+    fn = compile_owned(rt, source, len, label, entry->origin,
+                       COMPILE_PLAIN);
     if (fn == NULL)
         return NULL;
     entry->source = (const u8 *)rt->diag.files[rt->diag.nfiles - 1U].src;

@@ -58,11 +58,16 @@ bool fl_call_value_args(FlRuntime *rt, FlValue callable,
                         FlValue *out);
 
 /* Sprint 35's bounded register cache.  Registers are lower-case a..z.  A hit
- * requires byte-identical source, not merely matching register metadata.
- * Cached functions are GC roots for the lifetime of the runtime. */
+ * requires byte-identical source and unchanged defining origin, not merely
+ * matching register metadata. Cached functions are GC roots for the lifetime
+ * of the runtime. */
 FlFn *fl_macro_compile_cached(FlRuntime *rt, u8 reg,
                               const u8 *source, size_t len);
 void fl_macro_cache_invalidate(FlRuntime *rt, u8 reg);
+/* Record the defining origin at the shared named-register write doors.
+ * A later replay compiles under this authority even after the writer's
+ * Fletch frame has returned. */
+void fl_macro_source_written(FlRuntime *rt, u8 reg);
 
 /* Command source inherited by Fletch editor bindings and motion blocks. */
 CmdSource fl_runtime_cmd_source(const FlVm *vm);

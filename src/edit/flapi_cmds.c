@@ -221,6 +221,13 @@ CmdStatus yew_flapi_cmd_span_yank(CmdCtx *cx)
     yew_regval_from_span(&value, cx->win->buf->tb, cx->range.tok,
                          YEW_REG_CHARWISE, &cx->win->buf->meta);
     yew_reg_yank(&cx->ed->regs, name, &value);
+    if ((name >= (u8)'a' && name <= (u8)'z') ||
+        (name >= (u8)'A' && name <= (u8)'Z')) {
+        u8 lower = name >= (u8)'A' && name <= (u8)'Z' ?
+                   (u8)(name - (u8)'A' + (u8)'a') : name;
+
+        fl_macro_source_written(cx->ed->fl, lower);
+    }
     yew_regval_free(&value);
     return YEW_CMD_OK;
 }
@@ -238,7 +245,7 @@ CmdStatus yew_flapi_cmd_reg_set(CmdCtx *cx)
     value.type = YEW_REG_CHARWISE;
     bytebuf_append(&value.bytes, cx->sarg, cx->sarg_len);
     yew_reg_set_macro(&cx->ed->regs, name, &value, cx->bang);
-    fl_macro_cache_invalidate(cx->ed->fl, name);
+    fl_macro_source_written(cx->ed->fl, name);
     yew_regval_free(&value);
     return YEW_CMD_OK;
 }

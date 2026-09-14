@@ -17,6 +17,7 @@ typedef struct FlMacroCache {
     const u8 *source;
     size_t len;
     u32 hash;
+    FlOrigin origin;
 } FlMacroCache;
 
 struct FlRuntime {
