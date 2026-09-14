@@ -660,13 +660,10 @@ void test_plug_lifecycle_twenty_by_twenty_reclaims_every_closure(void)
         life_assert_counts(life_counts(&f), before);
         YEW_ASSERT_EQ_U64(f.ed.plug->ncmds, raw_commands);
         YEW_ASSERT_EQ_U64(f.ed.plug->nregs, raw_values);
-        /* YEW-F-021 pins the stricter zero-length contract.  Until its
-         * Sprint 59 remediation, tombstones must at least plateau after
-         * the first cycle rather than growing over all 400 enables. */
-        YEW_ASSERT_EQ_U64(f.ed.hooks.n,
-                          raw_hooks + YEW_ARRAY_LEN(closures));
-        YEW_ASSERT_EQ_U64(f.ed.hooks.ledger.n,
-                          raw_ledger + 6U * YEW_ARRAY_LEN(closures));
+        /* YEW-F-021: reverse teardown trims inactive suffixes while keeping
+         * interior stable-id tombstones for any registrations still live. */
+        YEW_ASSERT_EQ_U64(f.ed.hooks.n, raw_hooks);
+        YEW_ASSERT_EQ_U64(f.ed.hooks.ledger.n, raw_ledger);
         for (i = 0U; i < YEW_ARRAY_LEN(closures); i++)
             YEW_ASSERT(!life_gc_contains(yew_fl_vm(&f.ed), closures[i]));
     }

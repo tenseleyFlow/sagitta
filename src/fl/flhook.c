@@ -107,7 +107,11 @@ bool fl_reg_remove(FlRegLedger *l, u32 ledger_id)
     r = &l->v[ledger_id - 1U];
     if (!r->active)
         return false;
-    r->active = false;
+    *r = (FlRegistration){0};
+    /* YEW-F-021: retain interior tombstones so live ledger ids stay stable,
+     * but release the inactive suffix after reverse origin teardown. */
+    while (l->n != 0U && !l->v[l->n - 1U].active)
+        l->n--;
     return true;
 }
 
@@ -205,9 +209,10 @@ bool fl_hook_remove(FlHookTable *t, u32 ledger_id)
     h = hook_by_ledger(t, ledger_id);
     if (h == NULL)
         return false;
-    h->active = false;
-    h->fn = FL_NIL_V;
+    *h = (FlHook){0};
     (void)fl_reg_remove(&t->ledger, ledger_id);
+    while (t->n != 0U && !t->v[t->n - 1U].active)
+        t->n--;
     return true;
 }
 

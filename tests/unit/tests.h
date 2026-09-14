@@ -1571,6 +1571,7 @@ void test_fl_txn_reenlist_refreshes_abort_context(void);
 void test_fl_txn_save_flushes_implicit_and_refuses_explicit(void);
 void test_fl_hook_event_inventory(void);
 void test_fl_hook_order_mask_and_remove(void);
+void test_fl_hook_compacts_only_inactive_suffixes(void);
 void test_fl_hook_contains_and_disables_failures(void);
 void test_fl_hook_drops_self_reentrancy_once(void);
 void test_fl_hook_listens_only_to_dispatchable_rows(void);
