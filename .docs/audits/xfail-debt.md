@@ -44,7 +44,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-031 | audit | `tests/audit/f15_ban_misses.c` | ~~explicit-registry ban accepts token-pasted constructors~~ — fixed in `ccfc924c` | fixed |
 | YEW-F-032 | audit | `tests/audit/f15_ban_misses.c` | ~~single-thread ban accepts token-pasted pthread calls~~ — fixed in `a294794c` | fixed |
 | YEW-F-033 | audit | `tests/audit/f15_ban_misses.c` | ~~reproducibility ban omits `__TIMESTAMP__`~~ — fixed in `381bddf0` | fixed |
-| YEW-F-034 | audit | `tests/audit/f15_ban_misses.c` | mmap ban accepts macro-forwarded calls | open |
+| YEW-F-034 | audit | `tests/audit/f15_ban_misses.c` | ~~mmap ban accepts macro-forwarded calls~~ — fixed in `47046a40` | fixed |
 | YEW-F-035 | audit | `tests/audit/f15_ban_misses.c` | allocator ban accepts macro-forwarded libc allocation | open |
 | YEW-F-036 | audit | `tests/audit/f15_ban_misses.c` | cwd-allocation ban requires literal NULL spelling | open |
 | YEW-F-037 | audit | `tests/audit/f15_ban_misses.c` | realpath-allocation ban requires literal NULL spelling | open |
