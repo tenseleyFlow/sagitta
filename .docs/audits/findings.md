@@ -30,7 +30,7 @@ recorded in `audit-00.md`.
 | YEW-F-015 | M | fixed | F11 LSP | ~~snippet-policy grep gate matches unrelated core code~~ — fixed 2026-09-13 in `59d318cf` | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
 | YEW-F-016 | M | fixed | F11 LSP | ~~required 1-based display edges violate the LSP +/-1 gate~~ — fixed 2026-09-13 in `07ee554b` | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
 | YEW-F-017 | M | fixed | F13 GIT | ~~interactive rebase bypasses the Git verb and environment boundary~~ — fixed 2026-09-13 in `c96b4f91` | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
-| YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
+| YEW-F-018 | M | fixed | F13 GIT | ~~FUSS picker detail bypasses the module clock discipline~~ — fixed 2026-09-13 in `b61d329b` | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
 | YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
 | YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
 | YEW-F-021 | M | open | F14 PLUG | plugin teardown retains raw hook and ledger lengths | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
@@ -279,16 +279,15 @@ invalidation. Its only policy exception is the two explicitly replaced Git
 editor rows. A 43-assertion behavioral test captures the complete job spec;
 the source-backed audit also rejects a future direct job from FUSS.
 
-`YEW-F-018` is Medium because the Git module's mandatory clock-source gate is
-not empty and FUSS picker detail reads the process wall clock through
-`time(NULL)` instead of an injected yew clock. That makes exact picker output
-uncontrollable under clock steps and contradicts the subsystem's deterministic
-clock discipline, while leaving document bytes safe. The literal source gate
-also matches four permitted helper declarations/definitions whose names end
-in `clock`, so its promised empty result is independently unattainable. The
-source-backed reproducer records all five matches at the fixed replacement
-baseline. It remains open for Sprint 59; no product source changed during the
-audit.
+`YEW-F-018` was Medium because FUSS picker detail read the process wall clock
+through `time(NULL)` instead of yew's anchored editor clock. Commit `b61d329b`
+routes relative-time formatting through the startup wall-time anchor advanced
+by monotonic editor time, with tests for missing anchors, elapsed time, and
+future timestamps. It also replaces the impossible literal source policy with
+a token-aware control: actual calls to the exact `time`, `clock`, and
+`cpu_time` identifiers fail, while permitted helpers whose longer names end
+in `clock` do not. The stripped-module shim preserves the same public seam as
+a deterministic no-op.
 
 `YEW-F-019` is Medium because the mandatory porcelain-v2 mutation control
 does not detect the exact desynchronisation it claims to pin. With both
