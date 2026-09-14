@@ -55,7 +55,7 @@ recorded in `audit-00.md`.
 | YEW-F-040 | M | fixed | F15 CI | ~~strerror_r ban accepts macro-forwarded calls~~ — fixed 2026-09-14 in `1cac4adf` | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
 | YEW-F-041 | M | fixed | F15 CI | ~~musl backtrace ban omits `backtrace_symbols_fd`~~ — fixed 2026-09-14 in `aec0fe6b` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-042 | M | fixed | F15 CI | ~~GNU-libc ban omits `getopt_long_only`~~ — fixed 2026-09-14 in `aec0fe6b` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
-| YEW-F-043 | M | open | F15 CI | long-double ban misses valid continued declarations | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
+| YEW-F-043 | M | fixed | F15 CI | ~~long-double ban misses valid continued declarations~~ — fixed 2026-09-14 in `4b2b0f02` | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
 | YEW-F-044 | M | open | F15 CI | shim-honesty gate accepts parenthesized success | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
 | YEW-F-045 | M | open | F15 CI | Unicode-width ban accepts decimal local tables | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
 | YEW-F-046 | M | open | F15 CI | syntax-color ban accepts packed decimal colors | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
@@ -456,8 +456,9 @@ pins it with a dedicated positive control.
 
 `YEW-F-043` is Medium because C line continuation permits `long double` to
 span physical source lines before preprocessing while grep evaluates each
-line separately. The ABI-divergent type passes the actual gate and the
-control finding remains open for Sprint 59.
+line separately. Commit `4b2b0f02` reconstructs translation-phase-2 logical
+lines in one deterministic scan, preserves source locations, and pins the
+continued form with an internal positive control.
 
 `YEW-F-044` is Medium because the shim honesty parser recognizes only a few
 literal return expressions. A disabled action returning `(YEW_CMD_OK)` has

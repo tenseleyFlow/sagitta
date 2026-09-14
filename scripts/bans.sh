@@ -94,6 +94,62 @@ scan_seed()
     fi
 }
 
+spliced_hits()
+{
+    pattern=$1
+    file_list=$2
+    spliced_out=$3
+    : >"$spliced_out"
+    set --
+    while IFS= read -r file; do
+        set -- "$@" "$file"
+    done <"$file_list"
+    [ "$#" -gt 0 ] || return
+    awk -v pattern="$pattern" -v repo="$repo_dir/" '
+    function inspect() {
+        if (logical ~ pattern)
+            printf "%s:%d:%s\n", name, start, logical
+        logical = ""
+        start = 0
+    }
+    FNR == 1 {
+        if (start != 0)
+            inspect()
+        name = FILENAME
+        if (index(name, repo) == 1)
+            name = substr(name, length(repo) + 1)
+    }
+    {
+        physical = $0
+        if (start == 0)
+            start = FNR
+        if (physical ~ /\\$/) {
+            sub(/\\$/, "", physical)
+            logical = logical physical
+            next
+        }
+        logical = logical physical
+        inspect()
+    }
+    END {
+        if (start != 0)
+            inspect()
+    }' "$@" >>"$spliced_out" || :
+}
+
+scan_spliced()
+{
+    label=$1
+    pattern=$2
+    file_list=$3
+    scan_hits=$tmp/scan-spliced
+    spliced_hits "$pattern" "$file_list" "$scan_hits"
+    if [ -s "$scan_hits" ]; then
+        echo "ban: $label" >>"$hits"
+        cat "$scan_hits" >>"$hits"
+    fi
+}
+
 #
 # Sprint 31 DoD 5: no conversion in src/fl/ may take a format that is not
 # a literal in our own source.
@@ -435,10 +491,24 @@ scan_seed "GNU getopt_long_only" "$gnu_api_pattern" \
 scan_seed "program_invocation_name" "$gnu_api_pattern" \
     'const char *seeded = program_invocation_name;'
 long_double_pattern='(^|[^[:alnum:]_])long[[:space:]]+double([^[:alnum:]_]|$)'
-scan "long double has different target ABIs; use the f64 model" \
+# YEW-F-043: translation phase 2 removes backslash-newline pairs before token
+# recognition, so the ABI ban must inspect the same spliced logical lines.
+scan_spliced "long double has different target ABIs; use the f64 model" \
     "$long_double_pattern" "$source_files"
 scan_seed "long-double" "$long_double_pattern" \
     'long double seeded(long double value) { return value; }'
+long_double_seed=$tmp/long-double-spliced.c
+printf '%s\n' \
+    'long \' \
+    'double seeded(long \' \
+    'double value) { return value; }' >"$long_double_seed"
+printf '%s\n' "$long_double_seed" >"$tmp/long-double-spliced-list"
+spliced_hits "$long_double_pattern" "$tmp/long-double-spliced-list" \
+    "$tmp/long-double-spliced-hits"
+if [ "$(wc -l <"$tmp/long-double-spliced-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the continued long-double rule no longer fires on its own seed" \
+        >>"$hits"
+fi
 shim_check=$tmp/module-shims
 if ! "$repo_dir/scripts/check-module-shims.sh" >"$shim_check" 2>&1; then
     echo "ban: disabled-module header/shim parity or honesty failed" >>"$hits"
