@@ -31,7 +31,7 @@ recorded in `audit-00.md`.
 | YEW-F-016 | M | fixed | F11 LSP | ~~required 1-based display edges violate the LSP +/-1 gate~~ — fixed 2026-09-13 in `07ee554b` | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
 | YEW-F-017 | M | fixed | F13 GIT | ~~interactive rebase bypasses the Git verb and environment boundary~~ — fixed 2026-09-13 in `c96b4f91` | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
 | YEW-F-018 | M | fixed | F13 GIT | ~~FUSS picker detail bypasses the module clock discipline~~ — fixed 2026-09-13 in `b61d329b` | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
-| YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
+| YEW-F-019 | M | fixed | F13 GIT | ~~porcelain rename test survives the required one-NUL mutation~~ — fixed 2026-09-13 in `b464953d` | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
 | YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
 | YEW-F-021 | M | open | F14 PLUG | plugin teardown retains raw hook and ledger lengths | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
 | YEW-F-022 | M | open | F14 PLUG | plugin trust wording gate rejects its required warning | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
@@ -289,14 +289,15 @@ a token-aware control: actual calls to the exact `time`, `clock`, and
 in `clock` do not. The stripped-module shim preserves the same public seam as
 a deterministic no-op.
 
-`YEW-F-019` is Medium because the mandatory porcelain-v2 mutation control
-does not detect the exact desynchronisation it claims to pin. With both
-rename advances changed from two NULs to one, the source pathname becomes an
-unknown record and is silently skipped; the parser still returns the seven
-entries and original-path bytes asserted by the existing test. The manual
-mutant passed 16 assertions. The source-independent reproducer models that
-stream advance and records the indistinguishable entry count. It remains
-open for Sprint 59; no product source changed during the audit.
+`YEW-F-019` was Medium because the mandatory porcelain-v2 mutation control
+did not detect the exact desynchronisation it claimed to pin. Commit
+`b464953d` replaces the rename's original-path fixture with a legal filename
+that begins like a recognized porcelain record and asserts those bytes
+exactly. The source-independent reproducer now observes eight records under
+one-NUL advancement instead of the seven valid entries. With both production
+passes temporarily advanced only to the destination NUL, the named unit test
+failed at its first parse assertion; restoring the two-NUL parser returned all
+17 assertions to green. Production parser behavior is unchanged.
 
 `YEW-F-020` is Medium because Sprint 51's formatting grep cannot establish
 the narrower argv-safety rule it is meant to enforce. Seven
