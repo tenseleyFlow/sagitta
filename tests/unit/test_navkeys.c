@@ -11,6 +11,7 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "edit/shadow.h"
+#include "ui/cmdline.h"
 
 /*
  * Line 0 "    indented" -- four spaces of indent.
@@ -206,5 +207,158 @@ void test_nav_home_toggle_handles_the_unterminated_last_line(void)
     YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L4);
     nav_home_toggle(&ed);
     YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L4);
+    yew_ed_free(&ed);
+}
+
+static Key nav_key(u32 code)
+{
+    Key key = {0};
+
+    key.code = code;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    if (code < 0x80U) {
+        key.ntext = 1U;
+        key.text[0] = (u8)code;
+    }
+    return key;
+}
+
+static Key nav_mod_key(u32 code, u16 mods)
+{
+    Key key = nav_key(code);
+
+    key.mods = mods;
+    return key;
+}
+
+static void nav_send(Ed *ed, Key key, i64 now)
+{
+    yew_ed_handle_key(ed, key, now);
+    YEW_ASSERT_EQ_U64(ed->last_status, YEW_CMD_OK);
+}
+
+static void nav_expect_cmd(const Ed *ed, const char *name)
+{
+    YEW_ASSERT_EQ_U64(ed->last_cmd.v,
+                      yew_cmd_lookup(name, (u32)strlen(name)).v);
+}
+
+/* The key, not just the command: `<home>` is the toggle in every mode
+ * that binds it, which is what the user actually presses. */
+static void nav_home_key_cycle(Ed *ed)
+{
+    nav_at(ed, 8U);
+    nav_send(ed, nav_key(YEW_KEY_HOME), 0);
+    nav_expect_cmd(ed, "ed.move.line.home_toggle");
+    YEW_ASSERT_EQ_U64(nav_pos(ed), NAV_L0_TEXT);
+    nav_send(ed, nav_key(YEW_KEY_HOME), 1);
+    YEW_ASSERT_EQ_U64(nav_pos(ed), NAV_L0);
+    nav_send(ed, nav_key(YEW_KEY_HOME), 2);
+    YEW_ASSERT_EQ_U64(nav_pos(ed), NAV_L0_TEXT);
+}
+
+void test_nav_home_key_toggles_in_line_word_and_insert_modes(void)
+{
+    Ed ed;
+
+    nav_fixture(&ed);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+    nav_home_key_cycle(&ed);
+    yew_ed_free(&ed);
+
+    nav_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'w'), 0);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_W);
+    nav_home_key_cycle(&ed);
+    yew_ed_free(&ed);
+
+    nav_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'i'), 0);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    nav_home_key_cycle(&ed);
+    yew_ed_free(&ed);
+}
+
+/* H keeps its anchor: the toggle is a motion, and a motion in H drags
+ * the selection's moving end. */
+void test_nav_home_key_toggles_under_every_highlight_unit(void)
+{
+    static const Mode units[] = {YEW_MODE_L, YEW_MODE_W, YEW_MODE_I};
+    Ed ed;
+    u32 i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(units); i++) {
+        nav_fixture(&ed);
+        nav_at(&ed, 8U);
+        YEW_ASSERT_EQ_U64(yew_mode_enter_highlight(&ed, units[i], false),
+                          YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_H);
+        nav_send(&ed, nav_key(YEW_KEY_HOME), 0);
+        nav_expect_cmd(&ed, "ed.move.line.home_toggle");
+        YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L0_TEXT);
+        YEW_ASSERT_EQ_U64(
+            ed.win->cs.curs.data[ed.win->cs.primary].anchor.v, 8U);
+        nav_send(&ed, nav_key(YEW_KEY_HOME), 1);
+        YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L0);
+        YEW_ASSERT_EQ_U64(
+            ed.win->cs.curs.data[ed.win->cs.primary].anchor.v, 8U);
+        yew_ed_free(&ed);
+    }
+}
+
+/* E mode edits the command line's own buffer, so the toggle has to walk
+ * that buffer's single line, not the document's. */
+void test_nav_home_key_toggles_on_the_command_line(void)
+{
+    Ed ed;
+
+    nav_fixture(&ed);
+    yew_cmdline_open(&ed, YEW_PROMPT_CMD, "   set x");
+    YEW_ASSERT(ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_E);
+    YEW_ASSERT_EQ_U64(ed.cmdline.cur.pos.v, 8U);
+    nav_send(&ed, nav_key(YEW_KEY_HOME), 0);
+    nav_expect_cmd(&ed, "ed.move.line.home_toggle");
+    YEW_ASSERT_EQ_U64(ed.cmdline.cur.pos.v, 3U);
+    nav_send(&ed, nav_key(YEW_KEY_HOME), 1);
+    YEW_ASSERT_EQ_U64(ed.cmdline.cur.pos.v, 0U);
+    nav_send(&ed, nav_key(YEW_KEY_HOME), 2);
+    YEW_ASSERT_EQ_U64(ed.cmdline.cur.pos.v, 3U);
+    /* C-a is deliberately NOT the toggle: it is the unconditional
+     * start-of-line the shell-key habit expects. */
+    nav_send(&ed, nav_mod_key((u32)'a', YEW_MOD_CTRL), 3);
+    nav_expect_cmd(&ed, "ed.move.line.home");
+    YEW_ASSERT_EQ_U64(ed.cmdline.cur.pos.v, 0U);
+    yew_cmdline_close(&ed, false);
+    yew_ed_free(&ed);
+}
+
+/*
+ * Motions in yew are single-cursor: yew_ed_dispatch_resolved only fans a
+ * command out over the cursor set when it CHANGES the buffer.  The toggle
+ * must behave exactly like its neighbours here -- move the primary, leave
+ * the rest of the set alone -- so a multi-cursor session cannot be
+ * surprised by one motion that is special.
+ */
+void test_nav_home_key_leaves_secondary_cursors_alone(void)
+{
+    Cursor second = {BYTEOFF(36U), {0U}, BYTEOFF(36U)};
+    Ed ed;
+
+    nav_fixture(&ed);
+    nav_at(&ed, 8U);
+    YEW_ASSERT(yew_cset_add(&ed.win->cs, second));
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.len, 2U);
+
+    nav_send(&ed, nav_key(YEW_KEY_HOME), 0);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.len, 2U);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].pos.v,
+                      NAV_L0_TEXT);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[1U].pos.v, 36U);
+    nav_send(&ed, nav_key(YEW_KEY_HOME), 1);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].pos.v,
+                      NAV_L0);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[1U].pos.v, 36U);
     yew_ed_free(&ed);
 }

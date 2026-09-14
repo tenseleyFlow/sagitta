@@ -34,7 +34,10 @@ static const BindRow frozen_L[] = {
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"A-]", "ed.shadow.next", 0, NULL},
     {"A-[", "ed.shadow.prev", 0, NULL},
-    {"<home>", "ed.move.unit.home", 0, NULL},
+    /* Sprint 57.19: `<home>` is the indent/column-0 toggle in every
+     * mode that binds it.  `A-<left>` keeps ed.move.unit.home_alt,
+     * and L's bare `0` keeps ed.move.unit.home. */
+    {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
     {"<pgup>", "ed.view.page_up", 0, NULL},
     {"<pgdn>", "ed.view.page_down", 0, NULL},
@@ -186,7 +189,7 @@ static const BindRow frozen_W[] = {
     {"A-[", "ed.shadow.prev", 0, NULL},
     {"C-<left>", "ed.move.word.sub_prev", 0, NULL},
     {"C-<right>", "ed.move.word.sub_next", 0, NULL},
-    {"<home>", "ed.move.unit.home", 0, NULL},
+    {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
     {"l", "ed.mode.enter", 0, "L"},
     {"b", "ed.mode.enter", 0, "B"},
@@ -265,7 +268,7 @@ static const BindRow frozen_I[] = {
     {"S-<up>", "ed.sel.extend.up", 0, NULL},
     {"S-<down>", "ed.sel.extend.down", 0, NULL},
     {"C-v", "ed.clip.paste", 0, NULL},
-    {"<home>", "ed.move.line.home", 0, NULL},
+    {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
 };
 
@@ -278,7 +281,7 @@ static const BindRow frozen_E[] = {
      * fallback would have to differ, and one command cannot carry two.
      */
     {"<right>", "ed.cmdline.ghost.accept", 0, NULL},
-    {"<home>", "ed.move.line.home", 0, NULL},
+    {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
     {"C-a", "ed.move.line.home", 0, NULL},
     {"C-e", "ed.move.line.end", 0, NULL},
