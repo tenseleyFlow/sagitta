@@ -908,8 +908,90 @@ if grep -nE '(unicode/width\.h|yew_(cluster_)?width)' \
         >>"$hits"
     sed 's|^|src/text/register.c:|' "$tmp/register-width-hits" >>"$hits"
 fi
-if grep -nE '(column|landed|content_column)\.v' \
-        "$register" >"$tmp/register-column-math-hits" 2>/dev/null; then
+
+# YEW-F-062: names do not establish types.  Strip comments and literals, find
+# every cell-column declarator, then reject direct access to its representation
+# regardless of the local name; register paste must use the coordinate API.
+awk '
+    function scrub(s,    out, i, c, nextc) {
+        out = ""
+        for (i = 1; i <= length(s); i++) {
+            c = substr(s, i, 1)
+            nextc = substr(s, i + 1, 1)
+            if (in_comment) {
+                if (c == "*" && nextc == "/") {
+                    in_comment = 0
+                    out = out "  "
+                    i++
+                } else {
+                    out = out " "
+                }
+            } else if (quote != "") {
+                if (c == "\\") {
+                    out = out "  "
+                    i++
+                } else {
+                    if (c == quote)
+                        quote = ""
+                    out = out " "
+                }
+            } else if (c == "/" && nextc == "*") {
+                in_comment = 1
+                out = out "  "
+                i++
+            } else if (c == "/" && nextc == "/") {
+                break
+            } else if (c == "\"" || c == single_quote) {
+                quote = c
+                out = out " "
+            } else {
+                out = out c
+            }
+        }
+        return out
+    }
+    function add_declarators(tail,    stop, n, parts, i, part, name) {
+        stop = length(tail) + 1
+        if (index(tail, ";") != 0 && index(tail, ";") < stop)
+            stop = index(tail, ";")
+        if (index(tail, ")") != 0 && index(tail, ")") < stop)
+            stop = index(tail, ")")
+        if (index(tail, "{") != 0 && index(tail, "{") < stop)
+            stop = index(tail, "{")
+        tail = substr(tail, 1, stop - 1)
+        n = split(tail, parts, ",")
+        for (i = 1; i <= n; i++) {
+            part = parts[i]
+            sub(/=.*/, "", part)
+            sub(/^[[:space:]*]*/, "", part)
+            name = part
+            sub(/[^[:alnum:]_].*$/, "", name)
+            if (name ~ /^[[:alpha:]_][[:alnum:]_]*$/ &&
+                substr(part, length(name) + 1) !~ /^[[:space:]]*[(]/)
+                names[name] = 1
+        }
+    }
+    BEGIN { single_quote = sprintf("%c", 39) }
+    { source = source "\n" scrub($0) }
+    END {
+        rest = source
+        type_pattern = "(^|[^[:alnum:]_])(CCol|CellCol)[^[:alnum:]_]"
+        while (match(rest, type_pattern)) {
+            tail = substr(rest, RSTART + RLENGTH)
+            add_declarators(tail)
+            rest = tail
+        }
+        for (name in names) {
+            member = "(^|[^[:alnum:]_])" name \
+                     "[[:space:]]*(\\.|->[[:space:]]*)v([^[:alnum:]_]|$)"
+            if (source ~ member) {
+                print "direct cell-column representation access"
+                exit
+            }
+        }
+    }
+' "$register" >"$tmp/register-column-math-hits"
+if [ -s "$tmp/register-column-math-hits" ]; then
     echo "ban: register paste must not perform cell-column arithmetic" \
         >>"$hits"
     sed 's|^|src/text/register.c:|' \
