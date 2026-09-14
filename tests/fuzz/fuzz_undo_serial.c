@@ -128,27 +128,6 @@ static bool unchanged_after_drop(const SerialFixture *f, size_t nodes,
            yew_textbuf_len(f->tb) == text_len;
 }
 
-static bool known_f076_anchor_rewrite(const u8 *input, size_t input_len,
-                                      const Bytebuf *output)
-{
-    size_t i;
-    bool changed = false;
-
-    if (input_len < 64U || output->len != input_len ||
-        memcmp(input, "YEWU", 4U) != 0 ||
-        input[20] != 0U || input[21] != 0U || input[22] != 0U ||
-        input[23] != 0U)
-        return false;
-    for (i = 0U; i < input_len; i++) {
-        if (input[i] == output->data[i])
-            continue;
-        if (i < 40U || i >= 48U)
-            return false;
-        changed = true;
-    }
-    return changed;
-}
-
 static bool roundtrip_current(SerialFixture *f, const u8 *data, size_t len,
                               char *why, size_t why_cap)
 {
@@ -163,10 +142,6 @@ static bool roundtrip_current(SerialFixture *f, const u8 *data, size_t len,
         return fail_serial(why, why_cap, "cannot read round-trip sidecar");
     equal = written.len == len &&
             (len == 0U || memcmp(written.data, data, len) == 0);
-    if (!equal && known_f076_anchor_rewrite(data, len, &written)) {
-        /* YEW-F-076 remains a hard XFAIL in tests/audit/yew_f_076.c. */
-        equal = true;
-    }
     bytebuf_free(&written);
     if (!equal)
         return fail_serial(why, why_cap,

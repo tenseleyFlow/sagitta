@@ -21,7 +21,9 @@ u32 yew_crc32_add(u32 crc, const u8 *bytes, size_t len);
 u32 yew_crc32_end(u32 crc);
 u32 yew_crc32(const u8 *bytes, size_t len);
 
-Journal *yew_journal_open(const char *realpath, const FileMeta *m);
+/* The returned handle borrows m until close/discard.  Opening may pin m's
+ * inode through the durable .base companion used for replacement recovery. */
+Journal *yew_journal_open(const char *realpath, FileMeta *m);
 bool yew_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n);
 bool yew_journal_sync(Journal *j);
 bool yew_journal_ok(const Journal *j);
