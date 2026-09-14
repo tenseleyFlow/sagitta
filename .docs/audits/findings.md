@@ -81,7 +81,7 @@ recorded in `audit-00.md`.
 | YEW-F-066 | M | fixed | F15 CI | ~~termination-site ban omits `_Exit`~~ — fixed 2026-09-14 in `4dc257b5` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
 | YEW-F-067 | M | fixed | F15 CI | ~~AI-body logging ban depends on variable names~~ — fixed 2026-09-14 in `13eca642` | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
 | YEW-F-068 | M | fixed | F15 CI | ~~unit-registry ban omits static test definitions~~ — fixed 2026-09-14 in `b159ff7d` | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
-| YEW-F-069 | M | open | F15 CI | PTY minimum-case gate skips a missing registry | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
+| YEW-F-069 | M | fixed | F15 CI | ~~PTY minimum-case gate skips a missing registry~~ — fixed 2026-09-14 in `95695028` | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
 | YEW-F-070 | M | open | F15 CI | PTY golden gate accepts computed missing names | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
@@ -600,9 +600,10 @@ only definitions beginning exactly with `void`. Commit `b159ff7d` reserves the
 `test_*` namespace for registry-owned tests regardless of linkage and renames
 the existing private helpers so an unregistered static test cannot hide.
 
-`YEW-F-069` is Medium because the PTY minimum-count check is conditional on
-the registry file existing. Deleting the registry skips the check entirely
-and the actual ban suite exits green. It remains open for Sprint 59.
+`YEW-F-069` was Medium because the PTY minimum-count check was conditional on
+the registry file existing. Commit `95695028` makes the registry itself
+required audit evidence, so its removal fails closed before any case or golden
+inventory can be skipped.
 
 `YEW-F-070` is Medium because a snapshot name held in a variable is invisible
 to the missing-golden extractor. The runtime names a nonexistent golden while
