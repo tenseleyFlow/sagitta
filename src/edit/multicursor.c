@@ -887,8 +887,6 @@ CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
     McSkip *skips;
     size_t skip_count;
     u32 repeats;
-    YewTxnReason outer_reason;
-    bool macro_txn;
 
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL || cx == NULL ||
         cx->ed == NULL || cx->win != w || w->cs.curs.len < 2U)
@@ -913,15 +911,6 @@ CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
         (ec.undo->pending_reason != YEW_TXN_MULTI &&
          ec.undo->pending_reason != YEW_TXN_MACRO))
         return YEW_CMD_ERR_STATE;
-    outer_reason = ec.undo->pending_reason;
-    macro_txn = outer_reason == YEW_TXN_MACRO;
-    /* The text engine's multi-cursor safety gate deliberately recognizes
-     * YEW_TXN_MULTI.  A replay already owns the stronger atomic MACRO
-     * boundary, so lend the fan-out that marker while it mutates and restore
-     * the outer reason before Fletch closes or aborts the transaction. */
-    if (macro_txn)
-        ec.undo->pending_reason = YEW_TXN_MULTI;
-
     before_count = w->cs.curs.len;
     repeats = (desc->flags & YEW_CMD_REPEATABLE) != 0U ? cx->count : 1U;
     skips = build_skip_plan(desc, w->buf->tb, &w->cs, repeats,
@@ -961,12 +950,6 @@ CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
     w->cs.batch_next = 0U;
     w->cs.active = YEW_MC_ACTIVE_NONE;
     yew_xfree(skips);
-    if (macro_txn) {
-        if (ec.undo->open != 0U)
-            ec.undo->nodes.data[ec.undo->open - 1U].reason =
-                (u8)YEW_TXN_MACRO;
-        ec.undo->pending_reason = outer_reason;
-    }
     if (status == YEW_CMD_OK) {
         size_t merged;
 

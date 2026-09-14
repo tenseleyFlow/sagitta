@@ -5,10 +5,10 @@
  * every match back-to-front in one undo transaction, adjusts both cursors,
  * and returns normally. One undo then restores the text and cursor set.
  *
- * Baseline failure: an outer Fletch edit block owns a MACRO transaction.
- * The replacement plan preserves that open transaction, so its first edit
- * reaches the multi-cursor choke point with the wrong reason and exits with
- * YEW_EXIT_BUG. The child process contains that expected baseline exit so
+ * Regression: an outer Fletch edit block owned a MACRO transaction. The
+ * replacement plan preserved that open transaction, so its first edit
+ * reached the multi-cursor choke point with an unrecognized aggregate reason
+ * and exited with YEW_EXIT_BUG. The child process contains any regression so
  * the remaining audit cases still run.
  */
 #include "audit.h"

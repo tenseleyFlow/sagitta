@@ -471,7 +471,12 @@ void yew_undo_prepare_delete(EditCtx *ec, Span range)
 static void finish_record(EditCtx *ec, UndoNode *node, bool added_op)
 {
     UndoTree *ut = ec->undo;
-    if (ut->depth != 0U && ut->pending_reason == YEW_TXN_MULTI) {
+    /* YEW-F-005: MULTI and MACRO both aggregate a live cursor set.  Keep
+     * one before/after snapshot for the whole transaction; snapshotting a
+     * transient cursor set after each inner edit is both wrong and costly. */
+    if (ut->depth != 0U &&
+        (ut->pending_reason == YEW_TXN_MULTI ||
+         ut->pending_reason == YEW_TXN_MACRO)) {
         node->t_last_ms = ut->mono_clock(ut->clock_ctx);
         ut->cur = node->id;
         if (added_op)

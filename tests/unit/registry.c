@@ -304,6 +304,7 @@ const YewTest yew_tests[] = {
     T(undo_filter_reason_names_sprint19),
     T(undo_replace_reason_is_live),
     T(undo_macro_reason_is_live),
+    T(undo_macro_aggregates_live_cursor_set),
     T(undo_lsp_reason_names_sprint47),
     T(undo_save_rejects_open_transaction),
     T(undo_abort_restores_content_and_single_cursor),
