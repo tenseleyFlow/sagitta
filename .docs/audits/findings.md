@@ -13,7 +13,7 @@ recorded in `audit-00.md`.
 
 | ID | Sev | Status | Front | Title | Reproducer | Violates |
 |---|---|---|---|---|---|---|
-| YEW-F-001 | M | open | F01 UNI | ambiguous-wide doubles fixed-cell chrome glyphs | tests/audit/yew_f_001.c | s27 §7 |
+| YEW-F-001 | M | fixed | F01 UNI | ~~ambiguous-wide doubles fixed-cell chrome glyphs~~ — fixed 2026-09-13 in `c5a11c96` | tests/audit/yew_f_001.c | s27 §7 |
 | YEW-F-002 | M | open | F01 UNI | long RI output delays a completed flag cluster | tests/audit/yew_f_002.c | s19 §3 |
 | YEW-F-003 | H | fixed | F01 UNI | ~~ASCII-base keycap leaves inconsistent grid width~~ — fixed 2026-09-13 in `2fd132e1` | tests/audit/yew_f_003.c | s05 §3 |
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
@@ -93,13 +93,16 @@ recorded in `audit-00.md`.
 | YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 
-The width mismatch is visible chrome corruption but the underlying document
-bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
-under the wrong-but-recoverable rubric. Root-cause hypothesis: the document
-width option feeds the global Unicode width table used by chrome, while several
-layout slots remain one cell by contract. The reproducer fails at the fixed
-baseline and was confirmed by hosted audit-control run `33815573832` across
-GCC, Clang, ASan/UBSan, Linux arm64, macOS arm64, musl, and `MODULES=""`.
+`YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
+left the document bytes intact and could be recovered by disabling
+`ambiguous_wide`. Commit `c5a11c96` keeps that option authoritative for
+document text while centrally selecting a same-width ASCII row for any Unicode
+chrome glyph that would outgrow its fixed slot. The regression covers both the
+complete glyph vocabulary and an actual grid write whose adjacent cell must
+survive. The reproducer failed at the fixed baseline and passed after the fix
+under Clang, Clang ASan/UBSan, and GCC 16 `MODULES=""`; the original failure was
+also confirmed by hosted audit-control run `33815573832` across GCC, Clang,
+ASan/UBSan, Linux arm64, macOS arm64, musl, and `MODULES=""`.
 
 `YEW-F-002` is visible but recoverable: all bytes eventually arrive, yet a
 completed four-byte flag cluster remains absent from a live job buffer until
