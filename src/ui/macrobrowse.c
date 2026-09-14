@@ -125,8 +125,11 @@ CmdStatus yew_macro_store(Ed *ed, Buffer *scratch)
         scratch->tb == NULL)
         return YEW_CMD_ERR_ARG;
     text_bytes(scratch->tb, &source);
-    compiled = fl_compile_str(ed->fl, source.data, source.len,
-                              yew_buf_label(scratch));
+    /* YEW-F-010: compile-only acceptance let an unresolved name enter the
+     * register and fail on its first replay.  Validate names before the
+     * atomic register write, without executing candidate side effects. */
+    compiled = fl_compile_macro_str(ed->fl, source.data, source.len,
+                                    yew_buf_label(scratch));
     if (compiled == NULL) {
         diag = fl_runtime_last_diag(ed->fl, &span);
         if (ed->win != NULL && ed->win->buf == scratch &&

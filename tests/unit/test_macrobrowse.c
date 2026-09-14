@@ -6,6 +6,7 @@
 
 #include "edit/ed.h"
 #include "edit/flapi_cmds.h"
+#include "fl/flruntime.h"
 #include "text/edit.h"
 #include "text/register.h"
 #include "text/undo.h"
@@ -100,6 +101,79 @@ void test_macrobrowse_unknown_motion_store_is_atomic_and_points_at_word(void)
     YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].pos.v,
                       strlen("fn edited() {\n  return 1\n  @[ "));
     YEW_ASSERT(!yew_undo_at_save_point(scratch->undo));
+    yew_ed_free(&ed);
+}
+
+void test_macrobrowse_unresolved_global_store_is_atomic_and_points_at_name(void)
+{
+    static const char original[] = "fn original() { return 1 }\n";
+    static const char invalid[] =
+        "@[ i\"changed\" ]\n"
+        "missing_function()\n";
+    Ed ed;
+    Buffer *scratch;
+    const RegVal *reg;
+    const char *message;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    macro_set(&ed, (u8)'d', original);
+    YEW_ASSERT_EQ_I64(yew_macro_edit(&ed, (u8)'d'), YEW_CMD_OK);
+    scratch = ed.win->buf;
+    macro_replace_all(&ed, scratch, invalid);
+    YEW_ASSERT_EQ_I64(yew_macro_store(&ed, scratch), YEW_CMD_ERR_ARG);
+    reg = yew_reg_get(&ed.regs, (u8)'d');
+    YEW_ASSERT_NOT_NULL(reg);
+    YEW_ASSERT_EQ_U64(reg->bytes.len, sizeof(original) - 1U);
+    YEW_ASSERT_EQ_MEM(reg->bytes.data, original, sizeof(original) - 1U);
+    message = macro_message(&ed);
+    YEW_ASSERT(strstr(message, "undefined name 'missing_function'") != NULL);
+    YEW_ASSERT(strstr(message, "*macro d*:2:1: error:") != NULL);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].pos.v,
+                      sizeof("@[ i\"changed\" ]\n") - 1U);
+    YEW_ASSERT(!yew_undo_at_save_point(scratch->undo));
+    yew_ed_free(&ed);
+}
+
+void test_macrobrowse_store_accepts_forward_global_function_reference(void)
+{
+    static const char original[] = "fn original() { return 1 }\n";
+    static const char edited[] =
+        "fn first() { return second() }\n"
+        "fn second() { return 1 }\n"
+        "first()\n";
+    Ed ed;
+    Buffer *scratch;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    macro_set(&ed, (u8)'e', original);
+    YEW_ASSERT_EQ_I64(yew_macro_edit(&ed, (u8)'e'), YEW_CMD_OK);
+    scratch = ed.win->buf;
+    macro_replace_all(&ed, scratch, edited);
+    YEW_ASSERT_EQ_I64(yew_macro_store(&ed, scratch), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(yew_macro_replay(&ed, (u8)'e', 1U), YEW_CMD_OK);
+    yew_ed_free(&ed);
+}
+
+void test_macrobrowse_store_accepts_persistent_runtime_global(void)
+{
+    static const char helper[] = "fn helper() { return 1 }\n";
+    static const char original[] = "fn original() { return 1 }\n";
+    static const char edited[] = "helper()\n";
+    Ed ed;
+    Buffer *scratch;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, helper, sizeof(helper) - 1U),
+                      YEW_CMD_OK);
+    macro_set(&ed, (u8)'f', original);
+    YEW_ASSERT_EQ_I64(yew_macro_edit(&ed, (u8)'f'), YEW_CMD_OK);
+    scratch = ed.win->buf;
+    macro_replace_all(&ed, scratch, edited);
+    YEW_ASSERT_EQ_I64(yew_macro_store(&ed, scratch), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(yew_macro_replay(&ed, (u8)'f', 1U), YEW_CMD_OK);
     yew_ed_free(&ed);
 }
 

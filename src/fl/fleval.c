@@ -34,6 +34,7 @@ static FlOrigin runtime_origin(void)
 
 enum {
     COMPILE_PLAIN,
+    COMPILE_MACRO,
     COMPILE_PROFILED,
     COMPILE_COVERED
 };
@@ -64,6 +65,9 @@ static FlFn *compile_owned(FlRuntime *rt, const u8 *source, size_t len,
                        file_id);
     if (program.had_error || program.incomplete)
         return NULL;
+    if (marker_mode == COMPILE_MACRO)
+        return fl_compile_macro(&rt->vm, &rt->diag, &program, file_id,
+                                origin);
     if (marker_mode == COMPILE_COVERED)
         return fl_compile_covered(&rt->vm, &rt->diag, &program, file_id,
                                   origin);
@@ -78,6 +82,13 @@ FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
 {
     return compile_owned(rt, source, len, label, runtime_origin(),
                          COMPILE_PLAIN);
+}
+
+FlFn *fl_compile_macro_str(FlRuntime *rt, const u8 *source, size_t len,
+                           const char *label)
+{
+    return compile_owned(rt, source, len, label, runtime_origin(),
+                         COMPILE_MACRO);
 }
 
 FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,

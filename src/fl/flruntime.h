@@ -33,6 +33,9 @@ const char *fl_runtime_last_diag(const FlRuntime *rt, FlSpan *span);
  * is used only in diagnostics/traces. */
 FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
                      const char *label);
+/* Store-time macro validation additionally rejects unresolved globals. */
+FlFn *fl_compile_macro_str(FlRuntime *rt, const u8 *source, size_t len,
+                           const char *label);
 /* Compile a top-level CLI script with its real path and full user authority. */
 FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
                         const char *realpath_label);
