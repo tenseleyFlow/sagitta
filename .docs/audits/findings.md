@@ -80,7 +80,7 @@ recorded in `audit-00.md`.
 | YEW-F-065 | M | fixed | F15 CI | ~~generated-table ban verifies only a retained marker~~ — fixed 2026-09-14 in `471a5064` | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
 | YEW-F-066 | M | fixed | F15 CI | ~~termination-site ban omits `_Exit`~~ — fixed 2026-09-14 in `4dc257b5` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
 | YEW-F-067 | M | fixed | F15 CI | ~~AI-body logging ban depends on variable names~~ — fixed 2026-09-14 in `13eca642` | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
-| YEW-F-068 | M | open | F15 CI | unit-registry ban omits static test definitions | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
+| YEW-F-068 | M | fixed | F15 CI | ~~unit-registry ban omits static test definitions~~ — fixed 2026-09-14 in `b159ff7d` | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
 | YEW-F-069 | M | open | F15 CI | PTY minimum-case gate skips a missing registry | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
 | YEW-F-070 | M | open | F15 CI | PTY golden gate accepts computed missing names | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
@@ -595,10 +595,10 @@ a small list of identifier substrings. Commit `13eca642` replaces that guess
 with an exact owner list for every ordinary AI log call; all other body-capable
 logging must use the existing dual-gated debug sink.
 
-`YEW-F-068` is Medium because the explicit unit registry inventory recognizes
-only definitions beginning exactly with `void`. Adding ordinary `static`
-linkage hides a test definition from the inventory and lets it remain
-unregistered. It remains open for Sprint 59.
+`YEW-F-068` was Medium because the explicit unit registry inventory recognized
+only definitions beginning exactly with `void`. Commit `b159ff7d` reserves the
+`test_*` namespace for registry-owned tests regardless of linkage and renames
+the existing private helpers so an unregistered static test cannot hide.
 
 `YEW-F-069` is Medium because the PTY minimum-count check is conditional on
 the registry file existing. Deleting the registry skips the check entirely
