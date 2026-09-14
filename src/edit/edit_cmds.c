@@ -930,6 +930,48 @@ static CmdStatus move_word_sub(CmdCtx *cx, bool next)
     return YEW_CMD_OK;
 }
 
+/*
+ * Sprint 57.19: the word unit's own motions, independent of the mode.
+ *
+ * W mode already steps by word through `ed.move.unit.next/prev`, because
+ * in W the UNIT is the word.  Insert mode's unit is the grapheme, so its
+ * Alt arrows need a motion that names the word outright rather than one
+ * that asks the mode what a unit is.
+ */
+static CmdStatus move_word(CmdCtx *cx, bool next)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    UnitCtx u;
+    ByteOff pos;
+    ByteOff anchor;
+    ByteOff old_pos;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return YEW_CMD_ERR_STATE;
+    u = (UnitCtx){tb, win->buf, win};
+    anchor = cursor->anchor;
+    old_pos = cursor->pos;
+    pos = next ? yew_unit_word.next(&u, cursor->pos, false)
+               : yew_unit_word.prev(&u, cursor->pos, false);
+    cursor_place(tb, cursor, pos);
+    finish_direct_motion(cx, cursor, anchor, old_pos);
+    win->wrap_goal_valid = false;
+    yew_win_follow_cursor(win);
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_edit_cmd_move_word_prev(CmdCtx *cx)
+{
+    return move_word(cx, false);
+}
+
+CmdStatus yew_edit_cmd_move_word_next(CmdCtx *cx)
+{
+    return move_word(cx, true);
+}
+
 CmdStatus yew_edit_cmd_move_word_sub_prev(CmdCtx *cx)
 {
     return move_word_sub(cx, false);

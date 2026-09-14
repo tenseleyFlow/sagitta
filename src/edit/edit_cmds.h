@@ -50,6 +50,8 @@ CmdStatus yew_edit_cmd_move_unit_down_alt(CmdCtx *cx);
 CmdStatus yew_edit_cmd_delete_unit(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_block_match_prev(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_block_match_next(CmdCtx *cx);
+CmdStatus yew_edit_cmd_move_word_prev(CmdCtx *cx);
+CmdStatus yew_edit_cmd_move_word_next(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_word_sub_prev(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_word_sub_next(CmdCtx *cx);
 CmdStatus yew_edit_cmd_sel_unit_expand(CmdCtx *cx);

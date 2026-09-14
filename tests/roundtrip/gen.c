@@ -37,6 +37,8 @@ static const RtGenCmd gen_cmds[] = {
     {"ed.move.buf.end", RT_GEN_MOTION},
     {"ed.move.line.home", RT_GEN_MOTION},
     {"ed.move.line.home_toggle", RT_GEN_MOTION},
+    {"ed.move.word.prev", RT_GEN_MOTION},
+    {"ed.move.word.next", RT_GEN_MOTION},
     {"ed.move.line.end", RT_GEN_MOTION},
     {"ed.edit.insert.text", RT_GEN_INSERT},
     {"ed.edit.insert.at", RT_GEN_INSERT},
