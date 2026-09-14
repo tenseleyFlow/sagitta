@@ -47,7 +47,7 @@ recorded in `audit-00.md`.
 | YEW-F-032 | M | fixed | F15 CI | ~~single-thread ban accepts token-pasted pthread calls~~ — fixed 2026-09-14 in `a294794c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-033 | M | fixed | F15 CI | ~~reproducibility ban omits `__TIMESTAMP__`~~ — fixed 2026-09-14 in `381bddf0` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-034 | M | fixed | F15 CI | ~~mmap ban accepts macro-forwarded calls~~ — fixed 2026-09-14 in `47046a40` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-035 | M | open | F15 CI | allocator ban accepts macro-forwarded libc allocation | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-035 | M | fixed | F15 CI | ~~allocator ban accepts macro-forwarded libc allocation~~ — fixed 2026-09-14 in `066041c3` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-036 | M | open | F15 CI | cwd-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-037 | M | open | F15 CI | realpath-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-038 | M | open | F15 CI | locale-dependent Unicode ban omits `mbtowc` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
@@ -416,10 +416,11 @@ source ban while preserving the truncate/SIGBUS hazard the rule exists to
 exclude. Commit `47046a40` rejects object-like aliases naming `mmap` and adds
 an alias positive control while retaining the direct-call check.
 
-`YEW-F-035` is Medium because the audited-allocation scan keys on a direct
-libc function token followed by `(` and accepts a macro-forwarded `malloc`.
-The isolated seed does not establish an allocation in the product tree. The
-control gap remains open for Sprint 59.
+`YEW-F-035` was Medium because the audited-allocation scan keyed on a direct
+libc function token followed by `(` and accepted a macro-forwarded `malloc`.
+Commit `066041c3` rejects object-like aliases naming any libc allocator in the
+existing set and adds a forwarding positive control while preserving the
+audited yew allocator boundary.
 
 `YEW-F-036` and `YEW-F-037` are Medium because the two libc-owned allocation
 checks require `NULL` to appear literally at the call site. Passing a pointer
