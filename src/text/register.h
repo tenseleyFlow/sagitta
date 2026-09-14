@@ -89,7 +89,6 @@ void yew_reg_free(Registers *r);
 void yew_reg_bind_context(Registers *r, const UndoTree *undo,
                           const FileMeta *meta);
 RegVal *yew_reg_get(Registers *r, u8 name);
-void yew_reg_set(Registers *r, u8 name, const RegVal *v);
 void yew_reg_set_macro(Registers *r, u8 name, const RegVal *v, bool append);
 void yew_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len);
 void yew_reg_set_search(Registers *r, const u8 *bytes, size_t len);

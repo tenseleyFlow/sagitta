@@ -334,7 +334,7 @@ void test_register_accepts_explicit_blockwise_values(void)
     block.ragged = true;
     for (i = 0U; i < sizeof(rows) / sizeof(rows[0]); i++)
         YewRegRowVec_push(&block.rows, rows[i]);
-    yew_reg_set(&r, 'a', &block);
+    yew_reg_set_macro(&r, 'a', &block, false);
     stored = yew_reg_get(&r, 'a');
     reg_assert_value(stored, YEW_REG_BLOCKWISE, bytes, sizeof(bytes) - 1U);
     YEW_ASSERT_EQ_U64(stored->width, 2U);

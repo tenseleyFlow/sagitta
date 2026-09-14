@@ -298,7 +298,7 @@ void test_cmdline_sanitizes_seed_paste_and_register_newlines(void)
                       sizeof("x\r\ny\n\nz") - 1U);
     yew_regval_init(&value);
     bytebuf_append(&value.bytes, "q\r\n\nr", sizeof("q\r\n\nr") - 1U);
-    yew_reg_set(&fixture.ed.regs, (u8)'a', &value);
+    yew_reg_set_macro(&fixture.ed.regs, (u8)'a', &value, false);
     yew_regval_free(&value);
     context.ed = &fixture.ed;
     context.win = yew_cmdline_target(&fixture.ed);
@@ -312,7 +312,7 @@ void test_cmdline_sanitizes_seed_paste_and_register_newlines(void)
     bytebuf_free(&text);
     yew_regval_init(&value);
     bytebuf_append(&value.bytes, "n\0x", 3U);
-    yew_reg_set(&fixture.ed.regs, (u8)'b', &value);
+    yew_reg_set_macro(&fixture.ed.regs, (u8)'b', &value, false);
     yew_regval_free(&value);
     context.sarg = "b";
     YEW_ASSERT_EQ_U64(yew_cmdline_cmd_insert_register(&context),

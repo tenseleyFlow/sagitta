@@ -713,21 +713,14 @@ fi
 scan_seed "terminal syscall ownership" "$tty_syscall_pattern" \
     'int seeded(int fd) { return tcflush(fd, TCIFLUSH); }'
 
-register_set_hits=$tmp/register-set-hits
-: >"$register_set_hits"
-while IFS= read -r file; do
-    case ${file#"$repo_dir"/} in
-        src/text/register.c|src/text/register.h) continue ;;
-    esac
-    grep -nE -e '(^|[^[:alnum:]_])yew_reg_set[[:space:]]*\(' \
-        "$file" 2>/dev/null |
-        sed "s|^|${file#"$repo_dir"/}:|" >>"$register_set_hits" || :
-done <"$source_files"
-if [ -s "$register_set_hits" ]; then
-    echo "ban: register writes must use the yank/delete routing choke point" \
-        >>"$hits"
-    cat "$register_set_hits" >>"$hits"
-fi
+# YEW-F-058: the raw named-register setter is deliberately private.  An
+# allow-listed implementation file could otherwise publish a wrapper and let
+# arbitrary callers bypass the yank/delete/macro routing policy.
+register_set_pattern='(^|[^[:alnum:]_])yew_reg_set[[:space:]]*\('
+scan "register writes must use the routed front doors" \
+    "$register_set_pattern" "$source_files"
+scan_seed "register-routing" "$register_set_pattern" \
+    'void seeded(void) { yew_reg_set(regs, name, value); }'
 
 #
 # Sprint 36 DoD 5: every option write goes through the one typed registry
