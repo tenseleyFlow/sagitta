@@ -8272,7 +8272,7 @@ static void case_s56_5_drawer(PtyCtx *c)
         }
     }
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot(c, name);
+    ptc_snapshot(c, c->test->name);
 done:
     free(before);
     force_quit(c);
@@ -8706,7 +8706,7 @@ static void case_s52_fuss(PtyCtx *c)
          * while this screen is settling.  The grid is the contract; the
          * cumulative render history is scheduler state. */
         c->vt.sync_pairs_unstable = true;
-        ptc_snapshot(c, name);
+        ptc_snapshot(c, c->test->name);
         s52_finish(c);
         return;
     }
@@ -8860,9 +8860,9 @@ static void case_s52_fuss(PtyCtx *c)
          * permits, and pinning it is what would catch that regression.
          */
         c->vt.sync_pairs_unstable = true;
-        ptc_snapshot(c, name);
+        ptc_snapshot(c, c->test->name);
     } else {
-        ptc_snapshot_sgr(c, name);
+        ptc_snapshot_sgr(c, c->test->name);
     }
     s52_finish(c);
 }
@@ -9251,7 +9251,7 @@ static void case_s53_statusline(PtyCtx *c)
                   "clean status fixture displayed an unknown Git sign");
     }
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot(c, name);
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
 

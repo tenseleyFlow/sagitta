@@ -82,7 +82,7 @@ recorded in `audit-00.md`.
 | YEW-F-067 | M | fixed | F15 CI | ~~AI-body logging ban depends on variable names~~ — fixed 2026-09-14 in `13eca642` | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
 | YEW-F-068 | M | fixed | F15 CI | ~~unit-registry ban omits static test definitions~~ — fixed 2026-09-14 in `b159ff7d` | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
 | YEW-F-069 | M | fixed | F15 CI | ~~PTY minimum-case gate skips a missing registry~~ — fixed 2026-09-14 in `95695028` | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
-| YEW-F-070 | M | open | F15 CI | PTY golden gate accepts computed missing names | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
+| YEW-F-070 | M | fixed | F15 CI | ~~PTY golden gate accepts computed missing names~~ — fixed 2026-09-14 in `613e23aa` | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
 | YEW-F-073 | M | open | F15 CI | baseline history policy is not enforced | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
@@ -605,9 +605,10 @@ the registry file existing. Commit `95695028` makes the registry itself
 required audit evidence, so its removal fails closed before any case or golden
 inventory can be skipped.
 
-`YEW-F-070` is Medium because a snapshot name held in a variable is invisible
-to the missing-golden extractor. The runtime names a nonexistent golden while
-the static gate passes. It remains open for Sprint 59.
+`YEW-F-070` was Medium because a snapshot name held in a variable was invisible
+to the missing-golden extractor. Commit `613e23aa` restricts every snapshot
+selection to an auditable literal or the exact registered case name, and checks
+literal names from both plain and SGR snapshot calls for committed goldens.
 
 `YEW-F-071` is Medium because the PTY case extractor does not honor the C
 preprocessor. A `C(orphan)` row under `#if 0` persuades the gate that an orphan
