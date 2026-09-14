@@ -4,9 +4,11 @@
  * Correct behavior: Sprint 51 and Sprint 58 F13 require the existing rename
  * fixture to fail when both parser passes consume only the destination NUL.
  *
- * Baseline failure: the source pathname begins with an unrecognised record
- * byte.  A one-NUL mutant therefore skips it as an unknown record and still
- * exposes the same seven entries asserted by the unit test.
+ * Baseline failure: the source pathname began with an unrecognised record
+ * byte. A one-NUL mutant therefore skipped it as an unknown record and still
+ * exposed the same seven entries asserted by the unit test. The replacement
+ * fixture starts that path with a recognised record prefix, making stream
+ * desynchronisation observable.
  */
 #include "audit.h"
 
@@ -43,7 +45,8 @@ bool test_yew_f_019(char *why, size_t why_cap)
 {
     static const uint8_t input[] =
         "2 R. N... 100644 100644 100644 " OID_A " " OID_B
-        " R100 renamed\npath\0old\npath\0"
+        " R100 renamed\npath\0"
+        "1 malformed rename source\0"
         "1 M. N... 100644 100644 100644 " OID_A " " OID_B " one\0"
         "1 .M N... 100644 100644 100644 " OID_A " " OID_B " two\0"
         "1 A. N... 000000 100644 100644 " OID_A " " OID_B " three\0"
@@ -54,10 +57,10 @@ bool test_yew_f_019(char *why, size_t why_cap)
     size_t mutant_count =
         one_nul_mutant_entry_count(input, sizeof(input) - 1U);
 
-    if (mutant_count == 7U) {
+    if (mutant_count != 8U) {
         (void)snprintf(why, why_cap,
-                       "one-NUL mutant still exposes all %zu asserted entries",
+                       "one-NUL mutant exposes %zu entries rather than 8",
                        mutant_count);
     }
-    return mutant_count != 7U;
+    return mutant_count == 8U;
 }

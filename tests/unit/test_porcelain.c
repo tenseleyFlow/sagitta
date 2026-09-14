@@ -154,7 +154,8 @@ void test_porcelain_rename_consumes_two_nuls_and_preserves_newline(void)
 {
     static const u8 input[] =
         "2 R. N... 100644 100644 100644 " OID_A " " OID_B
-        " R100 renamed\npath\0old\npath\0"
+        " R100 renamed\npath\0"
+        "1 malformed rename source\0"
         "1 M. N... 100644 100644 100644 " OID_A " " OID_B " one\0"
         "1 .M N... 100644 100644 100644 " OID_A " " OID_B " two\0"
         "1 A. N... 000000 100644 100644 " OID_A " " OID_B " three\0"
@@ -178,9 +179,13 @@ void test_porcelain_rename_consumes_two_nuls_and_preserves_newline(void)
     YEW_ASSERT_NOT_NULL(renamed);
     YEW_ASSERT_EQ_U64(renamed->path_len, strlen("renamed\npath"));
     YEW_ASSERT_EQ_MEM(renamed->path, "renamed\npath", renamed->path_len);
-    /* Mutation pin: this test must fail if rename consumption is patched from
-     * two NULs to one; the original path would desynchronize the stream. */
-    YEW_ASSERT_EQ_MEM(renamed->orig_path, "old\npath", renamed->orig_len);
+    /* YEW-F-019: make the original path resemble a recognized record. A
+     * one-NUL rename mutant must parse it and fail, rather than silently
+     * skipping an unrecognized filename while all assertions still pass. */
+    YEW_ASSERT_EQ_U64(renamed->orig_len,
+                      strlen("1 malformed rename source"));
+    YEW_ASSERT_EQ_MEM(renamed->orig_path, "1 malformed rename source",
+                      renamed->orig_len);
     renamed = entry_named(&snap, "copied");
     YEW_ASSERT_NOT_NULL(renamed);
     YEW_ASSERT_EQ_I64(renamed->kind, GIT_E_RENAME);
