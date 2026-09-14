@@ -27,6 +27,11 @@ void yew_width_set_opts(const YewWidthOpts *opts)
     width_opts.ambiguous_wide = opts != NULL && opts->ambiguous_wide;
 }
 
+bool yew_width_ambiguous_wide(void)
+{
+    return width_opts.ambiguous_wide;
+}
+
 static int cp_width_record(u32 cp, bool ignore_emoji_presentation)
 {
     u16 rec;

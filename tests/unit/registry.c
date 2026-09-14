@@ -2344,6 +2344,8 @@ const YewTest yew_tests[] = {
     T(glyphs_every_row_has_both_vocabularies),
     T(glyphs_grip_and_tick_are_one_cell),
     T(glyphs_are_the_same_width_in_both_vocabularies),
+    T(glyphs_preserve_slots_under_ambiguous_wide),
+    T(glyphs_ambiguous_fallback_preserves_grid_neighbor),
     T(glyphs_arrows_point_the_way_the_thing_moves),
     T(glyphs_ascii_is_auto_from_the_locale),
     T(glyphs_the_vocabulary_is_decided_once),

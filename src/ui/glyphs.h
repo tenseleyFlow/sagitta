@@ -21,7 +21,9 @@
  * otherwise.  YEW_ASCII=1 forces on, YEW_ASCII=0 forces off.  The
  * decision is made ONCE, at startup (Sprint 0's single-decision rule),
  * because a glyph set that could change mid-session would make two
- * frames of one screen disagree.
+ * frames of one screen disagree.  Independently, ambiguous-wide mode
+ * selects the ASCII row only where the Unicode row would outgrow its
+ * fixed chrome slot; document glyphs keep the configured width policy.
  *
  * EVERY GLYPH IS MEASURED WITH yew_cluster_width AT ITS CALL SITE.  A
  * two-cell glyph in a one-cell slot is a layout bug, and `⇕` and `✓`

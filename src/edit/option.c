@@ -224,7 +224,7 @@ const OptDesc yew_opts[] = {
      YEW_OPT_MODULE_CORE},
     {"ambiguous_wide", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
      0, 0, NULL, option_changed,
-     "Render East Asian ambiguous characters as two cells",
+     "Render document East Asian ambiguous characters as two cells",
      YEW_OPT_MODULE_CORE},
     {"subword", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(false), NULL, 0, 0,
      NULL, option_changed, "Use subword boundaries for word navigation",

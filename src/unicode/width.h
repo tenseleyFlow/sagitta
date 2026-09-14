@@ -25,6 +25,7 @@ typedef struct {
 
 /* Startup-only process option. NULL restores the deterministic default. */
 void yew_width_set_opts(const YewWidthOpts *opts);
+bool yew_width_ambiguous_wide(void);
 
 int yew_cp_width(u32 cp);
 void yew_cluster_width_init(YewClusterWidthState *state);

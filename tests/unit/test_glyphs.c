@@ -21,8 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "term/grid.h"
 #include "ui/glyphs.h"
 #include "unicode/width.h"
+#include "util/arena.h"
+#include "util/intern.h"
 
 void test_glyphs_every_row_has_both_vocabularies(void)
 {
@@ -88,6 +91,61 @@ void test_glyphs_are_the_same_width_in_both_vocabularies(void)
         YEW_ASSERT(wide >= 1U);
     }
     yew_glyph_reset();
+}
+
+void test_glyphs_preserve_slots_under_ambiguous_wide(void)
+{
+    YewWidthOpts opts = {false};
+    u16 expected[YEW_GLYPH__N];
+    u32 i;
+
+    yew_glyph_force_ascii(false);
+    yew_width_set_opts(&opts);
+    for (i = 0U; i < (u32)YEW_GLYPH__N; i++)
+        expected[i] = yew_glyph_cells((YewGlyph)i);
+
+    opts.ambiguous_wide = true;
+    yew_width_set_opts(&opts);
+    for (i = 0U; i < (u32)YEW_GLYPH__N; i++)
+        YEW_ASSERT_EQ_U64(yew_glyph_cells((YewGlyph)i), expected[i]);
+    YEW_ASSERT_EQ_STR(yew_glyph(YEW_GLYPH_DIRTY_TICK), "+");
+    YEW_ASSERT_EQ_STR(yew_glyph(YEW_GLYPH_BORDER_V), "|");
+    YEW_ASSERT_EQ_STR(yew_glyph(YEW_GLYPH_MODIFIED), "*");
+
+    yew_width_set_opts(NULL);
+    yew_glyph_reset();
+}
+
+void test_glyphs_ambiguous_fallback_preserves_grid_neighbor(void)
+{
+    YewWidthOpts opts = {true};
+    YewColor color = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    Arena arena;
+    Interner interner;
+    Grid grid;
+    const char *glyph;
+
+    arena_init(&arena);
+    interner_init(&interner, &arena);
+    YEW_ASSERT(yew_grid_init(&grid, &interner, 1U, 3U));
+    yew_glyph_force_ascii(false);
+    yew_width_set_opts(&opts);
+
+    glyph = yew_glyph(YEW_GLYPH_DIRTY_TICK);
+    YEW_ASSERT_EQ_U64(yew_grid_put(&grid, 0U, 0U, (const u8 *)glyph,
+                                  strlen(glyph), color, color, 0U), 1U);
+    YEW_ASSERT_EQ_U64(yew_grid_put(&grid, 0U, 1U, (const u8 *)"x", 1U,
+                                  color, color, 0U), 2U);
+    YEW_ASSERT_EQ_U64(grid.back[0].w, 1U);
+    YEW_ASSERT_EQ_U64(grid.back[0].utf8[0], (u8)'+');
+    YEW_ASSERT_EQ_U64(grid.back[1].w, 1U);
+    YEW_ASSERT_EQ_U64(grid.back[1].utf8[0], (u8)'x');
+
+    yew_width_set_opts(NULL);
+    yew_glyph_reset();
+    yew_grid_free(&grid);
+    interner_free(&interner);
+    arena_free_all(&arena);
 }
 
 /*
