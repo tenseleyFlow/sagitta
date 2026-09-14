@@ -239,6 +239,17 @@ if [ "$(uname -s)" = Linux ]; then
     if grep -F -- '-Wl,--gc-sections' "$scratch/no-gc.flags" >/dev/null; then
         fail 'GC_SECTIONS=0 retained linker garbage collection'
     fi
+else
+    "$make_cmd" -s -n -C "$repo" BUILD="$scratch/shipping" MODULES= SHIPPING=1 \
+        "$scratch/shipping/yew" >"$scratch/shipping.flags"
+    grep -F -- '-Wl,-reproducible' "$scratch/shipping.flags" >/dev/null ||
+        fail 'Darwin shipping profile omitted reproducible linking'
+
+    "$make_cmd" -s -n -C "$repo" BUILD="$scratch/development" MODULES= SHIPPING=0 \
+        "$scratch/development/yew" >"$scratch/development.flags"
+    if grep -F -- '-Wl,-reproducible' "$scratch/development.flags" >/dev/null; then
+        fail 'Darwin development profile enabled release-only linking'
+    fi
 fi
 
 echo 'size tools test: ok'

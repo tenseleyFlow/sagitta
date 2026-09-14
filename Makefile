@@ -341,6 +341,11 @@ ifeq ($(GC_SECTIONS),1)
 LDFLAGS += -Wl,--gc-sections
 endif
 LDFLAGS += -Wl,--build-id=none
+else ifeq ($(TARGET_OS),Darwin)
+# YEW-F-074: volatile object metadata made the content-derived LC_UUID and
+# ad-hoc signature differ across clean builds.  Ask ld to retain both while
+# deriving them reproducibly; current dyld rejects executables without a UUID.
+LDFLAGS += -Wl,-reproducible
 endif
 endif
 ifeq ($(TARGET),x86_64-linux-musl)
