@@ -24,7 +24,7 @@ recorded in `audit-00.md`.
 | YEW-F-009 | M | fixed | F09 REC | ~~recorder folding self-test no longer reaches its injected fault~~ — fixed 2026-09-13 in `1c11ebee` | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
 | YEW-F-010 | M | fixed | F09 REC | ~~macro store accepts source that fails on first replay~~ — fixed 2026-09-13 in `c362cefd` | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
 | YEW-F-011 | M | fixed | F10 SYN | ~~matching source metadata can retain stale syntax tables~~ — fixed 2026-09-13 in `2c9c7431` | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
-| YEW-F-012 | M | open | F10 SYN | pending embeds occupy a canonical state tail slot | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
+| YEW-F-012 | M | fixed | F10 SYN | ~~pending embeds occupy a canonical state tail slot~~ — fixed 2026-09-13 in `43a82533` | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
 | YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
 | YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
 | YEW-F-015 | M | open | F11 LSP | snippet-policy grep gate matches unrelated core code | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
@@ -229,14 +229,14 @@ cache-header rewrite; only changed bytes force table recompilation. The
 isolated builtin-shaped reproducer now loads its replacement `y` rule and
 records exactly one compile.
 
-`YEW-F-012` is Medium because the documented canonical state law and the
-pending-embed mechanism disagree, weakening the promised equality and cache
-invariants and potentially retaining an otherwise unreachable definition.
-Before JavaScript is resident, an HTML `<script>` opener leaves `ndef == 1`
-while storing the pending definition in `aux[1]`; `syn_state_canon`
-deliberately preserves that future slot even though Sprint 41.5 requires every
-tail slot from `ndef` onward to be zero. The isolated reproducer records the
-exact state without changing product behavior. It remains open for Sprint 59.
+`YEW-F-012` was Medium because pending embeds stored a future guest definition
+in `aux[ndef]`, contradicting the canonical-state law that every unused tail
+cell is zero. Commit `43a82533` makes tail clearing unconditional. The pure
+line phase reports unresolved guest identity through its existing result side
+channel, `SynBuf` owns the deterministic budgeted idle-load queue, and deferred
+resident guests use line-local EOL scratch. Pending states therefore retain no
+hidden definition identity, while the 84-byte state layout, fallback rendering,
+one-load-per-settle pacing, and subsequent invalidation behavior remain intact.
 
 `YEW-F-013` is Medium because the release-control fixture required by Sprint
 42 is absent: the JS and TypeScript known-wrong golden rows use an identifier
