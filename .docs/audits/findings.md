@@ -32,7 +32,7 @@ recorded in `audit-00.md`.
 | YEW-F-017 | M | fixed | F13 GIT | ~~interactive rebase bypasses the Git verb and environment boundary~~ — fixed 2026-09-13 in `c96b4f91` | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
 | YEW-F-018 | M | fixed | F13 GIT | ~~FUSS picker detail bypasses the module clock discipline~~ — fixed 2026-09-13 in `b61d329b` | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
 | YEW-F-019 | M | fixed | F13 GIT | ~~porcelain rename test survives the required one-NUL mutation~~ — fixed 2026-09-13 in `b464953d` | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
-| YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
+| YEW-F-020 | M | fixed | F13 GIT | ~~Git formatting gate rejects legitimate display formatting~~ — fixed 2026-09-13 in `0195ed1c` | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
 | YEW-F-021 | M | open | F14 PLUG | plugin teardown retains raw hook and ledger lengths | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
 | YEW-F-022 | M | open | F14 PLUG | plugin trust wording gate rejects its required warning | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
 | YEW-F-023 | M | open | F14 PLUG | plugin commands cannot enter the recorder CMDWORD space | tests/audit/yew_f_023.c | s58 F14 q8 |
@@ -299,14 +299,15 @@ passes temporarily advanced only to the destination NUL, the named unit test
 failed at its first parse assertion; restoring the two-NUL parser returned all
 17 assertions to green. Production parser behavior is unchanged.
 
-`YEW-F-020` is Medium because Sprint 51's formatting grep cannot establish
-the narrower argv-safety rule it is meant to enforce. Seven
-`bytebuf_printf` calls outside `porcelain.c` format owned status, patch, and
-picker-detail text; none constructs a Git argv element, but every one fails
-the literal mandatory gate. The argv hook and hostile-filename matrix still
-prove the product behavior. The source-backed reproducer pins the gate's
-seven-match baseline for Sprint 59; no product source changed during the
-audit.
+`YEW-F-020` was Medium because Sprint 51's formatting grep could not establish
+the narrower argv-safety rule it was meant to enforce. Commit `0195ed1c`
+replaces that literal control with a semantic one: the canonical argv builder
+must copy discrete tail elements without any formatting call, its structural
+unit test must remain registered, and the hostile-filename integration matrix
+must retain exact post-`--` byte comparisons across stage, unstage, diff, and
+blame. The focused unit test passes 138 assertions and the full FUSS command
+surface passes 544. Legitimate owned status, patch, and picker-detail
+formatting remains unchanged.
 
 `YEW-F-021` is Medium because plugin teardown clears every active hook and
 registration and the collector reclaims their closures, but the raw hook and

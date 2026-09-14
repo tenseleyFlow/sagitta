@@ -565,6 +565,8 @@ static char **git_build_argv(const GitVerb *verb, char *const *tail)
     argv[at++] = (char *)"status.renames=true";
     if (verb->kind == YEW_GV_READ)
         argv[at++] = (char *)"--no-optional-locks";
+    /* YEW-F-020: argv is structural data. Copy caller-owned elements
+     * byte-exactly; display formatting elsewhere in FUSS is unrelated. */
     if (n != 0U)
         (void)memcpy(argv + at, tail, n * sizeof(*argv));
     return argv;
