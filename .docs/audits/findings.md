@@ -56,7 +56,7 @@ recorded in `audit-00.md`.
 | YEW-F-041 | M | fixed | F15 CI | ~~musl backtrace ban omits `backtrace_symbols_fd`~~ — fixed 2026-09-14 in `aec0fe6b` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-042 | M | fixed | F15 CI | ~~GNU-libc ban omits `getopt_long_only`~~ — fixed 2026-09-14 in `aec0fe6b` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-043 | M | fixed | F15 CI | ~~long-double ban misses valid continued declarations~~ — fixed 2026-09-14 in `4b2b0f02` | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
-| YEW-F-044 | M | open | F15 CI | shim-honesty gate accepts parenthesized success | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
+| YEW-F-044 | M | fixed | F15 CI | ~~shim-honesty gate accepts parenthesized success~~ — fixed 2026-09-14 in `75bfedf5` | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
 | YEW-F-045 | M | open | F15 CI | Unicode-width ban accepts decimal local tables | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
 | YEW-F-046 | M | open | F15 CI | syntax-color ban accepts packed decimal colors | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
 | YEW-F-047 | M | open | F15 CI | syntax-width ban accepts local width arithmetic | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
@@ -462,8 +462,9 @@ continued form with an internal positive control.
 
 `YEW-F-044` is Medium because the shim honesty parser recognizes only a few
 literal return expressions. A disabled action returning `(YEW_CMD_OK)` has
-identical success semantics but passes `check-module-shims.sh`. No production
-shim was changed; the control finding remains open for Sprint 59.
+identical success semantics but passed `check-module-shims.sh`. Commit
+`75bfedf5` recognizes any number of enclosing parentheses and adds both bare
+and multiply-parenthesized internal positive controls.
 
 `YEW-F-045` is Medium because the non-Unicode width gate searches four
 symbolic/hex spellings, while the same code points in decimal form a local
