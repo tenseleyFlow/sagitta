@@ -203,6 +203,29 @@ ledgers into a same-directory transaction. The baseline is replaced only
 after every observation, the combined update, and the ending calibration
 drift check pass; a failure leaves the tracked baseline byte-identical.
 
+`make perf-noise` is the F072 evidence run after a reference and baseline
+exist. It refuses a non-Linux host, a runner/ISA mismatch, an invalid
+reference, or a missing baseline. It retains exactly 30 complete quick+huge
+run logs below `build/perf-noise/campaign-*/`, then reports each designated
+metric's p05/p50/p95 and one-sided regression noise. For `le` gates the noisy
+tail is p95 above p50; for `ge` gates it is p05 below p50. Noise at or above
+the 100-permille relative-regression threshold fails: a threshold inside its
+own measured noise is not a release gate.
+
+The bootstrap order on each pinned host is:
+
+1. Quiesce unrelated workloads and record the governor and all metadata named
+   by the matching `calib-reference-*.template` file.
+2. Run `make calib CC=gcc PERF_RUNNER_ID=<designated-id>` without a reference,
+   promote its three measured components into the completed reference, and
+   review that evidence-only commit.
+3. Run `make perf-update CC=gcc PERF_RUNNER_ID=<designated-id>` with
+   `YEW_PERF_UPDATE_WHY` set to a specific measured reason, and review the
+   isolated baseline commit.
+4. Run `make perf-noise CC=gcc PERF_RUNNER_ID=<designated-id>` and commit the
+   30-run report to the F15 audit closeout. Only then enable the matching
+   designated CI lane.
+
 Baseline files always live under `tests/perf/baselines/` (plural). Never
 raise a budget to make a regression green; changing `budgets.txt` changes a
 locked product decision and requires explicit review.

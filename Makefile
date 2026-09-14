@@ -1136,7 +1136,7 @@ endif
         perf-syn-resident-line-probe perf-syn-edit-probe perf-syn-size \
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-huge-components \
-        perf-update perf-baseline-guard \
+        perf-update perf-noise perf-baseline-guard \
         perf-baseline-selftest \
         perf-gate-selftest perf-latency perf-latency-selftest \
         perf-s56-functional perf-s56-observation \
@@ -3151,6 +3151,7 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
 	scripts/tests/s56-perf-gate.test.sh
 	scripts/tests/run-perf-suite.test.sh
 	scripts/tests/update-perf-suite.test.sh
+	scripts/tests/perf-noise-floor.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
 
 perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
@@ -3322,6 +3323,12 @@ perf-update:
 		PERF_BASELINE='$(PERF_BASELINE)' \
 		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
 		scripts/update-perf-suite.sh '$(MAKE)'
+
+perf-noise:
+	BUILD='$(BUILD)' PERF_RUNNER_ID='$(PERF_RUNNER_ID)' \
+		PERF_BASELINE='$(PERF_BASELINE)' \
+		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
+		scripts/run-perf-noise.sh '$(MAKE)'
 
 perf-baseline-guard:
 	scripts/perf-baseline-guard.sh

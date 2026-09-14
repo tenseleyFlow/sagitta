@@ -1,0 +1,148 @@
+#!/bin/sh
+
+set -eu
+
+repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+analyzer=$repo/scripts/perf-noise-floor.sh
+runner=$repo/scripts/run-perf-noise.sh
+scratch=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-perf-noise-test.XXXXXX")
+trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+
+fail()
+{
+    echo "perf noise test: $*" >&2
+    exit 1
+}
+
+cat >"$scratch/budgets" <<'EOF'
+latency.le le 1000 ns calibrated designated latency
+throughput.ge ge 100 units calibrated designated throughput
+hard.all le 10 count none all deterministic
+observe record - ns raw informational observation
+EOF
+
+write_runs()
+{
+    high=$1
+    low=$2
+    run=1
+    while [ "$run" -le 30 ]; do
+        le=100
+        ge=100
+        if [ "$run" -ge 29 ]; then
+            le=$high
+            ge=$low
+        fi
+        {
+            echo "perf-gate: latency.le median=$le absolute_over=0/3 relative_over=0/3 PASS"
+            echo "perf-gate: throughput.ge median=$ge absolute_over=0/3 relative_over=0/3 PASS"
+            echo 'perf-gate: hard.all median=1 absolute_over=0/3 relative_over=0/3 PASS'
+        } >"$scratch/run-$run.log"
+        run=$((run + 1))
+    done
+}
+
+write_runs 105 95
+"$analyzer" "$scratch/budgets" "$scratch"/run-*.log \
+    >"$scratch/pass.out" || fail 'stable 30-run campaign failed'
+grep -F 'latency.le direction=le p05=100 p50=100 p95=105 regression_noise_permille=50 threshold_permille=100 PASS' \
+    "$scratch/pass.out" >/dev/null || fail 'upper-tail noise is wrong'
+grep -F 'throughput.ge direction=ge p05=95 p50=100 p95=100 regression_noise_permille=50 threshold_permille=100 PASS' \
+    "$scratch/pass.out" >/dev/null || fail 'lower-tail noise is wrong'
+grep -F 'metrics=2 runs=30 failures=0' "$scratch/pass.out" >/dev/null ||
+    fail 'stable campaign summary is wrong'
+
+write_runs 110 100
+set +e
+"$analyzer" "$scratch/budgets" "$scratch"/run-*.log \
+    >"$scratch/noisy.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail 'noise equal to the threshold passed'
+grep -F 'regression_noise_permille=100 threshold_permille=100 FAIL' \
+    "$scratch/noisy.out" >/dev/null || fail 'threshold boundary is wrong'
+
+sed -i.bak '/throughput.ge/d' "$scratch/run-30.log"
+set +e
+"$analyzer" "$scratch/budgets" "$scratch"/run-*.log \
+    >"$scratch/missing.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail 'an incomplete run was accepted'
+grep -F 'run ' "$scratch/missing.out" >/dev/null &&
+grep -F ' omitted throughput.ge' "$scratch/missing.out" >/dev/null ||
+    fail 'missing metric was not named'
+
+set -- "$scratch"/run-*.log
+shift
+set +e
+"$analyzer" "$scratch/budgets" "$@" \
+    >"$scratch/count.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail 'a 29-run campaign was accepted'
+
+cat >"$scratch/uname" <<'EOF'
+#!/bin/sh
+case $1 in
+    -s) echo Linux ;;
+    -m) echo "${FAKE_ARCH:-x86_64}" ;;
+    *) exit 2 ;;
+esac
+EOF
+chmod +x "$scratch/uname"
+
+cat >"$scratch/make" <<'EOF'
+#!/bin/sh
+set -eu
+target=
+output=
+for arg do
+    case $arg in
+        calib|perf|perf-huge) target=$arg ;;
+        CALIB_OUTPUT=*) output=${arg#CALIB_OUTPUT=} ;;
+    esac
+done
+case $target in
+    calib)
+        mkdir -p "$(dirname -- "$output")"
+        {
+            echo 'scale_permille 1000'
+            echo "mode ${FAKE_MODE:-GATING}"
+        } >"$output"
+        ;;
+    perf)
+        echo 'perf-gate: latency.le median=100 absolute_over=0/3 relative_over=0/3 PASS'
+        echo 'perf-gate: throughput.ge median=100 absolute_over=0/3 relative_over=0/3 PASS'
+        ;;
+    perf-huge) ;;
+    *) exit 99 ;;
+esac
+EOF
+chmod +x "$scratch/make"
+echo reference >"$scratch/reference"
+echo baseline >"$scratch/baseline"
+
+BUILD=$scratch/build PERF_RUNNER_ID=perf-x86_64-linux-gnu \
+CALIB_REFERENCE=$scratch/reference PERF_BASELINE=$scratch/baseline \
+PERF_BUDGETS=$scratch/budgets YEW_PERF_UNAME=$scratch/uname \
+    "$runner" "$scratch/make" >"$scratch/runner.out" ||
+    fail '30-run campaign driver failed'
+grep -F 'metrics=2 runs=30 failures=0' "$scratch/runner.out" >/dev/null ||
+    fail 'campaign driver did not analyze its logs'
+set -- "$scratch"/build/perf-noise/campaign-*/run-*.log
+[ "$#" -eq 30 ] || fail 'campaign driver did not retain exactly 30 logs'
+set -- "$scratch"/build/perf-noise/campaign-*/noise-floor.txt
+[ "$#" -eq 1 ] || fail 'campaign driver did not retain its report'
+
+set +e
+FAKE_ARCH=arm64 BUILD=$scratch/mismatch \
+PERF_RUNNER_ID=perf-x86_64-linux-gnu CALIB_REFERENCE=$scratch/reference \
+PERF_BASELINE=$scratch/baseline PERF_BUDGETS=$scratch/budgets \
+YEW_PERF_UNAME=$scratch/uname "$runner" "$scratch/make" \
+    >"$scratch/mismatch.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail 'runner/ISA mismatch was accepted'
+
+echo 'perf noise test: ok'
