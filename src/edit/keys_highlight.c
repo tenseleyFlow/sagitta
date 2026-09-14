@@ -5,6 +5,11 @@
 #include "edit/ed.h"
 #include "util/log.h"
 
+/*
+ * Sprint 57.19: `<home>` is ed.move.line.home_toggle in every H unit
+ * table that binds it, matching L/W/I/E.  `A-<left>` keeps the unit
+ * alternate it has always had.
+ */
 static const BindRow keys_H_L[] = {
     {"<left>", "ed.move.unit.home", 0, NULL},
     {"<right>", "ed.move.unit.end", 0, NULL},
@@ -14,7 +19,7 @@ static const BindRow keys_H_L[] = {
     {"A-<right>", "ed.move.unit.end_alt", 0, NULL},
     {"A-<up>", "ed.move.unit.prev_alt", 0, NULL},
     {"A-<down>", "ed.move.unit.next_alt", 0, NULL},
-    {"<home>", "ed.move.unit.home", 0, NULL},
+    {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
 };
 
@@ -27,7 +32,7 @@ static const BindRow keys_H_W[] = {
     {"A-<right>", "ed.move.unit.next_alt", 0, NULL},
     {"C-<left>", "ed.move.word.sub_prev", 0, NULL},
     {"C-<right>", "ed.move.word.sub_next", 0, NULL},
-    {"<home>", "ed.move.unit.home", 0, NULL},
+    {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
 };
 
@@ -47,7 +52,7 @@ static const BindRow keys_H_C[] = {
     {"<right>", "ed.move.unit.next", 0, NULL},
     {"<up>", "ed.move.line.up", 0, NULL},
     {"<down>", "ed.move.line.down", 0, NULL},
-    {"<home>", "ed.move.line.home", 0, NULL},
+    {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
 };
 
