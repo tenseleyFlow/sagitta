@@ -2333,7 +2333,9 @@ YewUndoWriteResult yew_undo_write(EditCtx *ec, const char *path)
             return YEW_UNDO_WRITE_TOO_LARGE;
         }
     } else {
-        write_header(&file, 0U, ut->root, ut->cur, ut->saved, anchor, count,
+        write_header(&file,
+                     ut->persist_truncated ? YEWU_TRUNCATED : 0U,
+                     ut->root, ut->cur, ut->saved, anchor, count,
                      ut->saved != 0U ? ut->saved_len : ut->root_len,
                      ut->saved != 0U ? ut->saved_hash : ut->root_hash,
                      current_len, current_hash);
@@ -2935,6 +2937,18 @@ YewUndoReadResult yew_undo_read(EditCtx *ec, const char *path)
     len = yew_textbuf_len(ec->tb);
     hash = text_hash(ec->tb);
     if (len == cur_len && hash == cur_hash) {
+        if (saved == 0U) {
+            EditCtx identity = *ec;
+
+            identity.undo = &loaded;
+            loaded.cur = cur;
+            state_identity_at(&identity, root, &root_len, &root_hash);
+            /* YEW-F-076: an unsaved sidecar's anchor identifies its root.
+             * It is redundant while current bytes match, but accepting a
+             * different value would make read-then-write change the file. */
+            if (root_len != anchor_len || root_hash != anchor_hash)
+                goto dropped;
+        }
         outcome = YEW_UNDO_READ_CURRENT;
         loaded.cur = cur;
     } else if (len == anchor_len && hash == anchor_hash) {
@@ -2952,6 +2966,7 @@ YewUndoReadResult yew_undo_read(EditCtx *ec, const char *path)
     loaded.bytes_max = old->bytes_max;
     loaded.min_nodes = old->min_nodes;
     loaded.persist_bytes_max = old->persist_bytes_max;
+    loaded.persist_truncated = (flags & YEWU_TRUNCATED) != 0U;
     loaded.mono_clock = old->mono_clock;
     loaded.wall_clock = old->wall_clock;
     loaded.clock_ctx = old->clock_ctx;

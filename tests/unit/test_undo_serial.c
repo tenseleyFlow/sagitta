@@ -407,6 +407,31 @@ void test_undo_serial_validates_current_anchor_and_stale_content(void)
     serial_fixture_free(&source);
 }
 
+void test_undo_serial_rejects_noncanonical_unsaved_anchor_hash(void)
+{
+    SerialFixture source;
+    Bytebuf content;
+    Bytebuf file;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    (void)serial_append(&source, (const u8 *)"current", 7U);
+    serial_flatten(source.tb, &content);
+    serial_path(path);
+    YEW_ASSERT_EQ_U64(yew_undo_write(&source.edit, path),
+                      YEW_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    YEW_ASSERT_EQ_U64(serial_u32(file.data + 20U), 0U);
+    file.data[40U] ^= 0x08U;
+    serial_write_file(path, file.data, file.len);
+    YEW_ASSERT_EQ_U64(serial_try_read(path, content.data, content.len),
+                      YEW_UNDO_READ_DROPPED);
+    bytebuf_free(&file);
+    bytebuf_free(&content);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
 void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
 {
     SerialFixture source;
@@ -414,12 +439,14 @@ void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
     Bytebuf content;
     Bytebuf anchor_content;
     Bytebuf file;
+    Bytebuf rewritten;
     u32 cur;
     u32 persisted_root;
     u32 persisted_count;
     size_t nodes;
     u64 gen;
     char path[64];
+    char rewrite_path[64];
     u32 i;
 
     serial_fixture_init(&source, NULL, 0U);
@@ -452,6 +479,14 @@ void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
                       YEW_UNDO_READ_CURRENT);
     YEW_ASSERT_EQ_U64(loaded.undo->cur, cur);
     YEW_ASSERT_EQ_U64(loaded.undo->root, persisted_root);
+    serial_path(rewrite_path);
+    YEW_ASSERT_EQ_U64(yew_undo_write(&loaded.edit, rewrite_path),
+                      YEW_UNDO_WRITE_OK);
+    serial_read_file(rewrite_path, &rewritten);
+    YEW_ASSERT_EQ_U64(rewritten.len, file.len);
+    YEW_ASSERT_EQ_MEM(rewritten.data, file.data, file.len);
+    bytebuf_free(&rewritten);
+    YEW_ASSERT_EQ_I64(unlink(rewrite_path), 0);
     YEW_ASSERT(yew_undo(&loaded.edit));
     YEW_ASSERT(yew_textbuf_len(loaded.tb) < content.len);
     YEW_ASSERT(yew_redo(&loaded.edit));

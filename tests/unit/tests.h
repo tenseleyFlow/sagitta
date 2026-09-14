@@ -323,6 +323,7 @@ void test_undo_serial_rejects_each_corrupt_node_crc(void);
 void test_undo_serial_rejects_every_64_byte_truncation(void);
 void test_undo_serial_rejects_unknown_version(void);
 void test_undo_serial_validates_current_anchor_and_stale_content(void);
+void test_undo_serial_rejects_noncanonical_unsaved_anchor_hash(void);
 void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void);
 void test_undo_serial_persist_budget_preserves_surviving_branches(void);
 void test_undo_serial_virtual_reroot_preserves_saved_branch(void);
