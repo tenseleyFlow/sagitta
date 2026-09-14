@@ -175,9 +175,11 @@ Sprint 11's policy remains binding:
    requires replacing an initial placeholder reason with the actual cause.
 6. Baseline headers record the calibration vector and `scale_permille`.
    Comparing materially different calibration scales is refused.
-7. `make perf-update` is manual. Commit its output alone with a message
-   beginning `perf: rebaseline` and list the deltas. The baseline guard
-   rejects a commit that touches both `src/` and `tests/perf/baselines/`.
+7. `make perf-update` is manual. Commit its output alone with a subject
+   beginning `perf: rebaseline` (`size: rebaseline` for size ledgers), one or
+   more `Baseline-delta: METRIC OLD -> NEW` body lines that match the diff, and
+   a specific `Baseline-reason: ...` body line. The baseline guard rejects a
+   commit that touches both `src/` and `tests/perf/baselines/`.
 
 `make perf` and `make perf-huge` capture three complete Sprint 56
 observation ledgers before issuing a timing verdict.  The harnesses emit

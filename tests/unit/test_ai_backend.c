@@ -110,7 +110,7 @@ static void assert_header_log(const HttpHdr *hdrs, u32 nhdr,
     bytebuf_free(&log.lines);
 }
 
-static void test_header_logging(void)
+static void assert_header_logging_matrix(void)
 {
     static const HttpHdr mixed[] = {
         {"content-type", "application/json"},
@@ -189,7 +189,7 @@ void test_ai_backend_paths_and_modes(void)
                       YEW_AISTREAM_SSE);
     YEW_ASSERT_EQ_U64(yew_ai_adapters[YEW_AI_ANTHROPIC].stream_mode,
                       YEW_AISTREAM_SSE);
-    test_header_logging();
+    assert_header_logging_matrix();
 }
 
 void test_ai_backend_request_bodies(void)

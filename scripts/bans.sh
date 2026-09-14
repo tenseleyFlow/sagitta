@@ -1018,11 +1018,28 @@ for required in yew_off_to_ccol yew_ccol_to_off_padded \
     fi
 done
 
+oracle=$repo_dir/tests/fuzz/oracle.c
 if grep -nE 'yew_textbuf_|piece\.h' \
-        "$repo_dir/tests/fuzz/oracle.c" >"$tmp/oracle-hits" 2>/dev/null; then
+        "$oracle" >"$tmp/oracle-hits" 2>/dev/null; then
     echo "ban: the text-buffer oracle must remain implementation-independent" \
         >>"$hits"
     sed 's|^|tests/fuzz/oracle.c:|' "$tmp/oracle-hits" >>"$hits"
+fi
+# YEW-F-064: token bans cannot recognize a copied model after its identifiers
+# are renamed.  Seal the reviewed, intentionally naive array-of-lines oracle;
+# changing its structure now requires an explicit seal update and review.
+oracle_sha256=c76402ce9b8ce123de3e50067d373a303c55f7964fb8801517fc26d32524097c
+if command -v sha256sum >/dev/null 2>&1; then
+    oracle_actual=$(sha256sum "$oracle" | sed 's/[[:space:]].*//')
+elif command -v shasum >/dev/null 2>&1; then
+    oracle_actual=$(shasum -a 256 "$oracle" | sed 's/[[:space:]].*//')
+else
+    oracle_actual=
+    echo "ban: need sha256sum or shasum to verify the fuzz oracle" >>"$hits"
+fi
+if [ "$oracle_actual" != "$oracle_sha256" ]; then
+    echo "ban: tests/fuzz/oracle.c differs from its reviewed independence seal" \
+        >>"$hits"
 fi
 
 tables=$repo_dir/src/unicode/tables.c
@@ -1031,34 +1048,67 @@ if [ ! -f "$tables" ] ||
    ! grep -F "$generated_marker" "$tables" >/dev/null 2>&1; then
     echo "ban: src/unicode/tables.c lacks its generated-file marker" >>"$hits"
 fi
-
-# yew_bug is the single audited process-termination site required by the
-# exit-code contract.  No other source file may call exit().
-exit_hits=$tmp/exit
-: >"$exit_hits"
-while IFS= read -r file; do
-    case ${file#"$repo_dir"/} in
-        src/util/log.c) continue ;;
-    esac
-    grep -nE -e '(^|[^[:alnum:]_])exit[[:space:]]*\(' "$file" 2>/dev/null |
-        sed "s|^|${file#"$repo_dir"/}:|" >>"$exit_hits" || :
-done <"$source_files"
-if [ -s "$exit_hits" ]; then
-    echo "ban: exit() is allowed only in src/util/log.c:yew_bug" >>"$hits"
-    cat "$exit_hits" >>"$hits"
+# YEW-F-065: the marker alone survives hand edits.  The Unicode CI lane
+# regenerates this byte image from the vendored, manifest-checked UCD; pin its
+# resulting digest here so every ban invocation also compares exact content.
+tables_sha256=2604d1e60c81d132593a30a23afd9db72449a453880c1f4df2346dea9ff85a0e
+if command -v sha256sum >/dev/null 2>&1; then
+    tables_actual=$(sha256sum "$tables" | sed 's/[[:space:]].*//')
+elif command -v shasum >/dev/null 2>&1; then
+    tables_actual=$(shasum -a 256 "$tables" | sed 's/[[:space:]].*//')
+else
+    tables_actual=
+fi
+if [ "$tables_actual" != "$tables_sha256" ]; then
+    echo "ban: src/unicode/tables.c differs from regenerated UCD 16.0.0" \
+        >>"$hits"
 fi
 
+# yew_bug is the single audited process-termination site required by the
+# exit-code contract.  YEW-F-066 showed that `_Exit` bypassed the lowercase
+# token scan; use the function-owner gate for both spellings.  Child-only
+# `_exit` remains distinct and legal at audited post-fork sites.
+exit_pattern='(^|[^[:alnum:]_])(exit|_Exit)[[:space:]]*[(]'
+exit_hits=$tmp/exit
+c_call_owners "$source_files" "$exit_pattern" \
+    'src/util/log.c:yew_bug' "$exit_hits"
+if [ -s "$exit_hits" ]; then
+    echo "ban: exit/_Exit is allowed only in src/util/log.c:yew_bug" >>"$hits"
+    cat "$exit_hits" >>"$hits"
+fi
+scan_seed "process-termination ownership" "$exit_pattern" \
+    'void seeded(void) { _Exit(4); }'
+
 # AI request and completion bytes have one audited sink.  That sink enforces
-# the environment + typed-option dual gate; keeping its surface tiny makes a
-# new unconditional body log a build failure rather than a privacy regression.
+# the environment + typed-option dual gate.  YEW-F-067 showed that guessing
+# payload variable names was not a boundary, so ordinary AI logs are now an
+# exact function-owner set; any new logging surface requires privacy review.
 ai_body_hits=$tmp/ai-body-log
-: >"$ai_body_hits"
-grep -rnE 'yew_log[^;]*(ctx->prefix|ctx->suffix|->text\b|prompt|completion|body)' \
-    "$repo_dir/src" --include='*.c' 2>/dev/null |
-    grep -v 'yew_ai_debug_body' >"$ai_body_hits" || :
+ai_source_files=$tmp/ai-source-files
+: >"$ai_source_files"
+while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/mod/ai/*.c) printf '%s\n' "$file" >>"$ai_source_files" ;;
+    esac
+done <"$source_files"
+c_call_owners "$ai_source_files" \
+    '(^|[^[:alnum:]_])yew_log[[:space:]]*[(]' \
+    'src/mod/ai/ai.c:yew_ai_redact_option_changed,src/mod/ai/backend.c:log_secret_header,src/mod/ai/backend.c:yew_ai_log_headers,src/mod/ai/backend.c:event_type_mismatch,src/mod/ai/config.c:emit_credential_diag,src/mod/ai/http.c:rx_headers_done,src/mod/ai/http.c:yew_http_register_endpoint,src/mod/ai/policy.c:diag_log,src/mod/ai/policy.c:warn_deny_replaced,src/mod/ai/policy.c:parse_doc,src/mod/ai/policy.c:yew_ai_policy_load_paths' \
+    "$ai_body_hits"
 if [ -s "$ai_body_hits" ]; then
-    echo "ban: AI prompt/completion bodies must use yew_ai_debug_body" >>"$hits"
+    echo "ban: AI logging must use an audited metadata owner or yew_ai_debug_body" \
+        >>"$hits"
     cat "$ai_body_hits" >>"$hits"
+fi
+ai_log_seed=$tmp/seeded-ai-log.c
+echo 'void seeded(const char *bytes) { yew_log(1, "%s", bytes); }' \
+    >"$ai_log_seed"
+printf '%s\n' "$ai_log_seed" >"$tmp/ai-log-seed-list"
+c_call_owners "$tmp/ai-log-seed-list" \
+    '(^|[^[:alnum:]_])yew_log[[:space:]]*[(]' '' \
+    "$tmp/ai-log-seed-hits"
+if [ "$(wc -l <"$tmp/ai-log-seed-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the AI log-owner rule no longer fires on its own seed" >>"$hits"
 fi
 ai_debug_body_refs=$(grep -rn 'yew_ai_debug_body' "$repo_dir/src" 2>/dev/null |
     wc -l | tr -d ' ')
@@ -1069,14 +1119,24 @@ fi
 registry=$repo_dir/tests/unit/registry.c
 defs=$tmp/test-defs
 : >"$defs"
+# YEW-F-068: reserve every test_* definition for the explicit registry.  In
+# particular, internal linkage must not turn a forgotten unit test invisible;
+# private helpers use descriptive, non-test names instead.
+unit_def_pattern='s/^[[:space:]]*\(static[[:space:]]\{1,\}\)\{0,1\}void[[:space:]]\{1,\}test_\([[:alnum:]_]*\)[[:space:]]*(.*/\2/p'
 for file in "$repo_dir"/tests/unit/test_*.c; do
     [ -f "$file" ] || continue
-    sed -n 's/^void[[:space:]]\{1,\}test_\([[:alnum:]_]*\)[[:space:]]*(.*/\1/p' "$file" |
+    sed -n "$unit_def_pattern" "$file" |
         while IFS= read -r name; do
             printf '%s\t%s\n' "${file#"$repo_dir"/}" "$name"
         done >>"$defs"
 done
 LC_ALL=C sort -o "$defs" "$defs"
+
+unit_seed=$tmp/test_seed.c
+echo 'static void test_seeded_orphan(void) {}' >"$unit_seed"
+if [ "$(sed -n "$unit_def_pattern" "$unit_seed")" != "seeded_orphan" ]; then
+    echo "ban: the static unit-test inventory misses its own seed" >>"$hits"
+fi
 
 while IFS="$(printf '\t')" read -r file name; do
     [ -n "$name" ] || continue
@@ -1091,16 +1151,88 @@ done <"$defs"
 
 pty_registry=$repo_dir/tests/pty/registry.c
 golden_dir=$repo_dir/tests/pty/goldens
-if [ -f "$pty_registry" ]; then
+# YEW-F-069: the explicit PTY inventory is itself required evidence.  Its
+# absence must fail closed instead of bypassing every case and golden check.
+if [ ! -f "$pty_registry" ]; then
+    echo "ban: PTY registry is missing" >>"$hits"
+else
+    pty_live_registry=$tmp/pty-registry-live
     pty_cases=$tmp/pty-cases
     golden_refs=$tmp/golden-refs
+    pty_snapshot_hits=$tmp/pty-snapshot-hits
+
+    # YEW-F-071: raw source is not a registry.  Drop branches that the C
+    # preprocessor can prove dead while retaining both sides of unknown
+    # module conditions, because the PTY inventory spans every build shape.
+    LC_ALL=C awk '
+        BEGIN { depth = 0; live = 1 }
+        {
+            text = $0
+            sub(/^[ \t]*/, "", text)
+            zero = text ~ /^#[ \t]*if[ \t]+0[uUlL]*([ \t]|\/[*]|$)/
+            one = text ~ /^#[ \t]*if[ \t]+1[uUlL]*([ \t]|\/[*]|$)/
+            if (text ~ /^#[ \t]*(if|ifdef|ifndef)([ \t]|$)/) {
+                depth++
+                parent[depth] = live
+                certain[depth] = one ? 1 : (zero ? 0 : -1)
+                live = parent[depth] && !zero
+                next
+            }
+            if (text ~ /^#[ \t]*elif([ \t]|$)/) {
+                if (depth == 0)
+                    exit 2
+                zero = text ~ /^#[ \t]*elif[ \t]+0[uUlL]*([ \t]|\/[*]|$)/
+                one = text ~ /^#[ \t]*elif[ \t]+1[uUlL]*([ \t]|\/[*]|$)/
+                if (certain[depth] == 1 || zero)
+                    live = 0
+                else
+                    live = parent[depth]
+                if (one)
+                    certain[depth] = 1
+                else if (!zero && certain[depth] == 0)
+                    certain[depth] = -1
+                next
+            }
+            if (text ~ /^#[ \t]*else([ \t]|$)/) {
+                if (depth == 0)
+                    exit 2
+                live = parent[depth] && certain[depth] != 1
+                certain[depth] = 1
+                next
+            }
+            if (text ~ /^#[ \t]*endif([ \t]|$)/) {
+                if (depth == 0)
+                    exit 2
+                live = parent[depth]
+                delete parent[depth]
+                delete certain[depth]
+                depth--
+                next
+            }
+            if (live)
+                print
+        }
+        END { if (depth != 0) exit 2 }
+    ' "$pty_registry" >"$pty_live_registry"
     sed -n 's/^[[:space:]]*C[[:space:]]*([[:space:]]*\([[:alnum:]_]*\).*/\1/p' \
-        "$pty_registry" | LC_ALL=C sort -u >"$pty_cases"
+        "$pty_live_registry" | LC_ALL=C sort -u >"$pty_cases"
     if [ "$(wc -l <"$pty_cases" | tr -d ' ')" -lt 12 ]; then
         echo "ban: fewer than 12 registered pty cases" >>"$hits"
     fi
-    sed -n 's/.*ptc_snapshot[[:space:]]*([^,]*,[[:space:]]*"\([^"]*\)".*/\1/p' \
-        "$pty_registry" | LC_ALL=C sort -u >"$golden_refs"
+    # YEW-F-070: every selected golden must be statically reviewable as either
+    # a literal or the exact registered case name.  Arbitrary computed names
+    # cannot be checked for existence without executing the PTY case.
+    grep -nE '(^|[^[:alnum:]_])ptc_snapshot(_sgr)?[[:space:]]*[(]' \
+        "$pty_live_registry" |
+        grep -vE 'ptc_snapshot(_sgr)?[[:space:]]*[(][[:space:]]*c[[:space:]]*,[[:space:]]*("[[:alnum:]_-]+"|c->test->name)[[:space:]]*[)][[:space:]]*;' \
+        >"$pty_snapshot_hits" || :
+    if [ -s "$pty_snapshot_hits" ]; then
+        echo "ban: PTY snapshot name must be literal or registered case name" \
+            >>"$hits"
+        cat "$pty_snapshot_hits" >>"$hits"
+    fi
+    sed -n 's/.*ptc_snapshot\(_sgr\)\{0,1\}[[:space:]]*([^,]*,[[:space:]]*"\([^"]*\)".*/\2/p' \
+        "$pty_live_registry" | LC_ALL=C sort -u >"$golden_refs"
     while IFS= read -r name; do
         [ -n "$name" ] || continue
         if [ ! -f "$golden_dir/$name.golden" ]; then

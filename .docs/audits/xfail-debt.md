@@ -74,16 +74,16 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-061 | audit | `tests/audit/f15_ban_misses.c` | ~~register-width ban accepts local lookup tables~~ — fixed in `31497135` | fixed |
 | YEW-F-062 | audit | `tests/audit/f15_ban_misses.c` | ~~register-column ban depends on historical variable names~~ — fixed in `d87c57f6` | fixed |
 | YEW-F-063 | audit | `tests/audit/f15_ban_misses.c` | ~~register-helper presence gate accepts comments~~ — fixed in `f36b1e1e` | fixed |
-| YEW-F-064 | audit | `tests/audit/f15_ban_misses.c` | oracle-independence ban accepts copied renamed models | open |
-| YEW-F-065 | audit | `tests/audit/f15_ban_misses.c` | generated-table ban verifies only a retained marker | open |
-| YEW-F-066 | audit | `tests/audit/f15_ban_misses.c` | termination-site ban omits `_Exit` | open |
-| YEW-F-067 | audit | `tests/audit/f15_ban_misses.c` | AI-body logging ban depends on variable names | open |
-| YEW-F-068 | audit | `tests/audit/f15_ban_misses.c` | unit-registry ban omits static test definitions | open |
-| YEW-F-069 | audit | `tests/audit/f15_ban_misses.c` | PTY minimum-case gate skips a missing registry | open |
-| YEW-F-070 | audit | `tests/audit/f15_ban_misses.c` | PTY golden gate accepts computed missing names | open |
-| YEW-F-071 | audit | `tests/audit/f15_ban_misses.c` | PTY orphan gate counts dead preprocessor rows | open |
+| YEW-F-064 | audit | `tests/audit/f15_ban_misses.c` | ~~oracle-independence ban accepts copied renamed models~~ — fixed in `e79f2414` | fixed |
+| YEW-F-065 | audit | `tests/audit/f15_ban_misses.c` | ~~generated-table ban verifies only a retained marker~~ — fixed in `471a5064` | fixed |
+| YEW-F-066 | audit | `tests/audit/f15_ban_misses.c` | ~~termination-site ban omits `_Exit`~~ — fixed in `4dc257b5` | fixed |
+| YEW-F-067 | audit | `tests/audit/f15_ban_misses.c` | ~~AI-body logging ban depends on variable names~~ — fixed in `13eca642` | fixed |
+| YEW-F-068 | audit | `tests/audit/f15_ban_misses.c` | ~~unit-registry ban omits static test definitions~~ — fixed in `b159ff7d` | fixed |
+| YEW-F-069 | audit | `tests/audit/f15_ban_misses.c` | ~~PTY minimum-case gate skips a missing registry~~ — fixed in `95695028` | fixed |
+| YEW-F-070 | audit | `tests/audit/f15_ban_misses.c` | ~~PTY golden gate accepts computed missing names~~ — fixed in `613e23aa` | fixed |
+| YEW-F-071 | audit | `tests/audit/f15_ban_misses.c` | ~~PTY orphan gate counts dead preprocessor rows~~ — fixed in `e5cec738` | fixed |
 | YEW-F-072 | audit | `tests/audit/yew_f_072.c` | designated performance evidence remains placeholder-only | open |
-| YEW-F-073 | audit | `tests/audit/yew_f_073.c` | baseline history policy is not enforced | open |
+| YEW-F-073 | audit | `tests/audit/yew_f_073.c` | ~~baseline history policy is not enforced~~ — fixed in `aa77a9e6` | fixed |
 | YEW-F-074 | audit | `tests/audit/yew_f_074.c` | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed in `16761aba` | fixed |
 | YEW-F-075 | audit | `tests/audit/yew_f_075.c` | ~~stripped builds accept module-only config as inert state~~ — fixed in `ee6f9894` | fixed |
 | YEW-F-076 | audit | `tests/audit/yew_f_076.c` | accepted unsaved undo sidecars are not byte-canonical | open |

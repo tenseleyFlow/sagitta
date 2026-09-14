@@ -39,7 +39,7 @@ static FlMap *test_map(void)
     return map;
 }
 
-static void test_map_put(FlMap *map, const char *name, FlValue value)
+static void fixture_map_put(FlMap *map, const char *name, FlValue value)
 {
     FlMapEnt *grown = realloc(map->ent,
                               ((size_t)map->n + 1U) * sizeof(*grown));
@@ -69,7 +69,7 @@ static FlList *test_list(const char *a, const char *b, const char *c)
     return list;
 }
 
-static void test_value_drop(FlValue value)
+static void fixture_value_drop(FlValue value)
 {
     u32 i;
 
@@ -79,15 +79,15 @@ static void test_value_drop(FlValue value)
         FlList *list = (FlList *)value.as.o;
 
         for (i = 0U; i < list->n; i++)
-            test_value_drop(list->v[i]);
+            fixture_value_drop(list->v[i]);
         free(list->v);
         free(list);
     } else if (value.t == (u8)FL_MAP) {
         FlMap *map = (FlMap *)value.as.o;
 
         for (i = 0U; i < map->n; i++) {
-            test_value_drop(map->ent[i].k);
-            test_value_drop(map->ent[i].v);
+            fixture_value_drop(map->ent[i].k);
+            fixture_value_drop(map->ent[i].v);
         }
         free(map->ent);
         free(map);
@@ -99,9 +99,9 @@ static FlMap *minimal_config(const char *kind, const char *url,
 {
     FlMap *map = test_map();
 
-    test_map_put(map, "kind", test_strv(kind));
-    test_map_put(map, "url", test_strv(url));
-    test_map_put(map, "model", test_strv(model));
+    fixture_map_put(map, "kind", test_strv(kind));
+    fixture_map_put(map, "url", test_strv(url));
+    fixture_map_put(map, "model", test_strv(model));
     return map;
 }
 
@@ -144,13 +144,13 @@ void test_ai_registry_owns_runtime_values_and_key_argv(void)
     const AiBackendEntry *entry;
     char err[256];
 
-    test_map_put(config, "transport", test_strv("curl"));
-    test_map_put(config, "key_cmd",
+    fixture_map_put(config, "transport", test_strv("curl"));
+    fixture_map_put(config, "key_cmd",
                  FL_OBJ_V(FL_LIST, test_list("pass", "show", "ai/work")));
-    test_map_put(config, "max_tokens", FL_INT_V(512));
-    test_map_put(config, "temperature", FL_FLOAT_V(0.25));
-    test_map_put(config, "stream", FL_BOOL_V(false));
-    test_map_put(config, "fim", FL_BOOL_V(true));
+    fixture_map_put(config, "max_tokens", FL_INT_V(512));
+    fixture_map_put(config, "temperature", FL_FLOAT_V(0.25));
+    fixture_map_put(config, "stream", FL_BOOL_V(false));
+    fixture_map_put(config, "fim", FL_BOOL_V(true));
 
     yew_ai_registry_init(&registry, prepare_endpoint, release_endpoint, &probe);
     YEW_ASSERT(yew_ai_registry_put(&registry, name, config, err, sizeof(err)));
@@ -158,7 +158,7 @@ void test_ai_registry_owns_runtime_values_and_key_argv(void)
     (void)memset(((FlStr *)config->ent[0].v.as.o)->b, 'x',
                  ((FlStr *)config->ent[0].v.as.o)->len);
     free(name);
-    test_value_drop(FL_OBJ_V(FL_MAP, config));
+    fixture_value_drop(FL_OBJ_V(FL_MAP, config));
 
     entry = yew_ai_registry_find(&registry, "work");
     YEW_ASSERT_NOT_NULL(entry);
@@ -218,9 +218,9 @@ void test_ai_registry_replacement_keeps_order_and_resets_cooldown(void)
 
     free(one);
     free(two);
-    test_value_drop(FL_OBJ_V(FL_MAP, a));
-    test_value_drop(FL_OBJ_V(FL_MAP, b));
-    test_value_drop(FL_OBJ_V(FL_MAP, replacement));
+    fixture_value_drop(FL_OBJ_V(FL_MAP, a));
+    fixture_value_drop(FL_OBJ_V(FL_MAP, b));
+    fixture_value_drop(FL_OBJ_V(FL_MAP, replacement));
     yew_ai_registry_drop(&registry);
     YEW_ASSERT_EQ_U64(probe.released, 3U);
 }
@@ -247,39 +247,39 @@ void test_ai_registry_defaults_and_defensive_errors(void)
 
         YEW_ASSERT(!yew_ai_registry_put(&registry, name, bad, err, sizeof(err)));
         YEW_ASSERT(strstr(err, "userinfo") != NULL);
-        test_value_drop(FL_OBJ_V(FL_MAP, bad));
+        fixture_value_drop(FL_OBJ_V(FL_MAP, bad));
     }
     {
         FlMap *bad = minimal_config("openai", "https://example.com", "x");
 
-        test_map_put(bad, "transport", test_strv("http"));
+        fixture_map_put(bad, "transport", test_strv("http"));
         YEW_ASSERT(!yew_ai_registry_put(&registry, name, bad, err, sizeof(err)));
         YEW_ASSERT(strstr(err, "https backends run through curl") != NULL);
-        test_value_drop(FL_OBJ_V(FL_MAP, bad));
+        fixture_value_drop(FL_OBJ_V(FL_MAP, bad));
     }
     {
         FlMap *bad = minimal_config("anthropic", "https://example.com", "x");
 
-        test_map_put(bad, "key_env", test_strv("AI_KEY"));
-        test_map_put(bad, "key_cmd",
+        fixture_map_put(bad, "key_env", test_strv("AI_KEY"));
+        fixture_map_put(bad, "key_cmd",
                      FL_OBJ_V(FL_LIST, test_list("pass", NULL, NULL)));
         YEW_ASSERT(!yew_ai_registry_put(&registry, name, bad, err, sizeof(err)));
         YEW_ASSERT(strstr(err, "both key_env and key_cmd") != NULL);
-        test_value_drop(FL_OBJ_V(FL_MAP, bad));
+        fixture_value_drop(FL_OBJ_V(FL_MAP, bad));
     }
     {
         FlMap *bad = minimal_config("anthropic", "https://example.com", "x");
 
-        test_map_put(bad, "secret", test_strv("not-even-key-shaped"));
+        fixture_map_put(bad, "secret", test_strv("not-even-key-shaped"));
         YEW_ASSERT(!yew_ai_registry_put(&registry, name, bad, err, sizeof(err)));
         YEW_ASSERT(strstr(err, "may not hold a literal API key") != NULL);
-        test_value_drop(FL_OBJ_V(FL_MAP, bad));
+        fixture_value_drop(FL_OBJ_V(FL_MAP, bad));
     }
 
     YEW_ASSERT_EQ_STR(yew_ai_registry_find(&registry, "local")->backend.model,
                       "qwen");
     free(name);
-    test_value_drop(FL_OBJ_V(FL_MAP, config));
+    fixture_value_drop(FL_OBJ_V(FL_MAP, config));
     yew_ai_registry_drop(&registry);
 }
 
@@ -294,11 +294,11 @@ void test_ai_registry_reload_is_transactional_and_deterministic(void)
     u32 i;
     char err[256];
 
-    test_map_put(outer, "zeta",
+    fixture_map_put(outer, "zeta",
                  FL_OBJ_V(FL_MAP, minimal_config("ollama",
                                                 "http://127.0.0.1:11434",
                                                 "z")));
-    test_map_put(outer, "alpha",
+    fixture_map_put(outer, "alpha",
                  FL_OBJ_V(FL_MAP, minimal_config("openai",
                                                 "https://example.com/v1",
                                                 "a")));
@@ -317,13 +317,13 @@ void test_ai_registry_reload_is_transactional_and_deterministic(void)
     YEW_ASSERT_EQ_STR(yew_ai_registry_at(&left, 0U)->backend.name, "zeta");
     YEW_ASSERT_EQ_STR(yew_ai_registry_at(&left, 1U)->backend.name, "alpha");
 
-    test_map_put(bad, "broken", FL_INT_V(1));
+    fixture_map_put(bad, "broken", FL_INT_V(1));
     YEW_ASSERT(!yew_ai_registry_reload(&left, bad, err, sizeof(err)));
     YEW_ASSERT_EQ_U64(yew_ai_registry_count(&left), 2U);
     YEW_ASSERT_EQ_STR(yew_ai_registry_at(&left, 0U)->backend.name, "zeta");
 
-    test_value_drop(FL_OBJ_V(FL_MAP, outer));
-    test_value_drop(FL_OBJ_V(FL_MAP, bad));
+    fixture_value_drop(FL_OBJ_V(FL_MAP, outer));
+    fixture_value_drop(FL_OBJ_V(FL_MAP, bad));
     yew_ai_registry_drop(&left);
     yew_ai_registry_drop(&right);
 }

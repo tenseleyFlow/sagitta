@@ -76,16 +76,16 @@ recorded in `audit-00.md`.
 | YEW-F-061 | M | fixed | F15 CI | ~~register-width ban accepts local lookup tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
 | YEW-F-062 | M | fixed | F15 CI | ~~register-column ban depends on historical variable names~~ — fixed 2026-09-14 in `d87c57f6` | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
 | YEW-F-063 | M | fixed | F15 CI | ~~register-helper presence gate accepts comments~~ — fixed 2026-09-14 in `f36b1e1e` | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
-| YEW-F-064 | M | open | F15 CI | oracle-independence ban accepts copied renamed models | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
-| YEW-F-065 | M | open | F15 CI | generated-table ban verifies only a retained marker | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
-| YEW-F-066 | M | open | F15 CI | termination-site ban omits `_Exit` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
-| YEW-F-067 | M | open | F15 CI | AI-body logging ban depends on variable names | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
-| YEW-F-068 | M | open | F15 CI | unit-registry ban omits static test definitions | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
-| YEW-F-069 | M | open | F15 CI | PTY minimum-case gate skips a missing registry | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
-| YEW-F-070 | M | open | F15 CI | PTY golden gate accepts computed missing names | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
-| YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
+| YEW-F-064 | M | fixed | F15 CI | ~~oracle-independence ban accepts copied renamed models~~ — fixed 2026-09-14 in `e79f2414` | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
+| YEW-F-065 | M | fixed | F15 CI | ~~generated-table ban verifies only a retained marker~~ — fixed 2026-09-14 in `471a5064` | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
+| YEW-F-066 | M | fixed | F15 CI | ~~termination-site ban omits `_Exit`~~ — fixed 2026-09-14 in `4dc257b5` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
+| YEW-F-067 | M | fixed | F15 CI | ~~AI-body logging ban depends on variable names~~ — fixed 2026-09-14 in `13eca642` | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
+| YEW-F-068 | M | fixed | F15 CI | ~~unit-registry ban omits static test definitions~~ — fixed 2026-09-14 in `b159ff7d` | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
+| YEW-F-069 | M | fixed | F15 CI | ~~PTY minimum-case gate skips a missing registry~~ — fixed 2026-09-14 in `95695028` | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
+| YEW-F-070 | M | fixed | F15 CI | ~~PTY golden gate accepts computed missing names~~ — fixed 2026-09-14 in `613e23aa` | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
+| YEW-F-071 | M | fixed | F15 CI | ~~PTY orphan gate counts dead preprocessor rows~~ — fixed 2026-09-14 in `e5cec738` | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
-| YEW-F-073 | M | open | F15 CI | baseline history policy is not enforced | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
+| YEW-F-073 | M | fixed | F15 CI | ~~baseline history policy is not enforced~~ — fixed 2026-09-14 in `aa77a9e6` | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
 | YEW-F-074 | H | fixed | F15 CI | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed 2026-09-13 in `16761aba` | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
 | YEW-F-075 | C | fixed | F15 CI | ~~stripped builds accept module-only config as inert state~~ — fixed 2026-09-13 in `ee6f9894` | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
@@ -574,42 +574,46 @@ in comments as proof of routing. Commit `f36b1e1e` shares a C comment/literal
 stripper with the typed column check and requires an executable call token for
 each coordinate helper.
 
-`YEW-F-064` is Medium because oracle independence cannot be established by
-banning two implementation names. A copied, renamed piece model passes while
-retaining the correlated implementation structure the rule forbids. It
-remains open for Sprint 59.
+`YEW-F-064` was Medium because oracle independence could not be established by
+banning two implementation names. Commit `e79f2414` retains that defense but
+also seals the reviewed naive array-of-lines implementation with portable
+SHA-256 verification, forcing structural oracle changes through explicit
+review.
 
-`YEW-F-065` is Medium because retaining the generated-file marker after a
-manual table edit satisfies the entire generated-UCD check. The gate neither
-regenerates nor compares the table, so provenance is unproved. It remains
-open for Sprint 59.
+`YEW-F-065` was Medium because retaining the generated-file marker after a
+manual table edit satisfied the entire generated-UCD check. Commit `471a5064`
+pins the exact `tables.c` digest produced by the offline regeneration lane;
+local regeneration of all four vendored-UCD outputs was byte-identical.
 
-`YEW-F-066` is Medium because `_Exit` terminates the process outside
-`yew_bug` without matching the lowercase `exit()` scanner. This is a control
-gap rather than a product termination path and remains open for Sprint 59.
+`YEW-F-066` was Medium because `_Exit` terminated the process outside
+`yew_bug` without matching the lowercase `exit()` scanner. Commit `4dc257b5`
+checks both spellings by exact function owner while preserving audited
+post-fork `_exit` calls.
 
-`YEW-F-067` is Medium because the AI privacy scanner infers body data from a
-small list of identifier substrings. Renaming the bytes and logging them
-directly passes the gate. No user payload was logged by the audit; the control
-remains open for Sprint 59.
+`YEW-F-067` was Medium because the AI privacy scanner inferred body data from
+a small list of identifier substrings. Commit `13eca642` replaces that guess
+with an exact owner list for every ordinary AI log call; all other body-capable
+logging must use the existing dual-gated debug sink.
 
-`YEW-F-068` is Medium because the explicit unit registry inventory recognizes
-only definitions beginning exactly with `void`. Adding ordinary `static`
-linkage hides a test definition from the inventory and lets it remain
-unregistered. It remains open for Sprint 59.
+`YEW-F-068` was Medium because the explicit unit registry inventory recognized
+only definitions beginning exactly with `void`. Commit `b159ff7d` reserves the
+`test_*` namespace for registry-owned tests regardless of linkage and renames
+the existing private helpers so an unregistered static test cannot hide.
 
-`YEW-F-069` is Medium because the PTY minimum-count check is conditional on
-the registry file existing. Deleting the registry skips the check entirely
-and the actual ban suite exits green. It remains open for Sprint 59.
+`YEW-F-069` was Medium because the PTY minimum-count check was conditional on
+the registry file existing. Commit `95695028` makes the registry itself
+required audit evidence, so its removal fails closed before any case or golden
+inventory can be skipped.
 
-`YEW-F-070` is Medium because a snapshot name held in a variable is invisible
-to the missing-golden extractor. The runtime names a nonexistent golden while
-the static gate passes. It remains open for Sprint 59.
+`YEW-F-070` was Medium because a snapshot name held in a variable was invisible
+to the missing-golden extractor. Commit `613e23aa` restricts every snapshot
+selection to an auditable literal or the exact registered case name, and checks
+literal names from both plain and SGR snapshot calls for committed goldens.
 
-`YEW-F-071` is Medium because the PTY case extractor does not honor the C
-preprocessor. A `C(orphan)` row under `#if 0` persuades the gate that an orphan
-golden is live even though the compiler removes the row. It remains open for
-Sprint 59.
+`YEW-F-071` was Medium because the PTY case extractor did not honor the C
+preprocessor. Commit `e5cec738` removes provably dead constant branches before
+inventorying cases and snapshots while conservatively retaining both sides of
+module-dependent conditions.
 
 `YEW-F-072` is Medium because the two designated lanes cannot currently
 produce a performance verdict: both committed calibration references and the
@@ -620,13 +624,11 @@ measurements, F15 cannot recompute a 30-run noise floor or compare a threshold
 to it. This is an invariant-4 control mismatch, not evidence that a user-facing
 budget is exceeded, and remains open for Sprint 59.
 
-`YEW-F-073` is Medium because `perf-baseline-guard.sh` reads only the changed
-path list. It rejects a source-and-baseline commit but never reads the commit
-message or numerical diff, so an isolated baseline-only commit titled
-`Refresh numbers` can double every value and still pass. Historical review
-found many modified baseline commits without the required old-to-new record;
-the exact table is retained in `audit-15-ci.md`. The control finding remains
-open for Sprint 59.
+`YEW-F-073` was Medium because `perf-baseline-guard.sh` read only the changed
+path list. Commit `aa77a9e6` establishes the audited history cutover and makes
+every later baseline commit carry a rebaseline subject, a specific reason, and
+at least one declared old-to-new metric pair verified against its numerical
+diff. The pre-cutover classification remains retained in `audit-15-ci.md`.
 
 `YEW-F-074` was High because invariant 5 requires byte-identical builds and
 all four single-module profiles (`lsp`, `ai`, `fuss`, `plugins`) produced
