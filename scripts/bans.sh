@@ -1048,6 +1048,21 @@ if [ ! -f "$tables" ] ||
    ! grep -F "$generated_marker" "$tables" >/dev/null 2>&1; then
     echo "ban: src/unicode/tables.c lacks its generated-file marker" >>"$hits"
 fi
+# YEW-F-065: the marker alone survives hand edits.  The Unicode CI lane
+# regenerates this byte image from the vendored, manifest-checked UCD; pin its
+# resulting digest here so every ban invocation also compares exact content.
+tables_sha256=2604d1e60c81d132593a30a23afd9db72449a453880c1f4df2346dea9ff85a0e
+if command -v sha256sum >/dev/null 2>&1; then
+    tables_actual=$(sha256sum "$tables" | sed 's/[[:space:]].*//')
+elif command -v shasum >/dev/null 2>&1; then
+    tables_actual=$(shasum -a 256 "$tables" | sed 's/[[:space:]].*//')
+else
+    tables_actual=
+fi
+if [ "$tables_actual" != "$tables_sha256" ]; then
+    echo "ban: src/unicode/tables.c differs from regenerated UCD 16.0.0" \
+        >>"$hits"
+fi
 
 # yew_bug is the single audited process-termination site required by the
 # exit-code contract.  No other source file may call exit().

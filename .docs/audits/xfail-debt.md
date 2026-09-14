@@ -75,7 +75,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-062 | audit | `tests/audit/f15_ban_misses.c` | ~~register-column ban depends on historical variable names~~ — fixed in `d87c57f6` | fixed |
 | YEW-F-063 | audit | `tests/audit/f15_ban_misses.c` | ~~register-helper presence gate accepts comments~~ — fixed in `f36b1e1e` | fixed |
 | YEW-F-064 | audit | `tests/audit/f15_ban_misses.c` | ~~oracle-independence ban accepts copied renamed models~~ — fixed in `e79f2414` | fixed |
-| YEW-F-065 | audit | `tests/audit/f15_ban_misses.c` | generated-table ban verifies only a retained marker | open |
+| YEW-F-065 | audit | `tests/audit/f15_ban_misses.c` | ~~generated-table ban verifies only a retained marker~~ — fixed in `471a5064` | fixed |
 | YEW-F-066 | audit | `tests/audit/f15_ban_misses.c` | termination-site ban omits `_Exit` | open |
 | YEW-F-067 | audit | `tests/audit/f15_ban_misses.c` | AI-body logging ban depends on variable names | open |
 | YEW-F-068 | audit | `tests/audit/f15_ban_misses.c` | unit-registry ban omits static test definitions | open |
