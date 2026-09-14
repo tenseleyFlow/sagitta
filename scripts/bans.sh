@@ -104,7 +104,9 @@ spliced_hits()
     while IFS= read -r file; do
         set -- "$@" "$file"
     done <"$file_list"
-    [ "$#" -gt 0 ] || return
+    if [ "$#" -eq 0 ]; then
+        return 0
+    fi
     awk -v pattern="$pattern" -v repo="$repo_dir/" '
     function inspect() {
         if (logical ~ pattern)
@@ -576,8 +578,13 @@ if [ "$(wc -l <"$tmp/pty-seed-hits" | tr -d ' ')" != "1" ]; then
     echo "ban: the PTY-creation ownership rule no longer fires on its seed" \
         >>"$hits"
 fi
-scan "golden updates are forbidden in CI" \
-    'YEW_PTY_UPDATE' "$ci_files"
+# YEW-F-049: shell quote removal and line splicing can assemble the forbidden
+# environment name without leaving its contiguous spelling in workflow text.
+ci_golden_update_pattern='YEW_PTY_[^[:space:]]*UPDATE'
+scan_spliced "golden updates are forbidden in CI" \
+    "$ci_golden_update_pattern" "$ci_files"
+scan_seed "split-name CI golden update" "$ci_golden_update_pattern" \
+    'export YEW_PTY_"UPDATE"=1'
 scan "piece tree file I/O belongs to Sprint 8" \
     '(^|[^[:alnum:]_])(open|fopen|read)[[:space:]]*\(' "$piece_files"
 shadow_draw_files=$tmp/shadow-draw-files
