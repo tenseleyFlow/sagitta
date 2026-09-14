@@ -425,6 +425,48 @@ void test_undo_macro_reason_is_live(void)
     undo_fixture_free(&f);
 }
 
+void test_undo_macro_aggregates_live_cursor_set(void)
+{
+    UndoFixture f;
+    EditCtx enlist;
+    const UndoNode *node;
+
+    undo_fixture_init(&f, (const u8 *)"abcd", 4U);
+    f.cursors.curs.data[0] = undo_cursor(1U, 1U, 1U);
+    YEW_ASSERT(yew_cset_add(&f.cursors, undo_cursor(3U, 3U, 3U)));
+
+    /* Fletch opens the outer boundary before dispatch and therefore
+     * withholds the live multi-cursor set from yew_undo_begin.  Each edit
+     * receives it, and the closing context captures the final set. */
+    enlist = f.edit;
+    enlist.cset = NULL;
+    yew_undo_begin(&enlist, YEW_TXN_MACRO);
+    YEW_ASSERT(yew_edit_delete(&f.edit, (Span){1U, 2U}));
+    YEW_ASSERT(yew_edit_insert(&f.edit, BYTEOFF(1U),
+                               (const u8 *)"ZZ", 2U));
+    yew_undo_end(&f.edit);
+
+    node = undo_current_node(f.undo);
+    YEW_ASSERT_EQ_U64(node->reason, YEW_TXN_MACRO);
+    YEW_ASSERT_EQ_U64(node->n_ops, 2U);
+    YEW_ASSERT_EQ_U64(node->n_before, 2U);
+    YEW_ASSERT_EQ_U64(node->n_after, 2U);
+    undo_assert_text(f.tb, (const u8 *)"aZZcd", 5U);
+    YEW_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 3U);
+    YEW_ASSERT_EQ_U64(f.cursors.curs.data[1].pos.v, 4U);
+
+    YEW_ASSERT(yew_undo(&f.edit));
+    undo_assert_text(f.tb, (const u8 *)"abcd", 4U);
+    YEW_ASSERT_EQ_U64(f.cursors.curs.len, 2U);
+    YEW_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 1U);
+    YEW_ASSERT_EQ_U64(f.cursors.curs.data[1].pos.v, 3U);
+    YEW_ASSERT(yew_redo(&f.edit));
+    undo_assert_text(f.tb, (const u8 *)"aZZcd", 5U);
+    YEW_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 3U);
+    YEW_ASSERT_EQ_U64(f.cursors.curs.data[1].pos.v, 4U);
+    undo_fixture_free(&f);
+}
+
 void test_undo_lsp_reason_names_sprint47(void)
 {
     UndoFixture f;

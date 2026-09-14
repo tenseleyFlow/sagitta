@@ -17,7 +17,7 @@ recorded in `audit-00.md`.
 | YEW-F-002 | M | open | F01 UNI | long RI output delays a completed flag cluster | tests/audit/yew_f_002.c | s19 §3 |
 | YEW-F-003 | H | fixed | F01 UNI | ~~ASCII-base keycap leaves inconsistent grid width~~ — fixed 2026-09-13 in `2fd132e1` | tests/audit/yew_f_003.c | s05 §3 |
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
-| YEW-F-005 | H | open | F06 RE | multi-cursor replacement exits inside a Fletch edit transaction | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
+| YEW-F-005 | H | fixed | F06 RE | ~~multi-cursor replacement exits inside a Fletch edit transaction~~ — fixed 2026-09-13 in `db0759ed` | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
 | YEW-F-006 | C | fixed | F07 UI | ~~workspace re-emission drops unknown root and workspace keys~~ — fixed 2026-09-13 in `9e829cd9` | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 | YEW-F-007 | C | fixed | F07 UI | ~~workspace restore reorders group members from tab-array order~~ — fixed 2026-09-13 in `bea3990b` | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
 | YEW-F-008 | H | open | F08 FL | unprivileged plugin macro replay inherits config authority | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
@@ -133,15 +133,19 @@ pure-literal parser's entry path explicitly accepts dotted keys. The shipped
 `runtime/init.fl` quotes its dotted option names, masking the mismatch on the
 default startup path.
 
-`YEW-F-005` is High because a valid Fletch `edit {}` block containing a
-buffer-range replacement with two live cursors reaches `yew_bug()` and exits
-4. The reproducer opens the same outer `YEW_TXN_MACRO` boundary as Fletch,
-then invokes the real replacement command with the live cursor set. The plan
-does not own a replacement transaction at nonzero depth, so its first edit
-encounters the multi-cursor requirement while the pending reason is MACRO.
-Correct behavior is a normal, one-undo replacement that restores exact text
-and both cursor positions on undo. This remains open for Sprint 59; no product
-source changes during Sprint 58.
+`YEW-F-005` was High because a valid Fletch `edit {}` block containing a
+buffer-range replacement with two live cursors reached `yew_bug()` and exited
+4. Commit `db0759ed` recognizes the outer `YEW_TXN_MACRO` as the cursor-set
+aggregate it already is, defers its after-cursor snapshot until transaction
+close, and removes the multi-cursor runner's temporary reason mutation. The
+reproducer is now an ordinary passing audit test: replacement returns normally
+and one undo restores the exact text and both cursor positions.
+
+Sibling check: successful multi-cursor macro replay still records a MACRO node,
+and failed replay restores the buffer and cursor set before closing the outer
+transaction. Focused undo, Fletch-transaction, macro-replay, replacement, and
+multi-cursor suites cover the shared edit choke point and commit/abort symmetry;
+the multi-cursor and undo fuzzers remain clean.
 
 `YEW-F-006` was Critical: unknown workspace data belongs to the user and a
 normal parse followed by save silently deleted it. Commit `9e829cd9` retains

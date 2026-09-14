@@ -64,7 +64,12 @@ static void require_edit_wrapped(const EditCtx *ec)
     aggregate = ec->undo != NULL && ec->undo->depth != 0U &&
                 (ec->undo->pending_reason == YEW_TXN_MULTI ||
                  ec->undo->pending_reason == YEW_TXN_CUT ||
-                 ec->undo->pending_reason == YEW_TXN_PASTE);
+                 ec->undo->pending_reason == YEW_TXN_PASTE ||
+                 /* YEW-F-005: a Fletch edit block is the outer atomic
+                  * boundary for range commands.  Its live cursor set must
+                  * adjust with the edit even though the command does not
+                  * fan out once per cursor. */
+                 ec->undo->pending_reason == YEW_TXN_MACRO);
     if (!aggregate)
         yew_cset_require_single_edit(ec->cset);
     if (!ec->cset->batching)

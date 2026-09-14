@@ -270,6 +270,7 @@ void test_undo_multi_transaction_commits_one_node(void);
 void test_undo_filter_reason_names_sprint19(void);
 void test_undo_replace_reason_is_live(void);
 void test_undo_macro_reason_is_live(void);
+void test_undo_macro_aggregates_live_cursor_set(void);
 void test_undo_lsp_reason_names_sprint47(void);
 void test_undo_save_rejects_open_transaction(void);
 void test_undo_abort_restores_content_and_single_cursor(void);
