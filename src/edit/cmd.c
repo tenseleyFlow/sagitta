@@ -299,6 +299,11 @@ static const CmdDesc builtins[] = {
     {"ed.move.line.home", yew_edit_cmd_move_line_home, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the start of the line", "line_home"},
+    {"ed.move.line.home_toggle", yew_edit_cmd_move_line_home_toggle,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Move to the first non-blank, or to column 0 when already there",
+     "home_toggle"},
     {"ed.move.line.end", yew_edit_cmd_move_line_end, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the end of the line", "line_end"},
@@ -1422,6 +1427,9 @@ static bool command_name_valid(const char *name)
          * — `Save As...`, the rename panel's two answers, and the group
          * picker's confirm. */
         "save_as", "apply", "confirm",
+        /* Sprint 57.19: Home alternates between the indent and column 0
+         * without disturbing the unit alternates. */
+        "home_toggle",
         /* Sprint 57.18 §4: `:!!` -- one command, the real terminal.
          * Distinct from "term", which stays the refusal. */
         "term_run"};

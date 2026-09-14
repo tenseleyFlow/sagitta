@@ -6,6 +6,7 @@
 CmdStatus yew_edit_cmd_move_buf_home(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_buf_end(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_line_home(CmdCtx *cx);
+CmdStatus yew_edit_cmd_move_line_home_toggle(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_line_end(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_line_up(CmdCtx *cx);
 CmdStatus yew_edit_cmd_move_line_down(CmdCtx *cx);

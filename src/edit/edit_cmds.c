@@ -21,6 +21,7 @@
 
 static CmdStatus delete_span(CmdCtx *cx, Span span);
 static bool edit_is_cmdline(const CmdCtx *cx);
+static u32 edit_tabwidth(const Win *win);
 
 static bool edit_window_at(CmdCtx *cx, Win **win, TextBuf **tb,
                            Cursor **cursor, u32 *index)
@@ -264,6 +265,64 @@ CmdStatus yew_edit_cmd_move_line_home(CmdCtx *cx)
     anchor = cursor->anchor;
     old_pos = cursor->pos;
     yew_cursor_line_home(tb, cursor);
+    finish_direct_motion(cx, cursor, anchor, old_pos);
+    win->wrap_goal_valid = false;
+    yew_win_follow_cursor(win);
+    return YEW_CMD_OK;
+}
+
+/*
+ * Sprint 57.19: Home the way a caret editor draws it -- the first
+ * non-blank, then column 0, then back again.
+ *
+ * This is a NEW command rather than a change to motion.c's `line_home`
+ * alternate, which walks to the first non-blank and STAYS there.  Two
+ * structural reasons:
+ *
+ *   - That alternate is a unit ENDPOINT, not merely a caret stop:
+ *     `line_span` builds the alternate line span out of `line_home` and
+ *     `line_end`, so a toggling home would make the span an operator
+ *     yanks or deletes depend on where the caret happened to sit, and
+ *     change under repetition.  A span must be a function of the line.
+ *   - `A-<left>` is `ed.move.unit.home_alt` in L mode and in H mode.
+ *     Retargeting the alternate would silently change those keys too.
+ *
+ * So `<home>` moves to this command in every mode that binds it, and
+ * the alternate keeps the meaning it has.
+ *
+ * The toggle carries NO memory of the previous keypress.  "Am I already
+ * at the first non-blank" is answered by comparing the caret's current
+ * offset against the line's computed first non-blank, so the same state
+ * always produces the same answer and a replayed macro cannot drift.
+ *
+ * A line with no non-blank at all has no indent stop to alternate with
+ * and parks at column 0: landing on its content end instead would make
+ * Home oscillate across a line that looks empty.  A line with no indent
+ * is that same case from the other side -- its first non-blank IS
+ * column 0, the two stops coincide, and Home is idempotent.
+ */
+CmdStatus yew_edit_cmd_move_line_home_toggle(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    IndentInfo indent;
+    Span line;
+    ByteOff target;
+    ByteOff anchor;
+    ByteOff old_pos;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return YEW_CMD_ERR_STATE;
+    line = yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, cursor->pos));
+    if (!yew_indent_info(tb, line, edit_tabwidth(win), &indent))
+        return YEW_CMD_ERR_STATE;
+    target = indent.blank || cursor->pos.v == indent.first.v
+                 ? BYTEOFF(line.lo)
+                 : indent.first;
+    anchor = cursor->anchor;
+    old_pos = cursor->pos;
+    cursor_place(tb, cursor, target);
     finish_direct_motion(cx, cursor, anchor, old_pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
