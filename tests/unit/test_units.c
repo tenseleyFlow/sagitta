@@ -350,3 +350,181 @@ void test_units_line_motion_clamps_to_the_content_end(void)
         unit_ctx_free(&ctx);
     }
 }
+
+/*
+ * FIELD REPORT: "I have a goal column on the v in `var acc = zero`, and I
+ * arrow up to `fn total`, but the cursor lands before the goal column
+ * should be."
+ *
+ * A goal column is the SCREEN column the caret is trying to hold, and a
+ * tab is one grapheme but four cells.  Counting the goal in graphemes
+ * makes a tab-indented line and a space-indented line disagree about
+ * where a given screen column is, so the caret slides left by three
+ * cells for every tab the source line's indent contains.
+ *
+ * The fixture is the report's own shape: a space-indented line above a
+ * tab-indented one, then an indent that mixes both, then a wide space
+ * indent.  Every `v`-column position below sits at screen cell 4.
+ */
+static const u8 units_tab_indent[] =
+    "    fn total\n"     /* [0,13)  cell 4 is `f` at 4          */
+    "\tvar acc = zero\n" /* [13,29) cell 4 is `v` at 14         */
+    "  \tmixed\n"        /* [29,38) cell 4 is `m` at 32         */
+    "        wide";      /* [38,50) cell 4 is a space at 42     */
+
+static void tab_ctx_cursor(UnitTestCtx *ctx, Cursor *cursor, u64 pos,
+                           u64 goal)
+{
+    (void)memset(cursor, 0, sizeof(*cursor));
+    cursor->pos = BYTEOFF(pos);
+    cursor->anchor = cursor->pos;
+    cursor->goal_col.v = goal;
+    ctx->win.cs.curs.data = cursor;
+    ctx->win.cs.curs.len = 1U;
+    ctx->win.cs.primary = 0U;
+}
+
+static void tab_ctx_release(UnitTestCtx *ctx)
+{
+    ctx->win.cs.curs.data = NULL;
+    ctx->win.cs.curs.len = 0U;
+    unit_ctx_free(ctx);
+}
+
+void test_units_vertical_goal_keeps_the_screen_column_over_tabs(void)
+{
+    static const UnitFixture fixture = {units_tab_indent,
+                                        sizeof(units_tab_indent) - 1U};
+    UnitTestCtx ctx;
+    Cursor cursor;
+
+    /* Up from the `v` of `var` lands under it, on the `f` of `fn`. */
+    unit_ctx_init(&ctx, &fixture);
+    tab_ctx_cursor(&ctx, &cursor, 14U, 4U);
+    YEW_ASSERT_EQ_U64(yew_unit_line.prev(&ctx.unit, cursor.pos, false).v,
+                      4U);
+    tab_ctx_release(&ctx);
+
+    /* And down from the `f` of `fn` lands on the `v` of `var`. */
+    unit_ctx_init(&ctx, &fixture);
+    tab_ctx_cursor(&ctx, &cursor, 4U, 4U);
+    YEW_ASSERT_EQ_U64(yew_unit_line.next(&ctx.unit, cursor.pos, false).v,
+                      14U);
+    tab_ctx_release(&ctx);
+
+    /* Two spaces then a tab still reach cell 4: the `m` of `mixed`. */
+    unit_ctx_init(&ctx, &fixture);
+    tab_ctx_cursor(&ctx, &cursor, 14U, 4U);
+    YEW_ASSERT_EQ_U64(yew_unit_line.next(&ctx.unit, cursor.pos, false).v,
+                      32U);
+    tab_ctx_release(&ctx);
+
+    /* And so does a plain eight-space indent. */
+    unit_ctx_init(&ctx, &fixture);
+    tab_ctx_cursor(&ctx, &cursor, 32U, 4U);
+    YEW_ASSERT_EQ_U64(yew_unit_line.next(&ctx.unit, cursor.pos, false).v,
+                      42U);
+    tab_ctx_release(&ctx);
+}
+
+/*
+ * A goal column that falls INSIDE a tab's render width has no character
+ * of its own.  Rounding left onto the tab is the only answer that stays
+ * on a grapheme boundary, which invariant 2 requires of every cursor
+ * position, and it must round the same way on every line.
+ */
+void test_units_vertical_goal_rounds_left_inside_a_tab(void)
+{
+    static const UnitFixture fixture = {units_tab_indent,
+                                        sizeof(units_tab_indent) - 1U};
+    static const struct {
+        u64 pos;
+        u64 goal;
+        u64 want;
+    } cases[] = {
+        /* Cell 2 on the tab-indented line is the tab's third cell. */
+        {4U, 2U, 13U},
+        /* Cell 3 on `  \t` is the tab's second cell; the tab is at 31. */
+        {14U, 3U, 31U},
+        /* Cell 1 there is the second space, a cell of its own. */
+        {14U, 1U, 30U}
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        UnitTestCtx ctx;
+        Cursor cursor;
+        ByteOff landed;
+
+        unit_ctx_init(&ctx, &fixture);
+        tab_ctx_cursor(&ctx, &cursor, cases[i].pos, cases[i].goal);
+        landed = yew_unit_line.next(&ctx.unit, cursor.pos, false);
+        YEW_ASSERT_EQ_U64(landed.v, cases[i].want);
+        YEW_ASSERT(yew_is_grapheme_boundary(ctx.unit.tb, landed));
+        tab_ctx_release(&ctx);
+    }
+}
+
+/*
+ * The screen column depends on the buffer's own tab width, so a goal
+ * column must be measured with `Buffer.tabwidth` and not a constant.
+ * Cell 8 on `  \tmixed` is the `m` when a tab is eight cells wide and the
+ * `e` when it is four, so the two widths must disagree here.
+ */
+void test_units_vertical_goal_honours_the_buffer_tab_width(void)
+{
+    static const UnitFixture fixture = {units_tab_indent,
+                                        sizeof(units_tab_indent) - 1U};
+    static const struct {
+        u32 tabwidth;
+        u64 want;
+    } cases[] = {
+        {8U, 32U},
+        {4U, 35U},
+        /* A zero tab width is the documented stand-in for the default. */
+        {0U, 35U}
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        UnitTestCtx ctx;
+        Cursor cursor;
+
+        unit_ctx_init(&ctx, &fixture);
+        ctx.buffer.tabwidth = cases[i].tabwidth;
+        /* The `w` of `wide` is cell 8 under any tab width. */
+        tab_ctx_cursor(&ctx, &cursor, 46U, 8U);
+        YEW_ASSERT_EQ_U64(
+            yew_unit_line.prev(&ctx.unit, cursor.pos, false).v,
+            cases[i].want);
+        tab_ctx_release(&ctx);
+    }
+}
+
+/*
+ * A goal column past the target line's end keeps the behaviour HEAD
+ * landed for grapheme columns: the caret rests AFTER the last character,
+ * on every line including the buffer's final one, which is the only line
+ * without a trailing newline to stand on.
+ */
+void test_units_vertical_goal_past_the_end_still_clamps_after_the_last(void)
+{
+    static const UnitFixture fixture = {units_tab_indent,
+                                        sizeof(units_tab_indent) - 1U};
+    UnitTestCtx ctx;
+    Cursor cursor;
+
+    /* Up from the final line to `    fn total`, whose content ends at 12. */
+    unit_ctx_init(&ctx, &fixture);
+    tab_ctx_cursor(&ctx, &cursor, 42U, 99U);
+    YEW_ASSERT_EQ_U64(yew_unit_line.prev(&ctx.unit, cursor.pos, true).v,
+                      12U);
+    tab_ctx_release(&ctx);
+
+    /* Down onto the final line, which ends at the buffer's end. */
+    unit_ctx_init(&ctx, &fixture);
+    tab_ctx_cursor(&ctx, &cursor, 32U, 99U);
+    YEW_ASSERT_EQ_U64(yew_unit_line.next(&ctx.unit, cursor.pos, false).v,
+                      50U);
+    tab_ctx_release(&ctx);
+}

@@ -1435,3 +1435,37 @@ void test_multicursor_boundary_guards_name_their_constraints(void)
     assert_boundary_guard(BOUNDARY_LSP_EDIT,
                           "LSP edits require one primary cursor");
 }
+
+/*
+ * Every cursor carries its own goal column, and a goal column is a
+ * SCREEN column: a tab is one grapheme but four cells, so two cursors
+ * that start four cells apart on a space-indented line must stay four
+ * cells apart when they cross onto tab-indented lines.
+ */
+void test_multicursor_vertical_goals_are_per_cursor_over_tabs(void)
+{
+    static const u8 text[] =
+        "    fn total\n"     /* [0,13)  cells 4 and 8 at 4 and 8   */
+        "\tvar acc = zero\n" /* [13,29) cells 4 and 8 at 14 and 18 */
+        "  \tmixed";         /* [29,37) cells 4 and 8 at 32 and 36 */
+    TextBuf *tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
+    CursorSet set;
+
+    yew_cset_init(&set, test_cursor(4U, 4U, 4U));
+    YEW_ASSERT(yew_cset_add(&set, test_cursor(8U, 8U, 8U)));
+    yew_cset_normalize(tb, &set);
+    YEW_ASSERT_EQ_U64(set.curs.len, 2U);
+
+    yew_cursor_down(tb, &set.curs.data[0]);
+    yew_cursor_down(tb, &set.curs.data[1]);
+    assert_cursor(&set.curs.data[0], 14U, 14U, 4U);
+    assert_cursor(&set.curs.data[1], 18U, 18U, 8U);
+
+    yew_cursor_down(tb, &set.curs.data[0]);
+    yew_cursor_down(tb, &set.curs.data[1]);
+    assert_cursor(&set.curs.data[0], 32U, 32U, 4U);
+    assert_cursor(&set.curs.data[1], 36U, 36U, 8U);
+
+    yew_cset_free(&set);
+    yew_textbuf_free(tb);
+}
