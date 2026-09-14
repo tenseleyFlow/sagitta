@@ -23,7 +23,7 @@ recorded in `audit-00.md`.
 | YEW-F-008 | H | fixed | F08 FL | ~~unprivileged plugin macro replay inherits config authority~~ — fixed 2026-09-13 in `8995bb1f` | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 | YEW-F-009 | M | fixed | F09 REC | ~~recorder folding self-test no longer reaches its injected fault~~ — fixed 2026-09-13 in `1c11ebee` | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
 | YEW-F-010 | M | fixed | F09 REC | ~~macro store accepts source that fails on first replay~~ — fixed 2026-09-13 in `c362cefd` | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
-| YEW-F-011 | M | open | F10 SYN | matching source metadata can retain stale syntax tables | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
+| YEW-F-011 | M | fixed | F10 SYN | ~~matching source metadata can retain stale syntax tables~~ — fixed 2026-09-13 in `2c9c7431` | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
 | YEW-F-012 | M | open | F10 SYN | pending embeds occupy a canonical state tail slot | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
 | YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
 | YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
@@ -220,15 +220,14 @@ source-positioned diagnostic and leaves the old register untouched. The
 candidate is never executed during validation, so editor, shell, and I/O side
 effects still occur only on an explicit replay.
 
-`YEW-F-011` is Medium because an equal-size syntax source replacement whose
-nanosecond mtime is restored can retain the old compiled table. Highlighting
-is stale but recoverable, and document bytes remain intact. The cache header
-records the source hash as the authority, but `yew_syn_def_load` accepts an
-in-memory entry on matching size and mtime before hashing the source. The
-reproducer installs an isolated builtin-shaped `runtime/syntax/ini.fl`, loads
-an `x` rule, replaces it with an equal-size `y` rule, restores the exact
-timestamp, and observes zero recompiles plus the stale `x` rule. It remains
-open for Sprint 59; no product source changed during the audit.
+`YEW-F-011` was Medium because an equal-size syntax source replacement whose
+nanosecond mtime was restored could retain the old compiled table. Commit
+`2c9c7431` makes the source hash authoritative for every cache hit, including
+builtin definitions whose metadata appears unchanged. A matching hash still
+avoids syntax recompilation, and matching metadata avoids an unnecessary
+cache-header rewrite; only changed bytes force table recompilation. The
+isolated builtin-shaped reproducer now loads its replacement `y` rule and
+records exactly one compile.
 
 `YEW-F-012` is Medium because the documented canonical state law and the
 pending-embed mechanism disagree, weakening the promised equality and cache
