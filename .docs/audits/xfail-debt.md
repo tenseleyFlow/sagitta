@@ -62,7 +62,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-049 | audit | `tests/audit/f15_ban_misses.c` | ~~CI golden-update ban depends on contiguous spelling~~ — fixed in `58684ebb` | fixed |
 | YEW-F-050 | audit | `tests/audit/f15_ban_misses.c` | ~~piece-tree I/O ban omits `pread`~~ — fixed in `6cf5e51c` | fixed |
 | YEW-F-051 | audit | `tests/audit/f15_ban_misses.c` | ~~shadow-preview ban accepts manual destructive fill~~ — fixed in `910ea6be` | fixed |
-| YEW-F-052 | audit | `tests/audit/f15_ban_misses.c` | FUSS drawer ban accepts indirect pane-root replacement | open |
+| YEW-F-052 | audit | `tests/audit/f15_ban_misses.c` | ~~FUSS drawer ban accepts indirect pane-root replacement~~ — fixed in `6db23a13` | fixed |
 | YEW-F-053 | audit | `tests/audit/f15_ban_misses.c` | deterministic-fuzz ban omits `random` | open |
 | YEW-F-054 | audit | `tests/audit/f15_ban_misses.c` | clipboard shell ban omits direct shell exec | open |
 | YEW-F-055 | audit | `tests/audit/f15_ban_misses.c` | job-interpolation ban accepts raw append into shell text | open |

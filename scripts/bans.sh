@@ -645,8 +645,15 @@ if [ "$(wc -l <"$tmp/shadow-fill-seed-hits" | tr -d ' ')" != "1" ]; then
 fi
 fuss_mode_files=$tmp/fuss-mode-files
 printf '%s\n' "$repo_dir/src/mod/git/fussmode.c" >"$fuss_mode_files"
+# YEW-F-052: taking the live pane-root address permits a later indirect
+# replacement, so the drawer boundary forbids both that escape and assignment.
+fuss_pane_root_write_pattern='pane_root[[:space:]]*=[[:space:]]*($|[^=])|&[[:space:]]*([[:alnum:]_]+[[:space:]]*(->|\.)[[:space:]]*)*pane_root([^[:alnum:]_]|$)'
 scan "F mode is a drawer and must not replace the live pane root" \
-    'pane_root[[:space:]]*=' "$fuss_mode_files"
+    "$fuss_pane_root_write_pattern" "$fuss_mode_files"
+scan_seed "FUSS pane-root ownership" "$fuss_pane_root_write_pattern" \
+    'PaneNode **slot = &ed->panes.pane_root;'
+scan_seed "FUSS direct pane-root replacement" \
+    "$fuss_pane_root_write_pattern" 'ed->pane_root ='
 scan "generated edit campaigns must use xorshift64*, not libc randomness" \
     '(^|[^[:alnum:]_])rand[[:space:]]*\(|(^|[^[:alnum:]_])srand[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)' \
     "$deterministic_fuzz_files"
