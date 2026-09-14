@@ -317,8 +317,12 @@ scan "compiler time macros break reproducible builds" \
     "$repro_time_pattern" "$source_files"
 scan_seed "compiler time macros" "$repro_time_pattern" \
     'const char *seeded = __TIMESTAMP__;'
+# YEW-F-034: forwarding mmap through an object-like macro retains the same
+# truncate/SIGBUS hazard, so reject the alias definition and direct calls.
+mmap_pattern='(^|[^[:alnum:]_])mmap[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+mmap([^[:alnum:]_]|$)'
 scan "mmap risks SIGBUS after truncation" \
-    '(^|[^[:alnum:]_])mmap[[:space:]]*\(' "$source_files"
+    "$mmap_pattern" "$source_files"
+scan_seed "mmap macro forwarding" "$mmap_pattern" '#define MAP_FILE mmap'
 scan "source allocations must use the audited yew allocator" \
     '(^|[^[:alnum:]_])(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)[[:space:]]*\(' \
     "$allocator_files"
