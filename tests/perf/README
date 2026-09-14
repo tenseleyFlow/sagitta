@@ -205,12 +205,14 @@ drift check pass; a failure leaves the tracked baseline byte-identical.
 
 `make perf-noise` is the F072 evidence run after a reference and baseline
 exist. It refuses a non-Linux host, a runner/ISA mismatch, an invalid
-reference, or a missing baseline. It retains exactly 30 complete quick+huge
-run logs below `build/perf-noise/campaign-*/`, then reports each designated
-metric's p05/p50/p95 and one-sided regression noise. For `le` gates the noisy
-tail is p95 above p50; for `ge` gates it is p05 below p50. Noise at or above
-the 100-permille relative-regression threshold fails: a threshold inside its
-own measured noise is not a release gate.
+reference, a missing baseline, or tracked source/index changes. It retains
+exactly 30 complete quick+huge run logs below
+`build/perf-noise/campaign-*/`, then reports each designated metric's
+p05/p50/p95 and one-sided regression noise. The report binds the run to the
+source commit and the SHA-256 of both designated inputs. For `le` gates the
+noisy tail is p95 above p50; for `ge` gates it is p05 below p50. Noise at or
+above the 100-permille relative-regression threshold fails: a threshold
+inside its own measured noise is not a release gate.
 
 The bootstrap order on each pinned host is:
 

@@ -87,10 +87,32 @@ cat >"$scratch/uname" <<'EOF'
 case $1 in
     -s) echo Linux ;;
     -m) echo "${FAKE_ARCH:-x86_64}" ;;
+    -r) echo 6.12-test ;;
     *) exit 2 ;;
 esac
 EOF
 chmod +x "$scratch/uname"
+
+cat >"$scratch/git" <<'EOF'
+#!/bin/sh
+case $1 in
+    rev-parse) echo 0123456789abcdef0123456789abcdef01234567 ;;
+    diff) exit "${FAKE_GIT_DIRTY:-0}" ;;
+    *) exit 2 ;;
+esac
+EOF
+chmod +x "$scratch/git"
+
+cat >"$scratch/sha256sum" <<'EOF'
+#!/bin/sh
+case $1 in
+    *reference) hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;;
+    *baseline) hash=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ;;
+    *) exit 2 ;;
+esac
+echo "$hash  $1"
+EOF
+chmod +x "$scratch/sha256sum"
 
 cat >"$scratch/make" <<'EOF'
 #!/bin/sh
@@ -126,6 +148,7 @@ echo baseline >"$scratch/baseline"
 BUILD=$scratch/build PERF_RUNNER_ID=perf-x86_64-linux-gnu \
 CALIB_REFERENCE=$scratch/reference PERF_BASELINE=$scratch/baseline \
 PERF_BUDGETS=$scratch/budgets YEW_PERF_UNAME=$scratch/uname \
+YEW_PERF_GIT=$scratch/git YEW_PERF_SHA256=$scratch/sha256sum \
     "$runner" "$scratch/make" >"$scratch/runner.out" ||
     fail '30-run campaign driver failed'
 grep -F 'metrics=2 runs=30 failures=0' "$scratch/runner.out" >/dev/null ||
@@ -134,15 +157,33 @@ set -- "$scratch"/build/perf-noise/campaign-*/run-*.log
 [ "$#" -eq 30 ] || fail 'campaign driver did not retain exactly 30 logs'
 set -- "$scratch"/build/perf-noise/campaign-*/noise-floor.txt
 [ "$#" -eq 1 ] || fail 'campaign driver did not retain its report'
+grep -F 'source_commit 0123456789abcdef0123456789abcdef01234567' "$1" \
+    >/dev/null || fail 'report omitted source provenance'
+grep -F 'reference_sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    "$1" >/dev/null || fail 'report omitted reference provenance'
+grep -F 'baseline_sha256 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+    "$1" >/dev/null || fail 'report omitted baseline provenance'
 
 set +e
 FAKE_ARCH=arm64 BUILD=$scratch/mismatch \
 PERF_RUNNER_ID=perf-x86_64-linux-gnu CALIB_REFERENCE=$scratch/reference \
 PERF_BASELINE=$scratch/baseline PERF_BUDGETS=$scratch/budgets \
-YEW_PERF_UNAME=$scratch/uname "$runner" "$scratch/make" \
+YEW_PERF_UNAME=$scratch/uname YEW_PERF_GIT=$scratch/git \
+YEW_PERF_SHA256=$scratch/sha256sum "$runner" "$scratch/make" \
     >"$scratch/mismatch.out" 2>&1
 status=$?
 set -e
 [ "$status" -eq 2 ] || fail 'runner/ISA mismatch was accepted'
+
+set +e
+FAKE_GIT_DIRTY=1 BUILD=$scratch/dirty \
+PERF_RUNNER_ID=perf-x86_64-linux-gnu CALIB_REFERENCE=$scratch/reference \
+PERF_BASELINE=$scratch/baseline PERF_BUDGETS=$scratch/budgets \
+YEW_PERF_UNAME=$scratch/uname YEW_PERF_GIT=$scratch/git \
+YEW_PERF_SHA256=$scratch/sha256sum "$runner" "$scratch/make" \
+    >"$scratch/dirty.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail 'dirty evidence checkout was accepted'
 
 echo 'perf noise test: ok'
