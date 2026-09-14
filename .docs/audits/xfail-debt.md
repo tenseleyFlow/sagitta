@@ -40,8 +40,8 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-027 | audit | `tests/audit/f15_ban_misses.c` | ~~Fletch format ban accepts macro-forwarded nonliteral formats~~ — fixed in `c371b5a4` | fixed |
 | YEW-F-028 | audit | `tests/audit/f15_ban_misses.c` | ~~Fletch abort ban accepts macro-forwarded abort~~ — fixed in `f6c8075d` | fixed |
 | YEW-F-029 | audit | `tests/audit/f15_ban_misses.c` | ~~stable-sort ban accepts macro-forwarded qsort~~ — fixed in `0e2ab552` | fixed |
-| YEW-F-030 | audit | `tests/audit/f15_ban_misses.c` | C11-subset ban accepts token-pasted attribute syntax | open |
-| YEW-F-031 | audit | `tests/audit/f15_ban_misses.c` | explicit-registry ban accepts token-pasted constructors | open |
+| YEW-F-030 | audit | `tests/audit/f15_ban_misses.c` | ~~C11-subset ban accepts token-pasted attribute syntax~~ — fixed in `ccfc924c` | fixed |
+| YEW-F-031 | audit | `tests/audit/f15_ban_misses.c` | ~~explicit-registry ban accepts token-pasted constructors~~ — fixed in `ccfc924c` | fixed |
 | YEW-F-032 | audit | `tests/audit/f15_ban_misses.c` | single-thread ban accepts token-pasted pthread calls | open |
 | YEW-F-033 | audit | `tests/audit/f15_ban_misses.c` | reproducibility ban omits `__TIMESTAMP__` | open |
 | YEW-F-034 | audit | `tests/audit/f15_ban_misses.c` | mmap ban accepts macro-forwarded calls | open |
