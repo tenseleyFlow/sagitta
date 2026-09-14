@@ -1158,12 +1158,25 @@ if [ ! -f "$pty_registry" ]; then
 else
     pty_cases=$tmp/pty-cases
     golden_refs=$tmp/golden-refs
+    pty_snapshot_hits=$tmp/pty-snapshot-hits
     sed -n 's/^[[:space:]]*C[[:space:]]*([[:space:]]*\([[:alnum:]_]*\).*/\1/p' \
         "$pty_registry" | LC_ALL=C sort -u >"$pty_cases"
     if [ "$(wc -l <"$pty_cases" | tr -d ' ')" -lt 12 ]; then
         echo "ban: fewer than 12 registered pty cases" >>"$hits"
     fi
-    sed -n 's/.*ptc_snapshot[[:space:]]*([^,]*,[[:space:]]*"\([^"]*\)".*/\1/p' \
+    # YEW-F-070: every selected golden must be statically reviewable as either
+    # a literal or the exact registered case name.  Arbitrary computed names
+    # cannot be checked for existence without executing the PTY case.
+    grep -nE '(^|[^[:alnum:]_])ptc_snapshot(_sgr)?[[:space:]]*[(]' \
+        "$pty_registry" |
+        grep -vE 'ptc_snapshot(_sgr)?[[:space:]]*[(][[:space:]]*c[[:space:]]*,[[:space:]]*("[[:alnum:]_-]+"|c->test->name)[[:space:]]*[)][[:space:]]*;' \
+        >"$pty_snapshot_hits" || :
+    if [ -s "$pty_snapshot_hits" ]; then
+        echo "ban: PTY snapshot name must be literal or registered case name" \
+            >>"$hits"
+        cat "$pty_snapshot_hits" >>"$hits"
+    fi
+    sed -n 's/.*ptc_snapshot\(_sgr\)\{0,1\}[[:space:]]*([^,]*,[[:space:]]*"\([^"]*\)".*/\2/p' \
         "$pty_registry" | LC_ALL=C sort -u >"$golden_refs"
     while IFS= read -r name; do
         [ -n "$name" ] || continue
