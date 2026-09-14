@@ -83,7 +83,7 @@ recorded in `audit-00.md`.
 | YEW-F-068 | M | fixed | F15 CI | ~~unit-registry ban omits static test definitions~~ — fixed 2026-09-14 in `b159ff7d` | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
 | YEW-F-069 | M | fixed | F15 CI | ~~PTY minimum-case gate skips a missing registry~~ — fixed 2026-09-14 in `95695028` | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
 | YEW-F-070 | M | fixed | F15 CI | ~~PTY golden gate accepts computed missing names~~ — fixed 2026-09-14 in `613e23aa` | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
-| YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
+| YEW-F-071 | M | fixed | F15 CI | ~~PTY orphan gate counts dead preprocessor rows~~ — fixed 2026-09-14 in `e5cec738` | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
 | YEW-F-073 | M | open | F15 CI | baseline history policy is not enforced | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
 | YEW-F-074 | H | fixed | F15 CI | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed 2026-09-13 in `16761aba` | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
@@ -610,10 +610,10 @@ to the missing-golden extractor. Commit `613e23aa` restricts every snapshot
 selection to an auditable literal or the exact registered case name, and checks
 literal names from both plain and SGR snapshot calls for committed goldens.
 
-`YEW-F-071` is Medium because the PTY case extractor does not honor the C
-preprocessor. A `C(orphan)` row under `#if 0` persuades the gate that an orphan
-golden is live even though the compiler removes the row. It remains open for
-Sprint 59.
+`YEW-F-071` was Medium because the PTY case extractor did not honor the C
+preprocessor. Commit `e5cec738` removes provably dead constant branches before
+inventorying cases and snapshots while conservatively retaining both sides of
+module-dependent conditions.
 
 `YEW-F-072` is Medium because the two designated lanes cannot currently
 produce a performance verdict: both committed calibration references and the
