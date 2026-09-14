@@ -25,7 +25,7 @@ void test_register_append_char_char(void)
     yew_reg_init(&r);
     append_value(&a, YEW_REG_CHARWISE, "left");
     append_value(&b, YEW_REG_CHARWISE, "right");
-    yew_reg_set(&r, 'a', &a);
+    yew_reg_set_macro(&r, 'a', &a, false);
     yew_reg_append(&r, 'A', &b);
     append_assert(&r.named[0], YEW_REG_CHARWISE, "leftright");
     yew_regval_free(&b); yew_regval_free(&a); yew_reg_free(&r);
@@ -39,7 +39,7 @@ void test_register_append_char_line_uses_line_eol(void)
     yew_reg_init(&r);
     append_value(&a, YEW_REG_CHARWISE, "left");
     append_value(&b, YEW_REG_LINEWISE, "right\r\n");
-    yew_reg_set(&r, 'a', &a);
+    yew_reg_set_macro(&r, 'a', &a, false);
     yew_reg_append(&r, 'A', &b);
     append_assert(&r.named[0], YEW_REG_LINEWISE, "left\r\nright\r\n");
     yew_regval_free(&b); yew_regval_free(&a); yew_reg_free(&r);
@@ -53,7 +53,7 @@ void test_register_append_line_char_preserves_destination_eol(void)
     yew_reg_init(&r);
     append_value(&a, YEW_REG_LINEWISE, "left\r\n");
     append_value(&b, YEW_REG_CHARWISE, "right");
-    yew_reg_set(&r, 'a', &a);
+    yew_reg_set_macro(&r, 'a', &a, false);
     yew_reg_append(&r, 'A', &b);
     append_assert(&r.named[0], YEW_REG_LINEWISE, "left\r\nright\r\n");
     yew_regval_free(&b); yew_regval_free(&a); yew_reg_free(&r);
@@ -67,7 +67,7 @@ void test_register_append_line_line_is_byte_exact(void)
     yew_reg_init(&r);
     append_value(&a, YEW_REG_LINEWISE, "left\n");
     append_value(&b, YEW_REG_LINEWISE, "right\r\n");
-    yew_reg_set(&r, 'a', &a);
+    yew_reg_set_macro(&r, 'a', &a, false);
     yew_reg_append(&r, 'A', &b);
     append_assert(&r.named[0], YEW_REG_LINEWISE, "left\nright\r\n");
     yew_regval_free(&b); yew_regval_free(&a); yew_reg_free(&r);
@@ -83,7 +83,7 @@ void test_register_append_refuses_mixed_block_without_mutation(void)
     append_value(&block, YEW_REG_BLOCKWISE, "xx");
     block.width = 2U;
     YewRegRowVec_push(&block.rows, ((Span){0U, 2U}));
-    yew_reg_set(&r, 'a', &chars);
+    yew_reg_set_macro(&r, 'a', &chars, false);
     yew_test_capture_log();
     yew_reg_append(&r, 'A', &block);
     append_assert(&r.named[0], YEW_REG_CHARWISE, "keep");
