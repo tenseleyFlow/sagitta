@@ -54,8 +54,8 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-041 | audit | `tests/audit/f15_ban_misses.c` | ~~musl backtrace ban omits `backtrace_symbols_fd`~~ — fixed in `aec0fe6b` | fixed |
 | YEW-F-042 | audit | `tests/audit/f15_ban_misses.c` | ~~GNU-libc ban omits `getopt_long_only`~~ — fixed in `aec0fe6b` | fixed |
 | YEW-F-043 | audit | `tests/audit/f15_ban_misses.c` | ~~long-double ban misses valid continued declarations~~ — fixed in `4b2b0f02` | fixed |
-| YEW-F-044 | audit | `tests/audit/f15_ban_misses.c` | shim-honesty gate accepts parenthesized success | open |
-| YEW-F-045 | audit | `tests/audit/f15_ban_misses.c` | Unicode-width ban accepts decimal local tables | open |
+| YEW-F-044 | audit | `tests/audit/f15_ban_misses.c` | ~~shim-honesty gate accepts parenthesized success~~ — fixed in `75bfedf5` | fixed |
+| YEW-F-045 | audit | `tests/audit/f15_ban_misses.c` | ~~Unicode-width ban accepts decimal local tables~~ — fixed in `31497135` | fixed |
 | YEW-F-046 | audit | `tests/audit/f15_ban_misses.c` | syntax-color ban accepts packed decimal colors | open |
 | YEW-F-047 | audit | `tests/audit/f15_ban_misses.c` | syntax-width ban accepts local width arithmetic | open |
 | YEW-F-048 | audit | `tests/audit/f15_ban_misses.c` | PTY-creation ban omits direct `posix_openpt` callers | open |
@@ -71,7 +71,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-058 | audit | `tests/audit/f15_ban_misses.c` | register choke-point ban accepts allowed-file wrappers | open |
 | YEW-F-059 | audit | `tests/audit/f15_ban_misses.c` | option choke-point ban accepts allowed-file wrappers | open |
 | YEW-F-060 | audit | `tests/audit/f15_ban_misses.c` | package-git ban accepts allowed-file wrappers on startup | open |
-| YEW-F-061 | audit | `tests/audit/f15_ban_misses.c` | register-width ban accepts local lookup tables | open |
+| YEW-F-061 | audit | `tests/audit/f15_ban_misses.c` | ~~register-width ban accepts local lookup tables~~ — fixed in `31497135` | fixed |
 | YEW-F-062 | audit | `tests/audit/f15_ban_misses.c` | register-column ban depends on historical variable names | open |
 | YEW-F-063 | audit | `tests/audit/f15_ban_misses.c` | register-helper presence gate accepts comments | open |
 | YEW-F-064 | audit | `tests/audit/f15_ban_misses.c` | oracle-independence ban accepts copied renamed models | open |

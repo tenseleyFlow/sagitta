@@ -514,8 +514,14 @@ if ! "$repo_dir/scripts/check-module-shims.sh" >"$shim_check" 2>&1; then
     echo "ban: disabled-module header/shim parity or honesty failed" >>"$hits"
     cat "$shim_check" >>"$hits"
 fi
+# YEW-F-045 and YEW-F-061: decimal constants name the same width-sensitive
+# code points as their hexadecimal spellings. Catching them at the shared
+# Unicode boundary also prevents register-local lookup tables.
+unicode_width_pattern='(^|[^[:alnum:]_])(0[xX]1[fF]3[fF][bB]|0[xX][fF][eE]0[fF]|0[xX]200[dD]|127995|65039|8205)[uUlL]*([^[:alnum:]_]|$)|EastAsian'
 scan "Unicode width math belongs only in src/unicode" \
-    '(0x1F3FB|0xFE0F|0x200D|EastAsian)' "$non_unicode_files"
+    "$unicode_width_pattern" "$non_unicode_files"
+scan_seed "decimal Unicode width constants" "$unicode_width_pattern" \
+    'static const unsigned seeded[] = { 127995U, 65039U, 8205U };'
 scan "syntax definitions emit semantic attrs, never colors" \
     '(#[0-9a-fA-F]{6}|[Rr][Gg][Bb]|38;2|48;5)' "$syn_files"
 scan "syntax owns byte spans; width math belongs in src/unicode" \
