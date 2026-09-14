@@ -25,6 +25,44 @@ printf '%s\n' 'tests/size/ledger-full.txt' |
     "$guard" --stdin >"$scratch/size-only.out" ||
     fail 'rejected a size-baseline-only change'
 
+history=$scratch/history
+git init -q "$history"
+git -C "$history" config user.name 'yew baseline test'
+git -C "$history" config user.email 'baseline@example.invalid'
+git -C "$history" config commit.gpgsign false
+mkdir -p "$history/scripts" "$history/tests/perf/baselines"
+cp "$guard" "$history/scripts/perf-baseline-guard.sh"
+printf '%s\n' 'metric 100 110 120 0 initial measurement' \
+    >"$history/tests/perf/baselines/perf-test.txt"
+git -C "$history" add scripts/perf-baseline-guard.sh \
+    tests/perf/baselines/perf-test.txt
+git -C "$history" commit -q -m 'Seed baseline history fixture'
+printf '%s\n' 'metric 200 220 240 0 measured movement' \
+    >"$history/tests/perf/baselines/perf-test.txt"
+git -C "$history" add tests/perf/baselines/perf-test.txt
+git -C "$history" commit -q -m 'Refresh numbers'
+if (cd "$history" && scripts/perf-baseline-guard.sh --commit HEAD) \
+        >"$scratch/unexplained.out" 2>&1; then
+    fail 'accepted an unexplained baseline-only commit'
+fi
+
+git -C "$history" commit -q --amend \
+    -m 'perf: rebaseline audit fixture' \
+    -m 'Baseline-delta: metric 101 -> 200' \
+    -m 'Baseline-reason: measured fixture movement after calibration'
+if (cd "$history" && scripts/perf-baseline-guard.sh --commit HEAD) \
+        >"$scratch/false-delta.out" 2>&1; then
+    fail 'accepted a delta absent from the baseline diff'
+fi
+
+git -C "$history" commit -q --amend \
+    -m 'perf: rebaseline audit fixture' \
+    -m 'Baseline-delta: metric 100 -> 200' \
+    -m 'Baseline-reason: measured fixture movement after calibration'
+(cd "$history" && scripts/perf-baseline-guard.sh --commit HEAD) \
+    >"$scratch/explained.out" ||
+    fail 'rejected an explained baseline-only commit'
+
 set +e
 printf '%s\n' \
     'src/edit/loop.c' \
