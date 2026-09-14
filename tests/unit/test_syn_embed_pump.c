@@ -18,6 +18,8 @@ void test_syn_embed_pump_is_idle_only_and_loads_one(void)
     SynDef *def;
     SynEngine *engine;
     SynBuf syn;
+    TextBuf *tb;
+    SynSettleReport report;
     SynSpan spans[8];
     SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
     const SynState *pending;
@@ -26,6 +28,7 @@ void test_syn_embed_pump_is_idle_only_and_loads_one(void)
     u32 warnings = 0U;
     u32 file;
     u32 js = yew_syn_lang_by_name((const u8 *)"javascript", 10U);
+    u8 slot;
     char status[256];
 
     arena_init(&arena);
@@ -50,19 +53,27 @@ void test_syn_embed_pump_is_idle_only_and_loads_one(void)
     YEW_ASSERT_EQ_U64(pending->depth, 2U);
     YEW_ASSERT_EQ_U64(pending->ndef, 1U);
     YEW_ASSERT((pending->flags & YEW_SYN_F_EMBED_PEND) != 0U);
-    YEW_ASSERT_EQ_U64(pending->aux[pending->ndef], js);
+    for (slot = pending->ndef; slot < YEW_SYN_DEF_MAX; slot++)
+        YEW_ASSERT_EQ_U64(pending->aux[slot], 0U);
 
     yew_syn_buf_init(&syn);
-    syn.engine = engine;
-    syn.lang = 1U;
-    syn.entry.data = malloc(2U * sizeof(*syn.entry.data));
-    YEW_ASSERT_NOT_NULL(syn.entry.data);
-    syn.entry.len = 2U;
-    syn.entry.cap = 2U;
-    syn.entry.data[0] = YEW_SYN_STATE_ROOT;
-    syn.entry.data[1] = out.exit_state;
-    syn.wave = LINENO(1U);
-    syn.settled_to = LINENO(2U);
+    yew_syn_buf_bind(&syn, engine);
+    tb = yew_textbuf_from_bytes((const u8 *)"OPENbody\nnext\n", 14U);
+    YEW_ASSERT_NOT_NULL(tb);
+    yew_syn_attach(&syn, 1U, tb);
+    yew_syn_settle(&syn, tb, LINENO(0U), LINENO(2U), INT64_MAX,
+                   &report);
+    YEW_ASSERT(report.fixpoint);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
+    YEW_ASSERT_EQ_U64(syn.embed_pending_count, 1U);
+    YEW_ASSERT_EQ_U64(syn.embed_pending, js);
+    YEW_ASSERT_EQ_U64(syn.embed_pending_line.v, 0U);
+    pending = yew_syn_state_get(yew_syn_engine_states(engine),
+                                syn.entry.data[1]);
+    YEW_ASSERT_NOT_NULL(pending);
+    YEW_ASSERT((pending->flags & YEW_SYN_F_EMBED_PEND) != 0U);
+    for (slot = pending->ndef; slot < YEW_SYN_DEF_MAX; slot++)
+        YEW_ASSERT_EQ_U64(pending->aux[slot], 0U);
 
     YEW_ASSERT(!yew_syn_embed_pump(&syn, engine,
                                    YEW_SYN_FRAME_BUDGET_US));
@@ -95,10 +106,8 @@ void test_syn_embed_pump_is_idle_only_and_loads_one(void)
     YEW_ASSERT(strstr(status, "defs=2/4 depth=3/16") != NULL);
     YEW_ASSERT(strstr(status, "embed_pending=0") != NULL);
 
-    free(syn.entry.data);
-    syn.entry.data = NULL;
-    syn.entry.len = 0U;
-    syn.entry.cap = 0U;
+    yew_syn_detach(&syn);
+    yew_textbuf_free(tb);
     yew_syn_engine_free(engine);
     yew_syn_def_dispose(def);
     arena_free_all(&arena);
