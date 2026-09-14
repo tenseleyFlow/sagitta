@@ -61,7 +61,7 @@ recorded in `audit-00.md`.
 | YEW-F-046 | M | fixed | F15 CI | ~~syntax-color ban accepts packed decimal colors~~ — fixed 2026-09-14 in `76f2fed1` | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
 | YEW-F-047 | M | fixed | F15 CI | ~~syntax-width ban accepts local width arithmetic~~ — fixed 2026-09-14 in `41512e2c` | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
 | YEW-F-048 | M | fixed | F15 CI | ~~PTY-creation ban omits direct `posix_openpt` callers~~ — fixed 2026-09-14 in `674574eb` | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
-| YEW-F-049 | M | open | F15 CI | CI golden-update ban depends on contiguous spelling | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
+| YEW-F-049 | M | fixed | F15 CI | ~~CI golden-update ban depends on contiguous spelling~~ — fixed 2026-09-14 in `58684ebb` | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
 | YEW-F-050 | M | open | F15 CI | piece-tree I/O ban omits `pread` | tests/audit/f15_ban_misses.c | s08 I/O ownership; s58 F15 q2 |
 | YEW-F-051 | M | open | F15 CI | shadow-preview ban accepts manual destructive fill | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
 | YEW-F-052 | M | open | F15 CI | FUSS drawer ban accepts indirect pane-root replacement | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
@@ -493,7 +493,9 @@ and restricts them to the four audited fixtures that require direct ownership.
 `YEW-F-049` is Medium because shell token concatenation constructs the golden
 update environment name at execution time while preventing its contiguous
 appearance in workflow source. CI could therefore enable updates while the
-gate stays green. It remains open for Sprint 59.
+gate stayed green. Commit `58684ebb` scans spliced logical workflow lines for
+the prefixed update word even when quotes divide its runtime spelling and
+makes empty workflow lists a successful no-op rather than a silent abort.
 
 `YEW-F-050` is Medium because the piece-tree I/O ban lists `open`, `fopen`, and
 `read`, but direct `pread` retains the forbidden file-I/O ownership and passes.
