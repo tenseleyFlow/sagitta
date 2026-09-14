@@ -59,7 +59,7 @@ recorded in `audit-00.md`.
 | YEW-F-044 | M | fixed | F15 CI | ~~shim-honesty gate accepts parenthesized success~~ — fixed 2026-09-14 in `75bfedf5` | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
 | YEW-F-045 | M | fixed | F15 CI | ~~Unicode-width ban accepts decimal local tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
 | YEW-F-046 | M | fixed | F15 CI | ~~syntax-color ban accepts packed decimal colors~~ — fixed 2026-09-14 in `76f2fed1` | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
-| YEW-F-047 | M | open | F15 CI | syntax-width ban accepts local width arithmetic | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
+| YEW-F-047 | M | fixed | F15 CI | ~~syntax-width ban accepts local width arithmetic~~ — fixed 2026-09-14 in `41512e2c` | tests/audit/f15_ban_misses.c | s40 byte-span ownership; s58 F15 q2 |
 | YEW-F-048 | M | open | F15 CI | PTY-creation ban omits direct `posix_openpt` callers | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
 | YEW-F-049 | M | open | F15 CI | CI golden-update ban depends on contiguous spelling | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
 | YEW-F-050 | M | open | F15 CI | piece-tree I/O ban omits `pread` | tests/audit/f15_ban_misses.c | s08 I/O ownership; s58 F15 q2 |
@@ -480,8 +480,9 @@ positive control.
 
 `YEW-F-047` is Medium because syntax-local cell width arithmetic needs none of
 the two helper names the gate scans. A simple wide-threshold calculation
-passes even though syntax is required to own byte spans only. It remains open
-for Sprint 59.
+passed even though syntax is required to own byte spans only. Commit
+`41512e2c` recognizes the East Asian threshold in hexadecimal and decimal
+forms and pins the local calculation with an internal positive control.
 
 `YEW-F-048` is Medium because the PTY rule says creation must use the audited
 `posix_openpt` harness but does not scan for `posix_openpt` itself. A direct
