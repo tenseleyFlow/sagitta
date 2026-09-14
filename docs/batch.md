@@ -265,6 +265,13 @@ sandbox. It runs the equivalent of:
 build/yew --batch --test --clean tests/script/example.fl
 ```
 
+A known failing script may put `# XFAIL: YEW-F-NNN reason` in its contiguous
+leading comment block only when that ID has an active row in
+`.docs/audits/xfail-debt.md`. An assertion or byte-expectation failure is
+reported as `XFAIL`; a passing marked script is a hard `XPASS` and makes the
+runner fail. Setup failures, timeouts, signals, malformed protocols, unknown
+IDs, and already-fixed IDs remain hard failures and cannot satisfy XFAIL.
+
 Use the Make target for the normal suite:
 
 ```sh
@@ -280,6 +287,7 @@ build/script_runner --yew /path/to/yew --filter api_
 ```
 
 `YEW_SCRIPT_BUDGET_MS` changes the default 10,000 ms wall-clock budget per
-test. Passing sandboxes are removed. A failing, crashing, or timed-out test
-preserves its sandbox and prints its path. The runner exits 0 only when every
-selected test passes or skips; a filter matching no tests exits 1.
+test. Passing and expected-failing sandboxes are removed. A failing, crashing,
+or timed-out test preserves its sandbox and prints its path. The runner exits
+0 only when every selected test passes, skips, or fails under an active XFAIL;
+a hard XPASS or a filter matching no tests exits 1.

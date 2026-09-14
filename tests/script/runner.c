@@ -16,7 +16,9 @@
  * an explicit --config path; the runner also pins YEW_RUNTIME_DIR and supplies
  * an absolute YEW_TEST_FAKELSP only through --fakelsp.  An optional sibling
  * <test>.stdout file pins the child's stdout byte-for-byte; tests without one
- * retain the original rules.
+ * retain the original rules.  A contiguous leading comment block may carry
+ * `# XFAIL: YEW-F-NNN reason`; only an active row in the authoritative debt
+ * ledger enables it, and an unexpected pass is a hard XPASS.
  */
 
 #include <dirent.h>
@@ -56,8 +58,34 @@ typedef struct TestFile {
     char *path;
     char *stdout_path;
     char *config_path;
+    char *xfail_id;
+    char *xfail_why;
+    char *config_error;
     bool config;
+    bool config_invalid;
 } TestFile;
+
+typedef struct TestHeader {
+    char *xfail_id;
+    char *xfail_why;
+    char *error;
+    bool config;
+} TestHeader;
+
+typedef enum ScriptVerdict {
+    SCRIPT_PASS = 0,
+    SCRIPT_SKIP,
+    SCRIPT_FAIL,
+    SCRIPT_XFAIL,
+    SCRIPT_XPASS
+} ScriptVerdict;
+
+typedef enum XfailDebtStatus {
+    XFAIL_DEBT_IO = 0,
+    XFAIL_DEBT_ABSENT,
+    XFAIL_DEBT_ACTIVE,
+    XFAIL_DEBT_FIXED
+} XfailDebtStatus;
 
 typedef struct TestList {
     TestFile *data;
@@ -355,19 +383,188 @@ static bool config_header_bytes(const char *data, size_t len)
             (data[n] == '\r' && len > n + 1U && data[n + 1U] == '\n'));
 }
 
-static bool header_requests_config(const char *path)
+static char *span_copy(const char *data, size_t len)
 {
-    char first[10];
-    int fd = open(path, O_RDONLY);
-    ssize_t got;
+    char *copy = malloc(len + 1U);
 
-    if (fd < 0)
+    if (copy == NULL)
+        return NULL;
+    memcpy(copy, data, len);
+    copy[len] = '\0';
+    return copy;
+}
+
+static bool xfail_id_bytes_valid(const char *id, size_t len)
+{
+    size_t i;
+
+    if (len != 9U || memcmp(id, "YEW-F-", 6U) != 0)
         return false;
-    do {
-        got = read(fd, first, sizeof(first));
-    } while (got < 0 && errno == EINTR);
-    (void)close(fd);
-    return got >= 0 && config_header_bytes(first, (size_t)got);
+    for (i = 6U; i < 9U; i++)
+        if (id[i] < '0' || id[i] > '9')
+            return false;
+    return true;
+}
+
+static bool header_set_error(TestHeader *header, const char *message)
+{
+    if (header->error != NULL)
+        return true;
+    header->error = strdup(message);
+    return header->error != NULL;
+}
+
+static bool header_parse_xfail(TestHeader *header, const char *line,
+                               size_t len)
+{
+    static const char prefix[] = "# XFAIL:";
+    const char *id;
+    const char *reason;
+    size_t id_len;
+    size_t reason_len;
+
+    if (len < sizeof(prefix) - 1U ||
+        memcmp(line, prefix, sizeof(prefix) - 1U) != 0)
+        return true;
+    if (header->xfail_id != NULL)
+        return header_set_error(header, "duplicate # XFAIL directive");
+    id = line + sizeof(prefix) - 1U;
+    while ((size_t)(id - line) < len && (*id == ' ' || *id == '\t'))
+        id++;
+    reason = id;
+    while ((size_t)(reason - line) < len &&
+           *reason != ' ' && *reason != '\t')
+        reason++;
+    id_len = (size_t)(reason - id);
+    while ((size_t)(reason - line) < len &&
+           (*reason == ' ' || *reason == '\t'))
+        reason++;
+    reason_len = len - (size_t)(reason - line);
+    while (reason_len != 0U &&
+           (reason[reason_len - 1U] == ' ' ||
+            reason[reason_len - 1U] == '\t'))
+        reason_len--;
+    if (!xfail_id_bytes_valid(id, id_len))
+        return header_set_error(header,
+                                "# XFAIL needs a YEW-F-NNN id");
+    if (reason_len == 0U)
+        return header_set_error(header,
+                                "# XFAIL needs a trailing reason");
+    header->xfail_id = span_copy(id, id_len);
+    header->xfail_why = span_copy(reason, reason_len);
+    return header->xfail_id != NULL && header->xfail_why != NULL;
+}
+
+static bool test_header_bytes(const char *data, size_t len,
+                              TestHeader *header)
+{
+    size_t at = 0U;
+
+    memset(header, 0, sizeof(*header));
+    header->config = config_header_bytes(data, len);
+    while (at < len) {
+        size_t end = at;
+        size_t line_len;
+
+        while (end < len && data[end] != '\n')
+            end++;
+        line_len = end - at;
+        if (line_len != 0U && data[at + line_len - 1U] == '\r')
+            line_len--;
+        if (line_len != 0U && data[at] != '#')
+            break;
+        if (line_len != 0U &&
+            !header_parse_xfail(header, data + at, line_len))
+            return false;
+        if (header->error != NULL)
+            return true;
+        at = end < len ? end + 1U : end;
+    }
+    return true;
+}
+
+static bool test_header_path(const char *path, TestHeader *header)
+{
+    Bytes bytes = {0};
+    bool ok = bytes_read_path(path, &bytes) &&
+              test_header_bytes(bytes.data == NULL ? "" : bytes.data,
+                                bytes.len, header);
+
+    bytes_free(&bytes);
+    return ok;
+}
+
+static void test_header_free(TestHeader *header)
+{
+    free(header->xfail_id);
+    free(header->xfail_why);
+    free(header->error);
+    memset(header, 0, sizeof(*header));
+}
+
+static XfailDebtStatus xfail_debt_line_status(const char *line,
+                                               const char *id)
+{
+    char prefix[32];
+    const char *last;
+    const char *status;
+    size_t prefix_len;
+    size_t status_len;
+    int n = snprintf(prefix, sizeof(prefix), "| %s |", id);
+
+    if (n < 0 || (size_t)n >= sizeof(prefix))
+        return XFAIL_DEBT_ABSENT;
+    prefix_len = (size_t)n;
+    if (strncmp(line, prefix, prefix_len) != 0)
+        return XFAIL_DEBT_ABSENT;
+    last = strrchr(line, '|');
+    if (last == NULL || last == line)
+        return XFAIL_DEBT_ABSENT;
+    status = last;
+    while (status != line && status[-1] != '|')
+        status--;
+    if (status == line)
+        return XFAIL_DEBT_ABSENT;
+    while (status < last && (*status == ' ' || *status == '\t'))
+        status++;
+    status_len = (size_t)(last - status);
+    while (status_len != 0U &&
+           (status[status_len - 1U] == ' ' ||
+            status[status_len - 1U] == '\t'))
+        status_len--;
+    if (status_len == 5U && memcmp(status, "fixed", 5U) == 0)
+        return XFAIL_DEBT_FIXED;
+    if ((status_len == 4U && memcmp(status, "open", 4U) == 0) ||
+        (status_len == 8U && memcmp(status, "deferred", 8U) == 0) ||
+        (status_len == 7U && memcmp(status, "wontfix", 7U) == 0))
+        return XFAIL_DEBT_ACTIVE;
+    return XFAIL_DEBT_ABSENT;
+}
+
+static XfailDebtStatus xfail_debt_status(const char *root, const char *id)
+{
+    char *path = path_join(root, ".docs/audits/xfail-debt.md");
+    char line[4096];
+    FILE *file;
+    XfailDebtStatus status = XFAIL_DEBT_ABSENT;
+
+    if (path == NULL)
+        return XFAIL_DEBT_IO;
+    file = fopen(path, "rb");
+    free(path);
+    if (file == NULL)
+        return XFAIL_DEBT_IO;
+    while (fgets(line, sizeof(line), file) != NULL) {
+        XfailDebtStatus found = xfail_debt_line_status(line, id);
+
+        if (found != XFAIL_DEBT_ABSENT) {
+            status = found;
+            break;
+        }
+    }
+    if (ferror(file) || fclose(file) != 0)
+        return XFAIL_DEBT_IO;
+    return status;
 }
 
 static char *test_name(const char *file)
@@ -383,7 +580,8 @@ static char *test_name(const char *file)
 }
 
 static bool list_push(TestList *list, char *name, char *path,
-                      char *stdout_path, char *config_path, bool config)
+                      char *stdout_path, char *config_path,
+                      TestHeader *header)
 {
     TestFile *grown;
     size_t cap;
@@ -402,7 +600,14 @@ static bool list_push(TestList *list, char *name, char *path,
     list->data[list->len].path = path;
     list->data[list->len].stdout_path = stdout_path;
     list->data[list->len].config_path = config_path;
-    list->data[list->len].config = config;
+    list->data[list->len].xfail_id = header->xfail_id;
+    list->data[list->len].xfail_why = header->xfail_why;
+    list->data[list->len].config_error = header->error;
+    list->data[list->len].config = header->config;
+    list->data[list->len].config_invalid = false;
+    header->xfail_id = NULL;
+    header->xfail_why = NULL;
+    header->error = NULL;
     list->len++;
     return true;
 }
@@ -416,6 +621,9 @@ static void list_free(TestList *list)
         free(list->data[i].path);
         free(list->data[i].stdout_path);
         free(list->data[i].config_path);
+        free(list->data[i].xfail_id);
+        free(list->data[i].xfail_why);
+        free(list->data[i].config_error);
     }
     free(list->data);
     memset(list, 0, sizeof(*list));
@@ -453,7 +661,7 @@ static bool discover(const char *dir_path, TestList *list)
         char *name;
         char *stdout_path = NULL;
         char *config_path = NULL;
-        bool config;
+        TestHeader header = {0};
 
         errno = 0;
         entry = readdir(dir);
@@ -474,19 +682,21 @@ static bool discover(const char *dir_path, TestList *list)
             continue;
         }
         name = test_name(entry->d_name);
-        config = header_requests_config(path);
-        if (name == NULL || !optional_stdout_sibling(path, &stdout_path) ||
-            !optional_config_sibling(path, config, &config_path) ||
-            !list_push(list, name, path, stdout_path, config_path, config)) {
+        if (name == NULL || !test_header_path(path, &header) ||
+            !optional_stdout_sibling(path, &stdout_path) ||
+            !optional_config_sibling(path, header.config, &config_path) ||
+            !list_push(list, name, path, stdout_path, config_path, &header)) {
             free(name);
             free(path);
             if (name != NULL) {
                 free(stdout_path);
                 free(config_path);
             }
+            test_header_free(&header);
             ok = false;
             break;
         }
+        test_header_free(&header);
     }
     if (closedir(dir) != 0)
         ok = false;
@@ -1380,6 +1590,46 @@ static bool format_count_line(char *line, size_t cap, const char *verdict,
     return n >= 0 && (size_t)n < cap;
 }
 
+static bool format_xfail_line(char *line, size_t cap, ScriptVerdict verdict,
+                              const TestFile *test,
+                              const Protocol *protocol)
+{
+    const char *word = verdict == SCRIPT_XFAIL ? "XFAIL" : "XPASS";
+    int n;
+
+    if (verdict == SCRIPT_XFAIL)
+        n = snprintf(line, cap,
+                     "%s %-36s [%s] (%zu assertions, %zu failure%s)\n",
+                     word, test->name, test->xfail_id,
+                     protocol->assertions, protocol->failures,
+                     protocol->failures == 1U ? "" : "s");
+    else
+        n = snprintf(line, cap,
+                     "%s %-36s [%s] (%zu assertions; remove XFAIL)\n",
+                     word, test->name, test->xfail_id,
+                     protocol->assertions);
+    return n >= 0 && (size_t)n < cap;
+}
+
+static ScriptVerdict script_verdict(const TestFile *test,
+                                    const Protocol *protocol,
+                                    const char *reason,
+                                    bool stdout_mismatch)
+{
+    if (reason == NULL && protocol->skipped != 0U)
+        return SCRIPT_SKIP;
+    if (test->xfail_id == NULL)
+        return reason == NULL ? SCRIPT_PASS : SCRIPT_FAIL;
+    if (reason == NULL)
+        return SCRIPT_XPASS;
+    /* YEW-F-025: XFAIL covers a test assertion or byte expectation, never
+     * a runner/setup failure, timeout, signal, or corrupt protocol. */
+    if (protocol->valid &&
+        (protocol->failures != 0U || stdout_mismatch))
+        return SCRIPT_XFAIL;
+    return SCRIPT_FAIL;
+}
+
 static bool finish_sandbox(const char *sandbox, bool passed)
 {
     return !passed || remove_tree(sandbox);
@@ -1692,8 +1942,8 @@ static bool selftest_result_fd_env(void)
 static bool selftest_zero_filter(void)
 {
     TestFile data[] = {
-        {(char *)"alpha", (char *)"alpha.fl", NULL, NULL, false},
-        {(char *)"beta", (char *)"beta.fl", NULL, NULL, false}
+        {.name = (char *)"alpha", .path = (char *)"alpha.fl"},
+        {.name = (char *)"beta", .path = (char *)"beta.fl"}
     };
     TestList tests = {data, sizeof(data) / sizeof(data[0]),
                       sizeof(data) / sizeof(data[0])};
@@ -1765,6 +2015,89 @@ static bool selftest_config_directive(void)
            grant_argv[7] == NULL;
 }
 
+static bool selftest_xfail_header_is_strict(void)
+{
+    static const char valid[] =
+        "# CONFIG\n"
+        "# runner metadata\n"
+        "# XFAIL: YEW-F-025 expected script assertion\n"
+        "t.eq(1, 2)\n";
+    static const char missing_reason[] = "# XFAIL: YEW-F-025\n";
+    static const char duplicate[] =
+        "# XFAIL: YEW-F-025 first\n"
+        "# XFAIL: YEW-F-026 second\n";
+    static const char after_code[] =
+        "let marker = \"# XFAIL: YEW-F-025 not metadata\"\n";
+    TestHeader header;
+    bool ok;
+
+    ok = test_header_bytes(valid, sizeof(valid) - 1U, &header) &&
+         header.config && header.error == NULL &&
+         header.xfail_id != NULL &&
+         strcmp(header.xfail_id, "YEW-F-025") == 0 &&
+         header.xfail_why != NULL &&
+         strcmp(header.xfail_why, "expected script assertion") == 0;
+    test_header_free(&header);
+    if (!ok)
+        return false;
+    ok = test_header_bytes(missing_reason, sizeof(missing_reason) - 1U,
+                           &header) && header.error != NULL;
+    test_header_free(&header);
+    if (!ok)
+        return false;
+    ok = test_header_bytes(duplicate, sizeof(duplicate) - 1U, &header) &&
+         header.error != NULL;
+    test_header_free(&header);
+    if (!ok)
+        return false;
+    ok = test_header_bytes(after_code, sizeof(after_code) - 1U, &header) &&
+         header.error == NULL && header.xfail_id == NULL;
+    test_header_free(&header);
+    return ok;
+}
+
+static bool selftest_xfail_verdict_is_hard(void)
+{
+    static const char active[] =
+        "| YEW-F-025 | script | `case.fl` | reason | open |\n";
+    static const char fixed[] =
+        "| YEW-F-025 | script | `case.fl` | reason | fixed |\n";
+    static const char other[] =
+        "| YEW-F-026 | script | `case.fl` | reason | open |\n";
+    static const char expected_xfail[] =
+        "XFAIL expected_failure                     [YEW-F-025] "
+        "(9 assertions, 1 failure)\n";
+    static const char expected_xpass[] =
+        "XPASS expected_failure                     [YEW-F-025] "
+        "(9 assertions; remove XFAIL)\n";
+    TestFile test = {
+        .name = (char *)"expected_failure",
+        .xfail_id = (char *)"YEW-F-025"
+    };
+    Protocol failed = {9U, 1U, 0U, true};
+    Protocol passed = {9U, 0U, 0U, true};
+    Protocol corrupt = {0U, 0U, 0U, false};
+    char line[192];
+
+    return xfail_debt_line_status(active, "YEW-F-025") ==
+               XFAIL_DEBT_ACTIVE &&
+           xfail_debt_line_status(fixed, "YEW-F-025") ==
+               XFAIL_DEBT_FIXED &&
+           xfail_debt_line_status(other, "YEW-F-025") ==
+               XFAIL_DEBT_ABSENT &&
+           script_verdict(&test, &failed, "exit 2", false) ==
+               SCRIPT_XFAIL &&
+           script_verdict(&test, &passed, NULL, false) == SCRIPT_XPASS &&
+           script_verdict(&test, &corrupt, "invalid assertion protocol",
+                          false) == SCRIPT_FAIL &&
+           format_xfail_line(line, sizeof(line), SCRIPT_XFAIL, &test,
+                             &failed) &&
+           strcmp(line, expected_xfail) == 0 &&
+           format_xfail_line(line, sizeof(line), SCRIPT_XPASS, &test,
+                             &passed) &&
+           strcmp(line, expected_xpass) == 0;
+}
+
 static bool protocol_has_all_negative_assertions(const Bytes *protocol)
 {
     static const char *const expected[] = {
@@ -1822,8 +2155,10 @@ static bool selftest_negative_assertion_host(const char *yew,
     char *meta_dir = path_join(script_dir, "meta");
     char *script = meta_dir == NULL ? NULL :
                    path_join(meta_dir, "assertion_failures.fl");
-    TestFile test = {(char *)"assertion_failures", script, NULL, NULL,
-                     false};
+    TestFile test = {
+        .name = (char *)"assertion_failures",
+        .path = script
+    };
     RunResult result;
     Protocol protocol = {0};
     char *sandbox = NULL;
@@ -1887,13 +2222,17 @@ static int run_selftests(const char *yew, const char *fixtures,
                                 selftest_zero_filter());
     failures += report_selftest("config_header_controls_clean",
                                 selftest_config_directive());
+    failures += report_selftest("xfail_header_is_strict",
+                                selftest_xfail_header_is_strict());
+    failures += report_selftest("xfail_and_xpass_are_distinct",
+                                selftest_xfail_verdict_is_hard());
     failures += report_selftest("stdout_expectation_is_byte_exact",
                                 selftest_stdout_expectation_is_byte_exact());
     failures += report_selftest("negative_assertion_host_continues",
                                 selftest_negative_assertion_host(
                                     yew, fixtures, script_dir));
     (void)printf("script-runner-selftest: %zu tests, %zu failure%s\n",
-                 (size_t)9U, failures,
+                 (size_t)12U, failures,
                  failures == 1U ? "" : "s");
     (void)fflush(stdout);
     return failures == 0U ? 0 : 1;
@@ -1919,6 +2258,8 @@ int main(int argc, char **argv)
     size_t suite_assertions = 0U;
     size_t suite_failures = 0U;
     size_t suite_skipped = 0U;
+    size_t suite_xfailed = 0U;
+    size_t suite_xpassed = 0U;
     size_t i;
 
     if (!mark_inherited_fds_cloexec()) {
@@ -2005,6 +2346,35 @@ int main(int argc, char **argv)
         list_free(&tests);
         return 0;
     }
+    for (i = 0U; i < tests.len; i++) {
+        XfailDebtStatus debt;
+
+        if (!selected_test(tests.data[i].name, filter, exclude))
+            continue;
+        if (tests.data[i].config_error != NULL) {
+            (void)printf("CONFIG %s: %s\n", tests.data[i].name,
+                         tests.data[i].config_error);
+            tests.data[i].config_invalid = true;
+            suite_failures++;
+            continue;
+        }
+        if (tests.data[i].xfail_id == NULL)
+            continue;
+        debt = xfail_debt_status(root, tests.data[i].xfail_id);
+        if (debt == XFAIL_DEBT_ACTIVE)
+            continue;
+        if (debt == XFAIL_DEBT_FIXED)
+            (void)printf("CONFIG %s: XFAIL id %s is already fixed\n",
+                         tests.data[i].name, tests.data[i].xfail_id);
+        else if (debt == XFAIL_DEBT_ABSENT)
+            (void)printf("CONFIG %s: unknown XFAIL id %s\n",
+                         tests.data[i].name, tests.data[i].xfail_id);
+        else
+            (void)printf("CONFIG %s: cannot read XFAIL debt ledger\n",
+                         tests.data[i].name);
+        tests.data[i].config_invalid = true;
+        suite_failures++;
+    }
     yew = absolute_existing(yew_arg);
     if (yew == NULL) {
         (void)fprintf(stderr, "script: cannot resolve yew '%s': %s\n",
@@ -2065,8 +2435,10 @@ int main(int argc, char **argv)
         char count_line[512];
         const char *reason;
         bool stdout_mismatch = false;
+        ScriptVerdict verdict;
 
-        if (!selected_test(tests.data[i].name, filter, exclude))
+        if (!selected_test(tests.data[i].name, filter, exclude) ||
+            tests.data[i].config_invalid)
             continue;
         (void)run_test(yew, fixtures, fakelsp, &tests.data[i],
                        coverage_path != NULL, &sandbox, &result);
@@ -2086,7 +2458,9 @@ int main(int argc, char **argv)
             stdout_mismatch = reason != NULL &&
                               strcmp(reason, "stdout differs") == 0;
         }
-        if (reason == NULL && protocol.skipped != 0U) {
+        verdict = script_verdict(&tests.data[i], &protocol, reason,
+                                 stdout_mismatch);
+        if (verdict == SCRIPT_SKIP) {
             if (format_count_line(count_line, sizeof(count_line), "SKIP",
                                   tests.data[i].name,
                                   protocol.assertions, 0U))
@@ -2098,7 +2472,7 @@ int main(int argc, char **argv)
                 (void)printf("  sandbox preserved: %s\n", sandbox);
                 suite_failures++;
             }
-        } else if (reason == NULL) {
+        } else if (verdict == SCRIPT_PASS) {
             if (format_count_line(count_line, sizeof(count_line), "PASS",
                                   tests.data[i].name,
                                   protocol.assertions, 0U))
@@ -2108,6 +2482,26 @@ int main(int argc, char **argv)
                              tests.data[i].name);
                 (void)printf("  sandbox preserved: %s\n", sandbox);
                 suite_failures++;
+            }
+        } else if (verdict == SCRIPT_XFAIL) {
+            if (format_xfail_line(count_line, sizeof(count_line), verdict,
+                                  &tests.data[i], &protocol))
+                (void)fputs(count_line, stdout);
+            suite_xfailed++;
+            if (sandbox != NULL && !finish_sandbox(sandbox, true)) {
+                (void)printf("FAIL %-36s (cannot remove sandbox)\n",
+                             tests.data[i].name);
+                (void)printf("  sandbox preserved: %s\n", sandbox);
+                suite_failures++;
+            }
+        } else if (verdict == SCRIPT_XPASS) {
+            if (format_xfail_line(count_line, sizeof(count_line), verdict,
+                                  &tests.data[i], &protocol))
+                (void)fputs(count_line, stdout);
+            suite_xpassed++;
+            suite_failures++;
+            if (sandbox != NULL && !finish_sandbox(sandbox, true)) {
+                (void)printf("  sandbox preserved: %s\n", sandbox);
             }
         } else {
             if (protocol.valid && protocol.failures != 0U) {
@@ -2156,9 +2550,10 @@ int main(int argc, char **argv)
         suite_failures++;
     }
     (void)printf("script: %zu tests, %zu assertions, %zu failure%s, "
-                 "%zu skipped\n",
+                 "%zu skipped, %zu xfailed, %zu xpassed\n",
                  selected, suite_assertions, suite_failures,
-                 suite_failures == 1U ? "" : "s", suite_skipped);
+                 suite_failures == 1U ? "" : "s", suite_skipped,
+                 suite_xfailed, suite_xpassed);
     (void)fflush(stdout);
     free(yew);
     free(fakelsp);
