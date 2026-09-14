@@ -125,8 +125,7 @@ void test_lsp_restart_crosses_module_boundary(void)
             const CmdDesc *desc = yew_cmd_at(i);
             CmdId id;
 
-            if (desc == NULL || strncmp(desc->name, "ed.lsp.", 7U) != 0 ||
-                strcmp(desc->name, "ed.lsp.complete") == 0)
+            if (desc == NULL || strncmp(desc->name, "ed.lsp.", 7U) != 0)
                 continue;
             seen++;
             id = yew_cmd_lookup(desc->name, (u32)strlen(desc->name));
@@ -137,7 +136,7 @@ void test_lsp_restart_crosses_module_boundary(void)
             YEW_ASSERT_EQ_STR(ed.msg.text, absent);
             yew_msg_clear(&ed);
         }
-        YEW_ASSERT(seen >= 16U);
+        YEW_ASSERT(seen >= 17U);
     }
 #endif
     yew_ed_free(&ed);

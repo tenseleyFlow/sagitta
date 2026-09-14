@@ -1,10 +1,7 @@
 #include "mod/lsp/lsp.h"
 
-#include "edit/buf.h"
 #include "mod/mods.h"
-#include "ui/complmenu.h"
 #include "ui/message.h"
-#include "ui/win.h"
 
 static bool require_lsp(Ed *ed)
 {
@@ -59,18 +56,11 @@ bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward)
 
 bool yew_lsp_complete(Ed *ed, Win *w)
 {
-    const char *lang;
-
-    /* Completion is the one LSP command with a core implementation to
-     * degrade to.  Keep the default C-Space binding useful in stripped
-     * builds and preserve the same user-visible fallback as an enabled
-     * build with no ready server. */
-    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
-        return false;
-    lang = w->buf->lang == NULL ? "this buffer" : w->buf->lang;
-    yew_msg(ed, YEW_MSG_INFO,
-            "no ready LSP server for %s; using index completion", lang);
-    return yew_compl_open_source(ed, w, &yew_compl_source_index);
+    (void)w;
+    /* YEW-F-014: an excluded module is a hard boundary.  Core index
+     * completion remains available through ed.compl.open; the LSP-named
+     * command must identify the missing module like every sibling command. */
+    return require_lsp(ed);
 }
 
 bool yew_lsp_hover(Ed *ed, Win *w)
