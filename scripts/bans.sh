@@ -679,8 +679,15 @@ scan_seed "job-command-interpolation" "$job_interpolation_pattern" \
     'bytebuf_printf(&cmdline, "%s", path);'
 scan_seed "job-command-append" "$job_interpolation_pattern" \
     'bytebuf_append(shell, path, strlen(path));'
+# YEW-F-056: adjacent C string fragments concatenate at compile time, so
+# quotes and source whitespace cannot hide the OSC 52 query payload marker.
+osc52_query_pattern='52;([^[:space:]]*|[[:space:]"]*)\?'
 scan "OSC 52 clipboard queries are forbidden" \
-    '52;[^[:space:]]*\?' "$source_files"
+    "$osc52_query_pattern" "$source_files"
+scan_seed "OSC 52 contiguous query" "$osc52_query_pattern" \
+    'static const char query[] = "\033]52;c;?\a";'
+scan_seed "OSC 52 split-literal query" "$osc52_query_pattern" \
+    'static const char query[] = "\033]52;" "?\a";'
 
 # Sprint 37 DoD 2: all direct terminal-status and terminal-control syscalls
 # stay behind the one poisoned boundary. The product-level smoke drill calls
