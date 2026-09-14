@@ -231,7 +231,7 @@ static u32 name_const(Compiler *c, u32 intern_id, FlSpan sp)
 static u32 emit_jump(Compiler *c, FlOp op, FlSpan sp)
 {
     emit_op(c, op, sp);
-    emit_u16(c, 0xFFFFU);         /* placeholder */
+    emit_u16(c, 0xFFFFU);         /* patched when the target is known */
     return (u32)c->code.len - 2U;
 }
 

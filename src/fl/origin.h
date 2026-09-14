@@ -51,7 +51,7 @@ typedef struct FlVm FlVm;
  * a grant means (a plugin's caps are prompted for, a config's are
  * implicit); the path is what an error message must name to be
  * actionable.  Collapsing them into one module index, as Sprint 30's
- * placeholder did, makes the cache key in §11 -- (realpath, origin
+ * provisional model did, makes the cache key in §11 -- (realpath, origin
  * kind) -- inexpressible, and that key is what stops a plugin from
  * borrowing a config helper's authority.
  */
