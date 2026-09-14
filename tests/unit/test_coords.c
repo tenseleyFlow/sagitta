@@ -108,7 +108,7 @@ void test_coords_motion_golden(void)
         line = (Span){0U, (u64)byte_len};
         cursor.pos = BYTEOFF(0U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
 
         YEW_ASSERT(yew_is_grapheme_boundary(tb, BYTEOFF(0U)));
         for (i = 0U; i < cluster_count; i++) {
@@ -626,13 +626,13 @@ void test_coords_sparse_index_edit_invalidation(void)
     yew_textbuf_insert(tb, BYTEOFF(3U), &x, 1U);
     cursor.pos = BYTEOFF(sizeof(split_cluster) + 1U);
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){UINT64_MAX};
+    cursor.goal_col = (CCol){UINT64_MAX};
     yew_cursor_left(tb, &cursor);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 3U);
-    YEW_ASSERT_EQ_U64(cursor.goal_col.v, 1U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &cursor, 4U).v, 1U);
     yew_cursor_left(tb, &cursor);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 0U);
-    YEW_ASSERT_EQ_U64(cursor.goal_col.v, 0U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &cursor, 4U).v, 0U);
     yew_textbuf_free(tb);
 
     tb = yew_textbuf_from_bytes(latin2_run, sizeof(latin2_run));
@@ -642,13 +642,13 @@ void test_coords_sparse_index_edit_invalidation(void)
     YEW_ASSERT(tb->graphemes.gen != tb->gen);
     cursor.pos = BYTEOFF(sizeof(latin2_run) + 2U);
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){UINT64_MAX};
+    cursor.goal_col = (CCol){UINT64_MAX};
     yew_cursor_left(tb, &cursor);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 6U);
-    YEW_ASSERT_EQ_U64(cursor.goal_col.v, 4U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &cursor, 4U).v, 4U);
     yew_cursor_left(tb, &cursor);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 4U);
-    YEW_ASSERT_EQ_U64(cursor.goal_col.v, 3U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &cursor, 4U).v, 3U);
     YEW_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
     yew_textbuf_free(tb);
 }
@@ -682,3 +682,4 @@ void test_coords_deferred_index_keeps_line_local_motion_local(void)
     YEW_ASSERT(!tb->graphemes.initialized);
     yew_textbuf_free(tb);
 }
+

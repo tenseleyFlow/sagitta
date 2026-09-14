@@ -131,7 +131,7 @@ static void search_go(Ed *ed, Win *w, u64 hit)
 
     if (c != NULL) {
         c->pos = BYTEOFF(hit);
-        c->goal_col = (GCol){0U};
+        c->goal_col = (CCol){0U};
     }
     yew_win_follow_cursor(w);
     yew_ed_damage_document(ed);

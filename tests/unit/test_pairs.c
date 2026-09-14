@@ -23,7 +23,7 @@ static Cursor pair_cursor(u64 pos)
 
     cursor.pos = BYTEOFF(pos);
     cursor.anchor = BYTEOFF(pos);
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     return cursor;
 }
 

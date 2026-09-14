@@ -42,22 +42,22 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-029 | audit | `tests/audit/f15_ban_misses.c` | ~~stable-sort ban accepts macro-forwarded qsort~~ — fixed in `0e2ab552` | fixed |
 | YEW-F-030 | audit | `tests/audit/f15_ban_misses.c` | ~~C11-subset ban accepts token-pasted attribute syntax~~ — fixed in `ccfc924c` | fixed |
 | YEW-F-031 | audit | `tests/audit/f15_ban_misses.c` | ~~explicit-registry ban accepts token-pasted constructors~~ — fixed in `ccfc924c` | fixed |
-| YEW-F-032 | audit | `tests/audit/f15_ban_misses.c` | single-thread ban accepts token-pasted pthread calls | open |
-| YEW-F-033 | audit | `tests/audit/f15_ban_misses.c` | reproducibility ban omits `__TIMESTAMP__` | open |
-| YEW-F-034 | audit | `tests/audit/f15_ban_misses.c` | mmap ban accepts macro-forwarded calls | open |
-| YEW-F-035 | audit | `tests/audit/f15_ban_misses.c` | allocator ban accepts macro-forwarded libc allocation | open |
-| YEW-F-036 | audit | `tests/audit/f15_ban_misses.c` | cwd-allocation ban requires literal NULL spelling | open |
-| YEW-F-037 | audit | `tests/audit/f15_ban_misses.c` | realpath-allocation ban requires literal NULL spelling | open |
-| YEW-F-038 | audit | `tests/audit/f15_ban_misses.c` | locale-dependent Unicode ban omits `mbtowc` | open |
-| YEW-F-039 | audit | `tests/audit/f15_ban_misses.c` | native-loader ban omits `dlvsym` | open |
-| YEW-F-040 | audit | `tests/audit/f15_ban_misses.c` | strerror_r ban accepts macro-forwarded calls | open |
-| YEW-F-041 | audit | `tests/audit/f15_ban_misses.c` | musl backtrace ban omits `backtrace_symbols_fd` | open |
-| YEW-F-042 | audit | `tests/audit/f15_ban_misses.c` | GNU-libc ban omits `getopt_long_only` | open |
-| YEW-F-043 | audit | `tests/audit/f15_ban_misses.c` | long-double ban misses valid continued declarations | open |
-| YEW-F-044 | audit | `tests/audit/f15_ban_misses.c` | shim-honesty gate accepts parenthesized success | open |
-| YEW-F-045 | audit | `tests/audit/f15_ban_misses.c` | Unicode-width ban accepts decimal local tables | open |
-| YEW-F-046 | audit | `tests/audit/f15_ban_misses.c` | syntax-color ban accepts packed decimal colors | open |
-| YEW-F-047 | audit | `tests/audit/f15_ban_misses.c` | syntax-width ban accepts local width arithmetic | open |
+| YEW-F-032 | audit | `tests/audit/f15_ban_misses.c` | ~~single-thread ban accepts token-pasted pthread calls~~ — fixed in `a294794c` | fixed |
+| YEW-F-033 | audit | `tests/audit/f15_ban_misses.c` | ~~reproducibility ban omits `__TIMESTAMP__`~~ — fixed in `381bddf0` | fixed |
+| YEW-F-034 | audit | `tests/audit/f15_ban_misses.c` | ~~mmap ban accepts macro-forwarded calls~~ — fixed in `47046a40` | fixed |
+| YEW-F-035 | audit | `tests/audit/f15_ban_misses.c` | ~~allocator ban accepts macro-forwarded libc allocation~~ — fixed in `066041c3` | fixed |
+| YEW-F-036 | audit | `tests/audit/f15_ban_misses.c` | ~~cwd-allocation ban requires literal NULL spelling~~ — fixed in `16441f04` | fixed |
+| YEW-F-037 | audit | `tests/audit/f15_ban_misses.c` | ~~realpath-allocation ban requires literal NULL spelling~~ — fixed in `16441f04` | fixed |
+| YEW-F-038 | audit | `tests/audit/f15_ban_misses.c` | ~~locale-dependent Unicode ban omits `mbtowc`~~ — fixed in `af94a8c1` | fixed |
+| YEW-F-039 | audit | `tests/audit/f15_ban_misses.c` | ~~native-loader ban omits `dlvsym`~~ — fixed in `f09c70e0` | fixed |
+| YEW-F-040 | audit | `tests/audit/f15_ban_misses.c` | ~~strerror_r ban accepts macro-forwarded calls~~ — fixed in `1cac4adf` | fixed |
+| YEW-F-041 | audit | `tests/audit/f15_ban_misses.c` | ~~musl backtrace ban omits `backtrace_symbols_fd`~~ — fixed in `aec0fe6b` | fixed |
+| YEW-F-042 | audit | `tests/audit/f15_ban_misses.c` | ~~GNU-libc ban omits `getopt_long_only`~~ — fixed in `aec0fe6b` | fixed |
+| YEW-F-043 | audit | `tests/audit/f15_ban_misses.c` | ~~long-double ban misses valid continued declarations~~ — fixed in `4b2b0f02` | fixed |
+| YEW-F-044 | audit | `tests/audit/f15_ban_misses.c` | ~~shim-honesty gate accepts parenthesized success~~ — fixed in `75bfedf5` | fixed |
+| YEW-F-045 | audit | `tests/audit/f15_ban_misses.c` | ~~Unicode-width ban accepts decimal local tables~~ — fixed in `31497135` | fixed |
+| YEW-F-046 | audit | `tests/audit/f15_ban_misses.c` | ~~syntax-color ban accepts packed decimal colors~~ — fixed in `76f2fed1` | fixed |
+| YEW-F-047 | audit | `tests/audit/f15_ban_misses.c` | ~~syntax-width ban accepts local width arithmetic~~ — fixed in `41512e2c` | fixed |
 | YEW-F-048 | audit | `tests/audit/f15_ban_misses.c` | PTY-creation ban omits direct `posix_openpt` callers | open |
 | YEW-F-049 | audit | `tests/audit/f15_ban_misses.c` | CI golden-update ban depends on contiguous spelling | open |
 | YEW-F-050 | audit | `tests/audit/f15_ban_misses.c` | piece-tree I/O ban omits `pread` | open |
@@ -71,7 +71,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-058 | audit | `tests/audit/f15_ban_misses.c` | register choke-point ban accepts allowed-file wrappers | open |
 | YEW-F-059 | audit | `tests/audit/f15_ban_misses.c` | option choke-point ban accepts allowed-file wrappers | open |
 | YEW-F-060 | audit | `tests/audit/f15_ban_misses.c` | package-git ban accepts allowed-file wrappers on startup | open |
-| YEW-F-061 | audit | `tests/audit/f15_ban_misses.c` | register-width ban accepts local lookup tables | open |
+| YEW-F-061 | audit | `tests/audit/f15_ban_misses.c` | ~~register-width ban accepts local lookup tables~~ — fixed in `31497135` | fixed |
 | YEW-F-062 | audit | `tests/audit/f15_ban_misses.c` | register-column ban depends on historical variable names | open |
 | YEW-F-063 | audit | `tests/audit/f15_ban_misses.c` | register-helper presence gate accepts comments | open |
 | YEW-F-064 | audit | `tests/audit/f15_ban_misses.c` | oracle-independence ban accepts copied renamed models | open |

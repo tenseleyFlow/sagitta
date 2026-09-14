@@ -322,7 +322,7 @@ static bool replace_span(Ed *ed, Span span, const u8 *bytes, size_t len,
         return false;
     line->cur.pos = BYTEOFF(span.lo + len);
     line->cur.anchor = line->cur.pos;
-    line->cur.goal_col = (GCol){0U};
+    line->cur.goal_col = (CCol){0U};
     sync_to_target(line);
     if (reset_history) {
         char *draft = text_string(line->buf);

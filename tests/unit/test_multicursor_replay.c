@@ -17,7 +17,7 @@ static Cursor replay_cursor(u64 off)
 
     cursor.pos = BYTEOFF(off);
     cursor.anchor = BYTEOFF(off);
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     return cursor;
 }
 

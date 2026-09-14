@@ -279,7 +279,7 @@ static void gen_everything(void)
     w->cs.curs.data[w->cs.primary].goal_col.v = 14U;
     extra.pos = BYTEOFF(900U);
     extra.anchor = BYTEOFF(900U);
-    extra.goal_col.v = YEW_GCOL_EOL;
+    extra.goal_col.v = YEW_CCOL_EOL;
     YEW_ASSERT(yew_cset_add(&w->cs, extra));
     w->vp.top = LINENO(40U);
     w->vp.top_sub = 2U;
@@ -618,7 +618,7 @@ static void gen_untitled(void)
     gen_emit(&g, "19-with-scratch-tab.fl");
 }
 
-/* A goal column of exactly YEW_GCOL_EOL, spelled -1. */
+/* A goal column of exactly YEW_CCOL_EOL, spelled -1. */
 static void gen_goal_eol(void)
 {
     GenFix g;
@@ -630,7 +630,7 @@ static void gen_goal_eol(void)
     yew_tab_switch(&g.ed, idx);
     w = yew_tab_at(&g.ed, idx)->root->win;
     YEW_ASSERT_NOT_NULL(w);
-    w->cs.curs.data[0].goal_col.v = YEW_GCOL_EOL;
+    w->cs.curs.data[0].goal_col.v = YEW_CCOL_EOL;
     w->cs.curs.data[0].pos = BYTEOFF(1U);
     gen_emit(&g, "20-goal-eol.fl");
 }

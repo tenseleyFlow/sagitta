@@ -33,7 +33,7 @@ static void marks_fixture_init(MarkFixture *f, const u8 *bytes, u64 len)
     Cursor cursor;
 
     cursor.pos = BYTEOFF(0U);
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     cursor.anchor = BYTEOFF(0U);
     f->tb = yew_textbuf_from_bytes(bytes, len);
     f->marks = yew_marks_new();

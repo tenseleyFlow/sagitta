@@ -157,7 +157,7 @@ bool yew_ai_block_prompt_key(Ed *ed, u8 answer)
             cursor = &win->cs.curs.data[win->cs.primary];
             cursor->pos = yew_textbuf_line_start(win->buf->tb, line);
             cursor->anchor = cursor->pos;
-            cursor->goal_col = (GCol){0U};
+            cursor->goal_col = (CCol){0U};
             yew_win_follow_cursor(win);
             ed->full_damage = true;
         }

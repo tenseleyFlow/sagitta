@@ -499,7 +499,7 @@ CmdStatus yew_mark_cmd_jump(CmdCtx *cx)
      * mark jump is how you navigate it.
      */
     c->pos = at;
-    c->goal_col = (GCol){0U};
+    c->goal_col = (CCol){0U};
     yew_win_follow_cursor(cx->win);
     yew_ed_damage_document(cx->ed);
     return YEW_CMD_OK;

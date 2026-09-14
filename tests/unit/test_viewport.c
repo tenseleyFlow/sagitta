@@ -19,7 +19,7 @@ static Cursor vp_test_cursor(u64 off)
     Cursor c;
     c.pos = BYTEOFF(off);
     c.anchor = c.pos;
-    c.goal_col = (GCol){0U};
+    c.goal_col = (CCol){0U};
     return c;
 }
 
@@ -318,7 +318,7 @@ void test_viewport_cursor_push_preserves_nowrap_goal(void)
     c = &f.win.cs.curs.data[0];
     c->pos = BYTEOFF(5U);
     c->anchor = c->pos;
-    c->goal_col = (GCol){5U};
+    c->goal_col = (CCol){5U};
     f.win.vp.top = LINENO(1U);
     yew_vp_push_cursor(&f.win);
     YEW_ASSERT_EQ_U64(c->pos.v, 8U);

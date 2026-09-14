@@ -22,7 +22,7 @@ static Cursor paste_cursor(u64 pos)
     Cursor c;
     c.pos = BYTEOFF(pos);
     c.anchor = BYTEOFF(pos);
-    c.goal_col = (GCol){0U};
+    c.goal_col = (CCol){0U};
     return c;
 }
 

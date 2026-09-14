@@ -73,5 +73,5 @@ void yew_win_click_to_cursor(Win *w, u16 grid_x, u16 grid_y)
                              w->buf->tabwidth == 0U ? YEW_VP_TABWIDTH
                                                     : w->buf->tabwidth);
     c->anchor = c->pos;
-    c->goal_col = (GCol){0U};
+    c->goal_col = (CCol){0U};
 }

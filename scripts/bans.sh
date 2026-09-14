@@ -94,6 +94,62 @@ scan_seed()
     fi
 }
 
+spliced_hits()
+{
+    pattern=$1
+    file_list=$2
+    spliced_out=$3
+    : >"$spliced_out"
+    set --
+    while IFS= read -r file; do
+        set -- "$@" "$file"
+    done <"$file_list"
+    [ "$#" -gt 0 ] || return
+    awk -v pattern="$pattern" -v repo="$repo_dir/" '
+    function inspect() {
+        if (logical ~ pattern)
+            printf "%s:%d:%s\n", name, start, logical
+        logical = ""
+        start = 0
+    }
+    FNR == 1 {
+        if (start != 0)
+            inspect()
+        name = FILENAME
+        if (index(name, repo) == 1)
+            name = substr(name, length(repo) + 1)
+    }
+    {
+        physical = $0
+        if (start == 0)
+            start = FNR
+        if (physical ~ /\\$/) {
+            sub(/\\$/, "", physical)
+            logical = logical physical
+            next
+        }
+        logical = logical physical
+        inspect()
+    }
+    END {
+        if (start != 0)
+            inspect()
+    }' "$@" >>"$spliced_out" || :
+}
+
+scan_spliced()
+{
+    label=$1
+    pattern=$2
+    file_list=$3
+    scan_hits=$tmp/scan-spliced
+    spliced_hits "$pattern" "$file_list" "$scan_hits"
+    if [ -s "$scan_hits" ]; then
+        echo "ban: $label" >>"$hits"
+        cat "$scan_hits" >>"$hits"
+    fi
+}
+
 #
 # Sprint 31 DoD 5: no conversion in src/fl/ may take a format that is not
 # a literal in our own source.
@@ -303,62 +359,183 @@ scan_seed "token-pasted __attribute__" "$attribute_pattern" \
     'JOIN(__attribute, __)((unused)) static int seeded;'
 scan "constructor registration is forbidden; use the explicit registry" \
     '(constructor|\.init_array)' "$c_files"
+# YEW-F-032: `p ## thread_create` must not hide a pthread entry point from
+# the single-threaded-core gate.  No thread_* stem is valid in yew source.
+thread_pattern='(threads\.h|pthread|thread_[[:alnum:]_]+)'
 scan "threads are forbidden in the single-threaded core" \
-    '(threads\.h|pthread)' "$source_files"
-scan "__DATE__ and __TIME__ break reproducible builds" \
-    '(__DATE__|__TIME__)' "$source_files"
+    "$thread_pattern" "$source_files"
+scan_seed "token-pasted pthread API" "$thread_pattern" \
+    'void seeded(void) { JOIN(p, thread_create)(t, 0, f, 0); }'
+# YEW-F-033: __TIMESTAMP__ embeds filesystem modification time and is just
+# as unreproducible as the compilation date/time macros.
+repro_time_pattern='(__DATE__|__TIME__|__TIMESTAMP__)'
+scan "compiler time macros break reproducible builds" \
+    "$repro_time_pattern" "$source_files"
+scan_seed "compiler time macros" "$repro_time_pattern" \
+    'const char *seeded = __TIMESTAMP__;'
+# YEW-F-034: forwarding mmap through an object-like macro retains the same
+# truncate/SIGBUS hazard, so reject the alias definition and direct calls.
+mmap_pattern='(^|[^[:alnum:]_])mmap[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+mmap([^[:alnum:]_]|$)'
 scan "mmap risks SIGBUS after truncation" \
-    '(^|[^[:alnum:]_])mmap[[:space:]]*\(' "$source_files"
+    "$mmap_pattern" "$source_files"
+scan_seed "mmap macro forwarding" "$mmap_pattern" '#define MAP_FILE mmap'
+# YEW-F-035: an object-like alias to a libc allocator still bypasses the
+# audited yew allocation boundary; reject forwarding definitions too.
+allocator_pattern='(^|[^[:alnum:]_])(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)([^[:alnum:]_]|$)'
 scan "source allocations must use the audited yew allocator" \
-    '(^|[^[:alnum:]_])(malloc|calloc|realloc|free|strdup|getdelim|getline|asprintf|vasprintf)[[:space:]]*\(' \
-    "$allocator_files"
+    "$allocator_pattern" "$allocator_files"
+scan_seed "libc allocator macro forwarding" "$allocator_pattern" \
+    '#define ALLOCATE malloc'
 scan "libc-owned cwd allocations must use yew_xgetcwd" \
     'getcwd[[:space:]]*\([[:space:]]*NULL[[:space:]]*,' \
     "$allocator_files"
 scan "libc-owned realpath allocations must use yew_xrealpath" \
     'realpath[[:space:]]*\([^,]+,[[:space:]]*NULL[[:space:]]*\)' \
     "$allocator_files"
+
+# YEW-F-036 / YEW-F-037: spelling a nearby NULL value through a pointer
+# variable does not change getcwd/realpath ownership.  Follow the initialized
+# identifier across a short, ordinary call-site window without rejecting the
+# fixed caller-owned buffers that these APIs may legitimately fill.
+null_path_alloc_calls()
+{
+    null_path_list=$1
+    null_path_out=$2
+    : >"$null_path_out"
+    while IFS= read -r file; do
+        awk '
+        { line[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                rest = line[i]
+                buf = line[i] " " line[i+1] " " line[i+2] " " line[i+3]
+                while (match(rest, /[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*NULL/)) {
+                    assign = substr(rest, RSTART, RLENGTH)
+                    sub(/[ \t]*=.*/, "", assign)
+                    cwd = "getcwd[ \t]*\\([ \t]*" assign "[ \t]*,"
+                    path = "realpath[ \t]*\\([^,]+,[ \t]*" assign \
+                           "[ \t]*\\)"
+                    if (buf ~ cwd || buf ~ path) {
+                        printf "%d:%s\n", i, line[i]
+                        break
+                    }
+                    rest = substr(rest, RSTART + RLENGTH)
+                }
+            }
+        }' "$file" | sed "s|^|${file#"$repo_dir"/}:|" \
+            >>"$null_path_out" || :
+    done <"$null_path_list"
+}
+
+null_path_alloc_hits=$tmp/null-path-alloc-hits
+null_path_alloc_calls "$allocator_files" "$null_path_alloc_hits"
+if [ -s "$null_path_alloc_hits" ]; then
+    echo "ban: NULL path allocations must use yew_xgetcwd/yew_xrealpath" \
+        >>"$hits"
+    cat "$null_path_alloc_hits" >>"$hits"
+fi
+null_path_seed=$tmp/null-path-seed.c
+{
+    echo 'char *a(void) { char *p = NULL; return getcwd(p, 0); }'
+    echo 'char *b(const char *s) { char *p = NULL; return realpath(s, p); }'
+} >"$null_path_seed"
+printf '%s\n' "$null_path_seed" >"$tmp/null-path-seed-list"
+null_path_alloc_calls "$tmp/null-path-seed-list" "$tmp/null-path-seed-hits"
+if [ "$(wc -l <"$tmp/null-path-seed-hits" | tr -d ' ')" != "2" ]; then
+    echo "ban: the NULL path-allocation rule no longer fires on its own seed" \
+        >>"$hits"
+fi
+# YEW-F-038: mbtowc is the stateful locale-dependent predecessor of mbrtowc
+# and belongs behind the same bespoke Unicode boundary.
+locale_api_pattern='(wcwidth|wcswidth|mbrtowc|mbtowc|wchar\.h|langinfo\.h|setlocale|nl_langinfo|localeconv|iconv)'
 scan "locale-dependent Unicode APIs are forbidden" \
-    '(wcwidth|wcswidth|mbrtowc|wchar\.h|langinfo\.h|setlocale|nl_langinfo|localeconv|iconv)' \
-    "$source_files"
-dynamic_loader_pattern='(^|[^[:alnum:]_])(dlopen|dlsym|dlclose|dlerror)[[:space:]]*\('
+    "$locale_api_pattern" "$source_files"
+scan_seed "locale-dependent mbtowc" "$locale_api_pattern" \
+    'int seeded(void) { return mbtowc(w, s, n); }'
+# YEW-F-039: dlvsym is GNU's versioned native symbol lookup and violates the
+# same Fletch-only plugin boundary as dlsym.
+dynamic_loader_pattern='(^|[^[:alnum:]_])(dlopen|dlsym|dlvsym|dlclose|dlerror)[[:space:]]*\('
 scan "native dynamic loading is forbidden; yew plugins are Fletch-only" \
     "$dynamic_loader_pattern" "$source_files"
 scan_seed "native-dynamic-loading" "$dynamic_loader_pattern" \
     'void seeded(void) { (void)dlopen(path, flags); }'
-strerror_r_pattern='(^|[^[:alnum:]_])strerror_r[[:space:]]*\('
+scan_seed "versioned native-symbol loading" "$dynamic_loader_pattern" \
+    'void seeded(void) { (void)dlvsym(handle, "name", "V1"); }'
+# YEW-F-040: an object-like strerror_r alias preserves the incompatible GNU
+# versus POSIX ABI and must not evade the portability boundary.
+strerror_r_pattern='(^|[^[:alnum:]_])strerror_r[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+strerror_r([^[:alnum:]_]|$)'
 scan "strerror_r has incompatible GNU and POSIX ABIs; use strerror" \
     "$strerror_r_pattern" "$source_files"
 scan_seed "strerror_r" "$strerror_r_pattern" \
     'void seeded(void) { (void)strerror_r(code, buf, sizeof(buf)); }'
-backtrace_pattern='(execinfo\.h|(^|[^[:alnum:]_])(backtrace|backtrace_symbols)[[:space:]]*\()'
+scan_seed "strerror_r macro forwarding" "$strerror_r_pattern" \
+    '#define ERROR_TEXT strerror_r'
+# YEW-F-041: backtrace_symbols_fd is part of the same execinfo family and is
+# likewise absent from the musl profile.
+backtrace_pattern='(execinfo\.h|(^|[^[:alnum:]_])(backtrace|backtrace_symbols|backtrace_symbols_fd)[[:space:]]*\()'
 scan "glibc backtrace APIs are unavailable in the musl profile" \
     "$backtrace_pattern" "$source_files"
 scan_seed "glibc-backtrace" "$backtrace_pattern" \
     'void seeded(void) { (void)backtrace(frames, count); }'
-gnu_api_pattern='(^|[^[:alnum:]_])(getline|getdelim|asprintf|vasprintf|getopt_long)[[:space:]]*\(|(^|[<"])err(or)?\.h[>"]|program_invocation_name'
+scan_seed "glibc backtrace_symbols_fd" "$backtrace_pattern" \
+    'void seeded(void) { backtrace_symbols_fd(frames, count, fd); }'
+# YEW-F-042: getopt_long_only is a GNU extension alongside getopt_long and
+# cannot enter the portable core merely by using the longer suffix.
+gnu_api_pattern='(^|[^[:alnum:]_])(getline|getdelim|asprintf|vasprintf|getopt_long|getopt_long_only)[[:space:]]*\(|(^|[<"])err(or)?\.h[>"]|program_invocation_name'
 scan "GNU-only libc APIs are forbidden in the portable core" \
     "$gnu_api_pattern" "$source_files"
 scan_seed "GNU-libc-API" "$gnu_api_pattern" \
     'void seeded(void) { (void)getopt_long(argc, argv, opts, rows, idx); }'
+scan_seed "GNU getopt_long_only" "$gnu_api_pattern" \
+    'void seeded(void) { (void)getopt_long_only(argc, argv, opts, rows, idx); }'
 scan_seed "program_invocation_name" "$gnu_api_pattern" \
     'const char *seeded = program_invocation_name;'
 long_double_pattern='(^|[^[:alnum:]_])long[[:space:]]+double([^[:alnum:]_]|$)'
-scan "long double has different target ABIs; use the f64 model" \
+# YEW-F-043: translation phase 2 removes backslash-newline pairs before token
+# recognition, so the ABI ban must inspect the same spliced logical lines.
+scan_spliced "long double has different target ABIs; use the f64 model" \
     "$long_double_pattern" "$source_files"
 scan_seed "long-double" "$long_double_pattern" \
     'long double seeded(long double value) { return value; }'
+long_double_seed=$tmp/long-double-spliced.c
+printf '%s\n' \
+    'long \' \
+    'double seeded(long \' \
+    'double value) { return value; }' >"$long_double_seed"
+printf '%s\n' "$long_double_seed" >"$tmp/long-double-spliced-list"
+spliced_hits "$long_double_pattern" "$tmp/long-double-spliced-list" \
+    "$tmp/long-double-spliced-hits"
+if [ "$(wc -l <"$tmp/long-double-spliced-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the continued long-double rule no longer fires on its own seed" \
+        >>"$hits"
+fi
 shim_check=$tmp/module-shims
 if ! "$repo_dir/scripts/check-module-shims.sh" >"$shim_check" 2>&1; then
     echo "ban: disabled-module header/shim parity or honesty failed" >>"$hits"
     cat "$shim_check" >>"$hits"
 fi
+# YEW-F-045 and YEW-F-061: decimal constants name the same width-sensitive
+# code points as their hexadecimal spellings. Catching them at the shared
+# Unicode boundary also prevents register-local lookup tables.
+unicode_width_pattern='(^|[^[:alnum:]_])(0[xX]1[fF]3[fF][bB]|0[xX][fF][eE]0[fF]|0[xX]200[dD]|127995|65039|8205)[uUlL]*([^[:alnum:]_]|$)|EastAsian'
 scan "Unicode width math belongs only in src/unicode" \
-    '(0x1F3FB|0xFE0F|0x200D|EastAsian)' "$non_unicode_files"
+    "$unicode_width_pattern" "$non_unicode_files"
+scan_seed "decimal Unicode width constants" "$unicode_width_pattern" \
+    'static const unsigned seeded[] = { 127995U, 65039U, 8205U };'
+# YEW-F-046: a packed decimal value contains no hex or RGB spelling, but a
+# syntax-side color role still violates the semantic-attribute boundary.
+syntax_color_pattern='(#[0-9a-fA-F]{6}|[Rr][Gg][Bb]|38;2|48;5|(^|[^[:alnum:]_])([Ff][Gg]|[Bb][Gg]|[Ff]oreground|[Bb]ackground|[Cc]olor|[Cc]olour)([^[:alnum:]_]|$))'
 scan "syntax definitions emit semantic attrs, never colors" \
-    '(#[0-9a-fA-F]{6}|[Rr][Gg][Bb]|38;2|48;5)' "$syn_files"
+    "$syntax_color_pattern" "$syn_files"
+scan_seed "packed decimal syntax color" "$syntax_color_pattern" \
+    'static const unsigned foreground = 16711680U;'
+# YEW-F-047: local comparisons against the East Asian 0x1100 threshold
+# reimplement cell width even when no width helper is named.
+syntax_width_pattern='yew_(cp|str)_width|(^|[^[:alnum:]_])(0[xX]1100|4352)[uUlL]*([^[:alnum:]_]|$)'
 scan "syntax owns byte spans; width math belongs in src/unicode" \
-    'yew_(cp|str)_width' "$syn_files"
+    "$syntax_width_pattern" "$syn_files"
+scan_seed "syntax-local width threshold" "$syntax_width_pattern" \
+    'unsigned seeded(unsigned cp) { return cp >= 0x1100U ? 2U : 1U; }'
 scan "pty creation must use the audited posix_openpt harness" \
     '(forkpty|openpty|-lutil)' "$pty_files"
 scan "golden updates are forbidden in CI" \

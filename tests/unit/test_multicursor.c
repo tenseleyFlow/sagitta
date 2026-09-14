@@ -27,7 +27,7 @@ static Cursor test_cursor(u64 pos, u64 anchor, u64 goal)
 
     cursor.pos = BYTEOFF(pos);
     cursor.anchor = BYTEOFF(anchor);
-    cursor.goal_col = (GCol){goal};
+    cursor.goal_col = (CCol){goal};
     return cursor;
 }
 
@@ -1164,8 +1164,8 @@ static void integrated_move(const TextBuf *tb, CursorSet *set, u64 motion)
         switch (motion) {
         case 0U: yew_cursor_left(tb, cursor); break;
         case 1U: yew_cursor_right(tb, cursor); break;
-        case 2U: yew_cursor_up(tb, cursor); break;
-        case 3U: yew_cursor_down(tb, cursor); break;
+        case 2U: yew_cursor_up(tb, cursor, 4U); break;
+        case 3U: yew_cursor_down(tb, cursor, 4U); break;
         case 4U: yew_cursor_line_home(tb, cursor); break;
         default: yew_cursor_line_end(tb, cursor); break;
         }
@@ -1299,13 +1299,17 @@ void test_multicursor_normalize_preserves_sticky_motion(void)
     Cursor cursor = test_cursor(5U, 5U, 5U);
     CursorSet set;
 
-    yew_cursor_down(tb, &cursor);
-    assert_cursor(&cursor, 8U, 8U, 5U);
+    yew_cursor_down(tb, &cursor, 4U);
+    /* The final line has no newline to rest on, so an overflowing goal
+     * clamps AFTER the `y` -- the same answer motion.c gives. */
+    assert_cursor(&cursor, 9U, 9U, 5U);
 
     yew_cset_init(&set, cursor);
     yew_cset_normalize(tb, &set);
     yew_cursor_right(tb, &set.curs.data[0]);
-    assert_cursor(&set.curs.data[0], 9U, 9U, 2U);
+    YEW_ASSERT_EQ_U64(set.curs.data[0].pos.v, 9U);
+    YEW_ASSERT_EQ_U64(set.curs.data[0].anchor.v, 9U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &set.curs.data[0], 4U).v, 2U);
 
     yew_cset_free(&set);
     yew_textbuf_free(tb);
@@ -1434,4 +1438,38 @@ void test_multicursor_boundary_guards_name_their_constraints(void)
                           "completion requires one primary cursor");
     assert_boundary_guard(BOUNDARY_LSP_EDIT,
                           "LSP edits require one primary cursor");
+}
+
+/*
+ * Every cursor carries its own goal column, and a goal column is a
+ * SCREEN column: a tab is one grapheme but four cells, so two cursors
+ * that start four cells apart on a space-indented line must stay four
+ * cells apart when they cross onto tab-indented lines.
+ */
+void test_multicursor_vertical_goals_are_per_cursor_over_tabs(void)
+{
+    static const u8 text[] =
+        "    fn total\n"     /* [0,13)  cells 4 and 8 at 4 and 8   */
+        "\tvar acc = zero\n" /* [13,29) cells 4 and 8 at 14 and 18 */
+        "  \tmixed";         /* [29,37) cells 4 and 8 at 32 and 36 */
+    TextBuf *tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
+    CursorSet set;
+
+    yew_cset_init(&set, test_cursor(4U, 4U, 4U));
+    YEW_ASSERT(yew_cset_add(&set, test_cursor(8U, 8U, 8U)));
+    yew_cset_normalize(tb, &set);
+    YEW_ASSERT_EQ_U64(set.curs.len, 2U);
+
+    yew_cursor_down(tb, &set.curs.data[0], 4U);
+    yew_cursor_down(tb, &set.curs.data[1], 4U);
+    assert_cursor(&set.curs.data[0], 14U, 14U, 4U);
+    assert_cursor(&set.curs.data[1], 18U, 18U, 8U);
+
+    yew_cursor_down(tb, &set.curs.data[0], 4U);
+    yew_cursor_down(tb, &set.curs.data[1], 4U);
+    assert_cursor(&set.curs.data[0], 32U, 32U, 4U);
+    assert_cursor(&set.curs.data[1], 36U, 36U, 8U);
+
+    yew_cset_free(&set);
+    yew_textbuf_free(tb);
 }

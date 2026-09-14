@@ -81,7 +81,7 @@ static bool fixture_init(Fixture *fx)
                    INT64_MAX, &report);
     cursor.pos = BYTEOFF(yew_textbuf_len(fx->ed.buffer.tb));
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     fx->win.buf = &fx->ed.buffer;
     yew_cset_init(&fx->win.cs, cursor);
     fx->ed.win = &fx->win;

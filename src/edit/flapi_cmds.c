@@ -113,7 +113,7 @@ CmdStatus yew_flapi_cmd_cursor_set_many(CmdCtx *cx)
         return YEW_CMD_ERR_ARG;
     first.pos = cx->cursor_args[0].pos;
     first.anchor = cx->cursor_args[0].anchor;
-    first.goal_col = (GCol){cx->cursor_args[0].goal_col};
+    first.goal_col = (CCol){cx->cursor_args[0].goal_col};
     yew_cset_init(&replacement, first);
     if (cx->cursor_args_len > 1U) {
         rest = yew_xmalloc((size_t)(cx->cursor_args_len - 1U) *
@@ -121,7 +121,7 @@ CmdStatus yew_flapi_cmd_cursor_set_many(CmdCtx *cx)
         for (i = 1U; i < cx->cursor_args_len; i++) {
             rest[i - 1U].pos = cx->cursor_args[i].pos;
             rest[i - 1U].anchor = cx->cursor_args[i].anchor;
-            rest[i - 1U].goal_col = (GCol){cx->cursor_args[i].goal_col};
+            rest[i - 1U].goal_col = (CCol){cx->cursor_args[i].goal_col};
         }
         if (!yew_cset_add_many(&replacement, rest,
                                cx->cursor_args_len - 1U)) {
@@ -189,11 +189,7 @@ CmdStatus yew_flapi_cmd_cursor_move(CmdCtx *cx)
         return YEW_CMD_ERR_ARG;
     cursor->pos = next;
     cursor->anchor = next;
-    cursor->goal_col = yew_off_to_gcol(
-        cx->win->buf->tb,
-        yew_textbuf_line_span(cx->win->buf->tb,
-                              yew_textbuf_line_of(cx->win->buf->tb, next)),
-        next);
+    cursor->goal_col = (CCol){YEW_CCOL_HERE};
     yew_win_follow_cursor(cx->win);
     return YEW_CMD_OK;
 }

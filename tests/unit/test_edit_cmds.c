@@ -84,7 +84,7 @@ static void edit_fixture(Ed *ed, const u8 *bytes, size_t len, YewEol eol)
     YEW_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
     YEW_ASSERT_EQ_U64(yew_undo_current(ed->buffer.undo),
                       ed->buffer.undo->root);
 }
@@ -145,7 +145,8 @@ static void edit_place(Ed *ed, u64 off)
     line = yew_textbuf_line_span(ed->buffer.tb,
                                  yew_textbuf_line_of(ed->buffer.tb,
                                                     cursor->pos));
-    cursor->goal_col = yew_off_to_gcol(ed->buffer.tb, line, cursor->pos);
+    cursor->goal_col = yew_off_to_ccol(ed->buffer.tb, line, cursor->pos,
+                                       YEW_VP_TABWIDTH);
 }
 
 void test_edit_l_motion_table_handles_unicode_crlf_and_viewport_counts(void)
@@ -992,4 +993,55 @@ void test_edit_backspace_in_leading_whitespace_eats_one_level(void)
     edit_assert_text(&ed, snapped, sizeof(snapped) - 1U);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 4U);
     yew_ed_free(&ed);
+}
+
+/*
+ * FIELD REPORT: a goal column on the `v` of `var acc = zero` arrowed up
+ * to `fn total` and landed one cell short of the `f` above it.
+ *
+ * The same arrow key answered correctly with wrap ON, because the
+ * wrapped path has always carried its goal as a CELL column in
+ * `Win.wrap_goal` while the unwrapped path carried a GRAPHEME column in
+ * `Cursor.goal_col`, and a tab is one grapheme but four cells.  The two
+ * must agree: a buffer does not change shape when the user toggles wrap,
+ * and this disagreement is the crack the bug came through.
+ */
+static const u8 edit_tab_indent[] =
+    "    fn total\n"     /* [0,13)  cell 4 is `f` at 4      */
+    "\tvar acc = zero\n" /* [13,29) cell 4 is `v` at 14     */
+    "  \tmixed\n"        /* [29,38) cell 4 is `m` at 32     */
+    "        wide";      /* [38,50) cell 4 is a space at 42 */
+
+void test_edit_vertical_goal_agrees_with_wrap_on_and_off(void)
+{
+    static const bool wraps[] = {false, true};
+    u64 landed[YEW_ARRAY_LEN(wraps)][3];
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(wraps); i++) {
+        Ed ed;
+
+        edit_fixture(&ed, edit_tab_indent, sizeof(edit_tab_indent) - 1U,
+                     YEW_EOL_LF);
+        /* Wide enough that no line wraps: wrap must change nothing. */
+        ed.win->vp.cols = 80U;
+        ed.win->vp.wrap = wraps[i];
+        ed.win->wrap_goal_valid = false;
+        edit_place(&ed, 14U);
+        yew_ed_handle_key(&ed, edit_key(YEW_KEY_UP), 0);
+        landed[i][0] = yew_ed_cursor(&ed)->pos.v;
+        yew_ed_handle_key(&ed, edit_key(YEW_KEY_DOWN), 1);
+        landed[i][1] = yew_ed_cursor(&ed)->pos.v;
+        yew_ed_handle_key(&ed, edit_key(YEW_KEY_DOWN), 2);
+        landed[i][2] = yew_ed_cursor(&ed)->pos.v;
+        yew_ed_free(&ed);
+    }
+    /* Up onto the space indent, back onto the tab indent, then onto the
+     * indent that mixes both: cell 4 every time. */
+    YEW_ASSERT_EQ_U64(landed[0][0], 4U);
+    YEW_ASSERT_EQ_U64(landed[0][1], 14U);
+    YEW_ASSERT_EQ_U64(landed[0][2], 32U);
+    YEW_ASSERT_EQ_U64(landed[1][0], landed[0][0]);
+    YEW_ASSERT_EQ_U64(landed[1][1], landed[0][1]);
+    YEW_ASSERT_EQ_U64(landed[1][2], landed[0][2]);
 }

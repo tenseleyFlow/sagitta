@@ -300,7 +300,7 @@ static bool jump_in_focused(Ed *ed, Win *w, Buffer *target, ByteOff pos)
         return false;
     cursor->pos = pos;
     cursor->anchor = pos;
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
     yew_win_follow_cursor(ed->win);
     yew_ed_damage_document(ed);
     return true;
@@ -342,7 +342,7 @@ bool yew_lsp_location_jump(Ed *ed, Win *w, const LspLoc *loc, u8 pos_enc)
             return false;
         cursor->pos = pos;
         cursor->anchor = pos;
-        cursor->goal_col = (GCol){0U};
+        cursor->goal_col = (CCol){0U};
         yew_win_follow_cursor(ed->win);
         yew_ed_damage_document(ed);
         return true;

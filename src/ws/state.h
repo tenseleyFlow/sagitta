@@ -252,9 +252,13 @@ u32 yew_idmap_get(const IdMapVec *m, u32 file_id);
 float yew_permille_to_ratio(i64 permille);
 i64 yew_ratio_to_permille(float ratio);
 
-/* `goal: -1` in the file means YEW_GCOL_EOL, which is UINT64_MAX
+/* `goal: -1` in the file means YEW_CCOL_EOL, which is UINT64_MAX
  * internally and does not fit i64 — writing it raw would force every
- * reader into an unsigned special case. */
+ * reader into an unsigned special case.  Every other value is a CELL
+ * column: a file written before goal columns counted tab cells restores
+ * a goal measured in graphemes, which the next vertical motion corrects
+ * and the next horizontal one overwrites.  Positions, the bytes that
+ * matter, are unaffected. */
 i64 yew_goal_to_i64(u64 goal);
 u64 yew_goal_from_i64(i64 v);
 

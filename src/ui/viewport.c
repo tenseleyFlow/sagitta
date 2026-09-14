@@ -47,6 +47,27 @@ static TextBuf *vp_text(const Win *w)
     return w->buf->tb;
 }
 
+/*
+ * The buffer's own tab width, for `Cursor.goal_col` only.
+ *
+ * `Cursor.goal_col` is the screen column of an UNWRAPPED line, and
+ * ui/draw.c paints that line with the buffer's tab width, so the goal
+ * must be measured the same way or it will not sit under the glyph the
+ * user is looking at.  `Win.wrap_goal` keeps YEW_VP_TABWIDTH because the
+ * whole wrap subsystem -- the wrap cache, wrap_row_raw, wrap_count_raw --
+ * lays rows out at that width; a goal measured differently from the rows
+ * it indexes into would be worse than one measured consistently.  That
+ * wrap layout and the renderer disagree for a buffer whose tab width is
+ * not YEW_VP_TABWIDTH is a separate, older bug, and not this one's to
+ * fix.
+ */
+static u32 vp_goal_tabwidth(const Win *w)
+{
+    return w->buf != NULL && w->buf->tabwidth != 0U
+               ? w->buf->tabwidth
+               : (u32)YEW_VP_TABWIDTH;
+}
+
 static Cursor *vp_cursor(Win *w)
 {
     if (w->cs.curs.len == 0U || (size_t)w->cs.primary >= w->cs.curs.len)
@@ -774,11 +795,20 @@ static void cursor_to_row(Win *w, u16 target)
             target_row.lo < target_row.hi)
             pos = yew_grapheme_prev_boundary(tb, pos);
     } else {
-        pos = yew_gcol_to_off(tb, span, cursor->goal_col);
+        CCol goal = yew_cursor_goal(tb, cursor, vp_goal_tabwidth(w));
+
+        /* Materialise: a scroll that pushes the caret onto another line
+         * must not let an unresolved goal re-read itself from wherever
+         * it was pushed to.  Identical to a no-op when the goal already
+         * held a column, which is the behaviour this branch had. */
+        cursor->goal_col = goal;
+        pos = yew_ccol_to_off_padded(tb, span, goal,
+                                     vp_goal_tabwidth(w));
     }
     cursor->pos = pos;
     if (w->vp.wrap)
-        cursor->goal_col = yew_off_to_gcol(tb, span, pos);
+        cursor->goal_col = yew_off_to_ccol(tb, span, pos,
+                                           vp_goal_tabwidth(w));
     if (unselected)
         cursor->anchor = pos;
 }
