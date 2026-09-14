@@ -4,10 +4,10 @@
  * Correct behavior: yew_grid_puts segments `1` + VS16 + U+20E3 as one
  * two-cell grapheme, storing a width-2 head and width-0 continuation.
  *
- * Baseline failure: the printable-ASCII fast path stores `1` at width 1,
- * then appends the zero-width suffix without recomputing the complete
- * cluster width. The renderer consequently takes its YEW_BUG path on valid
- * keycap text.
+ * Regression: the printable-ASCII fast path used to store `1` at width 1,
+ * then append the zero-width suffix without recomputing the complete cluster
+ * width. The renderer consequently took its YEW_BUG path on valid keycap
+ * text.
  */
 #include "audit.h"
 

@@ -132,6 +132,10 @@ void test_width_golden(void)
 void test_width_strings(void)
 {
     static const u8 mixed[] = {'A', '\t', 0xe6u, 0xbcu, 0xa2u};
+    static const u8 keycap[] = {'1', 0xefu, 0xb8u, 0x8fu,
+                                0xe2u, 0x83u, 0xa3u};
+    static const u8 around_keycap[] = {'A', '1', 0xefu, 0xb8u, 0x8fu,
+                                       0xe2u, 0x83u, 0xa3u, 'B'};
     static const u8 clusters[] = {
         'e', 0xccu, 0x81u,
         0xf0u, 0x9fu, 0x87u, 0xbau,
@@ -145,6 +149,9 @@ void test_width_strings(void)
     YEW_ASSERT_EQ_I64(yew_str_width(mixed, sizeof(mixed), 8u), 10);
     YEW_ASSERT_EQ_I64(yew_str_width(mixed, sizeof(mixed), 0u), 4);
     YEW_ASSERT_EQ_I64(yew_str_width(clusters, sizeof(clusters), 4u), 7);
+    YEW_ASSERT_EQ_I64(yew_str_width(keycap, sizeof(keycap), 4u), 2);
+    YEW_ASSERT_EQ_I64(yew_str_width(around_keycap,
+                                    sizeof(around_keycap), 4u), 4);
 }
 
 void test_width_clip(void)
