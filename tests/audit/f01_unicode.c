@@ -70,7 +70,7 @@ static bool register_roundtrip(const TextBuf *tb, const u8 *bytes,
     yew_regval_init(&value);
     yew_regval_from_span(&value, tb, (Span){0U, (u64)len},
                          YEW_REG_CHARWISE, NULL);
-    yew_reg_set(&regs, (u8)'a', &value);
+    yew_reg_set_macro(&regs, (u8)'a', &value, false);
     stored = yew_reg_get(&regs, (u8)'a');
     ok = stored != NULL && stored->bytes.len == len &&
          (len == 0U || memcmp(stored->bytes.data, bytes, len) == 0);

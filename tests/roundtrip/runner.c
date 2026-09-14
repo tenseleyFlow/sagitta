@@ -359,7 +359,7 @@ static bool install_macro(Ed *ed, const Bytebuf *source)
     yew_regval_init(&value);
     value.type = (u8)YEW_REG_CHARWISE;
     bytebuf_append(&value.bytes, source->data, source->len);
-    yew_reg_set(&ed->regs, (u8)'a', &value);
+    yew_reg_set_macro(&ed->regs, (u8)'a', &value, false);
     yew_regval_free(&value);
     return true;
 }

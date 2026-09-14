@@ -225,12 +225,14 @@ static void reg_set_raw(RegVal *dst, const RegVal *src)
     dst->t_wall = (i64)time(NULL);
 }
 
-void yew_reg_set(Registers *r, u8 name, const RegVal *v)
+/* YEW-F-058: keep the raw named-register store private so production callers
+ * cannot wrap it and bypass the yank/delete/macro routing front doors. */
+static void reg_set(Registers *r, u8 name, const RegVal *v)
 {
     RegVal *dst;
 
     if (r == NULL || v == NULL)
-        YEW_BUG("yew_reg_set: NULL argument");
+        YEW_BUG("reg_set: NULL argument");
     if (name == '_' || name == 0U)
         return;
     /*
@@ -242,7 +244,7 @@ void yew_reg_set(Registers *r, u8 name, const RegVal *v)
     if (name == '.' || name == '/' || name == ':' || name == '%' ||
         name == '#')
         YEW_BUG("register %c is written by its owning subsystem, not by "
-                "yew_reg_set", (int)name);
+                "reg_set", (int)name);
     if (name >= 'A' && name <= 'Z') {
         yew_reg_append(r, name, v);
         return;
@@ -262,7 +264,7 @@ void yew_reg_set_macro(Registers *r, u8 name, const RegVal *v, bool append)
     if (append)
         yew_reg_append(r, (u8)(name - (u8)'a' + (u8)'A'), v);
     else
-        yew_reg_set(r, name, v);
+        reg_set(r, name, v);
 }
 
 void yew_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len)
@@ -471,7 +473,7 @@ static void set_explicit(Registers *r, u8 name, const RegVal *v)
         return;
     if (name == '-')
         return;
-    yew_reg_set(r, name, v);
+    reg_set(r, name, v);
 }
 
 void yew_reg_yank(Registers *r, u8 explicit_name, const RegVal *v)
