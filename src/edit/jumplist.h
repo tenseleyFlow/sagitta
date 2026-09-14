@@ -35,6 +35,8 @@ typedef struct Buffer Buffer;
 typedef struct JumpEntry {
     u32 buf_id;
     MarkId mark;
+    /* Sparse workspace-record identity; new entries remain 0. */
+    u32 state_token;
     /* Display and recovery only.  When the buffer has been closed the
      * mark is gone but buf_id + line can still reopen the file there. */
     LineNo line_hint;

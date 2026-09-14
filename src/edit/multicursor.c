@@ -291,8 +291,13 @@ bool yew_cset_add_many(CursorSet *cs, const Cursor *cursors, u32 count)
     if (count == 0U)
         return true;
     if (cs->next_stamp == 0U ||
-        cs->next_stamp > UINT64_MAX - (u64)count)
+        cs->next_stamp > UINT64_MAX - (u64)count) {
+        /* This caller needs room for both the live set and `count` new
+         * identities.  Force reseed's exhausted-namespace path instead
+         * of preserving a high next_stamp that only fits the live set. */
+        cs->next_stamp = 0U;
         yew_cset_reseed(cs);
+    }
     final_len = cs->curs.len + count;
     YewCursorVec_reserve(&cs->curs, final_len);
     YewCursorStampVec_reserve(&cs->stamps, final_len);
@@ -371,6 +376,7 @@ void yew_cset_remove_all_but_primary(CursorSet *cs)
 void yew_cset_reseed(CursorSet *cs)
 {
     SelStack empty = {0};
+    u64 first;
     size_t i;
 
     if (cs == NULL || cs->curs.len == 0U || cs->curs.len > YEW_MC_MAX)
@@ -382,9 +388,18 @@ void yew_cset_reseed(CursorSet *cs)
         YewSelStackVec_push(&cs->selstacks, empty);
     if (cs->selstacks.len > cs->curs.len)
         cs->selstacks.len = cs->curs.len;
+
+    /* YEW-F-079: a reseed replaces cursor identities.  Reusing 1..N
+     * would attach a retained future record to an unrelated cursor after
+     * undo restored a different set.  Keep stamps monotonic unless the
+     * integer space itself is exhausted; that exceptional path already
+     * invalidates every outstanding cursor handle. */
+    first = cs->next_stamp;
+    if (first == 0U || first > UINT64_MAX - (u64)cs->curs.len)
+        first = 1U;
     for (i = 0U; i < cs->curs.len; i++)
-        cs->stamps.data[i] = (u64)i + 1U;
-    cs->next_stamp = (u64)cs->curs.len + 1U;
+        cs->stamps.data[i] = first + (u64)i;
+    cs->next_stamp = first + (u64)cs->curs.len;
     cs->active = YEW_MC_ACTIVE_NONE;
     cs->batch_delta = 0;
     cs->batch_next = 0U;

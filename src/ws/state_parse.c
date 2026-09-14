@@ -312,7 +312,7 @@ static StateReadErr read_state_file(const char *path, Bytebuf *out)
 /* Applying a window record                                         */
 /* ---------------------------------------------------------------- */
 
-static void apply_cursors(Win *w, const FlLit *rec)
+static void apply_cursors(Ed *ed, Win *w, const FlLit *rec)
 {
     const FlLit *list = yew_fl_get(rec, "cursors");
     u32 n = yew_fl_len(list);
@@ -326,15 +326,31 @@ static void apply_cursors(Win *w, const FlLit *rec)
     for (i = 0U; i < n; i++) {
         const FlLit *c = yew_fl_at(list, i);
         Cursor cur;
+        u64 stamp = 0U;
 
         cur.pos = BYTEOFF((u64)yew_fl_int_or(yew_fl_get(c, "pos"), 0));
         cur.anchor = BYTEOFF((u64)yew_fl_int_or(yew_fl_get(c, "anchor"), 0));
         cur.goal_col.v =
             yew_goal_from_i64(yew_fl_int_or(yew_fl_get(c, "goal"), -1));
-        if (i == 0U)
+        if (i == 0U) {
             w->cs.curs.data[w->cs.primary] = cur;
-        else
-            (void)yew_cset_add(&w->cs, cur);
+            stamp = w->cs.stamps.data[w->cs.primary];
+        } else {
+            u64 added_stamp = w->cs.next_stamp;
+
+            if (yew_cset_add(&w->cs, cur)) {
+                u32 k;
+
+                for (k = 0U; k < w->cs.stamps.len; k++)
+                    if (w->cs.stamps.data[k] == added_stamp) {
+                        stamp = added_stamp;
+                        break;
+                    }
+            }
+        }
+        if (stamp != 0U)
+            yew_state_record_retain(&ed->state, YEW_STATE_REC_CURSOR,
+                                    w->id, stamp, c);
     }
     primary = yew_fl_int_or(yew_fl_get(rec, "primary"), 0);
     if (primary >= 0 && (u32)primary < w->cs.curs.len)
@@ -353,12 +369,13 @@ static void apply_cursors(Win *w, const FlLit *rec)
         yew_cset_normalize(w->buf->tb, &w->cs);
 }
 
-static void apply_view(Win *w, const FlLit *rec)
+static void apply_view(Ed *ed, Win *w, const FlLit *rec)
 {
     const FlLit *v = yew_fl_get(rec, "view");
 
     if (v == NULL)
         return;
+    yew_state_record_retain(&ed->state, YEW_STATE_REC_VIEW, w->id, 0U, v);
     w->vp.top = LINENO((u64)yew_fl_int_or(yew_fl_get(v, "top"), 0));
     w->vp.top_sub = (u32)yew_fl_int_or(yew_fl_get(v, "top_sub"), 0);
     w->vp.left.v = (u64)yew_fl_int_or(yew_fl_get(v, "left"), 0);
@@ -374,7 +391,8 @@ static void apply_view(Win *w, const FlLit *rec)
  * deferral exists to avoid.  s21 keeps line_hint for this case, and
  * a jump into a deferred buffer reopens it there.
  */
-static bool ring_entry(Ed *ed, const FlLit *rec, JumpEntry *out)
+static bool ring_entry(Ed *ed, const FlLit *rec, JumpEntry *out,
+                       WsRecordKind kind, u32 owner)
 {
     const char *path;
     u64 plen = 0U;
@@ -390,6 +408,8 @@ static bool ring_entry(Ed *ed, const FlLit *rec, JumpEntry *out)
     out->buf_id = b->id;
     out->line_hint = LINENO((u64)yew_fl_int_or(yew_fl_get(rec, "line"), 0));
     out->stamp_ms = (u64)yew_fl_int_or(yew_fl_get(rec, "stamp"), 0);
+    out->state_token =
+        yew_state_record_retain_token(&ed->state, kind, owner, rec);
     return true;
 }
 
@@ -403,6 +423,7 @@ static void apply_jumps(Ed *ed, Win *w, const FlLit *rec)
 
     if (j == NULL)
         return;
+    yew_state_record_retain(&ed->state, YEW_STATE_REC_JUMPS, w->id, 0U, j);
     list = yew_fl_get(j, "entries");
     n = yew_fl_len(list);
     if (n > (u32)YEW_STATE_MAX_JUMPS)
@@ -410,7 +431,8 @@ static void apply_jumps(Ed *ed, Win *w, const FlLit *rec)
     for (i = 0U; i < n; i++) {
         JumpEntry je;
 
-        if (!ring_entry(ed, yew_fl_at(list, i), &je))
+        if (!ring_entry(ed, yew_fl_at(list, i), &je,
+                        YEW_STATE_REC_JUMP_ENTRY, w->id))
             continue;
         w->jumps.e[w->jumps.head] = je;
         w->jumps.head = (w->jumps.head + 1U) % YEW_JUMPLIST_MAX;
@@ -444,7 +466,8 @@ typedef struct WinSlots {
     u32 leaves; /* leaves materialized so far, against the s22 cap */
 } WinSlots;
 
-static Pane *build_panes(const FlLit *m, WinSlots *slots, u32 depth)
+static Pane *build_panes(WsState *state, const FlLit *m, WinSlots *slots,
+                         u32 depth, u32 owner)
 {
     const FlLit *split;
     const char *dir;
@@ -494,15 +517,22 @@ static Pane *build_panes(const FlLit *m, WinSlots *slots, u32 depth)
             return NULL;
         slots->used[idx] = true;
         slots->leaves++;
-        return yew_pane_new_leaf(w);
+        p = yew_pane_new_leaf(w);
+        p->state_token = yew_state_record_retain_token(
+            state, YEW_STATE_REC_PANE, owner, m);
+        return p;
     }
     p = yew_xcalloc(1U, sizeof(*p));
     p->is_leaf = false;
     p->dir = dlen > 0U && dir[0] == 'v' ? YEW_SPLIT_V : YEW_SPLIT_H;
     p->ratio = yew_permille_to_ratio(
         yew_fl_int_or(yew_fl_get(m, "ratio_permille"), 500));
-    p->a = build_panes(yew_fl_get(m, "a"), slots, depth + 1U);
-    p->b = build_panes(yew_fl_get(m, "b"), slots, depth + 1U);
+    p->state_token = yew_state_record_retain_token(
+        state, YEW_STATE_REC_PANE, owner, m);
+    p->a = build_panes(state, yew_fl_get(m, "a"), slots, depth + 1U,
+                       owner);
+    p->b = build_panes(state, yew_fl_get(m, "b"), slots, depth + 1U,
+                       owner);
     if (p->a == NULL || p->b == NULL) {
         /*
          * A split with one child is not a tree.  Collapse to whichever
@@ -581,6 +611,7 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
     if (n > (u32)YEW_PANE_MAX_LEAVES)
         n = (u32)YEW_PANE_MAX_LEAVES;
     for (i = 0U; i < n; i++) {
+        const FlLit *wrec = yew_fl_at(wins, i);
         Win *w = yew_ed_win_clone(ed, ed->win);
 
         if (w == NULL)
@@ -588,12 +619,15 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
         yew_ed_win_set_buffer(ed, w, buf);
         /* set_buffer is a no-op when the window already shows `buf`,
          * so the view is applied after it either way. */
-        apply_cursors(w, yew_fl_at(wins, i));
-        apply_view(w, yew_fl_at(wins, i));
-        apply_jumps(ed, w, yew_fl_at(wins, i));
+        yew_state_record_retain(&ed->state, YEW_STATE_REC_WIN, 0U, w->id,
+                                wrec);
+        apply_cursors(ed, w, wrec);
+        apply_view(ed, w, wrec);
+        apply_jumps(ed, w, wrec);
         slots.v[slots.n++] = w;
     }
-    root = build_panes(yew_fl_get(rec, "panes"), &slots, 0U);
+    root = build_panes(&ed->state, yew_fl_get(rec, "panes"), &slots, 0U,
+                       t->tab_id);
     if (root == NULL) {
         /* Nothing usable: release what we built and keep the tab's
          * original single-leaf tree rather than leaving it rootless. */
@@ -686,6 +720,8 @@ static void apply_groups(Ed *ed, const FlLit *doc, IdMapVec *gids)
         live = yew_group_create(ed, dir, label);
         if (live == 0U)
             continue;
+        yew_state_record_retain(&ed->state, YEW_STATE_REC_GROUP, 0U, live,
+                                g);
         /* The FILE id is the key and the LIVE id is the value; the two
          * are never conflated.  DoD 4 greps for exactly that. */
         yew_idmap_put(gids, file_id, live);
@@ -753,6 +789,8 @@ static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
             *first_out = idx;
         file_id = (u32)yew_fl_int_or(yew_fl_get(rec, "id"), 0);
         yew_idmap_put(tids, file_id, t->tab_id);
+        yew_state_record_retain(&ed->state, YEW_STATE_REC_TAB, 0U,
+                                t->tab_id, rec);
         /*
          * The file is checked once, here.  A tab is KEPT when its file
          * is gone — the path is the only record of what was being
@@ -822,6 +860,8 @@ static void apply_files(Ed *ed, const FlLit *doc)
         b = yew_ws_file_buf(ed, path);
         if (b == NULL)
             continue;
+        yew_state_record_retain(&ed->state, YEW_STATE_REC_FILE, 0U, b->id,
+                                rec);
         marks = yew_fl_get(rec, "marks");
         for (m = 0U; m < yew_fl_len(marks); m++) {
             const FlLit *mk = yew_fl_at(marks, m);
@@ -841,6 +881,8 @@ static void apply_files(Ed *ed, const FlLit *doc)
             b->pending_marks[name[0] - 'a'] =
                 (u64)yew_fl_int_or(yew_fl_get(mk, "pos"), 0);
             b->pending_mark_set[name[0] - 'a'] = true;
+            yew_state_record_retain(&ed->state, YEW_STATE_REC_MARK, b->id,
+                                    (u64)(u8)name[0], mk);
         }
         changes = yew_fl_get(rec, "changes");
         if (changes != NULL) {
@@ -849,12 +891,16 @@ static void apply_files(Ed *ed, const FlLit *doc)
             u32 nc = yew_fl_len(entries);
             i64 cur;
 
+            yew_state_record_retain(&ed->state, YEW_STATE_REC_CHANGES,
+                                    b->id, 0U, changes);
+
             if (nc > (u32)YEW_STATE_MAX_JUMPS)
                 nc = (u32)YEW_STATE_MAX_JUMPS;
             for (c = 0U; c < nc; c++) {
                 JumpEntry je;
 
-                if (!ring_entry(ed, yew_fl_at(entries, c), &je))
+                if (!ring_entry(ed, yew_fl_at(entries, c), &je,
+                                YEW_STATE_REC_CHANGE_ENTRY, b->id))
                     continue;
                 b->changes.e[b->changes.head] = je;
                 b->changes.head =
@@ -868,6 +914,8 @@ static void apply_files(Ed *ed, const FlLit *doc)
                                  ? (u32)cur
                                  : b->changes.len;
         }
+        yew_state_record_retain(&ed->state, YEW_STATE_REC_UNDO, b->id, 0U,
+                                yew_fl_get(rec, "undo"));
     }
 }
 
@@ -899,6 +947,46 @@ static void clamp_all(Ed *ed)
                 yew_vp_clamp(w);
         }
     }
+}
+
+static void clear_pane_retained(Pane *p)
+{
+    u32 i;
+
+    if (p == NULL)
+        return;
+    p->state_token = 0U;
+    if (!p->is_leaf) {
+        clear_pane_retained(p->a);
+        clear_pane_retained(p->b);
+        return;
+    }
+    if (p->win == NULL)
+        return;
+    for (i = 0U; i < (u32)YEW_JUMPLIST_MAX; i++)
+        p->win->jumps.e[i].state_token = 0U;
+}
+
+void yew_state_retained_clear(Ed *ed)
+{
+    u32 i;
+
+    if (ed == NULL)
+        return;
+    /* Tokens live in mutable entities, while their records live in the
+     * document arena.  Clear the former before the latter can die. */
+    for (i = 0U; i < ed->tabs.v.len; i++)
+        clear_pane_retained(ed->tabs.v.data[i].root);
+    for (i = 0U; i < ed->ws.nbufs; i++) {
+        Buffer *b = ed->ws.bufs[i];
+        u32 k;
+
+        if (b == NULL)
+            continue;
+        for (k = 0U; k < (u32)YEW_CHANGELIST_MAX; k++)
+            b->changes.e[k].state_token = 0U;
+    }
+    yew_state_records_reset(&ed->state);
 }
 
 YewWsResult yew_state_apply(Ed *ed, const u8 *bytes, u64 len)
@@ -948,6 +1036,7 @@ YewWsResult yew_state_apply(Ed *ed, const u8 *bytes, u64 len)
                        (long long)version, YEW_STATE_VERSION);
         return recover(ed, why);
     }
+    yew_state_retained_clear(ed);
     /*
      * workspace.path mismatch LOGS and continues.  A moved checkout is
      * not corruption — the key is the realpath, so a mismatch means the
@@ -1007,6 +1096,7 @@ YewWsResult yew_state_apply(Ed *ed, const u8 *bytes, u64 len)
     yew_idmap_free(&gids);
     yew_idmap_free(&tids);
     yew_group_prune_empty(ed);               /* step 7 */
+    yew_state_records_finish(&ed->state);
     /*
      * Steps 8 and 9 are the caller's, because layout needs the terminal
      * size and this function is also driven by tests with no terminal.

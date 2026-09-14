@@ -116,6 +116,33 @@ void test_multicursor_latest_cap_and_active_tracking(void)
     yew_cset_free(&set);
 }
 
+void test_multicursor_reseed_uses_fresh_identity_space(void)
+{
+    CursorSet set;
+
+    yew_cset_init(&set, test_cursor(10U, 10U, 10U));
+    YEW_ASSERT(yew_cset_add(&set, test_cursor(5U, 5U, 5U)));
+    YEW_ASSERT_EQ_U64(set.next_stamp, 3U);
+    yew_cset_reseed(&set);
+    YEW_ASSERT_EQ_U64(set.stamps.data[0], 3U);
+    YEW_ASSERT_EQ_U64(set.stamps.data[1], 4U);
+    YEW_ASSERT_EQ_U64(set.next_stamp, 5U);
+
+    /* Exhaustion is the one path that must recycle the namespace. */
+    set.next_stamp = UINT64_MAX;
+    yew_cset_reseed(&set);
+    YEW_ASSERT_EQ_U64(set.stamps.data[0], 1U);
+    YEW_ASSERT_EQ_U64(set.stamps.data[1], 2U);
+    YEW_ASSERT_EQ_U64(set.next_stamp, 3U);
+    set.next_stamp = UINT64_MAX;
+    YEW_ASSERT(yew_cset_add(&set, test_cursor(20U, 20U, 20U)));
+    YEW_ASSERT_EQ_U64(set.stamps.data[0], 1U);
+    YEW_ASSERT_EQ_U64(set.stamps.data[1], 2U);
+    YEW_ASSERT_EQ_U64(set.stamps.data[2], 3U);
+    YEW_ASSERT_EQ_U64(set.next_stamp, 4U);
+    yew_cset_free(&set);
+}
+
 static CmdStatus mc_probe_insert(CmdCtx *cx)
 {
     EditCtx ec;

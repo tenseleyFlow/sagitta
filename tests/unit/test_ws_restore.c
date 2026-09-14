@@ -761,6 +761,69 @@ void test_ws_restore_preserves_unknown_root_and_workspace_fields(void)
     rs_remove(&f);
 }
 
+/*
+ * Retained entity records belong to the document that supplied them.
+ * Applying a later valid document must replace that association instead of
+ * leaking an older future field into the next save.  A document containing
+ * only v1 fields also keeps the sparse side table empty.
+ */
+void test_ws_restore_reapply_replaces_retained_entity_fields(void)
+{
+    RsFix f;
+    Ed b;
+    Bytebuf first;
+    Bytebuf second;
+    Bytebuf out;
+    char path[192];
+    char with_future[1024];
+    char plain[1024];
+    int n1;
+    int n2;
+
+    rs_make(&f);
+    rs_file(&f, "a.txt", "alpha\n", path, sizeof(path));
+    n1 = snprintf(with_future, sizeof(with_future),
+                  "{ version: 1, workspace: { path: \"\", saved_at: 0, }, "
+                  "options: {}, groups: [], tabs: [{ id: 1, path: \"%s\", "
+                  "group: 0, group_ordinal: 0, deferred: true, "
+                  "future_tab_key: { leaf: true, }, },], active_tab: 1, "
+                  "files: [], }\n",
+                  path);
+    n2 = snprintf(plain, sizeof(plain),
+                  "{ version: 1, workspace: { path: \"\", saved_at: 0, }, "
+                  "options: {}, groups: [], tabs: [{ id: 1, path: \"%s\", "
+                  "group: 0, group_ordinal: 0, deferred: true, },], "
+                  "active_tab: 1, files: [], }\n",
+                  path);
+    YEW_ASSERT(n1 > 0 && (size_t)n1 < sizeof(with_future));
+    YEW_ASSERT(n2 > 0 && (size_t)n2 < sizeof(plain));
+    bytebuf_init(&first);
+    bytebuf_init(&second);
+    bytebuf_init(&out);
+    bytebuf_append(&first, (const u8 *)with_future, (size_t)n1);
+    bytebuf_append(&second, (const u8 *)plain, (size_t)n2);
+
+    YEW_ASSERT_EQ_U64(rs_apply(&f, &b, &first), YEW_WS_RESTORED);
+    YEW_ASSERT_EQ_U64(b.state.records_len, 1U);
+    yew_state_emit(&b, &out);
+    bytebuf_push_u8(&out, 0U);
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "future_tab_key"));
+    out.len = 0U;
+
+    YEW_ASSERT_EQ_U64(yew_state_apply(&b, second.data, second.len),
+                      YEW_WS_RESTORED);
+    YEW_ASSERT_EQ_U64(b.state.records_len, 0U);
+    yew_state_emit(&b, &out);
+    bytebuf_push_u8(&out, 0U);
+    YEW_ASSERT_NULL(strstr((const char *)out.data, "future_tab_key"));
+
+    bytebuf_free(&first);
+    bytebuf_free(&second);
+    bytebuf_free(&out);
+    yew_ed_free(&b);
+    rs_remove(&f);
+}
+
 /* ---------------------------------------------------------------- */
 /* Marks                                                            */
 /* ---------------------------------------------------------------- */

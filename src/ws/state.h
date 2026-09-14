@@ -38,6 +38,37 @@ typedef struct WsBoolOption {
     bool value;
 } WsBoolOption;
 
+/*
+ * YEW-F-079: identity-bearing records need an association with the live
+ * entity they created.  Otherwise the emitter can only reconstruct today's
+ * fields and silently deletes fields written by a newer yew.  Records are
+ * retained only when they contain an unknown field, so an ordinary v1 state
+ * document pays no per-entity allocation.
+ */
+typedef enum WsRecordKind {
+    YEW_STATE_REC_GROUP = 0,
+    YEW_STATE_REC_TAB,
+    YEW_STATE_REC_PANE,
+    YEW_STATE_REC_WIN,
+    YEW_STATE_REC_CURSOR,
+    YEW_STATE_REC_VIEW,
+    YEW_STATE_REC_JUMPS,
+    YEW_STATE_REC_JUMP_ENTRY,
+    YEW_STATE_REC_FILE,
+    YEW_STATE_REC_MARK,
+    YEW_STATE_REC_CHANGES,
+    YEW_STATE_REC_CHANGE_ENTRY,
+    YEW_STATE_REC_UNDO,
+    YEW_STATE_REC_COUNT
+} WsRecordKind;
+
+typedef struct WsRetainedRecord {
+    const FlLit *lit;
+    u64 entity;
+    u32 owner;
+    u8 kind;
+} WsRetainedRecord;
+
 enum {
     YEW_STATE_VERSION = 1,
     /* §5: the debounce.  A state cache that is 2 s stale costs nothing;
@@ -123,6 +154,10 @@ typedef struct WsState {
     WsBoolOption *bool_options;
     u32 bool_options_len;
     u32 bool_options_cap;
+    WsRetainedRecord *records;
+    u32 records_len;
+    u32 records_cap;
+    u32 next_record_token;
 
     /* §6: files that were not on disk at restore.  Counted so exactly
      * ONE summary message is shown, never one per tab. */
@@ -222,5 +257,20 @@ i64 yew_ratio_to_permille(float ratio);
  * reader into an unsigned special case. */
 i64 yew_goal_to_i64(u64 goal);
 u64 yew_goal_from_i64(i64 v);
+
+/* Internal parse/emit bridge for YEW-F-079's sparse retained records. */
+void yew_state_records_reset(WsState *s);
+void yew_state_records_free(WsState *s);
+void yew_state_record_retain(WsState *s, WsRecordKind kind, u32 owner,
+                             u64 entity, const FlLit *lit);
+u32 yew_state_record_retain_token(WsState *s, WsRecordKind kind,
+                                  u32 owner, const FlLit *lit);
+void yew_state_records_finish(WsState *s);
+const FlLit *yew_state_record_get(const WsState *s, WsRecordKind kind,
+                                  u32 owner, u64 entity);
+bool yew_state_record_key_known(WsRecordKind kind, const char *key,
+                                u64 key_len);
+/* Clears pane/ring tokens as well as the sparse map before its arena dies. */
+void yew_state_retained_clear(Ed *ed);
 
 #endif
