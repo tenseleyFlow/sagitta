@@ -262,13 +262,17 @@ fi
 # turns the one check that mattered into no check at all.
 #
 fl_abort_hits=$tmp/fl-abort-hits
+fl_abort_pattern='(^|[^[:alnum:]_])(abort|assert)[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+(abort|assert)([^[:alnum:]_]|$)'
 : >"$fl_abort_hits"
 while IFS= read -r file; do
     case ${file#"$repo_dir"/} in
         src/fl/*) ;;
         *) continue ;;
     esac
-    grep -nE -e '(^|[^[:alnum:]_])(abort|assert)[[:space:]]*\(' "$file" \
+    # YEW-F-028: naming abort/assert through an object-like macro still
+    # creates the forbidden VM termination path; catch the forwarding
+    # definition as well as an ordinary direct call.
+    grep -nE -e "$fl_abort_pattern" "$file" \
         2>/dev/null | sed "s|^|${file#"$repo_dir"/}:|" >>"$fl_abort_hits" || :
 done <"$source_files"
 if [ -s "$fl_abort_hits" ]; then
@@ -276,6 +280,8 @@ if [ -s "$fl_abort_hits" ]; then
         >>"$hits"
     cat "$fl_abort_hits" >>"$hits"
 fi
+scan_seed "Fletch abort/assert macro forwarding" "$fl_abort_pattern" \
+    '#define FL_DIE abort'
 
 qsort_pattern='(^|[^[:alnum:]_])qsort(_r)?[[:space:]]*\('
 scan "qsort is unstable and qsort_r is ABI-divergent; use yew_sort_stable" \
