@@ -283,11 +283,15 @@ fi
 scan_seed "Fletch abort/assert macro forwarding" "$fl_abort_pattern" \
     '#define FL_DIE abort'
 
-qsort_pattern='(^|[^[:alnum:]_])qsort(_r)?[[:space:]]*\('
+# YEW-F-029: aliasing qsort does not acquire stable ordering; reject the
+# forwarding definition as well as direct qsort/qsort_r calls.
+qsort_pattern='(^|[^[:alnum:]_])qsort(_r)?[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+qsort(_r)?([^[:alnum:]_]|$)'
 scan "qsort is unstable and qsort_r is ABI-divergent; use yew_sort_stable" \
     "$qsort_pattern" "$all_files"
 scan_seed "qsort/qsort_r" "$qsort_pattern" \
     'void seeded(void) { qsort_r(rows, count, width, compare, ctx); }'
+scan_seed "qsort/qsort_r macro forwarding" "$qsort_pattern" \
+    '#define SORT_ROWS qsort'
 scan "__attribute__ is outside the locked C11 subset" \
     '__attribute__' "$all_files"
 scan "constructor registration is forbidden; use the explicit registry" \
