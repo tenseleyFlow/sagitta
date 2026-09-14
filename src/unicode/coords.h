@@ -32,8 +32,12 @@ ByteOff yew_gcol_to_off(const TextBuf *tb, Span line, GCol g);
 CharCol yew_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos);
 CCol yew_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw);
 ByteOff yew_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw);
-/* Block-paste coordinate helpers. The offset variant chooses content-end
- * when the requested cell lies beyond the line; shortfall is the number of
+/* The CARET form of yew_ccol_to_off, and the block-paste helpers built on
+ * it. The plain variant answers "which character occupies this cell", so a
+ * cell beyond the line answers with the LAST character -- correct for its
+ * question, wrong for a caret, which wants the position after that
+ * character. The padded variant chooses content-end instead, and is what
+ * vertical motion and block paste both want: shortfall is the number of
  * real padding spaces needed after round-left. */
 ByteOff yew_ccol_to_off_padded(const TextBuf *tb, Span line, CCol c,
                                u32 tabw);
