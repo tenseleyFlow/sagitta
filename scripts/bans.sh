@@ -909,47 +909,58 @@ if grep -nE '(unicode/width\.h|yew_(cluster_)?width)' \
     sed 's|^|src/text/register.c:|' "$tmp/register-width-hits" >>"$hits"
 fi
 
+c_strip_comments_literals()
+{
+    awk '
+        function scrub(s,    out, i, c, nextc) {
+            out = ""
+            for (i = 1; i <= length(s); i++) {
+                c = substr(s, i, 1)
+                nextc = substr(s, i + 1, 1)
+                if (in_comment) {
+                    if (c == "*" && nextc == "/") {
+                        in_comment = 0
+                        out = out "  "
+                        i++
+                    } else {
+                        out = out " "
+                    }
+                } else if (quote != "") {
+                    if (c == "\\") {
+                        out = out "  "
+                        i++
+                    } else {
+                        if (c == quote)
+                            quote = ""
+                        out = out " "
+                    }
+                } else if (c == "/" && nextc == "*") {
+                    in_comment = 1
+                    out = out "  "
+                    i++
+                } else if (c == "/" && nextc == "/") {
+                    break
+                } else if (c == "\"" || c == single_quote) {
+                    quote = c
+                    out = out " "
+                } else {
+                    out = out c
+                }
+            }
+            return out
+        }
+        BEGIN { single_quote = sprintf("%c", 39) }
+        { print scrub($0) }
+    ' "$1"
+}
+
+register_code=$tmp/register-code
+c_strip_comments_literals "$register" >"$register_code"
+
 # YEW-F-062: names do not establish types.  Strip comments and literals, find
 # every cell-column declarator, then reject direct access to its representation
 # regardless of the local name; register paste must use the coordinate API.
 awk '
-    function scrub(s,    out, i, c, nextc) {
-        out = ""
-        for (i = 1; i <= length(s); i++) {
-            c = substr(s, i, 1)
-            nextc = substr(s, i + 1, 1)
-            if (in_comment) {
-                if (c == "*" && nextc == "/") {
-                    in_comment = 0
-                    out = out "  "
-                    i++
-                } else {
-                    out = out " "
-                }
-            } else if (quote != "") {
-                if (c == "\\") {
-                    out = out "  "
-                    i++
-                } else {
-                    if (c == quote)
-                        quote = ""
-                    out = out " "
-                }
-            } else if (c == "/" && nextc == "*") {
-                in_comment = 1
-                out = out "  "
-                i++
-            } else if (c == "/" && nextc == "/") {
-                break
-            } else if (c == "\"" || c == single_quote) {
-                quote = c
-                out = out " "
-            } else {
-                out = out c
-            }
-        }
-        return out
-    }
     function add_declarators(tail,    stop, n, parts, i, part, name) {
         stop = length(tail) + 1
         if (index(tail, ";") != 0 && index(tail, ";") < stop)
@@ -971,8 +982,7 @@ awk '
                 names[name] = 1
         }
     }
-    BEGIN { single_quote = sprintf("%c", 39) }
-    { source = source "\n" scrub($0) }
+    { source = source "\n" $0 }
     END {
         rest = source
         type_pattern = "(^|[^[:alnum:]_])(CCol|CellCol)[^[:alnum:]_]"
@@ -990,16 +1000,19 @@ awk '
             }
         }
     }
-' "$register" >"$tmp/register-column-math-hits"
+' "$register_code" >"$tmp/register-column-math-hits"
 if [ -s "$tmp/register-column-math-hits" ]; then
     echo "ban: register paste must not perform cell-column arithmetic" \
         >>"$hits"
     sed 's|^|src/text/register.c:|' \
         "$tmp/register-column-math-hits" >>"$hits"
 fi
+# YEW-F-063: helper spellings in comments and string literals are not routing
+# evidence; require each call token in stripped C code.
 for required in yew_off_to_ccol yew_ccol_to_off_padded \
                 yew_ccol_shortfall yew_ccol_max; do
-    if ! grep -F "$required" "$register" >/dev/null 2>&1; then
+    if ! grep -E "(^|[^[:alnum:]_])${required}[[:space:]]*[(]" \
+            "$register_code" >/dev/null 2>&1; then
         echo "ban: register paste must route column math through $required" \
             >>"$hits"
     fi
