@@ -51,6 +51,8 @@ enum {
 typedef struct Pane {
     bool is_leaf;
     Rect rect; /* filled by yew_layout_compute */
+    /* Sparse workspace-record identity; 0 means no unknown fields. */
+    u32 state_token;
     struct Pane *parent;
 
     /* split node */

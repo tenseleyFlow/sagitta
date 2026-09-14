@@ -238,6 +238,9 @@ Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
     a->win = leaf->win;
     a->parent = leaf;
     a->ratio = 0.5f;
+    /* The old leaf's retained record follows the old window into child A;
+     * the in-place node is a new split and has no older record. */
+    a->state_token = leaf->state_token;
     b->is_leaf = true;
     b->win = win;
     b->parent = leaf;
@@ -250,6 +253,7 @@ Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
     leaf->ratio = 0.5f;
     leaf->a = a;
     leaf->b = b;
+    leaf->state_token = 0U;
     return b;
 }
 
@@ -274,6 +278,9 @@ bool yew_pane_close(Ed *ed, Pane *leaf)
     parent->is_leaf = sibling->is_leaf;
     parent->dir = sibling->dir;
     parent->ratio = sibling->ratio;
+    /* The sibling survives conceptually even though its allocation does
+     * not, so its retained workspace record moves with its contents. */
+    parent->state_token = sibling->state_token;
     parent->win = sibling->win;
     parent->a = sibling->a;
     parent->b = sibling->b;

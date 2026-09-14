@@ -272,6 +272,7 @@ void yew_state_dispose(Ed *ed)
         s->timer = YEW_TIMER_NONE;
     }
     lock_release(s);
+    yew_state_retained_clear(ed);
     if (s->doc_ready) {
         /* The retained literal trees live in this arena, so no pointer into
          * the parsed document may outlive its bytes. */
@@ -287,6 +288,7 @@ void yew_state_dispose(Ed *ed)
     s->bool_options = NULL;
     s->bool_options_len = 0U;
     s->bool_options_cap = 0U;
+    yew_state_records_free(s);
     s->ready = false;
     s->dirty = false;
 }

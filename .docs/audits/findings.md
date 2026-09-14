@@ -91,7 +91,7 @@ recorded in `audit-00.md`.
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
 | YEW-F-077 | M | open | F03 TEXT | rectangular yank omits required short-row padding | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 | YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
-| YEW-F-079 | C | open | F07 UI | workspace re-emission drops unknown group and tab record keys | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
+| YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 
 The width mismatch is visible chrome corruption but the underlying document
 bytes remain intact and the user can disable `ambiguous_wide`; that is Medium
@@ -610,15 +610,26 @@ mismatch and the correct recovery source remain observable and recoverable.
 No disk file is silently overwritten by replay, making this Medium rather
 than Critical. It remains open for Sprint 59; no product source changed.
 
-`YEW-F-079` is Critical because Sprint 25's forward-compatibility contract is
-not limited to singleton maps: group and tab records also carry user-owned
-workspace state. The hard-XPASS reproducer restores one grouped file whose
-group and tab records each contain a future nested field, then performs a
-normal emit; both fields disappear. Source inspection found the same
-reconstruction pattern in pane/window/view/jump/file subrecords, so the
-remediation must define a stable identity-to-retained-record mapping and audit
-the complete record family rather than patch only the two probe keys. This was
-filed by the `YEW-F-006` Critical cluster hunt and remains open for Sprint 59.
+`YEW-F-079` was Critical because Sprint 25's forward-compatibility contract is
+not limited to singleton maps: every entity record carries user-owned
+workspace state. Commit `9222b491` adds a sparse retained-record map keyed by
+the live stable identities for groups, tabs, windows, buffers, cursors, and
+marks, with compact state tokens for pane and history-entry records that have
+no schema identity. Known live fields are emitted first and win; unknown
+future fields retain their exact byte keys and nested values. The audit now
+reorders tabs and split/closes a retained pane before checking the complete
+record family, and is an ordinary passing test.
+
+Cluster hunt: group, tab, pane, window, cursor, view, jumplist container and
+entry, file, mark, changelist container and entry, and undo records were all
+checked at the parse/emit boundary. The sweep found two siblings within the
+same loss surface: pending named marks were omitted before hydration, and
+retained map-key emission measured keys as C strings, truncating a future key
+at an embedded NUL. Both are fixed and covered by the F079 audit. Cursor
+re-identification was also made monotonic so undo cannot attach an old future
+record to a replacement cursor. Root/workspace records remain covered by
+`YEW-F-006`, and the options map was already retained wholesale. No further
+record reconstruction site remains open.
 
 ## Unverified observations
 

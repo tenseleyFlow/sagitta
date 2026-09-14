@@ -35,7 +35,8 @@ typedef struct StateEmit {
     u32 depth;
 } StateEmit;
 
-static void state_add(StateEmit *e, const char *key, FlValue value)
+static void state_add_n(StateEmit *e, const char *key, u64 key_len,
+                        FlValue value)
 {
     FlValue parent;
 
@@ -53,12 +54,19 @@ static void state_add(StateEmit *e, const char *key, FlValue value)
 
         if (key == NULL)
             YEW_BUG("workspace state: map value without a key");
-        k = fl_str_new(&e->vm, key, (u32)strlen(key));
+        if (key_len > (u64)UINT32_MAX)
+            YEW_BUG("workspace state: map key too large");
+        k = fl_str_new(&e->vm, key, (u32)key_len);
         (void)fl_map_set(&e->vm, (FlMap *)parent.as.o,
                          FL_OBJ_V(FL_STR, k), value);
         return;
     }
     YEW_BUG("workspace state: value added outside a container");
+}
+
+static void state_add(StateEmit *e, const char *key, FlValue value)
+{
+    state_add_n(e, key, key == NULL ? 0U : (u64)strlen(key), value);
 }
 
 static void state_emit_init(StateEmit *e, Bytebuf *out)
@@ -88,6 +96,15 @@ static void state_open(StateEmit *e, const char *key, FlValue value)
     if (e->depth >= YEW_ARRAY_LEN(e->stack))
         YEW_BUG("workspace state: emitter nesting overflow");
     state_add(e, key, value);
+    e->stack[e->depth++] = value;
+}
+
+static void state_open_n(StateEmit *e, const char *key, u64 key_len,
+                         FlValue value)
+{
+    if (e->depth >= YEW_ARRAY_LEN(e->stack))
+        YEW_BUG("workspace state: emitter nesting overflow");
+    state_add_n(e, key, key_len, value);
     e->stack[e->depth++] = value;
 }
 
@@ -142,37 +159,43 @@ static void state_nil(StateEmit *e, const char *key)
     state_add(e, key, FL_NIL_V);
 }
 
-static void state_lit(StateEmit *e, const char *key, const FlLit *lit)
+static void state_lit_n(StateEmit *e, const char *key, u64 key_len,
+                        const FlLit *lit)
 {
     u32 i;
 
     if (lit == NULL) {
-        state_nil(e, key);
+        state_add_n(e, key, key_len, FL_NIL_V);
         return;
     }
     switch (lit->kind) {
     case FL_LIT_NIL:
-        state_nil(e, key);
+        state_add_n(e, key, key_len, FL_NIL_V);
         break;
     case FL_LIT_BOOL:
-        state_bool(e, key, lit->i != 0);
+        state_add_n(e, key, key_len, FL_BOOL_V(lit->i != 0));
         break;
     case FL_LIT_INT:
-        state_int(e, key, lit->i);
+        state_add_n(e, key, key_len, FL_INT_V(lit->i));
         break;
     case FL_LIT_STR:
-        state_str(e, key, lit->s, lit->slen);
+        if (lit->slen > (u64)UINT32_MAX)
+            YEW_BUG("workspace state: retained string too large");
+        state_add_n(e, key, key_len,
+                    FL_OBJ_V(FL_STR,
+                             fl_str_new(&e->vm, lit->s, (u32)lit->slen)));
         break;
     case FL_LIT_LIST:
-        state_list_open(e, key);
+        state_open_n(e, key, key_len,
+                     FL_OBJ_V(FL_LIST, fl_list_new(&e->vm)));
         for (i = 0U; i < lit->len; i++)
-            state_lit(e, NULL, lit->items[i]);
+            state_lit_n(e, NULL, 0U, lit->items[i]);
         state_list_close(e);
         break;
     case FL_LIT_MAP:
-        state_map_open(e, key);
+        state_open_n(e, key, key_len, FL_OBJ_V(FL_MAP, fl_map_new(&e->vm)));
         for (i = 0U; i < lit->len; i++)
-            state_lit(e, lit->keys[i], lit->items[i]);
+            state_lit_n(e, lit->keys[i], lit->keylens[i], lit->items[i]);
         state_map_close(e);
         break;
     default:
@@ -222,7 +245,8 @@ static void state_options(StateEmit *e, const WsState *s)
             if (override != NULL)
                 state_bool(e, override->key, override->value);
             else
-                state_lit(e, options->keys[i], options->items[i]);
+                state_lit_n(e, options->keys[i], options->keylens[i],
+                            options->items[i]);
         }
     }
     for (i = 0U; i < s->bool_options_len; i++)
@@ -258,8 +282,29 @@ static void state_unknown_fields(StateEmit *e, const FlLit *map,
             if (state_lit_key_eq(map, i, known[k]))
                 break;
         if (k == known_len)
-            state_lit(e, map->keys[i], map->items[i]);
+            state_lit_n(e, map->keys[i], map->keylens[i], map->items[i]);
     }
+}
+
+static void state_unknown_record(StateEmit *e, const FlLit *map,
+                                 WsRecordKind kind)
+{
+    u32 i;
+
+    if (map == NULL || map->kind != FL_LIT_MAP)
+        return;
+    for (i = 0U; i < map->len; i++)
+        if (!yew_state_record_key_known(kind, map->keys[i],
+                                        map->keylens[i]))
+            state_lit_n(e, map->keys[i], map->keylens[i], map->items[i]);
+}
+
+static void state_retained_unknown(StateEmit *e, const WsState *s,
+                                   WsRecordKind kind, u32 owner,
+                                   u64 entity)
+{
+    state_unknown_record(e, yew_state_record_get(s, kind, owner, entity),
+                         kind);
 }
 
 void yew_idmap_init(IdMapVec *m)
@@ -393,7 +438,7 @@ static i64 win_index(const WinOrder *o, const Win *w)
 }
 
 static void emit_panes(StateEmit *e, const char *key, const Pane *p,
-                       const WinOrder *o)
+                       const WinOrder *o, const WsState *state, u32 owner)
 {
     if (p == NULL) {
         /* A tab with no tree still restores as a single window. */
@@ -408,9 +453,11 @@ static void emit_panes(StateEmit *e, const char *key, const Pane *p,
     } else {
         state_str(e, "split", p->dir == YEW_SPLIT_H ? "h" : "v", 1U);
         state_int(e, "ratio_permille", yew_ratio_to_permille(p->ratio));
-        emit_panes(e, "a", p->a, o);
-        emit_panes(e, "b", p->b, o);
+        emit_panes(e, "a", p->a, o, state, owner);
+        emit_panes(e, "b", p->b, o, state, owner);
     }
+    state_retained_unknown(e, state, YEW_STATE_REC_PANE, owner,
+                           p->state_token);
     state_map_close(e);
 }
 
@@ -426,7 +473,8 @@ static void emit_panes(StateEmit *e, const char *key, const Pane *p,
  * survives as somewhere to reopen, and resolving it would mean reading
  * every file the user has ever jumped through (§3.3's whole point).
  */
-static void emit_ring_entry(StateEmit *e, const Ed *ed, const JumpEntry *je)
+static void emit_ring_entry(StateEmit *e, const Ed *ed, const JumpEntry *je,
+                            WsRecordKind kind, u32 owner)
 {
     Buffer *b = yew_ws_buf_by_id((Ed *)ed, je->buf_id);
     LineNo line = je->line_hint;
@@ -447,6 +495,7 @@ static void emit_ring_entry(StateEmit *e, const Ed *ed, const JumpEntry *je)
     state_int(e, "line", (i64)line.v);
     state_int(e, "col", (i64)col);
     state_int(e, "stamp", (i64)je->stamp_ms);
+    state_retained_unknown(e, &ed->state, kind, owner, je->state_token);
     state_map_close(e);
 }
 
@@ -464,8 +513,10 @@ static void emit_jumps(StateEmit *e, const Ed *ed, const Win *w)
     state_int(e, "cur", (i64)w->jumps.cur);
     state_list_open(e, "entries");
     for (i = 0U; i < n; i++)
-        emit_ring_entry(e, ed, yew_jumplist_at(&w->jumps, i));
+        emit_ring_entry(e, ed, yew_jumplist_at(&w->jumps, i),
+                        YEW_STATE_REC_JUMP_ENTRY, w->id);
     state_list_close(e);
+    state_retained_unknown(e, &ed->state, YEW_STATE_REC_JUMPS, w->id, 0U);
     state_map_close(e);
 }
 
@@ -483,6 +534,8 @@ static void emit_win(StateEmit *e, const Ed *ed, const Win *w)
         state_int(e, "pos", (i64)c->pos.v);
         state_int(e, "anchor", (i64)c->anchor.v);
         state_int(e, "goal", yew_goal_to_i64(c->goal_col.v));
+        state_retained_unknown(e, &ed->state, YEW_STATE_REC_CURSOR, w->id,
+                               w->cs.stamps.data[i]);
         state_map_close(e);
     }
     state_list_close(e);
@@ -492,8 +545,10 @@ static void emit_win(StateEmit *e, const Ed *ed, const Win *w)
     state_int(e, "top_sub", (i64)w->vp.top_sub);
     state_int(e, "left", (i64)w->vp.left.v);
     state_bool(e, "wrap", w->vp.wrap);
+    state_retained_unknown(e, &ed->state, YEW_STATE_REC_VIEW, w->id, 0U);
     state_map_close(e);
     emit_jumps(e, ed, w);
+    state_retained_unknown(e, &ed->state, YEW_STATE_REC_WIN, 0U, w->id);
     state_map_close(e);
 }
 
@@ -545,11 +600,13 @@ static void emit_tab(StateEmit *e, const Ed *ed, int idx)
     state_int(e, "focus", t->focus == NULL ? 0
                                             : win_index(&order,
                                                         t->focus->win));
-    emit_panes(e, "panes", t->root, &order);
+    emit_panes(e, "panes", t->root, &order, &ed->state, t->tab_id);
     state_list_open(e, "wins");
     for (i = 0U; i < order.n; i++)
         emit_win(e, ed, order.wins[i]);
     state_list_close(e);
+    state_retained_unknown(e, &ed->state, YEW_STATE_REC_TAB, 0U,
+                           t->tab_id);
     state_map_close(e);
 }
 
@@ -563,7 +620,6 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
          i++) {
         const Buffer *b = ed->ws.bufs[i];
         u32 m;
-        bool any_mark = false;
 
         /* Scratch buffers have no file behind them, so there is nothing
          * a file record could be about. */
@@ -575,9 +631,8 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
         for (m = 0U; m < 26U; m++) {
             char name[2];
 
-            if (!b->named_set[m])
+            if (!b->named_set[m] && !b->pending_mark_set[m])
                 continue;
-            any_mark = true;
             name[0] = (char)('a' + m);
             name[1] = '\0';
             state_map_open(e, NULL);
@@ -589,14 +644,16 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
              * avoids.
              */
             {
-                ByteOff at = BYTEOFF(0U);
+                ByteOff at = BYTEOFF(b->pending_marks[m]);
 
-                (void)yew_ed_mark_get((Ed *)ed, b, (u8)('a' + m), &at);
+                if (b->named_set[m])
+                    (void)yew_ed_mark_get((Ed *)ed, b, (u8)('a' + m), &at);
                 state_int(e, "pos", (i64)at.v);
             }
+            state_retained_unknown(e, &ed->state, YEW_STATE_REC_MARK,
+                                   b->id, (u64)(u8)name[0]);
             state_map_close(e);
         }
-        (void)any_mark;
         state_list_close(e);
         /*
          * The changelist is per BUFFER because a change is a property
@@ -619,9 +676,12 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
                 u32 at = (b->changes.head + YEW_CHANGELIST_MAX -
                           b->changes.len + c) % YEW_CHANGELIST_MAX;
 
-                emit_ring_entry(e, ed, &b->changes.e[at]);
+                emit_ring_entry(e, ed, &b->changes.e[at],
+                                YEW_STATE_REC_CHANGE_ENTRY, b->id);
             }
             state_list_close(e);
+            state_retained_unknown(e, &ed->state, YEW_STATE_REC_CHANGES,
+                                   b->id, 0U);
             state_map_close(e);
         }
         /*
@@ -641,7 +701,11 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
             state_str(e, "file", sidecar, (u64)strlen(sidecar));
             state_int(e, "version", 1);
         }
+        state_retained_unknown(e, &ed->state, YEW_STATE_REC_UNDO, b->id,
+                               0U);
         state_map_close(e);
+        state_retained_unknown(e, &ed->state, YEW_STATE_REC_FILE, 0U,
+                               b->id);
         state_map_close(e);
         written++;
     }
@@ -709,6 +773,8 @@ void yew_state_emit(const Ed *ed, Bytebuf *out)
         else
             state_str(&e, "last_active_member", g->last_active_member,
                        (u64)strlen(g->last_active_member));
+        state_retained_unknown(&e, &ed->state, YEW_STATE_REC_GROUP, 0U,
+                               g->id);
         state_map_close(&e);
     }
     state_list_close(&e);
