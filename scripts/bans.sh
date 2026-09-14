@@ -1018,11 +1018,28 @@ for required in yew_off_to_ccol yew_ccol_to_off_padded \
     fi
 done
 
+oracle=$repo_dir/tests/fuzz/oracle.c
 if grep -nE 'yew_textbuf_|piece\.h' \
-        "$repo_dir/tests/fuzz/oracle.c" >"$tmp/oracle-hits" 2>/dev/null; then
+        "$oracle" >"$tmp/oracle-hits" 2>/dev/null; then
     echo "ban: the text-buffer oracle must remain implementation-independent" \
         >>"$hits"
     sed 's|^|tests/fuzz/oracle.c:|' "$tmp/oracle-hits" >>"$hits"
+fi
+# YEW-F-064: token bans cannot recognize a copied model after its identifiers
+# are renamed.  Seal the reviewed, intentionally naive array-of-lines oracle;
+# changing its structure now requires an explicit seal update and review.
+oracle_sha256=c76402ce9b8ce123de3e50067d373a303c55f7964fb8801517fc26d32524097c
+if command -v sha256sum >/dev/null 2>&1; then
+    oracle_actual=$(sha256sum "$oracle" | sed 's/[[:space:]].*//')
+elif command -v shasum >/dev/null 2>&1; then
+    oracle_actual=$(shasum -a 256 "$oracle" | sed 's/[[:space:]].*//')
+else
+    oracle_actual=
+    echo "ban: need sha256sum or shasum to verify the fuzz oracle" >>"$hits"
+fi
+if [ "$oracle_actual" != "$oracle_sha256" ]; then
+    echo "ban: tests/fuzz/oracle.c differs from its reviewed independence seal" \
+        >>"$hits"
 fi
 
 tables=$repo_dir/src/unicode/tables.c

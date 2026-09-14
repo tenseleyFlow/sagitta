@@ -76,7 +76,7 @@ recorded in `audit-00.md`.
 | YEW-F-061 | M | fixed | F15 CI | ~~register-width ban accepts local lookup tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
 | YEW-F-062 | M | fixed | F15 CI | ~~register-column ban depends on historical variable names~~ — fixed 2026-09-14 in `d87c57f6` | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
 | YEW-F-063 | M | fixed | F15 CI | ~~register-helper presence gate accepts comments~~ — fixed 2026-09-14 in `f36b1e1e` | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
-| YEW-F-064 | M | open | F15 CI | oracle-independence ban accepts copied renamed models | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
+| YEW-F-064 | M | fixed | F15 CI | ~~oracle-independence ban accepts copied renamed models~~ — fixed 2026-09-14 in `e79f2414` | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
 | YEW-F-065 | M | open | F15 CI | generated-table ban verifies only a retained marker | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
 | YEW-F-066 | M | open | F15 CI | termination-site ban omits `_Exit` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
 | YEW-F-067 | M | open | F15 CI | AI-body logging ban depends on variable names | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
@@ -574,10 +574,11 @@ in comments as proof of routing. Commit `f36b1e1e` shares a C comment/literal
 stripper with the typed column check and requires an executable call token for
 each coordinate helper.
 
-`YEW-F-064` is Medium because oracle independence cannot be established by
-banning two implementation names. A copied, renamed piece model passes while
-retaining the correlated implementation structure the rule forbids. It
-remains open for Sprint 59.
+`YEW-F-064` was Medium because oracle independence could not be established by
+banning two implementation names. Commit `e79f2414` retains that defense but
+also seals the reviewed naive array-of-lines implementation with portable
+SHA-256 verification, forcing structural oracle changes through explicit
+review.
 
 `YEW-F-065` is Medium because retaining the generated-file marker after a
 manual table edit satisfies the entire generated-UCD check. The gate neither
