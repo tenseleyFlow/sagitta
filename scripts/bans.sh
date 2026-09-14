@@ -663,8 +663,13 @@ scan_seed "deterministic random-call" "$deterministic_random_pattern" \
     'long seeded(void) { return ran''dom(); }'
 scan_seed "deterministic random-seed" "$deterministic_random_pattern" \
     'void seeded(void) { sran''dom(1U); }'
+# YEW-F-054: direct variadic exec of a shell with -c is the same forbidden
+# clipboard command-string path as popen or system; only argv tools are valid.
+clipboard_shell_pattern='(^|[^[:alnum:]_])(popen|system)[[:space:]]*\(|(^|[^[:alnum:]_])(execl|execle|execlp)[[:space:]]*\([[:space:]]*"/(usr/)?bin/(ba|da|k|z)?sh"[^;]*"-c"'
 scan "clipboard subprocesses must never invoke a shell" \
-    '(^|[^[:alnum:]_])(popen|system)[[:space:]]*\(' "$source_files"
+    "$clipboard_shell_pattern" "$source_files"
+scan_seed "clipboard direct-shell exec" "$clipboard_shell_pattern" \
+    'execl("/bin/sh", "sh", "-c", cmd, NULL);'
 job_interpolation_pattern='bytebuf_printf.*cmdline|sprintf.*shell'
 scan "programmatic job data must not be interpolated into shell text" \
     "$job_interpolation_pattern" "$source_files"
