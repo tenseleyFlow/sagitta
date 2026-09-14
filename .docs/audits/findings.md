@@ -40,7 +40,7 @@ recorded in `audit-00.md`.
 | YEW-F-025 | M | fixed | F15 CI | ~~script tests have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `da1f9cd0` | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
 | YEW-F-026 | M | fixed | F15 CI | ~~PTY cases have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `86ccb661` | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
 | YEW-F-027 | M | fixed | F15 CI | ~~Fletch format ban accepts macro-forwarded nonliteral formats~~ — fixed 2026-09-14 in `c371b5a4` | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
-| YEW-F-028 | M | open | F15 CI | Fletch abort ban accepts macro-forwarded abort | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
+| YEW-F-028 | M | fixed | F15 CI | ~~Fletch abort ban accepts macro-forwarded abort~~ — fixed 2026-09-14 in `f6c8075d` | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
 | YEW-F-029 | M | open | F15 CI | stable-sort ban accepts macro-forwarded qsort | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-030 | M | open | F15 CI | C11-subset ban accepts token-pasted attribute syntax | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-031 | M | open | F15 CI | explicit-registry ban accepts token-pasted constructors | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
@@ -376,10 +376,11 @@ argument subject to the literal-format rule. The positive control pins a
 two-hop nonliteral alias as a violation while the same alias with a literal
 format and the bounded `va_list` forwarding exception remain accepted.
 
-`YEW-F-028` is Medium because the VM abort scanner accepts `abort()` reached
-through a plainly named macro. The compiler still emits the forbidden abort
-path while the gate reports green. This is a release-control gap, not a
-confirmed product crash, and remains open for Sprint 59.
+`YEW-F-028` was Medium because the VM abort scanner accepted `abort()` reached
+through a plainly named macro. Commit `f6c8075d` makes the Fletch-only scan
+reject object-like aliases naming `abort` or `assert` as well as direct calls,
+and carries a positive macro-forwarding control so a later direct-call-only
+regression fails the gate.
 
 `YEW-F-029` is Medium because the stable-sort ban accepts `qsort` behind a
 macro even though the resulting call retains the unstable cross-libc ordering
