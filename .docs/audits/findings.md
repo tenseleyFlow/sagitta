@@ -51,7 +51,7 @@ recorded in `audit-00.md`.
 | YEW-F-036 | M | fixed | F15 CI | ~~cwd-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-037 | M | fixed | F15 CI | ~~realpath-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-038 | M | fixed | F15 CI | ~~locale-dependent Unicode ban omits `mbtowc`~~ — fixed 2026-09-14 in `af94a8c1` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
-| YEW-F-039 | M | open | F15 CI | native-loader ban omits `dlvsym` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
+| YEW-F-039 | M | fixed | F15 CI | ~~native-loader ban omits `dlvsym`~~ — fixed 2026-09-14 in `f09c70e0` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
 | YEW-F-040 | M | open | F15 CI | strerror_r ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
 | YEW-F-041 | M | open | F15 CI | musl backtrace ban omits `backtrace_symbols_fd` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-042 | M | open | F15 CI | GNU-libc ban omits `getopt_long_only` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
@@ -434,10 +434,10 @@ reproducers now fail the real gate.
 adds the omitted API to the same bespoke-Unicode boundary and pins it with an
 explicit positive control.
 
-`YEW-F-039` is Medium because the native-loader list covers `dlsym` but omits
-the GNU versioned lookup `dlvsym`. A Fletch-only plugin policy cannot be
-established by that list while a native symbol resolver passes. It remains
-open for Sprint 59.
+`YEW-F-039` was Medium because the native-loader list covered `dlsym` but
+omitted the GNU versioned lookup `dlvsym`. Commit `f09c70e0` adds the versioned
+resolver to the Fletch-only plugin boundary and pins the omission with a
+dedicated positive control.
 
 `YEW-F-040` is Medium because a macro-forwarded `strerror_r` call preserves
 the incompatible ABI surface while evading the direct-call regex. The product
