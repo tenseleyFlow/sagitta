@@ -529,8 +529,13 @@ scan "syntax definitions emit semantic attrs, never colors" \
     "$syntax_color_pattern" "$syn_files"
 scan_seed "packed decimal syntax color" "$syntax_color_pattern" \
     'static const unsigned foreground = 16711680U;'
+# YEW-F-047: local comparisons against the East Asian 0x1100 threshold
+# reimplement cell width even when no width helper is named.
+syntax_width_pattern='yew_(cp|str)_width|(^|[^[:alnum:]_])(0[xX]1100|4352)[uUlL]*([^[:alnum:]_]|$)'
 scan "syntax owns byte spans; width math belongs in src/unicode" \
-    'yew_(cp|str)_width' "$syn_files"
+    "$syntax_width_pattern" "$syn_files"
+scan_seed "syntax-local width threshold" "$syntax_width_pattern" \
+    'unsigned seeded(unsigned cp) { return cp >= 0x1100U ? 2U : 1U; }'
 scan "pty creation must use the audited posix_openpt harness" \
     '(forkpty|openpty|-lutil)' "$pty_files"
 scan "golden updates are forbidden in CI" \
