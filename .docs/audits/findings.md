@@ -38,7 +38,7 @@ recorded in `audit-00.md`.
 | YEW-F-023 | M | fixed | F14 PLUG | ~~plugin commands cannot enter the recorder CMDWORD space~~ — fixed 2026-09-14 in `d2dc4ddf` | tests/audit/yew_f_023.c | s58 F14 q8 |
 | YEW-F-024 | M | fixed | F15 CI | ~~cross-surface XFAIL debt table stops at F004~~ — fixed 2026-09-14 in `56ce3f24` | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
 | YEW-F-025 | M | fixed | F15 CI | ~~script tests have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `da1f9cd0` | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
-| YEW-F-026 | M | open | F15 CI | PTY cases have no XFAIL or hard-XPASS state | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
+| YEW-F-026 | M | fixed | F15 CI | ~~PTY cases have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `86ccb661` | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
 | YEW-F-027 | M | open | F15 CI | Fletch format ban accepts macro-forwarded nonliteral formats | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
 | YEW-F-028 | M | open | F15 CI | Fletch abort ban accepts macro-forwarded abort | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
 | YEW-F-029 | M | open | F15 CI | stable-sort ban accepts macro-forwarded qsort | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
@@ -358,12 +358,15 @@ the exit statuses.
 The unit audit and Fletch conformance runners retain their independent hard
 XPASS paths.
 
-`YEW-F-026` is Medium because Sprint 58 explicitly requires
-`PtyCase.xfail_id`, but the structure has only name/profile/geometry/function
-fields and the runner has no expected-failure classification. A seeded golden
-mismatch remains an ordinary failure and a later matching golden cannot be
-reported as XPASS. It remains open for Sprint 59; no product source changed
-during the audit.
+`YEW-F-026` was Medium because PTY cases had no expected-failure identity or
+hard unexpected-pass state. Commit `86ccb661` adds `PtyCase.xfail_id`, requires
+its ID to have an active authoritative debt row, and permits only a stable
+comparison against an existing mismatching golden to report `XFAIL`. A matching
+golden is a hard `XPASS`; missing or unreadable goldens, setup and execution
+failures, independent-run instability, cleanup failures, live children, and
+descriptor leaks remain hard failures. Update mode refuses marked cases. The
+runner self-check and an end-to-end match/mismatch/fixed-ID drill pin the
+classification and exit-status contract.
 
 `YEW-F-027` is Medium because the Fletch format scanner recognizes direct
 printf-family call tokens but accepts a macro-forwarded call carrying a
