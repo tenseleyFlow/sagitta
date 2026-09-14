@@ -969,62 +969,12 @@ static bool run_one(u64 seed, u32 fixture, u32 len)
     return ok;
 }
 
-static bool init_count_folding_session(RtSession *session, u32 length)
-{
-    static const u8 insert[] = {'x'};
-    const char *name;
-    RtEvent event = {0};
-    u32 i;
-
-    if (length < 3U)
-        return false;
-    rt_session_init(session);
-    session->seed = UINT64_C(0x534147434f554e54);
-    session->fixture = 2U;
-    session->generated_len = length;
-    session->start_mode = (u8)YEW_MODE_L;
-
-    event.cmd = yew_cmd_lookup("ed.move.buf.end",
-                               (u32)strlen("ed.move.buf.end"));
-    event.count = 1U;
-    if (event.cmd.v == 0U)
-        goto fail;
-    RtEventVec_push(&session->events, event);
-    RtEventVec_push(&session->events, event);
-
-    event = (RtEvent){0};
-    event.cmd = yew_cmd_lookup("ed.edit.insert.text",
-                               (u32)strlen("ed.edit.insert.text"));
-    event.count = 1U;
-    event.sarg = insert;
-    event.sarg_len = sizeof(insert);
-    if (event.cmd.v == 0U)
-        goto fail;
-    RtEventVec_push(&session->events, event);
-
-    for (i = 3U; i < length; i++) {
-        name = (i & 1U) == 0U ? "ed.move.unit.next" :
-                                "ed.move.unit.prev";
-        event = (RtEvent){0};
-        event.cmd = yew_cmd_lookup(name, (u32)strlen(name));
-        event.count = 1U;
-        if (event.cmd.v == 0U)
-            goto fail;
-        RtEventVec_push(&session->events, event);
-    }
-    return true;
-
-fail:
-    rt_session_free(session);
-    return false;
-}
-
 static bool run_count_folding_sentinel(void)
 {
     RtSession session;
     bool ok;
 
-    if (!init_count_folding_session(&session, 3U))
+    if (!rt_session_init_count_folding(&session, 3U))
         return false;
 
     /* Two uncounted TAKES_COUNT operations must remain two operations.
@@ -1206,20 +1156,15 @@ static bool has_count_folding_prefix(const RtSession *session)
 
 static int run_selftest(void)
 {
-    const u64 seed = UINT64_C(20764);
     RtSession session;
 
-    /* Use an ordinary generator seed so the minimized .rec can be copied
-     * directly into the corpus and reconstructed by run_corpus().  Keep the
-     * seed pinned: a generator change that invalidates the fixture must fail
-     * this self-test visibly rather than silently selecting another case. */
-    rt_session_init(&session);
-    if (!rt_session_generate(&session, seed, 2U, 96U) ||
-        !has_count_folding_prefix(&session) || session.events.len < 96U) {
+    /* YEW-F-009: this planted fault must not depend on the random command
+     * pool, whose legitimate growth used to make the self-test exit early. */
+    if (!rt_session_init_count_folding(&session, 96U) ||
+        !has_count_folding_prefix(&session) || session.events.len != 96U) {
         rt_session_free(&session);
         return 2;
     }
-    session.events.len = 96U;
     /* Fold a TAKES_COUNT run in real emitted Fletch, then execute it through
      * the real VM.  The shortest divergent prefix is exactly three events. */
     report_failure(&session, true);
