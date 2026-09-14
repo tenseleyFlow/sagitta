@@ -34,7 +34,7 @@ recorded in `audit-00.md`.
 | YEW-F-019 | M | fixed | F13 GIT | ~~porcelain rename test survives the required one-NUL mutation~~ — fixed 2026-09-13 in `b464953d` | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
 | YEW-F-020 | M | fixed | F13 GIT | ~~Git formatting gate rejects legitimate display formatting~~ — fixed 2026-09-13 in `0195ed1c` | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
 | YEW-F-021 | M | fixed | F14 PLUG | ~~plugin teardown retains raw hook and ledger lengths~~ — fixed 2026-09-14 in `073489ff` | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
-| YEW-F-022 | M | open | F14 PLUG | plugin trust wording gate rejects its required warning | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
+| YEW-F-022 | M | fixed | F14 PLUG | ~~plugin trust wording gate rejects its required warning~~ — fixed 2026-09-14 in `4858a39c` | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
 | YEW-F-023 | M | open | F14 PLUG | plugin commands cannot enter the recorder CMDWORD space | tests/audit/yew_f_023.c | s58 F14 q8 |
 | YEW-F-024 | M | open | F15 CI | cross-surface XFAIL debt table stops at F004 | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
 | YEW-F-025 | M | open | F15 CI | script tests have no XFAIL or hard-XPASS state | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
@@ -320,13 +320,14 @@ tables to zero; the integrated 20-plugin by 20-cycle control now returns every
 registry length to its exact pre-enable value and still proves that every
 closure is reclaimed.
 
-`YEW-F-022` is Medium because Sprint 54 requires its author guide to quote the
-honest `plug.h` trust warning verbatim while also banning the word `sandbox`
-from every user-facing string. The required warning itself ends by saying that
-capability gates do not create a sandbox, so the literal release gate fails on
-the one sentence that most directly prevents a misleading isolation claim.
-The product text is honest; the defect is a self-contradictory release control.
-It remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-022` was Medium because Sprint 54 requires its author guide to quote the
+honest `plug.h` trust warning verbatim while its literal word ban rejected the
+warning's statement that capability gates do not create a sandbox. Commit
+`4858a39c` replaces that contradictory goalpost with a semantic control: the
+guide and header trust blocks remain byte-identical, the guide must explicitly
+deny memory and resource isolation, and its sole `sandbox` mention must be the
+negative disclaimer. Both the release script and audit reproducer reject an
+injected positive isolation claim.
 
 `YEW-F-023` is Medium because plugin commands execute normally but can never
 be represented by the recorder. The plugin registration path excludes

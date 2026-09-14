@@ -747,9 +747,11 @@ Scope `src/mod/plug/`; owners s54, s55.
 5. Does `yew pkg` verify what it installs? Install from a git URL whose
    ref moves under it, whose tarball is truncated, whose lock file
    disagrees with the checked-out commit. Is any failure silent?
-6. Is the security wording still absent? `grep -rn 'sandbox'` over
-   user-facing strings must return nothing, and `plug.h`'s §7 paragraph
-   must still say plainly that this is not isolation.
+6. Is the security wording still honest? The author guide must quote
+   `plug.h`'s §7 paragraph byte-for-byte, including the plain statements
+   that there is no memory or resource isolation. Its sole `sandbox`
+   mention must be the negative disclaimer that capability gates do not
+   create one; any positive isolation claim is a failure.
 7. Does the error limit still auto-disable through the normal teardown
    path rather than a special case, and does a throwing `buf.save` hook
    still let the save proceed with pre-hook content?
