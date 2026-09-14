@@ -34,6 +34,8 @@ void test_syn_state_unused_tails_are_canonicalized(void)
 
     clean.aux[0] = 42U;
     dirty.aux[0] = 42U;
+    clean.flags = YEW_SYN_F_EMBED_PEND;
+    dirty.flags = YEW_SYN_F_EMBED_PEND;
     for (i = 1U; i < YEW_SYN_DEPTH_MAX; i++)
         dirty.f[i] = (SynFrame){(u16)(100U + i),
                                 (u8)(i % YEW_SYN_DEF_MAX), 0xffU};

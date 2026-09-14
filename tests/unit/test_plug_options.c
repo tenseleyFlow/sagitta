@@ -197,8 +197,8 @@ void test_plug_options_collisions_are_atomic_and_origin_owned(void)
     arg = FL_OBJ_V(FL_MAP, collision);
     YEW_ASSERT(!fl_api_declare_plugin_options(
         vm, 802U, "collision", (u32)strlen("collision"), &arg, 1U, &out));
-    YEW_ASSERT_EQ_U64(ed.hooks.ledger.n, ledger_before + 1U);
-    YEW_ASSERT(!ed.hooks.ledger.v[ledger_before].active);
+    /* YEW-F-021: atomic rollback releases the inactive ledger suffix. */
+    YEW_ASSERT_EQ_U64(ed.hooks.ledger.n, ledger_before);
     YEW_ASSERT(!yew_opt_get(&ed, NULL, NULL, "plug.collision.temporary",
                             (u32)strlen("plug.collision.temporary"),
                             &(OptVal){0}));

@@ -56,6 +56,7 @@ typedef struct PtyCase {
     u16 rows;
     u16 cols;
     void (*fn)(PtyCtx *c);
+    const char *xfail_id;
 } PtyCase;
 
 struct PtyCtx {

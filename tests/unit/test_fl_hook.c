@@ -142,6 +142,45 @@ void test_fl_hook_order_mask_and_remove(void)
     hf_close(&f);
 }
 
+void test_fl_hook_compacts_only_inactive_suffixes(void)
+{
+    HookFix f;
+    u32 first;
+    u32 middle;
+    u32 last;
+    u32 replacement;
+
+    hf_open(&f);
+    first = fl_hook_add(&f.hooks, 1U, FL_EV_BUF_OPEN,
+                        fake_fn(&f, 1U));
+    middle = fl_hook_add(&f.hooks, 2U, FL_EV_BUF_OPEN,
+                         fake_fn(&f, 2U));
+    last = fl_hook_add(&f.hooks, 3U, FL_EV_BUF_OPEN,
+                       fake_fn(&f, 3U));
+    YEW_ASSERT_EQ_U64(f.hooks.n, 3U);
+    YEW_ASSERT_EQ_U64(f.hooks.ledger.n, 3U);
+
+    /* YEW-F-021: an interior removal cannot renumber the later live id. */
+    YEW_ASSERT(fl_hook_remove(&f.hooks, middle));
+    YEW_ASSERT_EQ_U64(f.hooks.n, 3U);
+    YEW_ASSERT_EQ_U64(f.hooks.ledger.n, 3U);
+    YEW_ASSERT_EQ_U64(fl_hook_origin(&f.hooks, last), 3U);
+    replacement = fl_hook_add(&f.hooks, 4U, FL_EV_BUF_OPEN,
+                              fake_fn(&f, 4U));
+    YEW_ASSERT_EQ_U64(replacement, middle);
+    YEW_ASSERT_EQ_U64(fl_hook_origin(&f.hooks, last), 3U);
+
+    YEW_ASSERT(fl_hook_remove(&f.hooks, replacement));
+    YEW_ASSERT(fl_hook_remove(&f.hooks, last));
+    YEW_ASSERT_EQ_U64(f.hooks.n, 1U);
+    YEW_ASSERT_EQ_U64(f.hooks.ledger.n, 1U);
+    YEW_ASSERT_EQ_U64(fl_hook_origin(&f.hooks, first), 1U);
+    YEW_ASSERT(fl_hook_remove(&f.hooks, first));
+    YEW_ASSERT_EQ_U64(f.hooks.n, 0U);
+    YEW_ASSERT_EQ_U64(f.hooks.ledger.n, 0U);
+    hf_close(&f);
+}
+
 void test_fl_hook_contains_and_disables_failures(void)
 {
     u32 event;

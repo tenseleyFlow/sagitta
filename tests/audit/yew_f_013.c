@@ -15,11 +15,13 @@
 #include <stdio.h>
 #include <string.h>
 
-static bool fixture_marks_heuristic(const char *path)
+static bool fixture_marks_heuristic(const char *path, size_t expected_rows)
 {
     char bytes[8192];
     FILE *file = fopen(path, "rb");
     size_t len;
+    size_t marked = 0U;
+    char *line;
 
     if (file == NULL)
         return false;
@@ -27,17 +29,37 @@ static bool fixture_marks_heuristic(const char *path)
     if (ferror(file) || fclose(file) != 0)
         return false;
     bytes[len] = '\0';
-    return strstr(bytes, "known-wrong") != NULL &&
-           strstr(bytes, "value") != NULL &&
-           strstr(bytes, "heuristic") != NULL;
+    line = bytes;
+    while (*line != '\0') {
+        char *end = strchr(line, '\n');
+        char saved = end == NULL ? '\0' : *end;
+        const char *comment;
+
+        if (end != NULL)
+            *end = '\0';
+        if (strstr(line, "/knownWrong") != NULL) {
+            comment = strstr(line, "//");
+            if (comment == NULL || strstr(comment, "YEW-F-013") == NULL ||
+                strstr(comment, "known-wrong") == NULL ||
+                strstr(comment, "value-flag") == NULL ||
+                strstr(comment, "heuristic") == NULL)
+                return false;
+            marked++;
+        }
+        if (end == NULL)
+            break;
+        *end = saved;
+        line = end + 1;
+    }
+    return marked == expected_rows;
 }
 
 bool test_yew_f_013(char *why, size_t why_cap)
 {
     bool javascript = fixture_marks_heuristic(
-        "tests/syn/javascript/01-kitchen.js");
+        "tests/syn/javascript/01-kitchen.js", 2U);
     bool typescript = fixture_marks_heuristic(
-        "tests/syn/javascript/10-kitchen.ts");
+        "tests/syn/javascript/10-kitchen.ts", 1U);
 
     if (!javascript || !typescript) {
         (void)snprintf(why, why_cap,

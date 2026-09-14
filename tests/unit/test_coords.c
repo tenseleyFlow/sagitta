@@ -9,6 +9,14 @@
 #include "text/piece.h"
 #include "unicode/coords.h"
 
+void test_coords_display_ordinal_is_one_based_without_overflow(void)
+{
+    YEW_ASSERT_EQ_U64(yew_coord_display(0U), 1U);
+    YEW_ASSERT_EQ_U64(yew_coord_display(1U), 2U);
+    YEW_ASSERT_EQ_U64(yew_coord_display(UINT32_MAX),
+                      (u64)UINT32_MAX + 1U);
+}
+
 static size_t coords_parse_hex(char *field, u8 *out, size_t cap)
 {
     char *p = field;

@@ -91,6 +91,39 @@ typedef struct GitJobOwner {
 
 static GitTestSpawnFn test_spawn;
 static void *test_spawn_opaque;
+static GitTestRunSyncFn test_run_sync;
+static void *test_run_sync_opaque;
+
+enum { GIT_ENV_SET_CAP = 9 };
+
+static const char *const git_env_unset[] = {
+    "COLUMNS", "LINES", "GIT_TRACE", "GIT_TRACE_PACKET",
+    "GIT_TRACE_PERFORMANCE", "GIT_CURL_VERBOSE", "GIT_TRANSFER_TRACE",
+    NULL
+};
+
+static const char *const git_env_unset_prefix[] = {"GIT_TRACE2", NULL};
+
+/* YEW-F-017: every Git runner gets the same pinned environment.  Interactive
+ * rebase may replace only the two editor rows; all other policy is shared. */
+static void git_env_build(const char *editor, const char *sequence_editor,
+                          bool literal_paths,
+                          const char **env_set)
+{
+    size_t at = 0U;
+
+    env_set[at++] = "GIT_TERMINAL_PROMPT=0";
+    env_set[at++] = editor == NULL ? "GIT_EDITOR=false" : editor;
+    env_set[at++] = sequence_editor == NULL ?
+                    "GIT_SEQUENCE_EDITOR=false" : sequence_editor;
+    env_set[at++] = "GIT_FLUSH=1";
+    env_set[at++] = "GIT_PAGER=cat";
+    env_set[at++] = "PAGER=cat";
+    env_set[at++] = "LC_ALL=C";
+    if (literal_paths)
+        env_set[at++] = "GIT_LITERAL_PATHSPECS=1";
+    env_set[at] = NULL;
+}
 
 static bool git_spawn_log(Ed *ed);
 static void git_incoming_clear(GitCtx *ctx);
@@ -156,6 +189,7 @@ static const GitVerb git_verbs[] = {
     GIT_MUTATE("branch-delete", true, true),
     GIT_MUTATE("merge", true, true),
     GIT_MUTATE("reset", true, true),
+    GIT_MUTATE("rebase", true, true),
     GIT_MUTATE("cherry-pick", true, true),
     GIT_MUTATE("revert", true, true),
     GIT_MUTATE("stash-push", true, false),
@@ -531,6 +565,8 @@ static char **git_build_argv(const GitVerb *verb, char *const *tail)
     argv[at++] = (char *)"status.renames=true";
     if (verb->kind == YEW_GV_READ)
         argv[at++] = (char *)"--no-optional-locks";
+    /* YEW-F-020: argv is structural data. Copy caller-owned elements
+     * byte-exactly; display formatting elsewhere in FUSS is unrelated. */
     if (n != 0U)
         (void)memcpy(argv + at, tail, n * sizeof(*argv));
     return argv;
@@ -612,22 +648,7 @@ static const YewJobCallbackOps git_job_ops = {
 u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
                   const GitReq *req, char *err, size_t errsz)
 {
-    static const char *const env_base[] = {
-        "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false",
-        "GIT_SEQUENCE_EDITOR=false", "GIT_FLUSH=1", "GIT_PAGER=cat",
-        "PAGER=cat", "LC_ALL=C", NULL
-    };
-    static const char *const env_paths[] = {
-        "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false",
-        "GIT_SEQUENCE_EDITOR=false", "GIT_FLUSH=1", "GIT_PAGER=cat",
-        "PAGER=cat", "LC_ALL=C", "GIT_LITERAL_PATHSPECS=1", NULL
-    };
-    static const char *const env_unset[] = {
-        "COLUMNS", "LINES", "GIT_TRACE", "GIT_TRACE_PACKET",
-        "GIT_TRACE_PERFORMANCE", "GIT_CURL_VERBOSE", "GIT_TRANSFER_TRACE",
-        NULL
-    };
-    static const char *const env_unset_prefix[] = {"GIT_TRACE2", NULL};
+    const char *env_set[GIT_ENV_SET_CAP];
     GitCtx *ctx;
     GitPending *pending;
     GitJobOwner *owner = NULL;
@@ -706,6 +727,9 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     pending->active = true;
     ctx->inflight++;
     final_argv = git_build_argv(verb, argv);
+    git_env_build(NULL, NULL,
+                  pending->req.literal_paths || git_takes_paths(verb),
+                  env_set);
     if (test_spawn != NULL) {
         id = test_spawn(ed, verb, final_argv, &pending->req,
                         test_spawn_opaque, err, errsz);
@@ -720,10 +744,9 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
         spec.display = verb->name;
         spec.internal = true;
         spec.collect_max = YEW_GIT_COLLECT_MAX;
-        spec.env_set = (pending->req.literal_paths || git_takes_paths(verb)) ?
-                       env_paths : env_base;
-        spec.env_unset = env_unset;
-        spec.env_unset_prefix = env_unset_prefix;
+        spec.env_set = env_set;
+        spec.env_unset = git_env_unset;
+        spec.env_unset_prefix = git_env_unset_prefix;
         spec.callback_owner = owner;
         spec.callback_ops = &git_job_ops;
         id = yew_job_spawn(ed, &spec, err, errsz);
@@ -738,6 +761,75 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     if (owner != NULL)
         owner->job_id = id;
     return id;
+}
+
+bool yew_git_run_terminal(Ed *ed, const GitVerb *verb, char *const *argv,
+                          const char *editor, YewJobWait *result,
+                          char *err, size_t errsz)
+{
+    const char *env_set[GIT_ENV_SET_CAP];
+    YewJobSpec spec = {0};
+    char *editor_env;
+    char *sequence_env;
+    char **final_argv;
+    size_t editor_len;
+    bool ran;
+
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    if (ed == NULL || ed->git == NULL || verb == NULL || argv == NULL ||
+        argv[0] == NULL || editor == NULL || editor[0] == '\0' ||
+        result == NULL || verb->kind != YEW_GV_MUTATE) {
+        git_error(err, errsz, "invalid Git terminal handover");
+        return false;
+    }
+    if (verb->needs_repo &&
+        (ed->git->detect_state != YEW_GIT_ASYNC_READY ||
+         ed->git->detect_result != YEW_GIT_OK)) {
+        git_error(err, errsz, yew_git_state_str(YEW_GIT_NOT_REPO));
+        return false;
+    }
+    if (verb->needs_head &&
+        (ed->git->snap[ed->git->live].gen == 0U ||
+         ed->git->snap[ed->git->live].unborn)) {
+        git_error(err, errsz, yew_git_state_str(YEW_GIT_NO_HEAD));
+        return false;
+    }
+
+    editor_len = strlen(editor);
+    editor_env = yew_xmalloc(sizeof("GIT_EDITOR=") + editor_len);
+    sequence_env = yew_xmalloc(sizeof("GIT_SEQUENCE_EDITOR=") + editor_len);
+    (void)memcpy(editor_env, "GIT_EDITOR=", sizeof("GIT_EDITOR=") - 1U);
+    (void)memcpy(editor_env + sizeof("GIT_EDITOR=") - 1U, editor,
+                 editor_len + 1U);
+    (void)memcpy(sequence_env, "GIT_SEQUENCE_EDITOR=",
+                 sizeof("GIT_SEQUENCE_EDITOR=") - 1U);
+    (void)memcpy(sequence_env + sizeof("GIT_SEQUENCE_EDITOR=") - 1U,
+                 editor, editor_len + 1U);
+    git_env_build(editor_env, sequence_env, false, env_set);
+    final_argv = git_build_argv(verb, argv);
+    spec.argv = final_argv;
+    spec.cwd = yew_ws_root(ed);
+    spec.sink = YEW_SINK_DISCARD;
+    spec.display = verb->name;
+    spec.internal = true;
+    spec.env_set = env_set;
+    spec.env_unset = git_env_unset;
+    spec.env_unset_prefix = git_env_unset_prefix;
+    spec.inherit_tty = true;
+    if (test_run_sync != NULL)
+        ran = test_run_sync(ed, verb, &spec, result,
+                            test_run_sync_opaque, err, errsz);
+    else
+        ran = yew_job_run_sync(ed, &spec, result, err, errsz);
+    yew_xfree(final_argv);
+    yew_xfree(sequence_env);
+    yew_xfree(editor_env);
+    if (ran) {
+        yew_git_invalidate(ed);
+        (void)yew_git_refresh(ed, true);
+    }
+    return ran;
 }
 
 typedef struct GitCallbackOwner {
@@ -778,17 +870,7 @@ u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
                                  const YewJobCallbackOps *ops,
                                  char *err, size_t errsz)
 {
-    static const char *const env_base[] = {
-        "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false",
-        "GIT_SEQUENCE_EDITOR=false", "GIT_FLUSH=1", "GIT_PAGER=cat",
-        "PAGER=cat", "LC_ALL=C", NULL
-    };
-    static const char *const env_unset[] = {
-        "COLUMNS", "LINES", "GIT_TRACE", "GIT_TRACE_PACKET",
-        "GIT_TRACE_PERFORMANCE", "GIT_CURL_VERBOSE", "GIT_TRANSFER_TRACE",
-        NULL
-    };
-    static const char *const env_unset_prefix[] = {"GIT_TRACE2", NULL};
+    const char *env_set[GIT_ENV_SET_CAP];
     YewJobSpec spec = {0};
     GitCallbackOwner *wrapped;
     char **final_argv;
@@ -830,6 +912,7 @@ u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
         wrapped->stdin_len = stdin_len;
     }
     final_argv = git_build_argv(verb, argv);
+    git_env_build(NULL, NULL, false, env_set);
     spec.argv = final_argv;
     spec.cwd = yew_ws_root(ed);
     spec.sink = YEW_SINK_CALLBACK;
@@ -839,9 +922,9 @@ u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
     spec.display = verb->name;
     spec.internal = true;
     spec.collect_max = YEW_GIT_COLLECT_MAX;
-    spec.env_set = env_base;
-    spec.env_unset = env_unset;
-    spec.env_unset_prefix = env_unset_prefix;
+    spec.env_set = env_set;
+    spec.env_unset = git_env_unset;
+    spec.env_unset_prefix = git_env_unset_prefix;
     spec.callback_owner = wrapped;
     spec.callback_ops = &git_callback_ops;
     id = yew_job_spawn(ed, &spec, err, errsz);
@@ -1104,17 +1187,7 @@ static GitBlobBatch *git_blob_batch_new(Ed *ed)
 
 static GitBlobBatch *git_blob_batch_ensure(Ed *ed, char *err, size_t errsz)
 {
-    static const char *const env_set[] = {
-        "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=false",
-        "GIT_SEQUENCE_EDITOR=false", "GIT_FLUSH=1", "GIT_PAGER=cat",
-        "PAGER=cat", "LC_ALL=C", NULL
-    };
-    static const char *const env_unset[] = {
-        "COLUMNS", "LINES", "GIT_TRACE", "GIT_TRACE_PACKET",
-        "GIT_TRACE_PERFORMANCE", "GIT_CURL_VERBOSE", "GIT_TRANSFER_TRACE",
-        NULL
-    };
-    static const char *const env_unset_prefix[] = {"GIT_TRACE2", NULL};
+    const char *env_set[GIT_ENV_SET_CAP];
     GitCtx *ctx = ed->git;
     GitBlobBatch *batch;
     YewJobSpec spec = {0};
@@ -1131,14 +1204,15 @@ static GitBlobBatch *git_blob_batch_ensure(Ed *ed, char *err, size_t errsz)
     }
     batch = git_blob_batch_new(ed);
     final_argv = git_build_argv(verb, argv);
+    git_env_build(NULL, NULL, false, env_set);
     spec.argv = final_argv;
     spec.cwd = yew_ws_root(ed);
     spec.sink = YEW_SINK_FRAMED;
     spec.display = "blob";
     spec.internal = true;
     spec.env_set = env_set;
-    spec.env_unset = env_unset;
-    spec.env_unset_prefix = env_unset_prefix;
+    spec.env_unset = git_env_unset;
+    spec.env_unset_prefix = git_env_unset_prefix;
     spec.framed_owner = batch;
     spec.framed_ops = &git_blob_ops;
     batch->job_id = yew_job_spawn(ed, &spec, err, errsz);
@@ -1277,6 +1351,12 @@ void yew_git_test_spawn_set(GitTestSpawnFn spawn, void *opaque)
 {
     test_spawn = spawn;
     test_spawn_opaque = opaque;
+}
+
+void yew_git_test_run_sync_set(GitTestRunSyncFn run, void *opaque)
+{
+    test_run_sync = run;
+    test_run_sync_opaque = opaque;
 }
 
 void yew_git_test_now_set(Ed *ed, i64 now_ms)

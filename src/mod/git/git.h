@@ -12,6 +12,8 @@ typedef struct Ed Ed;
 typedef struct GitCtx GitCtx;
 typedef struct GitReq GitReq;
 typedef struct YewJobCallbackOps YewJobCallbackOps;
+typedef struct YewJobSpec YewJobSpec;
+typedef struct YewJobWait YewJobWait;
 
 #define YEW_GIT_COLLECT_MAX (16U * 1024U * 1024U)
 #define YEW_GIT_READ_TIMEOUT_MS 5000
@@ -305,6 +307,12 @@ const GitVerb *yew_git_verb_at(size_t index);
 size_t yew_git_verb_count(void);
 u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
                   const GitReq *req, char *err, size_t errsz);
+/* Run the one interactive Git handover through the same descriptor, argv,
+ * repository, and environment policy as asynchronous module jobs.  The
+ * editor path replaces only GIT_EDITOR and GIT_SEQUENCE_EDITOR. */
+bool yew_git_run_terminal(Ed *ed, const GitVerb *verb, char *const *argv,
+                          const char *editor, YewJobWait *result,
+                          char *err, size_t errsz);
 /* Module jobs that need their own completion owner, such as a picker preview
  * or an allowlisted mutation with command-owned completion.  Network verbs
  * remain forbidden.  These inherit Git's locked environment and argv policy

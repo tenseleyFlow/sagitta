@@ -260,3 +260,39 @@ void test_modes_every_unit_mode_switches_in_one_key(void)
         yew_ed_free(&ed);
     }
 }
+
+/*
+ * FUSS opens from every resting unit mode, not only Line.
+ *
+ * `f` was bound in L alone, so reaching the file tree from Word or Block
+ * meant a detour through Line first — the same "spell a mode change as
+ * something else" problem the one-key switches removed. Insert and
+ * Execute are excluded because `f` is text there, and Highlight because
+ * entering FUSS would silently drop a live selection.
+ *
+ * Guarded like its sibling above so a MODULES="" build asserts the
+ * refusal rather than skipping the case.
+ */
+void test_modes_fuss_opens_from_every_unit_mode(void)
+{
+    static const Mode from[] = {YEW_MODE_L, YEW_MODE_W, YEW_MODE_B};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(from); i++) {
+        Ed ed;
+
+        modes_editor(&ed);
+        YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, from[i]), YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(ed.mode, from[i]);
+        yew_ed_handle_key(&ed, modes_key((u32)'f'), 10);
+#if YEW_WITH_FUSS
+        YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
+#else
+        YEW_ASSERT_EQ_U64(ed.last_status, YEW_CMD_ERR_STATE);
+        YEW_ASSERT_EQ_U64(ed.mode, from[i]);
+        YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "no fuss module"));
+#endif
+        yew_ed_free(&ed);
+    }
+}

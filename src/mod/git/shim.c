@@ -330,6 +330,16 @@ FussDrawerLayout yew_fuss_drawer_layout(u16 content_cols,
     return (FussDrawerLayout){0U, 0U, UINT16_MAX, false};
 }
 
+size_t yew_fuss_relative_time(const Ed *ed, char *dst, size_t cap,
+                              i64 author_epoch)
+{
+    (void)ed;
+    (void)author_epoch;
+    if (dst != NULL && cap != 0U)
+        dst[0] = '\0';
+    return 0U;
+}
+
 Rect yew_fuss_drawer_rect(const Ed *ed)
 {
     (void)ed;
@@ -613,6 +623,16 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
     (void)git_require(ed);
     return 0U;
+}
+
+bool yew_git_run_terminal(Ed *ed, const GitVerb *verb, char *const *argv,
+                          const char *editor, YewJobWait *result,
+                          char *err, size_t errsz)
+{
+    (void)verb; (void)argv; (void)editor; (void)result;
+    (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
+    (void)git_require(ed);
+    return false;
 }
 
 u32 yew_git_spawn_callback(Ed *ed, const GitVerb *verb,

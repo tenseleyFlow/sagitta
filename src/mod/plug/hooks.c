@@ -155,11 +155,11 @@ static bool command_flag(const FlStr *name, u32 *flag)
     return false;
 }
 
-static bool command_forbidden_flag(const FlStr *name)
+static bool command_flag_named(const FlStr *name, const char *want)
 {
-    return (name->len == 10U &&
-            memcmp(name->b, "recordable", 10U) == 0) ||
-           (name->len == 8U && memcmp(name->b, "deferred", 8U) == 0);
+    size_t len = strlen(want);
+
+    return name->len == len && memcmp(name->b, want, len) == 0;
 }
 
 static bool command_flags(FlVm *vm, FlValue value, u32 *out)
@@ -183,12 +183,13 @@ static bool command_flags(FlVm *vm, FlValue value, u32 *out)
                             "ctx.command opts must map names to booleans");
         name = (FlStr *)entry->k.as.o;
         if (!command_flag(name, &flag)) {
-            if (command_forbidden_flag(name) && entry->v.as.b)
+            if (command_flag_named(name, "recordable"))
+                return fl_raise(vm, "value",
+                                "ctx.command is always recordable");
+            if (command_flag_named(name, "deferred"))
                 return fl_raise(vm, "value",
                                 "ctx.command flag '%.*s' is host-only",
                                 (int)name->len, name->b);
-            if (command_forbidden_flag(name))
-                continue;
             return fl_raise(vm, "name", "unknown ctx.command flag '%.*s'",
                             (int)name->len, name->b);
         }

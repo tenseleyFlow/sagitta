@@ -4313,7 +4313,9 @@ static void case_s24_digit_jump_is_immediate(PtyCtx *c)
 }
 
 #define C(name, profile, rows, cols, fn) \
-    {#name, #profile, rows, cols, fn}
+    {#name, #profile, rows, cols, fn, NULL}
+#define X(name, profile, rows, cols, fn, id) \
+    {#name, #profile, rows, cols, fn, id}
 
 
 /* ---------------------------------------------------------------- */
@@ -10797,7 +10799,8 @@ const PtyCase yew_pty_cases[] = {
     C(s33_hello_world_repl, modern, 24U, 80U, case_s33_hello_world_repl),
     C(s32_bug_restores_the_terminal, modern, 24U, 80U,
       case_s32_bug_restores_the_terminal),
-    {NULL, NULL, 0U, 0U, NULL}
+    {NULL, NULL, 0U, 0U, NULL, NULL}
 };
 
 #undef C
+#undef X

@@ -1737,18 +1737,11 @@ static SynState syn_state_canon(const SynState *state)
     canon = *state;
     (void)memset(&canon.f[canon.depth], 0,
                  (YEW_SYN_DEPTH_MAX - canon.depth) * sizeof(canon.f[0]));
-    {
-        u8 keep = canon.ndef;
-
-        /* A pending guest occupies its future aux slot until the idle
-         * loader has made that definition resident. */
-        if (((canon.flags & YEW_SYN_F_EMBED_PEND) != 0U ||
-             (canon.f[canon.depth - 1U].fl & YEW_SYN_FR_DEFER) != 0U) &&
-            keep < YEW_SYN_DEF_MAX)
-            keep++;
-        (void)memset(&canon.aux[keep], 0,
-                     (YEW_SYN_DEF_MAX - keep) * sizeof(canon.aux[0]));
-    }
+    /* YEW-F-012: pending/deferred guest identity belongs to the line result
+     * and SynBuf queue, never to an unused aux tail cell.  Every interned
+     * logical state therefore has one byte-canonical representation. */
+    (void)memset(&canon.aux[canon.ndef], 0,
+                 (YEW_SYN_DEF_MAX - canon.ndef) * sizeof(canon.aux[0]));
     return canon;
 }
 
@@ -3289,9 +3282,9 @@ static bool push_guest(SynEngine *master, SynState *state, u8 slot,
 
 static void apply_embed(SynEngine *master, SynEngine *host, SynState *state,
                         const SynRule *rule, const u8 *line, u32 len,
-                        const YewReMatch *match, u32 *pending_lang,
-                        u32 *refused_lang, const char **unknown_name,
-                        size_t *unknown_len)
+                        const YewReMatch *match, u8 *deferred_slot,
+                        u32 *pending_lang, u32 *refused_lang,
+                        const char **unknown_name, size_t *unknown_len)
 {
     u8 host_slot = YEW_SYN_DEF_OF(state);
     u32 selected;
@@ -3356,14 +3349,13 @@ static void apply_embed(SynEngine *master, SynEngine *host, SynState *state,
                 *refused_lang = selected;
             return;
         }
-        state->aux[state->ndef] = selected;
         state->flags |= YEW_SYN_F_EMBED_PEND;
         if (pending_lang != NULL && *pending_lang == YEW_LANG_NONE)
             *pending_lang = selected;
         return;
     }
     if ((rule->embed.flags & YEW_SYN_EMBED_DEFER) != 0U) {
-        state->aux[state->ndef] = (u32)slot + 1U;
+        *deferred_slot = slot;
         return;
     }
     if (!push_guest(master, state, slot, &rule->embed, host)) {
@@ -3399,14 +3391,15 @@ static void apply_op(SynState *state, u8 op, u8 nop, u16 target)
 static void apply_rule_op(SynEngine *master, SynEngine *active,
                           SynState *state, const SynRule *rule,
                           const u8 *line, u32 len,
-                          const YewReMatch *match, u32 *pending_lang,
-                          u32 *refused_lang, const char **unknown_name,
-                          size_t *unknown_len)
+                          const YewReMatch *match, u8 *deferred_slot,
+                          u32 *pending_lang, u32 *refused_lang,
+                          const char **unknown_name, size_t *unknown_len)
 {
     u8 depth = state->depth;
     if (rule->op == SYN_OP_EMBED) {
         apply_embed(master, active, state, rule, line, len, match,
-                    pending_lang, refused_lang, unknown_name, unknown_len);
+                    deferred_slot, pending_lang, refused_lang, unknown_name,
+                    unknown_len);
     } else if (rule->op == SYN_OP_PUSH && rule->npush != 0U) {
         u8 i;
         if (rule->npush > 4U)
@@ -3428,8 +3421,9 @@ static void apply_rule_op(SynEngine *master, SynEngine *active,
 
 static void apply_empty_bol(SynEngine *master, SynState *state,
                             const u8 *line, bool instrument,
-                            u32 *pending_lang, u32 *refused_lang,
-                            const char **unknown_name, size_t *unknown_len)
+                            u8 *deferred_slot, u32 *pending_lang,
+                            u32 *refused_lang, const char **unknown_name,
+                            size_t *unknown_len)
 {
     u32 guard = 0U;
     while (guard++ <= YEW_SYN_DEPTH_MAX) {
@@ -3480,8 +3474,8 @@ static void apply_empty_bol(SynEngine *master, SynState *state,
             (void)set_aux(engine, state, state->ndef - 1U, matched, line,
                           0U, &match);
             apply_rule_op(master, engine, state, matched, line, 0U, &match,
-                          pending_lang, refused_lang, unknown_name,
-                          unknown_len);
+                          deferred_slot, pending_lang, refused_lang,
+                          unknown_name, unknown_len);
             if (instrument)
                 coverage_transition(master, &before, state);
         }
@@ -4002,6 +3996,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     const SynCtx *cached_ctx = NULL;
     const u8 *cached_first_bol = NULL;
     const u8 *cached_first_nonbol = NULL;
+    u8 deferred_slot = UINT8_MAX;
     bool state_changed = false;
 
     if (engine == NULL || out == NULL || (line == NULL && len != 0U))
@@ -4070,15 +4065,16 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                           &empty_match);
             leave_embed(&state, bridge_depth);
             apply_rule_op(engine, host, &state, end_rule, line, len,
-                          &empty_match, pending_lang, refused_lang,
-                          unknown_name, unknown_len);
+                          &empty_match, &deferred_slot, pending_lang,
+                          refused_lang, unknown_name, unknown_len);
             if (instrument) {
                 coverage_rule(host, end_index);
                 coverage_transition(engine, &before, &state);
             }
         } else {
-            apply_empty_bol(engine, &state, line, instrument, pending_lang,
-                            refused_lang, unknown_name, unknown_len);
+            apply_empty_bol(engine, &state, line, instrument,
+                            &deferred_slot, pending_lang, refused_lang,
+                            unknown_name, unknown_len);
         }
         if (trace != NULL)
             trace[0] = state;
@@ -4153,8 +4149,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                               &match);
                 leave_embed(&state, bridge_depth);
                 apply_rule_op(engine, host, &state, end_rule, line, len,
-                              &match, pending_lang, refused_lang,
-                              unknown_name, unknown_len);
+                              &match, &deferred_slot, pending_lang,
+                              refused_lang, unknown_name, unknown_len);
                 state_changed = true;
                 dispatch_gen++;
                 if (instrument) {
@@ -4406,7 +4402,8 @@ scan_rules:
             state_changed = true;
         }
         apply_rule_op(engine, active, &state, matched, line, len, &match,
-                      pending_lang, refused_lang, unknown_name, unknown_len);
+                      &deferred_slot, pending_lang, refused_lang,
+                      unknown_name, unknown_len);
         if (matched->op != SYN_OP_STAY) {
             state_changed = true;
             dispatch_gen++;
@@ -4462,13 +4459,11 @@ scan_rules:
             (state.flags & YEW_SYN_F_EMBED_PEND) == 0U) {
             SynEngine *host;
             const SynCtx *bridge = checked_ctx(engine, top, &host);
-            u32 encoded = state.aux[state.ndef];
 
             state_changed = true;
             top->fl &= (u8)~YEW_SYN_FR_DEFER;
-            state.aux[state.ndef] = 0U;
-            if (encoded != 0U &&
-                !push_guest(engine, &state, (u8)(encoded - 1U),
+            if (deferred_slot != UINT8_MAX &&
+                !push_guest(engine, &state, deferred_slot,
                             &bridge->embed, host)) {
                 lost_add(&state, 2U);
                 state.flags |= YEW_SYN_F_EMBED_LOST;
@@ -4692,17 +4687,6 @@ static void pending_reset(SynBuf *syn)
 {
     syn->embed_pending_count = 0U;
     pending_sync_head(syn);
-}
-
-static bool pending_contains(const SynBuf *syn, u32 lang)
-{
-    u16 i;
-
-    for (i = 0U; i < syn->embed_pending_count; i++) {
-        if (syn->embed_pending_langs[i] == lang)
-            return true;
-    }
-    return false;
 }
 
 static void pending_add(SynBuf *syn, u32 lang, size_t line)
@@ -5139,49 +5123,24 @@ static void syn_pending_request(SynBuf *syn, u32 lang, size_t line)
 bool yew_syn_embed_pump(SynBuf *syn, SynEngine *engine, i64 budget_us)
 {
     size_t i;
-    u32 lang = YEW_LANG_NONE;
+    u32 lang;
     SynEngine *runtime;
-    bool queued = false;
 
     if (syn == NULL || engine == NULL ||
         budget_us < YEW_SYN_EMBED_LOAD_BUDGET_US)
         return false;
-    if (syn->embed_pending_count != 0U) {
-        lang = syn->embed_pending_langs[0];
-        i = syn->embed_pending_lines[0].v;
-        queued = true;
-    }
-    if (!queued) {
-        for (i = 0U; lang == YEW_LANG_NONE && i < syn->entry.len; i++) {
-            const SynState *state = yew_syn_state_get(
-                engine->states, syn->entry.data[i]);
-
-            if (state != NULL &&
-                (state->flags & YEW_SYN_F_EMBED_PEND) != 0U &&
-                state->ndef < YEW_SYN_DEF_MAX) {
-                lang = state->aux[state->ndef];
-                if (lang != YEW_LANG_NONE &&
-                    resident_slot(engine, lang) == UINT8_MAX)
-                    break;
-                lang = YEW_LANG_NONE;
-            }
-        }
-    }
-    if (lang == YEW_LANG_NONE || engine->ndefs >= YEW_SYN_RESIDENT_MAX)
+    if (syn->embed_pending_count == 0U ||
+        engine->ndefs >= YEW_SYN_RESIDENT_MAX)
         return false;
+    lang = syn->embed_pending_langs[0];
+    i = syn->embed_pending_lines[0].v;
     runtime = yew_syn_engine_for(lang);
     if (!resident_install(engine, lang, runtime))
         return false;
+    pending_remove_head(syn);
 
-    if (queued) {
-        pending_remove_head(syn);
-    }
-
-    /* The pending state is an entry state, so its opener is on the prior
-     * line for deferred embeds and may be there for an immediate embed.
-     * Replaying one line of headroom is cheap and covers both cases. */
-    if (!queued && i != 0U)
-        i--;
+    /* The queue records the opener line.  Replay that line and discard all
+     * following entry states so the now-resident guest replaces fallback. */
     if (i < syn->entry.len) {
         size_t clear_from = i + 1U;
         size_t tail = syn->entry.len - clear_from;
@@ -5454,7 +5413,6 @@ void yew_syn_status(const SynBuf *syn, u64 line_count, char *dst, size_t cap)
     u32 pending = 0U;
     u8 ndefs = 0U;
     u8 depth = 0U;
-    size_t i;
 
     if (dst == NULL || cap == 0U)
         return;
@@ -5486,30 +5444,6 @@ void yew_syn_status(const SynBuf *syn, u64 line_count, char *dst, size_t cap)
             ndefs = active->ndef;
             if (def != NULL && def->name != NULL)
                 active_name = def->name;
-        }
-        for (i = 0U; i < syn->entry.len; i++) {
-            const SynState *state = yew_syn_state_get(
-                syn->engine->states, syn->entry.data[i]);
-
-            if (state != NULL &&
-                (state->flags & YEW_SYN_F_EMBED_PEND) != 0U &&
-                state->ndef < YEW_SYN_DEF_MAX) {
-                u32 lang = state->aux[state->ndef];
-                size_t prior;
-                bool seen = pending_contains(syn, lang);
-
-                for (prior = 0U; !seen && prior < i; prior++) {
-                    const SynState *earlier = yew_syn_state_get(
-                        syn->engine->states, syn->entry.data[prior]);
-
-                    seen = earlier != NULL &&
-                        (earlier->flags & YEW_SYN_F_EMBED_PEND) != 0U &&
-                        earlier->ndef < YEW_SYN_DEF_MAX &&
-                        earlier->aux[earlier->ndef] == lang;
-                }
-                if (!seen)
-                    pending++;
-            }
         }
     }
     (void)snprintf(dst, cap,

@@ -13,6 +13,7 @@
 #include "edit/mode.h"
 #include "edit/pane_cmds.h"
 #include "edit/theme_cmds.h"
+#include "mod/git/editor.h"
 #include "mod/git/fussmode.h"
 #include "mod/git/fusstree.h"
 #include "mod/git/git_int.h"
@@ -94,6 +95,36 @@ static void fussdrawer_click(Ed *ed, u16 col, u16 row)
     yew_mouse_event(ed, &key);
     key.ev = (u8)YEW_KEY_RELEASE;
     yew_mouse_event(ed, &key);
+}
+
+void test_fussdrawer_relative_time_uses_editor_anchor(void)
+{
+    Ed ed;
+    char text[64] = "unchanged";
+
+    yew_ed_init(&ed);
+    YEW_ASSERT_EQ_U64(yew_fuss_relative_time(&ed, text, sizeof(text), 1),
+                      0U);
+    YEW_ASSERT_EQ_STR(text, "");
+    ed.now_ms = 1000;
+    yew_git_editor_clock_anchor(&ed, 1000, 1700000000);
+    YEW_ASSERT_EQ_U64(yew_fuss_relative_time(&ed, text, sizeof(text),
+                                              1699999970), 3U);
+    YEW_ASSERT_EQ_STR(text, "now");
+    YEW_ASSERT(yew_fuss_relative_time(&ed, text, sizeof(text),
+                                       1699999940) != 0U);
+    YEW_ASSERT_EQ_STR(text, "1 minute ago");
+    YEW_ASSERT(yew_fuss_relative_time(&ed, text, sizeof(text),
+                                       1698790400) != 0U);
+    YEW_ASSERT_EQ_STR(text, "2 weeks ago");
+    ed.now_ms = 4000;
+    YEW_ASSERT(yew_fuss_relative_time(&ed, text, sizeof(text),
+                                       1699999940) != 0U);
+    YEW_ASSERT_EQ_STR(text, "1 minute ago");
+    YEW_ASSERT(yew_fuss_relative_time(&ed, text, sizeof(text),
+                                       1800000000) != 0U);
+    YEW_ASSERT_EQ_STR(text, "now");
+    yew_ed_free(&ed);
 }
 
 static bool fussdrawer_row_contains(const Grid *grid, u16 row,

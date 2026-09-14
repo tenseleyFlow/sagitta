@@ -37,6 +37,68 @@ typedef struct SpawnLog {
     char argv[16][128];
 } SpawnLog;
 
+typedef struct SyncLog {
+    unsigned calls;
+    char argv[16][128];
+    size_t argc;
+    char env_set[10][128];
+    size_t env_set_len;
+    char env_unset[10][128];
+    size_t env_unset_len;
+    char env_unset_prefix[4][128];
+    size_t env_unset_prefix_len;
+    bool inherit_tty;
+    YewJobSink sink;
+} SyncLog;
+
+static size_t gitcache_copy_rows(char dst[][128], size_t cap,
+                                 const char *const *src)
+{
+    size_t i;
+
+    if (src == NULL)
+        return 0U;
+    for (i = 0U; src[i] != NULL && i < cap; i++) {
+        size_t len = strlen(src[i]);
+
+        if (len >= 128U)
+            len = 127U;
+        (void)memcpy(dst[i], src[i], len);
+        dst[i][len] = '\0';
+    }
+    return i;
+}
+
+static bool gitcache_run_sync(Ed *ed, const GitVerb *verb,
+                              const YewJobSpec *spec,
+                              YewJobWait *result, void *opaque,
+                              char *err, size_t errsz)
+{
+    SyncLog *log = opaque;
+
+    (void)ed;
+    (void)verb;
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    log->calls++;
+    log->argc = gitcache_copy_rows(log->argv, YEW_ARRAY_LEN(log->argv),
+                                   (const char *const *)spec->argv);
+    log->env_set_len = gitcache_copy_rows(log->env_set,
+                                          YEW_ARRAY_LEN(log->env_set),
+                                          spec->env_set);
+    log->env_unset_len = gitcache_copy_rows(log->env_unset,
+                                            YEW_ARRAY_LEN(log->env_unset),
+                                            spec->env_unset);
+    log->env_unset_prefix_len = gitcache_copy_rows(
+        log->env_unset_prefix, YEW_ARRAY_LEN(log->env_unset_prefix),
+        spec->env_unset_prefix);
+    log->inherit_tty = spec->inherit_tty;
+    log->sink = spec->sink;
+    result->state = YEW_JOB_EXITED;
+    result->exit_code = 0;
+    return true;
+}
+
 static u32 gitcache_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
                           const GitReq *req, void *opaque,
                           char *err, size_t errsz)
@@ -98,6 +160,7 @@ static void gitcache_done(Ed *ed)
 {
     yew_git_state_free(ed);
     yew_git_test_spawn_set(NULL, NULL);
+    yew_git_test_run_sync_set(NULL, NULL);
 }
 
 static bool spawnlog_has_arg(const SpawnLog *log, const char *arg)
@@ -108,6 +171,16 @@ static bool spawnlog_has_arg(const SpawnLog *log, const char *arg)
         if (strcmp(log->argv[i], arg) == 0)
             return true;
     }
+    return false;
+}
+
+static bool sync_rows_have(char rows[][128], size_t len, const char *want)
+{
+    size_t i;
+
+    for (i = 0U; i < len; i++)
+        if (strcmp(rows[i], want) == 0)
+            return true;
     return false;
 }
 
@@ -1060,6 +1133,71 @@ void test_gitcache_verb_table_and_argv_are_structural(void)
                    verb->timeout_ms == YEW_GIT_READ_TIMEOUT_MS);
     }
     YEW_ASSERT_NULL(yew_git_verb_at(yew_git_verb_count()));
+    gitcache_done(&ed);
+}
+
+void test_gitcache_terminal_rebase_inherits_canonical_boundary(void)
+{
+    Ed ed;
+    SpawnLog spawn = {0};
+    SyncLog sync = {0};
+    YewJobWait wait = {0};
+    const GitVerb *rebase;
+    char *argv[] = {(char *)"rebase", (char *)"-i",
+                    (char *)"0123456789abcdef", NULL};
+    char err[128];
+
+    gitcache_ed(&ed, &spawn);
+    gitcache_ready(&ed, &spawn, ".", 1000);
+    rebase = yew_git_verb("rebase");
+    YEW_ASSERT_NOT_NULL(rebase);
+    YEW_ASSERT(rebase != NULL && rebase->kind == YEW_GV_MUTATE);
+    YEW_ASSERT(rebase != NULL && rebase->needs_repo && rebase->needs_head);
+    yew_git_test_run_sync_set(gitcache_run_sync, &sync);
+    YEW_ASSERT(yew_git_run_terminal(&ed, rebase, argv, "/tmp/yew editor",
+                                    &wait, err, sizeof(err)));
+    YEW_ASSERT_EQ_U64(sync.calls, 1U);
+    YEW_ASSERT_EQ_U64(wait.state, YEW_JOB_EXITED);
+    YEW_ASSERT(sync.inherit_tty);
+    YEW_ASSERT(sync.sink == YEW_SINK_DISCARD);
+    YEW_ASSERT_EQ_STR(sync.argv[0], "git");
+    YEW_ASSERT_EQ_STR(sync.argv[1], "--no-pager");
+    YEW_ASSERT_EQ_STR(sync.argv[2], "-c");
+    YEW_ASSERT_EQ_STR(sync.argv[3], "core.quotepath=false");
+    YEW_ASSERT_EQ_STR(sync.argv[4], "-c");
+    YEW_ASSERT_EQ_STR(sync.argv[5], "status.renames=true");
+    YEW_ASSERT_EQ_STR(sync.argv[6], "rebase");
+    YEW_ASSERT_EQ_STR(sync.argv[7], "-i");
+    YEW_ASSERT_EQ_STR(sync.argv[8], "0123456789abcdef");
+    YEW_ASSERT(!sync_rows_have(sync.argv, sync.argc,
+                               "--no-optional-locks"));
+    YEW_ASSERT(sync_rows_have(sync.env_set, sync.env_set_len,
+                              "GIT_TERMINAL_PROMPT=0"));
+    YEW_ASSERT(sync_rows_have(sync.env_set, sync.env_set_len,
+                              "GIT_EDITOR=/tmp/yew editor"));
+    YEW_ASSERT(sync_rows_have(sync.env_set, sync.env_set_len,
+                              "GIT_SEQUENCE_EDITOR=/tmp/yew editor"));
+    YEW_ASSERT(sync_rows_have(sync.env_set, sync.env_set_len,
+                              "GIT_FLUSH=1"));
+    YEW_ASSERT(sync_rows_have(sync.env_set, sync.env_set_len,
+                              "GIT_PAGER=cat"));
+    YEW_ASSERT(sync_rows_have(sync.env_set, sync.env_set_len, "PAGER=cat"));
+    YEW_ASSERT(sync_rows_have(sync.env_set, sync.env_set_len, "LC_ALL=C"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset, sync.env_unset_len,
+                              "COLUMNS"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset, sync.env_unset_len, "LINES"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset, sync.env_unset_len,
+                              "GIT_TRACE"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset, sync.env_unset_len,
+                              "GIT_TRACE_PACKET"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset, sync.env_unset_len,
+                              "GIT_TRACE_PERFORMANCE"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset, sync.env_unset_len,
+                              "GIT_CURL_VERBOSE"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset, sync.env_unset_len,
+                              "GIT_TRANSFER_TRACE"));
+    YEW_ASSERT(sync_rows_have(sync.env_unset_prefix,
+                              sync.env_unset_prefix_len, "GIT_TRACE2"));
     gitcache_done(&ed);
 }
 

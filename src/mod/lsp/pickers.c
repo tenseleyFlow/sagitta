@@ -14,6 +14,7 @@
 #include "edit/pane_cmds.h"
 #include "mod/lsp/sync.h"
 #include "term/grid.h"
+#include "text/coords.h"
 #include "text/piece.h"
 #include "ui/message.h"
 #include "ui/glyphs.h"
@@ -244,8 +245,10 @@ static const char *display_path(Ed *ed, const char *path)
 static char *location_label(Ed *ed, const LspLoc *loc)
 {
     const char *path = display_path(ed, loc->path);
-    unsigned long long line = (unsigned long long)loc->line + 1ULL;
-    unsigned long long chr = (unsigned long long)loc->chr + 1ULL;
+    unsigned long long line =
+        (unsigned long long)yew_coord_display(loc->line);
+    unsigned long long chr =
+        (unsigned long long)yew_coord_display(loc->chr);
     int n = snprintf(NULL, 0, "%s:%llu:%llu", path, line, chr);
     char *label;
 
@@ -519,7 +522,8 @@ static char *symbol_detail(Ed *ed, const LspSymbol *symbol)
     const char *path = symbol->path == NULL ? "(buffer)" :
                                                  display_path(ed,
                                                               symbol->path);
-    unsigned long long line = (unsigned long long)symbol->line + 1ULL;
+    unsigned long long line =
+        (unsigned long long)yew_coord_display(symbol->line);
     int n = snprintf(NULL, 0, "%s:%llu", path, line);
     char *detail;
 

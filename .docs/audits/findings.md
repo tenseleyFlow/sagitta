@@ -22,40 +22,40 @@ recorded in `audit-00.md`.
 | YEW-F-007 | C | fixed | F07 UI | ~~workspace restore reorders group members from tab-array order~~ — fixed 2026-09-13 in `bea3990b` | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
 | YEW-F-008 | H | fixed | F08 FL | ~~unprivileged plugin macro replay inherits config authority~~ — fixed 2026-09-13 in `8995bb1f` | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 | YEW-F-009 | M | fixed | F09 REC | ~~recorder folding self-test no longer reaches its injected fault~~ — fixed 2026-09-13 in `1c11ebee` | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
-| YEW-F-010 | M | open | F09 REC | macro store accepts source that fails on first replay | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
-| YEW-F-011 | M | open | F10 SYN | matching source metadata can retain stale syntax tables | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
-| YEW-F-012 | M | open | F10 SYN | pending embeds occupy a canonical state tail slot | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
-| YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
-| YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
-| YEW-F-015 | M | open | F11 LSP | snippet-policy grep gate matches unrelated core code | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
-| YEW-F-016 | M | open | F11 LSP | required 1-based display edges violate the LSP +/-1 gate | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
-| YEW-F-017 | M | open | F13 GIT | interactive rebase bypasses the Git verb and environment boundary | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
-| YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
-| YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
-| YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
-| YEW-F-021 | M | open | F14 PLUG | plugin teardown retains raw hook and ledger lengths | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
-| YEW-F-022 | M | open | F14 PLUG | plugin trust wording gate rejects its required warning | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
-| YEW-F-023 | M | open | F14 PLUG | plugin commands cannot enter the recorder CMDWORD space | tests/audit/yew_f_023.c | s58 F14 q8 |
-| YEW-F-024 | M | open | F15 CI | cross-surface XFAIL debt table stops at F004 | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
-| YEW-F-025 | M | open | F15 CI | script tests have no XFAIL or hard-XPASS state | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
-| YEW-F-026 | M | open | F15 CI | PTY cases have no XFAIL or hard-XPASS state | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
-| YEW-F-027 | M | open | F15 CI | Fletch format ban accepts macro-forwarded nonliteral formats | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
-| YEW-F-028 | M | open | F15 CI | Fletch abort ban accepts macro-forwarded abort | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
-| YEW-F-029 | M | open | F15 CI | stable-sort ban accepts macro-forwarded qsort | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-030 | M | open | F15 CI | C11-subset ban accepts token-pasted attribute syntax | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-031 | M | open | F15 CI | explicit-registry ban accepts token-pasted constructors | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
-| YEW-F-032 | M | open | F15 CI | single-thread ban accepts token-pasted pthread calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-033 | M | open | F15 CI | reproducibility ban omits `__TIMESTAMP__` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-034 | M | open | F15 CI | mmap ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-035 | M | open | F15 CI | allocator ban accepts macro-forwarded libc allocation | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
-| YEW-F-036 | M | open | F15 CI | cwd-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
-| YEW-F-037 | M | open | F15 CI | realpath-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
-| YEW-F-038 | M | open | F15 CI | locale-dependent Unicode ban omits `mbtowc` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
-| YEW-F-039 | M | open | F15 CI | native-loader ban omits `dlvsym` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
-| YEW-F-040 | M | open | F15 CI | strerror_r ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
-| YEW-F-041 | M | open | F15 CI | musl backtrace ban omits `backtrace_symbols_fd` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
-| YEW-F-042 | M | open | F15 CI | GNU-libc ban omits `getopt_long_only` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
-| YEW-F-043 | M | open | F15 CI | long-double ban misses valid continued declarations | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
+| YEW-F-010 | M | fixed | F09 REC | ~~macro store accepts source that fails on first replay~~ — fixed 2026-09-13 in `c362cefd` | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
+| YEW-F-011 | M | fixed | F10 SYN | ~~matching source metadata can retain stale syntax tables~~ — fixed 2026-09-13 in `2c9c7431` | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
+| YEW-F-012 | M | fixed | F10 SYN | ~~pending embeds occupy a canonical state tail slot~~ — fixed 2026-09-13 in `43a82533` | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
+| YEW-F-013 | M | fixed | F10 SYN | ~~JS/TS known-wrong golden rows lack the heuristic comment~~ — fixed 2026-09-13 in `838fd7e1` | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
+| YEW-F-014 | M | fixed | F11 LSP | ~~stripped LSP completion bypasses the module hard error~~ — fixed 2026-09-13 in `114f99fb` | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
+| YEW-F-015 | M | fixed | F11 LSP | ~~snippet-policy grep gate matches unrelated core code~~ — fixed 2026-09-13 in `59d318cf` | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
+| YEW-F-016 | M | fixed | F11 LSP | ~~required 1-based display edges violate the LSP +/-1 gate~~ — fixed 2026-09-13 in `07ee554b` | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
+| YEW-F-017 | M | fixed | F13 GIT | ~~interactive rebase bypasses the Git verb and environment boundary~~ — fixed 2026-09-13 in `c96b4f91` | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
+| YEW-F-018 | M | fixed | F13 GIT | ~~FUSS picker detail bypasses the module clock discipline~~ — fixed 2026-09-13 in `b61d329b` | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
+| YEW-F-019 | M | fixed | F13 GIT | ~~porcelain rename test survives the required one-NUL mutation~~ — fixed 2026-09-13 in `b464953d` | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
+| YEW-F-020 | M | fixed | F13 GIT | ~~Git formatting gate rejects legitimate display formatting~~ — fixed 2026-09-13 in `0195ed1c` | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
+| YEW-F-021 | M | fixed | F14 PLUG | ~~plugin teardown retains raw hook and ledger lengths~~ — fixed 2026-09-14 in `073489ff` | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
+| YEW-F-022 | M | fixed | F14 PLUG | ~~plugin trust wording gate rejects its required warning~~ — fixed 2026-09-14 in `4858a39c` | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
+| YEW-F-023 | M | fixed | F14 PLUG | ~~plugin commands cannot enter the recorder CMDWORD space~~ — fixed 2026-09-14 in `d2dc4ddf` | tests/audit/yew_f_023.c | s58 F14 q8 |
+| YEW-F-024 | M | fixed | F15 CI | ~~cross-surface XFAIL debt table stops at F004~~ — fixed 2026-09-14 in `56ce3f24` | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
+| YEW-F-025 | M | fixed | F15 CI | ~~script tests have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `da1f9cd0` | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
+| YEW-F-026 | M | fixed | F15 CI | ~~PTY cases have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `86ccb661` | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
+| YEW-F-027 | M | fixed | F15 CI | ~~Fletch format ban accepts macro-forwarded nonliteral formats~~ — fixed 2026-09-14 in `c371b5a4` | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
+| YEW-F-028 | M | fixed | F15 CI | ~~Fletch abort ban accepts macro-forwarded abort~~ — fixed 2026-09-14 in `f6c8075d` | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
+| YEW-F-029 | M | fixed | F15 CI | ~~stable-sort ban accepts macro-forwarded qsort~~ — fixed 2026-09-14 in `0e2ab552` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-030 | M | fixed | F15 CI | ~~C11-subset ban accepts token-pasted attribute syntax~~ — fixed 2026-09-14 in `ccfc924c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-031 | M | fixed | F15 CI | ~~explicit-registry ban accepts token-pasted constructors~~ — fixed 2026-09-14 in `ccfc924c` | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
+| YEW-F-032 | M | fixed | F15 CI | ~~single-thread ban accepts token-pasted pthread calls~~ — fixed 2026-09-14 in `a294794c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-033 | M | fixed | F15 CI | ~~reproducibility ban omits `__TIMESTAMP__`~~ — fixed 2026-09-14 in `381bddf0` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-034 | M | fixed | F15 CI | ~~mmap ban accepts macro-forwarded calls~~ — fixed 2026-09-14 in `47046a40` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-035 | M | fixed | F15 CI | ~~allocator ban accepts macro-forwarded libc allocation~~ — fixed 2026-09-14 in `066041c3` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-036 | M | fixed | F15 CI | ~~cwd-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-037 | M | fixed | F15 CI | ~~realpath-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-038 | M | fixed | F15 CI | ~~locale-dependent Unicode ban omits `mbtowc`~~ — fixed 2026-09-14 in `af94a8c1` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
+| YEW-F-039 | M | fixed | F15 CI | ~~native-loader ban omits `dlvsym`~~ — fixed 2026-09-14 in `f09c70e0` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
+| YEW-F-040 | M | fixed | F15 CI | ~~strerror_r ban accepts macro-forwarded calls~~ — fixed 2026-09-14 in `1cac4adf` | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
+| YEW-F-041 | M | fixed | F15 CI | ~~musl backtrace ban omits `backtrace_symbols_fd`~~ — fixed 2026-09-14 in `aec0fe6b` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
+| YEW-F-042 | M | fixed | F15 CI | ~~GNU-libc ban omits `getopt_long_only`~~ — fixed 2026-09-14 in `aec0fe6b` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
+| YEW-F-043 | M | fixed | F15 CI | ~~long-double ban misses valid continued declarations~~ — fixed 2026-09-14 in `4b2b0f02` | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
 | YEW-F-044 | M | open | F15 CI | shim-honesty gate accepts parenthesized success | tests/audit/f15_ban_misses.c | s57 module-size profiles; s58 F15 q2 |
 | YEW-F-045 | M | open | F15 CI | Unicode-width ban accepts decimal local tables | tests/audit/f15_ban_misses.c | s19 width ownership; s58 F15 q2 |
 | YEW-F-046 | M | open | F15 CI | syntax-color ban accepts packed decimal colors | tests/audit/f15_ban_misses.c | s40 semantic attrs; s58 F15 q2 |
@@ -210,235 +210,255 @@ and audit. `make test-roundtrip` now runs the planted fault and requires it to
 exit through `SELFTEST/P1`, shrink from 96 to at most three events, and name
 `ed.move.buf.end`; the ordinary legal-folding sentinel remains green.
 
-`YEW-F-010` is Medium because storing an invalid macro reports success, but
-its first replay fails. The failure is recoverable: the VM transaction rolls
-back the partial edit and preserves document bytes. `yew_macro_store`
-performs compile-only validation, so a syntactically valid program containing
-an unresolved global is accepted even though it cannot execute. The
-reproducer stores a macro that inserts text and then calls a missing function;
-store succeeds, replay returns `YEW_CMD_ERR_STATE`, and the buffer remains
-unchanged. It remains open for Sprint 59; no product source changed during
-the audit.
+`YEW-F-010` was Medium because storing an invalid macro reported success even
+though its first replay failed. Commit `c362cefd` gives the store path a
+side-effect-free strict compiler pass: free global references must resolve to
+a declaration in the candidate source, a persistent runtime global, or a
+prelude entry before the atomic register write. Forward references and live
+runtime helpers remain valid, while a definitely missing name produces a
+source-positioned diagnostic and leaves the old register untouched. The
+candidate is never executed during validation, so editor, shell, and I/O side
+effects still occur only on an explicit replay.
 
-`YEW-F-011` is Medium because an equal-size syntax source replacement whose
-nanosecond mtime is restored can retain the old compiled table. Highlighting
-is stale but recoverable, and document bytes remain intact. The cache header
-records the source hash as the authority, but `yew_syn_def_load` accepts an
-in-memory entry on matching size and mtime before hashing the source. The
-reproducer installs an isolated builtin-shaped `runtime/syntax/ini.fl`, loads
-an `x` rule, replaces it with an equal-size `y` rule, restores the exact
-timestamp, and observes zero recompiles plus the stale `x` rule. It remains
-open for Sprint 59; no product source changed during the audit.
+`YEW-F-011` was Medium because an equal-size syntax source replacement whose
+nanosecond mtime was restored could retain the old compiled table. Commit
+`2c9c7431` makes the source hash authoritative for every cache hit, including
+builtin definitions whose metadata appears unchanged. A matching hash still
+avoids syntax recompilation, and matching metadata avoids an unnecessary
+cache-header rewrite; only changed bytes force table recompilation. The
+isolated builtin-shaped reproducer now loads its replacement `y` rule and
+records exactly one compile.
 
-`YEW-F-012` is Medium because the documented canonical state law and the
-pending-embed mechanism disagree, weakening the promised equality and cache
-invariants and potentially retaining an otherwise unreachable definition.
-Before JavaScript is resident, an HTML `<script>` opener leaves `ndef == 1`
-while storing the pending definition in `aux[1]`; `syn_state_canon`
-deliberately preserves that future slot even though Sprint 41.5 requires every
-tail slot from `ndef` onward to be zero. The isolated reproducer records the
-exact state without changing product behavior. It remains open for Sprint 59.
+`YEW-F-012` was Medium because pending embeds stored a future guest definition
+in `aux[ndef]`, contradicting the canonical-state law that every unused tail
+cell is zero. Commit `43a82533` makes tail clearing unconditional. The pure
+line phase reports unresolved guest identity through its existing result side
+channel, `SynBuf` owns the deterministic budgeted idle-load queue, and deferred
+resident guests use line-local EOL scratch. Pending states therefore retain no
+hidden definition identity, while the 84-byte state layout, fallback rendering,
+one-load-per-settle pacing, and subsequent invalidation behavior remain intact.
 
-`YEW-F-013` is Medium because the release-control fixture required by Sprint
-42 is absent: the JS and TypeScript known-wrong golden rows use an identifier
-named `knownWrong`, but neither fixture contains the required adjacent comment
-naming the value-flag heuristic. Descriptions elsewhere do not satisfy the
-fixture-local documentation contract, so future reviewers cannot distinguish
-intentional heuristic debt from a regression at the point of evidence. It
-remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-013` was Medium because the JS and TypeScript known-wrong golden rows
+lacked Sprint 42's required adjacent explanation of the value-flag heuristic.
+Commit `838fd7e1` restores an ID-bearing comment on each affected `)`/`}` row,
+regenerates the exact span output, and strengthens the audit to require every
+row to carry the explanation locally. The pre-Sprint-41.5 golden guard now
+pins these two intentional comment-only changes as explicit old/new hash rows;
+the remaining 226 historical goldens retain a separate unchanged aggregate.
 
-`YEW-F-014` is Medium because a stripped build gives one `ed.lsp.*` command
-different module-boundary semantics from every other command in its domain.
-`yew_lsp_complete` reports an informational message and opens core index
-completion instead of returning the exact `yew_mod_require` error required by
-Sprints 45, 47, and F11; the minimal-module unit control explicitly excludes
-that command. The fallback is useful and recoverable, but it contradicts the
-locked surface and makes the advertised module boundary inaccurate. It
-remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-014` was Medium because a stripped build gave `ed.lsp.complete`
+different module-boundary semantics from every sibling command. Commit
+`114f99fb` routes the stripped completion shim through `yew_mod_require` and
+removes the unit test's special-case exclusion. Core index completion remains
+available through `ed.compl.open`; invoking an LSP-named command without the
+module now returns the exact documented error across the full command set.
 
-`YEW-F-015` is Medium because Sprint 47's mandatory repository-wide
-`tabstop|placeholder` scan cannot establish its claimed absence condition.
-The LSP policy paragraph is one match, but ordinary core implementation names
-and comments contribute ten more matching lines at the baseline. The product
-still downgrades the choice snippet deterministically; the defect is in a
-release gate that promises a specific result it cannot produce. It remains
-open for Sprint 59; no product source changed during the audit.
+`YEW-F-015` was Medium because Sprint 47's mandatory repository-wide snippet
+policy scan matched ten unrelated core names and comments in addition to its
+one intended LSP policy sentence. Commit `59d318cf` gives those internal
+concepts precise names—bootstrap tab, provisional tree/model, and deferred
+jump target—without changing behavior. The policy paragraph carries an
+ID-bearing uniqueness note, and the literal source scan now returns exactly
+that one line as its release contract requires.
 
-`YEW-F-016` is Medium because two locked LSP contracts cannot both satisfy
-their literal release controls. Sprint 46 requires a repository scan for
-`line + 1`, `line - 1`, and `.v + 1` under `src/mod/lsp/` to be empty, while
-Sprint 47 requires 1-based picker display at that layer. The baseline has
-three matches, all at user-facing display/error edges; protocol positions
-remain zero-based. The visible behavior is correct, but the frozen gate
-rejects its required implementation and cannot support a release claim. It
-remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-016` was Medium because the literal no-line-arithmetic gate rejected
+three required one-based picker/error display edges even though protocol
+positions remained zero-based. Commit `07ee554b` centralizes the explicit
+zero-based-to-display conversion in the shared coordinate layer and routes
+all three LSP presentation sites through it. Boundary tests cover zero, one,
+and `UINT32_MAX`; picker labels and rename errors remain one-based while the
+Sprint 46 scan over `src/mod/lsp/` is now empty.
 
-`YEW-F-017` is Medium because interactive rebase is the one Git execution
-path outside the static verb inventory and the shared environment builder.
-Its direct synchronous job safely uses an argv array and terminal handover,
-but it omits `GIT_TERMINAL_PROMPT=0`, `GIT_FLUSH=1`, and the trace-variable
-removals required on every verb; only the two editor variables were permitted
-to differ. The operation fails visibly rather than corrupting document bytes.
-The source-backed reproducer records both halves of the bypass at the fixed
-replacement baseline. It remains open for Sprint 59; no product source
-changed during the audit.
+`YEW-F-017` was Medium because interactive rebase was the one Git execution
+path outside the static verb inventory and shared environment builder. Commit
+`c96b4f91` adds the rebase descriptor and a Git-owned synchronous terminal
+runner. The runner retains the nested-yew editor and real-TTY handover, but now
+builds canonical global argv options, applies the same prompt/flush/pager/
+locale and trace-removal policy as every other Git path, and owns mutation
+invalidation. Its only policy exception is the two explicitly replaced Git
+editor rows. A 43-assertion behavioral test captures the complete job spec;
+the source-backed audit also rejects a future direct job from FUSS.
 
-`YEW-F-018` is Medium because the Git module's mandatory clock-source gate is
-not empty and FUSS picker detail reads the process wall clock through
-`time(NULL)` instead of an injected yew clock. That makes exact picker output
-uncontrollable under clock steps and contradicts the subsystem's deterministic
-clock discipline, while leaving document bytes safe. The literal source gate
-also matches four permitted helper declarations/definitions whose names end
-in `clock`, so its promised empty result is independently unattainable. The
-source-backed reproducer records all five matches at the fixed replacement
-baseline. It remains open for Sprint 59; no product source changed during the
-audit.
+`YEW-F-018` was Medium because FUSS picker detail read the process wall clock
+through `time(NULL)` instead of yew's anchored editor clock. Commit `b61d329b`
+routes relative-time formatting through the startup wall-time anchor advanced
+by monotonic editor time, with tests for missing anchors, elapsed time, and
+future timestamps. It also replaces the impossible literal source policy with
+a token-aware control: actual calls to the exact `time`, `clock`, and
+`cpu_time` identifiers fail, while permitted helpers whose longer names end
+in `clock` do not. The stripped-module shim preserves the same public seam as
+a deterministic no-op.
 
-`YEW-F-019` is Medium because the mandatory porcelain-v2 mutation control
-does not detect the exact desynchronisation it claims to pin. With both
-rename advances changed from two NULs to one, the source pathname becomes an
-unknown record and is silently skipped; the parser still returns the seven
-entries and original-path bytes asserted by the existing test. The manual
-mutant passed 16 assertions. The source-independent reproducer models that
-stream advance and records the indistinguishable entry count. It remains
-open for Sprint 59; no product source changed during the audit.
+`YEW-F-019` was Medium because the mandatory porcelain-v2 mutation control
+did not detect the exact desynchronisation it claimed to pin. Commit
+`b464953d` replaces the rename's original-path fixture with a legal filename
+that begins like a recognized porcelain record and asserts those bytes
+exactly. The source-independent reproducer now observes eight records under
+one-NUL advancement instead of the seven valid entries. With both production
+passes temporarily advanced only to the destination NUL, the named unit test
+failed at its first parse assertion; restoring the two-NUL parser returned all
+17 assertions to green. Production parser behavior is unchanged.
 
-`YEW-F-020` is Medium because Sprint 51's formatting grep cannot establish
-the narrower argv-safety rule it is meant to enforce. Seven
-`bytebuf_printf` calls outside `porcelain.c` format owned status, patch, and
-picker-detail text; none constructs a Git argv element, but every one fails
-the literal mandatory gate. The argv hook and hostile-filename matrix still
-prove the product behavior. The source-backed reproducer pins the gate's
-seven-match baseline for Sprint 59; no product source changed during the
-audit.
+`YEW-F-020` was Medium because Sprint 51's formatting grep could not establish
+the narrower argv-safety rule it was meant to enforce. Commit `0195ed1c`
+replaces that literal control with a semantic one: the canonical argv builder
+must copy discrete tail elements without any formatting call, its structural
+unit test must remain registered, and the hostile-filename integration matrix
+must retain exact post-`--` byte comparisons across stage, unstage, diff, and
+blame. The focused unit test passes 138 assertions and the full FUSS command
+surface passes 544. Legitimate owned status, patch, and picker-detail
+formatting remains unchanged.
 
-`YEW-F-021` is Medium because plugin teardown clears every active hook and
-registration and the collector reclaims their closures, but the raw hook and
-ledger lengths remain at their first-cycle high-water marks instead of
-returning to the pre-enable values required by Sprint 54 and F14. The retained
-rows are inert and reused: the 20-plugin by 20-cycle control plateaus after the
-first cycle, so this is bounded bookkeeping residue rather than executable
-callback leakage. It remains open for Sprint 59; no product source changed
-during the audit.
+`YEW-F-021` was Medium because plugin teardown cleared every active hook and
+registration and the collector reclaimed their closures, but the raw hook and
+ledger lengths remained at their first-cycle high-water marks instead of
+returning to the pre-enable values required by Sprint 54 and F14. Commit
+`073489ff` clears removed rows and trims inactive suffixes while retaining
+interior tombstones, so later live ledger ids remain stable. The focused
+invariant test removes and reuses an interior slot before collapsing both
+tables to zero; the integrated 20-plugin by 20-cycle control now returns every
+registry length to its exact pre-enable value and still proves that every
+closure is reclaimed.
 
-`YEW-F-022` is Medium because Sprint 54 requires its author guide to quote the
-honest `plug.h` trust warning verbatim while also banning the word `sandbox`
-from every user-facing string. The required warning itself ends by saying that
-capability gates do not create a sandbox, so the literal release gate fails on
-the one sentence that most directly prevents a misleading isolation claim.
-The product text is honest; the defect is a self-contradictory release control.
-It remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-022` was Medium because Sprint 54 requires its author guide to quote the
+honest `plug.h` trust warning verbatim while its literal word ban rejected the
+warning's statement that capability gates do not create a sandbox. Commit
+`4858a39c` replaces that contradictory goalpost with a semantic control: the
+guide and header trust blocks remain byte-identical, the guide must explicitly
+deny memory and resource isolation, and its sole `sandbox` mention must be the
+negative disclaimer. Both the release script and audit reproducer reject an
+injected positive isolation claim.
 
-`YEW-F-023` is Medium because plugin commands execute normally but can never
-be represented by the recorder. The plugin registration path excludes
-`YEW_CMD_RECORDABLE`, always supplies a NULL CMDWORD, and the author guide
-calls `recordable` host-only. With no word to enter in the global map, a plugin
-command named `up` is accepted beside core's `up` instead of reaching the
-required collision check. This is visible as a macro that omits the plugin
-action rather than a byte-loss path, so it is Medium. It remains open for
-Sprint 59; no product source changed during the audit.
+`YEW-F-023` was Medium because plugin commands executed normally but could
+never be represented by the recorder. Commit `d2dc4ddf` makes recordability
+implicit, installs each parseable local name in the global CMDWORD map, and
+rejects collisions with core or enabled-plugin commands before registration.
+The command registry also reserves motion syntax that would parse as a
+different action. A lifecycle regression records a real plugin invocation,
+proves that its CMDWORD is emitted, and replays the live closure; collision
+failure and repeated multi-plugin teardown retain their zero-residue checks.
 
-`YEW-F-024` is Medium because Sprint 58 calls
-`.docs/audits/xfail-debt.md` the authoritative cross-surface debt table and
-requires every live finding to remain there until closure, but it lists only
-`YEW-F-001` through `YEW-F-004` while the finding ledger and enforced audit
-registry run through `YEW-F-023`. The expected failures still execute, so
-this is tracking/control drift rather than a silently green product failure.
-It remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-024` was Medium because Sprint 58 calls
+`.docs/audits/xfail-debt.md` the authoritative cross-surface debt table, but
+it retained only four of the 79 finding IDs. Commit `56ce3f24` gives every
+finding exactly one retained verdict, records fixing commits on closed rows,
+and makes the passing audit guard require exact set equality with no missing,
+unexpected, or duplicate IDs. A deliberate one-row deletion now hard-fails
+the audit suite.
 
-`YEW-F-025` is Medium because the script runner has no syntax or state for an
-expected failure. A seeded `# XFAIL: YEW-F-NNN` is only a Fletch comment;
-failure remains an ordinary `FAIL`, and success remains `PASS`, so hard XPASS
-cannot be represented on this required surface. The unit audit runner and
-Fletch conformance runner do implement hard XPASS. It remains open for Sprint
-59; no product source changed during the audit.
+`YEW-F-025` was Medium because the script runner had no syntax or state for an
+expected failure. Commit `da1f9cd0` parses strict leading
+`# XFAIL: YEW-F-NNN reason` metadata, requires an active authoritative debt
+row, reports eligible failures as `XFAIL`, and makes an unexpected pass a hard
+`XPASS`. Runner/setup failures, timeouts, signals, corrupt protocols, unknown
+IDs, and fixed IDs cannot satisfy the marker. Self-checks pin parsing, ledger
+status, classification, and output; end-to-end fail/pass/fixed-ID probes pin
+the exit statuses.
 
-`YEW-F-026` is Medium because Sprint 58 explicitly requires
-`PtyCase.xfail_id`, but the structure has only name/profile/geometry/function
-fields and the runner has no expected-failure classification. A seeded golden
-mismatch remains an ordinary failure and a later matching golden cannot be
-reported as XPASS. It remains open for Sprint 59; no product source changed
-during the audit.
+The unit audit and Fletch conformance runners retain their independent hard
+XPASS paths.
 
-`YEW-F-027` is Medium because the Fletch format scanner recognizes direct
-printf-family call tokens but accepts a macro-forwarded call carrying a
-nonliteral user-controlled format. The isolated fixture runs the actual gate
-and exits green. This weakens a documented control without proving a product
-violation, so the finding is Medium and remains open for Sprint 59.
+`YEW-F-026` was Medium because PTY cases had no expected-failure identity or
+hard unexpected-pass state. Commit `86ccb661` adds `PtyCase.xfail_id`, requires
+its ID to have an active authoritative debt row, and permits only a stable
+comparison against an existing mismatching golden to report `XFAIL`. A matching
+golden is a hard `XPASS`; missing or unreadable goldens, setup and execution
+failures, independent-run instability, cleanup failures, live children, and
+descriptor leaks remain hard failures. Update mode refuses marked cases. The
+runner self-check and an end-to-end match/mismatch/fixed-ID drill pin the
+classification and exit-status contract.
 
-`YEW-F-028` is Medium because the VM abort scanner accepts `abort()` reached
-through a plainly named macro. The compiler still emits the forbidden abort
-path while the gate reports green. This is a release-control gap, not a
-confirmed product crash, and remains open for Sprint 59.
+`YEW-F-027` was Medium because the Fletch format scanner recognized direct
+printf-family call tokens but accepted a macro-forwarded call carrying a
+nonliteral user-controlled format. Commit `c371b5a4` resolves object-like macro
+alias chains before classifying format sinks, so forwarding cannot hide the
+argument subject to the literal-format rule. The positive control pins a
+two-hop nonliteral alias as a violation while the same alias with a literal
+format and the bounded `va_list` forwarding exception remain accepted.
 
-`YEW-F-029` is Medium because the stable-sort ban accepts `qsort` behind a
-macro even though the resulting call retains the unstable cross-libc ordering
-the rule forbids. The isolated actual-gate probe is green and remains an open
-Sprint 59 control finding.
+`YEW-F-028` was Medium because the VM abort scanner accepted `abort()` reached
+through a plainly named macro. Commit `f6c8075d` makes the Fletch-only scan
+reject object-like aliases naming `abort` or `assert` as well as direct calls,
+and carries a positive macro-forwarding control so a later direct-call-only
+regression fails the gate.
 
-`YEW-F-030` is Medium because token pasting produces the forbidden
-`__attribute__` spelling only after preprocessing. The source grep reports
-green although the compiler sees syntax outside the locked C11 subset. No
-such source is present in yew; the gate finding remains open for Sprint 59.
+`YEW-F-029` was Medium because the stable-sort ban accepted `qsort` behind a
+macro even though the resulting call retained the unstable cross-libc ordering
+the rule forbids. Commit `0e2ab552` rejects object-like aliases naming `qsort`
+or `qsort_r` and adds an alias-specific positive control alongside the existing
+direct-call control.
 
-`YEW-F-031` is Medium because the constructor check can be bypassed by token
-pasting both the attribute and `constructor` name. That reintroduces implicit
-registration while the explicit-registry gate stays green. The seeded control
-finding remains open for Sprint 59.
+`YEW-F-030` was Medium because token pasting produced the forbidden
+`__attribute__` spelling only after preprocessing. Commit `ccfc924c` rejects
+the incomplete `__attribute` stem as well as the completed spelling, closing
+the exact paste boundary while retaining the direct GNU-extension ban. An
+explicit token-paste positive control pins the behavior.
 
-`YEW-F-032` is Medium because token-pasted `pthread_create` reaches the
+`YEW-F-031` was Medium because the constructor check could be bypassed by
+token-pasting both the attribute and `constructor` name. The same
+`ccfc924c` boundary rejects the required pasted attribute stem before the
+constructor extension can exist, and the isolated paired-paste reproducer now
+fails the real gate.
+
+`YEW-F-032` was Medium because token-pasted `pthread_create` reached the
 forbidden threading API without leaving the contiguous `pthread` text the
-gate searches for. The product tree is not shown to spawn a thread; the
-single-thread release control is incomplete and remains open for Sprint 59.
+gate searched for. Commit `a294794c` also rejects the `thread_*` API stem,
+which has no valid use in yew source, and pins the pasted call with a positive
+control while retaining the direct `pthread` and `threads.h` checks.
 
-`YEW-F-033` is Medium because `__TIMESTAMP__` embeds filesystem-dependent
-build time just as surely as the two macros currently banned, yet is omitted
-from the reproducibility scan. The actual gate accepts the isolated seed. It
-remains open for Sprint 59.
+`YEW-F-033` was Medium because `__TIMESTAMP__` embeds filesystem-dependent
+build time just as surely as the two macros already banned. Commit `381bddf0`
+adds it to the compiler-time pattern, updates the diagnostic to cover the
+whole class, and adds a positive control for the formerly omitted macro.
 
-`YEW-F-034` is Medium because a macro-forwarded `mmap` call survives the
+`YEW-F-034` was Medium because a macro-forwarded `mmap` call survived the
 source ban while preserving the truncate/SIGBUS hazard the rule exists to
-exclude. This is a gate finding only and remains open for Sprint 59.
+exclude. Commit `47046a40` rejects object-like aliases naming `mmap` and adds
+an alias positive control while retaining the direct-call check.
 
-`YEW-F-035` is Medium because the audited-allocation scan keys on a direct
-libc function token followed by `(` and accepts a macro-forwarded `malloc`.
-The isolated seed does not establish an allocation in the product tree. The
-control gap remains open for Sprint 59.
+`YEW-F-035` was Medium because the audited-allocation scan keyed on a direct
+libc function token followed by `(` and accepted a macro-forwarded `malloc`.
+Commit `066041c3` rejects object-like aliases naming any libc allocator in the
+existing set and adds a forwarding positive control while preserving the
+audited yew allocator boundary.
 
-`YEW-F-036` and `YEW-F-037` are Medium because the two libc-owned allocation
-checks require `NULL` to appear literally at the call site. Passing a pointer
-variable initialized to NULL retains `getcwd`/`realpath` ownership semantics
-but passes both actual gates. They remain separate rule findings for Sprint
-59; no product source changed.
+`YEW-F-036` and `YEW-F-037` were Medium because the two libc-owned allocation
+checks required `NULL` to appear literally at the call site. Commit
+`16441f04` follows a nearby pointer initialized to `NULL` into the relevant
+`getcwd` or `realpath` argument, without rejecting fixed caller-owned buffers.
+Internal positive controls pin both APIs, and the two isolated variable-alias
+reproducers now fail the real gate.
 
-`YEW-F-038` is Medium because the locale-dependent Unicode list includes
-`mbrtowc` but omits its older stateful sibling `mbtowc`. The latter has the
-same forbidden locale dependence and passes the actual gate. This control
-finding remains open for Sprint 59.
+`YEW-F-038` was Medium because the locale-dependent Unicode list included
+`mbrtowc` but omitted its older stateful sibling `mbtowc`. Commit `af94a8c1`
+adds the omitted API to the same bespoke-Unicode boundary and pins it with an
+explicit positive control.
 
-`YEW-F-039` is Medium because the native-loader list covers `dlsym` but omits
-the GNU versioned lookup `dlvsym`. A Fletch-only plugin policy cannot be
-established by that list while a native symbol resolver passes. It remains
-open for Sprint 59.
+`YEW-F-039` was Medium because the native-loader list covered `dlsym` but
+omitted the GNU versioned lookup `dlvsym`. Commit `f09c70e0` adds the versioned
+resolver to the Fletch-only plugin boundary and pins the omission with a
+dedicated positive control.
 
-`YEW-F-040` is Medium because a macro-forwarded `strerror_r` call preserves
-the incompatible ABI surface while evading the direct-call regex. The product
-tree has no demonstrated violation; the portability control remains open for
-Sprint 59.
+`YEW-F-040` was Medium because a macro-forwarded `strerror_r` call preserved
+the incompatible ABI surface while evading the direct-call regex. Commit
+`1cac4adf` rejects object-like aliases naming `strerror_r` and adds an
+alias-specific positive control alongside the direct-call control.
 
-`YEW-F-041` is Medium because `backtrace_symbols_fd` is part of the same
-glibc/execinfo family but is absent from the musl-compatibility pattern. The
-actual gate accepts a direct call, so the release claim is incomplete and
-remains open for Sprint 59.
+`YEW-F-041` was Medium because `backtrace_symbols_fd` is part of the same
+glibc/execinfo family but was absent from the musl-compatibility pattern.
+Commit `aec0fe6b` adds the omitted sibling to the execinfo family and gives it
+an explicit positive control.
 
-`YEW-F-042` is Medium because `getopt_long_only` is a GNU extension adjacent
-to the listed `getopt_long`, but the word-boundary shape lets the longer name
-pass. The musl portability control remains open for Sprint 59.
+`YEW-F-042` was Medium because `getopt_long_only` is a GNU extension adjacent
+to the listed `getopt_long`, but the word-boundary shape let the longer name
+pass. The same `aec0fe6b` portability commit adds it to the GNU API family and
+pins it with a dedicated positive control.
 
 `YEW-F-043` is Medium because C line continuation permits `long double` to
 span physical source lines before preprocessing while grep evaluates each
-line separately. The ABI-divergent type passes the actual gate and the
-control finding remains open for Sprint 59.
+line separately. Commit `4b2b0f02` reconstructs translation-phase-2 logical
+lines in one deterministic scan, preserves source locations, and pins the
+continued form with an internal positive control.
 
 `YEW-F-044` is Medium because the shim honesty parser recognizes only a few
 literal return expressions. A disabled action returning `(YEW_CMD_OK)` has

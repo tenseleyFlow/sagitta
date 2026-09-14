@@ -19,6 +19,17 @@ and only then commit it. Every commit that changes a golden must explain the
 rendering-behaviour change; a golden diff is an observable terminal change.
 Missing goldens never create themselves outside update mode.
 
+A known deterministic golden mismatch may use the registry's
+`X(name, profile, rows, cols, fn, "YEW-F-NNN")` form only while that ID has an
+active row in `.docs/audits/xfail-debt.md`. The mismatch reports `XFAIL`; a
+matching golden reports a hard `XPASS` and exits nonzero. Missing or unreadable
+goldens, unstable independent runs, setup/execution failures, timeouts, live
+children, descriptor leaks, unknown IDs, and fixed IDs remain hard failures.
+Update mode refuses marked cases so it cannot rewrite an XFAIL into an XPASS.
+Expected-failing state directories are removed after the deterministic
+mismatch is established; unexpected failures retain the existing diagnostics
+and preserved-state behavior.
+
 The VT sequence set is intentionally closed. As a drill, temporarily seed the
 renderer output with `CSI 5 L` (`ESC [ 5 L` in bytes). At least one PTY case
 must fail with `unknown sequence: ESC [ 5 L`; removing the seed must restore a

@@ -2744,7 +2744,7 @@ static int ed_driver_inner(const YewStartPlan *plan,
                            const YewEdStartup *startup)
 {
     Ed ed;
-    u32 placeholder_tab_id;
+    u32 bootstrap_tab_id;
     int result;
     i64 wall_now;
     u16 rows;
@@ -2786,7 +2786,7 @@ static int ed_driver_inner(const YewStartPlan *plan,
     ed.input_ready = true;
 
     (void)yew_ed_open_scratch(&ed);
-    placeholder_tab_id = ed.tabs.v.data[0].tab_id;
+    bootstrap_tab_id = ed.tabs.v.data[0].tab_id;
     rows = ed.tty.rows > 0 && ed.tty.rows <= UINT16_MAX ?
                (u16)ed.tty.rows : 24U;
     cols = ed.tty.cols > 0 && ed.tty.cols <= UINT16_MAX ?
@@ -2832,13 +2832,13 @@ static int ed_driver_inner(const YewStartPlan *plan,
             return YEW_EXIT_IO;
         }
         /* The untitled tab existed only so state had a model to restore
-         * into.  Explicit targets replace that placeholder, not restored
+         * into.  Explicit targets replace that bootstrap tab, not restored
          * tabs, groups, panes, or cursors. */
         if (yew_tab_count(&ed) > 1U) {
-            int placeholder = yew_tab_index_of_id(&ed, placeholder_tab_id);
+            int bootstrap = yew_tab_index_of_id(&ed, bootstrap_tab_id);
 
-            if (placeholder >= 0)
-                (void)yew_tab_close(&ed, placeholder);
+            if (bootstrap >= 0)
+                (void)yew_tab_close(&ed, bootstrap);
         }
     }
 #if YEW_WITH_PLUGINS

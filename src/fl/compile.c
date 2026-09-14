@@ -20,6 +20,13 @@ VEC_DECL(FlConstVec, FlValue);
 VEC_DECL(FlNameVec, u32);
 VEC_DECL(FlLineVec, FlLineRun);
 
+typedef struct FlGlobalUse {
+    u32 name;
+    FlSpan span;
+} FlGlobalUse;
+
+VEC_DECL(FlGlobalUseVec, FlGlobalUse);
+
 enum { FL_MAX_LOOPS = 64, FL_MAX_BREAKS = 64 };
 
 typedef enum TraceStatements {
@@ -51,6 +58,7 @@ struct Compiler {
     FlConstVec consts;
     FlNameVec globals;
     FlLineVec lines;
+    FlGlobalUseVec global_uses;
 
     FlLocal locals[FL_MAX_LOCALS];
     u32 nlocals;
@@ -72,6 +80,7 @@ struct Compiler {
     u32 name_id;
     u8 arity;
     bool failed;
+    bool validate_globals;
     u8 trace_statements;
     /*
      * The defining module's origin, inherited by every nested
@@ -222,7 +231,7 @@ static u32 name_const(Compiler *c, u32 intern_id, FlSpan sp)
 static u32 emit_jump(Compiler *c, FlOp op, FlSpan sp)
 {
     emit_op(c, op, sp);
-    emit_u16(c, 0xFFFFU);         /* placeholder */
+    emit_u16(c, 0xFFFFU);         /* patched when the target is known */
     return (u32)c->code.len - 2U;
 }
 
@@ -407,6 +416,20 @@ static i32 resolve_upval(Compiler *c, u32 name, FlSpan sp)
     return -1;
 }
 
+static void note_global_use(Compiler *c, u32 name, FlSpan span)
+{
+    Compiler *top = c;
+    FlGlobalUse use;
+
+    while (top->enclosing != NULL)
+        top = top->enclosing;
+    if (!top->validate_globals)
+        return;
+    use.name = name;
+    use.span = span;
+    FlGlobalUseVec_push(&top->global_uses, use);
+}
+
 /* ---------------------------------------------------------------- */
 /* Expressions                                                      */
 /* ---------------------------------------------------------------- */
@@ -521,6 +544,7 @@ static void comp_expr(Compiler *c, const FlNode *n)
             emit_u8(c, (u8)slot);
             return;
         }
+        note_global_use(c, n->as.ident.name, n->sp);
         emit_op(c, FL_OP_GET_GLOBAL, n->sp);
         emit_u16(c, (u16)name_const(c, n->as.ident.name, n->sp));
         return;
@@ -1033,6 +1057,7 @@ static void comp_assign_target(Compiler *c, const FlNode *tgt,
             emit_u8(c, (u8)slot);
             return;
         }
+        note_global_use(c, tgt->as.ident.name, tgt->sp);
         emit_op(c, FL_OP_SET_GLOBAL, tgt->sp);
         emit_u16(c, (u16)name_const(c, tgt->as.ident.name, tgt->sp));
         return;
@@ -1084,6 +1109,33 @@ static void declare_global(Compiler *c, u32 name, FlSpan sp)
         }
     }
     FlNameVec_push(&c->globals, name);
+}
+
+static bool known_global(const Compiler *c, u32 name)
+{
+    FlValue key = FL_INT_V((i64)name);
+    size_t i;
+
+    for (i = 0U; i < c->globals.len; i++)
+        if (c->globals.data[i] == name)
+            return true;
+    return fl_map_get(c->vm->globals, key, NULL) ||
+           fl_map_get(c->vm->prelude, key, NULL);
+}
+
+static void validate_global_uses(Compiler *c)
+{
+    size_t i;
+
+    for (i = 0U; i < c->global_uses.len; i++) {
+        const FlGlobalUse *use = &c->global_uses.data[i];
+
+        if (known_global(c, use->name))
+            continue;
+        cerror(c, use->span, "undefined name '%s'",
+               yew_intern_str(c->vm->in, use->name));
+        return;
+    }
 }
 
 static void comp_stmt(Compiler *c, const FlNode *n)
@@ -1326,7 +1378,8 @@ static void comp_stmt(Compiler *c, const FlNode *n)
 
 static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                              u32 file_id, FlOrigin origin, u8 fnkind,
-                             TraceStatements trace_statements)
+                             TraceStatements trace_statements,
+                             bool validate_globals)
 {
     Compiler top;
     FlFn *fn;
@@ -1340,6 +1393,7 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     top.file_id = file_id;
     top.origin = origin;
     top.trace_statements = (u8)trace_statements;
+    top.validate_globals = validate_globals;
     bytebuf_init(&top.code);
     add_hidden_local(&top, end);   /* slot 0: the top-level "callee" */
     push_depth(&top, 1);
@@ -1379,12 +1433,16 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
         end.line = end.col = 1U;
     emit_op(&top, FL_OP_HALT, end);
 
+    if (!top.failed && top.validate_globals)
+        validate_global_uses(&top);
+
     if (top.failed) {
         vm->ncompiling = root_base;
         bytebuf_free(&top.code);
         FlConstVec_free(&top.consts);
         FlNameVec_free(&top.globals);
         FlLineVec_free(&top.lines);
+        FlGlobalUseVec_free(&top.global_uses);
         return NULL;
     }
     fn = fl_gc_alloc(vm, sizeof(*fn), FL_FN);
@@ -1439,6 +1497,7 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     FlConstVec_free(&top.consts);
     FlNameVec_free(&top.globals);
     FlLineVec_free(&top.lines);
+    FlGlobalUseVec_free(&top.global_uses);
     return fn;
 }
 
@@ -1446,26 +1505,33 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
                  FlOrigin origin)
 {
     return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
-                           TRACE_STATEMENTS_NONE);
+                           TRACE_STATEMENTS_NONE, false);
+}
+
+FlFn *fl_compile_macro(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                       u32 file_id, FlOrigin origin)
+{
+    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
+                           TRACE_STATEMENTS_NONE, true);
 }
 
 FlFn *fl_compile_profiled(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                           u32 file_id, FlOrigin origin)
 {
     return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
-                           TRACE_STATEMENTS_TOP);
+                           TRACE_STATEMENTS_TOP, false);
 }
 
 FlFn *fl_compile_covered(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                          u32 file_id, FlOrigin origin)
 {
     return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT,
-                           TRACE_STATEMENTS_ALL);
+                           TRACE_STATEMENTS_ALL, false);
 }
 
 FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
                       FlOrigin origin)
 {
     return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_REPL,
-                           TRACE_STATEMENTS_NONE);
+                           TRACE_STATEMENTS_NONE, false);
 }

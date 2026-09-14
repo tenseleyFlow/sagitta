@@ -270,6 +270,7 @@ void test_syn_discovery_engine_snapshots_user_name_for_pure_embed_lookup(void)
     u32 warnings = 0U;
     u32 file;
     u64 compiled;
+    u8 slot;
 
     discovery_open(&f, true);
     discovery_write(&f, "user.fl", alpha_def);
@@ -294,7 +295,8 @@ void test_syn_discovery_engine_snapshots_user_name_for_pure_embed_lookup(void)
                                 out.exit_state);
     YEW_ASSERT_NOT_NULL(pending);
     YEW_ASSERT((pending->flags & YEW_SYN_F_EMBED_PEND) != 0U);
-    YEW_ASSERT_EQ_U64(pending->aux[pending->ndef], alpha);
+    for (slot = pending->ndef; slot < YEW_SYN_DEF_MAX; slot++)
+        YEW_ASSERT_EQ_U64(pending->aux[slot], 0U);
     yew_syn_engine_free(engine);
     yew_syn_def_dispose(host);
     arena_free_all(&arena);

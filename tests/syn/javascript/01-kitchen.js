@@ -7,7 +7,7 @@ let re = /a[\\/]b+/g;
 return /afterReturn/i;
 const nested = `a${`b${{c: /x/.test(a)}}`} tail`;
 function call(x) { return x?.method(); }
-if (x) /knownWrong/.test(x);
-if (x) {} /knownWrongBlock/.test(x);
+if (x) /knownWrong/.test(x); // YEW-F-013 known-wrong: value-flag heuristic treats `)` as value-ending.
+if (x) {} /knownWrongBlock/.test(x); // YEW-F-013 known-wrong: value-flag heuristic treats `}` as value-ending.
 this / 2; super / 2; true / 2; false / 2; null / 2; undefined / 2;
 .;
