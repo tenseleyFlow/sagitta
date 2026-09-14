@@ -72,7 +72,7 @@ recorded in `audit-00.md`.
 | YEW-F-057 | M | fixed | F15 CI | ~~terminal-syscall ban omits `tcflush`~~ — fixed 2026-09-14 in `45f6137b` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
 | YEW-F-058 | M | fixed | F15 CI | ~~register choke-point ban accepts allowed-file wrappers~~ — fixed 2026-09-14 in `1519b8d8` | tests/audit/f15_ban_misses.c | s36 register routing; s58 F15 q2 |
 | YEW-F-059 | M | fixed | F15 CI | ~~option choke-point ban accepts allowed-file wrappers~~ — fixed 2026-09-14 in `02949a63` | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
-| YEW-F-060 | M | open | F15 CI | package-git ban accepts allowed-file wrappers on startup | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
+| YEW-F-060 | M | fixed | F15 CI | ~~package-git ban accepts allowed-file wrappers on startup~~ — fixed 2026-09-14 in `953b1e3c` | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
 | YEW-F-061 | M | fixed | F15 CI | ~~register-width ban accepts local lookup tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
 | YEW-F-062 | M | open | F15 CI | register-column ban depends on historical variable names | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
 | YEW-F-063 | M | open | F15 CI | register-helper presence gate accepts comments | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
@@ -553,10 +553,10 @@ let those files publish raw write wrappers for forbidden callers. Commit
 `02949a63` replaces file exemptions with a comment/literal-aware function-owner
 gate covering both setter levels and only the five legitimate routing owners.
 
-`YEW-F-060` is Medium because the package-git allow-list exempts an
-implementation file, which can publish a raw wrapper and let startup code call
-through it. The package-git startup policy passes its isolated seed and remains
-open for Sprint 59.
+`YEW-F-060` was Medium because exempting the package implementation let it
+publish a raw Git wrapper for startup callers. Commit `953b1e3c` makes the raw
+transport file-private, removes its public and stripped-module surfaces, and
+pins its three legitimate package-command owners with the shared C-call gate.
 
 `YEW-F-061` is Medium because register-local Unicode width calculation can use
 a decimal lookup table without importing or naming a yew width helper. The
