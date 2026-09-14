@@ -1472,3 +1472,60 @@ void test_job_torture_spawn_kill_cycles(void)
     YEW_ASSERT_EQ_U64(ed.jobs.v[0].bytes_out, 11U);
     yew_ed_free(&ed);
 }
+
+/*
+ * Escape retires job output, the same as `:q` does.
+ *
+ * FIELD REPORT: dismissing terminal output through `:q` is clunky —
+ * it is a whole command line for a view you only want gone. Escape is
+ * already the "undo the most recent thing" key, and job output is a
+ * view rather than a mode, so it belongs in that chain.
+ *
+ * It fires only when nothing else on the press did: a prompt cleared or
+ * a Highlight selection collapsed each consume their own Escape, so one
+ * press never both collapses and dismisses. (A live command line and a
+ * prompt are in fact settled even earlier, by the dispatch chain, so
+ * they never reach this command at all through a real keypress — this
+ * test drives the command directly and exercises the fallback.) And it
+ * is not a mode change: dismissing leaves W or B alone, because the
+ * press only meant "put this away".
+ */
+void test_job_escape_dismisses_output_like_quit(void)
+{
+    Ed ed;
+    Buffer *origin;
+    Buffer *output;
+    char err[256] = {0};
+    u32 id;
+
+    job_fixture(&ed);
+    origin = ed.win->buf;
+    id = yew_shell_run(&ed, "printf output", true, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    output = ed.win->buf;
+    YEW_ASSERT(output != origin);
+    YEW_ASSERT(run_to_completion(&ed, id));
+
+    /* Escape from a unit mode retires the view and keeps the mode. */
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, YEW_MODE_B), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_mode_escape(&ed), YEW_CMD_OK);
+    YEW_ASSERT(ed.win->buf == origin);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_B);
+    /* The job itself is retained, exactly as :q leaves it. */
+    YEW_ASSERT(yew_job_find(&ed, id)->buf == output);
+
+    /* With no output showing, Escape is the ordinary mode escape. */
+    YEW_ASSERT_EQ_U64(yew_mode_escape(&ed), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+
+    /* A prompt is more recent than the view, so it wins the first press. */
+    YEW_ASSERT(yew_ed_show_buffer(&ed, output));
+    yew_ed_prompt(&ed, YEW_PROMPT_QUIT_DIRTY);
+    YEW_ASSERT_EQ_U64(yew_mode_escape(&ed), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT(ed.win->buf == output);
+    /* The next press retires it. */
+    YEW_ASSERT_EQ_U64(yew_mode_escape(&ed), YEW_CMD_OK);
+    YEW_ASSERT(ed.win->buf == origin);
+    yew_ed_free(&ed);
+}

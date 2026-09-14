@@ -7,6 +7,7 @@
 #include "edit/keys_highlight.h"
 #include "edit/motion.h"
 #include "edit/shadow.h"
+#include "edit/shell.h"
 #include "fl/flruntime.h"
 #include "mod/git/fussmode.h"
 #include "util/log.h"
@@ -129,6 +130,7 @@ CmdStatus yew_mode_enter_highlight(Ed *ed, Mode unit, bool sticky)
 CmdStatus yew_mode_escape(Ed *ed)
 {
     size_t i;
+    bool handled = false;
 
     if (ed == NULL)
         return YEW_CMD_ERR_ARG;
@@ -144,9 +146,11 @@ CmdStatus yew_mode_escape(Ed *ed)
     if (ed->prompt != YEW_PROMPT_NONE) {
         ed->prompt = YEW_PROMPT_NONE;
         yew_msg_clear(ed);
+        handled = true;
     }
     if (ed->mode == YEW_MODE_H && ed->win != NULL &&
         ed->win->cs.curs.len != 0U) {
+        handled = true;
         for (i = 0U; i < ed->win->cs.curs.len; i++)
             ed->win->cs.curs.data[i].anchor =
                 ed->win->cs.curs.data[i].pos;
@@ -154,5 +158,18 @@ CmdStatus yew_mode_escape(Ed *ed)
         yew_selstack_clear(ed->win);
         yew_ed_damage_document(ed);
     }
+    /*
+     * Job output is a VIEW, not a mode, so Escape retires it rather than
+     * changing modes — `:q` was the only way to put it away, which is a
+     * whole command line for "I am done looking at this".
+     *
+     * LAST of the rungs above deliberately: a chord, the command line, a
+     * prompt and a Highlight selection are each more recent than the
+     * buffer being looked at, so each still wins its own press. And this
+     * returns WITHOUT entering L: dismissing is not a mode change, and a
+     * press that only meant "put this away" should leave W or B alone.
+     */
+    if (!handled && yew_shell_dismiss_output(ed))
+        return YEW_CMD_OK;
     return yew_mode_enter(ed, YEW_MODE_L);
 }
