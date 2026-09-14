@@ -336,6 +336,59 @@ scan "libc-owned cwd allocations must use yew_xgetcwd" \
 scan "libc-owned realpath allocations must use yew_xrealpath" \
     'realpath[[:space:]]*\([^,]+,[[:space:]]*NULL[[:space:]]*\)' \
     "$allocator_files"
+
+# YEW-F-036 / YEW-F-037: spelling a nearby NULL value through a pointer
+# variable does not change getcwd/realpath ownership.  Follow the initialized
+# identifier across a short, ordinary call-site window without rejecting the
+# fixed caller-owned buffers that these APIs may legitimately fill.
+null_path_alloc_calls()
+{
+    null_path_list=$1
+    null_path_out=$2
+    : >"$null_path_out"
+    while IFS= read -r file; do
+        awk '
+        { line[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                rest = line[i]
+                buf = line[i] " " line[i+1] " " line[i+2] " " line[i+3]
+                while (match(rest, /[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*NULL/)) {
+                    assign = substr(rest, RSTART, RLENGTH)
+                    sub(/[ \t]*=.*/, "", assign)
+                    cwd = "getcwd[ \t]*\\([ \t]*" assign "[ \t]*,"
+                    path = "realpath[ \t]*\\([^,]+,[ \t]*" assign \
+                           "[ \t]*\\)"
+                    if (buf ~ cwd || buf ~ path) {
+                        printf "%d:%s\n", i, line[i]
+                        break
+                    }
+                    rest = substr(rest, RSTART + RLENGTH)
+                }
+            }
+        }' "$file" | sed "s|^|${file#"$repo_dir"/}:|" \
+            >>"$null_path_out" || :
+    done <"$null_path_list"
+}
+
+null_path_alloc_hits=$tmp/null-path-alloc-hits
+null_path_alloc_calls "$allocator_files" "$null_path_alloc_hits"
+if [ -s "$null_path_alloc_hits" ]; then
+    echo "ban: NULL path allocations must use yew_xgetcwd/yew_xrealpath" \
+        >>"$hits"
+    cat "$null_path_alloc_hits" >>"$hits"
+fi
+null_path_seed=$tmp/null-path-seed.c
+{
+    echo 'char *a(void) { char *p = NULL; return getcwd(p, 0); }'
+    echo 'char *b(const char *s) { char *p = NULL; return realpath(s, p); }'
+} >"$null_path_seed"
+printf '%s\n' "$null_path_seed" >"$tmp/null-path-seed-list"
+null_path_alloc_calls "$tmp/null-path-seed-list" "$tmp/null-path-seed-hits"
+if [ "$(wc -l <"$tmp/null-path-seed-hits" | tr -d ' ')" != "2" ]; then
+    echo "ban: the NULL path-allocation rule no longer fires on its own seed" \
+        >>"$hits"
+fi
 scan "locale-dependent Unicode APIs are forbidden" \
     '(wcwidth|wcswidth|mbrtowc|wchar\.h|langinfo\.h|setlocale|nl_langinfo|localeconv|iconv)' \
     "$source_files"

@@ -48,8 +48,8 @@ recorded in `audit-00.md`.
 | YEW-F-033 | M | fixed | F15 CI | ~~reproducibility ban omits `__TIMESTAMP__`~~ — fixed 2026-09-14 in `381bddf0` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-034 | M | fixed | F15 CI | ~~mmap ban accepts macro-forwarded calls~~ — fixed 2026-09-14 in `47046a40` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-035 | M | fixed | F15 CI | ~~allocator ban accepts macro-forwarded libc allocation~~ — fixed 2026-09-14 in `066041c3` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
-| YEW-F-036 | M | open | F15 CI | cwd-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
-| YEW-F-037 | M | open | F15 CI | realpath-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-036 | M | fixed | F15 CI | ~~cwd-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
+| YEW-F-037 | M | fixed | F15 CI | ~~realpath-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-038 | M | open | F15 CI | locale-dependent Unicode ban omits `mbtowc` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
 | YEW-F-039 | M | open | F15 CI | native-loader ban omits `dlvsym` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
 | YEW-F-040 | M | open | F15 CI | strerror_r ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
@@ -422,11 +422,12 @@ Commit `066041c3` rejects object-like aliases naming any libc allocator in the
 existing set and adds a forwarding positive control while preserving the
 audited yew allocator boundary.
 
-`YEW-F-036` and `YEW-F-037` are Medium because the two libc-owned allocation
-checks require `NULL` to appear literally at the call site. Passing a pointer
-variable initialized to NULL retains `getcwd`/`realpath` ownership semantics
-but passes both actual gates. They remain separate rule findings for Sprint
-59; no product source changed.
+`YEW-F-036` and `YEW-F-037` were Medium because the two libc-owned allocation
+checks required `NULL` to appear literally at the call site. Commit
+`16441f04` follows a nearby pointer initialized to `NULL` into the relevant
+`getcwd` or `realpath` argument, without rejecting fixed caller-owned buffers.
+Internal positive controls pin both APIs, and the two isolated variable-alias
+reproducers now fail the real gate.
 
 `YEW-F-038` is Medium because the locale-dependent Unicode list includes
 `mbrtowc` but omits its older stateful sibling `mbtowc`. The latter has the
