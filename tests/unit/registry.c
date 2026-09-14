@@ -1606,6 +1606,7 @@ const YewTest yew_tests[] = {
     T(fl_txn_save_flushes_implicit_and_refuses_explicit),
     T(fl_hook_event_inventory),
     T(fl_hook_order_mask_and_remove),
+    T(fl_hook_compacts_only_inactive_suffixes),
     T(fl_hook_contains_and_disables_failures),
     T(fl_hook_drops_self_reentrancy_once),
     T(fl_hook_listens_only_to_dispatchable_rows),
