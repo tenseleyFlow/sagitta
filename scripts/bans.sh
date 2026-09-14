@@ -670,11 +670,15 @@ scan "clipboard subprocesses must never invoke a shell" \
     "$clipboard_shell_pattern" "$source_files"
 scan_seed "clipboard direct-shell exec" "$clipboard_shell_pattern" \
     'execl("/bin/sh", "sh", "-c", cmd, NULL);'
-job_interpolation_pattern='bytebuf_printf.*cmdline|sprintf.*shell'
+# YEW-F-055: raw append into a command-string buffer is interpolation too;
+# program-derived arguments belong in YewJobSpec.argv regardless of helper.
+job_interpolation_pattern='bytebuf_printf.*cmdline|sprintf.*shell|bytebuf_append[[:space:]]*\([[:space:]]*&?[[:space:]]*(cmdline|shell)[[:space:]]*,'
 scan "programmatic job data must not be interpolated into shell text" \
     "$job_interpolation_pattern" "$source_files"
 scan_seed "job-command-interpolation" "$job_interpolation_pattern" \
     'bytebuf_printf(&cmdline, "%s", path);'
+scan_seed "job-command-append" "$job_interpolation_pattern" \
+    'bytebuf_append(shell, path, strlen(path));'
 scan "OSC 52 clipboard queries are forbidden" \
     '52;[^[:space:]]*\?' "$source_files"
 
