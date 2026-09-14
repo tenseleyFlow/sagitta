@@ -204,6 +204,9 @@ bool yew_fl_runtime_init(Ed *ed)
     rt->command_source = YEW_SRC_FLETCH;
     for (i = 0U; i < (u32)YEW_ARRAY_LEN(rt->macro_cache); i++) {
         rt->macro_cache[i].fn = FL_NIL_V;
+        rt->macro_cache[i].origin = (FlOrigin){
+            (u8)FL_ORIGIN_CONFIG, 0U, FL_CAP_ALL, 0U
+        };
         fl_gc_host_root_add(&rt->vm, &rt->macro_cache[i].fn);
     }
     fl_hook_table_init(&ed->hooks, &ops, ed);

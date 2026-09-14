@@ -1618,6 +1618,7 @@ const YewTest yew_tests[] = {
     T(fl_runtime_cmdline_mode_hooks_fire_once_per_transition),
     T(fl_replay_runtime_propagates_command_source),
     T(fl_replay_runtime_cache_is_exact_rooted_and_invalidated),
+    T(fl_replay_runtime_cache_preserves_macro_defining_origin),
     T(macro_replay_insert_fans_out_to_current_cursor_set),
     T(macro_replay_delete_fans_out_to_current_cursor_set),
     T(macro_replay_multicursor_error_restores_buffer_and_cursors),
