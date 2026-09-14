@@ -414,16 +414,24 @@ scan_seed "strerror_r" "$strerror_r_pattern" \
     'void seeded(void) { (void)strerror_r(code, buf, sizeof(buf)); }'
 scan_seed "strerror_r macro forwarding" "$strerror_r_pattern" \
     '#define ERROR_TEXT strerror_r'
-backtrace_pattern='(execinfo\.h|(^|[^[:alnum:]_])(backtrace|backtrace_symbols)[[:space:]]*\()'
+# YEW-F-041: backtrace_symbols_fd is part of the same execinfo family and is
+# likewise absent from the musl profile.
+backtrace_pattern='(execinfo\.h|(^|[^[:alnum:]_])(backtrace|backtrace_symbols|backtrace_symbols_fd)[[:space:]]*\()'
 scan "glibc backtrace APIs are unavailable in the musl profile" \
     "$backtrace_pattern" "$source_files"
 scan_seed "glibc-backtrace" "$backtrace_pattern" \
     'void seeded(void) { (void)backtrace(frames, count); }'
-gnu_api_pattern='(^|[^[:alnum:]_])(getline|getdelim|asprintf|vasprintf|getopt_long)[[:space:]]*\(|(^|[<"])err(or)?\.h[>"]|program_invocation_name'
+scan_seed "glibc backtrace_symbols_fd" "$backtrace_pattern" \
+    'void seeded(void) { backtrace_symbols_fd(frames, count, fd); }'
+# YEW-F-042: getopt_long_only is a GNU extension alongside getopt_long and
+# cannot enter the portable core merely by using the longer suffix.
+gnu_api_pattern='(^|[^[:alnum:]_])(getline|getdelim|asprintf|vasprintf|getopt_long|getopt_long_only)[[:space:]]*\(|(^|[<"])err(or)?\.h[>"]|program_invocation_name'
 scan "GNU-only libc APIs are forbidden in the portable core" \
     "$gnu_api_pattern" "$source_files"
 scan_seed "GNU-libc-API" "$gnu_api_pattern" \
     'void seeded(void) { (void)getopt_long(argc, argv, opts, rows, idx); }'
+scan_seed "GNU getopt_long_only" "$gnu_api_pattern" \
+    'void seeded(void) { (void)getopt_long_only(argc, argv, opts, rows, idx); }'
 scan_seed "program_invocation_name" "$gnu_api_pattern" \
     'const char *seeded = program_invocation_name;'
 long_double_pattern='(^|[^[:alnum:]_])long[[:space:]]+double([^[:alnum:]_]|$)'
