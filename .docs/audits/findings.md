@@ -86,7 +86,7 @@ recorded in `audit-00.md`.
 | YEW-F-071 | M | open | F15 CI | PTY orphan gate counts dead preprocessor rows | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
 | YEW-F-073 | M | open | F15 CI | baseline history policy is not enforced | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
-| YEW-F-074 | H | open | F15 CI | Darwin shipping clean rebuilds differ by Mach-O UUID | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
+| YEW-F-074 | H | fixed | F15 CI | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed 2026-09-13 in `16761aba` | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
 | YEW-F-075 | C | fixed | F15 CI | ~~stripped builds accept module-only config as inert state~~ — fixed 2026-09-13 in `ee6f9894` | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 | YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
 | YEW-F-077 | M | open | F03 TEXT | rectangular yank omits required short-row padding | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
@@ -569,16 +569,19 @@ found many modified baseline commits without the required old-to-new record;
 the exact table is retained in `audit-15-ci.md`. The control finding remains
 open for Sprint 59.
 
-`YEW-F-074` is High because invariant 5 requires byte-identical builds and
+`YEW-F-074` was High because invariant 5 requires byte-identical builds and
 all four single-module profiles (`lsp`, `ai`, `fuss`, `plugins`) produced
 different SHA-256 hashes across consecutive clean builds of the fixed product
-baseline on arm64 macOS. The unstripped binary embeds changing object
-timestamps; after `strip -S`, the remaining delta is `LC_UUID` plus the
-ad-hoc signature derived from it. Rebuilding and stripping twice with
-`-Wl,-no_uuid` produced the same hash
-`99d3e903f772158f0c7903b9cdb98d52a8d762703be492c2e3febc69d14bd031`.
-This is nondeterministic release output and therefore High under the rubric.
-It remains open for Sprint 59/60; no product or build fix landed in the audit.
+baseline on arm64 macOS. Commit `16761aba` enables the Darwin linker's
+`-reproducible` mode only for `SHIPPING=1`, retaining the `LC_UUID` and derived
+ad-hoc signature required by current `dyld` while excluding volatile input
+properties from both. Two clean minimal builds in different build trees,
+stripped to the same release basename, are byte-identical at
+`24918d773d8653f7a53bcdebbece3ec165c6e633bd8930f3d34eafd99eaa28a0`
+and the stripped binary executes `--version`. The earlier audit experiment's
+`-no_uuid` route was rejected during remediation because current Apple-silicon
+`dyld` aborts such an executable. The regression also asserts that development
+links retain their ordinary debugger metadata path.
 
 `YEW-F-075` was Critical because excluded-module option writes either became
 inert state or reported a generic unknown-option error. Commit `ee6f9894`
