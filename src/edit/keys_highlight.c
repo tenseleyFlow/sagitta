@@ -6,7 +6,7 @@
 #include "util/log.h"
 
 /*
- * Sprint 57.19: `<home>` is ed.move.line.home_toggle in every H unit
+ * `<home>` is ed.move.line.home_toggle in every H unit
  * table that binds it, matching L/W/I/E.  `A-<left>` keeps the unit
  * alternate it has always had.
  */

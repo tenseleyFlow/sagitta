@@ -272,7 +272,7 @@ CmdStatus yew_edit_cmd_move_line_home(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.19: Home the way a caret editor draws it -- the first
+ * Home the way a caret editor draws it -- the first
  * non-blank, then column 0, then back again.
  *
  * This is a NEW command rather than a change to motion.c's `line_home`
@@ -931,7 +931,7 @@ static CmdStatus move_word_sub(CmdCtx *cx, bool next)
 }
 
 /*
- * Sprint 57.19: the word unit's own motions, independent of the mode.
+ * The word unit's own motions, independent of the mode.
  *
  * W mode already steps by word through `ed.move.unit.next/prev`, because
  * in W the UNIT is the word.  Insert mode's unit is the grapheme, so its

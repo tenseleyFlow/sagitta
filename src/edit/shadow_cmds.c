@@ -25,7 +25,7 @@ CmdStatus yew_shadow_cmd_accept_word_alt(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.19: Alt+Right in Insert mode, in the shape of
+ * Alt+Right in Insert mode, in the shape of
  * `yew_cmdline_cmd_ghost_accept` -- accept the suggestion when one is
  * there, and be the ordinary motion when it is not, so the key is never
  * dead under the finger.
