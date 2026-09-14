@@ -422,6 +422,40 @@ void test_piece_sequential_insert_coalesces(void)
     yew_textbuf_free(tb);
 }
 
+void test_piece_repeated_fanout_insert_coalesces(void)
+{
+    enum { INSERTS = 1000 };
+    TextBuf *tb = yew_textbuf_from_bytes((const u8 *)"a\nb\n", 4U);
+    Bytebuf actual;
+    u64 i;
+
+    for (i = 0U; i < INSERTS; i++) {
+        Span first = yew_textbuf_line_span(tb, LINENO(0U));
+        Span second;
+
+        yew_textbuf_insert(tb, BYTEOFF(first.hi - 1U),
+                           (const u8 *)"q", 1U);
+        second = yew_textbuf_line_span(tb, LINENO(1U));
+        yew_textbuf_insert(tb, BYTEOFF(second.hi - 1U),
+                           (const u8 *)"q", 1U);
+        yew_textbuf_check(tb);
+    }
+    YEW_ASSERT_EQ_U64(tb->add.len, INSERTS);
+    YEW_ASSERT(yew_textbuf_piece_count(tb) <= 5U);
+    actual = textbuf_materialize(tb);
+    YEW_ASSERT_EQ_U64(actual.len, 4U + 2U * INSERTS);
+    YEW_ASSERT_EQ_U64(actual.data[0U], (u8)'a');
+    YEW_ASSERT_EQ_U64(actual.data[INSERTS + 1U], (u8)'\n');
+    YEW_ASSERT_EQ_U64(actual.data[INSERTS + 2U], (u8)'b');
+    YEW_ASSERT_EQ_U64(actual.data[actual.len - 1U], (u8)'\n');
+    for (i = 1U; i <= INSERTS; i++) {
+        YEW_ASSERT_EQ_U64(actual.data[i], (u8)'q');
+        YEW_ASSERT_EQ_U64(actual.data[INSERTS + 2U + i], (u8)'q');
+    }
+    bytebuf_free(&actual);
+    yew_textbuf_free(tb);
+}
+
 void test_piece_interleaved_insert_stays_distinct(void)
 {
     TextBuf *tb = yew_textbuf_new();

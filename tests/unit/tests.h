@@ -135,6 +135,7 @@ void test_piece_line_mapping_mixed_fixture(void);
 void test_piece_line_iterator_yields_spans(void);
 void test_piece_line_iterator_rejects_other_buffer(void);
 void test_piece_sequential_insert_coalesces(void);
+void test_piece_repeated_fanout_insert_coalesces(void);
 void test_piece_interleaved_insert_stays_distinct(void);
 void test_piece_snapshot_preserves_content(void);
 void test_piece_snapshot_survives_middle_edits(void);

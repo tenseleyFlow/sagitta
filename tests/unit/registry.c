@@ -169,6 +169,7 @@ const YewTest yew_tests[] = {
     T(piece_line_iterator_yields_spans),
     T(piece_line_iterator_rejects_other_buffer),
     T(piece_sequential_insert_coalesces),
+    T(piece_repeated_fanout_insert_coalesces),
     T(piece_interleaved_insert_stays_distinct),
     T(piece_snapshot_preserves_content),
     T(piece_snapshot_survives_middle_edits),

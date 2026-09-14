@@ -810,13 +810,14 @@ static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
     } else {
         LineNo line = yew_textbuf_line_of(ec->tb, BYTEOFF(op->off));
         u64 old_lines = yew_textbuf_line_count(ec->tb);
-        u64 payload = ec->tb->add.len;
+        u64 payload;
         const u8 *bytes;
         if (op->payload > ut->blobs.len || op->len > ut->blobs.len - op->payload)
             YEW_BUG("undo: corrupt delete payload");
         bytes = ut->blobs.data + (size_t)op->payload;
         yew_edit_notify_pre(ec, YEW_JOURNAL_INS, BYTEOFF(op->off), op->len);
-        yew_textbuf_insert(ec->tb, BYTEOFF(op->off), bytes, op->len);
+        payload = yew_textbuf_insert_payload(ec->tb, BYTEOFF(op->off),
+                                             bytes, op->len);
         if (ec->marks != NULL)
             yew_marks_adjust(ec->marks, YEW_JOURNAL_INS, BYTEOFF(op->off),
                              op->len);
@@ -2820,10 +2821,9 @@ static void materialize_insert_payloads(EditCtx *ec, UndoTree *ut)
         if (op->kind != YEW_OP_INS)
             continue;
         blob_at = op->payload;
-        add_at = ec->tb->add.len;
         end = yew_textbuf_len(ec->tb);
-        yew_textbuf_insert(ec->tb, BYTEOFF(end),
-                           ut->blobs.data + (size_t)blob_at, op->len);
+        add_at = yew_textbuf_insert_payload(
+            ec->tb, BYTEOFF(end), ut->blobs.data + (size_t)blob_at, op->len);
         yew_textbuf_delete(ec->tb, (Span){end, end + op->len});
         op->src = YEW_STORE_ADD;
         op->payload = add_at;

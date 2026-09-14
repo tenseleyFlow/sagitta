@@ -85,7 +85,7 @@ static bool edit_apply(EditCtx *ec, u8 kind, ByteOff at, const u8 *bytes,
 
     yew_edit_notify_pre(ec, kind, at, len);
     if (kind == YEW_JOURNAL_INS)
-        yew_textbuf_insert(ec->tb, at, bytes, len);
+        payload = yew_textbuf_insert_payload(ec->tb, at, bytes, len);
     else
         yew_textbuf_delete(ec->tb, (Span){at.v, at.v + len});
     new_lines = yew_textbuf_line_count(ec->tb);
@@ -114,8 +114,6 @@ static bool edit_apply(EditCtx *ec, u8 kind, ByteOff at, const u8 *bytes,
 
 bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
 {
-    u64 payload;
-
     edit_require(ec);
     if (at.v > yew_textbuf_len(ec->tb))
         YEW_BUG("edit insert: offset out of bounds");
@@ -126,10 +124,9 @@ bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
     require_edit_wrapped(ec);
     if (!yew_edit_ensure_journal(ec))
         return false;
-    payload = ec->tb->add.len;
     if (ec->undo != NULL)
         yew_undo_prepare_insert(ec, at, len);
-    return edit_apply(ec, YEW_JOURNAL_INS, at, bytes, len, payload);
+    return edit_apply(ec, YEW_JOURNAL_INS, at, bytes, len, 0U);
 }
 
 bool yew_edit_delete(EditCtx *ec, Span range)
