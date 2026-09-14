@@ -3,7 +3,9 @@
 #include "support/live_pty.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -412,6 +414,112 @@ static bool one_floor(const Options *opt, i64 *sample)
     return *sample > 0;
 }
 
+static bool batch_env(const char *state)
+{
+    return setenv("LANG", "C.UTF-8", 1) == 0 &&
+           setenv("LC_ALL", "C.UTF-8", 1) == 0 &&
+           setenv("XDG_STATE_HOME", state, 1) == 0 &&
+           setenv("XDG_CONFIG_HOME", state, 1) == 0 &&
+           setenv("YEW_LOG", "/dev/null", 1) == 0;
+}
+
+static void reap_failed_batch(pid_t pid)
+{
+    int status;
+
+    if (pid <= 0)
+        return;
+    (void)kill(pid, SIGKILL);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
+        ;
+}
+
+static bool one_batch(const Options *opt, i64 *sample)
+{
+    static const char marker[] = "YEW_PERF_BATCH_READY";
+    int output[2] = {-1, -1};
+    pid_t pid;
+    i64 started;
+    i64 marked = -1;
+    i64 deadline;
+    size_t matched = 0U;
+    int status = 0;
+    bool exited = false;
+
+    if (pipe(output) != 0)
+        return false;
+    started = yew_live_pty_now_ns();
+    pid = started < 0 ? -1 : fork();
+    if (pid < 0) {
+        (void)close(output[0]);
+        (void)close(output[1]);
+        return false;
+    }
+    if (pid == 0) {
+        int nullfd = open("/dev/null", O_RDWR);
+
+        (void)close(output[0]);
+        if (nullfd < 0 || dup2(nullfd, STDIN_FILENO) < 0 ||
+            dup2(output[1], STDOUT_FILENO) < 0 ||
+            dup2(nullfd, STDERR_FILENO) < 0 ||
+            !batch_env(opt->state))
+            _exit(126);
+        if (nullfd > STDERR_FILENO)
+            (void)close(nullfd);
+        if (output[1] > STDERR_FILENO)
+            (void)close(output[1]);
+        (void)execl(opt->yew, opt->yew, "--clean", "--batch",
+                    opt->batch_script, opt->fixture, (char *)NULL);
+        _exit(127);
+    }
+    (void)close(output[1]);
+    output[1] = -1;
+    deadline = started + INT64_C(3000000000);
+    while (!exited && yew_live_pty_now_ns() < deadline) {
+        struct pollfd fd = {output[0], POLLIN | POLLHUP, 0};
+        u8 bytes[256];
+        ssize_t n;
+        pid_t got;
+
+        if (poll(&fd, 1U, 10) < 0 && errno != EINTR)
+            break;
+        if ((fd.revents & (POLLIN | POLLHUP)) != 0) {
+            n = read(output[0], bytes, sizeof(bytes));
+            if (n > 0) {
+                size_t i;
+
+                for (i = 0U; i < (size_t)n && marked < 0; i++) {
+                    if (bytes[i] == (u8)marker[matched]) {
+                        matched++;
+                        if (matched == sizeof(marker) - 1U)
+                            marked = yew_live_pty_now_ns();
+                    } else {
+                        matched = bytes[i] == (u8)marker[0] ? 1U : 0U;
+                    }
+                }
+            } else if (n < 0 && errno != EINTR && errno != EAGAIN) {
+                break;
+            }
+        }
+        do {
+            got = waitpid(pid, &status, WNOHANG);
+        } while (got < 0 && errno == EINTR);
+        if (got == pid)
+            exited = true;
+        else if (got < 0)
+            break;
+    }
+    (void)close(output[0]);
+    if (!exited) {
+        reap_failed_batch(pid);
+        return false;
+    }
+    if (marked < started || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        return false;
+    *sample = marked - started;
+    return *sample > 0;
+}
+
 static void sort_i64(i64 *values, size_t n)
 {
     size_t i;
@@ -443,6 +551,24 @@ static bool measure(const Options *opt, bool clean, bool dumb,
             (void)fprintf(stderr,
                           "perf_startup: profile=%s run=%zu failed\n",
                           profile, i + 1U);
+            return false;
+        }
+    }
+    sort_i64(samples, runs);
+    *median = samples[runs / 2U];
+    return true;
+}
+
+static bool measure_batch(const Options *opt, i64 *median)
+{
+    i64 samples[DEFAULT_RUNS];
+    size_t runs = getenv("YEW_PERF_SMOKE") != NULL ? 1U : DEFAULT_RUNS;
+    size_t i;
+
+    for (i = 0U; i < runs; i++) {
+        if (!one_batch(opt, &samples[i])) {
+            (void)fprintf(stderr, "perf_startup: profile=batch run=%zu failed\n",
+                          i + 1U);
             return false;
         }
     }
@@ -576,11 +702,19 @@ int main(int argc, char **argv)
         (void)puts("startup.first_paint.workspace50 verdict=UNSUPPORTED "
                    "reason=workspace_fixture_not_supplied");
     }
-    if (opt.batch_script != NULL)
-        (void)puts("startup.first_paint.batch verdict=UNSUPPORTED "
-                   "reason=batch_script_start_marker_not_available");
-    else
+    if (opt.batch_script != NULL) {
+        i64 batch;
+
+        /* YEW-F-072: the baseline transaction requires the recorded batch
+         * startup row, so measure script execution instead of emitting an
+         * UNSUPPORTED placeholder that the complete-ledger gate must reject. */
+        if (!measure_batch(&opt, &batch))
+            return 1;
+        (void)printf("startup.first_paint.batch value_ns=%lld "
+                     "verdict=RECORDED\n", (long long)batch);
+    } else {
         (void)puts("startup.first_paint.batch verdict=UNSUPPORTED "
                    "reason=batch_script_not_supplied");
+    }
     return ok ? 0 : 1;
 }

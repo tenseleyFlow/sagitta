@@ -37,6 +37,11 @@ cross-check uses `KEYPAINT`, and hard-fails if its call count differs from
 the harness's painted-key count; comparing external samples with all wakes
 would mix two different populations.
 
+The recorded `startup.first_paint.batch` row measures fork/exec through the
+first marker emitted by `tests/perf/fixtures/batch-start.fl`. It therefore
+captures batch script start, not completion of an arbitrary script or the
+older full-process `perf-batch` measurement.
+
 ## Triage playbook
 
 | Symptom | Likely phase | First look | Then |

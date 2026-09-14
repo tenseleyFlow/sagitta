@@ -1142,7 +1142,8 @@ endif
         perf-update perf-noise perf-baseline-guard \
         perf-default-path-selftest \
         perf-baseline-selftest \
-        perf-gate-selftest perf-latency perf-latency-selftest \
+        perf-gate-selftest perf-startup-s56-contract \
+        perf-latency perf-latency-selftest \
         perf-s56-functional perf-s56-observation \
         perf-s56-huge-observation perf-s56-checks \
         perf-latency-s56-check perf-latency-s56-smoke \
@@ -3055,7 +3056,8 @@ perf-latency-s56-matrix: perf-latency-s56-smoke \
                          perf-latency-s56-assist
 
 perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
-                  $(BUILD)/yew $(PERF_S56_WORKSPACE_READY)
+                  $(BUILD)/yew $(PERF_S56_WORKSPACE_READY) \
+                  tests/perf/fixtures/batch-start.fl
 	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures
 	@: > $(BUILD)/perf-s56-fixtures/empty.c
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
@@ -3064,7 +3066,8 @@ perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
 		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
 		--state $(abspath $(BUILD)/perf-s56-state) \
 		--budgets tests/perf/budgets.txt \
-		--workspace $(abspath $(BUILD)/perf-s56-many)
+		--workspace $(abspath $(BUILD)/perf-s56-many) \
+		--batch-script $(abspath tests/perf/fixtures/batch-start.fl)
 
 perf-open-s56: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
 	@mkdir -p $(BUILD)/perf-s56-state
@@ -3148,7 +3151,8 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
                         $(BUILD)/perf_startup_s56 \
                         $(BUILD)/perf_prof_crosscheck \
-                        perf-baseline-selftest perf-default-path-selftest
+                        perf-baseline-selftest perf-default-path-selftest \
+                        perf-startup-s56-contract
 	$(BUILD)/s56_gate_policy_selftest
 	$(BUILD)/perf_startup_s56 --selftest-policy
 	$(BUILD)/perf_prof_crosscheck --selftest-policy
@@ -3160,6 +3164,30 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
 	scripts/tests/update-perf-suite.test.sh
 	scripts/tests/perf-noise-floor.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
+
+# YEW-F-072: fail closed if the designated ledger loses the batch row.
+perf-startup-s56-contract: $(BUILD)/perf_startup_s56 \
+                           $(BUILD)/perf_nullexec $(BUILD)/yew \
+                           $(PERF_S56_WORKSPACE_READY) \
+                           tests/perf/fixtures/batch-start.fl
+	@set -eu; \
+	out=$(BUILD)/perf-startup-s56-contract.txt; \
+	trap 'rm -f "$$out"' EXIT HUP INT TERM; \
+	mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures; \
+	: > $(BUILD)/perf-s56-fixtures/empty.c; \
+	YEW_PERF_SMOKE=1 YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+		$(BUILD)/perf_startup_s56 --yew $(abspath $(BUILD)/yew) \
+		--nullexec $(abspath $(BUILD)/perf_nullexec) \
+		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--budgets tests/perf/budgets.txt \
+		--workspace $(abspath $(BUILD)/perf-s56-many) \
+		--batch-script $(abspath tests/perf/fixtures/batch-start.fl) \
+		>"$$out"; \
+	awk '$$1 == "startup.first_paint.batch" && \
+	     $$2 ~ /^value_ns=[1-9][0-9]*$$/ && $$3 == "verdict=RECORDED" \
+	     { seen = 1 } END { exit seen ? 0 : 1 }' "$$out"; \
+	echo 'perf startup contract: ok'
 
 perf-default-path-selftest:
 	@set -eu; \

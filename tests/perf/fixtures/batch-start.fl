@@ -1,0 +1,5 @@
+# YEW-F-072: this marker makes batch script start observable to the
+# designated performance ledger without timing the remainder of the script.
+import io
+
+io.print("YEW_PERF_BATCH_READY")
