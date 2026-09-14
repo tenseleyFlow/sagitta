@@ -35,7 +35,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-022 | audit | `tests/audit/yew_f_022.c` | ~~plugin trust wording gate rejects its required warning~~ — fixed in `4858a39c` | fixed |
 | YEW-F-023 | audit | `tests/audit/yew_f_023.c` | ~~plugin commands cannot enter the recorder CMDWORD space~~ — fixed in `d2dc4ddf` | fixed |
 | YEW-F-024 | audit | `tests/audit/yew_f_024.c` | ~~cross-surface XFAIL debt table stops at F004~~ — fixed in `56ce3f24` | fixed |
-| YEW-F-025 | audit | `tests/audit/yew_f_025.c` | script tests have no XFAIL or hard-XPASS state | open |
+| YEW-F-025 | audit | `tests/audit/yew_f_025.c` | ~~script tests have no XFAIL or hard-XPASS state~~ — fixed in `da1f9cd0` | fixed |
 | YEW-F-026 | audit | `tests/audit/yew_f_026.c` | PTY cases have no XFAIL or hard-XPASS state | open |
 | YEW-F-027 | audit | `tests/audit/f15_ban_misses.c` | Fletch format ban accepts macro-forwarded nonliteral formats | open |
 | YEW-F-028 | audit | `tests/audit/f15_ban_misses.c` | Fletch abort ban accepts macro-forwarded abort | open |
