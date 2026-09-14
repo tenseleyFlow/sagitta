@@ -30,6 +30,9 @@ normalize_hash()
 }
 
 awk -F '|' '$1 == "embed" { print $4 }' "$ledger" > "$tmp/embed.paths"
+awk -F '|' '$1 == "fixture" { print $4 }' "$ledger" > "$tmp/fixture.paths"
+awk -F '|' '$1 == "embed" || $1 == "fixture" { print $4 }' "$ledger" \
+    > "$tmp/exception.paths"
 awk -F '\t' '
     NR == 1 {
         if ($0 != "# definition\tlanguage\tsource-patterns\tgolden-rule\tscope\tcohort\tmin-goldens") bad = 1
@@ -104,8 +107,10 @@ comm -23 "$tmp/current.paths" "$tmp/new.paths.sorted" > "$tmp/all.paths"
 
 all_count=$(wc -l < "$tmp/all.paths" | tr -d ' ')
 embed_count=$(wc -l < "$tmp/embed.paths" | tr -d ' ')
+fixture_count=$(wc -l < "$tmp/fixture.paths" | tr -d ' ')
+exception_count=$(wc -l < "$tmp/exception.paths" | tr -d ' ')
 column_count=$(awk -F '|' '$1 == "column" { print $2; exit }' "$ledger")
-expected_total=$((column_count + embed_count))
+expected_total=$((column_count + exception_count))
 if [ "$all_count" -ne "$expected_total" ]; then
     echo "syntax golden columns: found $all_count pre-Sprint paths (ledger accounts for $expected_total)" >&2
     exit 1
@@ -114,14 +119,18 @@ if [ "$embed_count" -ne 15 ]; then
     echo "syntax golden columns: ledger has $embed_count embed exceptions (need 15)" >&2
     exit 1
 fi
-if [ "$(sort -u "$tmp/embed.paths" | wc -l | tr -d ' ')" -ne "$embed_count" ]; then
-    echo "syntax golden columns: duplicate embed exception" >&2
+if [ "$fixture_count" -ne 2 ]; then
+    echo "syntax golden columns: ledger has $fixture_count fixture exceptions (need 2)" >&2
+    exit 1
+fi
+if [ "$(sort -u "$tmp/exception.paths" | wc -l | tr -d ' ')" -ne "$exception_count" ]; then
+    echo "syntax golden columns: duplicate exception path" >&2
     exit 1
 fi
 
 : > "$tmp/columns.hashes"
 while IFS= read -r path; do
-    if grep -Fqx "$path" "$tmp/embed.paths"; then
+    if grep -Fqx "$path" "$tmp/exception.paths"; then
         continue
     fi
     hash=$(normalize_hash "$path")
@@ -131,25 +140,32 @@ done < "$tmp/all.paths"
 actual_columns=$(hash256 "$tmp/columns.hashes" | awk '{ print $1 }')
 expected_columns=$(awk -F '|' '$1 == "column" { print $3; exit }' "$ledger")
 if [ "$actual_columns" != "$expected_columns" ]; then
-    echo "syntax golden columns: normalized pre-existing column aggregate changed" >&2
+    echo "syntax golden columns: normalized pre-existing column aggregate changed: got $actual_columns expected $expected_columns" >&2
     exit 1
 fi
 
 while IFS='|' read -r kind old_hash expected_hash path; do
-    [ "$kind" = embed ] || continue
+    case "$kind" in
+        embed|fixture) ;;
+        column|'#'*|'') continue ;;
+        *)
+            echo "syntax golden columns: invalid ledger row kind: $kind" >&2
+            exit 1
+            ;;
+    esac
     if [ ! -f "$path" ]; then
-        echo "syntax golden columns: missing approved embed fixture: $path" >&2
+        echo "syntax golden columns: missing approved $kind fixture: $path" >&2
         exit 1
     fi
     if [ "$old_hash" = "$expected_hash" ]; then
-        echo "syntax golden columns: embed exception has no semantic delta: $path" >&2
+        echo "syntax golden columns: $kind exception has no semantic delta: $path" >&2
         exit 1
     fi
     actual_hash=$(normalize_hash "$path")
     if [ "$actual_hash" != "$expected_hash" ]; then
-        echo "syntax golden columns: unapproved embed semantic drift: $path" >&2
+        echo "syntax golden columns: unapproved $kind semantic drift: $path" >&2
         exit 1
     fi
 done < "$ledger"
 
-echo "syntax golden columns: $column_count qualification-only, $embed_count approved embed deltas"
+echo "syntax golden columns: $column_count qualification-only, $embed_count approved embed deltas, $fixture_count documented fixture deltas"

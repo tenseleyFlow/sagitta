@@ -135,6 +135,8 @@ line 10 entry=javascript:main exit=javascript:main
   10:25-26 attr=variable context=javascript:main
   10:26-27 attr=punct.bracket context=javascript:main
   10:27-28 attr=punct.delim context=javascript:main
+  10:28-29 attr=text context=javascript:main
+  10:29-103 attr=comment context=javascript:main
 line 11 entry=javascript:main exit=javascript:main
   11:0-2 attr=keyword.control context=javascript:main
   11:2-3 attr=text context=javascript:main
@@ -152,6 +154,8 @@ line 11 entry=javascript:main exit=javascript:main
   11:33-34 attr=variable context=javascript:main
   11:34-35 attr=punct.bracket context=javascript:main
   11:35-36 attr=punct.delim context=javascript:main
+  11:36-37 attr=text context=javascript:main
+  11:37-111 attr=comment context=javascript:main
 line 12 entry=javascript:main exit=javascript:main
   12:0-4 attr=constant.builtin context=javascript:main
   12:4-5 attr=text context=javascript:main

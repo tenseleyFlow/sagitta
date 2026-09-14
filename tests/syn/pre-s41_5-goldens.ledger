@@ -4,8 +4,15 @@
 # qualifier.  This makes name qualification invisible while retaining every
 # semantic state, span, attribute, flag, and byte boundary.
 #
-# The 228 files not named below have this normalized aggregate:
-column|228|c311aac61e0c2b482cf318358150e75994ae55995cb251d67f248a9b3634592b
+# The 226 files not named below have this normalized aggregate. YEW-F-013
+# moved two intentional comment-only deltas into exact old/new rows rather
+# than silently rebasing this historical guard:
+column|226|340c227748a715e4135ff3e4fdf789a20369f3c2e1390bedc0a596f8c8a9ce49
+#
+# Sprint 59 restored the Sprint 42 comments that identify the deliberately
+# known-wrong JavaScript/TypeScript value-flag heuristic rows.
+fixture|6212cfe5a8cd707d4d1897296027e690a7273f331af955384122a9a345d2a16a|01a1e003ae5bbf13a4607d2a004a2ed451547b391348a5584d6490b053669849|tests/syn/javascript/01-kitchen.spans
+fixture|2a331ebce76fcc08dd5db30888eee3c9dd8f559778ead624651f2eafadd3850b|82e9e9fb92496a6435a910201e8b9be594e3129ebd4225329c57f8edbf51b08d|tests/syn/javascript/10-kitchen.spans
 #
 # These 15 pre-existing host fixtures intentionally changed semantics when
 # embedded guests became active.  Each row records old hash, approved current

@@ -25,7 +25,7 @@ recorded in `audit-00.md`.
 | YEW-F-010 | M | fixed | F09 REC | ~~macro store accepts source that fails on first replay~~ — fixed 2026-09-13 in `c362cefd` | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
 | YEW-F-011 | M | fixed | F10 SYN | ~~matching source metadata can retain stale syntax tables~~ — fixed 2026-09-13 in `2c9c7431` | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
 | YEW-F-012 | M | fixed | F10 SYN | ~~pending embeds occupy a canonical state tail slot~~ — fixed 2026-09-13 in `43a82533` | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
-| YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
+| YEW-F-013 | M | fixed | F10 SYN | ~~JS/TS known-wrong golden rows lack the heuristic comment~~ — fixed 2026-09-13 in `838fd7e1` | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
 | YEW-F-014 | M | open | F11 LSP | stripped LSP completion bypasses the module hard error | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
 | YEW-F-015 | M | open | F11 LSP | snippet-policy grep gate matches unrelated core code | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
 | YEW-F-016 | M | open | F11 LSP | required 1-based display edges violate the LSP +/-1 gate | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
@@ -238,13 +238,13 @@ resident guests use line-local EOL scratch. Pending states therefore retain no
 hidden definition identity, while the 84-byte state layout, fallback rendering,
 one-load-per-settle pacing, and subsequent invalidation behavior remain intact.
 
-`YEW-F-013` is Medium because the release-control fixture required by Sprint
-42 is absent: the JS and TypeScript known-wrong golden rows use an identifier
-named `knownWrong`, but neither fixture contains the required adjacent comment
-naming the value-flag heuristic. Descriptions elsewhere do not satisfy the
-fixture-local documentation contract, so future reviewers cannot distinguish
-intentional heuristic debt from a regression at the point of evidence. It
-remains open for Sprint 59; no product source changed during the audit.
+`YEW-F-013` was Medium because the JS and TypeScript known-wrong golden rows
+lacked Sprint 42's required adjacent explanation of the value-flag heuristic.
+Commit `838fd7e1` restores an ID-bearing comment on each affected `)`/`}` row,
+regenerates the exact span output, and strengthens the audit to require every
+row to carry the explanation locally. The pre-Sprint-41.5 golden guard now
+pins these two intentional comment-only changes as explicit old/new hash rows;
+the remaining 226 historical goldens retain a separate unchanged aggregate.
 
 `YEW-F-014` is Medium because a stripped build gives one `ed.lsp.*` command
 different module-boundary semantics from every other command in its domain.

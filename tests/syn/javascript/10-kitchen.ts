@@ -10,6 +10,6 @@ enum Kind { One, Two }
 namespace Space { export const value = /x+/g; }
 const nested = `a${`b${{c: /x/.test("x")}}`}`;
 let div = value / 2;
-if (value) /knownWrong/.test(value);
+if (value) /knownWrong/.test(value); // YEW-F-013 known-wrong: value-flag heuristic treats `)` as value-ending.
 /* TODO */
 .;
