@@ -585,8 +585,13 @@ scan_spliced "golden updates are forbidden in CI" \
     "$ci_golden_update_pattern" "$ci_files"
 scan_seed "split-name CI golden update" "$ci_golden_update_pattern" \
     'export YEW_PTY_"UPDATE"=1'
+# YEW-F-050: positioned reads retain the same forbidden storage ownership as
+# read(), even though their longer name evaded the original token boundary.
+piece_io_pattern='(^|[^[:alnum:]_])(open|fopen|read|pread)[[:space:]]*\('
 scan "piece tree file I/O belongs to Sprint 8" \
-    '(^|[^[:alnum:]_])(open|fopen|read)[[:space:]]*\(' "$piece_files"
+    "$piece_io_pattern" "$piece_files"
+scan_seed "piece-tree pread" "$piece_io_pattern" \
+    'long seeded(int fd, void *p, unsigned long n) { return pread(fd, p, n, 0); }'
 shadow_draw_files=$tmp/shadow-draw-files
 printf '%s\n' "$repo_dir/src/ui/shadowdraw.c" >"$shadow_draw_files"
 scan "shadow insertion preview must compose without destructive row fill" \
