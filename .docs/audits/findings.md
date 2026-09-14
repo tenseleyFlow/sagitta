@@ -69,7 +69,7 @@ recorded in `audit-00.md`.
 | YEW-F-054 | M | fixed | F15 CI | ~~clipboard shell ban omits direct shell exec~~ — fixed 2026-09-14 in `702b5e92` | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
 | YEW-F-055 | M | fixed | F15 CI | ~~job-interpolation ban accepts raw append into shell text~~ — fixed 2026-09-14 in `7c3f0347` | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
 | YEW-F-056 | M | fixed | F15 CI | ~~OSC 52 query ban accepts split string literals~~ — fixed 2026-09-14 in `7808dea7` | tests/audit/f15_ban_misses.c | s24 write-only OSC 52; s58 F15 q2 |
-| YEW-F-057 | M | open | F15 CI | terminal-syscall ban omits `tcflush` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
+| YEW-F-057 | M | fixed | F15 CI | ~~terminal-syscall ban omits `tcflush`~~ — fixed 2026-09-14 in `45f6137b` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
 | YEW-F-058 | M | open | F15 CI | register choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 register routing; s58 F15 q2 |
 | YEW-F-059 | M | open | F15 CI | option choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
 | YEW-F-060 | M | open | F15 CI | package-git ban accepts allowed-file wrappers on startup | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
@@ -540,7 +540,8 @@ original contiguous-query rule, with a positive control for each form.
 
 `YEW-F-057` is Medium because the terminal boundary lists four calls but omits
 `tcflush`, another direct terminal-control syscall. An out-of-boundary call
-passes the actual gate. It remains open for Sprint 59.
+passes the actual gate. Commit `45f6137b` adds `tcflush` to the same guarded
+owner rule and pins the spelling with a positive control.
 
 `YEW-F-058`, `YEW-F-059`, and `YEW-F-060` are separate Medium boundary
 findings. Each allow-list exempts an implementation file, and each can be
