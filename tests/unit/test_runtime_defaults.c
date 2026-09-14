@@ -247,7 +247,14 @@ static const BindRow frozen_I[] = {
     {"A-h", "ed.mode.enter", 0, "H"},
     {"<esc>", "ed.shadow.dismiss", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
-    {"A-<right>", "ed.shadow.accept_word", 0, NULL},
+    /*
+     * Sprint 57.19: Alt+arrow is the word jump in Insert mode, and
+     * Alt+Right stays contextual -- it accepts a ghost word only while a
+     * suggestion is showing.  L, W and B keep the plain accept: their
+     * Alt arrows are already unit motions.
+     */
+    {"A-<left>", "ed.move.word.prev", 0, NULL},
+    {"A-<right>", "ed.shadow.accept_or_word", 0, NULL},
     {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
     {"A-<down>", "ed.shadow.accept_line", 0, NULL},
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
@@ -430,7 +437,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 242U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 243U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

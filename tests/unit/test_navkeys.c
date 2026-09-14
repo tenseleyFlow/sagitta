@@ -465,3 +465,112 @@ void test_nav_word_motions_step_between_word_starts(void)
     YEW_ASSERT_EQ_U64(nav_pos(&ed), 11U);
     yew_ed_free(&ed);
 }
+
+static void nav_deliver_ghost(Ed *ed, const char *text)
+{
+    ShadowSug suggestion = {0};
+    Shadow *shadow = &ed->win->shadow;
+
+    suggestion.seq = shadow->seq_next[YEW_SHADOW_INDEX]++;
+    suggestion.prov = (u8)YEW_SHADOW_INDEX;
+    suggestion.buf_id = ed->win->buf->id;
+    suggestion.buf_gen = ed->win->buf->tb->gen;
+    suggestion.pos = ed->win->cs.curs.data[ed->win->cs.primary].pos;
+    suggestion.text = (const u8 *)text;
+    suggestion.len = (u32)strlen(text);
+    yew_shadow_deliver(ed, &suggestion);
+    YEW_ASSERT(ed->win->shadow.live);
+}
+
+/* Alt+arrow is yew's word jump.  Alt+Left is unconditional. */
+void test_nav_alt_left_jumps_a_word_in_insert_mode(void)
+{
+    Ed ed;
+
+    nav_word_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'i'), 0);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    nav_at(&ed, 13U);
+    nav_send(&ed, nav_mod_key(YEW_KEY_LEFT, YEW_MOD_ALT), 1);
+    nav_expect_cmd(&ed, "ed.move.word.prev");
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 11U);
+    nav_send(&ed, nav_mod_key(YEW_KEY_LEFT, YEW_MOD_ALT), 2);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 6U);
+    yew_ed_free(&ed);
+}
+
+/*
+ * Alt+Right stays contextual: it accepts one word of the ghost while a
+ * suggestion is actually showing, and is the word jump otherwise, so the
+ * key is never dead.  "Showing" is the shadow's own drawn predicate --
+ * live and not suppressed -- not a guess.
+ */
+void test_nav_alt_right_jumps_a_word_without_a_live_suggestion(void)
+{
+    Ed ed;
+
+    nav_word_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'i'), 0);
+    nav_at(&ed, 16U);
+    YEW_ASSERT(!ed.win->shadow.live);
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_ALT), 1);
+    nav_expect_cmd(&ed, "ed.shadow.accept_or_word");
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.accepted_word, 0U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.win->buf->tb), 22U);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 17U);
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_ALT), 2);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 22U);
+    yew_ed_free(&ed);
+}
+
+void test_nav_alt_right_accepts_while_a_suggestion_is_showing(void)
+{
+    Ed ed;
+    u64 grown;
+
+    nav_word_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'i'), 0);
+    nav_at(&ed, 16U);
+    nav_deliver_ghost(&ed, " tail more");
+
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_ALT), 1);
+    nav_expect_cmd(&ed, "ed.shadow.accept_or_word");
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.accepted_word, 1U);
+    grown = yew_textbuf_len(ed.win->buf->tb);
+    YEW_ASSERT(grown > 22U);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), 16U + (grown - 22U));
+
+    /* A menu over the ghost suppresses the drawing, so the key has to be
+     * the motion again even though the suggestion is still live. */
+    ed.win->shadow.suppressed = true;
+    YEW_ASSERT(ed.win->shadow.live);
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_ALT), 2);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.accepted_word, 1U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.win->buf->tb), grown);
+    yew_ed_free(&ed);
+}
+
+/* A passive suggestion is single-cursor only, so a multi-cursor window
+ * can only ever take the motion half of the dispatcher. */
+void test_nav_alt_right_is_the_word_jump_with_many_cursors(void)
+{
+    Cursor second = {BYTEOFF(17U), {0U}, BYTEOFF(17U)};
+    Ed ed;
+
+    nav_word_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'i'), 0);
+    nav_at(&ed, 0U);
+    YEW_ASSERT(yew_cset_add(&ed.win->cs, second));
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.len, 2U);
+    YEW_ASSERT(!ed.win->shadow.live);
+
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_ALT), 1);
+    YEW_ASSERT_EQ_U64(ed.shadow_stats.accepted_word, 0U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.win->buf->tb), 22U);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].pos.v, 6U);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[1U].pos.v, 17U);
+    nav_send(&ed, nav_mod_key(YEW_KEY_LEFT, YEW_MOD_ALT), 2);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].pos.v, 0U);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[1U].pos.v, 17U);
+    yew_ed_free(&ed);
+}
