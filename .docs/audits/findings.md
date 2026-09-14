@@ -67,7 +67,7 @@ recorded in `audit-00.md`.
 | YEW-F-052 | M | fixed | F15 CI | ~~FUSS drawer ban accepts indirect pane-root replacement~~ — fixed 2026-09-14 in `6db23a13` | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
 | YEW-F-053 | M | fixed | F15 CI | ~~deterministic-fuzz ban omits `random`~~ — fixed 2026-09-14 in `fff0404d` | tests/audit/f15_ban_misses.c | s02 deterministic seeds; s58 F15 q2 |
 | YEW-F-054 | M | fixed | F15 CI | ~~clipboard shell ban omits direct shell exec~~ — fixed 2026-09-14 in `702b5e92` | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
-| YEW-F-055 | M | open | F15 CI | job-interpolation ban accepts raw append into shell text | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
+| YEW-F-055 | M | fixed | F15 CI | ~~job-interpolation ban accepts raw append into shell text~~ — fixed 2026-09-14 in `7c3f0347` | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
 | YEW-F-056 | M | open | F15 CI | OSC 52 query ban accepts split string literals | tests/audit/f15_ban_misses.c | s24 write-only OSC 52; s58 F15 q2 |
 | YEW-F-057 | M | open | F15 CI | terminal-syscall ban omits `tcflush` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
 | YEW-F-058 | M | open | F15 CI | register choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 register routing; s58 F15 q2 |
@@ -528,8 +528,9 @@ clipboard execution.
 
 `YEW-F-055` is Medium because the job-data rule recognizes two formatting
 shapes while a raw byte append into a buffer named `shell` performs equivalent
-interpolation and passes. The argv-boundary control remains open for Sprint
-59.
+interpolation and passes. Commit `7c3f0347` detects raw appends whose
+destination is a shell or command-line buffer and adds a positive control;
+ordinary register command-line storage remains outside that boundary.
 
 `YEW-F-056` is Medium because adjacent C literals construct an OSC 52 query
 whose semicolon and question mark are separated only in source. The terminal
