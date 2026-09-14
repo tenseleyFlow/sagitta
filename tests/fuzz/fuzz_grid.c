@@ -183,6 +183,8 @@ static void put_choice(Grid *g, u16 row, u16 col, u8 choice,
     static const u8 cjk[] = {0xe6u, 0xbcu, 0xa2u};
     static const u8 emoji[] = {0xf0u, 0x9fu, 0x98u, 0x80u};
     static const u8 combining[] = {0xccu, 0x81u};
+    static const u8 keycap[] = {'1', 0xefu, 0xb8u, 0x8fu,
+                               0xe2u, 0x83u, 0xa3u};
     static const u8 invalid[] = {0xffu};
     static const u8 zwj[] = {
         0xf0u, 0x9fu, 0x91u, 0xa8u, 0xe2u, 0x80u, 0x8du,
@@ -192,12 +194,13 @@ static void put_choice(Grid *g, u16 row, u16 col, u8 choice,
     const u8 *text = ascii;
     size_t len = sizeof(ascii);
 
-    switch (choice % 6u) {
+    switch (choice % 7u) {
     case 1u: text = cjk; len = sizeof(cjk); break;
     case 2u: text = emoji; len = sizeof(emoji); break;
     case 3u: text = combining; len = sizeof(combining); break;
     case 4u: text = invalid; len = sizeof(invalid); break;
     case 5u: text = zwj; len = sizeof(zwj); break;
+    case 6u: text = keycap; len = sizeof(keycap); break;
     default: break;
     }
     (void)yew_grid_put(g, row, col, text, len, fg, bg, attrs);

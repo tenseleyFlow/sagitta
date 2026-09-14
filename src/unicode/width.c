@@ -174,9 +174,15 @@ int yew_str_width(const u8 *s, size_t len, u32 tabw)
     while (pos < len) {
         size_t ascii = pos;
 
-        /* Every printable ASCII byte is one scalar, cluster and cell. */
+        /* YEW-F-003: every printable ASCII byte is one scalar, but the
+         * final one may own a following Unicode suffix.  Bulk-count only
+         * the prefix whose grapheme boundary is already certain. */
         while (ascii < len && s[ascii] >= 0x20u && s[ascii] <= 0x7eu)
             ascii++;
+        if (ascii != pos) {
+            if (ascii != len)
+                ascii--;
+        }
         if (ascii != pos) {
             if (ascii - pos > (size_t)(INT_MAX - cells))
                 return INT_MAX;

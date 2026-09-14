@@ -105,8 +105,8 @@ static size_t inline_len(const Cell *c)
     return n;
 }
 
-static void append_zero_width(Grid *g, u16 row, u16 col,
-                              const u8 *cluster, size_t n)
+static u16 append_zero_width(Grid *g, u16 row, u16 col,
+                             const u8 *cluster, size_t n)
 {
     Cell *cells;
     Cell *base;
@@ -115,10 +115,14 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
     size_t total;
     u8 *joined;
     u16 base_col;
+    u16 lo;
+    u16 hi;
+    u8 old_width;
+    int joined_width;
 
     if (col == 0u || row >= g->rows || col > g->cols) {
         yew_log(YEW_LOG_WARN, "dropping zero-width cluster without a base");
-        return;
+        return col;
     }
     cells = &g->back[(size_t)row * g->cols];
     base_col = (u16)(col - 1u);
@@ -126,18 +130,18 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
         if (base_col == 0u || cells[base_col - 1u].w != 2u) {
             yew_log(YEW_LOG_WARN,
                     "dropping zero-width cluster after orphan continuation");
-            return;
+            return col;
         }
         base_col--;
     }
     base = &cells[base_col];
     if (base->w != 1u && base->w != 2u) {
         yew_log(YEW_LOG_WARN, "dropping zero-width cluster without a base");
-        return;
+        return col;
     }
     if ((base->flags & CELL_INTERNED) == 0u && base->utf8[0] == 0u) {
         yew_log(YEW_LOG_WARN, "dropping zero-width cluster after a blank");
-        return;
+        return col;
     }
     if ((base->flags & CELL_INTERNED) != 0u) {
         const char *interned = yew_intern_str(g->gi, base->id);
@@ -158,6 +162,41 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
         memcpy(joined, old, old_n);
     if (n != 0u)
         memcpy(joined + old_n, cluster, n);
+    /* YEW-F-003: a zero-width fragment can change its ASCII base into a
+     * two-cell keycap.  Revalidate the joined cluster and update its grid
+     * geometry so fragmented writes cannot leave a renderer-fatal cell. */
+    if (yew_gb_next_bytes(joined, total, 0u) != total) {
+        yew_log(YEW_LOG_WARN,
+                "dropping zero-width fragment that does not join its base");
+        yew_xfree(joined);
+        return col;
+    }
+    joined_width = yew_cluster_width(joined, total);
+    if (joined_width != 1 && joined_width != 2) {
+        yew_log(YEW_LOG_WARN,
+                "dropping zero-width fragment with unsupported joined width %d",
+                joined_width);
+        yew_xfree(joined);
+        return col;
+    }
+    old_width = base->w;
+    lo = base_col;
+    hi = (u16)(base_col + old_width);
+    if (joined_width == 2 && old_width == 1u) {
+        if ((u16)(base_col + 1u) >= g->cols) {
+            static const u8 space_byte = ' ';
+            Cell space = cell_make(&space_byte, 1u, base->fg, base->bg,
+                                   base->attrs, 1u, g->gi);
+
+            cells[base_col] = space;
+            damage_add(g, row, base_col, (u16)(base_col + 1u));
+            yew_xfree(joined);
+            return g->cols;
+        }
+        break_pair(g, row, (u16)(base_col + 1u), &lo, &hi);
+    } else if (joined_width == 1 && old_width == 2u) {
+        cells[base_col + 1u] = g->blank;
+    }
     if (total <= sizeof(base->utf8)) {
         memset(base->utf8, 0, sizeof(base->utf8));
         memcpy(base->utf8, joined, total);
@@ -169,8 +208,24 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
         base->id = id;
         base->flags = CELL_INTERNED;
     }
+    base->w = (u8)joined_width;
+    if (joined_width == 2) {
+        Cell tail;
+
+        memset(&tail, 0, sizeof(tail));
+        tail.fg = base->fg;
+        tail.bg = base->bg;
+        tail.attrs = base->attrs;
+        tail.w = 0u;
+        cells[base_col + 1u] = tail;
+        if (g->cur_row == row && g->cur_col == (u16)(base_col + 1u))
+            g->cur_col = base_col;
+    }
     yew_xfree(joined);
-    damage_add(g, row, base_col, (u16)(base_col + 1u));
+    if ((u16)(base_col + (u16)joined_width) > hi)
+        hi = (u16)(base_col + (u16)joined_width);
+    damage_add(g, row, lo, hi);
+    return (u16)(base_col + (u16)joined_width);
 }
 
 static u16 put_ascii_expansion(Grid *g, u16 row, u16 col,
@@ -339,7 +394,7 @@ u16 yew_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
     size_t expanded_n;
     bool invalid;
 
-    if (g == NULL || row >= g->rows || col >= g->cols || cluster == NULL ||
+    if (g == NULL || row >= g->rows || col > g->cols || cluster == NULL ||
         n == 0u)
         return g != NULL && col > g->cols ? g->cols : col;
     if (n == 1u && cluster[0] == '\t') {
@@ -354,9 +409,10 @@ u16 yew_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
                                    attrs);
     }
     if (width == 0) {
-        append_zero_width(g, row, col, cluster, n);
-        return col;
+        return append_zero_width(g, row, col, cluster, n);
     }
+    if (col == g->cols)
+        return col;
     if (width != 1 && width != 2) {
         yew_log(YEW_LOG_WARN, "dropping cluster with unsupported width %d",
                 width);
@@ -408,10 +464,17 @@ u16 yew_grid_puts(Grid *g, u16 row, u16 col, const u8 *s, size_t n,
 
             while (end < n && s[end] >= 0x20u && s[end] <= 0x7eu)
                 end++;
-            col = put_printable_ascii_run(g, row, col, s + pos, end - pos,
-                                          fg, bg, attrs);
-            pos = end;
-            continue;
+            /* YEW-F-003: the last printable ASCII scalar may own a
+             * following VS16/keycap or combining suffix.  Keep that base
+             * for the grapheme walker while bulk-writing the safe prefix. */
+            if (end == n || end - pos > 1u) {
+                if (end != n)
+                    end--;
+                col = put_printable_ascii_run(g, row, col, s + pos,
+                                              end - pos, fg, bg, attrs);
+                pos = end;
+                continue;
+            }
         }
         size_t next = yew_gb_next_bytes(s, n, pos);
 

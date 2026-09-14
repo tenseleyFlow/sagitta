@@ -15,7 +15,7 @@ recorded in `audit-00.md`.
 |---|---|---|---|---|---|---|
 | YEW-F-001 | M | open | F01 UNI | ambiguous-wide doubles fixed-cell chrome glyphs | tests/audit/yew_f_001.c | s27 §7 |
 | YEW-F-002 | M | open | F01 UNI | long RI output delays a completed flag cluster | tests/audit/yew_f_002.c | s19 §3 |
-| YEW-F-003 | H | open | F01 UNI | ASCII-base keycap leaves inconsistent grid width | tests/audit/yew_f_003.c | s05 §3 |
+| YEW-F-003 | H | fixed | F01 UNI | ~~ASCII-base keycap leaves inconsistent grid width~~ — fixed 2026-09-13 in `2fd132e1` | tests/audit/yew_f_003.c | s05 §3 |
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
 | YEW-F-005 | H | open | F06 RE | multi-cursor replacement exits inside a Fletch edit transaction | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
 | YEW-F-006 | C | fixed | F07 UI | ~~workspace re-emission drops unknown root and workspace keys~~ — fixed 2026-09-13 in `9e829cd9` | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
@@ -109,14 +109,21 @@ answer were the exact final-cluster boundary. The reproducer fails at the
 fixed baseline and was confirmed by hosted audit-control run `33815573832`
 across the same cross-compiler, cross-architecture matrix.
 
-`YEW-F-003` is High because valid keycap text reaches a `YEW_BUG` in the
-renderer, terminating yew with exit 4. Root-cause hypothesis: the printable
-ASCII run in `yew_grid_puts` commits the base before segmentation can see its
-VS16/keycap suffix; `append_zero_width` joins the bytes but retains the base's
-one-cell width. The reproducer stops just before the fatal renderer call so
-the XFAIL runner can retain the other findings. It fails at the fixed baseline
-and was confirmed by hosted audit-control run `33815573832` across the same
-cross-compiler, cross-architecture matrix.
+`YEW-F-003` was High because valid keycap text reached a `YEW_BUG` in the
+renderer, terminating yew with exit 4. Commit `2fd132e1` keeps the final ASCII
+scalar of a mixed run for the grapheme walker, preserves the bulk path for the
+already-certain ASCII prefix, and makes fragmented zero-width appends
+revalidate the joined cluster and update both grid cells when its width
+changes. The reproducer is now an ordinary passing audit test; focused tests
+also cover prefix/suffix placement, collision with a prior wide glyph, cursor
+snapping, and right-edge clipping, while the grid fuzzer now generates
+keycaps.
+
+Sibling check: `yew_str_width` carried the same printable-ASCII-is-a-cluster
+assumption and now uses the same safe-prefix boundary. `yew_str_clip` already
+walks complete clusters, and the coordinate index feeds its final ASCII scalar
+through the streaming grapheme state before consuming following Unicode, so
+neither had the grid-cell finalization bug.
 
 `YEW-F-004` is Medium because a documented configuration shape fails loudly
 at startup but does not corrupt document bytes; quoting the option name is a

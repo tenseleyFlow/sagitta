@@ -229,6 +229,63 @@ void test_grid_printable_ascii_runs_match_scalar_writes(void)
     grid_fixture_free(&run, &run_arena, &run_interner);
 }
 
+void test_grid_puts_keeps_ascii_base_with_unicode_suffix(void)
+{
+    static const u8 keycap[] = {'1', 0xefu, 0xb8u, 0x8fu,
+                                0xe2u, 0x83u, 0xa3u};
+    static const u8 text[] = {'A', '1', 0xefu, 0xb8u, 0x8fu,
+                              0xe2u, 0x83u, 0xa3u, 'B'};
+    static const u8 suffix[] = {0xefu, 0xb8u, 0x8fu,
+                                0xe2u, 0x83u, 0xa3u};
+    static const u8 cjk[] = {0xe6u, 0xbcu, 0xa2u};
+    Grid grid;
+    Arena arena;
+    Interner interner;
+    YewColor color = grid_default_color();
+
+    grid_fixture_init(&grid, &arena, &interner, 1u, 8u);
+    YEW_ASSERT_EQ_U64(yew_grid_puts(&grid, 0u, 0u, text, sizeof(text),
+                                   color, color, 0u), 4u);
+    YEW_ASSERT_EQ_U64(grid.back[0].w, 1u);
+    YEW_ASSERT_EQ_U64(grid.back[0].utf8[0], (u8)'A');
+    YEW_ASSERT_EQ_U64(grid.back[1].w, 2u);
+    YEW_ASSERT_EQ_MEM(grid.back[1].utf8, keycap, sizeof(keycap));
+    YEW_ASSERT_EQ_U64(grid.back[2].w, 0u);
+    YEW_ASSERT_EQ_U64(grid.back[3].w, 1u);
+    YEW_ASSERT_EQ_U64(grid.back[3].utf8[0], (u8)'B');
+
+    yew_grid_clear(&grid);
+    YEW_ASSERT_EQ_U64(yew_grid_put(&grid, 0u, 0u, (const u8 *)"1", 1u,
+                                  color, color, 0u), 1u);
+    YEW_ASSERT_EQ_U64(yew_grid_put(&grid, 0u, 1u, suffix, sizeof(suffix),
+                                  color, color, 0u), 2u);
+    YEW_ASSERT_EQ_U64(grid.back[0].w, 2u);
+    YEW_ASSERT_EQ_MEM(grid.back[0].utf8, keycap, sizeof(keycap));
+    YEW_ASSERT_EQ_U64(grid.back[1].w, 0u);
+
+    yew_grid_clear(&grid);
+    (void)yew_grid_put(&grid, 0u, 0u, (const u8 *)"1", 1u,
+                       color, color, 0u);
+    (void)yew_grid_put(&grid, 0u, 1u, cjk, sizeof(cjk),
+                       color, color, 0u);
+    yew_grid_cursor(&grid, 0u, 1u, true);
+    YEW_ASSERT_EQ_U64(yew_grid_put(&grid, 0u, 1u, suffix, sizeof(suffix),
+                                  color, color, 0u), 2u);
+    YEW_ASSERT_EQ_U64(grid.back[0].w, 2u);
+    YEW_ASSERT_EQ_U64(grid.back[1].w, 0u);
+    YEW_ASSERT(yew_cell_eq(&grid.back[2], &grid.blank));
+    YEW_ASSERT_EQ_U64(grid.cur_col, 0u);
+
+    yew_grid_clear(&grid);
+    (void)yew_grid_put(&grid, 0u, 7u, (const u8 *)"1", 1u,
+                       color, color, 0u);
+    YEW_ASSERT_EQ_U64(yew_grid_put(&grid, 0u, 8u, suffix, sizeof(suffix),
+                                  color, color, 0u), 8u);
+    YEW_ASSERT_EQ_U64(grid.back[7].w, 1u);
+    YEW_ASSERT_EQ_U64(grid.back[7].utf8[0], (u8)' ');
+    grid_fixture_free(&grid, &arena, &interner);
+}
+
 void test_grid_invalid_and_c1_bytes_are_lowered(void)
 {
     Grid grid;
