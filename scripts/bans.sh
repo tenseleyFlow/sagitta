@@ -1065,20 +1065,19 @@ if [ "$tables_actual" != "$tables_sha256" ]; then
 fi
 
 # yew_bug is the single audited process-termination site required by the
-# exit-code contract.  No other source file may call exit().
+# exit-code contract.  YEW-F-066 showed that `_Exit` bypassed the lowercase
+# token scan; use the function-owner gate for both spellings.  Child-only
+# `_exit` remains distinct and legal at audited post-fork sites.
+exit_pattern='(^|[^[:alnum:]_])(exit|_Exit)[[:space:]]*[(]'
 exit_hits=$tmp/exit
-: >"$exit_hits"
-while IFS= read -r file; do
-    case ${file#"$repo_dir"/} in
-        src/util/log.c) continue ;;
-    esac
-    grep -nE -e '(^|[^[:alnum:]_])exit[[:space:]]*\(' "$file" 2>/dev/null |
-        sed "s|^|${file#"$repo_dir"/}:|" >>"$exit_hits" || :
-done <"$source_files"
+c_call_owners "$source_files" "$exit_pattern" \
+    'src/util/log.c:yew_bug' "$exit_hits"
 if [ -s "$exit_hits" ]; then
-    echo "ban: exit() is allowed only in src/util/log.c:yew_bug" >>"$hits"
+    echo "ban: exit/_Exit is allowed only in src/util/log.c:yew_bug" >>"$hits"
     cat "$exit_hits" >>"$hits"
 fi
+scan_seed "process-termination ownership" "$exit_pattern" \
+    'void seeded(void) { _Exit(4); }'
 
 # AI request and completion bytes have one audited sink.  That sink enforces
 # the environment + typed-option dual gate; keeping its surface tiny makes a
