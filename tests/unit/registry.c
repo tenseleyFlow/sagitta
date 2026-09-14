@@ -921,6 +921,7 @@ const YewTest yew_tests[] = {
     T(buflist_drop_compacts_and_ignores_document),
     T(job_stream_split_at_every_offset),
     T(job_stream_holds_incomplete_utf8),
+    T(job_stream_long_ri_run_holds_only_open_cluster),
     T(job_stream_newline_holds_nothing),
     T(job_stream_eof_flushes_invalid_tail),
     T(job_stream_hold_cap_flushes),

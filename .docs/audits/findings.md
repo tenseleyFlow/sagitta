@@ -14,7 +14,7 @@ recorded in `audit-00.md`.
 | ID | Sev | Status | Front | Title | Reproducer | Violates |
 |---|---|---|---|---|---|---|
 | YEW-F-001 | M | fixed | F01 UNI | ~~ambiguous-wide doubles fixed-cell chrome glyphs~~ — fixed 2026-09-13 in `c5a11c96` | tests/audit/yew_f_001.c | s27 §7 |
-| YEW-F-002 | M | open | F01 UNI | long RI output delays a completed flag cluster | tests/audit/yew_f_002.c | s19 §3 |
+| YEW-F-002 | M | fixed | F01 UNI | ~~long RI output delays a completed flag cluster~~ — fixed 2026-09-13 in `566b07b6` | tests/audit/yew_f_002.c | s19 §3 |
 | YEW-F-003 | H | fixed | F01 UNI | ~~ASCII-base keycap leaves inconsistent grid width~~ — fixed 2026-09-13 in `2fd132e1` | tests/audit/yew_f_003.c | s05 §3 |
 | YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
 | YEW-F-005 | H | fixed | F06 RE | ~~multi-cursor replacement exits inside a Fletch edit transaction~~ — fixed 2026-09-13 in `db0759ed` | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
@@ -104,13 +104,16 @@ under Clang, Clang ASan/UBSan, and GCC 16 `MODULES=""`; the original failure was
 also confirmed by hosted audit-control run `33815573832` across GCC, Clang,
 ASan/UBSan, Linux arm64, macOS arm64, musl, and `MODULES=""`.
 
-`YEW-F-002` is visible but recoverable: all bytes eventually arrive, yet a
-completed four-byte flag cluster remains absent from a live job buffer until
-the child writes again or exits. Root-cause hypothesis: `yew_job_safe_prefix`
-uses the documented bounded `yew_gb_prev_bytes` approximation as though its
-answer were the exact final-cluster boundary. The reproducer fails at the
-fixed baseline and was confirmed by hosted audit-control run `33815573832`
-across the same cross-compiler, cross-architecture matrix.
+`YEW-F-002` was Medium because all bytes eventually arrived, but a completed
+four-byte flag cluster remained absent from a live job buffer until the child
+wrote again or exited. Commit `566b07b6` separates the contracts: interactive
+reverse navigation retains its 64-codepoint approximation, while bounded job
+read windows use an exact final-cluster edge. Odd and even long RI runs now
+retain only the genuinely open final cluster. The reproducer failed at the
+fixed baseline and passed after the fix under Clang, Clang ASan/UBSan, and GCC
+16 `MODULES=""`; the original failure was also confirmed by hosted
+audit-control run `33815573832` across the same cross-compiler,
+cross-architecture matrix.
 
 `YEW-F-003` was High because valid keycap text reached a `YEW_BUG` in the
 renderer, terminating yew with exit 4. Commit `2fd132e1` keeps the final ASCII

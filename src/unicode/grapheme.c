@@ -196,7 +196,8 @@ static bool cp_is_prepend(u32 cp)
            cp_gcb(cp, yew_u_rec(cp)) == YEW_GCB_PREPEND;
 }
 
-size_t yew_gb_prev_bytes(const u8 *s, size_t len, size_t pos)
+static size_t gb_prev_bytes(const u8 *s, size_t len, size_t pos,
+                            size_t scan_cap)
 {
     size_t restart;
     size_t cursor;
@@ -212,7 +213,7 @@ size_t yew_gb_prev_bytes(const u8 *s, size_t len, size_t pos)
 
     restart = pos;
     cursor = pos;
-    while (cursor > 0 && scanned < 64) {
+    while (cursor > 0 && scanned < scan_cap) {
         size_t n = yew_utf8_decode_prev(s, 0, cursor, &cp);
         if (n == 0 || n > cursor)
             break;
@@ -235,6 +236,17 @@ size_t yew_gb_prev_bytes(const u8 *s, size_t len, size_t pos)
         cursor = next;
     }
     return restart;
+}
+
+size_t yew_gb_prev_bytes(const u8 *s, size_t len, size_t pos)
+{
+    return gb_prev_bytes(s, len, pos, 64U);
+}
+
+size_t yew_gb_prev_bytes_exact(const u8 *s, size_t len, size_t pos)
+{
+    /* A byte window contains at most `len` decoded codepoints. */
+    return gb_prev_bytes(s, len, pos, len);
 }
 
 size_t yew_gb_count_bytes(const u8 *s, size_t len)

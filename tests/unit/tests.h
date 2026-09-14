@@ -889,6 +889,7 @@ void test_buflist_drop_compacts_and_ignores_document(void);
 
 void test_job_stream_split_at_every_offset(void);
 void test_job_stream_holds_incomplete_utf8(void);
+void test_job_stream_long_ri_run_holds_only_open_cluster(void);
 void test_job_stream_newline_holds_nothing(void);
 void test_job_stream_eof_flushes_invalid_tail(void);
 void test_job_stream_hold_cap_flushes(void);
