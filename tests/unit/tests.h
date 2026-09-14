@@ -692,6 +692,7 @@ void test_edit_enter_between_a_matched_pair_opens_three_lines(void);
 void test_edit_enter_strips_the_whitespace_it_abandons(void);
 void test_edit_autoindent_off_keeps_the_literal_insert_bytes(void);
 void test_edit_tab_navigates_then_indents_then_inserts(void);
+void test_edit_tab_adopts_the_established_indent(void);
 void test_edit_tab_emits_spaces_under_expandtab(void);
 void test_edit_backspace_in_leading_whitespace_eats_one_level(void);
 void test_cmdline_does_not_auto_pair_or_indent(void);

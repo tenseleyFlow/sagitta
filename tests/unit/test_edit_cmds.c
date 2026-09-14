@@ -1045,3 +1045,61 @@ void test_edit_vertical_goal_agrees_with_wrap_on_and_off(void)
     YEW_ASSERT_EQ_U64(landed[1][1], landed[0][1]);
     YEW_ASSERT_EQ_U64(landed[1][2], landed[0][2]);
 }
+
+/*
+ * On a blank line, Tab adopts the indent the surrounding code has
+ * already established rather than counting from zero.
+ *
+ * FIELD REPORT: with `\t\t\tSome text` above, arrowing down to the empty
+ * line below and pressing Tab gave one tab, so reaching the working
+ * column took as many presses as the nesting was deep. Enter already
+ * carries that indent (57.16 §2); this makes Tab agree with it, using
+ * the same `yew_indent_lead_append` so the two cannot spell an indent
+ * differently.
+ *
+ * The established line is the nearest preceding NON-blank one: blank
+ * lines in between carry no information, and stopping at the first of
+ * them would answer "column zero" for every paragraph gap.
+ */
+void test_edit_tab_adopts_the_established_indent(void)
+{
+    static const u8 before[] = "\t\t\tsome text\n\nnext\n";
+    static const u8 want[] = "\t\t\tsome text\n\t\t\t\nnext\n";
+    static const u8 deeper[] = "\t\t\tsome text\n\t\t\t\t\nnext\n";
+    static const u8 gap[] = "\t\tanchor\n\n\n";
+    static const u8 gap_want[] = "\t\tanchor\n\n\t\t\n";
+    static const u8 none[] = "alpha\n\n";
+    static const u8 none_want[] = "alpha\n\t\n";
+    Ed ed;
+
+    /* One press reaches the established column, not one level. */
+    edit_fixture(&ed, before, sizeof(before) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 13U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, want, sizeof(want) - 1U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 16U);
+
+    /* Already there, so the next press indents one level further — the
+     * feature must not pin the caret at the established column. */
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, deeper, sizeof(deeper) - 1U);
+    yew_ed_free(&ed);
+
+    /* A blank line between does not reset the answer to column zero. */
+    edit_fixture(&ed, gap, sizeof(gap) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 10U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, gap_want, sizeof(gap_want) - 1U);
+    yew_ed_free(&ed);
+
+    /* Nothing established above: one level, exactly as before. */
+    edit_fixture(&ed, none, sizeof(none) - 1U, YEW_EOL_LF);
+    edit_place(&ed, 6U);
+    YEW_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.tab", 1U, false,
+                                  NULL, 0U), YEW_CMD_OK);
+    edit_assert_text(&ed, none_want, sizeof(none_want) - 1U);
+    yew_ed_free(&ed);
+}

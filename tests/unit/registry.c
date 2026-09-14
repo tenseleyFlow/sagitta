@@ -725,6 +725,7 @@ const YewTest yew_tests[] = {
     T(edit_enter_strips_the_whitespace_it_abandons),
     T(edit_autoindent_off_keeps_the_literal_insert_bytes),
     T(edit_tab_navigates_then_indents_then_inserts),
+    T(edit_tab_adopts_the_established_indent),
     T(edit_tab_emits_spaces_under_expandtab),
     T(edit_backspace_in_leading_whitespace_eats_one_level),
     T(cmdline_does_not_auto_pair_or_indent),

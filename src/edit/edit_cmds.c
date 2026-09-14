@@ -1822,6 +1822,60 @@ CmdStatus yew_edit_cmd_insert_tab(CmdCtx *cx)
         }
         return status;
     }
+    /*
+     * A BLANK line adopts the indent the code above has already
+     * established, so reaching the working column is one press rather
+     * than one press per level.
+     *
+     * The anchor is the nearest preceding NON-blank line: a blank line
+     * carries no indentation information, and stopping at the first one
+     * would answer "column zero" for every paragraph gap. Its leading
+     * whitespace is copied VERBATIM through the same helper Enter uses
+     * (57.16 §2), so a line indented by Tab and a line indented by
+     * Enter cannot come out spelled differently -- which matters when
+     * the anchor mixes tabs and spaces.
+     *
+     * Only when the caret sits before that column: once the line has
+     * reached it, Tab goes back to adding one level, so the feature
+     * cannot pin the caret at a depth the user is trying to leave.
+     */
+    if (info.blank && line.v != 0U) {
+        Bytebuf lead;
+        LineNo probe = line;
+        bool found = false;
+        Span anchor = span;
+
+        while (probe.v != 0U) {
+            IndentInfo above;
+
+            probe = LINENO(probe.v - 1U);
+            anchor = yew_textbuf_line_span(tb, probe);
+            if (!yew_indent_info(tb, anchor, edit_tabwidth(win), &above))
+                return YEW_CMD_ERR_STATE;
+            if (!above.blank) {
+                found = above.width.v > info.width.v;
+                break;
+            }
+        }
+        if (found) {
+            IndentInfo above;
+            CmdStatus status;
+
+            (void)yew_indent_info(tb, anchor, edit_tabwidth(win), &above);
+            bytebuf_init(&lead);
+            yew_indent_lead_append(tb, (Span){anchor.lo, above.first.v},
+                                   &lead);
+            status = insert_bytes_at(cx, BYTEOFF(span.lo), lead.data,
+                                     (u64)lead.len);
+            if (status == YEW_CMD_OK) {
+                cursor = &win->cs.curs.data[index];
+                cursor->pos = BYTEOFF(span.lo + lead.len);
+                cursor->anchor = cursor->pos;
+            }
+            bytebuf_free(&lead);
+            return status;
+        }
+    }
     return insert_bytes(cx, unit, n);
 }
 
