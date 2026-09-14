@@ -164,6 +164,7 @@ void test_piece_regress_undo_branch_survives(void);
 void test_piece_regress_snapshot_seam_release_orders(void);
 void test_piece_regress_undo_compact_zero_repair_run(void);
 void test_coords_motion_golden(void);
+void test_coords_display_ordinal_is_one_based_without_overflow(void);
 void test_coords_piece_stream(void);
 void test_coords_tabs_wide_and_invalid(void);
 void test_coords_crlf_and_clamping(void);

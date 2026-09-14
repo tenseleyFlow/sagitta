@@ -500,7 +500,7 @@ static bool rename_file_convert(Ed *ed, RenamePlan *plan,
             Vec_RenameEdit_free(&file.edits);
             return rename_error(err,
                 "rename produced an invalid range in %s:%llu", draft->path,
-                (unsigned long long)source->start_line + 1U);
+                (unsigned long long)yew_coord_display(source->start_line));
         }
         edit.len = source->len;
         edit.text = rename_arena_copy(&plan->arena, source->text, source->len);

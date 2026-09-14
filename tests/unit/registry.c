@@ -198,6 +198,7 @@ const YewTest yew_tests[] = {
     T(piece_regress_snapshot_seam_release_orders),
     T(piece_regress_undo_compact_zero_repair_run),
     T(coords_motion_golden),
+    T(coords_display_ordinal_is_one_based_without_overflow),
     T(coords_piece_stream),
     T(coords_tabs_wide_and_invalid),
     T(coords_crlf_and_clamping),
