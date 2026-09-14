@@ -303,8 +303,13 @@ scan_seed "token-pasted __attribute__" "$attribute_pattern" \
     'JOIN(__attribute, __)((unused)) static int seeded;'
 scan "constructor registration is forbidden; use the explicit registry" \
     '(constructor|\.init_array)' "$c_files"
+# YEW-F-032: `p ## thread_create` must not hide a pthread entry point from
+# the single-threaded-core gate.  No thread_* stem is valid in yew source.
+thread_pattern='(threads\.h|pthread|thread_[[:alnum:]_]+)'
 scan "threads are forbidden in the single-threaded core" \
-    '(threads\.h|pthread)' "$source_files"
+    "$thread_pattern" "$source_files"
+scan_seed "token-pasted pthread API" "$thread_pattern" \
+    'void seeded(void) { JOIN(p, thread_create)(t, 0, f, 0); }'
 scan "__DATE__ and __TIME__ break reproducible builds" \
     '(__DATE__|__TIME__)' "$source_files"
 scan "mmap risks SIGBUS after truncation" \
