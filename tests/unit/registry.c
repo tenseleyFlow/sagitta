@@ -586,6 +586,7 @@ const YewTest yew_tests[] = {
     T(modes_escape_cancels_chord_before_prompt_or_mode),
     T(modes_every_unit_mode_switches_in_one_key),
     T(modes_fuss_opens_from_every_unit_mode),
+    T(modes_tab_jumps_are_global_and_insert_keeps_its_digits),
     T(modes_escape_cancels_count_before_prompt_or_mode),
     T(modes_escape_closes_prompt_before_changing_mode),
     T(modes_escape_from_insert_enters_line_and_repaints),

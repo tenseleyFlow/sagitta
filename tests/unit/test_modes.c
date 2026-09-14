@@ -5,6 +5,18 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 
+/* The same key with modifiers held, for the global tab jumps. */
+static Key modes_key_mods(u32 code, u16 mods)
+{
+    Key key = {0};
+
+    key.code = code;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.mods = mods;
+    return key;
+}
+
 static Key modes_key(u32 code)
 {
     Key key = {0};
@@ -293,6 +305,54 @@ void test_modes_fuss_opens_from_every_unit_mode(void)
         YEW_ASSERT_EQ_U64(ed.mode, from[i]);
         YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "no fuss module"));
 #endif
+        yew_ed_free(&ed);
+    }
+}
+
+/*
+ * The numbered tab jumps are global, and Insert keeps what you type.
+ *
+ * FIELD REPORT: alt+N and ctrl+N only fired in Line mode, so switching
+ * tabs meant leaving whatever mode you were in and coming back.
+ *
+ * Insert carries a hazard the other modes do not. The 500 ms
+ * digit-extension window (Sprint 24 §7) sits BEFORE the insert text
+ * path in dispatch, precisely so `alt+1` `5` reaches tab 15 rather than
+ * typing a 5 into the document. In Insert that is exactly backwards: a
+ * digit there is the character the user is writing. So the jump fires
+ * and the window is NOT armed, which costs two-digit jumps in Insert
+ * and never costs a keystroke. The same holds in FUSS, whose
+ * type-to-jump reads bare printables.
+ */
+void test_modes_tab_jumps_are_global_and_insert_keeps_its_digits(void)
+{
+    static const Mode from[] = {YEW_MODE_L, YEW_MODE_W, YEW_MODE_B,
+                                YEW_MODE_I, YEW_MODE_H};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(from); i++) {
+        Ed ed;
+
+        modes_editor(&ed);
+        YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-jump-a.txt") >= 0);
+        YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-jump-b.txt") >= 0);
+        YEW_ASSERT_EQ_U64(yew_mode_enter(&ed, from[i]), YEW_CMD_OK);
+        yew_tab_switch(&ed, 2);
+        ed.now_ms = 1000;
+
+        /* alt+1 reaches tab 1 from every mode... */
+        yew_ed_handle_key(&ed, modes_key_mods((u32)'1', YEW_MOD_ALT), 1000);
+        YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
+        /* ...and does not change the mode on the way. */
+        YEW_ASSERT_EQ_U64(ed.mode, from[i]);
+
+        /* The extension window arms everywhere a bare digit is not text. */
+        if (from[i] == YEW_MODE_I)
+            YEW_ASSERT(!yew_tab_jump_armed());
+        else
+            YEW_ASSERT(yew_tab_jump_armed());
+
+        yew_tab_jump_clear(&ed);
         yew_ed_free(&ed);
     }
 }
