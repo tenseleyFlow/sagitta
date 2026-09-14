@@ -46,7 +46,7 @@ recorded in `audit-00.md`.
 | YEW-F-031 | M | fixed | F15 CI | ~~explicit-registry ban accepts token-pasted constructors~~ — fixed 2026-09-14 in `ccfc924c` | tests/audit/f15_ban_misses.c | s01 sections 1/6; s58 F15 q2 |
 | YEW-F-032 | M | fixed | F15 CI | ~~single-thread ban accepts token-pasted pthread calls~~ — fixed 2026-09-14 in `a294794c` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-033 | M | fixed | F15 CI | ~~reproducibility ban omits `__TIMESTAMP__`~~ — fixed 2026-09-14 in `381bddf0` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
-| YEW-F-034 | M | open | F15 CI | mmap ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
+| YEW-F-034 | M | fixed | F15 CI | ~~mmap ban accepts macro-forwarded calls~~ — fixed 2026-09-14 in `47046a40` | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-035 | M | open | F15 CI | allocator ban accepts macro-forwarded libc allocation | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-036 | M | open | F15 CI | cwd-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-037 | M | open | F15 CI | realpath-allocation ban requires literal NULL spelling | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
@@ -411,9 +411,10 @@ build time just as surely as the two macros already banned. Commit `381bddf0`
 adds it to the compiler-time pattern, updates the diagnostic to cover the
 whole class, and adds a positive control for the formerly omitted macro.
 
-`YEW-F-034` is Medium because a macro-forwarded `mmap` call survives the
+`YEW-F-034` was Medium because a macro-forwarded `mmap` call survived the
 source ban while preserving the truncate/SIGBUS hazard the rule exists to
-exclude. This is a gate finding only and remains open for Sprint 59.
+exclude. Commit `47046a40` rejects object-like aliases naming `mmap` and adds
+an alias positive control while retaining the direct-call check.
 
 `YEW-F-035` is Medium because the audited-allocation scan keys on a direct
 libc function token followed by `(` and accepts a macro-forwarded `malloc`.
