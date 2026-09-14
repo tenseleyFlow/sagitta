@@ -72,7 +72,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-059 | audit | `tests/audit/f15_ban_misses.c` | ~~option choke-point ban accepts allowed-file wrappers~~ — fixed in `02949a63` | fixed |
 | YEW-F-060 | audit | `tests/audit/f15_ban_misses.c` | ~~package-git ban accepts allowed-file wrappers on startup~~ — fixed in `953b1e3c` | fixed |
 | YEW-F-061 | audit | `tests/audit/f15_ban_misses.c` | ~~register-width ban accepts local lookup tables~~ — fixed in `31497135` | fixed |
-| YEW-F-062 | audit | `tests/audit/f15_ban_misses.c` | register-column ban depends on historical variable names | open |
+| YEW-F-062 | audit | `tests/audit/f15_ban_misses.c` | ~~register-column ban depends on historical variable names~~ — fixed in `d87c57f6` | fixed |
 | YEW-F-063 | audit | `tests/audit/f15_ban_misses.c` | register-helper presence gate accepts comments | open |
 | YEW-F-064 | audit | `tests/audit/f15_ban_misses.c` | oracle-independence ban accepts copied renamed models | open |
 | YEW-F-065 | audit | `tests/audit/f15_ban_misses.c` | generated-table ban verifies only a retained marker | open |

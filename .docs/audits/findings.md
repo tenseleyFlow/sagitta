@@ -74,7 +74,7 @@ recorded in `audit-00.md`.
 | YEW-F-059 | M | fixed | F15 CI | ~~option choke-point ban accepts allowed-file wrappers~~ — fixed 2026-09-14 in `02949a63` | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
 | YEW-F-060 | M | fixed | F15 CI | ~~package-git ban accepts allowed-file wrappers on startup~~ — fixed 2026-09-14 in `953b1e3c` | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
 | YEW-F-061 | M | fixed | F15 CI | ~~register-width ban accepts local lookup tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
-| YEW-F-062 | M | open | F15 CI | register-column ban depends on historical variable names | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
+| YEW-F-062 | M | fixed | F15 CI | ~~register-column ban depends on historical variable names~~ — fixed 2026-09-14 in `d87c57f6` | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
 | YEW-F-063 | M | open | F15 CI | register-helper presence gate accepts comments | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
 | YEW-F-064 | M | open | F15 CI | oracle-independence ban accepts copied renamed models | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
 | YEW-F-065 | M | open | F15 CI | generated-table ban verifies only a retained marker | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
@@ -564,9 +564,10 @@ shared Unicode-ownership correction in `31497135` catches that same lookup
 table before the register-specific helper check, closing both findings with
 one boundary rule.
 
-`YEW-F-062` is Medium because the register column-arithmetic rule searches
-three historical variable names followed by `.v`. Equivalent `CellCol`
-addition under renamed locals passes. It remains open for Sprint 59.
+`YEW-F-062` was Medium because the register column-arithmetic rule searched
+three historical variable names followed by `.v`. Commit `d87c57f6` strips
+comments and literals, discovers every `CCol`/`CellCol` declarator, and rejects
+direct representation access independently of the variable name.
 
 `YEW-F-063` is Medium because the four required-helper checks accept names in
 comments as proof of routing. A register implementation containing only those
