@@ -190,6 +190,12 @@ bind("I", "C-g", "ed.ui.message_expand")
 # accepts one word of a suggestion only while one is showing, and is
 # the word jump otherwise, so the key is never dead.
 bind("I", "A-<left>", "ed.move.word.prev")
+# Readline spelling of the same motions.  A terminal that will not
+# send CSI 1;3D for alt+arrow almost always sends ESC b / ESC f,
+# which the decoder already reports as A-b / A-f -- so these are
+# what actually reach yew under Terminal.app and tmux.
+bind("I", "A-b", "ed.move.word.prev")
+bind("I", "A-f", "ed.move.word.next")
 bind("I", "A-<right>", "ed.shadow.accept_or_word")
 bind("I", "A-S-<right>", "ed.shadow.accept_word_alt")
 bind("I", "A-<down>", "ed.shadow.accept_line")
@@ -216,6 +222,11 @@ bind("I", "<end>", "ed.move.line.end")
 # Ctrl+arrow is the LINE's start and end here, the same pair <home>/<end>
 # give above -- NOT the word jump the usual convention puts on Ctrl+arrow.
 # In yew the word jump is Alt+arrow (below), so leave these alone.
+# The unix line keys, which every terminal sends as plain control
+# bytes -- unlike ctrl+arrow, which Terminal.app and an unconfigured
+# tmux swallow entirely.  Same pair the command line already uses.
+bind("I", "C-a", "ed.move.line.home_toggle")
+bind("I", "C-e", "ed.move.line.end")
 bind("I", "C-<left>", "ed.move.line.home_toggle")
 bind("I", "C-<right>", "ed.move.line.end")
 

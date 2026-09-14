@@ -1785,6 +1785,17 @@ static void s17_settle_after_keys(PtyCtx *c, const char *keys)
     settle_sync_delta(c, before, 1U, 0);
 }
 
+/* The same settle, for a case that must send literal bytes rather than
+ * a key name -- a terminal's own spelling of a key is the thing under
+ * test, so it cannot go through the harness's key table. */
+static void s17_settle_after_bytes(PtyCtx *c, const char *bytes)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_bytes(c, bytes);
+    settle_sync_delta(c, before, 1U, 0);
+}
+
 static void case_s17_h_l_extends_by_line(PtyCtx *c)
 {
     static const u8 initial[] = "alpha\nbeta\ngamma\n";
@@ -3095,6 +3106,103 @@ static void case_s57_16_tab_navigates_indent(PtyCtx *c)
     s17_settle_after_keys(c, "i");
     s17_settle_after_keys(c, "tab");
     ptc_snapshot(c, "s57_16_tab_navigates_indent");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * The Insert-mode navigation keys, through a real terminal.
+ *
+ * The unit tests for these synthesize a Key and hand it to
+ * yew_ed_handle_key, which proves the BINDING but skips the decoder: a
+ * terminal sends `ctrl+left` as the bytes CSI 1;5D, and nothing until
+ * now checked that those bytes reach the command. The status line's
+ * column field is the evidence, so no new golden vocabulary is needed.
+ */
+static void case_s57_21_insert_nav_keys(PtyCtx *c)
+{
+    static const u8 initial[] = "    alpha beta gamma\nsecond\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    /* To the end of the line, then one word back, then home twice. */
+    s17_settle_after_keys(c, "ctrl+right");
+    s17_settle_after_keys(c, "alt+left");
+    ptc_snapshot(c, "s57_21_insert_nav_keys");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * Ctrl+Left is the Home toggle in Insert: from the text it goes to the
+ * first non-blank, and again to column 0.
+ */
+/*
+ * The bytes a real Terminal.app / tmux session actually sends.
+ *
+ * FIELD REPORT: alt+arrow produced nothing in Insert. `cat -v` showed
+ * the terminal emitting ESC f / ESC b -- the readline spelling -- and
+ * ctrl+arrow emitting nothing at all. The decoder already reports an
+ * ESC prefix as Alt, so A-b / A-f reach yew; they simply had no
+ * binding. This drives the literal bytes, not a synthesized key.
+ */
+/*
+ * Ctrl+A / Ctrl+E in Insert, driven as the raw control bytes 0x01 and
+ * 0x05 that every terminal sends for them.
+ *
+ * These exist because ctrl+arrow does NOT survive Terminal.app or an
+ * unconfigured tmux -- the field report was that it emitted nothing at
+ * all. A control byte has no such problem, which is why the unix line
+ * keys are the dependable spelling.
+ */
+static void case_s57_21_insert_unix_line_keys(PtyCtx *c)
+{
+    static const u8 initial[] = "    alpha beta\nsecond\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    s17_settle_after_bytes(c, "\x05");          /* C-e: end of line */
+    s17_settle_after_bytes(c, "\x01");          /* C-a: first non-blank */
+    s17_settle_after_bytes(c, "\x01");          /* again: column 0 */
+    ptc_snapshot(c, "s57_21_insert_unix_line_keys");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_21_insert_readline_words(PtyCtx *c)
+{
+    static const u8 initial[] = "    alpha beta gamma\nsecond\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    /* ESC f twice: forward two words from the line start. */
+    s17_settle_after_bytes(c, "\x1b" "f");
+    s17_settle_after_bytes(c, "\x1b" "f");
+    /* ESC b once: back one word. */
+    s17_settle_after_bytes(c, "\x1b" "b");
+    ptc_snapshot(c, "s57_21_insert_readline_words");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s57_21_insert_home_toggle(PtyCtx *c)
+{
+    static const u8 initial[] = "    alpha beta\nsecond\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i");
+    s17_settle_after_keys(c, "ctrl+right");
+    s17_settle_after_keys(c, "ctrl+left");
+    s17_settle_after_keys(c, "ctrl+left");
+    ptc_snapshot(c, "s57_21_insert_home_toggle");
     force_quit(c);
     (void)unlink(path);
 }
@@ -10527,6 +10635,14 @@ const PtyCase yew_pty_cases[] = {
       case_s57_16_tab_navigates_indent),
     C(s57_16_tab_indents_the_line, modern, 24U, 80U,
       case_s57_16_tab_indents_the_line),
+    C(s57_21_insert_nav_keys, modern, 24U, 80U,
+      case_s57_21_insert_nav_keys),
+    C(s57_21_insert_home_toggle, modern, 24U, 80U,
+      case_s57_21_insert_home_toggle),
+    C(s57_21_insert_readline_words, modern, 24U, 80U,
+      case_s57_21_insert_readline_words),
+    C(s57_21_insert_unix_line_keys, modern, 24U, 80U,
+      case_s57_21_insert_unix_line_keys),
 
     C(s57_12_job_output_quit_returns, modern, 24U, 80U,
       case_s57_12_job_output_quit_returns),

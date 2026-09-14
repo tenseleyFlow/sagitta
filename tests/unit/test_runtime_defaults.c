@@ -254,6 +254,8 @@ static const BindRow frozen_I[] = {
      * already unit motions.
      */
     {"A-<left>", "ed.move.word.prev", 0, NULL},
+    {"A-b", "ed.move.word.prev", 0, NULL},
+    {"A-f", "ed.move.word.next", 0, NULL},
     {"A-<right>", "ed.shadow.accept_or_word", 0, NULL},
     {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
     {"A-<down>", "ed.shadow.accept_line", 0, NULL},
@@ -282,6 +284,8 @@ static const BindRow frozen_I[] = {
      * <home>/<end> give.  Deliberately NOT the word jump the usual
      * convention puts on Ctrl+arrow -- in yew that is Alt+arrow, above.
      */
+    {"C-a", "ed.move.line.home_toggle", 0, NULL},
+    {"C-e", "ed.move.line.end", 0, NULL},
     {"C-<left>", "ed.move.line.home_toggle", 0, NULL},
     {"C-<right>", "ed.move.line.end", 0, NULL},
 };
@@ -437,7 +441,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 243U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 247U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
