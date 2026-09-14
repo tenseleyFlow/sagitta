@@ -1156,11 +1156,66 @@ golden_dir=$repo_dir/tests/pty/goldens
 if [ ! -f "$pty_registry" ]; then
     echo "ban: PTY registry is missing" >>"$hits"
 else
+    pty_live_registry=$tmp/pty-registry-live
     pty_cases=$tmp/pty-cases
     golden_refs=$tmp/golden-refs
     pty_snapshot_hits=$tmp/pty-snapshot-hits
+
+    # YEW-F-071: raw source is not a registry.  Drop branches that the C
+    # preprocessor can prove dead while retaining both sides of unknown
+    # module conditions, because the PTY inventory spans every build shape.
+    LC_ALL=C awk '
+        BEGIN { depth = 0; live = 1 }
+        {
+            text = $0
+            sub(/^[ \t]*/, "", text)
+            zero = text ~ /^#[ \t]*if[ \t]+0[uUlL]*([ \t]|\/[*]|$)/
+            one = text ~ /^#[ \t]*if[ \t]+1[uUlL]*([ \t]|\/[*]|$)/
+            if (text ~ /^#[ \t]*(if|ifdef|ifndef)([ \t]|$)/) {
+                depth++
+                parent[depth] = live
+                certain[depth] = one ? 1 : (zero ? 0 : -1)
+                live = parent[depth] && !zero
+                next
+            }
+            if (text ~ /^#[ \t]*elif([ \t]|$)/) {
+                if (depth == 0)
+                    exit 2
+                zero = text ~ /^#[ \t]*elif[ \t]+0[uUlL]*([ \t]|\/[*]|$)/
+                one = text ~ /^#[ \t]*elif[ \t]+1[uUlL]*([ \t]|\/[*]|$)/
+                if (certain[depth] == 1 || zero)
+                    live = 0
+                else
+                    live = parent[depth]
+                if (one)
+                    certain[depth] = 1
+                else if (!zero && certain[depth] == 0)
+                    certain[depth] = -1
+                next
+            }
+            if (text ~ /^#[ \t]*else([ \t]|$)/) {
+                if (depth == 0)
+                    exit 2
+                live = parent[depth] && certain[depth] != 1
+                certain[depth] = 1
+                next
+            }
+            if (text ~ /^#[ \t]*endif([ \t]|$)/) {
+                if (depth == 0)
+                    exit 2
+                live = parent[depth]
+                delete parent[depth]
+                delete certain[depth]
+                depth--
+                next
+            }
+            if (live)
+                print
+        }
+        END { if (depth != 0) exit 2 }
+    ' "$pty_registry" >"$pty_live_registry"
     sed -n 's/^[[:space:]]*C[[:space:]]*([[:space:]]*\([[:alnum:]_]*\).*/\1/p' \
-        "$pty_registry" | LC_ALL=C sort -u >"$pty_cases"
+        "$pty_live_registry" | LC_ALL=C sort -u >"$pty_cases"
     if [ "$(wc -l <"$pty_cases" | tr -d ' ')" -lt 12 ]; then
         echo "ban: fewer than 12 registered pty cases" >>"$hits"
     fi
@@ -1168,7 +1223,7 @@ else
     # a literal or the exact registered case name.  Arbitrary computed names
     # cannot be checked for existence without executing the PTY case.
     grep -nE '(^|[^[:alnum:]_])ptc_snapshot(_sgr)?[[:space:]]*[(]' \
-        "$pty_registry" |
+        "$pty_live_registry" |
         grep -vE 'ptc_snapshot(_sgr)?[[:space:]]*[(][[:space:]]*c[[:space:]]*,[[:space:]]*("[[:alnum:]_-]+"|c->test->name)[[:space:]]*[)][[:space:]]*;' \
         >"$pty_snapshot_hits" || :
     if [ -s "$pty_snapshot_hits" ]; then
@@ -1177,7 +1232,7 @@ else
         cat "$pty_snapshot_hits" >>"$hits"
     fi
     sed -n 's/.*ptc_snapshot\(_sgr\)\{0,1\}[[:space:]]*([^,]*,[[:space:]]*"\([^"]*\)".*/\2/p' \
-        "$pty_registry" | LC_ALL=C sort -u >"$golden_refs"
+        "$pty_live_registry" | LC_ALL=C sort -u >"$golden_refs"
     while IFS= read -r name; do
         [ -n "$name" ] || continue
         if [ ! -f "$golden_dir/$name.golden" ]; then
