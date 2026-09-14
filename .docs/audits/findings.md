@@ -16,7 +16,7 @@ recorded in `audit-00.md`.
 | YEW-F-001 | M | fixed | F01 UNI | ~~ambiguous-wide doubles fixed-cell chrome glyphs~~ — fixed 2026-09-13 in `c5a11c96` | tests/audit/yew_f_001.c | s27 §7 |
 | YEW-F-002 | M | fixed | F01 UNI | ~~long RI output delays a completed flag cluster~~ — fixed 2026-09-13 in `566b07b6` | tests/audit/yew_f_002.c | s19 §3 |
 | YEW-F-003 | H | fixed | F01 UNI | ~~ASCII-base keycap leaves inconsistent grid width~~ — fixed 2026-09-13 in `2fd132e1` | tests/audit/yew_f_003.c | s05 §3 |
-| YEW-F-004 | M | open | F04 MODAL | full Fletch parser rejects bare dotted map keys | tests/audit/yew_f_004.c | spec §2 `entry` |
+| YEW-F-004 | M | fixed | F04 MODAL | ~~full Fletch parser rejects bare dotted map keys~~ — fixed 2026-09-13 in `a030d621` | tests/audit/yew_f_004.c | spec §2 `entry` |
 | YEW-F-005 | H | fixed | F06 RE | ~~multi-cursor replacement exits inside a Fletch edit transaction~~ — fixed 2026-09-13 in `db0759ed` | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
 | YEW-F-006 | C | fixed | F07 UI | ~~workspace re-emission drops unknown root and workspace keys~~ — fixed 2026-09-13 in `9e829cd9` | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 | YEW-F-007 | C | fixed | F07 UI | ~~workspace restore reorders group members from tab-array order~~ — fixed 2026-09-13 in `bea3990b` | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
@@ -131,13 +131,16 @@ walks complete clusters, and the coordinate index feeds its final ASCII scalar
 through the streaming grapheme state before consuming following Unicode, so
 neither had the grid-cell finalization bug.
 
-`YEW-F-004` is Medium because a documented configuration shape fails loudly
-at startup but does not corrupt document bytes; quoting the option name is a
-working recovery. Root-cause hypothesis: the full expression parser treats an
-identifier map key as a single token and requires `:` immediately, while the
-pure-literal parser's entry path explicitly accepts dotted keys. The shipped
-`runtime/init.fl` quotes its dotted option names, masking the mismatch on the
-default startup path.
+`YEW-F-004` was Medium because a documented configuration shape failed loudly
+at startup but did not corrupt document bytes; quoting the option name was a
+working recovery. Commit `a030d621` gives the full and pure-literal parsers one
+shared map-key path that folds `IDENT ("." IDENT)+` only in entry position, so
+ordinary field access keeps its prior meaning. The parser, runtime application,
+and Fletch conformance corpus cover the result. The audit fixture's independent
+stale value `clipboard.sync: "none"` was corrected to the documented `"off"`;
+that corrected fixture still fails at the first dot on the fixed audit baseline.
+The reproducer passes after the fix under Clang, Clang ASan/UBSan, and GCC 16
+`MODULES=""`.
 
 `YEW-F-005` was High because a valid Fletch `edit {}` block containing a
 buffer-range replacement with two live cursors reached `yew_bug()` and exited

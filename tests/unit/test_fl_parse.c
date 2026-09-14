@@ -40,7 +40,7 @@
  *   literal        fl_parse_literals_and_primary
  *   list_lit       fl_parse_literals_and_primary    (incl. trailing comma)
  *   map_lit        fl_parse_literals_and_primary    (incl. trailing comma)
- *   entry          fl_parse_literals_and_primary    (ident/string/int keys)
+ *   entry          fl_parse_literals_and_primary    (incl. dotted ident key)
  *   motion_block   fl_parse_motion_blocks
  *   motion         fl_parse_motion_blocks           (with and without count)
  *   motion_word    fl_parse_motion_blocks           (every alternative)
@@ -169,6 +169,9 @@ void test_fl_parse_literals_and_primary(void)
      */
     ok_dump("let m = {a: 1}\n",
             "(let \"m\" (map ((lit str \"a\") (lit int 1))))\n");
+    ok_dump("let m = {clipboard.sync: 1, search.smartcase: false}\n",
+            "(let \"m\" (map ((lit str \"clipboard.sync\") (lit int 1)) "
+            "((lit str \"search.smartcase\") (lit bool false))))\n");
     ok_dump("let m = {\"k\": 1, 2: nil,}\n",
             "(let \"m\" (map ((lit str \"k\") (lit int 1)) "
             "((lit int 2) (lit nil))))\n");
@@ -612,6 +615,8 @@ void test_fl_parse_literal_accepts_the_value_grammar(void)
     pl_ok("\"s\"", "(lit str \"s\")");
     pl_ok("[1, 2,]", "(list (lit int 1) (lit int 2))");
     pl_ok("{a: 1}", "(map ((lit str \"a\") (lit int 1)))");
+    pl_ok("{clipboard.sync: 1}",
+          "(map ((lit str \"clipboard.sync\") (lit int 1)))");
     /* Comments are allowed (§12 cites §1.1). */
     pl_ok("# a note\n[1]", "(list (lit int 1))");
 }

@@ -147,7 +147,8 @@ io.print(block_body(1), expr_body(1), (3 + 4))
 #         | list_lit | map_lit
 # list_lit = "[" [ expr { "," expr } [ "," ] ] "]"
 # map_lit = "{" [ entry { "," entry } [ "," ] ] "}"
-# entry = ( IDENT | STRING | INT ) ":" expr
+# bare_key = IDENT { "." IDENT }
+# entry = ( bare_key | STRING | INT ) ":" expr
 # Every literal form, including the trailing commas and all three key
 # shapes -- a map keyed by an INT is not the same as one keyed by the
 # string of that int.
@@ -158,3 +159,6 @@ let trailing = [1, 2,]
 let keys = {ident: 1, "quoted": 2, 3: 4,}
 # OUT: [1, 2] 1 2 4
 io.print(trailing, keys.ident, keys["quoted"], keys[3])
+let dotted = {clipboard.sync: "off"}
+# OUT: off
+io.print(dotted["clipboard.sync"])
