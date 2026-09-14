@@ -113,7 +113,7 @@ void test_pty_environment_exact(void)
 void test_pty_spawn_clears_signal_mask(void)
 {
     static const PtyCase test = {
-        "signal_mask", "dumb", 2U, 8U, NULL
+        "signal_mask", "dumb", 2U, 8U, NULL, NULL
     };
     sigset_t blocked;
     sigset_t saved;
@@ -141,7 +141,7 @@ void test_pty_spawn_clears_signal_mask(void)
 void test_pty_timeout_reaps_child(void)
 {
     static const PtyCase test = {
-        "timeout_drill", "dumb", 2U, 8U, NULL
+        "timeout_drill", "dumb", 2U, 8U, NULL, NULL
     };
     PtyCtx ctx;
     i64 deadline = ptc_now_ms() + 50;
@@ -165,7 +165,7 @@ void test_pty_timeout_reaps_child(void)
 void test_pty_post_snapshot_protocol_error_fails_cleanup(void)
 {
     static const PtyCase test = {
-        "post_snapshot_error", "dumb", 2U, 8U, NULL
+        "post_snapshot_error", "dumb", 2U, 8U, NULL, NULL
     };
     static const char script[] =
         "printf '\\033[?1049hOK'; "
@@ -224,7 +224,7 @@ static bool pty_screen_contains(const PtyCtx *c, const void *arg)
 void test_pty_wait_never_observes_a_torn_frame(void)
 {
     static const PtyCase test = {
-        "torn_frame", "dumb", 4U, 16U, NULL
+        "torn_frame", "dumb", 4U, 16U, NULL, NULL
     };
     static const char script[] =
         "printf '\\033[?1049h'; "
@@ -267,7 +267,7 @@ void test_pty_wait_never_observes_a_torn_frame(void)
 void test_pty_snapshot_refuses_an_open_frame(void)
 {
     static const PtyCase test = {
-        "open_frame", "dumb", 4U, 16U, NULL
+        "open_frame", "dumb", 4U, 16U, NULL, NULL
     };
     static const char script[] =
         "printf '\\033[?1049hOK'; IFS= read -r line";
