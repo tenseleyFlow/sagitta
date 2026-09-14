@@ -654,9 +654,15 @@ scan_seed "FUSS pane-root ownership" "$fuss_pane_root_write_pattern" \
     'PaneNode **slot = &ed->panes.pane_root;'
 scan_seed "FUSS direct pane-root replacement" \
     "$fuss_pane_root_write_pattern" 'ed->pane_root ='
+# YEW-F-053: the libc random family shares global state and is no more
+# replayable than rand; generated campaigns stay on the pinned xorshift PRNG.
+deterministic_random_pattern='(^|[^[:alnum:]_])(rand|srand|random|srandom)[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)'
 scan "generated edit campaigns must use xorshift64*, not libc randomness" \
-    '(^|[^[:alnum:]_])rand[[:space:]]*\(|(^|[^[:alnum:]_])srand[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)' \
-    "$deterministic_fuzz_files"
+    "$deterministic_random_pattern" "$deterministic_fuzz_files"
+scan_seed "deterministic random-call" "$deterministic_random_pattern" \
+    'long seeded(void) { return ran''dom(); }'
+scan_seed "deterministic random-seed" "$deterministic_random_pattern" \
+    'void seeded(void) { sran''dom(1U); }'
 scan "clipboard subprocesses must never invoke a shell" \
     '(^|[^[:alnum:]_])(popen|system)[[:space:]]*\(' "$source_files"
 job_interpolation_pattern='bytebuf_printf.*cmdline|sprintf.*shell'
