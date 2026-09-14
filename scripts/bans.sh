@@ -389,9 +389,13 @@ if [ "$(wc -l <"$tmp/null-path-seed-hits" | tr -d ' ')" != "2" ]; then
     echo "ban: the NULL path-allocation rule no longer fires on its own seed" \
         >>"$hits"
 fi
+# YEW-F-038: mbtowc is the stateful locale-dependent predecessor of mbrtowc
+# and belongs behind the same bespoke Unicode boundary.
+locale_api_pattern='(wcwidth|wcswidth|mbrtowc|mbtowc|wchar\.h|langinfo\.h|setlocale|nl_langinfo|localeconv|iconv)'
 scan "locale-dependent Unicode APIs are forbidden" \
-    '(wcwidth|wcswidth|mbrtowc|wchar\.h|langinfo\.h|setlocale|nl_langinfo|localeconv|iconv)' \
-    "$source_files"
+    "$locale_api_pattern" "$source_files"
+scan_seed "locale-dependent mbtowc" "$locale_api_pattern" \
+    'int seeded(void) { return mbtowc(w, s, n); }'
 dynamic_loader_pattern='(^|[^[:alnum:]_])(dlopen|dlsym|dlclose|dlerror)[[:space:]]*\('
 scan "native dynamic loading is forbidden; yew plugins are Fletch-only" \
     "$dynamic_loader_pattern" "$source_files"
