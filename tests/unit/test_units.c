@@ -528,3 +528,44 @@ void test_units_vertical_goal_past_the_end_still_clamps_after_the_last(void)
                       50U);
     tab_ctx_release(&ctx);
 }
+
+/*
+ * FIELD REPORT, second sighting: with
+ *
+ *     fn main() -> !int {
+ *         0
+ *     }
+ *
+ * the caret after the `0` and Down pressed, the caret lands BEFORE the
+ * closing brace instead of after it.
+ *
+ * Both vertical paths now clamp through yew_ccol_to_off_padded, so this
+ * pins the LINE unit and the char unit against the same shape at once.
+ * Line 1 is `    0` (offsets 20..25), line 2 is `}` (26..27); after the
+ * `0` is offset 25, and the answer on the brace line must be 27 -- past
+ * the brace, where the caret can rest.
+ */
+void test_units_down_from_a_short_line_lands_after_the_brace(void)
+{
+    static const u8 body[] = "fn main() -> !int {\n    0\n}\n";
+    static const UnitFixture fixture = {body, sizeof(body) - 1U};
+    UnitTestCtx ctx;
+    Cursor cursor;
+
+    unit_ctx_init(&ctx, &fixture);
+    (void)memset(&cursor, 0, sizeof(cursor));
+    cursor.pos = BYTEOFF(25U);          /* just after the 0 */
+    cursor.anchor = cursor.pos;
+    cursor.goal_col = (CCol){YEW_CCOL_HERE};    /* lazily measured, as typing leaves it */
+    ctx.win.cs.curs.data = &cursor;
+    ctx.win.cs.curs.len = 1U;
+    ctx.win.cs.primary = 0U;
+
+    YEW_ASSERT_EQ_U64(yew_unit_line.next(&ctx.unit, cursor.pos, false).v,
+                      27U);
+
+    ctx.win.cs.curs.data = NULL;
+    ctx.win.cs.curs.len = 0U;
+    unit_ctx_free(&ctx);
+}
+

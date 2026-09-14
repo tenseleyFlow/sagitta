@@ -718,6 +718,7 @@ const YewTest yew_tests[] = {
     T(units_roundtrip_and_purity_hold_for_every_engine),
     T(units_conformance_rejects_fixed_point_engine),
     T(units_line_motion_clamps_to_the_content_end),
+    T(units_down_from_a_short_line_lands_after_the_brace),
     T(units_vertical_goal_keeps_the_screen_column_over_tabs),
     T(units_vertical_goal_rounds_left_inside_a_tab),
     T(units_vertical_goal_honours_the_buffer_tab_width),

@@ -685,6 +685,7 @@ void test_units_results_are_boundaries_and_spans_obey_law(void);
 void test_units_roundtrip_and_purity_hold_for_every_engine(void);
 void test_units_conformance_rejects_fixed_point_engine(void);
 void test_units_line_motion_clamps_to_the_content_end(void);
+void test_units_down_from_a_short_line_lands_after_the_brace(void);
 void test_units_vertical_goal_keeps_the_screen_column_over_tabs(void);
 void test_units_vertical_goal_rounds_left_inside_a_tab(void);
 void test_units_vertical_goal_honours_the_buffer_tab_width(void);
