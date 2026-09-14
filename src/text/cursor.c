@@ -19,12 +19,28 @@ static void cursor_set_pos(Cursor *c, ByteOff pos)
         c->anchor = pos;
 }
 
-static void cursor_update_goal(const TextBuf *tb, Cursor *c, u32 tabw)
+/*
+ * Horizontal motion does not MEASURE the new column, it just says "the
+ * goal is wherever I am now".  Measuring a cell column walks the line --
+ * cursor.h says why -- and nothing reads the goal until a vertical
+ * motion, which is already walking.
+ */
+static void cursor_update_goal(Cursor *c)
 {
-    LineNo line = yew_textbuf_line_of(tb, c->pos);
-    Span span = yew_textbuf_line_span(tb, line);
+    c->goal_col = (CCol){YEW_CCOL_HERE};
+}
 
-    c->goal_col = yew_off_to_ccol(tb, span, c->pos, tabw);
+CCol yew_cursor_goal(const TextBuf *tb, const Cursor *c, u32 tabw)
+{
+    LineNo line;
+    Span span;
+
+    cursor_require(tb, c);
+    if (c->goal_col.v != YEW_CCOL_HERE)
+        return c->goal_col;
+    line = yew_textbuf_line_of(tb, c->pos);
+    span = yew_textbuf_line_span(tb, line);
+    return yew_off_to_ccol(tb, span, c->pos, tabw);
 }
 
 static ByteOff cursor_line_end(const TextBuf *tb, LineNo line)
@@ -40,18 +56,18 @@ static ByteOff cursor_line_end(const TextBuf *tb, LineNo line)
     return end;
 }
 
-void yew_cursor_left(const TextBuf *tb, Cursor *c, u32 tabw)
+void yew_cursor_left(const TextBuf *tb, Cursor *c)
 {
     cursor_require(tb, c);
     cursor_set_pos(c, yew_grapheme_prev_boundary(tb, c->pos));
-    cursor_update_goal(tb, c, tabw);
+    cursor_update_goal(c);
 }
 
-void yew_cursor_right(const TextBuf *tb, Cursor *c, u32 tabw)
+void yew_cursor_right(const TextBuf *tb, Cursor *c)
 {
     cursor_require(tb, c);
     cursor_set_pos(c, yew_grapheme_next_boundary(tb, c->pos));
-    cursor_update_goal(tb, c, tabw);
+    cursor_update_goal(c);
 }
 
 /*
@@ -70,6 +86,7 @@ void yew_cursor_up(const TextBuf *tb, Cursor *c, u32 tabw)
     if (line.v == 0U)
         return;
     span = yew_textbuf_line_span(tb, LINENO(line.v - 1U));
+    c->goal_col = yew_cursor_goal(tb, c, tabw);
     cursor_set_pos(c, yew_ccol_to_off_padded(tb, span, c->goal_col, tabw));
 }
 
@@ -82,6 +99,7 @@ void yew_cursor_down(const TextBuf *tb, Cursor *c, u32 tabw)
     if (line.v + 1U >= yew_textbuf_line_count(tb))
         return;
     span = yew_textbuf_line_span(tb, LINENO(line.v + 1U));
+    c->goal_col = yew_cursor_goal(tb, c, tabw);
     cursor_set_pos(c, yew_ccol_to_off_padded(tb, span, c->goal_col, tabw));
 }
 

@@ -75,7 +75,7 @@ static CCol line_goal(const UnitCtx *u, ByteOff p)
             &u->win->cs.curs.data[u->win->cs.primary];
 
         if (cursor->pos.v == p.v)
-            return cursor->goal_col;
+            return yew_cursor_goal(u->tb, cursor, motion_tabwidth(u));
     }
     return yew_off_to_ccol(u->tb,
                            yew_textbuf_line_span(

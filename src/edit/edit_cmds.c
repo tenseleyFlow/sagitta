@@ -129,15 +129,12 @@ static u32 edit_tabwidth(const Win *win)
                                     : (u32)YEW_VP_TABWIDTH;
 }
 
-static void cursor_place(const TextBuf *tb, Cursor *cursor, ByteOff pos,
-                         u32 tabw)
+static void cursor_place(const TextBuf *tb, Cursor *cursor, ByteOff pos)
 {
-    Span line;
-
+    (void)tb;
     cursor->pos = pos;
     cursor->anchor = pos;
-    line = yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, pos));
-    cursor->goal_col = yew_off_to_ccol(tb, line, pos, tabw);
+    cursor->goal_col = (CCol){YEW_CCOL_HERE};
 }
 
 static void finish_direct_motion(CmdCtx *cx, Cursor *cursor,
@@ -253,8 +250,7 @@ CmdStatus yew_edit_cmd_move_buf_end(CmdCtx *cx)
         u64 requested = cx->count == 0U ? 0U : (u64)cx->count - 1U;
         LineNo line = LINENO(requested < lines ? requested : lines - 1U);
 
-        cursor_place(tb, cursor, yew_textbuf_line_start(tb, line),
-                     edit_tabwidth(win));
+        cursor_place(tb, cursor, yew_textbuf_line_start(tb, line));
     } else {
         yew_cursor_buf_end(tb, cursor);
     }
@@ -332,7 +328,7 @@ CmdStatus yew_edit_cmd_move_line_first_nonblank(CmdCtx *cx)
             break;
         pos = next;
     }
-    cursor_place(tb, cursor, pos, edit_tabwidth(win));
+    cursor_place(tb, cursor, pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
     return YEW_CMD_OK;
@@ -361,7 +357,7 @@ CmdStatus yew_edit_cmd_move_line_last_nonblank(CmdCtx *cx)
             last = pos;
         pos = next;
     }
-    cursor_place(tb, cursor, last, edit_tabwidth(win));
+    cursor_place(tb, cursor, last);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
     return YEW_CMD_OK;
@@ -488,8 +484,7 @@ CmdStatus yew_edit_cmd_view_goto_line(CmdCtx *cx)
     requested = cx->count == 0U ? 0U : (u64)cx->count - 1U;
     if (requested >= line_count)
         requested = line_count - 1U;
-    cursor_place(tb, cursor, yew_textbuf_line_start(tb, LINENO(requested)),
-                 edit_tabwidth(win));
+    cursor_place(tb, cursor, yew_textbuf_line_start(tb, LINENO(requested)));
     win->wrap_goal_valid = false;
     yew_vp_center(win);
     cx->ed->full_damage = true;
@@ -587,7 +582,7 @@ CmdStatus yew_edit_cmd_move_char_prev(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     anchor = cursor->anchor;
     old_pos = cursor->pos;
-    yew_cursor_left(tb, cursor, edit_tabwidth(win));
+    yew_cursor_left(tb, cursor);
     finish_direct_motion(cx, cursor, anchor, old_pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
@@ -606,7 +601,7 @@ CmdStatus yew_edit_cmd_move_char_next(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     anchor = cursor->anchor;
     old_pos = cursor->pos;
-    yew_cursor_right(tb, cursor, edit_tabwidth(win));
+    yew_cursor_right(tb, cursor);
     finish_direct_motion(cx, cursor, anchor, old_pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
@@ -688,6 +683,14 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
         return YEW_CMD_ERR_STATE;
     line_vertical = ops == &yew_unit_line &&
                     (motion == UNIT_NEXT || motion == UNIT_PREV);
+    /*
+     * Resolve the goal ONCE, here, and let the motion and the write-back
+     * below share the answer.  Leaving it unresolved would make the goal
+     * mean "wherever the caret is" on every step, so a column would stop
+     * being sticky the moment it crossed a short line.
+     */
+    if (line_vertical)
+        cursor->goal_col = yew_cursor_goal(tb, cursor, edit_tabwidth(win));
     vertical_goal = cursor->goal_col;
     old_pos = cursor->pos;
     unselected = cursor->anchor.v == cursor->pos.v;
@@ -717,9 +720,7 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
         if (line_vertical)
             cursor->goal_col = vertical_goal;
         else
-            cursor->goal_col = yew_off_to_ccol(
-                tb, yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, pos)),
-                pos, edit_tabwidth(win));
+            cursor->goal_col = (CCol){YEW_CCOL_HERE};
         win->wrap_goal_valid = false;
         damage_offsets(cx->ed, cursor->anchor,
                        old_pos.v < cursor->pos.v ? old_pos : cursor->pos);
@@ -733,7 +734,7 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
         if (!win->vp.wrap)
             win->wrap_goal_valid = false;
     } else {
-        cursor_place(tb, cursor, pos, edit_tabwidth(win));
+        cursor_place(tb, cursor, pos);
         win->wrap_goal_valid = false;
     }
     yew_win_follow_cursor(win);
@@ -843,7 +844,7 @@ static CmdStatus move_block_match(CmdCtx *cx, bool next)
         yew_msg(cx->ed, YEW_MSG_INFO, "no enclosing delimiter");
         return YEW_CMD_OK;
     }
-    cursor_place(tb, cursor, pos, edit_tabwidth(win));
+    cursor_place(tb, cursor, pos);
     finish_direct_motion(cx, cursor, anchor, old_pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
@@ -877,7 +878,7 @@ static CmdStatus move_word_sub(CmdCtx *cx, bool next)
     old_pos = cursor->pos;
     pos = next ? yew_word_sub_next(&u, cursor->pos)
                : yew_word_sub_prev(&u, cursor->pos);
-    cursor_place(tb, cursor, pos, edit_tabwidth(win));
+    cursor_place(tb, cursor, pos);
     finish_direct_motion(cx, cursor, anchor, old_pos);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
@@ -894,14 +895,11 @@ CmdStatus yew_edit_cmd_move_word_sub_next(CmdCtx *cx)
     return move_word_sub(cx, true);
 }
 
-static void select_span(const TextBuf *tb, Cursor *cursor, Span span,
-                        u32 tabw)
+static void select_span(Cursor *cursor, Span span)
 {
     cursor->anchor = BYTEOFF(span.lo);
     cursor->pos = BYTEOFF(span.hi);
-    cursor->goal_col = yew_off_to_ccol(
-        tb, yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, cursor->pos)),
-        cursor->pos, tabw);
+    cursor->goal_col = (CCol){YEW_CCOL_HERE};
 }
 
 CmdStatus yew_edit_cmd_sel_unit_expand(CmdCtx *cx)
@@ -931,7 +929,7 @@ CmdStatus yew_edit_cmd_sel_unit_expand(CmdCtx *cx)
              span.hi == stack->s[stack->n - 1U].hi))
             continue;
         stack->s[stack->n++] = span;
-        select_span(tb, item, span, edit_tabwidth(win));
+        select_span(item, span);
         changed = true;
     }
     if (!changed) {
@@ -966,8 +964,7 @@ CmdStatus yew_edit_cmd_sel_unit_contract(CmdCtx *cx)
         if (stack->n == 0U)
             item->anchor = item->pos;
         else
-            select_span(tb, item, stack->s[stack->n - 1U],
-                        edit_tabwidth(win));
+            select_span(item, stack->s[stack->n - 1U]);
         changed = true;
     }
     if (!changed) {
@@ -1034,12 +1031,7 @@ CmdStatus yew_edit_cmd_sel_swap_ends(CmdCtx *cx)
 
         cursor->pos = cursor->anchor;
         cursor->anchor = old_pos;
-        cursor->goal_col = yew_off_to_ccol(
-            cx->win->buf->tb,
-            yew_textbuf_line_span(
-                cx->win->buf->tb,
-                yew_textbuf_line_of(cx->win->buf->tb, cursor->pos)),
-            cursor->pos, edit_tabwidth(cx->win));
+        cursor->goal_col = (CCol){YEW_CCOL_HERE};
     }
     yew_cset_normalize(cx->win->buf->tb, &cx->win->cs);
     yew_win_follow_cursor(cx->win);
@@ -1060,14 +1052,13 @@ static void replace_cursors(Win *win, CursorSet *replacement)
     (void)memset(replacement, 0, sizeof(*replacement));
 }
 
-static Cursor cursor_at(const TextBuf *tb, ByteOff pos, u32 tabw)
+static Cursor cursor_at(ByteOff pos)
 {
     Cursor cursor;
-    Span line = yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, pos));
 
     cursor.pos = pos;
     cursor.anchor = pos;
-    cursor.goal_col = yew_off_to_ccol(tb, line, pos, tabw);
+    cursor.goal_col = (CCol){YEW_CCOL_HERE};
     return cursor;
 }
 
@@ -1122,15 +1113,12 @@ CmdStatus yew_edit_cmd_cursor_lift_lines(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     }
     yew_cset_init(&lifted,
-                  cursor_at(tb,
-                            yew_gcol_to_off(
-                                tb, yew_textbuf_line_span(tb, first), col),
-                            edit_tabwidth(cx->win)));
+                  cursor_at(yew_gcol_to_off(
+                      tb, yew_textbuf_line_span(tb, first), col)));
     for (i = 1U; i < rows; i++) {
         LineNo line = LINENO(first.v + i);
         Cursor cursor = cursor_at(
-            tb, yew_gcol_to_off(tb, yew_textbuf_line_span(tb, line), col),
-            edit_tabwidth(cx->win));
+            yew_gcol_to_off(tb, yew_textbuf_line_span(tb, line), col));
 
         (void)yew_cset_add(&lifted, cursor);
     }
@@ -1166,8 +1154,7 @@ static u8 *copy_span_bytes(const TextBuf *tb, Span span)
 
 static bool add_matches_in_span(const TextBuf *tb, Span haystack,
                                 const u8 *pat, u32 pat_len,
-                                CursorSet *matches, bool *have_match,
-                                u32 tabw)
+                                CursorSet *matches, bool *have_match)
 {
     u64 hay_len = haystack.hi - haystack.lo;
     u8 *bytes;
@@ -1185,9 +1172,9 @@ static bool add_matches_in_span(const TextBuf *tb, Span haystack,
         if (!yew_is_grapheme_boundary(tb, at))
             continue;
         if (!*have_match) {
-            yew_cset_init(matches, cursor_at(tb, at, tabw));
+            yew_cset_init(matches, cursor_at(at));
             *have_match = true;
-        } else if (!yew_cset_add(matches, cursor_at(tb, at, tabw)) &&
+        } else if (!yew_cset_add(matches, cursor_at(at)) &&
                    matches->curs.len >= YEW_MC_MAX) {
             yew_xfree(bytes);
             return false;
@@ -1237,13 +1224,11 @@ CmdStatus yew_edit_cmd_cursor_lift_matches(CmdCtx *cx)
         yew_sel_rect_spans(cx->win, selected, &spans);
         for (i = 0U; i < spans.len && ok; i++)
             ok = add_matches_in_span(tb, spans.data[i], pat, pat_len,
-                                     &matches, &have_match,
-                                     edit_tabwidth(cx->win));
+                                     &matches, &have_match);
         YewSelSpanVec_free(&spans);
     } else {
         ok = add_matches_in_span(tb, yew_sel_span(cx->win, selected), pat,
-                                 pat_len, &matches, &have_match,
-                                 edit_tabwidth(cx->win));
+                                 pat_len, &matches, &have_match);
     }
     yew_xfree(owned_pat);
     if (!ok) {
@@ -1256,7 +1241,6 @@ CmdStatus yew_edit_cmd_cursor_lift_matches(CmdCtx *cx)
 
 CmdStatus yew_edit_cmd_cursor_lift_ends(CmdCtx *cx)
 {
-    const TextBuf *tb;
     CursorSet lifted = {0};
     const Cursor *primary;
     size_t i;
@@ -1269,15 +1253,12 @@ CmdStatus yew_edit_cmd_cursor_lift_ends(CmdCtx *cx)
         yew_msg(cx->ed, YEW_MSG_ERROR, "selection ends exceed 10000 cursors");
         return YEW_CMD_ERR_STATE;
     }
-    tb = cx->win->buf->tb;
     primary = &cx->win->cs.curs.data[cx->win->cs.primary];
-    yew_cset_init(&lifted,
-                  cursor_at(tb, primary->pos, edit_tabwidth(cx->win)));
+    yew_cset_init(&lifted, cursor_at(primary->pos));
     for (i = 0U; i < cx->win->cs.curs.len; i++) {
         const Cursor *selected = &cx->win->cs.curs.data[i];
-        Cursor ends[2] = {
-            cursor_at(tb, selected->anchor, edit_tabwidth(cx->win)),
-            cursor_at(tb, selected->pos, edit_tabwidth(cx->win))};
+        Cursor ends[2] = {cursor_at(selected->anchor),
+                          cursor_at(selected->pos)};
         size_t j;
 
         for (j = 0U; j < YEW_ARRAY_LEN(ends); j++) {
@@ -1529,8 +1510,7 @@ CmdStatus yew_edit_cmd_cursor_set(CmdCtx *cx)
         return YEW_CMD_ERR_ARG;
     c = &cx->win->cs.curs.data[cx->cursor_given ? cx->cursor_index :
                                                    cx->win->cs.primary];
-    cursor_place(cx->win->buf->tb, c, BYTEOFF((u64)cx->iarg),
-                 edit_tabwidth(cx->win));
+    cursor_place(cx->win->buf->tb, c, BYTEOFF((u64)cx->iarg));
     cx->win->wrap_goal_valid = false;
     yew_win_follow_cursor(cx->win);
     yew_ed_damage_document(cx->ed);
@@ -1752,7 +1732,7 @@ CmdStatus yew_edit_cmd_insert_after(CmdCtx *cx)
     line = yew_textbuf_line_of(tb, cursor->pos);
     end = line_content_end(tb, line);
     if (cursor->pos.v < end.v)
-        yew_cursor_right(tb, cursor, edit_tabwidth(win));
+        yew_cursor_right(tb, cursor);
     return yew_mode_enter(cx->ed, YEW_MODE_I);
 }
 
@@ -1789,7 +1769,7 @@ static CmdStatus open_line(CmdCtx *cx, bool below)
     }
     yew_ed_finish_edit(cx->ed, &ec);
     cursor = &win->cs.curs.data[win->cs.primary];
-    cursor_place(tb, cursor, placed, edit_tabwidth(win));
+    cursor_place(tb, cursor, placed);
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
     yew_ed_damage_line(cx->ed, line, true);

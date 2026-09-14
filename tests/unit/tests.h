@@ -183,6 +183,7 @@ void test_cursor_motion_fuzz_four_seeds(void);
 void test_cursor_vertical_goal_counts_tab_cells(void);
 void test_cursor_vertical_goal_rounds_left_inside_a_tab(void);
 void test_cursor_vertical_goal_past_the_end_clamps_after_the_last(void);
+void test_cursor_goal_is_lazy_until_a_vertical_motion(void);
 void test_mark_bias_table(void);
 void test_mark_generational_handles(void);
 void test_mark_random_oracle(void);

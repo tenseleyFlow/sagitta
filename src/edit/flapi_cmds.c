@@ -189,13 +189,7 @@ CmdStatus yew_flapi_cmd_cursor_move(CmdCtx *cx)
         return YEW_CMD_ERR_ARG;
     cursor->pos = next;
     cursor->anchor = next;
-    cursor->goal_col = yew_off_to_ccol(
-        cx->win->buf->tb,
-        yew_textbuf_line_span(cx->win->buf->tb,
-                              yew_textbuf_line_of(cx->win->buf->tb, next)),
-        next,
-        cx->win->buf->tabwidth != 0U ? cx->win->buf->tabwidth
-                                     : (u32)YEW_VP_TABWIDTH);
+    cursor->goal_col = (CCol){YEW_CCOL_HERE};
     yew_win_follow_cursor(cx->win);
     return YEW_CMD_OK;
 }

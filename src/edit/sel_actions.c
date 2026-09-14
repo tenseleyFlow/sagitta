@@ -187,7 +187,6 @@ static void collapse_all(Win *win)
 static void cursor_place(Win *win, ByteOff at)
 {
     Cursor *cursor;
-    Span line;
     size_t index = win->cs.active != YEW_MC_ACTIVE_NONE ?
                        win->cs.active : win->cs.primary;
 
@@ -196,12 +195,7 @@ static void cursor_place(Win *win, ByteOff at)
     cursor = &win->cs.curs.data[index];
     cursor->pos = at;
     cursor->anchor = at;
-    line = yew_textbuf_line_span(win->buf->tb,
-                                 yew_textbuf_line_of(win->buf->tb, at));
-    cursor->goal_col = yew_off_to_ccol(
-        win->buf->tb, line, at,
-        win->buf->tabwidth != 0U ? win->buf->tabwidth
-                                 : (u32)YEW_VP_TABWIDTH);
+    cursor->goal_col = (CCol){YEW_CCOL_HERE};
 }
 
 static CmdStatus finish_action(CmdCtx *cx, ByteOff at, bool insert)

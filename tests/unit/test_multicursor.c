@@ -1162,8 +1162,8 @@ static void integrated_move(const TextBuf *tb, CursorSet *set, u64 motion)
         Cursor *cursor = &set->curs.data[i];
 
         switch (motion) {
-        case 0U: yew_cursor_left(tb, cursor, 4U); break;
-        case 1U: yew_cursor_right(tb, cursor, 4U); break;
+        case 0U: yew_cursor_left(tb, cursor); break;
+        case 1U: yew_cursor_right(tb, cursor); break;
         case 2U: yew_cursor_up(tb, cursor, 4U); break;
         case 3U: yew_cursor_down(tb, cursor, 4U); break;
         case 4U: yew_cursor_line_home(tb, cursor); break;
@@ -1306,8 +1306,10 @@ void test_multicursor_normalize_preserves_sticky_motion(void)
 
     yew_cset_init(&set, cursor);
     yew_cset_normalize(tb, &set);
-    yew_cursor_right(tb, &set.curs.data[0], 4U);
-    assert_cursor(&set.curs.data[0], 9U, 9U, 2U);
+    yew_cursor_right(tb, &set.curs.data[0]);
+    YEW_ASSERT_EQ_U64(set.curs.data[0].pos.v, 9U);
+    YEW_ASSERT_EQ_U64(set.curs.data[0].anchor.v, 9U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &set.curs.data[0], 4U).v, 2U);
 
     yew_cset_free(&set);
     yew_textbuf_free(tb);

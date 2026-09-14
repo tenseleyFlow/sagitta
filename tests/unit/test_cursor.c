@@ -37,19 +37,19 @@ void test_cursor_horizontal_graphemes(void)
     size_t i;
 
     for (i = 1U; i < YEW_ARRAY_LEN(boundaries); i++) {
-        yew_cursor_right(tb, &c, 4U);
+        yew_cursor_right(tb, &c);
         YEW_ASSERT_EQ_U64(c.pos.v, boundaries[i]);
         YEW_ASSERT_EQ_U64(c.anchor.v, c.pos.v);
         assert_cursor_boundary(tb, &c);
     }
-    yew_cursor_right(tb, &c, 4U);
+    yew_cursor_right(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, boundaries[YEW_ARRAY_LEN(boundaries) - 1U]);
     for (i = YEW_ARRAY_LEN(boundaries) - 1U; i > 0U; i--) {
-        yew_cursor_left(tb, &c, 4U);
+        yew_cursor_left(tb, &c);
         YEW_ASSERT_EQ_U64(c.pos.v, boundaries[i - 1U]);
         assert_cursor_boundary(tb, &c);
     }
-    yew_cursor_left(tb, &c, 4U);
+    yew_cursor_left(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 0U);
     yew_textbuf_free(tb);
 }
@@ -92,12 +92,12 @@ void test_cursor_horizontal_resolves_vertical_clamp(void)
      * since HEAD; both vertical paths now answer alike. */
     YEW_ASSERT_EQ_U64(c.pos.v, 9U);
     YEW_ASSERT_EQ_U64(c.goal_col.v, 5U);
-    yew_cursor_right(tb, &c, 4U);
+    yew_cursor_right(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 9U);
-    YEW_ASSERT_EQ_U64(c.goal_col.v, 2U);
-    yew_cursor_left(tb, &c, 4U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 2U);
+    yew_cursor_left(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 8U);
-    YEW_ASSERT_EQ_U64(c.goal_col.v, 1U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 1U);
     assert_cursor_boundary(tb, &c);
     yew_textbuf_free(tb);
 }
@@ -108,25 +108,25 @@ void test_cursor_horizontal_recomputes_cross_line_and_edges(void)
     TextBuf *tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
     Cursor c = cursor_at(tb, 7U);
 
-    yew_cursor_left(tb, &c, 4U);
+    yew_cursor_left(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 6U);
-    YEW_ASSERT_EQ_U64(c.goal_col.v, 6U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 6U);
     yew_cursor_down(tb, &c, 4U);
     YEW_ASSERT_EQ_U64(c.pos.v, 13U);
 
     c.pos = BYTEOFF(0U);
     c.anchor = c.pos;
     c.goal_col = (CCol){99U};
-    yew_cursor_left(tb, &c, 4U);
+    yew_cursor_left(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 0U);
-    YEW_ASSERT_EQ_U64(c.goal_col.v, 0U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 0U);
 
     c.pos = BYTEOFF(sizeof(text) - 1U);
     c.anchor = c.pos;
     c.goal_col = (CCol){99U};
-    yew_cursor_right(tb, &c, 4U);
+    yew_cursor_right(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, sizeof(text) - 1U);
-    YEW_ASSERT_EQ_U64(c.goal_col.v, 10U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 10U);
     yew_textbuf_free(tb);
 }
 
@@ -152,9 +152,9 @@ void test_cursor_home_end_and_crlf(void)
     yew_cursor_buf_end(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, sizeof(text) - 1U);
     YEW_ASSERT_EQ_U64(c.goal_col.v, UINT64_MAX);
-    yew_cursor_left(tb, &c, 4U);
+    yew_cursor_left(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, sizeof(text) - 2U);
-    YEW_ASSERT_EQ_U64(c.goal_col.v, 3U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 3U);
     yew_cursor_buf_home(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 0U);
     YEW_ASSERT_EQ_U64(c.goal_col.v, 0U);
@@ -196,7 +196,7 @@ void test_cursor_motion_preserves_selection_anchor(void)
     Cursor c = cursor_at(tb, 2U);
 
     c.anchor = BYTEOFF(0U);
-    yew_cursor_right(tb, &c, 4U);
+    yew_cursor_right(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 3U);
     YEW_ASSERT_EQ_U64(c.anchor.v, 0U);
     yew_cursor_down(tb, &c, 4U);
@@ -246,8 +246,8 @@ void test_cursor_motion_fuzz_four_seeds(void)
 
         for (i = 0U; i < 10000U; i++) {
             switch (cursor_rng(&state) % 10U) {
-            case 0U: yew_cursor_left(tb, &c, 4U); break;
-            case 1U: yew_cursor_right(tb, &c, 4U); break;
+            case 0U: yew_cursor_left(tb, &c); break;
+            case 1U: yew_cursor_right(tb, &c); break;
             case 2U: yew_cursor_up(tb, &c, 4U); break;
             case 3U: yew_cursor_down(tb, &c, 4U); break;
             case 4U: yew_cursor_line_home(tb, &c); break;
@@ -320,9 +320,9 @@ void test_cursor_vertical_goal_counts_tab_cells(void)
     /* Stepping onto the `v` must record its screen column, cell 4. */
     c.pos = BYTEOFF(13U);
     c.anchor = c.pos;
-    yew_cursor_right(tb, &c, 4U);
+    yew_cursor_right(tb, &c);
     YEW_ASSERT_EQ_U64(c.pos.v, 14U);
-    YEW_ASSERT_EQ_U64(c.goal_col.v, 4U);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 4U);
 
     /* Up lands under the `v`, on the `f` of `fn`. */
     yew_cursor_up(tb, &c, 4U);
@@ -391,5 +391,50 @@ void test_cursor_vertical_goal_past_the_end_clamps_after_the_last(void)
     yew_cursor_down(tb, &c, 4U);
     YEW_ASSERT_EQ_U64(c.pos.v, 50U);
     assert_cursor_boundary(tb, &c);
+    yew_textbuf_free(tb);
+}
+
+/*
+ * The goal is a cell column, and cells have no index behind them, so
+ * measuring one walks the line.  Horizontal motion therefore records
+ * YEW_CCOL_HERE -- "wherever I am" -- and the first vertical motion
+ * measures once and keeps the answer.  Keeping it is the whole point: a
+ * goal that re-read the caret's column on every step would stop being
+ * sticky the moment it crossed a short line.
+ */
+void test_cursor_goal_is_lazy_until_a_vertical_motion(void)
+{
+    static const u8 text[] =
+        "    abcdefgh\n"     /* [0,13)  cell 11 is `h` at 11          */
+        "x\n"                /* [13,15) content ends at 14, cell 1    */
+        "\tvar acc = zero";  /* [15,30) cell 11 is the space at 23    */
+    TextBuf *tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
+    Cursor c;
+
+    (void)memset(&c, 0, sizeof(c));
+    c.pos = BYTEOFF(10U);
+    c.anchor = c.pos;
+    yew_cursor_right(tb, &c);
+    YEW_ASSERT_EQ_U64(c.pos.v, 11U);
+    /* No number was written ... */
+    YEW_ASSERT_EQ_U64(c.goal_col.v, YEW_CCOL_HERE);
+    /* ... but the resolver reads the caret's own column. */
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 11U);
+
+    /* The first vertical motion measures once and stores the answer. */
+    yew_cursor_down(tb, &c, 4U);
+    YEW_ASSERT_EQ_U64(c.pos.v, 14U);
+    YEW_ASSERT_EQ_U64(c.goal_col.v, 11U);
+
+    /* And keeps it: cell 11 on the tab-indented line, not cell 1. */
+    yew_cursor_down(tb, &c, 4U);
+    YEW_ASSERT_EQ_U64(c.pos.v, 23U);
+    YEW_ASSERT_EQ_U64(c.goal_col.v, 11U);
+    assert_cursor_boundary(tb, &c);
+
+    /* A horizontal step drops the remembered column again. */
+    yew_cursor_left(tb, &c);
+    YEW_ASSERT_EQ_U64(c.goal_col.v, YEW_CCOL_HERE);
+    YEW_ASSERT_EQ_U64(yew_cursor_goal(tb, &c, 4U).v, 10U);
     yew_textbuf_free(tb);
 }

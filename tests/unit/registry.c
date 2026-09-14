@@ -217,6 +217,7 @@ const YewTest yew_tests[] = {
     T(cursor_vertical_goal_counts_tab_cells),
     T(cursor_vertical_goal_rounds_left_inside_a_tab),
     T(cursor_vertical_goal_past_the_end_clamps_after_the_last),
+    T(cursor_goal_is_lazy_until_a_vertical_motion),
     T(mark_bias_table),
     T(mark_generational_handles),
     T(mark_random_oracle),

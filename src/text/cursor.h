@@ -7,6 +7,15 @@
 #include "unicode/coords.h"
 
 #define YEW_CCOL_EOL UINT64_MAX
+/*
+ * "Wherever the caret is": an UNRESOLVED goal, standing for the cell
+ * column of `pos` on whatever line `pos` is on right now.  Horizontal
+ * motion sets this instead of measuring; the next vertical motion
+ * measures once and stores the answer, after which the goal is a real
+ * column and stays sticky across short lines.  `yew_cursor_goal` is the
+ * one place that resolves it.
+ */
+#define YEW_CCOL_HERE (UINT64_MAX - 1U)
 
 /*
  * `goal_col` is a CELL column: the screen column the caret is trying to
@@ -30,11 +39,21 @@
  * travelled the wronger it gets.  A remembered column has to be remembered
  * in the units it will later be compared in.
  *
+ * It is RESOLVED LAZILY because cells, unlike graphemes, have no index
+ * behind them: `yew_off_to_gcol` reaches a checkpoint and walks a few
+ * clusters, while `yew_off_to_ccol` walks the line.  On an 8 MiB single
+ * line that is 6 microseconds against 244 milliseconds, so measuring a
+ * cell column on every LEFT and RIGHT would put a quarter-second scan on
+ * every arrow key (perf-cursor is the gate that says so).  Only vertical
+ * motion needs the number, and it is already paying a line walk to turn
+ * the goal back into an offset, so that is where the measuring belongs.
+ * Horizontal motion writes YEW_CCOL_HERE and moves on.
+ *
  * A tab's cell width belongs to the buffer, so every conversion takes the
  * width the renderer uses for that buffer -- `Buffer.tabwidth`, and
  * YEW_VP_TABWIDTH when that is zero.  The motions below are the text
- * layer's, below Buffer, so they take the width as a parameter.  Callers
- * that hold a Win take it from `win->buf`.
+ * layer's, below Buffer, so the vertical pair takes the width as a
+ * parameter.  Callers that hold a Win take it from `win->buf`.
  *
  * YEW_CCOL_EOL is "past the end of any line": it resolves to each line's
  * content end.  Zero still means column zero under either representation,
@@ -48,8 +67,12 @@ typedef struct Cursor {
 
 _Static_assert(sizeof(Cursor) == 24U, "cursor layout changed");
 
-void yew_cursor_left(const TextBuf *tb, Cursor *c, u32 tabw);
-void yew_cursor_right(const TextBuf *tb, Cursor *c, u32 tabw);
+/* The cell column `c` is aiming at, resolving YEW_CCOL_HERE against the
+ * line `c->pos` is on.  Every reader of `goal_col` goes through this. */
+CCol yew_cursor_goal(const TextBuf *tb, const Cursor *c, u32 tabw);
+
+void yew_cursor_left(const TextBuf *tb, Cursor *c);
+void yew_cursor_right(const TextBuf *tb, Cursor *c);
 void yew_cursor_up(const TextBuf *tb, Cursor *c, u32 tabw);
 void yew_cursor_down(const TextBuf *tb, Cursor *c, u32 tabw);
 void yew_cursor_line_home(const TextBuf *tb, Cursor *c);

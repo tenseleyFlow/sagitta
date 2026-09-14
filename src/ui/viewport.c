@@ -795,8 +795,9 @@ static void cursor_to_row(Win *w, u16 target)
             target_row.lo < target_row.hi)
             pos = yew_grapheme_prev_boundary(tb, pos);
     } else {
-        pos = yew_ccol_to_off_padded(tb, span, cursor->goal_col,
-                                     vp_goal_tabwidth(w));
+        pos = yew_ccol_to_off_padded(
+            tb, span, yew_cursor_goal(tb, cursor, vp_goal_tabwidth(w)),
+            vp_goal_tabwidth(w));
     }
     cursor->pos = pos;
     if (w->vp.wrap)

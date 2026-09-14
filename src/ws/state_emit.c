@@ -520,6 +520,25 @@ static void emit_jumps(StateEmit *e, const Ed *ed, const Win *w)
     state_map_close(e);
 }
 
+/*
+ * An unresolved goal (YEW_CCOL_HERE) has no number to write, and the
+ * format should not learn a second sentinel for it, so it is resolved
+ * against the caret's own line here.  text/cursor.h says why it is lazy.
+ * A window with no text to measure against has only column zero to give.
+ */
+static i64 state_cursor_goal(const Win *w, const Cursor *c)
+{
+    u32 tabw;
+
+    if (c->goal_col.v != YEW_CCOL_HERE)
+        return yew_goal_to_i64(c->goal_col.v);
+    if (w->buf == NULL || w->buf->tb == NULL)
+        return 0;
+    tabw = w->buf->tabwidth != 0U ? w->buf->tabwidth
+                                  : (u32)YEW_VP_TABWIDTH;
+    return yew_goal_to_i64(yew_cursor_goal(w->buf->tb, c, tabw).v);
+}
+
 static void emit_win(StateEmit *e, const Ed *ed, const Win *w)
 {
     u32 i;
@@ -533,7 +552,7 @@ static void emit_win(StateEmit *e, const Ed *ed, const Win *w)
         state_map_open(e, NULL);
         state_int(e, "pos", (i64)c->pos.v);
         state_int(e, "anchor", (i64)c->anchor.v);
-        state_int(e, "goal", yew_goal_to_i64(c->goal_col.v));
+        state_int(e, "goal", state_cursor_goal(w, c));
         state_retained_unknown(e, &ed->state, YEW_STATE_REC_CURSOR, w->id,
                                w->cs.stamps.data[i]);
         state_map_close(e);
