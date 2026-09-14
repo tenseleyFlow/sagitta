@@ -78,7 +78,7 @@ recorded in `audit-00.md`.
 | YEW-F-063 | M | fixed | F15 CI | ~~register-helper presence gate accepts comments~~ — fixed 2026-09-14 in `f36b1e1e` | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
 | YEW-F-064 | M | fixed | F15 CI | ~~oracle-independence ban accepts copied renamed models~~ — fixed 2026-09-14 in `e79f2414` | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
 | YEW-F-065 | M | fixed | F15 CI | ~~generated-table ban verifies only a retained marker~~ — fixed 2026-09-14 in `471a5064` | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
-| YEW-F-066 | M | open | F15 CI | termination-site ban omits `_Exit` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
+| YEW-F-066 | M | fixed | F15 CI | ~~termination-site ban omits `_Exit`~~ — fixed 2026-09-14 in `4dc257b5` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
 | YEW-F-067 | M | open | F15 CI | AI-body logging ban depends on variable names | tests/audit/f15_ban_misses.c | s50 privacy gate; s58 F15 q2 |
 | YEW-F-068 | M | open | F15 CI | unit-registry ban omits static test definitions | tests/audit/f15_ban_misses.c | s01 explicit registry; s58 F15 q2 |
 | YEW-F-069 | M | open | F15 CI | PTY minimum-case gate skips a missing registry | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
@@ -585,9 +585,10 @@ manual table edit satisfied the entire generated-UCD check. Commit `471a5064`
 pins the exact `tables.c` digest produced by the offline regeneration lane;
 local regeneration of all four vendored-UCD outputs was byte-identical.
 
-`YEW-F-066` is Medium because `_Exit` terminates the process outside
-`yew_bug` without matching the lowercase `exit()` scanner. This is a control
-gap rather than a product termination path and remains open for Sprint 59.
+`YEW-F-066` was Medium because `_Exit` terminated the process outside
+`yew_bug` without matching the lowercase `exit()` scanner. Commit `4dc257b5`
+checks both spellings by exact function owner while preserving audited
+post-fork `_exit` calls.
 
 `YEW-F-067` is Medium because the AI privacy scanner infers body data from a
 small list of identifier substrings. Renaming the bytes and logging them
