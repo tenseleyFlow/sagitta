@@ -468,6 +468,10 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
 {
     FrameScan scan = {0};
 
+    /* YEW-F-072: a failed evidence run must distinguish a silent child from
+     * a malformed causality tag.  The old umbrella "transport failed"
+     * erased the only evidence needed to tell an editor stall from a broken
+     * PTY parser, encouraging blind retries on the designated runners. */
     (void)memset(out, 0, sizeof(*out));
     while (yew_live_pty_now_ns() < deadline) {
         struct pollfd fd = {pty->master, POLLIN | POLLHUP, 0};
@@ -478,15 +482,31 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
 
         if (result < 0 && errno == EINTR)
             continue;
-        if (result <= 0)
+        if (result <= 0) {
+            (void)fprintf(stderr,
+                          "perf_latency: frame poll %s frames=%llu "
+                          "partial_tag=%u/%zu partial_frame=%zu\n",
+                          result == 0 ? "timed out" : strerror(errno),
+                          (unsigned long long)out->frames,
+                          (unsigned)scan.tag_field, scan.tag_matched,
+                          scan.frame_matched);
             return false;
+        }
         n = read(pty->master, data, sizeof(data));
         if (n < 0 && errno == EINTR)
             continue;
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
             continue;
-        if (n <= 0)
+        if (n <= 0) {
+            (void)fprintf(stderr,
+                          "perf_latency: frame read %s revents=0x%x "
+                          "frames=%llu partial_tag=%u/%zu partial_frame=%zu\n",
+                          n == 0 ? "closed" : strerror(errno), fd.revents,
+                          (unsigned long long)out->frames,
+                          (unsigned)scan.tag_field, scan.tag_matched,
+                          scan.frame_matched);
             return false;
+        }
         read_ns = yew_live_pty_now_ns();
         if (read_ns < 0)
             return false;
@@ -495,8 +515,17 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
             FrameScanResult scan_result =
                 scan_frame_bytes(&scan, data, (size_t)n, out);
 
-            if (scan_result == FRAME_SCAN_INVALID)
+            if (scan_result == FRAME_SCAN_INVALID) {
+                (void)fprintf(stderr,
+                              "perf_latency: invalid frame tag fields=%u "
+                              "keys=%u visible=%u digit=%u frames=%llu\n",
+                              (unsigned)scan.tag_field,
+                              (unsigned)scan.tag_keys,
+                              (unsigned)scan.tag_visible,
+                              scan.tag_digit ? 1U : 0U,
+                              (unsigned long long)out->frames);
                 return false;
+            }
             if (scan_result == FRAME_SCAN_MORE)
                 continue;
             out->painted = scan_result == FRAME_SCAN_PAINT;
