@@ -90,7 +90,7 @@ recorded in `audit-00.md`.
 | YEW-F-075 | C | fixed | F15 CI | ~~stripped builds accept module-only config as inert state~~ — fixed 2026-09-13 in `ee6f9894` | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
 | YEW-F-076 | M | fixed | F03 TEXT | ~~accepted unsaved undo sidecars are not byte-canonical~~ — fixed 2026-09-14 in `4c887676` | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
 | YEW-F-077 | M | fixed | F03 TEXT | ~~rectangular yank omits required short-row padding~~ — fixed 2026-09-14 in `792e32d8` | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
-| YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
+| YEW-F-078 | M | fixed | F03 TEXT | ~~crash journal admits a same-metadata replacement inode~~ — fixed 2026-09-14 in `f65eea0d` | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
@@ -696,7 +696,15 @@ edit into the replacement instead of recovering the exact intended buffer.
 The reproducer retains two hardlinks to the original base, so both the
 mismatch and the correct recovery source remain observable and recoverable.
 No disk file is silently overwritten by replay, making this Medium rather
-than Critical. It remains open for Sprint 59; no product source changed.
+than Critical. Commit `f65eea0d` extends the journal header with device/inode
+identity and creates a durable base companion before the header is committed.
+The normal same-filesystem path is a constant-space hardlink; a cross-device
+fallback is a private CRC-authenticated copy. Replay of a replacement restores
+that exact base before applying the journal, while save topology discounts
+only the known active recovery link. Unsupported legacy logs and their bases
+are preserved under collision-free stale names instead of being truncated.
+The exact `Xalpha\n` reproducer, companion lifecycle units, the complete audit
+suite, and a 200-process randomized kill campaign all pass.
 
 `YEW-F-079` was Critical because Sprint 25's forward-compatibility contract is
 not limited to singleton maps: every entity record carries user-owned

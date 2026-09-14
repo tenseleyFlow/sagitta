@@ -88,7 +88,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-075 | audit | `tests/audit/yew_f_075.c` | ~~stripped builds accept module-only config as inert state~~ — fixed in `ee6f9894` | fixed |
 | YEW-F-076 | audit | `tests/audit/yew_f_076.c` | ~~accepted unsaved undo sidecars are not byte-canonical~~ — fixed in `4c887676` | fixed |
 | YEW-F-077 | audit | `tests/audit/yew_f_077.c` | ~~rectangular yank omits required short-row padding~~ — fixed in `792e32d8` | fixed |
-| YEW-F-078 | audit | `tests/audit/yew_f_078.c` | crash journal admits a same-metadata replacement inode | open |
+| YEW-F-078 | audit | `tests/audit/yew_f_078.c` | ~~crash journal admits a same-metadata replacement inode~~ — fixed in `f65eea0d` | fixed |
 | YEW-F-079 | audit | `tests/audit/yew_f_079.c` | ~~workspace re-emission drops unknown entity-record fields~~ — fixed in `9222b491` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
