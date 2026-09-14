@@ -173,9 +173,10 @@ FIXTURE_MANIFEST ?= tests/perf/fixtures.sha
 PERF_RUNNER_ID ?= local-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
 # YEW-F-072: strip indentation from the conditional so a default designated
 # path cannot acquire a leading space and redirect evidence outside tests/.
-PERF_BASELINE ?= $(strip $(if $(filter perf-arm64-linux,$(PERF_RUNNER_ID)),\
+perf_baseline_default = $(strip $(if $(filter perf-arm64-linux,$(1)),\
                     tests/perf/baselines/perf-arm64-linux.txt,\
                     tests/perf/baselines/perf-x86_64-linux-gnu.txt))
+PERF_BASELINE ?= $(call perf_baseline_default,$(PERF_RUNNER_ID))
 PERF_COMPONENT_LIMITS ?= tests/perf/component-limits.txt
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
@@ -1139,7 +1140,7 @@ endif
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-huge-components \
         perf-update perf-noise perf-baseline-guard \
-        perf-default-path-print perf-default-path-selftest \
+        perf-default-path-selftest \
         perf-baseline-selftest \
         perf-gate-selftest perf-latency perf-latency-selftest \
         perf-s56-functional perf-s56-observation \
@@ -3157,15 +3158,10 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
 	scripts/tests/perf-noise-floor.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
 
-perf-default-path-print:
-	@printf '%s\n' '$(PERF_BASELINE)'
-
 perf-default-path-selftest:
 	@set -eu; \
-	x86=$$($(MAKE) --no-print-directory -s perf-default-path-print \
-		PERF_RUNNER_ID=perf-x86_64-linux-gnu); \
-	arm=$$($(MAKE) --no-print-directory -s perf-default-path-print \
-		PERF_RUNNER_ID=perf-arm64-linux); \
+	x86='$(call perf_baseline_default,perf-x86_64-linux-gnu)'; \
+	arm='$(call perf_baseline_default,perf-arm64-linux)'; \
 	test "$$x86" = tests/perf/baselines/perf-x86_64-linux-gnu.txt; \
 	test "$$arm" = tests/perf/baselines/perf-arm64-linux.txt; \
 	echo 'perf default paths: ok'
