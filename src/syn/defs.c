@@ -2980,6 +2980,16 @@ static struct timespec source_stat_mtime(const struct stat *st)
 #endif
 }
 
+static bool cache_source_metadata_matches(const u8 *header,
+                                          const struct stat *st)
+{
+    struct timespec mtime = source_stat_mtime(st);
+
+    return get64(header + 24U) == (u64)mtime.tv_sec &&
+           get64(header + 32U) == (u64)mtime.tv_nsec &&
+           get64(header + 40U) == (u64)st->st_size;
+}
+
 static bool cache_write(const char *path, const struct stat *st,
                         const u8 *src, size_t src_len, const u8 *blob,
                         size_t blob_len)
@@ -3165,25 +3175,11 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
             yew_log(YEW_LOG_WARN, "syntax cache corrupt; recompiling %s",
                     path);
             cache_warned = true;
-        } else if (valid_cache && !source_loaded &&
-                   get64(cached.data + 24U) ==
-                       (u64)source_stat_mtime(&src_st).tv_sec &&
-                   get64(cached.data + 32U) ==
-                       (u64)source_stat_mtime(&src_st).tv_nsec &&
-                   get64(cached.data + 40U) == (u64)src_st.st_size) {
-            file_id = fl_diag_add_file(dc, path, "", 0U);
-            (void)file_id;
-            def = syn_blob_unpack(a,
-                                  cached.data + YEW_SYN_CACHE_HEADER_SIZE,
-                                  blob_len, path, expected_name);
-            if (def != NULL)
-                goto done;
-            yew_log(YEW_LOG_WARN,
-                    "syntax cache tables invalid; recompiling %s", path);
-            cache_warned = true;
-            valid_cache = false;
         }
     }
+    /* YEW-F-011: size and nanosecond mtime can be restored after replacing a
+     * definition.  Hash the source before accepting any cached tables; the
+     * metadata remains only a reason to refresh an otherwise valid header. */
     if (!source_loaded && !read_whole(path, &source, &src_st)) {
         file_id = fl_diag_add_file(dc, path, "", 0U);
         fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
@@ -3196,7 +3192,8 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
         def = syn_blob_unpack(a, cached.data + YEW_SYN_CACHE_HEADER_SIZE,
                               blob_len, path, expected_name);
         if (def != NULL) {
-            if (!cache_write(cache_path, &src_st, source.data, source.len,
+            if (!cache_source_metadata_matches(cached.data, &src_st) &&
+                !cache_write(cache_path, &src_st, source.data, source.len,
                              cached.data + YEW_SYN_CACHE_HEADER_SIZE,
                              blob_len))
                 yew_log(YEW_LOG_WARN,
