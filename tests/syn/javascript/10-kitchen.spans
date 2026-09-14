@@ -183,6 +183,8 @@ line 13 entry=typescript:main exit=typescript:main
   13:29-34 attr=variable context=typescript:main
   13:34-35 attr=punct.bracket context=typescript:main
   13:35-36 attr=punct.delim context=typescript:main
+  13:36-37 attr=text context=typescript:main
+  13:37-111 attr=comment context=typescript:main
 line 14 entry=typescript:main exit=typescript:main
   14:0-3 attr=comment context=typescript:main
   14:3-7 attr=comment.todo context=typescript:block_comment
