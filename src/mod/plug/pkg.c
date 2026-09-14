@@ -1279,8 +1279,9 @@ static void pkg_job_destroy(void *owner)
     (void)owner;
 }
 
-bool yew_pkg_git(const char *const *argv, u32 nargv, i64 timeout_ms,
-                 bool c_locale, GitRun *out)
+/* YEW-F-060: keep raw Git execution private to the package command. */
+static bool pkg_git(const char *const *argv, u32 nargv, i64 timeout_ms,
+                    bool c_locale, GitRun *out)
 {
     static const YewJobCallbackOps ops = {pkg_job_complete, pkg_job_destroy};
     static const char *const env_set_c[] = {
@@ -1366,7 +1367,7 @@ static char *pkg_buf_string(const Bytebuf *buf)
 static bool pkg_run_ok(const char *const *argv, u32 nargv, i64 timeout,
                        bool c_locale, GitRun *run, const char *op)
 {
-    if (!yew_pkg_git(argv, nargv, timeout, c_locale, run)) {
+    if (!pkg_git(argv, nargv, timeout, c_locale, run)) {
         (void)fprintf(stderr, "yew pkg: error: cannot start git %s\n", op);
         return false;
     }
@@ -2321,7 +2322,7 @@ static void pkg_doctor_paths(const PkgEntry *entry, const char *dir)
     u32 shown = 0U;
     bool truncated = false;
 
-    if (yew_pkg_git(diff_argv, YEW_ARRAY_LEN(diff_argv), 10000, true, &run) &&
+    if (pkg_git(diff_argv, YEW_ARRAY_LEN(diff_argv), 10000, true, &run) &&
         run.status == 0) {
         text = pkg_buf_string(&run.out);
         save = NULL;
@@ -2340,8 +2341,8 @@ static void pkg_doctor_paths(const PkgEntry *entry, const char *dir)
         yew_xfree(text);
     }
     yew_pkg_git_run_free(&run);
-    if (yew_pkg_git(other_argv, YEW_ARRAY_LEN(other_argv), 10000, true,
-                    &run) && run.status == 0) {
+    if (pkg_git(other_argv, YEW_ARRAY_LEN(other_argv), 10000, true, &run) &&
+        run.status == 0) {
         text = pkg_buf_string(&run.out);
         save = NULL;
         for (line = strtok_r(text, "\n", &save); line != NULL;
@@ -3014,7 +3015,7 @@ static int pkg_update(int argc, char **argv)
             const char *const ff[] = {"git", "-C", dir, "merge-base",
                                       "--is-ancestor", "--end-of-options",
                                       entry->rev, target};
-            if (!yew_pkg_git(ff, YEW_ARRAY_LEN(ff), 10000, true, &run)) {
+            if (!pkg_git(ff, YEW_ARRAY_LEN(ff), 10000, true, &run)) {
                 yew_xfree(dir);
                 failed = true;
                 continue;

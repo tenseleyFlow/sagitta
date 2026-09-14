@@ -211,17 +211,6 @@ void yew_pkg_git_run_free(GitRun *run)
     (void)memset(run, 0, sizeof(*run));
 }
 
-bool yew_pkg_git(const char *const *argv, u32 nargv, i64 timeout_ms,
-                 bool c_locale, GitRun *out)
-{
-    (void)argv;
-    (void)nargv;
-    (void)timeout_ms;
-    (void)c_locale;
-    (void)out;
-    return false;
-}
-
 bool yew_pkg_resolve_spec(const char *spec, Bytebuf *url, DiagCtx *dc)
 {
     (void)spec;
