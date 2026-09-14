@@ -52,7 +52,7 @@ recorded in `audit-00.md`.
 | YEW-F-037 | M | fixed | F15 CI | ~~realpath-allocation ban requires literal NULL spelling~~ — fixed 2026-09-14 in `16441f04` | tests/audit/f15_ban_misses.c | s57 section 3; s58 F15 q2 |
 | YEW-F-038 | M | fixed | F15 CI | ~~locale-dependent Unicode ban omits `mbtowc`~~ — fixed 2026-09-14 in `af94a8c1` | tests/audit/f15_ban_misses.c | s19 portability law; s58 F15 q2 |
 | YEW-F-039 | M | fixed | F15 CI | ~~native-loader ban omits `dlvsym`~~ — fixed 2026-09-14 in `f09c70e0` | tests/audit/f15_ban_misses.c | s54 Fletch-only plugin law; s58 F15 q2 |
-| YEW-F-040 | M | open | F15 CI | strerror_r ban accepts macro-forwarded calls | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
+| YEW-F-040 | M | fixed | F15 CI | ~~strerror_r ban accepts macro-forwarded calls~~ — fixed 2026-09-14 in `1cac4adf` | tests/audit/f15_ban_misses.c | s57 portability audit; s58 F15 q2 |
 | YEW-F-041 | M | open | F15 CI | musl backtrace ban omits `backtrace_symbols_fd` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-042 | M | open | F15 CI | GNU-libc ban omits `getopt_long_only` | tests/audit/f15_ban_misses.c | s57 musl profile; s58 F15 q2 |
 | YEW-F-043 | M | open | F15 CI | long-double ban misses valid continued declarations | tests/audit/f15_ban_misses.c | s57 ABI audit; s58 F15 q2 |
@@ -439,10 +439,10 @@ omitted the GNU versioned lookup `dlvsym`. Commit `f09c70e0` adds the versioned
 resolver to the Fletch-only plugin boundary and pins the omission with a
 dedicated positive control.
 
-`YEW-F-040` is Medium because a macro-forwarded `strerror_r` call preserves
-the incompatible ABI surface while evading the direct-call regex. The product
-tree has no demonstrated violation; the portability control remains open for
-Sprint 59.
+`YEW-F-040` was Medium because a macro-forwarded `strerror_r` call preserved
+the incompatible ABI surface while evading the direct-call regex. Commit
+`1cac4adf` rejects object-like aliases naming `strerror_r` and adds an
+alias-specific positive control alongside the direct-call control.
 
 `YEW-F-041` is Medium because `backtrace_symbols_fd` is part of the same
 glibc/execinfo family but is absent from the musl-compatibility pattern. The

@@ -405,11 +405,15 @@ scan_seed "native-dynamic-loading" "$dynamic_loader_pattern" \
     'void seeded(void) { (void)dlopen(path, flags); }'
 scan_seed "versioned native-symbol loading" "$dynamic_loader_pattern" \
     'void seeded(void) { (void)dlvsym(handle, "name", "V1"); }'
-strerror_r_pattern='(^|[^[:alnum:]_])strerror_r[[:space:]]*\('
+# YEW-F-040: an object-like strerror_r alias preserves the incompatible GNU
+# versus POSIX ABI and must not evade the portability boundary.
+strerror_r_pattern='(^|[^[:alnum:]_])strerror_r[[:space:]]*\(|^[[:space:]]*#[[:space:]]*define[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]+strerror_r([^[:alnum:]_]|$)'
 scan "strerror_r has incompatible GNU and POSIX ABIs; use strerror" \
     "$strerror_r_pattern" "$source_files"
 scan_seed "strerror_r" "$strerror_r_pattern" \
     'void seeded(void) { (void)strerror_r(code, buf, sizeof(buf)); }'
+scan_seed "strerror_r macro forwarding" "$strerror_r_pattern" \
+    '#define ERROR_TEXT strerror_r'
 backtrace_pattern='(execinfo\.h|(^|[^[:alnum:]_])(backtrace|backtrace_symbols)[[:space:]]*\()'
 scan "glibc backtrace APIs are unavailable in the musl profile" \
     "$backtrace_pattern" "$source_files"
