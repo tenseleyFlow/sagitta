@@ -103,7 +103,7 @@ This table is normative and frozen at plugin API 1:
 |---|---|---|---|
 | `ctx.name` | str | — | manifest name; the option and command namespace |
 | `ctx.on(event, fn)` | → nil | `REG_HOOK` | event must be in API 1's frozen table **and** in the manifest `events` |
-| `ctx.command(name, fn, opts?)` | → nil | `REG_CMD` | registers `ed.plug.<normalized-name>.<name>` in the one registry; hyphens in the plugin name become underscores; `opts` carries command flags |
+| `ctx.command(name, fn, opts?)` | → nil | `REG_CMD` | registers the recordable `ed.plug.<normalized-name>.<name>` in the one registry; `name` is its globally unique CMDWORD; hyphens in the plugin name become underscores; `opts` carries command flags |
 | `ctx.bind(mode, seq, target)` | → nil | `REG_BIND` | target = command name or closure; stacks in the plugin layer above the user's |
 | `ctx.set(map)` | → nil | `REG_OPTION` | declares `plug.<name>.<key>` with defaults; read with `opt.get` |
 | `ctx.attr(name)` | → int | `REG_ATTR` | resolves a syntax attribute name; unknown name = init-time error |
@@ -114,7 +114,10 @@ This table is normative and frozen at plugin API 1:
 
 `ctx.command` accepts the boolean flags `repeatable`, `takes_count`,
 `needs_win`, `changes_buffer`, and `prompts`. `repeatable` and `takes_count`
-cannot both be true. `recordable` and `deferred` are host-only.
+cannot both be true. Every plugin command is recordable and replayable by its
+`[a-z][a-z0-9_]{0,15}` local name, which cannot collide with core motion words
+or another enabled plugin. `recordable` is therefore not an option;
+`deferred` remains reserved for host commands.
 
 ## 4. Capabilities and consent
 

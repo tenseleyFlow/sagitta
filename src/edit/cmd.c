@@ -1486,6 +1486,15 @@ static bool help_names_sprint(const char *help)
     return isdigit((unsigned char)*p) != 0;
 }
 
+static bool cmdword_is_motion_syntax(const char *word, size_t len)
+{
+    static const char *const reserved[] = {
+        "l", "w", "b", "c", "v", "av", "del", "esc"
+    };
+
+    return word_in(word, len, reserved, YEW_ARRAY_LEN(reserved));
+}
+
 /*
  * Sprint 34 §3: the CMDWORD rules, enforced where a command is BORN.
  *
@@ -1522,6 +1531,8 @@ static void word_validate(const CmdDesc *d)
                 YEW_BUG("command %s has an invalid CMDWORD", d->name);
         }
     }
+    if (cmdword_is_motion_syntax(w, n))
+        YEW_BUG("command %s CMDWORD is reserved motion syntax", d->name);
 }
 
 static void desc_validate(const CmdDesc *d)
@@ -1769,6 +1780,11 @@ bool yew_cmd_register_plugin_flags(const char *plugin_segment,
         plugin_register_error(err, errcap, "invalid plugin command name");
         return false;
     }
+    if (local_len > 16U || cmdword_is_motion_syntax(local, local_len)) {
+        plugin_register_error(err, errcap,
+                              "plugin command name is not a valid CMDWORD");
+        return false;
+    }
     if (fn == NULL || help == NULL || help[0] == '\0') {
         plugin_register_error(err, errcap, "invalid plugin command descriptor");
         return false;
@@ -1794,7 +1810,16 @@ bool yew_cmd_register_plugin_flags(const char *plugin_segment,
         plugin_register_error(err, errcap, "plugin command already registered");
         return false;
     }
-    desc = (CmdDesc){name, fn, YEW_ARITY_NONE, flags, help, NULL};
+    /* YEW-F-023: plugin commands enter the same record/replay word map as
+     * core commands, so reject a collision before the fatal host invariant. */
+    existing = yew_cmd_by_word(local, (u32)local_len);
+    if (existing.v != 0U) {
+        plugin_register_error(err, errcap,
+                              "plugin command CMDWORD already registered");
+        return false;
+    }
+    desc = (CmdDesc){name, fn, YEW_ARITY_NONE,
+                     flags | YEW_CMD_RECORDABLE, help, local};
     *out = register_desc(&desc);
     if (err != NULL && errcap != 0U)
         err[0] = '\0';

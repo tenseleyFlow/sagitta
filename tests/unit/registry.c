@@ -2452,6 +2452,8 @@ const YewTest yew_tests[] = {
     T(plug_overlay_shape_clips_to_exclusive_visible_lines),
     T(plug_overlay_errors_are_contained_and_disabled_regs_do_not_run),
     T(plug_lifecycle_enable_passes_ctx_and_registers_command_and_hook),
+    T(plug_lifecycle_command_records_and_replays_by_cmdword),
+    T(plug_lifecycle_cmdword_collision_fails_init_cleanly),
     T(plug_lifecycle_capability_preflight_runs_bytecode_once),
     T(plug_lifecycle_failing_init_leaves_zero_residue_and_trace),
     T(plug_lifecycle_ctx_on_rejects_event_missing_from_manifest),

@@ -32,7 +32,7 @@ const YewAuditTest yew_audit_tests[] = {
 #if YEW_WITH_PLUGINS
     , A("YEW-F-021", YEW_AUDIT_PASS, test_yew_f_021)
     , A("YEW-F-022", YEW_AUDIT_PASS, test_yew_f_022)
-    , A("YEW-F-023", YEW_AUDIT_XFAIL, test_yew_f_023)
+    , A("YEW-F-023", YEW_AUDIT_PASS, test_yew_f_023)
 #endif
     , A("YEW-F-024", YEW_AUDIT_XFAIL, test_yew_f_024)
     , A("YEW-F-025", YEW_AUDIT_XFAIL, test_yew_f_025)

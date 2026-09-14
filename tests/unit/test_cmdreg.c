@@ -159,6 +159,7 @@ void test_cmd_registry_invocation_and_deferred(void)
     {
         static const char too_long[] =
             "abcdefghijklmnopqrstuvwxyzabcdefg";
+        static const char word_too_long[] = "abcdefghijklmnopq";
         char err[80];
         CmdId plugin = {(u32)999U};
         CmdId reactivated;
@@ -172,12 +173,19 @@ void test_cmd_registry_invocation_and_deferred(void)
             "sample", too_long, probe_repeat, "Plugin probe", &plugin, err,
             sizeof(err)));
         YEW_ASSERT_EQ_U64(plugin.v, YEW_CMD_NONE.v);
+        YEW_ASSERT(!yew_cmd_register_plugin(
+            "sample", word_too_long, probe_repeat, "Plugin probe", &plugin,
+            err, sizeof(err)));
+        YEW_ASSERT_NOT_NULL(strstr(err, "valid CMDWORD"));
         YEW_ASSERT(yew_cmd_register_plugin(
             "sample", "toggle", probe_repeat, "Plugin probe", &plugin, err,
             sizeof(err)));
         YEW_ASSERT(plugin.v != YEW_CMD_NONE.v);
         YEW_ASSERT_EQ_STR(yew_cmd_desc(plugin)->name,
                           "ed.plug.sample.toggle");
+        YEW_ASSERT_EQ_STR(yew_cmd_desc(plugin)->word, "toggle");
+        YEW_ASSERT((yew_cmd_desc(plugin)->flags & YEW_CMD_RECORDABLE) != 0U);
+        YEW_ASSERT_EQ_U64(yew_cmd_by_word("toggle", 6U).v, plugin.v);
         YEW_ASSERT_EQ_U64(yew_cmd_active_count(), active_before + 1U);
         YEW_ASSERT(!yew_cmd_register_plugin(
             "sample", "toggle", probe_repeat, "Plugin probe", &reactivated,
@@ -407,6 +415,8 @@ void test_cmd_registry_enforces_cmdwords(void)
     YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.word = "abcdefghijklmnopq";      /* 17 */
     YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
+    desc.word = "del";
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     /* Colliding with a word a builtin already owns. */
     desc.word = "yank";
     YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
@@ -443,8 +453,13 @@ void test_cmd_registry_word_roundtrip(void)
     YEW_ASSERT(yew_cmd_register_plugin(
         "audit_a", "probe", probe_repeat, "First audit plugin command",
         &plugin_a, err, sizeof(err)));
+    YEW_ASSERT(!yew_cmd_register_plugin(
+        "audit_b", "probe", probe_repeat, "Colliding plugin command",
+        &plugin_b, err, sizeof(err)));
+    YEW_ASSERT_EQ_U64(plugin_b.v, YEW_CMD_NONE.v);
+    YEW_ASSERT_NOT_NULL(strstr(err, "CMDWORD already registered"));
     YEW_ASSERT(yew_cmd_register_plugin(
-        "audit_b", "probe", probe_repeat, "Second audit plugin command",
+        "audit_b", "pulse", probe_repeat, "Second audit plugin command",
         &plugin_b, err, sizeof(err)));
     YEW_ASSERT(plugin_a.v != YEW_CMD_NONE.v);
     YEW_ASSERT(plugin_b.v != YEW_CMD_NONE.v);
@@ -483,6 +498,6 @@ void test_cmd_registry_word_roundtrip(void)
     YEW_ASSERT_EQ_U64(worded, recordable);
     YEW_ASSERT_EQ_U64(yew_cmd_by_word("no_such_word", 12U).v, 0U);
     YEW_ASSERT_EQ_U64(yew_cmd_by_word(NULL, 0U).v, 0U);
-    YEW_ASSERT_NULL(yew_cmd_desc(plugin_a)->word);
-    YEW_ASSERT_NULL(yew_cmd_desc(plugin_b)->word);
+    YEW_ASSERT_EQ_STR(yew_cmd_desc(plugin_a)->word, "probe");
+    YEW_ASSERT_EQ_STR(yew_cmd_desc(plugin_b)->word, "pulse");
 }

@@ -190,7 +190,9 @@ void test_plug_ctx_frozen_returns_flags_ws_attr_and_message(void)
     desc = yew_cmd_desc(id);
     YEW_ASSERT_NOT_NULL(desc);
     YEW_ASSERT_EQ_U64(desc->flags,
-                      YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN);
+                      YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN |
+                      YEW_CMD_RECORDABLE);
+    YEW_ASSERT_EQ_STR(desc->word, "pulse");
     message = f.ed.msg.full == NULL ? f.ed.msg.text : f.ed.msg.full;
     YEW_ASSERT_EQ_STR(message, "[ctx-surface] ready");
     YEW_ASSERT_EQ_U64(f.ed.msg.sev, YEW_MSG_WARN);
