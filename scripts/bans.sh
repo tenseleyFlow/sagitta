@@ -723,26 +723,131 @@ scan_seed "register-routing" "$register_set_pattern" \
     'void seeded(void) { yew_reg_set(regs, name, value); }'
 
 #
+# Report calls made outside an exact file:function owner set.  This is a
+# deliberately small C lexer, not a parser: it removes comments and literals,
+# tracks top-level function bodies, and leaves the compiler to parse C.  The
+# source subset bans attributes and statement expressions, which keeps the
+# ownership boundary unambiguous.
+c_call_owners()
+{
+    call_list=$1
+    call_pattern=$2
+    call_allowed=$3
+    call_out=$4
+    : >"$call_out"
+    while IFS= read -r file; do
+        case $file in
+            *.c) ;;
+            *) continue ;;
+        esac
+        call_path=${file#"$repo_dir"/}
+        awk -v path="$call_path" -v calls="$call_pattern" \
+            -v allowed=",$call_allowed," '
+            function scrub(s,    out, i, c, nextc) {
+                out = ""
+                for (i = 1; i <= length(s); i++) {
+                    c = substr(s, i, 1)
+                    nextc = substr(s, i + 1, 1)
+                    if (in_comment) {
+                        if (c == "*" && nextc == "/") {
+                            in_comment = 0
+                            out = out "  "
+                            i++
+                        } else {
+                            out = out " "
+                        }
+                    } else if (quote != "") {
+                        if (c == "\\") {
+                            out = out "  "
+                            i++
+                        } else {
+                            if (c == quote)
+                                quote = ""
+                            out = out " "
+                        }
+                    } else if (c == "/" && nextc == "*") {
+                        in_comment = 1
+                        out = out "  "
+                        i++
+                    } else if (c == "/" && nextc == "/") {
+                        while (length(out) < length(s))
+                            out = out " "
+                        break
+                    } else if (c == "\"" || c == single_quote) {
+                        quote = c
+                        out = out " "
+                    } else {
+                        out = out c
+                    }
+                }
+                return out
+            }
+            function function_name(header,    p, before, name) {
+                p = index(header, "(")
+                if (p == 0 || index(substr(header, 1, p), "=") != 0)
+                    return ""
+                before = substr(header, 1, p - 1)
+                sub(/[[:space:]]*$/, "", before)
+                name = before
+                sub(/^.*[^[:alnum:]_]/, "", name)
+                if (name !~ /^[[:alpha:]_][[:alnum:]_]*$/)
+                    return ""
+                return name
+            }
+            BEGIN {
+                single_quote = sprintf("%c", 39)
+                depth = 0
+                owner = ""
+                pending = ""
+            }
+            {
+                raw = $0
+                code = scrub(raw)
+                body = ""
+                if (depth == 0 && code ~ /^[[:space:]]*#/) {
+                    pending = ""
+                    code = ""
+                }
+                if (depth == 0) {
+                    open_at = index(code, "{")
+                    if (open_at != 0) {
+                        owner = function_name(pending " " \
+                                              substr(code, 1, open_at - 1))
+                        pending = ""
+                        if (owner != "")
+                            body = substr(code, open_at + 1)
+                    } else {
+                        pending = pending " " code
+                        if (index(code, ";") != 0)
+                            pending = ""
+                    }
+                } else if (owner != "") {
+                    body = code
+                }
+                if (owner != "" && body ~ calls &&
+                    index(allowed, "," path ":" owner ",") == 0)
+                    print path ":" NR ":" raw
+                opens = code
+                closes = code
+                gsub(/[^{]/, "", opens)
+                gsub(/[^}]/, "", closes)
+                depth += length(opens) - length(closes)
+                if (depth == 0)
+                    owner = ""
+            }
+        ' "$file" >>"$call_out"
+    done <"$call_list"
+}
+
 # Sprint 36 DoD 5: every option write goes through the one typed registry
-# choke point.  The registry implementation, its public declaration, and
-# the two specified front doors are the complete allow-list; a new caller
-# anywhere else would create a second origin/on-change policy surface.
-#
+# choke point.  YEW-F-059 showed that exempting entire implementation files
+# let a new wrapper launder writes, so this is an exact function-owner list.
 option_set_calls()
 {
-    option_list=$1
-    option_out=$2
-    : >"$option_out"
-    while IFS= read -r file; do
-        case ${file#"$repo_dir"/} in
-            src/edit/option.c|src/edit/option.h|src/fl/flapi.c|src/ui/cmdline.c)
-                continue
-                ;;
-        esac
-        grep -nE -e '(^|[^[:alnum:]_])yew_opt_set[[:space:]]*\(' \
-            "$file" 2>/dev/null |
-            sed "s|^|${file#"$repo_dir"/}:|" >>"$option_out" || :
-    done <"$option_list"
+    c_call_owners "$1" \
+        '(^|[^[:alnum:]_])(yew_opt_set|yew_opt_set_for)[[:space:]]*[(]' \
+        'src/edit/option.c:yew_opt_set,src/edit/option.c:builtin_set,src/fl/flapi.c:q_buf_opt_set,src/fl/flapi.c:fl_api_set_options,src/ui/cmdline.c:yew_opt_cmdline_set' \
+        "$2"
 }
 
 option_set_calls "$source_files" "$tmp/option-set-hits"
