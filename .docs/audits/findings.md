@@ -39,7 +39,7 @@ recorded in `audit-00.md`.
 | YEW-F-024 | M | fixed | F15 CI | ~~cross-surface XFAIL debt table stops at F004~~ — fixed 2026-09-14 in `56ce3f24` | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
 | YEW-F-025 | M | fixed | F15 CI | ~~script tests have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `da1f9cd0` | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
 | YEW-F-026 | M | fixed | F15 CI | ~~PTY cases have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `86ccb661` | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
-| YEW-F-027 | M | open | F15 CI | Fletch format ban accepts macro-forwarded nonliteral formats | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
+| YEW-F-027 | M | fixed | F15 CI | ~~Fletch format ban accepts macro-forwarded nonliteral formats~~ — fixed 2026-09-14 in `c371b5a4` | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
 | YEW-F-028 | M | open | F15 CI | Fletch abort ban accepts macro-forwarded abort | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
 | YEW-F-029 | M | open | F15 CI | stable-sort ban accepts macro-forwarded qsort | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
 | YEW-F-030 | M | open | F15 CI | C11-subset ban accepts token-pasted attribute syntax | tests/audit/f15_ban_misses.c | s01 section 6; s58 F15 q2 |
@@ -368,11 +368,13 @@ descriptor leaks remain hard failures. Update mode refuses marked cases. The
 runner self-check and an end-to-end match/mismatch/fixed-ID drill pin the
 classification and exit-status contract.
 
-`YEW-F-027` is Medium because the Fletch format scanner recognizes direct
-printf-family call tokens but accepts a macro-forwarded call carrying a
-nonliteral user-controlled format. The isolated fixture runs the actual gate
-and exits green. This weakens a documented control without proving a product
-violation, so the finding is Medium and remains open for Sprint 59.
+`YEW-F-027` was Medium because the Fletch format scanner recognized direct
+printf-family call tokens but accepted a macro-forwarded call carrying a
+nonliteral user-controlled format. Commit `c371b5a4` resolves object-like macro
+alias chains before classifying format sinks, so forwarding cannot hide the
+argument subject to the literal-format rule. The positive control pins a
+two-hop nonliteral alias as a violation while the same alias with a literal
+format and the bounded `va_list` forwarding exception remain accepted.
 
 `YEW-F-028` is Medium because the VM abort scanner accepts `abort()` reached
 through a plainly named macro. The compiler still emits the forbidden abort
