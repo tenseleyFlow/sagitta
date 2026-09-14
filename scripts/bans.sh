@@ -860,22 +860,16 @@ fi
 # Sprint 55 DoD 7: git belongs exclusively to the explicit `yew pkg`
 # subcommand.  Discovery may hash installed trees during editor startup,
 # but it must never spawn git (a captive portal must not be able to hang
-# opening an editor).  Keeping every call in pkg.c is a stronger and more
-# stable boundary than trying to enumerate today's startup-path files.
+# opening an editor).  YEW-F-060 showed that exempting pkg.c let it export a
+# laundering wrapper, so both the private spelling and its exact owners are
+# pinned here.
 #
 pkg_git_calls()
 {
-    pkg_git_list=$1
-    pkg_git_out=$2
-    : >"$pkg_git_out"
-    while IFS= read -r file; do
-        case ${file#"$repo_dir"/} in
-            src/mod/plug/pkg.c|src/mod/plug/pkg.h|src/mod/plug/shim.c) continue ;;
-        esac
-        grep -nE -e '(^|[^[:alnum:]_])yew_pkg_git[[:space:]]*\(' \
-            "$file" 2>/dev/null |
-            sed "s|^|${file#"$repo_dir"/}:|" >>"$pkg_git_out" || :
-    done <"$pkg_git_list"
+    c_call_owners "$1" \
+        '(^|[^[:alnum:]_])(yew_pkg_git|pkg_git)[[:space:]]*[(]' \
+        'src/mod/plug/pkg.c:pkg_run_ok,src/mod/plug/pkg.c:pkg_doctor_paths,src/mod/plug/pkg.c:pkg_update' \
+        "$2"
 }
 
 pkg_git_calls "$source_files" "$tmp/pkg-git-hits"
