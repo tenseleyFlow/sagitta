@@ -55,6 +55,11 @@ FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p,
 FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                  u32 file_id, FlOrigin origin);
 
+/* Macro-store variant: reject definitely unresolved global references
+ * without executing the candidate program or any of its side effects. */
+FlFn *fl_compile_macro(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                       u32 file_id, FlOrigin origin);
+
 /* As fl_compile, with one release-safe TRACE_LINE marker before each
  * top-level statement.  Batch profiling observes those markers; ordinary
  * scripts keep their bytecode unchanged. */

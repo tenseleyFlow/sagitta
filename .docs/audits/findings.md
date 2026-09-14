@@ -22,7 +22,7 @@ recorded in `audit-00.md`.
 | YEW-F-007 | C | fixed | F07 UI | ~~workspace restore reorders group members from tab-array order~~ — fixed 2026-09-13 in `bea3990b` | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
 | YEW-F-008 | H | fixed | F08 FL | ~~unprivileged plugin macro replay inherits config authority~~ — fixed 2026-09-13 in `8995bb1f` | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 | YEW-F-009 | M | fixed | F09 REC | ~~recorder folding self-test no longer reaches its injected fault~~ — fixed 2026-09-13 in `1c11ebee` | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
-| YEW-F-010 | M | open | F09 REC | macro store accepts source that fails on first replay | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
+| YEW-F-010 | M | fixed | F09 REC | ~~macro store accepts source that fails on first replay~~ — fixed 2026-09-13 in `c362cefd` | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
 | YEW-F-011 | M | open | F10 SYN | matching source metadata can retain stale syntax tables | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
 | YEW-F-012 | M | open | F10 SYN | pending embeds occupy a canonical state tail slot | tests/audit/yew_f_012.c | s41.5 §1 / DoD 5; s58 F10 q2 |
 | YEW-F-013 | M | open | F10 SYN | JS/TS known-wrong golden rows lack the heuristic comment | tests/audit/yew_f_013.c | s42 §9 / testing strategy; s58 F10 q9 |
@@ -210,15 +210,15 @@ and audit. `make test-roundtrip` now runs the planted fault and requires it to
 exit through `SELFTEST/P1`, shrink from 96 to at most three events, and name
 `ed.move.buf.end`; the ordinary legal-folding sentinel remains green.
 
-`YEW-F-010` is Medium because storing an invalid macro reports success, but
-its first replay fails. The failure is recoverable: the VM transaction rolls
-back the partial edit and preserves document bytes. `yew_macro_store`
-performs compile-only validation, so a syntactically valid program containing
-an unresolved global is accepted even though it cannot execute. The
-reproducer stores a macro that inserts text and then calls a missing function;
-store succeeds, replay returns `YEW_CMD_ERR_STATE`, and the buffer remains
-unchanged. It remains open for Sprint 59; no product source changed during
-the audit.
+`YEW-F-010` was Medium because storing an invalid macro reported success even
+though its first replay failed. Commit `c362cefd` gives the store path a
+side-effect-free strict compiler pass: free global references must resolve to
+a declaration in the candidate source, a persistent runtime global, or a
+prelude entry before the atomic register write. Forward references and live
+runtime helpers remain valid, while a definitely missing name produces a
+source-positioned diagnostic and leaves the old register untouched. The
+candidate is never executed during validation, so editor, shell, and I/O side
+effects still occur only on an explicit replay.
 
 `YEW-F-011` is Medium because an equal-size syntax source replacement whose
 nanosecond mtime is restored can retain the old compiled table. Highlighting
