@@ -209,6 +209,11 @@ bind("I", "S-<down>", "ed.sel.extend.down")
 bind("I", "C-v", "ed.clip.paste")
 bind("I", "<home>", "ed.move.line.home_toggle")
 bind("I", "<end>", "ed.move.line.end")
+# Ctrl+arrow is the LINE's start and end here, the same pair <home>/<end>
+# give above -- NOT the word jump the usual convention puts on Ctrl+arrow.
+# In yew the word jump is Alt+arrow (below), so leave these alone.
+bind("I", "C-<left>", "ed.move.line.home_toggle")
+bind("I", "C-<right>", "ed.move.line.end")
 
 # -- 4. H mode ----------------------------------------------------------
 # H-mode motions remain unit-sensitive: the C motion table is rebuilt when
