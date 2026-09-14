@@ -688,8 +688,13 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
      * below share the answer.  Leaving it unresolved would make the goal
      * mean "wherever the caret is" on every step, so a column would stop
      * being sticky the moment it crossed a short line.
+     *
+     * Not under wrap: there the motion steers by `Win.wrap_goal` and
+     * never reads this one, so resolving it would buy a line walk for
+     * nothing -- and would leave a column behind that is stale by the
+     * time wrap is switched off, where an unresolved goal is not.
      */
-    if (line_vertical)
+    if (line_vertical && !win->vp.wrap)
         cursor->goal_col = yew_cursor_goal(tb, cursor, edit_tabwidth(win));
     vertical_goal = cursor->goal_col;
     old_pos = cursor->pos;
