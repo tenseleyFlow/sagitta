@@ -68,7 +68,7 @@ static void nav_fixture_bytes(Ed *ed, const u8 *bytes, size_t len)
     YEW_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
 }
 
 static void nav_fixture(Ed *ed)
@@ -88,7 +88,7 @@ static void nav_at(Ed *ed, u64 off)
     YEW_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(off);
     cursor->anchor = BYTEOFF(off);
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
 }
 
 static u64 nav_pos(const Ed *ed)
