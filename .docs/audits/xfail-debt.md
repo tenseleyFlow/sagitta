@@ -65,7 +65,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-052 | audit | `tests/audit/f15_ban_misses.c` | ~~FUSS drawer ban accepts indirect pane-root replacement~~ — fixed in `6db23a13` | fixed |
 | YEW-F-053 | audit | `tests/audit/f15_ban_misses.c` | ~~deterministic-fuzz ban omits `random`~~ — fixed in `fff0404d` | fixed |
 | YEW-F-054 | audit | `tests/audit/f15_ban_misses.c` | ~~clipboard shell ban omits direct shell exec~~ — fixed in `702b5e92` | fixed |
-| YEW-F-055 | audit | `tests/audit/f15_ban_misses.c` | job-interpolation ban accepts raw append into shell text | open |
+| YEW-F-055 | audit | `tests/audit/f15_ban_misses.c` | ~~job-interpolation ban accepts raw append into shell text~~ — fixed in `7c3f0347` | fixed |
 | YEW-F-056 | audit | `tests/audit/f15_ban_misses.c` | OSC 52 query ban accepts split string literals | open |
 | YEW-F-057 | audit | `tests/audit/f15_ban_misses.c` | terminal-syscall ban omits `tcflush` | open |
 | YEW-F-058 | audit | `tests/audit/f15_ban_misses.c` | register choke-point ban accepts allowed-file wrappers | open |
