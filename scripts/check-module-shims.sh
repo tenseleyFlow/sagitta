@@ -97,7 +97,9 @@ action_successes()
                 }
             }
             if (current != "") {
-                if (line ~ /return[[:space:]]+(true|YEW_CMD_OK|0U?)[[:space:]]*;/)
+                # YEW-F-044: parentheses do not change a disabled action
+                # success status, including when more than one pair is used.
+                if (line ~ /return[[:space:]]+\(*[[:space:]]*(true|YEW_CMD_OK|0U?)[[:space:]]*\)*[[:space:]]*;/)
                     print current
                 opens = braces(line, "{")
                 closes = braces(line, "}")
@@ -183,9 +185,14 @@ printf '%s\n' \
     '{' \
     '    (void)cx;' \
     '    return YEW_CMD_OK;' \
+    '}' \
+    'CmdStatus yew_plug_cmd_parenthesized_seed(CmdCtx *cx)' \
+    '{' \
+    '    (void)cx;' \
+    '    return ((YEW_CMD_OK));' \
     '}' >"$scratch/success.c"
 action_successes "$scratch/success.c" >"$scratch/seed.success"
-if [ "$(cat "$scratch/seed.success")" != yew_plug_cmd_seed ]; then
+if [ "$(wc -l <"$scratch/seed.success" | tr -d ' ')" != "2" ]; then
     echo 'module shims: honesty checker no longer names its success seed' >&2
     failed=1
 fi
