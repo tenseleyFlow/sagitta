@@ -88,7 +88,7 @@ recorded in `audit-00.md`.
 | YEW-F-073 | M | fixed | F15 CI | ~~baseline history policy is not enforced~~ — fixed 2026-09-14 in `aa77a9e6` | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
 | YEW-F-074 | H | fixed | F15 CI | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed 2026-09-13 in `16761aba` | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
 | YEW-F-075 | C | fixed | F15 CI | ~~stripped builds accept module-only config as inert state~~ — fixed 2026-09-13 in `ee6f9894` | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
-| YEW-F-076 | M | open | F03 TEXT | accepted unsaved undo sidecars are not byte-canonical | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
+| YEW-F-076 | M | fixed | F03 TEXT | ~~accepted unsaved undo sidecars are not byte-canonical~~ — fixed 2026-09-14 in `4c887676` | tests/audit/yew_f_076.c | s10 section 9 / DoD 8; s58 section 6.4 |
 | YEW-F-077 | M | fixed | F03 TEXT | ~~rectangular yank omits required short-row padding~~ — fixed 2026-09-14 in `792e32d8` | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 | YEW-F-078 | M | open | F03 TEXT | crash journal admits a same-metadata replacement inode | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
@@ -662,13 +662,18 @@ sibling was the redundant `lsp.open_in` row in `runtime/init.fl`, fixed in
 `0da3de82`. `shadow.*` debounce and `compl.*` options remain core-owned by
 their core arbitration and symbol-index completion contracts.
 
-`YEW-F-076` is Medium because a corrupt but unused anchor-hash field in an
+`YEW-F-076` was Medium because a corrupt but unused anchor-hash field in an
 unsaved undo sidecar is accepted as current and then silently canonicalized
 on its next write. Document bytes and the undo tree remain recoverable, but
 the accepted-file byte round-trip required by Sprint 58 section 6.4 is false.
 Coverage-guided mutation flipped one bit at header offset 40; the standalone
-reproducer deterministically rebuilds that input and remains open for Sprint
-59. No product source changed during the audit.
+reproducer deterministically rebuilds that input. Commit `4c887676`
+reconstructs the unsaved root identity and rejects a mismatched anchor before
+installing the loaded tree. It also retains the truncation provenance of a
+valid loaded sidecar so a full rewrite preserves the accepted header exactly.
+The obsolete fuzz exception is gone; the exact-byte round-trip oracle passed
+200,000 deterministic mutations (`seed=1`, corpus 7, hash
+`231e0ce0abff3c1d`).
 
 `YEW-F-077` was Medium because an ordinary rectangular yank clipped short rows
 to their natural byte length but labeled the resulting register non-ragged.
