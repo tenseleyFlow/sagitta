@@ -35,3 +35,4 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-09-14 | Fix `YEW-F-022` (`4858a39c`) | 0 | 0 | 54 | 0 | 54 |
 | 2026-09-14 | Fix `YEW-F-023` (`d2dc4ddf`) | 0 | 0 | 53 | 0 | 53 |
 | 2026-09-14 | Fix `YEW-F-024` (`56ce3f24`) | 0 | 0 | 52 | 0 | 52 |
+| 2026-09-14 | Fix `YEW-F-025` (`da1f9cd0`) | 0 | 0 | 51 | 0 | 51 |

@@ -37,7 +37,7 @@ recorded in `audit-00.md`.
 | YEW-F-022 | M | fixed | F14 PLUG | ~~plugin trust wording gate rejects its required warning~~ — fixed 2026-09-14 in `4858a39c` | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
 | YEW-F-023 | M | fixed | F14 PLUG | ~~plugin commands cannot enter the recorder CMDWORD space~~ — fixed 2026-09-14 in `d2dc4ddf` | tests/audit/yew_f_023.c | s58 F14 q8 |
 | YEW-F-024 | M | fixed | F15 CI | ~~cross-surface XFAIL debt table stops at F004~~ — fixed 2026-09-14 in `56ce3f24` | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
-| YEW-F-025 | M | open | F15 CI | script tests have no XFAIL or hard-XPASS state | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
+| YEW-F-025 | M | fixed | F15 CI | ~~script tests have no XFAIL or hard-XPASS state~~ — fixed 2026-09-14 in `da1f9cd0` | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
 | YEW-F-026 | M | open | F15 CI | PTY cases have no XFAIL or hard-XPASS state | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
 | YEW-F-027 | M | open | F15 CI | Fletch format ban accepts macro-forwarded nonliteral formats | tests/audit/f15_ban_misses.c | s31 DoD 5; s58 F15 q2 |
 | YEW-F-028 | M | open | F15 CI | Fletch abort ban accepts macro-forwarded abort | tests/audit/f15_ban_misses.c | s32 DoD 10; s58 F15 q2 |
@@ -346,12 +346,17 @@ and makes the passing audit guard require exact set equality with no missing,
 unexpected, or duplicate IDs. A deliberate one-row deletion now hard-fails
 the audit suite.
 
-`YEW-F-025` is Medium because the script runner has no syntax or state for an
-expected failure. A seeded `# XFAIL: YEW-F-NNN` is only a Fletch comment;
-failure remains an ordinary `FAIL`, and success remains `PASS`, so hard XPASS
-cannot be represented on this required surface. The unit audit runner and
-Fletch conformance runner do implement hard XPASS. It remains open for Sprint
-59; no product source changed during the audit.
+`YEW-F-025` was Medium because the script runner had no syntax or state for an
+expected failure. Commit `da1f9cd0` parses strict leading
+`# XFAIL: YEW-F-NNN reason` metadata, requires an active authoritative debt
+row, reports eligible failures as `XFAIL`, and makes an unexpected pass a hard
+`XPASS`. Runner/setup failures, timeouts, signals, corrupt protocols, unknown
+IDs, and fixed IDs cannot satisfy the marker. Self-checks pin parsing, ledger
+status, classification, and output; end-to-end fail/pass/fixed-ID probes pin
+the exit statuses.
+
+The unit audit and Fletch conformance runners retain their independent hard
+XPASS paths.
 
 `YEW-F-026` is Medium because Sprint 58 explicitly requires
 `PtyCase.xfail_id`, but the structure has only name/profile/geometry/function
