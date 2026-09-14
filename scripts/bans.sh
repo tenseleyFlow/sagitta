@@ -1119,14 +1119,24 @@ fi
 registry=$repo_dir/tests/unit/registry.c
 defs=$tmp/test-defs
 : >"$defs"
+# YEW-F-068: reserve every test_* definition for the explicit registry.  In
+# particular, internal linkage must not turn a forgotten unit test invisible;
+# private helpers use descriptive, non-test names instead.
+unit_def_pattern='s/^[[:space:]]*\(static[[:space:]]\{1,\}\)\{0,1\}void[[:space:]]\{1,\}test_\([[:alnum:]_]*\)[[:space:]]*(.*/\2/p'
 for file in "$repo_dir"/tests/unit/test_*.c; do
     [ -f "$file" ] || continue
-    sed -n 's/^void[[:space:]]\{1,\}test_\([[:alnum:]_]*\)[[:space:]]*(.*/\1/p' "$file" |
+    sed -n "$unit_def_pattern" "$file" |
         while IFS= read -r name; do
             printf '%s\t%s\n' "${file#"$repo_dir"/}" "$name"
         done >>"$defs"
 done
 LC_ALL=C sort -o "$defs" "$defs"
+
+unit_seed=$tmp/test_seed.c
+echo 'static void test_seeded_orphan(void) {}' >"$unit_seed"
+if [ "$(sed -n "$unit_def_pattern" "$unit_seed")" != "seeded_orphan" ]; then
+    echo "ban: the static unit-test inventory misses its own seed" >>"$hits"
+fi
 
 while IFS="$(printf '\t')" read -r file name; do
     [ -n "$name" ] || continue

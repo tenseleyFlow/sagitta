@@ -656,7 +656,7 @@ static void assert_ascii_identifier_fast_path_equal(const char *pattern,
     arena_free_all(&arena);
 }
 
-static void test_yaml_block_key_fast_path_matrix(void);
+static void assert_yaml_block_key_fast_path_matrix(void);
 
 void test_syn_line_ascii_identifier_fast_path_matches_regex(void)
 {
@@ -680,7 +680,7 @@ void test_syn_line_ascii_identifier_fast_path_matches_regex(void)
                 patterns[pattern], (const u8 *)rows[row],
                 (u32)strlen(rows[row]));
     }
-    test_yaml_block_key_fast_path_matrix();
+    assert_yaml_block_key_fast_path_matrix();
 }
 
 static void assert_word_literal_fast_path_equal(const char *pattern,
@@ -947,7 +947,7 @@ static void assert_yaml_block_key_fast_path_equal(const char *pattern,
     arena_free_all(&arena);
 }
 
-static void test_yaml_block_key_fast_path_matrix(void)
+static void assert_yaml_block_key_fast_path_matrix(void)
 {
     static const char yaml_key[] =
         "^(\\s*)([^\\s#][^:#]*)(:)(\\s|$)";
