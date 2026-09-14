@@ -75,7 +75,7 @@ recorded in `audit-00.md`.
 | YEW-F-060 | M | fixed | F15 CI | ~~package-git ban accepts allowed-file wrappers on startup~~ — fixed 2026-09-14 in `953b1e3c` | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
 | YEW-F-061 | M | fixed | F15 CI | ~~register-width ban accepts local lookup tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
 | YEW-F-062 | M | fixed | F15 CI | ~~register-column ban depends on historical variable names~~ — fixed 2026-09-14 in `d87c57f6` | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
-| YEW-F-063 | M | open | F15 CI | register-helper presence gate accepts comments | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
+| YEW-F-063 | M | fixed | F15 CI | ~~register-helper presence gate accepts comments~~ — fixed 2026-09-14 in `f36b1e1e` | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
 | YEW-F-064 | M | open | F15 CI | oracle-independence ban accepts copied renamed models | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
 | YEW-F-065 | M | open | F15 CI | generated-table ban verifies only a retained marker | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
 | YEW-F-066 | M | open | F15 CI | termination-site ban omits `_Exit` | tests/audit/f15_ban_misses.c | s01 exit contract; s58 F15 q2 |
@@ -569,9 +569,10 @@ three historical variable names followed by `.v`. Commit `d87c57f6` strips
 comments and literals, discovers every `CCol`/`CellCol` declarator, and rejects
 direct representation access independently of the variable name.
 
-`YEW-F-063` is Medium because the four required-helper checks accept names in
-comments as proof of routing. A register implementation containing only those
-comments and a local calculation passes. It remains open for Sprint 59.
+`YEW-F-063` was Medium because the four required-helper checks accepted names
+in comments as proof of routing. Commit `f36b1e1e` shares a C comment/literal
+stripper with the typed column check and requires an executable call token for
+each coordinate helper.
 
 `YEW-F-064` is Medium because oracle independence cannot be established by
 banning two implementation names. A copied, renamed piece model passes while
