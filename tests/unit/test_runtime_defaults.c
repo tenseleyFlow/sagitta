@@ -270,6 +270,13 @@ static const BindRow frozen_I[] = {
     {"C-v", "ed.clip.paste", 0, NULL},
     {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
+    /*
+     * Sprint 57.19: Ctrl+arrow is the LINE's start and end here, the same
+     * pair <home>/<end> give.  Deliberately not the word jump the usual
+     * convention puts on Ctrl+arrow -- in yew that is Alt+arrow, below.
+     */
+    {"C-<left>", "ed.move.line.home_toggle", 0, NULL},
+    {"C-<right>", "ed.move.line.end", 0, NULL},
 };
 
 static const BindRow frozen_E[] = {
@@ -423,7 +430,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 240U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 242U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

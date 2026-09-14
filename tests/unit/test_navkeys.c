@@ -362,3 +362,51 @@ void test_nav_home_key_leaves_secondary_cursors_alone(void)
     YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[1U].pos.v, 36U);
     yew_ed_free(&ed);
 }
+
+/*
+ * Deliberately NOT the usual editor convention.  In yew the WORD jump is
+ * Alt+arrow; Ctrl+arrow in Insert mode is the line's start and end, the
+ * same pair `<home>`/`<end>` give there.  Do not "fix" this into a word
+ * motion -- W mode's Ctrl arrows are the subword motions and stay that
+ * way, which the second half of this test pins.
+ */
+void test_nav_ctrl_arrows_reach_the_line_ends_in_insert_mode(void)
+{
+    Ed ed;
+
+    nav_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'i'), 0);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+
+    nav_at(&ed, 8U);
+    nav_send(&ed, nav_mod_key(YEW_KEY_LEFT, YEW_MOD_CTRL), 1);
+    nav_expect_cmd(&ed, "ed.move.line.home_toggle");
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L0_TEXT);
+    nav_send(&ed, nav_mod_key(YEW_KEY_LEFT, YEW_MOD_CTRL), 2);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L0);
+
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_CTRL), 3);
+    nav_expect_cmd(&ed, "ed.move.line.end");
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L0_END);
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_CTRL), 4);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L0_END);
+
+    /* A line whose indent is the whole line: both ends still resolve. */
+    nav_at(&ed, NAV_L2 + 3U);
+    nav_send(&ed, nav_mod_key(YEW_KEY_LEFT, YEW_MOD_CTRL), 5);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L2);
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_CTRL), 6);
+    YEW_ASSERT_EQ_U64(nav_pos(&ed), NAV_L2_END);
+    yew_ed_free(&ed);
+
+    /* W mode keeps its subword Ctrl arrows. */
+    nav_fixture(&ed);
+    nav_send(&ed, nav_key((u32)'w'), 0);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_W);
+    nav_at(&ed, 8U);
+    nav_send(&ed, nav_mod_key(YEW_KEY_LEFT, YEW_MOD_CTRL), 1);
+    nav_expect_cmd(&ed, "ed.move.word.sub_prev");
+    nav_send(&ed, nav_mod_key(YEW_KEY_RIGHT, YEW_MOD_CTRL), 2);
+    nav_expect_cmd(&ed, "ed.move.word.sub_next");
+    yew_ed_free(&ed);
+}
