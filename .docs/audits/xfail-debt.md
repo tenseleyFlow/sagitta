@@ -37,7 +37,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-024 | audit | `tests/audit/yew_f_024.c` | ~~cross-surface XFAIL debt table stops at F004~~ — fixed in `56ce3f24` | fixed |
 | YEW-F-025 | audit | `tests/audit/yew_f_025.c` | ~~script tests have no XFAIL or hard-XPASS state~~ — fixed in `da1f9cd0` | fixed |
 | YEW-F-026 | audit | `tests/audit/yew_f_026.c` | ~~PTY cases have no XFAIL or hard-XPASS state~~ — fixed in `86ccb661` | fixed |
-| YEW-F-027 | audit | `tests/audit/f15_ban_misses.c` | Fletch format ban accepts macro-forwarded nonliteral formats | open |
+| YEW-F-027 | audit | `tests/audit/f15_ban_misses.c` | ~~Fletch format ban accepts macro-forwarded nonliteral formats~~ — fixed in `c371b5a4` | fixed |
 | YEW-F-028 | audit | `tests/audit/f15_ban_misses.c` | Fletch abort ban accepts macro-forwarded abort | open |
 | YEW-F-029 | audit | `tests/audit/f15_ban_misses.c` | stable-sort ban accepts macro-forwarded qsort | open |
 | YEW-F-030 | audit | `tests/audit/f15_ban_misses.c` | C11-subset ban accepts token-pasted attribute syntax | open |

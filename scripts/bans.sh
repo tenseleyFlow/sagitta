@@ -130,7 +130,27 @@ format_literal_hits()
             if (id == "printf")    return 0
             return 1
         }
+        function fmt_sink(id, depth) {
+            depth = 0
+            while ((id in format_alias) && depth < 64) {
+                id = format_alias[id]
+                depth++
+            }
+            return id
+        }
         END {
+            # YEW-F-027: an object-like macro alias does not make a
+            # nonliteral printf-family format safe.  Resolve alias chains
+            # before classifying call tokens so ordinary macro forwarding
+            # cannot evade the literal-format boundary.
+            for (i = 1; i <= NR; i++) {
+                define = line[i]
+                if (define !~ /^[ \t]*#[ \t]*define[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+[A-Za-z_][A-Za-z0-9_]*([ \t]|$)/)
+                    continue
+                sub(/^[ \t]*#[ \t]*define[ \t]+/, "", define)
+                split(define, part, /[ \t]+/)
+                format_alias[part[1]] = part[2]
+            }
             for (i = 1; i <= NR; i++) {
                 # Comment bodies are prose about the rule, not calls --
                 # this file has tripped five grep gates on its own
@@ -150,9 +170,10 @@ format_literal_hits()
                     if (at > own)
                         break
                     sub(/[ \t]*\($/, "", tok)
-                    if (tok !~ /printf$/ && tok != "fl_raise")
+                    sink = fmt_sink(tok)
+                    if (sink !~ /printf$/ && sink != "fl_raise")
                         continue
-                    want = fmt_index(tok)
+                    want = fmt_index(sink)
                     depth = 1
                     args = 0
                     k = pos
@@ -176,7 +197,7 @@ format_literal_hits()
                     # is the prototype and nothing else.
                     if (call ~ /\.\.\.[ \t]*\)$/)
                         continue
-                    if (tok ~ /^v/ && call ~ /,[ \t]*ap[ \t]*\)$/)
+                    if (sink ~ /^v/ && call ~ /,[ \t]*ap[ \t]*\)$/)
                         continue
                     tail = substr(buf, fmt_at)
                     sub(/^[ \t]*/, "", tail)
@@ -217,14 +238,18 @@ seed_file=$seed_dir/seeded.c
     echo 'void d(void) { bytebuf_printf(out, "%d", 1); }'
     echo 'void e(void) { (void)snprintf(q, sizeof(q), "%s.%s", a, b); }'
     echo 'void f(va_list ap) { (void)vsnprintf(m, sizeof(m), fmt, ap); }'
+    echo '#define FMT_ALIAS_1 bytebuf_printf'
+    echo '#define FMT_ALIAS_2 FMT_ALIAS_1'
+    echo 'void g(const char *t) { FMT_ALIAS_2(out, t); }'
+    echo 'void h(void) { FMT_ALIAS_2(out, "%d", 1); }'
 } >"$seed_file"
 printf '%s\n' "$seed_file" >"$tmp/seed-list"
 format_literal_hits "$tmp/seed-list" "$tmp/seed-hits"
 seed_found=$(wc -l <"$tmp/seed-hits" | tr -d ' ')
-if [ "$seed_found" != "3" ]; then
+if [ "$seed_found" != "4" ]; then
     echo "ban: the format-literal rule no longer fires on its own seed" \
         >>"$hits"
-    echo "expected 3 violations in the seed, found $seed_found" >>"$hits"
+    echo "expected 4 violations in the seed, found $seed_found" >>"$hits"
     cat "$tmp/seed-hits" >>"$hits"
 fi
 
