@@ -146,7 +146,7 @@ static Cursor prop_cursor(u64 pos, u64 goal)
 
     c.pos = BYTEOFF(pos);
     c.anchor = c.pos;
-    c.goal_col = (GCol){goal};
+    c.goal_col = (CCol){goal};
     return c;
 }
 

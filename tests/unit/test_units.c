@@ -335,7 +335,7 @@ void test_units_line_motion_clamps_to_the_content_end(void)
         /* Column 24 on line 0, deep inside `return 50; }`. */
         cursor.pos = BYTEOFF(24U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){24U};
+        cursor.goal_col = (CCol){24U};
         ctx.win.cs.curs.data = &cursor;
         ctx.win.cs.curs.len = 1U;
         ctx.win.cs.primary = 0U;
@@ -469,7 +469,7 @@ void test_units_vertical_goal_rounds_left_inside_a_tab(void)
  * The screen column depends on the buffer's own tab width, so a goal
  * column must be measured with `Buffer.tabwidth` and not a constant.
  * Cell 8 on `  \tmixed` is the `m` when a tab is eight cells wide and the
- * `e` when it is four, so the two widths must disagree here.
+ * `d` when it is four, so the two widths must disagree here.
  */
 void test_units_vertical_goal_honours_the_buffer_tab_width(void)
 {
@@ -480,9 +480,9 @@ void test_units_vertical_goal_honours_the_buffer_tab_width(void)
         u64 want;
     } cases[] = {
         {8U, 32U},
-        {4U, 35U},
+        {4U, 36U},
         /* A zero tab width is the documented stand-in for the default. */
-        {0U, 35U}
+        {0U, 36U}
     };
     size_t i;
 

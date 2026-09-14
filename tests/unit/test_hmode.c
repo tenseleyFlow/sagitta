@@ -48,7 +48,8 @@ static void h_place(Ed *ed, u64 pos, u64 anchor)
     line = yew_textbuf_line_span(ed->win->buf->tb,
                                  yew_textbuf_line_of(ed->win->buf->tb,
                                                      cursor->pos));
-    cursor->goal_col = yew_off_to_gcol(ed->win->buf->tb, line, cursor->pos);
+    cursor->goal_col = yew_off_to_ccol(ed->win->buf->tb, line, cursor->pos,
+                                       YEW_VP_TABWIDTH);
 }
 
 static void h_assert_text(const Ed *ed, const u8 *want, size_t want_len)

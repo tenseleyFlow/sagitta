@@ -325,7 +325,8 @@ static void inv2_place(Ed *ed, u64 pos, u64 anchor)
     line = yew_textbuf_line_span(ed->buffer.tb,
                                  yew_textbuf_line_of(ed->buffer.tb,
                                                      cursor->pos));
-    cursor->goal_col = yew_off_to_gcol(ed->buffer.tb, line, cursor->pos);
+    cursor->goal_col = yew_off_to_ccol(ed->buffer.tb, line, cursor->pos,
+                                       YEW_VP_TABWIDTH);
     yew_cset_normalize(ed->buffer.tb, &ed->win->cs);
 }
 

@@ -27,7 +27,7 @@ static Cursor test_cursor(u64 pos, u64 anchor, u64 goal)
 
     cursor.pos = BYTEOFF(pos);
     cursor.anchor = BYTEOFF(anchor);
-    cursor.goal_col = (GCol){goal};
+    cursor.goal_col = (CCol){goal};
     return cursor;
 }
 
@@ -1162,10 +1162,10 @@ static void integrated_move(const TextBuf *tb, CursorSet *set, u64 motion)
         Cursor *cursor = &set->curs.data[i];
 
         switch (motion) {
-        case 0U: yew_cursor_left(tb, cursor); break;
-        case 1U: yew_cursor_right(tb, cursor); break;
-        case 2U: yew_cursor_up(tb, cursor); break;
-        case 3U: yew_cursor_down(tb, cursor); break;
+        case 0U: yew_cursor_left(tb, cursor, 4U); break;
+        case 1U: yew_cursor_right(tb, cursor, 4U); break;
+        case 2U: yew_cursor_up(tb, cursor, 4U); break;
+        case 3U: yew_cursor_down(tb, cursor, 4U); break;
         case 4U: yew_cursor_line_home(tb, cursor); break;
         default: yew_cursor_line_end(tb, cursor); break;
         }
@@ -1299,12 +1299,14 @@ void test_multicursor_normalize_preserves_sticky_motion(void)
     Cursor cursor = test_cursor(5U, 5U, 5U);
     CursorSet set;
 
-    yew_cursor_down(tb, &cursor);
-    assert_cursor(&cursor, 8U, 8U, 5U);
+    yew_cursor_down(tb, &cursor, 4U);
+    /* The final line has no newline to rest on, so an overflowing goal
+     * clamps AFTER the `y` -- the same answer motion.c gives. */
+    assert_cursor(&cursor, 9U, 9U, 5U);
 
     yew_cset_init(&set, cursor);
     yew_cset_normalize(tb, &set);
-    yew_cursor_right(tb, &set.curs.data[0]);
+    yew_cursor_right(tb, &set.curs.data[0], 4U);
     assert_cursor(&set.curs.data[0], 9U, 9U, 2U);
 
     yew_cset_free(&set);
@@ -1456,13 +1458,13 @@ void test_multicursor_vertical_goals_are_per_cursor_over_tabs(void)
     yew_cset_normalize(tb, &set);
     YEW_ASSERT_EQ_U64(set.curs.len, 2U);
 
-    yew_cursor_down(tb, &set.curs.data[0]);
-    yew_cursor_down(tb, &set.curs.data[1]);
+    yew_cursor_down(tb, &set.curs.data[0], 4U);
+    yew_cursor_down(tb, &set.curs.data[1], 4U);
     assert_cursor(&set.curs.data[0], 14U, 14U, 4U);
     assert_cursor(&set.curs.data[1], 18U, 18U, 8U);
 
-    yew_cursor_down(tb, &set.curs.data[0]);
-    yew_cursor_down(tb, &set.curs.data[1]);
+    yew_cursor_down(tb, &set.curs.data[0], 4U);
+    yew_cursor_down(tb, &set.curs.data[1], 4U);
     assert_cursor(&set.curs.data[0], 32U, 32U, 4U);
     assert_cursor(&set.curs.data[1], 36U, 36U, 8U);
 

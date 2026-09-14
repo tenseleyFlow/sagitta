@@ -147,7 +147,7 @@ static void cmdline_document(CmdlineFixture *fixture, const char *text)
     YEW_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
 }
 
 static Key cmdline_key(u32 code)

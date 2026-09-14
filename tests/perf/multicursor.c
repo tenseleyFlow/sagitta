@@ -91,7 +91,7 @@ static bool model_init(Ed *ed, Win *win, size_t cursor_count)
 
         cursors[i - 1U].pos = BYTEOFF(line * 2U);
         cursors[i - 1U].anchor = cursors[i - 1U].pos;
-        cursors[i - 1U].goal_col = (GCol){0U};
+        cursors[i - 1U].goal_col = (CCol){0U};
     }
     if (!yew_cset_add_many(&win->cs, cursors, (u32)cursor_count - 1U)) {
         free(cursors);

@@ -2213,7 +2213,7 @@ static bool paint_init(PaintFixture *paint, FrozenFixture *fixture,
         LINENO(yew_textbuf_line_count(paint->buffer.tb) / 2U)) :
         BYTEOFF(0U);
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     paint->win.buf = &paint->buffer;
     yew_cset_init(&paint->win.cs, cursor);
     yew_vp_init(&paint->win);

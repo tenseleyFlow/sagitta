@@ -100,14 +100,14 @@ void test_coords_motion_golden(void)
         line = (Span){0U, (u64)byte_len};
         cursor.pos = BYTEOFF(0U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
 
         YEW_ASSERT(yew_is_grapheme_boundary(tb, BYTEOFF(0U)));
         for (i = 0U; i < cluster_count; i++) {
             u64 start = off;
 
             off += lengths[i];
-            yew_cursor_right(tb, &cursor);
+            yew_cursor_right(tb, &cursor, 4U);
             YEW_ASSERT_EQ_U64(cursor.pos.v, off);
             YEW_ASSERT_EQ_U64(yew_grapheme_next(tb, BYTEOFF(start)).v,
                               off);
@@ -137,7 +137,7 @@ void test_coords_motion_golden(void)
         YEW_ASSERT_EQ_U64(off, byte_len);
         for (i = cluster_count; i > 0U; i--) {
             off -= lengths[i - 1U];
-            yew_cursor_left(tb, &cursor);
+            yew_cursor_left(tb, &cursor, 4U);
             YEW_ASSERT_EQ_U64(cursor.pos.v, off);
         }
         YEW_ASSERT_EQ_U64(off, 0U);
@@ -618,11 +618,11 @@ void test_coords_sparse_index_edit_invalidation(void)
     yew_textbuf_insert(tb, BYTEOFF(3U), &x, 1U);
     cursor.pos = BYTEOFF(sizeof(split_cluster) + 1U);
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){UINT64_MAX};
-    yew_cursor_left(tb, &cursor);
+    cursor.goal_col = (CCol){UINT64_MAX};
+    yew_cursor_left(tb, &cursor, 4U);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 3U);
     YEW_ASSERT_EQ_U64(cursor.goal_col.v, 1U);
-    yew_cursor_left(tb, &cursor);
+    yew_cursor_left(tb, &cursor, 4U);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 0U);
     YEW_ASSERT_EQ_U64(cursor.goal_col.v, 0U);
     yew_textbuf_free(tb);
@@ -634,11 +634,11 @@ void test_coords_sparse_index_edit_invalidation(void)
     YEW_ASSERT(tb->graphemes.gen != tb->gen);
     cursor.pos = BYTEOFF(sizeof(latin2_run) + 2U);
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){UINT64_MAX};
-    yew_cursor_left(tb, &cursor);
+    cursor.goal_col = (CCol){UINT64_MAX};
+    yew_cursor_left(tb, &cursor, 4U);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 6U);
     YEW_ASSERT_EQ_U64(cursor.goal_col.v, 4U);
-    yew_cursor_left(tb, &cursor);
+    yew_cursor_left(tb, &cursor, 4U);
     YEW_ASSERT_EQ_U64(cursor.pos.v, 4U);
     YEW_ASSERT_EQ_U64(cursor.goal_col.v, 3U);
     YEW_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);

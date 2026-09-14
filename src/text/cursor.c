@@ -19,12 +19,12 @@ static void cursor_set_pos(Cursor *c, ByteOff pos)
         c->anchor = pos;
 }
 
-static void cursor_update_goal(const TextBuf *tb, Cursor *c)
+static void cursor_update_goal(const TextBuf *tb, Cursor *c, u32 tabw)
 {
     LineNo line = yew_textbuf_line_of(tb, c->pos);
     Span span = yew_textbuf_line_span(tb, line);
 
-    c->goal_col = yew_off_to_gcol(tb, span, c->pos);
+    c->goal_col = yew_off_to_ccol(tb, span, c->pos, tabw);
 }
 
 static ByteOff cursor_line_end(const TextBuf *tb, LineNo line)
@@ -40,21 +40,28 @@ static ByteOff cursor_line_end(const TextBuf *tb, LineNo line)
     return end;
 }
 
-void yew_cursor_left(const TextBuf *tb, Cursor *c)
+void yew_cursor_left(const TextBuf *tb, Cursor *c, u32 tabw)
 {
     cursor_require(tb, c);
     cursor_set_pos(c, yew_grapheme_prev_boundary(tb, c->pos));
-    cursor_update_goal(tb, c);
+    cursor_update_goal(tb, c, tabw);
 }
 
-void yew_cursor_right(const TextBuf *tb, Cursor *c)
+void yew_cursor_right(const TextBuf *tb, Cursor *c, u32 tabw)
 {
     cursor_require(tb, c);
     cursor_set_pos(c, yew_grapheme_next_boundary(tb, c->pos));
-    cursor_update_goal(tb, c);
+    cursor_update_goal(tb, c, tabw);
 }
 
-void yew_cursor_up(const TextBuf *tb, Cursor *c)
+/*
+ * The PADDED cell lookup, because this is a caret and not a character:
+ * a goal past the line's end rests AFTER the last character, on every
+ * line including the buffer's final one, which is the only line without
+ * a trailing newline to stand on.  `line_at_col` in edit/motion.c owes
+ * the caret the same answer; the two vertical paths are the same key.
+ */
+void yew_cursor_up(const TextBuf *tb, Cursor *c, u32 tabw)
 {
     LineNo line;
     Span span;
@@ -63,10 +70,10 @@ void yew_cursor_up(const TextBuf *tb, Cursor *c)
     if (line.v == 0U)
         return;
     span = yew_textbuf_line_span(tb, LINENO(line.v - 1U));
-    cursor_set_pos(c, yew_gcol_to_off(tb, span, c->goal_col));
+    cursor_set_pos(c, yew_ccol_to_off_padded(tb, span, c->goal_col, tabw));
 }
 
-void yew_cursor_down(const TextBuf *tb, Cursor *c)
+void yew_cursor_down(const TextBuf *tb, Cursor *c, u32 tabw)
 {
     LineNo line;
     Span span;
@@ -75,7 +82,7 @@ void yew_cursor_down(const TextBuf *tb, Cursor *c)
     if (line.v + 1U >= yew_textbuf_line_count(tb))
         return;
     span = yew_textbuf_line_span(tb, LINENO(line.v + 1U));
-    cursor_set_pos(c, yew_gcol_to_off(tb, span, c->goal_col));
+    cursor_set_pos(c, yew_ccol_to_off_padded(tb, span, c->goal_col, tabw));
 }
 
 void yew_cursor_line_home(const TextBuf *tb, Cursor *c)
@@ -85,7 +92,7 @@ void yew_cursor_line_home(const TextBuf *tb, Cursor *c)
     cursor_require(tb, c);
     line = yew_textbuf_line_of(tb, c->pos);
     cursor_set_pos(c, yew_textbuf_line_start(tb, line));
-    c->goal_col = (GCol){0U};
+    c->goal_col = (CCol){0U};
 }
 
 void yew_cursor_line_end(const TextBuf *tb, Cursor *c)
@@ -95,21 +102,21 @@ void yew_cursor_line_end(const TextBuf *tb, Cursor *c)
     cursor_require(tb, c);
     line = yew_textbuf_line_of(tb, c->pos);
     cursor_set_pos(c, cursor_line_end(tb, line));
-    c->goal_col = (GCol){YEW_GCOL_EOL};
+    c->goal_col = (CCol){YEW_CCOL_EOL};
 }
 
 void yew_cursor_buf_home(const TextBuf *tb, Cursor *c)
 {
     cursor_require(tb, c);
     cursor_set_pos(c, BYTEOFF(0U));
-    c->goal_col = (GCol){0U};
+    c->goal_col = (CCol){0U};
 }
 
 void yew_cursor_buf_end(const TextBuf *tb, Cursor *c)
 {
     cursor_require(tb, c);
     cursor_set_pos(c, BYTEOFF(yew_textbuf_len(tb)));
-    c->goal_col = (GCol){YEW_GCOL_EOL};
+    c->goal_col = (CCol){YEW_CCOL_EOL};
 }
 
 static ByteOff cursor_clamp_off(const TextBuf *tb, ByteOff pos)

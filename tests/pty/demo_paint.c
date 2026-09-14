@@ -456,7 +456,7 @@ static void paint_s15(Demo *d)
         cursor.pos = BYTEOFF(7U);
     }
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
 
     win.buf = &buffer;
     yew_cset_init(&win.cs, cursor);
@@ -636,7 +636,7 @@ static void paint_s46_diag(Demo *d)
     cursor.pos = s46_scene_is(d, "hint") ? BYTEOFF(0U) :
                  yew_textbuf_line_start(buffer.tb, LINENO(4U));
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     win.buf = &buffer;
     yew_cset_init(&win.cs, cursor);
     yew_vp_init(&win);

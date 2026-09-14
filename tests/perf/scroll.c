@@ -137,7 +137,7 @@ static bool measure(const ScrollCase *pc, const Bytebuf *fixture,
     cursor.pos = yew_textbuf_line_start(buffer.tb,
                                         LINENO(SCROLL_LINES / 2U));
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     win.buf = &buffer;
     yew_cset_init(&win.cs, cursor);
     yew_vp_init(&win);

@@ -30,7 +30,7 @@ static void tree_fixture_init(TreeFixture *f)
     Cursor cursor;
 
     cursor.pos = BYTEOFF(0U);
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     cursor.anchor = BYTEOFF(0U);
     f->tb = yew_textbuf_new();
     yew_cset_init(&f->cursors, cursor);

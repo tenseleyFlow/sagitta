@@ -140,7 +140,7 @@ static void restore_cursors(EditCtx *ec, u32 at, u32 count)
         const CursorRec *rec = &ec->undo->cursors.data[at + i];
         cs->curs.data[i].pos = BYTEOFF(rec->pos);
         cs->curs.data[i].anchor = BYTEOFF(rec->anchor);
-        cs->curs.data[i].goal_col = (GCol){rec->goal};
+        cs->curs.data[i].goal_col = (CCol){rec->goal};
     }
     yew_cset_reseed(cs);
     for (i = 0U; i < count; i++)

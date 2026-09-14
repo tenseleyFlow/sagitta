@@ -108,12 +108,12 @@ void test_state_schema_permille_is_a_fixpoint(void)
     YEW_ASSERT(yew_permille_to_ratio(5000) < 1.0f);
 }
 
-/* `goal: -1` is YEW_GCOL_EOL, because UINT64_MAX does not fit i64 and
+/* `goal: -1` is YEW_CCOL_EOL, because UINT64_MAX does not fit i64 and
  * would force every reader into an unsigned special case. */
 void test_state_schema_goal_column_round_trips(void)
 {
-    YEW_ASSERT_EQ_I64(yew_goal_to_i64(YEW_GCOL_EOL), -1);
-    YEW_ASSERT_EQ_U64(yew_goal_from_i64(-1), YEW_GCOL_EOL);
+    YEW_ASSERT_EQ_I64(yew_goal_to_i64(YEW_CCOL_EOL), -1);
+    YEW_ASSERT_EQ_U64(yew_goal_from_i64(-1), YEW_CCOL_EOL);
     YEW_ASSERT_EQ_I64(yew_goal_to_i64(0U), 0);
     YEW_ASSERT_EQ_U64(yew_goal_from_i64(0), 0U);
     YEW_ASSERT_EQ_I64(yew_goal_to_i64(14U), 14);

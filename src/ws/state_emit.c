@@ -380,8 +380,8 @@ i64 yew_ratio_to_permille(float ratio)
 
 i64 yew_goal_to_i64(u64 goal)
 {
-    /* YEW_GCOL_EOL is UINT64_MAX; -1 is its representable spelling. */
-    if (goal == YEW_GCOL_EOL)
+    /* YEW_CCOL_EOL is UINT64_MAX; -1 is its representable spelling. */
+    if (goal == YEW_CCOL_EOL)
         return -1;
     if (goal > (u64)9223372036854775807ULL)
         return -1;
@@ -390,7 +390,7 @@ i64 yew_goal_to_i64(u64 goal)
 
 u64 yew_goal_from_i64(i64 v)
 {
-    return v < 0 ? YEW_GCOL_EOL : (u64)v;
+    return v < 0 ? YEW_CCOL_EOL : (u64)v;
 }
 
 /* ---------------------------------------------------------------- */

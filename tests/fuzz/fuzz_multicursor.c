@@ -192,7 +192,7 @@ static size_t install_random_cursors(CursorSet *set,
             anchor_slot = slot + 1U;
         cursors[i].pos = boundaries[slot];
         cursors[i].anchor = boundaries[anchor_slot];
-        cursors[i].goal_col = (GCol){input_byte(data, len,
+        cursors[i].goal_col = (CCol){input_byte(data, len,
                                                 salt + 9U + i)};
     }
     yew_cset_free(set);

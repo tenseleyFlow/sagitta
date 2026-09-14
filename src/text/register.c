@@ -566,7 +566,7 @@ static void set_primary_cursor(EditCtx *ec, ByteOff pos)
     cursor = &ec->cset->curs.data[ec->cset->primary];
     cursor->pos = pos;
     cursor->anchor = pos;
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
 }
 
 static ByteOff first_nonblank(const TextBuf *tb, ByteOff start)

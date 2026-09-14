@@ -84,7 +84,7 @@ static void edit_fixture(Ed *ed, const u8 *bytes, size_t len, YewEol eol)
     YEW_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
     YEW_ASSERT_EQ_U64(yew_undo_current(ed->buffer.undo),
                       ed->buffer.undo->root);
 }
@@ -145,7 +145,8 @@ static void edit_place(Ed *ed, u64 off)
     line = yew_textbuf_line_span(ed->buffer.tb,
                                  yew_textbuf_line_of(ed->buffer.tb,
                                                     cursor->pos));
-    cursor->goal_col = yew_off_to_gcol(ed->buffer.tb, line, cursor->pos);
+    cursor->goal_col = yew_off_to_ccol(ed->buffer.tb, line, cursor->pos,
+                                       YEW_VP_TABWIDTH);
 }
 
 void test_edit_l_motion_table_handles_unicode_crlf_and_viewport_counts(void)

@@ -47,7 +47,7 @@ static void f076_fixture_init(F076Fixture *f)
 
     (void)memset(f, 0, sizeof(*f));
     cursor.pos = BYTEOFF(0U);
-    cursor.goal_col = (GCol){0U};
+    cursor.goal_col = (CCol){0U};
     cursor.anchor = BYTEOFF(0U);
     f->tb = yew_textbuf_from_bytes(NULL, 0U);
     yew_cset_init(&f->cursors, cursor);

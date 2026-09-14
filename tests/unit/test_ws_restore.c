@@ -457,7 +457,7 @@ void test_ws_restore_brings_back_cursors_and_goal(void)
     yew_tab_switch(&a, 1);
     a.win->cs.curs.data[a.win->cs.primary].pos = BYTEOFF(2U);
     a.win->cs.curs.data[a.win->cs.primary].anchor = BYTEOFF(2U);
-    a.win->cs.curs.data[a.win->cs.primary].goal_col.v = YEW_GCOL_EOL;
+    a.win->cs.curs.data[a.win->cs.primary].goal_col.v = YEW_CCOL_EOL;
     extra.pos = BYTEOFF(8U);
     extra.anchor = BYTEOFF(8U);
     extra.goal_col.v = 3U;
@@ -470,10 +470,10 @@ void test_ws_restore_brings_back_cursors_and_goal(void)
     YEW_ASSERT_NOT_NULL(w);
     YEW_ASSERT_EQ_U64(w->cs.curs.len, 2U);
     YEW_ASSERT_EQ_U64(w->cs.curs.data[0].pos.v, 2U);
-    /* -1 in the file, YEW_GCOL_EOL in memory: the one value that does
+    /* -1 in the file, YEW_CCOL_EOL in memory: the one value that does
      * not fit i64 and would otherwise force an unsigned special case
      * on every reader. */
-    YEW_ASSERT_EQ_U64(w->cs.curs.data[0].goal_col.v, YEW_GCOL_EOL);
+    YEW_ASSERT_EQ_U64(w->cs.curs.data[0].goal_col.v, YEW_CCOL_EOL);
     YEW_ASSERT_EQ_U64(w->cs.curs.data[1].pos.v, 8U);
     YEW_ASSERT_EQ_U64(w->cs.curs.data[1].goal_col.v, 3U);
 

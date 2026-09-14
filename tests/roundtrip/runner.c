@@ -163,7 +163,7 @@ static bool editor_open(Ed *ed, const Bytebuf *fixture, u8 mode)
         return false;
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
-    cursor->goal_col = (GCol){0U};
+    cursor->goal_col = (CCol){0U};
     return yew_mode_enter(ed, (Mode)mode) == YEW_CMD_OK;
 }
 

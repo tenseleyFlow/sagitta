@@ -179,7 +179,7 @@ static void collapse_all(Win *win)
 
         cursor->pos = start;
         cursor->anchor = start;
-        cursor->goal_col = (GCol){0U};
+        cursor->goal_col = (CCol){0U};
     }
     yew_cset_normalize(win->buf->tb, &win->cs);
 }
@@ -198,7 +198,10 @@ static void cursor_place(Win *win, ByteOff at)
     cursor->anchor = at;
     line = yew_textbuf_line_span(win->buf->tb,
                                  yew_textbuf_line_of(win->buf->tb, at));
-    cursor->goal_col = yew_off_to_gcol(win->buf->tb, line, at);
+    cursor->goal_col = yew_off_to_ccol(
+        win->buf->tb, line, at,
+        win->buf->tabwidth != 0U ? win->buf->tabwidth
+                                 : (u32)YEW_VP_TABWIDTH);
 }
 
 static CmdStatus finish_action(CmdCtx *cx, ByteOff at, bool insert)
@@ -393,7 +396,7 @@ static CmdStatus delete_or_change(CmdCtx *cx, bool change, u8 reg_name)
             removed += spans.data[i - 1U].hi - spans.data[i - 1U].lo;
             extra.pos = BYTEOFF(original.lo - removed);
             extra.anchor = extra.pos;
-            extra.goal_col = (GCol){0U};
+            extra.goal_col = (CCol){0U};
             (void)yew_cset_add(&win->cs, extra);
         }
         yew_cset_normalize(tb, &win->cs);
@@ -536,7 +539,7 @@ CmdStatus yew_sel_cmd_all(CmdCtx *cx)
     cursor = &win->cs.curs.data[0];
     cursor->anchor = BYTEOFF(0U);
     cursor->pos = BYTEOFF(yew_textbuf_len(win->buf->tb));
-    cursor->goal_col = (GCol){YEW_GCOL_EOL};
+    cursor->goal_col = (CCol){YEW_CCOL_EOL};
     yew_cset_normalize(win->buf->tb, &win->cs);
     yew_ed_damage_document(ed);
     return YEW_CMD_OK;
@@ -1033,7 +1036,7 @@ static CmdStatus rect_carets(CmdCtx *cx, bool append)
                 caret.pos = BYTEOFF(at.v + (u64)delta);
             }
             caret.anchor = caret.pos;
-            caret.goal_col = (GCol){0U};
+            caret.goal_col = (CCol){0U};
             YewCursorVec_push(&carets, caret);
         }
         YewSelSpanVec_free(&spans);

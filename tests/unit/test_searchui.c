@@ -96,7 +96,7 @@ void test_searchui_cancel_restores_cursor_goal_and_viewport(void)
     su_fixture(&ed);
     c = yew_ed_cursor(&ed);
     c->pos = BYTEOFF(20U);
-    c->goal_col = (GCol){7U};
+    c->goal_col = (CCol){7U};
     ed.win->vp.top = LINENO(2U);
     saved = *c;
     saved_top = ed.win->vp.top;
@@ -105,7 +105,7 @@ void test_searchui_cancel_restores_cursor_goal_and_viewport(void)
     YEW_ASSERT(ed.search.active);
     /* Move somewhere far away, as a preview would. */
     yew_ed_cursor(&ed)->pos = BYTEOFF(300U);
-    yew_ed_cursor(&ed)->goal_col = (GCol){0U};
+    yew_ed_cursor(&ed)->goal_col = (CCol){0U};
     ed.win->vp.top = LINENO(28U);
 
     yew_search_cancel(&ed, ed.win);

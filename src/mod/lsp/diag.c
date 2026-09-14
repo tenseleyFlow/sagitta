@@ -700,7 +700,7 @@ static bool diag_pick_accept(Ed *ed, void *ctx, i32 payload, u8 how)
         BYTEOFF(visible_span(b, d).lo);
     ed->win->cs.curs.data[ed->win->cs.primary].anchor =
         ed->win->cs.curs.data[ed->win->cs.primary].pos;
-    ed->win->cs.curs.data[ed->win->cs.primary].goal_col = (GCol){0U};
+    ed->win->cs.curs.data[ed->win->cs.primary].goal_col = (CCol){0U};
     yew_win_follow_cursor(ed->win);
     ed->full_damage = true;
     return true;
@@ -812,7 +812,7 @@ bool yew_diag_jump(Ed *ed, Win *w, bool forward)
         BYTEOFF(visible_span(w->buf, target).lo);
     w->cs.curs.data[w->cs.primary].anchor =
         w->cs.curs.data[w->cs.primary].pos;
-    w->cs.curs.data[w->cs.primary].goal_col = (GCol){0U};
+    w->cs.curs.data[w->cs.primary].goal_col = (CCol){0U};
     yew_win_follow_cursor(w);
     ed->full_damage = true;
     return true;

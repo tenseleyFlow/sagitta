@@ -247,7 +247,7 @@ void test_draw_rect_selected_cells_equal_deleted_span_cells(void)
             cursor = &ed.win->cs.curs.data[ed.win->cs.primary];
             cursor->anchor = BYTEOFF(edge0);
             cursor->pos = BYTEOFF(THIRD_ROW_AT + edge1);
-            cursor->goal_col = (GCol){0U};
+            cursor->goal_col = (CCol){0U};
 
             yew_sel_rect_spans(ed.win, cursor, &spans);
             YEW_ASSERT_EQ_U64(spans.len, 3U);

@@ -49,7 +49,7 @@ bool test_yew_f_077(char *why, size_t why_cap)
     cursor = yew_ed_cursor(&ed);
     cursor->anchor = BYTEOFF(0U);
     cursor->pos = BYTEOFF(4U);
-    cursor->goal_col = (GCol){2U};
+    cursor->goal_col = (CCol){2U};
     yew_cset_normalize(ed.buffer.tb, &ed.win->cs);
 
     cx.ed = &ed;

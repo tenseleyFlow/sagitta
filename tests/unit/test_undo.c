@@ -43,7 +43,7 @@ static Cursor undo_cursor(u64 pos, u64 anchor, u64 goal)
 
     cursor.pos = BYTEOFF(pos);
     cursor.anchor = BYTEOFF(anchor);
-    cursor.goal_col = (GCol){goal};
+    cursor.goal_col = (CCol){goal};
     return cursor;
 }
 

@@ -27,36 +27,47 @@ static ByteOff line_content_end(const TextBuf *tb, LineNo line)
 }
 
 /*
- * The goal column on `line`, landing as far RIGHT as the line allows.
- *
- * `yew_gcol_to_off` answers "which cluster occupies this column", and on
- * a line with no trailing newline an OVERFLOWING column answers with the
- * last cluster's start — the character at that column, since there is
- * none further right.  That is the right answer to its question and the
- * wrong one for a caret: arrowing down a long column onto a closing
- * brace put the caret before the brace at the end of a file and after it
- * everywhere else, because only the final line lacks the newline that
- * gives the caret somewhere past the text to rest.
- *
- * Vertical motion wants the caret position, so an overflow clamps to the
- * line's content end.  `yew_ccol_to_off_padded` is the same distinction
- * spelled for block paste; this is the grapheme-column twin, kept here
- * rather than in the coordinate layer so the primitive keeps its one
- * documented meaning.
+ * The buffer's own tab width, because a goal column is a SCREEN column
+ * and a tab's width on screen belongs to the buffer.  Zero means "not
+ * set"; ui/draw.c resolves it the same way when it paints the tab.
  */
-static ByteOff line_at_col(const TextBuf *tb, LineNo line, GCol goal)
+static u32 motion_tabwidth(const UnitCtx *u)
 {
-    Span span = yew_textbuf_line_span(tb, line);
-    ByteOff landed = yew_gcol_to_off(tb, span, goal);
-    ByteOff content_end = line_content_end(tb, line);
-
-    return landed.v < content_end.v && goal.v > yew_off_to_gcol(
-               tb, span, content_end).v
-               ? content_end
-               : landed;
+    return u->buf != NULL && u->buf->tabwidth != 0U
+               ? u->buf->tabwidth
+               : (u32)YEW_VP_TABWIDTH;
 }
 
-static GCol line_goal(const UnitCtx *u, ByteOff p)
+/*
+ * The goal column on `line`, landing as far RIGHT as the line allows.
+ *
+ * The PADDED lookup, because this is a caret and not a character.  The
+ * plain `yew_ccol_to_off` answers "which cluster occupies this column",
+ * and on a line with no trailing newline an OVERFLOWING column answers
+ * with the last cluster's start -- the character at that column, since
+ * there is none further right.  That is the right answer to its question
+ * and the wrong one for a caret: arrowing down a long column onto a
+ * closing brace put the caret before the brace at the end of a file and
+ * after it everywhere else, because only the final line lacks the
+ * newline that gives the caret somewhere past the text to rest.
+ *
+ * `yew_ccol_to_off_padded` clamps an overflow to the line's content end,
+ * which is exactly the caret's answer, so the distinction lives once in
+ * the coordinate layer and both vertical paths share it.
+ *
+ * A goal that falls INSIDE a tab's render width has no cluster of its
+ * own; the lookup rounds left onto the tab, which keeps every landing on
+ * a grapheme boundary as invariant 2 requires.
+ */
+static ByteOff line_at_col(const TextBuf *tb, LineNo line, CCol goal,
+                           u32 tabw)
+{
+    Span span = yew_textbuf_line_span(tb, line);
+
+    return yew_ccol_to_off_padded(tb, span, goal, tabw);
+}
+
+static CCol line_goal(const UnitCtx *u, ByteOff p)
 {
     if (u->win != NULL && u->win->cs.curs.len != 0U &&
         (size_t)u->win->cs.primary < u->win->cs.curs.len) {
@@ -66,10 +77,10 @@ static GCol line_goal(const UnitCtx *u, ByteOff p)
         if (cursor->pos.v == p.v)
             return cursor->goal_col;
     }
-    return yew_off_to_gcol(u->tb,
+    return yew_off_to_ccol(u->tb,
                            yew_textbuf_line_span(
                                u->tb, yew_textbuf_line_of(u->tb, p)),
-                           p);
+                           p, motion_tabwidth(u));
 }
 
 static u64 line_step(const UnitCtx *u, bool alt)
@@ -86,7 +97,7 @@ static ByteOff line_next(UnitCtx *u, ByteOff p, bool alt)
 {
     u64 count;
     LineNo line;
-    GCol goal;
+    CCol goal;
     u64 target;
 
     p = clamp_pos(u->tb, p);
@@ -105,13 +116,13 @@ static ByteOff line_next(UnitCtx *u, ByteOff p, bool alt)
     target = line.v + line_step(u, alt);
     if (target >= count)
         target = count - 1U;
-    return line_at_col(u->tb, LINENO(target), goal);
+    return line_at_col(u->tb, LINENO(target), goal, motion_tabwidth(u));
 }
 
 static ByteOff line_prev(UnitCtx *u, ByteOff p, bool alt)
 {
     LineNo line;
-    GCol goal;
+    CCol goal;
     u64 step;
 
     p = clamp_pos(u->tb, p);
@@ -129,7 +140,7 @@ static ByteOff line_prev(UnitCtx *u, ByteOff p, bool alt)
     goal = line_goal(u, p);
     step = line_step(u, alt);
     return line_at_col(u->tb, LINENO(line.v > step ? line.v - step : 0U),
-                       goal);
+                       goal, motion_tabwidth(u));
 }
 
 static bool cluster_is_blank(const TextBuf *tb, Span line, ByteOff p)

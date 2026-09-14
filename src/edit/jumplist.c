@@ -257,7 +257,7 @@ static bool walk(Ed *ed, Win *w, JumpEntry *e, u32 *head, u32 *len,
             c->pos = pos;
             /* A jump is an absolute move, so the column the user was
              * aiming at on some earlier vertical motion is stale. */
-            c->goal_col = (GCol){0U};
+            c->goal_col = (CCol){0U};
         }
     }
     yew_win_follow_cursor(w);

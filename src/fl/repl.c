@@ -25,6 +25,14 @@
 #include "ui/cmdhist.h"
 #include "unicode/width.h"
 
+/*
+ * The prompt is one line with no vertical motion, so nothing ever reads
+ * back the goal column these motions record.  The tab width is still
+ * required by the API, and the prompt has no Buffer to ask, so it uses
+ * the editor default.
+ */
+enum { FL_REPL_TABWIDTH = 4 };
+
 /* Hand-counting a literal's length is a bug waiting for the next edit
  * to the literal; this file counts nothing. */
 static void put(Bytebuf *b, const char *text)
@@ -487,7 +495,7 @@ static void line_backspace(FlLine *l)
 
     if (l->cur.pos.v == 0U)
         return;
-    yew_cursor_left(l->tb, &probe);
+    yew_cursor_left(l->tb, &probe, FL_REPL_TABWIDTH);
     line_delete(l, probe.pos.v, l->cur.pos.v);
 }
 
@@ -497,7 +505,7 @@ static void line_delete_fwd(FlLine *l)
 
     if (l->cur.pos.v >= yew_textbuf_len(l->tb))
         return;
-    yew_cursor_right(l->tb, &probe);
+    yew_cursor_right(l->tb, &probe, FL_REPL_TABWIDTH);
     line_delete(l, l->cur.pos.v, probe.pos.v);
 }
 
@@ -859,11 +867,13 @@ static int repl_main(bool selftest_bug)
                     line.cur.pos = BYTEOFF(word_left_of(&line,
                                                         line.cur.pos.v));
                 else
-                    yew_cursor_left(line.tb, &line.cur);
+                    yew_cursor_left(line.tb, &line.cur,
+                                    FL_REPL_TABWIDTH);
                 line.cur.anchor = line.cur.pos;
                 break;
             case YEW_KEY_RIGHT:
-                yew_cursor_right(line.tb, &line.cur);
+                yew_cursor_right(line.tb, &line.cur,
+                                 FL_REPL_TABWIDTH);
                 line.cur.anchor = line.cur.pos;
                 break;
             case YEW_KEY_HOME:

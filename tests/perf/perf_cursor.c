@@ -89,14 +89,14 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
 
         cursor.pos = BYTEOFF(LONG_LINE_BYTES - pc->pattern_len);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){clusters - 1U};
+        cursor.goal_col = (CCol){clusters - 1U};
         start = now_ns();
         if (start < 0) {
             yew_textbuf_free(tb);
             yew_textbuf_free(cross_tb);
             return false;
         }
-        yew_cursor_right(tb, &cursor);
+        yew_cursor_right(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
             cursor.goal_col.v != clusters) {
@@ -116,14 +116,14 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
 
         cursor.pos = BYTEOFF(LONG_LINE_BYTES);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){clusters};
+        cursor.goal_col = (CCol){clusters};
         start = now_ns();
         if (start < 0) {
             yew_textbuf_free(tb);
             yew_textbuf_free(cross_tb);
             return false;
         }
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
@@ -151,7 +151,7 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
             worst = elapsed;
         cursor.pos = BYTEOFF(LONG_LINE_BYTES + 1U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){clusters + 1U};
+        cursor.goal_col = (CCol){clusters + 1U};
         start = now_ns();
         if (start < 0) {
             yew_textbuf_delete(tb,
@@ -161,7 +161,7 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
             yew_textbuf_free(tb);
             return false;
         }
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
             cursor.goal_col.v != clusters) {
@@ -190,7 +190,7 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
             yew_textbuf_free(tb);
             return false;
         }
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         start = now_ns();
         yew_textbuf_delete(tb,
@@ -218,12 +218,12 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
 
         cursor.pos = BYTEOFF(0U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
         start = now_ns();
         yew_cursor_line_end(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
-            cursor.goal_col.v != YEW_GCOL_EOL) {
+            cursor.goal_col.v != YEW_CCOL_EOL) {
             yew_textbuf_free(cross_tb);
             yew_textbuf_free(tb);
             return false;
@@ -232,7 +232,7 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
             worst = elapsed;
 
         start = now_ns();
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
@@ -246,12 +246,12 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
 
         cursor.pos = BYTEOFF(0U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
         start = now_ns();
         yew_cursor_buf_end(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
-            cursor.goal_col.v != YEW_GCOL_EOL) {
+            cursor.goal_col.v != YEW_CCOL_EOL) {
             yew_textbuf_free(cross_tb);
             yew_textbuf_free(tb);
             return false;
@@ -261,9 +261,9 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
 
         cursor.pos = BYTEOFF(LONG_LINE_BYTES + 1U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
         start = now_ns();
-        yew_cursor_left(cross_tb, &cursor);
+        yew_cursor_left(cross_tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
             cursor.goal_col.v != clusters) {
@@ -275,7 +275,7 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
             worst = elapsed;
 
         start = now_ns();
-        yew_cursor_left(cross_tb, &cursor);
+        yew_cursor_left(cross_tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
@@ -328,9 +328,9 @@ static bool measure_contextual_reverse(void)
     tb = yew_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
     cursor.pos = BYTEOFF(LONG_LINE_BYTES);
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){LONG_LINE_BYTES / sizeof(ri) / 2U};
+    cursor.goal_col = (CCol){LONG_LINE_BYTES / sizeof(ri) / 2U};
     start = now_ns();
-    yew_cursor_left(tb, &cursor);
+    yew_cursor_left(tb, &cursor, 4U);
     ri_elapsed = now_ns() - start;
     if (start < 0 || ri_elapsed < 0 ||
         cursor.pos.v != LONG_LINE_BYTES - 2U * sizeof(ri) ||
@@ -349,9 +349,9 @@ static bool measure_contextual_reverse(void)
     tb = yew_textbuf_from_owned_bytes(bytes, (u64)extend_len);
     cursor.pos = BYTEOFF((u64)extend_len);
     cursor.anchor = cursor.pos;
-    cursor.goal_col = (GCol){1U};
+    cursor.goal_col = (CCol){1U};
     start = now_ns();
-    yew_cursor_left(tb, &cursor);
+    yew_cursor_left(tb, &cursor, 4U);
     extend_elapsed = now_ns() - start;
     if (start < 0 || extend_elapsed < 0 || cursor.pos.v != 0U ||
         cursor.goal_col.v != 0U) {
@@ -407,9 +407,9 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
 
         cursor.pos = BYTEOFF(at);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){gcol};
+        cursor.goal_col = (CCol){gcol};
         start = now_ns();
-        yew_cursor_right(tb, &cursor);
+        yew_cursor_right(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 || cursor.pos.v != at + 1U ||
             cursor.goal_col.v != gcol + 1U)
@@ -427,9 +427,9 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
 
         cursor.pos = BYTEOFF(at);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){gcol};
+        cursor.goal_col = (CCol){gcol};
         start = now_ns();
-        yew_cursor_right(tb, &cursor);
+        yew_cursor_right(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
             cursor.pos.v != at + pc->pattern_len ||
@@ -500,9 +500,9 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
 
         cursor.pos = BYTEOFF(LONG_LINE_BYTES + 2U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
         start = now_ns();
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES ||
@@ -601,9 +601,9 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
 
         cursor.pos = BYTEOFF(yew_textbuf_len(tb));
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
         start = now_ns();
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
             cursor.pos.v != yew_textbuf_len(tb) - pc->pattern_len ||
@@ -690,9 +690,9 @@ static bool measure_ascii_context_transition(void)
 
         cursor.pos = BYTEOFF(LONG_LINE_BYTES + sizeof(accent));
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
         start = now_ns();
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         if (cursor.pos.v != LONG_LINE_BYTES + sizeof(accent) - 1U ||
             cursor.goal_col.v != LONG_LINE_BYTES - 1U ||
             yew_gcol_to_off(
@@ -781,9 +781,9 @@ static bool measure_giant_cluster_midpoint_edit(void)
 
         cursor.pos = BYTEOFF(len + 1U);
         cursor.anchor = cursor.pos;
-        cursor.goal_col = (GCol){0U};
+        cursor.goal_col = (CCol){0U};
         start = now_ns();
-        yew_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor, 4U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 || cursor.pos.v != midpoint ||
             cursor.goal_col.v != 1U)
