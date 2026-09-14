@@ -1776,9 +1776,25 @@ static void jump_expire(Ed *ed, void *ctx)
  * like a lost keystroke — and the hint names the ROW, so the status
  * line never promises a tab when a member is meant.
  */
+/*
+ * The 500 ms window steals the NEXT digit, which is what makes
+ * `alt+1` `5` reach tab 15 -- and is exactly wrong where a bare digit is
+ * the character being written. Insert and FUSS both read bare
+ * printables (FUSS for type-to-jump), and yew_tab_jump_key sits ahead of
+ * both in dispatch, so arming there would eat a keystroke the user
+ * meant for the document. Those modes get single-digit jumps and keep
+ * every character; two-digit jumps are one mode away.
+ */
+static bool jump_window_allowed(const Ed *ed)
+{
+    return ed->mode != YEW_MODE_I && ed->mode != YEW_MODE_F;
+}
+
 static void jump_arm(Ed *ed, JumpMode mode, i64 value)
 {
     yew_tab_jump_clear(ed);
+    if (!jump_window_allowed(ed))
+        return;
     jump_on = true;
     jump_mode = mode;
     jump_value = value;

@@ -554,6 +554,7 @@ void test_s14_journal_append_failure_preserves_complete_edit_state(void);
 void test_modes_escape_cancels_chord_before_prompt_or_mode(void);
 void test_modes_every_unit_mode_switches_in_one_key(void);
 void test_modes_fuss_opens_from_every_unit_mode(void);
+void test_modes_tab_jumps_are_global_and_insert_keeps_its_digits(void);
 void test_modes_escape_cancels_count_before_prompt_or_mode(void);
 void test_modes_escape_closes_prompt_before_changing_mode(void);
 void test_modes_escape_from_insert_enters_line_and_repaints(void);

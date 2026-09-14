@@ -205,6 +205,26 @@ static const BindRow frozen_W[] = {
     {"@", "ed.macro.replay", 0, NULL},
     {"@ @", "ed.macro.replay_last", 0, NULL},
     {"Q", "ed.macro.list", 0, NULL},
+    {"A-1", "ed.tab.goto", 1, NULL},
+    {"A-2", "ed.tab.goto", 2, NULL},
+    {"A-3", "ed.tab.goto", 3, NULL},
+    {"A-4", "ed.tab.goto", 4, NULL},
+    {"A-5", "ed.tab.goto", 5, NULL},
+    {"A-6", "ed.tab.goto", 6, NULL},
+    {"A-7", "ed.tab.goto", 7, NULL},
+    {"A-8", "ed.tab.goto", 8, NULL},
+    {"A-9", "ed.tab.goto", 9, NULL},
+    {"A-0", "ed.tab.goto", 0, NULL},
+    {"C-1", "ed.tab.goto_bar", 1, NULL},
+    {"C-2", "ed.tab.goto_bar", 2, NULL},
+    {"C-3", "ed.tab.goto_bar", 3, NULL},
+    {"C-4", "ed.tab.goto_bar", 4, NULL},
+    {"C-5", "ed.tab.goto_bar", 5, NULL},
+    {"C-6", "ed.tab.goto_bar", 6, NULL},
+    {"C-7", "ed.tab.goto_bar", 7, NULL},
+    {"C-8", "ed.tab.goto_bar", 8, NULL},
+    {"C-9", "ed.tab.goto_bar", 9, NULL},
+    {"C-0", "ed.tab.goto_bar", 0, NULL},
 };
 
 static const BindRow frozen_B[] = {
@@ -241,6 +261,26 @@ static const BindRow frozen_B[] = {
     {"@", "ed.macro.replay", 0, NULL},
     {"@ @", "ed.macro.replay_last", 0, NULL},
     {"Q", "ed.macro.list", 0, NULL},
+    {"A-1", "ed.tab.goto", 1, NULL},
+    {"A-2", "ed.tab.goto", 2, NULL},
+    {"A-3", "ed.tab.goto", 3, NULL},
+    {"A-4", "ed.tab.goto", 4, NULL},
+    {"A-5", "ed.tab.goto", 5, NULL},
+    {"A-6", "ed.tab.goto", 6, NULL},
+    {"A-7", "ed.tab.goto", 7, NULL},
+    {"A-8", "ed.tab.goto", 8, NULL},
+    {"A-9", "ed.tab.goto", 9, NULL},
+    {"A-0", "ed.tab.goto", 0, NULL},
+    {"C-1", "ed.tab.goto_bar", 1, NULL},
+    {"C-2", "ed.tab.goto_bar", 2, NULL},
+    {"C-3", "ed.tab.goto_bar", 3, NULL},
+    {"C-4", "ed.tab.goto_bar", 4, NULL},
+    {"C-5", "ed.tab.goto_bar", 5, NULL},
+    {"C-6", "ed.tab.goto_bar", 6, NULL},
+    {"C-7", "ed.tab.goto_bar", 7, NULL},
+    {"C-8", "ed.tab.goto_bar", 8, NULL},
+    {"C-9", "ed.tab.goto_bar", 9, NULL},
+    {"C-0", "ed.tab.goto_bar", 0, NULL},
 };
 
 static const BindRow frozen_I[] = {
@@ -288,6 +328,26 @@ static const BindRow frozen_I[] = {
     {"C-e", "ed.move.line.end", 0, NULL},
     {"C-<left>", "ed.move.line.home_toggle", 0, NULL},
     {"C-<right>", "ed.move.line.end", 0, NULL},
+    {"A-1", "ed.tab.goto", 1, NULL},
+    {"A-2", "ed.tab.goto", 2, NULL},
+    {"A-3", "ed.tab.goto", 3, NULL},
+    {"A-4", "ed.tab.goto", 4, NULL},
+    {"A-5", "ed.tab.goto", 5, NULL},
+    {"A-6", "ed.tab.goto", 6, NULL},
+    {"A-7", "ed.tab.goto", 7, NULL},
+    {"A-8", "ed.tab.goto", 8, NULL},
+    {"A-9", "ed.tab.goto", 9, NULL},
+    {"A-0", "ed.tab.goto", 0, NULL},
+    {"C-1", "ed.tab.goto_bar", 1, NULL},
+    {"C-2", "ed.tab.goto_bar", 2, NULL},
+    {"C-3", "ed.tab.goto_bar", 3, NULL},
+    {"C-4", "ed.tab.goto_bar", 4, NULL},
+    {"C-5", "ed.tab.goto_bar", 5, NULL},
+    {"C-6", "ed.tab.goto_bar", 6, NULL},
+    {"C-7", "ed.tab.goto_bar", 7, NULL},
+    {"C-8", "ed.tab.goto_bar", 8, NULL},
+    {"C-9", "ed.tab.goto_bar", 9, NULL},
+    {"C-0", "ed.tab.goto_bar", 0, NULL},
 };
 
 static const BindRow frozen_E[] = {
@@ -441,7 +501,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 247U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 327U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
