@@ -35,7 +35,7 @@ recorded in `audit-00.md`.
 | YEW-F-020 | M | fixed | F13 GIT | ~~Git formatting gate rejects legitimate display formatting~~ — fixed 2026-09-13 in `0195ed1c` | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
 | YEW-F-021 | M | fixed | F14 PLUG | ~~plugin teardown retains raw hook and ledger lengths~~ — fixed 2026-09-14 in `073489ff` | tests/audit/yew_f_021.c | s54 section 4 / DoD 4; s58 F14 q3 |
 | YEW-F-022 | M | fixed | F14 PLUG | ~~plugin trust wording gate rejects its required warning~~ — fixed 2026-09-14 in `4858a39c` | tests/audit/yew_f_022.c | s54 section 7 / DoD 12; s58 F14 q6 |
-| YEW-F-023 | M | open | F14 PLUG | plugin commands cannot enter the recorder CMDWORD space | tests/audit/yew_f_023.c | s58 F14 q8 |
+| YEW-F-023 | M | fixed | F14 PLUG | ~~plugin commands cannot enter the recorder CMDWORD space~~ — fixed 2026-09-14 in `d2dc4ddf` | tests/audit/yew_f_023.c | s58 F14 q8 |
 | YEW-F-024 | M | open | F15 CI | cross-surface XFAIL debt table stops at F004 | tests/audit/yew_f_024.c | s58 section 3 / F15 q1 |
 | YEW-F-025 | M | open | F15 CI | script tests have no XFAIL or hard-XPASS state | tests/audit/yew_f_025.c | s58 section 3 / F15 q1 |
 | YEW-F-026 | M | open | F15 CI | PTY cases have no XFAIL or hard-XPASS state | tests/audit/yew_f_026.c | s58 section 3 / F15 q1 |
@@ -329,14 +329,14 @@ deny memory and resource isolation, and its sole `sandbox` mention must be the
 negative disclaimer. Both the release script and audit reproducer reject an
 injected positive isolation claim.
 
-`YEW-F-023` is Medium because plugin commands execute normally but can never
-be represented by the recorder. The plugin registration path excludes
-`YEW_CMD_RECORDABLE`, always supplies a NULL CMDWORD, and the author guide
-calls `recordable` host-only. With no word to enter in the global map, a plugin
-command named `up` is accepted beside core's `up` instead of reaching the
-required collision check. This is visible as a macro that omits the plugin
-action rather than a byte-loss path, so it is Medium. It remains open for
-Sprint 59; no product source changed during the audit.
+`YEW-F-023` was Medium because plugin commands executed normally but could
+never be represented by the recorder. Commit `d2dc4ddf` makes recordability
+implicit, installs each parseable local name in the global CMDWORD map, and
+rejects collisions with core or enabled-plugin commands before registration.
+The command registry also reserves motion syntax that would parse as a
+different action. A lifecycle regression records a real plugin invocation,
+proves that its CMDWORD is emitted, and replays the live closure; collision
+failure and repeated multi-plugin teardown retain their zero-residue checks.
 
 `YEW-F-024` is Medium because Sprint 58 calls
 `.docs/audits/xfail-debt.md` the authoritative cross-surface debt table and

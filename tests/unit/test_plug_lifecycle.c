@@ -13,11 +13,13 @@
 #include "edit/ed.h"
 #include "fl/flruntime.h"
 #include "fl/module.h"
+#include "fl/record.h"
 #include "mod/plug/internal.h"
 #include "term/grid.h"
 #include "term/input.h"
 #include "text/piece.h"
 #include "ui/layout.h"
+#include "ui/message.h"
 #include "ui/picker.h"
 #include "util/buf.h"
 #include "util/xdg.h"
@@ -389,6 +391,19 @@ static bool life_gc_contains(const FlVm *vm, const void *object)
     return false;
 }
 
+static bool life_bytes_contains(const Bytebuf *bytes, const char *text)
+{
+    size_t len = strlen(text);
+    size_t i;
+
+    if (len > bytes->len)
+        return false;
+    for (i = 0U; i <= bytes->len - len; i++)
+        if (memcmp(bytes->data + i, text, len) == 0)
+            return true;
+    return false;
+}
+
 static const void *life_command_closure(const LifecycleFix *f,
                                         u32 origin_id)
 {
@@ -504,6 +519,67 @@ void test_plug_lifecycle_enable_passes_ctx_and_registers_command_and_hook(void)
     life_close(&f);
 }
 
+void test_plug_lifecycle_command_records_and_replays_by_cmdword(void)
+{
+    static const char source[] =
+        "fn init(ctx) {\n"
+        "  ctx.command(\"pulse\", fn() ctx.msg(\"ran\", \"info\"))\n"
+        "}\n";
+    LifecycleFix f;
+    CmdCtx cx = {0};
+    CmdId command;
+    const CmdDesc *desc;
+    const RegVal *recording;
+    const char *message;
+
+    life_open(&f, "life-recordable", "[]", source, NULL);
+    YEW_ASSERT(yew_plug_enable(&f.ed, f.plug, &f.dc));
+    command = yew_cmd_lookup("ed.plug.life_recordable.pulse",
+                             strlen("ed.plug.life_recordable.pulse"));
+    YEW_ASSERT(command.v != YEW_CMD_NONE.v);
+    desc = yew_cmd_desc(command);
+    YEW_ASSERT_NOT_NULL(desc);
+    YEW_ASSERT((desc->flags & YEW_CMD_RECORDABLE) != 0U);
+    YEW_ASSERT_EQ_STR(desc->word, "pulse");
+    YEW_ASSERT_EQ_U64(yew_cmd_by_word("pulse", 5U).v, command.v);
+
+    YEW_ASSERT(yew_record_start(&f.ed, (u8)'a'));
+    cx.ed = &f.ed;
+    cx.win = f.ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&f.ed, command, &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
+    YEW_ASSERT_EQ_I64(yew_record_stop(&f.ed), YEW_CMD_OK);
+    recording = yew_reg_get(&f.ed.regs, (u8)'a');
+    YEW_ASSERT_NOT_NULL(recording);
+    YEW_ASSERT(life_bytes_contains(&recording->bytes, "pulse"));
+
+    yew_msg_clear(&f.ed);
+    YEW_ASSERT_EQ_I64(yew_macro_replay(&f.ed, (u8)'a', 1U), YEW_CMD_OK);
+    message = f.ed.msg.full == NULL ? f.ed.msg.text : f.ed.msg.full;
+    YEW_ASSERT_EQ_STR(message, "[life-recordable] ran");
+    life_close(&f);
+}
+
+void test_plug_lifecycle_cmdword_collision_fails_init_cleanly(void)
+{
+    static const char source[] =
+        "fn init(ctx) { ctx.command(\"up\", fn() nil) }\n";
+    LifecycleFix f;
+    LifecycleCounts before;
+
+    life_open(&f, "life-word-collision", "[]", source, NULL);
+    before = life_counts(&f);
+    YEW_ASSERT(!yew_plug_enable(&f.ed, f.plug, &f.dc));
+    YEW_ASSERT_EQ_U64(f.plug->st, PLUG_ERROR);
+    YEW_ASSERT_NOT_NULL(f.plug->last_error);
+    YEW_ASSERT_NOT_NULL(strstr(f.plug->last_error,
+                               "CMDWORD already registered"));
+    life_assert_counts(life_counts(&f), before);
+    life_close(&f);
+}
+
 void test_plug_lifecycle_failing_init_leaves_zero_residue_and_trace(void)
 {
     static const char source[] =
@@ -605,9 +681,9 @@ void test_plug_lifecycle_reverse_disable_leaves_zero_registry_residue(void)
 
 void test_plug_lifecycle_twenty_by_twenty_reclaims_every_closure(void)
 {
-    static const char source[] =
+    static const char source_format[] =
         "fn init(ctx) {\n"
-        "  ctx.command(\"cycle\", fn() nil)\n"
+        "  ctx.command(\"cycle%02u\", fn() nil)\n"
         "  ctx.on(\"ed.idle\", fn() nil)\n"
         "  ctx.bind(\"L\", \"z\", fn() nil)\n"
         "  ctx.set({enabled: true})\n"
@@ -623,12 +699,18 @@ void test_plug_lifecycle_twenty_by_twenty_reclaims_every_closure(void)
     u32 raw_ledger;
     u32 cycle;
     u32 i;
+    char source[512];
+    int n;
 
+    n = snprintf(source, sizeof(source), source_format, 0U);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(source));
     life_open(&f, "life-many-00", "[\"ed.idle\"]", source, NULL);
     for (i = 1U; i < YEW_ARRAY_LEN(closures); i++) {
         char name[32];
 
         (void)snprintf(name, sizeof(name), "life-many-%02u", (unsigned)i);
+        n = snprintf(source, sizeof(source), source_format, (unsigned)i);
+        YEW_ASSERT(n > 0 && (size_t)n < sizeof(source));
         life_add_plugin(&f, name, "[\"ed.idle\"]", source);
     }
     yew_plug_free(&f.ed);
