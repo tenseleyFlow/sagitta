@@ -53,7 +53,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-040 | audit | `tests/audit/f15_ban_misses.c` | ~~strerror_r ban accepts macro-forwarded calls~~ — fixed in `1cac4adf` | fixed |
 | YEW-F-041 | audit | `tests/audit/f15_ban_misses.c` | ~~musl backtrace ban omits `backtrace_symbols_fd`~~ — fixed in `aec0fe6b` | fixed |
 | YEW-F-042 | audit | `tests/audit/f15_ban_misses.c` | ~~GNU-libc ban omits `getopt_long_only`~~ — fixed in `aec0fe6b` | fixed |
-| YEW-F-043 | audit | `tests/audit/f15_ban_misses.c` | long-double ban misses valid continued declarations | open |
+| YEW-F-043 | audit | `tests/audit/f15_ban_misses.c` | ~~long-double ban misses valid continued declarations~~ — fixed in `4b2b0f02` | fixed |
 | YEW-F-044 | audit | `tests/audit/f15_ban_misses.c` | shim-honesty gate accepts parenthesized success | open |
 | YEW-F-045 | audit | `tests/audit/f15_ban_misses.c` | Unicode-width ban accepts decimal local tables | open |
 | YEW-F-046 | audit | `tests/audit/f15_ban_misses.c` | syntax-color ban accepts packed decimal colors | open |
