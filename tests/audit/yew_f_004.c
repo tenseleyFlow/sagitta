@@ -5,10 +5,9 @@
  * as `clipboard.sync:` and `search.smartcase:` without requiring quotes,
  * and set() applies both values.
  *
- * Baseline failure: the full parser consumes `clipboard` as the map key,
- * then expects `:` and rejects the following dot.  The pure-literal parser
- * accepts the same key shape, and runtime/init.fl avoids the defect by
- * quoting every dotted option name.
+ * Regression: both map parsers fold IDENT ("." IDENT)+ only in key
+ * position. Field access remains an expression production, and
+ * runtime/init.fl's quoted dotted names remain equivalent.
  */
 #include "audit.h"
 
@@ -22,7 +21,7 @@
 bool test_yew_f_004(char *why, size_t why_cap)
 {
     static const char source[] =
-        "set({ clipboard.sync: \"none\", search.smartcase: false })";
+        "set({ clipboard.sync: \"off\", search.smartcase: false })";
     Ed ed;
     OptVal clipboard;
     OptVal smartcase;
@@ -42,8 +41,8 @@ bool test_yew_f_004(char *why, size_t why_cap)
          yew_opt_get(&ed, ed.win->buf, ed.win, "search.smartcase", 16U,
                      &smartcase) &&
          clipboard.type == (u8)YEW_OPT_ENUM &&
-         clipboard.as.str.len == 4U &&
-         memcmp(clipboard.as.str.s, "none", 4U) == 0 &&
+         clipboard.as.str.len == 3U &&
+         memcmp(clipboard.as.str.s, "off", 3U) == 0 &&
          smartcase.type == (u8)YEW_OPT_BOOL && !smartcase.as.b;
     if (!ok) {
         const char *message = ed.msg.full == NULL ? ed.msg.text : ed.msg.full;

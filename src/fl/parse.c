@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "fl/lex.h"
+#include "util/buf.h"
 #include "util/log.h"
 
 typedef struct Parser {
@@ -448,6 +449,55 @@ static FlNode *parse_list_literal(Parser *p)
     return n;
 }
 
+static FlNode *parse_map_key(Parser *p, bool pure_literal)
+{
+    FlNode *k = node(p, FL_A_LIT, p->cur.sp);
+    bool ident_key = p->cur.kind == FL_T_IDENT;
+
+    if (p->cur.kind == FL_T_INT) {
+        k->as.lit.lit = (u8)FL_L_INT;
+        k->as.lit.v.i = p->cur.v.i;
+        advance(p);
+        return k;
+    }
+    k->as.lit.lit = (u8)FL_L_STR;
+    k->as.lit.v.str_id = p->cur.v.str_id;
+    advance(p);
+    if (ident_key && check(p, FL_T_DOT)) {
+        Bytebuf dotted;
+        const char *first = yew_intern_str(p->in, k->as.lit.v.str_id);
+        size_t first_len = yew_intern_len(p->in, k->as.lit.v.str_id);
+
+        bytebuf_init(&dotted);
+        bytebuf_append(&dotted, first, first_len);
+        /* YEW-F-004: dotted option names are literal keys only inside a
+         * map entry.  Folding here preserves normal postfix field access. */
+        while (match(p, FL_T_DOT)) {
+            const char *part;
+            size_t part_len;
+
+            bytebuf_push_u8(&dotted, (u8)'.');
+            if (!check(p, FL_T_IDENT)) {
+                if (pure_literal)
+                    error_here(p, "pure-literal mode: expected a map-key "
+                                  "identifier after '.', found '%s'",
+                               fl_tok_spelling(p->cur.kind));
+                else
+                    expected(p, "a map-key identifier after '.'");
+                break;
+            }
+            part = yew_intern_str(p->in, p->cur.v.str_id);
+            part_len = yew_intern_len(p->in, p->cur.v.str_id);
+            bytebuf_append(&dotted, part, part_len);
+            advance(p);
+        }
+        k->as.lit.v.str_id = yew_intern(p->in, (const char *)dotted.data,
+                                        dotted.len);
+        bytebuf_free(&dotted);
+    }
+    return k;
+}
+
 static FlNode *parse_map_literal(Parser *p)
 {
     FlSpan sp = p->cur.sp;
@@ -466,19 +516,11 @@ static FlNode *parse_map_literal(Parser *p)
     while (!check(p, FL_T_RBRACE) && !check(p, FL_T_EOF)) {
         FlNode *k;
 
-        /* §2: entry = ( IDENT | STRING | INT ) ":" expr.  A bare word
-         * key is the common case and is NOT an identifier reference. */
+        /* §2: an IDENT or dotted IDENT key is literal in entry
+         * position, never an identifier or field reference. */
         if (check(p, FL_T_IDENT) || check(p, FL_T_STRING) ||
             check(p, FL_T_INT)) {
-            k = node(p, FL_A_LIT, p->cur.sp);
-            if (p->cur.kind == FL_T_INT) {
-                k->as.lit.lit = (u8)FL_L_INT;
-                k->as.lit.v.i = p->cur.v.i;
-            } else {
-                k->as.lit.lit = (u8)FL_L_STR;
-                k->as.lit.v.str_id = p->cur.v.str_id;
-            }
-            advance(p);
+            k = parse_map_key(p, false);
         } else {
             expected(p, "a map key (identifier, string or integer)");
             break;
@@ -1251,15 +1293,7 @@ static FlNode *parse_pl_map(Parser *p)
          */
         if (check(p, FL_T_IDENT) || check(p, FL_T_STRING) ||
             check(p, FL_T_INT)) {
-            k = node(p, FL_A_LIT, p->cur.sp);
-            if (p->cur.kind == FL_T_INT) {
-                k->as.lit.lit = (u8)FL_L_INT;
-                k->as.lit.v.i = p->cur.v.i;
-            } else {
-                k->as.lit.lit = (u8)FL_L_STR;
-                k->as.lit.v.str_id = p->cur.v.str_id;
-            }
-            advance(p);
+            k = parse_map_key(p, true);
         } else {
             (void)pl_reject(p);
             break;
