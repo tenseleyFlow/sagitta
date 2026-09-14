@@ -272,8 +272,8 @@ CmdStatus yew_edit_cmd_move_line_home(CmdCtx *cx)
 }
 
 /*
- * Home the way a caret editor draws it -- the first
- * non-blank, then column 0, then back again.
+ * Home the way a caret editor draws it: the first non-blank, then
+ * column 0, then back again.
  *
  * This is a NEW command rather than a change to motion.c's `line_home`
  * alternate, which walks to the first non-blank and STAYS there.  Two

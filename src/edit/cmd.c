@@ -1436,8 +1436,8 @@ static bool command_name_valid(const char *name)
          * — `Save As...`, the rename panel's two answers, and the group
          * picker's confirm. */
         "save_as", "apply", "confirm",
-        /* Home alternates between the indent and column 0
-         * without disturbing the unit alternates. */
+        /* Home's indent/column-0 alternation, and Insert mode's
+         * contextual Alt+Right. */
         "home_toggle", "accept_or_word",
         /* Sprint 57.18 §4: `:!!` -- one command, the real terminal.
          * Distinct from "term", which stays the refusal. */

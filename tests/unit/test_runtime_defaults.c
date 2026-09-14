@@ -34,9 +34,9 @@ static const BindRow frozen_L[] = {
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"A-]", "ed.shadow.next", 0, NULL},
     {"A-[", "ed.shadow.prev", 0, NULL},
-    /* `<home>` is the indent/column-0 toggle in every
-     * mode that binds it.  `A-<left>` keeps ed.move.unit.home_alt,
-     * and L's bare `0` keeps ed.move.unit.home. */
+    /* `<home>` is the indent/column-0 toggle in every mode that binds
+     * it.  `A-<left>` keeps ed.move.unit.home_alt, and L's bare `0`
+     * keeps ed.move.unit.home. */
     {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
     {"<pgup>", "ed.view.page_up", 0, NULL},
@@ -248,10 +248,10 @@ static const BindRow frozen_I[] = {
     {"<esc>", "ed.shadow.dismiss", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
     /*
-     * Alt+arrow is the word jump in Insert mode, and
-     * Alt+Right stays contextual -- it accepts a ghost word only while a
-     * suggestion is showing.  L, W and B keep the plain accept: their
-     * Alt arrows are already unit motions.
+     * Alt+arrow is the word jump in Insert mode, and Alt+Right stays
+     * contextual: it accepts a ghost word only while a suggestion is
+     * showing.  L, W and B keep the plain accept -- their Alt arrows are
+     * already unit motions.
      */
     {"A-<left>", "ed.move.word.prev", 0, NULL},
     {"A-<right>", "ed.shadow.accept_or_word", 0, NULL},
@@ -278,9 +278,9 @@ static const BindRow frozen_I[] = {
     {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
     /*
-     * Ctrl+arrow is the LINE's start and end here, the same
-     * pair <home>/<end> give.  Deliberately not the word jump the usual
-     * convention puts on Ctrl+arrow -- in yew that is Alt+arrow, below.
+     * Ctrl+arrow is the LINE's start and end here, the same pair
+     * <home>/<end> give.  Deliberately NOT the word jump the usual
+     * convention puts on Ctrl+arrow -- in yew that is Alt+arrow, above.
      */
     {"C-<left>", "ed.move.line.home_toggle", 0, NULL},
     {"C-<right>", "ed.move.line.end", 0, NULL},

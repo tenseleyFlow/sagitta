@@ -6,9 +6,9 @@
 #include "util/log.h"
 
 /*
- * `<home>` is ed.move.line.home_toggle in every H unit
- * table that binds it, matching L/W/I/E.  `A-<left>` keeps the unit
- * alternate it has always had.
+ * `<home>` is ed.move.line.home_toggle in every H unit table that binds
+ * it, matching L, W, I and E.  `A-<left>` keeps the unit alternate it
+ * has always had.
  */
 static const BindRow keys_H_L[] = {
     {"<left>", "ed.move.unit.home", 0, NULL},
