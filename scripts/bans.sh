@@ -596,22 +596,98 @@ shadow_draw_files=$tmp/shadow-draw-files
 printf '%s\n' "$repo_dir/src/ui/shadowdraw.c" >"$shadow_draw_files"
 scan "shadow insertion preview must compose without destructive row fill" \
     'yew_grid_fill[[:space:]]*\(' "$shadow_draw_files"
+# YEW-F-051: a caller can spell a destructive full-row fill as an ordinary
+# loop and never name yew_grid_fill.  Match the behavior without rejecting
+# shadow_blank_cells, whose nonzero bounded ranges implement composition.
+shadow_full_fill_calls()
+{
+    shadow_list=$1
+    shadow_out=$2
+    : >"$shadow_out"
+    while IFS= read -r file; do
+        [ -f "$file" ] || continue
+        awk '
+        { line[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                if (line[i] !~ /for[ \t]*\(/)
+                    continue
+                body = line[i] " " line[i+1] " " line[i+2] " " \
+                       line[i+3] " " line[i+4] " " line[i+5] " " \
+                       line[i+6] " " line[i+7]
+                if (body ~ /for[ \t]*\([^;]*=[ \t]*0[uU]*[ \t]*;[^;]*<[ \t]*[^;]*(->|\.)[ \t]*cols[ \t]*;/ &&
+                    body ~ /((->|\.)[ \t]*(cells|back|front)|(^|[^[:alnum:]_])(cells|back|front))[ \t]*\[[^]]+\][ \t]*=/)
+                    printf "%d:%s\n", i, line[i]
+            }
+        }' "$file" | sed "s|^|${file#"$repo_dir"/}:|" >>"$shadow_out" || :
+    done <"$shadow_list"
+}
+
+shadow_full_fill_calls "$shadow_draw_files" "$tmp/shadow-full-fill-hits"
+if [ -s "$tmp/shadow-full-fill-hits" ]; then
+    echo "ban: shadow insertion preview must not replace a complete grid row" \
+        >>"$hits"
+    cat "$tmp/shadow-full-fill-hits" >>"$hits"
+fi
+shadow_fill_seed=$tmp/seeded-shadow-full-fill.c
+printf '%s\n' \
+    'void seeded(Grid *g, Cell blank)' \
+    '{' \
+    '    size_t x;' \
+    '    for (x = 0; x < g->cols; x++) g->cells[x] = blank;' \
+    '}' >"$shadow_fill_seed"
+printf '%s\n' "$shadow_fill_seed" >"$tmp/shadow-fill-seed-list"
+shadow_full_fill_calls "$tmp/shadow-fill-seed-list" \
+    "$tmp/shadow-fill-seed-hits"
+if [ "$(wc -l <"$tmp/shadow-fill-seed-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the shadow full-row rule no longer fires on its own seed" \
+        >>"$hits"
+fi
 fuss_mode_files=$tmp/fuss-mode-files
 printf '%s\n' "$repo_dir/src/mod/git/fussmode.c" >"$fuss_mode_files"
+# YEW-F-052: taking the live pane-root address permits a later indirect
+# replacement, so the drawer boundary forbids both that escape and assignment.
+fuss_pane_root_write_pattern='pane_root[[:space:]]*=[[:space:]]*($|[^=])|&[[:space:]]*([[:alnum:]_]+[[:space:]]*(->|\.)[[:space:]]*)*pane_root([^[:alnum:]_]|$)'
 scan "F mode is a drawer and must not replace the live pane root" \
-    'pane_root[[:space:]]*=' "$fuss_mode_files"
+    "$fuss_pane_root_write_pattern" "$fuss_mode_files"
+scan_seed "FUSS pane-root ownership" "$fuss_pane_root_write_pattern" \
+    'PaneNode **slot = &ed->panes.pane_root;'
+scan_seed "FUSS direct pane-root replacement" \
+    "$fuss_pane_root_write_pattern" 'ed->pane_root ='
+# YEW-F-053: the libc random family shares global state and is no more
+# replayable than rand; generated campaigns stay on the pinned xorshift PRNG.
+deterministic_random_pattern='(^|[^[:alnum:]_])(rand|srand|random|srandom)[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)'
 scan "generated edit campaigns must use xorshift64*, not libc randomness" \
-    '(^|[^[:alnum:]_])rand[[:space:]]*\(|(^|[^[:alnum:]_])srand[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)' \
-    "$deterministic_fuzz_files"
+    "$deterministic_random_pattern" "$deterministic_fuzz_files"
+scan_seed "deterministic random-call" "$deterministic_random_pattern" \
+    'long seeded(void) { return ran''dom(); }'
+scan_seed "deterministic random-seed" "$deterministic_random_pattern" \
+    'void seeded(void) { sran''dom(1U); }'
+# YEW-F-054: direct variadic exec of a shell with -c is the same forbidden
+# clipboard command-string path as popen or system; only argv tools are valid.
+clipboard_shell_pattern='(^|[^[:alnum:]_])(popen|system)[[:space:]]*\(|(^|[^[:alnum:]_])(execl|execle|execlp)[[:space:]]*\([[:space:]]*"/(usr/)?bin/(ba|da|k|z)?sh"[^;]*"-c"'
 scan "clipboard subprocesses must never invoke a shell" \
-    '(^|[^[:alnum:]_])(popen|system)[[:space:]]*\(' "$source_files"
-job_interpolation_pattern='bytebuf_printf.*cmdline|sprintf.*shell'
+    "$clipboard_shell_pattern" "$source_files"
+scan_seed "clipboard direct-shell exec" "$clipboard_shell_pattern" \
+    'execl("/bin/sh", "sh", "-c", cmd, NULL);'
+# YEW-F-055: raw append into a command-string buffer is interpolation too;
+# program-derived arguments belong in YewJobSpec.argv regardless of helper.
+job_interpolation_pattern='bytebuf_printf.*cmdline|sprintf.*shell|bytebuf_append[[:space:]]*\([[:space:]]*&?[[:space:]]*(cmdline|shell)[[:space:]]*,'
 scan "programmatic job data must not be interpolated into shell text" \
     "$job_interpolation_pattern" "$source_files"
 scan_seed "job-command-interpolation" "$job_interpolation_pattern" \
     'bytebuf_printf(&cmdline, "%s", path);'
+scan_seed "job-command-append" "$job_interpolation_pattern" \
+    'bytebuf_append(shell, path, strlen(path));'
+# YEW-F-056: adjacent C string fragments concatenate at compile time, so
+# quotes and source whitespace cannot hide the OSC 52 query payload marker.
+osc52_query_pattern='52;([^[:space:]]*|[[:space:]"]*)\?'
 scan "OSC 52 clipboard queries are forbidden" \
-    '52;[^[:space:]]*\?' "$source_files"
+    "$osc52_query_pattern" "$source_files"
+scan_seed "OSC 52 contiguous query" "$osc52_query_pattern" \
+    'static const char query[] = "\033]52;c;?\a";'
+scan_seed "OSC 52 split-literal query" "$osc52_query_pattern" \
+    'static const char query[] = "\033]52;" "?\a";'
 
 # Sprint 37 DoD 2: all direct terminal-status and terminal-control syscalls
 # stay behind the one poisoned boundary. The product-level smoke drill calls

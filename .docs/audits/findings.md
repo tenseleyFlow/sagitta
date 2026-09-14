@@ -63,12 +63,12 @@ recorded in `audit-00.md`.
 | YEW-F-048 | M | fixed | F15 CI | ~~PTY-creation ban omits direct `posix_openpt` callers~~ — fixed 2026-09-14 in `674574eb` | tests/audit/f15_ban_misses.c | s06 audited harness; s58 F15 q2 |
 | YEW-F-049 | M | fixed | F15 CI | ~~CI golden-update ban depends on contiguous spelling~~ — fixed 2026-09-14 in `58684ebb` | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
 | YEW-F-050 | M | fixed | F15 CI | ~~piece-tree I/O ban omits `pread`~~ — fixed 2026-09-14 in `6cf5e51c` | tests/audit/f15_ban_misses.c | s08 I/O ownership; s58 F15 q2 |
-| YEW-F-051 | M | open | F15 CI | shadow-preview ban accepts manual destructive fill | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
-| YEW-F-052 | M | open | F15 CI | FUSS drawer ban accepts indirect pane-root replacement | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
-| YEW-F-053 | M | open | F15 CI | deterministic-fuzz ban omits `random` | tests/audit/f15_ban_misses.c | s02 deterministic seeds; s58 F15 q2 |
-| YEW-F-054 | M | open | F15 CI | clipboard shell ban omits direct shell exec | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
-| YEW-F-055 | M | open | F15 CI | job-interpolation ban accepts raw append into shell text | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
-| YEW-F-056 | M | open | F15 CI | OSC 52 query ban accepts split string literals | tests/audit/f15_ban_misses.c | s24 write-only OSC 52; s58 F15 q2 |
+| YEW-F-051 | M | fixed | F15 CI | ~~shadow-preview ban accepts manual destructive fill~~ — fixed 2026-09-14 in `910ea6be` | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
+| YEW-F-052 | M | fixed | F15 CI | ~~FUSS drawer ban accepts indirect pane-root replacement~~ — fixed 2026-09-14 in `6db23a13` | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
+| YEW-F-053 | M | fixed | F15 CI | ~~deterministic-fuzz ban omits `random`~~ — fixed 2026-09-14 in `fff0404d` | tests/audit/f15_ban_misses.c | s02 deterministic seeds; s58 F15 q2 |
+| YEW-F-054 | M | fixed | F15 CI | ~~clipboard shell ban omits direct shell exec~~ — fixed 2026-09-14 in `702b5e92` | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
+| YEW-F-055 | M | fixed | F15 CI | ~~job-interpolation ban accepts raw append into shell text~~ — fixed 2026-09-14 in `7c3f0347` | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
+| YEW-F-056 | M | fixed | F15 CI | ~~OSC 52 query ban accepts split string literals~~ — fixed 2026-09-14 in `7808dea7` | tests/audit/f15_ban_misses.c | s24 write-only OSC 52; s58 F15 q2 |
 | YEW-F-057 | M | open | F15 CI | terminal-syscall ban omits `tcflush` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
 | YEW-F-058 | M | open | F15 CI | register choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 register routing; s58 F15 q2 |
 | YEW-F-059 | M | open | F15 CI | option choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
@@ -504,31 +504,39 @@ bounded ownership gate and adds an internal positive control for the spelling.
 
 `YEW-F-051` is Medium because the insertion-preview rule bans one fill helper,
 not destructive fill behavior. A loop assigning every grid cell directly
-passes while violating the same compositional rendering contract. It remains
-open for Sprint 59.
+passed while violating the same compositional rendering contract. Commit
+`910ea6be` detects zero-to-column-bound full-row loops that assign backing
+cells, while preserving the bounded range shifts required for composition.
 
 `YEW-F-052` is Medium because taking the address of `pane_root` and assigning
 through that pointer replaces the live root without matching the direct
-assignment pattern. The FUSS drawer control remains open for Sprint 59.
+assignment pattern. Commit `6db23a13` rejects both direct replacement and
+address-taking, with positive controls for both forms.
 
 `YEW-F-053` is Medium because deterministic fuzzing bans `rand`, `srand`, and
 one `time` spelling but omits the libc `random()` generator. A direct call
-passes the actual gate. It remains open for Sprint 59.
+passes the actual gate. Commit `fff0404d` brings both `random()` and its
+`srandom()` seeding function under the deterministic-campaign gate and adds
+positive controls for each form.
 
 `YEW-F-054` is Medium because the clipboard no-shell rule scans only `popen`
 and `system`; executing `/bin/sh -c` directly with `execl` has the same
-forbidden behavior and passes. No such product path was established, and the
-control remains open for Sprint 59.
+forbidden behavior and passes. No such product path was established. Commit
+`702b5e92` brings direct variadic exec of common shell paths with `-c` under
+the same gate and adds a positive control, while retaining argv-based
+clipboard execution.
 
 `YEW-F-055` is Medium because the job-data rule recognizes two formatting
 shapes while a raw byte append into a buffer named `shell` performs equivalent
-interpolation and passes. The argv-boundary control remains open for Sprint
-59.
+interpolation and passes. Commit `7c3f0347` detects raw appends whose
+destination is a shell or command-line buffer and adds a positive control;
+ordinary register command-line storage remains outside that boundary.
 
 `YEW-F-056` is Medium because adjacent C literals construct an OSC 52 query
 whose semicolon and question mark are separated only in source. The terminal
-receives the forbidden query while grep reports green. It remains open for
-Sprint 59.
+receives the forbidden query while grep reports green. Commit `7808dea7`
+detects quote-and-whitespace-separated query markers while retaining the
+original contiguous-query rule, with a positive control for each form.
 
 `YEW-F-057` is Medium because the terminal boundary lists four calls but omits
 `tcflush`, another direct terminal-control syscall. An out-of-boundary call
