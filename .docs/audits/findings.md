@@ -20,7 +20,7 @@ recorded in `audit-00.md`.
 | YEW-F-005 | H | fixed | F06 RE | ~~multi-cursor replacement exits inside a Fletch edit transaction~~ — fixed 2026-09-13 in `db0759ed` | tests/audit/yew_f_005.c | s21 §4 / DoD 6 |
 | YEW-F-006 | C | fixed | F07 UI | ~~workspace re-emission drops unknown root and workspace keys~~ — fixed 2026-09-13 in `9e829cd9` | tests/audit/yew_f_006.c | s25 §4 / §6; s58 F07 q5 |
 | YEW-F-007 | C | fixed | F07 UI | ~~workspace restore reorders group members from tab-array order~~ — fixed 2026-09-13 in `bea3990b` | tests/audit/yew_f_007.c | s25 §3 / §6 step 4 / DoD 4; s58 F07 q2 |
-| YEW-F-008 | H | open | F08 FL | unprivileged plugin macro replay inherits config authority | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
+| YEW-F-008 | H | fixed | F08 FL | ~~unprivileged plugin macro replay inherits config authority~~ — fixed 2026-09-13 in `8995bb1f` | tests/audit/yew_f_008.c | spec §13 / s34 DoD 10; s58 F08 q6 |
 | YEW-F-009 | M | open | F09 REC | recorder folding self-test no longer reaches its injected fault | tests/audit/yew_f_009.c | s35 DoD 3; s58 F09 q3 |
 | YEW-F-010 | M | open | F09 REC | macro store accepts source that fails on first replay | tests/audit/yew_f_010.c | s38 §4 / DoD 5; s58 F09 q7 |
 | YEW-F-011 | M | open | F10 SYN | matching source metadata can retain stale syntax tables | tests/audit/yew_f_011.c | s40 §6; s58 F10 q4 |
@@ -177,14 +177,19 @@ group's end, and the picker/from-directory/self-open paths only append. Pane
 restore builds all window slots before resolving focus. No second
 partial-collection positional setter was found.
 
-`YEW-F-008` is High because a plugin declaring `capabilities: []` can write
+`YEW-F-008` was High because a plugin declaring `capabilities: []` could write
 an arbitrary file by storing Fletch source in a macro register through
-`ed.run("ed.reg.set", ...)` and replaying it. The hard-XPASS reproducer
-creates only an isolated temporary file; it does not run a shell command or
-touch user data. During replay, the plugin-supplied source is compiled through
-the config-origin `fl_compile_str` path and consequently receives config's
-`FL_CAP_ALL` authority. This violates spec §13's defining-module rule. It
-remains open for Sprint 59; no product source changed during the audit.
+`ed.run("ed.reg.set", ...)` and replaying it. Commit `8995bb1f` records the
+calling function's defining origin at the named-register write boundary and
+compiles replay under that preserved authority. The hard-XPASS reproducer is
+now an ordinary passing audit test: the replayed `io.write` raises a capability
+error, plugin initialization fails cleanly, and no file is created.
+
+Sibling check: both macro-source write doors, `ed.reg.set` and ranged
+`ed.edit.yank`, attach provenance; lower-case replacement and upper-case append
+are covered. A same-byte host rewrite invalidates the provenance-sensitive
+cache and restores config authority, while a plugin rewrite retains its
+principal and zero-capability mask after the writer's frame has returned.
 
 `YEW-F-009` is Medium because the recorder's mandatory shrinker self-test no
 longer exercises its injected divergence, leaving a release-control claim
