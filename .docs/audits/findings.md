@@ -29,7 +29,7 @@ recorded in `audit-00.md`.
 | YEW-F-014 | M | fixed | F11 LSP | ~~stripped LSP completion bypasses the module hard error~~ — fixed 2026-09-13 in `114f99fb` | tests/audit/yew_f_014.c | s45 DoD 13; s47 §7; s58 F11 q8 |
 | YEW-F-015 | M | fixed | F11 LSP | ~~snippet-policy grep gate matches unrelated core code~~ — fixed 2026-09-13 in `59d318cf` | tests/audit/yew_f_015.c | s47 DoD 4; s58 F11 q7 |
 | YEW-F-016 | M | fixed | F11 LSP | ~~required 1-based display edges violate the LSP +/-1 gate~~ — fixed 2026-09-13 in `07ee554b` | tests/audit/yew_f_016.c | s46 DoD 4; s47 §5; s58 F11 q2 |
-| YEW-F-017 | M | open | F13 GIT | interactive rebase bypasses the Git verb and environment boundary | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
+| YEW-F-017 | M | fixed | F13 GIT | ~~interactive rebase bypasses the Git verb and environment boundary~~ — fixed 2026-09-13 in `c96b4f91` | tests/audit/yew_f_017.c | s51 §2/§3; s52 §11; s58 F13 q1/q7 |
 | YEW-F-018 | M | open | F13 GIT | FUSS picker detail bypasses the module clock discipline | tests/audit/yew_f_018.c | s51 §10/DoD 2; s58 F13 q4 |
 | YEW-F-019 | M | open | F13 GIT | porcelain rename test survives the required one-NUL mutation | tests/audit/yew_f_019.c | s51 DoD 4; s58 F13 q2 |
 | YEW-F-020 | M | open | F13 GIT | Git formatting gate rejects legitimate display formatting | tests/audit/yew_f_020.c | s51 DoD 2; s58 F13 q1 |
@@ -269,15 +269,15 @@ all three LSP presentation sites through it. Boundary tests cover zero, one,
 and `UINT32_MAX`; picker labels and rename errors remain one-based while the
 Sprint 46 scan over `src/mod/lsp/` is now empty.
 
-`YEW-F-017` is Medium because interactive rebase is the one Git execution
-path outside the static verb inventory and the shared environment builder.
-Its direct synchronous job safely uses an argv array and terminal handover,
-but it omits `GIT_TERMINAL_PROMPT=0`, `GIT_FLUSH=1`, and the trace-variable
-removals required on every verb; only the two editor variables were permitted
-to differ. The operation fails visibly rather than corrupting document bytes.
-The source-backed reproducer records both halves of the bypass at the fixed
-replacement baseline. It remains open for Sprint 59; no product source
-changed during the audit.
+`YEW-F-017` was Medium because interactive rebase was the one Git execution
+path outside the static verb inventory and shared environment builder. Commit
+`c96b4f91` adds the rebase descriptor and a Git-owned synchronous terminal
+runner. The runner retains the nested-yew editor and real-TTY handover, but now
+builds canonical global argv options, applies the same prompt/flush/pager/
+locale and trace-removal policy as every other Git path, and owns mutation
+invalidation. Its only policy exception is the two explicitly replaced Git
+editor rows. A 43-assertion behavioral test captures the complete job spec;
+the source-backed audit also rejects a future direct job from FUSS.
 
 `YEW-F-018` is Medium because the Git module's mandatory clock-source gate is
 not empty and FUSS picker detail reads the process wall clock through
