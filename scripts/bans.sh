@@ -723,26 +723,131 @@ scan_seed "register-routing" "$register_set_pattern" \
     'void seeded(void) { yew_reg_set(regs, name, value); }'
 
 #
+# Report calls made outside an exact file:function owner set.  This is a
+# deliberately small C lexer, not a parser: it removes comments and literals,
+# tracks top-level function bodies, and leaves the compiler to parse C.  The
+# source subset bans attributes and statement expressions, which keeps the
+# ownership boundary unambiguous.
+c_call_owners()
+{
+    call_list=$1
+    call_pattern=$2
+    call_allowed=$3
+    call_out=$4
+    : >"$call_out"
+    while IFS= read -r file; do
+        case $file in
+            *.c) ;;
+            *) continue ;;
+        esac
+        call_path=${file#"$repo_dir"/}
+        awk -v path="$call_path" -v calls="$call_pattern" \
+            -v allowed=",$call_allowed," '
+            function scrub(s,    out, i, c, nextc) {
+                out = ""
+                for (i = 1; i <= length(s); i++) {
+                    c = substr(s, i, 1)
+                    nextc = substr(s, i + 1, 1)
+                    if (in_comment) {
+                        if (c == "*" && nextc == "/") {
+                            in_comment = 0
+                            out = out "  "
+                            i++
+                        } else {
+                            out = out " "
+                        }
+                    } else if (quote != "") {
+                        if (c == "\\") {
+                            out = out "  "
+                            i++
+                        } else {
+                            if (c == quote)
+                                quote = ""
+                            out = out " "
+                        }
+                    } else if (c == "/" && nextc == "*") {
+                        in_comment = 1
+                        out = out "  "
+                        i++
+                    } else if (c == "/" && nextc == "/") {
+                        while (length(out) < length(s))
+                            out = out " "
+                        break
+                    } else if (c == "\"" || c == single_quote) {
+                        quote = c
+                        out = out " "
+                    } else {
+                        out = out c
+                    }
+                }
+                return out
+            }
+            function function_name(header,    p, before, name) {
+                p = index(header, "(")
+                if (p == 0 || index(substr(header, 1, p), "=") != 0)
+                    return ""
+                before = substr(header, 1, p - 1)
+                sub(/[[:space:]]*$/, "", before)
+                name = before
+                sub(/^.*[^[:alnum:]_]/, "", name)
+                if (name !~ /^[[:alpha:]_][[:alnum:]_]*$/)
+                    return ""
+                return name
+            }
+            BEGIN {
+                single_quote = sprintf("%c", 39)
+                depth = 0
+                owner = ""
+                pending = ""
+            }
+            {
+                raw = $0
+                code = scrub(raw)
+                body = ""
+                if (depth == 0 && code ~ /^[[:space:]]*#/) {
+                    pending = ""
+                    code = ""
+                }
+                if (depth == 0) {
+                    open_at = index(code, "{")
+                    if (open_at != 0) {
+                        owner = function_name(pending " " \
+                                              substr(code, 1, open_at - 1))
+                        pending = ""
+                        if (owner != "")
+                            body = substr(code, open_at + 1)
+                    } else {
+                        pending = pending " " code
+                        if (index(code, ";") != 0)
+                            pending = ""
+                    }
+                } else if (owner != "") {
+                    body = code
+                }
+                if (owner != "" && body ~ calls &&
+                    index(allowed, "," path ":" owner ",") == 0)
+                    print path ":" NR ":" raw
+                opens = code
+                closes = code
+                gsub(/[^{]/, "", opens)
+                gsub(/[^}]/, "", closes)
+                depth += length(opens) - length(closes)
+                if (depth == 0)
+                    owner = ""
+            }
+        ' "$file" >>"$call_out"
+    done <"$call_list"
+}
+
 # Sprint 36 DoD 5: every option write goes through the one typed registry
-# choke point.  The registry implementation, its public declaration, and
-# the two specified front doors are the complete allow-list; a new caller
-# anywhere else would create a second origin/on-change policy surface.
-#
+# choke point.  YEW-F-059 showed that exempting entire implementation files
+# let a new wrapper launder writes, so this is an exact function-owner list.
 option_set_calls()
 {
-    option_list=$1
-    option_out=$2
-    : >"$option_out"
-    while IFS= read -r file; do
-        case ${file#"$repo_dir"/} in
-            src/edit/option.c|src/edit/option.h|src/fl/flapi.c|src/ui/cmdline.c)
-                continue
-                ;;
-        esac
-        grep -nE -e '(^|[^[:alnum:]_])yew_opt_set[[:space:]]*\(' \
-            "$file" 2>/dev/null |
-            sed "s|^|${file#"$repo_dir"/}:|" >>"$option_out" || :
-    done <"$option_list"
+    c_call_owners "$1" \
+        '(^|[^[:alnum:]_])(yew_opt_set|yew_opt_set_for)[[:space:]]*[(]' \
+        'src/edit/option.c:yew_opt_set,src/edit/option.c:builtin_set,src/fl/flapi.c:q_buf_opt_set,src/fl/flapi.c:fl_api_set_options,src/ui/cmdline.c:yew_opt_cmdline_set' \
+        "$2"
 }
 
 option_set_calls "$source_files" "$tmp/option-set-hits"
@@ -755,22 +860,16 @@ fi
 # Sprint 55 DoD 7: git belongs exclusively to the explicit `yew pkg`
 # subcommand.  Discovery may hash installed trees during editor startup,
 # but it must never spawn git (a captive portal must not be able to hang
-# opening an editor).  Keeping every call in pkg.c is a stronger and more
-# stable boundary than trying to enumerate today's startup-path files.
+# opening an editor).  YEW-F-060 showed that exempting pkg.c let it export a
+# laundering wrapper, so both the private spelling and its exact owners are
+# pinned here.
 #
 pkg_git_calls()
 {
-    pkg_git_list=$1
-    pkg_git_out=$2
-    : >"$pkg_git_out"
-    while IFS= read -r file; do
-        case ${file#"$repo_dir"/} in
-            src/mod/plug/pkg.c|src/mod/plug/pkg.h|src/mod/plug/shim.c) continue ;;
-        esac
-        grep -nE -e '(^|[^[:alnum:]_])yew_pkg_git[[:space:]]*\(' \
-            "$file" 2>/dev/null |
-            sed "s|^|${file#"$repo_dir"/}:|" >>"$pkg_git_out" || :
-    done <"$pkg_git_list"
+    c_call_owners "$1" \
+        '(^|[^[:alnum:]_])(yew_pkg_git|pkg_git)[[:space:]]*[(]' \
+        'src/mod/plug/pkg.c:pkg_run_ok,src/mod/plug/pkg.c:pkg_doctor_paths,src/mod/plug/pkg.c:pkg_update' \
+        "$2"
 }
 
 pkg_git_calls "$source_files" "$tmp/pkg-git-hits"
@@ -809,8 +908,90 @@ if grep -nE '(unicode/width\.h|yew_(cluster_)?width)' \
         >>"$hits"
     sed 's|^|src/text/register.c:|' "$tmp/register-width-hits" >>"$hits"
 fi
-if grep -nE '(column|landed|content_column)\.v' \
-        "$register" >"$tmp/register-column-math-hits" 2>/dev/null; then
+
+# YEW-F-062: names do not establish types.  Strip comments and literals, find
+# every cell-column declarator, then reject direct access to its representation
+# regardless of the local name; register paste must use the coordinate API.
+awk '
+    function scrub(s,    out, i, c, nextc) {
+        out = ""
+        for (i = 1; i <= length(s); i++) {
+            c = substr(s, i, 1)
+            nextc = substr(s, i + 1, 1)
+            if (in_comment) {
+                if (c == "*" && nextc == "/") {
+                    in_comment = 0
+                    out = out "  "
+                    i++
+                } else {
+                    out = out " "
+                }
+            } else if (quote != "") {
+                if (c == "\\") {
+                    out = out "  "
+                    i++
+                } else {
+                    if (c == quote)
+                        quote = ""
+                    out = out " "
+                }
+            } else if (c == "/" && nextc == "*") {
+                in_comment = 1
+                out = out "  "
+                i++
+            } else if (c == "/" && nextc == "/") {
+                break
+            } else if (c == "\"" || c == single_quote) {
+                quote = c
+                out = out " "
+            } else {
+                out = out c
+            }
+        }
+        return out
+    }
+    function add_declarators(tail,    stop, n, parts, i, part, name) {
+        stop = length(tail) + 1
+        if (index(tail, ";") != 0 && index(tail, ";") < stop)
+            stop = index(tail, ";")
+        if (index(tail, ")") != 0 && index(tail, ")") < stop)
+            stop = index(tail, ")")
+        if (index(tail, "{") != 0 && index(tail, "{") < stop)
+            stop = index(tail, "{")
+        tail = substr(tail, 1, stop - 1)
+        n = split(tail, parts, ",")
+        for (i = 1; i <= n; i++) {
+            part = parts[i]
+            sub(/=.*/, "", part)
+            sub(/^[[:space:]*]*/, "", part)
+            name = part
+            sub(/[^[:alnum:]_].*$/, "", name)
+            if (name ~ /^[[:alpha:]_][[:alnum:]_]*$/ &&
+                substr(part, length(name) + 1) !~ /^[[:space:]]*[(]/)
+                names[name] = 1
+        }
+    }
+    BEGIN { single_quote = sprintf("%c", 39) }
+    { source = source "\n" scrub($0) }
+    END {
+        rest = source
+        type_pattern = "(^|[^[:alnum:]_])(CCol|CellCol)[^[:alnum:]_]"
+        while (match(rest, type_pattern)) {
+            tail = substr(rest, RSTART + RLENGTH)
+            add_declarators(tail)
+            rest = tail
+        }
+        for (name in names) {
+            member = "(^|[^[:alnum:]_])" name \
+                     "[[:space:]]*(\\.|->[[:space:]]*)v([^[:alnum:]_]|$)"
+            if (source ~ member) {
+                print "direct cell-column representation access"
+                exit
+            }
+        }
+    }
+' "$register" >"$tmp/register-column-math-hits"
+if [ -s "$tmp/register-column-math-hits" ]; then
     echo "ban: register paste must not perform cell-column arithmetic" \
         >>"$hits"
     sed 's|^|src/text/register.c:|' \

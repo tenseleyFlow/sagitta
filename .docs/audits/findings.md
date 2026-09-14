@@ -71,10 +71,10 @@ recorded in `audit-00.md`.
 | YEW-F-056 | M | fixed | F15 CI | ~~OSC 52 query ban accepts split string literals~~ — fixed 2026-09-14 in `7808dea7` | tests/audit/f15_ban_misses.c | s24 write-only OSC 52; s58 F15 q2 |
 | YEW-F-057 | M | fixed | F15 CI | ~~terminal-syscall ban omits `tcflush`~~ — fixed 2026-09-14 in `45f6137b` | tests/audit/f15_ban_misses.c | s37 tty boundary; s58 F15 q2 |
 | YEW-F-058 | M | fixed | F15 CI | ~~register choke-point ban accepts allowed-file wrappers~~ — fixed 2026-09-14 in `1519b8d8` | tests/audit/f15_ban_misses.c | s36 register routing; s58 F15 q2 |
-| YEW-F-059 | M | open | F15 CI | option choke-point ban accepts allowed-file wrappers | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
-| YEW-F-060 | M | open | F15 CI | package-git ban accepts allowed-file wrappers on startup | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
+| YEW-F-059 | M | fixed | F15 CI | ~~option choke-point ban accepts allowed-file wrappers~~ — fixed 2026-09-14 in `02949a63` | tests/audit/f15_ban_misses.c | s36 option routing; s58 F15 q2 |
+| YEW-F-060 | M | fixed | F15 CI | ~~package-git ban accepts allowed-file wrappers on startup~~ — fixed 2026-09-14 in `953b1e3c` | tests/audit/f15_ban_misses.c | s55 startup transport law; s58 F15 q2 |
 | YEW-F-061 | M | fixed | F15 CI | ~~register-width ban accepts local lookup tables~~ — fixed 2026-09-14 in `31497135` | tests/audit/f15_ban_misses.c | s36 Unicode routing; s58 F15 q2 |
-| YEW-F-062 | M | open | F15 CI | register-column ban depends on historical variable names | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
+| YEW-F-062 | M | fixed | F15 CI | ~~register-column ban depends on historical variable names~~ — fixed 2026-09-14 in `d87c57f6` | tests/audit/f15_ban_misses.c | s36 column routing; s58 F15 q2 |
 | YEW-F-063 | M | open | F15 CI | register-helper presence gate accepts comments | tests/audit/f15_ban_misses.c | s36 helper routing; s58 F15 q2 |
 | YEW-F-064 | M | open | F15 CI | oracle-independence ban accepts copied renamed models | tests/audit/f15_ban_misses.c | s11 independent oracle; s58 F15 q2 |
 | YEW-F-065 | M | open | F15 CI | generated-table ban verifies only a retained marker | tests/audit/f15_ban_misses.c | s19 generated UCD tables; s58 F15 q2 |
@@ -548,11 +548,15 @@ raw setter wrapper for forbidden callers. Commit `1519b8d8` makes the raw
 named-register store private, migrates direct test setup through the existing
 macro front door, and bans any reintroduction of the old product symbol.
 
-`YEW-F-059` and `YEW-F-060` are separate Medium boundary findings. Each
-allow-list exempts an implementation file, and each can be defeated by adding
-a raw wrapper there and calling that wrapper from forbidden code. The option
-write and package-git startup policies pass their isolated seeds and remain
-open for Sprint 59.
+`YEW-F-059` was Medium because exempting complete option implementation files
+let those files publish raw write wrappers for forbidden callers. Commit
+`02949a63` replaces file exemptions with a comment/literal-aware function-owner
+gate covering both setter levels and only the five legitimate routing owners.
+
+`YEW-F-060` was Medium because exempting the package implementation let it
+publish a raw Git wrapper for startup callers. Commit `953b1e3c` makes the raw
+transport file-private, removes its public and stripped-module surfaces, and
+pins its three legitimate package-command owners with the shared C-call gate.
 
 `YEW-F-061` is Medium because register-local Unicode width calculation can use
 a decimal lookup table without importing or naming a yew width helper. The
@@ -560,9 +564,10 @@ shared Unicode-ownership correction in `31497135` catches that same lookup
 table before the register-specific helper check, closing both findings with
 one boundary rule.
 
-`YEW-F-062` is Medium because the register column-arithmetic rule searches
-three historical variable names followed by `.v`. Equivalent `CellCol`
-addition under renamed locals passes. It remains open for Sprint 59.
+`YEW-F-062` was Medium because the register column-arithmetic rule searched
+three historical variable names followed by `.v`. Commit `d87c57f6` strips
+comments and literals, discovers every `CCol`/`CellCol` declarator, and rejects
+direct representation access independently of the variable name.
 
 `YEW-F-063` is Medium because the four required-helper checks accept names in
 comments as proof of routing. A register implementation containing only those

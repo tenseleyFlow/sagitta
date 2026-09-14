@@ -59,8 +59,6 @@ typedef struct PkgLock {
 
 void yew_pkg_git_run_init(GitRun *run);
 void yew_pkg_git_run_free(GitRun *run);
-bool yew_pkg_git(const char *const *argv, u32 nargv, i64 timeout_ms,
-                 bool c_locale, GitRun *out);
 
 bool yew_pkg_resolve_spec(const char *spec, Bytebuf *url, DiagCtx *dc);
 bool yew_pkg_ref_valid(const char *ref);
