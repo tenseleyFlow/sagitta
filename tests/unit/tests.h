@@ -213,6 +213,12 @@ void test_multicursor_remove_and_normalize_clamp(void);
 void test_multicursor_normalize_preserves_sticky_motion(void);
 void test_multicursor_edit_guard_requires_multi_transaction(void);
 void test_multicursor_boundary_guards_name_their_constraints(void);
+
+void test_nav_home_toggle_alternates_indent_and_column_zero(void);
+void test_nav_home_toggle_is_idempotent_without_indent(void);
+void test_nav_home_toggle_parks_at_column_zero_on_a_blank_line(void);
+void test_nav_home_toggle_treats_mixed_tabs_and_spaces_as_one_indent(void);
+void test_nav_home_toggle_handles_the_unterminated_last_line(void);
 void test_file_load_empty_roundtrips(void);
 void test_file_load_lf_roundtrips(void);
 void test_file_load_missing_final_newline_roundtrips(void);
