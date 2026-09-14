@@ -64,7 +64,7 @@ recorded in `audit-00.md`.
 | YEW-F-049 | M | fixed | F15 CI | ~~CI golden-update ban depends on contiguous spelling~~ — fixed 2026-09-14 in `58684ebb` | tests/audit/f15_ban_misses.c | s06 golden update law; s58 F15 q2 |
 | YEW-F-050 | M | fixed | F15 CI | ~~piece-tree I/O ban omits `pread`~~ — fixed 2026-09-14 in `6cf5e51c` | tests/audit/f15_ban_misses.c | s08 I/O ownership; s58 F15 q2 |
 | YEW-F-051 | M | fixed | F15 CI | ~~shadow-preview ban accepts manual destructive fill~~ — fixed 2026-09-14 in `910ea6be` | tests/audit/f15_ban_misses.c | s44 composition law; s58 F15 q2 |
-| YEW-F-052 | M | open | F15 CI | FUSS drawer ban accepts indirect pane-root replacement | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
+| YEW-F-052 | M | fixed | F15 CI | ~~FUSS drawer ban accepts indirect pane-root replacement~~ — fixed 2026-09-14 in `6db23a13` | tests/audit/f15_ban_misses.c | s57.7 off-canvas law; s58 F15 q2 |
 | YEW-F-053 | M | open | F15 CI | deterministic-fuzz ban omits `random` | tests/audit/f15_ban_misses.c | s02 deterministic seeds; s58 F15 q2 |
 | YEW-F-054 | M | open | F15 CI | clipboard shell ban omits direct shell exec | tests/audit/f15_ban_misses.c | s24 no-shell subprocess law; s58 F15 q2 |
 | YEW-F-055 | M | open | F15 CI | job-interpolation ban accepts raw append into shell text | tests/audit/f15_ban_misses.c | s37 argv boundary; s58 F15 q2 |
@@ -510,7 +510,8 @@ cells, while preserving the bounded range shifts required for composition.
 
 `YEW-F-052` is Medium because taking the address of `pane_root` and assigning
 through that pointer replaces the live root without matching the direct
-assignment pattern. The FUSS drawer control remains open for Sprint 59.
+assignment pattern. Commit `6db23a13` rejects both direct replacement and
+address-taking, with positive controls for both forms.
 
 `YEW-F-053` is Medium because deterministic fuzzing bans `rand`, `srand`, and
 one `time` spelling but omits the libc `random()` generator. A direct call
