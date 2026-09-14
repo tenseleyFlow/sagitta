@@ -33,6 +33,32 @@ if ! cmp -s "$tmp/header" "$tmp/guide"; then
     exit 1
 fi
 
+# YEW-F-022: the honest disclaimer must negate sandboxing; banning the word
+# itself rejected the required verbatim warning and encouraged weaker prose.
+sandbox_mentions=$(awk '
+    {
+        line = $0
+        while (match(line, /sandbox/)) {
+            mentions++
+            line = substr(line, RSTART + RLENGTH)
+        }
+    }
+    END { print mentions + 0 }
+' docs/plugins-authoring.md)
+[ "$sandbox_mentions" -eq 1 ] || {
+    echo "plugin docs: expected one negative sandbox disclaimer, found $sandbox_mentions" >&2
+    exit 1
+}
+grep -Fq 'they do not create a sandbox.' docs/plugins-authoring.md || {
+    echo "plugin docs: missing negative sandbox disclaimer" >&2
+    exit 1
+}
+grep -Fq 'There is no memory isolation and no resource' \
+    docs/plugins-authoring.md || {
+    echo "plugin docs: missing memory/resource isolation warning" >&2
+    exit 1
+}
+
 ctx_rows=$(awk '
     /^This table is normative and frozen at plugin API 1:/ { table = 1; next }
     table && /^`ctx.command` accepts/ { exit }
