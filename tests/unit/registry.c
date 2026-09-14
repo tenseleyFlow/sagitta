@@ -692,6 +692,7 @@ const YewTest yew_tests[] = {
     T(units_results_are_boundaries_and_spans_obey_law),
     T(units_roundtrip_and_purity_hold_for_every_engine),
     T(units_conformance_rejects_fixed_point_engine),
+    T(units_line_motion_clamps_to_the_content_end),
     T(edit_enter_carries_indent_and_adds_a_level_after_an_opener),
     T(edit_enter_between_a_matched_pair_opens_three_lines),
     T(edit_enter_strips_the_whitespace_it_abandons),

@@ -26,11 +26,34 @@ static ByteOff line_content_end(const TextBuf *tb, LineNo line)
     return end;
 }
 
+/*
+ * The goal column on `line`, landing as far RIGHT as the line allows.
+ *
+ * `yew_gcol_to_off` answers "which cluster occupies this column", and on
+ * a line with no trailing newline an OVERFLOWING column answers with the
+ * last cluster's start — the character at that column, since there is
+ * none further right.  That is the right answer to its question and the
+ * wrong one for a caret: arrowing down a long column onto a closing
+ * brace put the caret before the brace at the end of a file and after it
+ * everywhere else, because only the final line lacks the newline that
+ * gives the caret somewhere past the text to rest.
+ *
+ * Vertical motion wants the caret position, so an overflow clamps to the
+ * line's content end.  `yew_ccol_to_off_padded` is the same distinction
+ * spelled for block paste; this is the grapheme-column twin, kept here
+ * rather than in the coordinate layer so the primitive keeps its one
+ * documented meaning.
+ */
 static ByteOff line_at_col(const TextBuf *tb, LineNo line, GCol goal)
 {
     Span span = yew_textbuf_line_span(tb, line);
+    ByteOff landed = yew_gcol_to_off(tb, span, goal);
+    ByteOff content_end = line_content_end(tb, line);
 
-    return yew_gcol_to_off(tb, span, goal);
+    return landed.v < content_end.v && goal.v > yew_off_to_gcol(
+               tb, span, content_end).v
+               ? content_end
+               : landed;
 }
 
 static GCol line_goal(const UnitCtx *u, ByteOff p)

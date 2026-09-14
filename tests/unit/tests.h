@@ -658,6 +658,7 @@ void test_units_next_prev_are_monotone_and_terminate(void);
 void test_units_results_are_boundaries_and_spans_obey_law(void);
 void test_units_roundtrip_and_purity_hold_for_every_engine(void);
 void test_units_conformance_rejects_fixed_point_engine(void);
+void test_units_line_motion_clamps_to_the_content_end(void);
 void test_edit_enter_carries_indent_and_adds_a_level_after_an_opener(void);
 void test_edit_enter_between_a_matched_pair_opens_three_lines(void);
 void test_edit_enter_strips_the_whitespace_it_abandons(void);

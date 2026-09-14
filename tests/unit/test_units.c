@@ -302,3 +302,51 @@ void test_units_conformance_rejects_fixed_point_engine(void)
     YEW_ASSERT(!unit_next_contract_holds(&broken, &ctx.unit, BYTEOFF(0U)));
     unit_ctx_free(&ctx);
 }
+
+/*
+ * Vertical motion lands as far RIGHT as the target line allows, and the
+ * last line of a buffer is not an exception.
+ *
+ * FIELD REPORT: arrowing down from a long column onto a line holding
+ * only a closing brace put the caret BEFORE the brace, while every other
+ * short line put it after. Only the final line of a buffer lacks the
+ * trailing newline that gives the caret somewhere past the text to rest,
+ * so `yew_gcol_to_off` answered with the brace itself — the character AT
+ * that column, which is its documented job. The caret wants the position
+ * after it, and that is this layer's business to ask for.
+ */
+void test_units_line_motion_clamps_to_the_content_end(void)
+{
+    static const u8 no_eol[] = "int f(void) { return 50; }\n    }";
+    static const u8 with_eol[] = "int f(void) { return 50; }\n    }\n";
+    static const UnitFixture cases[] = {
+        {no_eol, sizeof(no_eol) - 1U},
+        {with_eol, sizeof(with_eol) - 1U}
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        UnitTestCtx ctx;
+        Cursor cursor;
+        ByteOff landed;
+
+        unit_ctx_init(&ctx, &cases[i]);
+        (void)memset(&cursor, 0, sizeof(cursor));
+        /* Column 24 on line 0, deep inside `return 50; }`. */
+        cursor.pos = BYTEOFF(24U);
+        cursor.anchor = cursor.pos;
+        cursor.goal_col = (GCol){24U};
+        ctx.win.cs.curs.data = &cursor;
+        ctx.win.cs.curs.len = 1U;
+        ctx.win.cs.primary = 0U;
+
+        landed = yew_unit_line.next(&ctx.unit, cursor.pos, false);
+        /* `    }` is line 1 at offset 27; its content ends at 32, after
+         * the brace. Both spellings must agree. */
+        YEW_ASSERT_EQ_U64(landed.v, 32U);
+
+        ctx.win.cs.curs.data = NULL;
+        ctx.win.cs.curs.len = 0U;
+        unit_ctx_free(&ctx);
+    }
+}

@@ -674,3 +674,4 @@ void test_coords_deferred_index_keeps_line_local_motion_local(void)
     YEW_ASSERT(!tb->graphemes.initialized);
     yew_textbuf_free(tb);
 }
+
