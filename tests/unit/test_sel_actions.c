@@ -327,6 +327,33 @@ void test_sel_actions_yank_uses_char_line_and_block_register_types(void)
     fixture_free(&f);
 }
 
+void test_sel_actions_yank_pads_short_rect_rows_by_cell_width(void)
+{
+    static const u8 bytes[] = "a\nbb\n";
+    static const u8 want[] = "a bb";
+    SelActionFixture f;
+    CmdCtx cx = {0};
+    RegVal *reg;
+
+    fixture_init(&f, bytes, sizeof(bytes) - 1U);
+    cx.ed = &f.ed;
+    cx.win = f.ed.win;
+    set_selection(&f, YEW_SEL_RECT, 0U, 4U);
+    YEW_ASSERT_EQ_U64(yew_sel_cmd_yank(&cx), YEW_CMD_OK);
+    reg = yew_reg_get(&f.ed.regs, '"');
+    YEW_ASSERT_EQ_U64(reg->type, YEW_REG_BLOCKWISE);
+    YEW_ASSERT(!reg->ragged);
+    YEW_ASSERT_EQ_U64(reg->width, 2U);
+    YEW_ASSERT_EQ_U64(reg->bytes.len, sizeof(want) - 1U);
+    YEW_ASSERT_EQ_MEM(reg->bytes.data, want, sizeof(want) - 1U);
+    YEW_ASSERT_EQ_U64(reg->rows.len, 2U);
+    YEW_ASSERT_EQ_U64(reg->rows.data[0].lo, 0U);
+    YEW_ASSERT_EQ_U64(reg->rows.data[0].hi, 2U);
+    YEW_ASSERT_EQ_U64(reg->rows.data[1].lo, 2U);
+    YEW_ASSERT_EQ_U64(reg->rows.data[1].hi, 4U);
+    fixture_free(&f);
+}
+
 void test_sel_actions_aggregate_delete_is_one_edit_and_one_register(void)
 {
     static const u8 bytes[] = "ab cd ef";

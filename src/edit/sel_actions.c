@@ -8,6 +8,7 @@
 #include "text/clipboard.h"
 #include "text/register.h"
 #include "ui/message.h"
+#include "ui/viewport.h"
 #include "unicode/case.h"
 #include "unicode/grapheme.h"
 #include "unicode/utf8.h"
@@ -242,6 +243,7 @@ static void regval_from_rect(RegVal *value, const Win *win,
     CCol c1 = {0U};
     Span ignored;
     LineNo first;
+    u32 tabwidth;
     size_t i;
 
     yew_sel_rect_spans(win, cursor, &spans);
@@ -249,20 +251,40 @@ static void regval_from_rect(RegVal *value, const Win *win,
                                cursor->pos.v < cursor->anchor.v ?
                                    cursor->pos : cursor->anchor);
     (void)yew_sel_rect_row(win, cursor, first, &ignored, &c0, &c1);
+    tabwidth = win->buf->tabwidth != 0U ? win->buf->tabwidth :
+                                         (u32)YEW_VP_TABWIDTH;
     value->type = YEW_REG_BLOCKWISE;
     value->width = (u32)(c1.v - c0.v);
     value->ragged = false;
     value->bytes.len = 0U;
     value->rows.len = 0U;
     for (i = 0U; i < spans.len; i++) {
+        LineNo line = LINENO(first.v + i);
+        Span line_span = yew_textbuf_line_span(win->buf->tb, line);
+        CCol lo_col = yew_off_to_ccol(win->buf->tb, line_span,
+                                      BYTEOFF(spans.data[i].lo),
+                                      tabwidth);
+        CCol hi_col = yew_off_to_ccol(win->buf->tb, line_span,
+                                      BYTEOFF(spans.data[i].hi),
+                                      tabwidth);
         Span row;
-        u64 copied;
+        u64 padding;
 
         row.lo = value->bytes.len;
         append_span(&value->bytes, win->buf->tb, spans.data[i]);
-        copied = value->bytes.len - row.lo;
-        if (copied == 0U && value->width != 0U)
-            value->ragged = true;
+        if (hi_col.v < lo_col.v)
+            YEW_BUG("rectangular register: reversed row columns");
+        /* YEW-F-077: Sprint 12 pins non-ragged block rows to their CCol
+         * width at store time.  Bytes are sacred; only the visual shortfall
+         * is synthesized as literal spaces. */
+        padding = hi_col.v - lo_col.v < value->width ?
+                      yew_ccol_shortfall((CCol){value->width},
+                                         (CCol){hi_col.v - lo_col.v}) :
+                      0U;
+        while (padding != 0U) {
+            bytebuf_push_u8(&value->bytes, (u8)' ');
+            padding--;
+        }
         row.hi = value->bytes.len;
         YewRegRowVec_push(&value->rows, row);
     }
