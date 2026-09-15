@@ -1,0 +1,49 @@
+# yew perf noise evidence v1
+source_commit c45d7286394b1f2ebcc81a5b7fbb66227f9444d3
+runner_id perf-x86_64-linux-gnu
+arch x86_64
+kernel_release 7.2.3
+reference tests/perf/calib-reference.txt
+reference_sha256 ac44d11422d7c82981bab3c0bb9466560f48f96a76ddcb5c1c185b97a4f86013
+baseline tests/perf/baselines/perf-x86_64-linux-gnu.txt
+baseline_sha256 79812f3af66eb498f0d2aabab0fb39a0b0877cc265a0193be7406100641b1432
+runs 30
+relative_threshold_permille 100
+started_utc 2026-09-15T07:08:04Z
+finished_utc 2026-09-15T15:30:35Z
+analysis_commit e77471e9
+analysis_note completed raw campaign reanalyzed after measured-noise policy amendment S59-A2
+noise-floor: latency.typing.small.p99 policy=relative direction=le p05=405847 p50=422342 p95=431745 regression_noise_permille=23 threshold_permille=100 PASS
+noise-floor: latency.typing.huge.p99 policy=relative direction=le p05=407191 p50=413797 p95=433216 regression_noise_permille=47 threshold_permille=100 PASS
+noise-floor: latency.edit.syntax.p99 policy=relative direction=le p05=710111 p50=740303 p95=784012 regression_noise_permille=60 threshold_permille=100 PASS
+noise-floor: latency.multicursor.small.p99 policy=relative direction=le p05=2669671 p50=2693623 p95=2724579 regression_noise_permille=12 threshold_permille=100 PASS
+noise-floor: latency.navigate.many_buffers.p99 policy=absolute direction=le p05=180324 p50=189026 p95=208982 configured_limit=5000000 failing_runs=0 PASS
+noise-floor: latency.search.huge.p99 policy=relative direction=le p05=1305754 p50=1317887 p95=1330172 regression_noise_permille=10 threshold_permille=100 PASS
+noise-floor: latency.typing.assist.p99 policy=relative direction=le p05=418397 p50=441339 p95=453737 regression_noise_permille=29 threshold_permille=100 PASS
+noise-floor: latency.prof_overhead policy=absolute direction=le p05=1 p50=1 p95=2 configured_limit=20 failing_runs=0 PASS
+noise-floor: startup.first_paint.default policy=absolute direction=le p05=6298053 p50=6836028 p95=7519766 configured_limit=20000000 failing_runs=0 PASS
+noise-floor: startup.first_paint.clean policy=absolute direction=le p05=2422846 p50=2460894 p95=3198860 configured_limit=20000000 failing_runs=0 PASS
+noise-floor: startup.first_paint.dumb policy=absolute direction=le p05=4923533 p50=5051492 p95=5613910 configured_limit=20000000 failing_runs=0 PASS
+noise-floor: startup.first_paint.workspace50 policy=relative direction=le p05=13443250 p50=13633859 p95=14339837 regression_noise_permille=52 threshold_permille=100 PASS
+noise-floor: open.100m_code.e2e policy=relative direction=le p05=109398030 p50=110840355 p95=113066613 regression_noise_permille=21 threshold_permille=100 PASS
+noise-floor: open.100m_utf8.e2e policy=relative direction=le p05=75585039 p50=76637958 p95=78061330 regression_noise_permille=19 threshold_permille=100 PASS
+noise-floor: open.100m_code.first_key_paint policy=absolute direction=le p05=2907098 p50=3127148 p95=3989479 configured_limit=5000000 failing_runs=0 PASS
+noise-floor: scroll.full_viewport policy=relative direction=ge p05=2763 p50=2791 p95=2847 regression_noise_permille=11 threshold_permille=100 PASS
+noise-floor: scroll.render_share policy=relative direction=le p05=40 p50=41 p95=41 regression_noise_permille=0 threshold_permille=100 PASS
+noise-floor: scroll.syntax_share policy=absolute direction=le p05=0 p50=0 p95=0 configured_limit=180 failing_runs=0 PASS
+noise-floor: search.literal_early.1g_code policy=relative direction=le p05=2100968 p50=2113522 p95=2137616 regression_noise_permille=12 threshold_permille=100 PASS
+noise-floor: search.literal_absent.1g_code policy=relative direction=le p05=197411706 p50=198279554 p95=198827375 regression_noise_permille=3 threshold_permille=100 PASS
+noise-floor: search.literal.1g_noline policy=relative direction=le p05=173458027 p50=174250798 p95=174548743 regression_noise_permille=2 threshold_permille=100 PASS
+noise-floor: search.regex_anchored.1g_code policy=relative direction=le p05=193888020 p50=194271086 p95=194494405 regression_noise_permille=2 threshold_permille=100 PASS
+noise-floor: search.regex_alternation.1g_code policy=relative direction=le p05=5654306820 p50=5656831647 p95=5660349789 regression_noise_permille=1 threshold_permille=100 PASS
+noise-floor: search.regex_hostile.64k policy=relative direction=le p05=237604 p50=239752 p95=241559 regression_noise_permille=8 threshold_permille=100 PASS
+noise-floor: search.incremental.1g_code policy=relative direction=le p05=2007399 p50=2031089 p95=2135591 regression_noise_permille=52 threshold_permille=100 PASS
+noise-floor: mem.clean_open.100m_code policy=relative direction=le p05=1241 p50=1242 p95=1244 regression_noise_permille=2 threshold_permille=100 PASS
+noise-floor: mem.clean_open.100m_utf8 policy=relative direction=le p05=1175 p50=1176 p95=1177 regression_noise_permille=1 threshold_permille=100 PASS
+noise-floor: mem.paint.default_empty policy=relative direction=le p05=6791168 p50=6838272 p95=6995968 regression_noise_permille=24 threshold_permille=100 PASS
+noise-floor: mem.paint.clean_empty policy=relative direction=le p05=6332416 p50=6426624 p95=6533120 regression_noise_permille=17 threshold_permille=100 PASS
+noise-floor: mem.workspace50 policy=relative direction=le p05=10186752 p50=10280960 p95=10444800 regression_noise_permille=16 threshold_permille=100 PASS
+noise-floor: mem.typing_growth.small policy=relative direction=le p05=1048576 p50=1093632 p95=1118208 regression_noise_permille=23 threshold_permille=100 PASS
+noise-floor: mem.closed_growth.100m_code.linux policy=absolute direction=le p05=0 p50=0 p95=0 configured_limit=4194304 failing_runs=0 PASS
+noise-floor: mem.assist.small policy=relative direction=le p05=7237632 p50=7368704 p95=7663616 regression_noise_permille=41 threshold_permille=100 PASS
+noise-floor: metrics=33 runs=30 failures=0
