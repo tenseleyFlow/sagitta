@@ -2262,6 +2262,7 @@ const YewTest yew_tests[] = {
     T(re_engines_agree_from_offsets),
     T(re_dfa_survives_cache_pressure),
     T(re_dfa_handles_pathological_patterns),
+    T(re_dfa_bol_skip_preserves_next_line_match),
     T(mouse_press_arms_and_does_not_drag),
     T(mouse_new_tab_control_invokes_the_named_command_once),
     T(mouse_new_tab_control_cancels_off_region_and_drag),

@@ -2254,6 +2254,7 @@ void test_jumplist_deserialize_rejects_a_foreign_blob(void);
 void test_re_engines_agree_from_offsets(void);
 void test_re_dfa_survives_cache_pressure(void);
 void test_re_dfa_handles_pathological_patterns(void);
+void test_re_dfa_bol_skip_preserves_next_line_match(void);
 
 /* Sprint 27 */
 void test_mouse_press_arms_and_does_not_drag(void);
