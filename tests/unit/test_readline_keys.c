@@ -583,3 +583,136 @@ void test_readline_word_case_reaches_every_cursor(void)
     YEW_ASSERT_EQ_U64(rl_pos(&f, 1U), 22U);
     rl_free(&f);
 }
+
+/* ------------------------------------------------------------- the keys */
+
+/*
+ * The bindings, driven as real keys through yew_ed_handle_key against the
+ * loaded runtime -- so what these pin is what a user's fingers get, not
+ * what a command table says.  Modified chords carry no text: the decoder
+ * reports them through emit_named, which leaves ntext zero.
+ */
+static Key rl_chord(u32 code, u16 mods)
+{
+    Key key = {0};
+
+    key.code = code;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.mods = mods;
+    return key;
+}
+
+static void rl_send(RlFixture *f, Key key)
+{
+    yew_ed_handle_key(&f->ed, key, 0);
+    YEW_ASSERT_EQ_U64(f->ed.last_status, YEW_CMD_OK);
+}
+
+static void rl_key_runs(RlFixture *f, Key key, const char *name)
+{
+    rl_send(f, key);
+    YEW_ASSERT_EQ_U64(f->ed.last_cmd.v,
+                      yew_cmd_lookup(name, (u32)strlen(name)).v);
+}
+
+void test_readline_insert_keys_reach_their_commands(void)
+{
+    RlFixture f;
+
+    rl_fixture(&f, rl_words, sizeof(rl_words) - 1U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+
+    rl_at(&f, 10U);
+    rl_key_runs(&f, rl_chord((u32)'w', YEW_MOD_CTRL),
+                "ed.edit.kill.word_prev");
+    rl_at(&f, 6U);
+    rl_key_runs(&f, rl_chord(YEW_KEY_BACKSPACE, YEW_MOD_ALT),
+                "ed.edit.kill.word_prev");
+    rl_key_runs(&f, rl_chord((u32)'d', YEW_MOD_ALT),
+                "ed.edit.kill.word_next");
+    rl_key_runs(&f, rl_chord((u32)'u', YEW_MOD_CTRL),
+                "ed.edit.kill.to_home");
+    rl_key_runs(&f, rl_chord((u32)'k', YEW_MOD_CTRL),
+                "ed.edit.kill.to_end");
+    rl_key_runs(&f, rl_chord((u32)'y', YEW_MOD_CTRL),
+                "ed.edit.kill.yank");
+    rl_key_runs(&f, rl_chord((u32)'d', YEW_MOD_CTRL),
+                "ed.edit.delete.grapheme");
+    rl_key_runs(&f, rl_chord((u32)'t', YEW_MOD_CTRL),
+                "ed.edit.transpose.chars");
+    rl_key_runs(&f, rl_chord((u32)'t', YEW_MOD_ALT),
+                "ed.edit.transpose.words");
+    rl_key_runs(&f, rl_chord((u32)'u', YEW_MOD_ALT),
+                "ed.edit.case.upper_word");
+    rl_key_runs(&f, rl_chord((u32)'l', YEW_MOD_ALT),
+                "ed.edit.case.lower_word");
+    rl_key_runs(&f, rl_chord((u32)'c', YEW_MOD_ALT),
+                "ed.edit.case.cap_word");
+    rl_key_runs(&f, rl_chord((u32)'p', YEW_MOD_CTRL), "ed.move.line.up");
+    rl_key_runs(&f, rl_chord((u32)'n', YEW_MOD_CTRL), "ed.move.line.down");
+
+    /* Both spellings of the undo chord: 0x1F decodes as C-_ in a legacy
+     * terminal, and ctrl+/ arrives as itself under the kitty protocol. */
+    rl_key_runs(&f, rl_chord((u32)'_', YEW_MOD_CTRL), "ed.edit.undo");
+    rl_key_runs(&f, rl_chord((u32)'/', YEW_MOD_CTRL), "ed.edit.undo");
+
+    /* And the key signature help was moved onto. */
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    rl_free(&f);
+}
+
+/* The whole path, end to end: a real C-w removes the word. */
+void test_readline_ctrl_w_kills_a_word_through_the_key(void)
+{
+    RlFixture f;
+
+    rl_fixture(&f, rl_words, sizeof(rl_words) - 1U);
+    rl_at(&f, 10U);
+    rl_send(&f, rl_chord((u32)'w', YEW_MOD_CTRL));
+    rl_expect(&f, "alpha  gamma\ndelta epsilon");
+    rl_expect_kill(&f, "beta");
+    rl_send(&f, rl_chord((u32)'y', YEW_MOD_CTRL));
+    rl_expect(&f, "alpha beta gamma\ndelta epsilon");
+    rl_free(&f);
+}
+
+/*
+ * The one thing C-d must NOT do.  In a shell an empty line plus C-d is
+ * EOF; here the key is bound to the forward delete and nothing else, so
+ * on an empty line it removes the line's terminator and the editor stays
+ * exactly where it was.
+ */
+void test_readline_ctrl_d_on_an_empty_line_does_not_quit(void)
+{
+    static const u8 text[] = "one\n\ntwo";
+    RlFixture f;
+
+    rl_fixture(&f, text, sizeof(text) - 1U);
+    rl_at(&f, 4U);
+    rl_send(&f, rl_chord((u32)'d', YEW_MOD_CTRL));
+    YEW_ASSERT(!f.ed.quit);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    rl_expect(&f, "one\ntwo");
+
+    /* And again at the very end of the buffer, where there is nothing
+     * left to delete at all. */
+    rl_at(&f, yew_textbuf_len(f.ed.buffer.tb));
+    rl_send(&f, rl_chord((u32)'d', YEW_MOD_CTRL));
+    YEW_ASSERT(!f.ed.quit);
+    rl_expect(&f, "one\ntwo");
+    rl_free(&f);
+}
+
+/* Signature help is still reachable, on A-k. */
+void test_readline_signature_help_moved_to_alt_k(void)
+{
+    RlFixture f;
+
+    rl_fixture(&f, rl_words, sizeof(rl_words) - 1U);
+    yew_ed_handle_key(&f.ed, rl_chord((u32)'k', YEW_MOD_ALT), 0);
+    YEW_ASSERT_EQ_U64(f.ed.last_cmd.v,
+                      yew_cmd_lookup("ed.lsp.signature",
+                                     (u32)strlen("ed.lsp.signature")).v);
+    rl_free(&f);
+}

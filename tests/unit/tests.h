@@ -90,6 +90,11 @@ void test_readline_transpose_words_needs_a_word_on_each_side(void);
 void test_readline_word_case_runs_from_the_caret_and_steps_past(void);
 void test_readline_word_case_skips_blanks_to_the_next_word(void);
 void test_readline_word_case_reaches_every_cursor(void);
+void test_readline_insert_keys_reach_their_commands(void);
+void test_readline_ctrl_w_kills_a_word_through_the_key(void);
+void test_readline_ctrl_d_on_an_empty_line_does_not_quit(void);
+void test_readline_signature_help_moved_to_alt_k(void);
+
 
 void test_register_defaults_and_empty_deferred_slots(void);
 void test_register_computes_last_insert_and_current_path_on_read(void);
