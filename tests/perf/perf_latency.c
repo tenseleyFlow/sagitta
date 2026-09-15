@@ -558,27 +558,42 @@ static bool stop_editor(YewLivePty *pty)
            yew_live_pty_wait_exit(pty, deadline, &code) && code == 0;
 }
 
+static bool send_control_frame(YewLivePty *pty, const void *bytes, size_t len,
+                               i64 deadline)
+{
+    u64 before = pty->frames;
+
+    return yew_live_pty_write(pty, bytes, len, deadline) &&
+           yew_live_pty_wait_frame(pty, before, deadline, NULL) &&
+           yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline);
+}
+
 static bool send_editor_command(YewLivePty *pty, const char *command,
                                 int timeout_ms)
 {
     static const char escape[] = "\033[27u\033[27u";
-    char wire[1400];
+    static const char accept[] = "\r\033[27u";
+    char open[2];
     i64 deadline = yew_live_pty_now_ns() +
                    (i64)timeout_ms * INT64_C(1000000);
-    int n;
+    size_t len = strlen(command);
 
     /* A session may stop in a transient prompt (notably search.keys ends
      * with a partial query).  Deliver two Escapes in their own settled
-     * event-loop turn before entering command mode; one combined
-     * Escape+command write can leave the following ':' in the prompt when
-     * the editor drains a key burst.  The pair also keeps this control turn
-     * out of KEYPAINT's exactly-one-decoded-key population. */
-    n = snprintf(wire, sizeof(wire), ":%s\r", command);
-    return n > 0 && (size_t)n < sizeof(wire) &&
+     * event-loop turn before entering command mode.  Then prove each prompt
+     * transition with an observed frame: a quiet PTY alone does not prove
+     * that a descheduled editor has consumed a burst.  Open carries the first
+     * command byte and accept carries a trailing Escape so every control
+     * frame decodes multiple keys and remains outside KEYPAINT's exactly-one-
+     * key population.  These turns occur outside the measured session. */
+    open[0] = ':';
+    open[1] = command[0];
+    return len > 1U &&
            yew_live_pty_write(pty, escape, sizeof(escape) - 1U, deadline) &&
            yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline) &&
-           yew_live_pty_write(pty, wire, (size_t)n, deadline) &&
-           yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline);
+           send_control_frame(pty, open, sizeof(open), deadline) &&
+           send_control_frame(pty, command + 1U, len - 1U, deadline) &&
+           send_control_frame(pty, accept, sizeof(accept) - 1U, deadline);
 }
 
 static const MetricSpec *find_metric(const char *session, const char *fixture)
