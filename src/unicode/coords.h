@@ -45,6 +45,10 @@ CCol yew_ccol_max(CCol left, CCol right);
 u64 yew_ccol_shortfall(CCol target, CCol landed);
 u32 yew_tab_cells(CCol at, u32 tabw);
 
+/* True only when the current text generation is already proven to contain
+ * printable ASCII plus line endings.  This query never builds an index. */
+bool yew_coords_simple_ascii_current(const TextBuf *tb);
+
 ByteOff yew_grapheme_next(const TextBuf *tb, ByteOff pos);
 ByteOff yew_grapheme_prev(const TextBuf *tb, ByteOff pos);
 bool yew_is_grapheme_boundary(const TextBuf *tb, ByteOff pos);

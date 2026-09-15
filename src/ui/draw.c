@@ -759,6 +759,80 @@ static u8 syn_attr_at(const SynLineOut *syn, u32 relative, u32 *at)
     return YEW_ATTR_TEXT;
 }
 
+static void draw_span_simple_ascii(Grid *grid, const TextBuf *tb, Span span,
+                                   u64 line_start, const SynLineOut *syn,
+                                   u16 row, const Win *w, CCol left,
+                                   const ThemeEnt *theme)
+{
+    ByteOff start = yew_ccol_to_off(tb, span, left, draw_tabwidth(w));
+    CCol logical = yew_off_to_ccol(tb, span, start, draw_tabwidth(w));
+    TextIter it;
+    u64 pos = start.v;
+    u16 col = w->rect.x;
+    u16 right = row_right(grid, w);
+    u32 syn_at = 0U;
+
+    if (pos < span.hi && !yew_textiter_begin(&it, tb, start))
+        YEW_BUG("draw: cannot begin simple ASCII span");
+    while (pos < span.hi && col < right) {
+        const u8 *bytes;
+        u64 chunk_len;
+        u64 take;
+
+        if (!yew_textiter_chunk(&it, tb, &bytes, &chunk_len) ||
+            chunk_len == 0U)
+            YEW_BUG("draw: simple ASCII span ended early");
+        take = chunk_len < span.hi - pos ? chunk_len : span.hi - pos;
+        if (logical.v < left.v) {
+            u64 skip = left.v - logical.v;
+
+            if (skip > take)
+                skip = take;
+            bytes += (size_t)skip;
+            pos += skip;
+            logical.v += skip;
+            take -= skip;
+        }
+        if (take > (u64)(right - col))
+            take = (u64)(right - col);
+        while (take != 0U) {
+            u32 relative = pos - line_start > UINT32_MAX ? UINT32_MAX :
+                                                              (u32)(pos - line_start);
+            u8 attr = syn_attr_at(syn, relative, &syn_at);
+            size_t run = 1U;
+            ThemeEnt style = theme[attr];
+
+            while ((u64)run < take) {
+                u32 candidate_at = syn_at;
+                u64 candidate_pos = pos + (u64)run;
+                u32 candidate_relative =
+                    candidate_pos - line_start > UINT32_MAX ? UINT32_MAX :
+                                      (u32)(candidate_pos - line_start);
+
+                if (syn_attr_at(syn, candidate_relative, &candidate_at) !=
+                    attr)
+                    break;
+                syn_at = candidate_at;
+                run++;
+            }
+            if (style.fg.tag == YEW_COLOR_DEFAULT)
+                style.fg = grid->blank.fg;
+            if (style.bg.tag == YEW_COLOR_DEFAULT)
+                style.bg = grid->blank.bg;
+            col = yew_grid_puts(grid, row, col, bytes, run, style.fg,
+                                style.bg, style.attrs);
+            bytes += run;
+            pos += (u64)run;
+            logical.v += (u64)run;
+            take -= (u64)run;
+        }
+        if (pos < span.hi && col < right &&
+            !yew_textiter_advance(&it, tb))
+            YEW_BUG("draw: simple ASCII span ended early");
+    }
+    (void)put_spaces(grid, row, col, right);
+}
+
 static void draw_span(Grid *grid, const TextBuf *tb, Span span,
                       u64 line_start, const SynLineOut *syn, u16 row,
                       const Win *w, CCol left, const ThemeEnt *theme)
@@ -771,6 +845,15 @@ static void draw_span(Grid *grid, const TextBuf *tb, Span span,
     u16 col = w->rect.x;
     u16 right = row_right(grid, w);
     u32 syn_at = 0U;
+
+    /* YEW-F-072: a current whole-buffer ASCII proof makes every byte in a
+     * content span an independent width-one grapheme.  Stream piece chunks
+     * into styled grid runs instead of seeking and decoding once per cell. */
+    if (yew_coords_simple_ascii_current(tb)) {
+        draw_span_simple_ascii(grid, tb, span, line_start, syn, row, w,
+                               left, theme);
+        return;
+    }
 
     while (pos < span.hi && col < right) {
         ByteOff next_off = yew_grapheme_next_boundary(tb, BYTEOFF(pos));
