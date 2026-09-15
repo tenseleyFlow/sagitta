@@ -13,6 +13,7 @@
 #include "edit/opt.h"
 #include "edit/pane_cmds.h"
 #include "edit/prof_cmds.h"
+#include "edit/readline_cmds.h"
 #include "edit/search_cmds.h"
 #include "edit/shadow_cmds.h"
 #include "edit/file_cmds.h"
@@ -436,6 +437,58 @@ static const CmdDesc builtins[] = {
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
          YEW_CMD_CHANGES_BUFFER,
      "Alias for deleting the next grapheme", "del_next"},
+    /*
+     * The readline/Emacs Insert-mode kills.  MULTI_AGGREGATE because each
+     * one plans a span per cursor and replays the whole plan through one
+     * EditCtx -- fanning out through yew_mc_run would run the command
+     * once per cursor and leave only the last cursor's text in the kill
+     * register.  See edit/readline_cmds.h for the kill-ring note.
+     */
+    {"ed.edit.kill.word_prev", yew_rl_cmd_kill_word_prev, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Kill back to the previous word boundary", "kill_word_prev"},
+    {"ed.edit.kill.word_next", yew_rl_cmd_kill_word_next, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Kill forward to the next word boundary", "kill_word_next"},
+    {"ed.edit.kill.to_home", yew_rl_cmd_kill_to_home, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Kill from the cursor to line start", "kill_to_home"},
+    {"ed.edit.kill.to_end", yew_rl_cmd_kill_to_end, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Kill from the cursor to line end", "kill_to_end"},
+    {"ed.edit.kill.yank", yew_rl_cmd_kill_yank, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Yank the most recent kill at every cursor", "kill_yank"},
+    {"ed.edit.transpose.chars", yew_rl_cmd_transpose_chars,
+     YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Transpose the graphemes around the cursor", "transpose_chars"},
+    {"ed.edit.transpose.words", yew_rl_cmd_transpose_words,
+     YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Transpose the words around the cursor", "transpose_words"},
+    {"ed.edit.case.upper_word", yew_rl_cmd_case_upper_word,
+     YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Upcase the rest of the word and step past it", "upcase_word"},
+    {"ed.edit.case.lower_word", yew_rl_cmd_case_lower_word,
+     YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Downcase the rest of the word and step past it", "downcase_word"},
+    {"ed.edit.case.cap_word", yew_rl_cmd_case_cap_word, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Capitalize the rest of the word and step past it",
+     "capitalize_word"},
     {"ed.edit.undo", yew_edit_cmd_undo, YEW_ARITY_NONE,
      YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Undo the last edit transaction", "undo"},
@@ -1441,7 +1494,11 @@ static bool command_name_valid(const char *name)
         "home_toggle", "accept_or_word",
         /* Sprint 57.18 §4: `:!!` -- one command, the real terminal.
          * Distinct from "term", which stays the refusal. */
-        "term_run"};
+        "term_run",
+        /* The readline/Emacs Insert-mode keys.  `word_prev`, `word_next`,
+         * `to_home`, `to_end` and `yank` are already above; these are the
+         * transpose and word-case verbs those keys added. */
+        "chars", "words", "upper_word", "lower_word", "cap_word"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

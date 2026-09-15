@@ -381,6 +381,24 @@ static const RtDenied denied[] = {
     D("ed.edit.line.delete", "line register semantics need a seeded paste command"),
     D("ed.edit.delete.prev", "redundant delete alias"),
     D("ed.edit.delete.next", "redundant delete alias"),
+    /*
+     * The readline Insert-mode keys.  The kills all write the kill ring
+     * on the way out, which is the same register state ed.sel.delete is
+     * excluded for; the yank READS it, so it depends on history the
+     * generator does not seed.  Transpose needs two adjacent graphemes or
+     * two adjacent words to exist at the caret, and the case commands
+     * need the same dedicated case pool ed.sel.case_upper waits on.
+     */
+    D("ed.edit.kill.word_prev", "kill register state needs a seeded paste command"),
+    D("ed.edit.kill.word_next", "kill register state needs a seeded paste command"),
+    D("ed.edit.kill.to_home", "kill register state needs a seeded paste command"),
+    D("ed.edit.kill.to_end", "kill register state needs a seeded paste command"),
+    D("ed.edit.kill.yank", "reads prior register state, which is outside E0"),
+    D("ed.edit.transpose.chars", "adjacent-grapheme precondition is fixture-specific"),
+    D("ed.edit.transpose.words", "adjacent-word precondition is fixture-specific"),
+    D("ed.edit.case.upper_word", "locale/case fixture needs a dedicated pool"),
+    D("ed.edit.case.lower_word", "locale/case fixture needs a dedicated pool"),
+    D("ed.edit.case.cap_word", "locale/case fixture needs a dedicated pool"),
     D("ed.edit.undo", "history-dependent command"),
     D("ed.edit.redo", "history-dependent command"),
     D("ed.shadow.accept_word", "requires live suggestion state"),
