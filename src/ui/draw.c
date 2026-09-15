@@ -152,7 +152,10 @@ static u64 cursor_overlay_signature(const Ed *ed, const Win *w)
 
     hash = signature_mix(hash, w->cs.curs.len);
     hash = signature_mix(hash, w->cs.primary);
-    hash = signature_mix(hash, (u64)ed->mode);
+    /* YEW-F-072: only Highlight changes document overlay pixels.  Hashing
+     * every I/L/W/B transition made Insert escape repaint and re-highlight
+     * the full viewport though only the terminal cursor shape/footer move. */
+    hash = signature_mix(hash, ed->mode == YEW_MODE_H ? 1U : 0U);
     hash = signature_mix(hash, (u64)ed->render.tier);
     hash = signature_mix(hash, draw_tabwidth(w));
     hash = signature_mix(hash, w->vp.top.v);

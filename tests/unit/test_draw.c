@@ -178,9 +178,19 @@ void test_draw_selection_then_secondary_cursor_preserves_glyphs(void)
     ed.mode = YEW_MODE_L;
     yew_draw_document_rows(&ed, &win, 0U, 2U);
     yew_grid_flip(&ed.grid);
+    ed.mode = YEW_MODE_I;
+    yew_draw_cursor(&ed, &win);
+    /* YEW-F-072: I/L changes affect the hardware cursor and footer, not the
+     * document overlay; Insert escape must leave every document cell clean. */
+    YEW_ASSERT_EQ_U64(ed.grid.cur_shape, YEW_CURSOR_BAR);
+    YEW_ASSERT_EQ_U64(ed.grid.dmg_lo, ed.grid.rows);
+    YEW_ASSERT_EQ_U64(ed.grid.dmg_hi, 0U);
+
+    ed.mode = YEW_MODE_L;
     win.cs.curs.data[0U].pos = BYTEOFF(1U);
     win.cs.curs.data[0U].anchor = BYTEOFF(1U);
     yew_draw_cursor(&ed, &win);
+    YEW_ASSERT_EQ_U64(ed.grid.cur_shape, YEW_CURSOR_BLOCK);
     YEW_ASSERT_EQ_U64(ed.grid.dmg_lo, ed.grid.rows);
     YEW_ASSERT_EQ_U64(ed.grid.dmg_hi, 0U);
 

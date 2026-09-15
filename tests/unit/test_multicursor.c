@@ -528,6 +528,8 @@ void test_multicursor_same_line_batch_keeps_row_damage(void)
     Ed ed;
     Win win;
     CmdCtx cx = {0};
+    CmdId redo;
+    CmdId undo;
     Span second;
 
     mc_ed_init(&ed, &win, text, sizeof(text) - 1U);
@@ -552,6 +554,27 @@ void test_multicursor_same_line_batch_keeps_row_damage(void)
     YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 8U);
     YEW_ASSERT(ed.cursor_overlay_damage_complete);
     YEW_ASSERT_EQ_U64(ed.damage_batch_finalizations, 1U);
+
+    undo = yew_cmd_lookup("ed.edit.undo", 12U);
+    redo = yew_cmd_lookup("ed.edit.redo", 12U);
+    YEW_ASSERT(undo.v != 0U);
+    YEW_ASSERT(redo.v != 0U);
+    ed.doc_damage_lo = win.rect.h;
+    ed.doc_damage_hi = 0U;
+    ed.cursor_overlay_damage_complete = false;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, undo, &cx), YEW_CMD_OK);
+    /* YEW-F-072: undo and redo receive the same per-edit row reports as the
+     * original multicursor transaction; they must not widen them afterward. */
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 5U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 8U);
+    YEW_ASSERT(ed.cursor_overlay_damage_complete);
+    ed.doc_damage_lo = win.rect.h;
+    ed.doc_damage_hi = 0U;
+    ed.cursor_overlay_damage_complete = false;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, redo, &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 5U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 8U);
+    YEW_ASSERT(ed.cursor_overlay_damage_complete);
 
     ed.doc_damage_lo = win.rect.h;
     ed.doc_damage_hi = 0U;

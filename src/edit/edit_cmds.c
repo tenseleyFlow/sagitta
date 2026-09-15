@@ -2077,7 +2077,11 @@ CmdStatus yew_edit_cmd_undo(CmdCtx *cx)
     }
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
-    yew_ed_damage_document(cx->ed);
+    /* YEW-F-072: a multicursor undo reports every touched row through its
+     * edit notifications.  Replacing that bounded batch with an unconditional
+     * document redraw made undo one of the slowest repeated editor frames. */
+    if (!batch)
+        yew_ed_damage_document(cx->ed);
     return YEW_CMD_OK;
 }
 
@@ -2117,7 +2121,8 @@ CmdStatus yew_edit_cmd_redo(CmdCtx *cx)
     }
     win->wrap_goal_valid = false;
     yew_win_follow_cursor(win);
-    yew_ed_damage_document(cx->ed);
+    if (!batch)
+        yew_ed_damage_document(cx->ed);
     return YEW_CMD_OK;
 }
 
