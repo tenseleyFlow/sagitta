@@ -31,10 +31,14 @@ enum {
     YEW_DFA_MAX_STATES = 1024,
     YEW_DFA_MAX_BYTES = 1024U * 1024U,
     YEW_DFA_BUCKETS = 2048,
+    YEW_DFA_EDGE_CACHE = 4096,
     /* Two flushes in one search means the working set does not fit; a
      * third would just be more rebuilding. */
     YEW_DFA_MAX_FLUSHES = 2
 };
+
+_Static_assert((YEW_DFA_EDGE_CACHE & (YEW_DFA_EDGE_CACHE - 1U)) == 0U,
+               "DFA edge cache must be a power of two");
 
 /* Assertion context, folded into the state key: two states with the same
  * pc set but different surroundings can step differently, so they are
@@ -63,6 +67,14 @@ typedef struct DfaState {
     i32 *next_ascii;
 } DfaState;
 
+typedef struct DfaEdge {
+    u32 state;
+    u32 cp;
+    i32 next;
+    u8 ctx;
+    bool valid;
+} DfaEdge;
+
 typedef struct Dfa {
     const YewRe *re;
     const ReInst *prog;
@@ -82,6 +94,8 @@ typedef struct Dfa {
      * it per input position made a 64 MiB search grow RSS by 268 MB,
      * which the throughput gate's memory ceiling caught. */
     u32 *combined;
+    DfaEdge *edges;
+    u8 ctx_mask;
     bool has_assert;
 } Dfa;
 
@@ -190,9 +204,45 @@ static void dfa_flush(Dfa *d)
 
     for (i = 0U; i < YEW_DFA_BUCKETS; i++)
         d->buckets[i] = -1;
+    if (d->edges != NULL)
+        (void)memset(d->edges, 0,
+                     YEW_DFA_EDGE_CACHE * sizeof(*d->edges));
     d->nstates = 0U;
     d->bytes = 0U;
     d->flushes++;
+}
+
+static u32 edge_slot(u32 state, u32 cp, u8 ctx)
+{
+    u32 hash = state * 0x9e3779b1U;
+
+    hash ^= cp * 0x85ebca6bU;
+    hash ^= (u32)ctx * 0xc2b2ae35U;
+    hash ^= hash >> 16U;
+    return hash & (YEW_DFA_EDGE_CACHE - 1U);
+}
+
+static bool edge_get(const Dfa *d, u32 state, u32 cp, u8 ctx,
+                     i32 *next)
+{
+    const DfaEdge *edge = &d->edges[edge_slot(state, cp, ctx)];
+
+    if (!edge->valid || edge->state != state || edge->cp != cp ||
+        edge->ctx != ctx)
+        return false;
+    *next = edge->next;
+    return true;
+}
+
+static void edge_put(Dfa *d, u32 state, u32 cp, u8 ctx, i32 next)
+{
+    DfaEdge *edge = &d->edges[edge_slot(state, cp, ctx)];
+
+    edge->state = state;
+    edge->cp = cp;
+    edge->next = next;
+    edge->ctx = ctx;
+    edge->valid = true;
 }
 
 /* Interns the closure currently in d->work as a state id, or -1 when the
@@ -320,22 +370,36 @@ static u32 dfa_decode(const YewReInput *in, u64 off, u32 *len_out)
     return cp;
 }
 
+static bool dfa_is_word(u32 cp)
+{
+    if (cp < 128U)
+        return (cp >= (u32)'a' && cp <= (u32)'z') ||
+               (cp >= (u32)'A' && cp <= (u32)'Z') ||
+               (cp >= (u32)'0' && cp <= (u32)'9') || cp == (u32)'_';
+    return yew_re_is_word(cp);
+}
+
 static u8 ctx_at(const YewReInput *in, u64 pos, u32 prev_cp, bool has_prev,
-                 u32 cp, bool have_cp)
+                 u32 cp, bool have_cp, u8 mask)
 {
     u8 ctx = 0U;
 
-    if (pos == in->window.lo)
-        ctx |= (u8)(DFA_AT_BOT | DFA_AT_BOL);
-    else if (has_prev && prev_cp == (u32)'\n')
+    if ((mask & DFA_AT_BOT) != 0U && pos == in->window.lo)
+        ctx |= DFA_AT_BOT;
+    if ((mask & DFA_AT_BOL) != 0U &&
+        (pos == in->window.lo ||
+         (has_prev && prev_cp == (u32)'\n')))
         ctx |= DFA_AT_BOL;
-    if (pos == in->window.hi)
-        ctx |= (u8)(DFA_AT_EOT | DFA_AT_EOL);
-    else if (have_cp && (cp == (u32)'\n' || cp == (u32)'\r'))
+    if ((mask & DFA_AT_EOT) != 0U && pos == in->window.hi)
+        ctx |= DFA_AT_EOT;
+    if ((mask & DFA_AT_EOL) != 0U &&
+        (pos == in->window.hi ||
+         (have_cp && (cp == (u32)'\n' || cp == (u32)'\r'))))
         ctx |= DFA_AT_EOL;
-    if (has_prev && yew_re_is_word(prev_cp))
+    if ((mask & DFA_AFTER_WORD) != 0U && has_prev &&
+        dfa_is_word(prev_cp))
         ctx |= DFA_AFTER_WORD;
-    if (have_cp && yew_re_is_word(cp))
+    if ((mask & DFA_BEFORE_WORD) != 0U && have_cp && dfa_is_word(cp))
         ctx |= DFA_BEFORE_WORD;
     return ctx;
 }
@@ -370,6 +434,9 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     u32 *cur;
     u32 ncur;
     i32 state;
+    u32 scan_cp = 0U;
+    u32 scan_cp_len = 0U;
+    bool have_scan_cp = false;
 
     if (re == NULL || in == NULL || re->nprog == 0U)
         return YEW_DFA_NO;
@@ -399,17 +466,29 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     {
         u32 k;
 
-        d.has_assert = false;
+        d.ctx_mask = 0U;
         for (k = 0U; k < re->nprog; k++) {
             ReOp op = (ReOp)re->prog[k].op;
 
-            if (op == RE_BOL || op == RE_EOL || op == RE_BOT ||
-                op == RE_EOT || op == RE_WORDB || op == RE_NWORDB)
-                d.has_assert = true;
+            if (op == RE_BOL)
+                d.ctx_mask |= DFA_AT_BOL;
+            else if (op == RE_EOL)
+                d.ctx_mask |= DFA_AT_EOL;
+            else if (op == RE_BOT)
+                d.ctx_mask |= DFA_AT_BOT;
+            else if (op == RE_EOT)
+                d.ctx_mask |= DFA_AT_EOT;
+            else if (op == RE_WORDB || op == RE_NWORDB)
+                d.ctx_mask |= (u8)(DFA_AFTER_WORD | DFA_BEFORE_WORD);
         }
+        d.has_assert = d.ctx_mask != 0U;
     }
     d.combined = arena_alloc(&d.arena, (size_t)(re->nprog + 2U) *
                              sizeof(u32), sizeof(u32));
+    if (d.has_assert)
+        d.edges = arena_alloc(&d.arena,
+                              YEW_DFA_EDGE_CACHE * sizeof(*d.edges),
+                              sizeof(void *));
     dfa_flush(&d);
     d.flushes = 0U;
 
@@ -426,9 +505,6 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
      * about one pattern in fifty.
      */
     {
-        u32 cp0 = 0U;
-        u32 len0 = 0U;
-        bool have0;
         u8 ctx0;
         bool matched0 = false;
         u32 n0;
@@ -465,10 +541,11 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
                 probe += plen;
             }
         }
-        cp0 = dfa_decode(in, pos, &len0);
-        have0 = len0 != 0U && pos < in->window.hi;
+        scan_cp = dfa_decode(in, pos, &scan_cp_len);
+        have_scan_cp = scan_cp_len != 0U && pos < in->window.hi;
         ctx0 = d.has_assert ?
-               ctx_at(in, pos, prev0, has_prev0, cp0, have0) : 0U;
+               ctx_at(in, pos, prev0, has_prev0, scan_cp, have_scan_cp,
+                      d.ctx_mask) : 0U;
         d.combined[0] = 0U; /* the start instruction */
         n0 = closure(&d, d.combined, 1U, ctx0, &matched0);
         state = dfa_intern(&d, n0, ctx0, matched0);
@@ -479,10 +556,14 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     }
 
     for (;;) {
-        u32 cp = 0U;
-        u32 cp_len = 0U;
-        bool have_cp;
+        u32 cp = scan_cp;
+        u32 cp_len = scan_cp_len;
+        bool have_cp = have_scan_cp;
+        u32 next_cp;
+        u32 next_cp_len = 0U;
+        bool have_next_cp;
         i32 next;
+        u8 next_ctx = 0U;
         u32 i;
 
         if (d.states[state].matched) {
@@ -491,21 +572,27 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
                 *end_out = pos;
             break;
         }
-        cp = dfa_decode(in, pos, &cp_len);
-        have_cp = cp_len != 0U && pos < in->window.hi;
         if (!have_cp)
             break;
+        next_cp = dfa_decode(in, pos + cp_len, &next_cp_len);
+        have_next_cp = next_cp_len != 0U &&
+                       pos + cp_len < in->window.hi;
 
         next = -1;
         if (!d.has_assert && cp < 128U &&
             d.states[state].next_ascii != NULL)
             next = d.states[state].next_ascii[cp];
+        if (d.has_assert) {
+            next_ctx = ctx_at(in, pos + cp_len, cp, true, next_cp,
+                              have_next_cp, d.ctx_mask);
+            (void)edge_get(&d, (u32)state, cp, next_ctx, &next);
+        }
 
         if (next < 0) {
-            u8 ctx;
             bool matched = false;
             u32 n;
             i32 from_state = state;
+            u32 from_flushes = d.flushes;
 
             /* Step every live instruction of this state on `cp`, then
              * re-seed the start instruction: this scan is unanchored, so
@@ -520,31 +607,34 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
             for (i = 0U; i < ncur; i++)
                 d.combined[i] = cur[i];
             d.combined[ncur] = 0U;
-            if (d.has_assert) {
-                u32 nxt_len = 0U;
-                u32 nxt = dfa_decode(in, pos + cp_len, &nxt_len);
-                bool have_next = nxt_len != 0U &&
-                                 pos + cp_len < in->window.hi;
-
-                ctx = ctx_at(in, pos + cp_len, cp, true, nxt, have_next);
-            } else {
-                ctx = 0U;
-            }
-            n = closure(&d, d.combined, ncur + 1U, ctx, &matched);
-            next = dfa_intern(&d, n, ctx, matched);
+            n = closure(&d, d.combined, ncur + 1U, next_ctx, &matched);
+            next = dfa_intern(&d, n, next_ctx, matched);
             if (next < 0) {
                 verdict = YEW_DFA_GIVE_UP;
                 break;
             }
             /* Record the edge we just walked.  A flush may have
              * invalidated `from_state`, so only cache when it survived. */
-            if (!d.has_assert && cp < 128U &&
-                (u32)from_state < d.nstates &&
-                d.states[from_state].next_ascii != NULL)
-                d.states[from_state].next_ascii[cp] = next;
+            if (d.flushes == from_flushes) {
+                if (!d.has_assert && cp < 128U &&
+                    (u32)from_state < d.nstates &&
+                    d.states[from_state].next_ascii != NULL)
+                    d.states[from_state].next_ascii[cp] = next;
+                else if (d.has_assert) {
+                    /* YEW-F-072: assertion transitions depend on the
+                     * following context as well as state and codepoint.
+                     * Caching that complete key avoids rebuilding and
+                     * sorting the same closure for every byte of a large
+                     * search without weakening ^, $, or word boundaries. */
+                    edge_put(&d, (u32)from_state, cp, next_ctx, next);
+                }
+            }
         }
         state = next;
         pos += cp_len;
+        scan_cp = next_cp;
+        scan_cp_len = next_cp_len;
+        have_scan_cp = have_next_cp;
     }
     arena_free_all(&d.arena);
     return verdict;
