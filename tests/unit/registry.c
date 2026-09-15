@@ -229,6 +229,7 @@ const YewTest yew_tests[] = {
     T(multicursor_run_commits_one_undo_transaction),
     T(multicursor_run_rolls_back_every_cursor),
     T(multicursor_batches_symbol_rebuild_and_damage),
+    T(multicursor_same_line_batch_keeps_row_damage),
     T(multicursor_editor_invoke_rolls_back_on_per_cursor_failure),
     T(multicursor_count_repeats_per_cursor),
     T(multicursor_adjacent_edit_ranges_both_run),

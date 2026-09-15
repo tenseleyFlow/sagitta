@@ -172,6 +172,14 @@ static u64 cursor_overlay_signature(const Ed *ed, const Win *w)
     return hash;
 }
 
+void yew_draw_cursor_overlay_sync(Ed *ed, Win *w)
+{
+    if (ed == NULL || w == NULL)
+        YEW_BUG("draw: cannot sync missing cursor overlay");
+    ed->grid.cursor_overlay_signature = cursor_overlay_signature(ed, w);
+    ed->grid.cursor_overlay_valid = true;
+}
+
 static void redraw_primary_selection_change(Ed *ed, Win *w,
                                             const Cursor *cursor)
 {
@@ -887,8 +895,7 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     draw_panel_mark_rows(ed, w, lo, hi);
     draw_secondary_rows(ed, w, lo, hi);
     if (lo == 0U && hi == w->rect.h) {
-        grid->cursor_overlay_signature = cursor_overlay_signature(ed, w);
-        grid->cursor_overlay_valid = true;
+        yew_draw_cursor_overlay_sync(ed, w);
         if (w->cs.curs.len != 0U &&
             (size_t)w->cs.primary < w->cs.curs.len) {
             grid->cursor_overlay_primary_pos =

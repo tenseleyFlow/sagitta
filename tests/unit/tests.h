@@ -195,6 +195,7 @@ void test_multicursor_reseed_uses_fresh_identity_space(void);
 void test_multicursor_run_commits_one_undo_transaction(void);
 void test_multicursor_run_rolls_back_every_cursor(void);
 void test_multicursor_batches_symbol_rebuild_and_damage(void);
+void test_multicursor_same_line_batch_keeps_row_damage(void);
 void test_multicursor_editor_invoke_rolls_back_on_per_cursor_failure(void);
 void test_multicursor_count_repeats_per_cursor(void);
 void test_multicursor_adjacent_edit_ranges_both_run(void);

@@ -256,12 +256,21 @@ struct Ed {
     u16 doc_damage_hi;
     bool damage_batching;
     bool damage_batch_pending;
+    bool damage_batch_full;
+    bool damage_batch_line_pending;
+    bool damage_batch_row_pending;
     u32 damage_batch_finalizations;
     Win *damage_batch_win;
     u64 damage_batch_lines;
+    u64 damage_batch_gen;
+    LineNo damage_batch_line_lo;
     bool damage_batch_syn_pending;
     Buffer *damage_batch_syn_buffer;
     LineNo damage_batch_syn_lo;
+    /* A same-line multicursor batch repaints every row whose secondary
+     * caret moved.  The renderer may then accept the new overlay signature
+     * without revisiting untouched rows. */
+    bool cursor_overlay_damage_complete;
     LineNo drawn_top;
     u32 drawn_top_sub;
     CCol drawn_left;
