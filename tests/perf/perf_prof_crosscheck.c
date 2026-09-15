@@ -299,9 +299,12 @@ static uint64_t delta_permille(uint64_t a, uint64_t b, uint64_t denominator)
 
 static uint64_t ratio_permille(uint64_t numerator, uint64_t denominator)
 {
+    uint64_t scaled;
+
     if (denominator == 0U || numerator > UINT64_MAX / 1000U)
         return UINT64_MAX;
-    return numerator * 1000U / denominator;
+    scaled = numerator * 1000U;
+    return scaled / denominator + (scaled % denominator != 0U ? 1U : 0U);
 }
 
 static bool gating(void)
@@ -390,6 +393,7 @@ static int policy_selftest(void)
         return 1;
     }
     if (ratio_permille(20U, 1000U) != OVERHEAD_LIMIT_PERMILLE ||
+        ratio_permille(1U, 1000U) != 1U ||
         ratio_permille(1U, 0U) != UINT64_MAX ||
         median3(ordered) != 20U || median3(one_bad) != 0U ||
         median3(two_bad) != 300U ||
