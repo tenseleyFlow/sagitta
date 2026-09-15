@@ -561,13 +561,22 @@ static bool stop_editor(YewLivePty *pty)
 static bool send_editor_command(YewLivePty *pty, const char *command,
                                 int timeout_ms)
 {
+    static const char escape[] = "\033[27u\033[27u";
     char wire[1400];
     i64 deadline = yew_live_pty_now_ns() +
                    (i64)timeout_ms * INT64_C(1000000);
     int n;
 
-    n = snprintf(wire, sizeof(wire), "\033[27u:%s\r", command);
+    /* A session may stop in a transient prompt (notably search.keys ends
+     * with a partial query).  Deliver two Escapes in their own settled
+     * event-loop turn before entering command mode; one combined
+     * Escape+command write can leave the following ':' in the prompt when
+     * the editor drains a key burst.  The pair also keeps this control turn
+     * out of KEYPAINT's exactly-one-decoded-key population. */
+    n = snprintf(wire, sizeof(wire), ":%s\r", command);
     return n > 0 && (size_t)n < sizeof(wire) &&
+           yew_live_pty_write(pty, escape, sizeof(escape) - 1U, deadline) &&
+           yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline) &&
            yew_live_pty_write(pty, wire, (size_t)n, deadline) &&
            yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline);
 }
