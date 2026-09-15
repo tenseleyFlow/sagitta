@@ -123,6 +123,18 @@ gate therefore moves to the next 64 KiB boundary above the measured floor:
 gate, measurement recipe, feature matrix, and post-1.0 optimization ratchets
 are unchanged.
 
+**Amendment S59-A1 (2026-09-15) — typing RSS growth admits one Linux
+residency quantum.** Sprint 59's first designated ARM64 Linux campaign used
+the precise `/proc/self/smaps_rollup` checkpoints required by F072. Across
+21 identical 10,000-key observations, ordinary paint-to-session RSS growth
+was 176,128--466,944 bytes; three observations were exactly 2,097,152 bytes
+above that range (2,293,760 or 2,297,856 bytes). The old 2 MiB ceiling
+therefore rejected one kernel residency quantum rather than a retained
+per-key allocation. The session-leak gate moves to 3 MiB: enough for one
+2 MiB step plus the measured sub-0.5 MiB growth, while two steps still fail.
+All clean/default/workspace/open footprint gates, every latency gate, and
+the editor feature set are unchanged.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

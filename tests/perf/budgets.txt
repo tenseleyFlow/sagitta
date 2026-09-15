@@ -57,6 +57,6 @@ mem.clean_open.100m_allnl                 record  -           file_size_permille
 mem.paint.default_empty                   le      12582912    bytes              none        designated    default_footprint
 mem.paint.clean_empty                     le      8388608     bytes              none        designated    clean_footprint
 mem.workspace50                           le      41943040    bytes              none        designated    deferred_tabs
-mem.typing_growth.small                   le      2097152     bytes              none        designated    session_leak
+mem.typing_growth.small                   le      3145728     bytes              none        designated    session_leak
 mem.closed_growth.100m_code.linux         le      4194304     bytes              none        designated    closed_buffer_leak
 mem.assist.small                          le      25165824    bytes              none        designated    assist_footprint

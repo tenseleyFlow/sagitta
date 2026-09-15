@@ -189,7 +189,14 @@ Do not profile the PTY runner and mistake its cost for yew's. `perf` wall
 time includes profiler overhead; hardware counter values are not comparable
 between machines. Callgrind gives exact call counts but its timing is not
 real. Massif measures heap, not RSS; process RSS comes from the suite's
-`getrusage` checkpoints.
+precise Linux `smaps_rollup` checkpoints (and normalized `getrusage` peaks).
+
+The 10,000-key typing-growth ceiling is 3 MiB. Designated ARM64 measurements
+found ordinary retained growth of 176,128--466,944 bytes and occasional
+values exactly 2,097,152 bytes higher. The single 2 MiB Linux residency
+quantum is not a per-key leak, so the ceiling admits one such step plus the
+observed sub-0.5 MiB growth; a second step still fails. This amendment does
+not change the clean/default/workspace/open footprint ceilings.
 
 ## Baselines and rebaselining
 
