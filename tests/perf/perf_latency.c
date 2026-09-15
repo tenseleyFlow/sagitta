@@ -35,7 +35,8 @@ enum {
     ADVISORY_ATTEMPTS = 3,
     FLOOR_SAMPLES = 1001,
     MANY_BUFFER_COUNT = 50,
-    MANY_BUFFER_HYDRATED = 20
+    MANY_BUFFER_HYDRATED = 20,
+    KEY_NAME_CAP = 32
 };
 
 #define BROKEN_RUN_NS INT64_C(500000000)
@@ -44,6 +45,7 @@ _Static_assert((i64)KEY_TIMEOUT_MS * INT64_C(1000000) > BROKEN_RUN_NS,
                "PTY hang ceiling must outlive the broken-run latency gate");
 
 typedef struct KeyStroke {
+    char name[KEY_NAME_CAP];
     u8 bytes[32];
     u8 len;
 } KeyStroke;
@@ -308,7 +310,7 @@ static bool encode_key(const char *token, size_t len, KeyStroke *out)
 
 static bool encoding_is(const char *token, const char *expected)
 {
-    KeyStroke key = {{0}, 0U};
+    KeyStroke key = {0};
     size_t len = strlen(token);
     size_t expected_len = strlen(expected);
 
@@ -334,6 +336,7 @@ static bool load_session(const char *path, Session *out)
         char *start = line;
         char *end;
         char *p;
+        size_t token_len;
 
         lineno++;
         while (*start != '\0' && isspace((unsigned char)*start))
@@ -343,6 +346,7 @@ static bool load_session(const char *path, Session *out)
         end = start + strlen(start);
         while (end > start && isspace((unsigned char)end[-1]))
             end--;
+        token_len = (size_t)(end - start);
         for (p = start; p < end; p++) {
             if (isspace((unsigned char)*p)) {
                 (void)fprintf(stderr,
@@ -358,12 +362,19 @@ static bool load_session(const char *path, Session *out)
             (void)fprintf(stderr, "perf_latency: %s has more than %u keys\n",
                           path, SESSION_KEYS);
             ok = false;
-        } else if (!encode_key(start, (size_t)(end - start),
+        } else if (token_len >= sizeof(out->keys[out->len].name)) {
+            (void)fprintf(stderr,
+                          "perf_latency: %s:%lu key spelling is too long\n",
+                          path, lineno);
+            ok = false;
+        } else if (!encode_key(start, token_len,
                                &out->keys[out->len])) {
             (void)fprintf(stderr, "perf_latency: %s:%lu unknown key '%.*s'\n",
                           path, lineno, (int)(end - start), start);
             ok = false;
         } else {
+            (void)memcpy(out->keys[out->len].name, start, token_len);
+            out->keys[out->len].name[token_len] = '\0';
             out->len++;
         }
     }
@@ -973,13 +984,15 @@ static int run_session(const char *binary, const char *script,
                        const char *fixture, const char *path,
                        const char *state, const char *many_dir,
                        const char *fakelsp, const char *mockai,
-                       const char *ai_script, const char *prof_dump)
+                       const char *ai_script, const char *prof_dump,
+                       bool key_breakdown)
 {
     Session session;
     YewLivePty pty;
     char run_state[1024];
     char run_workspace[1024] = "";
     i64 samples[SESSION_KEYS];
+    i64 elapsed_by_key[SESSION_KEYS] = {0};
     size_t nsamples = 0U;
     size_t no_paint = 0U;
     u64 frames = 0U;
@@ -1132,6 +1145,7 @@ static int run_session(const char *binary, const char *script,
             i64 elapsed = read.completed_ns - start;
 
             samples[nsamples++] = elapsed;
+            elapsed_by_key[i] = elapsed;
         }
         else if (read.no_paint)
             no_paint++;
@@ -1220,6 +1234,54 @@ static int run_session(const char *binary, const char *script,
             frames > session.len)
             status = 1;
     }
+    if (key_breakdown) {
+        /* YEW-F-072: retain the workload spelling beside each elapsed sample
+         * so a failing mixed-session percentile can be attributed to an
+         * actual repeated command class instead of optimized by guesswork. */
+        for (i = 0U; i < session.len; i++) {
+            size_t j;
+            size_t painted = 0U;
+            size_t skipped = 0U;
+            i64 p50 = 0;
+            i64 p90 = 0;
+            i64 p99 = 0;
+            i64 max = 0;
+
+            for (j = 0U; j < i; j++) {
+                if (strcmp(session.keys[i].name,
+                           session.keys[j].name) == 0)
+                    break;
+            }
+            if (j != i)
+                continue;
+            for (j = i; j < session.len; j++) {
+                if (strcmp(session.keys[i].name,
+                           session.keys[j].name) != 0)
+                    continue;
+                if (elapsed_by_key[j] > 0)
+                    samples[painted++] = elapsed_by_key[j];
+                else
+                    skipped++;
+            }
+            if (painted != 0U) {
+                if (!sort_i64(samples, painted)) {
+                    (void)fprintf(stderr,
+                                  "perf_latency: cannot sort key breakdown\n");
+                    return 2;
+                }
+                p50 = samples[(painted - 1U) * 50U / 100U];
+                p90 = samples[(painted - 1U) * 90U / 100U];
+                p99 = samples[(painted - 1U) * 99U / 100U];
+                max = samples[painted - 1U];
+            }
+            (void)printf("latency.key metric=%s key=%s painted=%zu "
+                         "no_paint=%zu p50_ns=%lld p90_ns=%lld "
+                         "p99_ns=%lld max_ns=%lld\n",
+                         spec->metric, session.keys[i].name, painted, skipped,
+                         (long long)p50, (long long)p90, (long long)p99,
+                         (long long)max);
+        }
+    }
     return status;
 }
 
@@ -1243,7 +1305,7 @@ static int run_session_with_retry(const char *binary, const char *script,
                                   const char *fakelsp, const char *mockai,
                                   const char *ai_script,
                                   const char *prof_dump,
-                                  bool single_attempt)
+                                  bool single_attempt, bool key_breakdown)
 {
     bool advisory = perf_advisory();
     unsigned attempt;
@@ -1251,7 +1313,7 @@ static int run_session_with_retry(const char *binary, const char *script,
     for (attempt = 1U; ; attempt++) {
         int status = run_session(binary, script, fixture, path, state,
                                  many_dir, fakelsp, mockai, ai_script,
-                                 prof_dump);
+                                 prof_dump, key_breakdown);
 
         if (!retry_transport(advisory, single_attempt, status, attempt))
             return status;
@@ -1488,7 +1550,8 @@ static void usage(const char *arg0)
         "  %s --selftest-retry\n"
         "  %s --yew PATH --session FILE --fixture CLASS --path FILE "
         "[--state DIR] [--many-dir DIR] [--fakelsp PATH --mockai PATH "
-        "--ai-script PATH] [--prof-dump PATH] [--single-attempt]\n",
+        "--ai-script PATH] [--prof-dump PATH] [--single-attempt] "
+        "[--key-breakdown]\n",
         arg0, arg0, arg0, arg0, arg0, arg0);
 }
 
@@ -1511,6 +1574,7 @@ int main(int argc, char **argv)
     bool frame_tags = false;
     bool retry_selftest = false;
     bool single_attempt = false;
+    bool key_breakdown = false;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -1524,6 +1588,8 @@ int main(int argc, char **argv)
             retry_selftest = true;
         else if (strcmp(argv[i], "--single-attempt") == 0)
             single_attempt = true;
+        else if (strcmp(argv[i], "--key-breakdown") == 0)
+            key_breakdown = true;
         else if (i + 1 < argc && strcmp(argv[i], "--echo") == 0)
             echo = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--check-scripts") == 0)
@@ -1573,7 +1639,8 @@ int main(int argc, char **argv)
         path != NULL)
         return run_session_with_retry(yew, script, fixture, path, state,
                                       many_dir, fakelsp, mockai, ai_script,
-                                      prof_dump, single_attempt);
+                                      prof_dump, single_attempt,
+                                      key_breakdown);
     usage(argv[0]);
     return 2;
 }

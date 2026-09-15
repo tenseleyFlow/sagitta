@@ -217,6 +217,12 @@ bounded sampling policy, not a wider bound: a third failure still fails, and
 designated runs never retry.  Its paired profiler-off/profiler-on verdict is
 still the median of three completed observations.
 
+Pass `--key-breakdown` directly to `perf_latency_s56` when a mixed session
+misses its budget. After timing completes, the runner reports p50/p90/p99,
+maximum, painted count, and no-paint count for each key spelling in the
+session. The option does not change the default gate output or print during
+measurement.
+
 `make perf-update` is designated-runner-only. It measures the legacy 100 MiB
 and 1 GiB text-buffer rows, three quick Sprint 56 ledgers, and three huge
 ledgers into a same-directory transaction. The baseline is replaced only
