@@ -34,6 +34,8 @@ enum {
     PROF_DUMP_TIMEOUT_MS = 30000,
     ADVISORY_ATTEMPTS = 3,
     FLOOR_SAMPLES = 1001,
+    FLOOR_P50_INDEX = (FLOOR_SAMPLES - 1U) / 2U,
+    FLOOR_P99_INDEX = FLOOR_SAMPLES * 99U / 100U,
     MANY_BUFFER_COUNT = 50,
     MANY_BUFFER_HYDRATED = 20,
     KEY_NAME_CAP = 32
@@ -1429,9 +1431,14 @@ static int run_floor(const char *echo)
     if (!sort_i64(samples, FLOOR_SAMPLES))
         return 2;
     (void)printf("pty_floor_p50 %lld ns\n",
-                 (long long)samples[(FLOOR_SAMPLES - 1U) / 2U]);
-    return samples[(FLOOR_SAMPLES - 1U) / 2U] < INT64_C(2000) ||
-           samples[(FLOOR_SAMPLES - 1U) / 2U] > INT64_C(500000) ? 1 : 0;
+                 (long long)samples[FLOOR_P50_INDEX]);
+    /* YEW-F-072: the profiler cross-check compares p99 endpoint latency.
+     * Export the matching transport percentile as well as the historical
+     * p50 harness-sanity row so it need not subtract unlike quantiles. */
+    (void)printf("pty_floor_p99 %lld ns\n",
+                 (long long)samples[FLOOR_P99_INDEX]);
+    return samples[FLOOR_P50_INDEX] < INT64_C(2000) ||
+           samples[FLOOR_P50_INDEX] > INT64_C(500000) ? 1 : 0;
 }
 
 static int check_scripts(const char *dir)

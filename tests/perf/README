@@ -20,10 +20,11 @@ profiler-off/on session p99 delta remains an `OBSERVED` diagnostic: scheduler
 placement and DVFS can move a tail percentile between otherwise identical
 processes, so that delta is not attributed to instrumentation. Exact painted
 sample counts and the internal/external p99 cross-check remain hard gates.
-The cross-check subtracts a contemporaneous median echo round-trip floor from
+The cross-check subtracts a contemporaneous p99 echo round-trip floor from
 the external p99 before comparing it with `KEYPAINT`: the external endpoint
 includes PTY transport and wake-up, while the in-process timer begins after
-`poll`. The 25 percent agreement limit is unchanged.
+`poll`. The echo probe still exports p50 for its independent harness-sanity
+gate. The 25 percent agreement limit is unchanged.
 
 Useful commands:
 
