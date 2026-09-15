@@ -322,20 +322,23 @@ static bool spawn_editor(YewLivePty *pty, const Options *opt, bool clean,
     return true;
 }
 
-static bool stop_editor(YewLivePty *pty)
+static bool stop_editor(YewLivePty *pty, bool *retryable)
 {
     static const char quit[] = "\033[27u:q!\r";
     i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
     int code;
 
+    *retryable = false;
     if (!yew_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline)) {
         (void)fprintf(stderr, "perf_startup: quit write failed: %s\n",
                       strerror(errno));
+        *retryable = true;
         return false;
     }
     if (!yew_live_pty_wait_exit(pty, deadline, &code)) {
         (void)fputs("perf_startup: quit wait did not observe exit\n",
                     stderr);
+        *retryable = true;
         return false;
     }
     if (code != 0)
@@ -344,27 +347,36 @@ static bool stop_editor(YewLivePty *pty)
 }
 
 static bool one_startup(const Options *opt, bool clean, bool dumb,
-                        bool workspace, i64 *sample)
+                        bool workspace, i64 *sample, bool *retryable)
 {
     YewLivePty pty = {.master = -1, .pid = -1};
     i64 started;
     i64 painted;
     bool ok;
 
+    *retryable = false;
     if (!spawn_editor(&pty, opt, clean, dumb, workspace, &started)) {
         /* YEW-F-072: name the failed transport stage so a designated
          * campaign cannot turn a harness fault into an opaque no-verdict. */
         (void)fprintf(stderr, "perf_startup: editor spawn failed: %s\n",
                       strerror(errno));
+        *retryable = true;
         return false;
     }
     ok = wait_marker(&pty, dumb, started + INT64_C(3000000000), &painted);
     if (ok)
         *sample = painted - started;
     if (ok)
-        ok = stop_editor(&pty);
+        ok = stop_editor(&pty, retryable);
     yew_live_pty_close(&pty);
     return ok && *sample > 0;
+}
+
+static bool retry_transport_failure(bool retryable, unsigned attempts)
+{
+    /* YEW-F-072: retry one PTY setup/teardown fault, but never discard a
+     * missing paint marker, a bad child status, or an invalid measurement. */
+    return retryable && attempts == 0U;
 }
 
 static bool one_floor(const Options *opt, i64 *sample)
@@ -569,8 +581,24 @@ static bool measure(const Options *opt, bool clean, bool dumb,
     size_t i;
 
     for (i = 0U; i < runs; i++) {
-        if (!(floor ? one_floor(opt, &samples[i]) :
-                      one_startup(opt, clean, dumb, workspace, &samples[i]))) {
+        unsigned attempts = 0U;
+
+        for (;;) {
+            bool retryable = false;
+            bool ok = floor ? one_floor(opt, &samples[i]) :
+                      one_startup(opt, clean, dumb, workspace, &samples[i],
+                                  &retryable);
+
+            if (ok)
+                break;
+            if (retry_transport_failure(retryable, attempts)) {
+                attempts++;
+                (void)fprintf(stderr,
+                              "perf_startup: retrying profile=%s run=%zu "
+                              "after transport failure (attempt %u/2)\n",
+                              profile, i + 1U, attempts);
+                continue;
+            }
             (void)fprintf(stderr,
                           "perf_startup: profile=%s run=%zu failed\n",
                           profile, i + 1U);
@@ -651,6 +679,13 @@ static int selftest_policy(void)
     if (!spawn_fraction_fails_process(UINT64_C(301), UINT64_C(300))) {
         (void)fprintf(stderr,
                       "perf-startup-policy: disabled aggregate failed\n");
+        return 1;
+    }
+    if (!retry_transport_failure(true, 0U) ||
+        retry_transport_failure(true, 1U) ||
+        retry_transport_failure(false, 0U)) {
+        (void)fprintf(stderr,
+                      "perf-startup-policy: transport retry failed\n");
         return 1;
     }
     (void)puts("perf-startup-policy: standalone/aggregate gate ok");
