@@ -3165,7 +3165,9 @@ perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
 	scripts/tests/perf-noise-floor.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
 
-# YEW-F-072: fail closed if the designated ledger loses the batch row.
+# YEW-F-072: fail closed if the designated ledger loses the batch row.  This
+# probe owns only that contract; the suite's three-observation evaluator owns
+# the noisy spawn-fraction verdict.
 perf-startup-s56-contract: $(BUILD)/perf_startup_s56 \
                            $(BUILD)/perf_nullexec $(BUILD)/yew \
                            $(PERF_S56_WORKSPACE_READY) \
@@ -3175,7 +3177,7 @@ perf-startup-s56-contract: $(BUILD)/perf_startup_s56 \
 	trap 'rm -f "$$out"' EXIT HUP INT TERM; \
 	mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures; \
 	: > $(BUILD)/perf-s56-fixtures/empty.c; \
-	YEW_PERF_SMOKE=1 YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+	YEW_PERF_SMOKE=1 YEW_PERF_ADVISORY=1 YEW_PERF_AGGREGATE=1 PERF_GATE=0 \
 		$(BUILD)/perf_startup_s56 --yew $(abspath $(BUILD)/yew) \
 		--nullexec $(abspath $(BUILD)/perf_nullexec) \
 		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \

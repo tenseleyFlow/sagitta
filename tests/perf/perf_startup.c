@@ -596,7 +596,8 @@ static bool aggregate_observation(void)
 {
     const char *value = getenv("YEW_PERF_AGGREGATE");
 
-    /* Only run-perf-suite.sh's three-observation collector sets this. */
+    /* The three-observation collector and the non-verdict contract probe set
+     * this so their caller, rather than one noisy sample, owns the verdict. */
     return value != NULL && strcmp(value, "0") != 0;
 }
 
