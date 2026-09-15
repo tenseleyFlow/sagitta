@@ -278,6 +278,7 @@ void test_save_new_file_creates_requested_content(void);
 void test_save_atomic_bytes_replaces_file_and_cleans_temp(void);
 void test_save_fault_shim_contract(void);
 void test_undo_type_merges_when_all_predicates_hold(void);
+void test_undo_initial_save_reuses_root_identity(void);
 void test_undo_merge_rejects_different_reason(void);
 void test_undo_merge_rejects_elapsed_burst(void);
 void test_undo_merge_rejects_noncontiguous_type(void);

@@ -311,6 +311,7 @@ const YewTest yew_tests[] = {
     T(save_atomic_bytes_replaces_file_and_cleans_temp),
     T(save_fault_shim_contract),
     T(undo_type_merges_when_all_predicates_hold),
+    T(undo_initial_save_reuses_root_identity),
     T(undo_merge_rejects_different_reason),
     T(undo_merge_rejects_elapsed_burst),
     T(undo_merge_rejects_noncontiguous_type),

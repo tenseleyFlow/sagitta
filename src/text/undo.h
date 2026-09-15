@@ -130,6 +130,7 @@ typedef struct UndoTree {
     u64 gen;
     u64 root_len;
     u64 root_hash;
+    u64 root_owner_gen;
     u64 saved_len;
     u64 saved_hash;
     u64 bytes_max;
@@ -139,6 +140,7 @@ typedef struct UndoTree {
     YewTxnReason pending_reason;
     bool boundary;
     bool over_budget_logged;
+    bool root_owner_identity;
     bool reopened;
     u32 reopen_n_ops;
     u32 reopen_n_rep;
@@ -205,6 +207,10 @@ u32 yew_undo_current(const UndoTree *ut);
 bool yew_undo_at_save_point(const UndoTree *ut);
 void yew_undo_mark_saved(UndoTree *ut);
 bool yew_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall);
+
+/* YEW-F-072 test hook: count complete buffer identity scans. */
+u64 yew_undo_hash_count(void);
+void yew_undo_hash_count_reset(void);
 
 u32 yew_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max);
 u32 yew_undo_children(const UndoTree *ut, u32 id, u32 *out, u32 max);

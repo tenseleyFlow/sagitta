@@ -98,6 +98,27 @@ static const UndoNode *undo_current_node(const UndoTree *ut)
     return &ut->nodes.data[ut->cur - 1U];
 }
 
+void test_undo_initial_save_reuses_root_identity(void)
+{
+    UndoFixture f;
+
+    yew_undo_hash_count_reset();
+    undo_fixture_init(&f, (const u8 *)"root", 4U);
+    YEW_ASSERT_EQ_U64(yew_undo_hash_count(), 1U);
+    yew_undo_mark_saved(f.undo);
+    YEW_ASSERT_EQ_U64(yew_undo_hash_count(), 1U);
+    YEW_ASSERT_EQ_U64(f.undo->saved_hash, f.undo->root_hash);
+
+    yew_undo_begin(&f.edit, YEW_TXN_TYPE);
+    YEW_ASSERT(yew_edit_insert(&f.edit, BYTEOFF(4U),
+                               (const u8 *)"!", 1U));
+    yew_undo_end(&f.edit);
+    yew_undo_mark_saved(f.undo);
+    YEW_ASSERT_EQ_U64(yew_undo_hash_count(), 2U);
+    YEW_ASSERT_EQ_U64(f.undo->saved_len, 5U);
+    undo_fixture_free(&f);
+}
+
 void test_undo_type_merges_when_all_predicates_hold(void)
 {
     UndoFixture f;

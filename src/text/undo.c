@@ -30,6 +30,18 @@ static void trim_tree(EditCtx *ec);
 static bool is_ancestor(const UndoTree *ut, u32 ancestor, u32 id);
 static void account_live(UndoTree *ut);
 
+static u64 text_hash_calls;
+
+u64 yew_undo_hash_count(void)
+{
+    return text_hash_calls;
+}
+
+void yew_undo_hash_count_reset(void)
+{
+    text_hash_calls = 0U;
+}
+
 static UndoNode *node_mut(UndoTree *ut, u32 id)
 {
     if (ut == NULL || id == 0U || (size_t)id > ut->nodes.len)
@@ -82,6 +94,9 @@ static u64 text_hash(const TextBuf *tb)
 {
     TextIter it;
     u64 hash = UINT64_C(14695981039346656037);
+
+    if (text_hash_calls != UINT64_MAX)
+        text_hash_calls++;
 
     if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
         return hash;
@@ -169,6 +184,8 @@ UndoTree *yew_undo_new(const TextBuf *tb)
     ut->wall_clock = default_wall;
     ut->root_len = yew_textbuf_len(tb);
     ut->root_hash = text_hash(tb);
+    ut->root_owner_gen = tb->gen;
+    ut->root_owner_identity = true;
     ut->saved_len = ut->root_len;
     ut->saved_hash = ut->root_hash;
     ut->owner = tb;
@@ -1566,6 +1583,7 @@ static bool reroot_one(UndoTree *ut)
         next->flags |= YEW_TXN_TRIMMED;
         root->flags |= YEW_TXN_DEAD;
         ut->root = child;
+        ut->root_owner_identity = false;
         ut->gen++;
     }
     return true;
@@ -1680,7 +1698,17 @@ void yew_undo_mark_saved(UndoTree *ut)
     if (ut->owner == NULL)
         YEW_BUG("undo: save point has no buffer owner");
     ut->saved_len = yew_textbuf_len(ut->owner);
-    ut->saved_hash = text_hash(ut->owner);
+    /* YEW-F-072: hydration creates the undo root from the loaded bytes and
+     * immediately marks that unchanged root saved.  Reuse the identity we
+     * just computed instead of scanning a large file twice.  Node identity,
+     * owner generation, and length all participate so any mutation forces
+     * the conservative full hash used by ordinary saves. */
+    if (ut->root_owner_identity && ut->cur == ut->root &&
+        ut->owner->gen == ut->root_owner_gen &&
+        ut->saved_len == ut->root_len)
+        ut->saved_hash = ut->root_hash;
+    else
+        ut->saved_hash = text_hash(ut->owner);
     ut->boundary = true;
 }
 
