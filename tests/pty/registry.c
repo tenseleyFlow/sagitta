@@ -8929,6 +8929,10 @@ done:
 static void case_s52_fuss_loading(PtyCtx *c)
 {
     char repo[PATH_MAX];
+    VtScreen first;
+    VtScreen live;
+    size_t first_end;
+    size_t live_raw_len;
     u32 frame;
 
     if (!s52_fixture(c, repo, sizeof(repo)))
@@ -8939,10 +8943,28 @@ static void case_s52_fuss_loading(PtyCtx *c)
     frame = c->vt.nsync_pairs;
     ptc_keys(c, "f");
     ptc_wait_sync_pairs(c, frame + 1U);
-    ptc_check(c, s52_screen_contains(&c->vt, "loading"),
+    first_end = s41_5_sync_end(&c->raw, frame + 1U);
+    ptc_check(c, first_end != 0U,
+              "FUSS first synchronized frame could not be isolated");
+    vt_init(&first, c->vt.rows, c->vt.cols);
+    vt_set_profile(&first, VT_PROFILE_MODERN);
+    if (first_end != 0U)
+        vt_feed(&first, c->raw.data, first_end);
+    ptc_check(c, s52_screen_contains(&first, "loading"),
               "FUSS first frame did not publish its loading state");
+    /* YEW-F-072: faster paints can put the loading and completed frames in
+     * one PTY read.  Snapshot the isolated first frame, not whichever frame
+     * happened to be last in that read; the former is the entry contract. */
+    live = c->vt;
+    live_raw_len = c->raw.len;
+    c->vt = first;
+    c->raw.len = first_end;
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot_sgr(c, c->test->name);
+    first = c->vt;
+    c->vt = live;
+    c->raw.len = live_raw_len;
+    vt_free(&first);
     s52_finish(c);
 }
 
