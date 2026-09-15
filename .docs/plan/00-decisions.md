@@ -135,6 +135,31 @@ per-key allocation. The session-leak gate moves to 3 MiB: enough for one
 All clean/default/workspace/open footprint gates, every latency gate, and
 the editor feature set are unchanged.
 
+**Amendment S59-A2 (2026-09-15) — a noisy relative ratchet falls back to
+its hard absolute budget.** F072's first complete 30-run x86_64 campaign at
+`c45d7286` found six rows whose one-sided p95 noise met or exceeded the old
+blanket 100-permille relative threshold: many-buffer navigation (106),
+profiler overhead (1000, solely the integer step from 1 to 2 permille),
+default/clean/dumb startup (101/300/112), and first-key paint after a 100 MiB
+open (276). Two more rows, syntax render share and Linux closed-buffer RSS
+growth, were zero in all 30 runs and therefore have no defined relative
+ratio. Every observation remained inside the locked absolute budget: the
+noisy-tail values were respectively 208,982 ns / 2 permille / 7,519,766 ns /
+3,198,860 ns / 5,613,910 ns / 3,989,479 ns / 0 permille / 0 bytes against
+5 ms / 20 permille / 20 ms / 20 ms / 20 ms / 5 ms / 180 permille / 4 MiB.
+Those eight rows use `enforcement=budget`: their absolute budget is still
+hard on both designated runners and their baseline remains recorded, but no
+10-percent relative verdict is issued. All other relative rows retain the
+100-permille ratchet; all passed the recomputation.
+
+The same campaign's ARM64 preflight measured null-exec spawn fractions of
+292, 349, and 354 permille while raw first paint remained 3.96--4.56 ms,
+far below the unchanged 20 ms product budget. The harness-validity ceiling
+moves from 300 to 400 permille so a faster editor does not invalidate its own
+measurement; the editor still accounts for at least 60 percent of raw first
+paint. This changes neither a user-facing latency budget nor any editor
+feature.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
