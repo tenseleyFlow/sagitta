@@ -17,7 +17,9 @@
 #include "util/log.h"
 
 enum {
-    YEWU_VERSION = 1U,
+    YEWU_VERSION_FNV = 1U,
+    YEWU_VERSION_BLOCK = 2U,
+    YEWU_VERSION = YEWU_VERSION_BLOCK,
     YEWU_HEADER_LEN = 64U,
     YEWU_TRUNCATED = 1U,
     YEW_UNDO_HOT_NODES = 128U,
@@ -90,13 +92,10 @@ static u64 fnv_add(u64 hash, const u8 *bytes, size_t len)
     return hash;
 }
 
-static u64 text_hash(const TextBuf *tb)
+static u64 text_hash_fnv(const TextBuf *tb)
 {
     TextIter it;
     u64 hash = UINT64_C(14695981039346656037);
-
-    if (text_hash_calls != UINT64_MAX)
-        text_hash_calls++;
 
     if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
         return hash;
@@ -108,6 +107,175 @@ static u64 text_hash(const TextBuf *tb)
         hash = fnv_add(hash, bytes, (size_t)len);
     } while (yew_textiter_advance(&it, tb));
     return hash;
+}
+
+typedef struct {
+    u64 total_len;
+    u64 lane[4];
+    u8 tail[32];
+    size_t tail_len;
+} IdentityHash;
+
+static u64 hash_rotl(u64 value, unsigned int count)
+{
+    return value << count | value >> (64U - count);
+}
+
+static u32 hash_load32(const u8 *bytes)
+{
+    return (u32)bytes[0] | (u32)bytes[1] << 8U |
+           (u32)bytes[2] << 16U | (u32)bytes[3] << 24U;
+}
+
+static u64 hash_load64(const u8 *bytes)
+{
+    return (u64)hash_load32(bytes) |
+           (u64)hash_load32(bytes + 4U) << 32U;
+}
+
+static u64 hash_round(u64 acc, u64 lane)
+{
+    acc += lane * UINT64_C(14029467366897019727);
+    acc = hash_rotl(acc, 31U);
+    return acc * UINT64_C(11400714785074694791);
+}
+
+static void hash_block(IdentityHash *hash, const u8 *bytes)
+{
+    unsigned int lane;
+
+    for (lane = 0U; lane < 4U; lane++)
+        hash->lane[lane] = hash_round(hash->lane[lane],
+                                     hash_load64(bytes + lane * 8U));
+}
+
+static void hash_init(IdentityHash *hash)
+{
+    hash->total_len = 0U;
+    hash->lane[0] = UINT64_C(11400714785074694791) +
+                    UINT64_C(14029467366897019727);
+    hash->lane[1] = UINT64_C(14029467366897019727);
+    hash->lane[2] = 0U;
+    hash->lane[3] = 0U - UINT64_C(11400714785074694791);
+    hash->tail_len = 0U;
+}
+
+static void hash_update(IdentityHash *hash, const u8 *bytes, size_t len)
+{
+    size_t fill;
+
+    hash->total_len += (u64)len;
+    if (len < sizeof(hash->tail) - hash->tail_len) {
+        (void)memcpy(hash->tail + hash->tail_len, bytes, len);
+        hash->tail_len += len;
+        return;
+    }
+    if (hash->tail_len != 0U) {
+        fill = sizeof(hash->tail) - hash->tail_len;
+        (void)memcpy(hash->tail + hash->tail_len, bytes, fill);
+        hash_block(hash, hash->tail);
+        bytes += fill;
+        len -= fill;
+        hash->tail_len = 0U;
+    }
+    while (len >= sizeof(hash->tail)) {
+        hash_block(hash, bytes);
+        bytes += sizeof(hash->tail);
+        len -= sizeof(hash->tail);
+    }
+    if (len != 0U) {
+        (void)memcpy(hash->tail, bytes, len);
+        hash->tail_len = len;
+    }
+}
+
+static u64 hash_merge(u64 acc, u64 lane)
+{
+    acc ^= hash_round(0U, lane);
+    return acc * UINT64_C(11400714785074694791) +
+           UINT64_C(9650029242287828579);
+}
+
+static u64 hash_finish(const IdentityHash *hash)
+{
+    const u8 *bytes = hash->tail;
+    size_t len = hash->tail_len;
+    u64 value;
+
+    if (hash->total_len >= sizeof(hash->tail)) {
+        value = hash_rotl(hash->lane[0], 1U) +
+                hash_rotl(hash->lane[1], 7U) +
+                hash_rotl(hash->lane[2], 12U) +
+                hash_rotl(hash->lane[3], 18U);
+        value = hash_merge(value, hash->lane[0]);
+        value = hash_merge(value, hash->lane[1]);
+        value = hash_merge(value, hash->lane[2]);
+        value = hash_merge(value, hash->lane[3]);
+    } else {
+        value = UINT64_C(2870177450012600261);
+    }
+    value += hash->total_len;
+    while (len >= 8U) {
+        u64 lane = hash_round(0U, hash_load64(bytes));
+
+        value ^= lane;
+        value = hash_rotl(value, 27U) *
+                    UINT64_C(11400714785074694791) +
+                UINT64_C(9650029242287828579);
+        bytes += 8U;
+        len -= 8U;
+    }
+    if (len >= 4U) {
+        value ^= (u64)hash_load32(bytes) *
+                 UINT64_C(11400714785074694791);
+        value = hash_rotl(value, 23U) *
+                    UINT64_C(14029467366897019727) +
+                UINT64_C(1609587929392839161);
+        bytes += 4U;
+        len -= 4U;
+    }
+    while (len != 0U) {
+        value ^= (u64)*bytes++ * UINT64_C(2870177450012600261);
+        value = hash_rotl(value, 11U) *
+                UINT64_C(11400714785074694791);
+        len--;
+    }
+    value ^= value >> 33U;
+    value *= UINT64_C(14029467366897019727);
+    value ^= value >> 29U;
+    value *= UINT64_C(1609587929392839161);
+    value ^= value >> 32U;
+    return value;
+}
+
+static u64 text_hash_block(const TextBuf *tb)
+{
+    TextIter it;
+    IdentityHash hash;
+
+    hash_init(&hash);
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
+        return hash_finish(&hash);
+    do {
+        const u8 *bytes;
+        u64 len;
+
+        if (!yew_textiter_chunk(&it, tb, &bytes, &len))
+            YEW_BUG("undo: text iterator failed");
+        hash_update(&hash, bytes, (size_t)len);
+    } while (yew_textiter_advance(&it, tb));
+    return hash_finish(&hash);
+}
+
+static u64 text_hash_version(const TextBuf *tb, u32 version)
+{
+    if (text_hash_calls != UINT64_MAX)
+        text_hash_calls++;
+    if (version == YEWU_VERSION_FNV)
+        return text_hash_fnv(tb);
+    if (version == YEWU_VERSION_BLOCK)
+        return text_hash_block(tb);
+    YEW_BUG("undo: invalid identity version");
 }
 
 static void require_ctx(const EditCtx *ec)
@@ -182,8 +350,12 @@ UndoTree *yew_undo_new(const TextBuf *tb)
     ut->boundary = true;
     ut->mono_clock = default_mono;
     ut->wall_clock = default_wall;
+    ut->identity_version = YEWU_VERSION;
     ut->root_len = yew_textbuf_len(tb);
-    ut->root_hash = text_hash(tb);
+    /* YEW-F-072: FNV-1a serialized every byte dependency and dominated the
+     * large-file first-paint path.  New sidecars use a deterministic,
+     * piece-independent block hash; readers retain v1 FNV compatibility. */
+    ut->root_hash = text_hash_version(tb, ut->identity_version);
     ut->root_owner_gen = tb->gen;
     ut->root_owner_identity = true;
     ut->saved_len = ut->root_len;
@@ -1542,7 +1714,7 @@ static void state_identity_at(const EditCtx *ec, u32 target,
         id = node->parent;
     }
     *len_out = yew_textbuf_len(scratch);
-    *hash_out = text_hash(scratch);
+    *hash_out = text_hash_version(scratch, ut->identity_version);
     yew_textbuf_free(scratch);
 }
 
@@ -1708,7 +1880,8 @@ void yew_undo_mark_saved(UndoTree *ut)
         ut->saved_len == ut->root_len)
         ut->saved_hash = ut->root_hash;
     else
-        ut->saved_hash = text_hash(ut->owner);
+        ut->saved_hash = text_hash_version(ut->owner,
+                                           ut->identity_version);
     ut->boundary = true;
 }
 
@@ -1901,13 +2074,14 @@ static void put_repair(Bytebuf *buf, const MarkRepair *repair)
     put_u64(buf, repair->rel_off);
 }
 
-static void write_header(Bytebuf *file, u32 flags, u32 root, u32 cur,
+static void write_header(Bytebuf *file, u32 version, u32 flags,
+                         u32 root, u32 cur,
                          u32 saved, u32 anchor, u32 count,
                          u64 anchor_len, u64 anchor_hash,
                          u64 cur_len, u64 cur_hash)
 {
     bytebuf_append(file, "YEWU", 4U);
-    put_u32(file, YEWU_VERSION);
+    put_u32(file, version);
     put_u32(file, flags);
     put_u32(file, root);
     put_u32(file, cur);
@@ -2070,7 +2244,8 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
     bytebuf_init(file);
     if (path.len - first > UINT32_MAX)
         YEW_BUG("undo write: too many nodes on truncated path");
-    write_header(file, YEWU_TRUNCATED, path.data[first], ut->cur, saved,
+    write_header(file, ut->identity_version, YEWU_TRUNCATED,
+                 path.data[first], ut->cur, saved,
                  saved != 0U ? saved : path.data[first],
                  (u32)(path.len - first),
                  saved != 0U ? ut->saved_len : root_len,
@@ -2128,7 +2303,8 @@ static bool write_selected_tree(EditCtx *ec, Bytebuf *file,
     state_identity_at(ec, root, &root_len, &root_hash);
     bytebuf_free(file);
     bytebuf_init(file);
-    write_header(file, YEWU_TRUNCATED, root, ut->cur, saved, anchor, count,
+    write_header(file, ut->identity_version, YEWU_TRUNCATED,
+                 root, ut->cur, saved, anchor, count,
                  saved != 0U ? ut->saved_len : root_len,
                  saved != 0U ? ut->saved_hash : root_hash,
                  cur_len, cur_hash);
@@ -2348,7 +2524,7 @@ YewUndoWriteResult yew_undo_write(EditCtx *ec, const char *path)
     if (ut->depth != 0U)
         YEW_BUG("undo: serialize inside transaction");
     current_len = yew_textbuf_len(ec->tb);
-    current_hash = text_hash(ec->tb);
+    current_hash = text_hash_version(ec->tb, ut->identity_version);
     anchor = ut->saved != 0U ? ut->saved : ut->root;
     count = live_count(ut);
     serialized_size = serialized_tree_size(ut);
@@ -2362,7 +2538,7 @@ YewUndoWriteResult yew_undo_write(EditCtx *ec, const char *path)
             return YEW_UNDO_WRITE_TOO_LARGE;
         }
     } else {
-        write_header(&file,
+        write_header(&file, ut->identity_version,
                      ut->persist_truncated ? YEWU_TRUNCATED : 0U,
                      ut->root, ut->cur, ut->saved, anchor, count,
                      ut->saved != 0U ? ut->saved_len : ut->root_len,
@@ -2511,6 +2687,7 @@ static void init_loaded_tree(UndoTree *ut, const TextBuf *tb)
     ut->boundary = true;
     ut->mono_clock = default_mono;
     ut->wall_clock = default_wall;
+    ut->identity_version = YEWU_VERSION;
     ut->owner = tb;
 }
 
@@ -2936,7 +3113,8 @@ YewUndoReadResult yew_undo_read(EditCtx *ec, const char *path)
     reader = (YewuReader){file.data, file.len, 0U};
     init_loaded_tree(&loaded, ec->tb);
     if (!take(&reader, 4U, &magic) || memcmp(magic, "YEWU", 4U) != 0 ||
-        !get_u32(&reader, &version) || version != YEWU_VERSION ||
+        !get_u32(&reader, &version) ||
+        (version != YEWU_VERSION_FNV && version != YEWU_VERSION_BLOCK) ||
         !get_u32(&reader, &flags) || !get_u32(&reader, &root) ||
         !get_u32(&reader, &cur) || !get_u32(&reader, &saved) ||
         !get_u32(&reader, &anchor) || !get_u32(&reader, &count) ||
@@ -2948,6 +3126,7 @@ YewUndoReadResult yew_undo_read(EditCtx *ec, const char *path)
         count > (reader.len - YEWU_HEADER_LEN - 8U) / 48U) {
         goto dropped;
     }
+    loaded.identity_version = version;
     for (i = 0U; i < count; i++) {
         size_t before = reader.at;
         if (!parse_node(&reader, &loaded, &crc_xor, previous_id))
@@ -2963,7 +3142,7 @@ YewUndoReadResult yew_undo_read(EditCtx *ec, const char *path)
                          cur_len, &root_len))
         goto dropped;
     len = yew_textbuf_len(ec->tb);
-    hash = text_hash(ec->tb);
+    hash = text_hash_version(ec->tb, loaded.identity_version);
     if (len == cur_len && hash == cur_hash) {
         if (saved == 0U) {
             EditCtx identity = *ec;
