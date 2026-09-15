@@ -30,6 +30,7 @@ typedef enum RunStatus {
 
 typedef struct Options {
     const char *runner;
+    const char *echo;
     const char *yew;
     const char *session;
     const char *fixture;
@@ -152,6 +153,65 @@ static bool read_child_output(int fd, char *out, size_t cap)
     return true;
 }
 
+static bool parse_floor(const char *output, uint64_t *floor_ns)
+{
+    const char *row = strstr(output, "pty_floor_p50 ");
+    unsigned long long parsed;
+
+    if (row == NULL ||
+        sscanf(row + sizeof("pty_floor_p50 ") - 1U, "%llu ns", &parsed) != 1)
+        return false;
+    *floor_ns = (uint64_t)parsed;
+    return *floor_ns != 0U;
+}
+
+static RunStatus run_floor(const Options *opts, uint64_t *floor_ns)
+{
+    char *argv[] = {
+        (char *)opts->runner,
+        (char *)"--floor",
+        (char *)"--echo",
+        (char *)opts->echo,
+        NULL
+    };
+    char output[OUTPUT_CAP];
+    int pipefd[2];
+    pid_t pid;
+    int status;
+    bool read_ok;
+
+    if (pipe(pipefd) != 0)
+        return RUN_TRANSPORT_FAILED;
+    pid = fork();
+    if (pid < 0) {
+        (void)close(pipefd[0]);
+        (void)close(pipefd[1]);
+        return RUN_TRANSPORT_FAILED;
+    }
+    if (pid == 0) {
+        (void)close(pipefd[0]);
+        if (dup2(pipefd[1], STDOUT_FILENO) < 0)
+            _exit(126);
+        (void)close(pipefd[1]);
+        execv(opts->runner, argv);
+        _exit(126);
+    }
+    (void)close(pipefd[1]);
+    read_ok = read_child_output(pipefd[0], output, sizeof(output));
+    (void)close(pipefd[0]);
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR)
+            return RUN_TRANSPORT_FAILED;
+    }
+    if (!read_ok || !WIFEXITED(status))
+        return RUN_TRANSPORT_FAILED;
+    if (WEXITSTATUS(status) == 1)
+        return RUN_METRIC_FAILED;
+    if (WEXITSTATUS(status) != 0 || !parse_floor(output, floor_ns))
+        return RUN_TRANSPORT_FAILED;
+    return RUN_OK;
+}
+
 static RunStatus run_latency(const Options *opts, bool prof_on,
                              const char *dump_path, RunResult *result)
 {
@@ -254,6 +314,24 @@ static bool retry_advisory_run(bool advisory, RunStatus status,
            attempt < ADVISORY_ATTEMPTS;
 }
 
+static RunStatus measure_floor(const Options *opts, uint64_t *floor_ns,
+                               bool advisory)
+{
+    unsigned attempt;
+
+    for (attempt = 1U; ; attempt++) {
+        RunStatus status = run_floor(opts, floor_ns);
+
+        if (!retry_advisory_run(advisory, status, attempt))
+            return status;
+        (void)fprintf(stderr,
+                      "perf_prof_crosscheck: retrying PTY floor after %s "
+                      "failure (attempt %u/%u)\n",
+                      status == RUN_METRIC_FAILED ? "latency" : "transport",
+                      attempt, ADVISORY_ATTEMPTS);
+    }
+}
+
 static RunStatus measure_latency(const Options *opts, bool prof_on,
                                  const char *dump_path, RunResult *result,
                                  uint64_t *prof_p99_ns, uint32_t *prof_calls,
@@ -305,6 +383,15 @@ static uint64_t ratio_permille(uint64_t numerator, uint64_t denominator)
         return UINT64_MAX;
     scaled = numerator * 1000U;
     return scaled / denominator + (scaled % denominator != 0U ? 1U : 0U);
+}
+
+static bool remove_transport_floor(uint64_t external_ns, uint64_t floor_ns,
+                                   uint64_t *work_ns)
+{
+    if (external_ns <= floor_ns)
+        return false;
+    *work_ns = external_ns - floor_ns;
+    return true;
 }
 
 static bool gating(void)
@@ -364,7 +451,7 @@ static bool metric_prefix(const Options *opts, char *out, size_t cap)
 static void usage(const char *arg0)
 {
     (void)fprintf(stderr,
-        "usage: %s --runner PATH --yew PATH --session FILE "
+        "usage: %s --runner PATH --echo PATH --yew PATH --session FILE "
         "--fixture CLASS --path FILE [--state DIR] [--many-dir DIR] "
         "[--fakelsp PATH --mockai PATH --ai-script PATH]\n",
         arg0);
@@ -378,6 +465,7 @@ static int policy_selftest(void)
     static const uint64_t hosted_crosscheck[METRIC_TRIALS] = {
         265U, 242U, 291U
     };
+    uint64_t work_ns = 0U;
 
     if (retry_advisory_run(false, RUN_TRANSPORT_FAILED, 1U) ||
         retry_advisory_run(false, RUN_METRIC_FAILED, 1U) ||
@@ -395,6 +483,8 @@ static int policy_selftest(void)
     if (ratio_permille(20U, 1000U) != OVERHEAD_LIMIT_PERMILLE ||
         ratio_permille(1U, 1000U) != 1U ||
         ratio_permille(1U, 0U) != UINT64_MAX ||
+        !remove_transport_floor(240U, 40U, &work_ns) || work_ns != 200U ||
+        remove_transport_floor(40U, 40U, &work_ns) ||
         median3(ordered) != 20U || median3(one_bad) != 0U ||
         median3(two_bad) != 300U ||
         overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, false) ||
@@ -422,6 +512,7 @@ int main(int argc, char **argv)
     char prefix[160] = "";
     uint64_t off_p99_ns[METRIC_TRIALS];
     uint64_t on_p99_ns[METRIC_TRIALS];
+    uint64_t comparable_external_ns[METRIC_TRIALS];
     uint64_t prof_p99_ns[METRIC_TRIALS];
     uint64_t prof_cost_ns[METRIC_TRIALS];
     uint32_t prof_calls[METRIC_TRIALS];
@@ -431,6 +522,7 @@ int main(int argc, char **argv)
     uint64_t off_median_ns;
     uint64_t on_median_ns;
     uint64_t prof_median_ns;
+    uint64_t transport_floor_ns;
     uint64_t external_samples = 0U;
     uint64_t internal_samples = 0U;
     uint64_t overhead_pm;
@@ -452,6 +544,8 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (i + 1 < argc && strcmp(argv[i], "--runner") == 0)
             opts.runner = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--echo") == 0)
+            opts.echo = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--yew") == 0)
             opts.yew = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--session") == 0)
@@ -475,7 +569,8 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    if (!regular_file(opts.runner) || !regular_file(opts.yew) ||
+    if (!regular_file(opts.runner) || !regular_file(opts.echo) ||
+        !regular_file(opts.yew) ||
         !regular_file(opts.session) || opts.fixture == NULL ||
         opts.path == NULL ||
         (strcmp(opts.fixture, "assist") == 0 &&
@@ -505,6 +600,13 @@ int main(int argc, char **argv)
         goto done;
     }
     advisory = perf_advisory();
+    run_status = measure_floor(&opts, &transport_floor_ns, advisory);
+    if (run_status != RUN_OK) {
+        (void)fprintf(stderr,
+                      "perf_prof_crosscheck: PTY floor measurement failed\n");
+        status = run_status == RUN_METRIC_FAILED ? 1 : 2;
+        goto done;
+    }
     for (trial = 0U; trial < METRIC_TRIALS; trial++) {
         /* Alternate the pair order so monotonic warm-up or frequency drift
          * cannot systematically charge the second process to profiling.
@@ -547,9 +649,17 @@ int main(int argc, char **argv)
                            off_p99_ns[trial]) : 0U;
         overhead_trials[trial] = ratio_permille(prof_cost_ns[trial],
                                                 off_p99_ns[trial]);
-        crosscheck_trials[trial] = delta_permille(on_p99_ns[trial],
+        if (!remove_transport_floor(on_p99_ns[trial], transport_floor_ns,
+                                    &comparable_external_ns[trial])) {
+            (void)fprintf(stderr,
+                          "perf_prof_crosscheck: external p99 does not "
+                          "exceed PTY floor in trial %u\n", trial + 1U);
+            status = 1;
+            goto done;
+        }
+        crosscheck_trials[trial] = delta_permille(comparable_external_ns[trial],
                                                   prof_p99_ns[trial],
-                                                  on_p99_ns[trial]);
+                                                  comparable_external_ns[trial]);
         external_samples += on[trial].painted;
         internal_samples += prof_calls[trial];
         if (on[trial].painted != prof_calls[trial])
@@ -567,6 +677,10 @@ int main(int argc, char **argv)
                  (unsigned long long)on_median_ns);
     (void)printf("%s.keypaint.p99 %llu ns\n", prefix,
                  (unsigned long long)prof_median_ns);
+    (void)printf("%s.transport_floor %llu ns\n", prefix,
+                 (unsigned long long)transport_floor_ns);
+    (void)printf("%s.comparable_external.p99 %llu ns\n", prefix,
+                 (unsigned long long)median3(comparable_external_ns));
     (void)printf("%s.trials off=%llu,%llu,%llu on=%llu,%llu,%llu "
                  "keypaint=%llu,%llu,%llu\n", prefix,
                  (unsigned long long)off_p99_ns[0],

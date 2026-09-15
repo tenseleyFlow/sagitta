@@ -3198,7 +3198,8 @@ perf-default-path-selftest:
 	echo 'perf default paths: ok'
 
 perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
-                          $(BUILD)/perf_latency_s56 $(BUILD)/yew \
+                          $(BUILD)/perf_latency_s56 \
+                          $(BUILD)/perf_echo_child $(BUILD)/yew \
                           fixtures-quick $(PERF_S56_WORKSPACE_READY) \
                           $(FAKELSP) $(MOCKAI) \
                           tests/fixtures/ai/ollama.script
@@ -3206,6 +3207,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/typing.keys --fixture small \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
@@ -3213,6 +3215,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/typing.keys --fixture huge \
 		--path $(abspath $(FIXTURE_DIR)/100m-code.bin) \
@@ -3220,6 +3223,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/edit.keys --fixture syntax \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
@@ -3227,6 +3231,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/edit.keys --fixture syntax \
 		--path tests/perf/fixtures/syn/c_comment_bomb.c \
@@ -3234,6 +3239,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/multicursor.keys --fixture small \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
@@ -3241,6 +3247,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/navigate.keys \
 		--fixture many-buffers \
@@ -3250,6 +3257,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/search.keys --fixture huge \
 		--path $(abspath $(FIXTURE_DIR)/100m-code.bin) \
@@ -3257,6 +3265,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/typing.keys --fixture assist \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
