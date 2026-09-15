@@ -226,6 +226,15 @@ static bool wait_marker(YewLivePty *pty, bool dumb, i64 deadline,
             }
         }
     }
+    {
+        bool running = child_running(pty, "first-paint timeout");
+
+        (void)fprintf(stderr,
+                      "perf_startup: first-paint marker timed out "
+                      "kitty=%u sync=%u da=%u tail_bytes=%zu running=%u\n",
+                      kitty ? 1U : 0U, sync ? 1U : 0U, da ? 1U : 0U,
+                      ntail, running ? 1U : 0U);
+    }
     return false;
 }
 
@@ -319,9 +328,18 @@ static bool stop_editor(YewLivePty *pty)
     i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
     int code;
 
-    if (!yew_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline) ||
-        !yew_live_pty_wait_exit(pty, deadline, &code))
+    if (!yew_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline)) {
+        (void)fprintf(stderr, "perf_startup: quit write failed: %s\n",
+                      strerror(errno));
         return false;
+    }
+    if (!yew_live_pty_wait_exit(pty, deadline, &code)) {
+        (void)fputs("perf_startup: quit wait did not observe exit\n",
+                    stderr);
+        return false;
+    }
+    if (code != 0)
+        (void)fprintf(stderr, "perf_startup: quit status %d\n", code);
     return code == 0;
 }
 
@@ -333,8 +351,13 @@ static bool one_startup(const Options *opt, bool clean, bool dumb,
     i64 painted;
     bool ok;
 
-    if (!spawn_editor(&pty, opt, clean, dumb, workspace, &started))
+    if (!spawn_editor(&pty, opt, clean, dumb, workspace, &started)) {
+        /* YEW-F-072: name the failed transport stage so a designated
+         * campaign cannot turn a harness fault into an opaque no-verdict. */
+        (void)fprintf(stderr, "perf_startup: editor spawn failed: %s\n",
+                      strerror(errno));
         return false;
+    }
     ok = wait_marker(&pty, dumb, started + INT64_C(3000000000), &painted);
     if (ok)
         *sample = painted - started;
