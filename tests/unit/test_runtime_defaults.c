@@ -303,7 +303,8 @@ static const BindRow frozen_I[] = {
     {"A-]", "ed.shadow.next", 0, NULL},
     {"A-[", "ed.shadow.prev", 0, NULL},
     {"C-<space>", "ed.lsp.complete", 0, NULL},
-    {"C-k", "ed.lsp.signature", 0, NULL},
+    /* Signature help moved off C-k so kill-to-end could have it. */
+    {"A-k", "ed.lsp.signature", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},
     {"<tab>", "ed.edit.insert.tab", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
@@ -328,6 +329,29 @@ static const BindRow frozen_I[] = {
     {"C-e", "ed.move.line.end", 0, NULL},
     {"C-<left>", "ed.move.line.home_toggle", 0, NULL},
     {"C-<right>", "ed.move.line.end", 0, NULL},
+    /*
+     * The readline/Emacs editing set.  Document commands, not the
+     * command line's ed.del.*: these fan out to every cursor and are
+     * recordable.  C-w and Alt+Backspace are one kill under two
+     * spellings; C-_ and C-/ are one chord under two protocols.
+     */
+    {"C-w", "ed.edit.kill.word_prev", 0, NULL},
+    {"A-<bs>", "ed.edit.kill.word_prev", 0, NULL},
+    {"A-d", "ed.edit.kill.word_next", 0, NULL},
+    {"C-u", "ed.edit.kill.to_home", 0, NULL},
+    {"C-k", "ed.edit.kill.to_end", 0, NULL},
+    /* C-d is the forward delete and nothing else; it never quits. */
+    {"C-d", "ed.edit.delete.grapheme", 0, NULL},
+    {"C-y", "ed.edit.kill.yank", 0, NULL},
+    {"C-p", "ed.move.line.up", 0, NULL},
+    {"C-n", "ed.move.line.down", 0, NULL},
+    {"C-_", "ed.edit.undo", 0, NULL},
+    {"C-/", "ed.edit.undo", 0, NULL},
+    {"C-t", "ed.edit.transpose.chars", 0, NULL},
+    {"A-t", "ed.edit.transpose.words", 0, NULL},
+    {"A-u", "ed.edit.case.upper_word", 0, NULL},
+    {"A-l", "ed.edit.case.lower_word", 0, NULL},
+    {"A-c", "ed.edit.case.cap_word", 0, NULL},
     {"A-1", "ed.tab.goto", 1, NULL},
     {"A-2", "ed.tab.goto", 2, NULL},
     {"A-3", "ed.tab.goto", 3, NULL},
@@ -501,7 +525,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 327U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 343U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

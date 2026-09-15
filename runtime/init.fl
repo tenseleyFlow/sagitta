@@ -203,7 +203,9 @@ bind("I", "A-<cr>", "ed.shadow.accept_all")
 bind("I", "A-]", "ed.shadow.next")
 bind("I", "A-[", "ed.shadow.prev")
 bind("I", "C-<space>", "ed.lsp.complete")
-bind("I", "C-k", "ed.lsp.signature")
+# Signature help moves off C-k, which every readline user's fingers
+# already spend on kill-to-end.
+bind("I", "A-k", "ed.lsp.signature")
 bind("I", "<cr>", "ed.edit.insert.newline")
 bind("I", "<tab>", "ed.edit.insert.tab")
 bind("I", "<bs>", "ed.edit.delete.grapheme_left")
@@ -229,6 +231,40 @@ bind("I", "C-a", "ed.move.line.home_toggle")
 bind("I", "C-e", "ed.move.line.end")
 bind("I", "C-<left>", "ed.move.line.home_toggle")
 bind("I", "C-<right>", "ed.move.line.end")
+
+# The rest of the readline/Emacs editing set.  These are DOCUMENT
+# commands, not the command line's ed.del.* -- they fan out to every
+# live cursor and they are recordable, which E mode's do not need to be.
+# Alt+Backspace and C-w are the same kill; a terminal sends one or the
+# other depending on how it was configured, so both are bound.
+bind("I", "C-w", "ed.edit.kill.word_prev")
+bind("I", "A-<bs>", "ed.edit.kill.word_prev")
+bind("I", "A-d", "ed.edit.kill.word_next")
+# C-u is kill-to-START of line, the unix line-discard, NOT the whole
+# line -- what is already typed to the right of the caret survives.
+bind("I", "C-u", "ed.edit.kill.to_home")
+bind("I", "C-k", "ed.edit.kill.to_end")
+# C-d deletes one grapheme forward and NOTHING else.  In a shell it is
+# also EOF; here that would close a buffer on a keystroke meant to
+# delete a character, so it is only ever the delete.
+bind("I", "C-d", "ed.edit.delete.grapheme")
+# C-y yanks the most recent kill from the unnamed register.  C-v stays
+# the SYSTEM clipboard paste above, and E mode's C-y stays redo -- the
+# divergence is deliberate: in Insert mode the readline meaning wins.
+bind("I", "C-y", "ed.edit.kill.yank")
+bind("I", "C-p", "ed.move.line.up")
+bind("I", "C-n", "ed.move.line.down")
+# Undo.  A terminal in legacy mode sends 0x1F for both ctrl+_ and
+# ctrl+/, which the decoder reports as C-_; under the kitty keyboard
+# protocol ctrl+/ arrives as itself.  Bind both so the chord works
+# whichever protocol is negotiated.
+bind("I", "C-_", "ed.edit.undo")
+bind("I", "C-/", "ed.edit.undo")
+bind("I", "C-t", "ed.edit.transpose.chars")
+bind("I", "A-t", "ed.edit.transpose.words")
+bind("I", "A-u", "ed.edit.case.upper_word")
+bind("I", "A-l", "ed.edit.case.lower_word")
+bind("I", "A-c", "ed.edit.case.cap_word")
 
 # -- 4. H mode ----------------------------------------------------------
 # H-mode motions remain unit-sensitive: the C motion table is rebuilt when
