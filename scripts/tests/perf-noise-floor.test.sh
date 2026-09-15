@@ -17,6 +17,8 @@ fail()
 cat >"$scratch/budgets" <<'EOF'
 latency.le le 1000 ns calibrated designated latency
 throughput.ge ge 100 units calibrated designated throughput
+quantized.absolute le 20 permille none budget quantized_absolute
+zero.absolute le 180 permille none budget stable_zero_absolute
 hard.all le 10 count none all deterministic
 observe record - ns raw informational observation
 EOF
@@ -29,13 +31,17 @@ write_runs()
     while [ "$run" -le 30 ]; do
         le=100
         ge=100
+        quantized=1
         if [ "$run" -ge 29 ]; then
             le=$high
             ge=$low
+            quantized=2
         fi
         {
             echo "perf-gate: latency.le median=$le absolute_over=0/3 relative_over=0/3 PASS"
             echo "perf-gate: throughput.ge median=$ge absolute_over=0/3 relative_over=0/3 PASS"
+            echo "perf-gate: quantized.absolute median=$quantized absolute_over=0/3 relative_over=0/3 PASS"
+            echo 'perf-gate: zero.absolute median=0 absolute_over=0/3 relative_over=0/3 PASS'
             echo 'perf-gate: hard.all median=1 absolute_over=0/3 relative_over=0/3 PASS'
         } >"$scratch/run-$run.log"
         run=$((run + 1))
@@ -45,11 +51,15 @@ write_runs()
 write_runs 105 95
 "$analyzer" "$scratch/budgets" "$scratch"/run-*.log \
     >"$scratch/pass.out" || fail 'stable 30-run campaign failed'
-grep -F 'latency.le direction=le p05=100 p50=100 p95=105 regression_noise_permille=50 threshold_permille=100 PASS' \
+grep -F 'latency.le policy=relative direction=le p05=100 p50=100 p95=105 regression_noise_permille=50 threshold_permille=100 PASS' \
     "$scratch/pass.out" >/dev/null || fail 'upper-tail noise is wrong'
-grep -F 'throughput.ge direction=ge p05=95 p50=100 p95=100 regression_noise_permille=50 threshold_permille=100 PASS' \
+grep -F 'throughput.ge policy=relative direction=ge p05=95 p50=100 p95=100 regression_noise_permille=50 threshold_permille=100 PASS' \
     "$scratch/pass.out" >/dev/null || fail 'lower-tail noise is wrong'
-grep -F 'metrics=2 runs=30 failures=0' "$scratch/pass.out" >/dev/null ||
+grep -F 'quantized.absolute policy=absolute direction=le p05=1 p50=1 p95=2 configured_limit=20 failing_runs=0 PASS' \
+    "$scratch/pass.out" >/dev/null || fail 'quantized absolute row is wrong'
+grep -F 'zero.absolute policy=absolute direction=le p05=0 p50=0 p95=0 configured_limit=180 failing_runs=0 PASS' \
+    "$scratch/pass.out" >/dev/null || fail 'stable zero absolute row is wrong'
+grep -F 'metrics=4 runs=30 failures=0' "$scratch/pass.out" >/dev/null ||
     fail 'stable campaign summary is wrong'
 
 write_runs 110 100
@@ -62,6 +72,21 @@ set -e
 grep -F 'regression_noise_permille=100 threshold_permille=100 FAIL' \
     "$scratch/noisy.out" >/dev/null || fail 'threshold boundary is wrong'
 
+write_runs 105 95
+sed -i.bak \
+    's/quantized.absolute median=2 absolute_over=0\/3/quantized.absolute median=2 absolute_over=2\/3/' \
+    "$scratch/run-30.log"
+set +e
+"$analyzer" "$scratch/budgets" "$scratch"/run-*.log \
+    >"$scratch/absolute.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail 'an absolute-only failing run was accepted'
+grep -F 'quantized.absolute policy=absolute' "$scratch/absolute.out" |
+    grep -F 'failing_runs=1 FAIL' >/dev/null ||
+    fail 'absolute-only failure was not reported'
+
+write_runs 105 95
 sed -i.bak '/throughput.ge/d' "$scratch/run-30.log"
 set +e
 "$analyzer" "$scratch/budgets" "$scratch"/run-*.log \
@@ -136,6 +161,8 @@ case $target in
     perf)
         echo 'perf-gate: latency.le median=100 absolute_over=0/3 relative_over=0/3 PASS'
         echo 'perf-gate: throughput.ge median=100 absolute_over=0/3 relative_over=0/3 PASS'
+        echo 'perf-gate: quantized.absolute median=1 absolute_over=0/3 relative_over=0/3 PASS'
+        echo 'perf-gate: zero.absolute median=0 absolute_over=0/3 relative_over=0/3 PASS'
         ;;
     perf-huge) ;;
     *) exit 99 ;;
@@ -151,7 +178,7 @@ PERF_BUDGETS=$scratch/budgets YEW_PERF_UNAME=$scratch/uname \
 YEW_PERF_GIT=$scratch/git YEW_PERF_SHA256=$scratch/sha256sum \
     "$runner" "$scratch/make" >"$scratch/runner.out" ||
     fail '30-run campaign driver failed'
-grep -F 'metrics=2 runs=30 failures=0' "$scratch/runner.out" >/dev/null ||
+grep -F 'metrics=4 runs=30 failures=0' "$scratch/runner.out" >/dev/null ||
     fail 'campaign driver did not analyze its logs'
 set -- "$scratch"/build/perf-noise/campaign-*/run-*.log
 [ "$#" -eq 30 ] || fail 'campaign driver did not retain exactly 30 logs'

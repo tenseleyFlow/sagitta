@@ -50,9 +50,12 @@ FILENAME == ARGV[1] {
         next
     if (NF != 7)
         bad("malformed budgets row: " $0, 2)
-    if ($6 == "designated" && ($2 == "le" || $2 == "ge")) {
+    if (($6 == "designated" || $6 == "budget") &&
+        ($2 == "le" || $2 == "ge")) {
         selected[$1] = 1
         comparison[$1] = $2
+        policy[$1] = $6
+        configured_limit[$1] = $3
         metric_order[++metric_count] = $1
     }
     next
@@ -70,6 +73,12 @@ FILENAME != ARGV[1] && $1 == "perf-gate:" && $3 ~ /^median=/ {
         bad("duplicate metric " metric " in " FILENAME, 2)
     seen[slot] = 1
     measured[slot] = part[2] + 0
+    split($4, absolute, "=")
+    split(absolute[2], count, "/")
+    if (absolute[1] != "absolute_over" || !number(count[1]) ||
+        count[1] < 0 || count[1] > 3 || count[2] != 3)
+        bad("malformed absolute verdict for " metric " in " FILENAME, 2)
+    absolute_over[slot] = count[1] + 0
     next
 }
 END {
@@ -98,15 +107,32 @@ END {
         p05 = sample[2]
         median = int((sample[15] + sample[16]) / 2)
         p95 = sample[29]
+        if (policy[metric] == "budget") {
+            failed_runs = 0
+            for (run = 1; run <= expected_runs; run++)
+                if (absolute_over[metric SUBSEP run] >= 2)
+                    failed_runs++
+            verdict = failed_runs == 0 ? "PASS" : "FAIL"
+            printf "noise-floor: %s policy=absolute direction=%s " \
+                   "p05=%.0f p50=%.0f p95=%.0f configured_limit=%s " \
+                   "failing_runs=%d %s\n", metric, comparison[metric], \
+                   p05, median, p95, configured_limit[metric], \
+                   failed_runs, verdict
+            if (failed_runs != 0)
+                failures++
+            delete sample
+            continue
+        }
         if (median <= 0)
-            bad(metric " has a zero 30-run median", 2)
+            bad(metric " has a zero relative-gate median", 2)
         if (comparison[metric] == "ge")
             delta = p05 < median ? median - p05 : 0
         else
             delta = p95 > median ? p95 - median : 0
         noise = ceil_ratio_permille(delta, median)
         verdict = noise >= threshold ? "FAIL" : "PASS"
-        printf "noise-floor: %s direction=%s p05=%.0f p50=%.0f " \
+        printf "noise-floor: %s policy=relative direction=%s " \
+               "p05=%.0f p50=%.0f " \
                "p95=%.0f regression_noise_permille=%d " \
                "threshold_permille=%d %s\n", metric, comparison[metric], \
                p05, median, p95, noise, threshold, verdict

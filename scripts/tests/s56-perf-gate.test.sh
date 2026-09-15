@@ -25,6 +25,7 @@ sed_rewrite()
 
 cat >"$scratch/budgets" <<'EOF'
 latency.typing.small.p99 le 10000000 ns calibrated designated latency
+latency.absolute.small le 100 ns raw budget measured_noisy_absolute
 latency.any.max record - ns raw informational diagnose_long_tail
 latency.typing.no_paint_fraction record - permille none informational expected_noops
 latency.typing.frames le 10000 frames_per_10000_keys none all frames
@@ -44,6 +45,7 @@ write_baseline()
 # calib scale_permille=1000 c1=100 c2=200 c3=300
 # metric p50_ns p99_ns max_ns rss_bytes why
 latency.typing.small.p99 3000000 $value 5000000 0 measured_runner_evidence
+latency.absolute.small 0 0 0 0 measured_noisy_zero_baseline
 latency.prof_overhead 69 69 69 0 measured_profiler_evidence
 mem.closed_growth.100m_code.linux 0 0 0 1024 current_rss_linux
 legacy.scalar 42 preserved_scalar_reason
@@ -54,11 +56,13 @@ write_observations()
 {
     a=$1 b=$2 c=$3 frames=${4:-10000} keys=${5:-10000}
     fraction=${6:-100}
+    absolute=${7:-60}
     for pair in "1:$a" "2:$b" "3:$c"; do
         index=${pair%%:*}
         value=${pair#*:}
         cat >"$scratch/obs$index" <<EOF
 latency.typing.small.p99 $value ns ADVISORY
+latency.absolute.small $absolute ns ADVISORY
 latency.typing.small.max $((value + 1000)) ns
 latency.typing.small.no_paint 10 permille=25
 latency.typing.small.frames $frames keys=$keys
@@ -83,6 +87,24 @@ run_gate()
 write_baseline 4000000
 write_observations 4200000 4200000 4200000
 run_gate designated >"$scratch/five.out" || fail 'seeded 5 percent slowdown failed'
+grep -F \
+    'latency.absolute.small median=60 absolute_over=0/3 relative_over=0/3 PASS' \
+    "$scratch/five.out" >/dev/null ||
+    fail 'absolute-only designated row did not accept its zero baseline'
+
+write_observations 4200000 4200000 4200000 10000 10000 100 120
+set +e
+run_gate designated >"$scratch/absolute-designated.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 1 ] ||
+    fail 'absolute-only designated budget violation passed'
+run_gate advisory >"$scratch/absolute-advisory.out" ||
+    fail 'absolute-only budget violation failed advisory mode'
+grep -F \
+    'latency.absolute.small median=120 absolute_over=3/3 relative_over=0/3 WARN' \
+    "$scratch/absolute-advisory.out" >/dev/null ||
+    fail 'absolute-only advisory violation was not reported'
 
 write_observations 4800000 4800000 4800000
 set +e

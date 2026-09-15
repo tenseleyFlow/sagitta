@@ -98,7 +98,12 @@ Only the pinned runners named `perf-x86_64-linux-gnu` and
 `perf-arm64-linux` may issue wall-clock verdicts. They use separate,
 same-ISA calibration references and separate baselines. A designated run
 sets `PERF_GATE=1`, measures calibration before and after the suite, and
-enforces both absolute budgets and relative regressions.
+enforces the committed row policy. `enforcement=designated` means both the
+absolute budget and the 10-percent baseline regression ratchet are hard on a
+designated runner. `enforcement=budget` keeps the absolute budget hard there
+but records the baseline without a relative verdict; it is reserved for rows
+whose 30-run distribution or integer quantization proves that a 10-percent
+ratchet would flap. `enforcement=all` remains hard on every runner.
 
 Every hosted, shared, developer, unknown, or differently named runner is
 advisory. It runs the same metrics so the harness cannot rot, prints
@@ -227,8 +232,11 @@ that validates the quick/huge metric set, preserves budget-file order,
 applies the median/2-of-3 rule, and performs the runner-derived v2 baseline
 comparison.  Hosted runs need no baseline and keep timing advisory, but
 `enforcement=all`, frames-greater-than-keys, missing metrics, and the 100x
-sanity bound remain hard.  A designated run refuses a missing, incomplete,
-zero-calibration, or runner/ISA-mismatched baseline with exit 75.
+sanity bound remain hard. An `enforcement=budget` row still requires a
+committed baseline row and a hard designated absolute verdict; a legitimate
+zero baseline is permitted because no relative division is performed. A
+designated run refuses a missing or incomplete baseline, zero calibration,
+or a runner/ISA mismatch with exit 75.
 
 The profiler cross-check gives a hosted observation at most three attempts
 when its child loses transport or crosses that 100x sanity bound.  This is a
@@ -257,7 +265,11 @@ p05/p50/p95 and one-sided regression noise. The report binds the run to the
 source commit and the SHA-256 of both designated inputs. For `le` gates the
 noisy tail is p95 above p50; for `ge` gates it is p05 below p50. Noise at or
 above the 100-permille relative-regression threshold fails: a threshold
-inside its own measured noise is not a release gate.
+inside its own measured noise is not a release gate. Absolute-only
+`enforcement=budget` rows instead report their distribution and fail if any
+of the 30 aggregate runs would violate the configured absolute gate. This
+also makes a stable zero-valued share an honest passing observation rather
+than an undefined relative ratio.
 
 The bootstrap order on each pinned host is:
 
