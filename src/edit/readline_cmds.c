@@ -480,25 +480,35 @@ static bool rl_plan_transpose_words(UnitCtx *u, ByteOff pos, Span *span,
  * Case the rest of the word under or after the caret.
  *
  * From the CARET, not from the word's start, which is emacs M-u/M-l/M-c:
- * the half of a word already typed keeps the case it was typed with.  The
- * caret ends past the word because the next thing the user types belongs
- * after it.
+ * the half of a word already typed keeps the case it was typed with.
+ *
+ * The planned span STARTS at the caret even when blanks separate it from
+ * the word, and those blanks are copied through byte for byte.  That is
+ * what carries the caret: yew_cset_adjust biases a cursor sitting at an
+ * insertion point to the far side of it, so a caret inside the replaced
+ * run lands past the word with no second cursor-placement pass to keep in
+ * step with the running edit delta.  A caret left BEFORE the run would
+ * simply not move, and the key would case the word without advancing.
  */
 static bool rl_plan_case(UnitCtx *u, ByteOff pos, Span *span, Bytebuf *out,
                          YewCaseKind kind, bool capitalize)
 {
     Span word;
     Bytebuf source;
-    size_t at = 0U;
+    size_t at;
+    size_t head;
     bool first = true;
 
     if (!rl_word_forward(u, pos, &word))
         return false;
-    span->lo = pos.v > word.lo ? pos.v : word.lo;
+    span->lo = pos.v;
     span->hi = word.hi;
     if (span->lo >= span->hi)
         return false;
+    head = (size_t)((word.lo > span->lo ? word.lo : span->lo) - span->lo);
     source = yew_sel_copy_span(u->tb, *span);
+    bytebuf_append(out, source.data, head);
+    at = head;
     while (at < source.len) {
         u32 cp;
         u8 mapped[YEW_CASE_MAX_UTF8];

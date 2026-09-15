@@ -1646,6 +1646,9 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool shadow_accept;
     bool clipboard_paste;
     bool clipboard_cut;
+    bool readline_op;
+    bool readline_kill;
+    bool readline_yank;
     bool shadow_motion;
     bool shadow_quiet;
     bool shadow_holdoff_before;
@@ -1673,6 +1676,21 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
                     strcmp(desc->name, "ed.compl.accept") == 0;
     clipboard_paste = strcmp(desc->name, "ed.clip.paste") == 0;
     clipboard_cut = strcmp(desc->name, "ed.clip.cut") == 0;
+    /*
+     * The readline Insert keys close the typing run instead of joining
+     * it.  A kill, a yank, a transpose or a word-case press is a
+     * deliberate operation, not another character typed, and folding it
+     * into the surrounding run would make one C-_ after an accidental
+     * C-k discard the whole paragraph that preceded it.  Each press is
+     * therefore its own undo step, and the next typed character opens a
+     * fresh one.
+     */
+    readline_yank = strcmp(desc->name, "ed.edit.kill.yank") == 0;
+    readline_kill = strncmp(desc->name, "ed.edit.kill.", 13U) == 0 &&
+                    !readline_yank;
+    readline_op = readline_yank || readline_kill ||
+                  strncmp(desc->name, "ed.edit.case.", 13U) == 0 ||
+                  strncmp(desc->name, "ed.edit.transpose.", 18U) == 0;
     shadow_motion = document_target &&
                     strncmp(desc->name, "ed.move.", 8U) == 0;
     shadow_quiet = document_target &&
@@ -1694,12 +1712,13 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     }
 
     if (started_in_insert &&
-        (!changes || newline || shadow_accept || clipboard_paste))
+        (!changes || newline || shadow_accept || clipboard_paste ||
+         readline_op))
         yew_ed_insert_barrier(ed);
     if (changes && ed->model_ready) {
         ec = yew_ed_edit_ctx_for(ed, cx->win);
         if (started_in_insert && !newline && !shadow_accept &&
-            !clipboard_paste) {
+            !clipboard_paste && !readline_op) {
             if (!ed->insert_txn) {
                 yew_undo_begin(&ec,
                                multiple ? YEW_TXN_MULTI : YEW_TXN_TYPE);
@@ -1718,12 +1737,14 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
              */
             yew_undo_begin(
                 &ec,
-                (shadow_accept || clipboard_paste) ? YEW_TXN_PASTE
+                (shadow_accept || clipboard_paste || readline_yank)
+                      ? YEW_TXN_PASTE
                       : (clipboard_cut ? YEW_TXN_CUT
                       : (multiple ? YEW_TXN_MULTI
                       : (strcmp(desc->name, "ed.search.replace") == 0
                              ? YEW_TXN_REPLACE
                       : (strstr(desc->name, ".delete.") != NULL ||
+                                 readline_kill ||
                                  strcmp(desc->name,
                                         "ed.edit.line.delete") == 0
                              ? YEW_TXN_ERASE
@@ -1758,7 +1779,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
                 yew_undo_promote_multi(&ec);
             ed->insert_txn = true;
         } else if ((!started_in_insert || newline || shadow_accept ||
-                    clipboard_paste) &&
+                    clipboard_paste || readline_op) &&
                    opened) {
             yew_undo_end(&ec);
         }
