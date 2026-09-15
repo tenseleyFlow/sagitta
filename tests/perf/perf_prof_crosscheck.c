@@ -82,22 +82,32 @@ static bool parse_external(const char *output, RunResult *result)
     return result->painted != 0U;
 }
 
-static bool parse_prof_keypaint(const char *path, uint64_t *value,
-                                uint32_t *calls)
+static bool parse_prof_report(const char *path, uint64_t *value,
+                              uint32_t *calls, uint64_t *cost_ns)
 {
     FILE *fp = fopen(path, "r");
     char *line = NULL;
     size_t cap = 0U;
-    bool ok = false;
+    bool found_keypaint = false;
+    bool found_cost = false;
 
     if (fp == NULL)
         return false;
     while (getline(&line, &cap, fp) >= 0) {
+        const char *cost = strstr(line, "overhead_ns=");
         unsigned long long p50;
         unsigned long long p90;
         unsigned long long p99;
         unsigned long long max;
         unsigned long long parsed_calls;
+        unsigned long long parsed_cost;
+
+        if (cost != NULL &&
+            sscanf(cost + sizeof("overhead_ns=") - 1U, "%llu",
+                   &parsed_cost) == 1) {
+            *cost_ns = (uint64_t)parsed_cost;
+            found_cost = *cost_ns != 0U;
+        }
 
         if (sscanf(line, "KEYPAINT %llu %llu %llu %llu calls=%llu",
                    &p50, &p90, &p99, &max, &parsed_calls) == 5 &&
@@ -107,13 +117,12 @@ static bool parse_prof_keypaint(const char *path, uint64_t *value,
             (void)max;
             *value = (uint64_t)p99;
             *calls = (uint32_t)parsed_calls;
-            ok = *value != 0U && *calls != 0U;
-            break;
+            found_keypaint = *value != 0U && *calls != 0U;
         }
     }
     free(line);
     (void)fclose(fp);
-    return ok;
+    return found_keypaint && found_cost;
 }
 
 static bool read_child_output(int fd, char *out, size_t cap)
@@ -248,7 +257,7 @@ static bool retry_advisory_run(bool advisory, RunStatus status,
 static RunStatus measure_latency(const Options *opts, bool prof_on,
                                  const char *dump_path, RunResult *result,
                                  uint64_t *prof_p99_ns, uint32_t *prof_calls,
-                                 bool advisory)
+                                 uint64_t *prof_cost_ns, bool advisory)
 {
     unsigned attempt;
 
@@ -260,7 +269,8 @@ static RunStatus measure_latency(const Options *opts, bool prof_on,
             (void)unlink(dump_path);
         status = run_latency(opts, prof_on, dump_path, result);
         if (status == RUN_OK && prof_on &&
-            !parse_prof_keypaint(dump_path, prof_p99_ns, prof_calls))
+            !parse_prof_report(dump_path, prof_p99_ns, prof_calls,
+                               prof_cost_ns))
             status = RUN_TRANSPORT_FAILED;
         if (!retry_advisory_run(advisory, status, attempt))
             return status;
@@ -285,6 +295,13 @@ static uint64_t delta_permille(uint64_t a, uint64_t b, uint64_t denominator)
     if (delta > UINT64_MAX / 1000U)
         return UINT64_MAX;
     return delta * 1000U / denominator;
+}
+
+static uint64_t ratio_permille(uint64_t numerator, uint64_t denominator)
+{
+    if (denominator == 0U || numerator > UINT64_MAX / 1000U)
+        return UINT64_MAX;
+    return numerator * 1000U / denominator;
 }
 
 static bool gating(void)
@@ -372,7 +389,9 @@ static int policy_selftest(void)
                       "perf_prof_crosscheck: advisory retry policy failed\n");
         return 1;
     }
-    if (median3(ordered) != 20U || median3(one_bad) != 0U ||
+    if (ratio_permille(20U, 1000U) != OVERHEAD_LIMIT_PERMILLE ||
+        ratio_permille(1U, 0U) != UINT64_MAX ||
+        median3(ordered) != 20U || median3(one_bad) != 0U ||
         median3(two_bad) != 300U ||
         overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, false) ||
         !overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, true) ||
@@ -400,8 +419,10 @@ int main(int argc, char **argv)
     uint64_t off_p99_ns[METRIC_TRIALS];
     uint64_t on_p99_ns[METRIC_TRIALS];
     uint64_t prof_p99_ns[METRIC_TRIALS];
+    uint64_t prof_cost_ns[METRIC_TRIALS];
     uint32_t prof_calls[METRIC_TRIALS];
     uint64_t overhead_trials[METRIC_TRIALS];
+    uint64_t session_delta_trials[METRIC_TRIALS];
     uint64_t crosscheck_trials[METRIC_TRIALS];
     uint64_t off_median_ns;
     uint64_t on_median_ns;
@@ -490,18 +511,20 @@ int main(int argc, char **argv)
         if (prof_first) {
             run_status = measure_latency(&opts, true, dump_path, &on[trial],
                                          &prof_p99_ns[trial],
-                                         &prof_calls[trial], advisory);
+                                         &prof_calls[trial],
+                                         &prof_cost_ns[trial], advisory);
             if (run_status == RUN_OK)
                 run_status = measure_latency(&opts, false, NULL, &off[trial],
-                                             NULL, NULL, advisory);
+                                             NULL, NULL, NULL, advisory);
         } else {
             run_status = measure_latency(&opts, false, NULL, &off[trial],
-                                         NULL, NULL, advisory);
+                                         NULL, NULL, NULL, advisory);
             if (run_status == RUN_OK)
                 run_status = measure_latency(&opts, true, dump_path,
                                              &on[trial],
                                              &prof_p99_ns[trial],
-                                             &prof_calls[trial], advisory);
+                                             &prof_calls[trial],
+                                             &prof_cost_ns[trial], advisory);
         }
         if (run_status != RUN_OK) {
             (void)fprintf(stderr,
@@ -515,9 +538,11 @@ int main(int argc, char **argv)
         }
         off_p99_ns[trial] = off[trial].external_p99_ns;
         on_p99_ns[trial] = on[trial].external_p99_ns;
-        overhead_trials[trial] = on_p99_ns[trial] > off_p99_ns[trial] ?
+        session_delta_trials[trial] = on_p99_ns[trial] > off_p99_ns[trial] ?
             delta_permille(on_p99_ns[trial], off_p99_ns[trial],
                            off_p99_ns[trial]) : 0U;
+        overhead_trials[trial] = ratio_permille(prof_cost_ns[trial],
+                                                off_p99_ns[trial]);
         crosscheck_trials[trial] = delta_permille(on_p99_ns[trial],
                                                   prof_p99_ns[trial],
                                                   on_p99_ns[trial]);
@@ -553,6 +578,10 @@ int main(int argc, char **argv)
                  (unsigned long long)external_samples,
                  (unsigned long long)internal_samples,
                  samples_match ? "OK" : "FAIL");
+    (void)printf("%s.cost %llu ns\n", prefix,
+                 (unsigned long long)median3(prof_cost_ns));
+    (void)printf("%s.session_delta %llu permille OBSERVED\n", prefix,
+                 (unsigned long long)median3(session_delta_trials));
     (void)printf("%s.overhead %llu permille %s\n", prefix,
                  (unsigned long long)overhead_pm,
                  overhead_pm <= OVERHEAD_LIMIT_PERMILLE ? "OK" :

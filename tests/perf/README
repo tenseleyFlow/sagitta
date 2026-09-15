@@ -13,6 +13,14 @@ reaching for `perf`: the built-in profiler answers *which phase* in one
 keystroke, with a measured overhead limit of 2 percent. External profilers
 answer narrower questions and must never supply a gate number.
 
+The overhead gate times the complete phase-clock and ring-write path in the
+editor process, rejects an interrupted timing batch by median, and compares
+that per-frame cost with the external session p99. The separately launched
+profiler-off/on session p99 delta remains an `OBSERVED` diagnostic: scheduler
+placement and DVFS can move a tail percentile between otherwise identical
+processes, so that delta is not attributed to instrumentation. Exact painted
+sample counts and the internal/external p99 cross-check remain hard gates.
+
 Useful commands:
 
 ```text
