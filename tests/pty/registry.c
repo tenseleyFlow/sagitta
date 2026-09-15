@@ -6683,6 +6683,17 @@ static void case_startup_multiple_files(PtyCtx *c)
               "second startup tab is missing");
     ptc_check(c, s43_screen_contains(&c->vt, "startup second file"),
               "final positional file is not the active startup tab");
+    /* YEW-F-072: the picker snapshot keeps the inactive first target dim.
+     * Hydrating every positional file before first paint loses that style
+     * and reintroduces the workspace50 startup and memory regression. */
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, "buffers ");
+    ptc_keys(c, "enter");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, "startup_multiple_files");
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
     ptc_keys(c, ":");
     ptc_settle(c, 0);
     ptc_bytes(c, "ed.tab.prev");
@@ -6690,7 +6701,6 @@ static void case_startup_multiple_files(PtyCtx *c)
     ptc_settle(c, 0);
     ptc_check(c, s43_screen_contains(&c->vt, "startup first file"),
               "first positional file did not remain available");
-    ptc_snapshot(c, "startup_multiple_files");
     force_quit(c);
     (void)unlink(one);
     (void)unlink(two);

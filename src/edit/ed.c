@@ -2784,19 +2784,33 @@ static bool ed_apply_start_files(Ed *ed, const YewStartPlan *plan,
                                  const char **failed)
 {
     size_t i;
+    int final = -1;
 
     for (i = 0U; i < plan->nfiles; i++) {
-        int idx = yew_tab_open(ed, plan->files[i]);
+        int idx = yew_tab_find_by_path(ed, plan->files[i]);
 
-        if (idx < 0 || yew_tab_hydrate(ed, idx) != 0) {
+        if (idx < 0)
+            idx = yew_tab_open(ed, plan->files[i]);
+        if (idx < 0) {
             if (failed != NULL)
                 *failed = plan->files[i];
             return false;
         }
-        /* yew_tab_open focuses an existing canonical path.  New tabs are
-         * deliberately lazy, so make the same focus decision explicit. */
-        yew_tab_switch(ed, idx);
+        final = idx;
     }
+    /*
+     * YEW-F-072: positional startup used to hydrate and focus every tab in
+     * turn, making the 50-file "deferred" workspace pay 50 reads and retain
+     * 50 TextBufs before its first paint.  Register every target first, then
+     * read only the target the user will actually see.  The ordinary switch
+     * path remains the single hydration point for every inactive tab.
+     */
+    if (final >= 0 && yew_tab_hydrate(ed, final) != 0) {
+        if (failed != NULL)
+            *failed = plan->files[plan->nfiles - 1U];
+        return false;
+    }
+    yew_tab_switch(ed, final);
     return true;
 }
 
