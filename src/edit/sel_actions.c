@@ -16,13 +16,6 @@
 #include "util/log.h"
 #include "util/vec.h"
 
-typedef struct SelEdit {
-    Span span;
-    Bytebuf replacement;
-} SelEdit;
-
-VEC_DECL(SelEditVec, SelEdit);
-
 static bool action_context(CmdCtx *cx, Win **win, TextBuf **tb,
                            Cursor **cursor)
 {
@@ -82,7 +75,7 @@ static void append_span(Bytebuf *out, const TextBuf *tb, Span span)
     }
 }
 
-static Bytebuf copy_span(const TextBuf *tb, Span span)
+Bytebuf yew_sel_copy_span(const TextBuf *tb, Span span)
 {
     Bytebuf out;
 
@@ -91,7 +84,7 @@ static Bytebuf copy_span(const TextBuf *tb, Span span)
     return out;
 }
 
-static void edits_free(SelEditVec *edits)
+void yew_sel_edits_free(SelEditVec *edits)
 {
     size_t i;
 
@@ -100,7 +93,7 @@ static void edits_free(SelEditVec *edits)
     SelEditVec_free(edits);
 }
 
-static SelEdit *edit_push(SelEditVec *edits, Span span)
+SelEdit *yew_sel_edit_push(SelEditVec *edits, Span span)
 {
     SelEdit edit;
 
@@ -127,7 +120,7 @@ static SelEdit *edit_push(SelEditVec *edits, Span span)
  * Hence the single exit.  Every path out of the edit loop, including
  * the failure paths, has to hand the journal back.
  */
-static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
+bool yew_sel_apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
 {
     EditCtx ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
     i64 delta = 0;
@@ -389,15 +382,15 @@ static CmdStatus delete_or_change(CmdCtx *cx, bool change, u8 reg_name)
     capture_selection(&value, win);
     all_selection_spans(win, &spans);
     for (i = 0U; i < spans.len; i++)
-        (void)edit_push(&edits, spans.data[i]);
-    if (!apply_edits(cx, &edits, &first)) {
-        edits_free(&edits);
+        (void)yew_sel_edit_push(&edits, spans.data[i]);
+    if (!yew_sel_apply_edits(cx, &edits, &first)) {
+        yew_sel_edits_free(&edits);
         YewSelSpanVec_free(&spans);
         yew_regval_free(&value);
         return YEW_CMD_ERR_IO;
     }
     yew_reg_delete(&cx->ed->regs, reg_name, &value);
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     if (win->h.kind == YEW_SEL_RECT && change) {
         /* Rectangular change keeps one insertion caret per affected row. */
         Cursor primary = {first, {0U}, first};
@@ -498,17 +491,17 @@ CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
         }
     }
     for (i = 0U; i < spans.len; i++) {
-        SelEdit *edit = edit_push(&edits, spans.data[i]);
+        SelEdit *edit = yew_sel_edit_push(&edits, spans.data[i]);
 
         bytebuf_append(&edit->replacement, value->bytes.data,
                        value->bytes.len);
     }
-    if (!apply_edits(cx, &edits, &first)) {
-        edits_free(&edits);
+    if (!yew_sel_apply_edits(cx, &edits, &first)) {
+        yew_sel_edits_free(&edits);
         YewSelSpanVec_free(&spans);
         return YEW_CMD_ERR_IO;
     }
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     YewSelSpanVec_free(&spans);
     if (replace)
         return finish_action(cx, first, false);
@@ -576,8 +569,8 @@ static CmdStatus change_case(CmdCtx *cx, YewCaseKind kind)
     (void)cursor;
     all_selection_spans(win, &spans);
     for (i = 0U; i < spans.len; i++) {
-        SelEdit *edit = edit_push(&edits, spans.data[i]);
-        Bytebuf source = copy_span(tb, spans.data[i]);
+        SelEdit *edit = yew_sel_edit_push(&edits, spans.data[i]);
+        Bytebuf source = yew_sel_copy_span(tb, spans.data[i]);
         size_t at = 0U;
 
         while (at < source.len) {
@@ -592,12 +585,12 @@ static CmdStatus change_case(CmdCtx *cx, YewCaseKind kind)
         }
         bytebuf_free(&source);
     }
-    if (!apply_edits(cx, &edits, &first)) {
-        edits_free(&edits);
+    if (!yew_sel_apply_edits(cx, &edits, &first)) {
+        yew_sel_edits_free(&edits);
         YewSelSpanVec_free(&spans);
         return YEW_CMD_ERR_IO;
     }
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     YewSelSpanVec_free(&spans);
     return finish_action(cx, first, false);
 }
@@ -692,9 +685,9 @@ static CmdStatus indent_action(CmdCtx *cx, bool dedent)
                 }
             }
             if (end != span.lo)
-                (void)edit_push(&edits, (Span){span.lo, end});
+                (void)yew_sel_edit_push(&edits, (Span){span.lo, end});
         } else {
-            edit = edit_push(&edits, (Span){span.lo, span.lo});
+            edit = yew_sel_edit_push(&edits, (Span){span.lo, span.lo});
             if (span.lo < span.hi && text_byte(tb, span.lo) == (u8)'\t') {
                 bytebuf_push_u8(&edit->replacement, (u8)'\t');
             } else {
@@ -709,13 +702,13 @@ static CmdStatus indent_action(CmdCtx *cx, bool dedent)
         }
     }
     collapse = yew_textbuf_line_start(tb, first);
-    if (!apply_edits(cx, &edits, NULL)) {
+    if (!yew_sel_apply_edits(cx, &edits, NULL)) {
         yew_xfree(covered);
-        edits_free(&edits);
+        yew_sel_edits_free(&edits);
         return YEW_CMD_ERR_IO;
     }
     yew_xfree(covered);
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     return finish_action(cx, collapse, false);
 }
 
@@ -776,8 +769,8 @@ CmdStatus yew_sel_cmd_join(CmdCtx *cx)
         joined.hi = line_content_end(tb, last).v;
         if (edits.len != 0U && joined.lo < edits.data[edits.len - 1U].span.hi)
             continue;
-        source = copy_span(tb, joined);
-        edit = edit_push(&edits, joined);
+        source = yew_sel_copy_span(tb, joined);
+        edit = yew_sel_edit_push(&edits, joined);
         while (at < source.len) {
             u8 byte = source.data[at++];
 
@@ -797,11 +790,11 @@ CmdStatus yew_sel_cmd_join(CmdCtx *cx)
     }
     if (edits.len == 0U)
         collapse = win->cs.curs.data[win->cs.primary].pos;
-    if (!apply_edits(cx, &edits, NULL)) {
-        edits_free(&edits);
+    if (!yew_sel_apply_edits(cx, &edits, NULL)) {
+        yew_sel_edits_free(&edits);
         return YEW_CMD_ERR_IO;
     }
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     return finish_action(cx, collapse, false);
 }
 
@@ -823,8 +816,8 @@ CmdStatus yew_sel_cmd_replace_char(CmdCtx *cx)
     (void)cursor;
     all_selection_spans(win, &spans);
     for (i = 0U; i < spans.len; i++) {
-        SelEdit *edit = edit_push(&edits, spans.data[i]);
-        Bytebuf source = copy_span(tb, spans.data[i]);
+        SelEdit *edit = yew_sel_edit_push(&edits, spans.data[i]);
+        Bytebuf source = yew_sel_copy_span(tb, spans.data[i]);
         size_t at = 0U;
 
         while (at < source.len) {
@@ -835,12 +828,12 @@ CmdStatus yew_sel_cmd_replace_char(CmdCtx *cx)
         }
         bytebuf_free(&source);
     }
-    if (!apply_edits(cx, &edits, &first)) {
-        edits_free(&edits);
+    if (!yew_sel_apply_edits(cx, &edits, &first)) {
+        yew_sel_edits_free(&edits);
         YewSelSpanVec_free(&spans);
         return YEW_CMD_ERR_IO;
     }
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     YewSelSpanVec_free(&spans);
     return finish_action(cx, first, false);
 }
@@ -894,7 +887,7 @@ static CmdStatus shift_char_or_line(CmdCtx *cx, bool right)
         whole.hi = right ? neighbor.hi : selected.hi;
         if (edits.len != 0U && whole.lo < edits.data[edits.len - 1U].span.hi)
             continue;
-        edit = edit_push(&edits, whole);
+        edit = yew_sel_edit_push(&edits, whole);
         if (right) {
             append_span(&edit->replacement, tb, neighbor);
             append_span(&edit->replacement, tb, selected);
@@ -908,11 +901,11 @@ static CmdStatus shift_char_or_line(CmdCtx *cx, bool right)
     }
     if (edits.len == 0U)
         collapse = win->cs.curs.data[win->cs.primary].pos;
-    if (!apply_edits(cx, &edits, NULL)) {
-        edits_free(&edits);
+    if (!yew_sel_apply_edits(cx, &edits, NULL)) {
+        yew_sel_edits_free(&edits);
         return YEW_CMD_ERR_IO;
     }
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     return finish_action(cx, collapse, false);
 }
 
@@ -955,7 +948,7 @@ static CmdStatus shift_rect(CmdCtx *cx, bool right)
                               selected.lo};
             whole = (Span){neighbor.lo, selected.hi};
         }
-        edit = edit_push(&edits, whole);
+        edit = yew_sel_edit_push(&edits, whole);
         if (right) {
             append_span(&edit->replacement, tb, neighbor);
             append_span(&edit->replacement, tb, selected);
@@ -965,12 +958,12 @@ static CmdStatus shift_rect(CmdCtx *cx, bool right)
         }
     }
     first = BYTEOFF(spans.len == 0U ? cursor->pos.v : spans.data[0].lo);
-    if (!apply_edits(cx, &edits, NULL)) {
-        edits_free(&edits);
+    if (!yew_sel_apply_edits(cx, &edits, NULL)) {
+        yew_sel_edits_free(&edits);
         YewSelSpanVec_free(&spans);
         return YEW_CMD_ERR_IO;
     }
-    edits_free(&edits);
+    yew_sel_edits_free(&edits);
     YewSelSpanVec_free(&spans);
     return finish_action(cx, first, false);
 }
@@ -1037,7 +1030,7 @@ static CmdStatus rect_carets(CmdCtx *cx, bool append)
             Cursor caret;
 
             if (pad != 0U) {
-                SelEdit *edit = edit_push(&pads, (Span){end.v, end.v});
+                SelEdit *edit = yew_sel_edit_push(&pads, (Span){end.v, end.v});
                 u64 left = pad;
                 while (left != 0U) {
                     u64 take = left < sizeof(spaces) ? left : sizeof(spaces);
@@ -1057,12 +1050,12 @@ static CmdStatus rect_carets(CmdCtx *cx, bool append)
         }
         YewSelSpanVec_free(&spans);
     }
-    if (!apply_edits(cx, &pads, NULL)) {
-        edits_free(&pads);
+    if (!yew_sel_apply_edits(cx, &pads, NULL)) {
+        yew_sel_edits_free(&pads);
         YewCursorVec_free(&carets);
         return YEW_CMD_ERR_IO;
     }
-    edits_free(&pads);
+    yew_sel_edits_free(&pads);
     if (carets.len == 0U) {
         YewCursorVec_free(&carets);
         return YEW_CMD_ERR_STATE;
