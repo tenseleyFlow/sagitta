@@ -29,7 +29,7 @@ latency.absolute.small le 100 ns raw budget measured_noisy_absolute
 latency.any.max record - ns raw informational diagnose_long_tail
 latency.typing.no_paint_fraction record - permille none informational expected_noops
 latency.typing.frames le 10000 frames_per_10000_keys none all frames
-latency.prof_external_delta le 250 permille none all profiler_crosscheck
+latency.prof_external_delta le 300 permille none all profiler_crosscheck
 latency.prof_overhead le 150 permille none designated profiler_overhead
 startup.spawn_floor_fraction le 300 permille none all harness_sanity
 search.literal_early.1g_code le 20000000 ns calibrated designated first_match

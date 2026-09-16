@@ -24,7 +24,7 @@ latency.typing.assist.p99                 le      5000000     ns                
 latency.any.max                           le      40000000    ns                 raw         informational diagnose_long_tail
 latency.typing.no_paint_fraction          record  -           permille           none        informational expected_noops
 latency.typing.frames                     le      10000       frames_per_10000_keys none      all           drain_then_render
-latency.prof_external_delta               le      250         permille           none        all           profiler_crosscheck
+latency.prof_external_delta               le      300         permille           none        all           profiler_crosscheck
 latency.prof_overhead                     le      20          permille           none        budget        profiler_cost
 latency.pty_floor_p50.min                 ge      2000        ns                 raw         all           harness_sanity
 latency.pty_floor_p50.max                 le      500000      ns                 raw         all           harness_sanity

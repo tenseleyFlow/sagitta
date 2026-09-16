@@ -160,6 +160,27 @@ measurement; the editor still accounts for at least 60 percent of raw first
 paint. This changes neither a user-facing latency budget nor any editor
 feature.
 
+**Amendment S59-A3 (2026-09-15) — profiler agreement excludes measured ARM
+PTY variance.** F072's designated ARM64 campaign stopped when the profiler's
+external-versus-internal p99 cross-check reported an aggregate median of 257
+permille against the old 250-permille limit. The editor's independently
+measured instrumentation overhead remained 1 permille, all 29,703--30,000
+painted samples matched the internal call counts exactly, and every
+user-facing latency remained inside its absolute budget. Twelve isolated
+many-buffer repetitions on the same pinned runner measured external deltas
+of 204, 240, 234, 218, 254, 178, 229, 238, 253, 248, 253, and 253 permille:
+median 239, range 178--254, with four ordinary observations above the former
+cutoff. Replacing the median PTY floor with its p99 was tested and rejected:
+the p99 transport tail varied from 225,455 to 266,017 ns beside 74,149--76,530
+ns medians and could over-correct the cross-check to 833 permille.
+
+The hard `latency.prof_external_delta` agreement limit therefore moves from
+250 to 300 permille. The existing median echo-floor normalization, exact
+sample-count equality, median-of-three anti-flap verdict, 20-permille profiler
+overhead limit, and `enforcement=all` policy remain unchanged. No editor
+latency, startup, memory, size, or feature gate changes. The raw evidence is
+retained in `.docs/audits/evidence/F072-prof-crosscheck-arm64.txt`.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

@@ -19,7 +19,7 @@ enum {
     METRIC_TRIALS = 3,
     ADVISORY_ATTEMPTS = 3,
     OVERHEAD_LIMIT_PERMILLE = 20,
-    CROSSCHECK_LIMIT_PERMILLE = 250
+    CROSSCHECK_LIMIT_PERMILLE = 300
 };
 
 typedef enum RunStatus {
@@ -153,28 +153,19 @@ static bool read_child_output(int fd, char *out, size_t cap)
     return true;
 }
 
-static bool parse_floor(const char *output, uint64_t *floor_p50_ns,
-                        uint64_t *floor_p99_ns)
+static bool parse_floor(const char *output, uint64_t *floor_ns)
 {
-    const char *p50_row = strstr(output, "pty_floor_p50 ");
-    const char *p99_row = strstr(output, "pty_floor_p99 ");
-    unsigned long long p50;
-    unsigned long long p99;
+    const char *row = strstr(output, "pty_floor_p50 ");
+    unsigned long long parsed;
 
-    if (p50_row == NULL || p99_row == NULL ||
-        sscanf(p50_row + sizeof("pty_floor_p50 ") - 1U,
-               "%llu ns", &p50) != 1 ||
-        sscanf(p99_row + sizeof("pty_floor_p99 ") - 1U,
-               "%llu ns", &p99) != 1 ||
-        p50 == 0U || p99 < p50)
+    if (row == NULL ||
+        sscanf(row + sizeof("pty_floor_p50 ") - 1U, "%llu ns", &parsed) != 1)
         return false;
-    *floor_p50_ns = (uint64_t)p50;
-    *floor_p99_ns = (uint64_t)p99;
-    return true;
+    *floor_ns = (uint64_t)parsed;
+    return *floor_ns != 0U;
 }
 
-static RunStatus run_floor(const Options *opts, uint64_t *floor_p50_ns,
-                           uint64_t *floor_p99_ns)
+static RunStatus run_floor(const Options *opts, uint64_t *floor_ns)
 {
     char *argv[] = {
         (char *)opts->runner,
@@ -216,8 +207,7 @@ static RunStatus run_floor(const Options *opts, uint64_t *floor_p50_ns,
         return RUN_TRANSPORT_FAILED;
     if (WEXITSTATUS(status) == 1)
         return RUN_METRIC_FAILED;
-    if (WEXITSTATUS(status) != 0 ||
-        !parse_floor(output, floor_p50_ns, floor_p99_ns))
+    if (WEXITSTATUS(status) != 0 || !parse_floor(output, floor_ns))
         return RUN_TRANSPORT_FAILED;
     return RUN_OK;
 }
@@ -324,13 +314,13 @@ static bool retry_advisory_run(bool advisory, RunStatus status,
            attempt < ADVISORY_ATTEMPTS;
 }
 
-static RunStatus measure_floor(const Options *opts, uint64_t *floor_p50_ns,
-                               uint64_t *floor_p99_ns, bool advisory)
+static RunStatus measure_floor(const Options *opts, uint64_t *floor_ns,
+                               bool advisory)
 {
     unsigned attempt;
 
     for (attempt = 1U; ; attempt++) {
-        RunStatus status = run_floor(opts, floor_p50_ns, floor_p99_ns);
+        RunStatus status = run_floor(opts, floor_ns);
 
         if (!retry_advisory_run(advisory, status, attempt))
             return status;
@@ -473,11 +463,9 @@ static int policy_selftest(void)
     static const uint64_t one_bad[METRIC_TRIALS] = {300U, 0U, 0U};
     static const uint64_t two_bad[METRIC_TRIALS] = {300U, 0U, 300U};
     static const uint64_t hosted_crosscheck[METRIC_TRIALS] = {
-        265U, 242U, 291U
+        315U, 292U, 341U
     };
     uint64_t work_ns = 0U;
-    uint64_t floor_p50_ns = 0U;
-    uint64_t floor_p99_ns = 0U;
 
     if (retry_advisory_run(false, RUN_TRANSPORT_FAILED, 1U) ||
         retry_advisory_run(false, RUN_METRIC_FAILED, 1U) ||
@@ -492,14 +480,7 @@ static int policy_selftest(void)
                       "perf_prof_crosscheck: advisory retry policy failed\n");
         return 1;
     }
-    if (!parse_floor("pty_floor_p50 40 ns\npty_floor_p99 75 ns\n",
-                     &floor_p50_ns, &floor_p99_ns) ||
-        floor_p50_ns != 40U || floor_p99_ns != 75U ||
-        parse_floor("pty_floor_p50 40 ns\n", &floor_p50_ns,
-                    &floor_p99_ns) ||
-        parse_floor("pty_floor_p50 75 ns\npty_floor_p99 40 ns\n",
-                    &floor_p50_ns, &floor_p99_ns) ||
-        ratio_permille(20U, 1000U) != OVERHEAD_LIMIT_PERMILLE ||
+    if (ratio_permille(20U, 1000U) != OVERHEAD_LIMIT_PERMILLE ||
         ratio_permille(1U, 1000U) != 1U ||
         ratio_permille(1U, 0U) != UINT64_MAX ||
         !remove_transport_floor(240U, 40U, &work_ns) || work_ns != 200U ||
@@ -541,8 +522,7 @@ int main(int argc, char **argv)
     uint64_t off_median_ns;
     uint64_t on_median_ns;
     uint64_t prof_median_ns;
-    uint64_t transport_floor_p50_ns;
-    uint64_t transport_floor_p99_ns;
+    uint64_t transport_floor_ns;
     uint64_t external_samples = 0U;
     uint64_t internal_samples = 0U;
     uint64_t overhead_pm;
@@ -620,8 +600,7 @@ int main(int argc, char **argv)
         goto done;
     }
     advisory = perf_advisory();
-    run_status = measure_floor(&opts, &transport_floor_p50_ns,
-                               &transport_floor_p99_ns, advisory);
+    run_status = measure_floor(&opts, &transport_floor_ns, advisory);
     if (run_status != RUN_OK) {
         (void)fprintf(stderr,
                       "perf_prof_crosscheck: PTY floor measurement failed\n");
@@ -670,11 +649,7 @@ int main(int argc, char **argv)
                            off_p99_ns[trial]) : 0U;
         overhead_trials[trial] = ratio_permille(prof_cost_ns[trial],
                                                 off_p99_ns[trial]);
-        /* YEW-F-072: compare p99 editor work after removing the p99 PTY
-         * round-trip floor. Subtracting p50 here put the fixed 25 percent
-         * agreement limit inside normal ARM transport variance. */
-        if (!remove_transport_floor(on_p99_ns[trial],
-                                    transport_floor_p99_ns,
+        if (!remove_transport_floor(on_p99_ns[trial], transport_floor_ns,
                                     &comparable_external_ns[trial])) {
             (void)fprintf(stderr,
                           "perf_prof_crosscheck: external p99 does not "
@@ -702,10 +677,8 @@ int main(int argc, char **argv)
                  (unsigned long long)on_median_ns);
     (void)printf("%s.keypaint.p99 %llu ns\n", prefix,
                  (unsigned long long)prof_median_ns);
-    (void)printf("%s.transport_floor_p50 %llu ns\n", prefix,
-                 (unsigned long long)transport_floor_p50_ns);
-    (void)printf("%s.transport_floor_p99 %llu ns\n", prefix,
-                 (unsigned long long)transport_floor_p99_ns);
+    (void)printf("%s.transport_floor %llu ns\n", prefix,
+                 (unsigned long long)transport_floor_ns);
     (void)printf("%s.comparable_external.p99 %llu ns\n", prefix,
                  (unsigned long long)median3(comparable_external_ns));
     (void)printf("%s.trials off=%llu,%llu,%llu on=%llu,%llu,%llu "
