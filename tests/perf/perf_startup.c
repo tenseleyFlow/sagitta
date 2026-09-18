@@ -108,26 +108,6 @@ static bool budget(const char *path, const char *wanted, u64 *limit)
     return false;
 }
 
-static bool suffix(const u8 *tail, size_t len, const char *text)
-{
-    size_t n = strlen(text);
-
-    return n <= len && memcmp(tail + len - n, text, n) == 0;
-}
-
-static bool cup_suffix(const u8 *tail, size_t len)
-{
-    size_t at;
-
-    if (len < 3U || (tail[len - 1U] != 'H' && tail[len - 1U] != 'f'))
-        return false;
-    at = len - 2U;
-    while (at > 0U && ((tail[at] >= '0' && tail[at] <= '9') ||
-                       tail[at] == ';'))
-        at--;
-    return at > 0U && tail[at] == '[' && tail[at - 1U] == 0x1bU;
-}
-
 static bool child_running(YewLivePty *pty, const char *stage)
 {
     int status;
@@ -153,89 +133,57 @@ static bool child_running(YewLivePty *pty, const char *stage)
     return false;
 }
 
-static bool wait_marker(YewLivePty *pty, bool dumb, i64 deadline,
-                        i64 *completed)
+static bool write_all_fd(int fd, const void *data, size_t len)
 {
-    u8 tail[64];
-    size_t ntail = 0U;
-    bool kitty = false;
-    bool sync = false;
-    bool da = false;
+    const u8 *bytes = data;
 
-    while (yew_live_pty_now_ns() < deadline) {
-        struct pollfd fd = {pty->master, POLLIN | POLLHUP, 0};
-        u8 bytes[8192];
-        ssize_t n;
-        size_t i;
+    while (len != 0U) {
+        ssize_t n = write(fd, bytes, len);
 
-        if (poll(&fd, 1U, 25) < 0) {
-            if (errno == EINTR)
-                continue;
+        if (n > 0) {
+            bytes += (size_t)n;
+            len -= (size_t)n;
+        } else if (n < 0 && errno == EINTR) {
+            continue;
+        } else {
             return false;
         }
-        if ((fd.revents & (POLLIN | POLLHUP)) == 0)
-            continue;
-        n = read(pty->master, bytes, sizeof(bytes));
-        if (n < 0 && (errno == EINTR || errno == EAGAIN))
-            continue;
-        if (n == 0 || (n < 0 && errno == EIO)) {
-            if (!child_running(pty, "first paint"))
-                return false;
-            (void)poll(NULL, 0U, 1);
-            continue;
-        }
-        if (n < 0) {
-            (void)fprintf(stderr, "perf_startup: read during first paint: %s\n",
-                          strerror(errno));
-            return false;
-        }
-        for (i = 0U; i < (size_t)n; i++) {
-            if (ntail == sizeof(tail)) {
-                (void)memmove(tail, tail + 1U, sizeof(tail) - 1U);
-                ntail--;
-            }
-            tail[ntail++] = bytes[i];
-            if (!dumb && !kitty && suffix(tail, ntail, "\033[?u")) {
-                static const char response[] = "\033[?0u";
-
-                kitty = true;
-                if (!yew_live_pty_write(pty, response, sizeof(response) - 1U,
-                                        deadline))
-                    return false;
-            }
-            if (!dumb && !sync && suffix(tail, ntail, "\033[?2026$p")) {
-                static const char response[] = "\033[?2026;2$y";
-
-                sync = true;
-                if (!yew_live_pty_write(pty, response, sizeof(response) - 1U,
-                                        deadline))
-                    return false;
-            }
-            if (!dumb && !da && suffix(tail, ntail, "\033[c")) {
-                static const char response[] = "\033[?62;22c";
-
-                da = true;
-                if (!yew_live_pty_write(pty, response, sizeof(response) - 1U,
-                                        deadline))
-                    return false;
-            }
-            if ((!dumb && suffix(tail, ntail, "\033[?2026h")) ||
-                (dumb && cup_suffix(tail, ntail))) {
-                *completed = yew_live_pty_now_ns();
-                return *completed >= 0;
-            }
-        }
     }
-    {
-        bool running = child_running(pty, "first-paint timeout");
+    return true;
+}
 
-        (void)fprintf(stderr,
-                      "perf_startup: first-paint marker timed out "
-                      "kitty=%u sync=%u da=%u tail_bytes=%zu running=%u\n",
-                      kitty ? 1U : 0U, sync ? 1U : 0U, da ? 1U : 0U,
-                      ntail, running ? 1U : 0U);
+static bool selftest_unsynchronized_first_frame(void)
+{
+    static const char output[] =
+        "\033[?u\033[?2026$p\033[c"
+        "\033[?25lX\033[H\033[?25h";
+    YewLivePty pty = {.master = -1, .pid = -1};
+    char slave[128];
+    i64 completed = -1;
+    pid_t pid;
+    bool ok;
+
+    if (!yew_live_pty_open(&pty, slave, sizeof(slave), ROWS, COLS))
+        return false;
+    pty.kitty_supported = true;
+    pid = fork();
+    if (pid < 0) {
+        yew_live_pty_close(&pty);
+        return false;
     }
-    return false;
+    if (pid == 0) {
+        if (!yew_live_pty_attach(&pty, slave, ROWS, COLS) ||
+            !write_all_fd(STDOUT_FILENO, output, sizeof(output) - 1U))
+            _exit(126);
+        (void)poll(NULL, 0U, 300);
+        _exit(0);
+    }
+    pty.pid = pid;
+    ok = yew_live_pty_wait_frame(
+             &pty, 0U, yew_live_pty_now_ns() + INT64_C(1000000000),
+             &completed) && pty.frames == 1U && completed >= 0;
+    yew_live_pty_close(&pty);
+    return ok;
 }
 
 static const char *profile_log(const char *profile)
@@ -278,6 +226,7 @@ static bool spawn_editor(YewLivePty *pty, const Options *opt, bool clean,
 
     if (!yew_live_pty_open(pty, slave, sizeof(slave), ROWS, COLS))
         return false;
+    pty->kitty_supported = !dumb;
     *started = yew_live_pty_now_ns();
     if (*started < 0) {
         yew_live_pty_close(pty);
@@ -363,7 +312,12 @@ static bool one_startup(const Options *opt, bool clean, bool dumb,
         *retryable = true;
         return false;
     }
-    ok = wait_marker(&pty, dumb, started + INT64_C(3000000000), &painted);
+    /* YEW-F-072: first paint may precede the sync-capability reply.  The
+     * shared observer recognizes both an unsynchronized cursor-show frame
+     * and a synchronized frame end; waiting only for CSI ? 2026 h discarded
+     * the former and turned a legal startup ordering into a false timeout. */
+    ok = yew_live_pty_wait_frame(&pty, 0U,
+                                 started + INT64_C(3000000000), &painted);
     if (ok)
         *sample = painted - started;
     if (ok)
@@ -659,6 +613,12 @@ static bool spawn_fraction_fails_process(u64 fraction, u64 limit)
 
 static int selftest_policy(void)
 {
+    if (!selftest_unsynchronized_first_frame()) {
+        (void)fprintf(stderr,
+                      "perf-startup-policy: unsynchronized first frame "
+                      "was not observed\n");
+        return 1;
+    }
     if (unsetenv("YEW_PERF_AGGREGATE") != 0)
         return 2;
     if (!spawn_fraction_fails_process(UINT64_C(301), UINT64_C(300)) ||
@@ -688,7 +648,7 @@ static int selftest_policy(void)
                       "perf-startup-policy: transport retry failed\n");
         return 1;
     }
-    (void)puts("perf-startup-policy: standalone/aggregate gate ok");
+    (void)puts("perf-startup-policy: frame-order/standalone/aggregate gate ok");
     return 0;
 }
 
