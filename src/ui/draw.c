@@ -19,6 +19,7 @@
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
+#include "ui/mouse.h"
 #include "ui/message.h"
 #include "ui/shadowdraw.h"
 #include "ui/statusline.h"
@@ -1149,6 +1150,69 @@ static void draw_crossings_rec(Ed *ed, Pane *p)
     }
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.22 §4: the drag-to-spawn affordance                    */
+/* ---------------------------------------------------------------- */
+
+static Rect spawn_zone;
+
+Rect yew_draw_spawn_zone_rect(void)
+{
+    return spawn_zone;
+}
+
+/*
+ * The region the new pane would occupy, highlighted while the pointer
+ * rests in a live edge zone.
+ *
+ * DRAWN, NEVER REGISTERED — the same law the drag float follows
+ * (ui/tabs.c): these cells are part of a gesture in the user's hand,
+ * and registering them would make the pointer hover a picture.
+ * `yew_draw_spawn_zone_rect` is how a test asks where it was without
+ * the registry knowing.
+ *
+ * WHICH cells is yew_mouse_drag_spawn_zone's answer, which is the
+ * release's own answer asked of the pointer's current cell — so the
+ * highlight cannot advertise a split the button-up would refuse.
+ *
+ * Invariant 5: no clock is read here.  Same state, same grid; there is
+ * no pulse, no fade and no animation to make the picture depend on when
+ * it was painted.
+ */
+static void draw_spawn_zone(Ed *ed)
+{
+    PaneZoneHit zone;
+    Cell style;
+    u8 fields;
+    u16 row;
+
+    spawn_zone = (Rect){0U, 0U, 0U, 0U};
+    if (ed == NULL || !ed->grid_ready)
+        return;
+    if (!yew_mouse_drag_spawn_zone(ed, NULL, &zone))
+        return;
+    if (zone.preview.w == 0U || zone.preview.h == 0U)
+        return;
+    (void)memset(&style, 0, sizeof(style));
+    /*
+     * The selection surface, because that is what this is: a region the
+     * gesture has chosen.  A theme that defines none still has to show
+     * something, and reverse is the cue the float already relies on —
+     * it survives 16-colour and monochrome terminals alike.
+     */
+    fields = themed_overlay(&style, yew_theme_ui_tab(ed, "sel"));
+    if (fields == 0U) {
+        style.attrs = (u16)YEW_ATTR_REVERSE;
+        fields = (u8)YEW_OVERLAY_ATTRS;
+    }
+    for (row = zone.preview.y;
+         row < (u16)(zone.preview.y + zone.preview.h); row++)
+        yew_grid_overlay(&ed->grid, row, zone.preview.x,
+                         (u16)(zone.preview.x + zone.preview.w), &style,
+                         fields);
+    spawn_zone = zone.preview;
+}
+
 void yew_draw_panes(Ed *ed)
 {
     if (ed == NULL || ed->pane_root == NULL)
@@ -1162,6 +1226,9 @@ void yew_draw_panes(Ed *ed)
     yew_pane_tables_reset(ed);
     draw_pane_rec(ed, ed->pane_root);
     draw_crossings_rec(ed, ed->pane_root);
+    /* Over the panes it highlights, under the strip and the float that
+     * are the rest of the same gesture. */
+    draw_spawn_zone(ed);
     /* After the panes, so a strip span shadows the document beneath it
      * on overlap — last added wins. */
     yew_tab_strip_draw(ed, ed->tab_strip_rect);

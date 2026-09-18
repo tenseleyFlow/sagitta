@@ -2733,6 +2733,11 @@ static u16 sp_slot_x(const Ed *ed, int slot)
     return 0U;
 }
 
+static bool rect_eq_ms(Rect a, Rect b)
+{
+    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+}
+
 /* The highest row-1 slot the strip actually drew. */
 static int sp_last_drawn_slot(const Ed *ed)
 {
@@ -3073,5 +3078,174 @@ void test_mouse_tab_spawn_is_refused_when_the_pane_is_too_small(void)
             (u16)(r.y + r.h - 1U));
     YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
     YEW_ASSERT(ed.pane_root->is_leaf);
+    yew_ed_free(&ed);
+}
+
+/*
+ * §4: the affordance is the RELEASE'S OWN ANSWER, painted.
+ *
+ * Mid-drag, with the pointer in each live zone, the highlight covers
+ * exactly the rect the split then produces — asserted by performing the
+ * release and comparing the new leaf's rect to the rect that was drawn.
+ */
+void test_mouse_drag_affordance_shows_where_the_pane_lands(void)
+{
+    enum { SIDE_LEFT, SIDE_RIGHT, SIDE_BOTTOM };
+    int side;
+
+    for (side = SIDE_LEFT; side <= SIDE_BOTTOM; side++) {
+        Ed ed;
+        Rect r;
+        Rect shown;
+        Pane *nu;
+        u16 x;
+        u16 y;
+
+        sp_fixture(&ed);
+        r = ed.pane_root->rect;
+        if (side == SIDE_LEFT) {
+            x = r.x;
+            y = (u16)(r.y + r.h / 2U);
+        } else if (side == SIDE_RIGHT) {
+            x = (u16)(r.x + r.w - 1U);
+            y = (u16)(r.y + r.h / 2U);
+        } else {
+            x = (u16)(r.x + r.w / 2U);
+            y = (u16)(r.y + r.h - 1U);
+        }
+        {
+            Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                              sp_slot_x(&ed, 2), ed.tab_strip_rect.y);
+            Key at = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, x, y);
+            Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, x, y);
+
+            yew_mouse_event(&ed, &press);
+            yew_mouse_event(&ed, &at);
+            /* A full frame, mid-drag. */
+            yew_draw_panes(&ed);
+            shown = yew_draw_spawn_zone_rect();
+            YEW_ASSERT(shown.w > 0U);
+            YEW_ASSERT(shown.h > 0U);
+            /* Inside the leaf it is splitting, never over a neighbour. */
+            YEW_ASSERT(shown.x >= r.x);
+            YEW_ASSERT(shown.x + shown.w <= r.x + r.w);
+            YEW_ASSERT(shown.y >= r.y);
+            YEW_ASSERT(shown.y + shown.h <= r.y + r.h);
+            /* DRAWN, NEVER REGISTERED: every cell it covers still
+             * hit-tests as the pane underneath. */
+            YEW_ASSERT_EQ_U64(
+                (u64)yew_region_hit(shown.x, shown.y).kind,
+                (u64)YEW_REGION_PANE);
+            /* Invariant 5: the clock moving changes nothing. */
+            ed.now_ms += 5000;
+            yew_draw_panes(&ed);
+            YEW_ASSERT(rect_eq_ms(yew_draw_spawn_zone_rect(), shown));
+
+            yew_mouse_event(&ed, &up);
+        }
+        YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 2U);
+        nu = side == SIDE_LEFT ? ed.pane_root->a : ed.pane_root->b;
+        yew_ed_layout(&ed);
+        YEW_ASSERT(rect_eq_ms(nu->rect, shown));
+        /* The gesture is over, so the highlight is gone. */
+        yew_draw_panes(&ed);
+        YEW_ASSERT_EQ_U64(yew_draw_spawn_zone_rect().w, 0U);
+        yew_ed_free(&ed);
+    }
+}
+
+/* No zone, no highlight: the pane's interior, and a pane too small to
+ * split, both draw nothing at all. */
+void test_mouse_drag_affordance_is_absent_without_a_zone(void)
+{
+    Ed ed;
+    Rect r;
+    u16 depth;
+
+    sp_fixture(&ed);
+    r = ed.pane_root->rect;
+    depth = yew_pane_zone_depth(r.w);
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                          sp_slot_x(&ed, 2), ed.tab_strip_rect.y);
+        Key at = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT,
+                       (u16)(r.x + depth), (u16)(r.y + r.h / 2U));
+
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &at);
+        yew_draw_panes(&ed);
+        YEW_ASSERT_EQ_U64(yew_draw_spawn_zone_rect().w, 0U);
+        /* One cell back out and it appears — the absence above is the
+         * zone's edge, not a dead renderer. */
+        at.col = (u16)(r.x + depth - 1U);
+        yew_mouse_event(&ed, &at);
+        yew_draw_panes(&ed);
+        YEW_ASSERT(yew_draw_spawn_zone_rect().w > 0U);
+    }
+    yew_ed_free(&ed);
+    /* A pane too small to split offers nothing anywhere. */
+    sp_fixture_sized(&ed, 8U, (u16)(YEW_PANE_MIN_W * 2));
+    r = ed.pane_root->rect;
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                          sp_slot_x(&ed, 0), ed.tab_strip_rect.y);
+        Key at = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, r.x,
+                       (u16)(r.y + r.h - 1U));
+
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &at);
+        yew_draw_panes(&ed);
+        YEW_ASSERT_EQ_U64(yew_draw_spawn_zone_rect().w, 0U);
+    }
+    yew_ed_free(&ed);
+}
+
+/* A GROUP drag spawns nothing and shows nothing: a group is many tabs
+ * and there is no one buffer to open. */
+void test_mouse_group_drag_shows_no_spawn_affordance(void)
+{
+    Ed ed;
+    Rect r;
+    u32 g;
+    int slot;
+    u16 x;
+
+    sp_fixture(&ed);
+    g = yew_group_create(&ed, "/tmp", NULL);
+    YEW_ASSERT(g != 0U);
+    yew_group_add_member(&ed, g, 3);
+    yew_group_add_member(&ed, g, 4);
+    yew_tab_switch(&ed, 0);
+    yew_ed_layout(&ed);
+    yew_draw_panes(&ed);
+    r = ed.pane_root->rect;
+    /* The slot whose payload is the GROUP (negative by convention). */
+    slot = -1;
+    for (x = 0U; x < ed.grid.cols; x++) {
+        int s = yew_strip_slot_at(x, ed.tab_strip_rect.y);
+        i32 payload = 0;
+
+        if (s >= 0 && yew_strip_pre_payload(s, &payload) && payload < 0) {
+            slot = s;
+            break;
+        }
+    }
+    YEW_ASSERT(slot >= 0);
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                          sp_slot_x(&ed, slot), ed.tab_strip_rect.y);
+        Key at = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT,
+                       (u16)(r.x + r.w - 1U), (u16)(r.y + r.h / 2U));
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
+                       (u16)(r.x + r.w - 1U), (u16)(r.y + r.h / 2U));
+
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &at);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_DRAG_GROUP);
+        yew_draw_panes(&ed);
+        YEW_ASSERT_EQ_U64(yew_draw_spawn_zone_rect().w, 0U);
+        yew_mouse_event(&ed, &up);
+    }
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
     yew_ed_free(&ed);
 }

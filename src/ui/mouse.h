@@ -378,11 +378,24 @@ CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
  *   scrollbar nobody can aim at.  Ctrl+wheel stays unbound because it
  *   is the terminal emulator's font-size gesture.
  *
- * - DRAGGING A TAB INTO A PANE, to open it there → post-1.0.  The drag
- *   already carries its target by identity rather than by index, which
- *   is the whole preparation that feature needs — and is exactly why §4
- *   refuses to mutate Tabs.v during a drag.  Today a release over a
- *   pane cancels; proved by test_mouse_tab_dropped_on_a_pane_cancels.
+ * - DRAGGING A TAB ONTO A PANE'S EDGE → SHIPPED, Sprint 57.22.  A
+ *   release in a leaf's left, right or bottom EDGE ZONE splits that
+ *   leaf and opens the dragged tab's buffer in the new pane.  The tab
+ *   STAYS in the strip: yew's model is tabs-own-pane-trees rather than
+ *   groups-containing-tabs, so there is no group for a tab to leave,
+ *   and removing it would make a drag a destructive, un-undoable edit
+ *   (invariant 1).  Showing one buffer in two windows is already the
+ *   supported shape.  Nothing in Tabs.v moves on the way: the split
+ *   runs at RELEASE, after the drag state is torn down, and an edge
+ *   release runs INSTEAD of the strip's drop so a reorder target picked
+ *   up in passing is never also committed.
+ *
+ * - DRAGGING A TAB INTO A PANE'S INTERIOR, to open it there → still
+ *   post-1.0.  The interior release cancels exactly as it always did,
+ *   which is the narrowed half of
+ *   test_mouse_tab_dropped_on_a_pane_cancels.  The drag already carries
+ *   its target by identity rather than by index, which is the whole
+ *   preparation that feature needs.
  *
  * - F-MODE TREE MOUSE (click to expand, drag to stage) → Sprint 52,
  *   routed through THIS router and THIS registry.  F mode itself still
