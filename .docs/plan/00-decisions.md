@@ -181,6 +181,26 @@ overhead limit, and `enforcement=all` policy remain unchanged. No editor
 latency, startup, memory, size, or feature gate changes. The raw evidence is
 retained in `.docs/audits/evidence/F072-prof-crosscheck-arm64.txt`.
 
+**Amendment S59-A4 (2026-09-18) — corrected startup observation retains a
+majority-work harness bound.** `5a3ac30c` made the startup harness accept the
+legal ordering where yew paints before the terminal answers its synchronized-
+update capability query. The old observer discarded that completed frame and
+waited for a later synchronization marker, so S59-A2's 400-permille ceiling was
+calibrated against a different, late timestamp. On the pinned ARM64 runner, 50
+corrected observations measured spawn-floor fractions with p05 281, median
+370, p95 407, and maximum 424 permille. First paint measured p05 2.95 ms,
+median 3.24 ms, p95 3.98 ms, and maximum 11.62 ms; all observations remained
+inside the unchanged 20 ms product budget. A subsequent campaign stopped on
+the ordinary triplet 439, 417, and 317 permille (median 417); across its first
+twelve observations the maximum was 459 permille.
+
+The harness-validity ceiling therefore moves from 400 to 500 permille. This is
+the semantic majority-work boundary: null exec may consume at most half of the
+raw first-paint sample, so the measured editor path still accounts for at
+least half. The median-of-three verdict, `enforcement=all`, and the 20 ms
+user-facing first-paint budget remain unchanged. No editor code or feature is
+removed or weakened.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

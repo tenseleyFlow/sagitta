@@ -35,7 +35,7 @@ startup.first_paint.dumb                  le      20000000    ns                
 startup.first_paint.workspace50           le      20000000    ns                 raw         designated    deferred_tabs
 startup.first_paint.batch                 record  -           ns                 raw         informational headless_start
 startup.config_delta                      record  -           ns                 raw         informational config_crosscheck
-startup.spawn_floor_fraction              le      400         permille           none        all           harness_sanity
+startup.spawn_floor_fraction              le      500         permille           none        all           harness_sanity
 
 open.100m_code.e2e                        le      150000000   ns                 raw         designated    open_100mb
 open.100m_utf8.e2e                        le      150000000   ns                 raw         designated    open_100mb
