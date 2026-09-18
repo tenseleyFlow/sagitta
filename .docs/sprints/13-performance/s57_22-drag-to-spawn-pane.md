@@ -1,4 +1,4 @@
-# Sprint 57.21 — Drag a tab to an edge to spawn a pane
+# Sprint 57.22 — Drag a tab to an edge to spawn a pane
 
 ## The gesture
 
