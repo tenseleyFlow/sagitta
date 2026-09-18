@@ -109,6 +109,66 @@ Pane *yew_pane_split_side(Ed *ed, Pane *leaf, SplitDir dir,
  * refuses to close; Sprint 23 owns the last-pane-of-last-tab case. */
 bool yew_pane_close(Ed *ed, Pane *leaf);
 
+/*
+ * Sprint 57.22 §2: THE EDGE ZONES, and the one function that owns them.
+ *
+ * A tab dragged onto a leaf's left, right or bottom edge spawns a pane
+ * there.  Which cells are that edge, whether the edge is offered at
+ * all, and where the new pane would land are ONE answer computed here —
+ * the release's hit test and the drag's affordance both ask this, so a
+ * zone the user can see is always a zone that works.
+ *
+ *     depth = clamp(dimension / 5, 3, 12)    cells, integer division
+ *
+ * `dimension` is the leaf's content WIDTH for the left/right zones and
+ * its content HEIGHT for the bottom one.  (The enum spelling reads
+ * backwards from the gesture: a left/right zone is a YEW_SPLIT_H,
+ * side-by-side split, and it is the WIDTH that has to hold two panes.)
+ *
+ * A zone EXISTS only when yew_pane_split_side would succeed for it:
+ * the leaf cap and the same fit test the split itself asks, asked here
+ * BEFORE the zone is offered.  Left and right additionally require
+ * `2 * depth < width`, because two bands that touch leave no interior
+ * and the drop becomes unaimable.
+ *
+ * There is no top zone: the strip is up there, and a tab released
+ * upward is already the row-1 reorder gesture.
+ */
+typedef enum {
+    YEW_PANE_ZONE_NONE = 0,
+    YEW_PANE_ZONE_LEFT,
+    YEW_PANE_ZONE_RIGHT,
+    YEW_PANE_ZONE_BOTTOM
+} PaneZone;
+
+typedef struct PaneZoneHit {
+    PaneZone zone;
+    /* yew_pane_split_side's two arguments for this side. */
+    SplitDir dir;
+    bool new_first;
+    /* The cells that select the zone. */
+    Rect band;
+    /*
+     * Where the new leaf would land, computed through the SAME rounding
+     * yew_layout_compute uses — the affordance promises a rectangle and
+     * the layout has to keep the promise.
+     */
+    Rect preview;
+} PaneZoneHit;
+
+/* Exposed so the rule can be tested at its boundaries directly. */
+u16 yew_pane_zone_depth(u16 dimension);
+/*
+ * The live zone at (x, y) on `leaf`, or false when the pointer is in
+ * the leaf's interior, off it, or on an edge that is not offered.
+ *
+ * A corner belongs to the LEFT or RIGHT band: those are the two that
+ * can be refused for width, so letting them win keeps the corner's
+ * meaning the same whenever they exist at all.
+ */
+bool yew_pane_zone_at(Ed *ed, const Pane *leaf, u16 x, u16 y,
+                      PaneZoneHit *out);
+
 void yew_layout_compute(Pane *root, Rect area);
 /* NULL when (x, y) is off the tree or lands on a border. */
 Pane *yew_pane_leaf_at(Pane *root, u16 x, u16 y);

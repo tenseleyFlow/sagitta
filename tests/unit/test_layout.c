@@ -1132,3 +1132,350 @@ void test_layout_split_side_refuses_a_non_leaf(void)
                                    true) == NULL);
     yew_ed_free(&ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.22 §2: the edge zones                                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * depth = clamp(dimension / 5, 3, 12), integer division, asserted at
+ * both clamps and one either side of each.  Every other test here reads
+ * the depth back out of this function rather than restating the
+ * arithmetic, so the rule has exactly one statement in the tests too.
+ */
+void test_layout_zone_depth_clamps_at_both_ends(void)
+{
+    /* Below the low clamp: a two-cell band would be unaimable. */
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(0U), 3U);
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(14U), 3U);
+    /* 15 / 5 == 3 is the first value the formula produces itself. */
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(15U), 3U);
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(16U), 3U);
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(19U), 3U);
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(20U), 4U);
+    /* Either side of the high clamp. */
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(59U), 11U);
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(60U), 12U);
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(64U), 12U);
+    YEW_ASSERT_EQ_U64(yew_pane_zone_depth(1000U), 12U);
+}
+
+/*
+ * The bands are the edge cells and nothing else — asserted at the
+ * boundary and one cell either side of it, on both axes, because a
+ * zone one cell wide of where it is drawn is precisely the failure the
+ * one-function rule exists to prevent.
+ */
+void test_layout_zone_bands_are_the_edge_cells(void)
+{
+    Ed ed;
+    PaneZoneHit hit;
+    u16 dw;
+    u16 dh;
+    u16 mid_y;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    dw = yew_pane_zone_depth(80U);
+    dh = yew_pane_zone_depth(24U);
+    mid_y = 12U;
+
+    /* Left: the last cell in, and the first cell out. */
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, (u16)(dw - 1U), mid_y,
+                                &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_LEFT);
+    YEW_ASSERT(hit.dir == YEW_SPLIT_H);
+    YEW_ASSERT(hit.new_first);
+    YEW_ASSERT(rect_eq(hit.band, (Rect){0U, 0U, dw, 24U}));
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 0U, mid_y, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_LEFT);
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, dw, mid_y, &hit));
+
+    /* Right: the first cell in, and the last cell out. */
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, (u16)(80U - dw),
+                                mid_y, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_RIGHT);
+    YEW_ASSERT(hit.dir == YEW_SPLIT_H);
+    YEW_ASSERT(!hit.new_first);
+    YEW_ASSERT(rect_eq(hit.band, (Rect){(u16)(80U - dw), 0U, dw, 24U}));
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 79U, mid_y, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_RIGHT);
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, (u16)(80U - dw - 1U),
+                                 mid_y, &hit));
+
+    /* Bottom: the first row in, and the row above it. */
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 40U, (u16)(24U - dh),
+                                &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_BOTTOM);
+    YEW_ASSERT(hit.dir == YEW_SPLIT_V);
+    YEW_ASSERT(!hit.new_first);
+    YEW_ASSERT(rect_eq(hit.band, (Rect){0U, (u16)(24U - dh), 80U, dh}));
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 40U, 23U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_BOTTOM);
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, 40U,
+                                 (u16)(24U - dh - 1U), &hit));
+
+    /* The interior is not a zone, which is what makes an interior
+     * release still a cancel. */
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, 40U, mid_y, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_NONE);
+    /* Off the leaf entirely. */
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, 80U, mid_y, &hit));
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, 40U, 24U, &hit));
+    yew_ed_free(&ed);
+}
+
+/* A corner is in two bands at once; the side band wins, stated once in
+ * the header and pinned here. */
+void test_layout_zone_corner_belongs_to_the_side_band(void)
+{
+    Ed ed;
+    PaneZoneHit hit;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 0U, 23U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_LEFT);
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 79U, 23U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_RIGHT);
+    yew_ed_free(&ed);
+}
+
+/*
+ * THE PROMISE THE AFFORDANCE MAKES.
+ *
+ * `preview` is drawn as "the new pane goes here", so the split it
+ * describes has to land exactly there.  Each side is hit-tested, split
+ * with the hit's own dir/new_first, laid out, and the new leaf's rect
+ * compared against the rect the user was shown.
+ */
+void test_layout_zone_preview_is_where_the_split_lands(void)
+{
+    static const struct {
+        u16 x, y;
+        PaneZone zone;
+    } probes[] = {
+        {1U, 12U, YEW_PANE_ZONE_LEFT},
+        {78U, 12U, YEW_PANE_ZONE_RIGHT},
+        {40U, 23U, YEW_PANE_ZONE_BOTTOM}
+    };
+    Rect area = {0U, 0U, 80U, 24U};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(probes); i++) {
+        Ed ed;
+        PaneZoneHit hit;
+        Pane *nu;
+
+        ly_fixture(&ed);
+        yew_layout_compute(ed.pane_root, area);
+        YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, probes[i].x,
+                                    probes[i].y, &hit));
+        YEW_ASSERT(hit.zone == probes[i].zone);
+        nu = yew_pane_split_side(&ed, ed.pane_root, hit.dir,
+                                 hit.new_first);
+        YEW_ASSERT_NOT_NULL(nu);
+        yew_layout_compute(ed.pane_root, area);
+        YEW_ASSERT(rect_eq(rect_of(nu), hit.preview));
+        yew_ed_free(&ed);
+    }
+}
+
+/* A leaf one cell short of a split offers no zone on that axis — the
+ * zone asks split_fits, it does not guess. */
+void test_layout_zone_refuses_when_the_leaf_is_too_small(void)
+{
+    Ed ed;
+    PaneZoneHit hit;
+    u16 x;
+    u16 y;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2),
+                              (u16)(YEW_PANE_MIN_H * 2)});
+    for (y = 0U; y < (u16)(YEW_PANE_MIN_H * 2); y++)
+        for (x = 0U; x < (u16)(YEW_PANE_MIN_W * 2); x++)
+            YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, x, y, &hit));
+
+    /* One cell wider and one taller, both sides come back — the
+     * refusal above was the boundary, not a blanket no. */
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2 + 1),
+                              (u16)(YEW_PANE_MIN_H * 2 + 1)});
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 0U, 0U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_LEFT);
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root,
+                                (u16)(YEW_PANE_MIN_W * 2), 0U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_RIGHT);
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, YEW_PANE_MIN_W,
+                                (u16)(YEW_PANE_MIN_H * 2), &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_BOTTOM);
+    yew_ed_free(&ed);
+}
+
+/*
+ * Only one axis can be too small at a time, and the zones follow the
+ * axis that is: a leaf tall enough to stack but too narrow to sit side
+ * by side offers the bottom band alone.
+ */
+void test_layout_zone_follows_the_axis_that_fits(void)
+{
+    Ed ed;
+    PaneZoneHit hit;
+
+    ly_fixture(&ed);
+    /* Too narrow for a side-by-side split, tall enough to stack. */
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2), 24U});
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, 0U, 12U, &hit));
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root,
+                                 (u16)(YEW_PANE_MIN_W * 2 - 1U), 12U,
+                                 &hit));
+    /* The corner too: with no side band to win it, it is the bottom's. */
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 0U, 23U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_BOTTOM);
+
+    /* Wide enough to split, too short to stack. */
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, 80U, (u16)(YEW_PANE_MIN_H * 2)});
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 0U, 5U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_LEFT);
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, 40U, 5U, &hit));
+    yew_ed_free(&ed);
+}
+
+/*
+ * The two side bands may never touch: `2 * depth < width` or neither is
+ * offered.  Swept across every width a split fits at, because the rule
+ * is a guard rather than a case — with MIN_W at 12 a split needs 25
+ * columns and the bands are a fifth of the width each, so the FIT test
+ * always refuses first.  The sweep says so out loud instead of leaving
+ * a reader to wonder which of the two rules did the work.
+ */
+void test_layout_zone_side_bands_never_touch(void)
+{
+    Ed ed;
+    u16 w;
+
+    ly_fixture(&ed);
+    for (w = 1U; w <= 200U; w++) {
+        PaneZoneHit lo;
+        PaneZoneHit hi;
+        bool fits = w >= (u16)(YEW_PANE_MIN_W * 2 + 1);
+        u16 depth = yew_pane_zone_depth(w);
+
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, w, 24U});
+        YEW_ASSERT_EQ_U64(yew_pane_zone_at(&ed, ed.pane_root, 0U, 12U,
+                                           &lo) ? 1U : 0U,
+                          fits ? 1U : 0U);
+        YEW_ASSERT_EQ_U64(yew_pane_zone_at(&ed, ed.pane_root,
+                                           (u16)(w - 1U), 12U, &hi)
+                              ? 1U
+                              : 0U,
+                          fits ? 1U : 0U);
+        if (!fits)
+            continue;
+        YEW_ASSERT(lo.zone == YEW_PANE_ZONE_LEFT);
+        YEW_ASSERT(hi.zone == YEW_PANE_ZONE_RIGHT);
+        /* Disjoint, with interior left between them. */
+        YEW_ASSERT((u32)depth * 2U < (u32)w);
+        YEW_ASSERT(lo.band.x + lo.band.w <= hi.band.x);
+    }
+    yew_ed_free(&ed);
+}
+
+/* At the leaf cap every zone goes away, on a leaf with room to spare:
+ * the zone asks the cap the split asks, before offering anything. */
+void test_layout_zone_refuses_at_the_leaf_cap(void)
+{
+    Ed ed;
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
+    u32 count = 0U;
+    Rect area = {0U, 0U, 200U, 200U};
+    PaneZoneHit hit;
+    u32 i;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, area);
+    while (yew_pane_leaf_count(ed.pane_root) <
+           (u32)YEW_PANE_MAX_LEAVES) {
+        u32 tallest = 0U;
+
+        count = 0U;
+        yew_pane_collect_leaves(ed.pane_root, leaves,
+                                YEW_ARRAY_LEN(leaves), &count);
+        for (i = 1U; i < count; i++)
+            if (leaves[i]->rect.h > leaves[tallest]->rect.h)
+                tallest = i;
+        YEW_ASSERT_NOT_NULL(yew_pane_split_side(&ed, leaves[tallest],
+                                                YEW_SPLIT_V, false));
+        yew_layout_compute(ed.pane_root, area);
+    }
+    count = 0U;
+    yew_pane_collect_leaves(ed.pane_root, leaves, YEW_ARRAY_LEN(leaves),
+                            &count);
+    YEW_ASSERT_EQ_U64(count, (u64)YEW_PANE_MAX_LEAVES);
+    /* Room to spare on this leaf; the CAP is what refuses. */
+    YEW_ASSERT(leaves[0]->rect.w >= (u16)(YEW_PANE_MIN_W * 2 + 1));
+    for (i = 0U; i < count; i++) {
+        Rect r = leaves[i]->rect;
+        u16 x;
+        u16 y;
+
+        for (y = r.y; y < (u16)(r.y + r.h); y++)
+            for (x = r.x; x < (u16)(r.x + r.w); x++)
+                YEW_ASSERT(!yew_pane_zone_at(&ed, leaves[i], x, y, &hit));
+    }
+    yew_ed_free(&ed);
+}
+
+/*
+ * In a multi-pane tab the bands belong to the LEAF, not to the screen:
+ * the right leaf's left band starts at its own left edge, mid-screen.
+ */
+void test_layout_zone_bands_are_per_leaf(void)
+{
+    Ed ed;
+    PaneZoneHit hit;
+    Rect area = {0U, 0U, 80U, 24U};
+    Pane *right;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, area);
+    right = yew_pane_split_side(&ed, ed.pane_root, YEW_SPLIT_H, false);
+    YEW_ASSERT_NOT_NULL(right);
+    yew_layout_compute(ed.pane_root, area);
+    YEW_ASSERT(right->rect.x > 0U);
+    YEW_ASSERT(yew_pane_zone_at(&ed, right, right->rect.x, 12U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_LEFT);
+    YEW_ASSERT(hit.band.x == right->rect.x);
+    /* And the cells to its left are the OTHER leaf's, not its own. */
+    YEW_ASSERT(!yew_pane_zone_at(&ed, right, (u16)(right->rect.x - 1U),
+                                 12U, &hit));
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root->a,
+                                (u16)(right->rect.x - 2U), 12U, &hit));
+    YEW_ASSERT(hit.zone == YEW_PANE_ZONE_RIGHT);
+    yew_ed_free(&ed);
+}
+
+/* A NULL editor, a NULL leaf and a split node are refusals, not
+ * crashes: the gesture resolves its leaf from a region payload that a
+ * later frame may no longer have. */
+void test_layout_zone_refuses_a_non_leaf(void)
+{
+    Ed ed;
+    PaneZoneHit hit;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(!yew_pane_zone_at(NULL, ed.pane_root, 1U, 1U, &hit));
+    YEW_ASSERT(!yew_pane_zone_at(&ed, NULL, 1U, 1U, &hit));
+    /* No out parameter is legal too — the hit test asks "is there one"
+     * before it asks "which". */
+    YEW_ASSERT(yew_pane_zone_at(&ed, ed.pane_root, 1U, 1U, NULL));
+    YEW_ASSERT_NOT_NULL(yew_pane_split_side(&ed, ed.pane_root,
+                                            YEW_SPLIT_H, false));
+    YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, 1U, 1U, &hit));
+    yew_ed_free(&ed);
+}

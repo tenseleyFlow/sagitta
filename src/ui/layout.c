@@ -276,6 +276,120 @@ Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
     return yew_pane_split_side(ed, leaf, dir, false);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.22 §2: the edge zones                                  */
+/* ---------------------------------------------------------------- */
+
+u16 yew_pane_zone_depth(u16 dimension)
+{
+    u16 d = (u16)(dimension / 5U);
+
+    if (d < 3U)
+        return 3U;
+    if (d > 12U)
+        return 12U;
+    return d;
+}
+
+/*
+ * Could this leaf be split on `dir` AT ALL, right now?
+ *
+ * The same two questions yew_pane_split_side asks, in the same order,
+ * so the zone and the split cannot disagree about what is possible.
+ * Asked here rather than copied: a zone the user can see must be a zone
+ * that works.
+ */
+static bool zone_split_possible(Ed *ed, const Pane *leaf, SplitDir dir)
+{
+    if (ed == NULL || leaf == NULL || !leaf->is_leaf)
+        return false;
+    if (yew_pane_leaf_count(yew_ed_pane_root(ed)) >=
+        (u32)YEW_PANE_MAX_LEAVES)
+        return false;
+    return split_fits(leaf, dir);
+}
+
+/*
+ * Where the new leaf lands, through split_cells — THE rounding site the
+ * layout itself uses.  A preview that rounded on its own would be a
+ * cell off from the pane it promised on every odd span.
+ */
+static Rect zone_preview(const Pane *leaf, SplitDir dir, bool new_first)
+{
+    Rect r = leaf->rect;
+
+    if (dir == YEW_SPLIT_H) {
+        u16 aw = split_cells(r.w, 0.5f, YEW_PANE_MIN_W, YEW_PANE_MIN_W);
+
+        if (new_first)
+            return (Rect){r.x, r.y, aw, r.h};
+        return (Rect){(u16)(r.x + aw + 1U), r.y, (u16)(r.w - aw - 1U),
+                      r.h};
+    }
+    {
+        u16 ah = split_cells(r.h, 0.5f, YEW_PANE_MIN_H, YEW_PANE_MIN_H);
+
+        if (new_first)
+            return (Rect){r.x, r.y, r.w, ah};
+        return (Rect){r.x, (u16)(r.y + ah + 1U), r.w,
+                      (u16)(r.h - ah - 1U)};
+    }
+}
+
+static void zone_fill(PaneZoneHit *out, const Pane *leaf, PaneZone zone,
+                      Rect band)
+{
+    out->zone = zone;
+    out->dir = zone == YEW_PANE_ZONE_BOTTOM ? YEW_SPLIT_V : YEW_SPLIT_H;
+    out->new_first = zone == YEW_PANE_ZONE_LEFT;
+    out->band = band;
+    out->preview = zone_preview(leaf, out->dir, out->new_first);
+}
+
+bool yew_pane_zone_at(Ed *ed, const Pane *leaf, u16 x, u16 y,
+                      PaneZoneHit *out)
+{
+    PaneZoneHit hit;
+    Rect r;
+
+    if (out != NULL)
+        (void)memset(out, 0, sizeof(*out));
+    if (ed == NULL || leaf == NULL || !leaf->is_leaf)
+        return false;
+    r = leaf->rect;
+    if (!rect_contains(r, x, y))
+        return false;
+    (void)memset(&hit, 0, sizeof(hit));
+    if (zone_split_possible(ed, leaf, YEW_SPLIT_H)) {
+        u16 depth = yew_pane_zone_depth(r.w);
+
+        /* Two bands that meet leave no interior to cancel in, so a leaf
+         * this narrow is offered neither of them. */
+        if ((u32)depth * 2U < (u32)r.w) {
+            if (x < (u32)r.x + depth)
+                zone_fill(&hit, leaf, YEW_PANE_ZONE_LEFT,
+                          (Rect){r.x, r.y, depth, r.h});
+            else if ((u32)x >= (u32)r.x + r.w - depth)
+                zone_fill(&hit, leaf, YEW_PANE_ZONE_RIGHT,
+                          (Rect){(u16)(r.x + r.w - depth), r.y, depth,
+                                 r.h});
+        }
+    }
+    if (hit.zone == YEW_PANE_ZONE_NONE &&
+        zone_split_possible(ed, leaf, YEW_SPLIT_V)) {
+        u16 depth = yew_pane_zone_depth(r.h);
+
+        if ((u32)y >= (u32)r.y + r.h - depth)
+            zone_fill(&hit, leaf, YEW_PANE_ZONE_BOTTOM,
+                      (Rect){r.x, (u16)(r.y + r.h - depth), r.w, depth});
+    }
+    if (hit.zone == YEW_PANE_ZONE_NONE)
+        return false;
+    if (out != NULL)
+        *out = hit;
+    return true;
+}
+
 bool yew_pane_close(Ed *ed, Pane *leaf)
 {
     Pane *parent;
