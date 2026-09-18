@@ -19,7 +19,7 @@ CmdStatus yew_pane_cmd_focus_prev(CmdCtx *cx);
 CmdStatus yew_pane_cmd_grow(CmdCtx *cx);
 CmdStatus yew_pane_cmd_shrink(CmdCtx *cx);
 /*
- * Sprint 57.21 §5: open a TAB's buffer in a new pane on a chosen side.
+ * Sprint 57.22 §5: open a TAB's buffer in a new pane on a chosen side.
  *
  * The keyboard half of the drag-to-spawn gesture, and the function the
  * gesture itself calls at release — one implementation, so the pointer

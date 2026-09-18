@@ -116,7 +116,7 @@ CmdStatus yew_pane_cmd_split_v(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.21 §5: open a tab's buffer in a new pane on a chosen side.
+ * Sprint 57.22 §5: open a tab's buffer in a new pane on a chosen side.
  *
  * ONE implementation for the keyboard commands, the tab menu's rows and
  * the drag gesture's release, because a pointer path and a keyboard

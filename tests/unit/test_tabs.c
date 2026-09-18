@@ -1071,7 +1071,7 @@ void test_tabs_open_split_refuses_when_there_is_no_room(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.21 §5: ed.tab.split_left / _right / _down              */
+/* Sprint 57.22 §5: ed.tab.split_left / _right / _down              */
 /* ---------------------------------------------------------------- */
 
 /*

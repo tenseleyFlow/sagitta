@@ -138,7 +138,7 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
 
     /* CTXA_TAB_NEW          */ {"ed.tab.new", CTX_TGT_NONE, 0},
     /*
-     * Sprint 57.21 §5: the SIDED commands, not the axis-named pair.
+     * Sprint 57.22 §5: the SIDED commands, not the axis-named pair.
      *
      * `ed.tab.open_split_h` means "split on the horizontal axis and put
      * the clone wherever yew_pane_split puts it", which happens to be

@@ -90,7 +90,7 @@ void yew_pane_free(Ed *ed, Pane *p);
  */
 Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir);
 /*
- * Sprint 57.21 §3: the same split with a SIDE.
+ * Sprint 57.22 §3: the same split with a SIDE.
  *
  * `new_first` puts the new leaf in child `a` — the LEFT of a
  * side-by-side split, the TOP of a stacked one — and `false` is

@@ -386,7 +386,7 @@ void test_ctxrows_tab_rows_match_the_contract(void)
     YEW_ASSERT_EQ_U64(cr_priority("Open in Split Left"), 3U);
     YEW_ASSERT_EQ_U64(cr_priority("Open in Split Below"), 3U);
     /*
-     * Sprint 57.21 §5: the three rows are the three SIDES of the drag
+     * Sprint 57.22 §5: the three rows are the three SIDES of the drag
      * gesture, and each one names the sided command rather than the
      * axis-named pair that could not express `left` at all.
      */

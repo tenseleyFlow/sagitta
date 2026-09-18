@@ -907,7 +907,7 @@ void test_layout_close_repairs_focus_on_the_freed_sibling(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Sprint 57.21 §3: yew_pane_split_side                             */
+/* Sprint 57.22 §3: yew_pane_split_side                             */
 /* ---------------------------------------------------------------- */
 
 /*

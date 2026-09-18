@@ -514,7 +514,7 @@ static const RtDenied denied[] = {
     D("ed.git.open_split_h", "requires live F-mode layout state"),
     D("ed.git.open_split_v", "requires live F-mode layout state"),
     D("ed.git.diff.view", "requires live Git workspace and layout state"),
-    /* Sprint 57.21 §5: a split needs a laid-out pane tree with room in
+    /* Sprint 57.22 §5: a split needs a laid-out pane tree with room in
      * it, which the property envelope's single scratch window is not. */
     D("ed.tab.split_left", "requires live tab and layout state"),
     D("ed.tab.split_right", "requires live tab and layout state"),

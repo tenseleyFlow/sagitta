@@ -795,7 +795,7 @@ void test_invariant9_every_new_command_is_registered(void)
         "ed.sel.all",
         "ed.tab.open_split_h", "ed.tab.open_split_v",
         /*
-         * Sprint 57.21 §5: the three sides of the drag-to-spawn
+         * Sprint 57.22 §5: the three sides of the drag-to-spawn
          * gesture.  The gesture is mouse-only by nature, so the
          * CAPABILITY it adds ships with a command per side or it fails
          * invariant 9 outright.
@@ -826,7 +826,7 @@ void test_invariant9_every_new_command_is_registered(void)
 }
 
 /*
- * Sprint 57.21 §5: the drag-to-spawn gesture's keyboard reach.
+ * Sprint 57.22 §5: the drag-to-spawn gesture's keyboard reach.
  *
  * The gesture itself is mouse-only by nature, so what invariant 9 asks
  * for is that the CAPABILITY — open this tab's buffer in a new pane on

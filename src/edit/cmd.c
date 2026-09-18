@@ -811,7 +811,7 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN,
      "Open the active tab's buffer in a vertical split", NULL},
     /*
-     * Sprint 57.21 §5: the keyboard reach for drag-to-spawn-a-pane.
+     * Sprint 57.22 §5: the keyboard reach for drag-to-spawn-a-pane.
      *
      * The gesture is mouse-only by nature, so invariant 9 requires the
      * CAPABILITY — "open this tab beside/below the pane I am in" — to
@@ -1444,7 +1444,7 @@ static bool command_name_valid(const char *name)
         "text", "undo", "redo", "escape", "add", "above", "below", "center",
         "message_expand", "split_h", "split_v", "open_split_h",
         "open_split_v", "record", "stop", "name",
-        /* Sprint 57.21 §5 */
+        /* Sprint 57.22 §5 */
         "split_left", "split_right", "split_down",
         "replay", "replay_last", "stage", "map",
         "first_nonblank", "last_nonblank", "half_page_up", "half_page_down",
