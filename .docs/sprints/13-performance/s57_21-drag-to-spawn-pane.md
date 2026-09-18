@@ -7,9 +7,14 @@ pane. The pane splits and the new leaf opens the DRAGGED tab's buffer.
 
 | Release zone | Split | New pane lands |
 |---|---|---|
-| right edge  | `SPLIT_V` | right |
-| left edge   | `SPLIT_V` | left  |
-| bottom edge | `SPLIT_H` | below |
+| right edge  | `YEW_SPLIT_H` | right (`new_first = false`) |
+| left edge   | `YEW_SPLIT_H` | left  (`new_first = true`)  |
+| bottom edge | `YEW_SPLIT_V` | below (`new_first = false`) |
+
+Note the enum spelling, which reads backwards from the gesture:
+`YEW_SPLIT_H` is SIDE BY SIDE with a border column, `YEW_SPLIT_V` is
+STACKED with a border row (`ui/layout.h:32`). An earlier draft of this
+contract had the two swapped.
 
 No top edge: the strip is there, and a tab released upward is already
 the row-1 reorder gesture.
