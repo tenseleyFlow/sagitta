@@ -272,6 +272,15 @@ of the 30 aggregate runs would violate the configured absolute gate. This
 also makes a stable zero-valued share an honest passing observation rather
 than an undefined relative ratio.
 
+An interrupted campaign may be continued with
+`make perf-noise PERF_NOISE_RESUME=build/perf-noise/campaign-N ...` after
+the failure has been investigated. Resumption is fail-closed: the source
+commit, runner and ISA, kernel release, reference and baseline paths and
+hashes, run count, threshold, clean checkout, and starting calibration must
+still match. Completed logs must be contiguous and nonempty. A failed
+temporary log is retained, a fresh attempt gets a distinct temporary path,
+and only 30 successful quick+huge logs reach the analyzer.
+
 The bootstrap order on each pinned host is:
 
 1. Quiesce unrelated workloads and record the governor and all metadata named

@@ -12,6 +12,7 @@ runner_id=${PERF_RUNNER_ID:-}
 reference=${CALIB_REFERENCE:-}
 baseline=${PERF_BASELINE:-}
 budgets=${PERF_BUDGETS:-tests/perf/budgets.txt}
+resume=${PERF_NOISE_RESUME:-}
 runs=30
 
 die()
@@ -40,6 +41,13 @@ check_calibration()
         die "calibration did not enter GATING mode: $file"
     scale=$(field "$file" scale_permille)
     case $scale in ''|*[!0-9]*|0) die "invalid calibration scale: $file" ;; esac
+}
+
+require_manifest_field()
+{
+    actual=$(field "$manifest" "$1")
+    [ "$actual" = "$2" ] ||
+        die "resume manifest $1 mismatch: expected $2, got ${actual:-<missing>}"
 }
 
 cd "$repo"
@@ -78,33 +86,78 @@ baseline_sha=$($sha256_bin "$baseline" | awk '{ print $1 }')
 [ -n "$reference_sha" ] && [ -n "$baseline_sha" ] ||
     die 'cannot hash designated inputs'
 
-campaign=$build/perf-noise/campaign-$$
-mkdir -p "$campaign"
-manifest=$campaign/manifest.txt
-{
-    echo '# yew perf noise evidence v1'
-    echo "source_commit $source_commit"
-    echo "runner_id $runner_id"
-    echo "arch $arch"
-    echo "kernel_release $($uname_bin -r)"
-    echo "reference $reference"
-    echo "reference_sha256 $reference_sha"
-    echo "baseline $baseline"
-    echo "baseline_sha256 $baseline_sha"
-    echo "runs $runs"
-    echo 'relative_threshold_permille 100'
-    echo "started_utc $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} >"$manifest"
-before=$campaign/calib-before.txt
+kernel_release=$($uname_bin -r)
+if [ -n "$resume" ]; then
+    campaign=$resume
+    [ "$(dirname -- "$campaign")" = "$build/perf-noise" ] &&
+    case $(basename -- "$campaign") in campaign-*) true ;; *) false ;; esac ||
+        die 'PERF_NOISE_RESUME must name a generated campaign in BUILD/perf-noise'
+    manifest=$campaign/manifest.txt
+    [ -f "$manifest" ] || die "resume manifest is missing: $manifest"
+    # YEW-F-072: an interrupted designated campaign may resume only when
+    # every input that gives its observations meaning is byte-identical.
+    require_manifest_field source_commit "$source_commit"
+    require_manifest_field runner_id "$runner_id"
+    require_manifest_field arch "$arch"
+    require_manifest_field kernel_release "$kernel_release"
+    require_manifest_field reference "$reference"
+    require_manifest_field reference_sha256 "$reference_sha"
+    require_manifest_field baseline "$baseline"
+    require_manifest_field baseline_sha256 "$baseline_sha"
+    require_manifest_field runs "$runs"
+    require_manifest_field relative_threshold_permille 100
+    before=$campaign/calib-before.txt
+    [ -f "$before" ] || die "resume calibration is missing: $before"
+    check_calibration "$before"
+    before_scale=$scale
+else
+    campaign=$build/perf-noise/campaign-$$
+    mkdir -p "$campaign"
+    manifest=$campaign/manifest.txt
+    {
+        echo '# yew perf noise evidence v1'
+        echo "source_commit $source_commit"
+        echo "runner_id $runner_id"
+        echo "arch $arch"
+        echo "kernel_release $kernel_release"
+        echo "reference $reference"
+        echo "reference_sha256 $reference_sha"
+        echo "baseline $baseline"
+        echo "baseline_sha256 $baseline_sha"
+        echo "runs $runs"
+        echo 'relative_threshold_permille 100'
+        echo "started_utc $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } >"$manifest"
+    before=$campaign/calib-before.txt
+    measure "$before"
+    check_calibration "$before"
+    before_scale=$scale
+fi
 after=$campaign/calib-after.txt
-measure "$before"
-check_calibration "$before"
-before_scale=$scale
 
 run=1
+while [ "$run" -le "$runs" ] && [ -f "$campaign/run-$run.log" ]; do
+    [ -s "$campaign/run-$run.log" ] ||
+        die "completed run is empty: $campaign/run-$run.log"
+    run=$((run + 1))
+done
+probe=$((run + 1))
+while [ "$probe" -le "$runs" ]; do
+    [ ! -e "$campaign/run-$probe.log" ] ||
+        die "resume campaign has a gap before run $probe"
+    probe=$((probe + 1))
+done
+if [ -n "$resume" ]; then
+    echo "resumed_utc $(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$manifest"
+fi
 while [ "$run" -le "$runs" ]; do
     log=$campaign/run-$run.log
     temporary=$log.tmp
+    attempt=1
+    while [ -e "$temporary" ]; do
+        temporary=$log.tmp.$attempt
+        attempt=$((attempt + 1))
+    done
     echo "perf-noise: run $run/$runs"
     if PERF_GATE=0 PERF_S56_EVALUATE=1 \
        "$make_bin" --no-print-directory perf BUILD="$build" \

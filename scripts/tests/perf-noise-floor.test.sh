@@ -159,6 +159,18 @@ case $target in
         } >"$output"
         ;;
     perf)
+        if [ -n "${FAKE_PERF_COUNT:-}" ]; then
+            count=0
+            if [ -f "$FAKE_PERF_COUNT" ]; then
+                count=$(sed -n '1p' "$FAKE_PERF_COUNT")
+            fi
+            count=$((count + 1))
+            echo "$count" >"$FAKE_PERF_COUNT"
+            if [ "${FAKE_FAIL_PERF_AT:-0}" -eq "$count" ]; then
+                echo "seeded perf failure $count"
+                exit 42
+            fi
+        fi
         echo 'perf-gate: latency.le median=100 absolute_over=0/3 relative_over=0/3 PASS'
         echo 'perf-gate: throughput.ge median=100 absolute_over=0/3 relative_over=0/3 PASS'
         echo 'perf-gate: quantized.absolute median=1 absolute_over=0/3 relative_over=0/3 PASS'
@@ -190,6 +202,77 @@ grep -F 'reference_sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     "$1" >/dev/null || fail 'report omitted reference provenance'
 grep -F 'baseline_sha256 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
     "$1" >/dev/null || fail 'report omitted baseline provenance'
+
+resume_build=$scratch/resume-build
+resume_count=$scratch/resume-count
+set +e
+FAKE_PERF_COUNT=$resume_count FAKE_FAIL_PERF_AT=3 \
+BUILD=$resume_build PERF_RUNNER_ID=perf-x86_64-linux-gnu \
+CALIB_REFERENCE=$scratch/reference PERF_BASELINE=$scratch/baseline \
+PERF_BUDGETS=$scratch/budgets YEW_PERF_UNAME=$scratch/uname \
+YEW_PERF_GIT=$scratch/git YEW_PERF_SHA256=$scratch/sha256sum \
+    "$runner" "$scratch/make" >"$scratch/resume-first.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 42 ] || fail 'seeded interrupted campaign did not fail'
+set -- "$resume_build"/perf-noise/campaign-*
+[ "$#" -eq 1 ] || fail 'interrupted campaign directory is ambiguous'
+resume_campaign=$1
+[ -s "$resume_campaign/run-1.log" ] &&
+[ -s "$resume_campaign/run-2.log" ] &&
+[ -s "$resume_campaign/run-3.log.tmp" ] ||
+    fail 'interrupted campaign did not retain its evidence'
+FAKE_PERF_COUNT=$resume_count BUILD=$resume_build \
+PERF_NOISE_RESUME=$resume_campaign \
+PERF_RUNNER_ID=perf-x86_64-linux-gnu CALIB_REFERENCE=$scratch/reference \
+PERF_BASELINE=$scratch/baseline PERF_BUDGETS=$scratch/budgets \
+YEW_PERF_UNAME=$scratch/uname YEW_PERF_GIT=$scratch/git \
+YEW_PERF_SHA256=$scratch/sha256sum \
+    "$runner" "$scratch/make" >"$scratch/resume-second.out" ||
+    fail 'matching interrupted campaign did not resume'
+[ "$(sed -n '1p' "$resume_count")" -eq 31 ] ||
+    fail 'resume reran completed observations'
+[ -s "$resume_campaign/run-3.log.tmp" ] &&
+[ -s "$resume_campaign/run-3.log" ] ||
+    fail 'resume did not preserve the failed attempt beside its replacement'
+set -- "$resume_campaign"/run-*.log
+[ "$#" -eq 30 ] || fail 'resumed campaign did not retain exactly 30 logs'
+grep -F 'resumed_utc ' "$resume_campaign/manifest.txt" >/dev/null ||
+    fail 'resume event is absent from the manifest'
+grep -F 'metrics=4 runs=30 failures=0' "$scratch/resume-second.out" \
+    >/dev/null || fail 'resumed campaign did not analyze its logs'
+
+cp "$resume_campaign/manifest.txt" "$scratch/resume-manifest.good"
+sed 's/^source_commit .*/source_commit ffffffffffffffffffffffffffffffffffffffff/' \
+    "$scratch/resume-manifest.good" >"$resume_campaign/manifest.txt"
+set +e
+BUILD=$resume_build PERF_NOISE_RESUME=$resume_campaign \
+PERF_RUNNER_ID=perf-x86_64-linux-gnu CALIB_REFERENCE=$scratch/reference \
+PERF_BASELINE=$scratch/baseline PERF_BUDGETS=$scratch/budgets \
+YEW_PERF_UNAME=$scratch/uname YEW_PERF_GIT=$scratch/git \
+YEW_PERF_SHA256=$scratch/sha256sum \
+    "$runner" "$scratch/make" >"$scratch/resume-mismatch.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail 'resume accepted a different source commit'
+grep -F 'resume manifest source_commit mismatch' \
+    "$scratch/resume-mismatch.out" >/dev/null ||
+    fail 'resume source mismatch was not diagnosed'
+cp "$scratch/resume-manifest.good" "$resume_campaign/manifest.txt"
+mv "$resume_campaign/run-2.log" "$resume_campaign/run-2.saved"
+set +e
+BUILD=$resume_build PERF_NOISE_RESUME=$resume_campaign \
+PERF_RUNNER_ID=perf-x86_64-linux-gnu CALIB_REFERENCE=$scratch/reference \
+PERF_BASELINE=$scratch/baseline PERF_BUDGETS=$scratch/budgets \
+YEW_PERF_UNAME=$scratch/uname YEW_PERF_GIT=$scratch/git \
+YEW_PERF_SHA256=$scratch/sha256sum \
+    "$runner" "$scratch/make" >"$scratch/resume-gap.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail 'resume accepted a gap in completed runs'
+grep -F 'resume campaign has a gap before run 3' \
+    "$scratch/resume-gap.out" >/dev/null ||
+    fail 'resume log gap was not diagnosed'
 
 set +e
 FAKE_ARCH=arm64 BUILD=$scratch/mismatch \

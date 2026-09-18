@@ -3381,6 +3381,7 @@ perf-update:
 perf-noise:
 	BUILD='$(BUILD)' PERF_RUNNER_ID='$(PERF_RUNNER_ID)' \
 		PERF_BASELINE='$(PERF_BASELINE)' \
+		PERF_NOISE_RESUME='$(PERF_NOISE_RESUME)' \
 		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
 		scripts/run-perf-noise.sh '$(MAKE)'
 
