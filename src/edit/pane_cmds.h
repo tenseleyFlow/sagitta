@@ -18,6 +18,30 @@ CmdStatus yew_pane_cmd_focus_next(CmdCtx *cx);
 CmdStatus yew_pane_cmd_focus_prev(CmdCtx *cx);
 CmdStatus yew_pane_cmd_grow(CmdCtx *cx);
 CmdStatus yew_pane_cmd_shrink(CmdCtx *cx);
+/*
+ * Sprint 57.21 §5: open a TAB's buffer in a new pane on a chosen side.
+ *
+ * The keyboard half of the drag-to-spawn gesture, and the function the
+ * gesture itself calls at release — one implementation, so the pointer
+ * and the keyboard cannot drift into meaning different things.
+ *
+ * `tab_id`, never an index: the strip scrolls and tabs close, and an
+ * index captured a moment ago names a different file afterwards.
+ * `leaf` is the leaf to split, or NULL for the focused one.  `dir` and
+ * `new_first` are yew_pane_split_side's, so LEFT is
+ * (YEW_SPLIT_H, true), RIGHT is (YEW_SPLIT_H, false) and BELOW is
+ * (YEW_SPLIT_V, false).
+ *
+ * On success the new leaf takes focus and `*out` receives it; `out` may
+ * be NULL.  A refusal messages exactly as the commands do and leaves
+ * the layout as it was.
+ */
+CmdStatus yew_pane_open_tab_in_split(Ed *ed, u32 tab_id, Pane *leaf,
+                                     SplitDir dir, bool new_first,
+                                     Pane **out);
+CmdStatus yew_pane_cmd_tab_split_left(CmdCtx *cx);
+CmdStatus yew_pane_cmd_tab_split_right(CmdCtx *cx);
+CmdStatus yew_pane_cmd_tab_split_down(CmdCtx *cx);
 void yew_pane_refocus(Ed *ed, Pane *want);
 
 /*

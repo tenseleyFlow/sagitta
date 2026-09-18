@@ -115,6 +115,121 @@ CmdStatus yew_pane_cmd_split_v(CmdCtx *cx)
     return pane_split(cx, YEW_SPLIT_V);
 }
 
+/*
+ * Sprint 57.21 §5: open a tab's buffer in a new pane on a chosen side.
+ *
+ * ONE implementation for the keyboard commands, the tab menu's rows and
+ * the drag gesture's release, because a pointer path and a keyboard
+ * path that split separately drift — and the drift shows up as "the
+ * mouse opens the file, the menu opens the scratch view".
+ *
+ * The buffer comes from the TAB, not from the focused pane.  They are
+ * usually the same, but a pane can be parked on a job's output or a
+ * diff while the tab still owns the file, and "open this tab in a
+ * split" then has to mean the file or the new pane is a second copy of
+ * the scratch the user was trying to get away from.
+ *
+ * yew_pane_split_side clones the focused Win, so the new leaf starts on
+ * the SPLIT leaf's buffer; yew_ed_win_set_buffer then points it at the
+ * tab's.  Two panes on one buffer is the supported shape (the tab model
+ * forbids two TABS on one path, not two views).
+ */
+CmdStatus yew_pane_open_tab_in_split(Ed *ed, u32 tab_id, Pane *leaf,
+                                     SplitDir dir, bool new_first,
+                                     Pane **out)
+{
+    const Tab *tab;
+    Buffer *buffer;
+    Pane *nu;
+    int idx;
+
+    if (out != NULL)
+        *out = NULL;
+    if (ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    if (leaf == NULL)
+        leaf = ed->focus;
+    if (leaf == NULL || !leaf->is_leaf)
+        return YEW_CMD_ERR_STATE;
+    idx = yew_tab_index_of_id(ed, tab_id);
+    tab = yew_tab_at(ed, idx);
+    if (tab == NULL)
+        return YEW_CMD_ERR_STATE;
+    /*
+     * `buffer_id`, not yew_tab_buffer(): the latter answers "what is
+     * this tab's focused pane showing", which is the very thing a
+     * parked scratch view makes wrong.  buffer_id is the stable handle
+     * the tab was opened on.
+     */
+    buffer = yew_ws_buf_by_id(ed, tab->buffer_id);
+    if (buffer == NULL)
+        return YEW_CMD_ERR_STATE;
+    /* Deferred tabs carry no text until something asks; a split that
+     * showed an empty buffer would look like a truncated file. */
+    if (yew_buf_hydrate(ed, buffer) != 0) {
+        yew_msg(ed, YEW_MSG_ERROR, "could not read %s",
+                tab->path != NULL ? tab->path : "untitled");
+        return YEW_CMD_ERR_IO;
+    }
+    nu = yew_pane_split_side(ed, leaf, dir, new_first);
+    if (nu == NULL) {
+        /* A refusal, not a failure to clamp.  The message says which of
+         * the two reasons it was, because "no room" and "too many
+         * panes" call for different responses from the user. */
+        if (yew_pane_leaf_count(ed->pane_root) >=
+            (u32)YEW_PANE_MAX_LEAVES)
+            yew_msg(ed, YEW_MSG_ERROR, "too many panes (max %d)",
+                    YEW_PANE_MAX_LEAVES);
+        else
+            yew_msg(ed, YEW_MSG_ERROR, "no room to split");
+        return YEW_CMD_ERR_STATE;
+    }
+    yew_ed_win_set_buffer(ed, nu->win, buffer);
+    /* The new pane takes focus, which is what makes this "open a view
+     * here" rather than "rearrange the screen". */
+    pane_refocus(ed, nu);
+    if (out != NULL)
+        *out = nu;
+    return YEW_CMD_OK;
+}
+
+/*
+ * The command spelling acts on the ACTIVE tab.  The menu rows are
+ * CTX_TGT_TAB, which switches to the tab that was pointed at before the
+ * command runs, so "a chosen tab" and "the active tab" are the same
+ * sentence by the time it gets here — and the palette spelling then
+ * means the obvious thing.
+ */
+static CmdStatus tab_split(CmdCtx *cx, SplitDir dir, bool new_first)
+{
+    Ed *ed;
+    const Tab *tab;
+
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    tab = yew_tab_at(ed, ed->tabs.active);
+    if (tab == NULL)
+        return YEW_CMD_ERR_STATE;
+    return yew_pane_open_tab_in_split(ed, tab->tab_id, ed->focus, dir,
+                                      new_first, NULL);
+}
+
+CmdStatus yew_pane_cmd_tab_split_left(CmdCtx *cx)
+{
+    return tab_split(cx, YEW_SPLIT_H, true);
+}
+
+CmdStatus yew_pane_cmd_tab_split_right(CmdCtx *cx)
+{
+    return tab_split(cx, YEW_SPLIT_H, false);
+}
+
+CmdStatus yew_pane_cmd_tab_split_down(CmdCtx *cx)
+{
+    return tab_split(cx, YEW_SPLIT_V, false);
+}
+
 CmdStatus yew_pane_cmd_close(CmdCtx *cx)
 {
     Ed *ed;

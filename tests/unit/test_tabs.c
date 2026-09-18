@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/pane_cmds.h"
 #include "ui/groups.h"
 #include "ui/region.h"
 #include "ui/tabs.h"
@@ -1065,6 +1066,202 @@ void test_tabs_open_split_refuses_when_there_is_no_room(void)
     YEW_ASSERT(tb_invoke(&ed, "ed.tab.open_split_v", 0, NULL) !=
                YEW_CMD_OK);
     YEW_ASSERT_EQ_U64(tb_leaves(&ed, leaves, 4U), 1U);
+    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
+    yew_ed_free(&ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.21 §5: ed.tab.split_left / _right / _down              */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The keyboard reach for the drag-to-spawn gesture.  Each command opens
+ * the tab's buffer in a new pane on ITS side, and the side is the whole
+ * difference between them — so every row below asserts the new leaf's
+ * rect, not just that a leaf appeared.
+ */
+void test_tabs_split_commands_place_the_new_pane_on_each_side(void)
+{
+    static const struct {
+        const char *cmd;
+        bool first; /* is the new leaf child a? */
+        bool vertical;
+    } cases[] = {{"ed.tab.split_left", true, false},
+                 {"ed.tab.split_right", false, false},
+                 {"ed.tab.split_down", false, true}};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        Ed ed;
+        Buffer *doc;
+        Pane *nu;
+        Pane *old;
+
+        tb_fixture(&ed);
+        doc = yew_tab_buffer(&ed, ed.tabs.active);
+        YEW_ASSERT_NOT_NULL(doc);
+
+        YEW_ASSERT_EQ_U64(tb_invoke(&ed, cases[i].cmd, 0, NULL),
+                          YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 2U);
+        YEW_ASSERT(!ed.pane_root->is_leaf);
+        YEW_ASSERT(ed.pane_root->dir ==
+                   (cases[i].vertical ? YEW_SPLIT_V : YEW_SPLIT_H));
+        nu = cases[i].first ? ed.pane_root->a : ed.pane_root->b;
+        old = cases[i].first ? ed.pane_root->b : ed.pane_root->a;
+        /* The new pane takes focus and shows the tab's buffer. */
+        YEW_ASSERT(ed.focus == nu);
+        YEW_ASSERT(ed.win == nu->win);
+        YEW_ASSERT(nu->win->buf == doc);
+        YEW_ASSERT(old->win->buf == doc);
+        YEW_ASSERT(nu->win != old->win);
+
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+        if (cases[i].vertical) {
+            /* Below: the new leaf starts after the border row. */
+            YEW_ASSERT_EQ_U64(nu->rect.y, 13U);
+            YEW_ASSERT_EQ_U64(old->rect.y, 0U);
+        } else if (cases[i].first) {
+            YEW_ASSERT_EQ_U64(nu->rect.x, 0U);
+            YEW_ASSERT_EQ_U64(old->rect.x, 41U);
+        } else {
+            YEW_ASSERT_EQ_U64(nu->rect.x, 41U);
+            YEW_ASSERT_EQ_U64(old->rect.x, 0U);
+        }
+        yew_ed_free(&ed);
+    }
+}
+
+/*
+ * The subject is the TAB's buffer, not whatever the focused pane is
+ * parked on — the same rule ed.tab.open_split_h follows, asserted here
+ * because the sided family is a separate implementation path.
+ */
+void test_tabs_split_commands_prefer_the_tab_buffer(void)
+{
+    Ed ed;
+    Buffer *first;
+    Buffer *other;
+    int idx;
+
+    tb_fixture(&ed);
+    idx = yew_tab_open(&ed, "/tmp/yew-tab-sided-other.txt");
+    YEW_ASSERT(idx >= 0);
+    other = yew_tab_buffer(&ed, idx);
+    YEW_ASSERT_NOT_NULL(other);
+    yew_tab_switch(&ed, 0);
+    first = yew_tab_buffer(&ed, ed.tabs.active);
+    YEW_ASSERT_NOT_NULL(first);
+    YEW_ASSERT(first != other);
+
+    /* Park the focused pane on a foreign buffer, the way a job or diff
+     * view leaves it. */
+    yew_ed_win_set_buffer(&ed, ed.win, other);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+
+    YEW_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.split_left", 0, NULL),
+                      YEW_CMD_OK);
+    YEW_ASSERT(ed.win->buf == first);
+    YEW_ASSERT(ed.pane_root->a->win->buf == first);
+    yew_ed_free(&ed);
+}
+
+/*
+ * THE IDENTITY RULE.  yew_pane_open_tab_in_split takes a tab_id and
+ * re-finds the tab, so closing a tab between the capture and the call
+ * cannot make it open the file that slid into that index.
+ */
+void test_tabs_split_in_pane_is_addressed_by_tab_id(void)
+{
+    Ed ed;
+    u32 ids[2];
+    Buffer *wanted;
+    Pane *nu = NULL;
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 2U, ids);
+    /* Three tabs; the one we want is the LAST and is not active. */
+    yew_tab_switch(&ed, 0);
+    wanted = yew_tab_buffer(&ed, yew_tab_index_of_id(&ed, ids[1]));
+    YEW_ASSERT_NOT_NULL(wanted);
+    YEW_ASSERT(ed.win->buf != wanted);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+
+    YEW_ASSERT_EQ_U64(yew_pane_open_tab_in_split(&ed, ids[1], NULL,
+                                                 YEW_SPLIT_H, true, &nu),
+                      YEW_CMD_OK);
+    YEW_ASSERT_NOT_NULL(nu);
+    YEW_ASSERT(nu == ed.pane_root->a);
+    YEW_ASSERT(nu->win->buf == wanted);
+    /* The strip is untouched: the tab is still a tab, still where it
+     * was, and the active tab has not changed. */
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 3U);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&ed, ids[1]), 2);
+
+    /* An id that names nothing is a refusal, not a crash. */
+    YEW_ASSERT(yew_pane_open_tab_in_split(&ed, 0xbadU, NULL, YEW_SPLIT_H,
+                                          false, &nu) != YEW_CMD_OK);
+    YEW_ASSERT(nu == NULL);
+    yew_ed_free(&ed);
+}
+
+/* A leaf too small to split refuses on every side, messages, and leaves
+ * the layout exactly as it was. */
+void test_tabs_split_commands_refuse_when_there_is_no_room(void)
+{
+    static const char *const names[] = {"ed.tab.split_left",
+                                        "ed.tab.split_right",
+                                        "ed.tab.split_down"};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        Ed ed;
+
+        tb_fixture(&ed);
+        /* Too narrow for two panes and a border, and too short too. */
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 20U, 4U});
+        YEW_ASSERT(tb_invoke(&ed, names[i], 0, NULL) != YEW_CMD_OK);
+        YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+        YEW_ASSERT(ed.pane_root->is_leaf);
+        YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
+        yew_ed_free(&ed);
+    }
+}
+
+/* At YEW_PANE_MAX_LEAVES the refusal names the cap rather than the
+ * room, because the two call for different responses. */
+void test_tabs_split_commands_refuse_at_the_leaf_cap(void)
+{
+    Ed ed;
+
+    tb_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 200U, 200U});
+    while (yew_pane_leaf_count(ed.pane_root) <
+           (u32)YEW_PANE_MAX_LEAVES) {
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
+        u32 count = 0U;
+        u32 tallest = 0U;
+        u32 i;
+
+        yew_pane_collect_leaves(ed.pane_root, leaves,
+                                YEW_ARRAY_LEN(leaves), &count);
+        YEW_ASSERT(count > 0U);
+        /* Always halve the ROOMIEST leaf, so the tree reaches the cap
+         * rather than running out of rows on one branch. */
+        for (i = 1U; i < count; i++)
+            if (leaves[i]->rect.h > leaves[tallest]->rect.h)
+                tallest = i;
+        YEW_ASSERT_EQ_U64(yew_pane_open_tab_in_split(
+                              &ed, yew_tab_at(&ed, ed.tabs.active)->tab_id,
+                              leaves[tallest], YEW_SPLIT_V, false, NULL),
+                          YEW_CMD_OK);
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 200U, 200U});
+    }
+    YEW_ASSERT(tb_invoke(&ed, "ed.tab.split_right", 0, NULL) !=
+               YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root),
+                      (u64)YEW_PANE_MAX_LEAVES);
     YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
     yew_ed_free(&ed);
 }

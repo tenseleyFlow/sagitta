@@ -810,6 +810,27 @@ static const CmdDesc builtins[] = {
     {"ed.tab.open_split_v", yew_tab_cmd_open_split_v, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN,
      "Open the active tab's buffer in a vertical split", NULL},
+    /*
+     * Sprint 57.21 §5: the keyboard reach for drag-to-spawn-a-pane.
+     *
+     * The gesture is mouse-only by nature, so invariant 9 requires the
+     * CAPABILITY — "open this tab beside/below the pane I am in" — to
+     * have a command per side.  `split_left` is the one the old
+     * `open_split_h` pair could not express at all: yew_pane_split put
+     * the clone in child `b` unconditionally until §3.
+     */
+    {"ed.tab.split_left", yew_pane_cmd_tab_split_left, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE,
+     "Open the active tab's buffer in a new pane to the left",
+     "tabsplit_left"},
+    {"ed.tab.split_right", yew_pane_cmd_tab_split_right, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE,
+     "Open the active tab's buffer in a new pane to the right",
+     "tabsplit_right"},
+    {"ed.tab.split_down", yew_pane_cmd_tab_split_down, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE,
+     "Open the active tab's buffer in a new pane below",
+     "tabsplit_down"},
     /* Sprint 24 §6: the continuous line.  next/prev walk EVERY open
      * file — members of the active group first, then the row-1 entry
      * beside it — so left/right never dead-ends inside a group. */
@@ -1298,6 +1319,11 @@ static const BuiltinMeta builtin_meta[] = {
      * pane commands, because the subject is the tab's buffer. */
     {"ed.tab.open_split_h", "", YEW_RP_FORBID, "tabsplit"},
     {"ed.tab.open_split_v", "", YEW_RP_FORBID, "tabvsplit"},
+    /* Sprint 57.21 §5: the sided spellings, named for the side rather
+     * than for the axis, because the side is the whole difference. */
+    {"ed.tab.split_left", "", YEW_RP_FORBID, "tableft"},
+    {"ed.tab.split_right", "", YEW_RP_FORBID, "tabright"},
+    {"ed.tab.split_down", "", YEW_RP_FORBID, "tabdown"},
     {"ed.group.remove_tab", "", YEW_RP_FORBID, "gremove"},
     {"ed.group.enter", "", YEW_RP_FORBID, "genter"},
     {"ed.group.leave", "", YEW_RP_FORBID, "gleave"},
@@ -1423,6 +1449,8 @@ static bool command_name_valid(const char *name)
         "text", "undo", "redo", "escape", "add", "above", "below", "center",
         "message_expand", "split_h", "split_v", "open_split_h",
         "open_split_v", "record", "stop", "name",
+        /* Sprint 57.21 §5 */
+        "split_left", "split_right", "split_down",
         "replay", "replay_last", "stage", "map",
         "first_nonblank", "last_nonblank", "half_page_up", "half_page_down",
         "page_up", "page_down", "after", "newline", "tab",
