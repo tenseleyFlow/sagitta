@@ -793,7 +793,6 @@ void test_invariant9_every_new_command_is_registered(void)
         "ed.mouse.enable",     "ed.mouse.disable",
         /* Sprint 57.13 §4: the document-menu row commands. */
         "ed.sel.all",
-        "ed.tab.open_split_h", "ed.tab.open_split_v",
         /*
          * Sprint 57.22 §5: the three sides of the drag-to-spawn
          * gesture.  The gesture is mouse-only by nature, so the

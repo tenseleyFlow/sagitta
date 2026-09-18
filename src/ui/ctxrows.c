@@ -140,12 +140,13 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
     /*
      * Sprint 57.22 §5: the SIDED commands, not the axis-named pair.
      *
-     * `ed.tab.open_split_h` means "split on the horizontal axis and put
-     * the clone wherever yew_pane_split puts it", which happens to be
-     * the right; `ed.tab.split_right` means the right and says so, and
-     * it has a `split_left` sibling the axis spelling cannot express.
-     * The three rows here are the three sides the drag gesture lands
-     * on, so they are the three commands it spawns panes with.
+     * Sprint 57.13's `ed.tab.open_split_h` meant "split on the
+     * horizontal axis and put the clone wherever yew_pane_split puts
+     * it", which happened to be the right; `ed.tab.split_right` means
+     * the right and says so, and it has a `split_left` sibling the axis
+     * spelling could not express.  The axis-named pair is retired.  The
+     * three rows here are the three sides the drag gesture lands on, so
+     * they are the three commands it spawns panes with.
      */
     /* CTXA_TAB_OPEN_SPLIT_RIGHT */
     {"ed.tab.split_right", CTX_TGT_TAB, 0},

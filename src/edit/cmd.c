@@ -803,21 +803,20 @@ static const CmdDesc builtins[] = {
      "Close every tab but the active one", NULL},
     {"ed.tab.copy_path", yew_tab_cmd_copy_path, YEW_ARITY_NONE, 0U,
      "Copy the active tab's canonical path to the clipboard", NULL},
-    /* Sprint 57.13 §4: the tab menu's two "open in split" rows. */
-    {"ed.tab.open_split_h", yew_tab_cmd_open_split_h, YEW_ARITY_NONE,
-     YEW_CMD_NEEDS_WIN,
-     "Open the active tab's buffer in a horizontal split", NULL},
-    {"ed.tab.open_split_v", yew_tab_cmd_open_split_v, YEW_ARITY_NONE,
-     YEW_CMD_NEEDS_WIN,
-     "Open the active tab's buffer in a vertical split", NULL},
     /*
      * Sprint 57.22 §5: the keyboard reach for drag-to-spawn-a-pane.
      *
      * The gesture is mouse-only by nature, so invariant 9 requires the
      * CAPABILITY — "open this tab beside/below the pane I am in" — to
-     * have a command per side.  `split_left` is the one the old
-     * `open_split_h` pair could not express at all: yew_pane_split put
-     * the clone in child `b` unconditionally until §3.
+     * have a command per side.
+     *
+     * THESE REPLACE Sprint 57.13's `ed.tab.open_split_h` / `_v`, which
+     * are retired rather than kept beside them: they were the same
+     * function with the side fixed to "wherever yew_pane_split puts the
+     * clone", and a registry carrying two spellings of one action gives
+     * the palette two answers to one question.  `split_left` is the one
+     * the old pair could not express at all — yew_pane_split put the
+     * clone in child `b` unconditionally until §3.
      */
     {"ed.tab.split_left", yew_pane_cmd_tab_split_left, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_RECORDABLE,
@@ -1315,10 +1314,6 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.group.add_tab", "s", YEW_RP_FORBID, "gadd"},
     {"ed.tab.close_others", "", YEW_RP_FORBID, "tabonly"},
     {"ed.tab.copy_path", "", YEW_RP_FORBID, "copypath"},
-    /* Sprint 57.13 §4: named after :tabnew / :tabonly, not after the
-     * pane commands, because the subject is the tab's buffer. */
-    {"ed.tab.open_split_h", "", YEW_RP_FORBID, "tabsplit"},
-    {"ed.tab.open_split_v", "", YEW_RP_FORBID, "tabvsplit"},
     {"ed.group.remove_tab", "", YEW_RP_FORBID, "gremove"},
     {"ed.group.enter", "", YEW_RP_FORBID, "genter"},
     {"ed.group.leave", "", YEW_RP_FORBID, "gleave"},
