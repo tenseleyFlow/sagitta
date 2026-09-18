@@ -358,7 +358,8 @@ void test_ctxrows_tab_rows_match_the_contract(void)
         "",
         "Copy Path", "Remove from Group",
         "",
-        "New Tab", "Open in Split Right", "Open in Split Below"
+        "New Tab", "Open in Split Right", "Open in Split Left",
+        "Open in Split Below"
     };
     Ed ed;
     const Tab *t;
@@ -382,7 +383,28 @@ void test_ctxrows_tab_rows_match_the_contract(void)
     YEW_ASSERT_EQ_U64(cr_priority("Remove from Group"), 2U);
     YEW_ASSERT_EQ_U64(cr_priority("New Tab"), 2U);
     YEW_ASSERT_EQ_U64(cr_priority("Open in Split Right"), 3U);
+    YEW_ASSERT_EQ_U64(cr_priority("Open in Split Left"), 3U);
     YEW_ASSERT_EQ_U64(cr_priority("Open in Split Below"), 3U);
+    /*
+     * Sprint 57.21 §5: the three rows are the three SIDES of the drag
+     * gesture, and each one names the sided command rather than the
+     * axis-named pair that could not express `left` at all.
+     */
+    YEW_ASSERT_EQ_STR(
+        yew_ctx_actions[CTXA_TAB_OPEN_SPLIT_RIGHT].cmd,
+        "ed.tab.split_right");
+    YEW_ASSERT_EQ_STR(yew_ctx_actions[CTXA_TAB_OPEN_SPLIT_LEFT].cmd,
+                      "ed.tab.split_left");
+    YEW_ASSERT_EQ_STR(yew_ctx_actions[CTXA_TAB_OPEN_SPLIT_BELOW].cmd,
+                      "ed.tab.split_down");
+    /* And every one of them spends the captured tab_id, so the row acts
+     * on the tab that was pointed at rather than the active one. */
+    YEW_ASSERT_EQ_U64(yew_ctx_actions[CTXA_TAB_OPEN_SPLIT_RIGHT].target,
+                      (u64)CTX_TGT_TAB);
+    YEW_ASSERT_EQ_U64(yew_ctx_actions[CTXA_TAB_OPEN_SPLIT_LEFT].target,
+                      (u64)CTX_TGT_TAB);
+    YEW_ASSERT_EQ_U64(yew_ctx_actions[CTXA_TAB_OPEN_SPLIT_BELOW].target,
+                      (u64)CTX_TGT_TAB);
 
     /* A second tab, with a path, in a group: the other half of all
      * three conditions.  The file has to EXIST — a tab's path is its

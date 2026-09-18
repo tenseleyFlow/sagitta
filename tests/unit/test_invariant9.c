@@ -794,6 +794,13 @@ void test_invariant9_every_new_command_is_registered(void)
         /* Sprint 57.13 §4: the document-menu row commands. */
         "ed.sel.all",
         "ed.tab.open_split_h", "ed.tab.open_split_v",
+        /*
+         * Sprint 57.21 §5: the three sides of the drag-to-spawn
+         * gesture.  The gesture is mouse-only by nature, so the
+         * CAPABILITY it adds ships with a command per side or it fails
+         * invariant 9 outright.
+         */
+        "ed.tab.split_left", "ed.tab.split_right", "ed.tab.split_down",
         "ed.view.number_cycle",
         /*
          * Sprint 57.13 Deliverable 4: the four rows that shipped as

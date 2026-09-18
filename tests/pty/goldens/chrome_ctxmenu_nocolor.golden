@@ -13,9 +13,9 @@ modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
  ├─────────────────────┤
  │ New Tab             │
  │ Open in Split Right │
+ │ Open in Split Left  │
  │ Open in Split Below │
  └─────────────────────┘
-
 
 
 
@@ -40,7 +40,7 @@ DDDDDDDDDDDDDDDDDDDDDDDD
 DDDDDDDDDDDDDDDDDDDDDDDD
 DDDDDDDDDDDDDDDDDDDDDDDD
 DDDDDDDDDDDDDDDDDDDDDDDD
-
+DDDDDDDDDDDDDDDDDDDDDDDD
 
 
 

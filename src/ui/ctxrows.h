@@ -209,6 +209,13 @@ typedef enum CtxAction {
     /* Tab strip. */
     CTXA_TAB_NEW,
     CTXA_TAB_OPEN_SPLIT_RIGHT,
+    /*
+     * Sprint 57.21 §5.  LEFT joins its two neighbours because the drag
+     * gesture has three landing sides and invariant 9 wants each of
+     * them reachable without the pointer; it could not exist before §3
+     * gave `yew_pane_split` a side to place the new leaf on.
+     */
+    CTXA_TAB_OPEN_SPLIT_LEFT,
     CTXA_TAB_OPEN_SPLIT_BELOW,
     CTXA_GROUP_CLOSE,
     CTXA_GROUP_NEW,

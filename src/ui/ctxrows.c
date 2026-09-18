@@ -137,10 +137,22 @@ const CtxActionDesc yew_ctx_actions[CTXA__N] = {
     /* CTXA_DOC_TOGGLE_WRAP  */ {"ed.view.toggle_wrap", CTX_TGT_PANE, 0},
 
     /* CTXA_TAB_NEW          */ {"ed.tab.new", CTX_TGT_NONE, 0},
+    /*
+     * Sprint 57.21 §5: the SIDED commands, not the axis-named pair.
+     *
+     * `ed.tab.open_split_h` means "split on the horizontal axis and put
+     * the clone wherever yew_pane_split puts it", which happens to be
+     * the right; `ed.tab.split_right` means the right and says so, and
+     * it has a `split_left` sibling the axis spelling cannot express.
+     * The three rows here are the three sides the drag gesture lands
+     * on, so they are the three commands it spawns panes with.
+     */
     /* CTXA_TAB_OPEN_SPLIT_RIGHT */
-    {"ed.tab.open_split_h", CTX_TGT_TAB, 0},
+    {"ed.tab.split_right", CTX_TGT_TAB, 0},
+    /* CTXA_TAB_OPEN_SPLIT_LEFT  */
+    {"ed.tab.split_left", CTX_TGT_TAB, 0},
     /* CTXA_TAB_OPEN_SPLIT_BELOW */
-    {"ed.tab.open_split_v", CTX_TGT_TAB, 0},
+    {"ed.tab.split_down", CTX_TGT_TAB, 0},
     /* CTXA_GROUP_CLOSE      */ {"ed.group.close", CTX_TGT_GROUP, 0},
     /* CTXA_GROUP_NEW        */ {"ed.group.new", CTX_TGT_NONE, 0},
     /* CTXA_FIND_FILE        */ {"ed.find.file", CTX_TGT_NONE, 0},
@@ -455,6 +467,8 @@ static void build_tab(Ed *ed, const CtxContext *c)
     yew_ctx_item("New Tab", NULL, (u32)CTXA_TAB_NEW, true, 2U);
     yew_ctx_item("Open in Split Right", NULL,
                  (u32)CTXA_TAB_OPEN_SPLIT_RIGHT, true, 3U);
+    yew_ctx_item("Open in Split Left", NULL,
+                 (u32)CTXA_TAB_OPEN_SPLIT_LEFT, true, 3U);
     yew_ctx_item("Open in Split Below", NULL,
                  (u32)CTXA_TAB_OPEN_SPLIT_BELOW, true, 3U);
 }
