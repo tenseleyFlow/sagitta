@@ -2137,6 +2137,50 @@ static void drop_out_of_group(Ed *ed, int to)
     }
 }
 
+/*
+ * Sprint 57.22 §1: DOES THIS RELEASE SPAWN A PANE, and out of which
+ * leaf?
+ *
+ * The leaf is resolved through the region payload and
+ * yew_pane_leaf_by_index — never by walking the tree from coordinates a
+ * second time, which is the layout/hit-test identity law (Sprint 22)
+ * and is also what makes a multi-pane tab split the leaf the pointer is
+ * actually on rather than the focused one.
+ *
+ * Whether the cells are an edge, and which side they are, is
+ * yew_pane_zone_at's alone — the affordance asks the same function with
+ * the same arguments, so what the user saw is what the release does.
+ *
+ * A GROUP drag is excluded: a group is many tabs and there is no one
+ * buffer to open.  A tab count that moved cancels here for the reason
+ * drag_strip_motion cancels for it.
+ */
+static bool drag_spawn_target(Ed *ed, u16 x, u16 y, Pane **leaf_out,
+                              PaneZoneHit *zone)
+{
+    const MouseState *m;
+    Region hit;
+    Pane *leaf;
+
+    if (ed == NULL || leaf_out == NULL || zone == NULL)
+        return false;
+    m = &ed->mouse;
+    if (m->phase != YEW_MP_DRAG_TAB || m->drag_tab_id == 0U)
+        return false;
+    if (yew_tab_count(ed) != m->tab_count_at_press)
+        return false;
+    hit = yew_region_hit(x, y);
+    if (hit.kind != YEW_REGION_PANE)
+        return false;
+    leaf = yew_pane_leaf_by_index(ed, hit.payload);
+    if (leaf == NULL)
+        return false;
+    if (!yew_pane_zone_at(ed, leaf, x, y, zone))
+        return false;
+    *leaf_out = leaf;
+    return true;
+}
+
 static void drag_strip_drop(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
@@ -2344,7 +2388,17 @@ static void mouse_release(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
     MousePhase phase = m->phase;
+    /*
+     * Sprint 57.22 §6: the split is resolved here and PERFORMED below,
+     * after gesture_reset — nothing about the layout may move while a
+     * drag is still in flight, and a spawn that ran mid-teardown would
+     * be a mutation during a gesture in all but name.
+     */
+    Pane *spawn_leaf = NULL;
+    PaneZoneHit spawn_zone;
+    u32 spawn_tab = 0U;
 
+    (void)memset(&spawn_zone, 0, sizeof(spawn_zone));
     if (k->button != (u8)YEW_MB_LEFT)
         return;
     if (yew_mouse_claimed_by_menu(ed, *k)) {
@@ -2423,7 +2477,20 @@ static void mouse_release(Ed *ed, const Key *k)
         break;
     case YEW_MP_DRAG_TAB:
     case YEW_MP_DRAG_GROUP:
-        drag_strip_drop(ed, k);
+        /*
+         * An edge-zone release spawns a pane INSTEAD of dropping into
+         * the strip.  Instead, not as well: the drag may have crossed
+         * row 1 on its way down and left a target slot behind it, and
+         * committing that too would reorder the strip behind a gesture
+         * the user aimed at a pane.  The tab stays exactly where it is
+         * (§ "the dragged tab STAYS in the strip").
+         */
+        if (phase == YEW_MP_DRAG_TAB &&
+            drag_spawn_target(ed, k->col, k->row, &spawn_leaf,
+                              &spawn_zone))
+            spawn_tab = m->drag_tab_id;
+        else
+            drag_strip_drop(ed, k);
         /* Even a drop that changed nothing repaints: the float was drawn
          * at the pointer, and putting the button down is what takes it
          * off the screen. */
@@ -2441,6 +2508,16 @@ static void mouse_release(Ed *ed, const Key *k)
         ed->full_damage = true;
     }
     gesture_reset(m);
+    /*
+     * The drag is over; NOW the layout may move.  A refusal — the leaf
+     * cap, no room — messages from inside and leaves the tree as it
+     * was, which is why the return value is not consulted: there is
+     * nothing left here to undo.
+     */
+    if (spawn_tab != 0U)
+        (void)yew_pane_open_tab_in_split(ed, spawn_tab, spawn_leaf,
+                                         spawn_zone.dir,
+                                         spawn_zone.new_first, NULL);
 }
 
 /* ---------------------------------------------------------------- */
@@ -2704,6 +2781,32 @@ bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
      */
     *grab_dx = m->press_x > m->press_rgn.rect.x
                    ? (u16)(m->press_x - m->press_rgn.rect.x) : 0U;
+    return true;
+}
+
+/*
+ * Sprint 57.22 §4: WHERE THE NEW PANE WOULD GO, for the renderer.
+ *
+ * The same question the release asks, asked of the pointer's current
+ * cell rather than of the release's — one function (drag_spawn_target),
+ * so a visible zone is a working zone by construction rather than by
+ * two implementations agreeing.
+ *
+ * `leaf` is out too, because the affordance is drawn INSIDE that leaf
+ * and a highlight painted over a neighbour would be a lie about which
+ * pane is splitting.
+ */
+bool yew_mouse_drag_spawn_zone(Ed *ed, Pane **leaf, PaneZoneHit *zone)
+{
+    Pane *at = NULL;
+
+    if (ed == NULL || zone == NULL)
+        return false;
+    if (!drag_spawn_target(ed, ed->mouse.at_x, ed->mouse.at_y, &at,
+                           zone))
+        return false;
+    if (leaf != NULL)
+        *leaf = at;
     return true;
 }
 

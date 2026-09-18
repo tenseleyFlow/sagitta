@@ -33,6 +33,7 @@
 #include "term/input.h"
 #include "text/coords.h"
 #include "ui/ctxrows.h"
+#include "ui/layout.h"
 #include "ui/region.h"
 #include "util/base.h"
 
@@ -246,6 +247,20 @@ bool yew_mouse_drag_float(const Ed *ed, i32 *payload, u16 *x, u16 *y,
  * are holding" — the same trap row 1's pre-drag slot table exists for.
  */
 bool yew_mouse_drag_member_preview(const Ed *ed, u32 *gid, int *pos);
+
+/*
+ * Sprint 57.22 §4: the pane a release RIGHT NOW would spawn, or false
+ * when the pointer is not in a live edge zone.
+ *
+ * The renderer's half of the gesture and the release's are the same
+ * function underneath, asked with the pointer's cell here and with the
+ * release's cell there — so the highlight promises exactly the split
+ * the button-up performs, and a zone that cannot split shows nothing.
+ *
+ * Not const: resolving the leaf goes through the region payload and the
+ * per-frame leaf table, which is the editor's.
+ */
+bool yew_mouse_drag_spawn_zone(Ed *ed, Pane **leaf, PaneZoneHit *zone);
 
 /* §4: the group whose member strip a dwell has opened; 0 when none. */
 u32 yew_mouse_preview_group(const Ed *ed);

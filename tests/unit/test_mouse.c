@@ -36,6 +36,7 @@
 #include "ui/groups.h"
 #include "ui/layout.h"
 #include "ui/ctxmenu.h"
+#include "ui/draw.h"
 #include "ui/ctxrows.h"
 #include "ui/grouppicker.h"
 #include "ui/mouse.h"
@@ -850,13 +851,13 @@ void test_mouse_press_on_a_group_entry_captures_the_gid(void)
 /* ---------------------------------------------------------------- */
 
 /*
- * Dragging a tab into a PANE to open it there is post-1.0.  A release
- * over a pane must therefore CANCEL — not open the file there, and not
- * silently reorder the strip on the way, which is the failure the
- * "nothing moves until the drop" law was written against.
+ * NARROWED by Sprint 57.22, not deleted.
  *
- * Named as a test rather than as a comment so the day somebody wires it
- * up, they have to delete an assertion and think about it.
+ * The EDGES of a pane now spawn one (see the §1 tests below); its
+ * INTERIOR still cancels — not opening the file there, and not
+ * silently reordering the strip on the way, which is the failure the
+ * "nothing moves until the drop" law was written against.  Dropping
+ * onto the interior to open there is still post-1.0.
  */
 void test_mouse_tab_dropped_on_a_pane_cancels(void)
 {
@@ -2680,4 +2681,397 @@ void test_mouse_chevron_hover_waits_for_the_menu_to_close(void)
     }
     YEW_ASSERT(f.ed.mouse.hover_chevron);
     yew_ed_free(&f.ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.22 §1/§6: drag a tab to an edge to spawn a pane        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The gesture's fixture: four real tabs plus the scratch, tab 0 active,
+ * and a FULL frame drawn so the pane regions and the strip's slot table
+ * both come from the renderer rather than from hand-placed rects.  The
+ * whole point of resolving the leaf through the region payload is that
+ * the payload is the one the draw pass registered.
+ */
+static void sp_fixture_sized(Ed *ed, u16 rows, u16 cols)
+{
+    int i;
+
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, rows, cols));
+    ed->grid_ready = true;
+    ed->now_ms = 1000;
+    for (i = 0; i < 4; i++) {
+        char path[64];
+
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-sp%d.txt", i);
+        YEW_ASSERT(yew_tab_open(ed, path) >= 0);
+    }
+    yew_tab_switch(ed, 0);
+    yew_ed_layout(ed);
+    yew_draw_panes(ed);
+}
+
+static void sp_fixture(Ed *ed)
+{
+    sp_fixture_sized(ed, 24U, 80U);
+}
+
+/* The first column of row 1 that belongs to `slot`. */
+static u16 sp_slot_x(const Ed *ed, int slot)
+{
+    u16 x;
+
+    for (x = 0U; x < ed->grid.cols; x++)
+        if (yew_strip_slot_at(x, ed->tab_strip_rect.y) == slot)
+            return x;
+    YEW_ASSERT(0);
+    return 0U;
+}
+
+/* The highest row-1 slot the strip actually drew. */
+static int sp_last_drawn_slot(const Ed *ed)
+{
+    int best = -1;
+    u16 x;
+
+    for (x = 0U; x < ed->grid.cols; x++) {
+        int slot = yew_strip_slot_at(x, ed->tab_strip_rect.y);
+
+        if (slot > best)
+            best = slot;
+    }
+    return best;
+}
+
+/* Press on `slot`, travel through `via`, release at (x, y). */
+static void sp_drag(Ed *ed, int slot, u16 via_x, u16 via_y, u16 x, u16 y)
+{
+    Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                      sp_slot_x(ed, slot), ed->tab_strip_rect.y);
+    Key via = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, via_x, via_y);
+    Key at = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, x, y);
+    Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, x, y);
+
+    yew_mouse_event(ed, &press);
+    yew_mouse_event(ed, &via);
+    yew_mouse_event(ed, &at);
+    yew_mouse_event(ed, &up);
+}
+
+/*
+ * THE GESTURE.  Each side drops the dragged tab's buffer into a new
+ * leaf on that side, and the side is the whole difference between the
+ * three — so every case asserts WHICH child the new leaf is and which
+ * buffer it holds, not merely that a pane appeared.
+ *
+ * The dragged tab is not the active one: the split lands in the ACTIVE
+ * tab's pane tree and shows the DRAGGED tab's file, which is the shape
+ * the sprint decided on (the tab stays in the strip; a buffer in two
+ * windows is a first-class shape here).
+ */
+void test_mouse_tab_dropped_on_a_pane_edge_spawns_a_pane(void)
+{
+    enum { SIDE_LEFT, SIDE_RIGHT, SIDE_BOTTOM };
+    int side;
+
+    for (side = SIDE_LEFT; side <= SIDE_BOTTOM; side++) {
+        Ed ed;
+        Rect r;
+        Buffer *dragged;
+        Pane *nu;
+        Pane *old;
+        u16 x;
+        u16 y;
+
+        sp_fixture(&ed);
+        r = ed.pane_root->rect;
+        dragged = yew_tab_buffer(&ed, 2);
+        YEW_ASSERT_NOT_NULL(dragged);
+        YEW_ASSERT(ed.win->buf != dragged);
+
+        if (side == SIDE_LEFT) {
+            x = r.x;
+            y = (u16)(r.y + r.h / 2U);
+        } else if (side == SIDE_RIGHT) {
+            x = (u16)(r.x + r.w - 1U);
+            y = (u16)(r.y + r.h / 2U);
+        } else {
+            x = (u16)(r.x + r.w / 2U);
+            y = (u16)(r.y + r.h - 1U);
+        }
+        sp_drag(&ed, 2, x, y, x, y);
+
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+        YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 2U);
+        YEW_ASSERT(!ed.pane_root->is_leaf);
+        /* LEFT and RIGHT are the SIDE-BY-SIDE split; only BOTTOM
+         * stacks.  The enum spelling reads backwards from the gesture
+         * and getting it wrong is silent. */
+        YEW_ASSERT(ed.pane_root->dir ==
+                   (side == SIDE_BOTTOM ? YEW_SPLIT_V : YEW_SPLIT_H));
+        nu = side == SIDE_LEFT ? ed.pane_root->a : ed.pane_root->b;
+        old = side == SIDE_LEFT ? ed.pane_root->b : ed.pane_root->a;
+        YEW_ASSERT(nu->win->buf == dragged);
+        YEW_ASSERT(old->win->buf != dragged);
+        /* The new pane takes focus: this is "open a view here". */
+        YEW_ASSERT(ed.focus == nu);
+        YEW_ASSERT(ed.win == nu->win);
+
+        /* And the strip is exactly as it was — the tab STAYS. */
+        YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 5U);
+        YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
+        YEW_ASSERT(yew_tab_buffer(&ed, 2) == dragged);
+        yew_ed_free(&ed);
+    }
+}
+
+/*
+ * THE ONE THAT WOULD BE SILENT.
+ *
+ * A drag travels ALONG row 1 before it heads down into the pane, and
+ * that travel leaves a reorder target behind it.  Committing both would
+ * move the tab in the strip as a side effect of a gesture aimed at a
+ * pane — so an edge release runs the spawn INSTEAD of the drop, never
+ * as well.
+ */
+void test_mouse_tab_spawn_does_not_also_reorder_the_strip(void)
+{
+    Ed ed;
+    Rect r;
+    u32 ids[5];
+    u32 i;
+
+    sp_fixture(&ed);
+    for (i = 0U; i < 5U; i++)
+        ids[i] = yew_tab_at(&ed, (int)i)->tab_id;
+    r = ed.pane_root->rect;
+    /* Out along row 1 to the last slot ON SCREEN — a live reorder
+     * target, and a different one from the slot pressed — then down to
+     * the right edge.  The list can be longer than the row is wide,
+     * which is why this is not simply the last slot. */
+    YEW_ASSERT(sp_last_drawn_slot(&ed) > 1);
+    sp_drag(&ed, 1, sp_slot_x(&ed, sp_last_drawn_slot(&ed)),
+            ed.tab_strip_rect.y, (u16)(r.x + r.w - 1U),
+            (u16)(r.y + r.h / 2U));
+
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 2U);
+    YEW_ASSERT(ed.pane_root->b->win->buf == yew_tab_buffer(&ed, 1));
+    /* Every tab still at the index it started at. */
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 5U);
+    for (i = 0U; i < 5U; i++)
+        YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&ed, ids[i]), (int)i);
+    yew_ed_free(&ed);
+}
+
+/*
+ * A multi-pane tab splits the leaf UNDER THE POINTER, which is what
+ * "split this editor space" has to mean once there is more than one of
+ * them.  The pointer is on the right leaf's right edge; the left leaf
+ * must not move.
+ */
+void test_mouse_tab_dropped_on_an_edge_splits_the_leaf_under_it(void)
+{
+    Ed ed;
+    Pane *left;
+    Pane *right;
+    Rect r;
+    Buffer *dragged;
+
+    sp_fixture(&ed);
+    right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(right);
+    left = ed.pane_root->a;
+    yew_ed_layout(&ed);
+    yew_draw_panes(&ed);
+    r = right->rect;
+    dragged = yew_tab_buffer(&ed, 3);
+    YEW_ASSERT_NOT_NULL(dragged);
+
+    sp_drag(&ed, 3, (u16)(r.x + r.w / 2U), (u16)(r.y + r.h / 2U),
+            (u16)(r.x + r.w - 1U), (u16)(r.y + r.h / 2U));
+
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 3U);
+    /* The RIGHT leaf became the split; the left one is untouched. */
+    YEW_ASSERT(ed.pane_root->a == left);
+    YEW_ASSERT(left->is_leaf);
+    YEW_ASSERT(ed.pane_root->b == right);
+    YEW_ASSERT(!right->is_leaf);
+    YEW_ASSERT(right->dir == YEW_SPLIT_H);
+    YEW_ASSERT(right->b->win->buf == dragged);
+    YEW_ASSERT(ed.focus == right->b);
+    yew_ed_free(&ed);
+}
+
+/* The interior of a multi-pane tab still cancels, one cell in from the
+ * band — the narrowing is a band, not a whole pane. */
+void test_mouse_tab_dropped_just_inside_the_band_cancels(void)
+{
+    Ed ed;
+    Rect r;
+    u16 depth;
+
+    sp_fixture(&ed);
+    r = ed.pane_root->rect;
+    depth = yew_pane_zone_depth(r.w);
+    /* One cell inside the left band's inner edge. */
+    sp_drag(&ed, 2, (u16)(r.x + depth), (u16)(r.y + r.h / 2U),
+            (u16)(r.x + depth), (u16)(r.y + r.h / 2U));
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    YEW_ASSERT(ed.pane_root->is_leaf);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
+}
+
+/* Esc mid-drag spawns nothing: the release that follows finds no
+ * gesture, and the pointer is sitting in a live zone when it does. */
+void test_mouse_tab_drag_cancelled_by_esc_spawns_nothing(void)
+{
+    Ed ed;
+    Rect r;
+    u16 x;
+    u16 y;
+
+    sp_fixture(&ed);
+    r = ed.pane_root->rect;
+    x = (u16)(r.x + r.w - 1U);
+    y = (u16)(r.y + r.h / 2U);
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                          sp_slot_x(&ed, 2), ed.tab_strip_rect.y);
+        Key at = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, x, y);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, x, y);
+
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &at);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+        /* What Esc and a focus-out both call. */
+        yew_mouse_cancel(&ed);
+        yew_mouse_event(&ed, &up);
+    }
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    YEW_ASSERT(ed.pane_root->is_leaf);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
+}
+
+/*
+ * A tab closing under the drag cancels it — the array is frozen for the
+ * gesture's lifetime, and the tab the user is carrying may be the one
+ * that went away.  Nothing spawns.
+ */
+void test_mouse_tab_count_change_mid_drag_spawns_nothing(void)
+{
+    Ed ed;
+    Rect r;
+    u16 x;
+    u16 y;
+
+    sp_fixture(&ed);
+    r = ed.pane_root->rect;
+    x = (u16)(r.x + r.w - 1U);
+    y = (u16)(r.y + r.h / 2U);
+    {
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
+                          sp_slot_x(&ed, 2), ed.tab_strip_rect.y);
+        Key at = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, x, y);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, x, y);
+
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &at);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+        /* An async job closing a file, mid-gesture. */
+        YEW_ASSERT(yew_tab_close(&ed, 4));
+        yew_mouse_event(&ed, &up);
+    }
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    YEW_ASSERT(ed.pane_root->is_leaf);
+    yew_ed_free(&ed);
+}
+
+/*
+ * At the leaf cap the zone does not exist, so the release is an
+ * ordinary cancel: no split, no message-worthy failure, and above all
+ * no visible band that would not have worked.
+ */
+void test_mouse_tab_spawn_is_refused_at_the_leaf_cap(void)
+{
+    Ed ed;
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
+    u32 count = 0U;
+    Rect r;
+    PaneZoneHit zone;
+
+    /* Tall enough for sixteen stacked leaves and their borders. */
+    sp_fixture_sized(&ed, 100U, 80U);
+    while (yew_pane_leaf_count(ed.pane_root) <
+           (u32)YEW_PANE_MAX_LEAVES) {
+        u32 tallest = 0U;
+        u32 i;
+
+        count = 0U;
+        yew_pane_collect_leaves(ed.pane_root, leaves,
+                                YEW_ARRAY_LEN(leaves), &count);
+        for (i = 1U; i < count; i++)
+            if (leaves[i]->rect.h > leaves[tallest]->rect.h)
+                tallest = i;
+        YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, leaves[tallest],
+                                           YEW_SPLIT_V));
+        yew_ed_layout(&ed);
+    }
+    yew_draw_panes(&ed);
+    count = 0U;
+    yew_pane_collect_leaves(ed.pane_root, leaves, YEW_ARRAY_LEN(leaves),
+                            &count);
+    r = leaves[0]->rect;
+    YEW_ASSERT(r.w > 0U);
+    /* Nothing is offered anywhere on it... */
+    YEW_ASSERT(!yew_pane_zone_at(&ed, leaves[0], r.x,
+                                 (u16)(r.y + r.h / 2U), &zone));
+    /* ...and the release changes nothing. */
+    sp_drag(&ed, 2, r.x, (u16)(r.y + r.h / 2U), r.x,
+            (u16)(r.y + r.h / 2U));
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root),
+                      (u64)YEW_PANE_MAX_LEAVES);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
+}
+
+/*
+ * A pane too small to split shows no zone and the drop cancels as it
+ * did before the sprint.  24 columns is one short of the two minima
+ * plus their border.
+ */
+void test_mouse_tab_spawn_is_refused_when_the_pane_is_too_small(void)
+{
+    Ed ed;
+    Rect r;
+    u16 x;
+    u16 y;
+
+    sp_fixture_sized(&ed, 8U, (u16)(YEW_PANE_MIN_W * 2));
+    r = ed.pane_root->rect;
+    YEW_ASSERT(r.w < (u16)(YEW_PANE_MIN_W * 2 + 1));
+    YEW_ASSERT(r.h < (u16)(YEW_PANE_MIN_H * 2 + 1));
+    /* Every cell of it, corners included. */
+    for (y = r.y; y < (u16)(r.y + r.h); y++) {
+        for (x = r.x; x < (u16)(r.x + r.w); x++) {
+            PaneZoneHit zone;
+
+            YEW_ASSERT(!yew_pane_zone_at(&ed, ed.pane_root, x, y,
+                                         &zone));
+        }
+    }
+    /* A strip this narrow draws one slot; which tab is carried does not
+     * matter to a refusal. */
+    YEW_ASSERT(yew_strip_slot_count() > 0);
+    sp_drag(&ed, 0, r.x, (u16)(r.y + r.h - 1U), r.x,
+            (u16)(r.y + r.h - 1U));
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    YEW_ASSERT(ed.pane_root->is_leaf);
+    yew_ed_free(&ed);
 }
