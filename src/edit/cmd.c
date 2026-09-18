@@ -1319,11 +1319,6 @@ static const BuiltinMeta builtin_meta[] = {
      * pane commands, because the subject is the tab's buffer. */
     {"ed.tab.open_split_h", "", YEW_RP_FORBID, "tabsplit"},
     {"ed.tab.open_split_v", "", YEW_RP_FORBID, "tabvsplit"},
-    /* Sprint 57.21 §5: the sided spellings, named for the side rather
-     * than for the axis, because the side is the whole difference. */
-    {"ed.tab.split_left", "", YEW_RP_FORBID, "tableft"},
-    {"ed.tab.split_right", "", YEW_RP_FORBID, "tabright"},
-    {"ed.tab.split_down", "", YEW_RP_FORBID, "tabdown"},
     {"ed.group.remove_tab", "", YEW_RP_FORBID, "gremove"},
     {"ed.group.enter", "", YEW_RP_FORBID, "genter"},
     {"ed.group.leave", "", YEW_RP_FORBID, "gleave"},
