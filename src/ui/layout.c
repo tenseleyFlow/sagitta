@@ -215,10 +215,13 @@ static bool split_fits(const Pane *leaf, SplitDir dir)
     return leaf->rect.h >= (u16)(YEW_PANE_MIN_H * 2 + 1);
 }
 
-Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
+Pane *yew_pane_split_side(Ed *ed, Pane *leaf, SplitDir dir,
+                          bool new_first)
 {
     Pane *a;
     Pane *b;
+    Pane *keep;
+    Pane *fresh;
     Win *win;
 
     if (ed == NULL || leaf == NULL || !leaf->is_leaf)
@@ -233,18 +236,28 @@ Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
         return NULL;
     a = yew_xcalloc(1U, sizeof(*a));
     b = yew_xcalloc(1U, sizeof(*b));
-    /* The existing Win stays in child a; the clone takes b and focus. */
-    a->is_leaf = true;
-    a->win = leaf->win;
-    a->parent = leaf;
-    a->ratio = 0.5f;
-    /* The old leaf's retained record follows the old window into child A;
-     * the in-place node is a new split and has no older record. */
-    a->state_token = leaf->state_token;
-    b->is_leaf = true;
-    b->win = win;
-    b->parent = leaf;
-    b->ratio = 0.5f;
+    /*
+     * `keep` is the child the window that was ALREADY THERE goes into,
+     * `fresh` the one the clone takes.  Naming them rather than writing
+     * a/b twice is what keeps the state_token line below honest: it is
+     * about the old window, not about a position.
+     */
+    fresh = new_first ? a : b;
+    keep = new_first ? b : a;
+    keep->is_leaf = true;
+    keep->win = leaf->win;
+    keep->parent = leaf;
+    keep->ratio = 0.5f;
+    /* The old leaf's retained record follows the OLD WINDOW; the
+     * in-place node is a new split and has no older record. */
+    keep->state_token = leaf->state_token;
+    fresh->is_leaf = true;
+    fresh->win = win;
+    fresh->parent = leaf;
+    fresh->ratio = 0.5f;
+    /* yew_xcalloc already zeroed it; said out loud because the whole
+     * point of this function is which child gets the token. */
+    fresh->state_token = 0U;
     /* The leaf becomes the split node in place, so every pointer at it
      * — including Ed's focus — stays valid without a fixup pass. */
     leaf->is_leaf = false;
@@ -254,7 +267,13 @@ Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
     leaf->a = a;
     leaf->b = b;
     leaf->state_token = 0U;
-    return b;
+    return fresh;
+}
+
+Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
+{
+    /* The existing Win stays in child a; the clone takes b and focus. */
+    return yew_pane_split_side(ed, leaf, dir, false);
 }
 
 bool yew_pane_close(Ed *ed, Pane *leaf)

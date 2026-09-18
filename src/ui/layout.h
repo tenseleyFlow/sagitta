@@ -89,6 +89,22 @@ void yew_pane_free(Ed *ed, Pane *p);
  * input.
  */
 Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir);
+/*
+ * Sprint 57.21 §3: the same split with a SIDE.
+ *
+ * `new_first` puts the new leaf in child `a` — the LEFT of a
+ * side-by-side split, the TOP of a stacked one — and `false` is
+ * `yew_pane_split` exactly, which is how it is implemented.  Every
+ * refusal above applies unchanged, and it is asked BEFORE anything is
+ * cloned, so a refused split leaves the tree as it was.
+ *
+ * The old window's `state_token` follows THAT WINDOW into whichever
+ * child it lands in.  The retained workspace record belongs to the
+ * window that was already there; giving it to the clone restores the
+ * new pane with the old one's scroll position, silently.
+ */
+Pane *yew_pane_split_side(Ed *ed, Pane *leaf, SplitDir dir,
+                          bool new_first);
 /* Replaces the parent split with the sibling subtree.  The root leaf
  * refuses to close; Sprint 23 owns the last-pane-of-last-tab case. */
 bool yew_pane_close(Ed *ed, Pane *leaf);

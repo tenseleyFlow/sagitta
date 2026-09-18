@@ -905,3 +905,230 @@ void test_layout_close_repairs_focus_on_the_freed_sibling(void)
     YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
     yew_ed_free(&ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.21 §3: yew_pane_split_side                             */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The placement primitive the drag gesture and the keyboard commands
+ * both stand on.  `new_first` puts the CLONE in child `a` — left of a
+ * side-by-side split, above a stacked one — and the plain
+ * `yew_pane_split` is this with `new_first = false`.
+ *
+ * Every row below asserts the placement AND which Win ended up where,
+ * because "the new leaf is on the left" and "the new leaf holds the
+ * clone" are two separate ways to get it backwards.
+ */
+void test_layout_split_side_places_the_new_leaf_first(void)
+{
+    Ed ed;
+    Pane *nu;
+    Win *old_win;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    old_win = ed.pane_root->win;
+    nu = yew_pane_split_side(&ed, ed.pane_root, YEW_SPLIT_H, true);
+    YEW_ASSERT_NOT_NULL(nu);
+    /* The new leaf is child a; the window that was already there is b. */
+    YEW_ASSERT(ed.pane_root->a == nu);
+    YEW_ASSERT(ed.pane_root->b->win == old_win);
+    YEW_ASSERT(nu->win != old_win);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    /* And it really is the LEFT half. */
+    YEW_ASSERT(rect_eq(rect_of(nu), (Rect){0U, 0U, 40U, 24U}));
+    YEW_ASSERT(rect_eq(rect_of(ed.pane_root->b),
+                       (Rect){41U, 0U, 39U, 24U}));
+    yew_ed_free(&ed);
+}
+
+void test_layout_split_side_places_the_new_leaf_above(void)
+{
+    Ed ed;
+    Pane *nu;
+    Win *old_win;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    old_win = ed.pane_root->win;
+    nu = yew_pane_split_side(&ed, ed.pane_root, YEW_SPLIT_V, true);
+    YEW_ASSERT_NOT_NULL(nu);
+    YEW_ASSERT(ed.pane_root->a == nu);
+    YEW_ASSERT(ed.pane_root->b->win == old_win);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(rect_eq(rect_of(nu), (Rect){0U, 0U, 80U, 12U}));
+    YEW_ASSERT(rect_eq(rect_of(ed.pane_root->b),
+                       (Rect){0U, 13U, 80U, 11U}));
+    yew_ed_free(&ed);
+}
+
+/*
+ * `new_first = false` is byte-for-byte the old behaviour, and
+ * `yew_pane_split` is that call: the clone in b, the old window in a,
+ * the same rects.
+ */
+void test_layout_split_side_last_matches_plain_split(void)
+{
+    Ed a;
+    Ed b;
+    Pane *via_side;
+    Pane *via_plain;
+
+    ly_fixture(&a);
+    yew_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
+    via_plain = yew_pane_split(&a, a.pane_root, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(via_plain);
+    yew_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
+
+    ly_fixture(&b);
+    yew_layout_compute(b.pane_root, (Rect){0U, 0U, 80U, 24U});
+    via_side = yew_pane_split_side(&b, b.pane_root, YEW_SPLIT_H, false);
+    YEW_ASSERT_NOT_NULL(via_side);
+    yew_layout_compute(b.pane_root, (Rect){0U, 0U, 80U, 24U});
+
+    YEW_ASSERT(via_plain == a.pane_root->b);
+    YEW_ASSERT(via_side == b.pane_root->b);
+    YEW_ASSERT(rect_eq(rect_of(a.pane_root->a), rect_of(b.pane_root->a)));
+    YEW_ASSERT(rect_eq(rect_of(a.pane_root->b), rect_of(b.pane_root->b)));
+    YEW_ASSERT(a.pane_root->dir == b.pane_root->dir);
+    YEW_ASSERT(a.pane_root->ratio == b.pane_root->ratio);
+    YEW_ASSERT(a.pane_root->a->ratio == b.pane_root->a->ratio);
+    YEW_ASSERT(a.pane_root->b->ratio == b.pane_root->b->ratio);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
+}
+
+/*
+ * THE ONE THAT IS SILENT WHEN IT IS WRONG.
+ *
+ * `state_token` is the sparse workspace record of the window that was
+ * ALREADY THERE, so it follows that window into whichever child it
+ * lands in — `b` for a left/top placement, `a` otherwise.  Handing it
+ * to the clone instead restores the new pane with the old one's scroll
+ * position and nothing ever says so.
+ */
+void test_layout_split_side_state_token_follows_the_old_window(void)
+{
+    static const bool first[] = {false, true};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(first); i++) {
+        Ed ed;
+        Pane *nu;
+        Pane *old;
+
+        ly_fixture(&ed);
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+        ed.pane_root->state_token = 0x5eedU;
+        nu = yew_pane_split_side(&ed, ed.pane_root, YEW_SPLIT_H,
+                                 first[i]);
+        YEW_ASSERT_NOT_NULL(nu);
+        old = first[i] ? ed.pane_root->b : ed.pane_root->a;
+        YEW_ASSERT(old != nu);
+        YEW_ASSERT_EQ_U64(old->state_token, 0x5eedU);
+        /* The clone has no older record, and neither does the split
+         * node the leaf became. */
+        YEW_ASSERT_EQ_U64(nu->state_token, 0U);
+        YEW_ASSERT_EQ_U64(ed.pane_root->state_token, 0U);
+        yew_ed_free(&ed);
+    }
+}
+
+/* The cap is counted over the whole tree, and it refuses BEFORE
+ * cloning — a refused split leaves the tree exactly as it was. */
+void test_layout_split_side_refuses_at_the_leaf_cap(void)
+{
+    Ed ed;
+    u32 n;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 200U, 200U});
+    while (yew_pane_leaf_count(ed.pane_root) <
+           (u32)YEW_PANE_MAX_LEAVES) {
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
+        u32 count = 0U;
+        u32 i;
+        u32 tallest = 0U;
+        Pane *nu;
+
+        yew_pane_collect_leaves(ed.pane_root, leaves,
+                                YEW_ARRAY_LEN(leaves), &count);
+        YEW_ASSERT(count > 0U);
+        /* Always halve the ROOMIEST leaf, so the tree reaches the cap
+         * rather than running out of rows on one branch. */
+        for (i = 1U; i < count; i++)
+            if (leaves[i]->rect.h > leaves[tallest]->rect.h)
+                tallest = i;
+        nu = yew_pane_split_side(&ed, leaves[tallest], YEW_SPLIT_V,
+                                 true);
+        YEW_ASSERT_NOT_NULL(nu);
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 200U, 200U});
+    }
+    n = yew_pane_leaf_count(ed.pane_root);
+    YEW_ASSERT_EQ_U64(n, (u64)YEW_PANE_MAX_LEAVES);
+    {
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
+        u32 count = 0U;
+
+        yew_pane_collect_leaves(ed.pane_root, leaves,
+                                YEW_ARRAY_LEN(leaves), &count);
+        YEW_ASSERT_EQ_U64(count, (u64)YEW_PANE_MAX_LEAVES);
+        /* Room to spare on this leaf; the CAP is what refuses. */
+        YEW_ASSERT(leaves[0]->rect.w >= (u16)(YEW_PANE_MIN_W * 2 + 1));
+        YEW_ASSERT(yew_pane_split_side(&ed, leaves[0], YEW_SPLIT_H,
+                                       true) == NULL);
+        YEW_ASSERT(yew_pane_split_side(&ed, leaves[0], YEW_SPLIT_H,
+                                       false) == NULL);
+    }
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), n);
+    yew_ed_free(&ed);
+}
+
+/* `split_fits` is asked for both placements identically: a leaf one
+ * cell short refuses whichever side the new pane would take. */
+void test_layout_split_side_refuses_when_the_leaf_is_too_small(void)
+{
+    Ed ed;
+
+    ly_fixture(&ed);
+    /* One below 2*MIN_W + 1 columns, and one below 2*MIN_H + 1 rows. */
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2),
+                              (u16)(YEW_PANE_MIN_H * 2)});
+    YEW_ASSERT(yew_pane_split_side(&ed, ed.pane_root, YEW_SPLIT_H,
+                                   true) == NULL);
+    YEW_ASSERT(yew_pane_split_side(&ed, ed.pane_root, YEW_SPLIT_V,
+                                   true) == NULL);
+    YEW_ASSERT(ed.pane_root->is_leaf);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+
+    /* Exactly at the minimum it succeeds, so the refusal above was the
+     * boundary and not a blanket no. */
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2 + 1),
+                              (u16)(YEW_PANE_MIN_H * 2 + 1)});
+    YEW_ASSERT_NOT_NULL(yew_pane_split_side(&ed, ed.pane_root,
+                                            YEW_SPLIT_H, true));
+    yew_ed_free(&ed);
+}
+
+/* A NULL editor, a NULL leaf and a split node are all refusals, not
+ * crashes — the gesture resolves its leaf from a region payload that
+ * can name a node the frame no longer has. */
+void test_layout_split_side_refuses_a_non_leaf(void)
+{
+    Ed ed;
+
+    ly_fixture(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_pane_split_side(NULL, ed.pane_root, YEW_SPLIT_H,
+                                   true) == NULL);
+    YEW_ASSERT(yew_pane_split_side(&ed, NULL, YEW_SPLIT_H, true) == NULL);
+    YEW_ASSERT_NOT_NULL(yew_pane_split_side(&ed, ed.pane_root,
+                                            YEW_SPLIT_H, true));
+    /* pane_root is now a split node. */
+    YEW_ASSERT(yew_pane_split_side(&ed, ed.pane_root, YEW_SPLIT_H,
+                                   true) == NULL);
+    yew_ed_free(&ed);
+}
