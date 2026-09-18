@@ -129,9 +129,9 @@ CmdStatus yew_pane_cmd_split_v(CmdCtx *cx)
  * split" then has to mean the file or the new pane is a second copy of
  * the scratch the user was trying to get away from.
  *
- * yew_pane_split_side clones the focused Win, so the new leaf starts on
- * the SPLIT leaf's buffer; yew_ed_win_set_buffer then points it at the
- * tab's.  Two panes on one buffer is the supported shape (the tab model
+ * yew_pane_split_side clones the SPLIT LEAF's Win, so the new leaf
+ * starts on that leaf's buffer; yew_ed_win_set_buffer then points it at
+ * the tab's.  Two panes on one buffer is the supported shape (the tab model
  * forbids two TABS on one path, not two views).
  */
 CmdStatus yew_pane_open_tab_in_split(Ed *ed, u32 tab_id, Pane *leaf,
