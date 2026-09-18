@@ -2457,6 +2457,7 @@ const YewTest yew_tests[] = {
     T(invariant9_menu_and_its_rows_are_keyboard_reachable),
     T(invariant9_context_menu_takes_an_optional_strip_arg),
     T(invariant9_every_new_command_is_registered),
+    T(invariant9_tab_menu_splits_are_keyboard_reachable),
     T(mouse_tab_dropped_on_a_pane_cancels),
     T(mouse_hover_without_a_button_is_not_an_event),
     T(mouse_the_router_is_the_only_dispatch_site),

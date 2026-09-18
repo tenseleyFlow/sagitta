@@ -824,3 +824,66 @@ void test_invariant9_every_new_command_is_registered(void)
         YEW_ASSERT(id.v != YEW_CMD_NONE.v);
     }
 }
+
+/*
+ * Sprint 57.21 §5: the drag-to-spawn gesture's keyboard reach.
+ *
+ * The gesture itself is mouse-only by nature, so what invariant 9 asks
+ * for is that the CAPABILITY — open this tab's buffer in a new pane on
+ * a chosen side — is reachable with no pointer at all.  It is, twice
+ * over: the command by name, and the tab menu's rows, which this walks
+ * with End and Up rather than by counting rows, so the row's POSITION
+ * is free to change without this test quietly starting to assert a
+ * different row.
+ */
+void test_invariant9_tab_menu_splits_are_keyboard_reachable(void)
+{
+    Ed keys;
+    Buffer *doc;
+    u32 target;
+
+    i9_keys_only();
+    i9_fixture(&keys, 2);
+    yew_tab_switch(&keys, 1);
+    target = yew_tab_at(&keys, 1)->tab_id;
+    doc = yew_tab_buffer(&keys, 1);
+    YEW_ASSERT_NOT_NULL(doc);
+    yew_ed_layout(&keys);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(keys.pane_root), 1U);
+
+    YEW_ASSERT_EQ_U64(i9_run_iarg(&keys, "ed.ui.context_menu", 1),
+                      (u64)YEW_CMD_OK);
+    YEW_ASSERT(yew_ctx_active());
+    YEW_ASSERT_EQ_U64(yew_ctx_kind(), (u64)YEW_CTX_KIND_TAB);
+    YEW_ASSERT_EQ_U64(yew_ctx_target_id(), target);
+    {
+        /* End lands on the LAST usable row, `Open in Split Below`; one
+         * Up is `Open in Split Left`, the row §5 adds. */
+        Key end = i9_key(YEW_KEY_END);
+        Key up = i9_key(YEW_KEY_UP);
+        Key enter = i9_key(YEW_KEY_ENTER);
+
+        YEW_ASSERT(yew_mouse_menu_key(&keys, &end));
+        YEW_ASSERT(yew_mouse_menu_key(&keys, &up));
+        YEW_ASSERT(yew_mouse_menu_key(&keys, &enter));
+    }
+    YEW_ASSERT(!yew_ctx_active());
+
+    /* A second pane, on the LEFT, showing the tab that was pointed at
+     * — and the strip still has all three tabs. */
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(keys.pane_root), 2U);
+    YEW_ASSERT(!keys.pane_root->is_leaf);
+    YEW_ASSERT(keys.pane_root->dir == YEW_SPLIT_H);
+    YEW_ASSERT(keys.focus == keys.pane_root->a);
+    YEW_ASSERT(keys.focus->win->buf == doc);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&keys), 3U);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&keys, target), 1);
+
+    /* And the command by name is the same thing without the menu. */
+    yew_ed_layout(&keys);
+    YEW_ASSERT_EQ_U64(i9_run(&keys, "ed.tab.split_down", 0U, NULL),
+                      (u64)YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(keys.pane_root), 3U);
+    i9_mouse_on();
+    yew_ed_free(&keys);
+}
