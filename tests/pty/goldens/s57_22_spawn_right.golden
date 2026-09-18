@@ -1,0 +1,63 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=1,47 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s14-s57_22_spawn_ 2 yew-pty-0.txt  3 yew-pty-1.txt  +                    
+    1                                   │    1 alpha beta gamma                 
+                                        │    1 delta epsilon                    
+                                        │    2 zeta eta theta iota              
+                                        │    3 kappa                            
+                                        │    4                                  
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+                                        │                                       
+ L  pty-s14-s57_22_spawn_right.txt                           utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBCCCDDDDDDDDDDDDDDDDDDD
+EEEEFEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEFEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+IIIGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+--- legend
+A fg=#5c6370 bg=#1b202a attrs=-d--------
+B fg=#c8ccd4 bg=#2c313a attrs=b---------
+C fg=#61afef bg=#1b202a attrs=b---------
+D fg=#5c6370 bg=#1b202a attrs=----------
+E fg=#4b5263 bg=#12141a attrs=----------
+F fg=#c8ccd4 bg=#12141a attrs=b---------
+G fg=#c8ccd4 bg=#12141a attrs=----------
+H fg=#e77d24 bg=default attrs=----------
+I fg=#12141a bg=#61afef attrs=----------

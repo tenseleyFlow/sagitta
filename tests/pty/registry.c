@@ -5181,6 +5181,96 @@ static void case_chrome_drag(PtyCtx *c)
 }
 
 /* ---------------------------------------------------------------- */
+/* Sprint 57.22: drag a tab to an edge to spawn a pane              */
+/* ---------------------------------------------------------------- */
+
+/*
+ * A mouse report that MUST repaint.
+ *
+ * The motion that first enters a zone paints the affordance and the
+ * release that spawns a pane relays the whole screen, so the case waits
+ * for the FRAME rather than for a quiet period — a timeout would let a
+ * slow machine snapshot a half-drawn gesture and blame the golden.
+ */
+static void s57_22_mouse_frame(PtyCtx *c, const char *report)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_bytes(c, report);
+    settle_sync_delta(c, before, 1U, 0);
+}
+
+/*
+ * THE GEOMETRY THESE CASES STAND ON, at 80x24.
+ *
+ * Row 1 is the strip and row 24 the statusline, so the pane is rows
+ * 2-23 (22 cells tall) and 80 wide.  The zone depth is
+ * clamp(dimension / 5, 3, 12): 12 columns for the side bands — 1-based
+ * columns 1-12 and 69-80 — and 4 rows for the bottom, 1-based rows
+ * 20-23.  Every report below is aimed with those numbers, one cell
+ * clear of each boundary so a one-cell drift shows up as a changed
+ * golden rather than as a coin flip.
+ *
+ * Tab 1 holds the document; tabs 2 and 3 are empty files and tab 3 is
+ * active.  So the pane that appears shows TEXT and the pane that was
+ * there shows an empty buffer, which is the whole claim of the gesture
+ * visible in one picture.
+ */
+static void s57_22_drag_to(PtyCtx *c, const char *motion,
+                           const char *release)
+{
+    /* Press inside the first entry, arming without switching. */
+    s27_mouse(c, "\x1b[<0;3;1M");
+    s57_22_mouse_frame(c, motion);
+    if (release != NULL)
+        s57_22_mouse_frame(c, release);
+}
+
+static void s57_22_case(PtyCtx *c, const char *motion,
+                        const char *release)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s23_open_tabs(c, 2);
+    s57_22_drag_to(c, motion, release);
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* Mid-drag over the right band: the highlight covers the cells the new
+ * pane would take, the strip is untouched, and nothing has split yet. */
+static void case_s57_22_spawn_affordance(PtyCtx *c)
+{
+    s57_22_case(c, "\x1b[<32;75;12M", NULL);
+}
+
+/* The bottom band's affordance, which is the other axis and therefore
+ * the other half of the enum-spelling trap. */
+static void case_s57_22_spawn_affordance_below(PtyCtx *c)
+{
+    s57_22_case(c, "\x1b[<32;40;22M", NULL);
+}
+
+static void case_s57_22_spawn_right(PtyCtx *c)
+{
+    s57_22_case(c, "\x1b[<32;75;12M", "\x1b[<0;75;12m");
+}
+
+static void case_s57_22_spawn_left(PtyCtx *c)
+{
+    s57_22_case(c, "\x1b[<32;4;12M", "\x1b[<0;4;12m");
+}
+
+static void case_s57_22_spawn_below(PtyCtx *c)
+{
+    s57_22_case(c, "\x1b[<32;40;22M", "\x1b[<0;40;22m");
+}
+
+/* ---------------------------------------------------------------- */
 /* Sprint 27: the interaction goldens                               */
 /* ---------------------------------------------------------------- */
 
@@ -10881,6 +10971,13 @@ const PtyCase yew_pty_cases[] = {
     C(chrome_drag_colors_16, modern, 24U, 80U, case_chrome_drag),
     C(chrome_drag_ascii, modern, 24U, 80U, case_chrome_drag),
     C(s27_click_cjk_tab, modern, 24U, 80U, case_s27_click_cjk_tab),
+    C(s57_22_spawn_affordance, modern, 24U, 80U,
+      case_s57_22_spawn_affordance),
+    C(s57_22_spawn_affordance_below, modern, 24U, 80U,
+      case_s57_22_spawn_affordance_below),
+    C(s57_22_spawn_right, modern, 24U, 80U, case_s57_22_spawn_right),
+    C(s57_22_spawn_left, modern, 24U, 80U, case_s57_22_spawn_left),
+    C(s57_22_spawn_below, modern, 24U, 80U, case_s57_22_spawn_below),
     C(s57_8_click_new_tab, modern, 24U, 80U,
       case_s57_8_click_new_tab),
     C(s57_9_block_days_structure, modern, 24U, 80U,
