@@ -159,15 +159,20 @@ while [ "$run" -le "$runs" ]; do
         attempt=$((attempt + 1))
     done
     echo "perf-noise: run $run/$runs"
+    # YEW-F-072: the resume selector belongs only to this driver.  Clear it
+    # for nested makes so their policy self-tests do not mistake the real
+    # campaign path for one of their isolated synthetic campaigns.
     if PERF_GATE=0 PERF_S56_EVALUATE=1 \
        "$make_bin" --no-print-directory perf BUILD="$build" \
        PERF_RUNNER_ID="$runner_id" PERF_BASELINE="$baseline" \
        CALIB_REFERENCE="$reference" PERF_BUDGETS="$budgets" \
+       PERF_NOISE_RESUME= \
        >"$temporary" 2>&1 && \
        PERF_GATE=0 PERF_S56_EVALUATE=1 \
        "$make_bin" --no-print-directory perf-huge BUILD="$build" \
        PERF_RUNNER_ID="$runner_id" PERF_BASELINE="$baseline" \
        CALIB_REFERENCE="$reference" PERF_BUDGETS="$budgets" \
+       PERF_NOISE_RESUME= \
        >>"$temporary" 2>&1; then
         mv "$temporary" "$log"
     else

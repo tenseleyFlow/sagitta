@@ -144,10 +144,12 @@ cat >"$scratch/make" <<'EOF'
 set -eu
 target=
 output=
+resume_cleared=0
 for arg do
     case $arg in
         calib|perf|perf-huge) target=$arg ;;
         CALIB_OUTPUT=*) output=${arg#CALIB_OUTPUT=} ;;
+        PERF_NOISE_RESUME=) resume_cleared=1 ;;
     esac
 done
 case $target in
@@ -159,6 +161,11 @@ case $target in
         } >"$output"
         ;;
     perf)
+        if [ "${FAKE_REQUIRE_CLEARED_RESUME:-0}" -eq 1 ] &&
+           [ "$resume_cleared" -ne 1 ]; then
+            echo 'resume selector leaked into nested perf make' >&2
+            exit 43
+        fi
         if [ -n "${FAKE_PERF_COUNT:-}" ]; then
             count=0
             if [ -f "$FAKE_PERF_COUNT" ]; then
@@ -176,7 +183,13 @@ case $target in
         echo 'perf-gate: quantized.absolute median=1 absolute_over=0/3 relative_over=0/3 PASS'
         echo 'perf-gate: zero.absolute median=0 absolute_over=0/3 relative_over=0/3 PASS'
         ;;
-    perf-huge) ;;
+    perf-huge)
+        if [ "${FAKE_REQUIRE_CLEARED_RESUME:-0}" -eq 1 ] &&
+           [ "$resume_cleared" -ne 1 ]; then
+            echo 'resume selector leaked into nested perf-huge make' >&2
+            exit 43
+        fi
+        ;;
     *) exit 99 ;;
 esac
 EOF
@@ -222,7 +235,8 @@ resume_campaign=$1
 [ -s "$resume_campaign/run-2.log" ] &&
 [ -s "$resume_campaign/run-3.log.tmp" ] ||
     fail 'interrupted campaign did not retain its evidence'
-FAKE_PERF_COUNT=$resume_count BUILD=$resume_build \
+FAKE_PERF_COUNT=$resume_count FAKE_REQUIRE_CLEARED_RESUME=1 \
+BUILD=$resume_build \
 PERF_NOISE_RESUME=$resume_campaign \
 PERF_RUNNER_ID=perf-x86_64-linux-gnu CALIB_REFERENCE=$scratch/reference \
 PERF_BASELINE=$scratch/baseline PERF_BUDGETS=$scratch/budgets \
