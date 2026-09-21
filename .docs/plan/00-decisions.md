@@ -201,6 +201,30 @@ least half. The median-of-three verdict, `enforcement=all`, and the 20 ms
 user-facing first-paint budget remain unchanged. No editor code or feature is
 removed or weakened.
 
+**Amendment S59-A5 (2026-09-21) — three measured-noisy ARM rows retain hard
+absolute gates.** F072's complete 30-run campaign on the pinned ARM64 Linux
+guest at `c29b3077` passed every individual quick and huge budget run, with
+calibration scale 1143 before and 981 after (a 14.2 percent change, inside
+the 15 percent refusal boundary). The noise-floor recomputation nevertheless
+rejected three relative ratchets. Huge-search p99 had p05 1,108,981 ns,
+median 1,224,756 ns, and p95 1,471,495 ns (202 permille one-sided noise),
+while every run stayed below its calibrated 5 ms reference budget. Hostile
+regex on 64 KiB had p05 74,416 ns, median 83,816 ns, and p95 96,553 ns
+(152 permille noise), far below its 50 ms budget. Typing RSS growth was
+quantized between approximately 0.2 MiB and 0.45 MiB, with two 2 MiB
+residency steps: p05 196,608 bytes, median 200,704 bytes, and p95
+2,293,760 bytes. All 30 runs remained below the 3 MiB gate established
+by S59-A1. A 10-percent relative verdict on any of these rows would
+therefore fail on unchanged source and a stable designated host.
+
+These three rows use `enforcement=budget` under the S59-A2 rule: the same
+absolute limits remain hard on both designated runners, their baselines
+remain required and recorded, and all other relative ratchets are
+unchanged. The completed raw campaign is reanalyzed without rerunning or
+discarding observations; its source commit, input hashes, and original
+three-failure result remain named in the committed evidence. No editor
+code, feature, or user-facing limit changes.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

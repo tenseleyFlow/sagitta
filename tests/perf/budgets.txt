@@ -19,7 +19,7 @@ latency.typing.huge.p99                   le      5000000     ns                
 latency.edit.syntax.p99                   le      5000000     ns                 calibrated  designated    keypress_to_paint
 latency.multicursor.small.p99             le      5000000     ns                 calibrated  designated    keypress_to_paint
 latency.navigate.many_buffers.p99         le      5000000     ns                 calibrated  budget        keypress_to_paint
-latency.search.huge.p99                   le      5000000     ns                 calibrated  designated    keypress_to_paint
+latency.search.huge.p99                   le      5000000     ns                 calibrated  budget        keypress_to_paint
 latency.typing.assist.p99                 le      5000000     ns                 calibrated  designated    keypress_to_paint
 latency.any.max                           le      40000000    ns                 raw         informational diagnose_long_tail
 latency.typing.no_paint_fraction          record  -           permille           none        informational expected_noops
@@ -51,7 +51,7 @@ search.literal_absent.1g_code             le      2000000000  ns                
 search.literal.1g_noline                  le      2000000000  ns                 calibrated  designated    no_line_materialize
 search.regex_anchored.1g_code             le      4000000000  ns                 calibrated  designated    full_scan
 search.regex_alternation.1g_code          le      6000000000  ns                 calibrated  designated    full_scan
-search.regex_hostile.64k                  le      50000000    ns                 calibrated  designated    no_backtracking
+search.regex_hostile.64k                  le      50000000    ns                 calibrated  budget        no_backtracking
 search.incremental.1g_code                le      5000000     ns                 calibrated  designated    bounded_keystroke
 
 mem.clean_open.100m_code                  le      1600        file_size_permille none        designated    memory_1_6x
@@ -60,6 +60,6 @@ mem.clean_open.100m_allnl                 record  -           file_size_permille
 mem.paint.default_empty                   le      12582912    bytes              none        designated    default_footprint
 mem.paint.clean_empty                     le      8388608     bytes              none        designated    clean_footprint
 mem.workspace50                           le      41943040    bytes              none        designated    deferred_tabs
-mem.typing_growth.small                   le      3145728     bytes              none        designated    session_leak
+mem.typing_growth.small                   le      3145728     bytes              none        budget        session_leak
 mem.closed_growth.100m_code.linux         le      4194304     bytes              none        budget        closed_buffer_leak
 mem.assist.small                          le      25165824    bytes              none        designated    assist_footprint
