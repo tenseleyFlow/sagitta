@@ -82,7 +82,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-069 | audit | `tests/audit/f15_ban_misses.c` | ~~PTY minimum-case gate skips a missing registry~~ — fixed in `95695028` | fixed |
 | YEW-F-070 | audit | `tests/audit/f15_ban_misses.c` | ~~PTY golden gate accepts computed missing names~~ — fixed in `613e23aa` | fixed |
 | YEW-F-071 | audit | `tests/audit/f15_ban_misses.c` | ~~PTY orphan gate counts dead preprocessor rows~~ — fixed in `e5cec738` | fixed |
-| YEW-F-072 | audit | `tests/audit/yew_f_072.c` | designated performance evidence remains placeholder-only | open |
+| YEW-F-072 | audit | `tests/audit/yew_f_072.c` | ~~designated performance evidence remains placeholder-only~~ — fixed in `a1733694` | fixed |
 | YEW-F-073 | audit | `tests/audit/yew_f_073.c` | ~~baseline history policy is not enforced~~ — fixed in `aa77a9e6` | fixed |
 | YEW-F-074 | audit | `tests/audit/yew_f_074.c` | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed in `16761aba` | fixed |
 | YEW-F-075 | audit | `tests/audit/yew_f_075.c` | ~~stripped builds accept module-only config as inert state~~ — fixed in `ee6f9894` | fixed |
