@@ -3558,6 +3558,10 @@ install: all
 	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime/themes
 	install -m 0644 runtime/themes/*.fl \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/themes/
+	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime/completions
+	install -m 0644 runtime/completions/*.fl \
+		runtime/completions/README.md \
+		$(DESTDIR)$(PREFIX)/share/yew/runtime/completions/
 
 clean:
 	rm -rf $(BUILD)
