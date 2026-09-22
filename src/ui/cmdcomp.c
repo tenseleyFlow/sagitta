@@ -2422,10 +2422,7 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
             /* An explicit path keeps PATH (shape beats the spec), but the
              * spec still narrows it: a `dir` slot stays directories-only
              * past the first `/`, as 57.23's row 5 does for `cd`. */
-            if (arg != NULL && arg->kind == YEW_SPEC_ARG_DIR &&
-                pt.pending_flag == NULL)
-                p->mask = YEW_PATH_DIRS;
-            else if (arg != NULL && arg->kind == YEW_SPEC_ARG_DIR)
+            if (arg != NULL && arg->kind == YEW_SPEC_ARG_DIR)
                 p->mask = YEW_PATH_DIRS;
             if (arg != NULL && arg->kind == YEW_SPEC_ARG_PATH) {
                 p->ext = arg->ext;
@@ -2546,12 +2543,12 @@ static void spec_flag_rows(CandidateVec *v, const YewSpecNode *node,
 
 /* Rows of a value-bearing arg: fixed values, a built-in generator, or a
  * subprocess generator's cache.  `prefix` is `--flag=` (or `-` for a
- * dash value); *pending says a subprocess answer is still coming. */
+ * dash value). */
 static void spec_value_rows(const CompReq *req, const ShellPlan *p,
                             const YewSpecArg *arg, const char *prefix,
                             const char *stem, size_t head_len,
                             Arena *scratch, CandidateVec *v,
-                            CandidateVec *gv, bool *pending)
+                            CandidateVec *gv)
 {
     Vec_CompItem rows = {0};
     size_t np = strlen(prefix);
@@ -2572,12 +2569,10 @@ static void spec_value_rows(const CompReq *req, const ShellPlan *p,
         (void)yew_compgen_builtin(arg->generator, p->make_cwd, p->makefile,
                                   scratch, &rows);
     } else if (p->has_key) {
-        bool in_flight = false;
-
+        /* In flight or not, the filter asks yew_compgen_awaiting for
+         * the pager's marker itself. */
         (void)yew_compgen_rows(req->ed, &p->key, yew_now_ms(), scratch,
-                               &rows, &in_flight);
-        if (in_flight)
-            *pending = true;
+                               &rows, NULL);
     }
     /* Details stay in `scratch`: candidate_finish copies them, and the
      * caller finishes before it frees the arena. */
@@ -2639,7 +2634,6 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
         const char *pattern = stem + head_len;
         CandidateVec spec_rows = {0};
         CandidateVec gen_rows = {0};
-        bool pending = false;
         u32 k;
 
         if (plan.subs) {
@@ -2664,13 +2658,12 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
             if (plan.dash)
                 prefix = arena_strdup(&plan_arena, "-");
             spec_value_rows(req, &plan, plan.arg, prefix, stem, head_len,
-                            &plan_arena, &spec_rows, &gen_rows, &pending);
+                            &plan_arena, &spec_rows, &gen_rows);
         }
         total += spec_finish(req, YEW_COMP_SPEC, &spec_rows, head_len,
                              pattern, out);
         total += spec_finish(req, YEW_COMP_GEN, &gen_rows, head_len,
                              pattern, out);
-        (void)pending; /* the filter asks yew_compgen_awaiting itself */
     }
     if ((sources & SRC_BIT(YEW_COMP_VAR)) != 0U) {
         total += shell_sub(req, YEW_COMP_VAR, stem, 0U, NULL, 0U, &got);
