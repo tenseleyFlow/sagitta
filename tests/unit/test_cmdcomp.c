@@ -116,18 +116,20 @@ void test_cmdcomp_source_selection_and_score(void)
     YEW_ASSERT(!yew_comp_kind_for(&free_string, 1U, false, &kind));
     /*
      * Sprint 57.18 §3: inside a bang body the argspec is bypassed
-     * entirely -- word 0 is what the shell runs, 1+ are its operands --
-     * and the same 's' argspec that completes NOTHING above still
-     * completes nothing when the caret is not in a bang body.
+     * entirely, and the same 's' argspec that completes NOTHING above
+     * still completes nothing when the caret is not in a bang body.
+     * Sprint 57.23 §5 replaced 57.18's word-0-EXEC / else-PATH ternary:
+     * every word of a bang body goes to the SHELL dispatcher, which
+     * reads the caret's whole shell context rather than its index.
      */
     YEW_ASSERT(yew_comp_kind_for(NULL, 0U, true, &kind));
-    YEW_ASSERT_EQ_I64(kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_SHELL);
     YEW_ASSERT(yew_comp_kind_for(&free_string, 0U, true, &kind));
-    YEW_ASSERT_EQ_I64(kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_SHELL);
     YEW_ASSERT(yew_comp_kind_for(&free_string, 1U, true, &kind));
-    YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_SHELL);
     YEW_ASSERT(yew_comp_kind_for(NULL, 7U, true, &kind));
-    YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_SHELL);
     /*
      * Sprint 18.5 §2 closed the yew_comp_score seam; ranking is now
      * yew_fz_score's.  The sentinel moved from -1 to YEW_FZ_NO_MATCH,
@@ -1219,25 +1221,31 @@ void test_cmdcomp_bang_query_routes_exec_then_path(void)
     exec_set_path(&f, one);
     arena_init(&scratch);
 
-    /* Word 0 of a bang body: executables. */
+    /* Word 0 of a bang body: executables -- through Sprint 57.23's
+     * SHELL dispatcher, whose context says COMMAND. */
     YEW_ASSERT(yew_comp_query(&f.ed, ":!chk", 5U, 5U, &scratch, &q));
-    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_SHELL);
+    YEW_ASSERT_EQ_I64(q.shell->pos, YEW_SH_POS_COMMAND);
     YEW_ASSERT_EQ_STR(q.stem, "chk");
     YEW_ASSERT_EQ_U64(q.replace.lo, 2U);
     YEW_ASSERT_EQ_U64(q.replace.hi, 5U);
     /* Word 1: a path. */
     YEW_ASSERT(yew_comp_query(&f.ed, ":!chk-runner sr", 15U, 15U, &scratch,
                               &q));
-    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_PATH);
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_SHELL);
+    YEW_ASSERT_EQ_I64(q.shell->pos, YEW_SH_POS_ARGUMENT);
     YEW_ASSERT_EQ_STR(q.stem, "sr");
     /* `:%!` and `:r !` route the same way. */
     YEW_ASSERT(yew_comp_query(&f.ed, ":%!chk", 6U, 6U, &scratch, &q));
-    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_SHELL);
+    YEW_ASSERT_EQ_I64(q.shell->pos, YEW_SH_POS_COMMAND);
     YEW_ASSERT(yew_comp_query(&f.ed, ":r !chk", 7U, 7U, &scratch, &q));
-    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_SHELL);
+    YEW_ASSERT_EQ_I64(q.shell->pos, YEW_SH_POS_COMMAND);
     /* §4's `:!!` prefix completes its command word too. */
     YEW_ASSERT(yew_comp_query(&f.ed, ":!!chk", 6U, 6U, &scratch, &q));
-    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_EXEC);
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_SHELL);
+    YEW_ASSERT_EQ_I64(q.shell->pos, YEW_SH_POS_COMMAND);
     YEW_ASSERT_EQ_STR(q.stem, "chk");
     YEW_ASSERT_EQ_U64(q.replace.lo, 3U);
     /* An ordinary 's' argument is still not completed. */
@@ -1264,5 +1272,78 @@ void test_cmdcomp_bang_query_routes_exec_then_path(void)
     arena_free_all(&scratch);
     exec_rm(f.a, "chk-runner");
     exec_rm(f.a, "chk spacey");
+    exec_fixture_dispose(&f);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sprint 57.23: the SHELL dispatcher                                  */
+/* ------------------------------------------------------------------ */
+
+static void shell_touch(const char *dir, const char *name)
+{
+    char path[512];
+    int fd;
+
+    (void)snprintf(path, sizeof(path), "%s/%s", dir, name);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+}
+
+static void shell_unlink(const char *dir, const char *name)
+{
+    char path[512];
+
+    (void)snprintf(path, sizeof(path), "%s/%s", dir, name);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+}
+
+/*
+ * §5 pitfall, written before the fix: the live filter re-ranks while
+ * `head` and `pattern` are unchanged, and `ls gr` and `ls | gr` share
+ * both.  Type `ls gr`, insert `| ` before `gr` with the menu still open,
+ * and the rows must change -- files before, executables after.
+ */
+void test_cmdcomp_shell_filter_rekeys_on_context(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    CompFilter filter;
+    YewCompQuery q;
+    Vec_CompItem rows = {0};
+
+    exec_fixture_init(&f);
+    exec_mkexe(f.a, "grchk", 0700);
+    shell_touch(f.root, "grfile");
+    exec_set_path(&f, f.a);
+    arena_init(&scratch);
+    arena_init(&arena);
+    yew_comp_filter_init(&filter);
+
+    YEW_ASSERT(yew_comp_query(&f.ed, ":!ls gr", 7U, 7U, &scratch, &q));
+    YEW_ASSERT_EQ_I64(q.kind, YEW_COMP_SHELL);
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &rows);
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "grfile"));
+    YEW_ASSERT_NULL(find_item(&rows, "grchk"));
+
+    YEW_ASSERT(yew_comp_query(&f.ed, ":!ls | gr", 9U, 9U, &scratch, &q));
+    YEW_ASSERT_EQ_STR(q.stem, "gr");
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &rows);
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "grchk"));
+    YEW_ASSERT_NULL(find_item(&rows, "grfile"));
+
+    /* And back: deleting the `| ` re-keys again. */
+    YEW_ASSERT(yew_comp_query(&f.ed, ":!ls gr", 7U, 7U, &scratch, &q));
+    (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 0, &rows);
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "grfile"));
+    YEW_ASSERT_NULL(find_item(&rows, "grchk"));
+
+    Vec_CompItem_free(&rows);
+    yew_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    shell_unlink(f.root, "grfile");
+    exec_rm(f.a, "grchk");
     exec_fixture_dispose(&f);
 }

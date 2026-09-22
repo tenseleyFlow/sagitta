@@ -949,6 +949,7 @@ const YewTest yew_tests[] = {
     T(cmdcomp_exec_opendir_count_stays_bounded),
     T(cmdcomp_exec_slices_and_resumes),
     T(cmdcomp_bang_query_routes_exec_then_path),
+    T(cmdcomp_shell_filter_rekeys_on_context),
     T(cmdline_reuses_textbuf_and_grapheme_cursor),
     T(cmdline_sanitizes_seed_paste_and_register_newlines),
     T(cmdline_e_keymap_leaves_are_registered_editor_commands),

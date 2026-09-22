@@ -918,6 +918,7 @@ void test_cmdcomp_exec_lists_only_runnable_names(void);
 void test_cmdcomp_exec_opendir_count_stays_bounded(void);
 void test_cmdcomp_exec_slices_and_resumes(void);
 void test_cmdcomp_bang_query_routes_exec_then_path(void);
+void test_cmdcomp_shell_filter_rekeys_on_context(void);
 void test_cmdline_reuses_textbuf_and_grapheme_cursor(void);
 void test_cmdline_sanitizes_seed_paste_and_register_newlines(void);
 void test_cmdline_e_keymap_leaves_are_registered_editor_commands(void);
