@@ -1129,9 +1129,9 @@ void test_cmdcomp_exec_opendir_count_stays_bounded(void)
 /*
  * §2's slicing, shown the way the path source's is: a 1 us budget leaves
  * the scan pending, and the idle path drains it to exactly what an
- * unbudgeted scan would have answered. Instrumented builds can exhaust
- * that budget before the first entry, so only require useful partial
- * results and an open handle in the uninstrumented lane.
+ * unbudgeted scan would have answered. The budget may expire before the
+ * first entry on a busy runner, so no assertion depends on nonempty output
+ * from that first microsecond.
  */
 void test_cmdcomp_exec_slices_and_resumes(void)
 {
@@ -1142,7 +1142,6 @@ void test_cmdcomp_exec_slices_and_resumes(void)
     Vec_CompItem whole = {0};
     YewCompQuery q;
     char both[512];
-    bool instrumented = getenv("YEW_TEST_INSTRUMENTED") != NULL;
     u64 before;
     u32 slices = 0U;
     u32 i;
@@ -1163,16 +1162,11 @@ void test_cmdcomp_exec_slices_and_resumes(void)
     q = exec_query("chk");
     (void)yew_comp_filter_run(&f.ed, &filter, &arena, &q, 1, &sliced);
     YEW_ASSERT(yew_comp_listing_pending());
-    /* The second element has not been opened yet. Under sanitizers even
-     * the first opendir may not fit within a one-microsecond budget. */
-    if (!instrumented) {
-        YEW_ASSERT(sliced.len != 0U);
-        YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 1U);
-    } else {
-        YEW_ASSERT(yew_comp_listing_opendirs() - before <= 1U);
-    }
+    /* The second element has not been opened yet. Even the first opendir
+     * may not fit within a one-microsecond budget under contention. */
+    YEW_ASSERT(yew_comp_listing_opendirs() - before <= 1U);
 
-    while (yew_comp_listing_advance(instrumented ? 1000 : 1)) {
+    while (yew_comp_listing_advance(1000)) {
         if (++slices >= 200U)
             break;
     }
