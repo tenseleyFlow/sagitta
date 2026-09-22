@@ -48,16 +48,16 @@ void test_pty_environment_exact(void)
     size_t i;
 
     /* NO_COLOR, the two opt-in profiling variables, the clipboard override,
-     * the three invariant-5 audit variables, and Sprint 57.18's opt-in
-     * $PATH are absent from baseline. */
-    YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(expected) + 8U,
+     * the three invariant-5 audit variables, Sprint 57.18's opt-in $PATH
+     * and Sprint 57.24's opt-in $HOME are absent from baseline. */
+    YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(expected) + 9U,
                       (u64)YEW_PTY_ENV_COUNT);
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
                              NULL, "0", "/tmp/yew-runtime", "0",
                              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                             NULL));
+                             NULL, NULL));
     for (i = 0U; i < YEW_ARRAY_LEN(expected); i++)
         YEW_ASSERT_EQ_STR(envp[i], expected[i]);
     for (; i <= YEW_PTY_ENV_COUNT; i++)
@@ -70,7 +70,7 @@ void test_pty_environment_exact(void)
                              "/tmp/yew-pty-state",
                              "", "0", "/tmp/yew-runtime", "0",
                              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                             NULL));
+                             NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
@@ -79,7 +79,7 @@ void test_pty_environment_exact(void)
                              "/tmp/yew-pty-state",
                              "0", "0", "/tmp/yew-runtime", "0",
                              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                             NULL));
+                             NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=0");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
@@ -87,13 +87,15 @@ void test_pty_environment_exact(void)
     YEW_ASSERT(ptc_env_build(envp, "dumb", "16", "/tmp/yew-pty-state",
                              NULL, "0", "/tmp/yew-runtime", "0",
                              "1", "/tmp/yew-rss.log", "none",
-                             NULL, NULL, NULL, NULL, "bin"));
+                             NULL, NULL, NULL, NULL, "bin", "/tmp/home"));
     YEW_ASSERT_EQ_STR(envp[0], "TERM=dumb");
     YEW_ASSERT_EQ_STR(envp[19], "YEW_PROF=1");
     YEW_ASSERT_EQ_STR(envp[20], "YEW_LOG=/tmp/yew-rss.log");
     YEW_ASSERT_EQ_STR(envp[21], "YEW_CLIPBOARD=none");
     /* Sprint 57.18 §2: present only when a case asks for it. */
     YEW_ASSERT_EQ_STR(envp[22], "PATH=bin");
+    /* Sprint 57.24: so is HOME. */
+    YEW_ASSERT_EQ_STR(envp[23], "HOME=/tmp/home");
     ptc_env_free(envp);
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
@@ -101,7 +103,7 @@ void test_pty_environment_exact(void)
                              "/tmp/yew-runtime", "0", NULL, NULL, NULL,
                              "tr_TR.UTF-8@hostile", "GMT+25;bad",
                              "truecolor;touch-no-file",
-                             "WezTerm;touch-no-file", NULL));
+                             "WezTerm;touch-no-file", NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[7], "LANG=tr_TR.UTF-8@hostile");
     YEW_ASSERT_EQ_STR(envp[8], "LC_ALL=tr_TR.UTF-8@hostile");
     YEW_ASSERT_EQ_STR(envp[19], "TZ=GMT+25;bad");

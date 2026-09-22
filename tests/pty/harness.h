@@ -10,7 +10,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define YEW_PTY_ENV_COUNT 27U
+#define YEW_PTY_ENV_COUNT 28U
 
 typedef struct PtySpec {
     /*
@@ -102,6 +102,13 @@ struct PtyCtx {
      * so the detail column it draws is a fixed string.
      */
     const char *exec_path;
+    /*
+     * Sprint 57.24: $HOME for the child, or NULL to leave it unset (the
+     * default, as for $PATH).  A case that completes ssh hosts points it
+     * at a fixture directory in its own workspace, so no PTY ever reads
+     * the developer's real ~/.ssh.
+     */
+    const char *home_dir;
     /* The binary, made absolute when cwd is set. */
     char *resolved_bin;
     char failure[512];
@@ -119,7 +126,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *clipboard, const char *audit_lang,
                    const char *audit_tz, const char *audit_colorterm,
                    const char *audit_term_program,
-                   const char *exec_path);
+                   const char *exec_path, const char *home);
 void ptc_env_free(char **envp);
 
 void ptc_spawn(PtyCtx *c, const char *bin, ...);
