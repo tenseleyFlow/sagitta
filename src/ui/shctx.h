@@ -97,6 +97,33 @@ bool yew_shctx_at(const char *line, size_t len, size_t cursor, Arena *a,
                   YewShCtx *out);
 
 /*
+ * Sprint 57.24 §1: one precommand wrapper as a completion spec describes
+ * it.  `consumes` is NULL-terminated (NULL for none): the flags that take
+ * the next word.  `operands` words follow the flags before the command
+ * (timeout's duration); `skips_assign` lets NAME=value words through
+ * (env, sudo).
+ */
+typedef struct YewShWrapper {
+    const char *const *consumes;
+    u32 operands;
+    bool skips_assign;
+} YewShWrapper;
+
+/*
+ * Is `name` a precommand wrapper?  1: yes, `out` filled (its strings must
+ * outlive the call); 0: no -- a spec exists and has no `precommand`,
+ * which un-wraps a table row; -1: no opinion, use §2's built-in table.
+ */
+typedef int (*YewShWrapperLookup)(void *ud, const char *name,
+                                  YewShWrapper *out);
+
+/* yew_shctx_at with the wrapper table replaceable by `lookup` (NULL keeps
+ * the built-in table, which is all yew_shctx_at uses). */
+bool yew_shctx_at_with(const char *line, size_t len, size_t cursor,
+                       Arena *a, YewShWrapperLookup lookup, void *ud,
+                       YewShCtx *out);
+
+/*
  * §6: quote `text` for insertion at a caret whose state is `q`.  Returns
  * the bytes to insert; `closing` receives the quote to append when the
  * word is complete (sole match, non-directory), or "" for none.

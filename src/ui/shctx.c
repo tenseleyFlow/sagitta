@@ -135,6 +135,9 @@ typedef struct Lexer {
     bool var;
     bool var_brace;
     size_t var_start;
+    /* Sprint 57.24 §1: a spec's `precommand` replaces the table row. */
+    YewShWrapperLookup wrap_lookup;
+    void *wrap_ud;
 } Lexer;
 
 static bool is_name_start(unsigned char c)
@@ -1063,7 +1066,7 @@ static size_t lex_squote(Lexer *L, CmdFr *c, size_t at)
 typedef struct Wrapper {
     const char *name;
     const char *const *consumes; /* flags taking the next word; NULL-ended */
-    bool duration;               /* timeout: then ONE duration word        */
+    u32 operands;                /* timeout: then ONE duration word        */
     bool skips_assign;           /* env: NAME=value words are its own      */
 } Wrapper;
 
@@ -1080,27 +1083,53 @@ static const char *const no_flags[] = {NULL};
 
 /* §2's built-in table, replaceable by Sprint 57.24's specs. */
 static const Wrapper wrappers[] = {
-    {"sudo", sudo_flags, false, true},
-    {"doas", doas_flags, false, false},
-    {"env", env_flags, false, true},
-    {"nice", nice_flags, false, false},
-    {"timeout", timeout_flags, true, false},
-    {"xargs", xargs_flags, false, false},
-    {"nohup", no_flags, false, false},
-    {"time", no_flags, false, false},
-    {"command", no_flags, false, false},
-    {"builtin", no_flags, false, false},
-    {"exec", no_flags, false, false},
-    {"caffeinate", no_flags, false, false},
-    {"unbuffer", no_flags, false, false}
+    {"sudo", sudo_flags, 0U, true},
+    {"doas", doas_flags, 0U, false},
+    {"env", env_flags, 0U, true},
+    {"nice", nice_flags, 0U, false},
+    {"timeout", timeout_flags, 1U, false},
+    {"xargs", xargs_flags, 0U, false},
+    {"nohup", no_flags, 0U, false},
+    {"time", no_flags, 0U, false},
+    {"command", no_flags, 0U, false},
+    {"builtin", no_flags, 0U, false},
+    {"exec", no_flags, 0U, false},
+    {"caffeinate", no_flags, 0U, false},
+    {"unbuffer", no_flags, 0U, false}
 };
 
-static const Wrapper *wrapper_of(const ShWord *w)
+/*
+ * Sprint 57.24 §1: a completion spec's `precommand` REPLACES this
+ * table's row for its command (and a spec without one un-wraps it --
+ * whole-file replace).  The lookup answers 1 (a wrapper, `out` filled),
+ * 0 (not one) or -1 (no opinion: use the table).  `scratch` holds the
+ * answer so the caller can keep a pointer to it for one word.
+ */
+static const Wrapper *wrapper_of(const Lexer *L, const ShWord *w,
+                                 Wrapper *scratch)
 {
     size_t i;
 
     if ((w->flags & (W_QUOTED | W_EXPANDS | W_SYNTH)) != 0U)
         return NULL;
+    if (L->wrap_lookup != NULL) {
+        YewShWrapper got;
+        int verdict;
+
+        (void)memset(&got, 0, sizeof(got));
+        verdict = L->wrap_lookup(L->wrap_ud, w->text, &got);
+        if (verdict == 0)
+            return NULL;
+        if (verdict > 0) {
+            static const char *const none[] = {NULL};
+
+            scratch->name = w->text;
+            scratch->consumes = got.consumes == NULL ? none : got.consumes;
+            scratch->operands = got.operands;
+            scratch->skips_assign = got.skips_assign;
+            return scratch;
+        }
+    }
     for (i = 0U; i < YEW_ARRAY_LEN(wrappers); i++) {
         if (strcmp(w->text, wrappers[i].name) == 0)
             return &wrappers[i];
@@ -1139,19 +1168,21 @@ typedef enum CaretRole {
  * looks like an option, which keeps it with a wrapper that has not
  * finished its options.
  */
-static u32 command_index(const ShWord *w, u32 n, CaretRole role,
-                         bool caret_flag)
+static u32 command_index(const Lexer *L, const ShWord *w, u32 n,
+                         CaretRole role, bool caret_flag)
 {
     u32 i = skip_assign(w, 0U, n);
 
     for (;;) {
+        Wrapper scratch;
         const Wrapper *wr;
         u32 j;
+        u32 k;
         bool ended = false;
 
         if (i >= n)
             return n;
-        wr = wrapper_of(&w[i]);
+        wr = wrapper_of(L, &w[i], &scratch);
         if (wr == NULL)
             return i;
         j = i + 1U;
@@ -1185,12 +1216,15 @@ static u32 command_index(const ShWord *w, u32 n, CaretRole role,
                 return i;
             if (!ended && caret_flag)
                 return i;
-            if (wr->duration)
+            if (wr->operands != 0U)
                 return i;
             return n;
         }
-        if (wr->duration)
+        for (k = 0U; k < wr->operands; k++) {
+            if (j >= n)
+                return i; /* the caret is one of the wrapper's operands */
             j++;
+        }
         i = skip_assign(w, j, n);
     }
 }
@@ -1202,7 +1236,7 @@ static void resolve(Lexer *L, const CmdFr *c, CaretRole role, bool assign,
     u32 n = c->n;
     bool caret_flag = out->stem[0] == '-' &&
                       (!c->in_word || (c->w_flags & W_QUOTED) == 0U);
-    u32 cmd = command_index(w, n, role, caret_flag);
+    u32 cmd = command_index(L, w, n, role, caret_flag);
     u32 k;
 
     if (role == ROLE_WORD && cmd == n) {
@@ -1328,6 +1362,13 @@ static void finish(Lexer *L, YewShCtx *out)
 bool yew_shctx_at(const char *line, size_t len, size_t cursor, Arena *a,
                   YewShCtx *out)
 {
+    return yew_shctx_at_with(line, len, cursor, a, NULL, NULL, out);
+}
+
+bool yew_shctx_at_with(const char *line, size_t len, size_t cursor,
+                       Arena *a, YewShWrapperLookup lookup, void *ud,
+                       YewShCtx *out)
+{
     Lexer *L;
     size_t at = 0U;
     u32 i;
@@ -1341,6 +1382,8 @@ bool yew_shctx_at(const char *line, size_t len, size_t cursor, Arena *a,
     L->line = line == NULL ? "" : line;
     L->end = cursor;
     L->a = a;
+    L->wrap_lookup = lookup;
+    L->wrap_ud = ud;
     L->kinds[0] = FR_TOP;
     L->nk = 1U;
     frame_init(&L->cmd[0], FR_TOP);
