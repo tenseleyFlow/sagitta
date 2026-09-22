@@ -2897,6 +2897,161 @@ static void case_s57_18_bang_quotes_a_spacey_path(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.23: the shell context engine, end to end.
+ *
+ * The workspace is the editor's cwd, so a fixture made here is what a
+ * relative `:!` word names.  `execs` land in the workspace root with the
+ * exec bit (a `./scr` target); `bins` go in a $PATH-only directory as in
+ * 57.18; `files` and `dirs` are plain.
+ */
+static bool s57_23_make(PtyCtx *c, const char *const *bins, size_t nbins,
+                        const char *const *execs, size_t nexecs,
+                        const char *const *files, size_t nfiles,
+                        const char *const *dirs, size_t ndirs)
+{
+    char path[PATH_MAX];
+    size_t i;
+
+    if (!s57_18_make(c, bins == NULL ? NULL : "s5723bin", bins, nbins,
+                     files, nfiles))
+        return false;
+    for (i = 0U; i < nexecs; i++) {
+        if (snprintf(path, sizeof(path), "%s/%s", c->workspace_dir,
+                     execs[i]) >= (int)sizeof(path) ||
+            !write_bytes(path, (const u8 *)"#!/bin/sh\nexit 0\n", 17U) ||
+            chmod(path, 0700) != 0) {
+            ptc_check(c, false, "creating Sprint 57.23 executable");
+            return false;
+        }
+    }
+    for (i = 0U; i < ndirs; i++) {
+        if (snprintf(path, sizeof(path), "%s/%s", c->workspace_dir,
+                     dirs[i]) >= (int)sizeof(path) ||
+            mkdir(path, 0700) != 0) {
+            ptc_check(c, false, "creating Sprint 57.23 directory");
+            return false;
+        }
+    }
+    return true;
+}
+
+/* §3 row 4: `./scr` is a path-shaped COMMAND word, so it completes from
+ * the directory -- executables and directories only -- not from $PATH,
+ * which never contains `./`. */
+static void case_s57_23_bang_dot_slash_exec(PtyCtx *c)
+{
+    static const char *const execs[] = {"scrrun", "scrtool"};
+    static const char *const files[] = {"scrdata.txt"};
+    static const char *const dirs[] = {"scripts"};
+    static const u8 initial[] = "dot slash fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, NULL, 0U, execs, YEW_ARRAY_LEN(execs), files,
+                     YEW_ARRAY_LEN(files), dirs, YEW_ARRAY_LEN(dirs)))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!./scr");
+    ptc_snapshot(c, "s57_23_bang_dot_slash_exec");
+    s18_finish(c, path);
+}
+
+/* §1 + row 7: the word after `|` is a COMMAND again, so `chk` offers the
+ * $PATH executables and not the file that shares its prefix. */
+static void case_s57_23_bang_pipe_command_position(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha", "chk-beta"};
+    static const char *const files[] = {"chk-file.txt"};
+    static const u8 initial[] = "pipe fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, bins, YEW_ARRAY_LEN(bins), NULL, 0U, files,
+                     YEW_ARRAY_LEN(files), NULL, 0U))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!ls | chk");
+    ptc_snapshot(c, "s57_23_bang_pipe_command_position");
+    s18_finish(c, path);
+}
+
+/* §3 row 2: `$PAG` completes a variable the `:!` child will see -- here
+ * the job layer's own PAGER=cat -- with its value as the detail. */
+static void case_s57_23_bang_variable(PtyCtx *c)
+{
+    static const u8 initial[] = "variable fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!echo $PAG");
+    ptc_snapshot(c, "s57_23_bang_variable");
+    s18_finish(c, path);
+}
+
+/* §2: `sudo -u root` is stripped with its flag argument, and the next
+ * word completes executables. */
+static void case_s57_23_bang_sudo_wrapper(PtyCtx *c)
+{
+    static const char *const bins[] = {"chk-alpha", "chk-beta"};
+    static const char *const files[] = {"chk-file.txt"};
+    static const u8 initial[] = "wrapper fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, bins, YEW_ARRAY_LEN(bins), NULL, 0U, files,
+                     YEW_ARRAY_LEN(files), NULL, 0U))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!sudo -u root chk");
+    ptc_snapshot(c, "s57_23_bang_sudo_wrapper");
+    s18_finish(c, path);
+}
+
+/* §3 row 8: `cd` offers directories only. */
+static void case_s57_23_bang_cd_dirs_only(PtyCtx *c)
+{
+    static const char *const files[] = {"cdnote.txt"};
+    static const char *const dirs[] = {"cdalpha", "cdbeta"};
+    static const u8 initial[] = "cd fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, NULL, 0U, NULL, 0U, files, YEW_ARRAY_LEN(files),
+                     dirs, YEW_ARRAY_LEN(dirs)))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!cd cd");
+    ptc_snapshot(c, "s57_23_bang_cd_dirs_only");
+    s18_finish(c, path);
+}
+
+/* §6: a file named `a$b c` completes to `a\$b\ c ` -- the form the shell
+ * reads back as that name, rather than one it expands. */
+static void case_s57_23_bang_quote_dollar_file(PtyCtx *c)
+{
+    static const char *const files[] = {"a$b c"};
+    static const u8 initial[] = "quote fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, NULL, 0U, NULL, 0U, files, YEW_ARRAY_LEN(files),
+                     NULL, 0U))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!cat a");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_23_bang_quote_dollar_file");
+    s18_finish(c, path);
+}
+
 /* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
  * from the same tolerant parse the menu filtered with. */
 static void case_s18_5_cmdline_hint(PtyCtx *c)
@@ -11051,6 +11206,17 @@ const PtyCase yew_pty_cases[] = {
       case_s57_18_bang_completes_path),
     C(s57_18_bang_quotes_a_spacey_path, modern, 24U, 80U,
       case_s57_18_bang_quotes_a_spacey_path),
+    C(s57_23_bang_dot_slash_exec, modern, 24U, 80U,
+      case_s57_23_bang_dot_slash_exec),
+    C(s57_23_bang_pipe_command_position, modern, 24U, 80U,
+      case_s57_23_bang_pipe_command_position),
+    C(s57_23_bang_variable, modern, 24U, 80U, case_s57_23_bang_variable),
+    C(s57_23_bang_sudo_wrapper, modern, 24U, 80U,
+      case_s57_23_bang_sudo_wrapper),
+    C(s57_23_bang_cd_dirs_only, modern, 24U, 80U,
+      case_s57_23_bang_cd_dirs_only),
+    C(s57_23_bang_quote_dollar_file, modern, 24U, 80U,
+      case_s57_23_bang_quote_dollar_file),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
