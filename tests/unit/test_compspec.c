@@ -371,26 +371,31 @@ void test_compspec_user_file_is_rechecked_once_per_prompt(void)
     spec_fix_drop(&f);
 }
 
-/* §7: decorating the command column reads the index, built once. */
-void test_compspec_description_index_parses_each_file_once(void)
+/* §7: decorating the command column reads the index -- a SCAN of the
+ * shipped files' top level, no parse per keystroke and none at all for a
+ * command nobody completes. */
+void test_compspec_description_index_parses_nothing(void)
 {
     SpecFix f;
     u32 before;
-    u32 after_first;
     u32 i;
 
     spec_fix_init(&f);
     before = yew_compspec_test_parse_count();
+    YEW_ASSERT_EQ_STR(yew_compspec_describe("wolf"), "the wolf toolchain");
     YEW_ASSERT_NOT_NULL(yew_compspec_describe("git"));
-    after_first = yew_compspec_test_parse_count();
-    YEW_ASSERT_EQ_U64(after_first - before,
-                      (u64)yew_compspec_shipped_count());
+    /* `gmake` is only in make.fl's command list. */
+    YEW_ASSERT_EQ_STR(yew_compspec_describe("gmake"),
+                      yew_compspec_describe("make"));
     for (i = 0U; i < 100U; i++) {
         (void)yew_compspec_describe("wolf");
-        (void)yew_compspec_describe("make");
-        (void)yew_compspec_get(NULL, "git");
+        (void)yew_compspec_describe("no-such-s5724");
     }
-    YEW_ASSERT_EQ_U64(yew_compspec_test_parse_count(), after_first);
+    YEW_ASSERT_EQ_U64(yew_compspec_test_parse_count(), before);
+    /* Completing a command parses its file, once. */
+    YEW_ASSERT_NOT_NULL(yew_compspec_get(NULL, "gmake"));
+    YEW_ASSERT_NOT_NULL(yew_compspec_get(NULL, "make"));
+    YEW_ASSERT_EQ_U64(yew_compspec_test_parse_count(), before + 1U);
     spec_fix_drop(&f);
 }
 

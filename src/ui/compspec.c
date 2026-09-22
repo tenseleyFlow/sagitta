@@ -1059,6 +1059,7 @@ static bool read_path(const char *path, Bytebuf *out)
 
 typedef struct Shipped {
     char *file; /* "git.fl" */
+    char *description; /* from the index scan, before any parse */
     YewCompSpec *spec;
     char *error;
     bool loaded;
@@ -1271,12 +1272,189 @@ static int shipped_find(const char *file)
     return -1;
 }
 
-/* Every shipped file, parsed once; each `command` name maps to the first
- * file (in name order) that lists it. */
+/*
+ * §7: the index is built by SCANNING each shipped file's top level for
+ * `command` and `description` -- no parse, no validation.  Parsing every
+ * spec would put ~10 ms of work on the first keystroke of the first
+ * `:!` prompt; the scan is a byte loop.  A file is parsed only when its
+ * command is actually completed, and validated then.
+ */
+typedef struct IndexScan {
+    const char *s;
+    size_t n;
+    size_t at;
+} IndexScan;
+
+static void scan_skip(IndexScan *sc)
+{
+    while (sc->at < sc->n) {
+        char c = sc->s[sc->at];
+
+        if (c == '#') {
+            while (sc->at < sc->n && sc->s[sc->at] != '\n')
+                sc->at++;
+        } else if (c == ' ' || c == '\t' || c == '\r' || c == '\n' ||
+                   c == ',') {
+            sc->at++;
+        } else {
+            return;
+        }
+    }
+}
+
+/* A double-quoted string at `at`, unescaped; NULL if it is not one. */
+static char *scan_string(IndexScan *sc)
+{
+    Bytebuf b;
+    char *out;
+
+    if (sc->at >= sc->n || sc->s[sc->at] != '"')
+        return NULL;
+    sc->at++;
+    bytebuf_init(&b);
+    while (sc->at < sc->n && sc->s[sc->at] != '"') {
+        char c = sc->s[sc->at++];
+
+        if (c == '\\' && sc->at < sc->n) {
+            char e = sc->s[sc->at++];
+
+            c = e == 'n' ? '\n' : e == 't' ? '\t' : e;
+        }
+        bytebuf_push_u8(&b, (u8)c);
+    }
+    if (sc->at < sc->n)
+        sc->at++;
+    out = yew_xmalloc(b.len + 1U);
+    if (b.len != 0U)
+        (void)memcpy(out, b.data, b.len);
+    out[b.len] = '\0';
+    bytebuf_free(&b);
+    return out;
+}
+
+/* Skip one value of any shape: strings, nested maps and lists. */
+static void scan_value(IndexScan *sc)
+{
+    u32 depth = 0U;
+
+    do {
+        char c;
+
+        scan_skip(sc);
+        if (sc->at >= sc->n)
+            return;
+        c = sc->s[sc->at];
+        if (c == '"') {
+            yew_xfree(scan_string(sc));
+        } else if (c == '{' || c == '[') {
+            depth++;
+            sc->at++;
+        } else if (c == '}' || c == ']') {
+            if (depth == 0U)
+                return;
+            depth--;
+            sc->at++;
+        } else {
+            /* A bare word, number, true/false, or `key:` inside a map. */
+            while (sc->at < sc->n && sc->s[sc->at] != ',' &&
+                   sc->s[sc->at] != '}' && sc->s[sc->at] != ']' &&
+                   sc->s[sc->at] != '\n' && sc->s[sc->at] != '"' &&
+                   sc->s[sc->at] != '{' && sc->s[sc->at] != '[')
+                sc->at++;
+        }
+    } while (depth != 0U);
+}
+
+static void index_add(u32 file, const char *name, u32 *cap)
+{
+    u32 k;
+
+    for (k = 0U; k < shipped.n_alias; k++) {
+        if (strcmp(shipped.alias[k].name, name) == 0)
+            return; /* the first file in name order keeps it */
+    }
+    if (shipped.n_alias == *cap) {
+        *cap = *cap == 0U ? 64U : *cap * 2U;
+        shipped.alias = yew_xrealloc(shipped.alias,
+                                     *cap * sizeof(*shipped.alias));
+    }
+    shipped.alias[shipped.n_alias].name = yew_xstrdup(name);
+    shipped.alias[shipped.n_alias].file = file;
+    shipped.n_alias++;
+}
+
+static void index_scan_file(u32 file, const char *src, size_t len, u32 *cap)
+{
+    IndexScan sc = {src, len, 0U};
+
+    scan_skip(&sc);
+    if (sc.at >= sc.n || sc.s[sc.at] != '{')
+        return;
+    sc.at++;
+    for (;;) {
+        size_t key_at;
+        size_t key_len;
+
+        scan_skip(&sc);
+        if (sc.at >= sc.n || sc.s[sc.at] == '}')
+            return;
+        key_at = sc.at;
+        while (sc.at < sc.n && (sc.s[sc.at] == '_' ||
+                                (sc.s[sc.at] >= 'a' && sc.s[sc.at] <= 'z') ||
+                                (sc.s[sc.at] >= 'A' && sc.s[sc.at] <= 'Z')))
+            sc.at++;
+        key_len = sc.at - key_at;
+        scan_skip(&sc);
+        if (key_len == 0U || sc.at >= sc.n || sc.s[sc.at] != ':')
+            return; /* not the shape we scan; the parse will say why */
+        sc.at++;
+        scan_skip(&sc);
+        if (key_is(src + key_at, key_len, "command")) {
+            if (sc.at < sc.n && sc.s[sc.at] == '[') {
+                sc.at++;
+                for (;;) {
+                    char *name;
+
+                    scan_skip(&sc);
+                    name = scan_string(&sc);
+                    if (name == NULL)
+                        break;
+                    index_add(file, name, cap);
+                    yew_xfree(name);
+                }
+                scan_value(&sc); /* the closing `]` or whatever is left */
+            } else {
+                char *name = scan_string(&sc);
+
+                if (name != NULL)
+                    index_add(file, name, cap);
+                yew_xfree(name);
+            }
+        } else if (key_is(src + key_at, key_len, "description")) {
+            char *d = scan_string(&sc);
+
+            if (d != NULL && shipped.files[file].description == NULL)
+                shipped.files[file].description = d;
+            else
+                yew_xfree(d);
+        } else {
+            scan_value(&sc);
+        }
+    }
+}
+
+static int alias_cmp(const void *a, const void *b, void *ctx)
+{
+    const AliasEntry *x = a;
+    const AliasEntry *y = b;
+
+    (void)ctx;
+    return strcmp(x->name, y->name);
+}
+
 static void shipped_index(void)
 {
     u32 i;
-    u32 c;
     u32 cap = 0U;
 
     if (shipped.indexed)
@@ -1284,48 +1462,54 @@ static void shipped_index(void)
     shipped.indexed = true;
     shipped_list();
     for (i = 0U; i < shipped.n_files; i++) {
-        Shipped *f = shipped_load(i);
+        Bytebuf src;
 
-        if (f->spec == NULL)
-            continue;
-        for (c = 0U; c < f->spec->n_commands; c++) {
-            u32 k;
-            bool dup = false;
-
-            for (k = 0U; k < shipped.n_alias; k++) {
-                if (strcmp(shipped.alias[k].name, f->spec->commands[c]) == 0)
-                    dup = true;
-            }
-            if (dup)
-                continue;
-            if (shipped.n_alias == cap) {
-                cap = cap == 0U ? 64U : cap * 2U;
-                shipped.alias = yew_xrealloc(shipped.alias,
-                                             cap * sizeof(*shipped.alias));
-            }
-            shipped.alias[shipped.n_alias].name =
-                yew_xstrdup(f->spec->commands[c]);
-            shipped.alias[shipped.n_alias].file = i;
-            shipped.n_alias++;
-        }
+        bytebuf_init(&src);
+        if (shipped_read(shipped.files[i].file, &src))
+            index_scan_file(i, src.data == NULL ? ""
+                                                : (const char *)src.data,
+                            src.len, &cap);
+        bytebuf_free(&src);
     }
+    /* Name order, so describe() is a binary search per EXEC row. */
+    if (shipped.n_alias > 1U)
+        yew_sort_stable(shipped.alias, shipped.n_alias,
+                        sizeof(*shipped.alias), alias_cmp, NULL);
+}
+
+static const AliasEntry *alias_find(const char *name)
+{
+    u32 lo = 0U;
+    u32 hi;
+
+    shipped_index();
+    hi = shipped.n_alias;
+    while (lo < hi) {
+        u32 mid = lo + (hi - lo) / 2U;
+        int c = strcmp(name, shipped.alias[mid].name);
+
+        if (c == 0)
+            return &shipped.alias[mid];
+        if (c < 0)
+            hi = mid;
+        else
+            lo = mid + 1U;
+    }
+    return NULL;
 }
 
 static const Shipped *shipped_for(const char *name)
 {
     char *file = join3(name, ".fl", "");
     int direct = shipped_find(file);
-    u32 k;
+
+    const AliasEntry *e;
 
     yew_xfree(file);
     if (direct >= 0)
         return shipped_load((u32)direct);
-    shipped_index();
-    for (k = 0U; k < shipped.n_alias; k++) {
-        if (strcmp(shipped.alias[k].name, name) == 0)
-            return shipped_load(shipped.alias[k].file);
-    }
-    return NULL;
+    e = alias_find(name);
+    return e == NULL ? NULL : shipped_load(e->file);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1374,6 +1558,7 @@ void yew_compspec_invalidate_all(void)
     for (i = 0U; i < shipped.n_files; i++) {
         yew_compspec_free(shipped.files[i].spec);
         yew_xfree(shipped.files[i].error);
+        yew_xfree(shipped.files[i].description);
         yew_xfree(shipped.files[i].file);
     }
     yew_xfree(shipped.files);
@@ -1565,19 +1750,12 @@ bool yew_compspec_precommand(const YewCompSpec *spec, YewShWrapper *out)
 
 const char *yew_compspec_describe(const char *name)
 {
-    u32 k;
+    const AliasEntry *e;
 
     if (name == NULL)
         return NULL;
-    shipped_index();
-    for (k = 0U; k < shipped.n_alias; k++) {
-        if (strcmp(shipped.alias[k].name, name) == 0) {
-            const Shipped *f = &shipped.files[shipped.alias[k].file];
-
-            return f->spec == NULL ? NULL : f->spec->description;
-        }
-    }
-    return NULL;
+    e = alias_find(name);
+    return e == NULL ? NULL : shipped.files[e->file].description;
 }
 
 int yew_compspec_wrapper(void *ud, const char *name, YewShWrapper *out)
