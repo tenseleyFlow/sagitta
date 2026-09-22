@@ -280,9 +280,10 @@ const CompItem *yew_comp_sole(const Vec_CompItem *items, YewCompKind kind);
  *
  * Sprint 57.18 §3: `bang_body` says the caret is inside a `:!` body, in
  * which case the argspec has nothing to say -- ed.shell.run's single
- * 's' means "an arbitrary command line", and the question is which WORD
- * of that line the caret is on.  Word 0 is what the shell will execute
- * and completes from $PATH; 1+ are operands and complete as paths.
+ * 's' means "an arbitrary command line".  Sprint 57.23 §5: every word of
+ * a body is YEW_COMP_SHELL, whose dispatcher reads the caret's whole
+ * shell context (CmdParsePoint.shell) rather than a word index -- the
+ * index could not tell `ls | gr` from `ls gr`.
  *
  * Keyed off the bang body rather than off ed.shell.run, deliberately:
  * `:r !cmd` and `:%!cmd` are the same situation under different command
