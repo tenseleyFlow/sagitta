@@ -1,0 +1,16 @@
+# kill (macOS /bin/kill, Darwin 25.4; the sh builtin takes the same
+# forms) -- from `kill`'s usage.
+#
+# `kill -KILL <pid>` spells the signal as a flag: dash_values offers those
+# spellings when the word starts with `-`.
+{
+    completion: 1,
+    command: "kill",
+    description: "terminate or signal a process",
+    flags: [
+        { short: "s", desc: "the signal to send", arg: { kind: "signal" } },
+        { short: "l", desc: "list the signal names" },
+    ],
+    dash_values: { kind: "signal" },
+    args: [ { kind: "pid", repeat: true } ],
+}
