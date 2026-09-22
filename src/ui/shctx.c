@@ -173,7 +173,7 @@ static void give_up(Lexer *L)
     L->stop = true;
 }
 
-static void cmd_init(CmdFr *c, u8 kind)
+static void frame_init(CmdFr *c, u8 kind)
 {
     (void)memset(c, 0, sizeof(*c));
     c->kind = kind;
@@ -187,7 +187,7 @@ static bool push_cmd(Lexer *L, u8 kind)
         give_up(L);
         return false;
     }
-    cmd_init(&L->cmd[L->nc], kind);
+    frame_init(&L->cmd[L->nc], kind);
     L->nc++;
     L->kinds[L->nk++] = kind;
     return true;
@@ -203,7 +203,7 @@ static bool push_dq(Lexer *L)
     return true;
 }
 
-static void cmd_dispose(CmdFr *c)
+static void frame_dispose(CmdFr *c)
 {
     bytebuf_free(&c->dec);
     yew_xfree(c->words);
@@ -216,7 +216,7 @@ static void pop_frame(Lexer *L)
     if (L->nk <= 1U)
         return;
     if (L->kinds[L->nk - 1U] != FR_DQ) {
-        cmd_dispose(&L->cmd[L->nc - 1U]);
+        frame_dispose(&L->cmd[L->nc - 1U]);
         L->nc--;
     }
     L->nk--;
@@ -1343,7 +1343,7 @@ bool yew_shctx_at(const char *line, size_t len, size_t cursor, Arena *a,
     L->a = a;
     L->kinds[0] = FR_TOP;
     L->nk = 1U;
-    cmd_init(&L->cmd[0], FR_TOP);
+    frame_init(&L->cmd[0], FR_TOP);
     L->nc = 1U;
     while (at < L->end && !L->stop) {
         CmdFr *c = cur_cmd(L);
@@ -1360,7 +1360,7 @@ bool yew_shctx_at(const char *line, size_t len, size_t cursor, Arena *a,
     }
     finish(L, out);
     for (i = 0U; i < L->nc; i++)
-        cmd_dispose(&L->cmd[i]);
+        frame_dispose(&L->cmd[i]);
     yew_xfree(L);
     return true;
 }
