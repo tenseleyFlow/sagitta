@@ -765,12 +765,18 @@ static void case_notepad_save_error(PtyCtx *c)
         return;
     }
     spawn_editor(c, path);
+    /* Establish the unsaved edit before removing the destination.  Once
+     * the path vanishes, the external-change prompt owns incoming keys. */
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, "i X esc");
+    settle_sync_delta(c, before, 1U, 0);
+    ptc_settle(c, 250);
     if (unlink(path) != 0 || rmdir(dir) != 0) {
         ptc_check(c, false, "could not remove failing-save destination");
         return;
     }
     before = c->vt.nsync_pairs;
-    ptc_keys(c, "i X esc s");
+    ptc_keys(c, "s");
     settle_sync_delta(c, before, 1U, 0);
     ptc_check(c, !c->pty.reaped, "failed save unexpectedly exited editor");
     ptc_snapshot(c, "notepad_save_error");
@@ -3001,6 +3007,12 @@ static void s19_wait_screen(PtyCtx *c, const char *text)
               "Sprint 19 expected job outcome did not appear");
 }
 
+static bool s19_marker_ready(const PtyCtx *c, const void *arg)
+{
+    (void)c;
+    return access((const char *)arg, F_OK) == 0;
+}
+
 static void s19_send_command(PtyCtx *c, const char *command)
 {
     ptc_keys(c, ":");
@@ -3497,24 +3509,67 @@ static void case_s19_filter_typeahead_replays_after_completion(PtyCtx *c)
 {
     static const u8 initial[] = "keep me\n";
     char path[256];
+    char ready[1024];
+    char command[1024];
+    const char *sleep_bin = getenv("YEW_PTY_SLEEP");
+    const char *cat_bin = getenv("YEW_PTY_CAT");
+    int n;
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "filter workspace missing");
+        return;
+    }
+    n = snprintf(ready, sizeof(ready), "%s/.s19-typeahead-ready",
+                 c->workspace_dir);
+    if (n < 0 || (size_t)n >= sizeof(ready)) {
+        ptc_check(c, false, "filter readiness path overflow");
+        return;
+    }
+    if (sleep_bin == NULL)
+        sleep_bin = "sleep";
+    if (cat_bin == NULL)
+        cat_bin = "cat";
+    n = snprintf(command, sizeof(command),
+                 "%%!printf ready > \"$YEW_WORKSPACE/.s19-typeahead-ready\"; %s 1; %s",
+                 sleep_bin, cat_bin);
+    if (n < 0 || (size_t)n >= sizeof(command)) {
+        ptc_check(c, false, "filter command overflow");
+        return;
+    }
     /* Sprint 58 F05 Q7: keep the synchronous filter inside its restricted
-     * loop long enough to queue an entire modal edit behind it.  None of
-     * these bytes may be dispatched while the child is live; after the
-     * filter commits they must replay, in order, as i + QUEUED + Escape. */
-    s19_send_command(c, "%!sleep 1; cat");
-    ptc_keys(c, "i Q U E U E D esc");
+     * loop long enough to queue an edit behind it.  Escape intentionally
+     * cancels a live filter, so send it only after completion. */
+    s19_send_command(c, command);
+    ptc_wait_until(c, s19_marker_ready, ready,
+                   "filter child did not publish readiness marker");
+    ptc_keys(c, "i Q U E U E D");
     ptc_settle(c, 100);
     ptc_check(c, !s19_screen_contains(&c->vt, "QUEUED"),
               "filter typeahead dispatched before completion");
     s19_wait_screen(c, "filter: 2 \xE2\x86\x92 2 lines");
+    ptc_keys(c, "esc");
     ptc_settle(c, 250);
     ptc_check(c, s19_screen_contains(&c->vt, "QUEUED"),
               "filter typeahead was not replayed in order");
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, "s19_filter_typeahead_replays_after_completion");
+    /* A fresh run proves the other side of the rule: a decoded Escape
+     * cancels a live filter without changing the buffer. */
+    if (unlink(ready) != 0) {
+        ptc_check(c, false, "could not reset filter readiness marker");
+        return;
+    }
+    s19_send_command(c, command);
+    ptc_wait_until(c, s19_marker_ready, ready,
+                   "cancelled filter did not publish readiness marker");
+    ptc_keys(c, "esc");
+    s19_wait_screen(c, "filter cancelled; buffer unchanged");
+    ptc_check(c, s19_screen_contains(&c->vt, "QUEUED"),
+              "cancelled filter changed the edited buffer");
+    ptc_keys(c, "esc");
+    ptc_settle(c, 100);
     s18_finish(c, path);
 }
 
