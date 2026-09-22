@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/job.h"
 #include "ui/cmdcomp.h"
 #include "ui/cmdparse.h"
 #include "ui/menu.h"
@@ -1345,5 +1346,528 @@ void test_cmdcomp_shell_filter_rekeys_on_context(void)
     arena_free_all(&scratch);
     shell_unlink(f.root, "grfile");
     exec_rm(f.a, "grchk");
+    exec_fixture_dispose(&f);
+}
+
+/* Rank the SHELL rows for `line` (caret at its end) through a fresh live
+ * filter, which is where §7's prefix rule and the encoding both apply. */
+static u32 shell_rows(Ed *ed, const char *line, Arena *scratch,
+                      Arena *arena, Vec_CompItem *rows, YewCompQuery *q)
+{
+    CompFilter filter;
+    u32 total;
+    size_t len = strlen(line);
+
+    rows->len = 0U;
+    if (!yew_comp_query(ed, line, len, len, scratch, q))
+        return UINT32_MAX;
+    yew_comp_filter_init(&filter);
+    total = yew_comp_filter_run(ed, &filter, arena, q, 0, rows);
+    yew_comp_filter_free(&filter);
+    return total;
+}
+
+static u32 route_of(const char *body, u32 *sources, u32 *mask)
+{
+    Arena a;
+    YewShCtx ctx;
+    u32 row;
+
+    arena_init(&a);
+    YEW_ASSERT(yew_shctx_at(body, strlen(body), strlen(body), &a, &ctx));
+    row = yew_comp_shell_route(&ctx, sources, mask);
+    arena_free_all(&a);
+    return row;
+}
+
+#define BIT(k) (1U << (u32)(k))
+
+/* §3 row 1: NONE completes nothing, and Tab stays a literal tab. */
+void test_cmdcomp_shell_route_row1_none(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    YewCompQuery q;
+    u32 src = 99U;
+    u32 mask = 99U;
+
+    YEW_ASSERT_EQ_U64(route_of("ls # comm", &src, &mask), 1U);
+    YEW_ASSERT_EQ_U64(src, 0U);
+    YEW_ASSERT_EQ_U64(route_of("cat <<EO", &src, &mask), 1U);
+    YEW_ASSERT_EQ_U64(route_of("echo $(( 1 + ", &src, &mask), 1U);
+    YEW_ASSERT_EQ_U64(route_of("case x in a) b", &src, &mask), 1U);
+    YEW_ASSERT_EQ_U64(src, 0U);
+    exec_fixture_init(&f);
+    arena_init(&scratch);
+    YEW_ASSERT(!yew_comp_query(&f.ed, ":!ls # comm", 11U, 11U, &scratch,
+                               &q));
+    arena_free_all(&scratch);
+    exec_fixture_dispose(&f);
+}
+
+/* §3 row 2: VARIABLE → VAR, with `}` and the closing quote on commit. */
+void test_cmdcomp_shell_route_row2_variable(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    const CompItem *it;
+    u32 src = 0U;
+    u32 mask = 0U;
+
+    YEW_ASSERT_EQ_U64(route_of("echo $HO", &src, &mask), 2U);
+    YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_VAR));
+    YEW_ASSERT_EQ_U64(route_of("echo \"${PA", &src, &mask), 2U);
+    YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_VAR));
+    exec_fixture_init(&f);
+    YEW_ASSERT_EQ_I64(setenv("YEW_S5723_VAR", "value", 1), 0);
+    arena_init(&scratch);
+    arena_init(&arena);
+    (void)shell_rows(&f.ed, ":!echo $YEW_S5723_V", &scratch, &arena, &rows,
+                     &q);
+    it = find_item(&rows, "YEW_S5723_VAR");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_I64(it->kind, YEW_COMP_VAR);
+    YEW_ASSERT_EQ_STR(it->detail, "value");
+    YEW_ASSERT_EQ_STR(it->suffix, "");
+    YEW_ASSERT_EQ_U64(q.replace.lo, 8U); /* the name, after the `$` */
+    (void)shell_rows(&f.ed, ":!echo \"${YEW_S5723_V", &scratch, &arena,
+                     &rows, &q);
+    it = find_item(&rows, "YEW_S5723_VAR");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->suffix, "}\"");
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_S5723_VAR"), 0);
+    exec_fixture_dispose(&f);
+}
+
+/* §3 row 3: a leading unquoted `~` with no `/` → USER, as `~name/`; a
+ * quoted `~` is a literal name and is not. */
+void test_cmdcomp_shell_route_row3_user(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    const CompItem *root;
+    u32 src = 0U;
+    u32 mask = 0U;
+    size_t i;
+    bool seen_underscore = false;
+
+    YEW_ASSERT_EQ_U64(route_of("cd ~ro", &src, &mask), 3U);
+    YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_USER));
+    YEW_ASSERT_EQ_U64(route_of("~ro", &src, &mask), 3U);
+    YEW_ASSERT(route_of("cd \"~ro", &src, &mask) != 3U);
+    YEW_ASSERT(route_of("cd \\~ro", &src, &mask) != 3U);
+    exec_fixture_init(&f);
+    arena_init(&scratch);
+    arena_init(&arena);
+    (void)shell_rows(&f.ed, ":!cd ~roo", &scratch, &arena, &rows, &q);
+    root = find_item(&rows, "~root/");
+    YEW_ASSERT_NOT_NULL(root);
+    YEW_ASSERT_EQ_I64(root->kind, YEW_COMP_USER);
+    YEW_ASSERT(root->is_dir);
+    YEW_ASSERT_NOT_NULL(root->detail);
+    /* `_daemon` accounts are kept, after every other row. */
+    (void)shell_rows(&f.ed, ":!cd ~", &scratch, &arena, &rows, &q);
+    YEW_ASSERT(rows.len != 0U);
+    for (i = 0U; i < rows.len; i++) {
+        bool underscore = rows.data[i].match[1] == '_';
+
+        if (underscore)
+            seen_underscore = true;
+        else
+            YEW_ASSERT(!seen_underscore);
+    }
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    exec_fixture_dispose(&f);
+}
+
+/* §3 row 4: a path-shaped COMMAND word → PATH, executables and
+ * directories only.  This is the `./scr<Tab>` fix. */
+void test_cmdcomp_shell_route_row4_command_path(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    u32 src = 0U;
+    u32 mask = 0U;
+
+    YEW_ASSERT_EQ_U64(route_of("./scr", &src, &mask), 4U);
+    YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_PATH));
+    YEW_ASSERT_EQ_U64(mask, YEW_PATH_EXEC_OR_DIR);
+    YEW_ASSERT_EQ_U64(route_of("make && ./bu", &src, &mask), 4U);
+    YEW_ASSERT_EQ_U64(route_of("..", &src, &mask), 4U);
+    exec_fixture_init(&f);
+    exec_mkexe(f.root, "scrrun", 0700);
+    shell_touch(f.root, "scrdata");
+    arena_init(&scratch);
+    arena_init(&arena);
+    (void)shell_rows(&f.ed, ":!./scr", &scratch, &arena, &rows, &q);
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "./scrrun"));
+    YEW_ASSERT_NULL(find_item(&rows, "./scrdata"));
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    shell_unlink(f.root, "scrdata");
+    exec_rm(f.root, "scrrun");
+    exec_fixture_dispose(&f);
+}
+
+/* §3 row 5: a path-shaped operand → PATH, whatever the position. */
+void test_cmdcomp_shell_route_row5_operand_path(void)
+{
+    u32 src = 0U;
+    u32 mask = 0U;
+
+    YEW_ASSERT_EQ_U64(route_of("cat src/ma", &src, &mask), 5U);
+    YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_PATH));
+    YEW_ASSERT_EQ_U64(mask, YEW_PATH_ANY);
+    YEW_ASSERT_EQ_U64(route_of("cat > out/lo", &src, &mask), 5U);
+    YEW_ASSERT_EQ_U64(route_of("FOO=/usr/b", &src, &mask), 5U);
+    YEW_ASSERT_EQ_U64(route_of("cat ~/x", &src, &mask), 5U);
+    /* `cd src/` keeps row 8's directories-only mask. */
+    YEW_ASSERT_EQ_U64(route_of("cd src/", &src, &mask), 5U);
+    YEW_ASSERT_EQ_U64(mask, YEW_PATH_DIRS);
+    /* An active expansion offers nothing rather than a wrong path. */
+    YEW_ASSERT_EQ_U64(route_of("cat $HOME/x", &src, &mask), 0U);
+    YEW_ASSERT_EQ_U64(src, 0U);
+}
+
+/* §3 row 6: a flag stem before `--` offers NOTHING -- never a file
+ * named `-rf`. */
+void test_cmdcomp_shell_route_row6_flag(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    u32 src = 99U;
+    u32 mask = 0U;
+
+    YEW_ASSERT_EQ_U64(route_of("rm -r", &src, &mask), 6U);
+    YEW_ASSERT_EQ_U64(src, 0U);
+    /* After `--` it is an operand again. */
+    YEW_ASSERT_EQ_U64(route_of("rm -- -r", &src, &mask), 9U);
+    exec_fixture_init(&f);
+    shell_touch(f.root, "-rf");
+    arena_init(&scratch);
+    arena_init(&arena);
+    (void)shell_rows(&f.ed, ":!rm -r", &scratch, &arena, &rows, &q);
+    YEW_ASSERT_EQ_U64(rows.len, 0U);
+    (void)shell_rows(&f.ed, ":!rm -- -r", &scratch, &arena, &rows, &q);
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "-rf"));
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    shell_unlink(f.root, "-rf");
+    exec_fixture_dispose(&f);
+}
+
+/* §3 row 7: COMMAND → EXEC ∪ BUILTIN, a builtin shadowing a binary of
+ * the same name.  With §1 this is the `ls | gr<Tab>` fix. */
+void test_cmdcomp_shell_route_row7_command(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    const CompItem *it;
+    u32 src = 0U;
+    u32 mask = 0U;
+    size_t i;
+    u32 echoes = 0U;
+
+    YEW_ASSERT_EQ_U64(route_of("ls | gr", &src, &mask), 7U);
+    YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_EXEC) | BIT(YEW_COMP_BUILTIN));
+    YEW_ASSERT_EQ_U64(route_of("sudo -u root gi", &src, &mask), 7U);
+    YEW_ASSERT_EQ_U64(route_of("FOO=1 BAR=2 cm", &src, &mask), 7U);
+    exec_fixture_init(&f);
+    exec_mkexe(f.a, "echo", 0700);
+    exec_mkexe(f.a, "grchk", 0700);
+    exec_set_path(&f, f.a);
+    arena_init(&scratch);
+    arena_init(&arena);
+    (void)shell_rows(&f.ed, ":!ls | gr", &scratch, &arena, &rows, &q);
+    it = find_item(&rows, "grchk");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_I64(it->kind, YEW_COMP_EXEC);
+    (void)shell_rows(&f.ed, ":!ech", &scratch, &arena, &rows, &q);
+    for (i = 0U; i < rows.len; i++) {
+        if (strcmp(rows.data[i].match, "echo") == 0) {
+            echoes++;
+            YEW_ASSERT_EQ_I64(rows.data[i].kind, YEW_COMP_BUILTIN);
+            YEW_ASSERT_EQ_STR(rows.data[i].detail, "builtin");
+        }
+    }
+    YEW_ASSERT_EQ_U64(echoes, 1U);
+    /* Keywords are inserted bare: `\{` would not open a group. */
+    (void)shell_rows(&f.ed, ":!ls; [", &scratch, &arena, &rows, &q);
+    it = find_item(&rows, "[[");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->detail, "keyword");
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    exec_rm(f.a, "echo");
+    exec_rm(f.a, "grchk");
+    exec_fixture_dispose(&f);
+}
+
+/* §3 row 8: the argument-kind defaults. */
+void test_cmdcomp_shell_route_row8_arg_defaults(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    u32 src = 0U;
+    u32 mask = 0U;
+    static const char *const dirs[] = {"cd x", "pushd x", "rmdir x",
+                                       "mkdir x"};
+    static const char *const execs[] = {"which x", "type x", "whence x",
+                                        "where x"};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(dirs); i++) {
+        YEW_ASSERT_EQ_U64(route_of(dirs[i], &src, &mask), 8U);
+        YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_PATH));
+        YEW_ASSERT_EQ_U64(mask, YEW_PATH_DIRS);
+    }
+    for (i = 0U; i < YEW_ARRAY_LEN(execs); i++) {
+        YEW_ASSERT_EQ_U64(route_of(execs[i], &src, &mask), 8U);
+        YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_EXEC) | BIT(YEW_COMP_BUILTIN));
+    }
+    exec_fixture_init(&f);
+    shell_touch(f.root, "cdfile");
+    {
+        char dir[256];
+
+        (void)snprintf(dir, sizeof(dir), "%s/cddir", f.root);
+        YEW_ASSERT_EQ_I64(mkdir(dir, 0700), 0);
+        arena_init(&scratch);
+        arena_init(&arena);
+        (void)shell_rows(&f.ed, ":!cd cd", &scratch, &arena, &rows, &q);
+        YEW_ASSERT_NOT_NULL(find_item(&rows, "cddir/"));
+        YEW_ASSERT_NULL(find_item(&rows, "cdfile"));
+        (void)shell_rows(&f.ed, ":!cat cd", &scratch, &arena, &rows, &q);
+        YEW_ASSERT_NOT_NULL(find_item(&rows, "cddir/"));
+        YEW_ASSERT_NOT_NULL(find_item(&rows, "cdfile"));
+        Vec_CompItem_free(&rows);
+        arena_free_all(&arena);
+        arena_free_all(&scratch);
+        YEW_ASSERT_EQ_I64(rmdir(dir), 0);
+    }
+    shell_unlink(f.root, "cdfile");
+    exec_fixture_dispose(&f);
+}
+
+/* §3 row 9: every other operand → PATH. */
+void test_cmdcomp_shell_route_row9_operand(void)
+{
+    u32 src = 0U;
+    u32 mask = 99U;
+
+    YEW_ASSERT_EQ_U64(route_of("cat ou", &src, &mask), 9U);
+    YEW_ASSERT_EQ_U64(src, BIT(YEW_COMP_PATH));
+    YEW_ASSERT_EQ_U64(mask, YEW_PATH_ANY);
+    YEW_ASSERT_EQ_U64(route_of("cat > ou", &src, &mask), 9U);
+    YEW_ASSERT_EQ_U64(route_of("FOO=ba", &src, &mask), 9U);
+    YEW_ASSERT_EQ_U64(route_of("for f in a", &src, &mask), 9U);
+    YEW_ASSERT_EQ_U64(route_of("git st", &src, &mask), 9U);
+}
+
+/*
+ * §7: shell reflexes are prefix reflexes.  `st` offers `stash` and
+ * `status`, never `reset` -- as a command, and as an operand.
+ */
+void test_cmdcomp_shell_prefix_ranking_git_st(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    static const char *const names[] = {"stash", "status", "reset"};
+    size_t i;
+
+    exec_fixture_init(&f);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        exec_mkexe(f.a, names[i], 0700);
+        shell_touch(f.root, names[i]);
+    }
+    exec_set_path(&f, f.a);
+    arena_init(&scratch);
+    arena_init(&arena);
+    (void)shell_rows(&f.ed, ":!st", &scratch, &arena, &rows, &q);
+    YEW_ASSERT_EQ_U64(rows.len, 2U);
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "stash"));
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "status"));
+    (void)shell_rows(&f.ed, ":!git st", &scratch, &arena, &rows, &q);
+    YEW_ASSERT_EQ_U64(rows.len, 2U);
+    YEW_ASSERT_NULL(find_item(&rows, "reset"));
+    /* No case-sensitive prefix: the case-insensitive ones. */
+    (void)shell_rows(&f.ed, ":!git ST", &scratch, &arena, &rows, &q);
+    YEW_ASSERT_EQ_U64(rows.len, 2U);
+    /* No prefix at all: the fuzzy set as ranked today. */
+    (void)shell_rows(&f.ed, ":!git sts", &scratch, &arena, &rows, &q);
+    YEW_ASSERT_NOT_NULL(find_item(&rows, "status"));
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        exec_rm(f.a, names[i]);
+        shell_unlink(f.root, names[i]);
+    }
+    exec_fixture_dispose(&f);
+}
+
+/*
+ * §6 end to end at the source: a file named `a$b c` is offered in the
+ * form the SHELL reads back as that name, in each quote state.
+ */
+void test_cmdcomp_shell_rows_are_shell_quoted(void)
+{
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    const CompItem *it;
+
+    exec_fixture_init(&f);
+    shell_touch(f.root, "a$b c");
+    arena_init(&scratch);
+    arena_init(&arena);
+    (void)shell_rows(&f.ed, ":!cat a", &scratch, &arena, &rows, &q);
+    it = find_item(&rows, "a\\$b\\ c");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->suffix, "");
+    (void)shell_rows(&f.ed, ":!cat \"a", &scratch, &arena, &rows, &q);
+    it = find_item(&rows, "\"a\\$b c");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->suffix, "\"");
+    (void)shell_rows(&f.ed, ":!cat 'a", &scratch, &arena, &rows, &q);
+    it = find_item(&rows, "'a$b c");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->suffix, "'");
+    /* A quoted `~` is a literal directory, not $HOME. */
+    {
+        char dir[256];
+
+        (void)snprintf(dir, sizeof(dir), "%s/~lit", f.root);
+        YEW_ASSERT_EQ_I64(mkdir(dir, 0700), 0);
+        (void)shell_rows(&f.ed, ":!cat '~l", &scratch, &arena, &rows, &q);
+        YEW_ASSERT_NOT_NULL(find_item(&rows, "'~lit/"));
+        (void)shell_rows(&f.ed, ":!cat \\~l", &scratch, &arena, &rows, &q);
+        YEW_ASSERT_NOT_NULL(find_item(&rows, "\\~lit/"));
+        YEW_ASSERT_EQ_I64(rmdir(dir), 0);
+    }
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    shell_unlink(f.root, "a$b c");
+    exec_fixture_dispose(&f);
+}
+
+/* §4 VAR: a secret-named value is redacted, a plain one previewed, a
+ * control byte never reaches the pager, and a name the child will not
+ * see is not offered. */
+void test_cmdcomp_shell_var_redaction(void)
+{
+    ExecFixture f;
+    Vec_CompItem items = {0};
+    const CompItem *it;
+    char *saved_editor = getenv("EDITOR") == NULL ? NULL
+                                                  : strdup(getenv("EDITOR"));
+    char *saved_cols = getenv("COLUMNS") == NULL ? NULL
+                                                 : strdup(getenv("COLUMNS"));
+    size_t i;
+
+    exec_fixture_init(&f);
+    YEW_ASSERT_EQ_I64(setenv("YEW_S5723_GITHUB_TOKEN", "abc", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("EDITOR", "vi", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_S5723_ESC", "a\x1b[2Jb", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("COLUMNS", "80", 1), 0);
+    (void)yew_comp_enumerate(&f.ed, YEW_COMP_VAR, "YEW_S5723_GITHUB_TOKEN",
+                             &items);
+    it = find_item(&items, "YEW_S5723_GITHUB_TOKEN");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->detail, "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2");
+    (void)yew_comp_enumerate(&f.ed, YEW_COMP_VAR, "EDITOR", &items);
+    it = find_item(&items, "EDITOR");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->detail, "vi");
+    (void)yew_comp_enumerate(&f.ed, YEW_COMP_VAR, "YEW_S5723_ESC", &items);
+    it = find_item(&items, "YEW_S5723_ESC");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_NULL(strchr(it->detail, '\x1b'));
+    YEW_ASSERT_EQ_STR(it->detail, "a\xC2\xB7[2Jb");
+    /* The job layer drops COLUMNS for its children, so it is not a name
+     * a `:!` command could expand. */
+    (void)yew_comp_enumerate(&f.ed, YEW_COMP_VAR, "COLUMNS", &items);
+    YEW_ASSERT_NULL(find_item(&items, "COLUMNS"));
+    /* And the job layer's own rows are offered with their values. */
+    (void)yew_comp_enumerate(&f.ed, YEW_COMP_VAR, "PAGER", &items);
+    it = find_item(&items, "PAGER");
+    YEW_ASSERT_NOT_NULL(it);
+    YEW_ASSERT_EQ_STR(it->detail, "cat");
+    for (i = 0U; i < items.len; i++)
+        YEW_ASSERT_EQ_I64(items.data[i].kind, YEW_COMP_VAR);
+    Vec_CompItem_free(&items);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_S5723_GITHUB_TOKEN"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_S5723_ESC"), 0);
+    if (saved_editor != NULL)
+        YEW_ASSERT_EQ_I64(setenv("EDITOR", saved_editor, 1), 0);
+    else
+        YEW_ASSERT_EQ_I64(unsetenv("EDITOR"), 0);
+    if (saved_cols != NULL)
+        YEW_ASSERT_EQ_I64(setenv("COLUMNS", saved_cols, 1), 0);
+    else
+        YEW_ASSERT_EQ_I64(unsetenv("COLUMNS"), 0);
+    free(saved_editor);
+    free(saved_cols);
+    exec_fixture_dispose(&f);
+}
+
+/* §8: completion spawns NOTHING.  100 completions across every §3 row
+ * leave the job table empty. */
+void test_cmdcomp_shell_spawns_no_subprocess(void)
+{
+    static const char *const lines[] = {
+        ":!ls # c", ":!echo $HO", ":!cd ~ro", ":!./sc", ":!cat src/",
+        ":!rm -r", ":!gi", ":!cd x", ":!cat ou", ":!cat $HOME/x"};
+    ExecFixture f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    YewCompQuery q;
+    u32 i;
+
+    exec_fixture_init(&f);
+    arena_init(&scratch);
+    arena_init(&arena);
+    for (i = 0U; i < 100U; i++) {
+        (void)shell_rows(&f.ed, lines[i % YEW_ARRAY_LEN(lines)], &scratch,
+                         &arena, &rows, &q);
+        arena_free_all(&scratch);
+    }
+    YEW_ASSERT_EQ_U64(yew_job_running_count(&f.ed), 0U);
+    YEW_ASSERT_EQ_U64(f.ed.jobs.len, 0U);
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
     exec_fixture_dispose(&f);
 }
