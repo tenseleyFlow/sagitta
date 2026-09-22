@@ -2344,8 +2344,10 @@ void yew_comp_filter_invalidate(CompFilter *f)
     f->base.len = 0U;
     yew_xfree(f->head);
     yew_xfree(f->pattern);
+    yew_xfree(f->ctx_key);
     f->head = NULL;
     f->pattern = NULL;
+    f->ctx_key = NULL;
     f->valid = false;
     f->capped = false;
     f->total = 0U;
@@ -2400,6 +2402,68 @@ static int filter_item_cmp(const void *left, const void *right, void *ctx)
  * budget comment warns about.  So `filter_reusable` refuses, and the
  * cost is one more opendir in a directory big enough to cap.
  */
+static bool prefix_fold(const char *s, const char *prefix, size_t n)
+{
+    size_t i;
+
+    for (i = 0U; i < n; i++) {
+        unsigned char a = (unsigned char)s[i];
+        unsigned char b = (unsigned char)prefix[i];
+
+        if (a == '\0')
+            return false;
+        if (a >= 'A' && a <= 'Z')
+            a = (unsigned char)(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z')
+            b = (unsigned char)(b - 'A' + 'a');
+        if (a != b)
+            return false;
+    }
+    return true;
+}
+
+/*
+ * Sprint 57.23 §7: shell reflexes are prefix reflexes.  `git st` must not
+ * offer `reset` because s…t is a subsequence of it.  Keep the
+ * case-sensitive prefix matches if there are any, else the
+ * case-insensitive ones, else the fuzzy set as ranked.  SHELL only; every
+ * other kind keeps tiered-plus-fuzzy untouched.
+ */
+static void shell_prefix_rule(Vec_CompItem *out, const char *pattern,
+                              size_t pattern_len)
+{
+    int pass;
+
+    for (pass = 0; pass < 2; pass++) {
+        size_t keep = 0U;
+        size_t i;
+        bool any = false;
+
+        for (i = 0U; i < out->len; i++) {
+            const char *m = out->data[i].match;
+            bool hit = pass == 0 ? strncmp(m, pattern, pattern_len) == 0
+                                 : prefix_fold(m, pattern, pattern_len);
+
+            if (hit) {
+                any = true;
+                break;
+            }
+        }
+        if (!any)
+            continue;
+        for (i = 0U; i < out->len; i++) {
+            const char *m = out->data[i].match;
+            bool hit = pass == 0 ? strncmp(m, pattern, pattern_len) == 0
+                                 : prefix_fold(m, pattern, pattern_len);
+
+            if (hit)
+                out->data[keep++] = out->data[i];
+        }
+        out->len = keep;
+        return;
+    }
+}
+
 static u32 filter_rerank(CompFilter *f, const char *pattern,
                          Vec_CompItem *out)
 {
@@ -2431,19 +2495,58 @@ static u32 filter_rerank(CompFilter *f, const char *pattern,
         }
         Vec_CompItem_push(out, item);
     }
+    if (f->kind == YEW_COMP_SHELL)
+        shell_prefix_rule(out, pattern, pattern_len);
     yew_sort_stable(out->data, out->len, sizeof(out->data[0]),
                     filter_item_cmp, NULL);
+    if (f->kind == YEW_COMP_SHELL || f->kind == YEW_COMP_USER)
+        users_underscore_last(out);
     return out->len > UINT32_MAX ? UINT32_MAX : (u32)out->len;
 }
 
+/*
+ * Sprint 57.23 §5: the SHELL answer's identity beyond head and pattern --
+ * the routing row, the position, the quote state (it decides how every
+ * row is encoded), the brace and `--` flags, argv[0] and the path mask.
+ * NULL for every other kind.
+ */
+static char *shell_ctx_key(const YewCompQuery *q)
+{
+    const YewShCtx *ctx = q->shell;
+    u32 sources = 0U;
+    u32 mask = 0U;
+    u32 row;
+    Bytebuf key;
+    char *out;
+
+    if (q->kind != YEW_COMP_SHELL || ctx == NULL)
+        return NULL;
+    row = yew_comp_shell_route(ctx, &sources, &mask);
+    bytebuf_init(&key);
+    bytebuf_printf(&key, "%u|%u|%u|%u|%u|%u|%u|%u|", (unsigned)row,
+                   (unsigned)ctx->pos, (unsigned)ctx->quote,
+                   (unsigned)ctx->brace_var, (unsigned)ctx->tilde,
+                   (unsigned)ctx->dashdash, (unsigned)sources,
+                   (unsigned)mask);
+    if (ctx->argc != 0U && ctx->argv != NULL && ctx->argv[0] != NULL)
+        bytebuf_append(&key, ctx->argv[0], strlen(ctx->argv[0]));
+    out = dup_range((const char *)key.data, key.len);
+    bytebuf_free(&key);
+    return out;
+}
+
 static bool filter_reusable(const CompFilter *f, YewCompKind kind,
-                            const char *head, const char *pattern)
+                            const char *head, const char *pattern,
+                            const char *ctx_key)
 {
     size_t old_len;
 
     if (!f->valid || f->kind != kind || f->capped)
         return false;
     if (strcmp(f->head, head) != 0)
+        return false;
+    if ((f->ctx_key == NULL) != (ctx_key == NULL) ||
+        (ctx_key != NULL && strcmp(f->ctx_key, ctx_key) != 0))
         return false;
     /*
      * Appending can only SHRINK a subsequence match, never widen it, so
@@ -2462,6 +2565,7 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
     size_t head_len;
     const char *pattern;
     char *head;
+    char *ctx_key;
     bool reuse;
 
     if (ed == NULL || f == NULL || q == NULL || out == NULL ||
@@ -2480,7 +2584,8 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
                    : 0U;
     pattern = q->stem + head_len;
     head = dup_range(q->stem, head_len);
-    reuse = filter_reusable(f, q->kind, head, pattern);
+    ctx_key = shell_ctx_key(q);
+    reuse = filter_reusable(f, q->kind, head, pattern, ctx_key);
     if (!reuse) {
         CompReq req;
 
@@ -2503,18 +2608,26 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
         yew_xfree(f->pattern);
         f->head = head;
         f->pattern = dup_range(pattern, strlen(pattern));
+        yew_xfree(f->ctx_key);
+        f->ctx_key = ctx_key;
         f->kind = q->kind;
         f->valid = true;
         head = NULL;
+        ctx_key = NULL;
     }
     yew_xfree(head);
+    yew_xfree(ctx_key);
     {
         u32 matched = filter_rerank(f, pattern, out);
 
         /* A fresh enumerate knows the true pre-cap total; a narrowed
          * pass counted every survivor itself, and its base was uncapped
-         * by construction, so the count is exact either way. */
-        return reuse ? matched : f->total;
+         * by construction, so the count is exact either way.  A SHELL
+         * set is also narrowed by §7's prefix rule, so an uncapped one
+         * reports what survived it. */
+        if (reuse || (f->kind == YEW_COMP_SHELL && !f->capped))
+            return matched;
+        return f->total;
     }
 }
 
