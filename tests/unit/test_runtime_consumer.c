@@ -267,7 +267,7 @@ void test_runtime_consumer_completion_spec_loads_from_the_image(void)
     runtime_fix_init(&fix);
     yew_compspec_test_set_default_root(fix.root);
     YEW_ASSERT_EQ_STR(yew_compspec_shipped_source(), "embedded");
-    YEW_ASSERT(yew_compspec_shipped_count() >= 26U);
+    YEW_ASSERT(yew_compspec_shipped_count() >= 24U);
     YEW_ASSERT(yew_compspec_check_shipped("wolf.fl", err, sizeof(err)));
     spec = yew_compspec_get(NULL, "wolf");
     YEW_ASSERT_NOT_NULL(spec);

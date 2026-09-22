@@ -122,11 +122,12 @@ void test_compspec_every_shipped_file_validates(void)
             continue;
         check_one_shipped(&f, file);
     }
-    /* §6's batch: wolf git brew ssh scp make cargo uv gh cd pushd rmdir
-     * mkdir kill and nine precommands -- checked after the per-file loop
-     * so a broken file is named before the count is. */
+    /* §6's batch -- wolf git brew ssh scp make cargo uv gh, cd pushd
+     * rmdir mkdir, kill and nine precommands -- plus tar: 24.  Checked
+     * after the per-file loop so a broken file is named before the count
+     * is. */
     if (only == NULL || only[0] == '\0')
-        YEW_ASSERT(n >= 26U);
+        YEW_ASSERT(n >= 24U);
     spec_fix_drop(&f);
 }
 
