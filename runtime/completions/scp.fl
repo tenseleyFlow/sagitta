@@ -1,0 +1,45 @@
+# OpenSSH_10.2p1 (LibreSSL 3.3.6) -- from `scp`'s usage and scp(1).
+#
+# runtime/completions/scp.fl: sources and target are local paths or
+# `host:path`; local paths complete, and a word naming a host completes
+# from ~/.ssh/config and ~/.ssh/known_hosts when it has no `/` yet.
+{
+    completion: 1,
+    command: "scp",
+    description: "OpenSSH secure file copy",
+
+    flags: [
+        { short: "3", desc: "copy between two remotes through this host" },
+        { short: "4", desc: "use IPv4 addresses only" },
+        { short: "6", desc: "use IPv6 addresses only" },
+        { short: "A", desc: "forward the authentication agent" },
+        { short: "B", desc: "batch mode: never ask for passwords" },
+        { short: "C", desc: "compress all data" },
+        { short: "c", desc: "cipher specification", arg: { kind: "none" } },
+        { short: "D", desc: "connect directly to a local SFTP server",
+          arg: { kind: "path" } },
+        { short: "F", desc: "per-user ssh configuration file",
+          arg: { kind: "path" } },
+        { short: "i", desc: "identity (private key) file",
+          arg: { kind: "path" } },
+        { short: "J", desc: "connect through this jump host",
+          arg: { kind: "host" } },
+        { short: "l", desc: "limit bandwidth (Kbit/s)", arg: { kind: "none" } },
+        { short: "O", desc: "use the legacy SCP protocol" },
+        { short: "o", desc: "an option in ssh_config format",
+          arg: { kind: "none" } },
+        { short: "P", desc: "remote port", arg: { kind: "none" } },
+        { short: "p", desc: "preserve times and modes" },
+        { short: "q", desc: "quiet mode" },
+        { short: "R", desc: "copy between two remotes directly" },
+        { short: "r", desc: "copy directories recursively" },
+        { short: "S", desc: "program to use for the connection",
+          arg: { kind: "exec" } },
+        { short: "s", desc: "use the SFTP protocol" },
+        { short: "T", desc: "disable strict filename checking" },
+        { short: "v", desc: "verbose mode" },
+        { short: "X", desc: "SFTP protocol option", arg: { kind: "none" } },
+    ],
+
+    args: [ { kind: "path", repeat: true } ],
+}
