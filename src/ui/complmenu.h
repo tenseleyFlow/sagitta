@@ -123,6 +123,7 @@ void yew_compl_free(ComplMenu *menu);
 void yew_compl_select(Ed *ed, Win *w, i32 item);
 
 CmdStatus yew_compl_cmd_open(CmdCtx *cx);
+CmdStatus yew_compl_cmd_complete(CmdCtx *cx);
 CmdStatus yew_compl_cmd_next(CmdCtx *cx);
 CmdStatus yew_compl_cmd_prev(CmdCtx *cx);
 CmdStatus yew_compl_cmd_page_next(CmdCtx *cx);

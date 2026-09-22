@@ -21,6 +21,7 @@ let alternatives = {
     "ed.search.open": "use b.find(re)",
     "ed.search.open_back": "use b.find(re)",
     "ed.compl.open": "no batch alternative",
+    "ed.compl.complete": "no batch alternative",
     "ed.lsp.complete": "no batch alternative",
     "ed.lsp.hover": "no batch alternative",
     "ed.lsp.references": "no batch alternative",
@@ -74,7 +75,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 46)
+t.eq(seen, 47)
 
 # Hunk discard stopped being prompt-backed when Sprint 53 made it a direct,
 # undoable buffer edit.  It is still intentionally unavailable in batch mode,

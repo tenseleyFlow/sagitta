@@ -202,7 +202,7 @@ bind("I", "A-<down>", "ed.shadow.accept_line")
 bind("I", "A-<cr>", "ed.shadow.accept_all")
 bind("I", "A-]", "ed.shadow.next")
 bind("I", "A-[", "ed.shadow.prev")
-bind("I", "C-<space>", "ed.lsp.complete")
+bind("I", "C-<space>", "ed.compl.complete")
 # Signature help moves off C-k, which every readline user's fingers
 # already spend on kill-to-end.
 bind("I", "A-k", "ed.lsp.signature")

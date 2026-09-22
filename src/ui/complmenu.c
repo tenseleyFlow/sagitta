@@ -10,6 +10,8 @@
 #include "edit/option.h"
 #include "edit/shadow.h"
 #include "edit/theme_cmds.h"
+#include "mod/lsp/lsp.h"
+#include "mod/mods.h"
 #include "term/grid.h"
 #include "text/edit.h"
 #include "text/undo.h"
@@ -857,6 +859,22 @@ CmdStatus yew_compl_cmd_open(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     }
     return YEW_CMD_OK;
+}
+
+CmdStatus yew_compl_cmd_complete(CmdCtx *cx)
+{
+    const char *lang;
+
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL || cx->win->buf->tb == NULL)
+        return YEW_CMD_ERR_STATE;
+    if (yew_mod_enabled(YEW_MOD_LSP))
+        return yew_lsp_complete(cx->ed, cx->win) ? YEW_CMD_OK
+                                                : YEW_CMD_ERR_STATE;
+    lang = cx->win->buf->lang == NULL ? "this buffer" : cx->win->buf->lang;
+    yew_msg(cx->ed, YEW_MSG_INFO,
+            "no ready LSP server for %s; using index completion", lang);
+    return yew_compl_cmd_open(cx);
 }
 
 CmdStatus yew_compl_cmd_next(CmdCtx *cx)

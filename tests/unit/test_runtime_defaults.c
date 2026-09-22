@@ -302,7 +302,7 @@ static const BindRow frozen_I[] = {
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"A-]", "ed.shadow.next", 0, NULL},
     {"A-[", "ed.shadow.prev", 0, NULL},
-    {"C-<space>", "ed.lsp.complete", 0, NULL},
+    {"C-<space>", "ed.compl.complete", 0, NULL},
     /* Signature help moved off C-k so kill-to-end could have it. */
     {"A-k", "ed.lsp.signature", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},

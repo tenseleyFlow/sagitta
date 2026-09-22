@@ -141,6 +141,7 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.search.open", "use b.find(re)"},
     {"ed.search.open_back", "use b.find(re)"},
     {"ed.compl.open", "no batch alternative"},
+    {"ed.compl.complete", "no batch alternative"},
     {"ed.lsp.complete", "no batch alternative"},
     {"ed.lsp.hover", "no batch alternative"},
     {"ed.lsp.references", "no batch alternative"},
