@@ -1071,6 +1071,7 @@ const YewTest yew_tests[] = {
     T(ai_redact_false_positive_boundaries),
     T(ai_redact_prefix_suffix_line_and_first_rule),
     T(ai_redact_user_merge_replace_and_compile_error),
+    T(ai_redact_secret_name_fragments_match_env_rule),
     T(ai_paths_all_defaults_case_and_nesting),
     T(ai_paths_nonmatches_and_separator_boundary),
     T(ai_paths_user_merge_replace_question_and_star),

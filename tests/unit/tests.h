@@ -1024,6 +1024,7 @@ void test_ai_policy_replace_is_explicit_and_warns_about_dropped_defaults(void);
 void test_ai_redact_false_positive_boundaries(void);
 void test_ai_redact_prefix_suffix_line_and_first_rule(void);
 void test_ai_redact_user_merge_replace_and_compile_error(void);
+void test_ai_redact_secret_name_fragments_match_env_rule(void);
 void test_ai_paths_all_defaults_case_and_nesting(void);
 void test_ai_paths_nonmatches_and_separator_boundary(void);
 void test_ai_paths_user_merge_replace_question_and_star(void);

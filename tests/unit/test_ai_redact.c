@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "mod/ai/redact.h"
+#include "util/secret.h"
 #include "util/base.h"
 
 typedef struct RedactCase {
@@ -200,4 +201,49 @@ void test_ai_redact_user_merge_replace_and_compile_error(void)
     YEW_ASSERT(scan_text(replaced, "WOLF_ABCDEFGH", &hit));
     yew_ai_redact_policy_free(merged);
     yew_ai_redact_policy_free(replaced);
+}
+
+/*
+ * Sprint 57.23 §4: core's yew_secret_name and the shipped env-assignment
+ * rule name the SAME fragments.  The core list exists so the shell
+ * completer can redact with MODULES=""; this is what stops it drifting
+ * from the redactor it was copied out of.  Every core fragment must make
+ * a secret-shaped assignment hit THIS rule, in either case.
+ */
+void test_ai_redact_secret_name_fragments_match_env_rule(void)
+{
+    AiRedactPolicy *policy = yew_ai_redact_policy_new(NULL, 0U, false, NULL);
+    const char *const *frags;
+    size_t n = 0U;
+    size_t i;
+
+    YEW_ASSERT_NOT_NULL(policy);
+    frags = yew_secret_fragments(&n);
+    YEW_ASSERT(n >= 8U);
+    for (i = 0U; i < n; i++) {
+        char upper[96];
+        char lower[96];
+        size_t j;
+        RedactHit hit;
+
+        (void)snprintf(upper, sizeof(upper), "MY_%s_X=abcdefghijkl",
+                       frags[i]);
+        (void)snprintf(lower, sizeof(lower), "%s", upper);
+        for (j = 0U; lower[j] != '\0' && lower[j] != '='; j++) {
+            if (lower[j] >= 'A' && lower[j] <= 'Z')
+                lower[j] = (char)(lower[j] - 'A' + 'a');
+        }
+        YEW_ASSERT(scan_text(policy, upper, &hit));
+        YEW_ASSERT_EQ_STR(hit.rule, "env-assignment");
+        YEW_ASSERT(scan_text(policy, lower, &hit));
+        YEW_ASSERT_EQ_STR(hit.rule, "env-assignment");
+        upper[strcspn(upper, "=")] = '\0';
+        lower[strcspn(lower, "=")] = '\0';
+        YEW_ASSERT(yew_secret_name(upper));
+        YEW_ASSERT(yew_secret_name(lower));
+    }
+    /* And a name with no fragment is neither a rule hit nor a secret. */
+    YEW_ASSERT(!scan_text(policy, "EDITOR=abcdefghijkl", NULL));
+    YEW_ASSERT(!yew_secret_name("EDITOR"));
+    yew_ai_redact_policy_free(policy);
 }
