@@ -21,6 +21,16 @@
 #include "ui/compspec.h"
 #include "util/buf.h"
 
+/* snprintf into a path buffer, asserting nothing was cut off: a
+ * truncated fixture path would point a test at the wrong file. */
+static inline bool spec_fmt_fits(int n, size_t cap)
+{
+    return n >= 0 && (size_t)n < cap;
+}
+
+#define SPEC_FMT(buf, cap, ...)                                              \
+    YEW_ASSERT(spec_fmt_fits(snprintf((buf), (cap), __VA_ARGS__), (cap)))
+
 typedef struct SpecFix {
     char root[64];
     char config[128];
@@ -58,18 +68,18 @@ static inline void spec_fix_init(SpecFix *f)
     f->old_home = spec_env_copy("HOME");
     YEW_ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
     if (f->old_runtime != NULL && f->old_runtime[0] != '\0')
-        (void)snprintf(f->runtime, sizeof(f->runtime), "%s", f->old_runtime);
+        SPEC_FMT(f->runtime, sizeof(f->runtime), "%s", f->old_runtime);
     else
-        (void)snprintf(f->runtime, sizeof(f->runtime), "%s/runtime", cwd);
-    (void)snprintf(f->root, sizeof(f->root), "/tmp/yew-compspec-XXXXXX");
+        SPEC_FMT(f->runtime, sizeof(f->runtime), "%s/runtime", cwd);
+    SPEC_FMT(f->root, sizeof(f->root), "/tmp/yew-compspec-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
-    (void)snprintf(f->config, sizeof(f->config), "%s/config", f->root);
-    (void)snprintf(f->home, sizeof(f->home), "%s/home", f->root);
+    SPEC_FMT(f->config, sizeof(f->config), "%s/config", f->root);
+    SPEC_FMT(f->home, sizeof(f->home), "%s/home", f->root);
     YEW_ASSERT_EQ_I64(mkdir(f->config, 0700), 0);
     YEW_ASSERT_EQ_I64(mkdir(f->home, 0700), 0);
-    (void)snprintf(dir, sizeof(dir), "%s/yew", f->config);
+    SPEC_FMT(dir, sizeof(dir), "%s/yew", f->config);
     YEW_ASSERT_EQ_I64(mkdir(dir, 0700), 0);
-    (void)snprintf(dir, sizeof(dir), "%s/yew/completions", f->config);
+    SPEC_FMT(dir, sizeof(dir), "%s/yew/completions", f->config);
     YEW_ASSERT_EQ_I64(mkdir(dir, 0700), 0);
     YEW_ASSERT_EQ_I64(setenv("YEW_RUNTIME_DIR", f->runtime, 1), 0);
     YEW_ASSERT_EQ_I64(setenv("XDG_CONFIG_HOME", f->config, 1), 0);
@@ -84,7 +94,7 @@ static inline void spec_fix_user(const SpecFix *f, const char *name,
     char path[256];
     FILE *fp;
 
-    (void)snprintf(path, sizeof(path), "%s/yew/completions/%s.fl",
+    SPEC_FMT(path, sizeof(path), "%s/yew/completions/%s.fl",
                    f->config, name);
     fp = fopen(path, "wb");
     YEW_ASSERT_NOT_NULL(fp);
@@ -125,7 +135,7 @@ static inline void spec_rm_tree(const char *path)
 
         if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0)
             continue;
-        (void)snprintf(child, sizeof(child), "%s/%s", path, e->d_name);
+        SPEC_FMT(child, sizeof(child), "%s/%s", path, e->d_name);
         spec_rm_tree(child);
     }
     YEW_ASSERT_EQ_I64(closedir(d), 0);

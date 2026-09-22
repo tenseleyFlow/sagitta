@@ -73,7 +73,7 @@ static void check_one_shipped(const SpecFix *f, const char *file)
     YEW_ASSERT_NOT_NULL(file);
     if (!yew_compspec_check_shipped(file, err, sizeof(err)))
         yew_test_fail(__FILE__, __LINE__, err);
-    (void)snprintf(path, sizeof(path), "%s/completions/%s", f->runtime,
+    SPEC_FMT(path, sizeof(path), "%s/completions/%s", f->runtime,
                    file);
     fp = fopen(path, "rb");
     YEW_ASSERT_NOT_NULL(fp);
@@ -357,7 +357,7 @@ void test_compspec_user_file_is_rechecked_once_per_prompt(void)
                   "# t\n{ completion: 1, command: \"t5724\","
                   " subcommands: [ { name: \"two\" } ] }\n");
     /* Force a different mtime even on a coarse filesystem clock. */
-    (void)snprintf(path, sizeof(path), "%s/yew/completions/t5724.fl",
+    SPEC_FMT(path, sizeof(path), "%s/yew/completions/t5724.fl",
                    f.config);
     later[0].tv_sec = 2000000000;
     later[0].tv_nsec = 0;
@@ -433,7 +433,7 @@ typedef struct CorpusEd {
 static void corpus_ed_init(CorpusEd *c, const SpecFix *f)
 {
     (void)memset(c, 0, sizeof(*c));
-    (void)snprintf(c->ws, sizeof(c->ws), "%s/ws", f->root);
+    SPEC_FMT(c->ws, sizeof(c->ws), "%s/ws", f->root);
     YEW_ASSERT_EQ_I64(mkdir(c->ws, 0700), 0);
     arena_init(&c->ed.arena);
     c->ed.ws.dir = c->ws;

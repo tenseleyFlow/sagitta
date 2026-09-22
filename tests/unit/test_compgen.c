@@ -43,9 +43,9 @@ static void script(const SpecFix *f, const char *name, const char *body,
 {
     char dir[256];
 
-    (void)snprintf(dir, sizeof(dir), "%s/bin", f->root);
+    SPEC_FMT(dir, sizeof(dir), "%s/bin", f->root);
     (void)mkdir(dir, 0700);
-    (void)snprintf(path, cap, "%s/%s", dir, name);
+    SPEC_FMT(path, cap, "%s/%s", dir, name);
     write_file(path, body, 0700);
 }
 
@@ -136,9 +136,9 @@ void test_compgen_hosts_reads_the_fixture_home_only(void)
     Vec_CompItem rows = {0};
 
     spec_fix_init(&f);
-    (void)snprintf(path, sizeof(path), "%s/.ssh", f.home);
+    SPEC_FMT(path, sizeof(path), "%s/.ssh", f.home);
     YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
-    (void)snprintf(path, sizeof(path), "%s/.ssh/config", f.home);
+    SPEC_FMT(path, sizeof(path), "%s/.ssh/config", f.home);
     write_file(path,
                "# comment\n"
                "Host a b\n"
@@ -147,7 +147,7 @@ void test_compgen_hosts_reads_the_fixture_home_only(void)
                "Host !x\n"
                "host=lower\n",
                0600);
-    (void)snprintf(path, sizeof(path), "%s/.ssh/known_hosts", f.home);
+    SPEC_FMT(path, sizeof(path), "%s/.ssh/known_hosts", f.home);
     write_file(path,
                "kh1,10.0.0.1 ssh-ed25519 AAAA\n"
                "|1|HASHED= ssh-ed25519 AAAA\n"
@@ -208,8 +208,8 @@ void test_compgen_make_targets_never_executes_the_makefile(void)
     size_t i;
 
     spec_fix_init(&f);
-    (void)snprintf(sentinel, sizeof(sentinel), "%s/sentinel", f.root);
-    (void)snprintf(path, sizeof(path), "%s/Makefile", f.root);
+    SPEC_FMT(sentinel, sizeof(sentinel), "%s/sentinel", f.root);
+    SPEC_FMT(path, sizeof(path), "%s/Makefile", f.root);
     write_file(path,
                "X := $(shell touch sentinel)\n"
                "Y ::= y\n"
@@ -241,14 +241,14 @@ void test_compgen_make_targets_never_executes_the_makefile(void)
     YEW_ASSERT(access(sentinel, F_OK) != 0);
     YEW_ASSERT_EQ_I64(errno, ENOENT);
     /* make's own order: GNUmakefile wins over Makefile. */
-    (void)snprintf(path, sizeof(path), "%s/GNUmakefile", f.root);
+    SPEC_FMT(path, sizeof(path), "%s/GNUmakefile", f.root);
     write_file(path, "gnu-only:\n", 0600);
     rows.len = 0U;
     YEW_ASSERT(yew_compgen_builtin("make_targets", f.root, NULL, &a, &rows));
     YEW_ASSERT_EQ_U64(rows.len, 1U);
     YEW_ASSERT_EQ_STR(rows.data[0].text, "gnu-only");
     /* `make -f other.mk`: that file. */
-    (void)snprintf(path, sizeof(path), "%s/other.mk", f.root);
+    SPEC_FMT(path, sizeof(path), "%s/other.mk", f.root);
     write_file(path, "from-other:\n", 0600);
     rows.len = 0U;
     YEW_ASSERT(yew_compgen_builtin("make_targets", f.root, "other.mk", &a,
@@ -441,7 +441,7 @@ void test_compgen_failure_caches_an_empty_answer(void)
     YEW_ASSERT(yew_test_log_contains(YEW_LOG_INFO,
                                      "completion generator fails"));
     YEW_ASSERT(!g.ed.msg.active);
-    (void)snprintf(missing, sizeof(missing), "%s/no-such-program",
+    SPEC_FMT(missing, sizeof(missing), "%s/no-such-program",
                    g.spec.root);
     argv[0] = missing;
     k = key_for("missing", argv, g.spec.root);
@@ -513,7 +513,7 @@ void test_compgen_fifty_keystrokes_stay_within_the_caps(void)
     script(&g.spec, "slow", "#!/bin/sh\nsleep 0.3\necho \"$1\"\n", prog,
            sizeof(prog));
     for (i = 0U; i < 6U; i++) {
-        (void)snprintf(arg[i], sizeof(arg[i]), "key%u", (unsigned)i);
+        SPEC_FMT(arg[i], sizeof(arg[i]), "key%u", (unsigned)i);
         argv[i][0] = prog;
         argv[i][1] = arg[i];
         argv[i][2] = NULL;
@@ -568,7 +568,7 @@ void test_compgen_never_costs_the_user_a_job_slot(void)
     script(&g.spec, "slowgen", "#!/bin/sh\nsleep 5\n", prog, sizeof(prog));
     arena_init(&a);
     for (i = 0U; i < 4U; i++) {
-        (void)snprintf(arg[i], sizeof(arg[i]), "k%u", (unsigned)i);
+        SPEC_FMT(arg[i], sizeof(arg[i]), "k%u", (unsigned)i);
         argv[i][0] = prog;
         argv[i][1] = arg[i];
         argv[i][2] = NULL;
@@ -631,14 +631,14 @@ static void prompt_fix_init(PromptFix *p, const char *gen_body,
 
     spec_fix_init(&p->g.spec);
     p->old_state = spec_env_copy("XDG_STATE_HOME");
-    (void)snprintf(p->state, sizeof(p->state), "%s/state", p->g.spec.root);
+    SPEC_FMT(p->state, sizeof(p->state), "%s/state", p->g.spec.root);
     YEW_ASSERT_EQ_I64(mkdir(p->state, 0700), 0);
     YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", p->state, 1), 0);
     yew_ed_init(&p->g.ed);
     YEW_ASSERT(yew_ed_open_scratch(&p->g.ed));
     yew_test_load_runtime(&p->g.ed);
     script(&p->g.spec, "fixgen", gen_body, p->prog, sizeof(p->prog));
-    (void)snprintf(spec, sizeof(spec), spec_text, p->prog);
+    SPEC_FMT(spec, sizeof(spec), spec_text, p->prog);
     spec_fix_user(&p->g.spec, "fixcmd", spec);
     yew_compgen_test_set_timeout_ms(0);
 }
