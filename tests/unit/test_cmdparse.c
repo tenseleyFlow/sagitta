@@ -436,9 +436,9 @@ void test_cmdparse_bang_point_splits_the_shell_body(void)
         {":!cat \"a\\\"b", 11U, 1U, "a\"b", 6U, 11U},
         /* SHELL rules, not Sprint 18's: `%` is a percent sign. */
         {":!echo %", 8U, 1U, "%", 7U, 8U},
-        /* Deferred by name: `|` is an ordinary byte, so the word after
-         * it is an operand and completes as a path. */
-        {":!ls | gr", 9U, 2U, "gr", 7U, 9U},
+        /* Sprint 57.23 lifts 57.18's named deferral: the word after a
+         * `|` is a COMMAND word again (index 0), not operand 2. */
+        {":!ls | gr", 9U, 0U, "gr", 7U, 9U},
         /* A caret in the whitespace run before a word is a fresh word. */
         {":!ls   x", 5U, 1U, "", 5U, 5U}
     };
@@ -491,5 +491,49 @@ void test_cmdparse_bang_body_does_not_swallow_the_bang_flag(void)
     YEW_ASSERT(!point.bang_body);
     YEW_ASSERT_EQ_U64(point.token_index, 1U);
     YEW_ASSERT_EQ_STR(point.stem, "val");
+    parse_fixture_free(&f);
+}
+
+/*
+ * Sprint 57.23 §5: the point parser now reads the body through the shell
+ * context lexer -- and execution still does not.  `:!ls | gr` completes
+ * `gr` as a COMMAND while yew_cmd_parse hands `ls | gr` to the shell as
+ * one verbatim argument.
+ */
+void test_cmdparse_bang_pipe_body_stays_verbatim(void)
+{
+    ParseFixture f;
+    CmdParse parsed;
+    CmdParsePoint point;
+
+    parse_fixture_init(&f);
+    YEW_ASSERT(yew_cmd_parse(&f.ed, ":!ls | gr", 9U, &f.arena, &parsed));
+    YEW_ASSERT_EQ_STR(parsed.argv.v[0], "ed.shell.run");
+    YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    YEW_ASSERT_EQ_STR(parsed.argv.v[1], "ls | gr");
+    YEW_ASSERT_EQ_U64(parsed.arg_tok[1].lo, 2U);
+    YEW_ASSERT_EQ_U64(parsed.arg_tok[1].hi, 9U);
+
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":!ls | gr", 9U, 9U, &f.arena,
+                                   &point));
+    YEW_ASSERT(point.bang_body);
+    YEW_ASSERT_NOT_NULL(point.shell);
+    YEW_ASSERT_EQ_U64(point.shell->pos, YEW_SH_POS_COMMAND);
+    YEW_ASSERT_EQ_U64(point.shell->replace.lo, 7U);
+    YEW_ASSERT_EQ_U64(point.shell->replace.hi, 9U);
+    YEW_ASSERT_EQ_STR(point.shell->stem, "gr");
+    YEW_ASSERT_EQ_U64(point.token.lo, 7U);
+    YEW_ASSERT_EQ_U64(point.token_index, 0U);
+    /* The range and read spellings rebase onto their own body start. */
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":r !cat > ou", 12U, 12U,
+                                   &f.arena, &point));
+    YEW_ASSERT_NOT_NULL(point.shell);
+    YEW_ASSERT_EQ_U64(point.shell->pos, YEW_SH_POS_REDIRECT);
+    YEW_ASSERT_EQ_U64(point.token.lo, 10U);
+    YEW_ASSERT_EQ_STR(point.shell->argv[0], "cat");
+    /* Not a bang body: no shell context. */
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":w fi", 5U, 5U, &f.arena,
+                                   &point));
+    YEW_ASSERT_NULL(point.shell);
     parse_fixture_free(&f);
 }

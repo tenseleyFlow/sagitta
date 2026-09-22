@@ -886,6 +886,7 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void);
 void test_cmdparse_bang_execution_is_unchanged(void);
 void test_cmdparse_bang_point_splits_the_shell_body(void);
 void test_cmdparse_bang_body_does_not_swallow_the_bang_flag(void);
+void test_cmdparse_bang_pipe_body_stays_verbatim(void);
 void test_shctx_corpus_rows(void);
 void test_shctx_text_after_caret_is_ignored(void);
 void test_shctx_depth_is_capped(void);

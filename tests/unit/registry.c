@@ -917,6 +917,7 @@ const YewTest yew_tests[] = {
     T(cmdparse_bang_execution_is_unchanged),
     T(cmdparse_bang_point_splits_the_shell_body),
     T(cmdparse_bang_body_does_not_swallow_the_bang_flag),
+    T(cmdparse_bang_pipe_body_stays_verbatim),
     T(shctx_corpus_rows),
     T(shctx_text_after_caret_is_ignored),
     T(shctx_depth_is_capped),
