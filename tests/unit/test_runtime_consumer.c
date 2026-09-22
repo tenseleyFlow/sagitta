@@ -16,6 +16,7 @@
 #include "mod/ai/policy.h"
 #include "syn/defs.h"
 #include "syn/theme.h"
+#include "ui/compspec.h"
 #include "util/arena.h"
 #include "util/runtime_asset.h"
 
@@ -242,6 +243,47 @@ void test_runtime_consumer_builtin_config_honors_explicit_override(void)
     yew_config_init(&ed, &startup);
     YEW_ASSERT_EQ_I64(yew_config_load_all(&ed, NULL), YEW_CFG_MISSING);
     yew_ed_free(&ed);
+    runtime_fix_drop(&fix);
+#else
+    YEW_ASSERT_EQ_U64(yew_runtime_asset_count(), 0U);
+#endif
+}
+
+/*
+ * Sprint 57.24 DoD 8: the completion specs ship inside the embedded
+ * image.  No $YEW_RUNTIME_DIR, no installed prefix, no source tree under
+ * the cwd: the spec list and wolf.fl itself come from the image.
+ */
+void test_runtime_consumer_completion_spec_loads_from_the_image(void)
+{
+#if YEW_EMBED_RUNTIME
+    RuntimeFix fix;
+    const YewCompSpec *spec;
+    const YewSpecNode *root;
+    char err[512];
+    u32 i;
+    bool build = false;
+
+    runtime_fix_init(&fix);
+    yew_compspec_test_set_default_root(fix.root);
+    YEW_ASSERT_EQ_STR(yew_compspec_shipped_source(), "embedded");
+    YEW_ASSERT(yew_compspec_shipped_count() >= 26U);
+    YEW_ASSERT(yew_compspec_check_shipped("wolf.fl", err, sizeof(err)));
+    spec = yew_compspec_get(NULL, "wolf");
+    YEW_ASSERT_NOT_NULL(spec);
+    YEW_ASSERT_EQ_STR(yew_compspec_origin(spec), "completions/wolf.fl");
+    root = yew_compspec_root(spec);
+    for (i = 0U; i < root->n_subs; i++) {
+        if (strcmp(root->subs[i].name, "build") == 0)
+            build = true;
+    }
+    YEW_ASSERT(build);
+    YEW_ASSERT_EQ_STR(yew_compspec_describe("wolf"), "the wolf toolchain");
+    /* An explicit runtime directory without completions/ has none. */
+    YEW_ASSERT_EQ_I64(setenv("YEW_RUNTIME_DIR", "runtime", 1), 0);
+    yew_compspec_invalidate_all();
+    YEW_ASSERT_NULL(yew_compspec_get(NULL, "wolf"));
+    yew_compspec_test_set_default_root(NULL);
     runtime_fix_drop(&fix);
 #else
     YEW_ASSERT_EQ_U64(yew_runtime_asset_count(), 0U);
