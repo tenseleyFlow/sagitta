@@ -3,7 +3,6 @@
 #include "harness.h"
 
 #include <errno.h>
-#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -22,6 +21,10 @@
 #include "mod/ai/registry.h"
 #include "mod/ai/shadow_ai.h"
 #include "ui/message.h"
+
+#ifndef YEW_TEST_FAKECURL
+#define YEW_TEST_FAKECURL "build/tests/helpers/fakecurl"
+#endif
 
 static bool policy_deny_workspace(Ed *ed, const char *root)
 {
@@ -108,13 +111,13 @@ static int policy_child(void)
     char curl_root[] = "/tmp/yew-ai-off-curl-XXXXXX";
     char curl_link[sizeof(curl_root) + sizeof("/curl")];
     char curl_counter[sizeof(curl_root) + sizeof("/starts")];
-    char curl_target[PATH_MAX];
+    const char *curl_target = YEW_TEST_FAKECURL;
     char status[512];
     Ed ed;
     AiBackendEntry *entry;
     u64 sockets;
 
-    if (realpath("build/tests/helpers/fakecurl", curl_target) == NULL ||
+    if (access(curl_target, X_OK) != 0 ||
         mkdtemp(curl_root) == NULL ||
         snprintf(curl_link, sizeof(curl_link), "%s/curl", curl_root) <= 0 ||
         snprintf(curl_counter, sizeof(curl_counter), "%s/starts",

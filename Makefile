@@ -719,6 +719,9 @@ AI_TEST_HELPERS := $(if $(filter ai,$(MODULES)),$(MOCKAI) $(MOCKCURL))
 $(BUILD)/tests/unit/test_ai_curl.o: CFLAGS += \
   -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
 $(BUILD)/tests/unit/test_ai_curl.o: $(FAKECURL)
+$(BUILD)/tests/unit/test_ai_shadow_policy.o: CFLAGS += \
+  -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
+$(BUILD)/tests/unit/test_ai_shadow_policy.o: $(FAKECURL)
 $(BUILD)/tests/unit/test_http_live.o: CFLAGS += \
   -DYEW_TEST_FAKEHTTP='"$(abspath $(FAKEHTTP))"'
 $(BUILD)/tests/unit/test_http_live.o: $(FAKEHTTP)

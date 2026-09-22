@@ -15,6 +15,7 @@
 
 #include "audit.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -154,8 +155,11 @@ done:
     }
     if (cache != NULL)
         (void)unlink(cache);
-    if (old_cwd[0] != '\0')
-        (void)chdir(old_cwd);
+    if (old_cwd[0] != '\0' && chdir(old_cwd) != 0) {
+        correct = false;
+        (void)snprintf(why, why_cap, "cannot restore working directory: %s",
+                       strerror(errno));
+    }
     (void)snprintf(syn_dir, sizeof(syn_dir), "%s/yew/syn", root);
     (void)snprintf(yew_dir, sizeof(yew_dir), "%s/yew", root);
     (void)rmdir(syn_dir);

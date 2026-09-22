@@ -429,8 +429,8 @@ static const char *relative_path(Fixture *f, const char *path)
 static void test_gotos(Fixture *f)
 {
     static const GotoCase cases[] = {
-        {"src/text/edit.c", "yew_textbuf_insert", "src/text/piece.c",
-         "void yew_textbuf_insert("},
+        {"src/text/edit.c", "yew_textbuf_insert_payload", "src/text/piece.c",
+         "u64 yew_textbuf_insert_payload("},
         {"src/term/render.c", "yew_cluster_width", "src/unicode/width.c",
          "int yew_cluster_width("},
         /* The sprint draft named yew_cmd_invoke, which no longer has a use
@@ -868,7 +868,7 @@ static void test_hover(Fixture *f)
     bytebuf_init(&params);
     bytebuf_init(&body);
     arena_init(&arena);
-    position_params(buffer, "yew_textbuf_insert", NULL, NULL, &params);
+    position_params(buffer, "yew_textbuf_insert_payload", NULL, NULL, &params);
     result = request(f, buffer, "textDocument/hover", &params, &arena);
     if (!yew_lsp_hover_parse(result, buffer->tb, f->server->pos_enc,
                              &body, &range, &have_range) ||

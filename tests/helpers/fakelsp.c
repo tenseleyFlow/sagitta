@@ -537,6 +537,11 @@ static int run_session(const char *mode, const char *marker,
             return 63;
         drain_to_shutdown = true;
     }
+    /* The invariant-6 editor trial edits its open source before quitting.
+     * didChange may arrive before shutdown; consume it rather than treating
+     * a legal notification as a crashed server and restarting the fixture. */
+    if (strcmp(mode, "session-shutdown-delay") == 0)
+        drain_to_shutdown = true;
     if (!(drain_to_shutdown ?
               read_until_method("\"method\":\"shutdown\"", &id) :
               read_method("\"method\":\"shutdown\"", &id)) || id == 0U ||
