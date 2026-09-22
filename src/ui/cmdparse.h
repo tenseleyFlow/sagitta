@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "edit/cmd.h"
+#include "ui/shctx.h"
 #include "util/arena.h"
 
 typedef struct TextBuf TextBuf;
@@ -57,6 +58,15 @@ typedef struct CmdParsePoint {
      * decided here reaches execution.
      */
     bool bang_body;
+    /*
+     * Sprint 57.23 §5: what the shell context lexer says about the caret,
+     * when `bang_body`.  Arena-owned; `replace` is in PROMPT offsets (the
+     * lexer's body-relative span, rebased), so it is the same span as
+     * `token`.  `token`, `stem` and `token_index` are filled from it --
+     * `token_index` is the shell word index, 0 in command position --
+     * so every reader of this struct keeps working.  NULL otherwise.
+     */
+    const YewShCtx *shell;
     /* What the leading range resolved to, for Sprint 18.5 §9's hint.
      * `given` is false when the user typed none. */
     CmdRange range;

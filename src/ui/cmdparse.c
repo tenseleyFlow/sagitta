@@ -1165,117 +1165,42 @@ static bool bang_body_start(const Parser *p, const char *name,
     return true;
 }
 
-/* The backslash pairs a double-quoted shell word actually collapses. */
-static bool bang_dquote_escape(char c)
-{
-    return c == '"' || c == '\\' || c == '$' || c == '`';
-}
-
 /*
- * Decode one shell-ish word of a bang body, stopping at `stop`.
+ * Describe the caret inside a bang body.
  *
- * SHELL rules, not Sprint 18's argument rules.  The body reaches
- * `sh -c` untouched, so `%` is a percent sign here and not the current
- * file name, and an unknown escape is a literal backslash rather than an
- * error.  Running parse_token over it would decode a string the shell
- * will never see and then complete against it.
+ * Sprint 57.23 §5: the body is handed to the shell context lexer, which
+ * knows what 57.18's word splitter did not -- that `ls | gr` puts `gr` in
+ * COMMAND position, that `cat > ou` is a redirection target, that
+ * `sudo -u root gi` runs `gi`.  `token_index` is the lexer's `arg_index`:
+ * 0 in command position, otherwise the operand index within the caret's
+ * OWN simple command.
  *
- * Quoting is honoured exactly as far as locating the caret's token
- * needs: enough to keep `"my file"` one word and to report `my fi` as
- * the stem of a caret inside it.  An unterminated quote deliberately
- * swallows the whitespace after it -- that is what the user is typing.
- * The stem comes back WITHOUT its quotes, and yew_comp_quote puts them
- * back on whatever is inserted, so the round trip is closed.
- */
-static char *bang_word(Parser *p, size_t *at, size_t stop)
-{
-    Bytebuf out;
-    char *value;
-
-    bytebuf_init(&out);
-    while (*at < stop && !is_ws(p->line[*at])) {
-        char c = p->line[*at];
-
-        if (c == '\'') {
-            (*at)++;
-            while (*at < stop && p->line[*at] != '\'') {
-                bytebuf_append(&out, p->line + *at, 1U);
-                (*at)++;
-            }
-            if (*at < stop)
-                (*at)++;
-        } else if (c == '"') {
-            (*at)++;
-            while (*at < stop && p->line[*at] != '"') {
-                if (p->line[*at] == '\\' && *at + 1U < stop &&
-                    bang_dquote_escape(p->line[*at + 1U])) {
-                    bytebuf_append(&out, p->line + *at + 1U, 1U);
-                    *at += 2U;
-                } else {
-                    bytebuf_append(&out, p->line + *at, 1U);
-                    (*at)++;
-                }
-            }
-            if (*at < stop)
-                (*at)++;
-        } else if (c == '\\') {
-            (*at)++;
-            if (*at < stop) {
-                bytebuf_append(&out, p->line + *at, 1U);
-                (*at)++;
-            }
-        } else {
-            bytebuf_append(&out, p->line + *at, 1U);
-            (*at)++;
-        }
-    }
-    bytebuf_push_u8(&out, 0U);
-    value = arena_strndup(p->arena, (const char *)out.data, out.len - 1U);
-    bytebuf_free(&out);
-    return value;
-}
-
-/*
- * Split a bang body on unquoted whitespace and describe the caret's word.
- *
- * `token_index` counts SHELL words: 0 is what the shell will execute,
- * 1+ are its operands.  Pipelines and redirections are this sprint's
- * named deferral, so `|` and `>` are ordinary bytes -- `:!a | b` reports
- * `b` as word 2 and completes it as a path, not as an executable.
+ * SHELL rules, not Sprint 18's argument rules: `%` is a percent sign here,
+ * an unknown escape is a literal backslash, and the stem comes back
+ * WITHOUT its quotes -- the completer re-quotes for the caret's quote
+ * state (§6).  Nothing decided here reaches execution; yew_cmd_parse
+ * still hands the whole body to `sh -c` verbatim (finish_bang).
  */
 static void bang_point(Parser *p, size_t body, size_t cursor,
                        CmdParsePoint *out)
 {
-    size_t at = body;
-    u32 index = 0U;
+    YewShCtx *ctx = arena_alloc(p->arena, sizeof(*ctx), sizeof(void *));
 
     out->bang_body = true;
-    for (;;) {
-        size_t start;
-        char *value;
-
-        while (at < p->len && is_ws(p->line[at]))
-            at++;
-        if (at >= cursor) {
-            /* The caret sits in whitespace, or at a word's first byte:
-             * a fresh empty word at this index either way. */
-            out->token = (Span){(u32)cursor, (u32)cursor};
-            out->stem = arena_strdup(p->arena, "");
-            out->token_index = index;
-            return;
-        }
-        start = at;
-        value = bang_word(p, &at, cursor);
-        if (at >= cursor) {
-            out->token = (Span){(u32)start, (u32)at};
-            out->stem = value;
-            out->token_index = index;
-            return;
-        }
-        /* bang_word consumed at least one byte -- `at < cursor` held and
-         * the byte was not whitespace -- so this terminates. */
-        index++;
+    if (!yew_shctx_at(p->line + body, p->len - body, cursor - body,
+                      p->arena, ctx)) {
+        /* cursor >= body is the caller's precondition; unreachable. */
+        (void)memset(ctx, 0, sizeof(*ctx));
+        ctx->pos = YEW_SH_POS_NONE;
+        ctx->replace = (Span){cursor - body, cursor - body};
+        ctx->stem = arena_strdup(p->arena, "");
     }
+    ctx->replace.lo += body;
+    ctx->replace.hi += body;
+    out->shell = ctx;
+    out->token = ctx->replace;
+    out->stem = ctx->stem;
+    out->token_index = ctx->arg_index;
 }
 
 bool yew_cmd_parse_point(Ed *ed, const char *line, size_t len,
