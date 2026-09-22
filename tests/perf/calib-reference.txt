@@ -1,0 +1,27 @@
+# yew calibration reference v1
+# host_identity: hasu
+# source_commit: 1ae67fdd192524a51f35c4be4afce3f663dc2ef7
+# raw_measurement_sha256: 9240d2ba7cfc44fad6562f1547b5a795caff5f28bc61d4aa199d4be498fb64f1
+# selected_sample: complete bootstrap run 2 of 3
+# cpu_model: 12th Gen Intel(R) Core(TM) i7-12700KF
+# physical_cores: 12 (8 performance cores, 4 efficiency cores)
+# logical_cpus: 20
+# memory_capacity: 48 GiB (2 x 24 GiB)
+# memory_type_speed_timings: Corsair CMH48GX5M2B5600C40 DDR5; configured
+#   4000 MT/s; active timings are not exposed by SMBIOS 3.4
+# kernel_version: Linux 7.2.3 NixOS
+# libc_and_version: glibc 2.42
+# compiler_and_version: GCC 15.3.0
+# cpu_governor: performance during measurement; restored to powersave after
+# smt_enabled: yes on performance cores
+# aslr_enabled: yes (kernel.randomize_va_space=2)
+# workload_state: no deliberate concurrent load; resident desktop services
+#   remained online
+# measured_utc: 2026-09-14T19:11:01Z
+# method: 3 warmups discarded; 11 measured runs; median of 11 per component
+runner_id perf-x86_64-linux-gnu
+arch x86_64
+designated 1
+c1_chase_ns 27715699
+c2_scalar_ns 6348168
+c3_bandwidth_ns 17232645

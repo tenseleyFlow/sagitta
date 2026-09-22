@@ -17,6 +17,7 @@ enum {
     YEW_PROF_RING_MIN = 64U,
     YEW_PROF_RING_MAX = 262144U,
     YEW_PROF_OVERHEAD_SAMPLES = 1024U,
+    YEW_PROF_OVERHEAD_BATCHES = 5U,
     YEW_PROF_WORST_FRAMES = 10U
 };
 
@@ -79,19 +80,39 @@ static u32 ring_cap_from_env(void)
     return (u32)parsed;
 }
 
-static u64 measure_overhead(void)
+static u64 measure_overhead(Prof *p)
 {
-    u64 samples[YEW_PROF_OVERHEAD_SAMPLES];
-    size_t i;
+    u64 samples[YEW_PROF_OVERHEAD_BATCHES];
+    size_t batch;
 
-    for (i = 0U; i < YEW_ARRAY_LEN(samples); i++) {
+    /* YEW-F-072: measure the whole instrumentation path, not merely one
+     * clock pair.  A median of batches rejects a scheduler interruption,
+     * while averaging each batch avoids timing individual sub-microsecond
+     * calls at the clock's resolution boundary. */
+    for (batch = 0U; batch < YEW_ARRAY_LEN(samples); batch++) {
         u64 start = yew_now_ns();
-        u64 end = yew_now_ns();
-        samples[i] = end - start;
+        u64 end;
+        size_t frame;
+
+        for (frame = 0U; frame < YEW_PROF_OVERHEAD_SAMPLES; frame++) {
+            yew_prof_phase(p, YEW_PH_POLL);
+            yew_prof_frame_begin(p);
+            yew_prof_phase(p, YEW_PH_INPUT);
+            yew_prof_phase(p, YEW_PH_JOBS);
+            yew_prof_phase(p, YEW_PH_DISPATCH);
+            yew_prof_phase(p, YEW_PH_SYN);
+            yew_prof_phase(p, YEW_PH_LAYOUT);
+            yew_prof_phase(p, YEW_PH_RENDER);
+            yew_prof_phase(p, YEW_PH_WRITE);
+            yew_prof_frame_end(p, 1U, 1U, YEW_PF_KEY_PAINT);
+        }
+        end = yew_now_ns();
+        samples[batch] = (end - start) / YEW_PROF_OVERHEAD_SAMPLES;
     }
     yew_sort_stable(samples, YEW_ARRAY_LEN(samples), sizeof(samples[0]),
                     compare_u64, NULL);
-    return (samples[511] + samples[512]) / 2U;
+    yew_prof_reset(p);
+    return samples[YEW_ARRAY_LEN(samples) / 2U];
 }
 
 void yew_prof_init(Prof *p, Arena *a, bool on)
@@ -105,7 +126,7 @@ void yew_prof_init(Prof *p, Arena *a, bool on)
     p->ring = arena_alloc(a, (size_t)p->cap * sizeof(*p->ring),
                           _Alignof(ProfFrame));
     memset(p->ring, 0, (size_t)p->cap * sizeof(*p->ring));
-    p->overhead_ns = measure_overhead();
+    p->overhead_ns = measure_overhead(p);
 }
 
 static u32 duration_u32(u64 start, u64 end)

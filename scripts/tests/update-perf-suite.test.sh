@@ -55,6 +55,7 @@ case $target in
     fixtures|*/perf_textbuf) ;;
     perf-s56-checks) echo 'fake checks passed' ;;
     perf-s56-observation)
+        [ "${YEW_PERF_AGGREGATE:-0}" = 1 ] || exit 98
         echo 'latency.typing.small.p99 5000000 ns ADVISORY'
         echo 'latency.typing.small.max 6000000 ns'
         echo 'latency.typing.small.no_paint 10 permille=25'
@@ -62,6 +63,7 @@ case $target in
         echo 'startup.spawn_floor_fraction value_permille=100 verdict=PASS'
         ;;
     perf-s56-huge-observation)
+        [ "${YEW_PERF_AGGREGATE:-0}" = 1 ] || exit 98
         [ "${FAKE_FAIL_HUGE:-0}" = 0 ] || exit 9
         echo 'search.literal_early.1g_code value_ns=1000 verdict=ADVISORY'
         ;;

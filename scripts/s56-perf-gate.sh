@@ -163,6 +163,9 @@ function expected(metric) {
 FILENAME == ARGV[1] {
     if ($0 ~ /^[[:space:]]*#/ || NF == 0) next
     if (NF != 7) bad("malformed budgets row: " $0, 75)
+    if ($6 != "designated" && $6 != "budget" && $6 != "all" &&
+        $6 != "informational")
+        bad("unknown budget enforcement: " $6, 75)
     budget[$1] = $3 + 0
     comparison[$1] = $2
     unit[$1] = $4
@@ -313,25 +316,33 @@ END {
 
         relative = 0
         base = 0
-        if (update_file == "" && enforcement[metric] == "designated" &&
-            baseline_valid) {
+        if (update_file == "" &&
+            (enforcement[metric] == "designated" ||
+             enforcement[metric] == "budget") && baseline_valid) {
             if (!(metric in base_seen)) {
                 if (mode == "designated")
                     bad("baseline missing observed metric " metric, 75)
                 base = 0
             } else {
-            base = baseline_value(metric, unit[metric])
+                base = baseline_value(metric, unit[metric])
             }
-            if (base <= 0 && mode == "designated")
-                bad("baseline has zero value for " metric, 75)
-            if (base > 0) {
-            rel_limit = ceil_percent(base, 10)
-            if (comparison[metric] == "ge")
-                relative = ((a * 10 < base * 9) + (b * 10 < base * 9) + (c * 10 < base * 9))
-            else
-                relative = ((a > rel_limit) + (b > rel_limit) + (c > rel_limit))
-            if (comparison[metric] != "ge" && med * 100 < base * 80)
-                print "perf-gate: " metric " rebaseline me (" med " vs " base ")"
+            # YEW-F-072: a measured-noisy or quantized row remains a hard
+            # designated absolute budget without pretending its baseline is
+            # a stable 10 percent ratchet. Its baseline row remains required
+            # evidence and may legitimately contain zero.
+            if (enforcement[metric] == "designated") {
+                if (base <= 0 && mode == "designated")
+                    bad("baseline has zero value for " metric, 75)
+                if (base > 0) {
+                    rel_limit = ceil_percent(base, 10)
+                    if (comparison[metric] == "ge")
+                        relative = ((a * 10 < base * 9) + (b * 10 < base * 9) + (c * 10 < base * 9))
+                    else
+                        relative = ((a > rel_limit) + (b > rel_limit) + (c > rel_limit))
+                    if (comparison[metric] != "ge" && med * 100 < base * 80)
+                        print "perf-gate: " metric " rebaseline me (" med \
+                              " vs " base ")"
+                }
             }
         }
         fail_metric = comparison[metric] != "record" &&

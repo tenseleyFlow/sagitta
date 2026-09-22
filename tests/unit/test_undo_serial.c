@@ -158,6 +158,18 @@ static void serial_put_u64(u8 *bytes, u64 value)
     serial_put_u32(bytes + 4U, (u32)(value >> 32U));
 }
 
+static u64 serial_fnv(const u8 *bytes, size_t len)
+{
+    u64 hash = UINT64_C(14695981039346656037);
+    size_t i;
+
+    for (i = 0U; i < len; i++) {
+        hash ^= bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
 static size_t serial_crc_offsets(const Bytebuf *file, size_t *out,
                                  size_t cap)
 {
@@ -368,7 +380,7 @@ void test_undo_serial_rejects_unknown_version(void)
     YEW_ASSERT_EQ_U64(yew_undo_write(&source.edit, path), YEW_UNDO_WRITE_OK);
     serial_read_file(path, &file);
     YEW_ASSERT_EQ_MEM(file.data, "YEWU", 4U);
-    file.data[4] = 2U;
+    file.data[4] = 3U;
     file.data[5] = 0U;
     file.data[6] = 0U;
     file.data[7] = 0U;
@@ -378,6 +390,43 @@ void test_undo_serial_rejects_unknown_version(void)
     bytebuf_free(&file);
     bytebuf_free(&content);
     YEW_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_reads_v1_and_preserves_version(void)
+{
+    static const u8 legacy[] = "legacy";
+    SerialFixture source;
+    SerialFixture loaded;
+    Bytebuf file;
+    u64 legacy_hash = serial_fnv(legacy, sizeof(legacy) - 1U);
+    char path[64];
+
+    serial_fixture_init(&source, legacy, sizeof(legacy) - 1U);
+    yew_undo_mark_saved(source.undo);
+    serial_path(path);
+    YEW_ASSERT_EQ_U64(yew_undo_write(&source.edit, path),
+                      YEW_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    serial_put_u32(file.data + 4U, 1U);
+    serial_put_u64(file.data + 40U, legacy_hash);
+    serial_put_u64(file.data + 56U, legacy_hash);
+    serial_write_file(path, file.data, file.len);
+    bytebuf_free(&file);
+
+    serial_fixture_init(&loaded, legacy, sizeof(legacy) - 1U);
+    YEW_ASSERT_EQ_U64(yew_undo_read(&loaded.edit, path),
+                      YEW_UNDO_READ_CURRENT);
+    YEW_ASSERT_EQ_U64(loaded.undo->identity_version, 1U);
+    YEW_ASSERT_EQ_U64(yew_undo_write(&loaded.edit, path),
+                      YEW_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    YEW_ASSERT_EQ_U64(serial_u32(file.data + 4U), 1U);
+    YEW_ASSERT_EQ_U64(serial_u64(file.data + 40U), legacy_hash);
+    YEW_ASSERT_EQ_U64(serial_u64(file.data + 56U), legacy_hash);
+    bytebuf_free(&file);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&loaded);
     serial_fixture_free(&source);
 }
 

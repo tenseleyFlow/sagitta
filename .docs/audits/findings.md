@@ -84,7 +84,7 @@ recorded in `audit-00.md`.
 | YEW-F-069 | M | fixed | F15 CI | ~~PTY minimum-case gate skips a missing registry~~ — fixed 2026-09-14 in `95695028` | tests/audit/f15_ban_misses.c | s06 registry minimum; s58 F15 q2 |
 | YEW-F-070 | M | fixed | F15 CI | ~~PTY golden gate accepts computed missing names~~ — fixed 2026-09-14 in `613e23aa` | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
 | YEW-F-071 | M | fixed | F15 CI | ~~PTY orphan gate counts dead preprocessor rows~~ — fixed 2026-09-14 in `e5cec738` | tests/audit/f15_ban_misses.c | s06 golden completeness; s58 F15 q2 |
-| YEW-F-072 | M | open | F15 CI | designated performance evidence remains placeholder-only | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
+| YEW-F-072 | M | fixed | F15 CI | ~~designated performance evidence remains placeholder-only~~ — fixed 2026-09-21 in `a1733694` | tests/audit/yew_f_072.c | s56 section 4; s58 F15 q3 |
 | YEW-F-073 | M | fixed | F15 CI | ~~baseline history policy is not enforced~~ — fixed 2026-09-14 in `aa77a9e6` | tests/audit/yew_f_073.c | s56 baseline policy; s58 F15 q4 |
 | YEW-F-074 | H | fixed | F15 CI | ~~Darwin shipping clean rebuilds differ by Mach-O UUID~~ — fixed 2026-09-13 in `16761aba` | tests/audit/yew_f_074.c | invariant 5; s58 F15 q5 |
 | YEW-F-075 | C | fixed | F15 CI | ~~stripped builds accept module-only config as inert state~~ — fixed 2026-09-13 in `ee6f9894` | tests/audit/yew_f_075.c | invariant 3; s58 F15 q7 |
@@ -615,14 +615,20 @@ preprocessor. Commit `e5cec738` removes provably dead constant branches before
 inventorying cases and snapshots while conservatively retaining both sides of
 module-dependent conditions.
 
-`YEW-F-072` is Medium because the two designated lanes cannot currently
-produce a performance verdict: both committed calibration references and the
-arm64 baseline are absent, while the x86_64 baseline still carries an all-zero
-template calibration vector. Hosted lanes continue to execute the harnesses
-and hard sanity checks, but they are advisory by contract. With no designated
-measurements, F15 cannot recompute a 30-run noise floor or compare a threshold
-to it. This is an invariant-4 control mismatch, not evidence that a user-facing
-budget is exceeded, and remains open for Sprint 59.
+`YEW-F-072` was Medium because the two designated lanes could not produce a
+performance verdict: both committed calibration references and the arm64
+baseline were absent, while the x86_64 baseline carried an all-zero template
+calibration vector. Hosted lanes still ran the harnesses and hard sanity
+checks, but were advisory by contract. This was an invariant-4 control
+mismatch, not evidence that a user-facing budget was exceeded. Sprint 59
+recorded same-ISA references, populated both designated baselines, and
+committed 30-run noise evidence for each pinned runner. The ARM campaign's
+original three relative-noise failures remain in
+`evidence/F072-perf-arm64-original-noise.txt`; amendment S59-A5 documents the
+measured variance and retains the unchanged absolute hard gates for those
+three rows. The passing reanalysis in `evidence/F072-perf-arm64-linux.txt`
+binds the exact source commit, input hashes, and original report hash.
+`a1733694` removes the XFAIL after the audit reproducer passed.
 
 `YEW-F-073` was Medium because `perf-baseline-guard.sh` read only the changed
 path list. Commit `aa77a9e6` establishes the audited history cutover and makes

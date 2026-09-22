@@ -224,6 +224,33 @@ void test_re_dfa_handles_pathological_patterns(void)
     }
 }
 
+void test_re_dfa_bol_skip_preserves_next_line_match(void)
+{
+    enum { PREFIX = 8192 };
+    u8 text[PREFIX + 16U];
+    static const u8 suffix[] = "\nstatic value\n";
+    Arena arena;
+    YewRe *re;
+    YewReInput in;
+    u64 end = 0U;
+
+    (void)memset(text, 'x', PREFIX);
+    (void)memcpy(text + PREFIX, suffix, sizeof(suffix) - 1U);
+    arena_init(&arena);
+    re = yew_re_compile(&arena, "^static ", 8U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    in = yew_re_input_bytes(text, PREFIX + sizeof(suffix) - 1U);
+    YEW_ASSERT_EQ_I64(yew_re_dfa_test(re, &in, 17U), YEW_DFA_YES);
+    YEW_ASSERT_EQ_U64(end, 0U);
+    YEW_ASSERT_EQ_I64(yew_re_dfa_find_end(re, &in, 17U, &end),
+                      YEW_DFA_YES);
+    YEW_ASSERT_EQ_U64(end, PREFIX + 8U);
+    in.window.hi = PREFIX;
+    YEW_ASSERT_EQ_I64(yew_re_dfa_find_end(re, &in, 17U, &end),
+                      YEW_DFA_NO);
+    arena_free_all(&arena);
+}
+
 /*
  * DoD 5's span half.  The boolean tests above prove the DFA agrees
  * about WHETHER there is a match; this proves the dispatcher's

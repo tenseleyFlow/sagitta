@@ -1,0 +1,42 @@
+# YEW-F-072 ARM64 profiler cross-check evidence
+
+date 2026-09-15
+source_commit 353850a5b9bec2f45e8c6433d615ca438d4446dc
+runner_id perf-arm64-linux
+arch aarch64
+kernel_release 7.0.0-28-generic
+scenario latency.prof.navigate.many-buffers.external_delta
+policy median_echo_floor median_of_three exact_sample_count
+
+# Twelve isolated repetitions under the original 250-permille gate.
+# Columns: repetition transport_floor_p50_ns external_delta_permille
+1 45032 204
+2 39727 240
+3 37889 234
+4 49376 218
+5 45324 254
+6 63997 178
+7 51923 229
+8 42149 238
+9 42901 253
+10 49042 248
+11 49292 253
+12 45533 253
+summary count=12 median=239 min=178 max=254 old_limit=250 over=4
+
+# Failed campaign build/perf-noise/campaign-426720 run 2 aggregated the
+# worst scenario from each of three complete quick-suite observations.
+campaign_aggregate 384 257 240
+campaign_median 257
+campaign_absolute_over 2/3
+profiler_overhead_permille 1
+sample_counts exact
+
+# Rejected alternative: subtracting the raw p99 echo floor over-corrected
+# the same comparison. Columns: p50_ns p99_ns external_delta_permille.
+rejected_p99_floor 76530 266017 833
+rejected_p99_floor 74149 225455 195
+
+decision new_limit_permille=300
+unchanged median_echo_floor exact_sample_count median_of_three
+unchanged profiler_overhead_limit_permille=20 enforcement=all

@@ -114,7 +114,9 @@ typedef struct SynResident {
 
 typedef struct SynIdentifierSpec {
     u8 prefix[2];
+    u8 suffix[4];
     u8 nprefix;
+    u8 nsuffix;
     u8 start_kind;
     u8 continue_kind;
     bool boundary_before;
@@ -409,7 +411,7 @@ static bool identifier_kind_has(u8 kind, u8 byte)
 
 static bool regex_ascii_identifier(const YewRe *re, SynIdentifierSpec *out)
 {
-    SynIdentifierSpec spec = {{0U, 0U}, 0U, 0U, 0U, false, false};
+    SynIdentifierSpec spec = {0};
     u32 pc = 0U;
     u32 split;
 
@@ -448,10 +450,28 @@ static bool regex_ascii_identifier(const YewRe *re, SynIdentifierSpec *out)
     if (spec.continue_kind == SYN_IDENT_CLASS_NONE)
         return false;
     pc += 3U;
+    /* YEW-F-072: typedef-name rules append a short literal to an otherwise
+     * ordinary identifier.  Recognize that bounded shape so each byte of a
+     * growing identifier does not enter the general Pike VM. */
+    while (pc < re->nprog && (ReOp)re->prog[pc].op == RE_CHAR &&
+           spec.nsuffix < YEW_ARRAY_LEN(spec.suffix)) {
+        if (re->prog[pc].arg >= 0x80U ||
+            !identifier_kind_has(spec.continue_kind,
+                                 (u8)re->prog[pc].arg))
+            return false;
+        spec.suffix[spec.nsuffix++] = (u8)re->prog[pc].arg;
+        pc++;
+    }
+    if (pc < re->nprog && (ReOp)re->prog[pc].op == RE_CHAR)
+        return false;
+    if (pc >= re->nprog)
+        return false;
     if ((ReOp)re->prog[pc].op == RE_WORDB) {
         spec.boundary_after = true;
         pc++;
     }
+    if (spec.nsuffix != 0U && !spec.boundary_after)
+        return false;
     if (pc + 1U >= re->nprog || (ReOp)re->prog[pc].op != RE_SAVE ||
         re->prog[pc].arg != 1U ||
         (ReOp)re->prog[pc + 1U].op != RE_MATCH ||
@@ -2767,6 +2787,11 @@ static int ascii_identifier_match(const SynIdentifierSpec *spec,
     while (p < len && line[p] < 0x80U &&
            identifier_kind_has(spec->continue_kind, line[p]))
         p++;
+    if (spec->nsuffix != 0U &&
+        (p - at < (u32)spec->nprefix + 1U + (u32)spec->nsuffix ||
+         memcmp(line + p - spec->nsuffix, spec->suffix,
+                spec->nsuffix) != 0))
+        return 0;
     if (spec->boundary_after) {
         if (p < len && line[p] >= 0x80U)
             return -1;

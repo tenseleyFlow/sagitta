@@ -171,9 +171,12 @@ TORTURE_SIGKILL_ITERS ?= 500
 FIXTURE_DIR ?= $(BUILD)/fixtures
 FIXTURE_MANIFEST ?= tests/perf/fixtures.sha
 PERF_RUNNER_ID ?= local-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
-PERF_BASELINE ?= $(if $(filter perf-arm64-linux,$(PERF_RUNNER_ID)),\
+# YEW-F-072: strip indentation from the conditional so a default designated
+# path cannot acquire a leading space and redirect evidence outside tests/.
+perf_baseline_default = $(strip $(if $(filter perf-arm64-linux,$(1)),\
                     tests/perf/baselines/perf-arm64-linux.txt,\
-                    tests/perf/baselines/perf-x86_64-linux-gnu.txt)
+                    tests/perf/baselines/perf-x86_64-linux-gnu.txt))
+PERF_BASELINE ?= $(call perf_baseline_default,$(PERF_RUNNER_ID))
 PERF_COMPONENT_LIMITS ?= tests/perf/component-limits.txt
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
@@ -1136,9 +1139,11 @@ endif
         perf-syn-resident-line-probe perf-syn-edit-probe perf-syn-size \
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-huge-components \
-        perf-update perf-baseline-guard \
+        perf-update perf-noise perf-baseline-guard \
+        perf-default-path-selftest \
         perf-baseline-selftest \
-        perf-gate-selftest perf-latency perf-latency-selftest \
+        perf-gate-selftest perf-startup-s56-contract \
+        perf-latency perf-latency-selftest \
         perf-s56-functional perf-s56-observation \
         perf-s56-huge-observation perf-s56-checks \
         perf-latency-s56-check perf-latency-s56-smoke \
@@ -3051,7 +3056,8 @@ perf-latency-s56-matrix: perf-latency-s56-smoke \
                          perf-latency-s56-assist
 
 perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
-                  $(BUILD)/yew $(PERF_S56_WORKSPACE_READY)
+                  $(BUILD)/yew $(PERF_S56_WORKSPACE_READY) \
+                  tests/perf/fixtures/batch-start.fl
 	@mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures
 	@: > $(BUILD)/perf-s56-fixtures/empty.c
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
@@ -3060,7 +3066,8 @@ perf-startup-s56: $(BUILD)/perf_startup_s56 $(BUILD)/perf_nullexec \
 		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
 		--state $(abspath $(BUILD)/perf-s56-state) \
 		--budgets tests/perf/budgets.txt \
-		--workspace $(abspath $(BUILD)/perf-s56-many)
+		--workspace $(abspath $(BUILD)/perf-s56-many) \
+		--batch-script $(abspath tests/perf/fixtures/batch-start.fl)
 
 perf-open-s56: $(BUILD)/perf_open_s56 $(BUILD)/yew fixtures-quick
 	@mkdir -p $(BUILD)/perf-s56-state
@@ -3144,17 +3151,57 @@ perf-mem-s56: $(BUILD)/perf_mem_s56 $(BUILD)/perf_startup_s56 \
 perf-s56-gate-selftest: $(BUILD)/s56_gate_policy_selftest \
                         $(BUILD)/perf_startup_s56 \
                         $(BUILD)/perf_prof_crosscheck \
-                        perf-baseline-selftest
+                        perf-baseline-selftest perf-default-path-selftest \
+                        perf-startup-s56-contract
 	$(BUILD)/s56_gate_policy_selftest
 	$(BUILD)/perf_startup_s56 --selftest-policy
 	$(BUILD)/perf_prof_crosscheck --selftest-policy
 	scripts/tests/s56-perf-gate.test.sh
-	scripts/tests/run-perf-suite.test.sh
+	BUILD=/inherited-build CALIB_REFERENCE=/inherited-reference \
+		PERF_BASELINE=/inherited-baseline PERF_GATE=1 \
+		PERF_RUNNER_ID=perf-arm64-linux PERF_S56_EVALUATE=1 \
+		scripts/tests/run-perf-suite.test.sh
 	scripts/tests/update-perf-suite.test.sh
+	scripts/tests/perf-noise-floor.test.sh
 	scripts/tests/s56-baseline-guard.test.sh
 
+# YEW-F-072: fail closed if the designated ledger loses the batch row.  This
+# probe owns only that contract; the suite's three-observation evaluator owns
+# the noisy spawn-fraction verdict.
+perf-startup-s56-contract: $(BUILD)/perf_startup_s56 \
+                           $(BUILD)/perf_nullexec $(BUILD)/yew \
+                           $(PERF_S56_WORKSPACE_READY) \
+                           tests/perf/fixtures/batch-start.fl
+	@set -eu; \
+	out=$(BUILD)/perf-startup-s56-contract.txt; \
+	trap 'rm -f "$$out"' EXIT HUP INT TERM; \
+	mkdir -p $(BUILD)/perf-s56-state $(BUILD)/perf-s56-fixtures; \
+	: > $(BUILD)/perf-s56-fixtures/empty.c; \
+	YEW_PERF_SMOKE=1 YEW_PERF_ADVISORY=1 YEW_PERF_AGGREGATE=1 PERF_GATE=0 \
+		$(BUILD)/perf_startup_s56 --yew $(abspath $(BUILD)/yew) \
+		--nullexec $(abspath $(BUILD)/perf_nullexec) \
+		--fixture $(abspath $(BUILD)/perf-s56-fixtures/empty.c) \
+		--state $(abspath $(BUILD)/perf-s56-state) \
+		--budgets tests/perf/budgets.txt \
+		--workspace $(abspath $(BUILD)/perf-s56-many) \
+		--batch-script $(abspath tests/perf/fixtures/batch-start.fl) \
+		>"$$out"; \
+	awk '$$1 == "startup.first_paint.batch" && \
+	     $$2 ~ /^value_ns=[1-9][0-9]*$$/ && $$3 == "verdict=RECORDED" \
+	     { seen = 1 } END { exit seen ? 0 : 1 }' "$$out"; \
+	echo 'perf startup contract: ok'
+
+perf-default-path-selftest:
+	@set -eu; \
+	x86='$(call perf_baseline_default,perf-x86_64-linux-gnu)'; \
+	arm='$(call perf_baseline_default,perf-arm64-linux)'; \
+	test "$$x86" = tests/perf/baselines/perf-x86_64-linux-gnu.txt; \
+	test "$$arm" = tests/perf/baselines/perf-arm64-linux.txt; \
+	echo 'perf default paths: ok'
+
 perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
-                          $(BUILD)/perf_latency_s56 $(BUILD)/yew \
+                          $(BUILD)/perf_latency_s56 \
+                          $(BUILD)/perf_echo_child $(BUILD)/yew \
                           fixtures-quick $(PERF_S56_WORKSPACE_READY) \
                           $(FAKELSP) $(MOCKAI) \
                           tests/fixtures/ai/ollama.script
@@ -3162,6 +3209,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/typing.keys --fixture small \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
@@ -3169,6 +3217,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/typing.keys --fixture huge \
 		--path $(abspath $(FIXTURE_DIR)/100m-code.bin) \
@@ -3176,6 +3225,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/edit.keys --fixture syntax \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
@@ -3183,6 +3233,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/edit.keys --fixture syntax \
 		--path tests/perf/fixtures/syn/c_comment_bomb.c \
@@ -3190,6 +3241,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/multicursor.keys --fixture small \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
@@ -3197,6 +3249,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/navigate.keys \
 		--fixture many-buffers \
@@ -3206,6 +3259,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/search.keys --fixture huge \
 		--path $(abspath $(FIXTURE_DIR)/100m-code.bin) \
@@ -3213,6 +3267,7 @@ perf-prof-crosscheck-s56: $(BUILD)/perf_prof_crosscheck \
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) PERF_GATE=$(PERF_GATE) \
 		$(BUILD)/perf_prof_crosscheck \
 		--runner $(abspath $(BUILD)/perf_latency_s56) \
+		--echo $(abspath $(BUILD)/perf_echo_child) \
 		--yew $(abspath $(BUILD)/yew) \
 		--session tests/perf/sessions/typing.keys --fixture assist \
 		--path tests/perf/fixtures/syn/c_kitchen.c \
@@ -3322,6 +3377,13 @@ perf-update:
 		PERF_BASELINE='$(PERF_BASELINE)' \
 		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
 		scripts/update-perf-suite.sh '$(MAKE)'
+
+perf-noise:
+	BUILD='$(BUILD)' PERF_RUNNER_ID='$(PERF_RUNNER_ID)' \
+		PERF_BASELINE='$(PERF_BASELINE)' \
+		PERF_NOISE_RESUME='$(PERF_NOISE_RESUME)' \
+		CALIB_REFERENCE='$(CALIB_REFERENCE)' \
+		scripts/run-perf-noise.sh '$(MAKE)'
 
 perf-baseline-guard:
 	scripts/perf-baseline-guard.sh

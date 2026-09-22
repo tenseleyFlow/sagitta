@@ -98,6 +98,77 @@ static const UndoNode *undo_current_node(const UndoTree *ut)
     return &ut->nodes.data[ut->cur - 1U];
 }
 
+void test_undo_identity_hash_is_piece_independent(void)
+{
+    u8 block[64];
+    u8 even[32];
+    TextBuf *flat = yew_textbuf_from_bytes((const u8 *)"abc", 3U);
+    TextBuf *fragmented = yew_textbuf_from_bytes((const u8 *)"ac", 2U);
+    TextBuf *block_tb;
+    TextBuf *fragmented_block_tb;
+    UndoTree *flat_undo;
+    UndoTree *fragmented_undo;
+    UndoTree *block_undo;
+    UndoTree *fragmented_block_undo;
+    unsigned int i;
+
+    for (i = 0U; i < sizeof(block); i++) {
+        block[i] = (u8)i;
+        if ((i & 1U) == 0U)
+            even[i / 2U] = (u8)i;
+    }
+    yew_textbuf_insert(fragmented, BYTEOFF(1U), (const u8 *)"b", 1U);
+    block_tb = yew_textbuf_from_bytes(block, sizeof(block));
+    fragmented_block_tb = yew_textbuf_from_bytes(even, sizeof(even));
+    for (i = 0U; i < sizeof(even); i++) {
+        u8 odd = (u8)(i * 2U + 1U);
+
+        yew_textbuf_insert(fragmented_block_tb, BYTEOFF(i * 2U + 1U),
+                           &odd, 1U);
+    }
+    flat_undo = yew_undo_new(flat);
+    fragmented_undo = yew_undo_new(fragmented);
+    block_undo = yew_undo_new(block_tb);
+    fragmented_block_undo = yew_undo_new(fragmented_block_tb);
+    YEW_ASSERT_EQ_U64(flat_undo->identity_version, 2U);
+    YEW_ASSERT_EQ_U64(flat_undo->root_hash,
+                      UINT64_C(0x44bc2cf5ad770999));
+    YEW_ASSERT_EQ_U64(fragmented_undo->root_hash, flat_undo->root_hash);
+    YEW_ASSERT_EQ_U64(block_undo->root_hash,
+                      UINT64_C(0xf7c67301db6713f0));
+    YEW_ASSERT_EQ_U64(fragmented_block_undo->root_hash,
+                      block_undo->root_hash);
+    yew_undo_free(fragmented_block_undo);
+    yew_undo_free(block_undo);
+    yew_undo_free(fragmented_undo);
+    yew_undo_free(flat_undo);
+    yew_textbuf_free(fragmented_block_tb);
+    yew_textbuf_free(block_tb);
+    yew_textbuf_free(fragmented);
+    yew_textbuf_free(flat);
+}
+
+void test_undo_initial_save_reuses_root_identity(void)
+{
+    UndoFixture f;
+
+    yew_undo_hash_count_reset();
+    undo_fixture_init(&f, (const u8 *)"root", 4U);
+    YEW_ASSERT_EQ_U64(yew_undo_hash_count(), 1U);
+    yew_undo_mark_saved(f.undo);
+    YEW_ASSERT_EQ_U64(yew_undo_hash_count(), 1U);
+    YEW_ASSERT_EQ_U64(f.undo->saved_hash, f.undo->root_hash);
+
+    yew_undo_begin(&f.edit, YEW_TXN_TYPE);
+    YEW_ASSERT(yew_edit_insert(&f.edit, BYTEOFF(4U),
+                               (const u8 *)"!", 1U));
+    yew_undo_end(&f.edit);
+    yew_undo_mark_saved(f.undo);
+    YEW_ASSERT_EQ_U64(yew_undo_hash_count(), 2U);
+    YEW_ASSERT_EQ_U64(f.undo->saved_len, 5U);
+    undo_fixture_free(&f);
+}
+
 void test_undo_type_merges_when_all_predicates_hold(void)
 {
     UndoFixture f;

@@ -825,15 +825,21 @@ static bool payload_aliases_store(const u8 *bytes, u64 len,
     return true;
 }
 
-void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
+u64 yew_textbuf_insert_payload(TextBuf *tb, ByteOff at, const u8 *bytes,
+                               u64 len)
 {
     u64 buffer_len;
     u64 old_add_len;
     u64 old_gen;
     Span old_affected;
+    PieceNode *before;
+    PieceNode *after;
     PieceNode *middle;
+    const PieceNode *predecessor;
     u8 *staged = NULL;
     const u8 *payload = bytes;
+    bool extend;
+    bool reuse;
 
     if (tb == NULL)
         YEW_BUG("yew_textbuf_insert: NULL buffer");
@@ -843,7 +849,7 @@ void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
                 (unsigned long long)at.v,
                 (unsigned long long)buffer_len);
     if (len == 0U)
-        return;
+        return tb->backing->add.len;
     if (len > UINT64_MAX - buffer_len)
         YEW_BUG("insert length overflows text buffer");
     textbuf_require_edit_generation(tb);
@@ -860,18 +866,46 @@ void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
         (void)payload_aliases_store(bytes, len, &tb->backing->orig);
     }
     old_add_len = tb->backing->add.len;
-    store_append(&tb->backing->add, payload, len);
-    tb->add = tb->backing->add;
-    yew_xfree(staged);
-    if ((!tb->add_tail_known || tb->add_tail_at == at.v) &&
-        node_extend_predecessor(tb, &tb->root, at.v, old_add_len,
-                                tb->backing->add.len)) {
+    predecessor = node_ending_at(tb->root, at.v);
+    extend = predecessor != NULL && predecessor->src == YEW_STORE_ADD &&
+             predecessor->span.hi == old_add_len;
+    reuse = !extend && len <= old_add_len &&
+            memcmp(tb->backing->add.bytes + (size_t)(old_add_len - len),
+                   payload, (size_t)len) == 0;
+    /* YEW-F-072: multicursor fan-out used to append the same payload once
+     * per caret.  The next key therefore could not coalesce with any prior
+     * caret's piece, and sustained typing made every visible line a chain
+     * of hundreds of one-byte nodes.  Prefer extending the predecessor;
+     * otherwise reuse only the latest immutable add-store payload so the
+     * next fan-out remains contiguous at every caret. */
+    if (reuse) {
+        Span shared = {old_add_len - len, old_add_len};
+
+        middle = node_new(tb->backing,
+                          piece_make(tb->backing, YEW_STORE_ADD, shared));
+        node_split(tb, tb->root, at.v, &before, &after);
+        tb->root = node_concat(node_concat(before, middle), after);
         tb->gen++;
         yew_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
                                    old_affected, old_gen);
         tb->add_tail_at = at.v + len;
         tb->add_tail_known = true;
-        return;
+        yew_xfree(staged);
+        return shared.lo;
+    }
+    store_append(&tb->backing->add, payload, len);
+    tb->add = tb->backing->add;
+    yew_xfree(staged);
+    if (extend) {
+        if (!node_extend_predecessor(tb, &tb->root, at.v, old_add_len,
+                                     tb->backing->add.len))
+            YEW_BUG("extensible add-store predecessor disappeared");
+        tb->gen++;
+        yew_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
+                                   old_affected, old_gen);
+        tb->add_tail_at = at.v + len;
+        tb->add_tail_known = true;
+        return old_add_len;
     }
     middle = node_new(tb->backing,
                       piece_make(tb->backing, YEW_STORE_ADD,
@@ -883,6 +917,12 @@ void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
                                old_affected, old_gen);
     tb->add_tail_at = at.v + len;
     tb->add_tail_known = true;
+    return old_add_len;
+}
+
+void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
+{
+    (void)yew_textbuf_insert_payload(tb, at, bytes, len);
 }
 
 void yew_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)

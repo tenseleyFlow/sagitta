@@ -8,6 +8,7 @@ typedef struct Ed Ed;
 typedef struct Win Win;
 
 void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi);
+void yew_draw_cursor_overlay_sync(Ed *ed, Win *w);
 void yew_draw_footer(Ed *ed, Win *w);
 void yew_draw_cursor(Ed *ed, Win *w);
 /* Draws the complete Sprint 15 viewport and footer. */

@@ -119,6 +119,10 @@ void test_prof_reset_keeps_allocation(void)
     arena_init(&arena);
     yew_prof_init(&prof, &arena, true);
     ring = prof.ring;
+    YEW_ASSERT(prof.overhead_ns > 0U);
+    YEW_ASSERT_EQ_U64(prof.n, 0U);
+    YEW_ASSERT_EQ_U64(prof.head, 0U);
+    YEW_ASSERT_EQ_U64(prof.seq, 0U);
     yew_prof_frame_begin(&prof);
     yew_prof_frame_end(&prof, 0U, 0U, 0U);
     memcpy(prof.mark, "before", sizeof("before"));

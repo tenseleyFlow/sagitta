@@ -811,6 +811,10 @@ u32 yew_shell_read(Ed *ed, const char *cmdline, char *err, size_t errsz)
  * dispatching would re-enter the editor with a half-applied transaction. */
 static YewFilterResult filter_drive(Ed *ed, YewJob *j, Bytebuf *typeahead)
 {
+    In cancel_input;
+    bool cancelled = false;
+
+    yew_input_init(&cancel_input, &ed->in.caps);
     for (;;) {
         /* The synchronous filter shares the process-wide job table with
          * background Git, LSP, AI, and index work.  Each job can contribute
@@ -860,8 +864,10 @@ static YewFilterResult filter_drive(Ed *ed, YewJob *j, Bytebuf *typeahead)
         if (deadline < 0 || deadline > YEW_FILTER_TICK_MS)
             deadline = YEW_FILTER_TICK_MS;
         rc = poll(pfd, (nfds_t)n, (int)deadline);
-        if (rc < 0 && errno != EINTR)
+        if (rc < 0 && errno != EINTR) {
+            yew_input_free(&cancel_input);
             return YEW_FILT_SPAWN;
+        }
         now = yew_now_ms();
         yew_job_pump(ed, pfd, n);
         if (sig_slot >= 0 && (pfd[sig_slot].revents & POLLIN) != 0) {
@@ -876,17 +882,28 @@ static YewFilterResult filter_drive(Ed *ed, YewJob *j, Bytebuf *typeahead)
         if (tty_slot >= 0 && (pfd[tty_slot].revents & POLLIN) != 0) {
             u8 bytes[1024];
             ssize_t got = read(ed->tty.rfd, bytes, sizeof(bytes));
-            ssize_t i;
+            if (got > 0 && !cancelled) {
+                bytebuf_append(typeahead, bytes, (size_t)got);
+                yew_input_feed(&cancel_input, bytes, (size_t)got);
+            }
+        }
+        if (!cancelled) {
+            Key key;
 
-            for (i = 0; i < got; i++) {
-                /* The only keys inspected are cancel keys, and they are
-                 * consumed rather than replayed. */
-                if (bytes[i] == 0x03U || bytes[i] == 0x1BU) {
-                    (void)yew_job_signal(ed, j->id, SIGTERM);
-                    j->state = YEW_JOB_CANCELLED;
+            /* ESC starts every Kitty CSI-u key, not just the Escape key.
+             * Decode events before deciding whether input cancels the
+             * filter; keep the original bytes for lossless typeahead. */
+            while (yew_input_next(&cancel_input, now, &key)) {
+                if (key.kind != YEW_EV_KEY ||
+                    key.ev == YEW_KEY_RELEASE ||
+                    (key.code != YEW_KEY_ESCAPE &&
+                     !(key.code == (u32)'c' &&
+                       (key.mods & YEW_MOD_CTRL) != 0U)))
                     continue;
-                }
-                bytebuf_push_u8(typeahead, bytes[i]);
+                (void)yew_job_signal(ed, j->id, SIGTERM);
+                j->state = YEW_JOB_CANCELLED;
+                cancelled = true;
+                break;
             }
         }
         /* Reap before tick: a child that exits right as the deadline
@@ -895,6 +912,11 @@ static YewFilterResult filter_drive(Ed *ed, YewJob *j, Bytebuf *typeahead)
         yew_job_reap(ed);
         yew_job_tick(ed, now);
     }
+    yew_input_free(&cancel_input);
+    /* Cancellation is explicit: queued edits must not run against the
+     * unchanged buffer after Escape or Ctrl-C. */
+    if (cancelled)
+        typeahead->len = 0U;
     switch (j->state) {
     case YEW_JOB_TIMEOUT:
         return YEW_FILT_TIMEOUT;
