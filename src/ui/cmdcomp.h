@@ -56,6 +56,14 @@ typedef enum {
     YEW_COMP_VAR,     /* environment names a `:!` child will see (§4)  */
     YEW_COMP_USER,    /* `~name/` from the password database (§4)      */
     YEW_COMP_BUILTIN, /* sh-family builtins and reserved words (§4)    */
+    /*
+     * Sprint 57.24, appended.  SPEC rows come from a completion spec's
+     * tree -- subcommands, flags, fixed values; GEN rows from a generator
+     * (hosts, make targets, a spec's `git for-each-ref`).  Both are also
+     * registered as sources that answer for a request's shell context.
+     */
+    YEW_COMP_SPEC,
+    YEW_COMP_GEN,
     YEW_COMP_KIND__N
 } YewCompKind;
 
@@ -167,6 +175,10 @@ typedef struct CompReq {
     /* Sprint 57.23 §5.  Both zero-initialised for every existing caller. */
     const YewShCtx *shell; /* non-NULL only for YEW_COMP_SHELL             */
     u32 path_filter;       /* YEW_PATH_* mask; 0 == YEW_PATH_ANY           */
+    /* Sprint 57.24: a spec's `ext` list -- files must carry one of these
+     * extensions (directories always pass, so the user can descend). */
+    const char *const *path_ext;
+    u32 n_path_ext;
 } CompReq;
 
 enum {
@@ -214,6 +226,14 @@ typedef struct CompFilter {
      * NULL for every other kind.
      */
     char *ctx_key;
+    /*
+     * Sprint 57.24 §5: the generator key this answer asked for (NULL for
+     * none), and whether it was still in flight with nothing cached --
+     * the pager's `…` marker.  An arrival for exactly this key refilters;
+     * any other arrival only lands in the cache.
+     */
+    char *gen_key;
+    bool gen_pending;
     u32 total;     /* pre-cap total, for the footer                       */
     bool capped;   /* the source had more than YEW_COMP_MAX matches       */
     bool valid;
@@ -300,6 +320,15 @@ bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
  * PATH source applies.  An empty `sources` offers nothing.
  */
 u32 yew_comp_shell_route(const YewShCtx *ctx, u32 *sources, u32 *path_filter);
+
+/*
+ * Sprint 57.24 test seam: what the SHELL dispatcher would offer for
+ * `ctx`, as a stable string -- `sub`, `flags`, `dash`, `exec`, `path`
+ * (`path:lu` with extensions), `dir`, `var`, `user`, `values`,
+ * `gen:<name>`, joined by `+`, or `none`.  The resolution corpus asserts
+ * it, so the routing is tested without the filesystem.
+ */
+char *yew_comp_shell_describe(Ed *ed, const YewShCtx *ctx, Arena *a);
 
 /* Tolerant command-line source selection at the cursor. */
 bool yew_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,

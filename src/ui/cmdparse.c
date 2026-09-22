@@ -10,6 +10,7 @@
 
 #include "edit/ed.h"
 #include "edit/select.h"
+#include "ui/compspec.h"
 #include "unicode/coords.h"
 #include "util/buf.h"
 
@@ -1187,8 +1188,10 @@ static void bang_point(Parser *p, size_t body, size_t cursor,
     YewShCtx *ctx = arena_alloc(p->arena, sizeof(*ctx), sizeof(void *));
 
     out->bang_body = true;
-    if (!yew_shctx_at(p->line + body, p->len - body, cursor - body,
-                      p->arena, ctx)) {
+    /* Sprint 57.24 §1: a spec's `precommand` replaces the lexer's wrapper
+     * table row for its command. */
+    if (!yew_shctx_at_with(p->line + body, p->len - body, cursor - body,
+                           p->arena, yew_compspec_wrapper, p->ed, ctx)) {
         /* cursor >= body is the caller's precondition; unreachable. */
         (void)memset(ctx, 0, sizeof(*ctx));
         ctx->pos = YEW_SH_POS_NONE;

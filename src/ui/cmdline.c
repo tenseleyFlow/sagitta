@@ -16,6 +16,8 @@
 #include "term/grid.h"
 #include "text/edit.h"
 #include "text/register.h"
+#include "ui/compgen.h"
+#include "ui/compspec.h"
 #include "ui/message.h"
 #include "ui/statusline.h"
 #include "ui/viewport.h"
@@ -558,6 +560,10 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     menu_discard(ed);
     yew_menu_free(&line->menu);
     yew_comp_filter_free(&line->filter);
+    /* Sprint 57.24: generator answers and user spec files are held for
+     * one prompt -- the next one must see branches made in between. */
+    yew_compgen_cache_clear();
+    yew_compspec_prompt_closed();
     history_release(ed, line->kind, line->history);
     line->history = NULL;
     yew_hist_cur_dispose(&line->hist);
@@ -784,10 +790,39 @@ static void cmdline_refilter(Ed *ed)
         yew_menu_dismiss(&line->menu);
     } else {
         yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
+        line->menu.pending = line->filter.gen_pending;
     }
     arena_free_all(&scratch);
     yew_xfree(text);
     ed->full_damage = true;
+}
+
+/*
+ * Sprint 57.24 §5.4: a completion generator answered.  If the prompt is
+ * still open AND its filter asked for exactly this key, re-rank and
+ * repaint; otherwise the answer only lands in the cache (compgen did
+ * that already).
+ *
+ * An arrival NEVER edits the line: no sole-survivor insertion, no LCP.
+ * cmdline_refilter only replaces the menu's rows, and the prompt's text
+ * changing under the user's fingers because a subprocess finished is
+ * not acceptable.
+ */
+void yew_cmdline_compgen_arrived(Ed *ed, const char *key)
+{
+    CmdLine *line;
+
+    if (ed == NULL || key == NULL || !ed->cmdline.active ||
+        ed->cmdline.kind != YEW_PROMPT_CMD)
+        return;
+    line = &ed->cmdline;
+    if (line->filter.gen_key == NULL || strcmp(line->filter.gen_key, key) != 0)
+        return;
+    /* The cached set was ranked without the answer; drop it so the
+     * refilter re-enumerates, now served from the generator cache. */
+    yew_comp_filter_invalidate(&line->filter);
+    cmdline_refilter(ed);
+    ed->footer_dirty = true;
 }
 
 /*
@@ -1076,6 +1111,14 @@ static CmdStatus complete(Ed *ed, bool previous)
     line->comp_total = yew_comp_filter_run(ed, &line->filter,
                                            &line->comp_arena, &query, 0,
                                            &items);
+    if (items.len == 0U && line->filter.gen_pending) {
+        /* §5.5: the answer is still coming.  Say nothing; the arrival
+         * opens the menu (and edits nothing). */
+        Vec_CompItem_free(&items);
+        arena_free_all(&scratch);
+        yew_xfree(text);
+        return YEW_CMD_OK;
+    }
     if (items.len == 0U) {
         yew_msg(ed, YEW_MSG_INFO, "no completions");
         ed->full_damage = true;
@@ -1108,6 +1151,7 @@ static CmdStatus complete(Ed *ed, bool previous)
     line->menu_stem = heap_slice(text, query.replace);
     line->menu_original = query.replace;
     yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
+    line->menu.pending = line->filter.gen_pending;
     /*
      * The common prefix is taken over the TIERED rows only -- the ones
      * that matched as an exact or prefix match.  A fuzzy match shares no

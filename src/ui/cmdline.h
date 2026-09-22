@@ -90,6 +90,11 @@ void yew_cmdline_edited(Ed *ed);
 bool yew_cmdline_comp_tick(Ed *ed);
 bool yew_cmdline_comp_scanning(const Ed *ed);
 
+/* Sprint 57.24 §5.4: a completion generator's answer for `key` landed in
+ * the cache.  Refilters an open `:` menu that asked for exactly that key;
+ * never edits the prompt's text. */
+void yew_cmdline_compgen_arrived(Ed *ed, const char *key);
+
 CmdStatus yew_cmdline_cmd_hist_prev(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_hist_next(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_complete_next(CmdCtx *cx);

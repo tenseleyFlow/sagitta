@@ -23,7 +23,10 @@
 #if YEW_WITH_PLUGINS
 #include "mod/plug/plug.h"
 #endif
+#include "edit/loop.h"
 #include "ui/cmdparse.h"
+#include "ui/compgen.h"
+#include "ui/compspec.h"
 #include "unicode/utf8.h"
 #include "util/buf.h"
 #include "util/log.h"
@@ -932,8 +935,26 @@ bool yew_comp_listing_advance(i64 slice_us)
  * "executable" means what the $PATH source means by it: a regular file
  * this user may execute.
  */
+/* Sprint 57.24: does `name` carry one of a spec's `ext` extensions? */
+static bool path_ext_match(const char *name, const char *const *ext,
+                           u32 n_ext)
+{
+    size_t n = strlen(name);
+    u32 i;
+
+    for (i = 0U; i < n_ext; i++) {
+        size_t e = strlen(ext[i]);
+
+        if (n > e + 1U && name[n - e - 1U] == '.' &&
+            strcmp(name + n - e, ext[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool path_mask_keep(const char *scan_dir, const char *name,
-                           u8 entry_dtype, u32 mask)
+                           u8 entry_dtype, u32 mask,
+                           const char *const *ext, u32 n_ext)
 {
     unsigned char dtype = force_dtype_unknown ? DT_UNKNOWN : entry_dtype;
     char *with_slash;
@@ -941,6 +962,10 @@ static bool path_mask_keep(const char *scan_dir, const char *name,
     struct stat st;
     bool keep;
 
+    /* A file without the spec's extension survives only as a directory
+     * the user can descend into: the DIRS mask decides that. */
+    if (n_ext != 0U && dtype != DT_DIR && !path_ext_match(name, ext, n_ext))
+        mask = YEW_PATH_DIRS;
     if (mask == YEW_PATH_ANY || dtype == DT_DIR)
         return true;
     if (dtype != DT_LNK && dtype != DT_UNKNOWN &&
@@ -966,8 +991,11 @@ static bool path_mask_keep(const char *scan_dir, const char *name,
  * path and the streaming fallback so the two cannot drift. */
 static void path_rank_one(PathCandidateVec *paths, const char *name,
                           u8 dtype, const char *tail, size_t tail_len,
-                          u32 *total, const char *scan_dir, u32 mask)
+                          u32 *total, const char *scan_dir,
+                          const CompReq *req)
 {
+    u32 mask = req->path_filter;
+
     i32 score;
 
     if (name[0] == '.' && tail[0] != '.')
@@ -977,7 +1005,8 @@ static void path_rank_one(PathCandidateVec *paths, const char *name,
     score = comp_key(tail, tail_len, name, NULL);
     if (score == YEW_FZ_NO_MATCH)
         return;
-    if (!path_mask_keep(scan_dir, name, dtype, mask))
+    if (!path_mask_keep(scan_dir, name, dtype, mask, req->path_ext,
+                        req->n_path_ext))
         return;
     if (*total != UINT32_MAX)
         (*total)++;
@@ -1046,7 +1075,7 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
         for (i = 0U; i < comp_listing.n; i++)
             path_rank_one(&paths, listing_name(&comp_listing, i),
                           comp_listing.dtypes[i], tail, tail_len, &total,
-                          scan_dir, req->path_filter);
+                          scan_dir, req);
     } else {
         /* Unopenable, or too big to hold: stream it as before.  A
          * directory this size is Sprint 26's problem, not the prompt's. */
@@ -1064,7 +1093,7 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
                 strcmp(entry->d_name, "..") == 0)
                 continue;
             path_rank_one(&paths, entry->d_name, (u8)entry->d_type, tail,
-                          tail_len, &total, scan_dir, req->path_filter);
+                          tail_len, &total, scan_dir, req);
         }
         (void)closedir(dir);
     }
@@ -1570,6 +1599,7 @@ static void exec_candidates_finish(const CompReq *req,
 static u32 enumerate_exec(const CompReq *req, Vec_CompItem *out)
 {
     PathCandidateVec paths = {0};
+    CompReq any;
     const char *stem = req->stem;
     size_t stem_len = strlen(stem);
     u32 total = 0U;
@@ -1590,9 +1620,10 @@ static u32 enumerate_exec(const CompReq *req, Vec_CompItem *out)
      * path.  Blocking until a dozen directories are read is the
      * multi-millisecond keystroke the slicing exists to remove.
      */
+    (void)memset(&any, 0, sizeof(any)); /* YEW_PATH_ANY, no extensions */
     for (i = 0U; i < exec_cache.n_names; i++)
         path_rank_one(&paths, exec_name(i), (u8)DT_REG, stem, stem_len,
-                      &total, "", YEW_PATH_ANY);
+                      &total, "", &any);
     exec_candidates_finish(req, &paths, out);
     return total;
 }
@@ -2071,7 +2102,8 @@ static u32 enumerate_exec(const CompReq *req, Vec_CompItem *out);
 
 /* Run one sub-source with the dispatcher's arena and budget. */
 static u32 shell_sub(const CompReq *req, YewCompKind kind, const char *stem,
-                     u32 mask, Vec_CompItem *got)
+                     u32 mask, const char *const *ext, u32 n_ext,
+                     Vec_CompItem *got)
 {
     CompReq sub = *req;
 
@@ -2079,6 +2111,8 @@ static u32 shell_sub(const CompReq *req, YewCompKind kind, const char *stem,
     sub.stem = stem;
     sub.shell = NULL;
     sub.path_filter = mask;
+    sub.path_ext = ext;
+    sub.n_path_ext = n_ext;
     got->len = 0U;
     switch (kind) {
     case YEW_COMP_VAR:
@@ -2096,30 +2130,554 @@ static u32 shell_sub(const CompReq *req, YewCompKind kind, const char *stem,
     }
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.24 §4: routing with specs                                */
+/* ---------------------------------------------------------------- */
+
+enum {
+    /* Row number reported when a spec, not §3's table, decided. */
+    SHELL_ROW_SPEC = 10U,
+    /* `sudo env nice xargs git …` re-enters COMMAND position at most this
+     * many times; past it the line is a fuzz input, not a command. */
+    SHELL_REENTRY_MAX = 8U
+};
+
+typedef struct ShellPlan {
+    YewShCtx eff;  /* the context actually routed (after re-entry)       */
+    u32 row;       /* §3's row on `eff`, or SHELL_ROW_SPEC                */
+    u32 sources;   /* generic sub-sources (SRC_BIT)                       */
+    u32 mask;      /* YEW_PATH_* for PATH                                 */
+    const char *const *ext;
+    u32 n_ext;
+    const YewCompSpec *spec;
+    const YewSpecNode *node;
+    const YewSpecArg *arg; /* values / generator-backed slot, or NULL   */
+    bool subs;     /* the node's subcommands                             */
+    bool flags;    /* the node's flags and its ancestors' global ones    */
+    bool dash;     /* the node's dash_values, spelled `-VALUE`            */
+    size_t value_at; /* stem bytes before the value (`--emit=` → 7)      */
+    /* A generator-backed slot: a built-in run here, or a subprocess key. */
+    const char *builtin;
+    const char *make_cwd;
+    const char *makefile;
+    bool has_key;
+    YewCompGenKey key;
+    char *id;      /* node path, slot and flag: part of the ctx_key      */
+} ShellPlan;
+
+/* `-C dir` / `--directory=dir` and `-f file` / `--file=` / `--makefile=`
+ * already typed on a `make` line: make_targets reads THAT Makefile. */
+static void plan_make_flags(Ed *ed, const YewShCtx *ctx, Arena *a,
+                            ShellPlan *p)
+{
+    const char *dir = NULL;
+    const char *file = NULL;
+    u32 i;
+
+    for (i = 1U; i < ctx->arg_index && ctx->argv[i] != NULL; i++) {
+        const char *w = ctx->argv[i];
+        const char *next = i + 1U < ctx->arg_index ? ctx->argv[i + 1U]
+                                                   : NULL;
+
+        if (strcmp(w, "-C") == 0 || strcmp(w, "--directory") == 0) {
+            dir = next;
+            i++;
+        } else if (strncmp(w, "--directory=", 12U) == 0) {
+            dir = w + 12;
+        } else if (strncmp(w, "-C", 2U) == 0 && w[2] != '\0') {
+            dir = w + 2;
+        } else if (strcmp(w, "-f") == 0 || strcmp(w, "--file") == 0 ||
+                   strcmp(w, "--makefile") == 0) {
+            file = next;
+            i++;
+        } else if (strncmp(w, "--file=", 7U) == 0) {
+            file = w + 7;
+        } else if (strncmp(w, "--makefile=", 11U) == 0) {
+            file = w + 11;
+        }
+    }
+    p->make_cwd = yew_ws_root(ed);
+    if (dir != NULL && dir[0] != '\0') {
+        if (dir[0] == '/') {
+            p->make_cwd = dir;
+        } else {
+            size_t nr = strlen(p->make_cwd);
+            size_t nd = strlen(dir);
+            char *joined = arena_alloc(a, nr + nd + 2U, 1U);
+
+            (void)memcpy(joined, p->make_cwd, nr);
+            joined[nr] = '/';
+            (void)memcpy(joined + nr + 1U, dir, nd + 1U);
+            p->make_cwd = joined;
+        }
+    }
+    p->makefile = file;
+}
+
+/* A spec generator's argv: argv[0], then every pass flag the line
+ * already carries before the caret (with its value), then the rest. */
+static void plan_gen_key(Ed *ed, const YewCompSpec *spec,
+                         const YewSpecGen *gen, const YewShCtx *ctx,
+                         Arena *a, ShellPlan *p)
+{
+    const char **argv;
+    size_t cap = (size_t)gen->argc + 2U * (size_t)ctx->arg_index + 1U;
+    size_t n = 0U;
+    const char *origin = yew_compspec_origin(spec);
+    const char *slash = strrchr(origin, '/');
+    size_t nn;
+    char *name;
+    u32 i;
+    u32 f;
+
+    argv = arena_alloc(a, cap * sizeof(*argv), sizeof(void *));
+    argv[n++] = gen->argv[0];
+    for (i = 1U; i < ctx->arg_index && ctx->argv[i] != NULL; i++) {
+        const char *w = ctx->argv[i];
+
+        for (f = 0U; f < gen->n_pass; f++) {
+            const char *pf = gen->pass_flags[f];
+            size_t pl = strlen(pf);
+
+            if (strcmp(w, pf) == 0 && i + 1U < ctx->arg_index &&
+                ctx->argv[i + 1U] != NULL) {
+                argv[n++] = w;
+                argv[n++] = ctx->argv[i + 1U];
+                i++;
+                break;
+            }
+            if (strncmp(w, pf, pl) == 0 && w[pl] == '=') {
+                argv[n++] = w;
+                break;
+            }
+        }
+    }
+    for (i = 1U; i < gen->argc; i++)
+        argv[n++] = gen->argv[i];
+    argv[n] = NULL;
+    origin = slash == NULL ? origin : slash + 1;
+    nn = strlen(origin) + strlen(gen->name) + 2U;
+    name = arena_alloc(a, nn, 1U);
+    (void)snprintf(name, nn, "%s:%s", origin, gen->name);
+    p->has_key = true;
+    p->key.name = name;
+    p->key.argv = argv;
+    /* The SAME directory a `:!` command runs in: yew_shell_run leaves
+     * the job's cwd NULL, which the job layer resolves to exactly this.
+     * A generator anywhere else lists another repository's branches. */
+    p->key.cwd = yew_ws_root(ed);
+    p->key.cache_ms = gen->cache_ms;
+    p->key.ps_columns = false;
+}
+
+static void plan_arg(Ed *ed, const YewShCtx *ctx, const YewSpecArg *arg,
+                     Arena *a, ShellPlan *p)
+{
+    static const char *const ps_argv[] = {"ps", "-A", "-o", "pid=", "-o",
+                                          "comm=", NULL};
+
+    if (arg == NULL)
+        return;
+    switch (arg->kind) {
+    case YEW_SPEC_ARG_PATH:
+        p->sources |= SRC_BIT(YEW_COMP_PATH);
+        p->ext = arg->ext;
+        p->n_ext = arg->n_ext;
+        break;
+    case YEW_SPEC_ARG_DIR:
+        p->sources |= SRC_BIT(YEW_COMP_PATH);
+        p->mask = YEW_PATH_DIRS;
+        break;
+    case YEW_SPEC_ARG_EXEC:
+        p->sources |= SRC_BIT(YEW_COMP_EXEC) | SRC_BIT(YEW_COMP_BUILTIN);
+        break;
+    case YEW_SPEC_ARG_VAR:
+        p->sources |= SRC_BIT(YEW_COMP_VAR);
+        break;
+    case YEW_SPEC_ARG_VALUES:
+        p->arg = arg;
+        break;
+    case YEW_SPEC_ARG_USER:
+    case YEW_SPEC_ARG_HOST:
+    case YEW_SPEC_ARG_SIGNAL:
+    case YEW_SPEC_ARG_PID:
+    case YEW_SPEC_ARG_GENERATOR:
+        p->arg = arg;
+        if (arg->gen != NULL) {
+            plan_gen_key(ed, p->spec, arg->gen, ctx, a, p);
+        } else if (strcmp(arg->generator, "pids") == 0) {
+            p->has_key = true;
+            p->key.name = "pids";
+            p->key.argv = ps_argv;
+            p->key.cwd = yew_ws_root(ed);
+            p->key.cache_ms = YEW_COMPGEN_DEFAULT_CACHE_MS;
+            p->key.ps_columns = true;
+        } else {
+            p->builtin = arg->generator;
+            if (strcmp(arg->generator, "make_targets") == 0)
+                plan_make_flags(ed, ctx, a, p);
+        }
+        break;
+    case YEW_SPEC_ARG_COMMAND:
+    case YEW_SPEC_ARG_NONE:
+    case YEW_SPEC_ARG__N:
+    default:
+        break;
+    }
+}
+
+/* The context of the command that starts at argv[k]. */
+static void plan_reenter(YewShCtx *eff, u32 k, Arena *a)
+{
+    u32 i;
+
+    if (k >= eff->arg_index) {
+        char **none = arena_alloc(a, sizeof(char *), sizeof(void *));
+
+        none[0] = NULL;
+        eff->pos = YEW_SH_POS_COMMAND;
+        eff->argv = none;
+        eff->argc = 0U;
+        eff->arg_index = 0U;
+        eff->dashdash = false;
+        return;
+    }
+    eff->argv += k;
+    eff->argc -= k;
+    eff->arg_index -= k;
+    eff->dashdash = false;
+    for (i = 1U; i < eff->arg_index; i++) {
+        if (eff->argv[i] != NULL && strcmp(eff->argv[i], "--") == 0)
+            eff->dashdash = true;
+    }
+}
+
+static char *plan_id(Arena *a, const ShellPlan *p, const YewSpecPoint *pt)
+{
+    Bytebuf b;
+    const YewSpecNode *n;
+    char *out;
+
+    bytebuf_init(&b);
+    bytebuf_printf(&b, "%s", yew_compspec_origin(p->spec));
+    for (n = p->node; n != NULL && n->parent != NULL; n = n->parent)
+        bytebuf_printf(&b, "<%s", n->name);
+    bytebuf_printf(&b, "|%u|%u%u%u|%u|", (unsigned)pt->positional,
+                   (unsigned)p->subs, (unsigned)p->flags, (unsigned)p->dash,
+                   (unsigned)p->value_at);
+    if (pt->pending_flag != NULL)
+        bytebuf_printf(&b, "%s/%s",
+                       pt->pending_flag->lng == NULL ? ""
+                                                     : pt->pending_flag->lng,
+                       pt->pending_flag->shrt == NULL
+                           ? ""
+                           : pt->pending_flag->shrt);
+    out = arena_strndup(a, (const char *)b.data, b.len);
+    bytebuf_free(&b);
+    return out;
+}
+
+/*
+ * §4: §3's table first -- the SHAPE rows (an active expansion, $VAR,
+ * ~user, an explicit path) win in every position, spec or not -- then,
+ * for an operand of a command that has a spec, the spec's answer.
+ * Deterministic in (ctx, specs on disk), so the ctx_key and the
+ * enumerator can both call it and agree.
+ */
+static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
+{
+    u32 depth;
+
+    (void)memset(p, 0, sizeof(*p));
+    p->eff = *ctx;
+    for (depth = 0U; depth <= SHELL_REENTRY_MAX; depth++) {
+        const YewCompSpec *spec;
+        const YewSpecArg *arg = NULL;
+        YewSpecPoint pt;
+        const char *stem;
+
+        p->row = yew_comp_shell_route(&p->eff, &p->sources, &p->mask);
+        if (p->row <= 4U || p->eff.pos != YEW_SH_POS_ARGUMENT ||
+            p->eff.argc == 0U || p->eff.argv[0] == NULL)
+            return;
+        spec = yew_compspec_get(ed, p->eff.argv[0]);
+        if (spec == NULL || !yew_compspec_resolve(spec, &p->eff, &pt))
+            return; /* 57.23's rows 6, 8 and 9 stand */
+        if (pt.command_at != 0U) {
+            plan_reenter(&p->eff, pt.command_at, a);
+            continue;
+        }
+        p->spec = spec;
+        p->node = pt.node;
+        stem = p->eff.stem == NULL ? "" : p->eff.stem;
+        if (pt.pending_flag != NULL) {
+            arg = pt.pending_flag->arg;
+            p->value_at = pt.after_equals ? pt.value_at : 0U;
+        } else if (pt.positional != UINT32_MAX) {
+            arg = yew_compspec_slot(pt.node, pt.positional);
+        }
+        if (p->row == 5U) {
+            /* An explicit path keeps PATH (shape beats the spec), but the
+             * spec still narrows it: a `dir` slot stays directories-only
+             * past the first `/`, as 57.23's row 5 does for `cd`. */
+            if (arg != NULL && arg->kind == YEW_SPEC_ARG_DIR &&
+                pt.pending_flag == NULL)
+                p->mask = YEW_PATH_DIRS;
+            else if (arg != NULL && arg->kind == YEW_SPEC_ARG_DIR)
+                p->mask = YEW_PATH_DIRS;
+            if (arg != NULL && arg->kind == YEW_SPEC_ARG_PATH) {
+                p->ext = arg->ext;
+                p->n_ext = arg->n_ext;
+            }
+            p->id = plan_id(a, p, &pt);
+            return;
+        }
+        p->row = SHELL_ROW_SPEC;
+        p->sources = 0U;
+        p->mask = YEW_PATH_ANY;
+        if (pt.pending_flag == NULL && pt.positional != UINT32_MAX &&
+            stem[0] == '-' && !pt.flags_ended) {
+            p->flags = true;
+            p->dash = pt.node->dash_values != NULL;
+            arg = NULL;
+        } else if (pt.pending_flag == NULL) {
+            p->subs = pt.subcommands_allowed;
+        }
+        plan_arg(ed, &p->eff, arg, a, p);
+        if (p->dash)
+            plan_arg(ed, &p->eff, pt.node->dash_values, a, p);
+        p->id = plan_id(a, p, &pt);
+        return;
+    }
+    /* Re-entered too often: offer nothing. */
+    p->row = 1U;
+    p->sources = 0U;
+}
+
+char *yew_comp_shell_describe(Ed *ed, const YewShCtx *ctx, Arena *a)
+{
+    ShellPlan p;
+    Bytebuf b;
+    char *out;
+
+    if (ctx == NULL || a == NULL)
+        return NULL;
+    shell_plan(ed, ctx, a, &p);
+    bytebuf_init(&b);
+#define DESCRIBE(cond, ...)                                                  \
+    do {                                                                     \
+        if (cond) {                                                          \
+            if (b.len != 0U)                                                 \
+                bytebuf_push_u8(&b, (u8)'+');                                \
+            bytebuf_printf(&b, __VA_ARGS__);                                 \
+        }                                                                    \
+    } while (0)
+    DESCRIBE(p.subs, "sub");
+    DESCRIBE(p.flags, "flags");
+    DESCRIBE(p.dash, "dash");
+    DESCRIBE((p.sources & SRC_BIT(YEW_COMP_EXEC)) != 0U, "exec");
+    DESCRIBE((p.sources & SRC_BIT(YEW_COMP_VAR)) != 0U, "var");
+    DESCRIBE((p.sources & SRC_BIT(YEW_COMP_USER)) != 0U, "user");
+    if ((p.sources & SRC_BIT(YEW_COMP_PATH)) != 0U) {
+        u32 i;
+
+        DESCRIBE(true, "%s", p.mask == YEW_PATH_DIRS ? "dir"
+                             : p.mask == YEW_PATH_EXEC_OR_DIR ? "execpath"
+                                                             : "path");
+        for (i = 0U; i < p.n_ext; i++)
+            bytebuf_printf(&b, "%c%s", i == 0U ? ':' : ',', p.ext[i]);
+    }
+    DESCRIBE(p.arg != NULL && p.arg->kind == YEW_SPEC_ARG_VALUES, "values");
+    DESCRIBE(p.arg != NULL && p.arg->kind != YEW_SPEC_ARG_VALUES, "gen:%s",
+             p.arg != NULL && p.arg->generator != NULL ? p.arg->generator
+                                                       : "?");
+#undef DESCRIBE
+    if (b.len == 0U)
+        bytebuf_printf(&b, "none");
+    out = arena_strndup(a, (const char *)b.data, b.len);
+    bytebuf_free(&b);
+    return out;
+}
+
+/*
+ * One spec or generator row: `raw` is the whole word it would make.  It
+ * is ranked the way the filter will re-rank it -- the part after the
+ * stem's directory head against the pattern -- so a branch named
+ * `origin/main` narrows exactly as a path under `origin/` would.  A row
+ * that does not share the stem's head cannot prefix-match and is dropped.
+ */
+static void spec_candidate(CandidateVec *v, const char *stem,
+                           size_t head_len, const char *raw,
+                           const char *detail)
+{
+    if (strlen(raw) < head_len || strncmp(raw, stem, head_len) != 0)
+        return;
+    (void)candidate_add(v, stem + head_len, raw + head_len, raw, detail,
+                        false, false);
+}
+
+static void spec_flag_rows(CandidateVec *v, const YewSpecNode *node,
+                           const char *stem, size_t head_len)
+{
+    const YewSpecNode *n;
+    bool own = true;
+    u32 i;
+
+    for (n = node; n != NULL; n = n->parent, own = false) {
+        for (i = 0U; i < n->n_flags; i++) {
+            const YewSpecFlag *f = &n->flags[i];
+            char word[160];
+
+            if (!own && !f->global)
+                continue;
+            if (f->lng != NULL) {
+                (void)snprintf(word, sizeof(word), "--%s", f->lng);
+                spec_candidate(v, stem, head_len, word, f->desc);
+            }
+            if (f->shrt != NULL) {
+                (void)snprintf(word, sizeof(word), "-%s", f->shrt);
+                spec_candidate(v, stem, head_len, word, f->desc);
+            }
+        }
+    }
+}
+
+/* Rows of a value-bearing arg: fixed values, a built-in generator, or a
+ * subprocess generator's cache.  `prefix` is `--flag=` (or `-` for a
+ * dash value); *pending says a subprocess answer is still coming. */
+static void spec_value_rows(const CompReq *req, const ShellPlan *p,
+                            const YewSpecArg *arg, const char *prefix,
+                            const char *stem, size_t head_len,
+                            Arena *scratch, CandidateVec *v,
+                            CandidateVec *gv, bool *pending)
+{
+    Vec_CompItem rows = {0};
+    size_t np = strlen(prefix);
+    size_t i;
+
+    if (arg->kind == YEW_SPEC_ARG_VALUES) {
+        for (i = 0U; i < arg->n_values; i++) {
+            size_t nv = strlen(arg->values[i].value);
+            char *word = arena_alloc(scratch, np + nv + 1U, 1U);
+
+            (void)memcpy(word, prefix, np);
+            (void)memcpy(word + np, arg->values[i].value, nv + 1U);
+            spec_candidate(v, stem, head_len, word, arg->values[i].desc);
+        }
+        return;
+    }
+    if (p->builtin != NULL) {
+        (void)yew_compgen_builtin(arg->generator, p->make_cwd, p->makefile,
+                                  scratch, &rows);
+    } else if (p->has_key) {
+        bool in_flight = false;
+
+        (void)yew_compgen_rows(req->ed, &p->key, yew_now_ms(), scratch,
+                               &rows, &in_flight);
+        if (in_flight)
+            *pending = true;
+    }
+    /* Details stay in `scratch`: candidate_finish copies them, and the
+     * caller finishes before it frees the arena. */
+    for (i = 0U; i < rows.len; i++) {
+        size_t nv = strlen(rows.data[i].text);
+        char *word = arena_alloc(scratch, np + nv + 1U, 1U);
+
+        (void)memcpy(word, prefix, np);
+        (void)memcpy(word + np, rows.data[i].text, nv + 1U);
+        spec_candidate(gv, stem, head_len, word, rows.data[i].detail);
+    }
+    Vec_CompItem_free(&rows);
+}
+
+/* Push ranked spec/gen rows through the shell encoder. */
+static u32 spec_finish(const CompReq *req, YewCompKind kind, CandidateVec *v,
+                       size_t head_len, const char *pattern,
+                       Vec_CompItem *out)
+{
+    Vec_CompItem got = {0};
+    u32 total;
+    size_t i;
+
+    candidate_dedupe(v);
+    total = candidate_finish(req, kind, v, &got);
+    for (i = 0U; i < got.len; i++)
+        shell_push(req, &got.data[i], got.data[i].text, 0U, head_len,
+                   pattern, out);
+    Vec_CompItem_free(&got);
+    return total;
+}
+
 static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
 {
     const YewShCtx *ctx = req->shell;
+    const YewShCtx *eff;
     const char *stem;
     Vec_CompItem got = {0};
-    u32 sources = 0U;
-    u32 mask = YEW_PATH_ANY;
+    ShellPlan plan;
+    Arena plan_arena;
+    u32 sources;
+    u32 mask;
     u32 total = 0U;
+    size_t builtins_start = 0U;
     size_t builtins_end = 0U;
     size_t i;
 
     out->len = 0U;
     if (ctx == NULL || ctx->stem == NULL)
         return 0U;
+    arena_init(&plan_arena);
+    shell_plan(req->ed, ctx, &plan_arena, &plan);
+    eff = &plan.eff;
     stem = ctx->stem;
-    (void)yew_comp_shell_route(ctx, &sources, &mask);
+    sources = plan.sources;
+    mask = plan.mask;
+    if (plan.subs || plan.flags || plan.arg != NULL) {
+        size_t head_len = yew_comp_path_head_len(stem);
+        const char *pattern = stem + head_len;
+        CandidateVec spec_rows = {0};
+        CandidateVec gen_rows = {0};
+        bool pending = false;
+        u32 k;
+
+        if (plan.subs) {
+            const YewSpecNode *node = plan.node;
+
+            for (k = 0U; k < node->n_subs; k++) {
+                const YewSpecNode *sub = &node->subs[k];
+                u32 al;
+
+                spec_candidate(&spec_rows, stem, head_len, sub->name,
+                               sub->desc);
+                for (al = 0U; al < sub->n_aliases; al++)
+                    spec_candidate(&spec_rows, stem, head_len,
+                                   sub->aliases[al], sub->desc);
+            }
+        }
+        if (plan.flags)
+            spec_flag_rows(&spec_rows, plan.node, stem, head_len);
+        if (plan.arg != NULL) {
+            char *prefix = arena_strndup(&plan_arena, stem, plan.value_at);
+
+            if (plan.dash)
+                prefix = arena_strdup(&plan_arena, "-");
+            spec_value_rows(req, &plan, plan.arg, prefix, stem, head_len,
+                            &plan_arena, &spec_rows, &gen_rows, &pending);
+        }
+        total += spec_finish(req, YEW_COMP_SPEC, &spec_rows, head_len,
+                             pattern, out);
+        total += spec_finish(req, YEW_COMP_GEN, &gen_rows, head_len,
+                             pattern, out);
+        (void)pending; /* the filter asks yew_compgen_awaiting itself */
+    }
     if ((sources & SRC_BIT(YEW_COMP_VAR)) != 0U) {
-        total += shell_sub(req, YEW_COMP_VAR, stem, 0U, &got);
+        total += shell_sub(req, YEW_COMP_VAR, stem, 0U, NULL, 0U, &got);
         for (i = 0U; i < got.len; i++)
             shell_push(req, &got.data[i], got.data[i].match, 0U, 0U, stem,
                        out);
     }
     if ((sources & SRC_BIT(YEW_COMP_USER)) != 0U) {
-        total += shell_sub(req, YEW_COMP_USER, stem, 0U, &got);
+        total += shell_sub(req, YEW_COMP_USER, stem, 0U, NULL, 0U, &got);
         for (i = 0U; i < got.len; i++) {
             const char *raw = got.data[i].text; /* `~name/` */
 
@@ -2127,21 +2685,23 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
         }
     }
     if ((sources & SRC_BIT(YEW_COMP_BUILTIN)) != 0U) {
-        total += shell_sub(req, YEW_COMP_BUILTIN, stem, 0U, &got);
+        total += shell_sub(req, YEW_COMP_BUILTIN, stem, 0U, NULL, 0U, &got);
+        builtins_start = out->len;
         for (i = 0U; i < got.len; i++)
             shell_push(req, &got.data[i], got.data[i].match, 0U, 0U, stem,
                        out);
         builtins_end = out->len;
     }
     if ((sources & SRC_BIT(YEW_COMP_EXEC)) != 0U) {
-        total += shell_sub(req, YEW_COMP_EXEC, stem, 0U, &got);
+        total += shell_sub(req, YEW_COMP_EXEC, stem, 0U, NULL, 0U, &got);
         for (i = 0U; i < got.len; i++) {
             size_t b;
             bool shadowed = false;
+            const char *described;
 
             /* The shell runs a builtin before anything on $PATH, so an
              * `echo` binary is the same row as the `echo` builtin. */
-            for (b = 0U; b < builtins_end; b++) {
+            for (b = builtins_start; b < builtins_end; b++) {
                 if (strcmp(out->data[b].match, got.data[i].match) == 0) {
                     shadowed = true;
                     break;
@@ -2152,6 +2712,11 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
                     total--;
                 continue;
             }
+            /* §7: a command with a spec shows its description, read from
+             * the index -- never a parse per keystroke. */
+            described = yew_compspec_describe(got.data[i].match);
+            if (described != NULL)
+                got.data[i].detail = arena_strdup(req->arena, described);
             shell_push(req, &got.data[i], got.data[i].match, 0U, 0U, stem,
                        out);
         }
@@ -2162,46 +2727,86 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
          * path source expands any head that starts with one.  Asking for
          * `./~x` instead keeps it literal; the `./` is taken back off
          * every row below.
+         *
+         * Sprint 57.24: after `--flag=` the path is the VALUE; the flag
+         * rides in front of every row (`prefix`).
          */
+        const char *value = stem + plan.value_at;
+        size_t pre = plan.value_at;
         char *asked = NULL;
-        const char *sub_stem = stem;
+        const char *sub_stem = value;
         size_t strip = 0U;
         size_t head_len;
 
-        if (stem[0] == '~' && !ctx->tilde) {
-            asked = yew_xmalloc(strlen(stem) + 3U);
+        if (value[0] == '~' && (!eff->tilde || pre != 0U)) {
+            asked = yew_xmalloc(strlen(value) + 3U);
             (void)memcpy(asked, "./", 2U);
-            (void)memcpy(asked + 2U, stem, strlen(stem) + 1U);
+            (void)memcpy(asked + 2U, value, strlen(value) + 1U);
             sub_stem = asked;
             strip = 2U;
         }
         head_len = yew_comp_path_head_len(sub_stem);
-        total += shell_sub(req, YEW_COMP_PATH, sub_stem, mask, &got);
+        total += shell_sub(req, YEW_COMP_PATH, sub_stem, mask, plan.ext,
+                           plan.n_ext, &got);
         for (i = 0U; i < got.len; i++) {
             const CompItem *it = &got.data[i];
             size_t name_len = strlen(it->match);
-            char *raw = yew_xmalloc(head_len + name_len + 2U);
-            const char *word;
+            size_t word_len = head_len - strip + name_len + 1U;
+            char *raw = yew_xmalloc(pre + word_len + 1U);
             size_t prefix = 0U;
 
-            (void)memcpy(raw, sub_stem, head_len);
-            (void)memcpy(raw + head_len, it->match, name_len);
-            raw[head_len + name_len] = it->is_dir ? '/' : '\0';
-            raw[head_len + name_len + 1U] = '\0';
-            word = raw + strip;
-            if (ctx->tilde && word[0] == '~') {
-                const char *slash = strchr(word, '/');
+            (void)memcpy(raw, stem, pre);
+            (void)memcpy(raw + pre, sub_stem + strip, head_len - strip);
+            (void)memcpy(raw + pre + head_len - strip, it->match, name_len);
+            raw[pre + head_len - strip + name_len] = it->is_dir ? '/' : '\0';
+            raw[pre + head_len - strip + name_len + 1U] = '\0';
+            if (pre == 0U && eff->tilde && raw[0] == '~') {
+                const char *slash = strchr(raw, '/');
 
-                prefix = slash == NULL ? 0U : (size_t)(slash - word) + 1U;
+                prefix = slash == NULL ? 0U : (size_t)(slash - raw) + 1U;
             }
-            shell_push(req, it, word, prefix, head_len - strip,
+            shell_push(req, it, raw, prefix, pre + head_len - strip,
                        sub_stem + head_len, out);
             yew_xfree(raw);
         }
         yew_xfree(asked);
     }
     Vec_CompItem_free(&got);
+    arena_free_all(&plan_arena);
     return total;
+}
+
+/* The registered SPEC and GEN sources: the dispatcher's rows of that one
+ * kind, for a request that carries a shell context. */
+static u32 enumerate_spec_kind(const CompReq *req, Vec_CompItem *out,
+                               YewCompKind kind)
+{
+    Vec_CompItem all = {0};
+    u32 kept = 0U;
+    size_t i;
+
+    out->len = 0U;
+    if (req->shell == NULL)
+        return 0U;
+    (void)enumerate_shell(req, &all);
+    for (i = 0U; i < all.len; i++) {
+        if (all.data[i].kind == (u8)kind) {
+            Vec_CompItem_push(out, all.data[i]);
+            kept++;
+        }
+    }
+    Vec_CompItem_free(&all);
+    return kept;
+}
+
+static u32 enumerate_spec(const CompReq *req, Vec_CompItem *out)
+{
+    return enumerate_spec_kind(req, out, YEW_COMP_SPEC);
+}
+
+static u32 enumerate_gen(const CompReq *req, Vec_CompItem *out)
+{
+    return enumerate_spec_kind(req, out, YEW_COMP_GEN);
 }
 
 static struct {
@@ -2238,6 +2843,10 @@ static void comp_init(void)
         {YEW_COMP_USER, "user", enumerate_users, YEW_COMP_SRC_CACHEABLE},
         {YEW_COMP_BUILTIN, "builtin", enumerate_builtins,
          YEW_COMP_SRC_CACHEABLE},
+        /* Sprint 57.24: a spec's rows and a generator's, for a request
+         * that carries a shell context. */
+        {YEW_COMP_SPEC, "spec", enumerate_spec, YEW_COMP_SRC_CACHEABLE},
+        {YEW_COMP_GEN, "generator", enumerate_gen, YEW_COMP_SRC_CACHEABLE},
     };
     size_t i;
 
@@ -2345,9 +2954,12 @@ void yew_comp_filter_invalidate(CompFilter *f)
     yew_xfree(f->head);
     yew_xfree(f->pattern);
     yew_xfree(f->ctx_key);
+    yew_xfree(f->gen_key);
     f->head = NULL;
     f->pattern = NULL;
     f->ctx_key = NULL;
+    f->gen_key = NULL;
+    f->gen_pending = false;
     f->valid = false;
     f->capped = false;
     f->total = 0U;
@@ -2510,28 +3122,38 @@ static u32 filter_rerank(CompFilter *f, const char *pattern,
  * row is encoded), the brace and `--` flags, argv[0] and the path mask.
  * NULL for every other kind.
  */
-static char *shell_ctx_key(const YewCompQuery *q)
+static char *shell_ctx_key(Ed *ed, const YewCompQuery *q, char **gen_key)
 {
     const YewShCtx *ctx = q->shell;
-    u32 sources = 0U;
-    u32 mask = 0U;
-    u32 row;
+    ShellPlan plan;
+    Arena a;
     Bytebuf key;
     char *out;
 
+    *gen_key = NULL;
     if (q->kind != YEW_COMP_SHELL || ctx == NULL)
         return NULL;
-    row = yew_comp_shell_route(ctx, &sources, &mask);
+    arena_init(&a);
+    shell_plan(ed, ctx, &a, &plan);
     bytebuf_init(&key);
-    bytebuf_printf(&key, "%u|%u|%u|%u|%u|%u|%u|%u|", (unsigned)row,
+    bytebuf_printf(&key, "%u|%u|%u|%u|%u|%u|%u|%u|", (unsigned)plan.row,
                    (unsigned)ctx->pos, (unsigned)ctx->quote,
                    (unsigned)ctx->brace_var, (unsigned)ctx->tilde,
-                   (unsigned)ctx->dashdash, (unsigned)sources,
-                   (unsigned)mask);
+                   (unsigned)ctx->dashdash, (unsigned)plan.sources,
+                   (unsigned)plan.mask);
     if (ctx->argc != 0U && ctx->argv != NULL && ctx->argv[0] != NULL)
         bytebuf_append(&key, ctx->argv[0], strlen(ctx->argv[0]));
+    /* Sprint 57.24 §4: the resolved node path and slot, so moving from
+     * `git remote` to `git remote add` re-enumerates. */
+    if (plan.id != NULL)
+        bytebuf_printf(&key, "|%s", plan.id);
+    if (plan.has_key) {
+        *gen_key = yew_compgen_key_string(&plan.key);
+        bytebuf_printf(&key, "|%s", *gen_key);
+    }
     out = dup_range((const char *)key.data, key.len);
     bytebuf_free(&key);
+    arena_free_all(&a);
     return out;
 }
 
@@ -2566,6 +3188,7 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
     const char *pattern;
     char *head;
     char *ctx_key;
+    char *gen_key = NULL;
     bool reuse;
 
     if (ed == NULL || f == NULL || q == NULL || out == NULL ||
@@ -2584,7 +3207,7 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
                    : 0U;
     pattern = q->stem + head_len;
     head = dup_range(q->stem, head_len);
-    ctx_key = shell_ctx_key(q);
+    ctx_key = shell_ctx_key(ed, q, &gen_key);
     reuse = filter_reusable(f, q->kind, head, pattern, ctx_key);
     if (!reuse) {
         CompReq req;
@@ -2610,13 +3233,19 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
         f->pattern = dup_range(pattern, strlen(pattern));
         yew_xfree(f->ctx_key);
         f->ctx_key = ctx_key;
+        yew_xfree(f->gen_key);
+        f->gen_key = gen_key;
         f->kind = q->kind;
         f->valid = true;
         head = NULL;
         ctx_key = NULL;
+        gen_key = NULL;
     }
+    /* §5.5: the `…` marker is STATE -- in flight with nothing cached. */
+    f->gen_pending = f->gen_key != NULL && yew_compgen_awaiting(f->gen_key);
     yew_xfree(head);
     yew_xfree(ctx_key);
+    yew_xfree(gen_key);
     {
         u32 matched = filter_rerank(f, pattern, out);
 
