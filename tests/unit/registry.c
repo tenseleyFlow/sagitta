@@ -923,6 +923,7 @@ const YewTest yew_tests[] = {
     T(shctx_depth_is_capped),
     T(shctx_every_caret_of_random_bytes),
     T(shctx_secret_name_is_core),
+    T(shctx_fuzz_seeds_match_the_corpus),
     T(shq_quote_rules),
     T(shq_roundtrip_real_shells),
     T(shell_term_refuses_and_names_the_route),

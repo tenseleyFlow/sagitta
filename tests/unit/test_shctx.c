@@ -617,3 +617,29 @@ void test_shctx_secret_name_is_core(void)
     YEW_ASSERT(!yew_secret_name(""));
     YEW_ASSERT(!yew_secret_name(NULL));
 }
+
+/* The fuzz harness's seed corpus IS this corpus: one file per row, byte
+ * for byte, so a row added here without its seed fails. */
+void test_shctx_fuzz_seeds_match_the_corpus(void)
+{
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(sh_corpus); i++) {
+        char path[96];
+        char buf[256];
+        FILE *f;
+        size_t got;
+        size_t want = strlen(sh_corpus[i].in);
+
+        (void)snprintf(path, sizeof(path),
+                       "tests/fuzz/corpus/fuzz_shctx/row-%03zu", i);
+        f = fopen(path, "rb");
+        if (f == NULL)
+            (void)fprintf(stderr, "missing fuzz seed %s\n", path);
+        YEW_ASSERT_NOT_NULL(f);
+        got = fread(buf, 1U, sizeof(buf), f);
+        YEW_ASSERT_EQ_I64(fclose(f), 0);
+        YEW_ASSERT_EQ_U64((u64)got, (u64)want);
+        YEW_ASSERT_EQ_MEM(buf, sh_corpus[i].in, want);
+    }
+}

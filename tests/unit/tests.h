@@ -892,6 +892,7 @@ void test_shctx_text_after_caret_is_ignored(void);
 void test_shctx_depth_is_capped(void);
 void test_shctx_every_caret_of_random_bytes(void);
 void test_shctx_secret_name_is_core(void);
+void test_shctx_fuzz_seeds_match_the_corpus(void);
 void test_shq_quote_rules(void);
 void test_shq_roundtrip_real_shells(void);
 void test_shell_term_refuses_and_names_the_route(void);
