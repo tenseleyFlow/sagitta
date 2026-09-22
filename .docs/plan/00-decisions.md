@@ -225,6 +225,24 @@ discarding observations; its source commit, input hashes, and original
 three-failure result remain named in the committed evidence. No editor
 code, feature, or user-facing limit changes.
 
+**Amendment S59-A6 (2026-09-21) — size gates follow measured required editor
+growth.** The first pushed Sprint 59 candidate at `b5632851` includes 513
+commits since `b3f32645`, notably required core editing, tab, and workspace
+features. On the same hosted x86_64 size lane, minimal grew 61,440 bytes
+(1,509,024 to 1,570,464), full grew 65,536 bytes (2,000,584 to
+2,066,120), and every single-module profile grew 65,536--69,632 bytes.
+The full 2 MiB and minimal 1.5 MiB hard gates still pass unchanged, as do
+AI-only and plugins-only. Only LSP-only (1,697,440 against 1,695,744) and
+FUSS-only (1,730,208 against 1,726,464) cross their old single-module
+caps; these move to the next 16 KiB boundaries, 1,703,936 and 1,736,704
+bytes. The hosted musl static PIE measures 2,185,104 full and 1,664,880
+minimal, versus the previous 2,115,472 and 1,599,344. Their old caps
+are surpassed by 22,416 and 26,480 bytes, so each moves to the next
+64 KiB boundary: 2,228,224 full and 1,703,936 minimal. The roughly
+64 KiB common rise across configurations is evidence of required core
+growth, not a module-retention explosion. No feature is removed, and the
+measurement recipes and all other size gates remain unchanged.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
