@@ -1,0 +1,35 @@
+# bsdtar 3.5.3 (libarchive 3.7.4) -- from `tar --help`.
+#
+# Bundles are the norm (`tar -xvf archive`): `f` takes the next word.
+{
+    completion: 1,
+    command: ["tar", "bsdtar"],
+    description: "manipulate tape archives",
+    flags: [
+        { short: "c", desc: "create a new archive" },
+        { short: "r", desc: "append to an archive" },
+        { short: "t", desc: "list an archive's contents" },
+        { short: "u", desc: "update an archive" },
+        { short: "x", desc: "extract from an archive" },
+        { short: "b", desc: "512-byte records per I/O block",
+          arg: { kind: "none" } },
+        { short: "f", desc: "the archive file", arg: { kind: "path" } },
+        { short: "v", desc: "verbose" },
+        { short: "w", desc: "ask for confirmation of every action" },
+        { short: "z", desc: "compress with gzip" },
+        { short: "j", desc: "compress with bzip2" },
+        { short: "J", desc: "compress with xz" },
+        { long: "lzma", desc: "compress with lzma" },
+        { long: "format", desc: "the archive format",
+          arg: { kind: "values", values: ["ustar", "pax", "cpio", "shar"] } },
+        { long: "exclude", desc: "skip files matching this pattern",
+          arg: { kind: "none" } },
+        { short: "C", desc: "change to this directory first",
+          arg: { kind: "dir" } },
+        { short: "k", desc: "keep existing files" },
+        { short: "m", desc: "do not restore modification times" },
+        { short: "O", desc: "write entries to stdout" },
+        { short: "p", desc: "restore permissions" },
+    ],
+    args: [ { kind: "path", repeat: true } ],
+}
