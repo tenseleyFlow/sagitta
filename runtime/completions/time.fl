@@ -1,0 +1,17 @@
+# time (macOS /usr/bin/time, Darwin 25.4) -- from time(1).
+{
+    completion: 1,
+    command: "time",
+    description: "time command execution",
+
+    precommand: { flags_with_args: ["-o"] },
+
+    flags: [
+        { short: "a", desc: "append to the -o file" },
+        { short: "h", desc: "print times in a human friendly format" },
+        { short: "l", desc: "print the rusage structure too" },
+        { short: "o", desc: "write to this file instead of stderr",
+          arg: { kind: "path" } },
+        { short: "p", desc: "POSIX.2 output format" },
+    ],
+}

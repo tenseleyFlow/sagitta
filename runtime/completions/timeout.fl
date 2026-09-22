@@ -1,0 +1,23 @@
+# timeout (GNU coreutils) 9.11 -- from `timeout --help`.
+{
+    completion: 1,
+    command: ["timeout", "gtimeout"],
+    description: "run a command with a time limit",
+
+    precommand: {
+        flags_with_args: ["-k", "-s", "--kill-after", "--signal"],
+        operands: 1,
+    },
+
+    flags: [
+        { short: "f", long: "foreground", desc: "let the command use the TTY" },
+        { short: "k", long: "kill-after", desc: "then KILL after this duration",
+          arg: { kind: "none" } },
+        { short: "p", long: "preserve-status", desc: "exit with the command's status" },
+        { short: "s", long: "signal", desc: "the signal to send on timeout",
+          arg: { kind: "signal" } },
+        { short: "v", long: "verbose", desc: "report any signal sent" },
+        { long: "help", desc: "display help and exit" },
+        { long: "version", desc: "output version information and exit" },
+    ],
+}

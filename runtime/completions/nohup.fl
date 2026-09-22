@@ -1,0 +1,8 @@
+# nohup (macOS nohup, Darwin 25.4) -- from `nohup`'s usage and nohup(1).
+{
+    completion: 1,
+    command: "nohup",
+    description: "invoke a utility immune to hangups",
+
+    precommand: {},
+}

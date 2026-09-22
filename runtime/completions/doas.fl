@@ -1,0 +1,20 @@
+# doas 6.x (OpenBSD doas(1)) -- from doas(1); doas is not installed on
+# the authoring machine, so only the options doas(1) documents are here.
+{
+    completion: 1,
+    command: "doas",
+    description: "execute commands as another user",
+
+    precommand: { flags_with_args: ["-a", "-C", "-u"] },
+
+    flags: [
+        { short: "a", desc: "use this authentication style",
+          arg: { kind: "none" } },
+        { short: "C", desc: "check this config file and exit",
+          arg: { kind: "path" } },
+        { short: "L", desc: "clear persisted authentications" },
+        { short: "n", desc: "non-interactive: fail instead of prompting" },
+        { short: "s", desc: "run the user's shell" },
+        { short: "u", desc: "run as this user", arg: { kind: "user" } },
+    ],
+}

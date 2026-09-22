@@ -1,0 +1,38 @@
+# xargs (macOS / FreeBSD xargs, Darwin 25.4) -- from `xargs`'s usage and xargs(1).
+{
+    completion: 1,
+    command: "xargs",
+    description: "construct argument lists and execute utility",
+
+    precommand: {
+        flags_with_args: ["-E", "-I", "-J", "-L", "-n", "-P", "-R", "-S",
+                          "-s"],
+    },
+
+    flags: [
+        { short: "0", desc: "input items are NUL-terminated" },
+        { short: "E", desc: "the logical end-of-file string",
+          arg: { kind: "none" } },
+        { short: "I", desc: "replace this string in each utility",
+          arg: { kind: "none" } },
+        { short: "J", desc: "insert the arguments at this string",
+          arg: { kind: "none" } },
+        { short: "L", desc: "use this many input lines per command",
+          arg: { kind: "none" } },
+        { short: "n", desc: "use at most this many arguments",
+          arg: { kind: "none" } },
+        { short: "o", desc: "reopen stdin as /dev/tty" },
+        { short: "P", desc: "run up to this many utilities at once",
+          arg: { kind: "none" } },
+        { short: "p", desc: "prompt before each command" },
+        { short: "R", desc: "at most this many -I replacements",
+          arg: { kind: "none" } },
+        { short: "r", desc: "run nothing on empty input" },
+        { short: "S", desc: "grow -I arguments up to this size",
+          arg: { kind: "none" } },
+        { short: "s", desc: "limit the command line to this size",
+          arg: { kind: "none" } },
+        { short: "t", desc: "echo each command before running it" },
+        { short: "x", desc: "stop when -n does not fit" },
+    ],
+}

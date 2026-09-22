@@ -1,0 +1,21 @@
+# watch (procps-ng watch 4.x) -- from watch(1).  watch is not installed on
+# the authoring machine; only its long-standing documented options are
+# here, and of those only -n takes a value.
+{
+    completion: 1,
+    command: "watch",
+    description: "execute a program periodically",
+
+    precommand: { flags_with_args: ["-n", "--interval"] },
+
+    flags: [
+        { short: "b", long: "beep", desc: "beep if the command exits non-zero" },
+        { short: "d", long: "differences", desc: "highlight changes between updates" },
+        { short: "e", long: "errexit", desc: "freeze on a command error" },
+        { short: "g", long: "chgexit", desc: "exit when the output changes" },
+        { short: "n", long: "interval", desc: "seconds to wait between updates",
+          arg: { kind: "none" } },
+        { short: "t", long: "no-title", desc: "turn off the header" },
+        { short: "x", long: "exec", desc: "pass the command to exec, not sh -c" },
+    ],
+}

@@ -1,0 +1,12 @@
+# nice (macOS / FreeBSD nice, Darwin 25.4) -- from `nice`'s usage and nice(1).
+{
+    completion: 1,
+    command: "nice",
+    description: "execute a utility at an altered priority",
+
+    precommand: { flags_with_args: ["-n"] },
+
+    flags: [
+        { short: "n", desc: "priority increment", arg: { kind: "none" } },
+    ],
+}

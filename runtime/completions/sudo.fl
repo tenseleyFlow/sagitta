@@ -1,0 +1,57 @@
+# Sudo version 1.9.17p2 -- from `sudo -h`.
+#
+# runtime/completions/sudo.fl: a precommand.  Its options (and NAME=value
+# words) are skipped and the next word completes as a command; the rest of
+# the line completes as THAT command's arguments.
+{
+    completion: 1,
+    command: "sudo",
+    description: "execute a command as another user",
+
+    precommand: {
+        flags_with_args: ["-C", "-D", "-g", "-h", "-p", "-R", "-T", "-U",
+                          "-u", "--close-from", "--chdir", "--group",
+                          "--host", "--prompt", "--chroot",
+                          "--command-timeout", "--other-user", "--user"],
+        assignments: true,
+    },
+
+    flags: [
+        { short: "A", long: "askpass", desc: "use a helper program for the password" },
+        { short: "b", long: "background", desc: "run the command in the background" },
+        { short: "B", long: "bell", desc: "ring the bell when prompting" },
+        { short: "C", long: "close-from", desc: "close file descriptors >= num",
+          arg: { kind: "none" } },
+        { short: "D", long: "chdir", desc: "change directory before running",
+          arg: { kind: "dir" } },
+        { short: "E", long: "preserve-env", desc: "preserve the user environment",
+          arg: { kind: "var" }, arg_optional: true },
+        { short: "e", long: "edit", desc: "edit files instead of running a command" },
+        { short: "g", long: "group", desc: "run as this group name or ID",
+          arg: { kind: "none" } },
+        { short: "H", long: "set-home", desc: "set HOME to the target user's home" },
+        { long: "help", desc: "display help message and exit" },
+        { short: "h", long: "host", desc: "run the command on host (plugin)",
+          arg: { kind: "host" } },
+        { short: "i", long: "login", desc: "run a login shell as the target user" },
+        { short: "K", long: "remove-timestamp", desc: "remove the timestamp file" },
+        { short: "k", long: "reset-timestamp", desc: "invalidate the timestamp file" },
+        { short: "l", long: "list", desc: "list the user's privileges" },
+        { short: "n", long: "non-interactive", desc: "never prompt" },
+        { short: "P", long: "preserve-groups", desc: "preserve the group vector" },
+        { short: "p", long: "prompt", desc: "the password prompt to use",
+          arg: { kind: "none" } },
+        { short: "R", long: "chroot", desc: "change the root directory first",
+          arg: { kind: "dir" } },
+        { short: "S", long: "stdin", desc: "read the password from stdin" },
+        { short: "s", long: "shell", desc: "run a shell as the target user" },
+        { short: "T", long: "command-timeout", desc: "terminate after this time limit",
+          arg: { kind: "none" } },
+        { short: "U", long: "other-user", desc: "in list mode, show this user",
+          arg: { kind: "user" } },
+        { short: "u", long: "user", desc: "run as this user name or ID",
+          arg: { kind: "user" } },
+        { short: "V", long: "version", desc: "display version information" },
+        { short: "v", long: "validate", desc: "update the timestamp, run nothing" },
+    ],
+}
