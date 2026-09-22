@@ -30,6 +30,7 @@
 #include "term/grid.h"
 #include "ui/cmdcomp.h"
 #include "ui/cmdline.h"
+#include "ui/compspec.h"
 #include "ui/shctx.h"
 #include "util/arena.h"
 
@@ -83,7 +84,16 @@ enum {
     PERF_SHCTX_BYTES = 4096,
     PERF_SHCTX_ITERS = 1000,
     PERF_SHCTX_WARMUPS = 50,
-    PERF_SHCTX_BUDGET_NS = 200000
+    PERF_SHCTX_BUDGET_NS = 200000,
+    /*
+     * Sprint 57.24: resolving a caret against a spec runs on every
+     * keystroke of an open `:!` menu too -- the spec lookup, the walk and
+     * the routing.  `git -C x remote add o` against the SHIPPED git.fl,
+     * warm (the one-time parse is not a keystroke's), p99 under 150 us.
+     */
+    PERF_SPEC_ITERS = 1000,
+    PERF_SPEC_WARMUPS = 50,
+    PERF_SPEC_BUDGET_NS = 150000
 };
 
 static volatile u64 perf_comp_sink;
@@ -571,6 +581,89 @@ static int measure_shctx(void)
     return failed ? 1 : 0;
 }
 
+static int measure_spec(void)
+{
+    static const char body[] = "git -C x remote add o";
+    static i64 samples[PERF_SPEC_ITERS];
+    const char *runtime = getenv("YEW_RUNTIME_DIR");
+    char *cwd;
+    Arena arena;
+    u32 i;
+    i64 p99;
+    i64 median;
+    bool failed;
+
+    /* The checked-in runtime, never an installed one. */
+    if (runtime == NULL || runtime[0] == '\0') {
+        size_t n;
+        char *dir;
+
+        cwd = yew_xgetcwd();
+        n = strlen(cwd) + sizeof("/runtime");
+        dir = malloc(n);
+        if (dir == NULL) {
+            yew_xfree(cwd);
+            return 2;
+        }
+        (void)snprintf(dir, n, "%s/runtime", cwd);
+        yew_xfree(cwd);
+        if (setenv("YEW_RUNTIME_DIR", dir, 1) != 0) {
+            free(dir);
+            return 2;
+        }
+        free(dir);
+    }
+    yew_compspec_invalidate_all();
+    if (yew_compspec_get(NULL, "git") == NULL) {
+        (void)fprintf(stderr, "perf_cmdcomp: the shipped git.fl did not "
+                              "load\n");
+        return 2;
+    }
+    arena_init(&arena);
+    for (i = 0U; i < PERF_SPEC_WARMUPS + PERF_SPEC_ITERS; i++) {
+        YewShCtx ctx;
+        char *described;
+        i64 start = now_ns();
+        i64 end;
+
+        if (!yew_shctx_at_with(body, sizeof(body) - 1U, sizeof(body) - 1U,
+                               &arena, yew_compspec_wrapper, NULL, &ctx)) {
+            arena_free_all(&arena);
+            return 2;
+        }
+        described = yew_comp_shell_describe(NULL, &ctx, &arena);
+        end = now_ns();
+        /* `remote add <name> <url>`: `o` is the new remote's NAME, free
+         * text.  Anything else means the walk went wrong. */
+        if (described == NULL || strcmp(described, "none") != 0) {
+            (void)fprintf(stderr, "perf_cmdcomp: `%s` routed to %s\n", body,
+                          described == NULL ? "(null)" : described);
+            arena_free_all(&arena);
+            return 2;
+        }
+        perf_comp_sink += (u64)ctx.argc + strlen(described);
+        arena_free_all(&arena);
+        if (i >= PERF_SPEC_WARMUPS)
+            samples[i - PERF_SPEC_WARMUPS] = end - start;
+    }
+    stable_sort_i64(samples, PERF_SPEC_ITERS);
+    median = samples[PERF_SPEC_ITERS / 2U];
+    p99 = samples[(PERF_SPEC_ITERS * 99U + 99U) / 100U - 1U];
+    failed = yew_perf_timing_failed((uint64_t)p99,
+                                    (uint64_t)PERF_SPEC_BUDGET_NS,
+                                    yew_perf_advisory());
+    (void)printf("perf-cmdcomp-spec: line=\"%s\" iters=%u median_us=%.1f "
+                 "p99_us=%.1f max_us=%.1f budget_us=%.1f%s\n",
+                 body, (unsigned)PERF_SPEC_ITERS, (double)median / 1000.0,
+                 (double)p99 / 1000.0,
+                 (double)samples[PERF_SPEC_ITERS - 1U] / 1000.0,
+                 (double)PERF_SPEC_BUDGET_NS / 1000.0,
+                 yew_perf_timing_verdict((uint64_t)p99,
+                                         (uint64_t)PERF_SPEC_BUDGET_NS,
+                                         yew_perf_advisory()));
+    return failed ? 1 : 0;
+}
+
 static int selftest_policy(void)
 {
     const i64 budget = PERF_COMP_BUDGET_NS;
@@ -690,11 +783,14 @@ int main(int argc, char **argv)
          * the two share one mkdtemp and one cleanup. */
         int exec_status = measure_exec(root);
         int shctx_status = measure_shctx();
+        int spec_status = measure_spec();
 
         if (exec_status != 0 && status == 0)
             status = exec_status;
         if (shctx_status != 0 && status == 0)
             status = shctx_status;
+        if (spec_status != 0 && status == 0)
+            status = spec_status;
     }
 
 done:
