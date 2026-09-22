@@ -1009,6 +1009,31 @@ resume:
     return ok;
 }
 
+/*
+ * Sprint 57.24 §5: free one slot held by an evictable job (a completion
+ * generator) for a spawn that matters more.  The group is SIGKILLed and
+ * the slot released now; waitpid(-1) in yew_job_reap collects the child
+ * whenever it actually exits, so nothing is left a zombie.
+ */
+static bool job_evict_one(Ed *ed)
+{
+    u32 i;
+
+    for (i = 0U; i < ed->jobs.len; i++) {
+        YewJob *j = &ed->jobs.v[i];
+
+        if (!j->evictable)
+            continue;
+        if (yew_job_pending(j) && j->pgid > 0)
+            (void)kill(-j->pgid, SIGKILL);
+        if (j->state == YEW_JOB_RUNNING)
+            j->state = YEW_JOB_CANCELLED;
+        yew_job_release(ed, j);
+        return true;
+    }
+    return false;
+}
+
 u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
 {
     Arena scratch;
@@ -1035,7 +1060,8 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
                        "inherited-tty job requires synchronous runner");
         return 0U;
     }
-    if (ed->jobs.len >= YEW_JOB_MAX) {
+    if (ed->jobs.len >= YEW_JOB_MAX &&
+        (spec->evictable || !job_evict_one(ed))) {
         (void)snprintf(err, errsz,
                        "too many jobs (%d); finish or kill one first",
                        YEW_JOB_MAX);
@@ -1147,6 +1173,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     j->state = YEW_JOB_RUNNING;
     j->sink = spec->sink;
     j->internal = spec->internal;
+    j->evictable = spec->evictable;
     j->framed_owner = spec->framed_owner;
     j->framed_ops = spec->framed_ops;
     j->stream_owner = spec->stream_owner;

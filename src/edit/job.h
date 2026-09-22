@@ -141,6 +141,14 @@ typedef struct YewJobSpec {
     /* Internal module plumbing stays pollable but is hidden from user job
      * chrome and the *jobs* table. */
     bool internal;
+    /*
+     * Sprint 57.24 §5: a job whose answer is optional (a completion
+     * generator).  When the table is full, a spawn that is NOT evictable
+     * kills and releases one of these instead of failing, so completion
+     * can never be why a user's own `:!` command did not start.  Its
+     * callback's `complete` does not run; `destroy` does.
+     */
+    bool evictable;
     /* Collection ceiling for COLLECT/CALLBACK; 0 keeps the default. */
     u64 collect_max;
     /* NULL-terminated environment overrides, applied to a copy of the
@@ -232,6 +240,7 @@ struct YewJob {
      * for such a job: the driver owns the outcome, including rollback. */
     bool synchronous;
     bool internal;
+    bool evictable;
     /* Mode (c): insertion point that survives edits elsewhere. */
     MarkId at;
     bool has_mark;
