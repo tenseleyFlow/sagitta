@@ -424,3 +424,69 @@ abridged), and where a user override lives. It ships with the runtime so
 11. `perf-cmdcomp` green with the new case.
 12. `test-fletch test-script test-roundtrip test-roundtrip-coverage
     test-audit` and the three `scripts/check-*.sh` gates green.
+
+## Implementation divergences (recorded at landing)
+
+Where this contract was wrong about the code, or a rule could not hold as
+written, the implementation did what the contract intends:
+
+1. **Shipped files are not read through `yew_runtime_asset_read` alone** —
+   it serves only the `EMBED_RUNTIME=1` image. `compspec.c` resolves the
+   shipped directory the way the runtime's other consumers do:
+   `$YEW_RUNTIME_DIR` alone when set; else the installed prefix, but only
+   if IT has `completions/` (an older install does not); else the source
+   tree's `runtime/`; else the embedded image.
+2. **The embed list is automatic** (`find runtime -type f`), so nothing had
+   to be added to it; `README.md` ships in the image and is installed too.
+3. **A spec owns an arena, not an `FlVm`.** The per-document VM validates
+   and is freed; the spec is converted to C structs (`YewSpecNode`,
+   `YewSpecFlag`, `YewSpecArg`, public in `compspec.h`) so a keystroke
+   walks plain memory. `YewSpecPoint` holds typed pointers and gains
+   `flags_ended`, `command_at` (re-enter COMMAND position) and `value_at`.
+4. **Prompt close does not drop parsed specs.** `yew_compspec_invalidate_all`
+   is the test seam; prompt close calls `yew_compspec_prompt_closed`, which
+   makes each user file re-`stat` once on its next lookup. Dropping the
+   shipped specs per prompt would re-pay the parse on every first keystroke.
+5. **The alias index SCANS** each shipped file's top-level `command` and
+   `description` instead of parsing it: parsing all 24 costs ~10 ms (git.fl
+   alone 3.5 ms) on the first `:!` keystroke. A spec is parsed and
+   validated only when its command is completed.
+6. **Additive schema keys** (documented in `runtime/completions/README.md`):
+   node `dash_values` (`kill -KILL`), node `after_dashdash`
+   (`git checkout -- <path>`), and precommand `operands` / `assignments` —
+   `flags_with_args` alone cannot express 57.23's `timeout` (one duration
+   word) and `env`/`sudo` (`NAME=value`) rows it was meant to replace.
+7. **Precommand specs replace the lexer's table through a lookup**:
+   `yew_shctx_at_with(…, YewShWrapperLookup, …)`; `yew_shctx_at` keeps the
+   C table, so the lexer and its corpus stay pure. A spec without
+   `precommand` un-wraps (whole-file replace); no spec defers to the table.
+8. **Two kinds appended**, `YEW_COMP_SPEC` (subcommands, flags, values) and
+   `YEW_COMP_GEN` (generator rows), each with a registered source.
+9. **`YEW_JOB_MAX` guarantee needs the job layer.** The four-job cap alone
+   cannot promise the user's own `:!` never fails (28 user jobs + 4
+   generators = full). Generator jobs are `evictable`; a non-evictable
+   spawn into a full table kills and releases one. Tested.
+10. **Tab while a generator is pending inserts nothing** — neither a sole
+    survivor nor an LCP: the set is incomplete. The arrival refills the
+    menu (never the text); an empty word Tab asked about may then open it.
+11. **`modified` runs `git ls-files --modified --others --exclude-standard`**,
+    not `git status --porcelain=v1`: porcelain lines carry status columns
+    and repository-root-relative paths; ls-files prints paths relative to
+    the directory `:!` runs in.
+12. **`pid` is backed by an async `ps -A -o pid= -o comm=` generator**: §5
+    names no built-in source for it and POSIX has no subprocess-free
+    process list (`/proc` is Linux-only).
+13. **wolf has 22 subcommands**, the ones the contract's list names;
+    wolf 0.2.14 prints exactly those.
+14. **`scp` operands complete as paths**, not hosts: one slot cannot be
+    both and local files are the common operand; `-J` completes hosts.
+15. **`tar.fl` was added** for the corpus's bundle row; `watch` and `doas`
+    are not installed here and were written from their man pages (said in
+    each file's header).
+16. **git omits `citool gitk gui scalar gitweb instaweb`**: `git help -a`
+    lists them but the installed git reports each as "not a git command".
+17. **The specs were trimmed to the embedded-image budget** (220 KiB; the
+    image records 211 141 bytes with all 24 specs on macOS): each keeps
+    every subcommand and its common flags.
+18. **The PTY harness gained an opt-in `$HOME`**, unset by default like
+    57.18's `$PATH`, so `s57_24_ssh_hosts` reads a fixture `~/.ssh`.
