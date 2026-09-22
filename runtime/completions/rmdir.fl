@@ -1,0 +1,11 @@
+# rmdir (macOS / FreeBSD rmdir, Darwin 25.4) -- from `rmdir`'s usage.
+{
+    completion: 1,
+    command: "rmdir",
+    description: "remove directories",
+    flags: [
+        { short: "p", desc: "remove each empty parent too" },
+        { short: "v", desc: "print each directory as it is removed" },
+    ],
+    args: [ { kind: "dir", repeat: true } ],
+}

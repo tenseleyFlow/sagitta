@@ -1,0 +1,11 @@
+# cd (the sh/bash/zsh builtin; bash 3.2.57 `help cd`) -- directories only.
+{
+    completion: 1,
+    command: "cd",
+    description: "change the working directory",
+    flags: [
+        { short: "L", desc: "follow symbolic links" },
+        { short: "P", desc: "use the physical directory structure" },
+    ],
+    args: [ { kind: "dir" } ],
+}

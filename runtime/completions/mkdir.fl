@@ -1,0 +1,15 @@
+# mkdir (macOS / FreeBSD mkdir, Darwin 25.4) -- from `mkdir`'s usage.
+#
+# Directories are offered as parents to type the new name into.
+{
+    completion: 1,
+    command: "mkdir",
+    description: "make directories",
+    flags: [
+        { short: "m", desc: "the mode of the new directories",
+          arg: { kind: "none" } },
+        { short: "p", desc: "create intermediate directories" },
+        { short: "v", desc: "print each directory as it is made" },
+    ],
+    args: [ { kind: "dir", repeat: true } ],
+}

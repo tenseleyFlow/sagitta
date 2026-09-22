@@ -1,0 +1,10 @@
+# pushd (the bash/zsh builtin; bash 3.2.57 `help pushd`) -- directories only.
+{
+    completion: 1,
+    command: "pushd",
+    description: "push a directory onto the directory stack",
+    flags: [
+        { short: "n", desc: "do not change directory" },
+    ],
+    args: [ { kind: "dir" } ],
+}
