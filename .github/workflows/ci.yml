@@ -135,6 +135,24 @@ jobs:
           strip --version | sed -n '1p'
       - name: Gate all dynamic profiles and committed ledgers
         run: make -j2 CC=gcc size-check
+      - name: Capture measured ledgers after a size failure
+        if: failure()
+        run: |
+          CC=gcc scripts/size-ledger.sh --build build-size/full \
+            --binary build-size/measure/full/yew \
+            --without-gc build-size/measure/no-gc/full/yew \
+            > measured-ledger-full.txt
+          CC=gcc scripts/size-ledger.sh --build build-size/minimal \
+            --binary build-size/measure/minimal/yew \
+            --without-gc build-size/measure/no-gc/minimal/yew \
+            > measured-ledger-minimal.txt
+      - name: Attach measured ledgers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: measured-size-ledgers
+          path: measured-ledger-*.txt
+          if-no-files-found: ignore
 
   # Sprint 57 milestone: build the pinned Alpine static profile, then boot
   # its deterministic initramfs under the exact 64/32 MiB TCG guests.  The
