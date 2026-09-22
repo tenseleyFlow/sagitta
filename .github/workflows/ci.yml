@@ -100,7 +100,8 @@ jobs:
           make CC=clang BUILD=build-clang \
             build-clang/fuzz_textbuf build-clang/gen-bigfile \
             build-clang/perf_textbuf build-clang/perf_latency \
-            build-clang/fuzz_cmdparse build-clang/perf_cmdcomp
+            build-clang/fuzz_cmdparse build-clang/fuzz_shctx \
+            build-clang/perf_cmdcomp
 
   # Sprint 57 §2.4: both hosted compilers build and execute the optional
   # single-file runtime.  The target includes the deterministic generator
