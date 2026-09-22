@@ -92,6 +92,10 @@ bool yew_test_canonicalize_path(char *path, size_t cap);
         const u8 *yew_assert_right_bytes_ = yew_assert_right_;                \
         size_t yew_assert_offset_;                                            \
         yew_test_count_assertion();                                           \
+        if (yew_assert_size_ != 0U &&                                         \
+            (yew_assert_left_ == NULL || yew_assert_right_ == NULL))          \
+            yew_test_fail(__FILE__, __LINE__,                                 \
+                          "YEW_ASSERT_EQ_MEM received NULL");               \
         for (yew_assert_offset_ = 0; yew_assert_offset_ < yew_assert_size_;   \
              yew_assert_offset_++) {                                          \
             if (yew_assert_left_bytes_[yew_assert_offset_] !=                 \

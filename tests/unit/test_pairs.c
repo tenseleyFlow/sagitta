@@ -9,7 +9,9 @@
 #include "edit/pairs.h"
 #include "syn/defs.h"
 #include "syn/engine.h"
+#include "syn/theme.h"
 #include "text/mark.h"
+#include "util/base.h"
 
 typedef struct {
     Ed ed;
@@ -79,6 +81,11 @@ static void pair_free(PairFixture *fx)
     if (fx->engine != NULL)
         yew_syn_engine_free(fx->engine);
     yew_pairs_clear(&fx->ed.buffer);
+    yew_opt_scope_free(&fx->ed.buffer.opt_overrides);
+    yew_opt_scope_free(&fx->win.opt_overrides);
+    yew_theme_free(&fx->ed.theme);
+    yew_xfree(fx->ed.theme_last_dark);
+    yew_xfree(fx->ed.theme_last_light);
     yew_marks_free(fx->ed.buffer.marks);
     yew_undo_free(fx->ed.buffer.undo);
     yew_textbuf_free(fx->ed.buffer.tb);
@@ -218,6 +225,7 @@ void test_pairs_type_over_survives_editing_between_the_delimiters(void)
     YEW_ASSERT_EQ_U64(pair_caret(&fx), 5U);
 
     /* Deleting between them works the same way. */
+    pair_free(&fx);
     pair_init(&fx, "");
     pair_type(&fx, "(");
     pair_type(&fx, "x");
@@ -402,6 +410,7 @@ void test_pairs_backspace_between_a_fresh_pair_takes_both(void)
 
     /* Once the pair holds text it is no longer fresh: Backspace takes one
      * grapheme. */
+    pair_free(&fx);
     pair_init(&fx, "");
     pair_type(&fx, "(");
     pair_type(&fx, "z");

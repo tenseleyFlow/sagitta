@@ -296,6 +296,7 @@ int yew_test_run(int argc, char **argv)
     size_t i;
     int argi;
     char *xdg_state;
+    char *path;
 
     program_path = argv[0];
     for (argi = 1; argi < argc; argi++) {
@@ -341,16 +342,20 @@ int yew_test_run(int argc, char **argv)
     }
 
     xdg_state = env_copy("XDG_STATE_HOME");
+    path = env_copy("PATH");
     for (i = 0U; i < yew_tests_len; i++) {
         if (!yew_test_name_matches(yew_tests[i].name, filter) ||
             test_is_excluded(yew_tests[i].name, excluded, excluded_len))
             continue;
         env_restore("XDG_STATE_HOME", xdg_state);
+        env_restore("PATH", path);
         if (!run_one_test(&yew_tests[i]))
             failures++;
     }
     env_restore("XDG_STATE_HOME", xdg_state);
+    env_restore("PATH", path);
     yew_xfree(xdg_state);
+    yew_xfree(path);
     (void)printf("unit: %zu tests, %zu assertions, %zu failure%s\n",
                  selected, assertion_count, failures,
                  failures == 1U ? "" : "s");
