@@ -306,8 +306,10 @@ static void capture_selection(RegVal *value, const Win *win)
                 Span source = part.rows.data[row];
                 Span target = {value->bytes.len, value->bytes.len};
 
-                bytebuf_append(&value->bytes, part.bytes.data + source.lo,
-                               (size_t)(source.hi - source.lo));
+                if (source.hi != source.lo)
+                    bytebuf_append(&value->bytes,
+                                   part.bytes.data + source.lo,
+                                   (size_t)(source.hi - source.lo));
                 target.hi = value->bytes.len;
                 YewRegRowVec_push(&value->rows, target);
             }
