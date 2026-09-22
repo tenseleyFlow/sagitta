@@ -627,6 +627,16 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
     return env;
 }
 
+char **yew_job_env(Ed *ed, Arena *a)
+{
+    YewJobSpec spec;
+
+    if (ed == NULL || a == NULL)
+        return NULL;
+    (void)memset(&spec, 0, sizeof(spec));
+    return job_build_env(ed, a, &spec);
+}
+
 static void set_nonblock(int fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);

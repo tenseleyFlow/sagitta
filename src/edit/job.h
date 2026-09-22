@@ -16,6 +16,7 @@
 
 #include "text/coords.h"
 #include "text/mark.h"
+#include "util/arena.h"
 #include "util/base.h"
 #include "util/buf.h"
 
@@ -297,6 +298,15 @@ void yew_shell_quote(Bytebuf *out, const u8 *s, size_t n);
 /* $SHELL -> pw_shell -> /bin/sh.  A missing shell is reported precisely
  * through the exec-status pipe, never as a crash. */
 const char *yew_job_shell(void);
+
+/*
+ * Sprint 57.23 §4: the environment a plain `:!` command runs with --
+ * environ with the job layer's standard rows applied (YEW_FILE, PAGER=cat,
+ * the dropped COLUMNS/LINES, …).  NULL-terminated NAME=value rows, all in
+ * `a`.  The shell completer offers these names and no others: a name the
+ * child will not see is not a variable it can expand.
+ */
+char **yew_job_env(Ed *ed, Arena *a);
 
 /*
  * Absolute path to this yew executable for nested-editor handovers.  Linux
