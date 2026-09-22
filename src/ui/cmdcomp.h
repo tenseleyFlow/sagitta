@@ -6,6 +6,7 @@
 
 #include "edit/cmd.h"
 #include "text/coords.h"
+#include "ui/shctx.h"
 #include "util/arena.h"
 #include "util/base.h"
 #include "util/vec.h"
@@ -44,8 +45,29 @@ typedef enum {
     /* Sprint 57.18 §2: an executable on $PATH.  Appended rather than
      * inserted -- the source registry is indexed by this enum. */
     YEW_COMP_EXEC,
+    /*
+     * Sprint 57.23, appended for the same reason.  SHELL is the `:!`
+     * dispatcher (§5): ONE registered source that reads the caret's shell
+     * context, routes it (§3), and merges the sub-sources below.  Its
+     * items keep their SUB-source's kind, so provenance styling and
+     * yew_comp_sole(items, kind) still see EXEC, PATH, VAR, ….
+     */
+    YEW_COMP_SHELL,
+    YEW_COMP_VAR,     /* environment names a `:!` child will see (§4)  */
+    YEW_COMP_USER,    /* `~name/` from the password database (§4)      */
+    YEW_COMP_BUILTIN, /* sh-family builtins and reserved words (§4)    */
     YEW_COMP_KIND__N
 } YewCompKind;
+
+/*
+ * Sprint 57.23 §4: CompReq.path_filter.  Applied after readdir, so the
+ * sliced DirListing and its cache are shared by every mask.
+ */
+enum {
+    YEW_PATH_ANY = 0,
+    YEW_PATH_DIRS = 1,
+    YEW_PATH_EXEC_OR_DIR = 2
+};
 
 typedef struct {
     const char *text;
@@ -79,6 +101,15 @@ typedef struct {
      * when the two cannot be aligned (a quoted path).
      */
     u16 match_off;
+    /*
+     * Sprint 57.23 §6: bytes appended after `text` when this row is
+     * COMMITTED as the whole word (a sole survivor, an accept) and is not
+     * a directory -- the closing quote of a word typed inside `"…`, and
+     * the `}` of a `${NAME`.  The usual trailing space follows it.  NULL
+     * (every other source) means nothing extra.  A menu row that is only
+     * being LOOKED at inserts `text` alone.
+     */
+    const char *suffix;
 } CompItem;
 
 enum { YEW_COMP_NO_HIGHLIGHT = 0xFFFFU };
@@ -133,6 +164,9 @@ typedef struct CompReq {
      * directory that no longer exists.
      */
     bool allow_cache;
+    /* Sprint 57.23 §5.  Both zero-initialised for every existing caller. */
+    const YewShCtx *shell; /* non-NULL only for YEW_COMP_SHELL             */
+    u32 path_filter;       /* YEW_PATH_* mask; 0 == YEW_PATH_ANY           */
 } CompReq;
 
 enum {
@@ -155,6 +189,9 @@ typedef struct YewCompQuery {
     const CompSource *source;
     const char *stem;
     Span replace;
+    /* Sprint 57.23: the caret's shell context when kind is SHELL, owned
+     * by whatever arena the tolerant parse used.  NULL otherwise. */
+    const YewShCtx *shell;
 } YewCompQuery;
 
 /*
@@ -169,6 +206,14 @@ typedef struct CompFilter {
     YewCompKind kind;
     char *head;    /* the directory this set came from ("" for non-paths) */
     char *pattern; /* the pattern it was enumerated with                  */
+    /*
+     * Sprint 57.23 §5 pitfall: `head` and `pattern` do not identify a
+     * SHELL answer.  `ls | gr` and `ls gr` share both, but one is command
+     * position and the other is not.  The routing row, position, quote
+     * state, argv[0] and path mask go here, and any change re-enumerates.
+     * NULL for every other kind.
+     */
+    char *ctx_key;
     u32 total;     /* pre-cap total, for the footer                       */
     bool capped;   /* the source had more than YEW_COMP_MAX matches       */
     bool valid;
@@ -245,6 +290,15 @@ const CompItem *yew_comp_sole(const Vec_CompItem *items, YewCompKind kind);
  */
 bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
                        bool bang_body, YewCompKind *kind);
+
+/*
+ * Sprint 57.23 §3: route a shell context to its sources -- shape beats
+ * position, position refines.  Returns the table row that matched (1-9;
+ * 0 for the active-expansion guard), fills `sources` with a bit per
+ * YewCompKind (1U << kind) and `path_filter` with the YEW_PATH_* mask the
+ * PATH source applies.  An empty `sources` offers nothing.
+ */
+u32 yew_comp_shell_route(const YewShCtx *ctx, u32 *sources, u32 *path_filter);
 
 /* Tolerant command-line source selection at the cursor. */
 bool yew_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,

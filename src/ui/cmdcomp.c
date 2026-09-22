@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/job.h"
 #include "edit/option.h"
 #ifndef YEW_WITH_PLUGINS
 #define YEW_WITH_PLUGINS 0
@@ -26,6 +27,7 @@
 #include "unicode/utf8.h"
 #include "util/buf.h"
 #include "util/log.h"
+#include "util/secret.h"
 #include "util/sort.h"
 
 typedef struct {
@@ -196,6 +198,7 @@ static u32 candidate_finish(const CompReq *req, YewCompKind kind,
         item.detail = src->detail == NULL ? NULL :
                       arena_strdup(arena, src->detail);
         item.kind = (u8)kind;
+        item.suffix = NULL;
         item.is_dir = src->is_dir;
         item.deferred = src->deferred;
         item.score = src->score;
@@ -579,6 +582,7 @@ static void path_candidates_finish(const CompReq *req,
         item.text = yew_comp_quote(arena, raw);
         item.detail = NULL;
         item.kind = YEW_COMP_PATH;
+        item.suffix = NULL;
         item.is_dir = is_dir;
         item.deferred = false;
         item.score = path->score;
@@ -918,11 +922,51 @@ bool yew_comp_listing_advance(i64 slice_us)
     return exec_scan_advance(slice_us);
 }
 
+/*
+ * Sprint 57.23 §4: does `name` pass the request's YEW_PATH_* mask?
+ *
+ * Asked AFTER the name has matched the pattern, so a stat is paid only
+ * for rows that could be shown, and asked of the listing rather than of
+ * readdir, so every mask shares one cached directory.  A symlink is
+ * followed -- `cd` into a link to a directory is exactly right -- and
+ * "executable" means what the $PATH source means by it: a regular file
+ * this user may execute.
+ */
+static bool path_mask_keep(const char *scan_dir, const char *name,
+                           u8 entry_dtype, u32 mask)
+{
+    unsigned char dtype = force_dtype_unknown ? DT_UNKNOWN : entry_dtype;
+    char *with_slash;
+    char *path;
+    struct stat st;
+    bool keep;
+
+    if (mask == YEW_PATH_ANY || dtype == DT_DIR)
+        return true;
+    if (dtype != DT_LNK && dtype != DT_UNKNOWN &&
+        (mask == YEW_PATH_DIRS || dtype != DT_REG))
+        return false;
+    with_slash = join2(scan_dir,
+                       scan_dir[0] != '\0' &&
+                       scan_dir[strlen(scan_dir) - 1U] == '/' ? "" : "/");
+    path = join2(with_slash, name);
+    yew_xfree(with_slash);
+    if (stat(path, &st) != 0)
+        keep = false;
+    else if (S_ISDIR(st.st_mode))
+        keep = true;
+    else
+        keep = mask == YEW_PATH_EXEC_OR_DIR && S_ISREG(st.st_mode) &&
+               access(path, X_OK) == 0;
+    yew_xfree(path);
+    return keep;
+}
+
 /* Rank one candidate name into the bounded heap.  Shared by the cached
  * path and the streaming fallback so the two cannot drift. */
 static void path_rank_one(PathCandidateVec *paths, const char *name,
                           u8 dtype, const char *tail, size_t tail_len,
-                          u32 *total)
+                          u32 *total, const char *scan_dir, u32 mask)
 {
     i32 score;
 
@@ -932,6 +976,8 @@ static void path_rank_one(PathCandidateVec *paths, const char *name,
      * path_candidates_finish, so the scan never fills one. */
     score = comp_key(tail, tail_len, name, NULL);
     if (score == YEW_FZ_NO_MATCH)
+        return;
+    if (!path_mask_keep(scan_dir, name, dtype, mask))
         return;
     if (*total != UINT32_MAX)
         (*total)++;
@@ -999,7 +1045,8 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
 
         for (i = 0U; i < comp_listing.n; i++)
             path_rank_one(&paths, listing_name(&comp_listing, i),
-                          comp_listing.dtypes[i], tail, tail_len, &total);
+                          comp_listing.dtypes[i], tail, tail_len, &total,
+                          scan_dir, req->path_filter);
     } else {
         /* Unopenable, or too big to hold: stream it as before.  A
          * directory this size is Sprint 26's problem, not the prompt's. */
@@ -1017,7 +1064,7 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
                 strcmp(entry->d_name, "..") == 0)
                 continue;
             path_rank_one(&paths, entry->d_name, (u8)entry->d_type, tail,
-                          tail_len, &total);
+                          tail_len, &total, scan_dir, req->path_filter);
         }
         (void)closedir(dir);
     }
@@ -1499,6 +1546,7 @@ static void exec_candidates_finish(const CompReq *req,
                           ? arena_strdup(arena, exec_cache.dirs[from].dir)
                           : NULL;
         item.kind = (u8)YEW_COMP_EXEC;
+        item.suffix = NULL;
         item.is_dir = false;
         item.deferred = false;
         item.score = path->score;
@@ -1544,7 +1592,7 @@ static u32 enumerate_exec(const CompReq *req, Vec_CompItem *out)
      */
     for (i = 0U; i < exec_cache.n_names; i++)
         path_rank_one(&paths, exec_name(i), (u8)DT_REG, stem, stem_len,
-                      &total);
+                      &total, "", YEW_PATH_ANY);
     exec_candidates_finish(req, &paths, out);
     return total;
 }
@@ -1592,6 +1640,570 @@ static u32 enumerate_option_values(const CompReq *req, Vec_CompItem *out)
     return candidate_finish(req, YEW_COMP_VALUE, &matches, out);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 57.23 §4: the generic shell sources                        */
+/* ---------------------------------------------------------------- */
+
+/* Drop later rows whose ranked name repeats an earlier one.  The FIRST
+ * wins, which for the environment is the row getenv would return. */
+static void candidate_dedupe(CandidateVec *v)
+{
+    size_t keep = 0U;
+    size_t i;
+    size_t j;
+
+    for (i = 0U; i < v->len; i++) {
+        bool dup = false;
+
+        for (j = 0U; j < keep; j++) {
+            if (strcmp(v->data[j].match, v->data[i].match) == 0) {
+                dup = true;
+                break;
+            }
+        }
+        if (dup) {
+            if (v->data[i].match != v->data[i].text)
+                yew_xfree(v->data[i].match);
+            yew_xfree(v->data[i].text);
+            continue;
+        }
+        v->data[keep++] = v->data[i];
+    }
+    v->len = keep;
+}
+
+static bool valid_var_name(const char *s, size_t n)
+{
+    size_t i;
+
+    if (n == 0U || !(isalpha((unsigned char)s[0]) || s[0] == '_'))
+        return false;
+    for (i = 1U; i < n; i++) {
+        if (!(isalnum((unsigned char)s[i]) || s[i] == '_'))
+            return false;
+    }
+    return true;
+}
+
+/*
+ * §4's value preview: the first 40 bytes (backed off to a UTF-8
+ * boundary), every control byte -- C0, DEL, and the C1 range a terminal
+ * may also act on -- drawn as `·`, and the whole value replaced by `•••`
+ * when the NAME says it is a secret.  A completion pager is screen-shared
+ * far more often than it is secret.
+ */
+static char *var_preview(Arena *a, const char *name, const char *value)
+{
+    const u8 *v = (const u8 *)value;
+    size_t len = strlen(value);
+    size_t n = len < 40U ? len : 40U;
+    Bytebuf out;
+    size_t i;
+    char *result;
+
+    if (yew_secret_name(name))
+        return arena_strdup(a, "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2");
+    while (n > 0U && n < len && !yew_utf8_is_boundary(v, len, n))
+        n--;
+    bytebuf_init(&out);
+    for (i = 0U; i < n; i++) {
+        if (v[i] < 0x20U || v[i] == 0x7FU) {
+            bytebuf_append(&out, "\xC2\xB7", 2U);
+        } else if (v[i] == 0xC2U && i + 1U < n && v[i + 1U] >= 0x80U &&
+                   v[i + 1U] <= 0x9FU) {
+            bytebuf_append(&out, "\xC2\xB7", 2U);
+            i++;
+        } else {
+            bytebuf_push_u8(&out, v[i]);
+        }
+    }
+    result = arena_strndup(a, out.data == NULL ? "" : (const char *)out.data,
+                           out.len);
+    bytebuf_free(&out);
+    return result;
+}
+
+/* VAR: the names a `:!` child will see -- environ with the job layer's
+ * standard rows applied, so a name it drops is not offered. */
+static u32 enumerate_vars(const CompReq *req, Vec_CompItem *out)
+{
+    CandidateVec matches = {0};
+    Arena scratch;
+    char **env;
+    size_t i;
+    u32 total;
+
+    arena_init(&scratch);
+    env = yew_job_env(req->ed, &scratch);
+    for (i = 0U; env != NULL && env[i] != NULL; i++) {
+        const char *eq = strchr(env[i], '=');
+        char *name;
+
+        if (eq == NULL || !valid_var_name(env[i], (size_t)(eq - env[i])))
+            continue;
+        name = arena_strndup(&scratch, env[i], (size_t)(eq - env[i]));
+        (void)candidate_add(&matches, req->stem, name, name,
+                            var_preview(&scratch, name, eq + 1), false,
+                            false);
+    }
+    candidate_dedupe(&matches);
+    total = candidate_finish(req, YEW_COMP_VAR, &matches, out);
+    arena_free_all(&scratch);
+    return total;
+}
+
+/* A leading-underscore account (`_spotlight`, macOS daemon users) is kept
+ * but sorts after every other row: a stable partition, so each half keeps
+ * its rank order. */
+static void users_underscore_last(Vec_CompItem *items)
+{
+    Vec_CompItem tail = {0};
+    size_t keep = 0U;
+    size_t i;
+
+    for (i = 0U; i < items->len; i++) {
+        const CompItem *it = &items->data[i];
+
+        if (it->kind == (u8)YEW_COMP_USER && it->match != NULL &&
+            it->match[0] == '~' && it->match[1] == '_')
+            Vec_CompItem_push(&tail, *it);
+        else
+            items->data[keep++] = *it;
+    }
+    for (i = 0U; i < tail.len; i++)
+        items->data[keep++] = tail.data[i];
+    Vec_CompItem_free(&tail);
+}
+
+/* USER: `~name/` for every account; `detail` is its home directory. */
+static u32 enumerate_users(const CompReq *req, Vec_CompItem *out)
+{
+    CandidateVec matches = {0};
+    Arena scratch;
+    struct passwd *pw;
+    u32 total;
+
+    arena_init(&scratch);
+    setpwent();
+    while ((pw = getpwent()) != NULL) {
+        char *match;
+        char *text;
+        size_t n;
+
+        if (pw->pw_name == NULL || pw->pw_name[0] == '\0')
+            continue;
+        n = strlen(pw->pw_name);
+        match = arena_alloc(&scratch, n + 2U, 1U);
+        match[0] = '~';
+        (void)memcpy(match + 1U, pw->pw_name, n + 1U);
+        text = arena_alloc(&scratch, n + 3U, 1U);
+        (void)memcpy(text, match, n + 1U);
+        text[n + 1U] = '/';
+        text[n + 2U] = '\0';
+        /* getpwent's buffers are overwritten by the next call. */
+        (void)candidate_add(&matches, req->stem, match, text,
+                            arena_strdup(&scratch, pw->pw_dir == NULL
+                                                       ? ""
+                                                       : pw->pw_dir),
+                            true, false);
+    }
+    endpwent();
+    candidate_dedupe(&matches);
+    total = candidate_finish(req, YEW_COMP_USER, &matches, out);
+    users_underscore_last(out);
+    arena_free_all(&scratch);
+    return total;
+}
+
+typedef struct ShBuiltin {
+    const char *name;
+    bool keyword;
+} ShBuiltin;
+
+/* §4's list: the sh-family builtins, then the reserved words. */
+static const ShBuiltin sh_builtins[] = {
+    {"alias", false}, {"bg", false}, {"break", false}, {"builtin", false},
+    {"cd", false}, {"command", false}, {"continue", false},
+    {"declare", false}, {"dirs", false}, {"echo", false}, {"eval", false},
+    {"exec", false}, {"exit", false}, {"export", false}, {"false", false},
+    {"fc", false}, {"fg", false}, {"getopts", false}, {"hash", false},
+    {"history", false}, {"jobs", false}, {"kill", false}, {"let", false},
+    {"local", false}, {"popd", false}, {"printf", false}, {"pushd", false},
+    {"pwd", false}, {"read", false}, {"readonly", false}, {"return", false},
+    {"set", false}, {"shift", false}, {"source", false}, {"test", false},
+    {"times", false}, {"trap", false}, {"true", false}, {"type", false},
+    {"typeset", false}, {"ulimit", false}, {"umask", false},
+    {"unalias", false}, {"unset", false}, {"wait", false}, {".", false},
+    {"[", false},
+    {"if", true}, {"then", true}, {"else", true}, {"elif", true},
+    {"fi", true}, {"case", true}, {"esac", true}, {"for", true},
+    {"select", true}, {"while", true}, {"until", true}, {"do", true},
+    {"done", true}, {"function", true}, {"time", true}, {"{", true},
+    {"}", true}, {"!", true}, {"[[", true}, {"]]", true}
+};
+
+static u32 enumerate_builtins(const CompReq *req, Vec_CompItem *out)
+{
+    CandidateVec matches = {0};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(sh_builtins); i++)
+        (void)candidate_add(&matches, req->stem, sh_builtins[i].name,
+                            sh_builtins[i].name,
+                            sh_builtins[i].keyword ? "keyword" : "builtin",
+                            false, false);
+    return candidate_finish(req, YEW_COMP_BUILTIN, &matches, out);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.23 §3: routing -- shape beats position                  */
+/* ---------------------------------------------------------------- */
+
+#define SRC_BIT(k) (1U << (u32)(k))
+
+/* §4's argument-kind defaults (row 8), a small table 57.24's specs
+ * override. */
+static const struct {
+    const char *cmd;
+    u32 sources;
+    u32 mask;
+} arg_defaults[] = {
+    {"cd", SRC_BIT(YEW_COMP_PATH), YEW_PATH_DIRS},
+    {"pushd", SRC_BIT(YEW_COMP_PATH), YEW_PATH_DIRS},
+    {"rmdir", SRC_BIT(YEW_COMP_PATH), YEW_PATH_DIRS},
+    /* A parent to type into. */
+    {"mkdir", SRC_BIT(YEW_COMP_PATH), YEW_PATH_DIRS},
+    {"which", SRC_BIT(YEW_COMP_EXEC) | SRC_BIT(YEW_COMP_BUILTIN),
+     YEW_PATH_ANY},
+    {"type", SRC_BIT(YEW_COMP_EXEC) | SRC_BIT(YEW_COMP_BUILTIN),
+     YEW_PATH_ANY},
+    {"whence", SRC_BIT(YEW_COMP_EXEC) | SRC_BIT(YEW_COMP_BUILTIN),
+     YEW_PATH_ANY},
+    {"where", SRC_BIT(YEW_COMP_EXEC) | SRC_BIT(YEW_COMP_BUILTIN),
+     YEW_PATH_ANY},
+    {"command", SRC_BIT(YEW_COMP_EXEC) | SRC_BIT(YEW_COMP_BUILTIN),
+     YEW_PATH_ANY}
+};
+
+static int arg_default_of(const YewShCtx *ctx)
+{
+    size_t i;
+
+    if (ctx->argc == 0U || ctx->argv == NULL || ctx->argv[0] == NULL)
+        return -1;
+    for (i = 0U; i < YEW_ARRAY_LEN(arg_defaults); i++) {
+        if (strcmp(ctx->argv[0], arg_defaults[i].cmd) == 0)
+            return (int)i;
+    }
+    return -1;
+}
+
+/*
+ * §3's table, top row first, first match wins.  The table IS the spec;
+ * the two places this departs from a literal reading are marked.
+ */
+u32 yew_comp_shell_route(const YewShCtx *ctx, u32 *sources, u32 *path_filter)
+{
+    const char *stem;
+    bool slash;
+    bool operand;
+    int def;
+    u32 src = 0U;
+    u32 mask = YEW_PATH_ANY;
+    u32 row;
+
+    if (ctx == NULL || ctx->stem == NULL || ctx->pos == YEW_SH_POS_NONE) {
+        row = 1U; /* nothing: Tab inserts a literal tab */
+        goto done;
+    }
+    stem = ctx->stem;
+    if (ctx->pos == YEW_SH_POS_VARIABLE && ctx->quote != YEW_SH_Q_SINGLE) {
+        src = SRC_BIT(YEW_COMP_VAR);
+        row = 2U;
+        goto done;
+    }
+    /*
+     * Departure 1, a guard between rows 2 and 3: a word holding an
+     * active expansion (`$HOME/fo`, `$(pwd)/x`) offers nothing.  Its stem
+     * is the expansion's SOURCE, not its value; completing it would list
+     * a directory the shell never looks in and re-quote the `$` into a
+     * literal -- a different file for `rm`.
+     */
+    if (ctx->expands) {
+        row = 0U;
+        goto done;
+    }
+    slash = strchr(stem, '/') != NULL;
+    operand = ctx->pos == YEW_SH_POS_ARGUMENT ||
+              ctx->pos == YEW_SH_POS_REDIRECT ||
+              ctx->pos == YEW_SH_POS_ASSIGN;
+    /* Row 3; only a LEADING, UNQUOTED `~` names a user (§4 "Tilde"). */
+    if (stem[0] == '~' && !slash && ctx->tilde) {
+        src = SRC_BIT(YEW_COMP_USER);
+        row = 3U;
+        goto done;
+    }
+    if ((slash || strcmp(stem, ".") == 0 || strcmp(stem, "..") == 0) &&
+        ctx->pos == YEW_SH_POS_COMMAND) {
+        src = SRC_BIT(YEW_COMP_PATH);
+        mask = YEW_PATH_EXEC_OR_DIR;
+        row = 4U;
+        goto done;
+    }
+    if (slash && operand) {
+        src = SRC_BIT(YEW_COMP_PATH);
+        /*
+         * Departure 2: row 5 precedes row 8, so read literally `cd src/`
+         * would list files -- row 8's DIRS mask would only ever apply to
+         * the first path segment.  Row 5 keeps its PATH source but takes
+         * row 8's mask when the command has one.
+         */
+        def = ctx->pos == YEW_SH_POS_ARGUMENT ? arg_default_of(ctx) : -1;
+        if (def >= 0 && arg_defaults[def].sources == SRC_BIT(YEW_COMP_PATH))
+            mask = arg_defaults[def].mask;
+        row = 5U;
+        goto done;
+    }
+    if (stem[0] == '-' && !ctx->dashdash &&
+        ctx->pos == YEW_SH_POS_ARGUMENT) {
+        row = 6U; /* flags are Sprint 57.24's; never files named -rf */
+        goto done;
+    }
+    if (ctx->pos == YEW_SH_POS_COMMAND) {
+        src = SRC_BIT(YEW_COMP_EXEC) | SRC_BIT(YEW_COMP_BUILTIN);
+        row = 7U;
+        goto done;
+    }
+    def = ctx->pos == YEW_SH_POS_ARGUMENT ? arg_default_of(ctx) : -1;
+    if (def >= 0) {
+        src = arg_defaults[def].sources;
+        mask = arg_defaults[def].mask;
+        row = 8U;
+        goto done;
+    }
+    if (operand) {
+        src = SRC_BIT(YEW_COMP_PATH);
+        row = 9U;
+        goto done;
+    }
+    row = 1U;
+done:
+    if (sources != NULL)
+        *sources = src;
+    if (path_filter != NULL)
+        *path_filter = mask;
+    return row;
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.23 §5: the SHELL dispatcher                             */
+/* ---------------------------------------------------------------- */
+
+static const char *closing_of(YewShQuote q)
+{
+    switch (q) {
+    case YEW_SH_Q_SINGLE:
+    case YEW_SH_Q_DOLLAR:
+        return "'";
+    case YEW_SH_Q_DOUBLE:
+        return "\"";
+    case YEW_SH_Q_NONE:
+    default:
+        return "";
+    }
+}
+
+/*
+ * Re-encode one sub-source row for the caret's quote state (§6) and
+ * append it.  `raw` is the unquoted word the row stands for; `hl_off` is
+ * where `match` sits inside it, for highlighting when the encoding left
+ * it byte-identical.
+ */
+static void shell_push(const CompReq *req, const CompItem *sub,
+                       const char *raw, size_t literal_prefix,
+                       size_t hl_off, const char *pattern,
+                       Vec_CompItem *out)
+{
+    const YewShCtx *ctx = req->shell;
+    Arena *arena = req->arena;
+    CompItem item = *sub;
+    const char *closing = "";
+
+    if (sub->kind == (u8)YEW_COMP_VAR) {
+        /* A name is [A-Za-z0-9_] in every state: nothing to quote. */
+        item.text = arena_strdup(arena, raw);
+        item.suffix = ctx->brace_var
+                          ? arena_strdup(arena,
+                                         ctx->quote == YEW_SH_Q_DOUBLE ? "}\""
+                                                                       : "}")
+                          : closing_of(ctx->quote);
+    } else if (sub->kind == (u8)YEW_COMP_BUILTIN &&
+               ctx->quote == YEW_SH_Q_NONE) {
+        /* Reserved words lose their meaning when quoted (`\{` is not a
+         * group), and none of these names needs quoting. */
+        item.text = arena_strdup(arena, raw);
+        item.suffix = "";
+    } else {
+        item.text = yew_shq_insert(arena, raw, strlen(raw), literal_prefix,
+                                   ctx->quote, &closing);
+        item.suffix = closing;
+    }
+    if (strcmp(item.text, raw) == 0 && hl_off < (size_t)YEW_COMP_NO_HIGHLIGHT) {
+        u16 p;
+
+        (void)comp_key(pattern, strlen(pattern), item.match, &item.m);
+        item.match_off = (u16)hl_off;
+        for (p = 0U; p < item.m.n_pos; p++) {
+            size_t at = (size_t)item.m.pos[p] + hl_off;
+
+            item.m.pos[p] = at > (size_t)UINT16_MAX ? (u16)UINT16_MAX
+                                                    : (u16)at;
+        }
+    } else {
+        item.m.n_pos = 0U;
+        item.match_off = (u16)YEW_COMP_NO_HIGHLIGHT;
+    }
+    Vec_CompItem_push(out, item);
+}
+
+static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out);
+static u32 enumerate_exec(const CompReq *req, Vec_CompItem *out);
+
+/* Run one sub-source with the dispatcher's arena and budget. */
+static u32 shell_sub(const CompReq *req, YewCompKind kind, const char *stem,
+                     u32 mask, Vec_CompItem *got)
+{
+    CompReq sub = *req;
+
+    sub.kind = kind;
+    sub.stem = stem;
+    sub.shell = NULL;
+    sub.path_filter = mask;
+    got->len = 0U;
+    switch (kind) {
+    case YEW_COMP_VAR:
+        return enumerate_vars(&sub, got);
+    case YEW_COMP_USER:
+        return enumerate_users(&sub, got);
+    case YEW_COMP_BUILTIN:
+        return enumerate_builtins(&sub, got);
+    case YEW_COMP_EXEC:
+        return enumerate_exec(&sub, got);
+    case YEW_COMP_PATH:
+        return enumerate_paths(&sub, got);
+    default:
+        return 0U;
+    }
+}
+
+static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
+{
+    const YewShCtx *ctx = req->shell;
+    const char *stem;
+    Vec_CompItem got = {0};
+    u32 sources = 0U;
+    u32 mask = YEW_PATH_ANY;
+    u32 total = 0U;
+    size_t builtins_end = 0U;
+    size_t i;
+
+    out->len = 0U;
+    if (ctx == NULL || ctx->stem == NULL)
+        return 0U;
+    stem = ctx->stem;
+    (void)yew_comp_shell_route(ctx, &sources, &mask);
+    if ((sources & SRC_BIT(YEW_COMP_VAR)) != 0U) {
+        total += shell_sub(req, YEW_COMP_VAR, stem, 0U, &got);
+        for (i = 0U; i < got.len; i++)
+            shell_push(req, &got.data[i], got.data[i].match, 0U, 0U, stem,
+                       out);
+    }
+    if ((sources & SRC_BIT(YEW_COMP_USER)) != 0U) {
+        total += shell_sub(req, YEW_COMP_USER, stem, 0U, &got);
+        for (i = 0U; i < got.len; i++) {
+            const char *raw = got.data[i].text; /* `~name/` */
+
+            shell_push(req, &got.data[i], raw, strlen(raw), 0U, stem, out);
+        }
+    }
+    if ((sources & SRC_BIT(YEW_COMP_BUILTIN)) != 0U) {
+        total += shell_sub(req, YEW_COMP_BUILTIN, stem, 0U, &got);
+        for (i = 0U; i < got.len; i++)
+            shell_push(req, &got.data[i], got.data[i].match, 0U, 0U, stem,
+                       out);
+        builtins_end = out->len;
+    }
+    if ((sources & SRC_BIT(YEW_COMP_EXEC)) != 0U) {
+        total += shell_sub(req, YEW_COMP_EXEC, stem, 0U, &got);
+        for (i = 0U; i < got.len; i++) {
+            size_t b;
+            bool shadowed = false;
+
+            /* The shell runs a builtin before anything on $PATH, so an
+             * `echo` binary is the same row as the `echo` builtin. */
+            for (b = 0U; b < builtins_end; b++) {
+                if (strcmp(out->data[b].match, got.data[i].match) == 0) {
+                    shadowed = true;
+                    break;
+                }
+            }
+            if (shadowed) {
+                if (total != 0U)
+                    total--;
+                continue;
+            }
+            shell_push(req, &got.data[i], got.data[i].match, 0U, 0U, stem,
+                       out);
+        }
+    }
+    if ((sources & SRC_BIT(YEW_COMP_PATH)) != 0U) {
+        /*
+         * A QUOTED leading `~` is a literal directory name (§4), but the
+         * path source expands any head that starts with one.  Asking for
+         * `./~x` instead keeps it literal; the `./` is taken back off
+         * every row below.
+         */
+        char *asked = NULL;
+        const char *sub_stem = stem;
+        size_t strip = 0U;
+        size_t head_len;
+
+        if (stem[0] == '~' && !ctx->tilde) {
+            asked = yew_xmalloc(strlen(stem) + 3U);
+            (void)memcpy(asked, "./", 2U);
+            (void)memcpy(asked + 2U, stem, strlen(stem) + 1U);
+            sub_stem = asked;
+            strip = 2U;
+        }
+        head_len = yew_comp_path_head_len(sub_stem);
+        total += shell_sub(req, YEW_COMP_PATH, sub_stem, mask, &got);
+        for (i = 0U; i < got.len; i++) {
+            const CompItem *it = &got.data[i];
+            size_t name_len = strlen(it->match);
+            char *raw = yew_xmalloc(head_len + name_len + 2U);
+            const char *word;
+            size_t prefix = 0U;
+
+            (void)memcpy(raw, sub_stem, head_len);
+            (void)memcpy(raw + head_len, it->match, name_len);
+            raw[head_len + name_len] = it->is_dir ? '/' : '\0';
+            raw[head_len + name_len + 1U] = '\0';
+            word = raw + strip;
+            if (ctx->tilde && word[0] == '~') {
+                const char *slash = strchr(word, '/');
+
+                prefix = slash == NULL ? 0U : (size_t)(slash - word) + 1U;
+            }
+            shell_push(req, it, word, prefix, head_len - strip,
+                       sub_stem + head_len, out);
+            yew_xfree(raw);
+        }
+        yew_xfree(asked);
+    }
+    Vec_CompItem_free(&got);
+    return total;
+}
+
 static struct {
     CompSource v[YEW_COMP_KIND__N];
     bool initialized;
@@ -1618,6 +2230,14 @@ static void comp_init(void)
          * costs a stat before it can be called executable. */
         {YEW_COMP_EXEC, "exec", enumerate_exec,
          YEW_COMP_SRC_CACHEABLE | YEW_COMP_SRC_SLOW},
+        /* Sprint 57.23 §5: one source for all of `:!`.  SLOW because
+         * its PATH and EXEC halves are; its cache key is the ctx_key. */
+        {YEW_COMP_SHELL, "shell", enumerate_shell,
+         YEW_COMP_SRC_CACHEABLE | YEW_COMP_SRC_SLOW},
+        {YEW_COMP_VAR, "var", enumerate_vars, YEW_COMP_SRC_CACHEABLE},
+        {YEW_COMP_USER, "user", enumerate_users, YEW_COMP_SRC_CACHEABLE},
+        {YEW_COMP_BUILTIN, "builtin", enumerate_builtins,
+         YEW_COMP_SRC_CACHEABLE},
     };
     size_t i;
 
@@ -1855,8 +2475,9 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
      * whole stem.  yew_comp_path_head_len is the ONE split rule, shared
      * with the path source itself.
      */
-    head_len = q->kind == YEW_COMP_PATH ? yew_comp_path_head_len(q->stem)
-                                        : 0U;
+    head_len = q->kind == YEW_COMP_PATH || q->kind == YEW_COMP_SHELL
+                   ? yew_comp_path_head_len(q->stem)
+                   : 0U;
     pattern = q->stem + head_len;
     head = dup_range(q->stem, head_len);
     reuse = filter_reusable(f, q->kind, head, pattern);
@@ -1874,6 +2495,7 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
         req.arena = arena;
         req.budget_us = budget_us;
         req.allow_cache = true;
+        req.shell = q->kind == YEW_COMP_SHELL ? q->shell : NULL;
         test_enumerate_calls++;
         f->total = yew_comp_request(&req, &f->base);
         f->capped = f->base.len < (size_t)f->total;
@@ -1919,7 +2541,9 @@ bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
     /* Sprint 57.18 §3; see the header for why this precedes the argspec
      * rather than being spelled as a new argspec letter. */
     if (bang_body) {
-        *kind = token_index == 0U ? YEW_COMP_EXEC : YEW_COMP_PATH;
+        /* Sprint 57.23 §5: the word index no longer decides anything
+         * here; the SHELL dispatcher reads the caret's whole context. */
+        *kind = YEW_COMP_SHELL;
         return true;
     }
     if (token_index == 0U) {
@@ -1973,6 +2597,11 @@ bool yew_comp_query_at(Ed *ed, const CmdParsePoint *point,
             return false;
         entry = yew_cmd_entry(point->command);
     }
+    /* §3 row 1: a comment, a heredoc delimiter, arithmetic, a case body
+     * -- nothing completes, and Tab inserts a literal tab as it did. */
+    if (point->bang_body && point->shell != NULL &&
+        point->shell->pos == YEW_SH_POS_NONE)
+        return false;
     if (!yew_comp_kind_for(entry, point->token_index, point->bang_body,
                            &kind))
         return false;
@@ -1980,6 +2609,7 @@ bool yew_comp_query_at(Ed *ed, const CmdParsePoint *point,
     out->source = yew_comp_source(kind);
     out->stem = point->stem;
     out->replace = point->token;
+    out->shell = point->bang_body ? point->shell : NULL;
     return true;
 }
 
