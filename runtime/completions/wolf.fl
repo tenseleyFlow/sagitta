@@ -1,0 +1,277 @@
+# wolf 0.2.14 (wolfgang, pin 30731a6) -- from `wolf --help` and `wolf <command> --help`.
+#
+# runtime/completions/wolf.fl: completion spec for the wolf toolchain.
+# Every subcommand and flag here is one the installed wolf prints in its
+# own help; an entry file is a `.lu` file, and directories are always
+# offered so the user can descend into them.
+{
+    completion: 1,
+    command: "wolf",
+    description: "the wolf toolchain",
+
+    flags: [
+        { long: "explain", desc: "the full explanation of one diagnostic code",
+          arg: { kind: "none" } },
+        { long: "version", desc: "this build's identity and its interpreter" },
+        { long: "help", short: "h", global: true,
+          desc: "this message; `wolf <command> --help` for one" },
+        { long: "man", desc: "the man page, for an installer to place" },
+        { long: "completions", desc: "a completion script for a shell",
+          arg: { kind: "values", values: ["bash", "zsh", "fish"] } },
+    ],
+
+    subcommands: [
+        { name: "build", desc: "compile an entry file to a native executable",
+          flags: [
+              { short: "o", desc: "the output executable",
+                arg: { kind: "path" } },
+              { long: "emit", desc: "what to emit",
+                arg: { kind: "values", values: [
+                    { value: "wir", desc: "wolf IR" },
+                    { value: "obj", desc: "an object file" },
+                    { value: "bin", desc: "a native executable" },
+                    { value: "llvm-ir", desc: "LLVM IR" },
+                ] } },
+              { long: "no-cache", desc: "build even if a cached artifact exists" },
+              { long: "verbose", desc: "say what each phase did" },
+              { long: "checked", desc: "the checked profile" },
+              { long: "release", desc: "optimize through LLVM" },
+              { long: "codegen-report", desc: "report what code generation did" },
+              { long: "profile-gen", desc: "instrument for profile-guided optimization",
+                arg: { kind: "dir" }, arg_optional: true },
+              { long: "profile", desc: "optimize with this .wprof profile",
+                arg: { kind: "path", ext: ["wprof"] } },
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+              { long: "allow", desc: "allow a warning code (or `warnings`)",
+                arg: { kind: "values", values: ["warnings"] } },
+              { long: "warn", desc: "warn on a code (or `warnings`)",
+                arg: { kind: "values", values: ["warnings"] } },
+              { long: "deny", desc: "deny a warning code (or `warnings`)",
+                arg: { kind: "values", values: ["warnings"] } },
+              { long: "deny-warnings", desc: "treat every warning as an error" },
+              { long: "error-limit", desc: "stop after N errors",
+                arg: { kind: "none" } },
+          ],
+          args: [ { kind: "path", ext: ["lu"] } ] },
+
+        { name: "run", desc: "build an entry file and run it",
+          flags: [
+              { short: "o", desc: "the output executable",
+                arg: { kind: "path" } },
+              { long: "emit", desc: "what to emit",
+                arg: { kind: "values", values: [
+                    { value: "wir", desc: "wolf IR" },
+                    { value: "obj", desc: "an object file" },
+                    { value: "bin", desc: "a native executable" },
+                    { value: "llvm-ir", desc: "LLVM IR" },
+                ] } },
+              { long: "no-cache", desc: "build even if a cached artifact exists" },
+              { long: "verbose", desc: "say what each phase did" },
+              { long: "checked", desc: "the checked profile" },
+              { long: "release", desc: "optimize through LLVM" },
+              { long: "codegen-report", desc: "report what code generation did" },
+              { long: "profile-gen", desc: "instrument for profile-guided optimization",
+                arg: { kind: "dir" }, arg_optional: true },
+              { long: "profile", desc: "optimize with this .wprof profile",
+                arg: { kind: "path", ext: ["wprof"] } },
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+              { long: "allow", desc: "allow a warning code (or `warnings`)",
+                arg: { kind: "values", values: ["warnings"] } },
+              { long: "warn", desc: "warn on a code (or `warnings`)",
+                arg: { kind: "values", values: ["warnings"] } },
+              { long: "deny", desc: "deny a warning code (or `warnings`)",
+                arg: { kind: "values", values: ["warnings"] } },
+              { long: "deny-warnings", desc: "treat every warning as an error" },
+              { long: "error-limit", desc: "stop after N errors",
+                arg: { kind: "none" } },
+          ],
+          # The entry file, then the program's own argv.
+          args: [ { kind: "path", ext: ["lu"] },
+                  { kind: "path", repeat: true } ] },
+
+        { name: "test", desc: "discover and run `*_test.lu` files",
+          flags: [
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+              { long: "deny-warnings", desc: "treat every warning as an error" },
+          ],
+          args: [ { kind: "path", ext: ["lu"], repeat: true } ] },
+
+        { name: "fmt", desc: "reformat source in the one canonical style",
+          flags: [
+              { long: "check", desc: "rewrite nothing; list what is not canonical" },
+          ],
+          args: [ { kind: "path", ext: ["lu"], repeat: true } ] },
+
+        { name: "fix", desc: "apply the compiler's machine-applicable fixes",
+          flags: [
+              { long: "apply", desc: "perform the edits (default: dry run)" },
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "path", ext: ["lu"] } ] },
+
+        { name: "doc", desc: "generate the package's documentation",
+          flags: [
+              { long: "private", desc: "document private items too" },
+              { long: "out", desc: "where to write (default `doc/`)",
+                arg: { kind: "dir" } },
+              { long: "check", desc: "write nothing; fail on any drift" },
+              { long: "open", desc: "open the result" },
+              { long: "json", desc: "emit JSON" },
+              { long: "coverage", desc: "report documentation coverage" },
+              { long: "require-docs", desc: "fail on undocumented public items" },
+              { long: "deny-warnings", desc: "treat every warning as an error" },
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "path", ext: ["lu"] } ] },
+
+        { name: "init", desc: "promote a script to a package",
+          flags: [
+              { long: "from-script", desc: "the script to promote",
+                arg: { kind: "path", ext: ["lu"] } },
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ] },
+
+        { name: "add", desc: "add a dependency to `wolf.pkg`",
+          flags: [
+              { long: "path", desc: "a path tree dependency",
+                arg: { kind: "dir" } },
+              { long: "git", desc: "a git tree dependency",
+                arg: { kind: "none" } },
+              { long: "tag", desc: "the git tag to pin",
+                arg: { kind: "none" } },
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "none" } ] },
+
+        { name: "rm", desc: "remove a dependency from `wolf.pkg`",
+          flags: [
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "none" } ] },
+
+        { name: "update", desc: "re-fetch pinned dependencies, refresh the ledger",
+          flags: [
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ] },
+
+        { name: "audit", desc: "the capability tree and changes since `wolf.sum`",
+          flags: [
+              { long: "ci", desc: "fail on a capability the ledger has not seen" },
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ] },
+
+        { name: "tree", desc: "the resolved dependency tree",
+          flags: [
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ] },
+
+        { name: "why", desc: "the chain that pulls a dependency into the build",
+          flags: [
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "none" } ] },
+
+        { name: "vendor", desc: "mirror the dependencies into `vendor/wolf/`",
+          flags: [
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+          ] },
+
+        { name: "publish", desc: "verify a package and emit its signed record",
+          flags: [
+              { long: "dir", desc: "the package directory",
+                arg: { kind: "dir" } },
+              { long: "log", desc: "the static log (maintainer flow)",
+                arg: { kind: "dir" } },
+              { long: "key", desc: "the signing key",
+                arg: { kind: "path" } },
+          ] },
+
+        { name: "cache", desc: "where the script cache lives, and collecting it",
+          subcommands: [
+              { name: "path", desc: "print the cache root" },
+              { name: "gc", desc: "collect the cache",
+                flags: [
+                    { long: "dry-run", desc: "say what would be deleted" },
+                    { long: "all", desc: "collect everything" },
+                ] },
+          ] },
+
+        { name: "interface", desc: "print every module's public interface",
+          flags: [
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "path", ext: ["lu"] } ] },
+
+        { name: "audit-surface", desc: "the package's complete unsafety inventory",
+          flags: [
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "path", ext: ["lu"] } ] },
+
+        { name: "profile", desc: "read and merge profile-guided-optimization data",
+          subcommands: [
+              { name: "show", desc: "print one profile",
+                args: [ { kind: "path", ext: ["wprof"] } ] },
+              { name: "merge", desc: "combine runs into one profile",
+                args: [ { kind: "path", ext: ["wprof"], repeat: true } ] },
+          ] },
+
+        { name: "c-import", desc: "import C headers, and show what was refused",
+          flags: [
+              { long: "dump", desc: "print the artifact (the reviewable form)" },
+              { long: "refusals", desc: "print only what the importer refused" },
+              { short: "I", desc: "add an include directory",
+                arg: { kind: "dir" } },
+              { short: "D", desc: "define a macro (name[=value])",
+                arg: { kind: "none" } },
+              { long: "cflag", desc: "pass a flag to the importer",
+                arg: { kind: "none" } },
+              { long: "target", desc: "import for this target triple",
+                arg: { kind: "none" } },
+              { long: "sysroot", desc: "the sysroot identity to key the cache on",
+                arg: { kind: "none" } },
+              { long: "no-cache", desc: "import even if a cached artifact exists" },
+          ],
+          args: [ { kind: "path", ext: ["h"], repeat: true } ] },
+
+        { name: "conform-run", desc: "observe one program, emit a conformance record",
+          flags: [
+              { long: "phase", desc: "the phase to observe",
+                arg: { kind: "none" } },
+              { long: "seed", desc: "the seed",
+                arg: { kind: "none" } },
+              { long: "json", desc: "emit JSON" },
+              { long: "error-format", desc: "how diagnostics are printed",
+                arg: { kind: "values", values: ["human", "json"] } },
+              { long: "dump", desc: "dump an intermediate form",
+                arg: { kind: "values", values: ["regions", "cfg", "wir"] } },
+              { long: "zstats", desc: "print statistics" },
+              { long: "checked", desc: "the checked profile" },
+              { long: "native", desc: "run the native build" },
+              { long: "release", desc: "optimize through LLVM" },
+              { long: "std-root", desc: "the standard library checkout",
+                arg: { kind: "dir" } },
+          ],
+          args: [ { kind: "path", ext: ["lu"] } ] },
+
+        { name: "lsp", desc: "serve the Language Server Protocol over stdio",
+          flags: [
+              { long: "stdio", desc: "the conventional channel flag (the only one)" },
+          ] },
+    ],
+}
