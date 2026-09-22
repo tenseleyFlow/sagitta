@@ -973,8 +973,18 @@ static bool insert_completion(Ed *ed, Span replace, const CompItem *item,
 
     bytebuf_init(&bytes);
     sanitize_bytes((const u8 *)item->text, strlen(item->text), &bytes);
-    if (trailing_space && !item->is_dir)
+    if (trailing_space && !item->is_dir) {
+        /*
+         * Sprint 57.23 §6: a COMMITTED shell word closes what it opened
+         * -- the `"` of a word typed inside quotes, the `}` of `${NAME`
+         * -- and then gets its space.  A directory gets neither: the
+         * user keeps typing into it.
+         */
+        if (item->suffix != NULL)
+            sanitize_bytes((const u8 *)item->suffix, strlen(item->suffix),
+                           &bytes);
         bytebuf_push_u8(&bytes, (u8)' ');
+    }
     ok = replace_span(ed, replace, bytes.data, bytes.len, true);
     if (ok)
         ed->cmdline.menu.replace = (Span){replace.lo,
@@ -1117,6 +1127,15 @@ static CmdStatus complete(Ed *ed, bool previous)
         Vec_CompItem_free(&tiered);
     }
     stem_len = strlen(query.stem);
+    /*
+     * Sprint 57.23: a SHELL row is ENCODED for the caret's quote state
+     * (`"my dir/`, `my\ dir/`), so it is measured against the bytes the
+     * user typed, not the decoded stem -- or an LCP equal to what is
+     * already there would count as progress and Tab would never enter
+     * the list.
+     */
+    if (query.kind == YEW_COMP_SHELL)
+        stem_len = (size_t)(query.replace.hi - query.replace.lo);
     if (strlen(lcp) > stem_len) {
         /* The prefix every candidate shares is unambiguous, so insert it
          * and leave the list open with nothing selected -- the user has
