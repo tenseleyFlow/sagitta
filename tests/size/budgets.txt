@@ -1,6 +1,6 @@
 # config         bytes    modules                         why
 full             2097152  lsp,ai,fuss,plugins             s57-a1-2-MiB-evidence-floor
-minimal          1572864  none                            s57-a1-1.5-MiB-evidence-floor
+minimal          1576960  none                            s59-a7-empty-row-safety-next-4-KiB
 lsp-only         1703936  lsp                             s59-a6-required-lsp-next-16-KiB
 ai-only          1716224  ai                              s57-a1-minimal-plus-rounded-140-KiB
 fuss-only        1736704  fuss                            s59-a6-required-fuss-next-16-KiB

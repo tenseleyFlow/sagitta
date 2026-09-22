@@ -76,7 +76,7 @@ and an update to this file. Decided 2026-07-31 during the planning stage.
 | Cold start → first paint | ≤ 20 ms, default config |
 | Open 100 MB file | ≤ 150 ms to interactive |
 | Scroll throughput | full-viewport redraw ≥ 120 fps equivalent |
-| Binary size (full modules, stripped, x86_64) | ≤ 2 MiB; minimal MODULES build ≤ 1.5 MiB |
+| Binary size (full modules, stripped, x86_64) | ≤ 2 MiB; minimal MODULES build ≤ 1,576,960 bytes (S59-A7) |
 | Memory | ≤ 1.6× file size for a clean open |
 
 Budgets are locked as *gates* from the sprint that lands each subsystem;
@@ -242,6 +242,18 @@ are surpassed by 22,416 and 26,480 bytes, so each moves to the next
 64 KiB common rise across configurations is evidence of required core
 growth, not a module-retention explosion. No feature is removed, and the
 measurement recipes and all other size gates remain unchanged.
+
+**Amendment S59-A7 (2026-09-22) — minimal gate follows empty-row safety.**
+The pinned GCC/glibc `size` lane at `2dea5dc2` measures 1,574,560 bytes for
+the minimal stripped binary, versus 1,570,464 before the null-pointer
+arithmetic fix in block-selection capture. The ledger attributes just 41
+additional `.text` bytes to `core.edit`; the on-disk 4,096-byte step is file
+layout amplification. The old 1,572,864-byte minimal cap is short by 1,696
+bytes. The required no-undefined-behavior fix cannot be removed to preserve
+an obsolete cap, so the minimal cap alone moves to the next 4 KiB boundary,
+1,576,960 bytes. The full file remains 2,066,120 bytes; all four
+single-module profiles still pass their existing caps. No feature, compiler
+profile, measurement rule, or other gate changes.
 
 ## Non-negotiable invariants (enforced from Sprint 0)
 

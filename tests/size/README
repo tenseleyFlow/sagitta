@@ -13,13 +13,18 @@ choices affect only the shipping profile; ordinary, sanitizer, and
 committed ledgers name that delta as `gc_saved_bytes`.
 
 Sprint 57 amendment S57-A1 sets the achievable glibc hard bars at 2 MiB full
-and 1.5 MiB minimal. Amendment S57-A5 raises only the musl static-PIE minimal
-bar to 1,600 KiB after required Sprint 57.12 core work moved its hosted
-measurement from 1,562,480 to 1,582,960 bytes without retaining an optional
+and initially 1.5 MiB minimal. Amendment S57-A5 raises only the musl
+static-PIE minimal bar to 1,600 KiB after required Sprint 57.12 core work
+moved its hosted measurement from 1,562,480 to 1,582,960 bytes without an optional
 module. Amendment S57-A6 raises the musl full bar to 2,112 KiB after required
 UI and mouse work moved it from 2,090,896 to 2,115,472 bytes. The same source
 change moved the pinned glibc full binary by 24,576 bytes, chiefly in
 `core.ui`, while that binary remains below its unchanged 2 MiB gate. The
+S59-A7 empty-block-row safety fix adds 41 bytes of `core.edit` text in the
+pinned glibc minimal build. Its on-disk file steps from 1,570,464 to
+1,574,560 bytes, crossing the old 1,572,864-byte gate. The minimal cap alone
+moves to the next 4 KiB boundary, 1,576,960 bytes; the full binary remains
+2,066,120 bytes and every single-module profile remains inside its cap. The
 former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
 optimization ratchets. They are not alternate measurements and must not be
 selected by a CI flag.

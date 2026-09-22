@@ -98,7 +98,7 @@ package manager and a user's disk both see.
 | Config | `MODULES=` | Budget | Source |
 |---|---|---|---|
 | full | `lsp ai fuss plugins` | **≤ 2.0 MiB** | `00-decisions.md`, amended S57-A1 |
-| minimal | *(empty)* | **≤ 1.5 MiB** | `00-decisions.md`, amended S57-A1 |
+| minimal | *(empty)* | **≤ 1,576,960 bytes** | `00-decisions.md`, amended S59-A7 |
 | lsp-only | `lsp` | ≤ 1 656 KiB | minimal + measured 120 KiB delta |
 | ai-only | `ai` | ≤ 1 676 KiB | minimal + measured delta rounded to 140 KiB |
 | fuss-only | `fuss` | ≤ 1 686 KiB | minimal + measured delta rounded to 150 KiB |
@@ -152,6 +152,14 @@ would violate the core-preservation stop rule. The musl-full cap is therefore
 the next 64 KiB boundary above the observed binary, 2,112 KiB (2,162,688
 bytes). The glibc full and minimal caps, musl-minimal cap, feature matrix, and
 shipping measurement remain unchanged.
+
+**Amendment S59-A7 — rebaseline minimal after empty-row safety.** The pinned
+GCC/glibc minimal build at `2dea5dc2` measures 1,574,560 stripped bytes,
+4,096 above its previous measurement and 1,696 above the 1.5 MiB cap. The
+ledger shows only 41 additional `core.edit` text bytes from guarding empty
+block rows against null-pointer arithmetic. The minimal cap moves to the
+next 4 KiB boundary, 1,576,960 bytes. The 2 MiB full cap, single-module
+caps, feature matrix, and shipping recipe remain unchanged.
 
 ### 2. The per-module size ledger
 
@@ -769,9 +777,10 @@ coverage that may be discarded to make a footprint number pass.
    alloc, musl, embedded, arm64-linux and arm64-macos lanes all green on
    `trunk`.
 2. `make size` enforces all eight §1 rows; **full ≤ 2.0 MiB** and
-   **minimal ≤ 1.5 MiB** stripped on x86_64-linux-gnu, with the measurement
-   definition (stripped, on-disk, `-O2`) stated in `tests/size/README` and
-   the four single-module budgets carrying their derivation in `why`.
+   **minimal ≤ 1,576,960 bytes** stripped on x86_64-linux-gnu, with the
+   measurement definition (stripped, on-disk, `-O2`) stated in
+   `tests/size/README` and the four single-module budgets carrying their
+   derivation in `why`.
 3. The additivity check passes: `full` ≤ Σ(single-module deltas) + 5 %.
 4. `scripts/size-ledger.sh` produces the §2.2 format; `ledger-full.txt` and
    `ledger-minimal.txt` are committed, regenerate byte-identically, and
