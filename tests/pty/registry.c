@@ -3087,6 +3087,13 @@ static void case_s57_16_autoindent_block(PtyCtx *c)
     (void)unlink(path);
 }
 
+static bool s57_16_pair_typeover_ready(const PtyCtx *c, const void *arg)
+{
+    (void)arg;
+    return c->vt.cur_r == 1 && c->vt.cur_c == 12 &&
+           s57_screen_contains(c, "f(ab);");
+}
+
 static void case_s57_16_pair_typeover(PtyCtx *c)
 {
     static const u8 initial[] = "\n";
@@ -3101,6 +3108,8 @@ static void case_s57_16_pair_typeover(PtyCtx *c)
     ptc_settle(c, 0);
     ptc_bytes(c, ";");
     ptc_settle(c, 0);
+    ptc_wait_until(c, s57_16_pair_typeover_ready, NULL,
+                   "pair typeover did not finish rendering");
     ptc_snapshot(c, "s57_16_pair_typeover");
     force_quit(c);
     (void)unlink(path);
@@ -8734,6 +8743,43 @@ static void s52_collapse_job_frames(PtyCtx *c, size_t at)
     }
 }
 
+static void s52_keep_last_paint_frame(PtyCtx *c, size_t at)
+{
+    static const u8 paint[] = "\x1b[?2026h\x1b[?25l";
+    static const u8 end[] = "\x1b[?2026l";
+    size_t last_begin = SIZE_MAX;
+    size_t last_end = 0U;
+    size_t i = at;
+
+    if (c == NULL || at > c->raw.len)
+        return;
+    while (i + sizeof(paint) - 1U <= c->raw.len) {
+        size_t finish;
+
+        if (memcmp(c->raw.data + i, paint, sizeof(paint) - 1U) != 0) {
+            i++;
+            continue;
+        }
+        finish = i + sizeof(paint) - 1U;
+        while (finish + sizeof(end) - 1U <= c->raw.len &&
+               memcmp(c->raw.data + finish, end,
+                      sizeof(end) - 1U) != 0)
+            finish++;
+        if (finish + sizeof(end) - 1U > c->raw.len)
+            break;
+        last_begin = i;
+        last_end = finish + sizeof(end) - 1U;
+        i = last_end;
+    }
+    if (last_begin == SIZE_MAX) {
+        ptc_check(c, false, "FUSS jump hint had no completed paint frame");
+        return;
+    }
+    (void)memmove(c->raw.data, c->raw.data + last_begin,
+                  last_end - last_begin);
+    c->raw.len = last_end - last_begin;
+}
+
 static bool s52_spawn_editor(PtyCtx *c, const char *file)
 {
     char config[PATH_MAX];
@@ -8920,8 +8966,12 @@ static void case_s52_fuss(PtyCtx *c)
         semantic_snapshot = true;
     }
     else if (strstr(name, "jump_hint") != NULL) {
+        size_t jump_at = c->raw.len;
+
         ptc_keys(c, "m");
         s52_wait_screen(c, "jump: m");
+        ptc_settle(c, 0);
+        s52_keep_last_paint_frame(c, jump_at);
     } else if (strstr(name, "jump_clears") != NULL) {
         ptc_keys(c, "m");
         s52_wait_screen(c, "jump:");
