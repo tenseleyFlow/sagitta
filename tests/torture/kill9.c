@@ -390,6 +390,25 @@ static bool atomic_log_order(const char *path)
     return ok;
 }
 
+static bool log_records_enospc(const char *path)
+{
+    static const char marker[] = "errno=ENOSPC";
+    unsigned char *bytes;
+    size_t len;
+    size_t i;
+    bool found = false;
+
+    if (!read_file(path, &bytes, &len))
+        return false;
+    for (i = 0U; i + sizeof(marker) - 1U <= len; i++)
+        if (memcmp(bytes + i, marker, sizeof(marker) - 1U) == 0) {
+            found = true;
+            break;
+        }
+    free(bytes);
+    return found;
+}
+
 static uint64_t path_hash(const char *text)
 {
     uint64_t hash = UINT64_C(14695981039346656037);
@@ -908,7 +927,8 @@ static void injected_eintr(const char *driver, const char *shim,
 }
 
 static void injected_enospc(const char *driver, const char *shim,
-                            const char *root, unsigned long long *serial)
+                            const char *root, unsigned long long *serial,
+                            bool live_editor)
 {
     char dst[512], old[512], post[512], log[512];
     int code;
@@ -923,11 +943,25 @@ static void injected_enospc(const char *driver, const char *shim,
     code = wait_child(start_save(driver, shim, dst, post, log, 17U,
                                  -1, -1));
     (void)unsetenv("YEW_FAULT_ENOSPC_AT");
-    if (code != 3 || !run_check(driver, dst, old, post) ||
-        !file_equals_bytes(dst, old_bytes, sizeof(old_bytes) - 1U)) {
-        (void)fprintf(stderr,
-                      "torture: injected ENOSPC did not preserve/recover\n");
-        exit(1);
+    {
+        bool oracle = run_check(driver, dst, old, post);
+        bool exact = file_equals_bytes(dst, old_bytes,
+                                       sizeof(old_bytes) - 1U);
+        bool injected = log_records_enospc(log);
+        int expected_exit = live_editor ? 0 : 3;
+
+        /* The API driver returns I/O status directly.  Interactive yew
+         * reports the failed save in-session, then the feeder's explicit
+         * quit-force exits normally.  Both must preserve the old file and
+         * a journal that recovers the intended edit. */
+        if (code != expected_exit || !injected || !oracle || !exact) {
+            (void)fprintf(stderr,
+                          "torture: injected ENOSPC did not preserve/recover "
+                          "(exit=%d expected=%d injected=%d oracle=%d "
+                          "exact=%d)\n",
+                          code, expected_exit, injected, oracle, exact);
+            exit(1);
+        }
     }
     (void)printf("storage ENOSPC preserves old+journal ok\n");
 }
@@ -1158,7 +1192,7 @@ int main(int argc, char **argv)
         inplace_meta_fault_sweep(argv[1], argv[2], root, state, &serial);
     }
     injected_eintr(argv[1], argv[2], root, &serial);
-    injected_enospc(argv[1], argv[2], root, &serial);
+    injected_enospc(argv[1], argv[2], root, &serial, live_editor);
     determinism_check(argv[1], argv[2], root, &serial);
     external_kills(argv[1], argv[2], root, signal_iterations, &serial);
     if (getenv("YEW_TORTURE_KEEP") != NULL)

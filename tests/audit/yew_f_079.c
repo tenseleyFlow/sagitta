@@ -12,6 +12,7 @@
  * files, marks, changes, and undo metadata.
  */
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 
 #include "audit.h"
 
@@ -111,8 +112,8 @@ bool test_yew_f_079(char *why, size_t why_cap)
     };
     char path_a[] = "/tmp/yew-f079-a-XXXXXX";
     char path_b[] = "/tmp/yew-f079-b-XXXXXX";
-    char real_a[512];
-    char real_b[512];
+    char *real_a = NULL;
+    char *real_b = NULL;
     char document[16384];
     Ed ed;
     Bytebuf emitted;
@@ -139,7 +140,14 @@ bool test_yew_f_079(char *why, size_t why_cap)
         (void)unlink(path_b);
         return true;
     }
-    if (realpath(path_a, real_a) == NULL || realpath(path_b, real_b) == NULL) {
+    /* glibc fortify requires a caller-supplied realpath buffer to hold
+     * PATH_MAX bytes even for these short fixture paths.  Let realpath
+     * allocate the exact result instead of relying on a 512-byte array. */
+    real_a = realpath(path_a, NULL);
+    real_b = realpath(path_b, NULL);
+    if (real_a == NULL || real_b == NULL) {
+        free(real_a);
+        free(real_b);
         (void)unlink(path_a);
         (void)unlink(path_b);
         return true;
@@ -187,6 +195,8 @@ bool test_yew_f_079(char *why, size_t why_cap)
         "}\n",
         real_a, real_a, real_b, real_a, real_a);
     if (count < 0 || (size_t)count >= sizeof(document)) {
+        free(real_a);
+        free(real_b);
         (void)unlink(path_a);
         (void)unlink(path_b);
         return true;
@@ -273,6 +283,8 @@ done:
         yew_ed_free(&ed);
     (void)unlink(path_a);
     (void)unlink(path_b);
+    free(real_a);
+    free(real_b);
     return setup_failed ? true :
         retained == YEW_ARRAY_LEN(markers) && tab_identity && pending_mark &&
         binary_key;
