@@ -802,7 +802,8 @@ void test_clipboard_osc52_over_limit_falls_back_to_subprocess(void)
 {
     static const char *const names[] = {
         "YEW_CLIPBOARD", "YEW_OSC52", "YEW_OSC52_MAX",
-        "YEW_FAKECLIP_OUTPUT", "WAYLAND_DISPLAY", "SSH_TTY", "PATH"
+        "YEW_FAKECLIP_OUTPUT", "WAYLAND_DISPLAY", "SSH_TTY",
+        "SSH_CONNECTION", "PATH"
     };
     ClipEnv saved[YEW_ARRAY_LEN(names)];
     ClipFixture f;
@@ -815,6 +816,8 @@ void test_clipboard_osc52_over_limit_falls_back_to_subprocess(void)
         clip_env_save(&saved[i], names[i]);
     clip_fixture_init(&f);
     clip_link(&f, "wl-copy");
+    YEW_ASSERT_EQ_I64(unsetenv("SSH_TTY"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("SSH_CONNECTION"), 0);
     YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "osc52", 1), 0);
     YEW_ASSERT_EQ_I64(setenv("YEW_OSC52", "plain", 1), 0);
     YEW_ASSERT_EQ_I64(setenv("YEW_OSC52_MAX", "1", 1), 0);
