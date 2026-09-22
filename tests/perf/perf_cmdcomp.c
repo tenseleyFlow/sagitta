@@ -30,6 +30,8 @@
 #include "term/grid.h"
 #include "ui/cmdcomp.h"
 #include "ui/cmdline.h"
+#include "ui/shctx.h"
+#include "util/arena.h"
 
 /*
  * The typed prefix walks through three regimes on purpose: the command
@@ -71,7 +73,17 @@ enum {
     PERF_EXEC_DIRS = 2,
     PERF_EXEC_PER_DIR = 1000,
     PERF_EXEC_KEYS = sizeof(PERF_EXEC_PREFIX) - 1U,
-    PERF_EXEC_SAMPLES = PERF_COMP_TRIALS * PERF_EXEC_KEYS
+    PERF_EXEC_SAMPLES = PERF_COMP_TRIALS * PERF_EXEC_KEYS,
+    /*
+     * Sprint 57.23: the shell context lexer runs on EVERY keystroke of an
+     * open `:!` menu, over the whole body up to the caret.  A 4 KiB body
+     * with the caret at its end is the worst case a prompt realistically
+     * holds; 1000 lexes of it, p99 under 200 us.
+     */
+    PERF_SHCTX_BYTES = 4096,
+    PERF_SHCTX_ITERS = 1000,
+    PERF_SHCTX_WARMUPS = 50,
+    PERF_SHCTX_BUDGET_NS = 200000
 };
 
 static volatile u64 perf_comp_sink;
@@ -493,6 +505,72 @@ done:
     return status;
 }
 
+/*
+ * The body mixes every construct the lexer tracks -- pipes, quotes, a
+ * substitution, a variable, a redirection, assignments, a wrapper -- so
+ * no fast path can skip most of it.
+ */
+static int measure_shctx(void)
+{
+    static const char unit[] =
+        "FOO=1 sudo -u root git log --grep \"fix $(date +%s)\" "
+        "'a b' $HOME/x 2>err.log | grep -v x && ";
+    static i64 samples[PERF_SHCTX_ITERS];
+    char *body = malloc(PERF_SHCTX_BYTES + 1U);
+    size_t len = 0U;
+    size_t ulen = sizeof(unit) - 1U;
+    Arena arena;
+    u32 i;
+    i64 p99;
+    i64 median;
+    bool failed;
+
+    if (body == NULL)
+        return 2;
+    while (len + ulen <= PERF_SHCTX_BYTES) {
+        (void)memcpy(body + len, unit, ulen);
+        len += ulen;
+    }
+    while (len < PERF_SHCTX_BYTES)
+        body[len++] = 'x';
+    body[len] = '\0';
+    arena_init(&arena);
+    for (i = 0U; i < PERF_SHCTX_WARMUPS + PERF_SHCTX_ITERS; i++) {
+        YewShCtx ctx;
+        i64 start = now_ns();
+        i64 end;
+
+        if (!yew_shctx_at(body, len, len, &arena, &ctx)) {
+            (void)fprintf(stderr, "perf_cmdcomp: shctx refused its body\n");
+            arena_free_all(&arena);
+            free(body);
+            return 2;
+        }
+        end = now_ns();
+        perf_comp_sink += (u64)ctx.pos + ctx.argc;
+        arena_free_all(&arena);
+        if (i >= PERF_SHCTX_WARMUPS)
+            samples[i - PERF_SHCTX_WARMUPS] = end - start;
+    }
+    free(body);
+    stable_sort_i64(samples, PERF_SHCTX_ITERS);
+    median = samples[PERF_SHCTX_ITERS / 2U];
+    p99 = samples[(PERF_SHCTX_ITERS * 99U + 99U) / 100U - 1U];
+    failed = yew_perf_timing_failed((uint64_t)p99,
+                                    (uint64_t)PERF_SHCTX_BUDGET_NS,
+                                    yew_perf_advisory());
+    (void)printf("perf-cmdcomp-shctx: bytes=%u iters=%u median_us=%.1f "
+                 "p99_us=%.1f max_us=%.1f budget_us=%.1f%s\n",
+                 (unsigned)PERF_SHCTX_BYTES, (unsigned)PERF_SHCTX_ITERS,
+                 (double)median / 1000.0, (double)p99 / 1000.0,
+                 (double)samples[PERF_SHCTX_ITERS - 1U] / 1000.0,
+                 (double)PERF_SHCTX_BUDGET_NS / 1000.0,
+                 yew_perf_timing_verdict((uint64_t)p99,
+                                         (uint64_t)PERF_SHCTX_BUDGET_NS,
+                                         yew_perf_advisory()));
+    return failed ? 1 : 0;
+}
+
 static int selftest_policy(void)
 {
     const i64 budget = PERF_COMP_BUDGET_NS;
@@ -611,9 +689,12 @@ int main(int argc, char **argv)
         /* Runs after the path case and inside the same fixture root, so
          * the two share one mkdtemp and one cleanup. */
         int exec_status = measure_exec(root);
+        int shctx_status = measure_shctx();
 
         if (exec_status != 0 && status == 0)
             status = exec_status;
+        if (shctx_status != 0 && status == 0)
+            status = shctx_status;
     }
 
 done:
