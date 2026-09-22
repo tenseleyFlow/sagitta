@@ -992,6 +992,8 @@ const YewTest yew_tests[] = {
     T(cmdline_bang_completions_use_the_same_pager),
     T(cmdline_enter_on_a_pager_row_accepts_without_executing),
     T(cmdline_typing_blurs_the_pager_but_keeps_the_row),
+    T(cmdline_bang_tab_inserts_shell_quoted_words),
+    T(cmdline_bang_tab_in_a_comment_is_a_tab),
     T(cmdline_menu_page_moves_by_a_page),
     T(cmdline_click_selects_then_accepts_the_same_row),
     T(cmdline_click_and_keyboard_reach_the_same_state),

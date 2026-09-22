@@ -961,6 +961,8 @@ void test_cmdline_leaving_the_pager_restores_history_to_up(void);
 void test_cmdline_bang_completions_use_the_same_pager(void);
 void test_cmdline_enter_on_a_pager_row_accepts_without_executing(void);
 void test_cmdline_typing_blurs_the_pager_but_keeps_the_row(void);
+void test_cmdline_bang_tab_inserts_shell_quoted_words(void);
+void test_cmdline_bang_tab_in_a_comment_is_a_tab(void);
 void test_cmdline_menu_page_moves_by_a_page(void);
 void test_cmdline_click_selects_then_accepts_the_same_row(void);
 void test_cmdline_click_and_keyboard_reach_the_same_state(void);

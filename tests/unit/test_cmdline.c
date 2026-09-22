@@ -1717,3 +1717,79 @@ void test_cmdline_bang_completions_use_the_same_pager(void)
         YEW_ASSERT_EQ_I64(unsetenv("PATH"), 0);
     }
 }
+
+/*
+ * Sprint 57.23 §6 through the real Tab: a sole survivor inside `:!` lands
+ * in the form the SHELL reads back as the file's name, closes the quote
+ * it was typed in, and gets its space; a directory gets `/` and neither.
+ */
+static void bang_tab_expect(const char *seed, const char *want)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, seed);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
+    text = cmdline_text(&fixture.ed.cmdline);
+    if (strcmp((const char *)text.data, want) != 0)
+        (void)fprintf(stderr, "bang tab: `%s` -> `%s`, want `%s`\n", seed,
+                      (const char *)text.data, want);
+    YEW_ASSERT_EQ_STR((const char *)text.data, want);
+    bytebuf_free(&text);
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_bang_tab_inserts_shell_quoted_words(void)
+{
+    char dir[64];
+    char path[160];
+    char seed[256];
+    char want[256];
+    int fd;
+
+    (void)snprintf(dir, sizeof(dir), "/tmp/yew-shq-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(dir));
+    (void)snprintf(path, sizeof(path), "%s/a$b c", dir);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    (void)snprintf(path, sizeof(path), "%s/sub", dir);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+
+    (void)snprintf(seed, sizeof(seed), "!cat %s/a", dir);
+    (void)snprintf(want, sizeof(want), "!cat %s/a\\$b\\ c ", dir);
+    bang_tab_expect(seed, want);
+    (void)snprintf(seed, sizeof(seed), "!cat \"%s/a", dir);
+    (void)snprintf(want, sizeof(want), "!cat \"%s/a\\$b c\" ", dir);
+    bang_tab_expect(seed, want);
+    (void)snprintf(seed, sizeof(seed), "!cat '%s/a", dir);
+    (void)snprintf(want, sizeof(want), "!cat '%s/a$b c' ", dir);
+    bang_tab_expect(seed, want);
+    (void)snprintf(seed, sizeof(seed), "!ls %s/s", dir);
+    (void)snprintf(want, sizeof(want), "!ls %s/sub/", dir);
+    bang_tab_expect(seed, want);
+    (void)snprintf(seed, sizeof(seed), "!cd \"%s/s", dir);
+    (void)snprintf(want, sizeof(want), "!cd \"%s/sub/", dir);
+    bang_tab_expect(seed, want);
+
+    YEW_ASSERT_EQ_I64(setenv("YEW_S5723_CLI", "1", 1), 0);
+    bang_tab_expect("!echo $YEW_S5723_CL", "!echo $YEW_S5723_CLI ");
+    bang_tab_expect("!echo ${YEW_S5723_CL", "!echo ${YEW_S5723_CLI} ");
+    bang_tab_expect("!echo \"${YEW_S5723_CL", "!echo \"${YEW_S5723_CLI}\" ");
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_S5723_CLI"), 0);
+
+    YEW_ASSERT_EQ_I64(rmdir(path), 0);
+    (void)snprintf(path, sizeof(path), "%s/a$b c", dir);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    YEW_ASSERT_EQ_I64(rmdir(dir), 0);
+}
+
+/* §3 row 1 through the real Tab: in a comment it is still a tab. */
+void test_cmdline_bang_tab_in_a_comment_is_a_tab(void)
+{
+    bang_tab_expect("!ls # no", "!ls # no\t");
+}
