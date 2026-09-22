@@ -196,6 +196,7 @@ static void menu_discard(Ed *ed)
     line->menu_stem = NULL;
     line->menu_original = (Span){0U, 0U};
     line->comp_total = 0U;
+    line->comp_asked = false;
     if (was_open)
         ed->full_damage = true;
 }
@@ -744,7 +745,19 @@ static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
     }
 }
 
+static void cmdline_refilter_as(Ed *ed, bool asked);
+
 static void cmdline_refilter(Ed *ed)
+{
+    cmdline_refilter_as(ed, false);
+}
+
+/*
+ * `asked`: a Tab (or the arrival of what a Tab asked for) is answering,
+ * so an empty word still gets rows.  The live path passes false: an
+ * empty token completes nothing while the user is only typing.
+ */
+static void cmdline_refilter_as(Ed *ed, bool asked)
 {
     CmdLine *line = &ed->cmdline;
     Arena scratch;
@@ -774,7 +787,7 @@ static void cmdline_refilter(Ed *ed)
     }
     cmdline_set_hint(ed, &point);
     if (!yew_comp_query_at(ed, &point, &query) ||
-        query.replace.hi <= query.replace.lo) {
+        (!asked && query.replace.hi <= query.replace.lo)) {
         yew_menu_dismiss(&line->menu);
         arena_free_all(&scratch);
         yew_xfree(text);
@@ -819,9 +832,12 @@ void yew_cmdline_compgen_arrived(Ed *ed, const char *key)
     if (line->filter.gen_key == NULL || strcmp(line->filter.gen_key, key) != 0)
         return;
     /* The cached set was ranked without the answer; drop it so the
-     * refilter re-enumerates, now served from the generator cache. */
+     * refilter re-enumerates, now served from the generator cache.  A
+     * menu Tab opened (or a Tab still waiting) keeps its empty-word
+     * answer; otherwise this is exactly the live keystroke's refilter. */
     yew_comp_filter_invalidate(&line->filter);
-    cmdline_refilter(ed);
+    cmdline_refilter_as(ed, line->comp_asked || line->menu.items.len != 0U);
+    line->comp_asked = false;
     ed->footer_dirty = true;
 }
 
@@ -892,6 +908,7 @@ void yew_cmdline_edited(Ed *ed)
      * the arrows belong to the prompt until it is asked for.
      */
     yew_menu_blur(&ed->cmdline.menu);
+    ed->cmdline.comp_asked = false;
     cmdline_refilter(ed);
     ed->footer_dirty = true;
     /* Search-as-you-type: the `/` and `?` prompts preview on every
@@ -1114,6 +1131,7 @@ static CmdStatus complete(Ed *ed, bool previous)
     if (items.len == 0U && line->filter.gen_pending) {
         /* §5.5: the answer is still coming.  Say nothing; the arrival
          * opens the menu (and edits nothing). */
+        line->comp_asked = true;
         Vec_CompItem_free(&items);
         arena_free_all(&scratch);
         yew_xfree(text);
@@ -1124,6 +1142,25 @@ static CmdStatus complete(Ed *ed, bool previous)
         ed->full_damage = true;
         ed->footer_dirty = true;
         Vec_CompItem_free(&items);
+        arena_free_all(&scratch);
+        yew_xfree(text);
+        return YEW_CMD_OK;
+    }
+    /*
+     * Sprint 57.24 §5: while a generator's answer is still coming the set
+     * is INCOMPLETE -- a lone static row is not a sole survivor, and the
+     * static rows' common prefix is not the answer's.  Show the rows,
+     * insert nothing; the arrival refills the menu and Tab again decides.
+     */
+    if (line->filter.gen_pending) {
+        yew_xfree(line->menu_stem);
+        line->menu_stem = heap_slice(text, query.replace);
+        line->menu_original = query.replace;
+        yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
+        line->menu.pending = true;
+        line->comp_asked = true;
+        ed->full_damage = true;
+        ed->footer_dirty = true;
         arena_free_all(&scratch);
         yew_xfree(text);
         return YEW_CMD_OK;

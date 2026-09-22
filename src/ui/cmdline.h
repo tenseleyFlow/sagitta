@@ -57,6 +57,12 @@ typedef struct CmdLine {
     CmdHist *memory_history[3];
     u8 return_mode;
     u32 comp_total;
+    /*
+     * Sprint 57.24 §5: Tab asked and the answer is a generator still in
+     * flight with nothing to show yet.  Its arrival may then open the
+     * menu even on an empty word -- the user did ask.  Any edit clears it.
+     */
+    bool comp_asked;
     char *menu_stem;
     Span menu_original;
     YewCmdlineInputDone input_done;
