@@ -3052,6 +3052,199 @@ static void case_s57_23_bang_quote_dollar_file(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.24: completion specs, end to end against the SHIPPED specs
+ * (the harness pins YEW_RUNTIME_DIR to the checked-in runtime).  None of
+ * these needs the tool itself installed: a spec is data.
+ */
+static bool s57_24_write(PtyCtx *c, const char *rel, const char *text,
+                         mode_t mode)
+{
+    char path[PATH_MAX];
+
+    if (snprintf(path, sizeof(path), "%s/%s", c->workspace_dir, rel) >=
+            (int)sizeof(path) ||
+        !write_bytes(path, (const u8 *)text, strlen(text)) ||
+        chmod(path, mode) != 0) {
+        ptc_check(c, false, "writing a Sprint 57.24 fixture");
+        return false;
+    }
+    return true;
+}
+
+/* DoD 3: `:!wolf bu<Tab>` yields `:!wolf build `. */
+static void case_s57_24_wolf_subcommand(PtyCtx *c)
+{
+    static const u8 initial[] = "wolf fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!wolf bu");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_24_wolf_subcommand");
+    s18_finish(c, path);
+}
+
+/* DoD 3: `:!wolf build --emit=` offers exactly the four emit kinds. */
+static void case_s57_24_wolf_emit_values(PtyCtx *c)
+{
+    static const u8 initial[] = "wolf fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!wolf build --emit=");
+    ptc_snapshot(c, "s57_24_wolf_emit_values");
+    s18_finish(c, path);
+}
+
+/* A two-level walk: `remote` descends, `a` completes `add`. */
+static void case_s57_24_git_remote_add(PtyCtx *c)
+{
+    static const u8 initial[] = "git fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!git remote a");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_24_git_remote_add");
+    s18_finish(c, path);
+}
+
+/* Targets read from the Makefile's text -- make is never run, and the
+ * fixture's `$(shell ...)` would leave a sentinel if anything did. */
+static void case_s57_24_make_targets(PtyCtx *c)
+{
+    static const u8 initial[] = "make fixture\n";
+    char path[256];
+    char sentinel[PATH_MAX];
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.24 case needs an isolated workspace");
+        return;
+    }
+    if (!s57_24_write(c, "Makefile",
+                      "X := $(shell touch sentinel)\n"
+                      ".PHONY: all check\n"
+                      "all: build\n"
+                      "build check: deps\n"
+                      "install:\n"
+                      "%.o: %.c\n",
+                      0600))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!make ");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_24_make_targets");
+    (void)snprintf(sentinel, sizeof(sentinel), "%s/sentinel",
+                   c->workspace_dir);
+    ptc_check(c, access(sentinel, F_OK) != 0,
+              "make_targets must never evaluate the Makefile");
+    s18_finish(c, path);
+}
+
+/* Hosts from a FIXTURE home's ~/.ssh -- never the developer's. */
+static void case_s57_24_ssh_hosts(PtyCtx *c)
+{
+    static const u8 initial[] = "ssh fixture\n";
+    static char home[PATH_MAX];
+    char dir[PATH_MAX];
+    char path[256];
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.24 case needs an isolated workspace");
+        return;
+    }
+    (void)snprintf(home, sizeof(home), "%s/home", c->workspace_dir);
+    (void)snprintf(dir, sizeof(dir), "%s/home/.ssh", c->workspace_dir);
+    if (mkdir(home, 0700) != 0 || mkdir(dir, 0700) != 0) {
+        ptc_check(c, false, "creating the Sprint 57.24 fixture home");
+        return;
+    }
+    if (!s57_24_write(c, "home/.ssh/config",
+                      "Host build-box devbox\n"
+                      "Host *.corp\n"
+                      "Host !bastion\n",
+                      0600) ||
+        !s57_24_write(c, "home/.ssh/known_hosts",
+                      "kh-alpha ssh-ed25519 AAAA\n"
+                      "|1|hashed= ssh-ed25519 AAAA\n",
+                      0600))
+        return;
+    c->home_dir = home;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!ssh ");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_24_ssh_hosts");
+    s18_finish(c, path);
+}
+
+/*
+ * §5.5: a generator that has not answered shows the spec's static rows
+ * for the slot and the footer's `…` -- and Tab inserts nothing from the
+ * incomplete set.  The generator blocks until the job layer kills it at
+ * its timeout, so the pending frame is the one on screen when the marker
+ * appears; the snapshot is gated on that frame, never on a sleep.
+ */
+static void case_s57_24_generator_pending(PtyCtx *c)
+{
+    static const u8 initial[] = "generator fixture\n";
+    char spec[1024];
+    char dir[PATH_MAX];
+    char path[256];
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.24 case needs an isolated workspace");
+        return;
+    }
+    if (!s57_24_write(c, "slowgen",
+                      "#!/bin/sh\n"
+                      "while [ ! -e release ]; do /bin/sleep 0.05; done\n"
+                      "echo gen-row\n",
+                      0700))
+        return;
+    /* A user spec: XDG_CONFIG_HOME is the case's state directory. */
+    (void)snprintf(dir, sizeof(dir), "%s/yew", c->state_dir);
+    (void)mkdir(dir, 0700);
+    (void)snprintf(dir, sizeof(dir), "%s/yew/completions", c->state_dir);
+    if (mkdir(dir, 0700) != 0) {
+        ptc_check(c, false, "creating the Sprint 57.24 spec directory");
+        return;
+    }
+    (void)snprintf(spec, sizeof(spec),
+                   "# test 1\n"
+                   "{ completion: 1, command: \"fixgen\",\n"
+                   "  generators: { g: { argv: [\"%s/slowgen\"] } },\n"
+                   "  subcommands: [ { name: \"stat-one\", desc: \"static\" },\n"
+                   "                 { name: \"stat-two\", desc: \"static\" } ],\n"
+                   "  args: [ { kind: \"generator\", generator: \"g\" } ] }\n",
+                   c->workspace_dir);
+    (void)snprintf(dir, sizeof(dir), "%s/yew/completions/fixgen.fl",
+                   c->state_dir);
+    if (!write_bytes(dir, (const u8 *)spec, strlen(spec))) {
+        ptc_check(c, false, "writing the Sprint 57.24 user spec");
+        return;
+    }
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!fixgen ");
+    ptc_keys(c, "tab");
+    ptc_wait_until(c, s57_screen_contains, "\xE2\x80\xA6",
+                   "waiting for the pending-generator marker");
+    ptc_snapshot(c, "s57_24_generator_pending");
+    s18_finish(c, path);
+}
+
 /* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
  * from the same tolerant parse the menu filtered with. */
 static void case_s18_5_cmdline_hint(PtyCtx *c)
@@ -11217,6 +11410,15 @@ const PtyCase yew_pty_cases[] = {
       case_s57_23_bang_cd_dirs_only),
     C(s57_23_bang_quote_dollar_file, modern, 24U, 80U,
       case_s57_23_bang_quote_dollar_file),
+    C(s57_24_wolf_subcommand, modern, 24U, 80U,
+      case_s57_24_wolf_subcommand),
+    C(s57_24_wolf_emit_values, modern, 24U, 80U,
+      case_s57_24_wolf_emit_values),
+    C(s57_24_git_remote_add, modern, 24U, 80U, case_s57_24_git_remote_add),
+    C(s57_24_make_targets, modern, 24U, 80U, case_s57_24_make_targets),
+    C(s57_24_ssh_hosts, modern, 24U, 80U, case_s57_24_ssh_hosts),
+    C(s57_24_generator_pending, modern, 24U, 80U,
+      case_s57_24_generator_pending),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
