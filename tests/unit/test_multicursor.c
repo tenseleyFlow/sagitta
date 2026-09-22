@@ -520,6 +520,74 @@ void test_multicursor_batches_symbol_rebuild_and_damage(void)
     yew_ed_free(&ed);
 }
 
+void test_multicursor_same_line_batch_keeps_row_damage(void)
+{
+    static const u8 text[] =
+        "00\n01\n02\n03\n04\n05\n06\n07\n08\n09\n"
+        "10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n";
+    Ed ed;
+    Win win;
+    CmdCtx cx = {0};
+    CmdId redo;
+    CmdId undo;
+    Span second;
+
+    mc_ed_init(&ed, &win, text, sizeof(text) - 1U);
+    yew_syn_attach(&ed.buffer.syn, YEW_LANG_NONE, ed.buffer.tb);
+    win.rect = (Rect){0U, 0U, 80U, 20U};
+    win.vp.rows = win.rect.h;
+    win.vp.cols = win.rect.w;
+    win.cs.curs.data[0] = test_cursor(
+        yew_textbuf_line_span(ed.buffer.tb, LINENO(5U)).lo,
+        yew_textbuf_line_span(ed.buffer.tb, LINENO(5U)).lo, 0U);
+    second = yew_textbuf_line_span(ed.buffer.tb, LINENO(7U));
+    YEW_ASSERT(yew_cset_add(
+        &win.cs, test_cursor(second.lo, second.lo, 0U)));
+    cx.win = &win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, mc_probe_id(), &cx), YEW_CMD_OK);
+    /* YEW-F-072: two one-line edits repaint their three-row union, not the
+     * remaining seventeen rows of an otherwise unchanged viewport. */
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 5U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 8U);
+    YEW_ASSERT(ed.cursor_overlay_damage_complete);
+    YEW_ASSERT_EQ_U64(ed.damage_batch_finalizations, 1U);
+
+    undo = yew_cmd_lookup("ed.edit.undo", 12U);
+    redo = yew_cmd_lookup("ed.edit.redo", 12U);
+    YEW_ASSERT(undo.v != 0U);
+    YEW_ASSERT(redo.v != 0U);
+    ed.doc_damage_lo = win.rect.h;
+    ed.doc_damage_hi = 0U;
+    ed.cursor_overlay_damage_complete = false;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, undo, &cx), YEW_CMD_OK);
+    /* YEW-F-072: undo and redo receive the same per-edit row reports as the
+     * original multicursor transaction; they must not widen them afterward. */
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 5U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 8U);
+    YEW_ASSERT(ed.cursor_overlay_damage_complete);
+    ed.doc_damage_lo = win.rect.h;
+    ed.doc_damage_hi = 0U;
+    ed.cursor_overlay_damage_complete = false;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, redo, &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 5U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 8U);
+    YEW_ASSERT(ed.cursor_overlay_damage_complete);
+
+    ed.doc_damage_lo = win.rect.h;
+    ed.doc_damage_hi = 0U;
+    ed.cursor_overlay_damage_complete = false;
+    yew_ed_damage_batch_begin(&ed, &win);
+    yew_ed_damage_line(&ed, LINENO(5U), true);
+    yew_ed_damage_batch_end(&ed);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 0U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, win.rect.h);
+    YEW_ASSERT(!ed.cursor_overlay_damage_complete);
+    mc_ed_free(&ed, &win);
+}
+
 void test_multicursor_editor_invoke_rolls_back_on_per_cursor_failure(void)
 {
     Ed ed;

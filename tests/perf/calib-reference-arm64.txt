@@ -1,0 +1,29 @@
+# yew calibration reference v1
+# host_identity: yew-perf-arm64 Lima 2.2.0 VZ guest
+# source_commit: ce99fab215870bda41582d563310eacbc35cd963
+# raw_measurement_sha256: 32d61a6e6d70f520826f3f0e4ea7a747270a3edbf552ddb01a3930410198cbe6
+# selected_sample: settled full-power bootstrap run 3 of 3
+# cpu_model: Apple M5 Pro through Apple Virtualization Generic Platform
+# physical_cores: not exposed to guest; physical host has 18 cores
+# logical_cpus: 8 virtual CPUs, one thread per virtual core
+# memory_capacity: 16 GiB guest; physical host has 48 GB unified memory
+# memory_type_speed_timings: virtual DRAM; physical details are not exposed
+#   to the guest
+# vm_definition: 8 vCPUs, 16 GiB RAM, 30 GiB sparse disk, no host mounts,
+#   no container runtime, Lima 2.2.0 VZ
+# kernel_version: Linux 7.0.0-28-generic Ubuntu 26.04 LTS
+# libc_and_version: glibc 2.43
+# compiler_and_version: GCC 15.2.0-16ubuntu1
+# cpu_governor: not exposed by Apple Virtualization; host AC Low Power Mode
+#   off; otherwise host-managed
+# smt_enabled: no (one thread per virtual core)
+# aslr_enabled: yes (kernel.randomize_va_space=2)
+# workload_state: dedicated guest; no unrelated guest processes
+# measured_utc: 2026-09-15T02:05:58Z
+# method: 3 warmups discarded; 11 measured runs; median of 11 per component
+runner_id perf-arm64-linux
+arch aarch64
+designated 1
+c1_chase_ns 19328146
+c2_scalar_ns 6013212
+c3_bandwidth_ns 19492552

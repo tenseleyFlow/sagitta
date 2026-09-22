@@ -1,44 +1,69 @@
 # yew perf baseline v2  runner=perf-x86_64-linux-gnu
-# TEMPLATE CALIBRATION: Sprint 11 values are preserved below, but no pinned
-# runner calibration measurement exists yet. A designated gate refuses this
-# all-zero vector; replace it only with evidence from the named runner.
-# calib scale_permille=0 c1=0 c2=0 c3=0
+# calib scale_permille=999 c1=27564506 c2=6335517 c3=17358094
 # metric                         p50_ns        p99_ns        max_ns     rss_bytes  why
-open.100m-code                 118400000      131900000      140000000     148897792  s11 value preserved; pinned-runner calibration pending
-open.100m-utf8                 120000000      140000000      148000000     155000000  s11 value preserved; pinned-runner calibration pending
-# Informational: all-newline input is exempt from the 1.6x RSS gate because
-# s07's u64 line-feed index necessarily dominates one-byte lines.
-rss.100m-allnl                1200000000     1500000000     1700000000    1000000000  s11 informational value preserved; s07 all-newline exemption
-open.1g-code                  1250000000     1600000000     1800000000    1550000000  s11 value preserved; pinned-runner calibration pending
-open.1g-noline                1100000000     1500000000     1700000000    1450000000  s11 value preserved; pinned-runner calibration pending
-insert.head.1g-code                18000          41000          50000             0  s11 value preserved; pinned-runner calibration pending
-insert.eof.1g-code                  500           1500           5000             0  s11 value preserved; pinned-runner calibration pending
-line_start.1g-code                  800           2500           5000             0  s11 value preserved; pinned-runner calibration pending
-line_of.1g-code                     350            800          60000             0  s11 value preserved; pinned-runner calibration pending
-line_start.1g-noline                 40            150            500             0  s11 value preserved; pinned-runner calibration pending
-materialize.1g-code           650000000      850000000      950000000             0  s11 value preserved; pinned-runner calibration pending
-edit.ends.1g-code             500000000      800000000      900000000       8388608  s11 value preserved; pinned-runner calibration pending
-undo.100m-code                250000000      350000000      390000000      67108864  s11 value preserved; pinned-runner calibration pending
-save.atomic.1g-code          4000000000     5500000000     6000000000             0  s11 value preserved; pinned-runner filesystem evidence pending
-
-# Sprint 20: the no-backtracking proof.  The ratio is the load-bearing
-# limit -- an absolute budget only catches a slow machine, while a
-# super-linear ratio catches backtracking creeping back in on any machine.
-re.pathological_100k_ns            50000000  s20 no-backtracking absolute bound preserved
-re.pathological_scale_ratio              15  s20 no-backtracking ratio bound preserved
-
-# Sprint 20 search throughput.  The RSS ceiling is the no-materialization
-# proof: searching a gigabyte must cost the same kilobytes as searching a
-# line, so a regression that copies the buffer once is caught here even
-# though it would pass both rate gates.
-re.throughput_literal_mibs              500  s20 literal throughput bound preserved
-re.throughput_dfa_mibs                   50  s20 DFA throughput bound preserved
-re.throughput_rss_bytes             4194304  s20 no-materialization memory bound preserved
-
-# Sprint 21: search latency.  The keypress budget is invariant 4's 5 ms,
-# measured on a 1 GB buffer with the only match far outside the viewport
-# -- an overlay that scans the file rather than the viewport misses the
-# budget by orders of magnitude, not by a margin.
-search.keypress_p99_ns             5000000  s21 invariant-4 keypress bound preserved
-search.step_mean_ns                1000000  s21 search-step bound preserved
-search.overlay_rss_bytes           4194304  s21 viewport-only overlay memory bound preserved
+open.100m-code                     91268990       93006033       93006033      118169600  Sprint 59 F072 designated x86 Linux measurement
+open.100m-utf8                     58370262       58471374       58471374      104927232  Sprint 59 F072 designated x86 Linux measurement
+rss.100m-allnl                    746093465      746332546      746332546      947593216  Sprint 59 F072 designated x86 Linux measurement
+open.1g-code                      973730991      980787730      980787730     1205907456  Sprint 59 F072 designated x86 Linux measurement
+open.1g-noline                    545111815      546505785      546505785     1073745920  Sprint 59 F072 designated x86 Linux measurement
+insert.head.1g-code                      71            100           2037              0  Sprint 59 F072 designated x86 Linux measurement
+insert.eof.1g-code                       91            111            697              0  Sprint 59 F072 designated x86 Linux measurement
+line_start.1g-code                      114            315          20806              0  Sprint 59 F072 designated x86 Linux measurement
+line_of.1g-code                         399            884          21414              0  Sprint 59 F072 designated x86 Linux measurement
+line_start.1g-noline                     13             14           2965              0  Sprint 59 F072 designated x86 Linux measurement
+materialize.1g-code                51803804       52821964       52821964              0  Sprint 59 F072 designated x86 Linux measurement
+edit.ends.1g-code                   2155396        2155396        2155396              0  Sprint 59 F072 designated x86 Linux measurement
+undo.100m-code                      3300611        3300611        3300611        1680104  Sprint 59 F072 designated x86 Linux measurement
+save.atomic.1g-code               392252992      393075929      393075929              0  Sprint 59 F072 designated x86 Linux measurement
+re.pathological_100k_ns                    50000000  s20 no-backtracking absolute bound preserved
+re.pathological_scale_ratio                      15  s20 no-backtracking ratio bound preserved
+re.throughput_literal_mibs                      500  s20 literal throughput bound preserved
+re.throughput_dfa_mibs                           50  s20 DFA throughput bound preserved
+re.throughput_rss_bytes                     4194304  s20 no-materialization memory bound preserved
+search.keypress_p99_ns                      5000000  s21 invariant-4 keypress bound preserved
+search.step_mean_ns                         1000000  s21 search-step bound preserved
+search.overlay_rss_bytes                    4194304  s21 viewport-only overlay memory bound preserved
+latency.typing.small.p99             396796         396796         442161              0  Sprint 59 F072 designated x86 Linux measurement
+latency.typing.huge.p99              427345         427345         430752              0  Sprint 59 F072 designated x86 Linux measurement
+latency.edit.syntax.p99              753565         753565         766389              0  Sprint 59 F072 designated x86 Linux measurement
+latency.multicursor.small.p99        2743462        2743462        2764571              0  Sprint 59 F072 designated x86 Linux measurement
+latency.navigate.many_buffers.p99         193423         193423         203390              0  Sprint 59 F072 designated x86 Linux measurement
+latency.search.huge.p99             1363282        1363282        1947000              0  Sprint 59 F072 designated x86 Linux measurement
+latency.typing.assist.p99            423849         423849         448133              0  Sprint 59 F072 designated x86 Linux measurement
+latency.any.max                     8350277        8350277       20469671              0  Sprint 59 F072 designated x86 Linux measurement
+latency.typing.no_paint_fraction             10             10             10              0  Sprint 59 F072 designated x86 Linux measurement
+latency.typing.frames                 10000          10000          10000              0  Sprint 59 F072 designated x86 Linux measurement
+latency.prof_external_delta              71             71             73              0  Sprint 59 F072 designated x86 Linux measurement
+latency.prof_overhead                     1              1              1              0  Sprint 59 F072 designated x86 Linux measurement
+latency.pty_floor_p50.min              6891           6891           9037              0  Sprint 59 F072 designated x86 Linux measurement
+latency.pty_floor_p50.max              6891           6891           9037              0  Sprint 59 F072 designated x86 Linux measurement
+startup.first_paint.default         7368471        7368471       61457622              0  Sprint 59 F072 designated x86 Linux measurement
+startup.first_paint.clean           2470955        2470955        2488577              0  Sprint 59 F072 designated x86 Linux measurement
+startup.first_paint.dumb            5139850        5139850        5412664              0  Sprint 59 F072 designated x86 Linux measurement
+startup.first_paint.workspace50       13446449       13446449       13649074              0  Sprint 59 F072 designated x86 Linux measurement
+startup.first_paint.batch           1924601        1924601        2471445              0  Sprint 59 F072 designated x86 Linux measurement
+startup.config_delta                4879894        4879894       58986667              0  Sprint 59 F072 designated x86 Linux measurement
+startup.spawn_floor_fraction            150            150            176              0  Sprint 59 F072 designated x86 Linux measurement
+open.100m_code.e2e                110490902      110490902      111254681              0  Sprint 59 F072 designated x86 Linux measurement
+open.100m_utf8.e2e                 76670155       76670155       76857346              0  Sprint 59 F072 designated x86 Linux measurement
+open.100m_allnl.e2e               885551226      885551226      909054165              0  Sprint 59 F072 designated x86 Linux measurement
+open.100m_code.first_key_paint        2900183        2900183        4102655              0  Sprint 59 F072 designated x86 Linux measurement
+scroll.full_viewport                   2782           2782           2787              0  Sprint 59 F072 designated x86 Linux measurement
+scroll.render_share                      41             41             42              0  Sprint 59 F072 designated x86 Linux measurement
+scroll.syntax_share                       0              0              0              0  Sprint 59 F072 designated x86 Linux measurement
+search.literal_early.1g_code        2135338        2135338        2142138              0  Sprint 59 F072 designated x86 Linux measurement
+search.literal_absent.1g_code      199317814      199317814      203658559              0  Sprint 59 F072 designated x86 Linux measurement
+search.literal.1g_noline          175036984      175036984      180152932              0  Sprint 59 F072 designated x86 Linux measurement
+search.regex_anchored.1g_code      194627341      194627341      195425734              0  Sprint 59 F072 designated x86 Linux measurement
+search.regex_alternation.1g_code     5667415315     5667415315     5667493092              0  Sprint 59 F072 designated x86 Linux measurement
+search.regex_hostile.64k             246571         246571         266498              0  Sprint 59 F072 designated x86 Linux measurement
+search.incremental.1g_code          2065610        2065610        2170247              0  Sprint 59 F072 designated x86 Linux measurement
+mem.clean_open.100m_code                  0              0              0           1241  Sprint 59 F072 designated x86 Linux measurement
+mem.clean_open.100m_utf8                  0              0              0           1175  Sprint 59 F072 designated x86 Linux measurement
+mem.clean_open.100m_allnl                 0              0              0          13058  Sprint 59 F072 designated x86 Linux measurement
+mem.paint.default_empty                   0              0              0        6828032  Sprint 59 F072 designated x86 Linux measurement
+mem.paint.clean_empty                     0              0              0        6307840  Sprint 59 F072 designated x86 Linux measurement
+mem.workspace50                           0              0              0       10268672  Sprint 59 F072 designated x86 Linux measurement
+mem.typing_growth.small                   0              0              0        1048576  Sprint 59 F072 designated x86 Linux measurement
+mem.closed_growth.100m_code.linux              0              0           4096              0  Sprint 59 F072 designated x86 Linux measurement
+mem.assist.small                          0              0              0        7282688  Sprint 59 F072 designated x86 Linux measurement

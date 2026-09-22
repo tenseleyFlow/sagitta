@@ -35,7 +35,8 @@ enum {
     ADVISORY_ATTEMPTS = 3,
     FLOOR_SAMPLES = 1001,
     MANY_BUFFER_COUNT = 50,
-    MANY_BUFFER_HYDRATED = 20
+    MANY_BUFFER_HYDRATED = 20,
+    KEY_NAME_CAP = 32
 };
 
 #define BROKEN_RUN_NS INT64_C(500000000)
@@ -44,6 +45,7 @@ _Static_assert((i64)KEY_TIMEOUT_MS * INT64_C(1000000) > BROKEN_RUN_NS,
                "PTY hang ceiling must outlive the broken-run latency gate");
 
 typedef struct KeyStroke {
+    char name[KEY_NAME_CAP];
     u8 bytes[32];
     u8 len;
 } KeyStroke;
@@ -308,7 +310,7 @@ static bool encode_key(const char *token, size_t len, KeyStroke *out)
 
 static bool encoding_is(const char *token, const char *expected)
 {
-    KeyStroke key = {{0}, 0U};
+    KeyStroke key = {0};
     size_t len = strlen(token);
     size_t expected_len = strlen(expected);
 
@@ -334,6 +336,7 @@ static bool load_session(const char *path, Session *out)
         char *start = line;
         char *end;
         char *p;
+        size_t token_len;
 
         lineno++;
         while (*start != '\0' && isspace((unsigned char)*start))
@@ -343,6 +346,7 @@ static bool load_session(const char *path, Session *out)
         end = start + strlen(start);
         while (end > start && isspace((unsigned char)end[-1]))
             end--;
+        token_len = (size_t)(end - start);
         for (p = start; p < end; p++) {
             if (isspace((unsigned char)*p)) {
                 (void)fprintf(stderr,
@@ -358,12 +362,19 @@ static bool load_session(const char *path, Session *out)
             (void)fprintf(stderr, "perf_latency: %s has more than %u keys\n",
                           path, SESSION_KEYS);
             ok = false;
-        } else if (!encode_key(start, (size_t)(end - start),
+        } else if (token_len >= sizeof(out->keys[out->len].name)) {
+            (void)fprintf(stderr,
+                          "perf_latency: %s:%lu key spelling is too long\n",
+                          path, lineno);
+            ok = false;
+        } else if (!encode_key(start, token_len,
                                &out->keys[out->len])) {
             (void)fprintf(stderr, "perf_latency: %s:%lu unknown key '%.*s'\n",
                           path, lineno, (int)(end - start), start);
             ok = false;
         } else {
+            (void)memcpy(out->keys[out->len].name, start, token_len);
+            out->keys[out->len].name[token_len] = '\0';
             out->len++;
         }
     }
@@ -468,6 +479,10 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
 {
     FrameScan scan = {0};
 
+    /* YEW-F-072: a failed evidence run must distinguish a silent child from
+     * a malformed causality tag.  The old umbrella "transport failed"
+     * erased the only evidence needed to tell an editor stall from a broken
+     * PTY parser, encouraging blind retries on the designated runners. */
     (void)memset(out, 0, sizeof(*out));
     while (yew_live_pty_now_ns() < deadline) {
         struct pollfd fd = {pty->master, POLLIN | POLLHUP, 0};
@@ -478,15 +493,31 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
 
         if (result < 0 && errno == EINTR)
             continue;
-        if (result <= 0)
+        if (result <= 0) {
+            (void)fprintf(stderr,
+                          "perf_latency: frame poll %s frames=%llu "
+                          "partial_tag=%u/%zu partial_frame=%zu\n",
+                          result == 0 ? "timed out" : strerror(errno),
+                          (unsigned long long)out->frames,
+                          (unsigned)scan.tag_field, scan.tag_matched,
+                          scan.frame_matched);
             return false;
+        }
         n = read(pty->master, data, sizeof(data));
         if (n < 0 && errno == EINTR)
             continue;
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
             continue;
-        if (n <= 0)
+        if (n <= 0) {
+            (void)fprintf(stderr,
+                          "perf_latency: frame read %s revents=0x%x "
+                          "frames=%llu partial_tag=%u/%zu partial_frame=%zu\n",
+                          n == 0 ? "closed" : strerror(errno), fd.revents,
+                          (unsigned long long)out->frames,
+                          (unsigned)scan.tag_field, scan.tag_matched,
+                          scan.frame_matched);
             return false;
+        }
         read_ns = yew_live_pty_now_ns();
         if (read_ns < 0)
             return false;
@@ -495,8 +526,17 @@ static bool read_frames(YewLivePty *pty, i64 deadline, FrameRead *out)
             FrameScanResult scan_result =
                 scan_frame_bytes(&scan, data, (size_t)n, out);
 
-            if (scan_result == FRAME_SCAN_INVALID)
+            if (scan_result == FRAME_SCAN_INVALID) {
+                (void)fprintf(stderr,
+                              "perf_latency: invalid frame tag fields=%u "
+                              "keys=%u visible=%u digit=%u frames=%llu\n",
+                              (unsigned)scan.tag_field,
+                              (unsigned)scan.tag_keys,
+                              (unsigned)scan.tag_visible,
+                              scan.tag_digit ? 1U : 0U,
+                              (unsigned long long)out->frames);
                 return false;
+            }
             if (scan_result == FRAME_SCAN_MORE)
                 continue;
             out->painted = scan_result == FRAME_SCAN_PAINT;
@@ -518,18 +558,42 @@ static bool stop_editor(YewLivePty *pty)
            yew_live_pty_wait_exit(pty, deadline, &code) && code == 0;
 }
 
+static bool send_control_frame(YewLivePty *pty, const void *bytes, size_t len,
+                               i64 deadline)
+{
+    u64 before = pty->frames;
+
+    return yew_live_pty_write(pty, bytes, len, deadline) &&
+           yew_live_pty_wait_frame(pty, before, deadline, NULL) &&
+           yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline);
+}
+
 static bool send_editor_command(YewLivePty *pty, const char *command,
                                 int timeout_ms)
 {
-    char wire[1400];
+    static const char escape[] = "\033[27u\033[27u";
+    static const char accept[] = "\r\033[27u";
+    char open[2];
     i64 deadline = yew_live_pty_now_ns() +
                    (i64)timeout_ms * INT64_C(1000000);
-    int n;
+    size_t len = strlen(command);
 
-    n = snprintf(wire, sizeof(wire), "\033[27u:%s\r", command);
-    return n > 0 && (size_t)n < sizeof(wire) &&
-           yew_live_pty_write(pty, wire, (size_t)n, deadline) &&
-           yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline);
+    /* A session may stop in a transient prompt (notably search.keys ends
+     * with a partial query).  Deliver two Escapes in their own settled
+     * event-loop turn before entering command mode.  Then prove each prompt
+     * transition with an observed frame: a quiet PTY alone does not prove
+     * that a descheduled editor has consumed a burst.  Open carries the first
+     * command byte and accept carries a trailing Escape so every control
+     * frame decodes multiple keys and remains outside KEYPAINT's exactly-one-
+     * key population.  These turns occur outside the measured session. */
+    open[0] = ':';
+    open[1] = command[0];
+    return len > 1U &&
+           yew_live_pty_write(pty, escape, sizeof(escape) - 1U, deadline) &&
+           yew_live_pty_wait_quiet(pty, INT64_C(100000000), deadline) &&
+           send_control_frame(pty, open, sizeof(open), deadline) &&
+           send_control_frame(pty, command + 1U, len - 1U, deadline) &&
+           send_control_frame(pty, accept, sizeof(accept) - 1U, deadline);
 }
 
 static const MetricSpec *find_metric(const char *session, const char *fixture)
@@ -944,13 +1008,15 @@ static int run_session(const char *binary, const char *script,
                        const char *fixture, const char *path,
                        const char *state, const char *many_dir,
                        const char *fakelsp, const char *mockai,
-                       const char *ai_script, const char *prof_dump)
+                       const char *ai_script, const char *prof_dump,
+                       bool key_breakdown)
 {
     Session session;
     YewLivePty pty;
     char run_state[1024];
     char run_workspace[1024] = "";
     i64 samples[SESSION_KEYS];
+    i64 elapsed_by_key[SESSION_KEYS] = {0};
     size_t nsamples = 0U;
     size_t no_paint = 0U;
     u64 frames = 0U;
@@ -1103,6 +1169,7 @@ static int run_session(const char *binary, const char *script,
             i64 elapsed = read.completed_ns - start;
 
             samples[nsamples++] = elapsed;
+            elapsed_by_key[i] = elapsed;
         }
         else if (read.no_paint)
             no_paint++;
@@ -1191,6 +1258,54 @@ static int run_session(const char *binary, const char *script,
             frames > session.len)
             status = 1;
     }
+    if (key_breakdown) {
+        /* YEW-F-072: retain the workload spelling beside each elapsed sample
+         * so a failing mixed-session percentile can be attributed to an
+         * actual repeated command class instead of optimized by guesswork. */
+        for (i = 0U; i < session.len; i++) {
+            size_t j;
+            size_t painted = 0U;
+            size_t skipped = 0U;
+            i64 p50 = 0;
+            i64 p90 = 0;
+            i64 p99 = 0;
+            i64 max = 0;
+
+            for (j = 0U; j < i; j++) {
+                if (strcmp(session.keys[i].name,
+                           session.keys[j].name) == 0)
+                    break;
+            }
+            if (j != i)
+                continue;
+            for (j = i; j < session.len; j++) {
+                if (strcmp(session.keys[i].name,
+                           session.keys[j].name) != 0)
+                    continue;
+                if (elapsed_by_key[j] > 0)
+                    samples[painted++] = elapsed_by_key[j];
+                else
+                    skipped++;
+            }
+            if (painted != 0U) {
+                if (!sort_i64(samples, painted)) {
+                    (void)fprintf(stderr,
+                                  "perf_latency: cannot sort key breakdown\n");
+                    return 2;
+                }
+                p50 = samples[(painted - 1U) * 50U / 100U];
+                p90 = samples[(painted - 1U) * 90U / 100U];
+                p99 = samples[(painted - 1U) * 99U / 100U];
+                max = samples[painted - 1U];
+            }
+            (void)printf("latency.key metric=%s key=%s painted=%zu "
+                         "no_paint=%zu p50_ns=%lld p90_ns=%lld "
+                         "p99_ns=%lld max_ns=%lld\n",
+                         spec->metric, session.keys[i].name, painted, skipped,
+                         (long long)p50, (long long)p90, (long long)p99,
+                         (long long)max);
+        }
+    }
     return status;
 }
 
@@ -1214,7 +1329,7 @@ static int run_session_with_retry(const char *binary, const char *script,
                                   const char *fakelsp, const char *mockai,
                                   const char *ai_script,
                                   const char *prof_dump,
-                                  bool single_attempt)
+                                  bool single_attempt, bool key_breakdown)
 {
     bool advisory = perf_advisory();
     unsigned attempt;
@@ -1222,7 +1337,7 @@ static int run_session_with_retry(const char *binary, const char *script,
     for (attempt = 1U; ; attempt++) {
         int status = run_session(binary, script, fixture, path, state,
                                  many_dir, fakelsp, mockai, ai_script,
-                                 prof_dump);
+                                 prof_dump, key_breakdown);
 
         if (!retry_transport(advisory, single_attempt, status, attempt))
             return status;
@@ -1459,7 +1574,8 @@ static void usage(const char *arg0)
         "  %s --selftest-retry\n"
         "  %s --yew PATH --session FILE --fixture CLASS --path FILE "
         "[--state DIR] [--many-dir DIR] [--fakelsp PATH --mockai PATH "
-        "--ai-script PATH] [--prof-dump PATH] [--single-attempt]\n",
+        "--ai-script PATH] [--prof-dump PATH] [--single-attempt] "
+        "[--key-breakdown]\n",
         arg0, arg0, arg0, arg0, arg0, arg0);
 }
 
@@ -1482,6 +1598,7 @@ int main(int argc, char **argv)
     bool frame_tags = false;
     bool retry_selftest = false;
     bool single_attempt = false;
+    bool key_breakdown = false;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -1495,6 +1612,8 @@ int main(int argc, char **argv)
             retry_selftest = true;
         else if (strcmp(argv[i], "--single-attempt") == 0)
             single_attempt = true;
+        else if (strcmp(argv[i], "--key-breakdown") == 0)
+            key_breakdown = true;
         else if (i + 1 < argc && strcmp(argv[i], "--echo") == 0)
             echo = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--check-scripts") == 0)
@@ -1544,7 +1663,8 @@ int main(int argc, char **argv)
         path != NULL)
         return run_session_with_retry(yew, script, fixture, path, state,
                                       many_dir, fakelsp, mockai, ai_script,
-                                      prof_dump, single_attempt);
+                                      prof_dump, single_attempt,
+                                      key_breakdown);
     usage(argv[0]);
     return 2;
 }

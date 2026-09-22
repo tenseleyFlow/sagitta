@@ -129,7 +129,7 @@ while [ "$run" -le 3 ]; do
     quick=$work/quick-$run.txt
     huge=$work/huge-$run.txt
     combined=$work/all-$run.txt
-    if YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+    if YEW_PERF_ADVISORY=1 PERF_GATE=0 YEW_PERF_AGGREGATE=1 \
        YEW_CALIB_SCALE_PERMILLE="$scale" YEW_CALIB_C1_NS="$c1" \
        YEW_CALIB_C2_NS="$c2" YEW_CALIB_C3_NS="$c3" \
        "$make_bin" --no-print-directory perf-s56-observation \
@@ -141,7 +141,7 @@ while [ "$run" -le 3 ]; do
         cat "$quick"
         exit "$status"
     fi
-    if YEW_PERF_ADVISORY=1 PERF_GATE=0 \
+    if YEW_PERF_ADVISORY=1 PERF_GATE=0 YEW_PERF_AGGREGATE=1 \
        YEW_CALIB_SCALE_PERMILLE="$scale" YEW_CALIB_C1_NS="$c1" \
        YEW_CALIB_C2_NS="$c2" YEW_CALIB_C3_NS="$c3" \
        "$make_bin" --no-print-directory perf-s56-huge-observation \

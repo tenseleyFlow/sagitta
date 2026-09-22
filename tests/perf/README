@@ -13,6 +13,19 @@ reaching for `perf`: the built-in profiler answers *which phase* in one
 keystroke, with a measured overhead limit of 2 percent. External profilers
 answer narrower questions and must never supply a gate number.
 
+The overhead gate times the complete phase-clock and ring-write path in the
+editor process, rejects an interrupted timing batch by median, and compares
+that per-frame cost with the external session p99. The separately launched
+profiler-off/on session p99 delta remains an `OBSERVED` diagnostic: scheduler
+placement and DVFS can move a tail percentile between otherwise identical
+processes, so that delta is not attributed to instrumentation. Exact painted
+sample counts and the internal/external p99 cross-check remain hard gates.
+The cross-check subtracts a contemporaneous median echo round-trip floor from
+the external p99 before comparing it with `KEYPAINT`: the external endpoint
+includes PTY transport and wake-up, while the in-process timer begins after
+`poll`. The hard agreement limit is 30 percent; Sprint 59's ARM evidence
+showed that the former 25 percent cutoff sat inside ordinary PTY variance.
+
 Useful commands:
 
 ```text
@@ -36,6 +49,11 @@ decoded key and nonzero terminal output. The external keypress-to-paint
 cross-check uses `KEYPAINT`, and hard-fails if its call count differs from
 the harness's painted-key count; comparing external samples with all wakes
 would mix two different populations.
+
+The recorded `startup.first_paint.batch` row measures fork/exec through the
+first marker emitted by `tests/perf/fixtures/batch-start.fl`. It therefore
+captures batch script start, not completion of an arbitrary script or the
+older full-process `perf-batch` measurement.
 
 ## Triage playbook
 
@@ -81,7 +99,17 @@ Only the pinned runners named `perf-x86_64-linux-gnu` and
 `perf-arm64-linux` may issue wall-clock verdicts. They use separate,
 same-ISA calibration references and separate baselines. A designated run
 sets `PERF_GATE=1`, measures calibration before and after the suite, and
-enforces both absolute budgets and relative regressions.
+enforces the committed row policy. `enforcement=designated` means both the
+absolute budget and the 10-percent baseline regression ratchet are hard on a
+designated runner. `enforcement=budget` keeps the absolute budget hard there
+but records the baseline without a relative verdict; it is reserved for rows
+whose 30-run distribution or integer quantization proves that a 10-percent
+ratchet would flap. `enforcement=all` remains hard on every runner.
+
+Amendment S59-A5 records the three ARM64 noise-floor rows that met this rule:
+huge-search p99, hostile-regex latency, and typing RSS growth. Their absolute
+limits are unchanged, and the original 30-run failure is retained alongside
+the reanalysis in F072's audit evidence.
 
 Every hosted, shared, developer, unknown, or differently named runner is
 advisory. It runs the same metrics so the harness cannot rot, prints
@@ -115,6 +143,21 @@ machine metadata, and promotes the result as:
 
 - `calib-reference.txt` for `perf-x86_64-linux-gnu`;
 - `calib-reference-arm64.txt` for `perf-arm64-linux`.
+
+The runner IDs are hardware-environment identities, not portable labels:
+
+- `perf-x86_64-linux-gnu` is pinned to `hasu`, an Intel Core i7-12700KF
+  host running NixOS. The calibration reference records its exact memory,
+  kernel, libc, compiler, governor, SMT, and ASLR state.
+- `perf-arm64-linux` is pinned to the dedicated `yew-perf-arm64` Lima/VZ
+  guest on the recorded Apple M5 Pro host. The guest definition is 8 vCPUs,
+  16 GiB RAM, a 30 GiB sparse disk, no host mounts, no container runtime,
+  and Ubuntu 26.04 arm64. This is native arm64 execution on virtual hardware;
+  it is not evidence for an arbitrary hosted or developer VM.
+
+Changing either physical host or the ARM guest definition invalidates the
+corresponding reference and baseline until the bootstrap and 30-run noise
+campaign are repeated. A matching runner ID alone never transfers the pin.
 
 Never infer, copy across ISAs, or manufacture a reference vector. Promotion
 and both initial baseline commits require evidence from the named hardware.
@@ -157,7 +200,14 @@ Do not profile the PTY runner and mistake its cost for yew's. `perf` wall
 time includes profiler overhead; hardware counter values are not comparable
 between machines. Callgrind gives exact call counts but its timing is not
 real. Massif measures heap, not RSS; process RSS comes from the suite's
-`getrusage` checkpoints.
+precise Linux `smaps_rollup` checkpoints (and normalized `getrusage` peaks).
+
+The 10,000-key typing-growth ceiling is 3 MiB. Designated ARM64 measurements
+found ordinary retained growth of 176,128--466,944 bytes and occasional
+values exactly 2,097,152 bytes higher. The single 2 MiB Linux residency
+quantum is not a per-key leak, so the ceiling admits one such step plus the
+observed sub-0.5 MiB growth; a second step still fails. This amendment does
+not change the clean/default/workspace/open footprint ceilings.
 
 ## Baselines and rebaselining
 
@@ -188,8 +238,11 @@ that validates the quick/huge metric set, preserves budget-file order,
 applies the median/2-of-3 rule, and performs the runner-derived v2 baseline
 comparison.  Hosted runs need no baseline and keep timing advisory, but
 `enforcement=all`, frames-greater-than-keys, missing metrics, and the 100x
-sanity bound remain hard.  A designated run refuses a missing, incomplete,
-zero-calibration, or runner/ISA-mismatched baseline with exit 75.
+sanity bound remain hard. An `enforcement=budget` row still requires a
+committed baseline row and a hard designated absolute verdict; a legitimate
+zero baseline is permitted because no relative division is performed. A
+designated run refuses a missing or incomplete baseline, zero calibration,
+or a runner/ISA mismatch with exit 75.
 
 The profiler cross-check gives a hosted observation at most three attempts
 when its child loses transport or crosses that 100x sanity bound.  This is a
@@ -197,11 +250,55 @@ bounded sampling policy, not a wider bound: a third failure still fails, and
 designated runs never retry.  Its paired profiler-off/profiler-on verdict is
 still the median of three completed observations.
 
+Pass `--key-breakdown` directly to `perf_latency_s56` when a mixed session
+misses its budget. After timing completes, the runner reports p50/p90/p99,
+maximum, painted count, and no-paint count for each key spelling in the
+session. The option does not change the default gate output or print during
+measurement.
+
 `make perf-update` is designated-runner-only. It measures the legacy 100 MiB
 and 1 GiB text-buffer rows, three quick Sprint 56 ledgers, and three huge
 ledgers into a same-directory transaction. The baseline is replaced only
 after every observation, the combined update, and the ending calibration
 drift check pass; a failure leaves the tracked baseline byte-identical.
+
+`make perf-noise` is the F072 evidence run after a reference and baseline
+exist. It refuses a non-Linux host, a runner/ISA mismatch, an invalid
+reference, a missing baseline, or tracked source/index changes. It retains
+exactly 30 complete quick+huge run logs below
+`build/perf-noise/campaign-*/`, then reports each designated metric's
+p05/p50/p95 and one-sided regression noise. The report binds the run to the
+source commit and the SHA-256 of both designated inputs. For `le` gates the
+noisy tail is p95 above p50; for `ge` gates it is p05 below p50. Noise at or
+above the 100-permille relative-regression threshold fails: a threshold
+inside its own measured noise is not a release gate. Absolute-only
+`enforcement=budget` rows instead report their distribution and fail if any
+of the 30 aggregate runs would violate the configured absolute gate. This
+also makes a stable zero-valued share an honest passing observation rather
+than an undefined relative ratio.
+
+An interrupted campaign may be continued with
+`make perf-noise PERF_NOISE_RESUME=build/perf-noise/campaign-N ...` after
+the failure has been investigated. Resumption is fail-closed: the source
+commit, runner and ISA, kernel release, reference and baseline paths and
+hashes, run count, threshold, clean checkout, and starting calibration must
+still match. Completed logs must be contiguous and nonempty. A failed
+temporary log is retained, a fresh attempt gets a distinct temporary path,
+and only 30 successful quick+huge logs reach the analyzer.
+
+The bootstrap order on each pinned host is:
+
+1. Quiesce unrelated workloads and record the governor and all metadata named
+   by the matching `calib-reference-*.template` file.
+2. Run `make calib CC=gcc PERF_RUNNER_ID=<designated-id>` without a reference,
+   promote its three measured components into the completed reference, and
+   review that evidence-only commit.
+3. Run `make perf-update CC=gcc PERF_RUNNER_ID=<designated-id>` with
+   `YEW_PERF_UPDATE_WHY` set to a specific measured reason, and review the
+   isolated baseline commit.
+4. Run `make perf-noise CC=gcc PERF_RUNNER_ID=<designated-id>` and commit the
+   30-run report to the F15 audit closeout. Only then enable the matching
+   designated CI lane.
 
 Baseline files always live under `tests/perf/baselines/` (plural). Never
 raise a budget to make a regression green; changing `budgets.txt` changes a

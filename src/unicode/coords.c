@@ -1106,6 +1106,11 @@ static bool coords_simple_ascii(const TextBuf *tb)
            tb->graphemes.gen == tb->gen;
 }
 
+bool yew_coords_simple_ascii_current(const TextBuf *tb)
+{
+    return tb != NULL && coords_simple_ascii(tb);
+}
+
 static u64 simple_line_end(const TextBuf *tb, Span line)
 {
     return line_content_end(tb, line);

@@ -1438,6 +1438,7 @@ void yew_ed_damage_document(Ed *ed)
         return;
     if (ed->damage_batching) {
         ed->damage_batch_pending = true;
+        ed->damage_batch_full = true;
         return;
     }
     ed->doc_damage_lo = 0U;
@@ -1449,16 +1450,16 @@ void yew_ed_damage_rows(Ed *ed, u16 lo, u16 hi)
 {
     if (ed == NULL || ed->win == NULL || lo >= hi)
         return;
-    if (ed->damage_batching) {
+    if (ed->damage_batching)
         ed->damage_batch_pending = true;
-        return;
-    }
     if (lo > ed->win->rect.h)
         lo = ed->win->rect.h;
     if (hi > ed->win->rect.h)
         hi = ed->win->rect.h;
     if (lo >= hi)
         return;
+    if (ed->damage_batching)
+        ed->damage_batch_row_pending = true;
     if (ed->doc_damage_lo >= ed->doc_damage_hi) {
         ed->doc_damage_lo = lo;
         ed->doc_damage_hi = hi;
@@ -1481,6 +1482,25 @@ static void ed_damage_win_line(Ed *ed, Win *win, LineNo line,
         return;
     if (ed->damage_batching) {
         ed->damage_batch_pending = true;
+        if (!ed->damage_batch_line_pending ||
+            line.v < ed->damage_batch_line_lo.v)
+            ed->damage_batch_line_lo = line;
+        ed->damage_batch_line_pending = true;
+        if (line_count_changed || win->vp.wrap) {
+            ed->damage_batch_full = true;
+            return;
+        }
+        /* YEW-F-072: multicursor fan-out used to collapse every line-sized
+         * damage request into a full viewport repaint.  Same-line edits do
+         * not change row mapping, so retain their exact visible row range;
+         * newline and wrapped edits keep the conservative full redraw. */
+        {
+            LineNo top = yew_win_view_top(win);
+            u16 row;
+
+            if (line.v >= top.v && yew_win_view_row(win, line, &row))
+                yew_ed_damage_rows(ed, row, (u16)(row + 1U));
+        }
         return;
     }
     yew_vp_invalidate_from(win, line);
@@ -1528,6 +1548,9 @@ void yew_ed_syn_note_edit(Ed *ed, Buffer *buffer, LineNo lo,
         YEW_BUG("syntax edit notification: missing editor or buffer");
     owns_batch = ed->damage_batching && ed->damage_batch_win != NULL &&
                  ed->damage_batch_win->buf == buffer;
+    if (owns_batch)
+        ed_damage_win_line(ed, ed->damage_batch_win, lo,
+                           removed != 0U || inserted != 0U);
     if (!owns_batch || removed != 0U || inserted != 0U) {
         ed_syn_batch_flush(ed);
         yew_syn_edit(&buffer->syn, lo, removed, inserted);
@@ -1549,18 +1572,26 @@ void yew_ed_damage_batch_begin(Ed *ed, Win *win)
     if (ed->damage_batching)
         YEW_BUG("damage batch: nested begin");
     ed->damage_batching = true;
-    ed->damage_batch_pending = true;
+    ed->damage_batch_pending = false;
+    ed->damage_batch_full = false;
+    ed->damage_batch_line_pending = false;
+    ed->damage_batch_row_pending = false;
     ed->damage_batch_syn_pending = false;
     ed->damage_batch_syn_buffer = NULL;
     ed->damage_batch_win = win;
     ed->damage_batch_lines = win != NULL && win->buf != NULL &&
                                      win->buf->tb != NULL
                                  ? yew_textbuf_line_count(win->buf->tb) : 0U;
+    ed->damage_batch_gen = win != NULL && win->buf != NULL &&
+                                  win->buf->tb != NULL
+                              ? win->buf->tb->gen : 0U;
 }
 
 void yew_ed_damage_batch_end(Ed *ed)
 {
     bool pending;
+    bool full;
+    bool line_pending;
     Win *win;
 
     if (ed == NULL)
@@ -1568,20 +1599,41 @@ void yew_ed_damage_batch_end(Ed *ed)
     if (!ed->damage_batching)
         YEW_BUG("damage batch: end without begin");
     pending = ed->damage_batch_pending;
+    full = ed->damage_batch_full;
+    line_pending = ed->damage_batch_line_pending;
     win = ed->damage_batch_win;
     ed_syn_batch_flush(ed);
+    if (win != NULL && win->buf != NULL && win->buf->tb != NULL &&
+        win->buf->tb->gen != ed->damage_batch_gen &&
+        (!pending || !ed->damage_batch_row_pending)) {
+        /* A low-level or newly attached buffer may not yet have enough
+         * view metadata to report exact line damage.  Generation change is
+         * the fail-safe: preserve visibility with one full redraw. */
+        pending = true;
+        full = true;
+    }
     ed->damage_batching = false;
     ed->damage_batch_pending = false;
+    ed->damage_batch_full = false;
+    ed->damage_batch_line_pending = false;
+    ed->damage_batch_row_pending = false;
     ed->damage_batch_win = NULL;
     if (win != NULL) {
-        yew_vp_invalidate(win);
+        if (line_pending)
+            yew_vp_invalidate_from(win, ed->damage_batch_line_lo);
         if (win->buf != NULL && win->buf->tb != NULL &&
-            yew_textbuf_line_count(win->buf->tb) != ed->damage_batch_lines)
+            yew_textbuf_line_count(win->buf->tb) != ed->damage_batch_lines) {
             ed->layout_dirty = true;
+            full = true;
+        }
     }
     ed->damage_batch_lines = 0U;
+    ed->damage_batch_gen = 0U;
     if (pending) {
-        yew_ed_damage_document(ed);
+        if (full)
+            yew_ed_damage_document(ed);
+        else if (line_pending)
+            ed->cursor_overlay_damage_complete = true;
         ed->damage_batch_finalizations++;
     }
 }
@@ -2502,6 +2554,7 @@ void yew_ed_render(Ed *ed)
     bool view_changed;
     bool fuss;
     bool menu_only;
+    bool cursor_overlay_synced = false;
 
     if (ed == NULL || !ed->grid_ready || !ed->render_ready ||
         !ed->model_ready)
@@ -2520,6 +2573,7 @@ void yew_ed_render(Ed *ed)
         if (ed->full_damage || ed->footer_dirty)
             yew_draw_footer(ed, win);
         yew_grid_cursor(&ed->grid, 0U, 0U, false);
+        ed->cursor_overlay_damage_complete = false;
         goto draw_overlays;
     }
     if (ed->cursor_follow_pending) {
@@ -2575,17 +2629,23 @@ void yew_ed_render(Ed *ed)
          */
         yew_draw_panes(ed);
         yew_grid_mark_all(&ed->grid);
+        cursor_overlay_synced = true;
     } else if (ed->doc_damage_lo < ed->doc_damage_hi) {
         if (yew_pane_leaf_count(ed->pane_root) > 1U) {
             /* Partial damage is expressed in the focused pane's rows,
              * and a border or a neighbour may share them; redrawing the
              * tree is correct and still bounded by the screen. */
             yew_draw_panes(ed);
+            cursor_overlay_synced = true;
         } else {
             yew_draw_document_rows(ed, win, ed->doc_damage_lo,
                                    ed->doc_damage_hi);
+            cursor_overlay_synced = ed->cursor_overlay_damage_complete;
         }
     }
+    if (cursor_overlay_synced)
+        yew_draw_cursor_overlay_sync(ed, win);
+    ed->cursor_overlay_damage_complete = false;
     if (ed->full_damage || ed->footer_dirty)
         yew_draw_footer(ed, win);
     if (!ed->cmdline.active)
@@ -2745,19 +2805,33 @@ static bool ed_apply_start_files(Ed *ed, const YewStartPlan *plan,
                                  const char **failed)
 {
     size_t i;
+    int final = -1;
 
     for (i = 0U; i < plan->nfiles; i++) {
-        int idx = yew_tab_open(ed, plan->files[i]);
+        int idx = yew_tab_find_by_path(ed, plan->files[i]);
 
-        if (idx < 0 || yew_tab_hydrate(ed, idx) != 0) {
+        if (idx < 0)
+            idx = yew_tab_open(ed, plan->files[i]);
+        if (idx < 0) {
             if (failed != NULL)
                 *failed = plan->files[i];
             return false;
         }
-        /* yew_tab_open focuses an existing canonical path.  New tabs are
-         * deliberately lazy, so make the same focus decision explicit. */
-        yew_tab_switch(ed, idx);
+        final = idx;
     }
+    /*
+     * YEW-F-072: positional startup used to hydrate and focus every tab in
+     * turn, making the 50-file "deferred" workspace pay 50 reads and retain
+     * 50 TextBufs before its first paint.  Register every target first, then
+     * read only the target the user will actually see.  The ordinary switch
+     * path remains the single hydration point for every inactive tab.
+     */
+    if (final >= 0 && yew_tab_hydrate(ed, final) != 0) {
+        if (failed != NULL)
+            *failed = plan->files[plan->nfiles - 1U];
+        return false;
+    }
+    yew_tab_switch(ed, final);
     return true;
 }
 

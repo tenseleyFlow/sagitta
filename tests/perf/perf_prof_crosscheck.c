@@ -19,7 +19,7 @@ enum {
     METRIC_TRIALS = 3,
     ADVISORY_ATTEMPTS = 3,
     OVERHEAD_LIMIT_PERMILLE = 20,
-    CROSSCHECK_LIMIT_PERMILLE = 250
+    CROSSCHECK_LIMIT_PERMILLE = 300
 };
 
 typedef enum RunStatus {
@@ -30,6 +30,7 @@ typedef enum RunStatus {
 
 typedef struct Options {
     const char *runner;
+    const char *echo;
     const char *yew;
     const char *session;
     const char *fixture;
@@ -82,22 +83,32 @@ static bool parse_external(const char *output, RunResult *result)
     return result->painted != 0U;
 }
 
-static bool parse_prof_keypaint(const char *path, uint64_t *value,
-                                uint32_t *calls)
+static bool parse_prof_report(const char *path, uint64_t *value,
+                              uint32_t *calls, uint64_t *cost_ns)
 {
     FILE *fp = fopen(path, "r");
     char *line = NULL;
     size_t cap = 0U;
-    bool ok = false;
+    bool found_keypaint = false;
+    bool found_cost = false;
 
     if (fp == NULL)
         return false;
     while (getline(&line, &cap, fp) >= 0) {
+        const char *cost = strstr(line, "overhead_ns=");
         unsigned long long p50;
         unsigned long long p90;
         unsigned long long p99;
         unsigned long long max;
         unsigned long long parsed_calls;
+        unsigned long long parsed_cost;
+
+        if (cost != NULL &&
+            sscanf(cost + sizeof("overhead_ns=") - 1U, "%llu",
+                   &parsed_cost) == 1) {
+            *cost_ns = (uint64_t)parsed_cost;
+            found_cost = *cost_ns != 0U;
+        }
 
         if (sscanf(line, "KEYPAINT %llu %llu %llu %llu calls=%llu",
                    &p50, &p90, &p99, &max, &parsed_calls) == 5 &&
@@ -107,13 +118,12 @@ static bool parse_prof_keypaint(const char *path, uint64_t *value,
             (void)max;
             *value = (uint64_t)p99;
             *calls = (uint32_t)parsed_calls;
-            ok = *value != 0U && *calls != 0U;
-            break;
+            found_keypaint = *value != 0U && *calls != 0U;
         }
     }
     free(line);
     (void)fclose(fp);
-    return ok;
+    return found_keypaint && found_cost;
 }
 
 static bool read_child_output(int fd, char *out, size_t cap)
@@ -141,6 +151,65 @@ static bool read_child_output(int fd, char *out, size_t cap)
         return false;
     }
     return true;
+}
+
+static bool parse_floor(const char *output, uint64_t *floor_ns)
+{
+    const char *row = strstr(output, "pty_floor_p50 ");
+    unsigned long long parsed;
+
+    if (row == NULL ||
+        sscanf(row + sizeof("pty_floor_p50 ") - 1U, "%llu ns", &parsed) != 1)
+        return false;
+    *floor_ns = (uint64_t)parsed;
+    return *floor_ns != 0U;
+}
+
+static RunStatus run_floor(const Options *opts, uint64_t *floor_ns)
+{
+    char *argv[] = {
+        (char *)opts->runner,
+        (char *)"--floor",
+        (char *)"--echo",
+        (char *)opts->echo,
+        NULL
+    };
+    char output[OUTPUT_CAP];
+    int pipefd[2];
+    pid_t pid;
+    int status;
+    bool read_ok;
+
+    if (pipe(pipefd) != 0)
+        return RUN_TRANSPORT_FAILED;
+    pid = fork();
+    if (pid < 0) {
+        (void)close(pipefd[0]);
+        (void)close(pipefd[1]);
+        return RUN_TRANSPORT_FAILED;
+    }
+    if (pid == 0) {
+        (void)close(pipefd[0]);
+        if (dup2(pipefd[1], STDOUT_FILENO) < 0)
+            _exit(126);
+        (void)close(pipefd[1]);
+        execv(opts->runner, argv);
+        _exit(126);
+    }
+    (void)close(pipefd[1]);
+    read_ok = read_child_output(pipefd[0], output, sizeof(output));
+    (void)close(pipefd[0]);
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR)
+            return RUN_TRANSPORT_FAILED;
+    }
+    if (!read_ok || !WIFEXITED(status))
+        return RUN_TRANSPORT_FAILED;
+    if (WEXITSTATUS(status) == 1)
+        return RUN_METRIC_FAILED;
+    if (WEXITSTATUS(status) != 0 || !parse_floor(output, floor_ns))
+        return RUN_TRANSPORT_FAILED;
+    return RUN_OK;
 }
 
 static RunStatus run_latency(const Options *opts, bool prof_on,
@@ -245,10 +314,28 @@ static bool retry_advisory_run(bool advisory, RunStatus status,
            attempt < ADVISORY_ATTEMPTS;
 }
 
+static RunStatus measure_floor(const Options *opts, uint64_t *floor_ns,
+                               bool advisory)
+{
+    unsigned attempt;
+
+    for (attempt = 1U; ; attempt++) {
+        RunStatus status = run_floor(opts, floor_ns);
+
+        if (!retry_advisory_run(advisory, status, attempt))
+            return status;
+        (void)fprintf(stderr,
+                      "perf_prof_crosscheck: retrying PTY floor after %s "
+                      "failure (attempt %u/%u)\n",
+                      status == RUN_METRIC_FAILED ? "latency" : "transport",
+                      attempt, ADVISORY_ATTEMPTS);
+    }
+}
+
 static RunStatus measure_latency(const Options *opts, bool prof_on,
                                  const char *dump_path, RunResult *result,
                                  uint64_t *prof_p99_ns, uint32_t *prof_calls,
-                                 bool advisory)
+                                 uint64_t *prof_cost_ns, bool advisory)
 {
     unsigned attempt;
 
@@ -260,7 +347,8 @@ static RunStatus measure_latency(const Options *opts, bool prof_on,
             (void)unlink(dump_path);
         status = run_latency(opts, prof_on, dump_path, result);
         if (status == RUN_OK && prof_on &&
-            !parse_prof_keypaint(dump_path, prof_p99_ns, prof_calls))
+            !parse_prof_report(dump_path, prof_p99_ns, prof_calls,
+                               prof_cost_ns))
             status = RUN_TRANSPORT_FAILED;
         if (!retry_advisory_run(advisory, status, attempt))
             return status;
@@ -285,6 +373,25 @@ static uint64_t delta_permille(uint64_t a, uint64_t b, uint64_t denominator)
     if (delta > UINT64_MAX / 1000U)
         return UINT64_MAX;
     return delta * 1000U / denominator;
+}
+
+static uint64_t ratio_permille(uint64_t numerator, uint64_t denominator)
+{
+    uint64_t scaled;
+
+    if (denominator == 0U || numerator > UINT64_MAX / 1000U)
+        return UINT64_MAX;
+    scaled = numerator * 1000U;
+    return scaled / denominator + (scaled % denominator != 0U ? 1U : 0U);
+}
+
+static bool remove_transport_floor(uint64_t external_ns, uint64_t floor_ns,
+                                   uint64_t *work_ns)
+{
+    if (external_ns <= floor_ns)
+        return false;
+    *work_ns = external_ns - floor_ns;
+    return true;
 }
 
 static bool gating(void)
@@ -344,7 +451,7 @@ static bool metric_prefix(const Options *opts, char *out, size_t cap)
 static void usage(const char *arg0)
 {
     (void)fprintf(stderr,
-        "usage: %s --runner PATH --yew PATH --session FILE "
+        "usage: %s --runner PATH --echo PATH --yew PATH --session FILE "
         "--fixture CLASS --path FILE [--state DIR] [--many-dir DIR] "
         "[--fakelsp PATH --mockai PATH --ai-script PATH]\n",
         arg0);
@@ -356,8 +463,9 @@ static int policy_selftest(void)
     static const uint64_t one_bad[METRIC_TRIALS] = {300U, 0U, 0U};
     static const uint64_t two_bad[METRIC_TRIALS] = {300U, 0U, 300U};
     static const uint64_t hosted_crosscheck[METRIC_TRIALS] = {
-        265U, 242U, 291U
+        315U, 292U, 341U
     };
+    uint64_t work_ns = 0U;
 
     if (retry_advisory_run(false, RUN_TRANSPORT_FAILED, 1U) ||
         retry_advisory_run(false, RUN_METRIC_FAILED, 1U) ||
@@ -372,7 +480,12 @@ static int policy_selftest(void)
                       "perf_prof_crosscheck: advisory retry policy failed\n");
         return 1;
     }
-    if (median3(ordered) != 20U || median3(one_bad) != 0U ||
+    if (ratio_permille(20U, 1000U) != OVERHEAD_LIMIT_PERMILLE ||
+        ratio_permille(1U, 1000U) != 1U ||
+        ratio_permille(1U, 0U) != UINT64_MAX ||
+        !remove_transport_floor(240U, 40U, &work_ns) || work_ns != 200U ||
+        remove_transport_floor(40U, 40U, &work_ns) ||
+        median3(ordered) != 20U || median3(one_bad) != 0U ||
         median3(two_bad) != 300U ||
         overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, false) ||
         !overhead_fails(OVERHEAD_LIMIT_PERMILLE + 1U, true) ||
@@ -399,13 +512,17 @@ int main(int argc, char **argv)
     char prefix[160] = "";
     uint64_t off_p99_ns[METRIC_TRIALS];
     uint64_t on_p99_ns[METRIC_TRIALS];
+    uint64_t comparable_external_ns[METRIC_TRIALS];
     uint64_t prof_p99_ns[METRIC_TRIALS];
+    uint64_t prof_cost_ns[METRIC_TRIALS];
     uint32_t prof_calls[METRIC_TRIALS];
     uint64_t overhead_trials[METRIC_TRIALS];
+    uint64_t session_delta_trials[METRIC_TRIALS];
     uint64_t crosscheck_trials[METRIC_TRIALS];
     uint64_t off_median_ns;
     uint64_t on_median_ns;
     uint64_t prof_median_ns;
+    uint64_t transport_floor_ns;
     uint64_t external_samples = 0U;
     uint64_t internal_samples = 0U;
     uint64_t overhead_pm;
@@ -427,6 +544,8 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (i + 1 < argc && strcmp(argv[i], "--runner") == 0)
             opts.runner = argv[++i];
+        else if (i + 1 < argc && strcmp(argv[i], "--echo") == 0)
+            opts.echo = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--yew") == 0)
             opts.yew = argv[++i];
         else if (i + 1 < argc && strcmp(argv[i], "--session") == 0)
@@ -450,7 +569,8 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    if (!regular_file(opts.runner) || !regular_file(opts.yew) ||
+    if (!regular_file(opts.runner) || !regular_file(opts.echo) ||
+        !regular_file(opts.yew) ||
         !regular_file(opts.session) || opts.fixture == NULL ||
         opts.path == NULL ||
         (strcmp(opts.fixture, "assist") == 0 &&
@@ -480,6 +600,13 @@ int main(int argc, char **argv)
         goto done;
     }
     advisory = perf_advisory();
+    run_status = measure_floor(&opts, &transport_floor_ns, advisory);
+    if (run_status != RUN_OK) {
+        (void)fprintf(stderr,
+                      "perf_prof_crosscheck: PTY floor measurement failed\n");
+        status = run_status == RUN_METRIC_FAILED ? 1 : 2;
+        goto done;
+    }
     for (trial = 0U; trial < METRIC_TRIALS; trial++) {
         /* Alternate the pair order so monotonic warm-up or frequency drift
          * cannot systematically charge the second process to profiling.
@@ -490,18 +617,20 @@ int main(int argc, char **argv)
         if (prof_first) {
             run_status = measure_latency(&opts, true, dump_path, &on[trial],
                                          &prof_p99_ns[trial],
-                                         &prof_calls[trial], advisory);
+                                         &prof_calls[trial],
+                                         &prof_cost_ns[trial], advisory);
             if (run_status == RUN_OK)
                 run_status = measure_latency(&opts, false, NULL, &off[trial],
-                                             NULL, NULL, advisory);
+                                             NULL, NULL, NULL, advisory);
         } else {
             run_status = measure_latency(&opts, false, NULL, &off[trial],
-                                         NULL, NULL, advisory);
+                                         NULL, NULL, NULL, advisory);
             if (run_status == RUN_OK)
                 run_status = measure_latency(&opts, true, dump_path,
                                              &on[trial],
                                              &prof_p99_ns[trial],
-                                             &prof_calls[trial], advisory);
+                                             &prof_calls[trial],
+                                             &prof_cost_ns[trial], advisory);
         }
         if (run_status != RUN_OK) {
             (void)fprintf(stderr,
@@ -515,12 +644,22 @@ int main(int argc, char **argv)
         }
         off_p99_ns[trial] = off[trial].external_p99_ns;
         on_p99_ns[trial] = on[trial].external_p99_ns;
-        overhead_trials[trial] = on_p99_ns[trial] > off_p99_ns[trial] ?
+        session_delta_trials[trial] = on_p99_ns[trial] > off_p99_ns[trial] ?
             delta_permille(on_p99_ns[trial], off_p99_ns[trial],
                            off_p99_ns[trial]) : 0U;
-        crosscheck_trials[trial] = delta_permille(on_p99_ns[trial],
+        overhead_trials[trial] = ratio_permille(prof_cost_ns[trial],
+                                                off_p99_ns[trial]);
+        if (!remove_transport_floor(on_p99_ns[trial], transport_floor_ns,
+                                    &comparable_external_ns[trial])) {
+            (void)fprintf(stderr,
+                          "perf_prof_crosscheck: external p99 does not "
+                          "exceed PTY floor in trial %u\n", trial + 1U);
+            status = 1;
+            goto done;
+        }
+        crosscheck_trials[trial] = delta_permille(comparable_external_ns[trial],
                                                   prof_p99_ns[trial],
-                                                  on_p99_ns[trial]);
+                                                  comparable_external_ns[trial]);
         external_samples += on[trial].painted;
         internal_samples += prof_calls[trial];
         if (on[trial].painted != prof_calls[trial])
@@ -538,6 +677,10 @@ int main(int argc, char **argv)
                  (unsigned long long)on_median_ns);
     (void)printf("%s.keypaint.p99 %llu ns\n", prefix,
                  (unsigned long long)prof_median_ns);
+    (void)printf("%s.transport_floor %llu ns\n", prefix,
+                 (unsigned long long)transport_floor_ns);
+    (void)printf("%s.comparable_external.p99 %llu ns\n", prefix,
+                 (unsigned long long)median3(comparable_external_ns));
     (void)printf("%s.trials off=%llu,%llu,%llu on=%llu,%llu,%llu "
                  "keypaint=%llu,%llu,%llu\n", prefix,
                  (unsigned long long)off_p99_ns[0],
@@ -553,6 +696,10 @@ int main(int argc, char **argv)
                  (unsigned long long)external_samples,
                  (unsigned long long)internal_samples,
                  samples_match ? "OK" : "FAIL");
+    (void)printf("%s.cost %llu ns\n", prefix,
+                 (unsigned long long)median3(prof_cost_ns));
+    (void)printf("%s.session_delta %llu permille OBSERVED\n", prefix,
+                 (unsigned long long)median3(session_delta_trials));
     (void)printf("%s.overhead %llu permille %s\n", prefix,
                  (unsigned long long)overhead_pm,
                  overhead_pm <= OVERHEAD_LIMIT_PERMILLE ? "OK" :

@@ -31,10 +31,20 @@ enum {
     YEW_DFA_MAX_STATES = 1024,
     YEW_DFA_MAX_BYTES = 1024U * 1024U,
     YEW_DFA_BUCKETS = 2048,
+    YEW_DFA_EDGE_CACHE = 4096,
+    YEW_DFA_EDGE_WAYS = 4,
+    YEW_DFA_EDGE_SETS = YEW_DFA_EDGE_CACHE / YEW_DFA_EDGE_WAYS,
     /* Two flushes in one search means the working set does not fit; a
      * third would just be more rebuilding. */
     YEW_DFA_MAX_FLUSHES = 2
 };
+
+enum { DFA_EDGE_MISS = -1, DFA_EDGE_SKIP_BOL = -2 };
+
+_Static_assert((YEW_DFA_EDGE_CACHE & (YEW_DFA_EDGE_CACHE - 1U)) == 0U,
+               "DFA edge cache must be a power of two");
+_Static_assert((YEW_DFA_EDGE_SETS & (YEW_DFA_EDGE_SETS - 1U)) == 0U,
+               "DFA edge sets must be a power of two");
 
 /* Assertion context, folded into the state key: two states with the same
  * pc set but different surroundings can step differently, so they are
@@ -56,12 +66,18 @@ typedef struct DfaState {
     bool matched;
     i32 next; /* chain within the bucket, -1 ends it */
     /* Lazily filled transitions for ASCII, -1 meaning "not computed".
-     * This is what makes the steady state a table walk instead of an
-     * epsilon-closure per character.  It is only valid for patterns with
-     * no assertions, because an assertion makes the next state depend on
-     * the surrounding text and not merely on the input byte. */
+     * Assertion patterns add a compact context dimension when they use at
+     * most two distinct context bits. */
     i32 *next_ascii;
 } DfaState;
+
+typedef struct DfaEdge {
+    u32 state;
+    u32 cp;
+    i32 next;
+    u8 ctx;
+    bool valid;
+} DfaEdge;
 
 typedef struct Dfa {
     const YewRe *re;
@@ -82,6 +98,11 @@ typedef struct Dfa {
      * it per input position made a 64 MiB search grow RSS by 268 MB,
      * which the throughput gate's memory ceiling caught. */
     u32 *combined;
+    DfaEdge *edges;
+    u8 *edge_hand;
+    u8 ctx_index[64];
+    u32 ascii_ctx_variants;
+    u8 ctx_mask;
     bool has_assert;
 } Dfa;
 
@@ -190,15 +211,79 @@ static void dfa_flush(Dfa *d)
 
     for (i = 0U; i < YEW_DFA_BUCKETS; i++)
         d->buckets[i] = -1;
+    if (d->edges != NULL)
+        (void)memset(d->edges, 0,
+                     YEW_DFA_EDGE_CACHE * sizeof(*d->edges));
+    if (d->edge_hand != NULL)
+        (void)memset(d->edge_hand, 0,
+                     YEW_DFA_EDGE_SETS * sizeof(*d->edge_hand));
     d->nstates = 0U;
     d->bytes = 0U;
     d->flushes++;
+}
+
+static u32 edge_set(u32 state, u32 cp, u8 ctx)
+{
+    u32 hash = state * 0x9e3779b1U;
+
+    hash ^= cp * 0x85ebca6bU;
+    hash ^= (u32)ctx * 0xc2b2ae35U;
+    hash ^= hash >> 16U;
+    return hash & (YEW_DFA_EDGE_SETS - 1U);
+}
+
+static inline bool edge_get(const Dfa *d, u32 state, u32 cp, u8 ctx,
+                            i32 *next)
+{
+    u32 set = edge_set(state, cp, ctx);
+    u32 base = set * YEW_DFA_EDGE_WAYS;
+    u32 way;
+
+    for (way = 0U; way < YEW_DFA_EDGE_WAYS; way++) {
+        const DfaEdge *edge = &d->edges[base + way];
+
+        if (edge->valid && edge->state == state && edge->cp == cp &&
+            edge->ctx == ctx) {
+            *next = edge->next;
+            return true;
+        }
+    }
+    return false;
+}
+
+static inline void edge_put(Dfa *d, u32 state, u32 cp, u8 ctx, i32 next)
+{
+    u32 set = edge_set(state, cp, ctx);
+    u32 base = set * YEW_DFA_EDGE_WAYS;
+    u32 way;
+    DfaEdge *edge = NULL;
+
+    for (way = 0U; way < YEW_DFA_EDGE_WAYS; way++) {
+        if (!d->edges[base + way].valid) {
+            edge = &d->edges[base + way];
+            break;
+        }
+    }
+    if (edge == NULL) {
+        way = d->edge_hand[set];
+        d->edge_hand[set] =
+            (u8)((way + 1U) & (YEW_DFA_EDGE_WAYS - 1U));
+        edge = &d->edges[base + way];
+    }
+
+    edge->state = state;
+    edge->cp = cp;
+    edge->next = next;
+    edge->ctx = ctx;
+    edge->valid = true;
 }
 
 /* Interns the closure currently in d->work as a state id, or -1 when the
  * cache overflowed and could not be flushed further. */
 static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
 {
+    u64 state_bytes = (u64)n * sizeof(u32) +
+                      (u64)d->ascii_ctx_variants * 128U * sizeof(i32);
     u32 h;
     u32 bucket;
     i32 at;
@@ -217,7 +302,7 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
             return at;
     }
     if (d->nstates == YEW_DFA_MAX_STATES ||
-        d->bytes + (u64)n * sizeof(u32) > YEW_DFA_MAX_BYTES) {
+        state_bytes > YEW_DFA_MAX_BYTES - d->bytes) {
         if (d->flushes >= YEW_DFA_MAX_FLUSHES)
             return -1;
         dfa_flush(d);
@@ -235,17 +320,17 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
     st->matched = matched;
     st->next = d->buckets[bucket];
     st->next_ascii = NULL;
-    if (!d->has_assert) {
+    if (d->ascii_ctx_variants != 0U) {
+        u32 slots = 128U * d->ascii_ctx_variants;
         u32 k;
 
-        st->next_ascii = arena_alloc(&d->arena, 128U * sizeof(i32),
+        st->next_ascii = arena_alloc(&d->arena, slots * sizeof(i32),
                                      sizeof(i32));
-        for (k = 0U; k < 128U; k++)
+        for (k = 0U; k < slots; k++)
             st->next_ascii[k] = -1;
-        d->bytes += 128U * sizeof(i32);
     }
     d->buckets[bucket] = (i32)d->nstates;
-    d->bytes += (u64)n * sizeof(u32);
+    d->bytes += state_bytes;
     return (i32)d->nstates++;
 }
 
@@ -288,21 +373,12 @@ static bool dfa_byte(const YewReInput *in, u64 off, u8 *out)
     return true;
 }
 
-static u32 dfa_decode(const YewReInput *in, u64 off, u32 *len_out)
+static u32 dfa_decode_slow(const YewReInput *in, u64 off, u32 *len_out)
 {
     u8 buf[YEW_UTF8_MAX];
     size_t have = 0U;
     u32 cp = 0U;
     size_t used;
-
-    /* ASCII over a flat buffer is the overwhelmingly common case in a
-     * scan; taking it without the four-byte gather and the decoder call
-     * is most of this function's cost. */
-    if (in->tb == NULL && off < in->window.hi && off < in->len &&
-        in->bytes[off] < 0x80U) {
-        *len_out = 1U;
-        return in->bytes[off];
-    }
 
     while (have < YEW_UTF8_MAX) {
         u8 b;
@@ -320,22 +396,51 @@ static u32 dfa_decode(const YewReInput *in, u64 off, u32 *len_out)
     return cp;
 }
 
-static u8 ctx_at(const YewReInput *in, u64 pos, u32 prev_cp, bool has_prev,
-                 u32 cp, bool have_cp)
+static inline u32 dfa_decode(const YewReInput *in, u64 off, u32 *len_out)
+{
+    /* Keep the flat-ASCII branch small enough to inline into the DFA loop.
+     * Calling the general gather path for every byte consumed most of the
+     * remaining YEW-F-072 assertion-search budget. */
+    if (in->tb == NULL && off < in->window.hi && off < in->len &&
+        in->bytes[off] < 0x80U) {
+        *len_out = 1U;
+        return in->bytes[off];
+    }
+    return dfa_decode_slow(in, off, len_out);
+}
+
+static inline bool dfa_is_word(u32 cp)
+{
+    if (cp < 128U) {
+        u32 lower = cp | 0x20U;
+
+        return lower - (u32)'a' < 26U || cp - (u32)'0' < 10U ||
+               cp == (u32)'_';
+    }
+    return yew_re_is_word(cp);
+}
+
+static inline u8 ctx_at(const YewReInput *in, u64 pos, u32 prev_cp,
+                        bool has_prev, u32 cp, bool have_cp, u8 mask)
 {
     u8 ctx = 0U;
 
-    if (pos == in->window.lo)
-        ctx |= (u8)(DFA_AT_BOT | DFA_AT_BOL);
-    else if (has_prev && prev_cp == (u32)'\n')
+    if ((mask & DFA_AT_BOT) != 0U && pos == in->window.lo)
+        ctx |= DFA_AT_BOT;
+    if ((mask & DFA_AT_BOL) != 0U &&
+        (pos == in->window.lo ||
+         (has_prev && prev_cp == (u32)'\n')))
         ctx |= DFA_AT_BOL;
-    if (pos == in->window.hi)
-        ctx |= (u8)(DFA_AT_EOT | DFA_AT_EOL);
-    else if (have_cp && (cp == (u32)'\n' || cp == (u32)'\r'))
+    if ((mask & DFA_AT_EOT) != 0U && pos == in->window.hi)
+        ctx |= DFA_AT_EOT;
+    if ((mask & DFA_AT_EOL) != 0U &&
+        (pos == in->window.hi ||
+         (have_cp && (cp == (u32)'\n' || cp == (u32)'\r'))))
         ctx |= DFA_AT_EOL;
-    if (has_prev && yew_re_is_word(prev_cp))
+    if ((mask & DFA_AFTER_WORD) != 0U && has_prev &&
+        dfa_is_word(prev_cp))
         ctx |= DFA_AFTER_WORD;
-    if (have_cp && yew_re_is_word(cp))
+    if ((mask & DFA_BEFORE_WORD) != 0U && have_cp && dfa_is_word(cp))
         ctx |= DFA_BEFORE_WORD;
     return ctx;
 }
@@ -370,6 +475,10 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     u32 *cur;
     u32 ncur;
     i32 state;
+    u32 scan_cp = 0U;
+    u32 scan_cp_len = 0U;
+    bool have_scan_cp = false;
+    bool scan_word = false;
 
     if (re == NULL || in == NULL || re->nprog == 0U)
         return YEW_DFA_NO;
@@ -392,24 +501,61 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     cur = arena_alloc(&d.arena, (size_t)re->nprog * sizeof(u32),
                       sizeof(u32));
 
-    /* Assertions make a transition depend on the surrounding text, not
-     * just the byte, so the transition cache is only sound without
-     * them.  Patterns that use ^ $ \b and friends take the slower
-     * recompute-per-step path and stay correct. */
+    /* Assertions make a transition depend on the surrounding text as well
+     * as the byte.  Compress the context bits a pattern actually reads so
+     * common anchor and word-boundary patterns still get direct tables. */
     {
         u32 k;
+        u32 variants = 1U;
 
-        d.has_assert = false;
+        d.ctx_mask = 0U;
         for (k = 0U; k < re->nprog; k++) {
             ReOp op = (ReOp)re->prog[k].op;
 
-            if (op == RE_BOL || op == RE_EOL || op == RE_BOT ||
-                op == RE_EOT || op == RE_WORDB || op == RE_NWORDB)
-                d.has_assert = true;
+            if (op == RE_BOL)
+                d.ctx_mask |= DFA_AT_BOL;
+            else if (op == RE_EOL)
+                d.ctx_mask |= DFA_AT_EOL;
+            else if (op == RE_BOT)
+                d.ctx_mask |= DFA_AT_BOT;
+            else if (op == RE_EOT)
+                d.ctx_mask |= DFA_AT_EOT;
+            else if (op == RE_WORDB || op == RE_NWORDB)
+                d.ctx_mask |= (u8)(DFA_AFTER_WORD | DFA_BEFORE_WORD);
+        }
+        d.has_assert = d.ctx_mask != 0U;
+        for (k = 1U; k <= DFA_AT_EOT; k <<= 1U) {
+            if ((d.ctx_mask & (u8)k) != 0U)
+                variants <<= 1U;
+        }
+        if (variants <= 4U)
+            d.ascii_ctx_variants = variants;
+        for (k = 0U; k < YEW_ARRAY_LEN(d.ctx_index); k++) {
+            u32 bit;
+            u8 dense = 0U;
+            u8 out_bit = 1U;
+
+            for (bit = 1U; bit <= DFA_AT_EOT; bit <<= 1U) {
+                if ((d.ctx_mask & (u8)bit) == 0U)
+                    continue;
+                if ((k & bit) != 0U)
+                    dense |= out_bit;
+                out_bit <<= 1U;
+            }
+            d.ctx_index[k] = dense;
         }
     }
     d.combined = arena_alloc(&d.arena, (size_t)(re->nprog + 2U) *
                              sizeof(u32), sizeof(u32));
+    if (d.has_assert && d.ascii_ctx_variants == 0U)
+        d.edges = arena_alloc(&d.arena,
+                              YEW_DFA_EDGE_CACHE * sizeof(*d.edges),
+                              sizeof(void *));
+    if (d.has_assert && d.ascii_ctx_variants == 0U)
+        d.edge_hand = arena_alloc(&d.arena,
+                                  YEW_DFA_EDGE_SETS *
+                                      sizeof(*d.edge_hand),
+                                  sizeof(u8));
     dfa_flush(&d);
     d.flushes = 0U;
 
@@ -426,9 +572,6 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
      * about one pattern in fifty.
      */
     {
-        u32 cp0 = 0U;
-        u32 len0 = 0U;
-        bool have0;
         u8 ctx0;
         bool matched0 = false;
         u32 n0;
@@ -465,10 +608,14 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
                 probe += plen;
             }
         }
-        cp0 = dfa_decode(in, pos, &len0);
-        have0 = len0 != 0U && pos < in->window.hi;
+        scan_cp = dfa_decode(in, pos, &scan_cp_len);
+        have_scan_cp = scan_cp_len != 0U && pos < in->window.hi;
+        if ((d.ctx_mask & (DFA_AFTER_WORD | DFA_BEFORE_WORD)) != 0U &&
+            have_scan_cp)
+            scan_word = dfa_is_word(scan_cp);
         ctx0 = d.has_assert ?
-               ctx_at(in, pos, prev0, has_prev0, cp0, have0) : 0U;
+               ctx_at(in, pos, prev0, has_prev0, scan_cp, have_scan_cp,
+                      d.ctx_mask) : 0U;
         d.combined[0] = 0U; /* the start instruction */
         n0 = closure(&d, d.combined, 1U, ctx0, &matched0);
         state = dfa_intern(&d, n0, ctx0, matched0);
@@ -479,10 +626,16 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     }
 
     for (;;) {
-        u32 cp = 0U;
-        u32 cp_len = 0U;
-        bool have_cp;
+        u32 cp = scan_cp;
+        u32 cp_len = scan_cp_len;
+        bool have_cp = have_scan_cp;
+        u32 next_cp;
+        u32 next_cp_len = 0U;
+        bool have_next_cp;
+        bool next_word = false;
+        u64 next_pos;
         i32 next;
+        u8 next_ctx = 0U;
         u32 i;
 
         if (d.states[state].matched) {
@@ -491,21 +644,73 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
                 *end_out = pos;
             break;
         }
-        cp = dfa_decode(in, pos, &cp_len);
-        have_cp = cp_len != 0U && pos < in->window.hi;
         if (!have_cp)
             break;
+        next_pos = pos + cp_len;
+        next_cp = dfa_decode(in, next_pos, &next_cp_len);
+        have_next_cp = next_cp_len != 0U &&
+                       next_pos < in->window.hi;
 
-        next = -1;
-        if (!d.has_assert && cp < 128U &&
-            d.states[state].next_ascii != NULL)
-            next = d.states[state].next_ascii[cp];
+        next = DFA_EDGE_MISS;
+        if (d.has_assert) {
+            /* This is ctx_at(next_pos), flattened for the byte loop.  Word
+             * status is carried forward so each codepoint is classified
+             * once rather than as both this iteration's next and the next
+             * iteration's current codepoint. */
+            if ((d.ctx_mask & DFA_AT_BOL) != 0U && cp == (u32)'\n')
+                next_ctx |= DFA_AT_BOL;
+            if (next_pos == in->window.hi) {
+                next_ctx |= d.ctx_mask & (DFA_AT_EOT | DFA_AT_EOL);
+            } else if ((d.ctx_mask & DFA_AT_EOL) != 0U && have_next_cp &&
+                       (next_cp == (u32)'\n' || next_cp == (u32)'\r')) {
+                next_ctx |= DFA_AT_EOL;
+            }
+            if ((d.ctx_mask & (DFA_AFTER_WORD | DFA_BEFORE_WORD)) != 0U) {
+                if (have_next_cp)
+                    next_word = dfa_is_word(next_cp);
+                if ((d.ctx_mask & DFA_AFTER_WORD) != 0U && scan_word)
+                    next_ctx |= DFA_AFTER_WORD;
+                if ((d.ctx_mask & DFA_BEFORE_WORD) != 0U && next_word)
+                    next_ctx |= DFA_BEFORE_WORD;
+            }
+        }
+        if (cp < 128U && d.states[state].next_ascii != NULL) {
+            u32 slot = cp * d.ascii_ctx_variants +
+                       d.ctx_index[next_ctx];
+
+            next = d.states[state].next_ascii[slot];
+        } else if (d.edges != NULL) {
+            (void)edge_get(&d, (u32)state, cp, next_ctx, &next);
+        }
 
         if (next < 0) {
-            u8 ctx;
             bool matched = false;
             u32 n;
             i32 from_state = state;
+            u32 from_flushes = d.flushes;
+
+            if (next == DFA_EDGE_SKIP_BOL) {
+                u64 scan_hi = in->window.hi < in->len ?
+                              in->window.hi : in->len;
+                const u8 *newline;
+
+                /* YEW-F-072: a BOL-only state with no consuming
+                 * instruction cannot change before the next LF.  The
+                 * transition table encodes that fact so unrelated regexes
+                 * pay no branch in their byte loop. */
+                if (pos >= scan_hi)
+                    break;
+                newline = memchr(in->bytes + (size_t)pos, '\n',
+                                 (size_t)(scan_hi - pos));
+                if (newline == NULL)
+                    break;
+                pos = (u64)(newline - in->bytes);
+                scan_cp = (u32)'\n';
+                scan_cp_len = 1U;
+                have_scan_cp = true;
+                scan_word = false;
+                continue;
+            }
 
             /* Step every live instruction of this state on `cp`, then
              * re-seed the start instruction: this scan is unanchored, so
@@ -520,31 +725,42 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
             for (i = 0U; i < ncur; i++)
                 d.combined[i] = cur[i];
             d.combined[ncur] = 0U;
-            if (d.has_assert) {
-                u32 nxt_len = 0U;
-                u32 nxt = dfa_decode(in, pos + cp_len, &nxt_len);
-                bool have_next = nxt_len != 0U &&
-                                 pos + cp_len < in->window.hi;
-
-                ctx = ctx_at(in, pos + cp_len, cp, true, nxt, have_next);
-            } else {
-                ctx = 0U;
-            }
-            n = closure(&d, d.combined, ncur + 1U, ctx, &matched);
-            next = dfa_intern(&d, n, ctx, matched);
+            n = closure(&d, d.combined, ncur + 1U, next_ctx, &matched);
+            next = dfa_intern(&d, n, next_ctx, matched);
             if (next < 0) {
                 verdict = YEW_DFA_GIVE_UP;
                 break;
             }
             /* Record the edge we just walked.  A flush may have
              * invalidated `from_state`, so only cache when it survived. */
-            if (!d.has_assert && cp < 128U &&
-                (u32)from_state < d.nstates &&
-                d.states[from_state].next_ascii != NULL)
-                d.states[from_state].next_ascii[cp] = next;
+            if (d.flushes == from_flushes) {
+                if (cp < 128U && (u32)from_state < d.nstates &&
+                    d.states[from_state].next_ascii != NULL) {
+                    u32 slot = cp * d.ascii_ctx_variants +
+                               d.ctx_index[next_ctx];
+                    i32 cached = next;
+
+                    if (in->tb == NULL && d.ctx_mask == DFA_AT_BOL &&
+                        d.states[from_state].npcs == 0U &&
+                        cp != (u32)'\n' && next == from_state)
+                        cached = DFA_EDGE_SKIP_BOL;
+                    d.states[from_state].next_ascii[slot] = cached;
+                } else if (d.edges != NULL) {
+                    /* YEW-F-072: assertion transitions depend on the
+                     * following context as well as state and codepoint.
+                     * Caching that complete key avoids rebuilding and
+                     * sorting the same closure for every byte of a large
+                     * search without weakening ^, $, or word boundaries. */
+                    edge_put(&d, (u32)from_state, cp, next_ctx, next);
+                }
+            }
         }
         state = next;
         pos += cp_len;
+        scan_cp = next_cp;
+        scan_cp_len = next_cp_len;
+        have_scan_cp = have_next_cp;
+        scan_word = next_word;
     }
     arena_free_all(&d.arena);
     return verdict;

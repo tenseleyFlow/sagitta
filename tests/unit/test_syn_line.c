@@ -664,12 +664,14 @@ void test_syn_line_ascii_identifier_fast_path_matches_regex(void)
         "\\b[A-Z][A-Z0-9_]*\\b",
         "\\b[A-Z][A-Za-z0-9]*\\b",
         "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+        "\\b[A-Za-z_][A-Za-z0-9_]*_t\\b",
         "'[A-Za-z_][A-Za-z0-9_]*",
         "r#[A-Za-z_][A-Za-z0-9_]*"
     };
     static const char *const rows[] = {
         "CONST_42!", "Camel42 ", "plain_name:", "'static str",
-        "r#type,", "word_more", "9bad", "A_b", "na\xc3\xafve"
+        "r#type,", "word_more", "size_t ", "x_t!", "x_tmore",
+        "9bad", "A_b", "na\xc3\xafve"
     };
     u32 pattern;
     u32 row;

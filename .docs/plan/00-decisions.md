@@ -123,6 +123,108 @@ gate therefore moves to the next 64 KiB boundary above the measured floor:
 gate, measurement recipe, feature matrix, and post-1.0 optimization ratchets
 are unchanged.
 
+**Amendment S59-A1 (2026-09-15) — typing RSS growth admits one Linux
+residency quantum.** Sprint 59's first designated ARM64 Linux campaign used
+the precise `/proc/self/smaps_rollup` checkpoints required by F072. Across
+21 identical 10,000-key observations, ordinary paint-to-session RSS growth
+was 176,128--466,944 bytes; three observations were exactly 2,097,152 bytes
+above that range (2,293,760 or 2,297,856 bytes). The old 2 MiB ceiling
+therefore rejected one kernel residency quantum rather than a retained
+per-key allocation. The session-leak gate moves to 3 MiB: enough for one
+2 MiB step plus the measured sub-0.5 MiB growth, while two steps still fail.
+All clean/default/workspace/open footprint gates, every latency gate, and
+the editor feature set are unchanged.
+
+**Amendment S59-A2 (2026-09-15) — a noisy relative ratchet falls back to
+its hard absolute budget.** F072's first complete 30-run x86_64 campaign at
+`c45d7286` found six rows whose one-sided p95 noise met or exceeded the old
+blanket 100-permille relative threshold: many-buffer navigation (106),
+profiler overhead (1000, solely the integer step from 1 to 2 permille),
+default/clean/dumb startup (101/300/112), and first-key paint after a 100 MiB
+open (276). Two more rows, syntax render share and Linux closed-buffer RSS
+growth, were zero in all 30 runs and therefore have no defined relative
+ratio. Every observation remained inside the locked absolute budget: the
+noisy-tail values were respectively 208,982 ns / 2 permille / 7,519,766 ns /
+3,198,860 ns / 5,613,910 ns / 3,989,479 ns / 0 permille / 0 bytes against
+5 ms / 20 permille / 20 ms / 20 ms / 20 ms / 5 ms / 180 permille / 4 MiB.
+Those eight rows use `enforcement=budget`: their absolute budget is still
+hard on both designated runners and their baseline remains recorded, but no
+10-percent relative verdict is issued. All other relative rows retain the
+100-permille ratchet; all passed the recomputation.
+
+The same campaign's ARM64 preflight measured null-exec spawn fractions of
+292, 349, and 354 permille while raw first paint remained 3.96--4.56 ms,
+far below the unchanged 20 ms product budget. The harness-validity ceiling
+moves from 300 to 400 permille so a faster editor does not invalidate its own
+measurement; the editor still accounts for at least 60 percent of raw first
+paint. This changes neither a user-facing latency budget nor any editor
+feature.
+
+**Amendment S59-A3 (2026-09-15) — profiler agreement excludes measured ARM
+PTY variance.** F072's designated ARM64 campaign stopped when the profiler's
+external-versus-internal p99 cross-check reported an aggregate median of 257
+permille against the old 250-permille limit. The editor's independently
+measured instrumentation overhead remained 1 permille, all 29,703--30,000
+painted samples matched the internal call counts exactly, and every
+user-facing latency remained inside its absolute budget. Twelve isolated
+many-buffer repetitions on the same pinned runner measured external deltas
+of 204, 240, 234, 218, 254, 178, 229, 238, 253, 248, 253, and 253 permille:
+median 239, range 178--254, with four ordinary observations above the former
+cutoff. Replacing the median PTY floor with its p99 was tested and rejected:
+the p99 transport tail varied from 225,455 to 266,017 ns beside 74,149--76,530
+ns medians and could over-correct the cross-check to 833 permille.
+
+The hard `latency.prof_external_delta` agreement limit therefore moves from
+250 to 300 permille. The existing median echo-floor normalization, exact
+sample-count equality, median-of-three anti-flap verdict, 20-permille profiler
+overhead limit, and `enforcement=all` policy remain unchanged. No editor
+latency, startup, memory, size, or feature gate changes. The raw evidence is
+retained in `.docs/audits/evidence/F072-prof-crosscheck-arm64.txt`.
+
+**Amendment S59-A4 (2026-09-18) — corrected startup observation retains a
+majority-work harness bound.** `5a3ac30c` made the startup harness accept the
+legal ordering where yew paints before the terminal answers its synchronized-
+update capability query. The old observer discarded that completed frame and
+waited for a later synchronization marker, so S59-A2's 400-permille ceiling was
+calibrated against a different, late timestamp. On the pinned ARM64 runner, 50
+corrected observations measured spawn-floor fractions with p05 281, median
+370, p95 407, and maximum 424 permille. First paint measured p05 2.95 ms,
+median 3.24 ms, p95 3.98 ms, and maximum 11.62 ms; all observations remained
+inside the unchanged 20 ms product budget. A subsequent campaign stopped on
+the ordinary triplet 439, 417, and 317 permille (median 417); across its first
+twelve observations the maximum was 459 permille.
+
+The harness-validity ceiling therefore moves from 400 to 500 permille. This is
+the semantic majority-work boundary: null exec may consume at most half of the
+raw first-paint sample, so the measured editor path still accounts for at
+least half. The median-of-three verdict, `enforcement=all`, and the 20 ms
+user-facing first-paint budget remain unchanged. No editor code or feature is
+removed or weakened.
+
+**Amendment S59-A5 (2026-09-21) — three measured-noisy ARM rows retain hard
+absolute gates.** F072's complete 30-run campaign on the pinned ARM64 Linux
+guest at `c29b3077` passed every individual quick and huge budget run, with
+calibration scale 1143 before and 981 after (a 14.2 percent change, inside
+the 15 percent refusal boundary). The noise-floor recomputation nevertheless
+rejected three relative ratchets. Huge-search p99 had p05 1,108,981 ns,
+median 1,224,756 ns, and p95 1,471,495 ns (202 permille one-sided noise),
+while every run stayed below its calibrated 5 ms reference budget. Hostile
+regex on 64 KiB had p05 74,416 ns, median 83,816 ns, and p95 96,553 ns
+(152 permille noise), far below its 50 ms budget. Typing RSS growth was
+quantized between approximately 0.2 MiB and 0.45 MiB, with two 2 MiB
+residency steps: p05 196,608 bytes, median 200,704 bytes, and p95
+2,293,760 bytes. All 30 runs remained below the 3 MiB gate established
+by S59-A1. A 10-percent relative verdict on any of these rows would
+therefore fail on unchanged source and a stable designated host.
+
+These three rows use `enforcement=budget` under the S59-A2 rule: the same
+absolute limits remain hard on both designated runners, their baselines
+remain required and recorded, and all other relative ratchets are
+unchanged. The completed raw campaign is reanalyzed without rerunning or
+discarding observations; its source commit, input hashes, and original
+three-failure result remain named in the committed evidence. No editor
+code, feature, or user-facing limit changes.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

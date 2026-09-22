@@ -112,13 +112,24 @@ probed, nothing found
 
 probed, nothing found
 
-- The new real-PTY control starts `%!sleep 1; cat`, then sends the complete
-  modal input burst `i`, `QUEUED`, Escape while the child is live. After a
+- The real-PTY control starts a `sleep 1; cat` filter, waits for its child
+  readiness marker, then sends `iQUEUED` while the child is live. After a
   100 ms pump the word is absent from the grid, proving no mid-filter
   dispatch.
-- Once the filter completion message appears, the same bytes replay in order
-  and the golden contains `keep me` followed by `QUEUED`, with the editor
-  back in line mode. Two independent focused executions matched the golden.
+- Once the filter completion message appears, those bytes replay in order;
+  Escape then returns to line mode. The golden contains `keep me` followed
+  by `QUEUED`. A second live run verifies Escape cancellation separately.
+
+Post-audit CI follow-up (2026-09-21): the original control was timing-dependent.
+Escape cancels a live filter, while a Kitty CSI-u key starts with an Escape
+byte. The filter had been cancelling on that raw byte, so slow Valgrind runs
+could cancel or corrupt queued keys before the child completed. The restricted
+loop now decodes keys before recognizing Escape/Ctrl-C, preserves successful
+typeahead byte-for-byte, and discards queued edits on explicit cancellation.
+The PTY waits for a child readiness marker, queues `iQUEUED` while the child
+is live, sends Escape only after completion, then separately verifies that
+Escape cancels a fresh live filter without changing the buffer. Focused Mac
+and x86-64 Valgrind executions pass.
 
 ## Q8 — exact environment for every job type
 

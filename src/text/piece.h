@@ -160,6 +160,9 @@ void yew_textbuf_free(TextBuf *tb);
 
 /* Payload may alias either backing store; the implementation stages it. */
 void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len);
+/* Returns the immutable add-store offset that owns the inserted payload. */
+u64 yew_textbuf_insert_payload(TextBuf *tb, ByteOff at, const u8 *bytes,
+                               u64 len);
 /* Splices an existing immutable store span without appending its bytes. */
 void yew_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span);
 void yew_textbuf_delete(TextBuf *tb, Span range);

@@ -19,6 +19,29 @@ static u64 checked_scale(unsigned long long value, u64 scale)
 }
 #endif
 
+#if defined(__linux__)
+static u64 linux_precise_rss_bytes(void)
+{
+    char line[256];
+    FILE *rollup = fopen("/proc/self/smaps_rollup", "r");
+    unsigned long long kib = 0U;
+    bool found = false;
+
+    if (rollup == NULL)
+        return 0U;
+    while (fgets(line, sizeof(line), rollup) != NULL) {
+        if (strncmp(line, "Rss:", sizeof("Rss:") - 1U) == 0U &&
+            sscanf(line, "Rss: %llu kB", &kib) == 1) {
+            found = true;
+            break;
+        }
+    }
+    if (fclose(rollup) != 0 || !found)
+        return 0U;
+    return checked_scale(kib, 1024U);
+}
+#endif
+
 u64 yew_rss_peak_bytes(void)
 {
     struct rusage usage;
@@ -44,7 +67,19 @@ u64 yew_rss_bytes(void)
     unsigned long long total_pages;
     unsigned long long resident_pages;
     long page_size;
-    FILE *statm = fopen("/proc/self/statm", "r");
+    FILE *statm;
+    u64 precise;
+
+    /*
+     * YEW-F-072: statm's scalable RSS counters are asynchronous, so a fresh
+     * first-paint allocation could be charged later as typing growth.  The
+     * opt-in checkpoints are rare enough to scan the kernel's precise
+     * rollup; retain statm only for kernels without smaps_rollup.
+     */
+    precise = linux_precise_rss_bytes();
+    if (precise != 0U)
+        return precise;
+    statm = fopen("/proc/self/statm", "r");
 
     if (statm == NULL)
         return 0U;
