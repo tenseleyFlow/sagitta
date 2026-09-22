@@ -2413,6 +2413,8 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
         if (pt.pending_flag != NULL) {
             arg = pt.pending_flag->arg;
             p->value_at = pt.after_equals ? pt.value_at : 0U;
+        } else if (pt.flags_ended && pt.node->after_dashdash != NULL) {
+            arg = pt.node->after_dashdash;
         } else if (pt.positional != UINT32_MAX) {
             arg = yew_compspec_slot(pt.node, pt.positional);
         }

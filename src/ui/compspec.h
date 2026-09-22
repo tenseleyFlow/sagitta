@@ -107,6 +107,12 @@ struct YewSpecNode {
      * flag, which is exactly how the tool reads it.
      */
     const YewSpecArg *dash_values;
+    /*
+     * Also not in §1: what EVERY word after an unquoted `--` is, where it
+     * differs from the slots (`git checkout <branch>` but
+     * `git checkout -- <path>...`).  NULL: the slots apply as usual.
+     */
+    const YewSpecArg *after_dashdash;
     const YewSpecNode *parent;
 };
 

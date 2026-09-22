@@ -639,6 +639,8 @@ static void read_node_key(SpecRead *r, const char *key, size_t n,
         path_pop(r, old);
     } else if (key_is(key, n, "dash_values")) {
         out->dash_values = read_arg_at(r, val, "dash_values");
+    } else if (key_is(key, n, "after_dashdash")) {
+        out->after_dashdash = read_arg_at(r, val, "after_dashdash");
     } else {
         unknown_key(r, key, n);
     }
