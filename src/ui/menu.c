@@ -78,7 +78,7 @@ static u16 menu_candidate_rows_at(const Menu *m, u32 top, u16 rows)
 {
     /* A one-row window spent on a tail would show no candidates at all,
      * and "scanning…" is a state rather than a count -- see menu.h. */
-    if (rows < 2U || m->scanning)
+    if (rows < 2U || m->scanning || m->pending)
         return rows;
     return (u64)top + rows >= m->items.len ? rows : (u16)(rows - 1U);
 }
@@ -331,6 +331,7 @@ void yew_menu_dismiss(Menu *m)
     m->top = 0U;
     m->total = 0U;
     m->scanning = false;
+    m->pending = false;
 }
 
 static Cell styled_blank(const YewUiStyle *style)
@@ -505,6 +506,8 @@ void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
 
             if (m->scanning)
                 (void)snprintf(footer, sizeof(footer), "scanning\xE2\x80\xA6");
+            else if (m->pending)
+                (void)snprintf(footer, sizeof(footer), "\xE2\x80\xA6");
             else if (m->total > m->items.len)
                 (void)snprintf(footer, sizeof(footer), "%u+ of %u",
                                (unsigned)m->items.len, (unsigned)m->total);

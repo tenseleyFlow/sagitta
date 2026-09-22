@@ -64,6 +64,12 @@ typedef struct Menu {
      */
     char *held;
     bool scanning;
+    /*
+     * Sprint 57.24 §5.5: a completion generator has been asked and has
+     * not answered.  The footer shows `…` -- STATE, set by the host from
+     * the filter, so the same state always renders the same cells.
+     */
+    bool pending;
 } Menu;
 
 void yew_menu_init(Menu *m, const MenuSpec *spec);
