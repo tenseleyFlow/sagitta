@@ -732,8 +732,10 @@ static bool plain(const ShWord *w, const char *want)
  * a glob, an unknown user).  `how`: WD_LITERAL nothing was expanded, so
  * CDPATH may apply; WD_RESOLVED it is $PWD-based and already relative
  * to the start directory (the frame's own `in`), so it is not joined
- * again; WD_EXPANDED otherwise.  `allow_pwd` false refuses $PWD (a
- * caller that joins the result to a directory of its own).
+ * again; WD_EXPANDED otherwise.  `full` false refuses $PWD (a caller
+ * that joins the result to a directory of its own) and `~user` (a
+ * password-database lookup is too slow for every operand of every
+ * keystroke; only a `cd` pays it).
  */
 enum {
     WD_EXPANDED,
@@ -741,8 +743,8 @@ enum {
     WD_RESOLVED
 };
 
-static const char *word_dir(Lexer *L, const ShWord *w, DirV in,
-                            bool allow_pwd, u8 *how)
+static const char *word_dir(Lexer *L, const ShWord *w, DirV in, bool full,
+                            u8 *how)
 {
     const char *home = NULL;
 
@@ -764,7 +766,7 @@ static const char *word_dir(Lexer *L, const ShWord *w, DirV in,
         case VK_PWD:
             /* The rest must start a new component: `${PWD}x` names a
              * sibling this representation cannot spell. */
-            if (!allow_pwd || L->env_dirty || in.st != DV_KNOWN ||
+            if (!full || L->env_dirty || in.st != DV_KNOWN ||
                 (w->text[0] != '\0' && w->text[0] != '/'))
                 return NULL;
             if (!w->var_q && (splits(in.path) ||
@@ -798,7 +800,7 @@ static const char *word_dir(Lexer *L, const ShWord *w, DirV in,
 
         if (ulen == 0U) {
             home = L->env_dirty ? NULL : env_get(L, "HOME");
-        } else {
+        } else if (full) {
             char *user = arena_strndup(L->a, w->text + 1, ulen);
             struct passwd *pw = getpwnam(user);
 
