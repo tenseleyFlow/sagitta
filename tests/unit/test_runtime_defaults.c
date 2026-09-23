@@ -402,7 +402,9 @@ static const BindRow frozen_E[] = {
     {"C-e", "ed.cmdline.ghost.accept_line", 0, NULL},
     {"C-<right>", "ed.cmdline.ghost.accept_line", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
+    /* ^H from a legacy terminal decodes as C-<bs>; kitty sends C-h. */
     {"C-h", "ed.edit.delete.grapheme_left", 0, NULL},
+    {"C-<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
     {"<del>", "ed.edit.delete.grapheme", 0, NULL},
     {"C-d", "ed.edit.delete.grapheme", 0, NULL},
     /*
@@ -564,7 +566,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 370U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 371U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

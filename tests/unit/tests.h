@@ -74,6 +74,22 @@ void test_yankstack_evicts_by_count(void);
 void test_yankstack_evicts_by_bytes_and_keeps_the_newest(void);
 void test_yankstack_at_bounds(void);
 
+void test_prompt_keys_char_word_and_line_motions(void);
+void test_prompt_keys_ghost_accept_is_contextual(void);
+void test_prompt_keys_ctrl_d_and_ctrl_h(void);
+void test_prompt_keys_ctrl_w_is_whitespace_and_alt_bs_is_word(void);
+void test_prompt_keys_kill_forward_and_to_the_ends(void);
+void test_prompt_keys_transpose_and_word_case(void);
+void test_prompt_keys_yank_then_yank_pop_wraps(void);
+void test_prompt_keys_yank_pop_without_a_yank(void);
+void test_prompt_keys_yank_stack_is_shared_with_insert_mode(void);
+void test_prompt_keys_yank_folds_newlines_into_the_prompt(void);
+void test_prompt_keys_kill_yank_pop_are_one_undo_step_each(void);
+void test_prompt_keys_last_arg_walks_older_entries(void);
+void test_prompt_keys_ctrl_q_inserts_the_next_key_literally(void);
+void test_prompt_keys_alt_r_inserts_a_register(void);
+void test_prompt_keys_ctrl_v_pastes_the_system_clipboard(void);
+
 void test_readline_kill_word_prev_reaches_every_cursor(void);
 void test_readline_kill_word_prev_at_buffer_start_is_a_no_op(void);
 void test_readline_kill_word_next_takes_the_word_and_its_gap(void);

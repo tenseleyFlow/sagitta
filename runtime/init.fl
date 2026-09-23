@@ -249,9 +249,9 @@ bind("I", "C-k", "ed.edit.kill.to_end")
 # delete a character, so it is only ever the delete.
 bind("I", "C-d", "ed.edit.delete.grapheme")
 # C-y yanks the newest kill from the yank stack -- readline's kill ring,
-# shared with the prompt and apart from the registers: `p` never pastes a
-# kill.  A-y straight after swaps it for the next older kill.  C-v stays
-# the SYSTEM clipboard paste above.
+# shared with the prompt and apart from the registers: no register (and
+# no clipboard) ever holds a kill.  A-y straight after swaps it for the
+# next older kill.  C-v stays the SYSTEM clipboard paste above.
 bind("I", "C-y", "ed.edit.kill.yank")
 bind("I", "A-y", "ed.edit.kill.yank_pop")
 bind("I", "C-p", "ed.move.line.up")
@@ -430,7 +430,10 @@ bind("E", "C-<left>", "ed.move.line.home")
 bind("E", "C-e", "ed.cmdline.ghost.accept_line")
 bind("E", "C-<right>", "ed.cmdline.ghost.accept_line")
 bind("E", "<bs>", "ed.edit.delete.grapheme_left")
+# C-h: kitty-protocol terminals report ctrl+h as itself; a legacy terminal
+# that sends ^H (0x08) for Backspace decodes as C-<bs>.  Both delete left.
 bind("E", "C-h", "ed.edit.delete.grapheme_left")
+bind("E", "C-<bs>", "ed.edit.delete.grapheme_left")
 bind("E", "<del>", "ed.edit.delete.grapheme")
 # C-d only ever deletes forward; it never cancels the prompt.
 bind("E", "C-d", "ed.edit.delete.grapheme")

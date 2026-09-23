@@ -1045,6 +1045,13 @@ bool yew_cmdline_key(Ed *ed, const Key *key)
         return false;
     if (key->ev == YEW_KEY_RELEASE)
         return true;
+    /*
+     * A register name or a literal-next key is ARMED (A-r, C-r, C-q):
+     * the next key is that command's argument, printable or not, so it
+     * belongs to the dispatcher's capture rather than to the text.
+     */
+    if (ed->capture_cmd.v != 0U)
+        return false;
     if (key->code < YEW_KEY_BASE && key->ntext != 0U &&
         (key->mods & command_mods) == 0U) {
         /*
