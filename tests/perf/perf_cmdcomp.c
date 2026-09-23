@@ -29,10 +29,12 @@
 #include "perf_policy.h"
 #include "term/grid.h"
 #include "ui/cmdcomp.h"
+#include "ui/cmdhist.h"
 #include "ui/cmdline.h"
 #include "ui/compspec.h"
 #include "ui/shctx.h"
 #include "util/arena.h"
+#include "util/buf.h"
 
 /*
  * The typed prefix walks through three regimes on purpose: the command
@@ -93,7 +95,23 @@ enum {
      */
     PERF_SPEC_ITERS = 1000,
     PERF_SPEC_WARMUPS = 50,
-    PERF_SPEC_BUDGET_NS = 150000
+    PERF_SPEC_BUDGET_NS = 150000,
+    /*
+     * Sprint 57.26 §3: the history ghost is computed on every keystroke
+     * of a `:!` body -- a prefix memcmp over the snapshot, newest first.
+     * The worst case is a full 20 000-entry snapshot whose ONLY match is
+     * the oldest entry, so every entry is compared; p99 under 300 us.
+     */
+    PERF_HIST_ITERS = 1000,
+    PERF_HIST_WARMUPS = 50,
+    PERF_HIST_BUDGET_NS = 300000,
+    /*
+     * The snapshot is taken on the keystroke that first makes the line a
+     * bang body, once per prompt: parsing a full-size history (20 000
+     * fish entries, ~1 MB) must fit the keypress budget on its own.
+     */
+    PERF_HIST_LOADS = 21,
+    PERF_HIST_LOAD_BUDGET_NS = 5000000
 };
 
 static volatile u64 perf_comp_sink;
@@ -664,6 +682,112 @@ static int measure_spec(void)
     return failed ? 1 : 0;
 }
 
+static int measure_history(void)
+{
+    static i64 samples[PERF_HIST_ITERS];
+    static const char body[] = "git log --oneline --graph --decor";
+    YewHistSuggest snap;
+    char line[96];
+    u32 i;
+    i64 p99;
+    i64 median;
+    bool failed;
+
+    yew_hist_suggest_init(&snap);
+    /* Newest first: 19 999 near-misses sharing a long prefix (so each
+     * memcmp does real work), then the one match, the oldest. */
+    for (i = 0U; i + 1U < YEW_HIST_SUGGEST_MAX; i++) {
+        (void)snprintf(line, sizeof(line),
+                       "git log --oneline --graph --dec%05u", (unsigned)i);
+        (void)yew_hist_suggest_add(&snap, line, strlen(line));
+    }
+    (void)yew_hist_suggest_add(&snap,
+                               "git log --oneline --graph --decorate --all",
+                               42U);
+    if (snap.n != YEW_HIST_SUGGEST_MAX) {
+        (void)fprintf(stderr, "perf_cmdcomp: history snapshot holds %u\n",
+                      (unsigned)snap.n);
+        yew_hist_suggest_free(&snap);
+        return 2;
+    }
+    for (i = 0U; i < PERF_HIST_WARMUPS + PERF_HIST_ITERS; i++) {
+        size_t rest = 0U;
+        const char *ghost;
+        i64 start = now_ns();
+        i64 end;
+
+        ghost = yew_hist_suggest_match(&snap, body, sizeof(body) - 1U,
+                                       &rest);
+        end = now_ns();
+        if (ghost == NULL || rest != 9U || memcmp(ghost, "ate --all", 9U)) {
+            (void)fprintf(stderr, "perf_cmdcomp: history scan missed\n");
+            yew_hist_suggest_free(&snap);
+            return 2;
+        }
+        perf_comp_sink += (u64)rest;
+        if (i >= PERF_HIST_WARMUPS)
+            samples[i - PERF_HIST_WARMUPS] = end - start;
+    }
+    yew_hist_suggest_free(&snap);
+    {
+        static i64 loads[PERF_HIST_LOADS];
+        Bytebuf file;
+        i64 load_p99;
+        bool load_failed;
+
+        bytebuf_init(&file);
+        for (i = 0U; i < YEW_HIST_SUGGEST_MAX; i++)
+            bytebuf_printf(&file,
+                           "- cmd: make -C src/module%05u test-unit "
+                           "V=1 && ./build/run --verbose\n"
+                           "  when: %u\n",
+                           (unsigned)i, 1700000000U + (unsigned)i);
+        for (i = 0U; i < PERF_HIST_LOADS; i++) {
+            i64 start = now_ns();
+
+            yew_hist_suggest_init(&snap);
+            yew_hist_parse_fish(&snap, (const char *)file.data, file.len);
+            loads[i] = now_ns() - start;
+            perf_comp_sink += snap.n;
+            yew_hist_suggest_free(&snap);
+        }
+        stable_sort_i64(loads, PERF_HIST_LOADS);
+        load_p99 = loads[PERF_HIST_LOADS - 1U];
+        load_failed = yew_perf_timing_failed(
+            (uint64_t)load_p99, (uint64_t)PERF_HIST_LOAD_BUDGET_NS,
+            yew_perf_advisory());
+        (void)printf("perf-cmdcomp-history-load: entries=%u bytes=%zu "
+                     "median_ms=%.3f max_ms=%.3f budget_ms=%.3f%s\n",
+                     (unsigned)YEW_HIST_SUGGEST_MAX, file.len,
+                     (double)loads[PERF_HIST_LOADS / 2U] / 1000000.0,
+                     (double)load_p99 / 1000000.0,
+                     (double)PERF_HIST_LOAD_BUDGET_NS / 1000000.0,
+                     yew_perf_timing_verdict(
+                         (uint64_t)load_p99,
+                         (uint64_t)PERF_HIST_LOAD_BUDGET_NS,
+                         yew_perf_advisory()));
+        bytebuf_free(&file);
+        if (load_failed)
+            return 1;
+    }
+    stable_sort_i64(samples, PERF_HIST_ITERS);
+    median = samples[PERF_HIST_ITERS / 2U];
+    p99 = samples[(PERF_HIST_ITERS * 99U + 99U) / 100U - 1U];
+    failed = yew_perf_timing_failed((uint64_t)p99,
+                                    (uint64_t)PERF_HIST_BUDGET_NS,
+                                    yew_perf_advisory());
+    (void)printf("perf-cmdcomp-history: entries=%u iters=%u median_us=%.1f "
+                 "p99_us=%.1f max_us=%.1f budget_us=%.1f%s\n",
+                 (unsigned)YEW_HIST_SUGGEST_MAX, (unsigned)PERF_HIST_ITERS,
+                 (double)median / 1000.0, (double)p99 / 1000.0,
+                 (double)samples[PERF_HIST_ITERS - 1U] / 1000.0,
+                 (double)PERF_HIST_BUDGET_NS / 1000.0,
+                 yew_perf_timing_verdict((uint64_t)p99,
+                                         (uint64_t)PERF_HIST_BUDGET_NS,
+                                         yew_perf_advisory()));
+    return failed ? 1 : 0;
+}
+
 static int selftest_policy(void)
 {
     const i64 budget = PERF_COMP_BUDGET_NS;
@@ -784,6 +908,7 @@ int main(int argc, char **argv)
         int exec_status = measure_exec(root);
         int shctx_status = measure_shctx();
         int spec_status = measure_spec();
+        int history_status = measure_history();
 
         if (exec_status != 0 && status == 0)
             status = exec_status;
@@ -791,6 +916,8 @@ int main(int argc, char **argv)
             status = shctx_status;
         if (spec_status != 0 && status == 0)
             status = spec_status;
+        if (history_status != 0 && status == 0)
+            status = history_status;
     }
 
 done:
