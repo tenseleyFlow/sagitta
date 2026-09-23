@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/job.h"
 #include "edit/select.h"
 #include "ui/compspec.h"
 #include "unicode/coords.h"
@@ -1182,21 +1183,62 @@ static bool bang_body_start(const Parser *p, const char *name,
  * state (§6).  Nothing decided here reaches execution; yew_cmd_parse
  * still hands the whole body to `sh -c` verbatim (finish_bang).
  */
+/*
+ * Sprint 57.32 §1: the environment a `:!` child gets, for the lexer's
+ * `cd ~` / $HOME / $OLDPWD / CDPATH.  Built on the first question only:
+ * most lines hold no cd, and copying the environment per keystroke
+ * would be paid for nothing.
+ */
+typedef struct BangEnv {
+    Ed *ed;
+    Arena *arena;
+    char **vars;
+    bool loaded;
+} BangEnv;
+
+static const char *bang_env_get(void *ud, const char *name)
+{
+    BangEnv *e = ud;
+    size_t n = strlen(name);
+    size_t i;
+
+    if (!e->loaded) {
+        e->loaded = true;
+        e->vars = e->ed == NULL ? NULL : yew_job_env(e->ed, e->arena);
+    }
+    for (i = 0U; e->vars != NULL && e->vars[i] != NULL; i++) {
+        if (strncmp(e->vars[i], name, n) == 0 && e->vars[i][n] == '=')
+            return e->vars[i] + n + 1U;
+    }
+    return NULL;
+}
+
 static void bang_point(Parser *p, size_t body, size_t cursor,
                        CmdParsePoint *out)
 {
     YewShCtx *ctx = arena_alloc(p->arena, sizeof(*ctx), sizeof(void *));
+    BangEnv benv;
+    YewShEnv env;
 
+    benv.ed = p->ed;
+    benv.arena = p->arena;
+    benv.vars = NULL;
+    benv.loaded = false;
+    env.get = bang_env_get;
+    env.ud = &benv;
+    env.base = yew_ws_root(p->ed);
     out->bang_body = true;
     /* Sprint 57.24 §1: a spec's `precommand` replaces the lexer's wrapper
      * table row for its command. */
-    if (!yew_shctx_at_with(p->line + body, p->len - body, cursor - body,
-                           p->arena, yew_compspec_wrapper, p->ed, ctx)) {
+    if (!yew_shctx_at_env(p->line + body, p->len - body, cursor - body,
+                          p->arena, yew_compspec_wrapper, p->ed, &env,
+                          ctx)) {
         /* cursor >= body is the caller's precondition; unreachable. */
         (void)memset(ctx, 0, sizeof(*ctx));
         ctx->pos = YEW_SH_POS_NONE;
         ctx->replace = (Span){cursor - body, cursor - body};
         ctx->stem = arena_strdup(p->arena, "");
+        ctx->cwd = ctx->stem;
     }
     ctx->replace.lo += body;
     ctx->replace.hi += body;
