@@ -36,9 +36,6 @@
 #include "ws/trust.h"
 #include "ws/trust_prompt.h"
 
-#ifndef YEW_RUNTIME_DIR_DEFAULT
-#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
-#endif
 
 enum {
     YEW_CFG_BUILTIN = 0,
@@ -118,26 +115,29 @@ static char *path_join(const char *dir, const char *tail)
     return path;
 }
 
+/* Where the built-in init.fl comes from: yew_runtime_root's decision,
+ * which the completion specs share (src/ui/compspec.c). */
 static char *runtime_path(void)
 {
-    const char *dir = getenv("YEW_RUNTIME_DIR");
+    const char *dir = NULL;
     char *path;
 
-    if (dir != NULL && dir[0] != '\0')
+    switch (yew_runtime_root(&dir)) {
+    case YEW_RUNTIME_ROOT_ENV:
+    case YEW_RUNTIME_ROOT_PREFIX:
         return path_join(dir, "init.fl");
-    path = path_join(YEW_RUNTIME_DIR_DEFAULT, "init.fl");
-    if (path != NULL && access(path, R_OK) == 0)
-        return path;
-    yew_xfree(path);
-    /* An uninstalled build is run from the repository root by the test and
-     * development targets.  Installed binaries still resolve the compiled
-     * prefix first, so this does not weaken the shipped-artifact check. */
-    if (access("runtime/init.fl", R_OK) == 0)
+    case YEW_RUNTIME_ROOT_SOURCE:
         return cfg_dup("runtime/init.fl");
-    path = yew_runtime_asset_resolve("init.fl");
-    if (path != NULL)
-        return path;
-    return path_join(YEW_RUNTIME_DIR_DEFAULT, "init.fl");
+    case YEW_RUNTIME_ROOT_EMBEDDED:
+        path = yew_runtime_asset_resolve("init.fl");
+        if (path != NULL)
+            return path;
+        break;
+    case YEW_RUNTIME_ROOT_NONE:
+    default:
+        break;
+    }
+    return path_join(yew_runtime_prefix_dir(), "init.fl");
 }
 
 static char *user_path(const YewConfigState *state)

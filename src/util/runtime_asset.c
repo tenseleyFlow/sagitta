@@ -1,7 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "util/runtime_asset.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "util/buf.h"
 #include "util/runtime_blob.h"
@@ -245,4 +249,62 @@ char *yew_runtime_asset_resolve(const char *path)
     (void)path;
     return NULL;
 #endif
+}
+
+#ifndef YEW_RUNTIME_DIR_DEFAULT
+#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
+#endif
+
+static const char *test_prefix;
+
+void yew_runtime_test_set_prefix(const char *dir)
+{
+    test_prefix = dir;
+}
+
+const char *yew_runtime_prefix_dir(void)
+{
+    return test_prefix != NULL ? test_prefix : YEW_RUNTIME_DIR_DEFAULT;
+}
+
+static bool readable_init(const char *dir)
+{
+    size_t n = strlen(dir);
+    char *path = yew_xmalloc(n + sizeof("/init.fl"));
+    bool ok;
+
+    (void)memcpy(path, dir, n);
+    (void)memcpy(path + n, "/init.fl", sizeof("/init.fl"));
+    ok = access(path, R_OK) == 0;
+    yew_xfree(path);
+    return ok;
+}
+
+YewRuntimeRoot yew_runtime_root(const char **dir)
+{
+    const char *env = getenv("YEW_RUNTIME_DIR");
+    const char *prefix = yew_runtime_prefix_dir();
+
+    if (dir != NULL)
+        *dir = NULL;
+    if (env != NULL && env[0] != '\0') {
+        if (dir != NULL)
+            *dir = env;
+        return YEW_RUNTIME_ROOT_ENV;
+    }
+    if (prefix[0] != '\0' && readable_init(prefix)) {
+        if (dir != NULL)
+            *dir = prefix;
+        return YEW_RUNTIME_ROOT_PREFIX;
+    }
+    /* An uninstalled build is run from the repository root by the test and
+     * development targets.  Installed binaries resolve the prefix first. */
+    if (access("runtime/init.fl", R_OK) == 0) {
+        if (dir != NULL)
+            *dir = "runtime";
+        return YEW_RUNTIME_ROOT_SOURCE;
+    }
+    if (yew_runtime_asset_has("init.fl"))
+        return YEW_RUNTIME_ROOT_EMBEDDED;
+    return YEW_RUNTIME_ROOT_NONE;
 }
