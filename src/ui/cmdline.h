@@ -65,6 +65,13 @@ typedef struct CmdLine {
     bool comp_asked;
     char *menu_stem;
     Span menu_original;
+    /*
+     * Sprint 57.26 §3: the `:!` history snapshot the ghost reads -- taken
+     * the first time this prompt holds a bang body with the caret at its
+     * end, and fixed from then until the prompt closes (invariant 5).
+     */
+    YewHistSuggest suggest;
+    bool suggest_loaded;
     YewCmdlineInputDone input_done;
     void *input_ctx;
 } CmdLine;
@@ -141,6 +148,9 @@ CmdStatus yew_cmdline_cmd_menu_page_prev(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_accept(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_dismiss(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_ghost_accept(CmdCtx *cx);
+/* Sprint 57.26 §3: the ghost up to and including the next run of
+ * unquoted whitespace; a word motion when there is no ghost. */
+CmdStatus yew_cmdline_cmd_ghost_accept_word(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_cancel(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_delete_word_prev(CmdCtx *cx);

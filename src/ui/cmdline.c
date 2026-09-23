@@ -499,6 +499,8 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     }
     line->err = (CmdErr){0};
     line->scroll = 0U;
+    yew_hist_suggest_init(&line->suggest);
+    line->suggest_loaded = false;
     comp_idle_dirty = true;
     yew_msg_clear(ed);
     if (old != YEW_MODE_E) {
@@ -578,6 +580,8 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     /* Sprint 57.26: likewise fish's; its answers stay fresh 5 s. */
     yew_compfish_prompt_closed();
     comp_idle_dirty = false;
+    yew_hist_suggest_free(&line->suggest);
+    line->suggest_loaded = false;
     history_release(ed, line->kind, line->history);
     line->history = NULL;
     yew_hist_cur_dispose(&line->hist);
@@ -1588,7 +1592,7 @@ CmdStatus yew_cmdline_cmd_delete_to_end(CmdCtx *cx)
  * reads on every keystroke -- return a pattern with a suggestion glued
  * to it.
  */
-static const char *cmdline_ghost(Ed *ed, size_t *len)
+static const char *token_ghost(Ed *ed, size_t *len)
 {
     const CmdLine *line = &ed->cmdline;
     const CompItem *item;
@@ -1626,42 +1630,245 @@ static const char *cmdline_ghost(Ed *ed, size_t *len)
     return item->text + stem_len;
 }
 
-CmdStatus yew_cmdline_cmd_ghost_accept(CmdCtx *cx)
+/* `shell.suggest_history`: `all` (the default) or `yew`. */
+static bool suggest_all_shells(Ed *ed)
+{
+    OptVal v;
+
+    if (!yew_opt_get(ed, NULL, NULL, "shell.suggest_history", 21U, &v) ||
+        (v.type != (u8)YEW_OPT_ENUM && v.type != (u8)YEW_OPT_STR))
+        return true;
+    return !(v.as.str.len == 3U && memcmp(v.as.str.s, "yew", 3U) == 0);
+}
+
+/*
+ * Sprint 57.26 §3: the snapshot, taken once per prompt.  yew's own
+ * E-mode history first (its bang entries' BODIES, so `:!git st` finds
+ * `:%!git status` too), newest first; then, under `all`, the shells'
+ * files.  Nothing here runs again until the prompt closes, so a history
+ * another process writes mid-prompt cannot change a frame.
+ */
+static void suggest_ensure(Ed *ed)
+{
+    CmdLine *line = &ed->cmdline;
+    size_t i;
+
+    if (line->suggest_loaded)
+        return;
+    line->suggest_loaded = true;
+    yew_hist_suggest_init(&line->suggest);
+    if (line->history != NULL) {
+        for (i = yew_hist_len(line->history); i > 0U; i--) {
+            const char *entry = yew_hist_at(line->history, i - 1U);
+            size_t n = entry == NULL ? 0U : strlen(entry);
+            size_t body;
+
+            if (entry != NULL && yew_cmd_bang_body(ed, entry, n, &body))
+                (void)yew_hist_suggest_add(&line->suggest, entry + body,
+                                           n - body);
+        }
+    }
+    if (suggest_all_shells(ed))
+        yew_hist_suggest_read_shells(&line->suggest);
+}
+
+/*
+ * The history ghost: the caret at the end of a non-empty bang body, and
+ * the newest snapshot entry that begins with that body and is longer
+ * supplies its remainder.  A pure function of (snapshot, line).
+ */
+static const char *history_ghost(Ed *ed, size_t *len)
+{
+    CmdLine *line = &ed->cmdline;
+    const char *ghost = NULL;
+    u64 buf_len;
+    size_t body;
+    char *text;
+
+    *len = 0U;
+    if (line->kind != YEW_PROMPT_CMD || line->buf == NULL)
+        return NULL;
+    buf_len = yew_textbuf_len(line->buf);
+    if (buf_len == 0U || line->cur.pos.v != buf_len)
+        return NULL;
+    text = text_string(line->buf);
+    if (yew_cmd_bang_body(ed, text, (size_t)buf_len, &body) &&
+        body < (size_t)buf_len) {
+        suggest_ensure(ed);
+        ghost = yew_hist_suggest_match(&line->suggest, text + body,
+                                       (size_t)buf_len - body, len);
+    }
+    yew_xfree(text);
+    return ghost;
+}
+
+typedef enum GhostKind {
+    GHOST_NONE,
+    GHOST_TOKEN,
+    GHOST_HISTORY
+} GhostKind;
+
+/*
+ * Two providers behind the one function the draw and the accept both
+ * call.  An EXPLICIT menu selection means the user is navigating the
+ * menu: its row's rest.  Otherwise the history ghost when there is one,
+ * else the top row's rest.
+ */
+static const char *cmdline_ghost_of(Ed *ed, size_t *len, GhostKind *kind)
+{
+    const char *ghost;
+
+    *kind = GHOST_NONE;
+    if (yew_menu_selected(&ed->cmdline.menu) == NULL) {
+        ghost = history_ghost(ed, len);
+        if (ghost != NULL && *len != 0U) {
+            *kind = GHOST_HISTORY;
+            return ghost;
+        }
+    }
+    ghost = token_ghost(ed, len);
+    if (ghost != NULL)
+        *kind = GHOST_TOKEN;
+    return ghost;
+}
+
+static const char *cmdline_ghost(Ed *ed, size_t *len)
+{
+    GhostKind kind;
+
+    return cmdline_ghost_of(ed, len, &kind);
+}
+
+/*
+ * How much of `ghost` one word is: any blanks it starts with, the next
+ * word, and the run of UNQUOTED whitespace after it -- or all of it when
+ * there is none.  Quoting is read from `typed` (the line before the
+ * caret) onwards, so a ghost that continues an open `"a b` does not stop
+ * at the blank inside the quotes.
+ */
+static size_t ghost_word_len(const char *typed, size_t tn,
+                             const char *ghost, size_t gn)
+{
+    char q = 0;
+    size_t i;
+    bool word = false;
+
+    for (i = 0U; i < tn; i++) {
+        char c = typed[i];
+
+        if (q != '\'' && c == '\\' && i + 1U < tn)
+            i++;
+        else if (q == 0 && (c == '\'' || c == '"'))
+            q = c;
+        else if (q != 0 && c == q)
+            q = 0;
+    }
+    for (i = 0U; i < gn; i++) {
+        char c = ghost[i];
+
+        if (q == 0 && (c == ' ' || c == '\t')) {
+            if (word)
+                break;
+            continue;
+        }
+        word = true;
+        if (q != '\'' && c == '\\' && i + 1U < gn)
+            i++;
+        else if (q == 0 && (c == '\'' || c == '"'))
+            q = c;
+        else if (q != 0 && c == q)
+            q = 0;
+    }
+    while (i < gn && (ghost[i] == ' ' || ghost[i] == '\t'))
+        i++;
+    return i;
+}
+
+static CmdStatus ghost_motion(CmdCtx *cx, const char *command)
+{
+    CmdCtx move = {0};
+
+    move.win = yew_cmdline_target(cx->ed);
+    move.count = 1U;
+    move.source = cx->source;
+    return yew_ed_invoke(cx->ed, yew_cmd_lookup(command,
+                                                (u32)strlen(command)),
+                         &move);
+}
+
+static CmdStatus ghost_take(CmdCtx *cx, bool one_word)
 {
     Ed *ed;
     const CompItem *item;
     const char *ghost;
+    GhostKind kind;
     size_t len;
+    size_t take;
+    u64 end;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
     ed = cx->ed;
-    ghost = cmdline_ghost(ed, &len);
+    ghost = cmdline_ghost_of(ed, &len, &kind);
     if (ghost == NULL) {
         /*
          * No suggestion under the caret, so this is just a motion.  The
          * fallback is one grapheme right rather than end-of-line, which
          * is why this is bound to Right and not to C-e: at end of line
-         * the two agree, but anywhere else they do not.
+         * the two agree, but anywhere else they do not.  A-f is a word.
          */
-        CmdCtx move = {0};
-
-        move.win = yew_cmdline_target(ed);
-        move.count = 1U;
-        move.source = cx->source;
-        return yew_ed_invoke(ed, yew_cmd_lookup("ed.move.char.next", 17U),
-                             &move);
+        return ghost_motion(cx, one_word ? "ed.move.word.next"
+                                         : "ed.move.char.next");
     }
-    item = yew_menu_selected(&ed->cmdline.menu);
-    if (item == NULL)
-        item = &ed->cmdline.menu.items.data[0];
-    /* One accept path, shared with the menu's: a ghost accepted and a
-     * row accepted must land byte-identical text. */
-    if (!insert_completion(ed, ed->cmdline.menu.replace, item, true))
-        return YEW_CMD_ERR_IO;
+    take = len;
+    end = yew_textbuf_len(ed->cmdline.buf);
+    if (one_word) {
+        char *text = text_string(ed->cmdline.buf);
+        size_t body = 0U;
+
+        if (!yew_cmd_bang_body(ed, text, (size_t)end, &body))
+            body = 0U;
+        take = ghost_word_len(text + body, (size_t)end - body, ghost, len);
+        yew_xfree(text);
+    }
+    if (kind == GHOST_TOKEN && take == len) {
+        item = yew_menu_selected(&ed->cmdline.menu);
+        if (item == NULL)
+            item = &ed->cmdline.menu.items.data[0];
+        /* One accept path, shared with the menu's: a ghost accepted and
+         * a row accepted must land byte-identical text. */
+        if (!insert_completion(ed, ed->cmdline.menu.replace, item, true))
+            return YEW_CMD_ERR_IO;
+        menu_discard(ed);
+        cmdline_refilter(ed);
+        return YEW_CMD_OK;
+    }
+    /* A history remainder (whole or a word of it), or a word of a row's:
+     * the bytes on screen, appended at the caret, which is the end. */
+    {
+        Bytebuf bytes;
+        bool ok;
+
+        bytebuf_init(&bytes);
+        sanitize_bytes((const u8 *)ghost, take, &bytes);
+        ok = replace_span(ed, (Span){end, end}, bytes.data, bytes.len, true);
+        bytebuf_free(&bytes);
+        if (!ok)
+            return YEW_CMD_ERR_IO;
+    }
     menu_discard(ed);
-    cmdline_refilter(ed);
+    yew_cmdline_edited(ed);
     return YEW_CMD_OK;
+}
+
+CmdStatus yew_cmdline_cmd_ghost_accept(CmdCtx *cx)
+{
+    return ghost_take(cx, false);
+}
+
+CmdStatus yew_cmdline_cmd_ghost_accept_word(CmdCtx *cx)
+{
+    return ghost_take(cx, true);
 }
 
 static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
