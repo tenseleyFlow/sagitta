@@ -430,12 +430,21 @@ abridged), and where a user override lives. It ships with the runtime so
 Where this contract was wrong about the code, or a rule could not hold as
 written, the implementation did what the contract intends:
 
-1. **Shipped files are not read through `yew_runtime_asset_read` alone** —
-   it serves only the `EMBED_RUNTIME=1` image. `compspec.c` resolves the
-   shipped directory the way the runtime's other consumers do:
-   `$YEW_RUNTIME_DIR` alone when set; else the installed prefix, but only
-   if IT has `completions/` (an older install does not); else the source
-   tree's `runtime/`; else the embedded image.
+1. **Shipped files come from the runtime init.fl came from — one
+   decision** (`yew_runtime_root`, `src/util/runtime_asset.c`, read by both
+   `flconf.c` and `compspec.c`), not `yew_runtime_asset_read` alone (it
+   serves only the embedded image) and not a second search:
+   `$YEW_RUNTIME_DIR` → its `completions/`; the installed prefix (its
+   init.fl readable) → `prefix/completions/`, and if that is ABSENT, the
+   embedded image if this build has one, else no shipped specs, plus one
+   queued message saying the install needs refreshing — never a fall-
+   through to `./runtime`, which under a stale install would load (and run
+   the generators of) specs from whatever repository the user `cd`'d into,
+   exactly §9's deferral; `./runtime` only when init.fl itself came from
+   there (an uninstalled build, whose repository's init.fl already runs);
+   else embedded. Reports (a rejected file, the stale install) are queued
+   and put on the message line by the `:` prompt (`yew_compspec_notice`),
+   never from inside a lookup, which also runs inside the lexer.
 2. **The embed list is automatic** (`find runtime -type f`), so nothing had
    to be added to it; `README.md` ships in the image and is installed too.
 3. **A spec owns an arena, not an `FlVm`.** The per-document VM validates
