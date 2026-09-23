@@ -1168,22 +1168,6 @@ static bool bang_body_start(const Parser *p, const char *name,
 }
 
 /*
- * Describe the caret inside a bang body.
- *
- * Sprint 57.23 §5: the body is handed to the shell context lexer, which
- * knows what 57.18's word splitter did not -- that `ls | gr` puts `gr` in
- * COMMAND position, that `cat > ou` is a redirection target, that
- * `sudo -u root gi` runs `gi`.  `token_index` is the lexer's `arg_index`:
- * 0 in command position, otherwise the operand index within the caret's
- * OWN simple command.
- *
- * SHELL rules, not Sprint 18's argument rules: `%` is a percent sign here,
- * an unknown escape is a literal backslash, and the stem comes back
- * WITHOUT its quotes -- the completer re-quotes for the caret's quote
- * state (§6).  Nothing decided here reaches execution; yew_cmd_parse
- * still hands the whole body to `sh -c` verbatim (finish_bang).
- */
-/*
  * Sprint 57.32 §1: the environment a `:!` child gets, for the lexer's
  * `cd ~` / $HOME / $OLDPWD / CDPATH.  Built on the first question only:
  * most lines hold no cd, and copying the environment per keystroke
@@ -1213,6 +1197,22 @@ static const char *bang_env_get(void *ud, const char *name)
     return NULL;
 }
 
+/*
+ * Describe the caret inside a bang body.
+ *
+ * Sprint 57.23 §5: the body is handed to the shell context lexer, which
+ * knows what 57.18's word splitter did not -- that `ls | gr` puts `gr` in
+ * COMMAND position, that `cat > ou` is a redirection target, that
+ * `sudo -u root gi` runs `gi`.  `token_index` is the lexer's `arg_index`:
+ * 0 in command position, otherwise the operand index within the caret's
+ * OWN simple command.
+ *
+ * SHELL rules, not Sprint 18's argument rules: `%` is a percent sign here,
+ * an unknown escape is a literal backslash, and the stem comes back
+ * WITHOUT its quotes -- the completer re-quotes for the caret's quote
+ * state (§6).  Nothing decided here reaches execution; yew_cmd_parse
+ * still hands the whole body to `sh -c` verbatim (finish_bang).
+ */
 static void bang_point(Parser *p, size_t body, size_t cursor,
                        CmdParsePoint *out)
 {
