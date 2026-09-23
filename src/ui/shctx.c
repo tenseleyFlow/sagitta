@@ -193,7 +193,7 @@ typedef struct CmdFr {
     u32 w_nexp;       /* expansions in the word                          */
     u8 w_var;         /* VK_* of its one $NAME / ${NAME}                 */
     bool w_var_q;
-    bool cmd_started; /* the simple command has a word or redirection    */
+    bool began; /* the simple command has a word or redirection    */
     bool fn_pending;  /* `f()` ended a command: the next { or ( is its body */
     bool fn_body;     /* this frame IS a function body (runs later)      */
     Flow fl;
@@ -517,7 +517,7 @@ static void push_synth(Lexer *L, CmdFr *c)
 
 static void word_begin(CmdFr *c, size_t at)
 {
-    c->cmd_started = true;
+    c->began = true;
     if (c->in_word)
         return;
     c->in_word = true;
@@ -1010,9 +1010,9 @@ static void cmd_done(Lexer *L, CmdFr *c, u8 op)
     DirV s;
     DirV f;
 
-    if (!c->cmd_started && c->n == 0U && !fl->override)
+    if (!c->began && c->n == 0U && !fl->override)
         return;
-    c->cmd_started = false;
+    c->began = false;
     cmd_effect(L, c, fl->pipe_in, &s, &f);
     if (fl->override) {
         s = fl->ov_s;
@@ -1125,7 +1125,7 @@ static void flow_reserved(Lexer *L, CmdFr *c, const char *t)
 {
     Construct *k;
 
-    c->cmd_started = false;
+    c->began = false;
     if (strcmp(t, "if") == 0) {
         con_open(L, c, CK_IF, 0U);
     } else if (strcmp(t, "while") == 0 || strcmp(t, "until") == 0) {
@@ -1339,7 +1339,7 @@ static CmdFr *word_end(Lexer *L, CmdFr *c)
         }
         if (strcmp(text, "{") == 0) {
             c->fn_pending = pending; /* push_cmd reads it */
-            c->cmd_started = false;
+            c->began = false;
             (void)push_cmd(L, FR_BRACE);
             c->fn_pending = false;
             return cur_cmd(L);
@@ -1384,13 +1384,13 @@ static CmdFr *word_end(Lexer *L, CmdFr *c)
         }
         if (strcmp(text, "for") == 0 || strcmp(text, "select") == 0) {
             c->forst = FOR_NAME;
-            c->cmd_started = false;
+            c->began = false;
             con_open(L, c, CK_LOOP, 2U);
             return cur_cmd(L);
         }
         if (strcmp(text, "case") == 0) {
             c->casest = CASE_WORD;
-            c->cmd_started = false;
+            c->began = false;
             con_open(L, c, CK_CASE, 0U);
             push_synth(L, c);
             return cur_cmd(L);
@@ -1764,7 +1764,7 @@ static size_t lex_redirect(Lexer *L, CmdFr *c, size_t at)
     size_t p;
     bool dup = false;
 
-    c->cmd_started = true;
+    c->began = true;
     /* A digit run is an fd prefix only when immediately followed by `<`
      * or `>` -- and then it is part of the operator, not an operand. */
     if (c->in_word && c->w_digits && c->dec.len != 0U && c->w_flags == 0U &&
