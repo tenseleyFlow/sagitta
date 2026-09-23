@@ -911,6 +911,7 @@ void test_compspec_user_file_is_rechecked_once_per_prompt(void);
 void test_compspec_description_index_parses_nothing(void);
 void test_compspec_precommand_feeds_the_lexer(void);
 void test_compspec_resolution_corpus(void);
+void test_compspec_command_rows_show_the_description(void);
 void test_compgen_hosts_reads_the_fixture_home_only(void);
 void test_compgen_make_targets_never_executes_the_makefile(void);
 void test_compgen_signals_with_and_without_sig(void);

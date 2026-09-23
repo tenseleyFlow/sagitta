@@ -582,3 +582,72 @@ void test_compspec_resolution_corpus(void)
     corpus_ed_drop(&c);
     spec_fix_drop(&f);
 }
+
+/*
+ * §7: in COMMAND position an executable whose name has a spec shows the
+ * spec's description beside it -- `wolf  the wolf toolchain` next to
+ * `which` -- read from the index, with no spec parsed to draw it.
+ */
+void test_compspec_command_rows_show_the_description(void)
+{
+    SpecFix f;
+    CorpusEd c;
+    char bin[256];
+    char exe[300];
+    char *saved_path = getenv("PATH") == NULL ? NULL
+                                               : yew_xstrdup(getenv("PATH"));
+    static const char *const names[] = {"wolf", "wobble"};
+    Arena scratch;
+    Arena arena;
+    CompFilter filter;
+    YewCompQuery q;
+    Vec_CompItem items = {0};
+    u32 before;
+    size_t i;
+    bool saw_wolf = false;
+
+    spec_fix_init(&f);
+    corpus_ed_init(&c, &f);
+    SPEC_FMT(bin, sizeof(bin), "%s/bin", f.root);
+    YEW_ASSERT_EQ_I64(mkdir(bin, 0700), 0);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        FILE *fp;
+
+        SPEC_FMT(exe, sizeof(exe), "%s/%s", bin, names[i]);
+        fp = fopen(exe, "wb");
+        YEW_ASSERT_NOT_NULL(fp);
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+        YEW_ASSERT_EQ_I64(chmod(exe, 0700), 0);
+    }
+    YEW_ASSERT_EQ_I64(setenv("PATH", bin, 1), 0);
+    yew_comp_listing_invalidate();
+    before = yew_compspec_test_parse_count();
+    arena_init(&scratch);
+    arena_init(&arena);
+    yew_comp_filter_init(&filter);
+    YEW_ASSERT(yew_comp_query(&c.ed, ":!wo", 4U, 4U, &scratch, &q));
+    (void)yew_comp_filter_run(&c.ed, &filter, &arena, &q, 0, &items);
+    for (i = 0U; i < items.len; i++) {
+        if (strcmp(items.data[i].text, "wolf") == 0) {
+            YEW_ASSERT_EQ_STR(items.data[i].detail, "the wolf toolchain");
+            saw_wolf = true;
+        } else if (strcmp(items.data[i].text, "wobble") == 0) {
+            /* No spec: 57.18's detail, the $PATH element. */
+            YEW_ASSERT_EQ_STR(items.data[i].detail, bin);
+        }
+    }
+    YEW_ASSERT(saw_wolf);
+    YEW_ASSERT_EQ_U64(yew_compspec_test_parse_count(), before);
+    Vec_CompItem_free(&items);
+    yew_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    if (saved_path != NULL)
+        YEW_ASSERT_EQ_I64(setenv("PATH", saved_path, 1), 0);
+    else
+        YEW_ASSERT_EQ_I64(unsetenv("PATH"), 0);
+    yew_xfree(saved_path);
+    yew_comp_listing_invalidate();
+    corpus_ed_drop(&c);
+    spec_fix_drop(&f);
+}

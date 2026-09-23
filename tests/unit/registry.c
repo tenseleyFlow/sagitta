@@ -942,6 +942,7 @@ const YewTest yew_tests[] = {
     T(compspec_description_index_parses_nothing),
     T(compspec_precommand_feeds_the_lexer),
     T(compspec_resolution_corpus),
+    T(compspec_command_rows_show_the_description),
     T(compgen_hosts_reads_the_fixture_home_only),
     T(compgen_make_targets_never_executes_the_makefile),
     T(compgen_signals_with_and_without_sig),
