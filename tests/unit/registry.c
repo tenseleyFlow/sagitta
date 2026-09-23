@@ -1043,6 +1043,7 @@ const YewTest yew_tests[] = {
     T(cmdcomp_exec_slices_and_resumes),
     T(cmdcomp_bang_query_routes_exec_then_path),
     T(cmdcomp_shell_filter_rekeys_on_context),
+    T(cdaware_cache_rekeys_on_inserted_cd),
     T(cmdcomp_shell_route_row1_none),
     T(cmdcomp_shell_route_row2_variable),
     T(cmdcomp_shell_route_row3_user),

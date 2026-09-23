@@ -1013,6 +1013,7 @@ void test_cmdcomp_exec_opendir_count_stays_bounded(void);
 void test_cmdcomp_exec_slices_and_resumes(void);
 void test_cmdcomp_bang_query_routes_exec_then_path(void);
 void test_cmdcomp_shell_filter_rekeys_on_context(void);
+void test_cdaware_cache_rekeys_on_inserted_cd(void);
 void test_cmdcomp_shell_route_row1_none(void);
 void test_cmdcomp_shell_route_row2_variable(void);
 void test_cmdcomp_shell_route_row3_user(void);
