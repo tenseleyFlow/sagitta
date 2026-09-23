@@ -1013,10 +1013,8 @@ static char *shipped_dir(void)
         if (is_dir(dir))
             return dir;
         yew_xfree(dir);
+        /* Said once, on the message line, by yew_compspec_notice. */
         stale_prefix = yew_xstrdup(root);
-        yew_log(YEW_LOG_WARN,
-                "installed runtime %s has no completions/; reinstall yew",
-                root);
         return NULL;
     case YEW_RUNTIME_ROOT_SOURCE:
         /* An uninstalled build run from its own repository: that
