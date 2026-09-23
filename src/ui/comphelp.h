@@ -111,6 +111,11 @@ typedef struct YewHelpLookup {
  * and reports it pending.  Returns whether `out->spec` is set.
  */
 bool yew_comphelp_lookup(Ed *ed, const char *word, YewHelpLookup *out);
+/* Sprint 57.32: the same, with a relative command word (`./tool`)
+ * resolved against `cwd` -- the directory the command runs in; NULL
+ * (unknown) answers nothing for one. */
+bool yew_comphelp_lookup_in(Ed *ed, const char *word, const char *cwd,
+                            YewHelpLookup *out);
 
 typedef enum YewHelpDescend {
     YEW_HELP_DESCEND_READY,   /* the node's own help is in the tree     */
