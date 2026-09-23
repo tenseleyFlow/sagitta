@@ -15,6 +15,7 @@
 #include "edit/ed.h"
 #include "ui/compspec.h"
 #include "util/buf.h"
+#include "util/runtime_asset.h"
 
 /* ------------------------------------------------------------------ */
 /* Every shipped spec validates (DoD 1)                                */
@@ -326,12 +327,15 @@ void test_compspec_broken_user_file_is_reported_once(void)
     yew_ed_init(&ed);
     spec_fix_user(&f, "wolf", "{ completion: 1, command: \"wolf\", zap: 1 }");
     YEW_ASSERT_NULL(yew_compspec_get(&ed, "wolf"));
+    YEW_ASSERT(!ed.msg.active); /* queued, never from inside a lookup */
+    YEW_ASSERT(yew_compspec_notice(&ed));
     YEW_ASSERT(ed.msg.active);
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "wolf.fl"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "unknown key 'zap'"));
     yew_msg_clear(&ed);
     /* Once per session: the next lookup says nothing. */
     YEW_ASSERT_NULL(yew_compspec_get(&ed, "wolf"));
+    YEW_ASSERT(!yew_compspec_notice(&ed));
     YEW_ASSERT(!ed.msg.active);
     /* It never hides the rest of the line's specs. */
     YEW_ASSERT_NOT_NULL(yew_compspec_get(&ed, "git"));
@@ -650,4 +654,155 @@ void test_compspec_command_rows_show_the_description(void)
     yew_comp_listing_invalidate();
     corpus_ed_drop(&c);
     spec_fix_drop(&f);
+}
+
+/* ------------------------------------------------------------------ */
+/* Where shipped specs may come from: the runtime init.fl came from    */
+/* ------------------------------------------------------------------ */
+
+typedef struct RootFix {
+    SpecFix f;
+    char cwd[PATH_MAX];
+    char prefix[256];
+    char repo[256];
+} RootFix;
+
+static void root_write(const char *path, const char *text)
+{
+    FILE *fp = fopen(path, "wb");
+
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite(text, 1U, strlen(text), fp), strlen(text));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+}
+
+/* A hostile repository in the cwd: runtime/init.fl, and a spec whose
+ * generator would run a program if anything loaded it. */
+static void root_fix_init(RootFix *r, bool with_repo_init)
+{
+    char path[512];
+
+    spec_fix_init(&r->f);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_RUNTIME_DIR"), 0);
+    YEW_ASSERT_NOT_NULL(getcwd(r->cwd, sizeof(r->cwd)));
+    SPEC_FMT(r->prefix, sizeof(r->prefix), "%s/prefix", r->f.root);
+    SPEC_FMT(r->repo, sizeof(r->repo), "%s/repo", r->f.root);
+    YEW_ASSERT_EQ_I64(mkdir(r->prefix, 0700), 0);
+    YEW_ASSERT_EQ_I64(mkdir(r->repo, 0700), 0);
+    SPEC_FMT(path, sizeof(path), "%s/runtime", r->repo);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    SPEC_FMT(path, sizeof(path), "%s/runtime/completions", r->repo);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    if (with_repo_init) {
+        SPEC_FMT(path, sizeof(path), "%s/runtime/init.fl", r->repo);
+        root_write(path, "# repo init\n");
+    }
+    SPEC_FMT(path, sizeof(path), "%s/runtime/completions/lsx5724.fl",
+             r->repo);
+    root_write(path, "# evil 1\n{ completion: 1, command: \"lsx5724\",\n"
+                     "  generators: { g: { argv: [\"sh\", \"-c\", \"x\"] } },\n"
+                     "  args: [ { kind: \"generator\", generator: \"g\" } ] }\n");
+    YEW_ASSERT_EQ_I64(chdir(r->repo), 0);
+    yew_compspec_test_set_default_root(r->prefix);
+}
+
+static void root_fix_drop(RootFix *r)
+{
+    YEW_ASSERT_EQ_I64(chdir(r->cwd), 0);
+    yew_compspec_test_set_default_root(NULL);
+    spec_fix_drop(&r->f);
+}
+
+/*
+ * The stale-install case: the prefix has init.fl but no completions/.
+ * The cwd's runtime/completions is NOT loaded -- that would run a
+ * repository's program on Tab -- and the reinstall message says so once.
+ */
+void test_compspec_stale_install_never_falls_back_to_cwd(void)
+{
+    RootFix r;
+    char path[512];
+    Ed ed;
+
+    root_fix_init(&r, true);
+    SPEC_FMT(path, sizeof(path), "%s/init.fl", r.prefix);
+    root_write(path, "# installed init\n");
+    yew_compspec_invalidate_all();
+    YEW_ASSERT_EQ_I64(yew_runtime_root(NULL), YEW_RUNTIME_ROOT_PREFIX);
+    yew_ed_init(&ed);
+    YEW_ASSERT_NULL(yew_compspec_get(&ed, "lsx5724"));
+    YEW_ASSERT(yew_compspec_notice(&ed));
+    /* Only the embedded image, if this build has one -- never the cwd. */
+    YEW_ASSERT_EQ_STR(yew_compspec_shipped_source(), "embedded");
+    YEW_ASSERT(ed.msg.active);
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, r.prefix));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "no completions/"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "reinstall"));
+    yew_msg_clear(&ed);
+    YEW_ASSERT_NULL(yew_compspec_get(&ed, "lsx5724"));
+    YEW_ASSERT_NULL(yew_compspec_get(&ed, "git"));
+    YEW_ASSERT(!yew_compspec_notice(&ed));
+    YEW_ASSERT(!ed.msg.active);
+    yew_ed_free(&ed);
+    /* With completions/ in the prefix, the prefix's specs are used. */
+    SPEC_FMT(path, sizeof(path), "%s/completions", r.prefix);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    SPEC_FMT(path, sizeof(path), "%s/completions/pfx5724.fl", r.prefix);
+    root_write(path, "# t 1\n{ completion: 1, command: \"pfx5724\" }\n");
+    yew_compspec_invalidate_all();
+    YEW_ASSERT_NOT_NULL(yew_compspec_get(NULL, "pfx5724"));
+    YEW_ASSERT_NULL(yew_compspec_get(NULL, "lsx5724"));
+    root_fix_drop(&r);
+}
+
+/* An uninstalled dev build run from its repository root keeps working:
+ * that repository's init.fl is already the one running. */
+void test_compspec_uninstalled_build_uses_its_source_tree(void)
+{
+    RootFix r;
+
+    root_fix_init(&r, true);
+    YEW_ASSERT_EQ_I64(yew_runtime_root(NULL), YEW_RUNTIME_ROOT_SOURCE);
+    YEW_ASSERT_NOT_NULL(yew_compspec_get(NULL, "lsx5724"));
+    YEW_ASSERT_EQ_STR(yew_compspec_shipped_source(), "disk");
+    root_fix_drop(&r);
+}
+
+/* $YEW_RUNTIME_DIR is the one directory, even with a prefix and a
+ * source tree both present; and a cwd without runtime/init.fl is never
+ * a runtime at all. */
+void test_compspec_runtime_dir_env_is_the_only_directory(void)
+{
+    RootFix r;
+    char path[512];
+    char env[512];
+
+    root_fix_init(&r, false);
+    SPEC_FMT(path, sizeof(path), "%s/init.fl", r.prefix);
+    root_write(path, "# installed init\n");
+    SPEC_FMT(path, sizeof(path), "%s/completions", r.prefix);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    SPEC_FMT(path, sizeof(path), "%s/completions/pfx5724.fl", r.prefix);
+    root_write(path, "# t 1\n{ completion: 1, command: \"pfx5724\" }\n");
+    SPEC_FMT(env, sizeof(env), "%s/envrt", r.f.root);
+    YEW_ASSERT_EQ_I64(mkdir(env, 0700), 0);
+    SPEC_FMT(path, sizeof(path), "%s/completions", env);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    SPEC_FMT(path, sizeof(path), "%s/completions/env5724.fl", env);
+    root_write(path, "# t 1\n{ completion: 1, command: \"env5724\" }\n");
+    YEW_ASSERT_EQ_I64(setenv("YEW_RUNTIME_DIR", env, 1), 0);
+    yew_compspec_invalidate_all();
+    YEW_ASSERT_EQ_I64(yew_runtime_root(NULL), YEW_RUNTIME_ROOT_ENV);
+    YEW_ASSERT_NOT_NULL(yew_compspec_get(NULL, "env5724"));
+    YEW_ASSERT_NULL(yew_compspec_get(NULL, "pfx5724"));
+    YEW_ASSERT_NULL(yew_compspec_get(NULL, "lsx5724"));
+    YEW_ASSERT_EQ_U64(yew_compspec_shipped_count(), 1U);
+    /* No env, no prefix init, no ./runtime/init.fl: the repo's specs
+     * are still not loaded. */
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_RUNTIME_DIR"), 0);
+    SPEC_FMT(path, sizeof(path), "%s/init.fl", r.prefix);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    yew_compspec_invalidate_all();
+    YEW_ASSERT_NULL(yew_compspec_get(NULL, "lsx5724"));
+    root_fix_drop(&r);
 }
