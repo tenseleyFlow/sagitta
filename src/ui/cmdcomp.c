@@ -25,6 +25,7 @@
 #endif
 #include "edit/loop.h"
 #include "ui/cmdparse.h"
+#include "ui/compfish.h"
 #include "ui/compgen.h"
 #include "ui/comphelp.h"
 #include "ui/compspec.h"
@@ -2150,6 +2151,8 @@ static u32 shell_sub(const CompReq *req, YewCompKind kind, const char *stem,
 enum {
     /* Row number reported when a spec, not §3's table, decided. */
     SHELL_ROW_SPEC = 10U,
+    /* Sprint 57.26: fish's rows answered (rung 2). */
+    SHELL_ROW_FISH = 11U,
     /* `sudo env nice xargs git …` re-enters COMMAND position at most this
      * many times; past it the line is a fuzz input, not a command. */
     SHELL_REENTRY_MAX = 8U
@@ -2180,6 +2183,13 @@ typedef struct ShellPlan {
      * rows -- queued or in flight -- or NULL.  It rides the ctx_key and
      * the pager's `…` exactly as a generator key does. */
     char *help_key;
+    /* Sprint 57.26 §2: fish's rows when its gate is open (valid for the
+     * plan's lifetime: nothing lands in the cache while one is used), and
+     * the request answering or refreshing them -- the pending key, as
+     * help_key is. */
+    const YewFishRow *fish_rows;
+    u32 n_fish;
+    char *fish_key;
 } ShellPlan;
 
 /* `-C dir` / `--directory=dir` and `-f file` / `--file=` / `--makefile=`
@@ -2482,6 +2492,44 @@ static void plan_help(Ed *ed, Arena *a, ShellPlan *p)
 }
 
 /*
+ * Sprint 57.26 §2, rung 2: fish, for an operand of a command with no
+ * spec, where 57.25's help rung would be consulted -- rows 6 (a `-`
+ * stem) and 9 (a plain operand), never a shell builtin (fish's rules
+ * for `set` or `echo` describe fish's own).  The shape rows have already
+ * won: a path, `$VAR` or `~user` stem never reaches fish.
+ *
+ * Returns true when fish decided the slot: its rows, or -- while its
+ * answer is on the way -- 57.23's rows with the pending key, so the
+ * `…` shows and Tab waits (57.24's rule).  False lets the help rung
+ * answer: fish is off, absent, or has no rules here.
+ */
+static bool plan_fish(Ed *ed, Arena *a, ShellPlan *p)
+{
+    YewFishLookup fl;
+
+    if ((p->row != 6U && p->row != 9U) || sh_builtin_name(p->eff.argv[0]))
+        return false;
+    switch (yew_compfish_lookup(ed, &p->eff, &fl)) {
+    case YEW_FISH_PENDING:
+        p->fish_key = arena_strdup(a, fl.key);
+        return true;
+    case YEW_FISH_ROWS:
+        p->fish_rows = fl.rows;
+        p->n_fish = fl.n;
+        p->fish_key = arena_strdup(a, fl.key);
+        p->row = SHELL_ROW_FISH;
+        p->sources = 0U;
+        p->mask = YEW_PATH_ANY;
+        p->id = p->fish_key;
+        return true;
+    case YEW_FISH_OFF:
+    case YEW_FISH_CLOSED:
+    default:
+        return false;
+    }
+}
+
+/*
  * §4: §3's table first -- the SHAPE rows (an active expansion, $VAR,
  * ~user, an explicit path) win in every position, spec or not -- then,
  * for an operand of a command that has a spec, the spec's answer.
@@ -2508,14 +2556,15 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
         if (spec == NULL) {
             /*
              * §7's ladder for an operand: 1. a spec (above);
-             * 2. fish -- Sprint 57.26 slots its oracle in HERE, between
-             *    the spec and the help rung, and answers first when it
-             *    has rules for the command.  Not yet: a no-op rung;
+             * 2. fish (plan_fish, Sprint 57.26), which answers first
+             *    when it has rules for the command -- and holds the slot
+             *    while its answer is on the way;
              * 3. the tree learned from `--help` (plan_help);
              * 4. 57.23's rows 6, 8 and 9, which stand when 3 declines
              *    or is still pending.
              */
-            plan_help(ed, a, p);
+            if (!plan_fish(ed, a, p))
+                plan_help(ed, a, p);
             return;
         }
         if (!yew_compspec_resolve(spec, &p->eff, &pt))
@@ -2610,6 +2659,7 @@ char *yew_comp_shell_describe(Ed *ed, const YewShCtx *ctx, Arena *a)
     DESCRIBE(p.subs, "sub");
     DESCRIBE(p.flags, "flags");
     DESCRIBE(p.dash, "dash");
+    DESCRIBE(p.fish_rows != NULL, "fish");
     DESCRIBE((p.sources & SRC_BIT(YEW_COMP_EXEC)) != 0U, "exec");
     DESCRIBE((p.sources & SRC_BIT(YEW_COMP_VAR)) != 0U, "var");
     DESCRIBE((p.sources & SRC_BIT(YEW_COMP_USER)) != 0U, "user");
@@ -2800,6 +2850,41 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
                              pattern, out);
         total += spec_finish(req, YEW_COMP_GEN, &gen_rows, head_len,
                              pattern, out);
+    }
+    if (plan.fish_rows != NULL) {
+        /*
+         * Sprint 57.26 §2: fish's rows rank as GEN rows (an external
+         * answer with descriptions).  The query asked for the whole slot,
+         * so the REAL stem filters here; a directory is ranked by its
+         * name and carries its `/` back into the word, and every row is
+         * re-quoted by shell_push -- fish prints `a b.txt` raw.
+         */
+        size_t head_len = yew_comp_path_head_len(stem);
+        CandidateVec fish_rows = {0};
+        u32 k;
+
+        for (k = 0U; k < plan.n_fish; k++) {
+            const YewFishRow *r = &plan.fish_rows[k];
+            const char *raw = r->text;
+
+            if (r->is_dir) {
+                size_t n = strlen(r->text);
+                char *word = arena_alloc(&plan_arena, n + 2U, 1U);
+
+                (void)memcpy(word, r->text, n);
+                word[n] = '/';
+                word[n + 1U] = '\0';
+                raw = word;
+            }
+            if (strlen(r->text) < head_len ||
+                strncmp(r->text, stem, head_len) != 0)
+                continue;
+            (void)candidate_add(&fish_rows, stem + head_len,
+                                r->text + head_len, raw, r->desc,
+                                r->is_dir, false);
+        }
+        total += spec_finish(req, YEW_COMP_GEN, &fish_rows, head_len,
+                             stem + head_len, out);
     }
     if ((sources & SRC_BIT(YEW_COMP_VAR)) != 0U) {
         total += shell_sub(req, YEW_COMP_VAR, stem, 0U, NULL, 0U, &got);
@@ -3281,6 +3366,10 @@ static char *shell_ctx_key(Ed *ed, const YewCompQuery *q, char **gen_key)
     if (plan.has_key) {
         *gen_key = yew_compgen_key_string(&plan.key);
         bytebuf_printf(&key, "|%s", *gen_key);
+    } else if (plan.fish_key != NULL) {
+        /* Sprint 57.26: fish's answer (or its refresh) likewise. */
+        *gen_key = dup_range(plan.fish_key, strlen(plan.fish_key));
+        bytebuf_printf(&key, "|%s", *gen_key);
     } else if (plan.help_key != NULL) {
         /* Sprint 57.25: a help answer on its way is this set's pending
          * key -- the arrival refilters exactly the menu that asked. */
@@ -3380,7 +3469,8 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
     /* §5.5: the `…` marker is STATE -- in flight with nothing cached. */
     f->gen_pending = f->gen_key != NULL &&
                      (yew_compgen_awaiting(f->gen_key) ||
-                      yew_comphelp_awaiting(f->gen_key));
+                      yew_comphelp_awaiting(f->gen_key) ||
+                      yew_compfish_awaiting(f->gen_key));
     yew_xfree(head);
     yew_xfree(ctx_key);
     yew_xfree(gen_key);
