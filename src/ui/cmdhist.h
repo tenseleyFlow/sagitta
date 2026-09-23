@@ -83,8 +83,14 @@ enum {
 };
 
 typedef struct YewHistSuggest {
-    char **v;
+    /* Every body, NUL-terminated, in one pool: loading 20 000 entries
+     * is one growing buffer, not 20 000 allocations. */
+    char *pool;
+    size_t pool_len;
+    size_t pool_cap;
+    u32 *off;
     u32 *lens;
+    u32 *hashes;
     u32 n;
     u32 cap;
     /* Open-addressed set of the bodies held, for the dedupe. */
@@ -98,6 +104,9 @@ void yew_hist_suggest_free(YewHistSuggest *s);
  * Leading blanks are dropped (the shell ignores them).  Returns whether
  * it was kept. */
 bool yew_hist_suggest_add(YewHistSuggest *s, const char *text, size_t len);
+/* Entry `i` (0 is the newest), NUL-terminated; valid until the next add
+ * or the free. */
+const char *yew_hist_suggest_at(const YewHistSuggest *s, u32 i);
 /* Is this entry refused (multi-line, a control byte, a secret)? */
 bool yew_hist_suggest_refused(const char *text, size_t len);
 /*
