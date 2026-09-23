@@ -838,6 +838,18 @@ int main(int argc, char **argv)
         yew_cmd_shutdown();
         return 2;
     }
+    /*
+     * Sprint 57.26: a `:!` keystroke may take the history snapshot, which
+     * reads the shells' history files.  The gate measures yew, not the
+     * size of whoever runs it's history: HOME is the fixture root, and
+     * neither XDG_DATA_HOME nor HISTFILE names anything.
+     */
+    if (setenv("HOME", root, 1) != 0 || unsetenv("XDG_DATA_HOME") != 0 ||
+        unsetenv("HISTFILE") != 0) {
+        (void)fixture_remove(root);
+        yew_cmd_shutdown();
+        return 2;
+    }
     for (i = 0U; i < PERF_COMP_KEYS; i++)
         worst_by_key[i] = 0;
     for (trial = 0U; trial < PERF_COMP_WARMUPS; trial++) {
