@@ -1,0 +1,7 @@
+: 1790130547:0;ls cafÃ©
+: 1790130547:0;cat Äƒ£Äƒ¹.txt
+: 1790130547:0;echo first\
+second
+: 1790130547:0;git stash list
+: 1790130547:0;export API_TOKEN=abc123
+: 1790130547:0;zsh-only run

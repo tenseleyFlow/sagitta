@@ -1,0 +1,5 @@
+#1700000000
+bash-only thing
+#1700000001
+git status --porcelain
+ls -la
