@@ -77,6 +77,13 @@ bool yew_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
 bool yew_cmd_parse_point(Ed *ed, const char *line, size_t len,
                          size_t cursor, Arena *a, CmdParsePoint *out);
 
+/*
+ * Sprint 57.26 §3: where the `:!` body of a WHOLE prompt line starts
+ * (after `!`, `!!`, `r !` or a range's `!`), by the point parser's own
+ * routes.  False when the line is not a bang command.
+ */
+bool yew_cmd_bang_body(Ed *ed, const char *line, size_t len, size_t *body);
+
 /* Converts an already validated inclusive line range to bytes. */
 Span yew_range_span(const TextBuf *tb, const CmdRange *range);
 

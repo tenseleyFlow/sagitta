@@ -1206,6 +1206,27 @@ static void bang_point(Parser *p, size_t body, size_t cursor,
     out->token_index = ctx->arg_index;
 }
 
+bool yew_cmd_bang_body(Ed *ed, const char *line, size_t len, size_t *body)
+{
+    Parser p;
+    CmdErr ignored = {0};
+    CmdRange range;
+    char *name = NULL;
+    Span name_tok = {0U, 0U};
+    Arena a;
+    bool found;
+
+    if (line == NULL || body == NULL || memchr(line, '\0', len) != NULL)
+        return false;
+    (void)memset(&range, 0, sizeof(range));
+    arena_init(&a);
+    p = (Parser){ed, line, len, 0U, &a, &ignored};
+    (void)loose_name(&p, len, &name, &name_tok, &range);
+    found = bang_body_start(&p, name, name_tok, range.given, body);
+    arena_free_all(&a);
+    return found;
+}
+
 bool yew_cmd_parse_point(Ed *ed, const char *line, size_t len,
                          size_t cursor, Arena *a, CmdParsePoint *out)
 {
