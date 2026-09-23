@@ -707,6 +707,13 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.ghost.accept", yew_cmdline_cmd_ghost_accept,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Accept the inline suggestion, or move one grapheme right", NULL},
+    /* Sprint 57.26 §3: fish's A-f -- one word of a history ghost.  Keymap
+     * plumbing like ghost.accept: internal, so not recordable, and no
+     * motion word or round-trip row. */
+    {"ed.cmdline.ghost.accept_word", yew_cmdline_cmd_ghost_accept_word,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Accept one word of the inline suggestion, or move one word right",
+     NULL},
     /*
      * Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
      * and the goldens already use.
