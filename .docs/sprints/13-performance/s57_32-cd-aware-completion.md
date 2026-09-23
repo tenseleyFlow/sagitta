@@ -200,3 +200,96 @@ never a mystery. Truncate from the left to fit.
    test-audit` and the `scripts/check-*.sh` gates green.
 9. `tests/size/` untouched (the orchestrator runs the CI rebaseline);
    added-bytes estimate in the report.
+
+## Implementation divergences (recorded at landing)
+
+Where this contract was wrong about the code, or a rule could not hold as
+written, the implementation did what the contract intends:
+
+1. **The model is a path join** (`yew_shctx_at_env`'s header states it).
+   Each command list tracks, per execution path, where the shell is
+   (a directory, UNKNOWN, or unreachable after `exit`/`return`); `&&`
+   continues the success path, `||` the failure path, a list end the
+   success path -- a failure nothing branches on is assumed not to happen,
+   which is what makes both tables' rows (`cd a; x` -> a, `x && cd a; y`
+   -> a) and `cd a || echo no; x` (UNKNOWN) one rule.  Consequence: after
+   `||`, a later ABSOLUTE `cd` is known again (`false || cd a; cd /t && x`
+   -> /t); the contract said "every later command UNKNOWN", but /t is
+   certain on every path.
+2. **Beyond the tables.** `if`/`elif`/`else` join their branches (`if cd
+   a; then y; fi; x` UNKNOWN; `else` runs from the condition's failure);
+   a loop that moved the shell is UNKNOWN inside and after (its next
+   iteration starts elsewhere); `case` bodies are not lexed as commands, so
+   a body naming cd/pushd/popd makes the rest UNKNOWN; `!` joins both
+   paths; a function definition runs nothing and its body starts UNKNOWN;
+   a `cd` in a pipeline's LAST stage is UNKNOWN (bash: subshell, zsh:
+   current shell -- `:!` runs `$SHELL -c`).
+3. **Operands.** `$PWD` is the frame's own directory (the shell updates it
+   on cd); `$OLDPWD` comes from the environment only before any in-line
+   `cd` (after one it is UNKNOWN, like `cd -`).  A word naming HOME, PWD
+   or CDPATH (`HOME=/x`, `export CDPATH=…`, `unset HOME`) makes later
+   HOME/CDPATH-dependent answers UNKNOWN.  UNKNOWN too: `cd -e`/`-@`, two
+   operands (zsh's substitution), an assignment prefix (`CDPATH=… cd x`),
+   `pushd` with no operand, `-n`, `+N`/`-N`, an unknown `~user`, and
+   `~user` in a `changes_dir` value (no password lookup per operand per
+   keystroke; only a `cd` pays one).  `builtin cd` and `command cd` count;
+   `sudo cd` does not.
+4. **CDPATH is bash's rule exactly**: not consulted for an absolute operand
+   or one whose first COMPONENT is `.` or `..` -- `.hidden` does search,
+   which "starts with `.`" would not.  Entries are relative to the current
+   directory; the existence test needs the `:!` directory
+   (`YewShEnv.base`), without which the answer is UNKNOWN.  An expanded
+   operand (`~/x`, `$HOME/x`) is never searched.
+5. **Unknown offers nothing path-like, not nothing**: relative path stems,
+   `./` executables, spec generators and `make_targets`, fish, and a
+   relative help command word (`./tool`) answer nothing.  Kept, because
+   they name the same thing from any directory: absolute and `~` path
+   stems, subcommands/flags/values, `$VAR`, `~user`, builtins, `$PATH`
+   executables from ABSOLUTE elements, and the hosts/signals/users/pids
+   generators.  A relative `$PATH` element (`.`) is dropped whenever the
+   directory is not the prompt's.
+6. **Nonexistent** (`mkdir x && cd x && ls`): the path source finds
+   nothing (opendir fails) and generators and fish are not spawned (a
+   stat, only when the directory moved).
+7. **Showing it.** The note shares the pager's last row with the count
+   (`in ch7/ 2/5`), takes at most half the row, and truncates from the
+   left keeping `in ` (`in …/deep/ch7/`); it also rides the `… and N more`
+   tail row, which replaces the footer.  With zero rows there is no pager,
+   so Tab says `no completions (cd target unknown)` / `(in x/)` on the
+   message line.  An ancestor shows as `in ../`, elsewhere absolute.
+8. **`changes_dir`** requires a `dir` arg (validated).  Set on git -C,
+   make -C/--directory, uv --directory, cargo -C, and the precommands env
+   -C and sudo -D/--chdir (they apply to the wrapped command); never
+   tar -C.  Values chain (`git -C a -C b` -> a/b); attached forms
+   (`-Csub`, `--directory=sub`) are read literally.  git.fl's generators
+   no longer pass `-C` (the cwd carries it), and any `changes_dir`
+   flag/value is kept out of a generator's argv, so a user spec listing
+   both cannot apply it twice.  `plan_make_flags` no longer parses `-C`
+   (make.fl's `changes_dir` does); `-f` is read relative to the new
+   directory, as make does.
+9. **APIs** (additive): `yew_shctx_at_env` + `YewShEnv` (a getter and
+   the start directory; `yew_shctx_at`/`_with` pass none, so the lexer and
+   its corpus stay pure), `yew_sh_dir_join`, `yew_shctx_dir`;
+   `YewShCtx.cwd`/`cwd_known`/`dirv` (each operand as `cd` would read
+   it); `yew_comphelp_lookup_in`, `yew_compfish_lookup_in`;
+   `CompReq.cwd`/`cwd_moved`, `CompFilter.where`, `Menu.where`;
+   `YewSpecFlag.changes_dir`, `YewSpecPoint`'s dir fields.  The bang
+   parser builds the job environment lazily, on the lexer's first
+   question.  `pids` keeps the `:!` directory (ps answers the same
+   anywhere).
+10. **Named limits** (header): a `cd` inside a function, alias, `source`d
+    file or `eval`; a `cd` AFTER the caret in an enclosing loop's body
+    (the lexer never reads past the caret); the first command of a
+    one-line `f() { …` body, which 57.23 lexes as f's operands (the body's
+    start is UNKNOWN anyway); cd-changing shell options from the shell's
+    own startup files (bash cdable_vars, zsh auto_pushd).
+11. **Tests.** 115 cwd corpus rows (every row of both tables, the caret's
+    own `cd`, `~`, `$HOME`, `$FOO`, `cd -`, pushd/popd, `..`, `"my dir"`,
+    nested subshells, `$(cd a; x‸)`), CDPATH and `~user` against the disk,
+    `test_cdaware.c` for every consumer (stub generator that prints its
+    `pwd`), fish's stub records its `pwd`, help resolves `./tool` in sub/.
+    fuzz-shctx seeds `cd-00`..`cd-09` (the first ten rows, asserted), and
+    the harness also lexes with a fixed environment and checks the cwd's
+    normal form, `dirv`'s shape, and that the environment never changes
+    the position.  perf-cmdcomp's lexer body now holds cd, a subshell and
+    an `if` (median 33 us, budget 200 us).
