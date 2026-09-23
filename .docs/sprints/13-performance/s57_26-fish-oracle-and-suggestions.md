@@ -269,3 +269,82 @@ completion file in `~/.config/fish/completions/` is picked up.
    cmdline, cmdhist, cmdcomp clean; `MODULES=""` builds and passes.
 10. `test-fletch test-script test-roundtrip test-roundtrip-coverage
     test-audit` and the three `scripts/check-*.sh` gates green.
+
+## Implementation divergences (recorded at landing)
+
+Where this contract was written before 57.25 landed, or was wrong about
+the code, the implementation did what the contract intends:
+
+1. **Nothing spawns on the keystroke path, Tab included** (57.25's rule):
+   a fish lookup that misses only QUEUES a request; the loop's input-free
+   turn (`yew_cmdline_comp_idle`) spawns it, fish before help, one spawn
+   per turn. At most one fish job is in flight and it counts toward the
+   four completion jobs (compgen's and comphelp's caps count it too).
+2. **The rung is 57.25's reserved slot** (`plan_fish` in `shell_plan`),
+   consulted exactly where the help rung is -- rows 6 and 9, never a shell
+   builtin (fish's `set`/`echo` rules describe fish's own). While fish's
+   answer is pending the slot is held: 57.23's rows show with the `…` and
+   the help rung is not asked; only a CLOSED answer (no rules) lets help
+   answer. A flag stem has no 57.23 rows, so no pager shows the `…` while
+   it waits; the arrival opens the menu (Tab asked).
+3. **fish's rows are `YEW_COMP_GEN` rows** (an external answer with
+   descriptions); no new kind was added. Candidates are re-quoted by
+   `shell_push` (`yew_shq_insert`); a directory is ranked by its name and
+   carries its `/` back.
+4. **Query stems beyond `""` / `"-"`:** `--name=` for a flag's value (fish
+   prints whole `--name=value` words) and `.` for a leading dot (fish
+   lists dotfiles only for one).
+5. **An empty word -- `''` or an expansion such as `$(pwd)`, whose value
+   only the shell knows -- reaches fish as `''`**, so fish counts positions
+   as the shell will; none of the expansion's text is passed.
+6. **Measured fact 0 (fish 4.8.1):** fish autoloads a completion file only
+   for a command that resolves on `PATH`. The real-fish test installs its
+   `demo` executable before its rules can answer, and checks the fact.
+7. **Failure:** a spawn error, an exec failure, or a non-zero exit with
+   empty output -- on any query, not only the first -- disables the oracle
+   for the session with one `yew_log` line (from the idle path or the
+   arrival, never a lookup). A timeout caches the slot closed for 5 s.
+   A stale answer is served and refreshed (compgen's pattern).
+8. **A candidate line holding a control byte is dropped** rather than
+   drawn with `·`: inserting it would name a different file. Descriptions
+   still draw `·`.
+9. **The history snapshot is taken on the first idle turn after the
+   prompt opens** (and on demand if a bang body is typed before that
+   turn), not synchronously at open: prompt open is itself a keystroke.
+   It is fixed from then until the prompt closes. Order: yew's own bang
+   bodies (newest first), then fish, zsh, bash (each newest first) --
+   the files share no clock with yew's history.
+10. **Snapshot cost:** bodies live in one pool, the dedupe hash reads
+    eight bytes a step, and controls/secrets are found a word at a time;
+    `perf-cmdcomp` gates the 20 000-entry scan (p99 300 us) AND a 20 000-
+    entry load (5 ms).
+11. **Refused entries:** any control byte (a tab included), and any
+    `NAME=` whose name yew_secret_name() flags wherever it starts at a
+    word boundary -- `--token=…` included, not only env assignments.
+12. **`$HISTFILE`** is zsh's when its basename mentions zsh, else bash's;
+    only the environment names a file (never the password database), so a
+    process without HOME reads nothing. Leading blanks are ignored in the
+    typed body and in entries.
+13. **zsh 5.9 does not metafy `é` (C3 A9)**; the fixture (written by zsh
+    itself) holds `café` AND `ăę` (C4 83 / C4 99, metafied to C4 83 A3 /
+    C4 83 B9), which is what the unmetafy test is about.
+14. **`A-f` takes any leading blanks, the next word and the unquoted
+    whitespace after it** (a ghost `" status --short"` gives `" status "`,
+    not a lone blank). On a token ghost whose word is the whole ghost it
+    goes through the one accept path, so the byte-identical comment holds.
+15. **`ed.cmdline.ghost.accept_word` is internal** like
+    `ed.cmdline.ghost.accept`: not recordable, so no motion word and no
+    `gen_cmds[]`/`D(...)` row; its verb `accept_word` was already in
+    `command_name_valid` (Sprint 27). It is in the invariant-9 list and
+    the internal-cmdline-command test. Bindings: 345 active.
+16. **Isolation by default.** Unit: every test gets the run's own HOME and
+    XDG_DATA_HOME (inside the canonicalized per-run root), no HISTFILE, and
+    `YEW_TEST_FISH=""` (the seam's "no fish"); a test proves a child run
+    pointed at a sentinel home never shows it. The harness gained SKIP
+    (`SKIP <reason> (<test>)`, counted apart). PTY: the child environment
+    is built from scratch, so HISTFILE and XDG_DATA_HOME are never
+    exported and HOME only as a case's fixture; `YEW_TEST_FISH` is always
+    exported, empty unless a case supplies a stub. `perf-cmdcomp` unsets
+    HOME, XDG_DATA_HOME and HISTFILE.
+17. **`yew_cmdline_ghost`** is public (tests and the perf gate read the
+    ghost the prompt draws).
