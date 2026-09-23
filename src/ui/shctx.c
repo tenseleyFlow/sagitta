@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "edit/job.h"
+#include "unicode/utf8.h"
 #include "util/buf.h"
 
 /*
@@ -1412,7 +1413,19 @@ bool yew_shctx_at_with(const char *line, size_t len, size_t cursor,
 /* §6: shell quoting                                                  */
 /* ---------------------------------------------------------------- */
 
-static bool has_control(const unsigned char *s, size_t len)
+/*
+ * Must this word be single-quoted whole rather than backslash-escaped?
+ *
+ * A control byte: yes, because a backslash-newline is a line continuation
+ * and deletes the byte.  Invalid UTF-8: yes, because macOS 14's bash 3.2
+ * (also its /bin/sh) truncates an UNQUOTED word at the first invalid
+ * sequence under a UTF-8 locale -- CI's round trip got `20 3e 25` back
+ * for `20 3e 25 a0 ed 2d 40` -- while the same bytes inside '…' survive
+ * on that same shell.  A truncated word names a different file.  macOS
+ * 26's bash does not have the bug, so it cannot be reproduced there;
+ * the CI lane on the older image is what caught it.
+ */
+static bool needs_single_quote(const unsigned char *s, size_t len)
 {
     size_t i;
 
@@ -1420,7 +1433,7 @@ static bool has_control(const unsigned char *s, size_t len)
         if (s[i] < 0x20U || s[i] == 0x7FU)
             return true;
     }
-    return false;
+    return yew_utf8_validate((const u8 *)s, len) != len;
 }
 
 /*
@@ -1454,9 +1467,9 @@ char *yew_shq_quote(Arena *a, const char *text, size_t len, YewShQuote q,
     bytebuf_init(&out);
     switch (q) {
     case YEW_SH_Q_NONE:
-        if (has_control(s, len)) {
-            /* A backslash-newline is a line CONTINUATION and would
-             * silently delete the byte; only '…' keeps a control byte. */
+        if (needs_single_quote(s, len)) {
+            /* See needs_single_quote: '…' is the one form that keeps a
+             * control byte or an invalid UTF-8 sequence intact. */
             yew_shell_quote(&out, s, len);
             break;
         }

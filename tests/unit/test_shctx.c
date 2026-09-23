@@ -292,7 +292,12 @@ void test_shq_quote_rules(void)
         {"it's", YEW_SH_Q_NONE, "it\\'s", ""},
         {"a\nb", YEW_SH_Q_NONE, "'a\nb'", ""},
         {"it's\t", YEW_SH_Q_NONE, "'it'\\''s\t'", ""},
-        {"\xff\xfe", YEW_SH_Q_NONE, "\xff\xfe", ""},
+        /* Invalid UTF-8 is single-quoted whole: macOS 14's bash 3.2
+         * truncates an unquoted word at it.  The second row is the exact
+         * string CI's round trip failed on.  Valid UTF-8 stays bare. */
+        {"\xff\xfe", YEW_SH_Q_NONE, "'\xff\xfe'", ""},
+        {" >%\xa0\xed-@", YEW_SH_Q_NONE, "' >%\xa0\xed-@'", ""},
+        {"caf\xc3\xa9 x", YEW_SH_Q_NONE, "caf\xc3\xa9\\ x", ""},
         {"it's", YEW_SH_Q_SINGLE, "it'\\''s", "'"},
         {"$x `y` \\z", YEW_SH_Q_SINGLE, "$x `y` \\z", "'"},
         {"a\"$`\\b", YEW_SH_Q_DOUBLE, "a\\\"\\$\\`\\\\b", "\""},
