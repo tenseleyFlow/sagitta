@@ -3620,6 +3620,54 @@ static void case_s57_26_fish_stub_rows(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.32 DoD 1: `cd ch7/ && wolf build ou<Tab>` completes inside
+ * ch7/ -- where wolf will run -- and the pager says so.  The workspace
+ * holds a matching `.lu` of its own that must NOT be offered.
+ */
+static void case_s57_32_cd_then_complete(PtyCtx *c)
+{
+    static const char *const files[] = {"outer.lu"};
+    static const char *const dirs[] = {"ch7"};
+    static const u8 initial[] = "cd fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, NULL, 0U, NULL, 0U, files, YEW_ARRAY_LEN(files),
+                     dirs, YEW_ARRAY_LEN(dirs)) ||
+        !s57_24_write(c, "ch7/outline.lu", "", 0600) ||
+        !s57_24_write(c, "ch7/output.lu", "", 0600) ||
+        !s57_24_write(c, "ch7/notes.txt", "", 0600))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!cd ch7/ && wolf build ou");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_32_cd_then_complete");
+    s18_finish(c, path);
+}
+
+/* §3: after `cd $NOPE` the directory is unknown: `check.txt` is in the
+ * workspace, but the shell may not be, so Tab offers nothing -- and
+ * says why. */
+static void case_s57_32_cd_unknown(PtyCtx *c)
+{
+    static const char *const files[] = {"check.txt"};
+    static const u8 initial[] = "cd fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, NULL, 0U, NULL, 0U, files, YEW_ARRAY_LEN(files),
+                     NULL, 0U))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!cd $NOPE && cat ch");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_32_cd_unknown");
+    s18_finish(c, path);
+}
+
 /* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
  * from the same tolerant parse the menu filtered with. */
 static void case_s18_5_cmdline_hint(PtyCtx *c)
@@ -11804,6 +11852,9 @@ const PtyCase yew_pty_cases[] = {
     C(s57_26_history_isolated, modern, 24U, 80U,
       case_s57_26_history_isolated),
     C(s57_26_fish_stub_rows, modern, 24U, 80U, case_s57_26_fish_stub_rows),
+    C(s57_32_cd_then_complete, modern, 24U, 80U,
+      case_s57_32_cd_then_complete),
+    C(s57_32_cd_unknown, modern, 24U, 80U, case_s57_32_cd_unknown),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
