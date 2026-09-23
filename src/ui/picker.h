@@ -22,7 +22,7 @@
  *
  * 2. THE FILTER LINE IS THE SPRINT 18 CmdLine.  There is exactly one
  *    text editor in this program.  Its motions and edits are the same
- *    ed.move.* / ed.ins.* / ed.del.* commands L and I modes use, so
+ *    ed.move.* / ed.edit.* commands L and I modes use, so
  *    every binding and every register works here for free.  A
  *    `char buf[256]` with hand-rolled backspace is the pitfall s18
  *    exists to forbid, and DoD 9 greps for it.
