@@ -330,19 +330,22 @@ static const BindRow frozen_I[] = {
     {"C-<left>", "ed.move.line.home_toggle", 0, NULL},
     {"C-<right>", "ed.move.line.end", 0, NULL},
     /*
-     * The readline/Emacs editing set.  Document commands, not the
-     * command line's ed.del.*: these fan out to every cursor and are
-     * recordable.  C-w and Alt+Backspace are one kill under two
-     * spellings; C-_ and C-/ are one chord under two protocols.
+     * The readline/Emacs editing set.  These fan out to every cursor and
+     * are recordable; the prompt binds the same commands.  C-w and
+     * Alt+Backspace are one kill under two spellings; C-_ and C-/ are
+     * one chord under two protocols.
      */
     {"C-w", "ed.edit.kill.word_prev", 0, NULL},
     {"A-<bs>", "ed.edit.kill.word_prev", 0, NULL},
     {"A-d", "ed.edit.kill.word_next", 0, NULL},
+    /* Sprint 57.28 §3: Insert-mode parity with the prompt. */
+    {"A-<del>", "ed.edit.kill.word_next", 0, NULL},
     {"C-u", "ed.edit.kill.to_home", 0, NULL},
     {"C-k", "ed.edit.kill.to_end", 0, NULL},
     /* C-d is the forward delete and nothing else; it never quits. */
     {"C-d", "ed.edit.delete.grapheme", 0, NULL},
     {"C-y", "ed.edit.kill.yank", 0, NULL},
+    {"A-y", "ed.edit.kill.yank_pop", 0, NULL},
     {"C-p", "ed.move.line.up", 0, NULL},
     {"C-n", "ed.move.line.down", 0, NULL},
     {"C-_", "ed.edit.undo", 0, NULL},
@@ -376,26 +379,51 @@ static const BindRow frozen_I[] = {
 
 static const BindRow frozen_E[] = {
     {"<left>", "ed.move.char.prev", 0, NULL},
+    {"C-b", "ed.move.char.prev", 0, NULL},
     /*
      * Sprint 18.5 §7.  Right accepts the inline suggestion when one is
      * showing and otherwise moves one grapheme, so the key never stops
-     * being a motion.  C-e deliberately stays on end-of-line: its
-     * fallback would have to differ, and one command cannot carry two.
+     * being a motion.  Sprint 57.28 §3: C-f is fish's spelling of it.
      */
     {"<right>", "ed.cmdline.ghost.accept", 0, NULL},
-    /* Sprint 57.26 §3: one word of a history ghost, fish's A-f.  Both
-     * keys were free in E mode. */
+    {"C-f", "ed.cmdline.ghost.accept", 0, NULL},
+    /* Sprint 57.26 §3: one word of a history ghost, fish's A-f; one
+     * word right without one (57.28 §3). */
     {"A-f", "ed.cmdline.ghost.accept_word", 0, NULL},
     {"A-<right>", "ed.cmdline.ghost.accept_word", 0, NULL},
+    {"A-b", "ed.move.word.prev", 0, NULL},
+    {"A-<left>", "ed.move.word.prev", 0, NULL},
     {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
     {"C-a", "ed.move.line.home", 0, NULL},
-    {"C-e", "ed.move.line.end", 0, NULL},
+    {"C-<left>", "ed.move.line.home", 0, NULL},
+    /* Sprint 57.28 §3: fish's C-e takes a whole ghost, else line end;
+     * C-<right> is its synonym, as C-<left> is C-a's. */
+    {"C-e", "ed.cmdline.ghost.accept_line", 0, NULL},
+    {"C-<right>", "ed.cmdline.ghost.accept_line", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
+    {"C-h", "ed.edit.delete.grapheme_left", 0, NULL},
     {"<del>", "ed.edit.delete.grapheme", 0, NULL},
-    {"C-w", "ed.del.word_prev", 0, NULL},
-    {"C-u", "ed.del.to_home", 0, NULL},
-    {"C-k", "ed.del.to_end", 0, NULL},
+    {"C-d", "ed.edit.delete.grapheme", 0, NULL},
+    /*
+     * Sprint 57.28 §3: the Insert-mode readline commands, on the
+     * prompt's Win, so every kill feeds the one yank stack.  C-w is
+     * bash's unix-word-rubout (blank-delimited); A-<bs> the word kill.
+     */
+    {"C-w", "ed.edit.kill.ws_word_prev", 0, NULL},
+    {"A-<bs>", "ed.edit.kill.word_prev", 0, NULL},
+    {"A-d", "ed.edit.kill.word_next", 0, NULL},
+    {"A-<del>", "ed.edit.kill.word_next", 0, NULL},
+    {"C-u", "ed.edit.kill.to_home", 0, NULL},
+    {"C-k", "ed.edit.kill.to_end", 0, NULL},
+    {"C-t", "ed.edit.transpose.chars", 0, NULL},
+    {"A-t", "ed.edit.transpose.words", 0, NULL},
+    {"A-u", "ed.edit.case.upper_word", 0, NULL},
+    {"A-l", "ed.edit.case.lower_word", 0, NULL},
+    {"A-c", "ed.edit.case.cap_word", 0, NULL},
+    {"C-y", "ed.edit.kill.yank", 0, NULL},
+    {"A-y", "ed.edit.kill.yank_pop", 0, NULL},
+    {"A-.", "ed.cmdline.last_arg", 0, NULL},
     /*
      * Sprint 57.17 §2.  The arrows are dispatchers now, not history
      * outright: `<up>` enters an open pager and is history when none is
@@ -420,10 +448,17 @@ static const BindRow frozen_E[] = {
     {"C-p", "ed.cmdline.complete_prev", 0, NULL},
     {"<pgdn>", "ed.cmdline.menu.page_next", 0, NULL},
     {"<pgup>", "ed.cmdline.menu.page_prev", 0, NULL},
+    /* Sprint 57.28 §3: readline wins the clashes.  A-r is insert-register
+     * (C-r keeps it until 57.30), C-q literal-next, C-v the system
+     * clipboard, C-y yank, A-/ redo. */
     {"C-r", "ed.cmdline.insert_register", 0, NULL},
-    {"C-v", "ed.cmdline.literal_next", 0, NULL},
+    {"A-r", "ed.cmdline.insert_register", 0, NULL},
+    {"C-q", "ed.cmdline.literal_next", 0, NULL},
+    {"C-v", "ed.clip.paste", 0, NULL},
     {"C-z", "ed.edit.undo", 0, NULL},
-    {"C-y", "ed.edit.redo", 0, NULL},
+    {"C-_", "ed.edit.undo", 0, NULL},
+    {"C-/", "ed.edit.undo", 0, NULL},
+    {"A-/", "ed.edit.redo", 0, NULL},
     {"<cr>", "ed.cmdline.accept", 0, NULL},
     {"<esc>", "ed.cmdline.cancel", 0, NULL},
     {"C-g", "ed.cmdline.cancel", 0, NULL},
@@ -529,7 +564,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 345U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 370U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

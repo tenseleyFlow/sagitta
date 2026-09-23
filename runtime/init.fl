@@ -232,14 +232,14 @@ bind("I", "C-e", "ed.move.line.end")
 bind("I", "C-<left>", "ed.move.line.home_toggle")
 bind("I", "C-<right>", "ed.move.line.end")
 
-# The rest of the readline/Emacs editing set.  These are DOCUMENT
-# commands, not the command line's ed.del.* -- they fan out to every
-# live cursor and they are recordable, which E mode's do not need to be.
+# The rest of the readline/Emacs editing set.  They fan out to every live
+# cursor and they are recordable; the prompt binds the same commands.
 # Alt+Backspace and C-w are the same kill; a terminal sends one or the
 # other depending on how it was configured, so both are bound.
 bind("I", "C-w", "ed.edit.kill.word_prev")
 bind("I", "A-<bs>", "ed.edit.kill.word_prev")
 bind("I", "A-d", "ed.edit.kill.word_next")
+bind("I", "A-<del>", "ed.edit.kill.word_next")
 # C-u is kill-to-START of line, the unix line-discard, NOT the whole
 # line -- what is already typed to the right of the caret survives.
 bind("I", "C-u", "ed.edit.kill.to_home")
@@ -248,10 +248,12 @@ bind("I", "C-k", "ed.edit.kill.to_end")
 # also EOF; here that would close a buffer on a keystroke meant to
 # delete a character, so it is only ever the delete.
 bind("I", "C-d", "ed.edit.delete.grapheme")
-# C-y yanks the most recent kill from the unnamed register.  C-v stays
-# the SYSTEM clipboard paste above, and E mode's C-y stays redo -- the
-# divergence is deliberate: in Insert mode the readline meaning wins.
+# C-y yanks the newest kill from the yank stack -- readline's kill ring,
+# shared with the prompt and apart from the registers: `p` never pastes a
+# kill.  A-y straight after swaps it for the next older kill.  C-v stays
+# the SYSTEM clipboard paste above.
 bind("I", "C-y", "ed.edit.kill.yank")
+bind("I", "A-y", "ed.edit.kill.yank_pop")
 bind("I", "C-p", "ed.move.line.up")
 bind("I", "C-n", "ed.move.line.down")
 # Undo.  A terminal in legacy mode sends 0x1F for both ctrl+_ and
@@ -406,19 +408,51 @@ bind("H", "C-8", "ed.tab.goto_bar", { iarg: 8 })
 bind("H", "C-9", "ed.tab.goto_bar", { iarg: 9 })
 bind("H", "C-0", "ed.tab.goto_bar")
 
+# The prompt's line editing (Sprint 57.28): readline's and fish's keys,
+# on the SAME commands Insert mode binds -- the prompt is a one-line Win,
+# so a kill here feeds the one yank stack C-y reads in either place.
+# None of these touch a register or the system clipboard.
 bind("E", "<left>", "ed.move.char.prev")
+bind("E", "C-b", "ed.move.char.prev")
+# <right>, C-f: the whole ghost at the end of the line, else one
+# grapheme right.  A-f, A-<right>: one ghost word, else one word right.
 bind("E", "<right>", "ed.cmdline.ghost.accept")
+bind("E", "C-f", "ed.cmdline.ghost.accept")
 bind("E", "A-f", "ed.cmdline.ghost.accept_word")
 bind("E", "A-<right>", "ed.cmdline.ghost.accept_word")
+bind("E", "A-b", "ed.move.word.prev")
+bind("E", "A-<left>", "ed.move.word.prev")
 bind("E", "<home>", "ed.move.line.home_toggle")
 bind("E", "<end>", "ed.move.line.end")
 bind("E", "C-a", "ed.move.line.home")
-bind("E", "C-e", "ed.move.line.end")
+bind("E", "C-<left>", "ed.move.line.home")
+# C-e, C-<right>: fish's end of line, which takes a whole ghost too.
+bind("E", "C-e", "ed.cmdline.ghost.accept_line")
+bind("E", "C-<right>", "ed.cmdline.ghost.accept_line")
 bind("E", "<bs>", "ed.edit.delete.grapheme_left")
+bind("E", "C-h", "ed.edit.delete.grapheme_left")
 bind("E", "<del>", "ed.edit.delete.grapheme")
-bind("E", "C-w", "ed.del.word_prev")
-bind("E", "C-u", "ed.del.to_home")
-bind("E", "C-k", "ed.del.to_end")
+# C-d only ever deletes forward; it never cancels the prompt.
+bind("E", "C-d", "ed.edit.delete.grapheme")
+# C-w is bash's unix-word-rubout: back to the previous BLANK, so a path
+# goes whole.  A-<bs> is the word-character kill Insert mode's C-w is.
+bind("E", "C-w", "ed.edit.kill.ws_word_prev")
+bind("E", "A-<bs>", "ed.edit.kill.word_prev")
+bind("E", "A-d", "ed.edit.kill.word_next")
+bind("E", "A-<del>", "ed.edit.kill.word_next")
+bind("E", "C-u", "ed.edit.kill.to_home")
+bind("E", "C-k", "ed.edit.kill.to_end")
+bind("E", "C-t", "ed.edit.transpose.chars")
+bind("E", "A-t", "ed.edit.transpose.words")
+bind("E", "A-u", "ed.edit.case.upper_word")
+bind("E", "A-l", "ed.edit.case.lower_word")
+bind("E", "A-c", "ed.edit.case.cap_word")
+# Readline wins the clashes: C-y yanks (redo is A-/, fish's key), C-v
+# pastes the system clipboard (literal-next is C-q, readline's
+# quoted-insert), and insert-register gains A-r.
+bind("E", "C-y", "ed.edit.kill.yank")
+bind("E", "A-y", "ed.edit.kill.yank_pop")
+bind("E", "A-.", "ed.cmdline.last_arg")
 bind("E", "<up>", "ed.cmdline.up")
 bind("E", "<down>", "ed.cmdline.down")
 bind("E", "<tab>", "ed.cmdline.complete_next")
@@ -428,9 +462,13 @@ bind("E", "C-p", "ed.cmdline.complete_prev")
 bind("E", "<pgdn>", "ed.cmdline.menu.page_next")
 bind("E", "<pgup>", "ed.cmdline.menu.page_prev")
 bind("E", "C-r", "ed.cmdline.insert_register")
-bind("E", "C-v", "ed.cmdline.literal_next")
+bind("E", "A-r", "ed.cmdline.insert_register")
+bind("E", "C-q", "ed.cmdline.literal_next")
+bind("E", "C-v", "ed.clip.paste")
 bind("E", "C-z", "ed.edit.undo")
-bind("E", "C-y", "ed.edit.redo")
+bind("E", "C-_", "ed.edit.undo")
+bind("E", "C-/", "ed.edit.undo")
+bind("E", "A-/", "ed.edit.redo")
 bind("E", "C-g", "ed.cmdline.cancel")
 
 bind("F", "<esc>", "ed.git.mode.leave")
