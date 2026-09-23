@@ -210,3 +210,57 @@ estimate of the added bytes (`size` on the new/changed `.o` files).
 8. `test-fletch test-script test-roundtrip test-roundtrip-coverage
    test-audit` and the `scripts/check-*.sh` gates green.
 9. `tests/size/` untouched; added-bytes estimate in the report.
+
+## Implementation notes (divergences from this contract)
+
+Where the contract and the code disagreed, the implementation does what
+the contract intends:
+
+1. **`cmd_seq` is `Ed.invoke_seq`.** `scripts/check-cmd-dispatch.sh`
+   reserves the `cmd_` prefix for named-command dispatch symbols. Same
+   semantics: `yew_ed_invoke` bumps it once per invoked command.
+2. **`yew_yank_kill` takes an `owner`** (the Win's identity, `const void *`,
+   because text/ does not know `Win`), and `YewKillDir` gains
+   `YEW_KILL_ALONE` for multi-cursor kills, which never extend an entry
+   and are never extended. `YewYankStack` also carries
+   `kill_owner`/`kill_open` and the yank-pop state
+   (`yank_seq`/`yank_owner`/`yank_len`/`yank_k`). The newest entry is
+   never evicted, even when it alone is over `bytes_max`.
+3. **A-f / A-<right> without a ghost already moved a word.** 57.26's
+   `ghost_take` falls back to `ed.move.word.next`. No code change was
+   needed; the real-key tests pin both branches.
+4. **C-e / C-<right>** use a new internal command,
+   `ed.cmdline.ghost.accept_line`: the whole ghost when there is one,
+   otherwise line end. C-f is bound to the existing `ed.cmdline.ghost.accept`.
+5. **C-w** is a new recordable aggregate kill,
+   `ed.edit.kill.ws_word_prev` (motion word `unix_word_rubout`). It
+   feeds the yank stack and stops at the line start. Insert mode's C-w is
+   unchanged.
+6. **C-h:** a legacy terminal's `^H` byte decodes as `C-<bs>`, not `C-h`.
+   Kitty sends `C-h`. Both are bound, so there are 371 bindings, not 370.
+7. **Armed captures were broken for printable keys in the prompt.** Before
+   this sprint, `yew_cmdline_key` inserted a printable key as text even
+   when C-r, A-r or C-q was waiting for its argument. An armed capture now
+   takes the key.
+8. **Yanks and C-v pastes into the prompt fold newline runs to a blank**
+   and refuse NUL (`yew_cmdline_clean`), the same way a bracketed paste is
+   already handled.
+9. **A-y with no yank before it** posts a WARN message and returns OK. An
+   error would abort Insert mode's open typing transaction. A-. past the
+   oldest entry stops where it is and does not wrap.
+10. **Deleting `ed.del.*` breaks stale installed runtimes.** An old
+    `init.fl` that binds `ed.del.*` now fails to load. On this machine,
+    the stale `/usr/local/share/yew/runtime` makes 5 config-loading unit
+    tests fail when the suite runs bare. They pass with
+    `YEW_RUNTIME_DIR=runtime`, and in CI.
+11. **yew has no `p` or `dd` register write.** `ed.edit.line.delete` writes
+    no register. The separation tests therefore use two things. The first
+    is a byte-identical snapshot of the whole `Registers` struct and every
+    register's bytes, taken while `clipboard.sync = all` is set, with a
+    `yew_reg_delete` control that proves a register delete would queue a
+    clipboard write. The second checks that `d d` plus `ed.sel.yank` leave
+    the yank stack unchanged.
+12. **The `s57_28_prompt_last_arg` PTY case builds its history from two
+    `:set` commands.** A `:!` command would start an asynchronous job and
+    make the frame nondeterministic. The bang-entry `yew_shctx_at` path is
+    covered by the unit test.
