@@ -24,7 +24,16 @@ S59-A7 empty-block-row safety fix adds 41 bytes of `core.edit` text in the
 pinned glibc minimal build. Its on-disk file steps from 1,570,464 to
 1,574,560 bytes, crossing the old 1,572,864-byte gate. The minimal cap alone
 moves to the next 4 KiB boundary, 1,576,960 bytes; the full binary remains
-2,066,120 bytes and every single-module profile remains inside its cap. The
+2,066,120 bytes and every single-module profile remains inside its cap.
+Amendment S57.26-A2 records the shell completion engine of Sprints
+57.23-57.26 (a context lexer, command specs, --help learning, a fish oracle
+and history suggestions). It adds 119,569 bytes of `core.ui` and grows every
+glibc profile by 122,880-126,976 bytes, taking full to 2,193,096 and past the
+2 MiB evidence floor, and every musl profile by 126,976. No optional module
+grew. The hosted caps move to the next 16 KiB boundary (full 2,195,456,
+minimal 1,703,936) and the musl caps to the next 64 KiB boundary (2,359,296
+and 1,835,008), the S59-A6 rules; the ledgers above are that run's pinned
+measurement. The
 former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
 optimization ratchets. They are not alternate measurements and must not be
 selected by a CI flag.

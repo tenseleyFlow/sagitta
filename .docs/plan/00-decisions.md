@@ -265,6 +265,30 @@ layer exactly as absent `git` degrades FUSS mode. No test's pass/fail may
 depend on fish being installed: the suite runs against a stub, and the one
 real-fish test skips, loudly, when fish is absent.
 
+**Amendment S57.26-A2 (2026-09-23) — size gates follow the shell completion
+engine.** Sprints 57.23–57.26 add `:!` completion that rivals fish: a
+shell context lexer, command specs, `--help` learning, a fish oracle and
+history suggestions. The user asked for that engine explicitly and chose
+this amendment over shrinking or modularising it. On the pinned hosted
+x86_64 GCC 13.3 size lane, trunk moved from `243b6b26` to `b123e903` and
+every glibc profile grew by 122,880–126,976 bytes: full 2,066,120 to
+2,193,096, minimal 1,574,560 to 1,701,536, AI-only 1,709,768 to
+1,836,744, FUSS-only 1,730,208 to 1,853,088, LSP-only 1,697,440 to
+1,820,320, plugins-only 1,668,768 to 1,795,744. The committed ledgers
+attribute 119,569 bytes of it to `core.ui` (the five completion modules),
+1,257 to `core.edit` and 774 to `core.util`; no optional module grew, so
+this is required core growth, not module retention. **The full 2 MiB
+evidence floor is crossed.** Each hosted cap moves to the next 16 KiB
+boundary above its measurement, the rule S59-A6 applied: full 2,195,456,
+minimal 1,703,936, LSP-only 1,835,008, AI-only 1,851,392, FUSS-only
+1,867,776, plugins-only 1,802,240. The hosted musl static PIE grew the
+same 126,976 bytes, full 2,185,104 to 2,312,080 and minimal 1,668,976 to
+1,795,952; each moves to the next 64 KiB boundary, the S59-A6 musl rule:
+2,359,296 and 1,835,008. Full and minimal now sit about 2.4 KB under
+their caps, so the next core feature will need its own amendment. The
+1.5 MiB full / 900 KiB minimal post-1.0 ratchets are unchanged, as are the
+measurement recipes and every other gate. No feature is removed.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
