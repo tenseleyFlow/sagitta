@@ -20,6 +20,7 @@
 #include "ui/compgen.h"
 #include "ui/comphelp.h"
 #include "ui/compspec.h"
+#include "ui/shctx.h"
 #include "ui/message.h"
 #include "ui/statusline.h"
 #include "ui/viewport.h"
@@ -287,18 +288,34 @@ static CmdStatus invoke_prompt_text(Ed *ed, const u8 *bytes, size_t len)
     return status;
 }
 
+bool yew_cmdline_clean(Ed *ed, const Win *win, const u8 *b, size_t n,
+                       Bytebuf *out)
+{
+    if (ed == NULL || !ed->cmdline.active ||
+        win != yew_cmdline_target(ed)) {
+        bytebuf_append(out, b, n);
+        return true;
+    }
+    if (n != 0U && memchr(b, '\0', n) != NULL) {
+        yew_msg(ed, YEW_MSG_ERROR,
+                "NUL byte is not valid in a command line");
+        return false;
+    }
+    sanitize_bytes(b, n, out);
+    return true;
+}
+
 static CmdStatus insert_sanitized(Ed *ed, const u8 *bytes, size_t len)
 {
     Bytebuf clean;
     CmdStatus status;
 
-    if (len != 0U && memchr(bytes, '\0', len) != NULL) {
-        yew_msg(ed, YEW_MSG_ERROR,
-                "NUL byte is not valid in a command line");
+    bytebuf_init(&clean);
+    if (!yew_cmdline_clean(ed, yew_cmdline_target(ed), bytes, len,
+                           &clean)) {
+        bytebuf_free(&clean);
         return YEW_CMD_ERR_ARG;
     }
-    bytebuf_init(&clean);
-    sanitize_bytes(bytes, len, &clean);
     status = invoke_prompt_text(ed, clean.data, clean.len);
     bytebuf_free(&clean);
     return status;
@@ -1533,60 +1550,6 @@ CmdStatus yew_cmdline_cmd_literal_next(CmdCtx *cx)
     return insert_sanitized(cx->ed, (const u8 *)cx->sarg, cx->sarg_len);
 }
 
-static CmdStatus delete_range(CmdCtx *cx, Span span)
-{
-    EditCtx ec;
-
-    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
-        cx->win->buf == NULL || cx->win->buf->tb == NULL)
-        return YEW_CMD_ERR_STATE;
-    ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
-    if (!yew_edit_delete(&ec, span)) {
-        yew_ed_finish_edit(cx->ed, &ec);
-        return YEW_CMD_ERR_IO;
-    }
-    yew_ed_finish_edit(cx->ed, &ec);
-    return YEW_CMD_OK;
-}
-
-CmdStatus yew_cmdline_cmd_delete_word_prev(CmdCtx *cx)
-{
-    Cursor *cursor;
-    UnitCtx unit;
-    ByteOff previous;
-
-    if (cx == NULL || cx->win == NULL || cx->win->buf == NULL ||
-        cx->win->cs.curs.len == 0U)
-        return YEW_CMD_ERR_STATE;
-    cursor = &cx->win->cs.curs.data[cx->win->cs.primary];
-    unit = (UnitCtx){cx->win->buf->tb, cx->win->buf, cx->win};
-    previous = yew_unit_word.prev(&unit, cursor->pos, false);
-    return delete_range(cx, (Span){previous.v, cursor->pos.v});
-}
-
-CmdStatus yew_cmdline_cmd_delete_to_home(CmdCtx *cx)
-{
-    Cursor *cursor;
-
-    if (cx == NULL || cx->win == NULL || cx->win->cs.curs.len == 0U)
-        return YEW_CMD_ERR_STATE;
-    cursor = &cx->win->cs.curs.data[cx->win->cs.primary];
-    return delete_range(cx, (Span){0U, cursor->pos.v});
-}
-
-CmdStatus yew_cmdline_cmd_delete_to_end(CmdCtx *cx)
-{
-    Cursor *cursor;
-    u64 len;
-
-    if (cx == NULL || cx->win == NULL || cx->win->buf == NULL ||
-        cx->win->cs.curs.len == 0U)
-        return YEW_CMD_ERR_STATE;
-    cursor = &cx->win->cs.curs.data[cx->win->cs.primary];
-    len = yew_textbuf_len(cx->win->buf->tb);
-    return delete_range(cx, (Span){cursor->pos.v, len});
-}
-
 /*
  * Sprint 18.5 §7: the part of a candidate that has not been typed yet.
  *
@@ -1892,6 +1855,105 @@ CmdStatus yew_cmdline_cmd_ghost_accept(CmdCtx *cx)
 CmdStatus yew_cmdline_cmd_ghost_accept_word(CmdCtx *cx)
 {
     return ghost_take(cx, true);
+}
+
+/* Sprint 57.28 §3: fish's C-e -- the whole ghost when there is one (the
+ * caret is then at the end already), else the line end. */
+CmdStatus yew_cmdline_cmd_ghost_accept_line(CmdCtx *cx)
+{
+    size_t len = 0U;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    if (cmdline_ghost(cx->ed, &len) != NULL && len != 0U)
+        return ghost_take(cx, false);
+    return ghost_motion(cx, "ed.move.line.end");
+}
+
+/*
+ * The last word of a history entry.  A bang entry's is the shell word
+ * yew_shctx_at finds at the entry's end -- quotes and escapes honoured,
+ * the RAW bytes as typed -- so `!cp a "my file"` gives `"my file"`.
+ * Anything else: the last blank-delimited token.  Empty when the entry
+ * ends in a blank.
+ */
+static Span last_word(Ed *ed, const char *entry, size_t n)
+{
+    size_t body;
+    size_t lo = n;
+
+    if (yew_cmd_bang_body(ed, entry, n, &body)) {
+        Arena a;
+        YewShCtx ctx;
+        Span word = {n, n};
+
+        arena_init(&a);
+        if (yew_shctx_at(entry + body, n - body, n - body, &a, &ctx) &&
+            ctx.replace.lo < ctx.replace.hi)
+            word = (Span){ctx.replace.lo + body, ctx.replace.hi + body};
+        arena_free_all(&a);
+        return word;
+    }
+    while (lo > 0U && entry[lo - 1U] != ' ' && entry[lo - 1U] != '\t')
+        lo--;
+    return (Span){lo, n};
+}
+
+/*
+ * Sprint 57.28 §4: A-. inserts the newest history entry's last word at
+ * the caret; each further A-. -- consecutive by the dispatcher's
+ * sequence number -- replaces what the last one inserted with the last
+ * word of the next OLDER entry.  Entries with no last word are skipped.
+ * Past the oldest it stops where it is: there is nothing older to show,
+ * and wrapping back to the newest would read as a different command.
+ */
+CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx)
+{
+    Ed *ed;
+    CmdLine *line;
+    Span replace;
+    size_t i;
+    bool again;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    line = &ed->cmdline;
+    if (line->history == NULL)
+        return YEW_CMD_OK;
+    sync_from_target(line);
+    again = line->last_arg_seq != 0U &&
+            line->last_arg_gen == line->generation &&
+            ed->cmd_seq == line->last_arg_seq + 1U;
+    i = again ? line->last_arg_entry : yew_hist_len(line->history);
+    replace = again ? line->last_arg_span
+                    : (Span){line->cur.pos.v, line->cur.pos.v};
+    while (i > 0U) {
+        const char *entry = yew_hist_at(line->history, --i);
+        size_t n = entry == NULL ? 0U : strlen(entry);
+        Span word;
+
+        if (n == 0U)
+            continue;
+        word = last_word(ed, entry, n);
+        if (word.lo >= word.hi)
+            continue;
+        if (!replace_span(ed, replace, (const u8 *)entry + word.lo,
+                          (size_t)(word.hi - word.lo), true))
+            return YEW_CMD_ERR_IO;
+        line->last_arg_entry = i;
+        line->last_arg_span = (Span){replace.lo,
+                                     replace.lo + (word.hi - word.lo)};
+        line->last_arg_seq = ed->cmd_seq;
+        line->last_arg_gen = line->generation;
+        menu_discard(ed);
+        yew_cmdline_edited(ed);
+        return YEW_CMD_OK;
+    }
+    /* Nothing older: keep the chain, so a further A-. stops here too. */
+    if (again)
+        line->last_arg_seq = ed->cmd_seq;
+    return YEW_CMD_OK;
 }
 
 static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)

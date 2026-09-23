@@ -464,10 +464,23 @@ static const CmdDesc builtins[] = {
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
      "Kill from the cursor to line end", "kill_to_end"},
+    /* Sprint 57.28: the prompt's C-w -- bash's unix-word-rubout, back
+     * to the previous blank, so `a/b/c` goes whole. */
+    {"ed.edit.kill.ws_word_prev", yew_rl_cmd_kill_ws_word_prev,
+     YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Kill back to the previous whitespace", "unix_word_rubout"},
     {"ed.edit.kill.yank", yew_rl_cmd_kill_yank, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
          YEW_CMD_MULTI_AGGREGATE,
      "Yank the most recent kill at every cursor", "kill_yank"},
+    /* Sprint 57.28 §2: A-y, straight after C-y or another A-y. */
+    {"ed.edit.kill.yank_pop", yew_rl_cmd_kill_yank_pop, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Replace the text just yanked with the next older kill",
+     "yank_pop"},
     {"ed.edit.transpose.chars", yew_rl_cmd_transpose_chars,
      YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
@@ -710,6 +723,11 @@ static const CmdDesc builtins[] = {
     /* Sprint 57.26 §3: fish's A-f -- one word of a history ghost.  Keymap
      * plumbing like ghost.accept: internal, so not recordable, and no
      * motion word or round-trip row. */
+    /* Sprint 57.28 §3: C-e and C-<right> -- fish's end-of-line, which
+     * takes the whole ghost when there is one. */
+    {"ed.cmdline.ghost.accept_line", yew_cmdline_cmd_ghost_accept_line,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Accept the inline suggestion, or move to the line end", NULL},
     {"ed.cmdline.ghost.accept_word", yew_cmdline_cmd_ghost_accept_word,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Accept one word of the inline suggestion, or move one word right",
@@ -754,15 +772,11 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.cancel", yew_cmdline_cmd_cancel, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS | YEW_CMD_INTERNAL,
      "Cancel the command line or menu", NULL},
-    {"ed.del.word_prev", yew_cmdline_cmd_delete_word_prev, YEW_ARITY_NONE,
-     YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER | YEW_CMD_INTERNAL,
-     "Delete to the previous word boundary", NULL},
-    {"ed.del.to_home", yew_cmdline_cmd_delete_to_home, YEW_ARITY_NONE,
-     YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER | YEW_CMD_INTERNAL,
-     "Delete from the cursor to line start", NULL},
-    {"ed.del.to_end", yew_cmdline_cmd_delete_to_end, YEW_ARITY_NONE,
-     YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER | YEW_CMD_INTERNAL,
-     "Delete from the cursor to line end", NULL},
+    /* Sprint 57.28 §4: fish's and readline's A-. -- keymap plumbing like
+     * ghost.accept: internal, so not recordable. */
+    {"ed.cmdline.last_arg", yew_cmdline_cmd_last_arg, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Insert the previous entry's last word; again for older ones", NULL},
 
     {"ed.file.open", yew_file_cmd_buf_open, YEW_ARITY_STR,
      YEW_CMD_PROMPTS, "Open a file", NULL},
@@ -1537,7 +1551,9 @@ static bool command_name_valid(const char *name)
          * transpose and word-case verbs those keys added. */
         "chars", "words", "upper_word", "lower_word", "cap_word",
         /* Sprint 57.25 §5: `ed.shell.complete_forget`. */
-        "complete_forget"};
+        "complete_forget",
+        /* Sprint 57.28: the unix-word-rubout kill, yank-pop, A-. */
+        "ws_word_prev", "yank_pop", "last_arg"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

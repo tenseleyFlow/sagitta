@@ -74,6 +74,12 @@ typedef struct CmdLine {
     bool suggest_loaded;
     YewCmdlineInputDone input_done;
     void *input_ctx;
+    /* Sprint 57.28 §4: the last A-.: its dispatcher sequence number, the
+     * history index it took a word from and where that word now sits. */
+    u64 last_arg_seq;
+    u64 last_arg_gen;
+    size_t last_arg_entry;
+    Span last_arg_span;
 } CmdLine;
 
 void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed);
@@ -89,6 +95,14 @@ void yew_cmdline_sync(Ed *ed);
 /* Appends the prompt's current text to `out`. */
 void yew_cmdline_text(Ed *ed, Bytebuf *out);
 void yew_cmdline_edited(Ed *ed);
+/*
+ * Sprint 57.28: `n` bytes bound for `win`, as they may land there.  The
+ * prompt is one line: a newline run folds to one blank, as a paste into
+ * it always has, and a NUL is refused (false, with the message).  Any
+ * other Win takes the bytes verbatim.  `out` is appended to.
+ */
+bool yew_cmdline_clean(Ed *ed, const Win *win, const u8 *b, size_t n,
+                       Bytebuf *out);
 
 /*
  * Continue a sliced completion scan on the idle path; true while more
@@ -156,8 +170,9 @@ const char *yew_cmdline_ghost(Ed *ed, size_t *len);
 CmdStatus yew_cmdline_cmd_ghost_accept_word(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_cancel(CmdCtx *cx);
-CmdStatus yew_cmdline_cmd_delete_word_prev(CmdCtx *cx);
-CmdStatus yew_cmdline_cmd_delete_to_home(CmdCtx *cx);
-CmdStatus yew_cmdline_cmd_delete_to_end(CmdCtx *cx);
+/* Sprint 57.28 §3: the whole ghost, or the line end without one. */
+CmdStatus yew_cmdline_cmd_ghost_accept_line(CmdCtx *cx);
+/* Sprint 57.28 §4: A-., the previous entry's last word. */
+CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx);
 
 #endif

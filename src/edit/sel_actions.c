@@ -7,6 +7,7 @@
 #include "edit/select.h"
 #include "text/clipboard.h"
 #include "text/register.h"
+#include "ui/cmdline.h"
 #include "ui/message.h"
 #include "ui/viewport.h"
 #include "unicode/case.h"
@@ -463,6 +464,9 @@ CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
     YewSelSpanVec spans = {0};
     SelEditVec edits = {0};
     ByteOff first = {0U};
+    Bytebuf clean;
+    const u8 *bytes;
+    size_t nbytes;
     bool replace;
     size_t i;
 
@@ -480,6 +484,19 @@ CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
         yew_msg(cx->ed, YEW_MSG_WARN, "system clipboard is empty");
         return YEW_CMD_ERR_STATE;
     }
+    /* Sprint 57.28 §3: C-v in the one-line prompt folds newlines, as a
+     * bracketed paste there does.  A document takes the bytes as-is. */
+    bytebuf_init(&clean);
+    bytes = value->bytes.data;
+    nbytes = value->bytes.len;
+    if (cx->ed->cmdline.active && win == yew_cmdline_target(cx->ed)) {
+        if (!yew_cmdline_clean(cx->ed, win, bytes, nbytes, &clean)) {
+            bytebuf_free(&clean);
+            return YEW_CMD_ERR_ARG;
+        }
+        bytes = clean.data;
+        nbytes = clean.len;
+    }
 
     replace = cx->ed->mode == YEW_MODE_H;
     if (replace) {
@@ -495,9 +512,9 @@ CmdStatus yew_sel_cmd_clip_paste(CmdCtx *cx)
     for (i = 0U; i < spans.len; i++) {
         SelEdit *edit = yew_sel_edit_push(&edits, spans.data[i]);
 
-        bytebuf_append(&edit->replacement, value->bytes.data,
-                       value->bytes.len);
+        bytebuf_append(&edit->replacement, bytes, nbytes);
     }
+    bytebuf_free(&clean);
     if (!yew_sel_apply_edits(cx, &edits, &first)) {
         yew_sel_edits_free(&edits);
         YewSelSpanVec_free(&spans);
