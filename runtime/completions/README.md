@@ -158,3 +158,37 @@ rest of the line completes as that command's arguments.
 With that spec, `wolf b<Tab>` completes `build`, `wolf build <Tab>` offers
 `.lu` files and directories, `wolf build --emit=<Tab>` offers the four
 emit kinds, and `wolf build --std-root <Tab>` offers directories.
+
+## Commands without a spec
+
+For an operand of a command with no spec, yew asks, in order:
+
+1. **fish**, when `fish` is on `$PATH` and `shell.complete_fish` is `auto`
+   (the default; `off` never asks). fish's own completions -- and any file
+   of yours in `~/.config/fish/completions/`, with helpers from
+   `~/.config/fish/functions/` -- answer with descriptions. fish runs as
+   `fish -N --private` (no `config.fish`, nothing written to its history);
+   your line reaches it only as an argument, never as script text. Its
+   answer counts only when fish has rules for the command; otherwise the
+   next step answers. If fish cannot be run, yew stops asking it for the
+   session and says so once in its log.
+2. **`--help`**, learned from the command itself under
+   `shell.complete_help`: `native` (the default) runs only compiled
+   executables, never a script; `all` runs any executable; `off` runs
+   nothing. Answers are cached under `$XDG_CACHE_HOME/yew/completions/help`
+   until the executable changes; `:compforget [name]` drops them.
+3. Otherwise, paths.
+
+Neither is ever run on a keystroke: yew asks when the editor is idle, and
+the pager shows `…` until the answer arrives. A spec always wins.
+
+## History suggestions
+
+Type the start of a `:!` command you have run before and the rest appears
+dim after the caret: `<right>` takes all of it, `A-f` or `A-<right>` one
+word. `shell.suggest_history` chooses the history: `all` (the default)
+reads yew's own `:!` history and, read-only, fish's, zsh's and bash's
+(`$XDG_DATA_HOME/fish/fish_history`, `$HISTFILE`, `~/.zsh_history`,
+`~/.bash_history`); `yew` reads only yew's. A multi-line command, and any
+command with a secret-looking `NAME=value` (`API_TOKEN=…`), is never
+suggested.
