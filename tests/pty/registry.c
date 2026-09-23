@@ -22,6 +22,9 @@
 #ifndef YEW_TEST_MOCKAI
 #define YEW_TEST_MOCKAI "build/tests/helpers/mockai"
 #endif
+#ifndef YEW_TEST_HELPFIX
+#define YEW_TEST_HELPFIX "build/help_fixture"
+#endif
 #ifndef YEW_TEST_FAKECLIP
 #define YEW_TEST_FAKECLIP "build/fakeclip"
 #endif
@@ -3242,6 +3245,167 @@ static void case_s57_24_generator_pending(PtyCtx *c)
     ptc_wait_until(c, s57_screen_contains, "\xE2\x80\xA6",
                    "waiting for the pending-generator marker");
     ptc_snapshot(c, "s57_24_generator_pending");
+    s18_finish(c, path);
+}
+
+/*
+ * Sprint 57.25: completions learned from `--help`.
+ *
+ * The tool is build/help_fixture copied onto a fixture $PATH -- a NATIVE
+ * executable, which is all the default policy runs -- and its help is
+ * the clap layout in `tool.help` beside it.  While `tool.hold` exists the
+ * tool waits, so the "answer pending" frame is one the case holds on
+ * screen for as long as it likes and then releases; every snapshot is
+ * gated on a frame, never on a sleep.  $PATH is absolute here (the help
+ * layer skips relative $PATH elements) and never reaches the screen.
+ */
+static const char s57_25_clap_help[] =
+    "A fixture tool.\n\n"
+    "Usage: tool [OPTIONS] <COMMAND>\n\n"
+    "Commands:\n"
+    "  build  Compile the project\n"
+    "  bench  Run the benchmarks\n"
+    "  help   Print this message or the help of the given subcommand(s)\n\n"
+    "Options:\n"
+    "  -o, --output <FILE>  Write here\n"
+    "  -h, --help           Print help\n";
+
+static bool s57_25_tool(PtyCtx *c, const char *name, const char *help,
+                        bool hold)
+{
+    static char bin[PATH_MAX];
+    char path[PATH_MAX];
+    int fd;
+    Bytebuf b;
+    ssize_t n;
+    u8 chunk[8192];
+    bool ok;
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.25 case needs an isolated workspace");
+        return false;
+    }
+    (void)snprintf(bin, sizeof(bin), "%s/bin", c->workspace_dir);
+    (void)mkdir(bin, 0700);
+    fd = open(YEW_TEST_HELPFIX, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        ptc_check(c, false, "reading the Sprint 57.25 help fixture binary");
+        return false;
+    }
+    bytebuf_init(&b);
+    while ((n = read(fd, chunk, sizeof(chunk))) > 0)
+        bytebuf_append(&b, chunk, (size_t)n);
+    (void)close(fd);
+    (void)snprintf(path, sizeof(path), "%s/%s", bin, name);
+    ok = write_bytes(path, b.data, b.len) && chmod(path, 0755) == 0;
+    bytebuf_free(&b);
+    if (ok) {
+        (void)snprintf(path, sizeof(path), "%s/%s.help", bin, name);
+        ok = write_bytes(path, (const u8 *)help, strlen(help));
+    }
+    if (ok && hold) {
+        (void)snprintf(path, sizeof(path), "%s/%s.hold", bin, name);
+        ok = write_bytes(path, (const u8 *)"", 0U);
+    }
+    if (!ok) {
+        ptc_check(c, false, "installing the Sprint 57.25 fixture tool");
+        return false;
+    }
+    c->exec_path = bin;
+    return true;
+}
+
+static void s57_25_release(PtyCtx *c, const char *name)
+{
+    char path[PATH_MAX];
+
+    (void)snprintf(path, sizeof(path), "%s/bin/%s.hold", c->workspace_dir,
+                   name);
+    ptc_check(c, unlink(path) == 0, "releasing the Sprint 57.25 tool");
+}
+
+/* The menu is up and its footer no longer carries the pending `…`. */
+static bool s57_25_answered(const PtyCtx *c, const void *arg)
+{
+    return s57_screen_contains(c, arg) &&
+           !s57_screen_contains(c, "\xE2\x80\xA6");
+}
+
+/*
+ * §7 while the answer is pending: 57.23's rows (the workspace's paths)
+ * answer, the footer shows `…`, and Tab inserted nothing from the
+ * incomplete set.
+ */
+static void case_s57_25_help_pending(PtyCtx *c)
+{
+    static const u8 initial[] = "help fixture\n";
+    char path[256];
+
+    if (!s57_25_tool(c, "tool", s57_25_clap_help, true) ||
+        !s57_24_write(c, "bu-notes.txt", "notes\n", 0600))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!tool bu");
+    s18_settle_after_keys(c, "tab");
+    ptc_wait_until(c, s57_screen_contains, "\xE2\x80\xA6",
+                   "waiting for the pending-help marker");
+    ptc_snapshot(c, "s57_25_help_pending");
+    s57_25_release(c, "tool");
+    s18_finish(c, path);
+}
+
+/*
+ * DoD 3: the first `:!tool bu<Tab>` pends; the answer refills the menu
+ * with the subcommands the tool's help listed (and edits nothing); the
+ * second Tab completes `build `.
+ */
+static void case_s57_25_help_subcommands(PtyCtx *c)
+{
+    static const u8 initial[] = "help fixture\n";
+    char path[256];
+
+    if (!s57_25_tool(c, "tool", s57_25_clap_help, true) ||
+        !s57_24_write(c, "bu-notes.txt", "notes\n", 0600))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!tool bu");
+    s18_settle_after_keys(c, "tab");
+    ptc_wait_until(c, s57_screen_contains, "\xE2\x80\xA6",
+                   "waiting for the pending-help marker");
+    s57_25_release(c, "tool");
+    ptc_wait_until(c, s57_25_answered, "Compile the project",
+                   "waiting for the learned subcommands");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_25_help_subcommands");
+    s18_finish(c, path);
+}
+
+/* A usage-only tool is a NEGATIVE answer: once it lands the paths stand
+ * alone (no marker) and Tab completes one. */
+static void case_s57_25_help_negative(PtyCtx *c)
+{
+    static const u8 initial[] = "help fixture\n";
+    char path[256];
+
+    if (!s57_25_tool(c, "usage", "usage: usage [-abc] file ...\n", true) ||
+        !s57_24_write(c, "notes.txt", "notes\n", 0600))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!usage no");
+    s18_settle_after_keys(c, "tab");
+    ptc_wait_until(c, s57_screen_contains, "\xE2\x80\xA6",
+                   "waiting for the pending-help marker");
+    s57_25_release(c, "usage");
+    ptc_wait_until(c, s57_25_answered, "notes.txt",
+                   "waiting for the negative answer");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "s57_25_help_negative");
     s18_finish(c, path);
 }
 
@@ -11419,6 +11583,10 @@ const PtyCase yew_pty_cases[] = {
     C(s57_24_ssh_hosts, modern, 24U, 80U, case_s57_24_ssh_hosts),
     C(s57_24_generator_pending, modern, 24U, 80U,
       case_s57_24_generator_pending),
+    C(s57_25_help_subcommands, modern, 24U, 80U,
+      case_s57_25_help_subcommands),
+    C(s57_25_help_pending, modern, 24U, 80U, case_s57_25_help_pending),
+    C(s57_25_help_negative, modern, 24U, 80U, case_s57_25_help_negative),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
