@@ -67,6 +67,13 @@ void test_runtime_consumer_completion_spec_loads_from_the_image(void);
 void test_base64_rfc4648_vectors(void);
 void test_base64_lengths_and_alphabet(void);
 void test_base64_binary_roundtrip_fuzz(void);
+void test_yankstack_consecutive_kills_join_by_direction(void);
+void test_yankstack_a_gap_or_another_win_starts_a_new_entry(void);
+void test_yankstack_multicursor_kill_never_extends(void);
+void test_yankstack_evicts_by_count(void);
+void test_yankstack_evicts_by_bytes_and_keeps_the_newest(void);
+void test_yankstack_at_bounds(void);
+
 void test_readline_kill_word_prev_reaches_every_cursor(void);
 void test_readline_kill_word_prev_at_buffer_start_is_a_no_op(void);
 void test_readline_kill_word_next_takes_the_word_and_its_gap(void);
