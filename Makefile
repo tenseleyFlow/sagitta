@@ -713,6 +713,8 @@ SYN_ENGINE_UNIT_OBJ := $(BUILD)/tests/unit/syn_engine.o
 
 $(BUILD)/tests/unit/test_syn_embed_runtime.o: CFLAGS += -DYEW_SYN_TEST=1
 FAKECLIP := $(BUILD)/fakeclip
+# Sprint 57.25: a native executable whose --help a test controls.
+HELPFIX := $(BUILD)/help_fixture
 FAKELSP := $(BUILD)/tests/helpers/fakelsp
 FAKECURL := $(BUILD)/tests/helpers/fakecurl
 FAKEHTTP := $(BUILD)/tests/helpers/fakehttp
@@ -789,6 +791,9 @@ PTY_DEMO_OBJ := $(BUILD)/tests/pty/demo_paint.o
 $(PTY_REGISTRY_OBJ): CFLAGS += \
   -DYEW_TEST_FAKECLIP='"$(abspath $(FAKECLIP))"'
 $(PTY_REGISTRY_OBJ): $(FAKECLIP)
+# Sprint 57.25: the native --help fixture, by absolute path.
+$(PTY_REGISTRY_OBJ) $(BUILD)/tests/unit/test_comphelp.o: CFLAGS += \
+  -DYEW_TEST_HELPFIX='"$(abspath $(HELPFIX))"'
 ifneq ($(filter ai,$(MODULES)),)
 $(PTY_REGISTRY_OBJ): CFLAGS += \
   -DYEW_TEST_MOCKAI='"$(abspath $(MOCKAI))"'
@@ -1222,7 +1227,7 @@ $(BUILD)/yew: $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
 
 $(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP) $(FAKELSP) $(TORTURE_CHILD) \
-                     $(TORTURE_DRIVER) $(FAULTSHIM)
+                     $(TORTURE_DRIVER) $(FAULTSHIM) $(HELPFIX)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ) $(LDLIBS)
 
 $(BUILD)/pty_runner: $(PTY_LINK_OBJ)
@@ -1829,6 +1834,10 @@ endif
 
 $(FAKECLIP): tests/unit/fakeclip.c $(BUILD)/mods.stamp \
              $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+$(HELPFIX): tests/helpers/help_fixture.c $(BUILD)/mods.stamp \
+            $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 $(FAKELSP): tests/helpers/fakelsp.c $(BUILD)/mods.stamp \
@@ -3764,7 +3773,7 @@ test-roundtrip-coverage: $(BUILD)/roundtrip_runner
 test-fletch-roundtrip: test-roundtrip
 
 test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
-          $(AI_TEST_HELPERS)
+          $(AI_TEST_HELPERS) $(HELPFIX)
 	$(PTY_PREP) $(PTY_RUN) --selftest $(PTY_LOG_REDIRECT)
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
