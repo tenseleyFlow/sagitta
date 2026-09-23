@@ -823,7 +823,14 @@ void test_invariant9_every_new_command_is_registered(void)
          * (ed.cmdline.ghost.accept) and a word at a time by A-f and
          * A-<right> -- both keys, no mouse.
          */
-        "ed.cmdline.ghost.accept_word"
+        "ed.cmdline.ghost.accept_word",
+        /*
+         * Sprint 57.28 §3/§4: the prompt's readline set -- unix-word-
+         * rubout (C-w), yank-pop (A-y), fish's C-e ghost accept and the
+         * last argument (A-.).  Keys only; no mouse involved.
+         */
+        "ed.edit.kill.ws_word_prev", "ed.edit.kill.yank_pop",
+        "ed.cmdline.ghost.accept_line", "ed.cmdline.last_arg"
     };
     size_t i;
 
