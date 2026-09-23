@@ -795,7 +795,8 @@ $(PTY_REGISTRY_OBJ): CFLAGS += \
   -DYEW_TEST_FAKECLIP='"$(abspath $(FAKECLIP))"'
 $(PTY_REGISTRY_OBJ): $(FAKECLIP)
 # Sprint 57.25: the native --help fixture, by absolute path.
-$(PTY_REGISTRY_OBJ) $(BUILD)/tests/unit/test_comphelp.o: CFLAGS += \
+$(PTY_REGISTRY_OBJ) $(BUILD)/tests/unit/test_comphelp.o \
+  $(BUILD)/tests/unit/test_compfish.o: CFLAGS += \
   -DYEW_TEST_HELPFIX='"$(abspath $(HELPFIX))"'
 ifneq ($(filter ai,$(MODULES)),)
 $(PTY_REGISTRY_OBJ): CFLAGS += \
