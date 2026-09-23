@@ -31,6 +31,9 @@ _Noreturn void yew_test_fail_mem(const char *file, int line,
 _Noreturn void yew_test_fail_pointer(const char *file, int line,
                                      const char *macro, bool is_null);
 
+/* Sprint 57.26: stop this test and count it SKIPPED, printing why. */
+_Noreturn void yew_test_skip(const char *reason);
+
 void yew_test_capture_log(void);
 size_t yew_test_log_count(void);
 bool yew_test_log_contains(YewLogLevel level, const char *substr);

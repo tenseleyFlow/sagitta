@@ -87,6 +87,21 @@ static void env_restore(const char *name, const char *saved)
  */
 static char unit_cache[64];
 
+/*
+ * Sprint 57.26: the run's own HOME and XDG_DATA_HOME, and no HISTFILE.
+ *
+ * `shell.suggest_history` defaults to `all`, which reads fish, zsh and
+ * bash history.  A test that opened a `:!` prompt against the real HOME
+ * would render the developer's own shell commands -- nondeterministic,
+ * and a golden could commit them to the repository.  So isolation is
+ * the DEFAULT: every test starts with an empty home of the run's own,
+ * and a test that wants history plants a fixture there or points HOME
+ * elsewhere itself.  YEW_TEST_FISH is empty for the same reason: no
+ * test reaches a real fish unless it asks (compfish.h).
+ */
+static char unit_home[96];
+static char unit_data[96];
+
 static void unit_cache_remove(const char *path)
 {
     struct stat st;
@@ -294,6 +309,25 @@ void yew_test_load_runtime(Ed *ed)
     bytebuf_free(&source);
 }
 
+/*
+ * Sprint 57.26: a test whose subject is absent here (the real-fish test
+ * on a machine without fish) says so and is counted as SKIPPED -- never
+ * as passed, and never silently.
+ */
+static bool skip_requested;
+static char skip_reason[256];
+static size_t skip_count;
+
+_Noreturn void yew_test_skip(const char *reason)
+{
+    skip_requested = true;
+    (void)snprintf(skip_reason, sizeof(skip_reason), "%s",
+                   reason == NULL ? "" : reason);
+    if (failure_target != NULL)
+        longjmp(*failure_target, 1);
+    abort();
+}
+
 static bool run_one_test(const YewTest *test)
 {
     jmp_buf target;
@@ -302,6 +336,7 @@ static bool run_one_test(const YewTest *test)
     failure_file = NULL;
     failure_line = 0;
     failure_detail[0] = '\0';
+    skip_requested = false;
     if (setjmp(target) == 0) {
         test->fn();
         yew_test_teardown();
@@ -312,6 +347,13 @@ static bool run_one_test(const YewTest *test)
     }
     yew_test_teardown();
     failure_target = NULL;
+    if (skip_requested) {
+        skip_requested = false;
+        skip_count++;
+        (void)printf("SKIP %s: %s\n", test->name, skip_reason);
+        (void)fflush(stdout);
+        return true;
+    }
     (void)printf("FAIL %s at %s:%d: %s\n", test->name,
                  failure_file, failure_line, failure_detail);
     (void)fflush(stdout);
@@ -336,6 +378,10 @@ int yew_test_run(int argc, char **argv)
     char *xdg_state;
     char *xdg_cache;
     char *path;
+    char *xdg_data;
+    char *home;
+    char *histfile;
+    char *test_fish;
 
     program_path = argv[0];
     for (argi = 1; argi < argc; argi++) {
@@ -383,10 +429,31 @@ int yew_test_run(int argc, char **argv)
     xdg_state = env_copy("XDG_STATE_HOME");
     xdg_cache = env_copy("XDG_CACHE_HOME");
     path = env_copy("PATH");
+    xdg_data = env_copy("XDG_DATA_HOME");
+    home = env_copy("HOME");
+    histfile = env_copy("HISTFILE");
+    test_fish = env_copy("YEW_TEST_FISH");
     (void)snprintf(unit_cache, sizeof(unit_cache),
                    "/tmp/yew-unit-cache-XXXXXX");
     if (mkdtemp(unit_cache) == NULL) {
         (void)fprintf(stderr, "unit: cannot create a cache directory\n");
+        return 1;
+    }
+    {
+        /* Canonical (macOS's /tmp is a symlink): a test that uses HOME as
+         * a workspace root compares it with realpath()s. */
+        char *real = realpath(unit_cache, NULL);
+
+        if (real != NULL && strlen(real) < sizeof(unit_cache))
+            (void)snprintf(unit_cache, sizeof(unit_cache), "%s", real);
+        free(real);
+    }
+    /* Inside the cache root, so the one removal at the end takes them. */
+    (void)snprintf(unit_home, sizeof(unit_home), "%s/home", unit_cache);
+    (void)snprintf(unit_data, sizeof(unit_data), "%s/data", unit_cache);
+    if (mkdir(unit_home, 0700) != 0 || mkdir(unit_data, 0700) != 0) {
+        (void)fprintf(stderr, "unit: cannot create an isolated home\n");
+        unit_cache_remove(unit_cache);
         return 1;
     }
     for (i = 0U; i < yew_tests_len; i++) {
@@ -396,19 +463,37 @@ int yew_test_run(int argc, char **argv)
         env_restore("XDG_STATE_HOME", xdg_state);
         env_restore("XDG_CACHE_HOME", unit_cache);
         env_restore("PATH", path);
+        env_restore("HOME", unit_home);
+        env_restore("XDG_DATA_HOME", unit_data);
+        env_restore("HISTFILE", NULL);
+        env_restore("YEW_TEST_FISH", "");
         if (!run_one_test(&yew_tests[i]))
             failures++;
     }
     env_restore("XDG_STATE_HOME", xdg_state);
     env_restore("XDG_CACHE_HOME", xdg_cache);
     env_restore("PATH", path);
+    env_restore("XDG_DATA_HOME", xdg_data);
+    env_restore("HOME", home);
+    env_restore("HISTFILE", histfile);
+    env_restore("YEW_TEST_FISH", test_fish);
     unit_cache_remove(unit_cache);
     yew_xfree(xdg_state);
     yew_xfree(xdg_cache);
     yew_xfree(path);
-    (void)printf("unit: %zu tests, %zu assertions, %zu failure%s\n",
-                 selected, assertion_count, failures,
-                 failures == 1U ? "" : "s");
+    yew_xfree(xdg_data);
+    yew_xfree(home);
+    yew_xfree(histfile);
+    yew_xfree(test_fish);
+    if (skip_count != 0U)
+        (void)printf("unit: %zu tests, %zu assertions, %zu failure%s, "
+                     "%zu skipped\n",
+                     selected, assertion_count, failures,
+                     failures == 1U ? "" : "s", skip_count);
+    else
+        (void)printf("unit: %zu tests, %zu assertions, %zu failure%s\n",
+                     selected, assertion_count, failures,
+                     failures == 1U ? "" : "s");
     (void)fflush(stdout);
     return failures == 0U ? 0 : 1;
 }
