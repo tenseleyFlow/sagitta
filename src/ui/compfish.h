@@ -113,6 +113,11 @@ const char *yew_compfish_path(void);
  */
 YewFishState yew_compfish_lookup(Ed *ed, const YewShCtx *ctx,
                                  YewFishLookup *out);
+/* Sprint 57.32 §3: the same, fish spawned in `cwd` (the directory the
+ * command runs in) and keyed on it.  yew_compfish_lookup is this with
+ * the `:!` directory. */
+YewFishState yew_compfish_lookup_in(Ed *ed, const YewShCtx *ctx,
+                                    const char *cwd, YewFishLookup *out);
 
 /* Queued or in flight with no answer cached: the pager's `…`. */
 bool yew_compfish_awaiting(const char *key);
