@@ -1717,7 +1717,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     cx->ed = ed;
     if (cx->win == NULL)
         cx->win = ed->win;
-    ed->cmd_seq++;
+    ed->invoke_seq++;
     changes = (desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U;
     edits_text = changes || strcmp(desc->name, "ed.edit.undo") == 0 ||
                  strcmp(desc->name, "ed.edit.redo") == 0;

@@ -175,7 +175,7 @@ static CmdStatus rl_kill_apply(CmdCtx *cx, Win *win, TextBuf *tb,
         return YEW_CMD_ERR_IO;
     }
     yew_yank_kill(&cx->ed->yank, killed.data, killed.len, dir,
-                  cx->ed->cmd_seq, win);
+                  cx->ed->invoke_seq, win);
     bytebuf_free(&killed);
     yew_sel_edits_free(edits);
     yew_cset_normalize(tb, &win->cs);
@@ -363,7 +363,7 @@ static CmdStatus rl_yank_put(CmdCtx *cx, const Bytebuf *entry, u64 replace,
         return YEW_CMD_ERR_IO;
     }
     yew_sel_edits_free(&edits);
-    y->yank_seq = cx->ed->cmd_seq;
+    y->yank_seq = cx->ed->invoke_seq;
     y->yank_owner = win;
     y->yank_len = (u64)text.len;
     y->yank_k = k;
@@ -410,7 +410,7 @@ CmdStatus yew_rl_cmd_kill_yank_pop(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     y = &cx->ed->yank;
     if (y->len == 0U || y->yank_owner != cx->win ||
-        cx->ed->cmd_seq != y->yank_seq + 1U) {
+        cx->ed->invoke_seq != y->yank_seq + 1U) {
         yew_msg(cx->ed, YEW_MSG_WARN, "A-y follows a yank");
         return rl_nothing_to_do();
     }

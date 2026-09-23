@@ -204,7 +204,7 @@ struct Ed {
      * kills, yank-pop and last-argument read it, and no command has to
      * clear anything for the chain to break.
      */
-    u64 cmd_seq;
+    u64 invoke_seq;
     char dispatch_message[192];
 
     /* The loop's clock, handed in with each key; nothing in the core

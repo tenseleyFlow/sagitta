@@ -8,12 +8,13 @@
  * read from here, in Insert mode and in the `:` prompt alike.  It is
  * FULLY SEPARATE from yew's registers: a kill never writes the unnamed
  * register, the register ring (text/register.h) or the system clipboard,
- * so `p` never pastes a kill and `yy`/`dd` never change what C-y yanks.
+ * so no register paste ever pastes a kill, and no yank, delete or cut
+ * into a register changes what C-y yanks.
  * Two stores, two key families; neither can clobber the other.
  *
  * CONSECUTIVE kills join, the way readline's do: C-k C-k is one entry,
  * A-<bs> A-<bs> one entry with the earlier word in front.  "Consecutive"
- * is decided by the dispatcher's command sequence number (Ed.cmd_seq,
+ * is decided by the dispatcher's command sequence number (Ed.invoke_seq,
  * bumped once per yew_ed_invoke) and the identity of the Win the kill ran
  * in: the kill extends the newest entry when the previous command the
  * dispatcher ran was a kill in the same Win.  Every other command --
@@ -45,7 +46,7 @@ typedef struct YewYankStack {
     Bytebuf entry[YEW_YANK_MAX];  /* newest at `head`                    */
     u32 head, len;
     u64 bytes, bytes_max;         /* oldest evicted past bytes_max       */
-    u64 kill_seq;                 /* cmd_seq of the last kill            */
+    u64 kill_seq;                 /* Ed.invoke_seq of the last kill      */
     const void *kill_owner;       /* the Win it ran in (identity only)   */
     bool kill_open;               /* the newest entry may be extended    */
     /* The last yank, for A-y: what it inserted at each caret (the bytes

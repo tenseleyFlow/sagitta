@@ -1931,7 +1931,7 @@ CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx)
     sync_from_target(line);
     again = line->last_arg_seq != 0U &&
             line->last_arg_gen == line->generation &&
-            ed->cmd_seq == line->last_arg_seq + 1U;
+            ed->invoke_seq == line->last_arg_seq + 1U;
     i = again ? line->last_arg_entry : yew_hist_len(line->history);
     replace = again ? line->last_arg_span
                     : (Span){line->cur.pos.v, line->cur.pos.v};
@@ -1951,7 +1951,7 @@ CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx)
         line->last_arg_entry = i;
         line->last_arg_span = (Span){replace.lo,
                                      replace.lo + (word.hi - word.lo)};
-        line->last_arg_seq = ed->cmd_seq;
+        line->last_arg_seq = ed->invoke_seq;
         line->last_arg_gen = line->generation;
         menu_discard(ed);
         yew_cmdline_edited(ed);
@@ -1959,7 +1959,7 @@ CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx)
     }
     /* Nothing older: keep the chain, so a further A-. stops here too. */
     if (again)
-        line->last_arg_seq = ed->cmd_seq;
+        line->last_arg_seq = ed->invoke_seq;
     return YEW_CMD_OK;
 }
 
