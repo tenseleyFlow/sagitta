@@ -3409,6 +3409,189 @@ static void case_s57_25_help_negative(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.26 §3: history suggestions.  The child's history is a
+ * FIXTURE home's ~/.bash_history -- never the developer's: the PTY
+ * environment is built from scratch, with no HISTFILE, no XDG_DATA_HOME
+ * and no HOME unless a case gives one (harness.h).  Every command in it
+ * is made up here.
+ */
+static bool s57_26_home(PtyCtx *c, const char *bash_history)
+{
+    static char home[PATH_MAX];
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.26 case needs an isolated workspace");
+        return false;
+    }
+    (void)snprintf(home, sizeof(home), "%s/home", c->workspace_dir);
+    if (mkdir(home, 0700) != 0) {
+        ptc_check(c, false, "creating the Sprint 57.26 fixture home");
+        return false;
+    }
+    if (!s57_24_write(c, "home/.bash_history", bash_history, 0600))
+        return false;
+    c->home_dir = home;
+    return true;
+}
+
+static const char s57_26_history[] =
+    "#1700000000\n"
+    "echo hello-from-history --verbose --twice\n"
+    "echo unrelated\n";
+
+/* Type a prefix: the dim remainder of the newest match trails the caret
+ * and is not part of the line. */
+static void case_s57_26_history_ghost(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s57_26_home(c, s57_26_history))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!echo hello-fr");
+    ptc_wait_until(c, s57_screen_contains, "om-history --verbose --twice",
+                   "waiting for the history ghost");
+    ptc_snapshot(c, "s57_26_history_ghost");
+    s18_finish(c, path);
+}
+
+/* A-f takes one word of the ghost (and its blank); A-<right> the next;
+ * <right> the rest. */
+static void case_s57_26_history_accept_word(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s57_26_home(c, s57_26_history))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!echo hello-fr");
+    ptc_wait_until(c, s57_screen_contains, "om-history --verbose --twice",
+                   "waiting for the history ghost");
+    s18_settle_after_keys(c, "alt+f");
+    s18_settle_after_keys(c, "alt+right");
+    ptc_snapshot(c, "s57_26_history_accept_word");
+    s18_finish(c, path);
+}
+
+/*
+ * The proof at the PTY level: the RUNNER's own HOME, XDG_DATA_HOME and
+ * HISTFILE point at a home whose every history file carries a sentinel,
+ * as a developer's shell would set them.  The child is spawned with no
+ * fixture home; the sentinel never reaches its screen.
+ */
+static void case_s57_26_history_isolated(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    static const char *const names[] = {"HOME", "XDG_DATA_HOME",
+                                        "HISTFILE"};
+    char real_home[PATH_MAX];
+    char values[3][PATH_MAX];
+    char *saved[3];
+    char path[256];
+    size_t i;
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.26 case needs an isolated workspace");
+        return;
+    }
+    (void)snprintf(real_home, sizeof(real_home), "%s/real-home",
+                   c->workspace_dir);
+    if (mkdir(real_home, 0700) != 0 ||
+        !s57_24_write(c, "real-home/.bash_history",
+                      "echo yew-sentinel LEAKED-FROM-REAL-HOME\n", 0600) ||
+        !s57_24_write(c, "real-home/.zsh_history",
+                      ": 1700000000:0;echo yew-sentinel "
+                      "LEAKED-FROM-REAL-HOME\n",
+                      0600) ||
+        !s57_24_write(c, "real-home/fish_history",
+                      "- cmd: echo yew-sentinel LEAKED-FROM-REAL-HOME\n",
+                      0600))
+        return;
+    (void)snprintf(values[0], sizeof(values[0]), "%s", real_home);
+    (void)snprintf(values[1], sizeof(values[1]), "%s/xdg-data", real_home);
+    (void)snprintf(values[2], sizeof(values[2]), "%s/.zsh_history",
+                   real_home);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        const char *v = getenv(names[i]);
+
+        saved[i] = NULL;
+        if (v != NULL) {
+            size_t n = strlen(v) + 1U;
+
+            saved[i] = malloc(n);
+            if (saved[i] != NULL)
+                (void)memcpy(saved[i], v, n);
+        }
+        (void)setenv(names[i], values[i], 1);
+    }
+    /* The spawn builds the child's environment; the runner's is put back
+     * at once, whatever the open did. */
+    (void)s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path));
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        if (saved[i] == NULL)
+            (void)unsetenv(names[i]);
+        else
+            (void)setenv(names[i], saved[i], 1);
+        free(saved[i]);
+    }
+    if (c->failed)
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!echo yew-sentinel");
+    ptc_check(c, !s57_screen_contains(c, "LEAKED"),
+              "a real home's shell history reached the screen");
+    ptc_snapshot(c, "s57_26_history_isolated");
+    s18_finish(c, path);
+}
+
+/*
+ * §2 through the pager: a stub fish (the case's own script, named by
+ * YEW_TEST_FISH) answers for a command with no spec.  A flag stem has no
+ * 57.23 rows to show while the answer is on its way, so Tab asks, the
+ * idle turn spawns, and the arrival opens the menu with fish's rows and
+ * their descriptions -- the line is never edited.  The snapshot is gated
+ * on that answered frame, never on a sleep.
+ */
+static void case_s57_26_fish_stub_rows(PtyCtx *c)
+{
+    static const u8 initial[] = "fish fixture\n";
+    static char stub[PATH_MAX];
+    static const char script[] =
+        "#!/bin/sh\n"
+        "case \"$7\" in\n"
+        "rsync) printf '%s\\t%s\\n' "
+        "--delete 'Delete extraneous files from dest dirs' "
+        "--delay-updates 'Put all updated files into place at end' "
+        "--delete-after 'Receiver deletes after transfer' ;;\n"
+        "esac\n";
+    char path[256];
+
+    if (c->workspace_dir == NULL) {
+        ptc_check(c, false, "Sprint 57.26 case needs an isolated workspace");
+        return;
+    }
+    (void)snprintf(stub, sizeof(stub), "%s/stubfish", c->workspace_dir);
+    if (!s57_24_write(c, "stubfish", script, 0700))
+        return;
+    c->fish_path = stub;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!rsync --del");
+    ptc_keys(c, "tab");
+    ptc_wait_until(c, s57_25_answered, "Delete extraneous files",
+                   "waiting for fish's rows");
+    ptc_snapshot(c, "s57_26_fish_stub_rows");
+    s18_finish(c, path);
+}
+
 /* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
  * from the same tolerant parse the menu filtered with. */
 static void case_s18_5_cmdline_hint(PtyCtx *c)
@@ -11587,6 +11770,12 @@ const PtyCase yew_pty_cases[] = {
       case_s57_25_help_subcommands),
     C(s57_25_help_pending, modern, 24U, 80U, case_s57_25_help_pending),
     C(s57_25_help_negative, modern, 24U, 80U, case_s57_25_help_negative),
+    C(s57_26_history_ghost, modern, 24U, 80U, case_s57_26_history_ghost),
+    C(s57_26_history_accept_word, modern, 24U, 80U,
+      case_s57_26_history_accept_word),
+    C(s57_26_history_isolated, modern, 24U, 80U,
+      case_s57_26_history_isolated),
+    C(s57_26_fish_stub_rows, modern, 24U, 80U, case_s57_26_fish_stub_rows),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
