@@ -1029,6 +1029,7 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
     const char *tail = stem + head_len;
     size_t tail_len = strlen(tail);
     char *head = yew_xmalloc(head_len + 1U);
+    const char *base;
     char *expanded;
     char *scan_dir;
     DIR *dir;
@@ -1043,16 +1044,18 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
         out->len = 0U;
         return 0U;
     }
+    /* Sprint 57.32 §3: relative to where the command will run. */
+    base = req->cwd != NULL ? req->cwd : yew_ws_root(ed);
     if (expanded[0] == '/')
         scan_dir = join2("", expanded);
     else {
-        char *root_slash = join2(yew_ws_root(ed), "/");
+        char *root_slash = join2(base, "/");
         scan_dir = join2(root_slash, expanded);
         yew_xfree(root_slash);
     }
     if (scan_dir[0] == '\0') {
         yew_xfree(scan_dir);
-        scan_dir = join2("", yew_ws_root(ed));
+        scan_dir = join2("", base);
     }
     /* A fresh request also RETIRES the cache: whoever asked for one did
      * so because the directory may have changed, and a later cached read
@@ -1623,9 +1626,15 @@ static u32 enumerate_exec(const CompReq *req, Vec_CompItem *out)
      * multi-millisecond keystroke the slicing exists to remove.
      */
     (void)memset(&any, 0, sizeof(any)); /* YEW_PATH_ANY, no extensions */
-    for (i = 0U; i < exec_cache.n_names; i++)
+    for (i = 0U; i < exec_cache.n_names; i++) {
+        /* Sprint 57.32: `.` on $PATH is where the shell will be, which
+         * is not the directory this element was read from. */
+        if (req->cwd_moved && exec_cache.from[i] < exec_cache.n &&
+            exec_cache.dirs[exec_cache.from[i]].dir[0] != '/')
+            continue;
         path_rank_one(&paths, exec_name(i), (u8)DT_REG, stem, stem_len,
                       &total, "", &any);
+    }
     exec_candidates_finish(req, &paths, out);
     return total;
 }
@@ -2190,14 +2199,87 @@ typedef struct ShellPlan {
     const YewFishRow *fish_rows;
     u32 n_fish;
     char *fish_key;
+    /*
+     * Sprint 57.32 §3: the directory the command will run in -- the
+     * lexer's, then each `changes_dir` flag's value -- or NULL when it
+     * is unknown.  `where` says whether it is the `:!` directory;
+     * `skip` holds the argv indices of those flags and values, which a
+     * generator is not passed again (its cwd already carries them).
+     */
+    const char *cwd;
+    const char *root;
+    u8 where;
+    i8 cwd_exists;
+    u32 n_skip;
+    u32 skip[2U * YEW_SPEC_DIRS_MAX];
 } ShellPlan;
 
-/* `-C dir` / `--directory=dir` and `-f file` / `--file=` / `--makefile=`
- * already typed on a `make` line: make_targets reads THAT Makefile. */
-static void plan_make_flags(Ed *ed, const YewShCtx *ctx, Arena *a,
-                            ShellPlan *p)
+enum {
+    WHERE_ROOT,
+    WHERE_MOVED,
+    WHERE_UNKNOWN
+};
+
+/* The directory is known and (unless it is the prompt's own) exists:
+ * `mkdir x && cd x && …` has nothing in x to offer until it runs. */
+static bool plan_cwd_usable(ShellPlan *p)
 {
-    const char *dir = NULL;
+    struct stat st;
+
+    if (p->cwd == NULL)
+        return false;
+    if (p->cwd_exists < 0)
+        p->cwd_exists = (i8)(strcmp(p->cwd, p->root) == 0 ||
+                             (stat(p->cwd, &st) == 0 && S_ISDIR(st.st_mode)));
+    return p->cwd_exists != 0;
+}
+
+/* Sprint 57.32 §2: apply the `changes_dir` values resolution walked. */
+static void plan_dirs(ShellPlan *p, const YewSpecPoint *pt, Arena *a)
+{
+    u32 i;
+
+    if (pt->dirs_overflow)
+        p->cwd = NULL;
+    for (i = 0U; i < pt->n_dirs && p->cwd != NULL; i++) {
+        u32 at = pt->dir_at[i];
+        u32 off = pt->dir_off[i];
+        const char *v = NULL;
+
+        if (at < p->eff.arg_index && p->eff.dirv != NULL &&
+            p->eff.dirv[at] != NULL) {
+            /* An attached value (`-Csub`, `--directory=sub`) is plain
+             * text: no tilde after the flag. */
+            v = off == 0U ? p->eff.dirv[at] : p->eff.argv[at] + off;
+            if (off != 0U && (v[0] == '~' || v[0] == '\0'))
+                v = NULL;
+        }
+        p->cwd = v == NULL ? NULL : yew_sh_dir_join(a, p->cwd, v);
+        p->cwd_exists = -1;
+        if (p->n_skip + 2U <= YEW_ARRAY_LEN(p->skip)) {
+            p->skip[p->n_skip++] = pt->dir_flag[i];
+            p->skip[p->n_skip++] = at;
+        }
+    }
+}
+
+static bool plan_skipped(const ShellPlan *p, u32 i)
+{
+    u32 k;
+
+    for (k = 0U; k < p->n_skip; k++) {
+        if (p->skip[k] == i)
+            return true;
+    }
+    return false;
+}
+
+/* `-f file` / `--file=` / `--makefile=` already typed on a `make` line:
+ * make_targets reads THAT Makefile, in the directory the command runs
+ * in -- `-C dir` is make.fl's `changes_dir` (Sprint 57.32), already in
+ * the plan's cwd, and make reads -f relative to it. */
+static void plan_make_flags(const YewShCtx *ctx, ShellPlan *p)
+{
     const char *file = NULL;
     u32 i;
 
@@ -2206,15 +2288,10 @@ static void plan_make_flags(Ed *ed, const YewShCtx *ctx, Arena *a,
         const char *next = i + 1U < ctx->arg_index ? ctx->argv[i + 1U]
                                                    : NULL;
 
-        if (strcmp(w, "-C") == 0 || strcmp(w, "--directory") == 0) {
-            dir = next;
-            i++;
-        } else if (strncmp(w, "--directory=", 12U) == 0) {
-            dir = w + 12;
-        } else if (strncmp(w, "-C", 2U) == 0 && w[2] != '\0') {
-            dir = w + 2;
-        } else if (strcmp(w, "-f") == 0 || strcmp(w, "--file") == 0 ||
-                   strcmp(w, "--makefile") == 0) {
+        if (plan_skipped(p, i))
+            continue;
+        if (strcmp(w, "-f") == 0 || strcmp(w, "--file") == 0 ||
+            strcmp(w, "--makefile") == 0) {
             file = next;
             i++;
         } else if (strncmp(w, "--file=", 7U) == 0) {
@@ -2223,21 +2300,7 @@ static void plan_make_flags(Ed *ed, const YewShCtx *ctx, Arena *a,
             file = w + 11;
         }
     }
-    p->make_cwd = yew_ws_root(ed);
-    if (dir != NULL && dir[0] != '\0') {
-        if (dir[0] == '/') {
-            p->make_cwd = dir;
-        } else {
-            size_t nr = strlen(p->make_cwd);
-            size_t nd = strlen(dir);
-            char *joined = arena_alloc(a, nr + nd + 2U, 1U);
-
-            (void)memcpy(joined, p->make_cwd, nr);
-            joined[nr] = '/';
-            (void)memcpy(joined + nr + 1U, dir, nd + 1U);
-            p->make_cwd = joined;
-        }
-    }
+    p->make_cwd = p->cwd;
     p->makefile = file;
 }
 
@@ -2262,12 +2325,15 @@ static void plan_gen_key(Ed *ed, const YewCompSpec *spec,
     for (i = 1U; i < ctx->arg_index && ctx->argv[i] != NULL; i++) {
         const char *w = ctx->argv[i];
 
+        /* A `changes_dir` flag is already the generator's cwd. */
+        if (plan_skipped(p, i))
+            continue;
         for (f = 0U; f < gen->n_pass; f++) {
             const char *pf = gen->pass_flags[f];
             size_t pl = strlen(pf);
 
             if (strcmp(w, pf) == 0 && i + 1U < ctx->arg_index &&
-                ctx->argv[i + 1U] != NULL) {
+                ctx->argv[i + 1U] != NULL && !plan_skipped(p, i + 1U)) {
                 argv[n++] = w;
                 argv[n++] = ctx->argv[i + 1U];
                 i++;
@@ -2289,10 +2355,12 @@ static void plan_gen_key(Ed *ed, const YewCompSpec *spec,
     p->has_key = true;
     p->key.name = name;
     p->key.argv = argv;
-    /* The SAME directory a `:!` command runs in: yew_shell_run leaves
-     * the job's cwd NULL, which the job layer resolves to exactly this.
-     * A generator anywhere else lists another repository's branches. */
-    p->key.cwd = yew_ws_root(ed);
+    /* The directory the command will run in (Sprint 57.32): the `:!`
+     * directory after the line's `cd`s and the command's `changes_dir`
+     * flags.  A generator anywhere else lists another repository's
+     * branches. */
+    (void)ed;
+    p->key.cwd = p->cwd;
     p->key.cache_ms = gen->cache_ms;
     p->key.ps_columns = false;
 }
@@ -2331,18 +2399,25 @@ static void plan_arg(Ed *ed, const YewShCtx *ctx, const YewSpecArg *arg,
     case YEW_SPEC_ARG_GENERATOR:
         p->arg = arg;
         if (arg->gen != NULL) {
-            plan_gen_key(ed, p->spec, arg->gen, ctx, a, p);
+            /* Sprint 57.32 §3: a spec generator runs where the command
+             * will; unknown or not yet created, it has nothing to say. */
+            if (plan_cwd_usable(p))
+                plan_gen_key(ed, p->spec, arg->gen, ctx, a, p);
         } else if (strcmp(arg->generator, "pids") == 0) {
+            /* `ps` answers the same from any directory. */
             p->has_key = true;
             p->key.name = "pids";
             p->key.argv = ps_argv;
             p->key.cwd = yew_ws_root(ed);
             p->key.cache_ms = YEW_COMPGEN_DEFAULT_CACHE_MS;
             p->key.ps_columns = true;
+        } else if (strcmp(arg->generator, "make_targets") == 0) {
+            if (plan_cwd_usable(p)) {
+                p->builtin = arg->generator;
+                plan_make_flags(ctx, p);
+            }
         } else {
-            p->builtin = arg->generator;
-            if (strcmp(arg->generator, "make_targets") == 0)
-                plan_make_flags(ed, ctx, a, p);
+            p->builtin = arg->generator; /* hosts, signals, users */
         }
         break;
     case YEW_SPEC_ARG_COMMAND:
@@ -2364,12 +2439,15 @@ static void plan_reenter(YewShCtx *eff, u32 k, Arena *a)
         none[0] = NULL;
         eff->pos = YEW_SH_POS_COMMAND;
         eff->argv = none;
+        eff->dirv = none;
         eff->argc = 0U;
         eff->arg_index = 0U;
         eff->dashdash = false;
         return;
     }
     eff->argv += k;
+    if (eff->dirv != NULL)
+        eff->dirv += k;
     eff->argc -= k;
     eff->arg_index -= k;
     eff->dashdash = false;
@@ -2447,7 +2525,7 @@ static void plan_help(Ed *ed, Arena *a, ShellPlan *p)
 
     if ((p->row != 6U && p->row != 9U) || sh_builtin_name(p->eff.argv[0]))
         return;
-    if (!yew_comphelp_lookup(ed, p->eff.argv[0], &hl)) {
+    if (!yew_comphelp_lookup_in(ed, p->eff.argv[0], p->cwd, &hl)) {
         if (hl.pending && help_pending_matters(&p->eff))
             p->help_key = arena_strdup(a, hl.key);
         return;
@@ -2509,7 +2587,11 @@ static bool plan_fish(Ed *ed, Arena *a, ShellPlan *p)
 
     if ((p->row != 6U && p->row != 9U) || sh_builtin_name(p->eff.argv[0]))
         return false;
-    switch (yew_compfish_lookup(ed, &p->eff, &fl)) {
+    /* Sprint 57.32: fish lists the files of the directory it runs in;
+     * with that unknown (or not yet created) it is not asked. */
+    if (!plan_cwd_usable(p))
+        return false;
+    switch (yew_compfish_lookup_in(ed, &p->eff, p->cwd, &fl)) {
     case YEW_FISH_PENDING:
         p->fish_key = arena_strdup(a, fl.key);
         return true;
@@ -2536,12 +2618,10 @@ static bool plan_fish(Ed *ed, Arena *a, ShellPlan *p)
  * Deterministic in (ctx, specs on disk), so the ctx_key and the
  * enumerator can both call it and agree.
  */
-static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
+static void shell_plan_walk(Ed *ed, Arena *a, ShellPlan *p)
 {
     u32 depth;
 
-    (void)memset(p, 0, sizeof(*p));
-    p->eff = *ctx;
     for (depth = 0U; depth <= SHELL_REENTRY_MAX; depth++) {
         const YewCompSpec *spec;
         const YewSpecArg *arg = NULL;
@@ -2569,6 +2649,8 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
         }
         if (!yew_compspec_resolve(spec, &p->eff, &pt))
             return; /* 57.23's rows 6, 8 and 9 stand */
+        /* Sprint 57.32 §2: `git -C sub …`, `env -C sub cmd …`. */
+        plan_dirs(p, &pt, a);
         if (pt.command_at != 0U) {
             plan_reenter(&p->eff, pt.command_at, a);
             continue;
@@ -2617,6 +2699,97 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
     /* Re-entered too often: offer nothing. */
     p->row = 1U;
     p->sources = 0U;
+}
+
+static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
+{
+    const char *cwd;
+
+    (void)memset(p, 0, sizeof(*p));
+    p->eff = *ctx;
+    p->root = yew_ws_root(ed);
+    p->cwd_exists = -1;
+    /* Sprint 57.32 §1: where the lexer says the command will run. */
+    p->cwd = yew_shctx_dir(ctx, p->root, a);
+    shell_plan_walk(ed, a, p);
+    cwd = p->cwd;
+    if (cwd == NULL)
+        p->where = WHERE_UNKNOWN;
+    else if (strcmp(yew_sh_dir_join(a, NULL, cwd),
+                    yew_sh_dir_join(a, NULL, p->root)) == 0)
+        p->where = WHERE_ROOT;
+    else
+        p->where = WHERE_MOVED;
+}
+
+/*
+ * Sprint 57.32 §4: the pager's note -- `in ch7/` relative to the `:!`
+ * directory when it is inside it, `in ../` above it, the absolute path
+ * elsewhere -- or the reason nothing path-like was offered.
+ */
+static void plan_note(const ShellPlan *p, Arena *a, char *out, size_t cap)
+{
+    const char *root;
+    const char *cwd;
+    size_t nr;
+    size_t nc;
+    Bytebuf b;
+
+    out[0] = '\0';
+    if (p->where == WHERE_ROOT)
+        return;
+    if (p->where == WHERE_UNKNOWN) {
+        if (snprintf(out, cap, "cd target unknown") < 0)
+            out[0] = '\0';
+        return;
+    }
+    root = yew_sh_dir_join(a, NULL, p->root);
+    cwd = yew_sh_dir_join(a, NULL, p->cwd);
+    nr = strlen(root);
+    nc = strlen(cwd);
+    bytebuf_init(&b);
+    bytebuf_append(&b, "in ", 3U);
+    if (nr == 0U && cwd[0] != '/') {
+        bytebuf_append(&b, cwd, nc); /* the `:!` directory is "." */
+    } else if (nc > nr && strncmp(cwd, root, nr) == 0 &&
+               (cwd[nr] == '/' || strcmp(root, "/") == 0)) {
+        const char *rest = cwd + nr + (cwd[nr] == '/' ? 1U : 0U);
+
+        bytebuf_append(&b, rest, strlen(rest));
+    } else if (nr > nc && strncmp(root, cwd, nc) == 0 &&
+               (root[nc] == '/' || strcmp(cwd, "/") == 0)) {
+        const char *q = strcmp(cwd, "/") == 0 ? root : root + nc;
+
+        /* An ancestor: one `..` per component below it. */
+        while (*q != '\0') {
+            while (*q == '/')
+                q++;
+            if (*q == '\0')
+                break;
+            bytebuf_append(&b, b.len > 3U ? "/.." : "..", b.len > 3U ? 3U : 2U);
+            while (*q != '\0' && *q != '/')
+                q++;
+        }
+    } else {
+        bytebuf_append(&b, cwd, nc);
+    }
+    if (b.data[b.len - 1U] != '/')
+        bytebuf_push_u8(&b, (u8)'/');
+    if (b.len >= cap) {
+        /* Keep the tail, the part that names the directory. */
+        size_t keep = cap - 1U - 6U;
+        size_t from = b.len - keep;
+
+        while (from < b.len && (b.data[from] & 0xC0U) == 0x80U)
+            from++;
+        if (snprintf(out, cap, "in \xE2\x80\xA6%.*s", (int)(b.len - from),
+                     (const char *)b.data + from) < 0)
+            out[0] = '\0';
+    } else {
+        (void)memcpy(out, b.data, b.len);
+        out[b.len] = '\0';
+    }
+    bytebuf_free(&b);
 }
 
 /*
@@ -2794,6 +2967,7 @@ static u32 spec_finish(const CompReq *req, YewCompKind kind, CandidateVec *v,
 static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
 {
     const YewShCtx *ctx = req->shell;
+    CompReq at;
     const YewShCtx *eff;
     const char *stem;
     Vec_CompItem got = {0};
@@ -2815,6 +2989,11 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
     stem = ctx->stem;
     sources = plan.sources;
     mask = plan.mask;
+    /* Sprint 57.32 §3: every sub-source lists where the command runs. */
+    at = *req;
+    at.cwd = plan.cwd;
+    at.cwd_moved = plan.where != WHERE_ROOT;
+    req = &at;
     if (plan.subs || plan.flags || plan.arg != NULL) {
         size_t head_len = yew_comp_path_head_len(stem);
         const char *pattern = stem + head_len;
@@ -2937,6 +3116,15 @@ static u32 enumerate_shell(const CompReq *req, Vec_CompItem *out)
                        out);
         }
     }
+    /*
+     * Sprint 57.32 §3: with the directory unknown a relative path could
+     * name a file in the wrong place -- offer nothing.  An absolute or
+     * `~` path names the same file from anywhere.
+     */
+    if ((sources & SRC_BIT(YEW_COMP_PATH)) != 0U && plan.cwd == NULL &&
+        stem[plan.value_at] != '/' &&
+        !(stem[plan.value_at] == '~' && eff->tilde && plan.value_at == 0U))
+        sources &= ~SRC_BIT(YEW_COMP_PATH);
     if ((sources & SRC_BIT(YEW_COMP_PATH)) != 0U) {
         /*
          * A QUOTED leading `~` is a literal directory name (§4), but the
@@ -3338,7 +3526,8 @@ static u32 filter_rerank(CompFilter *f, const char *pattern,
  * row is encoded), the brace and `--` flags, argv[0] and the path mask.
  * NULL for every other kind.
  */
-static char *shell_ctx_key(Ed *ed, const YewCompQuery *q, char **gen_key)
+static char *shell_ctx_key(Ed *ed, const YewCompQuery *q, char **gen_key,
+                           char *where, size_t where_cap)
 {
     const YewShCtx *ctx = q->shell;
     ShellPlan plan;
@@ -3347,10 +3536,12 @@ static char *shell_ctx_key(Ed *ed, const YewCompQuery *q, char **gen_key)
     char *out;
 
     *gen_key = NULL;
+    where[0] = '\0';
     if (q->kind != YEW_COMP_SHELL || ctx == NULL)
         return NULL;
     arena_init(&a);
     shell_plan(ed, ctx, &a, &plan);
+    plan_note(&plan, &a, where, where_cap);
     bytebuf_init(&key);
     bytebuf_printf(&key, "%u|%u|%u|%u|%u|%u|%u|%u|", (unsigned)plan.row,
                    (unsigned)ctx->pos, (unsigned)ctx->quote,
@@ -3363,6 +3554,9 @@ static char *shell_ctx_key(Ed *ed, const YewCompQuery *q, char **gen_key)
      * `git remote` to `git remote add` re-enumerates. */
     if (plan.id != NULL)
         bytebuf_printf(&key, "|%s", plan.id);
+    /* Sprint 57.32 §3 pitfall: the same row in another directory is
+     * another answer. */
+    bytebuf_printf(&key, "|cwd:%s", plan.cwd == NULL ? "?" : plan.cwd);
     if (plan.has_key) {
         *gen_key = yew_compgen_key_string(&plan.key);
         bytebuf_printf(&key, "|%s", *gen_key);
@@ -3432,7 +3626,7 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
                    : 0U;
     pattern = q->stem + head_len;
     head = dup_range(q->stem, head_len);
-    ctx_key = shell_ctx_key(ed, q, &gen_key);
+    ctx_key = shell_ctx_key(ed, q, &gen_key, f->where, sizeof(f->where));
     reuse = filter_reusable(f, q->kind, head, pattern, ctx_key);
     if (!reuse) {
         CompReq req;
