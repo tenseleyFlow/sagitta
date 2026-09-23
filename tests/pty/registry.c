@@ -3270,6 +3270,15 @@ static const char s57_25_clap_help[] =
     "  -o, --output <FILE>  Write here\n"
     "  -h, --help           Print help\n";
 
+/* Did snprintf fit?  A cut-off fixture path would point a case at the
+ * wrong file -- and in the history-isolation case, silently weaken the
+ * proof it exists to give -- so every fixture path is checked.  Using the
+ * result is also what GCC's -Wformat-truncation asks for. */
+static bool s57_fits(int n, size_t cap)
+{
+    return n >= 0 && (size_t)n < cap;
+}
+
 static bool s57_25_tool(PtyCtx *c, const char *name, const char *help,
                         bool hold)
 {
@@ -3285,7 +3294,11 @@ static bool s57_25_tool(PtyCtx *c, const char *name, const char *help,
         ptc_check(c, false, "Sprint 57.25 case needs an isolated workspace");
         return false;
     }
-    (void)snprintf(bin, sizeof(bin), "%s/bin", c->workspace_dir);
+    if (!s57_fits(snprintf(bin, sizeof(bin), "%s/bin", c->workspace_dir),
+                  sizeof(bin))) {
+        ptc_check(c, false, "Sprint 57.25 fixture directory path too long");
+        return false;
+    }
     (void)mkdir(bin, 0700);
     fd = open(YEW_TEST_HELPFIX, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
@@ -3296,17 +3309,18 @@ static bool s57_25_tool(PtyCtx *c, const char *name, const char *help,
     while ((n = read(fd, chunk, sizeof(chunk))) > 0)
         bytebuf_append(&b, chunk, (size_t)n);
     (void)close(fd);
-    (void)snprintf(path, sizeof(path), "%s/%s", bin, name);
-    ok = write_bytes(path, b.data, b.len) && chmod(path, 0755) == 0;
+    ok = s57_fits(snprintf(path, sizeof(path), "%s/%s", bin, name),
+                  sizeof(path)) &&
+         write_bytes(path, b.data, b.len) && chmod(path, 0755) == 0;
     bytebuf_free(&b);
-    if (ok) {
-        (void)snprintf(path, sizeof(path), "%s/%s.help", bin, name);
-        ok = write_bytes(path, (const u8 *)help, strlen(help));
-    }
-    if (ok && hold) {
-        (void)snprintf(path, sizeof(path), "%s/%s.hold", bin, name);
-        ok = write_bytes(path, (const u8 *)"", 0U);
-    }
+    if (ok)
+        ok = s57_fits(snprintf(path, sizeof(path), "%s/%s.help", bin, name),
+                      sizeof(path)) &&
+             write_bytes(path, (const u8 *)help, strlen(help));
+    if (ok && hold)
+        ok = s57_fits(snprintf(path, sizeof(path), "%s/%s.hold", bin, name),
+                      sizeof(path)) &&
+             write_bytes(path, (const u8 *)"", 0U);
     if (!ok) {
         ptc_check(c, false, "installing the Sprint 57.25 fixture tool");
         return false;
@@ -3501,8 +3515,12 @@ static void case_s57_26_history_isolated(PtyCtx *c)
         ptc_check(c, false, "Sprint 57.26 case needs an isolated workspace");
         return;
     }
-    (void)snprintf(real_home, sizeof(real_home), "%s/real-home",
-                   c->workspace_dir);
+    if (!s57_fits(snprintf(real_home, sizeof(real_home), "%s/real-home",
+                           c->workspace_dir),
+                  sizeof(real_home))) {
+        ptc_check(c, false, "Sprint 57.26 sentinel home path too long");
+        return;
+    }
     if (mkdir(real_home, 0700) != 0 ||
         !s57_24_write(c, "real-home/.bash_history",
                       "echo yew-sentinel LEAKED-FROM-REAL-HOME\n", 0600) ||
@@ -3514,10 +3532,20 @@ static void case_s57_26_history_isolated(PtyCtx *c)
                       "- cmd: echo yew-sentinel LEAKED-FROM-REAL-HOME\n",
                       0600))
         return;
-    (void)snprintf(values[0], sizeof(values[0]), "%s", real_home);
-    (void)snprintf(values[1], sizeof(values[1]), "%s/xdg-data", real_home);
-    (void)snprintf(values[2], sizeof(values[2]), "%s/.zsh_history",
-                   real_home);
+    /* A truncated sentinel path would aim the runner's variables somewhere
+     * that holds no sentinel, and the case would pass without proving
+     * anything -- so a path that does not fit fails the case. */
+    if (!s57_fits(snprintf(values[0], sizeof(values[0]), "%s", real_home),
+                  sizeof(values[0])) ||
+        !s57_fits(snprintf(values[1], sizeof(values[1]), "%s/xdg-data",
+                           real_home),
+                  sizeof(values[1])) ||
+        !s57_fits(snprintf(values[2], sizeof(values[2]), "%s/.zsh_history",
+                           real_home),
+                  sizeof(values[2]))) {
+        ptc_check(c, false, "Sprint 57.26 sentinel history path too long");
+        return;
+    }
     for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         const char *v = getenv(names[i]);
 
