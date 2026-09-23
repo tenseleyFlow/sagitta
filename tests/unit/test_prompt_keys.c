@@ -348,6 +348,42 @@ void test_prompt_keys_yank_then_yank_pop_wraps(void)
     pk_free(&f);
 }
 
+/*
+ * The prompt's kills and yanks never touch the register file: the struct
+ * (every length, head and pointer) and the unnamed register's bytes are
+ * byte-identical after C-w C-u C-k C-y A-y, and no clipboard write is
+ * queued even under clipboard.sync = all.
+ */
+void test_prompt_keys_kills_leave_registers_untouched(void)
+{
+    PkFix f;
+    Registers before;
+    RegVal seeded;
+
+    pk_init(&f);
+    f.ed.regs.clipboard_sync = YEW_CLIP_SYNC_ALL;
+    yew_regval_init(&seeded);
+    bytebuf_append(&seeded.bytes, "unnamed", 7U);
+    yew_reg_yank(&f.ed.regs, 0U, &seeded);
+    yew_regval_free(&seeded);
+    yew_clip_reset();
+    pk_prompt(&f, NULL, 0U, "one two three");
+    (void)memcpy(&before, &f.ed.regs, sizeof(before));
+    pk_run(&f, (u32)'w', YEW_MOD_CTRL, "ed.edit.kill.ws_word_prev");
+    pk_run(&f, (u32)'b', YEW_MOD_CTRL, "ed.move.char.prev");
+    pk_run(&f, (u32)'u', YEW_MOD_CTRL, "ed.edit.kill.to_home");
+    pk_run(&f, (u32)'k', YEW_MOD_CTRL, "ed.edit.kill.to_end");
+    pk_run(&f, (u32)'y', YEW_MOD_CTRL, "ed.edit.kill.yank");
+    pk_run(&f, (u32)'y', YEW_MOD_ALT, "ed.edit.kill.yank_pop");
+    pk_text(&f, "three");
+    YEW_ASSERT_EQ_MEM(&before, &f.ed.regs, sizeof(before));
+    YEW_ASSERT_EQ_U64(f.ed.regs.unnamed.bytes.len, 7U);
+    YEW_ASSERT_EQ_MEM(f.ed.regs.unnamed.bytes.data, "unnamed", 7U);
+    YEW_ASSERT(!yew_clip_pending());
+    pk_free(&f);
+    yew_clip_reset();
+}
+
 /* A-y with no yank just before it: a message, and nothing changes. */
 void test_prompt_keys_yank_pop_without_a_yank(void)
 {

@@ -13,6 +13,7 @@
 
 #include "edit/ed.h"
 #include "edit/mode.h"
+#include "text/clipboard.h"
 #include "text/register.h"
 
 typedef struct RlFixture {
@@ -715,5 +716,250 @@ void test_readline_signature_help_moved_to_alt_k(void)
     YEW_ASSERT_EQ_U64(f.ed.last_cmd.v,
                       yew_cmd_lookup("ed.lsp.signature",
                                      (u32)strlen("ed.lsp.signature")).v);
+    rl_free(&f);
+}
+
+/* ------------------------------------------------ Sprint 57.28: the stack */
+
+static void rl_snap_regval(Bytebuf *out, const RegVal *v)
+{
+    bytebuf_append(out, &v->type, sizeof(v->type));
+    bytebuf_append(out, &v->ragged, sizeof(v->ragged));
+    bytebuf_append(out, &v->width, sizeof(v->width));
+    bytebuf_append(out, &v->t_wall, sizeof(v->t_wall));
+    bytebuf_append(out, &v->bytes.len, sizeof(v->bytes.len));
+    if (v->bytes.len != 0U)
+        bytebuf_append(out, v->bytes.data, v->bytes.len);
+    bytebuf_append(out, &v->rows.len, sizeof(v->rows.len));
+    if (v->rows.len != 0U)
+        bytebuf_append(out, v->rows.data, v->rows.len * sizeof(Span));
+}
+
+/*
+ * Every byte a register holds, and the Registers struct itself (so the
+ * ring's head, length and byte count, the paste-cycle state and every
+ * buffer pointer are covered too).  Byte-identical before and after
+ * means nothing in the register file moved.
+ */
+static void rl_snap_regs(Bytebuf *out, const Registers *r)
+{
+    size_t i;
+
+    bytebuf_init(out);
+    bytebuf_append(out, r, sizeof(*r));
+    for (i = 0U; i < 26U; i++)
+        rl_snap_regval(out, &r->named[i]);
+    rl_snap_regval(out, &r->unnamed);
+    for (i = 0U; i < 10U; i++)
+        rl_snap_regval(out, &r->numbered[i]);
+    rl_snap_regval(out, &r->small_del);
+    rl_snap_regval(out, &r->last_insert);
+    rl_snap_regval(out, &r->search);
+    rl_snap_regval(out, &r->cmdline);
+    rl_snap_regval(out, &r->file);
+    rl_snap_regval(out, &r->alt_file);
+    rl_snap_regval(out, &r->system);
+    for (i = 0U; i < YEW_KILL_RING_MAX; i++)
+        rl_snap_regval(out, &r->ring[i]);
+}
+
+static void rl_snap_yank(Bytebuf *out, const YewYankStack *y)
+{
+    u32 k;
+
+    bytebuf_init(out);
+    bytebuf_append(out, &y->len, sizeof(y->len));
+    bytebuf_append(out, &y->bytes, sizeof(y->bytes));
+    for (k = 0U; k < y->len; k++) {
+        const Bytebuf *entry = yew_yank_at(y, k);
+
+        bytebuf_append(out, &entry->len, sizeof(entry->len));
+        bytebuf_append(out, entry->data, entry->len);
+    }
+}
+
+static void rl_expect_same(const Bytebuf *a, const Bytebuf *b)
+{
+    YEW_ASSERT_EQ_U64(a->len, b->len);
+    YEW_ASSERT_EQ_MEM(a->data, b->data, a->len);
+}
+
+/*
+ * THE separation.  With clipboard.sync = all -- where every register
+ * delete reaches the system clipboard (the control proves it) -- C-k,
+ * C-w, A-d, C-u and C-y in Insert mode leave every register and the
+ * clipboard queue byte-identical.
+ */
+void test_readline_kills_leave_registers_and_clipboard_untouched(void)
+{
+    static const u8 text[] = "keep me\nalpha beta gamma\ndelta\n";
+    RlFixture f;
+    Bytebuf before;
+    Bytebuf after;
+    RegVal seeded;
+
+    rl_fixture(&f, text, sizeof(text) - 1U);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&f.ed, YEW_MODE_L), YEW_CMD_OK);
+    f.ed.regs.clipboard_sync = YEW_CLIP_SYNC_ALL;
+    yew_regval_init(&seeded);
+    bytebuf_append(&seeded.bytes, "named", 5U);
+    yew_reg_yank(&f.ed.regs, (u8)'a', &seeded);
+    yew_regval_free(&seeded);
+    yew_clip_reset();
+    YEW_ASSERT(!yew_clip_pending());
+    /* The control: under sync = all, a register DELETE -- the entry point
+     * these kills used before the yank stack -- queues a clipboard write
+     * and becomes the unnamed register. */
+    yew_regval_init(&seeded);
+    bytebuf_append(&seeded.bytes, "gone", 4U);
+    yew_reg_delete(&f.ed.regs, 0U, &seeded);
+    yew_regval_free(&seeded);
+    YEW_ASSERT(yew_clip_pending());
+    yew_clip_reset();
+    YEW_ASSERT(!yew_clip_pending());
+    rl_at(&f, 0U);
+    rl_send(&f, rl_chord((u32)'d', 0U));
+    rl_send(&f, rl_chord((u32)'d', 0U));
+    rl_expect(&f, "alpha beta gamma\ndelta\n");
+
+    rl_snap_regs(&before, &f.ed.regs);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&f.ed, YEW_MODE_I), YEW_CMD_OK);
+    rl_at(&f, 11U);
+    rl_send(&f, rl_chord((u32)'k', YEW_MOD_CTRL));
+    rl_send(&f, rl_chord((u32)'w', YEW_MOD_CTRL));
+    rl_send(&f, rl_chord(YEW_KEY_LEFT, 0U));
+    rl_send(&f, rl_chord((u32)'d', YEW_MOD_ALT));
+    rl_send(&f, rl_chord((u32)'u', YEW_MOD_CTRL));
+    /* C-k C-w joined; the Left split; A-d C-u joined. */
+    YEW_ASSERT_EQ_U64(f.ed.yank.len, 2U);
+    YEW_ASSERT_EQ_U64(yew_yank_at(&f.ed.yank, 1U)->len, 10U);
+    YEW_ASSERT_EQ_MEM(yew_yank_at(&f.ed.yank, 1U)->data, "beta gamma", 10U);
+    rl_send(&f, rl_chord((u32)'y', YEW_MOD_CTRL));
+    rl_snap_regs(&after, &f.ed.regs);
+    rl_expect_same(&before, &after);
+    YEW_ASSERT(!yew_clip_pending());
+    YEW_ASSERT(!yew_clip_busy());
+    /* The unnamed register still holds the control's value, not a kill. */
+    YEW_ASSERT_EQ_U64(yew_reg_get(&f.ed.regs, (u8)'"')->bytes.len, 4U);
+    YEW_ASSERT_EQ_MEM(yew_reg_get(&f.ed.regs, (u8)'"')->bytes.data,
+                      "gone", 4U);
+    bytebuf_free(&before);
+    bytebuf_free(&after);
+    rl_free(&f);
+    yew_clip_reset();
+}
+
+/* And the other way: `d d` and a selection yank leave the yank stack as
+ * it was, so C-y still yanks the last KILL. */
+void test_readline_register_writes_leave_the_yank_stack(void)
+{
+    static const u8 text[] = "one two\nthree\nfour\n";
+    RlFixture f;
+    Bytebuf before;
+    Bytebuf after;
+    CmdId yank = yew_cmd_lookup("ed.sel.yank", 11U);
+    CmdCtx cx = {0};
+
+    rl_fixture(&f, text, sizeof(text) - 1U);
+    rl_at(&f, 7U);
+    rl_send(&f, rl_chord((u32)'w', YEW_MOD_CTRL));
+    rl_expect_kill(&f, "two");
+    rl_snap_yank(&before, &f.ed.yank);
+    rl_send(&f, rl_chord(YEW_KEY_ESCAPE, 0U));
+    rl_send(&f, rl_chord(YEW_KEY_ESCAPE, 0U));
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    rl_at(&f, 9U);
+    rl_send(&f, rl_chord((u32)'d', 0U));
+    rl_send(&f, rl_chord((u32)'d', 0U));
+    rl_expect(&f, "one \nfour\n");
+    f.ed.win->cs.curs.data[0].anchor = BYTEOFF(0U);
+    f.ed.win->cs.curs.data[0].pos = BYTEOFF(3U);
+    YEW_ASSERT(yank.v != 0U);
+    cx.ed = &f.ed;
+    cx.win = f.ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    (void)yew_ed_invoke(&f.ed, yank, &cx);
+    rl_snap_yank(&after, &f.ed.yank);
+    rl_expect_same(&before, &after);
+    bytebuf_free(&before);
+    bytebuf_free(&after);
+    rl_free(&f);
+}
+
+/* Consecutive kills through the keys join; a motion in between splits. */
+void test_readline_consecutive_kill_keys_join(void)
+{
+    RlFixture f;
+
+    rl_fixture(&f, rl_words, sizeof(rl_words) - 1U);
+    rl_at(&f, 16U);
+    rl_send(&f, rl_chord((u32)'w', YEW_MOD_CTRL));
+    rl_send(&f, rl_chord(YEW_KEY_BACKSPACE, YEW_MOD_ALT));
+    rl_expect_kill(&f, "beta gamma");
+    YEW_ASSERT_EQ_U64(f.ed.yank.len, 1U);
+    rl_send(&f, rl_chord(YEW_KEY_LEFT, 0U));
+    rl_send(&f, rl_chord((u32)'k', YEW_MOD_CTRL));
+    YEW_ASSERT_EQ_U64(f.ed.yank.len, 2U);
+    rl_expect_kill(&f, " ");
+    rl_send(&f, rl_chord((u32)'k', YEW_MOD_CTRL));
+    rl_expect_kill(&f, " \n");
+    rl_expect(&f, "alphadelta epsilon");
+    rl_free(&f);
+}
+
+/* Insert-mode parity: A-<del> kills the word ahead; A-y cycles. */
+void test_readline_insert_alt_del_and_alt_y(void)
+{
+    RlFixture f;
+
+    rl_fixture(&f, rl_words, sizeof(rl_words) - 1U);
+    rl_at(&f, 6U);
+    rl_key_runs(&f, rl_chord(YEW_KEY_DELETE, YEW_MOD_ALT),
+                "ed.edit.kill.word_next");
+    rl_expect(&f, "alpha gamma\ndelta epsilon");
+    rl_expect_kill(&f, "beta ");
+    rl_send(&f, rl_chord(YEW_KEY_RIGHT, 0U));
+    rl_send(&f, rl_chord((u32)'d', YEW_MOD_ALT));
+    rl_expect(&f, "alpha gdelta epsilon");
+    rl_expect_kill(&f, "amma\n");
+    rl_key_runs(&f, rl_chord((u32)'y', YEW_MOD_CTRL), "ed.edit.kill.yank");
+    rl_expect(&f, "alpha gamma\ndelta epsilon");
+    rl_key_runs(&f, rl_chord((u32)'y', YEW_MOD_ALT),
+                "ed.edit.kill.yank_pop");
+    rl_expect(&f, "alpha gbeta delta epsilon");
+    rl_send(&f, rl_chord((u32)'y', YEW_MOD_ALT));
+    rl_expect(&f, "alpha gamma\ndelta epsilon");
+    /* One undo per yank-pop. */
+    rl_ok(&f, "ed.edit.undo");
+    rl_expect(&f, "alpha gbeta delta epsilon");
+    rl_free(&f);
+}
+
+/* Multi-cursor: the yank lands at every caret, and A-y replaces it at
+ * every caret from the spans the yank left behind. */
+void test_readline_multicursor_yank_pop(void)
+{
+    static const u8 text[] = "ab\ncd\n";
+    RlFixture f;
+
+    rl_fixture(&f, text, sizeof(text) - 1U);
+    yew_yank_kill(&f.ed.yank, (const u8 *)"OLD", 3U, YEW_KILL_FORWARD, 0U,
+                  NULL);
+    yew_yank_kill(&f.ed.yank, (const u8 *)"new", 3U, YEW_KILL_FORWARD, 0U,
+                  NULL);
+    YEW_ASSERT_EQ_U64(f.ed.yank.len, 2U);
+    rl_at(&f, 1U);
+    rl_add(&f, 4U);
+    rl_send(&f, rl_chord((u32)'y', YEW_MOD_CTRL));
+    rl_expect(&f, "anewb\ncnewd\n");
+    rl_send(&f, rl_chord((u32)'y', YEW_MOD_ALT));
+    rl_expect(&f, "aOLDb\ncOLDd\n");
+    YEW_ASSERT_EQ_U64(rl_pos(&f, 0U), 4U);
+    YEW_ASSERT_EQ_U64(rl_pos(&f, 1U), 10U);
+    rl_send(&f, rl_chord((u32)'y', YEW_MOD_ALT));
+    rl_expect(&f, "anewb\ncnewd\n");
+    rl_ok(&f, "ed.edit.undo");
+    rl_expect(&f, "aOLDb\ncOLDd\n");
     rl_free(&f);
 }
