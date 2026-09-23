@@ -1,0 +1,19 @@
+fac - a terminal text editor written in Fortran
+Version: 0.42.0
+
+Usage:
+  fac                    Welcome menu: recent workspaces and files
+  fac <file>             Open a file
+  fac <dir>              Open the directory as a workspace
+  fac -w <dir> [file]    Open <file> with <dir> as the workspace root
+  fac -v, --version      Print the version
+  fac -h, --help         This message
+
+A few keys to start with:
+  ctrl-s  save              ctrl-q  quit
+  ctrl-f  find              ctrl-g  go to line
+  ctrl-b  file tree         ctrl-o  file browser
+  ctrl-p  command palette   f1      every keybinding
+
+Keys follow VSCode wherever a terminal can express them. F1 lists all of
+them; docs/KEYBINDINGS.md has the same list with the reasoning.

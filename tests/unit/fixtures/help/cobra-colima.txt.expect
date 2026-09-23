@@ -1,0 +1,22 @@
+sub completion | Generate completion script
+sub delete | delete and teardown Colima
+sub help | Help about any command
+sub kubernetes | manage Kubernetes cluster
+sub list | list instances
+sub model | manage AI models (requires docker runtime and krunkit VM typ
+sub nerdctl | run nerdctl (requires containerd runtime)
+sub prune | prune cached downloaded assets
+sub restart | restart Colima
+sub ssh | SSH into the VM
+sub ssh-config | show SSH connection config
+sub start | start Colima
+sub status | show the status of Colima
+sub stop | stop Colima
+sub template | edit the template for default configurations
+sub update | update the container runtime
+sub version | print the version of Colima
+flag -h --help | help for colima
+flag -p --profile arg=none | profile name, for multiple instances (default "default")
+flag -v --verbose | enable verbose log
+flag --version | version for colima
+flag --very-verbose | enable more verbose log

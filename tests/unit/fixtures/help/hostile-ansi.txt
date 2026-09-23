@@ -1,0 +1,14 @@
+[1mUsage:[0m clickapp [OPTIONS] COMMAND [ARGS]...
+
+  A small click application.
+
+[1;4mOptions[0m:
+  [36m-o[0m, [36m--output[0m PATH            Where to write results.
+  [36m--color[0m [always|never|auto]  Colorize output.
+  [36m-v[0m, [36m--verbose[0m                Print more.
+
+[1mCommands[0m:
+  [32mbuild[0m      ]8;;https://example.invalid/buildCompile the project.]8;;
+  [32mrun[0m        Run the compiled program.
+  (Bstray      a term holding an escape that starts nothing
+  bad      a bare ESC at the end of a term

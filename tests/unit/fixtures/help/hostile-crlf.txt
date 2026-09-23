@@ -1,0 +1,15 @@
+Usage: clickapp [OPTIONS] COMMAND [ARGS]...
+
+  A small click application.
+
+Options:
+  -o, --output PATH            Where to write results.
+  --color [always|never|auto]  Colorize output.
+  -v, --verbose                Print more.
+  --version                    Show the version and exit.
+  --help                       Show this message and exit.
+
+Commands:
+  build      Compile the project.
+  run        Run the compiled program.
+  self-test  Check the installation.

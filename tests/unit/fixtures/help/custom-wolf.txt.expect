@@ -1,0 +1,27 @@
+sub build | compile an entry file to a native executable
+sub run | build an entry file and run it, passing on its exit code
+sub test | discover and run `*_test.lu` files
+sub fmt | reformat source in the one canonical style
+sub fix | apply the compiler's machine-applicable suggestions
+sub doc | generate the package's documentation
+sub init | promote a script to a package
+sub add | add a dependency to `wolf.pkg`
+sub rm | remove a dependency from `wolf.pkg`
+sub update | re-fetch pinned dependencies and refresh the ledger
+sub audit | the capability tree, and what changed since `wolf.sum`
+sub tree | the resolved dependency tree
+sub why | the chain that pulls one dependency into the build
+sub vendor | mirror the resolved dependencies into `vendor/wolf/`
+sub publish | verify a package and emit its signed log record
+sub cache | where the script cache lives, and collecting it
+sub interface | print every module's public interface
+sub audit-surface | the package's complete unsafety inventory
+sub profile | read and merge profile-guided-optimization data
+sub c-import | import C headers, and show what was refused
+sub conform-run | observe one program and emit a conformance record
+sub lsp | serve the Language Server Protocol over stdio
+flag --explain | the full explanation of one diagnostic code
+flag --version | this build's identity and its paired interpreter
+flag -h --help | this message; `wolf <command> --help` for one command
+flag --man | the man page, for an installer to place
+flag --completions arg=none | a completion script for bash, zsh or fish

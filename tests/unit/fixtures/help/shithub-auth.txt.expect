@@ -1,0 +1,8 @@
+sub login | Authenticate to a shithub host
+sub logout | Remove a stored credential for a shithub host
+sub refresh | Re-authenticate to rotate or expand scopes on the active hos
+sub setup-git | Configure git to use shithub as a credential helper
+sub status | Show authentication status for each configured shithub host
+sub switch | Switch the default shithub host
+sub token | Print the authenticated token for a host
+flag -h --help | help for auth

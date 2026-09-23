@@ -1,0 +1,43 @@
+sub create | Create a resource from a file or from stdin
+sub expose | Take a replication controller, service, deployment or pod an
+sub run | Run a particular image on the cluster
+sub set | Set specific features on objects
+sub explain | Get documentation for a resource
+sub get | Display one or many resources
+sub edit | Edit a resource on the server
+sub delete | Delete resources by file names, stdin, resources and names,
+sub rollout | Manage the rollout of a resource
+sub scale | Set a new size for a deployment, replica set, or replication
+sub autoscale | Auto-scale a deployment, replica set, stateful set, or repli
+sub certificate | Modify certificate resources
+sub cluster-info | Display cluster information
+sub top | Display resource (CPU/memory) usage
+sub cordon | Mark node as unschedulable
+sub uncordon | Mark node as schedulable
+sub drain | Drain node in preparation for maintenance
+sub taint | Update the taints on one or more nodes
+sub describe | Show details of a specific resource or group of resources
+sub logs | Print the logs for a container in a pod
+sub attach | Attach to a running container
+sub exec | Execute a command in a container
+sub port-forward | Forward one or more local ports to a pod
+sub proxy | Run a proxy to the Kubernetes API server
+sub cp | Copy files and directories to and from containers
+sub auth | Inspect authorization
+sub debug | Create debugging sessions for troubleshooting workloads and
+sub events | List events
+sub diff | Diff the live version against a would-be applied version
+sub apply | Apply a configuration to a resource by file name or stdin
+sub patch | Update fields of a resource
+sub replace | Replace a resource by file name or stdin
+sub wait | Wait for a specific condition on one or many resources
+sub kustomize | Build a kustomization target from a directory or URL
+sub label | Update the labels on a resource
+sub annotate | Update the annotations on a resource
+sub completion | Output shell completion code for the specified shell (bash,
+sub api-resources | Print the supported API resources on the server
+sub api-versions | Print the supported API versions on the server, in the form
+sub config | Modify kubeconfig files
+sub kuberc | Manage kuberc configuration files
+sub plugin | Provides utilities for interacting with plugins
+sub version | Print the client and server version information

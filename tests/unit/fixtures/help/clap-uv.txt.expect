@@ -1,0 +1,41 @@
+sub auth | Manage authentication
+sub run | Run a command or script
+sub init | Create a new project
+sub add | Add dependencies to the project
+sub remove | Remove dependencies from the project
+sub version | Read or update the project's version
+sub sync | Update the project's environment
+sub lock | Update the project's lockfile
+sub export | Export the project's lockfile to an alternate format
+sub tree | Display the project's dependency tree
+sub format | Format Python code in the project
+sub check | Run checks on the project
+sub audit | Audit the project's dependencies
+sub tool | Run and install commands provided by Python packages
+sub python | Manage Python versions and installations
+sub pip | Manage Python packages with a pip-compatible interface
+sub venv | Create a virtual environment
+sub build | Build Python packages into source distributions and wheels
+sub publish | Upload distributions to an index
+sub workspace | Inspect uv workspaces
+sub cache | Manage uv's cache
+sub self | Manage the uv executable
+sub help | Display documentation for a command
+flag -n --no-cache | Avoid reading from or writing to the cache, instead using a
+flag --cache-dir arg=dir | Path to the cache directory [env: UV_CACHE_DIR=]
+flag --managed-python | Require use of uv-managed Python versions [env: UV_MANAGED_P
+flag --no-managed-python | Disable use of uv-managed Python versions [env: UV_NO_MANAGE
+flag --no-python-downloads | Disable automatic downloads of Python. [env: "UV_PYTHON_DOWN
+flag -q --quiet global | Use quiet output
+flag -v --verbose global | Use verbose output
+flag --color arg=values:auto,always,never global | Control the use of color in output [possible values: auto, a
+flag --system-certs global | Whether to load TLS certificates from the platform's native
+flag --offline global | Disable network access [env: UV_OFFLINE=]
+flag --allow-insecure-host arg=none global | Allow insecure connections to a host [env: UV_INSECURE_HOST=
+flag --no-progress global | Hide all progress outputs [env: UV_NO_PROGRESS=]
+flag --directory arg=dir global | Change to the given directory prior to running the command [
+flag --project arg=none global | Discover a project in the given directory [env: UV_PROJECT=]
+flag --config-file arg=path global | The path to a `uv.toml` file to use for configuration [env:
+flag --no-config global | Avoid discovering configuration files (`pyproject.toml`, `uv
+flag -h --help global | Display the concise help for this command
+flag -V --version global | Display the uv version

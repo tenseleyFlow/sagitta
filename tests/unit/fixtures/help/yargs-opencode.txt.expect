@@ -1,0 +1,41 @@
+sub completion | generate shell completion script
+sub acp | start ACP (Agent Client Protocol) server
+sub mcp | manage MCP (Model Context Protocol) servers
+sub attach | attach to a running opencode server
+sub run | run opencode with a message
+sub debug | debugging and troubleshooting tools
+sub providers alias=auth | manage AI providers and credentials [aliases: auth]
+sub agent | manage agents
+sub upgrade | upgrade opencode to the latest or a specific version
+sub uninstall | uninstall opencode and remove all related files
+sub serve | starts a headless opencode server
+sub web | start opencode server and open web interface
+sub models | list all available models
+sub stats | show token usage and cost statistics
+sub export | export session data as JSON
+sub import | import session data from JSON file or URL
+sub github | manage GitHub agent
+sub pr | fetch and checkout a GitHub PR branch, then run opencode
+sub session | manage sessions
+sub plugin alias=plug | install plugin and update config [aliases: plug]
+sub db | database tools
+flag -h --help | show help [boolean]
+flag -v --version | show version number [boolean]
+flag --print-logs | print logs to stderr [boolean]
+flag --log-level arg=values:DEBUG,INFO,WARN,ERROR | log level [string] [choices: "DEBUG", "INFO", "WARN", "ERROR
+flag --pure | run without external plugins [boolean]
+flag --port arg=none | port to listen on [number] [default: 0]
+flag --hostname arg=none | hostname to listen on [string] [default: "127.0.0.1"]
+flag --mdns | enable mDNS service discovery (defaults hostname to 0.0.0.0)
+flag --mdns-domain arg=none | custom domain name for mDNS service (default: opencode.local
+flag --cors arg=none | additional domains to allow for CORS [array] [default: []]
+flag -m --model arg=none | model to use in the format of provider/model [string]
+flag -c --continue | continue the last session [boolean]
+flag -s --session arg=none | session id to continue [string]
+flag --fork | fork the session when continuing (use with --continue or --s
+flag --prompt arg=none | prompt to use [string]
+flag --agent arg=none | agent to use [string]
+flag --auto | auto-approve permissions that are not explicitly denied (dan
+flag --mini | start the minimal interactive interface [boolean] [default:
+flag --no-replay | disable mini session history replay on resume and after resi
+flag --replay-limit arg=none | cap visible mini replay to the newest N messages [number]

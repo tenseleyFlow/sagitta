@@ -1,0 +1,68 @@
+wolf — the wolf toolchain: one binary that compiles, runs, tests, formats,
+documents and packages wolf programs. Wolf is a compiled systems language
+whose memory lives in regions the compiler infers, so a program carries no
+lifetime annotations, and whose arithmetic is checked in every profile.
+
+Usage: wolf <command> [options] [file.lu]
+
+Your first program — put it in a directory of its own:
+
+    mkdir hello && cd hello
+    cat > hello.lu <<'EOF'
+    fn main() {
+        print("hello, wolf\n")
+    }
+    EOF
+    wolf run hello.lu
+
+A DIRECTORY is a module (D32), not a file: every `.lu` file beside
+`hello.lu` joins the same module, so a second scratch file with its own
+`main` is an error (E0302), not a second program. Give each program its
+own directory.
+
+Writing and running code:
+  build          compile an entry file to a native executable
+  run            build an entry file and run it, passing on its exit code
+  test           discover and run `*_test.lu` files
+  fmt            reformat source in the one canonical style
+  fix            apply the compiler's machine-applicable suggestions
+  doc            generate the package's documentation
+
+Packages:
+  init           promote a script to a package
+  add            add a dependency to `wolf.pkg`
+  rm             remove a dependency from `wolf.pkg`
+  update         re-fetch pinned dependencies and refresh the ledger
+  audit          the capability tree, and what changed since `wolf.sum`
+  tree           the resolved dependency tree
+  why            the chain that pulls one dependency into the build
+  vendor         mirror the resolved dependencies into `vendor/wolf/`
+  publish        verify a package and emit its signed log record
+  cache          where the script cache lives, and collecting it
+
+Inspecting and reporting:
+  interface      print every module's public interface
+  audit-surface  the package's complete unsafety inventory
+  profile        read and merge profile-guided-optimization data
+  c-import       import C headers, and show what was refused
+  conform-run    observe one program and emit a conformance record
+  lsp            serve the Language Server Protocol over stdio
+
+On its own:
+  --explain E####        the full explanation of one diagnostic code
+  --version              this build's identity and its paired interpreter
+  --help, -h             this message; `wolf <command> --help` for one command
+  --man                  the man page, for an installer to place
+  --completions <shell>  a completion script for bash, zsh or fish
+
+Exit codes:
+  0  success
+  1  the program did not compile, or a test or a check failed
+  2  a usage or environment error
+
+Documentation and the specification:
+  https://github.com/wolffe-lang/wolf-lang
+The standard library ships separately and no package of the compiler
+carries it; point wolf at a checkout with `--std-root <dir>` or the
+`WOLF_STD` environment variable:
+  https://github.com/wolffe-lang/wolf-std

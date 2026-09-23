@@ -1,0 +1,16 @@
+sub run | Run one program; output passes through live and the exit cod
+sub eval | Evaluate a snippet in a fresh session and print its value as
+sub check | Check files through the frontend only (lex, parse, resolve)
+sub corpus | Walk the pinned corpus and check every directive against thi
+sub conformance | Export the versioned conformance bundle, or check an impleme
+sub conform-run | Observe one program and emit a spec/06 observation record
+sub lex | Tokenize one program (`spec/01` §1)
+sub parse | Parse one program (`spec/01` §2-§6)
+sub protocol | Validate observation records against the spec/06 schema
+sub diff-run | Compare this implementation against the pinned compiler, cor
+sub fuzz | Differential testing over generated programs, with reduction
+sub repl | Interactive session; `--script` replays a recorded transcrip
+sub help | Print this message or the help of the given subcommand(s)
+flag -e arg=none | Evaluate CODE in a fresh session and print its value as the
+flag -h --help | Print help (see a summary with '-h')
+flag -V --version | Print version

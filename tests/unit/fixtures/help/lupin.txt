@@ -1,0 +1,34 @@
+lupin — the wolf reference interpreter: an independent implementation of the wolf specification, and the compiler's differential-testing oracle. Built by the wolf-interp package.
+
+Usage: lupin [OPTIONS] [FILE] [COMMAND]
+
+Commands:
+  run          Run one program; output passes through live and the exit code is the program's
+  eval         Evaluate a snippet in a fresh session and print its value as the REPL would
+  check        Check files through the frontend only (lex, parse, resolve) and report diagnostics
+  corpus       Walk the pinned corpus and check every directive against this implementation
+  conformance  Export the versioned conformance bundle, or check an implementation against one
+  conform-run  Observe one program and emit a spec/06 observation record
+  lex          Tokenize one program (`spec/01` §1)
+  parse        Parse one program (`spec/01` §2-§6)
+  protocol     Validate observation records against the spec/06 schema
+  diff-run     Compare this implementation against the pinned compiler, corpus-wide
+  fuzz         Differential testing over generated programs, with reduction of anything divergent
+  repl         Interactive session; `--script` replays a recorded transcript
+  help         Print this message or the help of the given subcommand(s)
+
+Arguments:
+  [FILE]
+          Run FILE directly (`lupin FILE.lu` = `lupin run FILE.lu`); `-` reads the program from stdin. With nothing at all, the REPL opens
+
+Options:
+  -e <CODE>
+          Evaluate CODE in a fresh session and print its value as the REPL would (`lupin -e '1 + 1'` = `lupin eval '1 + 1'`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+The front door: `lupin FILE.lu` runs the file (`lupin -` reads the program from stdin; bare `lupin` opens the REPL). Its exit code is the program's own exit(N); a static-phase rejection exits 2, a trap or UB finding exits 3, `unsupported` exits 4. A subcommand name wins over a file of the same name — run a file literally named `repl` as `lupin run repl`.

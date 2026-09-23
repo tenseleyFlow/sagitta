@@ -1,0 +1,26 @@
+Manage authentication to shithub.
+
+The minimum to do anything authenticated is:
+
+    shithub auth login --hostname shithub.sh --with-token < token.txt
+
+Tokens are stored in the system keyring by default. Pass --insecure-storage
+to keep them in ~/.config/shithub/hosts.yml (0600) instead — for example on
+a headless server with no secret-service daemon.
+
+Usage:
+  shithub auth [command]
+
+Available Commands:
+  login          Authenticate to a shithub host
+  logout         Remove a stored credential for a shithub host
+  refresh        Re-authenticate to rotate or expand scopes on the active host
+  setup-git      Configure git to use shithub as a credential helper
+  status         Show authentication status for each configured shithub host
+  switch         Switch the default shithub host
+  token          Print the authenticated token for a host
+
+Flags:
+  -h, --help   help for auth
+
+Use "shithub auth [command] --help" for more information about a command.

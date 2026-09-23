@@ -1,0 +1,37 @@
+usage: rapid-mlx [-h] [--version] [--no-telemetry] {serve,bench,models,ls,version,help,pull,rm,ps,upgrade,chat,run,info,agents,doctor,telemetry,share,launch} ...
+
+Rapid-MLX: AI inference for Apple Silicon
+
+positional arguments:
+  {serve,bench,models,ls,version,help,pull,rm,ps,upgrade,chat,run,info,agents,doctor,telemetry,share,launch}
+                        Commands
+    serve               Start OpenAI-compatible server
+    bench               Run benchmark
+    models              List available model aliases
+    ls                  List models in the local HuggingFace cache (alias for `models --cached`)
+    version             Show version number
+    help                Show help for a subcommand
+    pull                Download a model to the HuggingFace cache (no server)
+    rm                  Remove a cached model from the HuggingFace cache
+    ps                  List running rapid-mlx servers
+    upgrade             Upgrade rapid-mlx to the latest version (brew / pip / install.sh)
+    chat (run)          Interactive chat REPL with a model
+    info                Show the per-model profile for a model name or alias
+    agents              List, configure, and test agent integrations
+    doctor              Check environment health (Python, packages, HF cache, network, ...)
+    telemetry           Manage anonymous usage telemetry (opt-in)
+    share               Expose a local model behind a public URL via rapidmlx.com
+    launch              One-shot bootstrap: patch IDE/agent client config to use rapid-mlx
+
+options:
+  -h, --help            show this help message and exit
+  --version, -V         show program's version number and exit
+  --no-telemetry        Disable anonymous usage telemetry for this run (equivalent to RAPID_MLX_TELEMETRY=0).
+
+Examples:
+  rapid-mlx chat                                      # interactive REPL (defaults to qwen3.5-4b-4bit)
+  rapid-mlx chat qwen3.5-9b-4bit --think                   # larger model, surface reasoning
+  rapid-mlx serve qwen3.5-9b-4bit --port 8000              # OpenAI-compatible server
+  rapid-mlx serve mlx-community/Qwen3.5-9B-4bit       # full HF repo also works
+  rapid-mlx models                                    # list all aliases
+  rapid-mlx info qwen3.5-9b-4bit                           # show per-alias profile

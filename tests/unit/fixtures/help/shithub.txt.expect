@@ -1,0 +1,30 @@
+sub alias | Create command shortcuts
+sub api | Make an authenticated HTTP request to a shithub API endpoint
+sub attestation | Verify and inspect Sigstore artifact attestations (deferred
+sub auth | Authenticate shithub-cli and configure git credential helper
+sub browse | Open the shithub repository in a browser
+sub cache | Manage GitHub-Actions-compatible cache entries
+sub completion | Print a shell completion script
+sub config | Read and write shithub-cli configuration
+sub extension | Install and manage third-party shithub-cli extensions
+sub gist | Manage gists (deferred until shithub-S49 ships)
+sub gpg-key | Manage your shithub GPG public keys
+sub help | Help about any command
+sub issue | Manage issues
+sub label | Manage repository labels
+sub org | Work with organizations
+sub pr | Manage pull requests
+sub project | Manage ProjectsV2-style projects (deferred until shithub-S47
+sub release | Manage releases (deferred until shithub-S48 ships)
+sub repo | Manage repositories
+sub ruleset | Inspect repository and org rulesets (deferred until REST API
+sub run | Inspect workflow runs and their artifacts
+sub search | Search across repos, issues, PRs, code, and commits
+sub secret | Manage GitHub-Actions-style secrets
+sub ssh-key | Manage your shithub SSH public keys
+sub status | Personal dashboard: assigned issues, PRs, review requests, m
+sub variable | Manage GitHub-Actions-style variables
+sub version | Print version information
+sub workflow | Inspect and trigger GitHub-Actions-style workflows
+flag -h --help | help for shithub
+flag -v --version | version for shithub

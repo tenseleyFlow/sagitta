@@ -1,0 +1,3 @@
+sub build | compile it
+flag -o --output arg=path | write here
+flag -q | be quiet

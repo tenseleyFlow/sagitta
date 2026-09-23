@@ -1,0 +1,8 @@
+sub build | Compile the project.
+sub run | Run the compiled program.
+sub self-test | Check the installation.
+flag -o --output arg=path | Where to write results.
+flag --color arg=values:always,never,auto | Colorize output.
+flag -v --verbose | Print more.
+flag --version | Show the version and exit.
+flag --help | Show this message and exit.

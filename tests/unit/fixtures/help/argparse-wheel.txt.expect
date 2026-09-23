@@ -1,0 +1,8 @@
+sub unpack | Unpack wheel
+sub pack | Repack wheel
+sub convert | Convert egg or wininst to wheel
+sub tags | Add or replace the tags on a wheel
+sub info | Show information about a wheel file
+sub version | Print version and exit
+sub help | Show this help
+flag -h --help | show this help message and exit

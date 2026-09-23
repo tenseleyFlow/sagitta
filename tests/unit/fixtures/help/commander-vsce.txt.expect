@@ -1,0 +1,16 @@
+sub ls | Lists all the files that will be published/packaged
+sub package alias=pack | Packages an extension
+sub publish | Publishes an extension
+sub unpublish | Removes an extension from the marketplace. Example extension
+sub generate-manifest | Generates the extension manifest from the provided VSIX pack
+sub verify-signature | Verifies the provided signature file against the provided VS
+sub ls-publishers | Lists all known publishers
+sub delete-publisher | Deletes a publisher from marketplace
+sub login | Adds a publisher to the list of known publishers
+sub logout | Removes a publisher from the list of known publishers
+sub verify-pat | Verifies if the Personal Access Token or Azure identity has
+sub show | Shows an extension's metadata
+sub search | Searches extension gallery
+sub help | display help for command
+flag -V --version | output the version number
+flag -h --help | display help for command

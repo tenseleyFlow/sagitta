@@ -1,0 +1,46 @@
+flag --activate | set as active Docker/Kubernetes/Incus context on startup (de
+flag -a --arch arg=none | architecture (aarch64, x86_64) (default "aarch64")
+flag --binfmt | use binfmt for foreign architecture emulation (no-op if Rose
+flag --cpu-type arg=none | the CPU type, options can be checked with 'qemu-system-aarch
+flag -c --cpus arg=none | number of CPUs (default 2)
+flag -d --disk arg=none | disk size in GiB (default 100)
+flag -i --disk-image arg=none | file path to a custom disk image
+flag -n --dns arg=none | DNS resolvers for the VM (default [])
+flag --dns-host arg=none | custom DNS names to provide to resolver
+flag --downloader arg=none | downloader to use (native, curl) (default "native")
+flag -e --edit | edit the configuration file before starting
+flag --editor arg=none | editor to use for edit e.g. vim, nano, code (default "$EDITO
+flag --env arg=none | environment variables for the VM (default [])
+flag --force-disk-image | load unsupported disk image
+flag -f --foreground | Keep colima in the foreground
+flag --gateway-address arg=none | gateway address (default 192.168.5.2)
+flag -h --help | help for start
+flag --hostname arg=none | custom hostname for the virtual machine
+flag --k3s-arg arg=none | additional args to pass to k3s (default [--disable=traefik])
+flag --k3s-listen-port arg=none | k3s server listen port
+flag -k --kubernetes | start with Kubernetes
+flag --kubernetes-version arg=none | must match a k3s version https://github.com/k3s-io/k3s/relea
+flag -m --memory arg=none | memory in GiB (default 2)
+flag --model-runner arg=none | AI model runner (docker, ramalama) (default "docker")
+flag -V --mount arg=none | directories to mount, suffix ':w' for writable, disable with
+flag --mount-inotify | propagate inotify file events to the VM
+flag --mount-type arg=none | volume driver for the mount (sshfs, 9p, virtiofs) (default "
+flag -z --nested-virtualization | enable nested virtualization
+flag --network-address | assign reachable IP address to the VM
+flag --network-host-addresses | support port forwarding to specific host IP addresses
+flag --network-interface arg=none | host network interface to use for bridged mode (default "en0
+flag --network-mode arg=none | network mode (shared, bridged) (default "shared")
+flag --network-preferred-route | use the assigned IP address as the preferred route for the V
+flag --port-forwarder arg=none | port forwarder to use (ssh, grpc, none) (default "ssh")
+flag --root-disk arg=none | disk size in GiB for the root filesystem (default 20)
+flag -r --runtime arg=none | container runtime (containerd, docker, incus) (default "dock
+flag --save-config | persist and overwrite config file with (newly) specified fla
+flag -s --ssh-agent | forward SSH agent to the VM
+flag --ssh-config | generate SSH config in ~/.ssh/config (default true)
+flag --ssh-port arg=none | SSH server port
+flag --template | use the template file for initial configuration (default tru
+flag -t --vm-type arg=none | virtual machine type (qemu, vz, krunkit) (default "vz")
+flag --vz-rosetta | enable Rosetta for amd64 emulation
+flag -p --profile arg=none global | profile name, for multiple instances (default "default")
+flag -v --verbose global | enable verbose log
+flag --very-verbose global | enable more verbose log

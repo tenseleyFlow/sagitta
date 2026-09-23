@@ -1,0 +1,5 @@
+sub build | Compile the project.
+sub run | Run the compiled program.
+flag -o --output arg=path | Where to write results.
+flag --color arg=values:always,never,auto | Colorize output.
+flag -v --verbose | Print more.

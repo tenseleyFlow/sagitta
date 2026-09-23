@@ -1,0 +1,3 @@
+flag -w arg=dir | Open <file> with <dir> as the workspace root
+flag -v --version | Print the version
+flag -h --help | This message

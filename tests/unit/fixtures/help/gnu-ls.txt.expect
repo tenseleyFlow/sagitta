@@ -1,0 +1,60 @@
+flag -a --all | do not ignore entries starting with .
+flag -A --almost-all | do not list implied . and ..
+flag --author | with -l, print the author of each file
+flag -b --escape | print C-style escapes for nongraphic characters
+flag --block-size arg=none | with -l, scale sizes by SIZE when printing them; e.g., '--bl
+flag -B --ignore-backups | do not list implied entries ending with ~
+flag -c | with -lt: sort by, and show, ctime (time of last change of f
+flag -C | list entries by columns
+flag --color arg=none optional | color the output WHEN; more info below
+flag -d --directory | list directories themselves, not their contents
+flag -D --dired | generate output designed for Emacs' dired mode
+flag -f | same as -a -U
+flag -F --classify arg=none optional | append indicator (one of */=>@|) to entries WHEN
+flag --file-type | like -F, except do not append '*'
+flag --format arg=none | across,horizontal (-x), commas (-m), long (-l), single-colum
+flag --full-time | like -l --time-style=full-iso
+flag -g | like -l, but do not list owner
+flag --group-directories-first | group directories before files
+flag -G --no-group | in a long listing, don't print group names
+flag -h --human-readable | with -l and -s, print sizes like 1K 234M 2G etc.
+flag --si | likewise, but use powers of 1000 not 1024
+flag -H --dereference-command-line | follow symbolic links listed on the command line
+flag --dereference-command-line-symlink-to-dir | follow each command line symbolic link that points to a dire
+flag --hide arg=none | do not list implied entries matching shell PATTERN (overridd
+flag --hyperlink arg=none optional | hyperlink file names WHEN
+flag --indicator-style arg=none | append indicator with style WORD to entry names: none (defau
+flag -i --inode | print the index number of each file
+flag -I --ignore arg=none | do not list implied entries matching shell PATTERN
+flag -k --kibibytes | default to 1024-byte blocks for file system usage; used only
+flag -l | use a long listing format
+flag -L --dereference | when showing file information for a symbolic link, show info
+flag -m | fill width with a comma separated list of entries
+flag -n --numeric-uid-gid | like -l, but list numeric user and group IDs
+flag -N --literal | print entry names without quoting
+flag -o | like -l, but do not list group information
+flag -p arg=none | append / indicator to directories
+flag -q --hide-control-chars | print ? instead of nongraphic characters
+flag --show-control-chars | show nongraphic characters as-is; the default, unless progra
+flag -Q --quote-name | enclose entry names in double quotes
+flag --quoting-style arg=none | use quoting style WORD for entry names: literal, locale, she
+flag -r --reverse | reverse order while sorting
+flag -R --recursive | list subdirectories recursively
+flag -s --size | print the allocated size of each file, in blocks
+flag -S | sort by file size, largest first
+flag --sort arg=none | change default 'name' sort to WORD: none (-U), size (-S), ti
+flag --time arg=none | select which timestamp used to display or sort; access time
+flag --time-style arg=none | time/date format with -l; see TIME_STYLE below
+flag -t | sort by time, newest first; see --time
+flag -T --tabsize arg=none | assume tab stops at each COLS instead of 8
+flag -u | with -lt: sort by, and show, access time; with -l: show acce
+flag -U | do not sort directory entries
+flag -v | natural sort of (version) numbers within text
+flag -w --width arg=none | set output width to COLS. 0 means no limit
+flag -x | list entries by lines instead of by columns
+flag -X | sort alphabetically by entry extension
+flag -Z --context | print any security context of each file
+flag --zero | end each output line with NUL, not newline
+flag -1 | list one file per line
+flag --help | display this help and exit
+flag --version | output version information and exit

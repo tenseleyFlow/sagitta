@@ -1,0 +1,4 @@
+sub build | Compile �� the project �(
+sub test | ✓ checks pass — a long description that runs well past s
+flag -x | a long name with a non-ASCII letter is dropped
+flag -y --yes | ok

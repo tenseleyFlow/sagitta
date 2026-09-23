@@ -1,0 +1,20 @@
+sub serve | Start OpenAI-compatible server
+sub bench | Run benchmark
+sub models | List available model aliases
+sub ls | List models in the local HuggingFace cache (alias for `model
+sub version | Show version number
+sub help | Show help for a subcommand
+sub pull | Download a model to the HuggingFace cache (no server)
+sub rm | Remove a cached model from the HuggingFace cache
+sub ps | List running rapid-mlx servers
+sub upgrade | Upgrade rapid-mlx to the latest version (brew / pip / instal
+sub chat alias=run | Interactive chat REPL with a model
+sub info | Show the per-model profile for a model name or alias
+sub agents | List, configure, and test agent integrations
+sub doctor | Check environment health (Python, packages, HF cache, networ
+sub telemetry | Manage anonymous usage telemetry (opt-in)
+sub share | Expose a local model behind a public URL via rapidmlx.com
+sub launch | One-shot bootstrap: patch IDE/agent client config to use rap
+flag -h --help | show this help message and exit
+flag -V --version | show program's version number and exit
+flag --no-telemetry | Disable anonymous usage telemetry for this run (equivalent t

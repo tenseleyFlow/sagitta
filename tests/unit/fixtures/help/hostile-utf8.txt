@@ -1,0 +1,8 @@
+Commands:
+  build      Compile ÿþ the project Ã(
+  rÿun      a term with an invalid byte is not a name
+  cafÃ©      a non-ASCII name is not a subcommand
+  test       âœ“ checks pass â€” a long description that runs well past sixty bytes of text
+Options:
+  -x, --exÃ©      a long name with a non-ASCII letter is dropped
+  -y, --yes      ok
