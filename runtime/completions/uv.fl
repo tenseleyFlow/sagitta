@@ -27,7 +27,7 @@
         { long: "no-progress", global: true, desc: "hide all progress outputs" },
         { long: "directory", global: true,
           desc: "change to the given directory before running",
-          arg: { kind: "dir" } },
+          arg: { kind: "dir" }, changes_dir: true },
         { long: "project", global: true,
           desc: "discover a project in the given directory",
           arg: { kind: "dir" } },

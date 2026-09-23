@@ -21,7 +21,7 @@
         { long: "explain", desc: "explain a rustc error message",
           arg: { kind: "none" } },
         { short: "C", desc: "change to DIRECTORY first (nightly-only)",
-          arg: { kind: "dir" } },
+          arg: { kind: "dir" }, changes_dir: true },
         { long: "verbose", short: "v", global: true,
           desc: "verbose output (-vv very verbose)" },
         { long: "quiet", short: "q", global: true,

@@ -23,7 +23,7 @@
         { short: "C", long: "close-from", desc: "close file descriptors >= num",
           arg: { kind: "none" } },
         { short: "D", long: "chdir", desc: "change directory before running",
-          arg: { kind: "dir" } },
+          arg: { kind: "dir" }, changes_dir: true },
         { short: "E", long: "preserve-env", desc: "preserve the user environment",
           arg: { kind: "var" }, arg_optional: true },
         { short: "e", long: "edit", desc: "edit files instead of running a command" },
