@@ -3,11 +3,14 @@
 
 #include "harness.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "edit/bind.h"
 #include "edit/ed.h"
@@ -74,6 +77,41 @@ static void env_restore(const char *name, const char *saved)
     } else if (unsetenv(name) != 0) {
         abort();
     }
+}
+
+/*
+ * Sprint 57.25: the run's own XDG_CACHE_HOME.  Completion lookups read a
+ * cache of what tools' --help printed; a unit run must neither read the
+ * developer's (results would depend on what they had used yew for) nor
+ * write it.  Created fresh per run and removed at its end.
+ */
+static char unit_cache[64];
+
+static void unit_cache_remove(const char *path)
+{
+    struct stat st;
+    DIR *d;
+    struct dirent *e;
+
+    if (lstat(path, &st) != 0)
+        return;
+    if (!S_ISDIR(st.st_mode)) {
+        (void)unlink(path);
+        return;
+    }
+    d = opendir(path);
+    while (d != NULL && (e = readdir(d)) != NULL) {
+        char child[4096];
+
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0)
+            continue;
+        if (snprintf(child, sizeof(child), "%s/%s", path, e->d_name) <
+            (int)sizeof(child))
+            unit_cache_remove(child);
+    }
+    if (d != NULL)
+        (void)closedir(d);
+    (void)rmdir(path);
 }
 
 static void capture_write(void *user, YewLogLevel level, const char *message)
@@ -296,6 +334,7 @@ int yew_test_run(int argc, char **argv)
     size_t i;
     int argi;
     char *xdg_state;
+    char *xdg_cache;
     char *path;
 
     program_path = argv[0];
@@ -342,19 +381,30 @@ int yew_test_run(int argc, char **argv)
     }
 
     xdg_state = env_copy("XDG_STATE_HOME");
+    xdg_cache = env_copy("XDG_CACHE_HOME");
     path = env_copy("PATH");
+    (void)snprintf(unit_cache, sizeof(unit_cache),
+                   "/tmp/yew-unit-cache-XXXXXX");
+    if (mkdtemp(unit_cache) == NULL) {
+        (void)fprintf(stderr, "unit: cannot create a cache directory\n");
+        return 1;
+    }
     for (i = 0U; i < yew_tests_len; i++) {
         if (!yew_test_name_matches(yew_tests[i].name, filter) ||
             test_is_excluded(yew_tests[i].name, excluded, excluded_len))
             continue;
         env_restore("XDG_STATE_HOME", xdg_state);
+        env_restore("XDG_CACHE_HOME", unit_cache);
         env_restore("PATH", path);
         if (!run_one_test(&yew_tests[i]))
             failures++;
     }
     env_restore("XDG_STATE_HOME", xdg_state);
+    env_restore("XDG_CACHE_HOME", xdg_cache);
     env_restore("PATH", path);
+    unit_cache_remove(unit_cache);
     yew_xfree(xdg_state);
+    yew_xfree(xdg_cache);
     yew_xfree(path);
     (void)printf("unit: %zu tests, %zu assertions, %zu failure%s\n",
                  selected, assertion_count, failures,
