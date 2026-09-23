@@ -377,12 +377,15 @@ static HpSub *hp_add_sub(HelpParse *p, const char *name, size_t n)
     return s;
 }
 
-static void hp_add_alias(HelpParse *p, HpSub *s, const char *name, size_t n)
+/* Returns `s`, which moves down one slot when an earlier bare choice of
+ * the alias's name is folded into it. */
+static HpSub *hp_add_alias(HelpParse *p, HpSub *s, const char *name,
+                           size_t n)
 {
     HpSub *other;
 
     if (!hp_sub_name(name, n) || s->n_aliases == HP_ALIASES_MAX)
-        return;
+        return s;
     other = hp_find_sub(p, name, n);
     if (other != NULL) {
         u32 at = (u32)(other - p->subs);
@@ -393,7 +396,7 @@ static void hp_add_alias(HelpParse *p, HpSub *s, const char *name, size_t n)
          * that name was the alias all along. */
         if (other == s || other->desc != NULL || other->n_aliases != 0U ||
             strlen(other->name) != n || memcmp(other->name, name, n) != 0)
-            return;
+            return s;
         if (s > other)
             s--;
         for (k = at; k + 1U < p->n_subs; k++)
@@ -401,10 +404,12 @@ static void hp_add_alias(HelpParse *p, HpSub *s, const char *name, size_t n)
         p->n_subs--;
     }
     s->aliases[s->n_aliases++] = arena_strndup(p->a, name, n);
+    return s;
 }
 
 /* `[aliases: a, b]` (yargs) in a description. */
-static void hp_desc_aliases(HelpParse *p, HpSub *s, const char *d, size_t n)
+static HpSub *hp_desc_aliases(HelpParse *p, HpSub *s, const char *d,
+                              size_t n)
 {
     static const char tag[] = "[aliases:";
     size_t i;
@@ -414,7 +419,7 @@ static void hp_desc_aliases(HelpParse *p, HpSub *s, const char *d, size_t n)
             break;
     }
     if (i + sizeof(tag) - 1U > n)
-        return;
+        return s;
     i += sizeof(tag) - 1U;
     while (i < n && d[i] != ']') {
         size_t start;
@@ -425,8 +430,9 @@ static void hp_desc_aliases(HelpParse *p, HpSub *s, const char *d, size_t n)
         while (i < n && d[i] != ',' && d[i] != ']' && !hp_blank(d[i]))
             i++;
         if (i > start)
-            hp_add_alias(p, s, d + start, i - start);
+            s = hp_add_alias(p, s, d + start, i - start);
     }
+    return s;
 }
 
 /*
@@ -454,7 +460,7 @@ static void hp_sub_row(HelpParse *p, const char *t, size_t n, const char *d,
             i++;
             continue;
         }
-        if (t[i] == '(' ) {
+        if (t[i] == '(') {
             /* argparse's `chat (run)`: the parenthesised names are
              * aliases. */
             i++;
@@ -513,9 +519,9 @@ static void hp_sub_row(HelpParse *p, const char *t, size_t n, const char *d,
     if (s == NULL)
         return;
     for (i = 0U; i < n_alias; i++)
-        hp_add_alias(p, s, aliases[i], alias_len[i]);
+        s = hp_add_alias(p, s, aliases[i], alias_len[i]);
     if (dn != 0U) {
-        hp_desc_aliases(p, s, d, dn);
+        s = hp_desc_aliases(p, s, d, dn);
         if (s->desc == NULL || s->desc[0] == '\0')
             s->desc = hp_field(p->a, d, dn, YEW_COMPHELP_DESC_MAX);
     }
@@ -1087,7 +1093,13 @@ static void hp_line(HelpParse *p, const char *s, size_t n)
         return;
     }
     if (p->active && indent > p->indent) {
-        if (!p->has_desc) {
+        /* argparse without a title for its subparsers: the choice line
+         * `{a,b}` is followed directly by its (deeper) rows, which are
+         * rows, not the choice line's description. */
+        bool choice_rows = p->term_len != 0U && p->term[0] == '{' &&
+                           hp_rowlike(s + ws, n - ws);
+
+        if (!p->has_desc && !choice_rows) {
             /* Go's flag package and clap's long help: the description is
              * on the next line, indented further (Go's after a tab). */
             p->has_desc = true;
@@ -1100,8 +1112,9 @@ static void hp_line(HelpParse *p, const char *s, size_t n)
         /* Indented to the description column, or prose that is not a
          * row of its own: more description.  A line that starts a flag
          * short of that column is the next row (GNU's layout). */
-        if (indent >= p->desc_col ||
-            (!hp_rowlike(s + ws, n - ws) && s[ws] != '-')) {
+        if (!choice_rows &&
+            (indent >= p->desc_col ||
+             (!hp_rowlike(s + ws, n - ws) && s[ws] != '-'))) {
             hp_desc_append(p, s + ws, n - ws);
             return;
         }
@@ -2001,11 +2014,6 @@ static HelpEntry *entry_of_spec(const YewCompSpec *spec)
             return &help.v[i];
     }
     return NULL;
-}
-
-bool yew_comphelp_owns(const YewCompSpec *spec)
-{
-    return entry_of_spec(spec) != NULL;
 }
 
 /* A new entry, evicting the least recently used past HELP_MEM_MAX. */

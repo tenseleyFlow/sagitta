@@ -132,8 +132,6 @@ typedef enum YewHelpDescend {
 YewHelpDescend yew_comphelp_descend(Ed *ed, const YewCompSpec *spec,
                                     const YewSpecNode *node, char key[17]);
 
-/* Whether `spec` came from this layer. */
-bool yew_comphelp_owns(const YewCompSpec *spec);
 /* Queued or in flight: the pager's `…` (57.24 §5.5). */
 bool yew_comphelp_awaiting(const char *key);
 u32 yew_comphelp_inflight(void);

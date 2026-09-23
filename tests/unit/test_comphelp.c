@@ -354,6 +354,28 @@ void test_comphelp_classifies_terms(void)
     YEW_ASSERT_EQ_U64(count_subs(spec), 17U);
     yew_compspec_free(spec);
 
+    /* The same when the alias's bare choice comes FIRST: folding it in
+     * moves the row it belongs to, which must still get its text. */
+    {
+        static const char *const tool[] = {"tool"};
+        static const char text[] =
+            "positional arguments:\n"
+            "  {run,chat,serve}\n"
+            "    chat (run)   Interactive chat\n"
+            "    serve        Start a server\n";
+
+        spec = yew_comphelp_parse("help:order", tool, 1U, text,
+                                  sizeof(text) - 1U);
+        YEW_ASSERT_EQ_U64(count_subs(spec), 2U);
+        sub = sub_named(spec, "chat");
+        YEW_ASSERT(sub != NULL && sub->n_aliases == 1U &&
+                   strcmp(sub->aliases[0], "run") == 0 &&
+                   sub->desc != NULL &&
+                   strcmp(sub->desc, "Interactive chat") == 0);
+        YEW_ASSERT_EQ_STR(sub_named(spec, "serve")->desc, "Start a server");
+        yew_compspec_free(spec);
+    }
+
     /* cobra: Global Flags are global; Examples rows are not rows. */
     spec = parse_file("cobra-colima-start.txt", colima, 2U);
     YEW_ASSERT_NOT_NULL(spec);
