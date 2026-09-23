@@ -16,6 +16,7 @@
 #include "edit/job.h"
 #include "edit/loop.h"
 #include "ui/cmdline.h"
+#include "ui/compfish.h"
 #include "ui/comphelp.h"
 #include "util/buf.h"
 #include "util/log.h"
@@ -762,9 +763,9 @@ static void spawn_for(Ed *ed, const YewCompGenKey *key, const char *ks)
     /* §5.2: one per key, four in all.  A fifth distinct key waits for a
      * slot -- YEW_JOB_MAX fails rather than queues, and the user's own
      * `:!` command matters more than a branch list. */
-    if (gen.n_flights + yew_comphelp_inflight() >=
+    if (gen.n_flights + yew_comphelp_inflight() + yew_compfish_inflight() >=
         YEW_COMPGEN_MAX_INFLIGHT)
-        return; /* Sprint 57.25: a help job holds one of the four */
+        return; /* Sprints 57.25/57.26: help and fish jobs hold slots */
     owner = yew_xcalloc(1U, sizeof(*owner));
     owner->key = yew_xstrdup(ks);
     owner->name = yew_xstrdup(key->name == NULL ? "?" : key->name);

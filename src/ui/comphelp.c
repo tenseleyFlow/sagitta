@@ -32,6 +32,7 @@
 #include "fl/vm.h"
 #include "text/file.h"
 #include "ui/cmdline.h"
+#include "ui/compfish.h"
 #include "ui/compgen.h"
 #include "ui/message.h"
 #include "unicode/utf8.h"
@@ -2488,7 +2489,8 @@ bool yew_comphelp_idle_ready(void)
     u32 flying = yew_comphelp_inflight();
 
     if (flying >= HELP_INFLIGHT_MAX ||
-        yew_compgen_inflight() + flying >= YEW_COMPGEN_MAX_INFLIGHT)
+        yew_compgen_inflight() + yew_compfish_inflight() + flying >=
+            YEW_COMPGEN_MAX_INFLIGHT)
         return false;
     for (i = 0U; i < help.nq; i++) {
         if (!help.q[i].inflight)
