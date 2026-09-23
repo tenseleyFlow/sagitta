@@ -126,6 +126,9 @@ CMDPARSE_FUZZ_ITERS ?= 1000000
 SHCTX_FUZZ_ITERS ?= 1000000
 # 0 runs SHCTX_FUZZ_ITERS; a number of seconds runs a timed campaign.
 SHCTX_FUZZ_SECONDS ?= 0
+# Sprint 57.25: the --help parser; COMPHELP_FUZZ_SECONDS=60 is the DoD run.
+COMPHELP_FUZZ_ITERS ?= 200000
+COMPHELP_FUZZ_SECONDS ?= 0
 TEXTBUF_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                       0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 TEXTBUF_FUZZ_MIXES ?= typing paste undo
@@ -827,6 +830,7 @@ FUZZ_MULTICURSOR_OBJ := $(BUILD)/tests/fuzz/fuzz_multicursor.o
 FUZZ_INSERT_OBJ := $(BUILD)/tests/fuzz/fuzz_insert.o
 FUZZ_CMDPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_cmdparse.o
 FUZZ_SHCTX_OBJ := $(BUILD)/tests/fuzz/fuzz_shctx.o
+FUZZ_COMPHELP_OBJ := $(BUILD)/tests/fuzz/fuzz_comphelp.o
 FUZZ_RECOMPILE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_compile.o
 FUZZ_REQUOTE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_quote.o
 FUZZ_SEARCH_OBJ := $(BUILD)/tests/fuzz/fuzz_search.o
@@ -1043,7 +1047,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) \
                 $(FUZZ_INSERT_OBJ) \
                 $(FUZZ_SHADOW_OBJ) \
                 $(FUZZ_CMDPARSE_OBJ) $(FUZZ_RECOMPILE_OBJ) \
-                $(FUZZ_SHCTX_OBJ) \
+                $(FUZZ_SHCTX_OBJ) $(FUZZ_COMPHELP_OBJ) \
                 $(FUZZ_REDIFF_OBJ) $(RE_REF_OBJ) \
                 $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
@@ -1122,7 +1126,7 @@ endif
         test-fuss-commands test-git-hunks test-group-from-dir \
         test-script-determinism test-script-budget test-pkg test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-insert \
-        fuzz-cmdparse fuzz-shctx fuzz-long \
+        fuzz-cmdparse fuzz-shctx fuzz-comphelp fuzz-long \
         fuzz-plug-manifest fuzz-pkg-tree fuzz-pkg-tree-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
@@ -1375,6 +1379,10 @@ $(BUILD)/fuzz_cmdparse: $(FUZZ_LINK_OBJ) $(FUZZ_CMDPARSE_OBJ)
 $(BUILD)/fuzz_shctx: $(FUZZ_LINK_OBJ) $(FUZZ_SHCTX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_SHCTX_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_comphelp: $(FUZZ_LINK_OBJ) $(FUZZ_COMPHELP_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_COMPHELP_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_fuzzy: $(FUZZ_LINK_OBJ) $(FUZZ_FUZZY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -2074,7 +2082,8 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_flapi \
       $(BUILD)/fuzz_theme $(BUILD)/fuzz_undo_serial \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-insert fuzz-cmdparse \
-      fuzz-shctx fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
+      fuzz-shctx fuzz-comphelp fuzz-mouse fuzz-groups fuzz-shadow fuzz-record \
+      fuzz-syn fuzz-syn-def \
       fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
       $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET) $(PKG_FUZZ_TARGET)
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -2189,6 +2198,14 @@ fuzz-cmdparse: $(BUILD)/fuzz_cmdparse
 fuzz-shctx: $(BUILD)/fuzz_shctx
 	$(BUILD)/fuzz_shctx --iters=$(SHCTX_FUZZ_ITERS) --seed=$(FUZZ_SEED) \
 		$(if $(filter-out 0,$(SHCTX_FUZZ_SECONDS)),--seconds=$(SHCTX_FUZZ_SECONDS))
+
+# Sprint 57.25: the --help parser.  Seeded from the captured layout
+# fixtures (tests/fuzz/corpus/fuzz_comphelp/); COMPHELP_FUZZ_SECONDS=60
+# under SAN=1 is the DoD run.
+fuzz-comphelp: $(BUILD)/fuzz_comphelp
+	$(BUILD)/fuzz_comphelp --iters=$(COMPHELP_FUZZ_ITERS) \
+		--seed=$(FUZZ_SEED) \
+		$(if $(filter-out 0,$(COMPHELP_FUZZ_SECONDS)),--seconds=$(COMPHELP_FUZZ_SECONDS))
 
 fuzz-record: $(BUILD)/fuzz_record
 	$(BUILD)/fuzz_record --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -3804,7 +3821,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(FUZZ_PKG_TREE_OBJ:.o=.d) \
          $(LSP_LIVE_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
-         $(FUZZ_SHCTX_OBJ:.o=.d) \
+         $(FUZZ_SHCTX_OBJ:.o=.d) $(FUZZ_COMPHELP_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \

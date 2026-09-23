@@ -1,0 +1,48 @@
+shithub is the command-line client for shithub.sh — a feature-complete,
+AGPLv3-licensed reverse engineering of GitHub. The command tree mirrors
+GitHub's gh CLI; flags and output shapes are gh-compatible where shithub's
+data model permits.
+
+Authentication, configuration, and host management live under
+'shithub auth' and 'shithub config'. The 'shithub api' escape hatch
+exposes the raw REST surface for anything the typed subcommands have not
+yet wrapped.
+
+Usage:
+  shithub [command]
+
+Available Commands:
+  alias       Create command shortcuts
+  api         Make an authenticated HTTP request to a shithub API endpoint
+  attestation Verify and inspect Sigstore artifact attestations (deferred until Sigstore integration ships)
+  auth        Authenticate shithub-cli and configure git credential helpers
+  browse      Open the shithub repository in a browser
+  cache       Manage GitHub-Actions-compatible cache entries
+  completion  Print a shell completion script
+  config      Read and write shithub-cli configuration
+  extension   Install and manage third-party shithub-cli extensions
+  gist        Manage gists (deferred until shithub-S49 ships)
+  gpg-key     Manage your shithub GPG public keys
+  help        Help about any command
+  issue       Manage issues
+  label       Manage repository labels
+  org         Work with organizations
+  pr          Manage pull requests
+  project     Manage ProjectsV2-style projects (deferred until shithub-S47 ships)
+  release     Manage releases (deferred until shithub-S48 ships)
+  repo        Manage repositories
+  ruleset     Inspect repository and org rulesets (deferred until REST API ships)
+  run         Inspect workflow runs and their artifacts
+  search      Search across repos, issues, PRs, code, and commits
+  secret      Manage GitHub-Actions-style secrets
+  ssh-key     Manage your shithub SSH public keys
+  status      Personal dashboard: assigned issues, PRs, review requests, mentions
+  variable    Manage GitHub-Actions-style variables
+  version     Print version information
+  workflow    Inspect and trigger GitHub-Actions-style workflows
+
+Flags:
+  -h, --help      help for shithub
+  -v, --version   version for shithub
+
+Use "shithub [command] --help" for more information about a command.

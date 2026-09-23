@@ -1,0 +1,37 @@
+Usage: vsce <command>
+
+VS Code Extensions Manager
+To learn more about the VS Code extension API:
+https://aka.ms/vscode-extension-api
+To connect with the VS Code extension developer community:
+https://aka.ms/vscode-discussions
+
+Options:
+  -V, --version                      output the version number
+  -h, --help                         display help for command
+
+Commands:
+  ls [options]                       Lists all the files that will be
+                                     published/packaged
+  package|pack [options] [version]   Packages an extension
+  publish [options] [version]        Publishes an extension
+  unpublish [options] [extensionid]  Removes an extension from the marketplace.
+                                     Example extension id:
+                                     ms-vscode.live-server.
+  generate-manifest [options]        Generates the extension manifest from the
+                                     provided VSIX package.
+  verify-signature [options]         Verifies the provided signature file
+                                     against the provided VSIX package and
+                                     manifest.
+  ls-publishers                      Lists all known publishers
+  delete-publisher <publisher>       Deletes a publisher from marketplace
+  login <publisher>                  Adds a publisher to the list of known
+                                     publishers
+  logout <publisher>                 Removes a publisher from the list of known
+                                     publishers
+  verify-pat [options] [publisher]   Verifies if the Personal Access Token or
+                                     Azure identity has publish rights for the
+                                     publisher
+  show [options] <extensionid>       Shows an extension's metadata
+  search [options] <text>            Searches extension gallery
+  help [command]                     display help for command

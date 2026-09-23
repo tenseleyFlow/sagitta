@@ -1,0 +1,15 @@
+usage: wheel3 [-h] {unpack,pack,convert,tags,info,version,help} ...
+
+positional arguments:
+  {unpack,pack,convert,tags,info,version,help}
+                        commands
+    unpack              Unpack wheel
+    pack                Repack wheel
+    convert             Convert egg or wininst to wheel
+    tags                Add or replace the tags on a wheel
+    info                Show information about a wheel file
+    version             Print version and exit
+    help                Show this help
+
+options:
+  -h, --help            show this help message and exit
