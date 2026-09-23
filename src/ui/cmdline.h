@@ -148,6 +148,9 @@ CmdStatus yew_cmdline_cmd_menu_page_prev(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_accept(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_dismiss(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_ghost_accept(CmdCtx *cx);
+/* The ghost the prompt draws after the caret (dim), or NULL: what
+ * `<right>` would accept.  Never part of the prompt's text. */
+const char *yew_cmdline_ghost(Ed *ed, size_t *len);
 /* Sprint 57.26 §3: the ghost up to and including the next run of
  * unquoted whitespace; a word motion when there is no ghost. */
 CmdStatus yew_cmdline_cmd_ghost_accept_word(CmdCtx *cx);

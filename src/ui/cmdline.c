@@ -1739,6 +1739,18 @@ static const char *cmdline_ghost(Ed *ed, size_t *len)
     return cmdline_ghost_of(ed, len, &kind);
 }
 
+const char *yew_cmdline_ghost(Ed *ed, size_t *len)
+{
+    size_t n = 0U;
+    const char *ghost = NULL;
+
+    if (ed != NULL && ed->cmdline.active)
+        ghost = cmdline_ghost(ed, &n);
+    if (len != NULL)
+        *len = ghost == NULL ? 0U : n;
+    return ghost;
+}
+
 /*
  * How much of `ghost` one word is: any blanks it starts with, the next
  * word, and the run of UNQUOTED whitespace after it -- or all of it when
