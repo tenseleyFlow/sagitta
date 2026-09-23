@@ -3580,6 +3580,116 @@ static void case_s57_26_history_isolated(PtyCtx *c)
 }
 
 /*
+ * Sprint 57.28: the prompt's readline editing set, through the real
+ * terminal.  Each snapshot is gated on the frame the last key produced
+ * and on the text that frame must show -- never on a sleep.
+ */
+
+/* C-w takes a whole path (unix-word-rubout), C-y puts it back from the
+ * yank stack, A-<bs> kills one word-character run of it. */
+static void case_s57_28_prompt_kill_and_yank(PtyCtx *c)
+{
+    static const u8 initial[] = "kill fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "e alpha/beta.txt");
+    ptc_wait_until(c, s57_screen_contains, "e alpha/beta.txt",
+                   "waiting for the typed line");
+    s18_settle_after_keys(c, "ctrl+w");
+    s18_settle_after_bytes(c, "x ");
+    s18_settle_after_keys(c, "ctrl+y");
+    ptc_wait_until(c, s57_screen_contains, "e x alpha/beta.txt",
+                   "waiting for the yank");
+    s18_settle_after_keys(c, "alt+backspace");
+    ptc_snapshot(c, "s57_28_prompt_kill_and_yank");
+    s18_finish(c, path);
+}
+
+/* Three kills, C-y the newest, A-y the next older. */
+static void case_s57_28_prompt_yank_pop(PtyCtx *c)
+{
+    static const u8 initial[] = "yank fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "one two three");
+    ptc_wait_until(c, s57_screen_contains, "one two three",
+                   "waiting for the typed line");
+    s18_settle_after_keys(c, "ctrl+w");
+    s18_settle_after_keys(c, "backspace");
+    s18_settle_after_keys(c, "ctrl+w");
+    s18_settle_after_keys(c, "backspace");
+    s18_settle_after_keys(c, "ctrl+w");
+    s18_settle_after_bytes(c, "x ");
+    s18_settle_after_keys(c, "ctrl+y");
+    ptc_wait_until(c, s57_screen_contains, "x one",
+                   "waiting for the yank");
+    s18_settle_after_keys(c, "alt+y");
+    ptc_wait_until(c, s57_screen_contains, "x two",
+                   "waiting for the yank-pop");
+    ptc_snapshot(c, "s57_28_prompt_yank_pop");
+    s18_finish(c, path);
+}
+
+/* Two accepted commands in the prompt's own history; A-. takes the
+ * newest one's last word, A-. again the older one's in its place. */
+static void case_s57_28_prompt_last_arg(PtyCtx *c)
+{
+    static const u8 initial[] = "last-argument fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "set shell.suggest_history yew");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "set shell.suggest_history all");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "echo ");
+    s18_settle_after_keys(c, "alt+.");
+    ptc_wait_until(c, s57_screen_contains, "echo all",
+                   "waiting for the newest last argument");
+    s18_settle_after_keys(c, "alt+.");
+    ptc_wait_until(c, s57_screen_contains, "echo yew",
+                   "waiting for the older last argument");
+    ptc_snapshot(c, "s57_28_prompt_last_arg");
+    s18_finish(c, path);
+}
+
+/* A-<right> is contextual: one ghost word at the end of the line, and
+ * without a ghost (the caret moved home) one word right. */
+static void case_s57_28_prompt_alt_arrow_contextual(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s57_26_home(c, s57_26_history))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!echo hello-fr");
+    ptc_wait_until(c, s57_screen_contains, "om-history --verbose --twice",
+                   "waiting for the history ghost");
+    s18_settle_after_keys(c, "alt+right");
+    ptc_wait_until(c, s57_screen_contains, "!echo hello-from-history ",
+                   "waiting for the accepted ghost word");
+    s18_settle_after_keys(c, "ctrl+a");
+    /* `!`, then `echo`: the caret lands on `hello`, the text unchanged. */
+    s18_settle_after_keys(c, "alt+right");
+    s18_settle_after_keys(c, "alt+right");
+    ptc_snapshot(c, "s57_28_prompt_alt_arrow_contextual");
+    s18_finish(c, path);
+}
+
+/*
  * §2 through the pager: a stub fish (the case's own script, named by
  * YEW_TEST_FISH) answers for a command with no spec.  A flag stem has no
  * 57.23 rows to show while the answer is on its way, so Tab asks, the
@@ -11804,6 +11914,12 @@ const PtyCase yew_pty_cases[] = {
     C(s57_26_history_isolated, modern, 24U, 80U,
       case_s57_26_history_isolated),
     C(s57_26_fish_stub_rows, modern, 24U, 80U, case_s57_26_fish_stub_rows),
+    C(s57_28_prompt_kill_and_yank, modern, 24U, 80U,
+      case_s57_28_prompt_kill_and_yank),
+    C(s57_28_prompt_yank_pop, modern, 24U, 80U, case_s57_28_prompt_yank_pop),
+    C(s57_28_prompt_last_arg, modern, 24U, 80U, case_s57_28_prompt_last_arg),
+    C(s57_28_prompt_alt_arrow_contextual, modern, 24U, 80U,
+      case_s57_28_prompt_alt_arrow_contextual),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
