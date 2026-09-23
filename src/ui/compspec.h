@@ -30,6 +30,11 @@
 
 typedef struct Ed Ed;
 
+enum {
+    /* Sprint 57.32: `git -C a -C b` chains; past this many, unknown. */
+    YEW_SPEC_DIRS_MAX = 8
+};
+
 /* Opaque; owns its arena.  Valid until yew_compspec_invalidate_all. */
 typedef struct YewCompSpec YewCompSpec;
 
@@ -88,6 +93,10 @@ typedef struct YewSpecFlag {
     const YewSpecArg *arg; /* non-NULL <=> the flag takes a value */
     bool arg_optional;
     bool global;
+    /* Sprint 57.32 §2: the flag's value is a directory the command
+     * changes to first (`git -C`, `make -C`): later paths and generators
+     * are relative to it.  Never tar's -C, which only moves extraction. */
+    bool changes_dir;
 } YewSpecFlag;
 
 typedef struct YewSpecNode YewSpecNode;
@@ -176,6 +185,18 @@ typedef struct YewSpecPoint {
     bool flags_ended;
     u32 command_at;
     u32 value_at;
+    /*
+     * Sprint 57.32 §2: the `changes_dir` flags walked, in order.  Value
+     * `i` is argv[dir_at[i]] from byte dir_off[i] (0: the whole word;
+     * past the flag in `-Cdir` / `--directory=dir`); dir_flag[i] is the
+     * word holding the flag.  More than YEW_SPEC_DIRS_MAX sets
+     * `dirs_overflow`, which makes the directory unknown.
+     */
+    u32 n_dirs;
+    u32 dir_at[YEW_SPEC_DIRS_MAX];
+    u32 dir_off[YEW_SPEC_DIRS_MAX];
+    u32 dir_flag[YEW_SPEC_DIRS_MAX];
+    bool dirs_overflow;
 } YewSpecPoint;
 
 bool yew_compspec_resolve(const YewCompSpec *spec, const YewShCtx *ctx,

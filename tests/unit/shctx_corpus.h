@@ -379,4 +379,147 @@ static const ShCorpusRow sh_corpus[] = {
     {"ls \\\n x‸", SC_ARG, SC_QN, "ls", 1, "x", "x", 0, 0}
 };
 
+/*
+ * Sprint 57.32 §1: where the caret's command runs.  `cwd` is YewShCtx's
+ * (relative to the `:!` directory, or absolute); NULL means UNKNOWN.
+ * The environment is sh_cwd_env: HOME=/home/fix, OLDPWD=/prev/dir, no
+ * CDPATH (CDPATH needs a tree on disk; test_shctx.c has those rows).
+ * The first ten rows are fuzz seeds too (cd-00 .. cd-09).
+ */
+typedef struct ShCwdRow {
+    const char *in;
+    const char *cwd;
+} ShCwdRow;
+
+#define SC_UNKNOWN NULL
+
+static const ShCwdRow sh_cwd_corpus[] = {
+    /* -- the dogfood line -------------------------------------- */
+    {"cd ch7/ && wolf build ou‸", "ch7"},
+    /* -- §1 table 1: which commands move the shell ------------- */
+    {"cd a && x‸", "a"},
+    {"pushd a && x‸", "a"},
+    {"cd -- a && x‸", "a"},
+    {"cd && x‸", "/home/fix"},
+    {"cd ~ && x‸", "/home/fix"},
+    {"cd - && x‸", SC_UNKNOWN},
+    {"popd && x‸", SC_UNKNOWN},
+    {"pushd a && pushd b && popd && x‸", "a"},
+    {"cd -P a && x‸", "a"},
+    {"cd -L a && x‸", "a"},
+    {"ls a && x‸", ""},
+    /* -- §1 table 2: which connectors let a cd apply ----------- */
+    {"cd a; x‸", "a"},
+    {"cd a\nx‸", "a"},
+    {"cd a || x‸", ""},
+    {"cd a & x‸", ""},
+    {"cd a | x‸", ""},
+    {"(cd a; x‸", "a"},
+    {"(cd a); x‸", ""},
+    {"{ cd a; }; x‸", "a"},
+    {"cd a && cd b && x‸", "a/b"},
+    {"if cd a; then x‸", "a"},
+    {"cd a || exit; x‸", "a"},
+    {"cd a || return 1; x‸", "a"},
+    {"cd a || echo no; x‸", SC_UNKNOWN},
+    {"false || cd a && x‸", SC_UNKNOWN},
+    /* -- the caret's own command ------------------------------- */
+    {"cd ch‸", ""},
+    {"cd a && cd b‸", "a"},
+    {"cd a && cd ‸", "a"},
+    /* -- operands ---------------------------------------------- */
+    {"cd ~/proj && x‸", "/home/fix/proj"},
+    {"cd $HOME && x‸", "/home/fix"},
+    {"cd \"$HOME\"/w && x‸", "/home/fix/w"},
+    {"cd ${HOME}/w && x‸", "/home/fix/w"},
+    {"cd ${HOME}x && x‸", "/home/fixx"},
+    {"cd $FOO && x‸", SC_UNKNOWN},
+    {"cd $HOME$FOO && x‸", SC_UNKNOWN},
+    {"cd $(pwd) && x‸", SC_UNKNOWN},
+    {"cd `pwd` && x‸", SC_UNKNOWN},
+    {"cd a* && x‸", SC_UNKNOWN},
+    {"cd {a,b} && x‸", SC_UNKNOWN},
+    {"cd .. && x‸", ".."},
+    {"cd ../.. && cd a && x‸", "../../a"},
+    {"cd a/../b/./c/ && x‸", "b/c"},
+    {"cd a && cd .. && x‸", ""},
+    {"cd \"my dir\" && x‸", "my dir"},
+    {"cd 'q d'/e && x‸", "q d/e"},
+    {"cd my\\ dir && x‸", "my dir"},
+    {"cd /tmp && x‸", "/tmp"},
+    {"cd /a/../.. && x‸", "/"},
+    {"cd a && cd $PWD/b && x‸", "a/b"},
+    {"cd $OLDPWD && x‸", "/prev/dir"},
+    {"cd a && cd $OLDPWD && x‸", SC_UNKNOWN},
+    {"cd \"~\" && x‸", "~"},
+    {"cd ~nosuchuser-yew57 && x‸", SC_UNKNOWN},
+    {"cd '' && x‸", SC_UNKNOWN},
+    {"cd a b && x‸", SC_UNKNOWN},
+    {"cd -e a && x‸", SC_UNKNOWN},
+    {"FOO=1 cd a && x‸", SC_UNKNOWN},
+    {"builtin cd a && x‸", "a"},
+    {"command cd a && x‸", "a"},
+    {"sudo cd a && x‸", ""},
+    {"time cd a && x‸", "a"},
+    {"HOME=/x; cd && x‸", SC_UNKNOWN},
+    {"export HOME=/x; cd ~ && x‸", SC_UNKNOWN},
+    /* -- pushd / popd ------------------------------------------ */
+    {"pushd a && popd && x‸", ""},
+    {"pushd a; pushd /t; popd; x‸", "a"},
+    {"popd; pushd a; x‸", SC_UNKNOWN},
+    {"pushd && x‸", SC_UNKNOWN},
+    {"pushd +1 && x‸", SC_UNKNOWN},
+    /* -- lists and pipelines ----------------------------------- */
+    {"cd a &&\nx‸", "a"},
+    {"cd a && x | y‸", "a"},
+    {"cd a && x & y‸", ""},
+    {"cd a; x & y‸", "a"},
+    {"cd a | x; y‸", ""},
+    {"x | cd a; y‸", SC_UNKNOWN},
+    {"! cd a && x‸", SC_UNKNOWN},
+    {"exit; x‸", SC_UNKNOWN},
+    {"cd a; cd /abs; x‸", "/abs"},
+    {"false || cd a; cd /t && x‸", "/t"},
+    {"x && cd a; y‸", "a"},
+    {"cd a || exit 2\ny‸", "a"},
+    /* -- subshells, substitutions, groups ---------------------- */
+    {"(cd a; (cd b; x‸", "a/b"},
+    {"(cd a; (cd b); x‸", "a"},
+    {"x $(cd a; y‸", "a"},
+    {"echo $(cd a); x‸", ""},
+    {"cd a; echo `cd b`; x‸", "a"},
+    {"cd a && cat <(cd b; x‸", "a/b"},
+    {"cd a && { cd b; x‸", "a/b"},
+    {"{ cd a; } && x‸", "a"},
+    {"{ cd a || exit; }; x‸", "a"},
+    {"cd a || { echo no; exit 1; }; x‸", "a"},
+    {"{ cd a; } | x; y‸", ""},
+    /* -- compound commands ------------------------------------- */
+    {"if cd a; then y; else x‸", ""},
+    {"if cd a; then y; fi; x‸", SC_UNKNOWN},
+    {"if true; then cd a; fi; x‸", SC_UNKNOWN},
+    {"if true; then cd a; else cd a; fi; x‸", "a"},
+    {"if cd a && cd b; then x‸", "a/b"},
+    {"if x; then cd a; elif y; then z‸", ""},
+    {"while cd a; do x‸", SC_UNKNOWN},
+    {"until cd a; do x‸", ""},
+    {"for f in 1 2; do x‸", ""},
+    {"for f in 1 2; do cd a; x‸", SC_UNKNOWN},
+    {"for f in 1 2; do (cd a; x‸", "a"},
+    {"for f in 1; do cd a; done; x‸", SC_UNKNOWN},
+    {"for f in 1; do ls; done; x‸", ""},
+    {"case $x in a) cd b;; esac; x‸", SC_UNKNOWN},
+    {"case $x in a) ls;; esac; x‸", ""},
+    /* -- function definitions run nothing ---------------------- */
+    {"f() { cd a; }; x‸", ""},
+    {"f() { x‸", SC_UNKNOWN},
+    {"f() { echo; cd /tmp; x‸", "/tmp"},
+    /* 57.23's named limit: the body's first command is f's operands. */
+    {"f() { cd /tmp; x‸", SC_UNKNOWN},
+    {"f()\n{ cd a; }\nx‸", ""},
+    {"function f { cd a; }; x‸", ""},
+    {"f() (cd a); x‸", ""},
+    {"f() { { x; }; cd a; }; y‸", ""}
+};
+
 #endif

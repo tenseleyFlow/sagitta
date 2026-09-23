@@ -32,7 +32,9 @@ enum {
      * unbounded memory, and Sprint 26's finder owns that case with its own
      * budget and async walk.
      */
-    YEW_COMP_LIST_MAX = 50000
+    YEW_COMP_LIST_MAX = 50000,
+    /* Sprint 57.32 §4: the pager's `in ch7/` note, bytes with its NUL. */
+    YEW_COMP_WHERE_MAX = 160
 };
 
 typedef enum {
@@ -179,6 +181,15 @@ typedef struct CompReq {
      * extensions (directories always pass, so the user can descend). */
     const char *const *path_ext;
     u32 n_path_ext;
+    /*
+     * Sprint 57.32 §3: the directory a relative path stem is listed in
+     * -- the one the caret's command will run in -- or NULL for
+     * yew_ws_root.  `cwd_moved`: it is not the `:!` directory, so a
+     * relative $PATH element (`.`) names somewhere the exec cache never
+     * read, and its names are not offered.
+     */
+    const char *cwd;
+    bool cwd_moved;
 } CompReq;
 
 enum {
@@ -237,6 +248,13 @@ typedef struct CompFilter {
     u32 total;     /* pre-cap total, for the footer                       */
     bool capped;   /* the source had more than YEW_COMP_MAX matches       */
     bool valid;
+    /*
+     * Sprint 57.32 §4: where a SHELL answer came from when that is not
+     * the prompt's directory -- `in ch7/` -- or why path-like sources
+     * offered nothing (`cd target unknown`).  "" otherwise.  Set by
+     * every yew_comp_filter_run, reused set or not.
+     */
+    char where[YEW_COMP_WHERE_MAX];
 } CompFilter;
 
 void yew_comp_filter_init(CompFilter *f);

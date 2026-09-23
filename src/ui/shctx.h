@@ -88,7 +88,35 @@ typedef struct YewShCtx {
      */
     bool tilde;
     bool expands;
+    /*
+     * Sprint 57.32 §1: where the caret's command will run, relative to
+     * the directory `:!` commands start in ("" = unchanged), or
+     * absolute.  Lexically normalised (`a/../b` -> `b`), the way a
+     * shell's LOGICAL `cd` (the default, -L) resolves `..`.  Valid only
+     * when `cwd_known`; "" otherwise.
+     *
+     * `dirv` parallels `argv`: each operand as `cd` would receive it --
+     * `~`, `~user`, $HOME and $OLDPWD expanded -- or NULL where only the
+     * shell knows its value (any other expansion, a glob).  The caret's
+     * own word is NULL.  A change-directory flag's value reads it.
+     */
+    char *cwd;
+    bool cwd_known;
+    char **dirv;
 } YewShCtx;
+
+/*
+ * Sprint 57.32 §1: what the lexer may know about the environment the
+ * `:!` shell starts with.  `get` answers a variable (NULL: unset) --
+ * HOME, OLDPWD and CDPATH are all it asks.  `base` is the absolute
+ * directory `:!` commands start in, for CDPATH's existence test; NULL
+ * makes a CDPATH search unknown.
+ */
+typedef struct YewShEnv {
+    const char *(*get)(void *ud, const char *name);
+    void *ud;
+    const char *base;
+} YewShEnv;
 
 /* All strings live in `a`.  Never fails on any byte sequence: an input it
  * cannot classify yields YEW_SH_POS_NONE, not false.  Returns false only
@@ -122,6 +150,48 @@ typedef int (*YewShWrapperLookup)(void *ud, const char *name,
 bool yew_shctx_at_with(const char *line, size_t len, size_t cursor,
                        Arena *a, YewShWrapperLookup lookup, void *ud,
                        YewShCtx *out);
+
+/*
+ * Sprint 57.32: yew_shctx_at_with and the environment `env` (NULL: an
+ * empty one -- `cd ~` and `$HOME` are then unknown, CDPATH unset).
+ *
+ * THE MODEL (§1).  Every command list tracks, per execution path, where
+ * the shell is: a directory, UNKNOWN, or unreachable (after `exit`).  A
+ * `cd` moves the path on which it SUCCEEDED.  `&&` runs the next
+ * pipeline on the success path, `||` on the failure path, and a list
+ * ending (`;`, newline) continues from the success path -- a failure
+ * nothing branches on is assumed not to happen, so `cd a; x` runs x in
+ * a, while `cd a || echo no; x` joins both paths and is UNKNOWN.
+ * `exit` and `return` end their path: `cd a || exit; x` is a.  Pipeline
+ * stages and `&` lists are subshells (the zsh last-stage exception only
+ * counts where bash agrees); `( … )`, `$( … )`, backticks and process
+ * substitutions start from a copy and are discarded at their close; a
+ * `{ … }` group shares its parent's shell; `if`/`while`/`until`/`for`/
+ * `case` join their branches, and a loop that moves the shell is
+ * UNKNOWN inside and after (its next iteration starts elsewhere).  A
+ * function body runs when called, so its start is UNKNOWN.  Paths join
+ * to a directory only when they agree: whenever the shell's path to the
+ * caret's command is data-dependent, the answer is UNKNOWN, never a
+ * guess.
+ *
+ * Named limits: a `cd` inside a function, alias, `source`d file or
+ * `eval` the line runs is invisible; so is a `cd` AFTER the caret in an
+ * enclosing loop's body (the lexer never reads past the caret), and
+ * shell options that change cd (bash cdable_vars, zsh auto_pushd) from
+ * the shell's own startup files.
+ */
+bool yew_shctx_at_env(const char *line, size_t len, size_t cursor, Arena *a,
+                      YewShWrapperLookup lookup, void *ud,
+                      const YewShEnv *env, YewShCtx *out);
+
+/* `operand` resolved against `dir` (NULL or "": relative stays
+ * relative) and lexically normalised, as a logical `cd` would. */
+char *yew_sh_dir_join(Arena *a, const char *dir, const char *operand);
+
+/* The directory the caret's command runs in, as a path the filesystem
+ * can open: ctx->cwd against `base` (the `:!` start directory).  NULL
+ * when it is unknown. */
+char *yew_shctx_dir(const YewShCtx *ctx, const char *base, Arena *a);
 
 /*
  * §6: quote `text` for insertion at a caret whose state is `q`.  Returns

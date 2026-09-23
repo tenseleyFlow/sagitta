@@ -65,6 +65,7 @@ static const char stub_script[] =
     "done\n"
     "echo \"$n\" > \"$d/argc\"\n"
     "echo call >> \"$d/calls\"\n"
+    "pwd > \"$d/cwd\"\n"
     "line=$6\n"
     "cmd=$7\n"
     "i=0\n"
@@ -1021,5 +1022,44 @@ void test_compfish_real_fish_demo_and_gate(void)
     SPEC_FMT(path, sizeof(path), "%s/PWNED3", f.spec.root);
     YEW_ASSERT(access(path, F_OK) != 0);
     yew_xfree(fish);
+    fish_fix_drop(&f);
+}
+
+/*
+ * Sprint 57.32 §3: fish is spawned in the directory the command will run
+ * in (the stub records its `pwd`), keyed on it -- the same words after a
+ * different `cd` are another question -- and not asked at all when that
+ * directory is unknown.
+ */
+void test_compfish_runs_in_the_effective_directory(void)
+{
+    FishFix f;
+    char path[256];
+    Bytebuf b;
+    u32 calls;
+
+    fish_fix_init(&f);
+    SPEC_FMT(path, sizeof(path), "%s/sub", f.spec.root);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    stub_file(&f, "tool", "rows", "build\tcompile it\n");
+    ask(&f, "!cd sub && tool b");
+    YEW_ASSERT_NOT_NULL(menu_row(&f.ed, "build"));
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.menu.where, "in sub/");
+    SPEC_FMT(path, sizeof(path), "%s/cwd", f.stubdir);
+    bytebuf_init(&b);
+    spec_read_file(path, &b);
+    YEW_ASSERT(b.len > 5U && memcmp(b.data + b.len - 5U, "/sub\n", 5U) == 0);
+    bytebuf_free(&b);
+    calls = stub_calls(&f);
+    ask(&f, "!tool b");
+    YEW_ASSERT_EQ_U64(stub_calls(&f), calls + 1U);
+    bytebuf_init(&b);
+    spec_read_file(path, &b);
+    YEW_ASSERT(b.len > 5U && memcmp(b.data + b.len - 5U, "/sub\n", 5U) != 0);
+    bytebuf_free(&b);
+    calls = stub_calls(&f);
+    ask(&f, "!cd $X && tool b");
+    ask(&f, "!mkdir new && cd new && tool b");
+    YEW_ASSERT_EQ_U64(stub_calls(&f), calls);
     fish_fix_drop(&f);
 }

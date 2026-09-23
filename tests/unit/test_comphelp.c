@@ -1402,3 +1402,58 @@ void test_comphelp_loop_deadline_shares_the_idle_condition(void)
     YEW_ASSERT(!yew_cmdline_comp_idle_pending(&h.ed));
     help_fix_drop(&h);
 }
+
+/*
+ * Sprint 57.32 §3: help still runs with cwd `/`, but `./tool` is the
+ * tool in the directory the command will run in -- after the line's
+ * `cd` -- and nothing at all when that directory is unknown.
+ */
+void test_comphelp_relative_word_follows_the_effective_directory(void)
+{
+    static const char line[] = ":!cd sub && ./tool ";
+    static const char unknown[] = ":!cd $X && ./tool ";
+    HelpFix h;
+    char path[256];
+    Bytebuf b;
+    YewHelpLookup hl;
+    YewCompQuery q;
+    Arena scratch;
+    char *d;
+
+    help_fix_init(&h);
+    SPEC_FMT(path, sizeof(path), "%s/sub", h.spec.root);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    bytebuf_init(&b);
+    spec_read_file(YEW_TEST_HELPFIX, &b);
+    SPEC_FMT(path, sizeof(path), "%s/sub/tool", h.spec.root);
+    write_all(path, b.data, b.len, 0755);
+    bytebuf_free(&b);
+    SPEC_FMT(path, sizeof(path), "%s/sub/tool.help", h.spec.root);
+    write_all(path, clap_help, strlen(clap_help), 0644);
+    arena_init(&scratch);
+
+    /* The prompt's directory has no ./tool; an unknown one answers
+     * nothing and asks nothing. */
+    YEW_ASSERT(!yew_comphelp_lookup_in(&h.ed, "./tool", h.spec.root, &hl));
+    YEW_ASSERT(!hl.pending);
+    YEW_ASSERT(!yew_comphelp_lookup_in(&h.ed, "./tool", NULL, &hl));
+    YEW_ASSERT(!hl.pending);
+    YEW_ASSERT_EQ_U64(hl.key[0], 0U);
+    YEW_ASSERT(yew_comp_query(&h.ed, unknown, strlen(unknown),
+                              strlen(unknown), &scratch, &q));
+    yew_comp_shell_prewarm(&h.ed, q.shell);
+    YEW_ASSERT(!yew_comphelp_idle_ready());
+
+    /* After `cd sub`, the plan asks sub/tool, and learns its tree. */
+    YEW_ASSERT(yew_comp_query(&h.ed, line, strlen(line), strlen(line),
+                              &scratch, &q));
+    yew_comp_shell_prewarm(&h.ed, q.shell);
+    YEW_ASSERT(yew_comphelp_idle_ready());
+    settle(&h.ed);
+    d = yew_comp_shell_describe(&h.ed, q.shell, &scratch);
+    YEW_ASSERT_EQ_STR(d, "sub");
+    SPEC_FMT(path, sizeof(path), "%s/sub/tool", h.spec.root);
+    YEW_ASSERT(yew_comphelp_lookup(&h.ed, path, &hl));
+    arena_free_all(&scratch);
+    help_fix_drop(&h);
+}

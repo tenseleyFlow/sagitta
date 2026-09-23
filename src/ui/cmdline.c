@@ -781,6 +781,14 @@ static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
 
 static void cmdline_refilter_as(Ed *ed, bool asked);
 
+/* Sprint 57.32 §4: the filter's `in ch7/` note, onto the menu. */
+static void menu_where(CmdLine *line)
+{
+    (void)memcpy(line->menu.where, line->filter.where,
+                 sizeof(line->menu.where));
+    line->menu.where[sizeof(line->menu.where) - 1U] = '\0';
+}
+
 static void cmdline_refilter(Ed *ed)
 {
     cmdline_refilter_as(ed, false);
@@ -841,6 +849,7 @@ static void cmdline_refilter_as(Ed *ed, bool asked)
     } else {
         yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
         line->menu.pending = line->filter.gen_pending;
+        menu_where(line);
     }
     arena_free_all(&scratch);
     yew_xfree(text);
@@ -1238,7 +1247,12 @@ static CmdStatus complete(Ed *ed, bool previous)
         return YEW_CMD_OK;
     }
     if (items.len == 0U) {
-        yew_msg(ed, YEW_MSG_INFO, "no completions");
+        /* Sprint 57.32 §3: say why when the directory is the reason. */
+        if (query.kind == YEW_COMP_SHELL && line->filter.where[0] != '\0')
+            yew_msg(ed, YEW_MSG_INFO, "no completions (%s)",
+                    line->filter.where);
+        else
+            yew_msg(ed, YEW_MSG_INFO, "no completions");
         ed->full_damage = true;
         ed->footer_dirty = true;
         Vec_CompItem_free(&items);
@@ -1258,6 +1272,7 @@ static CmdStatus complete(Ed *ed, bool previous)
         line->menu_original = query.replace;
         yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
         line->menu.pending = true;
+        menu_where(line);
         line->comp_asked = true;
         ed->full_damage = true;
         ed->footer_dirty = true;
@@ -1289,6 +1304,7 @@ static CmdStatus complete(Ed *ed, bool previous)
     line->menu_original = query.replace;
     yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
     line->menu.pending = line->filter.gen_pending;
+    menu_where(line);
     /*
      * The common prefix is taken over the TIERED rows only -- the ones
      * that matched as an exact or prefix match.  A fuzzy match shares no

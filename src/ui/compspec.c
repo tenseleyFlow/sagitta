@@ -484,6 +484,8 @@ static void read_flag(SpecRead *r, FlValue v, YewSpecFlag *out)
             out->arg_optional = read_bool(r, val, "arg_optional");
         } else if (key_is(key, n, "global")) {
             out->global = read_bool(r, val, "global");
+        } else if (key_is(key, n, "changes_dir")) {
+            out->changes_dir = read_bool(r, val, "changes_dir");
         } else {
             unknown_key(r, key, n);
         }
@@ -492,6 +494,9 @@ static void read_flag(SpecRead *r, FlValue v, YewSpecFlag *out)
         read_fail(r, "a flag needs 'long' or 'short'");
     if (out->arg_optional && out->arg == NULL)
         read_fail(r, "'arg_optional' needs 'arg'");
+    if (out->changes_dir &&
+        (out->arg == NULL || out->arg->kind != YEW_SPEC_ARG_DIR))
+        read_fail(r, "'changes_dir' needs a 'dir' arg");
 }
 
 static bool node_names(const YewSpecNode *n, const char *name)
@@ -1109,6 +1114,8 @@ FlValue yew_compspec_write_node(FlVm *vm, const YewSpecNode *node)
                 write_put(vm, fm, "arg_optional", FL_BOOL_V(true));
             if (f->global)
                 write_put(vm, fm, "global", FL_BOOL_V(true));
+            if (f->changes_dir)
+                write_put(vm, fm, "changes_dir", FL_BOOL_V(true));
             (void)fl_list_push(vm, l, FL_OBJ_V(FL_MAP, fm));
         }
         write_put(vm, m, "flags", FL_OBJ_V(FL_LIST, l));
@@ -2111,6 +2118,19 @@ static bool is_assignment(const char *w)
     return w[i] == '=';
 }
 
+/* Sprint 57.32 §2: a `changes_dir` flag's value, walked. */
+static void point_dir(YewSpecPoint *out, u32 flag_at, u32 at, u32 off)
+{
+    if (out->n_dirs >= YEW_SPEC_DIRS_MAX) {
+        out->dirs_overflow = true;
+        return;
+    }
+    out->dir_flag[out->n_dirs] = flag_at;
+    out->dir_at[out->n_dirs] = at;
+    out->dir_off[out->n_dirs] = off;
+    out->n_dirs++;
+}
+
 bool yew_compspec_resolve(const YewCompSpec *spec, const YewShCtx *ctx,
                           YewSpecPoint *out)
 {
@@ -2141,6 +2161,8 @@ bool yew_compspec_resolve(const YewCompSpec *spec, const YewShCtx *ctx,
          * reading it as a flag instead would shift every word after it.
          */
         if (pending != NULL || pre_pending) {
+            if (pending != NULL && pending->changes_dir)
+                point_dir(out, i - 1U, i, 0U);
             pending = NULL;
             pre_pending = false;
             continue;
@@ -2154,8 +2176,13 @@ bool yew_compspec_resolve(const YewCompSpec *spec, const YewShCtx *ctx,
             const char *eq = strchr(name, '=');
             const YewSpecFlag *f;
 
-            if (eq != NULL)
-                continue; /* --name=value: consumed whole, known or not */
+            if (eq != NULL) {
+                /* --name=value: consumed whole, known or not. */
+                f = find_long(node, name, (size_t)(eq - name));
+                if (f != NULL && f->changes_dir && f->arg != NULL)
+                    point_dir(out, i, i, (u32)(eq + 1 - w));
+                continue;
+            }
             f = find_long(node, name, strlen(name));
             if (f != NULL && f->arg != NULL && !f->arg_optional)
                 pending = f;
@@ -2183,6 +2210,8 @@ bool yew_compspec_resolve(const YewCompSpec *spec, const YewShCtx *ctx,
                     continue;
                 if (w[j + 1U] == '\0' && !f->arg_optional)
                     pending = f;
+                else if (w[j + 1U] != '\0' && f->changes_dir)
+                    point_dir(out, i, i, (u32)(j + 1U)); /* -Cdir */
                 break;
             }
             /* A precommand flag the spec names only in flags_with_args

@@ -65,6 +65,7 @@ key below as well as these:
 | `arg` | arg map | present when the flag takes a value |
 | `arg_optional` | bool | the value may only be attached with `=` (`--profile-gen[=<dir>]`); the next word is not consumed |
 | `global` | bool | also valid under every subcommand |
+| `changes_dir` | bool | the value (a `dir` arg) is where the command runs: later paths and generators are relative to it (`git -C`, `make -C`; not `tar -C`) |
 
 A flag needs `long`, `short` or both; each spelling gets its own row.
 
@@ -96,7 +97,7 @@ the Makefile's text -- make is never run), `pids`.
 generators: {
     branches: { argv: ["git", "for-each-ref", "--format=%(refname:short)",
                        "refs/heads", "refs/remotes"],
-                cache_ms: 2000, pass_flags: ["-C", "--git-dir"] },
+                cache_ms: 2000, pass_flags: ["--git-dir"] },
 },
 ```
 
@@ -104,10 +105,11 @@ generators: {
 |---|---|
 | `argv` | the program and its arguments -- run directly, never through a shell |
 | `cache_ms` | how long an answer stays fresh (default 2000) |
-| `pass_flags` | flags that, when already on the line before the cursor, are passed to the generator with their values, right after `argv[0]` (`git -C ../other checkout <Tab>` lists `../other`'s branches) |
+| `pass_flags` | flags that, when already on the line before the cursor, are passed to the generator with their values, right after `argv[0]` (`git --git-dir x checkout <Tab>` lists x's branches) |
 
 A generator prints one candidate per line, optionally followed by a tab and
-a description. It runs in the directory `:!` commands run in, with
+a description. It runs in the directory the command will run in (after
+any `cd` before it on the line, and any `changes_dir` flag), with
 `NO_COLOR=1 PAGER=cat GIT_PAGER=cat TERM=dumb`, and is given 1.5 seconds.
 Completion never waits for it: its answer appears when it arrives, and it
 never changes what you have typed.

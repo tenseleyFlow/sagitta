@@ -8,9 +8,11 @@
 #include "harness.h"
 
 #include <fcntl.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -646,5 +648,296 @@ void test_shctx_fuzz_seeds_match_the_corpus(void)
         YEW_ASSERT_EQ_I64(fclose(f), 0);
         YEW_ASSERT_EQ_U64((u64)got, (u64)want);
         YEW_ASSERT_EQ_MEM(buf, sh_corpus[i].in, want);
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Sprint 57.32 §1: the effective directory                            */
+/* ------------------------------------------------------------------ */
+
+typedef struct CwdEnv {
+    const char *const *vars; /* NAME=value, NULL-terminated */
+} CwdEnv;
+
+static const char *cwd_env_get(void *ud, const char *name)
+{
+    const CwdEnv *e = ud;
+    size_t n = strlen(name);
+    size_t i;
+
+    for (i = 0U; e->vars[i] != NULL; i++) {
+        if (strncmp(e->vars[i], name, n) == 0 && e->vars[i][n] == '=')
+            return e->vars[i] + n + 1U;
+    }
+    return NULL;
+}
+
+static const char *const sh_cwd_vars[] = {"HOME=/home/fix",
+                                          "OLDPWD=/prev/dir", NULL};
+
+/* Lex `in` (caret marked) with `vars` and `base`; the context lives in
+ * `a`. */
+static void cwd_lex(const char *in, const char *const *vars,
+                    const char *base, Arena *a, YewShCtx *ctx)
+{
+    CwdEnv e;
+    YewShEnv env;
+    size_t len;
+    size_t caret;
+    char *line = corpus_line(in, &len, &caret);
+
+    e.vars = vars;
+    env.get = cwd_env_get;
+    env.ud = &e;
+    env.base = base;
+    YEW_ASSERT(yew_shctx_at_env(line, len, caret, a, NULL, NULL, &env, ctx));
+    yew_xfree(line);
+}
+
+static bool cwd_is(const YewShCtx *ctx, const char *want)
+{
+    if (want == NULL)
+        return !ctx->cwd_known && ctx->cwd != NULL && ctx->cwd[0] == '\0';
+    return ctx->cwd_known && ctx->cwd != NULL && strcmp(ctx->cwd, want) == 0;
+}
+
+/* DoD 2: every row of both reference tables, and ≥ 40 more. */
+void test_shctx_cwd_corpus_rows(void)
+{
+    Arena a;
+    size_t i;
+    size_t failures = 0U;
+
+    YEW_ASSERT(YEW_ARRAY_LEN(sh_cwd_corpus) >= 40U);
+    arena_init(&a);
+    for (i = 0U; i < YEW_ARRAY_LEN(sh_cwd_corpus); i++) {
+        YewShCtx ctx;
+
+        cwd_lex(sh_cwd_corpus[i].in, sh_cwd_vars, "/base", &a, &ctx);
+        if (!cwd_is(&ctx, sh_cwd_corpus[i].cwd)) {
+            (void)fprintf(stderr,
+                          "shctx cwd row %zu `%s`: want %s%s%s got %s%s%s\n",
+                          i, sh_cwd_corpus[i].in,
+                          sh_cwd_corpus[i].cwd == NULL ? "UNKNOWN" : "`",
+                          sh_cwd_corpus[i].cwd == NULL ? ""
+                                                       : sh_cwd_corpus[i].cwd,
+                          sh_cwd_corpus[i].cwd == NULL ? "" : "`",
+                          ctx.cwd_known ? "`" : "UNKNOWN",
+                          ctx.cwd_known ? ctx.cwd : "",
+                          ctx.cwd_known ? "`" : "");
+            failures++;
+        }
+    }
+    arena_free_all(&a);
+    YEW_ASSERT_EQ_U64((u64)failures, 0U);
+}
+
+/* Without an environment, nothing it would name is known -- and the
+ * plain rows are unchanged. */
+void test_shctx_cwd_without_env(void)
+{
+    static const char *const none[] = {NULL};
+    Arena a;
+    YewShCtx ctx;
+    size_t len;
+    size_t caret;
+    char *line;
+
+    arena_init(&a);
+    cwd_lex("cd && x‸", none, NULL, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, NULL));
+    cwd_lex("cd ~/x && y‸", none, NULL, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, NULL));
+    line = corpus_line("cd a && cd b && x‸", &len, &caret);
+    YEW_ASSERT(yew_shctx_at(line, len, caret, &a, &ctx));
+    YEW_ASSERT(cwd_is(&ctx, "a/b"));
+    yew_xfree(line);
+    /* A NONE caret still says where it is. */
+    cwd_lex("cd a; ls # x‸", none, NULL, &a, &ctx);
+    YEW_ASSERT_EQ_I64(ctx.pos, YEW_SH_POS_NONE);
+    YEW_ASSERT(cwd_is(&ctx, "a"));
+    arena_free_all(&a);
+}
+
+/* `~user` is the password database's answer, whatever it is here. */
+void test_shctx_cwd_tilde_user(void)
+{
+    static const char *const none[] = {NULL};
+    struct passwd *pw = getpwuid(getuid());
+    char in[256];
+    char want[512];
+    Arena a;
+    YewShCtx ctx;
+    char *user;
+    char *home;
+
+    YEW_ASSERT_NOT_NULL(pw);
+    user = yew_xstrdup(pw->pw_name);
+    home = yew_xstrdup(pw->pw_dir);
+    arena_init(&a);
+    YEW_ASSERT((size_t)snprintf(in, sizeof(in), "cd ~%s/sub && x\xE2\x80\xB8",
+                                user) < sizeof(in));
+    YEW_ASSERT((size_t)snprintf(want, sizeof(want), "%s/sub",
+                                strcmp(home, "/") == 0 ? "" : home) <
+               sizeof(want));
+    cwd_lex(in, none, NULL, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, want));
+    /* Quoted, the prefix is a literal directory name. */
+    YEW_ASSERT((size_t)snprintf(in, sizeof(in), "cd \"~%s\" && x\xE2\x80\xB8",
+                                user) < sizeof(in));
+    cwd_lex(in, none, NULL, &a, &ctx);
+    YEW_ASSERT_EQ_U64(strncmp(ctx.cwd, "~", 1U) == 0 ? 1U : 0U, 1U);
+    arena_free_all(&a);
+    yew_xfree(user);
+    yew_xfree(home);
+}
+
+/* CDPATH (bash's rule): entries in order, empty = current, first that
+ * exists wins; none exists -> the plain relative path; `./x`, `../x`
+ * and `/x` never search. */
+void test_shctx_cwd_cdpath(void)
+{
+    char root[64];
+    char path[256];
+    char var[320];
+    const char *vars[3];
+    Arena a;
+    YewShCtx ctx;
+
+    (void)strcpy(root, "/tmp/yew-cdpath-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/lib", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/lib/pkg", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/far", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/far/pkg", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    arena_init(&a);
+    vars[1] = "HOME=/home/fix";
+    vars[2] = NULL;
+
+    /* A relative entry is relative to the current directory. */
+    YEW_ASSERT((size_t)snprintf(var, sizeof(var), "CDPATH=nope:lib:%s/far",
+                                root) < sizeof(var));
+    vars[0] = var;
+    cwd_lex("cd pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, "lib/pkg"));
+    /* An absolute entry gives an absolute directory. */
+    YEW_ASSERT((size_t)snprintf(var, sizeof(var), "CDPATH=%s/far:lib",
+                                root) < sizeof(var));
+    cwd_lex("cd pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/far/pkg", root) <
+               sizeof(path));
+    YEW_ASSERT(cwd_is(&ctx, path));
+    /* The empty entry first: the current directory wins when it has
+     * one, and here it does not, so lib's does. */
+    (void)strcpy(var, "CDPATH=:lib");
+    cwd_lex("cd pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, "lib/pkg"));
+    /* None exists: the plain relative path (what the shell tries). */
+    cwd_lex("cd ghost && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, "ghost"));
+    /* `./`, `../` and `/` never search. */
+    cwd_lex("cd ./pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, "pkg"));
+    cwd_lex("cd ../pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, "../pkg"));
+    /* An expansion is not searched either. */
+    cwd_lex("cd ~/pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, "/home/fix/pkg"));
+    /* Searched from where the shell already is. */
+    cwd_lex("cd lib && cd pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, "lib/pkg"));
+    /* No start directory to test against: unknown, not a guess. */
+    cwd_lex("cd pkg && x‸", vars, NULL, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, NULL));
+    /* A line that may have changed CDPATH: unknown. */
+    cwd_lex("CDPATH=/x; cd pkg && x‸", vars, root, &a, &ctx);
+    YEW_ASSERT(cwd_is(&ctx, NULL));
+    arena_free_all(&a);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/far/pkg", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(rmdir(path), 0);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/far", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(rmdir(path), 0);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/lib/pkg", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(rmdir(path), 0);
+    YEW_ASSERT((size_t)snprintf(path, sizeof(path), "%s/lib", root) <
+               sizeof(path));
+    YEW_ASSERT_EQ_I64(rmdir(path), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
+}
+
+/* `dirv`: operands as `cd` would read them, NULL where the shell alone
+ * knows; and yew_shctx_dir / yew_sh_dir_join, the consumers' half. */
+void test_shctx_cwd_dirv_and_join(void)
+{
+    Arena a;
+    YewShCtx ctx;
+
+    arena_init(&a);
+    cwd_lex("git -C ~/r -C $X -C 'q d' -C a* x‸", sh_cwd_vars, "/b", &a,
+            &ctx);
+    YEW_ASSERT_EQ_U64(ctx.arg_index, 9U);
+    YEW_ASSERT_EQ_STR(ctx.dirv[2], "/home/fix/r");
+    YEW_ASSERT_NULL(ctx.dirv[4]);
+    YEW_ASSERT_EQ_STR(ctx.dirv[6], "q d");
+    YEW_ASSERT_NULL(ctx.dirv[8]);
+    YEW_ASSERT_NULL(ctx.dirv[9]);
+    YEW_ASSERT_NULL(ctx.dirv[10]);
+
+    YEW_ASSERT_EQ_STR(yew_sh_dir_join(&a, "a/b", "../c"), "a/c");
+    YEW_ASSERT_EQ_STR(yew_sh_dir_join(&a, "", ".."), "..");
+    YEW_ASSERT_EQ_STR(yew_sh_dir_join(&a, "..", "../x/./"), "../../x");
+    YEW_ASSERT_EQ_STR(yew_sh_dir_join(&a, "/r", "/abs//y/"), "/abs/y");
+    YEW_ASSERT_EQ_STR(yew_sh_dir_join(&a, "/", ".."), "/");
+    YEW_ASSERT_EQ_STR(yew_sh_dir_join(&a, "a", ".."), "");
+
+    cwd_lex("cd sub && x‸", sh_cwd_vars, "/b", &a, &ctx);
+    YEW_ASSERT_EQ_STR(yew_shctx_dir(&ctx, "/ws/root", &a), "/ws/root/sub");
+    cwd_lex("cd .. && x‸", sh_cwd_vars, "/b", &a, &ctx);
+    YEW_ASSERT_EQ_STR(yew_shctx_dir(&ctx, "/ws/root", &a), "/ws");
+    cwd_lex("x‸", sh_cwd_vars, "/b", &a, &ctx);
+    YEW_ASSERT_EQ_STR(yew_shctx_dir(&ctx, "/ws/root", &a), "/ws/root");
+    YEW_ASSERT_EQ_STR(yew_shctx_dir(&ctx, NULL, &a), ".");
+    cwd_lex("cd /t && x‸", sh_cwd_vars, "/b", &a, &ctx);
+    YEW_ASSERT_EQ_STR(yew_shctx_dir(&ctx, "/ws/root", &a), "/t");
+    cwd_lex("cd $Q && x‸", sh_cwd_vars, "/b", &a, &ctx);
+    YEW_ASSERT_NULL(yew_shctx_dir(&ctx, "/ws/root", &a));
+    arena_free_all(&a);
+}
+
+/* §Testing: ten cd shapes seed fuzz-shctx (cd-00 .. cd-09), the first
+ * ten rows of the cwd corpus, byte for byte. */
+void test_shctx_cwd_fuzz_seeds_match(void)
+{
+    size_t i;
+
+    YEW_ASSERT(YEW_ARRAY_LEN(sh_cwd_corpus) >= 10U);
+    for (i = 0U; i < 10U; i++) {
+        char path[96];
+        char buf[256];
+        FILE *f;
+        size_t got;
+        size_t want = strlen(sh_cwd_corpus[i].in);
+
+        (void)snprintf(path, sizeof(path),
+                       "tests/fuzz/corpus/fuzz_shctx/cd-%02zu", i);
+        f = fopen(path, "rb");
+        if (f == NULL)
+            (void)fprintf(stderr, "missing fuzz seed %s\n", path);
+        YEW_ASSERT_NOT_NULL(f);
+        got = fread(buf, 1U, sizeof(buf), f);
+        YEW_ASSERT_EQ_I64(fclose(f), 0);
+        YEW_ASSERT_EQ_U64((u64)got, (u64)want);
+        YEW_ASSERT_EQ_MEM(buf, sh_cwd_corpus[i].in, want);
     }
 }

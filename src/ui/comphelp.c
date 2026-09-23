@@ -2360,6 +2360,31 @@ bool yew_comphelp_lookup(Ed *ed, const char *word, YewHelpLookup *out)
     return false;
 }
 
+bool yew_comphelp_lookup_in(Ed *ed, const char *word, const char *cwd,
+                            YewHelpLookup *out)
+{
+    char *abs;
+    bool found;
+
+    /*
+     * Sprint 57.32 §3: help still runs with cwd `/`, but `./tool` names
+     * a file in the directory the command will run in.  Made absolute
+     * here, so the memo -- keyed by the word -- cannot answer one
+     * directory's `./tool` with another's.
+     */
+    if (word == NULL || word[0] == '/' || strchr(word, '/') == NULL)
+        return yew_comphelp_lookup(ed, word, out);
+    if (cwd == NULL) {
+        if (out != NULL)
+            (void)memset(out, 0, sizeof(*out));
+        return false; /* the directory is unknown: so is the file */
+    }
+    abs = join_path(cwd, word);
+    found = yew_comphelp_lookup(ed, abs, out);
+    yew_xfree(abs);
+    return found;
+}
+
 YewHelpDescend yew_comphelp_descend(Ed *ed, const YewCompSpec *spec,
                                     const YewSpecNode *node, char key[17])
 {

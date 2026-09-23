@@ -11,7 +11,7 @@
     flags: [
         { short: "B", long: "always-make", desc: "unconditionally make all targets" },
         { short: "C", long: "directory", desc: "change to DIRECTORY first",
-          arg: { kind: "dir" } },
+          arg: { kind: "dir" }, changes_dir: true },
         { short: "d", desc: "print lots of debugging information" },
         { long: "debug", desc: "print debugging information",
           arg: { kind: "none" }, arg_optional: true },

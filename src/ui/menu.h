@@ -70,6 +70,13 @@ typedef struct Menu {
      * the filter, so the same state always renders the same cells.
      */
     bool pending;
+    /*
+     * Sprint 57.32 §4: where these rows came from when it is not the
+     * prompt's directory (`in ch7/`), or why path rows are missing
+     * (`cd target unknown`); "" for none.  Set by the host, drawn in the
+     * footer, truncated from the left to fit.
+     */
+    char where[YEW_COMP_WHERE_MAX];
 } Menu;
 
 void yew_menu_init(Menu *m, const MenuSpec *spec);

@@ -464,8 +464,15 @@ static const char *base_of(const char *path)
 YewFishState yew_compfish_lookup(Ed *ed, const YewShCtx *ctx,
                                  YewFishLookup *out)
 {
+    return yew_compfish_lookup_in(ed, ctx, ed == NULL ? NULL
+                                                      : yew_ws_root(ed),
+                                  out);
+}
+
+YewFishState yew_compfish_lookup_in(Ed *ed, const YewShCtx *ctx,
+                                    const char *cwd, YewFishLookup *out)
+{
     const char *path;
-    const char *cwd;
     FishEntry *e;
     char *line;
     u64 h;
@@ -480,8 +487,8 @@ YewFishState yew_compfish_lookup(Ed *ed, const YewShCtx *ctx,
     if (line == NULL)
         return YEW_FISH_OFF;
     path = yew_compfish_path();
-    /* The directory a `:!` command runs in: fish lists ITS files. */
-    cwd = yew_ws_root(ed);
+    /* The directory the command will run in (Sprint 57.32): fish lists
+     * ITS files, and the key carries it. */
     if (cwd == NULL)
         cwd = "";
     /* §2: the key is (fish, cwd, the rebuilt words, the query stem) --
