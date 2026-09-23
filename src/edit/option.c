@@ -104,6 +104,10 @@ static const char *const save_check_disk_values[] = {
 static const char *const complete_help_values[] = {
     "native", "all", "off", NULL
 };
+/* Sprint 57.26 §2: whether fish may answer as a completion oracle. */
+static const char *const complete_fish_values[] = {"auto", "off", NULL};
+/* Sprint 57.26 §3: whose history suggests `:!` ghosts. */
+static const char *const suggest_history_values[] = {"all", "yew", NULL};
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -325,6 +329,18 @@ const OptDesc yew_opts[] = {
     {"shell.complete_help", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("native"),
      complete_help_values, 0, 0, NULL, option_changed,
      "Learn :! completions from --help: native, all, or off",
+     YEW_OPT_MODULE_CORE},
+    /* Sprint 57.26 §2 (Amendment S57.26-A1): fish, when on $PATH, answers
+     * for commands with no spec before --help is parsed. */
+    {"shell.complete_fish", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("auto"),
+     complete_fish_values, 0, 0, NULL, option_changed,
+     "Ask fish for :! completions when it is installed: auto or off",
+     YEW_OPT_MODULE_CORE},
+    /* Sprint 57.26 §3: `all` (the user's call, 2026-09-22) also reads
+     * fish, zsh and bash history, read-only; `yew` reads only yew's. */
+    {"shell.suggest_history", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("all"),
+     suggest_history_values, 0, 0, NULL, option_changed,
+     "History ghosts for :! from all shells' history, or yew's only",
      YEW_OPT_MODULE_CORE},
     {"shadow.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
      0, 0, NULL, option_changed, "Enable passive shadow suggestions",
