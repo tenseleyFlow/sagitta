@@ -383,6 +383,10 @@ static const BindRow frozen_E[] = {
      * fallback would have to differ, and one command cannot carry two.
      */
     {"<right>", "ed.cmdline.ghost.accept", 0, NULL},
+    /* Sprint 57.26 §3: one word of a history ghost, fish's A-f.  Both
+     * keys were free in E mode. */
+    {"A-f", "ed.cmdline.ghost.accept_word", 0, NULL},
+    {"A-<right>", "ed.cmdline.ghost.accept_word", 0, NULL},
     {"<home>", "ed.move.line.home_toggle", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
     {"C-a", "ed.move.line.home", 0, NULL},
@@ -525,7 +529,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 343U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 345U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

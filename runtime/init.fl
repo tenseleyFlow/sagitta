@@ -408,6 +408,8 @@ bind("H", "C-0", "ed.tab.goto_bar")
 
 bind("E", "<left>", "ed.move.char.prev")
 bind("E", "<right>", "ed.cmdline.ghost.accept")
+bind("E", "A-f", "ed.cmdline.ghost.accept_word")
+bind("E", "A-<right>", "ed.cmdline.ghost.accept_word")
 bind("E", "<home>", "ed.move.line.home_toggle")
 bind("E", "<end>", "ed.move.line.end")
 bind("E", "C-a", "ed.move.line.home")
