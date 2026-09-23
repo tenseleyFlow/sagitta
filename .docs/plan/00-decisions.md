@@ -21,7 +21,7 @@ and an update to this file. Decided 2026-07-31 during the planning stage.
 | Language | C11 subset: C99 core + `_Static_assert`, anonymous struct/union, `alignas`. No VLAs, no `__attribute__`, no statement expressions in our own source |
 | Threads | **None in core.** Single-threaded `poll(2)` event loop; parallelism comes from subprocesses (LSP servers, shell jobs, curl). Revisit post-1.0 only |
 | Dependencies | C stdlib + POSIX only. No ncurses, no libgit2, no TLS lib, no regex lib, no JSON lib — all bespoke. Adding a dependency requires discussion + CLAUDE.md update + justification |
-| Optional runtime tools | `git` (FUSS mode), `$SHELL` (E mode), `curl` (cloud AI only). All degrade gracefully when absent |
+| Optional runtime tools | `git` (FUSS mode), `$SHELL` (E mode), `curl` (cloud AI only), `fish` (`:!` completion oracle, S57.26-A1). All degrade gracefully when absent |
 | Build system | One hand-written GNU Makefile. No autotools/cmake/meson, ever |
 | Compilers | gcc and clang, zero warnings under `-std=c11 -pedantic -Wall -Wextra -Werror` |
 | Feature modules | Compile-time: `MODULES="lsp ai fuss plugins"` (all on by default). Core (modal editing, Fletch, highlighting, search, workspace) is not excisable. Excluded modules hard-error with a clear message, never silently no-op |
@@ -254,6 +254,16 @@ an obsolete cap, so the minimal cap alone moves to the next 4 KiB boundary,
 1,576,960 bytes. The full file remains 2,066,120 bytes; all four
 single-module profiles still pass their existing caps. No feature, compiler
 profile, measurement rule, or other gate changes.
+
+**Amendment S57.26-A1 (2026-09-22) — fish is an optional completion oracle.**
+When `fish` is on `PATH` and `shell.complete_fish` is `auto`, `:!`
+completion may ask it for candidates for a command yew has no spec for.
+It is queried asynchronously, never on the keystroke path, with user
+configuration NOT loaded (`fish -N`) and the user's completion and function
+directories added back explicitly. Absent fish degrades to the `--help`
+layer exactly as absent `git` degrades FUSS mode. No test's pass/fail may
+depend on fish being installed: the suite runs against a stub, and the one
+real-fish test skips, loudly, when fish is absent.
 
 ## Non-negotiable invariants (enforced from Sprint 0)
 
