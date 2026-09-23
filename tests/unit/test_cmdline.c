@@ -876,7 +876,7 @@ void test_cmdline_menu_commands_are_registered_and_internal(void)
         "ed.cmdline.menu.next",      "ed.cmdline.menu.prev",
         "ed.cmdline.menu.page_next", "ed.cmdline.menu.page_prev",
         "ed.cmdline.menu.accept",    "ed.cmdline.menu.dismiss",
-        "ed.cmdline.ghost.accept",
+        "ed.cmdline.ghost.accept",   "ed.cmdline.ghost.accept_word",
     };
     size_t i;
 

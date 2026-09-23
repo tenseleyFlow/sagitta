@@ -817,7 +817,13 @@ void test_invariant9_every_new_command_is_registered(void)
          * directory; this is how a user makes yew re-learn a tool
          * without finding it (`:compforget [name]`).
          */
-        "ed.shell.complete_forget"
+        "ed.shell.complete_forget",
+        /*
+         * Sprint 57.26 §3: a history ghost is taken whole by <right>
+         * (ed.cmdline.ghost.accept) and a word at a time by A-f and
+         * A-<right> -- both keys, no mouse.
+         */
+        "ed.cmdline.ghost.accept_word"
     };
     size_t i;
 
