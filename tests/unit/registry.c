@@ -1057,6 +1057,7 @@ const YewTest yew_tests[] = {
     T(cdaware_menu_carries_the_note),
     T(cdaware_generator_runs_in_the_effective_directory),
     T(cdaware_make_and_git_follow_their_flag),
+    T(cdaware_changes_dir_schema_and_walk),
     T(cmdcomp_shell_route_row1_none),
     T(cmdcomp_shell_route_row2_variable),
     T(cmdcomp_shell_route_row3_user),

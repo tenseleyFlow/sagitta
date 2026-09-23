@@ -29,6 +29,7 @@
 #include "ui/cmdline.h"
 #include "ui/cmdparse.h"
 #include "ui/compgen.h"
+#include "ui/compspec.h"
 
 typedef struct CdFix {
     char root[128];
@@ -542,4 +543,71 @@ void test_cdaware_make_and_git_follow_their_flag(void)
     arena_free_all(&arena);
     arena_free_all(&scratch);
     ed_fix_drop(&f);
+}
+
+/* §2: `changes_dir` is validated like the other keys -- it needs a `dir`
+ * arg -- and resolution records every value it walks, in each spelling;
+ * the shipped tar.fl never sets it. */
+void test_cdaware_changes_dir_schema_and_walk(void)
+{
+    static const char *const bad[] = {
+        "# t\n{ completion: 1, command: \"t\",\n"
+        "  flags: [ { short: \"C\", changes_dir: true } ] }\n",
+        "# t\n{ completion: 1, command: \"t\",\n"
+        "  flags: [ { short: \"C\", arg: { kind: \"path\" },\n"
+        "             changes_dir: true } ] }\n",
+        "# t\n{ completion: 1, command: \"t\",\n"
+        "  flags: [ { short: \"C\", arg: { kind: \"dir\" },\n"
+        "             changes_dir: 1 } ] }\n"};
+    static const char good[] =
+        "# t\n{ completion: 1, command: \"t\",\n"
+        "  flags: [ { short: \"C\", long: \"dir\", arg: { kind: \"dir\" },\n"
+        "             changes_dir: true },\n"
+        "           { short: \"v\" } ] }\n";
+    static const char line[] = "t -C a -vCb --dir c --dir=d x";
+    char err[512];
+    YewCompSpec *spec;
+    YewSpecPoint pt;
+    YewShCtx ctx;
+    Arena a;
+    size_t i;
+    SpecFix f;
+    const YewCompSpec *tar;
+    const YewSpecNode *root;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(bad); i++) {
+        spec = yew_compspec_load_text("completions/t.fl", bad[i],
+                                      strlen(bad[i]), err, sizeof(err));
+        YEW_ASSERT_NULL(spec);
+        YEW_ASSERT_NOT_NULL(strstr(err, "changes_dir"));
+    }
+    spec = yew_compspec_load_text("completions/t.fl", good, strlen(good),
+                                  err, sizeof(err));
+    YEW_ASSERT_NOT_NULL(spec);
+    arena_init(&a);
+    YEW_ASSERT(yew_shctx_at(line, strlen(line), strlen(line), &a, &ctx));
+    YEW_ASSERT(yew_compspec_resolve(spec, &ctx, &pt));
+    YEW_ASSERT_EQ_U64(pt.n_dirs, 4U);
+    /* -C a: the next word. */
+    YEW_ASSERT_EQ_U64(pt.dir_flag[0], 1U);
+    YEW_ASSERT_EQ_U64(pt.dir_at[0], 2U);
+    YEW_ASSERT_EQ_U64(pt.dir_off[0], 0U);
+    /* -vCb: attached, inside a bundle. */
+    YEW_ASSERT_EQ_U64(pt.dir_at[1], 3U);
+    YEW_ASSERT_EQ_STR(ctx.argv[3] + pt.dir_off[1], "b");
+    /* --dir c, --dir=d */
+    YEW_ASSERT_EQ_U64(pt.dir_at[2], 5U);
+    YEW_ASSERT_EQ_U64(pt.dir_flag[2], 4U);
+    YEW_ASSERT_EQ_STR(ctx.argv[6] + pt.dir_off[3], "d");
+    YEW_ASSERT(!pt.dirs_overflow);
+    arena_free_all(&a);
+    yew_compspec_free(spec);
+
+    spec_fix_init(&f);
+    tar = yew_compspec_get(NULL, "tar");
+    YEW_ASSERT_NOT_NULL(tar);
+    root = yew_compspec_root(tar);
+    for (i = 0U; i < root->n_flags; i++)
+        YEW_ASSERT(!root->flags[i].changes_dir);
+    spec_fix_drop(&f);
 }

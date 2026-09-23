@@ -1027,6 +1027,7 @@ void test_cdaware_empty_tab_names_the_reason(void);
 void test_cdaware_menu_carries_the_note(void);
 void test_cdaware_generator_runs_in_the_effective_directory(void);
 void test_cdaware_make_and_git_follow_their_flag(void);
+void test_cdaware_changes_dir_schema_and_walk(void);
 void test_cmdcomp_shell_route_row1_none(void);
 void test_cmdcomp_shell_route_row2_variable(void);
 void test_cmdcomp_shell_route_row3_user(void);
