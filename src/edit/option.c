@@ -336,7 +336,7 @@ const OptDesc yew_opts[] = {
      complete_fish_values, 0, 0, NULL, option_changed,
      "Ask fish for :! completions when it is installed: auto or off",
      YEW_OPT_MODULE_CORE},
-    /* Sprint 57.26 §3: `all` (the user's call, 2026-09-22) also reads
+    /* Sprint 57.26 §3: `all` (the user's call; see the contract) also reads
      * fish, zsh and bash history, read-only; `yew` reads only yew's. */
     {"shell.suggest_history", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("all"),
      suggest_history_values, 0, 0, NULL, option_changed,
