@@ -535,14 +535,16 @@ done:
 
 /*
  * The body mixes every construct the lexer tracks -- pipes, quotes, a
- * substitution, a variable, a redirection, assignments, a wrapper -- so
- * no fast path can skip most of it.
+ * substitution, a variable, a redirection, assignments, a wrapper, and
+ * (Sprint 57.32) the `cd`s, subshells and `if` whose directories it
+ * tracks -- so no fast path can skip most of it.
  */
 static int measure_shctx(void)
 {
     static const char unit[] =
-        "FOO=1 sudo -u root git log --grep \"fix $(date +%s)\" "
-        "'a b' $HOME/x 2>err.log | grep -v x && ";
+        "cd a/../b && FOO=1 sudo -u root git log --grep \"fix $(date +%s)\" "
+        "'a b' $HOME/x 2>err.log | grep -v x && (cd c; d) && "
+        "if cd e; then f; fi; ";
     static i64 samples[PERF_SHCTX_ITERS];
     char *body = malloc(PERF_SHCTX_BYTES + 1U);
     size_t len = 0U;
