@@ -271,3 +271,98 @@ never edit the line.
 9. `test-fletch test-script test-roundtrip test-roundtrip-coverage
    test-audit` and the three `scripts/check-*.sh` gates green; the new
    command is in the invariant-9 audit list and the roundtrip exclusions.
+
+## Implementation divergences (recorded at landing)
+
+Where this contract was written before 57.24 landed, or was wrong about
+the code, the implementation did what the contract intends:
+
+1. **The tree is 57.24's C form, not an FlVm.** The parser builds a
+   `YewCompSpec` through `yew_compspec_new` / `yew_compspec_arena` /
+   `yew_compspec_root_mut`; `yew_compspec_resolve` and the routing walk
+   it unchanged. The cache's `node` is written by `yew_compspec_write_node`
+   (a Fletch value for `fl_data_write`) and read back by
+   `yew_compspec_read_node` -- the spec reader's own node validation, so
+   there is one schema. A node refuses top-level spec keys.
+2. **Laziness grafts.** A subcommand's own help is hung under its node in
+   the root's tree (flags, args, children; the children's `parent`
+   pointers move onto the node so ancestors' `global` flags still reach
+   them). The tree is entry-owned; resolution re-runs after a graft.
+3. **No spawn on the keystroke path, including Tab.** A lookup that misses
+   only QUEUES a request; `yew_cmdline_comp_idle` -- a new entry point the
+   loop calls only on a turn with no input (`!had_input && !raw_input`),
+   beside `yew_cmdline_comp_tick` -- evaluates the prewarm and spawns.
+   `yew_cmdline_comp_idle_pending` is its predicate, shared with
+   `yew_loop_deadline` the way the scan tick's pair is. The pending `…`
+   is "queued or in flight". §6's "at most one prewarm in flight" is
+   enforced as at most ONE help job in flight of any origin; it counts
+   toward compgen's four (compgen's own cap now counts it too).
+4. **Which rows consult the tree.** Only 57.23's rows 6 (a `-` stem) and
+   9 (a plain operand); the shape rows win as always, row 8's C defaults
+   (`cd`, `which`, ...) are a decision, and a shell builtin's name is not
+   looked up (the shell runs the builtin, not the binary). A plain
+   positional of a learned node -- no subcommand slot, no flag value --
+   falls through to rung 4 (paths): `--help` tables do not describe
+   positional kinds.
+5. **The marker only where the answer matters.** While a root answer is
+   pending the `…` shows (and Tab inserts nothing, 57.24's rule) for a
+   flag stem or the first operand; a later operand of a command whose
+   first operand was not a flag is a path either way, so it neither waits
+   nor shows the marker. The same for a pending descent.
+6. **argv[0] is the absolute PATH-resolved path**, not the realpath: a
+   multi-call binary dispatches on its basename. The realpath (with
+   mtime and size) is the identity and the key; the spawn re-checks that
+   the path still resolves to it, and every §1 rule, at spawn time.
+7. **Safety beyond §1.** Relative (and empty) `$PATH` elements are
+   skipped -- `.` on `$PATH` would run a workspace's binaries. The
+   denylist is checked on the typed, resolved and real basenames (a
+   symlink named `tidy` to `rm` is `rm`); a spec on the real basename
+   also wins. `off` also stops USING cached answers. Help runs with cwd
+   `/`: the answer is cached per executable, not per directory.
+8. **What is cached.** Any completed job is cached (a timeout parses
+   what it printed; nothing is negative, `empty: true`). A spawn failure
+   or an eviction is not the tool's answer: it is remembered for the
+   session only, or not at all. The file starts with one `#` comment
+   line naming the tool.
+9. **`ed.shell.complete_forget` has no CMDWORD and no `D(...)` row.**
+   Registration refuses a CMDWORD on a command that is not RECORDABLE,
+   and the round-trip coverage walks only recordable commands, so a
+   `D(...)` row would be dead. Not recordable is what keeps it out of
+   the property; a test asserts both. Its E-mode spelling is
+   `:compforget [name]`; its verb is in `command_name_valid`; it is in
+   the invariant-9 registered list; plugins need FS_WRITE for it.
+10. **Parser additions the fixtures required.** A usage section yields
+    only flag rows and rows spelled with the program's name (`fac -w
+    <dir>` gives flags, never `fac` as a subcommand; Go's `usage:` line
+    is followed directly by its flags). Sections headed by keys,
+    shortcuts or environment are ignored like examples. Options/flags
+    sections give only flags; argument sections only the argparse choice
+    set. cobra pads names to a column and the longest keeps one space
+    (`attestation Verify…`): the section's column recovers it. GNU's
+    coreutils put each description on the next line, and a line starting
+    a flag short of the description column is the next row. argparse
+    lists an alias among its choices (`{chat,run}`, `chat (run)`): the
+    bare choice folds into the alias. yargs' `[aliases: …]`,
+    `[choices: …]` and `[string]`/`[number]`/`[array]` are read.
+    Multi-letter single-dash spellings become long flags only in Go's
+    flag layout (a tab gap), which accepts both.
+11. **Measured rows differ from the Goals paragraph.** `shithub --help`
+    yields all 28 subcommands (the paragraph's 27 missed `attestation`)
+    and 2 flags; `lupin` 13 subcommands and 3 flags; `fac` 3 flags (5
+    spellings, no subcommands); `fackr` is negative.
+12. **Fixtures.** No click-based CLI is installed on this machine; the
+    click fixture is a minimal app run through the real click 8.3.2 (the
+    layout is click's). commander is `vsce`; argparse `wheel` and
+    `rapid-mlx`; clap `starship`, `uv` and `lupin`; cobra `colima`,
+    `colima start` (Global Flags), `kubectl` and `shithub`; yargs
+    `opencode`; GNU `gls`; Go `gofmt`; BSD `cp`; custom `wolf`. The
+    `.expect` format is one line per row (`sub name alias=… | desc`,
+    `flag -s --long arg=kind:values optional global | desc`, or
+    `negative`); `YEW_HELP_EXPECT_UPDATE=1` rewrites them.
+13. **Test isolation.** The unit harness gives each run its own
+    `XDG_CACHE_HOME`, removed at the end, so no unit run reads or writes
+    the developer's help cache. A native fixture, `build/help_fixture`,
+    stands in for tools: tests copy it onto a fixture `$PATH` and it logs
+    every invocation (argv, and that stdin was at EOF). The PTY cases use
+    an absolute fixture `$PATH` (never on screen) and hold the tool with
+    a file, so the pending frame is gated, not timed.
