@@ -122,7 +122,13 @@ char *yew_compfish_line(const YewShCtx *ctx)
                  ctx->argv[i] != NULL; i++) {
         if (i != 0U)
             bytebuf_push_u8(&b, (u8)' ');
-        yew_compfish_escape(&b, ctx->argv[i]);
+        /* An empty word -- `''`, or an expansion whose value only the
+         * shell knows -- stays a word, so fish counts positions as the
+         * shell will. */
+        if (ctx->argv[i][0] == '\0')
+            bytebuf_append(&b, "''", 2U);
+        else
+            yew_compfish_escape(&b, ctx->argv[i]);
     }
     bytebuf_push_u8(&b, (u8)' ');
     qstem = yew_compfish_query_stem(ctx->stem);
