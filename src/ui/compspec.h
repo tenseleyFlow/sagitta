@@ -120,13 +120,17 @@ struct YewSpecNode {
  * The spec for `name` -- the BASENAME of the command word -- or NULL.
  * Lookup order, first hit wins, whole-file replace, never merge:
  *   1. yew_xdg_config_dir()/completions/<name>.fl (the user's),
- *   2. the shipped runtime's completions/<name>.fl,
+ *   2. the shipped runtime's completions/<name>.fl -- the runtime
+ *      init.fl came from (yew_runtime_root), never a second search;
  *   3. a shipped spec whose `command` list names <name>.
  * A user file is re-checked by mtime at most once per prompt open.
- * `ed` may be NULL (the lexer asks); a rejection is then reported on the
- * next call that has one.
+ * `ed` may be NULL (the lexer asks).  A rejected file, or an installed
+ * runtime with no completions/, is QUEUED for yew_compspec_notice.
  */
 const YewCompSpec *yew_compspec_get(Ed *ed, const char *name);
+/* Put one queued report on `ed`'s message line, once per session per
+ * reason.  The `:` prompt calls it; returns whether it said anything. */
+bool yew_compspec_notice(Ed *ed);
 /* Drop every loaded spec and the alias index.  Test seam. */
 void yew_compspec_invalidate_all(void);
 /* The prompt closed: user files are re-stat'ed on their next lookup. */
@@ -196,8 +200,8 @@ size_t yew_compspec_shipped_count(void);
 const char *yew_compspec_shipped_name(size_t i);
 /* Read and validate one shipped file by its listed name. */
 bool yew_compspec_check_shipped(const char *file, char *err, size_t errsz);
-/* Replace the compiled install prefix (NULL restores it), so a test can
- * prove the embedded image is read without an installed runtime. */
+/* Replace the compiled install prefix (NULL restores it) for the shared
+ * runtime decision, and drop every loaded spec. */
 void yew_compspec_test_set_default_root(const char *root);
 /* "disk" or "embedded": where the shipped list was read from. */
 const char *yew_compspec_shipped_source(void);

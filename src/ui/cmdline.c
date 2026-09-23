@@ -798,6 +798,8 @@ static void cmdline_refilter_as(Ed *ed, bool asked)
                                            &line->comp_arena, &query,
                                            YEW_CMDLINE_LIVE_BUDGET_US,
                                            &items);
+    if (query.kind == YEW_COMP_SHELL && yew_compspec_notice(ed))
+        ed->footer_dirty = true;
     if (items.len == 0U) {
         Vec_CompItem_free(&items);
         yew_menu_dismiss(&line->menu);
@@ -1128,6 +1130,8 @@ static CmdStatus complete(Ed *ed, bool previous)
     line->comp_total = yew_comp_filter_run(ed, &line->filter,
                                            &line->comp_arena, &query, 0,
                                            &items);
+    if (query.kind == YEW_COMP_SHELL && yew_compspec_notice(ed))
+        ed->footer_dirty = true;
     if (items.len == 0U && line->filter.gen_pending) {
         /* §5.5: the answer is still coming.  Say nothing; the arrival
          * opens the menu (and edits nothing). */

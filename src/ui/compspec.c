@@ -26,10 +26,6 @@
 #include "util/sort.h"
 #include "util/xdg.h"
 
-#ifndef YEW_RUNTIME_DIR_DEFAULT
-#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
-#endif
-
 enum {
     /* A spec is a few KiB; a megabyte is a mistake, not a spec. */
     SPEC_MAX_BYTES = 1024U * 1024U,
@@ -957,13 +953,9 @@ YewCompSpec *yew_compspec_load_text(const char *origin, const char *src,
 /* Where the files are (§2)                                          */
 /* ---------------------------------------------------------------- */
 
-static const char *test_default_root;
-static bool test_default_root_set;
-
 void yew_compspec_test_set_default_root(const char *root)
 {
-    test_default_root = root;
-    test_default_root_set = root != NULL;
+    yew_runtime_test_set_prefix(root);
     yew_compspec_invalidate_all();
 }
 
@@ -987,34 +979,59 @@ static bool is_dir(const char *path)
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+/* Set when the installed runtime was chosen but has no completions/:
+ * reported once per session, never silently patched over from cwd. */
+static char *stale_prefix;
+static bool stale_reported;
+/* One queued report for yew_compspec_notice (see report()). */
+static char *pending_notice;
+
 /*
  * The shipped completions directory on disk, or NULL for the embedded
- * image.  The same precedence the runtime's other consumers use:
- * $YEW_RUNTIME_DIR alone when set; else the installed prefix -- but only
- * if IT has completions/, because an install from before this sprint
- * does not, and an evening has already been lost to exactly that; else
- * the source tree's runtime/ (a build run from the repository root);
- * else the embedded image.
+ * image (or none).  NOT a second search: it is the directory init.fl was
+ * resolved from (yew_runtime_root), so the two can never disagree.
+ *
+ * In particular an installed runtime WITHOUT completions/ -- a new
+ * binary over an old install -- never falls through to ./runtime: that
+ * would load specs, whose generators run programs, from whatever
+ * repository the user happened to `cd` into (the §9 deferral).  It uses
+ * the embedded image if this build has one, else nothing, and says once
+ * that the install needs refreshing.
  */
 static char *shipped_dir(void)
 {
-    const char *env = getenv("YEW_RUNTIME_DIR");
-    const char *root;
+    const char *root = NULL;
     char *dir;
 
-    if (env != NULL && env[0] != '\0')
-        return join3(env, "/", "completions");
-    root = test_default_root_set ? test_default_root
-                                 : YEW_RUNTIME_DIR_DEFAULT;
-    if (root != NULL && root[0] != '\0') {
+    yew_xfree(stale_prefix);
+    stale_prefix = NULL;
+    switch (yew_runtime_root(&root)) {
+    case YEW_RUNTIME_ROOT_ENV:
+        return join3(root, "/", "completions");
+    case YEW_RUNTIME_ROOT_PREFIX:
         dir = join3(root, "/", "completions");
         if (is_dir(dir))
             return dir;
         yew_xfree(dir);
+        stale_prefix = yew_xstrdup(root);
+        yew_log(YEW_LOG_WARN,
+                "installed runtime %s has no completions/; reinstall yew",
+                root);
+        return NULL;
+    case YEW_RUNTIME_ROOT_SOURCE:
+        /* An uninstalled build run from its own repository: that
+         * repository's init.fl is already running, so its specs expose
+         * nothing new. */
+        dir = join3(root, "/", "completions");
+        if (is_dir(dir))
+            return dir;
+        yew_xfree(dir);
+        return NULL;
+    case YEW_RUNTIME_ROOT_EMBEDDED:
+    case YEW_RUNTIME_ROOT_NONE:
+    default:
+        return NULL;
     }
-    if (is_dir("runtime/completions"))
-        return join3("runtime/", "", "completions");
-    return NULL;
 }
 
 static bool read_fd_all(int fd, Bytebuf *out)
@@ -1567,6 +1584,11 @@ void yew_compspec_invalidate_all(void)
     yew_xfree(shipped.alias);
     yew_xfree(shipped.dir);
     (void)memset(&shipped, 0, sizeof(shipped));
+    yew_xfree(stale_prefix);
+    stale_prefix = NULL;
+    stale_reported = false;
+    yew_xfree(pending_notice);
+    pending_notice = NULL;
 }
 
 void yew_compspec_prompt_closed(void)
@@ -1657,17 +1679,45 @@ static bool valid_name(const char *name)
            strcmp(name, "..") != 0 && strchr(name, '/') == NULL;
 }
 
-static void report(Ed *ed, Slot *s)
+/*
+ * Reports wait here until something with a live prompt drains them
+ * (yew_compspec_notice): a lookup also runs inside the shell lexer and
+ * from bare completion requests, where there is no message line to own.
+ * One line at a time; each reason is queued once per session.
+ */
+static void notice_queue(const char *fmt, const char *a, const char *b)
+{
+    char msg[SPEC_ERR_MAX + 256];
+
+    if (pending_notice != NULL)
+        return; /* the next lookup queues the next one */
+    if (b == NULL)
+        (void)snprintf(msg, sizeof(msg), fmt, a);
+    else
+        (void)snprintf(msg, sizeof(msg), fmt, a, b);
+    pending_notice = yew_xstrdup(msg);
+}
+
+static void report(Slot *s)
 {
     Shipped *f = NULL;
     u32 i;
 
-    if (ed == NULL)
+    if (pending_notice != NULL)
         return;
+    shipped_list();
+    if (stale_prefix != NULL && !stale_reported) {
+        stale_reported = true;
+        notice_queue("installed runtime %s has no completions/; reinstall "
+                     "yew (%s)",
+                     stale_prefix,
+                     yew_runtime_asset_count() != 0U ? "using built-in specs"
+                                                     : "no command specs");
+        return;
+    }
     if (s->user_error != NULL && !s->user_reported) {
         s->user_reported = true;
-        yew_msg(ed, YEW_MSG_WARN, "completion spec rejected: %s",
-                s->user_error);
+        notice_queue("completion spec rejected: %s", s->user_error, NULL);
         return;
     }
     if (s->user_seen)
@@ -1686,8 +1736,18 @@ static void report(Ed *ed, Slot *s)
     }
     if (f != NULL && f->error != NULL && !f->reported) {
         f->reported = true;
-        yew_msg(ed, YEW_MSG_WARN, "completion spec rejected: %s", f->error);
+        notice_queue("completion spec rejected: %s", f->error, NULL);
     }
+}
+
+bool yew_compspec_notice(Ed *ed)
+{
+    if (ed == NULL || pending_notice == NULL)
+        return false;
+    yew_msg(ed, YEW_MSG_WARN, "%s", pending_notice);
+    yew_xfree(pending_notice);
+    pending_notice = NULL;
+    return true;
 }
 
 const YewCompSpec *yew_compspec_get(Ed *ed, const char *name)
@@ -1720,7 +1780,8 @@ const YewCompSpec *yew_compspec_get(Ed *ed, const char *name)
     } else if (s->epoch != slots.epoch) {
         slot_refresh(s);
     }
-    report(ed, s);
+    (void)ed;
+    report(s);
     return s->spec;
 }
 
