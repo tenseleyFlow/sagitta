@@ -330,6 +330,13 @@ u32 yew_comp_shell_route(const YewShCtx *ctx, u32 *sources, u32 *path_filter);
  */
 char *yew_comp_shell_describe(Ed *ed, const YewShCtx *ctx, Arena *a);
 
+/*
+ * Sprint 57.25 §6: route the caret's ARGUMENT word as a keystroke would,
+ * so a command with no spec and no learned help gets its `--help`
+ * requested from the idle path.  Requests only; never spawns.
+ */
+void yew_comp_shell_prewarm(Ed *ed, const YewShCtx *ctx);
+
 /* Tolerant command-line source selection at the cursor. */
 bool yew_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,
                     Arena *scratch, YewCompQuery *out);

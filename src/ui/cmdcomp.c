@@ -26,6 +26,7 @@
 #include "edit/loop.h"
 #include "ui/cmdparse.h"
 #include "ui/compgen.h"
+#include "ui/comphelp.h"
 #include "ui/compspec.h"
 #include "unicode/utf8.h"
 #include "util/buf.h"
@@ -1873,6 +1874,18 @@ static const ShBuiltin sh_builtins[] = {
     {"}", true}, {"!", true}, {"[[", true}, {"]]", true}
 };
 
+/* A name the shell runs itself, whatever $PATH holds. */
+static bool sh_builtin_name(const char *name)
+{
+    size_t i;
+
+    for (i = 0U; name != NULL && i < YEW_ARRAY_LEN(sh_builtins); i++) {
+        if (strcmp(sh_builtins[i].name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
 static u32 enumerate_builtins(const CompReq *req, Vec_CompItem *out)
 {
     CandidateVec matches = {0};
@@ -2163,6 +2176,10 @@ typedef struct ShellPlan {
     bool has_key;
     YewCompGenKey key;
     char *id;      /* node path, slot and flag: part of the ctx_key      */
+    /* Sprint 57.25 §7: the help request whose answer would change these
+     * rows -- queued or in flight -- or NULL.  It rides the ctx_key and
+     * the pager's `…` exactly as a generator key does. */
+    char *help_key;
 } ShellPlan;
 
 /* `-C dir` / `--directory=dir` and `-f file` / `--file=` / `--makefile=`
@@ -2378,6 +2395,93 @@ static char *plan_id(Arena *a, const ShellPlan *p, const YewSpecPoint *pt)
 }
 
 /*
+ * Would the help answer change what this word is offered?  Before the
+ * tree is known: a flag stem, or the first operand (the subcommand
+ * slot).  A later operand of a command whose first operand was not a
+ * flag is a path either way, so it neither waits nor shows the marker.
+ */
+static bool help_pending_matters(const YewShCtx *ctx)
+{
+    u32 i;
+
+    if (ctx->stem != NULL && ctx->stem[0] == '-' && !ctx->dashdash)
+        return true;
+    for (i = 1U; i < ctx->arg_index && ctx->argv[i] != NULL; i++) {
+        if (ctx->argv[i][0] != '-')
+            return false;
+    }
+    return !ctx->dashdash;
+}
+
+/*
+ * Sprint 57.25 §7 rung 3: an operand of a command with no spec, read
+ * against the tree its `--help` taught us.  Only rows 6 (a `-` stem) and
+ * 9 (a plain operand) consult it: the shape rows win as always, and
+ * row 8's C defaults (`cd`, `which`, ...) are a decision, not a gap.  A
+ * shell builtin is what the shell runs, so a same-named binary's help
+ * describes the wrong command.
+ *
+ * Answers only where the tree has something to say -- its flags, its
+ * subcommands, a flag's value.  A plain positional falls through to
+ * 57.23's row (paths), as does everything while the answer is pending.
+ */
+static void plan_help(Ed *ed, Arena *a, ShellPlan *p)
+{
+    YewHelpLookup hl;
+    YewHelpDescend d = YEW_HELP_DESCEND_READY;
+    YewSpecPoint pt;
+    const YewSpecArg *arg = NULL;
+    const char *stem;
+    char key[17];
+    u32 tries;
+
+    if ((p->row != 6U && p->row != 9U) || sh_builtin_name(p->eff.argv[0]))
+        return;
+    if (!yew_comphelp_lookup(ed, p->eff.argv[0], &hl)) {
+        if (hl.pending && help_pending_matters(&p->eff))
+            p->help_key = arena_strdup(a, hl.key);
+        return;
+    }
+    for (tries = 0U; tries <= YEW_COMPHELP_DEPTH_MAX; tries++) {
+        if (!yew_compspec_resolve(hl.spec, &p->eff, &pt) ||
+            pt.command_at != 0U)
+            return;
+        d = yew_comphelp_descend(ed, hl.spec, pt.node, key);
+        if (d != YEW_HELP_DESCEND_CHANGED)
+            break;
+    }
+    stem = p->eff.stem == NULL ? "" : p->eff.stem;
+    if (d == YEW_HELP_DESCEND_PENDING) {
+        /* The node's own help is coming: it offers nothing yet, and
+         * 57.23's row answers meanwhile (§4, §7). */
+        if (key[0] != '\0' &&
+            ((stem[0] == '-' && !pt.flags_ended) ||
+             (pt.pending_flag == NULL && pt.positional == 0U &&
+              !pt.flags_ended)))
+            p->help_key = arena_strdup(a, key);
+        return;
+    }
+    if (pt.pending_flag != NULL) {
+        arg = pt.pending_flag->arg;
+        p->value_at = pt.after_equals ? pt.value_at : 0U;
+    } else if (stem[0] == '-' && !pt.flags_ended &&
+               pt.positional != UINT32_MAX) {
+        p->flags = true;
+    } else if (pt.subcommands_allowed) {
+        p->subs = true;
+    } else {
+        return; /* a plain positional: 57.23's row stands */
+    }
+    p->spec = hl.spec;
+    p->node = pt.node;
+    p->row = SHELL_ROW_SPEC;
+    p->sources = 0U;
+    p->mask = YEW_PATH_ANY;
+    plan_arg(ed, &p->eff, arg, a, p);
+    p->id = plan_id(a, p, &pt);
+}
+
+/*
  * §4: §3's table first -- the SHAPE rows (an active expansion, $VAR,
  * ~user, an explicit path) win in every position, spec or not -- then,
  * for an operand of a command that has a spec, the spec's answer.
@@ -2401,7 +2505,20 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
             p->eff.argc == 0U || p->eff.argv[0] == NULL)
             return;
         spec = yew_compspec_get(ed, p->eff.argv[0]);
-        if (spec == NULL || !yew_compspec_resolve(spec, &p->eff, &pt))
+        if (spec == NULL) {
+            /*
+             * §7's ladder for an operand: 1. a spec (above);
+             * 2. fish -- Sprint 57.26 slots its oracle in HERE, between
+             *    the spec and the help rung, and answers first when it
+             *    has rules for the command.  Not yet: a no-op rung;
+             * 3. the tree learned from `--help` (plan_help);
+             * 4. 57.23's rows 6, 8 and 9, which stand when 3 declines
+             *    or is still pending.
+             */
+            plan_help(ed, a, p);
+            return;
+        }
+        if (!yew_compspec_resolve(spec, &p->eff, &pt))
             return; /* 57.23's rows 6, 8 and 9 stand */
         if (pt.command_at != 0U) {
             plan_reenter(&p->eff, pt.command_at, a);
@@ -2451,6 +2568,25 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
     /* Re-entered too often: offer nothing. */
     p->row = 1U;
     p->sources = 0U;
+}
+
+/*
+ * Sprint 57.25 §6: plan the caret's word exactly as a keystroke would --
+ * which is where a missing help tree gets asked for -- but from the idle
+ * path, so the first Tab on a never-seen tool does not pay.  Only the
+ * request is made here; yew_comphelp_idle spawns it.
+ */
+void yew_comp_shell_prewarm(Ed *ed, const YewShCtx *ctx)
+{
+    ShellPlan p;
+    Arena a;
+
+    if (ed == NULL || ctx == NULL || ctx->stem == NULL ||
+        ctx->pos != YEW_SH_POS_ARGUMENT)
+        return;
+    arena_init(&a);
+    shell_plan(ed, ctx, &a, &p);
+    arena_free_all(&a);
 }
 
 char *yew_comp_shell_describe(Ed *ed, const YewShCtx *ctx, Arena *a)
@@ -3145,6 +3281,11 @@ static char *shell_ctx_key(Ed *ed, const YewCompQuery *q, char **gen_key)
     if (plan.has_key) {
         *gen_key = yew_compgen_key_string(&plan.key);
         bytebuf_printf(&key, "|%s", *gen_key);
+    } else if (plan.help_key != NULL) {
+        /* Sprint 57.25: a help answer on its way is this set's pending
+         * key -- the arrival refilters exactly the menu that asked. */
+        *gen_key = dup_range(plan.help_key, strlen(plan.help_key));
+        bytebuf_printf(&key, "|help:%s", *gen_key);
     }
     out = dup_range((const char *)key.data, key.len);
     bytebuf_free(&key);
@@ -3237,7 +3378,9 @@ u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
         gen_key = NULL;
     }
     /* §5.5: the `…` marker is STATE -- in flight with nothing cached. */
-    f->gen_pending = f->gen_key != NULL && yew_compgen_awaiting(f->gen_key);
+    f->gen_pending = f->gen_key != NULL &&
+                     (yew_compgen_awaiting(f->gen_key) ||
+                      yew_comphelp_awaiting(f->gen_key));
     yew_xfree(head);
     yew_xfree(ctx_key);
     yew_xfree(gen_key);
