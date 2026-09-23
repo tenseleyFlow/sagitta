@@ -332,6 +332,7 @@ void yew_menu_dismiss(Menu *m)
     m->total = 0U;
     m->scanning = false;
     m->pending = false;
+    m->where[0] = '\0';
 }
 
 static Cell styled_blank(const YewUiStyle *style)
@@ -409,19 +410,65 @@ static void highlight_match(Grid *grid, u16 row, u16 col0, u16 right,
  * registers NO region: it names no candidate, so a click must fall
  * through to the inert block rather than select the row it covers.
  */
+static int text_cells(const char *s)
+{
+    size_t n = strlen(s);
+    int w = n == 0U ? 0 : yew_str_width((const u8 *)s, n, 1U);
+
+    return w > 0 ? w : 0;
+}
+
+/*
+ * Sprint 57.32 §4: the `where` note in at most `max` cells, truncated
+ * from the LEFT -- the end of a path names the directory -- keeping an
+ * `in ` lead: `in …/deep/ch7/`.
+ */
+static void where_fit(const char *where, int max, char *out, size_t cap)
+{
+    const char *lead = strncmp(where, "in ", 3U) == 0 ? "in " : "";
+    const char *p = where + strlen(lead);
+    int budget = max - text_cells(lead) - 1;
+
+    out[0] = '\0';
+    if (where[0] == '\0' || max <= 0)
+        return;
+    if (text_cells(where) <= max) {
+        if (snprintf(out, cap, "%s", where) < 0)
+            out[0] = '\0';
+        return;
+    }
+    if (budget <= 0)
+        return;
+    while (*p != '\0' &&
+           (text_cells(p) > budget || ((u8)*p & 0xC0U) == 0x80U))
+        p++;
+    if (snprintf(out, cap, "%s\xE2\x80\xA6%s", lead, p) < 0)
+        out[0] = '\0';
+}
+
 static void draw_tail(Ed *ed, u16 row, u16 x, u16 right, u32 hidden,
-                      const YewUiStyle *style)
+                      const char *where, const YewUiStyle *style)
 {
     YewUiStyle tail_style = *style;
     char text[64];
+    char note[YEW_COMP_WHERE_MAX];
+    u16 col;
 
     tail_style.attrs |= YEW_ATTR_DIM;
     yew_grid_fill(&ed->grid, row, x, right, styled_blank(&tail_style));
     (void)snprintf(text, sizeof(text), "  \xE2\x80\xA6 and %u more",
                    (unsigned)hidden);
-    (void)yew_grid_puts(&ed->grid, row, x, (const u8 *)text, strlen(text),
+    col = yew_grid_puts(&ed->grid, row, x, (const u8 *)text, strlen(text),
                         tail_style.row_fg, tail_style.row_bg,
                         tail_style.attrs);
+    /* The tail is the last row, so the footer's note rides on it. */
+    where_fit(where, (int)right - (int)col - 2, note, sizeof(note));
+    if (note[0] != '\0')
+        (void)yew_grid_puts(&ed->grid, row,
+                            (u16)(right - (u16)text_cells(note)),
+                            (const u8 *)note, strlen(note),
+                            tail_style.row_fg, tail_style.row_bg,
+                            tail_style.attrs);
 }
 
 void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
@@ -456,7 +503,7 @@ void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
         YewUiStyle row_style = *style;
         Rect row_rect = {area.x, row, area.w, 1U};
         char label[512];
-        char footer[64];
+        char footer[64 + YEW_COMP_WHERE_MAX];
         u16 footer_cells;
         u16 col;
         bool selected;
@@ -464,7 +511,7 @@ void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
         if (i >= cand_rows) {
             /* The last row is the tail, and it is the whole row: no
              * label, no detail, no footer.  menu.h states the rule. */
-            draw_tail(ed, row, area.x, right, hidden, style);
+            draw_tail(ed, row, area.x, right, hidden, m->where, style);
             break;
         }
         if (index >= m->items.len)
@@ -514,6 +561,25 @@ void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
             else if (m->sel >= 0)
                 (void)snprintf(footer, sizeof(footer), "%u/%u",
                                (unsigned)(m->sel + 1), (unsigned)m->total);
+            if (m->where[0] != '\0') {
+                /* Sprint 57.32 §4: `in ch7/ 2/5`; the note gives way
+                 * first, from the left, and never takes more than half
+                 * the row. */
+                char note[YEW_COMP_WHERE_MAX];
+                char count[64];
+                int half = ((int)right - (int)area.x) / 2;
+
+                (void)memcpy(count, footer, sizeof(count));
+                count[sizeof(count) - 1U] = '\0';
+                where_fit(m->where,
+                          half - text_cells(count) -
+                              (count[0] != '\0' ? 1 : 0),
+                          note, sizeof(note));
+                if (note[0] != '\0' &&
+                    snprintf(footer, sizeof(footer), "%s%s%s", note,
+                             count[0] != '\0' ? " " : "", count) < 0)
+                    footer[0] = '\0';
+            }
             n = strlen(footer);
             width = n == 0U ? 0 : yew_str_width((const u8 *)footer, n, 1U);
             footer_cells = width > 0 ? (u16)width : 0U;
