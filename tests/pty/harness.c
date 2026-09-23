@@ -551,7 +551,8 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *clipboard, const char *audit_lang,
                    const char *audit_tz, const char *audit_colorterm,
                    const char *audit_term_program,
-                   const char *exec_path, const char *home)
+                   const char *exec_path, const char *home,
+                   const char *fish)
 {
     static const char *const keys[] = {
         "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
@@ -577,7 +578,10 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
          * golden recorded before this sprint can move. */
         "PATH",
         /* Sprint 57.24: likewise -- a fixture home, or none. */
-        "HOME"
+        "HOME",
+        /* Sprint 57.26: ALWAYS present -- empty means no fish, so the
+         * oracle is inert unless a case supplies a stub. */
+        "YEW_TEST_FISH"
     };
     const char *values[] = {
         term, colors, "1", "500", "25", state_dir, state_dir,
@@ -595,7 +599,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "1700000000",
         no_color, ascii, runtime_dir, state_dir, shadow_test, "1", state_dir,
         prof, log, clipboard, audit_tz, audit_colorterm, audit_term_program,
-        exec_path, home
+        exec_path, home, fish == NULL ? "" : fish
     };
     size_t i;
     size_t out_i = 0U;
@@ -724,7 +728,7 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
                        getenv("YEW_PTY_AUDIT_TZ"),
                        getenv("YEW_PTY_AUDIT_COLORTERM"),
                        getenv("YEW_PTY_AUDIT_TERM_PROGRAM"),
-                       c->exec_path, c->home_dir)) {
+                       c->exec_path, c->home_dir, c->fish_path)) {
         free(runtime_dir);
         strv_free(argv);
         ptc_fail(c, "allocating pinned environment");

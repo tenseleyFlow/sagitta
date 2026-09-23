@@ -557,6 +557,7 @@ void test_osc52_tmux_escape_doubling_golden(void);
 void test_osc52_screen_chunking_golden(void);
 void test_osc52_environment_selection(void);
 void test_pty_environment_exact(void);
+void test_pty_env_never_inherits_history_sources(void);
 void test_pty_spawn_clears_signal_mask(void);
 void test_pty_timeout_reaps_child(void);
 void test_pty_post_snapshot_protocol_error_fails_cleanup(void);

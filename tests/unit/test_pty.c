@@ -42,7 +42,9 @@ void test_pty_environment_exact(void)
         "YEW_AI_MOCK=1",
         /* Sprint 53 keeps non-repository PTYs from discovering the source
          * checkout above their isolated workspace. */
-        "GIT_CEILING_DIRECTORIES=/tmp/yew-pty-state"
+        "GIT_CEILING_DIRECTORIES=/tmp/yew-pty-state",
+        /* Sprint 57.26: no fish unless a case supplies one. */
+        "YEW_TEST_FISH="
     };
     char *envp[YEW_PTY_ENV_COUNT + 1U] = {0};
     size_t i;
@@ -57,7 +59,7 @@ void test_pty_environment_exact(void)
                              "/tmp/yew-pty-state",
                              NULL, "0", "/tmp/yew-runtime", "0",
                              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                             NULL, NULL));
+                             NULL, NULL, NULL));
     for (i = 0U; i < YEW_ARRAY_LEN(expected); i++)
         YEW_ASSERT_EQ_STR(envp[i], expected[i]);
     for (; i <= YEW_PTY_ENV_COUNT; i++)
@@ -70,7 +72,7 @@ void test_pty_environment_exact(void)
                              "/tmp/yew-pty-state",
                              "", "0", "/tmp/yew-runtime", "0",
                              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                             NULL, NULL));
+                             NULL, NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
@@ -79,7 +81,7 @@ void test_pty_environment_exact(void)
                              "/tmp/yew-pty-state",
                              "0", "0", "/tmp/yew-runtime", "0",
                              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                             NULL, NULL));
+                             NULL, NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=0");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
@@ -87,7 +89,8 @@ void test_pty_environment_exact(void)
     YEW_ASSERT(ptc_env_build(envp, "dumb", "16", "/tmp/yew-pty-state",
                              NULL, "0", "/tmp/yew-runtime", "0",
                              "1", "/tmp/yew-rss.log", "none",
-                             NULL, NULL, NULL, NULL, "bin", "/tmp/home"));
+                             NULL, NULL, NULL, NULL, "bin", "/tmp/home",
+                             "/tmp/stub-fish"));
     YEW_ASSERT_EQ_STR(envp[0], "TERM=dumb");
     YEW_ASSERT_EQ_STR(envp[19], "YEW_PROF=1");
     YEW_ASSERT_EQ_STR(envp[20], "YEW_LOG=/tmp/yew-rss.log");
@@ -96,6 +99,7 @@ void test_pty_environment_exact(void)
     YEW_ASSERT_EQ_STR(envp[22], "PATH=bin");
     /* Sprint 57.24: so is HOME. */
     YEW_ASSERT_EQ_STR(envp[23], "HOME=/tmp/home");
+    YEW_ASSERT_EQ_STR(envp[24], "YEW_TEST_FISH=/tmp/stub-fish");
     ptc_env_free(envp);
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
@@ -103,13 +107,63 @@ void test_pty_environment_exact(void)
                              "/tmp/yew-runtime", "0", NULL, NULL, NULL,
                              "tr_TR.UTF-8@hostile", "GMT+25;bad",
                              "truecolor;touch-no-file",
-                             "WezTerm;touch-no-file", NULL, NULL));
+                             "WezTerm;touch-no-file", NULL, NULL, NULL));
     YEW_ASSERT_EQ_STR(envp[7], "LANG=tr_TR.UTF-8@hostile");
     YEW_ASSERT_EQ_STR(envp[8], "LC_ALL=tr_TR.UTF-8@hostile");
     YEW_ASSERT_EQ_STR(envp[19], "TZ=GMT+25;bad");
     YEW_ASSERT_EQ_STR(envp[20], "COLORTERM=truecolor;touch-no-file");
     YEW_ASSERT_EQ_STR(envp[21], "TERM_PROGRAM=WezTerm;touch-no-file");
     ptc_env_free(envp);
+}
+
+/*
+ * Sprint 57.26: `shell.suggest_history` defaults to `all`, so a PTY child
+ * that inherited the runner's HOME, XDG_DATA_HOME or HISTFILE would draw
+ * the developer's own shell commands into a golden.  The environment is
+ * built from scratch: set all three to a sentinel in THIS process and
+ * none reaches the child's table, and fish is exported empty.
+ */
+void test_pty_env_never_inherits_history_sources(void)
+{
+    static const char *const names[] = {"HOME", "XDG_DATA_HOME",
+                                        "HISTFILE"};
+    char *saved[3];
+    char *envp[YEW_PTY_ENV_COUNT + 1U] = {0};
+    size_t i;
+    size_t k;
+    bool fish_empty = false;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        const char *v = getenv(names[i]);
+
+        saved[i] = v == NULL ? NULL : yew_xstrdup(v);
+        YEW_ASSERT_EQ_I64(setenv(names[i], "/tmp/yew-sentinel-real-home",
+                                 1), 0);
+    }
+    YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
+                             "/tmp/yew-pty-state", NULL, "0",
+                             "/tmp/yew-runtime", "0", NULL, NULL, NULL,
+                             NULL, NULL, NULL, NULL, NULL, NULL, NULL));
+    for (k = 0U; envp[k] != NULL; k++) {
+        YEW_ASSERT_NULL(strstr(envp[k], "yew-sentinel-real-home"));
+        for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+            size_t n = strlen(names[i]);
+
+            YEW_ASSERT(!(strncmp(envp[k], names[i], n) == 0 &&
+                         envp[k][n] == '='));
+        }
+        if (strcmp(envp[k], "YEW_TEST_FISH=") == 0)
+            fish_empty = true;
+    }
+    YEW_ASSERT(fish_empty);
+    ptc_env_free(envp);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        if (saved[i] == NULL)
+            YEW_ASSERT_EQ_I64(unsetenv(names[i]), 0);
+        else
+            YEW_ASSERT_EQ_I64(setenv(names[i], saved[i], 1), 0);
+        yew_xfree(saved[i]);
+    }
 }
 
 void test_pty_spawn_clears_signal_mask(void)

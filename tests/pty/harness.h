@@ -10,7 +10,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define YEW_PTY_ENV_COUNT 28U
+#define YEW_PTY_ENV_COUNT 29U
 
 typedef struct PtySpec {
     /*
@@ -109,6 +109,16 @@ struct PtyCtx {
      * the developer's real ~/.ssh.
      */
     const char *home_dir;
+    /*
+     * Sprint 57.26: the fish the child's completion oracle runs -- a
+     * case's stub -- or NULL, which exports YEW_TEST_FISH EMPTY: no fish
+     * at all, whatever the runner's PATH holds.  The history sources are
+     * inert the same way: the child's environment is built from scratch,
+     * so it has no HISTFILE and no XDG_DATA_HOME, and a HOME only when a
+     * case gives it a fixture one.  A developer's shell history can never
+     * reach a golden.
+     */
+    const char *fish_path;
     /* The binary, made absolute when cwd is set. */
     char *resolved_bin;
     char failure[512];
@@ -126,7 +136,8 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *clipboard, const char *audit_lang,
                    const char *audit_tz, const char *audit_colorterm,
                    const char *audit_term_program,
-                   const char *exec_path, const char *home);
+                   const char *exec_path, const char *home,
+                   const char *fish);
 void ptc_env_free(char **envp);
 
 void ptc_spawn(PtyCtx *c, const char *bin, ...);

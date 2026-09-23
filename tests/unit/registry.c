@@ -588,6 +588,7 @@ const YewTest yew_tests[] = {
     T(osc52_screen_chunking_golden),
     T(osc52_environment_selection),
     T(pty_environment_exact),
+    T(pty_env_never_inherits_history_sources),
     T(pty_spawn_clears_signal_mask),
     T(pty_timeout_reaps_child),
     T(pty_post_snapshot_protocol_error_fails_cleanup),
