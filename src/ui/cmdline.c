@@ -17,6 +17,7 @@
 #include "text/edit.h"
 #include "text/register.h"
 #include "ui/compgen.h"
+#include "ui/comphelp.h"
 #include "ui/compspec.h"
 #include "ui/message.h"
 #include "ui/statusline.h"
@@ -46,6 +47,10 @@ enum {
      */
     YEW_CMDLINE_LIVE_BUDGET_US = 1500
 };
+
+/* Sprint 57.25 §6: the prompt's line changed since the idle path last
+ * considered prewarming its command's help. */
+static bool comp_idle_dirty;
 
 static bool parse_option_value(const OptDesc *desc, const char *text,
                                OptVal *out)
@@ -493,6 +498,7 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     }
     line->err = (CmdErr){0};
     line->scroll = 0U;
+    comp_idle_dirty = true;
     yew_msg_clear(ed);
     if (old != YEW_MODE_E) {
         yew_fl_hook_mode(ed, FL_EV_MODE_LEAVE, yew_modes[old].name);
@@ -565,6 +571,10 @@ void yew_cmdline_close(Ed *ed, bool accepted)
      * one prompt -- the next one must see branches made in between. */
     yew_compgen_cache_clear();
     yew_compspec_prompt_closed();
+    /* Sprint 57.25: requests this prompt made and never spawned go with
+     * it; learned trees stay (they are keyed by the executable). */
+    yew_comphelp_prompt_closed();
+    comp_idle_dirty = false;
     history_release(ed, line->kind, line->history);
     line->history = NULL;
     yew_hist_cur_dispose(&line->hist);
@@ -798,7 +808,8 @@ static void cmdline_refilter_as(Ed *ed, bool asked)
                                            &line->comp_arena, &query,
                                            YEW_CMDLINE_LIVE_BUDGET_US,
                                            &items);
-    if (query.kind == YEW_COMP_SHELL && yew_compspec_notice(ed))
+    if (query.kind == YEW_COMP_SHELL &&
+        (yew_compspec_notice(ed) || yew_comphelp_notice(ed)))
         ed->footer_dirty = true;
     if (items.len == 0U) {
         Vec_CompItem_free(&items);
@@ -892,6 +903,43 @@ bool yew_cmdline_comp_tick(Ed *ed)
     return false;
 }
 
+/*
+ * Sprint 57.25 §6: the line changed since the idle path last looked at
+ * it, so the prewarm has a new caret to consider.  One flag, read by the
+ * loop's deadline and acted on by yew_cmdline_comp_idle -- the pair
+ * share yew_cmdline_comp_idle_pending, as the scan tick's pair does.
+ */
+bool yew_cmdline_comp_idle_pending(const Ed *ed)
+{
+    if (ed == NULL || !ed->cmdline.active ||
+        ed->cmdline.kind != YEW_PROMPT_CMD)
+        return false;
+    return comp_idle_dirty || yew_comphelp_idle_ready();
+}
+
+u32 yew_cmdline_comp_idle(Ed *ed)
+{
+    if (!yew_cmdline_comp_idle_pending(ed))
+        return 0U;
+    if (comp_idle_dirty) {
+        CmdLine *line = &ed->cmdline;
+        YewCompQuery query;
+        Arena scratch;
+        char *text;
+
+        comp_idle_dirty = false;
+        text = text_string(line->buf);
+        arena_init(&scratch);
+        if (yew_comp_query(ed, text, (size_t)yew_textbuf_len(line->buf),
+                           (size_t)line->cur.pos.v, &scratch, &query) &&
+            query.kind == YEW_COMP_SHELL && query.shell != NULL)
+            yew_comp_shell_prewarm(ed, query.shell);
+        arena_free_all(&scratch);
+        yew_xfree(text);
+    }
+    return yew_comphelp_idle(ed);
+}
+
 void yew_cmdline_edited(Ed *ed)
 {
     char *draft;
@@ -911,6 +959,7 @@ void yew_cmdline_edited(Ed *ed)
      */
     yew_menu_blur(&ed->cmdline.menu);
     ed->cmdline.comp_asked = false;
+    comp_idle_dirty = true;
     cmdline_refilter(ed);
     ed->footer_dirty = true;
     /* Search-as-you-type: the `/` and `?` prompts preview on every
@@ -1130,7 +1179,8 @@ static CmdStatus complete(Ed *ed, bool previous)
     line->comp_total = yew_comp_filter_run(ed, &line->filter,
                                            &line->comp_arena, &query, 0,
                                            &items);
-    if (query.kind == YEW_COMP_SHELL && yew_compspec_notice(ed))
+    if (query.kind == YEW_COMP_SHELL &&
+        (yew_compspec_notice(ed) || yew_comphelp_notice(ed)))
         ed->footer_dirty = true;
     if (items.len == 0U && line->filter.gen_pending) {
         /* §5.5: the answer is still coming.  Say nothing; the arrival

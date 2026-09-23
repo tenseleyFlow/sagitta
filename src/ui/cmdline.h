@@ -96,6 +96,19 @@ void yew_cmdline_edited(Ed *ed);
 bool yew_cmdline_comp_tick(Ed *ed);
 bool yew_cmdline_comp_scanning(const Ed *ed);
 
+/*
+ * Sprint 57.25 §6: the IDLE half of completion -- the loop calls it only
+ * on a turn that carried no input, so a subprocess spawn (~1 ms) is never
+ * charged to a keystroke.  It asks for the help of the command whose
+ * argument the caret sits in (the prewarm) and spawns one queued help
+ * request.  Returns the jobs it started.
+ *
+ * `idle_pending` is the condition it would act on, for
+ * yew_loop_deadline: the same pairing rule as `scanning` above.
+ */
+u32 yew_cmdline_comp_idle(Ed *ed);
+bool yew_cmdline_comp_idle_pending(const Ed *ed);
+
 /* Sprint 57.24 §5.4: a completion generator's answer for `key` landed in
  * the cache.  Refilters an open `:` menu that asked for exactly that key;
  * never edits the prompt's text. */

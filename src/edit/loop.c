@@ -305,6 +305,11 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
      * for what a mismatched pair does. */
     if (yew_cmdline_comp_scanning(ed))
         return 0;
+    /* Sprint 57.25 §6: a help request (or a prewarm to consider) waits
+     * for a turn with no input; do not sleep past it.  The predicate is
+     * the one yew_cmdline_comp_idle acts on. */
+    if (yew_cmdline_comp_idle_pending(ed))
+        return 0;
     /* Syntax propagation is sliced on a 16 ms idle cadence.  It is work,
      * but unlike picker scans it must not turn an idle editor into a busy
      * loop while a million-line wave is settling. */
@@ -668,6 +673,11 @@ int yew_loop_run(Ed *ed)
         /* The completion scan is sliced for the same reason and drains
          * in the same place. */
         (void)yew_cmdline_comp_tick(ed);
+        /* Sprint 57.25 §6: spawning a `--help` job costs ~1 ms, so it
+         * happens only on a turn that carried no input -- never charged
+         * to a keystroke (invariant 4). */
+        if (!had_input && !raw_input)
+            (void)yew_cmdline_comp_idle(ed);
         /* Symbol indexing is stale-safe, so preserve input-to-paint latency
          * by waiting for a short idle window.  The deadline above wakes the
          * loop even when no further event arrives. */
