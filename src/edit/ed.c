@@ -745,6 +745,7 @@ void yew_ed_init(Ed *ed)
     bytebuf_init(&ed->frame);
     bytebuf_init(&ed->paste);
     yew_reg_init(&ed->regs);
+    yew_yank_init(&ed->yank);
     yew_timers_init(&ed->timers);
     yew_jobs_init(&ed->jobs);
     yew_ai_state_init(ed);
@@ -882,6 +883,7 @@ void yew_ed_free(Ed *ed)
     ed->theme_last_light = NULL;
     yew_record_free(&ed->rec);
     yew_reg_free(&ed->regs);
+    yew_yank_free(&ed->yank);
     yew_msg_clear(ed);
     yew_msg_hint_clear(ed);
     if (ed->grid_ready)
@@ -1715,6 +1717,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     cx->ed = ed;
     if (cx->win == NULL)
         cx->win = ed->win;
+    ed->cmd_seq++;
     changes = (desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U;
     edits_text = changes || strcmp(desc->name, "ed.edit.undo") == 0 ||
                  strcmp(desc->name, "ed.edit.redo") == 0;
@@ -1737,7 +1740,8 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
      * therefore its own undo step, and the next typed character opens a
      * fresh one.
      */
-    readline_yank = strcmp(desc->name, "ed.edit.kill.yank") == 0;
+    readline_yank = strcmp(desc->name, "ed.edit.kill.yank") == 0 ||
+                    strcmp(desc->name, "ed.edit.kill.yank_pop") == 0;
     readline_kill = strncmp(desc->name, "ed.edit.kill.", 13U) == 0 &&
                     !readline_yank;
     readline_op = readline_yank || readline_kill ||

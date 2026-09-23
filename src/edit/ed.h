@@ -25,6 +25,7 @@
 #include "term/tty.h"
 #include "text/edit.h"
 #include "text/register.h"
+#include "text/yankstack.h"
 #include "search/searchui.h"
 #include "syn/theme.h"
 #include "ui/cmdline.h"
@@ -153,6 +154,9 @@ struct Ed {
      * filesystem. */
     WsState state;
     Registers regs;
+    /* Sprint 57.28: readline's kill ring, shared by Insert mode and the
+     * prompt and apart from `regs` (see text/yankstack.h). */
+    YewYankStack yank;
     Buffer buffer;
     Win single_win;
     Win *win;
@@ -194,6 +198,13 @@ struct Ed {
     CmdId last_cmd;
     CmdStatus last_status;
     u64 dispatch_count;
+    /*
+     * Sprint 57.28 §1: bumped once by every yew_ed_invoke, so "the
+     * previous command was X" is `seq == recorded + 1` -- consecutive
+     * kills, yank-pop and last-argument read it, and no command has to
+     * clear anything for the chain to break.
+     */
+    u64 cmd_seq;
     char dispatch_message[192];
 
     /* The loop's clock, handed in with each key; nothing in the core

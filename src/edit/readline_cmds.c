@@ -4,7 +4,9 @@
 #include "edit/motion.h"
 #include "edit/multicursor.h"
 #include "edit/sel_actions.h"
-#include "text/register.h"
+#include "text/yankstack.h"
+#include "ui/cmdline.h"
+#include "ui/message.h"
 #include "unicode/case.h"
 #include "unicode/coords.h"
 #include "unicode/utf8.h"
@@ -138,18 +140,17 @@ static void rl_plan_kill(Win *win, UnitCtx *u, RlSpanFn span_of,
 }
 
 /*
- * Apply a plan and hand what it removed to the kill ring.
+ * Apply a plan and hand what it removed to the yank stack.
  *
- * The register value is the concatenation of every killed span in
- * document order, which is how ed.sel.delete already records a
- * multi-cursor cut.  yew_reg_delete is the same entry point that command
- * uses, so the unnamed register, the small-delete register and the ring
- * all see this kill exactly as they see a selection delete.
+ * The entry is the concatenation of every killed span in document order,
+ * one entry for the whole fan-out.  A kill over several cursors is
+ * YEW_KILL_ALONE: it never joins the previous kill and the next never
+ * joins it.  Nothing here touches a register (text/yankstack.h).
  */
 static CmdStatus rl_kill_apply(CmdCtx *cx, Win *win, TextBuf *tb,
-                               SelEditVec *edits)
+                               SelEditVec *edits, YewKillDir dir)
 {
-    RegVal value;
+    Bytebuf killed;
     EditCtx ec;
     size_t i;
 
@@ -157,30 +158,32 @@ static CmdStatus rl_kill_apply(CmdCtx *cx, Win *win, TextBuf *tb,
         yew_sel_edits_free(edits);
         return rl_nothing_to_do();
     }
+    if (win->cs.curs.len > 1U)
+        dir = YEW_KILL_ALONE;
     ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
     rl_promote_multi(cx, &ec);
-    yew_regval_init(&value);
-    value.type = (u8)YEW_REG_CHARWISE;
+    bytebuf_init(&killed);
     for (i = 0U; i < edits->len; i++) {
         Bytebuf part = yew_sel_copy_span(tb, edits->data[i].span);
 
-        bytebuf_append(&value.bytes, part.data, part.len);
+        bytebuf_append(&killed, part.data, part.len);
         bytebuf_free(&part);
     }
     if (!yew_sel_apply_edits(cx, edits, NULL)) {
         yew_sel_edits_free(edits);
-        yew_regval_free(&value);
+        bytebuf_free(&killed);
         return YEW_CMD_ERR_IO;
     }
-    yew_reg_delete(&cx->ed->regs, 0U, &value);
-    yew_regval_free(&value);
+    yew_yank_kill(&cx->ed->yank, killed.data, killed.len, dir,
+                  cx->ed->cmd_seq, win);
+    bytebuf_free(&killed);
     yew_sel_edits_free(edits);
     yew_cset_normalize(tb, &win->cs);
     yew_win_follow_cursor(win);
     return YEW_CMD_OK;
 }
 
-static CmdStatus rl_kill(CmdCtx *cx, RlSpanFn span_of)
+static CmdStatus rl_kill(CmdCtx *cx, RlSpanFn span_of, YewKillDir dir)
 {
     Win *win;
     TextBuf *tb;
@@ -190,7 +193,7 @@ static CmdStatus rl_kill(CmdCtx *cx, RlSpanFn span_of)
     if (!rl_context(cx, &win, &tb, &u))
         return YEW_CMD_ERR_STATE;
     rl_plan_kill(win, &u, span_of, &edits);
-    return rl_kill_apply(cx, win, tb, &edits);
+    return rl_kill_apply(cx, win, tb, &edits, dir);
 }
 
 static bool rl_span_word_prev(UnitCtx *u, ByteOff pos, Span *out)
@@ -200,6 +203,47 @@ static bool rl_span_word_prev(UnitCtx *u, ByteOff pos, Span *out)
     out->lo = start.v;
     out->hi = pos.v;
     return start.v < pos.v;
+}
+
+static bool rl_is_blank(u8 c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' ||
+           c == '\f';
+}
+
+static bool rl_byte_before(const TextBuf *tb, u64 at, u8 *out)
+{
+    Bytebuf one = yew_sel_copy_span(tb, (Span){at - 1U, at});
+    bool ok = one.len == 1U;
+
+    if (ok)
+        *out = one.data[0];
+    bytebuf_free(&one);
+    return ok;
+}
+
+/*
+ * bash's unix-word-rubout: back over blanks, then back to the previous
+ * blank.  Whitespace is the ONLY delimiter, so `a/b/c` and `--x=y` go
+ * whole -- which is why the prompt's C-w is this and not the word-char
+ * kill A-<bs> keeps.  The blanks are ASCII: every byte of a multi-byte
+ * sequence is >= 0x80, so stepping bytes never splits a grapheme at a
+ * stop, and the span always ends on a blank boundary or the line start.
+ */
+static bool rl_span_ws_word_prev(UnitCtx *u, ByteOff pos, Span *out)
+{
+    u64 at = pos.v;
+    u64 home = yew_textbuf_line_span(u->tb,
+                                     yew_textbuf_line_of(u->tb, pos)).lo;
+    u8 c = 0U;
+
+    while (at > home && rl_byte_before(u->tb, at, &c) && rl_is_blank(c))
+        at--;
+    while (at > home && rl_byte_before(u->tb, at, &c) && !rl_is_blank(c))
+        at--;
+    out->lo = at;
+    out->hi = pos.v;
+    return out->lo < out->hi;
 }
 
 /*
@@ -249,66 +293,129 @@ static bool rl_span_to_end(UnitCtx *u, ByteOff pos, Span *out)
 
 CmdStatus yew_rl_cmd_kill_word_prev(CmdCtx *cx)
 {
-    return rl_kill(cx, rl_span_word_prev);
+    return rl_kill(cx, rl_span_word_prev, YEW_KILL_BACKWARD);
 }
 
 CmdStatus yew_rl_cmd_kill_word_next(CmdCtx *cx)
 {
-    return rl_kill(cx, rl_span_word_next);
+    return rl_kill(cx, rl_span_word_next, YEW_KILL_FORWARD);
 }
 
 CmdStatus yew_rl_cmd_kill_to_home(CmdCtx *cx)
 {
-    return rl_kill(cx, rl_span_to_home);
+    return rl_kill(cx, rl_span_to_home, YEW_KILL_BACKWARD);
 }
 
 CmdStatus yew_rl_cmd_kill_to_end(CmdCtx *cx)
 {
-    return rl_kill(cx, rl_span_to_end);
+    return rl_kill(cx, rl_span_to_end, YEW_KILL_FORWARD);
+}
+
+CmdStatus yew_rl_cmd_kill_ws_word_prev(CmdCtx *cx)
+{
+    return rl_kill(cx, rl_span_ws_word_prev, YEW_KILL_BACKWARD);
 }
 
 /*
- * Yank the most recent kill at every caret.
- *
- * The bytes go in verbatim and charwise.  ed.clip.paste reads the SYSTEM
- * clipboard and is a different key (C-v); this one reads the unnamed
- * register, which is where every yew delete and every kill above lands,
- * so kill-then-yank round-trips byte for byte.  A linewise value still
- * carries its trailing EOL, so yanking one at a caret splits the line --
- * which is what killing a whole line and yanking it back should do.
+ * Put `entry` at every caret, replacing the `replace` bytes before each
+ * one (0 for a yank, the previous yank's length for a yank-pop).  The
+ * carets sit at the END of what the last yank inserted -- yew_cset_adjust
+ * biases a caret at an insertion point past it -- so the spans a pop
+ * replaces are known without having been stored: every caret yanked the
+ * same text.
  */
-CmdStatus yew_rl_cmd_kill_yank(CmdCtx *cx)
+static CmdStatus rl_yank_put(CmdCtx *cx, const Bytebuf *entry, u64 replace,
+                             u32 k)
 {
     Win *win;
     TextBuf *tb;
     UnitCtx u;
     SelEditVec edits = {0};
     EditCtx ec;
-    const RegVal *value;
+    Bytebuf text;
+    YewYankStack *y = &cx->ed->yank;
     size_t i;
 
     if (!rl_context(cx, &win, &tb, &u))
         return YEW_CMD_ERR_STATE;
-    value = yew_reg_get(&cx->ed->regs, (u8)'"');
-    if (value == NULL || value->bytes.len == 0U)
-        return rl_nothing_to_do();
-    ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
-    rl_promote_multi(cx, &ec);
+    bytebuf_init(&text);
+    if (!yew_cmdline_clean(cx->ed, win, entry->data, entry->len, &text)) {
+        bytebuf_free(&text);
+        return YEW_CMD_ERR_ARG;
+    }
     for (i = 0U; i < win->cs.curs.len; i++) {
         ByteOff at = win->cs.curs.data[i].pos;
-        SelEdit *edit = yew_sel_edit_push(&edits, (Span){at.v, at.v});
+        SelEdit *edit;
 
-        bytebuf_append(&edit->replacement, value->bytes.data,
-                       value->bytes.len);
+        if (at.v < replace) {
+            bytebuf_free(&text);
+            yew_sel_edits_free(&edits);
+            return YEW_CMD_ERR_STATE;
+        }
+        edit = yew_sel_edit_push(&edits, (Span){at.v - replace, at.v});
+        bytebuf_append(&edit->replacement, text.data, text.len);
     }
+    ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
+    rl_promote_multi(cx, &ec);
     if (!yew_sel_apply_edits(cx, &edits, NULL)) {
         yew_sel_edits_free(&edits);
+        bytebuf_free(&text);
         return YEW_CMD_ERR_IO;
     }
     yew_sel_edits_free(&edits);
+    y->yank_seq = cx->ed->cmd_seq;
+    y->yank_owner = win;
+    y->yank_len = (u64)text.len;
+    y->yank_k = k;
+    bytebuf_free(&text);
     yew_cset_normalize(tb, &win->cs);
     yew_win_follow_cursor(win);
     return YEW_CMD_OK;
+}
+
+/*
+ * Yank the newest yank-stack entry at every caret.
+ *
+ * The bytes go in verbatim and charwise -- into the prompt with each
+ * newline run folded to a blank, as any paste there is.  ed.clip.paste
+ * reads the SYSTEM clipboard and is a different key (C-v); `p` reads the
+ * registers.  Only the readline kills feed this.
+ */
+CmdStatus yew_rl_cmd_kill_yank(CmdCtx *cx)
+{
+    const Bytebuf *entry;
+
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    entry = yew_yank_at(&cx->ed->yank, 0U);
+    if (entry == NULL || entry->len == 0U)
+        return rl_nothing_to_do();
+    return rl_yank_put(cx, entry, 0U, 0U);
+}
+
+/*
+ * A-y: straight after a yank or a yank-pop in the same Win, replace what
+ * it inserted with the next older entry, wrapping past the oldest back to
+ * the newest.  Anything else in between -- a motion, a typed character --
+ * and the inserted text is no longer "what the yank put there", so the
+ * key says why it did nothing.  That is OK, not an error: an error would
+ * abort Insert mode's open typing transaction.
+ */
+CmdStatus yew_rl_cmd_kill_yank_pop(CmdCtx *cx)
+{
+    YewYankStack *y;
+    u32 k;
+
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    y = &cx->ed->yank;
+    if (y->len == 0U || y->yank_owner != cx->win ||
+        cx->ed->cmd_seq != y->yank_seq + 1U) {
+        yew_msg(cx->ed, YEW_MSG_WARN, "A-y follows a yank");
+        return rl_nothing_to_do();
+    }
+    k = (y->yank_k + 1U) % y->len;
+    return rl_yank_put(cx, yew_yank_at(y, k), y->yank_len, k);
 }
 
 /*

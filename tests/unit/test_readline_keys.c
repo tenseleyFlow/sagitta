@@ -3,7 +3,7 @@
  *
  * Every case drives a REGISTERED command through yew_ed_invoke against
  * the loaded runtime, so the transaction wrapping, the multi-cursor
- * fan-out and the kill-ring write are the ones a keystroke gets; the
+ * fan-out and the yank-stack write are the ones a keystroke gets; the
  * binding tests at the bottom drive the real keys through
  * yew_ed_handle_key on top of that.
  */
@@ -122,14 +122,15 @@ static void rl_expect(RlFixture *f, const char *want)
     bytebuf_free(&got);
 }
 
+/* The newest yank-stack entry -- where every kill lands (Sprint 57.28). */
 static void rl_expect_kill(RlFixture *f, const char *want)
 {
-    const RegVal *value = yew_reg_get(&f->ed.regs, (u8)'"');
+    const Bytebuf *value = yew_yank_at(&f->ed.yank, 0U);
     size_t len = strlen(want);
 
     YEW_ASSERT_NOT_NULL(value);
-    YEW_ASSERT_EQ_U64(value->bytes.len, len);
-    YEW_ASSERT_EQ_MEM(value->bytes.data, want, len);
+    YEW_ASSERT_EQ_U64(value->len, len);
+    YEW_ASSERT_EQ_MEM(value->data, want, len);
 }
 
 /*
@@ -141,8 +142,8 @@ static const u8 rl_words[] = "alpha beta gamma\ndelta epsilon";
 /* ---------------------------------------------------------------- kills */
 
 /*
- * The headline key.  One press per caret, every caret, and ONE register
- * value holding what all of them removed, in document order -- the same
+ * The headline key.  One press per caret, every caret, and ONE yank-stack
+ * entry holding what all of them removed, in document order -- the same
  * shape ed.sel.delete gives a multi-cursor cut.
  */
 void test_readline_kill_word_prev_reaches_every_cursor(void)
@@ -200,7 +201,7 @@ void test_readline_kill_to_home_stops_at_the_line_start(void)
     rl_expect_kill(&f, "delta");
     YEW_ASSERT_EQ_U64(rl_pos(&f, 0U), 17U);
 
-    /* Already at column 0: no-op, and the register keeps the last kill. */
+    /* Already at column 0: no-op, and the stack keeps the last kill. */
     rl_ok(&f, "ed.edit.kill.to_home");
     rl_expect(&f, "alpha beta gamma\n epsilon");
     rl_expect_kill(&f, "delta");
@@ -307,8 +308,8 @@ void test_readline_kills_take_whole_graphemes(void)
 /* ----------------------------------------------------------- kill + yank */
 
 /*
- * The round trip.  A kill lands in the unnamed register -- which is also
- * the head of the kill ring -- and the yank puts those exact bytes back.
+ * The round trip.  A kill lands on the yank stack and the yank puts those
+ * exact bytes back.
  */
 void test_readline_kill_then_yank_round_trips(void)
 {
@@ -340,7 +341,7 @@ void test_readline_yank_reaches_every_cursor(void)
     rl_free(&f);
 }
 
-/* An empty kill register is a no-op, not an error. */
+/* An empty yank stack is a no-op, not an error. */
 void test_readline_yank_without_a_kill_is_a_no_op(void)
 {
     RlFixture f;
