@@ -100,6 +100,10 @@ static const char *const save_strategy_values[] = {
 static const char *const save_check_disk_values[] = {
     "off", "mtime", "content", NULL
 };
+/* Sprint 57.25 §1: which executables may be asked for their --help. */
+static const char *const complete_help_values[] = {
+    "native", "all", "off", NULL
+};
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -315,6 +319,12 @@ const OptDesc yew_opts[] = {
      YEW_OPT_MODULE_CORE},
     {"macro.dir", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
      0, 0, NULL, option_changed, "Macro library directory",
+     YEW_OPT_MODULE_CORE},
+    /* Sprint 57.25 §1: running a program to learn its flags is not free
+     * of risk; `native` never runs a script. */
+    {"shell.complete_help", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("native"),
+     complete_help_values, 0, 0, NULL, option_changed,
+     "Learn :! completions from --help: native, all, or off",
      YEW_OPT_MODULE_CORE},
     {"shadow.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
      0, 0, NULL, option_changed, "Enable passive shadow suggestions",

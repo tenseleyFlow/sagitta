@@ -61,7 +61,7 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "save.backup_keep", "save.backup_dir",
         "plug.error_limit", "plug.verify_on_load",
         "theme", "theme_auto",
-        "macro.dir",
+        "macro.dir", "shell.complete_help",
         "shadow.enable", "shadow.providers", "shadow.max_lines",
         "shadow.midline", "shadow.lsp_debounce_ms",
         "shadow.ai_debounce_ms", "compl.auto_trigger",
