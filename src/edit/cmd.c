@@ -33,6 +33,7 @@
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
 #include "ui/complmenu.h"
+#include "ui/comphelp.h"
 #include "ui/groupnav.h"
 #include "ui/mouse.h"
 #include "ui/macrobrowse.h"
@@ -1024,6 +1025,13 @@ static const CmdDesc builtins[] = {
     {"ed.shell.term_run", yew_shell_cmd_term_run, YEW_ARITY_STR,
      YEW_CMD_RECORDABLE | YEW_CMD_INTERACTIVE,
      "Run one command with the real terminal (:!!)", "shell_term"},
+    /* Sprint 57.25 §5.  Invariant 9: how a user makes yew re-learn a
+     * tool without finding the cache directory.  Not RECORDABLE -- it
+     * touches disk, not the buffer -- so it has no CMDWORD and the
+     * round-trip property never reaches it. */
+    {"ed.shell.complete_forget", yew_comphelp_run_forget, YEW_ARITY_OPT_STR,
+     0U, "Forget completions learned from --help (one command, or all)",
+     NULL},
     {"ed.job.list", yew_job_cmd_list, YEW_ARITY_NONE, 0U,
      "Open the job table", NULL},
     {"ed.job.kill", yew_job_cmd_kill, YEW_ARITY_OPT_INT,
@@ -1351,6 +1359,7 @@ static const BuiltinMeta builtin_meta[] = {
     /* One arbitrary command line, like :!; the range is forbidden
      * because a child that owns the screen has nothing to filter. */
     {"ed.shell.term_run", "s", YEW_RP_FORBID, NULL},
+    {"ed.shell.complete_forget", "s", YEW_RP_FORBID, "compforget"},
     {"ed.plug.enable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.disable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.reload", "p", YEW_RP_FORBID, NULL},
@@ -1519,7 +1528,9 @@ static bool command_name_valid(const char *name)
         /* The readline/Emacs Insert-mode keys.  `word_prev`, `word_next`,
          * `to_home`, `to_end` and `yank` are already above; these are the
          * transpose and word-case verbs those keys added. */
-        "chars", "words", "upper_word", "lower_word", "cap_word"};
+        "chars", "words", "upper_word", "lower_word", "cap_word",
+        /* Sprint 57.25 §5: `ed.shell.complete_forget`. */
+        "complete_forget"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

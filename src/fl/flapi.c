@@ -1698,7 +1698,9 @@ static u32 command_caps(const CmdDesc *d)
         strcmp(d->name, "ed.file.write") == 0 ||
         strcmp(d->name, "ed.file.write_quit") == 0 ||
         strcmp(d->name, "ed.ws.save_state") == 0 ||
-        strcmp(d->name, "ed.ws.forget") == 0)
+        strcmp(d->name, "ed.ws.forget") == 0 ||
+        /* Sprint 57.25: deletes the help cache, runs nothing. */
+        strcmp(d->name, "ed.shell.complete_forget") == 0)
         return FL_CAP_FS_WRITE;
     if (command_has_prefix(d, "ed.shell.") ||
         strcmp(d->name, "ed.job.rerun") == 0)

@@ -811,7 +811,13 @@ void test_invariant9_every_new_command_is_registered(void)
         "ed.file.save_as",     "ed.git.copy_path",
         "ed.lsp.rename.apply", "ed.lsp.rename.diff",
         "ed.lsp.rename.cancel",
-        "ed.group.pick.toggle", "ed.group.pick.confirm"
+        "ed.group.pick.toggle", "ed.group.pick.confirm",
+        /*
+         * Sprint 57.25 §5: learned completions live in a hashed cache
+         * directory; this is how a user makes yew re-learn a tool
+         * without finding it (`:compforget [name]`).
+         */
+        "ed.shell.complete_forget"
     };
     size_t i;
 
