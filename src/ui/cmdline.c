@@ -921,14 +921,23 @@ bool yew_cmdline_comp_idle_pending(const Ed *ed)
     if (ed == NULL || !ed->cmdline.active ||
         ed->cmdline.kind != YEW_PROMPT_CMD)
         return false;
-    return comp_idle_dirty || yew_compfish_idle_ready() ||
-           yew_comphelp_idle_ready();
+    /* Sprint 57.26: the history snapshot is taken on the first idle turn
+     * after the prompt opens, so no keystroke pays for it. */
+    return comp_idle_dirty || !ed->cmdline.suggest_loaded ||
+           yew_compfish_idle_ready() || yew_comphelp_idle_ready();
 }
+
+static void suggest_ensure(Ed *ed);
 
 u32 yew_cmdline_comp_idle(Ed *ed)
 {
     if (!yew_cmdline_comp_idle_pending(ed))
         return 0U;
+    /* Sprint 57.26 §3: load the `:!` history snapshot now, on a turn with
+     * no input.  (A line typed faster than the first idle turn loads it
+     * on demand instead -- the same snapshot either way.) */
+    if (!ed->cmdline.suggest_loaded)
+        suggest_ensure(ed);
     if (comp_idle_dirty) {
         CmdLine *line = &ed->cmdline;
         YewCompQuery query;
@@ -1642,7 +1651,9 @@ static bool suggest_all_shells(Ed *ed)
 }
 
 /*
- * Sprint 57.26 §3: the snapshot, taken once per prompt.  yew's own
+ * Sprint 57.26 §3: the snapshot, taken once per prompt -- on the first
+ * idle turn after the prompt opens, or on demand if a bang body is typed
+ * before one comes.  yew's own
  * E-mode history first (its bang entries' BODIES, so `:!git st` finds
  * `:%!git status` too), newest first; then, under `all`, the shells'
  * files.  Nothing here runs again until the prompt closes, so a history
