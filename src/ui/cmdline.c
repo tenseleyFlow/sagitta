@@ -16,6 +16,7 @@
 #include "term/grid.h"
 #include "text/edit.h"
 #include "text/register.h"
+#include "ui/compfish.h"
 #include "ui/compgen.h"
 #include "ui/comphelp.h"
 #include "ui/compspec.h"
@@ -574,6 +575,8 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     /* Sprint 57.25: requests this prompt made and never spawned go with
      * it; learned trees stay (they are keyed by the executable). */
     yew_comphelp_prompt_closed();
+    /* Sprint 57.26: likewise fish's; its answers stay fresh 5 s. */
+    yew_compfish_prompt_closed();
     comp_idle_dirty = false;
     history_release(ed, line->kind, line->history);
     line->history = NULL;
@@ -914,7 +917,8 @@ bool yew_cmdline_comp_idle_pending(const Ed *ed)
     if (ed == NULL || !ed->cmdline.active ||
         ed->cmdline.kind != YEW_PROMPT_CMD)
         return false;
-    return comp_idle_dirty || yew_comphelp_idle_ready();
+    return comp_idle_dirty || yew_compfish_idle_ready() ||
+           yew_comphelp_idle_ready();
 }
 
 u32 yew_cmdline_comp_idle(Ed *ed)
@@ -937,6 +941,11 @@ u32 yew_cmdline_comp_idle(Ed *ed)
         arena_free_all(&scratch);
         yew_xfree(text);
     }
+    /* Sprint 57.26: fish is the rung above help, so its request goes
+     * first; one spawn per idle turn, and the next turn takes the
+     * other (the predicate keeps the loop from sleeping between). */
+    if (yew_compfish_idle(ed) != 0U)
+        return 1U;
     return yew_comphelp_idle(ed);
 }
 
