@@ -60,4 +60,81 @@ void yew_hist_cur_dispose(HistCur *c);
 const char *yew_hist_prev(CmdHist *h, HistCur *c);
 const char *yew_hist_next(CmdHist *h, HistCur *c);
 
+/*
+ * Sprint 57.26 §3: history suggestions for `:!` bodies.
+ *
+ * A snapshot of command bodies, NEWEST FIRST, deduplicated keeping the
+ * newest, capped at YEW_HIST_SUGGEST_MAX.  It is taken once per prompt
+ * and never changes under the prompt, so the ghost is a pure function of
+ * (snapshot, line) -- invariant 5 -- and the per-keystroke work is one
+ * prefix memcmp per entry, the loading having happened already
+ * (invariant 4).
+ *
+ * Refused on entry, whatever the source:
+ *   - a multi-line command (the prompt is one line);
+ *   - one with a control byte (a ghost is drawn as it is);
+ *   - one holding a `NAME=value` word whose NAME yew_secret_name()
+ *     calls a secret: the ghost is on screen, and screens are shared.
+ */
+enum {
+    YEW_HIST_SUGGEST_MAX = 20000,
+    /* A shell history larger than this is read from its tail. */
+    YEW_HIST_SHELL_READ_MAX = 8 * 1024 * 1024
+};
+
+typedef struct YewHistSuggest {
+    char **v;
+    u32 *lens;
+    u32 n;
+    u32 cap;
+    /* Open-addressed set of the bodies held, for the dedupe. */
+    u32 *slots;
+    u32 n_slots;
+} YewHistSuggest;
+
+void yew_hist_suggest_init(YewHistSuggest *s);
+void yew_hist_suggest_free(YewHistSuggest *s);
+/* Offer one body.  Call newest first: the first offer of a text wins.
+ * Leading blanks are dropped (the shell ignores them).  Returns whether
+ * it was kept. */
+bool yew_hist_suggest_add(YewHistSuggest *s, const char *text, size_t len);
+/* Is this entry refused (multi-line, a control byte, a secret)? */
+bool yew_hist_suggest_refused(const char *text, size_t len);
+/*
+ * The newest entry that starts with `body` (leading blanks ignored) and
+ * is longer: returns its remainder and sets `*rest_len`, or NULL.
+ * Byte-exact and case-sensitive.
+ */
+const char *yew_hist_suggest_match(const YewHistSuggest *s, const char *body,
+                                   size_t len, size_t *rest_len);
+
+/*
+ * The shells' own history files, read-only.  Each parser offers its
+ * entries NEWEST FIRST (the files are written oldest first).
+ *   fish: `- cmd: <text>` lines; `\\` is `\`, `\n` a newline.
+ *   zsh:  UNMETAFIED first (0x83 then b means b ^ 0x20); an optional
+ *         `: <start>:<elapsed>;` prefix; a line ending `\` continues.
+ *   bash: plain lines; `#<digits>` timestamp lines skipped.
+ */
+void yew_hist_parse_fish(YewHistSuggest *s, const char *data, size_t len);
+void yew_hist_parse_zsh(YewHistSuggest *s, const char *data, size_t len);
+void yew_hist_parse_bash(YewHistSuggest *s, const char *data, size_t len);
+/* zsh's metafication undone in place; returns the new length. */
+size_t yew_hist_unmetafy(char *bytes, size_t len);
+
+/*
+ * Read the history files that exist, in the order fish, zsh, bash:
+ *   fish  $XDG_DATA_HOME/fish/fish_history, else
+ *         $HOME/.local/share/fish/fish_history;
+ *   zsh   $HISTFILE when its name mentions zsh, else $HOME/.zsh_history;
+ *   bash  $HISTFILE otherwise, else $HOME/.bash_history.
+ * Only the environment names a file -- never the password database -- so
+ * a process without HOME reads nothing.
+ */
+void yew_hist_suggest_read_shells(YewHistSuggest *s);
+
+/* Test seam: history files opened by yew_hist_suggest_read_shells. */
+u32 yew_hist_test_shell_opens(void);
+void yew_hist_test_reset_shell_opens(void);
+
 #endif

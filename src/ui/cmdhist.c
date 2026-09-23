@@ -13,6 +13,7 @@
 #include "text/file.h"
 #include "util/buf.h"
 #include "util/log.h"
+#include "util/secret.h"
 #include "util/xdg.h"
 
 struct CmdHist {
@@ -612,4 +613,528 @@ const char *yew_hist_next(CmdHist *h, HistCur *c)
     }
     c->idx = -1;
     return c->draft == NULL ? "" : c->draft;
+}
+
+/* ================================================================ */
+/* Sprint 57.26 §3: history suggestions                              */
+/* ================================================================ */
+
+static u32 hist_shell_opens;
+
+u32 yew_hist_test_shell_opens(void)
+{
+    return hist_shell_opens;
+}
+
+void yew_hist_test_reset_shell_opens(void)
+{
+    hist_shell_opens = 0U;
+}
+
+void yew_hist_suggest_init(YewHistSuggest *s)
+{
+    if (s != NULL)
+        (void)memset(s, 0, sizeof(*s));
+}
+
+void yew_hist_suggest_free(YewHistSuggest *s)
+{
+    u32 i;
+
+    if (s == NULL)
+        return;
+    for (i = 0U; i < s->n; i++)
+        yew_xfree(s->v[i]);
+    yew_xfree(s->v);
+    yew_xfree(s->lens);
+    yew_xfree(s->slots);
+    (void)memset(s, 0, sizeof(*s));
+}
+
+static u32 suggest_hash(const char *text, size_t len)
+{
+    u32 h = 2166136261U;
+    size_t i;
+
+    for (i = 0U; i < len; i++) {
+        h ^= (u32)(u8)text[i];
+        h *= 16777619U;
+    }
+    return h;
+}
+
+static bool is_blank_byte(char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+static bool name_start(char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+}
+
+static bool name_char(char c)
+{
+    return name_start(c) || (c >= '0' && c <= '9');
+}
+
+bool yew_hist_suggest_refused(const char *text, size_t len)
+{
+    size_t i = 0U;
+
+    for (i = 0U; i < len; i++) {
+        u8 c = (u8)text[i];
+
+        /* A newline is a multi-line command; any control byte is one a
+         * ghost cannot draw. */
+        if (c < 0x20U || c == 0x7FU)
+            return true;
+    }
+    /*
+     * `NAME=value`, anywhere on the line: `export API_TOKEN=…`,
+     * `env AWS_SECRET_ACCESS_KEY=… cmd`, `a=1;DB_PASSWORD=…`.  Any name
+     * that starts at a word boundary counts, so `--token=…` is refused
+     * too -- a secret on screen is the harm, whatever spelled it.
+     */
+    i = 0U;
+    while (i < len) {
+        size_t start;
+
+        if (!name_start(text[i]) || (i != 0U && name_char(text[i - 1U]))) {
+            i++;
+            continue;
+        }
+        start = i;
+        while (i < len && name_char(text[i]))
+            i++;
+        if (i < len && text[i] == '=') {
+            char name[128];
+            size_t n = i - start;
+
+            if (n >= sizeof(name))
+                n = sizeof(name) - 1U;
+            (void)memcpy(name, text + start, n);
+            name[n] = '\0';
+            if (yew_secret_name(name))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool suggest_has(const YewHistSuggest *s, const char *text,
+                        size_t len, u32 h)
+{
+    u32 mask;
+    u32 at;
+
+    if (s->n_slots == 0U)
+        return false;
+    mask = s->n_slots - 1U;
+    for (at = h & mask; s->slots[at] != 0U; at = (at + 1U) & mask) {
+        u32 k = s->slots[at] - 1U;
+
+        if (s->lens[k] == len && memcmp(s->v[k], text, len) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void suggest_slot(YewHistSuggest *s, u32 index, u32 h)
+{
+    u32 mask = s->n_slots - 1U;
+    u32 at;
+
+    for (at = h & mask; s->slots[at] != 0U; at = (at + 1U) & mask)
+        ;
+    s->slots[at] = index + 1U;
+}
+
+static void suggest_grow(YewHistSuggest *s)
+{
+    u32 i;
+
+    if (s->n == s->cap) {
+        s->cap = s->cap == 0U ? 256U : s->cap * 2U;
+        s->v = yew_xreallocarray(s->v, s->cap, sizeof(*s->v));
+        s->lens = yew_xreallocarray(s->lens, s->cap, sizeof(*s->lens));
+    }
+    /* Keep the set at most half full. */
+    if ((s->n + 1U) * 2U > s->n_slots) {
+        u32 slots = s->n_slots == 0U ? 512U : s->n_slots * 2U;
+
+        yew_xfree(s->slots);
+        s->slots = yew_xcalloc(slots, sizeof(*s->slots));
+        s->n_slots = slots;
+        for (i = 0U; i < s->n; i++)
+            suggest_slot(s, i, suggest_hash(s->v[i], s->lens[i]));
+    }
+}
+
+bool yew_hist_suggest_add(YewHistSuggest *s, const char *text, size_t len)
+{
+    u32 h;
+
+    if (s == NULL || text == NULL)
+        return false;
+    while (len != 0U && is_blank_byte(text[0])) {
+        text++;
+        len--;
+    }
+    if (len == 0U || len > YEW_HIST_LINE_MAX || s->n >= YEW_HIST_SUGGEST_MAX)
+        return false;
+    if (yew_hist_suggest_refused(text, len))
+        return false;
+    h = suggest_hash(text, len);
+    if (suggest_has(s, text, len, h))
+        return false;
+    suggest_grow(s);
+    s->v[s->n] = hist_dup_n(text, len);
+    s->lens[s->n] = (u32)len;
+    suggest_slot(s, s->n, h);
+    s->n++;
+    return true;
+}
+
+const char *yew_hist_suggest_match(const YewHistSuggest *s, const char *body,
+                                   size_t len, size_t *rest_len)
+{
+    u32 i;
+
+    if (rest_len != NULL)
+        *rest_len = 0U;
+    if (s == NULL || body == NULL)
+        return NULL;
+    while (len != 0U && is_blank_byte(body[0])) {
+        body++;
+        len--;
+    }
+    if (len == 0U)
+        return NULL;
+    /* Newest first: the first hit is the answer.  One prefix compare
+     * per entry, nothing else, on every keystroke. */
+    for (i = 0U; i < s->n; i++) {
+        if (s->lens[i] > len && memcmp(s->v[i], body, len) == 0) {
+            if (rest_len != NULL)
+                *rest_len = s->lens[i] - len;
+            return s->v[i] + len;
+        }
+    }
+    return NULL;
+}
+
+/* Entries collected oldest first, then offered newest first. */
+typedef struct HistEntries {
+    char **v;
+    size_t *lens;
+    size_t n;
+    size_t cap;
+} HistEntries;
+
+static void entries_push(HistEntries *e, char *text, size_t len)
+{
+    if (e->n == e->cap) {
+        e->cap = e->cap == 0U ? 64U : e->cap * 2U;
+        e->v = yew_xreallocarray(e->v, e->cap, sizeof(*e->v));
+        e->lens = yew_xreallocarray(e->lens, e->cap, sizeof(*e->lens));
+    }
+    e->v[e->n] = text;
+    e->lens[e->n] = len;
+    e->n++;
+}
+
+static void entries_offer(YewHistSuggest *s, HistEntries *e)
+{
+    size_t i;
+
+    for (i = e->n; i > 0U; i--) {
+        (void)yew_hist_suggest_add(s, e->v[i - 1U], e->lens[i - 1U]);
+        yew_xfree(e->v[i - 1U]);
+    }
+    yew_xfree(e->v);
+    yew_xfree(e->lens);
+    (void)memset(e, 0, sizeof(*e));
+}
+
+/* The next line of [data, data+len) from `*at`: its length, and `*at`
+ * moved past its newline.  False at the end. */
+static bool next_line(const char *data, size_t len, size_t *at,
+                      const char **line, size_t *n)
+{
+    const char *nl;
+
+    if (*at >= len)
+        return false;
+    *line = data + *at;
+    nl = memchr(*line, '\n', len - *at);
+    *n = nl == NULL ? len - *at : (size_t)(nl - *line);
+    *at += *n + 1U;
+    return true;
+}
+
+void yew_hist_parse_fish(YewHistSuggest *s, const char *data, size_t len)
+{
+    static const char tag[] = "- cmd: ";
+    HistEntries e = {0};
+    const char *line;
+    size_t n;
+    size_t at = 0U;
+
+    if (s == NULL || data == NULL)
+        return;
+    while (next_line(data, len, &at, &line, &n)) {
+        char *text;
+        size_t i;
+        size_t out = 0U;
+
+        if (n < sizeof(tag) - 1U || memcmp(line, tag, sizeof(tag) - 1U) != 0)
+            continue;
+        line += sizeof(tag) - 1U;
+        n -= sizeof(tag) - 1U;
+        text = yew_xmalloc(n + 1U);
+        /* fish's own escaping of the value: `\\` and `\n`, nothing
+         * else (any other backslash is literal). */
+        for (i = 0U; i < n; i++) {
+            if (line[i] == '\\' && i + 1U < n && line[i + 1U] == '\\') {
+                text[out++] = '\\';
+                i++;
+            } else if (line[i] == '\\' && i + 1U < n &&
+                       line[i + 1U] == 'n') {
+                text[out++] = '\n';
+                i++;
+            } else {
+                text[out++] = line[i];
+            }
+        }
+        text[out] = '\0';
+        entries_push(&e, text, out);
+    }
+    entries_offer(s, &e);
+}
+
+size_t yew_hist_unmetafy(char *bytes, size_t len)
+{
+    size_t in;
+    size_t out = 0U;
+
+    if (bytes == NULL)
+        return 0U;
+    for (in = 0U; in < len; in++) {
+        if ((u8)bytes[in] == 0x83U && in + 1U < len) {
+            bytes[out++] = (char)((u8)bytes[in + 1U] ^ 0x20U);
+            in++;
+        } else {
+            bytes[out++] = bytes[in];
+        }
+    }
+    return out;
+}
+
+/* `: 1790129293:0;` -- EXTENDED_HISTORY's start and elapsed time. */
+static size_t zsh_prefix_len(const char *line, size_t n)
+{
+    size_t i = 2U;
+
+    if (n < 2U || line[0] != ':' || line[1] != ' ')
+        return 0U;
+    if (i >= n || line[i] < '0' || line[i] > '9')
+        return 0U;
+    while (i < n && line[i] >= '0' && line[i] <= '9')
+        i++;
+    if (i >= n || line[i] != ':')
+        return 0U;
+    i++;
+    while (i < n && line[i] >= '0' && line[i] <= '9')
+        i++;
+    if (i >= n || line[i] != ';')
+        return 0U;
+    return i + 1U;
+}
+
+void yew_hist_parse_zsh(YewHistSuggest *s, const char *data, size_t len)
+{
+    HistEntries e = {0};
+    Bytebuf entry;
+    char *plain;
+    const char *line;
+    size_t n;
+    size_t at = 0U;
+    bool open = false;
+
+    if (s == NULL || data == NULL)
+        return;
+    /* Before anything else reads a byte: metafied text read as text is
+     * mojibake, and a suggestion taken from it names a file that does not
+     * exist (invariant 2). */
+    plain = hist_dup_n(data, len);
+    len = yew_hist_unmetafy(plain, len);
+    bytebuf_init(&entry);
+    while (next_line(plain, len, &at, &line, &n)) {
+        bool more;
+
+        if (!open) {
+            size_t skip = zsh_prefix_len(line, n);
+
+            line += skip;
+            n -= skip;
+            entry.len = 0U;
+        } else {
+            bytebuf_push_u8(&entry, (u8)'\n');
+        }
+        /* A line ending in a backslash continues: the command was
+         * multi-line, and stays one entry (which is then refused). */
+        more = n != 0U && line[n - 1U] == '\\';
+        bytebuf_append(&entry, line, more ? n - 1U : n);
+        open = more;
+        if (!open)
+            entries_push(&e, hist_dup_n((const char *)entry.data, entry.len),
+                         entry.len);
+    }
+    if (open)
+        entries_push(&e, hist_dup_n((const char *)entry.data, entry.len),
+                     entry.len);
+    bytebuf_free(&entry);
+    yew_xfree(plain);
+    entries_offer(s, &e);
+}
+
+void yew_hist_parse_bash(YewHistSuggest *s, const char *data, size_t len)
+{
+    HistEntries e = {0};
+    const char *line;
+    size_t n;
+    size_t at = 0U;
+
+    if (s == NULL || data == NULL)
+        return;
+    while (next_line(data, len, &at, &line, &n)) {
+        size_t i = 1U;
+
+        /* HISTTIMEFORMAT's `#<seconds>` lines. */
+        if (n > 1U && line[0] == '#') {
+            while (i < n && line[i] >= '0' && line[i] <= '9')
+                i++;
+            if (i == n)
+                continue;
+        }
+        if (n != 0U)
+            entries_push(&e, hist_dup_n(line, n), n);
+    }
+    entries_offer(s, &e);
+}
+
+/* The whole file, or its last YEW_HIST_SHELL_READ_MAX bytes from a line
+ * start.  Heap-owned; NULL when it is not a readable regular file. */
+static char *shell_file_read(const char *path, size_t *len)
+{
+    struct stat st;
+    Bytebuf b;
+    char chunk[16384];
+    char *out;
+    int fd;
+    size_t skip = 0U;
+
+    *len = 0U;
+    if (path == NULL)
+        return NULL;
+    fd = open(path, O_RDONLY | O_CLOEXEC | O_NOCTTY);
+    if (fd < 0)
+        return NULL;
+    hist_shell_opens++;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        (void)close(fd);
+        return NULL;
+    }
+    if (st.st_size > (off_t)YEW_HIST_SHELL_READ_MAX) {
+        if (lseek(fd, st.st_size - (off_t)YEW_HIST_SHELL_READ_MAX,
+                  SEEK_SET) < 0) {
+            (void)close(fd);
+            return NULL;
+        }
+        skip = 1U; /* the first, partial line is not an entry */
+    }
+    bytebuf_init(&b);
+    for (;;) {
+        ssize_t n = read(fd, chunk, sizeof(chunk));
+
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break;
+        if (b.len + (size_t)n > (size_t)YEW_HIST_SHELL_READ_MAX)
+            n = (ssize_t)((size_t)YEW_HIST_SHELL_READ_MAX - b.len);
+        bytebuf_append(&b, chunk, (size_t)n);
+        if (b.len >= (size_t)YEW_HIST_SHELL_READ_MAX)
+            break;
+    }
+    (void)close(fd);
+    if (skip != 0U) {
+        const u8 *nl = b.len == 0U ? NULL : memchr(b.data, '\n', b.len);
+
+        skip = nl == NULL ? b.len : (size_t)(nl - b.data) + 1U;
+    }
+    out = hist_dup_n(b.len == 0U ? "" : (const char *)b.data + skip,
+                     b.len - skip);
+    *len = b.len - skip;
+    bytebuf_free(&b);
+    return out;
+}
+
+static char *env_path(const char *root, const char *suffix)
+{
+    size_t nr;
+    size_t ns;
+    char *out;
+
+    if (root == NULL || root[0] != '/')
+        return NULL;
+    nr = strlen(root);
+    ns = strlen(suffix);
+    out = yew_xmalloc(nr + ns + 1U);
+    (void)memcpy(out, root, nr);
+    (void)memcpy(out + nr, suffix, ns + 1U);
+    return out;
+}
+
+static void read_one(YewHistSuggest *s, char *path,
+                     void (*parse)(YewHistSuggest *, const char *, size_t))
+{
+    size_t len;
+    char *data = shell_file_read(path, &len);
+
+    if (data != NULL)
+        parse(s, data, len);
+    yew_xfree(data);
+    yew_xfree(path);
+}
+
+void yew_hist_suggest_read_shells(YewHistSuggest *s)
+{
+    const char *home = getenv("HOME");
+    const char *data_home = getenv("XDG_DATA_HOME");
+    const char *histfile = getenv("HISTFILE");
+    const char *base = NULL;
+    bool zsh_file = false;
+
+    if (s == NULL)
+        return;
+    if (histfile != NULL && histfile[0] == '/') {
+        base = strrchr(histfile, '/') + 1;
+        zsh_file = strstr(base, "zsh") != NULL;
+    } else {
+        histfile = NULL;
+    }
+    read_one(s,
+             data_home != NULL && data_home[0] == '/'
+                 ? env_path(data_home, "/fish/fish_history")
+                 : env_path(home, "/.local/share/fish/fish_history"),
+             yew_hist_parse_fish);
+    read_one(s,
+             histfile != NULL && zsh_file ? env_path(histfile, "")
+                                          : env_path(home, "/.zsh_history"),
+             yew_hist_parse_zsh);
+    read_one(s,
+             histfile != NULL && !zsh_file ? env_path(histfile, "")
+                                           : env_path(home, "/.bash_history"),
+             yew_hist_parse_bash);
 }
