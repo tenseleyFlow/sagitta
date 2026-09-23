@@ -289,6 +289,23 @@ their caps, so the next core feature will need its own amendment. The
 1.5 MiB full / 900 KiB minimal post-1.0 ratchets are unchanged, as are the
 measurement recipes and every other gate. No feature is removed.
 
+**Amendment S57.32-A1 (2026-09-23) — size gates follow prompt editing and
+cd-aware completion.** Sprint 57.28 gives the `:` prompt the readline editing
+set and a yank stack shared with Insert mode; Sprint 57.32 makes `:!`
+completion follow `cd` through the line. Both were asked for by the user
+after dogfooding the completion engine, and the user directed that the
+S57.26-A2 route be taken again rather than waiting. On the pinned hosted
+x86_64 GCC 13.3 size lane at `3ff3c17c`, every glibc profile grew
+20,480-24,576 bytes: full 2,193,096 to 2,213,576, minimal 1,701,536 to
+1,726,112, AI-only 1,836,744 to 1,857,224, FUSS-only 1,853,088 to
+1,873,568, LSP-only 1,820,320 to 1,840,800, plugins-only 1,795,744 to
+1,820,320. The ledgers attribute 18,140 bytes to `core.ui` (the effective-
+directory lexer and prompt keys), 1,429 to `core.edit` and 940 to
+`core.text` (the yank stack); no optional module grew. Each hosted cap moves
+to the next 16 KiB boundary: full 2,228,224, minimal 1,736,704, LSP-only
+1,851,392, AI-only 1,867,776, FUSS-only 1,884,160, plugins-only 1,835,008.
+The musl caps set by S57.26-A2 are unchanged. Nothing else changes.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

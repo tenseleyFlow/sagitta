@@ -33,7 +33,11 @@ glibc profile by 122,880-126,976 bytes, taking full to 2,193,096 and past the
 grew. The hosted caps move to the next 16 KiB boundary (full 2,195,456,
 minimal 1,703,936) and the musl caps to the next 64 KiB boundary (2,359,296
 and 1,835,008), the S59-A6 rules; the ledgers above are that run's pinned
-measurement. The
+measurement. Amendment S57.32-A1 adds the prompt editing set and
+cd-aware completion (Sprints 57.28 and 57.32): 18,140 bytes of `core.ui`,
+1,429 of `core.edit`, 940 of `core.text`, 20,480-24,576 per glibc profile
+(full 2,213,576, minimal 1,726,112). Hosted caps move to the next 16 KiB
+boundary (full 2,228,224, minimal 1,736,704); musl caps are unchanged. The
 former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
 optimization ratchets. They are not alternate measurements and must not be
 selected by a CI flag.
