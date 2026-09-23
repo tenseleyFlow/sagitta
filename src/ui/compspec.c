@@ -15,6 +15,7 @@
 #include "edit/ed.h"
 #include "fl/data.h"
 #include "fl/diag.h"
+#include "fl/gc.h"
 #include "fl/value.h"
 #include "fl/vm.h"
 #include "ui/message.h"
@@ -947,6 +948,192 @@ YewCompSpec *yew_compspec_load_text(const char *origin, const char *src,
      * here on the spec owns it (yew_compspec_free takes it back out). */
     spec->arena = arena;
     return spec;
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 57.25: specs built in C, and a node's data form             */
+/* ---------------------------------------------------------------- */
+
+YewCompSpec *yew_compspec_new(const char *origin)
+{
+    Arena arena;
+    YewCompSpec *spec;
+
+    arena_init(&arena);
+    spec = arena_alloc(&arena, sizeof(*spec), sizeof(void *));
+    (void)memset(spec, 0, sizeof(*spec));
+    spec->origin = arena_strdup(&arena, origin == NULL ? "" : origin);
+    /* The same by-value hand-over as load_text: from here on every
+     * allocation goes through spec->arena, never the local copy. */
+    spec->arena = arena;
+    return spec;
+}
+
+Arena *yew_compspec_arena(YewCompSpec *spec)
+{
+    return spec == NULL ? NULL : &spec->arena;
+}
+
+YewSpecNode *yew_compspec_root_mut(YewCompSpec *spec)
+{
+    return spec == NULL ? NULL : &spec->root;
+}
+
+YewCompSpec *yew_compspec_read_node(const char *origin, const FlValue *node,
+                                    char *err, size_t errsz)
+{
+    YewCompSpec *spec;
+    SpecRead r;
+
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    if (node == NULL)
+        return NULL;
+    spec = yew_compspec_new(origin);
+    (void)memset(&r, 0, sizeof(r));
+    r.spec = spec;
+    r.a = &spec->arena;
+    r.origin = spec->origin;
+    r.err = err;
+    r.errsz = errsz;
+    /*
+     * The SAME node reader a spec file goes through: one schema, one set
+     * of rejections.  A node carries no generators, so an arg naming one
+     * that is not built in is rejected exactly as in a spec without a
+     * `generators` map.  The top-level-only keys a spec's root would
+     * skip are refused here: a node is not a spec.
+     */
+    if (node->t == (u8)FL_MAP) {
+        const FlMap *m = (const FlMap *)node->as.o;
+        u32 cursor = 0U;
+        FlValue k;
+        FlValue v;
+
+        while (fl_map_iter(m, &cursor, &k, &v)) {
+            const char *key;
+            size_t n;
+
+            if (as_str(k, &key, &n) && top_only_key(key, n))
+                unknown_key(&r, key, n);
+        }
+    }
+    read_node(&r, *node, true, NULL, &spec->root);
+    if (r.failed) {
+        yew_compspec_free(spec);
+        return NULL;
+    }
+    return spec;
+}
+
+static FlValue write_str(FlVm *vm, const char *s)
+{
+    return FL_OBJ_V(FL_STR, fl_str_new(vm, s, (u32)strlen(s)));
+}
+
+static void write_put(FlVm *vm, FlMap *m, const char *key, FlValue v)
+{
+    (void)fl_map_set(vm, m, write_str(vm, key), v);
+}
+
+static FlValue write_strings(FlVm *vm, const char *const *v, u32 n)
+{
+    FlList *l = fl_list_new(vm);
+    u32 i;
+
+    for (i = 0U; i < n; i++)
+        (void)fl_list_push(vm, l, write_str(vm, v[i]));
+    return FL_OBJ_V(FL_LIST, l);
+}
+
+static FlValue write_arg(FlVm *vm, const YewSpecArg *arg)
+{
+    FlMap *m = fl_map_new(vm);
+    u32 i;
+
+    write_put(vm, m, "kind", write_str(vm, arg_kind_names[arg->kind]));
+    if (arg->kind == YEW_SPEC_ARG_PATH && arg->n_ext != 0U)
+        write_put(vm, m, "ext", write_strings(vm, arg->ext, arg->n_ext));
+    if (arg->kind == YEW_SPEC_ARG_VALUES) {
+        FlList *l = fl_list_new(vm);
+
+        for (i = 0U; i < arg->n_values; i++) {
+            const YewSpecValue *val = &arg->values[i];
+
+            if (val->desc == NULL) {
+                (void)fl_list_push(vm, l, write_str(vm, val->value));
+            } else {
+                FlMap *vm_map = fl_map_new(vm);
+
+                write_put(vm, vm_map, "value", write_str(vm, val->value));
+                write_put(vm, vm_map, "desc", write_str(vm, val->desc));
+                (void)fl_list_push(vm, l, FL_OBJ_V(FL_MAP, vm_map));
+            }
+        }
+        write_put(vm, m, "values", FL_OBJ_V(FL_LIST, l));
+    }
+    if (arg->kind == YEW_SPEC_ARG_GENERATOR && arg->generator != NULL)
+        write_put(vm, m, "generator", write_str(vm, arg->generator));
+    if (arg->repeat)
+        write_put(vm, m, "repeat", FL_BOOL_V(true));
+    return FL_OBJ_V(FL_MAP, m);
+}
+
+FlValue yew_compspec_write_node(FlVm *vm, const YewSpecNode *node)
+{
+    FlMap *m = fl_map_new(vm);
+    u32 i;
+
+    if (node->name != NULL)
+        write_put(vm, m, "name", write_str(vm, node->name));
+    if (node->n_aliases != 0U)
+        write_put(vm, m, "aliases",
+                  write_strings(vm, node->aliases, node->n_aliases));
+    if (node->desc != NULL)
+        write_put(vm, m, "desc", write_str(vm, node->desc));
+    if (node->n_flags != 0U) {
+        FlList *l = fl_list_new(vm);
+
+        for (i = 0U; i < node->n_flags; i++) {
+            const YewSpecFlag *f = &node->flags[i];
+            FlMap *fm = fl_map_new(vm);
+
+            if (f->lng != NULL)
+                write_put(vm, fm, "long", write_str(vm, f->lng));
+            if (f->shrt != NULL)
+                write_put(vm, fm, "short", write_str(vm, f->shrt));
+            if (f->desc != NULL)
+                write_put(vm, fm, "desc", write_str(vm, f->desc));
+            if (f->arg != NULL)
+                write_put(vm, fm, "arg", write_arg(vm, f->arg));
+            if (f->arg_optional)
+                write_put(vm, fm, "arg_optional", FL_BOOL_V(true));
+            if (f->global)
+                write_put(vm, fm, "global", FL_BOOL_V(true));
+            (void)fl_list_push(vm, l, FL_OBJ_V(FL_MAP, fm));
+        }
+        write_put(vm, m, "flags", FL_OBJ_V(FL_LIST, l));
+    }
+    if (node->n_args != 0U) {
+        FlList *l = fl_list_new(vm);
+
+        for (i = 0U; i < node->n_args; i++)
+            (void)fl_list_push(vm, l, write_arg(vm, &node->args[i]));
+        write_put(vm, m, "args", FL_OBJ_V(FL_LIST, l));
+    }
+    if (node->dash_values != NULL)
+        write_put(vm, m, "dash_values", write_arg(vm, node->dash_values));
+    if (node->after_dashdash != NULL)
+        write_put(vm, m, "after_dashdash",
+                  write_arg(vm, node->after_dashdash));
+    if (node->n_subs != 0U) {
+        FlList *l = fl_list_new(vm);
+
+        for (i = 0U; i < node->n_subs; i++)
+            (void)fl_list_push(vm, l,
+                               yew_compspec_write_node(vm, &node->subs[i]));
+        write_put(vm, m, "subcommands", FL_OBJ_V(FL_LIST, l));
+    }
+    return FL_OBJ_V(FL_MAP, m);
 }
 
 /* ---------------------------------------------------------------- */

@@ -23,7 +23,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "fl/value.h"
 #include "ui/shctx.h"
+#include "util/arena.h"
 #include "util/base.h"
 
 typedef struct Ed Ed;
@@ -194,6 +196,24 @@ bool yew_compspec_builtin_generator(const char *name);
 YewCompSpec *yew_compspec_load_text(const char *origin, const char *src,
                                     size_t len, char *err, size_t errsz);
 void yew_compspec_free(YewCompSpec *spec);
+
+/*
+ * Sprint 57.25: a spec that did not come from a spec file -- the tree
+ * parsed out of a command's `--help` -- in the SAME in-memory form, so
+ * yew_compspec_resolve and the routing walk it unchanged.
+ *
+ * `new` is an empty spec (no `command`, no generators) owning an arena;
+ * the builder allocates through yew_compspec_arena and fills the root.
+ * `write_node` is the data form of a node (§1's node keys) as a Fletch
+ * value in `vm`, for fl_data_write; `read_node` reads one back through
+ * the spec reader's own node validation -- one schema, not two.
+ */
+YewCompSpec *yew_compspec_new(const char *origin);
+Arena *yew_compspec_arena(YewCompSpec *spec);
+YewSpecNode *yew_compspec_root_mut(YewCompSpec *spec);
+FlValue yew_compspec_write_node(FlVm *vm, const YewSpecNode *node);
+YewCompSpec *yew_compspec_read_node(const char *origin, const FlValue *node,
+                                    char *err, size_t errsz);
 /* The shipped spec files, sorted by name ("git.fl"); the index is built
  * from exactly this list. */
 size_t yew_compspec_shipped_count(void);
