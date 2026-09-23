@@ -907,6 +907,7 @@ static DirV cd_effect(Lexer *L, const char *name, const ShWord *w, u32 k,
                       u32 n, DirV in)
 {
     u8 how = WD_EXPANDED;
+    const char *target;
     DirV s;
 
     if (strcmp(name, "popd") == 0) {
@@ -929,7 +930,12 @@ static DirV cd_effect(Lexer *L, const char *name, const ShWord *w, u32 k,
          * about the stack, not a directory. */
         if (k + 1U != n || w[k].text[0] == '-' || w[k].text[0] == '+')
             return dv_unknown();
-        s = cd_target(L, in, word_dir(L, &w[k], in, true, &how), how);
+        /* Two statements, never one call: word_dir WRITES `how`, and C
+         * leaves argument evaluation order unspecified -- x86_64 GCC read
+         * the stale `how` first, joined a $PWD path twice (`a/a/b`) and
+         * skipped CDPATH.  See the plain `cd` branch too. */
+        target = word_dir(L, &w[k], in, true, &how);
+        s = cd_target(L, in, target, how);
         if (s.st != DV_KNOWN)
             return s;
         top = arena_alloc(L->a, sizeof(*top), sizeof(void *));
@@ -962,7 +968,9 @@ static DirV cd_effect(Lexer *L, const char *name, const ShWord *w, u32 k,
      * substitutes into $PWD. */
     if (k + 1U != n || plain(&w[k], "-"))
         return dv_unknown();
-    return cd_target(L, in, word_dir(L, &w[k], in, true, &how), how);
+    /* Sequenced on purpose; see the pushd branch above. */
+    target = word_dir(L, &w[k], in, true, &how);
+    return cd_target(L, in, target, how);
 }
 
 /*
