@@ -350,7 +350,9 @@ static bool run_one_test(const YewTest *test)
     if (skip_requested) {
         skip_requested = false;
         skip_count++;
-        (void)printf("SKIP %s: %s\n", test->name, skip_reason);
+        /* The reason first, so a test can name its subject the way a
+         * reader greps for it (`SKIP real-fish: fish not on PATH`). */
+        (void)printf("SKIP %s (%s)\n", skip_reason, test->name);
         (void)fflush(stdout);
         return true;
     }
