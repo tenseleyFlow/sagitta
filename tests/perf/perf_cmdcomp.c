@@ -841,10 +841,10 @@ int main(int argc, char **argv)
     /*
      * Sprint 57.26: a `:!` keystroke may take the history snapshot, which
      * reads the shells' history files.  The gate measures yew, not the
-     * size of whoever runs it's history: HOME is the fixture root, and
-     * neither XDG_DATA_HOME nor HISTFILE names anything.
+     * size of whoever runs it's history: none of HOME, XDG_DATA_HOME
+     * and HISTFILE names anything, so no history file is found.
      */
-    if (setenv("HOME", root, 1) != 0 || unsetenv("XDG_DATA_HOME") != 0 ||
+    if (unsetenv("HOME") != 0 || unsetenv("XDG_DATA_HOME") != 0 ||
         unsetenv("HISTFILE") != 0) {
         (void)fixture_remove(root);
         yew_cmd_shutdown();
