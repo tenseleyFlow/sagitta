@@ -119,7 +119,7 @@ static void plant_home(const char *home)
 static const char *snap_at(const YewHistSuggest *s, u32 i)
 {
     YEW_ASSERT(i < s->n);
-    return s->v[i];
+    return yew_hist_suggest_at(s, i);
 }
 
 /* ------------------------------------------------------------------ */
@@ -174,8 +174,8 @@ void test_histsuggest_zsh_reader_unmetafies_first(void)
     YEW_ASSERT_EQ_STR(snap_at(&s, 2U), "cat \xC4\x83\xC4\x99.txt");
     YEW_ASSERT_EQ_STR(snap_at(&s, 3U), "ls caf\xC3\xA9");
     for (i = 0U; i < s.n; i++) {
-        YEW_ASSERT_NULL(strchr(s.v[i], '\n'));
-        YEW_ASSERT_NULL(strstr(s.v[i], ": 17"));
+        YEW_ASSERT_NULL(strchr(yew_hist_suggest_at(&s, i), '\n'));
+        YEW_ASSERT_NULL(strstr(yew_hist_suggest_at(&s, i), ": 17"));
     }
     yew_hist_suggest_free(&s);
     yew_xfree(data);
@@ -577,6 +577,28 @@ void test_histsuggest_snapshot_is_fixed_per_prompt(void)
     /* The next prompt takes a new snapshot. */
     prompt(&g, NULL, 0U, "!git st");
     assert_ghost(&g.ed, "able-newest");
+    ghost_fix_drop(&g);
+}
+
+/* The snapshot is taken on the first idle turn after the prompt opens,
+ * so no keystroke pays for reading the files; typing a bang body before
+ * that turn loads it on demand. */
+void test_histsuggest_snapshot_taken_on_the_idle_turn(void)
+{
+    GhostFix g;
+
+    ghost_fix_init(&g, true);
+    yew_cmdline_open(&g.ed, YEW_PROMPT_CMD, NULL);
+    YEW_ASSERT(!g.ed.cmdline.suggest_loaded);
+    YEW_ASSERT(yew_cmdline_comp_idle_pending(&g.ed));
+    YEW_ASSERT_EQ_U64(yew_hist_test_shell_opens(), 0U);
+    (void)yew_cmdline_comp_idle(&g.ed);
+    YEW_ASSERT(g.ed.cmdline.suggest_loaded);
+    YEW_ASSERT_EQ_U64(yew_hist_test_shell_opens(), 3U);
+    YEW_ASSERT(!yew_cmdline_comp_idle_pending(&g.ed));
+    yew_cmdline_paste(&g.ed, (const u8 *)"!git st", 7U);
+    assert_ghost(&g.ed, "atus");
+    YEW_ASSERT_EQ_U64(yew_hist_test_shell_opens(), 3U);
     ghost_fix_drop(&g);
 }
 

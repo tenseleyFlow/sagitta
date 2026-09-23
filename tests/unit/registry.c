@@ -1012,6 +1012,7 @@ const YewTest yew_tests[] = {
     T(histsuggest_own_history_bodies),
     T(histsuggest_yew_reads_no_shell_file),
     T(histsuggest_snapshot_is_fixed_per_prompt),
+    T(histsuggest_snapshot_taken_on_the_idle_turn),
     T(histsuggest_accept_whole_and_word),
     T(histsuggest_precedence_against_the_token_ghost),
     T(histsuggest_harness_isolates_by_default),

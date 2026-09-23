@@ -982,6 +982,7 @@ void test_histsuggest_ghost_is_the_remainder(void);
 void test_histsuggest_own_history_bodies(void);
 void test_histsuggest_yew_reads_no_shell_file(void);
 void test_histsuggest_snapshot_is_fixed_per_prompt(void);
+void test_histsuggest_snapshot_taken_on_the_idle_turn(void);
 void test_histsuggest_accept_whole_and_word(void);
 void test_histsuggest_precedence_against_the_token_ghost(void);
 void test_histsuggest_harness_isolates_by_default(void);
