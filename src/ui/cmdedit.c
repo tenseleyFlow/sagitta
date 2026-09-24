@@ -358,8 +358,13 @@ static bool cmdedit_show(Ed *ed, Buffer *b, size_t caret)
         yew_tab_switch(ed, idx);
     else if (!yew_ed_show_buffer(ed, b))
         return false;
-    if (ed->win == NULL || ed->win->buf != b)
+    if (ed->win == NULL || ed->win->buf != b) {
+        /* Never leave a tab behind on a buffer about to be dropped. */
+        if (idx >= 0 && ed->tabs.v.len > 1U)
+            (void)yew_tab_close(ed, idx);
+        cmdedit_unshow(ed, b, &ed->buffer);
         return false;
+    }
     /* The new view has no size until it is laid out, and following the
      * caret in a zero-width view scrolls the line away. */
     yew_ed_layout(ed);
@@ -433,6 +438,14 @@ CmdStatus yew_cmdedit_cmd_edit_in_buffer(CmdCtx *cx)
     caret = (size_t)ed->cmdline.cur.pos.v;
     if (caret > text.len)
         caret = text.len;
+    if (st->released) {
+        /* The last buffer's line is still on its way back (a prompt was
+         * open when it was released): starting over would drop it. */
+        bytebuf_free(&text);
+        yew_msg(ed, YEW_MSG_WARN, "A-e: %s is still returning its line",
+                cmdedit_name);
+        return YEW_CMD_OK;
+    }
     open = st->buf_id == 0U ? NULL : yew_ws_buf_by_id(ed, st->buf_id);
     if (open != NULL) {
         /* §2.5: one at a time.  This prompt's line is not dropped on the

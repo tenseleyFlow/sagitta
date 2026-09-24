@@ -2715,6 +2715,23 @@ void test_prompt_keys_alt_e_returns_on_any_release(void)
     YEW_ASSERT_NOT_NULL(yew_ws_scratch_find(&f.ed, "*command-line*"));
     pk_colon(&f, "q!", true);
     pk_back(&f, YEW_PROMPT_CMD, "!ls -la", 7U);
+
+    /* Released while another prompt is open: the line waits for that
+     * prompt to close, and A-e meanwhile does not start over on it. */
+    pk_edit(&f);
+    pk_type(&f, " /");
+    pk_send(&f, YEW_KEY_ESCAPE, 0U);
+    pk_send(&f, (u32)':', 0U);
+    pk_type(&f, "e x");
+    yew_ws_scratch_drop(&f.ed, yew_ws_scratch_find(&f.ed, "*command-line*"));
+    yew_cmdedit_settle(&f.ed);
+    YEW_ASSERT(f.ed.cmdedit.released);
+    pk_text(&f, "e x");
+    pk_edit(&f);
+    YEW_ASSERT_EQ_STR(f.ed.msg.text,
+                      "A-e: *command-line* is still returning its line");
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_back(&f, YEW_PROMPT_CMD, "!ls -la /", 9U);
     pk_free(&f);
 }
 
