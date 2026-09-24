@@ -11,8 +11,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-static int run_unit_child(char *const argv[], const char *log_path,
-                          bool selfcheck, Bytebuf *output)
+/* `env` is NULL or NAME, VALUE pairs ending in NULL, set in the child. */
+static int run_unit_child_env(char *const argv[], const char *log_path,
+                              bool selfcheck, const char *const *env,
+                              Bytebuf *output)
 {
     int pipefd[2];
     pid_t pid;
@@ -39,6 +41,10 @@ static int run_unit_child(char *const argv[], const char *log_path,
         }
         if (log_path != NULL)
             (void)setenv("YEW_LOG", log_path, 1);
+        for (; env != NULL && env[0] != NULL; env += 2) {
+            if (setenv(env[0], env[1], 1) != 0)
+                _exit(126);
+        }
         execv(argv[0], argv);
         _exit(127);
     }
@@ -62,6 +68,12 @@ static int run_unit_child(char *const argv[], const char *log_path,
     if (!WIFEXITED(status))
         return 128;
     return WEXITSTATUS(status);
+}
+
+static int run_unit_child(char *const argv[], const char *log_path,
+                          bool selfcheck, Bytebuf *output)
+{
+    return run_unit_child_env(argv, log_path, selfcheck, NULL, output);
 }
 
 static size_t substring_count(const Bytebuf *buf, const char *needle)
@@ -253,8 +265,9 @@ void test_harness_spawned_child_is_fresh(void)
 
 /*
  * The leak is blamed on the test that made it.  The child runs with
- * LeakSanitizer's exit-time check off, so only the harness's per-test
- * check can turn its exit status to 1 and name the test; its stdout
+ * LeakSanitizer's exit-time check off, so only the harness's batch
+ * check (a batch of one: the child runs this test alone) can turn its
+ * exit status to 1 and name the test; its stdout
  * joins the captured stderr so the FAIL line can be read.
  */
 static void *volatile harness_leak_sink;
@@ -301,4 +314,91 @@ void test_harness_leak_is_blamed_on_the_leaking_test(void)
                                "FAIL harness_leak_is_blamed_on_the_leaking_"
                                "test: LeakSanitizer found a leak"));
     yew_test_child_free(&child);
+}
+
+/*
+ * A leak found at the end of a batch is narrowed to its test by
+ * rerunning each of the batch's tests alone.  The two members do
+ * nothing unless YEW_TEST_LEAK_DEMO is set, which only this test's
+ * child run sets.
+ */
+void test_harness_leak_batch_member_clean(void)
+{
+    YEW_ASSERT(true);
+}
+
+void test_harness_leak_batch_member_leaks(void)
+{
+    if (getenv("YEW_TEST_LEAK_DEMO") != NULL)
+        harness_leak();
+    YEW_ASSERT(true);
+}
+
+void test_harness_leak_in_a_batch_is_narrowed_to_its_test(void)
+{
+    const char *options;
+    const char *env[] = {"YEW_TEST_LEAK_DEMO", "1", "YEW_TEST_LEAK_EVERY",
+                         "64", "ASAN_OPTIONS", harness_leak_options, NULL};
+    char *argv[] = {(char *)yew_test_program_path(), "--filter",
+                    "harness_leak_batch_member_", NULL};
+    Bytebuf output;
+    int n;
+    int rc;
+
+    if (!yew_test_leak_check_enabled())
+        yew_test_skip("leak-check: no LeakSanitizer in this build");
+    options = getenv("ASAN_OPTIONS");
+    n = snprintf(harness_leak_options, sizeof(harness_leak_options),
+                 "%s%sdetect_leaks=1:leak_check_at_exit=0",
+                 options == NULL ? "" : options,
+                 options == NULL || options[0] == '\0' ? "" : ":");
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(harness_leak_options));
+    bytebuf_init(&output);
+    rc = run_unit_child_env(argv, NULL, false, env, &output);
+    YEW_ASSERT_EQ_I64(rc, 1);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "PASS harness_leak_batch_"
+                                               "member_"), 2U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "found a leak in the last "
+                                               "2 tests"), 1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output,
+                                      "FAIL harness_leak_batch_member_leaks: "
+                                      "LeakSanitizer found a leak when it "
+                                      "ran alone\n"), 1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "FAIL harness_leak_batch_"
+                                               "member_clean"), 0U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "leak checks are off"), 1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "unit: 2 tests,"), 1U);
+    bytebuf_free(&output);
+}
+
+/* The batch size is a count from 1 to 4096; anything else stops the run
+ * before a test starts. */
+void test_harness_leak_every_rejects_a_bad_count(void)
+{
+    static const char *const bad[] = {"0", "4097", "-1", "", "8x", "abc"};
+    char *argv[] = {(char *)yew_test_program_path(), "--only",
+                    "args_parse_batch_misuse", NULL};
+    const char *env[] = {"YEW_TEST_LEAK_EVERY", NULL, NULL};
+    Bytebuf output;
+    size_t i;
+    int rc;
+
+    for (i = 0U; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        env[1] = bad[i];
+        bytebuf_init(&output);
+        rc = run_unit_child_env(argv, NULL, false, env, &output);
+        YEW_ASSERT_EQ_I64(rc, 1);
+        YEW_ASSERT_EQ_U64(substring_count(&output, "YEW_TEST_LEAK_EVERY "
+                                                   "must be a count from 1 "
+                                                   "to 4096"), 1U);
+        YEW_ASSERT_EQ_U64(substring_count(&output, "PASS "), 0U);
+        bytebuf_free(&output);
+    }
+    env[1] = "4096";
+    bytebuf_init(&output);
+    rc = run_unit_child_env(argv, NULL, false, env, &output);
+    YEW_ASSERT_EQ_I64(rc, 0);
+    YEW_ASSERT_EQ_U64(substring_count(&output,
+                                      "PASS args_parse_batch_misuse\n"), 1U);
+    bytebuf_free(&output);
 }
