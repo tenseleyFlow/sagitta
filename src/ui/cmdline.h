@@ -232,6 +232,18 @@ CmdStatus yew_cmdline_cmd_token_next(CmdCtx *cx);
 /* Sprint 57.31 §1: A-s -- toggle `sudo ` (or `doas `) at the front of a
  * bang line's command; an empty body takes the newest bang entry. */
 CmdStatus yew_cmdline_cmd_toggle_sudo(CmdCtx *cx);
+/*
+ * Sprint 57.31 §3: A-h -- the man page of the bang line's command under
+ * the caret, in the user's pager on the real terminal; the prompt stays
+ * as it was.  `yew_cmdline_man_argv` is the argv it runs --
+ * {"/bin/sh", "-c", SCRIPT, "sh", name, [fallback,] NULL} -- where the
+ * names travel only as $1/$2 of a fixed SCRIPT.  Returns argc (5 or 6),
+ * or 0 with `why` saying what is missing.  Strings live in `a`.
+ */
+u32 yew_cmdline_man_argv(Ed *ed, const char *line, size_t len,
+                         size_t caret, Arena *a, char *argv[7],
+                         const char **why);
+CmdStatus yew_cmdline_cmd_man_page(CmdCtx *cx);
 
 /*
  * Sprint 57.29 §1: the prompt's selection is [min(anchor,pos),

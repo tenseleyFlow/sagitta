@@ -58,6 +58,9 @@ let alternatives = {
     # Sprint 57.18 Deliverable 4: `:!!` hands a child the REAL terminal,
     # which --batch does not have; `:!` still streams captured output.
     "ed.shell.term_run": "use ed.shell.run; --batch has no terminal",
+    # Sprint 57.31 Deliverable 3: A-h hands `man` the real terminal.
+    "ed.cmdline.man_page": "run man through ed.shell.run; --batch has " +
+                           "no terminal",
 }
 let seen = 0
 for command in ed.commands() {
@@ -78,7 +81,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 48)
+t.eq(seen, 49)
 
 # Hunk discard stopped being prompt-backed when Sprint 53 made it a direct,
 # undoable buffer edit.  It is still intentionally unavailable in batch mode,

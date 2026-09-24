@@ -738,6 +738,12 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.toggle_sudo", yew_cmdline_cmd_toggle_sudo, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Toggle sudo at the front of the prompt's shell command", NULL},
+    /* Sprint 57.31 §3: A-h -- internal like toggle_sudo, and
+     * INTERACTIVE like term_run: it hands a child the real terminal, which
+     * --batch does not have, so it is in the batch refusal table. */
+    {"ed.cmdline.man_page", yew_cmdline_cmd_man_page, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL | YEW_CMD_INTERACTIVE,
+     "Open the man page of the shell command under the caret", NULL},
     {"ed.cmdline.complete_next", yew_cmdline_cmd_complete_next,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Open or advance command-line completion", NULL},
@@ -1599,8 +1605,8 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.30: C-r's history search, A-<up>/A-<down>'s token
          * search. */
         "hist_search", "token_prev", "token_next",
-        /* Sprint 57.31: A-s's sudo toggle. */
-        "toggle_sudo"};
+        /* Sprint 57.31: A-s's sudo toggle, A-h's man page. */
+        "toggle_sudo", "man_page"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

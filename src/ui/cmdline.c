@@ -13,6 +13,7 @@
 #include "edit/motion.h"
 #include "edit/option.h"
 #include "edit/sel_actions.h"
+#include "edit/shell.h"
 #include "fl/flruntime.h"
 #include "term/grid.h"
 #include "text/edit.h"
@@ -1122,6 +1123,9 @@ static const PromptSelRow prompt_sel_rows[] = {
     /* Sprint 57.31: A-s rewrites the command's front -- collapse at
      * the caret first. */
     {"ed.cmdline.toggle_sudo", PSEL_COLLAPSE},
+    /* A-h leaves the line as it is; a selection collapses as for any
+     * command. */
+    {"ed.cmdline.man_page", PSEL_COLLAPSE},
 };
 
 static PromptSel prompt_sel_rule(const char *command)
@@ -2977,6 +2981,224 @@ CmdStatus yew_cmdline_cmd_toggle_sudo(CmdCtx *cx)
     sync_to_target(line);
     menu_discard(ed);
     yew_cmdline_edited(ed);
+    return YEW_CMD_OK;
+}
+
+/*
+ * Sprint 57.31 §3: A-h, the man page of the command under the caret.
+ *
+ * THE INJECTION RULE (57.26's, for fish's query).  The names come from
+ * the user's line, so they reach the child only as "$1" and "$2" of a
+ * FIXED script -- never spliced into it.  `--` keeps a name from being
+ * read as one of man's options (`-P` names a pager man would run), and
+ * a name that starts with `-` is refused before that anyway.
+ *
+ * No `man -w` probe: that would be a synchronous subprocess on the
+ * keystroke path.  The script's `||` is the probe, in the child that
+ * owns the terminal anyway.
+ */
+static const char man_one[] = "man -- \"$1\"";
+static const char man_two[] = "man -- \"$1\" 2>/dev/null || man -- \"$2\"";
+
+/* The end of the shell word `at` is in, starting in quote state `q0`:
+ * unquoted blanks and operators end it, quotes and escapes do not. */
+static size_t man_word_end(const char *s, size_t n, size_t at, YewShQuote q0)
+{
+    char q = q0 == YEW_SH_Q_DOUBLE ? '"' :
+             q0 == YEW_SH_Q_NONE ? 0 : '\'';
+    bool dollar = q0 == YEW_SH_Q_DOLLAR;
+
+    while (at < n) {
+        char c = s[at];
+
+        if (q == 0 && strchr(" \t\n;|&<>()`", c) != NULL)
+            break;
+        if ((q != '\'' || dollar) && c == '\\' && at + 1U < n) {
+            at += 2U;
+            continue;
+        }
+        if (q == 0 && (c == '\'' || c == '"')) {
+            q = c;
+            dollar = c == '\'' && at != 0U && s[at - 1U] == '$';
+        } else if (q != 0 && c == q) {
+            q = 0;
+            dollar = false;
+        }
+        at++;
+    }
+    return at;
+}
+
+/* A subcommand name worth offering man: a plain word, never a path, an
+ * option or an expansion. */
+static bool man_plain_word(const char *w)
+{
+    size_t i;
+
+    if (w == NULL || w[0] == '\0' || w[0] == '-')
+        return false;
+    for (i = 0U; w[i] != '\0'; i++) {
+        char c = w[i];
+
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '.' || c == '_' ||
+              c == '+' || c == '-'))
+            return false;
+    }
+    return true;
+}
+
+/*
+ * The subcommand whose page to try first: the first-level node the
+ * spec walk reached (`git checkout -b x` -> checkout), else the caret's
+ * own word where the command takes a subcommand (`git che` -> che, as
+ * fish does).  NULL for a command with no subcommands in its spec.
+ */
+static const char *man_subcommand(Ed *ed, const char *command,
+                                  const YewShCtx *ctx)
+{
+    const YewCompSpec *spec = yew_compspec_get(ed, command);
+    const YewSpecNode *root;
+    const YewSpecNode *node;
+    YewSpecPoint pt;
+
+    if (spec == NULL || ctx->arg_index == 0U)
+        return NULL;
+    root = yew_compspec_root(spec);
+    if (root == NULL || root->n_subs == 0U ||
+        !yew_compspec_resolve(spec, ctx, &pt))
+        return NULL;
+    node = pt.node;
+    while (node != NULL && node->parent != NULL && node->parent != root)
+        node = node->parent;
+    if (node != NULL && node != root)
+        return man_plain_word(node->name) ? node->name : NULL;
+    if (pt.subcommands_allowed && man_plain_word(ctx->stem))
+        return ctx->stem;
+    return NULL;
+}
+
+u32 yew_cmdline_man_argv(Ed *ed, const char *line, size_t len,
+                         size_t caret, Arena *a, char *argv[7],
+                         const char **why)
+{
+    size_t body = 0U;
+    size_t end;
+    YewShCtx ctx;
+    const char *command;
+    const char *slash;
+    const char *sub;
+
+    *why = "A-h: man pages are for :! commands";
+    if (ed == NULL || line == NULL || caret > len ||
+        !yew_cmd_bang_body(ed, line, len, &body) || body > len)
+        return 0U;
+    *why = "A-h: no command under the caret";
+    if (caret < body)
+        caret = body;
+    /* The whole word under the caret, not the part before it: the lexer
+     * reads only up to the caret it is given.  Its quote state AT the
+     * caret says how the rest of the word reads. */
+    if (!yew_shctx_at(line + body, len - body, caret - body, a, &ctx))
+        return 0U;
+    end = man_word_end(line, len, caret, ctx.quote);
+    if (!yew_shctx_at_with(line + body, len - body, end - body, a,
+                           yew_compspec_wrapper, ed, &ctx))
+        return 0U;
+    command = ctx.arg_index == 0U ? ctx.stem :
+              (ctx.argc != 0U ? ctx.argv[0] : NULL);
+    if (command == NULL || command[0] == '\0')
+        return 0U;
+    slash = strrchr(command, '/');
+    if (slash != NULL)
+        command = slash + 1;
+    if (command[0] == '\0' || command[0] == '-')
+        return 0U;
+    sub = man_subcommand(ed, command, &ctx);
+    argv[0] = arena_strdup(a, "/bin/sh");
+    argv[1] = arena_strdup(a, "-c");
+    argv[3] = arena_strdup(a, "sh");
+    if (sub != NULL) {
+        size_t cn = strlen(command);
+        size_t sn = strlen(sub);
+        char *page = arena_alloc(a, cn + sn + 2U, 1U);
+
+        (void)memcpy(page, command, cn);
+        page[cn] = '-';
+        (void)memcpy(page + cn + 1U, sub, sn + 1U);
+        argv[2] = arena_strdup(a, man_two);
+        argv[4] = page;
+        argv[5] = arena_strdup(a, command);
+        argv[6] = NULL;
+        *why = NULL;
+        return 6U;
+    }
+    argv[2] = arena_strdup(a, man_one);
+    argv[4] = arena_strdup(a, command);
+    argv[5] = NULL;
+    argv[6] = NULL;
+    *why = NULL;
+    return 5U;
+}
+
+/*
+ * The prompt is not closed for the child: the run is synchronous, so
+ * nothing can touch it meanwhile, and the handover's epilogue marks the
+ * full repaint.  It comes back exactly as it was -- kind, text, caret,
+ * history walk -- and the dispatcher collapses a selection, as for any
+ * command.  Every outcome is a message on the still-open prompt.
+ */
+CmdStatus yew_cmdline_cmd_man_page(CmdCtx *cx)
+{
+    Ed *ed;
+    CmdLine *line;
+    char *text;
+    char *argv[7];
+    const char *why = NULL;
+    Arena a;
+    YewJobWait wait;
+    char err[192];
+    u32 argc;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    line = &ed->cmdline;
+    sync_from_target(line);
+    if (line->kind != YEW_PROMPT_CMD) {
+        yew_msg(ed, YEW_MSG_WARN, "A-h: man pages are for :! commands");
+        return YEW_CMD_OK;
+    }
+    text = text_string(line->buf);
+    arena_init(&a);
+    argc = yew_cmdline_man_argv(ed, text, strlen(text),
+                                (size_t)line->cur.pos.v, &a, argv, &why);
+    yew_xfree(text);
+    if (argc == 0U) {
+        arena_free_all(&a);
+        yew_msg(ed, YEW_MSG_WARN, "%s", why);
+        return YEW_CMD_OK;
+    }
+    if (!yew_shell_term_argv(ed, argv, &wait, err, sizeof(err))) {
+        arena_free_all(&a);
+        yew_msg(ed, YEW_MSG_ERROR, "A-h: %s", err);
+        return YEW_CMD_ERR_STATE;
+    }
+    if (wait.state == YEW_JOB_EXITED && wait.exit_code == 0)
+        yew_msg_clear(ed);
+    else if (wait.state == YEW_JOB_EXITED && argc == 6U)
+        yew_msg(ed, YEW_MSG_WARN, "no man page for %s or %s", argv[4],
+                argv[5]);
+    else if (wait.state == YEW_JOB_EXITED)
+        yew_msg(ed, YEW_MSG_WARN, "no man page for %s", argv[4]);
+    else if (wait.state == YEW_JOB_SIGNALED)
+        yew_msg(ed, YEW_MSG_WARN, "man killed by signal %d", wait.termsig);
+    else
+        yew_msg(ed, YEW_MSG_ERROR, "A-h: cannot run /bin/sh: %s",
+                strerror(wait.exec_errno));
+    arena_free_all(&a);
+    ed->full_damage = true;
+    ed->footer_dirty = true;
     return YEW_CMD_OK;
 }
 
