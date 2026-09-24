@@ -402,3 +402,49 @@ void test_harness_leak_every_rejects_a_bad_count(void)
                                       "PASS args_parse_batch_misuse\n"), 1U);
     bytebuf_free(&output);
 }
+
+/*
+ * SHELL is put back before every test.  The first member fails after
+ * pointing SHELL elsewhere; the second sees the run's own SHELL.  Both
+ * do nothing unless YEW_TEST_SHELL_DEMO (the SHELL the run started
+ * with) is set, which only this test's child run sets.
+ */
+void test_harness_shell_member_a_fails_mid_change(void)
+{
+    if (getenv("YEW_TEST_SHELL_DEMO") == NULL)
+        return;
+    YEW_ASSERT_EQ_I64(setenv("SHELL", "/nonexistent/fixture-sh", 1), 0);
+    YEW_ASSERT(false);
+}
+
+void test_harness_shell_member_b_sees_the_run_shell(void)
+{
+    const char *want = getenv("YEW_TEST_SHELL_DEMO");
+    const char *shell = getenv("SHELL");
+
+    if (want == NULL)
+        return;
+    YEW_ASSERT_NOT_NULL(shell);
+    YEW_ASSERT_EQ_STR(shell, want);
+}
+
+void test_harness_shell_is_restored_between_tests(void)
+{
+    const char *env[] = {"SHELL", "/bin/sh", "YEW_TEST_SHELL_DEMO",
+                         "/bin/sh", NULL};
+    char *argv[] = {(char *)yew_test_program_path(), "--filter",
+                    "harness_shell_member_", NULL};
+    Bytebuf output;
+    int rc;
+
+    bytebuf_init(&output);
+    rc = run_unit_child_env(argv, NULL, false, env, &output);
+    YEW_ASSERT_EQ_I64(rc, 1);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "FAIL harness_shell_member_"
+                                               "a_fails_mid_change"), 1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "PASS harness_shell_member_"
+                                               "b_sees_the_run_shell\n"),
+                      1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "unit: 2 tests,"), 1U);
+    bytebuf_free(&output);
+}
