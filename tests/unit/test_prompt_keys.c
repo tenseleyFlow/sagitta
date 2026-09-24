@@ -1613,8 +1613,10 @@ static void pk_table_scene(const PkArrows *k)
     pk_down(&f, k);
     pk_text(&f, typed);
     YEW_ASSERT(!pk_in_table(&f));
-    /* <pgdn>/<pgup> page inside the table. */
-    (void)pk_enter_table(&f);
+    /* <pgdn>/<pgup> page inside the table.  The returned text is heap:
+     * dropping it leaked, and LeakSanitizer then failed a LATER test
+     * whose forked child inherits the leak and exits through exit(). */
+    yew_xfree(pk_enter_table(&f));
     pk_run(&f, YEW_KEY_PAGE_DOWN, 0U, "ed.cmdline.menu.page_next");
     YEW_ASSERT(pk_in_table(&f));
     YEW_ASSERT(f.ed.cmdline.menu.sel >= 5);
