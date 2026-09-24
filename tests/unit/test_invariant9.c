@@ -839,7 +839,12 @@ void test_invariant9_every_new_command_is_registered(void)
          */
         "ed.sel.extend.word_prev", "ed.sel.extend.word_next",
         "ed.sel.extend.line_home", "ed.sel.extend.line_end",
-        "ed.cmdline.copy_or_cancel"
+        "ed.cmdline.copy_or_cancel",
+        /*
+         * Sprint 57.30 §4: C-r searches history in the pager -- keys
+         * move, Enter fills, Esc restores; no mouse needed.
+         */
+        "ed.cmdline.hist_search"
     };
     size_t i;
 

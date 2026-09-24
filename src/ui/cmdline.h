@@ -48,6 +48,14 @@ typedef struct CmdLine {
     YewHistWalk walk;
     size_t walk_prefix;
     bool walk_bang;
+    /*
+     * Sprint 57.30 §4: C-r's history search owns the pager -- its rows
+     * are history entries matching the line (§2's source and rule),
+     * refiltered as the line is edited.  `hsearch_line` is the line as
+     * it was when C-r was pressed, which Esc restores.
+     */
+    bool hsearch;
+    char *hsearch_line;
     CmdErr err;
     /* §9: what the parser currently understands.  Empty when it
      * understands nothing -- silence, never a guess. */
@@ -171,6 +179,9 @@ CmdStatus yew_cmdline_cmd_down(CmdCtx *cx);
  * is empty.
  */
 bool yew_cmdline_hist_match(Ed *ed, Span *out);
+/* Sprint 57.30 §4: C-r -- open the pager on history matching the line,
+ * or, open already, move to the next OLDER match. */
+CmdStatus yew_cmdline_cmd_hist_search(CmdCtx *cx);
 
 CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_page_prev(CmdCtx *cx);

@@ -511,6 +511,8 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     yew_hist_walk_end(&line->walk);
     line->walk_prefix = 0U;
     line->walk_bang = false;
+    line->hsearch = false;
+    line->hsearch_line = NULL;
     line->err = (CmdErr){0};
     line->scroll = 0U;
     yew_hist_suggest_init(&line->suggest);
@@ -599,6 +601,9 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     history_release(ed, line->kind, line->history);
     line->history = NULL;
     yew_hist_walk_end(&line->walk);
+    line->hsearch = false;
+    yew_xfree(line->hsearch_line);
+    line->hsearch_line = NULL;
     cmdline_target_free(cmdline_target(line));
     line->target = NULL;
     line->buf = NULL;
@@ -777,6 +782,7 @@ static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
 }
 
 static void cmdline_refilter_as(Ed *ed, bool asked);
+static void hsearch_refilter(Ed *ed);
 
 /* Sprint 57.32 §4: the filter's `in ch7/` note, onto the menu. */
 static void menu_where(CmdLine *line)
@@ -805,6 +811,11 @@ static void cmdline_refilter_as(Ed *ed, bool asked)
     Vec_CompItem items = {0};
     char *text;
 
+    /* Sprint 57.30 §4: C-r's rows are history, whatever the prompt. */
+    if (line->hsearch) {
+        hsearch_refilter(ed);
+        return;
+    }
     /* Only `:` completes; `/` and `?` carry a pattern, not a command. */
     if (line->kind != YEW_PROMPT_CMD) {
         yew_menu_dismiss(&line->menu);
@@ -1099,6 +1110,7 @@ static const PromptSelRow prompt_sel_rows[] = {
     {"ed.cmdline.down", PSEL_COLLAPSE},
     {"ed.cmdline.hist_prev", PSEL_COLLAPSE},
     {"ed.cmdline.hist_next", PSEL_COLLAPSE},
+    {"ed.cmdline.hist_search", PSEL_COLLAPSE},
 };
 
 static PromptSel prompt_sel_rule(const char *command)
@@ -1401,6 +1413,210 @@ CmdStatus yew_cmdline_cmd_hist_next(CmdCtx *cx)
     return history_move(cx, false);
 }
 
+/*
+ * Sprint 57.30 §4: C-r, fish's history pager, as 57.17's widget in a
+ * HISTORY mode.  Rows are the entries §2's walk would visit for the
+ * line's text -- same source, same match -- newest first, each with its
+ * match highlighted; the footer names the mode.  Enter puts the row in
+ * the line and does not run it; Esc puts back the line C-r found.
+ */
+enum { YEW_CMDLINE_HSEARCH_ROWS = 512 };
+
+static const char hsearch_mode[] = "history search";
+
+/* The line's term for a history match and the view it searches: a bang
+ * line's body (blanks dropped) in the snapshot, else the whole line in
+ * the prompt's history.  `*prefix` is where the entry goes. */
+static YewHistView history_source(Ed *ed, const char *text, size_t len,
+                                  size_t *prefix, size_t *term)
+{
+    CmdLine *line = &ed->cmdline;
+    YewHistView v = {NULL, NULL};
+    size_t body = 0U;
+
+    if (line->kind == YEW_PROMPT_CMD &&
+        yew_cmd_bang_body(ed, text, len, &body) && body <= len) {
+        *prefix = body;
+        while (body < len && (text[body] == ' ' || text[body] == '\t'))
+            body++;
+        *term = body;
+        suggest_ensure(ed);
+        v.suggest = &line->suggest;
+        return v;
+    }
+    *prefix = 0U;
+    *term = 0U;
+    v.hist = line->history;
+    return v;
+}
+
+static void hsearch_refilter(Ed *ed)
+{
+    CmdLine *line = &ed->cmdline;
+    char *text = text_string(line->buf);
+    size_t len = strlen(text);
+    size_t prefix;
+    size_t term;
+    YewHistView v = history_source(ed, text, len, &prefix, &term);
+    Vec_CompItem items = {0};
+    u32 n = yew_hist_view_len(&v);
+    u32 total = 0U;
+    u32 i;
+
+    /* Both sources hold each text once (CmdHist on add, the snapshot on
+     * load), so no row repeats and §2's duplicate rule holds as is. */
+    for (i = 0U; i < n; i++) {
+        const char *entry = yew_hist_view_at(&v, i);
+        size_t at;
+
+        if (entry == NULL ||
+            !yew_hist_find(entry, strlen(entry), text + term, len - term,
+                           &at))
+            continue;
+        total++;
+        if (items.len < YEW_CMDLINE_HSEARCH_ROWS) {
+            CompItem item;
+            size_t k;
+
+            (void)memset(&item, 0, sizeof(item));
+            item.text = entry;
+            item.match = entry;
+            for (k = 0U; k < len - term && k < YEW_FZ_MAX_POS &&
+                         at + k <= UINT16_MAX; k++)
+                item.m.pos[item.m.n_pos++] = (u16)(at + k);
+            Vec_CompItem_push(&items, item);
+        }
+    }
+    yew_xfree(text);
+    /* Always the newest match first: a refilter starts over. */
+    yew_menu_unselect(&line->menu);
+    if (items.len == 0U) {
+        Vec_CompItem_free(&items);
+        yew_menu_dismiss(&line->menu);
+        if (snprintf(line->hint, sizeof(line->hint), "%s: no match",
+                     hsearch_mode) < 0)
+            line->hint[0] = '\0';
+    } else {
+        yew_menu_reset(&line->menu, items, total, (Span){0U, len});
+        (void)yew_menu_select(&line->menu, 0);
+        if (snprintf(line->hint, sizeof(line->hint), "%s",
+                     hsearch_mode) < 0)
+            line->hint[0] = '\0';
+    }
+    /* Sprint 57.32's footer note names the mode. */
+    if (snprintf(line->menu.where, sizeof(line->menu.where), "%s",
+                 hsearch_mode) < 0)
+        line->menu.where[0] = '\0';
+    ed->full_damage = true;
+    ed->footer_dirty = true;
+}
+
+/* Leaves the mode; the pager goes back to completing the line. */
+static void hsearch_end(Ed *ed)
+{
+    CmdLine *line = &ed->cmdline;
+
+    line->hsearch = false;
+    yew_xfree(line->hsearch_line);
+    line->hsearch_line = NULL;
+    menu_discard(ed);
+    line->hint[0] = '\0';
+    cmdline_refilter(ed);
+}
+
+static CmdStatus hsearch_select(Ed *ed, i32 index)
+{
+    Menu *menu = &ed->cmdline.menu;
+    i32 last;
+
+    if (menu->items.len == 0U)
+        return YEW_CMD_OK;
+    last = menu->items.len > (size_t)INT32_MAX ? INT32_MAX
+                                               : (i32)menu->items.len - 1;
+    if (index < 0)
+        index = 0;
+    if (index > last)
+        index = last;
+    (void)yew_menu_select(menu, index);
+    ed->full_damage = true;
+    ed->footer_dirty = true;
+    return YEW_CMD_OK;
+}
+
+static CmdStatus hsearch_move(Ed *ed, i32 delta)
+{
+    return hsearch_select(ed, ed->cmdline.menu.sel + delta);
+}
+
+static CmdStatus hsearch_page(Ed *ed, bool previous)
+{
+    const Menu *menu = &ed->cmdline.menu;
+    i32 rows = menu->spec.max_rows == 0U ? 1 : (i32)menu->spec.max_rows;
+
+    return hsearch_select(ed, menu->sel + (previous ? -rows : rows));
+}
+
+/* Enter: the row into the line (after a bang line's `!`), NOT run. */
+static CmdStatus hsearch_accept(Ed *ed)
+{
+    CmdLine *line = &ed->cmdline;
+    const CompItem *item = yew_menu_selected(&line->menu);
+    CmdStatus status = YEW_CMD_OK;
+
+    if (item != NULL) {
+        char *text = text_string(line->buf);
+        size_t len = strlen(text);
+        size_t prefix;
+        size_t term;
+        Bytebuf bytes;
+
+        (void)history_source(ed, text, len, &prefix, &term);
+        bytebuf_init(&bytes);
+        bytebuf_append(&bytes, text, prefix);
+        sanitize_bytes((const u8 *)item->text, strlen(item->text), &bytes);
+        if (!replace_span(ed, (Span){0U, len}, bytes.data, bytes.len, true))
+            status = YEW_CMD_ERR_IO;
+        bytebuf_free(&bytes);
+        yew_xfree(text);
+    }
+    hsearch_end(ed);
+    return status;
+}
+
+/* Esc / C-g: the line as C-r found it. */
+static CmdStatus hsearch_cancel(Ed *ed)
+{
+    CmdLine *line = &ed->cmdline;
+    CmdStatus status = YEW_CMD_OK;
+
+    if (line->hsearch_line != NULL &&
+        !replace_all(ed, line->hsearch_line, true))
+        status = YEW_CMD_ERR_IO;
+    hsearch_end(ed);
+    return status;
+}
+
+CmdStatus yew_cmdline_cmd_hist_search(CmdCtx *cx)
+{
+    Ed *ed;
+    CmdLine *line;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    line = &ed->cmdline;
+    /* Again: the next OLDER match. */
+    if (line->hsearch)
+        return hsearch_move(ed, 1);
+    sync_from_target(line);
+    yew_hist_walk_end(&line->walk);
+    menu_discard(ed);
+    line->hsearch = true;
+    line->hsearch_line = text_string(line->buf);
+    hsearch_refilter(ed);
+    return YEW_CMD_OK;
+}
+
 static char *heap_slice(const char *text, Span span)
 {
     size_t len = (size_t)(span.hi - span.lo);
@@ -1475,6 +1691,8 @@ static CmdStatus menu_preview(Ed *ed, bool previous)
 {
     Menu *menu = &ed->cmdline.menu;
 
+    if (ed->cmdline.hsearch)
+        return hsearch_move(ed, previous ? -1 : 1);
     if (menu->items.len == 0U)
         return YEW_CMD_OK;
     if (!yew_menu_focused(menu)) {
@@ -1505,8 +1723,11 @@ static CmdStatus complete(Ed *ed, bool previous)
      * with nothing chosen is not "already cycling" -- it falls through
      * so the first Tab can still offer the longest common prefix.
      */
-    /* Sprint 57.30: Tab is a completion question, not a history step. */
+    /* Sprint 57.30: Tab is a completion question, not a history step --
+     * nor a history search: it leaves C-r's rows for completion's. */
     yew_hist_walk_end(&line->walk);
+    if (line->hsearch)
+        hsearch_end(ed);
     if (line->menu.explicit_sel)
         return completion_cycle(ed, previous);
     text = text_string(line->buf);
@@ -1673,6 +1894,8 @@ static CmdStatus menu_page(Ed *ed, bool previous)
     CmdLine *line = &ed->cmdline;
     const CompItem *item;
 
+    if (line->hsearch)
+        return hsearch_page(ed, previous);
     if (!yew_menu_move(&line->menu, previous ? -1 : 1, true))
         return YEW_CMD_OK;
     /* The page keys move inside the table, so they are in it. */
@@ -1787,6 +2010,8 @@ CmdStatus yew_cmdline_cmd_up(CmdCtx *cx)
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
+    if (cx->ed->cmdline.hsearch)
+        return hsearch_move(cx->ed, -1);
     menu = &cx->ed->cmdline.menu;
     if (!yew_menu_focused(menu))
         return history_move(cx, true);
@@ -1801,6 +2026,8 @@ CmdStatus yew_cmdline_cmd_down(CmdCtx *cx)
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
+    if (cx->ed->cmdline.hsearch)
+        return hsearch_move(cx->ed, 1);
     menu = &cx->ed->cmdline.menu;
     if (!yew_menu_focused(menu))
         return history_move(cx, false);
@@ -1835,6 +2062,8 @@ CmdStatus yew_cmdline_cmd_menu_accept(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
     ed = cx->ed;
+    if (ed->cmdline.hsearch)
+        return hsearch_accept(ed);
     item = yew_menu_selected(&ed->cmdline.menu);
     if (item == NULL)
         return YEW_CMD_OK;
@@ -1877,6 +2106,12 @@ bool yew_cmdline_menu_click(Ed *ed, i32 row)
         return true;
     }
     line->click_row = row;
+    /* C-r's rows are chosen by the click and put in the line by Enter
+     * (or the second click), never previewed into it. */
+    if (line->hsearch) {
+        ed->full_damage = true;
+        return true;
+    }
     /* Show the choice in the line, the same as Tab does. */
     {
         const CompItem *item = yew_menu_selected(&line->menu);
@@ -1903,6 +2138,12 @@ CmdStatus yew_cmdline_cmd_menu_dismiss(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
+    if (cx->ed->cmdline.hsearch) {
+        cx->ed->cmdline.hsearch = false;
+        yew_xfree(cx->ed->cmdline.hsearch_line);
+        cx->ed->cmdline.hsearch_line = NULL;
+        cx->ed->cmdline.hint[0] = '\0';
+    }
     menu_discard(cx->ed);
     return YEW_CMD_OK;
 }
@@ -2091,7 +2332,7 @@ static const char *cmdline_ghost_of(Ed *ed, size_t *len, GhostKind *kind)
     *kind = GHOST_NONE;
     /* Sprint 57.30 §2: a walked history entry is the whole suggestion;
      * a ghost continuing it would be a second one. */
-    if (walk_showing(&ed->cmdline))
+    if (walk_showing(&ed->cmdline) || ed->cmdline.hsearch)
         return NULL;
     if (yew_menu_selected(&ed->cmdline.menu) == NULL) {
         ghost = history_ghost(ed, len);
@@ -2488,6 +2729,10 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     ed = cx->ed;
     line = &ed->cmdline;
+    /* Sprint 57.30 §4: Enter in C-r's pager fills the line; a second
+     * Enter runs it. */
+    if (line->hsearch)
+        return hsearch_accept(ed);
     accepted_kind = line->kind;
     accepted_generation = line->generation;
     /*
@@ -2629,6 +2874,8 @@ CmdStatus yew_cmdline_cmd_cancel(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
     line = &cx->ed->cmdline;
+    if (line->hsearch)
+        return hsearch_cancel(cx->ed);
     /*
      * Esc dismisses the MENU only when the user opened or entered it --
      * Tab left a stem to restore, or a row was chosen.  A menu that

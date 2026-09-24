@@ -111,6 +111,9 @@ void test_prompt_keys_table_rows_on_ctrl_p_and_ctrl_n(void);
 void test_prompt_keys_history_is_a_substring_walk(void);
 void test_prompt_keys_search_prompt_walks_its_own_history(void);
 void test_prompt_keys_history_highlight_is_state(void);
+void test_prompt_keys_ctrl_r_searches_history(void);
+void test_prompt_keys_ctrl_r_escape_restores_the_line(void);
+void test_prompt_keys_ctrl_r_on_a_bang_line(void);
 
 void test_readline_kill_word_prev_reaches_every_cursor(void);
 void test_readline_kills_leave_registers_and_clipboard_untouched(void);

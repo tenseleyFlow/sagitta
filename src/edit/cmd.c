@@ -717,6 +717,11 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.hist_next", yew_cmdline_cmd_hist_next, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Find the next matching command-line history entry", NULL},
+    /* Sprint 57.30 §4: C-r -- keymap plumbing like hist_prev: internal,
+     * so not recordable. */
+    {"ed.cmdline.hist_search", yew_cmdline_cmd_hist_search, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Search history for the line's text; again for an older match", NULL},
     {"ed.cmdline.complete_next", yew_cmdline_cmd_complete_next,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Open or advance command-line completion", NULL},
@@ -1574,7 +1579,10 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.28: the unix-word-rubout kill, yank-pop, A-. */
         "ws_word_prev", "yank_pop", "last_arg",
         /* Sprint 57.29: the line-unit extends and the prompt's C-c. */
-        "line_home", "line_end", "copy_or_cancel"};
+        "line_home", "line_end", "copy_or_cancel",
+        /* Sprint 57.30: C-r's history search, A-<up>/A-<down>'s token
+         * search. */
+        "hist_search", "token_prev", "token_next"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

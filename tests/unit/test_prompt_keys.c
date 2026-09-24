@@ -530,8 +530,8 @@ void test_prompt_keys_ctrl_q_inserts_the_next_key_literally(void)
     pk_free(&f);
 }
 
-/* A-r and C-r both insert a register; the register name is the next key,
- * printable or not. */
+/* A-r inserts a register; the register name is the next key, printable
+ * or not.  (C-r did too until Sprint 57.30 gave it to history search.) */
 void test_prompt_keys_alt_r_inserts_a_register(void)
 {
     PkFix f;
@@ -548,9 +548,15 @@ void test_prompt_keys_alt_r_inserts_a_register(void)
     YEW_ASSERT_EQ_U64(f.ed.last_cmd.v,
                       yew_cmd_lookup("ed.cmdline.insert_register", 26U).v);
     pk_text(&f, "x reg");
-    pk_send(&f, (u32)'r', YEW_MOD_CTRL);
+    pk_send(&f, (u32)'r', YEW_MOD_ALT);
     pk_send(&f, (u32)'a', 0U);
     pk_text(&f, "x regreg");
+    /* C-r captures nothing now: the next key is typed text. */
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    YEW_ASSERT(f.ed.cmdline.hsearch);
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_text(&f, "x regreg");
+    YEW_ASSERT(!f.ed.cmdline.hsearch);
     pk_free(&f);
 }
 
@@ -1773,5 +1779,168 @@ void test_prompt_keys_history_highlight_is_state(void)
     pk_text(&f, "set nowrap");
     YEW_ASSERT(!yew_cmdline_hist_match(&f.ed, NULL));
     yew_grid_free(&f.ed.grid);
+    pk_free(&f);
+}
+
+static void pk_rows(PkFix *f, const char *const *want, size_t n)
+{
+    size_t i;
+
+    YEW_ASSERT_EQ_U64(f->ed.cmdline.menu.items.len, n);
+    for (i = 0U; i < n && i < f->ed.cmdline.menu.items.len; i++)
+        YEW_ASSERT_EQ_STR(f->ed.cmdline.menu.items.data[i].text, want[i]);
+}
+
+/* Does grid row `row` hold `text` anywhere (ASCII cells)? */
+static bool pk_row_has(PkFix *f, u16 row, const char *text)
+{
+    char line[256];
+    u16 x;
+    u16 cols = f->ed.grid.cols;
+
+    if (cols >= sizeof(line))
+        cols = (u16)(sizeof(line) - 1U);
+    for (x = 0U; x < cols; x++) {
+        u8 c = f->ed.grid.back[(size_t)row * f->ed.grid.cols + x].utf8[0];
+
+        line[x] = c >= 0x20U && c < 0x7fU ? (char)c : '.';
+    }
+    line[cols] = '\0';
+    return strstr(line, text) != NULL;
+}
+
+/* §4: C-r lists matching history newest first, refilters as the line is
+ * typed, moves older on C-r, and Enter fills the line WITHOUT running
+ * it; the second Enter runs it. */
+void test_prompt_keys_ctrl_r_searches_history(void)
+{
+    static const char *const own[] = {
+        "set shell.suggest_history all", "e notes.txt",
+        "set shell.suggest_history yew", "echo hi"};
+    static const char *const all[] = {
+        "echo hi", "set shell.suggest_history yew", "e notes.txt",
+        "set shell.suggest_history all"};
+    static const char *const sugg[] = {"set shell.suggest_history yew",
+                                       "set shell.suggest_history all"};
+    PkFix f;
+    OptVal v;
+    u16 row;
+    bool footer = false;
+
+    pk_init(&f);
+    pk_prompt(&f, own, 4U, "");
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    YEW_ASSERT(f.ed.cmdline.hsearch);
+    pk_rows(&f, all, 4U);
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.menu.where, "history search");
+
+    /* Typing edits the line and refilters, the match highlighted. */
+    pk_type(&f, "suggest");
+    pk_text(&f, "suggest");
+    YEW_ASSERT(f.ed.cmdline.hsearch);
+    pk_rows(&f, sugg, 2U);
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.data[0].m.n_pos, 7U);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.data[0].m.pos[0], 10U);
+    /* The pager's footer names the mode. */
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 8U, 60U));
+    yew_cmdline_draw(&f.ed, (Rect){0U, 7U, 60U, 1U});
+    for (row = 0U; row < 7U; row++)
+        footer = footer || pk_row_has(&f, row, "history search 1/2");
+    YEW_ASSERT(footer);
+    yew_grid_free(&f.ed.grid);
+
+    /* C-r again: the next OLDER match; past the oldest it stays. */
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 1);
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 1);
+    /* The arrows, C-p/C-n and the page keys move between rows; the line
+     * does not change while they do. */
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    pk_run(&f, YEW_KEY_DOWN, 0U, "ed.cmdline.down");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 1);
+    pk_run(&f, (u32)'p', YEW_MOD_CTRL, "ed.cmdline.up");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    pk_run(&f, (u32)'n', YEW_MOD_CTRL, "ed.cmdline.down");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 1);
+    pk_run(&f, YEW_KEY_PAGE_UP, 0U, "ed.cmdline.menu.page_prev");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    pk_run(&f, YEW_KEY_PAGE_DOWN, 0U, "ed.cmdline.menu.page_next");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 1);
+    pk_text(&f, "suggest");
+
+    /* Enter fills the line and closes the list; it does not run. */
+    pk_run(&f, YEW_KEY_ENTER, 0U, "ed.cmdline.accept");
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT(!f.ed.cmdline.hsearch);
+    pk_text(&f, "set shell.suggest_history all");
+    YEW_ASSERT(yew_opt_get(&f.ed, NULL, NULL, "shell.suggest_history", 21U,
+                           &v));
+    YEW_ASSERT_EQ_U64(v.as.str.len, 3U);
+    YEW_ASSERT_EQ_MEM(v.as.str.s, "yew", 3U);
+    /* A second Enter does. */
+    pk_run(&f, YEW_KEY_ENTER, 0U, "ed.cmdline.accept");
+    YEW_ASSERT(!f.ed.cmdline.active);
+    YEW_ASSERT(yew_opt_get(&f.ed, NULL, NULL, "shell.suggest_history", 21U,
+                           &v));
+    YEW_ASSERT_EQ_U64(v.as.str.len, 3U);
+    YEW_ASSERT_EQ_MEM(v.as.str.s, "all", 3U);
+    pk_free(&f);
+}
+
+/* §4: Esc and C-g close the list and restore the line as C-r found it;
+ * no match says so; Tab leaves the search for completion. */
+void test_prompt_keys_ctrl_r_escape_restores_the_line(void)
+{
+    static const char *const own[] = {"echo one", "echo two"};
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, own, 2U, "ec");
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.len, 2U);
+    pk_type(&f, "ho t");
+    pk_text(&f, "echo t");
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.len, 1U);
+    pk_run(&f, YEW_KEY_ESCAPE, 0U, "ed.cmdline.cancel");
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT(!f.ed.cmdline.hsearch);
+    pk_text(&f, "ec");
+
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    pk_type(&f, "zzz");
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.len, 0U);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.hint, "history search: no match");
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT(!f.ed.cmdline.hsearch);
+    pk_text(&f, "ec");
+
+    /* Tab leaves C-r's rows for completion's, keeping the line. */
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    pk_run(&f, YEW_KEY_TAB, 0U, "ed.cmdline.complete_next");
+    YEW_ASSERT(!f.ed.cmdline.hsearch);
+    YEW_ASSERT(strcmp(f.ed.cmdline.menu.where, "history search") != 0);
+    pk_free(&f);
+}
+
+/* §4 on a bang line: the snapshot, the row after the typed `!`. */
+void test_prompt_keys_ctrl_r_on_a_bang_line(void)
+{
+    static const char *const own[] = {"!make all", "!git stage -p"};
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, own, 2U, "r !a");
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.len, 2U);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.menu.items.data[0].text, "git stage -p");
+    pk_run(&f, (u32)'r', YEW_MOD_CTRL, "ed.cmdline.hist_search");
+    pk_run(&f, YEW_KEY_ENTER, 0U, "ed.cmdline.accept");
+    YEW_ASSERT(f.ed.cmdline.active);
+    pk_text(&f, "r !make all");
     pk_free(&f);
 }

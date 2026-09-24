@@ -447,10 +447,10 @@ static const BindRow frozen_E[] = {
     {"S-<tab>", "ed.cmdline.complete_prev", 0, NULL},
     {"<pgdn>", "ed.cmdline.menu.page_next", 0, NULL},
     {"<pgup>", "ed.cmdline.menu.page_prev", 0, NULL},
-    /* Sprint 57.28 §3: readline wins the clashes.  A-r is insert-register
-     * (C-r keeps it until 57.30), C-q literal-next, C-v the system
-     * clipboard, C-y yank, A-/ redo. */
-    {"C-r", "ed.cmdline.insert_register", 0, NULL},
+    /* Sprint 57.28 §3: readline wins the clashes.  A-r is insert-register,
+     * C-q literal-next, C-v the system clipboard, C-y yank, A-/ redo.
+     * Sprint 57.30 §4: C-r is fish's history search. */
+    {"C-r", "ed.cmdline.hist_search", 0, NULL},
     {"A-r", "ed.cmdline.insert_register", 0, NULL},
     {"C-q", "ed.cmdline.literal_next", 0, NULL},
     {"C-v", "ed.clip.paste", 0, NULL},
