@@ -138,6 +138,7 @@ const YewTest yew_tests[] = {
     T(prompt_keys_selection_is_never_text),
     T(prompt_keys_clipboard_and_yank_stack_stay_apart),
     T(prompt_keys_insert_mode_ctrl_c_and_ctrl_x),
+    T(prompt_keys_selection_draws_in_the_selection_style),
     T(readline_kill_word_prev_reaches_every_cursor),
     T(readline_kills_leave_registers_and_clipboard_untouched),
     T(readline_register_writes_leave_the_yank_stack),

@@ -105,6 +105,7 @@ void test_prompt_keys_selection_edges_respect_graphemes(void);
 void test_prompt_keys_selection_is_never_text(void);
 void test_prompt_keys_clipboard_and_yank_stack_stay_apart(void);
 void test_prompt_keys_insert_mode_ctrl_c_and_ctrl_x(void);
+void test_prompt_keys_selection_draws_in_the_selection_style(void);
 
 void test_readline_kill_word_prev_reaches_every_cursor(void);
 void test_readline_kills_leave_registers_and_clipboard_untouched(void);

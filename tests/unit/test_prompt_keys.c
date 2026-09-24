@@ -20,9 +20,11 @@
 
 #include "edit/ed.h"
 #include "edit/option.h"
+#include "term/grid.h"
 #include "text/clipboard.h"
 #include "ui/cmdhist.h"
 #include "ui/cmdline.h"
+#include "ui/draw.h"
 
 typedef struct PkFix {
     Ed ed;
@@ -1326,4 +1328,100 @@ void test_prompt_keys_insert_mode_ctrl_c_and_ctrl_x(void)
     pk_clip_holds(&clip, "lo");
     pk_free(&f);
     pk_clip_done(&clip);
+}
+
+/* ------------------------------------------------------------ drawing */
+
+static bool pk_color_eq(YewColor a, YewColor b)
+{
+    return memcmp(&a, &b, sizeof(a)) == 0;
+}
+
+/* Does cell `x` of the prompt row carry every field of the selection
+ * style? */
+static bool pk_styled(PkFix *f, u16 x)
+{
+    Cell sel;
+    u8 fields = yew_draw_sel_style(&f->ed, &sel);
+    const Cell *cell = &f->ed.grid.back[x];
+
+    YEW_ASSERT(fields != 0U);
+    if ((fields & YEW_OVERLAY_BG) != 0U && !pk_color_eq(cell->bg, sel.bg))
+        return false;
+    if ((fields & YEW_OVERLAY_FG) != 0U && !pk_color_eq(cell->fg, sel.fg))
+        return false;
+    if ((fields & YEW_OVERLAY_ATTRS) != 0U &&
+        (cell->attrs & sel.attrs) != sel.attrs)
+        return false;
+    return true;
+}
+
+static void pk_draw(PkFix *f, u16 cols)
+{
+    yew_cmdline_draw(&f->ed, (Rect){0U, 0U, cols, 1U});
+}
+
+/*
+ * §3: the prompt paints its selection in the document's style, across
+ * the horizontal scroll at either edge, whole wide clusters, never the
+ * `:` or the ghost -- and identical state draws identical cells.
+ */
+void test_prompt_keys_selection_draws_in_the_selection_style(void)
+{
+    static const char *const own[] = {"!git status"};
+    PkFix f;
+    Cell first[12];
+    u16 x;
+
+    pk_init(&f);
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 1U, 40U));
+    /* 18 bytes in 11 text cells: the start of the selection is off the
+     * left edge, the caret cell after the text is not selected. */
+    pk_prompt(&f, NULL, 0U, "e 0123456789abcdef");
+    pk_run(&f, (u32)'a', YEW_MOD_CTRL, "ed.move.line.home");
+    pk_shift(&f, YEW_KEY_END, 0U, "ed.sel.extend.line_end");
+    pk_draw(&f, 12U);
+    YEW_ASSERT(!pk_styled(&f, 0U));
+    for (x = 1U; x <= 10U; x++)
+        YEW_ASSERT(pk_styled(&f, x));
+    YEW_ASSERT(!pk_styled(&f, 11U));
+    YEW_ASSERT_EQ_U64(f.ed.grid.back[1].utf8[0], (u8)'6');
+    (void)memcpy(first, f.ed.grid.back, sizeof(first));
+    pk_draw(&f, 12U);
+    YEW_ASSERT_EQ_MEM(first, f.ed.grid.back, sizeof(first));
+    /* Selected from the end back to the start: the caret is home and
+     * the selection runs off the RIGHT edge. */
+    pk_run(&f, YEW_KEY_END, 0U, "ed.move.line.end");
+    pk_shift(&f, YEW_KEY_HOME, 0U, "ed.sel.extend.line_home");
+    pk_sel(&f, 0U, 18U);
+    pk_draw(&f, 12U);
+    YEW_ASSERT_EQ_U64(f.ed.grid.back[1].utf8[0], (u8)'e');
+    for (x = 1U; x <= 11U; x++)
+        YEW_ASSERT(pk_styled(&f, x));
+    YEW_ASSERT(!pk_styled(&f, 0U));
+
+    /* A wide cluster: both of its cells, and nothing of its neighbour. */
+    pk_prompt(&f, NULL, 0U, "e ");
+    pk_paste(&f, "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_draw(&f, 12U);
+    YEW_ASSERT(!pk_styled(&f, 5U));
+    YEW_ASSERT(!pk_styled(&f, 6U));
+    YEW_ASSERT(pk_styled(&f, 7U));
+    YEW_ASSERT(pk_styled(&f, 8U));
+    YEW_ASSERT(!pk_styled(&f, 9U));
+
+    /* The ghost trails the selected text and is never selected. */
+    pk_prompt(&f, own, 1U, "!git st");
+    pk_run(&f, (u32)'a', YEW_MOD_CTRL, "ed.move.line.home");
+    pk_shift(&f, YEW_KEY_END, 0U, "ed.sel.extend.line_end");
+    pk_ghost(&f, "atus");
+    pk_draw(&f, 40U);
+    for (x = 1U; x <= 7U; x++)
+        YEW_ASSERT(pk_styled(&f, x));
+    YEW_ASSERT_EQ_U64(f.ed.grid.back[8].utf8[0], (u8)'a');
+    for (x = 8U; x <= 11U; x++)
+        YEW_ASSERT(!pk_styled(&f, x));
+    yew_grid_free(&f.ed.grid);
+    pk_free(&f);
 }
