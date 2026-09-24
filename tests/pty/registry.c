@@ -3740,6 +3740,121 @@ static void case_s57_26_fish_stub_rows(PtyCtx *c)
 }
 
 /*
+ * Sprint 57.30: prompt history and the completion table.
+ *
+ * The history is built from `:set` commands (57.28's pattern: a `:!`
+ * would start a job and make the frame nondeterministic), newest last:
+ * `set tabwidth 4`, `set scrolloff 2`, `set shell.suggest_history yew`.
+ */
+static void s5730_history(PtyCtx *c)
+{
+    static const char *const lines[] = {
+        "set tabwidth 4", "set scrolloff 2", "set shell.suggest_history yew"};
+    size_t i;
+
+    for (i = 0U; i < sizeof(lines) / sizeof(lines[0]); i++) {
+        s18_settle_after_keys(c, ":");
+        s18_settle_after_bytes(c, lines[i]);
+        s18_settle_after_keys(c, "enter");
+    }
+}
+
+/* §1, the dogfooding bug: with the live table open under `:set`, Up is
+ * history -- the newest entry holding `set`, the match highlighted in
+ * the `/` match style, the table closed. */
+static void case_s57_30_up_is_history_with_menu_open(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s5730_history(c);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "set");
+    s18_settle_after_keys(c, "up");
+    ptc_snapshot(c, "s57_30_up_is_history_with_menu_open");
+    s18_finish(c, path);
+}
+
+/* §1: Tab enters the table; Up off its TOP row closes it and walks
+ * history with what was TYPED (`set s`), not the row's name. */
+static void case_s57_30_table_top_to_history(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s5730_history(c);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "set s");
+    s18_settle_after_keys(c, "tab");
+    s18_settle_after_keys(c, "down");
+    s18_settle_after_keys(c, "up");
+    s18_settle_after_keys(c, "up");
+    ptc_snapshot(c, "s57_30_table_top_to_history");
+    s18_finish(c, path);
+}
+
+/* §1: Down on the true last row leaves the table, the candidate kept
+ * and the table still open (unfocused) -- so the next Up is history,
+ * searched with the line the table left. */
+static void case_s57_30_table_bottom_exit(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s5730_history(c);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "set shell.");
+    s18_settle_after_keys(c, "tab");
+    s18_settle_after_keys(c, "down");
+    s18_settle_after_keys(c, "down");
+    s18_settle_after_keys(c, "down");
+    ptc_snapshot(c, "s57_30_table_bottom_exit");
+    s18_finish(c, path);
+}
+
+/* §2: a SUBSTRING match -- `width` in the middle of `set tabwidth 4` --
+ * highlighted, never part of the line's text. */
+static void case_s57_30_substring_history_highlight(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s5730_history(c);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "width");
+    s18_settle_after_keys(c, "up");
+    ptc_snapshot(c, "s57_30_substring_history_highlight");
+    s18_finish(c, path);
+}
+
+/* §4: C-r lists the history holding the line's text in the pager, the
+ * match highlighted per row and the footer naming the mode; C-r again
+ * moves to the older match. */
+static void case_s57_30_ctrl_r_search(PtyCtx *c)
+{
+    static const u8 initial[] = "history fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s5730_history(c);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_keys(c, "ctrl+r");
+    s18_settle_after_bytes(c, "set s");
+    s18_settle_after_keys(c, "ctrl+r");
+    ptc_snapshot(c, "s57_30_ctrl_r_search");
+    s18_finish(c, path);
+}
+
+/*
  * Sprint 57.32 DoD 1: `cd ch7/ && wolf build ou<Tab>` completes inside
  * ch7/ -- where wolf will run -- and the pager says so.  The workspace
  * holds a matching `.lu` of its own that must NOT be offered.
@@ -12141,6 +12256,15 @@ const PtyCase yew_pty_cases[] = {
       case_s57_29_prompt_select_nocolor),
     C(s57_29_prompt_select_ascii, modern, 24U, 80U,
       case_s57_29_prompt_select_nocolor),
+    C(s57_30_up_is_history_with_menu_open, modern, 24U, 80U,
+      case_s57_30_up_is_history_with_menu_open),
+    C(s57_30_table_top_to_history, modern, 24U, 80U,
+      case_s57_30_table_top_to_history),
+    C(s57_30_table_bottom_exit, modern, 24U, 80U,
+      case_s57_30_table_bottom_exit),
+    C(s57_30_substring_history_highlight, modern, 24U, 80U,
+      case_s57_30_substring_history_highlight),
+    C(s57_30_ctrl_r_search, modern, 24U, 80U, case_s57_30_ctrl_r_search),
     C(s57_32_cd_then_complete, modern, 24U, 80U,
       case_s57_32_cd_then_complete),
     C(s57_32_cd_unknown, modern, 24U, 80U, case_s57_32_cd_unknown),
