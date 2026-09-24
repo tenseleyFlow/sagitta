@@ -12,6 +12,7 @@
 #include "edit/mode.h"
 #include "edit/motion.h"
 #include "edit/option.h"
+#include "edit/sel_actions.h"
 #include "fl/flruntime.h"
 #include "term/grid.h"
 #include "text/edit.h"
@@ -1045,6 +1046,165 @@ void yew_cmdline_sync(Ed *ed)
     ed->footer_dirty = true;
 }
 
+/*
+ * Sprint 57.29 §1: the prompt's selection and its collapse table.
+ *
+ * ONE table, applied by the dispatcher around every command it runs on
+ * the prompt Win, so no command has to know a selection exists.  The
+ * cursor motions keep an anchor that differs from the caret (that is
+ * how H extends), so without this a plain motion would silently grow
+ * the selection instead of collapsing it.
+ */
+typedef enum PromptSel {
+    PSEL_COLLAPSE, /* collapse at the caret, then act (the default) */
+    PSEL_EXTEND,   /* Shift+motion: the anchor stays */
+    PSEL_KEEP,     /* reads the selection itself, or hands it on to the
+                    * insert it runs (C-c, C-x, A-., C-r, C-q) */
+    PSEL_START,    /* <left>, C-b: collapse to the start, no motion */
+    PSEL_END,      /* <right>, C-f: collapse to the end, no accept */
+    PSEL_REPLACE,  /* typing, paste, yank: the text replaces it */
+    PSEL_DELETE    /* <bs>, <del>, C-d, C-h: delete it, nothing more */
+} PromptSel;
+
+typedef struct PromptSelRow {
+    const char *command;
+    u8 rule;
+} PromptSelRow;
+
+static const PromptSelRow prompt_sel_rows[] = {
+    {"ed.clip.copy", PSEL_KEEP},
+    {"ed.clip.cut", PSEL_KEEP},
+    {"ed.cmdline.copy_or_cancel", PSEL_KEEP},
+    {"ed.cmdline.last_arg", PSEL_KEEP},
+    {"ed.cmdline.insert_register", PSEL_KEEP},
+    {"ed.cmdline.literal_next", PSEL_KEEP},
+    {"ed.move.char.prev", PSEL_START},
+    {"ed.move.char.left", PSEL_START},
+    {"ed.move.char.next", PSEL_END},
+    {"ed.move.char.right", PSEL_END},
+    {"ed.cmdline.ghost.accept", PSEL_END},
+    {"ed.edit.insert.text", PSEL_REPLACE},
+    {"ed.clip.paste", PSEL_REPLACE},
+    {"ed.edit.kill.yank", PSEL_REPLACE},
+    {"ed.edit.delete.grapheme_left", PSEL_DELETE},
+    {"ed.edit.delete.grapheme", PSEL_DELETE},
+};
+
+static PromptSel prompt_sel_rule(const char *command)
+{
+    size_t i;
+
+    if (strncmp(command, "ed.sel.extend.", 14U) == 0)
+        return PSEL_EXTEND;
+    for (i = 0U; i < YEW_ARRAY_LEN(prompt_sel_rows); i++) {
+        if (strcmp(command, prompt_sel_rows[i].command) == 0)
+            return (PromptSel)prompt_sel_rows[i].rule;
+    }
+    return PSEL_COLLAPSE;
+}
+
+static Cursor *prompt_cursor(Ed *ed)
+{
+    CmdLineTarget *target;
+
+    if (ed == NULL || !ed->cmdline.active)
+        return NULL;
+    target = cmdline_target(&ed->cmdline);
+    if (target == NULL || target->win.cs.primary >= target->win.cs.curs.len)
+        return NULL;
+    return &target->win.cs.curs.data[target->win.cs.primary];
+}
+
+bool yew_cmdline_selection(Ed *ed, Span *out)
+{
+    const Cursor *c = prompt_cursor(ed);
+
+    if (c == NULL || c->anchor.v == c->pos.v)
+        return false;
+    if (out != NULL)
+        *out = c->pos.v < c->anchor.v ? (Span){c->pos.v, c->anchor.v}
+                                      : (Span){c->anchor.v, c->pos.v};
+    return true;
+}
+
+static void prompt_sel_collapse(Ed *ed, ByteOff at)
+{
+    Cursor *c = prompt_cursor(ed);
+
+    if (c == NULL)
+        return;
+    c->pos = at;
+    c->anchor = at;
+    c->goal_col = (CCol){YEW_CCOL_HERE};
+    sync_from_target(&ed->cmdline);
+    ed->footer_dirty = true;
+}
+
+/* Joins the transaction the dispatcher opened for the command, so a
+ * replacement or a deletion over a selection is ONE undo step. */
+static bool prompt_sel_delete(Ed *ed, Span span)
+{
+    CmdLineTarget *target = cmdline_target(&ed->cmdline);
+    EditCtx ec = yew_ed_edit_ctx_for(ed, &target->win);
+    bool ok = yew_edit_delete(&ec, span);
+
+    yew_ed_finish_edit(ed, &ec);
+    if (ok)
+        prompt_sel_collapse(ed, BYTEOFF(span.lo));
+    return ok;
+}
+
+bool yew_cmdline_sel(Ed *ed, const char *command, bool after)
+{
+    Cursor *c = prompt_cursor(ed);
+    PromptSel rule;
+    Span span;
+
+    if (c == NULL || command == NULL)
+        return false;
+    rule = prompt_sel_rule(command);
+    if (after) {
+        if (rule != PSEL_EXTEND && c->anchor.v != c->pos.v)
+            prompt_sel_collapse(ed, c->pos);
+        return false;
+    }
+    if (!yew_cmdline_selection(ed, &span))
+        return false;
+    switch (rule) {
+    case PSEL_EXTEND:
+    case PSEL_KEEP:
+        return false;
+    case PSEL_START:
+        prompt_sel_collapse(ed, BYTEOFF(span.lo));
+        return true;
+    case PSEL_END:
+        prompt_sel_collapse(ed, BYTEOFF(span.hi));
+        return true;
+    case PSEL_REPLACE:
+        /* A failed delete must not leave the insert landing beside the
+         * text it was meant to replace. */
+        return !prompt_sel_delete(ed, span);
+    case PSEL_DELETE:
+        (void)prompt_sel_delete(ed, span);
+        return true;
+    case PSEL_COLLAPSE:
+        break;
+    }
+    prompt_sel_collapse(ed, c->pos);
+    return false;
+}
+
+CmdStatus yew_cmdline_cmd_copy_or_cancel(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    if (!yew_cmdline_selection(cx->ed, NULL))
+        return yew_cmdline_cmd_cancel(cx);
+    /* The dispatcher collapses it afterwards; the prompt stays open. */
+    cx->win = yew_cmdline_target(cx->ed);
+    return yew_sel_cmd_clip_copy(cx);
+}
+
 bool yew_cmdline_key(Ed *ed, const Key *key)
 {
     const u16 command_mods = YEW_MOD_ALT | YEW_MOD_CTRL | YEW_MOD_SUPER |
@@ -1949,8 +2109,13 @@ CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx)
             line->last_arg_gen == line->generation &&
             ed->invoke_seq == line->last_arg_seq + 1U;
     i = again ? line->last_arg_entry : yew_hist_len(line->history);
-    replace = again ? line->last_arg_span
-                    : (Span){line->cur.pos.v, line->cur.pos.v};
+    /* Sprint 57.29: the first A-. replaces a selection, in the same one
+     * edit, as any insert over one does. */
+    replace = (Span){line->cur.pos.v, line->cur.pos.v};
+    if (again)
+        replace = line->last_arg_span;
+    else
+        (void)yew_cmdline_selection(ed, &replace);
     while (i > 0U) {
         const char *entry = yew_hist_at(line->history, --i);
         size_t n = entry == NULL ? 0U : strlen(entry);

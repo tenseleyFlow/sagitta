@@ -175,4 +175,24 @@ CmdStatus yew_cmdline_cmd_ghost_accept_line(CmdCtx *cx);
 /* Sprint 57.28 §4: A-., the previous entry's last word. */
 CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx);
 
+/*
+ * Sprint 57.29 §1: the prompt's selection is [min(anchor,pos),
+ * max(anchor,pos)) of its Win's primary cursor -- STATE, never text: it
+ * is not in yew_cmdline_text(), the history draft, the parse point or
+ * the ghost.  False, and `out` untouched, when it is empty or there is no
+ * prompt.
+ */
+bool yew_cmdline_selection(Ed *ed, Span *out);
+/*
+ * The collapse table, applied by the dispatcher around EVERY command it
+ * runs on the prompt Win (yew_ed_invoke): `after` false runs before the
+ * command, inside its undo transaction, and returns true when the
+ * selection was the whole event (the command must not run); `after`
+ * true runs once it has, and leaves the selection collapsed unless the
+ * command was a Shift+motion.
+ */
+bool yew_cmdline_sel(Ed *ed, const char *command, bool after);
+/* C-c: copy a selection and stay; none, exactly ed.cmdline.cancel. */
+CmdStatus yew_cmdline_cmd_copy_or_cancel(CmdCtx *cx);
+
 #endif
