@@ -1119,6 +1119,9 @@ static const PromptSelRow prompt_sel_rows[] = {
     {"ed.cmdline.hist_search", PSEL_COLLAPSE},
     {"ed.cmdline.token_prev", PSEL_COLLAPSE},
     {"ed.cmdline.token_next", PSEL_COLLAPSE},
+    /* Sprint 57.31: A-s rewrites the command's front -- collapse at
+     * the caret first. */
+    {"ed.cmdline.toggle_sudo", PSEL_COLLAPSE},
 };
 
 static PromptSel prompt_sel_rule(const char *command)
@@ -2868,6 +2871,113 @@ CmdStatus yew_cmdline_cmd_token_prev(CmdCtx *cx)
 CmdStatus yew_cmdline_cmd_token_next(CmdCtx *cx)
 {
     return token_walk(cx, false);
+}
+
+/*
+ * Sprint 57.31 §1: A-s, fish's sudo toggle, on a bang line only.
+ *
+ * The body's first word decides, leading blanks skipped: `sudo` or
+ * `doas` (fish toggles its configured prefix; yew knows both) is
+ * removed with the one blank after it; any other word gets `sudo `
+ * in front of it; an empty body is filled with `sudo ` and the newest
+ * bang body of the 57.26 snapshot -- the entry Up and the ghost read.
+ * An entry that already starts with a prefix goes in as it is, rather
+ * than as `sudo sudo ...`.
+ *
+ * The caret stays on the text it was on: an insert before it moves it
+ * right, a removal before it moves it left, and a caret inside the
+ * removed word lands where the word began.  One replace_span, so one
+ * undo step.
+ */
+static bool sudo_prefix(const char *s, size_t n, size_t at, size_t *end)
+{
+    static const char *const words[] = {"sudo", "doas"};
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(words); i++) {
+        if (n - at < 4U || memcmp(s + at, words[i], 4U) != 0)
+            continue;
+        if (at + 4U == n) {
+            *end = n;
+            return true;
+        }
+        if (s[at + 4U] == ' ' || s[at + 4U] == '\t') {
+            *end = at + 5U;
+            return true;
+        }
+    }
+    return false;
+}
+
+CmdStatus yew_cmdline_cmd_toggle_sudo(CmdCtx *cx)
+{
+    Ed *ed;
+    CmdLine *line;
+    char *text;
+    size_t len;
+    size_t body = 0U;
+    size_t at;
+    size_t end = 0U;
+    size_t caret;
+    Bytebuf put;
+    Span span;
+    bool ok;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    line = &ed->cmdline;
+    sync_from_target(line);
+    text = text_string(line->buf);
+    len = strlen(text);
+    caret = (size_t)line->cur.pos.v;
+    if (line->kind != YEW_PROMPT_CMD ||
+        !yew_cmd_bang_body(ed, text, len, &body) || body > len) {
+        yew_xfree(text);
+        /* OK, not an error: the prompt stays as it was. */
+        yew_msg(ed, YEW_MSG_WARN, "A-s: not a shell command");
+        return YEW_CMD_OK;
+    }
+    at = body;
+    while (at < len && (text[at] == ' ' || text[at] == '\t'))
+        at++;
+    bytebuf_init(&put);
+    if (at == len) {
+        const char *prev = NULL;
+
+        suggest_ensure(ed);
+        if (line->suggest.n != 0U)
+            prev = yew_hist_suggest_at(&line->suggest, 0U);
+        if (prev == NULL || !sudo_prefix(prev, strlen(prev), 0U, &end))
+            bytebuf_append(&put, "sudo ", 5U);
+        if (prev != NULL)
+            sanitize_bytes((const u8 *)prev, strlen(prev), &put);
+        span = (Span){at, len};
+        caret = at + put.len;
+    } else if (sudo_prefix(text, len, at, &end)) {
+        span = (Span){at, end};
+        if (caret >= end)
+            caret -= end - at;
+        else if (caret > at)
+            caret = at;
+    } else {
+        bytebuf_append(&put, "sudo ", 5U);
+        span = (Span){at, at};
+        if (caret >= at)
+            caret += put.len;
+    }
+    yew_xfree(text);
+    ok = replace_span(ed, span, put.data, put.len, true);
+    bytebuf_free(&put);
+    if (!ok)
+        return YEW_CMD_ERR_IO;
+    line->cur.pos = BYTEOFF(caret);
+    line->cur.anchor = line->cur.pos;
+    yew_cursor_clamp(line->buf, &line->cur);
+    sync_to_target(line);
+    menu_discard(ed);
+    yew_cmdline_edited(ed);
+    return YEW_CMD_OK;
 }
 
 static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)

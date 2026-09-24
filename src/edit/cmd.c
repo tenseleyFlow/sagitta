@@ -732,6 +732,12 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.token_next", yew_cmdline_cmd_token_next, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Walk the token search back toward the token typed", NULL},
+    /* Sprint 57.31 §1: A-s -- keymap plumbing like last_arg: internal,
+     * so not recordable.  It acts only on an open prompt, so it is no
+     * batch refusal either. */
+    {"ed.cmdline.toggle_sudo", yew_cmdline_cmd_toggle_sudo, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Toggle sudo at the front of the prompt's shell command", NULL},
     {"ed.cmdline.complete_next", yew_cmdline_cmd_complete_next,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Open or advance command-line completion", NULL},
@@ -1592,7 +1598,9 @@ static bool command_name_valid(const char *name)
         "line_home", "line_end", "copy_or_cancel",
         /* Sprint 57.30: C-r's history search, A-<up>/A-<down>'s token
          * search. */
-        "hist_search", "token_prev", "token_next"};
+        "hist_search", "token_prev", "token_next",
+        /* Sprint 57.31: A-s's sudo toggle. */
+        "toggle_sudo"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

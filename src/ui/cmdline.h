@@ -229,6 +229,9 @@ CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx);
  * caret with the next older / newer distinct history token holding it. */
 CmdStatus yew_cmdline_cmd_token_prev(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_token_next(CmdCtx *cx);
+/* Sprint 57.31 §1: A-s -- toggle `sudo ` (or `doas `) at the front of a
+ * bang line's command; an empty body takes the newest bang entry. */
+CmdStatus yew_cmdline_cmd_toggle_sudo(CmdCtx *cx);
 
 /*
  * Sprint 57.29 §1: the prompt's selection is [min(anchor,pos),

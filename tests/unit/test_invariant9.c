@@ -849,7 +849,11 @@ void test_invariant9_every_new_command_is_registered(void)
          * Sprint 57.30 §5: A-<up>/A-<down>, fish's token search.  Keys
          * only.
          */
-        "ed.cmdline.token_prev", "ed.cmdline.token_next"
+        "ed.cmdline.token_prev", "ed.cmdline.token_next",
+        /*
+         * Sprint 57.31 §1: A-s toggles sudo on a bang line.  Keys only.
+         */
+        "ed.cmdline.toggle_sudo"
     };
     size_t i;
 
