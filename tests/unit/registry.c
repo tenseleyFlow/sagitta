@@ -1226,6 +1226,7 @@ const YewTest yew_tests[] = {
     T(shell_self_errors_roll_back_tabs_buffers_and_focus),
     T(shsession_cd_persists),
     T(shsession_exports_functions_and_locals),
+    T(shsession_job_rows_are_per_command),
     T(shsession_exit_recovers_last_directory),
     T(shsession_reset_returns_to_workspace_root),
     T(shsession_fresh_is_sprint19),

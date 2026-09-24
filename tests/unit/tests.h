@@ -1200,6 +1200,7 @@ void test_shell_self_places_groups_by_root_and_stable_membership(void);
 void test_shell_self_errors_roll_back_tabs_buffers_and_focus(void);
 void test_shsession_cd_persists(void);
 void test_shsession_exports_functions_and_locals(void);
+void test_shsession_job_rows_are_per_command(void);
 void test_shsession_exit_recovers_last_directory(void);
 void test_shsession_reset_returns_to_workspace_root(void);
 void test_shsession_fresh_is_sprint19(void);

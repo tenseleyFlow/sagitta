@@ -329,6 +329,28 @@ void test_shsession_exports_functions_and_locals(void)
     sh_fix_free(&f);
 }
 
+/* The job layer's per-command rows follow the caret into the session:
+ * the shell started with YEW_LINE=1, but each `:!` sees where it is. */
+void test_shsession_job_rows_are_per_command(void)
+{
+    ShFix f;
+    EditCtx ec;
+
+    sh_fix_make(&f, "/bin/sh");
+    ec = yew_ed_edit_ctx(&f.ed);
+    yew_undo_begin(&ec, YEW_TXN_TYPE);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"a\nb\nc\n",
+                               6U));
+    yew_undo_end(&ec);
+    yew_ed_finish_edit(&f.ed, &ec);
+    f.ed.win->cs.curs.data[f.ed.win->cs.primary].pos = BYTEOFF(0U);
+    sh_expect(&f, "echo \"$YEW_LINE\"", "1\n");
+    f.ed.win->cs.curs.data[f.ed.win->cs.primary].pos = BYTEOFF(4U);
+    f.ed.win->cs.curs.data[f.ed.win->cs.primary].anchor = BYTEOFF(4U);
+    sh_expect(&f, "echo \"$YEW_LINE $YEW_COL\"", "3 1\n");
+    sh_fix_free(&f);
+}
+
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                          */
 /* ------------------------------------------------------------------ */

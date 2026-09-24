@@ -72,6 +72,7 @@ struct ShLink {
     char nonce[33];
     char word[16];    /* "command ", "builtin " or "": the probe's answer */
     char *pending;    /* the first command, waiting for the probe        */
+    char *pending_env; /* its YEW_FILE/LINE/COL words (frame_rows)       */
     const char *self; /* yew for --yew-env0, or NULL                     */
     u32 seq;          /* the frame being read                            */
     bool open;        /* its line was sent and its end not yet seen      */
@@ -328,13 +329,19 @@ static void link_put_tail(ShLink *l, const char *status_expr,
  * unsetting it, and it takes no arguments: `$#` is 0 and `$1` empty, as
  * under `$SHELL -c`.
  */
-static void link_send(ShLink *l, const char *cmdline)
+static void link_send(ShLink *l, const char *cmdline, const char *rows)
 {
     char between[64];
     int n;
 
     l->seq++;
     link_arm(l);
+    if (rows != NULL && rows[0] != '\0') {
+        link_put(l, l->word);
+        link_put(l, "export");
+        link_put(l, rows);
+        link_put(l, "; ");
+    }
     link_put(l, "__yew_run() { trap 'return 130' INT; ");
     link_put(l, l->word);
     link_put(l, "eval \"$__yew_c\"; }; __yew_c=");
@@ -453,10 +460,13 @@ static void link_frame_done(ShLink *l, bool env_ok)
         (void)memcpy(l->word, word, wn + 1U);
         if (l->pending != NULL) {
             char *cmd = l->pending;
+            char *rows = l->pending_env;
 
             l->pending = NULL;
-            link_send(l, cmd);
+            l->pending_env = NULL;
+            link_send(l, cmd, rows);
             yew_xfree(cmd);
+            yew_xfree(rows);
         }
         return;
     }
@@ -694,6 +704,7 @@ static void link_destroy(void *owner)
     bytebuf_free(&l->hold);
     bytebuf_free(&l->envb);
     yew_xfree(l->pending);
+    yew_xfree(l->pending_env);
     yew_xfree(l);
 }
 
@@ -890,10 +901,42 @@ static bool session_start(YewShSession *s, char *err, size_t errsz)
     return true;
 }
 
+/*
+ * The rows the job layer sets per command -- YEW_FILE, YEW_LINE, YEW_COL:
+ * where the caret is NOW, not where it was when the shell started -- as
+ * ` 'NAME=value'` words for the frame's `export`.  Heap string.
+ */
+static char *frame_rows(Ed *ed)
+{
+    static const char *const names[] = {"YEW_FILE=", "YEW_LINE=",
+                                        "YEW_COL="};
+    Arena a;
+    Bytebuf out;
+    char **env;
+    size_t i;
+    size_t k;
+
+    arena_init(&a);
+    bytebuf_init(&out);
+    env = yew_job_env(ed, &a);
+    for (i = 0U; env != NULL && env[i] != NULL; i++) {
+        for (k = 0U; k < YEW_ARRAY_LEN(names); k++) {
+            if (strncmp(env[i], names[k], strlen(names[k])) == 0) {
+                bytebuf_push_u8(&out, (u8)' ');
+                yew_shell_quote(&out, (const u8 *)env[i], strlen(env[i]));
+            }
+        }
+    }
+    bytebuf_push_u8(&out, 0U);
+    arena_free_all(&a);
+    return (char *)out.data;
+}
+
 u32 yew_shsession_run(Ed *ed, const char *cmdline, char *err, size_t errsz)
 {
     YewShSession *s;
     YewJobSpec spec;
+    char *rows;
     u32 id;
 
     if (err != NULL && errsz != 0U)
@@ -924,12 +967,16 @@ u32 yew_shsession_run(Ed *ed, const char *cmdline, char *err, size_t errsz)
         return 0U;
     s->proxy_id = id;
     s->cancel_ms = 0;
+    rows = frame_rows(ed);
     if (s->link->seq == 0U && s->link->open) {
         /* Still probing: the command goes the moment the probe ends. */
         yew_xfree(s->link->pending);
+        yew_xfree(s->link->pending_env);
         s->link->pending = yew_xstrdup(cmdline);
+        s->link->pending_env = rows;
     } else {
-        link_send(s->link, cmdline);
+        link_send(s->link, cmdline, rows);
+        yew_xfree(rows);
     }
     return id;
 }
