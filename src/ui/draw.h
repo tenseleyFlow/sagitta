@@ -37,5 +37,12 @@ Rect yew_draw_spawn_zone_rect(void);
  * the prompt's (Sprint 57.29 §3) both paint with it.
  */
 u8 yew_draw_sel_style(const Ed *ed, Cell *style);
+/*
+ * Sprint 57.30 §2: the `/` match style -- the theme's `search.match`
+ * (`search.current` when `current`), or the fixed colours and the
+ * no-colour/16-colour degradations the document draws without one.
+ * The prompt's history highlight reuses it rather than adding a key.
+ */
+u8 yew_draw_search_style(const Ed *ed, bool current, Cell *style);
 
 #endif

@@ -468,7 +468,7 @@ static void draw_secondary_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
 }
 
-static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+u8 yew_draw_search_style(const Ed *ed, bool current, Cell *style)
 {
     static const YewColor match_bg = {
         YEW_COLOR_RGB, 78U, 42U, 15U
@@ -476,35 +476,41 @@ static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     static const YewColor current_bg = {
         YEW_COLOR_RGB, 231U, 125U, 36U
     };
+    u8 fields;
+
+    *style = ed->grid.blank;
+    fields = themed_overlay(
+        style, yew_theme_ui_tab(ed, current ? "search.current"
+                                            : "search.match"));
+    if (fields != 0U) {
+        /* The compiled theme already chose the active degradation tier. */
+    } else if (ed->render.no_color) {
+        style->attrs = current ? (u16)(YEW_ATTR_BOLD | YEW_ATTR_UNDERLINE)
+                               : YEW_ATTR_BOLD;
+        fields = YEW_OVERLAY_ATTRS;
+    } else if (ed->render.tier == YEW_RENDER_TIER_16) {
+        style->attrs = current ? (u16)(YEW_ATTR_REVERSE | YEW_ATTR_UNDERLINE)
+                               : YEW_ATTR_REVERSE;
+        fields = YEW_OVERLAY_ATTRS;
+    } else {
+        style->bg = current ? current_bg : match_bg;
+        fields = YEW_OVERLAY_BG;
+    }
+    return fields;
+}
+
+static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+{
     const MatchOverlay *overlay = &w->overlay;
     size_t i;
 
     for (i = 0U; i < overlay->spans.len; i++) {
         const Span match = overlay->spans.data[i];
-        Cell style = ed->grid.blank;
-        u8 fields;
+        Cell style;
+        u8 fields = yew_draw_search_style(ed, (i32)i == overlay->cur_index,
+                                          &style);
         u16 screen_row;
 
-        fields = themed_overlay(
-            &style, yew_theme_ui_tab(
-                        ed, (i32)i == overlay->cur_index ?
-                                "search.current" : "search.match"));
-        if (fields != 0U) {
-            /* The compiled theme already chose the active degradation tier. */
-        } else if (ed->render.no_color) {
-            style.attrs = (i32)i == overlay->cur_index ?
-                              (u16)(YEW_ATTR_BOLD | YEW_ATTR_UNDERLINE) :
-                              YEW_ATTR_BOLD;
-            fields = YEW_OVERLAY_ATTRS;
-        } else if (ed->render.tier == YEW_RENDER_TIER_16) {
-            style.attrs = (i32)i == overlay->cur_index ?
-                              (u16)(YEW_ATTR_REVERSE | YEW_ATTR_UNDERLINE) :
-                              YEW_ATTR_REVERSE;
-            fields = YEW_OVERLAY_ATTRS;
-        } else {
-            style.bg = (i32)i == overlay->cur_index ? current_bg : match_bg;
-            fields = YEW_OVERLAY_BG;
-        }
         for (screen_row = lo;
              screen_row < hi && screen_row < w->rect.h; screen_row++) {
             LineNo line;
