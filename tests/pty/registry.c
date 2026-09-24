@@ -11029,12 +11029,32 @@ static void case_s53_blame(PtyCtx *c)
  * wrong.  The golden also carries the terminal modes, so it is where
  * `1003` being ARMED while the menu is up is proved end to end.
  */
+/*
+ * A mouse report that OPENS A MENU.  Unlike s27_mouse's reports, this one
+ * always repaints -- the menu is drawn and any-motion tracking is armed in
+ * that frame -- so wait for the frame itself, not for a quiet window.
+ *
+ * The quiet window was the Sprint 57.13 flake: on a slow runner the 60 ms
+ * of silence ran out before the menu painted, the case sent the release
+ * and its Esc early, the editor handled press, release and Esc in one
+ * loop turn, the menu opened and closed with no net change, no frame was
+ * emitted, and the Esc's frame wait starved to the case deadline.  The
+ * same race let a mode check read tracking before the menu armed it.
+ */
+static void s57_13_menu_press(PtyCtx *c, const char *report)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_bytes(c, report);
+    settle_sync_delta(c, before, 1U, 60);
+}
+
 static void case_s57_13_fuss_file_menu(PtyCtx *c)
 {
     if (!s52_open(c, NULL))
         return;
     /* Row 5 of the drawer is `modified.c` (see fuss_tree_unicode_80). */
-    s27_mouse(c, "\x1b[<2;11;6M");
+    s57_13_menu_press(c, "\x1b[<2;11;6M");
     s27_mouse(c, "\x1b[<2;11;6m");
     ptc_snapshot(c, c->test->name);
     ptc_keys(c, "esc");
@@ -11053,7 +11073,7 @@ static void case_s57_13_fuss_dir_menu(PtyCtx *c)
     if (!s52_open(c, NULL))
         return;
     /* Row 1 of the drawer is ` + docs`. */
-    s27_mouse(c, "\x1b[<2;5;2M");
+    s57_13_menu_press(c, "\x1b[<2;5;2M");
     s27_mouse(c, "\x1b[<2;5;2m");
     ptc_snapshot(c, c->test->name);
     ptc_keys(c, "esc");
@@ -11108,7 +11128,7 @@ static void case_s57_13_doc_menu(PtyCtx *c)
     s18_settle_after_keys(c, "h");
     s18_settle_after_keys(c, "right right right");
     /* Right press inside the text, at the 0-based cell (10,5). */
-    s27_mouse(c, "\x1b[<2;11;6M");
+    s57_13_menu_press(c, "\x1b[<2;11;6M");
     s27_mouse(c, "\x1b[<2;11;6m");
     /*
      * Motion with NO button held: SGR base 35, the report a terminal
@@ -11137,7 +11157,7 @@ static void case_s57_13_ctrl_click_menu(PtyCtx *c)
                   sizeof(path)))
         return;
     /* cb 16 is button 0 with the ctrl bit. */
-    s27_mouse(c, "\x1b[<16;11;6M");
+    s57_13_menu_press(c, "\x1b[<16;11;6M");
     s27_mouse(c, "\x1b[<16;11;6m");
     ptc_snapshot(c, c->test->name);
     s18_settle_after_keys(c, "esc");
@@ -11170,7 +11190,7 @@ static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
     s18_settle_after_keys(c, "t right t right");
 
     /* Open the document menu, then click its `Save As...` row. */
-    s27_mouse(c, "\x1b[<2;11;6M");
+    s57_13_menu_press(c, "\x1b[<2;11;6M");
     s27_mouse(c, "\x1b[<2;11;6m");
     ptc_check(c, c->vt.modes == menu,
               "document context menu did not select any-motion tracking");
@@ -11184,7 +11204,7 @@ static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
     /* Ctrl-click the active member tab, then dismiss BY CLICKING the
      * first member.  The same press must close the menu, restore 1002,
      * and continue through ordinary tab routing. */
-    s27_mouse(c, "\x1b[<16;31;2M");
+    s57_13_menu_press(c, "\x1b[<16;31;2M");
     s27_mouse(c, "\x1b[<16;31;2m");
     ptc_check(c, c->vt.modes == menu,
               "member-tab context menu did not select any-motion tracking");
@@ -11195,7 +11215,7 @@ static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
 
     /* Repeat against the row-1 group entry, then use the recovered mouse to
      * return to the final member. */
-    s27_mouse(c, "\x1b[<16;31;1M");
+    s57_13_menu_press(c, "\x1b[<16;31;1M");
     s27_mouse(c, "\x1b[<16;31;1m");
     ptc_check(c, c->vt.modes == menu,
               "group context menu did not select any-motion tracking");
@@ -11222,7 +11242,7 @@ static void case_s57_13_footer_menu(PtyCtx *c)
         return;
     /* The statusline is the LAST row of a 24-row terminal; row 23 is
      * still the pane, and a menu opened there would be the document's. */
-    s27_mouse(c, "\x1b[<2;6;24M");
+    s57_13_menu_press(c, "\x1b[<2;6;24M");
     s27_mouse(c, "\x1b[<2;6;24m");
     ptc_snapshot(c, c->test->name);
     s18_settle_after_keys(c, "esc");
@@ -11246,7 +11266,7 @@ static void case_s57_13_menu_sheds_rows(PtyCtx *c)
     if (!s18_open(c, s57_13_doc, sizeof(s57_13_doc) - 1U, path,
                   sizeof(path)))
         return;
-    s27_mouse(c, "\x1b[<2;6;4M");
+    s57_13_menu_press(c, "\x1b[<2;6;4M");
     s27_mouse(c, "\x1b[<2;6;4m");
     ptc_snapshot(c, c->test->name);
     s18_settle_after_keys(c, "esc");
