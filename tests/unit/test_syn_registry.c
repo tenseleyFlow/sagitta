@@ -169,15 +169,10 @@ void test_syn_registry_loads_requested_definition_once(void)
 
 void test_syn_registry_allocation_overflow_is_a_bug(void)
 {
-    SynLangSeed seed = {0};
-    pid_t child;
-    pid_t waited;
-    int status;
+    YewTestChild child;
 
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
+    if (yew_test_child_role() != NULL) {
+        SynLangSeed seed = {0};
         BuiltinRegistry registry;
         size_t len = SIZE_MAX / sizeof(SynLangDesc) + 1U;
 
@@ -186,12 +181,9 @@ void test_syn_registry_allocation_overflow_is_a_bug(void)
         yew_syn_builtin_registry_build(&registry, &seed, len);
         _exit(0);
     }
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
+    yew_test_spawn_child("bug", NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    yew_test_child_free(&child);
 }
 
 void test_syn_registry_builtin_id_ledger_matches_generated_table(void)
