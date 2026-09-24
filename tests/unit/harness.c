@@ -750,6 +750,7 @@ int yew_test_run(int argc, char **argv)
     char *home;
     char *histfile;
     char *test_fish;
+    char *shell;
 
     program_path = argv[0];
     if (!leak_every_init())
@@ -825,6 +826,10 @@ int yew_test_run(int argc, char **argv)
     home = env_copy("HOME");
     histfile = env_copy("HISTFILE");
     test_fish = env_copy("YEW_TEST_FISH");
+    /* Restored before every test: one that fails between pointing SHELL
+     * at a fixture and putting it back must not run every later
+     * `$SHELL -c` through that fixture. */
+    shell = env_copy("SHELL");
     if (child_of != NULL) {
         if (!unit_child_dirs(xdg_cache, home, xdg_data)) {
             (void)fprintf(stderr, "unit: a child needs its parent's "
@@ -845,6 +850,7 @@ int yew_test_run(int argc, char **argv)
         env_restore("XDG_DATA_HOME", unit_data);
         env_restore("HISTFILE", NULL);
         env_restore("YEW_TEST_FISH", "");
+        env_restore("SHELL", shell);
         if (!run_one_test(&yew_tests[i]))
             failures++;
         failures += leak_after_test(&yew_tests[i]);
@@ -857,6 +863,7 @@ int yew_test_run(int argc, char **argv)
     env_restore("HOME", home);
     env_restore("HISTFILE", histfile);
     env_restore("YEW_TEST_FISH", test_fish);
+    env_restore("SHELL", shell);
     if (child_of == NULL)
         unit_cache_remove(unit_cache);
     yew_xfree(child_of);
@@ -870,6 +877,7 @@ int yew_test_run(int argc, char **argv)
     yew_xfree(home);
     yew_xfree(histfile);
     yew_xfree(test_fish);
+    yew_xfree(shell);
     if (skip_count != 0U)
         (void)printf("unit: %zu tests, %zu assertions, %zu failure%s, "
                      "%zu skipped\n",
