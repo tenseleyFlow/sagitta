@@ -31,7 +31,9 @@
 #include "edit/shell.h"
 #include "edit/shsession.h"
 #include "text/piece.h"
+#include "ui/cmdline.h"
 #include "ui/cmdparse.h"
+#include "ui/message.h"
 #include "ui/layout.h"
 
 typedef struct ShFix {
@@ -728,5 +730,341 @@ void test_shsession_split_reads_and_replayed_markers(void)
         bytebuf_free(&raw);
         bytebuf_free(&cmd);
     }
+    sh_fix_free(&f);
+}
+
+/* ------------------------------------------------------------------ */
+/* Cancel                                                             */
+/* ------------------------------------------------------------------ */
+
+/* Until job `id` has written something: the command is running. */
+static void sh_wait_output(Ed *ed, u32 id)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_job_find(ed, id) != NULL &&
+           yew_job_find(ed, id)->bytes_out == 0U) {
+        sh_step(ed, 20);
+        YEW_ASSERT(yew_now_ms() - start < 10000);
+    }
+}
+
+/*
+ * Cancel until the frame completes.  One cancel is enough; a second is
+ * sent only past the escalation window (never escalating), for the rare
+ * SIGINT that lands between `echo started` and the fork of `sleep`.
+ */
+static void sh_cancel_until_done(Ed *ed, u32 id)
+{
+    i64 start = yew_now_ms();
+    i64 last = 0;
+
+    for (;;) {
+        YewJob *j = yew_job_find(ed, id);
+        i64 now = yew_now_ms();
+
+        YEW_ASSERT_NOT_NULL(j);
+        if (j->drained)
+            return;
+        if (j->state == YEW_JOB_RUNNING &&
+            (last == 0 || now - last > YEW_SHSESSION_ESCALATE_MS + 500)) {
+            YEW_ASSERT(yew_job_signal(ed, id, SIGTERM));
+            last = now;
+        }
+        sh_step(ed, 20);
+        YEW_ASSERT(now - start < 20000);
+    }
+}
+
+/*
+ * The contract's pitfall, verified per shell: with `trap : INT` in the
+ * prologue, a SIGINT to the session's group kills the command and the
+ * REST OF THE FRAME LINE still runs -- the status marker arrives with
+ * 128+2 and the same shell reads the next frame.  Every sh-family shell
+ * installed here is exercised (zsh, bash, dash, ksh, /bin/sh).
+ */
+void test_shsession_cancel_keeps_the_session_on_every_shell(void)
+{
+    static const char *const shells[] = {
+        "/bin/sh",  "/bin/bash", "/usr/bin/bash", "/opt/homebrew/bin/bash",
+        "/bin/zsh", "/usr/bin/zsh", "/bin/dash", "/usr/bin/dash",
+        "/bin/ksh", "/usr/bin/ksh"};
+    char seen[YEW_ARRAY_LEN(shells)][PATH_MAX];
+    size_t n_seen = 0U;
+    size_t i;
+    u32 tested = 0U;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(shells); i++) {
+        char real[PATH_MAX];
+        size_t k;
+        bool dup = false;
+        ShFix f;
+        u32 shell;
+        u32 id;
+        YewJob *j;
+
+        if (access(shells[i], X_OK) != 0 || realpath(shells[i], real) == NULL)
+            continue;
+        for (k = 0U; k < n_seen; k++)
+            dup = dup || strcmp(seen[k], real) == 0;
+        /* /bin/sh is often another shell by name; the name decides the
+         * shell's mode, so only an identical PATH is a duplicate. */
+        if (dup && strcmp(shells[i], "/bin/sh") != 0)
+            continue;
+        (void)memcpy(seen[n_seen++], real, sizeof(real));
+        sh_fix_make(&f, shells[i]);
+        YEW_ASSERT(sh_wait(&f.ed, sh_start(&f, "true")));
+        shell = yew_shsession_job(&f.ed);
+        id = sh_start(&f, "echo started; sleep 30; echo not-reached");
+        sh_wait_output(&f.ed, id);
+        sh_cancel_until_done(&f.ed, id);
+        j = yew_job_find(&f.ed, id);
+        if (j->state != YEW_JOB_SIGNALED || j->termsig != SIGINT)
+            (void)fprintf(stderr, "cancel on %s: state %d code %d sig %d\n",
+                          shells[i], (int)j->state, j->exit_code,
+                          j->termsig);
+        YEW_ASSERT_EQ_I64(j->state, YEW_JOB_SIGNALED);
+        YEW_ASSERT_EQ_I64(j->termsig, SIGINT);
+        {
+            char *got = sh_output(&f, id);
+
+            YEW_ASSERT_EQ_STR(got, "started\n");
+            free(got);
+        }
+        /* The session survived: same shell, next frame runs. */
+        YEW_ASSERT_EQ_U64(yew_shsession_job(&f.ed), shell);
+        sh_expect(&f, "echo after", "after\n");
+        YEW_ASSERT_EQ_U64(yew_shsession_job(&f.ed), shell);
+        sh_fix_free(&f);
+        tested++;
+    }
+    YEW_ASSERT(tested >= 1U);
+}
+
+/* A command that ignores INT cannot wedge the session: the second cancel
+ * inside the window SIGKILLs the group and ends it; the next `:!` gets a
+ * new shell. */
+void test_shsession_double_cancel_ends_the_session(void)
+{
+    ShFix f;
+    u32 shell;
+    u32 id;
+
+    sh_fix_make(&f, "/bin/sh");
+    id = sh_start(&f, "trap '' INT; echo started; sleep 30");
+    sh_wait_output(&f.ed, id);
+    shell = yew_shsession_job(&f.ed);
+    YEW_ASSERT(yew_job_signal(&f.ed, id, SIGTERM));
+    sh_step(&f.ed, 50);
+    YEW_ASSERT_EQ_I64(yew_job_find(&f.ed, id)->state, YEW_JOB_RUNNING);
+    YEW_ASSERT(yew_job_signal(&f.ed, id, SIGTERM));
+    YEW_ASSERT_EQ_U64(yew_shsession_job(&f.ed), 0U);
+    YEW_ASSERT(sh_wait(&f.ed, id));
+    YEW_ASSERT_EQ_I64(yew_job_find(&f.ed, id)->state, YEW_JOB_CANCELLED);
+    YEW_ASSERT(sh_wait_ended(&f.ed));
+    YEW_ASSERT_EQ_STR(f.ed.msg.text,
+                      "shell session ended; the next :! starts a new one");
+    sh_expect(&f, "echo fresh-shell", "fresh-shell\n");
+    YEW_ASSERT(yew_shsession_job(&f.ed) != shell);
+
+    /* kill_force is the immediate route. */
+    id = sh_start(&f, "sleep 30");
+    YEW_ASSERT(yew_job_signal(&f.ed, id, SIGKILL));
+    YEW_ASSERT(sh_wait(&f.ed, id));
+    YEW_ASSERT_EQ_I64(yew_job_find(&f.ed, id)->state, YEW_JOB_CANCELLED);
+    YEW_ASSERT(sh_wait_ended(&f.ed));
+    sh_fix_free(&f);
+}
+
+/* ------------------------------------------------------------------ */
+/* Busy, and the forms that start from the session's state            */
+/* ------------------------------------------------------------------ */
+
+/* Goals 3: a `:!` while a session command runs goes alongside, from the
+ * session's directory and exports, and its `cd` does not persist. */
+void test_shsession_busy_runs_alongside(void)
+{
+    ShFix f;
+    char sub[PATH_MAX];
+    char want[PATH_MAX + 16];
+    u32 slow;
+    u32 id;
+    char *got;
+
+    sh_fix_make(&f, "/bin/sh");
+    sh_path(&f, "sub", sub, sizeof(sub));
+    YEW_ASSERT_EQ_I64(mkdir(sub, 0700), 0);
+    YEW_ASSERT(sh_wait(&f.ed, sh_start(&f, "cd sub; export B=1")));
+    slow = sh_start(&f, "echo started; sleep 30");
+    sh_wait_output(&f.ed, slow);
+    YEW_ASSERT(yew_shsession_busy(&f.ed));
+
+    id = sh_start(&f, "pwd; echo \"b=$B\"; cd /");
+    YEW_ASSERT_EQ_STR(f.ed.msg.text,
+                      "session busy: ran outside it (a cd here will not "
+                      "persist)");
+    YEW_ASSERT(yew_job_find(&f.ed, id)->pid > 0);
+    YEW_ASSERT(sh_wait(&f.ed, id));
+    got = sh_output(&f, id);
+    (void)snprintf(want, sizeof(want), "%s\nb=1\n", sub);
+    YEW_ASSERT_EQ_STR(got, want);
+    free(got);
+
+    sh_cancel_until_done(&f.ed, slow);
+    (void)snprintf(want, sizeof(want), "%s\n", sub);
+    sh_expect(&f, "pwd", want);
+    sh_fix_free(&f);
+}
+
+static char *sh_buffer_text(const Buffer *b)
+{
+    TextIter it;
+    const u8 *chunk;
+    u64 len;
+    Bytebuf out;
+
+    bytebuf_init(&out);
+    if (yew_textbuf_len(b->tb) != 0U &&
+        yew_textiter_begin(&it, b->tb, BYTEOFF(0U))) {
+        do {
+            if (!yew_textiter_chunk(&it, b->tb, &chunk, &len))
+                break;
+            bytebuf_append(&out, chunk, (size_t)len);
+        } while (yew_textiter_advance(&it, b->tb));
+    }
+    bytebuf_push_u8(&out, 0U);
+    return (char *)out.data;
+}
+
+static bool sh_slurp(const char *path, char *out, size_t cap)
+{
+    FILE *fp = fopen(path, "rb");
+    size_t n;
+
+    if (fp == NULL)
+        return false;
+    n = fread(out, 1U, cap - 1U, fp);
+    out[n] = '\0';
+    return fclose(fp) == 0;
+}
+
+/*
+ * §3: `:r !`, `:%!` and `:!!` spawn exactly as before, but in the
+ * session's directory with its exports -- and `:!!`, which owns the
+ * terminal, keeps the user's pager unless the session exported one.
+ */
+void test_shsession_other_forms_inherit_state(void)
+{
+    ShFix f;
+    char sub[PATH_MAX];
+    char out[PATH_MAX];
+    char want[PATH_MAX + 32];
+    char got[PATH_MAX + 32];
+    char err[256];
+    char *text;
+    char *saved = getenv("PAGER") != NULL ? strdup(getenv("PAGER")) : NULL;
+    YewJobWait wait;
+    Arena a;
+    char **env;
+    size_t i;
+    bool y = false;
+    u32 id;
+
+    YEW_ASSERT_EQ_I64(setenv("PAGER", "my-pager", 1), 0);
+    sh_fix_make(&f, "/bin/sh");
+    sh_path(&f, "sub", sub, sizeof(sub));
+    YEW_ASSERT_EQ_I64(mkdir(sub, 0700), 0);
+    YEW_ASSERT(sh_wait(&f.ed, sh_start(&f, "cd sub; export Y=2")));
+
+    /* :r ! */
+    id = yew_shell_read(&f.ed, "echo \"$(pwd) $Y\"", err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT(sh_wait(&f.ed, id));
+    text = sh_buffer_text(f.ed.win->buf);
+    (void)snprintf(want, sizeof(want), "%s 2\n", sub);
+    YEW_ASSERT_EQ_STR(text, want);
+    free(text);
+
+    /* :%! */
+    YEW_ASSERT_EQ_I64(
+        yew_shell_filter(&f.ed, f.ed.win,
+                         (Span){0U, yew_textbuf_len(f.ed.win->buf->tb)},
+                         "cat >/dev/null; echo \"f $(pwd) $Y\"", NULL),
+        YEW_FILT_OK);
+    text = sh_buffer_text(f.ed.win->buf);
+    (void)snprintf(want, sizeof(want), "f %s 2\n", sub);
+    YEW_ASSERT_EQ_STR(text, want);
+    free(text);
+
+    /* :!! (no controlling terminal here, so no handover -- 57.18) */
+    YEW_ASSERT(yew_shell_term_run(&f.ed,
+                                  "echo \"$(pwd) $Y $PAGER\" > out.txt",
+                                  &wait, err, sizeof(err)));
+    YEW_ASSERT_EQ_I64(wait.exit_code, 0);
+    sh_path(&f, "sub/out.txt", out, sizeof(out));
+    YEW_ASSERT(sh_slurp(out, got, sizeof(got)));
+    (void)snprintf(want, sizeof(want), "%s 2 my-pager\n", sub);
+    YEW_ASSERT_EQ_STR(got, want);
+    /* A pager the user exported in the session is theirs. */
+    YEW_ASSERT(sh_wait(&f.ed, sh_start(&f, "export PAGER=less")));
+    YEW_ASSERT(yew_shell_term_run(&f.ed, "echo \"$PAGER\" > out.txt", &wait,
+                                  err, sizeof(err)));
+    YEW_ASSERT(sh_slurp(out, got, sizeof(got)));
+    YEW_ASSERT_EQ_STR(got, "less\n");
+    /* Inside the session the user's export is the user's; a job started
+     * FROM its state that has no terminal still gets PAGER=cat. */
+    sh_expect(&f, "echo \"$PAGER\"", "less\n");
+    id = yew_shell_read(&f.ed, "echo \"$PAGER\"", err, sizeof(err));
+    YEW_ASSERT(sh_wait(&f.ed, id));
+    text = sh_buffer_text(f.ed.win->buf);
+    YEW_ASSERT_NOT_NULL(strstr(text, "cat\n"));
+    free(text);
+
+    /* The environment completion offers is the session's. */
+    arena_init(&a);
+    env = yew_job_env(&f.ed, &a);
+    for (i = 0U; env != NULL && env[i] != NULL; i++)
+        y = y || strcmp(env[i], "Y=2") == 0;
+    YEW_ASSERT(y);
+    arena_free_all(&a);
+
+    sh_fix_free(&f);
+    if (saved != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("PAGER", saved, 1), 0);
+        free(saved);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("PAGER"), 0);
+    }
+}
+
+/* §5: the `:!` prompt's hint says where the session is. */
+void test_shsession_prompt_hint_names_the_directory(void)
+{
+    static const char line[] = "!ls";
+    ShFix f;
+    char sub[PATH_MAX];
+
+    sh_fix_make(&f, "/bin/sh");
+    sh_path(&f, "ch7", sub, sizeof(sub));
+    YEW_ASSERT_EQ_I64(mkdir(sub, 0700), 0);
+    yew_cmdline_open(&f.ed, YEW_PROMPT_CMD, NULL);
+    yew_cmdline_paste(&f.ed, (const u8 *)line, strlen(line));
+    yew_cmdline_edited(&f.ed);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.hint, "");
+    yew_cmdline_close(&f.ed, false);
+
+    YEW_ASSERT(sh_wait(&f.ed, sh_start(&f, "cd ch7")));
+    yew_cmdline_open(&f.ed, YEW_PROMPT_CMD, NULL);
+    yew_cmdline_paste(&f.ed, (const u8 *)line, strlen(line));
+    yew_cmdline_edited(&f.ed);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.hint, "in ch7/");
+    yew_cmdline_close(&f.ed, false);
+    /* The spelled-out command says it after what it already says. */
+    yew_cmdline_open(&f.ed, YEW_PROMPT_CMD, NULL);
+    yew_cmdline_paste(&f.ed, (const u8 *)"shell.run ls", 12U);
+    yew_cmdline_edited(&f.ed);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.hint,
+                      "shell.run \xC2\xB7 <text> \xC2\xB7 in ch7/");
+    yew_cmdline_close(&f.ed, false);
     sh_fix_free(&f);
 }

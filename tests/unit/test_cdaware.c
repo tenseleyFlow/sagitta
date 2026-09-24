@@ -25,6 +25,8 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "edit/shell.h"
+#include "edit/shsession.h"
 #include "ui/cmdcomp.h"
 #include "ui/cmdline.h"
 #include "ui/cmdparse.h"
@@ -610,4 +612,102 @@ void test_cdaware_changes_dir_schema_and_walk(void)
     for (i = 0U; i < root->n_flags; i++)
         YEW_ASSERT(!root->flags[i].changes_dir);
     spec_fix_drop(&f);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sprint 57.27 §4: completion follows the shell session               */
+/* ------------------------------------------------------------------ */
+
+/* A spec generator that prints where it ran and the session's export. */
+static const char gen_env_body[] =
+    "#!/bin/sh\n"
+    "echo \"cwd-$(basename \"$(pwd)\")\"\n"
+    "echo \"y-${Y:-unset}\"\n";
+
+/* One `:!` through the session, pumped to completion. */
+static void session_run(EdFix *f, const char *cmd)
+{
+    char err[256] = {0};
+    u32 id = yew_shell_run(&f->ed, cmd, false, err, sizeof(err));
+    i64 start = yew_now_ms();
+
+    YEW_ASSERT(id != 0U);
+    for (;;) {
+        YewJob *j = yew_job_find(&f->ed, id);
+
+        YEW_ASSERT_NOT_NULL(j);
+        if (j->drained)
+            break;
+        pump(&f->ed, 20);
+        yew_shsession_settle(&f->ed);
+        YEW_ASSERT(yew_now_ms() - start < 10000);
+    }
+}
+
+/*
+ * The contract's row: `:!cd ch7`, then later `:!wolf build ou<Tab>`
+ * completes from ch7/ with the `in ch7/` note -- with no `cd` on the
+ * line.  Generators run there with the session's exports; a `cd` on the
+ * line starts from the session's directory; ed.shell.reset puts it all
+ * back at the workspace root.
+ */
+void test_cdaware_follows_the_shell_session(void)
+{
+    EdFix f;
+    Arena scratch;
+    Arena arena;
+    Vec_CompItem rows = {0};
+    char where[YEW_COMP_WHERE_MAX];
+    char prog[512];
+    char spec[2048];
+    char *saved = spec_env_copy("SHELL");
+
+    YEW_ASSERT_EQ_I64(setenv("SHELL", "/bin/sh", 1), 0);
+    ed_fix_init(&f);
+    ed_mkdir(&f, "ch7");
+    ed_write(&f, "ch7/outline.lu", "", 0600);
+    ed_write(&f, "outer.lu", "", 0600);
+    ed_mkdir(&f, "bin");
+    ed_write(&f, "bin/fixgen", gen_env_body, 0700);
+    ed_path(&f, "bin/fixgen", prog, sizeof(prog));
+    SPEC_FMT(spec, sizeof(spec), gen_cwd_spec, prog);
+    spec_fix_user(&f.spec, "fixcmd", spec);
+    arena_init(&scratch);
+    arena_init(&arena);
+
+    ed_rows(&f, ":!wolf build ou", &scratch, &arena, &rows, where,
+            sizeof(where));
+    YEW_ASSERT_NOT_NULL(cd_find(&rows, "outer.lu"));
+    YEW_ASSERT_EQ_STR(where, "");
+
+    session_run(&f, "cd ch7 && export Y=2");
+    ed_rows(&f, ":!wolf build ou", &scratch, &arena, &rows, where,
+            sizeof(where));
+    YEW_ASSERT_NOT_NULL(cd_find(&rows, "outline.lu"));
+    YEW_ASSERT_NULL(cd_find(&rows, "outer.lu"));
+    YEW_ASSERT_EQ_STR(where, "in ch7/");
+    /* A `cd` on the line starts from where the session is. */
+    ed_rows(&f, ":!cd .. && wolf build ou", &scratch, &arena, &rows, where,
+            sizeof(where));
+    YEW_ASSERT_NOT_NULL(cd_find(&rows, "outer.lu"));
+    YEW_ASSERT_EQ_STR(where, "");
+    /* Generators run there, with the session's exports. */
+    gen_rows(&f, ":!fixcmd ", &scratch, &arena, &rows);
+    YEW_ASSERT_NOT_NULL(cd_find(&rows, "cwd-ch7"));
+    YEW_ASSERT_NOT_NULL(cd_find(&rows, "y-2"));
+
+    /* Reset: the workspace root again, the standard environment. */
+    session_run(&f, "true");
+    YEW_ASSERT(yew_shsession_job(&f.ed) != 0U);
+    yew_shsession_reset(&f.ed);
+    ed_rows(&f, ":!wolf build ou", &scratch, &arena, &rows, where,
+            sizeof(where));
+    YEW_ASSERT_NOT_NULL(cd_find(&rows, "outer.lu"));
+    YEW_ASSERT_EQ_STR(where, "");
+
+    Vec_CompItem_free(&rows);
+    arena_free_all(&arena);
+    arena_free_all(&scratch);
+    ed_fix_drop(&f);
+    spec_env_restore("SHELL", saved);
 }
