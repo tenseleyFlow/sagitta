@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "edit/bind.h"
@@ -31,6 +32,10 @@ static CapturedLog *captured_logs;
 static size_t captured_logs_len;
 static size_t captured_logs_cap;
 static const char *program_path;
+static const YewTest *current_test;
+/* Set only in a process yew_test_spawn_child() started. */
+static char *child_of;
+static char *child_role;
 
 bool yew_test_canonicalize_path(char *path, size_t cap)
 {
@@ -271,6 +276,14 @@ bool yew_test_name_matches(const char *name, const char *filter)
     return filter == NULL || strstr(name, filter) != NULL;
 }
 
+static bool test_is_selected(const char *name, const char *filter,
+                             const char *only)
+{
+    if (only != NULL)
+        return strcmp(name, only) == 0;
+    return yew_test_name_matches(name, filter);
+}
+
 static bool test_is_excluded(const char *name, const char **excluded,
                              size_t excluded_len)
 {
@@ -286,6 +299,82 @@ static bool test_is_excluded(const char *name, const char **excluded,
 const char *yew_test_program_path(void)
 {
     return program_path;
+}
+
+const char *yew_test_child_role(void)
+{
+    if (child_of == NULL || current_test == NULL ||
+        strcmp(child_of, current_test->name) != 0)
+        return NULL;
+    return child_role;
+}
+
+void yew_test_spawn_child(const char *role, YewTestChildPrep prep,
+                          void *user, YewTestChild *out)
+{
+    Bytebuf err;
+    int pipefd[2];
+    pid_t child;
+    pid_t waited;
+    ssize_t count;
+    u8 chunk[512];
+
+    YEW_ASSERT_NOT_NULL(out);
+    YEW_ASSERT_NOT_NULL(role);
+    YEW_ASSERT_NOT_NULL(program_path);
+    YEW_ASSERT_NOT_NULL(current_test);
+    out->status = 0;
+    out->err = NULL;
+    out->err_len = 0U;
+    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
+    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
+    child = fork();
+    YEW_ASSERT(child >= 0);
+    if (child == 0) {
+        (void)close(pipefd[0]);
+        if (dup2(STDERR_FILENO, STDOUT_FILENO) < 0 ||
+            dup2(pipefd[1], STDERR_FILENO) < 0)
+            _exit(126);
+        (void)close(pipefd[1]);
+        if (setenv("YEW_TEST_CHILD", current_test->name, 1) != 0 ||
+            setenv("YEW_TEST_CHILD_ROLE", role, 1) != 0)
+            _exit(126);
+        if (prep != NULL && !prep(user))
+            _exit(126);
+        execl(program_path, program_path, "--only", current_test->name,
+              (char *)NULL);
+        _exit(126);
+    }
+    (void)close(pipefd[1]);
+    bytebuf_init(&err);
+    for (;;) {
+        count = read(pipefd[0], chunk, sizeof(chunk));
+        if (count > 0) {
+            bytebuf_append(&err, chunk, (size_t)count);
+            continue;
+        }
+        if (count < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+    (void)close(pipefd[0]);
+    do {
+        waited = waitpid(child, &out->status, 0);
+    } while (waited < 0 && errno == EINTR);
+    out->err_len = err.len;
+    bytebuf_push_u8(&err, 0U);
+    out->err = (char *)err.data;
+    YEW_ASSERT_EQ_I64(count, 0);
+    YEW_ASSERT_EQ_I64(waited, child);
+}
+
+void yew_test_child_free(YewTestChild *child)
+{
+    if (child == NULL)
+        return;
+    yew_xfree(child->err);
+    child->err = NULL;
+    child->err_len = 0U;
 }
 
 void yew_test_load_runtime(Ed *ed)
@@ -332,6 +421,7 @@ static bool run_one_test(const YewTest *test)
 {
     jmp_buf target;
 
+    current_test = test;
     failure_target = &target;
     failure_file = NULL;
     failure_line = 0;
@@ -341,12 +431,14 @@ static bool run_one_test(const YewTest *test)
         test->fn();
         yew_test_teardown();
         failure_target = NULL;
+        current_test = NULL;
         (void)printf("PASS %s\n", test->name);
         (void)fflush(stdout);
         return true;
     }
     yew_test_teardown();
     failure_target = NULL;
+    current_test = NULL;
     if (skip_requested) {
         skip_requested = false;
         skip_count++;
@@ -367,9 +459,61 @@ static bool run_one_test(const YewTest *test)
     return false;
 }
 
+/* A fresh run's own cache root, with HOME and XDG_DATA_HOME inside it. */
+static bool unit_own_dirs(void)
+{
+    (void)snprintf(unit_cache, sizeof(unit_cache),
+                   "/tmp/yew-unit-cache-XXXXXX");
+    if (mkdtemp(unit_cache) == NULL) {
+        (void)fprintf(stderr, "unit: cannot create a cache directory\n");
+        return false;
+    }
+    {
+        /* Canonical (macOS's /tmp is a symlink): a test that uses HOME as
+         * a workspace root compares it with realpath()s. */
+        char *real = realpath(unit_cache, NULL);
+
+        if (real != NULL && strlen(real) < sizeof(unit_cache))
+            (void)snprintf(unit_cache, sizeof(unit_cache), "%s", real);
+        free(real);
+    }
+    /* Inside the cache root, so the one removal at the end takes them. */
+    (void)snprintf(unit_home, sizeof(unit_home), "%s/home", unit_cache);
+    (void)snprintf(unit_data, sizeof(unit_data), "%s/data", unit_cache);
+    if (mkdir(unit_home, 0700) != 0 || mkdir(unit_data, 0700) != 0) {
+        (void)fprintf(stderr, "unit: cannot create an isolated home\n");
+        unit_cache_remove(unit_cache);
+        return false;
+    }
+    return true;
+}
+
+/*
+ * A spawned child adopts the directories its parent run made (they are
+ * in the environment it inherited) and never removes them: they are the
+ * parent's, and a child that ends in YEW_BUG does not get to clean up.
+ */
+static bool unit_child_dirs(const char *cache, const char *home,
+                            const char *data)
+{
+    int n;
+
+    if (cache == NULL || home == NULL || data == NULL)
+        return false;
+    n = snprintf(unit_cache, sizeof(unit_cache), "%s", cache);
+    if (n < 0 || (size_t)n >= sizeof(unit_cache))
+        return false;
+    n = snprintf(unit_home, sizeof(unit_home), "%s", home);
+    if (n < 0 || (size_t)n >= sizeof(unit_home))
+        return false;
+    n = snprintf(unit_data, sizeof(unit_data), "%s", data);
+    return n >= 0 && (size_t)n < sizeof(unit_data);
+}
+
 int yew_test_run(int argc, char **argv)
 {
     const char *filter = NULL;
+    const char *only = NULL;
     const char *excluded[32];
     size_t excluded_len = 0U;
     bool list = false;
@@ -395,6 +539,14 @@ int yew_test_run(int argc, char **argv)
                 return 1;
             }
             filter = argv[argi];
+        } else if (strcmp(argv[argi], "--only") == 0) {
+            /* Exactly one test by its full name, where --filter would
+             * take every name containing it. */
+            if (++argi >= argc) {
+                (void)fprintf(stderr, "unit: --only requires a test name\n");
+                return 1;
+            }
+            only = argv[argi];
         } else if (strcmp(argv[argi], "--exclude") == 0) {
             if (++argi >= argc || excluded_len ==
                                       sizeof(excluded) / sizeof(excluded[0])) {
@@ -410,7 +562,7 @@ int yew_test_run(int argc, char **argv)
     }
 
     for (i = 0U; i < yew_tests_len; i++) {
-        if (yew_test_name_matches(yew_tests[i].name, filter) &&
+        if (test_is_selected(yew_tests[i].name, filter, only) &&
             !test_is_excluded(yew_tests[i].name, excluded, excluded_len))
             selected++;
     }
@@ -420,7 +572,7 @@ int yew_test_run(int argc, char **argv)
     }
     if (list) {
         for (i = 0U; i < yew_tests_len; i++) {
-            if (yew_test_name_matches(yew_tests[i].name, filter) &&
+            if (test_is_selected(yew_tests[i].name, filter, only) &&
                 !test_is_excluded(yew_tests[i].name, excluded,
                                   excluded_len))
                 (void)printf("%s\n", yew_tests[i].name);
@@ -428,6 +580,20 @@ int yew_test_run(int argc, char **argv)
         return 0;
     }
 
+    /* Read, then cleared: a child's own subprocesses are not children
+     * of this test. */
+    child_of = env_copy("YEW_TEST_CHILD");
+    child_role = env_copy("YEW_TEST_CHILD_ROLE");
+    if (unsetenv("YEW_TEST_CHILD") != 0 ||
+        unsetenv("YEW_TEST_CHILD_ROLE") != 0) {
+        (void)fprintf(stderr, "unit: cannot clear the child marker\n");
+        return 1;
+    }
+    if ((child_of == NULL) != (child_role == NULL)) {
+        (void)fprintf(stderr, "unit: YEW_TEST_CHILD and "
+                              "YEW_TEST_CHILD_ROLE come together\n");
+        return 1;
+    }
     xdg_state = env_copy("XDG_STATE_HOME");
     xdg_cache = env_copy("XDG_CACHE_HOME");
     path = env_copy("PATH");
@@ -435,31 +601,17 @@ int yew_test_run(int argc, char **argv)
     home = env_copy("HOME");
     histfile = env_copy("HISTFILE");
     test_fish = env_copy("YEW_TEST_FISH");
-    (void)snprintf(unit_cache, sizeof(unit_cache),
-                   "/tmp/yew-unit-cache-XXXXXX");
-    if (mkdtemp(unit_cache) == NULL) {
-        (void)fprintf(stderr, "unit: cannot create a cache directory\n");
-        return 1;
-    }
-    {
-        /* Canonical (macOS's /tmp is a symlink): a test that uses HOME as
-         * a workspace root compares it with realpath()s. */
-        char *real = realpath(unit_cache, NULL);
-
-        if (real != NULL && strlen(real) < sizeof(unit_cache))
-            (void)snprintf(unit_cache, sizeof(unit_cache), "%s", real);
-        free(real);
-    }
-    /* Inside the cache root, so the one removal at the end takes them. */
-    (void)snprintf(unit_home, sizeof(unit_home), "%s/home", unit_cache);
-    (void)snprintf(unit_data, sizeof(unit_data), "%s/data", unit_cache);
-    if (mkdir(unit_home, 0700) != 0 || mkdir(unit_data, 0700) != 0) {
-        (void)fprintf(stderr, "unit: cannot create an isolated home\n");
-        unit_cache_remove(unit_cache);
+    if (child_of != NULL) {
+        if (!unit_child_dirs(xdg_cache, home, xdg_data)) {
+            (void)fprintf(stderr, "unit: a child needs its parent's "
+                                  "isolated HOME and caches\n");
+            return 1;
+        }
+    } else if (!unit_own_dirs()) {
         return 1;
     }
     for (i = 0U; i < yew_tests_len; i++) {
-        if (!yew_test_name_matches(yew_tests[i].name, filter) ||
+        if (!test_is_selected(yew_tests[i].name, filter, only) ||
             test_is_excluded(yew_tests[i].name, excluded, excluded_len))
             continue;
         env_restore("XDG_STATE_HOME", xdg_state);
@@ -479,7 +631,12 @@ int yew_test_run(int argc, char **argv)
     env_restore("HOME", home);
     env_restore("HISTFILE", histfile);
     env_restore("YEW_TEST_FISH", test_fish);
-    unit_cache_remove(unit_cache);
+    if (child_of == NULL)
+        unit_cache_remove(unit_cache);
+    yew_xfree(child_of);
+    yew_xfree(child_role);
+    child_of = NULL;
+    child_role = NULL;
     yew_xfree(xdg_state);
     yew_xfree(xdg_cache);
     yew_xfree(path);

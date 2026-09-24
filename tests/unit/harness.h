@@ -41,6 +41,40 @@ void yew_test_teardown(void);
 
 bool yew_test_name_matches(const char *name, const char *filter);
 const char *yew_test_program_path(void);
+
+/*
+ * A test's child side, run in a FRESH process.
+ *
+ * A fork()ed child inherits everything the parent has done: its heap
+ * (and so any leak LeakSanitizer finds when the child exits), its
+ * statics, its log sink.  A child that is expected to die with a
+ * particular exit status must not be at the mercy of earlier tests, so
+ * yew_test_spawn_child() re-executes this unit binary running ONLY the
+ * current test (`--only <name>`), with YEW_TEST_CHILD / _ROLE telling it
+ * that it is the child.  In there, yew_test_child_role() returns `role`
+ * and the test runs its child side; everywhere else it returns NULL.
+ *
+ * `prep`, if given, runs in the forked process just before the exec (to
+ * set the child's environment); returning false exits it with 126.  The
+ * child's stderr is captured; its stdout (the harness's PASS/FAIL lines)
+ * goes to our stderr, so a failing child is diagnosable without
+ * polluting this run's own report.  The child shares this run's
+ * isolated HOME and caches rather than making its own: a child that
+ * exits through YEW_BUG never reaches the cleanup that would remove
+ * them.
+ */
+typedef struct {
+    int status;    /* as waitpid() reported it */
+    char *err;     /* the child's stderr, NUL-terminated */
+    size_t err_len;
+} YewTestChild;
+
+typedef bool (*YewTestChildPrep)(void *user);
+
+const char *yew_test_child_role(void);
+void yew_test_spawn_child(const char *role, YewTestChildPrep prep,
+                          void *user, YewTestChild *out);
+void yew_test_child_free(YewTestChild *child);
 void yew_test_load_runtime(Ed *ed);
 bool yew_test_canonicalize_path(char *path, size_t cap);
 
