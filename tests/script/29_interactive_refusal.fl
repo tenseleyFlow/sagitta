@@ -5,6 +5,9 @@ let alternatives = {
     "ed.ui.message_expand": "no batch alternative",
     "ed.cmdline.accept": "use ed.run(name, args)",
     "ed.cmdline.cancel": "use ed.run(name, args)",
+    # Sprint 57.29: the prompt's C-c copies or cancels a line a script
+    # never has open.
+    "ed.cmdline.copy_or_cancel": "use ed.run(name, args)",
     "ed.file.open": "use buf.open(path)",
     # Sprint 57.13 Deliverable 4: `Save As...` is the question "write to
     # which path?", and a script already has the answer.
@@ -75,7 +78,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 47)
+t.eq(seen, 48)
 
 # Hunk discard stopped being prompt-backed when Sprint 53 made it a direct,
 # undoable buffer edit.  It is still intentionally unavailable in batch mode,
