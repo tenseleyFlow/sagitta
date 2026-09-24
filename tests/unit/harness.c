@@ -417,9 +417,56 @@ _Noreturn void yew_test_skip(const char *reason)
     abort();
 }
 
+/*
+ * Per-test leak attribution.  LeakSanitizer otherwise checks only when
+ * the process exits -- and a fork()ed child that exits checks the heap
+ * it inherited, so an earlier test's leak surfaced as a death test's
+ * exit status changing from 4 to 1.  In an ASan build every test ends
+ * with a recoverable leak check, and the test that leaked fails by name.
+ *
+ * The check cannot tell old leaks from new ones, so after the first it
+ * stands down: later tests would be blamed for the same allocation.
+ * The end-of-process check still reports anything that follows.
+ *
+ * macOS has no LeakSanitizer; there the call exists and returns 0.
+ */
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define YEW_TEST_LEAK_CHECK 1
+#endif
+#endif
+#if !defined(YEW_TEST_LEAK_CHECK) && defined(__SANITIZE_ADDRESS__)
+#define YEW_TEST_LEAK_CHECK 1
+#endif
+
+#if defined(YEW_TEST_LEAK_CHECK)
+#include <sanitizer/lsan_interface.h>
+
+static bool leak_check_armed = true;
+
+static bool test_leaked(const YewTest *test)
+{
+    if (!leak_check_armed || __lsan_do_recoverable_leak_check() == 0)
+        return false;
+    leak_check_armed = false;
+    (void)printf("FAIL %s: LeakSanitizer found a leak once it had run "
+                 "(report on stderr); per-test leak checks are off for "
+                 "the rest of this run\n", test->name);
+    (void)fflush(stdout);
+    return true;
+}
+#else
+static bool test_leaked(const YewTest *test)
+{
+    (void)test;
+    return false;
+}
+#endif
+
 static bool run_one_test(const YewTest *test)
 {
     jmp_buf target;
+    volatile bool finished = false;
 
     current_test = test;
     failure_target = &target;
@@ -429,34 +476,40 @@ static bool run_one_test(const YewTest *test)
     skip_requested = false;
     if (setjmp(target) == 0) {
         test->fn();
-        yew_test_teardown();
-        failure_target = NULL;
-        current_test = NULL;
-        (void)printf("PASS %s\n", test->name);
-        (void)fflush(stdout);
-        return true;
+        finished = true;
     }
     yew_test_teardown();
     failure_target = NULL;
     current_test = NULL;
-    if (skip_requested) {
+    if (!finished && !skip_requested) {
+        (void)printf("FAIL %s at %s:%d: %s\n", test->name,
+                     failure_file, failure_line, failure_detail);
+        (void)fflush(stdout);
+        if (getenv("YEW_TEST_SELFCHECK") != NULL) {
+            yew_log(YEW_LOG_INFO, "harness teardown restored default sink");
+            if (yew_test_log_count() != 0U)
+                (void)printf("FAIL harness teardown left capture sink "
+                             "installed\n");
+        }
+        (void)test_leaked(test);
+        return false;
+    }
+    if (test_leaked(test)) {
         skip_requested = false;
-        skip_count++;
-        /* The reason first, so a test can name its subject the way a
-         * reader greps for it (`SKIP real-fish: fish not on PATH`). */
-        (void)printf("SKIP %s (%s)\n", skip_reason, test->name);
+        return false;
+    }
+    if (finished) {
+        (void)printf("PASS %s\n", test->name);
         (void)fflush(stdout);
         return true;
     }
-    (void)printf("FAIL %s at %s:%d: %s\n", test->name,
-                 failure_file, failure_line, failure_detail);
+    skip_requested = false;
+    skip_count++;
+    /* The reason first, so a test can name its subject the way a
+     * reader greps for it (`SKIP real-fish: fish not on PATH`). */
+    (void)printf("SKIP %s (%s)\n", skip_reason, test->name);
     (void)fflush(stdout);
-    if (getenv("YEW_TEST_SELFCHECK") != NULL) {
-        yew_log(YEW_LOG_INFO, "harness teardown restored default sink");
-        if (yew_test_log_count() != 0U)
-            (void)printf("FAIL harness teardown left capture sink installed\n");
-    }
-    return false;
+    return true;
 }
 
 /* A fresh run's own cache root, with HOME and XDG_DATA_HOME inside it. */
