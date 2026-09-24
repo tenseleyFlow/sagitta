@@ -896,8 +896,9 @@ void yew_cmdline_compgen_arrived(Ed *ed, const char *key)
 {
     CmdLine *line;
 
+    /* Sprint 57.30 §4: C-r's rows are history; an answer only caches. */
     if (ed == NULL || key == NULL || !ed->cmdline.active ||
-        ed->cmdline.kind != YEW_PROMPT_CMD)
+        ed->cmdline.kind != YEW_PROMPT_CMD || ed->cmdline.hsearch)
         return;
     line = &ed->cmdline;
     if (line->filter.gen_key == NULL || strcmp(line->filter.gen_key, key) != 0)
@@ -924,7 +925,8 @@ void yew_cmdline_compgen_arrived(Ed *ed, const char *key)
 bool yew_cmdline_comp_scanning(const Ed *ed)
 {
     return ed != NULL && ed->cmdline.active &&
-           ed->cmdline.kind == YEW_PROMPT_CMD && yew_comp_listing_pending();
+           ed->cmdline.kind == YEW_PROMPT_CMD && !ed->cmdline.hsearch &&
+           yew_comp_listing_pending();
 }
 
 /*
