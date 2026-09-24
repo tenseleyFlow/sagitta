@@ -317,6 +317,16 @@ each: on-disk layout amplification, as S59-A7 recorded, not module growth.
 Those two caps alone move to the next 16 KiB boundary: FUSS-only 1,900,544,
 LSP-only 1,867,776. Nothing else changes.
 
+**Amendment S57.30-A1 (2026-09-24) — two caps follow prompt history.**
+Sprint 57.30 (Up/Down as history, the table's edges, substring history,
+`C-r` and token search) adds 10,229 file-backed bytes on the pinned x86_64
+GCC 13.3 lane at `f09a2503`: 9,784 in `core.ui`, 445 in `core.edit`. Full
+stays inside its S57.32-A1 cap at 2,225,864 (2,360 bytes of headroom
+remain). AI-only (1,861,320 to 1,869,512) and minimal (1,730,208 to
+1,738,400) cross their caps by 1,736 and 1,696 bytes; those two alone move
+to the next 16 KiB boundary: AI-only 1,884,160, minimal 1,753,088. Nothing
+else changes.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
