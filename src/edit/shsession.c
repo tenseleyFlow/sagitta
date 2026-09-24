@@ -286,8 +286,13 @@ static void link_arm(ShLink *l)
     l->num_len = 0U;
 }
 
-/* The status marker, the env record and the end marker for frame `seq`. */
-static void link_put_tail(ShLink *l, const char *status_expr)
+/*
+ * The status marker, the env record and the end marker for frame `seq`.
+ * `between` runs after the status is taken and before the record (the
+ * command frame puts the idle INT trap back there).
+ */
+static void link_put_tail(ShLink *l, const char *status_expr,
+                          const char *between)
 {
     char tag[64];
     int n;
@@ -301,6 +306,7 @@ static void link_put_tail(ShLink *l, const char *status_expr)
     link_put(l, " ");
     link_put(l, status_expr);
     link_put(l, " >&9; ");
+    link_put(l, between);
     if (l->self != NULL) {
         yew_shell_quote(&l->tx, (const u8 *)l->self, strlen(l->self));
         link_put(l, " --yew-env0 </dev/null >&9; ");
@@ -311,15 +317,34 @@ static void link_put_tail(ShLink *l, const char *status_expr)
     link_put(l, " >&9\n");
 }
 
+/*
+ * One command's line.  The command runs inside a function whose INT trap
+ * RETURNS: a trapped SIGINT only runs the trap once the killed child is
+ * reaped, and at top level every shell then carries on with the rest of
+ * the list (`sleep 30; make install` would install).  `return` from the
+ * trap ends the whole command in zsh, bash, dash and ksh alike; the idle
+ * `trap : INT` is back before the env record.  The function is defined
+ * again on every line, so a command cannot break the next frame by
+ * unsetting it, and it takes no arguments: `$#` is 0 and `$1` empty, as
+ * under `$SHELL -c`.
+ */
 static void link_send(ShLink *l, const char *cmdline)
 {
+    char between[64];
+    int n;
+
     l->seq++;
     link_arm(l);
+    link_put(l, "__yew_run() { trap 'return 130' INT; ");
     link_put(l, l->word);
-    link_put(l, "eval ");
+    link_put(l, "eval \"$__yew_c\"; }; __yew_c=");
     yew_shell_quote(&l->tx, (const u8 *)cmdline, strlen(cmdline));
-    link_put(l, " </dev/null 9>&-; ");
-    link_put_tail(l, "\"$?\"");
+    link_put(l, "; __yew_run </dev/null 9>&-; ");
+    n = snprintf(between, sizeof(between), "%strap : INT; %sunset __yew_c; ",
+                 l->word, l->word);
+    if (n < 0 || (size_t)n >= sizeof(between))
+        between[0] = '\0';
+    link_put_tail(l, "\"$?\"", between);
 }
 
 /*
@@ -342,8 +367,7 @@ static void link_prologue(ShLink *l)
     link_put(l, "if command eval : 2>/dev/null; then __yew_w=0; "
                 "elif builtin eval : 2>/dev/null; then __yew_w=1; "
                 "else __yew_w=2; fi </dev/null 9>&-; ");
-    link_put_tail(l, "\"$__yew_w\"");
-    link_put(l, "unset __yew_w\n");
+    link_put_tail(l, "\"$__yew_w\"", "unset __yew_w; ");
 }
 
 static u64 link_tx_view(void *owner, const u8 **bytes)
