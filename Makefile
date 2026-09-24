@@ -443,16 +443,18 @@ MUSL_UNIT_EXCLUDES :=
 MUSL_UNIT_PREP :=
 ifeq ($(TARGET),x86_64-linux-musl)
 # A static PIE has no dynamic loader with which to interpose faultshim.so.
-# The same four contracts remain mandatory in the glibc, sanitizer, and
+# The same five contracts remain mandatory in the glibc, sanitizer, and
 # valgrind lanes; make the musl omission named rather than silently passing.
 MUSL_UNIT_EXCLUDES := \
   --exclude multicursor_200_insert_is_one_undo_and_one_journal_sync \
+  --exclude multicursor_1000_failure_at_700_rolls_back_and_syncs_once \
   --exclude save_fault_shim_contract \
   --exclude ws_save_write_is_atomic_in_order \
   --exclude ws_save_survives_kill9_at_every_step
 MUSL_UNIT_PREP := \
   printf '%s\n' \
     'SKIP multicursor_200_insert_is_one_undo_and_one_journal_sync: static PIE cannot load the LD_PRELOAD fault shim' \
+    'SKIP multicursor_1000_failure_at_700_rolls_back_and_syncs_once: static PIE cannot load the LD_PRELOAD fault shim' \
     'SKIP save_fault_shim_contract: static PIE cannot load the LD_PRELOAD fault shim' \
     'SKIP ws_save_write_is_atomic_in_order: static PIE cannot load the LD_PRELOAD fault shim' \
     'SKIP ws_save_survives_kill9_at_every_step: static PIE cannot load the LD_PRELOAD fault shim' &&
