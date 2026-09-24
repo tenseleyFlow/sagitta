@@ -463,24 +463,9 @@ void test_ctxmenu_right_click_in_a_pane_opens_the_document_menu(void)
  */
 void test_ctxmenu_a_row_handler_reading_a_payload_is_a_bug(void)
 {
-    Bytebuf output;
-    int pipefd[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    ssize_t count;
-    u8 chunk[256];
+    YewTestChild child;
 
-    bytebuf_init(&output);
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
-        (void)close(pipefd[0]);
-        if (dup2(pipefd[1], STDERR_FILENO) < 0)
-            _exit(126);
-        (void)close(pipefd[1]);
+    if (yew_test_child_role() != NULL) {
         (void)setenv("YEW_LOG", "/dev/null", 1);
         yew_region_frame_begin();
         yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, 3);
@@ -489,28 +474,10 @@ void test_ctxmenu_a_row_handler_reading_a_payload_is_a_bug(void)
         (void)yew_region_hit(1U, 0U);
         _exit(99);
     }
-    (void)close(pipefd[1]);
-    for (;;) {
-        count = read(pipefd[0], chunk, sizeof(chunk));
-        if (count > 0) {
-            bytebuf_append(&output, chunk, (size_t)count);
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        break;
-    }
-    (void)close(pipefd[0]);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
-    bytebuf_append(&output, "", 1U);
-    YEW_ASSERT_NOT_NULL(strstr((const char *)output.data,
-                               "captured at open time"));
-    bytebuf_free(&output);
+    yew_test_spawn_child("bug", NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    YEW_ASSERT_NOT_NULL(strstr(child.err, "captured at open time"));
+    yew_test_child_free(&child);
     /* And an unfrozen table answers normally, so the guard is not
      * simply always on. */
     YEW_ASSERT(!yew_region_frozen());
