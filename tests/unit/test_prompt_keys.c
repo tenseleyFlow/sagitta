@@ -2016,3 +2016,151 @@ void test_prompt_keys_token_search_on_a_bang_line(void)
     pk_text(&f, "!cat my");
     pk_free(&f);
 }
+
+/* ----------------------------------------------------- fish's extras */
+
+static void pk_sudo(PkFix *f)
+{
+    pk_run(f, (u32)'s', YEW_MOD_ALT, "ed.cmdline.toggle_sudo");
+}
+
+/* Moves the caret to byte `at` with real keys: C-a, then C-f. */
+static void pk_caret_to(PkFix *f, u64 at)
+{
+    u64 i;
+
+    pk_run(f, (u32)'a', YEW_MOD_CTRL, "ed.move.line.home");
+    for (i = 0U; i < at; i++)
+        pk_send(f, (u32)'f', YEW_MOD_CTRL);
+    YEW_ASSERT_EQ_U64(pk_caret(f), at);
+}
+
+/* Sprint 57.31 §1: every row of the table, on every bang form. */
+void test_prompt_keys_alt_s_toggles_sudo(void)
+{
+    static const char *const own[] = {"!make test", "e foo.c"};
+    static const char *const own_sudo[] = {"!sudo apt update"};
+    PkFix f;
+
+    pk_init(&f);
+    /* Otherwise, non-empty: `sudo ` goes in front. */
+    pk_prompt(&f, NULL, 0U, "!make");
+    pk_sudo(&f);
+    pk_text(&f, "!sudo make");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 10U);
+    /* Starts with `sudo `: removed. */
+    pk_sudo(&f);
+    pk_text(&f, "!make");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 5U);
+    /* `doas ` too, after leading blanks, which stay. */
+    pk_prompt(&f, NULL, 0U, "!  doas rm x");
+    pk_sudo(&f);
+    pk_text(&f, "!  rm x");
+    pk_sudo(&f);
+    pk_text(&f, "!  sudo rm x");
+    /* A lone `sudo` is the prefix too. */
+    pk_prompt(&f, NULL, 0U, "!sudo");
+    pk_sudo(&f);
+    pk_text(&f, "!");
+    /* `sudoedit` is a command, not the prefix. */
+    pk_prompt(&f, NULL, 0U, "!sudoedit x");
+    pk_sudo(&f);
+    pk_text(&f, "!sudo sudoedit x");
+    /* The other bang spellings. */
+    pk_prompt(&f, NULL, 0U, "r !ls");
+    pk_sudo(&f);
+    pk_text(&f, "r !sudo ls");
+    pk_prompt(&f, NULL, 0U, "%!sort");
+    pk_sudo(&f);
+    pk_text(&f, "%!sudo sort");
+    pk_prompt(&f, NULL, 0U, "!!top");
+    pk_sudo(&f);
+    pk_text(&f, "!!sudo top");
+
+    /* Empty: `sudo ` and the newest bang entry's body (fish), caret at
+     * the end.  Blanks alone are empty too. */
+    pk_prompt(&f, own, YEW_ARRAY_LEN(own), "!");
+    pk_sudo(&f);
+    pk_text(&f, "!sudo make test");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 15U);
+    pk_prompt(&f, own, YEW_ARRAY_LEN(own), "! ");
+    pk_sudo(&f);
+    pk_text(&f, "! sudo make test");
+    /* An entry that already starts with the prefix goes in as it is. */
+    pk_prompt(&f, own_sudo, 1U, "!");
+    pk_sudo(&f);
+    pk_text(&f, "!sudo apt update");
+    /* No history at all: just the prefix. */
+    pk_free(&f);
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "!");
+    pk_sudo(&f);
+    pk_text(&f, "!sudo ");
+    pk_free(&f);
+}
+
+/* §1: the caret stays on the text it was on. */
+void test_prompt_keys_alt_s_keeps_the_caret_on_its_text(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "!make test");
+    /* On the `t` of `test`. */
+    pk_caret_to(&f, 6U);
+    pk_sudo(&f);
+    pk_text(&f, "!sudo make test");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 11U);
+    pk_sudo(&f);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 6U);
+    /* At the body's start: the caret was on `m`, and stays on it. */
+    pk_caret_to(&f, 1U);
+    pk_sudo(&f);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 6U);
+    /* Inside the removed word: where the word began. */
+    pk_caret_to(&f, 3U);
+    pk_sudo(&f);
+    pk_text(&f, "!make test");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 1U);
+    /* Before the body (on the `!`): untouched. */
+    pk_caret_to(&f, 0U);
+    pk_sudo(&f);
+    pk_text(&f, "!sudo make test");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 0U);
+    pk_free(&f);
+}
+
+/* §1: not a shell command -- the line is untouched and the message says
+ * why; the search prompt is never one.  And each toggle is ONE undo
+ * step. */
+void test_prompt_keys_alt_s_refuses_and_undoes_in_one_step(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e foo.c");
+    pk_sudo(&f);
+    pk_text(&f, "e foo.c");
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "A-s: not a shell command");
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_send(&f, (u32)'/', 0U);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.kind, YEW_PROMPT_SEARCH_F);
+    pk_type(&f, "!x");
+    pk_sudo(&f);
+    pk_text(&f, "!x");
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "A-s: not a shell command");
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+
+    pk_prompt(&f, NULL, 0U, "!make");
+    pk_sudo(&f);
+    pk_text(&f, "!sudo make");
+    pk_run(&f, (u32)'_', YEW_MOD_CTRL, "ed.edit.undo");
+    pk_text(&f, "!make");
+    pk_run(&f, (u32)'/', YEW_MOD_ALT, "ed.edit.redo");
+    pk_text(&f, "!sudo make");
+    pk_sudo(&f);
+    pk_text(&f, "!make");
+    pk_run(&f, (u32)'_', YEW_MOD_CTRL, "ed.edit.undo");
+    pk_text(&f, "!sudo make");
+    pk_free(&f);
+}

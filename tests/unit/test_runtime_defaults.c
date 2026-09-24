@@ -475,6 +475,8 @@ static const BindRow frozen_E[] = {
     {"C-S-<right>", "ed.sel.extend.line_end", 0, NULL},
     {"C-c", "ed.cmdline.copy_or_cancel", 0, NULL},
     {"C-x", "ed.clip.cut", 0, NULL},
+    /* Sprint 57.31: fish's extras. */
+    {"A-s", "ed.cmdline.toggle_sudo", 0, NULL},
 };
 
 static const BindRow frozen_F[] = {
@@ -577,7 +579,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 385U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 386U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
