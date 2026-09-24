@@ -683,6 +683,110 @@ void test_histsuggest_precedence_against_the_token_ghost(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* Sprint 57.30 §2: Up on a bang line walks the snapshot               */
+/* ------------------------------------------------------------------ */
+
+static void arrow(Ed *ed, u32 code, const char *command)
+{
+    Key key;
+
+    (void)memset(&key, 0, sizeof(key));
+    key.code = code;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    yew_ed_handle_key(ed, key, 0);
+    YEW_ASSERT_EQ_U64(ed->last_status, YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed->last_cmd.v,
+                      yew_cmd_lookup(command, (u32)strlen(command)).v);
+}
+
+static void up(Ed *ed)
+{
+    arrow(ed, YEW_KEY_UP, "ed.cmdline.up");
+}
+
+static void down(Ed *ed)
+{
+    arrow(ed, YEW_KEY_DOWN, "ed.cmdline.down");
+}
+
+/* yew's own bodies first, then fish, zsh, bash -- the ghost's order --
+ * matched by SUBSTRING of the body, the typed `!` kept; refused entries
+ * never appear. */
+void test_histsuggest_bang_up_walks_the_snapshot(void)
+{
+    static const char *const own[] = {"w", "!git stage -p"};
+    GhostFix g;
+
+    ghost_fix_init(&g, true);
+    prompt(&g, own, YEW_ARRAY_LEN(own), "!git st");
+    up(&g.ed);
+    assert_text(&g.ed, "!git stage -p");
+    YEW_ASSERT(g.ed.cmdline.walk_bang);
+    YEW_ASSERT_EQ_STR(g.ed.cmdline.walk.term, "git st");
+    up(&g.ed);
+    assert_text(&g.ed, "!git status");
+    up(&g.ed);
+    assert_text(&g.ed, "!git status --short");
+    up(&g.ed);
+    assert_text(&g.ed, "!git stash list");
+    up(&g.ed);
+    assert_text(&g.ed, "!git status --porcelain");
+    up(&g.ed);
+    assert_text(&g.ed, "!git status --porcelain");
+    down(&g.ed);
+    assert_text(&g.ed, "!git stash list");
+    down(&g.ed);
+    down(&g.ed);
+    down(&g.ed);
+    down(&g.ed);
+    assert_text(&g.ed, "!git st");
+
+    /* A substring anywhere, the prefix form kept. */
+    prompt(&g, own, YEW_ARRAY_LEN(own), "r !only");
+    up(&g.ed);
+    assert_text(&g.ed, "r !fish-only --flag");
+    up(&g.ed);
+    assert_text(&g.ed, "r !zsh-only run");
+    up(&g.ed);
+    assert_text(&g.ed, "r !bash-only thing");
+    /* Refused entries (a secret, a multi-line command) never show. */
+    prompt(&g, own, YEW_ARRAY_LEN(own), "!AWS");
+    up(&g.ed);
+    assert_text(&g.ed, "!AWS");
+    prompt(&g, own, YEW_ARRAY_LEN(own), "!first");
+    up(&g.ed);
+    assert_text(&g.ed, "!first");
+    /* The same words WITHOUT the bang walk the prompt's own history. */
+    prompt(&g, own, YEW_ARRAY_LEN(own), "git st");
+    up(&g.ed);
+    assert_text(&g.ed, "!git stage -p");
+    YEW_ASSERT(!g.ed.cmdline.walk_bang);
+    up(&g.ed);
+    assert_text(&g.ed, "!git stage -p");
+    ghost_fix_drop(&g);
+}
+
+/* `yew` walks only yew's own bang entries. */
+void test_histsuggest_bang_up_follows_the_option(void)
+{
+    static const char *const own[] = {"!make all", "!git stage -p"};
+    GhostFix g;
+
+    ghost_fix_init(&g, true);
+    set_option(&g.ed, "shell.suggest_history", "yew");
+    prompt(&g, own, YEW_ARRAY_LEN(own), "!");
+    up(&g.ed);
+    assert_text(&g.ed, "!git stage -p");
+    up(&g.ed);
+    assert_text(&g.ed, "!make all");
+    up(&g.ed);
+    assert_text(&g.ed, "!make all");
+    YEW_ASSERT_EQ_U64(yew_hist_test_shell_opens(), 0U);
+    ghost_fix_drop(&g);
+}
+
+/* ------------------------------------------------------------------ */
 /* Isolation: a real home's history never reaches a ghost              */
 /* ------------------------------------------------------------------ */
 

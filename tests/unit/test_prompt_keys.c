@@ -1444,3 +1444,334 @@ void test_prompt_keys_selection_draws_in_the_selection_style(void)
     yew_grid_free(&f.ed.grid);
     pk_free(&f);
 }
+
+/* ================================================================== */
+/* Sprint 57.30: prompt history and the completion table               */
+/* ================================================================== */
+
+/* The two chords a scene drives Up and Down with: the arrows, or C-p
+ * and C-n, which §3 binds to the same commands. */
+typedef struct PkArrows {
+    u32 up;
+    u16 up_mods;
+    u32 down;
+    u16 down_mods;
+} PkArrows;
+
+static const PkArrows pk_arrow_keys = {YEW_KEY_UP, 0U, YEW_KEY_DOWN, 0U};
+static const PkArrows pk_ctrl_keys = {(u32)'p', YEW_MOD_CTRL, (u32)'n',
+                                      YEW_MOD_CTRL};
+
+static void pk_up(PkFix *f, const PkArrows *k)
+{
+    pk_run(f, k->up, k->up_mods, "ed.cmdline.up");
+}
+
+static void pk_down(PkFix *f, const PkArrows *k)
+{
+    pk_run(f, k->down, k->down_mods, "ed.cmdline.down");
+}
+
+static bool pk_in_table(PkFix *f)
+{
+    return yew_menu_focused(&f->ed.cmdline.menu);
+}
+
+/* Tab until the table has focus -- the first Tab may only extend the
+ * word by its common prefix.  Returns the line as it was just before
+ * the Tab that entered: the text the table was entered from. */
+static char *pk_enter_table(PkFix *f)
+{
+    Bytebuf b;
+    char *before = NULL;
+    int i;
+
+    for (i = 0; i < 3 && !pk_in_table(f); i++) {
+        yew_xfree(before);
+        bytebuf_init(&b);
+        yew_cmdline_text(&f->ed, &b);
+        bytebuf_push_u8(&b, 0U);
+        before = (char *)b.data;
+        pk_run(f, YEW_KEY_TAB, 0U, "ed.cmdline.complete_next");
+    }
+    YEW_ASSERT(pk_in_table(f));
+    return before;
+}
+
+static const char *pk_row(PkFix *f, u32 i)
+{
+    YEW_ASSERT(i < f->ed.cmdline.menu.items.len);
+    return f->ed.cmdline.menu.items.data[i].text;
+}
+
+/* Every row of §1's table, driven by `k`. */
+static void pk_table_scene(const PkArrows *k)
+{
+    static const char *const own[] = {"file.zzz", "set wrap"};
+    PkFix f;
+    char *typed;
+    char again[160];
+    u32 last;
+    bool scrolled = false;
+
+    pk_init(&f);
+    pk_prompt(&f, own, 2U, "fil");
+    YEW_ASSERT(f.ed.cmdline.menu.items.len > 5U);
+
+    /* NOT in the table, the live table open: Up is history (the
+     * dogfooding bug), Down past the newest is the draft again. */
+    YEW_ASSERT(!pk_in_table(&f));
+    pk_up(&f, k);
+    pk_text(&f, "file.zzz");
+    YEW_ASSERT(!pk_in_table(&f));
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.len, 0U);
+    pk_down(&f, k);
+    pk_text(&f, "fil");
+    YEW_ASSERT(f.ed.cmdline.menu.items.len > 5U);
+    YEW_ASSERT(!pk_in_table(&f));
+
+    /* Tab enters; in the table, Down moves a row and writes it. */
+    typed = pk_enter_table(&f);
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    pk_text(&f, pk_row(&f, 0U));
+    pk_down(&f, k);
+    YEW_ASSERT(pk_in_table(&f));
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 1);
+    pk_text(&f, pk_row(&f, 1U));
+    /* Up, not on the top row: a row up. */
+    pk_up(&f, k);
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    pk_text(&f, pk_row(&f, 0U));
+
+    /* Down to the true last row; off the bottom VISIBLE row, with rows
+     * hidden below, the window scrolls one row at a time. */
+    last = (u32)f.ed.cmdline.menu.items.len - 1U;
+    while (f.ed.cmdline.menu.sel < (i32)last) {
+        u32 top = f.ed.cmdline.menu.top;
+        i32 sel = f.ed.cmdline.menu.sel;
+
+        pk_down(&f, k);
+        YEW_ASSERT(pk_in_table(&f));
+        YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, sel + 1);
+        YEW_ASSERT(f.ed.cmdline.menu.top == top ||
+                   f.ed.cmdline.menu.top == top + 1U);
+        if (f.ed.cmdline.menu.top != top)
+            scrolled = true;
+    }
+    YEW_ASSERT(scrolled);
+    /* Down on the true last row: out of the table, the candidate kept
+     * in the line, the table still OPEN but unfocused. */
+    pk_down(&f, k);
+    YEW_ASSERT(!pk_in_table(&f));
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, (i32)last);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.len, (u64)last + 1U);
+    pk_text(&f, pk_row(&f, last));
+    /* Tab enters it again and the rows move again. */
+    pk_run(&f, YEW_KEY_TAB, 0U, "ed.cmdline.complete_next");
+    YEW_ASSERT(pk_in_table(&f));
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    pk_down(&f, k);
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 1);
+    while (f.ed.cmdline.menu.sel < (i32)last)
+        pk_down(&f, k);
+    pk_down(&f, k);
+    YEW_ASSERT(!pk_in_table(&f));
+    /* From the line, Up is history again -- searched with the line. */
+    {
+        int n = snprintf(again, sizeof(again), "%s again", pk_row(&f, last));
+
+        YEW_ASSERT(n > 0 && (size_t)n < sizeof(again));
+    }
+    yew_hist_add(f.ed.cmdline.history, again);
+    pk_up(&f, k);
+    pk_text(&f, again);
+    YEW_ASSERT(!pk_in_table(&f));
+    pk_down(&f, k);
+    YEW_ASSERT(!pk_in_table(&f));
+
+    /* Up on the TOP row: out of the table, the table closed, history
+     * searched with what was TYPED -- `file.zzz` holds that, and no
+     * candidate's name. */
+    pk_prompt(&f, own, 2U, "fil");
+    yew_xfree(typed);
+    typed = pk_enter_table(&f);
+    YEW_ASSERT(strcmp(typed, pk_row(&f, 0U)) != 0);
+    pk_down(&f, k);
+    pk_up(&f, k);
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    pk_up(&f, k);
+    YEW_ASSERT(!pk_in_table(&f));
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.menu.items.len, 0U);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.walk.term, typed);
+    pk_text(&f, "file.zzz");
+    pk_down(&f, k);
+    pk_text(&f, typed);
+    YEW_ASSERT(!pk_in_table(&f));
+    /* <pgdn>/<pgup> page inside the table. */
+    (void)pk_enter_table(&f);
+    pk_run(&f, YEW_KEY_PAGE_DOWN, 0U, "ed.cmdline.menu.page_next");
+    YEW_ASSERT(pk_in_table(&f));
+    YEW_ASSERT(f.ed.cmdline.menu.sel >= 5);
+    pk_text(&f, pk_row(&f, (u32)f.ed.cmdline.menu.sel));
+    pk_run(&f, YEW_KEY_PAGE_UP, 0U, "ed.cmdline.menu.page_prev");
+    YEW_ASSERT_EQ_I64(f.ed.cmdline.menu.sel, 0);
+    yew_xfree(typed);
+    pk_free(&f);
+}
+
+/* §1, every row, on the arrows. */
+void test_prompt_keys_table_rows_on_the_arrows(void)
+{
+    pk_table_scene(&pk_arrow_keys);
+}
+
+/* §3: C-p and C-n are the arrows exactly, edge rules included. */
+void test_prompt_keys_table_rows_on_ctrl_p_and_ctrl_n(void)
+{
+    pk_table_scene(&pk_ctrl_keys);
+}
+
+/* §2 on a prompt's own history: substring, newest first, a frozen term,
+ * Down past the newest back at the draft, an edit ending the walk. */
+static void pk_history_scene(const PkArrows *k)
+{
+    static const char *const own[] = {"e notes.txt", "set wrap",
+                                      "echo wrapped", "set nowrap"};
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, own, 4U, "wrap");
+    pk_up(&f, k);
+    pk_text(&f, "set nowrap");
+    pk_up(&f, k);
+    pk_text(&f, "echo wrapped");
+    /* Frozen: the term is still what was typed, not the entry shown. */
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.walk.term, "wrap");
+    pk_up(&f, k);
+    pk_text(&f, "set wrap");
+    /* Past the oldest match it stays put. */
+    pk_up(&f, k);
+    pk_text(&f, "set wrap");
+    pk_down(&f, k);
+    pk_text(&f, "echo wrapped");
+    pk_down(&f, k);
+    pk_text(&f, "set nowrap");
+    pk_down(&f, k);
+    pk_text(&f, "wrap");
+    pk_down(&f, k);
+    pk_text(&f, "wrap");
+
+    /* An edit ends the walk; the next Up searches the new text. */
+    pk_up(&f, k);
+    pk_up(&f, k);
+    pk_text(&f, "echo wrapped");
+    pk_type(&f, "x");
+    YEW_ASSERT(!f.ed.cmdline.walk.on);
+    pk_up(&f, k);
+    pk_text(&f, "echo wrappedx");
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.walk.term, "echo wrappedx");
+
+    /* Case-sensitive. */
+    pk_prompt(&f, NULL, 0U, "WRAP");
+    pk_up(&f, k);
+    pk_text(&f, "WRAP");
+
+    /* An empty line walks all of it. */
+    pk_prompt(&f, NULL, 0U, "");
+    pk_up(&f, k);
+    pk_text(&f, "set nowrap");
+    pk_up(&f, k);
+    pk_text(&f, "echo wrapped");
+    pk_up(&f, k);
+    pk_text(&f, "set wrap");
+    pk_up(&f, k);
+    pk_text(&f, "e notes.txt");
+    pk_free(&f);
+}
+
+void test_prompt_keys_history_is_a_substring_walk(void)
+{
+    pk_history_scene(&pk_arrow_keys);
+    pk_history_scene(&pk_ctrl_keys);
+}
+
+/* The `/` prompt walks the search history the same way. */
+void test_prompt_keys_search_prompt_walks_its_own_history(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_send(&f, (u32)'/', 0U);
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.kind, YEW_PROMPT_SEARCH_F);
+    yew_hist_add(f.ed.cmdline.history, "alpha beta");
+    yew_hist_add(f.ed.cmdline.history, "gamma");
+    pk_type(&f, "bet");
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    pk_text(&f, "alpha beta");
+    YEW_ASSERT(!f.ed.cmdline.walk_bang);
+    pk_free(&f);
+}
+
+static bool pk_match_styled(PkFix *f, u16 x)
+{
+    Cell m;
+    u8 fields = yew_draw_search_style(&f->ed, false, &m);
+    const Cell *cell = &f->ed.grid.back[x];
+
+    YEW_ASSERT(fields != 0U);
+    if ((fields & YEW_OVERLAY_BG) != 0U && !pk_color_eq(cell->bg, m.bg))
+        return false;
+    if ((fields & YEW_OVERLAY_ATTRS) != 0U &&
+        (cell->attrs & m.attrs) != m.attrs)
+        return false;
+    return true;
+}
+
+/* §2: the matched part is highlighted in the `/` match style -- STATE,
+ * never text. */
+void test_prompt_keys_history_highlight_is_state(void)
+{
+    static const char *const own[] = {"echo wrapped", "set nowrap"};
+    PkFix f;
+    Span hit = {0U, 0U};
+    u16 x;
+
+    pk_init(&f);
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 1U, 40U));
+    pk_prompt(&f, own, 2U, "wrap");
+    YEW_ASSERT(!yew_cmdline_hist_match(&f.ed, NULL));
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    pk_text(&f, "echo wrapped");
+    YEW_ASSERT(yew_cmdline_hist_match(&f.ed, &hit));
+    YEW_ASSERT_EQ_U64(hit.lo, 5U);
+    YEW_ASSERT_EQ_U64(hit.hi, 9U);
+    pk_draw(&f, 40U);
+    /* `:` is cell 0, so bytes 5..9 are cells 6..9. */
+    for (x = 0U; x <= 5U; x++)
+        YEW_ASSERT(!pk_match_styled(&f, x));
+    for (x = 6U; x <= 9U; x++)
+        YEW_ASSERT(pk_match_styled(&f, x));
+    for (x = 10U; x <= 13U; x++)
+        YEW_ASSERT(!pk_match_styled(&f, x));
+    /* No ghost trails a walked entry. */
+    pk_ghost(&f, NULL);
+    /* Back at the draft, and after an edit, nothing is highlighted. */
+    pk_run(&f, YEW_KEY_DOWN, 0U, "ed.cmdline.down");
+    pk_run(&f, YEW_KEY_DOWN, 0U, "ed.cmdline.down");
+    pk_text(&f, "wrap");
+    YEW_ASSERT(!yew_cmdline_hist_match(&f.ed, NULL));
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    YEW_ASSERT(yew_cmdline_hist_match(&f.ed, NULL));
+    pk_type(&f, "!");
+    YEW_ASSERT(!yew_cmdline_hist_match(&f.ed, NULL));
+    pk_text(&f, "set nowrap!");
+    /* An empty term walks everything and highlights nothing. */
+    pk_prompt(&f, NULL, 0U, "");
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    pk_text(&f, "set nowrap");
+    YEW_ASSERT(!yew_cmdline_hist_match(&f.ed, NULL));
+    yew_grid_free(&f.ed.grid);
+    pk_free(&f);
+}
