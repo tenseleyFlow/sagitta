@@ -349,15 +349,41 @@ CmdStatus yew_sel_cmd_yank(CmdCtx *cx)
     return YEW_CMD_OK;
 }
 
+/*
+ * Sprint 57.29 §4: where C-c and C-x may act.
+ *
+ * The prompt Win holds its own selection in E mode, so there the answer
+ * is its selection, and none is a silent no-op.  In the document a
+ * selection is H: an anchor away from the caret anywhere else is not
+ * drawn and is not one (Sprint 57.13).  Insert mode therefore never has
+ * one -- its Shift+arrows enter H, where these keys already act -- so
+ * there they are inert, and OK, because an error would abort the open
+ * typing transaction.  Every other mode refuses, as before.
+ */
+typedef enum { CLIP_ACT, CLIP_INERT, CLIP_REFUSE } ClipScope;
+
+static ClipScope clip_scope(const CmdCtx *cx)
+{
+    if (cx->ed->cmdline.active && cx->win == yew_cmdline_target(cx->ed))
+        return yew_cmdline_selection(cx->ed, NULL) ? CLIP_ACT : CLIP_INERT;
+    if (cx->ed->mode == YEW_MODE_H)
+        return CLIP_ACT;
+    return cx->ed->mode == YEW_MODE_I ? CLIP_INERT : CLIP_REFUSE;
+}
+
 CmdStatus yew_sel_cmd_clip_copy(CmdCtx *cx)
 {
     Win *win;
     TextBuf *tb;
     Cursor *cursor;
     RegVal value;
+    ClipScope scope;
 
-    if (!action_context(cx, &win, &tb, &cursor) || cx->ed->mode != YEW_MODE_H)
+    if (!action_context(cx, &win, &tb, &cursor))
         return YEW_CMD_ERR_STATE;
+    scope = clip_scope(cx);
+    if (scope != CLIP_ACT)
+        return scope == CLIP_INERT ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
     (void)tb;
     (void)cursor;
     yew_regval_init(&value);
@@ -448,10 +474,49 @@ CmdStatus yew_sel_cmd_change(CmdCtx *cx)
     return delete_or_change(cx, true, 0U);
 }
 
+/*
+ * The prompt's cut: the same capture and register write as H's, but the
+ * prompt stays open and stays E.  One undo step -- the dispatcher opened
+ * YEW_TXN_CUT around it.
+ */
+static CmdStatus prompt_cut(CmdCtx *cx)
+{
+    Win *win = cx->win;
+    RegVal value;
+    Span span;
+    SelEditVec edits = {0};
+    ByteOff first;
+    bool ok;
+
+    if (!yew_cmdline_selection(cx->ed, &span))
+        return YEW_CMD_OK;
+    yew_regval_init(&value);
+    capture_selection(&value, win);
+    (void)yew_sel_edit_push(&edits, span);
+    ok = yew_sel_apply_edits(cx, &edits, &first);
+    yew_sel_edits_free(&edits);
+    if (ok) {
+        yew_reg_delete(&cx->ed->regs, '+', &value);
+        cursor_place(win, first);
+        collapse_all(win);
+    }
+    yew_regval_free(&value);
+    return ok ? YEW_CMD_OK : YEW_CMD_ERR_IO;
+}
+
 CmdStatus yew_sel_cmd_clip_cut(CmdCtx *cx)
 {
-    if (cx == NULL || cx->ed == NULL || cx->ed->mode != YEW_MODE_H)
+    ClipScope scope;
+
+    if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
+    if (cx->win == NULL)
+        cx->win = cx->ed->win;
+    scope = clip_scope(cx);
+    if (scope != CLIP_ACT)
+        return scope == CLIP_INERT ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
+    if (cx->ed->mode != YEW_MODE_H)
+        return prompt_cut(cx);  /* CLIP_ACT outside H is the prompt */
     return delete_or_change(cx, false, '+');
 }
 
