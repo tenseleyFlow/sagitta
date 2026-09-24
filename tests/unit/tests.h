@@ -923,6 +923,8 @@ void test_menu_focus_takes_the_arrows_and_gives_them_back(void);
 void test_menu_focus_dies_with_a_lost_selection(void);
 void test_cmdhist_memory_rules(void);
 void test_cmdhist_frozen_stem_navigation(void);
+void test_cmdhist_smart_walk_substring_and_draft(void);
+void test_cmdhist_smart_walk_skips_duplicates(void);
 void test_cmdhist_escape_corruption_and_xdg(void);
 void test_cmdhist_concurrent_handles_preserve_appends(void);
 void test_cmdhist_flush_read_failure_preserves_state(void);

@@ -146,4 +146,63 @@ void yew_hist_suggest_read_shells(YewHistSuggest *s);
 u32 yew_hist_test_shell_opens(void);
 void yew_hist_test_reset_shell_opens(void);
 
+/*
+ * Sprint 57.30 §2: fish's "smart" history walk.
+ *
+ * A VIEW is the history one prompt walks: its own CmdHist, or -- on a
+ * bang line -- the 57.26 snapshot, so Up and the ghost always agree.
+ * Either way index 0 is the NEWEST entry.
+ */
+typedef struct YewHistView {
+    const CmdHist *hist;            /* used when non-NULL */
+    const YewHistSuggest *suggest;  /* otherwise */
+} YewHistView;
+
+u32 yew_hist_view_len(const YewHistView *v);
+/* Entry `i`, 0 the newest; NULL past the end. */
+const char *yew_hist_view_at(const YewHistView *v, u32 i);
+
+/*
+ * The first occurrence of `term` in `text`: case-sensitive, byte-exact.
+ * An empty term is found at 0.  False, `*at` untouched, when absent.
+ */
+bool yew_hist_find(const char *text, size_t len, const char *term,
+                   size_t term_len, size_t *at);
+
+/*
+ * One walk.  The TERM is frozen when it begins and never re-derived;
+ * matching is yew_hist_find over the whole entry; an entry equal to one
+ * this walk already showed is skipped; newest first.  `seen` is the
+ * stack of view indices shown, oldest last -- Down pops it, so walking
+ * back retraces exactly the entries walked through.
+ */
+typedef struct YewHistWalk {
+    bool on;
+    char *term;
+    size_t term_len;
+    /* The line as it was when the walk began: Down past the newest
+     * match restores it (readline's draft). */
+    char *draft;
+    u32 *seen;
+    u32 n_seen;
+    u32 cap_seen;
+} YewHistWalk;
+
+void yew_hist_walk_begin(YewHistWalk *w, const char *draft,
+                         const char *term, size_t term_len);
+/* Ends the walk and frees what it held; safe on a zeroed or ended walk. */
+void yew_hist_walk_end(YewHistWalk *w);
+/* The next OLDER distinct match, or NULL (the walk stays put). */
+const char *yew_hist_walk_older(YewHistWalk *w, const YewHistView *v);
+/*
+ * One step NEWER: the match before the current one, or -- past the
+ * newest -- NULL with `*at_draft` set, the walk now back at its draft.
+ * NULL with `*at_draft` clear when it was already there.
+ */
+const char *yew_hist_walk_newer(YewHistWalk *w, const YewHistView *v,
+                                bool *at_draft);
+/* The entry the walk shows now, or NULL at the draft. */
+const char *yew_hist_walk_current(const YewHistWalk *w,
+                                  const YewHistView *v);
+
 #endif

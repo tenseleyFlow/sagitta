@@ -952,6 +952,8 @@ const YewTest yew_tests[] = {
     T(menu_focus_dies_with_a_lost_selection),
     T(cmdhist_memory_rules),
     T(cmdhist_frozen_stem_navigation),
+    T(cmdhist_smart_walk_substring_and_draft),
+    T(cmdhist_smart_walk_skips_duplicates),
     T(cmdhist_escape_corruption_and_xdg),
     T(cmdhist_concurrent_handles_preserve_appends),
     T(cmdhist_flush_read_failure_preserves_state),

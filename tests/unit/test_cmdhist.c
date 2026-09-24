@@ -138,6 +138,101 @@ void test_cmdhist_frozen_stem_navigation(void)
     yew_hist_close(h);
 }
 
+/*
+ * Sprint 57.30 §2: the smart walk -- substring, newest first, a frozen
+ * term, duplicates skipped, Down past the newest back at the draft.
+ */
+void test_cmdhist_smart_walk_substring_and_draft(void)
+{
+    CmdHist *h = yew_hist_open_memory();
+    YewHistView v = {h, NULL};
+    YewHistWalk w;
+    bool at_draft = true;
+
+    (void)memset(&w, 0, sizeof(w));
+    yew_hist_add(h, "set wrap");
+    yew_hist_add(h, "write old");
+    yew_hist_add(h, "other");
+    yew_hist_add(h, "rewrite");
+    YEW_ASSERT_EQ_U64(yew_hist_view_len(&v), 4U);
+    YEW_ASSERT_EQ_STR(yew_hist_view_at(&v, 0U), "rewrite");
+    YEW_ASSERT_NULL(yew_hist_view_at(&v, 4U));
+
+    /* Nothing walked yet: no current entry, nothing newer. */
+    yew_hist_walk_begin(&w, "wr", "wr", 2U);
+    YEW_ASSERT_NULL(yew_hist_walk_current(&w, &v));
+    YEW_ASSERT_NULL(yew_hist_walk_newer(&w, &v, &at_draft));
+    YEW_ASSERT(!at_draft);
+    /* A SUBSTRING, not a prefix: `rewrite` and `set wrap` match. */
+    YEW_ASSERT_EQ_STR(yew_hist_walk_older(&w, &v), "rewrite");
+    YEW_ASSERT_EQ_STR(yew_hist_walk_older(&w, &v), "write old");
+    YEW_ASSERT_EQ_STR(yew_hist_walk_older(&w, &v), "set wrap");
+    YEW_ASSERT_EQ_STR(yew_hist_walk_current(&w, &v), "set wrap");
+    /* Past the oldest it stays put. */
+    YEW_ASSERT_NULL(yew_hist_walk_older(&w, &v));
+    YEW_ASSERT_EQ_STR(yew_hist_walk_current(&w, &v), "set wrap");
+    YEW_ASSERT_EQ_STR(w.term, "wr");
+    YEW_ASSERT_EQ_STR(yew_hist_walk_newer(&w, &v, &at_draft), "write old");
+    YEW_ASSERT_EQ_STR(yew_hist_walk_newer(&w, &v, &at_draft), "rewrite");
+    YEW_ASSERT_NULL(yew_hist_walk_newer(&w, &v, &at_draft));
+    YEW_ASSERT(at_draft);
+    YEW_ASSERT_EQ_STR(w.draft, "wr");
+    YEW_ASSERT_NULL(yew_hist_walk_current(&w, &v));
+
+    /* Case-sensitive, and an empty term walks everything. */
+    yew_hist_walk_begin(&w, "", "", 0U);
+    YEW_ASSERT_EQ_STR(yew_hist_walk_older(&w, &v), "rewrite");
+    YEW_ASSERT_EQ_STR(yew_hist_walk_older(&w, &v), "other");
+    yew_hist_walk_begin(&w, "WR", "WR", 2U);
+    YEW_ASSERT_NULL(yew_hist_walk_older(&w, &v));
+    yew_hist_walk_end(&w);
+    YEW_ASSERT(!w.on);
+    yew_hist_walk_end(&w);
+    yew_hist_close(h);
+}
+
+/*
+ * An entry equal to one this walk already showed is skipped.  Both real
+ * sources dedupe on the way in, so the view is built by hand here: the
+ * walk's rule must not lean on theirs.
+ */
+void test_cmdhist_smart_walk_skips_duplicates(void)
+{
+    static char pool[] = "git log\0ls\0git log\0git status";
+    static u32 off[] = {0U, 8U, 11U, 19U};
+    YewHistSuggest s;
+    YewHistView v = {NULL, NULL};
+    YewHistWalk w;
+    bool at_draft = false;
+    size_t at = 99U;
+
+    yew_hist_suggest_init(&s);
+    s.pool = pool;
+    s.off = off;
+    s.n = 4U;
+    v.suggest = &s;
+    (void)memset(&w, 0, sizeof(w));
+    yew_hist_walk_begin(&w, "!g", "g", 1U);
+    YEW_ASSERT_EQ_STR(yew_hist_walk_older(&w, &v), "git log");
+    /* `ls` does not match; the second `git log` was already shown. */
+    YEW_ASSERT_EQ_STR(yew_hist_walk_older(&w, &v), "git status");
+    YEW_ASSERT_EQ_U64(w.n_seen, 2U);
+    YEW_ASSERT_EQ_U64(w.seen[1], 3U);
+    YEW_ASSERT_NULL(yew_hist_walk_older(&w, &v));
+    YEW_ASSERT_EQ_STR(yew_hist_walk_newer(&w, &v, &at_draft), "git log");
+    YEW_ASSERT(!at_draft);
+    yew_hist_walk_end(&w);
+
+    YEW_ASSERT(yew_hist_find("abcabc", 6U, "ca", 2U, &at));
+    YEW_ASSERT_EQ_U64(at, 2U);
+    YEW_ASSERT(!yew_hist_find("abc", 3U, "abcd", 4U, &at));
+    YEW_ASSERT(!yew_hist_find("abc", 3U, "C", 1U, &at));
+    YEW_ASSERT(yew_hist_find("abc", 3U, "", 0U, &at));
+    YEW_ASSERT_EQ_U64(at, 0U);
+    YEW_ASSERT(yew_hist_find("xxab", 4U, "ab", 2U, &at));
+    YEW_ASSERT_EQ_U64(at, 2U);
+}
+
 void test_cmdhist_escape_corruption_and_xdg(void)
 {
     static const char odd[] = {'a', '\\', '\n', '\t', '\r', (char)0xff,

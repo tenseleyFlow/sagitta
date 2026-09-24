@@ -1222,3 +1222,146 @@ void yew_hist_suggest_read_shells(YewHistSuggest *s)
                                            : env_path(home, "/.bash_history"),
              yew_hist_parse_bash);
 }
+
+/* ================================================================ */
+/* Sprint 57.30 §2: the smart walk                                   */
+/* ================================================================ */
+
+u32 yew_hist_view_len(const YewHistView *v)
+{
+    if (v == NULL)
+        return 0U;
+    if (v->hist != NULL)
+        return (u32)v->hist->len;
+    return v->suggest == NULL ? 0U : v->suggest->n;
+}
+
+const char *yew_hist_view_at(const YewHistView *v, u32 i)
+{
+    u32 n = yew_hist_view_len(v);
+
+    if (i >= n)
+        return NULL;
+    if (v->hist != NULL)
+        return v->hist->entries[n - 1U - i];
+    return yew_hist_suggest_at(v->suggest, i);
+}
+
+bool yew_hist_find(const char *text, size_t len, const char *term,
+                   size_t term_len, size_t *at)
+{
+    const char *p = text;
+    const char *end = text + len;
+
+    if (term_len == 0U) {
+        if (at != NULL)
+            *at = 0U;
+        return true;
+    }
+    if (text == NULL || term == NULL || term_len > len)
+        return false;
+    /* memchr for the first byte, then one memcmp: a 20 000-entry
+     * snapshot is scanned on a keystroke. */
+    while ((size_t)(end - p) >= term_len) {
+        const char *hit = memchr(p, (unsigned char)term[0],
+                                 (size_t)(end - p) - term_len + 1U);
+
+        if (hit == NULL)
+            return false;
+        if (memcmp(hit, term, term_len) == 0) {
+            if (at != NULL)
+                *at = (size_t)(hit - text);
+            return true;
+        }
+        p = hit + 1;
+    }
+    return false;
+}
+
+void yew_hist_walk_begin(YewHistWalk *w, const char *draft,
+                         const char *term, size_t term_len)
+{
+    if (w == NULL)
+        return;
+    yew_hist_walk_end(w);
+    w->on = true;
+    w->draft = hist_dup(draft == NULL ? "" : draft);
+    w->term = hist_dup_n(term == NULL ? "" : term,
+                         term == NULL ? 0U : term_len);
+    w->term_len = term == NULL ? 0U : term_len;
+}
+
+void yew_hist_walk_end(YewHistWalk *w)
+{
+    if (w == NULL)
+        return;
+    yew_xfree(w->term);
+    yew_xfree(w->draft);
+    yew_xfree(w->seen);
+    (void)memset(w, 0, sizeof(*w));
+}
+
+static bool walk_seen_text(const YewHistWalk *w, const YewHistView *v,
+                           const char *text)
+{
+    u32 i;
+
+    for (i = 0U; i < w->n_seen; i++) {
+        const char *seen = yew_hist_view_at(v, w->seen[i]);
+
+        if (seen != NULL && strcmp(seen, text) == 0)
+            return true;
+    }
+    return false;
+}
+
+const char *yew_hist_walk_older(YewHistWalk *w, const YewHistView *v)
+{
+    u32 n = yew_hist_view_len(v);
+    u32 i;
+
+    if (w == NULL || !w->on)
+        return NULL;
+    i = w->n_seen == 0U ? 0U : w->seen[w->n_seen - 1U] + 1U;
+    for (; i < n; i++) {
+        const char *entry = yew_hist_view_at(v, i);
+
+        if (entry == NULL ||
+            !yew_hist_find(entry, strlen(entry), w->term, w->term_len,
+                           NULL) ||
+            walk_seen_text(w, v, entry))
+            continue;
+        if (w->n_seen == w->cap_seen) {
+            w->cap_seen = w->cap_seen == 0U ? 16U : w->cap_seen * 2U;
+            w->seen = yew_xreallocarray(w->seen, w->cap_seen,
+                                        sizeof(*w->seen));
+        }
+        w->seen[w->n_seen++] = i;
+        return entry;
+    }
+    return NULL;
+}
+
+const char *yew_hist_walk_newer(YewHistWalk *w, const YewHistView *v,
+                                bool *at_draft)
+{
+    if (at_draft != NULL)
+        *at_draft = false;
+    if (w == NULL || !w->on || w->n_seen == 0U)
+        return NULL;
+    w->n_seen--;
+    if (w->n_seen == 0U) {
+        if (at_draft != NULL)
+            *at_draft = true;
+        return NULL;
+    }
+    return yew_hist_view_at(v, w->seen[w->n_seen - 1U]);
+}
+
+const char *yew_hist_walk_current(const YewHistWalk *w,
+                                  const YewHistView *v)
+{
+    if (w == NULL || !w->on || w->n_seen == 0U)
+        return NULL;
+    return yew_hist_view_at(v, w->seen[w->n_seen - 1U]);
+}
