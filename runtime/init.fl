@@ -219,6 +219,10 @@ bind("I", "S-<right>", "ed.sel.extend.right")
 bind("I", "S-<up>", "ed.sel.extend.up")
 bind("I", "S-<down>", "ed.sel.extend.down")
 bind("I", "C-v", "ed.clip.paste")
+# C-c / C-x copy and cut a selection.  Insert's Shift+arrows enter H,
+# where these keys act; in Insert itself there is none, so they do nothing.
+bind("I", "C-c", "ed.clip.copy")
+bind("I", "C-x", "ed.clip.cut")
 bind("I", "<home>", "ed.move.line.home_toggle")
 bind("I", "<end>", "ed.move.line.end")
 # Ctrl+arrow is the LINE's start and end here, the same pair <home>/<end>
@@ -473,6 +477,20 @@ bind("E", "C-_", "ed.edit.undo")
 bind("E", "C-/", "ed.edit.undo")
 bind("E", "A-/", "ed.edit.redo")
 bind("E", "C-g", "ed.cmdline.cancel")
+# The prompt's selection (Sprint 57.29): Shift+motion selects, typing,
+# pasting or yanking replaces it, <bs>/<del> delete it.  C-c copies it
+# to the system clipboard and stays; with nothing selected C-c cancels,
+# exactly as C-g does.  C-x cuts it, and without one does nothing.
+bind("E", "S-<left>", "ed.sel.extend.left")
+bind("E", "S-<right>", "ed.sel.extend.right")
+bind("E", "A-S-<left>", "ed.sel.extend.word_prev")
+bind("E", "A-S-<right>", "ed.sel.extend.word_next")
+bind("E", "S-<home>", "ed.sel.extend.line_home")
+bind("E", "S-<end>", "ed.sel.extend.line_end")
+bind("E", "C-S-<left>", "ed.sel.extend.line_home")
+bind("E", "C-S-<right>", "ed.sel.extend.line_end")
+bind("E", "C-c", "ed.cmdline.copy_or_cancel")
+bind("E", "C-x", "ed.clip.cut")
 
 bind("F", "<esc>", "ed.git.mode.leave")
 bind("F", "C-w s", "ed.git.open_split_h")
