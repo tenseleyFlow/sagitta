@@ -734,6 +734,27 @@ static int mc_set_preload(const char *shim)
 #endif
 }
 
+/* The fault-shim child's environment, set between fork and exec. */
+typedef struct McShimEnv {
+    const char *root_var;
+    const char *root;
+    const char *state;
+    const char *log;
+    const char *shim;
+} McShimEnv;
+
+static bool mc_shim_child_prep(void *user)
+{
+    const McShimEnv *env = user;
+
+    return setenv(env->root_var, env->root, 1) == 0 &&
+           setenv("XDG_STATE_HOME", env->state, 1) == 0 &&
+           setenv("YEW_FAULT_LOG", env->log, 1) == 0 &&
+           setenv("YEW_FAULT_ENABLE", "0", 1) == 0 &&
+           setenv("YEW_LOG", "/dev/null", 1) == 0 &&
+           mc_set_preload(env->shim) == 0;
+}
+
 static void mc_audit_1000_child(void)
 {
     const char *root = getenv("YEW_MC_AUDIT_ROOT");
@@ -803,19 +824,17 @@ static void mc_audit_1000_child(void)
 
 void test_multicursor_1000_failure_at_700_rolls_back_and_syncs_once(void)
 {
-    const char *child_mode = getenv("YEW_MC_AUDIT_CHILD");
     char root[] = "/tmp/yew-mc-audit-XXXXXX";
     char state[PATH_MAX];
     char log[PATH_MAX];
     char journal_dir[PATH_MAX];
     char yew_dir[PATH_MAX];
     char shim[PATH_MAX];
-    pid_t child;
-    pid_t waited;
-    int status;
+    McShimEnv env;
+    YewTestChild child;
     int count;
 
-    if (child_mode != NULL && strcmp(child_mode, "1") == 0) {
+    if (yew_test_child_role() != NULL) {
         mc_audit_1000_child();
         return;
     }
@@ -827,28 +846,14 @@ void test_multicursor_1000_failure_at_700_rolls_back_and_syncs_once(void)
     YEW_ASSERT_EQ_I64(mkdir(state, 0700), 0);
     mc_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
 
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
-        if (setenv("YEW_MC_AUDIT_CHILD", "1", 1) != 0 ||
-            setenv("YEW_MC_AUDIT_ROOT", root, 1) != 0 ||
-            setenv("XDG_STATE_HOME", state, 1) != 0 ||
-            setenv("YEW_FAULT_LOG", log, 1) != 0 ||
-            setenv("YEW_FAULT_ENABLE", "0", 1) != 0 ||
-            setenv("YEW_LOG", "/dev/null", 1) != 0 ||
-            mc_set_preload(shim) != 0)
-            _exit(126);
-        execl(yew_test_program_path(), yew_test_program_path(), "--filter",
-              "multicursor_1000_failure_at_700_rolls_back_and_syncs_once",
-              (char *)NULL);
-        _exit(126);
-    }
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+    env.root_var = "YEW_MC_AUDIT_ROOT";
+    env.root = root;
+    env.state = state;
+    env.log = log;
+    env.shim = shim;
+    yew_test_spawn_child("fault-shim", mc_shim_child_prep, &env, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, 0);
+    yew_test_child_free(&child);
     YEW_ASSERT_EQ_U64(mc_log_count(log, "fsync-file pass"), 1U);
     YEW_ASSERT_EQ_U64(mc_log_count(log, "fdatasync-file pass"), 0U);
 
@@ -866,19 +871,17 @@ void test_multicursor_1000_failure_at_700_rolls_back_and_syncs_once(void)
 
 void test_multicursor_200_insert_is_one_undo_and_one_journal_sync(void)
 {
-    const char *child_mode = getenv("YEW_MC_SYNC_CHILD");
     char root[] = "/tmp/yew-mc-sync-XXXXXX";
     char state[PATH_MAX];
     char log[PATH_MAX];
     char journal_dir[PATH_MAX];
     char yew_dir[PATH_MAX];
     char shim[PATH_MAX];
-    pid_t child;
-    pid_t waited;
-    int status;
+    McShimEnv env;
+    YewTestChild child;
     int count;
 
-    if (child_mode != NULL && strcmp(child_mode, "1") == 0) {
+    if (yew_test_child_role() != NULL) {
         mc_sync_child();
         return;
     }
@@ -890,28 +893,14 @@ void test_multicursor_200_insert_is_one_undo_and_one_journal_sync(void)
     YEW_ASSERT_EQ_I64(mkdir(state, 0700), 0);
     mc_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
 
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
-        if (setenv("YEW_MC_SYNC_CHILD", "1", 1) != 0 ||
-            setenv("YEW_MC_SYNC_ROOT", root, 1) != 0 ||
-            setenv("XDG_STATE_HOME", state, 1) != 0 ||
-            setenv("YEW_FAULT_LOG", log, 1) != 0 ||
-            setenv("YEW_FAULT_ENABLE", "0", 1) != 0 ||
-            setenv("YEW_LOG", "/dev/null", 1) != 0 ||
-            mc_set_preload(shim) != 0)
-            _exit(126);
-        execl(yew_test_program_path(), yew_test_program_path(), "--filter",
-              "multicursor_200_insert_is_one_undo_and_one_journal_sync",
-              (char *)NULL);
-        _exit(126);
-    }
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+    env.root_var = "YEW_MC_SYNC_ROOT";
+    env.root = root;
+    env.state = state;
+    env.log = log;
+    env.shim = shim;
+    yew_test_spawn_child("fault-shim", mc_shim_child_prep, &env, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, 0);
+    yew_test_child_free(&child);
     YEW_ASSERT_EQ_U64(mc_log_count(log, "fsync-file pass"), 1U);
     YEW_ASSERT_EQ_U64(mc_log_count(log, "fdatasync-file pass"), 0U);
 
@@ -1385,55 +1374,21 @@ void test_multicursor_normalize_preserves_sticky_motion(void)
 
 void test_multicursor_edit_guard_requires_multi_transaction(void)
 {
-    CursorSet set;
-    Bytebuf output;
-    int pipefd[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    ssize_t count;
-    u8 chunk[256];
+    YewTestChild child;
 
-    yew_cset_init(&set, test_cursor(1U, 1U, 1U));
-    YEW_ASSERT(yew_cset_add(&set, test_cursor(2U, 2U, 2U)));
-    bytebuf_init(&output);
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
-        (void)close(pipefd[0]);
-        if (dup2(pipefd[1], STDERR_FILENO) < 0)
-            _exit(126);
-        (void)close(pipefd[1]);
+    if (yew_test_child_role() != NULL) {
+        CursorSet set;
+
+        yew_cset_init(&set, test_cursor(1U, 1U, 1U));
+        YEW_ASSERT(yew_cset_add(&set, test_cursor(2U, 2U, 2U)));
         (void)setenv("YEW_LOG", "/dev/null", 1);
         yew_cset_require_single_edit(&set);
         _exit(0);
     }
-    (void)close(pipefd[1]);
-    for (;;) {
-        count = read(pipefd[0], chunk, sizeof(chunk));
-        if (count > 0) {
-            bytebuf_append(&output, chunk, (size_t)count);
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        break;
-    }
-    (void)close(pipefd[0]);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
-    bytebuf_append(&output, "", 1U);
-    YEW_ASSERT(strstr((const char *)output.data, "MULTI transaction") !=
-               NULL);
-    bytebuf_free(&output);
-    yew_cset_free(&set);
+    yew_test_spawn_child("bug", NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    YEW_ASSERT(strstr(child.err, "MULTI transaction") != NULL);
+    yew_test_child_free(&child);
 }
 
 typedef enum BoundaryGuard {
@@ -1442,64 +1397,43 @@ typedef enum BoundaryGuard {
     BOUNDARY_LSP_EDIT
 } BoundaryGuard;
 
-static void assert_boundary_guard(BoundaryGuard guard, const char *message)
+static const char *const boundary_roles[] = {
+    "regex-lift", "completion", "lsp-edit"
+};
+
+/* The child side: trip the one guard its role names. */
+static _Noreturn void boundary_guard_child(const char *role)
 {
     CursorSet set;
-    Bytebuf output;
-    int pipefd[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    ssize_t count;
-    u8 chunk[256];
 
     yew_cset_init(&set, test_cursor(1U, 1U, 1U));
     YEW_ASSERT(yew_cset_add(&set, test_cursor(2U, 2U, 2U)));
-    bytebuf_init(&output);
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
-        (void)close(pipefd[0]);
-        if (dup2(pipefd[1], STDERR_FILENO) < 0)
-            _exit(126);
-        (void)close(pipefd[1]);
-        (void)setenv("YEW_LOG", "/dev/null", 1);
-        if (guard == BOUNDARY_REGEX_LIFT)
-            yew_mc_require_literal_lift(true);
-        else if (guard == BOUNDARY_COMPLETION)
-            yew_mc_require_single_completion(&set);
-        else
-            yew_mc_require_single_lsp_edit(&set);
-        _exit(0);
-    }
-    (void)close(pipefd[1]);
-    for (;;) {
-        count = read(pipefd[0], chunk, sizeof(chunk));
-        if (count > 0) {
-            bytebuf_append(&output, chunk, (size_t)count);
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        break;
-    }
-    (void)close(pipefd[0]);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
-    bytebuf_append(&output, "", 1U);
-    YEW_ASSERT(strstr((const char *)output.data, message) != NULL);
-    bytebuf_free(&output);
-    yew_cset_free(&set);
+    (void)setenv("YEW_LOG", "/dev/null", 1);
+    if (strcmp(role, boundary_roles[BOUNDARY_REGEX_LIFT]) == 0)
+        yew_mc_require_literal_lift(true);
+    else if (strcmp(role, boundary_roles[BOUNDARY_COMPLETION]) == 0)
+        yew_mc_require_single_completion(&set);
+    else if (strcmp(role, boundary_roles[BOUNDARY_LSP_EDIT]) == 0)
+        yew_mc_require_single_lsp_edit(&set);
+    _exit(0);
+}
+
+static void assert_boundary_guard(BoundaryGuard guard, const char *message)
+{
+    YewTestChild child;
+
+    yew_test_spawn_child(boundary_roles[guard], NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    YEW_ASSERT(strstr(child.err, message) != NULL);
+    yew_test_child_free(&child);
 }
 
 void test_multicursor_boundary_guards_name_their_constraints(void)
 {
+    const char *role = yew_test_child_role();
+
+    if (role != NULL)
+        boundary_guard_child(role);
     assert_boundary_guard(BOUNDARY_REGEX_LIFT,
                           "cursor lift requires literal matches");
     assert_boundary_guard(BOUNDARY_COMPLETION,
