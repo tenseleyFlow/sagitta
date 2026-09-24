@@ -1106,7 +1106,10 @@ static u32 job_spawn_proxy(Ed *ed, const YewJobSpec *spec, char *err,
 
     if (spec->sink != YEW_SINK_BUFFER || spec->proxy_owner == NULL ||
         spec->proxy_ops->signal == NULL) {
-        (void)snprintf(err, errsz, "proxy job needs a buffer and an owner");
+        if (snprintf(err, errsz, "proxy job needs a buffer and an owner") <
+                0 &&
+            err != NULL && errsz != 0U)
+            err[0] = '\0';
         return 0U;
     }
     display = spec->display != NULL ? spec->display :

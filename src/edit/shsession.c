@@ -947,7 +947,9 @@ u32 yew_shsession_run(Ed *ed, const char *cmdline, char *err, size_t errsz)
     yew_shsession_settle(ed);
     s = session_get(ed);
     if (session_proxy(s) != NULL) {
-        (void)snprintf(err, errsz, "shell session is busy");
+        if (snprintf(err, errsz, "shell session is busy") < 0 &&
+            err != NULL && errsz != 0U)
+            err[0] = '\0';
         return 0U;
     }
     if (s->link == NULL) {

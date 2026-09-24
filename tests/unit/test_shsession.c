@@ -36,6 +36,15 @@
 #include "ui/message.h"
 #include "ui/layout.h"
 
+/* snprintf into a fixed buffer, asserting nothing was cut off. */
+static bool sh_fits(int n, size_t cap)
+{
+    return n >= 0 && (size_t)n < cap;
+}
+
+#define SH_FMT(buf, cap, ...)                                                \
+    YEW_ASSERT(sh_fits(snprintf((buf), (cap), __VA_ARGS__), (cap)))
+
 typedef struct ShFix {
     Ed ed;
     char root[PATH_MAX];
@@ -291,7 +300,7 @@ void test_shsession_cd_persists(void)
     shell = yew_shsession_job(&f.ed);
     YEW_ASSERT(shell != 0U);
     YEW_ASSERT_EQ_STR(yew_shsession_cwd(&f.ed), sub);
-    (void)snprintf(want, sizeof(want), "%s\n", sub);
+    SH_FMT(want, sizeof(want), "%s\n", sub);
     sh_expect(&f, "pwd", want);
     /* One shell served both. */
     YEW_ASSERT_EQ_U64(yew_shsession_job(&f.ed), shell);
@@ -299,7 +308,7 @@ void test_shsession_cd_persists(void)
     {
         char row[PATH_MAX + 8];
 
-        (void)snprintf(row, sizeof(row), "PWD=%s", sub);
+        SH_FMT(row, sizeof(row), "PWD=%s", sub);
         YEW_ASSERT(sh_env_has(&f.ed, row));
     }
     sh_fix_free(&f);
@@ -380,7 +389,7 @@ void test_shsession_exit_recovers_last_directory(void)
     /* The state survives the shell. */
     YEW_ASSERT_EQ_STR(yew_shsession_cwd(&f.ed), sub);
 
-    (void)snprintf(want, sizeof(want), "%s yes\n", sub);
+    SH_FMT(want, sizeof(want), "%s yes\n", sub);
     sh_expect(&f, "echo \"$PWD $KEEP\"", want);
     YEW_ASSERT(yew_shsession_job(&f.ed) != 0U);
     YEW_ASSERT(yew_shsession_job(&f.ed) != first);
@@ -404,7 +413,7 @@ void test_shsession_reset_returns_to_workspace_root(void)
     YEW_ASSERT_EQ_STR(yew_shsession_cwd(&f.ed), f.root);
     YEW_ASSERT_NULL(yew_shsession_env(&f.ed));
     YEW_ASSERT(sh_wait_ended(&f.ed));
-    (void)snprintf(want, sizeof(want), "%s -\n", f.root);
+    SH_FMT(want, sizeof(want), "%s -\n", f.root);
     sh_expect(&f, "echo \"$(pwd) ${GONE:--}\"", want);
     sh_fix_free(&f);
 }
@@ -433,7 +442,7 @@ void test_shsession_fresh_is_sprint19(void)
     id = sh_start(&f, "cd sub");
     YEW_ASSERT(yew_job_find(&f.ed, id)->pid > 0);
     YEW_ASSERT(sh_wait(&f.ed, id));
-    (void)snprintf(want, sizeof(want), "%s\n", f.root);
+    SH_FMT(want, sizeof(want), "%s\n", f.root);
     sh_expect(&f, "pwd", want);
     YEW_ASSERT_EQ_U64(yew_shsession_job(&f.ed), 0U);
     /* And stderr is its own pipe again, as Sprint 19 counts it. */
@@ -445,7 +454,7 @@ void test_shsession_fresh_is_sprint19(void)
     /* Back to persistent: the next session starts where the last one
      * was (the end path keeps its state). */
     sh_set(&f, "shell.session", "persistent");
-    (void)snprintf(want, sizeof(want), "%s\n", sub);
+    SH_FMT(want, sizeof(want), "%s\n", sub);
     sh_expect(&f, "pwd", want);
     sh_fix_free(&f);
 }
@@ -474,7 +483,7 @@ void test_shsession_non_sh_shell_falls_back_to_fresh(void)
     id = sh_start(&f, "cd /");
     YEW_ASSERT(yew_job_find(&f.ed, id)->pid > 0);
     YEW_ASSERT(sh_wait(&f.ed, id));
-    (void)snprintf(want, sizeof(want), "%s\n", f.root);
+    SH_FMT(want, sizeof(want), "%s\n", f.root);
     sh_expect(&f, "pwd", want);
     YEW_ASSERT_EQ_U64(yew_shsession_job(&f.ed), 0U);
     sh_fix_free(&f);
@@ -610,7 +619,7 @@ void test_shsession_state_survives_any_bytes(void)
     YEW_ASSERT_EQ_STR(yew_shsession_cwd(&f.ed), path);
     YEW_ASSERT(sh_wait(&f.ed,
                        sh_start(&f, "export Z=\"$(printf 'x\\ny\\377\\036=')\"")));
-    (void)snprintf(row, sizeof(row), "Z=x\ny\377\036=");
+    SH_FMT(row, sizeof(row), "Z=x\ny\377\036=");
     YEW_ASSERT(sh_env_has(&f.ed, row));
     YEW_ASSERT_EQ_STR(yew_shsession_cwd(&f.ed), path);
     sh_fix_free(&f);
@@ -718,7 +727,7 @@ void test_shsession_split_reads_and_replayed_markers(void)
 
         bytebuf_init(&raw);
         bytebuf_init(&cmd);
-        (void)snprintf(name, sizeof(name), "d%u", (unsigned)c);
+        SH_FMT(name, sizeof(name), "d%u", (unsigned)c);
         sh_path(&f, name, sub, sizeof(sub));
         YEW_ASSERT_EQ_I64(mkdir(sub, 0700), 0);
         bytebuf_printf(&cmd, "printf 'one\\036two'; cd '%s'; echo; echo x",
@@ -928,12 +937,12 @@ void test_shsession_busy_runs_alongside(void)
     YEW_ASSERT(yew_job_find(&f.ed, id)->pid > 0);
     YEW_ASSERT(sh_wait(&f.ed, id));
     got = sh_output(&f, id);
-    (void)snprintf(want, sizeof(want), "%s\nb=1\n", sub);
+    SH_FMT(want, sizeof(want), "%s\nb=1\n", sub);
     YEW_ASSERT_EQ_STR(got, want);
     yew_xfree(got);
 
     sh_cancel_until_done(&f.ed, slow);
-    (void)snprintf(want, sizeof(want), "%s\n", sub);
+    SH_FMT(want, sizeof(want), "%s\n", sub);
     sh_expect(&f, "pwd", want);
     sh_fix_free(&f);
 }
@@ -1003,7 +1012,7 @@ void test_shsession_other_forms_inherit_state(void)
     YEW_ASSERT(id != 0U);
     YEW_ASSERT(sh_wait(&f.ed, id));
     text = sh_buffer_text(f.ed.win->buf);
-    (void)snprintf(want, sizeof(want), "%s 2\n", sub);
+    SH_FMT(want, sizeof(want), "%s 2\n", sub);
     YEW_ASSERT_EQ_STR(text, want);
     yew_xfree(text);
 
@@ -1014,7 +1023,7 @@ void test_shsession_other_forms_inherit_state(void)
                          "cat >/dev/null; echo \"f $(pwd) $Y\"", NULL),
         YEW_FILT_OK);
     text = sh_buffer_text(f.ed.win->buf);
-    (void)snprintf(want, sizeof(want), "f %s 2\n", sub);
+    SH_FMT(want, sizeof(want), "f %s 2\n", sub);
     YEW_ASSERT_EQ_STR(text, want);
     yew_xfree(text);
 
@@ -1025,7 +1034,7 @@ void test_shsession_other_forms_inherit_state(void)
     YEW_ASSERT_EQ_I64(wait.exit_code, 0);
     sh_path(&f, "sub/out.txt", out, sizeof(out));
     YEW_ASSERT(sh_slurp(out, got, sizeof(got)));
-    (void)snprintf(want, sizeof(want), "%s 2 my-pager\n", sub);
+    SH_FMT(want, sizeof(want), "%s 2 my-pager\n", sub);
     YEW_ASSERT_EQ_STR(got, want);
     /* A pager the user exported in the session is theirs. */
     YEW_ASSERT(sh_wait(&f.ed, sh_start(&f, "export PAGER=less")));
