@@ -157,3 +157,62 @@ orchestrator runs the CI rebaseline. Report your estimate of added bytes.
 9. `test-fletch test-script test-roundtrip test-roundtrip-coverage
    test-audit` and the `scripts/check-*.sh` gates green.
 10. `tests/size/` untouched; added-bytes estimate in the report.
+
+## Implementation notes (divergences from this contract)
+
+Where the contract and the code disagreed, the implementation does what
+the contract intends:
+
+1. **The collapse table is one function the dispatcher calls.**
+   `yew_cmdline_sel(ed, command, after)` in `src/ui/cmdline.c` holds the
+   §1 table keyed by command name; `yew_ed_invoke` calls it around every
+   command it runs on the prompt Win -- before the command, inside the
+   undo transaction the dispatcher just opened (so a replacement or a
+   deletion over a selection is one step), and after it, when everything
+   but a Shift+motion leaves the selection collapsed.  That "after" rule
+   also collapses what undo and redo restore.  The two existing
+   `anchor = pos` resets (`set_error`, `replace_span`) are collapses the
+   table wants and stay.  Needed because the cursor motions keep an
+   anchor that differs from the caret (that is how H extends): without
+   the table a plain motion in the prompt grew the selection.
+2. **C-b and C-f collapse to the edge, like `<left>` and `<right>`.**
+   They are the same commands (`ed.move.char.prev`,
+   `ed.cmdline.ghost.accept`), and the table is per command.  Cocoa's
+   emacs keys do the same.  Every other motion collapses at the caret and
+   then moves.
+3. **`<right>`/C-f with a selection collapse to the END and do not take
+   the ghost** -- the GUI rule for `<right>` wins over "ghost accept:
+   collapse, then act".  The next `<right>` takes it.  A-f/A-`<right>`
+   and C-e/C-`<right>` collapse and then act, as the table says.  The
+   ghost stays drawn during a selection (it is a function of the text
+   and the caret) and is never styled as selected.
+4. **Shift+motion in the prompt used to enter H.**  `ed.sel.extend.*`
+   called `yew_mode_enter_highlight` unconditionally; on the prompt Win
+   they now run the motion and put the anchor back, and E stays E.
+   The new `ed.sel.extend.word_prev|word_next|line_home|line_end` use
+   the same path (H in a document).  Motion words are at most 16
+   characters, so they are `sel_word_prev`, `sel_word_next`,
+   `sel_line_home`, `sel_line_end`.
+5. **Insert mode never holds a selection.**  Insert's Shift+arrows enter
+   H (Sprint 57.12), where C-c and C-x were already bound
+   (`keys_highlight.c`), so Insert users could already copy and cut from
+   the keyboard.  An anchor away from the caret outside H is not a
+   selection (57.13's rule, which the context menu relies on), so the new
+   I-mode C-c/C-x are always inert and return OK, which keeps the
+   typing transaction open.  The Insert test drives the real path:
+   Shift+arrows from Insert, then C-c reaches the fake clipboard.
+6. **`ed.clip.copy`/`cut` choose where they act in one place**
+   (`clip_scope` in `sel_actions.c`): the prompt's selection, H, inert in
+   I, refused elsewhere as before.  The prompt's cut keeps the prompt open
+   and in E (H's cut returns to L) and is one `YEW_TXN_CUT` step.  Copy
+   collapses at the caret.
+7. **A-., C-r/A-r and C-q replace a selection too**: A-. through its own
+   single edit, and the register and literal inserts through the
+   `ed.edit.insert.text` they run.  A bracketed paste replaces a selection
+   as a typed key does.
+8. **Two more goldens**: `s57_29_prompt_select_colors_16` and
+   `s57_29_prompt_select_ascii` run the nocolor scene under the other two
+   degradations `chrome_cmdline` has.  The harness hands `YEW_CLIPBOARD`
+   to `s57_29_prompt_select_and_copy`, as it does to
+   `s57_12_clipboard_*`.
+9. **383 bindings** (371 + 12: ten in E, two in I).
