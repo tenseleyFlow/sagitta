@@ -327,6 +327,17 @@ remain). AI-only (1,861,320 to 1,869,512) and minimal (1,730,208 to
 to the next 16 KiB boundary: AI-only 1,884,160, minimal 1,753,088. Nothing
 else changes.
 
+**Amendment S57.31-A1 (2026-09-24) — four caps follow the prompt extras.**
+Sprint 57.31 (`A-s` sudo toggle, `A-e` edit-in-buffer, `A-h` man page)
+adds 12,159 file-backed bytes on the pinned x86_64 GCC 13.3 lane at
+`0c929005`: 10,942 in `core.ui`, 1,217 in `core.edit`. Full (2,225,864 to
+2,238,152), FUSS-only (1,894,048 to 1,906,336), LSP-only (1,861,280 to
+1,873,568) and plugins-only (1,832,608 to 1,848,992) cross their caps; each
+moves to the next 16 KiB boundary: full 2,244,608, FUSS-only 1,916,928,
+LSP-only 1,884,160, plugins-only 1,851,392. AI-only and minimal stay inside
+their S57.30-A1 caps. The musl caps are not moved here: they are measured by
+a separate lane and will be amended on its evidence if it crosses.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
