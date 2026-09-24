@@ -14,8 +14,11 @@
  * THE FRAME.  The session is a YEW_SINK_FRAMED job whose stdin carries
  * one line per command:
  *
- *     W eval 'CMD' </dev/null 9>&-; W printf '\036%s %d\036' 'N-S' "$?" >&9;
- *     'yew' --yew-env0 </dev/null >&9; W printf '\036%s.\036' 'N-S' >&9
+ *     __yew_run() { trap 'return 130' INT; W eval "$__yew_c"; };
+ *     __yew_c='CMD'; __yew_run </dev/null 9>&-;
+ *     W printf '\036%s %d\036' 'N-S' "$?" >&9; W trap : INT;
+ *     W unset __yew_c; 'yew' --yew-env0 </dev/null >&9;
+ *     W printf '\036%s.\036' 'N-S' >&9
  *
  *   - CMD is single-quoted and eval'd, so an unbalanced quote or a syntax
  *     error is eval's failure: the rest of the line still runs and the
@@ -24,6 +27,10 @@
  *     `command` also skips a user function named eval or printf) or
  *     `builtin` (zsh, whose `command` runs only external programs); the
  *     session's first frame probes which one the shell has.
+ *   - The command runs inside `__yew_run`, whose INT trap RETURNS: with
+ *     the idle `trap : INT` alone, a cancelled `sleep 9; make install`
+ *     would go on to install (every shell resumes the list after a
+ *     trapped SIGINT).  No arguments: `$#` is 0, as under `$SHELL -c`.
  *   - N is a 16-byte random per-session NONCE in hex and S the frame's
  *     sequence number, so neither a command's output nor a replay of an
  *     earlier frame's bytes can end a frame.
