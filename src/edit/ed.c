@@ -586,6 +586,9 @@ void yew_ws_scratch_drop(Ed *ed, Buffer *b)
          * this buffer falls back to the document buffer first. */
         if (ed->win != NULL && ed->win->buf == b)
             (void)yew_ed_show_buffer(ed, &ed->buffer);
+        /* Sprint 57.31 §2: A-e's return hangs off this release, not off
+         * whichever command closed the buffer. */
+        yew_cmdedit_released(ed, b);
         yew_symidx_drop_buffer(&ed->ws, b->id);
         ed_buffer_dispose(b);
         yew_xfree(b);
@@ -849,6 +852,7 @@ void yew_ed_free(Ed *ed)
     yew_picker_close(ed, false);
     yew_pickers_dispose();
     yew_cmdline_dispose(ed);
+    yew_cmdedit_free(ed);
     /* The symbol walk borrows a job slot and must release its filesystem
      * traversal before the generic job table is dismantled. */
     yew_symwalk_dispose(ed);
@@ -2287,7 +2291,17 @@ static bool prompt_key(Ed *ed, Key key)
     return true;
 }
 
+static void ed_handle_key(Ed *ed, Key key, i64 now_ms);
+
 void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
+{
+    ed_handle_key(ed, key, now_ms);
+    /* Sprint 57.31 §2: an event boundary -- a *command-line* buffer
+     * closed by this key gives its line back to the prompt here. */
+    yew_cmdedit_settle(ed);
+}
+
+static void ed_handle_key(Ed *ed, Key key, i64 now_ms)
 {
     const u16 command_mods = YEW_MOD_ALT | YEW_MOD_CTRL | YEW_MOD_SUPER |
                              YEW_MOD_HYPER | YEW_MOD_META;
@@ -2452,6 +2466,7 @@ void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
     ed->paste.len = 0U;
     ed->paste_active = false;
     ed->shadow_holdoff = false;
+    yew_cmdedit_settle(ed);
 }
 
 void yew_ed_resize(Ed *ed, bool resumed)

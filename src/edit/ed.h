@@ -28,6 +28,7 @@
 #include "text/yankstack.h"
 #include "search/searchui.h"
 #include "syn/theme.h"
+#include "ui/cmdedit.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
 #include "ui/mouse.h"
@@ -242,6 +243,9 @@ struct Ed {
     SearchState search;
     SearchConfirm confirm;
     CmdLine cmdline;
+    /* Sprint 57.31 §2: A-e's *command-line* buffer, and the prompt
+     * that comes back when it goes. */
+    YewCmdEdit cmdedit;
     PromptKind prompt;
     bool quit_after_save;
     bool insert_txn;

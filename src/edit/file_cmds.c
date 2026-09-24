@@ -122,7 +122,14 @@ CmdStatus yew_file_cmd_save_as(CmdCtx *cx)
 
 CmdStatus yew_file_cmd_write_quit(CmdCtx *cx)
 {
-    CmdStatus status = yew_file_cmd_write(cx);
+    CmdStatus status;
+
+    /* Sprint 57.31 §2: `:wq` in A-e's buffer returns the line -- there
+     * is no file to write and no editor to quit. */
+    if (cx != NULL && cx->ed != NULL && cx->ed->win != NULL &&
+        yew_cmdedit_owns(cx->ed, cx->ed->win->buf))
+        return yew_cmdedit_close(cx->ed, false);
+    status = yew_file_cmd_write(cx);
 
     if (status != YEW_CMD_OK)
         return status;
@@ -331,6 +338,10 @@ CmdStatus yew_file_cmd_buf_close(CmdCtx *cx)
     b = cx->win != NULL ? cx->win->buf : yew_ed_doc(cx->ed);
     if (b == NULL)
         return YEW_CMD_ERR_STATE;
+    /* Sprint 57.31 §2: A-e's buffer returns its line to the prompt on
+     * the way out; `!` returns the original. */
+    if (yew_cmdedit_owns(cx->ed, b))
+        return yew_cmdedit_close(cx->ed, cx->bang);
     status = yew_fuss_commit_close(cx->ed, b, &handled);
     if (handled)
         return status;
@@ -397,6 +408,10 @@ CmdStatus yew_file_cmd_quit(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_ARG;
+    /* Sprint 57.31 §2: `:q` closes A-e's buffer and returns its line;
+     * `:q!` returns the original. */
+    if (cx->ed->win != NULL && yew_cmdedit_owns(cx->ed, cx->ed->win->buf))
+        return yew_cmdedit_close(cx->ed, cx->bang);
     if (!cx->bang && yew_shell_dismiss_output(cx->ed)) {
         yew_msg(cx->ed, YEW_MSG_INFO,
                 "job output hidden; :jobs to reopen");

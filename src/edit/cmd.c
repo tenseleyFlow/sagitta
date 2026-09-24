@@ -31,6 +31,7 @@
 #include "mod/lsp/lsp.h"
 #include "mod/plug/plug.h"
 #include "ui/pickers.h"
+#include "ui/cmdedit.h"
 #include "ui/cmdline.h"
 #include "ui/complmenu.h"
 #include "ui/comphelp.h"
@@ -744,6 +745,13 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.man_page", yew_cmdline_cmd_man_page, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL | YEW_CMD_INTERACTIVE,
      "Open the man page of the shell command under the caret", NULL},
+    /* Sprint 57.31 §2: A-e / A-v.  PROMPTS: it closes this prompt and
+     * reopens it when the buffer goes, so --batch refuses it (there is
+     * no prompt there to edit). */
+    {"ed.cmdline.edit_in_buffer", yew_cmdedit_cmd_edit_in_buffer,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS | YEW_CMD_INTERNAL,
+     "Edit the command line in a buffer; closing it returns the text",
+     NULL},
     {"ed.cmdline.complete_next", yew_cmdline_cmd_complete_next,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Open or advance command-line completion", NULL},
@@ -1605,8 +1613,8 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.30: C-r's history search, A-<up>/A-<down>'s token
          * search. */
         "hist_search", "token_prev", "token_next",
-        /* Sprint 57.31: A-s's sudo toggle, A-h's man page. */
-        "toggle_sudo", "man_page"};
+        /* Sprint 57.31: A-s's sudo toggle, A-h's man page, A-e. */
+        "toggle_sudo", "man_page", "edit_in_buffer"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

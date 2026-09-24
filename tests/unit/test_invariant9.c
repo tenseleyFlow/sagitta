@@ -851,10 +851,12 @@ void test_invariant9_every_new_command_is_registered(void)
          */
         "ed.cmdline.token_prev", "ed.cmdline.token_next",
         /*
-         * Sprint 57.31 §1/§3: A-s toggles sudo on a bang line; A-h opens
-         * the command's man page.  Keys only.
+         * Sprint 57.31: A-s toggles sudo on a bang line; A-h opens the
+         * command's man page; A-e (A-v) edits the line in a buffer, and
+         * :q / :tabclose bring it back.  Keys only.
          */
-        "ed.cmdline.toggle_sudo", "ed.cmdline.man_page"
+        "ed.cmdline.toggle_sudo", "ed.cmdline.man_page",
+        "ed.cmdline.edit_in_buffer"
     };
     size_t i;
 

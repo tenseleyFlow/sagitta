@@ -468,6 +468,9 @@ void yew_loop_dispatch_event(Ed *ed, const Key *key, i64 now_ms)
     default:
         break;
     }
+    /* Sprint 57.31 §2: a click can close A-e's buffer (its tab's close
+     * box); the prompt comes back at this boundary as after a key. */
+    yew_cmdedit_settle(ed);
 }
 
 u32 yew_loop_settle_jobs(Ed *ed)

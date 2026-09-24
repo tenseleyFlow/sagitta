@@ -183,6 +183,9 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.mode.enter", "use ed.run(name, args)"},
     /* Sprint 57.18 §4: handing a child the terminal needs a terminal. */
     {"ed.shell.term_run", "use ed.shell.run; --batch has no terminal"},
+    /* Sprint 57.31 section 2: A-e trades the prompt for a buffer and
+     * back; a script holds its text already. */
+    {"ed.cmdline.edit_in_buffer", "no batch alternative"},
     /* Sprint 57.31 section 3: A-h hands `man` the real terminal. */
     {"ed.cmdline.man_page", "run man through ed.shell.run; --batch has "
                             "no terminal"},
