@@ -563,6 +563,15 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
                                        "YEW_LINE=", "YEW_COL=",
                                        "YEW_WORKSPACE=", "YEW_JOB=",
                                        "PAGER=", "GIT_PAGER="};
+    /*
+     * Sprint 57.31 §3: a child handed the REAL terminal owns its stdin,
+     * so the reason for PAGER=cat (a pager waiting on a pipe nobody
+     * types into) does not hold -- and `man` under PAGER=cat would dump
+     * the page and return before anyone read it.  Such a child keeps the
+     * user's pagers; the last two drop rows are the pager rows.
+     */
+    size_t n_drop = spec->inherit_tty ? YEW_ARRAY_LEN(drop) - 2U :
+                                        YEW_ARRAY_LEN(drop);
     size_t n = 0U;
     size_t i;
     size_t out = 0U;
@@ -582,7 +591,7 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
         bool skip = false;
         size_t d;
 
-        for (d = 0U; d < YEW_ARRAY_LEN(drop); d++) {
+        for (d = 0U; d < n_drop; d++) {
             size_t dl = strlen(drop[d]);
 
             if (strncmp(environ[i], drop[d], dl) == 0) {
@@ -617,8 +626,10 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
     job_env_append(a, env, &out, "YEW_JOB=1", spec);
     /* A job that spawns `less` would wait forever on a stdin it does not
      * own: no output, no exit, no clue. */
-    job_env_append(a, env, &out, "PAGER=cat", spec);
-    job_env_append(a, env, &out, "GIT_PAGER=cat", spec);
+    if (!spec->inherit_tty) {
+        job_env_append(a, env, &out, "PAGER=cat", spec);
+        job_env_append(a, env, &out, "GIT_PAGER=cat", spec);
+    }
     if (spec->env_set != NULL) {
         for (i = 0U; spec->env_set[i] != NULL; i++)
             env[out++] = arena_strdup(a, spec->env_set[i]);

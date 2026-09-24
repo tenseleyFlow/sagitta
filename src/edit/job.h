@@ -159,7 +159,9 @@ typedef struct YewJobSpec {
     const char *const *env_unset_prefix;
     /* Synchronous terminal handover only: leave fd 0/1/2 inherited rather
      * than replacing them with pipes.  yew_job_run_sync is the sole API
-     * that accepts this flag; normal asynchronous jobs remain nonblocking. */
+     * that accepts this flag; normal asynchronous jobs remain nonblocking.
+     * Such a child also keeps the user's PAGER/GIT_PAGER (Sprint 57.31):
+     * it owns the terminal a pager reads. */
     bool inherit_tty;
     /* Required for YEW_SINK_FRAMED.  Ownership transfers only after a
      * successful spawn and is released exactly once by the job. */
