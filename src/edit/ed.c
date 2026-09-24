@@ -1708,6 +1708,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool shadow_holdoff_before;
     bool opened = false;
     bool started_in_insert;
+    bool prompt_target;
 
     if (ed == NULL || cx == NULL)
         return YEW_CMD_ERR_ARG;
@@ -1722,6 +1723,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     edits_text = changes || strcmp(desc->name, "ed.edit.undo") == 0 ||
                  strcmp(desc->name, "ed.edit.redo") == 0;
     document_target = cx->win == ed->win;
+    prompt_target = ed->cmdline.active && cx->win == yew_cmdline_target(ed);
     multiple = changes && ed->model_ready && cx->win != NULL &&
                cx->win->cs.curs.len > 1U;
     durability_command = document_target && edits_text;
@@ -1812,7 +1814,14 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     shadow_holdoff_before = ed->shadow_holdoff;
     if (shadow_quiet)
         ed->shadow_holdoff = true;
-    status = yew_ed_dispatch_resolved(ed, id, cx);
+    /* Sprint 57.29 §1: the prompt's selection rule, inside the undo
+     * transaction just opened, so a replacement is one step. */
+    if (prompt_target && yew_cmdline_sel(ed, desc->name, false))
+        status = YEW_CMD_OK;
+    else
+        status = yew_ed_dispatch_resolved(ed, id, cx);
+    if (prompt_target)
+        (void)yew_cmdline_sel(ed, desc->name, true);
     ed->shadow_holdoff = shadow_holdoff_before;
     if (status == YEW_CMD_OK && shadow_motion && cx->win != NULL)
         yew_shadow_arm(ed, cx->win);
