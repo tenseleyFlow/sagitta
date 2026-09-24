@@ -122,6 +122,9 @@ bool yew_tabs_scroll_is_owned(const Tabs *t, bool row2);
  * new file into the still-active tab, and the next save wrote it over
  * the old file's path. */
 int yew_tab_open(Ed *ed, const char *path);
+/* Sprint 57.31: a new untitled tab showing the existing `buf`; -1 when
+ * refused (the message says why). */
+int yew_tab_open_buffer(Ed *ed, Buffer *buf);
 /* False when vetoed — a modified tab needs an answer first. */
 bool yew_tab_close(Ed *ed, int idx);
 int yew_tab_index_of_id(const Ed *ed, u32 id);

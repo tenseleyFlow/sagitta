@@ -339,6 +339,40 @@ int yew_tab_open(Ed *ed, const char *path)
 }
 
 /*
+ * Sprint 57.31 §2: a new tab showing `buf`, a buffer that already exists
+ * (A-e's scratch).  Untitled -- no path, so a saved session drops it --
+ * and not switched to; the caller does that.
+ */
+int yew_tab_open_buffer(Ed *ed, Buffer *buf)
+{
+    Tab t;
+    Win *win;
+
+    if (ed == NULL || buf == NULL || ed->win == NULL)
+        return -1;
+    if (ed->tabs.v.len >= (size_t)YEW_TAB_MAX) {
+        yew_msg(ed, YEW_MSG_ERROR, "too many tabs (max %d)", YEW_TAB_MAX);
+        return -1;
+    }
+    win = yew_ed_win_clone(ed, ed->win);
+    if (win == NULL) {
+        yew_msg(ed, YEW_MSG_ERROR, "no room for another view");
+        return -1;
+    }
+    (void)memset(&t, 0, sizeof(t));
+    t.tab_id = ed->tabs.next_tab_id++;
+    yew_ed_win_set_buffer(ed, win, buf);
+    t.root = yew_pane_new_leaf(win);
+    t.focus = t.root;
+    t.buffer_id = buf->id;
+    TabVec_push(&ed->tabs.v, t);
+    yew_tabs_follow_active(&ed->tabs);
+    yew_fuss_windows_changed(ed);
+    yew_state_mark_dirty(ed);
+    return (int)ed->tabs.v.len - 1;
+}
+
+/*
  * Which tab should be active once `idx` is gone — decided by ID, and
  * decided BEFORE the compaction, because after the memmove the index
  * that names the neighbour has already changed meaning.
@@ -602,12 +636,23 @@ void yew_tab_defer(Ed *ed, int idx)
 /* Sprint 23 §3: the tab strip                                      */
 /* ---------------------------------------------------------------- */
 
-static const char *tab_basename(const Tab *t)
+static const char *tab_basename(const Ed *ed, const Tab *t)
 {
     const char *slash;
+    u32 i;
 
-    if (t->path == NULL)
+    if (t->path == NULL) {
+        /* Sprint 57.31: a tab opened ON a named scratch buffer (A-e's
+         * `*command-line*`) is called what it holds. */
+        for (i = 0U; i < ed->ws.nbufs; i++) {
+            const Buffer *b = ed->ws.bufs[i];
+
+            if (b->id == t->buffer_id && b->name != NULL &&
+                (b->flags & YEW_BUF_SCRATCH) != 0U)
+                return b->name;
+        }
         return "untitled";
+    }
     slash = strrchr(t->path, '/');
     return slash != NULL && slash[1] != '\0' ? slash + 1 : t->path;
 }
@@ -626,7 +671,7 @@ static void tab_label(const Ed *ed, int idx, int num, char *out,
                       size_t cap)
 {
     (void)snprintf(out, cap, " %d %s%s ", num,
-                   tab_basename(&ed->tabs.v.data[idx]),
+                   tab_basename(ed, &ed->tabs.v.data[idx]),
                    yew_tab_modified(ed, idx)
                        ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
 }
@@ -1359,7 +1404,7 @@ void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
          */
         (void)snprintf(entries[i].label, sizeof(entries[i].label),
                        " %d %s%s ", i + 1,
-                       tab_basename(&ed->tabs.v.data[order[i]]),
+                       tab_basename(ed, &ed->tabs.v.data[order[i]]),
                        yew_tab_modified(ed, order[i])
                            ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
         entries[i].payload = order[i];
@@ -1427,7 +1472,7 @@ static void strip_float_label(const Ed *ed, i32 payload, char *out,
 
         if (t == NULL)
             return;
-        (void)snprintf(out, cap, " %s%s ", tab_basename(t),
+        (void)snprintf(out, cap, " %s%s ", tab_basename(ed, t),
                        yew_tab_modified(ed, (int)payload)
                            ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
     }
@@ -1988,6 +2033,11 @@ CmdStatus yew_tab_cmd_close(CmdCtx *cx)
     idx = ed->tabs.active;
     if (idx < 0)
         return YEW_CMD_ERR_STATE;
+    /* Sprint 57.31 §2: A-e's tab returns its line to the prompt -- or
+     * refuses, naming the line, when the text cannot be one line.  It is
+     * never "modified" in the save-or-discard sense. */
+    if (ed->win != NULL && yew_cmdedit_owns(ed, ed->win->buf))
+        return yew_cmdedit_close(ed, false);
     if (yew_tab_count(ed) <= 1U) {
         yew_msg(ed, YEW_MSG_ERROR, "cannot close the last tab");
         return YEW_CMD_ERR_STATE;
