@@ -460,12 +460,15 @@ bind("E", "A-c", "ed.edit.case.cap_word")
 bind("E", "C-y", "ed.edit.kill.yank")
 bind("E", "A-y", "ed.edit.kill.yank_pop")
 bind("E", "A-.", "ed.cmdline.last_arg")
+# Up/Down (and C-p/C-n, exactly) are history -- fish's substring search
+# on the typed text -- unless Tab has entered the completion table; in
+# it they move rows (Sprint 57.30).
 bind("E", "<up>", "ed.cmdline.up")
 bind("E", "<down>", "ed.cmdline.down")
+bind("E", "C-p", "ed.cmdline.up")
+bind("E", "C-n", "ed.cmdline.down")
 bind("E", "<tab>", "ed.cmdline.complete_next")
 bind("E", "S-<tab>", "ed.cmdline.complete_prev")
-bind("E", "C-n", "ed.cmdline.complete_next")
-bind("E", "C-p", "ed.cmdline.complete_prev")
 bind("E", "<pgdn>", "ed.cmdline.menu.page_next")
 bind("E", "<pgup>", "ed.cmdline.menu.page_prev")
 bind("E", "C-r", "ed.cmdline.insert_register")

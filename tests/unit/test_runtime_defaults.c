@@ -431,27 +431,20 @@ static const BindRow frozen_E[] = {
     {"A-y", "ed.edit.kill.yank_pop", 0, NULL},
     {"A-.", "ed.cmdline.last_arg", 0, NULL},
     /*
-     * Sprint 57.17 §2.  The arrows are dispatchers now, not history
-     * outright: `<up>` enters an open pager and is history when none is
-     * open, `<down>` moves in the pager only while it has focus.
-     *
-     * Sprint 18.5 §6 gave Up to history because a live menu is open the
-     * whole time a command name is being typed, and the arrow would
-     * otherwise never reach history -- "you reach for it blind, at the
-     * start of a line, which is when the list is fullest".  That case
-     * still works: an EMPTY prompt completes nothing, so there is no
-     * menu to enter and `<up>` is history.  With a list up, one `<up>`
-     * takes it, one more hands it back, and the next is history.
+     * Sprint 57.30 §1 (replacing 57.17 §2's rule): the arrows are
+     * HISTORY -- fish's substring search on the typed text -- unless Tab
+     * has entered the completion table, where they move rows.  The live
+     * table open while a token is typed never takes an arrow; Up off its
+     * top row goes back to history, Down off its last row back to the
+     * line.  C-p and C-n are the arrows exactly; completion next/prev
+     * stay on Tab and S-Tab.
      */
     {"<up>", "ed.cmdline.up", 0, NULL},
     {"<down>", "ed.cmdline.down", 0, NULL},
+    {"C-p", "ed.cmdline.up", 0, NULL},
+    {"C-n", "ed.cmdline.down", 0, NULL},
     {"<tab>", "ed.cmdline.complete_next", 0, NULL},
     {"S-<tab>", "ed.cmdline.complete_prev", 0, NULL},
-    /* Tab/S-Tab and C-n/C-p INSERT as they move; the arrows only
-     * preview.  Keymap data, so flipping this is two lines plus
-     * goldens. */
-    {"C-n", "ed.cmdline.complete_next", 0, NULL},
-    {"C-p", "ed.cmdline.complete_prev", 0, NULL},
     {"<pgdn>", "ed.cmdline.menu.page_next", 0, NULL},
     {"<pgup>", "ed.cmdline.menu.page_prev", 0, NULL},
     /* Sprint 57.28 §3: readline wins the clashes.  A-r is insert-register
