@@ -430,18 +430,51 @@ _Noreturn void yew_test_skip(const char *reason)
 }
 
 /*
- * Per-test leak attribution.  LeakSanitizer otherwise checks only when
- * the process exits -- and a fork()ed child that exits checks the heap
- * it inherited, so an earlier test's leak surfaced as a death test's
- * exit status changing from 4 to 1.  In an ASan build every test ends
- * with a recoverable leak check, and the test that leaked fails by name.
+ * Leak attribution.  LeakSanitizer otherwise checks only when the
+ * process exits -- and a fork()ed child that exits checks the heap it
+ * inherited, so an earlier test's leak surfaced as a death test's exit
+ * status changing from 4 to 1.  In an ASan build the harness runs a
+ * recoverable leak check after every YEW_TEST_LEAK_EVERY tests (default
+ * 64) and after the last.  Each check scans the whole heap: one per
+ * test cost the sanitize lane a fifth of its time.
+ *
+ * A check that finds a leak reruns its batch one test per fresh process
+ * (`--only NAME`, checking after that one test), and every test that
+ * leaks alone fails by name.  If none does, the leak depends on the
+ * order the batch ran in, and the batch's names are printed.
  *
  * The check cannot tell old leaks from new ones, so after the first it
- * stands down: later tests would be blamed for the same allocation.
+ * stands down: later batches would be blamed for the same allocation.
  * The end-of-process check still reports anything that follows.
  *
  * macOS has no LeakSanitizer; there the call exists and returns 0.
  */
+enum { LEAK_EVERY_DEFAULT = 64, LEAK_EVERY_MAX = 4096 };
+
+static size_t leak_every = LEAK_EVERY_DEFAULT;
+
+/* YEW_TEST_LEAK_EVERY, when set, is a count in 1..LEAK_EVERY_MAX. */
+static bool leak_every_init(void)
+{
+    const char *text = getenv("YEW_TEST_LEAK_EVERY");
+    char *end = NULL;
+    unsigned long value;
+
+    leak_every = LEAK_EVERY_DEFAULT;
+    if (text == NULL)
+        return true;
+    errno = 0;
+    value = strtoul(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || text[0] == '-' ||
+        value == 0UL || value > (unsigned long)LEAK_EVERY_MAX) {
+        (void)fprintf(stderr, "unit: YEW_TEST_LEAK_EVERY must be a count "
+                              "from 1 to %d\n", LEAK_EVERY_MAX);
+        return false;
+    }
+    leak_every = (size_t)value;
+    return true;
+}
+
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer)
 #define YEW_TEST_LEAK_CHECK 1
@@ -455,17 +488,127 @@ _Noreturn void yew_test_skip(const char *reason)
 #include <sanitizer/lsan_interface.h>
 
 static bool leak_check_armed = true;
+static const YewTest *leak_batch[LEAK_EVERY_MAX];
+static size_t leak_batch_len;
+static char leak_rerun_options[1024];
 
-static bool test_leaked(const YewTest *test)
+/* `test` leaks when it runs alone in a fresh process. */
+static bool leak_rerun_alone(const YewTest *test)
 {
-    if (!leak_check_armed || __lsan_do_recoverable_leak_check() == 0)
+    const char *options = getenv("ASAN_OPTIONS");
+    char needle[512];
+    Bytebuf out;
+    int pipefd[2];
+    pid_t child;
+    pid_t waited;
+    ssize_t count;
+    u8 chunk[512];
+    int status;
+    bool leaked;
+    int n;
+
+    n = snprintf(needle, sizeof(needle),
+                 "FAIL %s: LeakSanitizer found a leak", test->name);
+    if (n < 0 || (size_t)n >= sizeof(needle))
         return false;
+    /* Only the harness's own check reports, never the exit-time one. */
+    n = snprintf(leak_rerun_options, sizeof(leak_rerun_options),
+                 "%s%sleak_check_at_exit=0", options == NULL ? "" : options,
+                 options == NULL || options[0] == '\0' ? "" : ":");
+    if (n < 0 || (size_t)n >= sizeof(leak_rerun_options))
+        return false;
+    (void)fflush(NULL);
+    if (pipe(pipefd) != 0)
+        return false;
+    child = fork();
+    if (child < 0) {
+        (void)close(pipefd[0]);
+        (void)close(pipefd[1]);
+        return false;
+    }
+    if (child == 0) {
+        (void)close(pipefd[0]);
+        if (dup2(pipefd[1], STDOUT_FILENO) < 0 ||
+            dup2(pipefd[1], STDERR_FILENO) < 0)
+            _exit(126);
+        (void)close(pipefd[1]);
+        if (setenv("YEW_TEST_LEAK_EVERY", "1", 1) != 0 ||
+            setenv("ASAN_OPTIONS", leak_rerun_options, 1) != 0)
+            _exit(126);
+        execl(program_path, program_path, "--only", test->name,
+              (char *)NULL);
+        _exit(126);
+    }
+    (void)close(pipefd[1]);
+    bytebuf_init(&out);
+    for (;;) {
+        count = read(pipefd[0], chunk, sizeof(chunk));
+        if (count > 0) {
+            bytebuf_append(&out, chunk, (size_t)count);
+            continue;
+        }
+        if (count < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+    (void)close(pipefd[0]);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    bytebuf_push_u8(&out, 0U);
+    leaked = strstr((const char *)out.data, needle) != NULL;
+    bytebuf_free(&out);
+    return leaked;
+}
+
+/* Checks the batch since the last check; returns the failures it adds. */
+static size_t leak_check_batch(void)
+{
+    size_t len = leak_batch_len;
+    size_t failures = 0U;
+    size_t i;
+
+    leak_batch_len = 0U;
+    if (!leak_check_armed || len == 0U ||
+        __lsan_do_recoverable_leak_check() == 0)
+        return 0U;
     leak_check_armed = false;
-    (void)printf("FAIL %s: LeakSanitizer found a leak once it had run "
-                 "(report on stderr); per-test leak checks are off for "
-                 "the rest of this run\n", test->name);
+    if (len == 1U) {
+        (void)printf("FAIL %s: LeakSanitizer found a leak once it had run "
+                     "(report on stderr); leak checks are off for the rest "
+                     "of this run\n", leak_batch[0]->name);
+        (void)fflush(stdout);
+        return 1U;
+    }
+    (void)printf("unit: LeakSanitizer found a leak in the last %zu tests "
+                 "(report on stderr); rerunning each alone\n", len);
     (void)fflush(stdout);
-    return true;
+    for (i = 0U; i < len; i++) {
+        if (!leak_rerun_alone(leak_batch[i]))
+            continue;
+        (void)printf("FAIL %s: LeakSanitizer found a leak when it ran "
+                     "alone\n", leak_batch[i]->name);
+        failures++;
+    }
+    if (failures == 0U) {
+        (void)printf("FAIL leak-check: no test leaks alone; the leak "
+                     "depends on the order these ran in:\n");
+        for (i = 0U; i < len; i++)
+            (void)printf("  %s\n", leak_batch[i]->name);
+        failures = 1U;
+    }
+    (void)printf("unit: leak checks are off for the rest of this run\n");
+    (void)fflush(stdout);
+    return failures;
+}
+
+/* Adds `test` to the batch; checks when the batch is full. */
+static size_t leak_after_test(const YewTest *test)
+{
+    if (!leak_check_armed)
+        return 0U;
+    leak_batch[leak_batch_len++] = test;
+    return leak_batch_len >= leak_every ? leak_check_batch() : 0U;
 }
 
 bool yew_test_leak_check_enabled(void)
@@ -482,10 +625,15 @@ bool yew_test_leak_check_enabled(void)
     return false;
 }
 
-static bool test_leaked(const YewTest *test)
+static size_t leak_check_batch(void)
+{
+    return 0U;
+}
+
+static size_t leak_after_test(const YewTest *test)
 {
     (void)test;
-    return false;
+    return 0U;
 }
 #endif
 
@@ -517,11 +665,6 @@ static bool run_one_test(const YewTest *test)
                 (void)printf("FAIL harness teardown left capture sink "
                              "installed\n");
         }
-        (void)test_leaked(test);
-        return false;
-    }
-    if (test_leaked(test)) {
-        skip_requested = false;
         return false;
     }
     if (finished) {
@@ -609,6 +752,8 @@ int yew_test_run(int argc, char **argv)
     char *test_fish;
 
     program_path = argv[0];
+    if (!leak_every_init())
+        return 1;
     for (argi = 1; argi < argc; argi++) {
         if (strcmp(argv[argi], "--list") == 0) {
             list = true;
@@ -702,7 +847,9 @@ int yew_test_run(int argc, char **argv)
         env_restore("YEW_TEST_FISH", "");
         if (!run_one_test(&yew_tests[i]))
             failures++;
+        failures += leak_after_test(&yew_tests[i]);
     }
+    failures += leak_check_batch();
     env_restore("XDG_STATE_HOME", xdg_state);
     env_restore("XDG_CACHE_HOME", xdg_cache);
     env_restore("PATH", path);
