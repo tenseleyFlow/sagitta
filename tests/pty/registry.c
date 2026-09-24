@@ -3835,6 +3835,74 @@ static void case_s57_30_substring_history_highlight(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.31: fish's extras.  The bang lines name `wolf`, a command
+ * with no spec and nothing on the hermetic PATH, so no completion
+ * generator or help probe ever runs and every frame is a function of
+ * the keys.
+ */
+
+/* §1: A-s puts `sudo ` in front of the command. */
+static void case_s57_31_toggle_sudo(PtyCtx *c)
+{
+    static const u8 initial[] = "sudo fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!wolf build");
+    s18_settle_after_keys(c, "alt+s");
+    ptc_wait_until(c, s57_screen_contains, "!sudo wolf build",
+                   "waiting for the sudo prefix");
+    ptc_snapshot(c, "s57_31_toggle_sudo");
+    s18_finish(c, path);
+}
+
+/* §2: A-e opens the bang BODY in a `*command-line*` tab, in Insert. */
+static void case_s57_31_edit_in_buffer_open(PtyCtx *c)
+{
+    static const u8 initial[] = "command-line fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!wolf build");
+    s18_settle_after_keys(c, "alt+e");
+    ptc_wait_until(c, s57_screen_contains, "*command-line*",
+                   "waiting for the command-line tab");
+    ptc_snapshot(c, "s57_31_edit_in_buffer_open");
+    s18_finish(c, path);
+}
+
+/* §2: two lines edited in the buffer; `:q` brings them back to the `:`
+ * prompt as one line, the newline after a complete command a `; `. */
+static void case_s57_31_edit_in_buffer_roundtrip(PtyCtx *c)
+{
+    static const u8 initial[] = "command-line fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!wolf build");
+    s18_settle_after_keys(c, "alt+e");
+    ptc_wait_until(c, s57_screen_contains, "*command-line*",
+                   "waiting for the command-line tab");
+    s18_settle_after_bytes(c, " --all");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_bytes(c, "wolf test");
+    s18_settle_after_keys(c, "esc");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "q");
+    s18_settle_after_keys(c, "enter");
+    ptc_wait_until(c, s57_screen_contains, "!wolf build --all; wolf test",
+                   "waiting for the line back in the prompt");
+    ptc_snapshot(c, "s57_31_edit_in_buffer_roundtrip");
+    s18_finish(c, path);
+}
+
 /* §4: C-r lists the history holding the line's text in the pager, the
  * match highlighted per row and the footer naming the mode; C-r again
  * moves to the older match. */
@@ -12265,6 +12333,11 @@ const PtyCase yew_pty_cases[] = {
     C(s57_30_substring_history_highlight, modern, 24U, 80U,
       case_s57_30_substring_history_highlight),
     C(s57_30_ctrl_r_search, modern, 24U, 80U, case_s57_30_ctrl_r_search),
+    C(s57_31_toggle_sudo, modern, 24U, 80U, case_s57_31_toggle_sudo),
+    C(s57_31_edit_in_buffer_open, modern, 24U, 80U,
+      case_s57_31_edit_in_buffer_open),
+    C(s57_31_edit_in_buffer_roundtrip, modern, 24U, 80U,
+      case_s57_31_edit_in_buffer_roundtrip),
     C(s57_32_cd_then_complete, modern, 24U, 80U,
       case_s57_32_cd_then_complete),
     C(s57_32_cd_unknown, modern, 24U, 80U, case_s57_32_cd_unknown),
