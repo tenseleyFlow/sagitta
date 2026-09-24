@@ -11,6 +11,7 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/select.h"
+#include "edit/shsession.h"
 #include "ui/compspec.h"
 #include "unicode/coords.h"
 #include "util/buf.h"
@@ -1226,7 +1227,8 @@ static void bang_point(Parser *p, size_t body, size_t cursor,
     benv.loaded = false;
     env.get = bang_env_get;
     env.ud = &benv;
-    env.base = yew_ws_root(p->ed);
+    /* Sprint 57.27 §4: the line starts where the shell session is. */
+    env.base = yew_shsession_cwd(p->ed);
     out->bang_body = true;
     /* Sprint 57.24 §1: a spec's `precommand` replaces the lexer's wrapper
      * table row for its command. */

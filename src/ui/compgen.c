@@ -15,6 +15,7 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "edit/shsession.h"
 #include "ui/cmdline.h"
 #include "ui/compfish.h"
 #include "ui/comphelp.h"
@@ -781,6 +782,8 @@ static void spawn_for(Ed *ed, const YewCompGenKey *key, const char *ks)
                                          : (i64)YEW_COMPGEN_TIMEOUT_MS;
     spec.collect_max = YEW_COMPGEN_COLLECT_MAX;
     spec.env_set = env_set;
+    /* Sprint 57.27 §4: the shell session's exports. */
+    spec.env_base = yew_shsession_env(ed);
     spec.display = owner->name;
     spec.callback_owner = owner;
     spec.callback_ops = &gen_ops;

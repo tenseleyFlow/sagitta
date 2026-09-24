@@ -25,6 +25,7 @@
 #include "edit/job.h"
 #include "edit/loop.h"
 #include "edit/option.h"
+#include "edit/shsession.h"
 #include "fl/data.h"
 #include "fl/diag.h"
 #include "fl/gc.h"
@@ -2610,6 +2611,8 @@ u32 yew_comphelp_idle(Ed *ed)
                                           : (i64)YEW_COMPHELP_TIMEOUT_MS;
     spec.collect_max = YEW_COMPHELP_COLLECT_MAX;
     spec.env_set = env_set;
+    /* Sprint 57.27 §4: the shell session's exports. */
+    spec.env_base = yew_shsession_env(ed);
     spec.display = base_of(r->exec);
     spec.callback_owner = owner;
     spec.callback_ops = &help_ops;

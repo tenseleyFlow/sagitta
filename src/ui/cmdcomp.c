@@ -24,6 +24,7 @@
 #include "mod/plug/plug.h"
 #endif
 #include "edit/loop.h"
+#include "edit/shsession.h"
 #include "ui/cmdparse.h"
 #include "ui/compfish.h"
 #include "ui/compgen.h"
@@ -2709,8 +2710,11 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
     p->eff = *ctx;
     p->root = yew_ws_root(ed);
     p->cwd_exists = -1;
-    /* Sprint 57.32 §1: where the lexer says the command will run. */
-    p->cwd = yew_shctx_dir(ctx, p->root, a);
+    /* Sprint 57.32 §1: where the lexer says the command will run --
+     * from the shell session's directory (57.27 §4).  `root` stays the
+     * workspace's: the note says `in ch7/` against IT, so a session
+     * that moved shows even with no `cd` on the line. */
+    p->cwd = yew_shctx_dir(ctx, yew_shsession_cwd(ed), a);
     shell_plan_walk(ed, a, p);
     cwd = p->cwd;
     if (cwd == NULL)
@@ -2729,12 +2733,6 @@ static void shell_plan(Ed *ed, const YewShCtx *ctx, Arena *a, ShellPlan *p)
  */
 static void plan_note(const ShellPlan *p, Arena *a, char *out, size_t cap)
 {
-    const char *root;
-    const char *cwd;
-    size_t nr;
-    size_t nc;
-    Bytebuf b;
-
     out[0] = '\0';
     if (p->where == WHERE_ROOT)
         return;
@@ -2743,8 +2741,23 @@ static void plan_note(const ShellPlan *p, Arena *a, char *out, size_t cap)
             out[0] = '\0';
         return;
     }
-    root = yew_sh_dir_join(a, NULL, p->root);
-    cwd = yew_sh_dir_join(a, NULL, p->cwd);
+    yew_comp_where_note(p->root, p->cwd, a, out, cap);
+}
+
+void yew_comp_where_note(const char *root_in, const char *cwd_in, Arena *a,
+                         char *out, size_t cap)
+{
+    const char *root;
+    const char *cwd;
+    size_t nr;
+    size_t nc;
+    Bytebuf b;
+
+    out[0] = '\0';
+    if (cap < 16U)
+        return;
+    root = yew_sh_dir_join(a, NULL, root_in);
+    cwd = yew_sh_dir_join(a, NULL, cwd_in);
     nr = strlen(root);
     nc = strlen(cwd);
     bytebuf_init(&b);

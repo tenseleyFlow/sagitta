@@ -354,6 +354,14 @@ char *yew_comp_shell_describe(Ed *ed, const YewShCtx *ctx, Arena *a);
  * requested from the idle path.  Requests only; never spawns.
  */
 void yew_comp_shell_prewarm(Ed *ed, const YewShCtx *ctx);
+/*
+ * Sprint 57.32 §4's note, for any directory: `in ch7/` for `cwd` inside
+ * `root`, `in ../` above it, the absolute path elsewhere, cut from the
+ * left to fit `cap` (never less than 16).  Sprint 57.27 §5's `:!` prompt
+ * hint says where the shell session is with it.
+ */
+void yew_comp_where_note(const char *root, const char *cwd, Arena *a,
+                         char *out, size_t cap);
 
 /* Tolerant command-line source selection at the cursor. */
 bool yew_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,

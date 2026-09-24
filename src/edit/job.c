@@ -20,6 +20,7 @@
 
 #include "edit/ed.h"
 #include "edit/loop.h"
+#include "edit/shsession.h"
 #include "term/input.h"
 #include "text/piece.h"
 #include "unicode/coords.h"
@@ -687,6 +688,9 @@ char **yew_job_env(Ed *ed, Arena *a)
     if (ed == NULL || a == NULL)
         return NULL;
     (void)memset(&spec, 0, sizeof(spec));
+    /* Sprint 57.27: a plain `:!` runs inside the shell session, so its
+     * environment is the session's exports once there are any. */
+    spec.env_base = yew_shsession_env(ed);
     return job_build_env(ed, a, &spec);
 }
 
