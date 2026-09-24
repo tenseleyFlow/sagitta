@@ -3949,6 +3949,114 @@ static void case_s57_32_cd_then_complete(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.27: the persistent shell session.  Each `:!` below waits for
+ * the outcome it owns on a whole frame (s57_screen_contains through
+ * ptc_wait_until) before the next is typed.  The workspace's absolute
+ * path is not deterministic, so the commands print `basename "$PWD"`.
+ */
+static void s57_27_run(PtyCtx *c, const char *command, const char *outcome)
+{
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, command);
+    s18_settle_after_keys(c, "enter");
+    ptc_wait_until(c, s57_screen_contains, outcome,
+                   "waiting for the :! outcome");
+}
+
+static bool s57_27_make(PtyCtx *c)
+{
+    static const char *const dirs[] = {"sub"};
+
+    return s57_23_make(c, NULL, 0U, NULL, 0U, NULL, 0U, dirs,
+                       YEW_ARRAY_LEN(dirs));
+}
+
+/* DoD 1: `:!cd sub` then a later `:!` runs in sub; an export persists. */
+static void case_s57_27_session_cd_persists(PtyCtx *c)
+{
+    static const u8 initial[] = "session fixture\n";
+    char path[256];
+
+    if (!s57_27_make(c) ||
+        !s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s57_27_run(c, "!cd sub && export KEPT=yes", "no output (exit 0)");
+    s57_27_run(c, "!echo \"$(basename \"$PWD\") $KEPT\"",
+               "[exit 0 in 1.24s]");
+    ptc_check(c, s57_screen_contains(c, "sub yes"),
+              "the second :! did not run in the session's directory");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s57_27_session_cd_persists");
+    s18_finish(c, path);
+}
+
+/* §1: `exit` ends the session and says so; the next `:!` starts a new
+ * one in the LAST directory. */
+static void case_s57_27_session_exit_recovers(PtyCtx *c)
+{
+    static const u8 initial[] = "session fixture\n";
+    char path[256];
+
+    if (!s57_27_make(c) ||
+        !s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s57_27_run(c, "!cd sub", "no output (exit 0)");
+    s57_27_run(c, "!exit",
+               "shell session ended; the next :! starts a new one");
+    s57_27_run(c, "!basename \"$PWD\"", "[exit 0 in 1.24s]");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s57_27_session_exit_recovers");
+    s18_finish(c, path);
+}
+
+/* Goals 3: while `sleep 30` runs in the session, a `:!` runs alongside
+ * from the session's directory (the badge still counts the sleep). */
+static void case_s57_27_session_busy_alongside(PtyCtx *c)
+{
+    static const u8 initial[] = "session fixture\n";
+    char path[256];
+
+    if (!s57_27_make(c) ||
+        !s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s57_27_run(c, "!cd sub", "no output (exit 0)");
+    s57_27_run(c, "!echo started; sleep 30", "started");
+    s57_27_run(c, "!echo \"alongside in $(basename \"$PWD\")\"",
+               "[exit 0 in 1.24s]");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s57_27_session_busy_alongside");
+    /* Force-quit kills the session's group; nothing waits on the sleep. */
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* §4: after `:!cd ch7`, `wolf build ou<Tab>` completes in ch7/ with no
+ * `cd` on the line, and the pager says `in ch7/`. */
+static void case_s57_27_completion_follows_session(PtyCtx *c)
+{
+    static const char *const files[] = {"outer.lu"};
+    static const char *const dirs[] = {"ch7"};
+    static const u8 initial[] = "session fixture\n";
+    char path[256];
+
+    if (!s57_23_make(c, NULL, 0U, NULL, 0U, files, YEW_ARRAY_LEN(files),
+                     dirs, YEW_ARRAY_LEN(dirs)) ||
+        !s57_24_write(c, "ch7/outline.lu", "", 0600) ||
+        !s57_24_write(c, "ch7/output.lu", "", 0600))
+        return;
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s57_27_run(c, "!cd ch7", "no output (exit 0)");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!wolf build ou");
+    s18_settle_after_keys(c, "tab");
+    ptc_wait_until(c, s57_screen_contains, "in ch7/",
+                   "waiting for the pager's note");
+    ptc_snapshot(c, "s57_27_completion_follows_session");
+    s18_finish(c, path);
+}
+
 /* §3: after `cd $NOPE` the directory is unknown: `check.txt` is in the
  * workspace, but the shell may not be, so Tab offers nothing -- and
  * says why. */
@@ -12361,6 +12469,14 @@ const PtyCase yew_pty_cases[] = {
     C(s57_32_cd_then_complete, modern, 24U, 80U,
       case_s57_32_cd_then_complete),
     C(s57_32_cd_unknown, modern, 24U, 80U, case_s57_32_cd_unknown),
+    C(s57_27_session_cd_persists, modern, 24U, 80U,
+      case_s57_27_session_cd_persists),
+    C(s57_27_session_exit_recovers, modern, 24U, 80U,
+      case_s57_27_session_exit_recovers),
+    C(s57_27_session_busy_alongside, modern, 24U, 80U,
+      case_s57_27_session_busy_alongside),
+    C(s57_27_completion_follows_session, modern, 24U, 80U,
+      case_s57_27_completion_follows_session),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
