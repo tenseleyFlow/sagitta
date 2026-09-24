@@ -239,14 +239,9 @@ void test_shadow_completion_menu_suppresses_and_rearms_fresh(void)
 
 void test_shadow_menu_ghost_conflict_is_a_bug(void)
 {
-    pid_t child;
-    pid_t waited;
-    int status;
+    YewTestChild child;
 
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
+    if (yew_test_child_role() != NULL) {
         Ed ed = {0};
         Win win = {0};
         Grid grid = {0};
@@ -259,10 +254,7 @@ void test_shadow_menu_ghost_conflict_is_a_bug(void)
         yew_shadow_draw(&ed, &win, &layout, &grid);
         _exit(99);
     }
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
+    yew_test_spawn_child("bug", NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    yew_test_child_free(&child);
 }
