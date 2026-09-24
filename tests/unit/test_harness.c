@@ -5,6 +5,7 @@
 #include "util/buf.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -171,4 +172,81 @@ void test_harness_intentional_failure(void)
 #line 192 "tests/unit/test_harness.c"
     }
     YEW_ASSERT(true);
+}
+
+void test_harness_only_selects_one_exact_name(void)
+{
+    Bytebuf output;
+    char *exact[] = {(char *)yew_test_program_path(), "--only",
+                     "args_parse_batch_misuse", NULL};
+    char *prefix[] = {(char *)yew_test_program_path(), "--only",
+                      "args_parse_", NULL};
+    int rc;
+
+    bytebuf_init(&output);
+    rc = run_unit_child(exact, NULL, false, &output);
+    YEW_ASSERT_EQ_I64(rc, 0);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "PASS "), 1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output,
+                                      "PASS args_parse_batch_misuse\n"), 1U);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "unit: 1 tests,"), 1U);
+    bytebuf_free(&output);
+
+    /* A substring is --filter's job: --only takes a whole name. */
+    bytebuf_init(&output);
+    rc = run_unit_child(prefix, NULL, false, &output);
+    YEW_ASSERT_EQ_I64(rc, 1);
+    YEW_ASSERT_EQ_U64(substring_count(&output, "matched zero tests"), 1U);
+    bytebuf_free(&output);
+}
+
+/* Set by the parent before it spawns; a fresh process never sees it. */
+static int harness_parent_only_state;
+static char harness_prep_value[] = "prepared";
+
+static bool harness_child_prep(void *user)
+{
+    return setenv("YEW_HARNESS_PREP", user, 1) == 0;
+}
+
+void test_harness_spawned_child_is_fresh(void)
+{
+    const char *role = yew_test_child_role();
+    YewTestChild child;
+    const char *home;
+    char expected[256];
+    int n;
+
+    if (role != NULL) {
+        const char *prep = getenv("YEW_HARNESS_PREP");
+
+        home = getenv("HOME");
+        if (strcmp(role, "probe") != 0)
+            _exit(3);
+        if (harness_parent_only_state != 0)
+            _exit(4);
+        /* The marker is consumed, so the child's own children are not
+         * mistaken for children of this test. */
+        if (getenv("YEW_TEST_CHILD") != NULL ||
+            getenv("YEW_TEST_CHILD_ROLE") != NULL)
+            _exit(5);
+        if (prep == NULL || strcmp(prep, harness_prep_value) != 0)
+            _exit(6);
+        (void)fprintf(stderr, "child home=%s\n", home == NULL ? "" : home);
+        _exit(7);
+    }
+    harness_parent_only_state = 1;
+    yew_test_spawn_child("probe", harness_child_prep, harness_prep_value,
+                         &child);
+    harness_parent_only_state = 0;
+    YEW_ASSERT_CHILD_EXIT(&child, 7);
+    /* It shares this run's isolated HOME rather than making its own. */
+    home = getenv("HOME");
+    YEW_ASSERT_NOT_NULL(home);
+    n = snprintf(expected, sizeof(expected), "child home=%s\n", home);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(expected));
+    YEW_ASSERT_EQ_U64(child.err_len, (u64)n);
+    YEW_ASSERT_EQ_STR(child.err, expected);
+    yew_test_child_free(&child);
+    YEW_ASSERT_NULL(getenv("YEW_HARNESS_PREP"));
 }

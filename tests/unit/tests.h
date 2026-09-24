@@ -500,6 +500,8 @@ void test_harness_filter_selects(void);
 void test_harness_list_order(void);
 void test_harness_failure_isolated(void);
 void test_harness_intentional_failure(void);
+void test_harness_only_selects_one_exact_name(void);
+void test_harness_spawned_child_is_fresh(void);
 void test_utf8_valid_decode(void);
 void test_utf8_reject_classes(void);
 void test_utf8_truncated_decode(void);
