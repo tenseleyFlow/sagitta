@@ -11,9 +11,11 @@
 #include "harness.h"
 
 #include <limits.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
@@ -550,26 +552,34 @@ void test_prompt_keys_alt_r_inserts_a_register(void)
     pk_free(&f);
 }
 
-static void pk_fake_clipboard(char path[PATH_MAX], const char *bytes)
+/* The fakeclip helper built beside the test binary. */
+static void pk_fakeclip_path(char fake[PATH_MAX])
 {
     const char *program = yew_test_program_path();
     const char *slash = strrchr(program, '/');
+    int n;
+
+    if (slash != NULL) {
+        size_t prefix = (size_t)(slash - program);
+
+        YEW_ASSERT(prefix + sizeof("/fakeclip") <= PATH_MAX);
+        (void)memcpy(fake, program, prefix);
+        (void)memcpy(fake + prefix, "/fakeclip", sizeof("/fakeclip"));
+    } else {
+        n = snprintf(fake, PATH_MAX, "./fakeclip");
+        YEW_ASSERT(n > 0 && n < PATH_MAX);
+    }
+}
+
+static void pk_fake_clipboard(char path[PATH_MAX], const char *bytes)
+{
     char fake[PATH_MAX];
     char value[PATH_MAX * 3U];
     FILE *fp;
     int fd;
     int n;
 
-    if (slash != NULL) {
-        size_t prefix = (size_t)(slash - program);
-
-        YEW_ASSERT(prefix + sizeof("/fakeclip") <= sizeof(fake));
-        (void)memcpy(fake, program, prefix);
-        (void)memcpy(fake + prefix, "/fakeclip", sizeof("/fakeclip"));
-    } else {
-        n = snprintf(fake, sizeof(fake), "./fakeclip");
-        YEW_ASSERT(n > 0 && (size_t)n < sizeof(fake));
-    }
+    pk_fakeclip_path(fake);
     n = snprintf(path, PATH_MAX, "/tmp/yew-pkclip-XXXXXX");
     YEW_ASSERT(n > 0 && (size_t)n < PATH_MAX);
     fd = mkstemp(path);
@@ -611,4 +621,709 @@ void test_prompt_keys_ctrl_v_pastes_the_system_clipboard(void)
         YEW_ASSERT_EQ_I64(unsetenv("YEW_CLIPBOARD"), 0);
     free(saved);
     yew_clip_reset();
+}
+
+/* ============================================ Sprint 57.29: selection */
+
+static void pk_sel(PkFix *f, u64 lo, u64 hi)
+{
+    Span span = {0U, 0U};
+
+    YEW_ASSERT(yew_cmdline_selection(&f->ed, &span));
+    YEW_ASSERT_EQ_U64(span.lo, lo);
+    YEW_ASSERT_EQ_U64(span.hi, hi);
+    YEW_ASSERT_EQ_U64(f->ed.mode, YEW_MODE_E);
+}
+
+static void pk_nosel(PkFix *f)
+{
+    YEW_ASSERT(!yew_cmdline_selection(&f->ed, NULL));
+}
+
+/* A bracketed paste: how text beyond ASCII reaches the prompt here. */
+static void pk_paste(PkFix *f, const char *bytes)
+{
+    yew_ed_handle_paste(&f->ed, NULL, 0U, false);
+    yew_ed_handle_paste(&f->ed, (const u8 *)bytes, strlen(bytes), false);
+    yew_ed_handle_paste(&f->ed, NULL, 0U, true);
+}
+
+static void pk_shift(PkFix *f, u32 code, u16 mods, const char *command)
+{
+    pk_run(f, code, (u16)(mods | YEW_MOD_SHIFT), command);
+}
+
+/*
+ * One file behind both halves of a fake system clipboard: a copy lands
+ * in it once the write is flushed, and a paste reads it back.  `path`
+ * starts holding `bytes`.  The previous YEW_CLIPBOARD comes back from
+ * pk_clip_done, so no test ever reaches the real clipboard.
+ */
+typedef struct PkClip {
+    char path[PATH_MAX];
+    char *saved;
+} PkClip;
+
+static void pk_clip_open(PkClip *c, const char *bytes)
+{
+    const char *env = getenv("YEW_CLIPBOARD");
+    char fake[PATH_MAX];
+    char value[PATH_MAX * 3U];
+    FILE *fp;
+    int fd;
+    int n;
+
+    c->saved = env == NULL ? NULL : strdup(env);
+    pk_fakeclip_path(fake);
+    n = snprintf(c->path, sizeof(c->path), "/tmp/yew-pksel-XXXXXX");
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(c->path));
+    fd = mkstemp(c->path);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    fp = fopen(c->path, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite(bytes, 1U, strlen(bytes), fp), strlen(bytes));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    n = snprintf(value, sizeof(value), "cmd:%s %s write|%s %s read", fake,
+                 c->path, fake, c->path);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(value));
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", value, 1), 0);
+    yew_clip_reset();
+}
+
+static void pk_clip_done(PkClip *c)
+{
+    yew_clip_shutdown();
+    YEW_ASSERT_EQ_I64(unlink(c->path), 0);
+    if (c->saved != NULL)
+        YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", c->saved, 1), 0);
+    else
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_CLIPBOARD"), 0);
+    free(c->saved);
+    yew_clip_reset();
+}
+
+static i64 pk_now_ms(void)
+{
+    struct timespec ts;
+
+    YEW_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &ts), 0);
+    return (i64)ts.tv_sec * 1000 + (i64)(ts.tv_nsec / 1000000L);
+}
+
+/* Flush a queued clipboard write the way a frame does, then wait for the
+ * helper to finish, and compare what it wrote. */
+static void pk_clip_holds(PkClip *c, const char *want)
+{
+    Bytebuf terminal;
+    char got[64];
+    FILE *fp;
+    size_t n;
+    u32 i;
+
+    bytebuf_init(&terminal);
+    yew_clip_after_render(&terminal, pk_now_ms());
+    for (i = 0U; i < 5000U && yew_clip_busy(); i++) {
+        int fd = yew_clip_write_fd();
+
+        if (fd >= 0) {
+            struct pollfd pfd = {fd, POLLOUT, 0};
+
+            (void)poll(&pfd, 1U, 1);
+        }
+        yew_clip_pump(pk_now_ms());
+    }
+    YEW_ASSERT(!yew_clip_busy());
+    bytebuf_free(&terminal);
+    /* The helper may still be writing its file after yew lets go of
+     * it: wait on the CONTENT, bounded, never on a bare sleep. */
+    for (i = 0U; i < 2000U; i++) {
+        struct timespec pause = {0, 1000000L};
+
+        fp = fopen(c->path, "rb");
+        YEW_ASSERT_NOT_NULL(fp);
+        n = fread(got, 1U, sizeof(got), fp);
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+        if (n == strlen(want) && memcmp(got, want, n) == 0)
+            break;
+        (void)nanosleep(&pause, NULL);
+    }
+    YEW_ASSERT_EQ_U64(n, strlen(want));
+    YEW_ASSERT_EQ_MEM(got, want, n);
+}
+
+static void pk_plus_holds(PkFix *f, const char *want)
+{
+    const RegVal *plus = yew_reg_get(&f->ed.regs, '+');
+
+    YEW_ASSERT_NOT_NULL(plus);
+    YEW_ASSERT_EQ_U64(plus->bytes.len, strlen(want));
+    YEW_ASSERT_EQ_MEM(plus->bytes.data, want, plus->bytes.len);
+}
+
+/* §2: every Shift row extends, by grapheme, word and line; E stays E. */
+void test_prompt_keys_shift_motions_extend_the_selection(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e alpha beta");
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_sel(&f, 11U, 12U);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_sel(&f, 8U, 12U);
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_sel(&f, 2U, 12U);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 2U);
+    pk_shift(&f, YEW_KEY_RIGHT, YEW_MOD_ALT, "ed.sel.extend.word_next");
+    pk_sel(&f, 8U, 12U);
+    pk_shift(&f, YEW_KEY_HOME, 0U, "ed.sel.extend.line_home");
+    pk_sel(&f, 0U, 12U);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 0U);
+    pk_shift(&f, YEW_KEY_END, 0U, "ed.sel.extend.line_end");
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_CTRL, "ed.sel.extend.line_home");
+    pk_sel(&f, 0U, 12U);
+    pk_shift(&f, YEW_KEY_RIGHT, YEW_MOD_CTRL, "ed.sel.extend.line_end");
+    pk_nosel(&f);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 12U);
+    YEW_ASSERT(f.ed.cmdline.active);
+    pk_text(&f, "e alpha beta");
+    pk_free(&f);
+}
+
+/* §1: <left>/<right> (and C-b/C-f, the same commands) collapse to the
+ * selection's start/end without moving further; with none they move. */
+void test_prompt_keys_left_right_collapse_to_the_selection_edges(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e alpha beta");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, YEW_KEY_LEFT, 0U, "ed.move.char.prev");
+    pk_nosel(&f);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 8U);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_sel(&f, 8U, 10U);
+    pk_run(&f, YEW_KEY_LEFT, 0U, "ed.move.char.prev");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 8U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_run(&f, YEW_KEY_LEFT, 0U, "ed.move.char.prev");
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_sel(&f, 7U, 8U);
+    pk_run(&f, YEW_KEY_RIGHT, 0U, "ed.cmdline.ghost.accept");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 8U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_sel(&f, 6U, 8U);
+    pk_run(&f, (u32)'b', YEW_MOD_CTRL, "ed.move.char.prev");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 6U);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_sel(&f, 6U, 7U);
+    pk_run(&f, (u32)'f', YEW_MOD_CTRL, "ed.cmdline.ghost.accept");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 7U);
+    pk_nosel(&f);
+    /* Nothing selected: an ordinary motion. */
+    pk_run(&f, YEW_KEY_LEFT, 0U, "ed.move.char.prev");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 6U);
+    pk_text(&f, "e alpha beta");
+    pk_free(&f);
+}
+
+/* §1: every other motion collapses, then moves from the CARET. */
+void test_prompt_keys_other_motions_collapse_then_move_from_the_caret(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e alpha beta");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'b', YEW_MOD_ALT, "ed.move.word.prev");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 2U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_run(&f, (u32)'a', YEW_MOD_CTRL, "ed.move.line.home");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 0U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_run(&f, YEW_KEY_END, 0U, "ed.move.line.end");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 12U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, YEW_KEY_HOME, 0U, "ed.move.line.home_toggle");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 0U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_run(&f, (u32)'f', YEW_MOD_ALT, "ed.cmdline.ghost.accept_word");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 2U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_run(&f, (u32)'e', YEW_MOD_CTRL, "ed.cmdline.ghost.accept_line");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 12U);
+    pk_nosel(&f);
+    pk_text(&f, "e alpha beta");
+    pk_free(&f);
+}
+
+/* §1: a printable key, a yank, A-., a register, C-q and a bracketed
+ * paste each REPLACE the selection. */
+void test_prompt_keys_typing_yank_and_paste_replace_the_selection(void)
+{
+    static const char *const own[] = {"e last.txt"};
+    PkFix f;
+    RegVal value;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e alpha beta");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_type(&f, "X");
+    pk_text(&f, "e alpha X");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 9U);
+    pk_nosel(&f);
+
+    pk_prompt(&f, NULL, 0U, "e one two");
+    pk_run(&f, (u32)'w', YEW_MOD_CTRL, "ed.edit.kill.ws_word_prev");
+    pk_type(&f, "three");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'y', YEW_MOD_CTRL, "ed.edit.kill.yank");
+    pk_text(&f, "e one two");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 9U);
+    pk_nosel(&f);
+
+    pk_prompt(&f, own, 1U, "e a b");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'.', YEW_MOD_ALT, "ed.cmdline.last_arg");
+    pk_text(&f, "e a last.txt");
+    pk_nosel(&f);
+
+    yew_regval_init(&value);
+    bytebuf_append(&value.bytes, "reg", 3U);
+    yew_reg_yank(&f.ed.regs, (u8)'a', &value);
+    yew_regval_free(&value);
+    pk_prompt(&f, NULL, 0U, "x yy");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_send(&f, (u32)'r', YEW_MOD_ALT);
+    pk_send(&f, (u32)'a', 0U);
+    pk_text(&f, "x reg");
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_send(&f, (u32)'q', YEW_MOD_CTRL);
+    pk_send(&f, (u32)'Q', 0U);
+    pk_text(&f, "x reQ");
+    pk_nosel(&f);
+
+    pk_shift(&f, YEW_KEY_HOME, 0U, "ed.sel.extend.line_home");
+    pk_paste(&f, "pasted");
+    pk_text(&f, "pasted");
+    pk_nosel(&f);
+    pk_free(&f);
+}
+
+/* §1: <bs>, <del>, C-d and C-h delete the selection and nothing more. */
+void test_prompt_keys_delete_keys_delete_only_the_selection(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e abcdef");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, YEW_KEY_BACKSPACE, 0U, "ed.edit.delete.grapheme_left");
+    pk_text(&f, "e abcd");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 6U);
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, YEW_KEY_DELETE, 0U, "ed.edit.delete.grapheme");
+    pk_text(&f, "e ab");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 4U);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'d', YEW_MOD_CTRL, "ed.edit.delete.grapheme");
+    pk_text(&f, "e a");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'h', YEW_MOD_CTRL, "ed.edit.delete.grapheme_left");
+    pk_text(&f, "e ");
+    pk_nosel(&f);
+    /* Nothing selected: one grapheme, as ever. */
+    pk_run(&f, YEW_KEY_BACKSPACE, 0U, "ed.edit.delete.grapheme_left");
+    pk_text(&f, "e");
+    YEW_ASSERT(f.ed.cmdline.active);
+    pk_free(&f);
+}
+
+/* §1: kills collapse and act from the caret -- they never kill the
+ * selection (C-x is the cut); transpose and case likewise. */
+void test_prompt_keys_kills_transpose_and_case_collapse_first(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e one two three");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'u', YEW_MOD_CTRL, "ed.edit.kill.to_home");
+    pk_text(&f, "three");
+    YEW_ASSERT_EQ_MEM(yew_yank_at(&f.ed.yank, 0U)->data, "e one two ", 10U);
+    pk_nosel(&f);
+
+    pk_prompt(&f, NULL, 0U, "e one two");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'w', YEW_MOD_CTRL, "ed.edit.kill.ws_word_prev");
+    pk_text(&f, "e one wo");
+    pk_nosel(&f);
+    /* The blank before "wo" selected, the caret on its left: A-<bs>
+     * takes the word before the CARET and leaves the blank. */
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, YEW_KEY_BACKSPACE, YEW_MOD_ALT, "ed.edit.kill.word_prev");
+    pk_text(&f, "e  wo");
+    pk_nosel(&f);
+    pk_run(&f, (u32)'a', YEW_MOD_CTRL, "ed.move.line.home");
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_run(&f, (u32)'d', YEW_MOD_ALT, "ed.edit.kill.word_next");
+    pk_text(&f, "ewo");
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'k', YEW_MOD_CTRL, "ed.edit.kill.to_end");
+    pk_text(&f, "");
+    pk_nosel(&f);
+
+    pk_prompt(&f, NULL, 0U, "ab");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'t', YEW_MOD_CTRL, "ed.edit.transpose.chars");
+    pk_text(&f, "ba");
+    pk_nosel(&f);
+    pk_prompt(&f, NULL, 0U, "one two");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'u', YEW_MOD_ALT, "ed.edit.case.upper_word");
+    pk_text(&f, "one TWO");
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'t', YEW_MOD_ALT, "ed.edit.transpose.words");
+    pk_text(&f, "TWO one");
+    pk_nosel(&f);
+    pk_free(&f);
+}
+
+/* §1: a ghost accept, a completion, history, Enter and cancel collapse;
+ * Enter submits the WHOLE line. */
+void test_prompt_keys_ghost_tab_history_enter_and_cancel_collapse(void)
+{
+    static const char *const own[] = {"!git status"};
+    static const char *const older[] = {"e older"};
+    PkFix f;
+    OptVal v;
+
+    pk_init(&f);
+    pk_prompt(&f, own, 1U, "!git st");
+    pk_shift(&f, YEW_KEY_HOME, 0U, "ed.sel.extend.line_home");
+    pk_ghost(&f, NULL);
+    /* <right> collapses to the END; the ghost is back but not taken. */
+    pk_run(&f, YEW_KEY_RIGHT, 0U, "ed.cmdline.ghost.accept");
+    pk_nosel(&f);
+    pk_text(&f, "!git st");
+    pk_ghost(&f, "atus");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'e', YEW_MOD_CTRL, "ed.cmdline.ghost.accept_line");
+    pk_nosel(&f);
+    pk_text(&f, "!git st");
+    pk_run(&f, (u32)'e', YEW_MOD_CTRL, "ed.cmdline.ghost.accept_line");
+    pk_text(&f, "!git status");
+
+    pk_prompt(&f, NULL, 0U, "se");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, YEW_KEY_TAB, 0U, "ed.cmdline.complete_next");
+    pk_nosel(&f);
+    YEW_ASSERT(yew_textbuf_len(f.ed.cmdline.buf) >= 2U);
+    /* Tab opened a menu C-g would close first; the next scene wants
+     * a fresh prompt. */
+    yew_cmdline_close(&f.ed, false);
+
+    /* History walks by the typed stem, so the line is its prefix. */
+    pk_prompt(&f, older, 1U, "e ");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    pk_text(&f, "e older");
+    pk_nosel(&f);
+
+    pk_prompt(&f, NULL, 0U, "set shell.suggest_history all");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, YEW_KEY_ENTER, 0U, "ed.cmdline.accept");
+    YEW_ASSERT(!f.ed.cmdline.active);
+    YEW_ASSERT(yew_opt_get(&f.ed, NULL, NULL, "shell.suggest_history", 21U,
+                           &v));
+    YEW_ASSERT_EQ_U64(v.as.str.len, 3U);
+    YEW_ASSERT_EQ_MEM(v.as.str.s, "all", 3U);
+
+    pk_prompt(&f, NULL, 0U, "e x");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    YEW_ASSERT(!f.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    pk_free(&f);
+}
+
+/* §1 undo rows: undo and redo collapse; a typed replacement and a cut
+ * are ONE undo step each. */
+void test_prompt_keys_replacement_and_cut_are_one_undo_step(void)
+{
+    PkFix f;
+    PkClip clip;
+
+    pk_clip_open(&clip, "");
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e alpha beta");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_type(&f, "X");
+    pk_text(&f, "e alpha X");
+    pk_run(&f, (u32)'_', YEW_MOD_CTRL, "ed.edit.undo");
+    pk_text(&f, "e alpha beta");
+    pk_nosel(&f);
+    pk_run(&f, (u32)'/', YEW_MOD_ALT, "ed.edit.redo");
+    pk_text(&f, "e alpha X");
+    pk_nosel(&f);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'x', YEW_MOD_CTRL, "ed.clip.cut");
+    pk_text(&f, "e alpha");
+    pk_run(&f, (u32)'z', YEW_MOD_CTRL, "ed.edit.undo");
+    pk_text(&f, "e alpha X");
+    pk_nosel(&f);
+    pk_free(&f);
+    pk_clip_done(&clip);
+}
+
+/* §2: C-c copies a selection and stays; without one it is C-g. */
+void test_prompt_keys_ctrl_c_copies_or_cancels(void)
+{
+    PkFix f;
+    PkClip clip;
+
+    pk_clip_open(&clip, "");
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e alpha beta");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'c', YEW_MOD_CTRL, "ed.cmdline.copy_or_cancel");
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_E);
+    pk_nosel(&f);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 8U);
+    pk_text(&f, "e alpha beta");
+    pk_plus_holds(&f, "beta");
+    pk_clip_holds(&clip, "beta");
+    /* Nothing selected now: exactly C-g. */
+    pk_run(&f, (u32)'c', YEW_MOD_CTRL, "ed.cmdline.copy_or_cancel");
+    YEW_ASSERT(!f.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    pk_free(&f);
+    pk_clip_done(&clip);
+}
+
+/* §2: C-x cuts a selection to the clipboard; with none, nothing at all. */
+void test_prompt_keys_ctrl_x_cuts_or_does_nothing(void)
+{
+    PkFix f;
+    PkClip clip;
+
+    pk_clip_open(&clip, "");
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e alpha beta");
+    yew_msg_clear(&f.ed);
+    pk_run(&f, (u32)'x', YEW_MOD_CTRL, "ed.clip.cut");
+    pk_text(&f, "e alpha beta");
+    YEW_ASSERT(!f.ed.msg.active);
+    YEW_ASSERT(!yew_clip_pending());
+    YEW_ASSERT(f.ed.cmdline.active);
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'x', YEW_MOD_CTRL, "ed.clip.cut");
+    pk_text(&f, "e alpha ");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 8U);
+    pk_nosel(&f);
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_E);
+    pk_plus_holds(&f, "beta");
+    pk_clip_holds(&clip, "beta");
+    pk_free(&f);
+    pk_clip_done(&clip);
+}
+
+/* §2: C-v replaces a selection with the clipboard, folded to one line,
+ * as one undo step. */
+void test_prompt_keys_ctrl_v_replaces_the_selection(void)
+{
+    PkFix f;
+    PkClip clip;
+
+    pk_clip_open(&clip, "git\nlog");
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "!echo hi");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'v', YEW_MOD_CTRL, "ed.clip.paste");
+    pk_text(&f, "!echo git log");
+    pk_nosel(&f);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 13U);
+    pk_run(&f, (u32)'z', YEW_MOD_CTRL, "ed.edit.undo");
+    pk_text(&f, "!echo hi");
+    pk_free(&f);
+    pk_clip_done(&clip);
+}
+
+/* Invariant 2: a Shift+motion takes a CJK wide cluster or a combining
+ * sequence whole, and typing replaces it whole. */
+void test_prompt_keys_selection_edges_respect_graphemes(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e ");
+    pk_paste(&f, "\xe6\x97\xa5\xe6\x9c\xac");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_sel(&f, 5U, 8U);
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_sel(&f, 2U, 8U);
+    pk_shift(&f, YEW_KEY_RIGHT, 0U, "ed.sel.extend.right");
+    pk_sel(&f, 5U, 8U);
+    pk_type(&f, "Z");
+    pk_text(&f, "e \xe6\x97\xa5Z");
+
+    pk_prompt(&f, NULL, 0U, "e x");
+    pk_paste(&f, "e\xcc\x81");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_sel(&f, 3U, 6U);
+    pk_run(&f, YEW_KEY_BACKSPACE, 0U, "ed.edit.delete.grapheme_left");
+    pk_text(&f, "e x");
+    pk_free(&f);
+}
+
+/* The pitfall: a selection is never text -- not in yew_cmdline_text(),
+ * the history draft, the hint the parse point produces, or the ghost. */
+void test_prompt_keys_selection_is_never_text(void)
+{
+    static const char *const own[] = {"!git status"};
+    PkFix f;
+    char hint[sizeof(f.ed.cmdline.hint)];
+
+    pk_init(&f);
+    pk_prompt(&f, own, 1U, "!git st");
+    pk_ghost(&f, "atus");
+    (void)memcpy(hint, f.ed.cmdline.hint, sizeof(hint));
+    pk_run(&f, (u32)'a', YEW_MOD_CTRL, "ed.move.line.home");
+    pk_shift(&f, YEW_KEY_END, 0U, "ed.sel.extend.line_end");
+    pk_sel(&f, 0U, 7U);
+    pk_text(&f, "!git st");
+    YEW_ASSERT_NOT_NULL(f.ed.cmdline.hist.draft);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.hist.draft, "!git st");
+    YEW_ASSERT_EQ_MEM(f.ed.cmdline.hint, hint, sizeof(hint));
+    pk_ghost(&f, "atus");
+    pk_free(&f);
+}
+
+static void pk_yank_snapshot(const YewYankStack *y, YewYankStack *copy,
+                             Bytebuf *bytes)
+{
+    u32 k;
+
+    (void)memcpy(copy, y, sizeof(*copy));
+    bytebuf_init(bytes);
+    for (k = 0U; k < y->len; k++) {
+        const Bytebuf *e = yew_yank_at(y, k);
+
+        bytebuf_append(bytes, e->data, e->len);
+        bytebuf_push_u8(bytes, 0U);
+    }
+}
+
+/* §4 both ways: copy and cut leave the yank stack byte-identical; kills
+ * over a selection leave the clipboard and `+` untouched. */
+void test_prompt_keys_clipboard_and_yank_stack_stay_apart(void)
+{
+    PkFix f;
+    PkClip clip;
+    YewYankStack before;
+    YewYankStack after;
+    Bytebuf before_bytes;
+    Bytebuf after_bytes;
+
+    pk_clip_open(&clip, "");
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "e one two three");
+    pk_run(&f, (u32)'w', YEW_MOD_CTRL, "ed.edit.kill.ws_word_prev");
+    pk_type(&f, "four");
+    pk_yank_snapshot(&f.ed.yank, &before, &before_bytes);
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'c', YEW_MOD_CTRL, "ed.cmdline.copy_or_cancel");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'x', YEW_MOD_CTRL, "ed.clip.cut");
+    pk_text(&f, "e one four");
+    pk_yank_snapshot(&f.ed.yank, &after, &after_bytes);
+    YEW_ASSERT_EQ_MEM(&before, &after, sizeof(before));
+    YEW_ASSERT_EQ_U64(before_bytes.len, after_bytes.len);
+    YEW_ASSERT_EQ_MEM(before_bytes.data, after_bytes.data,
+                      before_bytes.len);
+    bytebuf_free(&before_bytes);
+    bytebuf_free(&after_bytes);
+    pk_plus_holds(&f, "two ");
+    pk_clip_holds(&clip, "two ");
+
+    /* And back: kills with a selection present write neither. */
+    f.ed.regs.clipboard_sync = YEW_CLIP_SYNC_ALL;
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    pk_run(&f, (u32)'w', YEW_MOD_CTRL, "ed.edit.kill.ws_word_prev");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_run(&f, (u32)'k', YEW_MOD_CTRL, "ed.edit.kill.to_end");
+    YEW_ASSERT(!yew_clip_pending());
+    pk_plus_holds(&f, "two ");
+    pk_free(&f);
+    pk_clip_done(&clip);
+}
+
+/*
+ * Insert mode: with nothing selected C-c and C-x change nothing -- and an
+ * anchor away from the caret in I is not a selection (57.13), so it is
+ * not copied either.  Shift+arrows from Insert select (in H), and there
+ * C-c reaches the clipboard.
+ */
+void test_prompt_keys_insert_mode_ctrl_c_and_ctrl_x(void)
+{
+    PkFix f;
+    PkClip clip;
+    Cursor *c;
+
+    pk_clip_open(&clip, "");
+    pk_init(&f);
+    pk_send(&f, (u32)'i', 0U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    pk_type(&f, "hello");
+    pk_run(&f, (u32)'c', YEW_MOD_CTRL, "ed.clip.copy");
+    pk_run(&f, (u32)'x', YEW_MOD_CTRL, "ed.clip.cut");
+    c = yew_ed_cursor(&f.ed);
+    c->anchor = BYTEOFF(0U);
+    pk_run(&f, (u32)'c', YEW_MOD_CTRL, "ed.clip.copy");
+    pk_run(&f, (u32)'x', YEW_MOD_CTRL, "ed.clip.cut");
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(f.ed.buffer.tb), 5U);
+    YEW_ASSERT(!yew_clip_pending());
+    YEW_ASSERT_EQ_U64(f.ed.regs.system.bytes.len, 0U);
+    c = yew_ed_cursor(&f.ed);
+    c->anchor = c->pos;
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_H);
+    pk_run(&f, (u32)'c', YEW_MOD_CTRL, "ed.clip.copy");
+    pk_plus_holds(&f, "lo");
+    pk_clip_holds(&clip, "lo");
+    pk_free(&f);
+    pk_clip_done(&clip);
 }
