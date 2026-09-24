@@ -55,6 +55,16 @@ static void term_fix_free(TermFix *f)
     YEW_ASSERT_EQ_I64(rmdir(f->base), 0);
 }
 
+static u32 term_public_jobs(const Ed *ed)
+{
+    u32 i;
+    u32 n = 0U;
+
+    for (i = 0U; i < ed->jobs.len; i++)
+        n += ed->jobs.v[i].internal ? 0U : 1U;
+    return n;
+}
+
 /* Run one E-mode line through the real parse and dispatch, so the test
  * exercises the same route a typed `:!!` takes. */
 static CmdStatus term_run_line(TermFix *f, const char *line)
@@ -137,9 +147,11 @@ void test_shell_term_run_reports_every_outcome(void)
                       YEW_CMD_OK);
     YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "exited 0"));
 
-    /* And ordinary `:!` is still the asynchronous, captured form. */
+    /* And ordinary `:!` is still the asynchronous, captured form: one
+     * user-visible job (Sprint 57.27's shell session, when on, adds its
+     * own hidden internal one). */
     YEW_ASSERT_EQ_I64(term_run_line(&f, ":!true"), YEW_CMD_OK);
-    YEW_ASSERT_EQ_U64(f.ed.jobs.len, 1U);
+    YEW_ASSERT_EQ_U64(term_public_jobs(&f.ed), 1U);
     term_fix_free(&f);
 }
 

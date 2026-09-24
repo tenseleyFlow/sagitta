@@ -1197,6 +1197,17 @@ void test_shell_self_recognizes_only_exact_safe_argv(void);
 void test_shell_self_resolves_workspace_and_outside_tabs(void);
 void test_shell_self_places_groups_by_root_and_stable_membership(void);
 void test_shell_self_errors_roll_back_tabs_buffers_and_focus(void);
+void test_shsession_cd_persists(void);
+void test_shsession_exports_functions_and_locals(void);
+void test_shsession_exit_recovers_last_directory(void);
+void test_shsession_reset_returns_to_workspace_root(void);
+void test_shsession_fresh_is_sprint19(void);
+void test_shsession_non_sh_shell_falls_back_to_fresh(void);
+void test_shsession_forged_marker_is_output(void);
+void test_shsession_syntax_error_cannot_swallow_frames(void);
+void test_shsession_output_shapes(void);
+void test_shsession_state_survives_any_bytes(void);
+void test_shsession_split_reads_and_replayed_markers(void);
 
 void test_job_echo_lifecycle(void);
 void test_job_internal_ids_do_not_advance_public_ids(void);

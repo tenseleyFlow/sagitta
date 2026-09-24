@@ -483,7 +483,7 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
         "save.backup_dir",
         "plug.error_limit", "plug.verify_on_load",
         "theme", "theme_auto", "macro.dir", "shell.complete_help",
-        "shell.complete_fish", "shell.suggest_history",
+        "shell.complete_fish", "shell.suggest_history", "shell.session",
         "shadow.enable",
         "shadow.providers",
         "shadow.max_lines", "shadow.midline", "shadow.lsp_debounce_ms",
