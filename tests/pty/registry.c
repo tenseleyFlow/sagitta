@@ -6241,6 +6241,26 @@ static void s27_mouse(PtyCtx *c, const char *report)
     ptc_settle(c, 60);
 }
 
+/*
+ * A mouse report that OPENS A MENU.  Unlike s27_mouse's reports, this one
+ * always repaints -- the menu is drawn and any-motion tracking is armed in
+ * that frame -- so wait for the frame itself, not for a quiet window.
+ *
+ * The quiet window was the Sprint 57.13 flake: on a slow runner the 60 ms
+ * of silence ran out before the menu painted, the case sent the release
+ * and its Esc early, the editor handled press, release and Esc in one
+ * loop turn, the menu opened and closed with no net change, no frame was
+ * emitted, and the Esc's frame wait starved to the case deadline.  The
+ * same race let a mode check read tracking before the menu armed it.
+ */
+static void s57_13_menu_press(PtyCtx *c, const char *report)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_bytes(c, report);
+    settle_sync_delta(c, before, 1U, 60);
+}
+
 static void chrome_snapshot(PtyCtx *c)
 {
     ptc_snapshot(c, c->test->name);
@@ -11029,26 +11049,6 @@ static void case_s53_blame(PtyCtx *c)
  * wrong.  The golden also carries the terminal modes, so it is where
  * `1003` being ARMED while the menu is up is proved end to end.
  */
-/*
- * A mouse report that OPENS A MENU.  Unlike s27_mouse's reports, this one
- * always repaints -- the menu is drawn and any-motion tracking is armed in
- * that frame -- so wait for the frame itself, not for a quiet window.
- *
- * The quiet window was the Sprint 57.13 flake: on a slow runner the 60 ms
- * of silence ran out before the menu painted, the case sent the release
- * and its Esc early, the editor handled press, release and Esc in one
- * loop turn, the menu opened and closed with no net change, no frame was
- * emitted, and the Esc's frame wait starved to the case deadline.  The
- * same race let a mode check read tracking before the menu armed it.
- */
-static void s57_13_menu_press(PtyCtx *c, const char *report)
-{
-    u32 before = c->vt.nsync_pairs;
-
-    ptc_bytes(c, report);
-    settle_sync_delta(c, before, 1U, 60);
-}
-
 static void case_s57_13_fuss_file_menu(PtyCtx *c)
 {
     if (!s52_open(c, NULL))
