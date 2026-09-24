@@ -39,7 +39,15 @@ typedef struct CmdLine {
     Arena comp_arena;
     /* §4: the cached candidate set `comp_arena` backs. */
     CompFilter filter;
-    HistCur hist;
+    /*
+     * Sprint 57.30 §2: the history walk Up/Down drive.  Its term froze
+     * when it began; any edit ends it.  `walk_bang`: the walk reads the
+     * 57.26 snapshot and puts entries after the first `walk_prefix`
+     * bytes of its draft (the `!`, `r !`, `%!` the user typed).
+     */
+    YewHistWalk walk;
+    size_t walk_prefix;
+    bool walk_bang;
     CmdErr err;
     /* §9: what the parser currently understands.  Empty when it
      * understands nothing -- silence, never a guess. */
@@ -152,10 +160,17 @@ bool yew_cmdline_menu_scroll(Ed *ed, i32 delta);
  */
 CmdStatus yew_cmdline_cmd_menu_next(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_prev(CmdCtx *cx);
-/* `<up>` / `<down>`: the pager when it is open and has focus, the
- * command-line history otherwise. */
+/* Sprint 57.30 §1: `<up>` / `<down>` (and C-p / C-n): rows of the table
+ * once Tab has entered it, the smart history walk otherwise. */
 CmdStatus yew_cmdline_cmd_up(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_down(CmdCtx *cx);
+/*
+ * Sprint 57.30 §2: the bytes of the line the history highlight covers --
+ * the first occurrence of the walk's term in the walked entry.  STATE,
+ * never text.  False while no walked entry is on the line or the term
+ * is empty.
+ */
+bool yew_cmdline_hist_match(Ed *ed, Span *out);
 
 CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_menu_page_prev(CmdCtx *cx);

@@ -352,12 +352,10 @@ static bool replace_span(Ed *ed, Span span, const u8 *bytes, size_t len,
     line->cur.anchor = line->cur.pos;
     line->cur.goal_col = (CCol){0U};
     sync_to_target(line);
-    if (reset_history) {
-        char *draft = text_string(line->buf);
-
-        yew_hist_cur_reset(&line->hist, draft);
-        yew_xfree(draft);
-    }
+    /* Sprint 57.30 §2: an edit ends the history walk; the next Up begins
+     * a new one from the line as it is then. */
+    if (reset_history)
+        yew_hist_walk_end(&line->walk);
     clear_error(ed);
     ed->footer_dirty = true;
     return true;
@@ -510,12 +508,9 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     /* -1, not 0: a zeroed field would make the very first click on row 0
      * read as the SECOND click and accept it outright. */
     line->click_row = -1;
-    {
-        char *draft = text_string(line->buf);
-
-        yew_hist_cur_reset(&line->hist, draft);
-        yew_xfree(draft);
-    }
+    yew_hist_walk_end(&line->walk);
+    line->walk_prefix = 0U;
+    line->walk_bang = false;
     line->err = (CmdErr){0};
     line->scroll = 0U;
     yew_hist_suggest_init(&line->suggest);
@@ -603,7 +598,7 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     line->suggest_loaded = false;
     history_release(ed, line->kind, line->history);
     line->history = NULL;
-    yew_hist_cur_dispose(&line->hist);
+    yew_hist_walk_end(&line->walk);
     cmdline_target_free(cmdline_target(line));
     line->target = NULL;
     line->buf = NULL;
@@ -830,6 +825,19 @@ static void cmdline_refilter_as(Ed *ed, bool asked)
         return;
     }
     cmdline_set_hint(ed, &point);
+    /*
+     * Sprint 57.30 §1: a walked history entry on the line has no table
+     * -- the user is reading history, not completing a word (fish does
+     * the same).  The hint above still reads the entry.  The next edit
+     * ends the walk and the live table comes back.
+     */
+    if (line->walk.on && line->walk.n_seen != 0U) {
+        menu_discard(ed);
+        arena_free_all(&scratch);
+        yew_xfree(text);
+        ed->full_damage = true;
+        return;
+    }
     if (!yew_comp_query_at(ed, &point, &query) ||
         (!asked && query.replace.hi <= query.replace.lo)) {
         yew_menu_dismiss(&line->menu);
@@ -992,20 +1000,16 @@ u32 yew_cmdline_comp_idle(Ed *ed)
 
 void yew_cmdline_edited(Ed *ed)
 {
-    char *draft;
-
     if (ed == NULL || !ed->cmdline.active)
         return;
     sync_from_target(&ed->cmdline);
-    draft = text_string(ed->cmdline.buf);
-    yew_hist_cur_reset(&ed->cmdline.hist, draft);
-    yew_xfree(draft);
+    yew_hist_walk_end(&ed->cmdline.walk);
     clear_error(ed);
     /*
-     * Sprint 57.17 §2: typing puts the caret back in charge.  The
-     * SELECTION survives (it is held by identity across the refilter),
-     * so one `<up>` picks the pager up again where it was left -- but
-     * the arrows belong to the prompt until it is asked for.
+     * Sprint 57.30 §1: typing leaves the table.  The SELECTION survives
+     * (it is held by identity across the refilter), so Tab goes on from
+     * the row it was on; the arrows are history until Tab enters the
+     * table again.
      */
     yew_menu_blur(&ed->cmdline.menu);
     ed->cmdline.comp_asked = false;
@@ -1089,6 +1093,12 @@ static const PromptSelRow prompt_sel_rows[] = {
     {"ed.edit.kill.yank", PSEL_REPLACE},
     {"ed.edit.delete.grapheme_left", PSEL_DELETE},
     {"ed.edit.delete.grapheme", PSEL_DELETE},
+    /* Sprint 57.30: history and the table's rows replace the line or a
+     * word of it -- collapse at the caret first, like any command. */
+    {"ed.cmdline.up", PSEL_COLLAPSE},
+    {"ed.cmdline.down", PSEL_COLLAPSE},
+    {"ed.cmdline.hist_prev", PSEL_COLLAPSE},
+    {"ed.cmdline.hist_next", PSEL_COLLAPSE},
 };
 
 static PromptSel prompt_sel_rule(const char *command)
@@ -1244,24 +1254,141 @@ void yew_cmdline_paste(Ed *ed, const u8 *bytes, size_t len)
     (void)insert_sanitized(ed, bytes, len);
 }
 
+/*
+ * Sprint 57.30 §2: fish's "smart" history.
+ *
+ * SOURCE: a bang line walks the 57.26 snapshot -- yew's own bang bodies
+ * first, then the shells' files the option allows -- so Up and the
+ * ghost read the same entries; any other line walks its prompt's own
+ * history.  TERM: the line's text when the walk begins (a bang line's
+ * body, leading blanks dropped, as the snapshot drops them), frozen
+ * until an edit ends the walk.  An entry is shown when the term is a
+ * substring of it (yew_hist_find) and it is not equal to one this walk
+ * already showed; newest first.
+ */
+static void walk_begin(Ed *ed, const char *text)
+{
+    CmdLine *line = &ed->cmdline;
+    size_t len = strlen(text);
+    size_t body = 0U;
+    size_t term;
+
+    line->walk_bang = line->kind == YEW_PROMPT_CMD &&
+                      yew_cmd_bang_body(ed, text, len, &body) && body <= len;
+    if (!line->walk_bang)
+        body = 0U;
+    line->walk_prefix = body;
+    term = body;
+    if (line->walk_bang) {
+        while (term < len && (text[term] == ' ' || text[term] == '\t'))
+            term++;
+    }
+    yew_hist_walk_begin(&line->walk, text, text + term, len - term);
+}
+
+static YewHistView walk_view(Ed *ed)
+{
+    YewHistView v = {NULL, NULL};
+
+    if (ed->cmdline.walk_bang) {
+        suggest_ensure(ed);
+        v.suggest = &ed->cmdline.suggest;
+    } else {
+        v.hist = ed->cmdline.history;
+    }
+    return v;
+}
+
+static bool walk_showing(const CmdLine *line)
+{
+    return line->walk.on && line->walk.n_seen != 0U;
+}
+
+/* The line becomes the draft's prefix (a bang line's `!`) and `entry`,
+ * without ending the walk. */
+static CmdStatus walk_show(Ed *ed, const char *entry)
+{
+    CmdLine *line = &ed->cmdline;
+    size_t prefix = line->walk_prefix;
+    Bytebuf bytes;
+    bool ok;
+
+    bytebuf_init(&bytes);
+    if (prefix != 0U && line->walk.draft != NULL)
+        bytebuf_append(&bytes, line->walk.draft, prefix);
+    sanitize_bytes((const u8 *)entry, strlen(entry), &bytes);
+    ok = replace_span(ed, (Span){0U, yew_textbuf_len(line->buf)},
+                      bytes.data, bytes.len, false);
+    bytebuf_free(&bytes);
+    if (!ok)
+        return YEW_CMD_ERR_IO;
+    /* A history jump rewrites the whole line without going through the
+     * edit hook: refilter for the hint (the table stays closed while a
+     * walked entry is shown). */
+    cmdline_refilter(ed);
+    return YEW_CMD_OK;
+}
+
 static CmdStatus history_move(CmdCtx *cx, bool previous)
 {
+    Ed *ed;
+    CmdLine *line;
+    YewHistView view;
     const char *found;
+    bool at_draft = false;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
-    found = previous ? yew_hist_prev(cx->ed->cmdline.history,
-                                     &cx->ed->cmdline.hist) :
-                       yew_hist_next(cx->ed->cmdline.history,
-                                     &cx->ed->cmdline.hist);
-    if (found == NULL)
+    ed = cx->ed;
+    line = &ed->cmdline;
+    sync_from_target(line);
+    if (!line->walk.on) {
+        char *text = text_string(line->buf);
+
+        walk_begin(ed, text);
+        yew_xfree(text);
+    }
+    view = walk_view(ed);
+    if (previous) {
+        found = yew_hist_walk_older(&line->walk, &view);
+        /* Past the oldest match: stay put. */
+        return found == NULL ? YEW_CMD_OK : walk_show(ed, found);
+    }
+    found = yew_hist_walk_newer(&line->walk, &view, &at_draft);
+    if (found != NULL)
+        return walk_show(ed, found);
+    if (!at_draft)
         return YEW_CMD_OK;
-    if (!replace_all(cx->ed, found, false))
+    /* Down past the newest match: the text the walk began with. */
+    if (!replace_all(ed, line->walk.draft, false))
         return YEW_CMD_ERR_IO;
-    /* A history jump rewrites the whole line without going through the
-     * edit hook, so the menu is refiltered here rather than left stale. */
-    cmdline_refilter(cx->ed);
+    cmdline_refilter(ed);
     return YEW_CMD_OK;
+}
+
+bool yew_cmdline_hist_match(Ed *ed, Span *out)
+{
+    CmdLine *line;
+    char *text;
+    size_t len;
+    size_t at;
+    bool hit;
+
+    if (ed == NULL || !ed->cmdline.active || ed->cmdline.buf == NULL)
+        return false;
+    line = &ed->cmdline;
+    if (!walk_showing(line) || line->walk.term_len == 0U)
+        return false;
+    text = text_string(line->buf);
+    len = strlen(text);
+    hit = line->walk_prefix <= len &&
+          yew_hist_find(text + line->walk_prefix, len - line->walk_prefix,
+                        line->walk.term, line->walk.term_len, &at);
+    yew_xfree(text);
+    if (hit && out != NULL)
+        *out = (Span){line->walk_prefix + at,
+                      line->walk_prefix + at + line->walk.term_len};
+    return hit;
 }
 
 CmdStatus yew_cmdline_cmd_hist_prev(CmdCtx *cx)
@@ -1319,6 +1446,8 @@ static CmdStatus completion_cycle(Ed *ed, bool previous)
 
     if (!yew_menu_move(&line->menu, previous ? -1 : 1, false))
         return YEW_CMD_OK;
+    /* Sprint 57.30 §1: Tab is how the user enters the table. */
+    (void)yew_menu_focus(&line->menu);
     item = yew_menu_selected(&line->menu);
     if (item == NULL)
         return YEW_CMD_OK;
@@ -1338,8 +1467,9 @@ static CmdStatus completion_cycle(Ed *ed, bool previous)
  * arrowing up into the list to read it before choosing possible at all.
  *
  * `previous` off the FIRST row leaves the pager instead of wrapping:
- * the rows stay on screen, the choice is dropped so §6's Enter rule
- * sees none, and the next `<up>` is history again.
+ * the rows stay on screen and the choice is dropped so §6's Enter rule
+ * sees none.  No longer bound (57.30 §1 gave the arrows to history and
+ * the table's rows); Fletch still reaches it.
  */
 static CmdStatus menu_preview(Ed *ed, bool previous)
 {
@@ -1375,6 +1505,8 @@ static CmdStatus complete(Ed *ed, bool previous)
      * with nothing chosen is not "already cycling" -- it falls through
      * so the first Tab can still offer the longest common prefix.
      */
+    /* Sprint 57.30: Tab is a completion question, not a history step. */
+    yew_hist_walk_end(&line->walk);
     if (line->menu.explicit_sel)
         return completion_cycle(ed, previous);
     text = text_string(line->buf);
@@ -1511,6 +1643,7 @@ static CmdStatus complete(Ed *ed, bool previous)
         /* Nothing left to insert unambiguously, so this Tab is a choice:
          * enter the list (from the far end for S-Tab). */
         (void)yew_menu_move(&line->menu, previous ? -1 : 1, false);
+        (void)yew_menu_focus(&line->menu);
         {
             const CompItem *item = yew_menu_selected(&line->menu);
 
@@ -1542,6 +1675,8 @@ static CmdStatus menu_page(Ed *ed, bool previous)
 
     if (!yew_menu_move(&line->menu, previous ? -1 : 1, true))
         return YEW_CMD_OK;
+    /* The page keys move inside the table, so they are in it. */
+    (void)yew_menu_focus(&line->menu);
     item = yew_menu_selected(&line->menu);
     if (item == NULL)
         return YEW_CMD_OK;
@@ -1566,38 +1701,115 @@ CmdStatus yew_cmdline_cmd_menu_prev(CmdCtx *cx)
 }
 
 /*
- * Sprint 57.17 §2: `<up>` and `<down>` choose between the pager and the
- * history.
+ * Sprint 57.30 §1: `<up>` and `<down>` (and C-p / C-n, bound to the same
+ * commands) are HISTORY unless the user has ENTERED the table -- and
+ * only Tab / S-Tab (and the page keys, which move there the same way)
+ * enter it.  The live table, open the whole time a token is typed,
+ * never takes an arrow; that was 57.17 §2's rule, and dogfooding found
+ * it backwards for a shell prompt.  ONE rule:
  *
- * ONE rule, stated once.  `<up>` asks the pager for the arrows whenever
- * a list is open and non-empty; `<down>` moves in the pager only while
- * the pager already HAS them.  Focus comes back on Escape, or on `<up>`
- * off the first row -- so history stays reachable with a list on
- * screen: one `<up>` takes the list, one more hands it back, the next
- * is history.
- *
- * Sprint 18.5 §6 gave Up to history outright because a live menu is
- * open the whole time a command name is being typed and the arrow would
- * otherwise never reach history.  That argument survives here: an EMPTY
- * prompt -- reaching for history blind, which is the case it named --
- * has no menu at all, because an empty token completes nothing.
+ *   not in the table          Up: history older   Down: history newer
+ *   in it, not the top row    Up: row up (the row written to the line)
+ *   in it, the top row        Up: leave it, close it, and walk history
+ *                                 from the text the user TYPED
+ *   in it, not the last row   Down: row down; off the bottom VISIBLE
+ *                                 row the window scrolls by one
+ *   in it, the true last row  Down: leave it, keeping the candidate in
+ *                                 the line; the table stays open but
+ *                                 unfocused, so Up is history again and
+ *                                 Tab re-enters it.
  */
+static CmdStatus table_row(Ed *ed, i32 delta)
+{
+    Menu *menu = &ed->cmdline.menu;
+    const CompItem *item;
+
+    if (!yew_menu_move(menu, delta, false))
+        return YEW_CMD_OK;
+    item = yew_menu_selected(menu);
+    if (item != NULL && !insert_completion(ed, menu->replace, item, false))
+        return YEW_CMD_ERR_IO;
+    ed->full_damage = true;
+    ed->footer_dirty = true;
+    return YEW_CMD_OK;
+}
+
+/*
+ * The pitfall: row navigation wrote each candidate into the line, so the
+ * line now holds a word the user never typed.  What they TYPED is the
+ * line with the table's span put back to its stem -- the same text Esc
+ * restores -- and that is what the history walk searches with.
+ */
+static char *typed_text(const CmdLine *line)
+{
+    char *text = text_string(line->buf);
+    size_t len = strlen(text);
+    Span r = line->menu.replace;
+    Bytebuf out;
+    char *typed;
+
+    if (line->menu_stem == NULL || r.lo > r.hi || r.hi > len)
+        return text;
+    bytebuf_init(&out);
+    bytebuf_append(&out, text, (size_t)r.lo);
+    bytebuf_append(&out, line->menu_stem, strlen(line->menu_stem));
+    bytebuf_append(&out, text + r.hi, len - (size_t)r.hi);
+    bytebuf_push_u8(&out, 0U);
+    typed = (char *)out.data;
+    yew_xfree(text);
+    return typed;
+}
+
+static CmdStatus table_top_to_history(CmdCtx *cx)
+{
+    Ed *ed = cx->ed;
+    char *typed = typed_text(&ed->cmdline);
+    CmdStatus status;
+
+    menu_discard(ed);
+    /* An edit, so it ends any walk; the new one begins from `typed`. */
+    if (!replace_all(ed, typed, true)) {
+        yew_xfree(typed);
+        return YEW_CMD_ERR_IO;
+    }
+    walk_begin(ed, typed);
+    yew_xfree(typed);
+    status = history_move(cx, true);
+    /* Nothing older matched: the typed text stays, with its live table. */
+    if (status == YEW_CMD_OK && !walk_showing(&ed->cmdline))
+        cmdline_refilter(ed);
+    return status;
+}
+
 CmdStatus yew_cmdline_cmd_up(CmdCtx *cx)
 {
+    Menu *menu;
+
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
-    if (cx->ed->cmdline.menu.items.len != 0U)
-        return menu_preview(cx->ed, true);
-    return history_move(cx, true);
+    menu = &cx->ed->cmdline.menu;
+    if (!yew_menu_focused(menu))
+        return history_move(cx, true);
+    if (menu->sel > 0)
+        return table_row(cx->ed, -1);
+    return table_top_to_history(cx);
 }
 
 CmdStatus yew_cmdline_cmd_down(CmdCtx *cx)
 {
+    Menu *menu;
+
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
-    if (yew_menu_focused(&cx->ed->cmdline.menu))
-        return menu_preview(cx->ed, false);
-    return history_move(cx, false);
+    menu = &cx->ed->cmdline.menu;
+    if (!yew_menu_focused(menu))
+        return history_move(cx, false);
+    if ((size_t)menu->sel + 1U < menu->items.len)
+        return table_row(cx->ed, 1);
+    yew_menu_blur(menu);
+    cx->ed->full_damage = true;
+    cx->ed->footer_dirty = true;
+    return YEW_CMD_OK;
 }
 
 CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx)
@@ -1877,6 +2089,10 @@ static const char *cmdline_ghost_of(Ed *ed, size_t *len, GhostKind *kind)
     const char *ghost;
 
     *kind = GHOST_NONE;
+    /* Sprint 57.30 §2: a walked history entry is the whole suggestion;
+     * a ghost continuing it would be a second one. */
+    if (walk_showing(&ed->cmdline))
+        return NULL;
     if (yew_menu_selected(&ed->cmdline.menu) == NULL) {
         ghost = history_ghost(ed, len);
         if (ghost != NULL && *len != 0U) {
@@ -2713,6 +2929,33 @@ void yew_cmdline_draw(Ed *ed, Rect rect)
             x1 = (u16)(x0 + 1U);
         yew_grid_overlay(&ed->grid, rect.y, x0, x1, &error_cell,
                          YEW_OVERLAY_BG | YEW_OVERLAY_ATTRS);
+    }
+    /*
+     * Sprint 57.30 §2: the walked entry's first occurrence of the term,
+     * in the style the document gives a `/` match.  Drawn before the
+     * selection, which wins where they meet; like it, clamped to the
+     * text drawn.
+     */
+    {
+        Span hit;
+
+        if (yew_cmdline_hist_match(ed, &hit)) {
+            CCol lo = yew_off_to_ccol(line->buf, span, BYTEOFF(hit.lo),
+                                      YEW_CMDLINE_TABWIDTH);
+            CCol hi = yew_off_to_ccol(line->buf, span, BYTEOFF(hit.hi),
+                                      YEW_CMDLINE_TABWIDTH);
+            u64 base = (u64)rect.x + 1U;
+            u64 x0v = lo.v > line->scroll ? base + lo.v - line->scroll : base;
+            u64 x1v = hi.v > line->scroll ? base + hi.v - line->scroll : base;
+            u16 x0 = x0v > col ? col : (u16)x0v;
+            u16 x1 = x1v > col ? col : (u16)x1v;
+            Cell match_style;
+            u8 fields = yew_draw_search_style(ed, false, &match_style);
+
+            if (x0 < x1)
+                yew_grid_overlay(&ed->grid, rect.y, x0, x1, &match_style,
+                                 fields);
+        }
     }
     /*
      * Sprint 57.29 §3: the selection, in the document's selection style,

@@ -2722,10 +2722,12 @@ static void case_s57_17_fuzzy_one_executes(PtyCtx *c)
 }
 
 /*
- * Sprint 57.17 §2: `<up>` enters the pager rather than walking history,
- * and the PROMPT DOES NOT MOVE -- the line still reads `:fil` with the
- * first row highlighted.  Tab in the same place writes the row into the
- * line, which is the whole difference this golden exists to hold.
+ * Sprint 57.17 §2, edited to Sprint 57.30 §1: the arrows reach the table
+ * only once Tab has entered it (the first Tab may only extend `fil` by
+ * its common prefix; the second lands on row 0 and writes it into the
+ * line).  `<up>` on that TOP row leaves the table for history; this
+ * case's history is empty, so the line goes back to the text the table
+ * was entered from, with its live rows and NO row highlighted.
  */
 static void case_s57_17_pager_arrow_up(PtyCtx *c)
 {
@@ -2736,6 +2738,8 @@ static void case_s57_17_pager_arrow_up(PtyCtx *c)
         return;
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c, "fil");
+    s18_settle_after_keys(c, "tab");
+    s18_settle_after_keys(c, "tab");
     s18_settle_after_keys(c, "up");
     ptc_snapshot(c, "s57_17_pager_arrow_up");
     s18_finish(c, path);
@@ -2749,6 +2753,10 @@ static void case_s57_17_pager_arrow_up(PtyCtx *c)
  * one and KEEPS it, so this snapshot has a non-zero `top` and a tail at
  * once -- and no footer, because menu.h's rule gives the last row
  * exactly one count.
+ *
+ * Sprint 57.30 §1: the table is entered with Tab (the first Tab may only
+ * extend `fil` by its common prefix), and each row the arrows reach is
+ * written into the line.
  */
 static void case_s57_17_pager_tail_row(PtyCtx *c)
 {
@@ -2759,7 +2767,8 @@ static void case_s57_17_pager_tail_row(PtyCtx *c)
         return;
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c, "fil");
-    s18_settle_after_keys(c, "up");
+    s18_settle_after_keys(c, "tab");
+    s18_settle_after_keys(c, "tab");
     s18_settle_after_keys(c, "down down down down");
     ptc_snapshot(c, "s57_17_pager_tail_row");
     s18_finish(c, path);

@@ -1238,10 +1238,16 @@ void test_prompt_keys_selection_is_never_text(void)
     pk_shift(&f, YEW_KEY_END, 0U, "ed.sel.extend.line_end");
     pk_sel(&f, 0U, 7U);
     pk_text(&f, "!git st");
-    YEW_ASSERT_NOT_NULL(f.ed.cmdline.hist.draft);
-    YEW_ASSERT_EQ_STR(f.ed.cmdline.hist.draft, "!git st");
     YEW_ASSERT_EQ_MEM(f.ed.cmdline.hint, hint, sizeof(hint));
     pk_ghost(&f, "atus");
+    /* Sprint 57.30: the history draft and term are taken when a walk
+     * begins, from the line's TEXT -- the selection is not in them. */
+    YEW_ASSERT(!f.ed.cmdline.walk.on);
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    YEW_ASSERT(f.ed.cmdline.walk.on);
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.walk.draft, "!git st");
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.walk.term, "git st");
+    pk_text(&f, "!git status");
     pk_free(&f);
 }
 
