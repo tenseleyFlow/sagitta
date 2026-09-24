@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include <sys/wait.h>
 
 #include "util/base.h"
 #include "util/log.h"
@@ -75,6 +76,20 @@ const char *yew_test_child_role(void);
 void yew_test_spawn_child(const char *role, YewTestChildPrep prep,
                           void *user, YewTestChild *out);
 void yew_test_child_free(YewTestChild *child);
+/* Replays the child's captured stderr on ours unless it exited `code`. */
+void yew_test_child_replay(const YewTestChild *child, int code);
+
+/* The child exited with `code`; if not, its stderr says why. */
+#define YEW_ASSERT_CHILD_EXIT(child, code)                                    \
+    do {                                                                      \
+        const YewTestChild *yew_assert_child_ = (child);                      \
+        int yew_assert_code_ = (code);                                        \
+        yew_test_child_replay(yew_assert_child_, yew_assert_code_);          \
+        YEW_ASSERT(WIFEXITED(yew_assert_child_->status));                     \
+        YEW_ASSERT_EQ_I64(WEXITSTATUS(yew_assert_child_->status),             \
+                          yew_assert_code_);                                  \
+    } while (0)
+
 void yew_test_load_runtime(Ed *ed);
 bool yew_test_canonicalize_path(char *path, size_t cap);
 

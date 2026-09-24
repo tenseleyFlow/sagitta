@@ -368,6 +368,18 @@ void yew_test_spawn_child(const char *role, YewTestChildPrep prep,
     YEW_ASSERT_EQ_I64(waited, child);
 }
 
+void yew_test_child_replay(const YewTestChild *child, int code)
+{
+    if (child == NULL || child->err == NULL)
+        return;
+    if (WIFEXITED(child->status) && WEXITSTATUS(child->status) == code)
+        return;
+    (void)fprintf(stderr, "unit: child of %s: status 0x%x, stderr:\n%s",
+                  current_test == NULL ? "?" : current_test->name,
+                  (unsigned)child->status, child->err);
+    (void)fflush(stderr);
+}
+
 void yew_test_child_free(YewTestChild *child)
 {
     if (child == NULL)
