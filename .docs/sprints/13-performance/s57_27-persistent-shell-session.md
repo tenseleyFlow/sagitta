@@ -250,3 +250,106 @@ Tests use a fixture `$SHELL=/bin/sh` (and zsh / bash where installed, like
 9. `test-fletch test-script test-roundtrip test-roundtrip-coverage
    test-audit` and the `scripts/check-*.sh` gates green.
 10. `tests/size/` untouched; added-bytes estimate in the report.
+
+## Implementation divergences (recorded at landing)
+
+Where this contract was wrong about the code, or silent, the
+implementation does what it intends:
+
+1. **The per-command job is a PROXY job** (`YewJobProxyOps`,
+   `YewJobSpec.proxy_owner/proxy_ops`, `yew_job_proxy_output`,
+   `yew_job_proxy_end`): a table entry with pid/pgid 0 and no fds.  Its
+   output goes through the same UTF-8/cluster hold as YEW_SINK_BUFFER
+   (the text path of `job_drain` is now `job_deliver_text`, shared), its
+   end marks it reaped with the frame's verdict, and `yew_job_settle`
+   finishes it like any BUFFER job -- footer, message, `*jobs*` row,
+   dismissal and the git refresh all unchanged.  `yew_job_signal` routes a
+   proxy's signal to its owner.  One table, no second jobs list.
+2. **The frame runs the command in a function whose INT trap returns.**
+   The contract's bare `eval ...; printf status` form was verified on
+   zsh, bash 3.2/5.3, dash, ksh and /bin/sh: the marker does arrive with
+   130, but every shell then resumes the REST of the command's list
+   (`echo started; sleep 30; echo not-reached` printed not-reached), so
+   a cancelled `sleep 9; make install` would install.  The line is now
+   `__yew_run() { trap 'return 130' INT; W eval "$__yew_c"; };
+   __yew_c='CMD'; __yew_run </dev/null 9>&-; W printf <status> >&9;
+   W trap : INT; W unset __yew_c; yew --yew-env0 >&9; W printf <end> >&9`.
+   Verified by `test_shsession_cancel_keeps_the_session_on_every_shell`
+   on every shell installed (here: /bin/sh, /bin/bash, Homebrew bash,
+   /bin/zsh, /bin/dash, /bin/ksh -- output is exactly `started`).  The
+   function takes no arguments, so `$#` is 0 as under `$SHELL -c`.
+3. **`eval` alone is not exit-safe.**  dash (and bash --posix) EXIT on
+   a syntax error in the special built-in `eval`; zsh's `command` runs
+   only external programs.  The first frame probes which prefix W works
+   (`command`, else `builtin`, else none) and every later line uses it,
+   which also makes `eval`/`printf` immune to a user function of that
+   name.  The probe frame's output is discarded (§1's pitfall).
+4. **Markers go to fd 9**, the prologue's dup of the output pipe, closed
+   for the command: a command's `exec >/dev/null` cannot swallow them.
+   The nonce is per session AND each marker carries the frame's sequence
+   number, so replaying an earlier frame's real marker is output too.
+5. **Env transport**: after the status marker, `yew --yew-env0` prints
+   `YEW0 <len>:` and exactly <len> bytes (cwd -- the logical `$PWD` when
+   it names the same inode -- then each exported row, NUL-terminated;
+   `_` omitted), then the end marker `\036<nonce>-<seq>.\036`.  A missing
+   or failed helper, or a record over 8 MiB, completes the frame without
+   touching the state.  SHLVL is replaced by yew's own (a child started
+   FROM the state is not inside the shell).
+6. **`yew_shsession_env` returns NULL** when there is no session state
+   (none yet, `fresh`, after reset): callers hand it to the new
+   `YewJobSpec.env_base`, where NULL is environ -- i.e. exactly
+   `yew_job_env()`'s standard environment.  `yew_job_env` itself now
+   builds from the session's exports, so the `$VAR` completer and the
+   bang lexer's variable lookups follow the session.
+7. **Pagers.**  The session base carries the PAGER=cat the job layer
+   gave the session; a terminal-owning `:!!` child gets the parent's
+   pager instead (57.31 §3), unless the user exported a different one in
+   the session.  Inside the session a user's `export PAGER=less` is
+   honoured; one-offs started from the state still get PAGER=cat.
+8. **YEW_FILE/YEW_LINE/YEW_COL are exported with every frame** -- the
+   contract was silent, and the shell's copies would otherwise be frozen
+   at the caret where the session started.
+9. **stderr is merged** (`exec 2>&1`), so a session command counts its
+   stderr in `bytes_out`; `fresh` keeps Sprint 19's split.
+10. **Status mapping**: a status above 128 after a cancel is SIGNALED
+    (footer `[killed by SIGINT …]`); ksh93's 256+N is normalised.
+11. **Session end is detected on the shell's reap**, once `poll` says
+    its pipe has nothing more (so the tail of its output is never lost),
+    not on EOF -- a background child holding the pipe cannot delay the
+    recovery; its pipe closes when the dead shell is released.  `exit N`
+    finishes its command with N.  A last directory that no longer exists
+    restarts at the workspace root.
+12. **Messages**: double cancel / kill_force SIGKILL the group at once;
+    `shell session ended; the next :! starts a new one` is said when that
+    shell is reaped (after the command's footer and the cancel's own
+    line).  `:shreset` says `shell session reset; the next :! starts in
+    the workspace root`.
+13. **The prompt hint**: a bare `:!` body names no command, so it had no
+    hint at all; it now reads `in ch7/` (the pager's note, via the new
+    `yew_comp_where_note`) when the session is not at the workspace root,
+    and a spelled-out shell command appends ` · in ch7/`.
+14. **Commands**: `ed.shell.reset` (`:shreset`) is not RECORDABLE (like
+    complete_forget: no CMDWORD, no round-trip row), is in the
+    invariant-9 list, needs FL_CAP_SHELL by its prefix, and is not
+    interactive (no batch refusal).  `reset` was already a verb.  No
+    binding changed (389).
+15. **Tests**: the unit runner (`tests/unit/unit_main.c`) handles
+    `--yew-env0` and publishes argv[0], since the session runs
+    `yew_job_self_exe()` and under the runner that is the runner.
+    `test_shell_term_run_reports_every_outcome` now counts PUBLIC jobs
+    (the session adds a hidden one).  `-DYEW_SHELL_SESSION_DEFAULT='"fresh"'`
+    (EXTRA_CFLAGS) builds a `fresh`-default tree for the byte-identity
+    lane.
+16. **Goldens that moved** (inspected): `s19_exit_footer_nonzero`
+    (`exit 3`) and `s19_exit_footer_signal` (`kill -TERM $$`) now end
+    the SESSION shell, so their message line reads `shell session ended;
+    the next :! starts a new one` (the `[exit 3 …]` / `[killed by
+    SIGTERM …]` footers in the buffer are unchanged); `s57_30_table_bottom_exit`
+    lists the new `shell.session` option (4/4).  Every pre-existing unit
+    test passes on a `fresh`-default build (2970/2970, the session tests
+    excluded).
+17. **Named limits** are in `src/edit/shsession.h`: background jobs may
+    print into a later command's buffer; a command that closes fd 9 or
+    redefines `command`/`builtin` can stall its frame (cancel twice);
+    `set -e`/`exit` in a command end the session (it recovers in the last
+    directory).
