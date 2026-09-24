@@ -500,8 +500,9 @@ bind("E", "C-S-<right>", "ed.sel.extend.line_end")
 bind("E", "C-c", "ed.cmdline.copy_or_cancel")
 bind("E", "C-x", "ed.clip.cut")
 # fish's extras (Sprint 57.31): A-s toggles sudo at the front of a :!
-# command.
+# command; A-h opens the man page of the command under the caret.
 bind("E", "A-s", "ed.cmdline.toggle_sudo")
+bind("E", "A-h", "ed.cmdline.man_page")
 
 bind("F", "<esc>", "ed.git.mode.leave")
 bind("F", "C-w s", "ed.git.open_split_h")

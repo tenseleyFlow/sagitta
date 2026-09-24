@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
@@ -594,6 +595,165 @@ void test_shell_term_run_restores_the_terminal_on_every_exit(void)
     }
     waited = handover_wait_pty(child, master, &status);
     YEW_ASSERT_EQ_I64(waited, child);
+    YEW_ASSERT(WIFEXITED(status));
+    if (WIFEXITED(status))
+        YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+    (void)memset(&after, 0, sizeof(after));
+    slave_fd = open(slave, O_RDWR | O_NOCTTY);
+    YEW_ASSERT(slave_fd >= 0);
+    YEW_ASSERT_EQ_I64(handover_tcgetattr(slave_fd, &after), 0);
+    YEW_ASSERT(handover_termios_equal(&after, &initial));
+    YEW_ASSERT_EQ_I64(close(slave_fd), 0);
+    YEW_ASSERT_EQ_I64(close(master), 0);
+}
+
+/*
+ * Sprint 57.31 §3: A-h's handover -- the SAME yew_job_run_sync epilogue
+ * reached through yew_shell_term_argv -- restores the terminal on every
+ * way `man` can end: a page read, no page, the man killed, and an exec
+ * that fails outright.  The prompt the key was pressed in is the same
+ * prompt afterwards.  A fake `man` first on PATH plays each outcome
+ * ($YEW_TEST_MAN_MODE), in a real pty as the `:!!` case above.
+ */
+static bool handover_man_prompt_same(Ed *ed, u64 gen)
+{
+    Bytebuf text;
+    bool same;
+
+    bytebuf_init(&text);
+    yew_cmdline_text(ed, &text);
+    same = ed->cmdline.active && ed->cmdline.generation == gen &&
+           text.len == 8U && memcmp(text.data, "!git che", 8U) == 0 &&
+           ed->cmdline.cur.pos.v == 6U;
+    bytebuf_free(&text);
+    return same;
+}
+
+static void handover_man_child(const char *slave_path)
+{
+    static const char script[] =
+        "#!/bin/sh\n"
+        "case \"$YEW_TEST_MAN_MODE\" in\n"
+        "ok) exit 0 ;;\n"
+        "kill) kill -TERM $$ ;;\n"
+        "esac\n"
+        "exit 1\n";
+    static const char *const modes[] = {"ok", "none", "kill"};
+    Ed ed;
+    YewJobWait wait;
+    struct termios actual;
+    struct termios initial;
+    struct termios raw;
+    CmdCtx cx;
+    CmdId id;
+    Win *target;
+    char dir[] = "/tmp/yew-homan-XXXXXX";
+    char man[64];
+    char path[4096];
+    char err[192];
+    char *bad[] = {(char *)"/definitely/not/yew-s5731", NULL};
+    const char *old_path = getenv("PATH");
+    FILE *fp;
+    u64 gen;
+    size_t i;
+    int n;
+
+    if (!handover_attach_slave(slave_path))
+        _exit(131);
+    if (mkdtemp(dir) == NULL)
+        _exit(132);
+    n = snprintf(man, sizeof(man), "%s/man", dir);
+    if (n <= 0 || (size_t)n >= sizeof(man))
+        _exit(133);
+    fp = fopen(man, "wb");
+    if (fp == NULL || fwrite(script, 1U, sizeof(script) - 1U, fp) !=
+                          sizeof(script) - 1U)
+        _exit(134);
+    if (fclose(fp) != 0 || chmod(man, 0755) != 0)
+        _exit(135);
+    n = snprintf(path, sizeof(path), "%s:%s", dir,
+                 old_path == NULL ? "/usr/bin:/bin" : old_path);
+    if (n <= 0 || (size_t)n >= sizeof(path) ||
+        setenv("PATH", path, 1) != 0)
+        _exit(136);
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed) || !yew_tty_open(&ed.tty))
+        _exit(137);
+    ed.tty_ready = true;
+    if (!yew_tty_raw(&ed.tty))
+        _exit(138);
+    yew_tty_altscreen(&ed.tty, true);
+    initial = ed.tty.saved;
+    raw = initial;
+    yew_tty_rawios(&raw);
+    yew_cmdline_open(&ed, YEW_PROMPT_CMD, "!git che");
+    target = yew_cmdline_target(&ed);
+    if (!ed.cmdline.active || target == NULL)
+        _exit(139);
+    target->cs.curs.data[target->cs.primary].pos = BYTEOFF(6U);
+    target->cs.curs.data[target->cs.primary].anchor = BYTEOFF(6U);
+    yew_cmdline_sync(&ed);
+    gen = ed.cmdline.generation;
+    id = yew_cmd_lookup("ed.cmdline.man_page", 19U);
+    if (id.v == 0U)
+        _exit(140);
+    for (i = 0U; i < YEW_ARRAY_LEN(modes); i++) {
+        if (setenv("YEW_TEST_MAN_MODE", modes[i], 1) != 0)
+            _exit(141);
+        (void)memset(&cx, 0, sizeof(cx));
+        cx.win = yew_cmdline_target(&ed);
+        cx.count = 1U;
+        if (yew_ed_invoke(&ed, id, &cx) != YEW_CMD_OK)
+            _exit((int)(142U + i));
+        if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+            !handover_termios_equal(&actual, &raw) || !ed.tty.alt)
+            _exit((int)(145U + i));
+        if (!handover_man_prompt_same(&ed, gen) || !ed.full_damage)
+            _exit((int)(148U + i));
+        ed.full_damage = false;
+    }
+    /* The exec itself failing reaches the same epilogue. */
+    if (!yew_shell_term_argv(&ed, bad, &wait, err, sizeof(err)) ||
+        wait.state != YEW_JOB_EXECFAIL)
+        _exit(151);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &raw) || !ed.tty.alt)
+        _exit(152);
+    yew_ed_free(&ed);
+    (void)unlink(man);
+    (void)rmdir(dir);
+    if (handover_tcgetattr(STDIN_FILENO, &actual) != 0 ||
+        !handover_termios_equal(&actual, &initial))
+        _exit(153);
+    _exit(0);
+}
+
+void test_man_page_restores_the_terminal_on_every_exit(void)
+{
+    char slave[128];
+    struct termios initial;
+    struct termios after;
+    pid_t child;
+    int master;
+    int slave_fd;
+    int status = 0;
+
+    (void)memset(&initial, 0, sizeof(initial));
+    master = handover_open_pty(slave, sizeof(slave), &initial);
+    YEW_ASSERT(master >= 0);
+    if (master < 0)
+        return;
+    child = fork();
+    YEW_ASSERT(child >= 0);
+    if (child == 0) {
+        (void)close(master);
+        handover_man_child(slave);
+    }
+    if (child < 0) {
+        (void)close(master);
+        return;
+    }
+    YEW_ASSERT_EQ_I64(handover_wait_pty(child, master, &status), child);
     YEW_ASSERT(WIFEXITED(status));
     if (WIFEXITED(status))
         YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);

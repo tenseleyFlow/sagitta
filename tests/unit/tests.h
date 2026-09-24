@@ -119,6 +119,9 @@ void test_prompt_keys_token_search_on_a_bang_line(void);
 void test_prompt_keys_alt_s_toggles_sudo(void);
 void test_prompt_keys_alt_s_keeps_the_caret_on_its_text(void);
 void test_prompt_keys_alt_s_refuses_and_undoes_in_one_step(void);
+void test_prompt_keys_alt_h_builds_the_man_argv(void);
+void test_prompt_keys_alt_h_runs_man_with_names_as_arguments(void);
+void test_prompt_keys_alt_h_reports_a_missing_page(void);
 
 void test_readline_kill_word_prev_reaches_every_cursor(void);
 void test_readline_kills_leave_registers_and_clipboard_untouched(void);
@@ -1063,6 +1066,7 @@ void test_shell_term_run_reports_every_outcome(void);
 void test_shell_term_run_refuses_a_range_and_batch(void);
 void test_shell_term_argv_runs_words_and_keeps_the_pager(void);
 void test_shell_term_run_restores_the_terminal_on_every_exit(void);
+void test_man_page_restores_the_terminal_on_every_exit(void);
 void test_cmdrange_addresses_policies_and_deferred_forms(void);
 void test_cmdrange_mark_and_pattern_addresses_resolve(void);
 void test_cmdrange_selection_and_eol_spans(void);

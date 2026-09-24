@@ -2164,3 +2164,248 @@ void test_prompt_keys_alt_s_refuses_and_undoes_in_one_step(void)
     pk_text(&f, "!sudo make");
     pk_free(&f);
 }
+
+/* §3: the argv A-h would run, for the line and caret given. */
+static u32 pk_man(PkFix *f, const char *line, size_t caret, Arena *a,
+                  char *argv[7], const char **why)
+{
+    return yew_cmdline_man_argv(&f->ed, line, strlen(line), caret, a, argv,
+                                why);
+}
+
+/*
+ * Sprint 57.31 §3: the child command line.  The command word is argv[0]
+ * of the simple command under the caret, wrappers stripped; a spec'd
+ * command with subcommands tries `<cmd>-<sub>` first.  The script is
+ * FIXED: whatever the line says reaches it only as $1 and $2.
+ */
+void test_prompt_keys_alt_h_builds_the_man_argv(void)
+{
+    PkFix f;
+    Arena a;
+    char *argv[7];
+    const char *why = NULL;
+
+    pk_init(&f);
+    arena_init(&a);
+    /* `git che‸`: the caret's word is where git takes a subcommand. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!git che", 8U, &a, argv, &why), 6U);
+    YEW_ASSERT_EQ_STR(argv[0], "/bin/sh");
+    YEW_ASSERT_EQ_STR(argv[1], "-c");
+    YEW_ASSERT_EQ_STR(argv[2],
+                      "man -- \"$1\" 2>/dev/null || man -- \"$2\"");
+    YEW_ASSERT_EQ_STR(argv[3], "sh");
+    YEW_ASSERT_EQ_STR(argv[4], "git-che");
+    YEW_ASSERT_EQ_STR(argv[5], "git");
+    YEW_ASSERT(argv[6] == NULL);
+    YEW_ASSERT(why == NULL);
+    /* Past the subcommand, the walk names it; a path is its basename. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!/usr/bin/git checkout -b fo", 28U, &a,
+                             argv, &why), 6U);
+    YEW_ASSERT_EQ_STR(argv[4], "git-checkout");
+    YEW_ASSERT_EQ_STR(argv[5], "git");
+    /* On the command word itself: its own page, the whole word. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!git log", 3U, &a, argv, &why), 5U);
+    YEW_ASSERT_EQ_STR(argv[2], "man -- \"$1\"");
+    YEW_ASSERT_EQ_STR(argv[4], "git");
+    YEW_ASSERT(argv[5] == NULL);
+    /* `sudo make‸`: the wrapper is stripped. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!sudo make", 10U, &a, argv, &why), 5U);
+    YEW_ASSERT_EQ_STR(argv[4], "make");
+    /* The simple command under the caret, not the line's first. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!ls -la | sort -r", 16U, &a, argv, &why),
+                      5U);
+    YEW_ASSERT_EQ_STR(argv[4], "sort");
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!ls -la | sort -r", 2U, &a, argv, &why),
+                      5U);
+    YEW_ASSERT_EQ_STR(argv[4], "ls");
+    /* A quoted name is decoded, and stays one word. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!'my tool' x", 12U, &a, argv, &why), 5U);
+    YEW_ASSERT_EQ_STR(argv[4], "my tool");
+    YEW_ASSERT_EQ_STR(argv[2], "man -- \"$1\"");
+    /* A subcommand that is not a plain word is never offered. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!git ../x", 9U, &a, argv, &why), 5U);
+    YEW_ASSERT_EQ_STR(argv[4], "git");
+    /* Nothing to look up. */
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!", 1U, &a, argv, &why), 0U);
+    YEW_ASSERT_EQ_STR(why, "A-h: no command under the caret");
+    YEW_ASSERT_EQ_U64(pk_man(&f, "!-rf x", 2U, &a, argv, &why), 0U);
+    YEW_ASSERT_EQ_STR(why, "A-h: no command under the caret");
+    YEW_ASSERT_EQ_U64(pk_man(&f, "e foo", 5U, &a, argv, &why), 0U);
+    YEW_ASSERT_EQ_STR(why, "A-h: man pages are for :! commands");
+    arena_free_all(&a);
+    pk_free(&f);
+}
+
+/*
+ * A fake `man` first on PATH: it appends its argc and each argument,
+ * bracketed, to $YEW_TEST_MAN_OUT, and succeeds only for a name in
+ * $YEW_TEST_MAN_HAVE.  The workspace root -- the child's directory -- is
+ * the fixture directory, so an expansion that ran would leave a file
+ * there.
+ */
+typedef struct PkMan {
+    char dir[PATH_MAX];
+    char out[PATH_MAX];
+    char *path;
+} PkMan;
+
+static void pk_man_open(PkMan *m, PkFix *f, const char *have)
+{
+    static const char script[] =
+        "#!/bin/sh\n"
+        "{ printf '%s\\n' \"$#\"; for a in \"$@\"; do "
+        "printf '[%s]\\n' \"$a\"; done; } >> \"$YEW_TEST_MAN_OUT\"\n"
+        "case \" $YEW_TEST_MAN_HAVE \" in *\" $2 \"*) exit 0 ;; esac\n"
+        "exit 1\n";
+    const char *path = getenv("PATH");
+    char man[PATH_MAX];
+    char value[PATH_MAX * 2U];
+    FILE *fp;
+    int n;
+
+    m->path = path == NULL ? NULL : strdup(path);
+    n = snprintf(m->dir, sizeof(m->dir), "/tmp/yew-pkman-XXXXXX");
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(m->dir));
+    YEW_ASSERT_NOT_NULL(mkdtemp(m->dir));
+    n = snprintf(man, sizeof(man), "%s/man", m->dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(man));
+    fp = fopen(man, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite(script, 1U, sizeof(script) - 1U, fp),
+                      sizeof(script) - 1U);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_I64(chmod(man, 0755), 0);
+    n = snprintf(m->out, sizeof(m->out), "%s/out", m->dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(m->out));
+    n = snprintf(value, sizeof(value), "%s:%s", m->dir,
+                 path == NULL ? "/usr/bin:/bin" : path);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(value));
+    YEW_ASSERT_EQ_I64(setenv("PATH", value, 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_TEST_MAN_OUT", m->out, 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_TEST_MAN_HAVE", have, 1), 0);
+    YEW_ASSERT(yew_ed_set_workspace_root(&f->ed, m->dir));
+}
+
+/* What the fake man saw since the last call, then forgotten. */
+static void pk_man_saw(PkMan *m, const char *want)
+{
+    char got[1024];
+    FILE *fp = fopen(m->out, "rb");
+    size_t n = 0U;
+
+    if (fp != NULL) {
+        n = fread(got, 1U, sizeof(got) - 1U, fp);
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+        YEW_ASSERT_EQ_I64(unlink(m->out), 0);
+    }
+    got[n] = '\0';
+    YEW_ASSERT_EQ_STR(got, want);
+}
+
+static void pk_man_done(PkMan *m)
+{
+    char man[PATH_MAX];
+    int n = snprintf(man, sizeof(man), "%s/man", m->dir);
+
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(man));
+    YEW_ASSERT_EQ_I64(unlink(man), 0);
+    YEW_ASSERT_EQ_I64(rmdir(m->dir), 0);
+    if (m->path != NULL)
+        YEW_ASSERT_EQ_I64(setenv("PATH", m->path, 1), 0);
+    free(m->path);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_TEST_MAN_OUT"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_TEST_MAN_HAVE"), 0);
+}
+
+static void pk_man_key(PkFix *f)
+{
+    pk_run(f, (u32)'h', YEW_MOD_ALT, "ed.cmdline.man_page");
+}
+
+/*
+ * §3 through real keys, the handover stubbed as 57.18's tests stub it
+ * (no controlling terminal, so the child runs on the inherited stdio).
+ * A hostile name arrives as ONE argument and nothing in it runs; the
+ * prompt is the same prompt afterwards -- kind, text, caret, generation
+ * -- with a selection collapsed.
+ */
+void test_prompt_keys_alt_h_runs_man_with_names_as_arguments(void)
+{
+    PkFix f;
+    PkMan m;
+    u64 gen;
+    char pwned[PATH_MAX];
+    int n;
+
+    pk_init(&f);
+    pk_man_open(&m, &f, "git a b;$(touch pwned)`touch pwned`");
+    n = snprintf(pwned, sizeof(pwned), "%s/pwned", m.dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(pwned));
+
+    pk_prompt(&f, NULL, 0U, "!'a b;$(touch pwned)`touch pwned`' -x");
+    gen = f.ed.cmdline.generation;
+    pk_caret_to(&f, 3U);
+    pk_man_key(&f);
+    pk_man_saw(&m, "2\n[--]\n[a b;$(touch pwned)`touch pwned`]\n");
+    YEW_ASSERT(access(pwned, F_OK) != 0);
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.generation, gen);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.kind, YEW_PROMPT_CMD);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_E);
+    pk_text(&f, "!'a b;$(touch pwned)`touch pwned`' -x");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 3U);
+    YEW_ASSERT(!f.ed.msg.active);
+
+    /* `git che`: the subcommand's page first, then git's. */
+    pk_prompt(&f, NULL, 0U, "!git che");
+    pk_shift(&f, YEW_KEY_LEFT, 0U, "ed.sel.extend.left");
+    pk_sel(&f, 7U, 8U);
+    pk_man_key(&f);
+    pk_man_saw(&m, "2\n[--]\n[git-che]\n2\n[--]\n[git]\n");
+    YEW_ASSERT(!f.ed.msg.active);
+    pk_nosel(&f);
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 7U);
+    pk_text(&f, "!git che");
+    pk_man_done(&m);
+    pk_free(&f);
+}
+
+/* §3: no page -- a message on the prompt, which stays as it was; and
+ * the refusals off a bang line. */
+void test_prompt_keys_alt_h_reports_a_missing_page(void)
+{
+    PkFix f;
+    PkMan m;
+
+    pk_init(&f);
+    pk_man_open(&m, &f, "");
+    pk_prompt(&f, NULL, 0U, "!sudo make all");
+    pk_caret_to(&f, 8U);
+    pk_man_key(&f);
+    pk_man_saw(&m, "2\n[--]\n[make]\n");
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "no man page for make");
+    pk_text(&f, "!sudo make all");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 8U);
+    pk_prompt(&f, NULL, 0U, "!git frob");
+    pk_man_key(&f);
+    pk_man_saw(&m, "2\n[--]\n[git-frob]\n2\n[--]\n[git]\n");
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "no man page for git-frob or git");
+
+    /* Not a shell command: said, and nothing runs. */
+    pk_prompt(&f, NULL, 0U, "e foo.c");
+    pk_man_key(&f);
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "A-h: man pages are for :! commands");
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_send(&f, (u32)'/', 0U);
+    pk_type(&f, "!ls");
+    pk_man_key(&f);
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "A-h: man pages are for :! commands");
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_prompt(&f, NULL, 0U, "!");
+    pk_man_key(&f);
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "A-h: no command under the caret");
+    pk_man_saw(&m, "");
+    pk_man_done(&m);
+    pk_free(&f);
+}
