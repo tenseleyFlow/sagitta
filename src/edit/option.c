@@ -7,6 +7,7 @@
 #include "edit/dispatch.h"
 #include "edit/ed.h"
 #include "edit/shadow.h"
+#include "edit/shsession.h"
 #include "edit/theme_cmds.h"
 #include "fl/flruntime.h"
 #include "fl/flhook.h"
@@ -108,6 +109,14 @@ static const char *const complete_help_values[] = {
 static const char *const complete_fish_values[] = {"auto", "off", NULL};
 /* Sprint 57.26 §3: whose history suggests `:!` ghosts. */
 static const char *const suggest_history_values[] = {"all", "yew", NULL};
+static const char *const shell_session_values[] = {"persistent", "fresh",
+                                                   NULL};
+/* Sprint 57.27: a verification build can make Sprint 19's semantics the
+ * default (EXTRA_CFLAGS='-DYEW_SHELL_SESSION_DEFAULT="fresh"') and run
+ * every pre-existing shell test under them. */
+#ifndef YEW_SHELL_SESSION_DEFAULT
+#define YEW_SHELL_SESSION_DEFAULT "persistent"
+#endif
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -341,6 +350,12 @@ const OptDesc yew_opts[] = {
     {"shell.suggest_history", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("all"),
      suggest_history_values, 0, 0, NULL, option_changed,
      "History ghosts for :! from all shells' history, or yew's only",
+     YEW_OPT_MODULE_CORE},
+    /* Sprint 57.27 §5: one long-lived $SHELL every plain :! runs inside
+     * (cd, export and functions persist); `fresh` is $SHELL -c each. */
+    {"shell.session", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM(YEW_SHELL_SESSION_DEFAULT),
+     shell_session_values, 0, 0, NULL, option_changed,
+     "Run :! in one persistent shell session, or each in a fresh shell",
      YEW_OPT_MODULE_CORE},
     {"shadow.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
      0, 0, NULL, option_changed, "Enable passive shadow suggestions",
@@ -796,6 +811,11 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
         return;
     if (strcmp(desc->name, "ai.key_cache") == 0) {
         yew_ai_state_key_cache_enable(ed, nu->as.b);
+    } else if (strcmp(desc->name, "shell.session") == 0) {
+        /* §5: `fresh` ends a running session, quietly; its last state is
+         * kept for a later switch back. */
+        if (value_string_is(nu, "fresh"))
+            yew_shsession_end(ed);
     } else if (strcmp(desc->name, "ai.on_redact") == 0) {
         yew_ai_redact_option_changed(ed);
     } else if (strcmp(desc->name, "ai.deny_replace") == 0 ||

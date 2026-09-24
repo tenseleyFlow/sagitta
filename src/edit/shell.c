@@ -16,6 +16,7 @@
 
 #include "edit/ed.h"
 #include "edit/loop.h"
+#include "edit/shsession.h"
 #include "term/input.h"
 #include "term/tty.h"
 #include "text/piece.h"
@@ -649,7 +650,10 @@ not_handled:
 static bool shell_term_spec(Ed *ed, YewJobSpec *spec, YewJobWait *wait,
                             char *err, size_t errsz)
 {
-    spec->cwd = yew_ws_root(ed);
+    /* Sprint 57.27 §3: from the shell session's directory and exports
+     * (the workspace root and environ when there is none). */
+    spec->cwd = yew_shsession_cwd(ed);
+    spec->env_base = yew_shsession_env(ed);
     /* DISCARD is not a choice: yew_job_run_sync refuses a sink, because
      * the child writes straight to the terminal it was handed. */
     spec->sink = YEW_SINK_DISCARD;
@@ -750,12 +754,25 @@ u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
     u32 id;
     YewJob *j;
     Buffer *buf;
+    bool alongside = false;
 
     if (ed == NULL || cmdline == NULL)
         return 0U;
     spec.cmdline = cmdline;
     spec.sink = YEW_SINK_BUFFER;
-    id = yew_job_spawn(ed, &spec, err, errsz);
+    if (!yew_shsession_wanted(ed)) {
+        /* `shell.session = fresh`: Sprint 19's $SHELL -c, exactly. */
+        id = yew_job_spawn(ed, &spec, err, errsz);
+    } else if (yew_shsession_busy(ed)) {
+        /* Sprint 57.27 Goals 3: never queue behind a running command;
+         * run alongside, from the session's state. */
+        spec.cwd = yew_shsession_cwd(ed);
+        spec.env_base = yew_shsession_env(ed);
+        id = yew_job_spawn(ed, &spec, err, errsz);
+        alongside = true;
+    } else {
+        id = yew_shsession_run(ed, cmdline, err, errsz);
+    }
     if (id == 0U)
         return 0U;
     j = yew_job_find(ed, id);
@@ -773,6 +790,9 @@ u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
     j->buf = buf;
     if (focus)
         (void)yew_ed_show_buffer(ed, buf);
+    if (alongside)
+        yew_msg(ed, YEW_MSG_INFO,
+                "session busy: ran outside it (a cd here will not persist)");
     return id;
 }
 
@@ -825,6 +845,8 @@ u32 yew_shell_read(Ed *ed, const char *cmdline, char *err, size_t errsz)
     b = ed->win->buf;
     spec.cmdline = cmdline;
     spec.sink = YEW_SINK_COLLECT;
+    spec.cwd = yew_shsession_cwd(ed);
+    spec.env_base = yew_shsession_env(ed);
     id = yew_job_spawn(ed, &spec, err, errsz);
     if (id == 0U)
         return 0U;
@@ -986,6 +1008,8 @@ YewFilterResult yew_shell_filter(Ed *ed, Win *w, Span region,
         return YEW_FILT_SPAWN;
     spec.cmdline = cmdline;
     spec.sink = YEW_SINK_COLLECT;
+    spec.cwd = yew_shsession_cwd(ed);
+    spec.env_base = yew_shsession_env(ed);
     spec.in_buf = w->buf->tb;
     spec.in_span = region;
     spec.timeout_ms = YEW_FILTER_TIMEOUT_MS;
