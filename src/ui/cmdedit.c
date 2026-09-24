@@ -360,6 +360,9 @@ static bool cmdedit_show(Ed *ed, Buffer *b, size_t caret)
         return false;
     if (ed->win == NULL || ed->win->buf != b)
         return false;
+    /* The new view has no size until it is laid out, and following the
+     * caret in a zero-width view scrolls the line away. */
+    yew_ed_layout(ed);
     c = yew_ed_cursor(ed);
     if (c != NULL) {
         c->pos = BYTEOFF(caret);
