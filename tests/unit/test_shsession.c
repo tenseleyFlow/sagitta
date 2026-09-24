@@ -106,6 +106,17 @@ static void sh_path(const ShFix *f, const char *rel, char *out, size_t cap)
     YEW_ASSERT(n > 0 && (size_t)n < cap);
 }
 
+/* Writes an executable file at `path`. */
+static void sh_write_exec(const char *path, const char *text)
+{
+    size_t len = strlen(text);
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(write(fd, text, len), (i64)len);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+}
+
 /* One turn of the event loop's job half. */
 static void sh_step(Ed *ed, int wait_ms)
 {
@@ -470,7 +481,9 @@ void test_shsession_non_sh_shell_falls_back_to_fresh(void)
 
     sh_fix_make(&f, "/bin/sh");
     sh_path(&f, "fish", fish, sizeof(fish));
-    YEW_ASSERT_EQ_I64(symlink("/bin/sh", fish), 0);
+    /* A script, not a symlink: busybox's sh picks its applet from the
+     * name it was run by, and has none called fish. */
+    sh_write_exec(fish, "#!/bin/sh\nexec /bin/sh \"$@\"\n");
     YEW_ASSERT_EQ_I64(setenv("SHELL", fish, 1), 0);
     YEW_ASSERT(yew_shsession_wanted(&f.ed) == false);
     YEW_ASSERT_EQ_STR(f.ed.msg.text,
