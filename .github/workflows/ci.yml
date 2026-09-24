@@ -187,6 +187,7 @@ jobs:
               chown -R nobody:nobody /work
               chown nobody:nobody "$tinycore_kernel"
               su nobody -s /bin/sh -c '\''
+                set -e
                 cd /work
                 make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
                   BUILD=build-embedded-qemu EMBED_RUNTIME=1 \
@@ -220,6 +221,8 @@ jobs:
               cp -a /src /work
               chown -R nobody:nobody /work
               su nobody -s /bin/sh -c '\''
+              # Without -e, su reports only the status of the last command.
+              set -e
               cd /work
 
               make -j2 TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
@@ -236,6 +239,7 @@ jobs:
                 BUILD=build-musl test-musl-hosts
 
               su nobody -s /bin/sh -c '\''
+              set -e
               cd /work
               sha256sum build-musl/yew > /tmp/yew.first
               make TARGET=x86_64-linux-musl CROSS= MUSL_CC=gcc \
