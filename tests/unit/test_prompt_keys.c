@@ -2409,3 +2409,424 @@ void test_prompt_keys_alt_h_reports_a_missing_page(void)
     pk_man_done(&m);
     pk_free(&f);
 }
+
+/* ----------------------------------------------------------------- A-e */
+
+static void pk_edit(PkFix *f)
+{
+    pk_run(f, (u32)'e', YEW_MOD_ALT, "ed.cmdline.edit_in_buffer");
+}
+
+/* A key whose command may refuse: no status assertion. */
+static void pk_try(PkFix *f, u32 code, u16 mods)
+{
+    yew_ed_handle_key(&f->ed, pk_key(code, mods), 0);
+}
+
+/* A `:` line typed from L and run with Enter; `ok` is what it returns. */
+static void pk_colon(PkFix *f, const char *line, bool ok)
+{
+    pk_send(f, YEW_KEY_ESCAPE, 0U);
+    YEW_ASSERT_EQ_U64(f->ed.mode, YEW_MODE_L);
+    pk_send(f, (u32)':', 0U);
+    pk_type(f, line);
+    pk_try(f, YEW_KEY_ENTER, 0U);
+    YEW_ASSERT_EQ_U64(f->ed.last_status == YEW_CMD_OK, ok);
+}
+
+/* The *command-line* buffer is focused and holds `want`. */
+static void pk_scratch(PkFix *f, const char *want)
+{
+    Buffer *b = yew_ws_scratch_find(&f->ed, "*command-line*");
+    Bytebuf got;
+    TextIter it;
+    u64 left;
+
+    YEW_ASSERT_NOT_NULL(b);
+    if (b == NULL)
+        return;
+    YEW_ASSERT(f->ed.win != NULL && f->ed.win->buf == b);
+    YEW_ASSERT(!f->ed.cmdline.active);
+    bytebuf_init(&got);
+    left = yew_textbuf_len(b->tb);
+    if (left != 0U && yew_textiter_begin(&it, b->tb, BYTEOFF(0U))) {
+        while (left != 0U) {
+            const u8 *p;
+            u64 n;
+
+            if (!yew_textiter_chunk(&it, b->tb, &p, &n) || n == 0U)
+                break;
+            if (n > left)
+                n = left;
+            bytebuf_append(&got, p, (size_t)n);
+            left -= n;
+            if (left != 0U && !yew_textiter_advance(&it, b->tb))
+                break;
+        }
+    }
+    YEW_ASSERT_EQ_U64(got.len, strlen(want));
+    if (got.len == strlen(want) && got.len != 0U)
+        YEW_ASSERT_EQ_MEM(got.data, want, got.len);
+    bytebuf_free(&got);
+}
+
+static u64 pk_doc_caret(PkFix *f)
+{
+    const Cursor *c = yew_ed_cursor(&f->ed);
+
+    return c == NULL ? UINT64_MAX : c->pos.v;
+}
+
+/* The prompt is back: `kind`, `text`, caret `caret`, in E, and the
+ * buffer is gone. */
+static void pk_back(PkFix *f, YewPromptKind kind, const char *text,
+                    u64 caret)
+{
+    YEW_ASSERT(f->ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f->ed.cmdline.kind, kind);
+    YEW_ASSERT_EQ_U64(f->ed.mode, YEW_MODE_E);
+    pk_text(f, text);
+    YEW_ASSERT_EQ_U64(pk_caret(f), caret);
+    YEW_ASSERT(yew_ws_scratch_find(&f->ed, "*command-line*") == NULL);
+    YEW_ASSERT_EQ_U64(f->ed.cmdedit.buf_id, 0U);
+}
+
+/*
+ * Sprint 57.31 §2: A-e opens the BODY of a bang line in a new tab, caret
+ * where it was, in Insert; `:q` brings the edited text back to the same
+ * kind of prompt, caret at the end, in the tab it came from.
+ */
+void test_prompt_keys_alt_e_edits_the_body_and_q_returns_it(void)
+{
+    PkFix f;
+    u32 tabs;
+    u32 origin;
+
+    pk_init(&f);
+    tabs = yew_tab_count(&f.ed);
+    origin = f.ed.tabs.v.data[f.ed.tabs.active].tab_id;
+    pk_prompt(&f, NULL, 0U, "!make test");
+    pk_caret_to(&f, 3U);
+    pk_edit(&f);
+    pk_scratch(&f, "make test");
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    YEW_ASSERT_EQ_U64(pk_doc_caret(&f), 2U);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&f.ed), tabs + 1U);
+    pk_type(&f, "x");
+    pk_scratch(&f, "maxke test");
+    pk_colon(&f, "q", true);
+    pk_back(&f, YEW_PROMPT_CMD, "!maxke test", 11U);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&f.ed), tabs);
+    YEW_ASSERT_EQ_U64(f.ed.tabs.v.data[f.ed.tabs.active].tab_id, origin);
+    /* And it is the ordinary prompt again: Esc goes back to L. */
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+
+    /* A-v is the same key (fish); `:wq` and `:close` return it too. */
+    pk_prompt(&f, NULL, 0U, "e foo.c");
+    pk_run(&f, (u32)'v', YEW_MOD_ALT, "ed.cmdline.edit_in_buffer");
+    pk_scratch(&f, "e foo.c");
+    YEW_ASSERT_EQ_U64(pk_doc_caret(&f), 7U);
+    pk_type(&f, "x");
+    pk_colon(&f, "wq", true);
+    pk_back(&f, YEW_PROMPT_CMD, "e foo.cx", 8U);
+    pk_edit(&f);
+    pk_colon(&f, "close", true);
+    pk_back(&f, YEW_PROMPT_CMD, "e foo.cx", 8U);
+    pk_edit(&f);
+    pk_colon(&f, "tabclose", true);
+    pk_back(&f, YEW_PROMPT_CMD, "e foo.cx", 8U);
+    pk_free(&f);
+}
+
+/* §2.3: `:q!` (and `:close!`) discard -- the ORIGINAL line and caret. */
+void test_prompt_keys_alt_e_discard_returns_the_original(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "r !date -u");
+    pk_caret_to(&f, 5U);
+    pk_edit(&f);
+    pk_scratch(&f, "date -u");
+    YEW_ASSERT_EQ_U64(pk_doc_caret(&f), 2U);
+    pk_type(&f, "zzz");
+    pk_send(&f, YEW_KEY_ENTER, 0U);
+    pk_type(&f, "echo 'open");
+    pk_colon(&f, "q!", true);
+    pk_back(&f, YEW_PROMPT_CMD, "r !date -u", 5U);
+    pk_edit(&f);
+    pk_type(&f, "qqq");
+    pk_colon(&f, "close!", true);
+    pk_back(&f, YEW_PROMPT_CMD, "r !date -u", 5U);
+    pk_free(&f);
+}
+
+/* Types `lines` into the buffer, a real Enter between them. */
+static void pk_lines(PkFix *f, const char *const *lines, size_t n)
+{
+    size_t i;
+
+    for (i = 0U; i < n; i++) {
+        if (i != 0U)
+            pk_send(f, YEW_KEY_ENTER, 0U);
+        pk_type(f, lines[i]);
+    }
+}
+
+/* One multi-line body through A-e and `:q`; the line it comes back as. */
+static void pk_join(PkFix *f, const char *const *lines, size_t n,
+                    const char *want)
+{
+    pk_prompt(f, NULL, 0U, "!");
+    pk_edit(f);
+    pk_lines(f, lines, n);
+    pk_colon(f, "q", true);
+    pk_back(f, YEW_PROMPT_CMD, want, strlen(want));
+}
+
+/*
+ * §2.4 through real keys: a newline after a complete command is `; `;
+ * after an operator, a keyword that opens a list, or an empty line it
+ * is a blank; a `\` continuation vanishes; trailing newlines go.
+ */
+void test_prompt_keys_alt_e_joins_lines_as_the_shell_would(void)
+{
+    static const char *const two[] = {"make", "make install"};
+    static const char *const cont[] = {"cc a.c \\", "  -o a"};
+    static const char *const glued[] = {"echo a\\", "b"};
+    static const char *const ops[] = {"ls |", "sort &&", "echo ok"};
+    static const char *const kw[] = {"if true; then", "  echo y",
+                                     "fi", ""};
+    static const char *const empty[] = {"ls", "", "", "pwd", "", ""};
+    PkFix f;
+
+    pk_init(&f);
+    pk_join(&f, two, YEW_ARRAY_LEN(two), "!make; make install");
+    pk_join(&f, cont, YEW_ARRAY_LEN(cont), "!cc a.c -o a");
+    pk_join(&f, glued, YEW_ARRAY_LEN(glued), "!echo ab");
+    pk_join(&f, ops, YEW_ARRAY_LEN(ops), "!ls | sort && echo ok");
+    pk_join(&f, kw, YEW_ARRAY_LEN(kw), "!if true; then echo y; fi");
+    pk_join(&f, empty, YEW_ARRAY_LEN(empty), "!ls; pwd");
+    pk_free(&f);
+}
+
+/*
+ * §2.4: a newline the prompt cannot hold is REFUSED, naming the line,
+ * and the buffer stays open with every byte in it -- by `:q`,
+ * `:tabclose` and `:close` alike.  Fixed, it goes back.
+ */
+void test_prompt_keys_alt_e_refuses_a_newline_it_cannot_join(void)
+{
+    static const char *const quoted[] = {"ls", "pwd", "echo 'x", "y'"};
+    static const char *const comment[] = {"ls # list", "pwd"};
+    PkFix f;
+    u32 tabs;
+
+    pk_init(&f);
+    tabs = yew_tab_count(&f.ed);
+    pk_prompt(&f, NULL, 0U, "!");
+    pk_edit(&f);
+    pk_lines(&f, quoted, YEW_ARRAY_LEN(quoted));
+    pk_colon(&f, "q", false);
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text,
+                               "line 3: a one-line prompt cannot hold a "
+                               "newline inside quotes"));
+    /* The `:q` line stays up with the error; the buffer is untouched. */
+    YEW_ASSERT(f.ed.cmdline.active);
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_scratch(&f, "ls\npwd\necho 'x\ny'");
+    YEW_ASSERT_EQ_U64(yew_tab_count(&f.ed), tabs + 1U);
+    pk_colon(&f, "tabclose", false);
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_scratch(&f, "ls\npwd\necho 'x\ny'");
+    pk_colon(&f, "close", false);
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_scratch(&f, "ls\npwd\necho 'x\ny'");
+    pk_colon(&f, "q!", true);
+    pk_back(&f, YEW_PROMPT_CMD, "!", 1U);
+
+    /* A comment would swallow the next line: refused too. */
+    pk_edit(&f);
+    pk_lines(&f, comment, YEW_ARRAY_LEN(comment));
+    pk_colon(&f, "q", false);
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "line 1: "));
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_colon(&f, "q!", true);
+
+    /* Not a shell line: any newline but a trailing one is refused. */
+    pk_prompt(&f, NULL, 0U, "e foo");
+    pk_edit(&f);
+    pk_send(&f, YEW_KEY_ENTER, 0U);
+    pk_type(&f, "bar");
+    pk_colon(&f, "q", false);
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text,
+                               "line 1: a one-line prompt cannot hold a "
+                               "newline"));
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    /* Fixed (the newline deleted), it goes back. */
+    pk_send(&f, (u32)'i', 0U);
+    pk_send(&f, YEW_KEY_HOME, 0U);
+    pk_send(&f, YEW_KEY_BACKSPACE, 0U);
+    pk_scratch(&f, "e foobar");
+    pk_colon(&f, "q", true);
+    pk_back(&f, YEW_PROMPT_CMD, "e foobar", 8U);
+    pk_free(&f);
+}
+
+/*
+ * §2 pitfall: the return hangs off the buffer's RELEASE.  A tab closed
+ * with no command at all (as its close box does) still returns the line
+ * at the next event boundary; one whose text cannot be one line comes
+ * back as a buffer, never as nothing.
+ */
+void test_prompt_keys_alt_e_returns_on_any_release(void)
+{
+    static const char *const bad[] = {"echo 'a", "b'"};
+    PkFix f;
+    int idx;
+
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "!ls");
+    pk_edit(&f);
+    pk_type(&f, " -la");
+    pk_send(&f, YEW_KEY_ESCAPE, 0U);
+    idx = f.ed.tabs.active;
+    YEW_ASSERT(yew_tab_close(&f.ed, idx));
+    yew_cmdedit_settle(&f.ed);
+    pk_back(&f, YEW_PROMPT_CMD, "!ls -la", 7U);
+
+    pk_edit(&f);
+    pk_send(&f, YEW_KEY_END, 0U);
+    pk_send(&f, YEW_KEY_ENTER, 0U);
+    pk_lines(&f, bad, YEW_ARRAY_LEN(bad));
+    pk_send(&f, YEW_KEY_ESCAPE, 0U);
+    YEW_ASSERT(yew_tab_close(&f.ed, f.ed.tabs.active));
+    yew_cmdedit_settle(&f.ed);
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text,
+                               "line 2: a one-line prompt cannot hold a "
+                               "newline inside quotes"));
+    pk_scratch(&f, "ls -la\necho 'a\nb'");
+
+    /* The buffer dropped outright (a script's ed.buf.close) is the same
+     * release. */
+    yew_ws_scratch_drop(&f.ed, f.ed.win->buf);
+    yew_cmdedit_settle(&f.ed);
+    YEW_ASSERT_NOT_NULL(yew_ws_scratch_find(&f.ed, "*command-line*"));
+    pk_colon(&f, "q!", true);
+    pk_back(&f, YEW_PROMPT_CMD, "!ls -la", 7U);
+    pk_free(&f);
+}
+
+/* §2.5: one at a time.  A second A-e switches to the open buffer, and
+ * the line it was pressed on is kept where Up finds it. */
+void test_prompt_keys_alt_e_twice_switches_to_the_open_buffer(void)
+{
+    PkFix f;
+    u32 tabs;
+
+    pk_init(&f);
+    tabs = yew_tab_count(&f.ed);
+    pk_prompt(&f, NULL, 0U, "!make");
+    pk_edit(&f);
+    pk_send(&f, YEW_KEY_ESCAPE, 0U);
+    /* Back to the first tab, a new prompt there, A-e again. */
+    yew_tab_switch(&f.ed, 0);
+    pk_send(&f, (u32)':', 0U);
+    pk_type(&f, "e other");
+    pk_edit(&f);
+    pk_scratch(&f, "make");
+    YEW_ASSERT_EQ_U64(yew_tab_count(&f.ed), tabs + 1U);
+    YEW_ASSERT_EQ_STR(f.ed.msg.text, "*command-line* is already open");
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    pk_colon(&f, "q", true);
+    pk_back(&f, YEW_PROMPT_CMD, "!make", 5U);
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+    pk_prompt(&f, NULL, 0U, "e ot");
+    pk_run(&f, YEW_KEY_UP, 0U, "ed.cmdline.up");
+    pk_text(&f, "e other");
+    pk_free(&f);
+}
+
+/* §2.1: the prompt's KIND comes back -- a search stays a search -- and a
+ * prompt whose owner waits on its answer does not leave. */
+void test_prompt_keys_alt_e_keeps_the_prompt_kind(void)
+{
+    PkFix f;
+
+    pk_init(&f);
+    pk_send(&f, (u32)'?', 0U);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.kind, YEW_PROMPT_SEARCH_B);
+    pk_type(&f, "needle");
+    pk_edit(&f);
+    pk_scratch(&f, "needle");
+    pk_type(&f, "s");
+    pk_colon(&f, "q", true);
+    pk_back(&f, YEW_PROMPT_SEARCH_B, "needles", 7U);
+    pk_run(&f, (u32)'g', YEW_MOD_CTRL, "ed.cmdline.cancel");
+
+    yew_cmdline_open_input(&f.ed, "answer", NULL, NULL);
+    pk_edit(&f);
+    YEW_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(f.ed.cmdline.kind, YEW_PROMPT_INPUT);
+    YEW_ASSERT_EQ_STR(f.ed.msg.text,
+                      "A-e: this prompt cannot become a buffer");
+    pk_text(&f, "answer");
+    pk_free(&f);
+}
+
+/* The one-line rule itself, byte for byte. */
+static void pk_oneline(const char *in, bool shell, const char *want,
+                       u32 want_line)
+{
+    Bytebuf out;
+    u32 line = 99U;
+    const char *why = NULL;
+    bool ok;
+
+    bytebuf_init(&out);
+    ok = yew_cmdedit_oneline(in, strlen(in), shell, &out, &line, &why);
+    YEW_ASSERT_EQ_U64(ok, want != NULL);
+    if (want != NULL) {
+        YEW_ASSERT_EQ_U64(out.len, strlen(want));
+        if (out.len == strlen(want) && out.len != 0U)
+            YEW_ASSERT_EQ_MEM(out.data, want, out.len);
+    } else {
+        YEW_ASSERT_EQ_U64(line, want_line);
+    }
+    bytebuf_free(&out);
+}
+
+void test_cmdedit_oneline_rules(void)
+{
+    pk_oneline("make\nmake install\n", true, "make; make install", 0U);
+    pk_oneline("make\r\nmake install\r\n", true, "make; make install", 0U);
+    pk_oneline("a &\nb", true, "a & b", 0U);
+    pk_oneline("a;\nb", true, "a; b", 0U);
+    pk_oneline("a ||\n  b", true, "a || b", 0U);
+    pk_oneline("while true\ndo\n  x\ndone", true,
+               "while true; do x; done", 0U);
+    pk_oneline("{\n a\n}", true, "{ a; }", 0U);
+    pk_oneline("x=$(\n date\n)", true, "x=$( date; )", 0U);
+    pk_oneline("echo a\\ \nb", true, "echo a\\ ; b", 0U);
+    pk_oneline("echo a \\\nb", true, "echo a b", 0U);
+    pk_oneline("echo \"a\nb\"", true, NULL, 1U);
+    pk_oneline("ls\ncat <<EOF\nx\nEOF", true, NULL, 2U);
+    pk_oneline("ls # c\n", true, "ls # c", 0U);
+    pk_oneline("ls\n\n", false, "ls", 0U);
+    pk_oneline("a\nb", false, NULL, 1U);
+    pk_oneline("", true, "", 0U);
+    {
+        /* A NUL is refused, with the line it is on. */
+        Bytebuf out;
+        u32 line = 0U;
+        const char *why = NULL;
+
+        bytebuf_init(&out);
+        YEW_ASSERT(!yew_cmdedit_oneline("a\nb\0c", 5U, false, &out, &line,
+                                        &why));
+        YEW_ASSERT_EQ_U64(line, 2U);
+        YEW_ASSERT_EQ_STR(why, "a prompt cannot hold a NUL byte");
+        bytebuf_free(&out);
+    }
+}

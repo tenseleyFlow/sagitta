@@ -122,6 +122,14 @@ void test_prompt_keys_alt_s_refuses_and_undoes_in_one_step(void);
 void test_prompt_keys_alt_h_builds_the_man_argv(void);
 void test_prompt_keys_alt_h_runs_man_with_names_as_arguments(void);
 void test_prompt_keys_alt_h_reports_a_missing_page(void);
+void test_prompt_keys_alt_e_edits_the_body_and_q_returns_it(void);
+void test_prompt_keys_alt_e_discard_returns_the_original(void);
+void test_prompt_keys_alt_e_joins_lines_as_the_shell_would(void);
+void test_prompt_keys_alt_e_refuses_a_newline_it_cannot_join(void);
+void test_prompt_keys_alt_e_returns_on_any_release(void);
+void test_prompt_keys_alt_e_twice_switches_to_the_open_buffer(void);
+void test_prompt_keys_alt_e_keeps_the_prompt_kind(void);
+void test_cmdedit_oneline_rules(void);
 
 void test_readline_kill_word_prev_reaches_every_cursor(void);
 void test_readline_kills_leave_registers_and_clipboard_untouched(void);
