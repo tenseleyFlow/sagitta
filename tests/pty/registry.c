@@ -3845,6 +3845,159 @@ static void case_s18_cmdline_zwj_right(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 57.29: the prompt's selection, through the real terminal.  Each
+ * snapshot is gated on the frame the last key produced and on the text
+ * that frame must show -- never on a sleep.
+ */
+
+/* A-S-<left> selects "beta", C-c copies it to a fake system clipboard
+ * (the prompt stays), C-v pastes it at the end, and S-<left> twice
+ * leaves "ta" selected on screen. */
+static void case_s57_29_prompt_select_and_copy(PtyCtx *c)
+{
+    static const u8 initial[] = "copy fixture\n";
+    static const u8 copied[] = "beta";
+    const char *old = getenv("YEW_CLIPBOARD");
+    char *saved = old != NULL ? strdup(old) : NULL;
+    char *fake = realpath(YEW_TEST_FAKECLIP, NULL);
+    char clip[] = "/tmp/yew-pty-s57-29-clip-XXXXXX";
+    char setting[PATH_MAX * 3U];
+    char path[256];
+    bool opened;
+    int fd;
+    int n;
+
+    if ((old != NULL && saved == NULL) || fake == NULL) {
+        free(fake);
+        free(saved);
+        ptc_check(c, false, "could not prepare the fake clipboard");
+        return;
+    }
+    fd = mkstemp(clip);
+    if (fd < 0 || close(fd) != 0 || unlink(clip) != 0) {
+        free(fake);
+        free(saved);
+        ptc_check(c, false, "could not create clipboard fixture path");
+        return;
+    }
+    n = snprintf(setting, sizeof(setting), "cmd:%s %s write|%s %s read",
+                 fake, clip, fake, clip);
+    free(fake);
+    if (n < 0 || (size_t)n >= sizeof(setting) ||
+        setenv("YEW_CLIPBOARD", setting, 1) != 0) {
+        free(saved);
+        ptc_check(c, false, "could not configure fake clipboard");
+        return;
+    }
+    opened = s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path));
+    if (saved != NULL)
+        (void)setenv("YEW_CLIPBOARD", saved, 1);
+    else
+        (void)unsetenv("YEW_CLIPBOARD");
+    free(saved);
+    if (!opened) {
+        (void)unlink(clip);
+        return;
+    }
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "e alpha beta");
+    ptc_wait_until(c, s57_screen_contains, "e alpha beta",
+                   "waiting for the typed line");
+    s18_settle_after_keys(c, "alt+shift+left");
+    s18_settle_after_keys(c, "ctrl+c");
+    while (!c->failed && !file_equals(clip, copied, sizeof(copied) - 1U))
+        ptc_settle(c, 25);
+    ptc_check(c, file_equals(clip, copied, sizeof(copied) - 1U),
+              "C-c did not write the system clipboard");
+    s18_settle_after_keys(c, "end");
+    s18_settle_after_bytes(c, " ");
+    s18_settle_after_keys(c, "ctrl+v");
+    ptc_wait_until(c, s57_screen_contains, "e alpha beta beta",
+                   "waiting for the paste");
+    s18_settle_after_keys(c, "shift+left");
+    s18_settle_after_keys(c, "shift+left");
+    ptc_snapshot(c, "s57_29_prompt_select_and_copy");
+    s18_finish(c, path);
+    (void)unlink(clip);
+}
+
+/* S-<home> selects the whole line and typing replaces it; A-S-<left>
+ * then <bs> deletes just the selected word, and A-S-<left> leaves the
+ * next one selected. */
+static void case_s57_29_prompt_type_over(PtyCtx *c)
+{
+    static const u8 initial[] = "type-over fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "e alpha beta");
+    ptc_wait_until(c, s57_screen_contains, "e alpha beta",
+                   "waiting for the typed line");
+    s18_settle_after_keys(c, "shift+home");
+    s18_settle_after_bytes(c, "w out.txt old");
+    ptc_wait_until(c, s57_screen_contains, "w out.txt old",
+                   "waiting for the replacement");
+    s18_settle_after_keys(c, "alt+shift+left");
+    s18_settle_after_keys(c, "backspace");
+    ptc_wait_until(c, s57_screen_contains, ":w out.txt  ",
+                   "waiting for the deleted word");
+    s18_settle_after_keys(c, "shift+left");
+    s18_settle_after_keys(c, "alt+shift+left");
+    ptc_snapshot(c, "s57_29_prompt_type_over");
+    s18_finish(c, path);
+}
+
+/* A line wider than the terminal selected from its start: the selection
+ * begins off the left edge of the scrolled prompt. */
+static void case_s57_29_prompt_select_scrolled(PtyCtx *c)
+{
+    static const u8 initial[] = "scroll fixture\n";
+    static const char command[] =
+        "this_is_a_command_line_longer_than_the_narrow_terminal_width";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, command);
+    ptc_wait_until(c, s57_screen_contains, "terminal_width",
+                   "waiting for the scrolled line");
+    s18_settle_after_keys(c, "ctrl+a");
+    ptc_wait_until(c, s57_screen_contains, ":this_is",
+                   "waiting for the line start");
+    s18_settle_after_keys(c, "shift+end");
+    ptc_wait_until(c, s57_screen_contains, "terminal_width",
+                   "waiting for the selected tail");
+    s18_settle_after_keys(c, "shift+left");
+    s18_settle_after_keys(c, "shift+left");
+    ptc_snapshot(c, "s57_29_prompt_select_scrolled");
+    s18_finish(c, path);
+}
+
+/* Two wide clusters selected, under NO_COLOR (the theme's monochrome
+ * selection style), 16 colours and the ASCII chrome. */
+static void case_s57_29_prompt_select_nocolor(PtyCtx *c)
+{
+    static const u8 initial[] = "nocolor fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "e alpha \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+    ptc_wait_until(c, s57_screen_contains,
+                   "e alpha \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e",
+                   "waiting for the typed line");
+    s18_settle_after_keys(c, "shift+left");
+    s18_settle_after_keys(c, "shift+left");
+    /* One scene, three degradations: the golden is the case's name. */
+    ptc_snapshot(c, c->test->name);
+    s18_finish(c, path);
+}
+
 static void case_s18_cmdline_horizontal_scroll(PtyCtx *c)
 {
     static const u8 initial[] = "scroll fixture\n";
@@ -11968,6 +12121,17 @@ const PtyCase yew_pty_cases[] = {
     C(s57_28_prompt_last_arg, modern, 24U, 80U, case_s57_28_prompt_last_arg),
     C(s57_28_prompt_alt_arrow_contextual, modern, 24U, 80U,
       case_s57_28_prompt_alt_arrow_contextual),
+    C(s57_29_prompt_select_and_copy, modern, 24U, 80U,
+      case_s57_29_prompt_select_and_copy),
+    C(s57_29_prompt_type_over, modern, 24U, 80U, case_s57_29_prompt_type_over),
+    C(s57_29_prompt_select_scrolled, modern, 8U, 32U,
+      case_s57_29_prompt_select_scrolled),
+    C(s57_29_prompt_select_nocolor, modern, 24U, 80U,
+      case_s57_29_prompt_select_nocolor),
+    C(s57_29_prompt_select_colors_16, modern, 24U, 80U,
+      case_s57_29_prompt_select_nocolor),
+    C(s57_29_prompt_select_ascii, modern, 24U, 80U,
+      case_s57_29_prompt_select_nocolor),
     C(s57_32_cd_then_complete, modern, 24U, 80U,
       case_s57_32_cd_then_complete),
     C(s57_32_cd_unknown, modern, 24U, 80U, case_s57_32_cd_unknown),

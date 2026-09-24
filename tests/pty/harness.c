@@ -722,7 +722,9 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
                        runtime_dir == NULL ? "" : runtime_dir,
                        shadow_test_for(c), getenv("YEW_PROF"),
                        getenv("YEW_LOG"),
-                       strncmp(c->test->name, "s57_12_clipboard_", 17U) == 0
+                       strncmp(c->test->name, "s57_12_clipboard_", 17U) == 0 ||
+                       strcmp(c->test->name,
+                              "s57_29_prompt_select_and_copy") == 0
                            ? getenv("YEW_CLIPBOARD") : NULL,
                        getenv("YEW_PTY_AUDIT_LANG"),
                        getenv("YEW_PTY_AUDIT_TZ"),
