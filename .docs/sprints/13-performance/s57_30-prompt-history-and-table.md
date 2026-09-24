@@ -185,3 +185,94 @@ Report an added-bytes estimate.
 8. `test-fletch test-script test-roundtrip test-roundtrip-coverage
    test-audit` and the `scripts/check-*.sh` gates green.
 9. `tests/size/` untouched; added-bytes estimate in the report.
+
+## Implementation notes (divergences from this contract)
+
+Where the contract and the code disagreed, or the contract was silent,
+the implementation does what the contract intends:
+
+1. **The page keys enter the table too.**  Tab and S-Tab grant focus
+   (`yew_menu_focus` in `completion_cycle` and in `complete`'s
+   enter-the-list branch), and so do `<pgup>`/`<pgdn>`: they choose a row
+   and write it into the line exactly as Tab does, and "keep paging inside
+   the table" needs them to be in it.  A click still selects without
+   entering, so the arrows stay history after one.  The unbound Fletch
+   preview commands `ed.cmdline.menu.next`/`prev` are unchanged.
+2. **"The typed text" is the table's stem** (`menu_stem` put back over
+   `menu.replace`) -- the text Esc restores.  When the first Tab extended
+   the word by its common prefix (`fil` -> `file.`), that is the text the
+   table was entered from, so Up off the top row searches with `file.`,
+   never with the row the preview wrote (`file.new`).  With nothing older
+   matching, the line goes back to that text with its live table,
+   unfocused.
+3. **While a walked entry is on the line there is no table and no
+   ghost.**  `cmdline_refilter_as` still computes the hint, then closes
+   the table; the next edit ends the walk and the live table returns.
+   Tab also ends a walk.  Down past the newest restores the draft and its
+   live table.
+4. **The smart walk lives in `src/ui/cmdhist.[ch]`** (`YewHistView`,
+   `YewHistWalk`, `yew_hist_find`, `yew_hist_walk_*`): a view is the
+   prompt's `CmdHist` or the 57.26 snapshot, newest first.  `CmdLine.hist`
+   (a `HistCur`) became `CmdLine.walk`; `yew_hist_prev/next` (prefix)
+   remain for the Fletch REPL.  The unbound `ed.cmdline.hist_prev/next`
+   drive the same walk as the arrows.
+5. **Bang-line term and placement.**  The term is the body with its
+   leading blanks dropped (the snapshot drops them too); an entry is
+   placed after the draft's first `walk_prefix` bytes -- the `!`, `r !`,
+   `%!` the user typed.
+6. **Duplicates.**  Both sources already hold each text once (CmdHist on
+   add, the snapshot on load); the walk still skips a repeat through its
+   `seen` stack, pinned on a hand-built view.  C-r's rows rely on the
+   sources' dedupe, keeping its refilter one pass per keystroke.
+7. **The highlight** reuses the document's `/` match style through the
+   new `yew_draw_search_style` (extracted from `draw_search_rows`: theme
+   `search.match`, then the no-colour and 16-colour degradations);
+   `yew_cmdline_hist_match` exposes the span as state.
+8. **C-r details.**  Rows are capped at 512 (the footer then reads
+   `512+ of N`); every refilter selects the newest row; C-r, Up and Down
+   stop at the ends rather than wrap.  The footer's mode name rides
+   57.32's `where` note (`history search 2/2`); with no match the hint
+   reads `history search: no match`.  A click selects a row and a second
+   click fills the line, like Enter; Tab leaves the search (keeping the
+   line) for completion; generator arrivals and the idle directory scan
+   never touch C-r's rows.
+9. **Token search.**  Entries newest first, each entry's words right to
+   left (fish's order); a token equal to the one the walk began on is
+   skipped along with repeats.  Words split at unquoted blanks with
+   quotes and escapes honoured on a bang line, at blanks otherwise, at
+   most 256 per entry.  The caret's token on a bang line starts where
+   `yew_shctx_at` says and runs to the end of that shell word.
+   A-<down> with no walk in progress does nothing.
+10. **The three new commands are internal**, like `ed.cmdline.last_arg`:
+    not recordable, so no motion word and no `gen_cmds[]`/`D(...)` row;
+    verbs `hist_search`, `token_prev`, `token_next` added to
+    `command_name_valid`; all three in the invariant-9 list and in
+    57.29's collapse table (with `ed.cmdline.up/down/hist_prev/hist_next`,
+    all PSEL_COLLAPSE).  None is `YEW_CMD_PROMPTS` -- each acts only on
+    an already-open prompt, as `complete_next` and `last_arg` do -- so
+    none joins the batch refusal table.
+11. **PTY.**  The runner allows one snapshot per case, so
+    `s57_30_table_bottom_exit` pins the exit state (candidate kept, table
+    open); the Up that follows is pinned by the unit tests.
+    `s57_17_pager_arrow_up` now drives Tab, Tab, Up (the empty-history
+    branch of Up off the top row) and `s57_17_pager_tail_row` enters the
+    table with Tab.
+12. **Bindings: 385** (383 + `A-<up>`, `A-<down>`; C-p, C-n and C-r were
+    rebound in place).
+
+### Tests edited from 57.17 §2's rule (§7)
+
+- `test_cmdline_up_enters_the_pager_without_touching_the_prompt` ->
+  `test_cmdline_up_is_history_with_the_live_menu_open`
+- `test_cmdline_leaving_the_pager_restores_history_to_up` ->
+  `test_cmdline_up_off_the_top_row_walks_history_from_the_typed_text`
+- `test_cmdline_enter_on_a_pager_row_accepts_without_executing`,
+  `test_cmdline_typing_blurs_the_pager_but_keeps_the_row`: enter by Tab
+- `test_cmdline_bang_completions_use_the_same_pager`: Up is history
+- `test_cmdline_up_is_history_when_no_pager_is_open`: comment only
+- `test_cmdline_printable_edit_resets_history_walk_to_new_draft`,
+  `test_cmdline_ghost_is_never_in_the_buffer`,
+  `test_prompt_keys_selection_is_never_text`: the walk's draft/term
+- `test_prompt_keys_alt_r_inserts_a_register`: C-r is history search
+- `tests/unit/test_runtime_defaults.c`: the E mirror and the count
+- PTY `s57_17_pager_arrow_up`, `s57_17_pager_tail_row` and their goldens
