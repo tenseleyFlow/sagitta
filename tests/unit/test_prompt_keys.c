@@ -1180,6 +1180,19 @@ void test_prompt_keys_ctrl_v_replaces_the_selection(void)
     pk_text(&f, "!echo hi");
     pk_free(&f);
     pk_clip_done(&clip);
+
+    /* An EMPTY clipboard refuses the paste, and the selection it would
+     * have replaced is still there: the delete rolls back with it. */
+    pk_clip_open(&clip, "");
+    pk_init(&f);
+    pk_prompt(&f, NULL, 0U, "!echo hi");
+    pk_shift(&f, YEW_KEY_LEFT, YEW_MOD_ALT, "ed.sel.extend.word_prev");
+    yew_ed_handle_key(&f.ed, pk_key((u32)'v', YEW_MOD_CTRL), 0);
+    YEW_ASSERT(f.ed.last_status != YEW_CMD_OK);
+    pk_text(&f, "!echo hi");
+    YEW_ASSERT(f.ed.cmdline.active);
+    pk_free(&f);
+    pk_clip_done(&clip);
 }
 
 /* Invariant 2: a Shift+motion takes a CJK wide cluster or a combining
