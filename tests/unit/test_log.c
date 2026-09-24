@@ -100,51 +100,18 @@ void test_log_bug_prehook(void)
 {
     static const char marker[] = "prehook\n";
     static const char report[] = "yew: internal error at";
-    Bytebuf output;
-    int pipefd[2];
-    char chunk[512];
-    pid_t child;
-    pid_t waited;
-    ssize_t count;
-    int status;
+    YewTestChild child;
 
-    bytebuf_init(&output);
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
-        (void)close(pipefd[0]);
-        if (dup2(pipefd[1], STDERR_FILENO) < 0)
-            _exit(126);
-        (void)close(pipefd[1]);
+    if (yew_test_child_role() != NULL) {
         (void)setenv("YEW_LOG", "/dev/null", 1);
         yew_bug_set_prehook(bug_prehook_marker);
         yew_bug("prehook-test", 7, "ordered");
     }
-    (void)close(pipefd[1]);
-    for (;;) {
-        count = read(pipefd[0], chunk, sizeof(chunk));
-        if (count > 0) {
-            bytebuf_append(&output, chunk, (size_t)count);
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        break;
-    }
-    (void)close(pipefd[0]);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-
-    YEW_ASSERT_EQ_I64(count, 0);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
-    YEW_ASSERT(output.len >= sizeof(marker) - 1U + sizeof(report) - 1U);
-    YEW_ASSERT_EQ_MEM(output.data, marker, sizeof(marker) - 1U);
-    YEW_ASSERT(memcmp(output.data + sizeof(marker) - 1U,
+    yew_test_spawn_child("bug", NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    YEW_ASSERT(child.err_len >= sizeof(marker) - 1U + sizeof(report) - 1U);
+    YEW_ASSERT_EQ_MEM(child.err, marker, sizeof(marker) - 1U);
+    YEW_ASSERT(memcmp(child.err + sizeof(marker) - 1U,
                       report, sizeof(report) - 1U) == 0);
-    bytebuf_free(&output);
+    yew_test_child_free(&child);
 }
