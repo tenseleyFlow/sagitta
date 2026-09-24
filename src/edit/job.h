@@ -71,6 +71,21 @@ typedef struct YewJobCallbackOps {
     void (*destroy)(void *owner);
 } YewJobCallbackOps;
 
+/*
+ * Sprint 57.27 §2: a PROXY job -- a table entry with no process of its
+ * own.  A `:!` command run inside the persistent shell session is one:
+ * it keeps its `*job:N*` buffer, its *jobs* row, its exit status and
+ * its cancel, but its output is fed by the session owner
+ * (yew_job_proxy_output) and it ends when the owner says so
+ * (yew_job_proxy_end).  yew_job_signal routes to `signal`, which decides
+ * what a cancel means for the process that really runs the command.
+ * The owner outlives every proxy it creates (it ends them before it
+ * goes), so there is no destroy callback.
+ */
+typedef struct YewJobProxyOps {
+    bool (*signal)(void *owner, Ed *ed, u32 id, int sig);
+} YewJobProxyOps;
+
 enum {
     /* Concurrent jobs.  Spawning past this errors — never queues silently,
      * because a queued job that runs minutes later surprises the user. */
@@ -157,6 +172,11 @@ typedef struct YewJobSpec {
     const char *const *env_set;
     const char *const *env_unset;
     const char *const *env_unset_prefix;
+    /* Sprint 57.27 §3: NULL-terminated NAME=value rows that replace
+     * `environ` as the base the standard rows and overrides apply to
+     * (the persistent shell session's exported environment).  NULL is
+     * environ, exactly as before. */
+    const char *const *env_base;
     /* Synchronous terminal handover only: leave fd 0/1/2 inherited rather
      * than replacing them with pipes.  yew_job_run_sync is the sole API
      * that accepts this flag; normal asynchronous jobs remain nonblocking.
@@ -173,6 +193,10 @@ typedef struct YewJobSpec {
     /* Required for YEW_SINK_CALLBACK; ownership transfers on success. */
     void *callback_owner;
     const YewJobCallbackOps *callback_ops;
+    /* Sprint 57.27 §2: non-NULL makes a proxy job (no process; argv and
+     * cmdline are ignored, `display` names it).  Only YEW_SINK_BUFFER. */
+    void *proxy_owner;
+    const YewJobProxyOps *proxy_ops;
 } YewJobSpec;
 
 typedef struct YewJobWait {
@@ -208,6 +232,8 @@ struct YewJob {
     const YewJobStreamOps *stream_ops;
     void *callback_owner;
     const YewJobCallbackOps *callback_ops;
+    void *proxy_owner;
+    const YewJobProxyOps *proxy_ops; /* non-NULL: a proxy job (57.27)    */
     const TextBuf *in_buf;
     Span in_span;
     const u8 *in_bytes;
@@ -284,8 +310,18 @@ u32 yew_job_settle(Ed *ed);
 /* True while the job still owes output or a wait status. */
 bool yew_job_pending(const YewJob *j);
 /* Signals the process GROUP: killing the pid alone leaves the shell's
- * children running, and `:!sleep 100 | cat` becomes unkillable. */
+ * children running, and `:!sleep 100 | cat` becomes unkillable.  A proxy
+ * job's signal goes to its owner instead. */
 bool yew_job_signal(Ed *ed, u32 id, int sig);
+/*
+ * Sprint 57.27 §2: a proxy job's output, through the same UTF-8/cluster
+ * hold YEW_SINK_BUFFER output takes (invariant 2), and its end: the tail
+ * is flushed, the job is marked reaped with `wait`'s verdict (a verdict
+ * already recorded, e.g. CANCELLED, is kept), and yew_job_settle finishes
+ * it like any other.  Both ignore a job that is not a running proxy.
+ */
+void yew_job_proxy_output(Ed *ed, YewJob *j, const u8 *bytes, u64 len);
+void yew_job_proxy_end(Ed *ed, YewJob *j, const YewJobWait *wait);
 YewJob *yew_job_find(Ed *ed, u32 id);
 /* Drops a finished job's slot, compacting the table.  The caller owns any
  * buffer the job pointed at. */
@@ -316,6 +352,9 @@ const char *yew_job_shell(void);
  * the dropped COLUMNS/LINES, …).  NULL-terminated NAME=value rows, all in
  * `a`.  The shell completer offers these names and no others: a name the
  * child will not see is not a variable it can expand.
+ *
+ * Sprint 57.27: the base is the persistent shell session's exported
+ * environment when there is one (yew_shsession_env), environ otherwise.
  */
 char **yew_job_env(Ed *ed, Arena *a);
 

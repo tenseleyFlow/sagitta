@@ -563,6 +563,20 @@ static bool drop_is_pager(const char *row)
     return strcmp(row, "PAGER=") == 0 || strcmp(row, "GIT_PAGER=") == 0;
 }
 
+/* environ's row for the NAME `row` names, or NULL. */
+static const char *job_environ_row(const char *row)
+{
+    const char *eq = strchr(row, '=');
+    size_t len = eq == NULL ? strlen(row) : (size_t)(eq - row);
+    size_t i;
+
+    for (i = 0U; environ[i] != NULL; i++) {
+        if (strncmp(environ[i], row, len) == 0 && environ[i][len] == '=')
+            return environ[i];
+    }
+    return NULL;
+}
+
 static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
 {
     static const char *const drop[] = {"COLUMNS=", "LINES=", "YEW_FILE=",
@@ -578,6 +592,11 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
      * position, so a row added to `drop` later cannot take a pager's place.
      */
     const size_t n_drop = YEW_ARRAY_LEN(drop);
+    /* Sprint 57.27 §3: the session's exports replace environ as the base
+     * when the caller hands them in; the rows below apply the same. */
+    const char *const *base = spec->env_base != NULL
+                                  ? spec->env_base
+                                  : (const char *const *)environ;
     size_t n = 0U;
     size_t i;
     size_t out = 0U;
@@ -588,28 +607,42 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
     GCol col = {0U};
     char tmp[512];
 
-    while (environ[n] != NULL)
+    while (base[n] != NULL)
         n++;
     /* Parent rows + seven standard rows + caller sets + NULL. */
     env = arena_alloc(a, (n + 8U + job_env_set_count(spec)) * sizeof(*env),
                       sizeof(void *));
     for (i = 0U; i < n; i++) {
+        const char *row = base[i];
         bool skip = false;
         size_t d;
 
+        /*
+         * A session base carries the PAGER=cat the job layer gave the
+         * session itself.  A terminal-owning child keeps the USER's pager
+         * (57.31 §3), so that row is the parent's again -- unless the
+         * user exported a different pager in the session, which is theirs.
+         */
+        if (spec->inherit_tty && spec->env_base != NULL &&
+            (strcmp(row, "PAGER=cat") == 0 ||
+             strcmp(row, "GIT_PAGER=cat") == 0)) {
+            row = job_environ_row(row);
+            if (row == NULL)
+                continue;
+        }
         for (d = 0U; d < n_drop; d++) {
             size_t dl = strlen(drop[d]);
 
             if (spec->inherit_tty && drop_is_pager(drop[d]))
                 continue;
 
-            if (strncmp(environ[i], drop[d], dl) == 0) {
+            if (strncmp(row, drop[d], dl) == 0) {
                 skip = true;
                 break;
             }
         }
-        if (!skip && !job_env_removed(environ[i], spec))
-            env[out++] = arena_strdup(a, environ[i]);
+        if (!skip && !job_env_removed(row, spec))
+            env[out++] = arena_strdup(a, row);
     }
     if (ed->win != NULL && buf != NULL && buf->tb != NULL &&
         ed->win->cs.curs.len != 0U) {
@@ -1054,6 +1087,51 @@ static bool job_evict_one(Ed *ed)
     return false;
 }
 
+/*
+ * Sprint 57.27 §2: a table entry with no process.  Everything the table,
+ * the *jobs* rows, the footer and dismissal read is filled in exactly as
+ * for a spawned BUFFER job; pid and pgid stay 0 and every fd -1, so no
+ * path that signals, reaps or polls can reach a process through it.
+ */
+static u32 job_spawn_proxy(Ed *ed, const YewJobSpec *spec, char *err,
+                           size_t errsz)
+{
+    YewJob *j;
+    const char *display;
+    size_t dlen;
+
+    if (spec->sink != YEW_SINK_BUFFER || spec->proxy_owner == NULL ||
+        spec->proxy_ops->signal == NULL) {
+        (void)snprintf(err, errsz, "proxy job needs a buffer and an owner");
+        return 0U;
+    }
+    display = spec->display != NULL ? spec->display :
+              (spec->cmdline != NULL ? spec->cmdline : "");
+    j = &ed->jobs.v[ed->jobs.len++];
+    (void)memset(j, 0, sizeof(*j));
+    j->id = spec->internal ? ed->jobs.next_internal_id-- :
+            ed->jobs.next_id++;
+    j->in_fd = j->out_fd = j->err_fd = j->exec_fd = -1;
+    j->state = YEW_JOB_RUNNING;
+    j->sink = YEW_SINK_BUFFER;
+    j->internal = spec->internal;
+    j->proxy_owner = spec->proxy_owner;
+    j->proxy_ops = spec->proxy_ops;
+    j->collect_max = YEW_JOB_COLLECT_MAX;
+    j->start_ms = yew_now_ms();
+    j->follow_tail = true;
+    bytebuf_init(&j->hold);
+    bytebuf_init(&j->collect);
+    bytebuf_init(&j->collect_err);
+    bytebuf_init(&j->framed_err);
+    bytebuf_init(&j->stream_err);
+    dlen = strlen(display);
+    j->label = yew_xmalloc(dlen + 1U);
+    (void)memcpy(j->label, display, dlen + 1U);
+    ed->jobs.dirty = true;
+    return j->id;
+}
+
 u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
 {
     Arena scratch;
@@ -1087,6 +1165,8 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
                        YEW_JOB_MAX);
         return 0U;
     }
+    if (spec->proxy_ops != NULL)
+        return job_spawn_proxy(ed, spec, err, errsz);
     if (spec->argv == NULL && spec->cmdline == NULL) {
         (void)snprintf(err, errsz, "no command");
         return 0U;
@@ -1248,6 +1328,11 @@ bool yew_job_signal(Ed *ed, u32 id, int sig)
 {
     YewJob *j = yew_job_find(ed, id);
 
+    /* A proxy has no process: its owner decides what the signal means
+     * for the one that really runs the command. */
+    if (j != NULL && j->proxy_ops != NULL)
+        return j->state == YEW_JOB_RUNNING &&
+               j->proxy_ops->signal(j->proxy_owner, ed, id, sig);
     if (j == NULL || j->pgid <= 0 || j->state != YEW_JOB_RUNNING)
         return false;
     if (kill(-j->pgid, sig) != 0)
@@ -1407,6 +1492,69 @@ static void job_deliver(Ed *ed, YewJob *j, const u8 *bytes, u64 len,
     }
 }
 
+/* Text sinks: held bytes from the previous read lead the window, and only
+ * the safe prefix goes out; the rest waits for more bytes or EOF. */
+static void job_deliver_text(Ed *ed, YewJob *j, const u8 *bytes, u64 len,
+                             bool at_eof, bool is_err)
+{
+    const u8 *view;
+    u64 total;
+    u64 safe;
+
+    if (j->hold.len != 0U) {
+        bytebuf_append(&j->hold, bytes, (size_t)len);
+        view = j->hold.data;
+        total = j->hold.len;
+    } else {
+        view = bytes;
+        total = len;
+    }
+    safe = yew_job_safe_prefix(view, total, at_eof);
+    job_deliver(ed, j, view, safe, is_err);
+    if (safe < total) {
+        u64 rest = total - safe;
+        u8 tail[YEW_JOB_HOLD_MAX + 16];
+
+        (void)memcpy(tail, view + safe, (size_t)rest);
+        j->hold.len = 0U;
+        bytebuf_append(&j->hold, tail, (size_t)rest);
+    } else {
+        j->hold.len = 0U;
+    }
+}
+
+void yew_job_proxy_output(Ed *ed, YewJob *j, const u8 *bytes, u64 len)
+{
+    if (ed == NULL || j == NULL || j->proxy_ops == NULL || j->reaped ||
+        bytes == NULL || len == 0U)
+        return;
+    j->bytes_out += len;
+    job_deliver_text(ed, j, bytes, len, false, false);
+}
+
+void yew_job_proxy_end(Ed *ed, YewJob *j, const YewJobWait *wait)
+{
+    if (ed == NULL || j == NULL || j->proxy_ops == NULL || j->reaped)
+        return;
+    if (j->hold.len != 0U) {
+        /* EOF rule: an incomplete tail goes out verbatim. */
+        job_deliver(ed, j, j->hold.data, (u64)j->hold.len, false);
+        j->hold.len = 0U;
+    }
+    j->reaped = true;
+    j->end_ms = yew_now_ms();
+    if (j->state == YEW_JOB_RUNNING && wait != NULL) {
+        j->state = wait->state == YEW_JOB_RUNNING ? YEW_JOB_EXITED
+                                                  : wait->state;
+        j->exit_code = wait->exit_code;
+        j->termsig = wait->termsig;
+        j->exec_errno = wait->exec_errno;
+    } else if (j->state == YEW_JOB_RUNNING) {
+        j->state = YEW_JOB_EXITED;
+    }
+    ed->jobs.dirty = true;
+}
+
 /* Drains one fd until EAGAIN or the read budget, whichever comes first.
  * Returns true when the fd reached EOF. */
 static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
@@ -1418,9 +1566,6 @@ static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
         u64 remaining = YEW_JOB_READ_BUDGET - drained;
         size_t want = sizeof(chunk);
         ssize_t got;
-        u64 safe;
-        u64 total;
-        const u8 *view;
 
         if ((u64)want > remaining)
             want = (size_t)remaining;
@@ -1465,27 +1610,7 @@ static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
             }
             continue;
         }
-        /* Held bytes from the previous read lead the window. */
-        if (j->hold.len != 0U) {
-            bytebuf_append(&j->hold, chunk, (size_t)got);
-            view = j->hold.data;
-            total = j->hold.len;
-        } else {
-            view = chunk;
-            total = (u64)got;
-        }
-        safe = yew_job_safe_prefix(view, total, got == 0);
-        job_deliver(ed, j, view, safe, is_err);
-        if (safe < total) {
-            u64 rest = total - safe;
-            u8 tail[YEW_JOB_HOLD_MAX + 16];
-
-            (void)memcpy(tail, view + safe, (size_t)rest);
-            j->hold.len = 0U;
-            bytebuf_append(&j->hold, tail, (size_t)rest);
-        } else {
-            j->hold.len = 0U;
-        }
+        job_deliver_text(ed, j, chunk, (u64)got, got == 0, is_err);
         if (got == 0) {
             job_close(fd);
             return true;
@@ -1802,7 +1927,7 @@ void yew_job_tick(Ed *ed, i64 now_ms)
          * job pipe open.  Pending keeps that group eligible without ever
          * signalling a stale pgid after the job has fully drained. */
         if (j->kill_at_ms != 0 && now_ms >= j->kill_at_ms) {
-            if (yew_job_pending(j))
+            if (yew_job_pending(j) && j->pgid > 0)
                 (void)kill(-j->pgid, SIGKILL);
             j->kill_at_ms = 0;
             continue;
