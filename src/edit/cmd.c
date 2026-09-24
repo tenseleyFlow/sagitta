@@ -553,6 +553,20 @@ static const CmdDesc builtins[] = {
     {"ed.sel.extend.down", yew_edit_cmd_sel_extend_down, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Start or extend a character highlight down", "sel_extend_down"},
+    /* Sprint 57.29 §2: the word and line units, for the prompt's
+     * A-S-<arrow>, S-<home>/<end> and C-S-<arrow>. */
+    {"ed.sel.extend.word_prev", yew_edit_cmd_sel_extend_word_prev,
+     YEW_ARITY_NONE, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Start or extend a highlight one word left", "sel_word_prev"},
+    {"ed.sel.extend.word_next", yew_edit_cmd_sel_extend_word_next,
+     YEW_ARITY_NONE, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Start or extend a highlight one word right", "sel_word_next"},
+    {"ed.sel.extend.line_home", yew_edit_cmd_sel_extend_line_home,
+     YEW_ARITY_NONE, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Start or extend a highlight to the line start", "sel_line_home"},
+    {"ed.sel.extend.line_end", yew_edit_cmd_sel_extend_line_end,
+     YEW_ARITY_NONE, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
+     "Start or extend a highlight to the line end", "sel_line_end"},
     {"ed.sel.yank", yew_sel_cmd_yank, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_MULTI_AGGREGATE,
      "Yank the active selections", "yank"},
@@ -777,6 +791,11 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.last_arg", yew_cmdline_cmd_last_arg, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Insert the previous entry's last word; again for older ones", NULL},
+    /* Sprint 57.29 §2: C-c -- copy a selection, or cancel without one.
+     * Keymap plumbing like cancel: internal, so not recordable. */
+    {"ed.cmdline.copy_or_cancel", yew_cmdline_cmd_copy_or_cancel,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS | YEW_CMD_INTERNAL,
+     "Copy the prompt's selection, or cancel the prompt without one", NULL},
 
     {"ed.file.open", yew_file_cmd_buf_open, YEW_ARITY_STR,
      YEW_CMD_PROMPTS, "Open a file", NULL},
@@ -1553,7 +1572,9 @@ static bool command_name_valid(const char *name)
         /* Sprint 57.25 §5: `ed.shell.complete_forget`. */
         "complete_forget",
         /* Sprint 57.28: the unix-word-rubout kill, yank-pop, A-. */
-        "ws_word_prev", "yank_pop", "last_arg"};
+        "ws_word_prev", "yank_pop", "last_arg",
+        /* Sprint 57.29: the line-unit extends and the prompt's C-c. */
+        "line_home", "line_end", "copy_or_cancel"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

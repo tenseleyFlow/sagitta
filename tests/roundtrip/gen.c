@@ -52,6 +52,10 @@ static const RtGenCmd gen_cmds[] = {
     {"ed.sel.extend.right", RT_GEN_SELECTION},
     {"ed.sel.extend.up", RT_GEN_SELECTION},
     {"ed.sel.extend.down", RT_GEN_SELECTION},
+    {"ed.sel.extend.word_prev", RT_GEN_SELECTION},
+    {"ed.sel.extend.word_next", RT_GEN_SELECTION},
+    {"ed.sel.extend.line_home", RT_GEN_SELECTION},
+    {"ed.sel.extend.line_end", RT_GEN_SELECTION},
     {"ed.sel.all", RT_GEN_SELECTION},
     {"ed.sel.yank", RT_GEN_YANK}
 };

@@ -830,7 +830,16 @@ void test_invariant9_every_new_command_is_registered(void)
          * last argument (A-.).  Keys only; no mouse involved.
          */
         "ed.edit.kill.ws_word_prev", "ed.edit.kill.yank_pop",
-        "ed.cmdline.ghost.accept_line", "ed.cmdline.last_arg"
+        "ed.cmdline.ghost.accept_line", "ed.cmdline.last_arg",
+        /*
+         * Sprint 57.29 §2: the prompt's selection -- A-S-<arrow>,
+         * S-<home>/<end> and C-S-<arrow> extend it; C-c copies it (or
+         * cancels without one).  Keys only; mouse selection in the
+         * prompt is deferred.
+         */
+        "ed.sel.extend.word_prev", "ed.sel.extend.word_next",
+        "ed.sel.extend.line_home", "ed.sel.extend.line_end",
+        "ed.cmdline.copy_or_cancel"
     };
     size_t i;
 
