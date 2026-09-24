@@ -531,6 +531,7 @@ const YewTest yew_tests[] = {
     T(harness_intentional_failure),
     T(harness_only_selects_one_exact_name),
     T(harness_spawned_child_is_fresh),
+    T(harness_leak_is_blamed_on_the_leaking_test),
     T(utf8_valid_decode),
     T(utf8_reject_classes),
     T(utf8_truncated_decode),

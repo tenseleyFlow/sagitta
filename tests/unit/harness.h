@@ -90,6 +90,10 @@ void yew_test_child_replay(const YewTestChild *child, int code);
                           yew_assert_code_);                                  \
     } while (0)
 
+/* True where each test ends with a LeakSanitizer check (an ASan build
+ * off macOS, which has no LeakSanitizer). */
+bool yew_test_leak_check_enabled(void);
+
 void yew_test_load_runtime(Ed *ed);
 bool yew_test_canonicalize_path(char *path, size_t cap);
 

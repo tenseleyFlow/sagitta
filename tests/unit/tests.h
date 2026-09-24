@@ -502,6 +502,7 @@ void test_harness_failure_isolated(void);
 void test_harness_intentional_failure(void);
 void test_harness_only_selects_one_exact_name(void);
 void test_harness_spawned_child_is_fresh(void);
+void test_harness_leak_is_blamed_on_the_leaking_test(void);
 void test_utf8_valid_decode(void);
 void test_utf8_reject_classes(void);
 void test_utf8_truncated_decode(void);

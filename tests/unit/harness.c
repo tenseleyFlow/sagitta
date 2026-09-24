@@ -467,7 +467,21 @@ static bool test_leaked(const YewTest *test)
     (void)fflush(stdout);
     return true;
 }
+
+bool yew_test_leak_check_enabled(void)
+{
+#if defined(__APPLE__)
+    return false;
 #else
+    return true;
+#endif
+}
+#else
+bool yew_test_leak_check_enabled(void)
+{
+    return false;
+}
+
 static bool test_leaked(const YewTest *test)
 {
     (void)test;

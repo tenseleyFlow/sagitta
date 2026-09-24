@@ -250,3 +250,55 @@ void test_harness_spawned_child_is_fresh(void)
     yew_test_child_free(&child);
     YEW_ASSERT_NULL(getenv("YEW_HARNESS_PREP"));
 }
+
+/*
+ * The leak is blamed on the test that made it.  The child runs with
+ * LeakSanitizer's exit-time check off, so only the harness's per-test
+ * check can turn its exit status to 1 and name the test; its stdout
+ * joins the captured stderr so the FAIL line can be read.
+ */
+static void *volatile harness_leak_sink;
+static char harness_leak_options[1024];
+
+/* Called through a volatile pointer, so no copy of the lost pointer
+ * outlives this frame in the caller's registers. */
+static void harness_leak_once(void)
+{
+    harness_leak_sink = malloc(48U);
+    harness_leak_sink = NULL;
+}
+
+static void (*volatile harness_leak)(void) = harness_leak_once;
+
+static bool harness_leak_prep(void *user)
+{
+    (void)user;
+    return dup2(STDERR_FILENO, STDOUT_FILENO) >= 0 &&
+           setenv("ASAN_OPTIONS", harness_leak_options, 1) == 0;
+}
+
+void test_harness_leak_is_blamed_on_the_leaking_test(void)
+{
+    const char *options;
+    YewTestChild child;
+    int n;
+
+    if (yew_test_child_role() != NULL) {
+        harness_leak();
+        return;
+    }
+    if (!yew_test_leak_check_enabled())
+        yew_test_skip("leak-check: no LeakSanitizer in this build");
+    options = getenv("ASAN_OPTIONS");
+    n = snprintf(harness_leak_options, sizeof(harness_leak_options),
+                 "%s%sdetect_leaks=1:leak_check_at_exit=0",
+                 options == NULL ? "" : options,
+                 options == NULL || options[0] == '\0' ? "" : ":");
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(harness_leak_options));
+    yew_test_spawn_child("leak", harness_leak_prep, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, 1);
+    YEW_ASSERT_NOT_NULL(strstr(child.err,
+                               "FAIL harness_leak_is_blamed_on_the_leaking_"
+                               "test: LeakSanitizer found a leak"));
+    yew_test_child_free(&child);
+}
