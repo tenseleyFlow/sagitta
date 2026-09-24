@@ -1086,6 +1086,7 @@ const YewTest yew_tests[] = {
     T(shell_term_refuses_and_names_the_route),
     T(shell_term_run_reports_every_outcome),
     T(shell_term_run_refuses_a_range_and_batch),
+    T(shell_term_argv_runs_words_and_keeps_the_pager),
     T(shell_term_run_restores_the_terminal_on_every_exit),
     T(cmdrange_addresses_policies_and_deferred_forms),
     T(cmdrange_mark_and_pattern_addresses_resolve),

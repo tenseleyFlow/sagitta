@@ -64,6 +64,10 @@ u32 yew_shell_read(Ed *ed, const char *cmdline, char *err, size_t errsz);
  */
 bool yew_shell_term_run(Ed *ed, const char *cmdline, YewJobWait *wait,
                         char *err, size_t errsz);
+/* Sprint 57.31 §3: the same handover for an argv yew built (no shell
+ * parses the caller's words).  Refused under --batch. */
+bool yew_shell_term_argv(Ed *ed, char *const *argv, YewJobWait *wait,
+                         char *err, size_t errsz);
 
 /* The *jobs* table (§8); re-rendered whenever a job changes state. */
 void yew_jobs_table_refresh(Ed *ed);

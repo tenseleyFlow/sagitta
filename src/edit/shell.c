@@ -645,6 +645,18 @@ not_handled:
     return YEW_SHELL_SELF_NOT_HANDLED;
 }
 
+/* The one route both spellings take: the real terminal, no sink. */
+static bool shell_term_spec(Ed *ed, YewJobSpec *spec, YewJobWait *wait,
+                            char *err, size_t errsz)
+{
+    spec->cwd = yew_ws_root(ed);
+    /* DISCARD is not a choice: yew_job_run_sync refuses a sink, because
+     * the child writes straight to the terminal it was handed. */
+    spec->sink = YEW_SINK_DISCARD;
+    spec->inherit_tty = true;
+    return yew_job_run_sync(ed, spec, wait, err, errsz);
+}
+
 /*
  * Sprint 57.18 §4: `:!!cmd` -- run a command that wants a terminal.
  *
@@ -699,12 +711,35 @@ bool yew_shell_term_run(Ed *ed, const char *cmdline, YewJobWait *wait,
         return false;
     }
     spec.cmdline = cmdline;
-    spec.cwd = yew_ws_root(ed);
-    /* DISCARD is not a choice: yew_job_run_sync refuses a sink, because
-     * the child writes straight to the terminal it was handed. */
-    spec.sink = YEW_SINK_DISCARD;
-    spec.inherit_tty = true;
-    return yew_job_run_sync(ed, &spec, wait, err, errsz);
+    return shell_term_spec(ed, &spec, wait, err, errsz);
+}
+
+/*
+ * Sprint 57.31 §3: the same handover for an argv yew built itself (A-h's
+ * fixed `man` script).  No shell parses anything here that the caller
+ * did not put in `argv` word by word -- the names a user's line
+ * supplied reach the child as whole arguments, never as source.
+ */
+bool yew_shell_term_argv(Ed *ed, char *const *argv, YewJobWait *wait,
+                         char *err, size_t errsz)
+{
+    YewJobSpec spec = {0};
+
+    if (err != NULL && errsz != 0U)
+        err[0] = '\0';
+    if (ed == NULL || argv == NULL || argv[0] == NULL || wait == NULL) {
+        (void)snprintf(err, errsz, "invalid interactive command");
+        return false;
+    }
+    (void)memset(wait, 0, sizeof(*wait));
+    if (ed->headless) {
+        (void)snprintf(err, errsz,
+                       "a terminal handover is not available under "
+                       "--batch");
+        return false;
+    }
+    spec.argv = (char **)argv;
+    return shell_term_spec(ed, &spec, wait, err, errsz);
 }
 
 u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,

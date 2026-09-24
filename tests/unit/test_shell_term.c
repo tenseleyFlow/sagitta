@@ -171,3 +171,95 @@ void test_shell_term_run_refuses_a_range_and_batch(void)
     f.ed.headless = false;
     term_fix_free(&f);
 }
+
+/* Reads `path` whole into `out` (NUL-terminated); false when absent. */
+static bool term_slurp(const char *path, char *out, size_t cap)
+{
+    FILE *fp = fopen(path, "rb");
+    size_t n;
+
+    if (fp == NULL)
+        return false;
+    n = fread(out, 1U, cap - 1U, fp);
+    out[n] = '\0';
+    (void)fclose(fp);
+    return true;
+}
+
+/*
+ * Sprint 57.31 §3: the argv route runs the words it is given -- no shell
+ * parses them -- and, like `:!!`, a child handed the terminal keeps the
+ * user's pagers, where a captured job still gets PAGER=cat.
+ */
+void test_shell_term_argv_runs_words_and_keeps_the_pager(void)
+{
+    TermFix f;
+    YewJobWait wait;
+    char err[256];
+    char out[PATH_MAX];
+    char got[256];
+    char *saved = getenv("PAGER") == NULL ? NULL :
+                  strdup(getenv("PAGER"));
+    char *argv[6];
+    Arena a;
+    char **env;
+    size_t i;
+    bool cat = false;
+    int n;
+
+    term_fix_make(&f);
+    n = snprintf(out, sizeof(out), "%s/out", f.base);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(out));
+    YEW_ASSERT_EQ_I64(setenv("PAGER", "my-pager -R", 1), 0);
+    argv[0] = (char *)"/bin/sh";
+    argv[1] = (char *)"-c";
+    argv[2] = (char *)"printf '%s|%s|%s' \"$#\" \"$1\" \"$PAGER\" > \"$2\"";
+    argv[3] = (char *)"sh";
+    argv[4] = (char *)"a b;$(touch nope)";
+    argv[5] = NULL;
+    /* $2 is the output path: pass it as the second word. */
+    {
+        char *full[7];
+
+        full[0] = argv[0];
+        full[1] = argv[1];
+        full[2] = argv[2];
+        full[3] = argv[3];
+        full[4] = argv[4];
+        full[5] = out;
+        full[6] = NULL;
+        YEW_ASSERT(yew_shell_term_argv(&f.ed, full, &wait, err,
+                                       sizeof(err)));
+    }
+    YEW_ASSERT_EQ_I64(wait.state, YEW_JOB_EXITED);
+    YEW_ASSERT_EQ_I64(wait.exit_code, 0);
+    YEW_ASSERT(term_slurp(out, got, sizeof(got)));
+    YEW_ASSERT_EQ_STR(got, "2|a b;$(touch nope)|my-pager -R");
+    YEW_ASSERT_EQ_I64(unlink(out), 0);
+
+    /* A captured job's environment still forces the pager off. */
+    arena_init(&a);
+    env = yew_job_env(&f.ed, &a);
+    for (i = 0U; env != NULL && env[i] != NULL; i++) {
+        if (strcmp(env[i], "PAGER=cat") == 0)
+            cat = true;
+        YEW_ASSERT(strcmp(env[i], "PAGER=my-pager -R") != 0);
+    }
+    YEW_ASSERT(cat);
+    arena_free_all(&a);
+
+    /* Headless: refused by name, nothing runs. */
+    f.ed.headless = true;
+    YEW_ASSERT(!yew_shell_term_argv(&f.ed, argv, &wait, err, sizeof(err)));
+    YEW_ASSERT_NOT_NULL(strstr(err, "--batch"));
+    f.ed.headless = false;
+    YEW_ASSERT(!yew_shell_term_argv(&f.ed, NULL, &wait, err, sizeof(err)));
+
+    if (saved != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("PAGER", saved, 1), 0);
+        free(saved);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("PAGER"), 0);
+    }
+    term_fix_free(&f);
+}

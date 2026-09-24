@@ -1058,6 +1058,7 @@ void test_histsuggest_sentinel_never_leaks(void);
 void test_shell_term_refuses_and_names_the_route(void);
 void test_shell_term_run_reports_every_outcome(void);
 void test_shell_term_run_refuses_a_range_and_batch(void);
+void test_shell_term_argv_runs_words_and_keeps_the_pager(void);
 void test_shell_term_run_restores_the_terminal_on_every_exit(void);
 void test_cmdrange_addresses_policies_and_deferred_forms(void);
 void test_cmdrange_mark_and_pattern_addresses_resolve(void);
