@@ -293,44 +293,21 @@ void test_tty_poison_marks_terminal_unusable(void)
 
 void test_tty_poisoned_access_is_bug(void)
 {
-    int fds[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    char output[1024];
-    ssize_t got;
+    YewTestChild child;
 
-    YEW_ASSERT_EQ_I64(pipe(fds), 0);
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
+    if (yew_test_child_role() != NULL) {
         Tty t;
 
-        (void)close(fds[0]);
-        if (dup2(fds[1], STDERR_FILENO) < 0)
-            _exit(126);
-        (void)close(fds[1]);
         memset(&t, 0, sizeof(t));
         yew_tty_poison(&t);
         (void)yew_tty_signal_fd(&t);
         _exit(0);
     }
-    YEW_ASSERT_EQ_I64(close(fds[1]), 0);
-    do {
-        got = read(fds[0], output, sizeof(output) - 1U);
-    } while (got < 0 && errno == EINTR);
-    YEW_ASSERT(got >= 0);
-    output[got < 0 ? 0U : (size_t)got] = '\0';
-    YEW_ASSERT_EQ_I64(close(fds[0]), 0);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
-    YEW_ASSERT(strstr(output, "terminal access in --batch: "
-                              "yew_tty_signal_fd") != NULL);
+    yew_test_spawn_child("bug", NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    YEW_ASSERT(strstr(child.err, "terminal access in --batch: "
+                                 "yew_tty_signal_fd") != NULL);
+    yew_test_child_free(&child);
 }
 
 void test_tty_probe_modern(void)
