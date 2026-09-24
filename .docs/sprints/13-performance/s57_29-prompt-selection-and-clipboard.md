@@ -216,3 +216,7 @@ the contract intends:
    to `s57_29_prompt_select_and_copy`, as it does to
    `s57_12_clipboard_*`.
 9. **383 bindings** (371 + 12: ten in E, two in I).
+10. **`ed.cmdline.copy_or_cancel` is a batch refusal.**  `YEW_CMD_PROMPTS`
+    makes it interactive, so it joins `ed.cmdline.cancel` in the batch
+    refusal table (`src/edit/batch.c`) and in
+    `tests/script/29_interactive_refusal.fl` (48 interactive commands).
