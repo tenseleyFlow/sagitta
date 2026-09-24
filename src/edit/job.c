@@ -557,6 +557,12 @@ static void job_env_append(Arena *a, char **env, size_t *out,
         env[(*out)++] = arena_strdup(a, row);
 }
 
+/* The two drop rows a terminal-owning child keeps (57.31 §3). */
+static bool drop_is_pager(const char *row)
+{
+    return strcmp(row, "PAGER=") == 0 || strcmp(row, "GIT_PAGER=") == 0;
+}
+
 static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
 {
     static const char *const drop[] = {"COLUMNS=", "LINES=", "YEW_FILE=",
@@ -568,10 +574,10 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
      * so the reason for PAGER=cat (a pager waiting on a pipe nobody
      * types into) does not hold -- and `man` under PAGER=cat would dump
      * the page and return before anyone read it.  Such a child keeps the
-     * user's pagers; the last two drop rows are the pager rows.
+     * user's pagers.  The rows are skipped by NAME (drop_is_pager), not by
+     * position, so a row added to `drop` later cannot take a pager's place.
      */
-    size_t n_drop = spec->inherit_tty ? YEW_ARRAY_LEN(drop) - 2U :
-                                        YEW_ARRAY_LEN(drop);
+    const size_t n_drop = YEW_ARRAY_LEN(drop);
     size_t n = 0U;
     size_t i;
     size_t out = 0U;
@@ -593,6 +599,9 @@ static char **job_build_env(Ed *ed, Arena *a, const YewJobSpec *spec)
 
         for (d = 0U; d < n_drop; d++) {
             size_t dl = strlen(drop[d]);
+
+            if (spec->inherit_tty && drop_is_pager(drop[d]))
+                continue;
 
             if (strncmp(environ[i], drop[d], dl) == 0) {
                 skip = true;
