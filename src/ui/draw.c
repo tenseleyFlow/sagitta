@@ -339,22 +339,31 @@ static void draw_plugin_rows(Ed *ed, Win *win, u16 lo, u16 hi)
 }
 #endif
 
-static void draw_selection_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+u8 yew_draw_sel_style(const Ed *ed, Cell *style)
 {
     static const YewColor selected_bg = {
         YEW_COLOR_RGB, 52U, 72U, 108U
     };
-    Cell style = ed->grid.blank;
+    u8 fields;
+
+    *style = ed->grid.blank;
+    fields = themed_overlay(style, yew_theme_ui_tab(ed, "sel"));
+    if (fields == 0U) {
+        style->bg = selected_bg;
+        fields = YEW_OVERLAY_BG;
+    }
+    return fields;
+}
+
+static void draw_selection_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+{
+    Cell style;
     u8 fields;
     size_t i;
 
     if (ed->mode != YEW_MODE_H)
         return;
-    fields = themed_overlay(&style, yew_theme_ui_tab(ed, "sel"));
-    if (fields == 0U) {
-        style.bg = selected_bg;
-        fields = YEW_OVERLAY_BG;
-    }
+    fields = yew_draw_sel_style(ed, &style);
     for (i = 0U; i < w->cs.curs.len; i++) {
         const Cursor *cursor = &w->cs.curs.data[i];
         YewSelSpanVec rect_spans = {0};

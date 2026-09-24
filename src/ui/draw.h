@@ -1,6 +1,7 @@
 #ifndef YEW_UI_DRAW_H
 #define YEW_UI_DRAW_H
 
+#include "term/grid.h"
 #include "ui/layout.h"
 #include "util/base.h"
 
@@ -28,5 +29,13 @@ bool yew_draw_pane_is_focused(const Ed *ed, const Win *w);
  * stayed quiet about it.
  */
 Rect yew_draw_spawn_zone_rect(void);
+
+/*
+ * The selection style: the theme's `sel` entry, or the fixed blue the
+ * document has always used without one.  Sets `*style` and returns the
+ * yew_grid_overlay fields it carries.  The document's H selection and
+ * the prompt's (Sprint 57.29 §3) both paint with it.
+ */
+u8 yew_draw_sel_style(const Ed *ed, Cell *style);
 
 #endif
