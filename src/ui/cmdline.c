@@ -21,6 +21,7 @@
 #include "ui/compgen.h"
 #include "ui/comphelp.h"
 #include "ui/compspec.h"
+#include "ui/draw.h"
 #include "ui/shctx.h"
 #include "ui/message.h"
 #include "ui/statusline.h"
@@ -2712,6 +2713,36 @@ void yew_cmdline_draw(Ed *ed, Rect rect)
             x1 = (u16)(x0 + 1U);
         yew_grid_overlay(&ed->grid, rect.y, x0, x1, &error_cell,
                          YEW_OVERLAY_BG | YEW_OVERLAY_ATTRS);
+    }
+    /*
+     * Sprint 57.29 §3: the selection, in the document's selection style,
+     * over the error token so the user sees what the next key replaces.
+     * Its edges are grapheme boundaries, so a wide cluster is in or out
+     * whole (and yew_grid_overlay styles both cells of a pair it
+     * touches).  Either edge may lie past the scroll, so both clamp to
+     * the text drawn: `col` is where it ended, and the ghost after it is
+     * never selected.
+     */
+    {
+        Span sel;
+
+        if (yew_cmdline_selection(ed, &sel)) {
+            CCol lo = yew_off_to_ccol(line->buf, span, BYTEOFF(sel.lo),
+                                      YEW_CMDLINE_TABWIDTH);
+            CCol hi = yew_off_to_ccol(line->buf, span, BYTEOFF(sel.hi),
+                                      YEW_CMDLINE_TABWIDTH);
+            u64 base = (u64)rect.x + 1U;
+            u64 x0v = lo.v > line->scroll ? base + lo.v - line->scroll : base;
+            u64 x1v = hi.v > line->scroll ? base + hi.v - line->scroll : base;
+            u16 x0 = x0v > col ? col : (u16)x0v;
+            u16 x1 = x1v > col ? col : (u16)x1v;
+            Cell sel_style;
+            u8 fields = yew_draw_sel_style(ed, &sel_style);
+
+            if (x0 < x1)
+                yew_grid_overlay(&ed->grid, rect.y, x0, x1, &sel_style,
+                                 fields);
+        }
     }
     /*
      * §7: the suggestion trails the caret, dim, and is drawn AFTER the
