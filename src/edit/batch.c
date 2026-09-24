@@ -123,6 +123,9 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.ui.message_expand", "no batch alternative"},
     {"ed.cmdline.accept", "use ed.run(name, args)"},
     {"ed.cmdline.cancel", "use ed.run(name, args)"},
+    /* Sprint 57.29: the prompt's C-c -- a copy or a cancel of a line
+     * a script never has open. */
+    {"ed.cmdline.copy_or_cancel", "use ed.run(name, args)"},
     {"ed.file.open", "use buf.open(path)"},
     /* Sprint 57.13 section 4: `Save As...` is the QUESTION "write to
      * which path?" and nothing else - it opens the E-mode line seeded
