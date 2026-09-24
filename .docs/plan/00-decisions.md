@@ -306,6 +306,17 @@ to the next 16 KiB boundary: full 2,228,224, minimal 1,736,704, LSP-only
 1,851,392, AI-only 1,867,776, FUSS-only 1,884,160, plugins-only 1,835,008.
 The musl caps set by S57.26-A2 are unchanged. Nothing else changes.
 
+**Amendment S57.29-A1 (2026-09-24) — two single-module caps follow a layout
+step.** Sprint 57.29 (prompt selection and the clipboard) adds 3,718 file-
+backed bytes on the pinned x86_64 GCC 13.3 lane at `8b4058f2` (about 1.9 KB
+in `core.ui`, 1.8 KB in `core.edit`). Full and minimal stay inside their
+S57.32-A1 caps (full's file does not move; minimal steps one 4 KiB page to
+1,730,208). FUSS-only and LSP-only each step three pages, 1,873,568 to
+1,885,856 and 1,840,800 to 1,853,088, crossing their caps by 1,696 bytes
+each: on-disk layout amplification, as S59-A7 recorded, not module growth.
+Those two caps alone move to the next 16 KiB boundary: FUSS-only 1,900,544,
+LSP-only 1,867,776. Nothing else changes.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
