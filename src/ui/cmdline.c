@@ -532,6 +532,42 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     ed->footer_dirty = true;
 }
 
+/*
+ * Sprint 57.31 §2: reopen a prompt a command took away -- the kind it
+ * was, its text, the caret at `caret`, and the mode it returns to.  A
+ * search prompt reopens through the search UI, so its preview and its
+ * restore point are the ones a fresh `/` would make.
+ */
+void yew_cmdline_restore(Ed *ed, YewPromptKind kind, const char *text,
+                         size_t caret, u8 return_mode)
+{
+    CmdLine *line;
+
+    if (ed == NULL || text == NULL)
+        return;
+    if (kind == YEW_PROMPT_SEARCH_F || kind == YEW_PROMPT_SEARCH_B) {
+        if (ed->win == NULL)
+            return;
+        yew_search_open(ed, ed->win, kind == YEW_PROMPT_SEARCH_B);
+        if (!ed->cmdline.active || !replace_all(ed, text, true))
+            return;
+        yew_cmdline_edited(ed);
+    } else {
+        (void)yew_mode_enter_execute(ed, text);
+        if (!ed->cmdline.active)
+            return;
+    }
+    line = &ed->cmdline;
+    if (return_mode < YEW_MODE__N && return_mode != (u8)YEW_MODE_E)
+        line->return_mode = return_mode;
+    line->cur.pos = BYTEOFF(caret);
+    line->cur.anchor = line->cur.pos;
+    line->cur.goal_col = (CCol){0U};
+    yew_cursor_clamp(line->buf, &line->cur);
+    sync_to_target(line);
+    ed->footer_dirty = true;
+}
+
 void yew_cmdline_open_input(Ed *ed, const char *seed,
                             YewCmdlineInputDone done, void *ctx)
 {
@@ -1126,6 +1162,8 @@ static const PromptSelRow prompt_sel_rows[] = {
     /* A-h leaves the line as it is; a selection collapses as for any
      * command. */
     {"ed.cmdline.man_page", PSEL_COLLAPSE},
+    /* A-e takes the whole line, caret and all, and the prompt closes. */
+    {"ed.cmdline.edit_in_buffer", PSEL_COLLAPSE},
 };
 
 static PromptSel prompt_sel_rule(const char *command)

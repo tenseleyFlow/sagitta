@@ -127,6 +127,10 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed);
 void yew_cmdline_open_input(Ed *ed, const char *seed,
                             YewCmdlineInputDone done, void *ctx);
 void yew_cmdline_close(Ed *ed, bool accepted);
+/* Sprint 57.31 §2: open a `kind` prompt holding `text` with the caret at
+ * `caret`, returning to `return_mode` when it closes. */
+void yew_cmdline_restore(Ed *ed, YewPromptKind kind, const char *text,
+                         size_t caret, u8 return_mode);
 void yew_cmdline_dispose(Ed *ed);
 bool yew_cmdline_key(Ed *ed, const Key *key);
 void yew_cmdline_paste(Ed *ed, const u8 *bytes, size_t len);
