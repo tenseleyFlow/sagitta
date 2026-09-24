@@ -26,6 +26,15 @@ typedef enum {
 typedef void (*YewCmdlineInputDone)(Ed *ed, bool accepted,
                                     const u8 *text, size_t len, void *ctx);
 
+/* Sprint 57.30 §5: one token a token walk showed -- word `word` of view
+ * entry `entry`, bytes [lo, hi) of it. */
+typedef struct YewTokHit {
+    u32 entry;
+    u32 word;
+    u32 lo;
+    u32 hi;
+} YewTokHit;
+
 typedef struct CmdLine {
     YewPromptKind kind;
     bool active;
@@ -96,6 +105,22 @@ typedef struct CmdLine {
     u64 last_arg_gen;
     size_t last_arg_entry;
     Span last_arg_span;
+    /*
+     * Sprint 57.30 §5: A-<up>/A-<down>, fish's token search.  The walk
+     * continues while the presses are consecutive (Ed.invoke_seq).
+     * `tok_term` is the token the walk began on; `tok_span` where the
+     * token it shows now sits in the line; `tok_seen` the hits shown,
+     * newest first, so A-<down> retraces them.
+     */
+    u64 tok_seq;
+    u64 tok_gen;
+    bool tok_bang;
+    char *tok_term;
+    size_t tok_term_len;
+    Span tok_span;
+    YewTokHit *tok_seen;
+    u32 tok_n;
+    u32 tok_cap;
 } CmdLine;
 
 void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed);
@@ -200,6 +225,10 @@ CmdStatus yew_cmdline_cmd_cancel(CmdCtx *cx);
 CmdStatus yew_cmdline_cmd_ghost_accept_line(CmdCtx *cx);
 /* Sprint 57.28 §4: A-., the previous entry's last word. */
 CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx);
+/* Sprint 57.30 §5: A-<up> / A-<down> -- replace the token under the
+ * caret with the next older / newer distinct history token holding it. */
+CmdStatus yew_cmdline_cmd_token_prev(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_token_next(CmdCtx *cx);
 
 /*
  * Sprint 57.29 §1: the prompt's selection is [min(anchor,pos),

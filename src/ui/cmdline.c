@@ -187,6 +187,8 @@ static void cmdline_target_free(CmdLineTarget *target)
     yew_xfree(target);
 }
 
+static void tok_forget(CmdLine *line);
+
 static void menu_discard(Ed *ed)
 {
     CmdLine *line = &ed->cmdline;
@@ -513,6 +515,7 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     line->walk_bang = false;
     line->hsearch = false;
     line->hsearch_line = NULL;
+    tok_forget(line);
     line->err = (CmdErr){0};
     line->scroll = 0U;
     yew_hist_suggest_init(&line->suggest);
@@ -604,6 +607,7 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     line->hsearch = false;
     yew_xfree(line->hsearch_line);
     line->hsearch_line = NULL;
+    tok_forget(line);
     cmdline_target_free(cmdline_target(line));
     line->target = NULL;
     line->buf = NULL;
@@ -1111,6 +1115,8 @@ static const PromptSelRow prompt_sel_rows[] = {
     {"ed.cmdline.hist_prev", PSEL_COLLAPSE},
     {"ed.cmdline.hist_next", PSEL_COLLAPSE},
     {"ed.cmdline.hist_search", PSEL_COLLAPSE},
+    {"ed.cmdline.token_prev", PSEL_COLLAPSE},
+    {"ed.cmdline.token_next", PSEL_COLLAPSE},
 };
 
 static PromptSel prompt_sel_rule(const char *command)
@@ -2600,6 +2606,266 @@ CmdStatus yew_cmdline_cmd_last_arg(CmdCtx *cx)
     if (again)
         line->last_arg_seq = ed->invoke_seq;
     return YEW_CMD_OK;
+}
+
+/*
+ * Sprint 57.30 §5: fish's history-token-search.
+ *
+ * The term is the token under the caret (a bang line's shell word, raw;
+ * otherwise blank-delimited).  A-<up> replaces just that token with the
+ * next OLDER distinct token holding it as a substring, from any entry of
+ * §2's source -- entries newest first, each entry's words right to left
+ * -- and A-<down> walks back, the original token past the newest.
+ */
+enum { YEW_TOK_WORDS_MAX = 256 };
+
+static bool tok_blank(char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+/*
+ * The raw words of `s`: split at blanks -- UNQUOTED blanks when `shell`,
+ * with `'…'`, `"…"` and backslash escapes read as a shell reads them, so
+ * `cp a "my file"` is three words.  At most `cap`; returns the count.
+ */
+static u32 tok_words(const char *s, size_t n, bool shell, Span *out, u32 cap)
+{
+    size_t i = 0U;
+    u32 count = 0U;
+
+    while (i < n && count < cap) {
+        size_t lo;
+        char q = 0;
+
+        while (i < n && tok_blank(s[i]))
+            i++;
+        if (i >= n)
+            break;
+        lo = i;
+        while (i < n && (q != 0 || !tok_blank(s[i]))) {
+            char c = s[i];
+
+            if (shell && q != '\'' && c == '\\' && i + 1U < n)
+                i++;
+            else if (shell && q == 0 && (c == '\'' || c == '"'))
+                q = c;
+            else if (shell && q != 0 && c == q)
+                q = 0;
+            i++;
+        }
+        out[count++] = (Span){lo, i};
+    }
+    return count;
+}
+
+/* The token under the caret in `text`: [start, end) of the word the
+ * caret is in or at the end of; empty at the caret between words. */
+static Span tok_at(Ed *ed, const char *text, size_t len, size_t caret,
+                   bool *bang)
+{
+    size_t body = 0U;
+    size_t lo = caret;
+    Span words[YEW_TOK_WORDS_MAX];
+    u32 n;
+    u32 i;
+
+    *bang = ed->cmdline.kind == YEW_PROMPT_CMD &&
+            yew_cmd_bang_body(ed, text, len, &body) && body <= caret;
+    if (*bang) {
+        Arena a;
+        YewShCtx ctx;
+
+        arena_init(&a);
+        if (yew_shctx_at(text + body, len - body, caret - body, &a, &ctx) &&
+            ctx.replace.lo <= ctx.replace.hi)
+            lo = (size_t)ctx.replace.lo + body;
+        arena_free_all(&a);
+        /* The rest of the word after the caret, with the lexer's words. */
+        n = tok_words(text + lo, len - lo, true, words, 1U);
+        if (n == 1U && words[0].lo == 0U)
+            return (Span){lo, lo + words[0].hi};
+        return (Span){lo, caret};
+    }
+    n = tok_words(text, len, false, words, YEW_TOK_WORDS_MAX);
+    for (i = 0U; i < n; i++) {
+        if (words[i].lo <= caret && caret <= words[i].hi)
+            return words[i];
+    }
+    return (Span){caret, caret};
+}
+
+static void tok_forget(CmdLine *line)
+{
+    yew_xfree(line->tok_term);
+    yew_xfree(line->tok_seen);
+    line->tok_term = NULL;
+    line->tok_seen = NULL;
+    line->tok_term_len = 0U;
+    line->tok_n = 0U;
+    line->tok_cap = 0U;
+    line->tok_seq = 0U;
+}
+
+static YewHistView tok_view(Ed *ed)
+{
+    YewHistView v = {NULL, NULL};
+
+    if (ed->cmdline.tok_bang) {
+        suggest_ensure(ed);
+        v.suggest = &ed->cmdline.suggest;
+    } else {
+        v.hist = ed->cmdline.history;
+    }
+    return v;
+}
+
+static bool tok_same(const char *a, size_t an, const char *b, size_t bn)
+{
+    return an == bn && (an == 0U || memcmp(a, b, an) == 0);
+}
+
+/* Was this token's text shown already, or is it the one the walk began
+ * on?  Either way it is not a new answer. */
+static bool tok_repeat(const CmdLine *line, const YewHistView *v,
+                       const char *tok, size_t n)
+{
+    u32 i;
+
+    if (tok_same(tok, n, line->tok_term, line->tok_term_len))
+        return true;
+    for (i = 0U; i < line->tok_n; i++) {
+        const YewTokHit *h = &line->tok_seen[i];
+        const char *e = yew_hist_view_at(v, h->entry);
+
+        if (e != NULL && tok_same(tok, n, e + h->lo, h->hi - h->lo))
+            return true;
+    }
+    return false;
+}
+
+static bool tok_older(CmdLine *line, const YewHistView *v, YewTokHit *out)
+{
+    u32 n = yew_hist_view_len(v);
+    u32 e = 0U;
+    bool resume = line->tok_n != 0U;
+
+    if (resume)
+        e = line->tok_seen[line->tok_n - 1U].entry;
+    for (; e < n; e++) {
+        const char *entry = yew_hist_view_at(v, e);
+        Span words[YEW_TOK_WORDS_MAX];
+        u32 k;
+
+        if (entry == NULL)
+            continue;
+        k = tok_words(entry, strlen(entry), line->tok_bang, words,
+                      YEW_TOK_WORDS_MAX);
+        if (resume && e == line->tok_seen[line->tok_n - 1U].entry)
+            k = line->tok_seen[line->tok_n - 1U].word;
+        while (k > 0U) {
+            const char *tok = entry + words[--k].lo;
+            size_t len = (size_t)(words[k].hi - words[k].lo);
+
+            if (!yew_hist_find(tok, len, line->tok_term, line->tok_term_len,
+                               NULL) ||
+                tok_repeat(line, v, tok, len))
+                continue;
+            *out = (YewTokHit){e, k, (u32)words[k].lo, (u32)words[k].hi};
+            return true;
+        }
+    }
+    return false;
+}
+
+static CmdStatus tok_put(Ed *ed, const char *bytes, size_t len)
+{
+    CmdLine *line = &ed->cmdline;
+
+    if (!replace_span(ed, line->tok_span, (const u8 *)bytes, len, true))
+        return YEW_CMD_ERR_IO;
+    line->tok_span = (Span){line->tok_span.lo, line->tok_span.lo + len};
+    menu_discard(ed);
+    yew_cmdline_edited(ed);
+    return YEW_CMD_OK;
+}
+
+static CmdStatus token_walk(CmdCtx *cx, bool older)
+{
+    Ed *ed;
+    CmdLine *line;
+    YewHistView view;
+    CmdStatus status = YEW_CMD_OK;
+    bool again;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return YEW_CMD_ERR_STATE;
+    ed = cx->ed;
+    line = &ed->cmdline;
+    sync_from_target(line);
+    again = line->tok_seq != 0U && line->tok_gen == line->generation &&
+            ed->invoke_seq == line->tok_seq + 1U;
+    if (!again) {
+        char *text = text_string(line->buf);
+        size_t len = strlen(text);
+        bool bang = false;
+        Span tok = tok_at(ed, text, len, (size_t)line->cur.pos.v, &bang);
+
+        tok_forget(line);
+        line->tok_bang = bang;
+        line->tok_span = tok;
+        line->tok_term_len = (size_t)(tok.hi - tok.lo);
+        line->tok_term = yew_xmalloc(line->tok_term_len + 1U);
+        if (line->tok_term_len != 0U)
+            (void)memcpy(line->tok_term, text + tok.lo,
+                         line->tok_term_len);
+        line->tok_term[line->tok_term_len] = '\0';
+        yew_xfree(text);
+    }
+    view = tok_view(ed);
+    if (older) {
+        YewTokHit hit;
+
+        if (tok_older(line, &view, &hit)) {
+            const char *entry = yew_hist_view_at(&view, hit.entry);
+
+            if (line->tok_n == line->tok_cap) {
+                line->tok_cap = line->tok_cap == 0U ? 16U
+                                                    : line->tok_cap * 2U;
+                line->tok_seen = yew_xreallocarray(line->tok_seen,
+                                                   line->tok_cap,
+                                                   sizeof(*line->tok_seen));
+            }
+            line->tok_seen[line->tok_n++] = hit;
+            status = tok_put(ed, entry + hit.lo, hit.hi - hit.lo);
+        }
+        /* Past the oldest it stays put. */
+    } else if (again && line->tok_n != 0U) {
+        line->tok_n--;
+        if (line->tok_n == 0U) {
+            status = tok_put(ed, line->tok_term, line->tok_term_len);
+        } else {
+            const YewTokHit *h = &line->tok_seen[line->tok_n - 1U];
+            const char *entry = yew_hist_view_at(&view, h->entry);
+
+            if (entry != NULL)
+                status = tok_put(ed, entry + h->lo, h->hi - h->lo);
+        }
+    }
+    /* The chain goes on only while the presses are consecutive. */
+    line->tok_seq = ed->invoke_seq;
+    line->tok_gen = line->generation;
+    return status;
+}
+
+CmdStatus yew_cmdline_cmd_token_prev(CmdCtx *cx)
+{
+    return token_walk(cx, true);
+}
+
+CmdStatus yew_cmdline_cmd_token_next(CmdCtx *cx)
+{
+    return token_walk(cx, false);
 }
 
 static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)

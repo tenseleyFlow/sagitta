@@ -1944,3 +1944,75 @@ void test_prompt_keys_ctrl_r_on_a_bang_line(void)
     pk_text(&f, "r !make all");
     pk_free(&f);
 }
+
+/* §5: A-<up> replaces JUST the token under the caret with the next
+ * older distinct history token holding it; A-<down> walks back, the
+ * original past the newest; anything else ends the walk. */
+void test_prompt_keys_token_search_replaces_only_the_token(void)
+{
+    static const char *const own[] = {"e src/main.c", "e src/util.c",
+                                      "e docs/main.md", "e src/main.c"};
+    PkFix f;
+
+    pk_init(&f);
+    /* History, newest first: e src/main.c, e docs/main.md, e src/util.c. */
+    pk_prompt(&f, own, 4U, "e main x");
+    pk_run(&f, (u32)'b', YEW_MOD_ALT, "ed.move.word.prev");
+    pk_run(&f, (u32)'b', YEW_MOD_ALT, "ed.move.word.prev");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 2U);
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    pk_text(&f, "e src/main.c x");
+    YEW_ASSERT_EQ_U64(pk_caret(&f), 12U);
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    pk_text(&f, "e docs/main.md x");
+    /* `src/main.c` again is not a new answer; nothing older holds it. */
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    pk_text(&f, "e docs/main.md x");
+    pk_run(&f, YEW_KEY_DOWN, YEW_MOD_ALT, "ed.cmdline.token_next");
+    pk_text(&f, "e src/main.c x");
+    pk_run(&f, YEW_KEY_DOWN, YEW_MOD_ALT, "ed.cmdline.token_next");
+    pk_text(&f, "e main x");
+    pk_run(&f, YEW_KEY_DOWN, YEW_MOD_ALT, "ed.cmdline.token_next");
+    pk_text(&f, "e main x");
+
+    /* Anything between two presses ends the walk: the next begins on
+     * the token then under the caret. */
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    pk_text(&f, "e src/main.c x");
+    pk_run(&f, YEW_KEY_LEFT, 0U, "ed.move.char.prev");
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    YEW_ASSERT_EQ_STR(f.ed.cmdline.tok_term, "src/main.c");
+    /* Distinct: `src/main.c` itself is the term, so the next token that
+     * holds it is from an older entry -- there is none. */
+    pk_text(&f, "e src/main.c x");
+
+    /* Words of every entry, the caret's word only: `util` in the middle
+     * of a line. */
+    pk_prompt(&f, own, 4U, "x util y");
+    pk_run(&f, (u32)'b', YEW_MOD_ALT, "ed.move.word.prev");
+    pk_run(&f, (u32)'b', YEW_MOD_ALT, "ed.move.word.prev");
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    pk_text(&f, "x src/util.c y");
+    pk_free(&f);
+}
+
+/* §5 on a bang line: the shell word under the caret, and an entry's
+ * RAW shell words, quotes as typed. */
+void test_prompt_keys_token_search_on_a_bang_line(void)
+{
+    static const char *const own[] = {"!cp a \"my file\" b",
+                                      "!grep -n 'my pat' src"};
+    PkFix f;
+
+    pk_init(&f);
+    pk_prompt(&f, own, 2U, "!cat my");
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    YEW_ASSERT(f.ed.cmdline.tok_bang);
+    pk_text(&f, "!cat 'my pat'");
+    pk_run(&f, YEW_KEY_UP, YEW_MOD_ALT, "ed.cmdline.token_prev");
+    pk_text(&f, "!cat \"my file\"");
+    pk_run(&f, YEW_KEY_DOWN, YEW_MOD_ALT, "ed.cmdline.token_next");
+    pk_run(&f, YEW_KEY_DOWN, YEW_MOD_ALT, "ed.cmdline.token_next");
+    pk_text(&f, "!cat my");
+    pk_free(&f);
+}

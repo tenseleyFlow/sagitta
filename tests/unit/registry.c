@@ -147,6 +147,8 @@ const YewTest yew_tests[] = {
     T(prompt_keys_ctrl_r_searches_history),
     T(prompt_keys_ctrl_r_escape_restores_the_line),
     T(prompt_keys_ctrl_r_on_a_bang_line),
+    T(prompt_keys_token_search_replaces_only_the_token),
+    T(prompt_keys_token_search_on_a_bang_line),
     T(readline_kill_word_prev_reaches_every_cursor),
     T(readline_kills_leave_registers_and_clipboard_untouched),
     T(readline_register_writes_leave_the_yank_stack),

@@ -844,7 +844,12 @@ void test_invariant9_every_new_command_is_registered(void)
          * Sprint 57.30 §4: C-r searches history in the pager -- keys
          * move, Enter fills, Esc restores; no mouse needed.
          */
-        "ed.cmdline.hist_search"
+        "ed.cmdline.hist_search",
+        /*
+         * Sprint 57.30 §5: A-<up>/A-<down>, fish's token search.  Keys
+         * only.
+         */
+        "ed.cmdline.token_prev", "ed.cmdline.token_next"
     };
     size_t i;
 

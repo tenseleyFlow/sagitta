@@ -471,6 +471,10 @@ bind("E", "<tab>", "ed.cmdline.complete_next")
 bind("E", "S-<tab>", "ed.cmdline.complete_prev")
 bind("E", "<pgdn>", "ed.cmdline.menu.page_next")
 bind("E", "<pgup>", "ed.cmdline.menu.page_prev")
+# A-<up>/A-<down>: fish's token search -- the word under the caret
+# becomes older (newer) history words holding it (Sprint 57.30).
+bind("E", "A-<up>", "ed.cmdline.token_prev")
+bind("E", "A-<down>", "ed.cmdline.token_next")
 # C-r searches history in the pager (Sprint 57.30); A-r inserts a register.
 bind("E", "C-r", "ed.cmdline.hist_search")
 bind("E", "A-r", "ed.cmdline.insert_register")

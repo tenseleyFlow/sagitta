@@ -114,6 +114,8 @@ void test_prompt_keys_history_highlight_is_state(void);
 void test_prompt_keys_ctrl_r_searches_history(void);
 void test_prompt_keys_ctrl_r_escape_restores_the_line(void);
 void test_prompt_keys_ctrl_r_on_a_bang_line(void);
+void test_prompt_keys_token_search_replaces_only_the_token(void);
+void test_prompt_keys_token_search_on_a_bang_line(void);
 
 void test_readline_kill_word_prev_reaches_every_cursor(void);
 void test_readline_kills_leave_registers_and_clipboard_untouched(void);

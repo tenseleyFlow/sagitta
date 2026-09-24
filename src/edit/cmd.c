@@ -722,6 +722,16 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.hist_search", yew_cmdline_cmd_hist_search, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Search history for the line's text; again for an older match", NULL},
+    /* Sprint 57.30 §5: A-<up>/A-<down> -- keymap plumbing like
+     * last_arg: internal, so not recordable. */
+    {"ed.cmdline.token_prev", yew_cmdline_cmd_token_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Replace the token under the caret with an older history token "
+     "holding it",
+     NULL},
+    {"ed.cmdline.token_next", yew_cmdline_cmd_token_next, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Walk the token search back toward the token typed", NULL},
     {"ed.cmdline.complete_next", yew_cmdline_cmd_complete_next,
      YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Open or advance command-line completion", NULL},
