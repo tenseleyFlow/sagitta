@@ -207,7 +207,7 @@ static void sh_expect(ShFix *f, const char *cmd, const char *want)
     char *got = sh_do(f, cmd);
 
     YEW_ASSERT_EQ_STR(got, want);
-    free(got);
+    yew_xfree(got);
 }
 
 static void sh_set(ShFix *f, const char *name, const char *value)
@@ -523,7 +523,7 @@ void test_shsession_forged_marker_is_output(void)
     YEW_ASSERT_EQ_STR(got + sizeof(forged) - 1U, "after\n");
     YEW_ASSERT_EQ_I64(yew_job_find(&f.ed, id)->state, YEW_JOB_EXITED);
     YEW_ASSERT_EQ_I64(yew_job_find(&f.ed, id)->exit_code, 1);
-    free(got);
+    yew_xfree(got);
     bytebuf_free(&cmd);
     sh_expect(&f, "echo next", "next\n");
     sh_fix_free(&f);
@@ -578,7 +578,7 @@ void test_shsession_output_shapes(void)
             break;
     }
     YEW_ASSERT_EQ_U64(i, 1048576U);
-    free(got);
+    yew_xfree(got);
     /* Invalid UTF-8 and a lone 0x1e are bytes like any other. */
     sh_expect(&f, "printf 'x\\377\\036y\\n'", "x\377\036y\n");
     sh_fix_free(&f);
@@ -728,7 +728,7 @@ void test_shsession_split_reads_and_replayed_markers(void)
         YEW_ASSERT(sh_wait_split(&f.ed, id, chunks[c], &raw));
         got = sh_output(&f, id);
         YEW_ASSERT_EQ_STR(got, "one\036two\nx\n");
-        free(got);
+        yew_xfree(got);
         YEW_ASSERT_EQ_STR(yew_shsession_cwd(&f.ed), sub);
 
         /* Replay this frame's own status marker in the next frame. */
@@ -748,7 +748,7 @@ void test_shsession_split_reads_and_replayed_markers(void)
         YEW_ASSERT_EQ_U64(strlen(got), mlen + 2U + 5U);
         YEW_ASSERT_EQ_MEM(got, mark, mlen);
         YEW_ASSERT_EQ_STR(got + mlen, "0\036tail\n");
-        free(got);
+        yew_xfree(got);
         bytebuf_free(&raw);
         bytebuf_free(&cmd);
     }
@@ -851,7 +851,7 @@ void test_shsession_cancel_keeps_the_session_on_every_shell(void)
             char *got = sh_output(&f, id);
 
             YEW_ASSERT_EQ_STR(got, "started\n");
-            free(got);
+            yew_xfree(got);
         }
         /* The session survived: same shell, next frame runs. */
         YEW_ASSERT_EQ_U64(yew_shsession_job(&f.ed), shell);
@@ -930,7 +930,7 @@ void test_shsession_busy_runs_alongside(void)
     got = sh_output(&f, id);
     (void)snprintf(want, sizeof(want), "%s\nb=1\n", sub);
     YEW_ASSERT_EQ_STR(got, want);
-    free(got);
+    yew_xfree(got);
 
     sh_cancel_until_done(&f.ed, slow);
     (void)snprintf(want, sizeof(want), "%s\n", sub);
@@ -1005,7 +1005,7 @@ void test_shsession_other_forms_inherit_state(void)
     text = sh_buffer_text(f.ed.win->buf);
     (void)snprintf(want, sizeof(want), "%s 2\n", sub);
     YEW_ASSERT_EQ_STR(text, want);
-    free(text);
+    yew_xfree(text);
 
     /* :%! */
     YEW_ASSERT_EQ_I64(
@@ -1016,7 +1016,7 @@ void test_shsession_other_forms_inherit_state(void)
     text = sh_buffer_text(f.ed.win->buf);
     (void)snprintf(want, sizeof(want), "f %s 2\n", sub);
     YEW_ASSERT_EQ_STR(text, want);
-    free(text);
+    yew_xfree(text);
 
     /* :!! (no controlling terminal here, so no handover -- 57.18) */
     YEW_ASSERT(yew_shell_term_run(&f.ed,
@@ -1040,7 +1040,7 @@ void test_shsession_other_forms_inherit_state(void)
     YEW_ASSERT(sh_wait(&f.ed, id));
     text = sh_buffer_text(f.ed.win->buf);
     YEW_ASSERT_NOT_NULL(strstr(text, "cat\n"));
-    free(text);
+    yew_xfree(text);
 
     /* The environment completion offers is the session's. */
     arena_init(&a);
