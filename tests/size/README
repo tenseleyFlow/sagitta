@@ -37,7 +37,9 @@ measurement. Amendment S57.32-A1 adds the prompt editing set and
 cd-aware completion (Sprints 57.28 and 57.32): 18,140 bytes of `core.ui`,
 1,429 of `core.edit`, 940 of `core.text`, 20,480-24,576 per glibc profile
 (full 2,213,576, minimal 1,726,112). Hosted caps move to the next 16 KiB
-boundary (full 2,228,224, minimal 1,736,704); musl caps are unchanged. The
+boundary (full 2,228,224, minimal 1,736,704); musl caps are unchanged. Amendment
+S57.29-A1 moves only the FUSS-only and LSP-only caps (1,900,544 and 1,867,776):
+Sprint 57.29's 3,718 bytes stepped each file three 4 KiB pages. The
 former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
 optimization ratchets. They are not alternate measurements and must not be
 selected by a CI flag.

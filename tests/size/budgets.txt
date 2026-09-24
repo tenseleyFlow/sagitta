@@ -1,9 +1,9 @@
 # config         bytes    modules                         why
 full             2228224  lsp,ai,fuss,plugins             s57-32-a1-prompt-and-cd-next-16-KiB
 minimal          1736704  none                            s57-32-a1-prompt-and-cd-next-16-KiB
-lsp-only         1851392  lsp                             s57-32-a1-prompt-and-cd-next-16-KiB
+lsp-only         1867776  lsp                             s57-29-a1-layout-step-next-16-KiB
 ai-only          1867776  ai                              s57-32-a1-prompt-and-cd-next-16-KiB
-fuss-only        1884160  fuss                            s57-32-a1-prompt-and-cd-next-16-KiB
+fuss-only        1900544  fuss                            s57-29-a1-layout-step-next-16-KiB
 plugins-only     1835008  plugins                         s57-32-a1-prompt-and-cd-next-16-KiB
 musl-full        2359296  lsp,ai,fuss,plugins             s57-26-a2-shell-completion-next-64-KiB
 musl-minimal     1835008  none                            s57-26-a2-shell-completion-next-64-KiB

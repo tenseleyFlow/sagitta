@@ -1,15 +1,15 @@
 # yew size ledger v1  config=minimal  binary=build-size/measure/minimal/yew  stripped=1
 # toolchain: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 / GNU nm (GNU Binutils for Ubuntu) 2.42 / GNU size (GNU Binutils for Ubuntu) 2.42   target=x86_64-linux-gnu
-# on-disk 1726112   object-file-backed 1639831   link-file-residue 86281
-# final-file-backed 1577555   final-bss 477664   object-bss 10962707
-# gc_saved_bytes 77824   without-gc-on-disk 1803936
-# unattributed-symbols 0/4187 (0.0%)   limit 2.0%
-# non-folded-object-sections 10547234
+# on-disk 1730208   object-file-backed 1643531   link-file-residue 86677
+# final-file-backed 1580979   final-bss 477664   object-bss 10962707
+# gc_saved_bytes 73728   without-gc-on-disk 1803936
+# unattributed-symbols 0/4199 (0.0%)   limit 2.0%
+# non-folded-object-sections 10557863
 
 bucket                  .text    .rodata      .data       .bss      total     pct
 core.fl                211935      27472      10672   10492081   10742160  85.2%
-core.ui                351299      19145       6305     407193     783942   6.2%
-core.edit              238337      53835      34320       9957     336449   2.6%
+core.ui                352610      19474       6561     407193     785838   6.2%
+core.edit              239428      54308      34560       9957     338253   2.6%
 core.unicode            25878     154532          0          1     180411   1.4%
 core.syn               112233      12508      12680        107     137528   1.0%
 core.text              110681      12560        416       3321     126978   1.0%
@@ -22,20 +22,20 @@ mod.fuss                11554        310        144          0      12008   0.0%
 mod.lsp                  2490          3          0          0       2493   0.0%
 mod.ai                   2452          3          0          0       2455   0.0%
 mod.plugins              1382          7          0          0       1389   0.0%
-libc+crt                86281
---totals             12602538
+libc+crt                86677
+--totals             12606238
 
 -- non-folded object sections
         8786  .comment
-      253659  .debug_abbrev
-       64368  .debug_aranges
-      225960  .debug_frame
-     5041919  .debug_info
-     1198330  .debug_line
-      145551  .debug_line_str
-     1466882  .debug_loclists
-      207251  .debug_rnglists
-     1928416  .debug_str
+      253748  .debug_abbrev
+       64544  .debug_aranges
+      226528  .debug_frame
+     5046033  .debug_info
+     1200683  .debug_line
+      145572  .debug_line_str
+     1469120  .debug_loclists
+      207543  .debug_rnglists
+     1929194  .debug_str
         6112  .note.gnu.property
 
 -- top 12 symbols by size
