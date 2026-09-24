@@ -685,32 +685,71 @@ static CmdStatus shift_highlight_begin(CmdCtx *cx)
     return yew_mode_enter_highlight(cx->ed, YEW_MODE_I, false);
 }
 
+/*
+ * Sprint 57.29 §2: in the `:` prompt a Shift+motion extends the prompt
+ * Win's OWN selection.  The prompt is E mode and stays E -- entering H
+ * would hand the keys to the document -- so the motion runs as it is and
+ * the anchor is put back after it, which is what H's motions do.
+ */
+static CmdStatus sel_extend(CmdCtx *cx, CmdStatus (*move)(CmdCtx *cx))
+{
+    CmdStatus status;
+
+    if (cx != NULL && cx->ed != NULL && cx->ed->cmdline.active &&
+        cx->win != NULL && cx->win == yew_cmdline_target(cx->ed) &&
+        cx->win->cs.primary < cx->win->cs.curs.len) {
+        size_t primary = cx->win->cs.primary;
+        ByteOff anchor = cx->win->cs.curs.data[primary].anchor;
+
+        status = move(cx);
+        if (primary < cx->win->cs.curs.len)
+            cx->win->cs.curs.data[primary].anchor = anchor;
+        return status;
+    }
+    status = shift_highlight_begin(cx);
+    return status == YEW_CMD_OK ? move(cx) : status;
+}
+
 CmdStatus yew_edit_cmd_sel_extend_left(CmdCtx *cx)
 {
-    CmdStatus status = shift_highlight_begin(cx);
-
-    return status == YEW_CMD_OK ? yew_edit_cmd_move_char_prev(cx) : status;
+    return sel_extend(cx, yew_edit_cmd_move_char_prev);
 }
 
 CmdStatus yew_edit_cmd_sel_extend_right(CmdCtx *cx)
 {
-    CmdStatus status = shift_highlight_begin(cx);
-
-    return status == YEW_CMD_OK ? yew_edit_cmd_move_char_next(cx) : status;
+    return sel_extend(cx, yew_edit_cmd_move_char_next);
 }
 
 CmdStatus yew_edit_cmd_sel_extend_up(CmdCtx *cx)
 {
-    CmdStatus status = shift_highlight_begin(cx);
-
-    return status == YEW_CMD_OK ? yew_edit_cmd_move_line_up(cx) : status;
+    return sel_extend(cx, yew_edit_cmd_move_line_up);
 }
 
 CmdStatus yew_edit_cmd_sel_extend_down(CmdCtx *cx)
 {
-    CmdStatus status = shift_highlight_begin(cx);
+    return sel_extend(cx, yew_edit_cmd_move_line_down);
+}
 
-    return status == YEW_CMD_OK ? yew_edit_cmd_move_line_down(cx) : status;
+/* Sprint 57.29 §2: by the word unit A-b / A-f step in, and to the line's
+ * ends. */
+CmdStatus yew_edit_cmd_sel_extend_word_prev(CmdCtx *cx)
+{
+    return sel_extend(cx, yew_edit_cmd_move_word_prev);
+}
+
+CmdStatus yew_edit_cmd_sel_extend_word_next(CmdCtx *cx)
+{
+    return sel_extend(cx, yew_edit_cmd_move_word_next);
+}
+
+CmdStatus yew_edit_cmd_sel_extend_line_home(CmdCtx *cx)
+{
+    return sel_extend(cx, yew_edit_cmd_move_line_home);
+}
+
+CmdStatus yew_edit_cmd_sel_extend_line_end(CmdCtx *cx)
+{
+    return sel_extend(cx, yew_edit_cmd_move_line_end);
 }
 
 typedef enum {
