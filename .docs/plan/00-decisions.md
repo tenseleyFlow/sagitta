@@ -338,6 +338,16 @@ LSP-only 1,884,160, plugins-only 1,851,392. AI-only and minimal stay inside
 their S57.30-A1 caps. The musl caps are not moved here: they are measured by
 a separate lane and will be amended on its evidence if it crosses.
 
+**Amendment S57.31-A2 (2026-09-24) — the musl caps follow Sprints
+57.28-57.31.** The hosted musl static-PIE lane at `bb9ebe66` measures
+musl-full 2,361,232 and musl-minimal 1,849,200, against the S57.26-A2
+measurements 2,312,080 and 1,795,952: prompt editing and the yank stack,
+cd-aware completion, prompt selection, prompt history and the prompt extras
+together add 49,152 and 53,248 bytes, the same required core growth the
+glibc amendments recorded one sprint at a time. They cross their caps by
+1,936 and 14,192 bytes and move to the next 64 KiB boundary, the S59-A6
+musl rule: musl-full 2,424,832, musl-minimal 1,900,544. Nothing else changes.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

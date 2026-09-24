@@ -43,7 +43,9 @@ Sprint 57.29's 3,718 bytes stepped each file three 4 KiB pages. Amendment S57.30
 moves only AI-only and minimal (1,884,160 and 1,753,088) after Sprint 57.30's
 10,229 bytes of prompt history; full remains 2,228,224. Amendment S57.31-A1 moves
 full, FUSS-only, LSP-only and plugins-only (2,244,608, 1,916,928, 1,884,160,
-1,851,392) after Sprint 57.31's 12,159 bytes. The
+1,851,392) after Sprint 57.31's 12,159 bytes. Amendment S57.31-A2 moves the musl
+caps (2,424,832 and 1,900,544) after Sprints 57.28-57.31 grew musl-full to
+2,361,232 and musl-minimal to 1,849,200. The
 former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
 optimization ratchets. They are not alternate measurements and must not be
 selected by a CI flag.

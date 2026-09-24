@@ -5,5 +5,5 @@ lsp-only         1884160  lsp                             s57-31-a1-prompt-extra
 ai-only          1884160  ai                              s57-30-a1-prompt-history-next-16-KiB
 fuss-only        1916928  fuss                            s57-31-a1-prompt-extras-next-16-KiB
 plugins-only     1851392  plugins                         s57-31-a1-prompt-extras-next-16-KiB
-musl-full        2359296  lsp,ai,fuss,plugins             s57-26-a2-shell-completion-next-64-KiB
-musl-minimal     1835008  none                            s57-26-a2-shell-completion-next-64-KiB
+musl-full        2424832  lsp,ai,fuss,plugins             s57-31-a2-musl-next-64-KiB
+musl-minimal     1900544  none                            s57-31-a2-musl-next-64-KiB
