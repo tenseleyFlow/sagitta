@@ -5,6 +5,7 @@
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/shsession.h"
 #include "mod/lsp/lsp.h"
 #include "mod/ai/ai.h"
 #include "mod/mods.h"
@@ -183,6 +184,11 @@ int main(int argc, char **argv)
     int exit_code;
 
     yew_job_set_argv0(argc > 0 ? argv[0] : NULL);
+
+    /* Sprint 57.27: the shell session's env record (shsession.h).  Not an
+     * option: nothing but the session's frame line runs it. */
+    if (argc == 2 && strcmp(argv[1], "--yew-env0") == 0)
+        return yew_shsession_env0_main();
 
     /*
      * `yew fl` is handled BEFORE the editor's parser: its options are

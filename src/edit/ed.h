@@ -69,6 +69,7 @@ typedef struct GitCtx GitCtx;
 typedef struct GitEditorState GitEditorState;
 typedef struct FussMode FussMode;
 typedef struct PlugSys PlugSys;
+typedef struct YewShSession YewShSession;
 struct OptStored;
 
 typedef enum YewStartKind {
@@ -217,6 +218,9 @@ struct Ed {
     bool syn_rr_last_valid;
     TimerHeap timers;
     JobTable jobs;
+    /* Sprint 57.27: the persistent shell session and its last known
+     * directory and exports; NULL until the first `:!` needs it. */
+    YewShSession *shsession;
     /* Optional-module state stays opaque to the editor core.  The enabled
      * LSP implementation owns this allocation; the stripped shim preserves
      * the same lifecycle surface without pulling module internals into Ed. */

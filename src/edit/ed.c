@@ -21,6 +21,7 @@
 #include "fl/flruntime.h"
 #include "fl/flconf.h"
 #include "edit/option.h"
+#include "edit/shsession.h"
 #include "edit/theme_cmds.h"
 #include "edit/bind.h"
 #include "edit/block.h"
@@ -863,6 +864,9 @@ void yew_ed_free(Ed *ed)
     yew_ai_state_free(ed);
     /* F mode borrows snapshots and scratch buffers; release it first. */
     yew_fuss_state_free(ed);
+    /* The shell session kills its shell and lets go of its link; the
+     * job table below disposes both. */
+    yew_shsession_free(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
     yew_jobs_free(ed);

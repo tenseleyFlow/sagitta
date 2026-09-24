@@ -16,6 +16,7 @@
 #include "edit/job.h"
 #include "edit/loop.h"
 #include "edit/select.h"
+#include "edit/shsession.h"
 #include "fl/gc.h"
 #include "fl/handle.h"
 #include "fl/std.h"
@@ -628,6 +629,7 @@ static bool t_pump(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         yew_job_reap(ed);
         yew_job_tick(ed, now);
         yew_job_settle(ed);
+        yew_shsession_settle(ed);
         yew_lsp_pump(ed);
     }
     *out = FL_NIL_V;

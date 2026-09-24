@@ -14,6 +14,7 @@
 #include "edit/dispatch.h"
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/shsession.h"
 #include "edit/theme_cmds.h"
 #include "ui/mouse.h"
 #include "edit/shell.h"
@@ -497,6 +498,9 @@ u32 yew_loop_settle_jobs(Ed *ed)
         }
     }
     completed = yew_job_settle(ed);
+    /* Sprint 57.27: a shell session whose shell left finishes its
+     * running command here (it settles that job itself). */
+    yew_shsession_settle(ed);
 
     if (observable_completion) {
         yew_git_invalidate(ed);
