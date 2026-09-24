@@ -14,6 +14,7 @@
 #include "edit/option.h"
 #include "edit/sel_actions.h"
 #include "edit/shell.h"
+#include "edit/shsession.h"
 #include "fl/flruntime.h"
 #include "term/grid.h"
 #include "text/edit.h"
@@ -766,6 +767,42 @@ static const char *hint_arg_name(const CmdEntry *entry, u32 token_index,
     return NULL;
 }
 
+/*
+ * Sprint 57.27 §5: a shell command starts where the shell session is,
+ * so its hint says so when that is not the workspace root (`in ch7/`,
+ * the completion pager's note).  Returns the new length; on a note that
+ * does not fit, the hint is left as it was.
+ */
+static size_t hint_session_dir(Ed *ed, const char *name, char *hint,
+                               size_t at, size_t cap)
+{
+    const char *cwd;
+    Arena a;
+    char note[YEW_COMP_WHERE_MAX];
+    int n;
+
+    if (strncmp(name, "ed.shell.", 9U) != 0 ||
+        (strcmp(name + 9U, "run") != 0 && strcmp(name + 9U, "run_bg") != 0 &&
+         strcmp(name + 9U, "read") != 0 && strcmp(name + 9U, "filter") != 0 &&
+         strcmp(name + 9U, "term_run") != 0))
+        return at;
+    cwd = yew_shsession_cwd(ed);
+    if (cwd == NULL || strcmp(cwd, yew_ws_root(ed)) == 0)
+        return at;
+    arena_init(&a);
+    yew_comp_where_note(yew_ws_root(ed), cwd, &a, note, sizeof(note));
+    arena_free_all(&a);
+    if (note[0] == '\0')
+        return at;
+    n = snprintf(hint + at, cap - at, "%s%s", at == 0U ? "" : " \xC2\xB7 ",
+                 note);
+    if (n < 0 || (size_t)n >= cap - at) {
+        hint[at] = '\0';
+        return at;
+    }
+    return at + (size_t)n;
+}
+
 static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
 {
     CmdLine *line = &ed->cmdline;
@@ -777,8 +814,14 @@ static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
     size_t at = 0U;
 
     line->hint[0] = '\0';
-    if (!point->command_known)
+    if (!point->command_known) {
+        /* A bare `:!` body names no command, so it had no hint; the
+         * session's directory is still worth saying (57.27 §5). */
+        if (point->bang_body)
+            (void)hint_session_dir(ed, "ed.shell.run", line->hint, 0U,
+                                   sizeof(line->hint));
         return;
+    }
     desc = yew_cmd_desc(point->command);
     entry = yew_cmd_entry(point->command);
     if (desc == NULL || entry == NULL)
@@ -801,6 +844,10 @@ static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
         at += (size_t)snprintf(line->hint + at, sizeof(line->hint) - at,
                                " \xC2\xB7 %s%s", arg, repeats ? "\xE2\x80\xA6"
                                                              : "");
+    if (at >= sizeof(line->hint))
+        return;
+    at = hint_session_dir(ed, desc->name, line->hint, at,
+                          sizeof(line->hint));
     if (at >= sizeof(line->hint) || !point->range.given)
         return;
     /*
