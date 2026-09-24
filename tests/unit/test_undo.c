@@ -563,24 +563,12 @@ void test_undo_lsp_reason_names_sprint47(void)
 
 void test_undo_save_rejects_open_transaction(void)
 {
-    int fds[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    char output[1024];
-    ssize_t got;
+    YewTestChild child;
 
-    YEW_ASSERT_EQ_I64(pipe(fds), 0);
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
+    if (yew_test_child_role() != NULL) {
         UndoFixture f;
         FileMeta meta;
 
-        (void)close(fds[0]);
-        (void)dup2(fds[1], STDERR_FILENO);
-        (void)close(fds[1]);
         (void)memset(&meta, 0, sizeof(meta));
         undo_fixture_init(&f, NULL, 0U);
         yew_undo_begin(&f.edit, YEW_TXN_PASTE);
@@ -589,18 +577,10 @@ void test_undo_save_rejects_open_transaction(void)
         (void)yew_edit_save(&f.edit, "/tmp/yew-save-open-transaction");
         _exit(0);
     }
-    YEW_ASSERT_EQ_I64(close(fds[1]), 0);
-    got = read(fds[0], output, sizeof(output) - 1U);
-    YEW_ASSERT(got >= 0);
-    output[got < 0 ? 0U : (size_t)got] = '\0';
-    YEW_ASSERT_EQ_I64(close(fds[0]), 0);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
-    YEW_ASSERT(strstr(output, "edit save: open undo transaction") != NULL);
+    yew_test_spawn_child("bug", NULL, NULL, &child);
+    YEW_ASSERT_CHILD_EXIT(&child, YEW_EXIT_BUG);
+    YEW_ASSERT(strstr(child.err, "edit save: open undo transaction") != NULL);
+    yew_test_child_free(&child);
 }
 
 void test_undo_abort_restores_content_and_single_cursor(void)
