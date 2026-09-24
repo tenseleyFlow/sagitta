@@ -12,6 +12,7 @@
 #include "edit/ed.h"
 #include "edit/select.h"
 #include "edit/shell.h"
+#include "edit/shsession.h"
 #include "text/piece.h"
 #include "ui/message.h"
 #include "util/log.h"
@@ -328,6 +329,21 @@ CmdStatus yew_job_cmd_rerun(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     }
     yew_jobs_table_refresh(cx->ed);
+    return YEW_CMD_OK;
+}
+
+/*
+ * Sprint 57.27 §5: `ed.shell.reset` (`:shreset`) -- the keyboard path to
+ * a clean shell (invariant 9).  Unlike an `exit`, which the next `:!`
+ * recovers from in the last directory, this forgets the directory and
+ * the exports: the next `:!` starts a new session in the workspace root
+ * with the standard job environment.
+ */
+CmdStatus yew_shell_cmd_reset(CmdCtx *cx)
+{
+    yew_shsession_reset(cx->ed);
+    yew_msg(cx->ed, YEW_MSG_INFO,
+            "shell session reset; the next :! starts in the workspace root");
     return YEW_CMD_OK;
 }
 

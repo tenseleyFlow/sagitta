@@ -819,6 +819,11 @@ void test_invariant9_every_new_command_is_registered(void)
          */
         "ed.shell.complete_forget",
         /*
+         * Sprint 57.27 §5: the persistent shell session's reset
+         * (`:shreset`) -- a clean shell without quitting the editor.
+         */
+        "ed.shell.reset",
+        /*
          * Sprint 57.26 §3: a history ghost is taken whole by <right>
          * (ed.cmdline.ghost.accept) and a word at a time by A-f and
          * A-<right> -- both keys, no mouse.

@@ -1107,6 +1107,12 @@ static const CmdDesc builtins[] = {
     {"ed.shell.complete_forget", yew_comphelp_run_forget, YEW_ARITY_OPT_STR,
      0U, "Forget completions learned from --help (one command, or all)",
      NULL},
+    /* Sprint 57.27 §5.  Invariant 9: the keyboard path to a clean shell.
+     * Not RECORDABLE -- it resets a process, not the buffer -- so, like
+     * complete_forget, it has no CMDWORD and no round-trip row. */
+    {"ed.shell.reset", yew_shell_cmd_reset, YEW_ARITY_NONE, 0U,
+     "End the shell session; the next :! starts in the workspace root",
+     NULL},
     {"ed.job.list", yew_job_cmd_list, YEW_ARITY_NONE, 0U,
      "Open the job table", NULL},
     {"ed.job.kill", yew_job_cmd_kill, YEW_ARITY_OPT_INT,
@@ -1435,6 +1441,7 @@ static const BuiltinMeta builtin_meta[] = {
      * because a child that owns the screen has nothing to filter. */
     {"ed.shell.term_run", "s", YEW_RP_FORBID, NULL},
     {"ed.shell.complete_forget", "s", YEW_RP_FORBID, "compforget"},
+    {"ed.shell.reset", "", YEW_RP_FORBID, "shreset"},
     {"ed.plug.enable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.disable", "p", YEW_RP_FORBID, NULL},
     {"ed.plug.reload", "p", YEW_RP_FORBID, NULL},
