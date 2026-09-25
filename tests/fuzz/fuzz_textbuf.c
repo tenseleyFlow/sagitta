@@ -1394,11 +1394,17 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
         bytebuf_free(&trace_bytes);
         goto done;
     }
+    /* The campaign report contract shared with every fuzz target (see
+     * scripts/fuzz-soak.sh): "<target>: seed=<decimal> [seconds=N]
+     * iters=N ... ok".  The trace file keeps the hexadecimal seed. */
+    (void)printf("fuzz_textbuf: seed=%llu ", (unsigned long long)seed);
+    if (seconds != 0U)
+        (void)printf("seconds=%llu ", (unsigned long long)seconds);
     (void)printf(
-        "fuzz_textbuf seed=%016llx mix=%s ops=%zu trace=%016llx "
+        "iters=%zu mix=%s trace=%016llx "
         "final=%016llx bytes=%llu pieces=%u invalid=%zu nul=%zu crlf=%zu "
-        "split=%zu huge=%zu\n",
-        (unsigned long long)seed, mix_name(mix), gen.trace.len,
+        "split=%zu huge=%zu ok\n",
+        gen.trace.len, mix_name(mix),
         (unsigned long long)gen.trace_hash, (unsigned long long)final_hash,
         (unsigned long long)yew_textbuf_len(run.tb),
         yew_textbuf_piece_count(run.tb),
