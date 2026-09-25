@@ -36,7 +36,18 @@ mkdir -p "$tmp_dir/state" "$tmp_dir/config" "$tmp_dir/cache"
 echo "fuzz-soak: target=$target seconds=$seconds seed=$seed commit=$(git rev-parse HEAD)"
 set +e
 case $target in
-    fuzz_undo|fuzz_textbuf|fuzz_units)
+    fuzz_textbuf)
+        # --iters is a floor for fuzz_textbuf, not a cap; its 200000-op
+        # default would outlive a short campaign.  Six ops is the smallest
+        # trace it accepts, so --seconds alone bounds the run.
+        XDG_STATE_HOME=$tmp_dir/state \
+        XDG_CONFIG_HOME=$tmp_dir/config \
+        XDG_CACHE_HOME=$tmp_dir/cache \
+            "$binary" --iters=6 --seconds="$seconds" --seed="$seed" \
+            --coverage-report >"$tmp_dir/out" 2>"$tmp_dir/err"
+        status=$?
+        ;;
+    fuzz_undo|fuzz_units)
         XDG_STATE_HOME=$tmp_dir/state \
         XDG_CONFIG_HOME=$tmp_dir/config \
         XDG_CACHE_HOME=$tmp_dir/cache \
