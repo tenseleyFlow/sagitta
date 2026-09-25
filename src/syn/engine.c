@@ -5165,7 +5165,12 @@ bool yew_syn_embed_pump(SynBuf *syn, SynEngine *engine, i64 budget_us)
     pending_remove_head(syn);
 
     /* The queue records the opener line.  Replay that line and discard all
-     * following entry states so the now-resident guest replaces fallback. */
+     * following entry states so the now-resident guest replaces fallback.
+     *
+     * The wave only ever moves BACK here.  An edit above the opener has
+     * already pulled it to the edited line, and raising it to the opener
+     * would skip re-lexing that line: its new exit state would never
+     * reach the entries below it (fuzz_syn, seed 20260925). */
     if (i < syn->entry.len) {
         size_t clear_from = i + 1U;
         size_t tail = syn->entry.len - clear_from;
@@ -5173,8 +5178,10 @@ bool yew_syn_embed_pump(SynBuf *syn, SynEngine *engine, i64 budget_us)
         if (tail != 0U)
             (void)memset(syn->entry.data + clear_from, 0,
                          tail * sizeof(*syn->entry.data));
-        syn->wave = LINENO(i);
-        syn->settled_to = LINENO(i + 1U);
+        if (syn->wave.v > i)
+            syn->wave = LINENO(i);
+        if (syn->settled_to.v > i + 1U)
+            syn->settled_to = LINENO(i + 1U);
         syn->must_reach = LINENO(syn->entry.len);
         syn->settling = true;
         syn->spec_valid = false;
