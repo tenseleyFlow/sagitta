@@ -1,9 +1,9 @@
 # config         bytes    modules                         why
-full             2244608  lsp,ai,fuss,plugins             s57-31-a1-prompt-extras-next-16-KiB
-minimal          1753088  none                            s57-30-a1-prompt-history-next-16-KiB
-lsp-only         1884160  lsp                             s57-31-a1-prompt-extras-next-16-KiB
-ai-only          1884160  ai                              s57-30-a1-prompt-history-next-16-KiB
-fuss-only        1916928  fuss                            s57-31-a1-prompt-extras-next-16-KiB
-plugins-only     1851392  plugins                         s57-31-a1-prompt-extras-next-16-KiB
+full             2260992  lsp,ai,fuss,plugins             s57-27-a1-shell-session-next-16-KiB
+minimal          1769472  none                            s57-27-a1-shell-session-next-16-KiB
+lsp-only         1900544  lsp                             s57-27-a1-shell-session-next-16-KiB
+ai-only          1916928  ai                              s57-27-a1-shell-session-next-16-KiB
+fuss-only        1933312  fuss                            s57-27-a1-shell-session-next-16-KiB
+plugins-only     1867776  plugins                         s57-27-a1-shell-session-next-16-KiB
 musl-full        2424832  lsp,ai,fuss,plugins             s57-31-a2-musl-next-64-KiB
 musl-minimal     1900544  none                            s57-31-a2-musl-next-64-KiB

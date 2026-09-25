@@ -348,6 +348,18 @@ glibc amendments recorded one sprint at a time. They cross their caps by
 1,936 and 14,192 bytes and move to the next 64 KiB boundary, the S59-A6
 musl rule: musl-full 2,424,832, musl-minimal 1,900,544. Nothing else changes.
 
+**Amendment S57.27-A1 (2026-09-25) — the glibc caps follow the shell
+session.** Sprint 57.27 (the persistent `$SHELL -s` session, its frame
+parser and `--yew-env0` record) adds 13,468 file-backed bytes on the pinned
+x86_64 GCC 13.3 lane at `cfc06ea9`: 12,641 in `core.edit`, 757 in
+`core.ui`, 78 in `core.main`; the libc residue grows 7,012. All six glibc
+configurations cross their caps -- full 2,258,632, minimal 1,767,072,
+LSP-only 1,885,856, AI-only 1,902,280, FUSS-only 1,918,624, plugins-only
+1,861,280 -- and each moves to the next 16 KiB boundary: full 2,260,992,
+minimal 1,769,472, LSP-only 1,900,544, AI-only 1,916,928, FUSS-only
+1,933,312, plugins-only 1,867,776. The musl lane stays inside its
+S57.31-A2 caps.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

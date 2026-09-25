@@ -45,7 +45,10 @@ moves only AI-only and minimal (1,884,160 and 1,753,088) after Sprint 57.30's
 full, FUSS-only, LSP-only and plugins-only (2,244,608, 1,916,928, 1,884,160,
 1,851,392) after Sprint 57.31's 12,159 bytes. Amendment S57.31-A2 moves the musl
 caps (2,424,832 and 1,900,544) after Sprints 57.28-57.31 grew musl-full to
-2,361,232 and musl-minimal to 1,849,200. The
+2,361,232 and musl-minimal to 1,849,200. Amendment S57.27-A1 moves all six glibc
+caps (full 2,260,992, minimal 1,769,472, LSP-only 1,900,544, AI-only 1,916,928,
+FUSS-only 1,933,312, plugins-only 1,867,776) after Sprint 57.27's 13,468 bytes
+of persistent shell session. The
 former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
 optimization ratchets. They are not alternate measurements and must not be
 selected by a CI flag.
