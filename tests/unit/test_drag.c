@@ -315,6 +315,58 @@ void test_drag_a_changed_tab_count_cancels(void)
     yew_ed_free(&f.ed);
 }
 
+/*
+ * ...and it cancels AT THE MUTATION, not at the next button-held
+ * report.  fuzz_mouse (seed 20260925) closed a tab under a drag and
+ * then sent a NO-BUTTON motion — what mode 1003 streams while a chevron
+ * is drawn — which the hover path rightly ignores; the drag stayed in
+ * flight over the moved array, so the next frame painted a float and a
+ * gap for entries that had shifted.  An open moves the count too.
+ */
+void test_drag_a_close_or_open_under_a_drag_cancels_at_once(void)
+{
+    DragFixture f;
+    int round;
+
+    for (round = 0; round < 2; round++) {
+        u32 held;
+
+        dg_fixture(&f, 5U);
+        dg_paint(&f);
+        held = yew_tab_at(&f.ed, 0)->tab_id;
+        {
+            Key press = dg_ev((u8)YEW_KEY_PRESS, dg_slot_x(&f, 0), 0U);
+            Key motion = dg_ev((u8)YEW_KEY_REPEAT, dg_slot_x(&f, 3), 0U);
+
+            yew_mouse_event(&f.ed, &press);
+            yew_mouse_event(&f.ed, &motion);
+        }
+        YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_DRAG_TAB);
+        if (round == 0)
+            YEW_ASSERT(yew_tab_close(&f.ed, 5));
+        else
+            YEW_ASSERT(yew_tab_open(&f.ed, "/tmp/yew-drag-late.txt") >= 0);
+        YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_IDLE);
+        {
+            Key hover = dg_ev((u8)YEW_KEY_REPEAT, 40U, 11U);
+
+            hover.button = (u8)YEW_MB_NONE;
+            yew_mouse_event(&f.ed, &hover);
+        }
+        YEW_ASSERT_EQ_U64((u64)f.ed.mouse.phase, (u64)YEW_MP_IDLE);
+        dg_paint(&f);
+        YEW_ASSERT_EQ_U64(yew_strip_float_rect().w, 0U);
+        {
+            Key up = dg_ev((u8)YEW_KEY_RELEASE, dg_slot_x(&f, 3), 0U);
+
+            yew_mouse_event(&f.ed, &up);
+        }
+        /* The release found nothing to drop. */
+        YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&f.ed, held), 0);
+        yew_ed_free(&f.ed);
+    }
+}
+
 /* ---------------------------------------------------------------- */
 /* The dwell                                                         */
 /* ---------------------------------------------------------------- */

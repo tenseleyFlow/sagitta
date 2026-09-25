@@ -2582,6 +2582,7 @@ const YewTest yew_tests[] = {
     T(drag_drop_reorders_by_insertion),
     T(drag_drop_where_it_started_changes_nothing),
     T(drag_a_changed_tab_count_cancels),
+    T(drag_a_close_or_open_under_a_drag_cancels_at_once),
     T(drag_dwell_opens_a_group_at_500ms_and_not_at_499),
     T(drag_passing_over_three_groups_opens_none),
     T(drag_dwell_reads_the_pre_drag_list_not_the_region),
