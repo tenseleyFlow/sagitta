@@ -1288,6 +1288,15 @@ static bool s57_top_ready(const PtyCtx *c, const void *arg)
            s57_screen_contains(c, arg);
 }
 
+/* The top of the file with the save message gone.  The cursor can only
+ * reach 1,8 after `g g`, which is queued behind the Escape that closed the
+ * command line, so this also proves the line is closed again. */
+static bool s57_top_ready_dismissed(const PtyCtx *c, const void *arg)
+{
+    return s57_top_ready(c, arg) &&
+           !s57_screen_contains(c, "wrote build/pty-s57-embedded-4m.c");
+}
+
 /*
  * Sprint 57 constrained-target rows 3 and 5.  Generating the exact 4 MiB
  * fixture is sub-second on ordinary hosts and keeps the checked-in golden
@@ -1327,8 +1336,19 @@ static void case_s57_embedded_4m_roundtrip(PtyCtx *c)
     ptc_check(c, s57_file_hash(path, &saved_size, &saved_hash) &&
                      saved_size == limit && saved_hash == original_hash,
               "4 MiB save was not a byte-identical round trip");
+    /*
+     * The completion message is INFO: it expires 4 s of wall clock after
+     * the save.  Under valgrind or the emulated embedded target the `g g`
+     * below routinely outlives that, so a snapshot of it recorded whichever
+     * side of the expiry the run happened to land on.  Dismiss it with a
+     * keystroke instead: opening the command line clears the message and
+     * cancels its timer, and Escape closes the line again, so the footer
+     * the snapshot sees no longer depends on elapsed time.
+     */
+    ptc_keys(c, ":");
+    ptc_keys(c, "esc");
     ptc_keys(c, "g g");
-    ptc_wait_until(c, s57_top_ready, first,
+    ptc_wait_until(c, s57_top_ready_dismissed, first,
                    "4 MiB viewport did not return to the first line");
     ptc_settle(c, 0);
     ptc_snapshot(c, "s57_embedded_4m_roundtrip");
