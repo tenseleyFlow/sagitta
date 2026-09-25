@@ -266,3 +266,86 @@ void test_syn_embed_pump_keeps_more_than_three_guests_resident(void)
     yew_syn_def_dispose(def);
     arena_free_all(&arena);
 }
+
+/*
+ * fuzz_syn (seed 20260925): the pump replays from the queued OPENER
+ * line, and used to set the wave there unconditionally.  An edit ABOVE
+ * the opener had already pulled the wave to the edited line, so the
+ * pump moved it forward past a dirty line: that line was never
+ * re-lexed and its new exit state never reached the entries below it.
+ * The idle settle that runs the pump must agree with a fresh highlight.
+ */
+void test_syn_embed_pump_never_skips_a_line_edited_above_the_opener(void)
+{
+    static const char src[] =
+        "{syntax:1,language:{name:\"pump-wave\"},contexts:{"
+        "main:{rules:[{match:\"B\",push:\"blk\"},"
+        "{match:\"OPEN\",push:\"bridge\",embed:{lang:\"css\",end:\"inline\",fallback:\"code\"}}]},"
+        "blk:{rules:[{match:\"E\",pop:1},"
+        "{match:\"OPEN\",push:\"bridge\",embed:{lang:\"css\",end:\"inline\",fallback:\"code\"}}]},"
+        "bridge:{rules:[{match:\"END\",pop:1,end:true}]}}}";
+    Arena arena;
+    DiagCtx dc;
+    SynDef *def;
+    SynEngine *engine;
+    SynBuf syn;
+    SynBuf fresh;
+    TextBuf *tb;
+    SynSettleReport report;
+    u32 errors = 0U;
+    u32 warnings = 0U;
+    u32 css = yew_syn_lang_by_name((const u8 *)"css", 3U);
+    u32 file;
+    size_t i;
+
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    file = fl_diag_add_file(&dc, "pump-wave.fl", src, strlen(src));
+    def = yew_syn_def_compile(&arena, &dc, (const u8 *)src, strlen(src),
+                              file, &errors, &warnings);
+    YEW_ASSERT_NOT_NULL(def);
+    YEW_ASSERT_EQ_U64(errors, 0U);
+    YEW_ASSERT_EQ_U64(warnings, 0U);
+    engine = yew_syn_engine_new(def);
+    YEW_ASSERT_NULL(yew_syn_def_resident(engine, css));
+    yew_syn_buf_init(&syn);
+    yew_syn_buf_bind(&syn, engine);
+    tb = yew_textbuf_from_bytes((const u8 *)"B\nOPENbody\nx\n", 13U);
+    YEW_ASSERT_NOT_NULL(tb);
+    yew_syn_attach(&syn, 1U, tb);
+    /* A frame budget settles without pumping: the guest stays queued,
+     * its request recorded against the opener on line 1. */
+    yew_syn_settle(&syn, tb, LINENO(0U), LINENO(4U),
+                   YEW_SYN_FRAME_BUDGET_US, &report);
+    YEW_ASSERT(report.fixpoint);
+    YEW_ASSERT_NULL(yew_syn_def_resident(engine, css));
+    YEW_ASSERT_EQ_U64(syn.embed_pending_count, 1U);
+    YEW_ASSERT_EQ_U64(syn.embed_pending_line.v, 1U);
+    YEW_ASSERT(syn.entry.data[1] != YEW_SYN_STATE_ROOT);
+
+    /* Delete the "B": line 0 now exits at the root. */
+    yew_textbuf_delete(tb, (Span){0U, 1U});
+    yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
+    YEW_ASSERT_EQ_U64(syn.wave.v, 0U);
+    yew_syn_settle(&syn, tb, LINENO(0U), LINENO(4U), INT64_MAX, &report);
+    YEW_ASSERT(report.fixpoint);
+    YEW_ASSERT_NOT_NULL(yew_syn_def_resident(engine, css));
+    YEW_ASSERT_EQ_U64(syn.entry.data[1], YEW_SYN_STATE_ROOT);
+
+    yew_syn_buf_init(&fresh);
+    yew_syn_buf_bind(&fresh, engine);
+    yew_syn_attach(&fresh, 1U, tb);
+    yew_syn_settle(&fresh, tb, LINENO(0U), LINENO(4U), INT64_MAX,
+                   &report);
+    YEW_ASSERT(report.fixpoint);
+    YEW_ASSERT_EQ_U64(fresh.entry.len, syn.entry.len);
+    for (i = 0U; i < syn.entry.len; i++)
+        YEW_ASSERT_EQ_U64(syn.entry.data[i], fresh.entry.data[i]);
+
+    yew_syn_detach(&fresh);
+    yew_syn_detach(&syn);
+    yew_textbuf_free(tb);
+    yew_syn_engine_free(engine);
+    yew_syn_def_dispose(def);
+    arena_free_all(&arena);
+}

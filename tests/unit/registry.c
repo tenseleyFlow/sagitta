@@ -2930,6 +2930,7 @@ const YewTest yew_tests[] = {
     T(syn_lang_by_name_is_length_checked_and_io_free),
     T(syn_embed_pump_keeps_one_line_request_after_balanced_exit),
     T(syn_embed_pump_keeps_more_than_three_guests_resident),
+    T(syn_embed_pump_never_skips_a_line_edited_above_the_opener),
     T(syn_firstbyte_ini_includes_every_observed_leading_byte),
     T(syn_firstbyte_toy_definition_passes_the_shared_selfcheck),
     T(syn_firstbyte_literal_class_utf8_and_icase_sets_are_safe),
