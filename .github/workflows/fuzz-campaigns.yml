@@ -62,7 +62,7 @@ jobs:
           mkdir -p "build-campaign-artifacts/$CAMPAIGN_TARGET"
           cp .docs/audits/fuzz-coverage.md \
             "build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md"
-          make COV=1 SAN="$san" COV_BUILD=build-campaign \
+          make COV=1 CC=clang SAN="$san" COV_BUILD=build-campaign \
             FUZZ_CAMPAIGN_TARGET="$CAMPAIGN_TARGET" FUZZ_NIGHTLY_SECONDS=1800 \
             SOAK_LEDGER="build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md" \
             SOAK_ADMIT_DIR="build-campaign-artifacts/$CAMPAIGN_TARGET/admit" \
