@@ -329,6 +329,7 @@ int yew_tab_open(Ed *ed, const char *path)
     t.focus = t.root;
     t.buffer_id = buf->id;
     TabVec_push(&ed->tabs.v, t);
+    yew_mouse_tabs_changed(ed);
     /* Sprint 57.15 §1: an OPEN changes the entry list under the offset.
      * yew_tab_switch is not on this path — a tab opened for a group is
      * never switched to — so the follow is resumed here. */
@@ -366,6 +367,7 @@ int yew_tab_open_buffer(Ed *ed, Buffer *buf)
     t.focus = t.root;
     t.buffer_id = buf->id;
     TabVec_push(&ed->tabs.v, t);
+    yew_mouse_tabs_changed(ed);
     yew_tabs_follow_active(&ed->tabs);
     yew_fuss_windows_changed(ed);
     yew_state_mark_dirty(ed);
@@ -412,6 +414,7 @@ bool yew_tab_close(Ed *ed, int idx)
                   (ed->tabs.v.len - (size_t)idx - 1U) *
                       sizeof(*ed->tabs.v.data));
     ed->tabs.v.len--;
+    yew_mouse_tabs_changed(ed);
     /* Resolved AFTER compaction, from the id chosen before it. */
     ed->tabs.active = yew_tab_index_of_id(ed, survivor);
     if (ed->tabs.active < 0 && ed->tabs.v.len > 0U)
