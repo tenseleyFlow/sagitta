@@ -55,17 +55,17 @@ jobs:
       - uses: actions/checkout@v6
       - name: Run 30-minute date-seeded campaign
         env:
-          TARGET: ${{ matrix.target }}
+          CAMPAIGN_TARGET: ${{ matrix.target }}
         run: |
           week=$(date -u +%V | sed 's/^0*//')
           san=$((week % 2))
-          mkdir -p "build-campaign-artifacts/$TARGET"
+          mkdir -p "build-campaign-artifacts/$CAMPAIGN_TARGET"
           cp .docs/audits/fuzz-coverage.md \
-            "build-campaign-artifacts/$TARGET/fuzz-coverage.md"
+            "build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md"
           make COV=1 SAN="$san" COV_BUILD=build-campaign \
-            FUZZ_CAMPAIGN_TARGET="$TARGET" FUZZ_NIGHTLY_SECONDS=1800 \
-            SOAK_LEDGER="build-campaign-artifacts/$TARGET/fuzz-coverage.md" \
-            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" \
+            FUZZ_CAMPAIGN_TARGET="$CAMPAIGN_TARGET" FUZZ_NIGHTLY_SECONDS=1800 \
+            SOAK_LEDGER="build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$CAMPAIGN_TARGET/admit" \
             fuzz-nightly
       - name: Attach ledger, admissions, and minimized failures
         if: always()
@@ -110,15 +110,15 @@ jobs:
           clang --version | head -n 1 | grep -F 'Apple clang version 21.0.0'
       - name: Run four-hour coverage campaign and monotonicity gate
         env:
-          TARGET: ${{ matrix.target }}
+          CAMPAIGN_TARGET: ${{ matrix.target }}
         run: |
-          mkdir -p "build-campaign-artifacts/$TARGET"
+          mkdir -p "build-campaign-artifacts/$CAMPAIGN_TARGET"
           cp .docs/audits/fuzz-coverage.md \
-            "build-campaign-artifacts/$TARGET/fuzz-coverage.md"
+            "build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md"
           make COV=1 CC=clang COV_BUILD=build-campaign \
-            FUZZ_CAMPAIGN_TARGET="$TARGET" FUZZ_WEEKLY_SECONDS=14400 \
-            SOAK_LEDGER="build-campaign-artifacts/$TARGET/fuzz-coverage.md" \
-            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" \
+            FUZZ_CAMPAIGN_TARGET="$CAMPAIGN_TARGET" FUZZ_WEEKLY_SECONDS=14400 \
+            SOAK_LEDGER="build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$CAMPAIGN_TARGET/admit" \
             fuzz-cov-weekly
       - name: Attach ledger, admissions, and minimized failures
         if: always()
@@ -151,19 +151,19 @@ jobs:
           clang --version | head -n 1 | grep -F 'Apple clang version 21.0.0'
       - name: Run four disjoint 18-hour seed streams
         env:
-          TARGET: ${{ matrix.target }}
+          CAMPAIGN_TARGET: ${{ matrix.target }}
         run: |
           week=$(date -u +%V | sed 's/^0*//')
           san=$((week % 2))
           seed=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
-          mkdir -p "build-campaign-artifacts/$TARGET"
+          mkdir -p "build-campaign-artifacts/$CAMPAIGN_TARGET"
           cp .docs/audits/fuzz-coverage.md \
-            "build-campaign-artifacts/$TARGET/fuzz-coverage.md"
+            "build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md"
           make COV=1 CC=clang SAN="$san" COV_BUILD=build-campaign \
-            FUZZ_CAMPAIGN_TARGET="$TARGET" SOAK_SECONDS=259200 \
+            FUZZ_CAMPAIGN_TARGET="$CAMPAIGN_TARGET" SOAK_SECONDS=259200 \
             SOAK_STREAMS=4 SOAK_SEED="$seed" SOAK_LANE=soak \
-            SOAK_LEDGER="build-campaign-artifacts/$TARGET/fuzz-coverage.md" \
-            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" soak
+            SOAK_LEDGER="build-campaign-artifacts/$CAMPAIGN_TARGET/fuzz-coverage.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$CAMPAIGN_TARGET/admit" soak
       - name: Attach ledger, admissions, and minimized failures
         if: always()
         uses: actions/upload-artifact@v4
@@ -208,20 +208,20 @@ jobs:
       - name: Run the exact-commit tier budget in four streams
         env:
           RC_COMMIT: ${{ inputs.rc_commit }}
-          TARGET: ${{ matrix.target }}
+          CAMPAIGN_TARGET: ${{ matrix.target }}
           TOTAL_SECONDS: ${{ matrix.seconds }}
         run: |
           week=$(date -u +%V | sed 's/^0*//')
           san=$((week % 2))
           seed=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
-          mkdir -p "build-campaign-artifacts/$TARGET"
+          mkdir -p "build-campaign-artifacts/$CAMPAIGN_TARGET"
           cp .docs/audits/fuzz-coverage.md \
-            "build-campaign-artifacts/$TARGET/release-soak.md"
+            "build-campaign-artifacts/$CAMPAIGN_TARGET/release-soak.md"
           make COV=1 CC=clang SAN="$san" COV_BUILD=build-campaign \
-            RC_COMMIT="$RC_COMMIT" FUZZ_CAMPAIGN_TARGET="$TARGET" \
+            RC_COMMIT="$RC_COMMIT" FUZZ_CAMPAIGN_TARGET="$CAMPAIGN_TARGET" \
             SOAK_SECONDS="$TOTAL_SECONDS" SOAK_STREAMS=4 SOAK_SEED="$seed" \
-            SOAK_LEDGER="build-campaign-artifacts/$TARGET/release-soak.md" \
-            SOAK_ADMIT_DIR="build-campaign-artifacts/$TARGET/admit" soak-rc
+            SOAK_LEDGER="build-campaign-artifacts/$CAMPAIGN_TARGET/release-soak.md" \
+            SOAK_ADMIT_DIR="build-campaign-artifacts/$CAMPAIGN_TARGET/admit" soak-rc
       - name: Attach release evidence, admissions, and minimized failures
         if: always()
         uses: actions/upload-artifact@v4
