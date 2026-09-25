@@ -77,6 +77,55 @@ void yew_cov_merge(void)
     }
 }
 
+u32 yew_cov_novel_ids(u32 *out, u32 cap)
+{
+    u32 count = 0U;
+    u32 i;
+
+    if (out == NULL)
+        return 0U;
+    for (i = 0U; i < touched_len && count < cap; i++) {
+        u32 id = touched[i];
+
+        if (yew_cov_map[id] != 0U && seen[id] == 0U)
+            out[count++] = id;
+    }
+    return count;
+}
+
+bool yew_cov_hit_all(const u32 *ids, u32 count)
+{
+    u32 i;
+
+    if (ids == NULL && count != 0U)
+        return false;
+    for (i = 0U; i < count; i++) {
+        if (ids[i] == 0U || ids[i] >= YEW_COV_SIZE ||
+            yew_cov_map[ids[i]] == 0U)
+            return false;
+    }
+    return true;
+}
+
+u32 yew_cov_merge_ids(const u32 *ids, u32 count)
+{
+    u32 merged = 0U;
+    u32 i;
+
+    if (ids == NULL)
+        return 0U;
+    for (i = 0U; i < count; i++) {
+        u32 id = ids[i];
+
+        if (id != 0U && id < YEW_COV_SIZE && seen[id] == 0U) {
+            seen[id] = 1U;
+            total_edges++;
+            merged++;
+        }
+    }
+    return merged;
+}
+
 u64 yew_cov_hash(void)
 {
     u64 hash = UINT64_C(1469598103934665603);
