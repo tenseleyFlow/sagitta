@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
- L filter: 2 → 2 lines                                                          
+ L  pty-s14-s19_filter_typeahead_replays_after_completion.txt *   utf-8  lf  2:7
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
@@ -50,7 +50,7 @@ DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 DDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-GGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+GGGEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 --- legend
 A fg=#c8ccd4 bg=#2c313a attrs=b---------
 B fg=#61afef bg=#1b202a attrs=b---------
@@ -58,5 +58,4 @@ C fg=#5c6370 bg=#1b202a attrs=----------
 D fg=#4b5263 bg=#12141a attrs=----------
 E fg=#c8ccd4 bg=#12141a attrs=----------
 F fg=#c8ccd4 bg=#12141a attrs=b---------
-G fg=#ebf4ff bg=#266eba attrs=b---------
-H fg=#dae5f0 bg=#14304c attrs=----------
+G fg=#12141a bg=#61afef attrs=----------

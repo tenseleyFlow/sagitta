@@ -4868,14 +4868,48 @@ static void case_s19_filter_nonzero_keeps_buffer(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Opens the release FIFO for writing and hands the blocked filter its line.
+ * A non-blocking open fails with ENXIO until the child is parked in its
+ * read-side open, so success is itself the proof that the child is waiting.
+ */
+static bool s19_release_filter(const PtyCtx *c, const void *arg)
+{
+    int fd;
+    bool sent;
+
+    (void)c;
+    fd = open((const char *)arg, O_WRONLY | O_NONBLOCK);
+    if (fd < 0)
+        return false;
+    sent = write(fd, "go\n", 3U) == 3;
+    (void)close(fd);
+    return sent;
+}
+
+/* Normal mode on the replayed line, with the completion message dismissed
+ * and the command line that dismissed it closed again. */
+static bool s19_typeahead_settled(const PtyCtx *c, const void *arg)
+{
+    const VtCell *footer = &c->vt.cells[(size_t)(c->vt.rows - 1) *
+                                        (size_t)c->vt.cols];
+
+    return c->vt.cur_r == 2 && footer[1].g[0] == 'L' &&
+           s19_screen_contains(&c->vt, "QUEUED") &&
+           !s19_screen_contains(&c->vt, (const char *)arg);
+}
+
 static void case_s19_filter_typeahead_replays_after_completion(PtyCtx *c)
 {
     static const u8 initial[] = "keep me\n";
+    static const char completed[] = "filter: 2 \xE2\x86\x92 2 lines";
+    static const char cancelled[] = "filter cancelled; buffer unchanged";
     char path[256];
     char ready[1024];
+    char release[1024];
     char command[1024];
-    const char *sleep_bin = getenv("YEW_PTY_SLEEP");
     const char *cat_bin = getenv("YEW_PTY_CAT");
+    size_t output_at;
     int n;
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
@@ -4890,20 +4924,36 @@ static void case_s19_filter_typeahead_replays_after_completion(PtyCtx *c)
         ptc_check(c, false, "filter readiness path overflow");
         return;
     }
-    if (sleep_bin == NULL)
-        sleep_bin = "sleep";
+    n = snprintf(release, sizeof(release), "%s/.s19-typeahead-release",
+                 c->workspace_dir);
+    if (n < 0 || (size_t)n >= sizeof(release)) {
+        ptc_check(c, false, "filter release path overflow");
+        return;
+    }
+    if (mkfifo(release, 0600) != 0) {
+        ptc_check(c, false, "could not create filter release FIFO");
+        return;
+    }
     if (cat_bin == NULL)
         cat_bin = "cat";
+    /*
+     * The child parks on the release FIFO instead of sleeping.  A fixed
+     * `sleep 1` let wall clock decide the case: a slow harness could type
+     * the "live filter" keys after the child had already finished, so the
+     * typeahead was never typeahead and the Escape below never cancelled
+     * anything.  Now the filter is live until the harness says otherwise.
+     */
     n = snprintf(command, sizeof(command),
-                 "%%!printf ready > \"$YEW_WORKSPACE/.s19-typeahead-ready\"; %s 1; %s",
-                 sleep_bin, cat_bin);
+                 "%%!printf ready > \"$YEW_WORKSPACE/.s19-typeahead-ready\"; "
+                 "read go < \"$YEW_WORKSPACE/.s19-typeahead-release\"; %s",
+                 cat_bin);
     if (n < 0 || (size_t)n >= sizeof(command)) {
         ptc_check(c, false, "filter command overflow");
         return;
     }
-    /* Sprint 58 F05 Q7: keep the synchronous filter inside its restricted
-     * loop long enough to queue an edit behind it.  Escape intentionally
-     * cancels a live filter, so send it only after completion. */
+    /* Sprint 58 F05 Q7: queue an edit behind the synchronous filter's
+     * restricted loop.  Escape intentionally cancels a live filter, so send
+     * it only after completion. */
     s19_send_command(c, command);
     ptc_wait_until(c, s19_marker_ready, ready,
                    "filter child did not publish readiness marker");
@@ -4911,15 +4961,27 @@ static void case_s19_filter_typeahead_replays_after_completion(PtyCtx *c)
     ptc_settle(c, 100);
     ptc_check(c, !s19_screen_contains(&c->vt, "QUEUED"),
               "filter typeahead dispatched before completion");
-    s19_wait_screen(c, "filter: 2 \xE2\x86\x92 2 lines");
+    output_at = c->raw.len;
+    ptc_wait_until(c, s19_release_filter, release,
+                   "filter child never waited on its release FIFO");
+    /* The completion message is INFO and expires on wall clock, so the
+     * durable raw log proves it was posted; the replayed text is the
+     * durable screen barrier. */
+    ptc_wait_output_since(c, output_at, completed, sizeof(completed) - 1U);
+    ptc_wait_until(c, s57_screen_contains, "QUEUED",
+                   "filter typeahead was not replayed after completion");
+    /* Leave insert mode, then dismiss the message through the command
+     * line so the snapshot's footer does not depend on elapsed time. */
     ptc_keys(c, "esc");
-    ptc_settle(c, 250);
-    ptc_check(c, s19_screen_contains(&c->vt, "QUEUED"),
-              "filter typeahead was not replayed in order");
+    ptc_keys(c, ":");
+    ptc_keys(c, "esc");
+    ptc_wait_until(c, s19_typeahead_settled, completed,
+                   "filter typeahead was not replayed in order");
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, "s19_filter_typeahead_replays_after_completion");
     /* A fresh run proves the other side of the rule: a decoded Escape
-     * cancels a live filter without changing the buffer. */
+     * cancels a live filter without changing the buffer.  The child stays
+     * parked on the FIFO, so the Escape always meets a live filter. */
     if (unlink(ready) != 0) {
         ptc_check(c, false, "could not reset filter readiness marker");
         return;
@@ -4927,8 +4989,9 @@ static void case_s19_filter_typeahead_replays_after_completion(PtyCtx *c)
     s19_send_command(c, command);
     ptc_wait_until(c, s19_marker_ready, ready,
                    "cancelled filter did not publish readiness marker");
+    output_at = c->raw.len;
     ptc_keys(c, "esc");
-    s19_wait_screen(c, "filter cancelled; buffer unchanged");
+    ptc_wait_output_since(c, output_at, cancelled, sizeof(cancelled) - 1U);
     ptc_check(c, s19_screen_contains(&c->vt, "QUEUED"),
               "cancelled filter changed the edited buffer");
     ptc_keys(c, "esc");
