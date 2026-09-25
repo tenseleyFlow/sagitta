@@ -2019,8 +2019,8 @@ soak-rc:
 		SOAK_LEDGER='$(SOAK_LEDGER)' \
 		SOAK_ADMIT_DIR='$(SOAK_ADMIT_DIR)' soak
 
-soak-selftest: $(BUILD)/fuzz_input
-	scripts/fuzz-soak-selftest.sh $(BUILD)/fuzz_input
+soak-selftest: $(BUILD)/fuzz_input $(FUZZ_COV_BINS)
+	scripts/fuzz-soak-selftest.sh $(BUILD)/fuzz_input $(FUZZ_COV_NAMES)
 else
 fuzz-cov-weekly:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' \
