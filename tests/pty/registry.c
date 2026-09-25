@@ -9711,6 +9711,11 @@ static bool s52_header_lacks_text(const PtyCtx *c, const void *arg)
            !s52_row_contains(&c->vt, 0, (const char *)arg);
 }
 
+static bool s52_screen_lacks_text(const PtyCtx *c, const void *arg)
+{
+    return c != NULL && !s52_screen_contains(&c->vt, (const char *)arg);
+}
+
 static void s52_wait_screen(PtyCtx *c, const char *text);
 
 static bool s56_5_drawer_open_ready(const PtyCtx *c, const void *arg)
@@ -10189,6 +10194,7 @@ static bool s52_spawn_editor(PtyCtx *c, const char *file)
 
 static bool s52_open(PtyCtx *c, VtCell *original_cells)
 {
+    static const char walk_notice[] = "git discovery unavailable";
     char repo[PATH_MAX];
     size_t frame_at;
 
@@ -10197,6 +10203,21 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
         return false;
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+    /*
+     * The child has no $PATH, so startup posts the INFO notice "git
+     * discovery unavailable" in its first frame and a wall-clock timer
+     * repaints the footer when it expires.  Left to run, that expiry frame
+     * lands wherever the instrumented child happens to be -- before `f`,
+     * between the FUSS frames the collapse below keeps, or after it -- and
+     * the SGR appendix records a different render history for the same
+     * grid.  Let it expire before the scene starts, so every run paints it
+     * at the same point in the byte stream.  Waiting for the posted bytes
+     * first (a durable record, unlike the screen) keeps "gone" from being
+     * satisfied before the notice was ever painted.
+     */
+    ptc_wait_output(c, walk_notice, sizeof(walk_notice) - 1U);
+    ptc_wait_until(c, s52_screen_lacks_text, walk_notice,
+                   "startup workspace-walk notice did not expire");
     if (original_cells != NULL)
         (void)memcpy(original_cells, c->vt.cells,
                      (size_t)c->vt.rows * c->vt.cols *
@@ -10231,11 +10252,8 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
         s52_wait_screen(c, "jump | Alt+key");
         c->vt.sync_pairs_unstable = true;
     }
-    /* The workspace-walk notice is deliberately transient.  Snapshotting
-     * before or after its expiry made every tree/navigation case depend on
-     * how quickly the instrumented child reached this point.  The complete
-     * footer is the stable FUSS state shared by all actions below. */
-    s52_wait_screen_gone(c, "git discovery unavailable", 240U);
+    ptc_check(c, !s52_screen_contains(&c->vt, walk_notice),
+              "workspace-walk notice returned after it expired");
     s52_wait_screen(c, "Legend:");
     return !c->failed;
 }
