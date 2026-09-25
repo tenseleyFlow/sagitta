@@ -106,8 +106,18 @@ static void panel_push_line(Panel *p, u32 lo, u32 hi, u16 width)
             pos = next;
         }
         if (pos == hi) {
+            /*
+             * Trim trailing spaces, walking clusters of the row's own
+             * window: `start` is where the row begins, not a length.
+             * Passed as the length, the walker clamped `pos` to it and
+             * answered with the cluster BEFORE the row — on a wrapped
+             * row, the space it broke at — and the row's end crossed
+             * its start (fuzz_lsp_resp).
+             */
             while (pos > start) {
-                size_t prev = yew_gb_prev_bytes(p->body, start, pos);
+                size_t prev = start +
+                    yew_gb_prev_bytes_exact(p->body + start, pos - start,
+                                            pos - start);
 
                 if (prev >= pos || !panel_space(p->body + prev, pos - prev))
                     break;
