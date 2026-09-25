@@ -1290,11 +1290,15 @@ static bool s57_top_ready(const PtyCtx *c, const void *arg)
 
 /* The top of the file with the save message gone.  The cursor can only
  * reach 1,8 after `g g`, which is queued behind the Escape that closed the
- * command line, so this also proves the line is closed again. */
+ * command line, so this also proves the line is closed again.  The `syn…`
+ * badge shows while background highlighting of the 4 MiB file has been
+ * catching up longer than YEW_SYN_SETTLING_MS -- elapsed-time state, so
+ * wait for the settle to finish (its fixpoint repaints the footer). */
 static bool s57_top_ready_dismissed(const PtyCtx *c, const void *arg)
 {
     return s57_top_ready(c, arg) &&
-           !s57_screen_contains(c, "wrote build/pty-s57-embedded-4m.c");
+           !s57_screen_contains(c, "wrote build/pty-s57-embedded-4m.c") &&
+           !s57_screen_contains(c, "syn\xE2\x80\xA6");
 }
 
 /*
