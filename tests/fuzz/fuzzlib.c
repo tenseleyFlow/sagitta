@@ -1171,7 +1171,9 @@ static void minimize(FuzzRun *run, FuzzBuf *buf)
  * edge set rather than "any unseen edge": the latter let a candidate trade
  * the calibrated edges for a one-shot edge (first-use initialisation, a
  * buffer growing past its high-water mark) that no later execution
- * reproduces. */
+ * reproduces.  A timed campaign stops shrinking at its deadline: every
+ * accepted step already reaches STABLE, so the current input is admissible
+ * and one expensive input cannot hold the campaign past its budget. */
 static void minimize_coverage(FuzzRun *run, FuzzBuf *buf, const u32 *stable,
                               u32 stable_len)
 {
@@ -1187,6 +1189,8 @@ static void minimize_coverage(FuzzRun *run, FuzzBuf *buf, const u32 *stable,
             FuzzBuf candidate = {0};
             size_t take = chunk;
 
+            if (run->seconds != 0U && monotonic_ms() >= run->deadline_ms)
+                return;
             if (take > buf->len - at)
                 take = buf->len - at;
             buf_assign(&candidate, buf->data, buf->len);
