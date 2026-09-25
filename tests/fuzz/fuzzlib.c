@@ -64,6 +64,7 @@ typedef struct {
 #if YEW_COV
     size_t admitted;
     u64 admitted_edges;
+    u64 unstable_edges;
 #endif
 } FuzzRun;
 
@@ -1165,7 +1166,14 @@ static void minimize(FuzzRun *run, FuzzBuf *buf)
 }
 
 #if YEW_COV
-static void minimize_coverage(FuzzRun *run, FuzzBuf *buf)
+/* Shrink BUF while every edge in STABLE (a calibrated, reproducible subset
+ * of what BUF first reached) is still reached.  The predicate is a fixed
+ * edge set rather than "any unseen edge": the latter let a candidate trade
+ * the calibrated edges for a one-shot edge (first-use initialisation, a
+ * buffer growing past its high-water mark) that no later execution
+ * reproduces. */
+static void minimize_coverage(FuzzRun *run, FuzzBuf *buf, const u32 *stable,
+                              u32 stable_len)
 {
     size_t granularity = 2U;
     char why[YEW_FUZZ_WHY_CAP];
@@ -1184,7 +1192,8 @@ static void minimize_coverage(FuzzRun *run, FuzzBuf *buf)
             buf_assign(&candidate, buf->data, buf->len);
             buf_delete(&candidate, at, take);
             yew_cov_reset();
-            if (checked(run, &candidate, why) && yew_cov_new_edges() != 0U) {
+            if (checked(run, &candidate, why) &&
+                yew_cov_hit_all(stable, stable_len)) {
                 buf_assign(buf, candidate.data, candidate.len);
                 reduced = true;
                 free(candidate.data);
@@ -1327,6 +1336,100 @@ static void save_crash(FuzzRun *run, const FuzzBuf *buf)
     (void)fprintf(stderr, "fuzz: minimized input saved to %s (%zu bytes)\n",
                   path, buf->len);
 }
+
+#if YEW_COV
+/* Admit one input whose execution reached NOVEL unseen edges; the coverage
+ * map still holds that execution.  The input is re-executed once to
+ * calibrate: only edges reached by both executions are treated as the
+ * input's own (a campaign process keeps state across executions, so a
+ * first-use or high-water-mark edge is reached once and never again).  The
+ * input is minimized against that calibrated set and must reproduce it on a
+ * final execution before it is admitted; if neither the minimized nor the
+ * original input does, nothing is admitted.  The first execution's novel
+ * edges (and the admitted execution's) are merged into the seen set so a
+ * one-shot edge is not rediscovered forever; every merged edge not carried
+ * by the admitted input is counted as unstable.  Returns
+ * 0 to continue the campaign, otherwise the process exit status. */
+static int admit_novel(FuzzRun *run, FuzzBuf *input, u32 novel)
+{
+    u32 *first = xmalloc((size_t)novel * sizeof(*first));
+    u32 *stable = xmalloc((size_t)novel * sizeof(*stable));
+    u32 first_len;
+    u32 stable_len = 0U;
+    u32 i;
+    FuzzBuf original = {0};
+    char why[YEW_FUZZ_WHY_CAP] = {0};
+    bool created = false;
+    bool reproduced = false;
+    int status = 0;
+
+    first_len = yew_cov_novel_ids(first, novel);
+    buf_assign(&original, input->data, input->len);
+    yew_cov_reset();
+    if (!checked(run, input, why)) {
+        (void)fprintf(stderr,
+                      "%s: FAIL seed=%llu iter=%zu on calibration "
+                      "re-execution: %s\n",
+                      run->target, (unsigned long long)run->seed,
+                      run->iteration, why);
+        save_crash(run, input);
+        status = 1;
+        goto done;
+    }
+    for (i = 0U; i < first_len; i++) {
+        if (yew_cov_hit_all(&first[i], 1U))
+            stable[stable_len++] = first[i];
+    }
+    if (stable_len != 0U) {
+        minimize_coverage(run, input, stable, stable_len);
+        yew_cov_reset();
+        if (!checked(run, input, why)) {
+            (void)fprintf(stderr,
+                          "%s: coverage minimizer made input fail: %s\n",
+                          run->target, why);
+            save_crash(run, input);
+            status = 1;
+            goto done;
+        }
+        reproduced = yew_cov_hit_all(stable, stable_len);
+        if (!reproduced && input->len != original.len) {
+            buf_assign(input, original.data, original.len);
+            yew_cov_reset();
+            if (!checked(run, input, why)) {
+                (void)fprintf(stderr,
+                              "%s: FAIL seed=%llu iter=%zu on admission "
+                              "re-execution: %s\n",
+                              run->target, (unsigned long long)run->seed,
+                              run->iteration, why);
+                save_crash(run, input);
+                status = 1;
+                goto done;
+            }
+            reproduced = yew_cov_hit_all(stable, stable_len);
+        }
+    }
+    if (reproduced) {
+        run->admitted_edges += yew_cov_merge_ids(stable, stable_len);
+        run->unstable_edges += yew_cov_new_edges();
+        yew_cov_merge();
+    }
+    run->unstable_edges += yew_cov_merge_ids(first, first_len);
+    if (reproduced && run->admit_dir != NULL) {
+        if (!save_admission(run, input, &created)) {
+            status = 2;
+            goto done;
+        }
+        if (created)
+            run->admitted++;
+    }
+
+done:
+    free(original.data);
+    free(stable);
+    free(first);
+    return status;
+}
+#endif
 
 static bool crashes_empty(void)
 {
@@ -1604,37 +1707,13 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
             u32 new_edges = yew_cov_new_edges();
 
             if (new_edges != 0U) {
-                bool created = false;
+                int status = admit_novel(&run, &input, new_edges);
 
-                minimize_coverage(&run, &input);
-                yew_cov_reset();
-                if (!checked(&run, &input, why)) {
-                    (void)fprintf(stderr,
-                                  "%s: coverage minimizer made input fail: "
-                                  "%s\n", target, why);
+                if (status != 0) {
                     free(input.data);
                     fuzz_run_free(&run);
-                    return 2;
+                    return status;
                 }
-                new_edges = yew_cov_new_edges();
-                if (new_edges == 0U) {
-                    (void)fprintf(stderr,
-                                  "%s: coverage minimizer lost novel edge\n",
-                                  target);
-                    free(input.data);
-                    fuzz_run_free(&run);
-                    return 2;
-                }
-                yew_cov_merge();
-                run.admitted_edges += new_edges;
-                if (run.admit_dir != NULL &&
-                    !save_admission(&run, &input, &created)) {
-                    free(input.data);
-                    fuzz_run_free(&run);
-                    return 2;
-                }
-                if (created)
-                    run.admitted++;
             }
         }
 #endif
@@ -1655,9 +1734,11 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
     if (run.coverage_report) {
         (void)printf("%s: ", target);
         yew_cov_report(stdout);
-        (void)printf(" corpus=%zu admitted=%zu new_edges=%llu\n",
+        (void)printf(" corpus=%zu admitted=%zu new_edges=%llu "
+                     "unstable=%llu\n",
                      run.corpus.len, run.admitted,
-                     (unsigned long long)run.admitted_edges);
+                     (unsigned long long)run.admitted_edges,
+                     (unsigned long long)run.unstable_edges);
     }
 #endif
     fuzz_run_free(&run);
