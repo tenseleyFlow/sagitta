@@ -202,6 +202,15 @@ bool yew_mouse_claimed_by_menu(Ed *ed, Key key);
  */
 void yew_mouse_cancel(Ed *ed);
 
+/*
+ * Tabs.v gained or lost an entry.  A tab or group drag in flight is
+ * cancelled on the spot: its press payload and target slot were read
+ * from the array as it was, and a drag left alive over a moved array
+ * paints a float and a gap for entries that are no longer there.  The
+ * tab mutators call this; nothing else needs to.
+ */
+void yew_mouse_tabs_changed(Ed *ed);
+
 /* True while a gesture is armed or dragging.  The renderer asks so it
  * can draw the preview; Esc asks so it can cancel before any mode sees
  * the key. */

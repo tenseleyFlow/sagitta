@@ -2560,6 +2560,24 @@ void yew_mouse_cancel(Ed *ed)
     yew_mouse_init(&ed->mouse);
 }
 
+/*
+ * The EAGER half of drag_strip_motion's count check.  That check only
+ * runs on a button-held motion, so between an external close and the
+ * next such report the drag stayed in flight over the moved array: a
+ * no-button hover report (mode 1003 is armed while a chevron is drawn),
+ * a clock tick or a repaint all saw a gesture whose press payload and
+ * target slot named entries that had shifted or gone.  The mutation is
+ * the moment the aim stops meaning anything, so that is where it ends.
+ */
+void yew_mouse_tabs_changed(Ed *ed)
+{
+    if (ed == NULL)
+        return;
+    if (ed->mouse.phase == YEW_MP_DRAG_TAB ||
+        ed->mouse.phase == YEW_MP_DRAG_GROUP)
+        yew_mouse_cancel(ed);
+}
+
 /* ---------------------------------------------------------------- */
 /* §4: the clocks                                                   */
 /* ---------------------------------------------------------------- */
