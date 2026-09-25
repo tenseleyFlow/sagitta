@@ -962,6 +962,7 @@ const YewTest yew_tests[] = {
     T(panel_second_open_replaces_existing_content),
     T(panel_drops_only_standalone_code_fence_lines),
     T(panel_mark_is_owned_drawn_and_cleared_with_panel),
+    T(panel_wrapped_row_trim_never_crosses_its_start),
     T(symidx_query_is_byte_identical_across_entry_permutations),
     T(symwalk_fallback_caps_skips_and_repeat_interning),
     T(symwalk_git_discovery_honors_ignore_when_available),

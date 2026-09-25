@@ -633,3 +633,36 @@ void test_panel_mark_is_owned_drawn_and_cleared_with_panel(void)
     (void)memset(&ed.grid, 0, sizeof(ed.grid));
     yew_ed_free(&ed);
 }
+
+/*
+ * fuzz_lsp_resp: the trailing-space trim of a WRAPPED row asked the
+ * grapheme walker for the cluster before `pos` with `start` as the
+ * buffer LENGTH.  The walker clamps `pos` to that length, so it
+ * answered with the cluster before `start` — here the NBSP the row
+ * broke at — which is a space, and the row's end walked back past its
+ * own start: {4, 2}.  Every row must stay a span of the body.
+ */
+void test_panel_wrapped_row_trim_never_crosses_its_start(void)
+{
+    static const u8 body[] = "xx\xc2\xa0yy ";
+    static const Span want[] = {{0U, 2U}, {4U, 6U}};
+    Ed ed;
+    PanelSpec spec;
+    size_t i;
+
+    panel_fixture(&ed, 24U, 8U);
+    spec = panel_spec(body, sizeof(body) - 1U, 1U, 1U, YEW_PANEL_BELOW);
+    spec.max_w = 3U;
+    YEW_ASSERT(yew_panel_open(&ed, &ed.win->panel, &spec));
+    YEW_ASSERT_EQ_U64(ed.win->panel.rows.len, YEW_ARRAY_LEN(want));
+    for (i = 0U; i < ed.win->panel.rows.len; i++) {
+        Span row = ed.win->panel.rows.data[i];
+
+        YEW_ASSERT(row.lo <= row.hi);
+        YEW_ASSERT(row.hi <= sizeof(body) - 1U);
+        YEW_ASSERT_EQ_U64(row.lo, want[i].lo);
+        YEW_ASSERT_EQ_U64(row.hi, want[i].hi);
+    }
+    yew_panel_close(&ed, &ed.win->panel);
+    yew_ed_free(&ed);
+}

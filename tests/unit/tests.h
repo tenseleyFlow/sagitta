@@ -933,6 +933,7 @@ void test_panel_draw_registers_exact_block_rect(void);
 void test_panel_second_open_replaces_existing_content(void);
 void test_panel_drops_only_standalone_code_fence_lines(void);
 void test_panel_mark_is_owned_drawn_and_cleared_with_panel(void);
+void test_panel_wrapped_row_trim_never_crosses_its_start(void);
 void test_symidx_query_is_byte_identical_across_entry_permutations(void);
 void test_symwalk_fallback_caps_skips_and_repeat_interning(void);
 void test_symwalk_git_discovery_honors_ignore_when_available(void);
