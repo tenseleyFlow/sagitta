@@ -748,10 +748,14 @@ static void pk_clip_holds(PkClip *c, const char *want)
     for (i = 0U; i < 2000U; i++) {
         struct timespec pause = {0, 1000000L};
 
+        /* Polled: uncounted checks, so the assertion total does not
+         * depend on how many turns the helper took. */
         fp = fopen(c->path, "rb");
-        YEW_ASSERT_NOT_NULL(fp);
+        if (fp == NULL)
+            yew_test_fail(__FILE__, __LINE__, "clipboard file vanished");
         n = fread(got, 1U, sizeof(got), fp);
-        YEW_ASSERT_EQ_I64(fclose(fp), 0);
+        if (fclose(fp) != 0)
+            yew_test_fail(__FILE__, __LINE__, "clipboard file close failed");
         if (n == strlen(want) && memcmp(got, want, n) == 0)
             break;
         (void)nanosleep(&pause, NULL);
