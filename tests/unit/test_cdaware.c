@@ -635,12 +635,16 @@ static void session_run(EdFix *f, const char *cmd)
     for (;;) {
         YewJob *j = yew_job_find(&f->ed, id);
 
-        YEW_ASSERT_NOT_NULL(j);
+        /* Polled: uncounted checks, so the assertion total does not
+         * depend on how many turns the job took. */
+        if (j == NULL)
+            yew_test_fail(__FILE__, __LINE__, "session job vanished");
         if (j->drained)
             break;
         pump(&f->ed, 20);
         yew_shsession_settle(&f->ed);
-        YEW_ASSERT(yew_now_ms() - start < 10000);
+        if (yew_now_ms() - start >= 10000)
+            yew_test_fail(__FILE__, __LINE__, "session job ran over 10 s");
     }
 }
 
