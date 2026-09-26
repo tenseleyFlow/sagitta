@@ -115,6 +115,11 @@ SOAK_ADMIT_DIR ?= tests/fuzz/corpus/$(FUZZ_CAMPAIGN_TARGET)
 # but give that one instrumented campaign bounded headroom without reducing
 # its iteration count or sanitizer coverage.
 AI_SHADOW_FUZZ_WATCHDOG_SECONDS ?= $(if $(filter 1,$(SAN)),30,5)
+# The same headroom for every shared-driver target in the coverage
+# campaigns: ASan/UBSan plus edge tracing slows fuzz_multicursor's
+# 129..500-cursor cases ~13x (151 ms plain, 2 s instrumented on arm64,
+# past 5 s on the slower x86 runners).
+FUZZ_CAMPAIGN_WATCHDOG_SECONDS ?= $(if $(filter 1,$(SAN)),30,5)
 PLUG_FUZZ_SECONDS ?= 3600
 LSP_RESP_FUZZ_ITERS ?= 50000
 LSP_RESP_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
@@ -1992,12 +1997,14 @@ fuzz-cov-regression-selftest:
 ifeq ($(COV),1)
 fuzz-cov-weekly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 	@seed=$$(date -u +%Y%m%d); \
+		YEW_SOAK_WATCHDOG_SECONDS='$(FUZZ_CAMPAIGN_WATCHDOG_SECONDS)' \
 		scripts/fuzz-weekly.sh $(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
 		'$(FUZZ_WEEKLY_SECONDS)' "$$seed" '$(SOAK_LEDGER)' \
 		'$(SOAK_ADMIT_DIR)'
 
 fuzz-nightly: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 	@seed=$$(date -u +%Y%m%d); \
+		YEW_SOAK_WATCHDOG_SECONDS='$(FUZZ_CAMPAIGN_WATCHDOG_SECONDS)' \
 		YEW_SOAK_LANE=fuzz-nightly scripts/fuzz-soak.sh \
 		$(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
 		'$(FUZZ_NIGHTLY_SECONDS)' "$$seed" '$(SOAK_LEDGER)' \
@@ -2008,7 +2015,8 @@ soak: $(BUILD)/$(FUZZ_CAMPAIGN_TARGET)
 	if [ -z "$$seed" ]; then \
 		seed=$$(od -An -N4 -tu4 /dev/urandom | tr -d ' '); \
 	fi; \
-	YEW_SOAK_LANE='$(SOAK_LANE)' scripts/fuzz-streams.sh \
+	YEW_SOAK_WATCHDOG_SECONDS='$(FUZZ_CAMPAIGN_WATCHDOG_SECONDS)' \
+		YEW_SOAK_LANE='$(SOAK_LANE)' scripts/fuzz-streams.sh \
 		$(BUILD) '$(FUZZ_CAMPAIGN_TARGET)' \
 		'$(SOAK_SECONDS)' "$$seed" '$(SOAK_STREAMS)' \
 		'$(SOAK_LEDGER)' '$(SOAK_ADMIT_DIR)'
