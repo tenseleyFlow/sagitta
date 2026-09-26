@@ -9778,11 +9778,6 @@ static bool s52_header_lacks_text(const PtyCtx *c, const void *arg)
            !s52_row_contains(&c->vt, 0, (const char *)arg);
 }
 
-static bool s52_screen_lacks_text(const PtyCtx *c, const void *arg)
-{
-    return c != NULL && !s52_screen_contains(&c->vt, (const char *)arg);
-}
-
 static void s52_wait_screen(PtyCtx *c, const char *text);
 
 static bool s56_5_drawer_open_ready(const PtyCtx *c, const void *arg)
@@ -10259,6 +10254,41 @@ static bool s52_spawn_editor(PtyCtx *c, const char *file)
     return true;
 }
 
+static bool s52_last_row_starts(const VtScreen *vt, char want)
+{
+    const VtCell *cell = &vt->cells[(size_t)(vt->rows - 1) *
+                                    (size_t)vt->cols];
+    const u8 *glyph;
+    size_t glyph_len;
+
+    glyph = vt_cell_bytes(vt, cell, &glyph_len);
+    return glyph_len == 1U && glyph[0] == (u8)want;
+}
+
+/* The `:` frame: the prompt owns the last row and the message is gone. */
+static bool s52_cmdline_open(const PtyCtx *c, const void *arg)
+{
+    return s52_last_row_starts(&c->vt, ':') &&
+           !s52_screen_contains(&c->vt, (const char *)arg);
+}
+
+/* The Escape frame with the git branch badge in the status line.  Only
+ * reachable after the `:` frame above, so a last row without the prompt
+ * means the line closed, not that it never opened. */
+static bool s52_status_ready(const PtyCtx *c, const void *arg)
+{
+    return !s52_last_row_starts(&c->vt, ':') &&
+           s52_row_contains(&c->vt, c->vt.rows - 1, "trunk") &&
+           !s52_screen_contains(&c->vt, (const char *)arg);
+}
+
+/* Forgets the raw log from `from` onward; the VT has already consumed it. */
+static void s52_drop_raw(PtyCtx *c, size_t from)
+{
+    if (from <= c->raw.len)
+        c->raw.len = from;
+}
+
 /* Appends the glyphs and styles of the VT's bottom two rows to `out`. */
 static void s52_bottom_rows_key(const VtScreen *vt, Bytebuf *out)
 {
@@ -10354,6 +10384,7 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
 {
     static const char walk_notice[] = "git discovery unavailable";
     char repo[PATH_MAX];
+    size_t dismiss_at;
     size_t frame_at;
 
     if (!s52_fixture(c, repo, sizeof(repo)) ||
@@ -10363,19 +10394,33 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
     ptc_wait_kitty_push(c, 21U);
     /*
      * The child has no $PATH, so startup posts the INFO notice "git
-     * discovery unavailable" in its first frame and a wall-clock timer
+     * discovery unavailable" in its first frame, and a wall-clock timer
      * repaints the footer when it expires.  Left to run, that expiry frame
      * lands wherever the instrumented child happens to be -- before `f`,
      * between the FUSS frames the collapse below keeps, or after it -- and
      * the SGR appendix records a different render history for the same
-     * grid.  Let it expire before the scene starts, so every run paints it
-     * at the same point in the byte stream.  Waiting for the posted bytes
-     * first (a durable record, unlike the screen) keeps "gone" from being
-     * satisfied before the notice was ever painted.
+     * grid.  Dismiss it by keystroke instead: opening the command line
+     * clears the message and cancels its timer, and Escape closes the line.
+     * Each key waits for its own frame, because the two sent back to back
+     * are sometimes decoded in one batch and sometimes painted separately.
+     *
+     * Dismissal uncovers the status line, whose branch badge comes from a
+     * git child and may land in the Escape frame or in a frame of its own.
+     * Wait for the badge so it cannot land after `f`, and drop the
+     * dismissal's frames from the raw log: they are a harness step, and
+     * how the badge split across them is scheduler state.  The appendix
+     * keeps the startup frames and the whole FUSS history.
      */
-    ptc_wait_output(c, walk_notice, sizeof(walk_notice) - 1U);
-    ptc_wait_until(c, s52_screen_lacks_text, walk_notice,
-                   "startup workspace-walk notice did not expire");
+    ptc_wait_until(c, s57_screen_contains, walk_notice,
+                   "startup workspace-walk notice was not painted");
+    dismiss_at = c->raw.len;
+    ptc_keys(c, ":");
+    ptc_wait_until(c, s52_cmdline_open, walk_notice,
+                   "startup notice was not dismissed by the command line");
+    ptc_keys(c, "esc");
+    ptc_wait_until(c, s52_status_ready, walk_notice,
+                   "status line did not return with its branch badge");
+    s52_drop_raw(c, dismiss_at);
     if (original_cells != NULL)
         (void)memcpy(original_cells, c->vt.cells,
                      (size_t)c->vt.rows * c->vt.cols *
@@ -10396,7 +10441,7 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
         c->vt.sync_pairs_unstable = true;
     }
     ptc_check(c, !s52_screen_contains(&c->vt, walk_notice),
-              "workspace-walk notice returned after it expired");
+              "workspace-walk notice returned after it was dismissed");
     s52_wait_screen(c, "Legend:");
     return !c->failed;
 }
