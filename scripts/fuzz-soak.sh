@@ -29,6 +29,14 @@ if [ ! -x "$binary" ]; then
     exit 2
 fi
 
+# Per-input hang budget for the shared-driver targets.  Instrumented
+# (ASan/UBSan + coverage) campaigns legitimately run an order of magnitude
+# slower than the plain build the default was sized for.
+watchdog=${YEW_SOAK_WATCHDOG_SECONDS:-5}
+case $watchdog in
+    ''|*[!0-9]*|0) echo "fuzz-soak: invalid watchdog $watchdog" >&2; exit 2 ;;
+esac
+
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/yew-fuzz-soak.XXXXXX")
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 mkdir -p "$tmp_dir/state" "$tmp_dir/config" "$tmp_dir/cache"
@@ -61,6 +69,7 @@ case $target in
         XDG_CONFIG_HOME=$tmp_dir/config \
         XDG_CACHE_HOME=$tmp_dir/cache \
             "$binary" --seconds="$seconds" --seed="$seed" \
+            --watchdog-seconds="$watchdog" \
             --coverage-report --admit-dir="$admit_dir" \
             >"$tmp_dir/out" 2>"$tmp_dir/err"
         status=$?
@@ -70,6 +79,12 @@ set -e
 cat "$tmp_dir/out"
 cat "$tmp_dir/err" >&2
 if [ "$status" -ne 0 ]; then
+    if [ "$status" -eq 124 ]; then
+        echo "fuzz-soak: $target exceeded its ${watchdog}s per-input watchdog" >&2
+    fi
+    for crash in tests/fuzz/crashes/"$target"-*; do
+        [ -f "$crash" ] && echo "fuzz-soak: finding saved to $crash" >&2
+    done
     exit "$status"
 fi
 
