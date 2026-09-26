@@ -10468,6 +10468,15 @@ static void s52_keys_repaint(PtyCtx *c, const char *keys)
     ptc_settle(c, 0);
 }
 
+/* F mode has handed the document back: its "clean" footer is up and
+ * the FUSS legend is gone. */
+static bool s52_left_fuss(const PtyCtx *c, const void *arg)
+{
+    (void)arg;
+    return s52_screen_contains(&c->vt, "clean") &&
+           !s52_screen_contains(&c->vt, "Legend:");
+}
+
 static void case_s52_fuss(PtyCtx *c)
 {
     const char *name = c->test->name;
@@ -10522,10 +10531,10 @@ static void case_s52_fuss(PtyCtx *c)
         ptc_bytes(c, "README");
         s52_wait_screen(c, "jump: README");
         ptc_keys(c, "enter enter");
-        ptc_settle(c, 0);
-        ptc_check(c, s52_screen_contains(&c->vt, "clean") &&
-                         !s52_screen_contains(&c->vt, "Legend:"),
-                  "opening README did not leave F mode");
+        /* A quiet window can close before the open repaints on a busy
+         * runner; wait for the state itself. */
+        ptc_wait_until(c, s52_left_fuss, NULL,
+                       "opening README did not leave F mode");
         ptc_keys(c, ":");
         ptc_bytes(c, "ed.tab.prev");
         ptc_keys(c, "enter");
