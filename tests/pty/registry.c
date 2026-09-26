@@ -1290,15 +1290,69 @@ static bool s57_top_ready(const PtyCtx *c, const void *arg)
 
 /* The top of the file with the save message gone.  The cursor can only
  * reach 1,8 after `g g`, which is queued behind the Escape that closed the
- * command line, so this also proves the line is closed again.  The `syn…`
- * badge shows while background highlighting of the 4 MiB file has been
- * catching up longer than YEW_SYN_SETTLING_MS -- elapsed-time state, so
- * wait for the settle to finish (its fixpoint repaints the footer). */
+ * command line, so this also proves the line is closed again. */
 static bool s57_top_ready_dismissed(const PtyCtx *c, const void *arg)
 {
     return s57_top_ready(c, arg) &&
-           !s57_screen_contains(c, "wrote build/pty-s57-embedded-4m.c") &&
-           !s57_screen_contains(c, "syn\xE2\x80\xA6");
+           !s57_screen_contains(c, "wrote build/pty-s57-embedded-4m.c");
+}
+
+/* Back at the top with the `ed.syn.status` report dismissed. */
+static bool s57_top_ready_unreported(const PtyCtx *c, const void *arg)
+{
+    return s57_top_ready(c, arg) && !s57_screen_contains(c, "settled ");
+}
+
+/* Reads the `ed.syn.status` report off the screen: true once it says the
+ * settle reached its fixpoint (every line settled, the wave at the end). */
+static bool s57_syn_report_settled(const PtyCtx *c)
+{
+    Bytebuf screen;
+    const char *at;
+    unsigned long long settled = 0U;
+    unsigned long long lines = 1U;
+    unsigned long long wave = 0U;
+    bool done;
+
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    at = strstr((const char *)screen.data, "settled ");
+    done = at != NULL &&
+           sscanf(at, "settled %llu/%llu, wave %llu", &settled, &lines,
+                  &wave) == 3 &&
+           settled == lines && wave == lines;
+    bytebuf_free(&screen);
+    return done;
+}
+
+/*
+ * Waits for background highlighting of the 4 MiB file to finish.
+ *
+ * The `syn…` footer badge appears only once a settle has run longer than
+ * YEW_SYN_SETTLING_MS, so its absence proves nothing: it can appear after
+ * any check that saw it missing.  Ask the editor instead.  `ed.syn.status`
+ * reports the settle frontier; repeat it until it names the fixpoint,
+ * after which nothing is settling and the badge cannot return.  Each
+ * report is dismissed through the command line before the next, so a
+ * report on screen is always the current one.
+ */
+static void s57_wait_syn_settled(PtyCtx *c, const char *first)
+{
+    bool settled = false;
+
+    while (!settled && !c->failed) {
+        ptc_keys(c, ":");
+        ptc_bytes(c, "ed.syn.status");
+        ptc_keys(c, "enter");
+        ptc_wait_until(c, s57_screen_contains, "settled ",
+                       "ed.syn.status did not report");
+        settled = s57_syn_report_settled(c);
+        ptc_keys(c, ":");
+        ptc_keys(c, "esc");
+        ptc_wait_until(c, s57_top_ready_unreported, first,
+                       "ed.syn.status report was not dismissed");
+    }
 }
 
 /*
@@ -1354,6 +1408,9 @@ static void case_s57_embedded_4m_roundtrip(PtyCtx *c)
     ptc_keys(c, "g g");
     ptc_wait_until(c, s57_top_ready_dismissed, first,
                    "4 MiB viewport did not return to the first line");
+    s57_wait_syn_settled(c, first);
+    ptc_check(c, !s57_screen_contains(c, "syn\xE2\x80\xA6"),
+              "settled 4 MiB buffer still showed the syn badge");
     ptc_settle(c, 0);
     ptc_snapshot(c, "s57_embedded_4m_roundtrip");
     quit_editor_cleanly(c);
