@@ -10259,6 +10259,97 @@ static bool s52_spawn_editor(PtyCtx *c, const char *file)
     return true;
 }
 
+/* Appends the glyphs and styles of the VT's bottom two rows to `out`. */
+static void s52_bottom_rows_key(const VtScreen *vt, Bytebuf *out)
+{
+    size_t i;
+    size_t first = (size_t)(vt->rows - 2) * (size_t)vt->cols;
+    size_t end = (size_t)vt->rows * (size_t)vt->cols;
+
+    for (i = first; i < end; i++) {
+        const VtCell *cell = &vt->cells[i];
+        const u8 *glyph;
+        size_t glyph_len;
+        u8 style[11];
+
+        glyph = vt_cell_bytes(vt, cell, &glyph_len);
+        style[0] = (u8)glyph_len;
+        style[1] = cell->fg.tag;
+        style[2] = cell->fg.r;
+        style[3] = cell->fg.g;
+        style[4] = cell->fg.b;
+        style[5] = cell->bg.tag;
+        style[6] = cell->bg.r;
+        style[7] = cell->bg.g;
+        style[8] = cell->bg.b;
+        style[9] = (u8)(cell->attrs & 0xffU);
+        style[10] = (u8)(cell->attrs >> 8);
+        bytebuf_append(out, style, sizeof(style));
+        if (glyph != NULL && glyph_len != 0U)
+            bytebuf_append(out, glyph, glyph_len);
+    }
+}
+
+/* The VT's bottom two rows match the pair recorded at the test size. */
+static bool s52_bottom_rows_match(const PtyCtx *c, const void *arg)
+{
+    const Bytebuf *want = arg;
+    Bytebuf now;
+    bool same;
+
+    if (c->vt.rows < 2)
+        return false;
+    bytebuf_init(&now);
+    s52_bottom_rows_key(&c->vt, &now);
+    same = now.len == want->len &&
+           (now.len == 0U || memcmp(now.data, want->data, now.len) == 0);
+    bytebuf_free(&now);
+    return same;
+}
+
+/*
+ * A resize round-trip turns the joined state into one full frame.  Without
+ * it, two independent child completions can leave Darwin with a tree frame
+ * followed by a header-only frame, while Linux commonly coalesces both into
+ * the one frame the golden records.
+ *
+ * Each leg is gated on the frame THAT leg causes, never on "one more
+ * frame": the editor also emits cursor-only frames when a background job
+ * finishes, and under valgrind one of those answered the first leg's wait.
+ * The second SIGWINCH then went out before the editor had read the first,
+ * the editor saw its original size on both and painted nothing, and the
+ * case hung until its deadline.  The FUSS slot and hint rows sit at the
+ * bottom of every layout, so they identify a repaint at the new size:
+ *   - grown by one row, only a repaint at the new size can fill the new
+ *     last row (the VT adds it blank and an old-size frame never reaches
+ *     it);
+ *   - shrunk back, the truncated grid and any late frame at the grown
+ *     size (whose last row the VT clamps) both leave something other than
+ *     the slot row directly above the hint row.
+ */
+static void s52_resize_round_trip(PtyCtx *c)
+{
+    u16 rows = c->test->rows;
+    u16 bumped = rows < UINT16_MAX ? (u16)(rows + 1U) : (u16)(rows - 1U);
+    Bytebuf bottom;
+
+    if (c->failed)
+        return;
+    if (c->vt.rows < 2) {
+        ptc_check(c, false, "FUSS round trip needs at least two rows");
+        return;
+    }
+    bytebuf_init(&bottom);
+    s52_bottom_rows_key(&c->vt, &bottom);
+    ptc_resize(c, bumped, c->test->cols);
+    ptc_wait_until(c, s52_bottom_rows_match, &bottom,
+                   "FUSS did not repaint at the grown size");
+    ptc_resize(c, rows, c->test->cols);
+    ptc_wait_until(c, s52_bottom_rows_match, &bottom,
+                   "FUSS did not repaint at the restored size");
+    bytebuf_free(&bottom);
+}
+
 static bool s52_open(PtyCtx *c, VtCell *original_cells)
 {
     static const char walk_notice[] = "git discovery unavailable";
@@ -10293,22 +10384,7 @@ static bool s52_open(PtyCtx *c, VtCell *original_cells)
     ptc_keys(c, "f");
     s52_wait_screen(c, "both.c");
     s52_wait_screen(c, "fussrepo · trunk");
-    {
-        u16 bumped_rows = c->test->rows < UINT16_MAX ?
-                              (u16)(c->test->rows + 1U) :
-                              (u16)(c->test->rows - 1U);
-        u32 repaint = c->vt.nsync_pairs + 1U;
-
-        /* A resize round-trip turns the joined state into one full frame.
-         * Without it, two independent child completions can leave Darwin
-         * with a tree frame followed by a header-only frame, while Linux
-         * commonly coalesces both into the one frame the golden records. */
-        ptc_resize(c, bumped_rows, c->test->cols);
-        ptc_wait_sync_pairs(c, repaint);
-        repaint = c->vt.nsync_pairs + 1U;
-        ptc_resize(c, c->test->rows, c->test->cols);
-        ptc_wait_sync_pairs(c, repaint);
-    }
+    s52_resize_round_trip(c);
     ptc_settle(c, 0);
     s52_collapse_job_frames(c, frame_at);
     /* Git discovery may publish the same completed tree in one or more
