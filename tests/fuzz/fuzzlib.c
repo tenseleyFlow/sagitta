@@ -69,6 +69,14 @@ typedef struct {
 } FuzzRun;
 
 static volatile sig_atomic_t watchdog_iteration;
+/* The input under check, published for the SIGALRM handler so a hang
+ * leaves a replayable crash file instead of vanishing with _Exit.  Two
+ * stores per check; the handler does only async-signal-safe work (mkdir,
+ * open, write, close) on a path formatted once at startup. */
+static const u8 *volatile watchdog_data;
+static volatile size_t watchdog_len;
+static char watchdog_path[320];
+static size_t watchdog_path_len;
 
 static void *xmalloc(size_t size);
 
@@ -1100,15 +1108,68 @@ static bool sha256_selftest(void)
 }
 #endif
 
+static void watchdog_say(const char *text, size_t len)
+{
+    while (len != 0U) {
+        ssize_t wrote = write(STDERR_FILENO, text, len);
+
+        if (wrote <= 0)
+            return;
+        text += wrote;
+        len -= (size_t)wrote;
+    }
+}
+
 static void watchdog(int signo)
 {
-    static const char message[] = "fuzz: watchdog expired\n";
-    ssize_t written;
+    static const char expired[] = "fuzz: watchdog expired iter=";
+    static const char saved[] = "; hung input saved to ";
+    static const char unsaved[] = "; hung input could not be saved\n";
+    const u8 *data = watchdog_data;
+    size_t len = watchdog_len;
+    unsigned long iteration = (unsigned long)watchdog_iteration;
+    char digits[24];
+    size_t at = sizeof(digits);
+    bool ok = false;
 
     (void)signo;
-    (void)watchdog_iteration;
-    written = write(STDERR_FILENO, message, sizeof(message) - 1U);
-    (void)written;
+    do {
+        digits[--at] = (char)('0' + iteration % 10U);
+        iteration /= 10U;
+    } while (iteration != 0U && at != 0U);
+    watchdog_say(expired, sizeof(expired) - 1U);
+    watchdog_say(digits + at, sizeof(digits) - at);
+    if (data != NULL && watchdog_path_len != 0U) {
+        int fd;
+
+        (void)mkdir("tests/fuzz/crashes", 0777);
+        fd = open(watchdog_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd >= 0) {
+            size_t off = 0U;
+
+            ok = true;
+            while (off < len) {
+                ssize_t wrote = write(fd, data + off, len - off);
+
+                if (wrote < 0 && errno == EINTR)
+                    continue;
+                if (wrote <= 0) {
+                    ok = false;
+                    break;
+                }
+                off += (size_t)wrote;
+            }
+            if (close(fd) != 0)
+                ok = false;
+        }
+    }
+    if (ok) {
+        watchdog_say(saved, sizeof(saved) - 1U);
+        watchdog_say(watchdog_path, watchdog_path_len);
+        watchdog_say("\n", 1U);
+    } else {
+        watchdog_say(unsaved, sizeof(unsaved) - 1U);
+    }
     _Exit(124);
 }
 
@@ -1121,9 +1182,12 @@ static bool checked(FuzzRun *run, const FuzzBuf *buf,
     if (buf->len != 0U)
         (void)memcpy(exact, buf->data, buf->len);
     watchdog_iteration = (sig_atomic_t)run->iteration;
+    watchdog_len = buf->len;
+    watchdog_data = exact;
     (void)alarm(run->watchdog_seconds);
     ok = run->check(exact, buf->len, why, YEW_FUZZ_WHY_CAP);
     (void)alarm(0U);
+    watchdog_data = NULL;
     free(exact);
     return ok;
 }
@@ -1639,6 +1703,10 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
         run.deadline_ms = now > UINT64_MAX - span ? UINT64_MAX : now + span;
         run.iterations = SIZE_MAX;
     }
+    if (snprintf(watchdog_path, sizeof(watchdog_path),
+                 "tests/fuzz/crashes/%s-seed-%llu-watchdog.bin", target,
+                 (unsigned long long)run.seed) < (int)sizeof(watchdog_path))
+        watchdog_path_len = strlen(watchdog_path);
     (void)memset(&action, 0, sizeof(action));
     action.sa_handler = watchdog;
     (void)sigemptyset(&action.sa_mask);
