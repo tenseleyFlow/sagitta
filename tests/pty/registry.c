@@ -11333,11 +11333,120 @@ static bool s53_blame_fixture(PtyCtx *c, char *repo, size_t repo_cap)
     return true;
 }
 
+/*
+ * The stale-blame case's git.  With no $PATH exported, the editor finds git
+ * on the confstr default path; this resolves that same binary, so the
+ * wrapper below changes only when a blame runs, never what it runs.
+ */
+static bool s53_real_git(char *out, size_t cap)
+{
+    char dirs[PATH_MAX];
+    size_t n = confstr(_CS_PATH, dirs, sizeof(dirs));
+    char *at = dirs;
+
+    if (n == 0U || n > sizeof(dirs))
+        return false;
+    while (at != NULL && *at != '\0') {
+        char *end = strchr(at, ':');
+
+        if (end != NULL)
+            *end = '\0';
+        if (*at != '\0' && s57_fits(snprintf(out, cap, "%s/git", at), cap) &&
+            access(out, X_OK) == 0)
+            return true;
+        at = end != NULL ? end + 1 : NULL;
+    }
+    return false;
+}
+
+/*
+ * Puts a `git` on the child's $PATH that runs the real one, except that a
+ * `blame` started while <workspace>/blame.hold exists first parks on the
+ * <workspace>/blame.release FIFO.  The edited line's stale annotation then
+ * lasts until the harness releases it, rather than for the debounce plus
+ * git's runtime -- a window a descheduled harness could sleep through, after
+ * which it waited for a stale frame that had already been replaced.
+ */
+static bool s53_hold_blame_git(PtyCtx *c)
+{
+    static char bin[PATH_MAX];
+    char real[PATH_MAX];
+    char script[PATH_MAX * 4];
+    char fifo[PATH_MAX];
+
+    if (c->workspace_dir == NULL || !s53_real_git(real, sizeof(real)) ||
+        !s57_fits(snprintf(bin, sizeof(bin), "%s/bin", c->workspace_dir),
+                  sizeof(bin)) ||
+        !s57_fits(snprintf(fifo, sizeof(fifo), "%s/blame.release",
+                           c->workspace_dir), sizeof(fifo)) ||
+        !s57_fits(snprintf(script, sizeof(script),
+                           "#!/bin/sh\n"
+                           "if [ -e '%s/blame.hold' ]; then\n"
+                           "  for arg in \"$@\"; do\n"
+                           "    if [ \"$arg\" = blame ]; then\n"
+                           "      read go < '%s'\n"
+                           "      break\n"
+                           "    fi\n"
+                           "  done\n"
+                           "fi\n"
+                           "exec '%s' \"$@\"\n",
+                           c->workspace_dir, fifo, real), sizeof(script)) ||
+        (mkdir(bin, 0700) != 0 && errno != EEXIST) ||
+        mkfifo(fifo, 0600) != 0 ||
+        !s57_24_write(c, "bin/git", script, 0700)) {
+        ptc_check(c, false, "installing the stale-blame git wrapper");
+        return false;
+    }
+    c->exec_path = bin;
+    return true;
+}
+
+static bool s53_blame_hold(PtyCtx *c)
+{
+    char path[PATH_MAX];
+
+    return s57_fits(snprintf(path, sizeof(path), "%s/blame.hold",
+                             c->workspace_dir), sizeof(path)) &&
+           write_bytes(path, (const u8 *)"", 0U);
+}
+
+/*
+ * Releases the held refresh once it is parked.  A non-blocking open of the
+ * FIFO fails until the wrapper sits in its read-side open, so success means
+ * the edit's blame reached git and passed the hold check; only then does
+ * the hold go, so a refresh that has not started yet can never slip past
+ * unheld and leave nothing to release.
+ */
+static bool s53_release_blame(const PtyCtx *c, const void *arg)
+{
+    char hold[PATH_MAX];
+    int fd;
+    bool sent;
+
+    fd = open((const char *)arg, O_WRONLY | O_NONBLOCK);
+    if (fd < 0)
+        return false;
+    sent = s57_fits(snprintf(hold, sizeof(hold), "%s/blame.hold",
+                             c->workspace_dir), sizeof(hold)) &&
+           unlink(hold) == 0 && write(fd, "go\n", 3U) == 3;
+    (void)close(fd);
+    return sent;
+}
+
+/* Normal mode, with the edited line showing its sign and the preceding
+ * commit's annotation. */
+static bool s53_blame_stale_ready(const PtyCtx *c, const void *arg)
+{
+    return c->vt.cursor_shape == 2U && c->vt.cur_r != c->vt.rows - 1 &&
+           s52_screen_contains(&c->vt, (const char *)arg);
+}
+
 static void case_s53_blame(PtyCtx *c)
 {
     char repo[PATH_MAX];
 
-    if (!s53_blame_fixture(c, repo, sizeof(repo)))
+    if (!s53_blame_fixture(c, repo, sizeof(repo)) ||
+        (strstr(c->test->name, "stale") != NULL && !s53_hold_blame_git(c)))
         return;
     ptc_spawn(c, ptc_yew_bin(c), "main.c", NULL);
     s53_wait_git(c);
@@ -11358,21 +11467,36 @@ static void case_s53_blame(PtyCtx *c)
     }
     s53_clear_message(c);
     if (strstr(c->test->name, "stale") != NULL) {
+        char release[PATH_MAX];
+
         /* Keep insert, edit, and Escape in one input-bearing turn, then wait
-         * for the in-process diff to publish its sign.  The diff tick runs
-         * before the asynchronous blame request, so this pins the state in
-         * which the sign is current while the preceding blame is still
-         * visibly stale. */
+         * for the in-process diff to publish its sign.  The blame refresh
+         * the edit schedules is held at the wrapper, so the preceding blame
+         * stays visibly stale -- the sign current, the annotation not --
+         * until the harness lets it through. */
+        if (!s53_blame_hold(c) ||
+            !s57_fits(snprintf(release, sizeof(release), "%s/blame.release",
+                               c->workspace_dir), sizeof(release))) {
+            ptc_check(c, false, "holding the stale blame refresh");
+            return;
+        }
         ptc_keys(c, "i X esc");
-        s53_wait_screen(c, "▎   1 Xshort blamed line  ▏ Yew PTY");
-        ptc_check(c, s52_screen_contains(
-                         &c->vt,
-                         "▎   1 Xshort blamed line  ▏ Yew PTY"),
-                  "edited line did not retain stale blame after sign refresh");
-        s53_wait_cursor(c, 2U, false);
-        ptc_check(c, c->vt.cursor_shape == 2U &&
-                         c->vt.cur_r != c->vt.rows - 1,
-                  "stale blame did not return to normal mode");
+        ptc_wait_until(c, s53_blame_stale_ready,
+                       "▎   1 Xshort blamed line  ▏ Yew PTY",
+                       "edited line did not retain stale blame in normal "
+                       "mode after sign refresh");
+        c->vt.sync_pairs_unstable = true;
+        ptc_snapshot(c, c->test->name);
+        /* Then release the refresh: it must replace the stale annotation,
+         * which proves the snapshot showed data awaiting a refresh rather
+         * than a blame that never updates. */
+        ptc_wait_until(c, s53_release_blame, release,
+                       "stale blame refresh never reached git");
+        ptc_wait_until(c, s57_screen_contains,
+                       "Xshort blamed line  ▏ (uncommitted)",
+                       "released blame refresh did not replace stale data");
+        force_quit(c);
+        return;
     }
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);
