@@ -5170,7 +5170,7 @@ bool yew_syn_embed_pump(SynBuf *syn, SynEngine *engine, i64 budget_us)
      * The wave only ever moves BACK here.  An edit above the opener has
      * already pulled it to the edited line, and raising it to the opener
      * would skip re-lexing that line: its new exit state would never
-     * reach the entries below it (fuzz_syn, seed 20260925). */
+     * reach the entries below it (found by fuzz_syn's nightly campaign). */
     if (i < syn->entry.len) {
         size_t clear_from = i + 1U;
         size_t tail = syn->entry.len - clear_from;
