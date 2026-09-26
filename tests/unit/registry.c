@@ -978,6 +978,7 @@ const YewTest yew_tests[] = {
     T(symidx_resident_bytes_track_real_allocation),
     T(symidx_resident_cap_stops_growth_and_notifies_once),
     T(symidx_cap_follows_the_build_profile),
+    T(symidx_idle_rss_plateau_stays_under_the_cap),
     T(symshadow_delivers_only_the_top_label_remainder),
     T(symshadow_rejects_short_and_exhausted_stems),
     T(menu_selection_survives_a_refilter_by_identity),

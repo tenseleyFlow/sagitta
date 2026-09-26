@@ -10,6 +10,7 @@
 #include "text/edit.h"
 #include "ui/message.h"
 #include "util/memacct.h"
+#include "util/rss.h"
 #include "ws/symidx.h"
 
 typedef struct SymFixture {
@@ -543,5 +544,36 @@ void test_symidx_cap_follows_the_build_profile(void)
 #endif
     yew_symidx_test_set_cap(12345U);
     YEW_ASSERT_EQ_U64(yew_symidx_cap_bytes(), 12345U);
+    yew_symidx_test_set_cap(0U);
+}
+
+/*
+ * The idle plateau, measured as the process sees it.  Sixty thousand
+ * distinct names would index to tens of MiB uncapped; under a 2 MiB cap the
+ * resident growth of a fully drained index stays within the cap plus the
+ * merge's transient tail copy (at most the occurrence vector, itself under
+ * the cap) and allocator slack.
+ */
+void test_symidx_idle_rss_plateau_stays_under_the_cap(void)
+{
+    Ed ed;
+    size_t len;
+    u8 *text = distinct_words(60000U, 12U, &len);
+    u64 cap = 2U * 1024U * 1024U;
+    u64 before;
+    u64 after;
+
+    yew_symidx_test_set_cap(cap);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, len, "symidx-plateau.txt"));
+    free(text);
+    before = yew_rss_bytes();
+    pump_symbols(&ed);
+    after = yew_rss_bytes();
+    YEW_ASSERT(ed.ws.sym_cap_hit);
+    YEW_ASSERT(yew_symidx_workspace_bytes(&ed.ws) <= cap);
+    if (before != 0U && after > before)
+        YEW_ASSERT(after - before <= 2U * cap + 1024U * 1024U);
+    yew_ed_free(&ed);
     yew_symidx_test_set_cap(0U);
 }

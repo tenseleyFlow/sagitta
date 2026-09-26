@@ -949,6 +949,7 @@ void test_symidx_dirty_rescan_retries_after_a_memory_cap(void);
 void test_symidx_resident_bytes_track_real_allocation(void);
 void test_symidx_resident_cap_stops_growth_and_notifies_once(void);
 void test_symidx_cap_follows_the_build_profile(void);
+void test_symidx_idle_rss_plateau_stays_under_the_cap(void);
 void test_symshadow_delivers_only_the_top_label_remainder(void);
 void test_symshadow_rejects_short_and_exhausted_stems(void);
 void test_menu_selection_survives_a_refilter_by_identity(void);
