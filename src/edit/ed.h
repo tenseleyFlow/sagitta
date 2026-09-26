@@ -130,6 +130,12 @@ typedef struct Workspace {
     size_t sym_seen_cap;
     u32 sym_seen_tick;
     u32 sym_rr;
+    /* Resident bytes of the names the symbol system added to the editor's
+     * interner.  Interned strings are never freed, so this only grows. */
+    u64 sym_intern_bytes;
+    /* The resident cap refused an addition; the notice is posted once. */
+    bool sym_cap_hit;
+    bool sym_cap_noticed;
     SymWalk sym_walk;
 } Workspace;
 

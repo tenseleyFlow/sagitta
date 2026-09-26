@@ -955,11 +955,16 @@ CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
     }
     total_bytes = yew_symidx_workspace_bytes(&cx->ed->ws);
     yew_msg(cx->ed, YEW_MSG_INFO,
-            "completion: buffers=%zu symbols=%llu bytes=%llu; "
+            "completion: pending=%s cap=%s; "
+            "buffers=%zu symbols=%llu bytes=%llu; "
             "workspace files=%llu/%llu symbols=%zu bytes=%llu; "
             "caps files=%u file-bytes=%u line-bytes=%u symbols/file=%u "
-            "memory=%llu/%u long-line-files=%llu "
+            "memory=%llu/%llu long-line-files=%llu "
             "buffer-indexes=%s workspace=%s walk=%s",
+            yew_symidx_pending(cx->ed) || cx->ed->ws.sym_walk.running
+                ? "yes" : "no",
+            cx->ed->ws.sym_cap_noticed ? "noticed"
+            : cx->ed->ws.sym_cap_hit   ? "hit" : "ok",
             cx->ed->ws.sym_buf.len,
             (unsigned long long)buffer_symbols,
             (unsigned long long)buffer_bytes,
@@ -969,7 +974,8 @@ CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
             (unsigned long long)cx->ed->ws.sym_ws.bytes,
             YEW_SYMWALK_MAX_FILES, YEW_SYMWALK_MAX_FILE_BYTES,
             YEW_SYMWALK_MAX_LINE_BYTES, YEW_SYMWALK_MAX_SYMS_PER_FILE,
-            (unsigned long long)total_bytes, YEW_SYMIDX_BYTES_MAX,
+            (unsigned long long)total_bytes,
+            (unsigned long long)yew_symidx_cap_bytes(),
             (unsigned long long)cx->ed->ws.sym_walk.long_files_skipped,
             buffer_capped ? "capped" : "ok",
             cx->ed->ws.sym_ws.capped ? "capped" : "ok",

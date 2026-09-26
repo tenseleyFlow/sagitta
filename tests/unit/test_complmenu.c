@@ -1,5 +1,6 @@
 #include "harness.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -540,7 +541,14 @@ void test_complmenu_stats_reports_every_symbol_cap(void)
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "line-bytes=65536"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "symbols/file=4000"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "memory="));
-    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "/33554432"));
+    {
+        char cap[32];
+
+        (void)snprintf(cap, sizeof(cap), "/%llu ",
+                       (unsigned long long)yew_symidx_cap_bytes());
+        YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, cap));
+    }
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "pending=no"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "long-line-files=0"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "buffer-indexes=ok"));
 

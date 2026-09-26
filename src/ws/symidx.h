@@ -27,7 +27,15 @@ enum {
     YEW_SYMIDX_BURST_US = 500,
     YEW_SYMIDX_DIRTY_MAX_LINES = 512,
     YEW_SYMIDX_FULL_US = 4000,
-    YEW_SYMIDX_BYTES_MAX = 32 * 1024 * 1024
+    /* The symbol system's resident-memory cap (see yew_symidx_cap_bytes).
+     * Ordinary builds allow 32 MiB.  The constrained embedded profile
+     * (EMBED_RUNTIME=1, the build the Sprint 57 64 MiB guest runs) allows
+     * 4 MiB: Sprint 57 row 11 caps the editor's VmHWM at 24 MiB, the 4 MiB
+     * round trip peaks near 11 MiB before any index exists, and the guest
+     * leaves about 18 MiB available to the editor and its harness -- so
+     * 4 MiB keeps a fully indexed session near 15 MiB, clear of both. */
+    YEW_SYMIDX_BYTES_MAX = 32 * 1024 * 1024,
+    YEW_SYMIDX_BYTES_MAX_CONSTRAINED = 4 * 1024 * 1024
 };
 
 typedef enum SymKind {
@@ -70,6 +78,7 @@ typedef struct SymOcc {
 } SymOcc;
 
 VEC_DECL(Vec_SymOcc, SymOcc);
+VEC_DECL(Vec_SymBits, u8);
 
 typedef struct SymIndex {
     Vec_SymEntry e;
@@ -77,7 +86,19 @@ typedef struct SymIndex {
     Arena arena;
     u32 tick;
     u32 scan_limit;
+    /* Resident bytes this index owns, by the util/memacct.h model: every
+     * vector by capacity, the name map, and the postings.  Refreshed after
+     * each mutation; yew_symidx_resident_recount() recomputes it. */
     u64 bytes;
+    /* The postings' share of `bytes`: structs plus arrays by capacity. */
+    u64 posting_bytes;
+    /* Not resident: budget held for the entries the pending occurrences
+     * will need when they are merged.  Released by the merge. */
+    u64 reserve_bytes;
+    /* Names (by interner id) that already hold a reservation, so a name
+     * repeated across the pending occurrences reserves only once.  Resident,
+     * and charged like the vectors. */
+    Vec_SymBits reserved;
 
     /* Parallel to e. Recency is deliberately an index-update clock, not
      * wall time, so ranking is reproducible across hosts and replays. */
@@ -162,7 +183,22 @@ u32 yew_symidx_scan(SymIndex *idx, Buffer *buf, Span range);
  * buffer.  This is the save-time and background-walk tier boundary. */
 u32 yew_symidx_scan_workspace(SymIndex *idx, Buffer *buf, Span range);
 void yew_symidx_workspace_replace(Workspace *ws, Buffer *buf);
+/* Resident bytes the whole symbol system owns: every index, the per-buffer
+ * dirty tables, the query scratch, and the names it added to the editor's
+ * interner.  This is what the cap is compared against. */
 u64 yew_symidx_workspace_bytes(const Workspace *ws);
+/* The resident cap for this build's memory profile. */
+u64 yew_symidx_cap_bytes(void);
+/* Tests only: replace the profile cap; zero restores it. */
+void yew_symidx_test_set_cap(u64 bytes);
+/* Recomputes an index's resident bytes from its structures, independently
+ * of the incremental accounting, by walking every posting. */
+u64 yew_symidx_resident_recount(const SymIndex *idx);
+/* Posts the one-per-session notice that the cap stopped indexing.  Called
+ * when a query is about to answer from the partial index, so the notice
+ * arrives with the completion it explains -- never at a moment set by how
+ * fast background indexing happened to run. */
+void yew_symidx_cap_notice(Ed *ed);
 void yew_symidx_reindex_buffers(Workspace *ws);
 
 i32 yew_sym_rank(i32 fuzzy, u32 age, SymProx prox, u8 kind, u16 hits);

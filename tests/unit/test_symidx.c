@@ -1,11 +1,15 @@
 #include "harness.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "edit/buf.h"
 #include "edit/ed.h"
 #include "syn_toy.h"
+#include "text/edit.h"
+#include "ui/message.h"
+#include "util/memacct.h"
 #include "ws/symidx.h"
 
 typedef struct SymFixture {
@@ -303,8 +307,11 @@ void test_symidx_save_replaces_workspace_file_tier(void)
     YEW_ASSERT_EQ_U64(entry->hits, 2U);
     file = entry->file;
     YEW_ASSERT(file != 0U);
-    YEW_ASSERT_EQ_U64(yew_symidx_workspace_bytes(&ed.ws),
-                      ed.ws.sym_ws.bytes);
+    /* No buffer index exists yet, so the system's total is the workspace
+     * index, the names it interned, and the query scratch it projects. */
+    YEW_ASSERT(ed.ws.sym_intern_bytes != 0U);
+    YEW_ASSERT(yew_symidx_workspace_bytes(&ed.ws) >
+               ed.ws.sym_ws.bytes + ed.ws.sym_intern_bytes);
 
     /* The memory fixture has no crash-journal path; expose the canonical
      * path only at the two save-index boundaries. */
@@ -326,7 +333,7 @@ void test_symidx_save_replaces_workspace_file_tier(void)
     YEW_ASSERT_EQ_U64(entry->buf_id, 0U);
     YEW_ASSERT_EQ_U64(entry->file, file);
     YEW_ASSERT(yew_symidx_workspace_bytes(&ed.ws) <=
-               YEW_SYMIDX_BYTES_MAX);
+               yew_symidx_cap_bytes());
     yew_ed_free(&ed);
 }
 
@@ -382,4 +389,159 @@ void test_symidx_query_is_byte_identical_across_entry_permutations(void)
                           baseline_len * sizeof(*baseline));
     }
     yew_ed_free(&ed);
+}
+
+/* `count` distinct identifiers, `per_line` to a line. */
+static u8 *distinct_words(size_t count, size_t per_line, size_t *len)
+{
+    size_t cap = count * 16U + count / per_line + 2U;
+    u8 *text = malloc(cap);
+    size_t at = 0U;
+    size_t i;
+
+    YEW_ASSERT_NOT_NULL(text);
+    for (i = 0U; text != NULL && i < count; i++) {
+        int n = snprintf((char *)text + at, cap - at, "word_%06zu%c", i,
+                         (i + 1U) % per_line == 0U ? '\n' : ' ');
+
+        YEW_ASSERT(n > 0 && (size_t)n < cap - at);
+        at += (size_t)n;
+    }
+    *len = at;
+    return text;
+}
+
+static void pump_symbols(Ed *ed)
+{
+    while (yew_symidx_pending(ed))
+        yew_symidx_pump(ed, INT64_MAX);
+}
+
+void test_symidx_resident_bytes_track_real_allocation(void)
+{
+    Ed ed;
+    SymIndex *idx;
+    size_t len;
+    u8 *text = distinct_words(3000U, 12U, &len);
+    u64 live_before;
+    u64 live_after;
+    u64 accounted_before;
+    u64 accounted_after;
+    u64 payload;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, len, "symidx-resident.txt"));
+    /* Measure what indexing allocates: the index and the names it
+     * interned.  (The workspace total also projects query scratch that no
+     * query has allocated yet.) */
+    accounted_before = ed.ws.sym_intern_bytes;
+    live_before = yew_alloc_live_bytes();
+    pump_symbols(&ed);
+    live_after = yew_alloc_live_bytes();
+    idx = yew_symidx_buffer(&ed.ws, ed.buffer.id, false);
+    YEW_ASSERT_NOT_NULL(idx);
+    accounted_after =
+        ed.ws.sym_intern_bytes + idx->bytes +
+        yew_heap_array_cost(ed.ws.sym_buf.cap, sizeof(SymBufIndex)) +
+        yew_heap_array_cost(ed.ws.sym_buf.data[0].dirty.affected.cap,
+                            sizeof(u32));
+    YEW_ASSERT_EQ_U64(idx->e.len, 3000U);
+
+    /* The incremental figure equals an independent recount. */
+    YEW_ASSERT_EQ_U64(idx->bytes, yew_symidx_resident_recount(idx));
+    /* It charges capacity, not length: never less than the payload. */
+    payload = idx->e.len * (sizeof(SymEntry) + sizeof(u32) + sizeof(u64)) +
+              idx->occ.len * sizeof(SymOcc);
+    YEW_ASSERT(idx->bytes >= payload);
+    /* Every name was new, so the interner's growth was charged too. */
+    YEW_ASSERT(ed.ws.sym_intern_bytes >= 3000U * sizeof("word_000000"));
+
+    /* Allocation-debug builds count every live heap byte.  The accounted
+     * growth must cover what the index really allocated (the model adds
+     * chunk headers the payload count leaves out) without overstating it
+     * by more than those headers and rounding plausibly cost. */
+    if (live_after != 0U && live_after > live_before) {
+        u64 real = live_after - live_before;
+        u64 accounted = accounted_after - accounted_before;
+
+        YEW_ASSERT(accounted >= real);
+        YEW_ASSERT(accounted <= real + real / 2U);
+    }
+    free(text);
+    yew_ed_free(&ed);
+}
+
+void test_symidx_resident_cap_stops_growth_and_notifies_once(void)
+{
+    Ed ed;
+    EditCtx edit;
+    SymIndex *idx;
+    size_t len;
+    u8 *text = distinct_words(3000U, 12U, &len);
+    u64 cap = 96U * 1024U;
+    size_t entries;
+    SymQuery query = {"word", 4U, 0U, {0U}, 8U, false};
+    SymHit hits[8];
+
+    yew_symidx_test_set_cap(cap);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, len, "symidx-cap.txt"));
+    pump_symbols(&ed);
+    idx = yew_symidx_buffer(&ed.ws, ed.buffer.id, false);
+    YEW_ASSERT_NOT_NULL(idx);
+
+    /* Indexing stopped at the cap: partial, never past it. */
+    YEW_ASSERT(idx->capped);
+    YEW_ASSERT(ed.ws.sym_cap_hit);
+    YEW_ASSERT(idx->e.len != 0U);
+    YEW_ASSERT(idx->e.len < 3000U);
+    YEW_ASSERT(yew_symidx_workspace_bytes(&ed.ws) <= cap);
+    YEW_ASSERT_EQ_U64(idx->bytes, yew_symidx_resident_recount(idx));
+
+    /* Background indexing says nothing on its own; the first query that
+     * answers from the partial index tells the user, once. */
+    YEW_ASSERT(!ed.msg.active ||
+               strstr(ed.msg.text, "completion index full") == NULL);
+    query.buf_id = ed.buffer.id;
+    (void)yew_symidx_query(&ed.ws, &query, hits, YEW_ARRAY_LEN(hits));
+    YEW_ASSERT(ed.msg.active);
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "completion index full"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "editing is unaffected"));
+    yew_msg_clear(&ed);
+    (void)yew_symidx_query(&ed.ws, &query, hits, YEW_ARRAY_LEN(hits));
+    YEW_ASSERT(!ed.msg.active);
+
+    /* Editing still works, and a rescan that runs into the cap again
+     * neither grows the index past it nor repeats the notice. */
+    entries = idx->e.len;
+    edit = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(0U),
+                               (const u8 *)"fresh_symbol ", 13U));
+    yew_ed_finish_edit(&ed, &edit);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.buffer.tb), len + 13U);
+    pump_symbols(&ed);
+    idx = yew_symidx_buffer(&ed.ws, ed.buffer.id, false);
+    YEW_ASSERT_NOT_NULL(idx);
+    YEW_ASSERT(idx->e.len <= entries + 1U);
+    YEW_ASSERT(yew_symidx_workspace_bytes(&ed.ws) <= cap);
+    (void)yew_symidx_query(&ed.ws, &query, hits, YEW_ARRAY_LEN(hits));
+    YEW_ASSERT(!ed.msg.active ||
+               strstr(ed.msg.text, "completion index full") == NULL);
+    yew_ed_free(&ed);
+    yew_symidx_test_set_cap(0U);
+    free(text);
+}
+
+void test_symidx_cap_follows_the_build_profile(void)
+{
+    yew_symidx_test_set_cap(0U);
+#if defined(YEW_EMBED_RUNTIME) && YEW_EMBED_RUNTIME
+    YEW_ASSERT_EQ_U64(yew_symidx_cap_bytes(),
+                      YEW_SYMIDX_BYTES_MAX_CONSTRAINED);
+#else
+    YEW_ASSERT_EQ_U64(yew_symidx_cap_bytes(), YEW_SYMIDX_BYTES_MAX);
+#endif
+    yew_symidx_test_set_cap(12345U);
+    YEW_ASSERT_EQ_U64(yew_symidx_cap_bytes(), 12345U);
+    yew_symidx_test_set_cap(0U);
 }

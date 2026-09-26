@@ -14,7 +14,9 @@
 #include "text/edit.h"
 #include "unicode/utf8.h"
 #include "unicode/wordbreak.h"
+#include "ui/message.h"
 #include "util/log.h"
+#include "util/memacct.h"
 #include "util/sort.h"
 
 typedef struct SymPosting {
@@ -41,9 +43,9 @@ static i64 sym_now_us(void)
     return (i64)ts.tv_sec * 1000000 + (i64)ts.tv_nsec / 1000;
 }
 
-static void posting_free_all(Strmap *map)
+static void posting_free_all(SymIndex *idx)
 {
-    StrmapIter it = strmap_iter(map);
+    StrmapIter it = strmap_iter(&idx->by_name);
     void *value;
 
     while (strmap_iter_next(&it, NULL, NULL, &value)) {
@@ -52,6 +54,76 @@ static void posting_free_all(Strmap *map)
         yew_xfree(posting->data);
         yew_xfree(posting);
     }
+    idx->posting_bytes = 0U;
+}
+
+static u64 symidx_cap_override;
+
+u64 yew_symidx_cap_bytes(void)
+{
+    if (symidx_cap_override != 0U)
+        return symidx_cap_override;
+#if defined(YEW_EMBED_RUNTIME) && YEW_EMBED_RUNTIME
+    return YEW_SYMIDX_BYTES_MAX_CONSTRAINED;
+#else
+    return YEW_SYMIDX_BYTES_MAX;
+#endif
+}
+
+void yew_symidx_test_set_cap(u64 bytes)
+{
+    symidx_cap_override = bytes;
+}
+
+static u64 posting_cost(u64 cap)
+{
+    return yew_heap_array_cost(cap, sizeof(u32));
+}
+
+/* Everything but the postings, which are tracked as they change. */
+static u64 symidx_structure_bytes(const SymIndex *idx)
+{
+    u64 total = 0U;
+
+    total = yew_sat_add(total, yew_heap_array_cost(idx->e.cap,
+                                                   sizeof(*idx->e.data)));
+    total = yew_sat_add(total,
+                        yew_heap_array_cost(idx->updated.cap,
+                                            sizeof(*idx->updated.data)));
+    total = yew_sat_add(total, yew_heap_array_cost(idx->sig.cap,
+                                                   sizeof(*idx->sig.data)));
+    total = yew_sat_add(total, yew_heap_array_cost(idx->occ.cap,
+                                                   sizeof(*idx->occ.data)));
+    total = yew_sat_add(total,
+                        yew_heap_array_cost(idx->reserved.cap,
+                                            sizeof(*idx->reserved.data)));
+    total = yew_sat_add(total, strmap_resident_bytes(&idx->by_name));
+    return yew_sat_add(total, arena_resident_bytes(&idx->arena));
+}
+
+static void symidx_refresh(SymIndex *idx)
+{
+    idx->bytes = yew_sat_add(symidx_structure_bytes(idx),
+                             idx->posting_bytes);
+}
+
+u64 yew_symidx_resident_recount(const SymIndex *idx)
+{
+    StrmapIter it;
+    void *value;
+    u64 postings = 0U;
+
+    if (idx == NULL)
+        return 0U;
+    it = strmap_iter(&idx->by_name);
+    while (strmap_iter_next(&it, NULL, NULL, &value)) {
+        const SymPosting *posting = value;
+
+        postings = yew_sat_add(postings,
+                               yew_heap_cost(sizeof(*posting)));
+        postings = yew_sat_add(postings, posting_cost(posting->cap));
+    }
+    return yew_sat_add(symidx_structure_bytes(idx), postings);
 }
 
 void yew_symidx_init(SymIndex *idx, Interner *intern)
@@ -62,6 +134,50 @@ void yew_symidx_init(SymIndex *idx, Interner *intern)
     strmap_init(&idx->by_name);
     arena_init(&idx->arena);
     idx->intern = intern;
+}
+
+static void symidx_reserved_clear(SymIndex *idx)
+{
+    if (idx->reserved.len != 0U)
+        (void)memset(idx->reserved.data, 0, idx->reserved.len);
+}
+
+static bool symidx_reserved_has(const SymIndex *idx, u32 name)
+{
+    size_t byte = name / 8U;
+
+    return byte < idx->reserved.len &&
+           (idx->reserved.data[byte] & (u8)(1U << (name % 8U))) != 0U;
+}
+
+/* Growth of the reservation bitmap to cover `name`. */
+static u64 symidx_reserved_cost(const SymIndex *idx, u32 name)
+{
+    size_t need = (size_t)name / 8U + 1U;
+    size_t cap;
+
+    if (need <= idx->reserved.cap)
+        return 0U;
+    cap = idx->reserved.cap != 0U ? idx->reserved.cap : 8U;
+    while (cap < need)
+        cap *= 2U;
+    return yew_heap_array_cost(cap, sizeof(*idx->reserved.data)) -
+           yew_heap_array_cost(idx->reserved.cap,
+                               sizeof(*idx->reserved.data));
+}
+
+static void symidx_reserved_mark(SymIndex *idx, u32 name)
+{
+    size_t byte = name / 8U;
+
+    if (byte >= idx->reserved.len) {
+        size_t old = idx->reserved.len;
+
+        Vec_SymBits_reserve(&idx->reserved, byte + 1U);
+        (void)memset(idx->reserved.data + old, 0, byte + 1U - old);
+        idx->reserved.len = byte + 1U;
+    }
+    idx->reserved.data[byte] |= (u8)(1U << (name % 8U));
 }
 
 void yew_symidx_clear(SymIndex *idx)
@@ -81,7 +197,7 @@ void yew_symidx_clear(SymIndex *idx)
     scan_limit = idx->scan_limit;
     track_occ = idx->track_occ;
     tick = idx->tick == UINT32_MAX ? 1U : idx->tick + 1U;
-    posting_free_all(&idx->by_name);
+    posting_free_all(idx);
     strmap_free(&idx->by_name);
     arena_free_all(&idx->arena);
     idx->e.len = 0U;
@@ -91,7 +207,8 @@ void yew_symidx_clear(SymIndex *idx)
     strmap_init(&idx->by_name);
     arena_init(&idx->arena);
     idx->tick = tick;
-    idx->bytes = 0U;
+    idx->reserve_bytes = 0U;
+    symidx_reserved_clear(idx);
     idx->intern = intern;
     idx->owner = owner;
     idx->buf_id = buf_id;
@@ -100,6 +217,69 @@ void yew_symidx_clear(SymIndex *idx)
     idx->occ_only = false;
     idx->capped = false;
     idx->map_dirty = false;
+    /* Cleared vectors keep their capacity, which stays resident. */
+    symidx_refresh(idx);
+}
+
+static u64 symidx_entry_count(const Workspace *ws)
+{
+    u64 total = ws->sym_ws.e.len;
+    size_t i;
+
+    for (i = 0U; i < ws->sym_buf.len; i++)
+        total = yew_sat_add(total, ws->sym_buf.data[i].idx.e.len);
+    return total;
+}
+
+static u64 symidx_name_count(const Workspace *ws)
+{
+    return ws->owner == NULL ? 0U
+                             : (u64)yew_intern_count(&ws->owner->interner);
+}
+
+/*
+ * The query scratch, charged at the size the NEXT query will grow it to:
+ * the candidate vector doubles up to one slot per entry, and the seen/slot
+ * tables hold one u32 each per interned id.  Charging the projection rather
+ * than the current allocation keeps a query from pushing the system over a
+ * cap that indexing respected.
+ */
+static u64 symidx_query_scratch(const Workspace *ws, u64 entries, u64 names)
+{
+    u64 hits = ws->sym_query.cap;
+    u64 seen = ws->sym_seen_cap;
+
+    if (entries > hits) {
+        u64 cap = hits != 0U ? hits : 8U;
+
+        while (cap < entries && cap <= UINT64_MAX / 2U)
+            cap *= 2U;
+        hits = cap;
+    }
+    if (names + 1U > seen)
+        seen = names + 1U;
+    return yew_sat_add(yew_heap_array_cost(hits, sizeof(*ws->sym_query.data)),
+                       yew_sat_add(yew_heap_array_cost(seen,
+                                                       sizeof(*ws->sym_seen)),
+                                   yew_heap_array_cost(seen,
+                                                       sizeof(*ws->sym_slot))));
+}
+
+/* Growth of that projection when `entries` and `names` more exist. */
+static u64 symidx_query_scratch_cost(const SymIndex *idx, u64 entries,
+                                     u64 names)
+{
+    const Workspace *ws = idx->owner;
+    u64 e;
+    u64 n;
+
+    if (ws == NULL || (entries == 0U && names == 0U))
+        return 0U;
+    e = symidx_entry_count(ws);
+    n = symidx_name_count(ws);
+    return symidx_query_scratch(ws, yew_sat_add(e, entries),
+                                yew_sat_add(n, names)) -
+           symidx_query_scratch(ws, e, n);
 }
 
 u64 yew_symidx_workspace_bytes(const Workspace *ws)
@@ -109,15 +289,32 @@ u64 yew_symidx_workspace_bytes(const Workspace *ws)
 
     if (ws == NULL)
         return 0U;
-    total = ws->sym_ws.bytes;
+    total = yew_sat_add(ws->sym_ws.bytes, ws->sym_intern_bytes);
     for (i = 0U; i < ws->sym_buf.len; i++) {
-        u64 bytes = ws->sym_buf.data[i].idx.bytes;
+        const SymBufIndex *sb = &ws->sym_buf.data[i];
 
-        if (UINT64_MAX - total < bytes)
-            return UINT64_MAX;
-        total += bytes;
+        total = yew_sat_add(total, sb->idx.bytes);
+        total = yew_sat_add(total,
+                            yew_heap_array_cost(sb->dirty.affected.cap,
+                                                sizeof(u32)));
     }
-    return total;
+    total = yew_sat_add(total,
+                        yew_heap_array_cost(ws->sym_buf.cap,
+                                            sizeof(*ws->sym_buf.data)));
+    return yew_sat_add(total,
+                       symidx_query_scratch(ws, symidx_entry_count(ws),
+                                            symidx_name_count(ws)));
+}
+
+void yew_symidx_cap_notice(Ed *ed)
+{
+    if (ed == NULL || !ed->ws.sym_cap_hit || ed->ws.sym_cap_noticed)
+        return;
+    ed->ws.sym_cap_noticed = true;
+    yew_msg(ed, YEW_MSG_WARN,
+            "completion index full (%llu MiB): indexing stopped; "
+            "editing is unaffected",
+            (unsigned long long)(yew_symidx_cap_bytes() / (1024U * 1024U)));
 }
 
 void yew_symidx_reindex_buffers(Workspace *ws)
@@ -148,25 +345,36 @@ void yew_symidx_free(SymIndex *idx)
 {
     if (idx == NULL)
         return;
-    posting_free_all(&idx->by_name);
+    posting_free_all(idx);
     strmap_free(&idx->by_name);
     arena_free_all(&idx->arena);
     Vec_SymEntry_free(&idx->e);
     Vec_SymTick_free(&idx->updated);
     Vec_SymSig_free(&idx->sig);
     Vec_SymOcc_free(&idx->occ);
+    Vec_SymBits_free(&idx->reserved);
     (void)memset(idx, 0, sizeof(*idx));
 }
 
-static void posting_push(SymPosting *posting, u32 entry)
+static size_t posting_next_cap(const SymPosting *posting)
+{
+    if (posting->len < posting->cap)
+        return posting->cap;
+    return posting->cap == 0U ? 2U : posting->cap * 2U;
+}
+
+static void posting_push(SymIndex *idx, SymPosting *posting, u32 entry)
 {
     if (posting->len == posting->cap) {
-        size_t cap = posting->cap == 0U ? 2U : posting->cap * 2U;
+        size_t cap = posting_next_cap(posting);
 
         if (cap < posting->cap)
             YEW_BUG("symbol index: posting overflow");
         posting->data = yew_xreallocarray(posting->data, cap,
                                           sizeof(*posting->data));
+        idx->posting_bytes = yew_sat_add(idx->posting_bytes -
+                                             posting_cost(posting->cap),
+                                         posting_cost(cap));
         posting->cap = cap;
     }
     posting->data[posting->len++] = entry;
@@ -185,24 +393,23 @@ static void symidx_map_add(SymIndex *idx, u32 entry)
     if (posting == NULL) {
         posting = yew_xcalloc(1U, sizeof(*posting));
         (void)strmap_put(&idx->by_name, name, len, posting);
-        idx->bytes += sizeof(*posting) + len + 1U;
+        idx->posting_bytes = yew_sat_add(idx->posting_bytes,
+                                         yew_heap_cost(sizeof(*posting)));
     }
-    posting_push(posting, entry);
-    idx->bytes += sizeof(entry);
+    posting_push(idx, posting, entry);
 }
 
 static void symidx_map_rebuild(SymIndex *idx)
 {
     size_t i;
 
-    posting_free_all(&idx->by_name);
+    posting_free_all(idx);
     strmap_free(&idx->by_name);
     strmap_init(&idx->by_name);
-    idx->bytes = idx->occ.len * sizeof(SymOcc) +
-                 idx->e.len * (sizeof(SymEntry) + sizeof(u32) + sizeof(u64));
     for (i = 0U; i < idx->e.len; i++)
         symidx_map_add(idx, (u32)i);
     idx->map_dirty = false;
+    symidx_refresh(idx);
 }
 
 static bool text_copy(const TextBuf *tb, Span span, u8 *out)
@@ -500,55 +707,199 @@ static u64 sym_signature(const u8 *bytes, size_t len)
     return sig;
 }
 
+/* The budget a new record is measured against: the whole symbol system
+ * when the index belongs to a workspace, else the index alone. */
+static u64 symidx_budget_used(const SymIndex *idx)
+{
+    const Workspace *ws = idx->owner;
+    u64 used;
+    size_t i;
+
+    if (ws == NULL)
+        return yew_sat_add(idx->bytes, idx->reserve_bytes);
+    used = yew_sat_add(yew_symidx_workspace_bytes(ws),
+                       ws->sym_ws.reserve_bytes);
+    for (i = 0U; i < ws->sym_buf.len; i++)
+        used = yew_sat_add(used, ws->sym_buf.data[i].idx.reserve_bytes);
+    return used;
+}
+
+/* Refuses growth past the resident cap.  Once refused, the index stays
+ * capped until something frees memory and a rescan clears the flag. */
+static bool symidx_budget_fits(SymIndex *idx, u64 need)
+{
+    u64 used;
+    u64 cap = yew_symidx_cap_bytes();
+
+    used = symidx_budget_used(idx);
+    if (need <= cap && used <= cap - need)
+        return true;
+    idx->capped = true;
+    if (idx->owner != NULL)
+        idx->owner->sym_cap_hit = true;
+    return false;
+}
+
+static bool symidx_budget_admits(SymIndex *idx, u64 need)
+{
+    return !idx->capped && symidx_budget_fits(idx, need);
+}
+
+/* Interns through the editor's interner, charging the symbol system for
+ * any string it is first to add. */
+static u32 symidx_intern(SymIndex *idx, const char *str, size_t len,
+                         u64 cost)
+{
+    u32 id = yew_intern(idx->intern, str, len);
+
+    if (idx->owner != NULL)
+        idx->owner->sym_intern_bytes =
+            yew_sat_add(idx->owner->sym_intern_bytes, cost);
+    return id;
+}
+
+/* The id `name` already has in the interner, or zero when it is new. */
+static u32 symidx_interned_id(const SymIndex *idx, const u8 *name, u32 len)
+{
+    return (u32)(uintptr_t)strmap_get(&idx->intern->map, (const char *)name,
+                                      len);
+}
+
+static u64 symidx_intern_cost(const SymIndex *idx, const u8 *name, u32 len)
+{
+    if (symidx_interned_id(idx, name, len) != 0U)
+        return 0U;
+    return interner_insert_cost(idx->intern, len);
+}
+
+/* Growth of the entry vectors when one entry is appended. */
+static u64 symidx_entry_vec_cost(const SymIndex *idx)
+{
+    u64 cost = yew_vec_push_cost(idx->e.len, idx->e.cap,
+                                 sizeof(*idx->e.data));
+
+    cost = yew_sat_add(cost,
+                       yew_vec_push_cost(idx->updated.len, idx->updated.cap,
+                                         sizeof(*idx->updated.data)));
+    return yew_sat_add(cost, yew_vec_push_cost(idx->sig.len, idx->sig.cap,
+                                               sizeof(*idx->sig.data)));
+}
+
+/* Upper bound on one merged entry's cost apart from vector growth, which
+ * is charged exactly when it happens: its map entry and key copy (the map's
+ * arrays grow by doubling, so charge twice its share) and its posting. */
+static u64 symidx_entry_map_cost(size_t len)
+{
+    u64 cost = yew_heap_cost((u64)len + 1U);
+
+    cost = yew_sat_add(cost, 2U * sizeof(StrmapEntry));
+    cost = yew_sat_add(cost, 3U * sizeof(u32));
+    cost = yew_sat_add(cost, yew_heap_cost(sizeof(SymPosting)));
+    return yew_sat_add(cost, yew_heap_array_cost(2U, sizeof(u32)));
+}
+
+/* The same bound plus the entry's own vector slots at the doubled
+ * capacity they may need, for a merge that has not happened yet. */
+static u64 symidx_entry_reserve(size_t len)
+{
+    return yew_sat_add(symidx_entry_map_cost(len),
+                       2U * (sizeof(SymEntry) + sizeof(u32) +
+                             sizeof(u64) + sizeof(SymHit)));
+}
+
 static bool symidx_add(SymIndex *idx, const u8 *name, u32 len, u32 buf_id,
                        u32 file, u64 off, u32 line, u8 kind, u8 flags,
                        u32 updated, bool record_occ)
 {
-    SymPosting *posting;
+    SymPosting *posting = NULL;
+    SymEntry *existing = NULL;
     size_t i;
     u32 name_id;
-    u64 need = sizeof(SymEntry) + sizeof(u32) + sizeof(u64) + len + 1U;
+    u64 need;
+    u64 intern_cost;
+    u64 reserve = 0U;
+    u32 known;
+    bool occ = record_occ && idx->track_occ;
+    bool occ_only = occ && idx->occ_only;
 
-    if (record_occ && idx->track_occ)
-        need += sizeof(SymOcc);
-
-    if (idx->capped || idx->intern == NULL ||
-        (idx->owner != NULL &&
-         (need > YEW_SYMIDX_BYTES_MAX ||
-          yew_symidx_workspace_bytes(idx->owner) >
-              (u64)YEW_SYMIDX_BYTES_MAX - need)) ||
-        (idx->owner == NULL &&
-         (need > YEW_SYMIDX_BYTES_MAX ||
-          idx->bytes > (u64)YEW_SYMIDX_BYTES_MAX - need))) {
-        idx->capped = true;
+    if (idx->capped || idx->intern == NULL)
         return false;
+    known = symidx_interned_id(idx, name, len);
+    intern_cost = known != 0U ? 0U : interner_insert_cost(idx->intern, len);
+    need = intern_cost;
+    if (occ)
+        need = yew_sat_add(need,
+                           yew_vec_push_cost(idx->occ.len, idx->occ.cap,
+                                             sizeof(*idx->occ.data)));
+    /* An occurrence of a name this index does not hold yet becomes an
+     * entry at the merge.  Hold that entry's cost now, once per name, or
+     * the occurrences alone could fill the budget and leave the merge
+     * nothing to spend: an index full of occurrences but empty of names. */
+    if (occ_only &&
+        (known == 0U ||
+         (!symidx_reserved_has(idx, known) &&
+          strmap_get(&idx->by_name, (const char *)name, len) == NULL))) {
+        reserve = symidx_entry_reserve(len);
+        need = yew_sat_add(need,
+                           symidx_reserved_cost(
+                               idx, known != 0U
+                                        ? known
+                                        : (u32)idx->intern->len));
     }
-    name_id = yew_intern(idx->intern, (const char *)name, len);
-    if (record_occ && idx->track_occ) {
-        Vec_SymOcc_push(&idx->occ,
-                        (SymOcc){name_id, file, off, line, updated,
-                                 kind, flags, 0U});
-        idx->bytes += sizeof(SymOcc);
-        if (idx->occ_only)
-            return true;
-    }
-    posting = strmap_get(&idx->by_name, (const char *)name, len);
-    if (posting != NULL) {
-        for (i = posting->len; i != 0U; i--) {
+    if (!occ_only) {
+        posting = strmap_get(&idx->by_name, (const char *)name, len);
+        for (i = posting == NULL ? 0U : posting->len; i != 0U; i--) {
             SymEntry *entry = &idx->e.data[posting->data[i - 1U]];
 
             if (same_source(entry, buf_id, file)) {
-                if (entry->hits != UINT16_MAX)
-                    entry->hits++;
-                if ((flags & YEW_SYMF_DECL) != 0U &&
-                    (entry->flags & YEW_SYMF_DECL) == 0U) {
-                    entry->kind = kind;
-                    entry->flags = flags;
-                }
-                idx->updated.data[posting->data[i - 1U]] = updated;
-                return true;
+                existing = entry;
+                break;
             }
         }
+        if (existing == NULL) {
+            need = yew_sat_add(need, symidx_entry_vec_cost(idx));
+            if (posting == NULL) {
+                need = yew_sat_add(need,
+                                   strmap_insert_cost(&idx->by_name, len));
+                need = yew_sat_add(need, yew_heap_cost(sizeof(*posting)));
+                need = yew_sat_add(need, posting_cost(2U));
+            } else if (posting->len == posting->cap) {
+                need = yew_sat_add(need,
+                                   posting_cost(posting_next_cap(posting)) -
+                                       posting_cost(posting->cap));
+            }
+        }
+    }
+    need = yew_sat_add(need,
+                       symidx_query_scratch_cost(
+                           idx, !occ_only && existing == NULL ? 1U : 0U,
+                           known == 0U ? 1U : 0U));
+    if (!symidx_budget_admits(idx, yew_sat_add(need, reserve)))
+        return false;
+    idx->reserve_bytes = yew_sat_add(idx->reserve_bytes, reserve);
+    name_id = symidx_intern(idx, (const char *)name, len, intern_cost);
+    if (reserve != 0U)
+        symidx_reserved_mark(idx, name_id);
+    if (occ) {
+        Vec_SymOcc_push(&idx->occ,
+                        (SymOcc){name_id, file, off, line, updated,
+                                 kind, flags, 0U});
+        if (occ_only) {
+            symidx_refresh(idx);
+            return true;
+        }
+    }
+    if (existing != NULL) {
+        if (existing->hits != UINT16_MAX)
+            existing->hits++;
+        if ((flags & YEW_SYMF_DECL) != 0U &&
+            (existing->flags & YEW_SYMF_DECL) == 0U) {
+            existing->kind = kind;
+            existing->flags = flags;
+        }
+        idx->updated.data[existing - idx->e.data] = updated;
+        symidx_refresh(idx);
+        return true;
     }
     Vec_SymEntry_push(&idx->e,
                       (SymEntry){name_id, buf_id, file, off, line, 1U,
@@ -556,7 +907,7 @@ static bool symidx_add(SymIndex *idx, const u8 *name, u32 len, u32 buf_id,
     Vec_SymTick_push(&idx->updated, updated);
     Vec_SymSig_push(&idx->sig, sym_signature(name, len));
     symidx_map_add(idx, (u32)(idx->e.len - 1U));
-    idx->bytes += sizeof(SymEntry);
+    symidx_refresh(idx);
     return true;
 }
 
@@ -824,7 +1175,9 @@ void yew_symidx_workspace_replace(Workspace *ws, Buffer *buf)
     if (path == NULL)
         return;
     idx = &ws->sym_ws;
-    file = yew_intern_cstr(idx->intern, path);
+    file = symidx_intern(idx, path, strlen(path),
+                         symidx_intern_cost(idx, (const u8 *)path,
+                                            (u32)strlen(path)));
     for (read = 0U; read < idx->e.len; read++) {
         if (idx->e.data[read].file == file)
             continue;
@@ -999,8 +1352,6 @@ static void symidx_apply_edit(SymBufIndex *sb, u64 new_lines, u8 kind,
                           ? 0U : (u64)((i64)occ.off + byte_delta);
         idx->occ.data[write++] = occ;
     }
-    if (idx->occ.len - write <= idx->bytes / sizeof(SymOcc))
-        idx->bytes -= (idx->occ.len - write) * sizeof(SymOcc);
     idx->occ.len = write;
     for (read = 0U; read < idx->e.len; read++) {
         SymEntry *entry = &idx->e.data[read];
@@ -1079,8 +1430,6 @@ static void symidx_occ_remove_lines(SymIndex *idx, SymDirty *dirty,
         }
         idx->occ.data[write++] = idx->occ.data[read];
     }
-    if (idx->occ.len - write <= idx->bytes / sizeof(SymOcc))
-        idx->bytes -= (idx->occ.len - write) * sizeof(SymOcc);
     idx->occ.len = write;
 }
 
@@ -1224,11 +1573,28 @@ static bool symidx_aggregate_name(const SymIndex *idx, u32 name,
     return found;
 }
 
+/* Upper bound on what one more merged entry costs once the name map is
+ * rebuilt: its vector slots, its map entry and key, and its posting.  The
+ * map's arrays grow by doubling, so charge each new entry twice its share
+ * of them. */
+static u64 symidx_entry_estimate(const SymIndex *idx, u32 name)
+{
+    return yew_sat_add(
+        yew_sat_add(symidx_entry_vec_cost(idx),
+                    symidx_entry_map_cost(yew_intern_len(idx->intern,
+                                                         name))),
+        symidx_query_scratch_cost(idx, 1U, 0U));
+}
+
 static void symidx_aggregate_affected(SymIndex *idx, SymDirty *dirty)
 {
     size_t read;
     size_t write = 0U;
     size_t i;
+
+    /* The merge spends what the scan reserved, measured exactly below. */
+    idx->reserve_bytes = 0U;
+    symidx_reserved_clear(idx);
 
     if (dirty->affected.len == 1U) {
         u32 name = dirty->affected.data[0];
@@ -1263,13 +1629,28 @@ static void symidx_aggregate_affected(SymIndex *idx, SymDirty *dirty)
     idx->updated.len = write;
     idx->sig.len = write;
 
+    /* Materializing entries is growth too.  Admit each against the cap
+     * with the map and posting it will need once the map is rebuilt, and
+     * stop -- the index stays usable, merely partial -- when one would
+     * not fit. */
     for (i = 0U; i < dirty->affected.len; i++) {
         u32 name = dirty->affected.data[i];
         SymEntry entry;
         u32 updated = 0U;
+        u64 map;
 
-        if (symidx_aggregate_name(idx, name, &entry, &updated))
-            symidx_entry_insert(idx, entry, updated);
+        if (!symidx_aggregate_name(idx, name, &entry, &updated))
+            continue;
+        map = symidx_entry_map_cost(yew_intern_len(idx->intern, name));
+        /* Not _admits: a scan that hit the cap has already set the flag,
+         * and these entries are what its reservations were held for. */
+        if (!symidx_budget_fits(idx, symidx_entry_estimate(idx, name)))
+            break;
+        symidx_entry_insert(idx, entry, updated);
+        /* The vectors and the query projection count themselves now; hold
+         * the map and posting share until the rebuild measures it. */
+        idx->posting_bytes = yew_sat_add(idx->posting_bytes, map);
+        symidx_refresh(idx);
     }
     symidx_map_rebuild(idx);
 }
@@ -1641,6 +2022,8 @@ u32 yew_symidx_query(Workspace *ws, const SymQuery *q, SymHit *out, u32 max)
     if (ws == NULL || ws->owner == NULL || q == NULL || out == NULL ||
         q->stem == NULL || max == 0U)
         return 0U;
+    /* The answer is about to come from a partial index: say so, once. */
+    yew_symidx_cap_notice(ws->owner);
     current = yew_ws_buf_by_id(ws->owner, q->buf_id);
     if (current != NULL && current->tb != NULL)
         cursor_line = (u32)yew_textbuf_line_of(current->tb, q->pos).v;
