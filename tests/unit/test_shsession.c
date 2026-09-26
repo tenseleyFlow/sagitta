@@ -670,8 +670,12 @@ static void sh_step_split(Ed *ed, size_t chunk, Bytebuf *raw)
                 size_t take = (size_t)got - off < chunk ? (size_t)got - off
                                                         : chunk;
 
-                YEW_ASSERT(sj->framed_ops->feed_stdout(sj->framed_owner,
-                                                       buf + off, take));
+                /* Not YEW_ASSERT: how many chunks a run reads is timing,
+                 * and the assertion count must be deterministic. */
+                if (!sj->framed_ops->feed_stdout(sj->framed_owner,
+                                                 buf + off, take))
+                    yew_test_fail(__FILE__, __LINE__,
+                                  "session parser refused a chunk");
             }
         }
     }
@@ -789,7 +793,10 @@ static void sh_wait_output(Ed *ed, u32 id)
     while (yew_job_find(ed, id) != NULL &&
            yew_job_find(ed, id)->bytes_out == 0U) {
         sh_step(ed, 20);
-        YEW_ASSERT(yew_now_ms() - start < 10000);
+        /* Polled: a counted assertion here would make the run's
+         * assertion total depend on timing. */
+        if (yew_now_ms() - start >= 10000)
+            yew_test_fail(__FILE__, __LINE__, "command wrote nothing in 10 s");
     }
 }
 
@@ -807,16 +814,20 @@ static void sh_cancel_until_done(Ed *ed, u32 id)
         YewJob *j = yew_job_find(ed, id);
         i64 now = yew_now_ms();
 
-        YEW_ASSERT_NOT_NULL(j);
+        /* Polled, so uncounted checks: the number of turns is timing. */
+        if (j == NULL)
+            yew_test_fail(__FILE__, __LINE__, "cancelled job vanished");
         if (j->drained)
             return;
         if (j->state == YEW_JOB_RUNNING &&
             (last == 0 || now - last > YEW_SHSESSION_ESCALATE_MS + 500)) {
-            YEW_ASSERT(yew_job_signal(ed, id, SIGTERM));
+            if (!yew_job_signal(ed, id, SIGTERM))
+                yew_test_fail(__FILE__, __LINE__, "cancel was refused");
             last = now;
         }
         sh_step(ed, 20);
-        YEW_ASSERT(now - start < 20000);
+        if (now - start >= 20000)
+            yew_test_fail(__FILE__, __LINE__, "cancel did not finish in 20 s");
     }
 }
 
