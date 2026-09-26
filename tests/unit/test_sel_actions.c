@@ -170,7 +170,9 @@ static void use_fake_clipboard_reader(char path[PATH_MAX],
     YEW_ASSERT_EQ_I64(close(fd), 0);
     fp = fopen(path, "wb");
     YEW_ASSERT_NOT_NULL(fp);
-    YEW_ASSERT_EQ_U64(fwrite(bytes, 1U, len, fp), len);
+    /* fwrite's buffer must not be NULL even for zero bytes (UBSan). */
+    if (len != 0U)
+        YEW_ASSERT_EQ_U64(fwrite(bytes, 1U, len, fp), len);
     YEW_ASSERT_EQ_I64(fclose(fp), 0);
     n = snprintf(value, sizeof(value), "cmd:/bin/true|%s %s read", fake,
                  path);
