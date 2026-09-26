@@ -6,6 +6,7 @@
 
 #include "util/base.h"
 #include "util/log.h"
+#include "util/memacct.h"
 
 #define ARENA_FIRST_BLOCK (64u * 1024u)
 
@@ -113,4 +114,54 @@ void arena_free_all(Arena *arena)
         block = next;
     }
     arena_init(arena);
+}
+
+u64 arena_resident_bytes(const Arena *arena)
+{
+    const ArenaBlock *block;
+    u64 total = 0U;
+
+    if (arena == NULL)
+        return 0U;
+    for (block = arena->head; block != NULL; block = block->next)
+        total = yew_sat_add(total,
+                            yew_heap_cost(sizeof(*block) + block->cap));
+    return total;
+}
+
+u64 arena_alloc_cost(const Arena *arena, size_t size, size_t align)
+{
+    const ArenaBlock *block;
+    size_t cap;
+    size_t min_payload;
+
+    if (arena == NULL || align == 0 || (align & (align - 1)) != 0 ||
+        size > SIZE_MAX - (align - 1))
+        return UINT64_MAX;
+    block = arena->head;
+    if (block != NULL) {
+        uintptr_t base = (uintptr_t)block->payload + block->used;
+
+        if (base <= UINTPTR_MAX - (align - 1)) {
+            uintptr_t aligned = (base + align - 1) & ~(uintptr_t)(align - 1);
+            uintptr_t end = (uintptr_t)block->payload + block->cap;
+
+            if (aligned <= end && size <= (size_t)(end - aligned))
+                return 0U;
+        }
+    }
+    /* Mirror arena_new_block's sizing. */
+    min_payload = size + align - 1;
+    cap = arena->next_block_size == 0 ? ARENA_FIRST_BLOCK
+                                      : arena->next_block_size;
+    while (cap < min_payload) {
+        if (cap > SIZE_MAX / 2) {
+            cap = min_payload;
+            break;
+        }
+        cap *= 2;
+    }
+    if (cap > SIZE_MAX - sizeof(*block))
+        return UINT64_MAX;
+    return yew_heap_cost(sizeof(*block) + cap);
 }

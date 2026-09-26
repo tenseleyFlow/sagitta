@@ -20,12 +20,15 @@ void test_alloc_debug_exit_report(void);
 
 void test_arena_align(void);
 void test_arena_strdup(void);
+void test_arena_alloc_cost_predicts_resident_growth(void);
 void test_vec_growth(void);
 void test_vec_free_resets(void);
 void test_strmap_order(void);
 void test_strmap_replace_keeps_order(void);
+void test_strmap_insert_cost_predicts_resident_growth(void);
 void test_intern_roundtrip(void);
 void test_intern_id_stability(void);
+void test_intern_insert_cost_predicts_resident_growth(void);
 void test_sort_stable_ties(void);
 void test_sort_empty(void);
 void test_prof_frame_is_one_cache_line(void);

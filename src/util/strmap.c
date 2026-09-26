@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "util/log.h"
+#include "util/memacct.h"
 
 #define STRMAP_FIRST_SLOTS 64u
 
@@ -106,6 +107,7 @@ void *strmap_put(Strmap *map, const char *key, size_t key_len, void *value)
     if (key_len == SIZE_MAX)
         YEW_BUG("string map key size overflow");
     entry->key = yew_xmalloc(key_len + 1);
+    map->key_bytes = yew_sat_add(map->key_bytes, yew_heap_cost(key_len + 1));
     if (key_len)
         memcpy(entry->key, key, key_len);
     entry->key[key_len] = '\0';
@@ -131,6 +133,45 @@ bool strmap_has(const Strmap *map, const char *key, size_t key_len)
     if (map->slot_count == 0)
         return false;
     return map->slots[strmap_probe(map, key, key_len)] != 0;
+}
+
+u64 strmap_resident_bytes(const Strmap *map)
+{
+    if (map == NULL)
+        return 0U;
+    return yew_sat_add(
+        yew_sat_add(yew_heap_array_cost(map->cap, sizeof(*map->entries)),
+                    yew_heap_array_cost(map->slot_count,
+                                        sizeof(*map->slots))),
+        map->key_bytes);
+}
+
+u64 strmap_insert_cost(const Strmap *map, size_t key_len)
+{
+    u64 cost;
+
+    if (map == NULL)
+        return 0U;
+    cost = key_len == SIZE_MAX ? UINT64_MAX : yew_heap_cost(key_len + 1);
+    if (map->slot_count == 0 ||
+        map->len + 1 >= map->slot_count - map->slot_count / 4) {
+        u64 next = map->slot_count == 0 ? STRMAP_FIRST_SLOTS
+                                        : (u64)map->slot_count * 2U;
+
+        cost = yew_sat_add(cost,
+                           yew_heap_array_cost(next, sizeof(*map->slots)) -
+                               yew_heap_array_cost(map->slot_count,
+                                                   sizeof(*map->slots)));
+    }
+    if (map->len == map->cap) {
+        u64 next = map->cap == 0 ? 16U : (u64)map->cap * 2U;
+
+        cost = yew_sat_add(cost,
+                           yew_heap_array_cost(next, sizeof(*map->entries)) -
+                               yew_heap_array_cost(map->cap,
+                                                   sizeof(*map->entries)));
+    }
+    return cost;
 }
 
 size_t strmap_len(const Strmap *map)

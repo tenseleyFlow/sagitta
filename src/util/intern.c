@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "util/log.h"
+#include "util/memacct.h"
 
 void interner_init(Interner *interner, Arena *arena)
 {
@@ -82,4 +83,42 @@ void interner_free(Interner *interner)
     interner->len = 0;
     interner->cap = 0;
     interner->arena = NULL;
+}
+
+u64 interner_resident_bytes(const Interner *interner)
+{
+    if (interner == NULL)
+        return 0U;
+    return yew_sat_add(
+        yew_sat_add(yew_heap_array_cost(interner->cap,
+                                        sizeof(*interner->strings)),
+                    yew_heap_array_cost(interner->cap,
+                                        sizeof(*interner->lens))),
+        strmap_resident_bytes(&interner->map));
+}
+
+u64 interner_insert_cost(const Interner *interner, size_t len)
+{
+    u64 cost;
+
+    if (interner == NULL || len == SIZE_MAX)
+        return UINT64_MAX;
+    cost = strmap_insert_cost(&interner->map, len);
+    if (interner->arena != NULL)
+        cost = yew_sat_add(cost, arena_alloc_cost(interner->arena, len + 1U,
+                                                  1U));
+    if (interner->len == interner->cap) {
+        u64 next = (u64)interner->cap * 2U;
+
+        cost = yew_sat_add(
+            cost,
+            yew_heap_array_cost(next, sizeof(*interner->strings)) -
+                yew_heap_array_cost(interner->cap,
+                                    sizeof(*interner->strings)));
+        cost = yew_sat_add(
+            cost,
+            yew_heap_array_cost(next, sizeof(*interner->lens)) -
+                yew_heap_array_cost(interner->cap, sizeof(*interner->lens)));
+    }
+    return cost;
 }

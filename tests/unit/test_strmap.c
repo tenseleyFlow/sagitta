@@ -69,3 +69,31 @@ void test_strmap_replace_keeps_order(void)
     YEW_ASSERT(strmap_get(&map, keys[42], strlen(keys[42])) == &replacement);
     strmap_free(&map);
 }
+
+/* The predicted cost of a new key equals the resident growth its insertion
+ * causes, across entry-array and slot-table doublings. */
+void test_strmap_insert_cost_predicts_resident_growth(void)
+{
+    Strmap map;
+    size_t i;
+
+    strmap_init(&map);
+    YEW_ASSERT_EQ_U64(strmap_resident_bytes(&map), 0U);
+    for (i = 0U; i < 5000U; i++) {
+        char key[32];
+        int n = snprintf(key, sizeof(key), "resident-key-%zu", i);
+        u64 before = strmap_resident_bytes(&map);
+        u64 cost = strmap_insert_cost(&map, (size_t)n);
+
+        YEW_ASSERT(n > 0);
+        YEW_ASSERT_NULL(strmap_put(&map, key, (size_t)n, &map));
+        YEW_ASSERT_EQ_U64(strmap_resident_bytes(&map) - before, cost);
+        /* Replacing a value copies no key.  (It may still grow the slot
+         * table: strmap_put checks the load factor before it probes.) */
+        before = map.key_bytes;
+        (void)strmap_put(&map, key, (size_t)n, NULL);
+        YEW_ASSERT_EQ_U64(map.key_bytes, before);
+    }
+    strmap_free(&map);
+    YEW_ASSERT_EQ_U64(strmap_resident_bytes(&map), 0U);
+}

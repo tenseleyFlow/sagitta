@@ -35,5 +35,11 @@ const char *yew_intern_str(const Interner *interner, u32 id);
 size_t yew_intern_len(const Interner *interner, u32 id);
 size_t yew_intern_count(const Interner *interner);
 void interner_free(Interner *interner);
+/* Resident bytes the interner owns outside its (possibly shared) arena:
+ * the string and length tables by capacity and the lookup map. */
+u64 interner_resident_bytes(const Interner *interner);
+/* Resident growth interning a NEW `len`-byte string would cause, including
+ * its copy in the arena. */
+u64 interner_insert_cost(const Interner *interner, size_t len);
 
 #endif
