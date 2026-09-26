@@ -823,6 +823,8 @@ FUZZ_COV_TEST_OBJ := $(BUILD)/tests/unit/test_cov.o
 FUZZ_COV_TEST := $(BUILD)/cov_selftest
 FUZZ_COV_CALIB_OBJ := $(BUILD)/tests/fuzz/fuzz_cov_calib.o
 FUZZ_COV_CALIB := $(BUILD)/fuzz_cov_calib
+FUZZ_WATCHDOG_OBJ := $(BUILD)/tests/fuzz/fuzz_watchdog.o
+FUZZ_WATCHDOG := $(BUILD)/fuzz_watchdog
 FUZZ_UTF8_OBJ := $(BUILD)/tests/fuzz/fuzz_utf8.o
 FUZZ_GRAPHEME_OBJ := $(BUILD)/tests/fuzz/fuzz_grapheme.o
 FUZZ_INPUT_OBJ := $(BUILD)/tests/fuzz/fuzz_input.o
@@ -1044,7 +1046,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(AUDIT_OBJ) \
                 $(RUNTIME_BLOB_GEN) $(EMBED_INITRAMFS_GEN) \
                 $(RUNTIME_BLOB_C) \
                 $(FUZZ_LIB_OBJ) $(FUZZ_COV_OBJ) $(FUZZ_COV_TEST_OBJ) \
-                $(FUZZ_COV_CALIB_OBJ) \
+                $(FUZZ_COV_CALIB_OBJ) $(FUZZ_WATCHDOG_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
                 $(FUZZ_TEXTBUF_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
@@ -1256,6 +1258,10 @@ $(FUZZ_COV_TEST): $(FUZZ_COV_OBJ) $(FUZZ_COV_TEST_OBJ)
 $(FUZZ_COV_CALIB): $(FUZZ_LINK_OBJ) $(FUZZ_COV_CALIB_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_COV_CALIB_OBJ) $(LDLIBS)
+
+$(FUZZ_WATCHDOG): $(FUZZ_LINK_OBJ) $(FUZZ_WATCHDOG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_WATCHDOG_OBJ) $(LDLIBS)
 
 $(AUDIT_TESTS): $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) $(AUDIT_SUPPORT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(AUDIT_OBJ) \
@@ -1926,7 +1932,7 @@ test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
 	scripts/check-findings.sh
 	scripts/check-audit-fixtures.sh
 
-fuzzlib-selftest: $(BUILD)/fuzz_utf8
+fuzzlib-selftest: $(BUILD)/fuzz_utf8 $(FUZZ_WATCHDOG)
 	@set -eu; \
 	mkdir -p $(BUILD)/tmp; \
 	out=$(BUILD)/tmp/fuzzlib-watchdog-invalid.out; \
@@ -1943,6 +1949,7 @@ fuzzlib-selftest: $(BUILD)/fuzz_utf8
 		fi; \
 	done; \
 	grep -F -- '--watchdog-seconds=N' $$out >/dev/null; \
+	scripts/fuzz-watchdog-selftest.sh $(FUZZ_WATCHDOG); \
 	echo "fuzzlib-selftest: ok"
 
 ifeq ($(COV),1)
@@ -3813,6 +3820,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(F09_REC_VM_AUDIT_OBJ:.o=.d) \
          $(F09_REC_VM_AUDIT_RECORD_OBJ:.o=.d) \
          $(FUZZ_LIB_OBJ:.o=.d) $(FUZZ_COV_CALIB_OBJ:.o=.d) \
+         $(FUZZ_WATCHDOG_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
          $(FUZZ_INPUT_OBJ:.o=.d) $(FUZZ_GRID_OBJ:.o=.d) \
          $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \
