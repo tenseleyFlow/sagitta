@@ -573,6 +573,45 @@ emulator measures perfectly well.
 also enforces rows 11 and 12. **MILESTONE: embedded proof** is rows 1–12
 green plus §1's musl size budgets.
 
+#### 5.1 Symbol-index resident budget (post-s57 finding, 2026-09-26)
+
+**Finding.** Background indexing of the open 4 MiB file (Sprint 44's
+buffer symbol index) grew yew's RSS from ~15 MiB to a ~44 MiB plateau once
+the editor sat idle long enough — past row 11's 24 MiB and past what the
+64 MiB guest leaves the editor (`YEW_EMBED_MEMORY stage=before-4m-pty`
+reports ~18 MiB available). The embedded lane OOM-killed yew on run
+36253353158. The cap `YEW_SYMIDX_BYTES_MAX` (32 MiB) was compared against
+*payload* bytes, which omit chunk headers, vector growth slack, the name
+map's key copies, the postings, and the strings the index interned into
+the editor's interner.
+
+**Rule.** The symbol system charges what it makes resident (model in
+`src/util/memacct.h`: 16-byte header, 16-byte granularity — pessimistic for
+both glibc and musl): every vector by capacity, the name map, postings,
+interned names, the per-buffer dirty tables, and the query scratch at the
+size the next query will grow it to. Growth is refused *before* it is paid
+for (strmap/arena/interner/Vec growth is predicted exactly); occurrences
+reserve the entry their merge will need, so a capped index is partial, not
+empty. On refusal indexing stops, the file stays fully editable, and the
+first completion query that answers from the partial index posts one
+notice per session: `completion index full (N MiB): indexing stopped;
+editing is unaffected`. `ed.compl.stats` leads with `pending=` and `cap=`.
+
+**Numbers.** `yew_symidx_cap_bytes()`:
+
+| Profile | Selected by | Cap | Why |
+|---|---|---|---|
+| ordinary builds | default | 32 MiB | unchanged bound, now in resident bytes |
+| constrained (the §5 guest image) | `EMBED_RUNTIME=1` (the build `make embedded` requires) | **4 MiB** | row 11 ≤ 24 MiB; the 4 MiB round trip peaks ~11 MiB (musl, `YEW_EMBED_CASE_RSS`) before any index; the guest leaves ~18 MiB — 11 + 4 + model slack ≈ 15–16 MiB keeps ~2 MiB clear of the guest and ~8 MiB under row 11 |
+
+Measured on arm64 Linux under a 20 MiB memcg (the guest's headroom), the
+4 MiB case plus 30 s idle: before, `Memory cgroup out of memory: Killed
+process (yew) anon-rss:20164kB`; after (constrained build), memcg peak
+17.8–18.4 MiB, `VmHWM` 17.2 MiB, no OOM kill. Ordinary build under the same
+idle: `VmHWM` 27–29.6 MiB (32 MiB cap). Accounted vs allocation-debug live
+bytes for a 3 000-name index: 1 056 880 vs 813 904 (the model adds the
+headers the payload count omits).
+
 ### 6. The minimal-build feature matrix
 
 `MODULES=""` must still be a complete modal editor:
