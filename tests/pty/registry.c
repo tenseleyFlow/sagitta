@@ -10534,6 +10534,67 @@ static bool s52_left_fuss(const PtyCtx *c, const void *arg)
            !s52_screen_contains(&c->vt, "Legend:");
 }
 
+typedef struct S52FilterStep {
+    char text[16];
+    int row;
+    int col;
+} S52FilterStep;
+
+/* The filter prompt shows `text` with the cursor just after it. */
+static bool s52_filter_at(const PtyCtx *c, const void *arg)
+{
+    const S52FilterStep *step = arg;
+
+    return c->vt.cur_vis && c->vt.cur_r == step->row &&
+           c->vt.cur_c == step->col &&
+           s52_screen_contains(&c->vt, step->text);
+}
+
+/* The picker's hidden cursor becomes visible at the filter prompt. */
+static bool s52_filter_open(const PtyCtx *c, const void *arg)
+{
+    (void)arg;
+    return c->vt.cur_vis;
+}
+
+/*
+ * Opens the picker's filter and types `text` one key per frame.
+ *
+ * Sent as one burst, `/` and the query were decoded in however many reads
+ * the scheduler delivered, and each read painted its own frame, so the
+ * SGR appendix recorded one to four filter repaints for the same grid
+ * (fuss_actions_palette was unstable under valgrind).  Each key now waits
+ * for the prompt to show it, with the cursor after it, before the next is
+ * sent: one key, one repaint, in every run.
+ */
+static void s52_type_filter(PtyCtx *c, const char *text)
+{
+    S52FilterStep step;
+    size_t i;
+    size_t n = strlen(text);
+
+    if (n + 2U > sizeof(step.text)) {
+        ptc_check(c, false, "FUSS filter query too long");
+        return;
+    }
+    ptc_keys(c, "/");
+    ptc_wait_until(c, s52_filter_open, NULL,
+                   "FUSS action picker filter did not open");
+    step.row = c->vt.cur_r;
+    step.col = c->vt.cur_c;
+    step.text[0] = ':';
+    for (i = 0U; i < n && !c->failed; i++) {
+        char key[2] = {text[i], '\0'};
+
+        ptc_bytes(c, key);
+        step.text[i + 1U] = text[i];
+        step.text[i + 2U] = '\0';
+        step.col++;
+        ptc_wait_until(c, s52_filter_at, &step,
+                       "FUSS action picker filter did not echo a key");
+    }
+}
+
 static void case_s52_fuss(PtyCtx *c)
 {
     const char *name = c->test->name;
@@ -10673,13 +10734,7 @@ static void case_s52_fuss(PtyCtx *c)
     } else if (strstr(name, "actions_palette") != NULL) {
         ptc_keys(c, "ctrl+shift+/");
         s52_wait_screen(c, "FUSS actions");
-        ptc_keys(c, "/");
-        ptc_bytes(c, "A-g");
-        /* A-g is already present in the unfiltered action list.  Wait for
-         * the filter prompt and its cursor so both deterministic passes
-         * observe the complete input repaint. */
-        ptc_wait_until(c, s52_screen_contains_visible_cursor, ":A-g",
-                       "FUSS action picker filter did not settle");
+        s52_type_filter(c, "A-g");
         ptc_check(c, s52_screen_contains(&c->vt, "A-g"),
                   "FUSS action picker omitted the group action key");
     } else if (strstr(name, "leave_q") != NULL) {
