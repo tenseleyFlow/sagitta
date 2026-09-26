@@ -1093,6 +1093,13 @@ static void case_burst_paste(PtyCtx *c)
     burst_case(c, true);
 }
 
+/* Insert mode's frame: the bar cursor and the ` I ` mode badge. */
+static bool audit_insert_ready(const PtyCtx *c, const void *arg)
+{
+    (void)arg;
+    return c->vt.cursor_shape == 6U && s57_screen_contains(c, " I ");
+}
+
 static void case_audit_terminal_paste_256k(PtyCtx *c)
 {
     static const u8 initial[] = "tail\n";
@@ -1118,7 +1125,13 @@ static void case_audit_terminal_paste_256k(PtyCtx *c)
     burst[prefix + payload + suffix] = '\0';
     spawn_editor(c, path);
     ptc_keys(c, "i");
-    ptc_settle(c, 0);
+    /* The paste window below counts every synchronized frame, so the
+     * Insert-mode frame must already be in before the count starts.  A
+     * quiet-window settle does not guarantee that: a runner that stalls the
+     * editor past the window let that frame land inside the paste window
+     * and read as a second paste frame.  Wait for the frame itself. */
+    ptc_wait_until(c, audit_insert_ready, NULL,
+                   "Insert mode did not paint before the 256 KiB paste");
     before = c->vt.nsync_pairs;
     ptc_bytes(c, burst);
     ptc_wait_sync_pairs(c, before + 1U);
