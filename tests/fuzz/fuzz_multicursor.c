@@ -354,11 +354,16 @@ static bool check_multicursor(const u8 *data, size_t len,
         CmdStatus status;
         EditCtx ec;
 
+        /* The first two cases of every process (builtin seeds, replayed
+         * first) pin the extremes.  The large-set path is chosen by the
+         * input itself, not a call counter, so any case -- including one
+         * saved by the watchdog -- replays identically in a fresh process
+         * and under coverage calibration. */
         if (round == 0U && case_index == 0U)
             requested = MC_FUZZ_MAX_CURSORS;
         else if (round == 0U && case_index == 1U)
             requested = 1U;
-        else if (round == 0U && case_index % 128U == 0U)
+        else if (round == 0U && input_byte(data, len, 3U) % 128U == 0U)
             requested = 129U + input_u16(data, len, salt + 10U) % 372U;
         if (requested > MC_FUZZ_MAX_CURSORS)
             requested = MC_FUZZ_MAX_CURSORS;
