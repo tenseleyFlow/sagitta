@@ -14,6 +14,7 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "mod/git/blame.h"
 #include "mod/git/editor.h"
 #include "mod/git/git.h"
 #include "mod/git/git_int.h"
@@ -1048,6 +1049,92 @@ void test_gitcache_editor_reuses_base_across_one_hundred_edits(void)
         YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 1U);
     }
     YEW_ASSERT_EQ_U64(ed.buffer.tb->gen, 100U);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+}
+
+/* Opens `name` under the cwd in a ready repo with the diff base settled. */
+static void gitcache_blame_fixture(Ed *ed, SpawnLog *log, const char *name)
+{
+    static const char oid[] = "0123456789012345678901234567890123456789";
+    static const u8 initial[] = "local two\n";
+    char root[1024];
+    char path[1200];
+    char response[128];
+    int n;
+
+    YEW_ASSERT_NOT_NULL(getcwd(root, sizeof(root)));
+    n = snprintf(path, sizeof(path), "%s/%s", root, name);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(path));
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_memory(ed, initial, sizeof(initial) - 1U, name));
+    ed->buffer.path = arena_strdup(&ed->arena, path);
+    yew_git_test_spawn_set(gitcache_spawn, log);
+    gitcache_ready(ed, log, root, 1000);
+    YEW_ASSERT(yew_git_test_blob_batch_open(ed));
+    ed->now_ms = 1000;
+    yew_git_editor_prepare(ed, ed->win);
+    n = snprintf(response, sizeof(response), "%s blob %u\n%s\n", oid,
+                 (unsigned)(sizeof(initial) - 1U), (const char *)initial);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(response));
+    YEW_ASSERT(yew_git_test_blob_batch_feed(ed, (const u8 *)response,
+                                            (u64)n));
+    gitcache_editor_pump_until(ed, 1000, 1U);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(ed, 1000), -1);
+}
+
+/*
+ * The event loop wakes when a debounced blame request comes due: the
+ * deadline counts down the 200 ms from the last viewport change and is 0
+ * once it has passed.  Before, the request waited for whatever woke the
+ * loop next.  Under the test hook the tick's blame spawn fails, which is
+ * the retry path: a failed request must not ask for another wake (an
+ * untracked file's blame fails every time and would poll git).
+ */
+void test_gitcache_editor_deadline_wakes_for_debounced_blame(void)
+{
+    SpawnLog log = {0};
+    Ed ed;
+
+    gitcache_blame_fixture(&ed, &log, "main.c");
+    ed.win->git_blame = true;
+    ed.now_ms = 2000;
+    yew_git_editor_prepare(&ed, ed.win);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 2000),
+                      YEW_BLAME_DEBOUNCE_MS);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 2150),
+                      YEW_BLAME_DEBOUNCE_MS - 150);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 2000 +
+                                                  YEW_BLAME_DEBOUNCE_MS), 0);
+    yew_git_editor_tick(&ed, 2000 + YEW_BLAME_DEBOUNCE_MS);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 2000 +
+                                                  YEW_BLAME_DEBOUNCE_MS), -1);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 9000), -1);
+    /* A fresh viewport schedules a wake again. */
+    ed.win->vp.top = LINENO(0U);
+    yew_textbuf_insert(ed.buffer.tb, BYTEOFF(0U), (const u8 *)"x\n", 2U);
+    ed.now_ms = 9000;
+    yew_git_editor_prepare(&ed, ed.win);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 9000) >= 0, 1);
+    yew_git_test_spawn_set(NULL, NULL);
+    yew_ed_free(&ed);
+}
+
+/* A request the tick cannot start -- the buffer is outside the repo --
+ * must not ask for a wake, or the loop would spin at deadline 0. */
+void test_gitcache_editor_deadline_ignores_unservable_blame(void)
+{
+    SpawnLog log = {0};
+    Ed ed;
+
+    gitcache_blame_fixture(&ed, &log, "main.c");
+    ed.buffer.path = arena_strdup(&ed.arena, "/nonexistent-yew-outside/x.c");
+    ed.buffer.meta.realpath = NULL;
+    ed.win->git_blame = true;
+    ed.now_ms = 2000;
+    yew_git_editor_prepare(&ed, ed.win);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 2000), -1);
+    YEW_ASSERT_EQ_I64(yew_git_editor_deadline(&ed, 5000), -1);
     yew_git_test_spawn_set(NULL, NULL);
     yew_ed_free(&ed);
 }

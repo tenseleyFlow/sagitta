@@ -75,6 +75,44 @@ void test_blamecache_waits_for_200ms_of_viewport_quiet(void)
     yew_blame_cache_free(cache);
 }
 
+/*
+ * yew_blame_cache_due_ms tells the event loop when to wake: at the end of a
+ * fresh observation's debounce, never for a failure's retry (retried on
+ * the next natural wake), never while both job slots are busy.
+ */
+void test_blamecache_due_ms_schedules_fresh_requests_only(void)
+{
+    BlameCache *cache = yew_blame_cache_new();
+    BlameRequest a;
+    BlameRequest b;
+
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(cache), -1);
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(NULL), -1);
+    yew_blame_cache_observe(cache, 1U, 1U, LINENO(0U), LINENO(1U), 500U, 50);
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(cache),
+                      50 + YEW_BLAME_DEBOUNCE_MS);
+    YEW_ASSERT(yew_blame_cache_take_request(cache, 250, &a));
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(cache), -1);
+    yew_blame_cache_fail(cache, &a);
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(cache), -1);
+    /* ...but the retry is still taken when something else wakes the loop. */
+    YEW_ASSERT(yew_blame_cache_take_request(cache, 900, &a));
+    /* A new viewport is fresh again: it schedules. */
+    yew_blame_cache_observe(cache, 2U, 1U, LINENO(64U), LINENO(65U), 500U,
+                            1000);
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(cache),
+                      1000 + YEW_BLAME_DEBOUNCE_MS);
+    YEW_ASSERT(yew_blame_cache_take_request(cache, 1200, &b));
+    yew_blame_cache_observe(cache, 3U, 1U, LINENO(128U), LINENO(129U), 500U,
+                            1300);
+    YEW_ASSERT_EQ_U64(yew_blame_cache_inflight(cache), 2U);
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(cache), -1);
+    yew_blame_cache_fail(cache, &b);
+    YEW_ASSERT_EQ_I64(yew_blame_cache_due_ms(cache),
+                      1300 + YEW_BLAME_DEBOUNCE_MS);
+    yew_blame_cache_free(cache);
+}
+
 void test_blamecache_caps_requests_at_two_inflight(void)
 {
     BlameCache *cache = yew_blame_cache_new();
