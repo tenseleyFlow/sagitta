@@ -53,6 +53,13 @@ void yew_blame_cache_observe(BlameCache *cache, u32 buf_id, u64 text_gen,
 bool yew_blame_cache_take_request(BlameCache *cache, i64 now_ms,
                                   BlameRequest *request);
 
+/* When yew_blame_cache_take_request will next hand out a request: the
+ * pending observation's debounce end, or -1 when nothing is waiting, both
+ * job slots are busy (a finishing job wakes the loop anyway), or the
+ * pending request is a retry after a failure (retried lazily, never
+ * polled). */
+i64 yew_blame_cache_due_ms(const BlameCache *cache);
+
 /* Publishes raw `git blame --incremental` output for a request. Completion of
  * an obsolete request only releases its slot; it cannot replace newer data. */
 bool yew_blame_cache_finish(BlameCache *cache, const BlameRequest *request,

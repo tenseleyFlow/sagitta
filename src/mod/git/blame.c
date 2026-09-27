@@ -45,6 +45,10 @@ struct BlameCache {
     u32 inflight;
     bool observed_valid;
     bool observed_pending;
+    /* observed_pending was re-armed by a failure, not a fresh viewport:
+     * it retries on the next natural wake and never schedules one, so a
+     * blame that always fails (an untracked file) cannot poll git. */
+    bool observed_retry;
 };
 
 static char *blame_dup(const char *text)
@@ -178,6 +182,7 @@ void yew_blame_cache_observe(BlameCache *cache, u32 buf_id, u64 text_gen,
     cache->observed_pending =
         (block == NULL || block->text_gen != text_gen) &&
         !request_inflight(cache, &next);
+    cache->observed_retry = false;
 }
 
 bool yew_blame_cache_take_request(BlameCache *cache, i64 now_ms,
@@ -209,8 +214,17 @@ bool yew_blame_cache_take_request(BlameCache *cache, i64 now_ms,
     cache->flights[i].active = true;
     cache->inflight++;
     cache->observed_pending = false;
+    cache->observed_retry = false;
     *request = next;
     return true;
+}
+
+i64 yew_blame_cache_due_ms(const BlameCache *cache)
+{
+    if (cache == NULL || !cache->observed_pending || cache->observed_retry ||
+        cache->inflight >= YEW_BLAME_MAX_INFLIGHT)
+        return -1;
+    return cache->observed_ms + YEW_BLAME_DEBOUNCE_MS;
 }
 
 static BlameFlight *flight_find(BlameCache *cache,
@@ -244,8 +258,10 @@ void yew_blame_cache_fail(BlameCache *cache, const BlameRequest *request)
     BlameFlight *flight = flight_find(cache, request);
 
     if (flight != NULL && cache->observed_valid &&
-        request_same(&cache->observed, &flight->request))
+        request_same(&cache->observed, &flight->request)) {
         cache->observed_pending = true;
+        cache->observed_retry = true;
+    }
     flight_drop(cache, flight);
 }
 
@@ -383,8 +399,10 @@ done:
     yew_xfree(meta);
     arena_free_all(&parsed_arena);
     if (!ok && cache->observed_valid &&
-        request_same(&cache->observed, &flight->request))
+        request_same(&cache->observed, &flight->request)) {
         cache->observed_pending = true;
+        cache->observed_retry = true;
+    }
     flight_drop(cache, flight);
     return ok;
 }
