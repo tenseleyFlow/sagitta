@@ -1,41 +1,41 @@
 # yew size ledger v1  config=minimal  binary=build-size/measure/minimal/yew  stripped=1
 # toolchain: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 / GNU nm (GNU Binutils for Ubuntu) 2.42 / GNU size (GNU Binutils for Ubuntu) 2.42   target=x86_64-linux-gnu
-# on-disk 1767072   object-file-backed 1679415   link-file-residue 87657
-# final-file-backed 1617827   final-bss 477664   object-bss 10962715
-# gc_saved_bytes 73728   without-gc-on-disk 1840800
-# unattributed-symbols 0/4293 (0.0%)   limit 2.0%
-# non-folded-object-sections 10887459
+# on-disk 1775264   object-file-backed 1687207   link-file-residue 88057
+# final-file-backed 1625395   final-bss 477728   object-bss 10962755
+# gc_saved_bytes 73728   without-gc-on-disk 1848992
+# unattributed-symbols 0/4310 (0.0%)   limit 2.0%
+# non-folded-object-sections 10967593
 
 bucket                  .text    .rodata      .data       .bss      total     pct
 core.fl                211935      27472      10672   10492081   10742160  84.9%
-core.ui                372787      20563       6801     407193     807344   6.3%
-core.edit              250958      56440      35200       9965     352563   2.7%
+core.ui                372965      20603       6801     407209     807578   6.3%
+core.edit              250958      56440      35200       9981     352579   2.7%
 core.unicode            25878     154532          0          1     180411   1.4%
-core.syn               112231      12508      12680        107     137526   1.0%
+core.syn               112240      12508      12680        107     137535   1.0%
 core.text              110681      12560        416       3321     126978   1.0%
-core.ws                 74893       4246        520      16401      96060   0.7%
+core.ws                 80784       4320        520      16409     102033   0.8%
 core.search             46844       3124        208      33413      83589   0.6%
 core.term               36969       3747       1440        183      42339   0.3%
 core.main               25443       8206        168          0      33817   0.2%
-core.util               17822       2886        240         50      20998   0.1%
+core.util               19422       2886        240         50      22598   0.1%
 mod.fuss                11554        310        144          0      12008   0.0%
 mod.lsp                  2490          3          0          0       2493   0.0%
 mod.ai                   2452          3          0          0       2455   0.0%
 mod.plugins              1382          7          0          0       1389   0.0%
-libc+crt                87657
---totals             12642130
+libc+crt                88057
+--totals             12649962
 
 -- non-folded object sections
         8878  .comment
-      257415  .debug_abbrev
-       65920  .debug_aranges
-      231960  .debug_frame
-     5224993  .debug_info
-     1230676  .debug_line
-      149129  .debug_line_str
-     1499371  .debug_loclists
-      211679  .debug_rnglists
-     2001262  .debug_str
+      257882  .debug_abbrev
+       66176  .debug_aranges
+      232752  .debug_frame
+     5258768  .debug_info
+     1241246  .debug_line
+      149224  .debug_line_str
+     1516026  .debug_loclists
+      216149  .debug_rnglists
+     2014316  .debug_str
         6176  .note.gnu.property
 
 -- top 12 symbols by size
@@ -43,7 +43,7 @@ libc+crt                87657
      4194304  core.fl            src/fl/vmcheck.o                 work.0
      1048576  core.fl            src/fl/vmcheck.o                 seen.2
      1048576  core.fl            src/fl/vmcheck.o                 starts.3
-      138520  core.ui            src/ui/grouppicker.o             gp
+      138536  core.ui            src/ui/grouppicker.o             gp
        98336  core.ui            src/ui/pickers.o                 store
        71696  core.ui            src/ui/macrobrowse.o             mb
        65536  core.ui            src/ui/pickers.o                 buf.0

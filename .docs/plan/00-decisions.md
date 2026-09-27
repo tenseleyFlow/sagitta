@@ -360,6 +360,16 @@ minimal 1,769,472, LSP-only 1,900,544, AI-only 1,916,928, FUSS-only
 1,933,312, plugins-only 1,867,776. The musl lane stays inside its
 S57.31-A2 caps.
 
+**Amendment S57.33-A1 (2026-09-26) — three caps follow the symbol index's
+resident-memory cap.** Charging the symbol index for the memory it really
+holds (strmap/arena/interner cost models, a profile-derived cap, the
+one-shot "index full" notice) adds 7,792 file-backed bytes on the pinned
+x86_64 GCC 13.3 lane at `9d6a6a5a`: 5,973 in `core.ws`, 1,600 in
+`core.util`, 234 in `core.ui`. Full (2,266,824), minimal (1,775,264) and
+plugins-only (1,869,472) cross their caps and move to the next 16 KiB
+boundary: full 2,277,376, minimal 1,785,856, plugins-only 1,884,160.
+AI-only, FUSS-only, LSP-only and the musl caps still hold.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

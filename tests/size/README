@@ -48,7 +48,9 @@ caps (2,424,832 and 1,900,544) after Sprints 57.28-57.31 grew musl-full to
 2,361,232 and musl-minimal to 1,849,200. Amendment S57.27-A1 moves all six glibc
 caps (full 2,260,992, minimal 1,769,472, LSP-only 1,900,544, AI-only 1,916,928,
 FUSS-only 1,933,312, plugins-only 1,867,776) after Sprint 57.27's 13,468 bytes
-of persistent shell session. The
+of persistent shell session. Amendment S57.33-A1 moves full, minimal and
+plugins-only (2,277,376, 1,785,856, 1,884,160) after the symbol index's
+resident-memory cap added 7,792 bytes. The
 former 1.5 MiB full / 900 KiB minimal planning values remain post-1.0
 optimization ratchets. They are not alternate measurements and must not be
 selected by a CI flag.
