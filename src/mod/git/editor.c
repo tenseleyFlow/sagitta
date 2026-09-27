@@ -907,11 +907,21 @@ i64 yew_git_editor_deadline(const Ed *ed, i64 now_ms)
 
         if (diff_active(state))
             return 0;
-        if (at < 0 || !state->base_ready)
-            continue;
-        wait = at <= now_ms ? 0 : at - now_ms;
-        if (best < 0 || wait < best)
-            best = wait;
+        if (at >= 0 && state->base_ready) {
+            wait = at <= now_ms ? 0 : at - now_ms;
+            if (best < 0 || wait < best)
+                best = wait;
+        }
+        /* A debounced blame request is started by the tick, so wake for
+         * it -- but only where request_blame can take it, or an unservable
+         * request would spin the loop. */
+        at = yew_blame_cache_due_ms(state->blame);
+        if (at >= 0 &&
+            repo_path(ed, yew_ws_buf_by_id((Ed *)ed, state->buf_id)) != NULL) {
+            wait = at <= now_ms ? 0 : at - now_ms;
+            if (best < 0 || wait < best)
+                best = wait;
+        }
     }
     return best;
 }
