@@ -39,6 +39,21 @@ prepare_external_storage()
         return 1
     fi
     rm -f /modules/virtio_blk.ko /modules/mbcache.ko /modules/ext2.ko
+    # The editor's home and XDG state live on the external disk, as they
+    # would on a device with storage.  The initramfs root is RAM: yew's
+    # crash journal keeps a .base copy of every edited file under
+    # XDG_STATE_HOME, so the 4 MiB batch rows held a second 4 MiB copy of
+    # the fixture in guest memory while they ran and the OOM killer took
+    # yew (CI run 36295047887).
+    export HOME=/work/build/xdg/home
+    export XDG_STATE_HOME=/work/build/xdg/state
+    export XDG_CONFIG_HOME=/work/build/xdg/config
+    export XDG_CACHE_HOME=/work/build/xdg/cache
+    if ! mkdir -p "$HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" \
+            "$XDG_CACHE_HOME"; then
+        echo 'YEW_EMBED_STORAGE status=fail detail=xdg-dirs'
+        return 1
+    fi
     echo 'YEW_EMBED_STORAGE status=pass detail=virtio-ext2'
     generate_fixture
 }
