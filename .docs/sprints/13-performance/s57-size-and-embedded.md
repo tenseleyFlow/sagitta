@@ -612,6 +612,46 @@ idle: `VmHWM` 27–29.6 MiB (32 MiB cap). Accounted vs allocation-debug live
 bytes for a 3 000-name index: 1 056 880 vs 813 904 (the model adds the
 headers the payload count omits).
 
+#### 5.2 Guest memory model: what the 64 MiB guest really leaves yew (2026-09-27)
+
+The guest's root filesystem is the initramfs, i.e. RAM. Of 38,180 KiB
+`MemTotal`, ~12.4 MiB is slab (≈7 MiB reported reclaimable, but mostly the
+pinned inodes/dentries of that RAM root), ~4.8 MiB is the kernel's
+min-free reserve, and before this change ~4.0 MiB of `Shmem` was the
+unpacked image — yew alone is 2.6 MB of it, never reclaimable. yew plus
+`pty_runner` had ~12 MiB to live in.
+
+Two things now live on the external ext2 disk, as they would on a device
+with storage (`scripts/embedded-init.sh`, `prepare_external_storage`):
+
+- **HOME and XDG_* → `/work/build/xdg`.** The crash journal keeps a `.base`
+  copy of every edited file under `XDG_STATE_HOME`; on the RAM root the batch
+  rows 6/7 held a second 4 MiB copy of the fixture (`Shmem` 4.1 → 8.3 MiB at
+  the OOM; CI run 36295047887).
+- **yew, pty_runner, gen-bigfile → `/work/build/bin`**, `/bin` symlinks to
+  them, RAM copies removed; a copy that cannot be made or verified fails the
+  storage stage instead of falling back to RAM. busybox stays (PID 1 runs
+  from it). Measured at boot: `Shmem` 4,116 → 1,080 KiB, `MemAvailable`
+  17,924 → 20,020 KiB (+2.05 MiB); the text becomes ordinary page cache.
+
+**Effect (QEMU TCG, CI's image and kernel, A/B at equal host load):**
+
+| Load | Row 3 OOMs before | after |
+|---|---|---|
+| 2 guests at once | 6/24 | 0/24 |
+| 4 guests at once | 5/24 | 0/24 |
+
+All other rows passed in all 96 runs.
+
+**What row 11 now counts.** `YEW_EMBED_CASE_RSS`/`VmHWM` include the mapped
+executable either way; it moved from `RssShmem` (1,608 KiB, tmpfs) to
+`RssFile` (2,364 KiB, page cache with fault-around), while `RssAnon` —
+the heap, where growth shows — is unchanged (9,232 vs 9,244 KiB on the 4m
+row). So every case's peak reads ~0.4–1.1 MB higher (4m row 11.18 →
+11.42–11.98 MB, batch 9.69 → 10.60–10.80 MB, notepad_open 4.25 → 5.15–5.24
+MB): a constant text-mapping offset, still far under the 24 MiB gate, and
+heap growth stays visible one-for-one.
+
 ### 6. The minimal-build feature matrix
 
 `MODULES=""` must still be a complete modal editor:
