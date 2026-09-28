@@ -54,8 +54,38 @@ prepare_external_storage()
         echo 'YEW_EMBED_STORAGE status=fail detail=xdg-dirs'
         return 1
     fi
+    move_binaries_to_disk || return 1
     echo 'YEW_EMBED_STORAGE status=pass detail=virtio-ext2'
     generate_fixture
+}
+
+# The large read-only executables live on the external disk too, as they
+# would on a device with storage.  In the initramfs their pages are tmpfs:
+# pinned in RAM for the whole boot and never reclaimable.  Moving them frees
+# about 2 MiB of the 64 MiB guest (MemAvailable before row 3: 18.1 -> 20.0
+# MiB), and their text becomes ordinary page cache the kernel may drop.
+# Row 3 (the 4 MiB PTY) was OOM-killed at ~10.8 MiB of yew under host load
+# without it.  busybox stays: PID 1 is running from it.  A move that cannot
+# complete fails the storage stage -- falling back to the RAM copies would
+# measure a different machine.
+move_binaries_to_disk()
+{
+    report_memory before-binary-move
+    mkdir -p /work/build/bin || {
+        echo 'YEW_EMBED_STORAGE status=fail detail=bin-dir'
+        return 1
+    }
+    for name in yew pty_runner gen-bigfile; do
+        if ! cp "/bin/$name" "/work/build/bin/$name" ||
+           ! cmp -s "/bin/$name" "/work/build/bin/$name" ||
+           ! rm -f "/bin/$name" ||
+           ! ln -s "/work/build/bin/$name" "/bin/$name"; then
+            echo "YEW_EMBED_STORAGE status=fail detail=bin-$name"
+            return 1
+        fi
+    done
+    sync
+    report_memory after-binary-move
 }
 
 failures=0
@@ -69,8 +99,9 @@ report_memory()
         /^MemAvailable:/ { available = $2 }
         /^Cached:/ { cached = $2 }
         /^Slab:/ { slab = $2 }
+        /^Shmem:/ { shmem = $2 }
         END {
-            printf "YEW_EMBED_MEMORY stage=%s total_kib=%s free_kib=%s available_kib=%s cached_kib=%s slab_kib=%s\n", tag, total, free, available, cached, slab
+            printf "YEW_EMBED_MEMORY stage=%s total_kib=%s free_kib=%s available_kib=%s cached_kib=%s slab_kib=%s shmem_kib=%s\n", tag, total, free, available, cached, slab, shmem
         }
     ' /proc/meminfo
 }
