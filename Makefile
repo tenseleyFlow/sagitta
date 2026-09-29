@@ -132,6 +132,11 @@ FUSS_FUZZ_ITERS ?= 20000
 # FUZZ_ITERS=200000 took 204 of the old one-job deep lane's 360 minutes.  The
 # instrumented run keeps a tenth of the iterations; plain runs keep all.
 SYN_DEF_FUZZ_ITERS ?= $(if $(filter 1,$(SAN)),20000,$(FUZZ_ITERS))
+# Likewise fuzz_state: every case builds a real editor to apply the state
+# through the schema layer -- ~10 ms plain, ~42 ms under ASan/UBSan on
+# arm64 and slower on the hosted x86 runner, where 200000 cases ran past
+# the deep lane's 240-minute job timeout on their own.
+STATE_FUZZ_ITERS ?= $(if $(filter 1,$(SAN)),20000,$(FUZZ_ITERS))
 CMDPARSE_FUZZ_ITERS ?= 1000000
 SHCTX_FUZZ_ITERS ?= 1000000
 # 0 runs SHCTX_FUZZ_ITERS; a number of seconds runs a timed campaign.
@@ -2138,7 +2143,7 @@ fuzz-iter: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_tabs --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_re_diff --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_fuzzy --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
-	$(BUILD)/fuzz_state --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_state --iters=$(STATE_FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_gitignore --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_fl_lex --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_fl_parse --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
