@@ -248,6 +248,32 @@ set -e
 grep -F 'runner unstable (scale 1000 -> 1151); no verdict' \
     "$scratch/drift.out" >/dev/null || fail 'drift refusal message missing'
 
+# Advisory mode (a shared hosted runner) says it could not judge but does
+# not fail: only the designated gate refuses on drift.
+reset_case
+set +e
+FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1600 \
+    BUILD=$scratch/build PERF_GATE=0 PERF_S56_EVALUATE=0 \
+    PERF_RUNNER_ID=hosted-arm64 \
+    "$runner" "$scratch/make" >"$scratch/advisory-drift.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 0 ] || fail "advisory drift failed the run (status $status)"
+grep -F 'runner unstable (scale 1000 -> 1600); no verdict' \
+    "$scratch/advisory-drift.out" >/dev/null ||
+    fail 'advisory drift did not say it had no verdict'
+
+# ...and a suite that really failed still fails, drift or not.
+reset_case
+set +e
+FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1600 \
+    FAKE_SUITE_STATUS=7 BUILD=$scratch/build PERF_GATE=0 \
+    PERF_S56_EVALUATE=0 PERF_RUNNER_ID=hosted-arm64 \
+    "$runner" "$scratch/make" >"$scratch/advisory-drift-fail.out" 2>&1
+status=$?
+set -e
+[ "$status" -eq 7 ] || fail 'advisory drift hid a suite failure'
+
 reset_case
 set +e
 FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1000 \
