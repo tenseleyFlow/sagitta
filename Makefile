@@ -127,6 +127,11 @@ LSP_RESP_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
 PORCELAIN_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                         0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 FUSS_FUZZ_ITERS ?= 20000
+# Every fuzz_syn_def iteration compiles a whole syntax definition: ~1.4 ms
+# plain, ~61 ms under ASan/UBSan on the hosted x86 runner, where
+# FUZZ_ITERS=200000 took 204 of the old one-job deep lane's 360 minutes.  The
+# instrumented run keeps a tenth of the iterations; plain runs keep all.
+SYN_DEF_FUZZ_ITERS ?= $(if $(filter 1,$(SAN)),20000,$(FUZZ_ITERS))
 CMDPARSE_FUZZ_ITERS ?= 1000000
 SHCTX_FUZZ_ITERS ?= 1000000
 # 0 runs SHCTX_FUZZ_ITERS; a number of seconds runs a timed campaign.
@@ -1142,6 +1147,7 @@ endif
         fuzz-cmdparse fuzz-shctx fuzz-comphelp fuzz-long \
         fuzz-plug-manifest fuzz-pkg-tree fuzz-pkg-tree-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
+        fuzz-special fuzz-iter \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-fuss fuzz-lsp-msg fuzz-lsp-resp \
         fuzz-porcelain fuzz-git-diff \
         fuzz-theme fuzz-undo-serial \
@@ -2096,7 +2102,19 @@ test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty te
 test-pkg: $(BUILD)/yew
 	tests/pkg/run.sh $(BUILD)/yew
 
-fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
+# The fixed campaigns, in two halves the nightly deep lane runs as separate
+# jobs (one serial job overran GitHub's 6 h job limit under ASan/UBSan):
+# fuzz-special runs the targets with their own recipes, fuzz-iter the plain
+# FUZZ_ITERS list.  `make fuzz` is both, in the order it always ran.
+fuzz: fuzz-special fuzz-iter
+
+fuzz-special: fuzz-textbuf fuzz-units fuzz-multicursor fuzz-insert \
+      fuzz-cmdparse fuzz-shctx fuzz-comphelp fuzz-mouse fuzz-groups \
+      fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
+      fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
+      $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET) $(PKG_FUZZ_TARGET)
+
+fuzz-iter: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
       $(BUILD)/fuzz_re_compile $(BUILD)/fuzz_re_diff \
       $(BUILD)/fuzz_re_quote $(BUILD)/fuzz_search \
@@ -2106,12 +2124,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_lex $(BUILD)/fuzz_fl_parse \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
-      $(BUILD)/fuzz_theme $(BUILD)/fuzz_undo_serial \
-      fuzz-textbuf fuzz-units fuzz-multicursor fuzz-insert fuzz-cmdparse \
-      fuzz-shctx fuzz-comphelp fuzz-mouse fuzz-groups fuzz-shadow fuzz-record \
-      fuzz-syn fuzz-syn-def \
-      fuzz-symidx fuzz-json fuzz-jsonrpc $(FUSS_FUZZ_TARGET) \
-      $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET) $(PKG_FUZZ_TARGET)
+      $(BUILD)/fuzz_theme $(BUILD)/fuzz_undo_serial
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -2286,7 +2299,7 @@ test-syn-corpus: $(BUILD)/fuzz_syn
 	$(BUILD)/fuzz_syn --corpus-only
 
 fuzz-syn-def: $(BUILD)/fuzz_syn_def
-	$(BUILD)/fuzz_syn_def --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_syn_def --iters=$(SYN_DEF_FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 fuzz-symidx: $(BUILD)/fuzz_symidx
 	@set -eu; \
