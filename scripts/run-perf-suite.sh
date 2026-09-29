@@ -178,7 +178,12 @@ case $before_scale:$after_scale in
             difference=$((after_scale > before_scale ? after_scale - before_scale : before_scale - after_scale))
             if [ $((difference * 100)) -gt $((before_scale * 15)) ]; then
                 echo "perf: runner unstable (scale $before_scale -> $after_scale); no verdict" >&2
-                exit 75
+                # As for a zero scale: only the designated gate refuses.  An
+                # advisory run on a shared runner reports that it could not
+                # judge, skips the evaluation, and keeps the suite's own
+                # status -- a noisy neighbour is not a failure.
+                [ "$gate" = 1 ] && exit 75
+                evaluate=0
             fi
         fi
         ;;
