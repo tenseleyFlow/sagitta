@@ -67,7 +67,7 @@ jobs:
     # introduces a crash or a sanitizer finding is caught, and that is
     # what a tenth of the iterations buys.
     #
-    # The depth did not disappear -- fuzz-deep-nightly runs exactly
+    # The depth did not disappear -- the fuzz-deep-* jobs run exactly
     # these campaigns at the old budget under both compilers. Dropping
     # the iterations WITHOUT that job would have been a silent coverage
     # cut dressed up as a speedup.
@@ -778,29 +778,68 @@ jobs:
   # GitHub's 6 h ceiling. If that margin ever gets thin, split the two
   # steps into two jobs -- they are independent and would then run in
   # parallel with their own budgets.
-  fuzz-deep-nightly:
+  # The fixed campaigns at full depth, split three ways.  As one serial job
+  # they overran GitHub's 6 h hosted-job limit every night (fuzz_syn_def
+  # alone took 204 min under ASan/UBSan), so the lane never finished and
+  # the GCC half never ran.  Each job now has a timeout under the cap, so
+  # a slow target fails by name instead of being cancelled silently.
+  fuzz-deep-san-special:
     if: github.event_name == 'schedule' || inputs.nightly
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
-      - name: Fixed campaigns at full depth under ASan and UBSan
+      - name: Special-recipe campaigns at full depth under ASan and UBSan
         run: |
-          make fuzz CC=clang SAN=1 BUILD=build-deep-san \
+          make fuzz-special CC=clang SAN=1 BUILD=build-deep-san \
+            FUZZ_SEED=1
+      - name: Attach any minimized findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-san-special-traces
+          path: tests/fuzz/crashes/*
+          if-no-files-found: ignore
+
+  fuzz-deep-san-iter:
+    if: github.event_name == 'schedule' || inputs.nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - name: Iteration campaigns at full depth under ASan and UBSan
+        run: |
+          make fuzz-iter CC=clang SAN=1 BUILD=build-deep-san \
             FUZZ_SEED=1 FUZZ_SECONDS=60
       - name: Run the recorder emitter for ten minutes under ASan and UBSan
-        run: build-deep-san/fuzz_record --seconds=600 --seed=1
-      # No `make clean` between the two: they use different BUILD dirs,
-      # so their objects never meet. Mixing sanitized and plain objects
-      # in one tree is the trap that produces a binary whose behaviour
-      # depends on what happened to be stale.
+        run: |
+          make build-deep-san/fuzz_record CC=clang SAN=1 BUILD=build-deep-san
+          build-deep-san/fuzz_record --seconds=600 --seed=1
+      - name: Attach any minimized findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-san-iter-traces
+          path: tests/fuzz/crashes/*
+          if-no-files-found: ignore
+
+  # No SAN tree in this job: sanitized and plain objects never share a
+  # BUILD dir, the trap that yields a binary whose behaviour depends on
+  # what happened to be stale.
+  fuzz-deep-gcc:
+    if: github.event_name == 'schedule' || inputs.nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
       - name: Fixed campaigns at full depth under GCC
         run: make fuzz CC=gcc FUZZ_SEED=1
       - name: Attach any minimized findings
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: deep-campaign-traces
-          path: tests/fuzz/crashes/*.trace
+          name: deep-gcc-traces
+          path: tests/fuzz/crashes/*
           if-no-files-found: ignore
 
   fuzz-nightly:
