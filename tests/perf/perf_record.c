@@ -7,6 +7,8 @@
 #include "edit/ed.h"
 #include "fl/record.h"
 
+#include "perf_policy.h"
+
 enum {
     TAP_ITERS = 1000000U,
     EMIT_EVENTS = 10000U,
@@ -85,9 +87,44 @@ static void sort_u64(u64 *values, u32 len)
     }
 }
 
+/*
+ * --gate (PERF_GATE=1) is strict unless YEW_PERF_ADVISORY says otherwise;
+ * an ungated run is advisory.  Either way the per-sample policy of
+ * tests/perf/perf_policy.h applies, so even an ungated hosted run fails a
+ * gross (beyond 100x) regression.  A negative tap overhead means the
+ * recorded loop won the race, which is noise, not a failure.
+ */
+static bool record_failed(i64 overhead, u64 emit_elapsed, bool advisory)
+{
+    return (overhead > 0 &&
+            yew_perf_sample_failed((u64)overhead, TAP_BUDGET_NS,
+                                   advisory)) ||
+           yew_perf_sample_failed(emit_elapsed, EMIT_BUDGET_NS, advisory);
+}
+
+static int selftest_policy(void)
+{
+    const u64 m = YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (record_failed(TAP_BUDGET_NS, EMIT_BUDGET_NS, false) ||
+        record_failed(-5, 0U, false) ||
+        !record_failed(TAP_BUDGET_NS + 1, EMIT_BUDGET_NS, false) ||
+        !record_failed(0, EMIT_BUDGET_NS + 1U, false) ||
+        record_failed(TAP_BUDGET_NS + 1, EMIT_BUDGET_NS + 1U, true) ||
+        record_failed((i64)(TAP_BUDGET_NS * m), EMIT_BUDGET_NS * m, true) ||
+        !record_failed((i64)(TAP_BUDGET_NS * m) + 1, 0U, true) ||
+        !record_failed(0, EMIT_BUDGET_NS * m + 1U, true)) {
+        (void)fprintf(stderr, "perf_record: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-record-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     bool gate = argc == 2 && strcmp(argv[1], "--gate") == 0;
+    bool advisory = !gate || yew_perf_advisory();
     Ed ed;
     CmdId escape;
     CmdCtx cx = {0};
@@ -99,8 +136,11 @@ int main(int argc, char **argv)
     Bytebuf out;
     u32 i;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (argc > 2 || (argc == 2 && !gate)) {
-        (void)fprintf(stderr, "usage: perf_record [--gate]\n");
+        (void)fprintf(stderr,
+                      "usage: perf_record [--gate|--selftest-policy]\n");
         return 2;
     }
     yew_ed_init(&ed);
@@ -159,15 +199,19 @@ int main(int argc, char **argv)
     emit_elapsed = emit_samples[PERF_SAMPLES / 2U];
     perf_record_sink += out.len;
 
-    (void)printf("tap_overhead_ns %lld budget %u median_samples %u\n",
-                 (long long)overhead, TAP_BUDGET_NS, PERF_SAMPLES);
-    (void)printf("emit_10k_ns %llu budget %u\n",
-                 (unsigned long long)emit_elapsed, EMIT_BUDGET_NS);
+    (void)printf("record mode %s\n", yew_perf_mode(advisory));
+    (void)printf("tap_overhead_ns %lld budget %u median_samples %u%s\n",
+                 (long long)overhead, TAP_BUDGET_NS, PERF_SAMPLES,
+                 yew_perf_sample_verdict(overhead > 0 ? (u64)overhead : 0U,
+                                         TAP_BUDGET_NS, advisory));
+    (void)printf("emit_10k_ns %llu budget %u%s\n",
+                 (unsigned long long)emit_elapsed, EMIT_BUDGET_NS,
+                 yew_perf_sample_verdict(emit_elapsed, EMIT_BUDGET_NS,
+                                         advisory));
     bytebuf_free(&out);
     yew_cmd_set_record_tap(yew_record_tap);
     yew_ed_free(&ed);
-    if (gate && (overhead > (i64)TAP_BUDGET_NS ||
-                 emit_elapsed > EMIT_BUDGET_NS))
+    if (record_failed(overhead, emit_elapsed, advisory))
         return 1;
     return 0;
 }

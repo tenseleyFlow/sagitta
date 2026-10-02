@@ -2882,7 +2882,9 @@ perf-cmdcomp: $(BUILD)/perf_cmdcomp
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_cmdcomp
 
 perf-record: $(BUILD)/perf_record
-	$(BUILD)/perf_record $(if $(filter 1,$(PERF_GATE)),--gate,)
+	$(BUILD)/perf_record --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_record $(if $(filter 1,$(PERF_GATE)),--gate,)
 
 perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_syn --gate
