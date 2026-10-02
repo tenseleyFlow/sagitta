@@ -747,6 +747,7 @@ void yew_ed_init(Ed *ed)
     yew_symidx_init(&ed->ws.sym_ws, &ed->interner);
     ed->ws.sym_ws.owner = &ed->ws;
     bytebuf_init(&ed->frame);
+    bytebuf_init(&ed->drawn_tab_marks);
     bytebuf_init(&ed->paste);
     yew_reg_init(&ed->regs);
     yew_yank_init(&ed->yank);
@@ -912,6 +913,7 @@ void yew_ed_free(Ed *ed)
     yew_timers_free(&ed->timers);
     bytebuf_free(&ed->paste);
     bytebuf_free(&ed->frame);
+    bytebuf_free(&ed->drawn_tab_marks);
     yew_symidx_workspace_free(&ed->ws);
     interner_free(&ed->interner);
     arena_free_all(&ed->cmdline.comp_arena);
@@ -2578,6 +2580,33 @@ static bool menu_only_frame(const Ed *ed, const Win *win)
     return win == NULL || (!win->compl.open && !win->panel.open);
 }
 
+/* Whether any tab's modified marker differs from what the strip shows. */
+static bool tab_marks_changed(const Ed *ed)
+{
+    u32 n = yew_tab_count(ed);
+    u32 i;
+
+    if (ed->drawn_tab_marks.len != n)
+        return true;
+    for (i = 0U; i < n; i++) {
+        if (ed->drawn_tab_marks.data[i] !=
+            (u8)(yew_tab_modified(ed, (int)i) ? 1U : 0U))
+            return true;
+    }
+    return false;
+}
+
+static void tab_marks_record(Ed *ed)
+{
+    u32 n = yew_tab_count(ed);
+    u32 i;
+
+    ed->drawn_tab_marks.len = 0U;
+    for (i = 0U; i < n; i++)
+        bytebuf_push_u8(&ed->drawn_tab_marks,
+                        (u8)(yew_tab_modified(ed, (int)i) ? 1U : 0U));
+}
+
 void yew_ed_render(Ed *ed)
 {
     Win *win;
@@ -2675,6 +2704,14 @@ void yew_ed_render(Ed *ed)
             cursor_overlay_synced = ed->cursor_overlay_damage_complete;
         }
     }
+    if (!ed->full_damage && !yew_region_frozen() && tab_marks_changed(ed)) {
+        /* Redraw the strip alone.  Its hit regions are re-added by the
+         * draw, so drop the previous ones first. */
+        yew_region_remove_kind(YEW_REGION_TAB);
+        yew_region_remove_kind(YEW_REGION_TAB_SCROLL);
+        yew_region_remove_kind(YEW_REGION_TAB_NEW);
+        yew_tab_strip_draw(ed, ed->tab_strip_rect);
+    }
     if (cursor_overlay_synced)
         yew_draw_cursor_overlay_sync(ed, win);
     ed->cursor_overlay_damage_complete = false;
@@ -2739,6 +2776,8 @@ draw_overlays:
         ed->rss_paint_logged = true;
     }
     yew_grid_flip(&ed->grid);
+    if (!fuss || ed->full_damage)
+        tab_marks_record(ed);
     ed->full_damage = false;
     ed->footer_dirty = false;
     ed->overlay_dirty = false;

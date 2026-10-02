@@ -729,6 +729,7 @@ void test_viewport_cursor_push_preserves_nowrap_goal(void);
 void test_viewport_scroll_pushes_cursor_without_follow_snapback(void);
 void test_viewport_resize_roundtrip_and_gutter_digit_damage(void);
 void test_viewport_relative_cursor_render_touches_only_gutter(void);
+void test_viewport_partial_frame_redraws_the_modified_marker(void);
 void test_wrap_prefers_space_runs_and_absorbs_trailing_space(void);
 void test_wrap_hard_breaks_long_token(void);
 void test_wrap_breaks_after_hyphen_dash_and_slash(void);

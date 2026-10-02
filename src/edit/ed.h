@@ -303,6 +303,14 @@ struct Ed {
     LineNo drawn_cursor_line;
     bool drawn_cursor_line_valid;
     bool drawn_top_valid;
+    /*
+     * The modified marker each tab showed when the strip was last drawn,
+     * one byte per tab.  A single-pane edit damages document rows only, so
+     * without this the strip kept its old marker until something forced a
+     * full repaint: the first edit left `file.txt` unmarked, and whether
+     * the `*` appeared depended on what else happened to repaint.
+     */
+    Bytebuf drawn_tab_marks;
 
     /*
      * Sprint 34: the origin registry (§2).  A value member rather than

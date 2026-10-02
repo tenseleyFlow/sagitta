@@ -5,7 +5,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "edit/cmd.h"
 #include "edit/ed.h"
+#include "text/edit.h"
 #include "ui/layout.h"
 #include "ui/viewport.h"
 
@@ -457,6 +459,82 @@ void test_viewport_relative_cursor_render_touches_only_gutter(void)
     yew_ed_render(&ed);
     YEW_ASSERT_EQ_U64(ed.drawn_cursor_line.v, 1U);
     YEW_ASSERT_EQ_U64(content->utf8[0], (u8)'#');
+
+    YEW_ASSERT(close(sink) == 0);
+    ed.tty.wfd = -1;
+    yew_ed_free(&ed);
+}
+
+/* Whether the tab strip row holds `needle` (single-byte cells only). */
+static bool vp_strip_has(const Ed *ed, const char *needle)
+{
+    char row[256];
+    size_t n = 0U;
+    u16 x;
+    u16 y = ed->tab_strip_rect.y;
+
+    for (x = 0U; x < ed->grid.cols && n + 1U < sizeof(row); x++) {
+        const Cell *c = &ed->grid.back[(size_t)y * ed->grid.cols + x];
+
+        row[n++] = (char)(c->utf8[0] >= 32U && c->utf8[0] < 127U
+                              ? c->utf8[0] : ' ');
+    }
+    row[n] = '\0';
+    return strstr(row, needle) != NULL;
+}
+
+/*
+ * An edit in a single pane damages document rows only.  The tab strip must
+ * still pick up the modified marker in that same frame, and drop it when
+ * undo returns to the save point -- not wait for some later full repaint.
+ */
+void test_viewport_partial_frame_redraws_the_modified_marker(void)
+{
+    static const u8 text[] = "alpha\n";
+    Ed ed;
+    TtyCaps caps = {0};
+    EditCtx edit;
+    int sink;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, sizeof(text) - 1U,
+                                  "marker.txt"));
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 8U, 40U));
+    ed.grid_ready = true;
+    yew_render_init(&ed.render, &caps, NULL);
+    ed.render_ready = true;
+    yew_ed_layout(&ed);
+    sink = open("/dev/null", O_WRONLY);
+    YEW_ASSERT(sink >= 0);
+    ed.tty.wfd = sink;
+
+    yew_ed_render(&ed);
+    YEW_ASSERT(ed.tab_strip_rect.h != 0U);
+    YEW_ASSERT(vp_strip_has(&ed, "marker.txt"));
+    YEW_ASSERT(!vp_strip_has(&ed, "marker.txt*"));
+
+    edit = yew_ed_edit_ctx(&ed);
+    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(0U), (const u8 *)"X", 1U));
+    yew_ed_finish_edit(&ed, &edit);
+    YEW_ASSERT(!ed.full_damage);
+    yew_ed_render(&ed);
+    YEW_ASSERT(vp_strip_has(&ed, "marker.txt*"));
+
+    {
+        CmdCtx cx = {0};
+
+        cx.ed = &ed;
+        cx.win = ed.win;
+        cx.count = 1U;
+        YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed,
+                                        yew_cmd_lookup("ed.edit.undo", 12U),
+                                        &cx),
+                          YEW_CMD_OK);
+    }
+    YEW_ASSERT(!yew_buf_dirty(&ed.buffer));
+    ed.full_damage = false;
+    yew_ed_render(&ed);
+    YEW_ASSERT(!vp_strip_has(&ed, "marker.txt*"));
 
     YEW_ASSERT(close(sink) == 0);
     ed.tty.wfd = -1;
