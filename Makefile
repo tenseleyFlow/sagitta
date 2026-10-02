@@ -3026,7 +3026,8 @@ fl-dispatch-parity:
 	fi
 
 perf-state: $(BUILD)/perf_state
-	$(BUILD)/perf_state
+	$(BUILD)/perf_state --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_state
 
 perf-finder: $(BUILD)/perf_finder
 	$(BUILD)/perf_finder

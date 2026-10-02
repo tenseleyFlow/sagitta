@@ -44,6 +44,8 @@
 #include "ws/fllit.h"
 #include "ws/state.h"
 
+#include "perf_policy.h"
+
 enum {
     PERF_STATE_TABS = 512,
     PERF_STATE_LEAVES = 16,
@@ -234,7 +236,49 @@ static int measure_restore(const Bytebuf *doc, i64 *out_ns, u64 *out_reads)
     return 0;
 }
 
-int main(void)
+/*
+ * Timing verdicts follow tests/perf/perf_policy.h: strict by default, and
+ * under YEW_PERF_ADVISORY (shared hosted runners) a median fails only when
+ * it is zero or beyond 100x its budget.  The single-read restore contract
+ * is correctness, not timing, and stays hard in both modes.
+ */
+static bool state_failed(i64 emit_ns, i64 parse_ns, i64 restore_ns,
+                         u64 reads, bool advisory)
+{
+    return yew_perf_timing_failed_i64(emit_ns, PERF_STATE_EMIT_BUDGET_NS,
+                                      advisory) ||
+           yew_perf_timing_failed_i64(parse_ns, PERF_STATE_PARSE_BUDGET_NS,
+                                      advisory) ||
+           yew_perf_timing_failed_i64(restore_ns,
+                                      PERF_STATE_RESTORE_BUDGET_NS,
+                                      advisory) ||
+           reads > 1U;
+}
+
+static int selftest_policy(void)
+{
+    const i64 emit = PERF_STATE_EMIT_BUDGET_NS;
+    const i64 parse = PERF_STATE_PARSE_BUDGET_NS;
+    const i64 restore = PERF_STATE_RESTORE_BUDGET_NS;
+    const i64 multiplier = YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (state_failed(emit, parse, restore, 1U, false) ||
+        !state_failed(emit + 1, parse, restore, 1U, false) ||
+        state_failed(emit + 1, parse + 1, restore + 1, 1U, true) ||
+        state_failed(emit * multiplier, parse * multiplier,
+                     restore * multiplier, 1U, true) ||
+        !state_failed(emit, parse, restore * multiplier + 1, 1U, true) ||
+        !state_failed(0, parse, restore, 1U, true) ||
+        !state_failed(emit, parse, restore, 2U, true) ||
+        !state_failed(emit, parse, restore, 2U, false)) {
+        (void)fprintf(stderr, "perf-state: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-state-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     Ed big;
     Ed forty;
@@ -248,7 +292,15 @@ int main(void)
     u32 i;
     int status = 0;
     int rc;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
+    (void)printf("perf-state: mode %s\n", yew_perf_mode(advisory));
     build_maximal(&big);
     bytebuf_init(&big_doc);
     rc = measure_emit(&big, &emit_ns, &bytes);
@@ -288,34 +340,36 @@ int main(void)
     }
 
     (void)printf("perf-state: tabs=%u leaves=%u bytes=%llu "
-                 "emit_ms=%.3f (budget %.3f) parse_ms=%.3f (budget %.3f)%s\n",
+                 "emit_ms=%.3f (budget %.3f)%s parse_ms=%.3f "
+                 "(budget %.3f)%s\n",
                  (unsigned)PERF_STATE_TABS, (unsigned)PERF_STATE_LEAVES,
                  (unsigned long long)bytes,
                  (double)emit_ns / 1000000.0,
                  (double)PERF_STATE_EMIT_BUDGET_NS / 1000000.0,
+                 yew_perf_timing_verdict_i64(emit_ns,
+                                             PERF_STATE_EMIT_BUDGET_NS,
+                                             advisory),
                  (double)parse_ns / 1000000.0,
                  (double)PERF_STATE_PARSE_BUDGET_NS / 1000000.0,
-                 emit_ns <= PERF_STATE_EMIT_BUDGET_NS &&
-                         parse_ns <= PERF_STATE_PARSE_BUDGET_NS
-                     ? " ok"
-                     : " FAIL");
+                 yew_perf_timing_verdict_i64(parse_ns,
+                                             PERF_STATE_PARSE_BUDGET_NS,
+                                             advisory));
     /*
      * The read count is printed on its own line and always, because it
      * is the number that explains the time — and the one a reviewer
      * should look at first when this gate moves.
      */
     (void)printf("perf-state: restore_tabs=%u restore_ms=%.3f "
-                 "(budget %.3f) file_reads=%llu (expected 1)%s\n",
+                 "(budget %.3f)%s file_reads=%llu (expected 1)%s\n",
                  (unsigned)PERF_STATE_RESTORE_TABS,
                  (double)restore_ns / 1000000.0,
                  (double)PERF_STATE_RESTORE_BUDGET_NS / 1000000.0,
+                 yew_perf_timing_verdict_i64(restore_ns,
+                                             PERF_STATE_RESTORE_BUDGET_NS,
+                                             advisory),
                  (unsigned long long)reads,
-                 restore_ns <= PERF_STATE_RESTORE_BUDGET_NS && reads <= 1U
-                     ? " ok"
-                     : " FAIL");
-    if (emit_ns > PERF_STATE_EMIT_BUDGET_NS ||
-        parse_ns > PERF_STATE_PARSE_BUDGET_NS ||
-        restore_ns > PERF_STATE_RESTORE_BUDGET_NS || reads > 1U)
+                 reads <= 1U ? " ok" : " FAIL");
+    if (state_failed(emit_ns, parse_ns, restore_ns, reads, advisory))
         status = 1;
 
     bytebuf_free(&big_doc);
