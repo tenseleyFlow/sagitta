@@ -12,6 +12,8 @@
 #include "util/buf.h"
 #include "util/intern.h"
 
+#include "perf_policy.h"
+
 enum { PERF_SAMPLES = 101 };
 
 typedef enum {
@@ -203,7 +205,34 @@ static bool measure(PerfCase *pc)
     return ok;
 }
 
-int main(void)
+/*
+ * Render budgets have always been advisory here: the byte limits are the
+ * hard contract.  The shared policy adds the one timing failure every mode
+ * keeps -- a median beyond 100x its budget is a gross regression, not
+ * runner noise.  Medians are per-frame samples (the zero-damage frame is
+ * ~1 us), so zero is not insane.
+ */
+static bool render_insane(i64 median_ns, i64 budget_ns)
+{
+    return yew_perf_sample_failed_i64(median_ns, budget_ns, true);
+}
+
+static int selftest_policy(void)
+{
+    const i64 budget = 2000;
+    const i64 ceiling = budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (render_insane(0, budget) || render_insane(budget + 1, budget) ||
+        render_insane(ceiling, budget) ||
+        !render_insane(ceiling + 1, budget) || !render_insane(-1, budget)) {
+        (void)fprintf(stderr, "perf_render: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-render-policy: advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     PerfCase cases[] = {
         {"full_200x50", 50u, 200u, PERF_FULL, 2000000, SIZE_MAX, 0, 0, 0, 0},
@@ -215,6 +244,12 @@ int main(void)
     size_t i;
     int status = 0;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
     if (!load_baselines(cases, YEW_ARRAY_LEN(cases)))
         return 2;
     for (i = 0u; i < YEW_ARRAY_LEN(cases); i++) {
@@ -229,11 +264,15 @@ int main(void)
         over_budget = cases[i].median_ns > cases[i].budget_ns;
         over_baseline = cases[i].median_ns >
                         cases[i].baseline_ns + cases[i].baseline_ns / 5;
-        (void)printf("%s %lld %lld %zu%s%s\n", cases[i].name,
+        (void)printf("%s %lld %lld %zu%s%s%s\n", cases[i].name,
                      (long long)cases[i].median_ns,
                      (long long)cases[i].p99_ns, cases[i].bytes,
                      over_budget ? " ADVISORY-OVER-BUDGET" : "",
-                     over_baseline ? " ADVISORY-REGRESSION" : "");
+                     over_baseline ? " ADVISORY-REGRESSION" : "",
+                     render_insane(cases[i].median_ns, cases[i].budget_ns)
+                         ? " SANITY-FAIL" : "");
+        if (render_insane(cases[i].median_ns, cases[i].budget_ns))
+            status = 1;
         if (cases[i].byte_limit != SIZE_MAX &&
             cases[i].bytes > cases[i].byte_limit) {
             (void)fprintf(stderr,

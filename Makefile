@@ -2751,6 +2751,7 @@ calib: $(BUILD)/calib_runner
 	cat '$(CALIB_OUTPUT)'
 
 perf-render: $(BUILD)/perf_render
+	$(BUILD)/perf_render --selftest-policy
 	$(BUILD)/perf_render
 
 alloc:
