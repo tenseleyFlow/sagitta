@@ -3052,7 +3052,9 @@ perf-re-throughput: $(BUILD)/perf_re_throughput
 		$(BUILD)/perf_re_throughput --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-search-latency: $(BUILD)/perf_search_latency
-	$(BUILD)/perf_search_latency --baseline $(PERF_COMPONENT_LIMITS)
+	$(BUILD)/perf_search_latency --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_search_latency --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-jobstream: $(BUILD)/perf_jobstream $(BUILD)/yew
 	$(BUILD)/perf_jobstream --selftest-policy

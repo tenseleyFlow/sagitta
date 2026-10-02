@@ -35,6 +35,8 @@
 #include "text/piece.h"
 #include "util/arena.h"
 
+#include "perf_policy.h"
+
 #define DEFAULT_BYTES (1024ULL * 1024ULL * 1024ULL)
 
 static i64 now_ns(void)
@@ -123,6 +125,36 @@ static void sort_i64(i64 *v, size_t n)
     }
 }
 
+/*
+ * Timing limits follow tests/perf/perf_policy.h's per-sample rule: strict
+ * by default, and under YEW_PERF_ADVISORY (shared hosted runners) fatal
+ * only beyond 100x.  The keystroke max and the per-step mean are small
+ * enough that a coarse clock may read 0, so zero is not insane here.  The
+ * viewport-only RSS ceiling is correctness and stays hard.
+ */
+static bool timing_failed(i64 value, u64 limit, bool advisory)
+{
+    return yew_perf_sample_failed_i64(value, (i64)limit, advisory);
+}
+
+static int selftest_policy(void)
+{
+    const u64 limit = 5000000U;
+    const i64 ceiling = (i64)limit * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (timing_failed((i64)limit, limit, false) ||
+        !timing_failed((i64)limit + 1, limit, false) ||
+        timing_failed((i64)limit + 1, limit, true) ||
+        timing_failed(ceiling, limit, true) ||
+        !timing_failed(ceiling + 1, limit, true) ||
+        timing_failed(0, limit, true) || !timing_failed(-1, limit, true)) {
+        (void)fprintf(stderr, "search_latency: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-search-latency-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     u64 bytes = env_u64("YEW_SEARCH_LATENCY_BYTES", DEFAULT_BYTES);
@@ -141,11 +173,16 @@ int main(int argc, char **argv)
     u64 rss_before;
     u64 rss_after;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (argc != 3 || strcmp(argv[1], "--baseline") != 0) {
-        (void)fprintf(stderr, "usage: search_latency --baseline FILE\n");
+        (void)fprintf(stderr, "usage: search_latency --baseline FILE | "
+                      "--selftest-policy\n");
         return 2;
     }
+    (void)printf("search.mode %s\n", yew_perf_mode(advisory));
     if (!read_limits(argv[2], &keypress_limit, &step_limit, &rss_limit)) {
         (void)fprintf(stderr, "search_latency: cannot read %s\n", argv[2]);
         return 2;
@@ -207,9 +244,11 @@ int main(int argc, char **argv)
     {
         i64 p99 = samples[nsamples - 1U]; /* few samples: take the max */
 
-        (void)printf("search.keypress_p99 %12lld ns (limit %llu)\n",
-                     (long long)p99, (unsigned long long)keypress_limit);
-        if ((u64)p99 > keypress_limit) {
+        (void)printf("search.keypress_p99 %12lld ns (limit %llu)%s\n",
+                     (long long)p99, (unsigned long long)keypress_limit,
+                     yew_perf_sample_verdict_i64(p99, (i64)keypress_limit,
+                                                 advisory));
+        if (timing_failed(p99, keypress_limit, advisory)) {
             (void)fprintf(stderr,
                           "search_latency: a search keystroke took %lld ns "
                           "against a %llu ns budget — something is "
@@ -241,9 +280,11 @@ int main(int argc, char **argv)
         {
             i64 mean = (end - start) / (i64)steps;
 
-            (void)printf("search.step_mean    %12lld ns (limit %llu)\n",
-                         (long long)mean, (unsigned long long)step_limit);
-            if ((u64)mean > step_limit) {
+            (void)printf("search.step_mean    %12lld ns (limit %llu)%s\n",
+                         (long long)mean, (unsigned long long)step_limit,
+                         yew_perf_sample_verdict_i64(mean, (i64)step_limit,
+                                                     advisory));
+            if (timing_failed(mean, step_limit, advisory)) {
                 (void)fprintf(stderr,
                               "search_latency: `n` averaged %lld ns over "
                               "%u steps against a %llu ns budget\n",
