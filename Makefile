@@ -3034,7 +3034,8 @@ perf-finder: $(BUILD)/perf_finder
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_finder
 
 perf-mouse: $(BUILD)/perf_mouse
-	$(BUILD)/perf_mouse
+	$(BUILD)/perf_mouse --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_mouse
 
 perf-latency: $(BUILD)/perf_latency $(BUILD)/yew
 	$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \

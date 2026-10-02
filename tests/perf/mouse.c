@@ -42,6 +42,8 @@
 #include "ui/tabs.h"
 #include "util/base.h"
 
+#include "perf_policy.h"
+
 enum {
     PERF_MOUSE_EVENTS = 1000,
     PERF_MOUSE_TRIALS = 11,
@@ -308,7 +310,35 @@ static bool router_allocates(const char **what)
     return found;
 }
 
-int main(void)
+/*
+ * The burst's median follows tests/perf/perf_policy.h: strict by default,
+ * and under YEW_PERF_ADVISORY (shared hosted runners) it fails only when
+ * zero or beyond 100x the budget.  Render counts and the no-allocation
+ * rule are correctness and stay hard in both modes.
+ */
+static bool burst_failed(i64 median, bool advisory)
+{
+    return yew_perf_timing_failed_i64(median, PERF_MOUSE_BUDGET_NS,
+                                      advisory);
+}
+
+static int selftest_policy(void)
+{
+    const i64 budget = PERF_MOUSE_BUDGET_NS;
+    const i64 ceiling = budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (burst_failed(budget, false) || !burst_failed(budget + 1, false) ||
+        burst_failed(budget + 1, true) || burst_failed(ceiling, true) ||
+        !burst_failed(ceiling + 1, true) || !burst_failed(0, true) ||
+        !burst_failed(-1, false)) {
+        (void)fprintf(stderr, "perf_mouse: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-mouse-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     Ed ed;
     i64 samples[PERF_MOUSE_TRIALS];
@@ -319,7 +349,15 @@ int main(void)
     bool allocates;
     int i;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
+    (void)printf("perf-mouse: mode %s\n", yew_perf_mode(advisory));
     yew_cmd_init();
     yew_ed_init(&ed);
     if (!yew_ed_open_scratch(&ed) ||
@@ -391,18 +429,18 @@ int main(void)
     }
 
     allocates = router_allocates(&offender);
-    (void)printf("perf-mouse: burst=%d events_ms=%.3f (budget %.3f) "
+    (void)printf("perf-mouse: burst=%d events_ms=%.3f (budget %.3f)%s "
                  "renders=%llu (budget 0)%s\n",
                  PERF_MOUSE_EVENTS, (double)median / 1000000.0,
                  (double)PERF_MOUSE_BUDGET_NS / 1000000.0,
+                 yew_perf_timing_verdict_i64(median, PERF_MOUSE_BUDGET_NS,
+                                             advisory),
                  (unsigned long long)worst_renders,
-                 median <= PERF_MOUSE_BUDGET_NS && worst_renders == 0U
-                     ? " ok"
-                     : " FAIL");
+                 worst_renders == 0U ? " ok" : " FAIL");
     (void)printf("perf-mouse: router_allocations=%s%s\n",
                  allocates ? offender : "none",
                  allocates ? " FAIL" : " ok");
-    if (median > PERF_MOUSE_BUDGET_NS || worst_renders != 0U || allocates)
+    if (burst_failed(median, advisory) || worst_renders != 0U || allocates)
         status = 1;
     yew_ed_free(&ed);
     return status;
