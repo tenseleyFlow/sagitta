@@ -14,6 +14,8 @@
 #include "util/buf.h"
 #include "util/intern.h"
 
+#include "perf_policy.h"
+
 enum {
     SCROLL_LINES = 10000,
     SCROLL_FRAMES = 240
@@ -28,6 +30,31 @@ typedef struct {
 } ScrollCase;
 
 static volatile u64 scroll_sink;
+
+/* The baseline floor is a frame-rate minimum, so the shared throughput
+ * policy applies: strict below the minimum, and in advisory mode (a shared
+ * hosted runner) only below minimum / 100 or a non-positive rate. */
+static int selftest_policy(void)
+{
+    const double minimum = 120.0;
+
+    if (yew_perf_throughput_failed(minimum, minimum, false) ||
+        !yew_perf_throughput_failed(96.16, minimum, false) ||
+        yew_perf_throughput_failed(96.16, minimum, true) ||
+        yew_perf_throughput_failed(
+            minimum / (double)YEW_PERF_ADVISORY_SANITY_MULTIPLIER, minimum,
+            true) ||
+        !yew_perf_throughput_failed(
+            minimum / (double)(YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1),
+            minimum, true) ||
+        !yew_perf_throughput_failed(0.0, minimum, true) ||
+        !yew_perf_throughput_failed(0.0, minimum, false)) {
+        (void)fprintf(stderr, "perf_scroll: throughput policy failed\n");
+        return 1;
+    }
+    (void)printf("perf-scroll-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
 
 static bool now_ns(i64 *out)
 {
@@ -189,7 +216,7 @@ done_arena:
     return ok;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     ScrollCase cases[] = {
         {"scroll_nowrap_80x24", 80U, 24U, false, 0.0},
@@ -200,9 +227,17 @@ int main(void)
     Bytebuf fixture;
     size_t i;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
     if (!load_baselines(cases, YEW_ARRAY_LEN(cases)))
         return 2;
+    (void)printf("perf_scroll: mode %s\n", yew_perf_mode(advisory));
     make_fixture(&fixture);
     for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
         double fps;
@@ -215,8 +250,9 @@ int main(void)
         }
         (void)printf("%s %.2f fps (minimum %.2f)%s\n", cases[i].name,
                      fps, cases[i].minimum_fps,
-                     fps < cases[i].minimum_fps ? " FAIL" : "");
-        if (fps < cases[i].minimum_fps)
+                     yew_perf_throughput_verdict(fps, cases[i].minimum_fps,
+                                                 advisory));
+        if (yew_perf_throughput_failed(fps, cases[i].minimum_fps, advisory))
             status = 1;
     }
     bytebuf_free(&fixture);

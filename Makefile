@@ -2792,7 +2792,8 @@ perf-shadow: $(BUILD)/perf_shadow
 		$(BUILD)/perf_shadow
 
 perf-scroll: $(BUILD)/perf_scroll
-	$(BUILD)/perf_scroll
+	$(BUILD)/perf_scroll --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_scroll
 
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
