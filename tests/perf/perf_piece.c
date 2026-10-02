@@ -8,6 +8,8 @@
 
 #include "text/piece.h"
 
+#include "perf_policy.h"
+
 enum {
     INITIAL_BYTES = 1024 * 1024,
     INSERT_OPS = 1000000
@@ -67,7 +69,33 @@ typedef struct {
     u8 bytes[8];
 } PerfInsert;
 
-int main(void)
+/* Strict by default; advisory (hosted runners) fails only a zero or
+ * beyond-100x run.  The final length and yew_textbuf_check() stay hard. */
+static bool piece_failed(i64 elapsed, bool advisory)
+{
+    return elapsed < 0 ||
+           yew_perf_timing_failed((u64)elapsed,
+                                  (u64)PIECE_BUDGET_MS * UINT64_C(1000000),
+                                  advisory);
+}
+
+static int selftest_policy(void)
+{
+    const i64 budget = (i64)PIECE_BUDGET_MS * INT64_C(1000000);
+    const i64 ceiling = budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (piece_failed(budget, false) || !piece_failed(budget + 1, false) ||
+        piece_failed(budget + 1, true) || piece_failed(ceiling, true) ||
+        !piece_failed(ceiling + 1, true) || !piece_failed(0, true) ||
+        !piece_failed(-1, false)) {
+        (void)fprintf(stderr, "perf_piece: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-piece-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     static const u64 seed = UINT64_C(0x9e3779b97f4a7c15);
     static const i64 budget_ns =
@@ -80,7 +108,19 @@ int main(void)
     i64 start;
     i64 elapsed;
     size_t op;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0) {
+        free(initial);
+        free(ops);
+        return selftest_policy();
+    }
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        free(initial);
+        free(ops);
+        return 2;
+    }
     if (initial == NULL || ops == NULL) {
         (void)fprintf(stderr, "perf_piece: fixture allocation failed\n");
         free(initial);
@@ -122,14 +162,16 @@ int main(void)
     }
     yew_textbuf_check(tb);
     (void)printf("piece-perf: seed=%016llx ops=%u bytes=%llu pieces=%u "
-                 "elapsed_ms=%lld budget_ms=%d%s\n",
+                 "elapsed_ms=%lld budget_ms=%d mode=%s%s\n",
                  (unsigned long long)seed, INSERT_OPS,
                  (unsigned long long)yew_textbuf_len(tb),
                  yew_textbuf_piece_count(tb),
                  (long long)(elapsed / INT64_C(1000000)),
-                 PIECE_BUDGET_MS,
-                 elapsed < budget_ns ? "" : " OVER-BUDGET");
-    if (yew_textbuf_len(tb) != expected_len || elapsed >= budget_ns) {
+                 PIECE_BUDGET_MS, yew_perf_mode(advisory),
+                 yew_perf_timing_verdict((u64)elapsed, (u64)budget_ns,
+                                         advisory));
+    if (yew_textbuf_len(tb) != expected_len ||
+        piece_failed(elapsed, advisory)) {
         yew_textbuf_free(tb);
         return 1;
     }

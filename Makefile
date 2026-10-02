@@ -2797,7 +2797,8 @@ perf-scroll: $(BUILD)/perf_scroll
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_scroll
 
 perf-piece: $(BUILD)/perf_piece
-	$(BUILD)/perf_piece
+	$(BUILD)/perf_piece --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_piece
 
 perf:
 	PERF_GATE='$(PERF_GATE)' BUILD='$(BUILD)' \
