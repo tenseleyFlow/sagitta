@@ -1539,6 +1539,7 @@ void test_re_reverse_program_swaps_anchors(void);
 void test_re_limits_fire_during_emission(void);
 void test_re_inst_size_budget(void);
 void test_re_error_offsets_are_always_in_range(void);
+void test_re_empty_repeat_bodies_are_not_walked_per_copy(void);
 
 void test_re_icase_ascii(void);
 void test_re_icase_kelvin_sign(void);
@@ -1599,6 +1600,7 @@ void test_searchui_wrapscan_off_stops_at_the_end(void);
 void test_searchui_no_pattern_reports_rather_than_moving(void);
 void test_searchui_word_search_quotes_metacharacters(void);
 void test_searchui_bad_pattern_keeps_the_last_good_program(void);
+void test_searchui_stacked_empty_repeats_compile_per_keystroke(void);
 void test_searchui_literal_preview_continues_in_bounded_slices(void);
 void test_searchui_preview_continuations_have_no_timer_delay(void);
 void test_searchui_accept_resumes_pending_preview(void);

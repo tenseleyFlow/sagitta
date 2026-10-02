@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "search/regex_internal.h"
 #include "search/searchui.h"
 #include "text/piece.h"
 #include "text/register.h"
@@ -595,5 +596,43 @@ void test_searchui_later_key_cancels_a_pending_preview(void)
 
     yew_search_preview_tick(&ed);
     YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 0U);
+    yew_ed_free(&ed);
+}
+
+/*
+ * Invariant 4, from fuzz_re_compile's watchdog: `/` recompiles on every
+ * keystroke, so a pattern whose compile cost is the PRODUCT of stacked
+ * counts over an empty body froze the prompt for seconds.  Type both
+ * watchdog patterns a byte at a time through the prompt's own compile
+ * (the smartcase probe plus the ICASE pass) and require every keystroke
+ * to stay bounded by the pattern, not by its counts.
+ */
+void test_searchui_stacked_empty_repeats_compile_per_keystroke(void)
+{
+    static const char *const pats[] = {
+        "\xa0{0}{110}{1000}{1,1000}???",
+        "\x81,}{1,}{01,}{0}{110}{100}{110}{1000}",
+    };
+    Ed ed;
+    SearchOpts o;
+    size_t p;
+
+    su_fixture(&ed);
+    yew_search_opts_init(&o);
+    for (p = 0U; p < YEW_ARRAY_LEN(pats); p++) {
+        size_t len = strlen(pats[p]);
+        size_t typed;
+
+        for (typed = 1U; typed <= len; typed++) {
+            YewReErr err;
+
+            (void)memset(&err, 0, sizeof(err));
+            (void)yew_search_compile(&ed.search.arena, pats[p], typed, &o,
+                                     &err);
+            YEW_ASSERT(yew_re_last_compile_walk() <= 256U);
+        }
+        YEW_ASSERT_NOT_NULL(yew_search_compile(&ed.search.arena, pats[p],
+                                               len, &o, NULL));
+    }
     yew_ed_free(&ed);
 }

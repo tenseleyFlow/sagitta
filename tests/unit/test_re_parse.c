@@ -357,3 +357,63 @@ void test_re_error_offsets_are_always_in_range(void)
         arena_free_all(&arena);
     }
 }
+
+/*
+ * fuzz_re_compile watchdog (seeds 20260929, 20261002): stacked counted
+ * repeats over a body that emits NOTHING.  The program cap is checked
+ * at emission, and an empty body never emits, so the compiler walked
+ * the product of the counts — 1.1e8 empty copies for the first pattern,
+ * seconds per keystroke under `/`.  The walk must be bounded by the
+ * pattern, not by the counts, and the program must be the empty one.
+ */
+void test_re_empty_repeat_bodies_are_not_walked_per_copy(void)
+{
+    static const struct {
+        const char *pat;
+        size_t len;
+    } rows[] = {
+        {"\xa0{0}{110}{1000}{1,1000}???", 26U},
+        {"\x81,}{1,}{01,}{0}{110}{100}{110}{1000}", 36U},
+        {"a{0}{1000}{100}{100}", 20U},
+        {"(?:(?:){1000}){1000}x*", 22U},
+    };
+    static const u32 flag_sets[] = {
+        0U, YEW_RE_ICASE, YEW_RE_DOTALL, YEW_RE_ICASE | YEW_RE_DOTALL
+    };
+    size_t r;
+    size_t f;
+
+    for (r = 0U; r < YEW_ARRAY_LEN(rows); r++) {
+        for (f = 0U; f < YEW_ARRAY_LEN(flag_sets); f++) {
+            Arena arena;
+            YewReErr err;
+            YewRe *re;
+
+            arena_init(&arena);
+            (void)memset(&err, 0, sizeof(err));
+            re = yew_re_compile(&arena, rows[r].pat, rows[r].len,
+                                flag_sets[f], &err);
+            YEW_ASSERT(yew_re_last_compile_walk() <= 256U);
+            YEW_ASSERT_NOT_NULL(re);
+            arena_free_all(&arena);
+        }
+    }
+    /* What survives is exactly what was not repeated away: the empty
+     * program, and `x` followed by nothing. */
+    check_shape("a{0}{1000}{100}{100}", 0U, "SAVE SAVE MATCH");
+    check_shape("x(?:a{0}){1000}", 0U, "SAVE CHAR SAVE MATCH");
+    /* A NON-empty body still hits the cap at emission. */
+    {
+        Arena arena;
+        YewReErr err;
+
+        arena_init(&arena);
+        (void)memset(&err, 0, sizeof(err));
+        YEW_ASSERT_NULL(yew_re_compile(&arena, "(?:a{0}b){1000}{1000}",
+                                       21U, 0U, &err));
+        YEW_ASSERT_EQ_STR(err.msg,
+                          "pattern too complex (program limit 4096)");
+        YEW_ASSERT(yew_re_last_compile_walk() <= 8U * YEW_RE_MAX_PROG);
+        arena_free_all(&arena);
+    }
+}
