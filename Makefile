@@ -208,7 +208,18 @@ PERF_BASELINE ?= $(call perf_baseline_default,$(PERF_RUNNER_ID))
 PERF_COMPONENT_LIMITS ?= tests/perf/component-limits.txt
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
-PERF_ADVISORY ?= 0
+# Perf verdict policy (tests/perf/perf_policy.h).  PERF_ADVISORY=0 is
+# strict: every timing/throughput limit is a hard gate.  PERF_ADVISORY=1 is
+# for shared hosted runners (scripts/run-perf-suite.sh sets it whenever
+# PERF_GATE=0, e.g. the hosted arm64-macos job): limits print the measured
+# value with a WARN verdict, and only a gross regression -- zero, beyond
+# 100x a budget, or below 1/100 of a throughput floor -- fails.  Correctness
+# checks (output, frame and byte counts, RSS, allocations) are hard in both
+# modes.  The designated PERF_GATE=1 runners stay strict and remain the real
+# latency gate, including invariant 4's 5 ms keystroke budget.  Each perf
+# target passes YEW_PERF_ADVISORY=$(PERF_ADVISORY) to its binary; an
+# exported YEW_PERF_ADVISORY seeds the default so the two cannot disagree.
+PERF_ADVISORY ?= $(if $(filter-out 0,$(YEW_PERF_ADVISORY)),1,0)
 PERF_S56_COLLECT ?= 1
 PERF_SYN_PROBE_STEM ?= markdown
 # Reduced fixture size for the functional search gate.  Export or override
@@ -2838,7 +2849,7 @@ perf-ai-http: $(BUILD)/perf_ai_http
 
 perf-ai-shadow: $(BUILD)/perf_ai_shadow $(MOCKAI) $(MOCKCURL)
 	$(BUILD)/perf_ai_shadow --selftest-policy
-	YEW_AI_MOCK=1 $(BUILD)/perf_ai_shadow
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) YEW_AI_MOCK=1 $(BUILD)/perf_ai_shadow
 
 perf-ai-privacy: $(BUILD)/perf_ai_privacy
 	$(BUILD)/perf_ai_privacy --selftest-policy
@@ -2846,13 +2857,13 @@ perf-ai-privacy: $(BUILD)/perf_ai_privacy
 
 perf-plug: $(BUILD)/perf_plug
 	$(BUILD)/perf_plug --selftest-policy
-	$(BUILD)/perf_plug
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_plug
 
 perf-pkg: $(BUILD)/perf_pkg
-	$(BUILD)/perf_pkg
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_pkg
 
 perf-cloud: $(BUILD)/perf_cloud
-	$(BUILD)/perf_cloud
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_cloud
 
 perf-ai-http-valgrind: $(BUILD)/perf_ai_http
 	valgrind --quiet --error-exitcode=99 --leak-check=full \
@@ -3044,7 +3055,8 @@ perf-mouse: $(BUILD)/perf_mouse
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_mouse
 
 perf-latency: $(BUILD)/perf_latency $(BUILD)/yew
-	$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE)
 
 perf-re-pathological: $(BUILD)/perf_re_pathological
@@ -3092,7 +3104,8 @@ perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 	$(BUILD)/perf_latency --selftest-exit-drain
 	$(BUILD)/perf_latency --selftest-quiet-drain
 	$(BUILD)/perf_latency --selftest-advisory
-	@if YEW_LATENCY_KEYS=100 YEW_LATENCY_INJECT_NS=6000000 \
+	@if YEW_PERF_ADVISORY=0 YEW_LATENCY_KEYS=100 \
+		YEW_LATENCY_INJECT_NS=6000000 \
 		$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE); then \
 		echo 'error: latency gate accepted injected paint delay' >&2; \
