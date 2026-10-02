@@ -51,6 +51,26 @@ static inline const char *yew_perf_timing_verdict(uint64_t value, uint64_t budge
     return " ok";
 }
 
+/* Signed-clock wrappers: a negative elapsed time is a broken clock, never
+ * a pass. */
+static inline bool yew_perf_timing_failed_i64(int64_t value, int64_t budget,
+                                              bool advisory)
+{
+    return value < 0 || budget <= 0 ||
+           yew_perf_timing_failed((uint64_t)value, (uint64_t)budget,
+                                  advisory);
+}
+
+static inline const char *yew_perf_timing_verdict_i64(int64_t value,
+                                                      int64_t budget,
+                                                      bool advisory)
+{
+    if (value < 0 || budget <= 0)
+        return " SANITY-FAIL";
+    return yew_perf_timing_verdict((uint64_t)value, (uint64_t)budget,
+                                   advisory);
+}
+
 /*
  * One timed sample inside a population (a per-call check, a count of calls
  * over budget).  A single fast call may legitimately read 0 ns on a coarse
