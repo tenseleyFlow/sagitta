@@ -119,6 +119,25 @@ rows such as byte counts and frame counts remain hard failures everywhere;
 a value above 100 times its budget is a broken harness/feature, not noise.
 An unknown runner ID never becomes designated by having a reference file.
 
+The same rule reaches every `perf-components` binary through
+`tests/perf/perf_policy.h`. `scripts/run-perf-suite.sh` turns `PERF_GATE=0`
+(for example the hosted `arm64-macos` job) into `PERF_ADVISORY=1`, and each
+target passes `YEW_PERF_ADVISORY=$(PERF_ADVISORY)` to its binary. Strict mode
+fails any value over its budget or under its throughput floor. Advisory mode
+prints the measured value with a `WARN` verdict and fails only a
+`SANITY-FAIL`: a whole-operation median of zero, any value above 100 times
+its budget, or a throughput (fps, MiB/s) below 1/100 of its floor or not
+positive. Per-key samples that a coarse clock can read as 0 ns use the
+ceiling alone (`yew_perf_sample_failed`). Each binary's `--selftest-policy`
+checks its own decision function at, just over, and beyond 100 times its
+budgets; `make perf-policy-selftest` runs them all. `perf-batch-selftest`
+and `perf-jobstream-selftest` prove on live runs that a strict gate rejects
+an injected delay that advisory mode warns about, and the batch selftest
+lowers its budget so the same delay crosses the sanity ceiling. Two
+timing-derived checks stay hard in both modes because machine speed cancels
+out of them: `re_pathological`'s 10^4-to-10^5 scaling ratio and the frame
+and render counts.
+
 `make calib` performs three warmup-discarded, median-of-11 measurements for
 pointer-chase latency, branchy scalar work, and memory bandwidth. Calibrated
 limits use the equal-weight integer scale in permille. Calibration refuses a
