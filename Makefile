@@ -137,6 +137,13 @@ SYN_DEF_FUZZ_ITERS ?= $(if $(filter 1,$(SAN)),20000,$(FUZZ_ITERS))
 # arm64 and slower on the hosted x86 runner, where 200000 cases ran past
 # the deep lane's 240-minute job timeout on their own.
 STATE_FUZZ_ITERS ?= $(if $(filter 1,$(SAN)),20000,$(FUZZ_ITERS))
+# The two multi-run special targets: fuzz_textbuf runs 4 seeds x 3 mixes
+# (~5 min each under ASan/UBSan on the hosted runner) and fuzz_symidx 4
+# seeds (~22 min each), ~150 of fuzz-deep-san-special's 240 minutes
+# between them, which a slow runner pushed past the job timeout.  The
+# instrumented runs keep every seed and mix at a quarter of the depth.
+TEXTBUF_FUZZ_ITERS ?= $(if $(filter 1,$(SAN)),50000,$(FUZZ_ITERS))
+SYMIDX_FUZZ_ITERS ?= $(if $(filter 1,$(SAN)),50000,$(FUZZ_ITERS))
 CMDPARSE_FUZZ_ITERS ?= 1000000
 SHCTX_FUZZ_ITERS ?= 1000000
 # 0 runs SHCTX_FUZZ_ITERS; a number of seconds runs a timed campaign.
@@ -2309,7 +2316,7 @@ fuzz-syn-def: $(BUILD)/fuzz_syn_def
 fuzz-symidx: $(BUILD)/fuzz_symidx
 	@set -eu; \
 	for seed in 0x44 0x4401 0x4402 0x4403; do \
-		$(BUILD)/fuzz_symidx --iters=$(FUZZ_ITERS) --seed=$$seed; \
+		$(BUILD)/fuzz_symidx --iters=$(SYMIDX_FUZZ_ITERS) --seed=$$seed; \
 	done
 
 fuzz-porcelain: $(BUILD)/fuzz_porcelain
@@ -2347,7 +2354,7 @@ fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	@set -eu; \
 	for seed in $(TEXTBUF_FUZZ_SEEDS); do \
 		for mix in $(TEXTBUF_FUZZ_MIXES); do \
-			$(BUILD)/fuzz_textbuf --iters=$(FUZZ_ITERS) \
+			$(BUILD)/fuzz_textbuf --iters=$(TEXTBUF_FUZZ_ITERS) \
 				--seed=$$seed --mix=$$mix; \
 		done; \
 	done
