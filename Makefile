@@ -1196,7 +1196,8 @@ endif
         perf-syn-scroll-s56 \
         perf-syn-gate-selftest perf-syn-line-probe \
         perf-syn-resident-line-probe perf-syn-edit-probe perf-syn-size \
-        perf-batch perf-batch-selftest \
+        perf-batch perf-batch-selftest perf-policy-selftest \
+        perf-jobstream perf-jobstream-selftest \
         perf-undo perf-textbuf perf-huge perf-huge-components \
         perf-update perf-noise perf-baseline-guard \
         perf-default-path-selftest \
@@ -2969,6 +2970,28 @@ perf-batch-selftest: $(BUILD)/perf_batch $(BUILD)/yew
 	else \
 		echo 'perf-batch-selftest: loosened budget refused'; \
 	fi
+
+# Every component's strict/advisory/sanity verdict rules, without timing
+# anything: each binary's --selftest-policy exercises its real decision
+# function at, just over, and beyond 100x its budgets.  The end-to-end
+# injection selftests (batch, jobstream, latency, gate) prove the same
+# rules on live measurements.
+PERF_POLICY_SELFTEST_BINS := perf_unicode perf_render perf_scroll \
+        perf_piece perf_units perf_state perf_finder perf_mouse \
+        perf_record perf_batch perf_jobstream perf_re_pathological \
+        perf_re_throughput perf_search_latency perf_cursor perf_insert \
+        perf_multicursor perf_cmdcomp perf_symidx \
+        $(if $(filter fuss,$(MODULES)),perf_git_status perf_fuss \
+                                       perf_git_gutter) \
+        $(if $(filter lsp,$(MODULES)),perf_lsp) \
+        $(if $(filter ai,$(MODULES)),perf_ai_http perf_ai_shadow \
+                                     perf_ai_privacy) \
+        $(if $(filter plugins,$(MODULES)),perf_plug)
+
+perf-policy-selftest: $(addprefix $(BUILD)/,$(PERF_POLICY_SELFTEST_BINS))
+	@set -e; for bin in $(PERF_POLICY_SELFTEST_BINS); do \
+		$(BUILD)/$$bin --selftest-policy; \
+	done
 
 #
 # Sprint 30 DoD 12: the Fletch perf smoke.  NUMBERS ONLY -- there is no

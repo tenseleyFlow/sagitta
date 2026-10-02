@@ -495,6 +495,10 @@ jobs:
           done
       - name: Prove the absolute gate rejects an injected delay
         run: make perf-gate-selftest CC=gcc
+      - name: Prove every component's strict, advisory and sanity verdicts
+        run: |
+          make perf-policy-selftest CC=gcc
+          make perf-jobstream-selftest CC=gcc
       - name: Run subsystem budgets despite runner noise
         run: |
           for target in perf-unicode perf-render perf-shadow perf-cursor \
