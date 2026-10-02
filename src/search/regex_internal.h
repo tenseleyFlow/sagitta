@@ -123,6 +123,10 @@ typedef struct ReAst ReAst;
 struct ReAst {
     u8 kind;
     bool greedy;
+    /* compile.c's pre-pass: gen() emits no instruction for this node.
+     * Lets a repeat of an empty body cost O(1) instead of the product
+     * of its counts. */
+    bool emits_none;
     u32 cp;      /* RE_A_CHAR                                           */
     u32 cls;     /* RE_A_CLASS index                                    */
     u32 group;   /* RE_A_GROUP slot, 0 = non-capturing                  */
@@ -162,6 +166,11 @@ typedef struct ReParse {
 } ReParse;
 
 ReAst *yew_re_parse(ReParse *p);
+
+/* Test seam: gen() calls the most recent yew_re_compile made, both
+ * directions.  The program cap bounds what is emitted; this is how a
+ * test proves it also bounds what is walked. */
+u64 yew_re_last_compile_walk(void);
 void yew_re_fail(ReParse *p, size_t off, const char *msg);
 /* Interns a class, returning its index (or UINT32_MAX on overflow). */
 u32 yew_re_class_intern(ReParse *p, ReRange *ranges, u32 n, bool negate);

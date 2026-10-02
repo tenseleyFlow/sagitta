@@ -13,7 +13,16 @@ typedef struct Emit {
     Arena *arena;
     bool overflow;
     bool reverse;
+    u64 walked;
 } Emit;
+
+/* gen() calls made by the most recent yew_re_compile, both directions. */
+static u64 re_last_walk;
+
+u64 yew_re_last_compile_walk(void)
+{
+    return re_last_walk;
+}
 
 static u32 emit(Emit *e, ReOp op, u32 x, u32 y, u32 arg)
 {
@@ -79,10 +88,61 @@ static void gen_cat(Emit *e, const ReAst *a)
     gen(e, a->b);
 }
 
+/*
+ * Bottom-up, once per compile: does gen() emit NOTHING for this node?
+ *
+ * The program cap bounds what is EMITTED, not what is WALKED.  A repeat
+ * whose body emits nothing — `x{0}`, or a repeat of one — never moves
+ * e->n, so `x{0}{110}{1000}{1,1000}` walked 110 * 1000 * 1000 empty
+ * copies without the cap ever firing: seconds per keystroke under `/`
+ * (fuzz_re_compile watchdog, seeds 20260929 and 20261002).  With this
+ * flag gen() skips an empty node in O(1) and gen_repeat drops a repeat
+ * of an empty body outright, so every subtree it does walk emits at
+ * least one instruction and the cap bounds the whole walk.
+ *
+ * A repeat of an empty body matches exactly the empty string and holds
+ * no capture (a capturing group always emits its SAVEs), so dropping it
+ * changes no match.  Mirrors gen() and is the same in both directions.
+ */
+static bool note_emits_none(ReAst *a)
+{
+    bool none;
+
+    if (a == NULL)
+        return true;
+    switch ((ReAstKind)a->kind) {
+    case RE_A_EMPTY:
+        none = true;
+        break;
+    case RE_A_CAT: {
+        bool l = note_emits_none(a->a);
+        bool r = note_emits_none(a->b);
+
+        none = l && r;
+        break;
+    }
+    case RE_A_REPEAT:
+        none = note_emits_none(a->a) || a->max == 0U;
+        break;
+    case RE_A_GROUP:
+        none = note_emits_none(a->a) && a->group == 0U;
+        break;
+    default:
+        (void)note_emits_none(a->a);
+        (void)note_emits_none(a->b);
+        none = false;
+        break;
+    }
+    a->emits_none = none;
+    return none;
+}
+
 static void gen_repeat(Emit *e, const ReAst *a)
 {
     u32 i;
 
+    if (a->a == NULL || a->a->emits_none || a->max == 0U)
+        return;
     for (i = 0U; i < a->min; i++) {
         gen(e, a->a);
         if (e->overflow)
@@ -107,9 +167,17 @@ static void gen_repeat(Emit *e, const ReAst *a)
     /* (max - min) optional copies. */
     {
         u32 opt = a->max - a->min;
-        u32 *splits = opt == 0U ? NULL :
-                      arena_alloc(e->arena, (size_t)opt * sizeof(u32),
-                                  sizeof(u32));
+        u32 *splits;
+
+        /* Each copy is a SPLIT plus a non-empty body: refuse before
+         * allocating a split table the cap could never hold. */
+        if (opt > YEW_RE_MAX_PROG - e->n) {
+            e->overflow = true;
+            return;
+        }
+        splits = opt == 0U ? NULL :
+                 arena_alloc(e->arena, (size_t)opt * sizeof(u32),
+                             sizeof(u32));
 
         for (i = 0U; i < opt; i++) {
             u32 split = emit(e, RE_SPLIT, 0U, 0U, 0U);
@@ -136,7 +204,8 @@ static void gen_repeat(Emit *e, const ReAst *a)
 
 static void gen(Emit *e, const ReAst *a)
 {
-    if (a == NULL || e->overflow)
+    e->walked++;
+    if (a == NULL || e->overflow || a->emits_none)
         return;
     switch ((ReAstKind)a->kind) {
     case RE_A_EMPTY:
@@ -353,6 +422,7 @@ static bool build_program(Emit *e, const ReAst *root, bool reverse)
     gen(e, root);
     (void)emit(e, RE_SAVE, 0U, 0U, reverse ? 0U : 1U);
     (void)emit(e, RE_MATCH, 0U, 0U, 0U);
+    re_last_walk = e->walked;
     return !e->overflow;
 }
 
@@ -463,9 +533,11 @@ YewRe *yew_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
     root = yew_re_parse(&p);
     if (root == NULL || p.failed)
         return NULL;
+    (void)note_emits_none(root);
 
     (void)memset(&e, 0, sizeof(e));
     e.arena = a;
+    re_last_walk = 0U;
     re = arena_alloc(a, sizeof(*re), sizeof(void *));
     (void)memset(re, 0, sizeof(*re));
     if (!build_program(&e, root, false)) {
