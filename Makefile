@@ -2912,15 +2912,41 @@ perf-syn-size: $(BUILD)/yew
 		scripts/check-s42_5-binary-growth.sh $(abspath $(BUILD)/yew)
 
 perf-batch: $(BUILD)/perf_batch $(BUILD)/yew
-	$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate
+	$(BUILD)/perf_batch --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate
 
+# Strict (the designated PERF_GATE=1 path) must reject a 12 ms injected
+# delay against the 8 ms budget; advisory (hosted runners) must warn and
+# pass on the same delay, and must still fail once the median is beyond
+# the 100x sanity ceiling -- reached here by lowering the budget to 100 us.
 perf-batch-selftest: $(BUILD)/perf_batch $(BUILD)/yew
-	@if YEW_BATCH_INJECT_NS=12000000 $(BUILD)/perf_batch \
-		--yew $(abspath $(BUILD)/yew) --gate; then \
+	$(BUILD)/perf_batch --selftest-policy
+	@if YEW_PERF_ADVISORY=0 YEW_BATCH_INJECT_NS=12000000 \
+		$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate; then \
 		echo 'error: batch startup gate accepted injected delay' >&2; \
 		exit 1; \
 	else \
 		echo 'perf-batch-selftest: injected delay rejected'; \
+	fi
+	@YEW_PERF_ADVISORY=1 YEW_BATCH_INJECT_NS=12000000 \
+		$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate && \
+		echo 'perf-batch-selftest: advisory delay warned and passed'
+	@if YEW_PERF_ADVISORY=1 YEW_BATCH_INJECT_NS=12000000 \
+		YEW_BATCH_BUDGET_NS=100000 \
+		$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate; then \
+		echo 'error: advisory batch gate accepted a delay beyond sanity' >&2; \
+		exit 1; \
+	else \
+		echo 'perf-batch-selftest: advisory sanity breach rejected'; \
+	fi
+	@if YEW_BATCH_BUDGET_NS=8000001 \
+		$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate \
+		>/dev/null 2>&1; then \
+		echo 'error: batch gate accepted a loosened budget' >&2; \
+		exit 1; \
+	else \
+		echo 'perf-batch-selftest: loosened budget refused'; \
 	fi
 
 #

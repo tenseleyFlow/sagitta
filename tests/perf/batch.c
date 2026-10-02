@@ -11,6 +11,12 @@
  *
  * YEW_BATCH_INJECT_NS delays the child before exec.  It exists only so the
  * Makefile selftest can prove that the gate rejects a known regression.
+ *
+ * The verdict follows tests/perf/perf_policy.h: strict by default, and under
+ * YEW_PERF_ADVISORY (a shared hosted runner) the median only fails when it
+ * is zero or beyond 100x the budget.  YEW_BATCH_BUDGET_NS may LOWER the
+ * budget -- never raise it -- so the selftest can reach the advisory sanity
+ * ceiling with a short injected delay instead of 100 runs of 800 ms.
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -27,6 +33,8 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "perf_policy.h"
 
 enum {
     BATCH_WARMUPS = 5,
@@ -223,6 +231,41 @@ static bool run_once(const char *binary, const char *script,
     return *elapsed >= 0;
 }
 
+static int64_t budget_ns(void)
+{
+    int64_t budget = env_i64("YEW_BATCH_BUDGET_NS", BATCH_BUDGET_NS);
+
+    if (budget <= 0 || budget > BATCH_BUDGET_NS)
+        return -1;
+    return budget;
+}
+
+static bool batch_failed(int64_t median, int64_t budget, bool advisory)
+{
+    return median < 0 ||
+           yew_perf_timing_failed((uint64_t)median, (uint64_t)budget,
+                                  advisory);
+}
+
+static int selftest_policy(void)
+{
+    const int64_t budget = BATCH_BUDGET_NS;
+    const int64_t ceiling = budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (batch_failed(budget, budget, false) ||
+        !batch_failed(8579000, budget, false) ||
+        batch_failed(8579000, budget, true) ||
+        batch_failed(ceiling, budget, true) ||
+        !batch_failed(ceiling + 1, budget, true) ||
+        !batch_failed(0, budget, true) ||
+        !batch_failed(-1, budget, true)) {
+        (void)fprintf(stderr, "perf-batch: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-batch-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 /* Insertion sort is deliberate: raw qsort is banned, and n is only 101. */
 static void sort_i64(int64_t *values, size_t len)
 {
@@ -247,6 +290,8 @@ int main(int argc, char **argv)
     char file[1024] = "";
     const char *binary;
     bool gate = false;
+    bool advisory = yew_perf_advisory();
+    int64_t budget = budget_ns();
     size_t count = sample_count();
     int64_t inject_ns = env_i64("YEW_BATCH_INJECT_NS", 0);
     int64_t *samples;
@@ -255,18 +300,23 @@ int main(int argc, char **argv)
     size_t i;
     int result = 2;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if ((argc != 3 && argc != 4) || strcmp(argv[1], "--yew") != 0 ||
         (argc == 4 && strcmp(argv[3], "--gate") != 0)) {
         (void)fprintf(stderr,
-                      "usage: %s --yew PATH [--gate]\n", argv[0]);
+                      "usage: %s --yew PATH [--gate] | --selftest-policy\n",
+                      argv[0]);
         return 2;
     }
     binary = argv[2];
     gate = argc == 4;
-    if (count == 0U || inject_ns < 0) {
+    if (count == 0U || inject_ns < 0 || budget < 0) {
         (void)fprintf(stderr,
-                      "perf-batch: YEW_BATCH_RUNS must be 100..1001 and "
-                      "YEW_BATCH_INJECT_NS must be nonnegative\n");
+                      "perf-batch: YEW_BATCH_RUNS must be 100..1001, "
+                      "YEW_BATCH_INJECT_NS must be nonnegative and "
+                      "YEW_BATCH_BUDGET_NS must be 1..%lld\n",
+                      (long long)BATCH_BUDGET_NS);
         return 2;
     }
     samples = malloc(count * sizeof(*samples));
@@ -297,12 +347,17 @@ int main(int argc, char **argv)
     sort_i64(samples, count);
     median = samples[count / 2U];
     p95 = samples[(count * 95U + 99U) / 100U - 1U];
-    (void)printf("batch_startup_median_ns %lld limit=%lld runs=%zu%s\n",
-                 (long long)median, (long long)BATCH_BUDGET_NS, count,
-                 !gate || median <= BATCH_BUDGET_NS ? " ok" : " FAIL");
+    (void)printf("batch_startup_median_ns %lld limit=%lld runs=%zu "
+                 "mode=%s%s\n",
+                 (long long)median, (long long)budget, count,
+                 gate ? yew_perf_mode(advisory) : "UNGATED",
+                 !gate ? " ok" :
+                 median < 0 ? " SANITY-FAIL" :
+                 yew_perf_timing_verdict((uint64_t)median, (uint64_t)budget,
+                                         advisory));
     (void)printf("batch_startup_p95_ns %lld informational\n",
                  (long long)p95);
-    result = gate && median > BATCH_BUDGET_NS ? 1 : 0;
+    result = gate && batch_failed(median, budget, advisory) ? 1 : 0;
 
 done_fixture:
     if (!remove_tree(root)) {
