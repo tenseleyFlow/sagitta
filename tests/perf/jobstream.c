@@ -28,6 +28,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "perf_policy.h"
+
 enum {
     STREAM_KEYS = 2000,
     SCREEN_ROWS = 24,
@@ -258,6 +260,30 @@ done_alloc:
     return ok;
 }
 
+/* Strict by default; under YEW_PERF_ADVISORY (shared hosted runners) the
+ * p99 fails only when zero or beyond 100x the baseline limit.  A stalled
+ * or crashed editor is a measurement failure and exits 2 in both modes. */
+static bool p99_failed(i64 p99, i64 limit, bool advisory)
+{
+    return yew_perf_timing_failed_i64(p99, limit, advisory);
+}
+
+static int selftest_policy(void)
+{
+    const i64 limit = 5000000;
+    const i64 ceiling = limit * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (p99_failed(limit, limit, false) || !p99_failed(limit + 1, limit, false) ||
+        p99_failed(limit + 1, limit, true) || p99_failed(ceiling, limit, true) ||
+        !p99_failed(ceiling + 1, limit, true) || !p99_failed(0, limit, true) ||
+        !p99_failed(-1, limit, false)) {
+        (void)fprintf(stderr, "jobstream: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-jobstream-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     char root[1024];
@@ -268,7 +294,10 @@ int main(int argc, char **argv)
     size_t keys = (size_t)env_i64("YEW_JOBSTREAM_KEYS", STREAM_KEYS);
     i64 inject = env_i64("YEW_JOBSTREAM_INJECT_NS", 0);
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (argc != 5 || strcmp(argv[1], "--yew") != 0 ||
         strcmp(argv[3], "--baseline") != 0) {
         (void)fprintf(stderr,
@@ -292,12 +321,16 @@ int main(int argc, char **argv)
         return 2;
     }
     (void)printf("jobstream keypress_to_paint_p99_streaming %lld ns "
-                 "(limit %lld ns, %zu keys under a 50 MiB stream)\n",
-                 (long long)p99, (long long)limit, keys);
-    if (p99 > limit) {
+                 "(limit %lld ns, %zu keys under a 50 MiB stream) "
+                 "mode=%s%s\n",
+                 (long long)p99, (long long)limit, keys,
+                 yew_perf_mode(advisory),
+                 yew_perf_timing_verdict_i64(p99, limit, advisory));
+    if (p99_failed(p99, limit, advisory)) {
         (void)fprintf(stderr,
-                      "jobstream: p99 %lld ns exceeds limit %lld ns\n",
-                      (long long)p99, (long long)limit);
+                      "jobstream: p99 %lld ns exceeds limit %lld ns (%s)\n",
+                      (long long)p99, (long long)limit,
+                      yew_perf_mode(advisory));
         status = 1;
     }
     remove_tree(root, fixture, state);

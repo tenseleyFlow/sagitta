@@ -3051,12 +3051,18 @@ perf-search-latency: $(BUILD)/perf_search_latency
 	$(BUILD)/perf_search_latency --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-jobstream: $(BUILD)/perf_jobstream $(BUILD)/yew
-	$(BUILD)/perf_jobstream --yew $(abspath $(BUILD)/yew) \
+	$(BUILD)/perf_jobstream --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_jobstream --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE)
 
-# Proves the gate reacts: an injected paint delay must fail it.
+# Proves the gate reacts: an injected paint delay must fail it when strict,
+# and must warn and pass when advisory (the 100x sanity ceiling is covered
+# by --selftest-policy; reaching it end to end costs 30 s of injected delay).
 perf-jobstream-selftest: $(BUILD)/perf_jobstream $(BUILD)/yew
-	@if YEW_JOBSTREAM_KEYS=60 YEW_JOBSTREAM_INJECT_NS=6000000 \
+	$(BUILD)/perf_jobstream --selftest-policy
+	@if YEW_PERF_ADVISORY=0 YEW_JOBSTREAM_KEYS=60 \
+		YEW_JOBSTREAM_INJECT_NS=6000000 \
 		$(BUILD)/perf_jobstream --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE); then \
 		echo 'error: jobstream gate accepted injected delay' >&2; \
@@ -3064,6 +3070,11 @@ perf-jobstream-selftest: $(BUILD)/perf_jobstream $(BUILD)/yew
 	else \
 		echo 'jobstream selftest: injected delay correctly rejected'; \
 	fi
+	@YEW_PERF_ADVISORY=1 YEW_JOBSTREAM_KEYS=60 \
+		YEW_JOBSTREAM_INJECT_NS=6000000 \
+		$(BUILD)/perf_jobstream --yew $(abspath $(BUILD)/yew) \
+		--baseline $(LATENCY_BASELINE) && \
+		echo 'jobstream selftest: advisory delay warned and passed'
 
 perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
 	$(BUILD)/perf_latency --selftest-exit-drain
