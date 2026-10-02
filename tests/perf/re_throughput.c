@@ -26,6 +26,8 @@
 #include "search/regex.h"
 #include "util/arena.h"
 
+#include "perf_policy.h"
+
 /* Overridable so the gate can be iterated on locally without a 1 GiB
  * allocation; CI runs the real size. */
 #define DEFAULT_BYTES (1024ULL * 1024ULL * 1024ULL)
@@ -126,6 +128,30 @@ static double mibs(u64 bytes, i64 ns)
            ((double)ns / 1e9);
 }
 
+/* MiB/s floors follow the shared throughput policy: strict by default,
+ * and under YEW_PERF_ADVISORY (shared hosted runners) fatal only below
+ * limit / 100.  Finding the needle and the RSS ceiling stay hard. */
+static int selftest_policy(void)
+{
+    const double limit = 500.0;
+
+    if (yew_perf_throughput_failed(limit, limit, false) ||
+        !yew_perf_throughput_failed(limit - 1.0, limit, false) ||
+        yew_perf_throughput_failed(limit - 1.0, limit, true) ||
+        yew_perf_throughput_failed(
+            limit / (double)YEW_PERF_ADVISORY_SANITY_MULTIPLIER, limit,
+            true) ||
+        !yew_perf_throughput_failed(
+            limit / (double)(YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1),
+            limit, true) ||
+        !yew_perf_throughput_failed(0.0, limit, true)) {
+        (void)fprintf(stderr, "re_throughput: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-re-throughput-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     u64 bytes = env_u64("YEW_RE_THROUGHPUT_BYTES", DEFAULT_BYTES);
@@ -143,11 +169,16 @@ int main(int argc, char **argv)
     i64 end;
     double rate;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (argc != 3 || strcmp(argv[1], "--baseline") != 0) {
-        (void)fprintf(stderr, "usage: re_throughput --baseline FILE\n");
+        (void)fprintf(stderr, "usage: re_throughput --baseline FILE | "
+                      "--selftest-policy\n");
         return 2;
     }
+    (void)printf("re.throughput mode %s\n", yew_perf_mode(advisory));
     if (!read_limits(argv[2], &lit_limit, &dfa_limit, &rss_limit)) {
         (void)fprintf(stderr, "re_throughput: cannot read %s\n", argv[2]);
         return 2;
@@ -196,13 +227,14 @@ int main(int argc, char **argv)
         }
     }
     rate = mibs(bytes, end - start);
-    (void)printf("re.throughput literal      %8.1f MiB/s (limit %llu)\n",
-                 rate, (unsigned long long)lit_limit);
-    if (rate < (double)lit_limit) {
+    (void)printf("re.throughput literal      %8.1f MiB/s (limit %llu)%s\n",
+                 rate, (unsigned long long)lit_limit,
+                 yew_perf_throughput_verdict(rate, (double)lit_limit, advisory));
+    if (yew_perf_throughput_failed(rate, (double)lit_limit, advisory)) {
         (void)fprintf(stderr,
                       "re_throughput: literal path %.1f MiB/s is below "
-                      "%llu MiB/s\n", rate,
-                      (unsigned long long)lit_limit);
+                      "%llu MiB/s (%s)\n", rate,
+                      (unsigned long long)lit_limit, yew_perf_mode(advisory));
         status = 1;
     }
 
@@ -212,13 +244,14 @@ int main(int argc, char **argv)
     (void)yew_re_test(dfa_re, &in, BYTEOFF(0U));
     end = now_ns();
     rate = mibs(bytes, end - start);
-    (void)printf("re.throughput non-literal  %8.1f MiB/s (limit %llu)\n",
-                 rate, (unsigned long long)dfa_limit);
-    if (rate < (double)dfa_limit) {
+    (void)printf("re.throughput non-literal  %8.1f MiB/s (limit %llu)%s\n",
+                 rate, (unsigned long long)dfa_limit,
+                 yew_perf_throughput_verdict(rate, (double)dfa_limit, advisory));
+    if (yew_perf_throughput_failed(rate, (double)dfa_limit, advisory)) {
         (void)fprintf(stderr,
                       "re_throughput: DFA path %.1f MiB/s is below "
-                      "%llu MiB/s\n", rate,
-                      (unsigned long long)dfa_limit);
+                      "%llu MiB/s (%s)\n", rate,
+                      (unsigned long long)dfa_limit, yew_perf_mode(advisory));
         status = 1;
     }
 

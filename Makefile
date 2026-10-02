@@ -3047,7 +3047,9 @@ perf-re-pathological: $(BUILD)/perf_re_pathological
 		$(BUILD)/perf_re_pathological --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-re-throughput: $(BUILD)/perf_re_throughput
-	$(BUILD)/perf_re_throughput --baseline $(PERF_COMPONENT_LIMITS)
+	$(BUILD)/perf_re_throughput --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) \
+		$(BUILD)/perf_re_throughput --baseline $(PERF_COMPONENT_LIMITS)
 
 perf-search-latency: $(BUILD)/perf_search_latency
 	$(BUILD)/perf_search_latency --baseline $(PERF_COMPONENT_LIMITS)
