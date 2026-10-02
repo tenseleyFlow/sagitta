@@ -2814,7 +2814,8 @@ perf-components: perf-unicode perf-render perf-shadow perf-scroll perf-piece per
       $(LSP_PERF_TARGET) $(AI_PERF_TARGET) $(PLUG_PERF_TARGET)
 
 perf-git-status: $(BUILD)/perf_git_status
-	$(BUILD)/perf_git_status
+	$(BUILD)/perf_git_status --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_git_status
 
 perf-fuss: $(BUILD)/perf_fuss
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_fuss

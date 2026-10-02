@@ -19,6 +19,8 @@
 #include "mod/git/git_int.h"
 #include "util/base.h"
 
+#include "perf_policy.h"
+
 enum {
     GIT_STATUS_ENTRIES = 20000,
     GIT_STATUS_SAMPLES = 9,
@@ -655,7 +657,60 @@ done:
     return ok;
 }
 
-int main(void)
+/*
+ * Timing verdicts follow tests/perf/perf_policy.h: strict by default; under
+ * YEW_PERF_ADVISORY (shared hosted runners) only a value beyond 100x its
+ * budget fails.  The parse median is a whole 20 000-entry parse and must be
+ * nonzero; keypress p99s and boundary maxima are per-key samples that a
+ * coarse clock may report as 0 ns, so only their ceiling is checked.
+ * Allocation and fixture checks are correctness and stay hard.
+ */
+static bool parse_failed(u64 median, bool advisory)
+{
+    return yew_perf_timing_failed(median, GIT_STATUS_BUDGET_NS, advisory);
+}
+
+static bool key_failed(u64 value, bool advisory)
+{
+    return yew_perf_sample_failed(value, GIT_KEYPRESS_BUDGET_NS, advisory);
+}
+
+static const char *key_verdict(u64 value, bool advisory)
+{
+    if (key_failed(value, true))
+        return " SANITY-FAIL";
+    if (value > GIT_KEYPRESS_BUDGET_NS)
+        return advisory ? " WARN" : " REGRESSION";
+    return " ok";
+}
+
+static int selftest_policy(void)
+{
+    const u64 key = GIT_KEYPRESS_BUDGET_NS;
+    const u64 parse = GIT_STATUS_BUDGET_NS;
+    const u64 multiplier = YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (parse_failed(parse, false) || !parse_failed(parse + 1U, false) ||
+        parse_failed(parse + 1U, true) ||
+        parse_failed(parse * multiplier, true) ||
+        !parse_failed(parse * multiplier + 1U, true) ||
+        !parse_failed(0U, true) ||
+        key_failed(0U, false) || key_failed(key, false) ||
+        !key_failed(key + 1U, false) || key_failed(key + 1U, true) ||
+        key_failed(key * multiplier, true) ||
+        !key_failed(key * multiplier + 1U, true) ||
+        strcmp(key_verdict(key + 1U, true), " WARN") != 0 ||
+        strcmp(key_verdict(key + 1U, false), " REGRESSION") != 0 ||
+        strcmp(key_verdict(key * multiplier + 1U, true),
+               " SANITY-FAIL") != 0) {
+        (void)fputs("perf_git_status: policy selftest failed\n", stderr);
+        return 1;
+    }
+    (void)printf("perf-git-status-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     u8 *fixture = NULL;
     size_t fixture_len = 0U;
@@ -672,7 +727,15 @@ int main(void)
     const char *offender = NULL;
     size_t i;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
+    (void)printf("git.status mode %s\n", yew_perf_mode(advisory));
     if (!build_fixture(&fixture, &fixture_len)) {
         (void)fputs("perf_git_status: could not build fixture\n", stderr);
         return 2;
@@ -689,18 +752,21 @@ int main(void)
     }
     sort_u64(samples, YEW_ARRAY_LEN(samples));
     median = samples[YEW_ARRAY_LEN(samples) / 2U];
-    (void)printf("git.status parse 20000  %.3f ms (limit 8.000 ms)\n",
-                 (double)median / 1000000.0);
+    (void)printf("git.status parse 20000  %.3f ms (limit 8.000 ms)%s\n",
+                 (double)median / 1000000.0,
+                 yew_perf_timing_verdict(median, GIT_STATUS_BUDGET_NS,
+                                         advisory));
 #if defined(__linux__)
     (void)printf("git.status allocations arena=%llu heap=%llu outside=%llu\n",
                  (unsigned long long)arena_allocation_calls,
                  (unsigned long long)heap_allocation_calls,
                  (unsigned long long)outside_arena_calls);
 #endif
-    if (median > GIT_STATUS_BUDGET_NS) {
+    if (parse_failed(median, advisory)) {
         (void)fprintf(stderr,
-                      "perf_git_status: median %.3f ms exceeds 8.000 ms\n",
-                      (double)median / 1000000.0);
+                      "perf_git_status: median %.3f ms exceeds 8.000 ms "
+                      "(%s)\n",
+                      (double)median / 1000000.0, yew_perf_mode(advisory));
         status = 1;
     }
     if (parser_uses_heap(&offender)) {
@@ -714,13 +780,15 @@ int main(void)
         status = 1;
     } else {
         (void)printf("git.status ttl500 keypress_p99 %.3f ms "
-                     "(limit 5.000 ms, %u refreshes)\n",
-                     (double)keypress_p99 / 1000000.0, refreshes);
-        if (keypress_p99 > GIT_KEYPRESS_BUDGET_NS) {
+                     "(limit 5.000 ms, %u refreshes)%s\n",
+                     (double)keypress_p99 / 1000000.0, refreshes,
+                     key_verdict(keypress_p99, advisory));
+        if (key_failed(keypress_p99, advisory)) {
             (void)fprintf(stderr,
                           "perf_git_status: keypress p99 %.3f ms exceeds "
-                          "5.000 ms\n",
-                          (double)keypress_p99 / 1000000.0);
+                          "5.000 ms (%s)\n",
+                          (double)keypress_p99 / 1000000.0,
+                          yew_perf_mode(advisory));
             status = 1;
         }
     }
@@ -731,16 +799,18 @@ int main(void)
                     stderr);
         status = 1;
     } else if (real_samples != 0U) {
-        (void)printf("git.status real ttl500 keypress_p99 %.3f ms "
-                     "boundary_max %.3f ms (limit 5.000 ms, "
+        (void)printf("git.status real ttl500 keypress_p99 %.3f ms%s "
+                     "boundary_max %.3f ms%s (limit 5.000 ms, "
                      "%u refreshes, %zu/%zu boundaries)\n",
                      (double)real_keypress_p99 / 1000000.0,
+                     key_verdict(real_keypress_p99, advisory),
                      (double)real_boundary_max / 1000000.0,
+                     key_verdict(real_boundary_max, advisory),
                      real_refreshes, real_boundaries, real_samples);
-        if (real_keypress_p99 > GIT_KEYPRESS_BUDGET_NS ||
-            real_boundary_max > GIT_KEYPRESS_BUDGET_NS) {
-            (void)fputs("perf_git_status: real TTL typing exceeds "
-                        "5.000 ms\n", stderr);
+        if (key_failed(real_keypress_p99, advisory) ||
+            key_failed(real_boundary_max, advisory)) {
+            (void)fprintf(stderr, "perf_git_status: real TTL typing exceeds "
+                          "5.000 ms (%s)\n", yew_perf_mode(advisory));
             status = 1;
         }
     }
