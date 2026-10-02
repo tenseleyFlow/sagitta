@@ -83,6 +83,35 @@ static inline bool yew_perf_sample_failed(uint64_t value, uint64_t budget,
     return value > (advisory ? yew_perf_sanity_ceiling(budget) : budget);
 }
 
+static inline const char *yew_perf_sample_verdict(uint64_t value,
+                                                  uint64_t budget,
+                                                  bool advisory)
+{
+    if (yew_perf_sample_failed(value, budget, true))
+        return " SANITY-FAIL";
+    if (value > budget)
+        return advisory ? " WARN" : " REGRESSION";
+    return " ok";
+}
+
+static inline bool yew_perf_sample_failed_i64(int64_t value, int64_t budget,
+                                              bool advisory)
+{
+    return value < 0 || budget < 0 ||
+           yew_perf_sample_failed((uint64_t)value, (uint64_t)budget,
+                                  advisory);
+}
+
+static inline const char *yew_perf_sample_verdict_i64(int64_t value,
+                                                      int64_t budget,
+                                                      bool advisory)
+{
+    if (value < 0 || budget < 0)
+        return " SANITY-FAIL";
+    return yew_perf_sample_verdict((uint64_t)value, (uint64_t)budget,
+                                   advisory);
+}
+
 /*
  * Throughput limits (fps, MiB/s) are minimums: the mirror image of a
  * timing budget.  A measurement is sane when it is positive and no worse

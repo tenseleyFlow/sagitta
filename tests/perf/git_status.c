@@ -677,11 +677,7 @@ static bool key_failed(u64 value, bool advisory)
 
 static const char *key_verdict(u64 value, bool advisory)
 {
-    if (key_failed(value, true))
-        return " SANITY-FAIL";
-    if (value > GIT_KEYPRESS_BUDGET_NS)
-        return advisory ? " WARN" : " REGRESSION";
-    return " ok";
+    return yew_perf_sample_verdict(value, GIT_KEYPRESS_BUDGET_NS, advisory);
 }
 
 static int selftest_policy(void)
