@@ -13,6 +13,12 @@
  * machine is fast, so t(10^5)/t(10^4) <= 15 is what actually proves the
  * property.  (15 rather than 10 because the smaller run is short enough
  * for fixed costs — compile, arena setup — to skew the quotient.)
+ *
+ * The absolute nanosecond limits follow tests/perf/perf_policy.h: strict
+ * by default, and under YEW_PERF_ADVISORY (shared hosted runners) fatal
+ * only beyond 100x.  The scaling ratio is NOT advisory: it is normalized
+ * within one process, so machine speed cancels out, and a 100x allowance
+ * would wave a quadratic engine straight through.
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -24,6 +30,8 @@
 
 #include "search/regex.h"
 #include "util/arena.h"
+
+#include "perf_policy.h"
 
 enum {
     SCALE_SMALL = 10000,
@@ -179,8 +187,31 @@ static bool time_scaling(const char *pat, i64 *small_out, i64 *large_out,
     return true;
 }
 
+static bool hard_failed(i64 ns, i64 limit, bool advisory)
+{
+    return yew_perf_timing_failed_i64(ns, limit, advisory);
+}
+
+static int selftest_policy(void)
+{
+    const i64 limit = 50000000;
+    const i64 ceiling = limit * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (hard_failed(limit, limit, false) ||
+        !hard_failed(limit + 1, limit, false) ||
+        hard_failed(limit + 1, limit, true) ||
+        hard_failed(ceiling, limit, true) ||
+        !hard_failed(ceiling + 1, limit, true) ||
+        !hard_failed(0, limit, true) || !hard_failed(-1, limit, false)) {
+        (void)fprintf(stderr, "re_pathological: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-re-pathological-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 static bool scaling_case(const char *pat, i64 hard_ns, i64 ratio_limit,
-                         int *status)
+                         bool advisory, int *status)
 {
     i64 small = 0;
     i64 large = 0;
@@ -190,14 +221,17 @@ static bool scaling_case(const char *pat, i64 hard_ns, i64 ratio_limit,
     if (!time_scaling(pat, &small, &large, &best_large))
         return false;
     ratio = (double)large / (double)small;
-    (void)printf("re.pathological /%-12s/ 10^4=%8lld ns  10^5=%9lld ns  "
-                 "ratio=%.2f\n",
-                 pat, (long long)small, (long long)large, ratio);
-    if (best_large > hard_ns) {
+    (void)printf("re.pathological /%-12s/ 10^4=%8lld ns  10^5=%9lld ns"
+                 "%s  ratio=%.2f\n",
+                 pat, (long long)small, (long long)large,
+                 yew_perf_timing_verdict_i64(best_large, hard_ns, advisory),
+                 ratio);
+    if (hard_failed(best_large, hard_ns, advisory)) {
         (void)fprintf(stderr,
                       "re_pathological: /%s/ took %lld ns at 10^5, "
-                      "limit %lld ns\n",
-                      pat, (long long)best_large, (long long)hard_ns);
+                      "limit %lld ns (%s)\n",
+                      pat, (long long)best_large, (long long)hard_ns,
+                      yew_perf_mode(advisory));
         *status = 1;
     }
     if (ratio > (double)ratio_limit) {
@@ -240,10 +274,14 @@ int main(int argc, char **argv)
     i64 ns = 0;
     size_t i;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (argc != 3 || strcmp(argv[1], "--baseline") != 0) {
         (void)fprintf(stderr,
-                      "usage: re_pathological --baseline FILE\n");
+                      "usage: re_pathological --baseline FILE | "
+                      "--selftest-policy\n");
         return 2;
     }
     if (!read_limits(argv[2], &hard_ns, &ratio_limit)) {
@@ -251,18 +289,22 @@ int main(int argc, char **argv)
                       argv[2]);
         return 2;
     }
+    (void)printf("re.pathological mode %s\n", yew_perf_mode(advisory));
     for (i = 0U; i < YEW_ARRAY_LEN(patterns); i++) {
-        if (!scaling_case(patterns[i], hard_ns, ratio_limit, &status))
+        if (!scaling_case(patterns[i], hard_ns, ratio_limit, advisory,
+                          &status))
             return 2;
     }
     if (!nested_quantifier_case(&ns))
         return 2;
-    (void)printf("re.pathological /a?{25}a{25}/ %lld ns\n",
-                 (long long)ns);
-    if (ns > 5000000) {
+    (void)printf("re.pathological /a?{25}a{25}/ %lld ns%s\n",
+                 (long long)ns,
+                 yew_perf_timing_verdict_i64(ns, 5000000, advisory));
+    if (hard_failed(ns, 5000000, advisory)) {
         (void)fprintf(stderr,
                       "re_pathological: a?{25}a{25} took %lld ns, "
-                      "limit 5000000\n", (long long)ns);
+                      "limit 5000000 (%s)\n", (long long)ns,
+                      yew_perf_mode(advisory));
         status = 1;
     }
     /* The .*.*.*=.* shape: a 10 KiB line with no '=' at all. */
@@ -290,13 +332,18 @@ int main(int argc, char **argv)
         end = now_ns();
         free(hay);
         arena_free_all(&arena);
-        (void)printf("re.pathological /.*.*.*.*=.*/ %lld ns\n",
-                     (long long)(end - start));
-        if (end - start > hard_ns) {
+        if (start < 0 || end < 0)
+            return 2;
+        (void)printf("re.pathological /.*.*.*.*=.*/ %lld ns%s\n",
+                     (long long)(end - start),
+                     yew_perf_timing_verdict_i64(end - start, hard_ns,
+                                                 advisory));
+        if (hard_failed(end - start, hard_ns, advisory)) {
             (void)fprintf(stderr,
                           "re_pathological: .*.*.*.*=.* took %lld ns, "
-                          "limit %lld\n",
-                          (long long)(end - start), (long long)hard_ns);
+                          "limit %lld (%s)\n",
+                          (long long)(end - start), (long long)hard_ns,
+                          yew_perf_mode(advisory));
             status = 1;
         }
     }
