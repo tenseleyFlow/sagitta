@@ -3030,7 +3030,8 @@ perf-state: $(BUILD)/perf_state
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_state
 
 perf-finder: $(BUILD)/perf_finder
-	$(BUILD)/perf_finder
+	$(BUILD)/perf_finder --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_finder
 
 perf-mouse: $(BUILD)/perf_mouse
 	$(BUILD)/perf_mouse

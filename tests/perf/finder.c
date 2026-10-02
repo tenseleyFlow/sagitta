@@ -30,6 +30,8 @@
 #include "ui/picker.h"
 #include "util/base.h"
 
+#include "perf_policy.h"
+
 enum {
     PERF_FINDER_ITEMS = 100000,
     PERF_FINDER_TRIALS = 11,
@@ -312,7 +314,46 @@ static i64 measure_worst_slice(void)
     return worst;
 }
 
-int main(void)
+/*
+ * Timing verdicts follow tests/perf/perf_policy.h.  Every number here is a
+ * worst-of-trials sample, so the per-sample rule applies: strict against
+ * the budget by default, and under YEW_PERF_ADVISORY (shared hosted
+ * runners) only beyond the 100x sanity ceiling.
+ */
+static bool finder_failed(i64 open_ns, i64 first_key, i64 narrowing,
+                          i64 slice, bool advisory)
+{
+    return yew_perf_sample_failed_i64(open_ns, PERF_FINDER_OPEN_BUDGET_NS,
+                                      advisory) ||
+           yew_perf_sample_failed_i64(first_key, PERF_FINDER_KEY_BUDGET_NS,
+                                      advisory) ||
+           yew_perf_sample_failed_i64(narrowing, PERF_FINDER_KEY_BUDGET_NS,
+                                      advisory) ||
+           yew_perf_sample_failed_i64(slice, PERF_FINDER_SLICE_BUDGET_NS,
+                                      advisory);
+}
+
+static int selftest_policy(void)
+{
+    const i64 open = PERF_FINDER_OPEN_BUDGET_NS;
+    const i64 key = PERF_FINDER_KEY_BUDGET_NS;
+    const i64 slice = PERF_FINDER_SLICE_BUDGET_NS;
+    const i64 m = YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (finder_failed(open, key, key, slice, false) ||
+        !finder_failed(open, key, key, slice + 1, false) ||
+        finder_failed(open + 1, key + 1, key + 1, slice + 1, true) ||
+        finder_failed(open * m, key * m, key * m, slice * m, true) ||
+        !finder_failed(open, key, key * m + 1, slice, true) ||
+        !finder_failed(-1, key, key, slice, true)) {
+        (void)fprintf(stderr, "perf-finder: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-finder-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     i64 first_key;
     i64 narrowing;
@@ -321,40 +362,52 @@ int main(void)
     i64 slice;
     u32 matched = 0U;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
+    (void)printf("perf-finder: mode %s\n", yew_perf_mode(advisory));
     corpus_make((u32)PERF_FINDER_ITEMS);
     open_ns = measure_open();
     first_key = measure_first_key();
     narrowing = measure_narrowing(&matched, &narrowing_total);
     slice = measure_worst_slice();
 
-    (void)printf("perf-finder: items=%u open_ms=%.3f (budget %.3f) "
+    (void)printf("perf-finder: items=%u open_ms=%.3f (budget %.3f)%s "
                  "first_key_ms=%.3f (budget %.3f)%s\n",
                  (unsigned)PERF_FINDER_ITEMS,
                  (double)open_ns / 1000000.0,
                  (double)PERF_FINDER_OPEN_BUDGET_NS / 1000000.0,
+                 yew_perf_sample_verdict_i64(open_ns,
+                                             PERF_FINDER_OPEN_BUDGET_NS,
+                                             advisory),
                  (double)first_key / 1000000.0,
                  (double)PERF_FINDER_KEY_BUDGET_NS / 1000000.0,
-                 open_ns <= PERF_FINDER_OPEN_BUDGET_NS &&
-                         first_key <= PERF_FINDER_KEY_BUDGET_NS
-                     ? " ok"
-                     : " FAIL");
+                 yew_perf_sample_verdict_i64(first_key,
+                                             PERF_FINDER_KEY_BUDGET_NS,
+                                             advisory));
     /*
      * The narrowing line is separate and always printed: it is the
      * number that says whether §7's central claim survives, and burying
      * it in a combined verdict would hide a regression behind three
      * passing budgets.
      */
-    (void)printf("perf-finder: narrowing_frame_ms=%.3f (budget %.3f) "
+    (void)printf("perf-finder: narrowing_frame_ms=%.3f (budget %.3f)%s "
                  "matched=%u worst_slice_ms=%.3f (budget %.3f)%s\n",
                  (double)narrowing / 1000000.0,
                  (double)PERF_FINDER_KEY_BUDGET_NS / 1000000.0,
+                 yew_perf_sample_verdict_i64(narrowing,
+                                             PERF_FINDER_KEY_BUDGET_NS,
+                                             advisory),
                  (unsigned)matched, (double)slice / 1000000.0,
                  (double)PERF_FINDER_SLICE_BUDGET_NS / 1000000.0,
-                 narrowing <= PERF_FINDER_KEY_BUDGET_NS &&
-                         slice <= PERF_FINDER_SLICE_BUDGET_NS
-                     ? " ok"
-                     : " FAIL");
+                 yew_perf_sample_verdict_i64(slice,
+                                             PERF_FINDER_SLICE_BUDGET_NS,
+                                             advisory));
     /*
      * Informational, and printed on purpose: this is the wall-clock cost
      * of fully narrowing ~54 000 candidates, spread across idle slices.
@@ -365,10 +418,7 @@ int main(void)
     (void)printf("perf-finder: narrowing_total_ms=%.3f (informational, "
                  "spread across idle slices)\n",
                  (double)narrowing_total / 1000000.0);
-    if (open_ns > PERF_FINDER_OPEN_BUDGET_NS ||
-        first_key > PERF_FINDER_KEY_BUDGET_NS ||
-        narrowing > PERF_FINDER_KEY_BUDGET_NS ||
-        slice > PERF_FINDER_SLICE_BUDGET_NS)
+    if (finder_failed(open_ns, first_key, narrowing, slice, advisory))
         status = 1;
     corpus_free();
     return status;
