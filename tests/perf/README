@@ -133,10 +133,9 @@ checks its own decision function at, just over, and beyond 100 times its
 budgets; `make perf-policy-selftest` runs them all. `perf-batch-selftest`
 and `perf-jobstream-selftest` prove on live runs that a strict gate rejects
 an injected delay that advisory mode warns about, and the batch selftest
-lowers its budget so the same delay crosses the sanity ceiling. Two
-timing-derived checks stay hard in both modes because machine speed cancels
-out of them: `re_pathological`'s 10^4-to-10^5 scaling ratio and the frame
-and render counts.
+lowers its budget so the same delay crosses the sanity ceiling. One
+timing-derived check stays hard in both modes because machine speed cancels
+out of it: `re_pathological`'s 10^4-to-10^5 scaling ratio.
 
 `make calib` performs three warmup-discarded, median-of-11 measurements for
 pointer-chase latency, branchy scalar work, and memory bandwidth. Calibrated
