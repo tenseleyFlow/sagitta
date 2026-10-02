@@ -346,8 +346,16 @@ static u32 min_len(const ReAst *a)
     }
     case RE_A_PLUS:
         return min_len(a->a);
-    case RE_A_REPEAT:
-        return a->min == 0U ? 0U : min_len(a->a) * a->min;
+    case RE_A_REPEAT: {
+        /* Saturate like CAT: a wrapped product would understate the
+         * shortest match.  Only a pattern already past the program cap
+         * can get here, but the bound should not depend on that. */
+        u32 inner = a->min == 0U ? 0U : min_len(a->a);
+
+        if (inner == 0U)
+            return 0U;
+        return inner > UINT32_MAX / a->min ? UINT32_MAX : inner * a->min;
+    }
     case RE_A_GROUP:
         return min_len(a->a);
     default:
