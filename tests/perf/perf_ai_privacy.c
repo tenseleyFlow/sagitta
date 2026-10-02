@@ -9,6 +9,8 @@
 #include "mod/ai/redact.h"
 #include "util/base.h"
 
+#include "perf_policy.h"
+
 enum {
     AI_PRIVACY_CONTEXT_BYTES = 4096,
     AI_PRIVACY_TRIALS = 17,
@@ -130,14 +132,54 @@ static bool measure_path(const AiPathPolicy *policy, u64 *result)
     return true;
 }
 
-int main(void)
+/* Per-sample policy (tests/perf/perf_policy.h): strict by default, fatal
+ * only beyond 100x under YEW_PERF_ADVISORY.  A batched per-match average
+ * can legitimately read 0 ns.  Shipped-policy construction stays hard. */
+static bool privacy_failed(u64 redact_ns, u64 path_ns, bool advisory)
 {
-    AiRedactPolicy *redact =
-        yew_ai_redact_policy_new(NULL, 0U, false, NULL);
-    AiPathPolicy *paths = yew_ai_path_policy_new(NULL, 0U, false, NULL);
+    return yew_perf_sample_failed(redact_ns, AI_PRIVACY_REDACT_LIMIT_NS,
+                                  advisory) ||
+           yew_perf_sample_failed(path_ns, AI_PRIVACY_PATH_LIMIT_NS,
+                                  advisory);
+}
+
+static int selftest_policy(void)
+{
+    const u64 redact = AI_PRIVACY_REDACT_LIMIT_NS;
+    const u64 path = AI_PRIVACY_PATH_LIMIT_NS;
+    const u64 m = YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (privacy_failed(redact, path, false) ||
+        privacy_failed(0U, 0U, false) ||
+        !privacy_failed(redact + 1U, path, false) ||
+        privacy_failed(redact + 1U, path + 1U, true) ||
+        privacy_failed(redact * m, path * m, true) ||
+        !privacy_failed(redact, path * m + 1U, true)) {
+        (void)fprintf(stderr, "perf_ai_privacy: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-ai-privacy-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    AiRedactPolicy *redact;
+    AiPathPolicy *paths;
     u64 redact_ns = 0U;
     u64 path_ns = 0U;
     int status = 0;
+    bool advisory = yew_perf_advisory();
+
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
+    redact = yew_ai_redact_policy_new(NULL, 0U, false, NULL);
+    paths = yew_ai_path_policy_new(NULL, 0U, false, NULL);
+    (void)printf("ai_privacy_mode %s\n", yew_perf_mode(advisory));
 
     if (redact == NULL || paths == NULL ||
         yew_ai_redact_policy_len(redact) == 0U ||
@@ -157,13 +199,15 @@ int main(void)
     (void)printf("ai_redact_scan_ns %llu limit=%u%s\n",
                  (unsigned long long)redact_ns,
                  (unsigned)AI_PRIVACY_REDACT_LIMIT_NS,
-                 redact_ns <= AI_PRIVACY_REDACT_LIMIT_NS ? " ok" : " FAIL");
+                 yew_perf_sample_verdict(redact_ns,
+                                         AI_PRIVACY_REDACT_LIMIT_NS,
+                                         advisory));
     (void)printf("ai_path_match_ns %llu limit=%u%s\n",
                  (unsigned long long)path_ns,
                  (unsigned)AI_PRIVACY_PATH_LIMIT_NS,
-                 path_ns <= AI_PRIVACY_PATH_LIMIT_NS ? " ok" : " FAIL");
-    if (redact_ns > AI_PRIVACY_REDACT_LIMIT_NS ||
-        path_ns > AI_PRIVACY_PATH_LIMIT_NS)
+                 yew_perf_sample_verdict(path_ns, AI_PRIVACY_PATH_LIMIT_NS,
+                                         advisory));
+    if (privacy_failed(redact_ns, path_ns, advisory))
         status = 1;
 done:
     yew_ai_path_policy_free(paths);

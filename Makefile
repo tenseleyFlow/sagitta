@@ -2839,7 +2839,8 @@ perf-ai-shadow: $(BUILD)/perf_ai_shadow $(MOCKAI) $(MOCKCURL)
 	YEW_AI_MOCK=1 $(BUILD)/perf_ai_shadow
 
 perf-ai-privacy: $(BUILD)/perf_ai_privacy
-	$(BUILD)/perf_ai_privacy
+	$(BUILD)/perf_ai_privacy --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_ai_privacy
 
 perf-plug: $(BUILD)/perf_plug
 	$(BUILD)/perf_plug --selftest-policy
