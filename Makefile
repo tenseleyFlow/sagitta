@@ -2832,7 +2832,8 @@ perf-lsp: $(BUILD)/perf_lsp
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_lsp
 
 perf-ai-http: $(BUILD)/perf_ai_http
-	$(BUILD)/perf_ai_http
+	$(BUILD)/perf_ai_http --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_ai_http
 
 perf-ai-shadow: $(BUILD)/perf_ai_shadow $(MOCKAI) $(MOCKCURL)
 	$(BUILD)/perf_ai_shadow --selftest-policy

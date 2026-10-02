@@ -24,6 +24,8 @@
 #include "mod/ai/http.h"
 #include "util/sort.h"
 
+#include "perf_policy.h"
+
 enum {
     AI_HTTP_SAMPLES = 1001,
     AI_HTTP_CYCLES = 500,
@@ -606,6 +608,28 @@ static bool load_baselines(Timing *rows, size_t count)
     return true;
 }
 
+/* Per-sample policy (tests/perf/perf_policy.h): a p99 is strict against
+ * its budget by default and fatal only beyond 100x under YEW_PERF_ADVISORY.
+ * Request/response invariants and the resource cycles stay hard. */
+static int selftest_policy(void)
+{
+    const u64 budget = AI_HTTP_BUILD_P99_BUDGET_NS;
+    const u64 ceiling = budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (yew_perf_sample_failed(budget, budget, false) ||
+        !yew_perf_sample_failed(budget + 1U, budget, false) ||
+        yew_perf_sample_failed(budget + 1U, budget, true) ||
+        yew_perf_sample_failed(ceiling, budget, true) ||
+        !yew_perf_sample_failed(ceiling + 1U, budget, true) ||
+        strcmp(yew_perf_sample_verdict(budget + 1U, budget, true),
+               " WARN") != 0) {
+        (void)fprintf(stderr, "perf_ai_http: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-ai-http-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     Timing rows[] = {
@@ -616,12 +640,16 @@ int main(int argc, char **argv)
     };
     bool cycles_only = argc == 2 && strcmp(argv[1], "--cycles-only") == 0;
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
+    bool advisory = yew_perf_advisory();
     int result = 0;
     size_t i;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (argc > 2 || (argc == 2 && !cycles_only && !measure)) {
-        (void)fprintf(stderr, "usage: %s [--measure|--cycles-only]\n",
-                      argv[0]);
+        (void)fprintf(stderr,
+                      "usage: %s [--measure|--cycles-only|"
+                      "--selftest-policy]\n", argv[0]);
         return 2;
     }
     if (!cycles_only) {
@@ -631,8 +659,11 @@ int main(int argc, char **argv)
             fail("response parse invariant failed");
         if (!measure && !load_baselines(rows, YEW_ARRAY_LEN(rows)))
             fail("missing or invalid baseline");
+        (void)printf("ai.http.mode %s\n", yew_perf_mode(advisory));
         for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
-            bool regression = rows[i].p99_ns > rows[i].budget_p99_ns;
+            bool failed = yew_perf_sample_failed(rows[i].p99_ns,
+                                                 rows[i].budget_p99_ns,
+                                                 advisory);
 
             (void)printf("ai.http.%s median_ns=%llu p99_ns=%llu "
                          "max_ns=%llu budget_ns=%llu%s\n", rows[i].name,
@@ -640,12 +671,14 @@ int main(int argc, char **argv)
                          (unsigned long long)rows[i].p99_ns,
                          (unsigned long long)rows[i].maximum_ns,
                          (unsigned long long)rows[i].budget_p99_ns,
-                         regression ? " REGRESSION" : " ok");
+                         yew_perf_sample_verdict(rows[i].p99_ns,
+                                                 rows[i].budget_p99_ns,
+                                                 advisory));
             if (measure)
                 (void)printf("%s %llu %llu\n", rows[i].name,
                              (unsigned long long)rows[i].median_ns,
                              (unsigned long long)rows[i].p99_ns);
-            if (regression)
+            if (failed)
                 result = 1;
         }
     }
