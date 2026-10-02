@@ -227,6 +227,32 @@ grep -F "YEW_PERF_ADVISORY=1 $scratch/plan-build/perf_git_gutter --gate" \
 grep -F -- '--gate-budgets' "$scratch/advisory-component-plan" >/dev/null ||
     fail 'PERF_GATE=0 incorrectly enabled the Fletch relative gate'
 
+# The hosted path (PERF_GATE=0 -> PERF_ADVISORY=1) must hand every timed
+# perf-components binary the advisory policy, and a strict run must hand
+# each one YEW_PERF_ADVISORY=0, so neither mode depends on what the caller
+# happened to export.  perf_render and perf_undo carry no strict timing
+# verdict (byte, RSS and sanity checks only) and are exempt.
+timed_components='perf_ai_http perf_ai_privacy perf_ai_shadow perf_batch
+perf_cloud perf_cmdcomp perf_cursor perf_finder perf_fuss perf_git_gutter
+perf_git_status perf_insert perf_jobstream perf_latency perf_lsp perf_mouse
+perf_multicursor perf_piece perf_pkg perf_plug perf_re_pathological
+perf_re_throughput perf_record perf_scroll perf_search_latency perf_shadow
+perf_state perf_symidx perf_syn perf_textbuf perf_unicode perf_units'
+for advisory in 1 0; do
+    make -C "$repo" --no-print-directory -n perf-components \
+        BUILD="$scratch/plan-build" PERF_GATE="$((1 - advisory))" \
+        PERF_ADVISORY="$advisory" PERF_S56_COLLECT=0 \
+        PERF_RUNNER_ID=hosted-arm64-macos 2>/dev/null |
+        awk '{ if (sub(/\\$/, "")) printf "%s", $0; else print }' \
+        >"$scratch/components-plan-$advisory"
+    for binary in $timed_components; do
+        grep -E "YEW_PERF_ADVISORY=$advisory .*$scratch/plan-build/$binary( |\$)" \
+            "$scratch/components-plan-$advisory" |
+            grep -v -- '--selftest-policy' >/dev/null ||
+            fail "$binary did not receive YEW_PERF_ADVISORY=$advisory"
+    done
+done
+
 : >"$scratch/reference"
 reset_case
 FAKE_ROOT=$scratch FAKE_SCALE_BEFORE=1000 FAKE_SCALE_AFTER=1150 \
