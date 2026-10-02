@@ -9,7 +9,12 @@
 #include <string.h>
 #include <time.h>
 
+#include "perf_policy.h"
+
 enum { CORPUS_MIN = 1024 * 1024, PERF_ROUNDS = 7 };
+
+/* The ASCII megabyte must scan inside one 5 ms keypress budget. */
+#define UNICODE_ASCII_BUDGET_NS INT64_C(5000000)
 
 typedef struct {
     const char *name;
@@ -144,7 +149,32 @@ static bool measure(PerfCase *pc)
     return true;
 }
 
-int main(void)
+/* Strict by default; advisory (hosted runners) fails only a zero or
+ * beyond-100x scan.  Cluster/cell agreement stays a hard check. */
+static bool ascii_failed(i64 best_ns, bool advisory)
+{
+    return best_ns < 0 ||
+           yew_perf_timing_failed((u64)best_ns,
+                                  (u64)UNICODE_ASCII_BUDGET_NS, advisory);
+}
+
+static int selftest_policy(void)
+{
+    const i64 budget = UNICODE_ASCII_BUDGET_NS;
+    const i64 ceiling = budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    if (ascii_failed(budget, false) || !ascii_failed(budget + 1, false) ||
+        ascii_failed(budget + 1, true) || ascii_failed(ceiling, true) ||
+        !ascii_failed(ceiling + 1, true) || !ascii_failed(0, true) ||
+        !ascii_failed(-1, true)) {
+        fprintf(stderr, "unicode-perf: policy selftest failed\n");
+        return 1;
+    }
+    printf("perf-unicode-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
+
+int main(int argc, char **argv)
 {
     static const u8 ascii[] = {'a'};
     static const u8 cjk[] = {0xe6u, 0xbcu, 0xa2u};
@@ -161,7 +191,15 @@ int main(void)
     };
     size_t i;
     int status = 0;
+    bool advisory = yew_perf_advisory();
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
+    printf("unicode-perf: mode %s\n", yew_perf_mode(advisory));
     for (i = 0u; i < YEW_ARRAY_LEN(cases); i++) {
         if (!prepare(&cases[i]) || !measure(&cases[i])) {
             fprintf(stderr, "unicode-perf: %s failed\n", cases[i].name);
@@ -171,8 +209,12 @@ int main(void)
         printf("unicode-perf: %s bytes=%zu clusters=%zu cells=%d best_us=%lld%s\n",
                cases[i].name, cases[i].len, cases[i].clusters,
                cases[i].cells, (long long)(cases[i].best_ns / 1000LL),
-               i == 0u && cases[i].best_ns > 5000000LL ? " OVER-BUDGET" : "");
-        if (i == 0u && cases[i].best_ns > 5000000LL)
+               i != 0u ? "" :
+               cases[i].best_ns < 0 ? " SANITY-FAIL" :
+               yew_perf_timing_verdict((u64)cases[i].best_ns,
+                                       (u64)UNICODE_ASCII_BUDGET_NS,
+                                       advisory));
+        if (i == 0u && ascii_failed(cases[i].best_ns, advisory))
             status = 1;
     }
     for (i = 0u; i < YEW_ARRAY_LEN(cases); i++)

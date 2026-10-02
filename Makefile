@@ -2368,7 +2368,8 @@ fuzz-long: $(BUILD)/fuzz_textbuf
 	done
 
 perf-unicode: $(BUILD)/perf_unicode
-	$(BUILD)/perf_unicode
+	$(BUILD)/perf_unicode --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_unicode
 
 # Manual deep-dive build.  The recursive invocation keeps profiling objects
 # disjoint from every ordinary/sanitized tree and preserves the release -O2
