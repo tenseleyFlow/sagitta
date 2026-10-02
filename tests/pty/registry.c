@@ -11090,19 +11090,33 @@ static bool s53_conflict_fixture(PtyCtx *c, char *repo, size_t repo_cap)
     return true;
 }
 
+typedef struct S53Cursor {
+    u8 shape;
+    bool footer;
+} S53Cursor;
+
+static bool s53_cursor_ready(const PtyCtx *c, const void *arg)
+{
+    const S53Cursor *want = arg;
+
+    return c->vt.cursor_shape == want->shape &&
+           ((c->vt.cur_r == c->vt.rows - 1) == want->footer);
+}
+
+/*
+ * Waits for the mode's cursor at a frame boundary.  This used to give up
+ * after 120 quiet-window settles (about three seconds of silence), a
+ * wall-clock cap shorter than the case budget: a loaded runner that held
+ * the editor past it failed git_editor_status_cherry_pick with "editor
+ * mode did not settle" while the editor was merely slow.  The case
+ * deadline is the only hang bound.
+ */
 static void s53_wait_cursor(PtyCtx *c, u8 shape, bool footer)
 {
-    u32 i;
-    bool ready = false;
+    S53Cursor want = {shape, footer};
 
-    for (i = 0U; i < 120U && !c->failed; i++) {
-        ready = c->vt.cursor_shape == shape &&
-                ((c->vt.cur_r == c->vt.rows - 1) == footer);
-        if (ready)
-            break;
-        ptc_settle(c, 25);
-    }
-    ptc_check(c, ready, "Sprint 53 editor mode did not settle");
+    ptc_wait_until(c, s53_cursor_ready, &want,
+                   "Sprint 53 editor mode did not settle");
 }
 
 static void s53_wait_git(PtyCtx *c)
