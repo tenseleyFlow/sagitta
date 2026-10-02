@@ -9,6 +9,8 @@
 #include "edit/ed.h"
 #include "edit/motion.h"
 
+#include "perf_policy.h"
+
 enum {
     PERF_UNIT_LINES = 10000,
     PERF_UNIT_CALLS = 100000,
@@ -16,6 +18,68 @@ enum {
 };
 
 static volatile u64 perf_unit_sink;
+static bool perf_units_advisory;
+
+/*
+ * At least 99% of representative calls must meet the keypress budget.
+ * Under YEW_PERF_ADVISORY (shared hosted runners) the same 99% must only
+ * stay inside the 100x sanity ceiling.  Every call's progress and bounds
+ * are correctness checks and stay hard in both modes.
+ */
+static bool population_failed(u32 over_budget, u32 over_sanity, u32 calls,
+                              bool advisory)
+{
+    return (advisory ? over_sanity : over_budget) > calls / 100U;
+}
+
+static const char *population_verdict(u32 over_budget, u32 over_sanity,
+                                      u32 calls, bool advisory)
+{
+    if (population_failed(over_budget, over_sanity, calls, true))
+        return " SANITY-FAIL";
+    if (population_failed(over_budget, over_sanity, calls, false))
+        return advisory ? " WARN" : " REGRESSION";
+    return " ok";
+}
+
+static void count_call(i64 elapsed, u32 *over_budget, u32 *over_sanity)
+{
+    if (elapsed > PERF_UNIT_KEY_NS)
+        (*over_budget)++;
+    if (yew_perf_sample_failed((u64)elapsed, PERF_UNIT_KEY_NS, true))
+        (*over_sanity)++;
+}
+
+static int selftest_policy(void)
+{
+    const u32 calls = PERF_UNIT_CALLS;
+    const u32 allowed = calls / 100U;
+    const u64 key = PERF_UNIT_KEY_NS;
+    const u64 ceiling = key * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+    u32 over_budget = 0U;
+    u32 over_sanity = 0U;
+
+    count_call((i64)key, &over_budget, &over_sanity);
+    count_call((i64)key + 1, &over_budget, &over_sanity);
+    count_call((i64)ceiling, &over_budget, &over_sanity);
+    count_call((i64)ceiling + 1, &over_budget, &over_sanity);
+    if (over_budget != 3U || over_sanity != 1U ||
+        population_failed(allowed, 0U, calls, false) ||
+        !population_failed(allowed + 1U, 0U, calls, false) ||
+        population_failed(calls, allowed, calls, true) ||
+        !population_failed(calls, allowed + 1U, calls, true) ||
+        yew_perf_sample_failed(0U, key, false) ||
+        !yew_perf_sample_failed(key + 1U, key, false) ||
+        yew_perf_sample_failed(ceiling, key, true) ||
+        !yew_perf_sample_failed(ceiling + 1U, key, true) ||
+        strcmp(population_verdict(allowed + 1U, 0U, calls, true),
+               " WARN") != 0) {
+        (void)fprintf(stderr, "perf-units: policy selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-units-policy: strict/advisory/sanity ok\n");
+    return 0;
+}
 
 static i64 now_ns(void)
 {
@@ -66,6 +130,7 @@ static bool measure_engine(UnitCtx *u, const UnitOps *ops)
     i64 total_elapsed;
     i64 max_elapsed = 0;
     u32 over_budget = 0U;
+    u32 over_sanity = 0U;
     int call;
 
     if (total_start < 0)
@@ -89,8 +154,7 @@ static bool measure_engine(UnitCtx *u, const UnitOps *ops)
             return false;
         if (elapsed > max_elapsed)
             max_elapsed = elapsed;
-        if (elapsed > PERF_UNIT_KEY_NS)
-            over_budget++;
+        count_call(elapsed, &over_budget, &over_sanity);
         p = next;
         perf_unit_sink ^= p.v + (u64)call;
     }
@@ -98,16 +162,18 @@ static bool measure_engine(UnitCtx *u, const UnitOps *ops)
     if (total_elapsed < 0)
         return false;
     (void)printf("perf-units: %-5s calls=%d total_ms=%.3f ns/op=%.1f "
-                 "max_ms=%.3f over_5ms=%u\n",
+                 "max_ms=%.3f over_5ms=%u%s\n",
                  ops->name, PERF_UNIT_CALLS,
                  (double)total_elapsed / 1000000.0,
                  (double)total_elapsed / (double)PERF_UNIT_CALLS,
-                 (double)max_elapsed / 1000000.0, over_budget);
+                 (double)max_elapsed / 1000000.0, over_budget,
+                 population_verdict(over_budget, over_sanity,
+                                    PERF_UNIT_CALLS, perf_units_advisory));
     (void)fflush(stdout);
-    /* At least 99% of representative calls must meet the keypress budget.
-     * A percentile gate tolerates scheduler preemption without averaging
+    /* A percentile gate tolerates scheduler preemption without averaging
      * slow engine work into invisibility. */
-    return over_budget <= PERF_UNIT_CALLS / 100;
+    return !population_failed(over_budget, over_sanity, PERF_UNIT_CALLS,
+                              perf_units_advisory);
 }
 
 static bool measure_nested(void)
@@ -146,7 +212,13 @@ static bool measure_nested(void)
             return false;
         }
         elapsed = now_ns() - start;
-        if (elapsed < 0 || elapsed > PERF_UNIT_KEY_NS) {
+        if (elapsed < 0 ||
+            yew_perf_sample_failed((u64)elapsed, PERF_UNIT_KEY_NS,
+                                   perf_units_advisory)) {
+            (void)fprintf(stderr, "perf-units: nested level %d took %lld ns "
+                          "(budget %d, %s)\n", i, (long long)elapsed,
+                          PERF_UNIT_KEY_NS,
+                          yew_perf_mode(perf_units_advisory));
             yew_textbuf_free(tb);
             return false;
         }
@@ -170,6 +242,7 @@ static bool measure_source_rows(bool comma_rows)
     i64 total_start;
     i64 max_elapsed = 0;
     u32 over_budget = 0U;
+    u32 over_sanity = 0U;
 
     if (tb == NULL)
         return false;
@@ -201,8 +274,7 @@ static bool measure_source_rows(bool comma_rows)
         }
         if (elapsed > max_elapsed)
             max_elapsed = elapsed;
-        if (elapsed > PERF_UNIT_KEY_NS)
-            over_budget++;
+        count_call(elapsed, &over_budget, &over_sanity);
         p = next;
         perf_unit_sink ^= p.v + (u64)call;
     }
@@ -210,17 +282,20 @@ static bool measure_source_rows(bool comma_rows)
         i64 total_elapsed = now_ns() - total_start;
 
         (void)printf("perf-units: block-%-6s calls=%d total_ms=%.3f "
-                     "ns/op=%.1f max_ms=%.3f over_5ms=%u\n",
+                     "ns/op=%.1f max_ms=%.3f over_5ms=%u%s\n",
                      comma_rows ? "comma" : "source", calls,
                      (double)total_elapsed / 1000000.0,
                      (double)total_elapsed / (double)calls,
-                     (double)max_elapsed / 1000000.0, over_budget);
+                     (double)max_elapsed / 1000000.0, over_budget,
+                     population_verdict(over_budget, over_sanity,
+                                        (u32)calls, perf_units_advisory));
     }
     yew_textbuf_free(tb);
-    return over_budget <= (u32)calls / 100U;
+    return !population_failed(over_budget, over_sanity, (u32)calls,
+                              perf_units_advisory);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     static const UnitOps *const engines[] = {
         &yew_unit_line, &yew_unit_word, &yew_unit_block, &yew_unit_char,
@@ -231,8 +306,19 @@ int main(void)
     size_t i;
     bool ok = true;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0) {
+        yew_textbuf_free(tb);
+        return selftest_policy();
+    }
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        yew_textbuf_free(tb);
+        return 2;
+    }
     if (tb == NULL)
         return 2;
+    perf_units_advisory = yew_perf_advisory();
+    (void)printf("perf-units: mode %s\n", yew_perf_mode(perf_units_advisory));
     buffer.tb = tb;
     buffer.tabwidth = 4U;
     u = (UnitCtx){tb, &buffer, NULL};

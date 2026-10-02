@@ -2867,7 +2867,8 @@ perf-undo: $(BUILD)/perf_undo
 	$(BUILD)/perf_undo
 
 perf-units: $(BUILD)/perf_units
-	$(BUILD)/perf_units
+	$(BUILD)/perf_units --selftest-policy
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_units
 
 perf-multicursor: $(BUILD)/perf_multicursor
 	$(BUILD)/perf_multicursor --selftest-policy
