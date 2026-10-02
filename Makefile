@@ -2820,6 +2820,7 @@ perf-git-status: $(BUILD)/perf_git_status
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_git_status
 
 perf-fuss: $(BUILD)/perf_fuss
+	$(BUILD)/perf_fuss --selftest-policy
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_fuss
 
 perf-git-gutter: $(BUILD)/perf_git_gutter

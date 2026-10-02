@@ -17,6 +17,8 @@
 #include "mod/git/git_int.h"
 #include "util/base.h"
 
+#include "perf_policy.h"
+
 enum {
     FUSS_PERF_ENTRIES = 20000,
     FUSS_PERF_PATH_CAP = 48,
@@ -39,11 +41,63 @@ typedef struct PerfFixture {
 
 static volatile u64 fuss_perf_sink;
 
-static bool perf_advisory(void)
-{
-    const char *value = getenv("YEW_PERF_ADVISORY");
+/*
+ * Timing verdicts follow tests/perf/perf_policy.h: strict by default, and
+ * under YEW_PERF_ADVISORY (shared hosted runners) fatal only beyond 100x.
+ * The build median is a whole 20 000-entry build and must be nonzero; the
+ * keypress p99s and drawer timings are per-key samples a coarse clock may
+ * read as 0.  Tree stability, zero rebuilds and every fixture check are
+ * correctness and stay hard in both modes.
+ */
+typedef struct FussTimings {
+    u64 build_median;
+    u64 nav_p99;
+    u64 toggle_p99;
+    u64 drawer_entry;
+    u64 drawer_input_p99;
+    u64 drawer_open;
+} FussTimings;
 
-    return value != NULL && strcmp(value, "0") != 0;
+static bool fuss_key_failed(u64 value, bool advisory)
+{
+    return yew_perf_sample_failed(value, FUSS_PERF_KEY_BUDGET_NS, advisory);
+}
+
+static bool fuss_timings_failed(const FussTimings *t, bool advisory)
+{
+    return yew_perf_timing_failed(t->build_median,
+                                  FUSS_PERF_BUILD_BUDGET_NS, advisory) ||
+           fuss_key_failed(t->nav_p99, advisory) ||
+           fuss_key_failed(t->toggle_p99, advisory) ||
+           fuss_key_failed(t->drawer_entry, advisory) ||
+           fuss_key_failed(t->drawer_input_p99, advisory) ||
+           fuss_key_failed(t->drawer_open, advisory);
+}
+
+static int selftest_policy(void)
+{
+    const u64 key = FUSS_PERF_KEY_BUDGET_NS;
+    const u64 build = FUSS_PERF_BUILD_BUDGET_NS;
+    const u64 m = YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+    FussTimings ok = {build, key, key, key, key, 0U};
+    FussTimings over = {build + 1U, key + 1U, key + 1U, key + 1U, key + 1U,
+                        key + 1U};
+    FussTimings ceiling = {build * m, key * m, key * m, key * m, key * m,
+                           key * m};
+    FussTimings insane_key = {build, key, key, key, key, key * m + 1U};
+    FussTimings zero_build = {0U, key, key, key, key, key};
+
+    if (fuss_timings_failed(&ok, false) ||
+        !fuss_timings_failed(&over, false) ||
+        fuss_timings_failed(&over, true) ||
+        fuss_timings_failed(&ceiling, true) ||
+        !fuss_timings_failed(&insane_key, true) ||
+        !fuss_timings_failed(&zero_build, true)) {
+        (void)fputs("perf_fuss: policy selftest failed\n", stderr);
+        return 1;
+    }
+    (void)printf("perf-fuss-policy: strict/advisory/sanity ok\n");
+    return 0;
 }
 
 static u64 now_ns(void)
@@ -507,7 +561,7 @@ done:
     return ok;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     PerfFixture fixture;
     u64 build_median = 0U;
@@ -518,9 +572,17 @@ int main(void)
     u64 drawer_input_p99 = 0U;
     u64 drawer_open = 0U;
     u64 layout_elapsed = 0U;
-    bool advisory = perf_advisory();
+    bool advisory = yew_perf_advisory();
+    FussTimings timings;
     int status = 0;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
+    if (argc != 1) {
+        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        return 2;
+    }
+    (void)printf("fuss mode %s\n", yew_perf_mode(advisory));
     if (!fixture_make(&fixture)) {
         (void)fputs("perf_fuss: could not build fixture\n", stderr);
         fixture_drop(&fixture);
@@ -551,12 +613,19 @@ int main(void)
         (void)fputs("perf_fuss: end-to-end drawer fixture failed\n", stderr);
         status = 1;
     }
-    (void)printf("fuss build+flatten 20000  %.3f ms (limit 12.000 ms)\n",
-                 (double)build_median / 1000000.0);
-    (void)printf("fuss navigation p99       %.3f ms (limit 5.000 ms)\n",
-                 (double)nav_p99 / 1000000.0);
-    (void)printf("fuss toggle+measure p99    %.3f ms (limit 5.000 ms)\n",
-                 (double)toggle_p99 / 1000000.0);
+    (void)printf("fuss build+flatten 20000  %.3f ms (limit 12.000 ms)%s\n",
+                 (double)build_median / 1000000.0,
+                 yew_perf_timing_verdict(build_median,
+                                         FUSS_PERF_BUILD_BUDGET_NS,
+                                         advisory));
+    (void)printf("fuss navigation p99       %.3f ms (limit 5.000 ms)%s\n",
+                 (double)nav_p99 / 1000000.0,
+                 yew_perf_sample_verdict(nav_p99, FUSS_PERF_KEY_BUDGET_NS,
+                                         advisory));
+    (void)printf("fuss toggle+measure p99    %.3f ms (limit 5.000 ms)%s\n",
+                 (double)toggle_p99 / 1000000.0,
+                 yew_perf_sample_verdict(toggle_p99, FUSS_PERF_KEY_BUDGET_NS,
+                                         advisory));
     (void)printf("fuss unchanged-gen x5000  %.3f ms (zero rebuilds)\n",
                  (double)unchanged / 1000000.0);
     (void)printf("fuss remembered refresh x100 stable (7 paths)\n");
@@ -564,20 +633,23 @@ int main(void)
                  (double)layout_elapsed / 1000000.0);
     (void)printf("fuss drawer entry 20000   %.3f ms (limit 5.000 ms)%s\n",
                  (double)drawer_entry / 1000000.0,
-                 advisory ? " ADVISORY" : "");
+                 yew_perf_sample_verdict(drawer_entry,
+                                         FUSS_PERF_KEY_BUDGET_NS, advisory));
     (void)printf("fuss input-to-damage p99  %.3f ms (1000 selections)%s\n",
                  (double)drawer_input_p99 / 1000000.0,
-                 advisory ? " ADVISORY" : "");
+                 yew_perf_sample_verdict(drawer_input_p99,
+                                         FUSS_PERF_KEY_BUDGET_NS, advisory));
     (void)printf("fuss open resolve 20000   %.3f ms (limit 5.000 ms)%s\n",
                  (double)drawer_open / 1000000.0,
-                 advisory ? " ADVISORY" : "");
-    if (build_median > FUSS_PERF_BUILD_BUDGET_NS ||
-        nav_p99 > FUSS_PERF_KEY_BUDGET_NS ||
-        toggle_p99 > FUSS_PERF_KEY_BUDGET_NS ||
-        (!advisory &&
-         (drawer_entry > FUSS_PERF_KEY_BUDGET_NS ||
-          drawer_input_p99 > FUSS_PERF_KEY_BUDGET_NS ||
-          drawer_open > FUSS_PERF_KEY_BUDGET_NS)))
+                 yew_perf_sample_verdict(drawer_open,
+                                         FUSS_PERF_KEY_BUDGET_NS, advisory));
+    timings.build_median = build_median;
+    timings.nav_p99 = nav_p99;
+    timings.toggle_p99 = toggle_p99;
+    timings.drawer_entry = drawer_entry;
+    timings.drawer_input_p99 = drawer_input_p99;
+    timings.drawer_open = drawer_open;
+    if (fuss_timings_failed(&timings, advisory))
         status = 1;
     fixture_drop(&fixture);
     return status;
