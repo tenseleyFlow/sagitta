@@ -31,6 +31,8 @@
 #include "util/log.h"
 #include "util/prof.h"
 
+#include "perf_policy.h"
+
 /* The benchmark intentionally exercises degradation paths millions of times.
  * Those warnings are useful in the editor and harmful in a measurement
  * process: synchronous persistent logging perturbs timings and used to grow a
@@ -179,11 +181,70 @@ typedef enum PerfSynGateMode {
 
 static volatile u64 perf_syn_sink;
 
-static bool gate_fails(PerfSynGateMode mode, bool absolute_violation,
-                       bool relative_violation)
+/*
+ * Every printed row carries one SynCheck, and the advisory policy of
+ * tests/perf/perf_policy.h reaches only its timing and throughput parts.  A
+ * deterministic breach (a call, load, frame or tick count, a byte or state
+ * size, a verdict on the injected settle clock) fails in every mode; a timing
+ * breach fails in strict mode, and in advisory mode only beyond the shared
+ * sanity bound.
+ */
+typedef struct SynCheck {
+    bool correctness;
+    bool timing;
+    bool insane;
+} SynCheck;
+
+static void syn_check_correct(SynCheck *check, bool breach)
 {
-    return absolute_violation ||
-           (mode == PERF_SYN_GATE_FULL && relative_violation);
+    if (breach)
+        check->correctness = true;
+}
+
+/* A whole operation (a detection batch, a child process, a summed settle):
+ * zero is a broken clock, never a pass. */
+static void syn_check_timing(SynCheck *check, u64 value, u64 budget)
+{
+    if (value > budget)
+        check->timing = true;
+    if (!yew_perf_timing_sane(value, budget))
+        check->insane = true;
+}
+
+/* A quantile of per-call samples, or an amortized difference: a coarse clock
+ * may legitimately read zero, so only the advisory ceiling applies. */
+static void syn_check_sample(SynCheck *check, u64 value, u64 budget)
+{
+    if (value > budget)
+        check->timing = true;
+    if (yew_perf_sample_failed(value, budget, true))
+        check->insane = true;
+}
+
+static void syn_check_throughput(SynCheck *check, double value,
+                                 double minimum)
+{
+    if (!(value >= minimum))
+        check->timing = true;
+    if (!yew_perf_throughput_sane(value, minimum))
+        check->insane = true;
+}
+
+static bool syn_check_failed(const SynCheck *check, bool advisory)
+{
+    return check->correctness || check->insane ||
+           (check->timing && !advisory);
+}
+
+static const char *syn_check_verdict(const SynCheck *check, bool advisory)
+{
+    if (check->correctness)
+        return " REGRESSION";
+    if (check->insane)
+        return " SANITY-FAIL";
+    if (check->timing)
+        return advisory ? " WARN" : " REGRESSION";
+    return " ok";
 }
 
 static bool gate_uses_baseline(PerfSynGateMode mode)
@@ -191,34 +252,81 @@ static bool gate_uses_baseline(PerfSynGateMode mode)
     return mode == PERF_SYN_GATE_FULL;
 }
 
-static int gate_status(bool regression_seen, bool advisory)
+/* The per-case decision.  Baseline-relative limits exist only in full mode
+ * and, like the absolute budgets, are timing; theme_line_calls is a
+ * deterministic count. */
+static SynCheck case_check(size_t i, const PerfCase *c, PerfSynGateMode mode,
+                           u64 theme_line_calls)
 {
-    return regression_seen && !advisory ? 1 : 0;
+    SynCheck check = {false, false, false};
+
+    if (gate_uses_baseline(mode)) {
+        syn_check_sample(&check, c->measured.median,
+                         c->baseline.median + c->baseline.median / 5U);
+        syn_check_sample(&check, c->measured.p99,
+                         c->baseline.p99 + c->baseline.p99 / 5U);
+    }
+    if (i >= CASE_VIEW_200_FIRST && i <= CASE_VIEW_200_LAST)
+        syn_check_sample(&check, c->measured.p99,
+                         PERF_SYN_VIEW_200_LIMIT_NS);
+    if (i >= CASE_VIEW_24_FIRST && i <= CASE_VIEW_24_LAST)
+        syn_check_sample(&check, c->measured.p99, PERF_SYN_VIEW_24_LIMIT_NS);
+    if (i >= CASE_FROZEN_LINE_FIRST && i <= CASE_FROZEN_LINE_LAST) {
+        bool markdown_embed =
+            i == CASE_FROZEN_LINE_FIRST + PERF_SYN_MD_EMBED_INDEX;
+
+        syn_check_sample(&check, c->measured.median,
+                         markdown_embed ? 3500U : 3000U);
+        syn_check_sample(&check, c->measured.p99,
+                         markdown_embed ? 14000U : 12000U);
+    }
+    if (i >= CASE_FROZEN_EDIT_FIRST && i <= CASE_FROZEN_EDIT_LAST)
+        syn_check_sample(&check, c->measured.p99, 60000U);
+    if (i == CASE_THEME_SWITCH) {
+        syn_check_sample(&check, c->measured.p99, PERF_SYN_THEME_LIMIT_NS);
+        syn_check_correct(&check, theme_line_calls != 0U);
+    }
+    if (i == CASE_MINIFIED_FIRST_PAINT)
+        syn_check_sample(&check, c->measured.p99,
+                         PERF_SYN_MINIFIED_LIMIT_NS);
+    return check;
 }
 
 static int selftest_gate(void)
 {
+    /* A 24-row viewport case: absolute p99 budget 300000 ns; the baseline
+     * {1000, 1000} puts the relative limits at 1200 ns. */
     static const struct {
         PerfSynGateMode mode;
-        bool absolute_violation;
-        bool relative_violation;
+        Timing measured;
+        Timing baseline;
         bool want;
         const char *what;
     } cases[] = {
-        {PERF_SYN_GATE_BUDGETS, false, false, false, "budgets clean"},
-        {PERF_SYN_GATE_BUDGETS, true, false, true, "budget exceeded"},
-        {PERF_SYN_GATE_BUDGETS, false, true, false, "relative ignored"},
-        {PERF_SYN_GATE_BUDGETS, true, true, true, "both in budgets mode"},
-        {PERF_SYN_GATE_FULL, false, false, false, "full clean"},
-        {PERF_SYN_GATE_FULL, true, false, true, "full budget exceeded"},
-        {PERF_SYN_GATE_FULL, false, true, true, "full relative exceeded"},
-        {PERF_SYN_GATE_FULL, true, true, true, "both in full mode"}
+        {PERF_SYN_GATE_BUDGETS, {100000U, 100000U}, {100000U, 1000000U},
+         false, "budgets clean"},
+        {PERF_SYN_GATE_BUDGETS, {100000U, 300001U}, {100000U, 1000000U},
+         true, "budget exceeded"},
+        {PERF_SYN_GATE_BUDGETS, {100000U, 100000U}, {1000U, 1000U},
+         false, "relative ignored"},
+        {PERF_SYN_GATE_BUDGETS, {100000U, 300001U}, {1000U, 1000U},
+         true, "both in budgets mode"},
+        {PERF_SYN_GATE_FULL, {100000U, 100000U}, {100000U, 1000000U},
+         false, "full clean"},
+        {PERF_SYN_GATE_FULL, {100000U, 300001U}, {100000U, 1000000U},
+         true, "full budget exceeded"},
+        {PERF_SYN_GATE_FULL, {100000U, 100000U}, {1000U, 1000U},
+         true, "full relative exceeded"},
+        {PERF_SYN_GATE_FULL, {100000U, 300001U}, {1000U, 1000U},
+         true, "both in full mode"}
     };
     size_t failures = 0U;
 
     for (size_t i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
-        bool got = gate_fails(cases[i].mode, cases[i].absolute_violation,
-                              cases[i].relative_violation);
+        PerfCase c = {"selftest", cases[i].measured, cases[i].baseline};
+        SynCheck check = case_check(CASE_VIEW_24_FIRST, &c, cases[i].mode,
+                                    0U);
+        bool got = syn_check_failed(&check, false);
 
         if (got != cases[i].want) {
             (void)printf("FAIL gate rule: %s -> %s, wanted %s\n",
@@ -230,11 +338,6 @@ static int selftest_gate(void)
     if (gate_uses_baseline(PERF_SYN_GATE_BUDGETS) ||
         !gate_uses_baseline(PERF_SYN_GATE_FULL)) {
         (void)printf("FAIL gate rule: baseline selection\n");
-        failures++;
-    }
-    if (gate_status(false, false) != 0 || gate_status(false, true) != 0 ||
-        gate_status(true, false) != 1 || gate_status(true, true) != 0) {
-        (void)printf("FAIL gate rule: advisory exit status\n");
         failures++;
     }
     if (failures != 0U) {
@@ -296,10 +399,11 @@ typedef struct ScrollProfile {
     u32 frames;
 } ScrollProfile;
 
-typedef struct ScrollProfileVerdict {
-    bool phase_regression;
-    bool timing_regression;
-} ScrollProfileVerdict;
+typedef enum ScrollProfilePart {
+    SCROLL_PART_THROUGHPUT,
+    SCROLL_PART_RENDER_SHARE,
+    SCROLL_PART_SYNTAX_SHARE
+} ScrollProfilePart;
 
 typedef struct ScrollProfileCase {
     const char *name;
@@ -886,17 +990,19 @@ static int detect_probe(void)
 {
     u64 samples[PERF_SYN_TRIALS];
     Timing measured;
+    SynCheck check = {false, false, false};
+    bool advisory = yew_perf_advisory();
 
     yew_syn_discovery_set_bypass(true);
     if (!measure_detect(samples, YEW_ARRAY_LEN(samples)))
         return 2;
     measured = timing_of(samples, YEW_ARRAY_LEN(samples));
+    syn_check_timing(&check, measured.p99, PERF_SYN_DETECT_P99_LIMIT_NS);
     (void)printf("syn.detect_10000         median_ns=%llu p99_ns=%llu%s\n",
                  (unsigned long long)measured.median,
                  (unsigned long long)measured.p99,
-                 measured.p99 > PERF_SYN_DETECT_P99_LIMIT_NS ?
-                     " REGRESSION" : " ok");
-    return measured.p99 > PERF_SYN_DETECT_P99_LIMIT_NS ? 1 : 0;
+                 syn_check_verdict(&check, advisory));
+    return syn_check_failed(&check, advisory) ? 1 : 0;
 }
 
 static bool measure_compile(const Source *source, u64 *samples, size_t count)
@@ -2486,13 +2592,6 @@ static bool measure_scroll_profile(FrozenFixture *fixture, const char *name,
     return true;
 }
 
-static bool perf_syn_advisory(void)
-{
-    const char *value = getenv("YEW_PERF_ADVISORY");
-
-    return value != NULL && strcmp(value, "0") != 0;
-}
-
 static bool measure_scroll_profiles(FrozenFixture *markdown,
                                     FrozenFixture *plain,
                                     ScrollProfile *profiles)
@@ -2512,19 +2611,44 @@ static bool measure_scroll_profiles(FrozenFixture *markdown,
     return true;
 }
 
-static ScrollProfileVerdict report_scroll_profiles(
-    const ScrollProfile *profiles, bool advisory)
+/* Phase shares are measured nanoseconds over a fixed frame budget, so they
+ * scale with machine speed exactly like the throughput they accompany. */
+static SynCheck scroll_profile_check(const ScrollProfile *profile,
+                                     ScrollProfilePart part)
 {
-    ScrollProfileVerdict verdict = {false, false};
+    SynCheck check = {false, false, false};
+
+    switch (part) {
+    case SCROLL_PART_THROUGHPUT:
+        syn_check_throughput(&check, (double)profile->fps_milli / 1000.0,
+                             PERF_SYN_SCROLL_MIN_FPS);
+        break;
+    case SCROLL_PART_RENDER_SHARE:
+        syn_check_sample(&check, profile->render_permille,
+                         PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE);
+        break;
+    case SCROLL_PART_SYNTAX_SHARE:
+        syn_check_sample(&check, profile->syn_permille,
+                         PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE);
+        break;
+    }
+    return check;
+}
+
+/* Prints every profile row; returns true when any row fails the gate. */
+static bool report_scroll_profiles(const ScrollProfile *profiles,
+                                   bool advisory)
+{
+    bool failed = false;
 
     for (size_t i = 0U; i < YEW_ARRAY_LEN(scroll_profile_cases); i++) {
         const ScrollProfile *profile = &profiles[i];
-        bool phase_regression =
-            profile->render_permille >
-                PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ||
-            profile->syn_permille > PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE;
-        bool timing_regression =
-            profile->fps_milli < (u64)PERF_SYN_SCROLL_MIN_FPS * 1000U;
+        SynCheck throughput =
+            scroll_profile_check(profile, SCROLL_PART_THROUGHPUT);
+        SynCheck render =
+            scroll_profile_check(profile, SCROLL_PART_RENDER_SHARE);
+        SynCheck syntax =
+            scroll_profile_check(profile, SCROLL_PART_SYNTAX_SHARE);
 
         (void)printf(
             "syn.scroll.throughput_%-20s frames=%u "
@@ -2532,8 +2656,7 @@ static ScrollProfileVerdict report_scroll_profiles(
             profile->name, (unsigned)profile->frames,
             (unsigned long long)profile->fps_milli,
             (unsigned long long)profile->total_ns,
-            timing_regression ? (advisory ? " TIMING-WARN" :
-                                            " REGRESSION") : " ok");
+            syn_check_verdict(&throughput, advisory));
         (void)printf(
             "syn.scroll.render_share_%-17s phase_ns=%llu "
             "budget_ns=%llu share_permille=%llu "
@@ -2544,9 +2667,7 @@ static ScrollProfileVerdict report_scroll_profiles(
             (unsigned long long)profile->render_permille,
             (unsigned long long)profile->render_work_permille,
             (unsigned)PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE,
-            profile->render_permille >
-                PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE ?
-                " REGRESSION" : " ok");
+            syn_check_verdict(&render, advisory));
         (void)printf(
             "syn.scroll.syntax_share_%-17s phase_ns=%llu "
             "budget_ns=%llu share_permille=%llu "
@@ -2557,14 +2678,13 @@ static ScrollProfileVerdict report_scroll_profiles(
             (unsigned long long)profile->syn_permille,
             (unsigned long long)profile->syn_work_permille,
             (unsigned)PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE,
-            profile->syn_permille > PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE ?
-                " REGRESSION" : " ok");
-        if (phase_regression)
-            verdict.phase_regression = true;
-        if (timing_regression && !advisory)
-            verdict.timing_regression = true;
+            syn_check_verdict(&syntax, advisory));
+        if (syn_check_failed(&throughput, advisory) ||
+            syn_check_failed(&render, advisory) ||
+            syn_check_failed(&syntax, advisory))
+            failed = true;
     }
-    return verdict;
+    return failed;
 }
 
 static int run_scroll_profile_gate(void)
@@ -2573,10 +2693,11 @@ static int run_scroll_profile_gate(void)
     FrozenFixture plain = {0};
     FrozenSpec plain_spec = {0};
     ScrollProfile profiles[PERF_SYN_SCROLL_PROFILE_CASES] = {{0}};
-    ScrollProfileVerdict verdict;
+    bool advisory = yew_perf_advisory();
     bool markdown_ready = false;
     int status = 0;
 
+    (void)printf("perf_syn: mode %s\n", yew_perf_mode(advisory));
     yew_syn_discovery_set_bypass(true);
     if (!frozen_init(&markdown, &frozen_specs[PERF_SYN_MARKDOWN_INDEX])) {
         (void)fputs("perf_syn: markdown scroll fixture failed\n", stderr);
@@ -2591,12 +2712,8 @@ static int run_scroll_profile_gate(void)
     if (status == 0 &&
         !measure_scroll_profiles(&markdown, &plain, profiles))
         status = 2;
-    if (status == 0) {
-        verdict = report_scroll_profiles(profiles,
-                                         perf_syn_advisory());
-        if (verdict.phase_regression || verdict.timing_regression)
-            status = 1;
-    }
+    if (status == 0 && report_scroll_profiles(profiles, advisory))
+        status = 1;
     if (markdown_ready)
         frozen_free(&markdown);
     free(plain.source.data);
@@ -2964,6 +3081,209 @@ static bool init_cases(
     return true;
 }
 
+/* Every whole-run result that a summary row judges. */
+typedef struct SynSummary {
+    Timing detect;
+    Timing compile;
+    Timing cache;
+    Timing warm_start;
+    Timing clean_list;
+    Timing block;
+    Timing block_multiline;
+    Timing make_embed_line;
+    Timing make_embed_view;
+    u64 block_line_calls;
+    u64 block_multiline_calls;
+    u64 theme_line_calls;
+    u64 comment_first_max_us;
+    u64 comment_first_frames;
+    u64 comment_idle_total_us;
+    u64 comment_idle_max_us;
+    u64 comment_idle_frames;
+    u64 comment_state_logical_bytes;
+    u64 comment_state_capacity_bytes;
+    u64 comment_state_rss_growth;
+    u64 comment_wall_ns;
+    u64 whole_total_ns;
+    u64 whole_max_frame_ns;
+    u64 whole_frames;
+    double markdown_wrap_fps;
+    u64 all_state_capacity_bytes;
+    u64 all_state_limit_bytes;
+    u64 warm_start_compiled_max;
+    u64 clean_list_compiled;
+    u64 compile_all_cold_ns;
+    u64 all_warm_load_ns;
+    u64 runtime_data_bytes;
+    u64 md_embed_idle_ticks;
+    u64 md_embed_loads;
+    u64 md_embed_pump_max_ns;
+    u64 md_embed_states;
+    u64 make_embed_idle_ticks;
+    u64 make_embed_loads;
+    u64 make_embed_pump_max_ns;
+    u64 html_embed_scan_ns;
+    u64 html_plain_scan_ns;
+    u64 html_scan_ratio_bp;
+    u64 definition_switch_ns;
+} SynSummary;
+
+typedef enum SynRow {
+    SYN_ROW_DETECT,
+    SYN_ROW_COMPILE,
+    SYN_ROW_CACHE,
+    SYN_ROW_WARM_START,
+    SYN_ROW_CLEAN_LIST,
+    SYN_ROW_COMPILE_ALL,
+    SYN_ROW_WARM_ALL,
+    SYN_ROW_RUNTIME_SIZE,
+    SYN_ROW_BLOCK,
+    SYN_ROW_BLOCK_MULTILINE,
+    SYN_ROW_COMMENT_VIEW,
+    SYN_ROW_COMMENT_IDLE,
+    SYN_ROW_THEME_CALLS,
+    SYN_ROW_MARKDOWN_SCROLL,
+    SYN_ROW_WHOLE_SETTLE,
+    SYN_ROW_COMMENT_STATE,
+    SYN_ROW_ALL_STATE,
+    SYN_ROW_MD_EMBED,
+    SYN_ROW_MAKE_EMBED,
+    SYN_ROW_HTML_SCAN,
+    SYN_ROW_DEFINITION_SWITCH,
+    SYN_ROW_COUNT
+} SynRow;
+
+/*
+ * The summary-row decisions.  Correctness: compiled-definition counts,
+ * runtime data bytes, provider line calls, frame counts and microseconds on
+ * the injected settle clock, state capacity and RSS growth, embed load and
+ * idle-tick counts, retained state count.  Everything measured on a real
+ * clock is timing, including the html embedded/plain ratio: machine speed
+ * mostly cancels out of it, but its 8 percent headroom sits inside a shared
+ * runner's noise.
+ */
+static SynCheck summary_check(const SynSummary *s, SynRow row)
+{
+    SynCheck check = {false, false, false};
+
+    switch (row) {
+    case SYN_ROW_DETECT:
+        syn_check_timing(&check, s->detect.median,
+                         PERF_SYN_DETECT_HARD_LIMIT_NS);
+        syn_check_timing(&check, s->detect.p99,
+                         PERF_SYN_DETECT_P99_LIMIT_NS);
+        break;
+    case SYN_ROW_COMPILE:
+        syn_check_sample(&check, s->compile.median,
+                         PERF_SYN_COMPILE_LIMIT_NS);
+        break;
+    case SYN_ROW_CACHE:
+        syn_check_sample(&check, s->cache.median, PERF_SYN_CACHE_LIMIT_NS);
+        break;
+    case SYN_ROW_WARM_START:
+        syn_check_timing(&check, s->warm_start.p99,
+                         PERF_SYN_WARM_START_LIMIT_NS);
+        syn_check_correct(&check, s->warm_start_compiled_max > 1U);
+        break;
+    case SYN_ROW_CLEAN_LIST:
+        syn_check_timing(&check, s->clean_list.median,
+                         PERF_SYN_LIST_MEDIAN_LIMIT_NS);
+        syn_check_timing(&check, s->clean_list.p99,
+                         PERF_SYN_LIST_P99_LIMIT_NS);
+        syn_check_correct(&check, s->clean_list_compiled != 0U);
+        break;
+    case SYN_ROW_COMPILE_ALL:
+        syn_check_timing(&check, s->compile_all_cold_ns,
+                         PERF_SYN_COMPILE_ALL_LIMIT_NS);
+        break;
+    case SYN_ROW_WARM_ALL:
+        syn_check_timing(&check, s->all_warm_load_ns,
+                         PERF_SYN_WARM_ALL_LIMIT_NS);
+        break;
+    case SYN_ROW_RUNTIME_SIZE:
+        syn_check_correct(&check, s->runtime_data_bytes >
+                                      PERF_SYN_RUNTIME_LIMIT_BYTES);
+        break;
+    case SYN_ROW_BLOCK:
+        syn_check_sample(&check, s->block.p99, PERF_SYN_BLOCK_LIMIT_NS);
+        syn_check_correct(&check, s->block_line_calls >
+                                      PERF_SYN_BLOCK_MAX_LINE_CALLS);
+        break;
+    case SYN_ROW_BLOCK_MULTILINE:
+        syn_check_sample(&check, s->block_multiline.p99,
+                         PERF_SYN_BLOCK_LIMIT_NS);
+        syn_check_correct(&check, s->block_multiline_calls >
+                                      PERF_SYN_BLOCK_MAX_LINE_CALLS);
+        break;
+    case SYN_ROW_COMMENT_VIEW:
+        syn_check_correct(&check,
+                          s->comment_first_frames != 1U ||
+                              s->comment_first_max_us >
+                                  YEW_SYN_FRAME_BUDGET_US);
+        break;
+    case SYN_ROW_COMMENT_IDLE:
+        syn_check_correct(&check,
+                          s->comment_idle_frames == 0U ||
+                              s->comment_idle_max_us >
+                                  YEW_SYN_IDLE_BUDGET_US ||
+                              s->comment_idle_total_us >
+                                  PERF_SYN_COMMENT_TOTAL_US);
+        syn_check_timing(&check, s->comment_wall_ns, UINT64_C(400000000));
+        break;
+    case SYN_ROW_THEME_CALLS:
+        syn_check_correct(&check, s->theme_line_calls != 0U);
+        break;
+    case SYN_ROW_MARKDOWN_SCROLL:
+        syn_check_throughput(&check, s->markdown_wrap_fps,
+                             PERF_SYN_SCROLL_MIN_FPS);
+        break;
+    case SYN_ROW_WHOLE_SETTLE:
+        syn_check_timing(&check, s->whole_total_ns, UINT64_C(45000000));
+        syn_check_sample(&check, s->whole_max_frame_ns, UINT64_C(1000000));
+        break;
+    case SYN_ROW_COMMENT_STATE:
+        syn_check_correct(&check,
+                          s->comment_state_capacity_bytes >
+                                  PERF_SYN_STATE_LIMIT_BYTES ||
+                              s->comment_state_rss_growth >
+                                  PERF_SYN_STATE_LIMIT_BYTES);
+        break;
+    case SYN_ROW_ALL_STATE:
+        syn_check_correct(&check, s->all_state_capacity_bytes >
+                                      s->all_state_limit_bytes);
+        break;
+    case SYN_ROW_MD_EMBED:
+        syn_check_correct(&check, s->md_embed_idle_ticks > 8U ||
+                                      s->md_embed_loads != 8U ||
+                                      s->md_embed_states > 2500U);
+        syn_check_sample(&check, s->md_embed_pump_max_ns,
+                         UINT64_C(2000000));
+        break;
+    case SYN_ROW_MAKE_EMBED:
+        syn_check_correct(&check, s->make_embed_idle_ticks > 1U ||
+                                      s->make_embed_loads != 1U);
+        syn_check_sample(&check, s->make_embed_pump_max_ns,
+                         UINT64_C(2000000));
+        syn_check_sample(&check, s->make_embed_line.median, 3000U);
+        syn_check_sample(&check, s->make_embed_line.p99, 12000U);
+        syn_check_sample(&check, s->make_embed_view.p99,
+                         PERF_SYN_VIEW_200_LIMIT_NS);
+        break;
+    case SYN_ROW_HTML_SCAN:
+        syn_check_timing(&check, s->html_scan_ratio_bp,
+                         PERF_SYN_HTML_RATIO_LIMIT);
+        if (s->html_plain_scan_ns == 0U)
+            check.insane = true;
+        break;
+    case SYN_ROW_DEFINITION_SWITCH:
+        syn_check_sample(&check, s->definition_switch_ns, 250U);
+        break;
+    case SYN_ROW_COUNT:
+        break;
+    }
+    return check;
+}
+
 int main(int argc, char **argv)
 {
     PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
@@ -3025,54 +3345,13 @@ int main(int argc, char **argv)
     ScrollProfile scroll_profile[PERF_SYN_SCROLL_PROFILE_CASES];
     size_t frozen_initialized = 0U;
     Source ini = {NULL, 0U};
-    Timing detect = {0U, 0U};
-    Timing compile = {0U, 0U};
-    Timing cache = {0U, 0U};
-    Timing warm_start = {0U, 0U};
-    Timing clean_list = {0U, 0U};
-    Timing block = {0U, 0U};
-    Timing block_multiline = {0U, 0U};
-    Timing make_embed_line = {0U, 0U};
-    Timing make_embed_view = {0U, 0U};
-    u64 block_line_calls = 0U;
-    u64 block_multiline_calls = 0U;
-    u64 theme_line_calls = 0U;
-    u64 comment_first_max_us = 0U;
-    u64 comment_first_frames = 0U;
-    u64 comment_idle_total_us = 0U;
-    u64 comment_idle_max_us = 0U;
-    u64 comment_idle_frames = 0U;
-    u64 comment_state_logical_bytes = 0U;
-    u64 comment_state_capacity_bytes = 0U;
-    u64 comment_state_rss_growth = 0U;
-    u64 comment_wall_ns = 0U;
-    u64 whole_total_ns = 0U;
-    u64 whole_max_frame_ns = 0U;
-    u64 whole_frames = 0U;
     double scroll_fps[PERF_SYN_FIXTURE_COUNT];
-    double markdown_wrap_fps = 0.0;
-    u64 all_state_capacity_bytes = 0U;
-    u64 all_state_limit_bytes = 0U;
-    u64 warm_start_compiled_max = 0U;
-    u64 clean_list_compiled = 0U;
-    u64 compile_all_cold_ns = 0U;
-    u64 all_warm_load_ns = 0U;
-    u64 runtime_data_bytes = 0U;
-    u64 md_embed_idle_ticks = 0U;
-    u64 md_embed_loads = 0U;
-    u64 md_embed_pump_max_ns = 0U;
-    u64 md_embed_states = 0U;
-    u64 make_embed_idle_ticks = 0U;
-    u64 make_embed_loads = 0U;
-    u64 make_embed_pump_max_ns = 0U;
-    u64 html_embed_scan_ns = 0U;
-    u64 html_plain_scan_ns = 0U;
-    u64 html_scan_ratio_bp = 0U;
-    u64 definition_switch_ns = 0U;
+    SynSummary r;
     bool regression_seen = false;
-    bool advisory = perf_syn_advisory();
+    bool advisory = yew_perf_advisory();
     int status = 0;
 
+    (void)printf("perf_syn: mode %s\n", yew_perf_mode(advisory));
     yew_syn_discovery_set_bypass(true);
     if (!init_cases(cases, case_names)) {
         (void)fprintf(stderr, "perf_syn: case name initialization failed\n");
@@ -3141,24 +3420,24 @@ int main(int argc, char **argv)
             break;
         }
         if (i == PERF_SYN_MD_EMBED_INDEX) {
-            md_embed_idle_ticks = idle_ticks;
-            md_embed_loads = loads;
-            md_embed_pump_max_ns = max_pump_ns;
-            md_embed_states = yew_syn_state_count(
+            r.md_embed_idle_ticks = idle_ticks;
+            r.md_embed_loads = loads;
+            r.md_embed_pump_max_ns = max_pump_ns;
+            r.md_embed_states = yew_syn_state_count(
                 yew_syn_engine_states(frozen[i].engine));
         }
     }
     if (status == 0 &&
         !measure_html_scan_pair(&frozen[PERF_SYN_HTML_EMBED_INDEX],
-                                &html_embed_scan_ns,
-                                &html_plain_scan_ns,
-                                &html_scan_ratio_bp)) {
+                                &r.html_embed_scan_ns,
+                                &r.html_plain_scan_ns,
+                                &r.html_scan_ratio_bp)) {
         (void)fprintf(stderr, "perf_syn: html inline scan pair failed\n");
         status = 2;
     }
     if (status == 0 &&
         !measure_definition_switch(&frozen[PERF_SYN_MD_EMBED_INDEX],
-                                   &definition_switch_ns)) {
+                                   &r.definition_switch_ns)) {
         (void)fprintf(stderr,
                       "perf_syn: definition-switch measurement failed\n");
         status = 2;
@@ -3245,8 +3524,8 @@ int main(int argc, char **argv)
             status = 2;
         } else if (status == 0) {
             case_trials[CASE_THEME_SWITCH][trial] = timing_of(samples, count);
-            if (trial_line_calls > theme_line_calls)
-                theme_line_calls = trial_line_calls;
+            if (trial_line_calls > r.theme_line_calls)
+                r.theme_line_calls = trial_line_calls;
         }
         if (status == 0 &&
             !measure_minified_first_paint(&frozen[PERF_SYN_JSON_INDEX],
@@ -3284,8 +3563,8 @@ int main(int argc, char **argv)
             status = 2;
         } else if (status == 0) {
             block_trials[trial] = timing_of(samples, count);
-            if (trial_line_calls > block_line_calls)
-                block_line_calls = trial_line_calls;
+            if (trial_line_calls > r.block_line_calls)
+                r.block_line_calls = trial_line_calls;
         }
         if (status == 0 &&
             !measure_block_multiline(&fx, samples, count,
@@ -3296,26 +3575,26 @@ int main(int argc, char **argv)
             status = 2;
         } else if (status == 0) {
             block_multiline_trials[trial] = timing_of(samples, count);
-            if (trial_multiline_calls > block_multiline_calls)
-                block_multiline_calls = trial_multiline_calls;
+            if (trial_multiline_calls > r.block_multiline_calls)
+                r.block_multiline_calls = trial_multiline_calls;
         }
     }
     if (status == 0) {
         for (size_t i = 0U; i < YEW_ARRAY_LEN(cases); i++)
             cases[i].measured = timing_of_trials(case_trials[i]);
-        detect = timing_of_trials(detect_trials);
-        compile = timing_of_trials(compile_trials);
-        cache = timing_of_trials(cache_trials);
-        block = timing_of_trials(block_trials);
-        block_multiline = timing_of_trials(block_multiline_trials);
+        r.detect = timing_of_trials(detect_trials);
+        r.compile = timing_of_trials(compile_trials);
+        r.cache = timing_of_trials(cache_trials);
+        r.block = timing_of_trials(block_trials);
+        r.block_multiline = timing_of_trials(block_multiline_trials);
     }
     /* The legacy Make rows above retain their unchanged, guest-unloaded
      * baseline.  Prime that same engine only after those timings, then gate
      * the real Make -> shell resident path independently. */
     if (status == 0 &&
         !prime_frozen_embeds(&frozen[PERF_SYN_MAKE_INDEX],
-                             &make_embed_idle_ticks, &make_embed_loads,
-                             &make_embed_pump_max_ns)) {
+                             &r.make_embed_idle_ticks, &r.make_embed_loads,
+                             &r.make_embed_pump_max_ns)) {
         (void)fprintf(stderr, "perf_syn: Make resident prime failed\n");
         status = 2;
     }
@@ -3340,51 +3619,51 @@ int main(int argc, char **argv)
         }
     }
     if (status == 0) {
-        make_embed_line = timing_of_trials(make_embed_line_trials);
-        make_embed_view = timing_of_trials(make_embed_view_trials);
+        r.make_embed_line = timing_of_trials(make_embed_line_trials);
+        r.make_embed_view = timing_of_trials(make_embed_view_trials);
     }
     if (status == 0 &&
         !measure_warm_start(argv[0], start_samples, start_count,
-                            &warm_start_compiled_max)) {
+                            &r.warm_start_compiled_max)) {
         (void)fprintf(stderr, "perf_syn: warm-start measurement failed\n");
         status = 2;
     } else if (status == 0) {
-        warm_start = timing_of(start_samples, start_count);
+        r.warm_start = timing_of(start_samples, start_count);
     }
     if (status == 0 &&
         !measure_clean_list(argv[0], start_samples, start_count,
-                            &clean_list_compiled)) {
+                            &r.clean_list_compiled)) {
         (void)fprintf(stderr, "perf_syn: clean-list measurement failed\n");
         status = 2;
     } else if (status == 0) {
-        clean_list = timing_of(start_samples, start_count);
+        r.clean_list = timing_of(start_samples, start_count);
     }
     if (status == 0 &&
-        !measure_all_pack_loads(argv[0], &compile_all_cold_ns,
-                                &all_warm_load_ns)) {
+        !measure_all_pack_loads(argv[0], &r.compile_all_cold_ns,
+                                &r.all_warm_load_ns)) {
         (void)fprintf(stderr, "perf_syn: pack-load measurement failed\n");
         status = 2;
     }
-    if (status == 0 && !measure_runtime_data_size(&runtime_data_bytes)) {
+    if (status == 0 && !measure_runtime_data_size(&r.runtime_data_bytes)) {
         (void)fprintf(stderr, "perf_syn: runtime-size measurement failed\n");
         status = 2;
     }
 
     if (status == 0 &&
-        !check_comment_bomb(&frozen[1], &comment_first_max_us,
-                            &comment_first_frames,
-                            &comment_idle_total_us,
-                            &comment_idle_max_us, &comment_idle_frames,
-                            &comment_state_logical_bytes,
-                            &comment_state_capacity_bytes,
-                            &comment_state_rss_growth,
-                            &comment_wall_ns)) {
+        !check_comment_bomb(&frozen[1], &r.comment_first_max_us,
+                            &r.comment_first_frames,
+                            &r.comment_idle_total_us,
+                            &r.comment_idle_max_us, &r.comment_idle_frames,
+                            &r.comment_state_logical_bytes,
+                            &r.comment_state_capacity_bytes,
+                            &r.comment_state_rss_growth,
+                            &r.comment_wall_ns)) {
         (void)fprintf(stderr, "perf_syn: comment-bomb frame check failed\n");
         status = 2;
     }
     if (status == 0 &&
-        !measure_whole_settle(&frozen[PERF_SYN_JSON_INDEX], &whole_total_ns,
-                              &whole_max_frame_ns, &whole_frames)) {
+        !measure_whole_settle(&frozen[PERF_SYN_JSON_INDEX], &r.whole_total_ns,
+                              &r.whole_max_frame_ns, &r.whole_frames)) {
         (void)fprintf(stderr, "perf_syn: whole-file settle failed\n");
         status = 2;
     }
@@ -3397,7 +3676,7 @@ int main(int argc, char **argv)
     }
     if (status == 0 &&
         !measure_scroll(&frozen[PERF_SYN_MARKDOWN_INDEX], true,
-                        &markdown_wrap_fps)) {
+                        &r.markdown_wrap_fps)) {
         (void)fprintf(stderr, "perf_syn: markdown wrap measurement failed\n");
         status = 2;
     }
@@ -3406,8 +3685,8 @@ int main(int argc, char **argv)
                                  &plain_scroll, scroll_profile))
         status = 2;
     if (status == 0 &&
-        !check_all_state_memory(frozen, &all_state_capacity_bytes,
-                                &all_state_limit_bytes)) {
+        !check_all_state_memory(frozen, &r.all_state_capacity_bytes,
+                                &r.all_state_limit_bytes)) {
         (void)fprintf(stderr, "perf_syn: state memory measurement failed\n");
         status = 2;
     }
@@ -3416,186 +3695,93 @@ int main(int argc, char **argv)
         !load_baselines(cases, YEW_ARRAY_LEN(cases)))
         status = 2;
     for (size_t i = 0U; status == 0 && i < YEW_ARRAY_LEN(cases); i++) {
-        bool relative_regression = false;
-        bool absolute_regression = false;
-        bool regression;
-
-        if (gate_mode == PERF_SYN_GATE_FULL) {
-            u64 median_limit = cases[i].baseline.median +
-                               cases[i].baseline.median / 5U;
-            u64 p99_limit = cases[i].baseline.p99 +
-                            cases[i].baseline.p99 / 5U;
-
-            relative_regression = cases[i].measured.median > median_limit ||
-                                  cases[i].measured.p99 > p99_limit;
-        }
-
-        if (i >= CASE_VIEW_200_FIRST && i <= CASE_VIEW_200_LAST)
-            absolute_regression =
-                cases[i].measured.p99 > PERF_SYN_VIEW_200_LIMIT_NS;
-        if (i >= CASE_VIEW_24_FIRST && i <= CASE_VIEW_24_LAST)
-            absolute_regression = absolute_regression ||
-                cases[i].measured.p99 > PERF_SYN_VIEW_24_LIMIT_NS;
-        if (i >= CASE_FROZEN_LINE_FIRST && i <= CASE_FROZEN_LINE_LAST) {
-            bool markdown_embed =
-                i == CASE_FROZEN_LINE_FIRST + PERF_SYN_MD_EMBED_INDEX;
-
-            absolute_regression = absolute_regression ||
-                cases[i].measured.median >
-                    (markdown_embed ? 3500U : 3000U) ||
-                cases[i].measured.p99 >
-                    (markdown_embed ? 14000U : 12000U);
-        }
-        if (i >= CASE_FROZEN_EDIT_FIRST && i <= CASE_FROZEN_EDIT_LAST)
-            absolute_regression = absolute_regression ||
-                                  cases[i].measured.p99 > 60000U;
-        if (i == CASE_THEME_SWITCH)
-            absolute_regression = absolute_regression ||
-                cases[i].measured.p99 > PERF_SYN_THEME_LIMIT_NS ||
-                theme_line_calls != 0U;
-        if (i == CASE_MINIFIED_FIRST_PAINT)
-            absolute_regression = absolute_regression ||
-                cases[i].measured.p99 > PERF_SYN_MINIFIED_LIMIT_NS;
-        regression = gate_fails(gate_mode, absolute_regression,
-                                relative_regression);
+        SynCheck check = case_check(i, &cases[i], gate_mode,
+                                    r.theme_line_calls);
 
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      cases[i].name,
                      (unsigned long long)cases[i].measured.median,
                      (unsigned long long)cases[i].measured.p99,
-                     regression ? " REGRESSION" : " ok");
-        if (regression)
+                     syn_check_verdict(&check, advisory));
+        if (syn_check_failed(&check, advisory))
             regression_seen = true;
     }
     if (status != 2) {
-        bool detect_regression =
-            detect.median > PERF_SYN_DETECT_HARD_LIMIT_NS ||
-            detect.p99 > PERF_SYN_DETECT_P99_LIMIT_NS;
-        bool compile_regression = compile.median > PERF_SYN_COMPILE_LIMIT_NS;
-        bool cache_regression = cache.median > PERF_SYN_CACHE_LIMIT_NS;
-        bool warm_start_regression =
-            warm_start.p99 > PERF_SYN_WARM_START_LIMIT_NS ||
-            warm_start_compiled_max > 1U;
-        bool clean_list_regression =
-            clean_list.median > PERF_SYN_LIST_MEDIAN_LIMIT_NS ||
-            clean_list.p99 > PERF_SYN_LIST_P99_LIMIT_NS ||
-            clean_list_compiled != 0U;
-        bool compile_all_regression =
-            compile_all_cold_ns > PERF_SYN_COMPILE_ALL_LIMIT_NS;
-        bool warm_all_regression =
-            all_warm_load_ns > PERF_SYN_WARM_ALL_LIMIT_NS;
-        bool runtime_size_regression =
-            runtime_data_bytes > PERF_SYN_RUNTIME_LIMIT_BYTES;
-        bool block_regression = block.p99 > PERF_SYN_BLOCK_LIMIT_NS;
-        bool multiline_regression =
-            block_multiline.p99 > PERF_SYN_BLOCK_LIMIT_NS;
+        const char *verdict[SYN_ROW_COUNT];
 
+        for (int i = 0; i < SYN_ROW_COUNT; i++) {
+            SynCheck check = summary_check(&r, (SynRow)i);
+
+            verdict[i] = syn_check_verdict(&check, advisory);
+            if (syn_check_failed(&check, advisory))
+                regression_seen = true;
+        }
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      "detect_10000",
-                     (unsigned long long)detect.median,
-                     (unsigned long long)detect.p99,
-                     detect_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.detect.median,
+                     (unsigned long long)r.detect.p99,
+                     verdict[SYN_ROW_DETECT]);
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      "ini_compile_cold",
-                     (unsigned long long)compile.median,
-                     (unsigned long long)compile.p99,
-                     compile_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.compile.median,
+                     (unsigned long long)r.compile.p99,
+                     verdict[SYN_ROW_COMPILE]);
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      "ini_cache_warm",
-                     (unsigned long long)cache.median,
-                     (unsigned long long)cache.p99,
-                     cache_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.cache.median,
+                     (unsigned long long)r.cache.p99,
+                     verdict[SYN_ROW_CACHE]);
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu "
                      "compiled_max=%llu%s\n", "all_defs_warm_start",
-                     (unsigned long long)warm_start.median,
-                     (unsigned long long)warm_start.p99,
-                     (unsigned long long)warm_start_compiled_max,
-                     warm_start_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.warm_start.median,
+                     (unsigned long long)r.warm_start.p99,
+                     (unsigned long long)r.warm_start_compiled_max,
+                     verdict[SYN_ROW_WARM_START]);
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu "
                      "compiled=%llu%s\n", "clean_list_48",
-                     (unsigned long long)clean_list.median,
-                     (unsigned long long)clean_list.p99,
-                     (unsigned long long)clean_list_compiled,
-                     clean_list_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.clean_list.median,
+                     (unsigned long long)r.clean_list.p99,
+                     (unsigned long long)r.clean_list_compiled,
+                     verdict[SYN_ROW_CLEAN_LIST]);
         (void)printf("syn.%-20s total_ns=%llu%s\n", "compile_all_cold",
-                     (unsigned long long)compile_all_cold_ns,
-                     compile_all_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.compile_all_cold_ns,
+                     verdict[SYN_ROW_COMPILE_ALL]);
         (void)printf("syn.%-20s total_ns=%llu%s\n", "all_warm_loads",
-                     (unsigned long long)all_warm_load_ns,
-                     warm_all_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.all_warm_load_ns,
+                     verdict[SYN_ROW_WARM_ALL]);
         (void)printf("syn.%-20s bytes=%llu limit=%llu%s\n",
                      "runtime_syntax_data",
-                     (unsigned long long)runtime_data_bytes,
+                     (unsigned long long)r.runtime_data_bytes,
                      (unsigned long long)PERF_SYN_RUNTIME_LIMIT_BYTES,
-                     runtime_size_regression ? " REGRESSION" : " ok");
+                     verdict[SYN_ROW_RUNTIME_SIZE]);
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu "
                      "line_calls_max=%llu%s\n",
                      "block_provider_64k",
-                     (unsigned long long)block.median,
-                     (unsigned long long)block.p99,
-                     (unsigned long long)block_line_calls,
-                     block_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.block.median,
+                     (unsigned long long)r.block.p99,
+                     (unsigned long long)r.block_line_calls,
+                     verdict[SYN_ROW_BLOCK]);
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu "
                      "line_calls_max=%llu%s\n",
                      "block_multiline_100k",
-                     (unsigned long long)block_multiline.median,
-                     (unsigned long long)block_multiline.p99,
-                     (unsigned long long)block_multiline_calls,
-                     multiline_regression ? " REGRESSION" : " ok");
+                     (unsigned long long)r.block_multiline.median,
+                     (unsigned long long)r.block_multiline.p99,
+                     (unsigned long long)r.block_multiline_calls,
+                     verdict[SYN_ROW_BLOCK_MULTILINE]);
         {
-            bool comment_view_regression =
-                comment_first_frames != 1U ||
-                comment_first_max_us > YEW_SYN_FRAME_BUDGET_US;
-            bool comment_idle_regression =
-                comment_idle_frames == 0U ||
-                comment_idle_max_us > YEW_SYN_IDLE_BUDGET_US ||
-                comment_idle_total_us > PERF_SYN_COMMENT_TOTAL_US ||
-                comment_wall_ns > UINT64_C(400000000);
-            bool scroll_regression =
-                markdown_wrap_fps < PERF_SYN_SCROLL_MIN_FPS;
-            bool scroll_profile_phase_regression = false;
-            bool scroll_profile_timing_regression = false;
-            ScrollProfileVerdict scroll_verdict;
-            bool whole_regression = whole_total_ns > UINT64_C(45000000) ||
-                                    whole_max_frame_ns > UINT64_C(1000000);
-            bool state_regression =
-                comment_state_capacity_bytes > PERF_SYN_STATE_LIMIT_BYTES ||
-                comment_state_rss_growth > PERF_SYN_STATE_LIMIT_BYTES;
-            bool all_state_regression =
-                all_state_capacity_bytes > all_state_limit_bytes;
-            bool embed_pump_regression =
-                md_embed_idle_ticks > 8U || md_embed_loads != 8U ||
-                md_embed_pump_max_ns > UINT64_C(2000000) ||
-                md_embed_states > 2500U;
-            bool inline_scan_regression =
-                html_plain_scan_ns == 0U ||
-                html_scan_ratio_bp > PERF_SYN_HTML_RATIO_LIMIT;
-            bool definition_switch_regression =
-                definition_switch_ns > 250U;
-            bool make_embed_regression =
-                make_embed_idle_ticks > 1U || make_embed_loads != 1U ||
-                make_embed_pump_max_ns > UINT64_C(2000000) ||
-                make_embed_line.median > 3000U ||
-                make_embed_line.p99 > 12000U ||
-                make_embed_view.p99 > PERF_SYN_VIEW_200_LIMIT_NS;
-
             for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
-                bool fixture_scroll_regression =
-                    scroll_fps[i] < PERF_SYN_SCROLL_MIN_FPS;
+                SynCheck fps = {false, false, false};
 
+                syn_check_throughput(&fps, scroll_fps[i],
+                                     PERF_SYN_SCROLL_MIN_FPS);
                 (void)printf("syn.scroll_%-13s fps=%.2f%s\n",
                              frozen[i].spec->stem, scroll_fps[i],
-                             fixture_scroll_regression ? " REGRESSION" :
-                                                         " ok");
-                if (fixture_scroll_regression)
-                    scroll_regression = true;
+                             syn_check_verdict(&fps, advisory));
+                if (syn_check_failed(&fps, advisory))
+                    regression_seen = true;
             }
-            scroll_verdict = report_scroll_profiles(scroll_profile,
-                                                     advisory);
-            scroll_profile_phase_regression =
-                scroll_verdict.phase_regression;
-            scroll_profile_timing_regression =
-                scroll_verdict.timing_regression;
+            if (report_scroll_profiles(scroll_profile, advisory))
+                regression_seen = true;
             {
                 size_t worst_line = PERF_SYN_S42_5_FIRST;
                 size_t worst_edit = PERF_SYN_S42_5_FIRST;
@@ -3630,88 +3816,73 @@ int main(int argc, char **argv)
 
             (void)printf("syn.%-20s frames=%llu fake_max_frame_us=%llu%s\n",
                          "comment_view",
-                         (unsigned long long)comment_first_frames,
-                         (unsigned long long)comment_first_max_us,
-                         comment_view_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.comment_first_frames,
+                         (unsigned long long)r.comment_first_max_us,
+                         verdict[SYN_ROW_COMMENT_VIEW]);
             (void)printf("syn.%-20s frames=%llu fake_total_us=%llu "
                          "fake_max_frame_us=%llu wall_ns=%llu%s\n",
                          "comment_idle",
-                         (unsigned long long)comment_idle_frames,
-                         (unsigned long long)comment_idle_total_us,
-                         (unsigned long long)comment_idle_max_us,
-                         (unsigned long long)comment_wall_ns,
-                         comment_idle_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.comment_idle_frames,
+                         (unsigned long long)r.comment_idle_total_us,
+                         (unsigned long long)r.comment_idle_max_us,
+                         (unsigned long long)r.comment_wall_ns,
+                         verdict[SYN_ROW_COMMENT_IDLE]);
             (void)printf("syn.%-20s line_calls_max=%llu%s\n",
                          "theme_switch_calls",
-                         (unsigned long long)theme_line_calls,
-                         theme_line_calls == 0U ? " ok" : " REGRESSION");
+                         (unsigned long long)r.theme_line_calls,
+                         verdict[SYN_ROW_THEME_CALLS]);
             (void)printf("syn.%-20s wrap_fps=%.2f%s\n",
-                         "markdown_scroll", markdown_wrap_fps,
-                         scroll_regression ? " REGRESSION" : " ok");
+                         "markdown_scroll", r.markdown_wrap_fps,
+                         verdict[SYN_ROW_MARKDOWN_SCROLL]);
             (void)printf("syn.%-20s frames=%llu total_ns=%llu "
                          "max_frame_ns=%llu%s\n", "whole_json_settle",
-                         (unsigned long long)whole_frames,
-                         (unsigned long long)whole_total_ns,
-                         (unsigned long long)whole_max_frame_ns,
-                         whole_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.whole_frames,
+                         (unsigned long long)r.whole_total_ns,
+                         (unsigned long long)r.whole_max_frame_ns,
+                         verdict[SYN_ROW_WHOLE_SETTLE]);
             (void)printf("syn.%-20s logical_bytes=%llu capacity_bytes=%llu "
                          "rss_growth_bytes=%llu%s\n", "comment_state",
-                         (unsigned long long)comment_state_logical_bytes,
-                         (unsigned long long)comment_state_capacity_bytes,
-                         (unsigned long long)comment_state_rss_growth,
-                         state_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.comment_state_logical_bytes,
+                         (unsigned long long)r.comment_state_capacity_bytes,
+                         (unsigned long long)r.comment_state_rss_growth,
+                         verdict[SYN_ROW_COMMENT_STATE]);
             (void)printf("syn.%-20s capacity_bytes=%llu limit_bytes=%llu%s\n",
                          "all_fixture_state",
-                         (unsigned long long)all_state_capacity_bytes,
-                         (unsigned long long)all_state_limit_bytes,
-                         all_state_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.all_state_capacity_bytes,
+                         (unsigned long long)r.all_state_limit_bytes,
+                         verdict[SYN_ROW_ALL_STATE]);
             (void)printf("syn.%-20s idle_ticks=%llu loads=%llu "
                          "states=%llu max_pump_ns=%llu%s\n",
                          "md_embed_pump",
-                         (unsigned long long)md_embed_idle_ticks,
-                         (unsigned long long)md_embed_loads,
-                         (unsigned long long)md_embed_states,
-                         (unsigned long long)md_embed_pump_max_ns,
-                         embed_pump_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.md_embed_idle_ticks,
+                         (unsigned long long)r.md_embed_loads,
+                         (unsigned long long)r.md_embed_states,
+                         (unsigned long long)r.md_embed_pump_max_ns,
+                         verdict[SYN_ROW_MD_EMBED]);
             (void)printf("syn.%-20s line_median_ns=%llu line_p99_ns=%llu "
                          "view_p99_ns=%llu idle_ticks=%llu loads=%llu "
                          "max_pump_ns=%llu%s\n",
                          "make_embed_resident",
-                         (unsigned long long)make_embed_line.median,
-                         (unsigned long long)make_embed_line.p99,
-                         (unsigned long long)make_embed_view.p99,
-                         (unsigned long long)make_embed_idle_ticks,
-                         (unsigned long long)make_embed_loads,
-                         (unsigned long long)make_embed_pump_max_ns,
-                         make_embed_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.make_embed_line.median,
+                         (unsigned long long)r.make_embed_line.p99,
+                         (unsigned long long)r.make_embed_view.p99,
+                         (unsigned long long)r.make_embed_idle_ticks,
+                         (unsigned long long)r.make_embed_loads,
+                         (unsigned long long)r.make_embed_pump_max_ns,
+                         verdict[SYN_ROW_MAKE_EMBED]);
             (void)printf("syn.%-20s embedded_ns=%llu plain_ns=%llu "
                          "ratio_bp=%llu%s\n",
                          "html_inline_scan",
-                         (unsigned long long)html_embed_scan_ns,
-                         (unsigned long long)html_plain_scan_ns,
-                         (unsigned long long)html_scan_ratio_bp,
-                         inline_scan_regression ? " REGRESSION" : " ok");
+                         (unsigned long long)r.html_embed_scan_ns,
+                         (unsigned long long)r.html_plain_scan_ns,
+                         (unsigned long long)r.html_scan_ratio_bp,
+                         verdict[SYN_ROW_HTML_SCAN]);
             (void)printf("syn.%-20s amortized_ns=%llu%s\n",
                          "definition_switch",
-                         (unsigned long long)definition_switch_ns,
-                         definition_switch_regression ? " REGRESSION" :
-                                                        " ok");
-            if (comment_view_regression || comment_idle_regression ||
-                scroll_regression || whole_regression || state_regression ||
-                all_state_regression || embed_pump_regression ||
-                make_embed_regression || inline_scan_regression ||
-                definition_switch_regression ||
-                scroll_profile_phase_regression ||
-                scroll_profile_timing_regression)
-                regression_seen = true;
+                         (unsigned long long)r.definition_switch_ns,
+                         verdict[SYN_ROW_DEFINITION_SWITCH]);
         }
-        if (detect_regression || compile_regression || cache_regression ||
-            warm_start_regression || clean_list_regression ||
-            compile_all_regression || warm_all_regression ||
-            runtime_size_regression || block_regression ||
-            multiline_regression)
-            regression_seen = true;
-        status = gate_status(regression_seen, advisory);
+        status = regression_seen ? 1 : 0;
     }
     if (status == 2)
         (void)fprintf(stderr, "perf_syn: measurement failed\n");
