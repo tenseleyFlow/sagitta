@@ -3284,6 +3284,454 @@ static SynCheck summary_check(const SynSummary *s, SynRow row)
     return check;
 }
 
+/* A summary in which every row passes in both modes. */
+static void selftest_clean_summary(SynSummary *s)
+{
+    (void)memset(s, 0, sizeof(*s));
+    s->detect = (Timing){1000U, 1000U};
+    s->compile = (Timing){1000U, 1000U};
+    s->cache = (Timing){1000U, 1000U};
+    s->warm_start = (Timing){1000U, 1000U};
+    s->clean_list = (Timing){1000U, 1000U};
+    s->block = (Timing){1000U, 1000U};
+    s->block_multiline = (Timing){1000U, 1000U};
+    s->make_embed_line = (Timing){1000U, 1000U};
+    s->make_embed_view = (Timing){1000U, 1000U};
+    s->block_line_calls = PERF_SYN_BLOCK_MAX_LINE_CALLS;
+    s->block_multiline_calls = PERF_SYN_BLOCK_MAX_LINE_CALLS;
+    s->comment_first_max_us = YEW_SYN_FRAME_BUDGET_US;
+    s->comment_first_frames = 1U;
+    s->comment_idle_total_us = PERF_SYN_COMMENT_TOTAL_US;
+    s->comment_idle_max_us = YEW_SYN_IDLE_BUDGET_US;
+    s->comment_idle_frames = 1U;
+    s->comment_state_capacity_bytes = PERF_SYN_STATE_LIMIT_BYTES;
+    s->comment_state_rss_growth = PERF_SYN_STATE_LIMIT_BYTES;
+    s->comment_wall_ns = 1000U;
+    s->whole_total_ns = 1000U;
+    s->whole_frames = 1U;
+    s->markdown_wrap_fps = PERF_SYN_SCROLL_MIN_FPS;
+    s->all_state_capacity_bytes = 1000U;
+    s->all_state_limit_bytes = 1000U;
+    s->warm_start_compiled_max = 1U;
+    s->compile_all_cold_ns = 1000U;
+    s->all_warm_load_ns = 1000U;
+    s->runtime_data_bytes = PERF_SYN_RUNTIME_LIMIT_BYTES;
+    s->md_embed_idle_ticks = 8U;
+    s->md_embed_loads = 8U;
+    s->md_embed_states = 2500U;
+    s->make_embed_idle_ticks = 1U;
+    s->make_embed_loads = 1U;
+    s->html_embed_scan_ns = 1000U;
+    s->html_plain_scan_ns = 1000U;
+    s->html_scan_ratio_bp = PERF_SYN_HTML_RATIO_LIMIT;
+}
+
+typedef enum SelftestKind {
+    SELFTEST_TIMING,       /* strict fails, advisory warns */
+    SELFTEST_SANITY,       /* fails in both modes */
+    SELFTEST_CORRECTNESS   /* fails in both modes, never a warning */
+} SelftestKind;
+
+/* Applies breach `which` to a clean summary; false once past the last. */
+static bool selftest_breach(size_t which, SynSummary *s, SynRow *row,
+                            SelftestKind *kind)
+{
+    const u64 x = YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+
+    *kind = SELFTEST_CORRECTNESS;
+    switch (which) {
+    case 0U:
+        s->runtime_data_bytes = PERF_SYN_RUNTIME_LIMIT_BYTES + 1U;
+        *row = SYN_ROW_RUNTIME_SIZE;
+        return true;
+    case 1U:
+        s->theme_line_calls = 1U;
+        *row = SYN_ROW_THEME_CALLS;
+        return true;
+    case 2U:
+        s->warm_start_compiled_max = 2U;
+        *row = SYN_ROW_WARM_START;
+        return true;
+    case 3U:
+        s->clean_list_compiled = 1U;
+        *row = SYN_ROW_CLEAN_LIST;
+        return true;
+    case 4U:
+        s->block_line_calls = PERF_SYN_BLOCK_MAX_LINE_CALLS + 1U;
+        *row = SYN_ROW_BLOCK;
+        return true;
+    case 5U:
+        s->block_multiline_calls = PERF_SYN_BLOCK_MAX_LINE_CALLS + 1U;
+        *row = SYN_ROW_BLOCK_MULTILINE;
+        return true;
+    case 6U:
+        s->comment_first_frames = 2U;
+        *row = SYN_ROW_COMMENT_VIEW;
+        return true;
+    case 7U:
+        s->comment_first_max_us = YEW_SYN_FRAME_BUDGET_US + 1U;
+        *row = SYN_ROW_COMMENT_VIEW;
+        return true;
+    case 8U:
+        s->comment_idle_frames = 0U;
+        *row = SYN_ROW_COMMENT_IDLE;
+        return true;
+    case 9U:
+        s->comment_idle_max_us = YEW_SYN_IDLE_BUDGET_US + 1U;
+        *row = SYN_ROW_COMMENT_IDLE;
+        return true;
+    case 10U:
+        s->comment_idle_total_us = PERF_SYN_COMMENT_TOTAL_US + 1U;
+        *row = SYN_ROW_COMMENT_IDLE;
+        return true;
+    case 11U:
+        s->comment_state_capacity_bytes = PERF_SYN_STATE_LIMIT_BYTES + 1U;
+        *row = SYN_ROW_COMMENT_STATE;
+        return true;
+    case 12U:
+        s->comment_state_rss_growth = PERF_SYN_STATE_LIMIT_BYTES + 1U;
+        *row = SYN_ROW_COMMENT_STATE;
+        return true;
+    case 13U:
+        s->all_state_capacity_bytes = s->all_state_limit_bytes + 1U;
+        *row = SYN_ROW_ALL_STATE;
+        return true;
+    case 14U:
+        s->md_embed_loads = 7U;
+        *row = SYN_ROW_MD_EMBED;
+        return true;
+    case 15U:
+        s->md_embed_idle_ticks = 9U;
+        *row = SYN_ROW_MD_EMBED;
+        return true;
+    case 16U:
+        s->md_embed_states = 2501U;
+        *row = SYN_ROW_MD_EMBED;
+        return true;
+    case 17U:
+        s->make_embed_loads = 0U;
+        *row = SYN_ROW_MAKE_EMBED;
+        return true;
+    case 18U:
+        s->make_embed_idle_ticks = 2U;
+        *row = SYN_ROW_MAKE_EMBED;
+        return true;
+    default:
+        break;
+    }
+    *kind = SELFTEST_TIMING;
+    switch (which) {
+    case 19U:
+        s->detect.p99 = PERF_SYN_DETECT_P99_LIMIT_NS + 1U;
+        *row = SYN_ROW_DETECT;
+        return true;
+    case 20U:
+        s->compile.median = PERF_SYN_COMPILE_LIMIT_NS + 1U;
+        *row = SYN_ROW_COMPILE;
+        return true;
+    case 21U:
+        s->cache.median = PERF_SYN_CACHE_LIMIT_NS + 1U;
+        *row = SYN_ROW_CACHE;
+        return true;
+    case 22U:
+        s->warm_start.p99 = PERF_SYN_WARM_START_LIMIT_NS + 1U;
+        *row = SYN_ROW_WARM_START;
+        return true;
+    case 23U:
+        s->clean_list.median = PERF_SYN_LIST_MEDIAN_LIMIT_NS + 1U;
+        *row = SYN_ROW_CLEAN_LIST;
+        return true;
+    case 24U:
+        s->compile_all_cold_ns = PERF_SYN_COMPILE_ALL_LIMIT_NS + 1U;
+        *row = SYN_ROW_COMPILE_ALL;
+        return true;
+    case 25U:
+        s->all_warm_load_ns = PERF_SYN_WARM_ALL_LIMIT_NS + 1U;
+        *row = SYN_ROW_WARM_ALL;
+        return true;
+    case 26U:
+        s->block_multiline.p99 = PERF_SYN_BLOCK_LIMIT_NS + 1U;
+        *row = SYN_ROW_BLOCK_MULTILINE;
+        return true;
+    case 27U:
+        s->comment_wall_ns = UINT64_C(400000001);
+        *row = SYN_ROW_COMMENT_IDLE;
+        return true;
+    case 28U:
+        s->markdown_wrap_fps = PERF_SYN_SCROLL_MIN_FPS - 1.0;
+        *row = SYN_ROW_MARKDOWN_SCROLL;
+        return true;
+    case 29U:
+        s->whole_max_frame_ns = UINT64_C(1000001);
+        *row = SYN_ROW_WHOLE_SETTLE;
+        return true;
+    case 30U:
+        s->md_embed_pump_max_ns = UINT64_C(2000001);
+        *row = SYN_ROW_MD_EMBED;
+        return true;
+    case 31U:
+        s->make_embed_view.p99 = PERF_SYN_VIEW_200_LIMIT_NS + 1U;
+        *row = SYN_ROW_MAKE_EMBED;
+        return true;
+    case 32U:
+        s->html_scan_ratio_bp = PERF_SYN_HTML_RATIO_LIMIT + 1U;
+        *row = SYN_ROW_HTML_SCAN;
+        return true;
+    case 33U:
+        s->definition_switch_ns = 251U;
+        *row = SYN_ROW_DEFINITION_SWITCH;
+        return true;
+    default:
+        break;
+    }
+    *kind = SELFTEST_SANITY;
+    switch (which) {
+    case 34U:
+        s->detect.median = 0U;
+        *row = SYN_ROW_DETECT;
+        return true;
+    case 35U:
+        s->compile_all_cold_ns = PERF_SYN_COMPILE_ALL_LIMIT_NS * x + 1U;
+        *row = SYN_ROW_COMPILE_ALL;
+        return true;
+    case 36U:
+        s->block.p99 = PERF_SYN_BLOCK_LIMIT_NS * x + 1U;
+        *row = SYN_ROW_BLOCK;
+        return true;
+    case 37U:
+        s->markdown_wrap_fps = PERF_SYN_SCROLL_MIN_FPS / (double)x - 0.01;
+        *row = SYN_ROW_MARKDOWN_SCROLL;
+        return true;
+    case 38U:
+        s->whole_total_ns = 0U;
+        *row = SYN_ROW_WHOLE_SETTLE;
+        return true;
+    case 39U:
+        s->html_plain_scan_ns = 0U;
+        *row = SYN_ROW_HTML_SCAN;
+        return true;
+    case 40U:
+        s->definition_switch_ns = 250U * x + 1U;
+        *row = SYN_ROW_DEFINITION_SWITCH;
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool selftest_expect(const char *what, const SynCheck *check,
+                            bool strict_fails, bool advisory_fails,
+                            const char *advisory_verdict)
+{
+    bool ok = syn_check_failed(check, false) == strict_fails &&
+              syn_check_failed(check, true) == advisory_fails &&
+              strcmp(syn_check_verdict(check, true), advisory_verdict) == 0;
+
+    if (!ok)
+        (void)printf("FAIL policy: %s -> strict %s, advisory %s%s\n", what,
+                     syn_check_failed(check, false) ? "fails" : "passes",
+                     syn_check_failed(check, true) ? "fails" : "passes",
+                     syn_check_verdict(check, true));
+    return ok;
+}
+
+static int selftest_policy(void)
+{
+    const u64 budget = PERF_SYN_VIEW_24_LIMIT_NS;
+    const u64 ceiling = budget * YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+    const double min_fps = PERF_SYN_SCROLL_MIN_FPS;
+    const double x = (double)YEW_PERF_ADVISORY_SANITY_MULTIPLIER;
+    size_t failures = 0U;
+    size_t checks = 0U;
+    SynSummary clean;
+    ScrollProfile profile;
+    PerfCase theme = {"theme_switch_200x50", {1000U, 1000U}, {0U, 0U}};
+
+    /* The helpers at, just over, and beyond the advisory ceiling. */
+    {
+        static const struct {
+            u64 value;
+            bool sample;
+            bool strict_fails;
+            bool advisory_fails;
+            const char *verdict;
+        } cases[] = {
+            {1U, false, false, false, " ok"},
+            {0U, false, true, true, " SANITY-FAIL"},
+            {0U, true, false, false, " ok"},
+            {PERF_SYN_VIEW_24_LIMIT_NS, false, false, false, " ok"},
+            {PERF_SYN_VIEW_24_LIMIT_NS + 1U, false, true, false, " WARN"},
+            {PERF_SYN_VIEW_24_LIMIT_NS + 1U, true, true, false, " WARN"},
+            {PERF_SYN_VIEW_24_LIMIT_NS * 100U, false, true, false, " WARN"},
+            {PERF_SYN_VIEW_24_LIMIT_NS * 100U, true, true, false, " WARN"},
+            {PERF_SYN_VIEW_24_LIMIT_NS * 100U + 1U, false, true, true,
+             " SANITY-FAIL"},
+            {PERF_SYN_VIEW_24_LIMIT_NS * 100U + 1U, true, true, true,
+             " SANITY-FAIL"}
+        };
+
+        _Static_assert(YEW_PERF_ADVISORY_SANITY_MULTIPLIER == 100,
+                       "selftest table assumes the 100x sanity bound");
+        for (size_t i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+            SynCheck check = {false, false, false};
+
+            if (cases[i].sample)
+                syn_check_sample(&check, cases[i].value, budget);
+            else
+                syn_check_timing(&check, cases[i].value, budget);
+            checks++;
+            if (!selftest_expect(cases[i].sample ? "sample" : "timing",
+                                 &check, cases[i].strict_fails,
+                                 cases[i].advisory_fails, cases[i].verdict))
+                failures++;
+        }
+        if (ceiling != PERF_SYN_VIEW_24_LIMIT_NS * 100U)
+            failures++;
+    }
+    {
+        static const struct {
+            double scale;
+            double offset;
+            bool strict_fails;
+            bool advisory_fails;
+            const char *verdict;
+        } cases[] = {
+            {1.0, 0.0, false, false, " ok"},
+            {1.0, -0.01, true, false, " WARN"},
+            {0.01, 0.0, true, false, " WARN"},
+            {0.01, -0.001, true, true, " SANITY-FAIL"},
+            {0.0, 0.0, true, true, " SANITY-FAIL"}
+        };
+
+        for (size_t i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+            SynCheck check = {false, false, false};
+
+            syn_check_throughput(&check,
+                                 min_fps * cases[i].scale + cases[i].offset,
+                                 min_fps);
+            checks++;
+            if (!selftest_expect("throughput", &check,
+                                 cases[i].strict_fails,
+                                 cases[i].advisory_fails, cases[i].verdict))
+                failures++;
+        }
+    }
+    {
+        SynCheck check = {false, false, false};
+
+        syn_check_correct(&check, true);
+        checks++;
+        if (!selftest_expect("correctness", &check, true, true,
+                             " REGRESSION"))
+            failures++;
+        syn_check_sample(&check, budget + 1U, budget);
+        checks++;
+        if (!selftest_expect("correctness with timing", &check, true, true,
+                             " REGRESSION"))
+            failures++;
+    }
+
+    /* The per-case decision: theme_line_calls is hard, the p99 timing. */
+    {
+        SynCheck check = case_check(CASE_THEME_SWITCH, &theme,
+                                    PERF_SYN_GATE_BUDGETS, 1U);
+
+        checks += 4U;
+        if (!selftest_expect("theme_line_calls", &check, true, true,
+                             " REGRESSION"))
+            failures++;
+        theme.measured.p99 = PERF_SYN_THEME_LIMIT_NS + 1U;
+        check = case_check(CASE_THEME_SWITCH, &theme, PERF_SYN_GATE_BUDGETS,
+                           0U);
+        if (!selftest_expect("theme p99", &check, true, false, " WARN"))
+            failures++;
+        theme.measured.p99 = PERF_SYN_THEME_LIMIT_NS *
+                             YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U;
+        check = case_check(CASE_THEME_SWITCH, &theme, PERF_SYN_GATE_BUDGETS,
+                           0U);
+        if (!selftest_expect("theme p99 beyond sanity", &check, true, true,
+                             " SANITY-FAIL"))
+            failures++;
+        theme.measured = (Timing){0U, 1000U};
+        theme.baseline = (Timing){65U, 70U};
+        check = case_check(CASE_LINE_CAP, &theme, PERF_SYN_GATE_FULL, 0U);
+        if (!selftest_expect("relative p99", &check, true, false, " WARN"))
+            failures++;
+    }
+
+    /* The scroll-profile decision: fps and both phase shares are timing. */
+    (void)memset(&profile, 0, sizeof(profile));
+    profile.fps_milli = (u64)(min_fps * 1000.0);
+    {
+        SynCheck check;
+
+        checks += 4U;
+        for (int part = SCROLL_PART_THROUGHPUT;
+             part <= SCROLL_PART_SYNTAX_SHARE; part++) {
+            check = scroll_profile_check(&profile, (ScrollProfilePart)part);
+            if (!selftest_expect("scroll profile clean", &check, false,
+                                 false, " ok"))
+                failures++;
+        }
+        profile.render_permille = PERF_SYN_SCROLL_RENDER_LIMIT_PERMILLE + 1U;
+        check = scroll_profile_check(&profile, SCROLL_PART_RENDER_SHARE);
+        if (!selftest_expect("render share", &check, true, false, " WARN"))
+            failures++;
+        profile.syn_permille = PERF_SYN_SCROLL_SYN_LIMIT_PERMILLE *
+                               YEW_PERF_ADVISORY_SANITY_MULTIPLIER + 1U;
+        check = scroll_profile_check(&profile, SCROLL_PART_SYNTAX_SHARE);
+        checks++;
+        if (!selftest_expect("syntax share beyond sanity", &check, true,
+                             true, " SANITY-FAIL"))
+            failures++;
+        profile.fps_milli = (u64)(min_fps / x * 1000.0) - 1U;
+        check = scroll_profile_check(&profile, SCROLL_PART_THROUGHPUT);
+        checks++;
+        if (!selftest_expect("scroll fps beyond sanity", &check, true, true,
+                             " SANITY-FAIL"))
+            failures++;
+    }
+
+    /* Every summary row, clean and then with each breach in turn. */
+    selftest_clean_summary(&clean);
+    for (int row = 0; row < SYN_ROW_COUNT; row++) {
+        SynCheck check = summary_check(&clean, (SynRow)row);
+
+        checks++;
+        if (!selftest_expect("clean summary row", &check, false, false,
+                             " ok"))
+            failures++;
+    }
+    for (size_t which = 0U;; which++) {
+        SynSummary s = clean;
+        SynRow row = SYN_ROW_COUNT;
+        SelftestKind kind;
+        SynCheck check;
+        char what[64];
+
+        if (!selftest_breach(which, &s, &row, &kind))
+            break;
+        check = summary_check(&s, row);
+        (void)snprintf(what, sizeof(what), "summary breach %lu",
+                       (unsigned long)which);
+        checks++;
+        if (!selftest_expect(what, &check, true, kind != SELFTEST_TIMING,
+                             kind == SELFTEST_TIMING ? " WARN" :
+                             kind == SELFTEST_SANITY ? " SANITY-FAIL" :
+                                                       " REGRESSION"))
+            failures++;
+    }
+
+    if (failures != 0U) {
+        (void)printf("perf-syn-policy: %lu of %lu checks wrong\n",
+                     (unsigned long)failures, (unsigned long)checks);
+        return 1;
+    }
+    (void)printf("perf-syn-policy: strict/advisory/sanity/correctness ok "
+                 "(%lu checks)\n", (unsigned long)checks);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
@@ -3300,6 +3748,8 @@ int main(int argc, char **argv)
         return detect_probe();
     if (argc == 2 && strcmp(argv[1], "--selftest-gate") == 0)
         return selftest_gate();
+    if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
+        return selftest_policy();
     if (argc == 2 && strncmp(argv[1], "--probe-legacy-line=", 20U) == 0)
         return probe_legacy_line(argv[1] + 20U, false);
     if (argc == 2 && strncmp(argv[1], "--probe-resident-line=", 22U) == 0)
@@ -3314,7 +3764,8 @@ int main(int argc, char **argv)
         (void)fprintf(stderr,
                       "usage: perf_syn [--gate|--gate-budgets|"
                       "--gate-scroll-s56|"
-                      "--selftest-gate|--probe-legacy-line=STEM|"
+                      "--selftest-gate|--selftest-policy|"
+                      "--probe-legacy-line=STEM|"
                       "--probe-resident-line=STEM|"
                       "--probe-legacy-edit=STEM]\n");
         return 2;
