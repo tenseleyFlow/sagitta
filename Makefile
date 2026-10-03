@@ -2900,6 +2900,7 @@ perf-record: $(BUILD)/perf_record
 		$(BUILD)/perf_record $(if $(filter 1,$(PERF_GATE)),--gate,)
 
 perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
+	$(BUILD)/perf_syn --selftest-policy
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_syn --gate
 
 perf-syn-scroll-s56: $(BUILD)/perf_syn $(BUILD)/yew
@@ -2980,7 +2981,7 @@ PERF_POLICY_SELFTEST_BINS := perf_unicode perf_render perf_scroll \
         perf_piece perf_units perf_state perf_finder perf_mouse \
         perf_record perf_batch perf_jobstream perf_re_pathological \
         perf_re_throughput perf_search_latency perf_cursor perf_insert \
-        perf_multicursor perf_cmdcomp perf_symidx \
+        perf_multicursor perf_cmdcomp perf_symidx perf_syn \
         $(if $(filter fuss,$(MODULES)),perf_git_status perf_fuss \
                                        perf_git_gutter) \
         $(if $(filter lsp,$(MODULES)),perf_lsp) \
