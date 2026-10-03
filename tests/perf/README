@@ -135,7 +135,12 @@ and `perf-jobstream-selftest` prove on live runs that a strict gate rejects
 an injected delay that advisory mode warns about, and the batch selftest
 lowers its budget so the same delay crosses the sanity ceiling. One
 timing-derived check stays hard in both modes because machine speed cancels
-out of it: `re_pathological`'s 10^4-to-10^5 scaling ratio.
+out of it: `re_pathological`'s 10^4-to-10^5 scaling ratio. `perf_syn`'s
+html embedded/plain scan ratio is not such a check: its 8 percent headroom
+sits inside a shared runner's noise, so it is timing, as are its scroll
+phase shares (measured nanoseconds over a fixed frame budget). Its
+comment-bomb frame microseconds come from an injected clock and, with its
+call, load, tick, byte and state counts, stay hard in both modes.
 
 `make calib` performs three warmup-discarded, median-of-11 measurements for
 pointer-chase latency, branchy scalar work, and memory bandwidth. Calibrated
