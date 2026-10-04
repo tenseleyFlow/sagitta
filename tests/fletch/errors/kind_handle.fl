@@ -1,0 +1,18 @@
+# SPEC: §9, §16
+# COVERS: kind:handle set
+# ERROR_KIND: handle
+# ERROR: no editor
+# EXIT: 1
+# Amendment A2 added "handle" for an editor object a script cannot
+# resolve.  `set({})` from a headless run is the shape fuzz_fl_vm hit
+# (seed 20261003): a well-typed call with no editor to apply it to.  It
+# raises the documented kind, catchably, rather than some kind outside
+# §9.1's thirteen -- and uncaught it exits 1.
+import io
+try {
+    set({})
+} catch e {
+    # OUT: handle
+    io.print(e.kind)
+}
+set({})
