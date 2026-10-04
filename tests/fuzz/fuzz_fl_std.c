@@ -10,7 +10,7 @@
  * fuzzed the day it lands, which is what DoD 3's "no gaps" is about.
  *
  * THE PROPERTY: no crash, no over-read, and every outcome is either a
- * value or a raise whose kind is one of §9's twelve.  A native that
+ * value or a raise whose kind is one of §9.1's thirteen.  A native that
  * returned false without setting an error, or set a kind outside the
  * closed set, is a native whose failure a `catch` cannot classify.
  *
@@ -19,6 +19,7 @@
  * well-formed text would fuzz the easy half.
  */
 #include "fuzzlib.h"
+#include "fl_kinds.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -36,22 +37,6 @@ enum {
     FL_STD_FUZZ_MAX_INPUT = 4096U,
     FL_STD_FUZZ_MAX_ARGS = 5U
 };
-
-/* §9.1, closed for 1.0.  Amendment A1 added "limit". */
-static bool known_kind(const char *k)
-{
-    static const char *const KINDS[] = {
-        "type", "arity", "name", "index", "key", "div",
-        "capability", "io", "import", "motion", "user", "limit"
-    };
-    size_t i;
-
-    for (i = 0U; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
-        if (strcmp(k, KINDS[i]) == 0)
-            return true;
-    }
-    return false;
-}
 
 /* The `kind` of the in-flight error, or "" when there is none. */
 static void err_kind(FlVm *vm, char *out, size_t cap)
@@ -105,7 +90,7 @@ static bool call_native(FlVm *vm, FlNative *nat, const FlValue *args,
                            nm == NULL ? "?" : nm);
             return false;
         }
-        if (!known_kind(kind)) {
+        if (!yew_fl_fuzz_spec_kind(kind)) {
             (void)snprintf(why, why_cap, "%s raised unknown kind '%s'",
                            nm == NULL ? "?" : nm, kind);
             return false;
@@ -305,7 +290,7 @@ static bool sweep_template(FlVm *vm, const u8 *data, size_t len, char *why,
         char kind[64];
 
         err_kind(vm, kind, sizeof(kind));
-        if (!known_kind(kind)) {
+        if (!yew_fl_fuzz_spec_kind(kind)) {
             (void)snprintf(why, why_cap, "fmt.f raised unknown kind '%s'",
                            kind);
             return false;
