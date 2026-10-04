@@ -40,6 +40,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "fuzzlib.h"
+#include "fl_kinds.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -74,22 +75,6 @@ static const FlHandleKind FLAPI_KINDS[] = {FL_H_BUF, FL_H_CUR, FL_H_SPAN,
 static bool allowed_kind(const char *k)
 {
     return strcmp(k, "handle") == 0 || strcmp(k, "type") == 0;
-}
-
-static bool spec_kind(const char *k)
-{
-    static const char *const kinds[] = {
-        "type", "arity", "name", "index", "key", "div",
-        "capability", "io", "import", "motion", "user", "limit",
-        "handle"
-    };
-    size_t i;
-
-    for (i = 0U; i < YEW_ARRAY_LEN(kinds); i++) {
-        if (strcmp(k, kinds[i]) == 0)
-            return true;
-    }
-    return false;
 }
 
 static void raised_kind(FlVm *vm, char *out, size_t cap)
@@ -246,7 +231,7 @@ static bool fuzz_ed_run(FlVm *vm, Ed *ed, const u8 *data, size_t len,
     }
     if (!invoked) {
         raised_kind(vm, kind, sizeof(kind));
-        if (!spec_kind(kind)) {
+        if (!yew_fl_fuzz_spec_kind(kind)) {
             (void)snprintf(why, cap, "ed.run failed with '%s'",
                            kind[0] == '\0' ? "(none)" : kind);
             fl_gc_release(vm, 2U);
