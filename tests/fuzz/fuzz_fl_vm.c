@@ -10,7 +10,7 @@
  * The per-input invariants, all of them checked rather than assumed:
  *
  *   - the run ends in exactly one outcome: a value, or a raise whose
- *     kind is one of §9's twelve;
+ *     kind is one of §9.1's thirteen (fl_kinds.h);
  *   - AFTER AN UNCAUGHT RAISE THE VM IS REUSABLE -- sp back at the
  *     stack floor, no frames, no handlers.  The unwinder leaving one
  *     behind is invisible until the next program returns into a dead
@@ -21,6 +21,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "fuzzlib.h"
+#include "fl_kinds.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -39,22 +40,6 @@ enum {
      * pathological loop is cut off in milliseconds. */
     FL_VM_FUZZ_STEPS = 5000000
 };
-
-/* §9.1, closed for 1.0.  Amendment A1 added "limit". */
-static bool known_kind(const char *k)
-{
-    static const char *const KINDS[] = {
-        "type", "arity", "name", "index", "key", "div",
-        "capability", "io", "import", "motion", "user", "limit"
-    };
-    size_t i;
-
-    for (i = 0U; i < sizeof(KINDS) / sizeof(KINDS[0]); i++) {
-        if (strcmp(k, KINDS[i]) == 0)
-            return true;
-    }
-    return false;
-}
 
 typedef struct Counter {
     u32 n;
@@ -156,7 +141,7 @@ static bool check_fl_vm(const u8 *data, size_t len, char *why, size_t why_cap)
             ok = false;
             goto done;
         }
-        if (!known_kind(kind)) {
+        if (!yew_fl_fuzz_spec_kind(kind)) {
             (void)snprintf(why, why_cap, "raised unknown kind '%s'", kind);
             ok = false;
             goto done;
