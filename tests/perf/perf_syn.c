@@ -19,6 +19,7 @@
 #include "syn/defs.h"
 #include "syn/engine.h"
 #include "syn/langs_gen.h"
+#include "syn/theme.h"
 #include "text/file.h"
 #include "text/piece.h"
 #include "text/undo.h"
@@ -3760,6 +3761,182 @@ static int selftest_policy(void)
     return 0;
 }
 
+/*
+ * --selftest-runtime: perf_syn measures the checkout's runtime and nothing
+ * else.  A decoy install prefix (the prefix seam, standing in for an
+ * installed runtime) holds a deliberately broken python.fl and
+ * quiver-dark theme.  Unpinned, the registry reaches the decoy and fails,
+ * which proves the decoy is live; pinned to the checkout it must load
+ * python and the theme cleanly; pinned to a runtime without python.fl it
+ * must fail rather than fall back to the decoy; and the guard must refuse
+ * an unset or foreign YEW_RUNTIME_DIR.  Registry cases run in fresh
+ * children because a process loads each definition once.
+ */
+static bool runtime_write(const char *dir, const char *leaf,
+                          const char *text)
+{
+    char path[1024];
+    FILE *file;
+    int n = snprintf(path, sizeof(path), "%s/%s", dir, leaf);
+    bool ok;
+
+    if (n <= 0 || (size_t)n >= sizeof(path))
+        return false;
+    file = fopen(path, "wb");
+    if (file == NULL)
+        return false;
+    ok = fputs(text, file) >= 0;
+    return fclose(file) == 0 && ok;
+}
+
+static void runtime_quiet_stderr(void)
+{
+    int fd = open("/dev/null", O_WRONLY);
+
+    if (fd >= 0) {
+        (void)dup2(fd, STDERR_FILENO);
+        (void)close(fd);
+    }
+}
+
+/* In a fresh child: does the registry load python with YEW_RUNTIME_DIR
+ * set to RUNTIME (NULL unsets it)?  1 loaded, 0 not, -1 harness error. */
+static int runtime_child_loads_python(const char *runtime)
+{
+    pid_t pid = fork();
+    pid_t waited;
+    int status;
+
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        runtime_quiet_stderr();
+        if ((runtime == NULL ? unsetenv("YEW_RUNTIME_DIR") :
+                               setenv("YEW_RUNTIME_DIR", runtime, 1)) != 0)
+            _exit(3);
+        _exit(yew_syn_def_for(yew_syn_lang_named("python")) != NULL ? 1 :
+                                                                       0);
+    }
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited != pid || !WIFEXITED(status) || WEXITSTATUS(status) > 1)
+        return -1;
+    return WEXITSTATUS(status);
+}
+
+static bool runtime_guard_accepts(const char *runtime)
+{
+    int saved = dup(STDERR_FILENO);
+    bool ok;
+
+    if (saved < 0)
+        return true;
+    runtime_quiet_stderr();
+    ok = (runtime == NULL ? unsetenv("YEW_RUNTIME_DIR") :
+                            setenv("YEW_RUNTIME_DIR", runtime, 1)) == 0 &&
+         yew_perf_runtime_check("perf_syn");
+    (void)dup2(saved, STDERR_FILENO);
+    (void)close(saved);
+    return ok;
+}
+
+static int selftest_runtime(void)
+{
+    char root[] = "/tmp/yew-perf-runtime-XXXXXX";
+    char decoy[64];
+    char empty[64];
+    char dir[96];
+    const char *pinned = getenv("YEW_RUNTIME_DIR");
+    char *checkout = pinned == NULL ? NULL : strdup(pinned);
+    Arena arena;
+    DiagCtx dc;
+    Theme theme;
+    bool themed;
+    int unpinned;
+    int foreign;
+    int ok_load;
+    int status = 1;
+
+    if (checkout == NULL || mkdtemp(root) == NULL) {
+        free(checkout);
+        return 2;
+    }
+    (void)snprintf(decoy, sizeof(decoy), "%s/decoy", root);
+    (void)snprintf(empty, sizeof(empty), "%s/empty", root);
+    if (mkdir(decoy, 0700) != 0 || mkdir(empty, 0700) != 0)
+        goto done;
+    (void)snprintf(dir, sizeof(dir), "%s/syntax", decoy);
+    if (mkdir(dir, 0700) != 0 ||
+        !runtime_write(dir, "python.fl", "DECOY: not a definition {\n"))
+        goto done;
+    (void)snprintf(dir, sizeof(dir), "%s/themes", decoy);
+    if (mkdir(dir, 0700) != 0 ||
+        !runtime_write(dir, "quiver-dark.fl", "DECOY: not a theme {\n"))
+        goto done;
+    if (setenv("YEW_NO_SYN_CACHE", "1", 1) != 0 ||
+        setenv("XDG_CONFIG_HOME", root, 1) != 0)
+        goto done;
+    yew_syn_discovery_set_bypass(true);
+    yew_runtime_test_set_prefix(decoy);
+
+    unpinned = runtime_child_loads_python(NULL);
+    foreign = runtime_child_loads_python(empty);
+    ok_load = runtime_child_loads_python(checkout);
+    if (setenv("YEW_RUNTIME_DIR", checkout, 1) != 0)
+        goto done;
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    yew_theme_init(&theme);
+    themed = yew_theme_select(&theme, "quiver-dark", NULL, &dc);
+    yew_theme_free(&theme);
+    arena_free_all(&arena);
+
+    status = 0;
+    if (unpinned != 0) {
+        (void)fprintf(stderr, "perf-syn-runtime: unpinned load did not "
+                              "reach the decoy prefix (%d)\n", unpinned);
+        status = 1;
+    }
+    if (foreign != 0) {
+        (void)fprintf(stderr, "perf-syn-runtime: a runtime without "
+                              "python.fl fell back to another copy\n");
+        status = 1;
+    }
+    if (ok_load != 1 || !themed) {
+        (void)fprintf(stderr, "perf-syn-runtime: the pinned checkout "
+                              "runtime did not load (python=%d theme=%d)\n",
+                      ok_load, themed ? 1 : 0);
+        status = 1;
+    }
+    if (runtime_guard_accepts(NULL) || runtime_guard_accepts(decoy) ||
+        !runtime_guard_accepts(checkout)) {
+        (void)fprintf(stderr, "perf-syn-runtime: the guard accepted a "
+                              "runtime other than the checkout's\n");
+        status = 1;
+    }
+    if (setenv("YEW_RUNTIME_DIR", checkout, 1) != 0)
+        status = 2;
+    if (status == 0)
+        (void)printf("perf-syn-runtime: checkout runtime pinned; decoy "
+                     "prefix and foreign runtimes refused ok\n");
+done:
+    yew_runtime_test_set_prefix(YEW_PERF_NO_PREFIX);
+    (void)snprintf(dir, sizeof(dir), "%s/syntax/python.fl", decoy);
+    (void)unlink(dir);
+    (void)snprintf(dir, sizeof(dir), "%s/syntax", decoy);
+    (void)rmdir(dir);
+    (void)snprintf(dir, sizeof(dir), "%s/themes/quiver-dark.fl", decoy);
+    (void)unlink(dir);
+    (void)snprintf(dir, sizeof(dir), "%s/themes", decoy);
+    (void)rmdir(dir);
+    (void)rmdir(decoy);
+    (void)rmdir(empty);
+    (void)rmdir(root);
+    free(checkout);
+    return status;
+}
+
 int main(int argc, char **argv)
 {
     PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
@@ -3781,6 +3958,8 @@ int main(int argc, char **argv)
         return selftest_gate();
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();
+    if (argc == 2 && strcmp(argv[1], "--selftest-runtime") == 0)
+        return selftest_runtime();
     if (argc == 2 && strncmp(argv[1], "--probe-legacy-line=", 20U) == 0)
         return probe_legacy_line(argv[1] + 20U, false);
     if (argc == 2 && strncmp(argv[1], "--probe-resident-line=", 22U) == 0)
@@ -3796,6 +3975,7 @@ int main(int argc, char **argv)
                       "usage: perf_syn [--gate|--gate-budgets|"
                       "--gate-scroll-s56|"
                       "--selftest-gate|--selftest-policy|"
+                      "--selftest-runtime|"
                       "--probe-legacy-line=STEM|"
                       "--probe-resident-line=STEM|"
                       "--probe-legacy-edit=STEM]\n");
