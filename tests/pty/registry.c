@@ -11934,7 +11934,7 @@ static void case_s57_15_chevron_click_scrolls(PtyCtx *c)
         return;
     s57_15_overflowing_strip(c);
     /* The `>N` indicator ends at the last column, whatever N is. */
-    s27_mouse(c, "\x1b[<0;80;1M");
+    s27_mouse_frame(c, "\x1b[<0;80;1M");
     s27_mouse(c, "\x1b[<0;80;1m");
     ptc_snapshot(c, c->test->name);
     force_quit(c);
@@ -12001,12 +12001,12 @@ static void case_s57_14_15_float_over_a_scrolled_strip(PtyCtx *c)
         return;
     s57_15_overflowing_strip(c);
     /* The `>N` indicator ends at the last column, whatever N is. */
-    s27_mouse(c, "\x1b[<0;80;1M");
+    s27_mouse_frame(c, "\x1b[<0;80;1M");
     s27_mouse(c, "\x1b[<0;80;1m");
     /* Press inside the first entry the scrolled strip shows, and carry
      * it to a column that is an entry rather than a chevron. */
     s27_mouse(c, "\x1b[<0;5;1M");
-    s27_mouse(c, "\x1b[<32;40;1M");
+    s27_mouse_frame(c, "\x1b[<32;40;1M");
     ptc_snapshot(c, c->test->name);
     s27_mouse(c, "\x1b[<0;40;1m");
     force_quit(c);
