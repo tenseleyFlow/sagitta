@@ -226,6 +226,38 @@ grep -F "YEW_PERF_ADVISORY=1 $scratch/plan-build/perf_git_gutter --gate" \
     fail 'perf-git-gutter did not receive the advisory policy'
 grep -F -- '--gate-budgets' "$scratch/advisory-component-plan" >/dev/null ||
     fail 'PERF_GATE=0 incorrectly enabled the Fletch relative gate'
+grep -F "$scratch/plan-build/perf_syn --selftest-runtime" \
+    "$scratch/advisory-component-plan" >/dev/null ||
+    fail 'perf-syn did not prove it measures the checkout runtime'
+
+# Every perf target, the top-level suite and their sub-makes measure the
+# checkout's runtime/: the Makefile exports it over whatever the caller
+# set, along with a per-build syntax cache (tests/perf/perf_runtime.h).
+# perf has no prerequisites and perf-env-probe stands for perf-%, so the
+# probe recipes below run without building anything.
+for target in perf perf-env-probe; do
+    env=$(printf '%s:\n\t@echo "$$YEW_RUNTIME_DIR $$XDG_CACHE_HOME"\n' \
+            "$target" |
+        YEW_RUNTIME_DIR=/usr/local/share/yew/runtime \
+        XDG_CACHE_HOME=$scratch/user-cache \
+        make -C "$repo" --no-print-directory -s -f Makefile -f - \
+            BUILD="$scratch/plan-build" "$target" 2>/dev/null) ||
+        fail "$target: cannot read its exported environment"
+    case $env in
+        "$repo/runtime "*/plan-build/tmp/perf-cache) ;;
+        *) fail "$target does not pin the checkout runtime: $env" ;;
+    esac
+done
+pinned=$(printf 'perf-runtime-targets:\n\t@echo $(PERF_RUNTIME_TARGETS)\n' |
+    make -C "$repo" --no-print-directory -s -f Makefile -f - \
+        perf-runtime-targets 2>/dev/null) ||
+    fail 'cannot list the perf targets that pin the runtime'
+for target in perf perf-% bench-fletch size-memory-run; do
+    case " $pinned " in
+        *" $target "*) ;;
+        *) fail "$target does not pin the checkout runtime" ;;
+    esac
+done
 
 # The hosted path (PERF_GATE=0 -> PERF_ADVISORY=1) must hand every timed
 # perf-components binary the advisory policy, and a strict run must hand
