@@ -57,6 +57,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/sort.h"
+#include "perf_runtime.h"
 
 #ifndef FL_COMPUTED_GOTO
 #  define FL_COMPUTED_GOTO 0
@@ -993,6 +994,9 @@ int main(int argc, char **argv)
     u64 concat_median = 0U;
     u64 join5k_median = 0U;
 
+    if (!yew_perf_runtime_pin("perf_fletch"))
+        return 2;
+
     for (argi = 1; argi < argc; argi++) {
         if (strcmp(argv[argi], "--gate") == 0) {
             gate = true;
@@ -1071,12 +1075,6 @@ int main(int argc, char **argv)
             src[len] = '\0';
             bytebuf_free(&bb);
 
-            if (setenv("YEW_RUNTIME_DIR", "runtime", 1) != 0) {
-                free(src);
-                (void)fprintf(stderr,
-                              "perf_fletch: cannot select runtime directory\n");
-                return 2;
-            }
             a.name = "runtime/init.fl";
             a.src = src;
             a.gc_pause = 0U;

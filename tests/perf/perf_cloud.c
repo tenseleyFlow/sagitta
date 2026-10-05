@@ -20,6 +20,7 @@
 #include "perf_policy.h"
 #include "util/buf.h"
 #include "util/sort.h"
+#include "perf_runtime.h"
 
 enum {
     CLOUD_PERF_BUFFERS = 20,
@@ -32,7 +33,6 @@ enum {
 
 typedef struct CloudPerfFix {
     char root[256];
-    char *old_runtime;
     Ed ed;
     FlValue scan;
 } CloudPerfFix;
@@ -49,26 +49,6 @@ static u64 now_ns(void)
         return 0U;
     }
     return (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
-}
-
-static char *copy_env(const char *name)
-{
-    const char *value = getenv(name);
-    size_t len;
-    char *copy;
-
-    if (value == NULL)
-        return NULL;
-    len = strlen(value);
-    copy = malloc(len + 1U);
-    if (copy != NULL)
-        (void)memcpy(copy, value, len + 1U);
-    return copy;
-}
-
-static bool restore_env(const char *name, char *value)
-{
-    return value == NULL ? unsetenv(name) == 0 : setenv(name, value, 1) == 0;
 }
 
 static bool write_all(const char *path, const char *text)
@@ -241,7 +221,6 @@ static bool idle_runs_once(CloudPerfFix *f)
 static bool fix_init(CloudPerfFix *f)
 {
     Bytebuf setup;
-    char *runtime;
     u32 found = 0U;
     bool ok;
 
@@ -250,13 +229,6 @@ static bool fix_init(CloudPerfFix *f)
                  sizeof("/tmp/yew-perf-cloud-XXXXXX"));
     if (mkdtemp(f->root) == NULL)
         return false;
-    runtime = realpath("runtime", NULL);
-    f->old_runtime = copy_env("YEW_RUNTIME_DIR");
-    if (runtime == NULL || setenv("YEW_RUNTIME_DIR", runtime, 1) != 0) {
-        free(runtime);
-        return false;
-    }
-    free(runtime);
     bytebuf_init(&setup);
     ok = make_files(f, &setup);
     if (!ok)
@@ -327,8 +299,6 @@ static bool fix_done(CloudPerfFix *f)
         ok = rmdir(dir) == 0 && ok;
     }
     ok = rmdir(f->root) == 0 && ok;
-    ok = restore_env("YEW_RUNTIME_DIR", f->old_runtime) && ok;
-    free(f->old_runtime);
     return ok;
 }
 
@@ -350,6 +320,9 @@ int main(int argc, char **argv)
     unsigned i;
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
     bool advisory = yew_perf_advisory();
+
+    if (!yew_perf_runtime_pin("perf_cloud"))
+        return 2;
 
     if (argc > 2 || (argc == 2 && !measure)) {
         (void)fprintf(stderr, "usage: %s [--measure]\n", argv[0]);

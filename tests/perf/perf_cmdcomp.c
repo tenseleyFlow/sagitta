@@ -35,6 +35,7 @@
 #include "ui/shctx.h"
 #include "util/arena.h"
 #include "util/buf.h"
+#include "perf_runtime.h"
 
 /*
  * The typed prefix walks through three regimes on purpose: the command
@@ -605,34 +606,13 @@ static int measure_spec(void)
 {
     static const char body[] = "git -C x remote add o";
     static i64 samples[PERF_SPEC_ITERS];
-    const char *runtime = getenv("YEW_RUNTIME_DIR");
-    char *cwd;
     Arena arena;
     u32 i;
     i64 p99;
     i64 median;
     bool failed;
 
-    /* The checked-in runtime, never an installed one. */
-    if (runtime == NULL || runtime[0] == '\0') {
-        size_t n;
-        char *dir;
-
-        cwd = yew_xgetcwd();
-        n = strlen(cwd) + sizeof("/runtime");
-        dir = malloc(n);
-        if (dir == NULL) {
-            yew_xfree(cwd);
-            return 2;
-        }
-        (void)snprintf(dir, n, "%s/runtime", cwd);
-        yew_xfree(cwd);
-        if (setenv("YEW_RUNTIME_DIR", dir, 1) != 0) {
-            free(dir);
-            return 2;
-        }
-        free(dir);
-    }
+    /* The checked-in runtime: main pinned YEW_RUNTIME_DIR to it. */
     yew_compspec_invalidate_all();
     if (yew_compspec_get(NULL, "git") == NULL) {
         (void)fprintf(stderr, "perf_cmdcomp: the shipped git.fl did not "
@@ -827,6 +807,9 @@ int main(int argc, char **argv)
     i64 p99;
     i64 median;
     int status = 0;
+
+    if (!yew_perf_runtime_pin("perf_cmdcomp"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();
