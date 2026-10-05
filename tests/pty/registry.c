@@ -5599,8 +5599,7 @@ static void case_s22_border_beside_wide_glyphs(PtyCtx *c)
 }
 
 
-/* Feeds an SGR press (and release) at a screen cell. */
-static void s22_click(PtyCtx *c, u16 col, u16 row)
+static void s22_click_bytes(PtyCtx *c, u16 col, u16 row)
 {
     char seq[64];
 
@@ -5611,7 +5610,28 @@ static void s22_click(PtyCtx *c, u16 col, u16 row)
     (void)snprintf(seq, sizeof(seq), "\033[<0;%u;%um", (unsigned)col + 1U,
                    (unsigned)row + 1U);
     ptc_bytes(c, seq);
+}
+
+/* Feeds an SGR press (and release) at a screen cell that need not
+ * repaint, e.g. one that lands where focus and cursor already are. */
+static void s22_click(PtyCtx *c, u16 col, u16 row)
+{
+    s22_click_bytes(c, col, row);
     ptc_settle(c, 80);
+}
+
+/*
+ * A click that MUST repaint exactly once: it switches tabs or focus,
+ * enters a group, or fires a menu row.  Wait for that frame rather than
+ * an 80 ms quiet window, which a slow (sanitizer) machine outlasts
+ * before painting -- the Sprint 57.8 flake's shape.
+ */
+static void s22_click_frame(PtyCtx *c, u16 col, u16 row)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    s22_click_bytes(c, col, row);
+    settle_sync_delta(c, before, 1U, 0);
 }
 
 /*
@@ -5634,7 +5654,7 @@ static void case_s22_click_focuses_and_lands_on_grapheme(PtyCtx *c)
     s18_settle_after_keys(c, "ctrl+w s");
     /* Focus is on the RIGHT pane after a split; click back into the
      * left one, past the ideograph. */
-    s22_click(c, 12U, 0U);
+    s22_click_frame(c, 12U, 0U);
     ptc_snapshot(c, "s22_click_focuses_and_lands_on_grapheme");
     force_quit(c);
     (void)unlink(path);
@@ -5946,7 +5966,7 @@ static void case_s24_click_enters_a_group(PtyCtx *c)
      * router reads the sign and enters the group, which is DoD 9 with a
      * group in the strip.
      */
-    s22_click(c, 30U, 0U);
+    s22_click_frame(c, 30U, 0U);
     ptc_snapshot(c, "s24_click_enters_a_group");
     force_quit(c);
     (void)unlink(path);
@@ -11806,7 +11826,7 @@ static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
     s27_mouse(c, "\x1b[<2;11;6m");
     ptc_check(c, c->vt.modes == menu,
               "document context menu did not select any-motion tracking");
-    s22_click(c, 15U, 15U);
+    s22_click_frame(c, 15U, 15U);
     ptc_check(c, c->vt.modes == resting,
               "Save As menu action did not restore button tracking");
     s18_settle_after_keys(c, "esc");
@@ -11820,7 +11840,7 @@ static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
     s27_mouse(c, "\x1b[<16;31;2m");
     ptc_check(c, c->vt.modes == menu,
               "member-tab context menu did not select any-motion tracking");
-    s22_click(c, 5U, 1U);
+    s22_click_frame(c, 5U, 1U);
     ptc_check(c, c->vt.modes == resting,
               "click-away did not restore button tracking");
     s19_wait_screen(c, "L  one.txt");
@@ -11834,7 +11854,7 @@ static void case_s57_13_save_as_group_mouse_recovers(PtyCtx *c)
     s18_settle_after_keys(c, "esc");
     ptc_check(c, c->vt.modes == resting,
               "group context menu did not restore button tracking");
-    s22_click(c, 30U, 1U);
+    s22_click_frame(c, 30U, 1U);
     s19_wait_screen(c, "L  two.txt");
 
     ptc_snapshot(c, c->test->name);
