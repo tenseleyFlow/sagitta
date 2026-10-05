@@ -5761,7 +5761,6 @@ static void case_s23_overflow_indicators(PtyCtx *c)
 static void case_s23_click_switches_with_cjk_labels(PtyCtx *c)
 {
     char path[256];
-    char seq[64];
 
     if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
         return;
@@ -5775,11 +5774,7 @@ static void case_s23_click_switches_with_cjk_labels(PtyCtx *c)
                            "tabedit /tmp/\xE6\x97\xA5\xE6\x9C\xAC.txt");
     s18_settle_after_keys(c, "enter");
     /* Click the FIRST tab's span, which sits left of both CJK ones. */
-    (void)snprintf(seq, sizeof(seq), "\033[<0;3;1M");
-    ptc_bytes(c, seq);
-    (void)snprintf(seq, sizeof(seq), "\033[<0;3;1m");
-    ptc_bytes(c, seq);
-    ptc_settle(c, 80);
+    s22_click_frame(c, 2U, 0U);
     ptc_snapshot(c, "s23_click_switches_with_cjk_labels");
     force_quit(c);
     (void)unlink(path);
