@@ -5666,6 +5666,7 @@ static void case_s22_drag_border(PtyCtx *c)
 {
     char path[256];
     char seq[64];
+    u32 before;
 
     if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
         return;
@@ -5674,10 +5675,13 @@ static void case_s22_drag_border(PtyCtx *c)
     (void)snprintf(seq, sizeof(seq), "\033[<0;41;5M");
     ptc_bytes(c, seq);
     ptc_settle(c, 40);
-    /* Motion with the button held is button 32 in SGR. */
+    /* Motion with the button held is button 32 in SGR.  It moves the
+     * border, so wait for that frame: a quiet window let a slow machine
+     * snapshot the border where the press left it. */
     (void)snprintf(seq, sizeof(seq), "\033[<32;51;5M");
+    before = c->vt.nsync_pairs;
     ptc_bytes(c, seq);
-    ptc_settle(c, 40);
+    settle_sync_delta(c, before, 1U, 0);
     (void)snprintf(seq, sizeof(seq), "\033[<0;51;5m");
     ptc_bytes(c, seq);
     ptc_settle(c, 80);
