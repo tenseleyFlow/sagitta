@@ -6769,7 +6769,7 @@ static void case_chrome_drag(PtyCtx *c)
     s23_open_tabs(c, 2);
     /* Press inside the first entry, then move into the third. */
     s27_mouse(c, "\x1b[<0;3;1M");
-    s27_mouse(c, "\x1b[<32;60;1M");
+    s27_mouse_frame(c, "\x1b[<32;60;1M");
     chrome_snapshot(c);
     s27_mouse(c, "\x1b[<0;60;1m");
     force_quit(c);
@@ -6874,7 +6874,7 @@ static void case_s27_click_cjk_tab(PtyCtx *c)
     s23_open_tabs(c, 1);
     /* Column 3 (1-based in the report) is inside the FIRST entry. */
     s27_mouse(c, "\x1b[<0;3;1M");
-    s27_mouse(c, "\x1b[<0;3;1m");
+    s27_mouse_frame(c, "\x1b[<0;3;1m");
     ptc_snapshot(c, "s27_click_cjk_tab");
     force_quit(c);
     (void)unlink(path);
