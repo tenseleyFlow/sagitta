@@ -643,6 +643,33 @@ static u64 source_lines(const Source *source)
     return lines;
 }
 
+/* Every definition the benchmark loads is the file the registry resolves
+ * for that language: $YEW_RUNTIME_DIR/syntax/..., the pinned checkout
+ * runtime.  Loading one file under two spellings would make each load
+ * reject the other's syntax cache entry, which records its source path,
+ * and turn a measured warm start into a compile. */
+static char *runtime_definition(const char *path)
+{
+    const char *relative = path;
+
+    if (strncmp(relative, "runtime/", 8U) == 0)
+        relative += 8U;
+    return yew_runtime_file(relative);
+}
+
+static SynDef *load_runtime_definition(Arena *arena, DiagCtx *dc,
+                                       const char *path)
+{
+    char *resolved = runtime_definition(path);
+    SynDef *def;
+
+    if (resolved == NULL)
+        return NULL;
+    def = yew_syn_def_load(arena, dc, resolved);
+    yew_xfree(resolved);
+    return def;
+}
+
 static void frozen_free(FrozenFixture *fixture);
 
 static bool frozen_init(FrozenFixture *fixture, const FrozenSpec *spec)
@@ -655,8 +682,8 @@ static bool frozen_init(FrozenFixture *fixture, const FrozenSpec *spec)
         fixture->source.len != spec->bytes ||
         source_lines(&fixture->source) != spec->lines)
         goto fail;
-    fixture->def = yew_syn_def_load(&fixture->arena, &fixture->dc,
-                                    spec->definition_path);
+    fixture->def = load_runtime_definition(&fixture->arena, &fixture->dc,
+                                           spec->definition_path);
     if (fixture->def == NULL)
         goto fail;
     fixture->engine = yew_syn_engine_new(fixture->def);
@@ -1074,8 +1101,8 @@ static bool measure_cache(u64 *samples, size_t count)
     yew_syn_cache_set_bypass(false);
     arena_init(&warm_arena);
     fl_diag_init(&warm_dc, &warm_arena);
-    warm = yew_syn_def_load(&warm_arena, &warm_dc,
-                            "runtime/syntax/ini.fl");
+    warm = load_runtime_definition(&warm_arena, &warm_dc,
+                                   "runtime/syntax/ini.fl");
     if (warm == NULL)
         goto warm_done;
     yew_syn_def_dispose(warm);
@@ -1095,7 +1122,7 @@ static bool measure_cache(u64 *samples, size_t count)
             arena_free_all(&arena);
             goto done_cache;
         }
-        def = yew_syn_def_load(&arena, &dc, "runtime/syntax/ini.fl");
+        def = load_runtime_definition(&arena, &dc, "runtime/syntax/ini.fl");
         if (!now_ns(&end) || end < start || def == NULL) {
             if (def != NULL)
                 yew_syn_def_dispose(def);
@@ -1140,8 +1167,8 @@ static int prime_all_syntax(void)
 
         arena_init(&arena);
         fl_diag_init(&dc, &arena);
-        def = yew_syn_def_load(&arena, &dc,
-                               yew_syn_builtin_langs[i].source);
+        def = load_runtime_definition(&arena, &dc,
+                                      yew_syn_builtin_langs[i].source);
         if (def == NULL) {
             arena_free_all(&arena);
             return 1;
