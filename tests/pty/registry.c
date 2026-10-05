@@ -11767,7 +11767,7 @@ static void case_s57_13_doc_menu(PtyCtx *c)
      * enabled row that is NOT the one the menu opened on, so the golden
      * shows the highlight having MOVED rather than where it started.
      */
-    s27_mouse(c, "\x1b[<35;15;12M");
+    s27_mouse_frame(c, "\x1b[<35;15;12M");
     chrome_snapshot(c);
     s18_settle_after_keys(c, "esc");
     force_quit(c);
