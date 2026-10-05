@@ -2911,6 +2911,7 @@ perf-record: $(BUILD)/perf_record
 
 perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
 	$(BUILD)/perf_syn --selftest-policy
+	$(BUILD)/perf_syn --selftest-runtime
 	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_syn --gate
 
 perf-syn-scroll-s56: $(BUILD)/perf_syn $(BUILD)/yew
