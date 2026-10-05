@@ -6507,6 +6507,27 @@ static void s27_mouse(PtyCtx *c, const char *report)
 }
 
 /*
+ * A mouse report that MUST repaint exactly once: a release that invokes
+ * a strip action or switches tabs, a motion that first paints a drag
+ * ghost or a spawn affordance, a chevron press that scrolls the strip.
+ *
+ * Wait for that FRAME, never for s27_mouse's quiet window.  The window
+ * was the Sprint 57.8 flake: on the sanitizer lane the add-tab release
+ * had not repainted after 60 ms of silence, so the check read the
+ * one-tab strip; the frame landed a moment later, which is why every
+ * check after it passed.  A case that snapshots after a quiet window
+ * can likewise take a slow machine's half-drawn gesture and blame the
+ * golden.
+ */
+static void s27_mouse_frame(PtyCtx *c, const char *report)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_bytes(c, report);
+    settle_sync_delta(c, before, 1U, 0);
+}
+
+/*
  * A mouse report that OPENS A MENU.  Unlike s27_mouse's reports, this one
  * always repaints -- the menu is drawn and any-motion tracking is armed in
  * that frame -- so wait for the frame itself, not for a quiet window.
@@ -6760,22 +6781,6 @@ static void case_chrome_drag(PtyCtx *c)
 /* ---------------------------------------------------------------- */
 
 /*
- * A mouse report that MUST repaint.
- *
- * The motion that first enters a zone paints the affordance and the
- * release that spawns a pane relays the whole screen, so the case waits
- * for the FRAME rather than for a quiet period — a timeout would let a
- * slow machine snapshot a half-drawn gesture and blame the golden.
- */
-static void s57_22_mouse_frame(PtyCtx *c, const char *report)
-{
-    u32 before = c->vt.nsync_pairs;
-
-    ptc_bytes(c, report);
-    settle_sync_delta(c, before, 1U, 0);
-}
-
-/*
  * THE GEOMETRY THESE CASES STAND ON, at 80x24.
  *
  * Row 1 is the strip and row 24 the statusline, so the pane is rows
@@ -6796,9 +6801,9 @@ static void s57_22_drag_to(PtyCtx *c, const char *motion,
 {
     /* Press inside the first entry, arming without switching. */
     s27_mouse(c, "\x1b[<0;3;1M");
-    s57_22_mouse_frame(c, motion);
+    s27_mouse_frame(c, motion);
     if (release != NULL)
-        s57_22_mouse_frame(c, release);
+        s27_mouse_frame(c, release);
 }
 
 static void s57_22_case(PtyCtx *c, const char *motion,
@@ -6886,8 +6891,9 @@ static void case_s57_8_click_new_tab(PtyCtx *c)
 
     if (!s18_open(c, first, sizeof(first) - 1U, path, sizeof(path)))
         return;
+    /* The press only arms; the release invokes ed.tab.new and repaints. */
     s27_mouse(c, "\x1b[<0;26;1M");
-    s27_mouse(c, "\x1b[<0;26;1m");
+    s27_mouse_frame(c, "\x1b[<0;26;1m");
     ptc_check(c, s19_screen_contains(&c->vt, " 2 untitled "),
               "clicking the tab-strip add action did not create untitled");
 
