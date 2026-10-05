@@ -20,10 +20,6 @@
 #include "util/buf.h"
 #include "util/runtime_asset.h"
 
-#ifndef YEW_RUNTIME_DIR_DEFAULT
-#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
-#endif
-
 static char *ai_read_file(const char *path, u32 *len)
 {
     FILE *file;
@@ -98,14 +94,14 @@ static char *ai_runtime_path(const char *name)
     if (access(path, R_OK) == 0)
         return path;
     yew_xfree(path);
-    path = ai_join_path(YEW_RUNTIME_DIR_DEFAULT, name);
+    path = ai_join_path(yew_runtime_prefix_dir(), name);
     if (access(path, R_OK) == 0)
         return path;
     yew_xfree(path);
     path = yew_runtime_asset_resolve(name);
     if (path != NULL)
         return path;
-    return ai_join_path(YEW_RUNTIME_DIR_DEFAULT, name);
+    return ai_join_path(yew_runtime_prefix_dir(), name);
 }
 
 static char *ai_privacy_path(void)
@@ -118,7 +114,7 @@ static char *ai_privacy_path(void)
         return path;
     yew_xfree(path);
     if (runtime == NULL || runtime[0] == '\0')
-        runtime = YEW_RUNTIME_DIR_DEFAULT;
+        runtime = yew_runtime_prefix_dir();
     len = strlen(runtime) + sizeof("/../docs/ai-privacy.md");
     path = yew_xmalloc(len);
     (void)snprintf(path, len, "%s/../docs/ai-privacy.md", runtime);

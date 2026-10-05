@@ -23,10 +23,6 @@
 #include "util/runtime_asset.h"
 #include "util/xdg.h"
 
-#ifndef YEW_RUNTIME_DIR_DEFAULT
-#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
-#endif
-
 typedef struct PolicyDoc {
     Arena arena;
     Interner in;
@@ -72,7 +68,7 @@ static char *shipped_path(void)
 
     if (runtime != NULL && runtime[0] != '\0')
         return policy_join(runtime, "ai-deny.fl");
-    path = policy_join(YEW_RUNTIME_DIR_DEFAULT, "ai-deny.fl");
+    path = policy_join(yew_runtime_prefix_dir(), "ai-deny.fl");
     if (access(path, R_OK) == 0)
         return path;
     yew_xfree(path);
@@ -81,7 +77,7 @@ static char *shipped_path(void)
     path = yew_runtime_asset_resolve("ai-deny.fl");
     if (path != NULL)
         return path;
-    return policy_join(YEW_RUNTIME_DIR_DEFAULT, "ai-deny.fl");
+    return policy_join(yew_runtime_prefix_dir(), "ai-deny.fl");
 }
 
 static char *user_path(void)

@@ -42,10 +42,6 @@
 #include "util/runtime_asset.h"
 #include "util/xdg.h"
 
-#ifndef YEW_RUNTIME_DIR_DEFAULT
-#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
-#endif
-
 enum { MOD_MAX_BYTES = 8U * 1024U * 1024U };
 
 /* ---------------------------------------------------------------- */
@@ -286,7 +282,7 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
     if (real == NULL) {
         runtime = getenv("YEW_RUNTIME_DIR");
         if (runtime == NULL || runtime[0] == '\0')
-            runtime = YEW_RUNTIME_DIR_DEFAULT;
+            runtime = yew_runtime_prefix_dir();
         join(&cand, runtime, rel, rn);
         bytebuf_append(tried, "\n  ", 3U);
         bytebuf_append(tried, cand.data, cand.len);
