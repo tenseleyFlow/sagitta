@@ -18,6 +18,7 @@
 #include "util/buf.h"
 #include "util/sort.h"
 #include "util/xdg.h"
+#include "perf_runtime.h"
 
 enum {
     PLUG_DISCOVERY_COUNT = 20,
@@ -695,6 +696,9 @@ int main(int argc, char **argv)
     bool advisory;
     int status = 0;
     size_t i;
+
+    if (!yew_perf_runtime_pin("perf_plug"))
+        return 2;
 
     if (argc > 2 || (argc == 2 && !measure && !selftest)) {
         (void)fprintf(stderr,

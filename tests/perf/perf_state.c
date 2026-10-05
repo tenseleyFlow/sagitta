@@ -45,6 +45,7 @@
 #include "ws/state.h"
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     PERF_STATE_TABS = 512,
@@ -293,6 +294,9 @@ int main(int argc, char **argv)
     int status = 0;
     int rc;
     bool advisory = yew_perf_advisory();
+
+    if (!yew_perf_runtime_pin("perf_state"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();

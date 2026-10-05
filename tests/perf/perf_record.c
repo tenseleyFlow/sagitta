@@ -8,6 +8,7 @@
 #include "fl/record.h"
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     TAP_ITERS = 1000000U,
@@ -135,6 +136,9 @@ int main(int argc, char **argv)
     u64 emit_elapsed;
     Bytebuf out;
     u32 i;
+
+    if (!yew_perf_runtime_pin("perf_record"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();

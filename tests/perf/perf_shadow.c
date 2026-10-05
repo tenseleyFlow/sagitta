@@ -21,6 +21,7 @@
 #include "text/edit.h"
 #include "ui/draw.h"
 #include "ui/shadowdraw.h"
+#include "perf_runtime.h"
 
 enum {
     SHADOW_PERF_TRIALS = 3,
@@ -540,6 +541,9 @@ int main(int argc, char **argv)
     bool advisory = perf_advisory();
     size_t i;
     int status = 0;
+
+    if (!yew_perf_runtime_pin("perf_shadow"))
+        return 2;
 
     if (argc > 2 || (argc == 2 && !measure_only)) {
         (void)fprintf(stderr, "usage: %s [--measure]\n", argv[0]);

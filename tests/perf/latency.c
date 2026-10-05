@@ -2,6 +2,7 @@
 
 #include "support/live_pty.h"
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -822,6 +823,9 @@ int main(int argc, char **argv)
     const char *wolf_path;
     bool advisory;
     int status = 0;
+
+    if (!yew_perf_runtime_check("perf_latency"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-exit-drain") == 0)
         return selftest_exit_drain();

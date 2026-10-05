@@ -11,6 +11,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "perf_runtime.h"
+
 enum {
     SESSION_KEYS = 10000,
     OUTPUT_CAP = 16384,
@@ -535,6 +537,9 @@ int main(int argc, char **argv)
     int i;
     int status = 0;
     const char *tmp;
+
+    if (!yew_perf_runtime_check("perf_prof_crosscheck"))
+        return 2;
 
     opts.state = "/tmp";
 

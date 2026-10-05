@@ -2,6 +2,7 @@
 
 #include "support/live_pty.h"
 #include "pty/vt.h"
+#include "perf_runtime.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -1600,6 +1601,9 @@ int main(int argc, char **argv)
     bool single_attempt = false;
     bool key_breakdown = false;
     int i;
+
+    if (!yew_perf_runtime_check("perf_latency_s56"))
+        return 2;
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--floor") == 0)

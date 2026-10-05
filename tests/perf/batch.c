@@ -35,6 +35,7 @@
 #include <unistd.h>
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     BATCH_WARMUPS = 5,
@@ -299,6 +300,9 @@ int main(int argc, char **argv)
     int64_t p95;
     size_t i;
     int result = 2;
+
+    if (!yew_perf_runtime_check("perf_batch"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();

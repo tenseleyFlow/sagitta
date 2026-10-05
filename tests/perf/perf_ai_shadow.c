@@ -24,6 +24,7 @@
 #include "text/edit.h"
 #include "unicode/utf8.h"
 #include "util/sort.h"
+#include "perf_runtime.h"
 
 #ifndef YEW_TEST_MOCKAI
 #define YEW_TEST_MOCKAI "build/tests/helpers/mockai"
@@ -746,6 +747,9 @@ int main(int argc, char **argv)
     u64 key_p99 = 0U;
     bool advisory;
     bool ok;
+
+    if (!yew_perf_runtime_pin("perf_ai_shadow"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return policy_selftest();

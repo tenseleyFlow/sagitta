@@ -22,6 +22,7 @@
 #include "ui/draw.h"
 #include "util/sort.h"
 #include "perf/perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     LSP_NOTE_SAMPLES = 1001,
@@ -679,6 +680,9 @@ int main(int argc, char **argv)
     bool advisory;
     size_t i;
     int status = 0;
+
+    if (!yew_perf_runtime_pin("perf_lsp"))
+        return 2;
 
     if (server)
         return run_stream_server();

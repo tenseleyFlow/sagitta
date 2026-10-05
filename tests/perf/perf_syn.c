@@ -32,6 +32,7 @@
 #include "util/prof.h"
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 /* The benchmark intentionally exercises degradation paths millions of times.
  * Those warnings are useful in the editor and harmful in a measurement
@@ -3735,6 +3736,9 @@ static int selftest_policy(void)
 int main(int argc, char **argv)
 {
     PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
+
+    if (!yew_perf_runtime_pin("perf_syn"))
+        return 2;
 
     isolate_benchmark_logging();
 

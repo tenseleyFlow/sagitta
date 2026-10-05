@@ -17,6 +17,7 @@
 #include "edit/ed.h"
 #include "edit/multicursor.h"
 #include "syn/defs.h"
+#include "perf_runtime.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -216,6 +217,8 @@ static int selftest_policy(void)
 
 int main(int argc, char **argv)
 {
+    if (!yew_perf_runtime_pin("perf_insert"))
+        return 2;
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();
     if (argc != 1) {

@@ -32,6 +32,7 @@
 #include "ui/win.h"
 #include "util/arena.h"
 #include "util/base.h"
+#include "perf_runtime.h"
 
 enum {
     RUNS = 3,
@@ -454,6 +455,9 @@ int main(int argc, char **argv)
     bool gate;
     bool ok = true;
     size_t i;
+
+    if (!yew_perf_runtime_pin("perf_search_s56"))
+        return 2;
 
     if (!parse_options(argc, argv, &opt)) {
         usage();

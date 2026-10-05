@@ -20,6 +20,7 @@
 #include "util/base.h"
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     GIT_STATUS_ENTRIES = 20000,
@@ -724,6 +725,9 @@ int main(int argc, char **argv)
     size_t i;
     int status = 0;
     bool advisory = yew_perf_advisory();
+
+    if (!yew_perf_runtime_pin("perf_git_status"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();

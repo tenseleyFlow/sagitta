@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "util/rss.h"
+#include "perf_runtime.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -384,6 +385,9 @@ int main(int argc, char **argv)
                   strcmp(getenv("YEW_PERF_ADVISORY"), "0") != 0);
     bool ok = true;
     size_t i;
+
+    if (!yew_perf_runtime_pin("perf_mem_s56"))
+        return 2;
 
     if (!parse_options(argc, argv, &opt)) {
         usage();

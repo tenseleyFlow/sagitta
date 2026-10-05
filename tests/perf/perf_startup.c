@@ -13,6 +13,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "perf_runtime.h"
+
 enum {
     ROWS = 24,
     COLS = 80,
@@ -669,6 +671,9 @@ int main(int argc, char **argv)
                       !(getenv("YEW_PERF_ADVISORY") != NULL &&
                         strcmp(getenv("YEW_PERF_ADVISORY"), "0") != 0);
     bool ok = true;
+
+    if (!yew_perf_runtime_check("perf_startup_s56"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();

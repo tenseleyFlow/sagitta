@@ -25,6 +25,7 @@
 #include "util/sort.h"
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     AI_HTTP_SAMPLES = 1001,
@@ -643,6 +644,9 @@ int main(int argc, char **argv)
     bool advisory = yew_perf_advisory();
     int result = 0;
     size_t i;
+
+    if (!yew_perf_runtime_pin("perf_ai_http"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();

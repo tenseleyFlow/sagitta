@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "support/live_pty.h"
+#include "perf_runtime.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -277,6 +278,9 @@ int main(int argc, char **argv)
                 !(getenv("YEW_PERF_ADVISORY") != NULL &&
                   strcmp(getenv("YEW_PERF_ADVISORY"), "0") != 0);
     bool ok = true;
+
+    if (!yew_perf_runtime_check("perf_open_s56"))
+        return 2;
 
     if (!parse_options(argc, argv, &opt)) {
         usage();

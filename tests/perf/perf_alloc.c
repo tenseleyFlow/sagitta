@@ -24,6 +24,7 @@
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/intern.h"
+#include "perf_runtime.h"
 
 enum {
     ALLOC_WARMUP_FRAMES = 100,
@@ -498,6 +499,9 @@ int main(int argc, char **argv)
     Bytebuf navigation;
     int output_fd;
     bool ok = true;
+
+    if (!yew_perf_runtime_pin("perf_alloc"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--render-only") == 0)
         return check_render() ? 0 : 1;

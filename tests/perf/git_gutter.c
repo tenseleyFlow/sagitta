@@ -16,6 +16,7 @@
 #include "util/buf.h"
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     GUTTER_LINES = 100000,
@@ -271,6 +272,9 @@ int main(int argc, char **argv)
     bool advisory = yew_perf_advisory();
     bool ok = true;
     size_t i;
+
+    if (!yew_perf_runtime_pin("perf_git_gutter"))
+        return 2;
 
     if (selftest)
         return selftest_policy();

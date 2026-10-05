@@ -14,6 +14,7 @@
 #include "util/sort.h"
 #include "ws/symidx.h"
 #include "ws/symwalk.h"
+#include "perf_runtime.h"
 
 enum {
     SYMIDX_PUMP_SAMPLES = 10000,
@@ -427,6 +428,9 @@ int main(int argc, char **argv)
     bool advisory;
     size_t i;
     int status = 0;
+
+    if (!yew_perf_runtime_pin("perf_symidx"))
+        return 2;
 
     if (argc > 2 || (argc == 2 && !measure && !selftest)) {
         (void)fprintf(stderr,

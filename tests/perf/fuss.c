@@ -18,6 +18,7 @@
 #include "util/base.h"
 
 #include "perf_policy.h"
+#include "perf_runtime.h"
 
 enum {
     FUSS_PERF_ENTRIES = 20000,
@@ -575,6 +576,9 @@ int main(int argc, char **argv)
     bool advisory = yew_perf_advisory();
     FussTimings timings;
     int status = 0;
+
+    if (!yew_perf_runtime_pin("perf_fuss"))
+        return 2;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();
