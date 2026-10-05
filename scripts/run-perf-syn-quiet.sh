@@ -69,6 +69,10 @@ fi
 
 [ -d "$workdir" ] || die "benchmark workdir is not a directory: $workdir"
 cd "$workdir"
+# perf_syn measures this checkout's runtime/ only and refuses to run
+# otherwise (tests/perf/perf_runtime.h); `make perf-syn-quiet` sets the same.
+YEW_RUNTIME_DIR=$repo/runtime
+export YEW_RUNTIME_DIR
 if [ "$#" -eq 0 ] && [ -n "${YEW_PERF_SYN_COMMAND:-}" ]; then
     set -f
     # The Make target supplies a whitespace-separated executable and flags.

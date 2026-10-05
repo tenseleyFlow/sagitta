@@ -472,6 +472,16 @@ UNIT_RUNTIME_ENV := HOME='$(UNIT_HOME)' \
                     TMPDIR='$(abspath $(BUILD)/tmp)' \
                     XDG_STATE_HOME='$(UNIT_STATE_HOME)' \
                     YEW_RUNTIME_DIR='$(abspath runtime)'
+# Benchmarks measure the checkout's runtime/, never an installed one, and
+# tests/perf/perf_runtime.h refuses to run without this.  Exported for every
+# perf target, its prerequisites and its sub-makes, so each benchmark and
+# each yew it spawns resolves every shipped file under this one directory
+# (an outer YEW_RUNTIME_DIR is overridden).  The syntax cache is per-build:
+# tables an installed yew compiled into ~/.cache are never loaded.
+PERF_RUNTIME_TARGETS := perf perf-% bench-fletch size-memory-run
+$(PERF_RUNTIME_TARGETS): export YEW_RUNTIME_DIR := $(abspath runtime)
+$(PERF_RUNTIME_TARGETS): export XDG_CACHE_HOME := \
+        $(abspath $(BUILD)/tmp/perf-cache)
 MUSL_UNIT_EXCLUDES :=
 MUSL_UNIT_PREP :=
 ifeq ($(TARGET),x86_64-linux-musl)
