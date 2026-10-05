@@ -19,7 +19,6 @@
 #include "util/runtime_asset.h"
 #include "util/xdg.h"
 
-
 enum { THEME_MAX_BYTES = 1024U * 1024U, THEME_MAX_DIAGS = 64U };
 
 typedef struct ColorSpec {
