@@ -3687,31 +3687,13 @@ u32 yew_syn_lang_for_scored(const char *path, const u8 *line1, u32 l1_len,
 
 static char *runtime_definition_path(const SynLangSeed *seed)
 {
-    const char *root = getenv("YEW_RUNTIME_DIR");
     const char *relative = seed->source;
     char *path;
-    size_t n;
 
     if (strncmp(relative, "runtime/", 8U) == 0)
         relative += 8U;
-    if (root != NULL && root[0] != '\0') {
-        n = strlen(root) + 1U + strlen(relative);
-        path = yew_xmalloc(n + 1U);
-        (void)snprintf(path, n + 1U, "%s/%s", root, relative);
-        if (access(path, R_OK) == 0)
-            return path;
-        yew_xfree(path);
-    }
-    root = YEW_RUNTIME_DIR_DEFAULT;
-    n = strlen(root) + 1U + strlen(relative);
-    path = yew_xmalloc(n + 1U);
-    (void)snprintf(path, n + 1U, "%s/%s", root, relative);
-    if (access(path, R_OK) == 0)
-        return path;
-    yew_xfree(path);
-    path = yew_xmalloc(strlen(seed->source) + 1U);
-    (void)memcpy(path, seed->source, strlen(seed->source) + 1U);
-    return path;
+    path = yew_runtime_file(relative);
+    return path != NULL ? path : yew_xstrdup(seed->source);
 }
 
 static SynDef *load_builtin_definition(Arena *arena, DiagCtx *dc,

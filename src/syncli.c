@@ -20,10 +20,6 @@
 #include "util/intern.h"
 #include "util/runtime_asset.h"
 
-#ifndef YEW_RUNTIME_DIR_DEFAULT
-#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
-#endif
-
 static const char syn_usage[] =
     "Usage:\n"
     "  yew syn list\n"
@@ -209,31 +205,13 @@ static void check_embed_source(Arena *arena, DiagCtx *dc, const char *source,
 
 static char *runtime_source(const SynLangDesc *desc)
 {
-    const char *root = getenv("YEW_RUNTIME_DIR");
     const char *relative = desc->source;
     char *path;
-    size_t n;
 
     if (strncmp(relative, "runtime/", 8U) == 0)
         relative += 8U;
-    if (root != NULL && root[0] != '\0') {
-        n = strlen(root) + 1U + strlen(relative);
-        path = yew_xmalloc(n + 1U);
-        (void)snprintf(path, n + 1U, "%s/%s", root, relative);
-        if (access(path, R_OK) == 0)
-            return path;
-        yew_xfree(path);
-    }
-    n = strlen(YEW_RUNTIME_DIR_DEFAULT) + 1U + strlen(relative);
-    path = yew_xmalloc(n + 1U);
-    (void)snprintf(path, n + 1U, "%s/%s", YEW_RUNTIME_DIR_DEFAULT,
-                   relative);
-    if (access(path, R_OK) == 0)
-        return path;
-    yew_xfree(path);
-    path = yew_xmalloc(strlen(desc->source) + 1U);
-    (void)memcpy(path, desc->source, strlen(desc->source) + 1U);
-    return path;
+    path = yew_runtime_file(relative);
+    return path != NULL ? path : yew_xstrdup(desc->source);
 }
 
 static int compile_one(const char *path)

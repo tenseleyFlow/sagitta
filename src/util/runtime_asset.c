@@ -308,3 +308,38 @@ YewRuntimeRoot yew_runtime_root(const char **dir)
         return YEW_RUNTIME_ROOT_EMBEDDED;
     return YEW_RUNTIME_ROOT_NONE;
 }
+
+static char *join_dir(const char *dir, const char *relative)
+{
+    size_t dn = strlen(dir);
+    size_t rn = strlen(relative);
+    char *path = yew_xmalloc(dn + 1U + rn + 1U);
+
+    (void)memcpy(path, dir, dn);
+    path[dn] = '/';
+    (void)memcpy(path + dn + 1U, relative, rn + 1U);
+    return path;
+}
+
+char *yew_runtime_file(const char *relative)
+{
+    const char *env = getenv("YEW_RUNTIME_DIR");
+    const char *prefix = yew_runtime_prefix_dir();
+    char *path;
+
+    if (relative == NULL || relative[0] == '\0')
+        return NULL;
+    if (env != NULL && env[0] != '\0')
+        return join_dir(env, relative);
+    if (prefix[0] != '\0') {
+        path = join_dir(prefix, relative);
+        if (access(path, R_OK) == 0)
+            return path;
+        yew_xfree(path);
+    }
+    path = join_dir("runtime", relative);
+    if (access(path, R_OK) == 0)
+        return path;
+    yew_xfree(path);
+    return NULL;
+}

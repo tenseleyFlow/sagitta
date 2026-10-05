@@ -47,4 +47,18 @@ const char *yew_runtime_prefix_dir(void);
 /* Test seam: replace the compiled prefix; NULL restores it. */
 void yew_runtime_test_set_prefix(const char *dir);
 
+/*
+ * One shipped file by its runtime-relative name ("syntax/c.fl"), as a
+ * newly allocated path, for consumers that look files up one by one
+ * (syntax definitions, themes).
+ *
+ * A set $YEW_RUNTIME_DIR is the ONLY directory consulted: the result is
+ * $YEW_RUNTIME_DIR/RELATIVE whether or not that file exists, so a file
+ * missing there is an error naming that directory -- never a silent
+ * per-file fallback to an installed copy.  Unset, the prefix's copy
+ * when readable, then ./runtime's; NULL when neither exists (the caller
+ * may then consult the embedded image).
+ */
+char *yew_runtime_file(const char *relative);
+
 #endif
