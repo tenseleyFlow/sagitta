@@ -19,9 +19,6 @@
 #include "util/runtime_asset.h"
 #include "util/xdg.h"
 
-#ifndef YEW_RUNTIME_DIR_DEFAULT
-#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
-#endif
 
 enum { THEME_MAX_BYTES = 1024U * 1024U, THEME_MAX_DIAGS = 64U };
 
@@ -924,8 +921,9 @@ static char *discover_path(const char *name, const char *runtime_dir)
 {
     char *filename = theme_filename(name);
     char *config = yew_xdg_config_dir();
+    char *relative;
     char *path = NULL;
-    const char *runtime = runtime_dir;
+    const char *env = getenv("YEW_RUNTIME_DIR");
 
     if (config != NULL) {
         path = path_join3(config, "themes", filename);
@@ -937,37 +935,35 @@ static char *discover_path(const char *name, const char *runtime_dir)
         yew_xfree(path);
         path = NULL;
     }
-    if (runtime == NULL || runtime[0] == '\0')
-        runtime = getenv("YEW_RUNTIME_DIR");
-    if (runtime != NULL && runtime[0] != '\0') {
-        path = path_join3(runtime, "themes", filename);
-        if (path != NULL && access(path, R_OK) == 0) {
-            yew_xfree(filename);
+    /* An explicit runtime directory is the only one consulted: a theme
+     * missing there is "not found", never an installed copy. */
+    if (runtime_dir != NULL && runtime_dir[0] != '\0') {
+        path = path_join3(runtime_dir, "themes", filename);
+        yew_xfree(filename);
+        if (path != NULL && access(path, R_OK) == 0)
             return path;
-        }
         yew_xfree(path);
+        return NULL;
     }
-    path = path_join3(YEW_RUNTIME_DIR_DEFAULT, "themes", filename);
-    if (path != NULL && access(path, R_OK) == 0) {
-        yew_xfree(filename);
-        return path;
-    }
-    yew_xfree(path);
-    path = path_join3("runtime", "themes", filename);
-    if (path != NULL && access(path, R_OK) == 0) {
-        yew_xfree(filename);
-        return path;
-    }
-    if (path != NULL) {
-        char *embedded = yew_runtime_asset_resolve(path);
-
-        yew_xfree(path);
-        yew_xfree(filename);
-        return embedded;
-    }
+    relative = yew_xmalloc(sizeof("themes/") + strlen(filename));
+    (void)memcpy(relative, "themes/", sizeof("themes/") - 1U);
+    (void)memcpy(relative + sizeof("themes/") - 1U, filename,
+                 strlen(filename) + 1U);
     yew_xfree(filename);
-    yew_xfree(path);
-    return NULL;
+    /* $YEW_RUNTIME_DIR, when set, is likewise the only directory. */
+    if (env != NULL && env[0] != '\0') {
+        path = yew_runtime_file(relative);
+        yew_xfree(relative);
+        if (access(path, R_OK) == 0)
+            return path;
+        yew_xfree(path);
+        return NULL;
+    }
+    path = yew_runtime_file(relative);
+    if (path == NULL)
+        path = yew_runtime_asset_resolve(relative);
+    yew_xfree(relative);
+    return path;
 }
 
 bool yew_theme_select(Theme *theme, const char *name,

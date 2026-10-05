@@ -70,8 +70,10 @@ bool yew_theme_compile(Theme *theme, const u8 *src, size_t n,
 
 /*
  * Discover NAME in $XDG_CONFIG_HOME/yew/themes first, then RUNTIME_DIR/themes.
- * A NULL runtime_dir uses $YEW_RUNTIME_DIR, the installed runtime directory,
- * and finally the repository-local runtime directory.  No disk cache exists.
+ * A non-NULL runtime_dir, or else a set $YEW_RUNTIME_DIR, is the only runtime
+ * directory consulted; otherwise the installed runtime directory, the
+ * repository-local one, then the embedded image (yew_runtime_file).  No disk
+ * cache exists.
  */
 bool yew_theme_select(Theme *theme, const char *name,
                       const char *runtime_dir, DiagCtx *dc);
