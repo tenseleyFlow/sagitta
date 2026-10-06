@@ -57,7 +57,8 @@ void yew_runtime_test_set_prefix(const char *dir);
  * missing there is an error naming that directory -- never a silent
  * per-file fallback to an installed copy.  Unset, the prefix's copy
  * when readable, then ./runtime's; NULL when neither exists (the caller
- * may then consult the embedded image).
+ * may then consult the embedded image).  An absolute path (a user's own
+ * file, not a runtime asset) is returned unchanged in every mode.
  */
 char *yew_runtime_file(const char *relative);
 

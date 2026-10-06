@@ -329,6 +329,10 @@ char *yew_runtime_file(const char *relative)
 
     if (relative == NULL || relative[0] == '\0')
         return NULL;
+    /* An absolute path is not a runtime asset (a user's syntax file under
+     * $XDG_CONFIG_HOME, say): it names itself, whatever the runtime dir. */
+    if (relative[0] == '/')
+        return yew_xstrdup(relative);
     if (env != NULL && env[0] != '\0')
         return join_dir(env, relative);
     if (prefix[0] != '\0') {
