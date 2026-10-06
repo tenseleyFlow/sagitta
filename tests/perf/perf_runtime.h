@@ -22,17 +22,24 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <sys/stat.h>
 
 #include "util/runtime_asset.h"
 
 #define YEW_PERF_NO_PREFIX "/nonexistent/yew-perf-checkout-runtime-only"
 
+/*
+ * Same directory by identity (device + inode), not by resolved path: the
+ * check needs only stat(2), which every POSIX feature level declares --
+ * realpath(3) is hidden by musl unless _XOPEN_SOURCE/_GNU_SOURCE is set,
+ * and the benchmarks that include this header do not all set it.
+ */
 static inline bool yew_perf_runtime_check(const char *prog)
 {
     const char *env = getenv("YEW_RUNTIME_DIR");
-    char *want;
-    char *got;
+    struct stat want;
+    struct stat got;
+    bool have_want;
     bool ok;
 
     if (env == NULL || env[0] == '\0') {
@@ -42,17 +49,15 @@ static inline bool yew_perf_runtime_check(const char *prog)
                       "make)\n", prog);
         return false;
     }
-    want = realpath("runtime", NULL);
-    got = realpath(env, NULL);
-    ok = want != NULL && got != NULL && strcmp(want, got) == 0;
+    have_want = stat("runtime", &want) == 0 && S_ISDIR(want.st_mode);
+    ok = have_want && stat(env, &got) == 0 && S_ISDIR(got.st_mode) &&
+         got.st_dev == want.st_dev && got.st_ino == want.st_ino;
     if (!ok)
         (void)fprintf(stderr,
                       "%s: YEW_RUNTIME_DIR=%s is not this checkout's "
                       "runtime/ (%s); refusing to measure another "
                       "runtime\n", prog, env,
-                      want == NULL ? "no ./runtime here" : want);
-    free(want);
-    free(got);
+                      have_want ? "./runtime" : "no ./runtime here");
     return ok;
 }
 
