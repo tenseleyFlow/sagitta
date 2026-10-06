@@ -102,6 +102,7 @@ const YewTest yew_tests[] = {
     T(runtime_consumer_builtin_config_honors_explicit_override),
     T(runtime_consumer_completion_spec_loads_from_the_image),
     T(runtime_file_env_is_the_only_directory),
+    T(runtime_file_absolute_path_names_itself),
     T(runtime_file_unset_env_prefers_prefix_then_source),
     T(runtime_file_theme_never_falls_back_past_explicit_runtime),
     T(base64_rfc4648_vectors),

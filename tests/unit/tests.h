@@ -68,6 +68,7 @@ void test_runtime_consumer_fletch_precedence_and_explicit_override(void);
 void test_runtime_consumer_builtin_config_honors_explicit_override(void);
 void test_runtime_consumer_completion_spec_loads_from_the_image(void);
 void test_runtime_file_env_is_the_only_directory(void);
+void test_runtime_file_absolute_path_names_itself(void);
 void test_runtime_file_unset_env_prefers_prefix_then_source(void);
 void test_runtime_file_theme_never_falls_back_past_explicit_runtime(void);
 void test_base64_rfc4648_vectors(void);

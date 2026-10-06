@@ -149,6 +149,30 @@ void test_runtime_file_env_is_the_only_directory(void)
     rt_fix_close(&f);
 }
 
+/* A user's syntax file under $XDG_CONFIG_HOME is an absolute path, not a
+ * runtime asset: it must name itself, never $YEW_RUNTIME_DIR/<abs>.  `yew
+ * syn` resolved one to "runtime//tmp/.../asset-user.fl" and failed. */
+void test_runtime_file_absolute_path_names_itself(void)
+{
+    RtFileFix f;
+    char abs[PATH_MAX];
+    char *path;
+
+    rt_fix_open(&f);
+    rt_join(abs, sizeof(abs), f.config, "yew/syntax/user.fl");
+    YEW_ASSERT_EQ_I64(setenv("YEW_RUNTIME_DIR", f.env, 1), 0);
+    path = yew_runtime_file(abs);
+    YEW_ASSERT_NOT_NULL(path);
+    YEW_ASSERT_EQ_STR(path, abs);
+    yew_xfree(path);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_RUNTIME_DIR"), 0);
+    path = yew_runtime_file(abs);
+    YEW_ASSERT_NOT_NULL(path);
+    YEW_ASSERT_EQ_STR(path, abs);
+    yew_xfree(path);
+    rt_fix_close(&f);
+}
+
 void test_runtime_file_unset_env_prefers_prefix_then_source(void)
 {
     RtFileFix f;
