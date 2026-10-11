@@ -506,10 +506,27 @@ static CtxStyle menu_style(const Ed *ed)
  */
 static bool motion_want_strip;
 
+static bool motion_wanted(void)
+{
+    return yew_mouse_enabled() && (yew_ctx_active() || motion_want_strip);
+}
+
 static void motion_sync(void)
 {
-    yew_tty_mouse_motion(yew_mouse_enabled() &&
-                         (yew_ctx_active() || motion_want_strip));
+    yew_tty_mouse_motion(motion_wanted());
+}
+
+/*
+ * The wants survive a ^Z/`fg` or a `:!cmd` handover — the chevron is
+ * still drawn, the menu still open — but the terminal does not: the
+ * restore wrote `1003l` and the re-entry's base modes select 1002.  Every
+ * note after that sees no change in its want and stays quiet, so the
+ * re-entry itself must put the mode back, through the tty's uncached
+ * path.
+ */
+void yew_mouse_motion_reassert(void)
+{
+    yew_tty_mouse_motion_reassert(motion_wanted());
 }
 
 void yew_mouse_note_chevrons(bool any)

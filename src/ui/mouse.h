@@ -310,6 +310,10 @@ void yew_mouse_note_chevrons(bool any);
 /* What the last strip draw reported — the seam fuzz_mouse asserts the
  * if-and-only-if against. */
 bool yew_mouse_chevron_drawn(void);
+/* After the base modes are re-written on a resume or a handover: re-arm
+ * 1003 if a chevron or a menu still wants it.  The notes above cannot,
+ * because nothing they track changed. */
+void yew_mouse_motion_reassert(void);
 
 /*
  * Sprint 57.13 §3: WHAT IS UNDER THE POINTER.
