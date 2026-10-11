@@ -357,7 +357,7 @@ static void loop_seed_probe(Ed *ed)
         return;
     ed->in.caps = ed->tty.caps;
     if (ed->input_ready)
-        yew_input_enable(ed->tty.wfd, &ed->tty.caps);
+        yew_ed_input_enable(ed);
     if (ed->render_ready) {
         yew_render_init(&ed->render, &ed->tty.caps, loop_getenv);
         yew_theme_sync_surfaces(ed);

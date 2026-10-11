@@ -1051,7 +1051,7 @@ resume:
                            strerror(errno));
             ok = false;
         } else {
-            yew_input_enable(ed->tty.wfd, &ed->tty.caps);
+            yew_ed_input_enable(ed);
             (void)yew_tty_winsize(&ed->tty);
             ed->layout_dirty = true;
             ed->full_damage = true;

@@ -2475,6 +2475,16 @@ void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
     yew_cmdedit_settle(ed);
 }
 
+void yew_ed_input_enable(Ed *ed)
+{
+    if (ed == NULL)
+        return;
+    yew_input_enable(ed->tty.wfd, &ed->tty.caps);
+    /* The base modes just selected 1002 over whatever 1003 a chevron or a
+     * menu holds; put it back before the next frame can need it. */
+    yew_mouse_motion_reassert();
+}
+
 void yew_ed_resize(Ed *ed, bool resumed)
 {
     bool resized = false;
@@ -2488,7 +2498,7 @@ void yew_ed_resize(Ed *ed, bool resumed)
             return;
         }
         yew_tty_altscreen(&ed->tty, true);
-        yew_input_enable(ed->tty.wfd, &ed->tty.caps);
+        yew_ed_input_enable(ed);
     }
     if (yew_tty_winsize(&ed->tty) && ed->grid_ready &&
         (ed->grid.rows != (u16)ed->tty.rows ||

@@ -472,6 +472,9 @@ void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
 /* Mouse events go to yew_mouse_event (ui/mouse.h).  There is deliberately
  * no editor-level twin: Sprint 27 DoD 2 is that the router is the only
  * place a mouse event becomes an action. */
+/* Write the base input modes on a (re-)entry and re-arm 1003 if a chevron
+ * or a menu still wants it: every re-entry goes through here. */
+void yew_ed_input_enable(Ed *ed);
 void yew_ed_resize(Ed *ed, bool resumed);
 void yew_ed_layout(Ed *ed);
 void yew_ed_render(Ed *ed);
