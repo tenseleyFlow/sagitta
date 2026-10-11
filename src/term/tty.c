@@ -859,14 +859,12 @@ void yew_tty_suspend(Tty *t)
     (void)kill(0, SIGTSTP);
 }
 
-void yew_tty_mouse_motion(bool on)
+static void yew_tty_mouse_motion_write(bool on)
 {
     sigset_t blocked;
     sigset_t saved;
     bool masked;
 
-    if ((g_mouse_motion != 0) == on)
-        return;
     /* The flag and the bytes that make it true must not be split by a
      * restore: a SIGTSTP between them would either leave 1003 armed
      * behind a cleared flag or clear a flag the terminal never saw. */
@@ -892,6 +890,28 @@ void yew_tty_mouse_motion(bool on)
     }
     if (masked)
         (void)sigprocmask(SIG_SETMASK, &saved, NULL);
+}
+
+void yew_tty_mouse_motion(bool on)
+{
+    if ((g_mouse_motion != 0) == on)
+        return;
+    yew_tty_mouse_motion_write(on);
+}
+
+void yew_tty_mouse_motion_reassert(bool on)
+{
+    /* The base modes were just written again, and their `1002h` selects
+     * button tracking whatever the flag says: a SIGTSTP restore cleared
+     * the flag along with the terminal, and a stop that skipped the
+     * restore left it set over a terminal that no longer has 1003.
+     * Either way the cache cannot be trusted, so arming writes the
+     * transition unconditionally.  Disarmed is what the base modes
+     * already left, so that side only settles a stale flag. */
+    if (on)
+        yew_tty_mouse_motion_write(true);
+    else
+        yew_tty_mouse_motion(false);
 }
 
 bool yew_tty_mouse_motion_active(void)

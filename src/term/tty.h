@@ -133,6 +133,10 @@ void yew_tty_suspend(Tty *t);
  * the terminal clears it.
  */
 void yew_tty_mouse_motion(bool on);
+/* For the moment after yew_input_enable re-wrote the base modes on a
+ * resume or handover: its `1002h` deselected 1003 behind the cached flag,
+ * so `on` re-arms it unconditionally.  `off` is yew_tty_mouse_motion. */
+void yew_tty_mouse_motion_reassert(bool on);
 bool yew_tty_mouse_motion_active(void);  /* test seam */
 
 void yew_tty_probe_start(Tty *t, i64 now_ms);
