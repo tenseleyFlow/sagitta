@@ -278,6 +278,15 @@ void test_tty_mouse_motion_restore_blob(void)
     actual = yew_tty_restore_blob(&len);
     YEW_ASSERT_EQ_U64(len, sizeof(idle) - 1U);
     YEW_ASSERT_EQ_MEM(actual, idle, sizeof(idle) - 1U);
+
+    /* The explicit-state accessor names the same two blobs whatever this
+     * process's own flag says. */
+    actual = yew_tty_restore_blob_for(true, &len);
+    YEW_ASSERT_EQ_U64(len, sizeof(armed) - 1U);
+    YEW_ASSERT_EQ_MEM(actual, armed, sizeof(armed) - 1U);
+    actual = yew_tty_restore_blob_for(false, &len);
+    YEW_ASSERT_EQ_U64(len, sizeof(idle) - 1U);
+    YEW_ASSERT_EQ_MEM(actual, idle, sizeof(idle) - 1U);
 }
 
 void test_tty_poison_marks_terminal_unusable(void)

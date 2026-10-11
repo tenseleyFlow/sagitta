@@ -155,5 +155,9 @@ bool yew_tty_detect_truecolor(const char *(*getv)(const char *));
  * bytes yew_tty_restore would write right now, 1003l included when
  * yew_tty_mouse_motion_active(). */
 const u8 *yew_tty_restore_blob(size_t *len);
+/* The same bytes for a CHILD whose 1003 state the caller knows: the PTY
+ * harness links this file but never arms motion itself, so it names the
+ * state it observed on the child's terminal instead of reading its own. */
+const u8 *yew_tty_restore_blob_for(bool motion, size_t *len);
 
 #endif

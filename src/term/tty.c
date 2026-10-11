@@ -1452,3 +1452,15 @@ const u8 *yew_tty_restore_blob(size_t *len)
         *len = blob_len;
     return (const u8 *)blob;
 }
+
+const u8 *yew_tty_restore_blob_for(bool motion, size_t *len)
+{
+    if (motion) {
+        if (len != NULL)
+            *len = sizeof(YEW_TTY_RESTORE_BLOB_MOTION) - 1U;
+        return (const u8 *)YEW_TTY_RESTORE_BLOB_MOTION;
+    }
+    if (len != NULL)
+        *len = sizeof(YEW_TTY_RESTORE_BLOB) - 1U;
+    return (const u8 *)YEW_TTY_RESTORE_BLOB;
+}
