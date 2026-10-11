@@ -1051,8 +1051,12 @@ resume:
                            strerror(errno));
             ok = false;
         } else {
-            yew_ed_input_enable(ed);
-            (void)yew_tty_winsize(&ed->tty);
+            /* The same re-entry as a SIGCONT: base modes and 1003, the
+             * window size the child may have changed, and the grid
+             * forgotten — the alternate screen came back EMPTY, so a
+             * diff against the old front buffer would repaint only the
+             * cells that changed and leave the rest blank. */
+            yew_ed_resize(ed, true);
             ed->layout_dirty = true;
             ed->full_damage = true;
             ed->footer_dirty = true;
