@@ -2591,6 +2591,7 @@ const YewTest yew_tests[] = {
     T(mouse_row2_chevron_hover_scrolls_row_2_and_not_row_1),
     T(mouse_drag_autoscroll_moves_the_row_under_the_pointer),
     T(mouse_motion_tracking_follows_the_chevrons_too),
+    T(mouse_motion_reassert_after_a_restore),
     T(mouse_motion_off_a_chevron_marks_no_damage),
     T(mouse_press_captures_its_target_across_a_strip_change),
     T(mouse_press_on_a_tab_closed_mid_gesture_is_inert),

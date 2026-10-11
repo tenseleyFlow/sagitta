@@ -2590,6 +2590,7 @@ void test_mouse_chevron_hover_tick_cancels_when_the_chevron_goes(void);
 void test_mouse_row2_chevron_hover_scrolls_row_2_and_not_row_1(void);
 void test_mouse_drag_autoscroll_moves_the_row_under_the_pointer(void);
 void test_mouse_motion_tracking_follows_the_chevrons_too(void);
+void test_mouse_motion_reassert_after_a_restore(void);
 void test_mouse_motion_off_a_chevron_marks_no_damage(void);
 void test_mouse_press_captures_its_target_across_a_strip_change(void);
 void test_mouse_press_on_a_tab_closed_mid_gesture_is_inert(void);

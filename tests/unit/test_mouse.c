@@ -2525,6 +2525,70 @@ void test_mouse_drag_autoscroll_moves_the_row_under_the_pointer(void)
 }
 
 /*
+ * ^Z/`fg` and `:!cmd` with a chevron on screen.
+ *
+ * The restore on the way out clears the tty's 1003 flag (the terminal
+ * really did get `1003l`), but the chevron is still drawn, so the strip's
+ * want never changes and the next paint's note is a no-op.  Only the
+ * re-entry's reassert can put the mode back — and it must do so for an
+ * open menu too, and stay down when nothing wants it.
+ */
+void test_mouse_motion_reassert_after_a_restore(void)
+{
+    HovFixture f;
+
+    hv_fixture(&f, 9U, 40U);
+    yew_tab_switch(&f.ed, 0);
+    hv_paint(&f);
+    YEW_ASSERT(yew_mouse_chevron_drawn());
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+
+    /* What the SIGTSTP restore does to the flag. */
+    yew_tty_mouse_motion(false);
+    hv_paint(&f);
+    /* THE BUG: the want did not change, so the paint did not re-arm. */
+    YEW_ASSERT(yew_mouse_chevron_drawn());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    yew_mouse_motion_reassert();
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    /* Idempotent against a flag that is already set. */
+    yew_mouse_motion_reassert();
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+
+    /* The strip fits: nothing wants it, so the reassert leaves it down. */
+    {
+        int i;
+
+        for (i = 9; i >= 2; i--)
+            YEW_ASSERT(yew_tab_close(&f.ed, i));
+    }
+    hv_paint(&f);
+    YEW_ASSERT(!yew_mouse_chevron_drawn());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    yew_mouse_motion_reassert();
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+
+    /* A menu open across the restore is a want of its own. */
+    YEW_ASSERT(yew_mouse_open_tab_menu(&f.ed, yew_tab_at(&f.ed, 0)->tab_id,
+                                       2U, 0U));
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    yew_tty_mouse_motion(false);
+    yew_mouse_motion_reassert();
+    YEW_ASSERT(yew_tty_mouse_motion_active());
+    {
+        Key esc;
+
+        (void)memset(&esc, 0, sizeof(esc));
+        esc.kind = (u16)YEW_EV_KEY;
+        esc.code = YEW_KEY_ESCAPE;
+        (void)yew_mouse_menu_key(&f.ed, &esc);
+    }
+    YEW_ASSERT(!yew_ctx_active());
+    YEW_ASSERT(!yew_tty_mouse_motion_active());
+    yew_ed_free(&f.ed);
+}
+
+/*
  * MODE 1003, and the if-and-only-if.
  *
  * Two owners, one arming path.  A chevron on screen arms it with no
