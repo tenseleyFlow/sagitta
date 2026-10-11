@@ -12027,6 +12027,49 @@ static void case_chevron_resume_rearms_motion(PtyCtx *c)
 }
 
 /*
+ * The handover twin of the case above: `:!!true` gives the child yew's
+ * terminal (restore blob, `1003l` included) and takes it back through
+ * the same base-mode re-entry, so a chevron still on screen must find
+ * 1003 armed again when the child is done.
+ */
+static void case_chevron_handover_rearms_motion(PtyCtx *c)
+{
+    const u32 motion = VT_MODE_BRACKETED_PASTE | VT_MODE_ANY_MOTION_MOUSE |
+                       VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    ptc_check(c, c->vt.modes == motion,
+              "a drawn chevron did not arm any-motion tracking");
+    ptc_allow_restore(c);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "!!true");
+    ptc_keys(c, "enter");
+    ptc_wait_until(c, s57_screen_contains, "true exited 0",
+                   "the handover child did not hand the terminal back");
+    ptc_check(c, c->vt.alt, "alternate screen was not re-entered after !!");
+    /* The alternate screen comes back empty; the first frame must be a
+     * full repaint, not a diff against what was there before. */
+    ptc_check(c, s57_screen_contains(c, "alpha beta gamma"),
+              "the handover repaint left the document rows blank");
+    ptc_check(c, c->vt.modes == motion,
+              "the handover left the chevron without any-motion tracking");
+    /* Dismiss the 4 s INFO line by keystroke, each gated on its frame,
+     * so the golden does not depend on elapsed time. */
+    ptc_keys(c, ":");
+    ptc_keys(c, "esc");
+    ptc_wait_until(c, s57_screen_contains, "utf-8  lf",
+                   "the footer did not return after dismissing the line");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
  * Sprints 57.14 and 57.15 in ONE frame, which neither could record on
  * its own.
  *
@@ -13124,6 +13167,8 @@ const PtyCase yew_pty_cases[] = {
       case_s57_15_chevron_hover_reveals),
     C(chevron_resume_rearms_motion, modern, 24U, 80U,
       case_chevron_resume_rearms_motion),
+    C(chevron_handover_rearms_motion, modern, 24U, 80U,
+      case_chevron_handover_rearms_motion),
     C(s57_14_15_float_over_a_scrolled_strip, modern, 24U, 80U,
       case_s57_14_15_float_over_a_scrolled_strip),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
