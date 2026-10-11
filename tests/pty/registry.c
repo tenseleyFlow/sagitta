@@ -12021,6 +12021,12 @@ static void case_chevron_resume_rearms_motion(PtyCtx *c)
     ptc_check(c, c->vt.alt, "alternate screen was not re-entered after resume");
     ptc_check(c, c->vt.modes == motion,
               "resume left the chevron without any-motion tracking");
+    /* And the ^Z the user actually types: ed.suspend, not a signal. */
+    ptc_command_suspend_resume(c);
+    ptc_settle(c, 0);
+    ptc_check(c, c->vt.modes == motion,
+              "ed.suspend + SIGCONT left the chevron without any-motion "
+              "tracking");
     ptc_snapshot(c, c->test->name);
     force_quit(c);
     (void)unlink(path);
