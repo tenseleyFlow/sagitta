@@ -1479,7 +1479,10 @@ static bool enter_suspend(PtyCtx *c, bool through_command)
         return false;
     ptc_allow_restore(c);
     raw_before = c->raw.len;
-    restore = yew_tty_restore_blob(&restore_len);
+    /* With 1003 armed the child's restore carries `1003l` too, so the
+     * expected blob follows the mode the VT saw it arm. */
+    restore = yew_tty_restore_blob_for(
+        (c->vt.modes & VT_MODE_ANY_MOTION_MOUSE) != 0U, &restore_len);
     if (through_command) {
         ptc_keys(c, "ctrl+z");
     } else if (kill(c->pty.pid, SIGTSTP) != 0) {
