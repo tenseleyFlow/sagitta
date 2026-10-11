@@ -11995,6 +11995,38 @@ static void case_s57_15_chevron_hover_reveals(PtyCtx *c)
 }
 
 /*
+ * ^Z then `fg` with a chevron on screen.
+ *
+ * The SIGTSTP restore writes `1003l` and the resume re-enables the
+ * baseline protocol, `1002h`.  The chevron never went away, so the
+ * strip's claim on 1003 is still live and the resume must re-arm it, or
+ * hover-to-reveal is dead until the chevron happens to be redrawn from
+ * scratch.  The modes are checked on both sides of the cycle; the golden
+ * records the resumed frame and its modes line.
+ */
+static void case_chevron_resume_rearms_motion(PtyCtx *c)
+{
+    const u32 motion = VT_MODE_BRACKETED_PASTE | VT_MODE_ANY_MOTION_MOUSE |
+                       VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s57_15_overflowing_strip(c);
+    ptc_check(c, c->vt.modes == motion,
+              "a drawn chevron did not arm any-motion tracking");
+    ptc_suspend_resume(c);
+    ptc_settle(c, 0);
+    ptc_check(c, c->vt.alt, "alternate screen was not re-entered after resume");
+    ptc_check(c, c->vt.modes == motion,
+              "resume left the chevron without any-motion tracking");
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
  * Sprints 57.14 and 57.15 in ONE frame, which neither could record on
  * its own.
  *
@@ -13090,6 +13122,8 @@ const PtyCase yew_pty_cases[] = {
       case_s57_15_chevron_click_scrolls),
     C(s57_15_chevron_hover_reveals, modern, 24U, 80U,
       case_s57_15_chevron_hover_reveals),
+    C(chevron_resume_rearms_motion, modern, 24U, 80U,
+      case_chevron_resume_rearms_motion),
     C(s57_14_15_float_over_a_scrolled_strip, modern, 24U, 80U,
       case_s57_14_15_float_over_a_scrolled_strip),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
