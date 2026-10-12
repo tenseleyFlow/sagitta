@@ -7,6 +7,8 @@
 #include "edit/ed.h"
 #include "fl/flapi.h"
 #include "fl/gc.h"
+#include "mod/git/fussmode.h"
+#include "mod/git/git_int.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
 
@@ -245,7 +247,10 @@ void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
     ApiFix f;
     FlValue args[1];
     FlValue out = FL_NIL_V;
+    FlValue staged_paths = FL_NIL_V;
     Buffer *buffer;
+    GitEntry entries[2] = {0};
+    GitSnapshot *snapshot;
 
     api_open(&f);
     buffer = yew_ed_doc(&f.ed);
@@ -284,6 +289,38 @@ void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
     YEW_ASSERT_EQ_I64(out.t, FL_MAP);
     YEW_ASSERT(api_map_bool(out, "active", false));
     YEW_ASSERT(api_map_bool(out, "known", false));
+    YEW_ASSERT(api_map_bool(out, "clean", false));
+    YEW_ASSERT(api_map_value(out, "staged_paths", &staged_paths));
+    YEW_ASSERT_EQ_I64(staged_paths.t, FL_LIST);
+    YEW_ASSERT_EQ_U64(((FlList *)staged_paths.as.o)->n, 0U);
+
+    snapshot = yew_git_test_snapshot_mut(&f.ed);
+    YEW_ASSERT_NOT_NULL(snapshot);
+    entries[0].path = (char *)"practice/notes.txt";
+    entries[0].path_len = 18U;
+    entries[0].staged = true;
+    entries[1].path = (char *)"draft.txt";
+    entries[1].path_len = 9U;
+    entries[1].unstaged = true;
+    snapshot->state = YEW_GIT_OK;
+    snapshot->entries.data = entries;
+    snapshot->entries.len = YEW_ARRAY_LEN(entries);
+    snapshot->gen = 1U;
+    YEW_ASSERT_EQ_I64(yew_fuss_mode_enter(&f.ed), YEW_CMD_OK);
+    f.ed.mode = YEW_MODE_F;
+    YEW_ASSERT(api_invoke(&f, "ed.fuss", NULL, 0U, &out));
+    YEW_ASSERT(api_map_value(out, "staged_paths", &staged_paths));
+    YEW_ASSERT_EQ_I64(staged_paths.t, FL_LIST);
+    YEW_ASSERT_EQ_U64(((FlList *)staged_paths.as.o)->n, 1U);
+    YEW_ASSERT_EQ_I64(((FlList *)staged_paths.as.o)->v[0].t, FL_STR);
+    YEW_ASSERT_EQ_MEM(((FlStr *)((FlList *)staged_paths.as.o)->v[0].as.o)->b,
+                      "practice/notes.txt", 18U);
+    snapshot->entries.len = 0U;
+    snapshot->state = YEW_GIT_NO_UPSTREAM;
+    YEW_ASSERT(api_invoke(&f, "ed.fuss", NULL, 0U, &out));
+    YEW_ASSERT(api_map_bool(out, "clean", true));
+    snapshot->state = YEW_GIT_NO_GIT;
+    YEW_ASSERT(api_invoke(&f, "ed.fuss", NULL, 0U, &out));
     YEW_ASSERT(api_map_bool(out, "clean", false));
     api_close(&f);
 }

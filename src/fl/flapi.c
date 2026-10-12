@@ -25,6 +25,7 @@
 #include "mod/plug/plug.h"
 #endif
 #include "mod/git/fussmode.h"
+#include "mod/git/git.h"
 #include "search/regex.h"
 #include "text/mark.h"
 #include "text/piece.h"
@@ -532,7 +533,10 @@ static bool q_ed_fuss(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Ed *ed = api_ed(vm);
     YewFussState state;
+    const GitSnapshot *snapshot;
+    FlList *staged_paths;
     FlMap *map;
+    size_t i;
     (void)a;
     (void)n;
     if (ed == NULL)
@@ -553,6 +557,23 @@ static bool q_ed_fuss(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)map_put(vm, map, "expanded", FL_BOOL_V(state.expanded));
     (void)map_put(vm, map, "actions_open", FL_BOOL_V(state.actions_open));
     (void)map_put(vm, map, "clean", FL_BOOL_V(state.clean));
+    staged_paths = fl_list_new(vm);
+    fl_gc_protect(vm, FL_OBJ_V(FL_LIST, staged_paths));
+    snapshot = state.active ? yew_git_snapshot_cached(ed) : NULL;
+    if (snapshot != NULL) {
+        for (i = 0U; i < snapshot->entries.len; i++) {
+            const GitEntry *entry = &snapshot->entries.data[i];
+
+            if (entry->staged && entry->path != NULL) {
+                (void)fl_list_push(vm, staged_paths,
+                                   api_str(vm, entry->path,
+                                           entry->path_len));
+            }
+        }
+    }
+    (void)map_put(vm, map, "staged_paths",
+                  FL_OBJ_V(FL_LIST, staged_paths));
+    fl_gc_release(vm, 1U);
     *out = FL_OBJ_V(FL_MAP, map);
     fl_gc_release(vm, 1U);
     return true;

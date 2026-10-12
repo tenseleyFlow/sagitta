@@ -354,6 +354,10 @@ struct Ed {
     i64 background_next_ms;
     bool fl_flushing_change;
     bool fl_idle_fired;
+    /* A background state publisher may request one idle observation after
+     * queued terminal input drains.  Unlike resetting the idle clock, this
+     * cannot lose the observation when the publisher and input share a poll. */
+    bool fl_idle_pending;
     bool fl_model_teardown;
     const OptProvider *opt_provider;
     struct OptStored *opt_globals;

@@ -641,6 +641,28 @@ void test_fussdrawer_typejump_selection_damage_stays_local(void)
     fussdrawer_fix_drop(&fix);
 }
 
+void test_fussdrawer_typejump_ignores_printable_outside_f_mode(void)
+{
+    FussDrawerFix fix;
+    Key key = {0};
+    Ed ed;
+
+    fussdrawer_fix_make(&fix);
+    fussdrawer_enter_non_git(&ed, &fix);
+    YEW_ASSERT(yew_fuss_active(&ed));
+    key.code = (u32)'m';
+    key.ntext = 1U;
+    key.text[0] = (u8)'m';
+
+    /* Commit editing intentionally leaves the drawer active while Insert
+     * mode owns the scratch buffer.  Its text must reach normal dispatch. */
+    ed.mode = YEW_MODE_I;
+    YEW_ASSERT(!yew_fuss_key(&ed, &key, yew_now_ms()));
+
+    yew_ed_free(&ed);
+    fussdrawer_fix_drop(&fix);
+}
+
 void test_fussdrawer_actions_list_uses_only_effective_reachable_keys(void)
 {
     static const BindRow overrides[] = {

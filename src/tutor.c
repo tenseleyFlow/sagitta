@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "fl/data.h"
@@ -19,6 +20,7 @@
 #include "fl/vm.h"
 #include "edit/ed.h"
 #include "mod/ai/ai.h"
+#include "mod/git/git.h"
 #include "mod/lsp/lsp.h"
 #include "syn/defs.h"
 #include "text/file.h"
@@ -377,6 +379,204 @@ static bool write_new_file(const char *path, const u8 *bytes, size_t len)
     return true;
 }
 
+typedef enum TutorGitPrep {
+    TUTOR_GIT_READY,
+    TUTOR_GIT_UNAVAILABLE,
+    TUTOR_GIT_FAILED
+} TutorGitPrep;
+
+static TutorGitPrep tutor_git_run(const char *root, const char *verb_name,
+                                  char *const *argv)
+{
+    static const char *const unset_names[] = {
+        "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_CONFIG_COUNT",
+        "GIT_SSH", "GIT_SSH_COMMAND", "GIT_ASKPASS", "SSH_ASKPASS",
+        "SSH_AUTH_SOCK", "SSH_ASKPASS_REQUIRE", "GIT_TEMPLATE_DIR"
+    };
+    int exec_pipe[2];
+    int status = 0;
+    int exec_errno = 0;
+    ssize_t got;
+    pid_t pid;
+    pid_t waited;
+    size_t i;
+
+    /* Module-less builds have no FUSS lesson.  Consult the same closed verb
+     * inventory as the editor before any process can be started. */
+    if (yew_git_verb(verb_name) == NULL)
+        return TUTOR_GIT_UNAVAILABLE;
+    if (!yew_pipe_cloexec(exec_pipe))
+        return TUTOR_GIT_FAILED;
+    pid = fork();
+    if (pid == 0) {
+        int nullfd;
+        int e;
+
+        (void)close(exec_pipe[0]);
+        if (chdir(root) != 0)
+            goto child_fail;
+        for (i = 0U; i < YEW_ARRAY_LEN(unset_names); i++)
+            (void)unsetenv(unset_names[i]);
+        if (setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1) != 0 ||
+            setenv("GIT_CONFIG_SYSTEM", "/dev/null", 1) != 0 ||
+            setenv("GIT_TERMINAL_PROMPT", "0", 1) != 0 ||
+            setenv("GIT_EDITOR", "false", 1) != 0 ||
+            setenv("GIT_SEQUENCE_EDITOR", "false", 1) != 0 ||
+            setenv("GIT_PAGER", "cat", 1) != 0 ||
+            setenv("PAGER", "cat", 1) != 0 ||
+            setenv("LC_ALL", "C", 1) != 0 ||
+            setenv("GIT_AUTHOR_NAME", "Yew Tutor", 1) != 0 ||
+            setenv("GIT_AUTHOR_EMAIL", "tutor@yew.invalid", 1) != 0 ||
+            setenv("GIT_COMMITTER_NAME", "Yew Tutor", 1) != 0 ||
+            setenv("GIT_COMMITTER_EMAIL", "tutor@yew.invalid", 1) != 0)
+            goto child_fail;
+        nullfd = open("/dev/null", O_RDWR | O_CLOEXEC);
+        if (nullfd < 0 || dup2(nullfd, STDIN_FILENO) < 0 ||
+            dup2(nullfd, STDOUT_FILENO) < 0 ||
+            dup2(nullfd, STDERR_FILENO) < 0)
+            goto child_fail;
+        if (nullfd > STDERR_FILENO)
+            (void)close(nullfd);
+        execvp(argv[0], argv);
+child_fail:
+        e = errno;
+        {
+            ssize_t ignored = write(exec_pipe[1], &e, sizeof(e));
+
+            (void)ignored;
+        }
+        _exit(127);
+    }
+    (void)close(exec_pipe[1]);
+    if (pid < 0) {
+        (void)close(exec_pipe[0]);
+        return TUTOR_GIT_FAILED;
+    }
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    do {
+        got = read(exec_pipe[0], &exec_errno, sizeof(exec_errno));
+    } while (got < 0 && errno == EINTR);
+    (void)close(exec_pipe[0]);
+    if (waited < 0 || got < 0)
+        return TUTOR_GIT_FAILED;
+    if (got == (ssize_t)sizeof(exec_errno))
+        return exec_errno == ENOENT ? TUTOR_GIT_UNAVAILABLE :
+                                      TUTOR_GIT_FAILED;
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ?
+           TUTOR_GIT_READY : TUTOR_GIT_FAILED;
+}
+
+static TutorGitPrep tutor_git_prepare(const char *root)
+{
+    static const u8 ignore[] = "tutor.fl\n.tutor-git-ready\n";
+    static const u8 notes[] = "FUSS tutor notes\n";
+    static const u8 draft[] = "draft baseline\n";
+    static const u8 todo[] = "todo baseline\n";
+    static const u8 checkpoint[] = "second tutor checkpoint\n";
+    static const u8 notes_dirty[] = "FUSS tutor notes\nstage this line\n";
+    static const u8 draft_dirty[] = "draft baseline\nreview this draft\n";
+    static const u8 todo_dirty[] = "todo baseline\nfinish this item\n";
+    static const u8 ready[] = "yew tutor git fixture v1\n";
+    char path[PATH_MAX];
+    char *init[] = {
+        (char *)"git", (char *)"--no-pager", (char *)"-c",
+        (char *)"core.quotepath=false", (char *)"-c",
+        (char *)"status.renames=true", (char *)"-c",
+        (char *)"init.defaultBranch=main", (char *)"init", (char *)"-q",
+        NULL
+    };
+    char *add_all[] = {
+        (char *)"git", (char *)"--no-pager", (char *)"-c",
+        (char *)"core.quotepath=false", (char *)"-c",
+        (char *)"status.renames=true", (char *)"add", (char *)"--",
+        (char *)".", NULL
+    };
+    char *commit_base[] = {
+        (char *)"git", (char *)"--no-pager", (char *)"-c",
+        (char *)"core.quotepath=false", (char *)"-c",
+        (char *)"status.renames=true", (char *)"commit", (char *)"-q",
+        (char *)"-m", (char *)"Seed yew tutor", NULL
+    };
+    char *add_checkpoint[] = {
+        (char *)"git", (char *)"--no-pager", (char *)"-c",
+        (char *)"core.quotepath=false", (char *)"-c",
+        (char *)"status.renames=true", (char *)"add", (char *)"--",
+        (char *)"checkpoint.txt", NULL
+    };
+    char *commit_checkpoint[] = {
+        (char *)"git", (char *)"--no-pager", (char *)"-c",
+        (char *)"core.quotepath=false", (char *)"-c",
+        (char *)"status.renames=true", (char *)"commit", (char *)"-q",
+        (char *)"-m", (char *)"Add tutor checkpoint", NULL
+    };
+    TutorGitPrep status;
+
+    if (!path_join(path, root, ".tutor-git-ready"))
+        return TUTOR_GIT_FAILED;
+    if (access(path, F_OK) == 0)
+        return TUTOR_GIT_READY;
+    if (yew_git_verb("init") == NULL || yew_git_verb("stage") == NULL ||
+        yew_git_verb("commit") == NULL)
+        return TUTOR_GIT_UNAVAILABLE;
+    if (!path_join(path, root, "practice") || !yew_mkdirs(path, 0700U) ||
+        !path_join(path, root, ".gitignore") ||
+        !write_new_file(path, ignore, sizeof(ignore) - 1U) ||
+        !path_join(path, root, "practice/notes.txt") ||
+        !write_new_file(path, notes, sizeof(notes) - 1U) ||
+        !path_join(path, root, "draft.txt") ||
+        !write_new_file(path, draft, sizeof(draft) - 1U) ||
+        !path_join(path, root, "todo.txt") ||
+        !write_new_file(path, todo, sizeof(todo) - 1U))
+        return TUTOR_GIT_FAILED;
+    status = tutor_git_run(root, "init", init);
+    if (status != TUTOR_GIT_READY ||
+        tutor_git_run(root, "stage", add_all) != TUTOR_GIT_READY ||
+        tutor_git_run(root, "commit", commit_base) != TUTOR_GIT_READY)
+        return status == TUTOR_GIT_UNAVAILABLE ? status : TUTOR_GIT_FAILED;
+    if (!path_join(path, root, "checkpoint.txt") ||
+        !write_new_file(path, checkpoint, sizeof(checkpoint) - 1U) ||
+        tutor_git_run(root, "stage", add_checkpoint) != TUTOR_GIT_READY ||
+        tutor_git_run(root, "commit", commit_checkpoint) != TUTOR_GIT_READY)
+        return TUTOR_GIT_FAILED;
+    if (!path_join(path, root, "practice/notes.txt") ||
+        yew_file_write_atomic(path, notes_dirty, sizeof(notes_dirty) - 1U,
+                              0600) != YEW_SAVE_OK ||
+        !path_join(path, root, "draft.txt") ||
+        yew_file_write_atomic(path, draft_dirty, sizeof(draft_dirty) - 1U,
+                              0600) != YEW_SAVE_OK ||
+        !path_join(path, root, "todo.txt") ||
+        yew_file_write_atomic(path, todo_dirty, sizeof(todo_dirty) - 1U,
+                              0600) != YEW_SAVE_OK ||
+        !path_join(path, root, ".tutor-git-ready") ||
+        !write_new_file(path, ready, sizeof(ready) - 1U))
+        return TUTOR_GIT_FAILED;
+    return TUTOR_GIT_READY;
+}
+
+static bool tutor_git_unavailable_text(const char *root)
+{
+    char path[PATH_MAX];
+    Bytebuf bytes;
+
+    if (!asset_read("tutor/text/ch07-nogit.txt", &bytes))
+        return false;
+    if (!path_join(path, root, "ch07.txt")) {
+        bytebuf_free(&bytes);
+        return false;
+    }
+    if (yew_file_write_atomic(path, bytes.data, bytes.len, 0600) !=
+        YEW_SAVE_OK) {
+        bytebuf_free(&bytes);
+        return false;
+    }
+    bytebuf_free(&bytes);
+    return true;
+}
+
 bool yew_tutor_seed(const char *root)
 {
     struct stat st;
@@ -668,6 +868,7 @@ int yew_tutor_main(int argc, char **argv)
     char chapter_path[YEW_TUTOR_CHAPTERS][PATH_MAX];
     const char *paths[YEW_TUTOR_CHAPTERS];
     YewTutorProgress progress;
+    TutorGitPrep git_prep;
     YewEdStartup startup;
     bool missing;
     u32 j;
@@ -717,6 +918,25 @@ int yew_tutor_main(int argc, char **argv)
         !yew_tutor_reconcile(root, &progress)) {
         yew_xfree(root);
         return usage_error("could not prepare tutor workspace", NULL);
+    }
+    if (have_chapter && chapter + 1U == (u8)YEW_TUTOR_CHAPTERS &&
+        !progress.skipped[chapter]) {
+        git_prep = tutor_git_prepare(root);
+        if (git_prep == TUTOR_GIT_FAILED) {
+            yew_xfree(root);
+            return usage_error("could not prepare tutor Git repository",
+                               NULL);
+        }
+        if (git_prep == TUTOR_GIT_UNAVAILABLE) {
+            progress.done[chapter] = 0U;
+            progress.skipped[chapter] = true;
+            if (!yew_tutor_progress_save(root, &progress) ||
+                !tutor_git_unavailable_text(root)) {
+                yew_xfree(root);
+                return usage_error("could not record skipped Git lesson",
+                                   NULL);
+            }
+        }
     }
     for (j = 0U; j < (u32)YEW_TUTOR_CHAPTERS; j++) {
         char name[16];

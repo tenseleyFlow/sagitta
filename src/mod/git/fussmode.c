@@ -114,7 +114,9 @@ struct FussMode {
     u32 commit_buffer_id;
     u32 pending_job;
     u32 seen_result_job;
+    u32 mutation_snapshot_gen;
     bool pending_view;
+    bool mutation_snapshot_pending;
     bool commit_editing;
     bool commit_amend;
     bool commit_cancel_pending;
@@ -640,6 +642,15 @@ static void fuss_result_tick(Ed *ed)
     pick = f->pending_pick;
     f->pending_pick = FUSS_PICK_NONE;
     if (result->state == YEW_GIT_OK) {
+        const GitVerb *completed = result->verb == NULL ? NULL :
+                                   yew_git_verb(result->verb);
+        const GitSnapshot *snapshot;
+
+        if (completed != NULL && completed->kind != YEW_GV_READ) {
+            snapshot = yew_git_snapshot_cached(ed);
+            f->mutation_snapshot_gen = snapshot == NULL ? 0U : snapshot->gen;
+            f->mutation_snapshot_pending = true;
+        }
         if (pick == FUSS_PICK_COMMIT_AMEND) {
             if (result->out_len > (u64)SIZE_MAX)
                 yew_msg(ed, YEW_MSG_ERROR,
@@ -1145,6 +1156,18 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
     snap = yew_git_snapshot(ed);
     if (snap != NULL)
         fuss_rebuild(ed, snap);
+    if (ed->fuss->mutation_snapshot_pending && snap != NULL &&
+        snap->gen != ed->fuss->mutation_snapshot_gen &&
+        !yew_git_refresh_busy(ed)) {
+        /* An idle hook is the public observation point for asynchronous
+         * FUSS state.  Rearm it only after the mutation's final refresh,
+         * rather than at the command result: an older in-flight status may
+         * publish first and would make a state checker observe stale Git.
+         * The loop consumes this request only after queued input drains. */
+        ed->fuss->mutation_snapshot_pending = false;
+        ed->fl_idle_pending = true;
+        ed->fl_idle_fired = false;
+    }
     if (ed->fuss->walk != NULL &&
         !yew_walk_step(ed->fuss->walk, 2000)) {
         yew_walk_end(ed->fuss->walk);
@@ -1218,7 +1241,9 @@ bool yew_fuss_key(Ed *ed, const Key *key, i64 now_ms)
     u32 row;
     bool consumed;
 
-    if (!yew_fuss_active(ed) || key == NULL)
+    /* The drawer remains active while its commit scratch owns focus.  In
+     * that state printable input belongs to Insert mode, not FUSS jump. */
+    if (!yew_fuss_active(ed) || ed->mode != YEW_MODE_F || key == NULL)
         return false;
     f = ed->fuss;
     /* Once dispatch owns a structural chord, its printable tail must reach
@@ -1799,8 +1824,11 @@ bool yew_fuss_state(const Ed *ed, YewFussState *out)
     out->actions_open = f->picker_action == FUSS_PICK_ACTIONS &&
                         yew_picker_active(ed);
     snap = yew_git_snapshot_cached(ed);
-    out->clean = snap != NULL && snap->state == YEW_GIT_OK &&
-                 snap->entries.len == 0U;
+    out->clean = snap != NULL && snap->entries.len == 0U &&
+                 (snap->state == YEW_GIT_OK ||
+                  snap->state == YEW_GIT_NO_HEAD ||
+                  snap->state == YEW_GIT_DETACHED ||
+                  snap->state == YEW_GIT_NO_UPSTREAM);
     return true;
 }
 

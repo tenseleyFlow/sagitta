@@ -708,9 +708,14 @@ int yew_loop_run(Ed *ed)
          * the keypress path.  A paste therefore produces one callback. */
         yew_fl_hook_flush_change(ed);
         yew_fl_hook_flush_cursor(ed, burst_win, burst_cursors);
-        if (!ed->fl_idle_fired && ed->fl_idle_since_ms >= 0 &&
+        if (ed->fl_idle_pending && !had_input && !raw_input) {
+            yew_fl_hook_fire(ed, FL_EV_ED_IDLE, NULL, 0U);
+            ed->fl_idle_pending = false;
+            ed->fl_idle_fired = true;
+        } else if (!ed->fl_idle_fired && ed->fl_idle_since_ms >= 0 &&
             now - ed->fl_idle_since_ms >= 500) {
             yew_fl_hook_fire(ed, FL_EV_ED_IDLE, NULL, 0U);
+            ed->fl_idle_pending = false;
             ed->fl_idle_fired = true;
         }
         yew_prof_phase(&ed->prof, YEW_PH_SYN);

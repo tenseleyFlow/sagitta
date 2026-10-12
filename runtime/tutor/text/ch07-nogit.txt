@@ -1,0 +1,8 @@
+YEW TUTOR 7/7 — FUSS MODE AND GIT
+
+Git is unavailable in this build or on PATH, so Chapter 7 is skipped—not
+complete. Install Git (or build with the FUSS module), then run:
+
+    yew tutor 7 --reset
+
+No exercise is marked complete when its required tool is unavailable.

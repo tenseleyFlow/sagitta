@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -149,6 +150,77 @@ static bool file_contains(const char *path, const char *needle)
     return found;
 }
 
+static bool command_output(char *const argv[], Bytebuf *out)
+{
+    int pipes[2];
+    int status = 0;
+    pid_t pid;
+    bool ok;
+
+    bytebuf_init(out);
+    if (pipe(pipes) != 0)
+        return false;
+    pid = fork();
+    if (pid == 0) {
+        (void)close(pipes[0]);
+        if (dup2(pipes[1], STDOUT_FILENO) < 0)
+            _exit(126);
+        (void)close(pipes[1]);
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+    (void)close(pipes[1]);
+    if (pid < 0) {
+        (void)close(pipes[0]);
+        return false;
+    }
+    ok = read_fd_all(pipes[0], out);
+    if (close(pipes[0]) != 0)
+        ok = false;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            ok = false;
+            break;
+        }
+    }
+    return ok && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+static bool tutor_git_postconditions(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+    char *status_argv[] = {
+        (char *)"git", (char *)"-C", repo, (char *)"status",
+        (char *)"--porcelain", NULL
+    };
+    char *log_argv[] = {
+        (char *)"git", (char *)"-C", repo, (char *)"log", (char *)"-1",
+        (char *)"--pretty=%s", NULL
+    };
+    static const char message[] = "tutor checkpoint\n";
+    Bytebuf output;
+    bool ok;
+    int n;
+
+    n = snprintf(repo, sizeof(repo), "%s/yew/tutor", c->state_dir);
+    if (n <= 0 || (size_t)n >= sizeof(repo))
+        return false;
+    if (!command_output(status_argv, &output)) {
+        bytebuf_free(&output);
+        return false;
+    }
+    ok = output.len == 0U;
+    bytebuf_free(&output);
+    if (!ok || !command_output(log_argv, &output)) {
+        bytebuf_free(&output);
+        return false;
+    }
+    ok = output.len == sizeof(message) - 1U &&
+         memcmp(output.data, message, sizeof(message) - 1U) == 0;
+    bytebuf_free(&output);
+    return ok;
+}
+
 static bool progress_complete(const char *path, u32 chapter,
                               const char *key)
 {
@@ -170,7 +242,7 @@ static bool progress_complete(const char *path, u32 chapter,
         at += (size_t)n;
     }
     n = snprintf(expected + at, sizeof(expected) - at,
-                 "], complete: true }");
+                 "], complete: true");
     return n > 0 && (size_t)n < sizeof(expected) - at &&
            file_contains(path, expected);
 }
@@ -247,14 +319,16 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
     replay_tasks(c, &keys, chapter, progress);
     ptc_check(c, progress_complete(progress, chapter, key),
               "tutor task engine did not persist every verdict");
+    if (chapter == 7U)
+        ptc_check(c, tutor_git_postconditions(c),
+                  "tutor Git lesson did not commit a clean repository");
     ptc_snapshot(c, golden);
 
-    /* Completion marks are ordinary undoable edits.  Exercise the normal
-     * dirty-buffer exit and explicitly discard after the assertion. */
+    /* Completion marks are ordinary undoable edits.  Later chapters may
+     * finish with another buffer focused, so discard explicitly instead of
+     * assuming :q must open the dirty-buffer prompt. */
     ptc_allow_restore(c);
-    ptc_keys(c, "<esc> : q <cr>");
-    ptc_settle(c, 20);
-    ptc_keys(c, "d");
+    ptc_keys(c, "<esc> : q ! <cr>");
     ptc_expect_exit(c, 0);
 }
 
@@ -288,6 +362,51 @@ void yew_tutor_case_ch06(PtyCtx *c)
 {
     run_chapter(c, 6U, "fletch", "ch06-fletch.fl",
                 "tutor_ch06_done");
+}
+
+void yew_tutor_case_ch07(PtyCtx *c)
+{
+    run_chapter(c, 7U, "fuss", "ch07-fuss.fl",
+                "tutor_ch07_done");
+}
+
+void yew_tutor_case_nogit(PtyCtx *c)
+{
+    char empty_path[PATH_MAX];
+    char progress[PATH_MAX];
+    char chapter[PATH_MAX];
+    int n;
+
+    n = snprintf(empty_path, sizeof(empty_path), "%s/empty-path",
+                 c->workspace_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(empty_path),
+              "tutor no-Git PATH overflow");
+    if (c->failed)
+        return;
+    ptc_check(c, mkdir(empty_path, 0700) == 0,
+              "creating tutor no-Git PATH");
+    c->exec_path = "empty-path";
+    ptc_spawn(c, ptc_yew_bin(c), "tutor", "7", "--reset", "--clean",
+              NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    if (!tutor_progress_path(c, progress))
+        return;
+    ptc_check(c, file_contains(progress, "skipped: true") &&
+                     file_contains(progress, "complete: false") &&
+                     !file_contains(progress, "\"ch07.t"),
+              "Git-unavailable tutor chapter was not marked skipped");
+    n = snprintf(chapter, sizeof(chapter), "%s/yew/tutor/ch07.txt",
+                 c->state_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(chapter),
+              "tutor no-Git chapter path overflow");
+    ptc_check(c, !c->failed && file_contains(
+                     chapter, "Git is unavailable in this build or on PATH"),
+              "Git-unavailable tutor chapter did not announce requirement");
+    ptc_snapshot(c, "tutor_nogit");
+    ptc_allow_restore(c);
+    ptc_keys(c, "<esc> : q ! <cr>");
+    ptc_expect_exit(c, 0);
 }
 
 void yew_tutor_case_resume(PtyCtx *c)

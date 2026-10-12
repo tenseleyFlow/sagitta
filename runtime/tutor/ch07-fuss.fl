@@ -1,13 +1,21 @@
 # Chapter 7: FUSS navigation and Git actions.  The public `ed.fuss()` query
 # reports the same selected tree row and flags the UI renders.
 import ed
+import list
 import str
 
 let tasks = [
     { id: "ch07.t1", line: 6, prompt: "Enter FUSS mode with f.",
-      keys: "f", check: fn(b, w) ed.mode() == "F" },
-    { id: "ch07.t2", line: 7, prompt: "Expand the selected directory with Right.",
-      keys: "<right>", check: fn(b, w) ed.fuss().expanded },
+      keys: "f", check: fn(b, w) {
+          return ed.mode() == "F" and ed.fuss().known
+      } },
+    { id: "ch07.t2", line: 7,
+      prompt: "Type p to select practice/, then Right to expand it.",
+      keys: "p <right>", check: fn(b, w) {
+          let state = ed.fuss();
+          return state.expanded and state.path != nil and
+                 state.path == "practice"
+      } },
     { id: "ch07.t3", line: 8, prompt: "Type n to jump to notes.txt among visible rows.",
       keys: "n", check: fn(b, w) {
           let state = ed.fuss();
@@ -20,9 +28,22 @@ let tasks = [
           return path != nil and str.ends_with(path, "/notes.txt")
       } },
     { id: "ch07.t5", line: 10, prompt: "Return to FUSS and stage it with Alt-A.",
-      keys: "f A-a", check: fn(b, w) ed.fuss().staged },
-    { id: "ch07.t6", line: 11, prompt: "Open action discovery with Ctrl-Shift-/.",
-      keys: "C-S-/", check: fn(b, w) ed.fuss().actions_open },
-    { id: "ch07.t7", line: 12, prompt: "Close discovery and commit with Alt-M.",
-      keys: "<esc> A-m", check: fn(b, w) ed.fuss().clean },
+      keys: "f A-a", check: fn(b, w) {
+          let state = ed.fuss();
+          return list.contains(state.staged_paths,
+                               "practice/notes.txt")
+      } },
+    { id: "ch07.t6", line: 11,
+      prompt: "Stage all with Alt-S, then open actions with Ctrl-Shift-/.",
+      keys: "A-S C-S-/", check: fn(b, w) {
+          let state = ed.fuss();
+          return state.actions_open and
+                 list.contains(state.staged_paths, "practice/notes.txt") and
+                 list.contains(state.staged_paths, "draft.txt") and
+                 list.contains(state.staged_paths, "todo.txt")
+      } },
+    { id: "ch07.t7", line: 12,
+      prompt: "Close discovery, then write and save a commit with Alt-M.",
+      keys: "<esc> A-m t u t o r <space> c h e c k p o i n t <esc> s",
+      check: fn(b, w) ed.fuss().clean },
 ]

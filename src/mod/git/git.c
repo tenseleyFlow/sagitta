@@ -2027,6 +2027,12 @@ GitSnapshot *yew_git_test_snapshot_mut(Ed *ed)
     return &ed->git->snap[ed->git->live];
 }
 
+bool yew_git_refresh_busy(const Ed *ed)
+{
+    return ed != NULL && ed->git != NULL &&
+           (ed->git->refresh_inflight || ed->git->refresh_again);
+}
+
 const GitLogRecordList *yew_git_log_records(const Ed *ed)
 {
     return ed == NULL || ed->git == NULL ? NULL : &ed->git->log_records;
