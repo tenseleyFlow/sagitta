@@ -7,6 +7,7 @@
 #include "edit/ed.h"
 #include "fl/flapi.h"
 #include "fl/gc.h"
+#include "ui/groups.h"
 #include "ui/layout.h"
 
 static CmdStatus run_cmd(Ed *ed, Win *win, const char *name,
@@ -190,6 +191,31 @@ static bool api_map_bool(FlValue value, const char *name, bool want)
     return false;
 }
 
+static bool api_map_value(FlValue value, const char *name, FlValue *out)
+{
+    const FlMap *map;
+    FlValue key;
+    FlValue item;
+    u32 cursor = 0U;
+
+    if (value.t != (u8)FL_MAP)
+        return false;
+    map = (const FlMap *)value.as.o;
+    while (fl_map_iter(map, &cursor, &key, &item)) {
+        const FlStr *text;
+
+        if (key.t != (u8)FL_STR)
+            continue;
+        text = (const FlStr *)key.as.o;
+        if (text->len == strlen(name) &&
+            memcmp(text->b, name, text->len) == 0) {
+            *out = item;
+            return true;
+        }
+    }
+    return false;
+}
+
 void test_fl_api_buf_metadata_queries_are_truthful(void)
 {
     ApiFix f;
@@ -259,6 +285,51 @@ void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
     YEW_ASSERT(api_map_bool(out, "active", false));
     YEW_ASSERT(api_map_bool(out, "known", false));
     YEW_ASSERT(api_map_bool(out, "clean", false));
+    api_close(&f);
+}
+
+void test_fl_api_workspace_query_reports_real_tabs_groups_and_panes(void)
+{
+    ApiFix f;
+    FlValue workspace = FL_NIL_V;
+    FlValue tabs = FL_NIL_V;
+    FlValue groups = FL_NIL_V;
+    FlValue item = FL_NIL_V;
+    FlValue value = FL_NIL_V;
+    FlList *list;
+    u32 gid;
+
+    api_open(&f);
+    yew_layout_compute(f.ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(api_invoke(&f, "ed.workspace", NULL, 0U, &workspace));
+    YEW_ASSERT(api_map_value(workspace, "tabs", &tabs));
+    YEW_ASSERT(api_map_value(workspace, "groups", &groups));
+    YEW_ASSERT_EQ_U64(((FlList *)tabs.as.o)->n, 1U);
+    YEW_ASSERT_EQ_U64(((FlList *)groups.as.o)->n, 0U);
+
+    gid = yew_group_create(&f.ed, "/tmp", "notes");
+    YEW_ASSERT(gid != 0U);
+    yew_group_add_member(&f.ed, gid, f.ed.tabs.active);
+    YEW_ASSERT(api_invoke(&f, "ed.workspace", NULL, 0U, &workspace));
+    YEW_ASSERT(api_map_value(workspace, "groups", &groups));
+    list = (FlList *)groups.as.o;
+    YEW_ASSERT_EQ_U64(list->n, 1U);
+    item = list->v[0];
+    YEW_ASSERT(api_map_value(item, "name", &value));
+    YEW_ASSERT_EQ_MEM(((FlStr *)value.as.o)->b, "notes", 5U);
+    YEW_ASSERT(api_map_value(item, "members", &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 1);
+
+    YEW_ASSERT(api_map_value(workspace, "tabs", &tabs));
+    list = (FlList *)tabs.as.o;
+    item = list->v[0];
+    YEW_ASSERT(api_map_value(item, "panes", &value));
+    YEW_ASSERT_EQ_U64(((FlList *)value.as.o)->n, 1U);
+    item = ((FlList *)value.as.o)->v[0];
+    YEW_ASSERT(api_map_value(item, "w", &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 80);
+    YEW_ASSERT(api_map_value(item, "h", &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 24);
     api_close(&f);
 }
 

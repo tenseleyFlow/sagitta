@@ -558,6 +558,92 @@ static bool q_ed_fuss(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     return true;
 }
 
+/* A read-only view of the tab/group/pane model.  Tutor checkers use the
+ * same public state a config can inspect; keeping this as data rather than
+ * tutor-only predicates prevents the lesson from claiming a group or split
+ * exists merely because its keystrokes were sent. */
+static bool q_ed_workspace(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    FlMap *root;
+    FlList *tabs;
+    FlList *groups;
+    u32 i;
+
+    (void)a;
+    (void)n;
+    if (ed == NULL)
+        return false;
+    root = fl_map_new(vm);
+    fl_gc_protect(vm, FL_OBJ_V(FL_MAP, root));
+    tabs = fl_list_new(vm);
+    fl_gc_protect(vm, FL_OBJ_V(FL_LIST, tabs));
+    groups = fl_list_new(vm);
+    fl_gc_protect(vm, FL_OBJ_V(FL_LIST, groups));
+    for (i = 0U; i < ed->tabs.v.len; i++) {
+        const Tab *tab = &ed->tabs.v.data[i];
+        const TabGroup *group = yew_group_at(ed, tab->group_id);
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
+        u32 nleaves = 0U;
+        u32 leaf;
+        FlMap *item = fl_map_new(vm);
+        FlList *panes;
+
+        fl_gc_protect(vm, FL_OBJ_V(FL_MAP, item));
+        (void)map_put(vm, item, "id", FL_INT_V((i64)tab->tab_id));
+        (void)map_put(vm, item, "path", api_cstr(vm, tab->path));
+        (void)map_put(vm, item, "active",
+                      FL_BOOL_V((int)i == ed->tabs.active));
+        (void)map_put(vm, item, "group_id",
+                      FL_INT_V((i64)tab->group_id));
+        (void)map_put(vm, item, "group",
+                      group == NULL ? FL_NIL_V : api_cstr(vm, group->label));
+        (void)map_put(vm, item, "ordinal",
+                      FL_INT_V((i64)tab->group_ordinal));
+        panes = fl_list_new(vm);
+        fl_gc_protect(vm, FL_OBJ_V(FL_LIST, panes));
+        yew_pane_collect_leaves(tab->root, leaves, YEW_ARRAY_LEN(leaves),
+                                &nleaves);
+        for (leaf = 0U; leaf < nleaves; leaf++) {
+            const Rect rect = leaves[leaf]->rect;
+            FlMap *pane = fl_map_new(vm);
+
+            fl_gc_protect(vm, FL_OBJ_V(FL_MAP, pane));
+            (void)map_put(vm, pane, "x", FL_INT_V((i64)rect.x));
+            (void)map_put(vm, pane, "y", FL_INT_V((i64)rect.y));
+            (void)map_put(vm, pane, "w", FL_INT_V((i64)rect.w));
+            (void)map_put(vm, pane, "h", FL_INT_V((i64)rect.h));
+            (void)fl_list_push(vm, panes, FL_OBJ_V(FL_MAP, pane));
+            fl_gc_release(vm, 1U);
+        }
+        (void)map_put(vm, item, "panes", FL_OBJ_V(FL_LIST, panes));
+        fl_gc_release(vm, 1U);
+        (void)fl_list_push(vm, tabs, FL_OBJ_V(FL_MAP, item));
+        fl_gc_release(vm, 1U);
+    }
+    for (i = 0U; i < ed->groups.v.len; i++) {
+        const TabGroup *group = &ed->groups.v.data[i];
+        FlMap *item = fl_map_new(vm);
+
+        fl_gc_protect(vm, FL_OBJ_V(FL_MAP, item));
+        (void)map_put(vm, item, "id", FL_INT_V((i64)group->id));
+        (void)map_put(vm, item, "name", api_cstr(vm, group->label));
+        (void)map_put(vm, item, "dir", api_cstr(vm, group->dir_path));
+        (void)map_put(vm, item, "members",
+                      FL_INT_V((i64)yew_group_member_count(ed, group->id)));
+        (void)fl_list_push(vm, groups, FL_OBJ_V(FL_MAP, item));
+        fl_gc_release(vm, 1U);
+    }
+    (void)map_put(vm, root, "active_tab",
+                  ed->tabs.active < 0 ? FL_NIL_V :
+                  FL_INT_V((i64)ed->tabs.v.data[ed->tabs.active].tab_id));
+    (void)map_put(vm, root, "tabs", FL_OBJ_V(FL_LIST, tabs));
+    (void)map_put(vm, root, "groups", FL_OBJ_V(FL_LIST, groups));
+    *out = FL_OBJ_V(FL_MAP, root);
+    fl_gc_release(vm, 3U);
+    return true;
+}
+
 static bool q_buf_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Buffer *b = fl_h_buf(vm, a[0]);
@@ -981,7 +1067,8 @@ FlBindDesc fl_api[] = {
     QUERY("ed.mode", FL_H_NONE, 0U, 0U, q_ed_mode),
     QUERY("ed.recording", FL_H_NONE, 0U, 0U, q_ed_recording),
     QUERY("ed.register", FL_H_NONE, 1U, 1U, q_ed_register),
-    QUERY("ed.fuss", FL_H_NONE, 0U, 0U, q_ed_fuss)
+    QUERY("ed.fuss", FL_H_NONE, 0U, 0U, q_ed_fuss),
+    QUERY("ed.workspace", FL_H_NONE, 0U, 0U, q_ed_workspace)
 };
 
 const u32 fl_api_len = (u32)YEW_ARRAY_LEN(fl_api);
@@ -2024,7 +2111,7 @@ static const FlNativeDef ED_DEFS[] = {
     {"commands", fl_api_ed_commands, 0U, 0U, 0U, "() -> list"},
     NATIVE("msg", 1U, 2U), NATIVE("mode", 0U, 0U),
     NATIVE("recording", 0U, 0U), NATIVE("register", 1U, 1U),
-    NATIVE("fuss", 0U, 0U)
+    NATIVE("fuss", 0U, 0U), NATIVE("workspace", 0U, 0U)
 };
 
 const FlModuleDef fl_mod_buf = {"buf", BUF_DEFS, YEW_ARRAY_LEN(BUF_DEFS), NULL, 0U};
