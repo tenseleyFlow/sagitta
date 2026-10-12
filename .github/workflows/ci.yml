@@ -57,8 +57,13 @@ permissions:
 jobs:
   documentation:
     runs-on: ubuntu-latest
+    env:
+      YEW_DOCS_BASE: ${{ github.event.pull_request.base.sha }}
+      YEW_DOCS_NO_USER_VISIBLE_CHANGE: ${{ contains(github.event.pull_request.body, 'docs: no user-visible change') }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Install both man-page implementations
         run: |
           sudo apt-get update
@@ -68,6 +73,8 @@ jobs:
         run: |
           make CC=gcc
           YEW_REQUIRE_GROFF=1 make test-man
+          make test-manual
+          make test-docs-sync
 
   gcc:
     runs-on: ubuntu-latest
@@ -304,7 +311,10 @@ jobs:
           make CC=clang
           make test CC=clang
       - name: Cross-check man pages and resolve yew-regex
-        run: make test-man CC=clang
+        run: |
+          make test-man CC=clang
+          make test-manual CC=clang
+          make test-docs-sync CC=clang
       - name: Prove default-filesystem aliases and Darwin RSS units
         run: |
           case_dir=$(mktemp -d)

@@ -769,6 +769,8 @@ FAKEHTTP := $(BUILD)/tests/helpers/fakehttp
 MOCKAI := $(BUILD)/tests/helpers/mockai
 MOCKCURL := $(BUILD)/tests/helpers/mockcurl
 AI_TEST_HELPERS := $(if $(filter ai,$(MODULES)),$(MOCKAI) $(MOCKCURL))
+DOCS_OPTION_DUMP := $(BUILD)/tests/helpers/option_dump
+DOCS_OPTION_DUMP_OBJ := $(BUILD)/tests/helpers/option_dump.o
 $(BUILD)/tests/unit/test_ai_curl.o: CFLAGS += \
   -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
 $(BUILD)/tests/unit/test_ai_curl.o: $(FAKECURL)
@@ -1161,7 +1163,7 @@ PROFILE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test test-unit test-man test-audit test-alloc-debug alloc perf-alloc \
+.PHONY: all check test test-unit test-man test-manual test-docs-sync test-audit test-alloc-debug alloc perf-alloc \
         perf-alloc-selftest clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
@@ -1286,6 +1288,10 @@ $(BUILD)/yew: $(OBJ)
 $(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP) $(FAKELSP) $(TORTURE_CHILD) \
                      $(TORTURE_DRIVER) $(FAULTSHIM) $(HELPFIX)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ) $(LDLIBS)
+
+$(DOCS_OPTION_DUMP): $(filter-out $(BUILD)/src/main.o,$(OBJ)) \
+                     $(DOCS_OPTION_DUMP_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(BUILD)/pty_runner: $(PTY_LINK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PTY_LINK_OBJ) $(LDLIBS)
@@ -1972,6 +1978,14 @@ test-man: $(BUILD)/yew
 	scripts/check-man.sh
 	scripts/tests/check-man.test.sh
 
+test-manual: $(BUILD)/yew
+	scripts/check-manual.sh
+	scripts/tests/check-manual.test.sh
+
+test-docs-sync: $(BUILD)/yew $(DOCS_OPTION_DUMP)
+	scripts/check-docs-sync.sh
+	scripts/tests/check-docs-sync.test.sh
+
 test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
             $(F01_VT_WIDTH_AUDIT_BIN) $(F09_REC_VM_AUDIT_BIN)
 	LC_ALL=C $(AUDIT_TESTS)
@@ -2127,7 +2141,7 @@ soak-selftest:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' soak-selftest
 endif
 
-test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script \
+test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script test-manual test-docs-sync \
       fuzzlib-selftest \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \

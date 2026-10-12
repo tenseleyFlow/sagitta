@@ -1,0 +1,21 @@
+# source-prefix manual-chapter
+src/args.c 01-install.md
+src/edit/mode.c 02-modes.md
+src/text/ 03-files.md
+src/edit/motion.c 04-motion.md
+src/edit/block.c 04-motion.md
+src/edit/select.c 04-motion.md
+src/edit/multicursor.c 04-motion.md
+src/search/ 05-search.md
+src/edit/shell.c 06-execute.md
+src/edit/job.c 06-execute.md
+src/ui/ 07-workspace.md
+src/ws/ 07-workspace.md
+src/fl/ 08-fletch.md
+src/edit/option.c 08-fletch.md
+src/fl/record.c 09-macros.md
+src/syn/ 10-syntax.md
+src/mod/lsp/ 11-completion.md
+src/mod/ai/ 12-ai.md
+src/mod/git/ 13-git.md
+src/mod/plug/ 14-plugins.md
