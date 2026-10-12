@@ -2,6 +2,10 @@
 
 Baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 
+Active tier-1 soak baseline:
+`4c99e13474c84d75eec3250d61412b53fa41ae00` (started 2026-10-12).
+No `soak` row is credited until its 18-hour stream completes.
+
 The first full `make fuzz-cov` run completed on arm64 macOS with Apple clang
 21.0.0. Plain and instrumented output was identical for all 45 targets. The
 deterministic generated snapshot had SHA-256
@@ -65,7 +69,7 @@ Coverage commit: `1990241d32d720a8d4f97a5a5d4a983e512e34e6`.
 |---|---|---|---|
 | `fuzz` | every push | 200,000 iterations per target, seed 1 | existing |
 | `fuzz-nightly` | nightly | 30 minutes per target, recorded date seed | scheduled across all 45 targets; admissions and ledger attached per target |
-| `soak` | continuous | 72 aggregate hours per tier-1 target, four 18-hour seed streams | first local exact-profile cycle running at `ba72c3a0`; hosted runner automation not registered |
+| `soak` | continuous | 72 aggregate hours per tier-1 target, four 18-hour seed streams | replacement exact-profile cycle running at `4c99e134`; 0/56 completed rows at launch; hosted runner automation not registered |
 | `fuzz-cov-weekly` | weekly | four hours per target, monotonic edge counts | baseline and scheduler wired; fail-closed on Apple clang 21.0.0; no matching runner registered |
 | `soak-rc` | each release candidate | 72 aggregate hours tier 1 + 12 aggregate hours tier 2 | exact-commit four-stream release blocker wired; designated runner not registered |
 
@@ -77,13 +81,21 @@ sensitive, so the weekly and continuous jobs require the matching macOS arm64
 Apple clang 21.0.0 runner instead of comparing unrelated hosted-compiler guard
 maps.
 
-The first local tier-1 cycle started on 2026-09-13 at `ba72c3a0` in an
-isolated worktree on arm64 macOS with Apple clang 21.0.0. It runs in the
-sanitizer week (`SAN=1`), with targets serial and each target's four streams
-concurrent at low scheduling priority. `fuzz_utf8` started with seeds
-`2218013357` through `2218013360`. Completed rows and minimized admissions
-are committed only after each target finishes; this paragraph is launch
-evidence, not a fabricated completion row.
+The first local tier-1 launch on 2026-09-13 at `ba72c3a0` was interrupted
+before it produced a completed stream row. It contributes zero hours to the
+gate.
+
+The replacement cycle started on 2026-10-12 at exact hosted-green product
+commit `4c99e13474c84d75eec3250d61412b53fa41ae00` in a detached worktree on
+arm64 macOS with Apple clang 21.0.0. It runs SAN=1 plus coverage, with targets
+serial and each target's four streams concurrent at low scheduling priority.
+`fuzz_utf8` started with seeds `2701121405` through `2701121408`. Each stream
+has a durable row file and admission directory, each four-stream target is a
+restart checkpoint, and `caffeinate` prevents idle sleep while the cycle is
+active. Operational state is under
+`/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/state/`. Completed rows and
+minimized admissions are committed only after validation; this paragraph is
+launch evidence, not a fabricated completion row.
 
 An Actions API capacity check on 2026-09-13 found no repository variables and
 no registered self-hosted runners. The workflow therefore leaves scheduled

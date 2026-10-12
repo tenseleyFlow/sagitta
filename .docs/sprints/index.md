@@ -1,16 +1,24 @@
 # yew Sprint Index
 
-75 sprints across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
+96 sprint-contract files across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
 bespoke-first, modal-paradigm-first terminal editor plus its language,
 Fletch. Small bites, clear milestones, testable deliverables at every
 stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-61 whole-numbered sprints plus fourteen fractional ones (18.5, 41.5, 42.5,
-49.5, 55.5, 56.5, 57.5, 57.6, 57.7, 57.8, 57.9, 57.10, 57.11, 57.12) split
-off during authoring — the pressure valve working as designed.
-Renumbering is forbidden once files exist, so fractional ids are permanent.
+The canonical arc remains 61 whole-numbered sprints, 0 through 60. Thirty-five
+fractional or supporting contracts split off during implementation — the
+pressure valve working as designed. Renumbering is forbidden once files exist,
+so those ids and supporting Sprint 57 records are permanent.
+
+**Current frontier (2026-10-12): Sprint 59 is active while Sprint 58's
+replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
+are complete, all 79 findings are fixed, and the last exact hosted-green
+product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
+green). Sprint 58 remains formally open until the 14-target soak records all
+56 streams. Sprint 60 is queued and may not start until all 15 Sprint 59
+closeouts say READY.
 
 Binding documents — read before any sprint:
 - `.docs/sprints/AUTHORING.md` — the sprint-file contract, the shared
@@ -281,14 +289,13 @@ Binding documents — read before any sprint:
   are green on hosted CI run 33025642745 attempt 3
 
 ### Campaign 13 — Performance (`13-performance/`)
-- **SPRINT 57.9 STRUCTURAL REPLACEMENT LOCALLY QUALIFIED; HOSTED CLOSEOUT
-  PENDING.**
-  Sprint 58 is paused after F08. Its original `41fef416` fixed product
-  baseline and F01–F08 reports remain historical evidence, but the
-  field-reported block-motion/group-picker repair must be pushed, pass hosted
-  CI, and become the replacement baseline before F09 opens. Sprint 56's pinned
-  designated-hardware evidence remains pending because no self-hosted runner is
-  registered, and Sprint 57's Pi Zero 2 W corroboration remains a release tail.
+- **REPOSITORY COMPLETE THROUGH SPRINT 57.32; HOSTED GREEN AT `4c99e134`.**
+  The structural replacement, mouse/tab integration, shell handoff, selection,
+  prompt, completion, persistent-shell, runtime-staleness, and resume repairs
+  are integrated on `trunk`. Actions run `38176840903` passed all 31 jobs
+  triggered for that exact product commit. Sprint 56's designated-hardware
+  evidence and Sprint 57's physical Pi Zero 2 W corroboration remain explicit
+  release tails; they do not block Sprint 59 repository work.
 - Sprint 56 (s56-latency-gates.md) — Profiling pass, reference-hardware
   calibration, all budgets from `00-decisions.md` become CI gates with
   committed baselines. **REPOSITORY COMPLETE 2026-08-27:** profiler, calibration,
@@ -402,22 +409,51 @@ Binding documents — read before any sprint:
   warns once naming the fix, and `--check-runtime` reports and exits non-zero.
   Every default binding is config, not code, so a stale installed `init.fl`
   silently drops new keys — observed in the field 2026-09-13.
+- Sprint 57.22 (s57_22-drag-to-spawn-pane.md) — drag a tab to a pane edge to
+  split and show that tab's buffer without changing tab identity.
+- Sprint 57.23 (s57_23-shell-context-engine.md) — completion-only shell lexer
+  and caret context for `:!`.
+- Sprint 57.24 (s57_24-completion-specs.md) — command specifications and
+  context-aware completion generators.
+- Sprint 57.25 (s57_25-help-parsing.md) — deterministic command-option learning
+  from `--help` output.
+- Sprint 57.26 (s57_26-fish-oracle-and-suggestions.md) — optional Fish
+  completion oracle and history-derived suggestions.
+- Sprint 57.27 (s57_27-persistent-shell-session.md) — persistent shell state so
+  `cd`, exports, and subsequent jobs share one session model.
+- Sprint 57.28 (s57_28-prompt-editing-and-yank-stack.md) — full prompt editing
+  and yank-stack behavior.
+- Sprint 57.29 (s57_29-prompt-selection-and-clipboard.md) — Shift-selection and
+  clipboard operations in prompts and Insert mode.
+- Sprint 57.30 (s57_30-prompt-history-and-table.md) — prompt history semantics
+  and the completion table.
+- Sprint 57.31 (s57_31-prompt-fish-extras.md) — Fish-style `A-s`, `A-e`, and
+  `A-h` prompt actions.
+- Sprint 57.32 (s57_32-cd-aware-completion.md) — completion relative to the
+  effective directory at the caret.
 
 ### Campaign 14 — Audits & release (`14-audits-release/`)
 - Sprint 58 (s58-adversarial-audits.md) — Audit fronts per subsystem
   (unicode, term, text, modal, fletch, syn, lsp, ai, git, ui, persistence),
-  fuzz campaigns extended, findings ledger with stable IDs. **FIRST SOAK
-  CYCLE RUNNING:** all fifteen fronts, dedup, coverage instrumentation, and
-  all ten invariant sessions are complete with `YEW-F-001` through
-  `YEW-F-078`; the exact-profile local arm64 campaign started at `ba72c3a0`
-  on 2026-09-13. Formal close waits for all fourteen tier-1 targets; hosted
-  runner registration remains an automation tail
+  fuzz campaigns extended, findings ledger with stable IDs. **AUDIT WORK
+  COMPLETE; REPLACEMENT SOAK RUNNING:** all fifteen fronts, dedup, coverage
+  instrumentation, and all ten invariant sessions are complete. The ledger
+  now contains `YEW-F-001` through `YEW-F-079`, all fixed in Sprint 59. The
+  interrupted September launch produced no soak rows and is historical only.
+  A checkpointed SAN+coverage cycle started 2026-10-12 at exact hosted-green
+  product commit `4c99e134` on arm64 macOS / Apple clang 21.0.0. Formal close
+  waits for all fourteen tier-1 targets; hosted-runner registration remains an
+  automation tail
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
-  Fletch book chapter 1
+  Fletch book chapter 1. **ACTIVE:** the severity-ordered implementation
+  burn-down reached 79/79 fixed; independent verification, status closure,
+  fifteen closeouts, closeout/deferral/docs checkers, and the documentation
+  surfaces remain
 - Sprint 60 (s60-v1.0.0-landing.md) — Packaging (AUR, brew tap, RPM spec —
   the fuss distribution set), README, keep-a-changelog CHANGELOG,
-  reproducible release builds, `--version` contract. **v1.0.0**
+  reproducible release builds, `--version` contract. **QUEUED; entry gate is
+  fifteen READY Sprint 59 closeouts. v1.0.0**
 
 ## Milestones
 
@@ -449,9 +485,8 @@ Binding documents — read before any sprint:
 - Sprint 25's state schema freezes before the Fletch serializer exists —
   s25 hand-writes the emitter against the frozen schema; s36 swaps the
   implementation, not the format.
-- Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s55_5-…`,
-  `s56_5-…`, `s57_5-…`, `s57_6-…`, `s57_7-…`, `s57_8-…`, `s57_9-…`,
-  `s57_10-…`, `s57_11-…`, `s57_12-…`, `s57_13-…`, `s57_14-…`, `s57_15-…`, `s57_16-…`, `s57_17-…`, `s57_18-…`, `s57_20-…`) are the pressure valve
+- Fractional sprints (`s18_5-…`, `s41_5-…`, `s42_5-…`, `s49_5-…`,
+  `s55_5-…`, `s56_5-…`, and the `s57_N-…` sequence) are the pressure valve
   when a sprint splits — renumbering is forbidden once files exist.
 
 ## Sprint file format

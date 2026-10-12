@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-09-11
+**Current checkpoint date:** 2026-10-12
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -10,38 +10,67 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Hosted-green code/recovery anchor:** `da04f30c` (last complete green push)
+**Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
+(GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**Current Sprint-57.9 structural block-repair frontier:** `c07791cc` (local;
-not pushed)
+**Local branch position at refresh:** `trunk` contains the tracked Sprint 59
+and Sprint 60 contracts plus this state reconciliation above `origin/trunk`.
+The product code used by the soak remains the exact hosted-green anchor.
 
-**Current combined local frontier:** current `HEAD` (local; not pushed)
+**Active implementation frontier:** Sprint 59 — remediation verification,
+front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
+chapter 1.
 
-**Git position:** `origin/trunk` is `a7da188f`; the local branch contains the
-`c07791cc` structural repair plus this handoff refresh. The broad statement-row
-B-mode policy pushed in
-`a7da188f` is rejected field behavior, and its GitHub Actions run
-`34660528390` is moot as Sprint 57.9 qualification. The last hosted-green
-recovery anchor remains `da04f30c` / run `34624021506` until the structural
-replacement is pushed and green. The combined tree includes the queued Sprint
-57.10 group-aware tab-jump work. The user has explicitly requested this
-replacement push.
+## Authoritative pickup point — 2026-10-12
 
-**Active implementation frontier:** Sprint 57.9's structural replacement is
-locally implemented and qualified at `c07791cc`, but awaits push and hosted
-closeout. The rejected `bb431836` source-row policy is not qualification
-evidence. The clean combined frontier also contains the queued Sprint 57.10
-group-aware tab-jump work. Sprint 58 is paused after F08,
-not unopened: F01–F08 closed on the original `41fef416` fixed product baseline
-and recorded findings `YEW-F-001` through `YEW-F-008`. Before F09, Sprint 57.9
-must establish a hosted-green replacement baseline and the closed fronts must
-receive the contract's delta-applicability review. Designated-hardware timing,
-trigger-specific Valgrind/nightly jobs, and physical Pi corroboration remain
-explicit release-evidence tails.
+Campaign 13 is repository-complete through Sprint 57.32. The latest exact
+product commit on `origin/trunk`, `4c99e134`, is fully hosted-green. The current
+checkout was fetched and compared with every registered worktree before this
+refresh; the main checkout was the only registered worktree. Adjacent Claude
+work observed on the host was outside this repository, so no branch or commit
+was silently merged here.
+
+Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
+instrumentation, the ten invariant sessions, and the two inbound obligations
+landed. The findings ledger contains 79 stable IDs, all at status `fixed` after
+Sprint 59's severity-ordered remediation. The sprint is nevertheless formally
+open because its required tier-1 soak has no completed `soak` row yet. The
+September `ba72c3a0` launch was interrupted and counts as 0/14 targets.
+
+A replacement SAN+coverage cycle launched on 2026-10-12 against detached exact
+commit `4c99e134` on arm64 macOS / Apple clang 21.0.0. Its four concurrent
+`fuzz_utf8` streams use seeds `2701121405` through `2701121408`; later targets
+run serially. Each 18-hour stream owns durable evidence and corpus-admission
+state, each target is a restart checkpoint, and `caffeinate` prevents idle
+sleep. The state, logs, manifest, and rebuilt ledger are under
+`/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/`. The full 14-target cycle is
+approximately 252 wall-clock hours (10.5 days) if targets complete without a
+restart. Do not report progress from elapsed process time: only completed row
+files count.
+
+Sprint 59 is active concurrently, as its prerequisite explicitly requires the
+soak to be running rather than complete. The immediate work is:
+
+1. independently re-verify and transition the 79 fixed findings through the
+   remaining ledger lifecycle;
+2. implement and negative-test the priority, closeout, deferral, man, manual,
+   and docs-sync checkers;
+3. produce all fifteen front closeouts, initially NOT READY wherever evidence
+   is missing;
+4. deliver the three man pages plus regex redirect, seven-chapter tutor,
+   fifteen-chapter manual, and Fletch book chapter 1.
+
+Sprint 60's contract is now tracked, but its entry gate is unchanged: it may
+not start until all fifteen Sprint 59 closeouts end in READY. Its RC soak is a
+separate exact-release-commit gate and is not replaced by the running Sprint 58
+cycle. Designated-hardware timing, trigger-specific Valgrind evidence, and
+physical Pi corroboration remain explicit release tails.
 
 This document began as the exact frozen Linux-to-Mac transfer record. The
-authoritative pickup point is immediately below. The older 2026-08-29 status
-is retained afterward as provenance and is explicitly superseded.
+older 2026-09-11 and 2026-08-29 status follows as provenance and is explicitly
+superseded by the pickup point above.
+
+## Historical pickup point — 2026-09-11
 
 ## 0. Authoritative pickup point
 

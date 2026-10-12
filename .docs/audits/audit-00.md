@@ -181,10 +181,16 @@ the implementation, or a CI control claiming evidence it cannot establish.
 ## Verdict
 
 We are not ready to tag: all fifteen Sprint 58 fronts, cross-front dedup, and
-all ten invariant sessions are complete, and the first tier-1 soak cycle is
-running from `ba72c3a0` on the exact arm64 macOS / Apple clang 21.0.0 profile.
+all ten invariant sessions are complete. The first tier-1 launch at
+`ba72c3a0` was interrupted before any stream completed and counts as no soak
+evidence. A replacement exact-profile SAN+coverage cycle started 2026-10-12
+from hosted-green product commit `4c99e134` on arm64 macOS / Apple clang
+21.0.0, beginning with `fuzz_utf8` seeds `2701121405` through `2701121408`.
 Formal Sprint 58 close still requires all fourteen target results; hosted
-runner registration remains an automation tail. Invariant 1 is
+runner registration remains an automation tail. The finding discussion below
+records the immutable audit-baseline verdict; Sprint 59 has since moved all 79
+ledger rows to `fixed`, but independent verification and closeout do not
+rewrite what the audit found. Invariant 1 is
 violated by F07's two Critical workspace-state defects and by `YEW-F-078`, a
 Medium journal-base identity defect. The invariant-2 session retains F01's
 Unicode findings and adds `YEW-F-077`, a Medium rectangular-register geometry

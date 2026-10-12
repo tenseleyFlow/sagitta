@@ -38,7 +38,7 @@ in yew, not gitignored. Sprint 33 already made `xfail-debt.md` a file
 CI reads; a ledger that CI depends on cannot be local-only. Every file
 this sprint writes under `.docs/audits/` is committed.
 
-## Baseline status — REQUALIFIED; FIRST SOAK CYCLE RUNNING
+## Baseline status — AUDITS CLOSED; REPLACEMENT SOAK RUNNING
 
 `41fef416` is the original post-Sprint-57.8 product baseline used by F01–F08.
 On Darwin arm64 it passes the complete default-module `make test` suite,
@@ -101,13 +101,22 @@ or severity downgrades. Coverage-guided corpus work subsequently added the
 Medium undo-sidecar finding `YEW-F-076`; the ten invariant sessions are now
 eligible.
 
-The first tier-1 soak cycle started on 2026-09-13 in an isolated worktree at
-`ba72c3a0`, on the pinned arm64 macOS / Apple clang 21.0.0 profile. Its first
-target runs four sanitizer-instrumented 18-hour streams with base seed
-`2218013357`; the remaining targets follow serially so Sprint 59 remediation
-can proceed on `trunk` without changing the campaign checkout. Hosted
-`yew-fuzz-cov` runner registration remains an automation tail, not evidence
-for this in-progress local cycle.
+The first tier-1 soak launch on 2026-09-13 at `ba72c3a0` was interrupted
+before any stream completed. It produced no `soak` ledger row and is retained
+only as launch history; none of its elapsed time is counted toward DoD 10.
+
+The replacement tier-1 cycle started on 2026-10-12 in an isolated detached
+worktree at exact product commit
+`4c99e13474c84d75eec3250d61412b53fa41ae00`, whose hosted Actions run
+`38176840903` passed all 31 triggered jobs. The host is the pinned arm64 macOS /
+Apple clang 21.0.0 profile. Every target runs four SAN+coverage 18-hour streams;
+the streams have independent durable rows and admission directories, the
+four-stream target is the restart checkpoint, and targets remain serial. The
+cycle begins with `fuzz_utf8` at seeds `2701121405` through `2701121408` and
+uses `caffeinate` plus low scheduling priority. Its operational state lives at
+`/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/state/`; only completed rows and
+minimized admissions become repository evidence. Hosted `yew-fuzz-cov` runner
+registration remains an automation tail, not evidence for this local cycle.
 
 ## Goals
 
