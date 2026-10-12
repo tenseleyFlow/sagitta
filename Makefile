@@ -1983,6 +1983,8 @@ test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
 	scripts/tests/check-closeouts.test.sh
 	scripts/check-deferrals.sh
 	scripts/tests/check-deferrals.test.sh
+	scripts/check-remediation-ledgers.sh
+	scripts/tests/check-remediation-ledgers.test.sh
 
 fuzzlib-selftest: $(BUILD)/fuzz_utf8 $(FUZZ_WATCHDOG)
 	@set -eu; \

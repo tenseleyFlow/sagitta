@@ -7,6 +7,8 @@ Sprints covered: s00, s01, s37, s56, s57
 
 ## DoD items (every numbered item from every sprint above)
 
+- [x] XFAIL.N Active expected-failure ceiling: 0.
+      — EVIDENCE: `.docs/audits/xfail-debt.md` has zero non-fixed rows and `tests/fletch/xfail-debt.txt` has no IDs.
 - [ ] s00.1 `make` produces `build/yew` and `build/yew` (symlink) with gcc and clang, zero warnings, `-std=c11 -pedantic -Wall -Wextra -Werror -Wvla` on every TU.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s00.2 `./build/yew --version | head -1` is exactly `yew 1.0.0-dev`; line 2 is `modules: lsp ai fuss plugins`. A `make MODULES=""` build prints `modules: none`. Exit 0 both.
