@@ -53,9 +53,11 @@ typedef enum {
 
 typedef struct ReLit {
     u8 kind;
-    u8 s[32];
     u32 n;
+    const u8 *s;
+    u32 *kmp;
     u32 skip[256];
+    u8 small[32];
     bool anchored;
 } ReLit;
 
@@ -191,8 +193,12 @@ u32 yew_re_fold_partners(u32 cp, u32 out[YEW_RE_FOLD_MAX]);
 bool yew_re_class_has(const ReClass *c, u32 cp);
 
 /* Literal prefilter (§7). */
-void yew_bmh_build(ReLit *l);
+void yew_lit_prepare(ReLit *l, Arena *a, const u8 *s, u32 n);
 u64 yew_lit_find(const ReLit *l, const u8 *hay, u64 n);
+bool yew_re_literal_match_at(const YewRe *re, const YewReInput *in,
+                             u64 at, YewReMatch *out);
+bool yew_re_literal_search(const YewRe *re, const YewReInput *in,
+                           u64 from, YewReMatch *out);
 /* The Pike VM, anchored at `start`: the match must begin exactly there.
  * This is the correctness reference the lazy DFA is checked against. */
 bool yew_re_pike_run(const YewRe *re, const YewReInput *in, u64 start,

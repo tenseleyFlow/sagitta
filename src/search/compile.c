@@ -3,6 +3,7 @@
 
 #include <string.h>
 
+#include "unicode/category.h"
 #include "unicode/utf8.h"
 #include "util/log.h"
 
@@ -468,7 +469,8 @@ static void collect_literal(const ReAst *a, Bytebuf *out, bool *done)
     *done = true;
 }
 
-static void build_literal(YewRe *re, const ReAst *root, u32 flags)
+static void build_literal(YewRe *re, Arena *arena, const ReAst *root,
+                          u32 flags)
 {
     Bytebuf buf;
     bool done = false;
@@ -494,16 +496,185 @@ static void build_literal(YewRe *re, const ReAst *root, u32 flags)
     /* Whole-pattern-literal means the VM is never entered at all. */
     whole = (flags & YEW_RE_LITERAL) != 0U ||
             (!done && buf.len != 0U);
-    (void)memcpy(re->lit.s, buf.data, buf.len);
-    re->lit.n = (u32)buf.len;
     if (buf.len == 1U)
         re->lit.kind = RE_LIT_BYTE;
     else
         re->lit.kind = RE_LIT_BMH;
     if (whole)
         re->lit.kind = RE_LIT_WHOLE;
-    yew_bmh_build(&re->lit);
+    yew_lit_prepare(&re->lit, arena, buf.data, (u32)buf.len);
     bytebuf_free(&buf);
+}
+
+static int literal_hex_value(u8 c)
+{
+    if (c >= '0' && c <= '9')
+        return (int)(c - '0');
+    if (c >= 'a' && c <= 'f')
+        return (int)(c - 'a') + 10;
+    if (c >= 'A' && c <= 'F')
+        return (int)(c - 'A') + 10;
+    return -1;
+}
+
+static bool literal_scan_hex(const u8 *pat, size_t len, size_t *at,
+                             u32 *cp)
+{
+    u32 value = 0U;
+    size_t digits = 0U;
+
+    if (*at < len && pat[*at] == '{') {
+        (*at)++;
+        while (*at < len && pat[*at] != '}') {
+            int digit = literal_hex_value(pat[*at]);
+
+            if (digit < 0 || digits == 6U)
+                return false;
+            value = value * 16U + (u32)digit;
+            digits++;
+            (*at)++;
+        }
+        if (digits == 0U || *at >= len || pat[*at] != '}' ||
+            value > 0x10FFFFU)
+            return false;
+        (*at)++;
+        *cp = value;
+        return true;
+    }
+    if (len - *at < 2U)
+        return false;
+    {
+        int hi = literal_hex_value(pat[*at]);
+        int lo = literal_hex_value(pat[*at + 1U]);
+
+        if (hi < 0 || lo < 0)
+            return false;
+        *cp = (u32)(hi * 16 + lo);
+        *at += 2U;
+    }
+    return true;
+}
+
+static bool literal_raw_meta(u8 c)
+{
+    switch (c) {
+    case '\\': case '.': case '^': case '$':
+    case '(': case ')': case '[': case ']':
+    case '|': case '*': case '+': case '?':
+    case '{': case '}':
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool literal_escaped_punct(u8 c)
+{
+    return (c >= '!' && c <= '/') || (c >= ':' && c <= '@') ||
+           (c >= '[' && c <= '`') || (c >= '{' && c <= '~');
+}
+
+/*
+ * Recognize only patterns whose full meaning is an exact byte string.  This
+ * deliberately runs before AST construction only for patterns large enough
+ * to cross the VM-program cap.  The common path therefore keeps its existing
+ * allocation and program shape, while yew_re_quote() output cannot be
+ * rejected merely because a literal is longer than a Thompson program.
+ *
+ * Returning false means "use the parser", not "invalid": uncertain syntax
+ * stays with the one authoritative grammar and retains its exact diagnostic.
+ */
+static bool scan_whole_literal(const u8 *pat, size_t len, u32 flags,
+                               Bytebuf *bytes, u32 *codepoints,
+                               bool *saw_upper)
+{
+    size_t at = 0U;
+
+    bytebuf_init(bytes);
+    *codepoints = 0U;
+    *saw_upper = false;
+    if ((flags & YEW_RE_ICASE) != 0U)
+        return false;
+    while (at < len) {
+        u32 cp = 0U;
+        size_t n;
+
+        if ((flags & YEW_RE_LITERAL) == 0U && pat[at] == '\\') {
+            u8 c;
+            u8 encoded[YEW_UTF8_MAX];
+
+            at++;
+            if (at == len)
+                return false;
+            c = pat[at++];
+            switch (c) {
+            case 'n': cp = '\n'; break;
+            case 't': cp = '\t'; break;
+            case 'r': cp = '\r'; break;
+            case 'f': cp = '\f'; break;
+            case 'v': cp = 0x0BU; break;
+            case 'a': cp = 0x07U; break;
+            case 'e': cp = 0x1BU; break;
+            case '0': cp = 0U; break;
+            case 'x':
+                if (!literal_scan_hex(pat, len, &at, &cp))
+                    return false;
+                break;
+            default:
+                if (!literal_escaped_punct(c))
+                    return false;
+                cp = c;
+                break;
+            }
+            n = yew_utf8_encode(cp, encoded);
+            if (n == 0U)
+                return false;
+            bytebuf_append(bytes, encoded, n);
+            (*codepoints)++;
+            continue;
+        }
+        if ((flags & YEW_RE_LITERAL) == 0U && literal_raw_meta(pat[at]))
+            return false;
+        n = yew_utf8_decode(pat + at, len - at, &cp);
+        if (n == 0U)
+            n = 1U;
+        bytebuf_append(bytes, pat + at, n);
+        at += n;
+        if ((yew_cat_rec(cp) & YEW_CAT_UPPER) != 0U)
+            *saw_upper = true;
+        (*codepoints)++;
+    }
+    return bytes->len != 0U;
+}
+
+static YewRe *build_large_literal(Arena *arena, const Bytebuf *bytes,
+                                  u32 codepoints, u32 flags,
+                                  bool saw_upper)
+{
+    YewRe *re = arena_alloc(arena, sizeof(*re), _Alignof(YewRe));
+
+    (void)memset(re, 0, sizeof(*re));
+    re->prog = arena_alloc(arena, 3U * sizeof(*re->prog),
+                           _Alignof(ReInst));
+    re->rprog = arena_alloc(arena, 3U * sizeof(*re->rprog),
+                            _Alignof(ReInst));
+    re->prog[0] = (ReInst){0U, 0U, 0U, RE_SAVE};
+    re->prog[1] = (ReInst){0U, 0U, 1U, RE_SAVE};
+    re->prog[2] = (ReInst){0U, 0U, 0U, RE_MATCH};
+    re->rprog[0] = (ReInst){0U, 0U, 1U, RE_SAVE};
+    re->rprog[1] = (ReInst){0U, 0U, 0U, RE_SAVE};
+    re->rprog[2] = (ReInst){0U, 0U, 0U, RE_MATCH};
+    re->nprog = 3U;
+    re->nrprog = 3U;
+    re->ngroups = 1U;
+    re->flags = flags;
+    re->saw_upper_literal = saw_upper;
+    re->min_len = codepoints;
+    re->max_len = codepoints;
+    re->lit.kind = RE_LIT_WHOLE;
+    yew_lit_prepare(&re->lit, arena, bytes->data, (u32)bytes->len);
+    re_last_walk = 0U;
+    return re;
 }
 
 YewRe *yew_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
@@ -522,6 +693,34 @@ YewRe *yew_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
         if (err != NULL)
             err->msg = "no pattern";
         return NULL;
+    }
+    /* yew_re_quote() may spell one control byte as four pattern bytes.
+     * Admit that bounded representation only when the conservative scanner
+     * proves it decodes to an exact literal no larger than the ordinary
+     * 64 KiB semantic limit.  General regex syntax keeps the 64 KiB cap. */
+    if (len > (size_t)YEW_RE_MAX_PATTERN * 4U) {
+        if (err != NULL) {
+            err->off = YEW_RE_MAX_PATTERN;
+            err->msg = "pattern too long (max 64 KiB)";
+        }
+        return NULL;
+    }
+    if (len > YEW_RE_MAX_PROG - 3U) {
+        Bytebuf bytes;
+        u32 codepoints;
+        bool saw_upper;
+        bool whole = scan_whole_literal((const u8 *)pat, len, flags,
+                                        &bytes, &codepoints, &saw_upper);
+
+        if (whole && bytes.len <= YEW_RE_MAX_PATTERN &&
+            codepoints > YEW_RE_MAX_PROG - 3U) {
+            YewRe *large = build_large_literal(a, &bytes, codepoints, flags,
+                                               saw_upper);
+
+            bytebuf_free(&bytes);
+            return large;
+        }
+        bytebuf_free(&bytes);
     }
     if (len > YEW_RE_MAX_PATTERN) {
         if (err != NULL) {
@@ -575,7 +774,7 @@ YewRe *yew_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
     re->force_case = p.force_case;
     re->min_len = min_len(root);
     re->max_len = max_len(root);
-    build_literal(re, root, flags);
+    build_literal(re, a, root, flags);
     return re;
 }
 
@@ -691,6 +890,11 @@ void yew_re_first_bytes(const YewRe *re, u8 first[32])
     if (first == NULL)
         return;
     (void)memset(first, 0, 32U);
+    if (re != NULL && re->lit.kind == RE_LIT_WHOLE &&
+        re->lit.n != 0U && re->lit.s != NULL) {
+        first_add(first, re->lit.s[0]);
+        return;
+    }
     if (re == NULL || re->prog == NULL || re->nprog == 0U ||
         re->nprog > YEW_RE_MAX_PROG) {
         (void)memset(first, 0xff, 32U);

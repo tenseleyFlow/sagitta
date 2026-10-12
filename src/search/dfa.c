@@ -482,6 +482,16 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
 
     if (re == NULL || in == NULL || re->nprog == 0U)
         return YEW_DFA_NO;
+    if (re->lit.kind == RE_LIT_WHOLE) {
+        YewReMatch match;
+
+        if (!yew_re_literal_search(re, in, from,
+                                   end_out != NULL ? &match : NULL))
+            return YEW_DFA_NO;
+        if (end_out != NULL)
+            *end_out = match.g[0].hi;
+        return YEW_DFA_YES;
+    }
     (void)memset(&d, 0, sizeof(d));
     d.re = re;
     d.prog = re->prog;

@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "search/regex.h"
+#include "search/regex_internal.h"
 #include "text/piece.h"
 #include "util/arena.h"
 
@@ -203,6 +204,152 @@ void test_re_match_at_is_anchored(void)
     YEW_ASSERT(yew_re_match_at(re, &in, BYTEOFF(2U), &m));
     YEW_ASSERT_EQ_U64(m.g[0].hi, 5U);
     arena_free_all(&arena);
+}
+
+void test_re_long_literal_bypasses_vm_limit(void)
+{
+    enum { LITERAL_LEN = 4240U, PREFIX_LEN = 3U, SUFFIX_LEN = 3U };
+    u8 literal[LITERAL_LEN];
+    u8 subject[PREFIX_LEN + LITERAL_LEN + SUFFIX_LEN];
+    Arena arena;
+    Arena restored_arena;
+    Arena truncated_arena;
+    Bytebuf pattern;
+    Bytebuf packed;
+    YewReErr err = {0};
+    YewReWorkspace workspace;
+    YewReMatch match;
+    YewReInput input;
+    YewRe *re;
+    YewRe *literal_re;
+    YewRe *limit_re;
+    YewRe *restored;
+    TextBuf *tb;
+    u8 *limit_literal;
+    size_t used = 0U;
+    size_t i;
+    u64 at;
+    u64 end = 0U;
+
+    for (i = 0U; i < sizeof(literal); i++)
+        literal[i] = (u8)('a' + (i * 17U) % 26U);
+    literal[0] = 'Q';
+    literal[17] = '*';
+    literal[100] = '\n';
+    literal[101] = 0U;
+    literal[102] = 0x80U;
+    literal[103] = 0xFFU;
+    literal[104] = '\\';
+    literal[105] = '_';
+    (void)memcpy(subject, "xx ", PREFIX_LEN);
+    (void)memcpy(subject + PREFIX_LEN, literal, sizeof(literal));
+    (void)memcpy(subject + PREFIX_LEN + LITERAL_LEN, " yy", SUFFIX_LEN);
+
+    bytebuf_init(&pattern);
+    bytebuf_init(&packed);
+    yew_re_quote(&pattern, literal, sizeof(literal));
+    arena_init(&arena);
+    re = yew_re_compile(&arena, (const char *)pattern.data, pattern.len,
+                        0U, &err);
+    YEW_ASSERT_NOT_NULL(re);
+    YEW_ASSERT_EQ_U64(yew_re_whole_literal_bytes(re), LITERAL_LEN);
+    YEW_ASSERT_EQ_U64(yew_re_min_len(re), LITERAL_LEN);
+    YEW_ASSERT(yew_re_has_upper_literal(re));
+
+    input = yew_re_input_bytes(subject, sizeof(subject));
+    YEW_ASSERT(yew_re_search(re, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
+    YEW_ASSERT_EQ_U64(match.g[0].hi, PREFIX_LEN + LITERAL_LEN);
+    YEW_ASSERT(yew_re_pike_run(re, &input, PREFIX_LEN, &match));
+    YEW_ASSERT_EQ_U64(match.g[0].hi, PREFIX_LEN + LITERAL_LEN);
+    YEW_ASSERT(yew_re_pike_run_ex(re, &input, 0U, false, &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
+    YEW_ASSERT_EQ_I64(yew_re_dfa_test(re, &input, 0U), YEW_DFA_YES);
+    YEW_ASSERT_EQ_I64(yew_re_dfa_find_end(re, &input, 0U, &end),
+                      YEW_DFA_YES);
+    YEW_ASSERT_EQ_U64(end, PREFIX_LEN + LITERAL_LEN);
+    YEW_ASSERT(yew_re_match_at(re, &input, BYTEOFF(PREFIX_LEN), &match));
+    YEW_ASSERT(!yew_re_match_at(re, &input, BYTEOFF(PREFIX_LEN - 1U),
+                                &match));
+    yew_re_workspace_init(&workspace);
+    YEW_ASSERT(yew_re_match_at_ws(&workspace, re, &input,
+                                  BYTEOFF(PREFIX_LEN), &match));
+    yew_re_workspace_free(&workspace);
+    YEW_ASSERT(yew_re_search_back(re, &input, BYTEOFF(sizeof(subject)),
+                                  &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
+    YEW_ASSERT(!yew_re_search(re, &input, BYTEOFF(PREFIX_LEN + 1U),
+                              &match));
+
+    /* Force the literal across hundreds of piece boundaries.  The long
+     * path streams KMP state between chunks; it must never materialize the
+     * buffer or depend on a fixed-size carry window. */
+    tb = yew_textbuf_new();
+    for (at = 0U; at < sizeof(subject);) {
+        u64 take = sizeof(subject) - at < 13U ?
+                   sizeof(subject) - at : 13U;
+
+        yew_textbuf_insert(tb, BYTEOFF(at), subject + at, take);
+        at += take;
+    }
+    input = yew_re_input_textbuf(tb);
+    YEW_ASSERT(yew_re_search(re, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
+    YEW_ASSERT(yew_re_match_at(re, &input, BYTEOFF(PREFIX_LEN), &match));
+    YEW_ASSERT(yew_re_search_back(re, &input, BYTEOFF(sizeof(subject)),
+                                  &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
+    yew_textbuf_free(tb);
+
+    /* Long whole literals are cacheable.  REP2 adds only the variable
+     * literal payload; REP1 remains byte-identical for ordinary patterns. */
+    YEW_ASSERT(yew_re_pack(re, &packed));
+    YEW_ASSERT(packed.len > LITERAL_LEN);
+    YEW_ASSERT(memcmp(packed.data, "YEWREP2", 7U) == 0);
+    arena_init(&truncated_arena);
+    YEW_ASSERT_NULL(yew_re_unpack(&truncated_arena, packed.data,
+                                  packed.len - 1U, NULL));
+    arena_free_all(&truncated_arena);
+    arena_init(&restored_arena);
+    restored = yew_re_unpack(&restored_arena, packed.data, packed.len, &used);
+    YEW_ASSERT_NOT_NULL(restored);
+    YEW_ASSERT_EQ_U64(used, packed.len);
+    input = yew_re_input_bytes(subject, sizeof(subject));
+    YEW_ASSERT(yew_re_search(restored, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
+    arena_free_all(&restored_arena);
+
+    literal_re = yew_re_compile(&arena, (const char *)literal,
+                                sizeof(literal), YEW_RE_LITERAL, &err);
+    YEW_ASSERT_NOT_NULL(literal_re);
+    YEW_ASSERT(yew_re_search(literal_re, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
+
+    subject[PREFIX_LEN + LITERAL_LEN / 2U] ^= 1U;
+    input = yew_re_input_bytes(subject, sizeof(subject));
+    YEW_ASSERT(!yew_re_search(re, &input, BYTEOFF(0U), &match));
+
+    /* Quoting expands controls fourfold.  The semantic 64 KiB literal
+     * limit still round-trips even though its safe textual spelling is
+     * 256 KiB; non-literal patterns retain the ordinary syntax cap. */
+    limit_literal = yew_xmalloc(YEW_RE_MAX_PATTERN);
+    (void)memset(limit_literal, '\n', YEW_RE_MAX_PATTERN);
+    pattern.len = 0U;
+    yew_re_quote(&pattern, limit_literal, YEW_RE_MAX_PATTERN);
+    YEW_ASSERT_EQ_U64(pattern.len, (u64)YEW_RE_MAX_PATTERN * 4U);
+    limit_re = yew_re_compile(&arena, (const char *)pattern.data,
+                              pattern.len, 0U, &err);
+    YEW_ASSERT_NOT_NULL(limit_re);
+    YEW_ASSERT_EQ_U64(yew_re_whole_literal_bytes(limit_re),
+                      YEW_RE_MAX_PATTERN);
+    input = yew_re_input_bytes(limit_literal, YEW_RE_MAX_PATTERN);
+    YEW_ASSERT(yew_re_search(limit_re, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].hi, YEW_RE_MAX_PATTERN);
+    yew_xfree(limit_literal);
+
+    arena_free_all(&arena);
+    bytebuf_free(&packed);
+    bytebuf_free(&pattern);
 }
 
 void test_re_workspace_reuses_mixed_programs_and_captures(void)

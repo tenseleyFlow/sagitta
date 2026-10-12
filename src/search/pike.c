@@ -559,6 +559,11 @@ bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
 
     if (workspace == NULL || re == NULL || in == NULL || re->nprog == 0U)
         return false;
+    if (re->lit.kind == RE_LIT_WHOLE) {
+        if (anchored)
+            return yew_re_literal_match_at(re, in, start, out);
+        return yew_re_literal_search(re, in, start, out);
+    }
     /* In an anchored run with no explicit groups, group zero is exactly
      * [start, MATCH-position].  SAVE threads carry no additional
      * information, so skip the capture pool entirely for this dominant

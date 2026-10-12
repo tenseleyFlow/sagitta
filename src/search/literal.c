@@ -3,17 +3,38 @@
 
 #include <string.h>
 
-void yew_bmh_build(ReLit *l)
+void yew_lit_prepare(ReLit *l, Arena *a, const u8 *s, u32 n)
 {
     u32 i;
+    u32 prefix = 0U;
 
-    if (l->kind == RE_LIT_NONE || l->n == 0U)
+    if (l == NULL || a == NULL || s == NULL || n == 0U)
         return;
+    l->n = n;
+    if (n <= sizeof(l->small)) {
+        (void)memcpy(l->small, s, n);
+        l->s = l->small;
+    } else {
+        u8 *copy = arena_alloc(a, n, 1U);
+
+        (void)memcpy(copy, s, n);
+        l->s = copy;
+        l->kmp = arena_alloc(a, (size_t)n * sizeof(*l->kmp),
+                             _Alignof(u32));
+        l->kmp[0] = 0U;
+        for (i = 1U; i < n; i++) {
+            while (prefix != 0U && l->s[prefix] != l->s[i])
+                prefix = l->kmp[prefix - 1U];
+            if (l->s[prefix] == l->s[i])
+                prefix++;
+            l->kmp[i] = prefix;
+        }
+    }
     for (i = 0U; i < 256U; i++)
-        l->skip[i] = l->n;
+        l->skip[i] = n;
     /* Last byte excluded: the classic Horspool table. */
-    for (i = 0U; i + 1U < l->n; i++)
-        l->skip[l->s[i]] = l->n - 1U - i;
+    for (i = 0U; i + 1U < n; i++)
+        l->skip[l->s[i]] = n - 1U - i;
 }
 
 u64 yew_lit_find(const ReLit *l, const u8 *hay, u64 n)

@@ -8,7 +8,10 @@ enum {
     RE_PACK_RANGE = 8
 };
 
-static const u8 re_pack_magic[8] = {'Y', 'E', 'W', 'R', 'E', 'P', '1', 0};
+static const u8 re_pack_magic_v1[8] =
+    {'Y', 'E', 'W', 'R', 'E', 'P', '1', 0};
+static const u8 re_pack_magic_v2[8] =
+    {'Y', 'E', 'W', 'R', 'E', 'P', '2', 0};
 
 static void put32(u8 *p, u32 v)
 {
@@ -68,12 +71,17 @@ bool yew_re_pack(const YewRe *re, Bytebuf *out)
     u8 *p;
     u32 i;
     u32 flags = 0U;
+    bool long_literal;
 
     if (re == NULL || out == NULL || re->nprog > YEW_RE_MAX_PROG ||
         re->nrprog > YEW_RE_MAX_PROG || re->nclasses > YEW_RE_MAX_CLASSES ||
         re->ngroups == 0U || re->ngroups > YEW_RE_MAX_GROUPS ||
-        re->lit.n > sizeof(re->lit.s))
+        re->lit.n > YEW_RE_MAX_PATTERN ||
+        (re->lit.n != 0U && re->lit.s == NULL) ||
+        (re->lit.n > sizeof(re->lit.small) &&
+         re->lit.kind != RE_LIT_WHOLE))
         return false;
+    long_literal = re->lit.n > sizeof(re->lit.small);
     if (!add_size(&size, re->nprog, RE_PACK_INST) ||
         !add_size(&size, re->nrprog, RE_PACK_INST))
         return false;
@@ -82,6 +90,8 @@ bool yew_re_pack(const YewRe *re, Bytebuf *out)
             !add_size(&size, re->classes[i].n, RE_PACK_RANGE))
             return false;
     }
+    if (long_literal && !add_size(&size, re->lit.n, 1U))
+        return false;
     start = out->len;
     if (size > SIZE_MAX - start)
         return false;
@@ -89,7 +99,8 @@ bool yew_re_pack(const YewRe *re, Bytebuf *out)
     out->len = start + size;
     p = out->data + start;
     (void)memset(p, 0, size);
-    (void)memcpy(p, re_pack_magic, sizeof(re_pack_magic));
+    (void)memcpy(p, long_literal ? re_pack_magic_v2 : re_pack_magic_v1,
+                 sizeof(re_pack_magic_v1));
     put32(p + 8U, re->nprog);
     put32(p + 12U, re->nrprog);
     put32(p + 16U, re->nclasses);
@@ -107,7 +118,8 @@ bool yew_re_pack(const YewRe *re, Bytebuf *out)
     put32(p + 40U, re->lit.kind);
     put32(p + 44U, re->lit.n);
     put32(p + 48U, re->lit.anchored ? 1U : 0U);
-    (void)memcpy(p + 64U, re->lit.s, sizeof(re->lit.s));
+    if (!long_literal && re->lit.n != 0U)
+        (void)memcpy(p + 64U, re->lit.s, re->lit.n);
     p += RE_PACK_HEADER;
     for (i = 0U; i < re->nprog; i++, p += RE_PACK_INST)
         pack_inst(p, &re->prog[i]);
@@ -122,6 +134,10 @@ bool yew_re_pack(const YewRe *re, Bytebuf *out)
             put32(p, re->classes[i].r[j].lo);
             put32(p + 4U, re->classes[i].r[j].hi);
         }
+    }
+    if (long_literal) {
+        (void)memcpy(p, re->lit.s, re->lit.n);
+        p += re->lit.n;
     }
     return (size_t)(p - (out->data + start)) == size;
 }
@@ -140,11 +156,15 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
     size_t at = RE_PACK_HEADER;
     u32 bools;
     u32 i;
+    bool v2;
 
     if (used != NULL)
         *used = 0U;
-    if (a == NULL || data == NULL || len < RE_PACK_HEADER ||
-        memcmp(data, re_pack_magic, sizeof(re_pack_magic)) != 0)
+    if (a == NULL || data == NULL || len < RE_PACK_HEADER)
+        return NULL;
+    v2 = memcmp(data, re_pack_magic_v2, sizeof(re_pack_magic_v2)) == 0;
+    if (!v2 &&
+        memcmp(data, re_pack_magic_v1, sizeof(re_pack_magic_v1)) != 0)
         return NULL;
     re = arena_alloc(a, sizeof(*re), _Alignof(YewRe));
     (void)memset(re, 0, sizeof(*re));
@@ -167,7 +187,11 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
                        YEW_RE_NOCAPTURE)) != 0U ||
         (re->max_len != UINT32_MAX && re->max_len < re->min_len) ||
         bools > 7U ||
-        re->lit.kind > RE_LIT_WHOLE || re->lit.n > sizeof(re->lit.s) ||
+        re->lit.kind > RE_LIT_WHOLE || re->lit.n > YEW_RE_MAX_PATTERN ||
+        (!v2 && re->lit.n > sizeof(re->lit.small)) ||
+        (v2 && re->lit.n <= sizeof(re->lit.small)) ||
+        (re->lit.n > sizeof(re->lit.small) &&
+         re->lit.kind != RE_LIT_WHOLE) ||
         (re->lit.kind == RE_LIT_NONE && re->lit.n != 0U) ||
         (re->lit.kind == RE_LIT_BYTE && re->lit.n != 1U) ||
         (re->lit.kind == RE_LIT_BMH && re->lit.n < 2U) ||
@@ -176,8 +200,6 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
         !take(&at, len, re->nprog, RE_PACK_INST) ||
         !take(&at, len, re->nrprog, RE_PACK_INST))
         return NULL;
-    (void)memcpy(re->lit.s, data + 64U, sizeof(re->lit.s));
-    yew_bmh_build(&re->lit);
     re->saw_upper_literal = (bools & 1U) != 0U;
     re->force_icase = (bools & 2U) != 0U;
     re->force_case = (bools & 4U) != 0U;
@@ -228,6 +250,15 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
                               re->classes[i].r[j].lo))
                 return NULL;
         }
+    }
+    if (v2) {
+        size_t literal_at = at;
+
+        if (!take(&at, len, re->lit.n, 1U))
+            return NULL;
+        yew_lit_prepare(&re->lit, a, data + literal_at, re->lit.n);
+    } else if (re->lit.n != 0U) {
+        yew_lit_prepare(&re->lit, a, data + 64U, re->lit.n);
     }
     if (used != NULL)
         *used = at;

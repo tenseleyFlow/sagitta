@@ -131,6 +131,40 @@ static u64 next_cp_off(const YewReInput *in, u64 off)
     return off + step;
 }
 
+static u64 long_literal_find_textbuf(const ReLit *l, const YewReInput *in,
+                                     u64 from)
+{
+    TextIter it;
+    u64 at = from;
+    u32 matched = 0U;
+
+    if (from >= in->window.hi || l->kmp == NULL ||
+        !yew_textiter_begin(&it, in->tb, BYTEOFF(from)))
+        return UINT64_MAX;
+    while (at < in->window.hi) {
+        const u8 *chunk = NULL;
+        u64 n = 0U;
+        u64 span;
+        u64 i;
+
+        if (!yew_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
+            return UINT64_MAX;
+        span = n < in->window.hi - at ? n : in->window.hi - at;
+        for (i = 0U; i < span; i++) {
+            while (matched != 0U && l->s[matched] != chunk[i])
+                matched = l->kmp[matched - 1U];
+            if (l->s[matched] == chunk[i])
+                matched++;
+            if (matched == l->n)
+                return at + i + 1U - l->n;
+        }
+        at += span;
+        if (at == in->window.hi || !yew_textiter_advance(&it, in->tb))
+            break;
+    }
+    return UINT64_MAX;
+}
+
 /*
  * Scans the literal prefilter over the input one TextIter chunk at a
  * time, carrying n-1 bytes across chunk boundaries.
@@ -156,6 +190,8 @@ static u64 prefilter_find(const YewRe *re, const YewReInput *in, u64 from)
         hit = yew_lit_find(l, in->bytes + from, in->window.hi - from);
         return hit == UINT64_MAX ? UINT64_MAX : from + hit;
     }
+    if (l->n > sizeof(l->small))
+        return long_literal_find_textbuf(l, in, from);
     while (at < in->window.hi) {
         TextIter it;
         const u8 *chunk = NULL;
@@ -205,11 +241,86 @@ static u64 prefilter_find(const YewRe *re, const YewReInput *in, u64 from)
     return UINT64_MAX;
 }
 
+static bool literal_equal_at(const ReLit *l, const YewReInput *in, u64 at)
+{
+    if (at < in->window.lo || at > in->window.hi ||
+        l->n > in->window.hi - at)
+        return false;
+    if (in->tb == NULL)
+        return memcmp(in->bytes + at, l->s, l->n) == 0;
+    {
+        TextIter it;
+        u64 checked = 0U;
+
+        if (!yew_textiter_begin(&it, in->tb, BYTEOFF(at)))
+            return false;
+        while (checked < l->n) {
+            const u8 *chunk = NULL;
+            u64 n = 0U;
+            u64 take;
+
+            if (!yew_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
+                return false;
+            take = n < (u64)l->n - checked ? n : (u64)l->n - checked;
+            if (memcmp(chunk, l->s + checked, (size_t)take) != 0)
+                return false;
+            checked += take;
+            if (checked < l->n && !yew_textiter_advance(&it, in->tb))
+                return false;
+        }
+    }
+    return true;
+}
+
+bool yew_re_literal_match_at(const YewRe *re, const YewReInput *in,
+                             u64 at, YewReMatch *out)
+{
+    if (re == NULL || in == NULL || re->lit.kind != RE_LIT_WHOLE ||
+        !literal_equal_at(&re->lit, in, at))
+        return false;
+    if (out != NULL) {
+        (void)memset(out, 0, sizeof(*out));
+        out->ngroups = 1U;
+        out->g[0] = (Span){at, at + re->lit.n};
+    }
+    return true;
+}
+
+bool yew_re_literal_search(const YewRe *re, const YewReInput *in,
+                           u64 from, YewReMatch *out)
+{
+    u64 at;
+
+    if (re == NULL || in == NULL || re->lit.kind != RE_LIT_WHOLE)
+        return false;
+    at = from < in->window.lo ? in->window.lo : from;
+    while (at <= in->window.hi) {
+        u64 hit = prefilter_find(re, in, at);
+
+        if (hit == UINT64_MAX || hit > in->window.hi ||
+            re->lit.n > in->window.hi - hit)
+            return false;
+        if (!is_cp_start(in, hit)) {
+            at = hit + 1U;
+            continue;
+        }
+        if (out != NULL) {
+            (void)memset(out, 0, sizeof(*out));
+            out->ngroups = 1U;
+            out->g[0] = (Span){hit, hit + re->lit.n};
+        }
+        return true;
+    }
+    return false;
+}
+
 bool yew_re_match_at(const YewRe *re, const YewReInput *in, ByteOff at,
                      YewReMatch *out)
 {
     if (re == NULL || in == NULL)
         return false;
+    if (re->lit.kind == RE_LIT_WHOLE)
+        return yew_re_literal_match_at(re, in, at.v, out);
     return yew_re_pike_run(re, in, at.v, out);
 }
 
@@ -218,6 +329,8 @@ bool yew_re_match_at_ws(YewReWorkspace *workspace, const YewRe *re,
 {
     if (workspace == NULL || re == NULL || in == NULL)
         return false;
+    if (re->lit.kind == RE_LIT_WHOLE)
+        return yew_re_literal_match_at(re, in, at.v, out);
     return yew_re_pike_run_ws(workspace, re, in, at.v, true, out);
 }
 
@@ -235,26 +348,8 @@ bool yew_re_search(const YewRe *re, const YewReInput *in, ByteOff from,
      * common case in an editor — most searches are a plain string — and
      * it runs at memchr/BMH speed.
      */
-    if (re->lit.kind == RE_LIT_WHOLE) {
-        while (at <= in->window.hi) {
-            u64 hit = prefilter_find(re, in, at);
-
-            if (hit == UINT64_MAX || hit + re->lit.n > in->window.hi)
-                return false;
-            if (!is_cp_start(in, hit)) {
-                at = hit + 1U;
-                continue;
-            }
-            if (out != NULL) {
-                (void)memset(out, 0, sizeof(*out));
-                out->ngroups = 1U;
-                out->g[0].lo = hit;
-                out->g[0].hi = hit + re->lit.n;
-            }
-            return true;
-        }
-        return false;
-    }
+    if (re->lit.kind == RE_LIT_WHOLE)
+        return yew_re_literal_search(re, in, at, out);
 
     /*
      * Otherwise: use the prefilter ONLY to skip the dead zone before the
