@@ -174,7 +174,7 @@ void test_lsp_default_server_table_is_complete(void)
 {
     static const char *const languages[] = {
         "c", "cpp", "objc", "rust", "python", "go", "js", "ts",
-        "jsx", "tsx", "fortran", "sh"
+        "jsx", "tsx", "fortran", "sh", "wolf"
     };
     size_t i;
 
