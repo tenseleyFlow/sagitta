@@ -71,6 +71,21 @@ static void tutor_path(const TutorFix *fix, const char *name,
     YEW_ASSERT(n > 0 && n < PATH_MAX);
 }
 
+static void tutor_path_concat(const char *left, const char *right,
+                              char out[PATH_MAX])
+{
+    size_t left_len = strlen(left);
+    size_t right_len = strlen(right);
+
+    if (left_len >= PATH_MAX || right_len > PATH_MAX - left_len - 1U) {
+        YEW_ASSERT(false);
+        out[0] = '\0';
+        return;
+    }
+    (void)memcpy(out, left, left_len);
+    (void)memcpy(out + left_len, right, right_len + 1U);
+}
+
 static void tutor_write(const char *path, const char *text)
 {
     size_t len = strlen(text);
@@ -157,12 +172,11 @@ void test_tutor_seed_preserves_existing_work_and_reset_is_confined(void)
     YEW_ASSERT_EQ_MEM(bytes.data, "my unsaved lesson\n", bytes.len);
     bytebuf_free(&bytes);
 
-    (void)snprintf(marker, sizeof(marker), "%s/keep", fix.base);
+    tutor_path_concat(fix.base, "/keep", marker);
     tutor_write(marker, "outside\n");
     YEW_ASSERT(yew_ws_key(&workspace, fix.root));
     YEW_ASSERT(yew_ws_ensure_dir(&workspace));
-    (void)snprintf(state_marker, sizeof(state_marker), "%sstate.fl",
-                   workspace.dir);
+    tutor_path_concat(workspace.dir, "state.fl", state_marker);
     tutor_write(state_marker, "{schema: 1}\n");
     YEW_ASSERT(!yew_tutor_reset(fix.base));
     YEW_ASSERT(yew_tutor_reset(fix.root));
@@ -247,7 +261,7 @@ void test_tutor_progress_reconciles_marks_without_leaving_workspace(void)
     tutor_write(chapter, custom);
     progress.done[0] = 0x05U;
 
-    (void)snprintf(outside, sizeof(outside), "%s/outside.txt", fix.base);
+    tutor_path_concat(fix.base, "/outside.txt", outside);
     tutor_write(outside, "[ ] ch02.t1 outside\n");
     tutor_path(&fix, "ch02.txt", chapter);
     YEW_ASSERT_EQ_I64(unlink(chapter), 0);
