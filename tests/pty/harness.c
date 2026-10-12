@@ -1102,6 +1102,11 @@ static bool key_parse(const char *token, size_t len, u16 *mods,
         *kitty = *scalar;
         return true;
     }
+    if (name_equal(part, (size_t)(end - part), "comma")) {
+        *scalar = (u8)',';
+        *kitty = *scalar;
+        return true;
+    }
     for (i = 0U; i < YEW_ARRAY_LEN(key_names); i++) {
         if (name_equal(part, (size_t)(end - part), key_names[i].name)) {
             *kitty = key_names[i].kitty;

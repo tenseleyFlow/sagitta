@@ -1,0 +1,63 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=2,6 vis=1
+modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
+--- text
+ 1 tutor (7)  +                                                                 
+ 1 ch01.txt  2 ch02.txt  3 ch03.txt*  4 ch04.txt  5 ch05.txt  6 ch06.txt      >1
+    1 YEW TUTOR 3/7 — EXECUTE MODE AND THE SHELL                                
+    1                                                                           
+    2 E mode is yew's command language. A leading ! runs your shell, while a ran
+    3 before ! filters buffer text through a command as one undoable edit.      
+    4                                                                           
+    5 [✓] ch03.t1 Open E mode with :.                                           
+    6 [✓] ch03.t2 Cancel E mode with Esc.                                       
+    7 [✓] ch03.t3 Run :set tabwidth 3.                                          
+    8 [✓] ch03.t4 Recall it with : then Up, change 3 to 5, and run it.          
+    9 [✓] ch03.t5 Sort the three fruit lines with :17,19!sort.                  
+   10 [✓] ch03.t6 Undo both the task mark and filter with 2u.                   
+   11 [✓] ch03.t7 Run the filter again from command history.                    
+   12                                                                           
+   13 Commands report errors without replacing this file. Job output opens in it
+   14 own scratch buffer and never becomes file content.                        
+   15                                                                           
+   16 apple                                                                     
+   17 orange                                                                    
+   18 pear                                                                      
+   19                                                                           
+                                                                                
+ L filter: 20 → 20 lines                                                        
+--- style
+AAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDD
+EEEEFEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+--- legend
+A fg=#c8ccd4 bg=#2c313a attrs=b---------
+B fg=#61afef bg=#1b202a attrs=b---------
+C fg=#5c6370 bg=#1b202a attrs=----------
+D fg=#5c6370 bg=#1b202a attrs=-d--------
+E fg=#4b5263 bg=#12141a attrs=----------
+F fg=#c8ccd4 bg=#12141a attrs=b---------
+G fg=#c8ccd4 bg=#12141a attrs=----------
+H fg=#ebf4ff bg=#266eba attrs=b---------
+I fg=#dae5f0 bg=#14304c attrs=----------

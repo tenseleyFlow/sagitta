@@ -24,12 +24,19 @@ let tasks = [
       } },
     { id: "ch02.t5", line: 10, prompt: "Press h to enter Highlight mode.",
       keys: "h", check: fn(b, w) ed.mode() == "H" },
-    { id: "ch02.t6", line: 11, prompt: "Extend the selection with Shift-Down.",
-      keys: "S-<down>", check: fn(b, w) w.selection() != nil },
+    { id: "ch02.t6", line: 11,
+      prompt: "Extend across four lines with Shift-Down three times.",
+      keys: "S-<down> S-<down> S-<down>", check: fn(b, w) {
+          let c = cursor(w);
+          return c != nil and c.line() == 5 and w.selection() != nil
+      } },
     { id: "ch02.t7", line: 12,
-      prompt: "Lift the selection with Enter, then type ! once.",
-      keys: "<cr> !", check: fn(b, w) {
-          return list.len(w.cursors()) > 1 and str.contains(b.text(), "!") and
-                 b.undo_depth() > 0
+      prompt: "Lift four cursors, enter Insert, type !, then Esc.",
+      keys: "<cr> i ! <esc>", check: fn(b, w) {
+          if b.lines() < 5 or list.len(w.cursors()) != 4 { return false }
+          return str.starts_with(b.line(2), "!") and
+                 str.starts_with(b.line(3), "!") and
+                 str.starts_with(b.line(4), "!") and
+                 str.starts_with(b.line(5), "!") and b.undo_depth() > 0
       } },
 ]

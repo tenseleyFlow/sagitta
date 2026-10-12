@@ -149,36 +149,83 @@ static bool file_contains(const char *path, const char *needle)
     return found;
 }
 
-void yew_tutor_case_ch01(PtyCtx *c)
+static bool progress_complete(const char *path, u32 chapter,
+                              const char *key)
+{
+    char expected[384];
+    size_t at = 0U;
+    u32 task;
+    int n;
+
+    n = snprintf(expected, sizeof(expected), "%s: { done: [", key);
+    if (n <= 0 || (size_t)n >= sizeof(expected))
+        return false;
+    at = (size_t)n;
+    for (task = 1U; task <= TUTOR_TASKS; task++) {
+        n = snprintf(expected + at, sizeof(expected) - at,
+                     "%s\"ch%02u.t%u\"", task == 1U ? "" : ", ",
+                     (unsigned)chapter, (unsigned)task);
+        if (n <= 0 || (size_t)n >= sizeof(expected) - at)
+            return false;
+        at += (size_t)n;
+    }
+    n = snprintf(expected + at, sizeof(expected) - at,
+                 "], complete: true }");
+    return n > 0 && (size_t)n < sizeof(expected) - at &&
+           file_contains(path, expected);
+}
+
+typedef struct TutorProgressWait {
+    const char *path;
+    char id[24];
+} TutorProgressWait;
+
+static bool progress_has_task(const PtyCtx *c, const void *arg)
+{
+    const TutorProgressWait *wait = arg;
+
+    (void)c;
+    return file_contains(wait->path, wait->id);
+}
+
+static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
+                        const char *module, const char *golden)
 {
     TutorKeys keys;
+    char chapter_arg[2];
     char progress[PATH_MAX];
+    TutorProgressWait wait;
     u32 i;
     int n;
 
-    if (!load_keys(c, "ch01-arrows.fl", &keys)) {
-        ptc_check(c, false, "could not load Chapter 1 task keys via Fletch");
+    if (!load_keys(c, module, &keys)) {
+        ptc_check(c, false, "could not load tutor task keys via Fletch");
         return;
     }
-    ptc_spawn(c, ptc_yew_bin(c), "tutor", "1", "--reset", "--clean",
-              NULL);
+    chapter_arg[0] = (char)('0' + chapter);
+    chapter_arg[1] = '\0';
+    ptc_spawn(c, ptc_yew_bin(c), "tutor", chapter_arg, "--reset",
+              "--clean", NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
-    for (i = 0U; i < keys.len; i++) {
-        ptc_keys(c, keys.key[i]);
-        ptc_settle(c, 30);
-    }
     n = snprintf(progress, sizeof(progress), "%s/yew/tutor/tutor.fl",
                  c->state_dir);
     ptc_check(c, n > 0 && (size_t)n < sizeof(progress),
-              "Chapter 1 progress path overflow");
-    ptc_check(c,
-              file_contains(progress,
-                  "arrows: { done: [\"ch01.t1\", \"ch01.t2\", "
-                  "\"ch01.t3\", \"ch01.t4\", \"ch01.t5\", "
-                  "\"ch01.t6\", \"ch01.t7\"], complete: true }"),
-              "Chapter 1 task engine did not persist every verdict");
-    ptc_snapshot(c, "tutor_ch01_done");
+              "tutor progress path overflow");
+    wait.path = progress;
+    for (i = 0U; i < keys.len; i++) {
+        ptc_keys(c, keys.key[i]);
+        n = snprintf(wait.id, sizeof(wait.id), "\"ch%02u.t%u\"",
+                     (unsigned)chapter, (unsigned)(i + 1U));
+        ptc_check(c, n > 0 && (size_t)n < sizeof(wait.id),
+                  "tutor task id overflow");
+        ptc_wait_until(c, progress_has_task, &wait,
+                       "tutor task did not reach its state verdict");
+        ptc_settle(c, 30);
+    }
+    ptc_check(c, progress_complete(progress, chapter, key),
+              "tutor task engine did not persist every verdict");
+    ptc_snapshot(c, golden);
 
     /* Completion marks are ordinary undoable edits.  Exercise the normal
      * dirty-buffer exit and explicitly discard after the assertion. */
@@ -187,4 +234,19 @@ void yew_tutor_case_ch01(PtyCtx *c)
     ptc_settle(c, 20);
     ptc_keys(c, "d");
     ptc_expect_exit(c, 0);
+}
+
+void yew_tutor_case_ch01(PtyCtx *c)
+{
+    run_chapter(c, 1U, "arrows", "ch01-arrows.fl", "tutor_ch01_done");
+}
+
+void yew_tutor_case_ch02(PtyCtx *c)
+{
+    run_chapter(c, 2U, "units", "ch02-units.fl", "tutor_ch02_done");
+}
+
+void yew_tutor_case_ch03(PtyCtx *c)
+{
+    run_chapter(c, 3U, "execute", "ch03-execute.fl", "tutor_ch03_done");
 }

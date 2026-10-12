@@ -8,8 +8,8 @@ cross changes. H borrows the unit you came from and extends a selection.
 [ ] ch02.t3 Press b to layer Block mode over the arrows.
 [ ] ch02.t4 Move Down to the next block.
 [ ] ch02.t5 Press h to enter Highlight mode.
-[ ] ch02.t6 Extend the selection with Shift-Down.
-[ ] ch02.t7 Lift the selection with Enter, then type ! once.
+[ ] ch02.t6 Extend across four lines with Shift-Down three times.
+[ ] ch02.t7 Lift four cursors, enter Insert, type !, then Esc.
 
 alpha beta gamma
 the quick fox jumped

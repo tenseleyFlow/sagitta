@@ -13185,6 +13185,8 @@ const PtyCase yew_pty_cases[] = {
     C(s32_bug_restores_the_terminal, modern, 24U, 80U,
       case_s32_bug_restores_the_terminal),
     C(tutor_ch01, modern, 24U, 80U, yew_tutor_case_ch01),
+    C(tutor_ch02, modern, 24U, 80U, yew_tutor_case_ch02),
+    C(tutor_ch03, modern, 24U, 80U, yew_tutor_case_ch03),
     {NULL, NULL, 0U, 0U, NULL, NULL}
 };
 
