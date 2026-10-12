@@ -715,7 +715,14 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
     }
     /* A child may chdir into an isolated workspace.  Pin the checked-in
      * runtime by absolute path so config-bearing cases remain hermetic. */
-    runtime_dir = realpath("runtime", NULL);
+    {
+        const char *runtime_override = getenv("YEW_PTY_RUNTIME_DIR");
+
+        runtime_dir = realpath(runtime_override == NULL ||
+                               runtime_override[0] == '\0'
+                                   ? "runtime" : runtime_override,
+                               NULL);
+    }
     if (!ptc_env_build(envp, term_for(c),
                        color_tier(c), c->state_dir,
                        no_color_for(c), ascii_for(c),

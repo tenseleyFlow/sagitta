@@ -1979,6 +1979,10 @@ test-tutor: $(BUILD)/unit_tests $(BUILD)/yew $(BUILD)/pty_runner \
             $(BUILD)/demo_paint
 	$(BUILD)/unit_tests --filter tutor_
 	YEW_TUTOR_BIN=$(abspath $(BUILD)/yew) scripts/tests/tutor-cli.test.sh
+	scripts/tests/tutor-rot-drill.test.sh \
+		$(abspath $(BUILD)/pty_runner) \
+		$(abspath $(BUILD)/demo_paint) \
+		$(abspath $(BUILD)/yew)
 	$(PTY_PREP) YEW_PTY_FILTER=tutor_ $(PTY_RUN) \
 		--demo $(abspath $(BUILD)/demo_paint) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)

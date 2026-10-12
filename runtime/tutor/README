@@ -1,0 +1,22 @@
+# Tutor rot drill
+
+The tutorial's `keys` fields are executable documentation. A default binding
+may move only when its lesson metadata moves in the same change.
+
+`make test-tutor` enforces that rule with a hermetic mutation drill. The drill
+copies `runtime/`, renames L mode's `i` binding to `z` in the copy, and runs
+the Chapter 1 PTY replay against that copied runtime. The replay must fail at
+the task-engine verdict for entering Insert mode. It then reruns the same case
+against the pristine checked-in runtime and requires a green, deterministic
+replay. Neither half edits the source tree or user state.
+
+To reproduce the complete check:
+
+```text
+make test-tutor
+```
+
+When intentionally changing a binding taught by the tutor, update the
+corresponding `keys` value and prose in `runtime/tutor/ch??-*.fl` and
+`runtime/tutor/text/ch??.txt` in the same commit. Never weaken the drill to
+accept a stale lesson.
