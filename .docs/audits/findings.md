@@ -92,7 +92,7 @@ recorded in `audit-00.md`.
 | YEW-F-077 | M | fixed | F03 TEXT | ~~rectangular yank omits required short-row padding~~ — fixed 2026-09-14 in `792e32d8` | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 | YEW-F-078 | M | fixed | F03 TEXT | ~~crash journal admits a same-metadata replacement inode~~ — fixed 2026-09-14 in `f65eea0d` | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
-| YEW-F-080 | M | open | F15 CI | host sleep fabricates a fuzz-watchdog finding | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
+| YEW-F-080 | M | fixed | F15 CI | ~~host sleep fabricates a fuzz-watchdog finding~~ — fixed 2026-10-12 in `ea6327f0` | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -741,7 +741,12 @@ the arm64 macOS runner resumed from low-battery hibernation.  The exact
 ASan/UBSan+coverage binary replayed all 1,236 corpus entries, including that
 input, in 6.89 seconds.  The product is unaffected, but the false finding
 invalidates that soak cycle and therefore makes the release evidence
-untrustworthy until the watchdog excludes suspended time.
+untrustworthy until the watchdog excludes suspended time.  Commit `ea6327f0`
+replaces the wall-clock alarm with an `ITIMER_PROF` process-CPU timer, keeps
+the real-spin exit-124 and byte-exact artifact contract, and adds a regression
+that stops a harmless checked input beyond its one-second budget before
+resuming it successfully.  It also formats the full `size_t` iteration before
+arming the signal instead of narrowing it through `sig_atomic_t`.
 
 ## Unverified observations
 

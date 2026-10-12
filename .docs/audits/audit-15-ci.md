@@ -22,6 +22,13 @@ number.  The exact instrumented binary replayed all 1,236 corpus entries in
 SHA-256 `c87d7d5aec956596601559f91327e04fa3295785490e1d54d941c5175eb866d2`
 preserved in the campaign state directory.
 
+Commit `ea6327f0` closes the finding.  The shared driver now charges the
+per-input budget against process CPU time with `ITIMER_PROF`; the deterministic
+self-test stops a harmless checked input for twice its budget and resumes it
+cleanly, then proves a real spin still exits 124 and saves the exact input.
+The signal path also reports the complete `size_t` iteration without the
+observed signed narrowing.
+
 Questions 1–7 and 9 kept the fixed product baseline immutable. Question 8 is
 the explicit Sprint 37 §9 obligation assigned to this front: it added a
 coverage-only VM/compiler path and runner/report tooling. Ordinary bytecode,
