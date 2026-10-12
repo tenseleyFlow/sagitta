@@ -8,6 +8,20 @@ Scope: `Makefile`, `scripts/`, `.github/workflows/`, `tests/`,
 `.docs/audits/xfail-debt.md`
 Owners read: Sprints 00, 01, 11, 33, 56, 57
 
+## Post-closeout tier-1 soak addendum — 2026-10-12
+
+finding `YEW-F-080`
+
+The replacement tier-1 soak at `4c99e134` exposed a gate-integrity defect,
+not a product UTF-8 hang.  Stream seed `2701121408` saved `e1 86` at
+13:11:15, one second after the arm64 macOS host resumed from a low-battery
+hibernate.  The shared driver's `alarm(2)` watchdog consumed suspended wall
+time and its signed iteration snapshot also rendered as a huge unsigned
+number.  The exact instrumented binary replayed all 1,236 corpus entries in
+6.89 seconds.  The failed cycle was stopped with the original artifact and
+SHA-256 `c87d7d5aec956596601559f91327e04fa3295785490e1d54d941c5175eb866d2`
+preserved in the campaign state directory.
+
 Questions 1–7 and 9 kept the fixed product baseline immutable. Question 8 is
 the explicit Sprint 37 §9 obligation assigned to this front: it added a
 coverage-only VM/compiler path and runner/report tooling. Ordinary bytecode,

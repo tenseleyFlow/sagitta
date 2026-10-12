@@ -87,3 +87,4 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-09-14 | Fix `YEW-F-076` (`4c887676`) | 0 | 0 | 2 | 0 | 2 |
 | 2026-09-14 | Fix `YEW-F-078` (`f65eea0d`) | 0 | 0 | 1 | 0 | 1 |
 | 2026-09-21 | Fix `YEW-F-072` (`a1733694`) | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-12 | File `YEW-F-080` from the tier-1 soak | 0 | 0 | 1 | 0 | 1 |

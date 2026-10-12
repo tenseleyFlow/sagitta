@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-080`
+Next available ID: `YEW-F-081`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -92,6 +92,7 @@ recorded in `audit-00.md`.
 | YEW-F-077 | M | fixed | F03 TEXT | ~~rectangular yank omits required short-row padding~~ — fixed 2026-09-14 in `792e32d8` | tests/audit/yew_f_077.c | invariant 2; s12 section 5 |
 | YEW-F-078 | M | fixed | F03 TEXT | ~~crash journal admits a same-metadata replacement inode~~ — fixed 2026-09-14 in `f65eea0d` | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
+| YEW-F-080 | M | open | F15 CI | host sleep fabricates a fuzz-watchdog finding | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -732,6 +733,15 @@ re-identification was also made monotonic so undo cannot attach an old future
 record to a replacement cursor. Root/workspace records remain covered by
 `YEW-F-006`, and the options map was already retained wholesale. No further
 record reconstruction site remains open.
+
+`YEW-F-080` is Medium because a host suspend can make an otherwise healthy
+fuzz input consume `alarm(2)`'s wall-clock budget and be recorded as a hang.
+The 2026-10-12 tier-1 cycle saved the two-byte input `e1 86` one second after
+the arm64 macOS runner resumed from low-battery hibernation.  The exact
+ASan/UBSan+coverage binary replayed all 1,236 corpus entries, including that
+input, in 6.89 seconds.  The product is unaffected, but the false finding
+invalidates that soak cycle and therefore makes the release evidence
+untrustworthy until the watchdog excludes suspended time.
 
 ## Unverified observations
 

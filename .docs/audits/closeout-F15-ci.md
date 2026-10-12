@@ -140,7 +140,8 @@ Sprints covered: s00, s01, s37, s56, s57
 
 ## Open audit findings against this front
 
-none
+`YEW-F-080` (Medium, blocking) — host sleep fabricates a fuzz-watchdog
+finding.
 
 ## Deferrals recorded against this front
 
