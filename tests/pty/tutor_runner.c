@@ -232,6 +232,39 @@ static bool command_output(char *const argv[], Bytebuf *out)
     return ok && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
+static bool tutor_check(PtyCtx *c, u32 chapter)
+{
+    char chapter_arg[2];
+    int null_fd;
+    int status = 0;
+    pid_t pid;
+
+    if (chapter == 0U || chapter > 7U)
+        return false;
+    chapter_arg[0] = (char)('0' + chapter);
+    chapter_arg[1] = '\0';
+    pid = fork();
+    if (pid == 0) {
+        null_fd = open("/dev/null", O_WRONLY);
+        if (null_fd < 0 || dup2(null_fd, STDOUT_FILENO) < 0 ||
+            dup2(null_fd, STDERR_FILENO) < 0 ||
+            setenv("XDG_STATE_HOME", c->state_dir, 1) != 0)
+            _exit(126);
+        if (null_fd != STDOUT_FILENO && null_fd != STDERR_FILENO)
+            (void)close(null_fd);
+        execl(ptc_yew_bin(c), ptc_yew_bin(c), "tutor", chapter_arg,
+              "--check", (char *)NULL);
+        _exit(127);
+    }
+    if (pid < 0)
+        return false;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR)
+            return false;
+    }
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
 static bool tutor_git_postconditions(PtyCtx *c)
 {
     char repo[PATH_MAX];
@@ -383,6 +416,8 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
     ptc_allow_restore(c);
     ptc_keys(c, "<esc> : q ! <cr>");
     ptc_expect_exit(c, 0);
+    ptc_check(c, tutor_check(c, chapter),
+              "yew tutor --check rejected completed replay verdicts");
 }
 
 void yew_tutor_case_ch01(PtyCtx *c)
@@ -460,6 +495,8 @@ void yew_tutor_case_nogit(PtyCtx *c)
     ptc_allow_restore(c);
     ptc_keys(c, "<esc> : q ! <cr>");
     ptc_expect_exit(c, 0);
+    ptc_check(c, tutor_check(c, 7U),
+              "yew tutor --check rejected skipped Git lesson");
 }
 
 void yew_tutor_case_list(PtyCtx *c)

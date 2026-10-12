@@ -73,6 +73,18 @@ cmp "$tmp/expected" "$tmp/list-one"
     exit 1
 }
 
+if run_tutor 1 --check >"$tmp/out" 2>"$tmp/err"; then
+    echo 'tutor cli: --check accepted an incomplete chapter' >&2
+    exit 1
+fi
+[ ! -s "$tmp/out" ]
+grep -Fxq 'yew tutor: chapter incomplete: arrows (0/7 tasks complete)' \
+    "$tmp/err"
+[ ! -e "$tmp/state" ] || {
+    echo 'tutor cli: --check created state' >&2
+    exit 1
+}
+
 run_tutor --reset --list >"$tmp/list-two"
 cmp "$tmp/list-one" "$tmp/list-two"
 [ "$(find "$tmp/state/yew/tutor" -type f -name 'ch??.txt' | wc -l | tr -d ' ')" \

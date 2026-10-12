@@ -855,6 +855,50 @@ static int list_chapters(const char *root)
     return YEW_EXIT_OK;
 }
 
+static u32 completed_tasks(u8 done)
+{
+    u32 count = 0U;
+
+    while (done != 0U) {
+        count += (u32)(done & 1U);
+        done >>= 1U;
+    }
+    return count;
+}
+
+static int check_chapters(const char *root, bool have_chapter, u8 chapter)
+{
+    const u8 complete =
+        (u8)((1U << YEW_TUTOR_TASKS_PER_CHAPTER) - 1U);
+    YewTutorProgress progress;
+    bool missing;
+    bool ok = true;
+    u32 first = have_chapter ? (u32)chapter : 0U;
+    u32 end = have_chapter ? first + 1U : (u32)YEW_TUTOR_CHAPTERS;
+    u32 i;
+
+    if (!yew_tutor_progress_load(root, &progress, &missing))
+        return usage_error("cannot read tutor progress", NULL);
+    for (i = first; i < end; i++) {
+        if (progress.skipped[i]) {
+            (void)printf("%u %s skipped\n", (unsigned)(i + 1U),
+                         chapter_names[i]);
+        } else if (progress.done[i] == complete) {
+            (void)printf("%u %s complete\n", (unsigned)(i + 1U),
+                         chapter_names[i]);
+        } else {
+            (void)fprintf(
+                stderr,
+                "yew tutor: chapter incomplete: %s (%u/%u tasks complete)\n",
+                chapter_names[i],
+                (unsigned)completed_tasks(progress.done[i]),
+                (unsigned)YEW_TUTOR_TASKS_PER_CHAPTER);
+            ok = false;
+        }
+    }
+    return ok ? YEW_EXIT_OK : YEW_EXIT_ERR;
+}
+
 int yew_tutor_main(int argc, char **argv)
 {
     bool list = false;
@@ -908,9 +952,9 @@ int yew_tutor_main(int argc, char **argv)
         return result;
     }
     if (check) {
+        result = check_chapters(root, have_chapter, chapter);
         yew_xfree(root);
-        return usage_error(
-            "--check replay lands in Sprint 59 tutor completion", NULL);
+        return result;
     }
     if (!yew_tutor_seed(root) ||
         !yew_tutor_progress_load(root, &progress, &missing) ||
