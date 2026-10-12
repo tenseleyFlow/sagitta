@@ -333,17 +333,18 @@ void test_fl_modules_list_natives_is_deterministic(void)
     }
     YEW_ASSERT_EQ_U64((u64)lines, (u64)na);
     /*
-     * 181 = the stdlib's 118 (30 str + 19 list + 12 map + 29 math +
+     * 187 = the stdlib's 118 (30 str + 19 list + 12 map + 29 math +
      * 7 fmt + 13 io + 7 re) plus Sprint 34's 59 editor natives and Sprint
      * 48's AI backend front door, plus Sprint 55's buf.opt, buf.opt_set, and
-     * ctx.message.  Pinned so a function added or lost shows up here and in
-     * s33's coverage ledger;
+     * ctx.message, plus Sprint 59's six tutor/runtime-observation natives:
+     * buf.undo_depth and ed.mode/recording/register/fuss/workspace.  Pinned
+     * so a function added or lost shows up here and in s33's coverage ledger;
      * the ledger names every new native missing a COVERS token.
      *
      * s31's DoD 2 asks for 150 and its own tables define 117; see the
      * DoD-walk note.  The number below is the tables, not the target.
      */
-    YEW_ASSERT_EQ_U64((u64)na, 181U);
+    YEW_ASSERT_EQ_U64((u64)na, 187U);
     bytebuf_free(&a);
     bytebuf_free(&b);
     flfix_close(&f);
