@@ -39,6 +39,7 @@
 
 enum {
     YEW_CFG_BUILTIN = 0,
+    YEW_CFG_OVERLAY,
     YEW_CFG_USER,
     YEW_CFG_WORKSPACE,
     YEW_CFG_SOURCE_N,
@@ -58,6 +59,7 @@ typedef struct CfgUnit {
 struct YewConfigState {
     CfgUnit unit[YEW_CFG_SOURCE_N];
     char *config_path;
+    char *builtin_overlay;
     YewTrustDb trust_db;
     YewTrustProbe trust_probe;
     u32 spare_file_id[YEW_CFG_SOURCE_N];
@@ -68,6 +70,7 @@ struct YewConfigState {
     bool workspace_once;
     bool trust_probe_ready;
     bool clean;
+    bool clean_builtins;
     bool no_workspace_config;
     bool trust_workspace;
 };
@@ -164,6 +167,8 @@ static void state_paths(YewConfigState *state, Ed *ed)
 {
     state->unit[YEW_CFG_BUILTIN].path = runtime_path();
     state->unit[YEW_CFG_BUILTIN].kind = (u8)FL_ORIGIN_BUILTIN;
+    state->unit[YEW_CFG_OVERLAY].path = cfg_dup(state->builtin_overlay);
+    state->unit[YEW_CFG_OVERLAY].kind = (u8)FL_ORIGIN_BUILTIN;
     state->unit[YEW_CFG_USER].path = user_path(state);
     state->unit[YEW_CFG_USER].kind = (u8)FL_ORIGIN_CONFIG;
     state->unit[YEW_CFG_WORKSPACE].path = workspace_path(ed);
@@ -182,7 +187,9 @@ static YewConfigState *state_new(Ed *ed, const YewConfigState *policy)
 
     if (policy != NULL) {
         state->config_path = cfg_dup(policy->config_path);
+        state->builtin_overlay = cfg_dup(policy->builtin_overlay);
         state->clean = policy->clean;
+        state->clean_builtins = policy->clean_builtins;
         state->no_workspace_config = policy->no_workspace_config;
         state->trust_workspace = policy->trust_workspace;
         state->once_hash = policy->once_hash;
@@ -231,6 +238,7 @@ static void state_dispose(Ed *ed, YewConfigState *state)
     yew_trust_probe_free(&state->trust_probe);
     yew_trust_db_free(&state->trust_db);
     yew_xfree(state->config_path);
+    yew_xfree(state->builtin_overlay);
     yew_xfree(state);
 }
 
@@ -246,7 +254,9 @@ void yew_config_init(Ed *ed, const YewEdStartup *startup)
     yew_config_free(ed);
     if (startup != NULL) {
         policy.config_path = (char *)startup->config_path;
+        policy.builtin_overlay = (char *)startup->builtin_overlay;
         policy.clean = startup->clean;
+        policy.clean_builtins = startup->clean_builtins;
         policy.no_workspace_config = startup->no_workspace_config;
         policy.trust_workspace = startup->trust_workspace;
     }
@@ -364,8 +374,12 @@ static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
 
 static bool source_enabled(const YewConfigState *state, u32 index)
 {
-    if (state->clean)
+    if (index == YEW_CFG_OVERLAY &&
+        state->unit[YEW_CFG_OVERLAY].path == NULL)
         return false;
+    if (state->clean)
+        return state->clean_builtins &&
+               (index == YEW_CFG_BUILTIN || index == YEW_CFG_OVERLAY);
     if (index == YEW_CFG_WORKSPACE && state->no_workspace_config)
         return false;
     return true;
@@ -438,15 +452,19 @@ static CfgStatus compile_one(Ed *ed, YewConfigState *state, u32 index)
         const char *runtime = getenv("YEW_RUNTIME_DIR");
 
         read_status = read_file(state->unit[index].path, &source);
-        if (read_status == CFG_READ_MISSING && index == YEW_CFG_BUILTIN &&
+        if (read_status == CFG_READ_MISSING &&
+            state->unit[index].kind == (u8)FL_ORIGIN_BUILTIN &&
             (runtime == NULL || runtime[0] == '\0') &&
             yew_runtime_asset_read(state->unit[index].path, &source))
             read_status = CFG_READ_OK;
         if (read_status == CFG_READ_MISSING) {
-            yew_log(index == YEW_CFG_BUILTIN ? YEW_LOG_ERROR : YEW_LOG_INFO,
+            bool required = index == YEW_CFG_BUILTIN ||
+                            index == YEW_CFG_OVERLAY;
+
+            yew_log(required ? YEW_LOG_ERROR : YEW_LOG_INFO,
                     "config missing: %s%s", state->unit[index].path == NULL ?
                         "<unresolved>" : state->unit[index].path,
-                    index == YEW_CFG_BUILTIN ?
+                    required ?
                         " (set YEW_RUNTIME_DIR to the shipped runtime directory)" :
                         "");
             return YEW_CFG_MISSING;
@@ -590,13 +608,14 @@ CfgStatus yew_config_load_all(Ed *ed, DiagCtx *dc)
     if (ed->config == NULL)
         yew_config_init(ed, NULL);
     state = ed->config;
-    if (state->clean)
+    if (state->clean && !state->clean_builtins)
         return YEW_CFG_OK;
     yew_bind_batch_begin(ed);
     for (i = 0U; i < YEW_CFG_SOURCE_N; i++) {
         CfgStatus status = compile_one(ed, state, i);
 
-        if (status == YEW_CFG_MISSING && i != YEW_CFG_BUILTIN)
+        if (status == YEW_CFG_MISSING && i != YEW_CFG_BUILTIN &&
+            i != YEW_CFG_OVERLAY)
             continue;
         if (status == YEW_CFG_UNTRUSTED && i == YEW_CFG_WORKSPACE)
             continue;
@@ -622,13 +641,14 @@ CfgStatus yew_config_reload(Ed *ed, DiagCtx *dc)
     if (ed->config == NULL)
         yew_config_init(ed, NULL);
     old = ed->config;
-    if (old->clean)
+    if (old->clean && !old->clean_builtins)
         return YEW_CFG_OK;
     candidate = state_new(ed, old);
     for (i = 0U; i < YEW_CFG_SOURCE_N; i++) {
         CfgStatus status = compile_one(ed, candidate, i);
 
-        if (status == YEW_CFG_MISSING && i != YEW_CFG_BUILTIN)
+        if (status == YEW_CFG_MISSING && i != YEW_CFG_BUILTIN &&
+            i != YEW_CFG_OVERLAY)
             continue;
         if (status == YEW_CFG_UNTRUSTED && i == YEW_CFG_WORKSPACE)
             continue;

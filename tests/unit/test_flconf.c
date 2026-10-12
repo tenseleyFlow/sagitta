@@ -24,6 +24,7 @@ typedef struct ConfigFix {
     char root[160];
     char runtime[192];
     char runtime_init[224];
+    char overlay[224];
     char xdg_config[192];
     char user_dir[224];
     char user_init[256];
@@ -81,6 +82,8 @@ static void cf_init(ConfigFix *f, const YewEdStartup *startup)
     (void)snprintf(f->runtime, sizeof(f->runtime), "%s/runtime", f->root);
     (void)snprintf(f->runtime_init, sizeof(f->runtime_init), "%s/init.fl",
                    f->runtime);
+    (void)snprintf(f->overlay, sizeof(f->overlay), "%s/tutor.fl",
+                   f->runtime);
     (void)snprintf(f->xdg_config, sizeof(f->xdg_config), "%s/config",
                    f->root);
     (void)snprintf(f->user_dir, sizeof(f->user_dir), "%s/yew",
@@ -120,6 +123,7 @@ static void cf_free(ConfigFix *f)
     (void)unlink(f->workspace_init);
     (void)unlink(f->user_init);
     (void)unlink(f->runtime_init);
+    (void)unlink(f->overlay);
     (void)rmdir(f->workspace);
     (void)rmdir(f->user_dir);
     (void)rmdir(f->xdg_config);
@@ -442,5 +446,42 @@ void test_flconf_clean_skips_every_fletch_config_source(void)
     YEW_ASSERT_EQ_U64(yew_bind_active_count(&f.ed), 0U);
     YEW_ASSERT_EQ_U64(cf_active_ledger(&f), 0U);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&f.ed), rebuilds);
+    cf_free(&f);
+}
+
+void test_flconf_clean_builtins_loads_only_shipped_layers(void)
+{
+    YewEdStartup startup = {0};
+    ConfigFix f;
+    FlValue value = FL_NIL_V;
+
+    cf_init(&f, NULL);
+    cf_write(f.runtime_init,
+             "set({errorbells: true})\nlet builtin_value = 1\n");
+    cf_write(f.overlay,
+             "set({tabwidth: 6})\nlet overlay_value = 2\n");
+    cf_write(f.user_init,
+             "set({tabwidth: 8})\nlet hostile_user = true\n");
+    cf_write(f.workspace_init,
+             "set({tabwidth: 9})\nlet hostile_workspace = true\n");
+    startup.clean = true;
+    startup.clean_builtins = true;
+    startup.builtin_overlay = f.overlay;
+    startup.trust_workspace = true;
+    yew_config_init(&f.ed, &startup);
+
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT_EQ_I64(cf_opt(&f, "tabwidth").as.i, 6);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "builtin_value", 13U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 1);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "overlay_value", 13U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 2);
+    YEW_ASSERT(!yew_config_get_global(&f.ed, "hostile_user", 12U, &value));
+    YEW_ASSERT(!yew_config_get_global(&f.ed, "hostile_workspace", 17U,
+                                      &value));
+    YEW_ASSERT_EQ_I64(yew_config_reload(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "overlay_value", 13U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 2);
     cf_free(&f);
 }

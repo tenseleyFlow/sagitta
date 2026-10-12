@@ -93,7 +93,18 @@ typedef struct YewEdStartup {
     const char *config_path;
     const char *theme;
     const char *workspace_dir;
+    /* Optional shipped Fletch layered immediately after runtime/init.fl. */
+    const char *builtin_overlay;
+    /* When non-NULL, group every explicit startup file under this label. */
+    const char *startup_group;
+    size_t startup_group_active;
     bool clean;
+    /* A clean session that still needs the shipped keymap and overlay. */
+    bool clean_builtins;
+    /* Treat a missing or invalid required built-in source as startup-fatal. */
+    bool require_config;
+    /* Suppress plugin discovery and workspace indexing for sealed sessions. */
+    bool isolated;
     bool no_workspace_config;
     bool trust_workspace;
 } YewEdStartup;

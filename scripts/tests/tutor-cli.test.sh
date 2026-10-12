@@ -25,6 +25,10 @@ expected='1 arrows    incomplete Arrows and the mode model
 6 fletch    incomplete Recordings and Fletch
 7 fuss      incomplete FUSS mode and git'
 
+run_tutor_program="$root/runtime/tutor/tutor.fl"
+"$yew" fl --dump-ast "$run_tutor_program" >"$tmp/tutor.ast"
+grep -Fq '(let "tutor_schema" (lit int 1))' "$tmp/tutor.ast"
+
 find "$root/runtime/tutor/text" -type f -name 'ch??.txt' -exec \
     grep -hEo 'ch[0-9][0-9]\.t[0-9]+' {} + | LC_ALL=C sort \
     >"$tmp/task-ids"

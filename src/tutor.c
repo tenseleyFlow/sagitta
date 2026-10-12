@@ -17,12 +17,17 @@
 #include "fl/diag.h"
 #include "fl/value.h"
 #include "fl/vm.h"
+#include "edit/ed.h"
+#include "mod/ai/ai.h"
+#include "mod/lsp/lsp.h"
+#include "syn/defs.h"
 #include "text/file.h"
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/runtime_asset.h"
 #include "util/xdg.h"
+#include "ws/symshadow.h"
 
 enum { YEW_TUTOR_FILE_MAX = 1024U * 1024U };
 
@@ -549,6 +554,13 @@ int yew_tutor_main(int argc, char **argv)
     bool have_chapter = false;
     u8 chapter = 0U;
     char *root;
+    char *overlay = NULL;
+    char chapter_path[YEW_TUTOR_CHAPTERS][PATH_MAX];
+    const char *paths[YEW_TUTOR_CHAPTERS];
+    YewTutorProgress progress;
+    YewEdStartup startup;
+    bool missing;
+    u32 j;
     int i;
     int result;
 
@@ -585,10 +597,54 @@ int yew_tutor_main(int argc, char **argv)
         yew_xfree(root);
         return result;
     }
+    if (check) {
+        yew_xfree(root);
+        return usage_error(
+            "--check replay lands in Sprint 59 tutor completion", NULL);
+    }
+    if (!yew_tutor_seed(root) ||
+        !yew_tutor_progress_load(root, &progress, &missing) ||
+        (missing && !yew_tutor_progress_save(root, &progress))) {
+        yew_xfree(root);
+        return usage_error("could not prepare tutor workspace", NULL);
+    }
+    for (j = 0U; j < (u32)YEW_TUTOR_CHAPTERS; j++) {
+        char name[16];
+        int n = snprintf(name, sizeof(name), "ch%02u.txt",
+                         (unsigned)(j + 1U));
+
+        if (n <= 0 || (size_t)n >= sizeof(name) ||
+            !path_join(chapter_path[j], root, name)) {
+            yew_xfree(root);
+            return usage_error("tutor chapter path is too long", NULL);
+        }
+        paths[j] = chapter_path[j];
+    }
+    overlay = yew_runtime_file("tutor/tutor.fl");
+    if (overlay == NULL)
+        overlay = yew_runtime_asset_resolve("tutor/tutor.fl");
+    if (overlay == NULL) {
+        yew_xfree(root);
+        return usage_error("cannot find the shipped tutor program", NULL);
+    }
+    yew_symshadow_install();
+    yew_lsp_shadow_install();
+    yew_ai_shadow_init(NULL);
+    yew_syn_cache_set_bypass(true);
+    yew_syn_discovery_set_bypass(true);
+    startup = (YewEdStartup){
+        .workspace_dir = root,
+        .builtin_overlay = overlay,
+        .startup_group = "tutor",
+        .startup_group_active = have_chapter ? (size_t)chapter : 0U,
+        .clean = true,
+        .clean_builtins = true,
+        .require_config = true,
+        .isolated = true,
+        .no_workspace_config = true
+    };
+    result = yew_ed_driver_files_opts(paths, YEW_TUTOR_CHAPTERS, &startup);
+    yew_xfree(overlay);
     yew_xfree(root);
-    (void)chapter;
-    (void)have_chapter;
-    return usage_error(check ?
-        "--check replay lands in Sprint 59 tutor completion" :
-        "interactive tutor lands in Sprint 59 tutor completion", NULL);
+    return result;
 }

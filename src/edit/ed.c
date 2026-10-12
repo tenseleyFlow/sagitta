@@ -2980,7 +2980,17 @@ static int ed_driver_inner(const YewStartPlan *plan,
      * land, and the lock is claimed before the first change can mark
      * anything dirty.
      */
-    (void)yew_config_load_all(&ed, NULL);
+    {
+        CfgStatus config_status = yew_config_load_all(&ed, NULL);
+
+        if (startup != NULL && startup->require_config &&
+            config_status != YEW_CFG_OK) {
+            yew_ed_free(&ed);
+            (void)fprintf(stderr,
+                          "yew: error: required built-in configuration failed\n");
+            return YEW_EXIT_ERR;
+        }
+    }
     yew_rss_checkpoint("config");
     (void)yew_theme_auto_startup(&ed);
     {
@@ -3016,13 +3026,46 @@ static int ed_driver_inner(const YewStartPlan *plan,
             if (bootstrap >= 0)
                 (void)yew_tab_close(&ed, bootstrap);
         }
+        if (startup != NULL && startup->startup_group != NULL) {
+            u32 gid;
+            size_t i;
+            int active;
+
+            if (startup->startup_group_active >= plan->nfiles) {
+                yew_ed_free(&ed);
+                (void)fprintf(stderr,
+                              "yew: error: startup group active member is invalid\n");
+                return YEW_EXIT_ERR;
+            }
+            gid = yew_group_create(&ed, plan->workspace,
+                                   startup->startup_group);
+            for (i = 0U; i < plan->nfiles; i++) {
+                int member = yew_tab_find_by_path(&ed, plan->files[i]);
+
+                if (member < 0) {
+                    yew_ed_free(&ed);
+                    (void)fprintf(stderr,
+                                  "yew: error: startup group member disappeared: %s\n",
+                                  plan->files[i]);
+                    return YEW_EXIT_ERR;
+                }
+                yew_group_add_member(&ed, gid, member);
+            }
+            active = yew_tab_find_by_path(
+                &ed, plan->files[startup->startup_group_active]);
+            yew_group_set_last_member(&ed, gid,
+                                      plan->files[startup->startup_group_active]);
+            yew_tab_switch(&ed, active);
+        }
     }
 #if YEW_WITH_PLUGINS
     /* Plugins see the restored workspace, but load before ws.open so their
      * declared workspace hooks observe the first session boundary. */
-    (void)yew_plug_boot(&ed);
+    if (startup == NULL || !startup->isolated)
+        (void)yew_plug_boot(&ed);
 #endif
-    yew_symwalk_start(&ed);
+    if (startup == NULL || !startup->isolated)
+        yew_symwalk_start(&ed);
     /* The workspace hook sees restored tabs and buffers, and runs before
      * the first paint.  Startup used to paint once before restore, which
      * made this ordering impossible and also caused a redundant frame. */

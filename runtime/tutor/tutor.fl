@@ -1,0 +1,6 @@
+# The tutor is a built-in configuration overlay.  runtime/init.fl loads
+# first, so every lesson exercises the same shipped bindings as the editor.
+# Chapter definitions and the state-driven task engine are loaded here as
+# Sprint 59's next frontier; workspace construction already occurs before
+# ws.open so hooks observe all seven chapter buffers as one `tutor` group.
+let tutor_schema = 1

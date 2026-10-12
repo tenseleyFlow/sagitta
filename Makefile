@@ -3782,6 +3782,8 @@ install: all
 		runtime/completions/README.md \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/completions/
 	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime/tutor/text
+	install -m 0644 runtime/tutor/*.fl \
+		$(DESTDIR)$(PREFIX)/share/yew/runtime/tutor/
 	install -m 0644 runtime/tutor/text/*.txt \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/tutor/text/
 
