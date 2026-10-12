@@ -56,6 +56,7 @@ static bool hook_call(void *ctx, FlVm *vm, FlValue fn,
                       const FlValue *args, u8 nargs, FlValue *err)
 {
     FlValue ignored = FL_NIL_V;
+    FlOrigin saved_origin;
     bool nested;
     bool ok;
 
@@ -67,7 +68,15 @@ static bool hook_call(void *ctx, FlVm *vm, FlValue fn,
     } else if (!vm->host->run_begin(vm)) {
         return false;
     }
+    /* Host-dispatched closures need the same root principal as every other
+     * retained closure entry.  Builtin frames are deliberately transparent
+     * to capability checks; leaving the VM's idle root in place therefore
+     * made builtin hooks lose their defining grants. */
+    saved_origin = vm->root_origin;
+    if (fn.t == (u8)FL_CLOSURE)
+        vm->root_origin = ((FlClosure *)fn.as.o)->fn->origin;
     ok = fl_call(vm, fn, args, (u32)nargs, &ignored);
+    vm->root_origin = saved_origin;
     if (!ok && err != NULL)
         *err = vm->err;
     if (nested)

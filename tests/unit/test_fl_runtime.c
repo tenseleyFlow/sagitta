@@ -2,6 +2,7 @@
 
 #include "harness.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -440,6 +441,47 @@ void test_fl_runtime_eval_keeps_globals_between_entries(void)
     YEW_ASSERT(ed.msg.active);
     YEW_ASSERT_EQ_STR(ed.msg.text, "42");
     yew_ed_free(&ed);
+}
+
+void test_fl_runtime_builtin_hook_keeps_defining_capabilities(void)
+{
+    char path[] = "/tmp/yew-fl-hook-cap-XXXXXX";
+    char source[PATH_MAX + 96U];
+    struct stat st;
+    Ed ed;
+    FlVm *vm;
+    FlHook *hook;
+    FlClosure *closure;
+    int fd;
+    int n;
+
+    fd = mkstemp(path);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    n = snprintf(source, sizeof(source),
+                 "import io\non(\"ed.idle\", fn() { io.write(\"%s\", \"ok\") })\n",
+                 path);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(source));
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, source, (u32)n), YEW_CMD_OK);
+    YEW_ASSERT(ed.hooks.n > 0U);
+    hook = &ed.hooks.v[ed.hooks.n - 1U];
+    YEW_ASSERT_EQ_I64(hook->fn.t, FL_CLOSURE);
+    closure = (FlClosure *)hook->fn.as.o;
+    closure->fn->origin.kind = (u8)FL_ORIGIN_BUILTIN;
+    closure->fn->origin.caps = FL_CAP_FS_WRITE;
+    vm = yew_fl_vm(&ed);
+    vm->root_origin = (FlOrigin){(u8)FL_ORIGIN_BUILTIN, 0U, 0U, 0U};
+
+    yew_fl_hook_fire(&ed, FL_EV_ED_IDLE, NULL, 0U);
+    YEW_ASSERT_EQ_U64(hook->errs, 0U);
+    YEW_ASSERT_EQ_I64(stat(path, &st), 0);
+    YEW_ASSERT_EQ_U64((u64)st.st_size, 2U);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
 }
 
 void test_fl_runtime_cmdline_mode_hooks_fire_once_per_transition(void)

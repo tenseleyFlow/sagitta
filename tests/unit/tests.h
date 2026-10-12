@@ -1932,6 +1932,7 @@ void test_fl_runtime_coalesces_each_buffer_in_workspace_order(void);
 void test_fl_runtime_drops_reentrant_buffer_change_notifications(void);
 void test_fl_runtime_contains_failing_hook_mutations(void);
 void test_fl_runtime_eval_keeps_globals_between_entries(void);
+void test_fl_runtime_builtin_hook_keeps_defining_capabilities(void);
 void test_fl_runtime_cmdline_mode_hooks_fire_once_per_transition(void);
 void test_fl_replay_runtime_propagates_command_source(void);
 void test_fl_replay_runtime_cache_is_exact_rooted_and_invalidated(void);

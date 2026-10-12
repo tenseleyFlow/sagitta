@@ -1962,6 +1962,7 @@ const YewTest yew_tests[] = {
     T(fl_runtime_drops_reentrant_buffer_change_notifications),
     T(fl_runtime_contains_failing_hook_mutations),
     T(fl_runtime_eval_keeps_globals_between_entries),
+    T(fl_runtime_builtin_hook_keeps_defining_capabilities),
     T(fl_runtime_cmdline_mode_hooks_fire_once_per_transition),
     T(fl_replay_runtime_propagates_command_source),
     T(fl_replay_runtime_cache_is_exact_rooted_and_invalidated),
