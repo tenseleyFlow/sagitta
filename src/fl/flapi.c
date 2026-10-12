@@ -10,6 +10,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/ed.h"
+#include "edit/mode.h"
 #include "edit/option.h"
 #include "fl/gc.h"
 #include "fl/flruntime.h"
@@ -25,6 +26,7 @@
 #include "search/regex.h"
 #include "text/mark.h"
 #include "text/piece.h"
+#include "text/undo.h"
 #include "unicode/coords.h"
 #include "ui/layout.h"
 #include "ui/message.h"
@@ -360,6 +362,24 @@ static bool q_buf_readonly(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     return true;
 }
 
+static bool q_buf_undo_depth(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Buffer *b = fl_h_buf(vm, a[0]);
+    const UndoTree *undo;
+    (void)n;
+    if (b == NULL)
+        return false;
+    undo = b->undo;
+    if (undo == NULL || undo->nodes.len == 0U) {
+        *out = FL_INT_V(0);
+        return true;
+    }
+    if (undo->cur == 0U || (size_t)undo->cur > undo->nodes.len)
+        return fl_raise(vm, "handle", "buffer undo tree is invalid");
+    *out = FL_INT_V((i64)undo->nodes.data[undo->cur - 1U].depth);
+    return true;
+}
+
 static bool q_buf_opt(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Ed *ed = api_ed(vm);
@@ -443,6 +463,19 @@ static bool q_ed_msg(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     }
     yew_msg(ed, severity, "%.*s", (int)message->len, message->b);
     *out = FL_NIL_V;
+    return true;
+}
+
+static bool q_ed_mode(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    (void)a;
+    (void)n;
+    if (ed == NULL)
+        return false;
+    if (ed->mode >= YEW_MODE__N)
+        return fl_raise(vm, "handle", "editor mode is invalid");
+    *out = api_cstr(vm, yew_modes[ed->mode].name);
     return true;
 }
 
@@ -809,6 +842,7 @@ FlBindDesc fl_api[] = {
     QUERY("buf.find_all", FL_H_BUF, 2U, 2U, q_buf_find_all),
     QUERY("buf.dirty", FL_H_BUF, 1U, 1U, q_buf_dirty),
     QUERY("buf.readonly", FL_H_BUF, 1U, 1U, q_buf_readonly),
+    QUERY("buf.undo_depth", FL_H_BUF, 1U, 1U, q_buf_undo_depth),
     QUERY("buf.opt", FL_H_BUF, 2U, 2U, q_buf_opt),
     QUERY("buf.opt_set", FL_H_BUF, 3U, 3U, q_buf_opt_set),
     QUERY("buf.mark", FL_H_BUF, 2U, 2U, q_buf_mark),
@@ -864,7 +898,8 @@ FlBindDesc fl_api[] = {
                  FL_ARG_STR, FL_ARG_NONE, FL_ARG_NONE),
     COMMAND_ARGS("opt.set", "ed.opt.set", FL_H_NONE, 2U, 2U, 0U,
                  FL_ARG_STR, FL_ARG_VALUE, FL_ARG_NONE),
-    QUERY("ed.msg", FL_H_NONE, 1U, 2U, q_ed_msg)
+    QUERY("ed.msg", FL_H_NONE, 1U, 2U, q_ed_msg),
+    QUERY("ed.mode", FL_H_NONE, 0U, 0U, q_ed_mode)
 };
 
 const u32 fl_api_len = (u32)YEW_ARRAY_LEN(fl_api);
@@ -1870,6 +1905,7 @@ static const FlNativeDef BUF_DEFS[] = {
     NATIVE("insert", 3U, 3U), NATIVE("delete", 2U, 2U),
     NATIVE("find", 2U, 3U), NATIVE("find_all", 2U, 2U),
     NATIVE("dirty", 1U, 1U), NATIVE("readonly", 1U, 1U),
+    NATIVE("undo_depth", 1U, 1U),
     NATIVE("opt", 2U, 2U), NATIVE("opt_set", 3U, 3U),
     NATIVE("mark", 2U, 2U)
 };
@@ -1904,7 +1940,7 @@ static const FlNativeDef OPT_DEFS[] = {
 static const FlNativeDef ED_DEFS[] = {
     {"run", fl_api_ed_run, 2U, 2U, 0U, "(name, args) -> nil"},
     {"commands", fl_api_ed_commands, 0U, 0U, 0U, "() -> list"},
-    NATIVE("msg", 1U, 2U)
+    NATIVE("msg", 1U, 2U), NATIVE("mode", 0U, 0U)
 };
 
 const FlModuleDef fl_mod_buf = {"buf", BUF_DEFS, YEW_ARRAY_LEN(BUF_DEFS), NULL, 0U};

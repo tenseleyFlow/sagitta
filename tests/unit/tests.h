@@ -1895,6 +1895,7 @@ void test_fl_api_cursor_move_targets_one_cursor_and_honors_count(void);
 void test_fl_api_span_yank_uses_requested_register(void);
 void test_fl_api_missing_rows_have_typed_argmaps(void);
 void test_fl_api_buf_metadata_queries_are_truthful(void);
+void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void);
 void test_fl_api_rows_replace_lines_yank_and_move(void);
 void test_fl_api_rows_split_focus_and_set_cursors(void);
 void test_fl_motion_units_arrows_words_and_counts_use_cmdwords(void);

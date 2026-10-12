@@ -2,14 +2,14 @@
 # COVERS: buf.current buf.list buf.open buf.close buf.save buf.path buf.name
 # COVERS: buf.lang buf.len buf.lines buf.text buf.line buf.span buf.line_span
 # COVERS: buf.insert buf.delete buf.find buf.find_all buf.dirty buf.readonly
-# COVERS: buf.mark buf.opt buf.opt_set win.current win.list win.buf
+# COVERS: buf.mark buf.opt buf.opt_set buf.undo_depth win.current win.list win.buf
 # COVERS: win.cursors win.selection
 # COVERS: win.split win.close win.focus win.viewport win.set_cursors cur.pos
 # COVERS: cur.line cur.col cur.anchor cur.span cur.goto cur.move cur.word
 # COVERS: cur.line_span cur.insert cur.is_primary cur.valid span.lo span.hi
 # COVERS: span.len span.text span.lines span.replace span.replace_lines
 # COVERS: span.prepend span.append span.delete span.yank span.valid opt.get opt.set
-# COVERS: ed.run ed.commands ed.msg bind unbind set record replay
+# COVERS: ed.run ed.commands ed.msg ed.mode bind unbind set record replay
 # COVERS: ai.backend
 # COVERS: kind:handle
 # ERROR_KIND: handle
@@ -85,6 +85,7 @@ try {
 # can be consulted; free functions must report the unavailable host.
 refuses("handle", fn() { buf.list() })
 refuses("handle", fn() { ed.msg("hello") })
+refuses("handle", fn() { ed.mode() })
 refuses("handle", fn() { ai.backend("local", {}) })
 refuses("handle", fn() { buf.open("missing") })
 refuses("type", fn() { buf.close(42) })
@@ -104,6 +105,7 @@ refuses("type", fn() { buf.opt(42, "save.strategy") })
 refuses("type", fn() { buf.opt_set(42, "save.strategy", "auto") })
 refuses("type", fn() { buf.readonly(42) })
 refuses("type", fn() { buf.mark(42, 0) })
+refuses("type", fn() { buf.undo_depth(42) })
 
 refuses("handle", fn() { win.current() })
 refuses("handle", fn() { win.list() })

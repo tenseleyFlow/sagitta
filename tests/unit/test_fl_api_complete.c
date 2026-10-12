@@ -190,6 +190,33 @@ void test_fl_api_buf_metadata_queries_are_truthful(void)
     api_close(&f);
 }
 
+void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
+{
+    ApiFix f;
+    FlValue args[1];
+    FlValue out = FL_NIL_V;
+    Buffer *buffer;
+
+    api_open(&f);
+    buffer = yew_ed_doc(&f.ed);
+    args[0] = fl_h_buf_make(&f.ed, buffer);
+    YEW_ASSERT(api_invoke(&f, "buf.undo_depth", args, 1U, &out));
+    YEW_ASSERT_EQ_I64(out.t, FL_INT);
+    YEW_ASSERT_EQ_I64(out.as.i, 0);
+    YEW_ASSERT_EQ_I64(run_cmd(&f.ed, f.ed.win, "ed.edit.insert.at", "x", 1U,
+                              1U, (Span){0U, 0U}, NULL, 0U), YEW_CMD_OK);
+    YEW_ASSERT(api_invoke(&f, "buf.undo_depth", args, 1U, &out));
+    YEW_ASSERT_EQ_I64(out.as.i, 1);
+    YEW_ASSERT(api_invoke(&f, "ed.mode", NULL, 0U, &out));
+    YEW_ASSERT_EQ_I64(out.t, FL_STR);
+    YEW_ASSERT_EQ_U64(((FlStr *)out.as.o)->len, 1U);
+    YEW_ASSERT_EQ_MEM(((FlStr *)out.as.o)->b, "L", 1U);
+    f.ed.mode = YEW_MODE_I;
+    YEW_ASSERT(api_invoke(&f, "ed.mode", NULL, 0U, &out));
+    YEW_ASSERT_EQ_MEM(((FlStr *)out.as.o)->b, "I", 1U);
+    api_close(&f);
+}
+
 void test_fl_api_missing_rows_have_typed_argmaps(void)
 {
     const FlBindDesc *d;
