@@ -13,11 +13,12 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**Local branch position at refresh:** `trunk` is 36 commits above
-`origin/trunk` at `8c982b1f`, including Sprint 59's documentation/tutorial
-work, the `YEW-F-080` watchdog remediation, and the two fast-gate integration
-repairs found on 2026-10-12. The product code used by the soak remains the
-exact hosted-green anchor.
+**Implementation checkpoint before this documentation refresh:** `trunk` was
+42 commits above `origin/trunk` at `a2412c6b`, including Sprint 59's
+documentation/tutorial work, the `YEW-F-080` watchdog remediation,
+`YEW-F-081`'s long-literal repair, and the fast-gate integration repairs found
+on 2026-10-12. The product code used by the soak remains the exact hosted-green
+anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
@@ -36,10 +37,15 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 80 stable IDs, all at status `fixed` after
-Sprint 59's severity-ordered remediation. The sprint is nevertheless formally
-open because its required tier-1 soak has no completed `soak` row yet. The
-September `ba72c3a0` launch was interrupted and counts as 0/14 targets.
+landed. The findings ledger contains 81 stable IDs, all at status `fixed` after
+Sprint 59's severity-ordered remediation. `YEW-F-081` came from scheduled fuzz
+run `38281035643`: a 4,240-byte quoted literal crossed the smaller VM-program
+limit. Commit `ee713cd5` preserves that limit and matches conservatively proven
+whole literals directly; the exact artifact, ASan/UBSan replay, a fresh
+100,000-iteration campaign, and the 64 KiB semantic boundary are green. The
+sprint is nevertheless formally open because its required tier-1 soak has no
+completed `soak` row yet. The September `ba72c3a0` launch was interrupted and
+counts as 0/14 targets.
 
 A replacement SAN+coverage cycle relaunched on 2026-10-12 against product
 commit `4c99e134` plus runner-only watchdog child `4f483f31` on arm64 macOS /
@@ -62,7 +68,7 @@ rows; do not report progress from elapsed process time.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 80 fixes and burndown/XFAIL rows reconcile, zero active
+executable gates: all 81 fixes and burndown/XFAIL rows reconcile, zero active
 XFAILs remain, priority order is proven from Git ancestry, the deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
@@ -71,7 +77,7 @@ being represented as independent verification.
 
 The immediate work is:
 
-1. independently re-verify and transition the 80 fixed findings through the
+1. independently re-verify and transition the 81 fixed findings through the
    remaining ledger lifecycle;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
