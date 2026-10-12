@@ -20,6 +20,8 @@ bool test_yew_f_080(char *why, size_t why_cap)
     FILE *file = fopen("tests/fuzz/fuzzlib.c", "rb");
     bool cpu_timer = false;
     bool cpu_signal = false;
+    bool exact_iteration = false;
+    bool narrowed_iteration = false;
     bool wall_alarm = false;
 
     if (file == NULL)
@@ -29,15 +31,24 @@ bool test_yew_f_080(char *why, size_t why_cap)
             cpu_timer = true;
         if (strstr(line, "sigaction(SIGPROF") != NULL)
             cpu_signal = true;
+        if (strstr(line, "watchdog_iteration_len") != NULL)
+            exact_iteration = true;
+        if (strstr(line, "(sig_atomic_t)run->iteration") != NULL)
+            narrowed_iteration = true;
         if (strstr(line, "alarm(run->watchdog_seconds)") != NULL)
             wall_alarm = true;
     }
     if (ferror(file) || fclose(file) != 0)
         return false;
-    if (!cpu_timer || !cpu_signal || wall_alarm)
+    if (!cpu_timer || !cpu_signal || !exact_iteration ||
+        narrowed_iteration || wall_alarm)
         (void)snprintf(why, why_cap,
-                       "cpu_timer=%u cpu_signal=%u wall_alarm=%u",
+                       "cpu_timer=%u cpu_signal=%u exact_iter=%u "
+                       "narrowed_iter=%u wall_alarm=%u",
                        cpu_timer ? 1U : 0U, cpu_signal ? 1U : 0U,
+                       exact_iteration ? 1U : 0U,
+                       narrowed_iteration ? 1U : 0U,
                        wall_alarm ? 1U : 0U);
-    return cpu_timer && cpu_signal && !wall_alarm;
+    return cpu_timer && cpu_signal && exact_iteration &&
+           !narrowed_iteration && !wall_alarm;
 }

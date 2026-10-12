@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -68,8 +69,9 @@ typedef struct {
 #endif
 } FuzzRun;
 
-static volatile sig_atomic_t watchdog_iteration;
-/* The input under check, published for the SIGALRM handler so a hang
+static char watchdog_iteration[32];
+static volatile sig_atomic_t watchdog_iteration_len;
+/* The input under check, published for the SIGPROF handler so a hang
  * leaves a replayable crash file instead of vanishing with _Exit.  Two
  * stores per check; the handler does only async-signal-safe work (mkdir,
  * open, write, close) on a path formatted once at startup. */
@@ -1120,6 +1122,18 @@ static void watchdog_say(const char *text, size_t len)
     }
 }
 
+static void watchdog_set_timer(unsigned int seconds)
+{
+    struct itimerval timer;
+
+    (void)memset(&timer, 0, sizeof(timer));
+    timer.it_value.tv_sec = (time_t)seconds;
+    if (setitimer(ITIMER_PROF, &timer, NULL) != 0) {
+        (void)fprintf(stderr, "fuzz: setitimer: %s\n", strerror(errno));
+        _Exit(2);
+    }
+}
+
 static void watchdog(int signo)
 {
     static const char expired[] = "fuzz: watchdog expired iter=";
@@ -1127,18 +1141,12 @@ static void watchdog(int signo)
     static const char unsaved[] = "; hung input could not be saved\n";
     const u8 *data = watchdog_data;
     size_t len = watchdog_len;
-    unsigned long iteration = (unsigned long)watchdog_iteration;
-    char digits[24];
-    size_t at = sizeof(digits);
+    size_t iteration_len = (size_t)watchdog_iteration_len;
     bool ok = false;
 
     (void)signo;
-    do {
-        digits[--at] = (char)('0' + iteration % 10U);
-        iteration /= 10U;
-    } while (iteration != 0U && at != 0U);
     watchdog_say(expired, sizeof(expired) - 1U);
-    watchdog_say(digits + at, sizeof(digits) - at);
+    watchdog_say(watchdog_iteration, iteration_len);
     if (data != NULL && watchdog_path_len != 0U) {
         int fd;
 
@@ -1178,15 +1186,26 @@ static bool checked(FuzzRun *run, const FuzzBuf *buf,
 {
     u8 *exact = xmalloc(buf->len == 0U ? 1U : buf->len);
     bool ok;
+    int iteration_len;
 
     if (buf->len != 0U)
         (void)memcpy(exact, buf->data, buf->len);
-    watchdog_iteration = (sig_atomic_t)run->iteration;
+    iteration_len = snprintf(watchdog_iteration, sizeof(watchdog_iteration),
+                             "%zu", run->iteration);
+    if (iteration_len < 0 ||
+        (size_t)iteration_len >= sizeof(watchdog_iteration)) {
+        (void)fprintf(stderr, "fuzz: cannot format watchdog iteration\n");
+        _Exit(2);
+    }
+    watchdog_iteration_len = (sig_atomic_t)iteration_len;
     watchdog_len = buf->len;
     watchdog_data = exact;
-    (void)alarm(run->watchdog_seconds);
+    /* YEW-F-080: alarm(2) spends its wall-clock budget while a host is
+     * asleep and fabricated a UTF-8 hang on resume.  ITIMER_PROF charges
+     * only CPU consumed by this single-threaded fuzz process. */
+    watchdog_set_timer(run->watchdog_seconds);
     ok = run->check(exact, buf->len, why, YEW_FUZZ_WHY_CAP);
-    (void)alarm(0U);
+    watchdog_set_timer(0U);
     watchdog_data = NULL;
     free(exact);
     return ok;
@@ -1710,7 +1729,7 @@ int yew_fuzz_main(int argc, char **argv, const char *target,
     (void)memset(&action, 0, sizeof(action));
     action.sa_handler = watchdog;
     (void)sigemptyset(&action.sa_mask);
-    if (sigaction(SIGALRM, &action, NULL) != 0) {
+    if (sigaction(SIGPROF, &action, NULL) != 0) {
         (void)fprintf(stderr, "%s: sigaction: %s\n", target,
                       strerror(errno));
         fuzz_run_free(&run);
