@@ -13,11 +13,10 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**Local branch position at refresh:** `trunk` is seven commits above
-`origin/trunk`: the tracked Sprint 59/60 contracts, state reconciliation, and
-Sprint 59's priority, sampling, closeout, deferral, and remediation-ledger
-gates. The product code used by the soak remains the exact hosted-green
-anchor.
+**Local branch position at refresh:** `trunk` is 33 commits above
+`origin/trunk`, including Sprint 59's documentation/tutorial work and the
+`YEW-F-080` watchdog remediation. The product code used by the soak remains
+the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
@@ -28,33 +27,41 @@ chapter 1.
 Campaign 13 is repository-complete through Sprint 57.32. The latest exact
 product commit on `origin/trunk`, `4c99e134`, is fully hosted-green. The current
 checkout was fetched and compared with every registered worktree before this
-refresh; the main checkout was the only registered worktree. Adjacent Claude
-work observed on the host was outside this repository, so no branch or commit
-was silently merged here.
+refresh. Two independent worktrees are now registered beside it:
+`lsp-wolf-default` at `8c23b440` and the runner-only `soak/s58-watchdog-r2`
+branch at `4f483f31`. Neither is merged into `trunk`; the soak branch is
+deliberately isolated, and adjacent work must be reconciled explicitly rather
+than mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 79 stable IDs, all at status `fixed` after
+landed. The findings ledger contains 80 stable IDs, all at status `fixed` after
 Sprint 59's severity-ordered remediation. The sprint is nevertheless formally
 open because its required tier-1 soak has no completed `soak` row yet. The
 September `ba72c3a0` launch was interrupted and counts as 0/14 targets.
 
-A replacement SAN+coverage cycle launched on 2026-10-12 against detached exact
-commit `4c99e134` on arm64 macOS / Apple clang 21.0.0. Its four concurrent
+A replacement SAN+coverage cycle relaunched on 2026-10-12 against product
+commit `4c99e134` plus runner-only watchdog child `4f483f31` on arm64 macOS /
+Apple clang 21.0.0. Its four concurrent
 `fuzz_utf8` streams use seeds `2701121405` through `2701121408`; later targets
 run serially. Each 18-hour stream owns durable evidence and corpus-admission
 state, each target is a restart checkpoint, and `caffeinate` prevents idle
 sleep. The state, logs, manifest, and rebuilt ledger are under
 `/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/`. Launchd job
-`org.yew.s58soak.4c99e134` owns the supervisor; this is deliberate, because a
-plain detached child launched by the command runner was reaped. The full
+`org.yew.s58soak.4c99e134` owns the supervisor. The first replacement attempt
+was stopped after host hibernation exposed and filed `YEW-F-080`; it completed
+no rows, its exact artifact replayed cleanly, and its evidence is archived
+under `state/failed-F080-20261012/`. The runner-only child uses process CPU
+time for its watchdog while leaving `src/` and `runtime/` byte-identical to
+the hosted-green parent. Launchd ownership is deliberate, because a plain
+detached child launched by the command runner was reaped. The full
 14-target cycle is approximately 252 wall-clock hours (10.5 days) if targets
 complete without a restart. Current durable progress is 0/56 completed stream
 rows; do not report progress from elapsed process time.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 79 fixes and burndown/XFAIL rows reconcile, zero active
+executable gates: all 80 fixes and burndown/XFAIL rows reconcile, zero active
 XFAILs remain, priority order is proven from Git ancestry, the deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
@@ -63,13 +70,13 @@ being represented as independent verification.
 
 The immediate work is:
 
-1. independently re-verify and transition the 79 fixed findings through the
+1. independently re-verify and transition the 80 fixed findings through the
    remaining ledger lifecycle;
-2. implement and negative-test the man, manual, and docs-sync checkers;
-3. replace the 747 pending closeout verdicts with linked evidence only as an
+2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
-4. deliver the three man pages plus regex redirect, seven-chapter tutor,
-   fifteen-chapter manual, and Fletch book chapter 1.
+3. keep the corrected 56-stream soak under observation without idling Sprint
+   59 work;
+4. run the complete cross-target regression on the eventual closeout commit.
 
 Sprint 60's contract is now tracked, but its entry gate is unchanged: it may
 not start until all fifteen Sprint 59 closeouts end in READY. Its RC soak is a

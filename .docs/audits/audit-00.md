@@ -196,12 +196,16 @@ cause before any sampled row advances from `fixed` to `verified`.
 We are not ready to tag: all fifteen Sprint 58 fronts, cross-front dedup, and
 all ten invariant sessions are complete. The first tier-1 launch at
 `ba72c3a0` was interrupted before any stream completed and counts as no soak
-evidence. A replacement exact-profile SAN+coverage cycle started 2026-10-12
-from hosted-green product commit `4c99e134` on arm64 macOS / Apple clang
-21.0.0, beginning with `fuzz_utf8` seeds `2701121405` through `2701121408`.
+evidence. The first 2026-10-12 replacement attempt was also invalidated before
+any completed row: host hibernation consumed `alarm(2)`'s wall-clock budget
+and filed `YEW-F-080`, whose two-byte artifact replayed cleanly. A corrected
+exact-profile SAN+coverage cycle restarted from hosted-green product commit
+`4c99e134` plus runner-only watchdog commit `4f483f31` on arm64 macOS / Apple
+clang 21.0.0, beginning with the same `fuzz_utf8` seeds `2701121405` through
+`2701121408`.
 Formal Sprint 58 close still requires all fourteen target results; hosted
 runner registration remains an automation tail. The finding discussion below
-records the immutable audit-baseline verdict; Sprint 59 has since moved all 79
+records the immutable audit-baseline verdict; Sprint 59 has since moved all 80
 ledger rows to `fixed`, but independent verification and closeout do not
 rewrite what the audit found. Invariant 1 is
 violated by F07's two Critical workspace-state defects and by `YEW-F-078`, a

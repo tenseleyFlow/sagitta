@@ -14,11 +14,14 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-12): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete, all 79 findings are fixed, and the last exact hosted-green
+are complete, all 80 findings are fixed, and the last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
-56 streams; its launchd-owned replacement cycle currently has four
-`fuzz_utf8` streams running and 0/56 durable rows complete. Sprint 59's
+56 streams. A host hibernate invalidated the first replacement attempt and
+filed `YEW-F-080`; runner-only commit `4f483f31` fixes the watchdog while
+retaining `4c99e134` byte-for-byte as the product parent. Its launchd-owned
+cycle currently has four `fuzz_utf8` streams running and 0/56 durable rows
+complete. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates are green; all 15 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Sprint 60 is queued
@@ -442,16 +445,18 @@ Binding documents — read before any sprint:
   fuzz campaigns extended, findings ledger with stable IDs. **AUDIT WORK
   COMPLETE; REPLACEMENT SOAK RUNNING:** all fifteen fronts, dedup, coverage
   instrumentation, and all ten invariant sessions are complete. The ledger
-  now contains `YEW-F-001` through `YEW-F-079`, all fixed in Sprint 59. The
-  interrupted September launch produced no soak rows and is historical only.
-  A checkpointed SAN+coverage cycle started 2026-10-12 at exact hosted-green
-  product commit `4c99e134` on arm64 macOS / Apple clang 21.0.0. Formal close
+  now contains `YEW-F-001` through `YEW-F-080`, all fixed in Sprint 59. The
+  interrupted September launch and the suspend-invalidated first replacement
+  attempt produced no soak rows and are historical only. A checkpointed
+  SAN+coverage cycle restarted 2026-10-12 with product commit `4c99e134` plus
+  runner-only watchdog commit `4f483f31` on arm64 macOS / Apple clang 21.0.0.
+  Formal close
   waits for all fourteen tier-1 targets; hosted-runner registration remains an
   automation tail
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1. **ACTIVE:** the severity-ordered implementation
-  burn-down reached 79/79 fixed; independent verification, status closure,
+  burn-down reached 80/80 fixed; independent verification, status closure,
   fifteen closeouts, closeout/deferral/docs checkers, and the documentation
   surfaces remain
 - Sprint 60 (s60-v1.0.0-landing.md) — Packaging (AUR, brew tap, RPM spec —
