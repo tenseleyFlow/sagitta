@@ -9,7 +9,8 @@
 # COVERS: cur.line_span cur.insert cur.is_primary cur.valid span.lo span.hi
 # COVERS: span.len span.text span.lines span.replace span.replace_lines
 # COVERS: span.prepend span.append span.delete span.yank span.valid opt.get opt.set
-# COVERS: ed.run ed.commands ed.msg ed.mode bind unbind set record replay
+# COVERS: ed.run ed.commands ed.msg ed.mode ed.recording ed.register ed.fuss
+# COVERS: bind unbind set record replay
 # COVERS: ai.backend
 # COVERS: kind:handle
 # ERROR_KIND: handle
@@ -86,6 +87,9 @@ try {
 refuses("handle", fn() { buf.list() })
 refuses("handle", fn() { ed.msg("hello") })
 refuses("handle", fn() { ed.mode() })
+refuses("handle", fn() { ed.recording() })
+refuses("handle", fn() { ed.register("a") })
+refuses("handle", fn() { ed.fuss() })
 refuses("handle", fn() { ai.backend("local", {}) })
 refuses("handle", fn() { buf.open("missing") })
 refuses("type", fn() { buf.close(42) })

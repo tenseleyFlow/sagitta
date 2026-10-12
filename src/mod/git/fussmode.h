@@ -112,6 +112,24 @@ typedef struct FussTarget {
 } FussTarget;
 
 bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out);
+
+/* Read-only public state for Fletch/UI observers.  `path` is borrowed from
+ * the current tree and remains valid until the next FUSS rebuild. */
+typedef struct YewFussState {
+    const char *path;
+    u32 path_len;
+    bool active;
+    bool known;
+    bool is_file;
+    bool staged;
+    bool unstaged;
+    bool untracked;
+    bool expanded;
+    bool actions_open;
+    bool clean;
+} YewFussState;
+
+bool yew_fuss_state(const Ed *ed, YewFussState *out);
 /*
  * The selected row's interned path and the cell it is drawn at, so
  * `ed.ui.context_menu` can open the FUSS menu with no pointer involved

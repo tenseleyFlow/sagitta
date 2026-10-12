@@ -167,6 +167,29 @@ static bool api_invoke(ApiFix *f, const char *name, FlValue *args, u32 n,
     return fl_api_invoke(&f->fl.vm, d, args, n, out);
 }
 
+static bool api_map_bool(FlValue value, const char *name, bool want)
+{
+    const FlMap *map;
+    FlValue key;
+    FlValue item;
+    u32 cursor = 0U;
+
+    if (value.t != (u8)FL_MAP)
+        return false;
+    map = (const FlMap *)value.as.o;
+    while (fl_map_iter(map, &cursor, &key, &item)) {
+        const FlStr *text;
+
+        if (key.t != (u8)FL_STR)
+            continue;
+        text = (const FlStr *)key.as.o;
+        if (text->len == strlen(name) &&
+            memcmp(text->b, name, text->len) == 0)
+            return item.t == (u8)FL_BOOL && item.as.b == want;
+    }
+    return false;
+}
+
 void test_fl_api_buf_metadata_queries_are_truthful(void)
 {
     ApiFix f;
@@ -192,6 +215,7 @@ void test_fl_api_buf_metadata_queries_are_truthful(void)
 
 void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
 {
+    static const char source[] = "@[ i\"x\" ]";
     ApiFix f;
     FlValue args[1];
     FlValue out = FL_NIL_V;
@@ -214,6 +238,27 @@ void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
     f.ed.mode = YEW_MODE_I;
     YEW_ASSERT(api_invoke(&f, "ed.mode", NULL, 0U, &out));
     YEW_ASSERT_EQ_MEM(((FlStr *)out.as.o)->b, "I", 1U);
+    YEW_ASSERT(api_invoke(&f, "ed.recording", NULL, 0U, &out));
+    YEW_ASSERT_EQ_I64(out.t, FL_NIL);
+    f.ed.rec.active = true;
+    f.ed.rec.reg = (u8)'a';
+    YEW_ASSERT(api_invoke(&f, "ed.recording", NULL, 0U, &out));
+    YEW_ASSERT_EQ_I64(out.t, FL_STR);
+    YEW_ASSERT_EQ_MEM(((FlStr *)out.as.o)->b, "a", 1U);
+    args[0] = api_string(&f.fl.vm, "a");
+    YEW_ASSERT(api_invoke(&f, "ed.register", args, 1U, &out));
+    YEW_ASSERT_EQ_I64(out.t, FL_NIL);
+    bytebuf_append(&yew_reg_get(&f.ed.regs, (u8)'a')->bytes, source,
+                   sizeof(source) - 1U);
+    YEW_ASSERT(api_invoke(&f, "ed.register", args, 1U, &out));
+    YEW_ASSERT_EQ_I64(out.t, FL_STR);
+    YEW_ASSERT_EQ_U64(((FlStr *)out.as.o)->len, sizeof(source) - 1U);
+    YEW_ASSERT_EQ_MEM(((FlStr *)out.as.o)->b, source, sizeof(source) - 1U);
+    YEW_ASSERT(api_invoke(&f, "ed.fuss", NULL, 0U, &out));
+    YEW_ASSERT_EQ_I64(out.t, FL_MAP);
+    YEW_ASSERT(api_map_bool(out, "active", false));
+    YEW_ASSERT(api_map_bool(out, "known", false));
+    YEW_ASSERT(api_map_bool(out, "clean", false));
     api_close(&f);
 }
 

@@ -1770,6 +1770,40 @@ bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out)
     return true;
 }
 
+bool yew_fuss_state(const Ed *ed, YewFussState *out)
+{
+    const FussMode *f;
+    const FussItem *item;
+    const FussNode *node;
+    const GitSnapshot *snap;
+
+    if (out == NULL)
+        return false;
+    (void)memset(out, 0, sizeof(*out));
+    if (!yew_fuss_active(ed))
+        return false;
+    f = ed->fuss;
+    out->active = true;
+    item = fuss_item(f, fuss_row(f));
+    node = fuss_node(f, item);
+    if (item != NULL && node != NULL) {
+        out->path = item->path;
+        out->path_len = item->path_len;
+        out->known = true;
+        out->is_file = node->is_file;
+        out->staged = node->staged;
+        out->unstaged = node->unstaged;
+        out->untracked = node->untracked;
+        out->expanded = !node->is_file && node->expanded;
+    }
+    out->actions_open = f->picker_action == FUSS_PICK_ACTIONS &&
+                        yew_picker_active(ed);
+    snap = yew_git_snapshot_cached(ed);
+    out->clean = snap != NULL && snap->state == YEW_GIT_OK &&
+                 snap->entries.len == 0U;
+    return true;
+}
+
 bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
 {
     FussMode *f;

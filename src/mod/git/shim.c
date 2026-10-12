@@ -371,6 +371,14 @@ bool yew_fuss_path_target(const Ed *ed, u32 path_id, FussTarget *out)
     return false;
 }
 
+bool yew_fuss_state(const Ed *ed, YewFussState *out)
+{
+    (void)ed;
+    if (out != NULL)
+        (void)memset(out, 0, sizeof(*out));
+    return false;
+}
+
 bool yew_fuss_selected_anchor(Ed *ed, u32 *path_id, u16 *x, u16 *y)
 {
     (void)ed;

@@ -13,6 +13,7 @@
 #include "edit/mode.h"
 #include "edit/option.h"
 #include "fl/gc.h"
+#include "fl/record.h"
 #include "fl/flruntime.h"
 #include "fl/origin.h"
 #include "fl/fltxn.h"
@@ -23,9 +24,11 @@
 #if YEW_WITH_PLUGINS
 #include "mod/plug/plug.h"
 #endif
+#include "mod/git/fussmode.h"
 #include "search/regex.h"
 #include "text/mark.h"
 #include "text/piece.h"
+#include "text/register.h"
 #include "text/undo.h"
 #include "unicode/coords.h"
 #include "ui/layout.h"
@@ -69,6 +72,7 @@ static FlValue api_cstr(FlVm *vm, const char *s)
 }
 
 static bool option_map_error(FlVm *vm, const FlStr *name, const char *err);
+static bool map_put(FlVm *vm, FlMap *m, const char *key, FlValue value);
 
 static bool option_to_fl(FlVm *vm, const OptVal *value, FlValue *out)
 {
@@ -476,6 +480,81 @@ static bool q_ed_mode(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (ed->mode >= YEW_MODE__N)
         return fl_raise(vm, "handle", "editor mode is invalid");
     *out = api_cstr(vm, yew_modes[ed->mode].name);
+    return true;
+}
+
+static bool q_ed_recording(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    RecStatus status;
+    char name[1];
+    (void)a;
+    (void)n;
+    if (ed == NULL)
+        return false;
+    if (yew_record_status(ed, &status) == 0U || !status.active) {
+        *out = FL_NIL_V;
+        return true;
+    }
+    name[0] = (char)status.reg;
+    *out = FL_OBJ_V(FL_STR, fl_str_new(vm, name, 1U));
+    return true;
+}
+
+static bool q_ed_register(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    const FlStr *name;
+    const RegVal *value;
+    u8 reg;
+    (void)n;
+    if (ed == NULL || !fl_arg_str(vm, a, 0U, &name))
+        return false;
+    if (name->len != 1U ||
+        !((name->b[0] >= 'a' && name->b[0] <= 'z') ||
+          (name->b[0] >= 'A' && name->b[0] <= 'Z')))
+        return fl_raise(vm, "type", "ed.register expects one letter a-z/A-Z");
+    reg = (u8)name->b[0];
+    value = yew_reg_get(&ed->regs, reg);
+    if (value == NULL || value->bytes.len == 0U) {
+        *out = FL_NIL_V;
+        return true;
+    }
+    if (value->bytes.len > UINT32_MAX)
+        return fl_raise(vm, "limit", "ed.register value exceeds string limit");
+    *out = FL_OBJ_V(FL_STR,
+                    fl_str_new(vm, (const char *)value->bytes.data,
+                               (u32)value->bytes.len));
+    return true;
+}
+
+static bool q_ed_fuss(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Ed *ed = api_ed(vm);
+    YewFussState state;
+    FlMap *map;
+    (void)a;
+    (void)n;
+    if (ed == NULL)
+        return false;
+    (void)yew_fuss_state(ed, &state);
+    map = fl_map_new(vm);
+    fl_gc_protect(vm, FL_OBJ_V(FL_MAP, map));
+    (void)map_put(vm, map, "active", FL_BOOL_V(state.active));
+    (void)map_put(vm, map, "path",
+                  state.path == NULL ? FL_NIL_V :
+                  FL_OBJ_V(FL_STR, fl_str_new(vm, state.path,
+                                              state.path_len)));
+    (void)map_put(vm, map, "known", FL_BOOL_V(state.known));
+    (void)map_put(vm, map, "is_file", FL_BOOL_V(state.is_file));
+    (void)map_put(vm, map, "staged", FL_BOOL_V(state.staged));
+    (void)map_put(vm, map, "unstaged", FL_BOOL_V(state.unstaged));
+    (void)map_put(vm, map, "untracked", FL_BOOL_V(state.untracked));
+    (void)map_put(vm, map, "expanded", FL_BOOL_V(state.expanded));
+    (void)map_put(vm, map, "actions_open", FL_BOOL_V(state.actions_open));
+    (void)map_put(vm, map, "clean", FL_BOOL_V(state.clean));
+    *out = FL_OBJ_V(FL_MAP, map);
+    fl_gc_release(vm, 1U);
     return true;
 }
 
@@ -899,7 +978,10 @@ FlBindDesc fl_api[] = {
     COMMAND_ARGS("opt.set", "ed.opt.set", FL_H_NONE, 2U, 2U, 0U,
                  FL_ARG_STR, FL_ARG_VALUE, FL_ARG_NONE),
     QUERY("ed.msg", FL_H_NONE, 1U, 2U, q_ed_msg),
-    QUERY("ed.mode", FL_H_NONE, 0U, 0U, q_ed_mode)
+    QUERY("ed.mode", FL_H_NONE, 0U, 0U, q_ed_mode),
+    QUERY("ed.recording", FL_H_NONE, 0U, 0U, q_ed_recording),
+    QUERY("ed.register", FL_H_NONE, 1U, 1U, q_ed_register),
+    QUERY("ed.fuss", FL_H_NONE, 0U, 0U, q_ed_fuss)
 };
 
 const u32 fl_api_len = (u32)YEW_ARRAY_LEN(fl_api);
@@ -1940,7 +2022,9 @@ static const FlNativeDef OPT_DEFS[] = {
 static const FlNativeDef ED_DEFS[] = {
     {"run", fl_api_ed_run, 2U, 2U, 0U, "(name, args) -> nil"},
     {"commands", fl_api_ed_commands, 0U, 0U, 0U, "() -> list"},
-    NATIVE("msg", 1U, 2U), NATIVE("mode", 0U, 0U)
+    NATIVE("msg", 1U, 2U), NATIVE("mode", 0U, 0U),
+    NATIVE("recording", 0U, 0U), NATIVE("register", 1U, 1U),
+    NATIVE("fuss", 0U, 0U)
 };
 
 const FlModuleDef fl_mod_buf = {"buf", BUF_DEFS, YEW_ARRAY_LEN(BUF_DEFS), NULL, 0U};
