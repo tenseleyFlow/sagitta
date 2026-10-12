@@ -8,6 +8,7 @@ void yew_tutor_case_ch02(PtyCtx *c);
 void yew_tutor_case_ch03(PtyCtx *c);
 void yew_tutor_case_ch04(PtyCtx *c);
 void yew_tutor_case_ch05(PtyCtx *c);
+void yew_tutor_case_ch06(PtyCtx *c);
 void yew_tutor_case_resume(PtyCtx *c);
 
 #endif /* YEW_TEST_PTY_TUTOR_RUNNER_H */

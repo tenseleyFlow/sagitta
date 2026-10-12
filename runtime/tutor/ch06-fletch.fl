@@ -1,5 +1,5 @@
-# Chapter 6: recordings are Fletch source.  Recorder/register state queries
-# are supplied by the public editor module, not by a tutor-only back door.
+# Chapter 6: recordings are editable, replayable Fletch source.  The checks
+# use the same public buffer and recorder state available to user config.
 import ed
 import str
 
@@ -8,22 +8,39 @@ let tasks = [
       keys: "q a", check: fn(b, w) ed.recording() == "a" },
     { id: "ch06.t2", line: 7, prompt: "Insert X at the start of the title.",
       keys: "i X <esc>", check: fn(b, w) {
-          return b.lines() > 0 and str.starts_with(b.line(1), "X")
+          return b.lines() > 0 and str.starts_with(b.line(1), "XYEW")
       } },
     { id: "ch06.t3", line: 8, prompt: "Stop recording with q.",
       keys: "q", check: fn(b, w) {
           let source = ed.register("a");
           return ed.recording() == nil and source != nil and
-                 str.contains(source, "@[" )
+                 str.starts_with(source, "# yew-macro: 1\n") and
+                 str.contains(source, "@[") and
+                 str.contains(source, "i\"X\"") and
+                 not str.contains(source, "[✓]")
       } },
-    { id: "ch06.t4", line: 9, prompt: "Replay register a with @ a.",
-      keys: "@ a", check: fn(b, w) {
-          return b.lines() > 0 and str.starts_with(b.line(1), "XX")
+    { id: "ch06.t4", line: 9,
+      prompt: "Return to the title start and replay with g g then @ a.",
+      keys: "g g @ a", check: fn(b, w) {
+          return b.lines() > 0 and str.starts_with(b.line(1), "XXYEW")
       } },
-    { id: "ch06.t5", line: 10, prompt: "Paste register a into this buffer with quote-a-p.",
-      keys: "\" a p", check: fn(b, w) str.contains(b.text(), "# yew-macro:") },
-    { id: "ch06.t6", line: 11, prompt: "Find the generated Fletch motion block with /@[.",
-      keys: "/ @ [ <cr>", check: fn(b, w) str.contains(b.text(), "@[") },
-    { id: "ch06.t7", line: 12, prompt: "Save the edited lesson with s.",
-      keys: "s", check: fn(b, w) not b.dirty() },
+    { id: "ch06.t5", line: 10,
+      prompt: "Open the macro browser with Q; open a's source with e.",
+      keys: "Q e", check: fn(b, w) {
+          let source = ed.register("a");
+          return b.name() == "*macro a*" and source != nil and
+                 b.text() == source
+      } },
+    { id: "ch06.t6", line: 11,
+      prompt: "Change the recorded X to Y and store it with s.",
+      keys: "/ X <cr> x i Y <esc> s", check: fn(b, w) {
+          let source = ed.register("a");
+          return b.name() == "*macro a*" and not b.dirty() and
+                 source == b.text() and str.contains(source, "i\"Y\"")
+      } },
+    { id: "ch06.t7", line: 12,
+      prompt: "Return to the tutor group with Ctrl-1; go home and replay @a.",
+      keys: "C-1 g g @ a", check: fn(b, w) {
+          return b.lines() > 0 and str.starts_with(b.line(1), "YXXYEW")
+      } },
 ]

@@ -1,6 +1,7 @@
 # The Sprint 59 tutor is an ordinary built-in Fletch overlay.  Its task
 # checkers live in chapter modules; this driver is the only writer.
 import buf
+import ed
 import io
 import list
 import map
@@ -85,6 +86,13 @@ fn initialize() {
 
 fn mark_task(b, task) {
     if b == nil or b.lines() < task.line { return nil }
+    # Completion is editor activity, not part of the exercise being recorded.
+    # Persist the verdict immediately and paint pending marks after q stops.
+    if ed.recording() != nil { return nil }
+    # Span edits are window-scoped.  A task may complete in a real scratch
+    # buffer (Chapter 6's macro editor), so persist its verdict now and paint
+    # the ordinary lesson-buffer checkmark when that lesson is active again.
+    if b.path() != buf.current().path() { return nil }
     let line = b.line_span(task.line)
     let text = line.text()
     if not str.starts_with(text, "[ ] ") { return nil }

@@ -2,7 +2,7 @@
 size 80x24 alt=1 cursor=1,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
- 1 pty-s14-s38_macro_edi +                                                      
+ 1 pty-s14-s38_macro_edi 2 *macro a*  +                                         
     1 Ybase                                                                     
     1                                                                           
                                                                                 
@@ -27,7 +27,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
  L  pty-s14-s38_macro_edit_flow.txt *                        utf-8  lf  1:2  all
 --- style
-AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -53,8 +53,8 @@ DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 GGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 --- legend
 A fg=#c8ccd4 bg=#2c313a attrs=b---------
-B fg=#61afef bg=#1b202a attrs=b---------
-C fg=#5c6370 bg=#1b202a attrs=----------
+B fg=#5c6370 bg=#1b202a attrs=----------
+C fg=#61afef bg=#1b202a attrs=b---------
 D fg=#4b5263 bg=#12141a attrs=----------
 E fg=#c8ccd4 bg=#12141a attrs=b---------
 F fg=#c8ccd4 bg=#12141a attrs=----------

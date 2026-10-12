@@ -6,10 +6,10 @@ not change what an old recording means.
 [ ] ch06.t1 Start recording register a with q a.
 [ ] ch06.t2 Insert X at the start of the title.
 [ ] ch06.t3 Stop recording with q.
-[ ] ch06.t4 Replay register a with @ a.
-[ ] ch06.t5 Paste register a into this buffer with quote-a-p.
-[ ] ch06.t6 Find the generated Fletch motion block with /@[.
-[ ] ch06.t7 Save the edited lesson with s.
+[ ] ch06.t4 Return to the title start and replay with g g then @ a.
+[ ] ch06.t5 Open the macro browser with Q; open a's source with e.
+[ ] ch06.t6 Change the recorded X to Y and store it with s.
+[ ] ch06.t7 Return to the tutor group with Ctrl-1; go home and replay @a.
 
 field
 field

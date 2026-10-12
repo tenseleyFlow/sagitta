@@ -284,6 +284,12 @@ void yew_tutor_case_ch05(PtyCtx *c)
                 "tutor_ch05_done");
 }
 
+void yew_tutor_case_ch06(PtyCtx *c)
+{
+    run_chapter(c, 6U, "fletch", "ch06-fletch.fl",
+                "tutor_ch06_done");
+}
+
 void yew_tutor_case_resume(PtyCtx *c)
 {
     TutorKeys keys;

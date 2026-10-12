@@ -10,6 +10,7 @@
 #include "fl/flruntime.h"
 #include "fl/macrolib.h"
 #include "fl/record.h"
+#include "syn/defs.h"
 #include "term/grid.h"
 #include "text/register.h"
 #include "text/file.h"
@@ -86,7 +87,10 @@ CmdStatus yew_macro_edit(Ed *ed, u8 reg)
 {
     const RegVal *value;
     Buffer *scratch;
+    SynEngine *engine;
     char name[32];
+    int tab;
+    u32 lang;
 
     if (ed == NULL || !named_reg(reg))
         return YEW_CMD_ERR_ARG;
@@ -102,13 +106,30 @@ CmdStatus yew_macro_edit(Ed *ed, u8 reg)
     if (value->bytes.len != 0U)
         yew_textbuf_insert(scratch->tb, BYTEOFF(0U), value->bytes.data,
                            value->bytes.len);
+    /* scratch_new attached syntax to the original empty buffer.  The
+     * register is populated outside the edit chokepoint because opening a
+     * macro is not an undoable user edit, so rebuild the line state before
+     * the new buffer can be rendered. */
+    lang = yew_syn_lang_named("fletch");
+    engine = lang == YEW_LANG_NONE ? NULL : yew_syn_engine_for(lang);
+    if (engine == NULL) {
+        yew_ws_scratch_drop(ed, scratch);
+        return YEW_CMD_ERR_IO;
+    }
+    yew_syn_attach(&scratch->syn, lang, scratch->tb);
+    yew_syn_buf_bind(&scratch->syn, engine);
     yew_undo_mark_saved(scratch->undo);
     scratch->lang = "fletch";
     scratch->macro_reg = reg;
-    if (!yew_ed_show_buffer(ed, scratch)) {
+    /* A macro scratch must not strand the document it was opened from.
+     * Give it an ordinary untitled tab so tab navigation and close both
+     * provide the same keyboard return path as every other editor buffer. */
+    tab = yew_tab_open_buffer(ed, scratch);
+    if (tab < 0) {
         yew_ws_scratch_drop(ed, scratch);
         return YEW_CMD_ERR_STATE;
     }
+    yew_tab_switch(ed, tab);
     return YEW_CMD_OK;
 }
 

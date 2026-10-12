@@ -12,6 +12,7 @@
 #include "text/undo.h"
 #include "ui/macrobrowse.h"
 #include "ui/message.h"
+#include "ui/tabs.h"
 
 static void macro_set(Ed *ed, u8 reg, const char *source)
 {
@@ -212,8 +213,12 @@ void test_macrobrowse_valid_store_marks_clean_and_sets_undo_boundary(void)
 
 void test_macrobrowse_edit_is_an_ordinary_multicursor_undo_buffer(void)
 {
-    static const char source[] = "fn plain() { return 1 }\n";
-    static const char inserted[] = "Xfn plain() { return 1 }\nX";
+    static const char source[] =
+        "# yew-macro: 1\n"
+        "@[ i\"plain\" ]\n";
+    static const char inserted[] =
+        "X# yew-macro: 1\n"
+        "@[ i\"plain\" ]\nX";
     Ed ed;
     Buffer *scratch;
     Cursor second;
@@ -221,6 +226,9 @@ void test_macrobrowse_edit_is_an_ordinary_multicursor_undo_buffer(void)
     CmdId insert;
     Bytebuf text;
     EditCtx ec;
+    SynSpan spans[16];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    u64 line_count;
 
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_scratch(&ed));
@@ -232,9 +240,16 @@ void test_macrobrowse_edit_is_an_ordinary_multicursor_undo_buffer(void)
     YEW_ASSERT_NULL(scratch->path);
     YEW_ASSERT_EQ_STR(scratch->lang, "fletch");
     YEW_ASSERT_EQ_U64(scratch->macro_reg, (u8)'c');
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->buffer_id, scratch->id);
     YEW_ASSERT((scratch->flags & YEW_BUF_SCRATCH) != 0U);
     YEW_ASSERT((scratch->flags & YEW_BUF_NOUNDO) == 0U);
     YEW_ASSERT(yew_undo_at_save_point(scratch->undo));
+    line_count = yew_textbuf_line_count(scratch->tb);
+    YEW_ASSERT_EQ_U64(scratch->syn.entry.len, line_count);
+    YEW_ASSERT_NOT_NULL(scratch->syn.engine);
+    yew_syn_spans(&scratch->syn, scratch->tb, LINENO(line_count - 1U), &out);
     second = (Cursor){BYTEOFF(sizeof(source) - 1U), {0U},
                       BYTEOFF(sizeof(source) - 1U)};
     YEW_ASSERT(yew_cset_add(&ed.win->cs, second));
