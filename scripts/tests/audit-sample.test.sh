@@ -20,7 +20,7 @@ cmp "$first" "$second"
 test "$(wc -l <"$first" | tr -d ' ')" -eq 5
 
 scripts/audit-sample.sh .docs/audits/findings.md 20261012 >"$first"
-test "$(wc -l <"$first" | tr -d ' ')" -eq 8
+test "$(wc -l <"$first" | tr -d ' ')" -eq 9
 if scripts/audit-sample.sh "$ledger" 0 >/dev/null 2>&1; then
     echo "audit-sample selftest: accepted seed zero" >&2
     exit 1
