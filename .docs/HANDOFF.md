@@ -13,10 +13,11 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**Local branch position at refresh:** `trunk` is 33 commits above
-`origin/trunk`, including Sprint 59's documentation/tutorial work and the
-`YEW-F-080` watchdog remediation. The product code used by the soak remains
-the exact hosted-green anchor.
+**Local branch position at refresh:** `trunk` is 36 commits above
+`origin/trunk` at `8c982b1f`, including Sprint 59's documentation/tutorial
+work, the `YEW-F-080` watchdog remediation, and the two fast-gate integration
+repairs found on 2026-10-12. The product code used by the soak remains the
+exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
@@ -25,13 +26,13 @@ chapter 1.
 ## Authoritative pickup point — 2026-10-12
 
 Campaign 13 is repository-complete through Sprint 57.32. The latest exact
-product commit on `origin/trunk`, `4c99e134`, is fully hosted-green. The current
-checkout was fetched and compared with every registered worktree before this
-refresh. Two independent worktrees are now registered beside it:
-`lsp-wolf-default` at `8c23b440` and the runner-only `soak/s58-watchdog-r2`
-branch at `4f483f31`. Neither is merged into `trunk`; the soak branch is
-deliberately isolated, and adjacent work must be reconciled explicitly rather
-than mistaken for missing trunk commits.
+product commit `4c99e134` is fully hosted-green. The current checkout was
+fetched and compared with every registered worktree before this refresh. Two
+worktrees are registered beside it: the clean `lsp-wolf-default` worktree at
+`8c23b440`, whose work is already merged through `origin/trunk` PR #1 at
+`8c982b1f`, and the runner-only `soak/s58-watchdog-r2` branch at `4f483f31`.
+Only the soak branch is deliberately isolated; the LSP work must not be merged
+a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
