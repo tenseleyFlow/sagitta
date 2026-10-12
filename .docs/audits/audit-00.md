@@ -178,6 +178,19 @@ No downgrade is justified. The remaining 71 findings meet the Medium
 definition: recoverable product behavior, a documented mechanism absent from
 the implementation, or a CI control claiming evidence it cannot establish.
 
+## Sprint 59 re-audit sample
+
+Seed: `20261012`. `scripts/audit-sample.sh` draws 10% of the sorted deduped
+ledger with a minimum of five. The 79-row ledger therefore yields eight IDs:
+
+`YEW-F-018`, `YEW-F-019`, `YEW-F-030`, `YEW-F-034`, `YEW-F-043`,
+`YEW-F-052`, `YEW-F-055`, `YEW-F-067`.
+
+The selection is recorded before review. It is not verification evidence by
+itself: a reviewer who authored none of the sampled fixes must build the fixed
+commit, run each reproducer, and compare the repair diff with the recorded root
+cause before any sampled row advances from `fixed` to `verified`.
+
 ## Verdict
 
 We are not ready to tag: all fifteen Sprint 58 fronts, cross-front dedup, and

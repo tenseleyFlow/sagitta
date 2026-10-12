@@ -1976,6 +1976,9 @@ test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
 	LC_ALL=C $(F09_REC_VM_AUDIT_BIN)
 	scripts/check-findings.sh
 	scripts/check-audit-fixtures.sh
+	scripts/check-priority.sh
+	scripts/tests/check-priority.test.sh
+	scripts/tests/audit-sample.test.sh
 
 fuzzlib-selftest: $(BUILD)/fuzz_utf8 $(FUZZ_WATCHDOG)
 	@set -eu; \
