@@ -27,6 +27,7 @@
 #include "util/intern.h"
 #include "util/runtime_asset.h"
 #include "util/xdg.h"
+#include "ws/workspace.h"
 #include "ws/symshadow.h"
 
 enum { YEW_TUTOR_FILE_MAX = 1024U * 1024U };
@@ -446,6 +447,8 @@ bool yew_tutor_reset(const char *root)
 {
     char *expected = yew_tutor_root(false);
     struct stat st;
+    WsKey workspace;
+    bool have_workspace;
     bool ok;
 
     if (root == NULL || expected == NULL || strcmp(root, expected) != 0) {
@@ -453,11 +456,14 @@ bool yew_tutor_reset(const char *root)
         return false;
     }
     yew_xfree(expected);
+    have_workspace = yew_ws_key(&workspace, root);
     if (lstat(root, &st) != 0)
         return errno == ENOENT && yew_mkdirs(root, 0700U);
     if (!S_ISDIR(st.st_mode))
         return false;
     ok = remove_tree(root, 0U);
+    if (have_workspace)
+        ok = remove_tree(workspace.dir, 0U) && ok;
     return ok && yew_mkdirs(root, 0700U);
 }
 
@@ -686,7 +692,6 @@ int yew_tutor_main(int argc, char **argv)
         else
             have_chapter = true;
     }
-    (void)clean;
     if (check && list)
         return usage_error("--check and --list cannot be combined", NULL);
     root = yew_tutor_root(reset);
@@ -744,6 +749,7 @@ int yew_tutor_main(int argc, char **argv)
         .startup_group_active = have_chapter ? (size_t)chapter : 0U,
         .clean = true,
         .clean_builtins = true,
+        .restore_state_in_clean = !clean,
         .require_config = true,
         .isolated = true,
         .no_workspace_config = true

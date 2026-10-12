@@ -1,8 +1,6 @@
-# Chapter 5: panes and tabs.  The tutorial itself is the shipped `tutor`
-# group, so every task is performed inside a real seven-member group.
-import buf
+# Chapter 5: panes, tab groups, and persistent workspace state.
+import ed
 import list
-import str
 import win
 
 fn cursor(w) {
@@ -11,30 +9,62 @@ fn cursor(w) {
     return cursors[0]
 }
 
+fn notes_group() {
+    for group in ed.workspace().groups {
+        if group.name == "notes" { return group }
+    }
+    return nil
+}
+
+fn active_panes() {
+    for tab in ed.workspace().tabs {
+        if tab.active { return tab.panes }
+    }
+    return []
+}
+
 let tasks = [
-    { id: "ch05.t1", line: 6, prompt: "Split this tab below with Ctrl-W s.",
-      keys: "C-w s", check: fn(b, w) list.len(win.list()) == 8 },
-    { id: "ch05.t2", line: 7, prompt: "Move Down in one pane to give it distinct state.",
+    { id: "ch05.t1", line: 6,
+      prompt: "Dissolve the seeded tutor group with t d.",
+      keys: "t d", check: fn(b, w) list.len(ed.workspace().groups) == 0 },
+    { id: "ch05.t2", line: 7,
+      prompt: "Create notes from ch01–ch03 with t g and the picker.",
+      keys: "t g <down> <space> <space> <space> <tab> <bs> <bs> <bs> <bs> <bs> <bs> n o t e s <cr>",
+      check: fn(b, w) {
+          let group = notes_group();
+          return group != nil and group.members == 3
+      } },
+    { id: "ch05.t3", line: 8,
+      prompt: "Split this tab side by side with Ctrl-W s.",
+      keys: "C-w s", check: fn(b, w) {
+          let panes = active_panes();
+          if list.len(panes) != 2 { return false }
+          let a = panes[0];
+          let z = panes[1];
+          return a.w > 0 and a.h > 0 and z.w > 0 and z.h == a.h and
+                 z.y == a.y and z.x == a.x + a.w + 1
+      } },
+    { id: "ch05.t4", line: 9,
+      prompt: "Move Down in one pane to give it distinct state.",
       keys: "<down>", check: fn(b, w) {
           let c = cursor(w); return c != nil and c.line() == 2 and
                                     list.len(win.list()) == 8
       } },
-    { id: "ch05.t3", line: 8, prompt: "Focus the other pane with Ctrl-W w.",
+    { id: "ch05.t5", line: 10,
+      prompt: "Focus the other pane with Ctrl-W w.",
       keys: "C-w w", check: fn(b, w) {
           let c = cursor(w); return c != nil and c.line() == 1 and
                                     list.len(win.list()) == 8
       } },
-    { id: "ch05.t4", line: 9, prompt: "Close that pane with Ctrl-W c.",
-      keys: "C-w c", check: fn(b, w) list.len(win.list()) == 7 },
-    { id: "ch05.t5", line: 10, prompt: "Open a new untitled tab with t t.",
-      keys: "t t", check: fn(b, w) b.path() == nil and list.len(buf.list()) == 8 },
-    { id: "ch05.t6", line: 11, prompt: "Return to the tutor group with t p.",
-      keys: "t p", check: fn(b, w) {
-          let path = b.path();
-          return path != nil and str.ends_with(path, "/ch05.txt")
+    { id: "ch05.t6", line: 11,
+      prompt: "Focus back with Ctrl-W w; its line-2 cursor returns.",
+      keys: "C-w w", check: fn(b, w) {
+          let c = cursor(w); return c != nil and c.line() == 2 and
+                                    list.len(active_panes()) == 2
       } },
-    { id: "ch05.t7", line: 12, prompt: "Move to the RESUME MARKER with G then Up twice.",
-      keys: "G <up> <up>", check: fn(b, w) {
+    { id: "ch05.t7", line: 12,
+      prompt: "Move to the RESUME MARKER with 14G.",
+      keys: "1 4 G", check: fn(b, w) {
           let c = cursor(w); return c != nil and c.line() == 14
       } },
 ]

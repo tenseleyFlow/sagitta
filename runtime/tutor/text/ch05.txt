@@ -3,13 +3,13 @@ YEW TUTOR 5/7 — WORKSPACES
 Tabs own pane trees. Groups collapse related tabs into one strip entry, while
 each member keeps a stable identity and remembers its last active position.
 
-[ ] ch05.t1 Split this tab below with Ctrl-W s.
-[ ] ch05.t2 Move Down in one pane to give it distinct state.
-[ ] ch05.t3 Focus the other pane with Ctrl-W w.
-[ ] ch05.t4 Close that pane with Ctrl-W c.
-[ ] ch05.t5 Open a new untitled tab with t t.
-[ ] ch05.t6 Return to the tutor group with t p.
-[ ] ch05.t7 Move to the RESUME MARKER with G then Up twice.
+[ ] ch05.t1 Dissolve the seeded tutor group with t d.
+[ ] ch05.t2 Create notes from ch01–ch03 with t g and the picker.
+[ ] ch05.t3 Split this tab side by side with Ctrl-W s.
+[ ] ch05.t4 Move Down in one pane to give it distinct state.
+[ ] ch05.t5 Focus the other pane with Ctrl-W w.
+[ ] ch05.t6 Focus back with Ctrl-W w; its line-2 cursor returns.
+[ ] ch05.t7 Move to the RESUME MARKER with 14G.
 
 RESUME MARKER
 

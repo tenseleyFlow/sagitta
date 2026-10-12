@@ -2921,6 +2921,9 @@ static int ed_driver_inner(const YewStartPlan *plan,
 {
     Ed ed;
     u32 bootstrap_tab_id;
+    YewWsResult workspace_result = YEW_WS_FRESH;
+    bool workspace_state;
+    bool preserve_restored_startup;
     int result;
     i64 wall_now;
     u16 rows;
@@ -2939,6 +2942,8 @@ static int ed_driver_inner(const YewStartPlan *plan,
     if (wall_now >= 0)
         yew_git_editor_clock_anchor(&ed, yew_now_ms(), wall_now);
     yew_config_init(&ed, startup);
+    workspace_state = !ed.clean ||
+        (startup != NULL && startup->restore_state_in_clean);
     errno = 0;
     if (!yew_tty_open(&ed.tty)) {
         result = errno == ENOTTY ? YEW_EXIT_ERR : YEW_EXIT_IO;
@@ -3004,11 +3009,19 @@ static int ed_driver_inner(const YewStartPlan *plan,
                 yew_msg(&ed, YEW_MSG_ERROR, "%s", error);
         }
     }
-    if (!ed.clean)
+    if (workspace_state)
         yew_state_open(&ed);
-    if (!ed.clean)
-        (void)yew_ws_restore(&ed);
-    if (plan->nfiles != 0U) {
+    if (workspace_state)
+        workspace_result = yew_ws_restore(&ed);
+    preserve_restored_startup = workspace_result == YEW_WS_RESTORED &&
+        startup != NULL && startup->restore_state_in_clean;
+    if (preserve_restored_startup && yew_tab_count(&ed) > 1U) {
+        int bootstrap = yew_tab_index_of_id(&ed, bootstrap_tab_id);
+
+        if (bootstrap >= 0)
+            (void)yew_tab_close(&ed, bootstrap);
+    }
+    if (plan->nfiles != 0U && !preserve_restored_startup) {
         const char *failed = NULL;
 
         if (!ed_apply_start_files(&ed, plan, &failed)) {
@@ -3026,7 +3039,8 @@ static int ed_driver_inner(const YewStartPlan *plan,
             if (bootstrap >= 0)
                 (void)yew_tab_close(&ed, bootstrap);
         }
-        if (startup != NULL && startup->startup_group != NULL) {
+        if (startup != NULL && startup->startup_group != NULL &&
+            workspace_result != YEW_WS_RESTORED) {
             u32 gid;
             size_t i;
             int active;
@@ -3080,7 +3094,7 @@ static int ed_driver_inner(const YewStartPlan *plan,
     result = ed.quit ? ed.exit_code : yew_loop_run(&ed);
     yew_fl_hook_workspace(&ed, FL_EV_WS_CLOSE);
     /* Clean quit: the unconditional save, before anything is freed. */
-    if (!ed.clean)
+    if (workspace_state)
         yew_state_close(&ed);
     yew_ed_free(&ed);
     return result;

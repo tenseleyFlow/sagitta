@@ -3,6 +3,7 @@
 
 #include "harness.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <ftw.h>
 #include <limits.h>
@@ -15,6 +16,7 @@
 #include "text/file.h"
 #include "tutor.h"
 #include "util/buf.h"
+#include "ws/workspace.h"
 
 typedef struct TutorFix {
     char base[PATH_MAX];
@@ -131,8 +133,10 @@ void test_tutor_seed_preserves_existing_work_and_reset_is_confined(void)
     TutorFix fix;
     char chapter[PATH_MAX];
     char marker[PATH_MAX];
+    char state_marker[PATH_MAX];
     Bytebuf bytes;
     struct stat st;
+    WsKey workspace;
     u32 i;
 
     tutor_fix_make(&fix);
@@ -155,9 +159,16 @@ void test_tutor_seed_preserves_existing_work_and_reset_is_confined(void)
 
     (void)snprintf(marker, sizeof(marker), "%s/keep", fix.base);
     tutor_write(marker, "outside\n");
+    YEW_ASSERT(yew_ws_key(&workspace, fix.root));
+    YEW_ASSERT(yew_ws_ensure_dir(&workspace));
+    (void)snprintf(state_marker, sizeof(state_marker), "%sstate.fl",
+                   workspace.dir);
+    tutor_write(state_marker, "{schema: 1}\n");
     YEW_ASSERT(!yew_tutor_reset(fix.base));
     YEW_ASSERT(yew_tutor_reset(fix.root));
     YEW_ASSERT_EQ_I64(stat(marker, &st), 0);
+    YEW_ASSERT_EQ_I64(lstat(workspace.dir, &st), -1);
+    YEW_ASSERT_EQ_I64(errno, ENOENT);
     YEW_ASSERT_EQ_I64(stat(fix.root, &st), 0);
     YEW_ASSERT(S_ISDIR(st.st_mode));
     YEW_ASSERT_EQ_I64(rmdir(fix.root), 0);

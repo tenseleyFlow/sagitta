@@ -188,15 +188,49 @@ static bool progress_has_task(const PtyCtx *c, const void *arg)
     return file_contains(wait->path, wait->id);
 }
 
+static bool tutor_progress_path(PtyCtx *c, char out[PATH_MAX])
+{
+    int n = snprintf(out, PATH_MAX, "%s/yew/tutor/tutor.fl",
+                     c->state_dir);
+
+    ptc_check(c, n > 0 && n < PATH_MAX, "tutor progress path overflow");
+    return !c->failed;
+}
+
+static void replay_tasks(PtyCtx *c, const TutorKeys *keys, u32 chapter,
+                         const char *progress)
+{
+    TutorProgressWait wait;
+    u32 i;
+
+    wait.path = progress;
+    for (i = 0U; i < keys->len && !c->failed; i++) {
+        int n;
+
+        ptc_keys(c, keys->key[i]);
+        n = snprintf(wait.id, sizeof(wait.id), "\"ch%02u.t%u\"",
+                     (unsigned)chapter, (unsigned)(i + 1U));
+        ptc_check(c, n > 0 && (size_t)n < sizeof(wait.id),
+                  "tutor task id overflow");
+        ptc_wait_until(c, progress_has_task, &wait,
+                       "tutor task did not reach its state verdict");
+        ptc_settle(c, 30);
+    }
+}
+
+static void quit_clean(PtyCtx *c)
+{
+    ptc_allow_restore(c);
+    ptc_keys(c, "<esc> : q <cr>");
+    ptc_expect_exit(c, 0);
+}
+
 static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
                         const char *module, const char *golden)
 {
     TutorKeys keys;
     char chapter_arg[2];
     char progress[PATH_MAX];
-    TutorProgressWait wait;
-    u32 i;
-    int n;
 
     if (!load_keys(c, module, &keys)) {
         ptc_check(c, false, "could not load tutor task keys via Fletch");
@@ -208,21 +242,9 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
               "--clean", NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
-    n = snprintf(progress, sizeof(progress), "%s/yew/tutor/tutor.fl",
-                 c->state_dir);
-    ptc_check(c, n > 0 && (size_t)n < sizeof(progress),
-              "tutor progress path overflow");
-    wait.path = progress;
-    for (i = 0U; i < keys.len; i++) {
-        ptc_keys(c, keys.key[i]);
-        n = snprintf(wait.id, sizeof(wait.id), "\"ch%02u.t%u\"",
-                     (unsigned)chapter, (unsigned)(i + 1U));
-        ptc_check(c, n > 0 && (size_t)n < sizeof(wait.id),
-                  "tutor task id overflow");
-        ptc_wait_until(c, progress_has_task, &wait,
-                       "tutor task did not reach its state verdict");
-        ptc_settle(c, 30);
-    }
+    if (!tutor_progress_path(c, progress))
+        return;
+    replay_tasks(c, &keys, chapter, progress);
     ptc_check(c, progress_complete(progress, chapter, key),
               "tutor task engine did not persist every verdict");
     ptc_snapshot(c, golden);
@@ -254,4 +276,49 @@ void yew_tutor_case_ch03(PtyCtx *c)
 void yew_tutor_case_ch04(PtyCtx *c)
 {
     run_chapter(c, 4U, "search", "ch04-search.fl", "tutor_ch04_done");
+}
+
+void yew_tutor_case_ch05(PtyCtx *c)
+{
+    run_chapter(c, 5U, "workspace", "ch05-workspace.fl",
+                "tutor_ch05_done");
+}
+
+void yew_tutor_case_resume(PtyCtx *c)
+{
+    TutorKeys keys;
+    char progress[PATH_MAX];
+
+    if (!load_keys(c, "ch05-workspace.fl", &keys)) {
+        ptc_check(c, false, "could not load tutor task keys via Fletch");
+        return;
+    }
+    ptc_spawn(c, ptc_yew_bin(c), "tutor", "5", "--reset", NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    if (!tutor_progress_path(c, progress))
+        return;
+    replay_tasks(c, &keys, 5U, progress);
+    ptc_check(c, progress_complete(progress, 5U, "workspace"),
+              "tutor resume setup did not complete Chapter 5");
+    if (c->failed)
+        return;
+
+    /* The completion ticks are ordinary edits.  Save them so the first
+     * live grid and the restored grid describe the same clean buffer. */
+    ptc_keys(c, "s");
+    ptc_settle(c, 40);
+    /* Opening the command line clears the timed save message; cancelling
+     * it returns to the same editor state without waiting on wall time. */
+    ptc_keys(c, ": <esc>");
+    ptc_settle(c, 40);
+    ptc_mark_resume(c);
+    quit_clean(c);
+
+    ptc_resume(c, ptc_yew_bin(c), "tutor", "5", NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_check_resume_exact(c);
+    ptc_snapshot(c, "tutor_resume");
+    quit_clean(c);
 }

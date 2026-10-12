@@ -101,6 +101,10 @@ typedef struct YewEdStartup {
     bool clean;
     /* A clean session that still needs the shipped keymap and overlay. */
     bool clean_builtins;
+    /* Keep config isolated while still restoring/saving workspace state.
+     * The tutor uses this split: user bindings stay out, but Chapter 5 can
+     * demonstrate an exact quit/reopen round trip. */
+    bool restore_state_in_clean;
     /* Treat a missing or invalid required built-in source as startup-fatal. */
     bool require_config;
     /* Suppress plugin discovery and workspace indexing for sealed sessions. */

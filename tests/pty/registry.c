@@ -13188,6 +13188,8 @@ const PtyCase yew_pty_cases[] = {
     C(tutor_ch02, modern, 24U, 80U, yew_tutor_case_ch02),
     C(tutor_ch03, modern, 24U, 80U, yew_tutor_case_ch03),
     C(tutor_ch04, modern, 24U, 80U, yew_tutor_case_ch04),
+    C(tutor_ch05, modern, 24U, 80U, yew_tutor_case_ch05),
+    C(tutor_resume, modern, 24U, 80U, yew_tutor_case_resume),
     {NULL, NULL, 0U, 0U, NULL, NULL}
 };
 
