@@ -26,5 +26,7 @@ bool yew_tutor_progress_load(const char *root, YewTutorProgress *out,
                              bool *missing);
 bool yew_tutor_progress_save(const char *root,
                              const YewTutorProgress *progress);
+bool yew_tutor_reconcile(const char *root,
+                         const YewTutorProgress *progress);
 
 #endif /* YEW_TUTOR_H */

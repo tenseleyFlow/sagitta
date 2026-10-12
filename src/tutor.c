@@ -489,17 +489,11 @@ bool yew_tutor_progress_load(const char *root, YewTutorProgress *out,
     return ok;
 }
 
-bool yew_tutor_progress_save(const char *root,
-                             const YewTutorProgress *progress)
+static bool progress_valid(const YewTutorProgress *progress)
 {
-    char path[PATH_MAX];
-    TutorDoc doc;
-    Bytebuf out;
-    FlValue value;
-    YewSaveErr error;
     u32 chapter;
 
-    if (progress == NULL || !path_join(path, root, "tutor.fl"))
+    if (progress == NULL)
         return false;
     for (chapter = 0U; chapter < (u32)YEW_TUTOR_CHAPTERS; chapter++) {
         if ((progress->done[chapter] & (u8)~0x7fU) != 0U ||
@@ -508,6 +502,21 @@ bool yew_tutor_progress_save(const char *root,
               progress->done[chapter] != 0U)))
             return false;
     }
+    return true;
+}
+
+bool yew_tutor_progress_save(const char *root,
+                             const YewTutorProgress *progress)
+{
+    char path[PATH_MAX];
+    TutorDoc doc;
+    Bytebuf out;
+    FlValue value;
+    YewSaveErr error;
+
+    if (!progress_valid(progress) ||
+        !path_join(path, root, "tutor.fl"))
+        return false;
     doc_init(&doc);
     value = progress_encode(&doc, progress);
     bytebuf_init(&out);
@@ -516,6 +525,101 @@ bool yew_tutor_progress_save(const char *root,
     bytebuf_free(&out);
     doc_free(&doc);
     return error == YEW_SAVE_OK;
+}
+
+static bool marker_boundary(const u8 *line, size_t len, size_t at)
+{
+    return at == len || line[at] == (u8)' ' || line[at] == (u8)'\t' ||
+           line[at] == (u8)'\r';
+}
+
+static bool reconcile_chapter(const char *root, u32 chapter, u8 done)
+{
+    static const u8 checked[] = {'[', 0xe2U, 0x9cU, 0x93U, ']'};
+    char name[16];
+    char path[PATH_MAX];
+    Bytebuf input;
+    Bytebuf output;
+    bool missing;
+    bool changed = false;
+    size_t at = 0U;
+    int n;
+
+    n = snprintf(name, sizeof(name), "ch%02u.txt", (unsigned)(chapter + 1U));
+    if (n <= 0 || (size_t)n >= sizeof(name) ||
+        !path_join(path, root, name) || !read_file(path, &input, &missing))
+        return false;
+    bytebuf_init(&output);
+    while (at < input.len) {
+        size_t end = at;
+        size_t line_len;
+        bool marked = false;
+        u32 task;
+
+        while (end < input.len && input.data[end] != (u8)'\n')
+            end++;
+        line_len = end - at;
+        if (line_len >= 4U &&
+            memcmp(input.data + at, "[ ] ", 4U) == 0) {
+            for (task = 0U;
+                 task < (u32)YEW_TUTOR_TASKS_PER_CHAPTER; task++) {
+                char id[24];
+                int id_len;
+                size_t after;
+
+                if ((done & (u8)(1U << task)) == 0U)
+                    continue;
+                id_len = snprintf(id, sizeof(id), "ch%02u.t%u",
+                                  (unsigned)(chapter + 1U),
+                                  (unsigned)(task + 1U));
+                if (id_len <= 0 || (size_t)id_len >= sizeof(id))
+                    continue;
+                after = 4U + (size_t)id_len;
+                if (line_len >= after &&
+                    memcmp(input.data + at + 4U, id,
+                           (size_t)id_len) == 0 &&
+                    marker_boundary(input.data + at, line_len, after)) {
+                    bytebuf_append(&output, checked, sizeof(checked));
+                    bytebuf_append(&output, input.data + at + 3U,
+                                   line_len - 3U);
+                    marked = true;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (!marked)
+            bytebuf_append(&output, input.data + at, line_len);
+        if (end < input.len) {
+            bytebuf_push_u8(&output, (u8)'\n');
+            end++;
+        }
+        at = end;
+    }
+    if (changed &&
+        yew_file_write_atomic(path, output.data, output.len, 0600) !=
+            YEW_SAVE_OK) {
+        bytebuf_free(&output);
+        bytebuf_free(&input);
+        return false;
+    }
+    bytebuf_free(&output);
+    bytebuf_free(&input);
+    return true;
+}
+
+bool yew_tutor_reconcile(const char *root,
+                         const YewTutorProgress *progress)
+{
+    u32 chapter;
+
+    if (root == NULL || root[0] != '/' || !progress_valid(progress))
+        return false;
+    for (chapter = 0U; chapter < (u32)YEW_TUTOR_CHAPTERS; chapter++) {
+        if (!reconcile_chapter(root, chapter, progress->done[chapter]))
+            return false;
+    }
+    return true;
 }
 
 static int usage_error(const char *message, const char *arg)
@@ -604,7 +708,8 @@ int yew_tutor_main(int argc, char **argv)
     }
     if (!yew_tutor_seed(root) ||
         !yew_tutor_progress_load(root, &progress, &missing) ||
-        (missing && !yew_tutor_progress_save(root, &progress))) {
+        (missing && !yew_tutor_progress_save(root, &progress)) ||
+        !yew_tutor_reconcile(root, &progress)) {
         yew_xfree(root);
         return usage_error("could not prepare tutor workspace", NULL);
     }

@@ -208,3 +208,57 @@ void test_tutor_progress_roundtrips_canonically_and_rejects_corruption(void)
     YEW_ASSERT(!missing);
     tutor_fix_free(&fix);
 }
+
+void test_tutor_progress_reconciles_marks_without_leaving_workspace(void)
+{
+    static const char custom[] =
+        "custom heading\n"
+        "[ ] ch01.t1 keep this wording\n"
+        "[ ] ch01.t2 remains open\n"
+        "[ ] ch01.t3 user-edited wording\n"
+        "copy: [ ] ch01.t1 is ordinary lesson text\n";
+    static const char expected[] =
+        "custom heading\n"
+        "[\xe2\x9c\x93] ch01.t1 keep this wording\n"
+        "[ ] ch01.t2 remains open\n"
+        "[\xe2\x9c\x93] ch01.t3 user-edited wording\n"
+        "copy: [ ] ch01.t1 is ordinary lesson text\n";
+    TutorFix fix;
+    YewTutorProgress progress = {0};
+    char chapter[PATH_MAX];
+    char outside[PATH_MAX];
+    Bytebuf first;
+    Bytebuf second;
+
+    tutor_fix_make(&fix);
+    YEW_ASSERT(yew_tutor_seed(fix.root));
+    tutor_path(&fix, "ch01.txt", chapter);
+    tutor_write(chapter, custom);
+    progress.done[0] = 0x05U;
+
+    (void)snprintf(outside, sizeof(outside), "%s/outside.txt", fix.base);
+    tutor_write(outside, "[ ] ch02.t1 outside\n");
+    tutor_path(&fix, "ch02.txt", chapter);
+    YEW_ASSERT_EQ_I64(unlink(chapter), 0);
+    YEW_ASSERT_EQ_I64(symlink(outside, chapter), 0);
+    progress.done[1] = 0x01U;
+
+    YEW_ASSERT(yew_tutor_reconcile(fix.root, &progress));
+    tutor_path(&fix, "ch01.txt", chapter);
+    tutor_read(chapter, &first);
+    YEW_ASSERT_EQ_U64(first.len, sizeof(expected) - 1U);
+    YEW_ASSERT_EQ_MEM(first.data, expected, first.len);
+    YEW_ASSERT(yew_tutor_reconcile(fix.root, &progress));
+    tutor_read(chapter, &second);
+    YEW_ASSERT_EQ_U64(first.len, second.len);
+    YEW_ASSERT_EQ_MEM(first.data, second.data, first.len);
+    bytebuf_free(&first);
+    bytebuf_free(&second);
+
+    tutor_read(outside, &first);
+    YEW_ASSERT_EQ_U64(first.len, sizeof("[ ] ch02.t1 outside\n") - 1U);
+    YEW_ASSERT_EQ_MEM(first.data, "[ ] ch02.t1 outside\n", first.len);
+    bytebuf_free(&first);
+    YEW_ASSERT(!yew_tutor_reconcile("relative", &progress));
+    tutor_fix_free(&fix);
+}

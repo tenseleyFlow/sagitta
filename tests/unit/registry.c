@@ -532,6 +532,7 @@ const YewTest yew_tests[] = {
     T(tutor_chapter_names_and_numbers_are_exact),
     T(tutor_seed_preserves_existing_work_and_reset_is_confined),
     T(tutor_progress_roundtrips_canonically_and_rejects_corruption),
+    T(tutor_progress_reconciles_marks_without_leaving_workspace),
     T(startup_plan_resolves_resume_files_and_explicit_workspace),
     T(startup_plan_canonicalizes_directory_and_symlink_launches),
     T(startup_plan_rejects_mixed_and_ambiguous_directories),
