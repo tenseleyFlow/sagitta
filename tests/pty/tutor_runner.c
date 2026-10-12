@@ -250,3 +250,8 @@ void yew_tutor_case_ch03(PtyCtx *c)
 {
     run_chapter(c, 3U, "execute", "ch03-execute.fl", "tutor_ch03_done");
 }
+
+void yew_tutor_case_ch04(PtyCtx *c)
+{
+    run_chapter(c, 4U, "search", "ch04-search.fl", "tutor_ch04_done");
+}

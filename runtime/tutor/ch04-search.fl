@@ -1,4 +1,4 @@
-# Chapter 4: directional search, smartcase, replacement, and undo.
+# Chapter 4: directional search, smartcase, replacement, and jumps.
 import list
 import str
 
@@ -14,31 +14,42 @@ fn on_line(w, line) {
 }
 
 let tasks = [
-    { id: "ch04.t1", line: 6, prompt: "Search forward for needle.",
-      keys: "/ n e e d l e <cr>", check: fn(b, w) on_line(w, 14) },
-    { id: "ch04.t2", line: 7, prompt: "Press n to reach the second lowercase match.",
-      keys: "n", check: fn(b, w) on_line(w, 16) },
+    { id: "ch04.t1", line: 6,
+      prompt: "Enable ignorecase, then search forward for ^needle.",
+      keys: ": s e t <space> s e a r c h . i g n o r e c a s e <space> t r u e <cr> / ^ n e e d l e <cr>",
+      check: fn(b, w) {
+          return b.opt("search.ignorecase") and on_line(w, 14) and
+                 b.undo_depth() == 0
+      } },
+    { id: "ch04.t2", line: 7, prompt: "Press n to reach the second match.",
+      keys: "n", check: fn(b, w) {
+          return on_line(w, 15) and b.undo_depth() == 1
+      } },
     { id: "ch04.t3", line: 8, prompt: "Press n again to reach the third match.",
-      keys: "n", check: fn(b, w) on_line(w, 17) },
-    { id: "ch04.t4", line: 9, prompt: "Press N once to return to the second match.",
-      keys: "N", check: fn(b, w) on_line(w, 16) },
-    { id: "ch04.t5", line: 10, prompt: "Search for Needle and observe smartcase.",
-      keys: "/ N e e d l e <cr>", check: fn(b, w) on_line(w, 15) },
+      keys: "n", check: fn(b, w) {
+          return on_line(w, 16) and b.undo_depth() == 2
+      } },
+    { id: "ch04.t4", line: 9,
+      prompt: "Press n, then N to reverse back to the third match.",
+      keys: "n N", check: fn(b, w) {
+          return on_line(w, 16) and b.undo_depth() == 3
+      } },
+    { id: "ch04.t5", line: 10,
+      prompt: "Search for ^Needle; smartcase finds only the capital.",
+      keys: "/ ^ N e e d l e <cr>", check: fn(b, w) on_line(w, 15) },
     { id: "ch04.t6", line: 11,
-      prompt: "Replace every lowercase needle with pin.",
-      keys: ": % s / n e e d l e / p i n / g <cr>", check: fn(b, w) {
-          if b.lines() < 17 { return false }
-          return not str.contains(b.line(14), "needle") and
-                 str.contains(b.line(15), "Needle") and
-                 not str.contains(b.line(16), "needle") and
-                 not str.contains(b.line(17), "needle")
+      prompt: "Press Ctrl-O to jump back to the third match.",
+      keys: "C-o", check: fn(b, w) {
+          return on_line(w, 16) and b.undo_depth() == 5
       } },
     { id: "ch04.t7", line: 12,
-      prompt: "Undo both the task mark and replacement with 2u.",
-      keys: "2 u", check: fn(b, w) {
+      prompt: "Confirm replacing lowercase ^needle with pin; answer a.",
+      keys: ": % s / ^ n e e d l e / p i n / g c I <cr> a",
+      check: fn(b, w) {
           if b.lines() < 17 { return false }
-          return str.contains(b.line(14), "needle") and
-                 str.contains(b.line(16), "needle") and
-                 str.contains(b.line(17), "needle")
+          return b.line(14) == "pin one" and
+                 b.line(15) == "Needle keeps its capital" and
+                 b.line(16) == "pin two" and b.line(17) == "pin three" and
+                 b.undo_depth() == 7
       } },
 ]

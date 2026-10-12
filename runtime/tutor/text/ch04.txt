@@ -1,17 +1,17 @@
 YEW TUTOR 4/7 — SEARCH, REPLACE, AND JUMPS
 
 Search direction belongs to the search. n repeats in that direction and N
-reverses it. Smartcase ignores case until the pattern contains uppercase.
+reverses it. With ignorecase on, smartcase makes uppercase patterns exact.
 
-[ ] ch04.t1 Search forward for needle with /needle Enter.
-[ ] ch04.t2 Press n to reach the second lowercase match.
+[ ] ch04.t1 Enable ignorecase, then search forward for ^needle.
+[ ] ch04.t2 Press n to reach the second match.
 [ ] ch04.t3 Press n again to reach the third match.
-[ ] ch04.t4 Press N once to return to the second match.
-[ ] ch04.t5 Search for Needle and observe smartcase.
-[ ] ch04.t6 Replace every lowercase needle with pin.
-[ ] ch04.t7 Undo both the task mark and replacement with 2u.
+[ ] ch04.t4 Press n, then N to reverse back to the third match.
+[ ] ch04.t5 Search for ^Needle; smartcase finds only the capital.
+[ ] ch04.t6 Press Ctrl-O to jump back to the third match.
+[ ] ch04.t7 Confirm replacing lowercase ^needle with pin; answer a.
 
 needle one
 Needle keeps its capital
 needle two
-another needle three
+needle three
