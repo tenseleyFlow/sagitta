@@ -1,0 +1,71 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=1,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s14-s59_book_reco 2 recording.fl  +                                      
+    1 # yew-macro: 1                                                            
+    1 # recorded-with: yew 1.0.0-dev                                            
+    2 # keymap: default                                                         
+    3 # events: 10                                                              
+    4 import ed                                                                 
+    5 (fn() {                                                                   
+    6   macro rec_a = @[ l unit_home ];                                         
+    7   rec_a();                                                                
+    8   ed.run("ed.mode.enter", { sarg: "I" });                                 
+    9   macro rec_a_1 = @[ i"\"" esc unit_end ];                                
+   10   rec_a_1();                                                              
+   11   ed.run("ed.mode.enter", { sarg: "I" });                                 
+   12   macro rec_a_2 = @[ i"\"," esc > ];                                      
+   13   rec_a_2();                                                              
+   14 })();                                                                     
+   15                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L  *macro a*                                                utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+EEEEFEGGGGGGGGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEGGGGGGGGGGGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEGGGGGGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEIIIIIIHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEJIIJJHJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHIIIIIIKKKKKHLHMJHNHKKKKKKKKKHJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHKKKKKJJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHKKKKJOOOOOOOOOOOOOOOJHJHPPPPJHOOOHJJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHIIIIIIKKKKKKKHLHMJHMOLLOHNNNHKKKKKKKKHJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHKKKKKKKJJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHKKKKJOOOOOOOOOOOOOOOJHJHPPPPJHOOOHJJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHIIIIIIKKKKKKKHLHMJHMOLLOOHNNNHLHJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHKKKKKKKJJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEJJJJJHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+EEEEEEHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+QQQHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+--- legend
+A fg=#5c6370 bg=#1b202a attrs=-d--------
+B fg=#c8ccd4 bg=#2c313a attrs=b---------
+C fg=#61afef bg=#1b202a attrs=b---------
+D fg=#5c6370 bg=#1b202a attrs=----------
+E fg=#4b5263 bg=#12141a attrs=----------
+F fg=#c8ccd4 bg=#12141a attrs=b---------
+G fg=#5c6370 bg=#12141a attrs=--i-------
+H fg=#c8ccd4 bg=#12141a attrs=----------
+I fg=#c678dd bg=#12141a attrs=--i-------
+J fg=#9aa0aa bg=#12141a attrs=----------
+K fg=#61afef bg=#12141a attrs=----------
+L fg=#56b6c2 bg=#12141a attrs=----------
+M fg=#c678dd bg=#12141a attrs=----------
+N fg=#c678dd bg=#12141a attrs=b---------
+O fg=#98c379 bg=#12141a attrs=----------
+P fg=#e06c75 bg=#12141a attrs=----------
+Q fg=#12141a bg=#61afef attrs=----------

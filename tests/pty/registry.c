@@ -189,6 +189,86 @@ static bool file_contains(const char *path, const char *needle)
     return found;
 }
 
+static bool read_path_bytes(const char *path, Bytebuf *out)
+{
+    int fd = open(path, O_RDONLY);
+
+    bytebuf_init(out);
+    if (fd < 0)
+        return false;
+    for (;;) {
+        u8 chunk[1024];
+        ssize_t n = read(fd, chunk, sizeof(chunk));
+
+        if (n > 0)
+            bytebuf_append(out, chunk, (size_t)n);
+        else if (n == 0)
+            break;
+        else if (errno != EINTR) {
+            (void)close(fd);
+            bytebuf_free(out);
+            return false;
+        }
+    }
+    if (close(fd) != 0) {
+        bytebuf_free(out);
+        return false;
+    }
+    return true;
+}
+
+static size_t bytes_find(const Bytebuf *haystack, size_t from,
+                         const char *needle)
+{
+    size_t needle_len = strlen(needle);
+    size_t i;
+
+    if (needle_len == 0U || from > haystack->len ||
+        needle_len > haystack->len - from)
+        return SIZE_MAX;
+    for (i = from; i + needle_len <= haystack->len; i++)
+        if (memcmp(haystack->data + i, needle, needle_len) == 0)
+            return i;
+    return SIZE_MAX;
+}
+
+static bool book_recording_matches(const char *generated)
+{
+    static const char book_path[] =
+        "docs/fletch-book/01-arrows-to-programs.md";
+    static const char begin[] =
+        "<!-- yew-recording:start -->\n```text\n";
+    static const char end[] =
+        "```\n<!-- yew-recording:end -->";
+    Bytebuf book;
+    Bytebuf source;
+    size_t first;
+    size_t last;
+    bool equal = false;
+
+    if (!read_path_bytes(book_path, &book))
+        return false;
+    if (!read_path_bytes(generated, &source)) {
+        bytebuf_free(&book);
+        return false;
+    }
+    first = bytes_find(&book, 0U, begin);
+    if (first != SIZE_MAX) {
+        first += sizeof(begin) - 1U;
+        last = bytes_find(&book, first, end);
+        equal = last != SIZE_MAX && last - first == source.len &&
+                memcmp(book.data + first, source.data, source.len) == 0;
+    }
+    if (!equal && source.len != 0U) {
+        (void)fprintf(stderr, "--- generated Sprint 59 book recording ---\n");
+        (void)fwrite(source.data, 1U, source.len, stderr);
+        (void)fprintf(stderr, "--- end generated recording ---\n");
+    }
+    bytebuf_free(&source);
+    bytebuf_free(&book);
+    return equal;
+}
+
 static void case_osc52_reply(PtyCtx *c)
 {
     static const char reply[] = "\x1b]52;c;c2VjcmV0\x1b\\";
@@ -2379,6 +2459,43 @@ cleanup:
     (void)unlink(fixture_abs);
     (void)rmdir("/tmp/yew/build");
     (void)rmdir("/tmp/yew");
+}
+
+static void case_s59_book_recording(PtyCtx *c)
+{
+    static const u8 initial[] = "id\nname\ncreated_at\n";
+    char fixture[256];
+    char generated[PATH_MAX];
+    char command[PATH_MAX + 4U];
+    int n;
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U,
+                  fixture, sizeof(fixture)))
+        return;
+    s18_settle_after_keys(c, "q a");
+    s18_settle_after_keys(
+        c, "left i \" esc end i \" comma esc down");
+    s18_settle_after_keys(c, "q");
+    s18_settle_after_keys(c, "Q e");
+    n = snprintf(generated, sizeof(generated), "%s/recording.fl",
+                 c->workspace_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(generated),
+              "Sprint 59 book recording path overflow");
+    n = snprintf(command, sizeof(command), "w %s", generated);
+    ptc_check(c, !c->failed && n > 0 && (size_t)n < sizeof(command),
+              "Sprint 59 book write command overflow");
+    if (!c->failed) {
+        s18_settle_after_keys(c, ":");
+        s18_settle_after_bytes(c, command);
+        s18_settle_after_keys(c, "enter");
+        ptc_check(c, book_recording_matches(generated),
+                  "Fletch book recording differs from the live emitter");
+    }
+    s18_settle_after_keys(c, ": esc");
+    ptc_snapshot(c, "s59_book_recording");
+    force_quit(c);
+    (void)unlink(generated);
+    (void)unlink(fixture);
 }
 
 static void case_s38_macro_browser(PtyCtx *c)
@@ -12722,6 +12839,8 @@ const PtyCase yew_pty_cases[] = {
       case_s38_macro_indicator),
     C(s38_macro_edit_flow, modern, 24U, 80U,
       case_s38_macro_edit_flow),
+    C(s59_book_recording, modern, 24U, 80U,
+      case_s59_book_recording),
     C(s38_macro_browser, modern, 24U, 120U,
       case_s38_macro_browser),
     C(s38_macro_browser_actions, modern, 24U, 80U,

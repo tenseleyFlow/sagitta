@@ -12,13 +12,24 @@ and creates one undo step per run. `@@` repeats the last macro.
 
 ## Source and provenance
 
-Pasting a macro register into a scratch buffer reveals ordinary source with a
-small provenance header and a `macro` declaration. The emitter annotates unit
-mode, combines adjacent insert text where semantics permit it, escapes string
-bytes, and keeps intervening motions explicit.
+Opening a register from the macro browser reveals ordinary source with a
+provenance header, an executable wrapper, and one or more local `macro`
+declarations. The emitter annotates unit mode, combines adjacent insert text
+where semantics permit it, escapes string bytes, and keeps intervening
+motions and mode transitions explicit.
 
 ```fletch
-macro quote_line = @[ l ^ i"\"" esc end i"\"," esc ]
+import ed
+(fn() {
+    macro go_home = @[ l unit_home ];
+    go_home();
+    ed.run("ed.mode.enter", { sarg: "I" });
+    macro open_quote = @[ i"\"" esc unit_end ];
+    open_quote();
+    ed.run("ed.mode.enter", { sarg: "I" });
+    macro close_quote = @[ i"\"," esc ];
+    close_quote();
+})();
 ```
 
 The motion literal is only syntax sugar for a zero-argument callable value.

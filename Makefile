@@ -1987,9 +1987,12 @@ test-man: $(BUILD)/yew
 	scripts/check-man.sh
 	scripts/tests/check-man.test.sh
 
-test-manual: $(BUILD)/yew
+test-manual: $(BUILD)/yew $(BUILD)/pty_runner $(BUILD)/demo_paint
 	scripts/check-manual.sh
 	scripts/tests/check-manual.test.sh
+	$(PTY_PREP) YEW_PTY_FILTER=s59_book_recording $(PTY_RUN) \
+		--demo $(abspath $(BUILD)/demo_paint) \
+		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
 test-docs-sync: $(BUILD)/yew $(DOCS_OPTION_DUMP)
 	scripts/check-docs-sync.sh
