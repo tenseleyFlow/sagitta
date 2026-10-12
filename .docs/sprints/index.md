@@ -17,8 +17,12 @@ replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
 are complete, all 79 findings are fixed, and the last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
-56 streams. Sprint 60 is queued and may not start until all 15 Sprint 59
-closeouts say READY.
+56 streams; its launchd-owned replacement cycle currently has four
+`fuzz_utf8` streams running and 0/56 durable rows complete. Sprint 59's
+priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
+gates are green; all 15 closeouts contain their 747 mapped DoD items and remain
+honestly NOT READY pending independent evidence review. Sprint 60 is queued
+and may not start until all 15 Sprint 59 closeouts say READY.
 
 Binding documents — read before any sprint:
 - `.docs/sprints/AUTHORING.md` — the sprint-file contract, the shared

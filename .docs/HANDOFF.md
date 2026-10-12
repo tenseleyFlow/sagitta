@@ -13,9 +13,11 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**Local branch position at refresh:** `trunk` contains the tracked Sprint 59
-and Sprint 60 contracts plus this state reconciliation above `origin/trunk`.
-The product code used by the soak remains the exact hosted-green anchor.
+**Local branch position at refresh:** `trunk` is seven commits above
+`origin/trunk`: the tracked Sprint 59/60 contracts, state reconciliation, and
+Sprint 59's priority, sampling, closeout, deferral, and remediation-ledger
+gates. The product code used by the soak remains the exact hosted-green
+anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
@@ -43,20 +45,29 @@ commit `4c99e134` on arm64 macOS / Apple clang 21.0.0. Its four concurrent
 run serially. Each 18-hour stream owns durable evidence and corpus-admission
 state, each target is a restart checkpoint, and `caffeinate` prevents idle
 sleep. The state, logs, manifest, and rebuilt ledger are under
-`/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/`. The full 14-target cycle is
-approximately 252 wall-clock hours (10.5 days) if targets complete without a
-restart. Do not report progress from elapsed process time: only completed row
-files count.
+`/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/`. Launchd job
+`org.yew.s58soak.4c99e134` owns the supervisor; this is deliberate, because a
+plain detached child launched by the command runner was reaped. The full
+14-target cycle is approximately 252 wall-clock hours (10.5 days) if targets
+complete without a restart. Current durable progress is 0/56 completed stream
+rows; do not report progress from elapsed process time.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
-soak to be running rather than complete. The immediate work is:
+soak to be running rather than complete. Its remediation governance now has
+executable gates: all 79 fixes and burndown/XFAIL rows reconcile, zero active
+XFAILs remain, priority order is proven from Git ancestry, the deterministic
+10% sample is recorded, the deferral ledger is empty and checked, and all 15
+closeout files structurally carry all 747 mapped DoD items. Every closeout is
+honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
+being represented as independent verification.
+
+The immediate work is:
 
 1. independently re-verify and transition the 79 fixed findings through the
    remaining ledger lifecycle;
-2. implement and negative-test the priority, closeout, deferral, man, manual,
-   and docs-sync checkers;
-3. produce all fifteen front closeouts, initially NOT READY wherever evidence
-   is missing;
+2. implement and negative-test the man, manual, and docs-sync checkers;
+3. replace the 747 pending closeout verdicts with linked evidence only as an
+   independent reviewer verifies them;
 4. deliver the three man pages plus regex redirect, seven-chapter tutor,
    fifteen-chapter manual, and Fletch book chapter 1.
 
