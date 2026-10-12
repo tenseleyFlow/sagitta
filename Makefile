@@ -1979,6 +1979,8 @@ test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
 	scripts/check-priority.sh
 	scripts/tests/check-priority.test.sh
 	scripts/tests/audit-sample.test.sh
+	scripts/check-closeouts.sh
+	scripts/tests/check-closeouts.test.sh
 
 fuzzlib-selftest: $(BUILD)/fuzz_utf8 $(FUZZ_WATCHDOG)
 	@set -eu; \
