@@ -1,6 +1,7 @@
 #include "args.h"
 #include "flcli.h"
 #include "syncli.h"
+#include "tutor.h"
 #include "edit/batch.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
@@ -47,6 +48,7 @@ static const char help_text[] =
     "  yew syn COMMAND   Inspect and compile syntax definitions.\n"
     "  yew plug COMMAND  List, enable, disable, or reload plugins.\n"
     "  yew pkg COMMAND   Install, update, remove, list, or verify plugins.\n"
+    "  yew tutor [CHAPTER]  Open the seven-chapter interactive tutorial.\n"
     "\n"
     "Command line:\n"
     "  Lines beginning with a space are not saved in command history.\n"
@@ -203,6 +205,8 @@ int main(int argc, char **argv)
         return yew_plug_main(argc - 1, argv + 1);
     if (argc >= 2 && strcmp(argv[1], "pkg") == 0)
         return yew_pkg_main(argc - 1, argv + 1);
+    if (argc >= 2 && strcmp(argv[1], "tutor") == 0)
+        return yew_tutor_main(argc - 1, argv + 1);
     if (argc >= 3 && strcmp(argv[1], "--clean") == 0 &&
         strcmp(argv[2], "syn") == 0)
         return yew_syn_main(argc - 2, argv + 2, true);

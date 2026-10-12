@@ -61,6 +61,12 @@ yew .
 yew src/main.c include/yew.h
 ```
 
+`yew tutor` is the guided first-run workspace. Its seven editable chapters
+live under `$XDG_STATE_HOME/yew/tutor/`; `yew tutor --list` reports durable
+chapter status, while `yew tutor --reset` deliberately clears and reseeds only
+that tutor directory. A chapter may be selected by number or by its listed
+name.
+
 Use `--clean` when diagnosing configuration: it loads the shipped defaults
 but skips file-based user/workspace configuration and saved workspace state.
 It does not make the editor read-only.

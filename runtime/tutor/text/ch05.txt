@@ -1,0 +1,17 @@
+YEW TUTOR 5/7 — WORKSPACES
+
+Tabs own pane trees. Groups collapse related tabs into one strip entry, while
+each member keeps a stable identity and remembers its last active position.
+
+[ ] ch05.t1 Split this tab below with Ctrl-W s.
+[ ] ch05.t2 Move focus to the other pane with Ctrl-W Down.
+[ ] ch05.t3 Close that pane with Ctrl-W q.
+[ ] ch05.t4 Open a new untitled tab from the + entry.
+[ ] ch05.t5 Open the group picker with Alt-G.
+[ ] ch05.t6 Build a group named notes with three tutor tabs.
+[ ] ch05.t7 Quit and reopen chapter 5; verify the cursor resumes here.
+
+RESUME MARKER
+
+Workspace state records tabs, groups, panes, cursors, viewports, and options.
+The tutorial uses its own progress file and never reads your normal config.

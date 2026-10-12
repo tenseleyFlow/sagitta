@@ -1,0 +1,16 @@
+YEW TUTOR 7/7 — FUSS MODE AND GIT
+
+FUSS is a compact workspace tree with dirty files first. Bare filename
+characters type-jump; actions stay behind Alt so typing remains navigation.
+
+[ ] ch07.t1 Enter FUSS mode with f.
+[ ] ch07.t2 Expand the selected directory with Right.
+[ ] ch07.t3 Type n to jump to notes.txt among visible rows.
+[ ] ch07.t4 Open the selected file with Enter.
+[ ] ch07.t5 Return to FUSS and stage it with Alt-A.
+[ ] ch07.t6 Open action discovery with Ctrl-Shift-/.
+[ ] ch07.t7 Commit the staged tutorial change with Alt-M.
+
+Chapter 7 uses a repository contained entirely in this tutor workspace. If
+git is unavailable, yew reports that fact and marks this chapter skipped—not
+complete—so progress never claims an exercise that did not run.

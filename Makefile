@@ -1163,7 +1163,7 @@ PROFILE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test test-unit test-man test-manual test-docs-sync test-audit test-alloc-debug alloc perf-alloc \
+.PHONY: all check test test-unit test-tutor test-man test-manual test-docs-sync test-audit test-alloc-debug alloc perf-alloc \
         perf-alloc-selftest clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
@@ -1974,6 +1974,10 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-fletc
 test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 	$(UNIT_RUN)
 
+test-tutor: $(BUILD)/unit_tests $(BUILD)/yew
+	$(BUILD)/unit_tests --filter tutor_
+	YEW_TUTOR_BIN=$(abspath $(BUILD)/yew) scripts/tests/tutor-cli.test.sh
+
 test-man: $(BUILD)/yew
 	scripts/check-man.sh
 	scripts/tests/check-man.test.sh
@@ -2141,7 +2145,7 @@ soak-selftest:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' soak-selftest
 endif
 
-test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script test-manual test-docs-sync \
+test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script test-tutor test-manual test-docs-sync \
       fuzzlib-selftest \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
@@ -3777,6 +3781,9 @@ install: all
 	install -m 0644 runtime/completions/*.fl \
 		runtime/completions/README.md \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/completions/
+	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime/tutor/text
+	install -m 0644 runtime/tutor/text/*.txt \
+		$(DESTDIR)$(PREFIX)/share/yew/runtime/tutor/text/
 
 clean:
 	rm -rf $(BUILD)

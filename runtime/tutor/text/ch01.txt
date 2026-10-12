@@ -1,0 +1,16 @@
+YEW TUTOR 1/7 — ARROWS AND MODES
+
+Work through the unchecked task at the top. A task completes from editor
+state, not from a particular route. Esc always returns to L mode.
+
+[ ] ch01.t1 Move down to the START marker with Down.
+[ ] ch01.t2 Move right onto the second arrow with Right.
+[ ] ch01.t3 Press i and type yew after the word hello.
+[ ] ch01.t4 Press Esc and confirm the mode chip returns to L.
+[ ] ch01.t5 Use Up and Left to return to the START marker.
+[ ] ch01.t6 Enter E mode with : and cancel it with Esc.
+[ ] ch01.t7 Save this chapter with :w Enter.
+
+START -> ->
+
+hello

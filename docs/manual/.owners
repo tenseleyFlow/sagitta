@@ -1,5 +1,6 @@
 # source-prefix manual-chapter
 src/args.c 01-install.md
+src/tutor.c 01-install.md
 src/edit/mode.c 02-modes.md
 src/text/ 03-files.md
 src/edit/motion.c 04-motion.md
