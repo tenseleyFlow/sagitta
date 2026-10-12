@@ -1161,7 +1161,7 @@ PROFILE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test test-unit test-audit test-alloc-debug alloc perf-alloc \
+.PHONY: all check test test-unit test-man test-audit test-alloc-debug alloc perf-alloc \
         perf-alloc-selftest clean install dirs FORCE \
         target-info target-tools-selftest static-pie-tools-selftest \
         runtime-blob-selftest runtime-embedded-e2e test-runtime-embedded \
@@ -1967,6 +1967,10 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-fletc
 
 test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 	$(UNIT_RUN)
+
+test-man: $(BUILD)/yew
+	scripts/check-man.sh
+	scripts/tests/check-man.test.sh
 
 test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
             $(F01_VT_WIDTH_AUDIT_BIN) $(F09_REC_VM_AUDIT_BIN)
@@ -3734,6 +3738,12 @@ dirs:
 install: all
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 0755 $(BUILD)/yew $(DESTDIR)$(PREFIX)/bin/yew
+	install -d $(DESTDIR)$(PREFIX)/share/man/man1
+	install -m 0644 docs/man/yew.1 docs/man/yew-fl.1 \
+		docs/man/yew-pkg.1 $(DESTDIR)$(PREFIX)/share/man/man1/
+	install -d $(DESTDIR)$(PREFIX)/share/man/man7
+	install -m 0644 docs/man/yew-regex.7 \
+		$(DESTDIR)$(PREFIX)/share/man/man7/yew-regex.7
 	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime
 	install -m 0644 runtime/init.fl \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/init.fl

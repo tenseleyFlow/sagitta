@@ -1,0 +1,342 @@
+.TH YEW-PKG 1 "2026-10-12" "yew" "User Commands"
+.SH NAME
+yew-pkg \- install and maintain Fletch plugins for yew
+.SH SYNOPSIS
+.B yew pkg install
+.I SPEC
+.RB [ \-\-rev " R" |
+.BR \-\-tag " T" |
+.BR \-\-branch " B" ]
+.RB [ \-\-enable ]
+.RB [ \-\-timeout " SECONDS" ]
+.br
+.B yew pkg update
+.RI [ NAME ...]
+.RB [ \-\-dry-run ]
+.RB [ \-\-discard-local ]
+.RB [ \-\-timeout " SECONDS" ]
+.br
+.B yew pkg remove
+.I NAME
+.RB [ \-\-keep-grants ]
+.br
+.B yew pkg list
+.RI [ NAME ...]
+.RB [ \-\-long ]
+.br
+.B yew pkg doctor
+.RI [ NAME ...]
+.RB [ \-\-fix | \-\-accept ]
+.br
+.B yew pkg verify
+.RI [ NAME ...]
+.RB [ \-\-fix | \-\-accept ]
+.SH DESCRIPTION
+.B yew pkg
+installs and maintains Fletch plugins from Git repositories.
+It is a command-line operation; editor startup never runs Git or checks for
+updates.
+An installation clones into a temporary directory, validates the pure-literal
+.I plugin.fl
+manifest, checks out a detached revision, records the revision and a content
+tree hash, and atomically moves the directory into place.
+The plugin remains disabled unless installation used
+.BR \-\-enable .
+.PP
+There is no central registry, namespace ownership, signing, review,
+dependency resolution, build hook, install hook, submodule recursion, or
+automatic update in yew 1.0.
+Plugins are Fletch-only and declare no dependencies.
+The rejected commands
+.B publish
+and
+.B search
+explain the absence of a registry.
+Network operations require Git 2.24 or newer and use a 60-second timeout by
+default.
+.SH SOURCE SPECIFICATIONS
+The accepted source forms are closed:
+.TP
+.BI gh: user/repo
+Resolve through
+.BR https://github.com/ .
+.TP
+.BI gl: user/repo
+Resolve through
+.BR https://gitlab.com/ .
+.TP
+.BI cb: user/repo
+Resolve through
+.BR https://codeberg.org/ .
+.TP
+.BI sr: ~user/repo
+Resolve through
+.BR https://git.sr.ht/ .
+.TP
+.BR https:// , " " http:// , " " ssh:// , " " git://
+Use the URL verbatim.
+.TP
+.BI git@ host:path
+Use the scp-like source verbatim.
+.TP
+.IR /absolute , " " ./relative , " " file://...
+Use the local source verbatim.
+.PP
+A bare
+.I user/repo
+is rejected because silently assuming a hosting site would create an implicit
+registry.
+Refs use
+.B [A-Za-z0-9._/-]{1,255}
+and may neither begin with a minus nor contain a
+.B ..
+path component.
+User-controlled Git arguments follow
+.B \-\-end-of-options
+or
+.BR \-\- .
+.SH COMMANDS
+.SS install
+.B yew pkg install
+performs a full clone, resolves the requested ref, checks it out detached,
+reads the manifest without executing it, hashes the content, and installs it
+under the manifest's name.
+There is no name override.
+.PP
+Exactly one of the following pins may be supplied:
+.TP
+.BI \-\-rev " R"
+Pin the resolved 40-hex commit permanently.
+Future updates perform no network operation for this entry.
+.TP
+.BI \-\-tag " T"
+Pin a tag name.
+A moved tag is detected and is not trusted silently.
+.TP
+.BI \-\-branch " B"
+Follow a branch, subject to the fast-forward-only update rule.
+.TP
+.B \-\-enable
+Record the new plugin as enabled.
+Without this option it is installed disabled.
+.TP
+.BI \-\-timeout " SECONDS"
+Set a positive network timeout in seconds.
+.TP
+.B \-\-force-relock
+Permit replacement of a corrupt lock file during installation.
+This explicitly discards the revisions and tree hashes that could not be
+read.
+.PP
+With no pin option the entry follows the remote default branch as
+.BR head .
+Installation executes nothing from the repository.
+A repository containing
+.I .gitmodules
+produces a warning; the rejected
+.B \-\-recurse-submodules
+option explains why yew will not expand that trust surface.
+.SS update
+With no names,
+.B update
+visits every lock entry in deterministic order.
+Revision pins stay fixed.
+Head, branch, and tag pins fetch and resolve their target, then update only
+when the recorded commit is an ancestor of the target.
+yew never merges and never invokes
+.BR "git pull" .
+.PP
+Before checkout yew prints up to 50 commit-subject rows.
+.B \-\-dry-run
+stops after this report and changes neither the checkout nor lock file.
+A dirty tracked worktree is refused unless
+.B \-\-discard-local
+explicitly permits discarding those changes.
+That option does not weaken the ancestry rule.
+.B \-\-timeout
+sets a positive network timeout in seconds.
+.PP
+A force-pushed branch or moved tag is refused with the old and proposed
+revisions and instructions for inspecting the repository.
+An unreachable remote does not prevent later entries from being checked;
+the final summary counts updated, current, and unreachable packages.
+.SS remove
+.B remove
+accepts only a package recorded in the lock file.
+It verifies that the resolved target lies below the managed plugin root
+before deleting anything and never follows symlinks inside the package.
+The default removes the enabled state and persisted capability decisions.
+.B \-\-keep-grants
+retains those trust records.
+.SS list
+.B list
+hashes local trees without network access.
+With no names it reports every managed package; names restrict the report.
+The compact output is deterministic and tab-separated:
+.nf
+.RS
+NAME  PIN  REV12  STATE  URL
+.RE
+.fi
+States include
+.BR ok ,
+.BR drift ,
+.BR missing ,
+and
+.BR unmanaged .
+.B \-\-long
+adds detail while retaining deterministic order.
+.SS "doctor and verify"
+.B verify
+is an alias of
+.BR doctor .
+They check named packages, or every managed package, and exit zero only when
+all required checks pass.
+Checks cover the lock format, directory presence, manifest validity and
+identity, tree hash, repository metadata, checked-out revision, and declared
+versus granted capabilities.
+.PP
+.B \-\-fix
+restores missing or drifted state from the locked revision.
+.B \-\-accept
+keeps local reality and updates the lock record.
+They are mutually exclusive.
+Inspect a drift report before choosing either action.
+.SH THE LOCK FILE
+.I $XDG_DATA_HOME/yew/plugins.lock
+is pure-literal Fletch data with schema 1.
+It cannot execute code.
+An absent file means there are no managed packages; a corrupt file is an
+error and is never overwritten implicitly.
+Unknown top-level and per-package keys survive a rewrite.
+.PP
+Each package records these fields:
+.TP
+.B url
+The resolved source supplied to Git.
+.TP
+.B shorthand
+The original source spelling, or an empty string.
+.TP
+.B rev
+The checked-out commit as exactly 40 lowercase hexadecimal digits.
+.TP
+.B pin
+One of
+.BR rev:<commit> ,
+.BR tag:<name> ,
+.BR branch:<name> ,
+or
+.BR head .
+.TP
+.B tree
+A 16-hex content-tree value.
+.TP
+.BR installed_at ", " updated_at
+Unix timestamps for the initial installation and most recent update.
+.PP
+Serialization is stable: top-level keys are
+.B schema
+then
+.BR plugins ;
+package names sort bytewise; fields use the order above.
+To reproduce an install, copy the lock file into the same XDG data root and
+install each recorded URL at its
+.B rev
+pin.
+The lock file itself is not a command and there is no
+.B yew pkg lock
+subcommand.
+.SH INTEGRITY
+The tree value covers every regular file and symlink below the package except
+the top-level
+.I .git/
+subtree.
+Paths sort bytewise.
+Regular files contribute path, executable-bit class, length, and bytes;
+symlinks contribute path and target and are never followed.
+.PP
+The value is FNV-1a-64.
+.B It is not a cryptographic hash.
+It detects accidental and casual drift but does not authenticate an author,
+repository, revision, tag, lock file, or crafted collision.
+When load-time verification detects changed code, yew warns and revokes
+persisted grants before executing the plugin.
+.SH CAPABILITIES AND TRUST
+An enabled plugin may request
+.BR fs ,
+.BR shell ,
+.BR net ,
+and
+.BR clipboard .
+The manifest declares the requested set; the user answers at first use, and
+the decision is stored in
+.IR trust.fl .
+A denial is a catchable Fletch error.
+Headless editor runs may use the repeatable top-level option
+.BI \-\-grant " NAME:CAP"
+to make an explicit session grant without a prompt.
+.SS "The honest paragraph"
+A plugin runs as Fletch in the same VM, process, and address space as the
+editor.
+There is no memory isolation and no resource isolation: an enabled plugin can
+read any open buffer, burn CPU, or allocate until the process exhausts its
+resources.
+Capability gates cover the Fletch API's file, shell, network, and clipboard
+surfaces and nothing else.
+Enabling a plugin is an act of trust in its author; capabilities limit blast
+radius, but
+.B this is not a sandbox.
+Read the source before enabling it.
+.SH FILES
+.TP
+.I $XDG_DATA_HOME/yew/plugins/
+Managed checkouts.
+The fallback is
+.IR $HOME/.local/share/yew/plugins/ .
+.TP
+.I $XDG_DATA_HOME/yew/plugins.lock
+The pure-literal lock file.
+.TP
+.I $XDG_STATE_HOME/yew/trust.fl
+Plugin enabled state and persisted capability decisions.
+The fallback is
+.IR $HOME/.local/state/yew/trust.fl .
+.SH ENVIRONMENT
+.TP
+.B XDG_DATA_HOME
+Select the managed package and lock-file root.
+.TP
+.B XDG_STATE_HOME
+Select the trust database root.
+.TP
+.B YEW_RUNTIME_DIR
+Select shipped runtime files used by Fletch imports.
+.PP
+Git children receive noninteractive prompting and pager settings.
+yew removes inherited repository-redirection variables such as
+.BR GIT_DIR ,
+.BR GIT_WORK_TREE ,
+and
+.B GIT_INDEX_FILE
+before spawning Git, but retains the user's Git configuration, proxy,
+credential helper, and URL rewrites.
+.SH EXIT STATUS
+.TP
+.B 0
+The operation completed and every required doctor check passed.
+.TP
+.B 1
+Usage error, explicit refusal, dirty or non-fast-forward update, or lock-file
+integrity error.
+.TP
+.B 3
+Filesystem I/O, missing or old Git, network, authentication, or timeout
+failure.
+.TP
+.B 4
+An internal yew invariant failed.
+.SH SEE ALSO
+.BR yew (1),
+.BR yew-fl (1),
+.BR git (1)

@@ -1,0 +1,1272 @@
+.TH YEW 1 "2026-10-12" "yew" "User Commands"
+.SH NAME
+yew, yew \- a modal terminal editor and its language
+.SH SYNOPSIS
+.B yew
+.RI [ OPTIONS ]
+.RI [ FILE ...]
+.br
+.B yew \-\-batch
+.I SCRIPT
+.RI [ FILE ...]
+.RI [ \-\- " ARG" ...]
+.br
+.B yew fl
+.RI [ FORM ]
+.br
+.B yew pkg
+.I COMMAND
+.br
+.B yew plug
+.I COMMAND
+.br
+.B yew syn
+.I COMMAND
+.SH DESCRIPTION
+yew is a modal, keyboard-first terminal text editor.
+Its single-threaded event loop multiplexes terminal input, jobs, language
+servers, and timers without blocking the editing core.
+The implementation is C11 and depends on the C and POSIX libraries rather
+than an application framework.
+.PP
+Fletch is yew's configuration and automation language.
+Bindings, hooks, batch scripts, plugins, and recorded macros meet at the same
+named-command dispatch surface, and a recording is readable Fletch source
+rather than an opaque keystroke file.
+.PP
+yew is not a vim clone and not an IDE.
+It has its own arrow-key modal model, composes external tools through jobs,
+and accepts extension code only as Fletch; native or binary plugins are not
+loaded.
+.SH MODES
+The status line displays the one-letter chip shown below.
+.TP
+.B L \(em line
+The line unit.
+Left and Right move to line bounds; Up and Down move between logical lines.
+Escape stays in or returns to L.
+.TP
+.B W \(em word
+The Unicode word unit.
+Left and Right move between words; vertical arrows retain the display goal.
+Escape returns to L.
+.TP
+.B B \(em block
+The syntax-aware block unit, with deterministic structural fallbacks when no
+syntax block is available.
+Arrows move among block boundaries and matching bounds.
+Escape returns to L.
+.TP
+.B H \(em highlight
+The selection action mode.
+It retains the unit that entered it: line, word, block, or insert-character.
+Escape clears selections and extra cursors, then returns to L.
+.TP
+.B I \(em insert
+Text keys insert UTF-8 text and arrows move by grapheme or display line.
+Escape first dismisses a live shadow suggestion; otherwise it returns to L.
+.TP
+.B E \(em execute
+The command, search, shell, and answer prompt.
+Escape cancels the prompt and restores the mode that opened it.
+The command registry supplies completion, argument policy, and dispatch.
+.TP
+.B F \(em fuss
+The workspace and Git drawer.
+Arrows navigate the visible tree, ordinary filename characters perform
+type-to-jump over visible rows, and Alt-modified action keys operate on the
+selected path.
+Escape closes the drawer and returns to L without changing the active file.
+.SH KEYS
+Key names use
+.B C-
+for Control,
+.B A-
+for Alt,
+.B S-
+for Shift, and angle brackets for named terminal keys.
+A space inside a key name separates a chord.
+Counts are accepted by L, W, and B where the invoked command permits one.
+The following inventory is literal checked-in documentation: each
+.B BIND
+row is
+.IR "mode | key | registered command | optional bound argument" .
+The special mode
+.B *
+installs the row in L, W, and B.
+.PP
+The compiled emergency layer remains beneath this runtime map.
+If configuration cannot load, L still provides Escape,
+.BR q ,
+.BR "q !" ,
+.BR : ,
+and
+.BR ! ;
+E still provides Enter and Escape; and F retains navigation and its
+Alt-modified action table.
+.SS "L mode runtime bindings"
+.nf
+BIND L|<left>|ed.move.unit.home
+BIND L|<right>|ed.move.unit.end
+BIND L|<up>|ed.move.unit.prev
+BIND L|<down>|ed.move.unit.next
+BIND L|S-<left>|ed.sel.extend.left
+BIND L|S-<right>|ed.sel.extend.right
+BIND L|S-<up>|ed.sel.extend.up
+BIND L|S-<down>|ed.sel.extend.down
+BIND L|C-v|ed.clip.paste
+BIND L|A-<left>|ed.move.unit.home_alt
+BIND L|A-<right>|ed.shadow.accept_word
+BIND L|A-S-<right>|ed.shadow.accept_word_alt
+BIND L|A-<up>|ed.git.hunk.prev
+BIND L|A-<down>|ed.git.hunk.next
+BIND L|A-S-<up>|ed.move.unit.prev_alt
+BIND L|A-S-<down>|ed.shadow.accept_line
+BIND L|A-<cr>|ed.shadow.accept_all
+BIND L|A-]|ed.shadow.next
+BIND L|A-[|ed.shadow.prev
+BIND L|<home>|ed.move.line.home_toggle
+BIND L|<end>|ed.move.unit.end
+BIND L|<pgup>|ed.view.page_up
+BIND L|<pgdn>|ed.view.page_down
+BIND L|i|ed.mode.enter|{ sarg: "I" }
+BIND L|a|ed.edit.insert.after
+BIND L|o|ed.edit.line.open_below
+BIND L|O|ed.edit.line.open_above
+BIND L|x|ed.edit.delete.grapheme
+BIND L|d d|ed.edit.line.delete
+BIND L|u|ed.edit.undo
+BIND L|C-r|ed.edit.redo
+BIND L|<esc>|ed.mode.escape
+BIND L|g a|ed.sel.all
+BIND L|g g|ed.move.buf.home
+BIND L|m|ed.mark.set
+BIND L|'|ed.mark.jump
+BIND L|/|ed.search.open
+BIND L|?|ed.search.open_back
+BIND L|n|ed.search.next
+BIND L|N|ed.search.prev
+BIND L|*|ed.search.word_next
+BIND L|#|ed.search.word_prev
+BIND L|K|ed.lsp.hover
+BIND L|g d|ed.lsp.goto_def
+BIND L|g D|ed.lsp.goto_decl
+BIND L|g y|ed.lsp.goto_type
+BIND L|g i|ed.lsp.goto_impl
+BIND L|g r|ed.lsp.references
+BIND L|g R|ed.lsp.rename
+BIND L|g s|ed.lsp.symbols
+BIND L|C-o|ed.jump.back
+BIND L|C-i|ed.jump.fwd
+BIND L|g ;|ed.change.older
+BIND L|g ,|ed.change.newer
+BIND L|G|ed.move.buf.end
+BIND L|s|ed.file.save
+BIND L|C-z|ed.suspend
+BIND L|C-l|ed.redraw
+BIND L|C-g|ed.ui.message_expand
+BIND L|0|ed.move.unit.home
+BIND L|w|ed.mode.enter|{ sarg: "W" }
+BIND L|b|ed.mode.enter|{ sarg: "B" }
+BIND L|h|ed.mode.enter|{ sarg: "H" }
+BIND L|!|ed.shell.open
+BIND L|e|ed.mode.enter|{ sarg: "E" }
+BIND L|f|ed.mode.enter|{ sarg: "F" }
+BIND L|C-w s|ed.pane.split_h
+BIND L|C-w v|ed.pane.split_v
+BIND L|C-w c|ed.pane.close
+BIND L|C-w <left>|ed.pane.focus_left
+BIND L|C-w <right>|ed.pane.focus_right
+BIND L|C-w <up>|ed.pane.focus_up
+BIND L|C-w <down>|ed.pane.focus_down
+BIND L|C-w w|ed.pane.focus_next
+BIND L|C-w =|ed.pane.grow
+BIND L|C-w -|ed.pane.shrink
+BIND L|t n|ed.tab.next
+BIND L|t p|ed.tab.prev
+BIND L|t t|ed.tab.new
+BIND L|t c|ed.tab.close
+BIND L|C-<pgdn>|ed.file.next
+BIND L|C-<pgup>|ed.file.prev
+BIND L|t <right>|ed.file.next
+BIND L|t <left>|ed.file.prev
+BIND L|t <down>|ed.group.enter
+BIND L|t <up>|ed.group.leave
+BIND L|t g|ed.group.new
+BIND L|t e|ed.group.edit
+BIND L|t d|ed.group.dissolve
+BIND L|t r|ed.group.remove_tab
+BIND L|t m|ed.ui.context_menu
+BIND L|t l|ed.group.rename
+BIND L|t o|ed.tab.close_others
+BIND L|t y|ed.tab.copy_path
+BIND L|A-1|ed.tab.goto|{ iarg: 1 }
+BIND L|A-2|ed.tab.goto|{ iarg: 2 }
+BIND L|A-3|ed.tab.goto|{ iarg: 3 }
+BIND L|A-4|ed.tab.goto|{ iarg: 4 }
+BIND L|A-5|ed.tab.goto|{ iarg: 5 }
+BIND L|A-6|ed.tab.goto|{ iarg: 6 }
+BIND L|A-7|ed.tab.goto|{ iarg: 7 }
+BIND L|A-8|ed.tab.goto|{ iarg: 8 }
+BIND L|A-9|ed.tab.goto|{ iarg: 9 }
+BIND L|A-0|ed.tab.goto
+BIND L|C-1|ed.tab.goto_bar|{ iarg: 1 }
+BIND L|C-2|ed.tab.goto_bar|{ iarg: 2 }
+BIND L|C-3|ed.tab.goto_bar|{ iarg: 3 }
+BIND L|C-4|ed.tab.goto_bar|{ iarg: 4 }
+BIND L|C-5|ed.tab.goto_bar|{ iarg: 5 }
+BIND L|C-6|ed.tab.goto_bar|{ iarg: 6 }
+BIND L|C-7|ed.tab.goto_bar|{ iarg: 7 }
+BIND L|C-8|ed.tab.goto_bar|{ iarg: 8 }
+BIND L|C-9|ed.tab.goto_bar|{ iarg: 9 }
+BIND L|C-0|ed.tab.goto_bar
+.fi
+.SS "W mode runtime bindings"
+.nf
+BIND W|<left>|ed.move.unit.prev
+BIND W|<right>|ed.move.unit.next
+BIND W|<up>|ed.move.line.up
+BIND W|<down>|ed.move.line.down
+BIND W|S-<left>|ed.sel.extend.left
+BIND W|S-<right>|ed.sel.extend.right
+BIND W|S-<up>|ed.sel.extend.up
+BIND W|S-<down>|ed.sel.extend.down
+BIND W|C-v|ed.clip.paste
+BIND W|A-<left>|ed.move.unit.prev_alt
+BIND W|A-<right>|ed.shadow.accept_word
+BIND W|A-S-<right>|ed.shadow.accept_word_alt
+BIND W|A-<up>|ed.git.hunk.prev
+BIND W|A-<down>|ed.git.hunk.next
+BIND W|A-S-<down>|ed.shadow.accept_line
+BIND W|A-<cr>|ed.shadow.accept_all
+BIND W|A-]|ed.shadow.next
+BIND W|A-[|ed.shadow.prev
+BIND W|C-<left>|ed.move.word.sub_prev
+BIND W|C-<right>|ed.move.word.sub_next
+BIND W|<home>|ed.move.line.home_toggle
+BIND W|<end>|ed.move.unit.end
+BIND W|l|ed.mode.enter|{ sarg: "L" }
+BIND W|b|ed.mode.enter|{ sarg: "B" }
+BIND W|i|ed.mode.enter|{ sarg: "I" }
+BIND W|h|ed.mode.enter|{ sarg: "H" }
+BIND W|f|ed.mode.enter|{ sarg: "F" }
+BIND W|e|ed.mode.enter|{ sarg: "E" }
+BIND W|:|ed.mode.enter|{ sarg: "E" }
+BIND W|!|ed.shell.open
+BIND W|<esc>|ed.mode.escape
+BIND W|C-g|ed.ui.message_expand
+BIND W|A-1|ed.tab.goto|{ iarg: 1 }
+BIND W|A-2|ed.tab.goto|{ iarg: 2 }
+BIND W|A-3|ed.tab.goto|{ iarg: 3 }
+BIND W|A-4|ed.tab.goto|{ iarg: 4 }
+BIND W|A-5|ed.tab.goto|{ iarg: 5 }
+BIND W|A-6|ed.tab.goto|{ iarg: 6 }
+BIND W|A-7|ed.tab.goto|{ iarg: 7 }
+BIND W|A-8|ed.tab.goto|{ iarg: 8 }
+BIND W|A-9|ed.tab.goto|{ iarg: 9 }
+BIND W|A-0|ed.tab.goto
+BIND W|C-1|ed.tab.goto_bar|{ iarg: 1 }
+BIND W|C-2|ed.tab.goto_bar|{ iarg: 2 }
+BIND W|C-3|ed.tab.goto_bar|{ iarg: 3 }
+BIND W|C-4|ed.tab.goto_bar|{ iarg: 4 }
+BIND W|C-5|ed.tab.goto_bar|{ iarg: 5 }
+BIND W|C-6|ed.tab.goto_bar|{ iarg: 6 }
+BIND W|C-7|ed.tab.goto_bar|{ iarg: 7 }
+BIND W|C-8|ed.tab.goto_bar|{ iarg: 8 }
+BIND W|C-9|ed.tab.goto_bar|{ iarg: 9 }
+BIND W|C-0|ed.tab.goto_bar
+.fi
+.SS "B mode runtime bindings"
+.nf
+BIND B|<left>|ed.move.unit.home
+BIND B|<right>|ed.move.unit.end
+BIND B|<up>|ed.move.unit.prev
+BIND B|<down>|ed.move.unit.next
+BIND B|S-<left>|ed.sel.extend.left
+BIND B|S-<right>|ed.sel.extend.right
+BIND B|S-<up>|ed.sel.extend.up
+BIND B|S-<down>|ed.sel.extend.down
+BIND B|C-v|ed.clip.paste
+BIND B|A-<left>|ed.move.block.match_prev
+BIND B|A-<right>|ed.shadow.accept_word
+BIND B|A-S-<right>|ed.shadow.accept_word_alt
+BIND B|A-<up>|ed.git.hunk.prev
+BIND B|A-<down>|ed.git.hunk.next
+BIND B|A-S-<up>|ed.sel.unit.expand
+BIND B|A-S-<down>|ed.shadow.accept_line
+BIND B|A-<cr>|ed.shadow.accept_all
+BIND B|A-]|ed.shadow.next
+BIND B|A-[|ed.shadow.prev
+BIND B|l|ed.mode.enter|{ sarg: "L" }
+BIND B|w|ed.mode.enter|{ sarg: "W" }
+BIND B|i|ed.mode.enter|{ sarg: "I" }
+BIND B|h|ed.mode.enter|{ sarg: "H" }
+BIND B|f|ed.mode.enter|{ sarg: "F" }
+BIND B|e|ed.mode.enter|{ sarg: "E" }
+BIND B|:|ed.mode.enter|{ sarg: "E" }
+BIND B|!|ed.shell.open
+BIND B|<esc>|ed.mode.escape
+BIND B|C-g|ed.ui.message_expand
+BIND B|A-1|ed.tab.goto|{ iarg: 1 }
+BIND B|A-2|ed.tab.goto|{ iarg: 2 }
+BIND B|A-3|ed.tab.goto|{ iarg: 3 }
+BIND B|A-4|ed.tab.goto|{ iarg: 4 }
+BIND B|A-5|ed.tab.goto|{ iarg: 5 }
+BIND B|A-6|ed.tab.goto|{ iarg: 6 }
+BIND B|A-7|ed.tab.goto|{ iarg: 7 }
+BIND B|A-8|ed.tab.goto|{ iarg: 8 }
+BIND B|A-9|ed.tab.goto|{ iarg: 9 }
+BIND B|A-0|ed.tab.goto
+BIND B|C-1|ed.tab.goto_bar|{ iarg: 1 }
+BIND B|C-2|ed.tab.goto_bar|{ iarg: 2 }
+BIND B|C-3|ed.tab.goto_bar|{ iarg: 3 }
+BIND B|C-4|ed.tab.goto_bar|{ iarg: 4 }
+BIND B|C-5|ed.tab.goto_bar|{ iarg: 5 }
+BIND B|C-6|ed.tab.goto_bar|{ iarg: 6 }
+BIND B|C-7|ed.tab.goto_bar|{ iarg: 7 }
+BIND B|C-8|ed.tab.goto_bar|{ iarg: 8 }
+BIND B|C-9|ed.tab.goto_bar|{ iarg: 9 }
+BIND B|C-0|ed.tab.goto_bar
+.fi
+.SS "I mode runtime bindings"
+.nf
+BIND I|A-h|ed.mode.enter|{ sarg: "H" }
+BIND I|<esc>|ed.shadow.dismiss
+BIND I|C-g|ed.ui.message_expand
+BIND I|A-<left>|ed.move.word.prev
+BIND I|A-b|ed.move.word.prev
+BIND I|A-f|ed.move.word.next
+BIND I|A-<right>|ed.shadow.accept_or_word
+BIND I|A-S-<right>|ed.shadow.accept_word_alt
+BIND I|A-<down>|ed.shadow.accept_line
+BIND I|A-<cr>|ed.shadow.accept_all
+BIND I|A-]|ed.shadow.next
+BIND I|A-[|ed.shadow.prev
+BIND I|C-<space>|ed.compl.complete
+BIND I|A-k|ed.lsp.signature
+BIND I|<cr>|ed.edit.insert.newline
+BIND I|<tab>|ed.edit.insert.tab
+BIND I|<bs>|ed.edit.delete.grapheme_left
+BIND I|<del>|ed.edit.delete.grapheme
+BIND I|<left>|ed.move.unit.prev
+BIND I|<right>|ed.move.unit.next
+BIND I|<up>|ed.move.line.up
+BIND I|<down>|ed.move.line.down
+BIND I|S-<left>|ed.sel.extend.left
+BIND I|S-<right>|ed.sel.extend.right
+BIND I|S-<up>|ed.sel.extend.up
+BIND I|S-<down>|ed.sel.extend.down
+BIND I|C-v|ed.clip.paste
+BIND I|C-c|ed.clip.copy
+BIND I|C-x|ed.clip.cut
+BIND I|<home>|ed.move.line.home_toggle
+BIND I|<end>|ed.move.line.end
+BIND I|C-a|ed.move.line.home_toggle
+BIND I|C-e|ed.move.line.end
+BIND I|C-<left>|ed.move.line.home_toggle
+BIND I|C-<right>|ed.move.line.end
+BIND I|C-w|ed.edit.kill.word_prev
+BIND I|A-<bs>|ed.edit.kill.word_prev
+BIND I|A-d|ed.edit.kill.word_next
+BIND I|A-<del>|ed.edit.kill.word_next
+BIND I|C-u|ed.edit.kill.to_home
+BIND I|C-k|ed.edit.kill.to_end
+BIND I|C-d|ed.edit.delete.grapheme
+BIND I|C-y|ed.edit.kill.yank
+BIND I|A-y|ed.edit.kill.yank_pop
+BIND I|C-p|ed.move.line.up
+BIND I|C-n|ed.move.line.down
+BIND I|C-_|ed.edit.undo
+BIND I|C-/|ed.edit.undo
+BIND I|C-t|ed.edit.transpose.chars
+BIND I|A-t|ed.edit.transpose.words
+BIND I|A-u|ed.edit.case.upper_word
+BIND I|A-l|ed.edit.case.lower_word
+BIND I|A-c|ed.edit.case.cap_word
+BIND I|A-1|ed.tab.goto|{ iarg: 1 }
+BIND I|A-2|ed.tab.goto|{ iarg: 2 }
+BIND I|A-3|ed.tab.goto|{ iarg: 3 }
+BIND I|A-4|ed.tab.goto|{ iarg: 4 }
+BIND I|A-5|ed.tab.goto|{ iarg: 5 }
+BIND I|A-6|ed.tab.goto|{ iarg: 6 }
+BIND I|A-7|ed.tab.goto|{ iarg: 7 }
+BIND I|A-8|ed.tab.goto|{ iarg: 8 }
+BIND I|A-9|ed.tab.goto|{ iarg: 9 }
+BIND I|A-0|ed.tab.goto
+BIND I|C-1|ed.tab.goto_bar|{ iarg: 1 }
+BIND I|C-2|ed.tab.goto_bar|{ iarg: 2 }
+BIND I|C-3|ed.tab.goto_bar|{ iarg: 3 }
+BIND I|C-4|ed.tab.goto_bar|{ iarg: 4 }
+BIND I|C-5|ed.tab.goto_bar|{ iarg: 5 }
+BIND I|C-6|ed.tab.goto_bar|{ iarg: 6 }
+BIND I|C-7|ed.tab.goto_bar|{ iarg: 7 }
+BIND I|C-8|ed.tab.goto_bar|{ iarg: 8 }
+BIND I|C-9|ed.tab.goto_bar|{ iarg: 9 }
+BIND I|C-0|ed.tab.goto_bar
+.fi
+.SS "H mode runtime bindings"
+.nf
+BIND H|A-1|ed.tab.goto|{ iarg: 1 }
+BIND H|A-2|ed.tab.goto|{ iarg: 2 }
+BIND H|A-3|ed.tab.goto|{ iarg: 3 }
+BIND H|A-4|ed.tab.goto|{ iarg: 4 }
+BIND H|A-5|ed.tab.goto|{ iarg: 5 }
+BIND H|A-6|ed.tab.goto|{ iarg: 6 }
+BIND H|A-7|ed.tab.goto|{ iarg: 7 }
+BIND H|A-8|ed.tab.goto|{ iarg: 8 }
+BIND H|A-9|ed.tab.goto|{ iarg: 9 }
+BIND H|A-0|ed.tab.goto
+BIND H|C-1|ed.tab.goto_bar|{ iarg: 1 }
+BIND H|C-2|ed.tab.goto_bar|{ iarg: 2 }
+BIND H|C-3|ed.tab.goto_bar|{ iarg: 3 }
+BIND H|C-4|ed.tab.goto_bar|{ iarg: 4 }
+BIND H|C-5|ed.tab.goto_bar|{ iarg: 5 }
+BIND H|C-6|ed.tab.goto_bar|{ iarg: 6 }
+BIND H|C-7|ed.tab.goto_bar|{ iarg: 7 }
+BIND H|C-8|ed.tab.goto_bar|{ iarg: 8 }
+BIND H|C-9|ed.tab.goto_bar|{ iarg: 9 }
+BIND H|C-0|ed.tab.goto_bar
+.fi
+.SS "E mode runtime bindings"
+.nf
+BIND E|<left>|ed.move.char.prev
+BIND E|C-b|ed.move.char.prev
+BIND E|<right>|ed.cmdline.ghost.accept
+BIND E|C-f|ed.cmdline.ghost.accept
+BIND E|A-f|ed.cmdline.ghost.accept_word
+BIND E|A-<right>|ed.cmdline.ghost.accept_word
+BIND E|A-b|ed.move.word.prev
+BIND E|A-<left>|ed.move.word.prev
+BIND E|<home>|ed.move.line.home_toggle
+BIND E|<end>|ed.move.line.end
+BIND E|C-a|ed.move.line.home
+BIND E|C-<left>|ed.move.line.home
+BIND E|C-e|ed.cmdline.ghost.accept_line
+BIND E|C-<right>|ed.cmdline.ghost.accept_line
+BIND E|<bs>|ed.edit.delete.grapheme_left
+BIND E|C-h|ed.edit.delete.grapheme_left
+BIND E|C-<bs>|ed.edit.delete.grapheme_left
+BIND E|<del>|ed.edit.delete.grapheme
+BIND E|C-d|ed.edit.delete.grapheme
+BIND E|C-w|ed.edit.kill.ws_word_prev
+BIND E|A-<bs>|ed.edit.kill.word_prev
+BIND E|A-d|ed.edit.kill.word_next
+BIND E|A-<del>|ed.edit.kill.word_next
+BIND E|C-u|ed.edit.kill.to_home
+BIND E|C-k|ed.edit.kill.to_end
+BIND E|C-t|ed.edit.transpose.chars
+BIND E|A-t|ed.edit.transpose.words
+BIND E|A-u|ed.edit.case.upper_word
+BIND E|A-l|ed.edit.case.lower_word
+BIND E|A-c|ed.edit.case.cap_word
+BIND E|C-y|ed.edit.kill.yank
+BIND E|A-y|ed.edit.kill.yank_pop
+BIND E|A-.|ed.cmdline.last_arg
+BIND E|<up>|ed.cmdline.up
+BIND E|<down>|ed.cmdline.down
+BIND E|C-p|ed.cmdline.up
+BIND E|C-n|ed.cmdline.down
+BIND E|<tab>|ed.cmdline.complete_next
+BIND E|S-<tab>|ed.cmdline.complete_prev
+BIND E|<pgdn>|ed.cmdline.menu.page_next
+BIND E|<pgup>|ed.cmdline.menu.page_prev
+BIND E|A-<up>|ed.cmdline.token_prev
+BIND E|A-<down>|ed.cmdline.token_next
+BIND E|C-r|ed.cmdline.hist_search
+BIND E|A-r|ed.cmdline.insert_register
+BIND E|C-q|ed.cmdline.literal_next
+BIND E|C-v|ed.clip.paste
+BIND E|C-z|ed.edit.undo
+BIND E|C-_|ed.edit.undo
+BIND E|C-/|ed.edit.undo
+BIND E|A-/|ed.edit.redo
+BIND E|C-g|ed.cmdline.cancel
+BIND E|S-<left>|ed.sel.extend.left
+BIND E|S-<right>|ed.sel.extend.right
+BIND E|A-S-<left>|ed.sel.extend.word_prev
+BIND E|A-S-<right>|ed.sel.extend.word_next
+BIND E|S-<home>|ed.sel.extend.line_home
+BIND E|S-<end>|ed.sel.extend.line_end
+BIND E|C-S-<left>|ed.sel.extend.line_home
+BIND E|C-S-<right>|ed.sel.extend.line_end
+BIND E|C-c|ed.cmdline.copy_or_cancel
+BIND E|C-x|ed.clip.cut
+BIND E|A-s|ed.cmdline.toggle_sudo
+BIND E|A-h|ed.cmdline.man_page
+BIND E|A-e|ed.cmdline.edit_in_buffer
+BIND E|A-v|ed.cmdline.edit_in_buffer
+.fi
+.SS "F mode runtime bindings"
+.nf
+BIND F|<esc>|ed.git.mode.leave
+BIND F|C-w s|ed.git.open_split_h
+BIND F|C-w v|ed.git.open_split_v
+.fi
+.SS "Shared L/W/B runtime bindings"
+.nf
+BIND *|q|ed.macro.record
+BIND *|@|ed.macro.replay
+BIND *|@ @|ed.macro.replay_last
+BIND *|Q|ed.macro.list
+.fi
+
+.SS "Adaptive H bindings"
+H motion keys are rebuilt from the unit that entered the selection.
+Line, word, block, and character selections use their corresponding motion
+engine; the common actions are copy, cut, paste, yank, delete, change, case,
+indent, join, replacement, rectangular insert/append, selection-end swap,
+selection-kind change, cursor lift/add/drop, execute, shell, and Escape.
+The compiled rows below are written as
+.IR "BUILTIN scope | key | command | optional argument" .
+.nf
+BUILTIN H(line)|<left>|ed.move.unit.home
+BUILTIN H(line)|<right>|ed.move.unit.end
+BUILTIN H(line)|<up>|ed.move.unit.prev
+BUILTIN H(line)|<down>|ed.move.unit.next
+BUILTIN H(line)|A-<left>|ed.move.unit.home_alt
+BUILTIN H(line)|A-<right>|ed.move.unit.end_alt
+BUILTIN H(line)|A-<up>|ed.move.unit.prev_alt
+BUILTIN H(line)|A-<down>|ed.move.unit.next_alt
+BUILTIN H(line)|<home>|ed.move.line.home_toggle
+BUILTIN H(line)|<end>|ed.move.unit.end
+BUILTIN H(word)|<left>|ed.move.unit.prev
+BUILTIN H(word)|<right>|ed.move.unit.next
+BUILTIN H(word)|<up>|ed.move.line.up
+BUILTIN H(word)|<down>|ed.move.line.down
+BUILTIN H(word)|A-<left>|ed.move.unit.prev_alt
+BUILTIN H(word)|A-<right>|ed.move.unit.next_alt
+BUILTIN H(word)|C-<left>|ed.move.word.sub_prev
+BUILTIN H(word)|C-<right>|ed.move.word.sub_next
+BUILTIN H(word)|<home>|ed.move.line.home_toggle
+BUILTIN H(word)|<end>|ed.move.unit.end
+BUILTIN H(block)|<left>|ed.move.unit.home
+BUILTIN H(block)|<right>|ed.move.unit.end
+BUILTIN H(block)|<up>|ed.move.unit.prev
+BUILTIN H(block)|<down>|ed.move.unit.next
+BUILTIN H(block)|A-<left>|ed.move.block.match_prev
+BUILTIN H(block)|A-<right>|ed.move.block.match_next
+BUILTIN H(block)|A-<up>|ed.sel.unit.expand
+BUILTIN H(block)|A-<down>|ed.sel.unit.contract
+BUILTIN H(character)|<left>|ed.move.unit.prev
+BUILTIN H(character)|<right>|ed.move.unit.next
+BUILTIN H(character)|<up>|ed.move.line.up
+BUILTIN H(character)|<down>|ed.move.line.down
+BUILTIN H(character)|<home>|ed.move.line.home_toggle
+BUILTIN H(character)|<end>|ed.move.line.end
+BUILTIN H(common)|S-<left>|ed.sel.extend.left
+BUILTIN H(common)|S-<right>|ed.sel.extend.right
+BUILTIN H(common)|S-<up>|ed.sel.extend.up
+BUILTIN H(common)|S-<down>|ed.sel.extend.down
+BUILTIN H(common)|:|ed.mode.enter|E
+BUILTIN H(common)|!|ed.shell.open
+BUILTIN H(common)|C-c|ed.clip.copy
+BUILTIN H(common)|C-x|ed.clip.cut
+BUILTIN H(common)|C-v|ed.clip.paste
+BUILTIN H(common)|y|ed.sel.yank
+BUILTIN H(common)|d|ed.sel.delete
+BUILTIN H(common)|<del>|ed.sel.delete
+BUILTIN H(common)|c|ed.sel.change
+BUILTIN H(common)|U|ed.sel.case_upper
+BUILTIN H(common)|u|ed.sel.case_lower
+BUILTIN H(common)|~|ed.sel.case_toggle
+BUILTIN H(common)|>|ed.sel.indent
+BUILTIN H(common)|<lt>|ed.sel.dedent
+BUILTIN H(common)|A-<lt>|ed.sel.shift_left
+BUILTIN H(common)|A->|ed.sel.shift_right
+BUILTIN H(common)|J|ed.sel.join
+BUILTIN H(common)|r|ed.sel.replace_char
+BUILTIN H(common)|I|ed.edit.rect.insert
+BUILTIN H(common)|A|ed.edit.rect.append
+BUILTIN H(common)|o|ed.sel.swap_ends
+BUILTIN H(common)|v c|ed.sel.kind|c
+BUILTIN H(common)|v l|ed.sel.kind|l
+BUILTIN H(common)|v r|ed.sel.kind|r
+BUILTIN H(common)|<cr>|ed.cursor.lift.lines
+BUILTIN H(common)|m|ed.cursor.lift.matches
+BUILTIN H(common)|e|ed.cursor.lift.ends
+BUILTIN H(common)|C-A-<up>|ed.cursor.add.above
+BUILTIN H(common)|C-A-<down>|ed.cursor.add.below
+BUILTIN H(common)|C-A-<bs>|ed.cursor.drop
+BUILTIN H(common)|<esc>|ed.mode.escape
+BUILTIN H(common)|C-g|ed.ui.message_expand
+.fi
+.SS "Compiled F action floor"
+F reserves unmodified printable filename characters for type-to-jump.
+Its actions therefore use Alt; Ctrl-Shift-/ opens the effective action list.
+.nf
+BUILTIN F|<up>|ed.git.nav.prev
+BUILTIN F|<down>|ed.git.nav.next
+BUILTIN F|<left>|ed.git.nav.parent
+BUILTIN F|<right>|ed.git.nav.enter
+BUILTIN F|<space>|ed.git.view
+BUILTIN F|C-w s|ed.git.open_split_h
+BUILTIN F|C-w v|ed.git.open_split_v
+BUILTIN F|C-<up>|ed.git.nav.row_prev
+BUILTIN F|C-<down>|ed.git.nav.row_next
+BUILTIN F|<pgup>|ed.view.page_up
+BUILTIN F|<pgdn>|ed.view.page_down
+BUILTIN F|<home>|ed.move.buf.home
+BUILTIN F|<end>|ed.move.buf.end
+BUILTIN F|A-a|ed.git.stage
+BUILTIN F|A-u|ed.git.unstage
+BUILTIN F|A-S|ed.git.stage.all
+BUILTIN F|A-U|ed.git.unstage.all
+BUILTIN F|A-m|ed.git.commit
+BUILTIN F|A-M|ed.git.commit.amend
+BUILTIN F|A-p|ed.git.push
+BUILTIN F|A-l|ed.git.pull
+BUILTIN F|A-f|ed.git.fetch
+BUILTIN F|A-d|ed.git.diff
+BUILTIN F|A-D|ed.git.diff.view
+BUILTIN F|A-s|ed.git.status
+BUILTIN F|A-w|ed.git.blame
+BUILTIN F|A-h|ed.git.history
+BUILTIN F|A-L|ed.git.reflog
+BUILTIN F|A-c|ed.git.view
+BUILTIN F|A-b|ed.git.branch.switch
+BUILTIN F|A-n|ed.git.branch.create
+BUILTIN F|A-R|ed.git.branch.delete
+BUILTIN F|A-G|ed.git.merge
+BUILTIN F|A-O|ed.git.reset
+BUILTIN F|A-I|ed.git.rebase.interactive
+BUILTIN F|A-y|ed.git.cherry_pick
+BUILTIN F|A-v|ed.git.revert
+BUILTIN F|A-z|ed.git.stash.push
+BUILTIN F|A-Z|ed.git.stash.pop
+BUILTIN F|A-t|ed.git.tag
+BUILTIN F|A-x|ed.git.discard
+BUILTIN F|A-r|ed.git.file.delete
+BUILTIN F|A-N|ed.git.file.rename
+BUILTIN F|<cr>|ed.git.open
+BUILTIN F|A-g|ed.group.from_dir
+BUILTIN F|A-T|ed.git.tree.all
+BUILTIN F|A-.|ed.git.tree.hidden
+BUILTIN F|C-S-/|ed.git.actions
+BUILTIN F|C-?|ed.git.actions
+BUILTIN F|C-_|ed.git.actions
+BUILTIN F|C-r|ed.git.refresh
+BUILTIN F|A-q|ed.git.mode.leave
+BUILTIN F|<esc>|ed.git.mode.leave
+.fi
+.PP
+Text not named in I inserts normally.
+In F, printable filename characters jump only among currently visible rows;
+they do not invoke actions.
+An otherwise unbound key reports
+.B unbound:
+and its normalized spelling rather than silently doing nothing.
+.SH OPTIONS
+.TP
+.B \-\-help
+Print usage, editor options, subcommands, and environment overrides.
+.TP
+.B \-\-help-cmds
+List every named editor command and its help text.
+.TP
+.B \-\-version
+Print the development version and compiled optional modules.
+.TP
+.B \-\-clean
+Load only the compiled panic keymap and retain no workspace state or command
+history.
+.TP
+.BI \-\-config " PATH"
+Use
+.I PATH
+in place of the user
+.IR init.fl .
+.TP
+.BI \-\-theme " NAME"
+Override the configured theme for this process.
+.TP
+.B \-\-no-workspace-config
+Do not load the workspace
+.IR .yew.fl .
+.TP
+.B \-\-trust-workspace
+Pre-grant the workspace configuration instead of opening the trust prompt.
+.TP
+.BI \-\-workspace " DIR"
+Use
+.I DIR
+as the workspace rather than the startup working directory.
+.TP
+.BI \-\-batch " SCRIPT"
+Run a Fletch script against the supplied file operands without a tty, grid,
+or event loop.
+.TP
+.BI \-\-replay " REG"
+After a successful batch script, replay the one-letter macro register once.
+.TP
+.B \-\-test
+Add the
+.B t.*
+script-test assertions.
+Valid only with
+.BR \-\-batch .
+.TP
+.B \-\-quiet
+Suppress batch warnings, but not errors.
+Valid only with
+.BR \-\-batch .
+.TP
+.BI \-\-grant " NAME:CAP"
+Pre-grant a batch plugin one capability from
+.BR fs ,
+.BR shell ,
+.BR net ,
+or
+.BR clipboard .
+Repeatable and valid only with
+.BR \-\-batch .
+.TP
+.B \-\-
+In batch mode, pass every remaining argument to the script's
+.B args
+list.
+Outside batch mode it ends editor option parsing.
+.SH "E-MODE COMMANDS"
+An E command has the form
+.BR :[range]name " [arguments]" .
+Ranges are one-based lines, marks, searches, or the whole-buffer
+.B %
+spelling.
+The table is generated once from the registry metadata and committed as
+literal text; each
+.B CMD
+row is
+.IR "abbreviation | registered command | range policy | argument spec" .
+Argument letters are
+.B f
+for a file,
+.B s
+for one opaque string,
+.B p
+for a plugin, and
+.B ov
+for an option plus value.
+.PP
+.nf
+CMD q|ed.quit|forbidden|-
+CMD redraw|ed.redraw|forbidden|-
+CMD d|ed.edit.line.delete|current-line default|-
+CMD e|ed.file.open|forbidden|f
+CMD w|ed.file.write|forbidden|f
+CMD wq|ed.file.write_quit|forbidden|f
+CMD new|ed.file.new|forbidden|f
+CMD reload|ed.file.reload|forbidden|-
+CMD saveas|ed.file.save_as|forbidden|-
+CMD close|ed.file.close|forbidden|-
+CMD search|ed.search.open|forbidden|s
+CMD tabnew|ed.tab.new|forbidden|-
+CMD tabedit|ed.tab.open|forbidden|f
+CMD tabclose|ed.tab.close|forbidden|-
+CMD gnew|ed.group.new|forbidden|s
+CMD gedit|ed.group.edit|forbidden|-
+CMD gclose|ed.group.close|forbidden|-
+CMD gdissolve|ed.group.dissolve|forbidden|-
+CMD grename|ed.group.rename|optional|s
+CMD gadd|ed.group.add_tab|forbidden|s
+CMD tabonly|ed.tab.close_others|forbidden|-
+CMD copypath|ed.tab.copy_path|forbidden|-
+CMD gremove|ed.group.remove_tab|forbidden|-
+CMD genter|ed.group.enter|forbidden|-
+CMD gleave|ed.group.leave|forbidden|-
+CMD wssave|ed.ws.save_state|forbidden|-
+CMD wsrestore|ed.ws.restore_state|forbidden|-
+CMD wsinfo|ed.ws.info|forbidden|-
+CMD wsforget|ed.ws.forget|forbidden|-
+CMD find|ed.find.file|forbidden|-
+CMD buffers|ed.find.buffer|forbidden|-
+CMD undolist|ed.undo.branches|forbidden|-
+CMD s|ed.search.replace|optional|s
+CMD g|ed.search.global|optional|s
+CMD fl|ed.fl.eval|forbidden|s
+CMD set|ed.opt.set_many|forbidden|ov
+CMD theme|ed.theme.set|forbidden|s
+CMD mark|ed.mark.set|forbidden|s
+CMD macros|ed.macro.list|forbidden|-
+CMD jobs|ed.job.list|forbidden|-
+CMD term|ed.shell.term|forbidden|-
+CMD compforget|ed.shell.complete_forget|forbidden|s
+CMD shreset|ed.shell.reset|forbidden|-
+.fi
+
+.PP
+Command names may also be entered by their unique short-name prefix or full
+registered name.
+Special shell spellings are
+.B :!command
+to run a job,
+.B :range!command
+to filter a range,
+.B :r!command
+to read output, and
+.B :!!command
+to hand the real terminal to a foreground child.
+Shell output is a dismissible view and never overwrites the active buffer;
+Escape retires that view and returns to the file.
+.SH "REGULAR EXPRESSIONS"
+yew's engine is a Thompson NFA/DFA hybrid with leftmost-first semantics and
+a linear-time design.
+Patterns and inputs operate on Unicode codepoints, not bytes or grapheme
+clusters.
+Invalid UTF-8 input bytes remain lossless surrogate-escape codepoints; they
+match dot and negated classes, but not word, digit, or space classes.
+.PP
+The accepted syntax is:
+.TP
+.B literals and escapes
+Non-metacharacters match themselves.
+Backslash quotes metacharacters and supports
+.BR \en ,
+.BR \et ,
+.BR \er ,
+.BR \ef ,
+.BR \ev ,
+.BR \ea ,
+.BR \ee ,
+.BR \e0 ,
+.BR \exHH ,
+and
+.BR \ex{H...} .
+.TP
+.B .
+Match any codepoint except newline; dotall or
+.B (?s)
+also matches newline.
+.TP
+.B [abc] [a-z] [^...]
+Character classes and negated classes.
+Inside a class,
+.B ]
+is literal first and
+.B -
+is literal first or last.
+Class escapes and POSIX bracket classes may be combined.
+.TP
+.B \ew \eW \ed \eD \es \eS
+Unicode word, non-word, decimal-digit, non-digit, white-space, and
+non-space classes.
+.TP
+.B [[:name:]] [[:^name:]]
+POSIX classes
+.BR alpha ,
+.BR digit ,
+.BR alnum ,
+.BR upper ,
+.BR lower ,
+.BR space ,
+.BR blank ,
+.BR punct ,
+.BR cntrl ,
+.BR graph ,
+.BR print ,
+.BR xdigit ,
+and
+.BR word .
+.TP
+.B \eb \eB
+A boundary, or non-boundary, between
+.B \ew
+and non-word codepoints, including buffer edges.
+.TP
+.B ^ $
+Line anchors unconditionally; there is no multiline flag.
+.B $
+matches before newline, at the search-window end, and before the carriage
+return of a CRLF pair.
+.TP
+.B \eA \ez
+Beginning and end of the complete search window.
+.TP
+.B (...) (?:...)
+Capturing and non-capturing groups.
+There are at most 32 groups including group zero.
+.TP
+.B (?i) (?-i) (?s) (?-s) (?i:...) (?s:...)
+Inline and group-scoped case-insensitive and dotall flags.
+.TP
+.B a|b
+Alternation.
+Earlier branches win ties, so
+.B a|ab
+against
+.B ab
+matches
+.BR a .
+.TP
+.B * + ? {m} {m,} {m,n}
+Greedy quantifiers.
+Appending
+.B ?
+makes a quantifier lazy.
+Repeat bounds are at most 1000.
+.PP
+The four Unicode definitions used together are:
+.B \ew
+= Alphabetic union Nd union Pc;
+.B \ed
+= general category Nd;
+.B \es
+= Unicode White_Space; and
+.B \eb
+= a transition defined from
+.BR \ew .
+Case-insensitive matching uses Unicode simple folding only.
+Length-changing full folds such as sharp-s to
+.B ss
+are deliberately excluded because one VM step consumes one codepoint.
+There is no locale-dependent matching and no normalization.
+.PP
+Lookaround, pattern backreferences, atomic and possessive groups, recursion,
+conditionals,
+.BR \eG ,
+and
+.B \eK
+are rejected.
+These features require backtracking or nested simulations and would forfeit
+the guarantee that a pattern typed into incremental search cannot hang the
+editor.
+.SH CONFIGURATION
+Normal startup loads the shipped
+.IR runtime/init.fl ,
+then the user
+.IR $XDG_CONFIG_HOME/yew/init.fl ,
+then
+.I <workspace>/.yew.fl
+after its trust decision.
+.B \-\-config
+replaces the user file;
+.B \-\-no-workspace-config
+skips the workspace file; and
+.B \-\-clean
+skips all file-based configuration.
+.PP
+Fletch functions
+.BR set() ,
+.BR bind() ,
+and
+.B on()
+configure options, key sequences, and hooks.
+The option registry is the authority for type, scope, default, completion,
+and module ownership; E-mode
+.B :set
+and Fletch use that same table.
+A workspace file is code and is never trusted because of its pathname alone.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/yew/init.fl
+User configuration.
+The fallback is
+.IR $HOME/.config/yew/init.fl .
+.TP
+.I $XDG_CONFIG_HOME/yew/themes/
+User themes, searched before installed themes.
+.TP
+.I $XDG_CONFIG_HOME/yew/macros/
+Named recorded macros by default.
+.TP
+.I $XDG_CONFIG_HOME/yew/plugins/
+Configuration-local Fletch plugins.
+.TP
+.I $XDG_DATA_HOME/yew/plugins/
+Managed and data-local Fletch plugins.
+.TP
+.I $XDG_DATA_HOME/yew/plugins.lock
+The package lock file described by
+.BR yew-pkg (1).
+.TP
+.I $XDG_STATE_HOME/yew/log
+The diagnostic log.
+.TP
+.I $XDG_STATE_HOME/yew/trust.fl
+Workspace trust and plugin enable/capability decisions.
+.TP
+.I $XDG_STATE_HOME/yew/workspaces/
+Per-workspace tabs, panes, buffers, cursor positions, undo state, history,
+and crash-recovery metadata.
+.TP
+.I $XDG_STATE_HOME/yew/journal/
+Crash journals for modified files.
+.TP
+.I $XDG_STATE_HOME/yew/backup/
+Durable save backups when configured.
+.TP
+.I $XDG_STATE_HOME/yew/history/
+Persistent command and search history.
+.TP
+.I $XDG_CACHE_HOME/yew/syn/
+Compiled syntax-definition cache.
+.TP
+.I <workspace>/.yew.fl
+Workspace configuration, loaded only through the trust policy.
+.SH ENVIRONMENT
+The following variables are read by the source tree.
+Variables marked diagnostic or test seam are not stable user interfaces, but
+are listed so automation and the implementation cannot drift silently.
+.TP
+.B YEW_LOG
+Override the log file path.
+.TP
+.B YEW_LOG_LEVEL
+Set
+.BR debug ,
+.BR info ,
+.BR warn ,
+or
+.BR error ;
+the default is
+.BR info .
+.TP
+.B YEW_RUNTIME_DIR
+Use this directory as the installed runtime root.
+.TP
+.B YEW_THEME
+Override the configured theme; the
+.B \-\-theme
+option wins.
+.TP
+.B YEW_NO_SYN_CACHE
+Set to 1 to bypass syntax-table caching.
+.TP
+.B YEW_CHORD_TIMEOUT_MS
+Set a positive key-chord timeout in milliseconds; the default is 500.
+.TP
+.B YEW_MOUSE
+Set to 0 to disable terminal mouse reporting.
+.TP
+.B YEW_ASCII
+Set to 0 or 1 to override locale-based ASCII-glyph selection.
+.TP
+.B YEW_COLORS
+Force the rendition tier to
+.BR truecolor ,
+.BR 256 ,
+or
+.BR 16 .
+.TP
+.B YEW_TRUECOLOR
+Set to 0 or 1 to override truecolor detection.
+.TP
+.B YEW_TTY_PROBE
+Set to 0 to disable terminal capability and background probes.
+.TP
+.B YEW_PROBE_TIMEOUT_MS
+Override the terminal probe deadline; the default is 50 milliseconds.
+.TP
+.B YEW_CLIPBOARD
+Choose
+.BR auto ,
+.BR osc52 ,
+.BR wl ,
+.BR xclip ,
+.BR xsel ,
+.BR pb ,
+.BR none ,
+or
+.BR cmd:<write-argv>[|<read-argv>] .
+.TP
+.B YEW_CLIPBOARD_TARGET
+Select OSC 52 target
+.BR c ,
+.BR p ,
+or
+.BR cp ;
+the default is
+.BR c .
+.TP
+.B YEW_CLIPBOARD_TIMEOUT_MS
+Set the clipboard subprocess timeout; the default is 1000 milliseconds.
+.TP
+.B YEW_OSC52
+Select
+.BR off ,
+.BR plain ,
+.BR tmux ,
+or
+.BR screen .
+Unset selects from the multiplexer environment.
+.TP
+.B YEW_OSC52_MAX
+Set the maximum encoded OSC 52 byte count; the default is 100000.
+.TP
+.B YEW_PROF
+Set to 1 to enable the in-loop profiler and RSS checkpoints.
+.TP
+.B YEW_PROF_OUT
+Set the batch profiler output path.
+.TP
+.B YEW_PROF_RING
+Set the profiler frame-ring capacity, clamped to 64 through 262144; the
+default is 4096.
+.TP
+.B YEW_PERF_FRAME_TAGS
+Set to 1 to emit performance frame tags.
+Diagnostic seam.
+.TP
+.B YEW_AI_DEBUG
+Set to 1, together with the corresponding option, to permit AI body logging.
+Diagnostic seam; bodies may contain private text.
+.TP
+.B YEW_AI_MOCK
+Set to 1 to restrict AI HTTP endpoints to loopback.
+Test seam.
+.TP
+.B YEW_SHADOW_TEST
+Select the deterministic shadow-suggestion provider.
+Test seam.
+.TP
+.B YEW_ALLOC_OUT
+Write allocation-debug records to this path in allocation-debug builds.
+.TP
+.B YEW_FL_GC_STRESS
+Collect the Fletch heap at every safe allocation point.
+Diagnostic seam.
+.TP
+.B YEW_FL_DUMP_BAD_CHUNK
+Write malformed Fletch bytecode diagnostics to this path.
+Diagnostic seam.
+.TP
+.B YEW_FL_COVERAGE_OUT
+Write Fletch script-test coverage records to this path.
+Test seam.
+.TP
+.B YEW_SCRIPT_TMPDIR
+Set the root returned by the script-test temporary-directory helper.
+.TP
+.B YEW_SCRIPT_RESULT_FD
+Select the file descriptor receiving script-test result records.
+.TP
+.B YEW_TEST_INSTRUMENTED
+Scale script-test pump deadlines for sanitizer and instrumentation builds.
+.TP
+.B YEW_BATCH_SELFTEST_TTY
+Force the batch terminal-access invariant path.
+Test seam.
+.TP
+.B YEW_JOB_ELAPSED_MS
+Pin displayed job elapsed time.
+Golden-test seam.
+.TP
+.B YEW_PICKERS_NOW
+Pin the time used by picker-relative timestamps.
+Golden-test seam.
+.TP
+.B YEW_TEST_FISH
+Override discovery of the fish completion oracle.
+Test seam.
+.TP
+.B YEW_TEST_PKG_NOW
+Pin package lock timestamps.
+Test seam.
+.PP
+.B XDG_CONFIG_HOME
+selects configuration;
+.B XDG_DATA_HOME
+selects plugins and the package lock;
+.B XDG_STATE_HOME
+selects durable state;
+.B XDG_CACHE_HOME
+selects caches.
+Each falls back below
+.B HOME
+according to the XDG base-directory convention.
+.B PATH
+locates tools and language servers;
+.B PWD
+seeds shell-session state;
+.B SHELL
+selects the command interpreter;
+.B TMPDIR
+supplies temporary storage;
+.B PAGER
+is retained only for children that own the real terminal.
+.PP
+Presence of
+.B NO_COLOR
+selects monochrome output.
+.B TERM
+and
+.B COLORTERM
+participate in terminal capability detection; additional terminal identity
+variables such as
+.BR TERM_PROGRAM ,
+.BR VTE_VERSION ,
+and
+.B KONSOLE_VERSION
+refine it.
+.B TMUX
+and
+.B STY
+select OSC 52 wrapping.
+.B SOURCE_DATE_EPOCH
+is consumed by the release build rather than at editor runtime.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Command-line, compilation, ordinary runtime, or explicit refusal error.
+.TP
+.B 2
+A
+.B \-\-batch
+script failed to compile or ended with an uncaught Fletch error.
+.TP
+.B 3
+File, host, network, or other I/O failure.
+.TP
+.B 4
+An internal invariant failed.
+.SH LIMITATIONS
+yew preserves file bytes and therefore performs no Unicode normalization;
+silently normalizing would rewrite bytes the user did not touch.
+Bidirectional layout is not implemented, so right-to-left text renders in
+logical order.
+Regular expressions omit lookaround and backreferences to retain bounded,
+linear-time matching.
+.PP
+Completion has no snippet-expansion engine.
+Panels display plain terminal text rather than rendered Markdown.
+There is no interactive terminal buffer; use
+.B :!!
+to hand the real terminal to a foreground child.
+There is no filesystem watcher; explicit refresh and command paths observe
+external changes.
+Fuzzy matching folds ASCII case only, so non-ASCII names require matching
+case.
+.PP
+In replacements,
+.B &
+is a literal ampersand; use
+.B \e0
+for the whole match.
+Clipboard register
+.B *
+aliases
+.B +
+rather than naming a second system selection.
+OSC 52 is write-only; clipboard reads require a readable platform tool or a
+configured custom command.
+.PP
+Plugins are Fletch-only and run without memory or resource isolation.
+There is no registry, signing, dependency solver, install hook, or automatic
+plugin update.
+Git conflict resolution is left to the file editor and external tools rather
+than a three-way merge UI.
+.SH SEE ALSO
+.BR yew-fl (1),
+.BR yew-pkg (1),
+.BR git (1),
+.BR less (1)
+.SH BUGS
+The default log is
+.IR $XDG_STATE_HOME/yew/log
+or
+.IR $HOME/.local/state/yew/log .
+Reproduce a configuration-sensitive problem with
+.B yew \-\-clean
+and attach the smallest input, terminal name, exact keystrokes, yew version
+and module list, relevant log tail, and whether the clean run reproduced it.

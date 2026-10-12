@@ -1,0 +1,353 @@
+.TH YEW-FL 1 "2026-10-12" "yew" "User Commands"
+.SH NAME
+yew-fl \- run the Fletch language used by yew
+.SH SYNOPSIS
+.B yew fl
+.br
+.B yew fl
+.I FILE
+.br
+.B yew fl \-e
+.I EXPR
+.br
+.B yew fl \-c
+.I FILE
+.br
+.B yew fl \-\-dump-ast
+.I FILE
+.br
+.B yew fl \-\-dump-bytecode
+.I FILE
+.br
+.B yew fl \-\-list-natives
+.PP
+The options
+.BR \-\-caps " and " \-\-origin
+may precede any of these forms.
+.SH DESCRIPTION
+Fletch is yew's configuration, automation, plugin, and recorded-macro
+language.
+It is a small, deterministic language with editor handles, motion literals,
+lexical closures, catchable errors, and transactional
+.B edit
+blocks.
+.PP
+With a terminal and no operand,
+.B yew fl
+starts an interactive prompt.
+Without a terminal it reads a complete script from standard input.
+Supplying
+.I FILE
+evaluates that file without taking terminal ownership.
+Diagnostics go to standard error; output from
+.B io.print
+goes to standard output.
+A script invoked through this command takes no arguments; use
+.BR "yew \-\-batch" (1)
+when a script needs editor buffers or an argument list.
+.SH OPTIONS
+.TP
+.BI \-e " EXPR"
+Evaluate one expression and print its value when it is not
+.BR nil .
+.TP
+.BI \-c " FILE"
+Parse and compile the file, but do not run it.
+.TP
+.BI \-\-dump-ast " FILE"
+Print the parsed abstract syntax tree.
+.TP
+.BI \-\-dump-bytecode " FILE"
+Disassemble every compiled function.
+.TP
+.B \-\-list-natives
+Print every module native as
+.IR module.name ,
+one per line.
+.TP
+.BI \-\-caps " SPEC"
+Limit the entry script's capabilities.
+.I SPEC
+is
+.BR all ,
+.BR none ,
+or a comma-separated list drawn from
+.BR fs.read ,
+.BR fs.write ,
+.BR shell ,
+and
+.BR net .
+The default for the command-line origin is
+.BR all .
+.TP
+.BI \-\-origin " KIND"
+Run with origin
+.BR cli ,
+.BR config ,
+.BR workspace ,
+or
+.BR plugin .
+The default is
+.BR cli .
+Changing the origin can only reduce what the script may reach.
+.TP
+.B \-\-help
+Print the Fletch command synopsis.
+.SH THE REPL
+The primary prompt is
+.BR "fl> " ;
+an incomplete expression uses the continuation prompt
+.BR "..> " .
+Enter compiles and runs a complete form.
+An open bracket or trailing operator continues onto the next line.
+Values other than
+.B nil
+are printed in deterministic Fletch notation.
+Rendering is bounded; a value too deep or too large is elided rather than
+allowing the prompt to grow without limit.
+.PP
+The prompt commands are:
+.TP
+.B :help [NAME]
+List prompt commands, or show a builtin signature.
+.TP
+.B :quit
+Leave the prompt.
+.B :q
+is an alias.
+.TP
+.BI :load " PATH"
+Evaluate a file in the current prompt while retaining its globals.
+.TP
+.B :reload
+Evaluate the most recent
+.B :load
+path again.
+.TP
+.B :globals
+List user-bound globals in insertion order.
+.TP
+.BI :disasm " NAME"
+Disassemble a function bound in the prompt.
+.TP
+.B :caps
+Show the current origin and grants.
+.PP
+.B Ctrl-C
+discards the input being edited.
+.B Ctrl-D
+on an empty line leaves the prompt.
+.B Ctrl-L
+clears the screen.
+There is no stepping debugger or breakpoint facility in 1.0; traces,
+.BR :disasm ,
+.BR \-\-dump-bytecode ,
+and
+.B io.print
+are the debugging surfaces.
+.SH LANGUAGE
+Fletch values are
+.BR nil ,
+booleans, wrapping signed 64-bit integers, doubles, immutable
+grapheme-indexed strings, mutable lists, insertion-ordered maps, functions,
+and editor handles for buffers, cursors, spans, windows, and regular
+expressions.
+Only
+.B nil
+and
+.B false
+are false; zero, empty strings, and empty lists are true.
+.PP
+Functions are lexically scoped and closures capture shared variables by
+reference.
+Maps iterate in insertion order and strings compare bytewise, making a run
+independent of locale and hash-table order.
+The terse motion layer uses values such as
+.BR l ,
+.BR w ,
+and
+.B b
+for editor motions.
+A top-level
+.B edit {
+block is one undo transaction: an escaping error rolls back the block and
+then re-raises; nested
+.B edit
+blocks join the outer transaction.
+.PP
+Runtime errors are maps with
+.B kind
+and
+.B msg
+fields.
+The closed 1.0 kind set is
+.BR type ,
+.BR arity ,
+.BR name ,
+.BR index ,
+.BR key ,
+.BR div ,
+.BR capability ,
+.BR io ,
+.BR import ,
+.BR motion ,
+.BR user ,
+.BR limit ,
+and
+.BR handle .
+Compile diagnostics are not catchable; runtime errors are.
+The complete grammar and semantics are in
+.IR .docs/fletch-spec.md ,
+and the introductory book is installed with yew's documentation.
+.SH MODULES
+The closed language-standard module set is
+.BR str ,
+.BR list ,
+.BR map ,
+.BR math ,
+.BR fmt ,
+.BR io ,
+and
+.BR re .
+An editor-hosted VM additionally exposes editor modules including
+.BR buf ,
+.BR win ,
+.BR cur ,
+.BR span ,
+.BR opt ,
+and
+.BR ed .
+File imports are resolved beside the importer, then below the user Fletch
+configuration directory, then below
+.BR YEW_RUNTIME_DIR .
+Modules are cached by real path; an import cycle is an error that names the
+cycle.
+.SH CAPABILITIES
+Host I/O is divided into
+.BR fs.read ,
+.BR fs.write ,
+.BR shell ,
+and
+.BR net .
+The origin of the active frame supplies authority; calling through a more
+privileged function does not borrow its authority.
+The command-line origin receives all four by default because the user who
+invoked it already has a shell.
+Use
+.B \-\-caps
+to reduce that set.
+A denial raises a catchable
+.B capability
+error and an uncaught denial exits 3.
+.SH BATCH MODE
+.B yew \-\-batch
+uses the same compiler and VM but adds an editor host.
+It loads configuration, opens file operands in order, installs the globals
+.BR args ,
+.BR script_path ,
+.BR files ,
+and
+.BR batch ,
+runs the script, and exits without initializing a tty, terminal grid, or
+event loop.
+.PP
+Standard output carries only script output.
+Standard error carries diagnostics, runtime traces, warnings, and mirrored
+logs.
+Standard input may be claimed either by one
+.B -
+file operand or by
+.BR io.stdin() ,
+never both.
+Batch mode never prompts and never saves a dirty buffer implicitly.
+.PP
+Commands requiring a screen or interactive answer raise a catchable
+.B capability
+error.
+Use direct scripted alternatives: for example,
+.B buf.open(path)
+instead of the file picker,
+.B io.glob(pattern)
+instead of the file finder, and
+.B ed.run(name, args)
+instead of entering E mode.
+.IR docs/batch.md
+contains the complete stdio and refusal tables.
+.SH EXIT STATUS
+.TP
+.B 0
+The script or requested inspection completed.
+.TP
+.B 1
+Usage, compilation, or an uncaught ordinary runtime error.
+.TP
+.B 3
+An unreadable file, host I/O error, or uncaught
+.B capability
+or
+.B io
+error.
+.TP
+.B 4
+An internal invariant failed.
+.PP
+.B yew fl
+never returns 2; that status belongs to a script failure under
+.BR "yew \-\-batch" .
+.SH ENVIRONMENT
+.TP
+.B YEW_RUNTIME_DIR
+Override the installed runtime directory used for file imports.
+.TP
+.B YEW_FL_GC_STRESS
+When present, request a garbage collection at every safe allocation point.
+This is a developer diagnostic and is intentionally slow.
+.TP
+.B FL_GC_STRESS
+Compatibility spelling for
+.BR YEW_FL_GC_STRESS .
+.TP
+.B YEW_FL_DUMP_BAD_CHUNK
+Write malformed-bytecode diagnostics to the named path.
+This is a developer diagnostic.
+.TP
+.BR XDG_CONFIG_HOME ", " HOME
+Select the user Fletch import directory.
+.SH EXAMPLES
+Evaluate an expression:
+.nf
+.RS
+yew fl \-e '1 + 2'
+.RE
+.fi
+.PP
+Run a script from standard input:
+.nf
+.RS
+printf 'import io\enio.print("hello")\en' | yew fl
+.RE
+.fi
+.PP
+Check a file without executing it:
+.nf
+.RS
+yew fl \-c tools/check.fl
+.RE
+.fi
+.PP
+Inspect compiled functions:
+.nf
+.RS
+yew fl \-\-dump-bytecode tools/check.fl
+.RE
+.fi
+.PP
+Run without host I/O authority:
+.nf
+.RS
+yew fl \-\-caps none \-\-origin cli tools/check.fl
+.RE
+.fi
+.SH SEE ALSO
+.BR yew (1),
+.BR yew-pkg (1)

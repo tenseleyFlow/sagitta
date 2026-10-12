@@ -55,6 +55,20 @@ permissions:
   contents: read
 
 jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install both man-page implementations
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes \
+            bsdextrautils groff man-db mandoc
+      - name: Cross-check and lint the installed man surface
+        run: |
+          make CC=gcc
+          YEW_REQUIRE_GROFF=1 make test-man
+
   gcc:
     runs-on: ubuntu-latest
     # SMOKE DEPTH, and the reason is measured, not guessed.
@@ -289,6 +303,8 @@ jobs:
         run: |
           make CC=clang
           make test CC=clang
+      - name: Cross-check man pages and resolve yew-regex
+        run: make test-man CC=clang
       - name: Prove default-filesystem aliases and Darwin RSS units
         run: |
           case_dir=$(mktemp -d)
