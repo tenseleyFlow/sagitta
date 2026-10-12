@@ -232,40 +232,78 @@ static size_t bytes_find(const Bytebuf *haystack, size_t from,
     return SIZE_MAX;
 }
 
+static const char *book_path(void)
+{
+    const char *override = getenv("YEW_MANUAL_BOOK");
+
+    return override == NULL || override[0] == '\0'
+               ? "docs/fletch-book/01-arrows-to-programs.md"
+               : override;
+}
+
+static bool book_marked_bytes(const char *begin, const char *end,
+                              Bytebuf *out)
+{
+    Bytebuf book;
+    size_t first;
+    size_t last;
+    bool found = false;
+
+    bytebuf_init(out);
+    if (!read_path_bytes(book_path(), &book))
+        return false;
+    first = bytes_find(&book, 0U, begin);
+    if (first != SIZE_MAX) {
+        first += strlen(begin);
+        last = bytes_find(&book, first, end);
+        if (last != SIZE_MAX) {
+            bytebuf_append(out, book.data + first, last - first);
+            found = true;
+        }
+    }
+    bytebuf_free(&book);
+    return found;
+}
+
+static bool book_recording_keys(Bytebuf *out)
+{
+    static const char begin[] =
+        "<!-- yew-recording-keys:start -->\n```keys\n"
+        "case: s59_book_recording\n";
+    static const char end[] =
+        "\n```\n<!-- yew-recording-keys:end -->";
+
+    if (!book_marked_bytes(begin, end, out))
+        return false;
+    bytebuf_push_u8(out, 0U);
+    return true;
+}
+
 static bool book_recording_matches(const char *generated)
 {
-    static const char book_path[] =
-        "docs/fletch-book/01-arrows-to-programs.md";
     static const char begin[] =
         "<!-- yew-recording:start -->\n```text\n";
     static const char end[] =
         "```\n<!-- yew-recording:end -->";
-    Bytebuf book;
+    Bytebuf expected;
     Bytebuf source;
-    size_t first;
-    size_t last;
     bool equal = false;
 
-    if (!read_path_bytes(book_path, &book))
+    if (!book_marked_bytes(begin, end, &expected))
         return false;
     if (!read_path_bytes(generated, &source)) {
-        bytebuf_free(&book);
+        bytebuf_free(&expected);
         return false;
     }
-    first = bytes_find(&book, 0U, begin);
-    if (first != SIZE_MAX) {
-        first += sizeof(begin) - 1U;
-        last = bytes_find(&book, first, end);
-        equal = last != SIZE_MAX && last - first == source.len &&
-                memcmp(book.data + first, source.data, source.len) == 0;
-    }
+    equal = expected.len == source.len &&
+            memcmp(expected.data, source.data, source.len) == 0;
     if (!equal && source.len != 0U) {
         (void)fprintf(stderr, "--- generated Sprint 59 book recording ---\n");
         (void)fwrite(source.data, 1U, source.len, stderr);
         (void)fprintf(stderr, "--- end generated recording ---\n");
     }
     bytebuf_free(&source);
-    bytebuf_free(&book);
+    bytebuf_free(&expected);
     return equal;
 }
 
@@ -2464,17 +2502,24 @@ cleanup:
 static void case_s59_book_recording(PtyCtx *c)
 {
     static const u8 initial[] = "id\nname\ncreated_at\n";
+    Bytebuf keys;
     char fixture[256];
     char generated[PATH_MAX];
     char command[PATH_MAX + 4U];
     int n;
 
-    if (!s18_open(c, initial, sizeof(initial) - 1U,
-                  fixture, sizeof(fixture)))
+    if (!book_recording_keys(&keys)) {
+        ptc_check(c, false, "cannot read the Fletch book key example");
         return;
+    }
+    if (!s18_open(c, initial, sizeof(initial) - 1U,
+                  fixture, sizeof(fixture))) {
+        bytebuf_free(&keys);
+        return;
+    }
     s18_settle_after_keys(c, "q a");
-    s18_settle_after_keys(
-        c, "left i \" esc end i \" comma esc down");
+    s18_settle_after_keys(c, (const char *)keys.data);
+    bytebuf_free(&keys);
     s18_settle_after_keys(c, "q");
     s18_settle_after_keys(c, "Q e");
     n = snprintf(generated, sizeof(generated), "%s/recording.fl",

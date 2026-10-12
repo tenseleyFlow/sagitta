@@ -38,6 +38,12 @@ new_fixture
 run_fixture >/dev/null
 
 new_fixture
+sed 's/case: s59_book_recording/case: no_such_manual_case/' \
+    "$fixture/book.md" >"$fixture/bad"
+mv "$fixture/bad" "$fixture/book.md"
+expect_reject 'unknown keys PTY case'
+
+new_fixture
 mv "$fixture/manual/15-limits.md" "$fixture/manual/15-missing.txt"
 expect_reject 'missing chapter'
 

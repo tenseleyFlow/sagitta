@@ -23,10 +23,15 @@ The goal is one quoted, comma-terminated string per line:
 ## 1. Make the edit with keys
 
 Begin in L mode on line 1. The sequence, in yew's canonical key spelling, is:
+The `case:` line names the documentation fixture; the following line is the
+sequence you type.
 
-```text
-<left> i " <esc> <end> i " , <esc> <down>
+<!-- yew-recording-keys:start -->
+```keys
+case: s59_book_recording
+<left> i " <esc> <end> i " <comma> <esc> <down>
 ```
+<!-- yew-recording-keys:end -->
 
 `<left>` uses L mode's current line as the unit and moves to its home. `i`
 enters Insert, and typing `"` changes the complete buffer to:

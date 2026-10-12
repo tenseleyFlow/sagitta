@@ -5,6 +5,8 @@ root=${YEW_MANUAL_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
 manual=${YEW_MANUAL_DIR:-$root/docs/manual}
 book=${YEW_MANUAL_BOOK:-$root/docs/fletch-book/01-arrows-to-programs.md}
 yew_bin=${YEW_MANUAL_BIN:-$root/build/yew}
+pty_runner=${YEW_MANUAL_PTY_RUNNER:-$root/build/pty_runner}
+demo_bin=${YEW_MANUAL_DEMO_BIN:-$root/build/demo_paint}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-check-manual.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
@@ -27,6 +29,8 @@ while [ "$i" -le 15 ]; do
 done
 
 [ -x "$yew_bin" ] || fail "missing executable $yew_bin"
+[ -x "$pty_runner" ] || fail "missing executable $pty_runner"
+[ -x "$demo_bin" ] || fail "missing executable $demo_bin"
 [ -f "$book" ] || fail "missing Fletch book chapter 1"
 chapters="$chapters $book"
 
@@ -182,7 +186,28 @@ while IFS='|' read -r number tag source line; do
             continue
             ;;
         keys)
-            fail "$source:$line: keys example requires a registered PTY case"
+            case_name=$(sed -n '1s/^case: //p' "$input")
+            case $case_name in
+                ''|*[!A-Za-z0-9_-]*)
+                    fail "$source:$line: keys example needs 'case: NAME'"
+                    ;;
+            esac
+            YEW_MANUAL_BOOK="$book" \
+            YEW_PTY_FILTER="$case_name" \
+            YEW_PTY_BUDGET_MS=45000 \
+            YEW_PTY_CASE_BUDGET_MS=20000 \
+                "$pty_runner" --demo "$demo_bin" --yew "$yew_bin" \
+                >"$first" 2>"$first_err" || {
+                    cat "$first_err" >&2
+                    fail "$source:$line: key replay failed"
+                }
+            [ ! -s "$first_err" ] || {
+                cat "$first_err" >&2
+                fail "$source:$line: key replay wrote unexpected stderr"
+            }
+            grep -Fxq "pty: $case_name: ok" "$first" ||
+                fail "$source:$line: named PTY case did not run"
+            continue
             ;;
         *) fail "$source:$line: internal unknown example tag $tag" ;;
     esac
