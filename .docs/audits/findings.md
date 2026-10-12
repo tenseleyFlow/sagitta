@@ -93,7 +93,7 @@ recorded in `audit-00.md`.
 | YEW-F-078 | M | fixed | F03 TEXT | ~~crash journal admits a same-metadata replacement inode~~ — fixed 2026-09-14 in `f65eea0d` | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 | YEW-F-080 | M | fixed | F15 CI | ~~host sleep fabricates a fuzz-watchdog finding~~ — fixed 2026-10-12 in `ea6327f0` | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
-| YEW-F-081 | M | confirmed | F06 RE | long quoted literals exceed the smaller VM-program limit | tests/audit/yew_f_081.c | s21 §6 / DoD 13 |
+| YEW-F-081 | M | fixed | F06 RE | ~~long quoted literals exceed the smaller VM-program limit~~ — fixed 2026-10-12 in `ee713cd5` | tests/audit/yew_f_081.c | s21 §6 / DoD 13 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -758,7 +758,16 @@ minimized artifact has SHA-256
 The editor reports an error rather than corrupting data, and ordinary-size
 searches remain correct, so this is Medium rather than High.  The hard XFAIL
 rebuilds the same 4,240-byte limit crossing without depending on the retained
-CI artifact.
+CI artifact.  Commit `ee713cd5` preserves the 4,096-instruction VM cap and
+routes only conservatively proven whole literals through bounded direct
+matching.  Flat inputs use Horspool search, fragmented piece trees carry KMP
+state without materializing the document, and the cache format adds a
+variable-length `YEWREP2` form while retaining byte-identical `YEWREP1` output
+for ordinary patterns.  The exact CI artifact passes coverage and
+ASan/UBSan+coverage replay, a fresh 100,000-iteration quote campaign is green,
+and the regression covers Pike/DFA entry points, forward/backward search,
+arbitrary piece boundaries, cache truncation, and the full 64 KiB semantic
+literal limit.
 
 ## Unverified observations
 

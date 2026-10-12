@@ -90,3 +90,4 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-12 | File `YEW-F-080` from the tier-1 soak (`08249798`) | 0 | 0 | 1 | 0 | 1 |
 | 2026-10-12 | Fix `YEW-F-080` (`ea6327f0`) | 0 | 0 | 0 | 0 | 0 |
 | 2026-10-12 | File `YEW-F-081` from scheduled fuzz run `38281035643` | 0 | 0 | 1 | 0 | 1 |
+| 2026-10-12 | Fix `YEW-F-081` (`ee713cd5`) | 0 | 0 | 0 | 0 | 0 |
