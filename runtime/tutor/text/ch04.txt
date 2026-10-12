@@ -4,12 +4,12 @@ Search direction belongs to the search. n repeats in that direction and N
 reverses it. Smartcase ignores case until the pattern contains uppercase.
 
 [ ] ch04.t1 Search forward for needle with /needle Enter.
-[ ] ch04.t2 Press n twice to reach the third lowercase match.
-[ ] ch04.t3 Press N once to return to the second match.
-[ ] ch04.t4 Search for Needle and observe smartcase.
-[ ] ch04.t5 Replace every lowercase needle with pin using :%s/needle/pin/g.
-[ ] ch04.t6 Undo and run a confirm replace instead.
-[ ] ch04.t7 Use the jump-back command to return to your prior position.
+[ ] ch04.t2 Press n to reach the second lowercase match.
+[ ] ch04.t3 Press n again to reach the third match.
+[ ] ch04.t4 Press N once to return to the second match.
+[ ] ch04.t5 Search for Needle and observe smartcase.
+[ ] ch04.t6 Replace every lowercase needle with pin.
+[ ] ch04.t7 Undo both the task mark and replacement with 2u.
 
 needle one
 Needle keeps its capital

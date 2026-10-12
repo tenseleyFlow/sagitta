@@ -3,13 +3,13 @@ YEW TUTOR 3/7 — EXECUTE MODE AND THE SHELL
 E mode is yew's command language. A leading ! runs your shell, while a range
 before ! filters buffer text through a command as one undoable edit.
 
-[ ] ch03.t1 Open E mode with : and cancel with Esc.
-[ ] ch03.t2 Run :set tabwidth=4.
-[ ] ch03.t3 Recall that command with : then Up, and cancel.
-[ ] ch03.t4 Sort the three fruit lines with :14,16!sort.
-[ ] ch03.t5 Undo and redo the filter once.
-[ ] ch03.t6 Run :!printf 'job output'.
-[ ] ch03.t7 Close the job output and return here.
+[ ] ch03.t1 Open E mode with :.
+[ ] ch03.t2 Cancel E mode with Esc.
+[ ] ch03.t3 Run :set tabwidth=4.
+[ ] ch03.t4 Recall that command with : then Up, and cancel.
+[ ] ch03.t5 Sort the three fruit lines with :17,19!sort.
+[ ] ch03.t6 Undo both the task mark and filter with 2u.
+[ ] ch03.t7 Run the filter again from command history.
 
 Commands report errors without replacing this file. Job output opens in its
 own scratch buffer and never becomes file content.

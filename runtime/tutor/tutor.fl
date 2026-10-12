@@ -1,6 +1,166 @@
-# The tutor is a built-in configuration overlay.  runtime/init.fl loads
-# first, so every lesson exercises the same shipped bindings as the editor.
-# Chapter definitions and the state-driven task engine are loaded here as
-# Sprint 59's next frontier; workspace construction already occurs before
-# ws.open so hooks observe all seven chapter buffers as one `tutor` group.
+# The Sprint 59 tutor is an ordinary built-in Fletch overlay.  Its task
+# checkers live in chapter modules; this driver is the only writer.
+import buf
+import io
+import list
+import map
+import str
+import win
+
+import "./ch01-arrows.fl" as ch01
+import "./ch02-units.fl" as ch02
+import "./ch03-execute.fl" as ch03
+import "./ch04-search.fl" as ch04
+import "./ch05-workspace.fl" as ch05
+import "./ch06-fletch.fl" as ch06
+import "./ch07-fuss.fl" as ch07
+
 let tutor_schema = 1
+
+let chapters = [
+    { key: "arrows", name: "ch01.txt", tasks: ch01.tasks },
+    { key: "units", name: "ch02.txt", tasks: ch02.tasks },
+    { key: "execute", name: "ch03.txt", tasks: ch03.tasks },
+    { key: "search", name: "ch04.txt", tasks: ch04.tasks },
+    { key: "workspace", name: "ch05.txt", tasks: ch05.tasks },
+    { key: "fletch", name: "ch06.txt", tasks: ch06.tasks },
+    { key: "fuss", name: "ch07.txt", tasks: ch07.tasks },
+]
+
+# Completion is state, not undo history.  The visible task marks are
+# deliberately undoable, so retain IDs separately and repair a mark that a
+# user undoes while continuing to evaluate the next task.
+let completed = {}
+let initialized = false
+let active_chapter = nil
+let progress_path = nil
+
+fn is_chapter_buffer(b, chapter) {
+    let path = b.path()
+    if path == nil { return b.name() == chapter.name }
+    return str.ends_with(path, "/" + chapter.name)
+}
+
+fn chapter_for_buffer(b) {
+    for chapter in chapters {
+        if is_chapter_buffer(b, chapter) { return chapter }
+    }
+    return nil
+}
+
+fn chapter_buffer(chapter) {
+    for b in buf.list() {
+        if is_chapter_buffer(b, chapter) { return b }
+    }
+    return nil
+}
+
+fn line_checked(b, task) {
+    if b == nil or b.lines() < task.line { return false }
+    return str.starts_with(b.line(task.line), "[✓] ")
+}
+
+fn remember_progress_path(b) {
+    if progress_path != nil { return nil }
+    let path = b.path()
+    if path == nil { return nil }
+    let slash = str.rfind(path, "/")
+    if slash < 0 { return nil }
+    progress_path = str.slice(path, 0, slash) + "/tutor.fl"
+}
+
+fn initialize() {
+    if initialized { return nil }
+    for chapter in chapters {
+        let b = chapter_buffer(chapter)
+        if b != nil {
+            remember_progress_path(b)
+            for task in chapter.tasks {
+                if line_checked(b, task) { map.set(completed, task.id, true) }
+            }
+        }
+    }
+    initialized = true
+}
+
+fn mark_task(b, task) {
+    if b == nil or b.lines() < task.line { return nil }
+    let line = b.line_span(task.line)
+    let text = line.text()
+    if not str.starts_with(text, "[ ] ") { return nil }
+    line.replace(str.replace(text, "[ ]", "[✓]", 1))
+}
+
+fn done_ids(chapter) {
+    let ids = []
+    for task in chapter.tasks {
+        if map.get(completed, task.id, false) {
+            list.push(ids, "\"" + task.id + "\"")
+        }
+    }
+    return ids
+}
+
+fn bool_text(value) {
+    if value { return "true" }
+    return "false"
+}
+
+fn progress_text() {
+    let text = "{\n  schema: 1,\n  version: \"1.0.0\",\n  chapters: {\n"
+    for chapter in chapters {
+        let ids = done_ids(chapter)
+        let complete = list.len(ids) == list.len(chapter.tasks)
+        text = text + "    " + chapter.key + ": { done: [" +
+               str.join(ids, ", ") + "], complete: " +
+               bool_text(complete)
+        if chapter.key == "fuss" { text = text + ", skipped: false" }
+        text = text + " },\n"
+    }
+    return text + "  },\n}\n"
+}
+
+fn persist() {
+    if progress_path != nil { io.write(progress_path, progress_text()) }
+}
+
+fn evaluate() {
+    initialize()
+    let current = buf.current()
+    let selected = chapter_for_buffer(current)
+    if selected != nil { active_chapter = selected }
+    if active_chapter == nil { return nil }
+    let lesson = chapter_buffer(active_chapter)
+    if lesson == nil { return nil }
+
+    for task in active_chapter.tasks {
+        if map.get(completed, task.id, false) {
+            if not line_checked(lesson, task) { edit { mark_task(lesson, task) } }
+        } else {
+            # Checkers are pure reads.  Only this branch mutates tutorial
+            # state, and the visible completion is one explicit transaction.
+            if task.check(current, win.current()) {
+                map.set(completed, task.id, true)
+                edit { mark_task(lesson, task) }
+                persist()
+            }
+            return nil
+        }
+    }
+    return nil
+}
+
+fn changed(b, changed_span) { evaluate() }
+fn cursor_moved(w) { evaluate() }
+fn mode_entered(mode) { evaluate() }
+fn window_focused(w) { evaluate() }
+fn idle() { evaluate() }
+
+on("buf.change", changed)
+on("cursor.move", cursor_moved)
+on("mode.enter", mode_entered)
+on("win.focus", window_focused)
+# FUSS selection, picker, and asynchronous Git publication are not text
+# cursor events.  Idle remains state-driven and lets chapter 7 use the same
+# pure checker contract without teaching the driver about FUSS internals.
+on("ed.idle", idle)

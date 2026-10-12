@@ -1006,13 +1006,17 @@ typedef struct KeyName {
 
 static const KeyName key_names[] = {
     {"esc", 27U, "\x1b", 0U}, {"enter", 13U, "\r", 0U},
+    {"cr", 13U, "\r", 0U},
     {"tab", 9U, "\t", 0U}, {"space", 32U, " ", 0U},
     {"backspace", 127U, "\x7f", 0U},
+    {"bs", 127U, "\x7f", 0U},
     {"insert", 57348U, NULL, 2U}, {"delete", 57349U, NULL, 3U},
+    {"ins", 57348U, NULL, 2U}, {"del", 57349U, NULL, 3U},
     {"left", 57350U, "\x1b[D", 0U},
     {"right", 57351U, "\x1b[C", 0U},
     {"up", 57352U, "\x1b[A", 0U}, {"down", 57353U, "\x1b[B", 0U},
     {"pageup", 57354U, NULL, 5U}, {"pagedown", 57355U, NULL, 6U},
+    {"pgup", 57354U, NULL, 5U}, {"pgdn", 57355U, NULL, 6U},
     {"home", 57356U, "\x1b[H", 0U}, {"end", 57357U, "\x1b[F", 0U}
 };
 
@@ -1062,14 +1066,39 @@ static bool key_parse(const char *token, size_t len, u16 *mods,
     *legacy = NULL;
     *tilde = 0U;
     *scalar = 0U;
+    /* Accept the editor's canonical Sprint 13 spelling as well as the
+     * older harness-only ctrl+left spelling.  Tutor metadata is executable
+     * documentation, so the PTY runner must consume it without translation. */
+    while (end - part >= 2 && part[1] == '-') {
+        if (part[0] == 'C')
+            *mods = (u16)(*mods | YEW_MOD_CTRL);
+        else if (part[0] == 'A')
+            *mods = (u16)(*mods | YEW_MOD_ALT);
+        else if (part[0] == 'S')
+            *mods = (u16)(*mods | YEW_MOD_SHIFT);
+        else if (part[0] == 'M')
+            *mods = (u16)(*mods | YEW_MOD_SUPER);
+        else
+            break;
+        part += 2;
+    }
     while ((plus = memchr(part, '+', (size_t)(end - part))) != NULL) {
         if (!token_modifier(part, (size_t)(plus - part), mods))
             return false;
         part = plus + 1;
     }
+    if (end - part >= 3 && part[0] == '<' && end[-1] == '>') {
+        part++;
+        end--;
+    }
     if (end - part == 1 && (unsigned char)*part >= 0x20U &&
         (unsigned char)*part <= 0x7eU) {
         *scalar = (u8)*part;
+        *kitty = *scalar;
+        return true;
+    }
+    if (name_equal(part, (size_t)(end - part), "lt")) {
+        *scalar = (u8)'<';
         *kitty = *scalar;
         return true;
     }

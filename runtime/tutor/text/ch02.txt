@@ -5,11 +5,11 @@ cross changes. H borrows the unit you came from and extends a selection.
 
 [ ] ch02.t1 Press w to enter W mode.
 [ ] ch02.t2 Move Right once to the next word.
-[ ] ch02.t3 Delete the word under the cursor with d.
-[ ] ch02.t4 Press b, then Down to visit the next block.
-[ ] ch02.t5 Press h and extend a line selection with Shift-Down.
-[ ] ch02.t6 Press Enter to lift the selected lines to cursors.
-[ ] ch02.t7 Type ! once and see every cursor edit in one transaction.
+[ ] ch02.t3 Press b to layer Block mode over the arrows.
+[ ] ch02.t4 Move Down to the next block.
+[ ] ch02.t5 Press h to enter Highlight mode.
+[ ] ch02.t6 Extend the selection with Shift-Down.
+[ ] ch02.t7 Lift the selection with Enter, then type ! once.
 
 alpha beta gamma
 the quick fox jumped

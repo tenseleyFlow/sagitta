@@ -1,0 +1,84 @@
+# Chapter 1: the line unit, Insert mode, Escape, and saving.
+#
+# Every checker is a total, read-only function of the supplied buffer and
+# window.  The driver, never a checker, owns task-line and progress writes.
+import ed
+import io
+import list
+import str
+
+fn cursor(w) {
+    let cursors = w.cursors()
+    if list.len(cursors) == 0 { return nil }
+    return cursors[0]
+}
+
+fn at(b, w, line, col) {
+    let c = cursor(w)
+    if c == nil { return false }
+    return c.line() == line and c.col() == col
+}
+
+let tasks = [
+    {
+        id: "ch01.t1",
+        line: 6,
+        prompt: "Move down one line with Down.",
+        keys: "<down>",
+        check: fn(b, w) at(b, w, 2, 0),
+    },
+    {
+        id: "ch01.t2",
+        line: 7,
+        prompt: "Move down again to the lesson text.",
+        keys: "<down>",
+        check: fn(b, w) at(b, w, 3, 0),
+    },
+    {
+        id: "ch01.t3",
+        line: 8,
+        prompt: "Move to the end of this line with Right.",
+        keys: "<right>",
+        check: fn(b, w) {
+            let c = cursor(w);
+            if c == nil or b.lines() < 3 { return false }
+            return c.line() == 3 and c.col() == str.len(b.line(3))
+        },
+    },
+    {
+        id: "ch01.t4",
+        line: 9,
+        prompt: "Move back to the start of the line with Left.",
+        keys: "<left>",
+        check: fn(b, w) at(b, w, 3, 0),
+    },
+    {
+        id: "ch01.t5",
+        line: 10,
+        prompt: "Press i to enter Insert mode.",
+        keys: "i",
+        check: fn(b, w) ed.mode() == "I",
+    },
+    {
+        id: "ch01.t6",
+        line: 11,
+        prompt: "Type yew, then press Esc to return to L mode.",
+        keys: "y e w <esc>",
+        check: fn(b, w) {
+            if b.lines() < 3 { return false }
+            return ed.mode() == "L" and str.starts_with(b.line(3), "yew")
+        },
+    },
+    {
+        id: "ch01.t7",
+        line: 12,
+        prompt: "Save the chapter with :w Enter.",
+        keys: ": w <cr>",
+        check: fn(b, w) {
+            let path = b.path();
+            if path == nil or b.dirty() or not io.exists(path) { return false }
+            try { return io.read(path) == b.text() }
+            catch e { return false }
+        },
+    },
+]

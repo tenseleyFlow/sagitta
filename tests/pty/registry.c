@@ -18,6 +18,7 @@
 #include "text/file.h"
 #include "text/journal.h"
 #include "snapshot.h"
+#include "tutor_runner.h"
 
 #ifndef YEW_TEST_MOCKAI
 #define YEW_TEST_MOCKAI "build/tests/helpers/mockai"
@@ -13183,6 +13184,7 @@ const PtyCase yew_pty_cases[] = {
     C(s33_hello_world_repl, modern, 24U, 80U, case_s33_hello_world_repl),
     C(s32_bug_restores_the_terminal, modern, 24U, 80U,
       case_s32_bug_restores_the_terminal),
+    C(tutor_ch01, modern, 24U, 80U, yew_tutor_case_ch01),
     {NULL, NULL, 0U, 0U, NULL, NULL}
 };
 

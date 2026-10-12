@@ -4,12 +4,12 @@ A recording stores commands, not key bytes. Rebinding a key therefore does
 not change what an old recording means.
 
 [ ] ch06.t1 Start recording register a with q a.
-[ ] ch06.t2 Insert quotes around the word field.
+[ ] ch06.t2 Insert X at the start of the title.
 [ ] ch06.t3 Stop recording with q.
-[ ] ch06.t4 Replay register a on the next line with @ a.
-[ ] ch06.t5 Paste register a into a scratch buffer with " a p.
-[ ] ch06.t6 Read the generated @[ ... ] Fletch motion source.
-[ ] ch06.t7 Save a named copy in your macro library.
+[ ] ch06.t4 Replay register a with @ a.
+[ ] ch06.t5 Paste register a into this buffer with quote-a-p.
+[ ] ch06.t6 Find the generated Fletch motion block with /@[.
+[ ] ch06.t7 Save the edited lesson with s.
 
 field
 field

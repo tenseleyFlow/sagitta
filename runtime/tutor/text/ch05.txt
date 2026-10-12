@@ -4,12 +4,12 @@ Tabs own pane trees. Groups collapse related tabs into one strip entry, while
 each member keeps a stable identity and remembers its last active position.
 
 [ ] ch05.t1 Split this tab below with Ctrl-W s.
-[ ] ch05.t2 Move focus to the other pane with Ctrl-W Down.
-[ ] ch05.t3 Close that pane with Ctrl-W q.
-[ ] ch05.t4 Open a new untitled tab from the + entry.
-[ ] ch05.t5 Open the group picker with Alt-G.
-[ ] ch05.t6 Build a group named notes with three tutor tabs.
-[ ] ch05.t7 Quit and reopen chapter 5; verify the cursor resumes here.
+[ ] ch05.t2 Move Down in one pane to give it distinct state.
+[ ] ch05.t3 Focus the other pane with Ctrl-W w.
+[ ] ch05.t4 Close that pane with Ctrl-W c.
+[ ] ch05.t5 Open a new untitled tab with t t.
+[ ] ch05.t6 Return to the tutor group with t p.
+[ ] ch05.t7 Move to the RESUME MARKER with G then Up twice.
 
 RESUME MARKER
 

@@ -836,6 +836,7 @@ PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
 PTY_ORACLE_OBJ := $(PTY_VT_OBJ) $(PTY_SNAPSHOT_OBJ)
 PTY_HARNESS_OBJ := $(BUILD)/tests/pty/harness.o
 PTY_REGISTRY_OBJ := $(BUILD)/tests/pty/registry.o
+PTY_TUTOR_OBJ := $(BUILD)/tests/pty/tutor_runner.o
 PTY_RUNNER_OBJ := $(BUILD)/tests/pty/runner.o
 PTY_DEMO_OBJ := $(BUILD)/tests/pty/demo_paint.o
 $(PTY_REGISTRY_OBJ): CFLAGS += \
@@ -852,7 +853,7 @@ $(PTY_REGISTRY_OBJ): $(MOCKAI)
 endif
 PTY_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) \
                 $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) \
-                $(PTY_RUNNER_OBJ)
+                $(PTY_TUTOR_OBJ) $(PTY_RUNNER_OBJ)
 PTY_DEMO_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(PTY_DEMO_OBJ)
 TEXT_FUZZ_SUPPORT_OBJ := $(BUILD)/tests/fuzz/oracle.o \
                          $(BUILD)/tests/fuzz/shrink.o
@@ -1974,9 +1975,13 @@ check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-fletc
 test-unit: $(BUILD)/unit_tests $(AI_TEST_HELPERS)
 	$(UNIT_RUN)
 
-test-tutor: $(BUILD)/unit_tests $(BUILD)/yew
+test-tutor: $(BUILD)/unit_tests $(BUILD)/yew $(BUILD)/pty_runner \
+            $(BUILD)/demo_paint
 	$(BUILD)/unit_tests --filter tutor_
 	YEW_TUTOR_BIN=$(abspath $(BUILD)/yew) scripts/tests/tutor-cli.test.sh
+	$(PTY_PREP) YEW_PTY_FILTER=tutor_ $(PTY_RUN) \
+		--demo $(abspath $(BUILD)/demo_paint) \
+		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
 test-man: $(BUILD)/yew
 	scripts/check-man.sh

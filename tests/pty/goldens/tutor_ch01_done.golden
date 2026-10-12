@@ -1,0 +1,63 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=4,9 vis=1
+modes 2004,1006,1004,1003 kitty=21 sync_pairs=n/a
+--- text
+ 1 tutor (7)  +                                                                 
+ 1 ch01.txt*  2 ch02.txt  3 ch03.txt  4 ch04.txt  5 ch05.txt  6 ch06.txt      >1
+    2 YEW TUTOR 1/7 — ARROWS AND MODES                                          
+    1                                                                           
+    3 yewWork through the unchecked task at the top. A task completes from edito
+    1 state, not from a particular route. Esc always returns to L mode.         
+    2                                                                           
+    3 [✓] ch01.t1 Move down one line with Down.                                 
+    4 [✓] ch01.t2 Move down again to the lesson text.                           
+    5 [✓] ch01.t3 Move to the end of this line with Right.                      
+    6 [✓] ch01.t4 Move back to the start of the line with Left.                 
+    7 [✓] ch01.t5 Press i to enter Insert mode.                                 
+    8 [✓] ch01.t6 Type yew, then press Esc to return to L mode.                 
+    9 [✓] ch01.t7 Save the chapter with :w Enter.                               
+   10                                                                           
+   11 START -> ->                                                               
+   12                                                                           
+   13 hello                                                                     
+   14                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L wrote ch01.txt, 17 lines                                                     
+--- style
+AAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDD
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEGEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+EEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+--- legend
+A fg=#c8ccd4 bg=#2c313a attrs=b---------
+B fg=#61afef bg=#1b202a attrs=b---------
+C fg=#5c6370 bg=#1b202a attrs=----------
+D fg=#5c6370 bg=#1b202a attrs=-d--------
+E fg=#4b5263 bg=#12141a attrs=----------
+F fg=#c8ccd4 bg=#12141a attrs=----------
+G fg=#c8ccd4 bg=#12141a attrs=b---------
+H fg=#ebf4ff bg=#266eba attrs=b---------
+I fg=#dae5f0 bg=#14304c attrs=----------

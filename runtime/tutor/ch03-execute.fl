@@ -1,0 +1,37 @@
+# Chapter 3: Execute mode, history, ranges, and shell filters.
+import ed
+
+let tasks = [
+    { id: "ch03.t1", line: 6, prompt: "Open E mode with :.",
+      keys: ":", check: fn(b, w) ed.mode() == "E" },
+    { id: "ch03.t2", line: 7, prompt: "Cancel E mode with Esc.",
+      keys: "<esc>", check: fn(b, w) ed.mode() == "L" },
+    { id: "ch03.t3", line: 8, prompt: "Run :set tabwidth=4.",
+      keys: ": s e t <space> t a b w i d t h = 4 <cr>",
+      check: fn(b, w) b.opt("tabwidth") == 4 and ed.mode() == "L" },
+    { id: "ch03.t4", line: 9,
+      prompt: "Recall that command with : then Up, and cancel.",
+      keys: ": <up> <esc>",
+      check: fn(b, w) b.opt("tabwidth") == 4 and ed.mode() == "L" },
+    { id: "ch03.t5", line: 10,
+      prompt: "Sort the three fruit lines with :17,19!sort.",
+      keys: ": 1 7 , 1 9 ! s o r t <cr>", check: fn(b, w) {
+          if b.lines() < 19 { return false }
+          return b.line(17) == "apple" and b.line(18) == "orange" and
+                 b.line(19) == "pear"
+      } },
+    { id: "ch03.t6", line: 11,
+      prompt: "Undo both the task mark and filter with 2u.",
+      keys: "2 u", check: fn(b, w) {
+          if b.lines() < 19 { return false }
+          return b.line(17) == "pear" and b.line(18) == "apple" and
+                 b.line(19) == "orange"
+      } },
+    { id: "ch03.t7", line: 12,
+      prompt: "Run the filter again from command history.",
+      keys: ": <up> <cr>", check: fn(b, w) {
+          if b.lines() < 19 { return false }
+          return b.line(17) == "apple" and b.line(18) == "orange" and
+                 b.line(19) == "pear"
+      } },
+]

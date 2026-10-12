@@ -41,6 +41,30 @@ while [ "$chapter" -le 7 ]; do
     chapter=$((chapter + 1))
 done
 
+: >"$tmp/module-ids"
+for module in "$root"/runtime/tutor/ch??-*.fl; do
+    "$yew" fl -c "$module"
+    name=$(basename "$module")
+    expression=$(printf '%s\n' \
+        'import io' \
+        "import \"tutor/$name\" as chapter" \
+        'for task in chapter.tasks { io.print(task.id) }')
+    YEW_RUNTIME_DIR="$root/runtime" \
+        "$yew" fl --caps none -e "$expression" >>"$tmp/module-ids"
+done
+LC_ALL=C sort -o "$tmp/module-ids" "$tmp/module-ids"
+cmp "$tmp/task-ids" "$tmp/module-ids"
+[ "$(grep -hEo 'check:[[:space:]]*fn' \
+      "$root"/runtime/tutor/ch??-*.fl | wc -l | tr -d ' ')" -eq 49 ]
+[ "$(grep -hEo 'keys:[[:space:]]*"' \
+      "$root"/runtime/tutor/ch??-*.fl | wc -l | tr -d ' ')" -eq 49 ]
+if grep -nE '\.(replace|replace_lines|insert|delete|save|append|prepend)\(|io\.(write|append|remove|mkdir)\(|(^|[[:space:]])(edit|error)[[:space:]{(]' \
+    "$root"/runtime/tutor/ch??-*.fl >"$tmp/impure"; then
+    echo 'tutor cli: chapter checker module contains a write or raise' >&2
+    cat "$tmp/impure" >&2
+    exit 1
+fi
+
 run_tutor --list >"$tmp/list-one"
 printf '%s\n' "$expected" >"$tmp/expected"
 cmp "$tmp/expected" "$tmp/list-one"

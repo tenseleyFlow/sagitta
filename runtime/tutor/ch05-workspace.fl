@@ -1,0 +1,40 @@
+# Chapter 5: panes and tabs.  The tutorial itself is the shipped `tutor`
+# group, so every task is performed inside a real seven-member group.
+import buf
+import list
+import str
+import win
+
+fn cursor(w) {
+    let cursors = w.cursors()
+    if list.len(cursors) == 0 { return nil }
+    return cursors[0]
+}
+
+let tasks = [
+    { id: "ch05.t1", line: 6, prompt: "Split this tab below with Ctrl-W s.",
+      keys: "C-w s", check: fn(b, w) list.len(win.list()) == 8 },
+    { id: "ch05.t2", line: 7, prompt: "Move Down in one pane to give it distinct state.",
+      keys: "<down>", check: fn(b, w) {
+          let c = cursor(w); return c != nil and c.line() == 2 and
+                                    list.len(win.list()) == 8
+      } },
+    { id: "ch05.t3", line: 8, prompt: "Focus the other pane with Ctrl-W w.",
+      keys: "C-w w", check: fn(b, w) {
+          let c = cursor(w); return c != nil and c.line() == 1 and
+                                    list.len(win.list()) == 8
+      } },
+    { id: "ch05.t4", line: 9, prompt: "Close that pane with Ctrl-W c.",
+      keys: "C-w c", check: fn(b, w) list.len(win.list()) == 7 },
+    { id: "ch05.t5", line: 10, prompt: "Open a new untitled tab with t t.",
+      keys: "t t", check: fn(b, w) b.path() == nil and list.len(buf.list()) == 8 },
+    { id: "ch05.t6", line: 11, prompt: "Return to the tutor group with t p.",
+      keys: "t p", check: fn(b, w) {
+          let path = b.path();
+          return path != nil and str.ends_with(path, "/ch05.txt")
+      } },
+    { id: "ch05.t7", line: 12, prompt: "Move to the RESUME MARKER with G then Up twice.",
+      keys: "G <up> <up>", check: fn(b, w) {
+          let c = cursor(w); return c != nil and c.line() == 14
+      } },
+]

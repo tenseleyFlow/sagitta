@@ -1,0 +1,28 @@
+# Chapter 7: FUSS navigation and Git actions.  The public `ed.fuss()` query
+# reports the same selected tree row and flags the UI renders.
+import ed
+import str
+
+let tasks = [
+    { id: "ch07.t1", line: 6, prompt: "Enter FUSS mode with f.",
+      keys: "f", check: fn(b, w) ed.mode() == "F" },
+    { id: "ch07.t2", line: 7, prompt: "Expand the selected directory with Right.",
+      keys: "<right>", check: fn(b, w) ed.fuss().expanded },
+    { id: "ch07.t3", line: 8, prompt: "Type n to jump to notes.txt among visible rows.",
+      keys: "n", check: fn(b, w) {
+          let state = ed.fuss();
+          return state.known and state.path != nil and
+                 str.ends_with(state.path, "/notes.txt")
+      } },
+    { id: "ch07.t4", line: 9, prompt: "Open the selected file with Enter.",
+      keys: "<cr>", check: fn(b, w) {
+          let path = b.path();
+          return path != nil and str.ends_with(path, "/notes.txt")
+      } },
+    { id: "ch07.t5", line: 10, prompt: "Return to FUSS and stage it with Alt-A.",
+      keys: "f A-a", check: fn(b, w) ed.fuss().staged },
+    { id: "ch07.t6", line: 11, prompt: "Open action discovery with Ctrl-Shift-/.",
+      keys: "C-S-/", check: fn(b, w) ed.fuss().actions_open },
+    { id: "ch07.t7", line: 12, prompt: "Close discovery and commit with Alt-M.",
+      keys: "<esc> A-m", check: fn(b, w) ed.fuss().clean },
+]
