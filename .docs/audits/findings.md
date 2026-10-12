@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-081`
+Next available ID: `YEW-F-082`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -93,6 +93,7 @@ recorded in `audit-00.md`.
 | YEW-F-078 | M | fixed | F03 TEXT | ~~crash journal admits a same-metadata replacement inode~~ — fixed 2026-09-14 in `f65eea0d` | tests/audit/yew_f_078.c | invariant 1; s08 section 4; s58 section 8 |
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 | YEW-F-080 | M | fixed | F15 CI | ~~host sleep fabricates a fuzz-watchdog finding~~ — fixed 2026-10-12 in `ea6327f0` | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
+| YEW-F-081 | M | confirmed | F06 RE | long quoted literals exceed the smaller VM-program limit | tests/audit/yew_f_081.c | s21 §6 / DoD 13 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -747,6 +748,17 @@ the real-spin exit-124 and byte-exact artifact contract, and adds a regression
 that stops a harmless checked input beyond its one-second budget before
 resuming it successfully.  It also formats the full `size_t` iteration before
 arming the signal instead of narrowing it through `sig_atomic_t`.
+
+`YEW-F-081` is Medium because `yew_re_quote()` promises that arbitrary editor
+bytes round-trip through the regex compiler, but a 4,240-byte literal crosses
+the separate 4,096-instruction VM cap and is rejected.  Scheduled fuzz run
+`38281035643` found the deterministic failure at iteration 100,808,305; its
+minimized artifact has SHA-256
+`ce12bafa65771eef818550609e72f585e52b004b92c6f4c41e2c9567baddf0e1`.
+The editor reports an error rather than corrupting data, and ordinary-size
+searches remain correct, so this is Medium rather than High.  The hard XFAIL
+rebuilds the same 4,240-byte limit crossing without depending on the retained
+CI artifact.
 
 ## Unverified observations
 

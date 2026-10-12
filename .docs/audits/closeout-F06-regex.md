@@ -64,7 +64,7 @@ Sprints covered: s20, s21
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-081` — long quoted literals exceed the smaller VM-program limit.
 
 ## Deferrals recorded against this front
 
