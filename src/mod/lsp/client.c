@@ -67,6 +67,8 @@ static const char *const ts_roots[] = {
 static const char *const fort_roots[] = {".fortls", ".git", NULL};
 static const char *const sh_args[] = {"start", NULL};
 static const char *const git_roots[] = {".git", NULL};
+static const char *const wolf_args[] = {"lsp", NULL};
+static const char *const wolf_roots[] = {"wolf.pkg", ".git", NULL};
 
 #define CFG(lang_, id_, cmd_, args_, roots_)                                  \
     {id_, lang_, cmd_, args_, roots_, NULL, YEW_RPC_INIT_TIMEOUT_MS}
@@ -83,7 +85,8 @@ static const LspServerCfg default_cfgs[] = {
     CFG("jsx", "tsserver", "typescript-language-server", ts_args, ts_roots),
     CFG("tsx", "tsserver", "typescript-language-server", ts_args, ts_roots),
     CFG("fortran", "fortls", "fortls", NULL, fort_roots),
-    CFG("sh", "bashls", "bash-language-server", sh_args, git_roots)
+    CFG("sh", "bashls", "bash-language-server", sh_args, git_roots),
+    CFG("wolf", "wolf", "wolf", wolf_args, wolf_roots)
 };
 
 const LspServerCfg *yew_lsp_default_cfg(const char *lang)
