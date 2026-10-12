@@ -377,7 +377,7 @@ static void quit_clean(PtyCtx *c)
 }
 
 static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
-                        const char *module, const char *golden)
+                        const char *module)
 {
     TutorKeys keys;
     char chapter_arg[2];
@@ -408,7 +408,11 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
     if (chapter == 7U)
         ptc_check(c, tutor_git_postconditions(c),
                   "tutor Git lesson did not commit a clean repository");
-    ptc_snapshot(c, golden);
+    /* YEW-F-070: a PTY golden is named by its registered case so the
+     * static orphan check can prove that deleting the case also makes the
+     * golden stale.  Do not pass an independently maintained name through
+     * this shared runner. */
+    ptc_snapshot(c, c->test->name);
 
     /* Completion marks are ordinary undoable edits.  Later chapters may
      * finish with another buffer focused, so discard explicitly instead of
@@ -422,40 +426,37 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
 
 void yew_tutor_case_ch01(PtyCtx *c)
 {
-    run_chapter(c, 1U, "arrows", "ch01-arrows.fl", "tutor_ch01_done");
+    run_chapter(c, 1U, "arrows", "ch01-arrows.fl");
 }
 
 void yew_tutor_case_ch02(PtyCtx *c)
 {
-    run_chapter(c, 2U, "units", "ch02-units.fl", "tutor_ch02_done");
+    run_chapter(c, 2U, "units", "ch02-units.fl");
 }
 
 void yew_tutor_case_ch03(PtyCtx *c)
 {
-    run_chapter(c, 3U, "execute", "ch03-execute.fl", "tutor_ch03_done");
+    run_chapter(c, 3U, "execute", "ch03-execute.fl");
 }
 
 void yew_tutor_case_ch04(PtyCtx *c)
 {
-    run_chapter(c, 4U, "search", "ch04-search.fl", "tutor_ch04_done");
+    run_chapter(c, 4U, "search", "ch04-search.fl");
 }
 
 void yew_tutor_case_ch05(PtyCtx *c)
 {
-    run_chapter(c, 5U, "workspace", "ch05-workspace.fl",
-                "tutor_ch05_done");
+    run_chapter(c, 5U, "workspace", "ch05-workspace.fl");
 }
 
 void yew_tutor_case_ch06(PtyCtx *c)
 {
-    run_chapter(c, 6U, "fletch", "ch06-fletch.fl",
-                "tutor_ch06_done");
+    run_chapter(c, 6U, "fletch", "ch06-fletch.fl");
 }
 
 void yew_tutor_case_ch07(PtyCtx *c)
 {
-    run_chapter(c, 7U, "fuss", "ch07-fuss.fl",
-                "tutor_ch07_done");
+    run_chapter(c, 7U, "fuss", "ch07-fuss.fl");
 }
 
 void yew_tutor_case_nogit(PtyCtx *c)
