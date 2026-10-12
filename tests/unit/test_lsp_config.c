@@ -60,7 +60,13 @@ void test_lsp_config_defaults_and_replacement_semantics(void)
     cfg = yew_lsp_client_cfg(&f.ed, "c");
     YEW_ASSERT_NOT_NULL(cfg);
     YEW_ASSERT_EQ_STR(cfg->id, "clangd");
-    YEW_ASSERT_NULL(yew_lsp_client_cfg(&f.ed, "wolf"));
+    cfg = yew_lsp_client_cfg(&f.ed, "wolf");
+    YEW_ASSERT_NOT_NULL(cfg);
+    YEW_ASSERT_EQ_STR(cfg->id, "wolf");
+    YEW_ASSERT_EQ_STR(cfg->cmd, "wolf");
+    YEW_ASSERT_EQ_STR(cfg->args[0], "lsp");
+    YEW_ASSERT_EQ_STR(cfg->roots[0], "wolf.pkg");
+    YEW_ASSERT_NULL(yew_lsp_client_cfg(&f.ed, "fletch"));
     fix_free(&f);
 
     fix_init(&f,
