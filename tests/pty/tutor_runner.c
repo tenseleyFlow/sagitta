@@ -150,6 +150,52 @@ static bool file_contains(const char *path, const char *needle)
     return found;
 }
 
+static bool write_text_file(const char *path, const char *text)
+{
+    size_t len = strlen(text);
+    size_t at = 0U;
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+
+    if (fd < 0)
+        return false;
+    while (at < len) {
+        ssize_t n = write(fd, text + at, len - at);
+
+        if (n > 0)
+            at += (size_t)n;
+        else if (n < 0 && errno == EINTR)
+            continue;
+        else {
+            (void)close(fd);
+            return false;
+        }
+    }
+    return close(fd) == 0;
+}
+
+static bool install_hostile_config(PtyCtx *c, char marker[PATH_MAX])
+{
+    char config_dir[PATH_MAX];
+    char config[PATH_MAX];
+    char source[PATH_MAX + 96U];
+    int n;
+
+    n = snprintf(config_dir, sizeof(config_dir), "%s/yew", c->state_dir);
+    if (n <= 0 || (size_t)n >= sizeof(config_dir) ||
+        (mkdir(config_dir, 0700) != 0 && errno != EEXIST))
+        return false;
+    n = snprintf(config, sizeof(config), "%s/init.fl", config_dir);
+    if (n <= 0 || (size_t)n >= sizeof(config))
+        return false;
+    n = snprintf(marker, PATH_MAX, "%s/hostile-loaded", c->state_dir);
+    if (n <= 0 || n >= PATH_MAX)
+        return false;
+    n = snprintf(source, sizeof(source),
+                 "import io\nio.write(\"%s\", \"loaded\")\n", marker);
+    return n > 0 && (size_t)n < sizeof(source) &&
+           write_text_file(config, source);
+}
+
 static bool command_output(char *const argv[], Bytebuf *out)
 {
     int pipes[2];
@@ -302,18 +348,25 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
 {
     TutorKeys keys;
     char chapter_arg[2];
+    char hostile_marker[PATH_MAX];
     char progress[PATH_MAX];
 
     if (!load_keys(c, module, &keys)) {
         ptc_check(c, false, "could not load tutor task keys via Fletch");
         return;
     }
+    ptc_check(c, install_hostile_config(c, hostile_marker),
+              "installing hostile tutor config");
+    if (c->failed)
+        return;
     chapter_arg[0] = (char)('0' + chapter);
     chapter_arg[1] = '\0';
     ptc_spawn(c, ptc_yew_bin(c), "tutor", chapter_arg, "--reset",
               "--clean", NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+    ptc_check(c, access(hostile_marker, F_OK) != 0 && errno == ENOENT,
+              "tutor --clean executed hostile user config");
     if (!tutor_progress_path(c, progress))
         return;
     replay_tasks(c, &keys, chapter, progress);
@@ -404,6 +457,84 @@ void yew_tutor_case_nogit(PtyCtx *c)
                      chapter, "Git is unavailable in this build or on PATH"),
               "Git-unavailable tutor chapter did not announce requirement");
     ptc_snapshot(c, "tutor_nogit");
+    ptc_allow_restore(c);
+    ptc_keys(c, "<esc> : q ! <cr>");
+    ptc_expect_exit(c, 0);
+}
+
+void yew_tutor_case_list(PtyCtx *c)
+{
+    static const char tail[] = "7 fuss      incomplete FUSS mode and git";
+    char root[PATH_MAX];
+    int n;
+
+    ptc_allow_primary(c);
+    ptc_spawn(c, ptc_yew_bin(c), "tutor", "--list", NULL);
+    ptc_no_altscreen(c);
+    ptc_wait_output(c, tail, sizeof(tail) - 1U);
+    ptc_expect_exit(c, 0);
+    n = snprintf(root, sizeof(root), "%s/yew/tutor", c->state_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(root),
+              "tutor list state path overflow");
+    ptc_check(c, !c->failed && access(root, F_OK) != 0 && errno == ENOENT,
+              "tutor --list created state");
+    ptc_snapshot(c, "tutor_list");
+}
+
+void yew_tutor_case_reset(PtyCtx *c)
+{
+    static const char sentinel[] = "reset must remove this\n";
+    char chapter[PATH_MAX];
+    char progress[PATH_MAX];
+    int n;
+
+    ptc_spawn(c, ptc_yew_bin(c), "tutor", "1", "--reset", "--clean",
+              NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_mark_resume(c);
+    ptc_allow_restore(c);
+    ptc_keys(c, "<esc> : q ! <cr>");
+    ptc_expect_exit(c, 0);
+    n = snprintf(chapter, sizeof(chapter), "%s/yew/tutor/ch01.txt",
+                 c->state_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(chapter),
+              "tutor reset chapter path overflow");
+    if (!tutor_progress_path(c, progress))
+        return;
+    ptc_check(c, !c->failed && write_text_file(chapter, sentinel) &&
+                     write_text_file(progress, sentinel),
+              "seeding tutor reset sentinels");
+    ptc_resume(c, ptc_yew_bin(c), "tutor", "1", "--reset", "--clean",
+               NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_check_resume_exact(c);
+    ptc_check(c, file_contains(chapter, "YEW TUTOR 1/7") &&
+                     !file_contains(chapter, "reset must remove this") &&
+                     !file_contains(progress, "reset must remove this"),
+              "tutor --reset did not restore a pristine workspace");
+    ptc_snapshot(c, "tutor_reset");
+    ptc_allow_restore(c);
+    ptc_keys(c, "<esc> : q ! <cr>");
+    ptc_expect_exit(c, 0);
+}
+
+void yew_tutor_case_clean(PtyCtx *c)
+{
+    char marker[PATH_MAX];
+
+    ptc_check(c, install_hostile_config(c, marker),
+              "installing hostile tutor config");
+    if (c->failed)
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "tutor", "1", "--reset", "--clean",
+              NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_check(c, access(marker, F_OK) != 0 && errno == ENOENT,
+              "tutor --clean executed hostile user config");
+    ptc_snapshot(c, "tutor_clean");
     ptc_allow_restore(c);
     ptc_keys(c, "<esc> : q ! <cr>");
     ptc_expect_exit(c, 0);
