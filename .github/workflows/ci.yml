@@ -76,6 +76,13 @@ jobs:
           make test-manual
           make test-docs-sync
 
+  tutor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Replay every chapter and run the binding rot drill
+        run: make test-tutor CC=gcc
+
   gcc:
     runs-on: ubuntu-latest
     # SMOKE DEPTH, and the reason is measured, not guessed.
