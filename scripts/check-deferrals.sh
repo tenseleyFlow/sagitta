@@ -49,7 +49,7 @@ LC_ALL=C awk -F '|' '
     }
 ' "$ledger" >"$rows"
 
-awk -F '\t' '$3 == "deferred" || $3 == "wontfix"' "$rows" >"$deferred_rows"
+awk -F '\t' '$3 ~ /^deferred/ || $3 == "wontfix"' "$rows" >"$deferred_rows"
 sed -n 's/^## \(YEW-F-[0-9][0-9][0-9]\)[[:space:]]*—.*$/\1/p' \
     "$deferrals" >"$entry_ids"
 
@@ -198,7 +198,7 @@ while IFS= read -r finding; do
         continue
     fi
     case $status in
-        deferred|wontfix) ;;
+        deferred*|wontfix) ;;
         *) fail "deferrals.md entry $finding maps to status $status" ;;
     esac
 done <"$entry_ids"

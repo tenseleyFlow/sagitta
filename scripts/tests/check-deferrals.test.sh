@@ -13,7 +13,7 @@ write_valid()
     cat >"$repo/audits/findings.md" <<'EOF'
 | ID | Sev | Status | Front | Title | Reproducer | Violates |
 |---|---|---|---|---|---|---|
-| YEW-F-901 | M | deferred | F07 UI | fixture | path | rule |
+| YEW-F-901 | M | deferred → post-1.0 | F07 UI | fixture | path | rule |
 
 `YEW-F-901` is the fixture body.
 
@@ -97,7 +97,7 @@ printf '%s\n' '# Limits' >"$repo/manual/15-limits.md"
 expect_reject 'release note absent from LIMITATIONS'
 
 write_valid
-sed 's/| M | deferred/| M | fixed/' "$repo/audits/findings.md" >"$repo/bad"
+sed 's/| M | deferred → post-1.0/| M | fixed/' "$repo/audits/findings.md" >"$repo/bad"
 mv "$repo/bad" "$repo/audits/findings.md"
 expect_reject 'deferrals entry mapped to fixed status'
 
