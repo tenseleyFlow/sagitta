@@ -65,7 +65,7 @@ Sprints covered: s07, s08, s09, s10, s11, s12
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s09.6 Merge rules: all table rows tested including primary survival and the two-permutation determinism case.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s09.7 Multi-cursor editing entry points hard-error naming Sprint 17.
+- [ ] s09.7 Sprint 17-delivered multi-cursor editing preserves the sorted/deduplicated `CursorSet`, primary-survival rules, and one `YEW_TXN_MULTI` transaction; the original Sprint 17 hard error was a staging guard (S59-A11).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s09.8 `yew_gcol_to_off` on the second cell of a wide glyph returns the glyph start (explicit unit case).
       — VERDICT: blocking — independent closeout review pending.
@@ -81,7 +81,7 @@ Sprints covered: s07, s08, s09, s10, s11, s12
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s10.4 All 6 merge conditions and all 7 boundary events have a test proving they do and do not merge.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s10.5 Exactly one node per insert burst, erase burst, paste, cut, and external transaction — asserted by node count. Deferred MULTI/FILTER/REPLACE/ MACRO/LSP reasons retain the hard-error gates in item 11 until their owning sprints replace those gates with the corresponding node-count cases.
+- [ ] s10.5 Exactly one node per insert burst, erase burst, paste, cut, external, MULTI, FILTER, REPLACE, MACRO, and LSP transaction — asserted by current node-count cases; later owning sprints replace their historical hard errors with those cases (S59-A11).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s10.6 100 000 undo/redo cycles leave `tb->add.len` unchanged and RSS flat (± 1 MiB) — the §3 pitfall, gated.
       — VERDICT: blocking — independent closeout review pending.
@@ -93,7 +93,7 @@ Sprints covered: s07, s08, s09, s10, s11, s12
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s10.10 Grep gates: `yew_textbuf_insert\|yew_textbuf_delete` under `src/` hits only `text/{piece,edit,undo}.c`; `CLOCK_REALTIME` in `undo.c` hits only the `t_wall` capture site.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s10.11 Deferred reasons hard-error naming their sprint (17, 19, 21, 34, 47).
+- [ ] s10.11 The Sprint 17/19/21/34/47-owned callers are live and route through the reason codes established here; each user action creates exactly one undo node, while genuinely unknown reasons still fail explicitly (S59-A11).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s10.12 ≥ 140 assertions across the five unit files.
       — VERDICT: blocking — independent closeout review pending.
@@ -149,7 +149,7 @@ Sprints covered: s07, s08, s09, s10, s11, s12
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s12.12 Grep gates: `grep -rn 'popen\|system(' src/` → nothing; `grep -rn '52;c;?\|52;.*?' src/` → nothing; `grep -rn 'yew_reg_set' src/` hits only `register.c`; `grep -rn 'width\|ccol' src/text/register.c` shows call sites into `src/unicode/` only, zero width arithmetic.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s12.13 Blockwise production outside `tests/` hard-errors naming Sprint 17; `/`, `:`, `#` read empty and never lie about being implemented.
+- [ ] s12.13 Sprint 17 blockwise production and the Sprint 21/18/23 writers for `/`, `:`, and `#` route through the register choke points established here; absent or unknown producers remain explicit rather than lying (S59-A11).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s12.14 ≥ 130 assertions across the six unit files plus the two pty tests.
       — VERDICT: blocking — independent closeout review pending.

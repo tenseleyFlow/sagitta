@@ -418,6 +418,21 @@ not every unrelated decimal `2026` in the repository. This amendment changes
 no terminal behavior or safety invariant; it supersedes only stale staging and
 evidence wording in Sprints 3–6 and F02. `YEW-F-099` records the correction.
 
+**Text-engine closeout amendment S59-A11 (2026-10-13) — delivered editing
+surfaces replace their staging guards.** Sprints 9, 10, and 12 established
+cursor sets, undo reason codes, and register storage before their user-facing
+producers existed. Their Sprint 17 hard errors and empty `/`, `:`, and `#`
+slots were staging guards, not permanent 1.0 behavior. Sprint 17 now owns
+multi-cursor editing and blockwise-register production; Sprints 19, 21, 34,
+and 47 own FILTER, REPLACE, MACRO, and LSP transactions; Sprints 18, 21, and
+23 own the command-line, search, and alternate-file register producers.
+Current closeout evidence therefore proves the shipped routes use the
+original choke points and create the contracted single undo node rather than
+requiring those routes to remain absent. Unknown or genuinely unimplemented
+paths still hard-error under invariant 3. This amendment changes no product
+behavior or text-safety invariant; it supersedes only stale staging wording
+in Sprints 9/10/12 and F03. `YEW-F-100` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

@@ -452,10 +452,11 @@ and every navigation move; this is the wiring s08 deferred to Sprint 10.
   `:earlier`/`:later` → Sprint 18.
 - **Branch picker UI** → Sprint 26 (§7's query API is complete now);
   `yew_undo_dump` is the interim surface and stays as a test/`--batch` tool.
-- Multi-cursor transactions → Sprint 17: `yew_undo_begin(YEW_TXN_MULTI)`
-  from a `CursorSet` with `len > 1` hard-errors naming Sprint 17 until then.
-  Macro/`edit{}` → 34; shell filters → 19; replace batches → 21; LSP
-  workspace edits → 47. Each already has its reason code and §4 row.
+- Multi-cursor transactions were deferred to Sprint 17; macro/`edit{}` to
+  34; shell filters to 19; replace batches to 21; and LSP workspace edits to
+  47. Their callers hard-errored at landing; later owning sprints replace these gates
+  with current behavior and exact one-node transaction coverage for the
+  reason codes already established by §4 (S59-A11).
 - Workspace state file *referencing* the `.sagu` → Sprint 25; this sprint
   reads and writes `.sagu` through the direct API, tested headless.
 - Undo-in-region (Emacs selective undo) → not for 1.0; do not reserve a
@@ -501,11 +502,10 @@ and every navigation move; this is the wiring s08 deferred to Sprint 10.
    byte-exact (the §2 headline, as an explicit unit case).
 4. All 6 merge conditions and all 7 boundary events have a test proving they
    do and do not merge.
-5. Exactly one node per insert burst, erase burst, paste, cut, and external
-   transaction — asserted by node count. Deferred MULTI/FILTER/REPLACE/
-   MACRO/LSP reasons retain the hard-error gates in item 11 until their
-   owning sprints replace those gates with the corresponding node-count
-   cases.
+5. Exactly one node per insert burst, erase burst, paste, cut, external,
+   MULTI, FILTER, REPLACE, MACRO, and LSP transaction — asserted by current
+   node-count cases. The later owning sprints replace their historical hard
+   errors with those cases (S59-A11).
 6. 100 000 undo/redo cycles leave `tb->add.len` unchanged and RSS flat
    (± 1 MiB) — the §3 pitfall, gated.
 7. After 10 000 random edits at a 4 KiB budget: every live node's parent is
@@ -519,5 +519,7 @@ and every navigation move; this is the wiring s08 deferred to Sprint 10.
 10. Grep gates: `yew_textbuf_insert\|yew_textbuf_delete` under `src/` hits
     only `text/{piece,edit,undo}.c`; `CLOCK_REALTIME` in `undo.c` hits only
     the `t_wall` capture site.
-11. Deferred reasons hard-error naming their sprint (17, 19, 21, 34, 47).
+11. The Sprint 17/19/21/34/47-owned callers are live and route through the
+    reason codes established here; each user action creates exactly one undo
+    node, while genuinely unknown reasons still fail explicitly (S59-A11).
 12. ≥ 140 assertions across the five unit files.

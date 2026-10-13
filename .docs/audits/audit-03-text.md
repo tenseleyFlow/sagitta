@@ -212,6 +212,11 @@ from those links and replay does not alter disk, so the finding is Medium.
 
 ## Unverified observations
 
+- Resolved by S59-A11 / `YEW-F-100`: the Sprint 9/10/12 hard errors and
+  empty register slots are identified as historical staging guards. Current
+  closeout evidence follows the later owning sprints and proves those shipped
+  callers retain the original cursor, undo-reason, and register choke points.
+
 - An exact 2 GiB file was not read, edited, and written end-to-end on the
   audit machine: doing so would consume several GiB of resident and I/O
   capacity for a boundary already isolated by the strict predicate and the

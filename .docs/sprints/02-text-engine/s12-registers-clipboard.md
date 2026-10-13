@@ -42,9 +42,10 @@ never reads it through the terminal; subprocess fallbacks with a detection
 order and the `YEW_CLIPBOARD` override; and a pinned default for the "does
 `y` go to the system clipboard" question. Keybindings (`y`, `p`, `"a`) are
 Sprint 13/14; the `:registers` display is Sprint 18; the register picker is
-Sprint 26; blockwise *selection* (which produces blockwise registers) is
-Sprint 17 — this sprint ships blockwise storage and paste, tested through the
-direct API, and hard-errors on any other producer.
+Sprint 26. Blockwise *selection* was deferred to Sprint 17; this sprint
+shipped blockwise storage and paste through the direct test API while other
+producers hard-errored. Sprint 17 subsequently delivered the production path
+through the same routing API (S59-A11).
 
 ## Deliverables
 
@@ -412,13 +413,14 @@ the §7 OOB flush. Payloads over `YEW_OSC52_MAX` skip the OSC 52 route per §7.
 
 - Keybindings (`y`, `p`, `P`, `"x`, `"X`) → Sprint 13/14; selections and the
   yank of a selection → Sprint 17.
-- **Blockwise register production** → Sprint 17: `yew_reg_set` with
-  `YEW_REG_BLOCKWISE` from anywhere but `tests/` hard-errors naming
-  Sprint 17; storage and paste are complete and tested now.
+- **Blockwise register production** was deferred to Sprint 17; storage and
+  paste were complete here while non-test producers hard-errored. Sprint 17
+  subsequently delivered production through the register choke point.
 - `:registers` display → Sprint 18 (`yew_reg_list` returns the rows);
   register/kill-ring **picker** → Sprint 26.
-- Writers for `/` (21), `:` (18), `#` (23) — the slots exist and read empty
-  until then, never a stub that lies.
+- Writers for `/` (21), `:` (18), and `#` (23) were deferred here. The
+  delivered register producers replace these staging guards through the same
+  typed slots; absent or unknown producers still never lie (S59-A11).
 - Macro registers and record/replay into `a`–`z` → Sprint 38; Fletch access
   → Sprint 34; `clipboard.sync` as a *configurable* option → Sprint 36 (the
   enum, the default, and all four behaviors are pinned here).
@@ -495,6 +497,7 @@ the §7 OOB flush. Payloads over `YEW_OSC52_MAX` skip the OSC 52 route per §7.
     `grep -rn 'yew_reg_set' src/` hits only `register.c`;
     `grep -rn 'width\|ccol' src/text/register.c` shows call sites into
     `src/unicode/` only, zero width arithmetic.
-13. Blockwise production outside `tests/` hard-errors naming Sprint 17;
-    `/`, `:`, `#` read empty and never lie about being implemented.
+13. Sprint 17 blockwise production and the Sprint 21/18/23 writers for `/`,
+    `:`, and `#` route through the register choke points established here;
+    absent or unknown producers remain explicit rather than lying (S59-A11).
 14. ≥ 130 assertions across the six unit files plus the two pty tests.

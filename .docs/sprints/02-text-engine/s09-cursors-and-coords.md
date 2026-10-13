@@ -180,10 +180,12 @@ depend on qsort tie order — same doctrine as Cgfried). `yew_cset_adjust`
 maps each cursor's `pos`/`anchor` through the §3 table semantics
 (pos behaves RIGHT-bias on insert-at-point — typing at a cursor moves the
 cursor past the text; anchor behaves LEFT — the selection grows).
-Simultaneous multi-cursor *editing* (apply once per cursor, one undo
-transaction) is Sprint 17; until then `yew_cset_*` is motion + bookkeeping
-only, and any call into an editing path with `curs.len > 1` hard-errors
-naming Sprint 17.
+At this sprint's landing, simultaneous multi-cursor editing was deferred and
+an editing path with `curs.len > 1` hard-errored naming Sprint 17.
+Sprint 17 delivered multi-cursor editing through this sorted/deduplicated
+`CursorSet` and one `YEW_TXN_MULTI`
+transaction; the old hard error remains historical staging evidence
+(S59-A11).
 
 ### 5. Grapheme-motion golden cases
 
@@ -249,7 +251,9 @@ boundaries, expected `CCol` widths. Minimum set:
 5. All 12 mark bias cells unit-tested; 10k-mark oracle test green.
 6. Merge rules: all table rows tested including primary survival and
    the two-permutation determinism case.
-7. Multi-cursor editing entry points hard-error naming Sprint 17.
+7. Sprint 17-delivered multi-cursor editing preserves the sorted/deduplicated
+   `CursorSet`, primary-survival rules, and one `YEW_TXN_MULTI` transaction;
+   the original Sprint 17 hard error was a staging guard (S59-A11).
 8. `yew_gcol_to_off` on the second cell of a wide glyph returns the
    glyph start (explicit unit case).
 9. ASan/UBSan/determinism lanes green; valgrind clean on all four new
