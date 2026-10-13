@@ -147,7 +147,7 @@ recorded in `audit-00.md`.
 | YEW-F-132 | M | fixed | F15 CI | ~~reserved `--batch-strict` falsely promises Sprint 59 delivery~~ — fixed 2026-10-13 in `cacf3917` | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
 | YEW-F-133 | M | fixed | F15 CI | ~~theme unit escapes the selected disjoint build tree~~ — fixed 2026-10-13 in `ec59fa31` | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
 | YEW-F-134 | M | fixed | F15 CI | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed 2026-10-13 in `cfb4befd` | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
-| YEW-F-135 | M | open | F15 CI | governance fixtures inherit global Git commit signing | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
+| YEW-F-135 | M | fixed | F15 CI | ~~governance fixtures inherit global Git commit signing~~ — fixed 2026-10-13 in `6c5de8cb` | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1463,6 +1463,9 @@ otherwise-passing 134-entry audit target reaches pinentry, times out, and
 fails after the registry itself is green. The hard XFAIL requires both
 repositories to disable commit signing locally, matching the package, Git,
 baseline-history, and F15-history fixtures already hardened this way.
+Commit `6c5de8cb` disables signing in both fixture-local configurations. Both
+selftests pass with a synthetic global `commit.gpgsign=true` policy and on the
+original `hasu` account that exposed the pinentry timeout.
 
 ## Unverified observations
 
