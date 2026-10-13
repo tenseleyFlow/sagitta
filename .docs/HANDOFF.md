@@ -14,7 +14,7 @@ Apple-silicon host `nomad-1`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
 **Implementation checkpoint before this documentation refresh:** `trunk` is
-88 commits above `origin/trunk` at `29682c67`, including Sprint 59's
+89 commits above `origin/trunk` at `6842c24f`, including Sprint 59's
 documentation/tutorial work, all 99 completed finding remediations, and the
 F01/F06 pre-closeout evidence packets. The product code used by the soak
 remains the exact hosted-green anchor.
@@ -74,16 +74,17 @@ order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
-being represented as independent verification. F06 has zero open findings and
-baseline-pinned local pre-closeout packets now exist for F01 at
-`.docs/audits/evidence/F01-precloseout-5422f5e6.md` and F06 at
-`.docs/audits/evidence/F06-precloseout-e93a8ddd.md`; both remain NOT READY
-until a non-author reviewer and the required hosted matrix sign their current
+being represented as independent verification. Baseline-pinned local
+pre-closeout packets now exist for F01, F02, and F06 at
+`.docs/audits/evidence/F01-precloseout-5422f5e6.md`,
+`.docs/audits/evidence/F02-precloseout-6842c24f.md`, and
+`.docs/audits/evidence/F06-precloseout-e93a8ddd.md`; all remain NOT READY until
+a non-author reviewer and the required hosted matrix sign their current
 baselines.
 
 The immediate work is:
 
-1. complete F02's baseline-pinned local pre-closeout evidence packet without
+1. continue baseline-pinned local pre-closeout preparation with F03, without
    claiming independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
