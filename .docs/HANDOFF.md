@@ -40,7 +40,13 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger now contains 119 stable IDs and all 119 are fixed.
+landed. The findings ledger now contains 121 stable IDs and all 121 are fixed.
+F13's closeout recheck closed two Medium contract findings,
+`YEW-F-120`/`YEW-F-121`, under S59-A30/A31. They replace obsolete Sprint
+51/52 staging and bare-action/type-jump rules with the shipped Sprint 52/53
+and binding compact-FUSS owners, and replace raw clock/format/width scans with
+the tokenized/structural/semantic gates already required by F018/F020 and the
+Unicode boundary. Neither required a product-code change.
 F12's closeout recheck closed two Medium contract findings,
 `YEW-F-118`/`YEW-F-119`, under S59-A28/A29. They replace obsolete Sprint
 48/49 command staging and raw TLS/stats scans with evidence for the shipped
@@ -123,7 +129,7 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 119 completed fixes reconcile, no hard XFAIL remains,
+executable gates: all 121 completed fixes reconcile, no hard XFAIL remains,
 and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
@@ -165,8 +171,9 @@ reviewer and the required hosted matrix sign their current baselines.
 
 The immediate work is:
 
-1. begin F13's reproducer-first contract recheck and baseline-pinned local
-   pre-closeout packet without claiming independent reviewer signoff;
+1. assemble F13's baseline-pinned local pre-closeout packet without claiming
+   independent reviewer signoff; its reproducer-first contract recheck is
+   complete;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
 3. keep the corrected 56-stream soak under observation without idling Sprint

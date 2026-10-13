@@ -14,7 +14,9 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 119 confirmed findings are fixed. F118/F119 aligned F12's
+are complete; all 121 confirmed findings are fixed. F120/F121 aligned F13's
+superseded Git/FUSS staging/key model and invalid clock/format/width scans
+under S59-A30/A31 without changing Git or FUSS behavior. F118/F119 aligned F12's
 superseded AI command staging and invalid TLS/stats ownership scans under
 S59-A28/A29 without changing transport, privacy, logging, or stats behavior.
 F115/F116 aligned F11's
@@ -60,7 +62,8 @@ passing real-clangd milestone with 8/8 gotos, six references in three files,
 a clean rename round trip, and one diagnostic. F12 maps all 43 AI DoD rows
 after warning-clean Clang/GCC/ASan builds, complete focused AI/HTTP unit and
 script filters, bounded deterministic fuzz, 38 applicable PTYs per
-configuration, repository bans, and performance-policy selftests. F13 is the
+configuration, repository bans, and performance-policy selftests. F13's
+contract recheck is complete; its current-baseline executable packet is the
 next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
