@@ -38,7 +38,7 @@ Sprints covered: s02
 
 ## Open audit findings against this front
 
-none
+1 open confirmed finding: `YEW-F-095`.
 
 ## Deferrals recorded against this front
 
@@ -46,4 +46,4 @@ none
 
 ## Verdict
 
-NOT READY — Independent evidence review remains pending.
+NOT READY — One conformance finding and independent evidence review remain.

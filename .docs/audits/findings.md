@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-095`
+Next available ID: `YEW-F-096`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -107,6 +107,7 @@ recorded in `audit-00.md`.
 | YEW-F-092 | M | fixed | F06 RE | ~~interactive search refinement forces full repaint~~ — fixed 2026-10-13 in `ff0373ca` | tests/audit/yew_f_092.c | invariant 4; s21 DoD 9 |
 | YEW-F-093 | M | fixed | F06 RE | ~~restored contracts name superseded regex mechanisms~~ — fixed 2026-10-13 in `2d26fe08` | tests/audit/yew_f_093.c | s59 §2/§3; s20/s21 closeout |
 | YEW-F-094 | L | fixed | F06 RE | ~~golden-table guard permits fewer than 150 rows~~ — fixed 2026-10-13 in `87c0684f` | tests/audit/yew_f_094.c | s20 DoD 4 |
+| YEW-F-095 | M | open | F01 UNI | F01 closeout requires delivered Unicode deferrals to be absent | tests/audit/yew_f_095.c | s59 §2; s02 DoD 12; s16/s20 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -908,6 +909,14 @@ contracts, the F06 closeout, and the PTY comment with the shipped design.
 the floor. No current editor behavior is wrong. The hard XFAIL pins the
 contracted minimum in the executable guard. Commit `87c0684f` raises that
 guard to 150 and names the finding at the assertion.
+
+`YEW-F-095` is Medium because the restored Sprint 2 contract and F01 closeout
+still require that no `yew_wb_*` surface or case-folding entry point exist,
+even though Sprints 16 and 20 deliberately shipped those exact deferred
+surfaces. Product Unicode behavior is not shown wrong; the current release
+closeout is impossible to certify truthfully. The hard XFAIL requires a
+formal decision amendment and matching Sprint 2/F01 language that distinguish
+the historical Sprint 2 staging boundary from the current delivered state.
 
 ## Unverified observations
 
