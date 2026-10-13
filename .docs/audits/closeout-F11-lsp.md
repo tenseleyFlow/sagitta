@@ -150,8 +150,8 @@ Sprints covered: s43, s44, s45, s46, s47
 
 ## Open audit findings against this front
 
-- `YEW-F-117` (Medium): the live-clangd harness sends request URIs rebuilt
-  from a noncanonical buffer path instead of the attached document URI.
+- `YEW-F-117` (Medium): the live-clangd harness treats the `/tmp` scratch-root
+  alias and its canonical macOS path as distinct documents.
 
 ## Deferrals recorded against this front
 

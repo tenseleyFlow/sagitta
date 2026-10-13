@@ -138,7 +138,9 @@ findings YEW-F-115, YEW-F-116
   `5a8a438f`; no product code changed.
 - `YEW-F-117` records the current live-clangd harness rebuilding request URIs
   from a noncanonical `/tmp` path after `didOpen` used the attached canonical
-  `/private/tmp` URI. Production requests already use the attached document.
+  `/private/tmp` URI, then comparing canonical response paths against the
+  noncanonical fixture root. Production requests already use the attached
+  document.
 
 ## Count
 
