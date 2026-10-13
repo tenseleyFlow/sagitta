@@ -249,8 +249,10 @@ void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
     FlValue out = FL_NIL_V;
     FlValue staged_paths = FL_NIL_V;
     Buffer *buffer;
+#if YEW_WITH_FUSS
     GitEntry entries[2] = {0};
     GitSnapshot *snapshot;
+#endif
 
     api_open(&f);
     buffer = yew_ed_doc(&f.ed);
@@ -294,6 +296,7 @@ void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
     YEW_ASSERT_EQ_I64(staged_paths.t, FL_LIST);
     YEW_ASSERT_EQ_U64(((FlList *)staged_paths.as.o)->n, 0U);
 
+#if YEW_WITH_FUSS
     snapshot = yew_git_test_snapshot_mut(&f.ed);
     YEW_ASSERT_NOT_NULL(snapshot);
     entries[0].path = (char *)"practice/notes.txt";
@@ -322,6 +325,7 @@ void test_fl_api_tutor_state_queries_report_mode_and_undo_depth(void)
     snapshot->state = YEW_GIT_NO_GIT;
     YEW_ASSERT(api_invoke(&f, "ed.fuss", NULL, 0U, &out));
     YEW_ASSERT(api_map_bool(out, "clean", false));
+#endif /* YEW_WITH_FUSS */
     api_close(&f);
 }
 
