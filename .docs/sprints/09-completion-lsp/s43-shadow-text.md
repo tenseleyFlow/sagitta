@@ -574,9 +574,11 @@ against.
 11. Menu/ghost exclusivity: the debug assert fires under a test that opens
     both, and `shadow.suppressed` is proven set/cleared by `yew_compl_*`
     stubs registered for the test.
-12. Unregistered providers are visibly deferred: `:shadow.stats` prints
-    `lsp — (Sprint 47)` and `ai — (Sprint 49)`; no provider slot is a
-    silent no-op.
+12. Sprints 44, 47, and 49 delivered the staged shadow providers. A full
+    modules startup registers index, LSP, and AI, and `:shadow.stats` reports
+    all three ready. A deliberately unregistered test provider remains
+    visible rather than becoming a silent no-op; stripped-module commands
+    retain their exact module-boundary errors.
 13. Perf baselines committed under `tests/perf/baselines/shadow.txt`; the
     8-line-ghost frame cost is within budget on the dev machine.
 14. ≥ 130 assertions across the four new unit files; determinism lane green

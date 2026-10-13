@@ -657,6 +657,35 @@ theme, or detection behavior. It supersedes only stale ownership scope and
 point-in-time inventory wording in Sprints 39/42 and F10; `YEW-F-114` records
 the correction.
 
+**Completion/LSP closeout amendment S59-A26 (2026-10-13) — later owners
+replace shadow, lifecycle, and feature staging guards.** Sprint 43 reserved
+three explicit shadow-provider slots; Sprint 44 delivered the index provider,
+Sprint 47 delivered the LSP provider and its nine feature commands, and Sprint
+49 delivered the AI provider. Sprint 46 delivered full-build server startup
+and restart, while Sprint 47 filled the LSP documentation slot without adding
+documentation to index-only completion items. Current closeout therefore
+tests full-build provider registration, lifecycle, capability gating,
+completion resolution, and feature behavior rather than historical
+`lands in Sprint` messages. Deliberately unregistered test providers remain
+visible, stripped LSP commands retain the exact module-boundary error, index
+items still render `(no documentation)`, and the named post-1.0 features
+remain non-goals. This amendment changes no product behavior. It supersedes
+only stale staging wording in Sprints 43–46 and F11; `YEW-F-115` records the
+correction.
+
+**Completion/LSP ownership closeout amendment S59-A27 (2026-10-13) —
+determinism scans follow lexical tokens and their actual owners.** Sprint 44's
+integer-only ranking rule belongs to `src/ws/sym*.c|h`, not unrelated
+workspace-state owners, and its ban concerns the `float`, `double`, and
+`qsort` tokens rather than those byte sequences inside ordinary words. Sprint
+45's sole JSON real formatter is the annotated `%.17g` conversion in
+`yew_jsonw_real`; its source gate must recognize precision-bearing conversion
+specifiers rather than only bare `%g`, `%f`, or `%e`. Current closeout uses a
+token-aware scan over symbol-index sources and a conversion-specifier scan
+that returns exactly that formatter. This amendment changes no ranking, JSON,
+or locale behavior. It supersedes only invalid grep wording in Sprints 44/45
+and F11; `YEW-F-116` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

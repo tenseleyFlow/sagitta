@@ -29,7 +29,7 @@ Sprints covered: s43, s44, s45, s46, s47
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s43.11 Menu/ghost exclusivity: the debug assert fires under a test that opens both, and `shadow.suppressed` is proven set/cleared by `yew_compl_*` stubs registered for the test.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s43.12 Unregistered providers are visibly deferred: `:shadow.stats` prints `lsp — (Sprint 47)` and `ai — (Sprint 49)`; no provider slot is a silent no-op.
+- [ ] s43.12 Later binding Sprints 44, 46, 47, and 49 supersede the original provider and feature staging guards: a full-modules startup registers index, LSP, and AI and `:shadow.stats` reports all three ready; deliberately unregistered test providers remain visible; stripped-module commands retain their exact boundary errors.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s43.13 Perf baselines committed under `tests/perf/baselines/shadow.txt`; the 8-line-ghost frame cost is within budget on the dev machine.
       — VERDICT: blocking — independent closeout review pending.
@@ -45,7 +45,7 @@ Sprints covered: s43, s44, s45, s46, s47
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s44.5 `sizeof(SymEntry) <= 32` (`_Static_assert`); index memory for a 100 kLOC workspace ≤ 32 MiB, reported by `:compl.stats`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s44.6 Determinism: `grep -n 'float\|double\|qsort' src/ws/` → empty; the same query on the same index returns byte-identical `SymHit` arrays across two runs and across 8 insertion-order permutations.
+- [ ] s44.6 Current closeout scopes symbol determinism to its actual owner: `grep -En '(^|[^[:alnum:]_])(float|double|qsort)([^[:alnum:]_]|$)' src/ws/sym*.c src/ws/sym*.h` → empty; the same query on the same index returns byte-identical `SymHit` arrays across two runs and across 8 insertion-order permutations.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s44.7 Every row of the §5 key table has a firing assertion, including `<cr>`-falls-through and unknown-key-re-dispatch.
       — VERDICT: blocking — independent closeout review pending.
@@ -59,7 +59,7 @@ Sprints covered: s43, s44, s45, s46, s47
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s44.12 Interner discipline: 10 repeat walks over a 200-file tree grow the interner by 0 entries after the first; the per-file symbol cap fires on the 10 000-identifier fixture.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s44.13 Deferred surfaces are named, not stubbed: `ComplItem.doc` renders `(no documentation)` for every index item, and `symidx.h` states the no-filesystem-watching non-goal and the Sprint 47 documentation handover.
+- [ ] s44.13 `ComplItem.doc` renders `(no documentation)` for every index item and `symidx.h` states the no-filesystem-watching non-goal; Sprint 47's delivered `completionItem/resolve` path supplies and renders LSP documentation.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s44.14 ≥ 170 assertions across the five new unit files; determinism lane green on the new pty goldens.
       — VERDICT: blocking — independent closeout review pending.
@@ -77,7 +77,7 @@ Sprints covered: s43, s44, s45, s46, s47
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s45.7 Number policy: all ≥ 40 vectors pass, `YEW_JSF_LOSSY_NUM` is set exactly where the table says, and `1e309` is a *parse error*, not an infinity.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s45.8 Determinism: writer output for the corpus is byte-identical across two runs and both compilers; `grep -n '%g\|%f\|%e' src/mod/lsp/` matches only the single annotated `snprintf` in `yew_jsonw_real`; no sort and no hash in the emitter (`grep -n 'yew_sort\|strmap' src/mod/lsp/json.c` → empty).
+- [ ] s45.8 Determinism: writer output for the corpus is byte-identical across two runs and both compilers; the JSON real-format gate accepts precision-bearing conversions, so `grep -rEn '%[-+ #0-9.*]*[gfe]' src/mod/lsp` matches only the single annotated `snprintf` in `yew_jsonw_real`; no sort and no hash in the emitter (`grep -n 'yew_sort\|strmap' src/mod/lsp/json.c` → empty).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s45.9 `grep -rn 'setlocale\|wcwidth\|mbrtowc' src/mod/lsp/` → empty; the s02 ban still passes; the locale rationale comment is present above the `strtod` call.
       — VERDICT: blocking — independent closeout review pending.
@@ -87,7 +87,7 @@ Sprints covered: s43, s44, s45, s46, s47
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s45.12 The framed sink bypasses `yew_job_safe_prefix`: the labelled regression test fails when the bypass is removed, and its comment says so.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s45.13 In a `MODULES=""` build, `:lsp.restart` prints exactly `this build has no lsp module; rebuild with 'make MODULES="… lsp"'`; in a full build it prints `LSP servers start in Sprint 46`. Neither is a silent no-op.
+- [ ] s45.13 In a `MODULES=""` build, `:lsp.restart` prints exactly `this build has no lsp module; rebuild with 'make MODULES="… lsp"'`; Sprint 46 delivered full-build server startup, so unconfigured and configured fake-server tests exercise the live no-server, start, and restart paths. None is a silent no-op.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s45.14 ≥ 220 assertions across the six new unit files; determinism lane green on `tests/unit/fixtures/lsp/*.json`.
       — VERDICT: blocking — independent closeout review pending.
@@ -115,7 +115,7 @@ Sprints covered: s43, s44, s45, s46, s47
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s46.12 Perf: `yew_lsp_note_edit` p99 ≤ 100 µs in both encodings; baselines committed under `tests/perf/baselines/lsp.txt`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s46.13 Deferred surfaces name their sprint: all nine feature commands report `… lands in Sprint 47`; `workspace/symbol`, code actions, formatting, inlay hints and semantic tokens are documented in `client.h` as permanent 1.0 non-goals, not stubbed.
+- [ ] s46.13 Sprint 47 delivered all nine feature commands: each routes through its implementation and exact capability gate rather than `YEW_CMD_DEFERRED`; `workspace/symbol`, code actions, formatting, inlay hints and semantic tokens remain documented in `client.h` as permanent 1.0 non-goals, not stubs.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s46.14 ≥ 220 assertions across the seven new unit files; determinism lane green on the new pty goldens.
       — VERDICT: blocking — independent closeout review pending.

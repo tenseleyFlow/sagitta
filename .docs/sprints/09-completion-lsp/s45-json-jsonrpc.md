@@ -624,9 +624,9 @@ as `YEW_CMD_DEFERRED` naming Sprint 46.
 7. Number policy: all ≥ 40 vectors pass, `YEW_JSF_LOSSY_NUM` is set exactly
    where the table says, and `1e309` is a *parse error*, not an infinity.
 8. Determinism: writer output for the corpus is byte-identical across two
-   runs and both compilers; `grep -n '%g\|%f\|%e' src/mod/lsp/` matches only
-   the single annotated `snprintf` in `yew_jsonw_real`; no sort and no hash
-   in the emitter (`grep -n 'yew_sort\|strmap' src/mod/lsp/json.c` → empty).
+   runs and both compilers. The scan admits precision-bearing conversion specifiers: `grep -rEn '%[-+ #0-9.*]*[gfe]' src/mod/lsp` matches only the
+   single annotated `snprintf` in `yew_jsonw_real`; no sort and no hash in
+   the emitter (`grep -n 'yew_sort\|strmap' src/mod/lsp/json.c` → empty).
 9. `grep -rn 'setlocale\|wcwidth\|mbrtowc' src/mod/lsp/` → empty; the s02
    ban still passes; the locale rationale comment is present above the
    `strtod` call.
@@ -640,8 +640,9 @@ as `YEW_CMD_DEFERRED` naming Sprint 46.
 12. The framed sink bypasses `yew_job_safe_prefix`: the labelled regression
     test fails when the bypass is removed, and its comment says so.
 13. In a `MODULES=""` build, `:lsp.restart` prints exactly
-    `this build has no lsp module; rebuild with 'make MODULES="… lsp"'`;
-    in a full build it prints `LSP servers start in Sprint 46`. Neither is
-    a silent no-op.
+    `this build has no lsp module; rebuild with 'make MODULES="… lsp"'`.
+    Sprint 46 delivered full-build server startup: without a configured
+    server restart reports that fact, while configured fake-server tests
+    exercise start and restart. Neither path is a silent no-op.
 14. ≥ 220 assertions across the six new unit files; determinism lane green
     on `tests/unit/fixtures/lsp/*.json`.

@@ -641,9 +641,12 @@ as the editor guessing), and no suggestion when the stem is shorter than
    word. Both asserted by count *and* by named example.
 5. `sizeof(SymEntry) <= 32` (`_Static_assert`); index memory for a 100 kLOC
    workspace ≤ 32 MiB, reported by `:compl.stats`.
-6. Determinism: `grep -n 'float\|double\|qsort' src/ws/` → empty; the same
-   query on the same index returns byte-identical `SymHit` arrays across two
-   runs and across 8 insertion-order permutations.
+6. Determinism: the token-aware `float|double|qsort` scan covers the
+   symbol-index sources rather than all workspace owners —
+   `grep -En '(^|[^[:alnum:]_])(float|double|qsort)([^[:alnum:]_]|$)'
+   src/ws/sym*.c src/ws/sym*.h` → empty. The same query on the same index
+   returns byte-identical `SymHit` arrays across two runs and across 8
+   insertion-order permutations.
 7. Every row of the §5 key table has a firing assertion, including
    `<cr>`-falls-through and unknown-key-re-dispatch.
 8. One completion accept == exactly one undo node; one undo restores the
@@ -661,9 +664,8 @@ as the editor guessing), and no suggestion when the stem is shorter than
 12. Interner discipline: 10 repeat walks over a 200-file tree grow the
     interner by 0 entries after the first; the per-file symbol cap fires on
     the 10 000-identifier fixture.
-13. Deferred surfaces are named, not stubbed: `ComplItem.doc` renders
-    `(no documentation)` for every index item, and `symidx.h` states the
-    no-filesystem-watching non-goal and the Sprint 47 documentation
-    handover.
+13. `ComplItem.doc` renders `(no documentation)` for every index item and
+    `symidx.h` states the no-filesystem-watching non-goal. Sprint 47 delivered the LSP documentation handover through `completionItem/resolve`; current
+    closeout tests both the permanent index behavior and that live LSP path.
 14. ≥ 170 assertions across the five new unit files; determinism lane green
     on the new pty goldens.

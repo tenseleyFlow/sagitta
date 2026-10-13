@@ -712,9 +712,10 @@ In a `MODULES=""` build every one of them exists and reports s00's pinned
     (pty golden), and never expires on its own.
 12. Perf: `yew_lsp_note_edit` p99 ≤ 100 µs in both encodings; baselines
     committed under `tests/perf/baselines/lsp.txt`.
-13. Deferred surfaces name their sprint: all nine feature commands report
-    `… lands in Sprint 47`; `workspace/symbol`, code actions, formatting,
-    inlay hints and semantic tokens are documented in `client.h` as
-    permanent 1.0 non-goals, not stubbed.
+13. Sprint 47 delivered all nine feature commands; current closeout proves
+    each routes through its implementation and exact capability gate rather
+    than returning `YEW_CMD_DEFERRED`. `workspace/symbol`, code actions,
+    formatting, inlay hints, and semantic tokens remain documented in
+    `client.h` as permanent 1.0 non-goals, not stubs.
 14. ≥ 220 assertions across the seven new unit files; determinism lane green
     on the new pty goldens.
