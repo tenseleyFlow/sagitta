@@ -143,6 +143,8 @@ findings YEW-F-120, YEW-F-121
 - `YEW-F-121` records literal clock/format scans already disproved by fixed
   F018/F020 plus a raw `strlen` scan that confuses byte length with cell-width
   ownership. Product owner boundaries remain intact.
+- Both findings were resolved by binding amendments S59-A30/A31 in
+  `66085e54`; no product code changed.
 
 ## Unverified observations
 

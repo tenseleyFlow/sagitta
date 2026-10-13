@@ -132,8 +132,8 @@ recorded in `audit-00.md`.
 | YEW-F-117 | M | fixed | F11 LSP | ~~live-clangd harness treats macOS path aliases as distinct documents~~ — fixed 2026-10-13 in `151bd0f0` | tests/audit/yew_f_117.c | s47 DoD 2; s58 F11 q8; s59 §2 |
 | YEW-F-118 | M | fixed | F12 AI | ~~AI closeout requires superseded Sprint 48/49 staging guards~~ — fixed 2026-10-13 in `d8fd10ad` | tests/audit/yew_f_118.c | s59 §2; s48 DoD 12; s49 DoD 11; s50 DoD 14 |
 | YEW-F-119 | M | fixed | F12 AI | ~~AI closeout retains invalid TLS/stats ownership scans~~ — fixed 2026-10-13 in `d8fd10ad` | tests/audit/yew_f_119.c | s59 §2; s48 DoD 2; s49 DoD 8 |
-| YEW-F-120 | M | open | F13 GIT | Git/FUSS closeout requires superseded staging and key rules | tests/audit/yew_f_120.c | s59 §2; s51 DoD 14; s52 DoD 7/14; s53 DoD 12 |
-| YEW-F-121 | M | open | F13 GIT | Git/FUSS closeout retains invalid clock/format/width scans | tests/audit/yew_f_121.c | s59 §2; s51 DoD 2; s52 DoD 3; YEW-F-018/020 |
+| YEW-F-120 | M | fixed | F13 GIT | ~~Git/FUSS closeout requires superseded staging and key rules~~ — fixed 2026-10-13 in `66085e54` | tests/audit/yew_f_120.c | s59 §2; s51 DoD 14; s52 DoD 7/14; s53 DoD 12 |
+| YEW-F-121 | M | fixed | F13 GIT | ~~Git/FUSS closeout retains invalid clock/format/width scans~~ — fixed 2026-10-13 in `66085e54` | tests/audit/yew_f_121.c | s59 §2; s51 DoD 2; s52 DoD 3; YEW-F-018/020 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1283,6 +1283,8 @@ ordinary filename bytes perform visible-row type jump while actions use Alt
 sequences and the effective-binding-derived action picker. Product behavior
 is not shown wrong. The hard XFAIL requires closeout to test the shipped
 owners and current binding model while retaining permanent Git non-goals.
+Commit `66085e54` adds S59-A30 and synchronizes the Sprint 51/52 and F13
+delivery/key contracts.
 
 `YEW-F-121` is Medium because F13 repeats literal scans already shown invalid
 by fixed findings `YEW-F-018` and `YEW-F-020`: clock-suffixed helper names are
@@ -1291,6 +1293,8 @@ interpolation. Sprint 52's raw `strlen|wcwidth` scan additionally rejects
 legitimate byte lengths even though display-cell measurement remains in the
 Unicode owner. The hard XFAIL requires tokenized clock-call, structural argv,
 and semantic width-ownership gates without weakening any of those boundaries.
+Commit `66085e54` adds S59-A31 and synchronizes the executable ownership
+contracts.
 
 ## Unverified observations
 
