@@ -15,6 +15,13 @@
 !.docs/fletch-spec.md
 !.docs/audits/
 !.docs/audits/**
+!.docs/plan/
+!.docs/plan/**
+!.docs/sprints/
+!.docs/sprints/**
+# Superseded before integration by the amended Sprint 57.13 contract.
+.docs/sprints/13-performance/s57_11-mouse-overhaul-context-menus.md
+!.docs/HANDOFF.md
 .git/
 .idea/
 .vscode/

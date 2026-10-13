@@ -1,13 +1,13 @@
 # yew Sprint Index
 
-96 sprint-contract files across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
+95 sprint-contract files across 15 campaigns: empty repo → **v1.0.0**, a speed-first,
 bespoke-first, modal-paradigm-first terminal editor plus its language,
 Fletch. Small bites, clear milestones, testable deliverables at every
 stage. Each sprint is independently reviewable and mergeable; every sprint
 that lands new surface area also lands its tests (unit, script, pty, fuzz,
 or perf as appropriate).
 
-The canonical arc remains 61 whole-numbered sprints, 0 through 60. Thirty-five
+The canonical arc remains 61 whole-numbered sprints, 0 through 60. Thirty-four
 fractional or supporting contracts split off during implementation — the
 pressure valve working as designed. Renumbering is forbidden once files exist,
 so those ids and supporting Sprint 57 records are permanent.
