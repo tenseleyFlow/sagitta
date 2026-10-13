@@ -603,12 +603,15 @@ debug palette (comment = dim, everything else = default). Sprint 41 lands
 1. `make && make test` green on gcc and clang under `-std=c11 -pedantic
    -Wall -Wextra -Werror`, zero warnings; ASan/UBSan/valgrind/determinism
    lanes green.
-2. `_Static_assert`s hold: `sizeof(SynState) == 40`, `sizeof(SynSpan) ==
-   8`, `YEW_ATTR__COUNT <= 64`; `YEW_ATTR__COUNT == 54` asserted so a
-   silent table edit fails the build.
-3. **No colors in the engine**: `grep -rniE '#[0-9a-f]{6}|rgb|\b38;2\b|\b48;5\b'
-   src/syn/` returns nothing, and `grep -rn 'yew_cp_width\|yew_str_width'
-   src/syn/` returns nothing (width math stays in `src/unicode/`).
+2. Sprint 41.5 superseded the 40-byte state tuple with the binding 84-byte
+   qualified-frame state while preserving four-byte per-line entry ids.
+   `_Static_assert`s hold for that current state, `sizeof(SynSpan) == 8`,
+   `YEW_ATTR__COUNT <= 64`, and `YEW_ATTR__COUNT == 54`.
+3. **No colors in matching or definitions.** Theme loading is the syntax subsystem's color-owning exception; the repository ban excludes only
+   `src/syn/theme.c` and `theme.h` while scanning every other `src/syn/` file
+   for color roles. The same scope contains no `yew_cp_width`,
+   `yew_str_width`, or local width arithmetic (width stays in
+   `src/unicode/`).
 4. The depth-cap balance law: 40 nested pushes followed by 40 pops returns
    the exact entry state id; the test fails if `lost` handling is removed
    (proved once with a deliberately broken build in the test comment).
@@ -634,9 +637,10 @@ debug palette (comment = dim, everything else = default). Sprint 41 lands
 11. Cache effectiveness: redrawing an unchanged 200-row viewport runs
     `yew_syn_line` **zero** times (counter asserted); a one-row scroll runs
     it once.
-12. Deferrals hard-error naming their sprint: loading a `.fl` definition
-    (Sprint 40), theme loading (Sprint 41), `yew_syn_lang_for` returning
-    anything but `YEW_LANG_NONE` (Sprints 41/42), any `SynState.def != 0`
-    (`YEW_BUG`).
+12. Sprints 40–42.5 delivered the staged syntax surfaces: `.fl` definitions,
+    themes, language detection/packs, and embedded definitions. Current
+    closeout exercises those live owners; Sprint 41.5's frame invariants
+    replace the deleted `SynState.def` guard. Post-1.0 semantic highlighting
+    remains explicitly deferred.
 13. ≥ 180 assertions across the five new unit files; `make perf` runs the
     syn scenarios and writes `tests/perf/baselines/syn.txt`.

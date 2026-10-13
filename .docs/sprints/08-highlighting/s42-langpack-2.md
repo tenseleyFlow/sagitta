@@ -596,11 +596,12 @@ state changes to `EARNED` when that declaration commit exists.
    ASan/UBSan/valgrind/determinism lanes green.
 2. Eleven new definition files — `python rust go javascript typescript
    fortran fortran_fixed json jsonc yaml toml` (8 languages; typescript,
-   fortran_fixed and jsonc are shared-body variants) — compile, and
-   `yew syn check --strict runtime/syntax/*.fl` exits 0 with zero warnings
-   across all 17 files / 14 languages.
-3. **100 % context and rule coverage** across all 17 definition files (14 languages) against
-   the committed fixtures; CI fails on any unfired rule.
+   fortran_fixed and jsonc are shared-body variants) — compile. The original 17-definition / 14-language cohort remains an explicit historical subset;
+   binding Sprint 42.5's manifest and `yew syn check --strict
+   runtime/syntax/*.fl` cover all 48 current definitions with zero warnings.
+3. **100 % context, rule, and embed-site coverage** across the checked
+   48-definition manifest; CI fails on any unfired row. The original 17/14
+   cohort remains named and covered within that set.
 4. Every trap in §1–§8 has a named golden: python's nested-quote f-string
    and `{{`; rust's 20-deep comment, `r###`, and all four lifetime/char
    rows; go's backtick-with-`\n`; js's eight `value` rows, two documented
@@ -617,13 +618,16 @@ state changes to `EARNED` when that declaration commit exists.
    correctly (removing s39's `lost` handling fails this test).
 7. Differential: 100 k random edits × 4 seeds × 8 new languages, zero
    divergences against from-scratch highlighting.
-8. `SynState.def == 0` for every state produced by every definition across
-   the entire fixture corpus (asserted in the differential harness).
-9. All §9 budgets green on every fixture with per-language baseline rows
-   committed; the minified 2 MiB JSON line opens to first paint ≤ 20 ms;
-   cold start with all 17 definition files installed compiles ≤ 1 definition.
-10. Fuzz: all definitions replayed through the s39 line fuzzer and the s40
-    definition fuzzer for 10 minutes each, zero findings, ASan clean.
+8. Sprint 41.5 replaced the flat `SynState.def` invariant with qualified
+   frame, resident-definition, canonical-tail, non-embedding, and balanced
+   embed-exit assertions across the complete fixture corpus.
+9. All §9 budgets stay green on every original fixture and every current
+   manifest row has its committed budget; the minified 2 MiB JSON line opens
+   to first paint ≤ 20 ms; cold start with all 48 definitions installed
+   compiles ≤ 1 definition.
+10. Fuzz: all 48 manifest definitions replay through the line, definition,
+    and differential-edit fuzz corpora at the contracted long-campaign
+    volumes, with zero findings and clean sanitizer runs.
 11. `.docs/syntax-def.md` updated: go named as the template definition;
     the four aux matchers each cite their real consumer (sh, rust/python/
     toml, markdown, yaml); the `value` flag documented with the js

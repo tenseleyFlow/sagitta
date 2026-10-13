@@ -605,8 +605,10 @@ Budgets — all measured by `tests/perf/perf_syn.c`, baselines committed to
     `c_comment_bomb.c` no-frame-over-1 ms assertion is a hard gate under
     the fake clock; scroll throughput on `md_kitchen.md` still ≥ 120 fps
     equivalent with highlighting on.
-13. `SynState.def == 0` asserted for every state produced by all five
-    definitions across the whole fixture corpus; an `embed:` key errors
-    naming `s41_5`.
+13. Sprint 41.5 replaced the flat `SynState.def` invariant with qualified
+    frames: non-embedding fixtures retain `ndef == 1` with every live frame
+    on the root definition, balanced embedded regions exit to the exact
+    entry state id, and canonical tails are zero. `embed:` is accepted and
+    validated by its binding owner.
 14. ≥ 90 golden span files across the five languages, all byte-stable
     across two runs; ≥ 120 assertions across the three new unit files.

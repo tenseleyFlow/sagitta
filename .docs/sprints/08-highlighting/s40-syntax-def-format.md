@@ -662,10 +662,10 @@ print either way); `--strict` promotes warnings to errors. CI runs
 9. Laziness: opening one `.ini` file compiles exactly **one** definition
    (counter asserted); `scripts/gen-langtab` output regenerates
    byte-identically in CI (same discipline as the Unicode tables).
-10. Deferrals hard-error naming their sprint: `ed.theme.set` (41), an
-    `embed:` key (its own sprint), a definition naming a language shipped
-    in 41/42 that does not exist yet (`no definition for 'rust' — Sprint
-    42`).
+10. Sprints 41–42.5 delivered the staged theme, embedding, and language-pack
+    surfaces. Current closeout exercises `ed.theme.set`, accepted `embed:`
+    definitions, and the checked 48-definition registry; user definitions
+    remain data-discovered and post-1.0 semantic tokens remain deferred.
 11. Fuzz: 10 minutes on the definition fuzzer, zero findings, ASan/UBSan
     clean; corpus committed and replayed in `make test`.
 12. Perf: `yew_syn_lang_for` ≤ 0.5 µs per path; `ini.fl` cold compile

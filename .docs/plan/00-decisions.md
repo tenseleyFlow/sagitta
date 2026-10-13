@@ -628,6 +628,35 @@ fixture. This amendment changes no product behavior or diagnostic path and
 supersedes only the unreachable collision-fixture wording in Sprint 38 and
 F09; `YEW-F-112` records the correction.
 
+**Syntax state closeout amendment S59-A24 (2026-10-13) — binding embedded
+state and delivered owners replace landing guards.** Sprint 39 landed a
+40-byte flat state tuple and staged later definition, theme, language-pack,
+and embedding surfaces behind hard errors. Sprints 40–42 delivered the first
+three surfaces; binding Sprint 41.5 widened the tuple to the current 84-byte
+stack of qualified `(definition, context)` frames, removed `SynState.def`,
+and preserved four-byte per-line interned entry ids; Sprint 42.5 expanded the
+pack without changing that representation. Current closeout therefore proves
+the frame bounds, canonical zero tails, unchanged non-embedding states,
+balanced embed exits, and shipped owner surfaces rather than requiring their
+historical hard errors. This amendment changes no product behavior or memory
+budget. It supersedes only stale state/staging wording in Sprints 39–42 and
+F10; `YEW-F-113` records the correction.
+
+**Syntax ownership and inventory closeout amendment S59-A25 (2026-10-13) —
+release gates follow the theme boundary and checked pack manifest.** Syntax
+matching and definition code continues to emit semantic attributes and owns
+no colors or width math. Sprint 41's `theme.c`/`theme.h` is the sole syntax
+subsystem exception that parses and degrades colors; the repository ban
+explicitly excludes only those files. Sprint 42's 17-definition / 14-language
+cohort remains a historical milestone, Sprint 41.5 expanded it to 19/16, and
+binding Sprint 42.5 owns the current deterministic 48-definition inventory
+through `tests/syn/manifest.tsv`. Current closeout preserves the original
+cohort checks and also follows the live manifest, all-pack strict/coverage
+gates, cold-load limit, and fuzz corpus. This amendment changes no syntax,
+theme, or detection behavior. It supersedes only stale ownership scope and
+point-in-time inventory wording in Sprints 39/42 and F10; `YEW-F-114` records
+the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
