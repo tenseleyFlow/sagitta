@@ -134,6 +134,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-121 | audit | `tests/audit/yew_f_121.c` | ~~Git/FUSS closeout retains invalid clock/format/width scans~~ — fixed in `66085e54` | fixed |
 | YEW-F-122 | audit | `tests/audit/yew_f_122.c` | ~~plugin closeout retains superseded package/docs staging rules~~ — fixed in `fe7ee656` | fixed |
 | YEW-F-123 | audit | `tests/audit/yew_f_123.c` | ~~plugin closeout names the wrong Fletch import amendment~~ — fixed in `fe7ee656` | fixed |
+| YEW-F-124 | audit | `tests/audit/yew_f_124.c` | macOS GCC package lane sends Apple arm64e flags to GCC | active |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
