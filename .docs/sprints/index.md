@@ -31,11 +31,11 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F06 without claiming reviewer
-signoff. F05 maps all 26 execute/shell DoD rows after exact-name
-Clang/GCC/ASan unit passes, the full parser fuzz gate, focused PTYs/scripts,
-and the strict job-stream gate. F07 contract reconciliation is the immediate
-front, followed by its local evidence packet.
+pre-closeout packets exist for F01 through F07 without claiming reviewer
+signoff. F07 maps all 75 UI/workspace DoD rows after fresh
+Clang/GCC/ASan builds, 25 focused unit filters, all 33 s22–s27 PTYs, all 48
+chrome variants, 14 later-owner successor PTYs, focused fuzz samples, and
+strict state/finder/mouse gates. F08 is the next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
