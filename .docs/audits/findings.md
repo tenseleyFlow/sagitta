@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-097`
+Next available ID: `YEW-F-098`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -109,6 +109,7 @@ recorded in `audit-00.md`.
 | YEW-F-094 | L | fixed | F06 RE | ~~golden-table guard permits fewer than 150 rows~~ — fixed 2026-10-13 in `87c0684f` | tests/audit/yew_f_094.c | s20 DoD 4 |
 | YEW-F-095 | M | fixed | F01 UNI | ~~F01 closeout requires delivered Unicode deferrals to be absent~~ — fixed 2026-10-13 in `c84e9fe7` | tests/audit/yew_f_095.c | s59 §2; s02 DoD 12; s16/s20 |
 | YEW-F-096 | M | fixed | F15 CI | ~~closeout checker reads ignored sprint contracts~~ — fixed 2026-10-13 in `dfe7f3ce` | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
+| YEW-F-097 | M | confirmed | F15 CI | priority gate rejects later-discovered Criticals | tests/audit/yew_f_097.c | s59 §1 priority law |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -935,6 +936,15 @@ Commit `dfe7f3ce` tracks all 95 canonical contracts plus the authoring
 contract and index, makes their policy explicit in `.gitignore`, and corrects
 the index's count after excluding that stale draft. An isolated detached
 worktree sees all 97 files and passes the 15-front closeout gate.
+
+`YEW-F-097` is Medium because `check-priority.sh` compares every historical
+Critical/High closure with every Medium/Low closure, regardless of when the
+finding was filed. It consequently rejects F001's September Medium fix for
+preceding F082, a Critical discovered by a later October review. The Sprint
+59 law forbids a lower-severity merge while a higher-severity finding is
+open; it cannot make a completed merge retroactively invalid. The hard XFAIL
+requires the gate to distinguish a known-open higher finding from one filed
+after the lower closure.
 
 ## Unverified observations
 
