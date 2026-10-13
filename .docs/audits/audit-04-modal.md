@@ -152,13 +152,15 @@ All rows below were rerun with `YEW_MOUSE=0`:
 ## Closeout-contract recheck addendum
 
 `YEW-F-102` was discovered while reconciling this audit with Sprint 59's F04
-closeout. The original Sprint 14/16/17 Definition-of-Done rows still require
-future-sprint hard errors and an inert syntax-provider slot that the later
-owning sprints intentionally replaced. The current product's live modes,
-syntax provider, multi-cursor expansion, regex lift, completion, and LSP
-paths are not shown defective; the contradictory release contract is the
-finding. `tests/audit/yew_f_102.c` pins the required decision amendment and
-synchronized owning-contract/closeout wording as a hard XFAIL.
+closeout. The original Sprint 14/16 Definition-of-Done rows still require
+future-sprint mode and multi-cursor errors and an inert syntax-provider slot
+that the later owning sprints intentionally replaced. Source review also
+confirmed that Sprint 17's regex-lift, multi-cursor ghost-completion, and
+multi-cursor LSP-edit guards remain intentional 1.0 boundaries; they must not
+be misreported as shipped features. The current product behavior is not shown
+defective; the contradictory subset of the release contract is the finding.
+`tests/audit/yew_f_102.c` pins the decision amendment and synchronized
+owning-contract/closeout wording as a hard XFAIL.
 
 ## Unverified observations
 

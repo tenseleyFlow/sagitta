@@ -43,7 +43,7 @@ Sprints covered: s13, s14, s15, s16, s17
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s14.6 Terminal restore holds for the live editor: `kill -SEGV`, `kill -TERM`, `kill -9`, and `ed.suspend`+`fg` each leave a usable terminal (pty test asserts the restore blob on the wire, invariant 6).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s14.7 Every L and I table row from §4/§5 is exercised by a unit or pty test; `ed.mode.enter` for W/B/H/E/F messages its sprint number.
+- [ ] s14.7 Every L and I table row from §4/§5 is exercised by a unit or pty test; later-owned W/B/H/E/F entries remain keyboard-reachable through the same `ed.mode.enter` route.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s14.8 Undo granularity: typing `hello`, Esc, `u` restores the pre-insert buffer in one step; typing `hel`, `<left>`, `lo`, Esc needs two.
       — VERDICT: blocking — independent closeout review pending.
@@ -87,7 +87,7 @@ Sprints covered: s13, s14, s15, s16, s17
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s16.4 B mode on a plain `.txt` with zero brackets yields ≥ 3 distinct containment levels (paragraph → section-or-indent → buffer), asserted on a prose fixture — the "useful without a language" gate.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s16.5 The containment chain on a C fixture returns 4 hand-computed levels; the syntax provider is registered, has a NULL `enclosing`, and is skipped without a branch anywhere outside `yew_block_level`.
+- [ ] s16.5 The containment chain on a C fixture returns 4 hand-computed levels; Sprint 40's installed syntax provider makes strict containment progress when active and falls through inside `yew_block_level` when unavailable.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s16.6 Indent blocks absorb interior blank lines and never end on a blank line (Python-shaped fixture, both asserted).
       — VERDICT: blocking — independent closeout review pending.
@@ -99,7 +99,7 @@ Sprints covered: s13, s14, s15, s16, s17
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s16.10 `grep -rn 'wcwidth\|0x4E00\|0x1F3' src/edit/` → empty: no hard-coded codepoint ranges and no width math outside `src/unicode/`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s16.11 `yew_block_provider_syntax_install` hard-errors naming Sprint 40; multi-cursor expand hard-errors naming Sprint 17.
+- [ ] s16.11 The Sprint 40 syntax provider installs through the original ordered slot; Sprint 17 multi-cursor expand keeps one selection stack per cursor and preserves cursor-set normalization.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s16.12 ≥ 160 assertions across the four new unit files; perf checks inside the keystroke budget; determinism lane green on the new goldens.
       — VERDICT: blocking — independent closeout review pending.
@@ -123,7 +123,7 @@ Sprints covered: s13, s14, s15, s16, s17
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s17.10 Perf gate: 1 000-cursor insert inside the 5 ms p99 keypress→paint budget; keyboard selection extension damages only the union of old and new bounds (frame counter asserts row counts, not full redraws; mouse drag remains Sprint 27).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s17.11 Deferred paths hard-error naming their sprint: regex lift (21), per-cursor completion (43), per-cursor LSP edits (47).
+- [ ] s17.11 Intentional 1.0 boundaries fail loudly and are tested: match lift rejects regex mode, ghost completion requires a single cursor, and LSP edits require one primary cursor.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s17.12 ≥ 180 assertions across the four new unit files; ≥ 12 new pty goldens, byte-stable across two runs (invariant 5).
       — VERDICT: blocking — independent closeout review pending.

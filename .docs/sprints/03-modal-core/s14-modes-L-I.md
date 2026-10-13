@@ -35,9 +35,11 @@ open with journal-recovery prompt, save via the Sprint 8 atomic path, and
 quit with a dirty-check prompt. The viewport here is a **naive
 follow-cursor** clamp (no scrolloff, no wrap, no horizontal scroll) and the
 footer is a **one-row raw** status/message strip — Sprint 15 replaces both
-with the real engines and specs. W/B/H/E/F entries still hard-error naming
-Sprints 16/16/17/18/52. Panes/tabs are Sprint 22/23: `Ed` holds exactly one
-`Win`, full screen.
+with the real engines and specs. At this sprint's landing, W/B/H/E/F entries
+hard-errored naming Sprints 16/16/17/18/52. Later owning sprints delivered
+W/B/H/E/F through the same mode-entry and command-dispatch surfaces
+(S59-A13). Panes/tabs are Sprint 22/23: `Ed` holds exactly one `Win`, full
+screen.
 
 ## Deliverables
 
@@ -174,8 +176,10 @@ CmdStatus yew_mode_enter(Ed *ed, Mode m);        /* the only transition */
   user pressed Esc to confirm where they are; showing them is free).
 - Mode changes set `full_damage` for the footer only (the mode chip
   recolors the whole footer, Sprint 15) — never the document.
-- `ed.mode.enter` with `"W"|"B"|"H"|"E"|"F"` still returns
-  `YEW_CMD_ERR_DEFERRED` naming Sprints 16/16/17/18/52.
+- `ed.mode.enter` with `"W"|"B"|"H"|"E"|"F"` returned
+  `YEW_CMD_ERR_DEFERRED` naming Sprints 16/16/17/18/52 at this sprint's
+  landing. Those owning sprints subsequently replaced the staging guards
+  with live entries through this one transition path (S59-A13).
 
 ### 4. The L-mode table (pinned) — `src/edit/keys_default.c`
 
@@ -214,7 +218,7 @@ Command keys:
 | `C-z` | `ed.suspend` | `yew_tty_suspend` |
 | `C-l` | `ed.redraw` | full damage; the panic button |
 | `1`–`9` | count prefix | `0` continues a count, else `ed.move.line.home` |
-| `w` `b` `h` `e` `f` | `ed.mode.enter W/B/H/E/F` | DEFERRED until 16/16/17/18/52 |
+| `w` `b` `h` `e` `f` | `ed.mode.enter W/B/H/E/F` | staging-deferred here; delivered by 16/16/17/18/52 (S59-A13) |
 | `<esc>` | `ed.mode.escape` | |
 
 `t`-prefixed tab keys (Sprint 23), `p`-prefixed pane keys (Sprint 22) and
@@ -355,8 +359,8 @@ only width math is that call (conversions live in `src/unicode/`).
 
 - Scrolloff, wrap, horizontal scroll, gutter, real statusline, message
   severity attrs, SIGWINCH relayout spec → Sprint 15.
-- W/B/H/E/F modes → 16/16/17/18/52; their `ed.mode.enter` args are
-  `YEW_CMD_DEFERRED`.
+- W/B/H/E/F modes were deferred to 16/16/17/18/52; their `ed.mode.enter`
+  args were `YEW_CMD_DEFERRED` at this landing and are live now (S59-A13).
 - Multiple files/tabs → 23; panes → 22; save-as / `:w path` → 18.
 - Registers, clipboard yank/paste keys → Sprint 12's API exists; the L-mode
   bindings land with selections in Sprint 17.
@@ -370,8 +374,9 @@ only width math is that call (conversions live in `src/unicode/`).
   equal deadlines (stable by insertion, determinism); cancel-then-fire
   never runs a cancelled callback.
 - **Unit** (`tests/unit/test_modes.c`): Esc collapse order (chord →
-  count → prompt → mode) driven through `yew_dispatch_key`; deferred mode
-  entries return `YEW_CMD_ERR_DEFERRED` with the right sprint number.
+  count → prompt → mode) driven through `yew_dispatch_key`; the original
+  staging test pinned deferred sprint numbers, while current coverage pins
+  the live later-owned entries through the same route (S59-A13).
 - **Unit** (`tests/unit/test_edit_cmds.c`): every L and I command against
   a fixture buffer with the s09 golden text (ZWJ family, CJK, CRLF,
   invalid byte) — `x` on a 25-byte ZWJ cluster removes exactly 25 bytes;
@@ -419,8 +424,10 @@ only width math is that call (conversions live in `src/unicode/`).
 6. Terminal restore holds for the live editor: `kill -SEGV`, `kill -TERM`,
    `kill -9`, and `ed.suspend`+`fg` each leave a usable terminal
    (pty test asserts the restore blob on the wire, invariant 6).
-7. Every L and I table row from §4/§5 is exercised by a unit or pty test;
-   `ed.mode.enter` for W/B/H/E/F messages its sprint number.
+7. Every L and I table row from §4/§5 is exercised by a unit or pty test.
+   Later owning sprints delivered W/B/H/E/F through the same
+   `ed.mode.enter` route, with keyboard entry and mode-state coverage; the
+   original future-sprint messages were staging guards (S59-A13).
 8. Undo granularity: typing `hello`, Esc, `u` restores the pre-insert
    buffer in one step; typing `hel`, `<left>`, `lo`, Esc needs two.
 9. Dirty-quit and journal-recovery prompts: all 3 + 3 answers covered;

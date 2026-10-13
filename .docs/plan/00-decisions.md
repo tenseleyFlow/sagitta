@@ -450,6 +450,23 @@ This amendment changes no product behavior or text-safety invariant. It
 supersedes only stale ownership spellings in Sprints 10/12 and F03;
 `YEW-F-101` records the correction.
 
+**Modal closeout amendment S59-A13 (2026-10-13) — delivered modal surfaces
+replace their staging guards.** Sprints 14 and 16 established mode entry and
+structural-unit contracts before all of their later consumers existed. Their
+future-sprint mode errors, inert syntax-provider slot, and single-cursor
+expansion guard were staging behavior, not permanent 1.0 behavior. Sprints
+16/17/18/52 delivered W/B/H/E/F; Sprint 40 installed the syntax provider; and
+Sprint 17 delivered multi-cursor expansion through the original modal,
+unit-engine, and transaction choke points. Current closeout evidence proves
+those shipped paths retain keyboard reachability, unit-engine progress,
+cursor invariants, rollback, and one-transaction behavior instead of
+requiring the paths to remain absent. Sprint 17's other boundaries remain
+intentional for 1.0: match lifting is literal-only, ghost completion is
+single-cursor, and LSP edits require one primary cursor. Those guards remain
+tested under invariant 3. This amendment changes no product behavior or modal
+invariant; it supersedes only stale staging wording in Sprints 14/16 and F04.
+`YEW-F-102` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

@@ -33,11 +33,12 @@ and subword (camelCase / snake_case / kebab-case) variants. B mode:
 provider-layered structural units — bracket/brace scope with
 string/comment-aware heuristics, indentation block, paragraph — chained by
 strict containment so alt+arrows grow and shrink a structural selection.
-The **syntax provider slot exists and is NULL**: Sprint 40 fills it, and
-until then B falls through to heuristics — which is the point, because B
-must be genuinely useful in a plain `.txt`. Selection *rendering* and H
-mode are Sprint 17; this sprint's expand/contract set the cursor's anchor
-and head (s09 `Cursor`) and nothing draws them yet.
+The syntax provider slot was inert at this sprint's landing.
+Sprint 40 delivered the syntax provider through that slot; B now prefers its
+exact spans when syntax is available and still falls through to heuristics,
+because B must remain genuinely useful in a plain `.txt`. Selection
+*rendering* and H mode are Sprint 17; this sprint's expand/contract initially
+set the cursor's anchor and head (s09 `Cursor`) before that rendering arrived.
 
 ## Deliverables
 
@@ -209,11 +210,12 @@ void yew_block_register(BlockProvider p);      /* insertion-ordered      */
 bool yew_block_level(UnitCtx *u, ByteOff p, u32 level, Span *out);
 ```
 
-Registered order (all four always registered; the first is inert):
+Registered order (all four always registered; the first falls through when
+syntax is unavailable):
 
 | # | Provider | Priority | Status |
 |---|---|---|---|
-| 1 | `syntax` | 40 | **slot only** — `enclosing` is NULL until Sprint 40; the chain skips it |
+| 1 | `syntax` | 40 | installed by Sprint 40; exact syntax spans when available, otherwise the chain falls through |
 | 2 | `scope` (bracket/brace/paren) | 30 | this sprint |
 | 3 | `indent` | 20 | this sprint |
 | 4 | `paragraph` | 10 | this sprint |
@@ -228,9 +230,9 @@ whole buffer. Consequences worth stating:
   indented) → buffer` — three useful levels with zero language support.
 - A C file gets `inner braces → enclosing braces → function → file`
   naturally, because each brace pair strictly contains the previous.
-- Sprint 40's syntax provider slots in *between* without changing any
-  caller: it simply starts returning spans that are smaller/better than
-  the heuristics' and wins the "smallest containing" comparison.
+- Sprint 40's syntax provider slotted in *between* without changing any
+  caller: it returns spans that are smaller/better than the heuristics' and
+  wins the "smallest containing" comparison when syntax is available.
 
 Arrow behavior in B mode (`←` `→` `↑` `↓` per §1's map):
 
@@ -283,8 +285,8 @@ static bool line_in_string(UnitCtx *u, LineNo l, ByteOff p);
 
 - Comments: `//`, `#`, `--`, `;` to end of line, and `/* … */` spanning
   lines, suppress bracket counting. A `commentstring`/`quotes` option
-  refines this per-buffer in Sprint 36; Sprint 40's syntax provider makes
-  it exact.
+  was refined per-buffer in Sprint 36; Sprint 40's syntax provider makes
+  it exact when syntax is available.
 - Scan budget: the outward scan stops after `YEW_BLOCK_SCAN_LINES = 2000`
   lines in each direction and reports "no enclosing scope", falling
   through to indent/paragraph. **Pitfall:** an unbalanced brace in a
@@ -308,9 +310,9 @@ typedef struct SelStack { Span s[YEW_SEL_DEPTH]; u8 n; } SelStack; /* 16 */
   replay the stack. The stack is invalidated (cleared) by any edit and by
   any cursor motion that is not expand/contract — a stale stack is how
   users get "shrink went somewhere I've never been".
-- The stack lives on `Win`. Multi-cursor expand is Sprint 17 (each cursor
-  gets its own stack there); this sprint asserts `cs.curs.len == 1` and
-  hard-errors otherwise, naming Sprint 17.
+- The stack initially lived on `Win`, with a single-cursor guard at this
+  sprint's landing. Sprint 17 moved it into the cursor set so every cursor
+  has a synchronized stack and expansion works across the normalized set.
 - Both commands work in **any** mode (they are structural, not modal) but
   are bound only in B's layer by default; H mode binds them in Sprint 17.
 
@@ -329,13 +331,12 @@ Per engine, per fixture, per `alt ∈ {false,true}`: monotonicity of
 `home <= p <= end`, `span == {home,end}`, round-trip `prev(next(p)) <= p`,
 and purity (buffer generation counter unchanged, s07 `tb->gen`).
 
-### 8. Defer
+### 8. Delivery history and remaining deferments
 
-- Syntax-aware structural units → Sprint 40 (the provider slot is
-  registered with a NULL `enclosing`; `yew_block_provider_syntax_install`
-  hard-errors naming Sprint 40 if called before then).
-- H mode, selection rendering, multi-cursor structural selection →
-  Sprint 17.
+- Syntax-aware structural units were deferred to Sprint 40 and are now
+  installed through this provider slot, preserving heuristic fallback.
+- H mode, selection rendering, and multi-cursor structural selection were
+  deferred to Sprint 17 and are now live through these unit-engine paths.
 - `ed.move.word.same_prev/next` (jump to the next occurrence of the word
   under the cursor) → Sprint 21 with the search engine; W's `A-↑`/`A-↓`
   stay unbound rather than shipping a naive scan that a real engine will
@@ -363,6 +364,9 @@ and purity (buffer generation counter unchanged, s07 `tb->gen`).
   heuristic on `don't`, `x = 'a[b'`, and a line with an unbalanced quote;
   the 2000-line scan budget on an unbalanced 100 kLOC fixture (asserts the
   fall-through, and that the call stays under the frame budget).
+- **Unit** (`tests/unit/test_syn_block.c`): Sprint 40's installed provider
+  makes strict containment progress and falls back safely when syntax is
+  unavailable.
 - **Unit** (`tests/unit/test_units.c`): the §7 conformance suite — 4
   engines × 6 fixtures × 2 alt values.
 - **Fuzz** (`tests/fuzz/fuzz_units.c`): random buffers (including invalid
@@ -390,8 +394,8 @@ and purity (buffer generation counter unchanged, s07 `tb->gen`).
    containment levels (paragraph → section-or-indent → buffer), asserted
    on a prose fixture — the "useful without a language" gate.
 5. The containment chain on a C fixture returns 4 hand-computed levels;
-   the syntax provider is registered, has a NULL `enclosing`, and is
-   skipped without a branch anywhere outside `yew_block_level`.
+   Sprint 40's installed syntax provider makes strict containment progress
+   when active and falls through inside `yew_block_level` when unavailable.
 6. Indent blocks absorb interior blank lines and never end on a blank
    line (Python-shaped fixture, both asserted).
 7. Quote/comment heuristics: `don't` does not suppress brackets;
@@ -401,7 +405,8 @@ and purity (buffer generation counter unchanged, s07 `tb->gen`).
 9. Fuzz: 100k ops × 4 seeds, zero contract violations, ASan/UBSan clean.
 10. `grep -rn 'wcwidth\|0x4E00\|0x1F3' src/edit/` → empty: no hard-coded
     codepoint ranges and no width math outside `src/unicode/`.
-11. `yew_block_provider_syntax_install` hard-errors naming Sprint 40;
-    multi-cursor expand hard-errors naming Sprint 17.
+11. The Sprint 40 syntax provider installs through the original ordered slot;
+    Sprint 17 multi-cursor expand keeps one selection stack per cursor and
+    preserves cursor-set normalization.
 12. ≥ 160 assertions across the four new unit files; perf checks inside
     the keystroke budget; determinism lane green on the new goldens.

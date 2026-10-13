@@ -3,8 +3,8 @@
  *
  * Correct behavior: a formal decision amendment, source sprint contracts,
  * and their closeout distinguish historical hard errors from the current
- * modes, syntax provider, multi-cursor, regex, completion, and LSP surfaces
- * delivered by later owning sprints.
+ * modes, syntax provider, and multi-cursor expansion delivered by later
+ * owning sprints, without erasing intentional 1.0 boundary guards.
  */
 #include "audit.h"
 
@@ -50,12 +50,10 @@ bool test_yew_f_102(char *why, size_t why_cap)
         file_has(s16, "multi-cursor expand hard-errors naming Sprint 17") ||
         file_has(closeout,
                  "multi-cursor expand hard-errors naming Sprint 17") ||
-        file_has(s17, "Deferred paths hard-error naming their sprint") ||
-        file_has(closeout,
-                 "Deferred paths hard-error naming their sprint") ||
         !file_has(s14, "Later owning sprints delivered W/B/H/E/F") ||
         !file_has(s16, "Sprint 40 delivered the syntax provider") ||
-        !file_has(s17, "Sprints 21, 43, and 47 delivered")) {
+        !file_has(s17, "Intentional 1.0 boundaries fail loudly") ||
+        !file_has(closeout, "Intentional 1.0 boundaries fail loudly")) {
         (void)snprintf(why, why_cap,
                        "F04 contract still requires superseded modal guards");
         return false;

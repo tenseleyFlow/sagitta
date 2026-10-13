@@ -1019,16 +1019,17 @@ calls by semantics instead of an obsolete whole-tree file list, and records
 the stronger private raw-setter plus typed register routes. The hard XFAIL
 passes without changing product behavior.
 
-`YEW-F-102` is Medium because the current Sprint 14, 16, and 17 contracts and
-F04 closeout still require historical staging guards after their owning
-sprints deliberately delivered those features. W/B/H/E/F must still message
-their future sprint; the syntax provider must remain NULL and hard-error;
-multi-cursor expansion must hard-error; and regex lift, per-cursor completion,
-and per-cursor LSP edits must still reject use even though Sprints
-16/17/18/21/40/43/47/52 shipped those surfaces. Current product behavior is
-not shown wrong, but the release closeout cannot truthfully require both the
-features and their former absence. The hard XFAIL requires a formal decision
-amendment and synchronized Sprint 14/16/17, F04, and audit wording.
+`YEW-F-102` is Medium because the current Sprint 14 and 16 contracts and F04
+closeout still require historical staging guards after their owning sprints
+deliberately delivered those features. W/B/H/E/F must still message their
+future sprint; the syntax provider must remain inert and hard-error; and
+multi-cursor expansion must hard-error even though Sprints 16/17/18/40/52
+shipped those surfaces. Source review confirmed that Sprint 17's regex-lift,
+multi-cursor ghost-completion, and multi-cursor LSP-edit guards remain
+intentional 1.0 boundaries, not stale staging. Current product behavior is not
+shown wrong, but the release closeout cannot truthfully require both the
+shipped subset and its former absence. The hard XFAIL requires a formal
+decision amendment and synchronized Sprint 14/16/17, F04, and audit wording.
 
 ## Unverified observations
 

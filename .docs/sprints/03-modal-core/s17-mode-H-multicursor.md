@@ -5,8 +5,8 @@
 - Sprint 9 — `Cursor` (`pos`, `anchor`, `goal_col`), `CursorSet` with the
   sorted/deduped invariant, `yew_cset_normalize`/`yew_cset_adjust`, the
   merge-rule table, `MarkSet` bias rules, typed coords (`GCol`, `CCol`),
-  and the standing hard-error: multi-cursor *editing* entry points name
-  this sprint.
+  and the staging hard-error on multi-cursor editing that this sprint
+  replaces.
 - Sprint 10 — undo tree with **transactions** (one multi-cursor edit = one
   undo step) and the clean-state node.
 - Sprint 12 — named registers, kill-ring semantics, OSC 52 clipboard —
@@ -33,10 +33,10 @@ action set routed through the registry (yank, delete, change, case,
 indent, shift, join), the three selection→multi-cursor lifts, simultaneous
 multi-cursor editing as **one** undo transaction with explicit
 overlap/merge rules and the cursor-ordering invariant, and the rendering
-of selection attributes plus secondary cursors. Regex-driven lift takes a
-**literal** pattern this sprint and gains regex in Sprint 21 through the
-same command; per-cursor completion, LSP-driven edits, and macro replay
-over cursor sets arrive with their campaigns.
+of selection attributes plus secondary cursors. Match lift is literal-only
+for 1.0; ghost completion remains single-cursor; and LSP edits require one
+primary cursor. Their boundary guards are deliberate rather than unimplemented
+stubs. Macro replay over cursor sets arrives with its owning campaign.
 
 ## Deliverables
 
@@ -165,10 +165,9 @@ u32 yew_mc_lift_ends   (Win *w);                       /* one per end    */
 
 - Lift leaves H and enters L with `cs.curs.len > 1`; the statusline shows
   ` L ` plus a cursor-count badge `×7`.
-- `lift.matches` uses a literal scan this sprint (`memmem`-style over the
-  s07 chunk iterator). Sprint 21 adds `re = true` and routes to the Sprint
-  20 engine — **the same command name and the same lift path**, so macros
-  recorded now keep working.
+- `lift.matches` uses a literal scan (`memmem`-style over the s07 chunk
+  iterator). Regex-driven lift remains outside the 1.0 surface; the guard
+  prevents a caller from silently treating a regex as a literal pattern.
 - Every lift ends with `yew_cset_normalize` (s09): sorted, deduped,
   primary preserved. A lift that produces > `YEW_MC_MAX` (10 000) cursors
   refuses with a message rather than allocating: `4 000 000 matches` is a
@@ -258,13 +257,12 @@ deletes 3 graphemes at each of the 7), still inside one transaction.
   selection bounds (their union), never the whole screen — dragging a
   selection down a 100 kLOC file must stay O(changed rows).
 
-### 7. Defer
+### 7. Boundaries retained after later campaigns
 
-- Regex-driven lift and search-based selection → Sprint 21
-  (`ed.cursor.lift.matches` gains the `re` flag there).
-- Per-cursor completion/ghost text → Sprint 43; per-cursor LSP edits →
-  Sprint 47; both hard-error naming their sprint if reached with
-  `len > 1`.
+- Regex-driven lift remains outside 1.0; `ed.cursor.lift.matches` is literal
+  and rejects a regex request rather than changing its meaning silently.
+- Sprint 43 deliberately disables ghost completion for a multi-cursor set;
+  LSP edits require one primary cursor. Both boundary guards remain tested.
 - Macro record/replay over a cursor set → Sprint 35 (the transaction
   boundary here is exactly what replay will reuse).
 - `rect_split_tabs`, `sel` theme customization, Kakoune-style
@@ -337,8 +335,9 @@ deletes 3 graphemes at each of the 7), still inside one transaction.
     budget; keyboard selection extension damages only the union of old and
     new bounds (frame counter asserts row counts, not full redraws; mouse
     drag remains Sprint 27).
-11. Deferred paths hard-error naming their sprint: regex lift (21),
-    per-cursor completion (43), per-cursor LSP edits (47).
+11. Intentional 1.0 boundaries fail loudly and are tested: match lift rejects
+    regex mode, ghost completion requires a single cursor, and LSP edits
+    require one primary cursor.
 12. ≥ 180 assertions across the four new unit files; ≥ 12 new pty
     goldens, byte-stable across two runs (invariant 5).
 13. **Milestone gate**: a single pty script drives L → W → B → H → I →
