@@ -13,12 +13,14 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F10 evidence baseline:** `73f6d4e9` was 130 commits above `origin/trunk`,
-including Sprint 59's documentation/tutorial work, all 114 completed finding
-remediations, and the F01–F09 pre-closeout evidence packets. F10's contract
-recheck closed `YEW-F-113` and `YEW-F-114` under decision amendments
-S59-A24/A25; neither showed a product-code defect. Its 52-row evidence packet
-landed immediately afterwards in `fc9c3408`.
+**F11 evidence baseline:** `c9529fb9` was 139 commits above `origin/trunk`,
+including Sprint 59's documentation/tutorial work, all 117 completed finding
+remediations, and the F01–F10 pre-closeout evidence packets. F11's contract
+recheck closed `YEW-F-115` and `YEW-F-116` under decision amendments
+S59-A26/A27; neither showed a product-code defect. `YEW-F-117` repaired the
+live-clangd harness's macOS path identity without changing production LSP
+behavior. Its 70-row evidence packet landed immediately afterwards in
+`41abb50a`.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -40,7 +42,13 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger now contains 114 stable IDs and all 114 are fixed.
+landed. The findings ledger now contains 117 stable IDs and all 117 are fixed.
+F11's closeout recheck closed three Medium findings. `YEW-F-115`/`YEW-F-116`
+replace obsolete provider/lifecycle staging and invalid symbol/JSON scans
+under S59-A26/A27 without removing shipped behavior. `YEW-F-117` canonicalizes
+the live-clangd fixture root and reuses the attached document URI so macOS
+`/tmp` aliases identify one document; the full real-clangd milestone now
+passes. Production LSP requests already used the attached URI.
 F10's closeout recheck closed two Medium contract findings,
 `YEW-F-113`/`YEW-F-114`, under S59-A24/A25. They replace obsolete flat-state
 and staging gates with the shipped qualified-frame and owner surfaces, exclude
@@ -111,13 +119,13 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 114 completed fixes reconcile, no hard XFAIL remains,
+executable gates: all 117 completed fixes reconcile, no hard XFAIL remains,
 and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
 being represented as independent verification. Baseline-pinned local
-pre-closeout packets now exist for F01 through F10 at
+pre-closeout packets now exist for F01 through F11 at
 `.docs/audits/evidence/F01-precloseout-5422f5e6.md`,
 `.docs/audits/evidence/F02-precloseout-6842c24f.md`,
 `.docs/audits/evidence/F03-precloseout-b45b24d8.md`, and
@@ -127,7 +135,8 @@ pre-closeout packets now exist for F01 through F10 at
 `.docs/audits/evidence/F07-precloseout-85a81ca7.md`, and
 `.docs/audits/evidence/F08-precloseout-5e99d472.md`, plus
 `.docs/audits/evidence/F09-precloseout-31c0a64a.md`, plus
-`.docs/audits/evidence/F10-precloseout-73f6d4e9.md`. F08 maps all 95 Fletch
+`.docs/audits/evidence/F10-precloseout-73f6d4e9.md`, and
+`.docs/audits/evidence/F11-precloseout-c9529fb9.md`. F08 maps all 95 Fletch
 DoD rows after strict Clang/GCC/ASan builds, 35 focused unit filters, 39/39
 conformance and GC-stress runs, deterministic dispatch/round-trip checks,
 bounded fuzz samples, selected PTYs, and a contention-qualified strict
@@ -139,13 +148,16 @@ F10 maps all 52 syntax/theme DoD rows after warning-clean Clang/GCC/ASan
 builds; 165 syntax tests and 52,973,617 assertions per configuration; complete
 48-definition strict/coverage and 432-golden asset gates; exact and bounded
 fuzz runs; and 97 focused PTYs per configuration. Strict uncontended
-performance and contracted long fuzz runs remain explicit blockers. All ten
-packets remain NOT READY until a non-author
+performance and contracted long fuzz runs remain explicit blockers. F11 maps
+all 70 completion/LSP rows after warning-clean Clang/GCC/ASan builds, focused
+unit/fuzz/PTY checks, policy selftests, and the passing real-clangd milestone:
+8/8 gotos, six references in three files, a clean rename round trip, and one
+diagnostic. All eleven packets remain NOT READY until a non-author
 reviewer and the required hosted matrix sign their current baselines.
 
 The immediate work is:
 
-1. begin F11's reproducer-first contract recheck and baseline-pinned local
+1. begin F12's reproducer-first contract recheck and baseline-pinned local
    pre-closeout packet without claiming independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
