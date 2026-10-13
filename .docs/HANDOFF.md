@@ -14,11 +14,11 @@ Apple-silicon host `nomad-1`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
 **Implementation checkpoint before this documentation refresh:** `trunk` is
-100 commits above `origin/trunk` at `818af14d`, including Sprint 59's
-documentation/tutorial work, all 102 completed finding remediations, and the
+103 commits above `origin/trunk` at `610e8833`, including Sprint 59's
+documentation/tutorial work, all 103 completed finding remediations, and the
 F01/F02/F03/F06 pre-closeout evidence packets. F04's contract recheck closed
-`YEW-F-102` under decision amendment S59-A13, then filed the open ownership
-finding `YEW-F-103`. Neither finding shows a product-code defect.
+`YEW-F-102` and `YEW-F-103` under decision amendments S59-A13/A14; neither
+finding showed a product-code defect.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -38,8 +38,7 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 103 stable IDs; 102 are fixed and
-`YEW-F-103` is open.
+landed. The findings ledger contains 103 stable IDs and all 103 are fixed.
 `YEW-F-102` aligned F04's shipped mode, syntax-provider, and multi-cursor
 expansion contracts while preserving intentional 1.0 boundary guards.
 `YEW-F-101` aligned F03's mutation-ownership wording with the already-audited
@@ -84,8 +83,8 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 102 completed fixes reconcile, one hard XFAIL pins
-`YEW-F-103`, and priority order is proven from Git ancestry. The deterministic
+executable gates: all 103 completed fixes reconcile, no hard XFAIL remains,
+and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not

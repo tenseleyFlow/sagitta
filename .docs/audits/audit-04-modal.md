@@ -170,6 +170,10 @@ ordinary cell geometry every later UI surface requires. No direct `wcwidth`
 call or hard-coded Unicode-width table was found in `src/ui/`; measurement and
 coordinate conversion still route through `src/unicode/`. The contradictory
 ownership wording, not product behavior, is the finding.
+Commit `610e8833` adds S59-A14, classifies the later viewport consumers, and
+restores the intended Unicode-ownership gate: measurement and conversion stay
+centralized while UI layout may operate on their cell-count results. The F103
+reproducer now passes.
 
 ## Unverified observations
 

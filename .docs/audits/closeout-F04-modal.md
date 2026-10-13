@@ -132,8 +132,7 @@ Sprints covered: s13, s14, s15, s16, s17
 
 ## Open audit findings against this front
 
-1 Medium: `YEW-F-103` — modal closeout retains obsolete viewport/width grep
-gates.
+0 open confirmed findings.
 
 ## Deferrals recorded against this front
 
@@ -141,4 +140,4 @@ none
 
 ## Verdict
 
-NOT READY — YEW-F-103 is open and independent evidence review remains pending.
+NOT READY — Confirmed findings are closed; independent evidence review remains.

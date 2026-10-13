@@ -115,7 +115,7 @@ recorded in `audit-00.md`.
 | YEW-F-100 | M | fixed | F03 TEXT | ~~text-engine closeout requires superseded staging guards~~ — fixed 2026-10-13 in `34dd30ef` | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
 | YEW-F-101 | M | fixed | F03 TEXT | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed 2026-10-13 in `f16c5dcd` | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
 | YEW-F-102 | M | fixed | F04 MODAL | ~~modal closeout requires superseded staging guards~~ — fixed 2026-10-13 in `1c8709f0` | tests/audit/yew_f_102.c | s59 §2; s14 DoD 7; s16 DoD 5/11; s17 DoD 11 |
-| YEW-F-103 | M | open | F04 MODAL | modal closeout retains obsolete viewport/width grep gates | tests/audit/yew_f_103.c | s59 §2; s14 DoD 10; s15 DoD 10 |
+| YEW-F-103 | M | fixed | F04 MODAL | ~~modal closeout retains obsolete viewport/width grep gates~~ — fixed 2026-10-13 in `610e8833` | tests/audit/yew_f_103.c | s59 §2; s14 DoD 10; s15 DoD 10 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1015,6 +1015,10 @@ closeout cannot truthfully satisfy its literal grep/API wording. The hard
 XFAIL requires a formal decision amendment and synchronized Sprint 10/12 and
 F03 closeout language without weakening editable-document or register routing
 ownership.
+Commit `610e8833` adds decision amendment S59-A14, classifies the legitimate
+later viewport consumers, and distinguishes centralized Unicode measurement
+from UI geometry over measured cell counts. The hard XFAIL passes without
+changing product behavior or weakening Unicode-width ownership.
 Commit `f16c5dcd` adds decision amendment S59-A12, scopes raw text-buffer
 calls by semantics instead of an obsolete whole-tree file list, and records
 the stronger private raw-setter plus typed register routes. The hard XFAIL
