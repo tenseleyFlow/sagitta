@@ -157,3 +157,5 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-13 | File `YEW-F-114` from F10 closeout recheck | 0 | 0 | 2 | 0 | 2 |
 | 2026-10-13 | Fix `YEW-F-113` (`0488f5df`) | 0 | 0 | 1 | 0 | 1 |
 | 2026-10-13 | Fix `YEW-F-114` (`0488f5df`) | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-13 | File `YEW-F-115` from F11 closeout recheck | 0 | 0 | 1 | 0 | 1 |
+| 2026-10-13 | File `YEW-F-116` from F11 closeout recheck | 0 | 0 | 2 | 0 | 2 |

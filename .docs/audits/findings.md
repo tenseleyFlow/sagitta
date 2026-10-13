@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-115`
+Next available ID: `YEW-F-117`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -127,6 +127,8 @@ recorded in `audit-00.md`.
 | YEW-F-112 | M | fixed | F09 REC | ~~Recorder closeout requires unreachable macrolib collision~~ — fixed 2026-10-13 in `905da06f` | tests/audit/yew_f_112.c | s59 §2; s38 DoD 8 |
 | YEW-F-113 | M | fixed | F10 SYN | ~~Syntax closeout requires superseded staging/state gates~~ — fixed 2026-10-13 in `0488f5df` | tests/audit/yew_f_113.c | s59 §2; s39 DoD 2/12; s40 DoD 10; s41 DoD 13; s42 DoD 8 |
 | YEW-F-114 | M | fixed | F10 SYN | ~~Syntax closeout retains historical ownership/inventory gates~~ — fixed 2026-10-13 in `0488f5df` | tests/audit/yew_f_114.c | s59 §2; s39 DoD 3; s42 DoD 2/3/9/10 |
+| YEW-F-115 | M | open | F11 LSP | LSP closeout requires superseded staging guards | tests/audit/yew_f_115.c | s59 §2; s43 DoD 12; s44 DoD 13; s45 DoD 13; s46 DoD 13 |
+| YEW-F-116 | M | open | F11 LSP | LSP closeout retains invalid determinism scans | tests/audit/yew_f_116.c | s59 §2; s44 DoD 6; s45 DoD 8 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1210,6 +1212,25 @@ only `theme.c`/`theme.h` while continuing to reject colors in matching code.
 Product behavior is not shown wrong. The hard XFAIL requires the contracts to
 retain the original cohort as history and use the manifest, current coverage,
 and current cold-load/fuzz gates for release closeout.
+
+`YEW-F-115` is Medium because F11's current closeout still requires deferred
+provider labels and hard errors for the shadow providers, server lifecycle,
+LSP documentation, and nine feature commands that Sprints 44, 46, 47, and 49
+delivered. Full builds register all three shadow providers, restart configured
+servers, and route feature commands through capability gates; stripped builds
+retain the exact module-boundary error fixed by `YEW-F-014`. Product behavior
+is not shown wrong. The hard XFAIL requires the Sprint 43–46 and F11 contracts
+to preserve landing history while testing the shipped owner surfaces and the
+permanent 1.0 non-goals.
+
+`YEW-F-116` is Medium because Sprint 44's raw whole-`src/ws/` substring scan
+rejects the pre-existing workspace-state float boundary and even the ordinary
+words `doubles` and `doubled` in the symbol index. Sprint 45's `%g|%f|%e`
+scan, meanwhile, cannot match the required `%.17g` formatter and has returned
+zero rows since the JSON writer landed. The underlying deterministic integer
+symbol ranking and sole annotated JSON real formatter are intact. The hard
+XFAIL requires token-aware owner-scoped symbol checks and a formatter pattern
+that admits precision-bearing conversions without broadening either owner.
 Commit `0488f5df` adds S59-A25 and aligns the syntax ownership scope and
 inventory gates with the theme boundary and checked 48-definition manifest.
 

@@ -150,7 +150,10 @@ Sprints covered: s43, s44, s45, s46, s47
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-115` (Medium): source and closeout contracts retain superseded
+  shadow-provider, lifecycle, documentation, and feature staging guards.
+- `YEW-F-116` (Medium): source and closeout contracts retain invalid symbol
+  and JSON determinism scans.
 
 ## Deferrals recorded against this front
 

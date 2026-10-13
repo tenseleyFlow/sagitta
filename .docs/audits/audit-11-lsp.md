@@ -123,6 +123,18 @@ finding `YEW-F-014`
 
 None.
 
+## Sprint 59 closeout-contract recheck
+
+findings YEW-F-115, YEW-F-116
+
+- `YEW-F-115` records deferred provider, lifecycle, documentation, and
+  feature-command clauses whose later owning Sprints 44, 46, 47, and 49 have
+  delivered. The stripped-module hard error and permanent 1.0 non-goals
+  remain binding.
+- `YEW-F-116` records a raw whole-workspace substring scan that includes
+  unrelated state owners and ordinary words, plus a JSON formatter pattern
+  that cannot match the required precision-bearing `%.17g` conversion.
+
 ## Count
 
-Raw 3 · deduped 3 · critical 0 · high 0 · medium 3 · low 0 · unverified 0.
+Raw 5 · deduped 5 · critical 0 · high 0 · medium 5 · low 0 · unverified 0.
