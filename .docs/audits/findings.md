@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-106`
+Next available ID: `YEW-F-108`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -118,6 +118,8 @@ recorded in `audit-00.md`.
 | YEW-F-103 | M | fixed | F04 MODAL | ~~modal closeout retains obsolete viewport/width grep gates~~ — fixed 2026-10-13 in `610e8833` | tests/audit/yew_f_103.c | s59 §2; s14 DoD 10; s15 DoD 10 |
 | YEW-F-104 | M | fixed | F05 EXEC | ~~execute closeout requires superseded staging guards~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_104.c | s59 §2; s18 DoD 6/11; s19 DoD 12 |
 | YEW-F-105 | M | fixed | F05 EXEC | ~~execute closeout retains impossible Unicode/pipe greps~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_105.c | s59 §2; s18 DoD 2; s19 DoD 2 |
+| YEW-F-106 | M | open | F07 UI | UI/workspace closeout requires superseded staging guards | tests/audit/yew_f_106.c | s59 §2; s22 DoD 9; s23 DoD 9; s24 DoD 11; s25 DoD 13; s26 DoD 13; s27 DoD 14 |
+| YEW-F-107 | M | open | F07 UI | UI/workspace closeout retains impossible ownership greps | tests/audit/yew_f_107.c | s59 §2; s22 DoD 7; s25 DoD 8; s27 DoD 2 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1084,6 +1086,29 @@ Commit `84fd9ba3` adds decision amendments S59-A15/A16 and synchronizes the
 Sprint 18/19 and F05 contracts. Both hard XFAILs pass without changing
 product behavior, removing shipped editor features, or weakening the
 terminal-emulator, shell-interpolation, Unicode, or descriptor boundaries.
+
+`YEW-F-106` is Medium because the current Sprint 22–27 contracts and F07
+closeout still require historical staging guards after later owning sprints
+deliberately delivered tab commands, negative tab-region group identity,
+directory-to-group opening, picker surfaces, document context menus, F-mode
+mouse, and tab-into-pane. Sprint 25 also requires a hand-written legacy
+differential file that Sprint 36 intentionally retired after the Fletch state
+codec handover. Product behavior is not shown wrong, but release closeout
+cannot require shipped surfaces or retired scaffolding to remain absent. The
+hard XFAIL requires a formal decision amendment and synchronized Sprint
+22–27 and F07 closeout language while preserving genuine permanent
+boundaries.
+
+`YEW-F-107` is Medium because three literal-grep gates do not express their
+claimed ownership rules. Sprint 22's `wcwidth|width` grep rejects normal UI
+geometry over already-measured cell counts; Sprint 25's `rename|fsync` grep
+matches comments despite state writes routing through the atomic file API;
+and Sprint 27's broad mouse grep rejects legitimate decode, dispatch, and
+integration code even though `src/edit/loop.c` has the single event-dispatch
+branch into `yew_mouse_event`. Product behavior is not shown wrong. The hard
+XFAIL requires a formal decision amendment and synchronized Sprint 22/25/27
+and F07 closeout language without weakening Unicode measurement, atomic-save,
+or singular mouse-dispatch ownership.
 
 ## Unverified observations
 

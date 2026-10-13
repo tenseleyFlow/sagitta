@@ -160,7 +160,7 @@ Sprints covered: s22, s23, s24, s25, s26, s27
 
 ## Open audit findings against this front
 
-none
+2 Medium: `YEW-F-106`, `YEW-F-107`.
 
 ## Deferrals recorded against this front
 
@@ -168,4 +168,4 @@ none
 
 ## Verdict
 
-NOT READY — Independent evidence review remains pending.
+NOT READY — Contract findings remain open and independent evidence review is pending.

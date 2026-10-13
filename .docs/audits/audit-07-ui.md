@@ -168,6 +168,25 @@ The test-only legacy wrapper and its differential-only tests have been
 removed. The retained Sprint 25 corpus round-trip now exercises the shipping
 Fletch data reader and writer as the remaining frozen-format guard.
 
+## Sprint 59 closeout-contract recheck
+
+findings YEW-F-106, YEW-F-107
+
+- `YEW-F-106` records historical staging requirements that conflict with
+  later delivered tab, group, picker, context-menu, F-mode mouse, and
+  tab-into-pane surfaces, plus Sprint 25's reference to the intentionally
+  retired hand-written legacy differential. The product implementations are
+  present and covered; the stale release contracts are the defect.
+- `YEW-F-107` records literal token greps that reject legitimate UI geometry,
+  atomic-save comments, and the mouse integration required around the single
+  `yew_mouse_event` dispatch path. Source review found no competing Unicode
+  measurement implementation, direct workspace `rename()`/`fsync()` call,
+  or second mouse-event dispatch site.
+- Both Medium findings are hard XFAILs pending formal Sprint 59 decision
+  amendments and synchronized source-sprint/F07-closeout wording. Neither
+  finding authorizes deleting a shipped feature or weakening an ownership
+  boundary.
+
 ## Count
 
-Raw 2 · deduped 2 · critical 2 · high 0 · medium 0 · low 0 · unverified 1.
+Raw 4 · deduped 4 · critical 2 · high 0 · medium 2 · low 0 · unverified 1.

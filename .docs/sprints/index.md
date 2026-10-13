@@ -14,7 +14,9 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 105 confirmed findings are fixed. F104/F105 aligned F05's
+are complete; 105 of 107 confirmed findings are fixed. F106/F107 isolate
+F07's superseded staging requirements and impossible token-grep ownership
+gates; neither shows a product-code defect. F104/F105 aligned F05's
 staging and Unicode/pipe ownership contracts under S59-A15/A16 without
 changing product behavior. The
 last exact hosted-green
@@ -26,13 +28,15 @@ retaining `4c99e134` byte-for-byte as the product parent. Its launchd-owned
 cycle has 4/56 durable rows complete: `fuzz_utf8` is checkpointed clean and
 the four `fuzz_grapheme` streams are running. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
-gates reconcile every completed finding with no active XFAIL. All 15
+gates reconcile every completed finding; F106/F107 are the two active hard
+XFAILs. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
 pre-closeout packets exist for F01 through F06 without claiming reviewer
 signoff. F05 maps all 26 execute/shell DoD rows after exact-name
 Clang/GCC/ASan unit passes, the full parser fuzz gate, focused PTYs/scripts,
-and the strict job-stream gate. F07 is the next local evidence front.
+and the strict job-stream gate. F07 contract reconciliation is the immediate
+front, followed by its local evidence packet.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
