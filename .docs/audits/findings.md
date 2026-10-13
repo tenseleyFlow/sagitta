@@ -118,8 +118,8 @@ recorded in `audit-00.md`.
 | YEW-F-103 | M | fixed | F04 MODAL | ~~modal closeout retains obsolete viewport/width grep gates~~ — fixed 2026-10-13 in `610e8833` | tests/audit/yew_f_103.c | s59 §2; s14 DoD 10; s15 DoD 10 |
 | YEW-F-104 | M | fixed | F05 EXEC | ~~execute closeout requires superseded staging guards~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_104.c | s59 §2; s18 DoD 6/11; s19 DoD 12 |
 | YEW-F-105 | M | fixed | F05 EXEC | ~~execute closeout retains impossible Unicode/pipe greps~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_105.c | s59 §2; s18 DoD 2; s19 DoD 2 |
-| YEW-F-106 | M | open | F07 UI | UI/workspace closeout requires superseded staging guards | tests/audit/yew_f_106.c | s59 §2; s22 DoD 9; s23 DoD 9; s24 DoD 11; s25 DoD 13; s26 DoD 13; s27 DoD 14 |
-| YEW-F-107 | M | open | F07 UI | UI/workspace closeout retains impossible ownership greps | tests/audit/yew_f_107.c | s59 §2; s22 DoD 7; s25 DoD 8; s27 DoD 2 |
+| YEW-F-106 | M | fixed | F07 UI | ~~UI/workspace closeout requires superseded staging guards~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_106.c | s59 §2; s22 DoD 9; s23 DoD 9; s24 DoD 11; s25 DoD 13; s26 DoD 13; s27 DoD 14 |
+| YEW-F-107 | M | fixed | F07 UI | ~~UI/workspace closeout retains impossible ownership greps~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_107.c | s59 §2; s22 DoD 7; s25 DoD 8; s27 DoD 2 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1109,6 +1109,11 @@ branch into `yew_mouse_event`. Product behavior is not shown wrong. The hard
 XFAIL requires a formal decision amendment and synchronized Sprint 22/25/27
 and F07 closeout language without weakening Unicode measurement, atomic-save,
 or singular mouse-dispatch ownership.
+Commit `a5081521` adds decision amendments S59-A17/A18 and synchronizes the
+Sprint 22–27 and F07 contracts. Both hard XFAILs pass without changing
+product behavior, removing shipped editor features, or weakening Unicode
+measurement, atomic replacement, singular mouse dispatch, or the retained
+LSP hover-on-pointer boundary.
 
 ## Unverified observations
 

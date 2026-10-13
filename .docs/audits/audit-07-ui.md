@@ -182,10 +182,9 @@ findings YEW-F-106, YEW-F-107
   `yew_mouse_event` dispatch path. Source review found no competing Unicode
   measurement implementation, direct workspace `rename()`/`fsync()` call,
   or second mouse-event dispatch site.
-- Both Medium findings are hard XFAILs pending formal Sprint 59 decision
-  amendments and synchronized source-sprint/F07-closeout wording. Neither
-  finding authorizes deleting a shipped feature or weakening an ownership
-  boundary.
+- Decision amendments S59-A17/A18 and commit `a5081521` synchronize the
+  source-sprint/F07-closeout wording. Both hard XFAILs now pass without
+  deleting a shipped feature or weakening an ownership boundary.
 
 ## Count
 

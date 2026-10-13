@@ -38,10 +38,11 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger now contains 107 stable IDs; 105 are fixed and
-F07's closeout recheck has two open Medium contract findings, `YEW-F-106` and
-`YEW-F-107`. Neither new finding shows a product-code defect: they isolate
-superseded staging requirements and impossible token-grep ownership gates.
+landed. The findings ledger now contains 107 stable IDs and all 107 are fixed.
+F07's closeout recheck closed the two Medium contract findings,
+`YEW-F-106`/`YEW-F-107`, under S59-A17/A18. Neither finding showed a
+product-code defect: they isolated superseded staging requirements and
+impossible token-grep ownership gates.
 F05 closeout reconciliation closed `YEW-F-104` and `YEW-F-105` under
 S59-A15/A16 without changing product code, removing shipped features, or
 weakening the Unicode/descriptor boundaries.
@@ -89,9 +90,8 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 105 completed fixes reconcile, the two newly filed F07
-contract findings are hard XFAILs, and priority order is proven from Git
-ancestry. The deterministic
+executable gates: all 107 completed fixes reconcile, no hard XFAIL remains,
+and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -110,9 +110,8 @@ matrix sign their current baselines.
 
 The immediate work is:
 
-1. reconcile and close `YEW-F-106`/`YEW-F-107`, then complete F07's
-   baseline-pinned local pre-closeout packet without claiming independent
-   reviewer signoff;
+1. complete F07's baseline-pinned local pre-closeout packet without claiming
+   independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
 3. keep the corrected 56-stream soak under observation without idling Sprint
