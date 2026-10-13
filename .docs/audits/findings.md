@@ -146,7 +146,7 @@ recorded in `audit-00.md`.
 | YEW-F-131 | M | fixed | F15 CI | ~~F15 retains a future size stub and superseded hard caps~~ — fixed 2026-10-13 in `7bdfa153` | tests/audit/yew_f_131.c | s56 DoD 14; s57 DoD 2; binding size amendments |
 | YEW-F-132 | M | fixed | F15 CI | ~~reserved `--batch-strict` falsely promises Sprint 59 delivery~~ — fixed 2026-10-13 in `cacf3917` | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
 | YEW-F-133 | M | fixed | F15 CI | ~~theme unit escapes the selected disjoint build tree~~ — fixed 2026-10-13 in `ec59fa31` | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
-| YEW-F-134 | M | open | F15 CI | plugin containment unit assumes `/etc/passwd` is canonical | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
+| YEW-F-134 | M | fixed | F15 CI | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed 2026-10-13 in `cfb4befd` | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1451,6 +1451,9 @@ therefore fails in a supported FHS namespace where that path is itself a
 symlink, obscuring the cross-compiler result without exposing a product
 containment failure. The hard XFAIL requires the unit to resolve the fixture
 target and compare the diagnostic with that canonical path.
+Commit `cfb4befd` resolves the fixture target before parsing and compares the
+escape diagnostic with that canonical path. The focused containment unit
+passes on native macOS and in the symlinked Linux FHS namespace.
 
 ## Unverified observations
 
