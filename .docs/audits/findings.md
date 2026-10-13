@@ -116,8 +116,8 @@ recorded in `audit-00.md`.
 | YEW-F-101 | M | fixed | F03 TEXT | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed 2026-10-13 in `f16c5dcd` | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
 | YEW-F-102 | M | fixed | F04 MODAL | ~~modal closeout requires superseded staging guards~~ — fixed 2026-10-13 in `1c8709f0` | tests/audit/yew_f_102.c | s59 §2; s14 DoD 7; s16 DoD 5/11; s17 DoD 11 |
 | YEW-F-103 | M | fixed | F04 MODAL | ~~modal closeout retains obsolete viewport/width grep gates~~ — fixed 2026-10-13 in `610e8833` | tests/audit/yew_f_103.c | s59 §2; s14 DoD 10; s15 DoD 10 |
-| YEW-F-104 | M | open | F05 EXEC | execute closeout requires superseded staging guards | tests/audit/yew_f_104.c | s59 §2; s18 DoD 6/11; s19 DoD 12 |
-| YEW-F-105 | M | open | F05 EXEC | execute closeout retains impossible Unicode/pipe greps | tests/audit/yew_f_105.c | s59 §2; s18 DoD 2; s19 DoD 2 |
+| YEW-F-104 | M | fixed | F05 EXEC | ~~execute closeout requires superseded staging guards~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_104.c | s59 §2; s18 DoD 6/11; s19 DoD 12 |
+| YEW-F-105 | M | fixed | F05 EXEC | ~~execute closeout retains impossible Unicode/pipe greps~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_105.c | s59 §2; s18 DoD 2; s19 DoD 2 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1080,6 +1080,10 @@ but the release contract is impossible on one target and its literal greps do
 not express ownership. The hard XFAIL requires a formal decision amendment
 and synchronized Sprint 18/19 and F05 wording while retaining the no-shell and
 close-on-exec guarantees.
+Commit `84fd9ba3` adds decision amendments S59-A15/A16 and synchronizes the
+Sprint 18/19 and F05 contracts. Both hard XFAILs pass without changing
+product behavior, removing shipped editor features, or weakening the
+terminal-emulator, shell-interpolation, Unicode, or descriptor boundaries.
 
 ## Unverified observations
 

@@ -163,6 +163,8 @@ surfaces to produce their historical staging errors. Source and test review
 confirmed that `:g` and terminal emulation remain intentional permanent
 non-goals; the shipped `:!!` route is a terminal handover, not an emulator.
 The contradictory release wording, not product behavior, is the finding.
+Decision S59-A15 and commit `84fd9ba3` now distinguish the shipped routes
+from `:g` and terminal emulation; the F104 reproducer passes.
 
 The same current-contract pass found `YEW-F-105`. Sprint 18's literal Unicode
 grep rejects harmless identifiers and comments, while Sprint 19 requires the
@@ -170,7 +172,8 @@ absence of the portable `pipe()` fallback needed by locked macOS. Current
 source still centralizes Unicode measurement/conversion and routes every pipe
 through `yew_pipe_cloexec`; no shell interpolation or descriptor-ownership
 defect was found. The impossible ownership wording, not product behavior, is
-the finding.
+the finding. Decision S59-A16 and commit `84fd9ba3` now express Unicode and
+pipe ownership across locked platforms; the F105 reproducer passes.
 
 ## Unverified observations
 

@@ -114,8 +114,8 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-101 | audit | `tests/audit/yew_f_101.c` | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed in `f16c5dcd` | fixed |
 | YEW-F-102 | audit | `tests/audit/yew_f_102.c` | ~~modal closeout requires superseded staging guards~~ — fixed in `1c8709f0` | fixed |
 | YEW-F-103 | audit | `tests/audit/yew_f_103.c` | ~~modal closeout retains obsolete viewport/width grep gates~~ — fixed in `610e8833` | fixed |
-| YEW-F-104 | audit | `tests/audit/yew_f_104.c` | execute closeout requires superseded staging guards | active |
-| YEW-F-105 | audit | `tests/audit/yew_f_105.c` | execute closeout retains impossible Unicode/pipe greps | active |
+| YEW-F-104 | audit | `tests/audit/yew_f_104.c` | ~~execute closeout requires superseded staging guards~~ — fixed in `84fd9ba3` | fixed |
+| YEW-F-105 | audit | `tests/audit/yew_f_105.c` | ~~execute closeout retains impossible Unicode/pipe greps~~ — fixed in `84fd9ba3` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
