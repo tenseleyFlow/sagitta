@@ -144,7 +144,7 @@ recorded in `audit-00.md`.
 | YEW-F-129 | M | fixed | F15 CI | ~~foundation closeout literal greps match prose and fixture data~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_129.c | s00 DoD 6; s01 DoD 7; semantic bans |
 | YEW-F-130 | M | fixed | F15 CI | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_130.c | s01 DoD 1; current CI budget owners |
 | YEW-F-131 | M | fixed | F15 CI | ~~F15 retains a future size stub and superseded hard caps~~ — fixed 2026-10-13 in `7bdfa153` | tests/audit/yew_f_131.c | s56 DoD 14; s57 DoD 2; binding size amendments |
-| YEW-F-132 | M | open | F15 CI | reserved `--batch-strict` falsely promises Sprint 59 delivery | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
+| YEW-F-132 | M | fixed | F15 CI | ~~reserved `--batch-strict` falsely promises Sprint 59 delivery~~ — fixed 2026-10-13 in `cacf3917` | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1426,6 +1426,9 @@ user manual already describes the honest reserved/non-implemented boundary.
 The hard XFAIL requires the product, exact unit witness, batch documentation,
 and F15 audit record to retain the failure while naming the 1.0 boundary
 instead of an internal sprint schedule.
+Commit `cacf3917` adds Amendment S59-A40, preserves the option's exit-1 hard
+error, and synchronizes the exact unit witness, batch documentation, source
+sprint, and F15 record on the honest yew 1.0 boundary.
 
 ## Unverified observations
 
