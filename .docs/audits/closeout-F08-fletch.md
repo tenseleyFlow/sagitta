@@ -5,9 +5,14 @@ Baseline commit: 4c99e13474c84d75eec3250d61412b53fa41ae00
 Reviewer:        UNASSIGNED
 Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
 
+Freeze-time and current Fletch inventories are distinguished: historical
+sprint totals remain evidence of their landing boundaries, while this release
+closeout regenerates kind and native totals from the amended specification and
+the complete shipped registry.
+
 ## DoD items (every numbered item from every sprint above)
 
-- [ ] s28.1 `.docs/fletch-spec.md` exists with all 16 sections; §16 empty.
+- [ ] s28.1 `.docs/fletch-spec.md` exists with all 16 sections. Freeze-time snapshot was 11 kinds with an empty §16; later amendments append there and current closeout validates the amended spec.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s28.2 Preface traceability matrix maps all 8 design requirements from `02-fletch.md` to sections; no requirement unmapped.
       — VERDICT: blocking — independent closeout review pending.
@@ -21,7 +26,7 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s28.7 Each § carries a "Conformance:" line naming its future `tests/fletch/` file.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s28.8 Closed error-kind set (11 kinds) and reserved-word set (22 words) enumerated; counts stated in the spec so s33 can assert them.
+- [ ] s28.8 At freeze, the closed error-kind set contained 11 kinds and the reserved-word set contained 22 words; append-only amendments later raised the current kind inventory without rewriting that history.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s28.9 Review sign-off recorded in the spec preface (date + reviewer); freeze declared. No code, no new directories outside `.docs/`.
       — VERDICT: blocking — independent closeout review pending.
@@ -65,13 +70,13 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s30.10 Reserved handle tags landed unconstructible in this sprint; Sprint 34 subsequently delivered their generation-checked constructors and type conversions. Sprint 31 delivered import execution; `FL_OP_IMPORT` remains compiled, disassembled, and covered by the 60-opcode conformance ledger.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s30.11 Amendment §16-A1 is filed in `.docs/fletch-spec.md` with reviewer and date; §9's stated kind count reads 12.
+- [ ] s30.11 Amendment §16-A1 is filed in `.docs/fletch-spec.md` with reviewer and date; the kind count reached 12 at this sprint boundary and A2 later raised the current amended total to 13.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s30.12 Perf smoke numbers recorded in `tests/perf/baselines/fletch_smoke.txt` for both dispatch modes, so s33's gates start from measured ground.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s31.1 `src/fl/{std,stdstr,stdlist,stdmap,stdmath,stdfmt,stdio,stdre,module}.c` plus headers build in both compiler lanes with zero warnings; the sanitize, valgrind, determinism, and GC-stress lanes are green.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s31.2 All seven modules registered; `yew fl --list-natives` (hidden flag, s32 documents it) prints **117** names in deterministic order and matches the tables in this file exactly. *(Corrected 2026-08-09, C1. The tables define 30 str + 19 list + 12 map + 29 math + 7 fmt + 13 io + 7 re = 117 functions; the ≥ 150 was a planning estimate written before they were finalized. The tables are the contract — this clause's own second half says so — so the count follows them rather than the other way round. The six `math` constants are surface but not natives and the flag does not list them; s33's ledger may want a `--list-surface` that does.)*
+- [ ] s31.2 All seven modules registered. Sprint 31 core modules contribute exactly 117 deterministic native names and match this file's tables; the full current `yew fl --list-natives` inventory also contains the prelude and later owner surfaces and must match the current conformance ledger.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s31.3 Every function in every table has ≥ 1 positive unit test and every listed error kind ≥ 1 negative test; a coverage comment table per test file maps function → tests with zero gaps.
       — VERDICT: blocking — independent closeout review pending.
@@ -123,11 +128,11 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s33.3 `ledger.txt` is committed and `run.c --ledger && git diff --exit-code tests/fletch/ledger.txt` is clean from a fresh clone.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s33.4 Totals in `ledger.txt`: sections 16/16, EBNF productions 38/38 (or whatever §2 defines — the count comes from the spec, not from this file), natives N/N matching `yew fl --list-natives`, kinds 12/12, opcodes 60/60.
+- [ ] s33.4 Totals in `ledger.txt`: sections 16/16, EBNF productions P/P from the spec, natives N/N matching `yew fl --list-natives`, kinds K/K from the amended spec, opcodes 60/60.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s33.5 `14-example.fl` is byte-identical to the spec §14 block (diffed by the runner) and asserts all four normative results (`total == 17`; 9 then 10; `dup` defined; `shout` → `"MOTION"`).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s33.6 Counts asserted by fixtures, not printed: 22 reserved words, 12 error kinds, 16 sections, 60 opcodes.
+- [ ] s33.6 Counts asserted by fixtures, not printed: 22 reserved words, every current error kind, 16 sections, and 60 opcodes.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s33.7 Meta-suite: 11 cases, expected totals asserted; a directive inside a string literal is proven not to fire; a typo'd directive is a configuration error.
       — VERDICT: blocking — independent closeout review pending.

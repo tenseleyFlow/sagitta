@@ -588,6 +588,20 @@ amendment changes no product behavior or allocation invariant. It supersedes
 only the historical scope restriction and impossible allocator token greps in
 Sprints 29/30 and F08; `YEW-F-109` records the correction.
 
+**Fletch inventory closeout amendment S59-A21 (2026-10-13) — freeze-time
+inventories remain history while release gates follow append-only amendments.**
+Sprint 28 froze 11 error kinds and an empty amendment section. Sprint 30 A1
+raised that inventory to 12, and the later A2 amendment raised the current
+inventory to 13. Sprint 31's seven core module tables contribute exactly 117
+native functions; the `error` prelude and later owner surfaces bring the
+current deterministic `yew fl --list-natives` inventory to 187. Sprint 33's
+ledger is generated from those current sources of truth, so closeout requires
+K/K and N/N agreement rather than preserving its landing-day totals. The
+freeze snapshots remain recorded as historical evidence; they are not current
+release totals. This amendment changes no language surface or product behavior
+and supersedes only stale point-in-time totals in Sprints 28/30/31/33 and F08;
+`YEW-F-110` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

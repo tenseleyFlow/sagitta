@@ -130,8 +130,8 @@ the file in the tree can never drift from reality.
 02 | Grammar                  | 02-grammar.fl errors/*.fl   | 38
 ...
 16 | Amendment log            | 09-errors-kinds.fl          | 1
--- totals: sections 16/16  productions 38/38  natives 157/157
-   kinds 12/12  opcodes 60/60
+-- totals: sections 16/16  productions P/P  natives N/N
+   kinds K/K  opcodes 60/60
 ```
 
 `scripts/check-fletch-coverage.sh` is the gate, and each check names what
@@ -169,7 +169,7 @@ satisfy — each is a DoD row:
 - **Every stdlib function** called at least once with a checked result, and
   **every documented error case** from the s31 tables raised at least once
   with `# ERROR_KIND:`.
-- **Every documented error path**: all 12 kinds; the `try`/`catch` law; the
+- **Every documented error path**: every current kind; the `try`/`catch` law; the
   transaction law of §10 in its headless form (`edit` is a plain block
   without a host); the capability-denial path; the import-cycle message.
 - **`14-example.fl` is byte-identical to the spec's §14 fenced block.** The
@@ -178,8 +178,8 @@ satisfy — each is a DoD row:
   normative results, pinned by s28's testing strategy, are asserted:
   `total == 17`, `next()` returns 9 then 10, `dup` is defined, and `shout`
   headless raises `"motion"` caught → returns `"MOTION"`.
-- **Counts asserted, not printed** (s28 DoD 8): 22 reserved words, 12 error
-  kinds, 16 sections, 60 opcodes.
+- **Counts asserted, not printed** (s28 DoD 8): 22 reserved words, the
+  current amended inventory is 13 kinds, 16 sections, and 60 opcodes.
 - **Pure-literal safety** (§12): the negative list is re-asserted through
   `fl_parse_literal` — no identifier, call, `@[`, import, or `fn`
   production is reachable.
@@ -331,12 +331,13 @@ Fletch program" block. Campaign 06 is closed when these are green.
    tests/fletch/ledger.txt` is clean from a fresh clone.
 4. Totals in `ledger.txt`: sections 16/16, EBNF productions 38/38 (or
    whatever §2 defines — the count comes from the spec, not from this file),
-   natives N/N matching `yew fl --list-natives`, kinds 12/12, opcodes 60/60.
+   natives N/N matching `yew fl --list-natives`, kinds K/K from the amended
+   spec, opcodes 60/60.
 5. `14-example.fl` is byte-identical to the spec §14 block (diffed by the
    runner) and asserts all four normative results (`total == 17`; 9 then 10;
    `dup` defined; `shout` → `"MOTION"`).
-6. Counts asserted by fixtures, not printed: 22 reserved words, 12 error
-   kinds, 16 sections, 60 opcodes.
+6. Counts asserted by fixtures, not printed: 22 reserved words, every current
+   error kind, 16 sections, and 60 opcodes.
 7. Meta-suite: 11 cases, expected totals asserted; a directive inside a
    string literal is proven not to fire; a typo'd directive is a
    configuration error.
@@ -421,9 +422,9 @@ and relative enforcement on designated hardware.
 | 1 | ≥ 20 files covering all 16 sections; `make test-fletch` green and part of `make test`; whole suite < 20 s | **PASS** — 37 units, 16/16 sections, ~0.2 s on the dev machine |
 | 2 | `check-fletch-coverage.sh` exits 0; all seven checks proven by a seeded violation | **PASS** — `check-fletch-gate-selftest.sh`, eight seeds (check 6 twice: a missing target and §14 drift) |
 | 3 | `ledger.txt` committed; regenerating leaves no diff from a fresh clone | **PASS** — check 7 regenerates to a temp file and `cmp`s, so a failing gate never rewrites the artifact it is checking |
-| 4 | totals: 16/16 sections, N/N productions, N/N natives, 12/12 kinds, 60/60 opcodes | **PASS** — 16/16, **42/42** (C3), 117/117, 12/12, 60/60 |
+| 4 | totals: 16/16 sections, N/N productions, N/N natives, K/K kinds, 60/60 opcodes | **PASS at landing** — 16/16, **42/42** (C3), 117/117, 12/12, 60/60. Current closeout regenerates the ledger against all later amendments and owner surfaces rather than pinning these Sprint 33 totals. |
 | 5 | `14-example.fl` byte-identical to the §14 block and asserts all four normative results | **PASS** — the runner diffs the file's PREFIX against the spec's fenced block, because the same DoD requires assertions after it |
-| 6 | counts asserted, not printed: 22 reserved words, 12 kinds, 16 sections, 60 opcodes | **PASS** — `15-style.fl`, `16-amendments.fl`, and checks 1/4/5 |
+| 6 | counts asserted, not printed: 22 reserved words, every current kind, 16 sections, 60 opcodes | **PASS** — `15-style.fl`, `16-amendments.fl`, and checks 1/4/5; the current amended inventory is 13 kinds. |
 | 7 | meta-suite: 11 cases, totals asserted; a directive in a string proven not to fire; a typo is a config error | **PASS** — `total=11 pass=1 fail=6 skip=1 xfail=0 config=3`, asserted as one line |
 | 8 | hard gates green and enforced: config_load < 1 ms, motion_dispatch ≤ 1 µs/op, startup ≤ 2 ms | **PASS** — 177 µs, 296 ns/op, 45 µs; 5.6x, 3.4x and 44x headroom |
 | 9 | 10 rows committed with a `why`; the two-condition gate proven by a 20 % failure and a 5 % pass | **PASS** — `--selftest-gate`, 7 cases; **proven on the rule, not on a stopwatch**, because a live re-measurement tests the machine (a loaded box swings parse_only 80 %) |

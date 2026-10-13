@@ -353,7 +353,7 @@ so the spec ships already knowing its own future:
 
 ## Definition of Done
 
-1. `.docs/fletch-spec.md` exists with all 16 sections; §16 empty.
+1. `.docs/fletch-spec.md` exists with all 16 sections. Freeze-time snapshot was 11 kinds with an empty §16; later amendments append to that section and current closeout validates the amended spec.
 2. Preface traceability matrix maps all 8 design requirements from
    `02-fletch.md` to sections; no requirement unmapped.
 3. §2 EBNF is complete: every nonterminal defined exactly once; every
@@ -369,7 +369,9 @@ so the spec ships already knowing its own future:
    grants nothing; capability checks read defining-module origin.
 7. Each § carries a "Conformance:" line naming its future
    `tests/fletch/` file.
-8. Closed error-kind set (11 kinds) and reserved-word set (22 words)
-   enumerated; counts stated in the spec so s33 can assert them.
+8. At freeze, the closed error-kind set contained 11 kinds and the
+   reserved-word set contained 22 words, both enumerated for s33 to assert.
+   Append-only amendments later raised the current error-kind inventory to
+   13 without rewriting that freeze-time history.
 9. Review sign-off recorded in the spec preface (date + reviewer); freeze
    declared. No code, no new directories outside `.docs/`.

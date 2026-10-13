@@ -586,9 +586,10 @@ in §2's grammar) and hits the same cache.
 1. `src/fl/{std,stdstr,stdlist,stdmap,stdmath,stdfmt,stdio,stdre,module}.c`
    plus headers build in both compiler lanes with zero warnings; the
    sanitize, valgrind, determinism, and GC-stress lanes are green.
-2. All seven modules registered; `yew fl --list-natives` (hidden flag,
-   s32 documents it) prints **117** names in deterministic order and
-   matches the tables in this file exactly.
+2. All seven modules registered. Sprint 31 core modules contribute exactly 117
+   deterministic native names and match the seven tables in this file. The
+   full current `yew fl --list-natives` inventory also includes the prelude
+   and later owner surfaces and must match the current conformance ledger.
    *(Corrected 2026-08-09, C1. The tables define 30 str + 19 list + 12
    map + 29 math + 7 fmt + 13 io + 7 re = 117 functions; the ≥ 150 was a
    planning estimate written before they were finalized. The tables are

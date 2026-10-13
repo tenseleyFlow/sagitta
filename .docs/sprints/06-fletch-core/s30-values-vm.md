@@ -654,6 +654,7 @@ VM dispatches plus 20 constant loads. The recorder's round-trip law
     conversions. Sprint 31 delivered import execution; `FL_OP_IMPORT` remains
     compiled, disassembled, and covered by the 60-opcode conformance ledger.
 11. Amendment §16-A1 is filed in `.docs/fletch-spec.md` with reviewer and
-    date; §9's stated kind count reads 12.
+    date. The §9 kind count reached 12 at this sprint boundary; amendment A2
+    later raised the current amended total to 13.
 12. Perf smoke numbers recorded in `tests/perf/baselines/fletch_smoke.txt`
     for both dispatch modes, so s33's gates start from measured ground.
