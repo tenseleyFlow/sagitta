@@ -145,7 +145,7 @@ recorded in `audit-00.md`.
 | YEW-F-130 | M | fixed | F15 CI | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_130.c | s01 DoD 1; current CI budget owners |
 | YEW-F-131 | M | fixed | F15 CI | ~~F15 retains a future size stub and superseded hard caps~~ — fixed 2026-10-13 in `7bdfa153` | tests/audit/yew_f_131.c | s56 DoD 14; s57 DoD 2; binding size amendments |
 | YEW-F-132 | M | fixed | F15 CI | ~~reserved `--batch-strict` falsely promises Sprint 59 delivery~~ — fixed 2026-10-13 in `cacf3917` | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
-| YEW-F-133 | M | open | F15 CI | theme unit escapes the selected disjoint build tree | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
+| YEW-F-133 | M | fixed | F15 CI | ~~theme unit escapes the selected disjoint build tree~~ — fixed 2026-10-13 in `ec59fa31` | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1439,6 +1439,9 @@ default build masks the defect by leaving `build/` behind. Product theme
 handling is unaffected, but the isolation claim and clean disjoint-lane
 reproducibility are false. The hard XFAIL requires this unit to use the
 existing per-build temporary-directory contract.
+Commit `ec59fa31` derives the fixture root from `TMPDIR`, retains the size and
+cleanup assertions, and passes the focused 272-assertion unit with its
+temporary root under an independently selected build directory.
 
 ## Unverified observations
 

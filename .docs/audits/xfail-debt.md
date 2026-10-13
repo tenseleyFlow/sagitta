@@ -143,7 +143,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-130 | audit | `tests/audit/yew_f_130.c` | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed in `d7752508` | fixed |
 | YEW-F-131 | audit | `tests/audit/yew_f_131.c` | ~~F15 retains a future size stub and superseded hard caps~~ — fixed in `7bdfa153` | fixed |
 | YEW-F-132 | audit | `tests/audit/yew_f_132.c` | ~~reserved `--batch-strict` falsely promises Sprint 59 delivery~~ — fixed in `cacf3917` | fixed |
-| YEW-F-133 | audit | `tests/audit/yew_f_133.c` | theme unit escapes the selected disjoint build tree | active |
+| YEW-F-133 | audit | `tests/audit/yew_f_133.c` | ~~theme unit escapes the selected disjoint build tree~~ — fixed in `ec59fa31` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
