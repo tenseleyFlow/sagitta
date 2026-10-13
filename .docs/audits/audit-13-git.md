@@ -133,10 +133,21 @@ probed, nothing found
   action-palette PTY matches its committed golden, so no new field finding is
   assigned.
 
+## Sprint 59 closeout-contract recheck
+
+findings YEW-F-120, YEW-F-121
+
+- `YEW-F-120` records staging clauses superseded by Sprint 52/53 delivery and
+  the original action/type-jump rule superseded by the binding compact-FUSS
+  keyboard model.
+- `YEW-F-121` records literal clock/format scans already disproved by fixed
+  F018/F020 plus a raw `strlen` scan that confuses byte length with cell-width
+  ownership. Product owner boundaries remain intact.
+
 ## Unverified observations
 
 None.
 
 ## Count
 
-Raw 4 · deduped 4 · critical 0 · high 0 · medium 4 · low 0 · unverified 0.
+Raw 6 · deduped 6 · critical 0 · high 0 · medium 6 · low 0 · unverified 0.

@@ -102,7 +102,10 @@ Sprints covered: s51, s52, s53
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-120` (Medium): staging and bare-action/type-jump rules predate the
+  shipped Sprint 52/53 and binding compact-FUSS owners.
+- `YEW-F-121` (Medium): raw clock/format/width scans reject legitimate helper,
+  display-format, and byte-length ownership.
 
 ## Deferrals recorded against this front
 

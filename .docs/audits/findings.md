@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-120`
+Next available ID: `YEW-F-122`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -132,6 +132,8 @@ recorded in `audit-00.md`.
 | YEW-F-117 | M | fixed | F11 LSP | ~~live-clangd harness treats macOS path aliases as distinct documents~~ — fixed 2026-10-13 in `151bd0f0` | tests/audit/yew_f_117.c | s47 DoD 2; s58 F11 q8; s59 §2 |
 | YEW-F-118 | M | fixed | F12 AI | ~~AI closeout requires superseded Sprint 48/49 staging guards~~ — fixed 2026-10-13 in `d8fd10ad` | tests/audit/yew_f_118.c | s59 §2; s48 DoD 12; s49 DoD 11; s50 DoD 14 |
 | YEW-F-119 | M | fixed | F12 AI | ~~AI closeout retains invalid TLS/stats ownership scans~~ — fixed 2026-10-13 in `d8fd10ad` | tests/audit/yew_f_119.c | s59 §2; s48 DoD 2; s49 DoD 8 |
+| YEW-F-120 | M | open | F13 GIT | Git/FUSS closeout requires superseded staging and key rules | tests/audit/yew_f_120.c | s59 §2; s51 DoD 14; s52 DoD 7/14; s53 DoD 12 |
+| YEW-F-121 | M | open | F13 GIT | Git/FUSS closeout retains invalid clock/format/width scans | tests/audit/yew_f_121.c | s59 §2; s51 DoD 2; s52 DoD 3; YEW-F-018/020 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1272,6 +1274,23 @@ requires semantic owner scans that permit those required surfaces while
 banning TLS implementations and stats access from prompt/transport paths.
 Commit `d8fd10ad` adds S59-A29 and synchronizes both executable ownership
 contracts.
+
+`YEW-F-120` is Medium because F13 still requires Sprint 51's F-mode and
+Sprint 52/53 commands, plus Sprint 52's directory-group command, to hard-error
+naming their future owner. Sprint 52/53 delivered those surfaces. Sprint 52's
+30 bare action keys also conflicts with the later binding compact-FUSS model:
+ordinary filename bytes perform visible-row type jump while actions use Alt
+sequences and the effective-binding-derived action picker. Product behavior
+is not shown wrong. The hard XFAIL requires closeout to test the shipped
+owners and current binding model while retaining permanent Git non-goals.
+
+`YEW-F-121` is Medium because F13 repeats literal scans already shown invalid
+by fixed findings `YEW-F-018` and `YEW-F-020`: clock-suffixed helper names are
+not forbidden clock calls, and formatting display text is not argv
+interpolation. Sprint 52's raw `strlen|wcwidth` scan additionally rejects
+legitimate byte lengths even though display-cell measurement remains in the
+Unicode owner. The hard XFAIL requires tokenized clock-call, structural argv,
+and semantic width-ownership gates without weakening any of those boundaries.
 
 ## Unverified observations
 
