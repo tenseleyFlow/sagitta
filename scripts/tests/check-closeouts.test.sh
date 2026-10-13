@@ -9,6 +9,7 @@ mkdir -p "$repo/sprints/x" "$repo/closeouts" "$repo/audits"
 git -C "$repo" init -q
 git -C "$repo" config user.name 'Fixture Author'
 git -C "$repo" config user.email fixture@example.com
+git -C "$repo" config commit.gpgsign false
 
 cat >"$repo/map" <<'EOF'
 F99|fixture|99

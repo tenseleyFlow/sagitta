@@ -54,6 +54,7 @@ mkdir "$later_repo"
 git -C "$later_repo" init -q
 git -C "$later_repo" config user.name yew-test
 git -C "$later_repo" config user.email yew-test.invalid
+git -C "$later_repo" config commit.gpgsign false
 printf '| YEW-F-001 | M | confirmed | F15 CI | fixture | tests/audit/fixture.c | fixture |\n' \
     >"$later_repo/findings.md"
 git -C "$later_repo" add findings.md
