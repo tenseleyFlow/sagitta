@@ -136,7 +136,7 @@ recorded in `audit-00.md`.
 | YEW-F-121 | M | fixed | F13 GIT | ~~Git/FUSS closeout retains invalid clock/format/width scans~~ — fixed 2026-10-13 in `66085e54` | tests/audit/yew_f_121.c | s59 §2; s51 DoD 2; s52 DoD 3; YEW-F-018/020 |
 | YEW-F-122 | M | fixed | F14 PLUG | ~~plugin closeout retains superseded package/docs staging rules~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_122.c | s59 §2; s54 DoD 12; s55 DoD 14; YEW-F-022 |
 | YEW-F-123 | M | fixed | F14 PLUG | ~~plugin closeout names the wrong Fletch import amendment~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_123.c | s59 §2; s55 DoD 10; Fletch spec §16 A3 |
-| YEW-F-124 | M | open | F15 CI | macOS GCC package lane sends Apple arm64e flags to GCC | tests/audit/yew_f_124.c | s55 DoD 1; compiler matrix; YEW-F-088 sibling |
+| YEW-F-124 | M | fixed | F15 CI | ~~macOS GCC package lane sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `7cdbe9d1` | tests/audit/yew_f_124.c | s55 DoD 1; compiler matrix; YEW-F-088 sibling |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1331,7 +1331,10 @@ compiler does not support 'arm64e'`. F088 already established the correct
 boundary for the Makefile-built copy: product/test objects retain the
 requested compiler while Apple's compiler owns the dual-ABI host shim. The
 hard XFAIL requires the package runner to consume that existing seam and the
-Makefile target to pass it explicitly.
+Makefile target to pass it explicitly. Commit `7cdbe9d1` passes
+`FAULTSHIM_CC` into the package runner and uses it only for the interposer;
+the complete GCC-built package suite then passes all 53 cases, including the
+five durability/recovery cases that the baseline never reached.
 
 ## Unverified observations
 
