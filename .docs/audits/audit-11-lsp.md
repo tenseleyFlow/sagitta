@@ -136,11 +136,13 @@ findings YEW-F-115, YEW-F-116
   that cannot match the required precision-bearing `%.17g` conversion.
   Both findings were resolved by binding amendments S59-A26/A27 in
   `5a8a438f`; no product code changed.
-- `YEW-F-117` records the current live-clangd harness rebuilding request URIs
-  from a noncanonical `/tmp` path after `didOpen` used the attached canonical
+- `YEW-F-117` recorded the live-clangd harness rebuilding request URIs from a
+  noncanonical `/tmp` path after `didOpen` used the attached canonical
   `/private/tmp` URI, then comparing canonical response paths against the
-  noncanonical fixture root. Production requests already use the attached
-  document.
+  noncanonical fixture root. Production requests already used the attached
+  document. Commit `151bd0f0` canonicalizes the fixture root and uses the
+  attached URI; the full live milestone passes with 8/8 gotos, six references
+  in three files, a clean rename round trip, and one diagnostic.
 
 ## Count
 

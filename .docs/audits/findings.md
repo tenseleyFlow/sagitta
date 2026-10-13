@@ -129,7 +129,7 @@ recorded in `audit-00.md`.
 | YEW-F-114 | M | fixed | F10 SYN | ~~Syntax closeout retains historical ownership/inventory gates~~ — fixed 2026-10-13 in `0488f5df` | tests/audit/yew_f_114.c | s59 §2; s39 DoD 3; s42 DoD 2/3/9/10 |
 | YEW-F-115 | M | fixed | F11 LSP | ~~LSP closeout requires superseded staging guards~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_115.c | s59 §2; s43 DoD 12; s44 DoD 13; s45 DoD 13; s46 DoD 13 |
 | YEW-F-116 | M | fixed | F11 LSP | ~~LSP closeout retains invalid determinism scans~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_116.c | s59 §2; s44 DoD 6; s45 DoD 8 |
-| YEW-F-117 | M | open | F11 LSP | live-clangd harness treats macOS path aliases as distinct documents | tests/audit/yew_f_117.c | s47 DoD 2; s58 F11 q8; s59 §2 |
+| YEW-F-117 | M | fixed | F11 LSP | ~~live-clangd harness treats macOS path aliases as distinct documents~~ — fixed 2026-10-13 in `151bd0f0` | tests/audit/yew_f_117.c | s47 DoD 2; s58 F11 q8; s59 §2 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1246,8 +1246,10 @@ compared canonical response paths against the noncanonical fixture root.
 Clangd first rejected the request as a non-added document; after using the
 attached URI, the harness still rejected the correct definition response.
 Production LSP feature and rename paths already use `doc->uri`, so no editor
-behavior is shown wrong. The hard XFAIL requires one canonical fixture root,
-the attached URI for later requests, and the full live milestone to pass.
+behavior was shown wrong. Commit `151bd0f0` canonicalizes the fixture root,
+uses the attached URI for later requests, and passes the full live milestone:
+8/8 gotos, six references in three files, a clean rename round trip, and one
+diagnostic.
 
 ## Unverified observations
 
