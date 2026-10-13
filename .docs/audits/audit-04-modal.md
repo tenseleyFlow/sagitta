@@ -160,7 +160,8 @@ multi-cursor LSP-edit guards remain intentional 1.0 boundaries; they must not
 be misreported as shipped features. The current product behavior is not shown
 defective; the contradictory subset of the release contract is the finding.
 `tests/audit/yew_f_102.c` pins the decision amendment and synchronized
-owning-contract/closeout wording as a hard XFAIL.
+owning-contract/closeout wording. Commit `1c8709f0` makes that reproducer pass
+while preserving the intentional 1.0 boundary guards.
 
 ## Unverified observations
 

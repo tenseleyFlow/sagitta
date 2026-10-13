@@ -114,7 +114,7 @@ recorded in `audit-00.md`.
 | YEW-F-099 | M | fixed | F02 TERM | ~~terminal closeout requires superseded staging behavior~~ — fixed 2026-10-13 in `29682c67` | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
 | YEW-F-100 | M | fixed | F03 TEXT | ~~text-engine closeout requires superseded staging guards~~ — fixed 2026-10-13 in `34dd30ef` | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
 | YEW-F-101 | M | fixed | F03 TEXT | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed 2026-10-13 in `f16c5dcd` | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
-| YEW-F-102 | M | open | F04 MODAL | modal closeout requires superseded staging guards | tests/audit/yew_f_102.c | s59 §2; s14 DoD 7; s16 DoD 5/11; s17 DoD 11 |
+| YEW-F-102 | M | fixed | F04 MODAL | ~~modal closeout requires superseded staging guards~~ — fixed 2026-10-13 in `1c8709f0` | tests/audit/yew_f_102.c | s59 §2; s14 DoD 7; s16 DoD 5/11; s17 DoD 11 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1030,6 +1030,10 @@ intentional 1.0 boundaries, not stale staging. Current product behavior is not
 shown wrong, but the release closeout cannot truthfully require both the
 shipped subset and its former absence. The hard XFAIL requires a formal
 decision amendment and synchronized Sprint 14/16/17, F04, and audit wording.
+Commit `1c8709f0` adds decision amendment S59-A13, aligns the shipped mode,
+syntax-provider, and multi-cursor expansion contracts, and preserves the
+tested literal-lift, single-cursor completion, and single-primary LSP-edit
+boundaries. The hard XFAIL passes without changing product behavior.
 
 ## Unverified observations
 

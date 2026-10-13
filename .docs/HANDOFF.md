@@ -14,11 +14,11 @@ Apple-silicon host `nomad-1`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
 **Implementation checkpoint before this documentation refresh:** `trunk` is
-97 commits above `origin/trunk` at `75ff7e4b`, including Sprint 59's
-documentation/tutorial work, 101 completed finding remediations, and the
-F01/F02/F03/F06 pre-closeout evidence packets. F04 recheck subsequently filed
-the open contract finding `YEW-F-102`. The product code used by the soak
-remains the exact hosted-green anchor.
+99 commits above `origin/trunk` at `1c8709f0`, including Sprint 59's
+documentation/tutorial work, all 102 completed finding remediations, and the
+F01/F02/F03/F06 pre-closeout evidence packets. F04's contract recheck closed
+`YEW-F-102` under decision amendment S59-A13 without changing product code.
+The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
@@ -37,8 +37,9 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 102 stable IDs; 101 are fixed and
-`YEW-F-102` is open.
+landed. The findings ledger contains 102 stable IDs and all 102 are fixed.
+`YEW-F-102` aligned F04's shipped mode, syntax-provider, and multi-cursor
+expansion contracts while preserving intentional 1.0 boundary guards.
 `YEW-F-101` aligned F03's mutation-ownership wording with the already-audited
 internal hydration/projection call sites and private raw register setter under
 decision amendment S59-A12 without changing product code.
@@ -47,15 +48,15 @@ literal crossed the smaller VM-program limit. Commit `ee713cd5` preserves that
 limit and matches conservatively proven whole literals directly; the exact
 artifact, ASan/UBSan replay, a fresh
 100,000-iteration campaign, and the 64 KiB semantic boundary are green. The
-sprint is nevertheless formally open because its required tier-1 soak has no
-completed `soak` row yet. The September `ba72c3a0` launch was interrupted and
-counts as 0/14 targets.
+sprint is nevertheless formally open because its required tier-1 soak has
+completed only one of fourteen target checkpoints. The September `ba72c3a0`
+launch was interrupted and counts as 0/14 targets.
 
 A replacement SAN+coverage cycle relaunched on 2026-10-12 against product
 commit `4c99e134` plus runner-only watchdog child `4f483f31` on arm64 macOS /
-Apple clang 21.0.0. Its four concurrent
-`fuzz_utf8` streams use seeds `2701121405` through `2701121408`; later targets
-run serially. Each 18-hour stream owns durable evidence and corpus-admission
+Apple clang 21.0.0. Its first four concurrent `fuzz_utf8` streams used seeds
+`2701121405` through `2701121408`; later targets advance in serial groups of
+four streams. Each 18-hour stream owns durable evidence and corpus-admission
 state, each target is a restart checkpoint, and `caffeinate` prevents idle
 sleep. The state, logs, manifest, and rebuilt ledger are under
 `/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/`. Launchd job
@@ -67,14 +68,22 @@ time for its watchdog while leaving `src/` and `runtime/` byte-identical to
 the hosted-green parent. Launchd ownership is deliberate, because a plain
 detached child launched by the command runner was reaped. The full
 14-target cycle is approximately 252 wall-clock hours (10.5 days) if targets
-complete without a restart. Current durable progress is 0/56 completed stream
-rows; do not report progress from elapsed process time.
+complete without a restart. Progress is counted only from durable rows, never
+from elapsed process time.
+
+The first target subsequently completed: all four 18-hour `fuzz_utf8` streams
+are durable and clean, for 4/56 completed rows. A POSIX-shell variable-scope
+bug in the lane driver then made ledger rebuild overwrite the outer target
+name and reject those valid checkpoints. The external lane driver was repaired
+without changing the product, runner commit, rows, seeds, corpora, or manifest;
+`fuzz_utf8` is checkpointed complete and four `fuzz_grapheme` streams are now
+running. Launchd stdout/stderr are retained as `supervisor.out` and
+`supervisor.err` beside the lane state.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 101 completed fixes reconcile, one hard XFAIL pins
-`YEW-F-102`, and
-priority order is proven from Git ancestry. The deterministic
+executable gates: all 102 completed fixes reconcile, no hard XFAIL remains,
+and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
