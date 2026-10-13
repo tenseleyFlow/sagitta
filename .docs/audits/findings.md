@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-127`
+Next available ID: `YEW-F-131`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -139,6 +139,10 @@ recorded in `audit-00.md`.
 | YEW-F-124 | M | fixed | F15 CI | ~~macOS GCC package lane sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `7cdbe9d1` | tests/audit/yew_f_124.c | s55 DoD 1; compiler matrix; YEW-F-088 sibling |
 | YEW-F-125 | M | fixed | F14 PLUG | ~~plugins-only unit build links a stripped FUSS test seam~~ — fixed 2026-10-13 in `ada52d91` | tests/audit/yew_f_125.c | s55 DoD 1; compile-time module boundary |
 | YEW-F-126 | M | fixed | F14 PLUG | ~~Sprint 54 diverges from the shared stripped-module diagnostic~~ — fixed 2026-10-13 in `7cd13177` | tests/audit/yew_f_126.c | s54 DoD 1; invariant 3; shared module seam |
+| YEW-F-127 | M | open | F15 CI | F15 retains landing-day hard errors for shipped surfaces | tests/audit/yew_f_127.c | s00 DoD 3; s01 DoD 8; s37 DoD 14; s59 §2 |
+| YEW-F-128 | M | open | F15 CI | renamed Sprint 0 contract requires yew to alias itself | tests/audit/yew_f_128.c | s00 DoD 1/10; binary/install ownership |
+| YEW-F-129 | M | open | F15 CI | foundation closeout literal greps match prose and fixture data | tests/audit/yew_f_129.c | s00 DoD 6; s01 DoD 7; semantic bans |
+| YEW-F-130 | M | open | F15 CI | Sprint 1 landing-day timing covers the expanded full suite | tests/audit/yew_f_130.c | s01 DoD 1; current CI budget owners |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1363,6 +1367,36 @@ Sprint 54 and F14 closeout wording, without changing product behavior.
 Commit `7cd13177` adds S59-A34 and makes the source sprint and closeout require
 the shared diagnostic byte-exact. The minimal binary's `plug list` and `pkg
 list` paths both exit 1 with that exact message; product code is unchanged.
+
+`YEW-F-127` is Medium because the F15 closeout still requires file/TUI,
+`--batch`, `--clean`, script, PTY, fuzz, `--replay`, and `--grant` surfaces to
+hard-error naming the sprints that later delivered them. Current binaries and
+targets correctly run those shipped owners; the audit's stale-Sprint-error
+review also found no false product deferral. The hard XFAIL requires the
+foundation, test-infrastructure, batch, and F15 contracts to test current
+owners while retaining the genuine `--batch-strict` non-goal.
+
+`YEW-F-128` is Medium because the historical executable alias in Sprint 0 was
+mechanically renamed into `build/yew` plus a `build/yew` symlink and `bin/yew`
+plus a `bin/yew` symlink. One path cannot be both the executable and its own
+alias. The Makefile correctly builds and installs one `yew` executable. The
+hard XFAIL requires the source sprint and closeout to name that single owner.
+
+`YEW-F-129` is Medium because Sprint 0's raw `qsort` scan matches explanatory
+comments in `src/`, while Sprint 1's raw `constructor` scan matches Kotlin
+syntax-corpus data. Neither is executable forbidden code. The token-aware ban
+suite and explicit unit registry already distinguish code from prose/data and
+carry seeded negative controls. The hard XFAIL requires closeout to cite those
+semantic owners without weakening the bans.
+
+`YEW-F-130` is Medium because Sprint 1's sub-10-second figure measured its
+landing-day unit harness plus smoke test. Today's `make test` intentionally
+includes thousands of units, audit controls, PTYs, Fletch/script/manual/doc
+suites, corpus/round-trip gates, package integration, and live torture. Treating
+the historical figure as the current aggregate either creates an impossible
+gate or incentivizes removing coverage. The hard XFAIL preserves the original
+measurement as history and assigns the expanded suite to current CI job
+budgets and the dedicated performance contracts.
 
 ## Unverified observations
 
