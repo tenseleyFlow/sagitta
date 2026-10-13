@@ -31,13 +31,13 @@ bool test_yew_f_127(char *why, size_t why_cap)
         "Foundation staging closeout amendment S59-A35");
     bool s00 = file_has(
         ".docs/sprints/00-scaffolding/s00-repo-and-foundations.md",
-        "shipped startup paths");
+        "startup paths are now owned");
     bool s01 = file_has(
         ".docs/sprints/00-scaffolding/s01-test-infrastructure.md",
-        "current targets run their shipped owners");
+        "targets run their shipped owners");
     bool s37 = file_has(
         ".docs/sprints/07-fletch-editor/s37-headless-batch.md",
-        "shipped `--replay` and `--grant` owners");
+        "`--grant` owners from Sprints 38/54");
     bool closeout = file_has(
         ".docs/audits/closeout-F15-ci.md",
         "shipped file/TUI, batch, and clean paths");
