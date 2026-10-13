@@ -110,7 +110,7 @@ recorded in `audit-00.md`.
 | YEW-F-095 | M | fixed | F01 UNI | ~~F01 closeout requires delivered Unicode deferrals to be absent~~ — fixed 2026-10-13 in `c84e9fe7` | tests/audit/yew_f_095.c | s59 §2; s02 DoD 12; s16/s20 |
 | YEW-F-096 | M | fixed | F15 CI | ~~closeout checker reads ignored sprint contracts~~ — fixed 2026-10-13 in `dfe7f3ce` | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
 | YEW-F-097 | M | fixed | F15 CI | ~~priority gate rejects later-discovered Criticals~~ — fixed 2026-10-13 in `601abc70` | tests/audit/yew_f_097.c | s59 §1 priority law |
-| YEW-F-098 | L | confirmed | F01 UNI | Unicode unit registry misses contracted floor | tests/audit/yew_f_098.c | s02 DoD 14 |
+| YEW-F-098 | L | fixed | F01 UNI | ~~Unicode unit registry misses contracted floor~~ — fixed 2026-10-13 in `8e9f1990` | tests/audit/yew_f_098.c | s02 DoD 14 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -959,6 +959,11 @@ a recent product regression. The existing tests execute millions of dynamic
 assertions and the broad F01 behavior is green; no Unicode misbehavior is yet
 shown. The hard XFAIL counts only named functions in the four owned files and
 also requires each to appear in the explicit unit registry.
+Commit `8e9f1990` adds thirteen named boundary and state-transition tests across
+UTF-8 decoding/encoding/validation, grapheme segmentation, and display-width
+clipping, bringing the four owned files to exactly 45 explicitly registered
+tests. The focused suites pass under Apple Clang and Homebrew GCC 16, and every
+new test passes under Clang ASan/UBSan.
 
 ## Unverified observations
 

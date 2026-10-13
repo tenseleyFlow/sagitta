@@ -14,7 +14,7 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete, all 97 findings are fixed, and the last exact hosted-green
+are complete, all 98 findings are fixed, and the last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
 56 streams. A host hibernate invalidated the first replacement attempt and
@@ -445,7 +445,7 @@ Binding documents — read before any sprint:
   fuzz campaigns extended, findings ledger with stable IDs. **AUDIT WORK
   COMPLETE; REPLACEMENT SOAK RUNNING:** all fifteen fronts, dedup, coverage
   instrumentation, and all ten invariant sessions are complete. The ledger
-  now contains `YEW-F-001` through `YEW-F-097`, all fixed in Sprint 59. The
+  now contains `YEW-F-001` through `YEW-F-098`, all fixed in Sprint 59. The
   interrupted September launch and the suspend-invalidated first replacement
   attempt produced no soak rows and are historical only. A checkpointed
   SAN+coverage cycle restarted 2026-10-12 with product commit `4c99e134` plus
@@ -456,7 +456,7 @@ Binding documents — read before any sprint:
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1. **ACTIVE:** the severity-ordered implementation
-  burn-down reached 97/97 fixed; the documentation, tutor, closeout,
+  burn-down reached 98/98 fixed; the documentation, tutor, closeout,
   deferral, and synchronization checkers are implemented. Independent
   verification, status closure, and fifteen READY closeouts remain
 - Sprint 60 (s60-v1.0.0-landing.md) — Packaging (AUR, brew tap, RPM spec —
