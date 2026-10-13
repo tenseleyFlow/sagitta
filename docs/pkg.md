@@ -4,8 +4,8 @@
 a command-line operation, not an editor command; editor startup never runs
 Git or checks for updates.
 
-This document is the `yew pkg` man section. Sprint 59 assembles it into the
-complete `yew(1)` manual.
+This document is the source for the assembled `docs/man/yew-pkg.1` package
+manual and the package section in the complete `yew(1)` manual.
 
 ## Synopsis
 

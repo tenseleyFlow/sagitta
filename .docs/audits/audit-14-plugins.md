@@ -147,6 +147,19 @@ finding `YEW-F-023`
 
 None.
 
+## Sprint 59 closeout-contract recheck
+
+findings `YEW-F-122`, `YEW-F-123`
+
+- `YEW-F-122` records Sprint 54's package hard-error and zero-`sandbox`
+  rules after Sprint 55 delivery and F022, plus Sprint 55's future-manual
+  clause after Sprint 59 assembled `docs/man/yew-pkg.1`.
+- `YEW-F-123` records Sprint 55/F14 naming Amendment A2 for the shipped
+  runtime import row even though binding Fletch Amendment A3 and its
+  conformance fixture own that behavior.
+- Both findings were resolved by binding amendments S59-A32/A33; no product
+  code changed.
+
 ## Count
 
-Raw 3 · deduped 3 · critical 0 · high 0 · medium 3 · low 0 · unverified 0.
+Raw 5 · deduped 5 · critical 0 · high 0 · medium 5 · low 0 · unverified 0.

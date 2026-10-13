@@ -738,6 +738,26 @@ amendment changes no clock, subprocess, path, or Unicode behavior. It
 supersedes only invalid literal scans in Sprints 51/52 and F13;
 `YEW-F-121` records the correction.
 
+**Plugin closeout amendment S59-A32 (2026-10-13) — shipped package and
+documentation owners replace landing guards.** Sprint 55 delivered `yew pkg`;
+the Sprint 54 hard error naming its future owner is landing history, not a
+current closeout requirement. Sprint 59 delivered the assembled plugin man
+pages, so closeout tests the shipped page and its checker rather than a future
+assembly notice. The semantic honesty control fixed by `YEW-F-022` remains
+binding: plugin docs must deny memory/resource isolation and may use
+`sandbox` only in negative disclaimers. Package registries, dependency
+resolution, install hooks, auto-update, native plugins, and editor-loop
+package installation remain explicit non-goals. This amendment changes no
+plugin or package behavior; `YEW-F-122` records the contract correction.
+
+**Plugin import closeout amendment S59-A33 (2026-10-13) — shipped runtime
+import evidence names binding Amendment A3.** Fletch Amendment A2 belongs to
+Sprint 34's `handle` value kind. Sprint 55's fourth, last-searched
+`$YEW_RUNTIME_DIR` import row is binding Amendment A3 in
+`.docs/fletch-spec.md` section 16 and its conformance fixture. Current plugin
+closeout cites A3. This amendment changes no import order or runtime behavior;
+`YEW-F-123` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

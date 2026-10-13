@@ -362,6 +362,13 @@ caps + last error trace). Region-registered for mouse like every list.
 - Plugin dependencies, native/FFI plugins, VM-level resource limits,
   central registry → post-1.0 (pinned; manifest rejects `dependencies`).
 
+**Current closeout binding.** Sprint 55 delivered `yew pkg`; the hard error
+above records the Sprint 54 landing boundary rather than current behavior.
+Sprint 59 delivered the assembled plugin manual. Under S59-A32 and
+`YEW-F-022`, the docs retain one negative `sandbox` disclaimer and reject any
+positive memory/resource-isolation claim. Permanent package and native-plugin
+non-goals remain binding.
+
 ## Testing Strategy
 
 - **Host integration** (`tests/unit/test_plug_{manifest,discovery,lifecycle,
@@ -422,5 +429,8 @@ caps + last error trace). Region-registered for mouse like every list.
     tree; states cover all five values in the fixture set.
 11. Perf: both Deliverable-11 budgets measured in CI perf lane with
     committed baselines.
-12. `yew pkg anything` errors naming Sprint 55; `grep -rn 'sandbox' `
-    user-facing strings returns nothing (docs honesty check).
+12. Later binding Sprints 55 and 59 supersede the original package/manual
+    staging guards: shipped `yew pkg` commands and the assembled plugin man
+    page are live, permanent package non-goals still hard-error, and the
+    semantic honesty gate permits only a negative `sandbox` disclaimer while
+    requiring the memory/resource-isolation warning.

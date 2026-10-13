@@ -29,7 +29,7 @@ Sprints covered: s54, s55
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s54.11 Perf: both Deliverable-11 budgets measured in CI perf lane with committed baselines.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s54.12 `yew pkg anything` errors naming Sprint 55; `grep -rn 'sandbox' ` user-facing strings returns nothing (docs honesty check).
+- [ ] s54.12 Sprint 55 supersedes the original package staging guard and Sprint 59 supersedes the manual staging guard: shipped `yew pkg` commands and the assembled plugin man page are live, permanent package non-goals still hard-error, and the semantic honesty gate permits only a negative `sandbox` disclaimer while requiring the memory/resource-isolation warning.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s55.1 `make test` green on gcc and clang at `-Werror`; ASan/UBSan/valgrind/ determinism lanes clean. The pkg suite passes in a `MODULES=plugins` build with `fuss` **excluded**, and `grep -rn 'src/mod/git\|yew_git_' src/mod/plug/` prints nothing.
       — VERDICT: blocking — independent closeout review pending.
@@ -49,7 +49,7 @@ Sprints covered: s54, s55
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s55.9 A local fixture with the same manifest/tree shape as the deferred examples installs by path, lands in `plugins.lock` with a tree hash, reports `ok` from `yew pkg list`/`doctor`, and enables. The actual `examples/plugins/<name>` trees, their installation, their behaviour, their zero-residue teardown, and the API-coverage gate are **`s55_5-example-plugins.md`'s DoD**, not this sprint's; §8–§9 carry only the summary and the pointer.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s55.10 `runtime/preset.cloud.fl` parses with zero diagnostics, passes the spec §15 style checks, imports only via the A2 row, and each of the six new options' defaults equal their C constants (s36's rule, unit-asserted). Amendment A2 is present in `.docs/fletch-spec.md` §16 and s33's conformance count is updated in the same commit.
+- [ ] s55.10 `runtime/preset.cloud.fl` parses with zero diagnostics, passes the spec §15 style checks, imports only via the A3 row, and each of the six new options' defaults equal their C constants (s36's rule, unit-asserted). The binding Amendment A3 is present in `.docs/fletch-spec.md` §16 and s33's conformance count is updated in the same commit.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s55.11 Torture green with `save.strategy=inplace` and `save.backup_keep=10`: s08's in-place checker invariant holds in 100 % of iterations, exactly 10 backups are retained, and `keep = 1` reproduces s08's existing on-disk result byte-for-byte.
       — VERDICT: blocking — independent closeout review pending.
@@ -57,7 +57,7 @@ Sprints covered: s54, s55
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s55.13 Docs: `docs/plugins-authoring.md` carries all ten `ctx` rows and quotes `plug.h`'s trust text verbatim (a test diffs the quoted block against the header comment); `docs/pkg.md` covers all five subcommands, all exit codes, and the "not a cryptographic hash" statement.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s55.14 Non-goal surfaces hard-error naming their reason: `yew pkg publish`/ `search` quote §7; `--recurse-submodules` quotes §5; `:PkgInstall` quotes §6's startup rule; man assembly names Sprint 59.
+- [ ] s55.14 Non-goal surfaces hard-error naming their reason: `yew pkg publish`/ `search` quote §7; `--recurse-submodules` quotes §5; `:PkgInstall` quotes §6's startup rule; Sprint 59's assembled plugin man page `docs/man/yew-pkg.1` passes the current man-page contract.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s55.15 ≥ 140 assertions across the four new unit files; ≥ 18 `tests/pkg/` integration cases; perf baselines committed for all three budgets.
       — VERDICT: blocking — independent closeout review pending.

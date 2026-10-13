@@ -124,8 +124,8 @@ for status in 0 1 3 4; do
     }
 done
 
-grep -q 'Sprint 59 assembles' docs/pkg.md || {
-    echo "plugin docs: missing Sprint 59 man-assembly boundary" >&2
+grep -Fq 'assembled `docs/man/yew-pkg.1`' docs/pkg.md || {
+    echo "plugin docs: missing assembled package-manual owner" >&2
     exit 1
 }
 

@@ -750,8 +750,9 @@ SECURITY paragraph promising nothing it cannot deliver.
   **`s55_5-example-plugins.md`**; §8–§9 keep the summaries. A third
   example, and examples covering `shell`/`net`/`clipboard` → post-1.0,
   pinned there.
-- Man assembly, user manual, `yew tutor` → **Sprint 59**; budget
-  calibration → **Sprint 56** (measured with committed baselines here).
+- Sprint 59 delivered the assembled plugin man pages, user manual, and
+  `yew tutor`; budget calibration was delivered by Sprint 56 with committed
+  baselines.
 - A conflict *merge* UI (three-way diff on a sync twin) → post-1.0; the
   preset opens both and says plainly that nothing merges them.
 - `yew pkg` from inside a running editor (`:PkgInstall`) → post-1.0; a
@@ -846,7 +847,7 @@ SECURITY paragraph promising nothing it cannot deliver.
 10. `runtime/preset.cloud.fl` parses with zero diagnostics, passes the spec
     §15 style checks, imports only via the A2 row, and each of the six new
     options' defaults equal their C constants (s36's rule, unit-asserted).
-    Amendment A2 is present in `.docs/fletch-spec.md` §16 and s33's
+    Binding Amendment A3 is present in `.docs/fletch-spec.md` §16 and s33's
     conformance count is updated in the same commit.
 11. Torture green with `save.strategy=inplace` and `save.backup_keep=10`:
     s08's in-place checker invariant holds in 100 % of iterations, exactly
@@ -861,6 +862,7 @@ SECURITY paragraph promising nothing it cannot deliver.
     exit codes, and the "not a cryptographic hash" statement.
 14. Non-goal surfaces hard-error naming their reason: `yew pkg publish`/
     `search` quote §7; `--recurse-submodules` quotes §5; `:PkgInstall`
-    quotes §6's startup rule; man assembly names Sprint 59.
+    quotes §6's startup rule; Sprint 59's assembled `docs/man/yew-pkg.1`
+    passes the current man-page contract.
 15. ≥ 140 assertions across the four new unit files; ≥ 18 `tests/pkg/`
     integration cases; perf baselines committed for all three budgets.
