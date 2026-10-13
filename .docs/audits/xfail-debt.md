@@ -128,8 +128,8 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-115 | audit | `tests/audit/yew_f_115.c` | ~~LSP closeout requires superseded staging guards~~ — fixed in `5a8a438f` | fixed |
 | YEW-F-116 | audit | `tests/audit/yew_f_116.c` | ~~LSP closeout retains invalid determinism scans~~ — fixed in `5a8a438f` | fixed |
 | YEW-F-117 | audit | `tests/audit/yew_f_117.c` | ~~live-clangd harness treats macOS path aliases as distinct documents~~ — fixed in `151bd0f0` | fixed |
-| YEW-F-118 | audit | `tests/audit/yew_f_118.c` | AI closeout requires superseded Sprint 48/49 staging guards | active |
-| YEW-F-119 | audit | `tests/audit/yew_f_119.c` | AI closeout retains invalid TLS/stats ownership scans | active |
+| YEW-F-118 | audit | `tests/audit/yew_f_118.c` | ~~AI closeout requires superseded Sprint 48/49 staging guards~~ — fixed in `d8fd10ad` | fixed |
+| YEW-F-119 | audit | `tests/audit/yew_f_119.c` | ~~AI closeout retains invalid TLS/stats ownership scans~~ — fixed in `d8fd10ad` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.

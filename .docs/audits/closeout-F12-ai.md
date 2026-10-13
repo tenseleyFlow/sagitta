@@ -96,10 +96,7 @@ Sprints covered: s48, s49, s50
 
 ## Open audit findings against this front
 
-- `YEW-F-118` (Medium): Sprint 48/49 closeout still requires command staging
-  guards superseded by Sprint 50's shipped AI surfaces.
-- `YEW-F-119` (Medium): raw TLS/stats ownership scans reject required error,
-  routing, API, editor-state, and lifecycle owners.
+none
 
 ## Deferrals recorded against this front
 

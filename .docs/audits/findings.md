@@ -130,8 +130,8 @@ recorded in `audit-00.md`.
 | YEW-F-115 | M | fixed | F11 LSP | ~~LSP closeout requires superseded staging guards~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_115.c | s59 §2; s43 DoD 12; s44 DoD 13; s45 DoD 13; s46 DoD 13 |
 | YEW-F-116 | M | fixed | F11 LSP | ~~LSP closeout retains invalid determinism scans~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_116.c | s59 §2; s44 DoD 6; s45 DoD 8 |
 | YEW-F-117 | M | fixed | F11 LSP | ~~live-clangd harness treats macOS path aliases as distinct documents~~ — fixed 2026-10-13 in `151bd0f0` | tests/audit/yew_f_117.c | s47 DoD 2; s58 F11 q8; s59 §2 |
-| YEW-F-118 | M | open | F12 AI | AI closeout requires superseded Sprint 48/49 staging guards | tests/audit/yew_f_118.c | s59 §2; s48 DoD 12; s49 DoD 11; s50 DoD 14 |
-| YEW-F-119 | M | open | F12 AI | AI closeout retains invalid TLS/stats ownership scans | tests/audit/yew_f_119.c | s59 §2; s48 DoD 2; s49 DoD 8 |
+| YEW-F-118 | M | fixed | F12 AI | ~~AI closeout requires superseded Sprint 48/49 staging guards~~ — fixed 2026-10-13 in `d8fd10ad` | tests/audit/yew_f_118.c | s59 §2; s48 DoD 12; s49 DoD 11; s50 DoD 14 |
+| YEW-F-119 | M | fixed | F12 AI | ~~AI closeout retains invalid TLS/stats ownership scans~~ — fixed 2026-10-13 in `d8fd10ad` | tests/audit/yew_f_119.c | s59 §2; s48 DoD 2; s49 DoD 8 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1259,7 +1259,8 @@ naming their future owner. Sprint 50 delivered the opt-in, privacy, preset,
 status, and enable/disable surfaces and explicitly requires no deferred AI
 command to remain. Product behavior is not shown wrong. The hard XFAIL
 requires the Sprint 48/49 and F12 contracts to preserve landing history while
-testing the shipped Sprint 50 owners and permanent 1.0 non-goals.
+testing the shipped Sprint 50 owners and permanent 1.0 non-goals. Commit
+`d8fd10ad` adds S59-A28 and synchronizes both source sprints and F12.
 
 `YEW-F-119` is Medium because Sprint 48's raw `SSL|TLS|openssl|mbedtls|BIO_`
 scan rejects the required TLS error enum, diagnostics, and curl-routing
@@ -1269,6 +1270,8 @@ state pointer, and lifecycle calls needed to own the aggregate-only subsystem.
 The prompt and transport privacy boundary remains intact. The hard XFAIL
 requires semantic owner scans that permit those required surfaces while
 banning TLS implementations and stats access from prompt/transport paths.
+Commit `d8fd10ad` adds S59-A29 and synchronizes both executable ownership
+contracts.
 
 ## Unverified observations
 

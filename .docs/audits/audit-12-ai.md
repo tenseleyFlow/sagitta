@@ -109,6 +109,8 @@ findings YEW-F-118, YEW-F-119
 - `YEW-F-119` records raw TLS and stats token scans that include their own
   required error/routing, public API, editor-state, and lifecycle surfaces.
   No TLS implementation or prompt/transport stats ownership was found.
+- Both findings were resolved by binding amendments S59-A28/A29 in
+  `d8fd10ad`; no product code changed.
 
 ## Unverified observations
 
