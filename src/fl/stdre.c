@@ -19,7 +19,8 @@
  * program.  So a scan pins the cache, and while pinned the arena is
  * never reset -- an evicted entry loses its table slot and keeps its
  * memory until the next unpinned reset.  Bounded, because the pin depth
- * is the call depth and a pattern is capped at YEW_RE_MAX_PATTERN.
+ * is the call depth and pattern text is capped at the core compiler's
+ * bounded fourfold spelling of YEW_RE_MAX_PATTERN semantic bytes.
  *
  * BYTE OFFSETS, EVERYWHERE.  A match map's lo/hi are byte offsets into
  * the subject, because that is what the engine reports and converting to
@@ -135,7 +136,10 @@ static YewRe *compile_cached(FlVm *vm, const FlStr *pat, u32 flags)
 
     if (re != NULL)
         return re;
-    if (pat->len > (u32)YEW_RE_MAX_PATTERN) {
+    /* YEW-F-084: yew_re_quote() may spell one semantic byte as four
+     * pattern bytes.  Keep this allocation guard aligned with the core
+     * compiler, which performs the authoritative decoded-size check. */
+    if (pat->len > (u32)YEW_RE_MAX_PATTERN * 4U) {
         (void)fl_raise(vm, "limit", "regex: the pattern exceeds %d bytes",
                        YEW_RE_MAX_PATTERN);
         return NULL;

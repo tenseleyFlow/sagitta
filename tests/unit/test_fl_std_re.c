@@ -17,6 +17,7 @@
  * re.replace_fn  "type"           re_replace_fn_calls_back_into_fletch
  * re.split       separators drop  re_split_drops_the_separators
  * re.escape      quotes metachars re_escape_round_trips_through_test
+ * re.escape      fourfold limit   re_accepts_quoted_text_to_semantic_limit
  * the LRU past 64 distinct pats   re_the_compile_cache_survives_a_full_cycle
  * s20's golden table, same spans  re_replays_the_s20_golden_table
  * empty match over 1 MiB          re_terminates_on_a_large_subject
@@ -225,6 +226,23 @@ void test_fl_re_escape_round_trips_through_test(void)
      * all have to agree about what a metacharacter is. */
     FL_EQ(&f, P "return re.test(\"a.b*c\", re.escape(\"a.b*c\"))\n", "true");
     FL_EQ(&f, P "return re.test(\"axbyc\", re.escape(\"a.b*c\"))\n", "false");
+    flfix_close(&f);
+}
+
+void test_fl_re_accepts_quoted_text_to_semantic_limit(void)
+{
+    FlFix f;
+
+    flfix_open(&f);
+    /* Newlines take the maximal four-byte \\xNN spelling.  The first row
+     * crosses the obsolete 64 KiB textual precheck; the second pins the
+     * core compiler's full 64 KiB semantic-literal boundary. */
+    FL_EQ(&f, P "import str\n"
+              "let s = str.repeat(\"\\n\", 16385)\n"
+              "return re.test(s, re.escape(s))\n", "true");
+    FL_EQ(&f, P "import str\n"
+              "let s = str.repeat(\"\\n\", 65536)\n"
+              "return re.test(s, re.escape(s))\n", "true");
     flfix_close(&f);
 }
 

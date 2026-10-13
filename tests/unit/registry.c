@@ -2042,6 +2042,7 @@ const YewTest yew_tests[] = {
     T(fl_re_replace_fn_calls_back_into_fletch),
     T(fl_re_split_drops_the_separators),
     T(fl_re_escape_round_trips_through_test),
+    T(fl_re_accepts_quoted_text_to_semantic_limit),
     T(fl_re_the_compile_cache_survives_a_full_cycle),
     T(fl_io_read_returns_the_bytes_verbatim),
     T(fl_io_read_names_the_errno_and_the_path),
