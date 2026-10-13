@@ -3,6 +3,7 @@
 #include "harness.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -210,9 +211,10 @@ void test_theme_invalid_input_is_diagnostic_and_transactional(void)
 
 void test_theme_oversize_file_reports_the_size_limit(void)
 {
-    char root[] = "build/theme-oversize.XXXXXX";
-    char dir[256];
-    char path[256];
+    const char *tmp = getenv("TMPDIR");
+    char root[PATH_MAX];
+    char dir[PATH_MAX];
+    char path[PATH_MAX];
     u8 block[4096];
     ThemeFix f;
     Theme theme;
@@ -220,6 +222,10 @@ void test_theme_oversize_file_reports_the_size_limit(void)
     u32 i;
     int n;
 
+    if (tmp == NULL || tmp[0] == '\0')
+        tmp = "build/tmp";
+    n = snprintf(root, sizeof(root), "%s/yew-theme-oversize.XXXXXX", tmp);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(root));
     YEW_ASSERT_NOT_NULL(mkdtemp(root));
     n = snprintf(dir, sizeof(dir), "%s/themes", root);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(dir));

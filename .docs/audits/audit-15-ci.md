@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-132`
+findings `YEW-F-127`–`YEW-F-133`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -345,13 +345,15 @@ findings `YEW-F-127`–`YEW-F-132`
   table being contradicted by future-stub wording and superseded caps.
 - `YEW-F-132` records a reserved post-1.0 option falsely promising delivery
   in the current documentation sprint.
+- `YEW-F-133` records the oversize-theme unit bypassing the selected
+  disjoint build tree's `TMPDIR`.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 64 · deduped 64 · critical 1 · high 1 · medium 62 · low 0 · unverified 4.
+Raw 65 · deduped 65 · critical 1 · high 1 · medium 63 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 
