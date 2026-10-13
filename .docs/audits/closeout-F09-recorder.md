@@ -33,7 +33,7 @@ Sprints covered: s35, s38
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s35.13 ≥ 120 recorder/replay unit assertions and ≥ 20 committed `.rec` corpus files. Macro-driven script tests are explicitly Sprint 37.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s35.14 `ed.macro.*` no longer `YEW_CMD_DEFERRED`; Sprint 38 surfaces (browser, edit flow, library) hard-error naming Sprint 38.
+- [ ] s35.14 `ed.macro.*` no longer `YEW_CMD_DEFERRED`; Sprint 38 delivered the browser, edit flow, and library through the same recorder/VM path.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s38.1 `make test` green on gcc and clang at `-Werror`; ASan/UBSan/valgrind/ determinism lanes clean; `make test-roundtrip` still green with the record→edit→store no-op fixture added.
       — VERDICT: blocking — independent closeout review pending.
@@ -49,7 +49,7 @@ Sprints covered: s35, s38
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s38.7 `:macro name` leaves the register intact, appends to the library, and the named function is callable immediately (no restart).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s38.8 Library: all eight naming/collision rows tested; a collision hard-errors naming both files; a broken file is skipped and the rest load; scan order bytewise and stable.
+- [ ] s38.8 Library: the seven reachable namespace rows are tested; canonical-name and bare-alias injectivity is proven; defensive collision rejection remains; a broken file is skipped and the rest load; scan order bytewise and stable.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s38.9 Header: all five fields parsed; unknown schema version skipped; a `keymap:` mismatch demonstrably changes nothing about execution (a macro recorded under a rebound keymap replays byte-identically under the default one — the sprint's headline claim, as an executable test).
       — VERDICT: blocking — independent closeout review pending.
@@ -59,8 +59,12 @@ Sprints covered: s35, s38
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s38.12 Pty goldens for the indicator (2 widths), the edit flow, and the browser are byte-stable across the determinism lane's double run.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s38.13 ≥ 90 assertions across the two unit files; ≥ 15 script tests; the deferred surfaces hard-error naming Sprints 41 and 55.
+- [ ] s38.13 ≥ 90 assertions across the two unit files and ≥ 15 script tests; Sprint 41's Fletch language pack highlights macro scratch buffers and Sprint 55's package mechanism owns macro-collection distribution.
       — VERDICT: blocking — independent closeout review pending.
+
+Later owning sprints delivered the recorder-adjacent surfaces: Sprint 38 owns
+the browser, ordinary-buffer edit/store flow, and macro library; Sprint 41
+owns Fletch highlighting; Sprint 55 owns package distribution. Namespace injectivity replaces the impossible collision fixture while the defensive rejection branch remains part of source review.
 
 ## Open audit findings against this front
 

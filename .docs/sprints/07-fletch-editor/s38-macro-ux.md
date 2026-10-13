@@ -290,10 +290,13 @@ directory of them versioned.
 
 ## Testing Strategy
 
-- **Unit** (`test_macrolib.c`): every naming and collision row — stem alias,
-  `_`-prefixed exclusion, non-zero-arg bindings not becoming macros,
-  in-scan collision hard-erroring naming both files, a non-compiling file
-  skipped with the rest loading, 1-char stem rejected, bytewise scan order.
+- **Unit** (`test_macrolib.c`): every reachable namespace row — stem alias,
+  `_`-prefixed exclusion, non-zero-arg bindings not becoming macros, a
+  non-compiling file skipped with the rest loading, 1-char stem rejected,
+  and bytewise scan order. The canonical-name and bare-alias rules are
+  injective, so the retained defensive collision rejection is reviewed as an
+  unreachable invariant guard rather than reached by weakening the public
+  namespace for a fixture.
 - **Unit** (`test_macro_header.c`): header parsing incl. missing fields,
   unknown `yew-macro:` version skipped, a major `recorded-with:`
   mismatch warning **and still loading**, a file with no header loading
@@ -343,9 +346,12 @@ directory of them versioned.
    not a special editor.
 7. `:macro name` leaves the register intact, appends to the library, and the
    named function is callable immediately (no restart).
-8. Library: all eight naming/collision rows tested; a collision hard-errors
-   naming both files; a broken file is skipped and the rest load; scan order
-   bytewise and stable.
+8. Library: The seven reachable namespace rows are tested; unique filename
+   stems, dotted canonical names, same-stem-only bare aliases, and one-byte
+   stem rejection prove injectivity. Collision rejection remains defensive
+   unreachable code and names both files if that invariant is ever violated.
+   A broken file is skipped and the rest load; scan order is bytewise and
+   stable.
 9. Header: all five fields parsed; unknown schema version skipped; a
    `keymap:` mismatch demonstrably changes nothing about execution (a macro
    recorded under a rebound keymap replays byte-identically under the
@@ -356,5 +362,4 @@ directory of them versioned.
     unchanged.
 12. Pty goldens for the indicator (2 widths), the edit flow, and the browser
     are byte-stable across the determinism lane's double run.
-13. ≥ 90 assertions across the two unit files; ≥ 15 script tests; the
-    deferred surfaces hard-error naming Sprints 41 and 55.
+13. ≥ 90 assertions across the two unit files and ≥ 15 script tests. Sprints 41 and 55 delivered the deferred integrations: the Fletch language pack highlights macro scratch buffers, and `yew pkg` owns distribution of macro collections. Sprint 38 intentionally exposed no fictional staging commands for either owner.

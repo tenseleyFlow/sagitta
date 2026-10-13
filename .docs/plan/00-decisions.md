@@ -602,6 +602,32 @@ release totals. This amendment changes no language surface or product behavior
 and supersedes only stale point-in-time totals in Sprints 28/30/31/33 and F08;
 `YEW-F-110` records the correction.
 
+**Recorder closeout amendment S59-A22 (2026-10-13) — later owners replace
+recorder staging guards with shipped integration evidence.** Sprint 35
+delivered recording, emission, and VM-only replay. Sprint 38 subsequently
+delivered the indicator, browser, ordinary-buffer edit/store flow, and macro
+library through that same recorder and VM path. Sprint 41's Fletch language
+pack now highlights macro scratch buffers, and Sprint 55's package mechanism
+owns distribution of macro collections. Sprint 38 deliberately exposed no
+callable staging commands for those latter integrations, so current closeout
+tests their shipped owners instead of inventing hard-error stubs. Interactive
+recording remains refused in batch mode, and cross-version migration remains
+post-1.0. This amendment changes no product behavior and supersedes only
+stale staging wording in Sprints 35/38 and F09; `YEW-F-111` records the
+correction.
+
+**Macrolib namespace closeout amendment S59-A23 (2026-10-13) — injectivity
+is the executable collision contract.** Unique filename stems produce dotted
+`<stem>.<binding>` canonical names; a bare alias exists only when the binding
+equals that same stem; and one-byte stems are rejected to keep register names
+disjoint. Those public rules make cross-file and register collisions
+unreachable. Closeout therefore tests every reachable namespace row and the
+injectivity premises, then reviews the retained defensive rejection branch;
+it does not weaken the namespace to manufacture an impossible filesystem
+fixture. This amendment changes no product behavior or diagnostic path and
+supersedes only the unreachable collision-fixture wording in Sprint 38 and
+F09; `YEW-F-112` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

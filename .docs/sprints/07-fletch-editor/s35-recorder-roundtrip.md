@@ -501,5 +501,4 @@ Sprint 38. This sprint's only UI is a message on start/stop
     double run.
 13. ≥ 120 recorder/replay unit assertions and ≥ 20 committed `.rec` corpus
     files. Macro-driven script tests are explicitly Sprint 37.
-14. `ed.macro.*` no longer `YEW_CMD_DEFERRED`; Sprint 38 surfaces
-    (browser, edit flow, library) hard-error naming Sprint 38.
+14. `ed.macro.*` no longer `YEW_CMD_DEFERRED`. Sprint 38 delivered the browser, edit flow, and library through the same recorder/VM path; current closeout tests those live surfaces rather than their landing guards.
