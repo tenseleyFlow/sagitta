@@ -525,8 +525,11 @@ bool yew_re_search_back(const YewRe *re, const YewReInput *in,
                 break;
             best = cur;
             found = true;
-            at = cur.g[0].hi > cur.g[0].lo ? cur.g[0].hi :
-                 next_cp_off(in, cur.g[0].lo);
+            /* YEW-F-083: matches may overlap.  Advancing to the prior
+             * match's end skips later starts (/aa/ over "aaa").  Move one
+             * decoded codepoint from its start instead; this also provides
+             * the mandatory progress for zero-width matches. */
+            at = next_cp_off(in, cur.g[0].lo);
         }
         if (found) {
             if (out != NULL)

@@ -496,12 +496,24 @@ void test_re_workspace_reuses_mixed_programs_and_captures(void)
 
 void test_re_search_from_offset_and_back(void)
 {
+    static const u8 overlap_subject[] = "ababa";
+    static const u8 cents[] = {
+        0xC2U, 0xA2U, 0xC2U, 0xA2U, 0xC2U, 0xA2U
+    };
     Arena arena;
     YewRe *re;
+    YewRe *overlap_re;
+    YewRe *capture_re;
+    YewRe *zero_re;
+    YewRe *unicode_re;
     YewReMatch m;
     YewReInput in = yew_re_input_bytes((const u8 *)"a b a b a", 9U);
+    Bytebuf pattern;
+    TextBuf *tb;
+    u64 at;
 
     arena_init(&arena);
+    bytebuf_init(&pattern);
     re = yew_re_compile(&arena, "a", 1U, 0U, NULL);
     YEW_ASSERT_NOT_NULL(re);
     YEW_ASSERT(yew_re_search(re, &in, BYTEOFF(0U), &m));
@@ -519,6 +531,55 @@ void test_re_search_from_offset_and_back(void)
     YEW_ASSERT(yew_re_search_back(re, &in, BYTEOFF(1U), &m));
     YEW_ASSERT_EQ_U64(m.g[0].lo, 0U);
     YEW_ASSERT(!yew_re_search_back(re, &in, BYTEOFF(0U), &m));
+
+    overlap_re = yew_re_compile(&arena, "aba", 3U, 0U, NULL);
+    capture_re = yew_re_compile(&arena, "(a.)a", 5U, 0U, NULL);
+    zero_re = yew_re_compile(&arena, "a*", 2U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(overlap_re);
+    YEW_ASSERT_NOT_NULL(capture_re);
+    YEW_ASSERT_NOT_NULL(zero_re);
+    in = yew_re_input_bytes(overlap_subject, sizeof(overlap_subject) - 1U);
+    YEW_ASSERT(yew_re_search_back(overlap_re, &in,
+                                  BYTEOFF(sizeof(overlap_subject) - 1U), &m));
+    YEW_ASSERT_EQ_U64(m.g[0].lo, 2U);
+    YEW_ASSERT_EQ_U64(m.g[0].hi, 5U);
+    YEW_ASSERT(yew_re_search_back(capture_re, &in,
+                                  BYTEOFF(sizeof(overlap_subject) - 1U), &m));
+    YEW_ASSERT_EQ_U64(m.g[0].lo, 2U);
+    YEW_ASSERT_EQ_U64(m.g[0].hi, 5U);
+    YEW_ASSERT_EQ_U64(m.g[1].lo, 2U);
+    YEW_ASSERT_EQ_U64(m.g[1].hi, 4U);
+    YEW_ASSERT(yew_re_search_back(zero_re, &in, BYTEOFF(3U), &m));
+    YEW_ASSERT_EQ_U64(m.g[0].lo, 2U);
+    YEW_ASSERT_EQ_U64(m.g[0].hi, 3U);
+
+    /* Fragment every byte so overlap enumeration also crosses piece seams. */
+    tb = yew_textbuf_new();
+    at = sizeof(overlap_subject) - 1U;
+    while (at != 0U) {
+        at--;
+        yew_textbuf_insert(tb, BYTEOFF(0U), overlap_subject + at, 1U);
+    }
+    in = yew_re_input_textbuf(tb);
+    YEW_ASSERT(yew_re_search_back(capture_re, &in,
+                                  BYTEOFF(sizeof(overlap_subject) - 1U), &m));
+    YEW_ASSERT_EQ_U64(m.g[0].lo, 2U);
+    YEW_ASSERT_EQ_U64(m.g[0].hi, 5U);
+    yew_textbuf_free(tb);
+
+    /* Advancing from a prior match start follows decoded codepoints, not
+     * continuation bytes, while still admitting a Unicode overlap. */
+    yew_re_quote(&pattern, cents, 4U);
+    unicode_re = yew_re_compile(&arena, (const char *)pattern.data,
+                                pattern.len, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(unicode_re);
+    in = yew_re_input_bytes(cents, sizeof(cents));
+    YEW_ASSERT(yew_re_search_back(unicode_re, &in, BYTEOFF(sizeof(cents)),
+                                  &m));
+    YEW_ASSERT_EQ_U64(m.g[0].lo, 2U);
+    YEW_ASSERT_EQ_U64(m.g[0].hi, 6U);
+
+    bytebuf_free(&pattern);
     arena_free_all(&arena);
 }
 
