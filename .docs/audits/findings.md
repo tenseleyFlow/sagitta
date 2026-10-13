@@ -113,7 +113,7 @@ recorded in `audit-00.md`.
 | YEW-F-098 | L | fixed | F01 UNI | ~~Unicode unit registry misses contracted floor~~ — fixed 2026-10-13 in `8e9f1990` | tests/audit/yew_f_098.c | s02 DoD 14 |
 | YEW-F-099 | M | fixed | F02 TERM | ~~terminal closeout requires superseded staging behavior~~ — fixed 2026-10-13 in `29682c67` | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
 | YEW-F-100 | M | fixed | F03 TEXT | ~~text-engine closeout requires superseded staging guards~~ — fixed 2026-10-13 in `34dd30ef` | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
-| YEW-F-101 | M | confirmed | F03 TEXT | text-engine closeout retains obsolete mutation-ownership spellings | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
+| YEW-F-101 | M | fixed | F03 TEXT | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed 2026-10-13 in `f16c5dcd` | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1013,6 +1013,10 @@ closeout cannot truthfully satisfy its literal grep/API wording. The hard
 XFAIL requires a formal decision amendment and synchronized Sprint 10/12 and
 F03 closeout language without weakening editable-document or register routing
 ownership.
+Commit `f16c5dcd` adds decision amendment S59-A12, scopes raw text-buffer
+calls by semantics instead of an obsolete whole-tree file list, and records
+the stronger private raw-setter plus typed register routes. The hard XFAIL
+passes without changing product behavior.
 
 ## Unverified observations
 

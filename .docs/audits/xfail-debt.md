@@ -111,7 +111,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-098 | audit | `tests/audit/yew_f_098.c` | ~~Unicode unit registry misses contracted floor~~ — fixed in `8e9f1990` | fixed |
 | YEW-F-099 | audit | `tests/audit/yew_f_099.c` | ~~terminal closeout requires superseded staging behavior~~ — fixed in `29682c67` | fixed |
 | YEW-F-100 | audit | `tests/audit/yew_f_100.c` | ~~text-engine closeout requires superseded staging guards~~ — fixed in `34dd30ef` | fixed |
-| YEW-F-101 | audit | `tests/audit/yew_f_101.c` | text-engine closeout retains obsolete mutation-ownership spellings | active |
+| YEW-F-101 | audit | `tests/audit/yew_f_101.c` | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed in `f16c5dcd` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
