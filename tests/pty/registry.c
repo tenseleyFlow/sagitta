@@ -5503,6 +5503,68 @@ static void case_s21_replace_all(PtyCtx *c)
 }
 
 /*
+ * DoD 7.  These are terminal-level proofs rather than another call into the
+ * replacement engine: the command line must parse the zero-width pattern,
+ * the edit must finish, and Save must persist the exact boundary bytes.
+ */
+static void case_s21_zero_width_prefix_final_newline(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha\nbeta\n";
+    static const u8 expected[] = "> alpha\n> beta\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "%s/^/> /");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, "s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "zero-width prefix did not preserve the final newline");
+    ptc_snapshot(c, "s21_zero_width_prefix_final_newline");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s21_zero_width_prefix_no_final_newline(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha\nbeta";
+    static const u8 expected[] = "> alpha\n> beta";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "%s/^/> /");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, "s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "zero-width prefix invented or lost a final newline");
+    ptc_snapshot(c, "s21_zero_width_prefix_no_final_newline");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s21_zero_width_global_terminates(PtyCtx *c)
+{
+    static const u8 initial[] = "ab\n";
+    static const u8 expected[] = "-a-b-\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "%s/x*/-/g");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, "s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "global zero-width replacement did not terminate exactly");
+    ptc_snapshot(c, "s21_zero_width_global_terminates");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
  * Highlighting over a CJK line and a ZWJ emoji family.  The overlay
  * speaks byte spans and the draw pass owns the width math, so this is
  * the test that the seam between them holds.
@@ -12961,6 +13023,12 @@ const PtyCase yew_pty_cases[] = {
     C(s21_replace_confirm_answers, modern, 24U, 80U,
       case_s21_replace_confirm_answers),
     C(s21_replace_all, modern, 24U, 80U, case_s21_replace_all),
+    C(s21_zero_width_prefix_final_newline, modern, 24U, 80U,
+      case_s21_zero_width_prefix_final_newline),
+    C(s21_zero_width_prefix_no_final_newline, modern, 24U, 80U,
+      case_s21_zero_width_prefix_no_final_newline),
+    C(s21_zero_width_global_terminates, modern, 24U, 80U,
+      case_s21_zero_width_global_terminates),
     C(s21_search_highlight_wide, modern, 24U, 80U,
       case_s21_search_highlight_wide),
     C(s21_overlay_damage_is_narrow, modern, 24U, 80U,
