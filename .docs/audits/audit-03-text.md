@@ -119,8 +119,11 @@ probed, nothing found
 
 probed, nothing found
 
-- The exact `yew_reg_set(` source grep reaches only `register.c`; there is no
-  external caller bypassing `yew_reg_yank`/`yew_reg_delete`.
+- The exact `yew_reg_set(` source grep is empty. The raw `reg_set` storage
+  helper is private to `register.c`; production writers use
+  `yew_reg_yank`/`yew_reg_delete` or the typed macro, command-line, and search
+  producer routes. `scripts/bans.sh` rejects reintroduction of the raw public
+  spelling and carries a firing positive control.
 - `register_blockwise_short_delete_uses_small_delete` builds a ragged
   three-row block whose byte payload has no LF. It reaches `-`, leaves `1`
   empty, and preserves row geometry, matching the pinned payload/type rule.
@@ -216,6 +219,12 @@ from those links and replay does not alter disk, so the finding is Medium.
   empty register slots are identified as historical staging guards. Current
   closeout evidence follows the later owning sprints and proves those shipped
   callers retain the original cursor, undo-reason, and register choke points.
+
+- Resolved by S59-A12 / `YEW-F-101`: Sprint 10's literal pre-hydration source
+  grep is scoped to editable-document operations while retaining an explicit
+  audit of construction/projection exceptions. Sprint 12 names the current
+  private raw setter and typed public register routes. No product behavior or
+  ownership boundary changed.
 
 - An exact 2 GiB file was not read, edited, and written end-to-end on the
   audit machine: doing so would consume several GiB of resident and I/O

@@ -115,10 +115,14 @@ shift and never touch `1`–`9` or `-`.
 void    yew_reg_init(Registers *r);
 void    yew_reg_free(Registers *r);
 RegVal *yew_reg_get(Registers *r, u8 name);       /* NULL if unknown      */
-void    yew_reg_set   (Registers *r, u8 name, const RegVal *v);
 void    yew_reg_append(Registers *r, u8 name, const RegVal *v);  /* A–Z    */
 
-/* the two ROUTING functions — call sites use these, never yew_reg_set */
+/* typed producer routes delivered by their owning sprints */
+void yew_reg_set_macro(Registers *r, u8 name, const RegVal *v, bool append);
+void yew_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len);
+void yew_reg_set_search(Registers *r, const u8 *bytes, size_t len);
+
+/* the two document-edit ROUTING functions */
 void yew_reg_yank  (Registers *r, u8 explicit_name /*0 = none*/,
                     const RegVal *v);
 void yew_reg_delete(Registers *r, u8 explicit_name, const RegVal *v);
@@ -126,10 +130,13 @@ void yew_reg_delete(Registers *r, u8 explicit_name, const RegVal *v);
 
 **Pitfall — one routing choke point.** `yew_reg_yank`/`yew_reg_delete`
 implement the whole table above (unnamed mirror, `0`, the shift, `-`, the
-ring push, the §9 clipboard sync). Call sites that poke `yew_reg_set`
-directly get the unnamed mirror wrong in exactly one code path and nobody
-notices for two campaigns — same doctrine as s09's mark choke point and s10's
-edit choke point. CI grep gate (DoD 12).
+ring push, the §9 clipboard sync). The raw storage setter is private
+`reg_set` in `register.c`; public writers use a typed producer or the
+yank/delete front doors. Reintroducing public `yew_reg_set` would let one
+code path get the unnamed mirror wrong without being obvious — the same
+doctrine as s09's mark choke point and s10's edit choke point. The ban and
+positive control in `scripts/bans.sh` enforce this stronger post-Sprint-58
+surface (S59-A12).
 
 ### 3. Append semantics (`A`–`Z`)
 
@@ -494,9 +501,11 @@ the §7 OOB flush. Payloads over `YEW_OSC52_MAX` skip the OSC 52 route per §7.
     write the system clipboard (asserted via the fake tool's log).
 12. Grep gates: `grep -rn 'popen\|system(' src/` → nothing;
     `grep -rn '52;c;?\|52;.*?' src/` → nothing;
-    `grep -rn 'yew_reg_set' src/` hits only `register.c`;
+    no raw public `yew_reg_set(` symbol exists, private `reg_set` storage
+    remains in `register.c`, and public production writers use only typed
+    `yew_reg_set_*`, `yew_reg_yank`, or `yew_reg_delete` routes;
     `grep -rn 'width\|ccol' src/text/register.c` shows call sites into
-    `src/unicode/` only, zero width arithmetic.
+    `src/unicode/` only, zero width arithmetic (S59-A12).
 13. Sprint 17 blockwise production and the Sprint 21/18/23 writers for `/`,
     `:`, and `#` route through the register choke points established here;
     absent or unknown producers remain explicit rather than lying (S59-A11).

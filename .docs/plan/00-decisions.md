@@ -433,6 +433,23 @@ paths still hard-error under invariant 3. This amendment changes no product
 behavior or text-safety invariant; it supersedes only stale staging wording
 in Sprints 9/10/12 and F03. `YEW-F-100` records the correction.
 
+**Text-engine ownership closeout amendment S59-A12 (2026-10-13) — editable
+mutations remain routed while construction surfaces stay direct.** Sprint 10's
+original whole-tree grep described the source graph before later sprints added
+initial hydration and internal scratch projections. User-visible editable
+document mutation still enters through `EditCtx`, preserving undo, marks,
+cursors, journal, and change notification as one operation. Direct
+`TextBuf` calls are also valid for piece-tree internals, undo replay, initial
+hydration before an edit context is exposed, and internal no-undo/read-only
+or temporary projections whose state is not an editable document. Every such
+exception remains individually auditable; it is not authority to bypass the
+edit choke point. Sprint 12's public raw `yew_reg_set` staging API was likewise
+strengthened into private `reg_set` storage plus typed public producer and
+yank/delete routes; `yew_reg_append` remains the tested A–Z append primitive.
+This amendment changes no product behavior or text-safety invariant. It
+supersedes only stale ownership spellings in Sprints 10/12 and F03;
+`YEW-F-101` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

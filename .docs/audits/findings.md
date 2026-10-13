@@ -1004,10 +1004,11 @@ claim every raw text-buffer mutation under `src/` lives in only
 `text/{piece,edit,undo}.c`, although later sprints deliberately added initial
 hydration and internal no-undo/read-only projection builders. The original
 F03 audit classified those call sites and found no editable-document bypass.
-Sprint 12 also still publishes the superseded public `yew_reg_set` and
-`yew_reg_append` spellings even though the implementation strengthened that
-boundary: the raw setter/appender are private and public writers use typed
-routing functions. Product behavior is not shown wrong, but the release
+Sprint 12 also still publishes the superseded public `yew_reg_set` spelling
+even though the implementation strengthened that boundary: the raw setter is
+private, public writers use typed routing functions, and the separately tested
+`yew_reg_append` primitive remains live. Product behavior is not shown wrong,
+but the release
 closeout cannot truthfully satisfy its literal grep/API wording. The hard
 XFAIL requires a formal decision amendment and synchronized Sprint 10/12 and
 F03 closeout language without weakening editable-document or register routing

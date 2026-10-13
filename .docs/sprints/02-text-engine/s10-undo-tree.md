@@ -57,8 +57,9 @@ void yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len);
 void yew_edit_delete(EditCtx *ec, Span range);
 ```
 
-These are the **only** paths that may mutate a `TextBuf` owned by an
-`EditCtx`. Each performs, in this exact order: (1) capture, for deletes, the
+These are the **only** paths that may mutate user-visible editable content in
+a `TextBuf` owned by an `EditCtx`. Each performs, in this exact order:
+(1) capture, for deletes, the
 removed bytes via `TextIter` into the undo blob arena **before** the tree
 changes; (2) mutate (`yew_textbuf_insert`/`_delete`); (3) `yew_marks_adjust`
 in pre-op coordinates, once; (4) `yew_cset_adjust`; (5)
@@ -67,10 +68,14 @@ whether the op opens a node or extends the open one.
 
 **Pitfall — one op stream, three consumers.** s09 pinned that
 `yew_marks_adjust` runs from *the* choke point. Any later sprint calling
-`yew_textbuf_insert` directly on a buffer with an `EditCtx` double-shifts
-marks or silently loses undo. Grep gate (DoD 11):
-`yew_textbuf_insert|yew_textbuf_delete` appears outside `piece.c` only in
-`edit.c` and `undo.c`.
+`yew_textbuf_insert` directly for user-visible editing on a live `EditCtx`
+double-shifts marks or silently loses undo. Current source also uses direct
+piece-tree mutation for initial hydration and internal scratch projections:
+batch/stdin and symbol-walk loading before an editable context is exposed;
+temporary rename/diff models; and no-undo/read-only log, trust, and preview
+buffers. Those bounded construction/projection sites do not own an editable
+operation stream and are audited individually (S59-A12); they do not weaken
+the `EditCtx` choke point.
 
 ### 2. Why a tree (the headline, and what it costs)
 
@@ -516,9 +521,12 @@ and every navigation move; this is the wiring s08 deferred to Sprint 10.
 9. Cursor restore correct for 1- and 8-cursor sets including §6's
    window-gone row; `MarkRepair` restores collapsed marks exactly and the
    1 000-mark oracle test is green.
-10. Grep gates: `yew_textbuf_insert\|yew_textbuf_delete` under `src/` hits
-    only `text/{piece,edit,undo}.c`; `CLOCK_REALTIME` in `undo.c` hits only
-    the `t_wall` capture site.
+10. Ownership gates: every `yew_textbuf_insert\|yew_textbuf_delete` under
+    `src/` is either in `text/{piece,edit,undo}.c` or is an audited initial
+    hydration/internal projection with no user-visible editable operation
+    stream; all editable-document mutation routes through `EditCtx`.
+    `CLOCK_REALTIME` in `undo.c` hits only the `t_wall` capture site
+    (S59-A12).
 11. The Sprint 17/19/21/34/47-owned callers are live and route through the
     reason codes established here; each user action creates exactly one undo
     node, while genuinely unknown reasons still fail explicitly (S59-A11).

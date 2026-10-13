@@ -91,7 +91,7 @@ Sprints covered: s07, s08, s09, s10, s11, s12
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s10.9 Cursor restore correct for 1- and 8-cursor sets including §6's window-gone row; `MarkRepair` restores collapsed marks exactly and the 1 000-mark oracle test is green.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s10.10 Grep gates: `yew_textbuf_insert\|yew_textbuf_delete` under `src/` hits only `text/{piece,edit,undo}.c`; `CLOCK_REALTIME` in `undo.c` hits only the `t_wall` capture site.
+- [ ] s10.10 Ownership gates: every `yew_textbuf_insert\|yew_textbuf_delete` under `src/` is either in `text/{piece,edit,undo}.c` or falls into the audited categories of initial hydration and internal scratch projections, with no user-visible editable operation stream; all editable-document mutation routes through `EditCtx`. `CLOCK_REALTIME` in `undo.c` hits only the `t_wall` capture site (S59-A12).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s10.11 The Sprint 17/19/21/34/47-owned callers are live and route through the reason codes established here; each user action creates exactly one undo node, while genuinely unknown reasons still fail explicitly (S59-A11).
       — VERDICT: blocking — independent closeout review pending.
@@ -147,7 +147,7 @@ Sprints covered: s07, s08, s09, s10, s11, s12
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s12.11 `clipboard.sync` default is `yank`; a delete under the default does not write the system clipboard (asserted via the fake tool's log).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s12.12 Grep gates: `grep -rn 'popen\|system(' src/` → nothing; `grep -rn '52;c;?\|52;.*?' src/` → nothing; `grep -rn 'yew_reg_set' src/` hits only `register.c`; `grep -rn 'width\|ccol' src/text/register.c` shows call sites into `src/unicode/` only, zero width arithmetic.
+- [ ] s12.12 Grep gates: `grep -rn 'popen\|system(' src/` → nothing; `grep -rn '52;c;?\|52;.*?' src/` → nothing; no raw public `yew_reg_set(` symbol exists, the private raw register setter remains in `register.c`, and public writers use typed routes; `grep -rn 'width\|ccol' src/text/register.c` shows call sites into `src/unicode/` only, zero width arithmetic (S59-A12).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s12.13 Sprint 17 blockwise production and the Sprint 21/18/23 writers for `/`, `:`, and `#` route through the register choke points established here; absent or unknown producers remain explicit rather than lying (S59-A11).
       — VERDICT: blocking — independent closeout review pending.
