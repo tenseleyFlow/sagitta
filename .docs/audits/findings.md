@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-135`
+Next available ID: `YEW-F-136`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -147,6 +147,7 @@ recorded in `audit-00.md`.
 | YEW-F-132 | M | fixed | F15 CI | ~~reserved `--batch-strict` falsely promises Sprint 59 delivery~~ — fixed 2026-10-13 in `cacf3917` | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
 | YEW-F-133 | M | fixed | F15 CI | ~~theme unit escapes the selected disjoint build tree~~ — fixed 2026-10-13 in `ec59fa31` | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
 | YEW-F-134 | M | fixed | F15 CI | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed 2026-10-13 in `cfb4befd` | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
+| YEW-F-135 | M | open | F15 CI | governance fixtures inherit global Git commit signing | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1454,6 +1455,14 @@ target and compare the diagnostic with that canonical path.
 Commit `cfb4befd` resolves the fixture target before parsing and compares the
 escape diagnostic with that canonical path. The focused containment unit
 passes on native macOS and in the symlinked Linux FHS namespace.
+
+`YEW-F-135` is Medium because the priority and closeout negative-fixture
+scripts create temporary Git repositories and commit without overriding a
+developer's global signing policy. On a host with `commit.gpgsign=true`, the
+otherwise-passing 134-entry audit target reaches pinentry, times out, and
+fails after the registry itself is green. The hard XFAIL requires both
+repositories to disable commit signing locally, matching the package, Git,
+baseline-history, and F15-history fixtures already hardened this way.
 
 ## Unverified observations
 
