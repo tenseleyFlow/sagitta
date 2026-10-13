@@ -118,10 +118,7 @@ performance obligations remain. Current closeout uses the theme-excluding syntax
 
 ## Open audit findings against this front
 
-- `YEW-F-113` (Medium): source and closeout contracts retain superseded
-  pre-embedding state and staging gates.
-- `YEW-F-114` (Medium): source and closeout contracts retain historical
-  syntax ownership and definition-inventory gates.
+none
 
 ## Deferrals recorded against this front
 

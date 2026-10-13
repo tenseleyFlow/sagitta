@@ -128,6 +128,11 @@ findings YEW-F-113, YEW-F-114
   legitimate theme loader and original 17-definition inventory wording that
   does not distinguish Sprint 42's cohort from Sprint 42.5's current checked
   48-definition manifest.
+- Decision amendments S59-A24/A25 and commit `0488f5df` align the source and
+  closeout contracts with the qualified-frame state, delivered syntax
+  surfaces, theme ownership boundary, and checked current manifest. Both hard
+  XFAILs now pass without changing product behavior or weakening syntax
+  release gates.
 
 ## Count
 

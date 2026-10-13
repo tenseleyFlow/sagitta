@@ -125,8 +125,8 @@ recorded in `audit-00.md`.
 | YEW-F-110 | M | fixed | F08 FL | ~~Fletch closeout treats historical inventories as current totals~~ — fixed 2026-10-13 in `bb1e745b` | tests/audit/yew_f_110.c | s59 §2; s28 DoD 1/8; s30 DoD 11; s31 DoD 2; s33 DoD 4/6 |
 | YEW-F-111 | M | fixed | F09 REC | ~~Recorder closeout requires superseded staging guards~~ — fixed 2026-10-13 in `905da06f` | tests/audit/yew_f_111.c | s59 §2; s35 DoD 14; s38 DoD 13 |
 | YEW-F-112 | M | fixed | F09 REC | ~~Recorder closeout requires unreachable macrolib collision~~ — fixed 2026-10-13 in `905da06f` | tests/audit/yew_f_112.c | s59 §2; s38 DoD 8 |
-| YEW-F-113 | M | open | F10 SYN | Syntax closeout requires superseded staging/state gates | tests/audit/yew_f_113.c | s59 §2; s39 DoD 2/12; s40 DoD 10; s41 DoD 13; s42 DoD 8 |
-| YEW-F-114 | M | open | F10 SYN | Syntax closeout retains historical ownership/inventory gates | tests/audit/yew_f_114.c | s59 §2; s39 DoD 3; s42 DoD 2/3/9/10 |
+| YEW-F-113 | M | fixed | F10 SYN | ~~Syntax closeout requires superseded staging/state gates~~ — fixed 2026-10-13 in `0488f5df` | tests/audit/yew_f_113.c | s59 §2; s39 DoD 2/12; s40 DoD 10; s41 DoD 13; s42 DoD 8 |
+| YEW-F-114 | M | fixed | F10 SYN | ~~Syntax closeout retains historical ownership/inventory gates~~ — fixed 2026-10-13 in `0488f5df` | tests/audit/yew_f_114.c | s59 §2; s39 DoD 3; s42 DoD 2/3/9/10 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1198,6 +1198,8 @@ entry ids and stronger canonicalization/balance invariants. Product behavior
 is not shown wrong. The hard XFAIL requires the Sprint 39–42 and F10 contracts
 to preserve landing history while testing the shipped frame state and later
 owner surfaces.
+Commit `0488f5df` adds S59-A24 and aligns the Sprint 39–42 and F10 contracts
+with the shipped qualified-frame state and delivered owner surfaces.
 
 `YEW-F-114` is Medium because Sprint 39's literal whole-`src/syn/` color grep
 now rejects Sprint 41's legitimate theme loader, while Sprint 42's current
@@ -1208,6 +1210,8 @@ only `theme.c`/`theme.h` while continuing to reject colors in matching code.
 Product behavior is not shown wrong. The hard XFAIL requires the contracts to
 retain the original cohort as history and use the manifest, current coverage,
 and current cold-load/fuzz gates for release closeout.
+Commit `0488f5df` adds S59-A25 and aligns the syntax ownership scope and
+inventory gates with the theme boundary and checked 48-definition manifest.
 
 ## Unverified observations
 
