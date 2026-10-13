@@ -325,6 +325,32 @@ void test_re_limits_fire_during_emission(void)
     arena_free_all(&arena);
 }
 
+void test_re_character_class_limit(void)
+{
+    char pat[(YEW_RE_MAX_CLASSES + 1U) * 3U];
+    Arena arena;
+    YewReErr err = {0};
+    YewRe *re;
+    size_t i;
+
+    for (i = 0U; i < YEW_RE_MAX_CLASSES + 1U; i++)
+        (void)memcpy(pat + i * 3U, "[a]", 3U);
+
+    arena_init(&arena);
+    re = yew_re_compile(&arena, pat, YEW_RE_MAX_CLASSES * 3U, 0U, &err);
+    YEW_ASSERT_NOT_NULL(re);
+    arena_free_all(&arena);
+
+    arena_init(&arena);
+    (void)memset(&err, 0, sizeof(err));
+    /* YEW-F-089: pin the exact class-cap boundary and its diagnostic. */
+    re = yew_re_compile(&arena, pat, sizeof(pat), 0U, &err);
+    YEW_ASSERT_NULL(re);
+    YEW_ASSERT_EQ_STR(err.msg, "too many character classes (max 256)");
+    YEW_ASSERT_EQ_U64(err.off, sizeof(pat));
+    arena_free_all(&arena);
+}
+
 void test_re_inst_size_budget(void)
 {
     /* DoD 11.  The program is walked linearly per input codepoint, so

@@ -1581,6 +1581,7 @@ const YewTest yew_tests[] = {
     T(re_program_shapes),
     T(re_reverse_program_swaps_anchors),
     T(re_limits_fire_during_emission),
+    T(re_character_class_limit),
     T(re_inst_size_budget),
     T(re_error_offsets_are_always_in_range),
     T(re_empty_repeat_bodies_are_not_walked_per_copy),

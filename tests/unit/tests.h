@@ -1549,6 +1549,7 @@ void test_re_non_goals_are_not_sprint_deferrals(void);
 void test_re_program_shapes(void);
 void test_re_reverse_program_swaps_anchors(void);
 void test_re_limits_fire_during_emission(void);
+void test_re_character_class_limit(void);
 void test_re_inst_size_budget(void);
 void test_re_error_offsets_are_always_in_range(void);
 void test_re_empty_repeat_bodies_are_not_walked_per_copy(void);
