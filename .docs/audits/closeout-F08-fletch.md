@@ -205,7 +205,8 @@ retaining the standalone-REPL motion and no-`io.run`/`io.http` boundaries.
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-110` (Medium): freeze-time and point-in-time kind/native inventories
+  are still expressed as current-tree totals.
 
 ## Deferrals recorded against this front
 

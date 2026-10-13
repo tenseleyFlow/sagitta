@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-110`
+Next available ID: `YEW-F-111`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -122,6 +122,7 @@ recorded in `audit-00.md`.
 | YEW-F-107 | M | fixed | F07 UI | ~~UI/workspace closeout retains impossible ownership greps~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_107.c | s59 §2; s22 DoD 7; s25 DoD 8; s27 DoD 2 |
 | YEW-F-108 | M | fixed | F08 FL | ~~Fletch closeout requires superseded staging guards~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_108.c | s59 §2; s30 DoD 10; s31 DoD 11; s32 DoD 12; s33 DoD 12; s34 DoD 14; s36 DoD 9/12 |
 | YEW-F-109 | M | fixed | F08 FL | ~~Fletch closeout retains historical ownership gates~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_109.c | s59 §2; s29 DoD 1/4; s30 DoD 8 |
+| YEW-F-110 | M | open | F08 FL | Fletch closeout treats historical inventories as current totals | tests/audit/yew_f_110.c | s59 §2; s28 DoD 1/8; s30 DoD 11; s31 DoD 2; s33 DoD 4/6 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1144,6 +1145,17 @@ Commit `674d826b` adds decision amendments S59-A19/A20 and synchronizes the
 Sprint 29–36 and F08 contracts. Both hard XFAILs pass without changing
 product behavior, removing a shipped Fletch surface, or weakening the
 caller-arena, GC-object, capability, or standalone-REPL boundaries.
+
+`YEW-F-110` is Medium because the F08 closeout treats multiple intentionally
+historical inventories as current-tree totals. Sprint 28 froze an empty §16
+and 11 error kinds; A1 and A2 later amended that set to 13. Sprint 30's
+point-in-time count was 12 after A1 and before A2. Sprint 31 contributed 117
+natives across its seven core modules, but later editor/config/plugin/AI
+owners extend the current deterministic program list to 187. Sprint 33's
+12-kind rows similarly predate A2 even though its amended ledger now proves
+13/13. Product behavior is not shown wrong. The hard XFAIL requires the
+contracts to preserve their historical snapshots while closeout separately
+asserts the current amended totals.
 
 ## Unverified observations
 

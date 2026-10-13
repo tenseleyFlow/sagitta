@@ -162,7 +162,7 @@ compile cycles.
 
 ## Sprint 59 closeout-contract recheck
 
-findings YEW-F-108, YEW-F-109
+findings YEW-F-108, YEW-F-109, YEW-F-110
 
 - `YEW-F-108` records historical staging requirements that conflict with
   later delivered imports, editor APIs, round-trip, batch, macro-library, and
@@ -180,7 +180,12 @@ findings YEW-F-108, YEW-F-109
   source-sprint/F08-closeout wording. Both hard XFAILs now pass without
   removing a shipped surface or weakening the arena, GC, capability, or
   standalone-REPL boundaries.
+- `YEW-F-110` records freeze-time kind/amendment counts and Sprint 31's core
+  native contribution being used as current-program totals. The evidence
+  walk observed 13/13 amended kinds and 187/187 current natives, while the
+  historical 11-, 12-, and 117-item snapshots remain valid at their original
+  sprint boundaries.
 
 ## Count
 
-Raw 3 · deduped 3 · critical 0 · high 1 · medium 2 · low 0 · unverified 2.
+Raw 4 · deduped 4 · critical 0 · high 1 · medium 3 · low 0 · unverified 2.
