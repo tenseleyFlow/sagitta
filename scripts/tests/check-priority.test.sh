@@ -47,4 +47,41 @@ if scripts/check-priority.sh "$missing_commit" >/dev/null 2>&1; then
     exit 1
 fi
 
+# A later audit may discover a new Critical after a Medium fix.  The finding
+# was not open at the lower closure and must not invalidate history.
+later_repo=$tmp_dir/later-discovery
+mkdir "$later_repo"
+git -C "$later_repo" init -q
+git -C "$later_repo" config user.name yew-test
+git -C "$later_repo" config user.email yew-test.invalid
+printf '| YEW-F-001 | M | confirmed | F15 CI | fixture | tests/audit/fixture.c | fixture |\n' \
+    >"$later_repo/findings.md"
+git -C "$later_repo" add findings.md
+git -C "$later_repo" commit -qm 'File Medium'
+printf 'fixed\n' >"$later_repo/lower-fix"
+git -C "$later_repo" add lower-fix
+git -C "$later_repo" commit -qm 'Fix Medium'
+lower_fix=$(git -C "$later_repo" rev-parse HEAD)
+: >"$later_repo/findings.md"
+write_row "$later_repo/findings.md" YEW-F-001 M fixed "$lower_fix"
+git -C "$later_repo" add findings.md
+git -C "$later_repo" commit -qm 'Close Medium'
+printf '| YEW-F-002 | C | confirmed | F15 CI | fixture | tests/audit/fixture.c | fixture |\n' \
+    >>"$later_repo/findings.md"
+git -C "$later_repo" add findings.md
+git -C "$later_repo" commit -qm 'File later Critical'
+printf 'fixed\n' >"$later_repo/higher-fix"
+git -C "$later_repo" add higher-fix
+git -C "$later_repo" commit -qm 'Fix later Critical'
+higher_fix=$(git -C "$later_repo" rev-parse HEAD)
+: >"$later_repo/findings.md"
+write_row "$later_repo/findings.md" YEW-F-001 M fixed "$lower_fix"
+write_row "$later_repo/findings.md" YEW-F-002 C fixed "$higher_fix"
+git -C "$later_repo" add findings.md
+git -C "$later_repo" commit -qm 'Close later Critical'
+(
+    cd "$later_repo"
+    "$repo/scripts/check-priority.sh" findings.md >/dev/null
+)
+
 echo "check-priority selftest: ok"

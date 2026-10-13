@@ -53,7 +53,6 @@ END {
 
 resolved_high=0
 resolved_low=0
-unresolved_high=0
 while IFS='	' read -r id sev status commit; do
     case $status in
         fixed|verified|closed)
@@ -67,36 +66,65 @@ while IFS='	' read -r id sev status commit; do
                 M|L) resolved_low=$((resolved_low + 1)) ;;
             esac
             ;;
-        *)
-            case $sev in
-                C|H) unresolved_high=$((unresolved_high + 1)) ;;
-            esac
-            ;;
+        *) ;;
     esac
 done <"$rows"
 
-if [ "$unresolved_high" -ne 0 ] && [ "$resolved_low" -ne 0 ]; then
-    echo "check-priority: $resolved_low Medium/Low findings were resolved" \
-         "while $unresolved_high Critical/High findings remain" >&2
-    exit 1
-fi
+ledger_history=
+ledger_dir=$(dirname "$ledger")
+ledger_base=$(basename "$ledger")
+ledger_path=$(cd "$ledger_dir" && pwd -P)/$ledger_base
+case $ledger_path in
+    "$repo"/*)
+        ledger_rel=${ledger_path#"$repo"/}
+        if git -C "$repo" ls-files --error-unmatch "$ledger_rel" \
+                >/dev/null 2>&1; then
+            ledger_history=$ledger_rel
+        fi
+        ;;
+esac
 
-while IFS='	' read -r high_id high_sev high_status high_commit; do
-    case $high_sev:$high_status in
-        C:fixed|C:verified|C:closed|H:fixed|H:verified|H:closed) ;;
+while IFS='	' read -r low_id low_sev low_status low_commit; do
+    case $low_sev:$low_status in
+        M:fixed|M:verified|M:closed|L:fixed|L:verified|L:closed) ;;
         *) continue ;;
     esac
-    while IFS='	' read -r low_id low_sev low_status low_commit; do
-        case $low_sev:$low_status in
-            M:fixed|M:verified|M:closed|L:fixed|L:verified|L:closed) ;;
+    snapshot=
+    if [ -n "$ledger_history" ]; then
+        candidate=$tmp_dir/snapshot-$low_id
+        if git -C "$repo" show "$low_commit:$ledger_history" \
+                >"$candidate" 2>/dev/null; then
+            snapshot=$candidate
+        fi
+    fi
+    while IFS='	' read -r high_id high_sev high_status high_commit; do
+        case $high_sev in
+            C|H) ;;
             *) continue ;;
         esac
-        if ! git -C "$repo" merge-base --is-ancestor \
-                "$high_commit" "$low_commit"; then
-            echo "check-priority: $low_id ($low_commit) closed before" \
-                 "$high_id ($high_commit)" >&2
-            exit 1
+        if [ -n "$snapshot" ] &&
+                ! grep -q "^|[[:space:]]*$high_id[[:space:]]*|" \
+                    "$snapshot"; then
+            # This higher-severity finding did not exist when the lower fix
+            # landed. A later audit cannot invalidate completed remediation.
+            continue
         fi
+        case $high_status in
+            fixed|verified|closed)
+                if git -C "$repo" merge-base --is-ancestor \
+                        "$high_commit" "$low_commit"; then
+                    continue
+                fi
+                echo "check-priority: $low_id ($low_commit) closed while" \
+                     "$high_id was open (fixed by $high_commit)" >&2
+                exit 1
+                ;;
+            *)
+                echo "check-priority: $low_id ($low_commit) closed while" \
+                     "$high_id remains open" >&2
+                exit 1
+                ;;
+        esac
     done <"$rows"
 done <"$rows"
 

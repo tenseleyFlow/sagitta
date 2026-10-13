@@ -74,7 +74,8 @@ security, data-loss, or stability finding.
   Critical's fix may land in the same commit **if the commit names it**.
   Enforced after the fact by `scripts/check-priority.sh`, which walks
   `git log` over the remediation window and fails on any commit closing
-  an M/L that predates the last C/H closure.
+  an M/L while an already-filed C/H remains open. A C/H first filed by a
+  later review does not retroactively invalidate completed remediation.
 - **Burn-down chart** `.docs/audits/burndown.md`, updated **in the same PR
   as each merge** by the merging developer. One table: rows are merge
   dates, columns are open C/H/M/L counts and the total, seeded from
