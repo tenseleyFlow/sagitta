@@ -522,6 +522,41 @@ race-free. Direct pipe creation outside the helper remains forbidden, as do
 descriptor/Unicode invariant. It supersedes only stale literal greps in
 Sprints 18/19 and F05; `YEW-F-105` records the correction.
 
+**UI/workspace closeout amendment S59-A17 (2026-10-13) — delivered UI
+surfaces replace their staging guards.** Sprints 22–27 established pane,
+tab, group, workspace-state, picker, and mouse contracts in sequence. Their
+future-sprint errors and inert paths were staging guards, not permanent 1.0
+behavior. Sprint 23 delivered the tab command surface; Sprint 24 assigned
+negative tab-region payloads to group identity; Sprint 53 delivered
+directory-to-group opening; Sprints 38/47/52/54–55 delivered the command,
+symbol, F-mode, and plugin/package discovery surfaces; and Sprints
+52/57.13/57.22 delivered F-mode mouse, document context menus, and
+tab-into-pane. Sprint 36 ran the required hand-written-versus-Fletch state
+codec differential and then retired the legacy implementation and its
+differential-only test, leaving the shipping Fletch corpus round-trip as the
+frozen-format guard. Current closeout evidence proves those delivered paths
+through their original registry, region, state, picker, and mouse choke
+points rather than requiring them to remain absent. LSP hover-on-pointer
+remains outside 1.0; keyboard `ed.lsp.hover` is the accessible hover route.
+This amendment changes no product behavior. It supersedes only stale staging
+wording in Sprints 22–27 and F07; `YEW-F-106` records the correction.
+
+**UI/workspace ownership closeout amendment S59-A18 (2026-10-13) — geometry,
+atomic replacement, and mouse dispatch have semantic boundaries.** Unicode
+measurement and coordinate conversion remain centralized in `src/unicode/`;
+UI layout may perform geometry over the resulting cell counts. Workspace
+state code must route durable replacement through the shared Sprint 8 atomic
+file API, and direct `rename()` and `fsync()` calls remain forbidden under
+`src/ws/`; prose, type names, and calls to the shared helper are not
+violations. Mouse escape decoding remains in `src/term/input.c`, exactly one
+event-loop branch in `src/edit/loop.c` dispatches `YEW_EV_MOUSE` to
+`yew_mouse_event`, and `src/ui/mouse.c` owns routing and behavior. Other
+modules may define regions or maintain state consumed by that router; they
+may not create another event dispatch site. This amendment changes no
+product behavior or ownership invariant. It supersedes only the impossible
+literal greps in Sprints 22/25/27 and F07; `YEW-F-107` records the
+correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

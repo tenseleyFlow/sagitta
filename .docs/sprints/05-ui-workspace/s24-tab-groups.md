@@ -308,8 +308,8 @@ deadline is a timer entry so the status hint clears even with no keys).
   needs no new API — ids are session-local).
 - Hover preview trigger, drag tab onto a group entry (dwell drop-in),
   group/tab context menus: Sprint 27.
-- F-mode "open directory as a group": Sprint 53 — `ed.group.from_dir`
-  hard-errors naming it.
+- F-mode "open directory as a group": Sprint 53 delivered `ed.group.from_dir`
+  through the registry and the group picker owned here.
 
 ## Testing Strategy
 
@@ -361,6 +361,6 @@ deadline is a timer entry so the status hint clears even with no keys).
    with multibyte labels present; each lands on its payload.
 10. Empty groups cannot exist after any op sequence (fuzz asserts
     count > 0 for every live group id).
-11. All new commands dispatch via the registry; `ed.group.from_dir`
-    hard-errors naming Sprint 53.
+11. All new commands dispatch via the registry; Sprint 53 delivered
+    `ed.group.from_dir` through that same route and the group picker.
 12. Two consecutive full pty runs byte-identical (invariant 5).

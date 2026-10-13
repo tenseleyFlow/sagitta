@@ -194,8 +194,9 @@ save changes to src/main.c?  [w]rite  [d]iscard  [esc] cancel
 ### 7. Defer
 
 - `group_id`/`group_ordinal` semantics, row-2 strip, group entries on row 1
-  (negative payloads), digit-extension window: Sprint 24. Until then a
-  negative `YEW_REGION_TAB` payload in the click router is `YEW_BUG`.
+  (negative payloads), digit-extension window: Sprint 24. Negative
+  `YEW_REGION_TAB` payloads now identify groups through the sign convention
+  reserved here; nonnegative payloads continue to identify tabs.
 - `deferred` tabs / lazy hydration: Sprint 24 (`yew_tab_open` always loads;
   the field exists so Sprint 25's schema work can proceed in parallel).
 - Persistence of the tab set: Sprint 25.
@@ -241,7 +242,8 @@ save changes to src/main.c?  [w]rite  [d]iscard  [esc] cancel
    the I/O error; the tab survives with its text intact.
 8. Digit `ed.tab.goto 0` reaches tab 10; out-of-range N messages and
    stays put.
-9. Negative `YEW_REGION_TAB` payload reaching the router triggers
-   `YEW_BUG` naming Sprint 24 (unit-tested via a hand-built region).
+9. Negative `YEW_REGION_TAB` payloads now identify groups as delivered by
+   Sprint 24; a hand-built-region unit test proves sign decoding cannot
+   confuse a stable group identity with a tab index.
 10. Two runs of the full pty suite produce byte-identical grids
     (invariant 5).

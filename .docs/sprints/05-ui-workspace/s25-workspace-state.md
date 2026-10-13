@@ -475,12 +475,12 @@ merged list back would migrate every global entry into every workspace.
     file ids are `7, 9, 12`; an orphan-path document; invalid UTF-8 and
     NUL bytes in paths; a `# comment` document; an unknown-key document;
     and the adversarial set from §7.
-  - `tests/unit/test_state_differential.c` — **the named s36 DoD item**:
-    for every corpus document, `emit(parse_hand(d))` and
-    `emit(parse_fletch(d))` are byte-identical and both parses are
-    structurally equal. It compiles this sprint with the Fletch arm
-    behind `YEW_HAVE_FLETCH_STATE`, so s36 turns on a test that already
-    exists rather than writing one.
+  - Sprint 36's hand-written-versus-Fletch differential — for every corpus
+    document, `emit(parse_hand(d))` and `emit(parse_fletch(d))` were
+    byte-identical and both parses structurally equal. Sprint 36 retired the
+    hand-written differential after that final 2×2 handover passed; the
+    retained corpus round-trip now exercises the shipping Fletch reader and
+    writer as the frozen-format guard.
 - Deferred elsewhere: `.yew.fl` trust prompt → 36; F-mode collapsed
   tree state → 52; LSP/AI per-workspace state → 46/50; a migration
   framework → the first sprint that needs v2 (v1 is frozen, and
@@ -560,8 +560,9 @@ merged list back would migrate every global entry into every workspace.
    caps at 5 corrupt files.
 8. Atomicity: the state write issues write → fsync(file) → rename →
    fsync(dir) in that order (shim intercept log asserted, as in s08 DoD
-   2); `grep -rn 'rename\|fsync' src/ws/` shows calls into
-   `yew_write_atomic` only — no second copy of the primitive.
+   2). Direct `rename()` and `fsync()` calls remain absent from `src/ws/`;
+   state writers call the shared Sprint 8 atomic file API and own no second
+   copy of the primitive.
 9. Never pollutes the repo: after a scripted session in a git checkout,
    `git status --porcelain` in the fixture workspace is empty, and
    `find <workspace> -name '*.fl' -newer <marker>` finds nothing.
@@ -573,9 +574,9 @@ merged list back would migrate every global entry into every workspace.
     document.
 12. Fuzz: 100 000 cases × 4 seeds clean; every cap breach classified as
     corruption rather than crashing or truncating silently.
-13. `tests/unit/test_state_differential.c` exists, compiles, and passes
-    with the hand-written implementation on both sides of the comparison;
-    the Fletch arm is guarded by `YEW_HAVE_FLETCH_STATE` and is named in
-    this file as Sprint 36's DoD item.
+13. Sprint 36 retired the hand-written differential only after its final
+    hand-written/Fletch 2×2 matrix passed. The retained state corpus
+    round-trip exercises the shipping Fletch reader and writer and preserves
+    the frozen-format, rejection, and idempotence coverage.
 14. ≥ 130 assertions across the four unit files; per-workspace history
     merge tested at both `history.scope` values.

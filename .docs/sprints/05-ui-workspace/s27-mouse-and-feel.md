@@ -51,9 +51,10 @@ unit engines so the mouse and the keyboard agree on what a word is. Then
 the feel pass: a pty-golden review of every chrome element in the program,
 one glyph vocabulary table, and a `NO_COLOR` / 16-colour / no-mouse
 degradation audit whose centrepiece is the invariant-9 table proving every
-mouse action has a keyboard path. Deferred: a document context menu,
-middle-click paste, F-mode tree mouse (52), LSP hover-on-pointer (47),
-dragging a tab into a pane (post-1.0).
+mouse action has a keyboard path. Later owning sprints delivered document
+context menus, F-mode tree mouse, and tab-into-pane through this router.
+Middle-click paste and LSP hover-on-pointer remain outside the 1.0 surface;
+keyboard paste and `ed.lsp.hover` are their accessible routes.
 
 ## Deliverables
 
@@ -407,19 +408,15 @@ New registry commands landing here to close the audit:
 `ed.group.add_tab`, `ed.tab.copy_path`, `ed.tab.close_others`,
 `ed.group.rename`, `ed.ui.context_menu`.
 
-### 9. Defer
+### 9. Later consumers and retained boundaries
 
-- **Document context menu** (right-click inside a pane) → post-1.0
-  (**superseded by Sprint 57.11**, which ships context menus on every surface);
-  right-click on `YEW_REGION_PANE` is unbound and does nothing, rather
-  than shipping a stub menu. Named here so nobody invents one.
-- Dragging a tab into a *pane* to open it there → post-1.0; the drag
-  module's target already has room for it and that is the whole
-  preparation (s24/facsimile's reasoning for not mutating during a drag
-  was written with this feature in mind).
-- F-mode tree mouse (click to expand, drag to stage) → Sprint 52, routed
-  through this same router and registry.
-- LSP hover-on-pointer and diagnostics tooltips → Sprint 47.
+- Later owning sprints delivered document context menus (Sprint 57.13),
+  F-mode tree mouse (Sprint 52 plus its later interaction refinements), and
+  tab-into-pane (Sprint 57.22) through this same router, region registry, and
+  keyboard-reachable command surface.
+- LSP hover-on-pointer and diagnostics tooltips remain outside 1.0. The live
+  `ed.lsp.hover` command provides keyboard access; pointer motion over a pane
+  does not synthesize a second LSP request path.
 - Pixel-precise / kitty-protocol mouse extensions → **never**: the cell
   is the unit of everything in this program, and sub-cell coordinates
   would break the layout/hit-test identity that s22 made a law.
@@ -479,9 +476,10 @@ New registry commands landing here to close the audit:
 1. `make test` green on gcc and clang, zero warnings at `-std=c11
    -pedantic -Wall -Wextra -Werror`; ASan/UBSan/valgrind/determinism
    lanes green.
-2. **Every mouse event enters through `yew_mouse_event`**: `grep -rn
-   'YEW_EV_MOUSE\|mouse' src/ --include=*.c | grep -v 'src/term/input.c\|
-   src/ui/mouse.c'` shows no other dispatch site.
+2. **Mouse-event dispatch remains singular**: terminal decoding produces
+   `YEW_EV_MOUSE`, exactly one `src/edit/loop.c` branch calls
+   `yew_mouse_event`, and `src/ui/mouse.c` owns routing. Region producers and
+   UI state consumers do not create a second event-dispatch path.
 3. Every row of the §2 region table has a passing unit assertion; rows
    marked ignored are proven inert (the event changes no state).
 4. Captured-identity law proven twice: a drag committed after the region
@@ -516,7 +514,8 @@ New registry commands landing here to close the audit:
 13. A 1 000-event motion burst produces ≤ 1 render and zero allocations
     in `mouse.c`; fuzz run (100 000 events × 4 seeds) leaves no stuck
     drag state.
-14. Deferred surfaces hard-error or are provably inert naming their
-    sprint: document context menu (post-1.0, right-click on a pane does
-    nothing), F-mode mouse (52), LSP hover (47), tab-into-pane (post-1.0).
+14. Later owning sprints delivered document context menus, F-mode mouse, and
+    tab-into-pane through the router and keyboard-equivalent commands. LSP
+    hover-on-pointer remains absent; `ed.lsp.hover` is the live keyboard
+    route and ordinary pointer motion cannot issue an LSP request.
 15. ≥ 140 assertions across the four unit files.

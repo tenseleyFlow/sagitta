@@ -225,8 +225,8 @@ Region yew_region_hit(u16 x, u16 y);           /* last-added wins */
 
 ### 8. Defer
 
-- Tab strip, tab model, multiple pane trees: Sprint 23 (`ed.tab.*` commands
-  hard-error naming it).
+- Tab strip, tab model, multiple pane trees: Sprint 23. Sprint 23 delivered
+  the `ed.tab.*` command surface through the registry reserved here.
 - Group rendering conventions consuming the payload sign: Sprint 24.
 - Persisting the pane tree: Sprint 25 (`layout.c` exposes
   `yew_pane_tree_walk(root, fn, ctx)` now so Sprint 25 serializes without
@@ -267,10 +267,13 @@ Region yew_region_hit(u16 x, u16 y);           /* last-added wins */
    double-width char earlier on the line (the desync case).
 6. Drag resize: press/motion/release sequence moves a border exactly the
    motion delta in cells; Esc mid-drag restores the entry ratio.
-7. `grep -rn "wcwidth\|width" src/ui/ | grep -v unicode` shows no width
-   math in `src/ui/` (conversions only via `src/unicode/` calls).
+7. Unicode measurement and coordinate conversion remain centralized in
+   `src/unicode/`: UI code may lay out, clip, and place already-measured cell
+   counts, but contains no locale-width call, width table/range, or duplicate
+   text-to-cell conversion.
 8. Every `ed.pane.*` command dispatches through the Sprint 13 registry
    (no direct key→function calls; grep for keymap table entries).
-9. `ed.tab.*` invocations hard-error naming Sprint 23.
+9. Sprint 23 delivered the `ed.tab.*` command surface through the Sprint 13
+   registry and the pane-tree ownership boundary established here.
 10. 10k-op fuzz run clean under ASan/UBSan; region table never queried
     between `frame_begin` and first `add` (assert counter in debug build).

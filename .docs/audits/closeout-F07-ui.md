@@ -19,11 +19,11 @@ Sprints covered: s22, s23, s24, s25, s26, s27
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s22.6 Drag resize: press/motion/release sequence moves a border exactly the motion delta in cells; Esc mid-drag restores the entry ratio.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s22.7 `grep -rn "wcwidth\|width" src/ui/ | grep -v unicode` shows no width math in `src/ui/` (conversions only via `src/unicode/` calls).
+- [ ] s22.7 Unicode measurement and coordinate conversion remain centralized in `src/unicode/`; UI code performs geometry only over already-measured cell counts and contains no locale-width call, width table/range, or duplicate text-to-cell conversion.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s22.8 Every `ed.pane.*` command dispatches through the Sprint 13 registry (no direct key→function calls; grep for keymap table entries).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s22.9 `ed.tab.*` invocations hard-error naming Sprint 23.
+- [ ] s22.9 Sprint 23 delivered the `ed.tab.*` command surface through the Sprint 13 registry and the pane-tree ownership boundary established here.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s22.10 10k-op fuzz run clean under ASan/UBSan; region table never queried between `frame_begin` and first `add` (assert counter in debug build).
       — VERDICT: blocking — independent closeout review pending.
@@ -43,7 +43,7 @@ Sprints covered: s22, s23, s24, s25, s26, s27
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s23.8 Digit `ed.tab.goto 0` reaches tab 10; out-of-range N messages and stays put.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s23.9 Negative `YEW_REGION_TAB` payload reaching the router triggers `YEW_BUG` naming Sprint 24 (unit-tested via a hand-built region).
+- [ ] s23.9 Negative `YEW_REGION_TAB` payloads now identify groups as delivered by Sprint 24; a hand-built-region unit test proves sign decoding cannot confuse a stable group identity with a tab index.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s23.10 Two runs of the full pty suite produce byte-identical grids (invariant 5).
       — VERDICT: blocking — independent closeout review pending.
@@ -67,7 +67,7 @@ Sprints covered: s22, s23, s24, s25, s26, s27
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s24.10 Empty groups cannot exist after any op sequence (fuzz asserts count > 0 for every live group id).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s24.11 All new commands dispatch via the registry; `ed.group.from_dir` hard-errors naming Sprint 53.
+- [ ] s24.11 All new commands dispatch via the registry; Sprint 53 delivered `ed.group.from_dir` through that same route and the group picker.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s24.12 Two consecutive full pty runs byte-identical (invariant 5).
       — VERDICT: blocking — independent closeout review pending.
@@ -85,7 +85,7 @@ Sprints covered: s22, s23, s24, s25, s26, s27
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s25.7 Every §7 row exercised: editor starts, exit 0, bad file renamed with a UTC timestamp, never deleted, exactly one status message, retention caps at 5 corrupt files.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s25.8 Atomicity: the state write issues write → fsync(file) → rename → fsync(dir) in that order (shim intercept log asserted, as in s08 DoD 2); `grep -rn 'rename\|fsync' src/ws/` shows calls into `yew_write_atomic` only — no second copy of the primitive.
+- [ ] s25.8 Atomicity: the state write issues write → fsync(file) → rename → fsync(dir) in that order (shim intercept log asserted, as in s08 DoD 2). Direct `rename()` and `fsync()` calls remain absent from `src/ws/`; state writers call the shared Sprint 8 atomic file API and own no second copy of the primitive.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s25.9 Never pollutes the repo: after a scripted session in a git checkout, `git status --porcelain` in the fixture workspace is empty, and `find <workspace> -name '*.fl' -newer <marker>` finds nothing.
       — VERDICT: blocking — independent closeout review pending.
@@ -95,7 +95,7 @@ Sprints covered: s22, s23, s24, s25, s26, s27
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s25.12 Fuzz: 100 000 cases × 4 seeds clean; every cap breach classified as corruption rather than crashing or truncating silently.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s25.13 `tests/unit/test_state_differential.c` exists, compiles, and passes with the hand-written implementation on both sides of the comparison; the Fletch arm is guarded by `YEW_HAVE_FLETCH_STATE` and is named in this file as Sprint 36's DoD item.
+- [ ] s25.13 Sprint 36 retired the hand-written differential only after its final hand-written/Fletch 2×2 matrix passed; the retained state corpus round-trip exercises the shipping Fletch reader and writer and preserves frozen-format, rejection, and idempotence coverage.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s25.14 ≥ 130 assertions across the four unit files; per-workspace history merge tested at both `history.scope` values.
       — VERDICT: blocking — independent closeout review pending.
@@ -123,13 +123,13 @@ Sprints covered: s22, s23, s24, s25, s26, s27
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s26.12 Type-to-jump: appends inside 500 ms, replaces after, exact match under the cursor does not move, deadline clears the hint with no keys (mocked clock).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s26.13 Deferred pickers hard-error naming Sprints 47, 55, 52, 38.
+- [ ] s26.13 Later owning sprints delivered all four picker surfaces: symbol, plugin/package, F-mode, and command discovery are live through the shared picker or type-to-jump machinery, with no second list event loop or ad-hoc filter editor.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s26.14 Two consecutive full pty runs byte-identical (invariant 5); ≥ 150 assertions across the five unit files.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s27.1 `make test` green on gcc and clang, zero warnings at `-std=c11 -pedantic -Wall -Wextra -Werror`; ASan/UBSan/valgrind/determinism lanes green.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s27.2 **Every mouse event enters through `yew_mouse_event`**: `grep -rn 'YEW_EV_MOUSE\|mouse' src/ --include=*.c | grep -v 'src/term/input.c\| src/ui/mouse.c'` shows no other dispatch site.
+- [ ] s27.2 **Mouse-event dispatch remains singular**: terminal decoding produces `YEW_EV_MOUSE`, exactly one `src/edit/loop.c` branch calls `yew_mouse_event`, and `src/ui/mouse.c` owns routing; region producers and UI state consumers create no second event-dispatch path.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s27.3 Every row of the §2 region table has a passing unit assertion; rows marked ignored are proven inert (the event changes no state).
       — VERDICT: blocking — independent closeout review pending.
@@ -153,7 +153,7 @@ Sprints covered: s22, s23, s24, s25, s26, s27
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s27.13 A 1 000-event motion burst produces ≤ 1 render and zero allocations in `mouse.c`; fuzz run (100 000 events × 4 seeds) leaves no stuck drag state.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s27.14 Deferred surfaces hard-error or are provably inert naming their sprint: document context menu (post-1.0, right-click on a pane does nothing), F-mode mouse (52), LSP hover (47), tab-into-pane (post-1.0).
+- [ ] s27.14 Later owning sprints delivered the staged UI surfaces: document context menus, F-mode mouse, and tab-into-pane use the shared router and keyboard-equivalent commands; LSP hover-on-pointer remains absent while `ed.lsp.hover` is the live keyboard route.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s27.15 ≥ 140 assertions across the four unit files.
       — VERDICT: blocking — independent closeout review pending.

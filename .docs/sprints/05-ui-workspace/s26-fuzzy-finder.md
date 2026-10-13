@@ -48,9 +48,11 @@ undo branch picker that closes Sprint 10's deferral; and the type-to-jump
 plumbing with its 500 ms inter-keystroke reset for lists that cannot have a
 filter line. Ranking a 100 000-file workspace stays inside the keystroke
 budget via an incremental narrowing strategy over a cached candidate set.
-Deferred: LSP symbol picker (47), `yew pkg` UI (55), F-mode fuzzy jump
-(52), command palette (38) — all of them `PickerSpec` instances requiring
-no new machinery.
+Later owning sprints delivered all four picker surfaces: the LSP symbol
+picker (47), plugin/package discovery UI (54–55), F-mode fuzzy jump (52),
+and command palette (38). They reuse `PickerSpec` where filtering lists is
+the final interaction and the type-to-jump engine for the visible F-mode
+tree; none introduces a second picker event loop.
 
 ## Deliverables
 
@@ -453,13 +455,14 @@ bool yew_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
 - `yew_typejump_key` returns false when the key was not consumed, so a
   host list keeps its own bindings.
 
-### 9. Defer
+### 9. Later consumers
 
-- LSP symbol picker → Sprint 47; `yew pkg` browse/install UI → Sprint 55;
-  F-mode fuzzy jump → Sprint 52; a **command palette** over
-  `yew_cmd_at()` → Sprint 38. All four are `PickerSpec` values with an
-  `items` callback and nothing else; `ed.find.symbol`, `ed.find.command`
-  hard-error naming their sprint (invariant 3).
+- Later owning sprints delivered all four picker surfaces: LSP symbol search
+  in Sprint 47, plugin/package discovery in Sprints 54–55, F-mode fuzzy jump
+  in Sprint 52, and the **command palette** over `yew_cmd_at()` in Sprint 38.
+  Filtered lists use `PickerSpec`; the visible F-mode tree uses §8's
+  type-to-jump engine. `ed.find.symbol` and `ed.find.command` are live registry
+  commands rather than staging errors.
 - Content search (grep-style, matching inside files) → not a picker
   feature; 1.0's answer is `:!rg` through Sprint 19's job buffer, as
   Sprint 21 already documented.
@@ -558,6 +561,8 @@ bool yew_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
 12. Type-to-jump: appends inside 500 ms, replaces after, exact match under
     the cursor does not move, deadline clears the hint with no keys
     (mocked clock).
-13. Deferred pickers hard-error naming Sprints 47, 55, 52, 38.
+13. The later symbol, plugin/package, F-mode, and command discovery surfaces
+    are live through the shared picker or type-to-jump machinery delivered
+    here; no second list event loop or ad-hoc filter editor exists.
 14. Two consecutive full pty runs byte-identical (invariant 5); ≥ 150
     assertions across the five unit files.
