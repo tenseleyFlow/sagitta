@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-100`
+Next available ID: `YEW-F-101`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -112,6 +112,7 @@ recorded in `audit-00.md`.
 | YEW-F-097 | M | fixed | F15 CI | ~~priority gate rejects later-discovered Criticals~~ — fixed 2026-10-13 in `601abc70` | tests/audit/yew_f_097.c | s59 §1 priority law |
 | YEW-F-098 | L | fixed | F01 UNI | ~~Unicode unit registry misses contracted floor~~ — fixed 2026-10-13 in `8e9f1990` | tests/audit/yew_f_098.c | s02 DoD 14 |
 | YEW-F-099 | M | fixed | F02 TERM | ~~terminal closeout requires superseded staging behavior~~ — fixed 2026-10-13 in `29682c67` | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
+| YEW-F-100 | M | confirmed | F03 TEXT | text-engine closeout requires superseded staging guards | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -981,6 +982,17 @@ Commit `29682c67` adds decision amendment S59-A10, distinguishes historical
 staging guards from current requirements across Sprints 3–6 and F02, and
 keeps the constructed PTY environment and closed-sequence VT policy explicit.
 The hard XFAIL now passes without changing terminal product behavior.
+
+`YEW-F-100` is Medium because the restored Sprints 9, 10, and 12 contracts
+and F03 closeout still require later-owned editing paths to remain absent.
+Multi-cursor editing and blockwise register production must hard-error naming
+Sprint 17; the MULTI/FILTER/REPLACE/MACRO/LSP undo reasons must still reject
+their callers; and the `/`, `:`, and `#` register producers must still read
+empty even though Sprints 17/18/19/21/23/34/47 deliberately delivered those
+surfaces. Current product behavior is not shown wrong, but release closeout
+cannot truthfully require both the shipped features and their staging guards.
+The hard XFAIL requires a formal decision amendment and synchronized Sprint
+9/10/12, F03, and audit wording.
 
 ## Unverified observations
 

@@ -14,8 +14,9 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 99 confirmed findings are fixed. `YEW-F-099` aligned F02's
-historical staging language with shipped behavior under S59-A10. The last exact hosted-green
+are complete; 99 of 100 confirmed findings are fixed. `YEW-F-100` records
+superseded text-engine staging guards found by F03 closeout reconciliation.
+The last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
 56 streams. A host hibernate invalidated the first replacement attempt and
@@ -24,7 +25,8 @@ retaining `4c99e134` byte-for-byte as the product parent. Its launchd-owned
 cycle currently has four `fuzz_utf8` streams running and 0/56 durable rows
 complete. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
-gates are green with zero active XFAILs; all 15 closeouts contain their 747 mapped DoD items and remain
+gates are green except for the one active `YEW-F-100` hard XFAIL; all 15
+closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
 pre-closeout packets exist for F01, F02, and F06 without claiming reviewer
 signoff.
@@ -449,8 +451,8 @@ Binding documents — read before any sprint:
   fuzz campaigns extended, findings ledger with stable IDs. **AUDIT WORK
   COMPLETE; REPLACEMENT SOAK RUNNING:** all fifteen fronts, dedup, coverage
   instrumentation, and all ten invariant sessions are complete. The ledger
-  now contains `YEW-F-001` through `YEW-F-099`; all 99 are fixed, including
-  F099's S59-A10 terminal-contract amendment. The
+  now contains `YEW-F-001` through `YEW-F-100`; the first 99 are fixed and
+  F100 awaits Sprint 59 text-contract remediation. The
   interrupted September launch and the suspend-invalidated first replacement
   attempt produced no soak rows and are historical only. A checkpointed
   SAN+coverage cycle restarted 2026-10-12 with product commit `4c99e134` plus
