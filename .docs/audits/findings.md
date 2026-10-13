@@ -103,7 +103,7 @@ recorded in `audit-00.md`.
 | YEW-F-088 | M | fixed | F15 CI | ~~macOS GCC unit build sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `b44cf7ce` | tests/audit/yew_f_088.c | s20/s21 DoD 1; compiler matrix |
 | YEW-F-089 | M | fixed | F06 RE | ~~character-class cap has no firing regression~~ — fixed 2026-10-13 in `709d1eb2` | tests/audit/yew_f_089.c | s20 DoD 11 |
 | YEW-F-090 | M | fixed | F06 RE | ~~DFA cache-pressure test need not flush~~ — fixed 2026-10-13 in `e40ccb23` | tests/audit/yew_f_090.c | s20 DoD 12 |
-| YEW-F-091 | M | open | F06 RE | zero-width replacement cases lack PTY goldens | tests/audit/yew_f_091.c | s21 DoD 7 |
+| YEW-F-091 | M | fixed | F06 RE | ~~zero-width replacement cases lack PTY goldens~~ — fixed 2026-10-13 in `9bb1415f` | tests/audit/yew_f_091.c | s21 DoD 7 |
 | YEW-F-092 | M | open | F06 RE | interactive search refinement forces full repaint | tests/audit/yew_f_092.c | invariant 4; s21 DoD 9 |
 | YEW-F-093 | M | fixed | F06 RE | ~~restored contracts name superseded regex mechanisms~~ — fixed 2026-10-13 in `2d26fe08` | tests/audit/yew_f_093.c | s59 §2/§3; s20/s21 closeout |
 | YEW-F-094 | L | fixed | F06 RE | ~~golden-table guard permits fewer than 150 rows~~ — fixed 2026-10-13 in `87c0684f` | tests/audit/yew_f_094.c | s20 DoD 4 |
@@ -879,6 +879,8 @@ and verifies that the production handoff finishes directly on the Pike VM.
 units, but the Sprint 21 contract requires terminal-level goldens for line
 prefixing with and without a final newline and for terminating `x*` global
 replacement. The hard XFAIL names all three missing PTY cases and goldens.
+Commit `9bb1415f` drives all three commands through the real terminal, asserts
+the byte-exact saved files, and pins deterministic final-grid goldens.
 
 `YEW-F-092` is Medium because ordinary interactive search refinement calls
 full-document damage and clears a message while the command line is active,
