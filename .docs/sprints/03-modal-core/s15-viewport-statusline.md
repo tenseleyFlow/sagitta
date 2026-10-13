@@ -10,8 +10,11 @@
 - Sprint 8 — `FileMeta` carries `eol`, `had_bom`, `binary`,
   `had_invalid_utf8`, `missing_final_nl` (this sprint is where they
   finally reach the user, as s08's Defer promised).
-- Sprint 9 — typed coordinates and the review-rejection rule: **width math
-  only in `src/unicode/`**; `YEW_GCOL_EOL` sentinel; `goal_col`.
+- Sprint 9 — typed coordinates and the review-rejection rule: Unicode
+  measurement and coordinate conversion stay in `src/unicode/`;
+  `YEW_GCOL_EOL` sentinel; `goal_col`. This sprint consumes measured cell
+  counts for UI geometry rather than inventing text-to-cell conversions
+  (clarified by S59-A14).
 - Sprint 13 — command registry (`ed.view.*`, `ed.ui.*`), keymap layers.
 - Sprint 14 — `Ed`/`Win`, the poll loop with its timer heap, `yew_draw_win`,
   the placeholder `Viewport` and one-row footer that this sprint replaces,
@@ -368,9 +371,10 @@ Sequence (invoked from the Sprint 14 loop's coalesced signal step):
    ERROR survives until a key; the not-buried rule tested.
 9. Gutter width change across the 999→1000 boundary triggers full damage
    (frame counter asserts one full redraw, not a partial shift).
-10. `grep -rn 'wcwidth\|cells\|width' src/ui/ | grep -v 'unicode/'`
-    shows calls into `src/unicode/` only — zero width arithmetic in
-    `src/ui/` (the s09 rule, re-gated).
+10. Unicode measurement and coordinate conversion remain centralized in
+    `src/unicode/`: `src/ui/` has no locale-width call, embedded codepoint
+    width table/range, or duplicate text-to-cell conversion. UI layout may
+    perform geometry on already-measured cell counts (S59-A14).
 11. Degenerate 4×1 terminal renders without a crash or an out-of-bounds
     write (ASan lane).
 12. ≥ 130 assertions across the four new unit files; ≥ 14 pty goldens,

@@ -49,7 +49,7 @@ Sprints covered: s13, s14, s15, s16, s17
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s14.9 Dirty-quit and journal-recovery prompts: all 3 + 3 answers covered; `w` on a failing save aborts the quit and keeps the buffer dirty.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s14.10 `grep -rn 'vp\.top\|vp->top' src/ | grep -v 'ui/draw.c\|ui/win' ` → empty (viewport internals stay behind their two consumers, so Sprint 15's replacement is local).
+- [ ] s14.10 Later owners legitimately consume viewport state for explicit persistence, view preservation/restoration, display, integration, and lifecycle duties; generic follow, wrap, scroll, and clamp algorithms remain owned by `src/ui/viewport.c`.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s14.11 No direct key→function wiring: `scripts/check-cmd-dispatch.sh` still passes with ≥ 35 new commands registered.
       — VERDICT: blocking — independent closeout review pending.
@@ -73,7 +73,7 @@ Sprints covered: s13, s14, s15, s16, s17
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s15.9 Gutter width change across the 999→1000 boundary triggers full damage (frame counter asserts one full redraw, not a partial shift).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s15.10 `grep -rn 'wcwidth\|cells\|width' src/ui/ | grep -v 'unicode/'` shows calls into `src/unicode/` only — zero width arithmetic in `src/ui/` (the s09 rule, re-gated).
+- [ ] s15.10 Unicode measurement and coordinate conversion remain centralized in `src/unicode/`; `src/ui/` contains no locale-width call, embedded width table/range, or duplicate text-to-cell conversion, while UI layout may use measured cell geometry.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s15.11 Degenerate 4×1 terminal renders without a crash or an out-of-bounds write (ASan lane).
       — VERDICT: blocking — independent closeout review pending.

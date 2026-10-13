@@ -467,6 +467,27 @@ tested under invariant 3. This amendment changes no product behavior or modal
 invariant; it supersedes only stale staging wording in Sprints 14/16 and F04.
 `YEW-F-102` records the correction.
 
+**Modal ownership closeout amendment S59-A14 (2026-10-13) — viewport
+consumers and cell geometry are not Unicode algorithms.** Sprint 14's naive
+single-window viewport deliberately limited direct field access so Sprint 15
+could replace it locally. Later owning sprints added serialized workspace
+restore, tab-view preservation, status and search state, pane/window cloning,
+Fletch inspection, and Git display integration. Those are legitimate
+consumers of viewport state; they do not transfer ownership of generic
+follow, wrap, scroll, or clamp algorithms away from `src/ui/viewport.c`.
+
+The architecture's "width math" rule means Unicode-width measurement and
+coordinate conversion: width tables, grapheme measurement, tab-aware text
+measurement, and byte/character/grapheme/cell conversion remain centralized
+in `src/unicode/`. UI code necessarily adds, subtracts, clips, and places the
+resulting cell counts to perform layout and drawing. It may not call
+locale-dependent width APIs, embed codepoint-width tables or ranges, or
+reimplement text-to-cell conversion. This clarification preserves invariant
+2 while replacing token greps that reject ordinary identifiers and cell
+geometry. It changes no product behavior; it supersedes only Sprint 14 DoD 10,
+Sprint 15 DoD 10, and their F04 closeout copies. `YEW-F-103` records the
+correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

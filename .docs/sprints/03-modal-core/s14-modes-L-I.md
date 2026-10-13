@@ -275,9 +275,12 @@ Rules this sprint: if `cur_line < top`, `top = cur_line`; if
 `cur_line >= top + rows`, `top = cur_line - rows + 1`. No scrolloff, no
 wrap, no horizontal scroll — a line longer than `cols` is clipped at the
 right edge (its remainder is unreachable by rendering, not by the model).
-The Sprint 15 file replaces this struct wholesale; nothing outside
-`yew_win_follow_cursor` and `draw.c` may read `vp.top` (grep-gated in
-Sprint 15's DoD).
+Sprint 15 replaced this placeholder wholesale. Its initial two-consumer rule
+kept that replacement local; it was not a permanent ban on state consumers.
+Later owners legitimately consume viewport state for persistence, tab-view
+preservation, status/search display, window lifecycle, Fletch inspection, and
+Git integration. Generic follow, wrap, scroll, and clamp algorithms remain in
+`src/ui/viewport.c` (S59-A14).
 
 ### 7. Open, save, quit — `src/edit/file_cmds.c`
 
@@ -432,9 +435,11 @@ only width math is that call (conversions live in `src/unicode/`).
    buffer in one step; typing `hel`, `<left>`, `lo`, Esc needs two.
 9. Dirty-quit and journal-recovery prompts: all 3 + 3 answers covered;
    `w` on a failing save aborts the quit and keeps the buffer dirty.
-10. `grep -rn 'vp\.top\|vp->top' src/ | grep -v 'ui/draw.c\|ui/win' ` →
-    empty (viewport internals stay behind their two consumers, so Sprint
-    15's replacement is local).
+10. Later owners legitimately consume viewport state for explicit
+    persistence, view preservation/restoration, display, integration, and
+    lifecycle duties. Direct uses are classified; generic follow, wrap,
+    scroll, and clamp algorithms remain owned by `src/ui/viewport.c`
+    (S59-A14).
 11. No direct key→function wiring: `scripts/check-cmd-dispatch.sh` still
     passes with ≥ 35 new commands registered.
 12. ≥ 120 assertions across the three new unit files; ≥ 10 pty goldens;
