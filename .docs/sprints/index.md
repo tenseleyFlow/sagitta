@@ -14,7 +14,12 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 121 confirmed findings are fixed. F120/F121 aligned F13's
+are complete; all 126 confirmed findings are fixed. F122/F123 aligned F14's
+obsolete package/manual staging rules and runtime-import amendment identity
+under S59-A32/A33. F125 repaired the plugins-only unit boundary without
+removing the module-neutral assertions, and F126 aligned Sprint 54 with the
+shared stripped-module diagnostic under S59-A34. The adjacent F124 repaired
+the macOS GCC package fault-shim compiler seam. F120/F121 aligned F13's
 superseded Git/FUSS staging/key model and invalid clock/format/width scans
 under S59-A30/A31 without changing Git or FUSS behavior. F118/F119 aligned F12's
 superseded AI command staging and invalid TLS/stats ownership scans under
@@ -45,7 +50,7 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F13 without claiming reviewer
+pre-closeout packets exist for F01 through F14 without claiming reviewer
 signoff. F08 maps all 95 Fletch DoD rows after strict Clang/GCC/ASan builds,
 35 focused unit filters, 39/39 conformance and GC-stress runs, deterministic
 dispatch/round-trip checks, bounded fuzz samples, selected PTYs, and a
@@ -66,7 +71,12 @@ configuration, repository bans, and performance-policy selftests. F13 maps
 all 46 Git/FUSS DoD rows after warning-clean Clang/GCC/ASan builds, focused
 unit and real-repository integration checks, bounded deterministic fuzz, 58
 focused PTYs per configuration, repository bans, semantic ownership scans,
-and performance-policy selftests. F14 is the next local evidence front.
+and performance-policy selftests. F14 maps all 27 plugin/package DoD rows
+after warning-clean Clang/GCC/ASan focused builds, 66 plugin units and 27,193
+assertions per configuration, 53 package cases in four configurations, nine
+PTYs per compiler configuration, plugins-only and empty-module boundary
+builds, bounded deterministic fuzz, documentation/bans/shim gates, and
+performance-policy checks. F15 is the next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 

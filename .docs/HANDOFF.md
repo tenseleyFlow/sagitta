@@ -13,11 +13,11 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F13 evidence baseline:** `13e41f1f` contains all 121 completed finding
-remediations and the F01–F12 pre-closeout evidence packets. F13's contract
-recheck closed `YEW-F-120` and `YEW-F-121` under decision amendments
-S59-A30/A31; neither showed a product-code defect. Its 46-row evidence packet
-landed immediately afterwards in `713d8854`.
+**F14 evidence baseline:** `be8f65e5` contains all 126 completed finding
+remediations and the F01–F13 pre-closeout evidence packets. F14's recheck
+closed `YEW-F-122`, `YEW-F-123`, `YEW-F-125`, and `YEW-F-126`; adjacent
+compiler-matrix finding `YEW-F-124` is also fixed. Its 27-row evidence packet
+landed immediately afterwards in `addfc5ae`.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -39,7 +39,17 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger now contains 121 stable IDs and all 121 are fixed.
+landed. The findings ledger now contains 126 stable IDs and all 126 are fixed.
+F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
+align obsolete package/manual staging rules and the runtime-import amendment
+identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
+guards only the FUSS-owned portion of a mixed Fletch API unit so both full and
+plugins-only binaries link and retain their appropriate assertions.
+`YEW-F-126` aligns Sprint 54's plugin-local error wording with the older shared
+module diagnostic under S59-A34, again without changing product behavior.
+The related F15 finding `YEW-F-124` routes the macOS arm64e test interposer
+through Apple's compiler while retaining GCC for product/test objects; all 53
+GCC package cases now pass.
 F13's closeout recheck closed two Medium contract findings,
 `YEW-F-120`/`YEW-F-121`, under S59-A30/A31. They replace obsolete Sprint
 51/52 staging and bare-action/type-jump rules with the shipped Sprint 52/53
@@ -128,13 +138,13 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 121 completed fixes reconcile, no hard XFAIL remains,
+executable gates: all 126 completed fixes reconcile, no hard XFAIL remains,
 and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
 being represented as independent verification. Baseline-pinned local
-pre-closeout packets now exist for F01 through F13 at
+pre-closeout packets now exist for F01 through F14 at
 `.docs/audits/evidence/F01-precloseout-5422f5e6.md`,
 `.docs/audits/evidence/F02-precloseout-6842c24f.md`,
 `.docs/audits/evidence/F03-precloseout-b45b24d8.md`, and
@@ -147,7 +157,8 @@ pre-closeout packets now exist for F01 through F13 at
 `.docs/audits/evidence/F10-precloseout-73f6d4e9.md`, and
 `.docs/audits/evidence/F11-precloseout-c9529fb9.md`, and
 `.docs/audits/evidence/F12-precloseout-5f1f211e.md`, and
-`.docs/audits/evidence/F13-precloseout-13e41f1f.md`. F08 maps all 95 Fletch
+`.docs/audits/evidence/F13-precloseout-13e41f1f.md`, and
+`.docs/audits/evidence/F14-precloseout-be8f65e5.md`. F08 maps all 95 Fletch
 DoD rows after strict Clang/GCC/ASan builds, 35 focused unit filters, 39/39
 conformance and GC-stress runs, deterministic dispatch/round-trip checks,
 bounded fuzz samples, selected PTYs, and a contention-qualified strict
@@ -171,13 +182,19 @@ Clang/GCC/ASan builds; 114 Git, 86 FUSS, eight porcelain, 25 blame, and five
 directory-group focused units per configuration; real-repository Git, hunk,
 FUSS-command, and directory-group checks; four deterministic bounded fuzz
 campaigns; 58 focused PTYs per configuration; repository bans; semantic
-ownership scans; and performance-policy selftests. All thirteen packets remain
-NOT READY until a non-author
-reviewer and the required hosted matrix sign their current baselines.
+ownership scans; and performance-policy selftests. F14 maps all 27 plugin and
+package rows after warning-clean Clang/GCC/ASan focused builds; 66 plugin
+units and 27,193 assertions per configuration; five script cases; all 53
+package cases under Clang, GCC, ASan/UBSan, and plugins-only/no-FUSS Clang;
+nine PTYs per compiler configuration; plugins-only and empty-module boundary
+builds; bounded deterministic fuzz; documentation, ban, and shim gates; and
+performance-policy checks. All fourteen packets remain NOT READY until a
+non-author reviewer and the required hosted matrix sign their current
+baselines.
 
 The immediate work is:
 
-1. reconcile F14's plugin closeout contract, remediate any reproducible
+1. reconcile F15's CI/release closeout contract, remediate any reproducible
    contract or product findings, and assemble its baseline-pinned local
    pre-closeout packet without claiming independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
