@@ -24,8 +24,10 @@ cycle currently has four `fuzz_utf8` streams running and 0/56 durable rows
 complete. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates are green; all 15 closeouts contain their 747 mapped DoD items and remain
-honestly NOT READY pending independent evidence review. Sprint 60 is queued
-and may not start until all 15 Sprint 59 closeouts say READY.
+honestly NOT READY pending independent evidence review. Baseline-pinned local
+pre-closeout packets exist for F01 and F06 without claiming reviewer signoff.
+Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
+READY.
 
 Binding documents — read before any sprint:
 - `.docs/sprints/AUTHORING.md` — the sprint-file contract, the shared

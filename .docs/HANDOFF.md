@@ -74,10 +74,11 @@ XFAILs remain, priority order is proven from Git ancestry, the deterministic
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
 being represented as independent verification. F06 has zero open findings and
-a baseline-pinned local pre-closeout packet at
-`.docs/audits/evidence/F06-precloseout-e93a8ddd.md`; it remains NOT READY
-until a non-author reviewer and the required hosted matrix sign the current
-baseline.
+baseline-pinned local pre-closeout packets now exist for F01 at
+`.docs/audits/evidence/F01-precloseout-5422f5e6.md` and F06 at
+`.docs/audits/evidence/F06-precloseout-e93a8ddd.md`; both remain NOT READY
+until a non-author reviewer and the required hosted matrix sign their current
+baselines.
 
 The immediate work is:
 
