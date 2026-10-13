@@ -89,6 +89,19 @@ void test_grapheme_ri_pairs(void)
     assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }
 
+void test_grapheme_ri_run_resets_after_ascii(void)
+{
+    static const u8 text[] = {
+        0xF0u, 0x9Fu, 0x87u, 0xA6u, 0xF0u, 0x9Fu, 0x87u, 0xA7u,
+        'x',
+        0xF0u, 0x9Fu, 0x87u, 0xA8u, 0xF0u, 0x9Fu, 0x87u, 0xA9u,
+        0xF0u, 0x9Fu, 0x87u, 0xAAu
+    };
+    static const size_t lengths[] = {8u, 1u, 8u, 4u};
+
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
+}
+
 void test_grapheme_emoji_zwj(void)
 {
     static const u8 family[] = {
@@ -103,12 +116,41 @@ void test_grapheme_emoji_zwj(void)
                     YEW_ARRAY_LEN(lengths));
 }
 
+void test_grapheme_emoji_zwj_requires_pictograph(void)
+{
+    static const u8 text[] = {
+        0xF0u, 0x9Fu, 0x91u, 0xA8u, 0xE2u, 0x80u, 0x8Du, 'A'
+    };
+    static const size_t lengths[] = {7u, 1u};
+
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
+}
+
 void test_grapheme_indic_conjunct(void)
 {
     static const u8 text[] = {
         0xE0, 0xA4, 0x95, 0xE0, 0xA5, 0x8D, 0xE0, 0xA4, 0xB7
     };
     static const size_t lengths[] = {9};
+
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
+}
+
+void test_grapheme_incb_requires_linker(void)
+{
+    static const u8 text[] = {
+        0xE0u, 0xA4u, 0x95u, 0xCCu, 0x81u,
+        0xE0u, 0xA4u, 0xB7u
+    };
+    static const size_t lengths[] = {5u, 3u};
+
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
+}
+
+void test_grapheme_prepend_does_not_cross_control(void)
+{
+    static const u8 text[] = {0xD8u, 0x80u, '\n', 'a'};
+    static const size_t lengths[] = {2u, 1u, 1u};
 
     assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }

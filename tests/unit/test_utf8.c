@@ -89,6 +89,78 @@ void test_utf8_reject_classes(void)
     }
 }
 
+void test_utf8_illegal_leads_are_single_byte_escapes(void)
+{
+    static const u8 bytes[] = {0xC0u, 0xC1u, 0xF5u, 0xFFu};
+    size_t i;
+
+    for (i = 0u; i < sizeof(bytes); i++)
+        assert_decodes(bytes + i, 1u, yew_utf8_escape_of(bytes[i]), 1u);
+}
+
+void test_utf8_overlong_boundary_forms_are_lossless(void)
+{
+    static const u8 two[] = {0xC0u, 0x80u};
+    static const u8 three[] = {0xE0u, 0x9Fu, 0xBFu};
+    static const u8 four[] = {0xF0u, 0x8Fu, 0xBFu, 0xBFu};
+
+    assert_round_trip(two, sizeof(two));
+    assert_round_trip(three, sizeof(three));
+    assert_round_trip(four, sizeof(four));
+}
+
+void test_utf8_surrogate_boundary_forms_are_lossless(void)
+{
+    static const u8 first[] = {0xEDu, 0xA0u, 0x80u};
+    static const u8 last[] = {0xEDu, 0xBFu, 0xBFu};
+
+    assert_round_trip(first, sizeof(first));
+    assert_round_trip(last, sizeof(last));
+}
+
+void test_utf8_above_max_boundary_forms_are_lossless(void)
+{
+    static const u8 first[] = {0xF4u, 0x90u, 0x80u, 0x80u};
+    static const u8 obsolete[] = {0xF5u, 0x80u, 0x80u, 0x80u};
+
+    assert_round_trip(first, sizeof(first));
+    assert_round_trip(obsolete, sizeof(obsolete));
+}
+
+void test_utf8_non_escape_surrogate_edges_are_unencodable(void)
+{
+    static const u32 rejected[] = {0xD800u, 0xDC7Fu, 0xDD00u, 0xDFFFu};
+    static const u32 escaped[] = {YEW_CP_ESC_LO, YEW_CP_ESC_HI};
+    size_t i;
+
+    for (i = 0u; i < YEW_ARRAY_LEN(rejected); i++) {
+        u8 bytes[YEW_UTF8_MAX];
+
+        YEW_ASSERT_EQ_U64(yew_utf8_encode(rejected[i], bytes), 0u);
+        YEW_ASSERT_EQ_U64(yew_utf8_len(rejected[i]), 0u);
+    }
+    for (i = 0u; i < YEW_ARRAY_LEN(escaped); i++) {
+        u8 bytes[YEW_UTF8_MAX];
+
+        YEW_ASSERT_EQ_U64(yew_utf8_encode(escaped[i], bytes), 1u);
+        YEW_ASSERT_EQ_U64(bytes[0], escaped[i] - 0xDC00u);
+    }
+}
+
+void test_utf8_validate_reports_earliest_error(void)
+{
+    static const u8 bad_first[] = {0xFFu, 'a', 0xC0u};
+    static const u8 bad_second[] = {'a', 0x80u, 0xFFu};
+    static const u8 bad_after_scalar[] = {
+        'a', 0xC2u, 0xA2u, 0xE1u, 'b', 0xFFu
+    };
+
+    YEW_ASSERT_EQ_U64(yew_utf8_validate(bad_first, sizeof(bad_first)), 0u);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate(bad_second, sizeof(bad_second)), 1u);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate(bad_after_scalar,
+                                        sizeof(bad_after_scalar)), 3u);
+}
+
 void test_utf8_truncated_decode(void)
 {
     static const u8 two[] = {0xC2};

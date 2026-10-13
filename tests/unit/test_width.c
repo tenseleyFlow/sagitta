@@ -92,6 +92,31 @@ void test_width_codepoints(void)
     yew_width_set_opts(NULL);
 }
 
+void test_width_invalid_byte_cluster_is_four_cells(void)
+{
+    static const u8 one[] = {0xFFu};
+    static const u8 two[] = {0xFFu, 0x80u};
+
+    yew_width_set_opts(NULL);
+    YEW_ASSERT_EQ_I64(yew_cluster_width(one, sizeof(one)), 4);
+    YEW_ASSERT_EQ_I64(yew_str_width(two, sizeof(two), 4u), 8);
+}
+
+void test_width_ambiguous_option_is_reversible(void)
+{
+    YewWidthOpts opts = {false};
+
+    yew_width_set_opts(&opts);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x00A1u), 1);
+    opts.ambiguous_wide = true;
+    yew_width_set_opts(&opts);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x00A1u), 2);
+    opts.ambiguous_wide = false;
+    yew_width_set_opts(&opts);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x00A1u), 1);
+    yew_width_set_opts(NULL);
+}
+
 void test_width_golden(void)
 {
     FILE *fp = fopen(WIDTH_FIXTURE, "r");
@@ -183,4 +208,15 @@ void test_width_clip(void)
     }
     YEW_ASSERT_EQ_U64(yew_str_clip(NULL, 4u, 3, NULL), 0u);
     YEW_ASSERT_EQ_U64(yew_str_clip(text, sizeof(text), -1, NULL), 0u);
+}
+
+void test_width_clip_keeps_invalid_byte_atomic(void)
+{
+    static const u8 text[] = {'A', 0xFFu, 'B'};
+    int cells = -1;
+
+    YEW_ASSERT_EQ_U64(yew_str_clip(text, sizeof(text), 4, &cells), 1u);
+    YEW_ASSERT_EQ_I64(cells, 1);
+    YEW_ASSERT_EQ_U64(yew_str_clip(text, sizeof(text), 5, &cells), 2u);
+    YEW_ASSERT_EQ_I64(cells, 5);
 }
