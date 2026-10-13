@@ -109,7 +109,7 @@ recorded in `audit-00.md`.
 | YEW-F-094 | L | fixed | F06 RE | ~~golden-table guard permits fewer than 150 rows~~ — fixed 2026-10-13 in `87c0684f` | tests/audit/yew_f_094.c | s20 DoD 4 |
 | YEW-F-095 | M | fixed | F01 UNI | ~~F01 closeout requires delivered Unicode deferrals to be absent~~ — fixed 2026-10-13 in `c84e9fe7` | tests/audit/yew_f_095.c | s59 §2; s02 DoD 12; s16/s20 |
 | YEW-F-096 | M | fixed | F15 CI | ~~closeout checker reads ignored sprint contracts~~ — fixed 2026-10-13 in `dfe7f3ce` | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
-| YEW-F-097 | M | confirmed | F15 CI | priority gate rejects later-discovered Criticals | tests/audit/yew_f_097.c | s59 §1 priority law |
+| YEW-F-097 | M | fixed | F15 CI | ~~priority gate rejects later-discovered Criticals~~ — fixed 2026-10-13 in `601abc70` | tests/audit/yew_f_097.c | s59 §1 priority law |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -945,6 +945,11 @@ preceding F082, a Critical discovered by a later October review. The Sprint
 open; it cannot make a completed merge retroactively invalid. The hard XFAIL
 requires the gate to distinguish a known-open higher finding from one filed
 after the lower closure.
+Commit `601abc70` evaluates each lower-severity fix against the ledger at that
+commit: a then-present higher finding must already have an ancestor fix, while
+a finding absent from that snapshot is correctly recognized as later work.
+The fixture covers the later-discovery case and retains the wrong-order and
+still-open rejection controls.
 
 ## Unverified observations
 
