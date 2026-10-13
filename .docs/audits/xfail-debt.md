@@ -105,7 +105,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-092 | audit | `tests/audit/yew_f_092.c` | ~~interactive search refinement forces full repaint~~ — fixed in `ff0373ca` | fixed |
 | YEW-F-093 | audit | `tests/audit/yew_f_093.c` | ~~restored contracts name superseded regex mechanisms~~ — fixed in `2d26fe08` | fixed |
 | YEW-F-094 | audit | `tests/audit/yew_f_094.c` | ~~golden-table guard permits fewer than 150 rows~~ — fixed in `87c0684f` | fixed |
-| YEW-F-095 | audit | `tests/audit/yew_f_095.c` | F01 closeout requires delivered Unicode deferrals to be absent | open |
+| YEW-F-095 | audit | `tests/audit/yew_f_095.c` | ~~F01 closeout requires delivered Unicode deferrals to be absent~~ — fixed in `c84e9fe7` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
