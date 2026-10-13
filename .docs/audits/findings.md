@@ -112,7 +112,7 @@ recorded in `audit-00.md`.
 | YEW-F-097 | M | fixed | F15 CI | ~~priority gate rejects later-discovered Criticals~~ — fixed 2026-10-13 in `601abc70` | tests/audit/yew_f_097.c | s59 §1 priority law |
 | YEW-F-098 | L | fixed | F01 UNI | ~~Unicode unit registry misses contracted floor~~ — fixed 2026-10-13 in `8e9f1990` | tests/audit/yew_f_098.c | s02 DoD 14 |
 | YEW-F-099 | M | fixed | F02 TERM | ~~terminal closeout requires superseded staging behavior~~ — fixed 2026-10-13 in `29682c67` | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
-| YEW-F-100 | M | confirmed | F03 TEXT | text-engine closeout requires superseded staging guards | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
+| YEW-F-100 | M | fixed | F03 TEXT | ~~text-engine closeout requires superseded staging guards~~ — fixed 2026-10-13 in `34dd30ef` | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -993,6 +993,10 @@ surfaces. Current product behavior is not shown wrong, but release closeout
 cannot truthfully require both the shipped features and their staging guards.
 The hard XFAIL requires a formal decision amendment and synchronized Sprint
 9/10/12, F03, and audit wording.
+Commit `34dd30ef` adds decision amendment S59-A11, replaces the obsolete
+absence requirements with the shipped one-transaction and register-routing
+evidence, and preserves explicit errors for genuinely unknown paths. The hard
+XFAIL now passes without changing text-engine product behavior.
 
 ## Unverified observations
 
