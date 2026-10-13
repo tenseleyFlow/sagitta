@@ -13,12 +13,12 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F08 evidence baseline:** `5e99d472` was 120 commits above `origin/trunk`,
-including Sprint 59's documentation/tutorial work, all 110 completed finding
-remediations, and the F01–F07 pre-closeout evidence packets. F08's contract
-recheck closed `YEW-F-108` through `YEW-F-110` under decision amendments
-S59-A19/A20/A21; none showed a product-code defect. Its 95-row evidence packet
-landed immediately afterwards in `a79f9ca0`.
+**F09 evidence baseline:** `31c0a64a` was 125 commits above `origin/trunk`,
+including Sprint 59's documentation/tutorial work, all 112 completed finding
+remediations, and the F01–F08 pre-closeout evidence packets. F09's contract
+recheck closed `YEW-F-111` and `YEW-F-112` under decision amendments
+S59-A22/A23; neither showed a product-code defect. Its 27-row evidence packet
+landed immediately afterwards in `c9765fed`.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -40,7 +40,13 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger now contains 110 stable IDs and all 110 are fixed.
+landed. The findings ledger now contains 112 stable IDs and all 112 are fixed.
+F09's closeout recheck closed two Medium contract findings,
+`YEW-F-111`/`YEW-F-112`, under S59-A22/A23. They replace obsolete recorder
+staging guards with evidence for the delivered Sprint 38/41/55 owners and
+replace an impossible public collision fixture with namespace-injectivity
+proof plus review of the retained defensive branch. Neither required a
+product-code change or feature removal.
 F08's closeout recheck closed three Medium contract findings,
 `YEW-F-108`–`YEW-F-110`, under S59-A19/A20/A21. They distinguish delivered
 Fletch surfaces from staging guards, preserve the parser-arena/GC-object
@@ -99,13 +105,13 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 110 completed fixes reconcile, no hard XFAIL remains,
+executable gates: all 112 completed fixes reconcile, no hard XFAIL remains,
 and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
 being represented as independent verification. Baseline-pinned local
-pre-closeout packets now exist for F01 through F08 at
+pre-closeout packets now exist for F01 through F09 at
 `.docs/audits/evidence/F01-precloseout-5422f5e6.md`,
 `.docs/audits/evidence/F02-precloseout-6842c24f.md`,
 `.docs/audits/evidence/F03-precloseout-b45b24d8.md`, and
@@ -113,17 +119,22 @@ pre-closeout packets now exist for F01 through F08 at
 `.docs/audits/evidence/F05-precloseout-d247b719.md` and
 `.docs/audits/evidence/F06-precloseout-e93a8ddd.md`, plus
 `.docs/audits/evidence/F07-precloseout-85a81ca7.md`, and
-`.docs/audits/evidence/F08-precloseout-5e99d472.md`. F08 maps all 95 Fletch
+`.docs/audits/evidence/F08-precloseout-5e99d472.md`, plus
+`.docs/audits/evidence/F09-precloseout-31c0a64a.md`. F08 maps all 95 Fletch
 DoD rows after strict Clang/GCC/ASan builds, 35 focused unit filters, 39/39
 conformance and GC-stress runs, deterministic dispatch/round-trip checks,
 bounded fuzz samples, selected PTYs, and a contention-qualified strict
-performance run. All eight packets remain NOT READY until a non-author
+performance run. F09 maps all 27 recorder/macro DoD rows after strict
+Clang/GCC/ASan audit and focused unit/script/PTY checks, exact corpus and
+100,000-iteration fuzzer runs, byte-identical dispatch variants, strict
+performance gates, and a green current-baseline 200,000-session P1–P5 run.
+All nine packets remain NOT READY until a non-author
 reviewer and the required hosted matrix sign their current baselines.
 
 The immediate work is:
 
-1. complete F09's baseline-pinned local pre-closeout packet without claiming
-   independent reviewer signoff;
+1. begin F10's reproducer-first contract recheck and baseline-pinned local
+   pre-closeout packet without claiming independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
 3. keep the corrected 56-stream soak under observation without idling Sprint

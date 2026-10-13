@@ -14,11 +14,13 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 110 confirmed findings are fixed. F108–F110 aligned F08's
-superseded staging, ownership, and historical-inventory contracts under
-S59-A19/A20/A21 without changing product behavior or removing shipped Fletch
-surfaces. F106/F107 likewise aligned F07's UI/workspace contracts under
-S59-A17/A18. The
+are complete; all 112 confirmed findings are fixed. F111/F112 aligned F09's
+superseded staging and unreachable collision-fixture contracts under
+S59-A22/A23 without changing recorder or macro-library behavior. F108–F110
+aligned F08's superseded staging, ownership, and historical-inventory
+contracts under S59-A19/A20/A21 without changing product behavior or removing
+shipped Fletch surfaces. F106/F107 likewise aligned F07's UI/workspace
+contracts under S59-A17/A18. The
 last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
@@ -31,12 +33,14 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F08 without claiming reviewer
+pre-closeout packets exist for F01 through F09 without claiming reviewer
 signoff. F08 maps all 95 Fletch DoD rows after strict Clang/GCC/ASan builds,
 35 focused unit filters, 39/39 conformance and GC-stress runs, deterministic
 dispatch/round-trip checks, bounded fuzz samples, selected PTYs, and a
-contention-qualified strict performance run. F09 is the next local evidence
-front.
+contention-qualified strict performance run. F09 maps all 27 recorder/macro
+DoD rows after strict Clang/GCC/ASan audit, unit, script, PTY, round-trip,
+fuzz, and performance checks; its current-baseline 200,000-session P1–P5 run
+is green. F10 is the next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
