@@ -13,12 +13,11 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F12 evidence baseline:** `5f1f211e` was 144 commits above `origin/trunk`,
-including Sprint 59's documentation/tutorial work, all 119 completed finding
-remediations, and the F01–F11 pre-closeout evidence packets. F12's contract
-recheck closed `YEW-F-118` and `YEW-F-119` under decision amendments
-S59-A28/A29; neither showed a product-code defect. Its 43-row evidence packet
-landed immediately afterwards in `04e1dc22`.
+**F13 evidence baseline:** `13e41f1f` contains all 121 completed finding
+remediations and the F01–F12 pre-closeout evidence packets. F13's contract
+recheck closed `YEW-F-120` and `YEW-F-121` under decision amendments
+S59-A30/A31; neither showed a product-code defect. Its 46-row evidence packet
+landed immediately afterwards in `713d8854`.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -135,7 +134,7 @@ and priority order is proven from Git ancestry. The deterministic
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
 being represented as independent verification. Baseline-pinned local
-pre-closeout packets now exist for F01 through F12 at
+pre-closeout packets now exist for F01 through F13 at
 `.docs/audits/evidence/F01-precloseout-5422f5e6.md`,
 `.docs/audits/evidence/F02-precloseout-6842c24f.md`,
 `.docs/audits/evidence/F03-precloseout-b45b24d8.md`, and
@@ -147,7 +146,8 @@ pre-closeout packets now exist for F01 through F12 at
 `.docs/audits/evidence/F09-precloseout-31c0a64a.md`, plus
 `.docs/audits/evidence/F10-precloseout-73f6d4e9.md`, and
 `.docs/audits/evidence/F11-precloseout-c9529fb9.md`, and
-`.docs/audits/evidence/F12-precloseout-5f1f211e.md`. F08 maps all 95 Fletch
+`.docs/audits/evidence/F12-precloseout-5f1f211e.md`, and
+`.docs/audits/evidence/F13-precloseout-13e41f1f.md`. F08 maps all 95 Fletch
 DoD rows after strict Clang/GCC/ASan builds, 35 focused unit filters, 39/39
 conformance and GC-stress runs, deterministic dispatch/round-trip checks,
 bounded fuzz samples, selected PTYs, and a contention-qualified strict
@@ -166,14 +166,20 @@ unit/fuzz/PTY checks, policy selftests, and the passing real-clangd milestone:
 diagnostic. F12 maps all 43 AI rows after warning-clean Clang/GCC/ASan builds,
 107 AI and 17 HTTP units per configuration, 18 scripts, deterministic bounded
 fuzz, 38 applicable PTYs per configuration, repository bans, and performance
-policy selftests. All twelve packets remain NOT READY until a non-author
+policy selftests. F13 maps all 46 Git/FUSS rows after warning-clean
+Clang/GCC/ASan builds; 114 Git, 86 FUSS, eight porcelain, 25 blame, and five
+directory-group focused units per configuration; real-repository Git, hunk,
+FUSS-command, and directory-group checks; four deterministic bounded fuzz
+campaigns; 58 focused PTYs per configuration; repository bans; semantic
+ownership scans; and performance-policy selftests. All thirteen packets remain
+NOT READY until a non-author
 reviewer and the required hosted matrix sign their current baselines.
 
 The immediate work is:
 
-1. assemble F13's baseline-pinned local pre-closeout packet without claiming
-   independent reviewer signoff; its reproducer-first contract recheck is
-   complete;
+1. reconcile F14's plugin closeout contract, remediate any reproducible
+   contract or product findings, and assemble its baseline-pinned local
+   pre-closeout packet without claiming independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
 3. keep the corrected 56-stream soak under observation without idling Sprint

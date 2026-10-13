@@ -45,7 +45,7 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F12 without claiming reviewer
+pre-closeout packets exist for F01 through F13 without claiming reviewer
 signoff. F08 maps all 95 Fletch DoD rows after strict Clang/GCC/ASan builds,
 35 focused unit filters, 39/39 conformance and GC-stress runs, deterministic
 dispatch/round-trip checks, bounded fuzz samples, selected PTYs, and a
@@ -62,9 +62,11 @@ passing real-clangd milestone with 8/8 gotos, six references in three files,
 a clean rename round trip, and one diagnostic. F12 maps all 43 AI DoD rows
 after warning-clean Clang/GCC/ASan builds, complete focused AI/HTTP unit and
 script filters, bounded deterministic fuzz, 38 applicable PTYs per
-configuration, repository bans, and performance-policy selftests. F13's
-contract recheck is complete; its current-baseline executable packet is the
-next local evidence front.
+configuration, repository bans, and performance-policy selftests. F13 maps
+all 46 Git/FUSS DoD rows after warning-clean Clang/GCC/ASan builds, focused
+unit and real-repository integration checks, bounded deterministic fuzz, 58
+focused PTYs per configuration, repository bans, semantic ownership scans,
+and performance-policy selftests. F14 is the next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
