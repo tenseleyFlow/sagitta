@@ -106,5 +106,13 @@ bool test_yew_f_083(char *why, size_t why_cap);
 bool test_yew_f_084(char *why, size_t why_cap);
 bool test_yew_f_085(char *why, size_t why_cap);
 bool test_yew_f_086(char *why, size_t why_cap);
+bool test_yew_f_087(char *why, size_t why_cap);
+bool test_yew_f_088(char *why, size_t why_cap);
+bool test_yew_f_089(char *why, size_t why_cap);
+bool test_yew_f_090(char *why, size_t why_cap);
+bool test_yew_f_091(char *why, size_t why_cap);
+bool test_yew_f_092(char *why, size_t why_cap);
+bool test_yew_f_093(char *why, size_t why_cap);
+bool test_yew_f_094(char *why, size_t why_cap);
 
 #endif

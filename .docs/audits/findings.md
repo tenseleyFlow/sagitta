@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-087`
+Next available ID: `YEW-F-095`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -99,6 +99,14 @@ recorded in `audit-00.md`.
 | YEW-F-084 | M | fixed | F06 RE | ~~Fletch keeps the obsolete 64 KiB regex-text precheck~~ — fixed 2026-10-13 in `5d9a74c4` | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
 | YEW-F-085 | M | fixed | F06 RE | ~~REP2 unpack accepts impossible direct-literal metadata~~ — fixed 2026-10-13 in `90517467` | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
 | YEW-F-086 | M | fixed | F15 CI | ~~binding and F06 contracts exist only as ignored local files~~ — fixed 2026-10-13 in `dda25e51` | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
+| YEW-F-087 | M | open | F06 RE | long-literal seam test builds one coalesced piece | tests/audit/yew_f_087.c | s20 DoD 10; s21 DoD 13 |
+| YEW-F-088 | M | open | F15 CI | macOS GCC unit build sends Apple arm64e flags to GCC | tests/audit/yew_f_088.c | s20/s21 DoD 1; compiler matrix |
+| YEW-F-089 | M | open | F06 RE | character-class cap has no firing regression | tests/audit/yew_f_089.c | s20 DoD 11 |
+| YEW-F-090 | M | open | F06 RE | DFA cache-pressure test need not flush | tests/audit/yew_f_090.c | s20 DoD 12 |
+| YEW-F-091 | M | open | F06 RE | zero-width replacement cases lack PTY goldens | tests/audit/yew_f_091.c | s21 DoD 7 |
+| YEW-F-092 | M | open | F06 RE | interactive search refinement forces full repaint | tests/audit/yew_f_092.c | invariant 4; s21 DoD 9 |
+| YEW-F-093 | M | open | F06 RE | restored contracts name superseded regex mechanisms | tests/audit/yew_f_093.c | s59 §2/§3; s20/s21 closeout |
+| YEW-F-094 | L | open | F06 RE | golden-table guard permits fewer than 150 rows | tests/audit/yew_f_094.c | s20 DoD 4 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -835,6 +843,53 @@ no product bytes are affected.  Commit `dda25e51` explicitly tracks all four
 documents despite the historical `.docs/*` ignore rule.  `git ls-files` now
 finds every binding/contract path, and `check-closeouts.sh` resolves all 15
 fronts as structurally complete.
+
+`YEW-F-087` is Medium because Sprint 20's piece-boundary proof is named as
+release evidence, but the long-literal fixture appends adjacent add-store
+spans and therefore coalesces to one piece. The matcher is green without
+crossing the seams the test claims to cover. The hard XFAIL requires the
+fixture to assert at least 100 live pieces before matching.
+
+`YEW-F-088` is Medium because the supported native macOS GCC lane cannot
+build `unit_tests`: its otherwise successful GCC object build passes Apple's
+dual `arm64`/`arm64e` slice flags to Homebrew GCC 16, which rejects `arm64e`.
+The reproduced failure is isolated to the fault-shim dylib recipe. The hard
+XFAIL requires a dedicated Apple-toolchain variable for that interposer while
+leaving product and test objects on the requested compiler.
+
+`YEW-F-089` is Medium because production enforces the hostile-input-reachable
+256-character-class cap, but no deterministic test fires the 257th-class
+error branch. Other parser limits do have boundary tests. The hard XFAIL
+requires a named exact-boundary regression.
+
+`YEW-F-090` is Medium because the test cited for bounded DFA cache behavior
+explicitly accepts cache retention, any number of flushes, or give-up. It can
+therefore pass without exercising the required second-flush fallback. The
+hard XFAIL requires a lowered-cap seam and an observed two-flush regression.
+
+`YEW-F-091` is Medium because the zero-width replacement engine is covered by
+units, but the Sprint 21 contract requires terminal-level goldens for line
+prefixing with and without a final newline and for terminating `x*` global
+replacement. The hard XFAIL names all three missing PTY cases and goldens.
+
+`YEW-F-092` is Medium because ordinary interactive search refinement calls
+full-document damage and clears a message while the command line is active,
+turning `/na` to `/nai` into a full viewport repaint even though only two
+highlight rows changed. The hard XFAIL drives the real prompt key path and
+records the actual damage interval and `full_damage` state.
+
+`YEW-F-093` is Medium because the restored binding contracts and their F06
+closeout name mechanisms the code deliberately superseded: a nonexistent
+materialization window, the renamed Pike list predicate, an unexecuted
+reverse-DFA span path, and a Sprint-34 `:g` deferral that is now a permanent
+non-goal. Product behavior is not shown wrong; release evidence is. The hard
+XFAIL requires a formal decision amendment and matching contract/closeout
+language.
+
+`YEW-F-094` is Low because the current 180-row golden table exceeds its
+150-row contract, but CI asserts only 130 and would allow silent erosion below
+the floor. No current editor behavior is wrong. The hard XFAIL pins the
+contracted minimum in the executable guard.
 
 ## Unverified observations
 

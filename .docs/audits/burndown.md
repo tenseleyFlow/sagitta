@@ -101,3 +101,11 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-13 | Fix `YEW-F-084` (`5d9a74c4`) | 0 | 0 | 2 | 0 | 2 |
 | 2026-10-13 | Fix `YEW-F-085` (`90517467`) | 0 | 0 | 1 | 0 | 1 |
 | 2026-10-13 | Fix `YEW-F-086` (`dda25e51`) | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-13 | File `YEW-F-087` from F06 conformance review | 0 | 0 | 1 | 0 | 1 |
+| 2026-10-13 | File `YEW-F-088` from F06 conformance review | 0 | 0 | 2 | 0 | 2 |
+| 2026-10-13 | File `YEW-F-089` from F06 conformance review | 0 | 0 | 3 | 0 | 3 |
+| 2026-10-13 | File `YEW-F-090` from F06 conformance review | 0 | 0 | 4 | 0 | 4 |
+| 2026-10-13 | File `YEW-F-091` from F06 conformance review | 0 | 0 | 5 | 0 | 5 |
+| 2026-10-13 | File `YEW-F-092` from F06 conformance review | 0 | 0 | 6 | 0 | 6 |
+| 2026-10-13 | File `YEW-F-093` from F06 conformance review | 0 | 0 | 7 | 0 | 7 |
+| 2026-10-13 | File `YEW-F-094` from F06 conformance review | 0 | 0 | 7 | 1 | 8 |

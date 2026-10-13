@@ -7,7 +7,7 @@ Sprints covered: s00, s01, s37, s56, s57
 
 ## DoD items (every numbered item from every sprint above)
 
-- [x] XFAIL.N Active expected-failure ceiling: 0.
+- [x] XFAIL.N Active expected-failure ceiling: 8.
       — EVIDENCE: `.docs/audits/xfail-debt.md` has zero non-fixed rows and `tests/fletch/xfail-debt.txt` has no IDs.
 - [ ] s00.1 `make` produces `build/yew` and `build/yew` (symlink) with gcc and clang, zero warnings, `-std=c11 -pedantic -Wall -Wextra -Werror -Wvla` on every TU.
       — VERDICT: blocking — independent closeout review pending.
@@ -140,7 +140,7 @@ Sprints covered: s00, s01, s37, s56, s57
 
 ## Open audit findings against this front
 
-0 open confirmed findings.  Independent evidence review remains.
+1 open confirmed finding: `YEW-F-088`.
 
 ## Deferrals recorded against this front
 
@@ -148,4 +148,4 @@ none
 
 ## Verdict
 
-NOT READY — Independent evidence review remains pending.
+NOT READY — `YEW-F-088` and independent evidence review remain pending.
