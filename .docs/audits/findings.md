@@ -98,7 +98,7 @@ recorded in `audit-00.md`.
 | YEW-F-083 | M | fixed | F06 RE | ~~backward search skips overlapping match starts~~ — fixed 2026-10-13 in `25ffe801` | tests/audit/yew_f_083.c | s20 §1 / §6c |
 | YEW-F-084 | M | fixed | F06 RE | ~~Fletch keeps the obsolete 64 KiB regex-text precheck~~ — fixed 2026-10-13 in `5d9a74c4` | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
 | YEW-F-085 | M | fixed | F06 RE | ~~REP2 unpack accepts impossible direct-literal metadata~~ — fixed 2026-10-13 in `90517467` | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
-| YEW-F-086 | M | confirmed | F15 CI | binding and F06 contracts exist only as ignored local files | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
+| YEW-F-086 | M | fixed | F15 CI | ~~binding and F06 contracts exist only as ignored local files~~ — fixed 2026-10-13 in `dda25e51` | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -831,7 +831,10 @@ contracts are present in the working directory only as ignored files.  A
 clean checkout therefore cannot follow the mandated binding order, and
 `check-closeouts.sh` resolves s20/s21 to zero files before reporting every F06
 row unexpected.  Local copies masked a reproducible release-control failure;
-no product bytes are affected.
+no product bytes are affected.  Commit `dda25e51` explicitly tracks all four
+documents despite the historical `.docs/*` ignore rule.  `git ls-files` now
+finds every binding/contract path, and `check-closeouts.sh` resolves all 15
+fronts as structurally complete.
 
 ## Unverified observations
 
