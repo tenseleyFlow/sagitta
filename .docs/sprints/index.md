@@ -14,11 +14,11 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 107 confirmed findings are fixed. F106/F107 aligned F07's
-superseded staging requirements and impossible token-grep ownership gates
-under S59-A17/A18; neither showed a product-code defect. F104/F105 aligned F05's
-staging and Unicode/pipe ownership contracts under S59-A15/A16 without
-changing product behavior. The
+are complete; all 110 confirmed findings are fixed. F108–F110 aligned F08's
+superseded staging, ownership, and historical-inventory contracts under
+S59-A19/A20/A21 without changing product behavior or removing shipped Fletch
+surfaces. F106/F107 likewise aligned F07's UI/workspace contracts under
+S59-A17/A18. The
 last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
@@ -31,11 +31,12 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F07 without claiming reviewer
-signoff. F07 maps all 75 UI/workspace DoD rows after fresh
-Clang/GCC/ASan builds, 25 focused unit filters, all 33 s22–s27 PTYs, all 48
-chrome variants, 14 later-owner successor PTYs, focused fuzz samples, and
-strict state/finder/mouse gates. F08 is the next local evidence front.
+pre-closeout packets exist for F01 through F08 without claiming reviewer
+signoff. F08 maps all 95 Fletch DoD rows after strict Clang/GCC/ASan builds,
+35 focused unit filters, 39/39 conformance and GC-stress runs, deterministic
+dispatch/round-trip checks, bounded fuzz samples, selected PTYs, and a
+contention-qualified strict performance run. F09 is the next local evidence
+front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 

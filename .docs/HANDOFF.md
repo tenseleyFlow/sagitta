@@ -13,12 +13,12 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F07 evidence baseline:** `85a81ca7` was 112 commits above `origin/trunk`,
-including Sprint 59's documentation/tutorial work, all 107 completed finding
-remediations, and the F01–F06 pre-closeout evidence packets. F07's contract
-recheck closed `YEW-F-106` and `YEW-F-107` under decision amendments
-S59-A17/A18; neither finding showed a product-code defect. Its evidence packet
-landed immediately afterwards in `02b92fee`.
+**F08 evidence baseline:** `5e99d472` was 120 commits above `origin/trunk`,
+including Sprint 59's documentation/tutorial work, all 110 completed finding
+remediations, and the F01–F07 pre-closeout evidence packets. F08's contract
+recheck closed `YEW-F-108` through `YEW-F-110` under decision amendments
+S59-A19/A20/A21; none showed a product-code defect. Its 95-row evidence packet
+landed immediately afterwards in `a79f9ca0`.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -29,16 +29,25 @@ chapter 1.
 
 Campaign 13 is repository-complete through Sprint 57.32. The latest exact
 product commit `4c99e134` is fully hosted-green. The current checkout was
-fetched and compared with every registered worktree before this refresh. Two
-worktrees are registered beside it: the clean `lsp-wolf-default` worktree at
-`8c23b440`, whose work is already merged through `origin/trunk` PR #1 at
-`8c982b1f`, and the runner-only `soak/s58-watchdog-r2` branch at `4f483f31`.
-Only the soak branch is deliberately isolated; the LSP work must not be merged
-a second time or mistaken for missing trunk commits.
+compared with every registered worktree before this refresh. The clean
+`lsp-wolf-default` worktree remains at `8c23b440`; its work is already merged
+through `origin/trunk` PR #1 at `8c982b1f` and must not be merged a second
+time. The clean runner-only `soak/s58-watchdog-r2` branch remains deliberately
+isolated at `4f483f31`. Two clean detached F06 review worktrees remain under
+`/private/tmp/yew-s59-f06-closeout-20261012-a2412c6b/` at `a2412c6b`; they
+contain no uncommitted or unmerged product work. No additional adjacent
+worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger now contains 107 stable IDs and all 107 are fixed.
+landed. The findings ledger now contains 110 stable IDs and all 110 are fixed.
+F08's closeout recheck closed three Medium contract findings,
+`YEW-F-108`–`YEW-F-110`, under S59-A19/A20/A21. They distinguish delivered
+Fletch surfaces from staging guards, preserve the parser-arena/GC-object
+ownership boundaries while permitting checked host allocations, and separate
+historical 11/12-kind and 117-native snapshots from current generated
+13-kind/187-native totals. None required a product-code change or feature
+removal.
 F07's closeout recheck closed the two Medium contract findings,
 `YEW-F-106`/`YEW-F-107`, under S59-A17/A18. Neither finding showed a
 product-code defect: they isolated superseded staging requirements and
@@ -90,29 +99,30 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 107 completed fixes reconcile, no hard XFAIL remains,
+executable gates: all 110 completed fixes reconcile, no hard XFAIL remains,
 and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
 being represented as independent verification. Baseline-pinned local
-pre-closeout packets now exist for F01 through F07 at
+pre-closeout packets now exist for F01 through F08 at
 `.docs/audits/evidence/F01-precloseout-5422f5e6.md`,
 `.docs/audits/evidence/F02-precloseout-6842c24f.md`,
 `.docs/audits/evidence/F03-precloseout-b45b24d8.md`, and
 `.docs/audits/evidence/F04-precloseout-8f4f8716.md`, plus
 `.docs/audits/evidence/F05-precloseout-d247b719.md` and
 `.docs/audits/evidence/F06-precloseout-e93a8ddd.md`, plus
-`.docs/audits/evidence/F07-precloseout-85a81ca7.md`. F07 maps all 75 UI/
-workspace DoD rows after fresh Clang/GCC/ASan builds, 25 focused unit filters,
-all 33 s22–s27 PTYs, 48 chrome variants, 14 later-owner successor PTYs,
-focused fuzz samples, and strict state/finder/mouse gates. All seven packets
-remain NOT READY until a non-author reviewer and the required hosted matrix
-sign their current baselines.
+`.docs/audits/evidence/F07-precloseout-85a81ca7.md`, and
+`.docs/audits/evidence/F08-precloseout-5e99d472.md`. F08 maps all 95 Fletch
+DoD rows after strict Clang/GCC/ASan builds, 35 focused unit filters, 39/39
+conformance and GC-stress runs, deterministic dispatch/round-trip checks,
+bounded fuzz samples, selected PTYs, and a contention-qualified strict
+performance run. All eight packets remain NOT READY until a non-author
+reviewer and the required hosted matrix sign their current baselines.
 
 The immediate work is:
 
-1. complete F08's baseline-pinned local pre-closeout packet without claiming
+1. complete F09's baseline-pinned local pre-closeout packet without claiming
    independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
