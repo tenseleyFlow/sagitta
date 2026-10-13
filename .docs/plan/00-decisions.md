@@ -771,6 +771,48 @@ diagnostics from their core owner. This amendment changes no product behavior
 and supersedes only Sprint 54's divergent string/owner wording and F14;
 `YEW-F-126` records the correction.
 
+**Foundation staging closeout amendment S59-A35 (2026-10-13) — later owners
+replace scaffolding hard errors.** Sprints 0/1 intentionally reserved file and
+TUI startup, `--clean`, batch execution, script tests, PTY tests, and fuzzing;
+Sprint 37 likewise reserved batch macro replay and plugin grants. Sprints
+2/6/14/36/37/38/54 subsequently shipped those surfaces. Current closeout
+tests their live owners and retains only genuine non-goals such as
+`--batch-strict`; it does not require delivered features to regress into
+landing-day stubs. This amendment changes no product behavior and supersedes
+only staging wording in Sprints 0/1/37 and F15; `YEW-F-127` records the
+correction.
+
+**Executable-name closeout amendment S59-A36 (2026-10-13) — yew owns one
+binary path.** The project rename mechanically collapsed Sprint 0's historical
+binary/alias pair into impossible requirements for `build/yew` and `bin/yew`
+to alias themselves. The current Makefile correctly builds one
+`build/yew` executable and installs it once as `bin/yew`. Closeout tests those
+single paths; no self-referential symlink is created. This amendment changes
+no build or install behavior and supersedes only the corrupted Sprint 0 and
+F15 alias wording; `YEW-F-128` records the correction.
+
+**Foundation scan closeout amendment S59-A37 (2026-10-13) — semantic bans
+distinguish code from prose and corpus data.** Sprint 0/1's landing greps were
+strengthened by F15's token-aware ban and explicit-registration controls.
+Current closeout uses those executable controls and their seeded negative
+fixtures: explanatory `qsort` prose and a Kotlin `constructor` keyword in
+syntax corpus data are not forbidden C operations. Actual raw-sort,
+constructor-attribute, GNU-extension, and unregistered-test code remains
+banned. This amendment weakens no C11 or determinism rule and supersedes only
+the obsolete literal scans in Sprints 0/1 and F15; `YEW-F-129` records the
+correction.
+
+**Foundation timing closeout amendment S59-A38 (2026-10-13) — landing-day
+suite time remains history, not the expanded aggregate budget.** Sprint 1's
+sub-10-second measurement covered its provisional unit harness and smoke test.
+Today's `make test` deliberately includes the later audit, PTY, Fletch,
+script, tutor, manual, corpus, package, and torture owners. Current closeout
+requires that expanded suite in its hosted CI budget and applies dedicated
+Sprint 37/56 performance gates to product latency; it does not remove tests to
+recreate the Sprint 1 wall time. This amendment changes no test or performance
+gate and supersedes only Sprint 1/F15's scope ambiguity; `YEW-F-130` records
+the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

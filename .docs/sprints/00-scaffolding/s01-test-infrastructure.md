@@ -227,8 +227,9 @@ deleted without its assertions landing here first.
 
 ## Definition of Done
 
-1. `make test` builds and runs the harness + smoke.sh; exit 0 locally
-   on gcc and clang; total wall time < 10 s.
+1. `make test` is green locally on gcc and clang. The sub-10-second figure is
+   the landing-day unit+smoke budget; the current expanded aggregate follows
+   its CI job budget and the dedicated Sprint 37/56 performance contracts.
 2. Runner output matches the pinned format exactly; two consecutive
    `make test` runs produce byte-identical stdout.
 3. All Sprint 0 provisional assertions live as registered tests: ≥ 18
@@ -239,10 +240,12 @@ deleted without its assertions landing here first.
    including the failure path (self-check test proves it).
 6. `scripts/bans.sh` exits 0 on the tree; each seeded violation from
    Testing Strategy is detected (qsort, unregistered test).
-7. `grep -rn 'constructor' tests/ src/` returns nothing — registration
-   is the explicit table only.
-8. `make test-script`, `make test-pty`, `make fuzz` each fail with a
-   message naming Sprints 37, 6, 2 respectively.
+7. The semantic registration control proves every unit test is in the
+   explicit table and no constructor attribute registers one, while allowing
+   comments and syntax-corpus data.
+8. `make test-script`, `make test-pty`, and `make fuzz` are live: current
+   targets run their shipped owners from Sprints 37, 6, and 2 and their CI
+   lanes remain required.
 9. CI: gcc, clang, sanitize, valgrind, modules, determinism, bans lanes
    all green on `trunk`; sanitize lane uses `build-san` (disjoint
    object tree); valgrind lane reports zero definite leaks.

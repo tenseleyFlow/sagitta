@@ -329,9 +329,24 @@ is still deferred.
 4. `t.log` has no passing discovered-suite caller, though the deliberate
    runner-failure self-test executes it.
 
+## Sprint 59 closeout-contract recheck
+
+findings `YEW-F-127`–`YEW-F-130`
+
+- `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
+  replay, and grant surfaces still represented as landing-day hard errors.
+- `YEW-F-128` records the project rename collapsing Sprint 0's historical
+  binary/alias pair into an impossible self-referential `yew` symlink.
+- `YEW-F-129` records raw foundation greps matching legitimate comments and
+  syntax-corpus data instead of the semantic F15 ban/registration owners.
+- `YEW-F-130` records Sprint 1's landing-day unit+smoke wall time being
+  applied to the much larger current aggregate suite.
+- S59-A35 through S59-A38 synchronize the source sprints and F15 closeout;
+  no product code, test coverage, ban, or performance budget is removed.
+
 ## Count
 
-Raw 52 · deduped 52 · critical 1 · high 1 · medium 50 · low 0 · unverified 4.
+Raw 62 · deduped 62 · critical 1 · high 1 · medium 60 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 

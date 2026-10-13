@@ -414,4 +414,6 @@ header records the sprint each area came from.
 13. `docs/batch.md` exists with all three tables and three worked examples;
     `--help` documents every Deliverable-1 flag.
 14. ≥ 40 script tests, ≥ 400 script assertions, ≥ 40 unit assertions in
-    `test_batch_args.c`; deferred surfaces hard-error naming Sprints 38, 54.
+    `test_batch_args.c`; current closeout exercises the shipped `--replay` and
+    `--grant` owners from Sprints 38/54 while `--batch-strict` remains the
+    explicit non-goal.

@@ -16,9 +16,10 @@ compile out to hard-error shims, never silent no-ops), GPL-3.0 LICENSE and
 README, the core containers (arena, vec, strmap, interner, bytebuf, stable
 sort), `yew_log` to XDG state (never stdout/stderr — the TUI will own the
 terminal), the `yew_bug()` exit-4 contract, the exit-code enum, and a
-driver shell answering `--version`/`--help` with a `yew` symlink build
-target. No editing happens: opening a file (or starting with no args,
-which would launch the TUI) hard-errors naming Sprint 14. The bespoke test
+driver shell answering `--version`/`--help` with a `yew` executable build
+target. At landing no editing happened: opening a file (or starting with no
+args, which would launch the TUI) hard-erred naming Sprint 14. The shipped
+startup paths are now owned by Sprints 14/36/37 under S59-A35. The bespoke test
 harness lands in Sprint 1 (this sprint ships a provisional unit binary);
 Unicode in Sprint 2; the terminal in Sprint 3; `--batch` in Sprint 37.
 
@@ -89,16 +90,14 @@ OBJ := $(SRC:%.c=$(BUILD)/%.o)
 
 $(BUILD)/yew: $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $(OBJ)
-$(BUILD)/yew: $(BUILD)/yew
-	ln -sf yew $@
 $(BUILD)/%.o: %.c $(BUILD)/mods.stamp | dirs
 	$(CC) $(CFLAGS) -c -o $@ $<
 -include $(OBJ:.o=.d)
 ```
 
-- Targets: `all` (default: `build/yew` + `build/yew` symlink), `test`
+- Targets: `all` (default: one `build/yew` executable), `test`
   (Sprint 0: builds and runs `build/unit_tests`), `clean` (`rm -rf
-  $(BUILD)`), `install` (installs `yew` + `yew` symlink under
+  $(BUILD)`), `install` (installs one `bin/yew` executable under
   `$(DESTDIR)$(PREFIX)/bin`, honors both variables).
 - `$(BUILD)/mods.stamp` contains the literal `$(MODULES)` value; the
   recipe rewrites it only when the value changes, and every object
@@ -312,22 +311,24 @@ expressions, no `threads.h` in our own source.
 
 ## Definition of Done
 
-1. `make` produces `build/yew` and `build/yew` (symlink) with gcc
+1. `make` produces one `build/yew` executable with gcc
    and clang, zero warnings, `-std=c11 -pedantic -Wall -Wextra -Werror
    -Wvla` on every TU.
 2. `./build/yew --version | head -1` is exactly `yew 1.0.0-dev`;
    line 2 is `modules: lsp ai fuss plugins`. A `make MODULES=""` build
    prints `modules: none`. Exit 0 both.
-3. `./build/yew --help` exits 0 with sectioned stdout; unknown flag
-   exits 1 naming the flag; `./build/yew foo.txt` and a bare
-   `./build/yew` exit 1 with stderr naming Sprint 14; `--batch x.fl`
-   names Sprint 37; `--clean` names Sprint 36.
+3. `./build/yew --help` exits 0 with sectioned stdout and an unknown flag
+   exits 1 naming the flag. Current closeout exercises the shipped file/TUI,
+   batch, and clean paths through their Sprints 14/37/36 owners rather than
+   reinstating their landing-day hard errors.
 4. `./build/yew --selftest-bug` exits 4; stderr matches
    `yew: internal error at src/…:<line>: selftest` plus the report
    line; the same report appears in the log file.
 5. `grep -rn '\bexit(' src/ | grep -v util/log.c` returns nothing;
    `main()` is the only return-to-OS site.
-6. `grep -rn 'qsort\|__attribute__\|threads\.h' src/` returns nothing.
+6. `scripts/bans.sh` supplies the token-aware ban control for actual raw
+   `qsort`, attribute, and thread constructs, with seeded negative fixtures;
+   explanatory comments and data are permitted.
 7. `XDG_STATE_HOME=$(mktemp -d) ./build/yew --version >out 2>err`
    leaves `err` empty and `out` exactly the two version lines; the log
    dir, if created, is mode 0700. No yew invocation writes log text
@@ -338,8 +339,8 @@ expressions, no `threads.h` in our own source.
 9. Rebuilding with a different `MODULES` value (no `make clean`)
    relinks correctly — `mods.stamp` forces it; `--version` reflects the
    new set.
-10. `make install DESTDIR=$(mktemp -d) PREFIX=/usr` installs `bin/
-    yew` and the `bin/yew` symlink; `make clean` removes `build/`.
+10. `make install DESTDIR=$(mktemp -d) PREFIX=/usr` installs one `bin/yew`
+    executable; `make clean` removes `build/`.
 11. LICENSE (GPL-3.0 verbatim), README, `.gitignore` present;
     `git status` clean after `make && make test` (nothing generated
     outside `build/`).

@@ -9,17 +9,17 @@ Sprints covered: s00, s01, s37, s56, s57
 
 - [x] XFAIL.N Active expected-failure ceiling: 8.
       — EVIDENCE: `.docs/audits/xfail-debt.md` has zero non-fixed rows and `tests/fletch/xfail-debt.txt` has no IDs.
-- [ ] s00.1 `make` produces `build/yew` and `build/yew` (symlink) with gcc and clang, zero warnings, `-std=c11 -pedantic -Wall -Wextra -Werror -Wvla` on every TU.
+- [ ] s00.1 `make` produces one `build/yew` executable with gcc and clang, zero warnings, `-std=c11 -pedantic -Wall -Wextra -Werror -Wvla` on every TU.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s00.2 `./build/yew --version | head -1` is exactly `yew 1.0.0-dev`; line 2 is `modules: lsp ai fuss plugins`. A `make MODULES=""` build prints `modules: none`. Exit 0 both.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s00.3 `./build/yew --help` exits 0 with sectioned stdout; unknown flag exits 1 naming the flag; `./build/yew foo.txt` and a bare `./build/yew` exit 1 with stderr naming Sprint 14; `--batch x.fl` names Sprint 37; `--clean` names Sprint 36.
+- [ ] s00.3 `./build/yew --help` exits 0 with sectioned stdout and an unknown flag exits 1 naming the flag; the shipped file/TUI, batch, and clean paths pass their current Sprint 14/37/36 owner tests.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s00.4 `./build/yew --selftest-bug` exits 4; stderr matches `yew: internal error at src/…:<line>: selftest` plus the report line; the same report appears in the log file.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s00.5 `grep -rn '\bexit(' src/ | grep -v util/log.c` returns nothing; `main()` is the only return-to-OS site.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s00.6 `grep -rn 'qsort\|__attribute__\|threads\.h' src/` returns nothing.
+- [ ] s00.6 The semantic ban and registration controls reject actual raw `qsort`, attribute, and thread constructs with seeded negatives while permitting comments/data.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s00.7 `XDG_STATE_HOME=$(mktemp -d) ./build/yew --version >out 2>err` leaves `err` empty and `out` exactly the two version lines; the log dir, if created, is mode 0700. No yew invocation writes log text to stdout/stderr.
       — VERDICT: blocking — independent closeout review pending.
@@ -27,11 +27,11 @@ Sprints covered: s00, s01, s37, s56, s57
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s00.9 Rebuilding with a different `MODULES` value (no `make clean`) relinks correctly — `mods.stamp` forces it; `--version` reflects the new set.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s00.10 `make install DESTDIR=$(mktemp -d) PREFIX=/usr` installs `bin/ yew` and the `bin/yew` symlink; `make clean` removes `build/`.
+- [ ] s00.10 `make install DESTDIR=$(mktemp -d) PREFIX=/usr` installs one `bin/yew` executable and the current manuals/runtime assets; `make clean` removes `build/`.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s00.11 LICENSE (GPL-3.0 verbatim), README, `.gitignore` present; `git status` clean after `make && make test` (nothing generated outside `build/`).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s01.1 `make test` builds and runs the harness + smoke.sh; exit 0 locally on gcc and clang; total wall time < 10 s.
+- [ ] s01.1 `make test` is green locally on gcc and clang; the landing-day unit+smoke slice retains its historical sub-10-second result, while the current suite follows its CI job budget and dedicated Sprint 37/56 performance gates.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s01.2 Runner output matches the pinned format exactly; two consecutive `make test` runs produce byte-identical stdout.
       — VERDICT: blocking — independent closeout review pending.
@@ -43,9 +43,9 @@ Sprints covered: s00, s01, s37, s56, s57
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s01.6 `scripts/bans.sh` exits 0 on the tree; each seeded violation from Testing Strategy is detected (qsort, unregistered test).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s01.7 `grep -rn 'constructor' tests/ src/` returns nothing — registration is the explicit table only.
+- [ ] s01.7 The semantic ban and registration controls prove explicit unit registration and reject actual constructor attributes, while permitting comments and syntax-corpus data.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s01.8 `make test-script`, `make test-pty`, `make fuzz` each fail with a message naming Sprints 37, 6, 2 respectively.
+- [ ] s01.8 `make test-script`, `make test-pty`, and `make fuzz` run their shipped Sprint 37/6/2 owners and remain required CI surfaces.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s01.9 CI: gcc, clang, sanitize, valgrind, modules, determinism, bans lanes all green on `trunk`; sanitize lane uses `build-san` (disjoint object tree); valgrind lane reports zero definite leaks.
       — VERDICT: blocking — independent closeout review pending.
@@ -79,7 +79,7 @@ Sprints covered: s00, s01, s37, s56, s57
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s37.13 `docs/batch.md` exists with all three tables and three worked examples; `--help` documents every Deliverable-1 flag.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s37.14 ≥ 40 script tests, ≥ 400 script assertions, ≥ 40 unit assertions in `test_batch_args.c`; deferred surfaces hard-error naming Sprints 38, 54.
+- [ ] s37.14 ≥ 40 script tests, ≥ 400 script assertions, ≥ 40 unit assertions in `test_batch_args.c`; the shipped `--replay` and `--grant` owners pass, while `--batch-strict` remains the explicit non-goal.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s56.1 `make && make test && make perf` green on gcc and clang, zero warnings under the locked flags; ASan/UBSan, valgrind, determinism, bans green.
       — VERDICT: blocking — independent closeout review pending.
