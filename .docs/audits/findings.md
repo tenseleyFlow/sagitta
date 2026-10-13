@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-102`
+Next available ID: `YEW-F-103`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -114,6 +114,7 @@ recorded in `audit-00.md`.
 | YEW-F-099 | M | fixed | F02 TERM | ~~terminal closeout requires superseded staging behavior~~ — fixed 2026-10-13 in `29682c67` | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
 | YEW-F-100 | M | fixed | F03 TEXT | ~~text-engine closeout requires superseded staging guards~~ — fixed 2026-10-13 in `34dd30ef` | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
 | YEW-F-101 | M | fixed | F03 TEXT | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed 2026-10-13 in `f16c5dcd` | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
+| YEW-F-102 | M | open | F04 MODAL | modal closeout requires superseded staging guards | tests/audit/yew_f_102.c | s59 §2; s14 DoD 7; s16 DoD 5/11; s17 DoD 11 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1017,6 +1018,17 @@ Commit `f16c5dcd` adds decision amendment S59-A12, scopes raw text-buffer
 calls by semantics instead of an obsolete whole-tree file list, and records
 the stronger private raw-setter plus typed register routes. The hard XFAIL
 passes without changing product behavior.
+
+`YEW-F-102` is Medium because the current Sprint 14, 16, and 17 contracts and
+F04 closeout still require historical staging guards after their owning
+sprints deliberately delivered those features. W/B/H/E/F must still message
+their future sprint; the syntax provider must remain NULL and hard-error;
+multi-cursor expansion must hard-error; and regex lift, per-cursor completion,
+and per-cursor LSP edits must still reject use even though Sprints
+16/17/18/21/40/43/47/52 shipped those surfaces. Current product behavior is
+not shown wrong, but the release closeout cannot truthfully require both the
+features and their former absence. The hard XFAIL requires a formal decision
+amendment and synchronized Sprint 14/16/17, F04, and audit wording.
 
 ## Unverified observations
 

@@ -14,10 +14,11 @@ Apple-silicon host `nomad-1`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
 **Implementation checkpoint before this documentation refresh:** `trunk` is
-96 commits above `origin/trunk` at `b45b24d8`, including Sprint 59's
-documentation/tutorial work, all 101 completed finding remediations, and the
-F01/F02/F03/F06 pre-closeout evidence packets. The product code used by the
-soak remains the exact hosted-green anchor.
+97 commits above `origin/trunk` at `75ff7e4b`, including Sprint 59's
+documentation/tutorial work, 101 completed finding remediations, and the
+F01/F02/F03/F06 pre-closeout evidence packets. F04 recheck subsequently filed
+the open contract finding `YEW-F-102`. The product code used by the soak
+remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
@@ -36,7 +37,8 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 101 stable IDs and all 101 are fixed.
+landed. The findings ledger contains 102 stable IDs; 101 are fixed and
+`YEW-F-102` is open.
 `YEW-F-101` aligned F03's mutation-ownership wording with the already-audited
 internal hydration/projection call sites and private raw register setter under
 decision amendment S59-A12 without changing product code.
@@ -70,7 +72,8 @@ rows; do not report progress from elapsed process time.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 101 fixes reconcile, no hard XFAIL remains, and
+executable gates: all 101 completed fixes reconcile, one hard XFAIL pins
+`YEW-F-102`, and
 priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
