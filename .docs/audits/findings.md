@@ -100,7 +100,7 @@ recorded in `audit-00.md`.
 | YEW-F-085 | M | fixed | F06 RE | ~~REP2 unpack accepts impossible direct-literal metadata~~ — fixed 2026-10-13 in `90517467` | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
 | YEW-F-086 | M | fixed | F15 CI | ~~binding and F06 contracts exist only as ignored local files~~ — fixed 2026-10-13 in `dda25e51` | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
 | YEW-F-087 | M | fixed | F06 RE | ~~long-literal seam test builds one coalesced piece~~ — fixed 2026-10-13 in `43bc2afd` | tests/audit/yew_f_087.c | s20 DoD 10; s21 DoD 13 |
-| YEW-F-088 | M | open | F15 CI | macOS GCC unit build sends Apple arm64e flags to GCC | tests/audit/yew_f_088.c | s20/s21 DoD 1; compiler matrix |
+| YEW-F-088 | M | fixed | F15 CI | ~~macOS GCC unit build sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `b44cf7ce` | tests/audit/yew_f_088.c | s20/s21 DoD 1; compiler matrix |
 | YEW-F-089 | M | open | F06 RE | character-class cap has no firing regression | tests/audit/yew_f_089.c | s20 DoD 11 |
 | YEW-F-090 | M | open | F06 RE | DFA cache-pressure test need not flush | tests/audit/yew_f_090.c | s20 DoD 12 |
 | YEW-F-091 | M | open | F06 RE | zero-width replacement cases lack PTY goldens | tests/audit/yew_f_091.c | s21 DoD 7 |
@@ -857,7 +857,9 @@ build `unit_tests`: its otherwise successful GCC object build passes Apple's
 dual `arm64`/`arm64e` slice flags to Homebrew GCC 16, which rejects `arm64e`.
 The reproduced failure is isolated to the fault-shim dylib recipe. The hard
 XFAIL requires a dedicated Apple-toolchain variable for that interposer while
-leaving product and test objects on the requested compiler.
+leaving product and test objects on the requested compiler. Commit `b44cf7ce`
+uses configurable Apple Clang only for the Darwin interposer; the native GCC
+16 unit graph now builds warning-free and runs its focused regex test.
 
 `YEW-F-089` is Medium because production enforces the hostile-input-reachable
 256-character-class cap, but no deterministic test fires the 257th-class
