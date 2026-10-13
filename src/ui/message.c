@@ -37,12 +37,30 @@ static YewColor indexed_color(u8 index)
     return color;
 }
 
+static bool prompt_message_uses_many_rows(const Ed *ed, const Msg *msg)
+{
+    const char *text;
+
+    if (!ed->cmdline.active || !msg->active ||
+        ed->cmdline.kind != YEW_PROMPT_INPUT)
+        return false;
+    text = msg->full == NULL ? msg->text : msg->full;
+    return msg->full != NULL || memchr(text, '\n', msg->len) != NULL;
+}
+
 static void message_damage(Ed *ed)
 {
     ed->footer_dirty = true;
-    /* Expanded overlays and prompt messages borrow document rows. */
-    if (ed->msg.expanded || ed->cmdline.active)
+    if (ed->msg.expanded || prompt_message_uses_many_rows(ed, &ed->msg)) {
         ed->full_damage = true;
+    } else if (ed->cmdline.active && ed->msg.active && ed->win != NULL &&
+               ed->win->rect.h != 0U) {
+        /* A one-line prompt message borrows only the row immediately above
+         * the command line.  Redraw that row when it appears or disappears;
+         * repainting every pane on each search key is unnecessary. */
+        yew_ed_damage_rows(ed, (u16)(ed->win->rect.h - 1U),
+                          ed->win->rect.h);
+    }
 }
 
 static void message_expire(Ed *ed, void *ctx)
@@ -53,10 +71,11 @@ static void message_expire(Ed *ed, void *ctx)
     if (ed == NULL)
         return;
     expanded = ed->msg.expanded;
+    message_damage(ed);
     yew_xfree(ed->msg.full);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
     ed->footer_dirty = true;
-    if (expanded || ed->cmdline.active)
+    if (expanded)
         ed->full_damage = true;
 }
 
@@ -67,12 +86,13 @@ void yew_msg_clear(Ed *ed)
     if (ed == NULL)
         return;
     expanded = ed->msg.expanded;
+    message_damage(ed);
     if (ed->msg.expiry != YEW_TIMER_NONE)
         (void)yew_timer_cancel(&ed->timers, ed->msg.expiry);
     yew_xfree(ed->msg.full);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
     ed->footer_dirty = true;
-    if (expanded || ed->cmdline.active)
+    if (expanded)
         ed->full_damage = true;
 }
 

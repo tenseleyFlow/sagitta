@@ -128,13 +128,37 @@ void yew_search_open(Ed *ed, Win *w, bool reverse)
 static void search_go(Ed *ed, Win *w, u64 hit)
 {
     Cursor *c = yew_ed_cursor(ed);
+    LineNo old_line = LINENO(0U);
+    LineNo old_top = yew_win_view_top(w);
+    u32 old_sub = 0U;
+    u32 old_top_sub = w->vp.top_sub;
+    bool had_cursor = c != NULL;
 
-    if (c != NULL) {
+    if (had_cursor) {
+        old_line = yew_textbuf_line_of(w->buf->tb, c->pos);
+        old_sub = yew_vp_cursor_subrow(w);
         c->pos = BYTEOFF(hit);
         c->goal_col = (CCol){0U};
     }
     yew_win_follow_cursor(w);
-    yew_ed_damage_document(ed);
+    if (!had_cursor)
+        return;
+    if (old_top.v != yew_win_view_top(w).v || old_top_sub != w->vp.top_sub) {
+        yew_ed_damage_document(ed);
+    } else {
+        LineNo new_line = yew_textbuf_line_of(w->buf->tb, c->pos);
+        u32 new_sub = yew_vp_cursor_subrow(w);
+        u16 row;
+
+        /* YEW-F-092: moving the current-match accent changes only its old
+         * and new visual rows.  The overlay diff below contributes any
+         * other rows whose match spans changed. */
+        if (yew_vp_row_of_line(w, old_line, old_sub, &row))
+            yew_ed_damage_rows(ed, row, (u16)(row + 1U));
+        if (yew_vp_row_of_line(w, new_line, new_sub, &row))
+            yew_ed_damage_rows(ed, row, (u16)(row + 1U));
+        ed->footer_dirty = true;
+    }
 }
 
 /*
@@ -179,9 +203,17 @@ static bool search_find(const YewRe *re, const TextBuf *tb, u64 from,
 
 static void search_report_wrap(Ed *ed, bool backward)
 {
-    yew_msg(ed, YEW_MSG_INFO,
-            backward ? "search hit TOP, continuing at BOTTOM"
-                     : "search hit BOTTOM, continuing at TOP");
+    const char *text = backward ? "search hit TOP, continuing at BOTTOM"
+                                : "search hit BOTTOM, continuing at TOP";
+    const char *shown = ed->msg.full == NULL ? ed->msg.text : ed->msg.full;
+    size_t len = strlen(text);
+
+    /* Refining a wrapped preview commonly produces the same notice again.
+     * Keep the already drawn row instead of clearing and repainting it. */
+    if (ed->msg.active && ed->msg.sev == YEW_MSG_INFO &&
+        ed->msg.len == len && memcmp(shown, text, len) == 0)
+        return;
+    yew_msg(ed, YEW_MSG_INFO, "%s", text);
 }
 
 static void search_report_miss(Ed *ed, bool backward, bool wrapscan,
@@ -421,7 +453,6 @@ static SearchPreviewResult search_preview_start(Ed *ed, Win *w, u64 from,
     ed->search.preview_wrapped = false;
     ed->search.preview_wrapscan = wrapscan;
     ed->search.preview_remaining = count == 0U ? 1U : count;
-    yew_msg_clear(ed);
     return search_preview_slice(ed, w);
 }
 

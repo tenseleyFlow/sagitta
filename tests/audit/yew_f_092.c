@@ -54,6 +54,8 @@ bool test_yew_f_092(char *why, size_t why_cap)
     }
     ed.win->rect.h = 10U;
     ed.win->rect.w = 80U;
+    ed.win->vp.rows = 10U;
+    ed.win->vp.cols = 80U;
     yew_search_open(&ed, ed.win, false);
     key = typed('n');
     (void)yew_cmdline_key(&ed, &key);
@@ -66,14 +68,18 @@ bool test_yew_f_092(char *why, size_t why_cap)
     ed.doc_damage_hi = 0U;
     key = typed('i');
     (void)yew_cmdline_key(&ed, &key);
-    passed = !ed.full_damage && ed.doc_damage_hi < ed.win->rect.h;
+    /* The two changed highlight rows are 0 and 5.  Damage is represented as
+     * one half-open interval, so the exact bounded envelope is [0, 6). */
+    passed = !ed.full_damage && ed.doc_damage_lo == 0U &&
+             ed.doc_damage_hi == 6U;
     if (!passed) {
         (void)snprintf(why, why_cap,
-                       "refinement damage=%u..%u full=%u viewport=%u",
+                       "refinement damage=%u..%u full=%u viewport=%u msg=%u %.80s",
                        (unsigned)ed.doc_damage_lo,
                        (unsigned)ed.doc_damage_hi,
                        ed.full_damage ? 1U : 0U,
-                       (unsigned)ed.win->rect.h);
+                       (unsigned)ed.win->rect.h,
+                       ed.msg.active ? 1U : 0U, ed.msg.text);
     }
     yew_ed_free(&ed);
     return passed;

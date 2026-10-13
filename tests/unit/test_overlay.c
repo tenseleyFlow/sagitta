@@ -42,6 +42,8 @@ static void ov_fixture(Ed *ed, u32 nlines, u32 plant_a, u32 plant_b)
      * arrange and easy to read in the assertions below. */
     ed->win->rect.h = 10U;
     ed->win->rect.w = 80U;
+    ed->win->vp.rows = 10U;
+    ed->win->vp.cols = 80U;
 }
 
 static YewRe *ov_compile(Arena *a, const char *pat)
@@ -377,6 +379,7 @@ void test_overlay_damage_is_diffed_not_blanket(void)
     Arena arena;
     YewRe *wide;
     YewRe *narrow;
+    YewRe *absent;
     u32 changed_lines = 0U;
     size_t i;
 
@@ -401,7 +404,20 @@ void test_overlay_damage_is_diffed_not_blanket(void)
     for (i = 0U; i < ed.win->overlay.spans.len; i++)
         changed_lines++;
     YEW_ASSERT_EQ_U64(changed_lines, 2U);
-    YEW_ASSERT(ed.doc_damage_hi - ed.doc_damage_lo <= ed.win->rect.h);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 1U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 4U);
+
+    /* Pattern invalidation must diff against the old set before clearing
+     * it.  Removing every match still has to repaint both old highlight
+     * rows; this is the stale-highlight half of YEW-F-092. */
+    ed.doc_damage_lo = 0U;
+    ed.doc_damage_hi = 0U;
+    absent = yew_re_compile(&arena, "absent", 6U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(absent);
+    yew_overlay_refresh(&ed, ed.win, absent, 3U, 0);
+    YEW_ASSERT_EQ_U64(ed.win->overlay.spans.len, 0U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_lo, 1U);
+    YEW_ASSERT_EQ_U64(ed.doc_damage_hi, 4U);
     arena_free_all(&arena);
     yew_ed_free(&ed);
 }

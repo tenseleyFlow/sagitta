@@ -219,6 +219,7 @@ void yew_overlay_refresh(Ed *ed, Win *w, const YewRe *re, u32 pat_gen,
     YewReInput in;
     Span want;
     SpanVec before;
+    bool invalidated;
     i64 deadline;
     u64 scanned_bytes = 0U;
     u64 at;
@@ -241,7 +242,17 @@ void yew_overlay_refresh(Ed *ed, Win *w, const YewRe *re, u32 pat_gen,
      * every span suspect; a scroll does not, which is the whole point
      * of keeping `scanned` separate from the viewport.
      */
-    if (ov->pat_gen != pat_gen || ov->buf_gen != tb->gen) {
+    invalidated = ov->pat_gen != pat_gen || ov->buf_gen != tb->gen;
+    (void)memset(&before, 0, sizeof(before));
+    if (invalidated) {
+        /* Preserve the old highlights before invalidation.  Otherwise a
+         * refinement that removes a match never damages the cells where
+         * that match used to be, leaving stale highlight behind. */
+        SpanVec_reserve(&before, ov->spans.len);
+        if (ov->spans.len > 0U)
+            (void)memcpy(before.data, ov->spans.data,
+                         ov->spans.len * sizeof(*before.data));
+        before.len = ov->spans.len;
         ov->spans.len = 0U;
         ov->scanned.lo = 0U;
         ov->scanned.hi = 0U;
@@ -257,16 +268,18 @@ void yew_overlay_refresh(Ed *ed, Win *w, const YewRe *re, u32 pat_gen,
             ov->scanned.hi >= vis.hi) {
             /* Spans are reusable, the cursor's position is not. */
             overlay_track_cursor(ed, ov);
+            SpanVec_free(&before);
             return;
         }
     }
 
-    (void)memset(&before, 0, sizeof(before));
-    SpanVec_reserve(&before, ov->spans.len);
-    if (ov->spans.len > 0U)
-        (void)memcpy(before.data, ov->spans.data,
-                     ov->spans.len * sizeof(*before.data));
-    before.len = ov->spans.len;
+    if (!invalidated) {
+        SpanVec_reserve(&before, ov->spans.len);
+        if (ov->spans.len > 0U)
+            (void)memcpy(before.data, ov->spans.data,
+                         ov->spans.len * sizeof(*before.data));
+        before.len = ov->spans.len;
+    }
 
     ov->spans.len = 0U;
     in = yew_re_input_textbuf(tb);
