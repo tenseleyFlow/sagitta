@@ -132,8 +132,8 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-119 | audit | `tests/audit/yew_f_119.c` | ~~AI closeout retains invalid TLS/stats ownership scans~~ — fixed in `d8fd10ad` | fixed |
 | YEW-F-120 | audit | `tests/audit/yew_f_120.c` | ~~Git/FUSS closeout requires superseded staging and key rules~~ — fixed in `66085e54` | fixed |
 | YEW-F-121 | audit | `tests/audit/yew_f_121.c` | ~~Git/FUSS closeout retains invalid clock/format/width scans~~ — fixed in `66085e54` | fixed |
-| YEW-F-122 | audit | `tests/audit/yew_f_122.c` | plugin closeout retains superseded package/docs staging rules | active |
-| YEW-F-123 | audit | `tests/audit/yew_f_123.c` | plugin closeout names the wrong Fletch import amendment | active |
+| YEW-F-122 | audit | `tests/audit/yew_f_122.c` | ~~plugin closeout retains superseded package/docs staging rules~~ — fixed in `fe7ee656` | fixed |
+| YEW-F-123 | audit | `tests/audit/yew_f_123.c` | ~~plugin closeout names the wrong Fletch import amendment~~ — fixed in `fe7ee656` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.

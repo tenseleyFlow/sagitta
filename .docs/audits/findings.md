@@ -134,8 +134,8 @@ recorded in `audit-00.md`.
 | YEW-F-119 | M | fixed | F12 AI | ~~AI closeout retains invalid TLS/stats ownership scans~~ — fixed 2026-10-13 in `d8fd10ad` | tests/audit/yew_f_119.c | s59 §2; s48 DoD 2; s49 DoD 8 |
 | YEW-F-120 | M | fixed | F13 GIT | ~~Git/FUSS closeout requires superseded staging and key rules~~ — fixed 2026-10-13 in `66085e54` | tests/audit/yew_f_120.c | s59 §2; s51 DoD 14; s52 DoD 7/14; s53 DoD 12 |
 | YEW-F-121 | M | fixed | F13 GIT | ~~Git/FUSS closeout retains invalid clock/format/width scans~~ — fixed 2026-10-13 in `66085e54` | tests/audit/yew_f_121.c | s59 §2; s51 DoD 2; s52 DoD 3; YEW-F-018/020 |
-| YEW-F-122 | M | open | F14 PLUG | plugin closeout retains superseded package/docs staging rules | tests/audit/yew_f_122.c | s59 §2; s54 DoD 12; s55 DoD 14; YEW-F-022 |
-| YEW-F-123 | M | open | F14 PLUG | plugin closeout names the wrong Fletch import amendment | tests/audit/yew_f_123.c | s59 §2; s55 DoD 10; Fletch spec §16 A3 |
+| YEW-F-122 | M | fixed | F14 PLUG | ~~plugin closeout retains superseded package/docs staging rules~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_122.c | s59 §2; s54 DoD 12; s55 DoD 14; YEW-F-022 |
+| YEW-F-123 | M | fixed | F14 PLUG | ~~plugin closeout names the wrong Fletch import amendment~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_123.c | s59 §2; s55 DoD 10; Fletch spec §16 A3 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1307,7 +1307,9 @@ and current manuals contain only negative isolation claims, and
 `docs/man/yew-pkg.1` is shipped and checked. No product behavior is shown
 wrong. The hard XFAIL requires the source sprints and F14 closeout to test the
 shipped package/manual owners and the semantic honesty gate while retaining
-permanent package non-goals.
+permanent package non-goals. Commit `fe7ee656` adds S59-A32, synchronizes both
+source sprints and F14, and replaces the stale doc check with the assembled
+manual owner.
 
 `YEW-F-123` is Medium because Sprint 55 DoD 10 and F14 require Fletch
 Amendment A2 as evidence for the runtime import row. Amendment A2 added the
@@ -1316,7 +1318,8 @@ binding Amendment A3, as both `.docs/fletch-spec.md` section 16 and the
 executable `runtime_dir_last.fl` conformance fixture state. The product and
 spec agree; the closeout evidence identity does not. The hard XFAIL requires
 Sprint 55 and F14 to name binding Amendment A3 without changing import
-behavior.
+behavior. Commit `fe7ee656` adds S59-A33 and synchronizes the Sprint 55 and
+F14 evidence identity.
 
 ## Unverified observations
 
