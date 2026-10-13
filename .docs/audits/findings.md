@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-117`
+Next available ID: `YEW-F-118`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -129,6 +129,7 @@ recorded in `audit-00.md`.
 | YEW-F-114 | M | fixed | F10 SYN | ~~Syntax closeout retains historical ownership/inventory gates~~ — fixed 2026-10-13 in `0488f5df` | tests/audit/yew_f_114.c | s59 §2; s39 DoD 3; s42 DoD 2/3/9/10 |
 | YEW-F-115 | M | fixed | F11 LSP | ~~LSP closeout requires superseded staging guards~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_115.c | s59 §2; s43 DoD 12; s44 DoD 13; s45 DoD 13; s46 DoD 13 |
 | YEW-F-116 | M | fixed | F11 LSP | ~~LSP closeout retains invalid determinism scans~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_116.c | s59 §2; s44 DoD 6; s45 DoD 8 |
+| YEW-F-117 | M | open | F11 LSP | live-clangd harness sends a URI different from didOpen on macOS | tests/audit/yew_f_117.c | s47 DoD 2; s58 F11 q8; s59 §2 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1236,6 +1237,15 @@ symbol ranking and sole annotated JSON real formatter are intact. The hard
 XFAIL requires token-aware owner-scoped symbol checks and a formatter pattern
 that admits precision-bearing conversions without broadening either owner.
 Commit `5a8a438f` adds S59-A27 and synchronizes both executable scan contracts.
+
+`YEW-F-117` is Medium because the required live-clangd milestone fails before
+its first goto request on macOS. The scratch root is created through `/tmp`,
+which resolves to `/private/tmp`; attachment and `didOpen` correctly use the
+canonical `LspDoc.uri`, but the harness rebuilt request URIs from
+`Buffer.path`. Clangd therefore rejected the request as a non-added document.
+Production LSP feature and rename paths already use `doc->uri`, so no editor
+behavior is shown wrong. The hard XFAIL requires the live harness to use the
+same attached URI and the full live milestone to pass on this host.
 
 ## Unverified observations
 

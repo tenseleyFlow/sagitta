@@ -136,7 +136,10 @@ findings YEW-F-115, YEW-F-116
   that cannot match the required precision-bearing `%.17g` conversion.
   Both findings were resolved by binding amendments S59-A26/A27 in
   `5a8a438f`; no product code changed.
+- `YEW-F-117` records the current live-clangd harness rebuilding request URIs
+  from a noncanonical `/tmp` path after `didOpen` used the attached canonical
+  `/private/tmp` URI. Production requests already use the attached document.
 
 ## Count
 
-Raw 5 · deduped 5 · critical 0 · high 0 · medium 5 · low 0 · unverified 0.
+Raw 6 · deduped 6 · critical 0 · high 0 · medium 6 · low 0 · unverified 0.

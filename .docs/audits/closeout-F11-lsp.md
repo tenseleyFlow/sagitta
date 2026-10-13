@@ -150,7 +150,8 @@ Sprints covered: s43, s44, s45, s46, s47
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-117` (Medium): the live-clangd harness sends request URIs rebuilt
+  from a noncanonical buffer path instead of the attached document URI.
 
 ## Deferrals recorded against this front
 

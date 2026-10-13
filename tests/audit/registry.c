@@ -127,6 +127,7 @@ const YewAuditTest yew_audit_tests[] = {
     , A("YEW-F-114", YEW_AUDIT_PASS, test_yew_f_114)
     , A("YEW-F-115", YEW_AUDIT_PASS, test_yew_f_115)
     , A("YEW-F-116", YEW_AUDIT_PASS, test_yew_f_116)
+    , A("YEW-F-117", YEW_AUDIT_XFAIL, test_yew_f_117)
 };
 
 const size_t yew_audit_tests_len =
