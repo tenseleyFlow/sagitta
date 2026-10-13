@@ -94,7 +94,7 @@ recorded in `audit-00.md`.
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 | YEW-F-080 | M | fixed | F15 CI | ~~host sleep fabricates a fuzz-watchdog finding~~ — fixed 2026-10-12 in `ea6327f0` | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
 | YEW-F-081 | M | fixed | F06 RE | ~~long quoted literals exceed the smaller VM-program limit~~ — fixed 2026-10-12 in `ee713cd5` | tests/audit/yew_f_081.c | s21 §6 / DoD 13 |
-| YEW-F-082 | C | confirmed | F06 RE | direct whole literals can split valid UTF-8 codepoints | tests/audit/yew_f_082.c | invariant 2; s20 §3 / §7 |
+| YEW-F-082 | C | fixed | F06 RE | ~~direct whole literals can split valid UTF-8 codepoints~~ — fixed 2026-10-13 in `8768947c` | tests/audit/yew_f_082.c | invariant 2; s20 §3 / §7 |
 | YEW-F-083 | M | confirmed | F06 RE | backward search skips overlapping match starts | tests/audit/yew_f_083.c | s20 §1 / §6c |
 | YEW-F-084 | M | confirmed | F06 RE | Fletch keeps the obsolete 64 KiB regex-text precheck | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
 | YEW-F-085 | M | confirmed | F06 RE | REP2 unpack accepts impossible direct-literal metadata | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
@@ -781,7 +781,16 @@ then turns the valid cent sign into the orphan byte `A2`.  That silently
 changes a user-owned byte outside the decoded-codepoint match the user asked
 for, crossing invariant 2's no-byte-confusion boundary.  The hard XFAIL uses
 the long-literal route that exposed the defect and also requires an invalid
-raw `C2` to keep matching itself.
+raw `C2` to keep matching itself.  Commit `8768947c` makes direct-literal
+start and end checks replay the authoritative lossless UTF-8 decoder, routes
+the syntax whole-literal shortcut through that same checked path, and retains
+the byte identity of malformed input.  The regression matrix covers flat and
+fragmented inputs, short and oversized literals, Pike/DFA agreement, valid
+multibyte endpoints, and malformed lead/continuation bytes.  The Critical
+cluster hunt checked public search, test, match-at, Pike, DFA, syntax, Fletch
+replacement, and TextBuf seams.  It found the separately filed backward
+overlap and Fletch-cap defects (`YEW-F-083` and `YEW-F-084`); no additional
+untracked byte-splitting path remains.
 
 `YEW-F-083` is Medium because the public backward-search contract promises the
 last match whose start is strictly before the requested offset, but its

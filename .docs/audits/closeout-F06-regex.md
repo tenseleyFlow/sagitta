@@ -1,6 +1,6 @@
 # Closeout: F06 — Regex and search
 
-Date:            2026-10-12
+Date:            2026-10-13
 Baseline commit: 4c99e13474c84d75eec3250d61412b53fa41ae00
 Reviewer:        UNASSIGNED
 Sprints covered: s20, s21
@@ -64,8 +64,7 @@ Sprints covered: s20, s21
 
 ## Open audit findings against this front
 
-4 open: `YEW-F-082` (Critical), `YEW-F-083`, `YEW-F-084`, and
-`YEW-F-085` (Medium).
+3 open: `YEW-F-083`, `YEW-F-084`, and `YEW-F-085` (Medium).
 
 ## Deferrals recorded against this front
 
@@ -73,4 +72,4 @@ none
 
 ## Verdict
 
-NOT READY — Independent review found four open regex/search defects.
+NOT READY — Independent review found three remaining regex/search defects.
