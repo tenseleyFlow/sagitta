@@ -614,17 +614,20 @@ only.
    and `git.ascii_glyphs` tree variants; all status combinations realizable
    by real Git are covered there. Marker stacking order is independently
    asserted for all 15 abstract non-empty subsets in the unit table.
-3. `grep -rn 'strlen\|wcwidth' src/mod/git/fussmode.c src/mod/git/fusstree.c`
-   → empty; all width math routes through `src/unicode/`.
+3. All display-cell width math routes through `src/unicode/`; direct
+   `wcwidth` use is empty. Ordinary `strlen` byte lengths are permitted for
+   command lookup, copied paths, and byte-buffer append operations and are
+   not treated as display-width calculations.
 4. Depth navigation matches the hand-computed table for all 12 fixture
    items × 4 directions, wraparound included.
 5. **Selection survives refresh by path**: the delete-a-row-above test
    passes and fails against an index-based implementation.
 6. Collapsed state survives 100 consecutive refreshes with zero drift
    (the set harvested equals the set restored, every time).
-7. The §5 rule holds: with the jump disarmed, all 30 verb keys dispatch
-   their command; with it armed, none of them do, and the window
-   self-clears under the fake clock.
+7. The binding compact-FUSS action model holds: ordinary valid filename
+   bytes perform type jump over visible/expanded rows only; actions use Alt
+   plus their prior key; Ctrl+Shift+/ opens the effective-binding-derived
+   action picker; and action keys never enter or clear the jump buffer.
 8. Every §6 command exists in the registry with a non-empty `help`, is
    `YEW_CMD_RECORDABLE`, and is reachable from E mode; `yew_keymap_build`
    accepts the `mode:F` table with no duplicate sequence.
@@ -642,8 +645,10 @@ only.
 13. The rebase handover leaves the terminal restored on **all** exit paths
     including a synthetic SIGTERM mid-rebase (torture lane asserts termios
     equality before and after).
-14. `ed.group.from_dir` hard-errors naming Sprint 53; every Sprint 53
-    command still hard-errors naming it.
+14. Sprint 53 delivered directory groups and the later Git commands:
+    `ed.group.from_dir` is live from both its command and F-mode directory
+    action, and hunks/blame/diff/status surfaces route through their shipped
+    owners. Permanent non-goals retain explicit messages rather than stubs.
 15. Perf: 20 000-entry build+flatten ≤ 12 ms; keypress p99 ≤ 5 ms with a
     500 ms refresh loop running; baselines committed.
 16. ≥ 150 assertions across the four unit files; ≥ 12 pty goldens, all

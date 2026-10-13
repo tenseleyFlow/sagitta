@@ -9,7 +9,7 @@ Sprints covered: s51, s52, s53
 
 - [ ] s51.1 `make test` green on gcc and clang at `-std=c11 -pedantic -Wall -Wextra -Werror`; ASan/UBSan/valgrind/determinism lanes green; the `MODULES=""` build compiles and every `ed.git.*` command reports `this build has no fuss module; rebuild with 'make MODULES="… fuss"'` verbatim.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s51.2 `grep -rn '/tmp/\|mkstemp\|tmpfile\|system(\|popen(' src/mod/git/` → empty. `grep -rn 'clock(\|cpu_time\|\btime(' src/mod/git/` → empty. `grep -rn 'sprintf\|bytebuf_printf' src/mod/git/ | grep -v porcelain.c` → empty.
+- [ ] s51.2 Temporary/process APIs remain absent; a tokenized clock-call scan finds no actual wall/CPU clock calls; structural argv and hostile-filename controls prove path/ref/message elements are copied byte-exactly without forbidding checked display formatting.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s51.3 Every record kind in §5 (`#` ×5, `1`, `2`, `u`, `?`, `!`) has a passing parse assertion, and every `XY` pair in §5.2/§5.4 drives the §5.6 mapping table.
       — VERDICT: blocking — independent closeout review pending.
@@ -33,13 +33,13 @@ Sprints covered: s51, s52, s53
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s51.13 ≥ 140 assertions across the two unit files; the fixture repo produces identical object hashes on two different machines (CI asserts a pinned hash list).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s51.14 `ed.mode.enter F` and every Sprint 52/53 command hard-error naming their sprint.
+- [ ] s51.14 Later binding Sprints 52, 53, and 57.5 supersede the original staging and key guards: shipped F/Git/editor commands are live, stripped commands retain exact module errors, and permanent non-goals remain explicit.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s52.1 `make test` green on gcc and clang, zero warnings; ASan/UBSan/valgrind/ determinism/`MODULES=""` lanes green.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s52.2 Every row of the §3 glyph table appears in pty evidence, with Unicode and `git.ascii_glyphs` tree variants; all status combinations realizable by real Git are covered there. Marker stacking order is independently asserted for all 15 abstract non-empty subsets in the unit table.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s52.3 `grep -rn 'strlen\|wcwidth' src/mod/git/fussmode.c src/mod/git/fusstree.c` → empty; all width math routes through `src/unicode/`.
+- [ ] s52.3 FUSS width ownership permits byte-length operations while routing every display-cell measurement through `src/unicode/`; no direct `wcwidth` call exists.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s52.4 Depth navigation matches the hand-computed table for all 12 fixture items × 4 directions, wraparound included.
       — VERDICT: blocking — independent closeout review pending.
@@ -47,7 +47,7 @@ Sprints covered: s51, s52, s53
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s52.6 Collapsed state survives 100 consecutive refreshes with zero drift (the set harvested equals the set restored, every time).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s52.7 The §5 rule holds: with the jump disarmed, all 30 verb keys dispatch their command; with it armed, none of them do, and the window self-clears under the fake clock.
+- [ ] s52.7 The binding compact-FUSS model gives ordinary filename bytes to visible-row type jump, gates actions behind Alt plus the prior key, exposes Ctrl+Shift+/ action help, and keeps action modifiers out of the jump buffer.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s52.8 Every §6 command exists in the registry with a non-empty `help`, is `YEW_CMD_RECORDABLE`, and is reachable from E mode; `yew_keymap_build` accepts the `mode:F` table with no duplicate sequence.
       — VERDICT: blocking — independent closeout review pending.
@@ -61,7 +61,7 @@ Sprints covered: s51, s52, s53
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s52.13 The rebase handover leaves the terminal restored on **all** exit paths including a synthetic SIGTERM mid-rebase (torture lane asserts termios equality before and after).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s52.14 `ed.group.from_dir` hard-errors naming Sprint 53; every Sprint 53 command still hard-errors naming it.
+- [ ] s52.14 Sprint 53's directory-group and editor-Git commands are live through their shipped command and F-mode owners; permanent non-goals remain explicit rather than silent stubs.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s52.15 Perf: 20 000-entry build+flatten ≤ 12 ms; keypress p99 ≤ 5 ms with a 500 ms refresh loop running; baselines committed.
       — VERDICT: blocking — independent closeout review pending.

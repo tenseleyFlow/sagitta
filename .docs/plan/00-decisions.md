@@ -713,6 +713,31 @@ access stats. This amendment changes no transport, privacy, logging, or stats
 behavior. It supersedes only raw ownership scans in Sprints 48/49 and F12;
 `YEW-F-119` records the correction.
 
+**Git/FUSS closeout amendment S59-A30 (2026-10-13) — shipped owners and the
+binding compact-FUSS keyboard replace landing guards.** Sprint 51 staged F
+mode and later Git/editor commands; Sprint 52 delivered F mode and the Git
+verbs; Sprint 53 delivered hunks, blame, diff views, status, and directory
+groups. Their future-sprint hard errors were landing guards. The binding
+Sprint 57.5/current FUSS model also resolves the action/type-jump conflict:
+ordinary valid filename bytes search visible rows, actions use Alt plus their
+prior key, and Ctrl+Shift+/ opens the effective-binding-derived action picker.
+Current closeout tests those shipped owners and bindings. Conflict resolution
+and sub-hunk staging remain documented post-1.0 boundaries. This amendment
+changes no product behavior. It supersedes only stale staging/key wording in
+Sprints 51/52 and F13; `YEW-F-120` records the correction.
+
+**Git/FUSS ownership closeout amendment S59-A31 (2026-10-13) — clock, argv,
+and width gates follow semantic operations.** The tokenized call scan fixed by
+`YEW-F-018` bans actual `time`, `clock`, and `cpu_time` calls while permitting
+helper identifiers containing those byte sequences. The structural argv
+builder and hostile-filename matrix fixed by `YEW-F-020` forbid formatted
+path/ref/message elements while permitting formatting of owned display text.
+FUSS display-cell measurement continues to route through `src/unicode/`;
+ordinary `strlen` calls that compute byte lengths are not width math. This
+amendment changes no clock, subprocess, path, or Unicode behavior. It
+supersedes only invalid literal scans in Sprints 51/52 and F13;
+`YEW-F-121` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

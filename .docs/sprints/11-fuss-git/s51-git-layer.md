@@ -670,9 +670,11 @@ state, snapshot age to the message line), `ed.git.refresh`, `ed.git.log`
    `this build has no fuss module; rebuild with 'make MODULES="… fuss"'`
    verbatim.
 2. `grep -rn '/tmp/\|mkstemp\|tmpfile\|system(\|popen(' src/mod/git/` →
-   empty. `grep -rn 'clock(\|cpu_time\|\btime(' src/mod/git/` → empty.
-   `grep -rn 'sprintf\|bytebuf_printf' src/mod/git/ | grep -v porcelain.c`
-   → empty.
+   empty. The tokenized call scan established by YEW-F-018 finds no actual
+   `time`, `clock`, or `cpu_time` call while permitting helper-name suffixes.
+   The structural argv control established by YEW-F-020 proves caller-owned
+   elements are copied byte-exactly and unformatted, while display-only
+   buffers may use checked formatting.
 3. Every record kind in §5 (`#` ×5, `1`, `2`, `u`, `?`, `!`) has a passing
    parse assertion, and every `XY` pair in §5.2/§5.4 drives the §5.6
    mapping table.
@@ -702,5 +704,8 @@ state, snapshot age to the message line), `ed.git.refresh`, `ed.git.log`
 13. ≥ 140 assertions across the two unit files; the fixture repo produces
     identical object hashes on two different machines (CI asserts a pinned
     hash list).
-14. `ed.mode.enter F` and every Sprint 52/53 command hard-error naming
-    their sprint.
+14. Sprints 52 and 53 delivered the staged commands. F mode, Git verbs,
+    hunks, blame, diff views, status, and directory groups route through their
+    live implementations; stripped-module commands retain the exact module
+    boundary error and permanent post-1.0 commands retain their documented
+    non-goal messages.
