@@ -116,6 +116,19 @@ finding `YEW-F-013`
   F10 cannot demonstrate its `NO_COLOR` behavior; no absence claim is made for
   that future surface.
 
+## Sprint 59 closeout-contract recheck
+
+findings YEW-F-113, YEW-F-114
+
+- `YEW-F-113` records state-layout and staging clauses that require the
+  pre-embedding 40-byte tuple, removed `SynState.def`, and hard errors for
+  syntax surfaces delivered by Sprints 40–42.5. Sprint 41.5 explicitly
+  superseded those landing guards with the current frame-stack invariants.
+- `YEW-F-114` records a whole-subsystem color grep that now includes the
+  legitimate theme loader and original 17-definition inventory wording that
+  does not distinguish Sprint 42's cohort from Sprint 42.5's current checked
+  48-definition manifest.
+
 ## Count
 
-Raw 3 · deduped 3 · critical 0 · high 0 · medium 3 · low 0 · unverified 1.
+Raw 5 · deduped 5 · critical 0 · high 0 · medium 5 · low 0 · unverified 1.

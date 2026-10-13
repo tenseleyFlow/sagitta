@@ -114,7 +114,10 @@ Sprints covered: s39, s40, s41, s42
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-113` (Medium): source and closeout contracts retain superseded
+  pre-embedding state and staging gates.
+- `YEW-F-114` (Medium): source and closeout contracts retain historical
+  syntax ownership and definition-inventory gates.
 
 ## Deferrals recorded against this front
 

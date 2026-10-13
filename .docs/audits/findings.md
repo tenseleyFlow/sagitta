@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-113`
+Next available ID: `YEW-F-115`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -125,6 +125,8 @@ recorded in `audit-00.md`.
 | YEW-F-110 | M | fixed | F08 FL | ~~Fletch closeout treats historical inventories as current totals~~ — fixed 2026-10-13 in `bb1e745b` | tests/audit/yew_f_110.c | s59 §2; s28 DoD 1/8; s30 DoD 11; s31 DoD 2; s33 DoD 4/6 |
 | YEW-F-111 | M | fixed | F09 REC | ~~Recorder closeout requires superseded staging guards~~ — fixed 2026-10-13 in `905da06f` | tests/audit/yew_f_111.c | s59 §2; s35 DoD 14; s38 DoD 13 |
 | YEW-F-112 | M | fixed | F09 REC | ~~Recorder closeout requires unreachable macrolib collision~~ — fixed 2026-10-13 in `905da06f` | tests/audit/yew_f_112.c | s59 §2; s38 DoD 8 |
+| YEW-F-113 | M | open | F10 SYN | Syntax closeout requires superseded staging/state gates | tests/audit/yew_f_113.c | s59 §2; s39 DoD 2/12; s40 DoD 10; s41 DoD 13; s42 DoD 8 |
+| YEW-F-114 | M | open | F10 SYN | Syntax closeout retains historical ownership/inventory gates | tests/audit/yew_f_114.c | s59 §2; s39 DoD 3; s42 DoD 2/3/9/10 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1186,6 +1188,26 @@ injectivity, cover all seven reachable rows, and retain the defensive branch
 for review. Commit `905da06f` adds S59-A23 and replaces only the impossible
 fixture requirement with the stronger namespace-injectivity proof and
 defensive-branch review.
+
+`YEW-F-113` is Medium because F10's current closeout still requires the
+40-byte flat syntax state, the removed `SynState.def` field, rejection of
+embedded languages, and hard errors for definitions, themes, and language
+packs that Sprints 40–42.5 delivered. Sprint 41.5 explicitly superseded the
+flat state with an 84-byte frame stack while retaining four-byte per-line
+entry ids and stronger canonicalization/balance invariants. Product behavior
+is not shown wrong. The hard XFAIL requires the Sprint 39–42 and F10 contracts
+to preserve landing history while testing the shipped frame state and later
+owner surfaces.
+
+`YEW-F-114` is Medium because Sprint 39's literal whole-`src/syn/` color grep
+now rejects Sprint 41's legitimate theme loader, while Sprint 42's current
+closeout still describes the original 17-definition / 14-language inventory
+after Sprint 41.5 expanded it to 19 and binding Sprint 42.5 established a
+checked 48-definition manifest. The repository's live ban already excludes
+only `theme.c`/`theme.h` while continuing to reject colors in matching code.
+Product behavior is not shown wrong. The hard XFAIL requires the contracts to
+retain the original cohort as history and use the manifest, current coverage,
+and current cold-load/fuzz gates for release closeout.
 
 ## Unverified observations
 
