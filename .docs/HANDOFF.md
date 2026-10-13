@@ -14,8 +14,8 @@ Apple-silicon host `nomad-1`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
 **Implementation checkpoint before this documentation refresh:** `trunk` is
-92 commits above `origin/trunk` at `34dd30ef`, including Sprint 59's
-documentation/tutorial work, all 100 completed finding remediations, and the
+93 commits above `origin/trunk` at `21a73494`, including Sprint 59's
+documentation/tutorial work, 100 completed finding remediations, and the
 F01/F02/F06 pre-closeout evidence packets. The product code used by the soak
 remains the exact hosted-green anchor.
 
@@ -36,9 +36,11 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 100 stable IDs and all 100 are fixed;
-`YEW-F-100` aligned F03's historical staging guards with shipped behavior
-under decision amendment S59-A11 without changing text-engine product code.
+landed. The findings ledger contains 101 stable IDs: 100 are fixed and
+`YEW-F-101` is the one open Medium. It records obsolete F03 mutation-ownership
+wording found during the current-baseline evidence pass; the original audit
+already classified the later internal call sites as safe, so no product
+regression is currently shown.
 `YEW-F-081` came from scheduled fuzz run `38281035643`: a 4,240-byte quoted
 literal crossed the smaller VM-program limit. Commit `ee713cd5` preserves that
 limit and matches conservatively proven whole literals directly; the exact
@@ -69,8 +71,8 @@ rows; do not report progress from elapsed process time.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 100 fixes reconcile, no hard XFAIL remains, and priority
-order is proven from Git ancestry. The deterministic
+executable gates: all 100 fixes reconcile, one hard XFAIL records F101, and
+priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -84,8 +86,8 @@ baselines.
 
 The immediate work is:
 
-1. complete F03's baseline-pinned local pre-closeout packet without claiming
-   independent reviewer signoff;
+1. remediate `YEW-F-101`, then complete F03's baseline-pinned local
+   pre-closeout packet without claiming independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
 3. keep the corrected 56-stream soak under observation without idling Sprint

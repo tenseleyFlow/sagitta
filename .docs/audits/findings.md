@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-101`
+Next available ID: `YEW-F-102`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -113,6 +113,7 @@ recorded in `audit-00.md`.
 | YEW-F-098 | L | fixed | F01 UNI | ~~Unicode unit registry misses contracted floor~~ — fixed 2026-10-13 in `8e9f1990` | tests/audit/yew_f_098.c | s02 DoD 14 |
 | YEW-F-099 | M | fixed | F02 TERM | ~~terminal closeout requires superseded staging behavior~~ — fixed 2026-10-13 in `29682c67` | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
 | YEW-F-100 | M | fixed | F03 TEXT | ~~text-engine closeout requires superseded staging guards~~ — fixed 2026-10-13 in `34dd30ef` | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
+| YEW-F-101 | M | confirmed | F03 TEXT | text-engine closeout retains obsolete mutation-ownership spellings | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -997,6 +998,20 @@ Commit `34dd30ef` adds decision amendment S59-A11, replaces the obsolete
 absence requirements with the shipped one-transaction and register-routing
 evidence, and preserves explicit errors for genuinely unknown paths. The hard
 XFAIL now passes without changing text-engine product behavior.
+
+`YEW-F-101` is Medium because the current Sprint 10 and F03 closeout still
+claim every raw text-buffer mutation under `src/` lives in only
+`text/{piece,edit,undo}.c`, although later sprints deliberately added initial
+hydration and internal no-undo/read-only projection builders. The original
+F03 audit classified those call sites and found no editable-document bypass.
+Sprint 12 also still publishes the superseded public `yew_reg_set` and
+`yew_reg_append` spellings even though the implementation strengthened that
+boundary: the raw setter/appender are private and public writers use typed
+routing functions. Product behavior is not shown wrong, but the release
+closeout cannot truthfully satisfy its literal grep/API wording. The hard
+XFAIL requires a formal decision amendment and synchronized Sprint 10/12 and
+F03 closeout language without weakening editable-document or register routing
+ownership.
 
 ## Unverified observations
 

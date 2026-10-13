@@ -120,5 +120,6 @@ bool test_yew_f_097(char *why, size_t why_cap);
 bool test_yew_f_098(char *why, size_t why_cap);
 bool test_yew_f_099(char *why, size_t why_cap);
 bool test_yew_f_100(char *why, size_t why_cap);
+bool test_yew_f_101(char *why, size_t why_cap);
 
 #endif

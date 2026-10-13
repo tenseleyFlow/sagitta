@@ -156,7 +156,7 @@ Sprints covered: s07, s08, s09, s10, s11, s12
 
 ## Open audit findings against this front
 
-0 open confirmed findings.
+1 open confirmed finding: `YEW-F-101` (obsolete mutation-ownership wording).
 
 ## Deferrals recorded against this front
 
@@ -164,4 +164,4 @@ none
 
 ## Verdict
 
-NOT READY — Confirmed findings are closed; independent evidence review remains.
+NOT READY — `YEW-F-101` and independent evidence review remain open.

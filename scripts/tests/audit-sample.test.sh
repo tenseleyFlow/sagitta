@@ -20,7 +20,13 @@ cmp "$first" "$second"
 test "$(wc -l <"$first" | tr -d ' ')" -eq 5
 
 scripts/audit-sample.sh .docs/audits/findings.md 20261012 >"$first"
-test "$(wc -l <"$first" | tr -d ' ')" -eq 10
+ledger_count=$(awk -F '|' '/^\|[[:space:]]*YEW-F-/ { count++ } END { print count + 0 }' \
+    .docs/audits/findings.md)
+expected=$(((ledger_count + 9) / 10))
+if [ "$expected" -lt 5 ]; then
+    expected=5
+fi
+test "$(wc -l <"$first" | tr -d ' ')" -eq "$expected"
 if scripts/audit-sample.sh "$ledger" 0 >/dev/null 2>&1; then
     echo "audit-sample selftest: accepted seed zero" >&2
     exit 1
