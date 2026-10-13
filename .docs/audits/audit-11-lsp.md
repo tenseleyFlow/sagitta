@@ -134,6 +134,8 @@ findings YEW-F-115, YEW-F-116
 - `YEW-F-116` records a raw whole-workspace substring scan that includes
   unrelated state owners and ordinary words, plus a JSON formatter pattern
   that cannot match the required precision-bearing `%.17g` conversion.
+  Both findings were resolved by binding amendments S59-A26/A27 in
+  `5a8a438f`; no product code changed.
 
 ## Count
 
