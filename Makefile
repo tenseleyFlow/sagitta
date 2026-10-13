@@ -411,11 +411,15 @@ FAULTSHIM_PLATFORM_SRC := tests/torture/faultshim-darwin.s
 # macOS ships an arm64e-only /bin/sh alongside an arm64 compiler target.
 # A DYLD interposer is loaded before a wrapper can clear its environment, so
 # the fault shim needs both native Apple-silicon ABI slices.
+# YEW-F-088: Homebrew GCC cannot emit arm64e.  Keep the requested CC for
+# product/test objects and use Apple's compiler only for this dual-ABI dylib.
+FAULTSHIM_CC ?= clang
 FAULTSHIM_ARCH_FLAGS := -arch arm64 -arch arm64e
 else
 SHARED_FLAG := -shared
 DL_LIBS := -ldl
 FAULTSHIM_PLATFORM_SRC :=
+FAULTSHIM_CC ?= $(CC)
 FAULTSHIM_ARCH_FLAGS :=
 endif
 
@@ -1778,7 +1782,7 @@ $(TORTURE_GIT_HUNK): $(PERF_CORE_OBJ) $(TORTURE_GIT_HUNK_OBJ)
 $(FAULTSHIM): tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
               $(BUILD)/mods.stamp \
               $(BUILD)/profile.stamp $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
-	$(CC) $(CFLAGS) $(LDFLAGS) $(FAULTSHIM_SAN_FLAGS) \
+	$(FAULTSHIM_CC) $(CFLAGS) $(LDFLAGS) $(FAULTSHIM_SAN_FLAGS) \
 		-fPIC $(SHARED_FLAG) $(FAULTSHIM_ARCH_FLAGS) -o $@ \
 		tests/torture/faultshim.c $(FAULTSHIM_PLATFORM_SRC) \
 		$(DL_LIBS) $(LDLIBS)
