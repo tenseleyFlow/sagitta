@@ -104,7 +104,7 @@ recorded in `audit-00.md`.
 | YEW-F-089 | M | fixed | F06 RE | ~~character-class cap has no firing regression~~ — fixed 2026-10-13 in `709d1eb2` | tests/audit/yew_f_089.c | s20 DoD 11 |
 | YEW-F-090 | M | fixed | F06 RE | ~~DFA cache-pressure test need not flush~~ — fixed 2026-10-13 in `e40ccb23` | tests/audit/yew_f_090.c | s20 DoD 12 |
 | YEW-F-091 | M | fixed | F06 RE | ~~zero-width replacement cases lack PTY goldens~~ — fixed 2026-10-13 in `9bb1415f` | tests/audit/yew_f_091.c | s21 DoD 7 |
-| YEW-F-092 | M | open | F06 RE | interactive search refinement forces full repaint | tests/audit/yew_f_092.c | invariant 4; s21 DoD 9 |
+| YEW-F-092 | M | fixed | F06 RE | ~~interactive search refinement forces full repaint~~ — fixed 2026-10-13 in `ff0373ca` | tests/audit/yew_f_092.c | invariant 4; s21 DoD 9 |
 | YEW-F-093 | M | fixed | F06 RE | ~~restored contracts name superseded regex mechanisms~~ — fixed 2026-10-13 in `2d26fe08` | tests/audit/yew_f_093.c | s59 §2/§3; s20/s21 closeout |
 | YEW-F-094 | L | fixed | F06 RE | ~~golden-table guard permits fewer than 150 rows~~ — fixed 2026-10-13 in `87c0684f` | tests/audit/yew_f_094.c | s20 DoD 4 |
 
@@ -887,6 +887,11 @@ full-document damage and clears a message while the command line is active,
 turning `/na` to `/nai` into a full viewport repaint even though only two
 highlight rows changed. The hard XFAIL drives the real prompt key path and
 records the actual damage interval and `full_damage` state.
+Commit `ff0373ca` limits an in-viewport search move to its old and new cursor
+rows, diffs overlays against the pre-invalidation spans so removed highlights
+are repainted, and preserves an identical wrap notice rather than churning its
+borrowed prompt row. The strengthened reproducer now requires the exact
+half-open damage envelope `[0, 6)` and forbids full damage.
 
 `YEW-F-093` is Medium because the restored binding contracts and their F06
 closeout name mechanisms the code deliberately superseded: a nonexistent
