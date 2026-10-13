@@ -141,7 +141,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-128 | audit | `tests/audit/yew_f_128.c` | ~~renamed Sprint 0 contract requires yew to alias itself~~ — fixed in `d7752508` | fixed |
 | YEW-F-129 | audit | `tests/audit/yew_f_129.c` | ~~foundation closeout literal greps match prose and fixture data~~ — fixed in `d7752508` | fixed |
 | YEW-F-130 | audit | `tests/audit/yew_f_130.c` | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed in `d7752508` | fixed |
-| YEW-F-131 | audit | `tests/audit/yew_f_131.c` | F15 retains a future size stub and superseded hard caps | active |
+| YEW-F-131 | audit | `tests/audit/yew_f_131.c` | ~~F15 retains a future size stub and superseded hard caps~~ — fixed in `7bdfa153` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
