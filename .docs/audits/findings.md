@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-098`
+Next available ID: `YEW-F-099`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -110,6 +110,7 @@ recorded in `audit-00.md`.
 | YEW-F-095 | M | fixed | F01 UNI | ~~F01 closeout requires delivered Unicode deferrals to be absent~~ — fixed 2026-10-13 in `c84e9fe7` | tests/audit/yew_f_095.c | s59 §2; s02 DoD 12; s16/s20 |
 | YEW-F-096 | M | fixed | F15 CI | ~~closeout checker reads ignored sprint contracts~~ — fixed 2026-10-13 in `dfe7f3ce` | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
 | YEW-F-097 | M | fixed | F15 CI | ~~priority gate rejects later-discovered Criticals~~ — fixed 2026-10-13 in `601abc70` | tests/audit/yew_f_097.c | s59 §1 priority law |
+| YEW-F-098 | L | confirmed | F01 UNI | Unicode unit registry misses contracted floor | tests/audit/yew_f_098.c | s02 DoD 14 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -950,6 +951,14 @@ commit: a then-present higher finding must already have an ancestor fix, while
 a finding absent from that snapshot is correctly recognized as later work.
 The fixture covers the later-discovery case and retains the wrong-order and
 still-open rejection controls.
+
+`YEW-F-098` is Low because the four unit files named by Sprint 2 define and
+register 32 tests, below the explicit floor of 45. The original Sprint 2
+landing had 30, so this is unfulfilled source-evidence granularity rather than
+a recent product regression. The existing tests execute millions of dynamic
+assertions and the broad F01 behavior is green; no Unicode misbehavior is yet
+shown. The hard XFAIL counts only named functions in the four owned files and
+also requires each to appear in the explicit unit registry.
 
 ## Unverified observations
 

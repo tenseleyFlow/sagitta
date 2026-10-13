@@ -108,6 +108,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-095 | audit | `tests/audit/yew_f_095.c` | ~~F01 closeout requires delivered Unicode deferrals to be absent~~ — fixed in `c84e9fe7` | fixed |
 | YEW-F-096 | audit | `tests/audit/yew_f_096.c` | ~~closeout checker reads ignored sprint contracts~~ — fixed in `dfe7f3ce` | fixed |
 | YEW-F-097 | audit | `tests/audit/yew_f_097.c` | ~~priority gate rejects later-discovered Criticals~~ — fixed in `601abc70` | fixed |
+| YEW-F-098 | audit | `tests/audit/yew_f_098.c` | Unicode unit registry misses contracted floor | open |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
