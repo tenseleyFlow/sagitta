@@ -176,6 +176,10 @@ findings YEW-F-108, YEW-F-109
   intact: lexer/parser allocations remain caller-arena-owned, language
   objects remain GC-owned through `fl_gc_alloc`, and direct libc allocators
   remain banned.
+- Decision amendments S59-A19/A20 and commit `674d826b` synchronize the
+  source-sprint/F08-closeout wording. Both hard XFAILs now pass without
+  removing a shipped surface or weakening the arena, GC, capability, or
+  standalone-REPL boundaries.
 
 ## Count
 

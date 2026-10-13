@@ -120,8 +120,8 @@ recorded in `audit-00.md`.
 | YEW-F-105 | M | fixed | F05 EXEC | ~~execute closeout retains impossible Unicode/pipe greps~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_105.c | s59 §2; s18 DoD 2; s19 DoD 2 |
 | YEW-F-106 | M | fixed | F07 UI | ~~UI/workspace closeout requires superseded staging guards~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_106.c | s59 §2; s22 DoD 9; s23 DoD 9; s24 DoD 11; s25 DoD 13; s26 DoD 13; s27 DoD 14 |
 | YEW-F-107 | M | fixed | F07 UI | ~~UI/workspace closeout retains impossible ownership greps~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_107.c | s59 §2; s22 DoD 7; s25 DoD 8; s27 DoD 2 |
-| YEW-F-108 | M | open | F08 FL | Fletch closeout requires superseded staging guards | tests/audit/yew_f_108.c | s59 §2; s30 DoD 10; s31 DoD 11; s32 DoD 12; s33 DoD 12; s34 DoD 14; s36 DoD 9/12 |
-| YEW-F-109 | M | open | F08 FL | Fletch closeout retains historical ownership gates | tests/audit/yew_f_109.c | s59 §2; s29 DoD 1/4; s30 DoD 8 |
+| YEW-F-108 | M | fixed | F08 FL | ~~Fletch closeout requires superseded staging guards~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_108.c | s59 §2; s30 DoD 10; s31 DoD 11; s32 DoD 12; s33 DoD 12; s34 DoD 14; s36 DoD 9/12 |
+| YEW-F-109 | M | fixed | F08 FL | ~~Fletch closeout retains historical ownership gates~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_109.c | s59 §2; s29 DoD 1/4; s30 DoD 8 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1140,6 +1140,10 @@ Every language `FlObj` remains allocated through `fl_gc_alloc`, and direct
 libc allocation remains forbidden. Product behavior is not shown wrong. The
 hard XFAIL requires semantic arena/GC ownership wording and synchronized
 Sprint 29/30 and F08 contracts without weakening either allocation boundary.
+Commit `674d826b` adds decision amendments S59-A19/A20 and synchronizes the
+Sprint 29–36 and F08 contracts. Both hard XFAILs pass without changing
+product behavior, removing a shipped Fletch surface, or weakening the
+caller-arena, GC-object, capability, or standalone-REPL boundaries.
 
 ## Unverified observations
 
