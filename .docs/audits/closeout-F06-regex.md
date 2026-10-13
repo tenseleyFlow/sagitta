@@ -64,7 +64,7 @@ Sprints covered: s20, s21
 
 ## Open audit findings against this front
 
-1 open: `YEW-F-085` (Medium).
+0 open confirmed findings.  Independent conformance-gap triage remains.
 
 ## Deferrals recorded against this front
 
@@ -72,4 +72,5 @@ none
 
 ## Verdict
 
-NOT READY — Independent review found one remaining regex/search defect.
+NOT READY — Confirmed defects are remediated; independent conformance-gap
+triage and closeout evidence remain.

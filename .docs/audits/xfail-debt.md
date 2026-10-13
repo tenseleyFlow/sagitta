@@ -95,7 +95,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-082 | audit | `tests/audit/yew_f_082.c` | ~~direct whole literals can split valid UTF-8 codepoints~~ — fixed in `8768947c` | fixed |
 | YEW-F-083 | audit | `tests/audit/yew_f_083.c` | ~~backward search skips overlapping match starts~~ — fixed in `25ffe801` | fixed |
 | YEW-F-084 | audit | `tests/audit/yew_f_084.c` | ~~Fletch keeps the obsolete 64 KiB regex-text precheck~~ — fixed in `5d9a74c4` | fixed |
-| YEW-F-085 | audit | `tests/audit/yew_f_085.c` | REP2 unpack accepts impossible direct-literal metadata | open |
+| YEW-F-085 | audit | `tests/audit/yew_f_085.c` | ~~REP2 unpack accepts impossible direct-literal metadata~~ — fixed in `90517467` | fixed |
 | YEW-F-086 | audit | `tests/audit/yew_f_086.c` | binding and F06 contracts exist only as ignored local files | open |
 
 The Sprint 33 conformance-only ledger remains at

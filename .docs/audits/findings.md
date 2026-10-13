@@ -97,7 +97,7 @@ recorded in `audit-00.md`.
 | YEW-F-082 | C | fixed | F06 RE | ~~direct whole literals can split valid UTF-8 codepoints~~ — fixed 2026-10-13 in `8768947c` | tests/audit/yew_f_082.c | invariant 2; s20 §3 / §7 |
 | YEW-F-083 | M | fixed | F06 RE | ~~backward search skips overlapping match starts~~ — fixed 2026-10-13 in `25ffe801` | tests/audit/yew_f_083.c | s20 §1 / §6c |
 | YEW-F-084 | M | fixed | F06 RE | ~~Fletch keeps the obsolete 64 KiB regex-text precheck~~ — fixed 2026-10-13 in `5d9a74c4` | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
-| YEW-F-085 | M | confirmed | F06 RE | REP2 unpack accepts impossible direct-literal metadata | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
+| YEW-F-085 | M | fixed | F06 RE | ~~REP2 unpack accepts impossible direct-literal metadata~~ — fixed 2026-10-13 in `90517467` | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
 | YEW-F-086 | M | confirmed | F15 CI | binding and F06 contracts exist only as ignored local files | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
@@ -819,7 +819,12 @@ but accepts headers the compiler cannot produce: ICASE direct matching and
 extra capture groups.  The resulting object advertises flags and groups its
 byte matcher does not honor.  The syntax-cache envelope normally catches
 accidental corruption, so the demonstrated impact is bounded wrong semantics,
-not memory unsafety.
+not memory unsafety.  Commit `90517467` validates REP2 as the exact direct
+oversized-literal form emitted by the compiler: allowed flags and booleans,
+one group/no classes, fixed forward and reverse programs, unanchored whole
+literal metadata, and payload-derived codepoint cardinality.  The public
+`used` contract still permits a following record.  A mutation matrix and the
+existing round trip pass under Clang, ASan/UBSan, and GCC 16.
 
 `YEW-F-086` is Medium because the two binding plans and the Sprint 20/21
 contracts are present in the working directory only as ignored files.  A
