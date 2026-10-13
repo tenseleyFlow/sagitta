@@ -138,7 +138,7 @@ recorded in `audit-00.md`.
 | YEW-F-123 | M | fixed | F14 PLUG | ~~plugin closeout names the wrong Fletch import amendment~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_123.c | s59 §2; s55 DoD 10; Fletch spec §16 A3 |
 | YEW-F-124 | M | fixed | F15 CI | ~~macOS GCC package lane sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `7cdbe9d1` | tests/audit/yew_f_124.c | s55 DoD 1; compiler matrix; YEW-F-088 sibling |
 | YEW-F-125 | M | fixed | F14 PLUG | ~~plugins-only unit build links a stripped FUSS test seam~~ — fixed 2026-10-13 in `ada52d91` | tests/audit/yew_f_125.c | s55 DoD 1; compile-time module boundary |
-| YEW-F-126 | M | open | F14 PLUG | Sprint 54 diverges from the shared stripped-module diagnostic | tests/audit/yew_f_126.c | s54 DoD 1; invariant 3; shared module seam |
+| YEW-F-126 | M | fixed | F14 PLUG | ~~Sprint 54 diverges from the shared stripped-module diagnostic~~ — fixed 2026-10-13 in `7cd13177` | tests/audit/yew_f_126.c | s54 DoD 1; invariant 3; shared module seam |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1360,6 +1360,9 @@ same clear form unit-tested for every excisable module. There is no silent
 stub or product ambiguity; the later plugin contract diverged from its older
 shared owner. The hard XFAIL requires a binding amendment plus synchronized
 Sprint 54 and F14 closeout wording, without changing product behavior.
+Commit `7cd13177` adds S59-A34 and makes the source sprint and closeout require
+the shared diagnostic byte-exact. The minimal binary's `plug list` and `pkg
+list` paths both exit 1 with that exact message; product code is unchanged.
 
 ## Unverified observations
 
