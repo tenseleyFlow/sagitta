@@ -14,7 +14,12 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 126 confirmed findings are fixed. F122/F123 aligned F14's
+are complete; all 135 confirmed findings are fixed. F127–F132 aligned F15's
+foundation, test, batch, and size contracts with shipped owners and the
+truthful 1.0 boundary under S59-A35–A40. F133–F135 repaired disjoint-build
+temporary ownership, FHS canonical-path handling, and inherited Git signing
+in the test harness. No feature or quality, performance, or size gate was
+removed. F122/F123 aligned F14's
 obsolete package/manual staging rules and runtime-import amendment identity
 under S59-A32/A33. F125 repaired the plugins-only unit boundary without
 removing the module-neutral assertions, and F126 aligned Sprint 54 with the
@@ -50,7 +55,7 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F14 without claiming reviewer
+pre-closeout packets exist for F01 through F15 without claiming reviewer
 signoff. F08 maps all 95 Fletch DoD rows after strict Clang/GCC/ASan builds,
 35 focused unit filters, 39/39 conformance and GC-stress runs, deterministic
 dispatch/round-trip checks, bounded fuzz samples, selected PTYs, and a
@@ -76,7 +81,13 @@ after warning-clean Clang/GCC/ASan focused builds, 66 plugin units and 27,193
 assertions per configuration, 53 package cases in four configurations, nine
 PTYs per compiler configuration, plugins-only and empty-module boundary
 builds, bounded deterministic fuzz, documentation/bans/shim gates, and
-performance-policy checks. F15 is the next local evidence front.
+performance-policy checks. F15 maps all 64 inherited rows after identical
+3,047-test GCC/Clang unit runs, 2,540 empty-module units, focused sanitizer
+and Valgrind checks, the complete script suite, batch torture, allocation and
+portable release gates, same-host binary identity, and all 135 governance
+fixtures. Its designated timing, pinned size/musl, full dynamic-analysis and
+PTY, hosted/cross-target, embedded/hardware, and independent-machine evidence
+remain explicit blockers.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
