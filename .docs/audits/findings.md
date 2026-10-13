@@ -139,10 +139,10 @@ recorded in `audit-00.md`.
 | YEW-F-124 | M | fixed | F15 CI | ~~macOS GCC package lane sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `7cdbe9d1` | tests/audit/yew_f_124.c | s55 DoD 1; compiler matrix; YEW-F-088 sibling |
 | YEW-F-125 | M | fixed | F14 PLUG | ~~plugins-only unit build links a stripped FUSS test seam~~ — fixed 2026-10-13 in `ada52d91` | tests/audit/yew_f_125.c | s55 DoD 1; compile-time module boundary |
 | YEW-F-126 | M | fixed | F14 PLUG | ~~Sprint 54 diverges from the shared stripped-module diagnostic~~ — fixed 2026-10-13 in `7cd13177` | tests/audit/yew_f_126.c | s54 DoD 1; invariant 3; shared module seam |
-| YEW-F-127 | M | open | F15 CI | F15 retains landing-day hard errors for shipped surfaces | tests/audit/yew_f_127.c | s00 DoD 3; s01 DoD 8; s37 DoD 14; s59 §2 |
-| YEW-F-128 | M | open | F15 CI | renamed Sprint 0 contract requires yew to alias itself | tests/audit/yew_f_128.c | s00 DoD 1/10; binary/install ownership |
-| YEW-F-129 | M | open | F15 CI | foundation closeout literal greps match prose and fixture data | tests/audit/yew_f_129.c | s00 DoD 6; s01 DoD 7; semantic bans |
-| YEW-F-130 | M | open | F15 CI | Sprint 1 landing-day timing covers the expanded full suite | tests/audit/yew_f_130.c | s01 DoD 1; current CI budget owners |
+| YEW-F-127 | M | fixed | F15 CI | ~~F15 retains landing-day hard errors for shipped surfaces~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_127.c | s00 DoD 3; s01 DoD 8; s37 DoD 14; s59 §2 |
+| YEW-F-128 | M | fixed | F15 CI | ~~renamed Sprint 0 contract requires yew to alias itself~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_128.c | s00 DoD 1/10; binary/install ownership |
+| YEW-F-129 | M | fixed | F15 CI | ~~foundation closeout literal greps match prose and fixture data~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_129.c | s00 DoD 6; s01 DoD 7; semantic bans |
+| YEW-F-130 | M | fixed | F15 CI | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_130.c | s01 DoD 1; current CI budget owners |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1397,6 +1397,10 @@ the historical figure as the current aggregate either creates an impossible
 gate or incentivizes removing coverage. The hard XFAIL preserves the original
 measurement as history and assigns the expanded suite to current CI job
 budgets and the dedicated performance contracts.
+Commit `d7752508` adds binding amendments S59-A35 through S59-A38 and
+synchronizes Sprints 0/1/37 plus F15. Current shipped targets, executable and
+install ownership, semantic bans, and CI/performance budgets remain intact;
+no product or test implementation changed.
 
 ## Unverified observations
 

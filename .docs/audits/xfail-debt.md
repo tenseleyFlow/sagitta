@@ -137,10 +137,10 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-124 | audit | `tests/audit/yew_f_124.c` | ~~macOS GCC package lane sends Apple arm64e flags to GCC~~ — fixed in `7cdbe9d1` | fixed |
 | YEW-F-125 | audit | `tests/audit/yew_f_125.c` | ~~plugins-only unit build links a stripped FUSS test seam~~ — fixed in `ada52d91` | fixed |
 | YEW-F-126 | audit | `tests/audit/yew_f_126.c` | ~~Sprint 54 diverges from the shared stripped-module diagnostic~~ — fixed in `7cd13177` | fixed |
-| YEW-F-127 | audit | `tests/audit/yew_f_127.c` | F15 retains landing-day hard errors for shipped surfaces | active |
-| YEW-F-128 | audit | `tests/audit/yew_f_128.c` | renamed Sprint 0 contract requires yew to alias itself | active |
-| YEW-F-129 | audit | `tests/audit/yew_f_129.c` | foundation closeout literal greps match prose and fixture data | active |
-| YEW-F-130 | audit | `tests/audit/yew_f_130.c` | Sprint 1 landing-day timing covers the expanded full suite | active |
+| YEW-F-127 | audit | `tests/audit/yew_f_127.c` | ~~F15 retains landing-day hard errors for shipped surfaces~~ — fixed in `d7752508` | fixed |
+| YEW-F-128 | audit | `tests/audit/yew_f_128.c` | ~~renamed Sprint 0 contract requires yew to alias itself~~ — fixed in `d7752508` | fixed |
+| YEW-F-129 | audit | `tests/audit/yew_f_129.c` | ~~foundation closeout literal greps match prose and fixture data~~ — fixed in `d7752508` | fixed |
+| YEW-F-130 | audit | `tests/audit/yew_f_130.c` | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed in `d7752508` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
