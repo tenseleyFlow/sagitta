@@ -39,8 +39,9 @@ then the workspace `.yew.fl` after its trust check.
 | `--replay REG` | Replay the one-letter macro register once after the script completes successfully. |
 | `--grant NAME:CAP` | Pre-grant a plugin capability (`fs`, `shell`, `net`, or `clipboard`); repeatable. |
 
-`--batch-strict` is owned by Sprint 59. Supplying it before then exits with
-an error naming that sprint rather than silently changing batch semantics.
+`--batch-strict` is not available in yew 1.0. Supplying it exits with a clear
+error rather than silently changing batch semantics; use explicit script
+assertions when dirty buffers must make automation fail.
 
 ## Script globals
 

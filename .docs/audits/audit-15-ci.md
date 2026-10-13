@@ -288,14 +288,14 @@ runs; the runner merges per-child records deterministically.
 
 ## Q9 — stale Sprint hard errors
 
-probed, nothing found
+rechecked; `YEW-F-132` fixed the stale permanent-non-goal diagnostic
 
-The exact repository grep returns 611 source references and is committed
-verbatim in Appendix A. Inspection of the built binary reduces user-visible
-runtime strings to:
+The original fixed-baseline repository grep returned 611 source references
+and is preserved verbatim in Appendix A. Current Sprint 59 reinspection of
+the built binary reduces user-visible runtime strings to:
 
-- `option '--batch-strict' lands in Sprint 59`, a still-reserved surface
-  explicitly owned by Sprints 37 and 59;
+- `--batch-strict` is not available in yew 1.0, the honest hard error for
+  the explicit permanent non-goal decided in Sprint 59;
 - AI-off guidance naming Sprint 50, and syntax-shadow labels naming Sprints
   44, 47, and 49, all historical attribution for implemented behavior;
 - one region invariant crash context naming Sprint 27, an implementation-law
@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-131`
+findings `YEW-F-127`–`YEW-F-132`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -343,12 +343,15 @@ findings `YEW-F-127`–`YEW-F-131`
   applied to the much larger current aggregate suite.
 - `YEW-F-131` records the shipped size target and current eight-row budget
   table being contradicted by future-stub wording and superseded caps.
-- S59-A35 through S59-A39 synchronize the source sprints and F15 closeout;
+- `YEW-F-132` records a reserved post-1.0 option falsely promising delivery
+  in the current documentation sprint.
+- S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
+  and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 63 · deduped 63 · critical 1 · high 1 · medium 61 · low 0 · unverified 4.
+Raw 64 · deduped 64 · critical 1 · high 1 · medium 62 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 

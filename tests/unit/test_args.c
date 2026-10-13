@@ -428,7 +428,7 @@ void test_args_parse_batch_misuse(void)
         ("yew: error: invalid --replay register 'qq' "
          "(expected one letter a-z/A-Z)\n"),
         "yew: error: option '--replay' specified twice\n",
-        "yew: error: option '--batch-strict' lands in Sprint 59\n"
+        "yew: error: option '--batch-strict' is not available in yew 1.0\n"
     };
     size_t i;
 

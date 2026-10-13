@@ -827,6 +827,17 @@ removed to recover a superseded footprint number; future movement still
 requires measured evidence and an explicit amendment. `YEW-F-131` records
 the contract correction.
 
+**Permanent non-goal diagnostic amendment S59-A40 (2026-10-13) — hard
+errors name an honest boundary.** Invariant 3 requires a reserved or
+unimplemented path to fail explicitly, naming its delivery sprint when one
+exists. Sprint 59 decided that `--batch-strict` is not for yew 1.0 and did
+not assign a later delivery sprint, so promising that it "lands in Sprint
+59" became false as soon as that decision was made. The option remains a
+recognized hard error, but now names the yew 1.0 boundary instead of an
+internal schedule that will not deliver it. This changes no batch behavior
+or exit code and supersedes only the stale Sprint 37 documentation and F15
+q9 classification; `YEW-F-132` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

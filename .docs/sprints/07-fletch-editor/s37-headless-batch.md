@@ -185,8 +185,9 @@ the torture test kills batch runs at random instants and asserts it.
 - Exiting with modified buffers is **exit 0** plus one stderr line:
   `warning: 2 buffers modified and not saved: a.c, b.c`. Making it an error
   would break the legitimate "analyze without writing" script; making it
-  silent would hide a missing `save()`. `--batch-strict` (reserved, errors
-  naming Sprint 59's docs pass) is *not* added speculatively.
+  silent would hide a missing `save()`. `--batch-strict` is reserved but not
+  available in yew 1.0, and says so with a hard error rather than changing
+  semantics speculatively.
 - The crash journal is still written (invariant 1 does not have a headless
   exemption) and discarded on clean exit; a killed batch run is recoverable
   by the next interactive open of the same file.

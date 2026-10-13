@@ -184,7 +184,8 @@ int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err)
             out->replay_reg = (u8)value[0];
         } else if (strcmp(arg, "--batch-strict") == 0) {
             return parse_error(out, err,
-                               "option '%s' lands in Sprint 59", arg);
+                               "option '%s' is not available in yew 1.0",
+                               arg);
         } else {
             return parse_error(out, err, "unknown option '%s'", arg);
         }

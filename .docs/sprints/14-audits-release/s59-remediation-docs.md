@@ -833,7 +833,8 @@ chapter cannot drift from the emitter.
   dependency (invariant 7).
 - `--batch-strict` — still reserved, still not built (s37 §9 named this
   sprint's docs pass as where it would be decided): **not for 1.0**,
-  recorded here so it is a decision rather than an oversight.
+  recorded here so it is a decision rather than an oversight. Its hard error
+  names that version boundary, not a Sprint 59 delivery that will not occur.
 
 ## Testing Strategy
 
