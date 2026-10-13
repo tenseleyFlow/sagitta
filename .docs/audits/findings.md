@@ -122,7 +122,7 @@ recorded in `audit-00.md`.
 | YEW-F-107 | M | fixed | F07 UI | ~~UI/workspace closeout retains impossible ownership greps~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_107.c | s59 §2; s22 DoD 7; s25 DoD 8; s27 DoD 2 |
 | YEW-F-108 | M | fixed | F08 FL | ~~Fletch closeout requires superseded staging guards~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_108.c | s59 §2; s30 DoD 10; s31 DoD 11; s32 DoD 12; s33 DoD 12; s34 DoD 14; s36 DoD 9/12 |
 | YEW-F-109 | M | fixed | F08 FL | ~~Fletch closeout retains historical ownership gates~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_109.c | s59 §2; s29 DoD 1/4; s30 DoD 8 |
-| YEW-F-110 | M | open | F08 FL | Fletch closeout treats historical inventories as current totals | tests/audit/yew_f_110.c | s59 §2; s28 DoD 1/8; s30 DoD 11; s31 DoD 2; s33 DoD 4/6 |
+| YEW-F-110 | M | fixed | F08 FL | ~~Fletch closeout treats historical inventories as current totals~~ — fixed 2026-10-13 in `bb1e745b` | tests/audit/yew_f_110.c | s59 §2; s28 DoD 1/8; s30 DoD 11; s31 DoD 2; s33 DoD 4/6 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1155,7 +1155,10 @@ owners extend the current deterministic program list to 187. Sprint 33's
 12-kind rows similarly predate A2 even though its amended ledger now proves
 13/13. Product behavior is not shown wrong. The hard XFAIL requires the
 contracts to preserve their historical snapshots while closeout separately
-asserts the current amended totals.
+asserts the current amended totals. Commit `bb1e745b` adds decision amendment
+S59-A21 and synchronizes the Sprint 28/30/31/33 and F08 contracts. The
+freeze-time 11/12-kind and 117-core-native milestones remain recorded, while
+current closeout follows the generated 13-kind and 187-native inventories.
 
 ## Unverified observations
 

@@ -185,6 +185,9 @@ findings YEW-F-108, YEW-F-109, YEW-F-110
   walk observed 13/13 amended kinds and 187/187 current natives, while the
   historical 11-, 12-, and 117-item snapshots remain valid at their original
   sprint boundaries.
+- Decision amendment S59-A21 and commit `bb1e745b` distinguish those
+  freeze-time snapshots from current generated inventories. The hard XFAIL
+  now passes without changing the Fletch language or registry.
 
 ## Count
 
