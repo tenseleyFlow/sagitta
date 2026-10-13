@@ -7,7 +7,7 @@ Sprints covered: s54, s55
 
 ## DoD items (every numbered item from every sprint above)
 
-- [ ] s54.1 `MODULES=` build without `plugins`: `yew plug list` prints the Deliverable 1 error byte-exact, exit 1; full build passes gcc + clang `-Werror` and ASan/UBSan lanes.
+- [ ] s54.1 `MODULES=` build without `plugins`: `yew plug list` exits 1 with the shared module diagnostic byte-exact (`this build has no plugins module; rebuild with 'make MODULES="… plugins"'`); full build passes gcc + clang `-Werror` and ASan/UBSan lanes.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s54.2 All 7 manifest-validation rows have firing unit tests; fuzzer runs 1 h on the manifest corpus with zero crashes/leaks.
       — VERDICT: blocking — independent closeout review pending.

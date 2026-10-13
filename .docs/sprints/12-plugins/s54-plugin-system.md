@@ -42,7 +42,8 @@ trust db, honest 1.0 trust-model documentation, error containment
 (auto-disable after N errors, never a crash), the 1.0 API stability
 contract, and `yew plug list/enable/disable/reload` plus a picker UI.
 All code under `src/mod/plug/` behind `MODULES=plugins`; a build without
-it hard-errors on every plugin surface, never no-ops. `yew pkg`
+it hard-errors on every plugin surface through the shared
+`yew_mod_require` seam, never no-ops. `yew pkg`
 (install/update/lock), the example plugins, and the cloud preset land in
 Sprint 55.
 
@@ -54,15 +55,15 @@ Sprint 55.
 `pkg.c` is Sprint 55's file. Makefile: `plug` sources compile only when
 `plugins` ∈ `MODULES`; core carries one weak seam (`yew_plug_boot(Ed *)`
 no-op stub in core when excluded is **banned** — instead every entry
-point compiled out produces the module hard-error):
+point compiled out produces the shared module hard-error):
 
 ```
-yew: error: built without plugin support (MODULES=plugins)
+this build has no plugins module; rebuild with 'make MODULES="… plugins"'
 ```
 
 `yew plug …` in an excluded build prints exactly that, exit 1. Pitfall:
-the hard-error string is tested byte-exact; keep it in one
-`static const char` in `plug.h` shared by driver + cmdline paths.
+the hard-error string is tested byte-exact; keep its formatter in
+`src/mod/mods.c` shared by every module entry path.
 
 ### 2. Package layout and manifest — `src/mod/plug/manifest.c`
 
@@ -399,8 +400,8 @@ non-goals remain binding.
 
 ## Definition of Done
 
-1. `MODULES=` build without `plugins`: `yew plug list` prints the
-   Deliverable 1 error byte-exact, exit 1; full build passes gcc + clang
+1. `MODULES=` build without `plugins`: `yew plug list` prints the shared
+   Deliverable 1 module error byte-exact, exit 1; full build passes gcc + clang
    `-Werror` and ASan/UBSan lanes.
 2. All 7 manifest-validation rows have firing unit tests; fuzzer runs
    1 h on the manifest corpus with zero crashes/leaks.

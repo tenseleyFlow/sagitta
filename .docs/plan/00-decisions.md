@@ -758,6 +758,19 @@ Sprint 34's `handle` value kind. Sprint 55's fourth, last-searched
 closeout cites A3. This amendment changes no import order or runtime behavior;
 `YEW-F-123` records the correction.
 
+**Plugin module-diagnostic closeout amendment S59-A34 (2026-10-13) — the
+shared module seam owns stripped-plugin errors.** Sprint 0's
+`yew_mod_require` predates the plugin module and provides one clear diagnostic
+for every excluded feature: `this build has no <name> module; rebuild with
+'make MODULES="… <name>"'`. Sprint 54's later plugin-local byte string and
+static-owner requirement diverged from that established seam even though the
+shipped plugin entry points correctly return its error and exit 1. Current
+closeout therefore requires the shared plugins diagnostic byte-exact and the
+same no-silent-stub behavior as every other module; it does not fork plugin
+diagnostics from their core owner. This amendment changes no product behavior
+and supersedes only Sprint 54's divergent string/owner wording and F14;
+`YEW-F-126` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

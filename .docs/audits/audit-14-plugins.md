@@ -147,9 +147,9 @@ finding `YEW-F-023`
 
 None.
 
-## Sprint 59 closeout-contract recheck
+## Sprint 59 closeout-contract and evidence recheck
 
-findings `YEW-F-122`, `YEW-F-123`
+findings `YEW-F-122`, `YEW-F-123`, `YEW-F-125`, `YEW-F-126`
 
 - `YEW-F-122` records Sprint 54's package hard-error and zero-`sandbox`
   rules after Sprint 55 delivery and F022, plus Sprint 55's future-manual
@@ -157,9 +157,14 @@ findings `YEW-F-122`, `YEW-F-123`
 - `YEW-F-123` records Sprint 55/F14 naming Amendment A2 for the shipped
   runtime import row even though binding Fletch Amendment A3 and its
   conformance fixture own that behavior.
-- Both findings were resolved by binding amendments S59-A32/A33; no product
-  code changed.
+- `YEW-F-125` records a mixed Fletch API unit linking a FUSS-only test seam
+  in the required `MODULES=plugins` build. The core assertions now remain in
+  every build while only the synthetic Git/FUSS state is module-guarded.
+- `YEW-F-126` records Sprint 54's plugin-specific stripped-module string
+  diverging from the older shared module seam used by the shipped product.
+- The contract findings were resolved by binding amendments S59-A32/A33/A34;
+  no product code changed for them. F125 changed only module-aware test code.
 
 ## Count
 
-Raw 5 · deduped 5 · critical 0 · high 0 · medium 5 · low 0 · unverified 0.
+Raw 7 · deduped 7 · critical 0 · high 0 · medium 7 · low 0 · unverified 0.
