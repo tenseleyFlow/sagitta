@@ -108,7 +108,7 @@ recorded in `audit-00.md`.
 | YEW-F-093 | M | fixed | F06 RE | ~~restored contracts name superseded regex mechanisms~~ — fixed 2026-10-13 in `2d26fe08` | tests/audit/yew_f_093.c | s59 §2/§3; s20/s21 closeout |
 | YEW-F-094 | L | fixed | F06 RE | ~~golden-table guard permits fewer than 150 rows~~ — fixed 2026-10-13 in `87c0684f` | tests/audit/yew_f_094.c | s20 DoD 4 |
 | YEW-F-095 | M | fixed | F01 UNI | ~~F01 closeout requires delivered Unicode deferrals to be absent~~ — fixed 2026-10-13 in `c84e9fe7` | tests/audit/yew_f_095.c | s59 §2; s02 DoD 12; s16/s20 |
-| YEW-F-096 | M | confirmed | F15 CI | closeout checker reads ignored sprint contracts | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
+| YEW-F-096 | M | fixed | F15 CI | ~~closeout checker reads ignored sprint contracts~~ — fixed 2026-10-13 in `dfe7f3ce` | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -931,6 +931,10 @@ F086 repair covered only the four documents its narrow reproducer named. The
 hard XFAIL requires every canonical contract named by the sprint index plus
 the authoring contract and index itself to be tracked, while rejecting the
 obsolete pre-integration Sprint 57.11 mouse draft.
+Commit `dfe7f3ce` tracks all 95 canonical contracts plus the authoring
+contract and index, makes their policy explicit in `.gitignore`, and corrects
+the index's count after excluding that stale draft. An isolated detached
+worktree sees all 97 files and passes the 15-front closeout gate.
 
 ## Unverified observations
 

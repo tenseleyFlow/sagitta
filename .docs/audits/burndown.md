@@ -120,3 +120,4 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-13 | File `YEW-F-095` from F01 pre-closeout review | 0 | 0 | 1 | 0 | 1 |
 | 2026-10-13 | Fix `YEW-F-095` (`c84e9fe7`) | 0 | 0 | 0 | 0 | 0 |
 | 2026-10-13 | File `YEW-F-096` from closeout provenance recheck | 0 | 0 | 1 | 0 | 1 |
+| 2026-10-13 | Fix `YEW-F-096` (`dfe7f3ce`) | 0 | 0 | 0 | 0 | 0 |

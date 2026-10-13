@@ -15,7 +15,7 @@ Apple-silicon host `nomad-1`
 
 **Implementation checkpoint before this documentation refresh:** `trunk` is
 72 commits above `origin/trunk` at `c3f790a6`, including Sprint 59's
-documentation/tutorial work, all 94 finding remediations, and the F06
+documentation/tutorial work, all 96 finding remediations, and the F06
 pre-closeout evidence packet. The product code used by the soak remains the
 exact hosted-green anchor.
 
@@ -36,7 +36,7 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 94 stable IDs, all at status `fixed` after
+landed. The findings ledger contains 96 stable IDs, all at status `fixed` after
 Sprint 59's severity-ordered remediation and F06 independent-review follow-up.
 `YEW-F-081` came from scheduled fuzz run `38281035643`: a 4,240-byte quoted
 literal crossed the smaller VM-program limit. Commit `ee713cd5` preserves that
@@ -68,7 +68,7 @@ rows; do not report progress from elapsed process time.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 94 fixes and burndown/XFAIL rows reconcile, zero active
+executable gates: all 96 fixes and burndown/XFAIL rows reconcile, zero active
 XFAILs remain, priority order is proven from Git ancestry, the deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
@@ -81,7 +81,7 @@ baseline.
 
 The immediate work is:
 
-1. independently re-verify and transition the 94 fixed findings through the
+1. independently re-verify and transition the 96 fixed findings through the
    remaining ledger lifecycle;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
