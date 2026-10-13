@@ -3,6 +3,7 @@
 #include "harness.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -206,6 +207,7 @@ void test_plug_manifest_entry_symlink_escape_is_rejected(void)
 {
     ManifestFix f;
     PlugManifest mf;
+    char resolved[PATH_MAX];
     static const char source[] =
         "{ name: \"escape\", version: \"1.0.0\", api: 1, "
         "entry: \"src/main.fl\", capabilities: [], events: [] }\n";
@@ -213,9 +215,10 @@ void test_plug_manifest_entry_symlink_escape_is_rejected(void)
     manifest_fix_init(&f, "escape", source);
     YEW_ASSERT_EQ_I64(unlink(f.entry), 0);
     YEW_ASSERT_EQ_I64(symlink("/etc/passwd", f.entry), 0);
+    YEW_ASSERT_NOT_NULL(realpath("/etc/passwd", resolved));
     YEW_ASSERT(!manifest_read(&f, &mf));
     YEW_ASSERT(strstr(f.diag, "escapes directory") != NULL);
-    YEW_ASSERT(strstr(f.diag, "/etc/passwd") != NULL);
+    YEW_ASSERT(strstr(f.diag, resolved) != NULL);
     manifest_fix_done(&f);
 }
 

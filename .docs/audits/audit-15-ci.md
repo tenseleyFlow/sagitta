@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-133`
+findings `YEW-F-127`–`YEW-F-134`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -347,13 +347,15 @@ findings `YEW-F-127`–`YEW-F-133`
   in the current documentation sprint.
 - `YEW-F-133` records the oversize-theme unit bypassing the selected
   disjoint build tree's `TMPDIR`.
+- `YEW-F-134` records the plugin-containment unit assuming that a standard
+  FHS path cannot itself be a symlink.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 65 · deduped 65 · critical 1 · high 1 · medium 63 · low 0 · unverified 4.
+Raw 66 · deduped 66 · critical 1 · high 1 · medium 64 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 
