@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-131`
+Next available ID: `YEW-F-132`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -143,6 +143,7 @@ recorded in `audit-00.md`.
 | YEW-F-128 | M | fixed | F15 CI | ~~renamed Sprint 0 contract requires yew to alias itself~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_128.c | s00 DoD 1/10; binary/install ownership |
 | YEW-F-129 | M | fixed | F15 CI | ~~foundation closeout literal greps match prose and fixture data~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_129.c | s00 DoD 6; s01 DoD 7; semantic bans |
 | YEW-F-130 | M | fixed | F15 CI | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_130.c | s01 DoD 1; current CI budget owners |
+| YEW-F-131 | M | open | F15 CI | F15 retains a future size stub and superseded hard caps | tests/audit/yew_f_131.c | s56 DoD 14; s57 DoD 2; binding size amendments |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1401,6 +1402,16 @@ Commit `d7752508` adds binding amendments S59-A35 through S59-A38 and
 synchronizes Sprints 0/1/37 plus F15. Current shipped targets, executable and
 install ownership, semantic bans, and CI/performance budgets remain intact;
 no product or test implementation changed.
+
+`YEW-F-131` is Medium because Sprint 56/F15 still require `make size` to
+hard-error naming future Sprint 57 even though the full size machinery is
+shipped. Sprint 57/F15 also freeze full at 2.0 MiB and minimal at 1,576,960
+bytes while binding measured-growth amendments through S57.33-A1 and
+`tests/size/budgets.txt` set full to 2,277,376, minimal to 1,785,856, and
+carry current caps for all six other profiles. The stale numbers predate
+required editor features and safety fixes. The hard XFAIL requires the source
+sprints and closeout to follow the executable eight-row table and its `why`
+provenance without changing code or lowering any current gate.
 
 ## Unverified observations
 
