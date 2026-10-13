@@ -64,7 +64,7 @@ Sprints covered: s20, s21
 
 ## Open audit findings against this front
 
-6 open confirmed findings: `YEW-F-089`–`YEW-F-094`.
+5 open confirmed findings: `YEW-F-089`–`YEW-F-093`.
 
 ## Deferrals recorded against this front
 
@@ -72,4 +72,4 @@ none
 
 ## Verdict
 
-NOT READY — Six conformance findings and independent closeout evidence remain.
+NOT READY — Five conformance findings and independent closeout evidence remain.

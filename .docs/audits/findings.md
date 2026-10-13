@@ -106,7 +106,7 @@ recorded in `audit-00.md`.
 | YEW-F-091 | M | open | F06 RE | zero-width replacement cases lack PTY goldens | tests/audit/yew_f_091.c | s21 DoD 7 |
 | YEW-F-092 | M | open | F06 RE | interactive search refinement forces full repaint | tests/audit/yew_f_092.c | invariant 4; s21 DoD 9 |
 | YEW-F-093 | M | open | F06 RE | restored contracts name superseded regex mechanisms | tests/audit/yew_f_093.c | s59 §2/§3; s20/s21 closeout |
-| YEW-F-094 | L | open | F06 RE | golden-table guard permits fewer than 150 rows | tests/audit/yew_f_094.c | s20 DoD 4 |
+| YEW-F-094 | L | fixed | F06 RE | ~~golden-table guard permits fewer than 150 rows~~ — fixed 2026-10-13 in `87c0684f` | tests/audit/yew_f_094.c | s20 DoD 4 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -891,7 +891,8 @@ language.
 `YEW-F-094` is Low because the current 180-row golden table exceeds its
 150-row contract, but CI asserts only 130 and would allow silent erosion below
 the floor. No current editor behavior is wrong. The hard XFAIL pins the
-contracted minimum in the executable guard.
+contracted minimum in the executable guard. Commit `87c0684f` raises that
+guard to 150 and names the finding at the assertion.
 
 ## Unverified observations
 
