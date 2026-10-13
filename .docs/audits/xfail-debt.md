@@ -92,6 +92,11 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-079 | audit | `tests/audit/yew_f_079.c` | ~~workspace re-emission drops unknown entity-record fields~~ — fixed in `9222b491` | fixed |
 | YEW-F-080 | audit | `tests/audit/yew_f_080.c` | ~~host sleep fabricates a fuzz-watchdog finding~~ — fixed in `ea6327f0` | fixed |
 | YEW-F-081 | audit | `tests/audit/yew_f_081.c` | ~~long quoted literals exceed the smaller VM-program limit~~ — fixed in `ee713cd5` | fixed |
+| YEW-F-082 | audit | `tests/audit/yew_f_082.c` | direct whole literals can split valid UTF-8 codepoints | open |
+| YEW-F-083 | audit | `tests/audit/yew_f_083.c` | backward search skips overlapping match starts | open |
+| YEW-F-084 | audit | `tests/audit/yew_f_084.c` | Fletch keeps the obsolete 64 KiB regex-text precheck | open |
+| YEW-F-085 | audit | `tests/audit/yew_f_085.c` | REP2 unpack accepts impossible direct-literal metadata | open |
+| YEW-F-086 | audit | `tests/audit/yew_f_086.c` | binding and F06 contracts exist only as ignored local files | open |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.

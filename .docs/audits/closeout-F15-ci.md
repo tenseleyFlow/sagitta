@@ -140,7 +140,7 @@ Sprints covered: s00, s01, s37, s56, s57
 
 ## Open audit findings against this front
 
-none
+1 open: `YEW-F-086` (Medium).
 
 ## Deferrals recorded against this front
 

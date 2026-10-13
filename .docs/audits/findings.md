@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-082`
+Next available ID: `YEW-F-087`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -94,6 +94,11 @@ recorded in `audit-00.md`.
 | YEW-F-079 | C | fixed | F07 UI | ~~workspace re-emission drops unknown entity-record fields~~ — fixed 2026-09-13 in `9222b491` | tests/audit/yew_f_079.c | invariant 1; s25 §4 / §6; s59 §1.2 |
 | YEW-F-080 | M | fixed | F15 CI | ~~host sleep fabricates a fuzz-watchdog finding~~ — fixed 2026-10-12 in `ea6327f0` | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
 | YEW-F-081 | M | fixed | F06 RE | ~~long quoted literals exceed the smaller VM-program limit~~ — fixed 2026-10-12 in `ee713cd5` | tests/audit/yew_f_081.c | s21 §6 / DoD 13 |
+| YEW-F-082 | C | confirmed | F06 RE | direct whole literals can split valid UTF-8 codepoints | tests/audit/yew_f_082.c | invariant 2; s20 §3 / §7 |
+| YEW-F-083 | M | confirmed | F06 RE | backward search skips overlapping match starts | tests/audit/yew_f_083.c | s20 §1 / §6c |
+| YEW-F-084 | M | confirmed | F06 RE | Fletch keeps the obsolete 64 KiB regex-text precheck | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
+| YEW-F-085 | M | confirmed | F06 RE | REP2 unpack accepts impossible direct-literal metadata | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
+| YEW-F-086 | M | confirmed | F15 CI | binding and F06 contracts exist only as ignored local files | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -768,6 +773,42 @@ ASan/UBSan+coverage replay, a fresh 100,000-iteration quote campaign is green,
 and the regression covers Pike/DFA entry points, forward/backward search,
 arbitrary piece boundaries, cache truncation, and the full 64 KiB semantic
 literal limit.
+
+`YEW-F-082` is Critical because the direct whole-literal path reports a match
+that ends inside a valid UTF-8 codepoint.  A quoted raw `C2` incorrectly
+matches the first byte of valid `C2 A2`; the shipped Fletch replacement path
+then turns the valid cent sign into the orphan byte `A2`.  That silently
+changes a user-owned byte outside the decoded-codepoint match the user asked
+for, crossing invariant 2's no-byte-confusion boundary.  The hard XFAIL uses
+the long-literal route that exposed the defect and also requires an invalid
+raw `C2` to keep matching itself.
+
+`YEW-F-083` is Medium because the public backward-search contract promises the
+last match whose start is strictly before the requested offset, but its
+forward enumeration advances to each match's end.  `/aa/` in `aaa` before
+byte 3 consequently returns `[0,2)` instead of the later overlapping
+`[1,3)`.  Navigation is visibly wrong but the document is unchanged.
+
+`YEW-F-084` is Medium because F081 deliberately admits a bounded 256 KiB
+textual spelling for a 64 KiB semantic quoted literal, while Fletch's shared
+regex cache still rejects at 64 KiB before calling the core compiler.
+`re.test(s, re.escape(s))` therefore fails once maximally escaped input
+exceeds 16,384 bytes even though the core safely accepts it.  This is a
+recoverable consumer/engine contract mismatch rather than corruption.
+
+`YEW-F-085` is Medium because public REP2 unpacking promises shape validation
+but accepts headers the compiler cannot produce: ICASE direct matching and
+extra capture groups.  The resulting object advertises flags and groups its
+byte matcher does not honor.  The syntax-cache envelope normally catches
+accidental corruption, so the demonstrated impact is bounded wrong semantics,
+not memory unsafety.
+
+`YEW-F-086` is Medium because the two binding plans and the Sprint 20/21
+contracts are present in the working directory only as ignored files.  A
+clean checkout therefore cannot follow the mandated binding order, and
+`check-closeouts.sh` resolves s20/s21 to zero files before reporting every F06
+row unexpected.  Local copies masked a reproducible release-control failure;
+no product bytes are affected.
 
 ## Unverified observations
 

@@ -91,3 +91,8 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-12 | Fix `YEW-F-080` (`ea6327f0`) | 0 | 0 | 0 | 0 | 0 |
 | 2026-10-12 | File `YEW-F-081` from scheduled fuzz run `38281035643` | 0 | 0 | 1 | 0 | 1 |
 | 2026-10-12 | Fix `YEW-F-081` (`ee713cd5`) | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-13 | File `YEW-F-082` from F06 independent review | 1 | 0 | 0 | 0 | 1 |
+| 2026-10-13 | File `YEW-F-083` from F06 independent review | 1 | 0 | 1 | 0 | 2 |
+| 2026-10-13 | File `YEW-F-084` from F06 independent review | 1 | 0 | 2 | 0 | 3 |
+| 2026-10-13 | File `YEW-F-085` from F06 independent review | 1 | 0 | 3 | 0 | 4 |
+| 2026-10-13 | File `YEW-F-086` from F06 independent review | 1 | 0 | 4 | 0 | 5 |
