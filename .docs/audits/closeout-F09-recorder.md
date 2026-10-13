@@ -64,7 +64,10 @@ Sprints covered: s35, s38
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-111` (Medium): source and closeout contracts retain superseded
+  Sprint 38/41/55 staging guards.
+- `YEW-F-112` (Medium): source and closeout contracts require a macrolib
+  collision fixture that the canonical namespace makes unreachable.
 
 ## Deferrals recorded against this front
 

@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-111`
+Next available ID: `YEW-F-113`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -123,6 +123,8 @@ recorded in `audit-00.md`.
 | YEW-F-108 | M | fixed | F08 FL | ~~Fletch closeout requires superseded staging guards~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_108.c | s59 §2; s30 DoD 10; s31 DoD 11; s32 DoD 12; s33 DoD 12; s34 DoD 14; s36 DoD 9/12 |
 | YEW-F-109 | M | fixed | F08 FL | ~~Fletch closeout retains historical ownership gates~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_109.c | s59 §2; s29 DoD 1/4; s30 DoD 8 |
 | YEW-F-110 | M | fixed | F08 FL | ~~Fletch closeout treats historical inventories as current totals~~ — fixed 2026-10-13 in `bb1e745b` | tests/audit/yew_f_110.c | s59 §2; s28 DoD 1/8; s30 DoD 11; s31 DoD 2; s33 DoD 4/6 |
+| YEW-F-111 | M | open | F09 REC | Recorder closeout requires superseded staging guards | tests/audit/yew_f_111.c | s59 §2; s35 DoD 14; s38 DoD 13 |
+| YEW-F-112 | M | open | F09 REC | Recorder closeout requires unreachable macrolib collision | tests/audit/yew_f_112.c | s59 §2; s38 DoD 8 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1159,6 +1161,27 @@ asserts the current amended totals. Commit `bb1e745b` adds decision amendment
 S59-A21 and synchronizes the Sprint 28/30/31/33 and F08 contracts. The
 freeze-time 11/12-kind and 117-core-native milestones remain recorded, while
 current closeout follows the generated 13-kind and 187-native inventories.
+
+`YEW-F-111` is Medium because the current F09 contracts still require the
+Sprint 38 macro browser, edit flow, and library to hard-error even though
+Sprint 38 delivered all three, and still require fictional Sprint 41/55
+deferred commands even though Sprint 38's completion record correctly says
+those owning sprints exposed no callable staging surface. Sprint 41 later
+delivered Fletch syntax highlighting and Sprint 55 delivered package
+installation. Product behavior is not shown wrong. The hard XFAIL requires
+the Sprint 35/38 and F09 contracts to test the delivered surfaces while
+retaining the interactive-only recording and post-1.0 migration boundaries.
+
+`YEW-F-112` is Medium because Sprint 38's own namespace rules make the
+required cross-file collision fixture impossible: each canonical name is
+`<unique filename stem>.<binding>`, bare aliases exist only when binding
+equals that same unique stem, and one-byte stems are rejected. The completion
+record acknowledges this while the DoD and F09 closeout still demand all
+eight rows as live tests. The loader's defensive rejection branch is useful,
+but manufacturing a public path around the injective namespace would weaken
+the product. The hard XFAIL requires the contract to prove namespace
+injectivity, cover all seven reachable rows, and retain the defensive branch
+for review.
 
 ## Unverified observations
 

@@ -131,6 +131,20 @@ probed, nothing found
   after the run. The per-session P3 byte assertion and local cross-dispatch
   comparison found no divergence.
 
+## Sprint 59 closeout-contract recheck
+
+findings YEW-F-111, YEW-F-112
+
+- `YEW-F-111` records staging clauses that require the delivered Sprint 38
+  macro UX to keep hard-erroring and require fictional Sprint 41/55 command
+  stubs. The browser, ordinary-buffer edit/store flow, library, Fletch syntax
+  highlighting, and package manager are present; Sprint 38 intentionally
+  exposed no callable staging API for its two later integrations.
+- `YEW-F-112` records the required cross-file collision fixture that Sprint
+  38's canonical namespace makes unreachable. Unique stems plus dotted
+  bindings and same-stem-only bare aliases are injective; the loader retains
+  defensive collision rejection without exposing a path around those rules.
+
 ## Count
 
-Raw 2 · deduped 2 · critical 0 · high 0 · medium 2 · low 0 · unverified 1.
+Raw 4 · deduped 4 · critical 0 · high 0 · medium 4 · low 0 · unverified 1.

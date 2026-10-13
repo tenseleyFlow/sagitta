@@ -121,6 +121,8 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-108 | audit | `tests/audit/yew_f_108.c` | ~~Fletch closeout requires superseded staging guards~~ — fixed in `674d826b` | fixed |
 | YEW-F-109 | audit | `tests/audit/yew_f_109.c` | ~~Fletch closeout retains historical ownership gates~~ — fixed in `674d826b` | fixed |
 | YEW-F-110 | audit | `tests/audit/yew_f_110.c` | ~~Fletch closeout treats historical inventories as current totals~~ — fixed in `bb1e745b` | fixed |
+| YEW-F-111 | audit | `tests/audit/yew_f_111.c` | Recorder closeout requires superseded staging guards | active |
+| YEW-F-112 | audit | `tests/audit/yew_f_112.c` | Recorder closeout requires unreachable macrolib collision | active |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
