@@ -375,27 +375,26 @@ static void trace_json(const char *label, const JsonValue *value)
     bytebuf_free(&bytes);
 }
 
-static void position_params(Buffer *buffer, const char *symbol,
+static void position_params(Buffer *buffer, const LspDoc *doc,
+                            const char *symbol,
                             const char *extra_key, const char *extra_value,
                             Bytebuf *out)
 {
-    Bytebuf uri;
     JsonW writer;
     i64 line;
     i64 character;
 
+    if (doc == NULL)
+        fail("buffer has no attached LSP document: %s", buffer->path);
     if (!find_position(buffer->tb, symbol, &line, &character))
         fail("symbol %s not found in %s", symbol, buffer->path);
-    bytebuf_init(&uri);
-    yew_lsp_uri_of_path(&uri, (const u8 *)buffer->path,
-                        (u32)strlen(buffer->path));
     out->len = 0U;
     yew_jsonw_init(&writer, out);
     yew_jsonw_obj(&writer);
     yew_jsonw_key(&writer, "textDocument");
     yew_jsonw_obj(&writer);
     yew_jsonw_key(&writer, "uri");
-    yew_jsonw_str(&writer, uri.data, (u32)uri.len);
+    yew_jsonw_cstr(&writer, doc->uri);
     yew_jsonw_obj_end(&writer);
     yew_jsonw_key(&writer, "position");
     yew_jsonw_obj(&writer);
@@ -415,7 +414,6 @@ static void position_params(Buffer *buffer, const char *symbol,
         }
     }
     yew_jsonw_obj_end(&writer);
-    bytebuf_free(&uri);
 }
 
 static const char *relative_path(Fixture *f, const char *path)
@@ -466,7 +464,9 @@ static void test_gotos(Fixture *f)
         size_t j;
 
         do {
-            position_params(buffer, cases[i].symbol, NULL, NULL, &params);
+            position_params(buffer,
+                            yew_lsp_doc_for_buffer(&f->ed, buffer),
+                            cases[i].symbol, NULL, NULL, &params);
             result = request(f, buffer, "textDocument/definition", &params,
                              &arena);
             if (i == 0U)
@@ -526,7 +526,8 @@ static void collect_width_references(Fixture *f, const char *symbol,
     i64 start;
 
     bytebuf_init(&params);
-    position_params(buffer, symbol, "context", NULL, &params);
+    position_params(buffer, yew_lsp_doc_for_buffer(&f->ed, buffer),
+                    symbol, "context", NULL, &params);
     start = yew_now_ms();
     do {
         result = request(f, buffer, "textDocument/references", &params,
@@ -724,7 +725,8 @@ static void rename_prepare(Fixture *f, const char *old_name,
     char error[YEW_RENAME_ERROR_MAX] = {0};
 
     bytebuf_init(&params);
-    position_params(buffer, old_name, "newName", new_name, &params);
+    position_params(buffer, yew_lsp_doc_for_buffer(&f->ed, buffer),
+                    old_name, "newName", new_name, &params);
     result = request(f, buffer, "textDocument/rename", &params, arena);
     yew_lsp_rename_plan_init(plan);
     if (!yew_lsp_rename_preflight(&f->ed, result, f->server->pos_enc,
@@ -868,7 +870,8 @@ static void test_hover(Fixture *f)
     bytebuf_init(&params);
     bytebuf_init(&body);
     arena_init(&arena);
-    position_params(buffer, "yew_textbuf_insert_payload", NULL, NULL, &params);
+    position_params(buffer, yew_lsp_doc_for_buffer(&f->ed, buffer),
+                    "yew_textbuf_insert_payload", NULL, NULL, &params);
     result = request(f, buffer, "textDocument/hover", &params, &arena);
     if (!yew_lsp_hover_parse(result, buffer->tb, f->server->pos_enc,
                              &body, &range, &have_range) ||
@@ -942,12 +945,16 @@ static void test_diagnostic(Fixture *f)
 
 static void fixture_init(Fixture *f, const char *root)
 {
+    char canonical_root[4096];
     char initial[4096];
 
     (void)memset(f, 0, sizeof(*f));
-    if (strlen(root) >= sizeof(f->root))
+    if (realpath(root, canonical_root) == NULL)
+        fail("cannot canonicalize workspace root %s: %s", root,
+             strerror(errno));
+    if (strlen(canonical_root) >= sizeof(f->root))
         fail("workspace root too long");
-    (void)memcpy(f->root, root, strlen(root) + 1U);
+    (void)memcpy(f->root, canonical_root, strlen(canonical_root) + 1U);
     f->fd_before = fd_count();
     yew_ed_init(&f->ed);
     f->ed.headless = true;
