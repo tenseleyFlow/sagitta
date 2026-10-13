@@ -29,10 +29,10 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01, F02, F03, F04, and F06 without claiming
-reviewer signoff. F04 maps all 61 modal DoD rows while leaving independent,
-hosted, and Linux leak/descriptor evidence blocking. F05 is the next local
-evidence front.
+pre-closeout packets exist for F01 through F06 without claiming reviewer
+signoff. F05 maps all 26 execute/shell DoD rows after exact-name
+Clang/GCC/ASan unit passes, the full parser fuzz gate, focused PTYs/scripts,
+and the strict job-stream gate. F07 is the next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 

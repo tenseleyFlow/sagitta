@@ -13,12 +13,12 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**Implementation checkpoint before the F04 evidence packet:** `trunk` is
-103 commits above `origin/trunk` at `8f4f8716`, including Sprint 59's
-documentation/tutorial work, all 103 completed finding remediations, and the
-F01/F02/F03/F06 pre-closeout evidence packets. F04's contract recheck closed
-`YEW-F-102` and `YEW-F-103` under decision amendments S59-A13/A14; neither
-finding showed a product-code defect.
+**F05 evidence baseline:** `d247b719` was 107 commits above `origin/trunk`,
+including Sprint 59's documentation/tutorial work, all 105 completed finding
+remediations, and the F01–F04/F06 pre-closeout evidence packets. F05's
+contract recheck closed `YEW-F-104` and `YEW-F-105` under decision amendments
+S59-A15/A16; neither finding showed a product-code defect. Its evidence packet
+landed immediately afterwards in `7a7fda29`.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -92,21 +92,21 @@ and priority order is proven from Git ancestry. The deterministic
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
 being represented as independent verification. Baseline-pinned local
-pre-closeout packets now exist for F01, F02, F03, F04, and F06 at
+pre-closeout packets now exist for F01 through F06 at
 `.docs/audits/evidence/F01-precloseout-5422f5e6.md`,
 `.docs/audits/evidence/F02-precloseout-6842c24f.md`,
 `.docs/audits/evidence/F03-precloseout-b45b24d8.md`, and
 `.docs/audits/evidence/F04-precloseout-8f4f8716.md`, plus
-`.docs/audits/evidence/F06-precloseout-e93a8ddd.md`. F04's packet maps all 61
-modal DoD rows to current or explicitly historical witnesses, including the
-new tutor surface, while leaving Valgrind, exact-baseline hosted campaigns,
-and independent signoff blocking. All five packets remain NOT READY until a
-non-author reviewer and the required hosted matrix sign their current
-baselines.
+`.docs/audits/evidence/F05-precloseout-d247b719.md` and
+`.docs/audits/evidence/F06-precloseout-e93a8ddd.md`. F05 maps all 26
+execute/shell DoD rows after exact-name Clang/GCC/ASan unit passes, full
+parser fuzz, focused PTYs/scripts, and the strict job-stream gate. All six
+packets remain NOT READY until a non-author reviewer and the required hosted
+matrix sign their current baselines.
 
 The immediate work is:
 
-1. complete F05's baseline-pinned local pre-closeout packet without claiming
+1. complete F07's baseline-pinned local pre-closeout packet without claiming
    independent reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
