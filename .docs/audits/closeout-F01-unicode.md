@@ -29,7 +29,7 @@ Sprints covered: s02
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s02.11 Perf: segment + width over 1 MiB of ASCII in ≤ 5 ms on the dev machine (fast path proven live); CJK and emoji baselines committed under `tests/perf/baselines/`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s02.12 Deferred surfaces absent and named: no `yew_wb_*`, no normalization or case-folding entry point; `grapheme.h`/`width.h` headers name Sprints 16, 20, 5/15 and the never-for-1.0 items with reasons.
+- [ ] s02.12 Deferred-surface lifecycle is explicit: Sprint 16 owns `yew_wb_*` and its word-break coverage, Sprint 20 owns the regex simple-fold entry point and its agreement corpus, and no normalization entry point exists; `grapheme.h`/`width.h` name the owning sprints and permanent non-goals.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s02.13 `ucd/MANIFEST` lists all six inputs with sha256; `ucd/LICENSE` holds the Unicode license; `README.md` gains a paragraph on why `src/unicode/tables.c` is generated *and* committed (redeeming Sprint 0's promise).
       — VERDICT: blocking — independent closeout review pending.

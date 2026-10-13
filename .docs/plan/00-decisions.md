@@ -388,6 +388,20 @@ supersedes only those stale Sprint 20/21 mechanism and evidence descriptions;
 the public matching semantics, linear-time guarantee, memory limits, and
 performance gates are unchanged. YEW-F-093 records the correction.
 
+**Sprint 2 closeout amendment S59-A9 (2026-10-13) — deferred Unicode
+surfaces are judged at their owning sprint boundaries.** Sprint 2's original
+absence of `yew_wb_*` and a simple-case-fold entry point was a staging rule:
+it prevented the Unicode foundation from silently pulling Sprint 16's word
+unit engine or Sprint 20's regex semantics forward. It was not a permanent
+1.0 non-goal. Sprint 16 subsequently delivered `src/unicode/wordbreak.*` and
+its UAX #29 tests; Sprint 20 delivered the regex-owned simple-fold entry point
+and its agreement corpus. The current F01 closeout therefore verifies that
+ownership and coverage instead of requiring the shipped APIs to disappear.
+Normalization remains the permanent byte-preservation non-goal, and the
+original table/width/grapheme budgets are unchanged. This amendment
+supersedes only Sprint 2 §11 and DoD 12's stale current-absence wording;
+`YEW-F-095` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
