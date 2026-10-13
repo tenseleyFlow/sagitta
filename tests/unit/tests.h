@@ -2573,6 +2573,7 @@ void test_jumplist_serializer_round_trips_in_memory(void);
 void test_jumplist_deserialize_rejects_a_foreign_blob(void);
 void test_re_engines_agree_from_offsets(void);
 void test_re_dfa_survives_cache_pressure(void);
+void test_re_dfa_two_flush_fallback(void);
 void test_re_dfa_handles_pathological_patterns(void);
 void test_re_dfa_bol_skip_preserves_next_line_match(void);
 

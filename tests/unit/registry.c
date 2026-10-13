@@ -2577,6 +2577,7 @@ const YewTest yew_tests[] = {
     T(jumplist_deserialize_rejects_a_foreign_blob),
     T(re_engines_agree_from_offsets),
     T(re_dfa_survives_cache_pressure),
+    T(re_dfa_two_flush_fallback),
     T(re_dfa_handles_pathological_patterns),
     T(re_dfa_bol_skip_preserves_next_line_match),
     T(mouse_press_arms_and_does_not_drag),

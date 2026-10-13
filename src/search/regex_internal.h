@@ -216,7 +216,18 @@ bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
  * report captures.  GIVE_UP means the state cache thrashed and the
  * caller should finish on the Pike VM. */
 enum { YEW_DFA_NO = 0, YEW_DFA_YES = 1, YEW_DFA_GIVE_UP = -1 };
+typedef struct YewReDfaStats {
+    u32 flushes;
+    u32 max_states;
+    u64 max_bytes;
+} YewReDfaStats;
 int yew_re_dfa_test(const YewRe *re, const YewReInput *in, u64 from);
+int yew_re_dfa_test_limits(const YewRe *re, const YewReInput *in, u64 from,
+                           u32 max_states, u64 max_bytes,
+                           YewReDfaStats *stats);
+bool yew_re_test_limits(const YewRe *re, const YewReInput *in, ByteOff from,
+                        u32 max_states, u64 max_bytes,
+                        YewReDfaStats *stats);
 /* Ceiling on the §6c skip-ahead window, in bytes.  Bounded so span
  * recovery is O(window) and never O(file). */
 #define YEW_RE_SPAN_WINDOW (64U * 1024U)

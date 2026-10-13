@@ -441,6 +441,16 @@ bool yew_re_search(const YewRe *re, const YewReInput *in, ByteOff from,
     return yew_re_pike_run_ex(re, in, at, false, out);
 }
 
+static bool dfa_verdict_or_pike(const YewRe *re, const YewReInput *in,
+                                ByteOff from, int verdict)
+{
+    if (verdict != YEW_DFA_GIVE_UP)
+        return verdict == YEW_DFA_YES;
+    /* YEW-F-090: a second cache flush is an observed handoff, not another
+     * fresh DFA attempt.  Finish directly on the correctness-reference VM. */
+    return yew_re_pike_run_ex(re, in, from.v, false, NULL);
+}
+
 bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from)
 {
     int verdict;
@@ -452,11 +462,22 @@ bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from)
     if (re->lit.kind == RE_LIT_WHOLE)
         return yew_re_search(re, in, from, NULL);
     verdict = yew_re_dfa_test(re, in, from.v);
-    if (verdict != YEW_DFA_GIVE_UP)
-        return verdict == YEW_DFA_YES;
-    /* The cache thrashed: finish on the VM rather than rebuild every
-     * state per character, which is slower than never having cached. */
-    return yew_re_search(re, in, from, NULL);
+    return dfa_verdict_or_pike(re, in, from, verdict);
+}
+
+bool yew_re_test_limits(const YewRe *re, const YewReInput *in, ByteOff from,
+                        u32 max_states, u64 max_bytes,
+                        YewReDfaStats *stats)
+{
+    int verdict;
+
+    if (re == NULL || in == NULL)
+        return false;
+    if (re->lit.kind == RE_LIT_WHOLE)
+        return yew_re_search(re, in, from, NULL);
+    verdict = yew_re_dfa_test_limits(re, in, from.v, max_states, max_bytes,
+                                     stats);
+    return dfa_verdict_or_pike(re, in, from, verdict);
 }
 
 u32 yew_re_whole_literal_bytes(const YewRe *re)

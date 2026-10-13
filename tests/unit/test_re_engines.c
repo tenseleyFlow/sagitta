@@ -196,6 +196,40 @@ void test_re_dfa_survives_cache_pressure(void)
     arena_free_all(&arena);
 }
 
+void test_re_dfa_two_flush_fallback(void)
+{
+    enum { REPEATS = 128 };
+    u8 hay[REPEATS * 3U + 1U];
+    Arena arena;
+    YewReDfaStats stats;
+    YewReInput in;
+    YewRe *re;
+    size_t i;
+
+    for (i = 0U; i < REPEATS; i++)
+        (void)memcpy(hay + i * 3U, "abc", 3U);
+    hay[sizeof(hay) - 1U] = 'Z';
+    in = yew_re_input_bytes(hay, sizeof(hay));
+    arena_init(&arena);
+    re = yew_re_compile(&arena, "a[b]cZ", 6U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+
+    /* YEW-F-090: cap the cache at two states so this four-state cycle must
+     * flush twice and hand off instead of making the test outcome optional. */
+    YEW_ASSERT_EQ_I64(yew_re_dfa_test_limits(re, &in, 0U, 2U, 0U,
+                                              &stats),
+                      YEW_DFA_GIVE_UP);
+    YEW_ASSERT_EQ_U64(stats.flushes, 2U);
+    YEW_ASSERT_EQ_U64(stats.max_states, 2U);
+    YEW_ASSERT(stats.max_states <= 2U);
+
+    (void)memset(&stats, 0, sizeof(stats));
+    YEW_ASSERT(yew_re_test_limits(re, &in, BYTEOFF(0U), 2U, 0U, &stats));
+    YEW_ASSERT_EQ_U64(stats.flushes, 2U);
+    YEW_ASSERT_EQ_U64(stats.max_states, 2U);
+    arena_free_all(&arena);
+}
+
 void test_re_dfa_handles_pathological_patterns(void)
 {
     static const char *const nasty[] = {

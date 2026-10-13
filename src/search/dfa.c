@@ -89,6 +89,9 @@ typedef struct Dfa {
     i32 buckets[YEW_DFA_BUCKETS];
     u32 flushes;
     u64 bytes;
+    u32 limit_states;
+    u64 limit_bytes;
+    YewReDfaStats *stats;
     /* Scratch reused by every closure so a step allocates nothing. */
     u32 *work;
     u32 *stamp;
@@ -220,6 +223,8 @@ static void dfa_flush(Dfa *d)
     d->nstates = 0U;
     d->bytes = 0U;
     d->flushes++;
+    if (d->stats != NULL)
+        d->stats->flushes = d->flushes;
 }
 
 static u32 edge_set(u32 state, u32 cp, u8 ctx)
@@ -301,11 +306,13 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
              memcmp(st->pcs, d->work, (size_t)n * sizeof(*st->pcs)) == 0))
             return at;
     }
-    if (d->nstates == YEW_DFA_MAX_STATES ||
-        state_bytes > YEW_DFA_MAX_BYTES - d->bytes) {
+    if (d->nstates == d->limit_states ||
+        state_bytes > d->limit_bytes - d->bytes) {
         if (d->flushes >= YEW_DFA_MAX_FLUSHES)
             return -1;
         dfa_flush(d);
+        if (state_bytes > d->limit_bytes)
+            return -1;
         bucket = h % YEW_DFA_BUCKETS;
     }
     st = &d->states[d->nstates];
@@ -331,7 +338,14 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
     }
     d->buckets[bucket] = (i32)d->nstates;
     d->bytes += state_bytes;
-    return (i32)d->nstates++;
+    d->nstates++;
+    if (d->stats != NULL) {
+        if (d->nstates > d->stats->max_states)
+            d->stats->max_states = d->nstates;
+        if (d->bytes > d->stats->max_bytes)
+            d->stats->max_bytes = d->bytes;
+    }
+    return (i32)(d->nstates - 1U);
 }
 
 static bool inst_takes(const YewRe *re, const ReInst *ins, u32 cp)
@@ -451,11 +465,20 @@ static inline u8 ctx_at(const YewReInput *in, u64 pos, u32 prev_cp,
  * should fall back to the Pike VM.
  */
 static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
-                    u64 *end_out);
+                    u64 *end_out, u32 max_states, u64 max_bytes,
+                    YewReDfaStats *stats);
 
 int yew_re_dfa_test(const YewRe *re, const YewReInput *in, u64 from)
 {
-    return dfa_scan(re, in, from, NULL);
+    return dfa_scan(re, in, from, NULL, YEW_DFA_MAX_STATES,
+                    YEW_DFA_MAX_BYTES, NULL);
+}
+
+int yew_re_dfa_test_limits(const YewRe *re, const YewReInput *in, u64 from,
+                           u32 max_states, u64 max_bytes,
+                           YewReDfaStats *stats)
+{
+    return dfa_scan(re, in, from, NULL, max_states, max_bytes, stats);
 }
 
 /* Reports where the earliest match ENDS.  Not where it starts, and not
@@ -463,11 +486,13 @@ int yew_re_dfa_test(const YewRe *re, const YewReInput *in, u64 from)
 int yew_re_dfa_find_end(const YewRe *re, const YewReInput *in, u64 from,
                         u64 *end_out)
 {
-    return dfa_scan(re, in, from, end_out);
+    return dfa_scan(re, in, from, end_out, YEW_DFA_MAX_STATES,
+                    YEW_DFA_MAX_BYTES, NULL);
 }
 
 static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
-                    u64 *end_out)
+                    u64 *end_out, u32 max_states, u64 max_bytes,
+                    YewReDfaStats *stats)
 {
     Dfa d;
     u64 pos;
@@ -480,6 +505,8 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     bool have_scan_cp = false;
     bool scan_word = false;
 
+    if (stats != NULL)
+        (void)memset(stats, 0, sizeof(*stats));
     if (re == NULL || in == NULL || re->nprog == 0U)
         return YEW_DFA_NO;
     if (re->lit.kind == RE_LIT_WHOLE) {
@@ -496,9 +523,14 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
     d.re = re;
     d.prog = re->prog;
     d.nprog = re->nprog;
+    d.limit_states = max_states == 0U || max_states > YEW_DFA_MAX_STATES ?
+                     YEW_DFA_MAX_STATES : max_states;
+    d.limit_bytes = max_bytes == 0U || max_bytes > YEW_DFA_MAX_BYTES ?
+                    YEW_DFA_MAX_BYTES : max_bytes;
+    d.stats = stats;
     arena_init(&d.arena);
     d.states = arena_alloc(&d.arena,
-                           YEW_DFA_MAX_STATES * sizeof(*d.states),
+                           (size_t)d.limit_states * sizeof(*d.states),
                            sizeof(void *));
     d.work = arena_alloc(&d.arena, (size_t)re->nprog * sizeof(u32),
                          sizeof(u32));
@@ -568,6 +600,8 @@ static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
                                   sizeof(u8));
     dfa_flush(&d);
     d.flushes = 0U;
+    if (d.stats != NULL)
+        d.stats->flushes = 0U;
 
     pos = from < in->window.lo ? in->window.lo : from;
 
