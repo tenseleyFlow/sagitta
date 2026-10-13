@@ -95,7 +95,7 @@ recorded in `audit-00.md`.
 | YEW-F-080 | M | fixed | F15 CI | ~~host sleep fabricates a fuzz-watchdog finding~~ — fixed 2026-10-12 in `ea6327f0` | tests/audit/yew_f_080.c | s58 §7; invariant 4 |
 | YEW-F-081 | M | fixed | F06 RE | ~~long quoted literals exceed the smaller VM-program limit~~ — fixed 2026-10-12 in `ee713cd5` | tests/audit/yew_f_081.c | s21 §6 / DoD 13 |
 | YEW-F-082 | C | fixed | F06 RE | ~~direct whole literals can split valid UTF-8 codepoints~~ — fixed 2026-10-13 in `8768947c` | tests/audit/yew_f_082.c | invariant 2; s20 §3 / §7 |
-| YEW-F-083 | M | confirmed | F06 RE | backward search skips overlapping match starts | tests/audit/yew_f_083.c | s20 §1 / §6c |
+| YEW-F-083 | M | fixed | F06 RE | ~~backward search skips overlapping match starts~~ — fixed 2026-10-13 in `25ffe801` | tests/audit/yew_f_083.c | s20 §1 / §6c |
 | YEW-F-084 | M | confirmed | F06 RE | Fletch keeps the obsolete 64 KiB regex-text precheck | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
 | YEW-F-085 | M | confirmed | F06 RE | REP2 unpack accepts impossible direct-literal metadata | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
 | YEW-F-086 | M | confirmed | F15 CI | binding and F06 contracts exist only as ignored local files | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
@@ -796,7 +796,12 @@ untracked byte-splitting path remains.
 last match whose start is strictly before the requested offset, but its
 forward enumeration advances to each match's end.  `/aa/` in `aaa` before
 byte 3 consequently returns `[0,2)` instead of the later overlapping
-`[1,3)`.  Navigation is visibly wrong but the document is unchanged.
+`[1,3)`.  Navigation is visibly wrong but the document is unchanged.  Commit
+`25ffe801` advances the bounded forward enumeration by one decoded codepoint
+from each match start, preserving progress for zero-width matches without
+skipping overlapping starts.  Coverage includes literals, captures,
+zero-width matches, UTF-8, and fragmented TextBuf input under Clang,
+ASan/UBSan, and GCC 16.
 
 `YEW-F-084` is Medium because F081 deliberately admits a bounded 256 KiB
 textual spelling for a 64 KiB semantic quoted literal, while Fletch's shared
