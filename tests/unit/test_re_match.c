@@ -106,8 +106,9 @@ void test_re_golden_table_bytes(void)
 {
     size_t i;
 
-    /* The table is the contract; keep it above the DoD floor. */
-    YEW_ASSERT(YEW_ARRAY_LEN(rows) >= 130U);
+    /* YEW-F-094: the table is the contract; keep the executable guard at
+     * Sprint 20's 150-row floor rather than allowing silent erosion. */
+    YEW_ASSERT(YEW_ARRAY_LEN(rows) >= 150U);
     for (i = 0U; i < YEW_ARRAY_LEN(rows); i++)
         check_row(&rows[i], false);
 }
