@@ -103,7 +103,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-090 | audit | `tests/audit/yew_f_090.c` | DFA cache-pressure test need not flush | open |
 | YEW-F-091 | audit | `tests/audit/yew_f_091.c` | zero-width replacement cases lack PTY goldens | open |
 | YEW-F-092 | audit | `tests/audit/yew_f_092.c` | interactive search refinement forces full repaint | open |
-| YEW-F-093 | audit | `tests/audit/yew_f_093.c` | restored contracts name superseded regex mechanisms | open |
+| YEW-F-093 | audit | `tests/audit/yew_f_093.c` | ~~restored contracts name superseded regex mechanisms~~ — fixed in `2d26fe08` | fixed |
 | YEW-F-094 | audit | `tests/audit/yew_f_094.c` | ~~golden-table guard permits fewer than 150 rows~~ — fixed in `87c0684f` | fixed |
 
 The Sprint 33 conformance-only ledger remains at
