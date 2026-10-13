@@ -68,10 +68,7 @@ owns Fletch highlighting; Sprint 55 owns package distribution. Namespace injecti
 
 ## Open audit findings against this front
 
-- `YEW-F-111` (Medium): source and closeout contracts retain superseded
-  Sprint 38/41/55 staging guards.
-- `YEW-F-112` (Medium): source and closeout contracts require a macrolib
-  collision fixture that the canonical namespace makes unreachable.
+none
 
 ## Deferrals recorded against this front
 

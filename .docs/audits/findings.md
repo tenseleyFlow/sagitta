@@ -123,8 +123,8 @@ recorded in `audit-00.md`.
 | YEW-F-108 | M | fixed | F08 FL | ~~Fletch closeout requires superseded staging guards~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_108.c | s59 §2; s30 DoD 10; s31 DoD 11; s32 DoD 12; s33 DoD 12; s34 DoD 14; s36 DoD 9/12 |
 | YEW-F-109 | M | fixed | F08 FL | ~~Fletch closeout retains historical ownership gates~~ — fixed 2026-10-13 in `674d826b` | tests/audit/yew_f_109.c | s59 §2; s29 DoD 1/4; s30 DoD 8 |
 | YEW-F-110 | M | fixed | F08 FL | ~~Fletch closeout treats historical inventories as current totals~~ — fixed 2026-10-13 in `bb1e745b` | tests/audit/yew_f_110.c | s59 §2; s28 DoD 1/8; s30 DoD 11; s31 DoD 2; s33 DoD 4/6 |
-| YEW-F-111 | M | open | F09 REC | Recorder closeout requires superseded staging guards | tests/audit/yew_f_111.c | s59 §2; s35 DoD 14; s38 DoD 13 |
-| YEW-F-112 | M | open | F09 REC | Recorder closeout requires unreachable macrolib collision | tests/audit/yew_f_112.c | s59 §2; s38 DoD 8 |
+| YEW-F-111 | M | fixed | F09 REC | ~~Recorder closeout requires superseded staging guards~~ — fixed 2026-10-13 in `905da06f` | tests/audit/yew_f_111.c | s59 §2; s35 DoD 14; s38 DoD 13 |
+| YEW-F-112 | M | fixed | F09 REC | ~~Recorder closeout requires unreachable macrolib collision~~ — fixed 2026-10-13 in `905da06f` | tests/audit/yew_f_112.c | s59 §2; s38 DoD 8 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1171,6 +1171,8 @@ delivered Fletch syntax highlighting and Sprint 55 delivered package
 installation. Product behavior is not shown wrong. The hard XFAIL requires
 the Sprint 35/38 and F09 contracts to test the delivered surfaces while
 retaining the interactive-only recording and post-1.0 migration boundaries.
+Commit `905da06f` adds S59-A22 and synchronizes both sprint and closeout
+contracts with the live Sprint 38/41/55 owners.
 
 `YEW-F-112` is Medium because Sprint 38's own namespace rules make the
 required cross-file collision fixture impossible: each canonical name is
@@ -1181,7 +1183,9 @@ eight rows as live tests. The loader's defensive rejection branch is useful,
 but manufacturing a public path around the injective namespace would weaken
 the product. The hard XFAIL requires the contract to prove namespace
 injectivity, cover all seven reachable rows, and retain the defensive branch
-for review.
+for review. Commit `905da06f` adds S59-A23 and replaces only the impossible
+fixture requirement with the stronger namespace-injectivity proof and
+defensive-branch review.
 
 ## Unverified observations
 

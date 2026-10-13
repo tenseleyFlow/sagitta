@@ -144,6 +144,10 @@ findings YEW-F-111, YEW-F-112
   38's canonical namespace makes unreachable. Unique stems plus dotted
   bindings and same-stem-only bare aliases are injective; the loader retains
   defensive collision rejection without exposing a path around those rules.
+- Decision amendments S59-A22/A23 and commit `905da06f` align the source and
+  closeout contracts with the delivered owners and the injective namespace.
+  Both hard XFAILs now pass without changing product behavior or weakening
+  collision diagnostics.
 
 ## Count
 
