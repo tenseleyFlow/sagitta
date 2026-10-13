@@ -25,13 +25,13 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s28.9 Review sign-off recorded in the spec preface (date + reviewer); freeze declared. No code, no new directories outside `.docs/`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s29.1 `src/fl/{lex.c,lex.h,ast.h,parse.c,parse.h}` build in both compiler lanes, zero warnings; no directory other than `src/fl/`, `tests/unit/`, `tests/fuzz/` touched.
+- [ ] s29.1 `src/fl/{lex.c,lex.h,ast.h,parse.c,parse.h}` build in both compiler lanes, zero warnings. The original touched-directory restriction was a Sprint 29 landing-scope control; release closeout preserves that history without requiring later owning sprints to leave the subsystem untouched.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s29.2 Token inventory implements every spec §1 row; unit tests cover each (≥ 60 lex assertions).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s29.3 Every spec §2 production has ≥ 1 positive dump-golden; every §2 terminal appears in some fixture. Coverage listed in a comment table at the top of `test_fl_parse.c` (production → test name) with zero gaps — s33 formalizes this, don't wait for it to be honest.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s29.4 `_Static_assert(sizeof(FlNode) <= 48)`; parser allocates from the caller's arena only — `grep -n 'malloc\|calloc' src/fl/` hits nothing.
+- [ ] s29.4 `_Static_assert(sizeof(FlNode) <= 48)`. Lexer and parser allocation remains caller-arena-owned: AST construction takes the caller's arena, the lexer/parser implementation contains no direct allocator calls, and the repository allocator gate continues to reject raw libc allocation.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s29.5 Expected/found wording matches Deliverable 4 exactly in goldens; the four special-cased messages each have a fixture.
       — VERDICT: blocking — independent closeout review pending.
@@ -59,11 +59,11 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s30.7 Every root in the §9 table has a drop-it test; the GC-stress lane is green over `make test` plus the s29 corpus; valgrind reports zero definite leaks and ASan reports zero use-after-poison.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s30.8 `grep -rn 'malloc\|calloc\|realloc' src/fl/` hits only `gc.c` (the collector owns the heap; everything else is arena or GC).
+- [ ] s30.8 Every `FlObj` allocation remains GC-owned through `fl_gc_alloc` and is covered by the enumerated-root and stress tests. Later host-side Fletch registries and configuration/recorder state may use the project's checked allocation wrappers for non-`FlObj` storage; the repository allocator gate continues to reject direct libc allocation.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s30.9 Upvalue semantics: by-reference sharing and per-iteration loop bindings each proven by a test whose failure mode is the classic bug.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s30.10 Reserved handle tags exist and are unconstructible: `grep -c 'FL_BUF' src/fl/` matches only the enum, the name table, and the deferral comment; `FL_OP_IMPORT` raises `"import"` naming Sprint 31.
+- [ ] s30.10 Reserved handle tags landed unconstructible in this sprint; Sprint 34 subsequently delivered their generation-checked constructors and type conversions. Sprint 31 delivered import execution; `FL_OP_IMPORT` remains compiled, disassembled, and covered by the 60-opcode conformance ledger.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s30.11 Amendment §16-A1 is filed in `.docs/fletch-spec.md` with reviewer and date; §9's stated kind count reads 12.
       — VERDICT: blocking — independent closeout review pending.
@@ -89,7 +89,7 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s31.10 Case mapping is available with regenerated tables; `make unicode-tables && git diff --exit-code src/unicode/` is clean and the `unicode` CI lane is green. *(Corrected 2026-08-09, C1. `yew_case_map`/`yew_case_map_utf8` are EMITTED by `scripts/gen-unicode-tables.c` into `src/unicode/tables_case.c`, behind `src/unicode/case.h`; there is no hand-written `src/unicode/case.c` and adding one would put hand-maintained code in a generated file or an empty wrapper beside it. The clause named a file; what it wanted was the capability and the clean regeneration, both of which hold.)*
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s31.11 Deferred surfaces exist and hard-error naming their sprint: `bind`, `set`, `on`, `buf`, `win` each raise `"name"` citing Sprint 34; there is no `io.run` and no `io.http` symbol anywhere in `src/fl/`.
+- [ ] s31.11 Later owning sprints delivered the editor surfaces `bind`, `set`, `on`, `buf`, and `win` through the capability-checked host API. The permanent 1.0 boundary remains: there is no `io.run` or `io.http` Fletch stdlib symbol anywhere in `src/fl/`.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s31.12 `math.random` reproduces a committed golden sequence; the determinism lane's double-run diff is clean. *(Clarified 2026-08-09, C1. `rng_state` is a file-static and therefore process-global, so the pristine DEFAULT-seed sequence is only observable in a fresh process — `yew fl` shows it, a shared test binary cannot. The golden is pinned after an explicit `math.seed(1)`, which tests the same thing: the generator's output for a known state.)*
       — VERDICT: blocking — independent closeout review pending.
@@ -115,7 +115,7 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s32.11 `vm.h` carries the no-verifier decision and its condition (any future bytecode loader lands with a real verifier, same commit) as a comment with the why, and this file's §8 is cited by section.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s32.12 Deferred surfaces hard-error naming their sprint: `yew --batch` → Sprint 37; `bind`/`set`/`on` → Sprint 34; `@[…]` raises `"motion"` at the REPL with a trace naming `<repl>`.
+- [ ] s32.12 Sprint 37 delivered `yew --batch`, and Sprint 34 delivered `bind`/`set`/`on` under the real editor host. The standalone REPL still uses the null host, so `@[…]` raises `"motion"` with a trace naming `<repl>`.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s33.1 `tests/fletch/` contains ≥ 20 conformance files/directories covering all 16 spec sections; `make test-fletch` is green and part of `make test`, and the whole suite completes in < 20 s on the dev machine.
       — VERDICT: blocking — independent closeout review pending.
@@ -139,7 +139,7 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s33.11 GC-stress and both `FL_CGOTO` settings green over the whole suite; `# GC_STRESS: 0` opt-outs ≤ 2 and each carries a reason.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s33.12 Deferrals are *tested*: `34-editor.fl` asserts `bind` raises `"name"` naming Sprint 34; `make test-fletch-roundtrip` hard-errors naming Sprint 35; `yew --batch` hard-errors naming Sprint 37.
+- [ ] s33.12 The landing deferrals were tested rather than stubbed. Sprints 34, 35, and 37 subsequently replaced those guards with live editor bindings, the recorder round-trip harness, and `yew --batch`; their shipping suites now provide the release-closeout evidence.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s33.13 **MILESTONE proven**: the four artifacts of §6 are green in CI — `yew fl hello.fl`, `yew fl -e`, the REPL pty golden, and the coverage gate. `--help` and the README document `yew fl`.
       — VERDICT: blocking — independent closeout review pending.
@@ -169,7 +169,7 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s34.13 ≥ 200 assertions across the three unit files; ≥ 25 script tests.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s34.14 Deferred surfaces hard-error naming their sprint: `bind`/`unbind` → 36, macro record/replay → 35, `--batch`-only refusals → 37 (invariant 3).
+- [ ] s34.14 The landing guards named their owning sprints rather than silently stubbing: Sprint 36 delivered `bind`/`unbind`, Sprint 35 delivered macro record/replay, and Sprint 37 delivered the `--batch` refusal policy.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s36.1 `make test` green on gcc and clang at `-Werror`; ASan/UBSan/valgrind/ determinism lanes clean.
       — VERDICT: blocking — independent closeout review pending.
@@ -187,23 +187,25 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s36.8 **Reload zero-residue**: registry lengths equal across 20 reloads; hooks fire exactly once after any number of reloads; a deleted `set()` line restores the default; a parse error leaves the previous config live and fully functional (script-tested by binding a key, breaking the file, reloading, and pressing the key).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s36.9 Differential test green: 500 generated states + the s25 corpus, byte-identical emitters and cross-parsed matrix.
+- [ ] s36.9 Sprint 58 retired the legacy differential only after the 500-state and Sprint 25 corpus handover matrix passed. The retained corpus exercises the shipping Fletch codec byte-for-byte and pins rejection, determinism, and idempotence.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s36.10 `--clean` loads only the panic keymap, skips workspace state and the workspace config, and is documented in `--help`; `yew --clean` no longer hard-errors naming this sprint.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s36.11 Perf: config load < 1 ms; reload with 500 binds ≤ 5 ms; baselines committed.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s36.12 Deferred surfaces hard-error naming their sprint: macro library → 38, plugin config → 54, `--batch` config flags → 37.
+- [ ] s36.12 Later owning sprints delivered the staged configuration surfaces: macro library loading in Sprint 38, plugin configuration in Sprint 54, and `--batch` configuration policy in Sprint 37.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s36.13 ≥ 180 assertions across the four unit files; ≥ 20 script tests; pty goldens byte-stable across the determinism lane's double run.
       — VERDICT: blocking — independent closeout review pending.
 
+Contract reconciliation: Later owning sprints delivered the staged Fletch surfaces.
+Sprint 58 retired only the completed legacy-codec handover scaffolding.
+Current closeout therefore proves the shipping implementations while
+retaining the standalone-REPL motion and no-`io.run`/`io.http` boundaries.
+
 ## Open audit findings against this front
 
-- `YEW-F-108` (Medium): superseded Fletch staging guards remain in the source
-  sprint and closeout contracts.
-- `YEW-F-109` (Medium): historical touched-directory and literal allocator
-  gates do not express the arena/GC ownership rules.
+none
 
 ## Deferrals recorded against this front
 

@@ -637,9 +637,10 @@ in §2's grammar) and hits the same cache.
     hand-maintained code in a generated file or an empty wrapper beside
     it. The clause named a file; what it wanted was the capability and
     the clean regeneration, both of which hold.)*
-11. Deferred surfaces exist and hard-error naming their sprint: `bind`,
-    `set`, `on`, `buf`, `win` each raise `"name"` citing Sprint 34; there is
-    no `io.run` and no `io.http` symbol anywhere in `src/fl/`.
+11. Later owning sprints delivered the editor surfaces `bind`, `set`, `on`,
+    `buf`, and `win` through the capability-checked host API. The permanent
+    1.0 boundary remains: there is no `io.run` or `io.http` Fletch stdlib
+    symbol anywhere in `src/fl/`.
 12. `math.random` reproduces a committed golden sequence; the determinism
     lane's double-run diff is clean.
     *(Clarified 2026-08-09, C1. `rng_state` is a file-static and

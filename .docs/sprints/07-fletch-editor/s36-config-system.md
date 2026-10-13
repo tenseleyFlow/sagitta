@@ -491,10 +491,11 @@ FlValue fl_data_read(FlVm *vm, const char *src, size_t len, DiagCtx *dc);
   workspace state, the trust db (§4), and — per its Prerequisites — s54's
   plugin manifests.
 
-**Differential test** (`tests/unit/test_state_diff.c`), the sprint's proof
-that "s36 swaps the implementation, not the format":
+**Historical differential handover proof** (`tests/unit/test_state_diff.c`),
+completed before retirement to prove that "s36 swaps the implementation, not
+the format":
 
-- the s25 emitter is retained as `src/ws/state_legacy.c`, compiled **only**
+- the s25 emitter was retained as `src/ws/state_legacy.c`, compiled **only**
   into the unit-test binary behind `YEW_STATE_LEGACY`;
 - for 500 generated `Workspace` states (0–200 tabs, deferred tabs, nested
   pane trees to depth 8, groups, cursor sets to 8 cursors, jumplists,
@@ -506,9 +507,10 @@ that "s36 swaps the implementation, not the format":
 - plus the fixed corpus of s25's committed state files, which must load and
   re-emit byte-identically (round-trip on real data, not just generated).
 
-Pitfall: the legacy emitter is not a reference implementation forever — it
-is deleted in Sprint 58's audit pass, and `state_legacy.c` carries a comment
-saying so with the sprint number, so it does not become permanent furniture.
+Sprint 58 retired the legacy differential after this matrix passed. The
+shipping Fletch reader/writer and frozen Sprint 25 corpus round-trip remain
+the current format, rejection, determinism, and idempotence guards; the
+legacy codec is not permanent furniture or a release dependency.
 
 ### 8. Defer
 
@@ -590,14 +592,17 @@ saying so with the sprint number, so it does not become permanent furniture.
    restores the default; a parse error leaves the previous config live and
    fully functional (script-tested by binding a key, breaking the file,
    reloading, and pressing the key).
-9. Differential test green: 500 generated states + the s25 corpus,
-   byte-identical emitters and cross-parsed matrix.
+9. Sprint 58 retired the legacy differential only after the 500-state and
+   Sprint 25 corpus handover matrix passed. The retained corpus exercises the
+   shipping Fletch codec byte-for-byte and pins rejection, determinism, and
+   idempotence.
 10. `--clean` loads only the panic keymap, skips workspace state and the
     workspace config, and is documented in `--help`; `yew --clean` no longer
     hard-errors naming this sprint.
 11. Perf: config load < 1 ms; reload with 500 binds ≤ 5 ms; baselines
     committed.
-12. Deferred surfaces hard-error naming their sprint: macro library → 38,
-    plugin config → 54, `--batch` config flags → 37.
+12. Later owning sprints delivered the staged configuration surfaces: macro
+    library loading in Sprint 38, plugin configuration in Sprint 54, and
+    `--batch` configuration policy in Sprint 37.
 13. ≥ 180 assertions across the four unit files; ≥ 20 script tests; pty
     goldens byte-stable across the determinism lane's double run.

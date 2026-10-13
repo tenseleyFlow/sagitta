@@ -505,9 +505,10 @@ the dump must itself be re-readable, which the tests assert. Exit is
 11. `vm.h` carries the no-verifier decision and its condition (any future
     bytecode loader lands with a real verifier, same commit) as a comment
     with the why, and this file's §8 is cited by section.
-12. Deferred surfaces hard-error naming their sprint: `yew --batch` →
-    Sprint 37; `bind`/`set`/`on` → Sprint 34; `@[…]` raises `"motion"` at
-    the REPL with a trace naming `<repl>`.
+12. Sprint 37 delivered `yew --batch`, and Sprint 34 delivered
+    `bind`/`set`/`on` under the real editor host. The standalone REPL still
+    uses the null host, so `@[…]` raises `"motion"` with a trace naming
+    `<repl>`.
 
 ### Corrections after landing
 
@@ -568,7 +569,7 @@ ordering that matters — the restore blob precedes it, because
 | 9 | met | `fl_chunk_check` runs under `FL_VM_CHECKS` after every compile; five tests via the test-only mutator |
 | 10 | met | structured report, exit 4, `YEW_FL_DUMP_BAD_CHUNK` round-trips; no bare `abort()`/`assert()` in `src/fl/` |
 | 11 | met | `vm.h` carries the no-verifier decision and its condition |
-| 12 | met | `--batch` → Sprint 37; `bind`/`set`/`on` → Sprint 34; `@[…]` raises `motion` with a `<repl>` trace |
+| 12 | met, later owners delivered staged surfaces | Sprint 37 delivered `--batch`; Sprint 34 delivered `bind`/`set`/`on`; standalone `yew fl` retains the null-host `motion` raise with a `<repl>` trace |
 
 **Seven defects found by the sprint's own tests**, five of them in code
 this sprint wrote: the VM stack-slot leak (fuzzer), the parser

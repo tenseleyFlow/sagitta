@@ -569,17 +569,16 @@ VM dispatches plus 20 constant loads. The recorder's round-trip law
 
 ### 12. Defer
 
-- **Standard library and real `import`** → Sprint 31. `FL_OP_IMPORT` raises
-  kind `"import"`, message `modules land in Sprint 31`. No `str`/`list`/…
-  global exists; referencing one is the ordinary kind `"name"` error.
+- **Standard library and real `import`** landed in Sprint 31. This sprint's
+  landing guard raised kind `"import"` with `modules land in Sprint 31`;
+  current `FL_OP_IMPORT` execution resolves through the module system.
 - **REPL, `yew fl`, full stack traces, did-you-mean, the VM fuzzer** →
   Sprint 32. This sprint's uncaught error prints `kind: msg` plus the
   innermost frame only.
-- **Editor handles and motion execution** → Sprint 34. The five tags exist
-  in `FlType` and in `fl_type_name`; there is no constructor for any of
-  them, so `grep -n 'FL_BUF\|FL_CURSOR\|FL_SPAN\|FL_WIN\|FL_REGEX' src/fl/`
-  hits only the enum, the name table, and this deferral comment.
-- **Recorder** → Sprint 35; **`--batch`** → Sprint 37.
+- **Editor handles and motion execution** landed in Sprint 34. The five tags
+  remain in `FlType` and `fl_type_name`; their constructors now route through
+  the generation-checked handle table.
+- **Recorder** landed in Sprint 35; **`--batch`** landed in Sprint 37.
 - **Bytecode serialization (`.flc`)** → not in 1.0, and `vm.h` says so with
   the reason: no foreign bytecode may enter the VM without a verifier
   (s32 §8 makes this a written rule).
@@ -643,13 +642,17 @@ VM dispatches plus 20 constant loads. The recorder's round-trip law
 7. Every root in the §9 table has a drop-it test; the GC-stress lane is
    green over `make test` plus the s29 corpus; valgrind reports zero
    definite leaks and ASan reports zero use-after-poison.
-8. `grep -rn 'malloc\|calloc\|realloc' src/fl/` hits only `gc.c` (the
-   collector owns the heap; everything else is arena or GC).
+8. Every `FlObj` allocation remains GC-owned through `fl_gc_alloc` and is
+   covered by the enumerated-root and stress tests. Later host-side Fletch
+   registries and configuration/recorder state may use the project's checked
+   allocation wrappers for non-`FlObj` storage; the repository allocator gate
+   continues to reject direct libc allocation.
 9. Upvalue semantics: by-reference sharing and per-iteration loop bindings
    each proven by a test whose failure mode is the classic bug.
-10. Reserved handle tags exist and are unconstructible:
-    `grep -c 'FL_BUF' src/fl/` matches only the enum, the name table, and
-    the deferral comment; `FL_OP_IMPORT` raises `"import"` naming Sprint 31.
+10. Reserved handle tags landed unconstructible in this sprint; Sprint 34
+    subsequently delivered their generation-checked constructors and type
+    conversions. Sprint 31 delivered import execution; `FL_OP_IMPORT` remains
+    compiled, disassembled, and covered by the 60-opcode conformance ledger.
 11. Amendment §16-A1 is filed in `.docs/fletch-spec.md` with reviewer and
     date; §9's stated kind count reads 12.
 12. Perf smoke numbers recorded in `tests/perf/baselines/fletch_smoke.txt`

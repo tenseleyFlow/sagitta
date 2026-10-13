@@ -557,6 +557,37 @@ product behavior or ownership invariant. It supersedes only the impossible
 literal greps in Sprints 22/25/27 and F07; `YEW-F-107` records the
 correction.
 
+**Fletch closeout amendment S59-A19 (2026-10-13) — delivered language and
+host surfaces replace their staging guards.** Sprints 30–36 established the
+VM, standard library, REPL, conformance suite, editor API, and configuration
+system in sequence. Their future-sprint errors and inert paths were landing
+guards, not permanent 1.0 behavior. Sprint 31 delivered import execution;
+Sprints 34–38 delivered editor handles/APIs, recorder round-trip, batch mode,
+configuration, and macro-library loading; and Sprint 54 delivered plugin
+configuration. Sprint 36 completed the required legacy-versus-Fletch state
+codec differential, then Sprint 58 retired that test-only legacy codec as the
+contract explicitly required. Current closeout proves the delivered surfaces
+through their shipping conformance, unit, script, PTY, and corpus guards.
+The standalone `yew fl` REPL still has no editor host, so motion execution
+there raises `"motion"`; `io.run` and `io.http` remain absent from the 1.0
+Fletch stdlib. This amendment changes no product behavior. It supersedes only
+stale staging wording in Sprints 30–36 and F08; `YEW-F-108` records the
+correction.
+
+**Fletch ownership closeout amendment S59-A20 (2026-10-13) — parser arenas
+and GC ownership have semantic boundaries.** Lexer and parser AST allocation
+remains caller-arena-owned. Every language `FlObj` allocation remains owned
+and traced by the Fletch collector through `fl_gc_alloc`. Later Fletch host
+support—origin and hook registries, configuration and recorder state, handle
+tables, transaction bookkeeping, and the macro library—may use the project's
+checked allocation wrappers for non-`FlObj` storage. Direct libc allocation
+remains forbidden by the repository-wide allocator gate. Sprint 29's
+touched-directory restriction was a landing-scope history constraint, not a
+current-tree release gate after later sprints extended the subsystem. This
+amendment changes no product behavior or allocation invariant. It supersedes
+only the historical scope restriction and impossible allocator token greps in
+Sprints 29/30 and F08; `YEW-F-109` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

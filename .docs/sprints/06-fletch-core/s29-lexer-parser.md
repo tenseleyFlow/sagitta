@@ -232,16 +232,19 @@ until s30 and the substrate for every golden below.
 ## Definition of Done
 
 1. `src/fl/{lex.c,lex.h,ast.h,parse.c,parse.h}` build in both compiler
-   lanes, zero warnings; no directory other than `src/fl/`,
-   `tests/unit/`, `tests/fuzz/` touched.
+   lanes, zero warnings. The original touched-directory restriction was a
+   Sprint 29 landing-scope control; release closeout preserves that history
+   without requiring later owning sprints to leave the subsystem untouched.
 2. Token inventory implements every spec §1 row; unit tests cover each
    (≥ 60 lex assertions).
 3. Every spec §2 production has ≥ 1 positive dump-golden; every §2
    terminal appears in some fixture. Coverage listed in a comment table
    at the top of `test_fl_parse.c` (production → test name) with zero
    gaps — s33 formalizes this, don't wait for it to be honest.
-4. `_Static_assert(sizeof(FlNode) <= 48)`; parser allocates from the
-   caller's arena only — `grep -n 'malloc\|calloc' src/fl/` hits nothing.
+4. `_Static_assert(sizeof(FlNode) <= 48)`. Lexer and parser allocation remains caller-arena-owned:
+   AST construction takes the caller's arena, the
+   lexer/parser implementation contains no direct allocator calls, and the
+   repository allocator gate continues to reject raw libc allocation.
 5. Expected/found wording matches Deliverable 4 exactly in goldens; the
    four special-cased messages each have a fixture.
 6. All 8 recovery fixtures: exactly 1 diagnostic each.

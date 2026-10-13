@@ -349,9 +349,10 @@ Fletch program" block. Campaign 06 is closed when these are green.
     comment explaining that the quadratic path is documented, not fixed.
 11. GC-stress and both `FL_CGOTO` settings green over the whole suite;
     `# GC_STRESS: 0` opt-outs ≤ 2 and each carries a reason.
-12. Deferrals are *tested*: `34-editor.fl` asserts `bind` raises `"name"`
-    naming Sprint 34; `make test-fletch-roundtrip` hard-errors naming
-    Sprint 35; `yew --batch` hard-errors naming Sprint 37.
+12. The landing deferrals were tested rather than stubbed. Sprints 34, 35,
+    and 37 subsequently replaced those guards with live editor bindings, the
+    recorder round-trip harness, and `yew --batch`; their shipping suites now
+    provide the release-closeout evidence.
 13. **MILESTONE proven**: the four artifacts of §6 are green in CI —
     `yew fl hello.fl`, `yew fl -e`, the REPL pty golden, and the coverage
     gate. `--help` and the README document `yew fl`.
@@ -428,7 +429,7 @@ and relative enforcement on designated hardware.
 | 9 | 10 rows committed with a `why`; the two-condition gate proven by a 20 % failure and a 5 % pass | **PASS** — `--selftest-gate`, 7 cases; **proven on the rule, not on a stopwatch**, because a live re-measurement tests the machine (a loaded box swings parse_only 80 %) |
 | 10 | `concat/join > 20` at n = 5000, with the comment | **PASS** — 52x, asserted in the driver |
 | 11 | GC-stress and both `FL_CGOTO` settings green; `# GC_STRESS: 0` opt-outs ≤ 2 | **PASS** — `test-fletch-gc-stress`, `test-fletch-dispatch` (byte-identical), **zero** opt-outs. No file needs one, so the directive has no user in the suite; it was validated by hand against a scratch tree — a missing reason is a configuration error, and an opt-out is announced with a `HARNESS_SKIP` line. Manufacturing an opt-out to exercise the directive would be gaming the number this row asks for |
-| 12 | deferrals tested: `34-editor.fl`, `test-fletch-roundtrip`, `yew --batch` | **PASS** — all three hard-error naming Sprints 34, 35 and 37 |
+| 12 | landing deferrals tested, then replaced by owning sprints | **PASS** — Sprints 34, 35, and 37 delivered editor bindings, recorder round-trip, and `yew --batch` with shipping coverage |
 | 13 | MILESTONE: the four artifacts green; `--help` and the README document `yew fl` | **PASS** — smoke script (script + `-e`), pty golden `s33_hello_world_repl`, coverage gate; README gained "Your first Fletch program" |
 
 ### Defects this sprint found in landed code

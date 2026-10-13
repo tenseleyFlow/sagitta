@@ -638,5 +638,6 @@ spells it `set({ tabwidth: 4 })` (Sprint 36 pins this).
 12. Perf gates: motion-op dispatch ≤ 1 µs; 10⁶ query calls < 300 ms;
     baselines committed.
 13. ≥ 200 assertions across the three unit files; ≥ 25 script tests.
-14. Deferred surfaces hard-error naming their sprint: `bind`/`unbind` → 36,
-    macro record/replay → 35, `--batch`-only refusals → 37 (invariant 3).
+14. The landing guards named their owning sprints rather than silently
+    stubbing: Sprint 36 delivered `bind`/`unbind`, Sprint 35 delivered macro
+    record/replay, and Sprint 37 delivered the `--batch` refusal policy.
