@@ -64,7 +64,7 @@ Sprints covered: s20, s21
 
 ## Open audit findings against this front
 
-2 open: `YEW-F-084` and `YEW-F-085` (Medium).
+1 open: `YEW-F-085` (Medium).
 
 ## Deferrals recorded against this front
 
@@ -72,4 +72,4 @@ none
 
 ## Verdict
 
-NOT READY — Independent review found two remaining regex/search defects.
+NOT READY — Independent review found one remaining regex/search defect.

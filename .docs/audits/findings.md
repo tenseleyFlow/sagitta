@@ -96,7 +96,7 @@ recorded in `audit-00.md`.
 | YEW-F-081 | M | fixed | F06 RE | ~~long quoted literals exceed the smaller VM-program limit~~ — fixed 2026-10-12 in `ee713cd5` | tests/audit/yew_f_081.c | s21 §6 / DoD 13 |
 | YEW-F-082 | C | fixed | F06 RE | ~~direct whole literals can split valid UTF-8 codepoints~~ — fixed 2026-10-13 in `8768947c` | tests/audit/yew_f_082.c | invariant 2; s20 §3 / §7 |
 | YEW-F-083 | M | fixed | F06 RE | ~~backward search skips overlapping match starts~~ — fixed 2026-10-13 in `25ffe801` | tests/audit/yew_f_083.c | s20 §1 / §6c |
-| YEW-F-084 | M | confirmed | F06 RE | Fletch keeps the obsolete 64 KiB regex-text precheck | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
+| YEW-F-084 | M | fixed | F06 RE | ~~Fletch keeps the obsolete 64 KiB regex-text precheck~~ — fixed 2026-10-13 in `5d9a74c4` | tests/audit/yew_f_084.c | s21 §6 / DoD 13; F081 |
 | YEW-F-085 | M | confirmed | F06 RE | REP2 unpack accepts impossible direct-literal metadata | tests/audit/yew_f_085.c | s20 cache shape validation; F081 |
 | YEW-F-086 | M | confirmed | F15 CI | binding and F06 contracts exist only as ignored local files | tests/audit/yew_f_086.c | s59 §2; AGENTS binding order |
 
@@ -809,6 +809,10 @@ regex cache still rejects at 64 KiB before calling the core compiler.
 `re.test(s, re.escape(s))` therefore fails once maximally escaped input
 exceeds 16,384 bytes even though the core safely accepts it.  This is a
 recoverable consumer/engine contract mismatch rather than corruption.
+Commit `5d9a74c4` aligns the cache's allocation guard with the compiler's
+fourfold textual bound while leaving decoded-size validation in the core.
+Fletch regressions cover the first formerly rejected spelling and the exact
+64 KiB semantic maximum under Clang, ASan/UBSan, and GCC 16.
 
 `YEW-F-085` is Medium because public REP2 unpacking promises shape validation
 but accepts headers the compiler cannot produce: ICASE direct matching and
