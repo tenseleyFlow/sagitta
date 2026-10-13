@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "unicode/utf8.h"
+
 enum {
     RE_PACK_HEADER = 96,
     RE_PACK_INST = 16,
@@ -62,6 +64,55 @@ static bool inst_valid(const ReInst *ins, u32 nprog, u32 nclasses,
     if (ins->op == RE_ANY && ins->arg > 1U)
         return false;
     return true;
+}
+
+static bool inst_is(const ReInst *ins, ReOp op, u32 x, u32 y, u32 arg)
+{
+    return ins->op == (u8)op && ins->x == x && ins->y == y &&
+           ins->arg == arg;
+}
+
+/* REP2 is emitted only by build_large_literal().  Unlike REP1, it bypasses
+ * the Pike/DFA instruction stream at execution time, so independently valid
+ * header fields are insufficient: the metadata and inert program must be the
+ * one exact shape the compiler can produce. */
+static bool rep2_header_valid(const YewRe *re, u32 bools)
+{
+    return re->nprog == 3U && re->nrprog == 3U &&
+           re->nclasses == 0U && re->ngroups == 1U &&
+           (re->flags & YEW_RE_ICASE) == 0U &&
+           (bools & ~1U) == 0U &&
+           re->min_len == re->max_len &&
+           re->min_len > YEW_RE_MAX_PROG - 3U &&
+           re->lit.kind == RE_LIT_WHOLE &&
+           re->lit.n > sizeof(re->lit.small) && !re->lit.anchored;
+}
+
+static bool rep2_program_valid(const YewRe *re)
+{
+    return inst_is(&re->prog[0], RE_SAVE, 0U, 0U, 0U) &&
+           inst_is(&re->prog[1], RE_SAVE, 0U, 0U, 1U) &&
+           inst_is(&re->prog[2], RE_MATCH, 0U, 0U, 0U) &&
+           inst_is(&re->rprog[0], RE_SAVE, 0U, 0U, 1U) &&
+           inst_is(&re->rprog[1], RE_SAVE, 0U, 0U, 0U) &&
+           inst_is(&re->rprog[2], RE_MATCH, 0U, 0U, 0U);
+}
+
+static bool rep2_literal_valid(const YewRe *re, const u8 *literal)
+{
+    size_t at = 0U;
+    u32 codepoints = 0U;
+
+    while (at < re->lit.n) {
+        u32 cp;
+        size_t step = yew_utf8_decode(literal + at, re->lit.n - at, &cp);
+
+        if (step == 0U)
+            return false;
+        at += step;
+        codepoints++;
+    }
+    return codepoints == re->min_len;
 }
 
 bool yew_re_pack(const YewRe *re, Bytebuf *out)
@@ -197,6 +248,7 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
         (re->lit.kind == RE_LIT_BMH && re->lit.n < 2U) ||
         (re->lit.kind == RE_LIT_WHOLE && re->lit.n == 0U) ||
         get32(data + 48U) > 1U ||
+        (v2 && !rep2_header_valid(re, bools)) ||
         !take(&at, len, re->nprog, RE_PACK_INST) ||
         !take(&at, len, re->nrprog, RE_PACK_INST))
         return NULL;
@@ -225,6 +277,8 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
         if (!inst_valid(&re->rprog[i], re->nrprog, re->nclasses, re->ngroups))
             return NULL;
     }
+    if (v2 && !rep2_program_valid(re))
+        return NULL;
     re->classes = arena_alloc(a, (size_t)re->nclasses * sizeof(*re->classes),
                               _Alignof(ReClass));
     for (i = 0U; i < re->nclasses; i++) {
@@ -255,6 +309,11 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
         size_t literal_at = at;
 
         if (!take(&at, len, re->lit.n, 1U))
+            return NULL;
+        /* YEW-F-085: the direct matcher trusts min/max/group/flag metadata
+         * rather than executing the serialized program.  Admit only the
+         * exact literal cardinality promised by the REP2 header. */
+        if (!rep2_literal_valid(re, data + literal_at))
             return NULL;
         yew_lit_prepare(&re->lit, a, data + literal_at, re->lit.n);
     } else if (re->lit.n != 0U) {

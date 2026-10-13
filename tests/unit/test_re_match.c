@@ -18,6 +18,25 @@
 
 #include "re_golden.h"
 
+static void re_test_put32(u8 *p, u32 v)
+{
+    p[0] = (u8)v;
+    p[1] = (u8)(v >> 8U);
+    p[2] = (u8)(v >> 16U);
+    p[3] = (u8)(v >> 24U);
+}
+
+static bool re_test_unpack_rejected(const Bytebuf *packed)
+{
+    Arena arena;
+    bool rejected;
+
+    arena_init(&arena);
+    rejected = yew_re_unpack(&arena, packed->data, packed->len, NULL) == NULL;
+    arena_free_all(&arena);
+    return rejected;
+}
+
 
 static void check_row(const ReRow *row, bool use_textbuf)
 {
@@ -431,6 +450,58 @@ void test_re_whole_literals_follow_utf8_decoder_boundaries(void)
     YEW_ASSERT_EQ_U64(match.g[0].hi, sizeof(long_literal));
 
     bytebuf_free(&pattern);
+    arena_free_all(&arena);
+}
+
+void test_re_rep2_rejects_impossible_direct_metadata(void)
+{
+    enum { LITERAL_LEN = YEW_RE_MAX_PROG - 2U, HEADER = 96U, INST = 16U };
+    u8 literal[LITERAL_LEN];
+    Arena arena;
+    Arena control_arena;
+    Bytebuf packed;
+    YewRe *re;
+
+    (void)memset(literal, 'a', sizeof(literal));
+    arena_init(&arena);
+    bytebuf_init(&packed);
+    re = yew_re_compile(&arena, (const char *)literal, sizeof(literal),
+                        YEW_RE_LITERAL, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    YEW_ASSERT(yew_re_pack(re, &packed));
+    YEW_ASSERT(memcmp(packed.data, "YEWREP2", 7U) == 0);
+    arena_init(&control_arena);
+    YEW_ASSERT_NOT_NULL(yew_re_unpack(&control_arena, packed.data,
+                                      packed.len, NULL));
+    arena_free_all(&control_arena);
+
+    re_test_put32(packed.data + 24U, YEW_RE_LITERAL | YEW_RE_ICASE);
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+    re_test_put32(packed.data + 24U, YEW_RE_LITERAL);
+    re_test_put32(packed.data + 20U, 2U);
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+    re_test_put32(packed.data + 20U, 1U);
+    re_test_put32(packed.data + 16U, 1U);
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+    re_test_put32(packed.data + 16U, 0U);
+    re_test_put32(packed.data + 36U, 2U);
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+    re_test_put32(packed.data + 36U, 0U);
+    re_test_put32(packed.data + 48U, 1U);
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+    re_test_put32(packed.data + 48U, 0U);
+    re_test_put32(packed.data + 28U, LITERAL_LEN - 1U);
+    re_test_put32(packed.data + 32U, LITERAL_LEN - 1U);
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+    re_test_put32(packed.data + 28U, LITERAL_LEN);
+    re_test_put32(packed.data + 32U, LITERAL_LEN);
+    packed.data[HEADER + INST + 12U] = (u8)RE_MATCH;
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+    packed.data[HEADER + INST + 12U] = (u8)RE_SAVE;
+    packed.data[HEADER + 3U * INST + 12U] = (u8)RE_MATCH;
+    YEW_ASSERT(re_test_unpack_rejected(&packed));
+
+    bytebuf_free(&packed);
     arena_free_all(&arena);
 }
 
