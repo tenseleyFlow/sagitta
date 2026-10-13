@@ -99,7 +99,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-086 | audit | `tests/audit/yew_f_086.c` | ~~binding and F06 contracts exist only as ignored local files~~ — fixed in `dda25e51` | fixed |
 | YEW-F-087 | audit | `tests/audit/yew_f_087.c` | ~~long-literal seam test builds one coalesced piece~~ — fixed in `43bc2afd` | fixed |
 | YEW-F-088 | audit | `tests/audit/yew_f_088.c` | ~~macOS GCC unit build sends Apple arm64e flags to GCC~~ — fixed in `b44cf7ce` | fixed |
-| YEW-F-089 | audit | `tests/audit/yew_f_089.c` | character-class cap has no firing regression | open |
+| YEW-F-089 | audit | `tests/audit/yew_f_089.c` | ~~character-class cap has no firing regression~~ — fixed in `709d1eb2` | fixed |
 | YEW-F-090 | audit | `tests/audit/yew_f_090.c` | DFA cache-pressure test need not flush | open |
 | YEW-F-091 | audit | `tests/audit/yew_f_091.c` | zero-width replacement cases lack PTY goldens | open |
 | YEW-F-092 | audit | `tests/audit/yew_f_092.c` | interactive search refinement forces full repaint | open |
