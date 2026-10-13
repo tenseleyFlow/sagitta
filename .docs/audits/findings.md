@@ -102,7 +102,7 @@ recorded in `audit-00.md`.
 | YEW-F-087 | M | fixed | F06 RE | ~~long-literal seam test builds one coalesced piece~~ — fixed 2026-10-13 in `43bc2afd` | tests/audit/yew_f_087.c | s20 DoD 10; s21 DoD 13 |
 | YEW-F-088 | M | fixed | F15 CI | ~~macOS GCC unit build sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `b44cf7ce` | tests/audit/yew_f_088.c | s20/s21 DoD 1; compiler matrix |
 | YEW-F-089 | M | fixed | F06 RE | ~~character-class cap has no firing regression~~ — fixed 2026-10-13 in `709d1eb2` | tests/audit/yew_f_089.c | s20 DoD 11 |
-| YEW-F-090 | M | open | F06 RE | DFA cache-pressure test need not flush | tests/audit/yew_f_090.c | s20 DoD 12 |
+| YEW-F-090 | M | fixed | F06 RE | ~~DFA cache-pressure test need not flush~~ — fixed 2026-10-13 in `e40ccb23` | tests/audit/yew_f_090.c | s20 DoD 12 |
 | YEW-F-091 | M | open | F06 RE | zero-width replacement cases lack PTY goldens | tests/audit/yew_f_091.c | s21 DoD 7 |
 | YEW-F-092 | M | open | F06 RE | interactive search refinement forces full repaint | tests/audit/yew_f_092.c | invariant 4; s21 DoD 9 |
 | YEW-F-093 | M | fixed | F06 RE | ~~restored contracts name superseded regex mechanisms~~ — fixed 2026-10-13 in `2d26fe08` | tests/audit/yew_f_093.c | s59 §2/§3; s20/s21 closeout |
@@ -872,6 +872,8 @@ diagnostic offset to the end of the offending pattern.
 explicitly accepts cache retention, any number of flushes, or give-up. It can
 therefore pass without exercising the required second-flush fallback. The
 hard XFAIL requires a lowered-cap seam and an observed two-flush regression.
+Commit `e40ccb23` adds that deterministic seam, proves both flushes occurred,
+and verifies that the production handoff finishes directly on the Pike VM.
 
 `YEW-F-091` is Medium because the zero-width replacement engine is covered by
 units, but the Sprint 21 contract requires terminal-level goldens for line
