@@ -5607,7 +5607,7 @@ static void case_s21_named_mark_round_trip(PtyCtx *c)
     s18_finish(c, path);
 }
 
-/* :g names Sprint 34 rather than pretending to be coming. */
+/* :g is an explicit permanent non-goal, not a future-sprint promise. */
 static void case_s21_global_is_a_non_goal(PtyCtx *c)
 {
     char path[256];

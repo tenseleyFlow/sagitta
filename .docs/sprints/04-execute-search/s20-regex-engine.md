@@ -256,14 +256,15 @@ rejected.
 
 ### 6. Execution engines
 
-Three engines, one dispatcher. The dispatcher is a table, not a heuristic
-pile:
+Two execution engines plus the literal prefilter, under one dispatcher. The
+dispatcher is a table, not a heuristic pile. Amendment S59-A8 supersedes the
+original reverse-DFA span composition because it cannot preserve
+leftmost-first semantics:
 
 | API call | Engine |
 |---|---|
-| `yew_re_test` | literal prefilter → lazy DFA |
-| `yew_re_search`, `NOCAPTURE` or `ngroups == 1` | prefilter → forward DFA for the end, reverse DFA for the start |
-| `yew_re_search` with groups | prefilter → forward DFA to locate a match end → Pike VM anchored in the recovered window |
+| `yew_re_test` | whole-literal matcher, otherwise lazy DFA; Pike fallback after cache thrash |
+| `yew_re_search` | literal prefilter → forward DFA miss/region bound → Pike VM for the authoritative span and captures |
 | `yew_re_match_at` | Pike VM, anchored (captures free) |
 | `yew_re_search_back` | §6c |
 
@@ -281,8 +282,8 @@ static void addthread(ReList *l, u32 pc, Caps *c, const ReCtx *x) {
      * the C stack on a pattern the user typed. */
     push(pc, c);
     while (pop(&pc, &c)) {
-        if (sparse_has(l, pc)) { caps_release(c); continue; }  /* THE fix */
-        sparse_add(l, pc);
+        if (list_has(l, pc)) { caps_release(c); continue; }  /* THE fix */
+        list_mark(l, pc);
         switch (prog[pc].op) {
         case RE_JMP:   push(prog[pc].x, c); break;
         case RE_SPLIT: push(prog[pc].y, caps_share(c));        /* lower  */
@@ -300,7 +301,7 @@ static void addthread(ReList *l, u32 pc, Caps *c, const ReCtx *x) {
 }
 ```
 
-**Pitfall — the empty-width loop.** Without the `sparse_has` check *inside*
+**Pitfall — the empty-width loop.** Without the `list_has` check *inside*
 `addthread` (not merely before the call), `(a*)*` re-adds the same pc
 forever at a single input position and the editor hangs on a pattern with
 no input at all. This one line is the difference between "linear-time
@@ -329,17 +330,16 @@ so a flush is a memset plus a generation bump). If a single search flushes
 twice, abandon the DFA and finish on the Pike VM — a pattern that thrashes
 the cache runs *slower* on a DFA rebuilding every state per character.
 
-**(c) Finding the start: the reverse program.** A forward DFA reports where
-a match *ends*, not where it starts. Instead of a second engine we compile
-the AST again with concatenation order flipped (`rprog`; anchors swap:
-`RE_BOL`↔`RE_EOL`, `RE_BOT`↔`RE_EOT`, `\b` unchanged) and run the reverse
-DFA backwards from the reported end. Backward scanning needs bytes in
-reverse, which the forward-only `TextIter` does not provide: we materialize
-a **bounded window** of ≤ 64 KiB ending at the match end
-(`yew_re_window_fill`), scan it backwards, and if no start is found inside
-it fall back to a Pike VM run anchored at the window's first line start.
-This is the engine's single materialization and it is O(64 KiB), never
-O(file).
+**(c) Finding the span and searching backward.** A forward DFA reports where
+a match *ends*, not where its leftmost-first span starts. We still compile the
+AST with concatenation order flipped (`rprog`; anchors swap:
+`RE_BOL`↔`RE_EOL`, `RE_BOT`↔`RE_EOT`, `\b` unchanged), but S59-A8 records why
+no engine executes it for span recovery: on `abcd`, `/bc|abcd/` ends earliest
+through `bc` at byte 3 while the required leftmost-first match is `abcd` at
+bytes 0..4. The dispatcher instead uses the boolean forward DFA to reject a
+miss or bound a safe region for finite-length patterns, then the Pike VM
+produces the authoritative span and captures. All input remains streamed
+through `TextIter`; the search engine materializes no buffer or window.
 
 `yew_re_search_back` (used by `?pattern` and `N`) has no reverse engine
 either: it scans **forward** inside `[w_lo, before)`, where `w_lo` walks
@@ -486,8 +486,8 @@ the caret while typing.
 1. `make test` green on both compilers, zero warnings; ASan/UBSan/valgrind/
    determinism lanes green.
 2. No materialization: `grep -rn 'textbuf_to_bytes\|materialize' src/search/`
-   shows only `yew_re_window_fill`'s bounded 64 KiB window with its
-   documented comment; the 1 GB throughput test's peak RSS delta < 4 MiB.
+   shows only explanatory comments for the streaming `TextIter` path; the
+   1 GB throughput test's peak RSS delta < 4 MiB.
 3. **No backtracking anywhere**: `grep -rn 'backtrack' src/search/` returns
    only comments explaining its absence; the pathological table is green
    with `t(10⁵)/t(10⁴) ≤ 15` on all four scaling patterns, and
@@ -495,8 +495,9 @@ the caret while typing.
    baseline.
 4. Golden match table ≥ 150 rows green with captures compared
    element-wise; leftmost-first pinned by explicit rows.
-5. Engine agreement: Pike VM, DFA test, and forward+reverse DFA spans agree
-   on 100% of golden rows and 100% of fuzz cases.
+5. Engine agreement: Pike VM and boolean DFA agree whenever the DFA decides;
+   public dispatcher spans agree with Pike VM on 100% of golden rows and
+   100% of fuzz cases.
 6. Differential fuzz: ≥ 5 000 000 (pattern, input) pairs × 4 seeds, zero
    mismatches; oracle-budget skip rate reported and < 2%.
 7. Compile fuzz: 1 000 000 inputs, zero crashes, `err.off` always in range.
@@ -504,7 +505,7 @@ the caret while typing.
    lookaround/backref/atomic give the permanent-non-goal message, **not** a
    sprint deferral.
 9. Empty-width protection: the `(a*)*` unit case completes; moving the
-   `sparse_has` check out of `addthread` makes it fail (documented in the
+   `list_has` check out of `addthread` makes it fail (documented in the
    test comment).
 10. Chunk-carry: a match spanning three pieces of an insertion-built piece
     tree is found, and mid-UTF-8 prefilter candidates are rejected.

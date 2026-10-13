@@ -453,8 +453,8 @@ bool yew_change_newer(Ed *ed, Win *w, u32 count);
 11. Persistence deferral is real: `grep -rn 'open(\|fopen\|write('
     src/edit/jumplist.c` → empty; the serializer exists, round-trips in
     memory under test, and is called by nobody until Sprint 25.
-12. `:g` hard-errors naming Sprint 34; multi-file search documents `:!rg`;
-    `'a` addresses now resolve (the Sprint 18 deferral is closed).
+12. `:g` hard-errors as a permanent non-goal; multi-file search documents
+    `:!rg`; `'a` addresses now resolve (the Sprint 18 deferral is closed).
 13. Fuzz: 10 000 ops × 4 seeds with all overlay/mark/undo invariants green;
     `yew_re_quote` round-trip over 100 000 random literals.
 14. ≥ 160 assertions across the four unit files.

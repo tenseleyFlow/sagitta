@@ -370,6 +370,24 @@ plugins-only (1,869,472) cross their caps and move to the next 16 KiB
 boundary: full 2,277,376, minimal 1,785,856, plugins-only 1,884,160.
 AI-only, FUSS-only, LSP-only and the musl caps still hold.
 
+**Sprint 20 conformance amendment S59-A8 (2026-10-13) — span recovery uses
+the boolean DFA plus Pike VM.** Sprint 20's original §6c proposed recovering
+leftmost-first spans by running a reverse DFA from the earliest end reported
+by a forward DFA. That composition is not semantics-preserving: on `abcd`,
+`/bc|abcd/` reaches the earlier end at byte 3 through `bc`, while the required
+leftmost-first answer is `abcd` at bytes 0..4; a reverse scan starting at byte
+3 cannot recover it. The implemented dispatcher therefore uses the DFA only
+to reject a miss or bound a safe region for finite-length patterns, then lets
+the Pike VM choose the authoritative span and captures. The compiled reverse
+program remains shape-, cache-, and round-trip-tested for a future operation
+whose semantics fit it, but no 1.0 execution path claims to run it. Search
+streams through `TextIter` without the proposed `yew_re_window_fill`
+materialization, Pike's current membership predicate is `list_has`, and `:g`
+is a permanent non-goal rather than a Sprint 34 deferral. This amendment
+supersedes only those stale Sprint 20/21 mechanism and evidence descriptions;
+the public matching semantics, linear-time guarantee, memory limits, and
+performance gates are unchanged. YEW-F-093 records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

@@ -9,13 +9,13 @@ Sprints covered: s20, s21
 
 - [ ] s20.1 `make test` green on both compilers, zero warnings; ASan/UBSan/valgrind/ determinism lanes green.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s20.2 No materialization: `grep -rn 'textbuf_to_bytes\|materialize' src/search/` shows only `yew_re_window_fill`'s bounded 64 KiB window with its documented comment; the 1 GB throughput test's peak RSS delta < 4 MiB.
+- [ ] s20.2 No materialization: `grep -rn 'textbuf_to_bytes\|materialize' src/search/` shows only explanatory comments for the streaming `TextIter` path; the 1 GB throughput test's peak RSS delta < 4 MiB.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s20.3 **No backtracking anywhere**: `grep -rn 'backtrack' src/search/` returns only comments explaining its absence; the pathological table is green with `t(10⁵)/t(10⁴) ≤ 15` on all four scaling patterns, and `a(a*)*b` × 100 000 a's completes in ≤ 50 ms against a committed baseline.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s20.4 Golden match table ≥ 150 rows green with captures compared element-wise; leftmost-first pinned by explicit rows.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s20.5 Engine agreement: Pike VM, DFA test, and forward+reverse DFA spans agree on 100% of golden rows and 100% of fuzz cases.
+- [ ] s20.5 Engine agreement: Pike VM and boolean DFA agree whenever the DFA decides; public dispatcher spans agree with Pike VM on 100% of golden rows and 100% of fuzz cases.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s20.6 Differential fuzz: ≥ 5 000 000 (pattern, input) pairs × 4 seeds, zero mismatches; oracle-budget skip rate reported and < 2%.
       — VERDICT: blocking — independent closeout review pending.
@@ -23,7 +23,7 @@ Sprints covered: s20, s21
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s20.8 Every §8 error row fires with the exact message and offset; lookaround/backref/atomic give the permanent-non-goal message, **not** a sprint deferral.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s20.9 Empty-width protection: the `(a*)*` unit case completes; moving the `sparse_has` check out of `addthread` makes it fail (documented in the test comment).
+- [ ] s20.9 Empty-width protection: the `(a*)*` unit case completes; moving the `list_has` check out of `addthread` makes it fail (documented in the test comment).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s20.10 Chunk-carry: a match spanning three pieces of an insertion-built piece tree is found, and mid-UTF-8 prefilter candidates are rejected.
       — VERDICT: blocking — independent closeout review pending.
@@ -55,7 +55,7 @@ Sprints covered: s20, s21
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s21.11 Persistence deferral is real: `grep -rn 'open(\|fopen\|write(' src/edit/jumplist.c` → empty; the serializer exists, round-trips in memory under test, and is called by nobody until Sprint 25.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s21.12 `:g` hard-errors naming Sprint 34; multi-file search documents `:!rg`; `'a` addresses now resolve (the Sprint 18 deferral is closed).
+- [ ] s21.12 `:g` hard-errors as a permanent non-goal; multi-file search documents `:!rg`; `'a` addresses now resolve (the Sprint 18 deferral is closed).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s21.13 Fuzz: 10 000 ops × 4 seeds with all overlay/mark/undo invariants green; `yew_re_quote` round-trip over 100 000 random literals.
       — VERDICT: blocking — independent closeout review pending.
