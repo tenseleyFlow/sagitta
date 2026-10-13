@@ -99,10 +99,21 @@ probed, nothing found
   exact canonical-shim assertions. The full build passes the live 83-assertion
   command surface.
 
+## Sprint 59 closeout-contract recheck
+
+findings YEW-F-118, YEW-F-119
+
+- `YEW-F-118` records Sprint 48/49 landing guards that still require AI
+  commands to hard-error even though Sprint 50 delivered their opt-in,
+  privacy, preset, status, and enable/disable owners.
+- `YEW-F-119` records raw TLS and stats token scans that include their own
+  required error/routing, public API, editor-state, and lifecycle surfaces.
+  No TLS implementation or prompt/transport stats ownership was found.
+
 ## Unverified observations
 
 None.
 
 ## Count
 
-Raw 0 · deduped 0 · critical 0 · high 0 · medium 0 · low 0 · unverified 0.
+Raw 2 · deduped 2 · critical 0 · high 0 · medium 2 · low 0 · unverified 0.

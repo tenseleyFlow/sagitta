@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-118`
+Next available ID: `YEW-F-120`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -130,6 +130,8 @@ recorded in `audit-00.md`.
 | YEW-F-115 | M | fixed | F11 LSP | ~~LSP closeout requires superseded staging guards~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_115.c | s59 §2; s43 DoD 12; s44 DoD 13; s45 DoD 13; s46 DoD 13 |
 | YEW-F-116 | M | fixed | F11 LSP | ~~LSP closeout retains invalid determinism scans~~ — fixed 2026-10-13 in `5a8a438f` | tests/audit/yew_f_116.c | s59 §2; s44 DoD 6; s45 DoD 8 |
 | YEW-F-117 | M | fixed | F11 LSP | ~~live-clangd harness treats macOS path aliases as distinct documents~~ — fixed 2026-10-13 in `151bd0f0` | tests/audit/yew_f_117.c | s47 DoD 2; s58 F11 q8; s59 §2 |
+| YEW-F-118 | M | open | F12 AI | AI closeout requires superseded Sprint 48/49 staging guards | tests/audit/yew_f_118.c | s59 §2; s48 DoD 12; s49 DoD 11; s50 DoD 14 |
+| YEW-F-119 | M | open | F12 AI | AI closeout retains invalid TLS/stats ownership scans | tests/audit/yew_f_119.c | s59 §2; s48 DoD 2; s49 DoD 8 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1250,6 +1252,23 @@ behavior was shown wrong. Commit `151bd0f0` canonicalizes the fixture root,
 uses the attached URI for later requests, and passes the full live milestone:
 8/8 gotos, six references in three files, a clean rename round trip, and one
 diagnostic.
+
+`YEW-F-118` is Medium because F12's current closeout still requires Sprint
+48's `ed.ai.enable`/`ed.ai.stats` and Sprint 49's `ed.ai.enable` to hard-error
+naming their future owner. Sprint 50 delivered the opt-in, privacy, preset,
+status, and enable/disable surfaces and explicitly requires no deferred AI
+command to remain. Product behavior is not shown wrong. The hard XFAIL
+requires the Sprint 48/49 and F12 contracts to preserve landing history while
+testing the shipped Sprint 50 owners and permanent 1.0 non-goals.
+
+`YEW-F-119` is Medium because Sprint 48's raw `SSL|TLS|openssl|mbedtls|BIO_`
+scan rejects the required TLS error enum, diagnostics, and curl-routing
+surface even though yew contains no TLS implementation. Sprint 49's raw
+`AiStats|ai_stats` scan likewise rejects the stats public header, editor-owned
+state pointer, and lifecycle calls needed to own the aggregate-only subsystem.
+The prompt and transport privacy boundary remains intact. The hard XFAIL
+requires semantic owner scans that permit those required surfaces while
+banning TLS implementations and stats access from prompt/transport paths.
 
 ## Unverified observations
 
