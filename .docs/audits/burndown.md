@@ -109,3 +109,4 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-13 | File `YEW-F-092` from F06 conformance review | 0 | 0 | 6 | 0 | 6 |
 | 2026-10-13 | File `YEW-F-093` from F06 conformance review | 0 | 0 | 7 | 0 | 7 |
 | 2026-10-13 | File `YEW-F-094` from F06 conformance review | 0 | 0 | 7 | 1 | 8 |
+| 2026-10-13 | Fix `YEW-F-087` (`43bc2afd`) | 0 | 0 | 6 | 1 | 7 |

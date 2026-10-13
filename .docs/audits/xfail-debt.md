@@ -97,7 +97,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-084 | audit | `tests/audit/yew_f_084.c` | ~~Fletch keeps the obsolete 64 KiB regex-text precheck~~ — fixed in `5d9a74c4` | fixed |
 | YEW-F-085 | audit | `tests/audit/yew_f_085.c` | ~~REP2 unpack accepts impossible direct-literal metadata~~ — fixed in `90517467` | fixed |
 | YEW-F-086 | audit | `tests/audit/yew_f_086.c` | ~~binding and F06 contracts exist only as ignored local files~~ — fixed in `dda25e51` | fixed |
-| YEW-F-087 | audit | `tests/audit/yew_f_087.c` | long-literal seam test builds one coalesced piece | open |
+| YEW-F-087 | audit | `tests/audit/yew_f_087.c` | ~~long-literal seam test builds one coalesced piece~~ — fixed in `43bc2afd` | fixed |
 | YEW-F-088 | audit | `tests/audit/yew_f_088.c` | macOS GCC unit build sends Apple arm64e flags to GCC | open |
 | YEW-F-089 | audit | `tests/audit/yew_f_089.c` | character-class cap has no firing regression | open |
 | YEW-F-090 | audit | `tests/audit/yew_f_090.c` | DFA cache-pressure test need not flush | open |
