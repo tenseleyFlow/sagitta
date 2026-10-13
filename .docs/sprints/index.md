@@ -28,8 +28,8 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates are green with zero active XFAILs; all 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01, F02, and F06 without claiming reviewer
-signoff.
+pre-closeout packets exist for F01, F02, F03, and F06 without claiming
+reviewer signoff. F04 is the next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
