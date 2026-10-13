@@ -155,6 +155,23 @@ probed, nothing found
   dump now checks the complete Yew table too. `make test-git-script` passed
   15,372 assertions, including hostile-parent preservation.
 
+## Closeout-contract recheck addendum
+
+`YEW-F-104` was discovered while reconciling this audit with Sprint 59's F05
+closeout. Sprint 18/19 still require later-delivered execute/search/Fletch
+surfaces to produce their historical staging errors. Source and test review
+confirmed that `:g` and terminal emulation remain intentional permanent
+non-goals; the shipped `:!!` route is a terminal handover, not an emulator.
+The contradictory release wording, not product behavior, is the finding.
+
+The same current-contract pass found `YEW-F-105`. Sprint 18's literal Unicode
+grep rejects harmless identifiers and comments, while Sprint 19 requires the
+absence of the portable `pipe()` fallback needed by locked macOS. Current
+source still centralizes Unicode measurement/conversion and routes every pipe
+through `yew_pipe_cloexec`; no shell interpolation or descriptor-ownership
+defect was found. The impossible ownership wording, not product behavior, is
+the finding.
+
 ## Unverified observations
 
 None.
@@ -169,4 +186,4 @@ were run with their required loopback-listener permission.
 
 ## Count
 
-Raw 0 · deduped 0 · critical 0 · high 0 · medium 0 · low 0 · unverified 0.
+Raw 2 · deduped 2 · critical 0 · high 0 · medium 2 · low 0 · unverified 0.

@@ -38,7 +38,10 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 103 stable IDs and all 103 are fixed.
+landed. The findings ledger now contains 105 stable IDs: the first 103 are
+fixed, while F05 closeout reconciliation has filed `YEW-F-104` and
+`YEW-F-105` as two open Medium contract findings. Neither new finding shows a
+product-code defect.
 `YEW-F-102` aligned F04's shipped mode, syntax-provider, and multi-cursor
 expansion contracts while preserving intentional 1.0 boundary guards.
 `YEW-F-101` aligned F03's mutation-ownership wording with the already-audited
@@ -83,8 +86,8 @@ running. Launchd stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 103 completed fixes reconcile, no hard XFAIL remains,
-and priority order is proven from Git ancestry. The deterministic
+executable gates: all 103 completed fixes reconcile, F104/F105 are explicit
+Medium hard XFAILs, and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -103,8 +106,9 @@ baselines.
 
 The immediate work is:
 
-1. complete F05's baseline-pinned local pre-closeout packet without claiming
-   independent reviewer signoff;
+1. reconcile and close F05's two contract findings, then complete its
+   baseline-pinned local pre-closeout packet without claiming independent
+   reviewer signoff;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
 3. keep the corrected 56-stream soak under observation without idling Sprint

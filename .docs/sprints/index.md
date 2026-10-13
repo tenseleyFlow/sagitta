@@ -14,8 +14,9 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 103 confirmed findings are fixed. F103 aligned F04's
-viewport/width ownership language under S59-A14. The
+are complete; 103 of 105 confirmed findings are fixed. F104/F105 are open
+Medium F05 contract-reconciliation findings covering superseded staging
+guards and impossible Unicode/pipe greps; no product defect is shown. The
 last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
@@ -453,8 +454,8 @@ Binding documents — read before any sprint:
   fuzz campaigns extended, findings ledger with stable IDs. **AUDIT WORK
   COMPLETE; REPLACEMENT SOAK RUNNING:** all fifteen fronts, dedup, coverage
   instrumentation, and all ten invariant sessions are complete. The ledger
-  now contains `YEW-F-001` through `YEW-F-103`; all 103 are fixed, including
-  F103's S59-A14 ownership clarification. The
+  now contains `YEW-F-001` through `YEW-F-105`; 103 are fixed and F104/F105
+  are open Medium F05 contract findings. The
   interrupted September launch and the suspend-invalidated first replacement
   attempt produced no soak rows and are historical only. A checkpointed
   SAN+coverage cycle restarted 2026-10-12 with product commit `4c99e134` plus
@@ -465,7 +466,7 @@ Binding documents — read before any sprint:
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1. **ACTIVE:** the severity-ordered implementation
-  burn-down has reached 103/103 fixed; the documentation, tutor, closeout,
+  burn-down has reached 103/105 fixed; the documentation, tutor, closeout,
   deferral, and synchronization checkers are implemented. Independent
   verification, status closure, and fifteen READY closeouts remain
 - Sprint 60 (s60-v1.0.0-landing.md) — Packaging (AUR, brew tap, RPM spec —

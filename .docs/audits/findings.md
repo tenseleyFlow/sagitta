@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-104`
+Next available ID: `YEW-F-106`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -116,6 +116,8 @@ recorded in `audit-00.md`.
 | YEW-F-101 | M | fixed | F03 TEXT | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed 2026-10-13 in `f16c5dcd` | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
 | YEW-F-102 | M | fixed | F04 MODAL | ~~modal closeout requires superseded staging guards~~ — fixed 2026-10-13 in `1c8709f0` | tests/audit/yew_f_102.c | s59 §2; s14 DoD 7; s16 DoD 5/11; s17 DoD 11 |
 | YEW-F-103 | M | fixed | F04 MODAL | ~~modal closeout retains obsolete viewport/width grep gates~~ — fixed 2026-10-13 in `610e8833` | tests/audit/yew_f_103.c | s59 §2; s14 DoD 10; s15 DoD 10 |
+| YEW-F-104 | M | open | F05 EXEC | execute closeout requires superseded staging guards | tests/audit/yew_f_104.c | s59 §2; s18 DoD 6/11; s19 DoD 12 |
+| YEW-F-105 | M | open | F05 EXEC | execute closeout retains impossible Unicode/pipe greps | tests/audit/yew_f_105.c | s59 §2; s18 DoD 2; s19 DoD 2 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1053,6 +1055,31 @@ is not shown wrong, but the current release contract cannot satisfy its
 historical literal greps. The hard XFAIL requires a formal decision amendment
 and synchronized Sprint 14/15 and F04 wording without weakening Unicode-width
 ownership.
+
+`YEW-F-104` is Medium because the current Sprint 18/19 contracts and F05
+closeout still require historical staging errors after later owning sprints
+deliberately delivered shell execution, substitute/search addresses, Fletch
+evaluation, named marks, and config reload. The current product correctly
+keeps two distinct permanent non-goals: `:g` rejects a bespoke global-command
+mini-language in favor of Fletch's query API, and `ed.shell.term` rejects a
+terminal emulator while `:!!` merely hands the real terminal to one child.
+No product defect is shown, but release closeout cannot demand that shipped
+features still name their future sprint. The hard XFAIL requires a formal
+decision amendment and synchronized Sprint 18/19, F05, and audit wording
+without erasing the two intentional non-goals.
+
+`YEW-F-105` is Medium because Sprint 18's literal Unicode grep matches normal
+`tabwidth` state, registered grapheme-command names, comments, and includes
+even though measurement and coordinate conversion still use `src/unicode/`.
+Sprint 19 simultaneously requires zero `pipe()` calls anywhere despite macOS
+being a locked target without `pipe2()`. The implementation has always routed
+pipe creation through `yew_pipe_cloexec`: Linux/FreeBSD use
+`pipe2(O_CLOEXEC)`, while the single-threaded, no-signal-fork macOS core safely
+uses `pipe()` followed by `FD_CLOEXEC`. Product behavior is not shown wrong,
+but the release contract is impossible on one target and its literal greps do
+not express ownership. The hard XFAIL requires a formal decision amendment
+and synchronized Sprint 18/19 and F05 wording while retaining the no-shell and
+close-on-exec guarantees.
 
 ## Unverified observations
 
