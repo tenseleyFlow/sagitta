@@ -111,7 +111,7 @@ recorded in `audit-00.md`.
 | YEW-F-096 | M | fixed | F15 CI | ~~closeout checker reads ignored sprint contracts~~ — fixed 2026-10-13 in `dfe7f3ce` | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
 | YEW-F-097 | M | fixed | F15 CI | ~~priority gate rejects later-discovered Criticals~~ — fixed 2026-10-13 in `601abc70` | tests/audit/yew_f_097.c | s59 §1 priority law |
 | YEW-F-098 | L | fixed | F01 UNI | ~~Unicode unit registry misses contracted floor~~ — fixed 2026-10-13 in `8e9f1990` | tests/audit/yew_f_098.c | s02 DoD 14 |
-| YEW-F-099 | M | confirmed | F02 TERM | terminal closeout requires superseded staging behavior | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
+| YEW-F-099 | M | fixed | F02 TERM | ~~terminal closeout requires superseded staging behavior~~ — fixed 2026-10-13 in `29682c67` | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -977,6 +977,10 @@ terminal implementation and its current tests are not shown wrong, but the
 release closeout cannot certify the current tree truthfully. The hard XFAIL
 requires a formal decision amendment and synchronized Sprint 3/5/6, F02, and
 audit wording.
+Commit `29682c67` adds decision amendment S59-A10, distinguishes historical
+staging guards from current requirements across Sprints 3–6 and F02, and
+keeps the constructed PTY environment and closed-sequence VT policy explicit.
+The hard XFAIL now passes without changing terminal product behavior.
 
 ## Unverified observations
 
