@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-099`
+Next available ID: `YEW-F-100`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -111,6 +111,7 @@ recorded in `audit-00.md`.
 | YEW-F-096 | M | fixed | F15 CI | ~~closeout checker reads ignored sprint contracts~~ — fixed 2026-10-13 in `dfe7f3ce` | tests/audit/yew_f_096.c | s59 §2; AGENTS sprint contract |
 | YEW-F-097 | M | fixed | F15 CI | ~~priority gate rejects later-discovered Criticals~~ — fixed 2026-10-13 in `601abc70` | tests/audit/yew_f_097.c | s59 §1 priority law |
 | YEW-F-098 | L | fixed | F01 UNI | ~~Unicode unit registry misses contracted floor~~ — fixed 2026-10-13 in `8e9f1990` | tests/audit/yew_f_098.c | s02 DoD 14 |
+| YEW-F-099 | M | confirmed | F02 TERM | terminal closeout requires superseded staging behavior | tests/audit/yew_f_099.c | s59 §2; s03/s05/s06 closeout |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -964,6 +965,18 @@ UTF-8 decoding/encoding/validation, grapheme segmentation, and display-width
 clipping, bringing the four owned files to exactly 45 explicitly registered
 tests. The focused suites pass under Apple Clang and Homebrew GCC 16, and every
 new test passes under Clang ASan/UBSan.
+
+`YEW-F-099` is Medium because the restored Sprints 3–6 contracts and F02
+closeout still require historical staging behavior that later owning sprints
+deliberately replaced. The non-TTY diagnostic must name the then-future Sprint
+37 even though `--batch` now ships; the mode-2026 proof is a literal numeric
+grep that now matches unrelated Unicode data; the PTY environment must equal
+the original nine-key table despite later deterministic fixture inputs; and
+the Sprint 6 VT inventory still claims only Sprints 3–5 emit sequences. The
+terminal implementation and its current tests are not shown wrong, but the
+release closeout cannot certify the current tree truthfully. The hard XFAIL
+requires a formal decision amendment and synchronized Sprint 3/5/6, F02, and
+audit wording.
 
 ## Unverified observations
 

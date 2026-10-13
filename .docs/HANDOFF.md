@@ -15,7 +15,7 @@ Apple-silicon host `nomad-1`
 
 **Implementation checkpoint before this documentation refresh:** `trunk` is
 84 commits above `origin/trunk` at `8e9f1990`, including Sprint 59's
-documentation/tutorial work, all 98 finding remediations, and the F06
+documentation/tutorial work, 98 completed finding remediations, and the F06
 pre-closeout evidence packet. The product code used by the soak remains the
 exact hosted-green anchor.
 
@@ -36,8 +36,8 @@ a second time or mistaken for missing trunk commits.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The findings ledger contains 98 stable IDs, all at status `fixed` after
-Sprint 59's severity-ordered remediation and F06 independent-review follow-up.
+landed. The findings ledger contains 99 stable IDs: 98 fixed, with
+`YEW-F-099` confirmed by the F02 pre-closeout contract review.
 `YEW-F-081` came from scheduled fuzz run `38281035643`: a 4,240-byte quoted
 literal crossed the smaller VM-program limit. Commit `ee713cd5` preserves that
 limit and matches conservatively proven whole literals directly; the exact
@@ -68,8 +68,8 @@ rows; do not report progress from elapsed process time.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance now has
-executable gates: all 98 fixes and burndown/XFAIL rows reconcile, zero active
-XFAILs remain, priority order is proven from Git ancestry, the deterministic
+executable gates: the first 98 fixes reconcile and priority order is proven
+from Git ancestry; `YEW-F-099` is the one active hard XFAIL. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -82,7 +82,8 @@ baselines.
 
 The immediate work is:
 
-1. independently re-verify and transition the 98 fixed findings through the
+1. remediate `YEW-F-099`, then independently re-verify and transition the 99
+   findings through the
    remaining ledger lifecycle;
 2. replace the 747 pending closeout verdicts with linked evidence only as an
    independent reviewer verifies them;
