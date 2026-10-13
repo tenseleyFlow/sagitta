@@ -403,7 +403,8 @@ hardware-independent.
   `render.c` emits none of `CSI r`, `L`, `M`, `S`, `T`, and Sprint 6's VT
   treats any of them as a test failure.
 - OSC 52 clipboard writes → Sprint 12 (`render.c` never emits OSC).
-  Sixel/kitty graphics: never. `yew <file>` still names Sprint 14.
+  Sixel/kitty graphics: never. At this sprint's landing `yew <file>` still
+  named Sprint 14; Sprint 14 subsequently delivered file editing (S59-A10).
 
 ## Testing Strategy
 
@@ -467,9 +468,10 @@ hardware-independent.
 8. No I/O in the renderer: `grep -rn 'write(\|fwrite\|printf'
    src/term/render.c src/term/grid.c` → empty (s03's `printf` ban for
    `src/term/` still passes).
-9. 2026 is emitted only by `render.c`, only as a balanced pair:
-   `grep -rn '2026' src/ | grep -v 'term/render.c\|term/tty.c'` → empty,
-   and a 1 000-frame fuzz run counts BSU == ESU.
+9. Terminal mode 2026 is emitted only by `render.c`, only as a balanced pair:
+   `scripts/check-render.sh` scans the escape spellings without matching
+   unrelated decimal data, and a 1 000-frame fuzz run counts BSU == ESU
+   (S59-A10).
 10. `make perf` runs the §8 scenarios against
     `tests/perf/baselines/render.txt`; byte-count rows are hard failures,
     timing rows advisory until Sprint 56.

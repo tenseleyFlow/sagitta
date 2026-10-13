@@ -79,9 +79,11 @@ i64    yew_tty_probe_deadline(const Tty *t, i64 now_ms); /* poll timeout  */
 - All time is injected (`now_ms` parameters, `CLOCK_MONOTONIC` read by the
   caller). `tty.c` makes no clock syscalls — unit tests drive deadlines
   with a fake clock.
-- `yew_tty_open` on a non-tty stdin/stdout: hard error
-  `yew: error: stdin is not a terminal (--batch lands in Sprint 37)`,
-  exit 1.
+- `yew_tty_open` on a non-tty stdin/stdout exits 1. At this sprint's landing
+  the diagnostic named the then-future Sprint 37; after Sprint 37 delivered
+  batch mode, the current diagnostic is
+  `yew: error: stdin is not a terminal; use --batch SCRIPT for headless
+  execution` (S59-A10).
 - No `yew_log` between raw-enter and restore *to stdout/stderr* — the
   Sprint 0 logger already writes to the XDG state file; this sprint adds
   the CI grep that keeps `printf`-family calls out of `src/term/`.
@@ -310,7 +312,9 @@ most cases and `YEW_TRUECOLOR=1` is the documented escape hatch.
 - Cell grid, damage, render → Sprint 5. `yew_tty_*` never draws.
 - Pty-harness verification of raw/alt/restore/suspend under a real child
   process → Sprint 6 (goldens there cover this sprint retroactively).
-- Editing a file still hard-errors naming Sprint 14 (driver unchanged).
+- At this sprint's landing, editing a file still hard-errored naming Sprint
+  14. Sprint 14 later delivered that deferred surface; this line records the
+  staging boundary rather than a current absence requirement (S59-A10).
 
 ## Testing Strategy
 
@@ -352,8 +356,9 @@ most cases and `YEW_TRUECOLOR=1` is the documented escape hatch.
 6. `pending` preservation: interleaved user bytes recovered byte-exact in
    all fixtures, including the ambiguous-prefix flush case.
 7. `scripts/check-sigsafe.sh` passes and is wired into `make test`.
-8. `yew < /dev/null` (stdin not a tty) exits 1 naming Sprint 37;
-   message text pinned by a smoke check.
+8. `yew < /dev/null` (stdin not a tty) exits 1 and directs the user to the
+   Sprint 37-delivered `--batch SCRIPT`; message text is pinned by a smoke
+   check (S59-A10).
 9. `YEW_TTY_PROBE=0` and `YEW_PROBE_TIMEOUT_MS` honored (unit-tested via
    injected env lookup on the probe-config reader).
 10. `grep -rn 'tcsetattr' src/ | grep -v term/tty.c` → empty: tty.c is

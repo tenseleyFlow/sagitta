@@ -390,7 +390,9 @@ sequence is not a keystroke. `buf` compacts when `rd > 4096`, not per event
 - Paste insertion and transactions → Sprint 14. OSC 52 clipboard *replies*
   → Sprint 12 (OSC bodies are dropped today, which is correct until then).
 - Kitty graphics / DCS responses: never; they stay in the dropped bucket.
-- Any editor action reachable from a key still hard-errors naming Sprint 14.
+- At this sprint's landing, editor actions still hard-errored naming Sprint
+  14. Sprint 14 later delivered dispatch; this remains historical staging
+  provenance rather than a current absence requirement (S59-A10).
 
 ## Testing Strategy
 

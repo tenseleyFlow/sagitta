@@ -114,15 +114,12 @@ case unless it declares one of the pinned exceptions below.
 
 ## Unverified observations
 
-- Sprint 6 §4's local closed-set table predates accepted output already
-  present at the fixed baseline: s17 cursor shape/reset (`CSI Ps SP q`),
-  s41 underline colour/reset (`SGR 58;2`/`59`), s12's out-of-band OSC 52
-  writer, and s41's optional OSC 11 background query. The test VT correctly
-  accepts the first three shipped families (OSC 11 has a fake-I/O unit
-  oracle), but the prose inventory was not amended. The planning corpus is
-  intentionally ignored and absent from a fresh clone, so a durable
-  baseline-failing CI reproducer cannot read or repair that table; under
-  Sprint 58's reproducer-first law this remains an observation, not an ID.
+- Resolved by S59-A10 / `YEW-F-099`: Sprint 6 §4's table is explicitly the
+  Sprints 3–5 baseline, while later owning sprints extend the compiled VT
+  whitelist and its rejection/round-trip coverage in the same change. This
+  covers s17 cursor shape/reset (`CSI Ps SP q`), s41 underline colour/reset
+  (`SGR 58;2`/`59`), s12's out-of-band OSC 52 writer, and s41's optional OSC
+  11 background query without weakening the closed-set rule.
 - Q3 asks this front to drive the tutor, but the campaign map and Sprint 59
   explicitly make `yew tutor` a next-sprint deliverable. Absence here is not
   a product stub or a finding against the Sprint 58 baseline.

@@ -33,7 +33,8 @@ incompleteness is the feature: the sequence set is closed by construction
 that fails a test instead of quietly entering the goldens. Also
 `tests/pty/demo_paint.c`, painting a static screen through the full `Tty` →
 `Grid` → `Render` stack — the **MILESTONE: first paint** proof. The real
-editor UI lands in Sprint 14 and after; `yew <file>` still hard-errors.
+editor UI lands in Sprint 14 and after; at this sprint's landing `yew <file>`
+still hard-errored, and Sprint 14 subsequently delivered it (S59-A10).
 `libutil`/`forkpty` is not used and never will be (invariant 7) — the
 replacement is pinned in full below.
 
@@ -151,8 +152,12 @@ The child's environment is **constructed**, never inherited: a developer's
 | `LANG` / `LC_ALL` | `C.UTF-8` | our code is locale-free; a child's libc is not |
 | `YEW_LOG_LEVEL` | `debug` | the log is the post-mortem artifact on failure |
 
-The runner asserts its constructed envp contains exactly these keys — a
-stray inherited variable is a test-integrity bug, not a convenience.
+The nine-key table was the runner's baseline; later owning sprints extend this set
+only when their deterministic fixtures need a new input. Each addition updates
+the constructed allowlist's enumerated key table and
+`test_pty_environment_exact` in the same change. The current exact allowlist
+remains constructed rather than inherited; a stray host variable is a
+test-integrity bug, not a convenience (S59-A10).
 
 ### 3. The fake terminal: answering probes
 
@@ -174,12 +179,12 @@ golden.
 
 ### 4. The minimal VT interpreter — `tests/pty/vt.c|h`
 
-**The closed set.** Sprints 3, 4 and 5 emit exactly the sequences below and
-nothing else. The interpreter implements exactly this list; *anything else
-is a test failure*, recorded with its bytes. That is the whole design: the
-harness is a conformance check on our own emitter, so the day someone adds
-`CSI r` to the renderer without a plan, every golden fails loudly instead
-of absorbing it.
+**The closed set.** The table below is the Sprints 3–5 baseline. The
+interpreter rejects anything outside its compiled whitelist, and later owning
+sprints extend this set only by updating the VT plus rejection, unit,
+round-trip, and PTY coverage in the same change. The harness remains a
+conformance check on every current emitter; it never accepts a new sequence
+merely to make a golden pass (S59-A10).
 
 | Sequence | Emitter | VT action |
 |---|---|---|
@@ -379,10 +384,10 @@ is built only by `make test-pty`, and is never installed.
 
 ### 10. Defer
 
-- The real editor UI — buffers, viewport, statusline, modes — Sprint 14 and
-  after. `yew <file>` and a bare `yew` still hard-error naming
-  Sprint 14, and a pty case now asserts that message through a real
-  terminal.
+- The real editor UI — buffers, viewport, statusline, modes — was deferred to
+  Sprint 14. The original driver-defer PTY pinned that staging guard; after
+  Sprint 14 landed, current PTYs exercise the delivered editor instead
+  (S59-A10).
 - Pane/tab/group goldens → Sprints 22–24; they land in `tests/pty/goldens/`
   beside these, using this registry unchanged.
 - Mouse and paste *behaviour* goldens → Sprints 27 and 14; `ptc_bytes` can
@@ -430,8 +435,8 @@ is built only by `make test-pty`, and is never installed.
   7. `input_keys_{modern,legacy}` — the `echo` scene under both profiles
      with the same `ptc_keys` script and the **same** golden. This is why
      `ptc_keys` takes a spelling rather than bytes.
-  8. `driver_defer` — `yew foo.txt` under the pty: exit 1, Sprint 14
-     message.
+  8. Historical `driver_defer` evidence pinned the Sprint 14 staging guard;
+     current successor cases open files through the real editor (S59-A10).
 - **Determinism** (invariant 5): the CI determinism lane runs
   `make test-pty` twice and diffs the runner's stdout; separately, every
   case snapshots twice from the same child and byte-compares before the
@@ -473,6 +478,7 @@ is built only by `make test-pty`, and is never installed.
     as "unstable snapshot".
 11. valgrind `--track-fds=yes` reports no leaked descriptors across a full
     pty run; the runner's live-child list is empty at exit.
-12. The child environment is constructed, not inherited: a unit test
-    asserts the envp key set matches §2 exactly, and
-    `COLORTERM=truecolor make test-pty` changes no golden.
+12. The child environment is constructed, not inherited: a unit test asserts
+    the current enumerated allowlist consists of §2's original baseline plus
+    explicit later owning-sprint additions, and `COLORTERM=truecolor make
+    test-pty` changes no golden (S59-A10).

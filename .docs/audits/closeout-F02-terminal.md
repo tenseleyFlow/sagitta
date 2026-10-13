@@ -21,7 +21,7 @@ Sprints covered: s03, s04, s05, s06
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s03.7 `scripts/check-sigsafe.sh` passes and is wired into `make test`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s03.8 `yew < /dev/null` (stdin not a tty) exits 1 naming Sprint 37; message text pinned by a smoke check.
+- [ ] s03.8 `yew < /dev/null` (stdin not a tty) exits 1 and directs the user to the Sprint 37-delivered `--batch SCRIPT`; message text is pinned by a smoke check (S59-A10).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s03.9 `YEW_TTY_PROBE=0` and `YEW_PROBE_TIMEOUT_MS` honored (unit-tested via injected env lookup on the probe-config reader).
       — VERDICT: blocking — independent closeout review pending.
@@ -69,7 +69,7 @@ Sprints covered: s03, s04, s05, s06
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s05.8 No I/O in the renderer: `grep -rn 'write(\|fwrite\|printf' src/term/render.c src/term/grid.c` → empty (s03's `printf` ban for `src/term/` still passes).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s05.9 2026 is emitted only by `render.c`, only as a balanced pair: `grep -rn '2026' src/ | grep -v 'term/render.c\|term/tty.c'` → empty, and a 1 000-frame fuzz run counts BSU == ESU.
+- [ ] s05.9 Terminal mode 2026 is emitted only by `render.c`, only as a balanced pair: `scripts/check-render.sh` scans the escape spellings without matching unrelated decimal data, and a 1 000-frame fuzz run counts BSU == ESU (S59-A10).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s05.10 `make perf` runs the §8 scenarios against `tests/perf/baselines/render.txt`; byte-count rows are hard failures, timing rows advisory until Sprint 56.
       — VERDICT: blocking — independent closeout review pending.
@@ -99,7 +99,7 @@ Sprints covered: s03, s04, s05, s06
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s06.11 valgrind `--track-fds=yes` reports no leaked descriptors across a full pty run; the runner's live-child list is empty at exit.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s06.12 The child environment is constructed, not inherited: a unit test asserts the envp key set matches §2 exactly, and `COLORTERM=truecolor make test-pty` changes no golden.
+- [ ] s06.12 The child environment is constructed, not inherited: a unit test asserts the current enumerated allowlist consists of §2's original baseline plus explicit later owning-sprint additions, and `COLORTERM=truecolor make test-pty` changes no golden (S59-A10).
       — VERDICT: blocking — independent closeout review pending.
 
 ## Open audit findings against this front

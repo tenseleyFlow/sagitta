@@ -402,6 +402,22 @@ original table/width/grapheme budgets are unchanged. This amendment
 supersedes only Sprint 2 §11 and DoD 12's stale current-absence wording;
 `YEW-F-095` records the correction.
 
+**Terminal closeout amendment S59-A10 (2026-10-13) — later owning sprints
+extend staging surfaces cumulatively.** Sprints 3–6 established the terminal,
+input, renderer, and PTY-harness baselines before batch mode, the editor UI,
+and later terminal features existed. Their future-sprint hard errors and the
+original nine-key PTY environment were staging guards, not permanent 1.0
+behavior: Sprint 37 now owns the non-TTY diagnostic and directs users to
+`--batch`, Sprint 14 delivered file editing, and later owning sprints may add
+only explicitly enumerated deterministic PTY environment keys. Likewise,
+Sprint 6's VT sequence table was the initial closed set, not a freeze on later
+contracted renderer work; every later sequence family must update the VT and
+its rejection/round-trip coverage in the same change. Current mode-2026
+evidence scans terminal escape spellings through `scripts/check-render.sh`,
+not every unrelated decimal `2026` in the repository. This amendment changes
+no terminal behavior or safety invariant; it supersedes only stale staging and
+evidence wording in Sprints 3–6 and F02. `YEW-F-099` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
