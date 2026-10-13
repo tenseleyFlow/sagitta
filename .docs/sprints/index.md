@@ -14,7 +14,10 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 112 confirmed findings are fixed. F111/F112 aligned F09's
+are complete; all 114 confirmed findings are fixed. F113/F114 aligned F10's
+superseded state/staging, ownership, and historical-inventory contracts under
+S59-A24/A25 without changing syntax behavior or removing shipped surfaces.
+F111/F112 aligned F09's
 superseded staging and unreachable collision-fixture contracts under
 S59-A22/A23 without changing recorder or macro-library behavior. F108–F110
 aligned F08's superseded staging, ownership, and historical-inventory
@@ -33,14 +36,18 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F09 without claiming reviewer
+pre-closeout packets exist for F01 through F10 without claiming reviewer
 signoff. F08 maps all 95 Fletch DoD rows after strict Clang/GCC/ASan builds,
 35 focused unit filters, 39/39 conformance and GC-stress runs, deterministic
 dispatch/round-trip checks, bounded fuzz samples, selected PTYs, and a
 contention-qualified strict performance run. F09 maps all 27 recorder/macro
 DoD rows after strict Clang/GCC/ASan audit, unit, script, PTY, round-trip,
 fuzz, and performance checks; its current-baseline 200,000-session P1–P5 run
-is green. F10 is the next local evidence front.
+is green. F10 maps all 52 syntax/theme DoD rows after warning-clean
+Clang/GCC/ASan builds, a 52,973,617-assertion syntax matrix per configuration,
+complete 48-definition strict/coverage and 432-golden asset gates, exact and
+bounded fuzz runs, and 97 focused PTYs per configuration. F11 is the next
+local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
