@@ -57,77 +57,63 @@ bool yew_re_input_byte(const YewReInput *in, u64 off, u8 *out)
     return byte_at(in, &it, off, out);
 }
 
-/* Bytes a lead byte claims, or 0 when it is not a lead. */
-static u64 lead_len(u8 b)
+/* Decode one codepoint using the exact lossless policy used by the engines. */
+static u64 cp_len_at(const YewReInput *in, u64 off)
 {
-    if ((b & 0x80U) == 0U)
-        return 1U;
-    if ((b & 0xE0U) == 0xC0U)
-        return 2U;
-    if ((b & 0xF0U) == 0xE0U)
-        return 3U;
-    if ((b & 0xF8U) == 0xF0U)
-        return 4U;
-    return 0U;
+    TextIter it;
+    u8 buf[YEW_UTF8_MAX];
+    size_t have = 0U;
+    u32 cp;
+
+    while (have < YEW_UTF8_MAX) {
+        u8 b;
+
+        if (!byte_at(in, &it, off + have, &b))
+            break;
+        buf[have++] = b;
+    }
+    if (have == 0U)
+        return 0U;
+    return (u64)yew_utf8_decode(buf, have, &cp);
 }
 
 static bool is_cp_start(const YewReInput *in, u64 off)
 {
-    TextIter it;
-    u8 b;
-    u64 back;
+    u64 probe;
 
-    if (off == 0U)
+    if (off == in->window.lo || off == in->window.hi)
         return true;
-    if (!byte_at(in, &it, off, &b))
-        return true;
-    /* A BMH candidate knows no encoding and can land mid-sequence;
-     * omitting this check produces phantom matches inside multibyte
-     * text (§7). */
-    if ((b & 0xC0U) != 0x80U)
-        return true;
+    if (off < in->window.lo || off > in->window.hi)
+        return false;
     /*
-     * It LOOKS like a continuation byte — but a stray 0x9F with no lead
-     * in front of it is its own codepoint (a U+DC80-range escape), and
-     * rejecting it would make a search for that byte fail on exactly the
-     * binary files the escape policy exists to support.  So check
-     * whether a real lead actually claims this offset.
+     * YEW-F-082: a nominal lead length is not enough to identify a UTF-8
+     * boundary.  E0 80 is rejected by the decoder and therefore denotes
+     * two independent surrogate-escape codepoints, while C2 A2 is one
+     * valid codepoint.  Replay at most the four bytes that can cover `off`
+     * through the authoritative decoder so direct byte search agrees with
+     * the Pike/DFA codepoint model on both valid and malformed input.
      */
-    for (back = 1U; back < YEW_UTF8_MAX && back <= off; back++) {
-        u8 lead;
-        u64 span;
+    probe = off - in->window.lo > YEW_UTF8_MAX ?
+            off - YEW_UTF8_MAX : in->window.lo;
+    while (probe < off) {
+        u64 step = cp_len_at(in, probe);
 
-        if (!byte_at(in, &it, off - back, &lead))
-            break;
-        if ((lead & 0xC0U) == 0x80U)
-            continue; /* another continuation; keep walking back */
-        span = lead_len(lead);
-        /* A lead covering this offset means we are genuinely inside a
-         * sequence; anything else means the byte stands alone. */
-        return span == 0U || back >= span;
+        if (step == 0U)
+            return false;
+        if (step > off - probe)
+            return false;
+        probe += step;
     }
-    return true;
+    return probe == off;
 }
 
 /* Advances one codepoint from `off`. */
 static u64 next_cp_off(const YewReInput *in, u64 off)
 {
-    TextIter it;
-    u8 b;
-    u64 step;
+    u64 step = cp_len_at(in, off);
 
-    if (!byte_at(in, &it, off, &b))
+    if (step == 0U)
         return off + 1U;
-    if ((b & 0x80U) == 0U)
-        step = 1U;
-    else if ((b & 0xE0U) == 0xC0U)
-        step = 2U;
-    else if ((b & 0xF0U) == 0xE0U)
-        step = 3U;
-    else if ((b & 0xF8U) == 0xF0U)
-        step = 4U;
-    else
-        step = 1U;
     return off + step;
 }
 
@@ -276,6 +262,9 @@ bool yew_re_literal_match_at(const YewRe *re, const YewReInput *in,
                              u64 at, YewReMatch *out)
 {
     if (re == NULL || in == NULL || re->lit.kind != RE_LIT_WHOLE ||
+        !is_cp_start(in, at) ||
+        re->lit.n > in->window.hi - at ||
+        !is_cp_start(in, at + re->lit.n) ||
         !literal_equal_at(&re->lit, in, at))
         return false;
     if (out != NULL) {
@@ -300,7 +289,8 @@ bool yew_re_literal_search(const YewRe *re, const YewReInput *in,
         if (hit == UINT64_MAX || hit > in->window.hi ||
             re->lit.n > in->window.hi - hit)
             return false;
-        if (!is_cp_start(in, hit)) {
+        if (!is_cp_start(in, hit) ||
+            !is_cp_start(in, hit + re->lit.n)) {
             at = hit + 1U;
             continue;
         }

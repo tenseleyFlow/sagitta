@@ -3037,15 +3037,10 @@ static bool rule_match(SynEngine *engine, const SynState *state,
                                     len, at, match);
     if (rule->re->lit.kind == RE_LIT_WHOLE &&
         rule->re->ngroups == 1U &&
-        (rule->re->flags & YEW_RE_ICASE) == 0U) {
-        if (rule->re->lit.n > len - at ||
-            (rule->re->lit.n != 0U &&
-             memcmp(line + at, rule->re->lit.s, rule->re->lit.n) != 0))
-            return false;
-        match->ngroups = 1U;
-        match->g[0] = (Span){at, at + rule->re->lit.n};
-        return true;
-    }
+        (rule->re->flags & YEW_RE_ICASE) == 0U)
+        return yew_re_match_at_ws(
+            &engine->re_workspace, rule->re,
+            &(YewReInput){NULL, line, len, {0U, len}}, BYTEOFF(at), match);
     if (rule->re->lit.kind != RE_LIT_NONE &&
         (rule->re->flags & YEW_RE_ICASE) == 0U &&
         (rule->re->lit.n > len - at ||

@@ -352,6 +352,88 @@ void test_re_long_literal_bypasses_vm_limit(void)
     bytebuf_free(&pattern);
 }
 
+void test_re_whole_literals_follow_utf8_decoder_boundaries(void)
+{
+    enum { LONG_PREFIX = 4094U, LONG_LEN = LONG_PREFIX + 1U };
+    static const u8 valid_cent[] = {0xC2U, 0xA2U};
+    static const u8 malformed_prefix[] = {0xE0U, 0x80U, 'x'};
+    static const u8 raw_c2[] = {0xC2U};
+    static const u8 raw_cont[] = {0x80U};
+    u8 long_literal[LONG_LEN];
+    u8 long_subject[LONG_LEN + 1U];
+    Arena arena;
+    Bytebuf pattern;
+    YewReMatch match;
+    YewReInput input;
+    YewRe *short_lead;
+    YewRe *short_cont;
+    YewRe *long_lead;
+    TextBuf *tb;
+    u64 at;
+
+    arena_init(&arena);
+    bytebuf_init(&pattern);
+
+    yew_re_quote(&pattern, raw_c2, sizeof(raw_c2));
+    short_lead = yew_re_compile(&arena, (const char *)pattern.data,
+                                pattern.len, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(short_lead);
+    input = yew_re_input_bytes(valid_cent, sizeof(valid_cent));
+    YEW_ASSERT(!yew_re_search(short_lead, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT(!yew_re_match_at(short_lead, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT(!yew_re_pike_run(short_lead, &input, 0U, &match));
+    YEW_ASSERT_EQ_I64(yew_re_dfa_test(short_lead, &input, 0U), YEW_DFA_NO);
+    input = yew_re_input_bytes(raw_c2, sizeof(raw_c2));
+    YEW_ASSERT(yew_re_search(short_lead, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].hi, 1U);
+
+    pattern.len = 0U;
+    yew_re_quote(&pattern, raw_cont, sizeof(raw_cont));
+    short_cont = yew_re_compile(&arena, (const char *)pattern.data,
+                                pattern.len, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(short_cont);
+    input = yew_re_input_bytes(malformed_prefix, sizeof(malformed_prefix));
+    YEW_ASSERT(yew_re_search(short_cont, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].lo, 1U);
+    YEW_ASSERT_EQ_U64(match.g[0].hi, 2U);
+    YEW_ASSERT(yew_re_match_at(short_cont, &input, BYTEOFF(1U), &match));
+
+    (void)memset(long_literal, 'a', LONG_PREFIX);
+    long_literal[LONG_PREFIX] = 0xC2U;
+    (void)memset(long_subject, 'a', LONG_PREFIX);
+    long_subject[LONG_PREFIX] = 0xC2U;
+    long_subject[LONG_PREFIX + 1U] = 0xA2U;
+    pattern.len = 0U;
+    yew_re_quote(&pattern, long_literal, sizeof(long_literal));
+    long_lead = yew_re_compile(&arena, (const char *)pattern.data,
+                               pattern.len, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(long_lead);
+    input = yew_re_input_bytes(long_subject, sizeof(long_subject));
+    YEW_ASSERT(!yew_re_search(long_lead, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT(!yew_re_match_at(long_lead, &input, BYTEOFF(0U), &match));
+
+    /* Reverse-prepending chunks prevents append coalescing, so the same
+     * endpoint decision is exercised across real TextBuf piece seams. */
+    tb = yew_textbuf_new();
+    at = sizeof(long_subject);
+    while (at != 0U) {
+        u64 take = at < 13U ? at : 13U;
+
+        at -= take;
+        yew_textbuf_insert(tb, BYTEOFF(0U), long_subject + at, take);
+    }
+    input = yew_re_input_textbuf(tb);
+    YEW_ASSERT(!yew_re_search(long_lead, &input, BYTEOFF(0U), &match));
+    yew_textbuf_free(tb);
+
+    input = yew_re_input_bytes(long_literal, sizeof(long_literal));
+    YEW_ASSERT(yew_re_search(long_lead, &input, BYTEOFF(0U), &match));
+    YEW_ASSERT_EQ_U64(match.g[0].hi, sizeof(long_literal));
+
+    bytebuf_free(&pattern);
+    arena_free_all(&arena);
+}
+
 void test_re_workspace_reuses_mixed_programs_and_captures(void)
 {
     static const char wide_pat[] = "(a)(b)?(a)(c)?(a)(d)?(a)(b)(r)(a)";
