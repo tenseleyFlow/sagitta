@@ -9,7 +9,7 @@ Sprints covered: s48, s49, s50
 
 - [ ] s48.1 `make` and `make test` green on gcc and clang, zero warnings under `-std=c11 -pedantic -Wall -Wextra -Werror -Wvla`, for **both** `MODULES="lsp ai fuss plugins"` and `MODULES=""`; ASan/UBSan/valgrind lanes clean.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s48.2 `grep -rn 'SSL\|TLS\|openssl\|mbedtls\|BIO_' src/mod/ai/` matches only comments and the §10 `YEW_AI_ERR_TLS` identifier — there is no TLS code in the tree, and `https://` on the bespoke transport produces §1's exact routing message.
+- [ ] s48.2 Current closeout bans TLS implementation symbols rather than the error surface: token-aware checks for SSL/TLS/BIO/OpenSSL/mbedtls implementation entry points are empty, while the required TLS error, diagnostics, curl routing, and bespoke-transport rejection remain tested.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s48.3 Chunking independence: the 20-response corpus yields an identical body byte stream for **every** split offset (≥ 60 000 cases) and for the 1-byte-at-a-time and single-giant-write servers.
       — VERDICT: blocking — independent closeout review pending.
@@ -29,7 +29,7 @@ Sprints covered: s48, s49, s50
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s48.11 `make fuzz FUZZ_ITERS=200000 FUZZ_SEED=1` exits 0 for `fuzz_http` and `fuzz_ai_stream`, plain and under ASan/UBSan; `tests/fuzz/crashes/` empty. `grep -rn 'system(\|popen(\|sprintf' src/mod/ai/` → empty; every subprocess is `yew_job_spawn` with an argv array (s19's rule).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s48.12 Off-by-default is visible: with `ai.enable = false`, every `ed.ai.*` command prints `AI is off; :ai enable turns it on (Sprint 50)`; `ed.ai.enable` and `ed.ai.stats` hard-error naming Sprints 50 and 49.
+- [ ] s48.12 Later binding Sprint 50 supersedes the original AI staging guards: traffic-producing commands remain off by default, `ed.ai.enable` launches the shipped opt-in flow, Sprint 49's stats command reports local aggregates, stripped builds retain exact module errors, and no deferred AI command remains.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s48.13 500 request cycles leak zero fds and zero sockets (no lingering connection after the pool's idle deadline); request build + parse baselines committed under `tests/perf/baselines/ai_http.txt`.
       — VERDICT: blocking — independent closeout review pending.
@@ -49,13 +49,13 @@ Sprints covered: s48, s49, s50
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s49.7 Redaction is unbypassable: `grep -rn 'yew_ai_prompt_build' src/` shows exactly one call site, and it is downstream of `yew_ai_context_build`; a seeded second body-building path fails `make test`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s49.8 Stats are local: `grep -rn 'AiStats\|ai_stats' src/mod/ai/` matches only `shadow_ai.c`, `stats.c`, and the command handler — never `prompt.c`, `backend.c`, `http.c` or `backend_curl.c`; `:ai stats` renders the §6 table from a fixture file, and a missing file is not an error.
+- [ ] s49.8 Stats are local: current ownership permits the stats API and lifecycle owner while excluding prompt and transport paths; persistence/formatting and aggregate event recording remain in their owners, and `:ai stats` renders the fixture table while accepting a missing file.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s49.9 No prompt or completion text reaches any log path in this sprint: `grep -rn 'yew_log' src/mod/ai/shadow_ai.c src/mod/ai/prompt.c` shows no call whose arguments include `ctx->prefix`, `ctx->suffix`, or `call->text` (Sprint 50 extends this into a repo-wide gate).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s49.10 s43 integration: `:shadow.stats` lists `ai` as registered (no longer `— (Sprint 49)`); the provider declines silently in all seven §1 rows; accept-word/line/all on an AI ghost route through `shadow_accept_n` and undo takes each accept back as one step.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s49.11 `ed.ai.enable` still hard-errors naming **Sprint 50**; `ai.enable` defaults to `false` and a fresh profile makes zero network syscalls (asserted by an `strace`-free counter on `socket(2)` in the test build).
+- [ ] s49.11 Sprint 50 delivered the opt-in and privacy surfaces: `ed.ai.enable` completes the shipped disclosure/trust flow; `ai.enable` defaults to false and a fresh profile makes zero network syscalls.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s49.12 `make fuzz FUZZ_ITERS=20000` green for `fuzz_ai_shadow`, plain and under ASan/UBSan; zero fd or child leaks.
       — VERDICT: blocking — independent closeout review pending.

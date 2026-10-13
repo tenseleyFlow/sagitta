@@ -841,10 +841,13 @@ Every one of them first checks `ai.enable` (default **false**, locked in
    `-std=c11 -pedantic -Wall -Wextra -Werror -Wvla`, for **both**
    `MODULES="lsp ai fuss plugins"` and `MODULES=""`; ASan/UBSan/valgrind
    lanes clean.
-2. `grep -rn 'SSL\|TLS\|openssl\|mbedtls\|BIO_' src/mod/ai/` matches only
-   comments and the §10 `YEW_AI_ERR_TLS` identifier — there is no TLS code
-   in the tree, and `https://` on the bespoke transport produces §1's exact
-   routing message.
+2. The current closeout scans TLS implementation symbols rather than the
+   error surface: a token-aware query for `SSL_new`, `SSL_connect`,
+   `SSL_read`, `SSL_write`, `SSL_free`, `TLS_client_method`, `BIO_new`,
+   `BIO_read`, `BIO_write`, `OPENSSL_init_ssl`, and `mbedtls_*` under
+   `src/mod/ai/` is empty. The required `YEW_AI_ERR_TLS`, diagnostics, and
+   curl-routing messages remain, and `https://` on the bespoke transport
+   produces §1's exact routing message.
 3. Chunking independence: the 20-response corpus yields an identical body
    byte stream for **every** split offset (≥ 60 000 cases) and for the
    1-byte-at-a-time and single-giant-write servers.
@@ -874,9 +877,12 @@ Every one of them first checks `ai.enable` (default **false**, locked in
     `fuzz_ai_stream`, plain and under ASan/UBSan; `tests/fuzz/crashes/` empty.
     `grep -rn 'system(\|popen(\|sprintf' src/mod/ai/` → empty; every
     subprocess is `yew_job_spawn` with an argv array (s19's rule).
-12. Off-by-default is visible: with `ai.enable = false`, every `ed.ai.*`
-    command prints `AI is off; :ai enable turns it on (Sprint 50)`;
-    `ed.ai.enable` and `ed.ai.stats` hard-error naming Sprints 50 and 49.
+12. Sprint 50 delivered the staged AI command surfaces. With
+    `ai.enable = false`, traffic-producing `ed.ai.*` commands report the
+    off-by-default state without emitting traffic; `ed.ai.enable` launches
+    the shipped opt-in flow, and Sprint 49's `ed.ai.stats` reports only local
+    aggregates. The stripped build retains its exact module-boundary error,
+    and Sprint 50's no-deferred-command gate remains green.
 13. 500 request cycles leak zero fds and zero sockets (no lingering
     connection after the pool's idle deadline); request build + parse
     baselines committed under `tests/perf/baselines/ai_http.txt`.

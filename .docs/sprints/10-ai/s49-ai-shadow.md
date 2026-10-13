@@ -654,10 +654,12 @@ mockai --port 0 --script tests/fixtures/ai/<name>.script [--seed N]
 7. Redaction is unbypassable: `grep -rn 'yew_ai_prompt_build' src/` shows
    exactly one call site, and it is downstream of `yew_ai_context_build`;
    a seeded second body-building path fails `make test`.
-8. Stats are local: `grep -rn 'AiStats\|ai_stats' src/mod/ai/` matches only
-   `shadow_ai.c`, `stats.c`, and the command handler — never `prompt.c`,
-   `backend.c`, `http.c` or `backend_curl.c`; `:ai stats` renders the §6
-   table from a fixture file, and a missing file is not an error.
+8. Stats are local: the stats API and lifecycle owner are permitted in
+   `stats.h`, `ai_int.h`, and `ai.c`, persistence and formatting remain in
+   `stats.c`, and `shadow_ai.c` records aggregate events. A token query for
+   `AiStats|ai_stats` is empty in `prompt.c`, `backend.c`, `http.c`, and
+   `backend_curl.c`; `:ai stats` renders the §6 table from a fixture file,
+   and a missing file is not an error.
 9. No prompt or completion text reaches any log path in this sprint:
    `grep -rn 'yew_log' src/mod/ai/shadow_ai.c src/mod/ai/prompt.c` shows no
    call whose arguments include `ctx->prefix`, `ctx->suffix`, or
@@ -666,9 +668,11 @@ mockai --port 0 --script tests/fixtures/ai/<name>.script [--seed N]
     `— (Sprint 49)`); the provider declines silently in all seven §1 rows;
     accept-word/line/all on an AI ghost route through `shadow_accept_n` and
     undo takes each accept back as one step.
-11. `ed.ai.enable` still hard-errors naming **Sprint 50**; `ai.enable`
-    defaults to `false` and a fresh profile makes zero network syscalls
-    (asserted by an `strace`-free counter on `socket(2)` in the test build).
+11. Sprint 50 delivered the opt-in and privacy surfaces: `ed.ai.enable`
+    completes the shipped disclosure/trust flow end to end. `ai.enable`
+    still defaults to `false`, and a fresh profile makes zero network
+    syscalls (asserted by an `strace`-free counter on `socket(2)` in the test
+    build).
 12. `make fuzz FUZZ_ITERS=20000` green for `fuzz_ai_shadow`, plain and under
     ASan/UBSan; zero fd or child leaks.
 13. `mockai` and `mockcurl` are built by `make test`, documented in

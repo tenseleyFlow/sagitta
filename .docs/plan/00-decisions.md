@@ -686,6 +686,33 @@ that returns exactly that formatter. This amendment changes no ranking, JSON,
 or locale behavior. It supersedes only invalid grep wording in Sprints 44/45
 and F11; `YEW-F-116` records the correction.
 
+**AI closeout amendment S59-A28 (2026-10-13) — Sprint 50 owners replace
+Sprint 48/49 command staging guards.** Sprint 48 delivered HTTP, curl, backend
+adapters, and their registered command boundary; Sprint 49 delivered the
+shadow provider and local aggregate stats; Sprint 50 delivered opt-in,
+enable/disable, trust, redaction, presets, privacy, and status. The earlier
+future-sprint hard errors were landing guards, not permanent behavior. Current
+closeout therefore proves the shipped command surfaces, off-by-default and
+zero-network boundaries, and stripped-module errors rather than requiring
+`ed.ai.enable` or `ed.ai.stats` to remain deferred. Multi-file context, chat,
+tool use, provider-retention promises, and a native TLS implementation remain
+the documented 1.0 non-goals. This amendment changes no product behavior. It
+supersedes only stale staging wording in Sprints 48/49 and F12;
+`YEW-F-118` records the correction.
+
+**AI ownership closeout amendment S59-A29 (2026-10-13) — TLS and stats scans
+follow implementation boundaries.** Yew continues to contain no TLS
+implementation: HTTPS routes through curl, while the AI error taxonomy,
+diagnostics, and routing code necessarily name TLS. The executable source gate
+bans TLS implementation/library symbols rather than the required error and
+message surface. Aggregate AI stats remain local and contain no prompt or
+completion bytes; `stats.c` owns persistence and formatting, `stats.h` owns
+its API, `ai_int.h`/`ai.c` own the editor-state pointer and lifecycle, and
+`shadow_ai.c` records aggregate events. Prompt and transport owners may not
+access stats. This amendment changes no transport, privacy, logging, or stats
+behavior. It supersedes only raw ownership scans in Sprints 48/49 and F12;
+`YEW-F-119` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

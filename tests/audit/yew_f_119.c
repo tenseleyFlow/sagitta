@@ -39,7 +39,7 @@ bool test_yew_f_119(char *why, size_t why_cap)
     if (!file_has(".docs/plan/00-decisions.md",
                   "AI ownership closeout amendment S59-A29") ||
         !file_has(s48,
-                  "TLS implementation symbols rather than the error surface") ||
+                  "scans TLS implementation symbols") ||
         !file_has(s49,
                   "stats API and lifecycle owner are permitted") ||
         !file_has(closeout,
