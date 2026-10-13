@@ -9,7 +9,7 @@ Sprints covered: s18, s19
 
 - [ ] s18.1 `make test` green on gcc and clang, zero warnings; ASan/UBSan/ determinism lanes green.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s18.2 Prompt reuse proven: `grep -rn 'utf8_\|grapheme\|width\|wcwidth' src/ui/cmdline.c src/ui/cmdcomp.c` returns only calls into `src/unicode/` — zero local width or cluster arithmetic.
+- [ ] s18.2 Unicode measurement and coordinate conversion remain centralized in the shared text/Unicode engines. `src/ui/cmdline.c` and `cmdcomp.c` may name grapheme commands, hold `tabwidth`, and lay out already-measured cells, but contain no local decoder, boundary algorithm, width table/range, or text-to-cell conversion (S59-A16).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s18.3 No second editor: `grep -n '\[[a-z_]*caret\|caret++\|caret--' src/ui/cmdline.c` → empty, and a unit test walks the `YEW_MODE_E` keymap asserting every leaf is a registered `ed.*` name.
       — VERDICT: blocking — independent closeout review pending.
@@ -17,7 +17,7 @@ Sprints covered: s18, s19
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s18.5 Quoting: a path with a space, `"`, `'`, `$`, and `\n` round-trips completion → prompt → argv as **one** element in all three quoting forms; ≥ 12 assertions.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s18.6 Range: all 6 `range_policy` rows enforced; the `:1,2d` span includes the trailing EOL (explicit case); `'a` and `/re/` name Sprint 21.
+- [ ] s18.6 Range: all 6 `range_policy` rows enforced; the `:1,2d` span includes the trailing EOL (explicit case); Sprint 21's `'a` and `/re/` successors resolve through the named-mark and shared search routes (S59-A15).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s18.7 History: cap, dedupe-to-end, frozen-stem walk, and concurrent-append all green; no history I/O under `--batch`/`--clean` (grep + unit).
       — VERDICT: blocking — independent closeout review pending.
@@ -27,13 +27,13 @@ Sprints covered: s18, s19
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s18.10 Fuzz: 1 000 000 parse inputs, zero crashes, `tok` invariant holds on 100% of failures.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s18.11 Deferred surfaces (`:!`, `:s`, `:g`, `:fl`, `'a`, `/re/`) each produce their exact sprint-naming message — one smoke assertion each.
+- [ ] s18.11 Later owning sprints delivered the execute surfaces `:!`, `:s`, `:fl`, `'a`, and `/re/` through the original parser/registry routes. `:g` alone remains a tested permanent non-goal with its Fletch-query guidance (S59-A15).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s18.12 ≥ 120 assertions across the four unit files.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s19.1 `make test` green on both compilers, zero warnings; ASan/UBSan/valgrind lanes green.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s19.2 `grep -rn '\bsystem(\|\bpopen(' src/` → empty; `grep -rn 'pipe(' src/` → empty (only `pipe2` with `O_CLOEXEC`).
+- [ ] s19.2 `system()` and `popen()` remain absent. All production pipe creation routes through `yew_pipe_cloexec`: Linux/FreeBSD use `pipe2(O_CLOEXEC)`, the portable macOS fallback uses `pipe()` plus immediate `FD_CLOEXEC`, and no other direct pipe caller exists (S59-A16).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s19.3 Exec failure is distinguishable from exit 127: `YEW_JOB_EXECFAIL` + `exec_errno == ENOENT` for a missing binary vs `YEW_JOB_EXITED` + `exit_code == 127` for `sh -c 'exit 127'`.
       — VERDICT: blocking — independent closeout review pending.
@@ -53,7 +53,7 @@ Sprints covered: s18, s19
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s19.11 `:!true` opens no buffer and messages exactly `:!true — no output (exit 0)` (pty golden).
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s19.12 `ed.shell.term` hard-errors with the permanent-non-goal message; `:s` and `/re/` still name Sprints 20/21.
+- [ ] s19.12 `ed.shell.term` hard-errors with the terminal-emulator permanent-non-goal message while `:!!` uses the tested terminal-handover path; Sprint 21's live `:s` and `/re/` routes pass their successor coverage (S59-A15).
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s19.13 Perf gate: 50 MiB of streamed output keeps keypress p99 ≤ 5 ms; baseline committed under `tests/perf/`.
       — VERDICT: blocking — independent closeout review pending.

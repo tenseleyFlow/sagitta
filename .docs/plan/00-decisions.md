@@ -488,6 +488,40 @@ geometry. It changes no product behavior; it supersedes only Sprint 14 DoD 10,
 Sprint 15 DoD 10, and their F04 closeout copies. `YEW-F-103` records the
 correction.
 
+**Execute closeout amendment S59-A15 (2026-10-13) — delivered command
+surfaces replace their staging guards.** Sprint 18 established the E-mode
+parser, range, and registry routes before their later consumers existed.
+Sprints 19/21/32/36 subsequently delivered shell execution, substitute and
+search addresses, named marks, Fletch evaluation, and config reload through
+those original choke points. Current closeout evidence must prove the shipped
+routes and their failure semantics instead of requiring them to keep naming a
+future sprint.
+
+Two boundaries remain intentional and are not staging guards. `:g` rejects a
+bespoke global-command mini-language in favor of Fletch's query API, and
+`ed.shell.term` rejects a terminal emulator. The later `:!!` command hands
+Yew's real terminal to one child and restores it; it does not create a
+pty-backed terminal buffer or weaken the emulator non-goal. This amendment
+changes no product behavior. It supersedes only stale staging wording in
+Sprints 18/19 and F05; `YEW-F-104` records the correction.
+
+**Execute ownership closeout amendment S59-A16 (2026-10-13) — Unicode and
+pipe gates express ownership across locked platforms.** Sprint 18's prompt
+reuse law means Unicode measurement, grapheme boundaries, and coordinate
+conversion use the shared text/Unicode engines. Command names, comments,
+`tabwidth` state, and arithmetic on already-measured cells are not duplicate
+Unicode implementations and cannot be rejected by a token grep.
+
+Sprint 19's descriptor law means all production pipe creation routes through
+`yew_pipe_cloexec` and every resulting descriptor is close-on-exec. Linux and
+FreeBSD use `pipe2(O_CLOEXEC)`. Locked macOS has no `pipe2`, so its portable
+fallback uses `pipe()` followed immediately by `FD_CLOEXEC`; invariant 8's
+single-threaded core and the ban on signal-handler forks make that fallback
+race-free. Direct pipe creation outside the helper remains forbidden, as do
+`system()` and `popen()`. This amendment changes no product behavior or
+descriptor/Unicode invariant. It supersedes only stale literal greps in
+Sprints 18/19 and F05; `YEW-F-105` records the correction.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

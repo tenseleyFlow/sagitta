@@ -117,10 +117,10 @@ Spawn sequence, exactly this order:
  * lock held by the parent at fork time.                                 */
 build argv:  spec->argv ? spec->argv : (char*[]){ shell, "-c", cmdline, 0 }
 build envp:  copy environ + the §7 table (never putenv() in the parent)
-pipe2(in_p,   O_CLOEXEC);       /* parent writes in_p[1]                 */
-pipe2(out_p,  O_CLOEXEC);
-pipe2(err_p,  O_CLOEXEC);
-pipe2(exec_p, O_CLOEXEC);       /* child->parent errno on exec failure   */
+yew_pipe_cloexec(in_p);         /* parent writes in_p[1]                 */
+yew_pipe_cloexec(out_p);
+yew_pipe_cloexec(err_p);
+yew_pipe_cloexec(exec_p);       /* child->parent errno on exec failure   */
 pid = fork();
 child:
     setpgid(0, 0);              /* also done in the parent — see pitfall */
@@ -160,8 +160,11 @@ Pitfalls, each with a test:
   signal) makes it exact: `cannot run /bin/fish: No such file or directory`.
 - **No `yew_log` between fork and exec** — it opens files and formats with
   stdio; the exec-status pipe is the only diagnostic channel in that window.
-- Every fd is `O_CLOEXEC` at creation (`pipe2`), never `pipe()`+`fcntl` —
-  the gap leaks fds into a concurrently spawned job.
+- All production pipe creation routes through `yew_pipe_cloexec`. It uses
+  `pipe2(O_CLOEXEC)` on Linux/FreeBSD and a portable macOS fallback of
+  `pipe()` followed immediately by `FD_CLOEXEC`. The fallback is race-free
+  because the core is single-threaded and never forks from a signal handler;
+  no direct caller may reproduce that sequence elsewhere (S59-A16).
 
 ### 3. Reading: nonblocking, budgeted, grapheme-safe
 
@@ -415,15 +418,16 @@ unchanged, invalid UTF-8 included — the shell speaks bytes.
 ### 10. Defer
 
 - **Interactive pty-backed terminal buffer** (`:term`): **not in 1.0**.
-  `ed.shell.term` is registered and hard-errors with `interactive terminals
-  are not a 1.0 feature (jobs are: see :!)` — a permanent non-goal, not a
-  sprint deferral.
+  `ed.shell.term` still rejects terminal emulation as a permanent non-goal.
+  Sprint 57.18's `:!!` gives Yew's real terminal to one child and restores it;
+  it does not create a pty-backed buffer (S59-A15).
 - Job persistence across restart: never — jobs die with the process, and
   Sprint 25's schema notes say so.
 - LSP/AI/git reuse of `yew_job_*`: Sprints 45/46, 48, 51 add framed sinks;
   the spawn/reap/poll core is final here. Fletch `sh.run` with capability
   checks: Sprints 34/54.
-- `:s`, `/re/` still hard-error naming Sprints 20/21 (unchanged from s18).
+- Sprint 21 delivered `:s` and `/re/` through the parser and search seams
+  established by Sprints 18–20 (S59-A15).
 
 ## Testing Strategy
 
@@ -467,8 +471,10 @@ unchanged, invalid UTF-8 included — the shell speaks bytes.
 
 1. `make test` green on both compilers, zero warnings; ASan/UBSan/valgrind
    lanes green.
-2. `grep -rn '\bsystem(\|\bpopen(' src/` → empty; `grep -rn 'pipe(' src/` →
-   empty (only `pipe2` with `O_CLOEXEC`).
+2. `system()` and `popen()` remain absent. All production pipe creation
+   routes through `yew_pipe_cloexec`: Linux/FreeBSD use
+   `pipe2(O_CLOEXEC)`, the portable macOS fallback uses `pipe()` plus
+   immediate `FD_CLOEXEC`, and no other direct pipe caller exists (S59-A16).
 3. Exec failure is distinguishable from exit 127: `YEW_JOB_EXECFAIL` +
    `exec_errno == ENOENT` for a missing binary vs `YEW_JOB_EXITED` +
    `exit_code == 127` for `sh -c 'exit 127'`.
@@ -492,8 +498,9 @@ unchanged, invalid UTF-8 included — the shell speaks bytes.
     `/bin/sh` byte-exact, embedded newlines and quotes included.
 11. `:!true` opens no buffer and messages exactly `:!true — no output
     (exit 0)` (pty golden).
-12. `ed.shell.term` hard-errors with the permanent-non-goal message; `:s`
-    and `/re/` still name Sprints 20/21.
+12. `ed.shell.term` hard-errors with the terminal-emulator permanent-non-goal
+    message while `:!!` uses the tested terminal-handover path; Sprint 21's
+    live `:s` and `/re/` routes pass their successor coverage (S59-A15).
 13. Perf gate: 50 MiB of streamed output keeps keypress p99 ≤ 5 ms;
     baseline committed under `tests/perf/`.
 14. ≥ 110 assertions across the four new unit files.

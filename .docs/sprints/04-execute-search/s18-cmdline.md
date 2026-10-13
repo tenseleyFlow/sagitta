@@ -32,12 +32,13 @@ Land E mode: a command prompt that is a *view onto the same text engine the
 editor uses*, persistent history with dedupe and prefix search, a
 source-driven completion engine with a menu widget, and the command grammar
 — tokenization, the expansion table, quoting rules, range prefixes, and how
-a parsed range reaches a registry command. Shell execution (`:!`) lands in
-Sprint 19 and hard-errors here; `/re/` addresses and `:s///` in Sprints
-20–21; `:fl` in Sprint 32; the options model behind option-name completion
-in Sprint 36 (the *source* ships now, over whatever the provider returns);
-named marks in ranges in Sprint 21. Sprint 21's search prompt reuses this
-widget verbatim — it does not fork it.
+a parsed range reaches a registry command. At this sprint's landing, shell
+execution (`:!`) hard-errored pending Sprint 19; `/re/` addresses and `:s///`
+waited for Sprints 20–21; `:fl` waited for Sprint 32; the options model and
+config reload waited for Sprint 36; and named-mark ranges waited for Sprint
+21. Those were staging boundaries, not current absence requirements
+(S59-A15). Sprint 21's search prompt reuses this widget verbatim — it does
+not fork it.
 
 ## Deliverables
 
@@ -334,8 +335,8 @@ Address forms:
 | `addr+N` / `addr-N` | offset from any address |
 | `%` | whole buffer — shorthand for `1,$`, `kind = BUFFER` |
 | `'<,'>` | the selection's first..last line, `kind = SELECTION` |
-| `'a`–`'z` | named mark — **hard-errors naming Sprint 21** |
-| `/re/`, `?re?` | pattern address — **hard-errors naming Sprint 21** |
+| `'a`–`'z` | named mark — Sprint 21 resolves it through the buffer's named-mark table (S59-A15) |
+| `/re/`, `?re?` | pattern address — Sprint 21 resolves it through the shared regex/search engine (S59-A15) |
 
 `lo > hi` is an error (`backwards range`), never silently swapped — the
 swap makes `:5,3d` delete lines the user did not name. Addresses outside
@@ -404,25 +405,24 @@ Catalogue (exact texts; each is a unit case):
 | unknown expansion | `unknown expansion '%z'` |
 | unnamed buffer | `buffer has no file name` |
 | no selection | `%s needs a selection` |
-| deferred surface | `:! runs shell commands: Sprint 19` |
+| historical staging surface | `:! runs shell commands: Sprint 19` at the Sprint 18 landing; Sprint 19 replaced it with the live route (S59-A15) |
 
 `tok_lo/tok_hi` must always be a valid, non-empty range inside the prompt
 buffer — the parse fuzzer (Testing) asserts exactly that on every input.
 
-### 8. Defer
+### 8. Delivery history and remaining non-goals
 
-- `:!cmd`, `:r !cmd`, `:'<,'>!filter`, `:jobs` → hard-error naming
-  **Sprint 19** (the parser recognizes `!` so the message is precise).
-- `/re/` addresses, `:s///`, `:g//` → **Sprint 20** (engine) / **Sprint 21**
-  (surface); `:g//` also notes that the global-command surface is Fletch's
-  query API (Sprint 34), not a bespoke mini-language.
-- `'a`–`'z` mark addresses → **Sprint 21**. `:fl` / `:source` →
-  **Sprint 32** / **Sprint 36**.
-- Full options model and value enumerators → **Sprint 36**; the
-  `YEW_COMP_OPTION` source ships now over whatever the provider has (an
-  empty list is data, not a stub).
-- Fuzzy ranking → **Sprint 26** (swaps `yew_comp_score` only).
-  Per-workspace history → **Sprint 25**; history here is global per user.
+Later owning sprints delivered `:!`, `:s`, `:fl`, named-mark and pattern
+addresses, `:source` as config reload, option completion, fuzzy ranking, and
+per-workspace history through the parser, registry, prompt, and history seams
+established here (S59-A15). Their original sprint-naming messages are
+historical landing behavior, not current closeout requirements.
+
+`:g` remains a permanent non-goal: Yew does not add a bespoke global-command
+mini-language alongside Fletch's `buf.find(re)` query and action surface. It
+fails explicitly with that reason rather than pretending a future sprint will
+deliver it. The full options model may still return an empty provider list
+when that is the actual data; that is not a stub.
 
 ## Testing Strategy
 
@@ -457,9 +457,11 @@ buffer — the parse fuzzer (Testing) asserts exactly that on every input.
 
 1. `make test` green on gcc and clang, zero warnings; ASan/UBSan/
    determinism lanes green.
-2. Prompt reuse proven: `grep -rn 'utf8_\|grapheme\|width\|wcwidth'
-   src/ui/cmdline.c src/ui/cmdcomp.c` returns only calls into
-   `src/unicode/` — zero local width or cluster arithmetic.
+2. Unicode measurement and coordinate conversion remain centralized in the
+   shared text/Unicode engines. `src/ui/cmdline.c` and `cmdcomp.c` may name
+   grapheme commands, hold `tabwidth`, and lay out already-measured cells,
+   but contain no local decoder, boundary algorithm, width table/range, or
+   text-to-cell conversion (S59-A16).
 3. No second editor: `grep -n '\[[a-z_]*caret\|caret++\|caret--'
    src/ui/cmdline.c` → empty, and a unit test walks the `YEW_MODE_E` keymap
    asserting every leaf is a registered `ed.*` name.
@@ -469,7 +471,8 @@ buffer — the parse fuzzer (Testing) asserts exactly that on every input.
    completion → prompt → argv as **one** element in all three quoting
    forms; ≥ 12 assertions.
 6. Range: all 6 `range_policy` rows enforced; the `:1,2d` span includes the
-   trailing EOL (explicit case); `'a` and `/re/` name Sprint 21.
+   trailing EOL (explicit case); Sprint 21's `'a` and `/re/` successors
+   resolve through the named-mark and shared search routes (S59-A15).
 7. History: cap, dedupe-to-end, frozen-stem walk, and concurrent-append all
    green; no history I/O under `--batch`/`--clean` (grep + unit).
 8. Completion menu: a byte-identical pty golden per cycling row across two
@@ -478,6 +481,8 @@ buffer — the parse fuzzer (Testing) asserts exactly that on every input.
    with text intact and the cursor at `tok_lo`.
 10. Fuzz: 1 000 000 parse inputs, zero crashes, `tok` invariant holds on
     100% of failures.
-11. Deferred surfaces (`:!`, `:s`, `:g`, `:fl`, `'a`, `/re/`) each produce
-    their exact sprint-naming message — one smoke assertion each.
+11. Later owning sprints delivered the execute surfaces `:!`, `:s`, `:fl`,
+    `'a`, and `/re/` through the original parser/registry routes. `:g` alone
+    remains a tested permanent non-goal with its Fletch-query guidance
+    (S59-A15).
 12. ≥ 120 assertions across the four unit files.
