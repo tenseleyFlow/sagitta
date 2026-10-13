@@ -14,7 +14,10 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 117 confirmed findings are fixed. F115/F116 aligned F11's
+are complete; all 119 confirmed findings are fixed. F118/F119 aligned F12's
+superseded AI command staging and invalid TLS/stats ownership scans under
+S59-A28/A29 without changing transport, privacy, logging, or stats behavior.
+F115/F116 aligned F11's
 superseded provider/lifecycle staging and invalid symbol/JSON scans under
 S59-A26/A27 without removing shipped LSP features. F117 repaired the
 live-clangd harness's macOS path-alias identity; production requests already
@@ -40,7 +43,7 @@ priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
-pre-closeout packets exist for F01 through F11 without claiming reviewer
+pre-closeout packets exist for F01 through F12 without claiming reviewer
 signoff. F08 maps all 95 Fletch DoD rows after strict Clang/GCC/ASan builds,
 35 focused unit filters, 39/39 conformance and GC-stress runs, deterministic
 dispatch/round-trip checks, bounded fuzz samples, selected PTYs, and a
@@ -54,8 +57,11 @@ bounded fuzz runs, and 97 focused PTYs per configuration. F11's packet maps
 all 70 completion/LSP DoD rows after warning-clean
 Clang/GCC/ASan builds, focused unit/fuzz/PTY checks, policy selftests, and a
 passing real-clangd milestone with 8/8 gotos, six references in three files,
-a clean rename round trip, and one diagnostic. F12 is the next local evidence
-front.
+a clean rename round trip, and one diagnostic. F12 maps all 43 AI DoD rows
+after warning-clean Clang/GCC/ASan builds, complete focused AI/HTTP unit and
+script filters, bounded deterministic fuzz, 38 applicable PTYs per
+configuration, repository bans, and performance-policy selftests. F13 is the
+next local evidence front.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say
 READY.
 
