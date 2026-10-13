@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-132`
+Next available ID: `YEW-F-133`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -144,6 +144,7 @@ recorded in `audit-00.md`.
 | YEW-F-129 | M | fixed | F15 CI | ~~foundation closeout literal greps match prose and fixture data~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_129.c | s00 DoD 6; s01 DoD 7; semantic bans |
 | YEW-F-130 | M | fixed | F15 CI | ~~Sprint 1 landing-day timing covers the expanded full suite~~ — fixed 2026-10-13 in `d7752508` | tests/audit/yew_f_130.c | s01 DoD 1; current CI budget owners |
 | YEW-F-131 | M | fixed | F15 CI | ~~F15 retains a future size stub and superseded hard caps~~ — fixed 2026-10-13 in `7bdfa153` | tests/audit/yew_f_131.c | s56 DoD 14; s57 DoD 2; binding size amendments |
+| YEW-F-132 | M | open | F15 CI | reserved `--batch-strict` falsely promises Sprint 59 delivery | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1416,6 +1417,15 @@ Commit `7bdfa153` adds binding Amendment S59-A39, synchronizes Sprint 56's
 handoff, and makes Sprint 57 plus F15 follow the executable eight-row table.
 The current caps, measurement recipe, feature matrix, and product code are
 unchanged.
+
+`YEW-F-132` is Medium because `--batch-strict` correctly hard-errors rather
+than silently changing batch semantics, but its user-facing diagnostic says
+the option "lands in Sprint 59" after Sprint 59 explicitly decided it is not
+for yew 1.0. `docs/batch.md` repeats the false delivery promise, while the
+user manual already describes the honest reserved/non-implemented boundary.
+The hard XFAIL requires the product, exact unit witness, batch documentation,
+and F15 audit record to retain the failure while naming the 1.0 boundary
+instead of an internal sprint schedule.
 
 ## Unverified observations
 
