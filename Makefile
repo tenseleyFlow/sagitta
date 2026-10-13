@@ -2178,7 +2178,7 @@ test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty te
 	$(TORTURE_LIVE_GATE)
 
 test-pkg: $(BUILD)/yew
-	tests/pkg/run.sh $(BUILD)/yew
+	FAULTSHIM_CC='$(FAULTSHIM_CC)' tests/pkg/run.sh $(BUILD)/yew
 
 # The fixed campaigns, in two halves the nightly deep lane runs as separate
 # jobs (one serial job overran GitHub's 6 h job limit under ASan/UBSan):

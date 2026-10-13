@@ -34,6 +34,12 @@ build_fault_shim()
 {
     local output=$1
     local -a arch_flags=()
+    local faultshim_cc
+
+    # YEW-F-124: product CC may be Homebrew GCC, which cannot emit the
+    # arm64e slice required by macOS's /bin/sh.  Keep the package binary on
+    # the requested compiler and use the existing host-shim compiler seam.
+    faultshim_cc=${FAULTSHIM_CC:-${CC:-cc}}
 
     if [[ $host_os == Darwin ]]; then
         # Current macOS uses an arm64e-only /bin/sh even when yew itself is
@@ -42,11 +48,11 @@ build_fault_shim()
         if [[ $host_arch == arm64 || $host_arch == arm64e ]]; then
             arch_flags=(-arch arm64 -arch arm64e)
         fi
-        ${CC:-cc} -std=c11 -fPIC -dynamiclib "${arch_flags[@]}" -o "$output" \
+        "$faultshim_cc" -std=c11 -fPIC -dynamiclib "${arch_flags[@]}" -o "$output" \
             "$repo_root/tests/torture/faultshim.c" \
             "$repo_root/tests/torture/faultshim-darwin.s"
     else
-        ${CC:-cc} -std=c11 -fPIC -shared -o "$output" \
+        "$faultshim_cc" -std=c11 -fPIC -shared -o "$output" \
             "$repo_root/tests/torture/faultshim.c" -ldl
     fi
 }

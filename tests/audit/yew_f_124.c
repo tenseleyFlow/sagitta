@@ -32,7 +32,7 @@ bool test_yew_f_124(char *why, size_t why_cap)
     bool runner_seam = file_has(
         "tests/pkg/run.sh", "FAULTSHIM_CC:-${CC:-cc}");
     bool runner_uses = file_has(
-        "tests/pkg/run.sh", "$faultshim_cc -std=c11");
+        "tests/pkg/run.sh", "\"$faultshim_cc\" -std=c11");
     bool make_passes = file_has(
         "Makefile", "FAULTSHIM_CC='$(FAULTSHIM_CC)' tests/pkg/run.sh");
 
