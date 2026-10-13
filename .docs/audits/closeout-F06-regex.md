@@ -72,5 +72,4 @@ none
 
 ## Verdict
 
-NOT READY — Confirmed defects are remediated; independent conformance-gap
-triage and closeout evidence remain.
+NOT READY — Confirmed defects are remediated; independent conformance-gap triage and closeout evidence remain.
