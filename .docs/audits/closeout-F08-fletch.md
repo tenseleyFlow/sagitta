@@ -200,7 +200,10 @@ Sprints covered: s28, s29, s30, s31, s32, s33, s34, s36
 
 ## Open audit findings against this front
 
-none
+- `YEW-F-108` (Medium): superseded Fletch staging guards remain in the source
+  sprint and closeout contracts.
+- `YEW-F-109` (Medium): historical touched-directory and literal allocator
+  gates do not express the arena/GC ownership rules.
 
 ## Deferrals recorded against this front
 

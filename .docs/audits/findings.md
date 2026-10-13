@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-108`
+Next available ID: `YEW-F-110`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -120,6 +120,8 @@ recorded in `audit-00.md`.
 | YEW-F-105 | M | fixed | F05 EXEC | ~~execute closeout retains impossible Unicode/pipe greps~~ — fixed 2026-10-13 in `84fd9ba3` | tests/audit/yew_f_105.c | s59 §2; s18 DoD 2; s19 DoD 2 |
 | YEW-F-106 | M | fixed | F07 UI | ~~UI/workspace closeout requires superseded staging guards~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_106.c | s59 §2; s22 DoD 9; s23 DoD 9; s24 DoD 11; s25 DoD 13; s26 DoD 13; s27 DoD 14 |
 | YEW-F-107 | M | fixed | F07 UI | ~~UI/workspace closeout retains impossible ownership greps~~ — fixed 2026-10-13 in `a5081521` | tests/audit/yew_f_107.c | s59 §2; s22 DoD 7; s25 DoD 8; s27 DoD 2 |
+| YEW-F-108 | M | open | F08 FL | Fletch closeout requires superseded staging guards | tests/audit/yew_f_108.c | s59 §2; s30 DoD 10; s31 DoD 11; s32 DoD 12; s33 DoD 12; s34 DoD 14; s36 DoD 9/12 |
+| YEW-F-109 | M | open | F08 FL | Fletch closeout retains historical ownership gates | tests/audit/yew_f_109.c | s59 §2; s29 DoD 1/4; s30 DoD 8 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1114,6 +1116,30 @@ Sprint 22–27 and F07 contracts. Both hard XFAILs pass without changing
 product behavior, removing shipped editor features, or weakening Unicode
 measurement, atomic replacement, singular mouse dispatch, or the retained
 LSP hover-on-pointer boundary.
+
+`YEW-F-108` is Medium because the current Sprint 30–36 contracts and F08
+closeout still require import, editor APIs, recorder round-trip, batch mode,
+macro-library loading, and plugin configuration to remain deferred after
+their owning sprints deliberately delivered those surfaces. Sprint 36 also
+requires the legacy state-codec differential that its own contract assigns
+Sprint 58 to retire after the handover proof. Product behavior is not shown
+wrong, but release closeout cannot truthfully require shipped features or
+retired test scaffolding to remain absent. The hard XFAIL requires a formal
+decision amendment and synchronized Sprint 30–36 and F08 wording while
+retaining genuine boundaries such as no `io.run`/`io.http` native and no
+editor motion execution in the standalone REPL.
+
+`YEW-F-109` is Medium because Sprint 29's release-closeout wording retains a
+historical touched-directory restriction and scans all of `src/fl/` for
+allocator substrings even though its actual invariant is that the lexer and
+parser allocate from the caller's arena. Sprint 30 likewise says every
+allocator spelling under `src/fl/` must occur in `gc.c`; later Fletch-owned
+host registries, configuration state, handles, recorder state, and macro
+library storage legitimately use the project's checked allocation wrappers.
+Every language `FlObj` remains allocated through `fl_gc_alloc`, and direct
+libc allocation remains forbidden. Product behavior is not shown wrong. The
+hard XFAIL requires semantic arena/GC ownership wording and synchronized
+Sprint 29/30 and F08 contracts without weakening either allocation boundary.
 
 ## Unverified observations
 

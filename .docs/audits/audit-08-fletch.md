@@ -160,6 +160,23 @@ compile cycles.
   confirmed macro-replay escalation; unavailable surfaces are not counted as
   passing.
 
+## Sprint 59 closeout-contract recheck
+
+findings YEW-F-108, YEW-F-109
+
+- `YEW-F-108` records historical staging requirements that conflict with
+  later delivered imports, editor APIs, round-trip, batch, macro-library, and
+  plugin-configuration surfaces, plus the Sprint 36 reference to the
+  intentionally retired legacy state-codec differential. The product
+  implementations are present and covered; the stale release contracts are
+  the defect.
+- `YEW-F-109` records a historical touched-directory restriction and broad
+  allocator token greps that reject later Fletch host-side modules using the
+  checked project allocators. Source review found the intended boundaries
+  intact: lexer/parser allocations remain caller-arena-owned, language
+  objects remain GC-owned through `fl_gc_alloc`, and direct libc allocators
+  remain banned.
+
 ## Count
 
-Raw 1 · deduped 1 · critical 0 · high 1 · medium 0 · low 0 · unverified 2.
+Raw 3 · deduped 3 · critical 0 · high 1 · medium 2 · low 0 · unverified 2.
