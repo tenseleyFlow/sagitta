@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-125`
+Next available ID: `YEW-F-126`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -137,6 +137,7 @@ recorded in `audit-00.md`.
 | YEW-F-122 | M | fixed | F14 PLUG | ~~plugin closeout retains superseded package/docs staging rules~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_122.c | s59 §2; s54 DoD 12; s55 DoD 14; YEW-F-022 |
 | YEW-F-123 | M | fixed | F14 PLUG | ~~plugin closeout names the wrong Fletch import amendment~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_123.c | s59 §2; s55 DoD 10; Fletch spec §16 A3 |
 | YEW-F-124 | M | fixed | F15 CI | ~~macOS GCC package lane sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `7cdbe9d1` | tests/audit/yew_f_124.c | s55 DoD 1; compiler matrix; YEW-F-088 sibling |
+| YEW-F-125 | M | open | F14 PLUG | plugins-only unit build links a stripped FUSS test seam | tests/audit/yew_f_125.c | s55 DoD 1; compile-time module boundary |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1335,6 +1336,15 @@ Makefile target to pass it explicitly. Commit `7cdbe9d1` passes
 `FAULTSHIM_CC` into the package runner and uses it only for the interposer;
 the complete GCC-built package suite then passes all 53 cases, including the
 five durability/recovery cases that the baseline never reached.
+
+`YEW-F-125` is Medium because the isolated `MODULES=plugins` editor binary
+builds, but the corresponding unit binary fails to link: the mixed Fletch API
+state-query test unconditionally calls `yew_git_test_snapshot_mut`, which is
+owned by the excluded FUSS module and intentionally absent from its product
+shim. The failure is confined to module-matrix verification rather than the
+shipping editor. The hard XFAIL requires the core query assertions to remain
+available in stripped builds while the synthetic Git snapshot and active-FUSS
+assertions are guarded by `YEW_WITH_FUSS`.
 
 ## Unverified observations
 
