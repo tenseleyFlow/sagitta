@@ -97,21 +97,26 @@ package manager and a user's disk both see.
 
 | Config | `MODULES=` | Budget | Source |
 |---|---|---|---|
-| full | `lsp ai fuss plugins` | **≤ 2.0 MiB** | `00-decisions.md`, amended S57-A1 |
-| minimal | *(empty)* | **≤ 1,576,960 bytes** | `00-decisions.md`, amended S59-A7 |
-| lsp-only | `lsp` | ≤ 1 656 KiB | minimal + measured 120 KiB delta |
-| ai-only | `ai` | ≤ 1 676 KiB | minimal + measured delta rounded to 140 KiB |
-| fuss-only | `fuss` | ≤ 1 686 KiB | minimal + measured delta rounded to 150 KiB |
-| plugins-only | `plugins` | ≤ 1 636 KiB | minimal + measured delta rounded to 100 KiB |
-| musl static-PIE, full | `lsp ai fuss plugins` | ≤ 2 112 KiB | amended S57-A6 required full matrix |
-| musl static-PIE, minimal | *(empty)* | ≤ 1 600 KiB | amended S57-A5 required-core floor |
+| full | `lsp ai fuss plugins` | **≤ 2,277,376 bytes** | amended S57.33-A1 |
+| minimal | *(empty)* | **≤ 1,785,856 bytes** | amended S57.33-A1 |
+| lsp-only | `lsp` | ≤ 1,900,544 bytes | amended S57.27-A1 |
+| ai-only | `ai` | ≤ 1,916,928 bytes | amended S57.27-A1 |
+| fuss-only | `fuss` | ≤ 1,933,312 bytes | amended S57.27-A1 |
+| plugins-only | `plugins` | ≤ 1,884,160 bytes | amended S57.33-A1 |
+| musl static-PIE, full | `lsp ai fuss plugins` | ≤ 2,424,832 bytes | amended S57.31-A2 |
+| musl static-PIE, minimal | *(empty)* | ≤ 1,900,544 bytes | amended S57.31-A2 |
 
-- The four single-module budgets are **derived, not invented**: the amended
-  minimal gate plus that module's measured on-disk delta over the minimal
-  build, rounded up to the next 10 KiB, written into
-  `tests/size/budgets.txt` with the derivation in the `why` column and
-  re-derived (not re-guessed) when a module grows on purpose. The §2 ledger
-  still identifies which section and symbol caused a changed delta.
+`tests/size/budgets.txt` is the binding executable copy of this current
+eight-row table. Its `why` fields retain the amendment provenance used to
+derive each cap; a later measured rebaseline updates both copies under an
+explicit amendment rather than silently weakening the gate.
+
+- The four single-module budgets are **derived, not invented**: each begins
+  with the minimal gate plus that module's measured on-disk delta, then
+  follows the explicit rounding rule named by its amendment. The result is
+  written into `tests/size/budgets.txt` with the derivation in the `why`
+  column and re-derived (not re-guessed) when a module grows on purpose. The
+  §2 ledger still identifies which section and symbol caused a changed delta.
 - **Additivity check, not additivity assumption.** `full` must be ≤ the sum
   of the four single-module deltas over `minimal`, plus 5 % for shared glue.
   Heavier means a module pulls in something the others already pay for, and
@@ -855,11 +860,11 @@ coverage that may be discarded to make a footprint number pass.
    under the locked flags; ASan/UBSan, valgrind, determinism, bans, size,
    alloc, musl, embedded, arm64-linux and arm64-macos lanes all green on
    `trunk`.
-2. `make size` enforces all eight §1 rows; **full ≤ 2.0 MiB** and
-   **minimal ≤ 1,576,960 bytes** stripped on x86_64-linux-gnu, with the
+2. `make size` enforces the binding eight current caps in
+   `tests/size/budgets.txt`, stripped on x86_64-linux-gnu, with the
    measurement definition (stripped, on-disk, `-O2`) stated in
-   `tests/size/README` and the four single-module budgets carrying their
-   derivation in `why`.
+   `tests/size/README` and every budget carrying its amendment derivation in
+   `why`.
 3. The additivity check passes: `full` ≤ Σ(single-module deltas) + 5 %.
 4. `scripts/size-ledger.sh` produces the §2.2 format; `ledger-full.txt` and
    `ledger-minimal.txt` are committed, regenerate byte-identically, and

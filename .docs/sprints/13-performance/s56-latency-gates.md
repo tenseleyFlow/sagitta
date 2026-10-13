@@ -675,8 +675,8 @@ Every other lane gains `make perf YEW_PERF_ADVISORY=1` — the suite must
 
 - **Binary-size budgets per `MODULES`, the size ledger, the allocation
   audit, the debug allocator, the musl static embedded profile** →
-  Sprint 57; `make size` hard-errors naming it. Adversarial audits and
-  extended fuzz → 58; reproducible releases and packaging → 60.
+  Sprint 57; `make size` now runs its shipped Sprint 57 owner. Adversarial
+  audits and extended fuzz → 58; reproducible releases and packaging → 60.
 - Threading or any parallel render/parse path → **never in 1.0**
   (invariant 8). If a budget cannot be met single-threaded, the fix is the
   algorithm; `:prof` exists to find which one.
@@ -774,5 +774,5 @@ Every other lane gains `make perf YEW_PERF_ADVISORY=1` — the suite must
     disjoint `build-prof/` tree.
 13. The `100m-allnl` exemption is discharged in writing per §5.3 — s11's
     "revisited in Sprint 56" resolves to a decision, not another deferral.
-14. `make size` hard-errors naming Sprint 57; ≥ 140 assertions across
+14. `make size` runs its shipped Sprint 57 owner; ≥ 140 assertions across
     `test_prof.c`, `test_prof_format.c` and `test_calib.c`.

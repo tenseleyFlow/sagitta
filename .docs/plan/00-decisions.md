@@ -76,7 +76,7 @@ and an update to this file. Decided 2026-07-31 during the planning stage.
 | Cold start → first paint | ≤ 20 ms, default config |
 | Open 100 MB file | ≤ 150 ms to interactive |
 | Scroll throughput | full-viewport redraw ≥ 120 fps equivalent |
-| Binary size (full modules, stripped, x86_64) | ≤ 2 MiB; minimal MODULES build ≤ 1,576,960 bytes (S59-A7) |
+| Binary size (full modules, stripped, x86_64) | ≤ 2,277,376 bytes; minimal MODULES build ≤ 1,785,856 bytes (S57.33-A1) |
 | Memory | ≤ 1.6× file size for a clean open |
 
 Budgets are locked as *gates* from the sprint that lands each subsystem;
@@ -812,6 +812,20 @@ Sprint 37/56 performance gates to product latency; it does not remove tests to
 recreate the Sprint 1 wall time. This amendment changes no test or performance
 gate and supersedes only Sprint 1/F15's scope ambiguity; `YEW-F-130` records
 the correction.
+
+**Size closeout amendment S59-A39 (2026-10-13) — the shipped gate and its
+measured amendments are authoritative.** Sprint 56 handed binary-size,
+allocation, ledger, musl, and embedded ownership to Sprint 57; `make size`
+now runs that shipped owner rather than a future-sprint stub. The binding
+executable budget table is `tests/size/budgets.txt`: its eight current rows
+and `why` provenance incorporate the measured-growth amendments through
+S57.33-A1. The Sprint 57 source table, its Definition of Done, and F15
+closeout follow those current caps instead of freezing earlier planning
+figures. This changes no product code, measurement recipe, feature matrix,
+or gate strength. Required editor behavior and safety fixes may not be
+removed to recover a superseded footprint number; future movement still
+requires measured evidence and an explicit amendment. `YEW-F-131` records
+the contract correction.
 
 ## Non-negotiable invariants (enforced from Sprint 0)
 

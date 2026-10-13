@@ -107,11 +107,11 @@ Sprints covered: s00, s01, s37, s56, s57
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s56.13 The `100m-allnl` exemption is discharged in writing per §5.3 — s11's "revisited in Sprint 56" resolves to a decision, not another deferral.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s56.14 `make size` hard-errors naming Sprint 57; ≥ 140 assertions across `test_prof.c`, `test_prof_format.c` and `test_calib.c`.
+- [ ] s56.14 `make size` runs its shipped Sprint 57 owner; ≥ 140 assertions across `test_prof.c`, `test_prof_format.c` and `test_calib.c`.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s57.1 `make` and `make test` green on gcc and clang; the pinned GCC `make size` lane green; zero warnings under the locked flags; ASan/UBSan, valgrind, determinism, bans, size, alloc, musl, embedded, arm64-linux and arm64-macos lanes all green on `trunk`.
       — VERDICT: blocking — independent closeout review pending.
-- [ ] s57.2 `make size` enforces all eight §1 rows; **full ≤ 2.0 MiB** and **minimal ≤ 1,576,960 bytes** stripped on x86_64-linux-gnu, with the measurement definition (stripped, on-disk, `-O2`) stated in `tests/size/README` and the four single-module budgets carrying their derivation in `why`.
+- [ ] s57.2 `make size` enforces the binding eight current caps in `tests/size/budgets.txt`, stripped on x86_64-linux-gnu, with the measurement definition (stripped, on-disk, `-O2`) stated in `tests/size/README` and every budget carrying its amendment derivation in `why`.
       — VERDICT: blocking — independent closeout review pending.
 - [ ] s57.3 The additivity check passes: `full` ≤ Σ(single-module deltas) + 5 %.
       — VERDICT: blocking — independent closeout review pending.

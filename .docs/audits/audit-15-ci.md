@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-130`
+findings `YEW-F-127`–`YEW-F-131`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -341,12 +341,14 @@ findings `YEW-F-127`–`YEW-F-130`
   syntax-corpus data instead of the semantic F15 ban/registration owners.
 - `YEW-F-130` records Sprint 1's landing-day unit+smoke wall time being
   applied to the much larger current aggregate suite.
-- S59-A35 through S59-A38 synchronize the source sprints and F15 closeout;
+- `YEW-F-131` records the shipped size target and current eight-row budget
+  table being contradicted by future-stub wording and superseded caps.
+- S59-A35 through S59-A39 synchronize the source sprints and F15 closeout;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 62 · deduped 62 · critical 1 · high 1 · medium 60 · low 0 · unverified 4.
+Raw 63 · deduped 63 · critical 1 · high 1 · medium 61 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 
