@@ -304,13 +304,16 @@ void test_re_long_literal_bypasses_vm_limit(void)
      * path streams KMP state between chunks; it must never materialize the
      * buffer or depend on a fixed-size carry window. */
     tb = yew_textbuf_new();
-    for (at = 0U; at < sizeof(subject);) {
-        u64 take = sizeof(subject) - at < 13U ?
-                   sizeof(subject) - at : 13U;
+    at = sizeof(subject);
+    while (at != 0U) {
+        u64 take = at < 13U ? at : 13U;
 
-        yew_textbuf_insert(tb, BYTEOFF(at), subject + at, take);
-        at += take;
+        at -= take;
+        yew_textbuf_insert(tb, BYTEOFF(0U), subject + at, take);
     }
+    /* YEW-F-087: end-appends coalesce in the add store.  Reverse prepends
+     * retain the same subject bytes while forcing the promised seams. */
+    YEW_ASSERT(yew_textbuf_piece_count(tb) >= 100U);
     input = yew_re_input_textbuf(tb);
     YEW_ASSERT(yew_re_search(re, &input, BYTEOFF(0U), &match));
     YEW_ASSERT_EQ_U64(match.g[0].lo, PREFIX_LEN);
