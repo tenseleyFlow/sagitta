@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-126`
+Next available ID: `YEW-F-127`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -138,6 +138,7 @@ recorded in `audit-00.md`.
 | YEW-F-123 | M | fixed | F14 PLUG | ~~plugin closeout names the wrong Fletch import amendment~~ — fixed 2026-10-13 in `fe7ee656` | tests/audit/yew_f_123.c | s59 §2; s55 DoD 10; Fletch spec §16 A3 |
 | YEW-F-124 | M | fixed | F15 CI | ~~macOS GCC package lane sends Apple arm64e flags to GCC~~ — fixed 2026-10-13 in `7cdbe9d1` | tests/audit/yew_f_124.c | s55 DoD 1; compiler matrix; YEW-F-088 sibling |
 | YEW-F-125 | M | fixed | F14 PLUG | ~~plugins-only unit build links a stripped FUSS test seam~~ — fixed 2026-10-13 in `ada52d91` | tests/audit/yew_f_125.c | s55 DoD 1; compile-time module boundary |
+| YEW-F-126 | M | open | F14 PLUG | Sprint 54 diverges from the shared stripped-module diagnostic | tests/audit/yew_f_126.c | s54 DoD 1; invariant 3; shared module seam |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1349,6 +1350,16 @@ Commit `ada52d91` keeps the module-neutral query assertions in every build and
 guards only the synthetic snapshot section. The focused test passes with 42
 assertions in `MODULES=plugins` and 57 assertions in full Clang, GCC, and
 ASan/UBSan builds; the plugins-only package suite passes all 53 cases.
+
+`YEW-F-126` is Medium because Sprint 54 requires stripped `yew plug` to print
+`yew: error: built without plugin support (MODULES=plugins)` byte-exact and
+claims a plugin-local static string owns that diagnostic. The shipped command
+instead exits 1 through Sprint 0's shared `yew_mod_require` seam with `this
+build has no plugins module; rebuild with 'make MODULES="… plugins"'`, the
+same clear form unit-tested for every excisable module. There is no silent
+stub or product ambiguity; the later plugin contract diverged from its older
+shared owner. The hard XFAIL requires a binding amendment plus synchronized
+Sprint 54 and F14 closeout wording, without changing product behavior.
 
 ## Unverified observations
 
