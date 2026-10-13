@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-134`
+Next available ID: `YEW-F-135`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -146,6 +146,7 @@ recorded in `audit-00.md`.
 | YEW-F-131 | M | fixed | F15 CI | ~~F15 retains a future size stub and superseded hard caps~~ — fixed 2026-10-13 in `7bdfa153` | tests/audit/yew_f_131.c | s56 DoD 14; s57 DoD 2; binding size amendments |
 | YEW-F-132 | M | fixed | F15 CI | ~~reserved `--batch-strict` falsely promises Sprint 59 delivery~~ — fixed 2026-10-13 in `cacf3917` | tests/audit/yew_f_132.c | s58 F15 q9; s59 §9; invariant 3 |
 | YEW-F-133 | M | fixed | F15 CI | ~~theme unit escapes the selected disjoint build tree~~ — fixed 2026-10-13 in `ec59fa31` | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
+| YEW-F-134 | M | open | F15 CI | plugin containment unit assumes `/etc/passwd` is canonical | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1442,6 +1443,14 @@ existing per-build temporary-directory contract.
 Commit `ec59fa31` derives the fixture root from `TMPDIR`, retains the size and
 cleanup assertions, and passes the focused 272-assertion unit with its
 temporary root under an independently selected build directory.
+
+`YEW-F-134` is Medium because the plugin-manifest containment test expects an
+escape diagnostic to contain literal `/etc/passwd`, even though the product
+correctly canonicalizes the symlink target before reporting it. The test
+therefore fails in a supported FHS namespace where that path is itself a
+symlink, obscuring the cross-compiler result without exposing a product
+containment failure. The hard XFAIL requires the unit to resolve the fixture
+target and compare the diagnostic with that canonical path.
 
 ## Unverified observations
 
