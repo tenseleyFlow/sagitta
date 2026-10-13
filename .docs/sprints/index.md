@@ -14,8 +14,8 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-13): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 102 confirmed findings are fixed. F102 aligned F04's shipped
-modal surfaces under S59-A13 while preserving intentional 1.0 guards. The
+are complete; 103 confirmed findings are recorded, 102 fixed and F103 open.
+F103 pins F04's obsolete viewport/width ownership greps. The
 last exact hosted-green
 product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
@@ -25,7 +25,7 @@ retaining `4c99e134` byte-for-byte as the product parent. Its launchd-owned
 cycle has 4/56 durable rows complete: `fuzz_utf8` is checkpointed clean and
 the four `fuzz_grapheme` streams are running. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
-gates reconcile every completed finding with no active XFAIL. All 15
+gates reconcile every completed finding; one active XFAIL pins F103. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
 pre-closeout packets exist for F01, F02, F03, and F06 without claiming
@@ -451,8 +451,8 @@ Binding documents — read before any sprint:
   fuzz campaigns extended, findings ledger with stable IDs. **AUDIT WORK
   COMPLETE; REPLACEMENT SOAK RUNNING:** all fifteen fronts, dedup, coverage
   instrumentation, and all ten invariant sessions are complete. The ledger
-  now contains `YEW-F-001` through `YEW-F-102`; all 102 are fixed, including
-  F102's S59-A13 modal-contract alignment. The
+  now contains `YEW-F-001` through `YEW-F-103`; 102 are fixed and F103 is
+  open against F04's obsolete viewport/width ownership greps. The
   interrupted September launch and the suspend-invalidated first replacement
   attempt produced no soak rows and are historical only. A checkpointed
   SAN+coverage cycle restarted 2026-10-12 with product commit `4c99e134` plus
@@ -463,7 +463,7 @@ Binding documents — read before any sprint:
 - Sprint 59 (s59-remediation-docs.md) — Findings burn-down, man pages,
   `yew tutor` (interactive, dogfoods the pty harness), user manual,
   Fletch book chapter 1. **ACTIVE:** the severity-ordered implementation
-  burn-down has reached 102/102 fixed; the documentation, tutor, closeout,
+  burn-down has reached 102/103 fixed; the documentation, tutor, closeout,
   deferral, and synchronization checkers are implemented. Independent
   verification, status closure, and fifteen READY closeouts remain
 - Sprint 60 (s60-v1.0.0-landing.md) — Packaging (AUR, brew tap, RPM spec —

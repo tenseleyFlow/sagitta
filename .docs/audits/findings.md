@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-103`
+Next available ID: `YEW-F-104`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -115,6 +115,7 @@ recorded in `audit-00.md`.
 | YEW-F-100 | M | fixed | F03 TEXT | ~~text-engine closeout requires superseded staging guards~~ — fixed 2026-10-13 in `34dd30ef` | tests/audit/yew_f_100.c | s59 §2; s09/s10/s12 closeout |
 | YEW-F-101 | M | fixed | F03 TEXT | ~~text-engine closeout retains obsolete mutation-ownership spellings~~ — fixed 2026-10-13 in `f16c5dcd` | tests/audit/yew_f_101.c | s59 §2; s10 DoD 10; s12 DoD 12 |
 | YEW-F-102 | M | fixed | F04 MODAL | ~~modal closeout requires superseded staging guards~~ — fixed 2026-10-13 in `1c8709f0` | tests/audit/yew_f_102.c | s59 §2; s14 DoD 7; s16 DoD 5/11; s17 DoD 11 |
+| YEW-F-103 | M | open | F04 MODAL | modal closeout retains obsolete viewport/width grep gates | tests/audit/yew_f_103.c | s59 §2; s14 DoD 10; s15 DoD 10 |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1034,6 +1035,20 @@ Commit `1c8709f0` adds decision amendment S59-A13, aligns the shipped mode,
 syntax-provider, and multi-cursor expansion contracts, and preserves the
 tested literal-lift, single-cursor completion, and single-primary LSP-edit
 boundaries. The hard XFAIL passes without changing product behavior.
+
+`YEW-F-103` is Medium because Sprint 14 and F04 still require every direct
+viewport-state consumer outside the original placeholder's two files to be
+absent, although later owning sprints deliberately added workspace restore,
+tab preservation, statusline, search, Git, cloning, and Fletch inspection.
+Sprint 15 and F04 also use a literal grep for every `cells` or `width` token to
+claim zero UI width arithmetic, even though UI layout must add, clip, and place
+already-measured cell counts. The actual invariant remains intact: Unicode
+measurement, grapheme-to-cell conversion, and width tables live in
+`src/unicode/`; UI code consumes those results for geometry. Product behavior
+is not shown wrong, but the current release contract cannot satisfy its
+historical literal greps. The hard XFAIL requires a formal decision amendment
+and synchronized Sprint 14/15 and F04 wording without weakening Unicode-width
+ownership.
 
 ## Unverified observations
 

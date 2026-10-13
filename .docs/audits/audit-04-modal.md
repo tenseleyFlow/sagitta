@@ -163,6 +163,14 @@ defective; the contradictory subset of the release contract is the finding.
 owning-contract/closeout wording. Commit `1c8709f0` makes that reproducer pass
 while preserving the intentional 1.0 boundary guards.
 
+The same current-contract pass found `YEW-F-103`: Sprint 14's placeholder-era
+viewport grep rejects later workspace, tab, statusline, search, Git, editor,
+and Fletch consumers, while Sprint 15's literal `cells|width` grep rejects the
+ordinary cell geometry every later UI surface requires. No direct `wcwidth`
+call or hard-coded Unicode-width table was found in `src/ui/`; measurement and
+coordinate conversion still route through `src/unicode/`. The contradictory
+ownership wording, not product behavior, is the finding.
+
 ## Unverified observations
 
 - Tutor keyboard reachability is unverified because the tutor does not
@@ -170,4 +178,4 @@ while preserving the intentional 1.0 boundary guards.
 
 ## Count
 
-Raw 2 · deduped 2 · critical 0 · high 0 · medium 2 · low 0 · unverified 1.
+Raw 3 · deduped 3 · critical 0 · high 0 · medium 3 · low 0 · unverified 1.
