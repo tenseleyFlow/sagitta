@@ -149,7 +149,7 @@ recorded in `audit-00.md`.
 | YEW-F-134 | M | fixed | F15 CI | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed 2026-10-13 in `cfb4befd` | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
 | YEW-F-135 | M | fixed | F15 CI | ~~governance fixtures inherit global Git commit signing~~ — fixed 2026-10-13 in `6c5de8cb` | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
 | YEW-F-136 | M | fixed | F15 CI | ~~tutor Git lesson inherits global commit policy~~ — fixed 2026-10-14 in `c99b4528` | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
-| YEW-F-137 | M | open | F15 CI | documentation targets ignore selected BUILD binaries | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
+| YEW-F-137 | M | fixed | F15 CI | ~~documentation targets ignore selected BUILD binaries~~ — fixed 2026-10-14 in `060cdee3` | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1494,6 +1494,13 @@ the defect by leaving `build/` populated; a clean cross-host disjoint tree
 fails before checking the documentation. The hard XFAIL requires every
 documentation checker and selftest to receive the selected binary/helper
 paths, and manual shell examples to resolve that selected binary directory.
+Commit `a5bbd987` routes the selected editor, PTY runner, demo, and option
+helper through all three Make targets and their negative selftests. Follow-up
+`060cdee3` preserves the caller's explicit tool PATH inside the manual's
+otherwise-clean environment, so Nix/FHS evidence can find its compiler and
+`make` while `yew` still resolves from the selected build first. On `hasu`,
+with no default `build/yew` present, the man and docs-sync gates and their
+selftests pass, followed by the complete manual gate and its selftest.
 
 ## Unverified observations
 

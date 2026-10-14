@@ -360,6 +360,9 @@ findings `YEW-F-127`–`YEW-F-137`
 - `YEW-F-137` records the man, manual, and documentation-sync targets and
   their negative selftests resolving default-tree binaries instead of the
   selected disjoint `BUILD=` tree.
+- Commits `a5bbd987` and `060cdee3` route selected-build binaries/helpers
+  through all documentation gates and preserve the explicit tool PATH inside
+  the manual's clean environment; a no-default-build Linux witness passes.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.

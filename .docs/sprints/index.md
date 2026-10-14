@@ -14,14 +14,15 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-14): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 136 confirmed findings are fixed. F127–F132 aligned F15's
+are complete; all 137 confirmed findings are fixed. F127–F132 aligned F15's
 foundation, test, batch, and size contracts with shipped owners and the
 truthful 1.0 boundary under S59-A35–A40. F133–F135 repaired disjoint-build
 temporary ownership, FHS canonical-path handling, and inherited Git signing
 in the test harness. F136 isolates generated-tutor Git identity, signing, and
-hook policy without changing user-workspace Git behavior. No feature or
-quality, performance, or size gate was
-removed. F122/F123 aligned F14's
+hook policy without changing user-workspace Git behavior. F137 routes the man, manual,
+and documentation-sync gates through their selected disjoint-build tools and
+preserves Nix toolchain discovery inside clean manual examples. No feature or
+quality, performance, or size gate was removed. F122/F123 aligned F14's
 obsolete package/manual staging rules and runtime-import amendment identity
 under S59-A32/A33. F125 repaired the plugins-only unit boundary without
 removing the module-neutral assertions, and F126 aligned Sprint 54 with the
@@ -86,7 +87,7 @@ builds, bounded deterministic fuzz, documentation/bans/shim gates, and
 performance-policy checks. F15 maps all 64 inherited rows after identical
 3,047-test GCC/Clang unit runs, 2,540 empty-module units, focused sanitizer
 and Valgrind checks, the complete script suite, batch torture, allocation and
-portable release gates, same-host binary identity, and all 136 governance
+portable release gates, same-host binary identity, and all 137 governance
 fixtures. Its designated timing, pinned size/musl, full dynamic-analysis and
 PTY, hosted/cross-target, embedded/hardware, and independent-machine evidence
 remain explicit blockers.

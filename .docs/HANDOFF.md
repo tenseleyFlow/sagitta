@@ -13,11 +13,11 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F15 remediation baseline:** `c99b4528` contains all 136 completed finding
+**F15 remediation baseline:** `060cdee3` contains all 137 completed finding
 remediations. The 64-row packet at
 `.docs/audits/evidence/F15-precloseout-e7a372cf.md` records its original
-`e7a372cf` evidence plus the complete-regression failure that filed F136 and
-the focused successor fix. Its complete successor aggregates are being
+`e7a372cf` evidence plus the complete-regression failures that filed F136 and
+F137 and their focused successor fixes. Its complete successor aggregates are being
 refreshed; it remains candidate evidence rather than independent signoff.
 The product code used by the soak remains the exact hosted-green anchor.
 
@@ -40,7 +40,7 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The global findings ledger now contains 136 stable IDs and all 136 are
+landed. The global findings ledger now contains 137 stable IDs and all 137 are
 fixed. F15's closeout recheck closed nine Medium findings. `YEW-F-127` through
 `YEW-F-132` align the foundation, test, batch, and size contracts with their
 shipped owners and truthful 1.0 boundary under S59-A35 through S59-A40;
@@ -50,6 +50,12 @@ harness. The subsequent full Linux PTY pass filed `YEW-F-136`; `c99b4528`
 gives only the generated tutor repository deterministic local identity,
 no-signing, and no-hook policy while preserving user Git policy everywhere
 else. No product feature or quality, performance, or size gate was removed.
+The same complete Linux aggregate then filed `YEW-F-137` after every full PTY
+and tutor case passed: the documentation targets selected default-tree tools
+instead of their disjoint `BUILD=` outputs. `a5bbd987`/`060cdee3` route all
+three gates and selftests through the selected tools and preserve the Nix
+toolchain PATH inside clean manual examples; the no-default-build focused
+Linux witness is green.
 F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
 align obsolete package/manual staging rules and the runtime-import amendment
 identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
@@ -150,7 +156,7 @@ stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 136 completed fixes reconcile, no hard XFAIL remains,
+executable gates: all 137 completed fixes reconcile, no hard XFAIL remains,
 and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
@@ -205,7 +211,7 @@ performance-policy checks. F15 maps all 64 foundation, test, batch, latency,
 size, and embedded rows after identical 3,047-test GCC/Clang unit runs,
 2,540 empty-module units, focused sanitizer and Valgrind checks, the complete
 script suite, batch torture, allocation gates, portable release selftests,
-same-host binary identity, and all 136 governance fixtures. Designated strict
+same-host binary identity, and all 137 governance fixtures. Designated strict
 performance, pinned size/musl, full sanitizer/Valgrind/PTY, current hosted,
 cross-target, embedded-guest, hardware, and independent-machine evidence
 remain explicit blockers. All fifteen packets remain NOT READY until a

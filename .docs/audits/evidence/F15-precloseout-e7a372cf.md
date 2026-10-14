@@ -28,14 +28,15 @@ musl, embedded, target, and CI contracts inherited from Sprints 0, 1, 37,
 56, and 57. Its original and adjacent finding scope is `YEW-F-024` through
 `YEW-F-075`, plus `YEW-F-080`, `YEW-F-086`, `YEW-F-088`, `YEW-F-096`,
 `YEW-F-097`, and `YEW-F-124`. The Sprint 59 closeout recheck added
-`YEW-F-127` through `YEW-F-135`. The subsequent complete-regression pass added
-`YEW-F-136`, for 68 F15 findings in all.
+`YEW-F-127` through `YEW-F-135`. Subsequent complete-regression passes added
+`YEW-F-136` and `YEW-F-137`, for 69 F15 findings in all.
 
 At the named packet baseline all 135 then-filed entries in the global audit
 registry pass, the remediation ledgers report zero active XFAILs, and the next
-finding id was `YEW-F-136`. Follow-up remediation commit `c99b4528` fixes that
-new finding; the current ledgers contain 136 fixed entries, zero active
-XFAILs, and reserve `YEW-F-137` next. F15 records one Critical, one High, 66
+finding id was `YEW-F-136`. Follow-up remediation commits through `060cdee3`
+fix that finding and the later selected-build documentation defect; the
+current ledgers contain 137 fixed entries, zero active XFAILs, and reserve
+`YEW-F-138` next. F15 records one Critical, one High, 67
 Medium, zero Low, and four unverified observations. No severity was waived or
 deferred.
 
@@ -55,8 +56,9 @@ that campaign.
 
 ## Sprint 59 closeout recheck and remediation
 
-The recheck found and closed nine Medium defects without deleting product
-features or weakening a quality, performance, or size gate:
+The recheck and follow-up complete-regression work found and closed eleven
+Medium defects without deleting product features or weakening a quality,
+performance, or size gate:
 
 - `YEW-F-127` replaces obsolete landing-day hard-error requirements with
   the shipped file/TUI, clean, batch, script, PTY, fuzz, replay, and grant
@@ -85,9 +87,11 @@ features or weakening a quality, performance, or size gate:
 - `YEW-F-136` gives the generated chapter-7 tutor repository deterministic
   local identity, signing, and hook policy without changing Git behavior in
   ordinary user workspaces.
+- `YEW-F-137` makes the man, manual, and documentation-sync gates and their
+  negative selftests consume the selected `BUILD=` binaries and helpers.
 
 Amendments S59-A35 through S59-A40 bind the affected source-sprint and F15
-contract corrections. F133 through F136 are portability fixes discovered by
+contract corrections. F133 through F137 are portability fixes discovered by
 the evidence campaign.
 
 ### Follow-up complete-regression result
@@ -103,11 +107,22 @@ that failure as `YEW-F-136`; it was not waived as infrastructure noise.
 Commit `c99b4528` localizes identity, signing, and hook policy to the generated
 tutor repository. On the same hostile local policy, the focused chapter-7 PTY
 now passes and asserts every local setting plus the clean commit postcondition.
-The complete arm64 macOS `make test-audit` target also passes all 136 fixtures
+The complete arm64 macOS `make test-audit` target also passes all 137 fixtures
 and every priority, sampling, closeout, deferral, and remediation-ledger
 selftest with zero active XFAILs. The complete successor GCC and Clang
 aggregates remain required before this packet can be refreshed onto that
 baseline.
+
+The next exact Linux GCC aggregate passed every registered PTY case, the
+complete 93-case script suite, tutor units, the tutor CLI and rot drill,
+and all twelve tutor PTYs—including chapter 7—before exposing `YEW-F-137` in
+`test-manual`: its Make target requested a nonexistent default-tree binary
+instead of the selected disjoint build. After `060cdee3`, a clean witness with
+no default `build/yew` passed `test-man`, `test-docs-sync`, and `test-manual`
+plus all three negative selftests from `build-f15-gcc`. The Linux host lacks
+mandoc, so its focused man witness intentionally skipped formatter/redirect
+resolution; the local mandoc check is green and complete cross-host formatter
+evidence remains an explicit blocker.
 
 ## Current-baseline executable evidence
 
