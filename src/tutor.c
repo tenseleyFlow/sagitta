@@ -470,6 +470,17 @@ child_fail:
            TUTOR_GIT_READY : TUTOR_GIT_FAILED;
 }
 
+static bool tutor_git_config_set(const char *root, const char *key,
+                                 const char *value)
+{
+    char *argv[] = {
+        (char *)"git", (char *)"--no-pager", (char *)"config",
+        (char *)"--local", (char *)key, (char *)value, NULL
+    };
+
+    return tutor_git_run(root, "config-local", argv) == TUTOR_GIT_READY;
+}
+
 static TutorGitPrep tutor_git_prepare(const char *root)
 {
     static const u8 ignore[] = "tutor.fl\n.tutor-git-ready\n";
@@ -519,8 +530,9 @@ static TutorGitPrep tutor_git_prepare(const char *root)
         return TUTOR_GIT_FAILED;
     if (access(path, F_OK) == 0)
         return TUTOR_GIT_READY;
-    if (yew_git_verb("init") == NULL || yew_git_verb("stage") == NULL ||
-        yew_git_verb("commit") == NULL)
+    if (yew_git_verb("init") == NULL ||
+        yew_git_verb("config-local") == NULL ||
+        yew_git_verb("stage") == NULL || yew_git_verb("commit") == NULL)
         return TUTOR_GIT_UNAVAILABLE;
     if (!path_join(path, root, "practice") || !yew_mkdirs(path, 0700U) ||
         !path_join(path, root, ".gitignore") ||
@@ -533,7 +545,17 @@ static TutorGitPrep tutor_git_prepare(const char *root)
         !write_new_file(path, todo, sizeof(todo) - 1U))
         return TUTOR_GIT_FAILED;
     status = tutor_git_run(root, "init", init);
+    /*
+     * The generated lesson is not the user's repository.  Give it a local,
+     * deterministic commit policy before either seed or interactive commits
+     * run.  Real workspaces continue to inherit the user's Git policy.
+     */
     if (status != TUTOR_GIT_READY ||
+        !tutor_git_config_set(root, "user.name", "Yew Tutor") ||
+        !tutor_git_config_set(root, "user.email", "tutor@yew.invalid") ||
+        !tutor_git_config_set(root, "commit.gpgsign", "false") ||
+        !tutor_git_config_set(root, "tag.gpgsign", "false") ||
+        !tutor_git_config_set(root, "core.hooksPath", ".git/no-hooks") ||
         tutor_git_run(root, "stage", add_all) != TUTOR_GIT_READY ||
         tutor_git_run(root, "commit", commit_base) != TUTOR_GIT_READY)
         return status == TUTOR_GIT_UNAVAILABLE ? status : TUTOR_GIT_FAILED;

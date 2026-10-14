@@ -178,6 +178,7 @@ static const GitVerb git_verbs[] = {
     GIT_READ("remote-list", true, false),
     GIT_NET("remote-check", true, false),
     GIT_MUTATE("init", false, false),
+    GIT_MUTATE("config-local", true, false),
     GIT_MUTATE("stage", true, false),
     GIT_MUTATE("unstage", true, false),
     GIT_MUTATE("stage-all", true, false),

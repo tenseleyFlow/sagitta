@@ -300,6 +300,40 @@ static bool tutor_git_postconditions(PtyCtx *c)
     return ok;
 }
 
+static bool tutor_git_config_is(const char *repo, const char *key,
+                                const char *expected)
+{
+    char *argv[] = {
+        (char *)"git", (char *)"-C", (char *)repo, (char *)"config",
+        (char *)"--local", (char *)"--get", (char *)key, NULL
+    };
+    Bytebuf output;
+    size_t expected_len = strlen(expected);
+    bool ok;
+
+    if (!command_output(argv, &output)) {
+        bytebuf_free(&output);
+        return false;
+    }
+    ok = output.len == expected_len &&
+         memcmp(output.data, expected, expected_len) == 0;
+    bytebuf_free(&output);
+    return ok;
+}
+
+static bool tutor_git_policy_is_local(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+    int n = snprintf(repo, sizeof(repo), "%s/yew/tutor", c->state_dir);
+
+    return n > 0 && (size_t)n < sizeof(repo) &&
+           tutor_git_config_is(repo, "user.name", "Yew Tutor\n") &&
+           tutor_git_config_is(repo, "user.email", "tutor@yew.invalid\n") &&
+           tutor_git_config_is(repo, "commit.gpgsign", "false\n") &&
+           tutor_git_config_is(repo, "tag.gpgsign", "false\n") &&
+           tutor_git_config_is(repo, "core.hooksPath", ".git/no-hooks\n");
+}
+
 static bool progress_complete(const char *path, u32 chapter,
                               const char *key)
 {
@@ -405,9 +439,12 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
     replay_tasks(c, &keys, chapter, progress);
     ptc_check(c, progress_complete(progress, chapter, key),
               "tutor task engine did not persist every verdict");
-    if (chapter == 7U)
+    if (chapter == 7U) {
+        ptc_check(c, tutor_git_policy_is_local(c),
+                  "tutor Git repository retained inherited policy");
         ptc_check(c, tutor_git_postconditions(c),
                   "tutor Git lesson did not commit a clean repository");
+    }
     /* YEW-F-070: a PTY golden is named by its registered case so the
      * static orphan check can prove that deleting the case also makes the
      * golden stale.  Do not pass an independently maintained name through
