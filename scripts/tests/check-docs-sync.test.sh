@@ -3,6 +3,8 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 checker=$root/scripts/check-docs-sync.sh
+yew_bin=${YEW_DOCS_BIN:-$root/build/yew}
+option_dump=${YEW_DOCS_OPTION_DUMP:-$root/build/tests/helpers/option_dump}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-check-docs-sync-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 case_no=0
@@ -29,8 +31,8 @@ run_fixture()
     YEW_DOCS_SOURCE=$root/src \
     YEW_DOCS_RUNTIME=$root/runtime/init.fl \
     YEW_DOCS_MAKEFILE=$root/Makefile \
-    YEW_DOCS_BIN=$root/build/yew \
-    YEW_DOCS_OPTION_DUMP=$root/build/tests/helpers/option_dump \
+    YEW_DOCS_BIN=$yew_bin \
+    YEW_DOCS_OPTION_DUMP=$option_dump \
     YEW_DOCS_BASE=${YEW_DOCS_TEST_BASE:-} \
     YEW_DOCS_CHANGED_FILE=${YEW_DOCS_TEST_CHANGED_FILE:-} \
     YEW_DOCS_NO_USER_VISIBLE_CHANGE=${YEW_DOCS_TEST_NO_VISIBLE:-0} \

@@ -7,6 +7,7 @@ book=${YEW_MANUAL_BOOK:-$root/docs/fletch-book/01-arrows-to-programs.md}
 yew_bin=${YEW_MANUAL_BIN:-$root/build/yew}
 pty_runner=${YEW_MANUAL_PTY_RUNNER:-$root/build/pty_runner}
 demo_bin=${YEW_MANUAL_DEMO_BIN:-$root/build/demo_paint}
+yew_dir=$(dirname -- "$yew_bin")
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-check-manual.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
@@ -123,7 +124,7 @@ run_sh()
     stderr=$3
     (cd "$root" && env -i \
         HOME="$tmp/home" \
-        PATH="$root/build:/usr/bin:/bin:/usr/sbin:/sbin" \
+        PATH="$yew_dir:/usr/bin:/bin:/usr/sbin:/sbin" \
         XDG_CONFIG_HOME="$tmp/config" \
         XDG_DATA_HOME="$tmp/data" \
         XDG_STATE_HOME="$tmp/state" \
@@ -139,7 +140,7 @@ run_batch()
     stderr=$3
     (cd "$tmp/work" && env -i \
         HOME="$tmp/home" \
-        PATH="$root/build:/usr/bin:/bin:/usr/sbin:/sbin" \
+        PATH="$yew_dir:/usr/bin:/bin:/usr/sbin:/sbin" \
         XDG_CONFIG_HOME="$tmp/config" \
         XDG_DATA_HOME="$tmp/data" \
         XDG_STATE_HOME="$tmp/state" \

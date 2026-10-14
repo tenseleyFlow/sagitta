@@ -1991,17 +1991,29 @@ test-tutor: $(BUILD)/unit_tests $(BUILD)/yew $(BUILD)/pty_runner \
 		--demo $(abspath $(BUILD)/demo_paint) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
+# YEW-F-137: documentation gates must use the selected BUILD tree rather
+# than succeeding only when a stale default build happens to exist.
 test-man: $(BUILD)/yew
-	scripts/check-man.sh
-	scripts/tests/check-man.test.sh
+	YEW_MAN_BIN=$(abspath $(BUILD)/yew) scripts/check-man.sh
+	YEW_MAN_BIN=$(abspath $(BUILD)/yew) scripts/tests/check-man.test.sh
 
 test-manual: $(BUILD)/yew $(BUILD)/pty_runner $(BUILD)/demo_paint
-	scripts/check-manual.sh
-	scripts/tests/check-manual.test.sh
+	YEW_MANUAL_BIN=$(abspath $(BUILD)/yew) \
+		YEW_MANUAL_PTY_RUNNER=$(abspath $(BUILD)/pty_runner) \
+		YEW_MANUAL_DEMO_BIN=$(abspath $(BUILD)/demo_paint) \
+		scripts/check-manual.sh
+	YEW_MANUAL_BIN=$(abspath $(BUILD)/yew) \
+		YEW_MANUAL_PTY_RUNNER=$(abspath $(BUILD)/pty_runner) \
+		YEW_MANUAL_DEMO_BIN=$(abspath $(BUILD)/demo_paint) \
+		scripts/tests/check-manual.test.sh
 
 test-docs-sync: $(BUILD)/yew $(DOCS_OPTION_DUMP)
-	scripts/check-docs-sync.sh
-	scripts/tests/check-docs-sync.test.sh
+	YEW_DOCS_BIN=$(abspath $(BUILD)/yew) \
+		YEW_DOCS_OPTION_DUMP=$(abspath $(DOCS_OPTION_DUMP)) \
+		scripts/check-docs-sync.sh
+	YEW_DOCS_BIN=$(abspath $(BUILD)/yew) \
+		YEW_DOCS_OPTION_DUMP=$(abspath $(DOCS_OPTION_DUMP)) \
+		scripts/tests/check-docs-sync.test.sh
 
 test-audit: $(AUDIT_TESTS) $(F01_UNICODE_AUDIT_BIN) \
             $(F01_VT_WIDTH_AUDIT_BIN) $(F09_REC_VM_AUDIT_BIN)

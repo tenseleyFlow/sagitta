@@ -3,6 +3,9 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 checker=$root/scripts/check-manual.sh
+yew_bin=${YEW_MANUAL_BIN:-$root/build/yew}
+pty_runner=${YEW_MANUAL_PTY_RUNNER:-$root/build/pty_runner}
+demo_bin=${YEW_MANUAL_DEMO_BIN:-$root/build/demo_paint}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-check-manual-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 case_no=0
@@ -21,7 +24,9 @@ run_fixture()
     YEW_MANUAL_ROOT=$root \
     YEW_MANUAL_DIR=$fixture/manual \
     YEW_MANUAL_BOOK=$fixture/book.md \
-    YEW_MANUAL_BIN=$root/build/yew \
+    YEW_MANUAL_BIN=$yew_bin \
+    YEW_MANUAL_PTY_RUNNER=$pty_runner \
+    YEW_MANUAL_DEMO_BIN=$demo_bin \
         "$checker"
 }
 

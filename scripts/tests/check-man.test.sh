@@ -3,6 +3,7 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 checker=$root/scripts/check-man.sh
+yew_bin=${YEW_MAN_BIN:-$root/build/yew}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-check-man-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 case_no=0
@@ -22,7 +23,7 @@ new_fixture()
 run_fixture()
 {
     YEW_MAN_ROOT=$fixture \
-    YEW_MAN_BIN=$root/build/yew \
+    YEW_MAN_BIN=$yew_bin \
     YEW_MAN_SKIP_FORMATTERS=${YEW_MAN_SKIP_FORMATTERS:-1} \
     YEW_MAN_SKIP_RESOLVE=1 \
         "$checker"
