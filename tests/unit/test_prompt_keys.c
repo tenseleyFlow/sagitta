@@ -715,7 +715,12 @@ static i64 pk_now_ms(void)
 {
     struct timespec ts;
 
-    YEW_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &ts), 0);
+    /* YEW-F-138: this helper runs once per asynchronous polling turn.
+     * A clock failure is fatal, but successful polls are not distinct
+     * semantic assertions and must not make the suite total scheduler-
+     * dependent. */
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        yew_test_fail(__FILE__, __LINE__, "monotonic clock failed");
     return (i64)ts.tv_sec * 1000 + (i64)(ts.tv_nsec / 1000000L);
 }
 
