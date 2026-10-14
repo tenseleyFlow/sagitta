@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-135`
+findings `YEW-F-127`–`YEW-F-136`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -351,13 +351,16 @@ findings `YEW-F-127`–`YEW-F-135`
   FHS path cannot itself be a symlink.
 - `YEW-F-135` records two temporary governance repositories inheriting the
   developer's global Git commit-signing policy.
+- `YEW-F-136` records the isolated chapter-7 tutor repository leaving its
+  interactive FUSS commit dependent on the developer's global identity,
+  signing, and hook policy.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 67 · deduped 67 · critical 1 · high 1 · medium 65 · low 0 · unverified 4.
+Raw 68 · deduped 68 · critical 1 · high 1 · medium 66 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 

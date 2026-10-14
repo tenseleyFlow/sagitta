@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-136`
+Next available ID: `YEW-F-137`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -148,6 +148,7 @@ recorded in `audit-00.md`.
 | YEW-F-133 | M | fixed | F15 CI | ~~theme unit escapes the selected disjoint build tree~~ — fixed 2026-10-13 in `ec59fa31` | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
 | YEW-F-134 | M | fixed | F15 CI | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed 2026-10-13 in `cfb4befd` | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
 | YEW-F-135 | M | fixed | F15 CI | ~~governance fixtures inherit global Git commit signing~~ — fixed 2026-10-13 in `6c5de8cb` | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
+| YEW-F-136 | M | open | F15 CI | tutor Git lesson inherits global commit policy | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1466,6 +1467,17 @@ baseline-history, and F15-history fixtures already hardened this way.
 Commit `6c5de8cb` disables signing in both fixture-local configurations. Both
 selftests pass with a synthetic global `commit.gpgsign=true` policy and on the
 original `hasu` account that exposed the pinentry timeout.
+
+`YEW-F-136` is Medium because the chapter-7 tutor repository isolates its
+two seed commits from global Git configuration but leaves the interactive
+FUSS commit dependent on the developer's identity, signing, and hook policy.
+The exact full Linux PTY run completed every preceding chapter-7 action, then
+left all three files staged and never recorded `ch07.t7` under the host's
+`commit.gpgsign=true` policy. Product repositories must continue to honor the
+user's Git policy; only the generated tutor repository needs deterministic
+local identity, signing, and hook settings. The hard XFAIL requires those
+settings to be repository-local and the chapter PTY to verify them after its
+clean commit.
 
 ## Unverified observations
 

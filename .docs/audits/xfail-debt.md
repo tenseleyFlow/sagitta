@@ -146,6 +146,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-133 | audit | `tests/audit/yew_f_133.c` | ~~theme unit escapes the selected disjoint build tree~~ — fixed in `ec59fa31` | fixed |
 | YEW-F-134 | audit | `tests/audit/yew_f_134.c` | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed in `cfb4befd` | fixed |
 | YEW-F-135 | audit | `tests/audit/yew_f_135.c` | ~~governance fixtures inherit global Git commit signing~~ — fixed in `6c5de8cb` | fixed |
+| YEW-F-136 | audit | `tests/audit/yew_f_136.c` | tutor Git lesson inherits global commit policy | active |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
