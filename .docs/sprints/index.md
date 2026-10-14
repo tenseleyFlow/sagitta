@@ -24,7 +24,10 @@ and documentation-sync gates through their selected disjoint-build tools and
 preserves Nix toolchain discovery inside clean manual examples. No feature or
 quality, performance, or size gate was removed. F138 makes clipboard-polling
 success uncounted so passing unit summaries no longer depend on scheduler
-timing while clock failure remains fatal. F122/F123 aligned F14's
+timing while clock failure remains fatal. Exact clean successor GCC 15.3 and
+Clang 21.1 aggregates are green with identical 3,047-test / 73,852,064
+assertion summaries, zero failures, and two declared skips. F122/F123 aligned
+F14's
 obsolete package/manual staging rules and runtime-import amendment identity
 under S59-A32/A33. F125 repaired the plugins-only unit boundary without
 removing the module-neutral assertions, and F126 aligned Sprint 54 with the

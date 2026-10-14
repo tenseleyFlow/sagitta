@@ -8,11 +8,10 @@
 - Linux memory checker: Valgrind 3.27.1
 
 Disposition: **NOT READY — the packet baseline's scoped functional and
-governance evidence is green, and later complete Linux GCC/Clang aggregates
-are semantically green, but their assertion-total mismatch exposed
-`YEW-F-138`. The focused successor fix is green while its exact complete
-aggregate, independent review, and the required designated, cross-target,
-hosted, and hardware gates remain.**
+governance evidence is green, `YEW-F-138` is fixed, and exact successor Linux
+GCC/Clang aggregates are completely green with identical assertion totals.
+Independent review and the required sanitizer, memory-checker, designated,
+cross-target, hosted, and hardware gates remain.**
 
 This packet prepares F15 for closeout without signing it. Its author also
 performed F15's contract reconciliation and remediated findings discovered
@@ -138,19 +137,30 @@ then showed the unchanged clipboard selection test alternating between 51 and
 52 assertions because its clock helper counted each asynchronous poll turn.
 `YEW-F-138` records that deterministic-gate defect. Commit `87a495cd` leaves a
 clock failure fatal through an uncounted failure path, and 100 focused runs now
-all report 49 assertions. Exact post-fix complete aggregates remain required.
+all report 49 assertions.
+
+Fresh disjoint GCC 15.3 and Clang 21.1 aggregates at exact clean successor
+`0c8dce52` then completed with exit 0. Both passed all 138 audit fixtures and
+governance checks, every registered PTY, 93 scripts with 951 assertions and
+one declared skip, every tutor gate, the documentation/manual gates, the
+round-trip P1-P5 gate, release and embedding selftests, the package suite,
+repository bans, smoke, and live-save torture. Each compiler reported exactly
+3,047 unit tests, 73,852,064 assertions, zero failures, and two declared
+skips. This closes the complete-aggregate portion of `YEW-F-138`; it does not
+substitute for the separate byte-compared determinism lane.
 
 ## Current-baseline executable evidence
 
 ### Compiler, unit, sanitizer, and memory-checker matrix
 
-Fresh full-module unit builds under GCC 15.3 and Clang 21.1 completed with
-the locked warnings enabled and identical results:
+Fresh full-module aggregates at exact clean successor `0c8dce52` under GCC
+15.3 and Clang 21.1 completed with the locked warnings enabled and identical
+unit results:
 
 | Configuration | Tests | Assertions | Failures | Notes |
 |---|---:|---:|---:|---|
-| GCC, full modules | 3,047 | 73,852,065 | 0 | 2 expected plain-build LeakSanitizer skips |
-| Clang, full modules | 3,047 | 73,852,065 | 0 | same 2 expected skips |
+| GCC, full modules | 3,047 | 73,852,064 | 0 | complete `make test`; 2 expected plain-build LeakSanitizer skips |
+| Clang, full modules | 3,047 | 73,852,064 | 0 | complete `make test`; same 2 expected skips |
 | GCC, `MODULES=''` | 2,540 | 72,821,504 | 0 | 2 expected plain-build skips |
 
 The Nix Clang package lacks `sanitizer/lsan_interface.h`, so the focused
@@ -263,23 +273,23 @@ These are witnesses to inspect, not pre-approved checkbox verdicts.
 
 | Row | Primary witnesses |
 |---|---|
-| s00.1 | warning-clean full GCC/Clang unit builds and one product executable; the complete `make test` matrix remains outstanding |
+| s00.1 | warning-clean complete `make test` aggregates under GCC and Clang at exact clean successor `0c8dce52` |
 | s00.2 | exact full- and empty-module version output, both exit 0 |
-| s00.3 | help/unknown-option CLI witnesses and current registered owner tests; the complete TUI/batch/clean aggregate remains outstanding |
+| s00.3 | help/unknown-option CLI witnesses, current registered owner tests, and the complete TUI/batch/clean aggregates under both compilers |
 | s00.4 | exact selftest exit-4 stderr and matching log witness |
 | s00.5 | current exit-site semantic scan confines the OS exit boundary to `util/log.c`/`main` ownership |
 | s00.6 | passing token-aware bans and seeded negative selftests |
 | s00.7 | exact quiet version output, mode-0700 state root, and log separation witness |
-| s00.8 | 3,047 full-module unit tests / 73,852,065 assertions per compiler, including container/log owners |
+| s00.8 | 3,047 full-module unit tests / 73,852,064 assertions per compiler, including container/log owners |
 | s00.9 | same-tree full -> minimal -> full relink witness |
 | s00.10 | 102-file staged install and scoped clean-probe removal |
-| s00.11 | source assets and clean staged checkout; post-complete-aggregate status remains outstanding |
+| s00.11 | source assets and exact clean staged checkout before and after both complete aggregates |
 
 ### Sprint 1 — test infrastructure
 
 | Row | Primary witnesses |
 |---|---|
-| s01.1 | full unit registry under GCC and Clang plus the complete script suite; complete current `make test` both-compiler runs remain outstanding |
+| s01.1 | complete current `make test` aggregates under GCC and Clang, including the full unit registry and complete script suite |
 | s01.2 | runner format controls and same-host binary identity; complete aggregate double-run stdout remains outstanding |
 | s01.3 | explicit 3,047-test current registry with no bare provisional-test path |
 | s01.4 | unit-runner filter/list/zero-match selftests in the passing registry |
@@ -295,7 +305,7 @@ These are witnesses to inspect, not pre-approved checkbox verdicts.
 
 | Row | Primary witnesses |
 |---|---|
-| s37.1 | GCC/Clang full units, full script suite, focused sanitizer/Valgrind, and selected PTY; complete aggregate lanes remain outstanding |
+| s37.1 | complete GCC/Clang aggregates, full units/scripts/PTYs, and focused sanitizer/Valgrind; complete sanitizer and Valgrind lanes remain outstanding |
 | s37.2 | headless PTY no-terminal case and guarded-TTY semantic control |
 | s37.3 | passing batch startup/selfcheck units and seeded invariant owner |
 | s37.4 | passing batch stdout/stderr/flush script and unit owners |
@@ -359,10 +369,10 @@ reviewer to confirm alongside the 64 sprint rows.
 
 - An independent non-author reviewer has not inspected F15 or assigned its
   64 sprint-row verdicts on the current baseline.
-- The exact post-F138 complete-baseline `make test` matrix under both
-  compilers, the complete ASan/UBSan and Valgrind lanes, the full PTY double
-  run, and aggregate determinism remain outstanding. The exact `c7db3e57`
-  pre-fix GCC/Clang aggregates are otherwise semantically green.
+- The complete ASan/UBSan and Valgrind lanes, the full PTY double run, and
+  byte-compared aggregate determinism remain outstanding. Exact post-F138 GCC
+  and Clang `make test` aggregates at clean successor `0c8dce52` are green
+  with identical 73,852,064-assertion unit summaries.
 - Strict Sprint 56 designated-runner calibration, latency, noise,
   profiler-crosscheck, frame-count, allocation-overhead, and RSS results are
   outstanding; the loaded `hasu` run is advisory only.

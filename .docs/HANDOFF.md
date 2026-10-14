@@ -13,13 +13,14 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F15 remediation baseline:** `87a495cd` contains all 138 completed finding
-remediations. The 64-row packet at
+**F15 evidence baseline:** `0c8dce52` contains all 138 completed finding
+remediations and their exact post-F138 complete compiler evidence. The 64-row
+packet at
 `.docs/audits/evidence/F15-precloseout-e7a372cf.md` records its original
 `e7a372cf` evidence plus the complete-regression failures that filed F136 and
 F137, the complete GCC/Clang aggregates at `c7db3e57` that filed F138, and
-their focused successor fixes. Its post-F138 complete aggregates are being
-refreshed; it remains candidate evidence rather than independent signoff.
+their successor fixes and clean aggregates. It remains candidate evidence
+rather than independent signoff.
 The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
@@ -63,7 +64,13 @@ isolated repeats proved the clipboard fixture counted scheduler-dependent
 pump turns. `YEW-F-138` records that deterministic-gate defect, and `87a495cd`
 keeps clock failure fatal while making successful polls uncounted. One hundred
 focused repeats now produce the same 49-assertion summary. Exact post-fix
-complete aggregates remain in progress.
+disjoint GCC 15.3 and Clang 21.1 `make test` aggregates at clean successor
+`0c8dce52` are now completely green, including all 138 audit fixtures, every
+PTY and tutor gate, 93 scripts / 951 assertions / zero failures / one skip,
+round-trip P1-P5, package, bans, smoke, and live-save torture. Both compilers
+report exactly 3,047 unit tests / 73,852,064 assertions / zero failures / two
+skips. The separate sanitizer, Valgrind, and byte-compared determinism lanes
+remain required.
 F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
 align obsolete package/manual staging rules and the runtime-import amendment
 identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
