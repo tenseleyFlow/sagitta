@@ -149,6 +149,7 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-136 | audit | `tests/audit/yew_f_136.c` | ~~tutor Git lesson inherits global commit policy~~ — fixed in `c99b4528` | fixed |
 | YEW-F-137 | audit | `tests/audit/yew_f_137.c` | ~~documentation targets ignore selected BUILD binaries~~ — fixed in `060cdee3` | fixed |
 | YEW-F-138 | audit | `tests/audit/yew_f_138.c` | ~~clipboard polling makes assertion totals scheduler-dependent~~ — fixed in `87a495cd` | fixed |
+| YEW-F-139 | audit | `tests/audit/yew_f_139.c` | audit fixture path formatting trips GCC sanitizer restrict | active |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.

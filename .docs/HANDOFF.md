@@ -42,8 +42,8 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The global findings ledger now contains 138 stable IDs and all 138 are
-fixed. F15's closeout recheck closed nine Medium findings. `YEW-F-127` through
+landed. The global findings ledger now contains 139 stable IDs: 138 fixed and
+one active. F15's closeout recheck closed nine Medium findings. `YEW-F-127` through
 `YEW-F-132` align the foundation, test, batch, and size contracts with their
 shipped owners and truthful 1.0 boundary under S59-A35 through S59-A40;
 `YEW-F-133` through `YEW-F-135` repair disjoint-build temporary ownership,
@@ -70,7 +70,9 @@ PTY and tutor gate, 93 scripts / 951 assertions / zero failures / one skip,
 round-trip P1-P5, package, bans, smoke, and live-save torture. Both compilers
 report exactly 3,047 unit tests / 73,852,064 assertions / zero failures / two
 skips. The separate sanitizer, Valgrind, and byte-compared determinism lanes
-remain required.
+remain required. The first exact GCC sanitizer attempt then filed active
+`YEW-F-139`: GCC 15 rejects the F007 audit fixture's same-aggregate path
+formatting under the sanitizer `-O1` warning-clean profile.
 F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
 align obsolete package/manual staging rules and the runtime-import amendment
 identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
@@ -171,8 +173,8 @@ stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 138 completed fixes reconcile, no hard XFAIL remains,
-and priority order is proven from Git ancestry. The deterministic
+executable gates: all 138 completed fixes reconcile, active `YEW-F-139` has a
+hard XFAIL, and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -226,10 +228,11 @@ performance-policy checks. F15 maps all 64 foundation, test, batch, latency,
 size, and embedded rows after identical 3,047-test GCC/Clang unit runs,
 2,540 empty-module units, focused sanitizer and Valgrind checks, the complete
 script suite, batch torture, allocation gates, portable release selftests,
-same-host binary identity, and all 138 governance fixtures. Designated strict
-performance, pinned size/musl, full sanitizer/Valgrind/PTY, current hosted,
-cross-target, embedded-guest, hardware, and independent-machine evidence
-remain explicit blockers. All fifteen packets remain NOT READY until a
+same-host binary identity, and all 138 passing governance fixtures plus the
+active F139 hard XFAIL. Designated strict performance, pinned size/musl, full
+sanitizer/Valgrind/PTY, current hosted, cross-target, embedded-guest, hardware,
+and independent-machine evidence remain explicit blockers. All fifteen
+packets remain NOT READY until a
 non-author reviewer and the required hosted matrix sign their current
 baselines.
 

@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-138`
+findings `YEW-F-127`–`YEW-F-139`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -368,13 +368,15 @@ findings `YEW-F-127`–`YEW-F-138`
   depend on scheduler timing.
 - Commit `87a495cd` leaves clock failure fatal but makes successful poll turns
   uncounted; 100 isolated executions now emit one identical assertion total.
+- `YEW-F-139` records GCC 15 rejecting the F007 audit fixture's same-aggregate
+  source and destination under the ASan/UBSan `-O1` warning-clean profile.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 70 · deduped 70 · critical 1 · high 1 · medium 68 · low 0 · unverified 4.
+Raw 71 · deduped 71 · critical 1 · high 1 · medium 69 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 
