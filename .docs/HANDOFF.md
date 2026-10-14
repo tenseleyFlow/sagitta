@@ -138,12 +138,14 @@ complete without a restart. Progress is counted only from durable rows, never
 from elapsed process time.
 
 The first target subsequently completed: all four 18-hour `fuzz_utf8` streams
-are durable and clean, for 4/56 completed rows. A POSIX-shell variable-scope
+are durable and clean. A POSIX-shell variable-scope
 bug in the lane driver then made ledger rebuild overwrite the outer target
 name and reject those valid checkpoints. The external lane driver was repaired
 without changing the product, runner commit, rows, seeds, corpora, or manifest;
-`fuzz_utf8` is checkpointed complete and four `fuzz_grapheme` streams are now
-running. Launchd stdout/stderr are retained as `supervisor.out` and
+`fuzz_utf8` remained checkpointed. All four `fuzz_grapheme` streams have since
+completed cleanly as well, bringing the campaign to 8/56 durable rows and
+2/14 targets. Four `fuzz_textbuf` streams are now running. Launchd
+stdout/stderr are retained as `supervisor.out` and
 `supervisor.err` beside the lane state.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the

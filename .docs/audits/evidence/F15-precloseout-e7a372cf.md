@@ -48,9 +48,10 @@ substituted for the pinned GCC 13.3 size lane or designated performance
 runner.
 
 The separate Sprint 58 tier-1 soak remains frozen against product
-`4c99e134` plus runner-only child `4f483f31`. It has four durable
-`fuzz_utf8` rows (4/56 overall), while all four `fuzz_grapheme` streams are
-active. This work did not change, stop, or restart that campaign.
+`4c99e134` plus runner-only child `4f483f31`. It has eight durable
+`fuzz_utf8`/`fuzz_grapheme` rows (8/56 overall), while all four
+`fuzz_textbuf` streams are active. This work did not change, stop, or restart
+that campaign.
 
 ## Sprint 59 closeout recheck and remediation
 
@@ -342,7 +343,7 @@ reviewer to confirm alongside the 64 sprint rows.
   outstanding; this packet proves only two disjoint builds on one host.
 - Current hosted CI is unavailable until this unpushed baseline reaches a
   hosted branch. The older hosted-green product anchor does not replace it.
-- The Sprint 58 tier-1 soak remains 4/56. Sprint 60's release-candidate soak
+- The Sprint 58 tier-1 soak remains 8/56. Sprint 60's release-candidate soak
   is a separate future exact-release-commit gate.
 - Local groff/mandoc release evidence and any complete cross-target manual
   install/open checks not covered by portable selftests remain outstanding.

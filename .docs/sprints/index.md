@@ -51,8 +51,8 @@ green). Sprint 58 remains formally open until the 14-target soak records all
 56 streams. A host hibernate invalidated the first replacement attempt and
 filed `YEW-F-080`; runner-only commit `4f483f31` fixes the watchdog while
 retaining `4c99e134` byte-for-byte as the product parent. Its launchd-owned
-cycle has 4/56 durable rows complete: `fuzz_utf8` is checkpointed clean and
-the four `fuzz_grapheme` streams are running. Sprint 59's
+cycle has 8/56 durable rows complete: `fuzz_utf8` and `fuzz_grapheme` are
+checkpointed clean and the four `fuzz_textbuf` streams are running. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with no active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
