@@ -148,7 +148,7 @@ recorded in `audit-00.md`.
 | YEW-F-133 | M | fixed | F15 CI | ~~theme unit escapes the selected disjoint build tree~~ — fixed 2026-10-13 in `ec59fa31` | tests/audit/yew_f_133.c | s00 DoD 11; s01 DoD 9; disjoint sanitizer/alignment trees |
 | YEW-F-134 | M | fixed | F15 CI | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed 2026-10-13 in `cfb4befd` | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
 | YEW-F-135 | M | fixed | F15 CI | ~~governance fixtures inherit global Git commit signing~~ — fixed 2026-10-13 in `6c5de8cb` | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
-| YEW-F-136 | M | open | F15 CI | tutor Git lesson inherits global commit policy | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
+| YEW-F-136 | M | fixed | F15 CI | ~~tutor Git lesson inherits global commit policy~~ — fixed 2026-10-14 in `c99b4528` | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1478,6 +1478,11 @@ user's Git policy; only the generated tutor repository needs deterministic
 local identity, signing, and hook settings. The hard XFAIL requires those
 settings to be repository-local and the chapter PTY to verify them after its
 clean commit.
+Commit `c99b4528` gives only the generated tutor repository a local identity,
+disables commit/tag signing and hooks there, and leaves ordinary product
+repositories on the user's Git policy. The focused chapter-7 PTY now reaches
+its final verdict, verifies all five local settings, and confirms a clean
+interactive commit while the host still has `commit.gpgsign=true`.
 
 ## Unverified observations
 

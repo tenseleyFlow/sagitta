@@ -7,9 +7,11 @@
 - Linux compilers: GCC 15.3.0; Clang 21.1.8
 - Linux memory checker: Valgrind 3.27.1
 
-Disposition: **NOT READY — current-baseline functional and governance
-evidence is green, but independent review and the required designated,
-cross-target, hosted, and hardware gates remain.**
+Disposition: **NOT READY — the packet baseline's scoped functional and
+governance evidence is green, but its later complete Linux regression exposed
+`YEW-F-136`; the focused successor fix is green while its complete aggregate,
+independent review, and the required designated, cross-target, hosted, and
+hardware gates remain.**
 
 This packet prepares F15 for closeout without signing it. Its author also
 performed F15's contract reconciliation and remediated findings discovered
@@ -26,13 +28,16 @@ musl, embedded, target, and CI contracts inherited from Sprints 0, 1, 37,
 56, and 57. Its original and adjacent finding scope is `YEW-F-024` through
 `YEW-F-075`, plus `YEW-F-080`, `YEW-F-086`, `YEW-F-088`, `YEW-F-096`,
 `YEW-F-097`, and `YEW-F-124`. The Sprint 59 closeout recheck added
-`YEW-F-127` through `YEW-F-135`, for 67 F15 findings in all.
+`YEW-F-127` through `YEW-F-135`. The subsequent complete-regression pass added
+`YEW-F-136`, for 68 F15 findings in all.
 
-Every one of those findings is fixed. At this baseline all 135 entries in
-the global audit registry pass, the remediation ledgers report zero active
-XFAILs, and the next finding id is `YEW-F-136`. The F15 audit records one
-Critical, one High, 65 Medium, zero Low, and four unverified observations.
-No severity was waived or deferred.
+At the named packet baseline all 135 then-filed entries in the global audit
+registry pass, the remediation ledgers report zero active XFAILs, and the next
+finding id was `YEW-F-136`. Follow-up remediation commit `c99b4528` fixes that
+new finding; the current ledgers contain 136 fixed entries, zero active
+XFAILs, and reserve `YEW-F-137` next. F15 records one Critical, one High, 66
+Medium, zero Low, and four unverified observations. No severity was waived or
+deferred.
 
 The current checkout was copied to a fresh staging tree on `hasu`; local and
 remote `git rev-parse HEAD` both returned the full baseline above. Native
@@ -76,9 +81,32 @@ features or weakening a quality, performance, or size gate:
 - `YEW-F-135` makes temporary governance repositories disable inherited
   commit signing locally, so a developer's global Git policy cannot hang or
   invalidate the selftests.
+- `YEW-F-136` gives the generated chapter-7 tutor repository deterministic
+  local identity, signing, and hook policy without changing Git behavior in
+  ordinary user workspaces.
 
 Amendments S59-A35 through S59-A40 bind the affected source-sprint and F15
-contract corrections. F133 through F135 are test-harness portability fixes.
+contract corrections. F133 through F136 are portability fixes discovered by
+the evidence campaign.
+
+### Follow-up complete-regression result
+
+The complete GCC 15 `make test` attempt on the exact packet baseline passed
+the warning-clean build, all then-current audit/governance gates, the complete
+script suite, and every PTY before chapter 7. `tutor_ch07` then failed to
+record its final task: the generated repository had all three lesson files
+staged but no interactive commit under the host account's inherited
+`commit.gpgsign=true` policy. The preserved sandbox and Git history isolated
+that failure as `YEW-F-136`; it was not waived as infrastructure noise.
+
+Commit `c99b4528` localizes identity, signing, and hook policy to the generated
+tutor repository. On the same hostile local policy, the focused chapter-7 PTY
+now passes and asserts every local setting plus the clean commit postcondition.
+The complete arm64 macOS `make test-audit` target also passes all 136 fixtures
+and every priority, sampling, closeout, deferral, and remediation-ledger
+selftest with zero active XFAILs. The complete successor GCC and Clang
+aggregates remain required before this packet can be refreshed onto that
+baseline.
 
 ## Current-baseline executable evidence
 
@@ -132,8 +160,8 @@ with its pinned diagnostic.
 
 ### Governance, portability, install, and determinism controls
 
-The complete `make test-audit` target passes under GCC 15 with 135 registry
-tests and zero failures. The finding, fixture, priority, sampling, closeout,
+The complete packet-baseline `make test-audit` target passes under GCC 15 with
+135 registry tests and zero failures. The finding, fixture, priority, sampling, closeout,
 deferral, and remediation-ledger checks and all their negative selftests pass
 under the account's original `commit.gpgsign=true` global policy. There are
 zero deferred or wontfix findings and zero active XFAILs.
@@ -299,7 +327,7 @@ reviewer to confirm alongside the 64 sprint rows.
 
 - An independent non-author reviewer has not inspected F15 or assigned its
   64 sprint-row verdicts on the current baseline.
-- The exact complete current-baseline `make test` matrix under both
+- The exact complete successor-baseline `make test` matrix under both
   compilers, the complete ASan/UBSan and Valgrind lanes, the full PTY double
   run, and aggregate determinism remain outstanding.
 - Strict Sprint 56 designated-runner calibration, latency, noise,

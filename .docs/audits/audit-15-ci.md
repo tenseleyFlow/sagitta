@@ -354,6 +354,9 @@ findings `YEW-F-127`–`YEW-F-136`
 - `YEW-F-136` records the isolated chapter-7 tutor repository leaving its
   interactive FUSS commit dependent on the developer's global identity,
   signing, and hook policy.
+- Commit `c99b4528` gives that generated repository deterministic local
+  identity, no-signing, and no-hook policy while ordinary workspaces continue
+  to honor the user's Git configuration; the chapter PTY verifies the seam.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
