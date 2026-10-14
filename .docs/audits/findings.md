@@ -150,7 +150,7 @@ recorded in `audit-00.md`.
 | YEW-F-135 | M | fixed | F15 CI | ~~governance fixtures inherit global Git commit signing~~ — fixed 2026-10-13 in `6c5de8cb` | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
 | YEW-F-136 | M | fixed | F15 CI | ~~tutor Git lesson inherits global commit policy~~ — fixed 2026-10-14 in `c99b4528` | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
 | YEW-F-137 | M | fixed | F15 CI | ~~documentation targets ignore selected BUILD binaries~~ — fixed 2026-10-14 in `060cdee3` | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
-| YEW-F-138 | M | open | F15 CI | clipboard polling makes assertion totals scheduler-dependent | tests/audit/yew_f_138.c | s01 deterministic test output; s59 DoD 1/2/14; F15 complete regression |
+| YEW-F-138 | M | fixed | F15 CI | ~~clipboard polling makes assertion totals scheduler-dependent~~ — fixed 2026-10-14 in `87a495cd` | tests/audit/yew_f_138.c | s01 deterministic test output; s59 DoD 1/2/14; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1512,6 +1512,10 @@ This does not expose a product clipboard failure, but it breaks deterministic
 gate output and makes cross-compiler evidence incomparable. The hard XFAIL
 requires clock failure to remain fatal without counting each polling turn as a
 semantic assertion.
+Commit `87a495cd` keeps monotonic-clock failure fatal through the harness's
+uncounted failure path while removing successful polling turns from the
+assertion total. One hundred isolated executions now report exactly 49
+assertions apiece.
 
 ## Unverified observations
 

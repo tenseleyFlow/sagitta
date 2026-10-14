@@ -366,6 +366,8 @@ findings `YEW-F-127`–`YEW-F-138`
 - `YEW-F-138` records the clipboard unit counting a monotonic-clock check on
   every asynchronous pump turn, making passing aggregate assertion totals
   depend on scheduler timing.
+- Commit `87a495cd` leaves clock failure fatal but makes successful poll turns
+  uncounted; 100 isolated executions now emit one identical assertion total.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.

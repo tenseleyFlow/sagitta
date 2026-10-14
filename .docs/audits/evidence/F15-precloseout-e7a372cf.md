@@ -8,10 +8,11 @@
 - Linux memory checker: Valgrind 3.27.1
 
 Disposition: **NOT READY — the packet baseline's scoped functional and
-governance evidence is green, but its later complete Linux regression exposed
-`YEW-F-136`; the focused successor fix is green while its complete aggregate,
-independent review, and the required designated, cross-target, hosted, and
-hardware gates remain.**
+governance evidence is green, and later complete Linux GCC/Clang aggregates
+are semantically green, but their assertion-total mismatch exposed
+`YEW-F-138`. The focused successor fix is green while its exact complete
+aggregate, independent review, and the required designated, cross-target,
+hosted, and hardware gates remain.**
 
 This packet prepares F15 for closeout without signing it. Its author also
 performed F15's contract reconciliation and remediated findings discovered
@@ -29,14 +30,15 @@ musl, embedded, target, and CI contracts inherited from Sprints 0, 1, 37,
 `YEW-F-075`, plus `YEW-F-080`, `YEW-F-086`, `YEW-F-088`, `YEW-F-096`,
 `YEW-F-097`, and `YEW-F-124`. The Sprint 59 closeout recheck added
 `YEW-F-127` through `YEW-F-135`. Subsequent complete-regression passes added
-`YEW-F-136` and `YEW-F-137`, for 69 F15 findings in all.
+`YEW-F-136` through `YEW-F-138`, for 70 F15 findings in all.
 
 At the named packet baseline all 135 then-filed entries in the global audit
 registry pass, the remediation ledgers report zero active XFAILs, and the next
-finding id was `YEW-F-136`. Follow-up remediation commits through `060cdee3`
-fix that finding and the later selected-build documentation defect; the
-current ledgers contain 137 fixed entries, zero active XFAILs, and reserve
-`YEW-F-138` next. F15 records one Critical, one High, 67
+finding id was `YEW-F-136`. Follow-up remediation commits through `87a495cd`
+fix that finding, the later selected-build documentation defect, and the
+passing unit suite's scheduler-dependent assertion total. The current ledgers
+contain 138 fixed entries, zero active XFAILs, and reserve `YEW-F-139` next.
+F15 records one Critical, one High, 68
 Medium, zero Low, and four unverified observations. No severity was waived or
 deferred.
 
@@ -56,7 +58,7 @@ that campaign.
 
 ## Sprint 59 closeout recheck and remediation
 
-The recheck and follow-up complete-regression work found and closed eleven
+The recheck and follow-up complete-regression work found and closed twelve
 Medium defects without deleting product features or weakening a quality,
 performance, or size gate:
 
@@ -89,10 +91,13 @@ performance, or size gate:
   ordinary user workspaces.
 - `YEW-F-137` makes the man, manual, and documentation-sync gates and their
   negative selftests consume the selected `BUILD=` binaries and helpers.
+- `YEW-F-138` makes successful asynchronous clipboard-poll clock reads
+  uncounted while preserving fatal clock failures, so passing assertion totals
+  do not vary with scheduler timing.
 
 Amendments S59-A35 through S59-A40 bind the affected source-sprint and F15
-contract corrections. F133 through F137 are portability fixes discovered by
-the evidence campaign.
+contract corrections. F133 through F138 are portability and deterministic-test
+fixes discovered by the evidence campaign.
 
 ### Follow-up complete-regression result
 
@@ -107,11 +112,9 @@ that failure as `YEW-F-136`; it was not waived as infrastructure noise.
 Commit `c99b4528` localizes identity, signing, and hook policy to the generated
 tutor repository. On the same hostile local policy, the focused chapter-7 PTY
 now passes and asserts every local setting plus the clean commit postcondition.
-The complete arm64 macOS `make test-audit` target also passes all 137 fixtures
+The complete arm64 macOS `make test-audit` target also passes all 138 fixtures
 and every priority, sampling, closeout, deferral, and remediation-ledger
-selftest with zero active XFAILs. The complete successor GCC and Clang
-aggregates remain required before this packet can be refreshed onto that
-baseline.
+selftest with zero active XFAILs.
 
 The next exact Linux GCC aggregate passed every registered PTY case, the
 complete 93-case script suite, tutor units, the tutor CLI and rot drill,
@@ -123,6 +126,19 @@ plus all three negative selftests from `build-f15-gcc`. The Linux host lacks
 mandoc, so its focused man witness intentionally skipped formatter/redirect
 resolution; the local mandoc check is green and complete cross-host formatter
 evidence remains an explicit blocker.
+
+Exact complete GCC and Clang aggregates at `c7db3e57` subsequently passed
+all 137 then-registered audit fixtures and governance checks, every registered
+PTY, 93 scripts with 951 assertions and one declared skip, every tutor gate,
+the documentation/manual gates, 432 syntax assets, release selftests, the
+complete unit suite, repository bans, smoke, and live torture. The GCC unit
+summary reported 73,852,078 assertions while Clang reported 73,852,072; both
+had 3,047 tests, zero failures, and two declared skips. Repeated isolated runs
+then showed the unchanged clipboard selection test alternating between 51 and
+52 assertions because its clock helper counted each asynchronous poll turn.
+`YEW-F-138` records that deterministic-gate defect. Commit `87a495cd` leaves a
+clock failure fatal through an uncounted failure path, and 100 focused runs now
+all report 49 assertions. Exact post-fix complete aggregates remain required.
 
 ## Current-baseline executable evidence
 
@@ -343,9 +359,10 @@ reviewer to confirm alongside the 64 sprint rows.
 
 - An independent non-author reviewer has not inspected F15 or assigned its
   64 sprint-row verdicts on the current baseline.
-- The exact complete successor-baseline `make test` matrix under both
+- The exact post-F138 complete-baseline `make test` matrix under both
   compilers, the complete ASan/UBSan and Valgrind lanes, the full PTY double
-  run, and aggregate determinism remain outstanding.
+  run, and aggregate determinism remain outstanding. The exact `c7db3e57`
+  pre-fix GCC/Clang aggregates are otherwise semantically green.
 - Strict Sprint 56 designated-runner calibration, latency, noise,
   profiler-crosscheck, frame-count, allocation-overhead, and RSS results are
   outstanding; the loaded `hasu` run is advisory only.
