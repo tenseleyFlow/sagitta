@@ -201,3 +201,4 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-13 | Fix `YEW-F-135` (`6c5de8cb`) | 0 | 0 | 0 | 0 | 0 |
 | 2026-10-14 | File `YEW-F-136` from F15 full Linux PTY evidence | 0 | 0 | 1 | 0 | 1 |
 | 2026-10-14 | Fix `YEW-F-136` (`c99b4528`) | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-14 | File `YEW-F-137` from F15 disjoint documentation evidence | 0 | 0 | 1 | 0 | 1 |

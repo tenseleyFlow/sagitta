@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-136`
+findings `YEW-F-127`–`YEW-F-137`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -357,13 +357,16 @@ findings `YEW-F-127`–`YEW-F-136`
 - Commit `c99b4528` gives that generated repository deterministic local
   identity, no-signing, and no-hook policy while ordinary workspaces continue
   to honor the user's Git configuration; the chapter PTY verifies the seam.
+- `YEW-F-137` records the man, manual, and documentation-sync targets and
+  their negative selftests resolving default-tree binaries instead of the
+  selected disjoint `BUILD=` tree.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 68 · deduped 68 · critical 1 · high 1 · medium 66 · low 0 · unverified 4.
+Raw 69 · deduped 69 · critical 1 · high 1 · medium 67 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 

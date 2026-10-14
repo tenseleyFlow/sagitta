@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-137`
+Next available ID: `YEW-F-138`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -149,6 +149,7 @@ recorded in `audit-00.md`.
 | YEW-F-134 | M | fixed | F15 CI | ~~plugin containment unit assumes `/etc/passwd` is canonical~~ — fixed 2026-10-13 in `cfb4befd` | tests/audit/yew_f_134.c | s55 DoD 1/2; s57 cross-target matrix; F15 compiler evidence |
 | YEW-F-135 | M | fixed | F15 CI | ~~governance fixtures inherit global Git commit signing~~ — fixed 2026-10-13 in `6c5de8cb` | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
 | YEW-F-136 | M | fixed | F15 CI | ~~tutor Git lesson inherits global commit policy~~ — fixed 2026-10-14 in `c99b4528` | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
+| YEW-F-137 | M | open | F15 CI | documentation targets ignore selected BUILD binaries | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1483,6 +1484,16 @@ disables commit/tag signing and hooks there, and leaves ordinary product
 repositories on the user's Git policy. The focused chapter-7 PTY now reaches
 its final verdict, verifies all five local settings, and confirms a clean
 interactive commit while the host still has `commit.gpgsign=true`.
+
+`YEW-F-137` is Medium because the complete disjoint GCC aggregate passes the
+full PTY sweep and tutor suite, then `test-manual` asks
+`scripts/check-manual.sh` for `$root/build/yew` instead of the executable in
+the selected `BUILD=build-f15-gcc` tree. The same omission affects the man and
+documentation-sync targets and their negative selftests. Default builds mask
+the defect by leaving `build/` populated; a clean cross-host disjoint tree
+fails before checking the documentation. The hard XFAIL requires every
+documentation checker and selftest to receive the selected binary/helper
+paths, and manual shell examples to resolve that selected binary directory.
 
 ## Unverified observations
 
