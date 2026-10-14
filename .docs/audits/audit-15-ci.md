@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-137`
+findings `YEW-F-127`–`YEW-F-138`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -363,13 +363,16 @@ findings `YEW-F-127`–`YEW-F-137`
 - Commits `a5bbd987` and `060cdee3` route selected-build binaries/helpers
   through all documentation gates and preserve the explicit tool PATH inside
   the manual's clean environment; a no-default-build Linux witness passes.
+- `YEW-F-138` records the clipboard unit counting a monotonic-clock check on
+  every asynchronous pump turn, making passing aggregate assertion totals
+  depend on scheduler timing.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 69 · deduped 69 · critical 1 · high 1 · medium 67 · low 0 · unverified 4.
+Raw 70 · deduped 70 · critical 1 · high 1 · medium 68 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 

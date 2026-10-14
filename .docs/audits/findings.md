@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-138`
+Next available ID: `YEW-F-139`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -150,6 +150,7 @@ recorded in `audit-00.md`.
 | YEW-F-135 | M | fixed | F15 CI | ~~governance fixtures inherit global Git commit signing~~ — fixed 2026-10-13 in `6c5de8cb` | tests/audit/yew_f_135.c | s59 DoD 1/2/6; F15 cross-host evidence |
 | YEW-F-136 | M | fixed | F15 CI | ~~tutor Git lesson inherits global commit policy~~ — fixed 2026-10-14 in `c99b4528` | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
 | YEW-F-137 | M | fixed | F15 CI | ~~documentation targets ignore selected BUILD binaries~~ — fixed 2026-10-14 in `060cdee3` | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
+| YEW-F-138 | M | open | F15 CI | clipboard polling makes assertion totals scheduler-dependent | tests/audit/yew_f_138.c | s01 deterministic test output; s59 DoD 1/2/14; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1501,6 +1502,16 @@ otherwise-clean environment, so Nix/FHS evidence can find its compiler and
 `make` while `yew` still resolves from the selected build first. On `hasu`,
 with no default `build/yew` present, the man and docs-sync gates and their
 selftests pass, followed by the complete manual gate and its selftest.
+
+`YEW-F-138` is Medium because the complete disjoint GCC and Clang aggregates
+both pass every semantic unit check, yet report different assertion totals.
+The clipboard fixture's monotonic-clock helper increments the assertion count
+once per asynchronous pump turn, so ten isolated executions of the unchanged
+test reported either 51 or 52 assertions solely according to scheduler timing.
+This does not expose a product clipboard failure, but it breaks deterministic
+gate output and makes cross-compiler evidence incomparable. The hard XFAIL
+requires clock failure to remain fatal without counting each polling turn as a
+semantic assertion.
 
 ## Unverified observations
 
