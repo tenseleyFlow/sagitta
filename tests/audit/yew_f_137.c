@@ -1,7 +1,8 @@
 /*
  * YEW-F-137 — documentation targets ignore the selected BUILD tree.
  * Correct behavior: every checker and its negative selftest receives the
- * selected binaries/helpers, and manual shell examples resolve that binary.
+ * selected binaries/helpers and build profile, and manual shell examples
+ * resolve that binary without mutating another profile's objects.
  */
 #include "audit.h"
 
@@ -34,6 +35,10 @@ bool test_yew_f_137(char *why, size_t why_cap)
         file_count("Makefile", "YEW_MANUAL_PTY_RUNNER=") >= 2U &&
         file_count("Makefile", "YEW_MANUAL_DEMO_BIN=") >= 2U &&
         file_count("Makefile",
+                   "YEW_MANUAL_BUILD='$(abspath $(BUILD))'") >= 2U &&
+        file_count("Makefile",
+                   "YEW_MANUAL_MODULES='$(MODULES)'") >= 2U &&
+        file_count("Makefile",
                    "YEW_DOCS_BIN=$(abspath $(BUILD)/yew)") >= 2U &&
         file_count("Makefile", "YEW_DOCS_OPTION_DUMP=") >= 2U;
     bool selftests =
@@ -52,7 +57,13 @@ bool test_yew_f_137(char *why, size_t why_cap)
     bool manual_path =
         file_count("scripts/check-manual.sh",
                    "yew_dir=$(dirname -- \"$yew_bin\")") == 1U &&
-        file_count("scripts/check-manual.sh", "PATH=\"$yew_dir:") == 2U;
+        file_count("scripts/check-manual.sh", "PATH=\"$yew_dir:") == 2U &&
+        file_count("scripts/check-manual.sh",
+                   "BUILD=\"$manual_build\"") == 1U &&
+        file_count("scripts/check-manual.sh",
+                   "MODULES=\"$manual_modules\"") == 1U &&
+        file_count("docs/manual/01-install.md",
+                   "${BUILD:-build}/yew") == 1U;
 
     if (make_targets && selftests && manual_path)
         return true;

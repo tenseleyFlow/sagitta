@@ -6,7 +6,7 @@ compiler and places the editor at `build/yew`:
 
 ```sh
 make >/dev/null
-test -x build/yew
+test -x "${BUILD:-build}/yew"
 ```
 ```output
 ```

@@ -2012,10 +2012,14 @@ test-manual: $(BUILD)/yew $(BUILD)/pty_runner $(BUILD)/demo_paint
 	YEW_MANUAL_BIN=$(abspath $(BUILD)/yew) \
 		YEW_MANUAL_PTY_RUNNER=$(abspath $(BUILD)/pty_runner) \
 		YEW_MANUAL_DEMO_BIN=$(abspath $(BUILD)/demo_paint) \
+		YEW_MANUAL_BUILD='$(abspath $(BUILD))' \
+		YEW_MANUAL_MODULES='$(MODULES)' \
 		scripts/check-manual.sh
 	YEW_MANUAL_BIN=$(abspath $(BUILD)/yew) \
 		YEW_MANUAL_PTY_RUNNER=$(abspath $(BUILD)/pty_runner) \
 		YEW_MANUAL_DEMO_BIN=$(abspath $(BUILD)/demo_paint) \
+		YEW_MANUAL_BUILD='$(abspath $(BUILD))' \
+		YEW_MANUAL_MODULES='$(MODULES)' \
 		scripts/tests/check-manual.test.sh
 
 test-docs-sync: $(BUILD)/yew $(DOCS_OPTION_DUMP)

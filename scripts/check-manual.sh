@@ -8,6 +8,8 @@ yew_bin=${YEW_MANUAL_BIN:-$root/build/yew}
 pty_runner=${YEW_MANUAL_PTY_RUNNER:-$root/build/pty_runner}
 demo_bin=${YEW_MANUAL_DEMO_BIN:-$root/build/demo_paint}
 yew_dir=$(dirname -- "$yew_bin")
+manual_build=${YEW_MANUAL_BUILD:-$yew_dir}
+manual_modules=${YEW_MANUAL_MODULES-lsp ai fuss plugins}
 tool_path=${YEW_MANUAL_PATH:-${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-check-manual.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
@@ -131,6 +133,8 @@ run_sh()
         XDG_STATE_HOME="$tmp/state" \
         XDG_CACHE_HOME="$tmp/cache" \
         YEW_RUNTIME_DIR="$root/runtime" \
+        BUILD="$manual_build" \
+        MODULES="$manual_modules" \
         sh -eu "$input") >"$stdout" 2>"$stderr"
 }
 
