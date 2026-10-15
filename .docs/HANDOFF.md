@@ -13,7 +13,7 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F15 remediation baseline:** `025df633` contains all 143 completed finding
+**F15 remediation baseline:** `025df633` contains 143 completed finding
 remediations. Exact post-F138 complete compiler evidence was recorded at
 `0c8dce52`. The 64-row
 packet at
@@ -43,7 +43,8 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The global findings ledger now contains 143 stable IDs, all fixed.
+landed. The global findings ledger now contains 144 stable IDs: 143 fixed and
+`YEW-F-144` active.
 F15's closeout recheck closed
 nine Medium findings. `YEW-F-127` through
 `YEW-F-132` align the foundation, test, batch, and size contracts with their
@@ -92,6 +93,10 @@ diagnostics and a 693 MiB sampled RSS high-water mark. The soak is stopped at
 8/56 durable rows; its empty text-buffer rows are invalid and must not be
 counted. Resume only after the runner overlay is refreshed and one guarded
 worker passes there.
+The preserved GCC sanitizer aggregate separately failed when the package
+harness placed its fault shim before GCC's shared ASan runtime. F144 tracks
+that test-harness preload-order defect; the product recovery invariant has
+not failed, but the affected sanitizer package rows remain unverified.
 F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
 align obsolete package/manual staging rules and the runtime-import amendment
 identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
@@ -193,8 +198,8 @@ reports are retained for the finding record.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 143 completed fixes reconcile with zero active hard
-XFAILs; priority order is proven from Git ancestry. The deterministic
+executable gates: all 143 completed fixes reconcile with one active hard
+XFAIL, F144; priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -248,7 +253,7 @@ performance-policy checks. F15 maps all 64 foundation, test, batch, latency,
 size, and embedded rows after identical 3,047-test GCC/Clang unit runs,
 2,540 empty-module units, focused sanitizer and Valgrind checks, the complete
 script suite, batch torture, allocation gates, portable release selftests,
-same-host binary identity, and all 143 governance fixtures. Designated strict
+same-host binary identity, and all 144 governance fixtures. Designated strict
 performance, pinned size/musl, full
 sanitizer/Valgrind/PTY, current hosted, cross-target, embedded-guest, hardware,
 and independent-machine evidence remain explicit blockers. All fifteen

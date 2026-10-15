@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-143`
+findings `YEW-F-127`–`YEW-F-144`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -388,13 +388,16 @@ findings `YEW-F-127`–`YEW-F-143`
   plain and sanitizer probes remain bounded with no clock storm. The fresh
   arm64 macOS sanitizer worker completed 200,000 operations across 92 epochs,
   emitted no diagnostics, and peaked at 693 MiB sampled RSS.
+- `YEW-F-144` records the GCC sanitizer package harness placing its injected
+  fault shim before the shared ASan runtime, causing the runtime to abort
+  before the intended kill-boundary recovery checks execute.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 75 · deduped 75 · critical 1 · high 2 · medium 72 · low 0 · unverified 4.
+Raw 76 · deduped 76 · critical 1 · high 2 · medium 73 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 

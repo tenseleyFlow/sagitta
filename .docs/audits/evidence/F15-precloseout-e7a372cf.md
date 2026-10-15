@@ -12,7 +12,9 @@ governance evidence is green, `YEW-F-138` is fixed, and exact successor Linux
 GCC/Clang aggregates are completely green with identical assertion totals.
 The successor sanitizer build filed and focused remediation closed
 `YEW-F-139`. Its complete rerun and the concurrent soak filed and remediation
-closed `YEW-F-140` through `YEW-F-143`; independent review and the required
+closed `YEW-F-140` through `YEW-F-143`. The resumed aggregate then filed
+`YEW-F-144` for the package fault-shim/ASan preload order; its remediation,
+independent review, and the required
 memory-checker, designated, cross-target, hosted, and hardware gates remain.**
 
 This packet prepares F15 for closeout without signing it. Its author also
@@ -31,7 +33,7 @@ musl, embedded, target, and CI contracts inherited from Sprints 0, 1, 37,
 `YEW-F-075`, plus `YEW-F-080`, `YEW-F-086`, `YEW-F-088`, `YEW-F-096`,
 `YEW-F-097`, and `YEW-F-124`. The Sprint 59 closeout recheck added
 `YEW-F-127` through `YEW-F-135`. Subsequent complete-regression passes added
-`YEW-F-136` through `YEW-F-143`, for 75 F15 findings in all.
+`YEW-F-136` through `YEW-F-144`, for 76 F15 findings in all.
 
 At the named packet baseline all 135 then-filed entries in the global audit
 registry pass, the remediation ledgers report zero active XFAILs, and the next
@@ -44,10 +46,11 @@ The concurrent tier-1 soak exhausted the macOS host after four unbounded
 `fuzz_textbuf` traces and a fake-clock warning storm, recorded as
 `YEW-F-142`/`YEW-F-143`; commit `9c4657e3` closes both with bounded replayable
 epochs and deterministic root clocks. Commit `025df633` closes F140/F141 with
-a guarded nil-result write and a tested fail-fast UBSan policy. The current
-ledgers contain 143 fixed entries, zero active XFAILs, and reserve `YEW-F-144`
-next. F15 records one Critical,
-two High, 72 Medium, zero Low, and four unverified observations. No severity
+a guarded nil-result write and a tested fail-fast UBSan policy. The resumed
+aggregate then exposed the package preload-order defect recorded as F144. The
+current ledgers contain 143 fixed entries and one active XFAIL, and reserve
+`YEW-F-145` next. F15 records one Critical,
+two High, 73 Medium, zero Low, and four unverified observations. No severity
 was waived or deferred.
 
 The current checkout was copied to a fresh staging tree on `hasu`; local and
@@ -108,6 +111,8 @@ performance, or size gate:
   UBSan profile with a guarded write and a tested fail-fast sanitizer policy.
   `YEW-F-142`/`YEW-F-143` close the unbounded retained
   text-buffer trace and deterministic-clock warning storm exposed by the soak.
+- `YEW-F-144` remains active for the GCC sanitizer package harness placing its
+  injected fault shim before the shared ASan runtime.
 
 Amendments S59-A35 through S59-A40 bind the affected source-sprint and F15
 contract corrections. F133 through F138 are portability and deterministic-test
@@ -376,7 +381,8 @@ These are witnesses to inspect, not pre-approved checkbox verdicts.
 ### XFAIL ceiling
 
 The closeout's recorded ceiling is eight. The current audit registry and
-remediation ledgers contain zero active XFAIL ids; Fletch debt remains empty.
+remediation ledgers contain one active XFAIL id, `YEW-F-144`; Fletch debt
+remains empty.
 The existing checked XFAIL row is
 supported, but remains for the independent reviewer to confirm alongside the
 64 sprint rows.

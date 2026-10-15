@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-144`
+Next available ID: `YEW-F-145`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -156,6 +156,7 @@ recorded in `audit-00.md`.
 | YEW-F-141 | M | fixed | F15 CI | ~~sanitizer profile continues after UBSan diagnostics~~ — fixed 2026-10-14 in `025df633` | tests/audit/yew_f_141.c | s01 sanitizer gate; s59 DoD 1/2/14; F15 complete regression |
 | YEW-F-142 | H | fixed | F15 CI | ~~timed text-buffer fuzzing retains an unbounded trace~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_142.c | s58 section 7 64 MiB high-water; invariant 4; F15 soak evidence |
 | YEW-F-143 | M | fixed | F15 CI | ~~text-buffer fuzz clock emits an unbounded warning stream~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_143.c | s02 deterministic harness; s58 section 7; F15 soak evidence |
+| YEW-F-144 | M | open | F15 CI | GCC sanitizer package harness preloads its fault shim before libasan | tests/audit/yew_f_144.c | s01 sanitizer gate; invariant 2; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1586,6 +1587,15 @@ to the injected deterministic wall and monotonic clocks before fuzz edits.
 Commit `9c4657e3` rebases the still-pristine root to both injected clocks.
 The same 120-second probe emitted zero backward-clock warnings; its 81
 bounded log lines were the undo tree's once-per-epoch budget notice.
+
+`YEW-F-144` is Medium because the exact GCC ASan/UBSan aggregate reaches the
+package kill-boundary cases but the harness sets `LD_PRELOAD` to only its
+fault shim. GCC links a shared ASan runtime, so the loader places the shim
+first and ASan aborts every injected child before the intended recovery
+boundary. The product has not failed its recovery invariant; the harness has
+made that invariant untestable in the sanitizer lane. The hard XFAIL requires
+the already-discovered GCC runtime to precede the shim in the package
+harness, while retaining Clang's static-runtime path unchanged.
 
 ## Unverified observations
 

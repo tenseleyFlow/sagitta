@@ -14,8 +14,9 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-14): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak is paused for a controlled runner refresh.** All 15 audit
-fronts and ten invariant sessions are complete; all 143 confirmed findings
-are fixed. F140/F141 close the full sanitizer rerun's nil-result UBSan
+fronts and ten invariant sessions are complete; 143 of 144 confirmed findings
+are fixed. F144 remains active after the resumed GCC sanitizer aggregate found
+the package fault shim loading before libasan. F140/F141 close the full sanitizer rerun's nil-result UBSan
 violation and non-fatal UBSan profile. F142/F143 close the
 tier-1 soak's unbounded `fuzz_textbuf` traces and deterministic-clock warning
 storm with bounded replayable epochs and deterministic root clocks.
@@ -69,7 +70,7 @@ checkpointed clean. The four `fuzz_textbuf` streams exhausted host memory and
 their empty rows are invalid; the launchd cycle is stopped pending F142/F143
 remediation. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
-gates reconcile every completed finding with zero active hard XFAILs. All 15
+gates reconcile every completed finding with one active hard XFAIL. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
 pre-closeout packets exist for F01 through F15 without claiming reviewer
@@ -101,7 +102,7 @@ builds, bounded deterministic fuzz, documentation/bans/shim gates, and
 performance-policy checks. F15 maps all 64 inherited rows after identical
 3,047-test GCC/Clang unit runs, 2,540 empty-module units, focused sanitizer
 and Valgrind checks, the complete script suite, batch torture, allocation and
-portable release gates, same-host binary identity, and all 143 governance
+portable release gates, same-host binary identity, and all 144 governance
 fixtures. Its designated timing, pinned
 size/musl, full dynamic-analysis and PTY, hosted/cross-target,
 embedded/hardware, and independent-machine evidence remain explicit blockers.
