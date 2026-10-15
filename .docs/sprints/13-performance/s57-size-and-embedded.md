@@ -97,12 +97,12 @@ package manager and a user's disk both see.
 
 | Config | `MODULES=` | Budget | Source |
 |---|---|---|---|
-| full | `lsp ai fuss plugins` | **≤ 2,310,144 bytes** | amended S59-A41 |
-| minimal | *(empty)* | **≤ 1,818,624 bytes** | amended S59-A41 |
-| lsp-only | `lsp` | ≤ 1,933,312 bytes | amended S59-A41 |
-| ai-only | `ai` | ≤ 1,933,312 bytes | amended S59-A41 |
-| fuss-only | `fuss` | ≤ 1,966,080 bytes | amended S59-A41 |
-| plugins-only | `plugins` | ≤ 1,900,544 bytes | amended S59-A41 |
+| full | `lsp ai fuss plugins` | **≤ 2,277,376 bytes** | amended S57.33-A1 |
+| minimal | *(empty)* | **≤ 1,785,856 bytes** | amended S57.33-A1 |
+| lsp-only | `lsp` | ≤ 1,900,544 bytes | amended S57.27-A1 |
+| ai-only | `ai` | ≤ 1,916,928 bytes | amended S57.27-A1 |
+| fuss-only | `fuss` | ≤ 1,933,312 bytes | amended S57.27-A1 |
+| plugins-only | `plugins` | ≤ 1,884,160 bytes | amended S57.33-A1 |
 | musl static-PIE, full | `lsp ai fuss plugins` | ≤ 2,424,832 bytes | amended S57.31-A2 |
 | musl static-PIE, minimal | *(empty)* | ≤ 1,900,544 bytes | amended S57.31-A2 |
 
