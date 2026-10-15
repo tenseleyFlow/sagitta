@@ -276,6 +276,8 @@ void test_clipboard_detection_matrix(void)
         clip_env_save(&saved[i], names[i]);
     clip_fixture_init(&f);
     clip_clear_environment();
+    /* This matrix covers subprocess discovery, not terminal transport. */
+    YEW_ASSERT_EQ_I64(setenv("YEW_OSC52", "off", 1), 0);
     YEW_ASSERT_EQ_I64(setenv("PATH", f.dir, 1), 0);
     yew_clip_reset();
     YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_NONE);
