@@ -2,7 +2,7 @@
 
 Active baseline: `b3f32645e0456dca1a90f73e4e4f2c2fc64003b3`
 F01–F08 filing baseline: `41fef4166fe6bf127f36b8b9f6eb653a454a28c1`
-Next available ID: `YEW-F-140`
+Next available ID: `YEW-F-144`
 
 IDs are assigned only after a reproducer fails at the fixed baseline. They
 are never reused, renumbered, or deleted. Resolution changes status and keeps
@@ -152,6 +152,10 @@ recorded in `audit-00.md`.
 | YEW-F-137 | M | fixed | F15 CI | ~~documentation targets ignore selected BUILD binaries~~ — fixed 2026-10-14 in `060cdee3` | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
 | YEW-F-138 | M | fixed | F15 CI | ~~clipboard polling makes assertion totals scheduler-dependent~~ — fixed 2026-10-14 in `87a495cd` | tests/audit/yew_f_138.c | s01 deterministic test output; s59 DoD 1/2/14; F15 complete regression |
 | YEW-F-139 | M | fixed | F15 CI | ~~audit fixture path formatting trips GCC sanitizer restrict~~ — fixed 2026-10-14 in `9f6ba89a` | tests/audit/yew_f_139.c | s01 warning-clean sanitizer lane; s59 DoD 1/2/14; F15 complete regression |
+| YEW-F-140 | M | open | F15 CI | nil Fletch evaluation passes NULL to `fwrite` | tests/audit/yew_f_140.c | C/POSIX library contract; s01 sanitizer lane; s59 DoD 1/2/14 |
+| YEW-F-141 | M | open | F15 CI | sanitizer profile continues after UBSan diagnostics | tests/audit/yew_f_141.c | s01 sanitizer gate; s59 DoD 1/2/14; F15 complete regression |
+| YEW-F-142 | H | open | F15 CI | timed text-buffer fuzzing retains an unbounded trace | tests/audit/yew_f_142.c | s58 section 7 64 MiB high-water; invariant 4; F15 soak evidence |
+| YEW-F-143 | M | open | F15 CI | text-buffer fuzz clock emits an unbounded warning stream | tests/audit/yew_f_143.c | s02 deterministic harness; s58 section 7; F15 soak evidence |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1530,6 +1534,42 @@ Commit `9f6ba89a` creates the temporary directory in standalone storage,
 copies the resulting name into fixture state, and formats child paths from
 that disjoint source. The exact previously failing GCC 15 ASan/UBSan compile
 command is warning-clean.
+
+`YEW-F-140` is Medium because the exact GCC ASan/UBSan aggregate reports
+`src/flcli.c:399` passing the empty `Bytebuf`'s NULL storage to `fwrite` when
+`yew fl -e` evaluates nil. The requested byte count is zero, so no user data
+is read or written, but the C library's nonnull contract is still violated
+and UBSan reports it repeatedly through existing nil-output smoke coverage.
+The hard XFAIL requires `mode_eval` to skip the write when the rendered result
+has zero bytes.
+
+`YEW-F-141` is Medium because the same `SAN=1` aggregate continued through
+hundreds of later checks after the first UBSan runtime diagnostic. The lane
+eventually failed for a separate package-test error, but no sanitizer policy
+made the undefined-behavior report itself fatal; an otherwise-clean run could
+therefore conceal a real diagnostic behind exit zero. The hard XFAIL requires
+the sanitizer profile to export `UBSAN_OPTIONS=halt_on_error=1` rather than
+grepping logs as a substitute for fail-fast execution.
+
+`YEW-F-142` is High because the four authoritative `fuzz_textbuf` soak
+streams retained every generated `TraceOp` and copied insertion payload for
+their entire 18-hour runs. Five macOS Jetsam reports on 2026-10-14 name
+`fuzz_textbuf` as the largest process; at 16 KiB per resident page the four
+workers occupied roughly 31--39 GiB apiece, exhausted compressor space, and
+preceded the host reboot at 20:28. A bounded one-worker probe reproduced
+steady growth to 1.1 GiB in 30 seconds. This invalidates the affected soak
+rows and violates Sprint 58's 64 MiB campaign high-water promise. The hard
+XFAIL requires reproducible trace epochs to roll over at a fixed storage cap
+while retaining the active epoch for failure replay and minimization.
+
+`YEW-F-143` is Medium because `fuzz_textbuf` creates the undo root under the
+real clock and only then installs its deterministic clock, whose 2023 epoch
+is earlier. Every later node therefore logs a clamped backward step: the
+30-second probe wrote 9,115 duplicate warnings and the macOS resource reports
+record multi-gigabyte file-backed writes over the soak. This amplifies the
+resource failure and obscures useful diagnostics without exercising intended
+clock behavior. The hard XFAIL requires the pristine undo root to be rebased
+to the injected deterministic wall and monotonic clocks before fuzz edits.
 
 ## Unverified observations
 

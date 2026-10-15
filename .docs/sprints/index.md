@@ -13,8 +13,12 @@ pressure valve working as designed. Renumbering is forbidden once files exist,
 so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-14): Sprint 59 is active while Sprint 58's
-replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; all 139 confirmed findings are fixed. F127–F132 aligned F15's
+replacement tier-1 soak is paused for resource remediation.** All 15 audit
+fronts and ten invariant sessions are complete; 139 of 143 confirmed findings
+are fixed. F140–F143 remain active after the full sanitizer rerun and tier-1
+soak exposed a nil-result UBSan violation, a non-fatal UBSan profile,
+unbounded `fuzz_textbuf` traces, and a deterministic-clock warning storm.
+F127–F132 aligned F15's
 foundation, test, batch, and size contracts with shipped owners and the
 truthful 1.0 boundary under S59-A35–A40. F133–F135 repaired disjoint-build
 temporary ownership, FHS canonical-path handling, and inherited Git signing
@@ -60,9 +64,11 @@ green). Sprint 58 remains formally open until the 14-target soak records all
 filed `YEW-F-080`; runner-only commit `4f483f31` fixes the watchdog while
 retaining `4c99e134` byte-for-byte as the product parent. Its launchd-owned
 cycle has 8/56 durable rows complete: `fuzz_utf8` and `fuzz_grapheme` are
-checkpointed clean and the four `fuzz_textbuf` streams are running. Sprint 59's
+checkpointed clean. The four `fuzz_textbuf` streams exhausted host memory and
+their empty rows are invalid; the launchd cycle is stopped pending F142/F143
+remediation. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
-gates reconcile every completed finding with no active hard XFAIL. All 15
+gates reconcile every completed finding with four active hard XFAILs. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
 pre-closeout packets exist for F01 through F15 without claiming reviewer
@@ -94,7 +100,7 @@ builds, bounded deterministic fuzz, documentation/bans/shim gates, and
 performance-policy checks. F15 maps all 64 inherited rows after identical
 3,047-test GCC/Clang unit runs, 2,540 empty-module units, focused sanitizer
 and Valgrind checks, the complete script suite, batch torture, allocation and
-portable release gates, same-host binary identity, and all 139 governance
+portable release gates, same-host binary identity, and all 143 governance
 fixtures. Its designated timing, pinned
 size/musl, full dynamic-analysis and PTY, hosted/cross-target,
 embedded/hardware, and independent-machine evidence remain explicit blockers.

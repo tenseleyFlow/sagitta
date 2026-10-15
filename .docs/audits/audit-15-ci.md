@@ -331,7 +331,7 @@ is still deferred.
 
 ## Sprint 59 closeout-contract recheck
 
-findings `YEW-F-127`–`YEW-F-139`
+findings `YEW-F-127`–`YEW-F-143`
 
 - `YEW-F-127` records delivered file/TUI, clean, batch, script, PTY, fuzz,
   replay, and grant surfaces still represented as landing-day hard errors.
@@ -372,13 +372,21 @@ findings `YEW-F-127`–`YEW-F-139`
   source and destination under the ASan/UBSan `-O1` warning-clean profile.
 - Commit `9f6ba89a` formats child paths from standalone directory storage;
   the exact previously failing sanitizer compile command is warning-clean.
+- `YEW-F-140` records nil Fletch evaluation passing empty `Bytebuf` storage
+  to `fwrite`, which UBSan diagnoses despite the zero byte count.
+- `YEW-F-141` records the sanitizer profile continuing after those UBSan
+  diagnostics instead of making the first runtime violation fail the target.
+- `YEW-F-142` records four unbounded 18-hour `fuzz_textbuf` traces reaching
+  roughly 31--39 GiB resident each and exhausting the 48 GiB soak host.
+- `YEW-F-143` records the fuzz harness stamping its undo root before installing
+  the fake clock, producing an unbounded duplicate-warning stream.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
 
 ## Count
 
-Raw 71 · deduped 71 · critical 1 · high 1 · medium 69 · low 0 · unverified 4.
+Raw 75 · deduped 75 · critical 1 · high 2 · medium 72 · low 0 · unverified 4.
 
 ## Appendix A — exact Sprint-reference grep
 

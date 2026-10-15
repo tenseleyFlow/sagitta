@@ -43,8 +43,9 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The global findings ledger now contains 139 stable IDs and all 139 are
-fixed. F15's closeout recheck closed nine Medium findings. `YEW-F-127` through
+landed. The global findings ledger now contains 143 stable IDs: 139 are fixed
+and `YEW-F-140` through `YEW-F-143` are active. F15's closeout recheck closed
+nine Medium findings. `YEW-F-127` through
 `YEW-F-132` align the foundation, test, batch, and size contracts with their
 shipped owners and truthful 1.0 boundary under S59-A35 through S59-A40;
 `YEW-F-133` through `YEW-F-135` repair disjoint-build temporary ownership,
@@ -75,7 +76,16 @@ remain required. The first exact GCC sanitizer attempt then filed
 `YEW-F-139`: GCC 15 rejects the F007 audit fixture's same-aggregate path
 formatting under the sanitizer `-O1` warning-clean profile. Commit `9f6ba89a`
 uses standalone directory storage, and the exact failed compile command is
-now green; the complete sanitizer aggregate is being rerun.
+now green. The complete sanitizer aggregate then exposed `YEW-F-140`, a nil
+Fletch result passed as NULL to zero-length `fwrite`, and `YEW-F-141`, a UBSan
+profile that continued after the diagnostic. The concurrent tier-1 soak
+exposed `YEW-F-142`: all four `fuzz_textbuf` workers retained their complete
+18-hour traces and reached roughly 31--39 GiB resident each, exhausting the
+48 GiB host before its 20:28 reboot. `YEW-F-143` records the same harness
+installing its fake clock after the real-time undo root and writing thousands
+of duplicate clamp warnings. The soak is stopped at 8/56 durable rows; its
+empty text-buffer rows are invalid and must not be counted or resumed before
+bounded remediation is verified with one worker.
 F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
 align obsolete package/manual staging rules and the runtime-import amendment
 identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
@@ -170,14 +180,15 @@ name and reject those valid checkpoints. The external lane driver was repaired
 without changing the product, runner commit, rows, seeds, corpora, or manifest;
 `fuzz_utf8` remained checkpointed. All four `fuzz_grapheme` streams have since
 completed cleanly as well, bringing the campaign to 8/56 durable rows and
-2/14 targets. Four `fuzz_textbuf` streams are now running. Launchd
-stdout/stderr are retained as `supervisor.out` and
-`supervisor.err` beside the lane state.
+2/14 targets. The four `fuzz_textbuf` streams exhausted host memory and were
+terminated during the 2026-10-14 reboot. Their empty row files are not
+evidence. Launchd is currently unloaded; stdout/stderr and the macOS Jetsam
+reports are retained for the finding record.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 139 completed fixes reconcile, no hard XFAIL remains,
-and priority order is proven from Git ancestry. The deterministic
+executable gates: all 139 completed fixes reconcile and four hard XFAILs now
+track F140--F143; priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -231,7 +242,7 @@ performance-policy checks. F15 maps all 64 foundation, test, batch, latency,
 size, and embedded rows after identical 3,047-test GCC/Clang unit runs,
 2,540 empty-module units, focused sanitizer and Valgrind checks, the complete
 script suite, batch torture, allocation gates, portable release selftests,
-same-host binary identity, and all 139 governance fixtures. Designated strict
+same-host binary identity, and all 143 governance fixtures. Designated strict
 performance, pinned size/musl, full
 sanitizer/Valgrind/PTY, current hosted, cross-target, embedded-guest, hardware,
 and independent-machine evidence remain explicit blockers. All fifteen

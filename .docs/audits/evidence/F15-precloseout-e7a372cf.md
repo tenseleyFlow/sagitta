@@ -11,7 +11,8 @@ Disposition: **NOT READY — the packet baseline's scoped functional and
 governance evidence is green, `YEW-F-138` is fixed, and exact successor Linux
 GCC/Clang aggregates are completely green with identical assertion totals.
 The successor sanitizer build filed and focused remediation closed
-`YEW-F-139`; its complete rerun, independent review, and the required
+`YEW-F-139`. Its complete rerun and the concurrent soak have now filed
+`YEW-F-140` through `YEW-F-143`; their remediation, independent review, and the required
 memory-checker, designated, cross-target, hosted, and hardware gates remain.**
 
 This packet prepares F15 for closeout without signing it. Its author also
@@ -30,19 +31,21 @@ musl, embedded, target, and CI contracts inherited from Sprints 0, 1, 37,
 `YEW-F-075`, plus `YEW-F-080`, `YEW-F-086`, `YEW-F-088`, `YEW-F-096`,
 `YEW-F-097`, and `YEW-F-124`. The Sprint 59 closeout recheck added
 `YEW-F-127` through `YEW-F-135`. Subsequent complete-regression passes added
-`YEW-F-136` through `YEW-F-139`, for 71 F15 findings in all.
+`YEW-F-136` through `YEW-F-143`, for 75 F15 findings in all.
 
 At the named packet baseline all 135 then-filed entries in the global audit
 registry pass, the remediation ledgers report zero active XFAILs, and the next
 finding id was `YEW-F-136`. Follow-up remediation commits through `87a495cd`
 fix that finding, the later selected-build documentation defect, and the
 passing unit suite's scheduler-dependent assertion total. The successor
-sanitizer build then filed `YEW-F-139`. The current ledgers contain 138 fixed
-entries plus its focused remediation, for 139 fixed entries, zero active
-XFAILs, and reserve `YEW-F-140` next.
-F15 records one Critical, one High, 69
-Medium, zero Low, and four unverified observations. No severity was waived or
-deferred.
+sanitizer build then filed `YEW-F-139`. Its rerun exposed the nil-output UBSan
+violation and non-fatal UBSan policy recorded as `YEW-F-140`/`YEW-F-141`.
+The concurrent tier-1 soak exhausted the macOS host after four unbounded
+`fuzz_textbuf` traces and a fake-clock warning storm, recorded as
+`YEW-F-142`/`YEW-F-143`. The current ledgers contain 139 fixed entries and
+four active XFAILs, and reserve `YEW-F-144` next. F15 records one Critical,
+two High, 72 Medium, zero Low, and four unverified observations. No severity
+was waived or deferred.
 
 The current checkout was copied to a fresh staging tree on `hasu`; local and
 remote `git rev-parse HEAD` both returned the full baseline above. Native
@@ -98,6 +101,10 @@ performance, or size gate:
   do not vary with scheduler timing.
 - `YEW-F-139` moves F007 path formatting to a standalone directory buffer
   after GCC 15 rejected same-aggregate subobjects at the sanitizer profile.
+- `YEW-F-140` through `YEW-F-143` remain active: they cover the nil-output
+  UBSan violation, a non-fatal UBSan profile, unbounded retained text-buffer
+  fuzz traces, and the deterministic-clock warning storm exposed by the
+  complete sanitizer and soak evidence.
 
 Amendments S59-A35 through S59-A40 bind the affected source-sprint and F15
 contract corrections. F133 through F138 are portability and deterministic-test
@@ -365,17 +372,19 @@ These are witnesses to inspect, not pre-approved checkbox verdicts.
 
 ### XFAIL ceiling
 
-The closeout's recorded ceiling is eight. The current audit registry,
-remediation ledgers, and Fletch debt contain zero active XFAIL ids. The
-existing checked XFAIL row is supported, but remains for the independent
-reviewer to confirm alongside the 64 sprint rows.
+The closeout's recorded ceiling is eight. The current audit registry and
+remediation ledgers contain four active XFAIL ids, `YEW-F-140` through
+`YEW-F-143`; Fletch debt remains empty. The existing checked XFAIL row is
+supported, but remains for the independent reviewer to confirm alongside the
+64 sprint rows.
 
 ## Explicit blockers before READY
 
 - An independent non-author reviewer has not inspected F15 or assigned its
   64 sprint-row verdicts on the current baseline.
-- The complete post-F139 ASan/UBSan rerun, complete Valgrind lane, full PTY
-  double run, and byte-compared aggregate determinism remain outstanding.
+- Remediate `YEW-F-140` through `YEW-F-143`, then complete the ASan/UBSan
+  rerun, complete Valgrind lane, full PTY double run, and byte-compared
+  aggregate determinism.
   Exact post-F138 GCC and Clang `make test` aggregates at clean successor
   `0c8dce52` are green with identical 73,852,064-assertion unit summaries.
 - Strict Sprint 56 designated-runner calibration, latency, noise,

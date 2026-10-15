@@ -150,6 +150,10 @@ deleted, because the retained verdict is the audit trail. Deferred and
 | YEW-F-137 | audit | `tests/audit/yew_f_137.c` | ~~documentation targets ignore selected BUILD binaries~~ — fixed in `060cdee3` | fixed |
 | YEW-F-138 | audit | `tests/audit/yew_f_138.c` | ~~clipboard polling makes assertion totals scheduler-dependent~~ — fixed in `87a495cd` | fixed |
 | YEW-F-139 | audit | `tests/audit/yew_f_139.c` | ~~audit fixture path formatting trips GCC sanitizer restrict~~ — fixed in `9f6ba89a` | fixed |
+| YEW-F-140 | audit | `tests/audit/yew_f_140.c` | nil Fletch evaluation passes NULL to `fwrite` | active |
+| YEW-F-141 | audit | `tests/audit/yew_f_141.c` | sanitizer profile continues after UBSan diagnostics | active |
+| YEW-F-142 | audit | `tests/audit/yew_f_142.c` | timed text-buffer fuzzing retains an unbounded trace | active |
+| YEW-F-143 | audit | `tests/audit/yew_f_143.c` | text-buffer fuzz clock emits an unbounded warning stream | active |
 
 The Sprint 33 conformance-only ledger remains at
 `tests/fletch/xfail-debt.txt` until the cross-surface runner migration lands.
