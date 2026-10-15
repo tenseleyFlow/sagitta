@@ -24,6 +24,7 @@ fi
 real_git=$(command -v git)
 host_os=$(uname -s)
 host_arch=$(uname -m)
+asan_runtime=${YEW_TEST_ASAN_RUNTIME:-}
 preload_faults=true
 if command -v file >/dev/null 2>&1 &&
    file -- "$yew_bin" | grep -F 'static-pie linked' >/dev/null; then
@@ -60,12 +61,17 @@ build_fault_shim()
 run_with_fault_shim()
 {
     local shim=$1
+    local preload
     shift
 
     if [[ $host_os == Darwin ]]; then
         DYLD_INSERT_LIBRARIES="$shim" DYLD_FORCE_FLAT_NAMESPACE=1 "$@"
     else
-        LD_PRELOAD="$shim" "$@"
+        preload=$shim
+        if [[ -n $asan_runtime ]]; then
+            preload=${asan_runtime}:$shim
+        fi
+        LD_PRELOAD="$preload" "$@"
     fi
 }
 

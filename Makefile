@@ -2217,6 +2217,7 @@ test-sanitizer-policy:
 endif
 
 test-pkg: $(BUILD)/yew
+	YEW_TEST_ASAN_RUNTIME='$(ASAN_RT)' \
 	FAULTSHIM_CC='$(FAULTSHIM_CC)' tests/pkg/run.sh $(BUILD)/yew
 
 # The fixed campaigns, in two halves the nightly deep lane runs as separate
