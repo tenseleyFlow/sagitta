@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       YEW_DOCS_BASE: ${{ github.event.pull_request.base.sha }}
-      YEW_DOCS_NO_USER_VISIBLE_CHANGE: ${{ contains(github.event.pull_request.body, 'docs: no user-visible change') }}
+      YEW_DOCS_NO_USER_VISIBLE_CHANGE: "${{ contains(github.event.pull_request.body, 'docs: no user-visible change') }}"
     steps:
       - uses: actions/checkout@v6
         with:
