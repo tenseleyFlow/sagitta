@@ -1575,6 +1575,11 @@ probe completed 618,909 operations across 271 epochs, reported a 9.42 MiB
 post-operation peak trace (the fixed cap plus one bounded operation), and
 fell from its transient 457 MiB allocator high-water to 130--150 MiB rather
 than growing monotonically.
+The exact soak SAN+COV profile subsequently completed a five-minute,
+146,001-operation pilot across 64 epochs with no diagnostics and a 591 MiB
+sampled RSS peak. Commit `52be99f4` adds a fail-closed optional RSS monitor and
+regression to the shared soak worker; the resumed runner sets a 2 GiB ceiling
+per process so a future retention regression cannot exhaust the host.
 
 `YEW-F-143` is Medium because `fuzz_textbuf` creates the undo root under the
 real clock and only then installs its deterministic clock, whose 2023 epoch

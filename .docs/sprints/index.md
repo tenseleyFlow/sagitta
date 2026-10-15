@@ -13,7 +13,7 @@ pressure valve working as designed. Renumbering is forbidden once files exist,
 so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-14): Sprint 59 is active while Sprint 58's
-replacement tier-1 soak is paused for a controlled runner refresh.** All 15 audit
+replacement tier-1 soak runs under a guarded runner refresh.** All 15 audit
 fronts and ten invariant sessions are complete; all 144 confirmed findings
 are fixed. F144 closes the GCC sanitizer package fault-shim/libasan order and
 both Clang and GCC sanitizer package runs pass all 53 cases. F140/F141 close
@@ -65,11 +65,13 @@ product commit is `4c99e134` (Actions run `38176840903`, all 31 triggered jobs
 green). Sprint 58 remains formally open until the 14-target soak records all
 56 streams. A host hibernate invalidated the first replacement attempt and
 filed `YEW-F-080`; runner-only commit `4f483f31` fixes the watchdog while
-retaining `4c99e134` byte-for-byte as the product parent. Its launchd-owned
+retaining `4c99e134` byte-for-byte as the product parent. Runner `f005fb23`
+adds bounded text-buffer epochs and a tested 2 GiB per-worker RSS guard without
+changing product source/runtime. Its launchd-owned
 cycle has 8/56 durable rows complete: `fuzz_utf8` and `fuzz_grapheme` are
-checkpointed clean. The four `fuzz_textbuf` streams exhausted host memory and
-their empty rows are invalid; the launchd cycle is stopped pending F142/F143
-remediation. Sprint 59's
+checkpointed clean. The four pre-fix `fuzz_textbuf` streams exhausted host
+memory and their empty rows are invalid. A five-minute exact SAN+COV pilot
+peaked at 591 MiB, and launchd has resumed the four guarded streams. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
 gates reconcile every completed finding with zero active hard XFAILs. All 15
 closeouts contain their 747 mapped DoD items and remain

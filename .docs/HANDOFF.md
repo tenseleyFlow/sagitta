@@ -35,8 +35,9 @@ product commit `4c99e134` is fully hosted-green. The current checkout was
 compared with every registered worktree before this refresh. The clean
 `lsp-wolf-default` worktree remains at `8c23b440`; its work is already merged
 through `origin/trunk` PR #1 at `8c982b1f` and must not be merged a second
-time. The clean runner-only `soak/s58-watchdog-r2` branch remains deliberately
-isolated at `4f483f31`. Two clean detached F06 review worktrees remain under
+time. The runner-only `soak/s58-watchdog-r2` branch remains deliberately
+isolated at `f005fb23`; it descends from watchdog commit `4f483f31` and changes
+only test/runner files. Two clean detached F06 review worktrees remain under
 `/private/tmp/yew-s59-f06-closeout-20261012-a2412c6b/` at `a2412c6b`; they
 contain no uncommitted or unmerged product work. No additional adjacent
 worktree is currently registered.
@@ -88,10 +89,12 @@ installing its fake clock after the real-time undo root and writing thousands
 of duplicate clamp warnings. Commit `9c4657e3` closes F142/F143 with bounded
 replayable epochs and deterministic root clocks. A fresh arm64 macOS
 ASan/UBSan worker completed 200,000 operations across 92 epochs with no
-diagnostics and a 693 MiB sampled RSS high-water mark. The soak is stopped at
-8/56 durable rows; its empty text-buffer rows are invalid and must not be
-counted. Resume only after the runner overlay is refreshed and one guarded
-worker passes there.
+diagnostics and a 693 MiB sampled RSS high-water mark. An exact SAN+COV runner
+pilot then completed 146,001 operations across 64 epochs in five minutes with
+no diagnostics and a 591 MiB sampled RSS peak. Commit `52be99f4` adds a tested
+fail-closed per-worker RSS guard; runner `f005fb23` carries both remediations.
+The soak resumed from its 8/56 durable rows under launchd, with each worker
+capped at 2 GiB. The four empty pre-fix text-buffer rows remain invalid.
 The preserved GCC sanitizer aggregate separately failed when the package
 harness placed its fault shim before GCC's shared ASan runtime. Commit
 `0f38a8fc` closes F144 by ordering the already-qualified runtime first;
@@ -165,14 +168,15 @@ completed only one of fourteen target checkpoints. The September `ba72c3a0`
 launch was interrupted and counts as 0/14 targets.
 
 A replacement SAN+coverage cycle relaunched on 2026-10-12 against product
-commit `4c99e134` plus runner-only watchdog child `4f483f31` on arm64 macOS /
+commit `4c99e134` plus a runner-only chain rooted at watchdog child `4f483f31`
+on arm64 macOS /
 Apple clang 21.0.0. Its first four concurrent `fuzz_utf8` streams used seeds
 `2701121405` through `2701121408`; later targets advance in serial groups of
 four streams. Each 18-hour stream owns durable evidence and corpus-admission
 state, each target is a restart checkpoint, and `caffeinate` prevents idle
 sleep. The state, logs, manifest, and rebuilt ledger are under
 `/Users/mfwolffe/lanes/yew-s58-soak-4c99e134/`. Launchd job
-`org.yew.s58soak.4c99e134` owns the supervisor. The first replacement attempt
+`com.tenseleyflow.yew-s58-soak` owns the supervisor. The first replacement attempt
 was stopped after host hibernation exposed and filed `YEW-F-080`; it completed
 no rows, its exact artifact replayed cleanly, and its evidence is archived
 under `state/failed-F080-20261012/`. The runner-only child uses process CPU
@@ -190,10 +194,12 @@ name and reject those valid checkpoints. The external lane driver was repaired
 without changing the product, runner commit, rows, seeds, corpora, or manifest;
 `fuzz_utf8` remained checkpointed. All four `fuzz_grapheme` streams have since
 completed cleanly as well, bringing the campaign to 8/56 durable rows and
-2/14 targets. The four `fuzz_textbuf` streams exhausted host memory and were
-terminated during the 2026-10-14 reboot. Their empty row files are not
-evidence. Launchd is currently unloaded; stdout/stderr and the macOS Jetsam
-reports are retained for the finding record.
+2/14 targets. The four pre-fix `fuzz_textbuf` streams exhausted host memory and
+were terminated during the 2026-10-14 reboot. Their empty row files are not
+evidence. Runner `f005fb23` carries bounded epochs and the 2 GiB fail-closed
+worker guard while keeping product source/runtime identical to `4c99e134`.
+Launchd has resumed all four text-buffer streams; stdout/stderr, pilot RSS
+samples, and the macOS Jetsam reports are retained for the finding record.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has

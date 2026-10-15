@@ -63,11 +63,13 @@ GCC 15/Nix linker are valid functional and portability evidence, but are not
 substituted for the pinned GCC 13.3 size lane or designated performance
 runner.
 
-The separate Sprint 58 tier-1 soak remains frozen against product
-`4c99e134` plus runner-only child `4f483f31`. It has eight durable
-`fuzz_utf8`/`fuzz_grapheme` rows (8/56 overall), while all four
-`fuzz_textbuf` streams are active. This work did not change, stop, or restart
-that campaign.
+The separate Sprint 58 tier-1 soak remains pinned to product `4c99e134` while
+runner-only successor `f005fb23` carries the watchdog, bounded text-buffer
+epochs, and tested 2 GiB per-worker RSS guard. It has eight durable
+`fuzz_utf8`/`fuzz_grapheme` rows (8/56 overall). A five-minute exact SAN+COV
+text-buffer pilot peaked at 591 MiB with no diagnostics; launchd then resumed
+all four guarded `fuzz_textbuf` streams. Product source/runtime remain
+byte-identical to the hosted-green anchor.
 
 ## Sprint 59 closeout recheck and remediation
 

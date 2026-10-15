@@ -388,6 +388,10 @@ findings `YEW-F-127`–`YEW-F-144`
   plain and sanitizer probes remain bounded with no clock storm. The fresh
   arm64 macOS sanitizer worker completed 200,000 operations across 92 epochs,
   emitted no diagnostics, and peaked at 693 MiB sampled RSS.
+- An exact five-minute SAN+COV runner pilot completed 146,001 operations
+  across 64 epochs with no diagnostics and a 591 MiB sampled RSS peak. Commit
+  `52be99f4` adds a tested fail-closed RSS guard; the resumed runner caps each
+  worker at 2 GiB.
 - `YEW-F-144` records the GCC sanitizer package harness placing its injected
   fault shim before the shared ASan runtime, causing the runtime to abort
   before the intended kill-boundary recovery checks execute.
