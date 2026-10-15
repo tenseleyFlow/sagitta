@@ -112,6 +112,11 @@ jobs:
       UNITS_FUZZ_SEEDS: 1
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Sprint 59's priority audit compares the fixing commits and the
+          # ledger as it existed at each closure; a shallow clone cannot
+          # prove that history and produces false YEW-F-097 failures.
+          fetch-depth: 0
       - run: make CC=gcc
       - run: make test CC=gcc
       - name: Run the fixed campaigns at smoke depth
@@ -121,6 +126,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - run: make CC=clang
       - run: make test CC=clang
       - name: Compile the campaign, fixture, and budget binaries
@@ -234,6 +241,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Build, test, and reproduce the Alpine 3.20 static PIE
         run: |
           docker run --rm \
@@ -296,6 +305,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Build and test arm64 with GCC
         run: |
           make CC=gcc
@@ -313,6 +324,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Build and test arm64 macOS with Clang
         run: |
           make CC=clang
@@ -357,6 +370,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Full suite with computed-goto dispatch, GCC
         run: make FL_CGOTO=1 test CC=gcc
       - name: Full suite with computed-goto dispatch, Clang
@@ -468,6 +483,8 @@ jobs:
       UNITS_FUZZ_SEEDS: 1
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       # FL_CHECKS turns on fl_chunk_check after every compile and the
       # VM's per-instruction invariant checks.  Off in the gating
       # lanes because the second group is on the hot path; on here,
@@ -660,6 +677,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - run: SMOKE_MODULES=none make test 'MODULES='
       - name: Prove package independence from FUSS and optional modules
         run: make clean && make check MODULES=plugins
@@ -691,19 +710,34 @@ jobs:
             build-det-clang/gen-bigfile
       - name: Compare edit traces across runs and compilers
         run: |
-          build-det-gcc/fuzz_textbuf --iters=5000 --seed=0x9e3779b97f4a7c15 \
-            --mix=typing --trace-out=trace-gcc-1.txt
-          build-det-gcc/fuzz_textbuf --iters=5000 --seed=0x9e3779b97f4a7c15 \
-            --mix=typing --trace-out=trace-gcc-2.txt
-          build-det-clang/fuzz_textbuf --iters=5000 --seed=0x9e3779b97f4a7c15 \
-            --mix=typing --trace-out=trace-clang-1.txt
-          diff -u trace-gcc-1.txt trace-gcc-2.txt
-          diff -u trace-gcc-1.txt trace-clang-1.txt
-          build-det-gcc/fuzz_textbuf --replay trace-gcc-1.txt > replay-gcc.txt
-          build-det-clang/fuzz_textbuf --replay trace-gcc-1.txt > replay-clang.txt
-          sed 's/replay=[^ ]*/replay=TRACE/' replay-gcc.txt > replay-gcc.norm
-          sed 's/replay=[^ ]*/replay=TRACE/' replay-clang.txt > replay-clang.norm
-          diff -u replay-gcc.norm replay-clang.norm
+          # YEW-F-142 bounds a replayable trace at 8 MiB.  Keep the original
+          # 5,000 generated operations, but split them across four independent
+          # deterministic traces so this lane tests the cap instead of
+          # defeating it with one unbounded artifact.
+          for seed in \
+            0x9e3779b97f4a7c15 \
+            0xbf58476d1ce4e5b9 \
+            0x94d049bb133111eb \
+            0xd1b54a32d192ed03
+          do
+            build-det-gcc/fuzz_textbuf --iters=1250 --seed="$seed" \
+              --mix=typing --trace-out="trace-gcc-1-$seed.txt"
+            build-det-gcc/fuzz_textbuf --iters=1250 --seed="$seed" \
+              --mix=typing --trace-out="trace-gcc-2-$seed.txt"
+            build-det-clang/fuzz_textbuf --iters=1250 --seed="$seed" \
+              --mix=typing --trace-out="trace-clang-1-$seed.txt"
+            diff -u "trace-gcc-1-$seed.txt" "trace-gcc-2-$seed.txt"
+            diff -u "trace-gcc-1-$seed.txt" "trace-clang-1-$seed.txt"
+            build-det-gcc/fuzz_textbuf --replay "trace-gcc-1-$seed.txt" \
+              > "replay-gcc-$seed.txt"
+            build-det-clang/fuzz_textbuf --replay "trace-gcc-1-$seed.txt" \
+              > "replay-clang-$seed.txt"
+            sed 's/replay=[^ ]*/replay=TRACE/' "replay-gcc-$seed.txt" \
+              > "replay-gcc-$seed.norm"
+            sed 's/replay=[^ ]*/replay=TRACE/' "replay-clang-$seed.txt" \
+              > "replay-clang-$seed.norm"
+            diff -u "replay-gcc-$seed.norm" "replay-clang-$seed.norm"
+          done
           build-det-gcc/fuzz_cmdparse --iters=10000 --seed=1 \
             > cmdparse-gcc.txt
           build-det-clang/fuzz_cmdparse --iters=10000 --seed=1 \
