@@ -700,6 +700,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The repeated full-suite comparison includes the Sprint 59
+          # history-aware priority audit; preserve its commit evidence.
+          fetch-depth: 0
       - name: Build GCC and Clang deterministic tools
         run: |
           make CC=gcc BUILD=build-det-gcc \
