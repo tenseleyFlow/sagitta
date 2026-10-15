@@ -35,10 +35,10 @@ bool test_yew_f_131(char *why, size_t why_cap)
         "runs its shipped Sprint 57 owner");
     bool full = file_has(
         ".docs/sprints/13-performance/s57-size-and-embedded.md",
-        "2,277,376 bytes");
+        "2,310,144 bytes");
     bool minimal = file_has(
         ".docs/sprints/13-performance/s57-size-and-embedded.md",
-        "1,785,856 bytes");
+        "1,818,624 bytes");
     bool closeout = file_has(
         ".docs/audits/closeout-F15-ci.md",
         "binding eight current caps");

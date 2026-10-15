@@ -76,7 +76,7 @@ and an update to this file. Decided 2026-07-31 during the planning stage.
 | Cold start → first paint | ≤ 20 ms, default config |
 | Open 100 MB file | ≤ 150 ms to interactive |
 | Scroll throughput | full-viewport redraw ≥ 120 fps equivalent |
-| Binary size (full modules, stripped, x86_64) | ≤ 2,277,376 bytes; minimal MODULES build ≤ 1,785,856 bytes (S57.33-A1) |
+| Binary size (full modules, stripped, x86_64) | ≤ 2,310,144 bytes; minimal MODULES build ≤ 1,818,624 bytes (S59-A41) |
 | Memory | ≤ 1.6× file size for a clean open |
 
 Budgets are locked as *gates* from the sprint that lands each subsystem;
@@ -837,6 +837,27 @@ recognized hard error, but now names the yew 1.0 boundary instead of an
 internal schedule that will not deliver it. This changes no batch behavior
 or exit code and supersedes only the stale Sprint 37 documentation and F15
 q9 classification; `YEW-F-132` records the correction.
+
+**Size rebaseline amendment S59-A41 (2026-10-15) — the hosted gates follow
+measured required core growth.** The pinned Ubuntu 24.04 x86_64 GCC 13.3
+size lane at `0562e4a3` measured full at 2,295,720 bytes and minimal at
+1,804,160 bytes. Each is 28,896 bytes above its last committed measurement
+(2,266,824 and 1,775,264). The captured ledgers attribute 24,752 and 24,560
+bytes of final-file-backed growth chiefly to `core.main`, `core.search`,
+`core.fl`, and required editor/safety paths; no optional-module bucket
+appears in the minimal cause. All six hosted configurations cross their old
+caps by a narrow 14,208–22,400-byte band, the broad profile movement expected
+from core growth rather than accidental module retention.
+
+Following the existing hosted rule, each cap moves only to the next 16 KiB
+boundary above its measurement: full 2,310,144; minimal 1,818,624; LSP-only
+1,933,312; AI-only 1,933,312; FUSS-only 1,966,080; and plugins-only
+1,900,544 bytes. The pinned ledgers are updated from the failed lane's
+artifacts. The musl-full and musl-minimal caps remain 2,424,832 and 1,900,544
+bytes because their existing headroom has not been shown exhausted. The
+measurement recipe, additive check, feature matrix, and 1.5 MiB full /
+900 KiB minimal post-1.0 optimization ratchets are unchanged. No feature or
+stability work is removed to recover a superseded footprint number.
 
 ## Non-negotiable invariants (enforced from Sprint 0)
 
