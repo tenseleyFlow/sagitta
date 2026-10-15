@@ -2062,6 +2062,7 @@ fuzzlib-selftest: $(BUILD)/fuzz_utf8 $(FUZZ_WATCHDOG)
 	done; \
 	grep -F -- '--watchdog-seconds=N' $$out >/dev/null; \
 	scripts/fuzz-watchdog-selftest.sh $(FUZZ_WATCHDOG); \
+	CC='$(CC)' scripts/tests/fuzz-soak-rss.test.sh; \
 	echo "fuzzlib-selftest: ok"
 
 ifeq ($(COV),1)

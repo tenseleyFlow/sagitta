@@ -36,9 +36,73 @@ watchdog=${YEW_SOAK_WATCHDOG_SECONDS:-5}
 case $watchdog in
     ''|*[!0-9]*|0) echo "fuzz-soak: invalid watchdog $watchdog" >&2; exit 2 ;;
 esac
+rss_limit_kib=${YEW_SOAK_RSS_LIMIT_KIB:-0}
+rss_poll_seconds=${YEW_SOAK_RSS_POLL_SECONDS:-30}
+case $rss_limit_kib in
+    ''|*[!0-9]*) echo "fuzz-soak: invalid RSS limit $rss_limit_kib" >&2; exit 2 ;;
+esac
+case $rss_poll_seconds in
+    ''|*[!0-9]*|0) echo "fuzz-soak: invalid RSS poll interval $rss_poll_seconds" >&2; exit 2 ;;
+esac
+
+rss_observed_kib=0
+run_campaign()
+{
+    campaign_pid=
+
+    if [ "$rss_limit_kib" -eq 0 ]; then
+        "$@"
+        return $?
+    fi
+
+    "$@" &
+    campaign_pid=$!
+    while kill -0 "$campaign_pid" 2>/dev/null; do
+        rss_observed_kib=$(ps -o rss= -p "$campaign_pid" 2>/dev/null |
+            tr -d ' ' || true)
+        case $rss_observed_kib in
+            ''|*[!0-9]*)
+                if kill -0 "$campaign_pid" 2>/dev/null; then
+                    kill -TERM "$campaign_pid" 2>/dev/null || true
+                    sleep 1
+                    kill -KILL "$campaign_pid" 2>/dev/null || true
+                    wait "$campaign_pid" 2>/dev/null || true
+                    campaign_pid=
+                    return 98
+                fi
+                ;;
+            *)
+                if [ "$rss_observed_kib" -gt "$rss_limit_kib" ]; then
+                    kill -TERM "$campaign_pid" 2>/dev/null || true
+                    sleep 1
+                    kill -KILL "$campaign_pid" 2>/dev/null || true
+                    wait "$campaign_pid" 2>/dev/null || true
+                    campaign_pid=
+                    return 99
+                fi
+                ;;
+        esac
+        sleep "$rss_poll_seconds"
+    done
+    wait "$campaign_pid"
+    campaign_status=$?
+    campaign_pid=
+    return "$campaign_status"
+}
 
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/yew-fuzz-soak.XXXXXX")
-trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
+cleanup()
+{
+    if [ -n "$campaign_pid" ] && kill -0 "$campaign_pid" 2>/dev/null; then
+        kill -TERM "$campaign_pid" 2>/dev/null || true
+        sleep 1
+        kill -KILL "$campaign_pid" 2>/dev/null || true
+        wait "$campaign_pid" 2>/dev/null || true
+    fi
+    rm -rf "$tmp_dir"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 mkdir -p "$tmp_dir/state" "$tmp_dir/config" "$tmp_dir/cache"
 
 echo "fuzz-soak: target=$target seconds=$seconds seed=$seed commit=$(git rev-parse HEAD)"
@@ -51,7 +115,7 @@ case $target in
         XDG_STATE_HOME=$tmp_dir/state \
         XDG_CONFIG_HOME=$tmp_dir/config \
         XDG_CACHE_HOME=$tmp_dir/cache \
-            "$binary" --iters=6 --seconds="$seconds" --seed="$seed" \
+            run_campaign "$binary" --iters=6 --seconds="$seconds" --seed="$seed" \
             --coverage-report >"$tmp_dir/out" 2>"$tmp_dir/err"
         status=$?
         ;;
@@ -59,7 +123,7 @@ case $target in
         XDG_STATE_HOME=$tmp_dir/state \
         XDG_CONFIG_HOME=$tmp_dir/config \
         XDG_CACHE_HOME=$tmp_dir/cache \
-            "$binary" --seconds="$seconds" --seed="$seed" \
+            run_campaign "$binary" --seconds="$seconds" --seed="$seed" \
             --coverage-report >"$tmp_dir/out" 2>"$tmp_dir/err"
         status=$?
         ;;
@@ -68,7 +132,7 @@ case $target in
         XDG_STATE_HOME=$tmp_dir/state \
         XDG_CONFIG_HOME=$tmp_dir/config \
         XDG_CACHE_HOME=$tmp_dir/cache \
-            "$binary" --seconds="$seconds" --seed="$seed" \
+            run_campaign "$binary" --seconds="$seconds" --seed="$seed" \
             --watchdog-seconds="$watchdog" \
             --coverage-report --admit-dir="$admit_dir" \
             >"$tmp_dir/out" 2>"$tmp_dir/err"
@@ -81,6 +145,10 @@ cat "$tmp_dir/err" >&2
 if [ "$status" -ne 0 ]; then
     if [ "$status" -eq 124 ]; then
         echo "fuzz-soak: $target exceeded its ${watchdog}s per-input watchdog" >&2
+    elif [ "$status" -eq 99 ]; then
+        echo "fuzz-soak: $target exceeded RSS limit ${rss_limit_kib} KiB (observed ${rss_observed_kib} KiB)" >&2
+    elif [ "$status" -eq 98 ]; then
+        echo "fuzz-soak: could not sample $target RSS; worker terminated fail-closed" >&2
     fi
     for crash in tests/fuzz/crashes/"$target"-*; do
         [ -f "$crash" ] && echo "fuzz-soak: finding saved to $crash" >&2
