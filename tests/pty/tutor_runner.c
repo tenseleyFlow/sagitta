@@ -365,12 +365,25 @@ typedef struct TutorProgressWait {
     char id[24];
 } TutorProgressWait;
 
+typedef struct TutorCursorWait {
+    int row;
+    int col;
+} TutorCursorWait;
+
 static bool progress_has_task(const PtyCtx *c, const void *arg)
 {
     const TutorProgressWait *wait = arg;
 
     (void)c;
     return file_contains(wait->path, wait->id);
+}
+
+static bool tutor_cursor_at(const PtyCtx *c, const void *arg)
+{
+    const TutorCursorWait *wait = arg;
+
+    return c->vt.cur_vis && c->vt.cur_r == wait->row &&
+           c->vt.cur_c == wait->col;
 }
 
 static bool tutor_progress_path(PtyCtx *c, char out[PATH_MAX])
@@ -439,6 +452,14 @@ static void run_chapter(PtyCtx *c, u32 chapter, const char *key,
     replay_tasks(c, &keys, chapter, progress);
     ptc_check(c, progress_complete(progress, chapter, key),
               "tutor task engine did not persist every verdict");
+    if (chapter == 5U) {
+        static const TutorCursorWait final_cursor = {14, 47};
+
+        /* The final task persists its verdict from the editor state before
+         * the corresponding frame necessarily reaches a loaded PTY. */
+        ptc_wait_until(c, tutor_cursor_at, &final_cursor,
+                       "Chapter 5 final cursor frame did not arrive");
+    }
     if (chapter == 7U) {
         ptc_check(c, tutor_git_policy_is_local(c),
                   "tutor Git repository retained inherited policy");
