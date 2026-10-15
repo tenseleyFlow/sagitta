@@ -113,7 +113,8 @@ while IFS="$tab" read -r finding severity status commit; do
                 fail "$finding is $status without a fixing commit"
             else
                 matches=$(awk -F '\t' -v want="$finding" -v commit="$commit" \
-                    '$1 == want && $2 == commit { n++ } END { print n+0 }' "$fixes")
+                    '$1 == want && ("x" $2) == ("x" commit) { n++ }
+                    END { print n+0 }' "$fixes")
                 if [ "$matches" -ne 1 ]; then
                     fail "$finding/$commit has $matches matching burndown fix rows"
                 fi

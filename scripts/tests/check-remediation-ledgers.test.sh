@@ -10,13 +10,13 @@ write_valid()
     cat >"$tmp_dir/findings.md" <<'EOF'
 | ID | Sev | Status | Front | Title | Reproducer | Violates |
 |---|---|---|---|---|---|---|
-| YEW-F-001 | M | fixed | F01 UNI | ~~fixture~~ — fixed 2026-10-12 in `deadbeef` | path | rule |
+| YEW-F-001 | M | fixed | F01 UNI | ~~fixture~~ — fixed 2026-10-12 in `610e8833` | path | rule |
 EOF
     cat >"$tmp_dir/burndown.md" <<'EOF'
 | Date | Change | Open C | Open H | Open M | Open L | Open total |
 |---|---|---:|---:|---:|---:|---:|
 | 2026-10-12 | baseline | 0 | 0 | 1 | 0 | 1 |
-| 2026-10-12 | Fix `YEW-F-001` (`deadbeef`) | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-12 | Fix `YEW-F-001` (`610e8833`) | 0 | 0 | 0 | 0 | 0 |
 EOF
     cat >"$tmp_dir/xfail.md" <<'EOF'
 | ID | Surface | Reproducer | Reason | Status |
@@ -62,7 +62,7 @@ mv "$tmp_dir/bad" "$tmp_dir/burndown.md"
 expect_reject 'bad row total'
 
 write_valid
-sed 's/(`deadbeef`)/(`feedface`)/' "$tmp_dir/burndown.md" >"$tmp_dir/bad"
+sed 's/(`610e8833`)/(`feedface`)/' "$tmp_dir/burndown.md" >"$tmp_dir/bad"
 mv "$tmp_dir/bad" "$tmp_dir/burndown.md"
 expect_reject 'wrong fixing commit'
 
@@ -72,7 +72,7 @@ mv "$tmp_dir/bad" "$tmp_dir/xfail.md"
 expect_reject 'missing XFAIL debt row'
 
 write_valid
-sed 's/| M | fixed/| H | confirmed/; s/~~fixture~~ — fixed 2026-10-12 in `deadbeef`/fixture/' \
+sed 's/| M | fixed/| H | confirmed/; s/~~fixture~~ — fixed 2026-10-12 in `610e8833`/fixture/' \
     "$tmp_dir/findings.md" >"$tmp_dir/bad"
 mv "$tmp_dir/bad" "$tmp_dir/findings.md"
 sed 's/| fixed | fixed |/| active | open |/' "$tmp_dir/xfail.md" >"$tmp_dir/bad"
@@ -80,7 +80,7 @@ mv "$tmp_dir/bad" "$tmp_dir/xfail.md"
 expect_reject 'active High XFAIL'
 
 write_valid
-sed 's/| M | fixed/| M | confirmed/; s/~~fixture~~ — fixed 2026-10-12 in `deadbeef`/fixture/' \
+sed 's/| M | fixed/| M | confirmed/; s/~~fixture~~ — fixed 2026-10-12 in `610e8833`/fixture/' \
     "$tmp_dir/findings.md" >"$tmp_dir/bad"
 mv "$tmp_dir/bad" "$tmp_dir/findings.md"
 sed 's/| fixed | fixed |/| active | open |/' "$tmp_dir/xfail.md" >"$tmp_dir/bad"
