@@ -13,7 +13,7 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F15 remediation baseline:** `9f6ba89a` contains all 139 completed finding
+**F15 remediation baseline:** `025df633` contains all 143 completed finding
 remediations. Exact post-F138 complete compiler evidence was recorded at
 `0c8dce52`. The 64-row
 packet at
@@ -43,8 +43,8 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The global findings ledger now contains 143 stable IDs: 141 are fixed
-and `YEW-F-140`/`YEW-F-141` are active. F15's closeout recheck closed
+landed. The global findings ledger now contains 143 stable IDs, all fixed.
+F15's closeout recheck closed
 nine Medium findings. `YEW-F-127` through
 `YEW-F-132` align the foundation, test, batch, and size contracts with their
 shipped owners and truthful 1.0 boundary under S59-A35 through S59-A40;
@@ -78,15 +78,20 @@ formatting under the sanitizer `-O1` warning-clean profile. Commit `9f6ba89a`
 uses standalone directory storage, and the exact failed compile command is
 now green. The complete sanitizer aggregate then exposed `YEW-F-140`, a nil
 Fletch result passed as NULL to zero-length `fwrite`, and `YEW-F-141`, a UBSan
-profile that continued after the diagnostic. The concurrent tier-1 soak
+profile that continued after the diagnostic. Commit `025df633` guards the
+empty write and makes the sanitizer profile fail fast, with a deliberate-UB
+policy regression. The concurrent tier-1 soak
 exposed `YEW-F-142`: all four `fuzz_textbuf` workers retained their complete
 18-hour traces and reached roughly 31--39 GiB resident each, exhausting the
 48 GiB host before its 20:28 reboot. `YEW-F-143` records the same harness
 installing its fake clock after the real-time undo root and writing thousands
 of duplicate clamp warnings. Commit `9c4657e3` closes F142/F143 with bounded
-replayable epochs and deterministic root clocks. The soak is stopped at 8/56 durable rows; its
-empty text-buffer rows are invalid and must not be counted or resumed before
-bounded remediation is verified with one worker.
+replayable epochs and deterministic root clocks. A fresh arm64 macOS
+ASan/UBSan worker completed 200,000 operations across 92 epochs with no
+diagnostics and a 693 MiB sampled RSS high-water mark. The soak is stopped at
+8/56 durable rows; its empty text-buffer rows are invalid and must not be
+counted. Resume only after the runner overlay is refreshed and one guarded
+worker passes there.
 F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
 align obsolete package/manual staging rules and the runtime-import amendment
 identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
@@ -188,8 +193,8 @@ reports are retained for the finding record.
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 141 completed fixes reconcile and two hard XFAILs now
-track F140/F141; priority order is proven from Git ancestry. The deterministic
+executable gates: all 143 completed fixes reconcile with zero active hard
+XFAILs; priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not

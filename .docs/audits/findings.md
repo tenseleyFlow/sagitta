@@ -152,8 +152,8 @@ recorded in `audit-00.md`.
 | YEW-F-137 | M | fixed | F15 CI | ~~documentation targets ignore selected BUILD binaries~~ — fixed 2026-10-14 in `060cdee3` | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
 | YEW-F-138 | M | fixed | F15 CI | ~~clipboard polling makes assertion totals scheduler-dependent~~ — fixed 2026-10-14 in `87a495cd` | tests/audit/yew_f_138.c | s01 deterministic test output; s59 DoD 1/2/14; F15 complete regression |
 | YEW-F-139 | M | fixed | F15 CI | ~~audit fixture path formatting trips GCC sanitizer restrict~~ — fixed 2026-10-14 in `9f6ba89a` | tests/audit/yew_f_139.c | s01 warning-clean sanitizer lane; s59 DoD 1/2/14; F15 complete regression |
-| YEW-F-140 | M | open | F15 CI | nil Fletch evaluation passes NULL to `fwrite` | tests/audit/yew_f_140.c | C/POSIX library contract; s01 sanitizer lane; s59 DoD 1/2/14 |
-| YEW-F-141 | M | open | F15 CI | sanitizer profile continues after UBSan diagnostics | tests/audit/yew_f_141.c | s01 sanitizer gate; s59 DoD 1/2/14; F15 complete regression |
+| YEW-F-140 | M | fixed | F15 CI | ~~nil Fletch evaluation passes NULL to `fwrite`~~ — fixed 2026-10-14 in `025df633` | tests/audit/yew_f_140.c | C/POSIX library contract; s01 sanitizer lane; s59 DoD 1/2/14 |
+| YEW-F-141 | M | fixed | F15 CI | ~~sanitizer profile continues after UBSan diagnostics~~ — fixed 2026-10-14 in `025df633` | tests/audit/yew_f_141.c | s01 sanitizer gate; s59 DoD 1/2/14; F15 complete regression |
 | YEW-F-142 | H | fixed | F15 CI | ~~timed text-buffer fuzzing retains an unbounded trace~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_142.c | s58 section 7 64 MiB high-water; invariant 4; F15 soak evidence |
 | YEW-F-143 | M | fixed | F15 CI | ~~text-buffer fuzz clock emits an unbounded warning stream~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_143.c | s02 deterministic harness; s58 section 7; F15 soak evidence |
 
@@ -1542,6 +1542,9 @@ is read or written, but the C library's nonnull contract is still violated
 and UBSan reports it repeatedly through existing nil-output smoke coverage.
 The hard XFAIL requires `mode_eval` to skip the write when the rendered result
 has zero bytes.
+Commit `025df633` guards the write on the rendered byte count. A fresh arm64
+macOS ASan/UBSan binary now evaluates nil with exit zero and empty stdout and
+stderr.
 
 `YEW-F-141` is Medium because the same `SAN=1` aggregate continued through
 hundreds of later checks after the first UBSan runtime diagnostic. The lane
@@ -1550,6 +1553,9 @@ made the undefined-behavior report itself fatal; an otherwise-clean run could
 therefore conceal a real diagnostic behind exit zero. The hard XFAIL requires
 the sanitizer profile to export `UBSAN_OPTIONS=halt_on_error=1` rather than
 grepping logs as a substitute for fail-fast execution.
+Commit `025df633` exports the fail-fast policy from every `SAN=1` build and
+adds a permanent deliberate-UB probe to the aggregate test prerequisites.
+The probe aborts at its signed-overflow diagnostic and the policy gate passes.
 
 `YEW-F-142` is High because the four authoritative `fuzz_textbuf` soak
 streams retained every generated `TraceOp` and copied insertion payload for

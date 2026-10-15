@@ -13,10 +13,10 @@ pressure valve working as designed. Renumbering is forbidden once files exist,
 so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-14): Sprint 59 is active while Sprint 58's
-replacement tier-1 soak is paused for resource remediation.** All 15 audit
-fronts and ten invariant sessions are complete; 141 of 143 confirmed findings
-are fixed. F140/F141 remain active after the full sanitizer rerun exposed a
-nil-result UBSan violation and a non-fatal UBSan profile. F142/F143 close the
+replacement tier-1 soak is paused for a controlled runner refresh.** All 15 audit
+fronts and ten invariant sessions are complete; all 143 confirmed findings
+are fixed. F140/F141 close the full sanitizer rerun's nil-result UBSan
+violation and non-fatal UBSan profile. F142/F143 close the
 tier-1 soak's unbounded `fuzz_textbuf` traces and deterministic-clock warning
 storm with bounded replayable epochs and deterministic root clocks.
 F127–F132 aligned F15's
@@ -69,7 +69,7 @@ checkpointed clean. The four `fuzz_textbuf` streams exhausted host memory and
 their empty rows are invalid; the launchd cycle is stopped pending F142/F143
 remediation. Sprint 59's
 priority, deterministic sampling, closeout, deferral, burndown, and XFAIL-debt
-gates reconcile every completed finding with two active hard XFAILs. All 15
+gates reconcile every completed finding with zero active hard XFAILs. All 15
 closeouts contain their 747 mapped DoD items and remain
 honestly NOT READY pending independent evidence review. Baseline-pinned local
 pre-closeout packets exist for F01 through F15 without claiming reviewer

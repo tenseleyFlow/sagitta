@@ -376,13 +376,18 @@ findings `YEW-F-127`–`YEW-F-143`
   to `fwrite`, which UBSan diagnoses despite the zero byte count.
 - `YEW-F-141` records the sanitizer profile continuing after those UBSan
   diagnostics instead of making the first runtime violation fail the target.
+- Commit `025df633` skips zero-length Fletch writes, exports a fail-fast UBSan
+  policy for every sanitizer target, and makes a deliberate runtime-violation
+  probe part of the aggregate test contract.
 - `YEW-F-142` records four unbounded 18-hour `fuzz_textbuf` traces reaching
   roughly 31--39 GiB resident each and exhausting the 48 GiB soak host.
 - `YEW-F-143` records the fuzz harness stamping its undo root before installing
   the fake clock, producing an unbounded duplicate-warning stream.
 - Commit `9c4657e3` bounds retained text-buffer traces with deterministic
   replayable epochs and rebases the pristine undo root to its injected clock;
-  a 120-second probe remains bounded across 271 epochs with no clock storm.
+  plain and sanitizer probes remain bounded with no clock storm. The fresh
+  arm64 macOS sanitizer worker completed 200,000 operations across 92 epochs,
+  emitted no diagnostics, and peaked at 693 MiB sampled RSS.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
