@@ -156,7 +156,7 @@ recorded in `audit-00.md`.
 | YEW-F-141 | M | fixed | F15 CI | ~~sanitizer profile continues after UBSan diagnostics~~ — fixed 2026-10-14 in `025df633` | tests/audit/yew_f_141.c | s01 sanitizer gate; s59 DoD 1/2/14; F15 complete regression |
 | YEW-F-142 | H | fixed | F15 CI | ~~timed text-buffer fuzzing retains an unbounded trace~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_142.c | s58 section 7 64 MiB high-water; invariant 4; F15 soak evidence |
 | YEW-F-143 | M | fixed | F15 CI | ~~text-buffer fuzz clock emits an unbounded warning stream~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_143.c | s02 deterministic harness; s58 section 7; F15 soak evidence |
-| YEW-F-144 | M | open | F15 CI | GCC sanitizer package harness preloads its fault shim before libasan | tests/audit/yew_f_144.c | s01 sanitizer gate; invariant 2; F15 complete regression |
+| YEW-F-144 | M | fixed | F15 CI | ~~GCC sanitizer package harness preloads its fault shim before libasan~~ — fixed 2026-10-14 in `0f38a8fc` | tests/audit/yew_f_144.c | s01 sanitizer gate; invariant 2; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1596,6 +1596,11 @@ boundary. The product has not failed its recovery invariant; the harness has
 made that invariant untestable in the sanitizer lane. The hard XFAIL requires
 the already-discovered GCC runtime to precede the shim in the package
 harness, while retaining Clang's static-runtime path unchanged.
+Commit `0f38a8fc` passes the Makefile's compiler-family-qualified runtime into
+the package harness and constructs Linux `LD_PRELOAD` with that runtime before
+the fault shim. The local Clang sanitizer path and exact remote GCC 15
+sanitizer path each pass all 53 package cases, including all five injected
+kill/recovery boundaries.
 
 ## Unverified observations
 

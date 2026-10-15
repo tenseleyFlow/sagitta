@@ -391,6 +391,9 @@ findings `YEW-F-127`–`YEW-F-144`
 - `YEW-F-144` records the GCC sanitizer package harness placing its injected
   fault shim before the shared ASan runtime, causing the runtime to abort
   before the intended kill-boundary recovery checks execute.
+- Commit `0f38a8fc` passes the compiler-family-qualified runtime into the
+  package harness and orders it before the Linux shim. Clang and GCC
+  ASan/UBSan package runs each pass all 53 cases.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
