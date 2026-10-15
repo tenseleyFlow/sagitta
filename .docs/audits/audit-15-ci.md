@@ -380,6 +380,9 @@ findings `YEW-F-127`–`YEW-F-143`
   roughly 31--39 GiB resident each and exhausting the 48 GiB soak host.
 - `YEW-F-143` records the fuzz harness stamping its undo root before installing
   the fake clock, producing an unbounded duplicate-warning stream.
+- Commit `9c4657e3` bounds retained text-buffer traces with deterministic
+  replayable epochs and rebases the pristine undo root to its injected clock;
+  a 120-second probe remains bounded across 271 epochs with no clock storm.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.

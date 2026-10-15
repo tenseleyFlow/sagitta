@@ -208,3 +208,5 @@ counted; fixed rows remain in `findings.md` but leave these open counts.
 | 2026-10-14 | File `YEW-F-139` from F15 complete sanitizer evidence | 0 | 0 | 1 | 0 | 1 |
 | 2026-10-14 | Fix `YEW-F-139` (`9f6ba89a`) | 0 | 0 | 0 | 0 | 0 |
 | 2026-10-14 | File `YEW-F-140`–`YEW-F-143` from F15 sanitizer and soak evidence | 0 | 1 | 3 | 0 | 4 |
+| 2026-10-14 | Fix `YEW-F-142` (`9c4657e3`) | 0 | 0 | 3 | 0 | 3 |
+| 2026-10-14 | Fix `YEW-F-143` (`9c4657e3`) | 0 | 0 | 2 | 0 | 2 |

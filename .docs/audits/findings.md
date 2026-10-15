@@ -154,8 +154,8 @@ recorded in `audit-00.md`.
 | YEW-F-139 | M | fixed | F15 CI | ~~audit fixture path formatting trips GCC sanitizer restrict~~ — fixed 2026-10-14 in `9f6ba89a` | tests/audit/yew_f_139.c | s01 warning-clean sanitizer lane; s59 DoD 1/2/14; F15 complete regression |
 | YEW-F-140 | M | open | F15 CI | nil Fletch evaluation passes NULL to `fwrite` | tests/audit/yew_f_140.c | C/POSIX library contract; s01 sanitizer lane; s59 DoD 1/2/14 |
 | YEW-F-141 | M | open | F15 CI | sanitizer profile continues after UBSan diagnostics | tests/audit/yew_f_141.c | s01 sanitizer gate; s59 DoD 1/2/14; F15 complete regression |
-| YEW-F-142 | H | open | F15 CI | timed text-buffer fuzzing retains an unbounded trace | tests/audit/yew_f_142.c | s58 section 7 64 MiB high-water; invariant 4; F15 soak evidence |
-| YEW-F-143 | M | open | F15 CI | text-buffer fuzz clock emits an unbounded warning stream | tests/audit/yew_f_143.c | s02 deterministic harness; s58 section 7; F15 soak evidence |
+| YEW-F-142 | H | fixed | F15 CI | ~~timed text-buffer fuzzing retains an unbounded trace~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_142.c | s58 section 7 64 MiB high-water; invariant 4; F15 soak evidence |
+| YEW-F-143 | M | fixed | F15 CI | ~~text-buffer fuzz clock emits an unbounded warning stream~~ — fixed 2026-10-14 in `9c4657e3` | tests/audit/yew_f_143.c | s02 deterministic harness; s58 section 7; F15 soak evidence |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1561,6 +1561,13 @@ steady growth to 1.1 GiB in 30 seconds. This invalidates the affected soak
 rows and violates Sprint 58's 64 MiB campaign high-water promise. The hard
 XFAIL requires reproducible trace epochs to roll over at a fixed storage cap
 while retaining the active epoch for failure replay and minimization.
+Commit `9c4657e3` rolls the campaign into deterministic, independently
+replayable epochs at an 8 MiB retained-trace cap and folds every epoch into
+the reported campaign hashes and operation count. A 120-second one-worker
+probe completed 618,909 operations across 271 epochs, reported a 9.42 MiB
+post-operation peak trace (the fixed cap plus one bounded operation), and
+fell from its transient 457 MiB allocator high-water to 130--150 MiB rather
+than growing monotonically.
 
 `YEW-F-143` is Medium because `fuzz_textbuf` creates the undo root under the
 real clock and only then installs its deterministic clock, whose 2023 epoch
@@ -1570,6 +1577,9 @@ record multi-gigabyte file-backed writes over the soak. This amplifies the
 resource failure and obscures useful diagnostics without exercising intended
 clock behavior. The hard XFAIL requires the pristine undo root to be rebased
 to the injected deterministic wall and monotonic clocks before fuzz edits.
+Commit `9c4657e3` rebases the still-pristine root to both injected clocks.
+The same 120-second probe emitted zero backward-clock warnings; its 81
+bounded log lines were the undo tree's once-per-epoch budget notice.
 
 ## Unverified observations
 

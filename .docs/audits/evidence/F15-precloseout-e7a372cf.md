@@ -42,8 +42,9 @@ sanitizer build then filed `YEW-F-139`. Its rerun exposed the nil-output UBSan
 violation and non-fatal UBSan policy recorded as `YEW-F-140`/`YEW-F-141`.
 The concurrent tier-1 soak exhausted the macOS host after four unbounded
 `fuzz_textbuf` traces and a fake-clock warning storm, recorded as
-`YEW-F-142`/`YEW-F-143`. The current ledgers contain 139 fixed entries and
-four active XFAILs, and reserve `YEW-F-144` next. F15 records one Critical,
+`YEW-F-142`/`YEW-F-143`; commit `9c4657e3` closes both with bounded replayable
+epochs and deterministic root clocks. The current ledgers contain 141 fixed
+entries and two active XFAILs, and reserve `YEW-F-144` next. F15 records one Critical,
 two High, 72 Medium, zero Low, and four unverified observations. No severity
 was waived or deferred.
 
@@ -101,10 +102,9 @@ performance, or size gate:
   do not vary with scheduler timing.
 - `YEW-F-139` moves F007 path formatting to a standalone directory buffer
   after GCC 15 rejected same-aggregate subobjects at the sanitizer profile.
-- `YEW-F-140` through `YEW-F-143` remain active: they cover the nil-output
-  UBSan violation, a non-fatal UBSan profile, unbounded retained text-buffer
-  fuzz traces, and the deterministic-clock warning storm exposed by the
-  complete sanitizer and soak evidence.
+- `YEW-F-140`/`YEW-F-141` remain active for the nil-output UBSan violation and
+  non-fatal UBSan profile. `YEW-F-142`/`YEW-F-143` close the unbounded retained
+  text-buffer trace and deterministic-clock warning storm exposed by the soak.
 
 Amendments S59-A35 through S59-A40 bind the affected source-sprint and F15
 contract corrections. F133 through F138 are portability and deterministic-test
@@ -373,8 +373,8 @@ These are witnesses to inspect, not pre-approved checkbox verdicts.
 ### XFAIL ceiling
 
 The closeout's recorded ceiling is eight. The current audit registry and
-remediation ledgers contain four active XFAIL ids, `YEW-F-140` through
-`YEW-F-143`; Fletch debt remains empty. The existing checked XFAIL row is
+remediation ledgers contain two active XFAIL ids, `YEW-F-140` and
+`YEW-F-141`; Fletch debt remains empty. The existing checked XFAIL row is
 supported, but remains for the independent reviewer to confirm alongside the
 64 sprint rows.
 
@@ -382,7 +382,8 @@ supported, but remains for the independent reviewer to confirm alongside the
 
 - An independent non-author reviewer has not inspected F15 or assigned its
   64 sprint-row verdicts on the current baseline.
-- Remediate `YEW-F-140` through `YEW-F-143`, then complete the ASan/UBSan
+- Remediate `YEW-F-140`/`YEW-F-141`, verify `YEW-F-142`/`YEW-F-143` under the
+  sanitizer profile, then complete the ASan/UBSan
   rerun, complete Valgrind lane, full PTY double run, and byte-compared
   aggregate determinism.
   Exact post-F138 GCC and Clang `make test` aggregates at clean successor
