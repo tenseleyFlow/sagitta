@@ -3636,17 +3636,18 @@ static void case_s57_25_help_pending(PtyCtx *c)
     s18_finish(c, path);
 }
 
-/*
- * DoD 3: the first `:!tool bu<Tab>` pends; the answer refills the menu
- * with the subcommands the tool's help listed (and edits nothing); the
- * second Tab completes `build `.
- */
+/* DoD 3 across the sibling cases: help_pending proves the first Tab's
+ * visible pending state; this case proves that the arriving answer refills
+ * the menu without editing and the second Tab completes `build `. */
 static void case_s57_25_help_subcommands(PtyCtx *c)
 {
     static const u8 initial[] = "help fixture\n";
     char path[256];
 
-    if (!s57_25_tool(c, "tool", s57_25_clap_help, true) ||
+    /* The sibling pending case owns the deliberately held process.  Holding
+     * this answer too can race the product's locked 1,000 ms help timeout
+     * under a loaded runner and turn valid help into a negative cache row. */
+    if (!s57_25_tool(c, "tool", s57_25_clap_help, false) ||
         !s57_24_write(c, "bu-notes.txt", "notes\n", 0600))
         return;
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
@@ -3654,9 +3655,6 @@ static void case_s57_25_help_subcommands(PtyCtx *c)
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c, "!tool bu");
     s18_settle_after_keys(c, "tab");
-    ptc_wait_until(c, s57_screen_contains, "\xE2\x80\xA6",
-                   "waiting for the pending-help marker");
-    s57_25_release(c, "tool");
     ptc_wait_until(c, s57_25_answered, "Compile the project",
                    "waiting for the learned subcommands");
     s18_settle_after_keys(c, "tab");
@@ -3671,7 +3669,7 @@ static void case_s57_25_help_negative(PtyCtx *c)
     static const u8 initial[] = "help fixture\n";
     char path[256];
 
-    if (!s57_25_tool(c, "usage", "usage: usage [-abc] file ...\n", true) ||
+    if (!s57_25_tool(c, "usage", "usage: usage [-abc] file ...\n", false) ||
         !s57_24_write(c, "notes.txt", "notes\n", 0600))
         return;
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
@@ -3679,9 +3677,6 @@ static void case_s57_25_help_negative(PtyCtx *c)
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c, "!usage no");
     s18_settle_after_keys(c, "tab");
-    ptc_wait_until(c, s57_screen_contains, "\xE2\x80\xA6",
-                   "waiting for the pending-help marker");
-    s57_25_release(c, "usage");
     ptc_wait_until(c, s57_25_answered, "notes.txt",
                    "waiting for the negative answer");
     s18_settle_after_keys(c, "tab");
