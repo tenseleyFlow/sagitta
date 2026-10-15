@@ -13,8 +13,9 @@ Apple-silicon host `nomad-1`
 **Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
-**F15 evidence baseline:** `0c8dce52` contains all 138 completed finding
-remediations and their exact post-F138 complete compiler evidence. The 64-row
+**F15 remediation baseline:** `9f6ba89a` contains all 139 completed finding
+remediations. Exact post-F138 complete compiler evidence was recorded at
+`0c8dce52`. The 64-row
 packet at
 `.docs/audits/evidence/F15-precloseout-e7a372cf.md` records its original
 `e7a372cf` evidence plus the complete-regression failures that filed F136 and
@@ -42,8 +43,8 @@ worktree is currently registered.
 
 Sprint 58's adversarial work is complete: all fifteen fronts, dedup, coverage
 instrumentation, the ten invariant sessions, and the two inbound obligations
-landed. The global findings ledger now contains 139 stable IDs: 138 fixed and
-one active. F15's closeout recheck closed nine Medium findings. `YEW-F-127` through
+landed. The global findings ledger now contains 139 stable IDs and all 139 are
+fixed. F15's closeout recheck closed nine Medium findings. `YEW-F-127` through
 `YEW-F-132` align the foundation, test, batch, and size contracts with their
 shipped owners and truthful 1.0 boundary under S59-A35 through S59-A40;
 `YEW-F-133` through `YEW-F-135` repair disjoint-build temporary ownership,
@@ -70,9 +71,11 @@ PTY and tutor gate, 93 scripts / 951 assertions / zero failures / one skip,
 round-trip P1-P5, package, bans, smoke, and live-save torture. Both compilers
 report exactly 3,047 unit tests / 73,852,064 assertions / zero failures / two
 skips. The separate sanitizer, Valgrind, and byte-compared determinism lanes
-remain required. The first exact GCC sanitizer attempt then filed active
+remain required. The first exact GCC sanitizer attempt then filed
 `YEW-F-139`: GCC 15 rejects the F007 audit fixture's same-aggregate path
-formatting under the sanitizer `-O1` warning-clean profile.
+formatting under the sanitizer `-O1` warning-clean profile. Commit `9f6ba89a`
+uses standalone directory storage, and the exact failed compile command is
+now green; the complete sanitizer aggregate is being rerun.
 F14's closeout recheck closed four Medium findings. `YEW-F-122`/`YEW-F-123`
 align obsolete package/manual staging rules and the runtime-import amendment
 identity under S59-A32/A33 without changing product behavior. `YEW-F-125`
@@ -173,8 +176,8 @@ stdout/stderr are retained as `supervisor.out` and
 
 Sprint 59 is active concurrently, as its prerequisite explicitly requires the
 soak to be running rather than complete. Its remediation governance has
-executable gates: all 138 completed fixes reconcile, active `YEW-F-139` has a
-hard XFAIL, and priority order is proven from Git ancestry. The deterministic
+executable gates: all 139 completed fixes reconcile, no hard XFAIL remains,
+and priority order is proven from Git ancestry. The deterministic
 10% sample is recorded, the deferral ledger is empty and checked, and all 15
 closeout files structurally carry all 747 mapped DoD items. Every closeout is
 honestly NOT READY with `Reviewer: UNASSIGNED`; structural completeness is not
@@ -228,8 +231,8 @@ performance-policy checks. F15 maps all 64 foundation, test, batch, latency,
 size, and embedded rows after identical 3,047-test GCC/Clang unit runs,
 2,540 empty-module units, focused sanitizer and Valgrind checks, the complete
 script suite, batch torture, allocation gates, portable release selftests,
-same-host binary identity, and all 138 passing governance fixtures plus the
-active F139 hard XFAIL. Designated strict performance, pinned size/musl, full
+same-host binary identity, and all 139 governance fixtures. Designated strict
+performance, pinned size/musl, full
 sanitizer/Valgrind/PTY, current hosted, cross-target, embedded-guest, hardware,
 and independent-machine evidence remain explicit blockers. All fifteen
 packets remain NOT READY until a

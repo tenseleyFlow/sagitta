@@ -14,7 +14,7 @@ so those ids and supporting Sprint 57 records are permanent.
 
 **Current frontier (2026-10-14): Sprint 59 is active while Sprint 58's
 replacement tier-1 soak runs.** All 15 audit fronts and ten invariant sessions
-are complete; 138 of 139 confirmed findings are fixed. F127–F132 aligned F15's
+are complete; all 139 confirmed findings are fixed. F127–F132 aligned F15's
 foundation, test, batch, and size contracts with shipped owners and the
 truthful 1.0 boundary under S59-A35–A40. F133–F135 repaired disjoint-build
 temporary ownership, FHS canonical-path handling, and inherited Git signing
@@ -28,7 +28,8 @@ timing while clock failure remains fatal. Exact clean successor GCC 15.3 and
 Clang 21.1 aggregates are green with identical 3,047-test / 73,852,064
 assertion summaries, zero failures, and two declared skips. F139 records the
 GCC sanitizer profile rejecting same-aggregate path formatting in the F007
-audit fixture; remediation is active. F122/F123 aligned F14's
+audit fixture; `9f6ba89a` moves the source to standalone storage and the exact
+failed compile is green. F122/F123 aligned F14's
 obsolete package/manual staging rules and runtime-import amendment identity
 under S59-A32/A33. F125 repaired the plugins-only unit boundary without
 removing the module-neutral assertions, and F126 aligned Sprint 54 with the
@@ -93,8 +94,8 @@ builds, bounded deterministic fuzz, documentation/bans/shim gates, and
 performance-policy checks. F15 maps all 64 inherited rows after identical
 3,047-test GCC/Clang unit runs, 2,540 empty-module units, focused sanitizer
 and Valgrind checks, the complete script suite, batch torture, allocation and
-portable release gates, same-host binary identity, and all 138 governance
-fixtures plus the active F139 hard XFAIL. Its designated timing, pinned
+portable release gates, same-host binary identity, and all 139 governance
+fixtures. Its designated timing, pinned
 size/musl, full dynamic-analysis and PTY, hosted/cross-target,
 embedded/hardware, and independent-machine evidence remain explicit blockers.
 Sprint 60 is queued and may not start until all 15 Sprint 59 closeouts say

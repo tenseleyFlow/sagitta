@@ -10,9 +10,9 @@
 Disposition: **NOT READY — the packet baseline's scoped functional and
 governance evidence is green, `YEW-F-138` is fixed, and exact successor Linux
 GCC/Clang aggregates are completely green with identical assertion totals.
-The successor sanitizer build filed active `YEW-F-139`; independent review
-and the required memory-checker, designated, cross-target, hosted, and
-hardware gates remain.**
+The successor sanitizer build filed and focused remediation closed
+`YEW-F-139`; its complete rerun, independent review, and the required
+memory-checker, designated, cross-target, hosted, and hardware gates remain.**
 
 This packet prepares F15 for closeout without signing it. Its author also
 performed F15's contract reconciliation and remediated findings discovered
@@ -38,7 +38,8 @@ finding id was `YEW-F-136`. Follow-up remediation commits through `87a495cd`
 fix that finding, the later selected-build documentation defect, and the
 passing unit suite's scheduler-dependent assertion total. The successor
 sanitizer build then filed `YEW-F-139`. The current ledgers contain 138 fixed
-entries, one active XFAIL, and reserve `YEW-F-140` next.
+entries plus its focused remediation, for 139 fixed entries, zero active
+XFAILs, and reserve `YEW-F-140` next.
 F15 records one Critical, one High, 69
 Medium, zero Low, and four unverified observations. No severity was waived or
 deferred.
@@ -59,9 +60,9 @@ that campaign.
 
 ## Sprint 59 closeout recheck and remediation
 
-The recheck and follow-up complete-regression work found twelve closed Medium
-defects and one active Medium defect without deleting product features or
-weakening a quality, performance, or size gate:
+The recheck and follow-up complete-regression work found and closed thirteen
+Medium defects without deleting product features or weakening a quality,
+performance, or size gate:
 
 - `YEW-F-127` replaces obsolete landing-day hard-error requirements with
   the shipped file/TUI, clean, batch, script, PTY, fuzz, replay, and grant
@@ -95,8 +96,8 @@ weakening a quality, performance, or size gate:
 - `YEW-F-138` makes successful asynchronous clipboard-poll clock reads
   uncounted while preserving fatal clock failures, so passing assertion totals
   do not vary with scheduler timing.
-- `YEW-F-139` records the F007 audit fixture formatting one aggregate
-  subobject from another in a form GCC 15 rejects at the sanitizer profile.
+- `YEW-F-139` moves F007 path formatting to a standalone directory buffer
+  after GCC 15 rejected same-aggregate subobjects at the sanitizer profile.
 
 Amendments S59-A35 through S59-A40 bind the affected source-sprint and F15
 contract corrections. F133 through F138 are portability and deterministic-test
@@ -364,20 +365,19 @@ These are witnesses to inspect, not pre-approved checkbox verdicts.
 
 ### XFAIL ceiling
 
-The closeout's recorded ceiling is eight. The current audit registry and
-remediation ledgers contain one active XFAIL id, `YEW-F-139`; Fletch debt is
-empty. The existing checked XFAIL row is supported, but remains for the
-independent reviewer to confirm alongside the 64 sprint rows.
+The closeout's recorded ceiling is eight. The current audit registry,
+remediation ledgers, and Fletch debt contain zero active XFAIL ids. The
+existing checked XFAIL row is supported, but remains for the independent
+reviewer to confirm alongside the 64 sprint rows.
 
 ## Explicit blockers before READY
 
 - An independent non-author reviewer has not inspected F15 or assigned its
   64 sprint-row verdicts on the current baseline.
-- The complete ASan/UBSan lane is blocked by active `YEW-F-139`; the complete
-  Valgrind lane, full PTY double run, and byte-compared aggregate determinism
-  remain outstanding. Exact post-F138 GCC and Clang `make test` aggregates at
-  clean successor `0c8dce52` are green with identical 73,852,064-assertion
-  unit summaries.
+- The complete post-F139 ASan/UBSan rerun, complete Valgrind lane, full PTY
+  double run, and byte-compared aggregate determinism remain outstanding.
+  Exact post-F138 GCC and Clang `make test` aggregates at clean successor
+  `0c8dce52` are green with identical 73,852,064-assertion unit summaries.
 - Strict Sprint 56 designated-runner calibration, latency, noise,
   profiler-crosscheck, frame-count, allocation-overhead, and RSS results are
   outstanding; the loaded `hasu` run is advisory only.

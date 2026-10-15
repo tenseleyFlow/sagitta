@@ -151,7 +151,7 @@ recorded in `audit-00.md`.
 | YEW-F-136 | M | fixed | F15 CI | ~~tutor Git lesson inherits global commit policy~~ — fixed 2026-10-14 in `c99b4528` | tests/audit/yew_f_136.c | s59 DoD 9/10/11; s57 cross-target matrix; F15 complete regression |
 | YEW-F-137 | M | fixed | F15 CI | ~~documentation targets ignore selected BUILD binaries~~ — fixed 2026-10-14 in `060cdee3` | tests/audit/yew_f_137.c | s01 disjoint build rule; s59 DoD 8/12/14/15; F15 complete regression |
 | YEW-F-138 | M | fixed | F15 CI | ~~clipboard polling makes assertion totals scheduler-dependent~~ — fixed 2026-10-14 in `87a495cd` | tests/audit/yew_f_138.c | s01 deterministic test output; s59 DoD 1/2/14; F15 complete regression |
-| YEW-F-139 | M | confirmed | F15 CI | audit fixture path formatting trips GCC sanitizer restrict | tests/audit/yew_f_139.c | s01 warning-clean sanitizer lane; s59 DoD 1/2/14; F15 complete regression |
+| YEW-F-139 | M | fixed | F15 CI | ~~audit fixture path formatting trips GCC sanitizer restrict~~ — fixed 2026-10-14 in `9f6ba89a` | tests/audit/yew_f_139.c | s01 warning-clean sanitizer lane; s59 DoD 1/2/14; F15 complete regression |
 
 `YEW-F-001` was Medium because the width mismatch visibly corrupted chrome but
 left the document bytes intact and could be recovered by disabling
@@ -1526,6 +1526,10 @@ locked `-Werror=restrict` gate correctly stops. This is an audit-fixture
 portability defect rather than evidence of product undefined behavior. The
 hard XFAIL requires path formatting to use provably disjoint source and
 destination objects without weakening warnings or sanitizer coverage.
+Commit `9f6ba89a` creates the temporary directory in standalone storage,
+copies the resulting name into fixture state, and formats child paths from
+that disjoint source. The exact previously failing GCC 15 ASan/UBSan compile
+command is warning-clean.
 
 ## Unverified observations
 

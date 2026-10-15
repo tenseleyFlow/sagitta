@@ -370,6 +370,8 @@ findings `YEW-F-127`–`YEW-F-139`
   uncounted; 100 isolated executions now emit one identical assertion total.
 - `YEW-F-139` records GCC 15 rejecting the F007 audit fixture's same-aggregate
   source and destination under the ASan/UBSan `-O1` warning-clean profile.
+- Commit `9f6ba89a` formats child paths from standalone directory storage;
+  the exact previously failing sanitizer compile command is warning-clean.
 - S59-A35 through S59-A40 synchronize the source sprints, product diagnostic,
   and F15 record;
   no product code, test coverage, ban, or performance budget is removed.
