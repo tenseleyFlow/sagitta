@@ -46,6 +46,33 @@ case $rss_poll_seconds in
 esac
 
 rss_observed_kib=0
+sample_rss_kib()
+{
+    pid=$1
+
+    if [ -r "/proc/$pid/status" ]; then
+        LC_ALL=C awk '
+            $1 == "VmRSS:" && $2 ~ /^[0-9]+$/ {
+                print $2
+                found = 1
+                exit
+            }
+            END { if (!found) exit 1 }
+        ' "/proc/$pid/status"
+        return $?
+    fi
+
+    ps -o rss= -p "$pid" 2>/dev/null |
+        LC_ALL=C awk '
+            $1 ~ /^[0-9]+$/ {
+                print $1
+                found = 1
+                exit
+            }
+            END { if (!found) exit 1 }
+        '
+}
+
 run_campaign()
 {
     campaign_pid=
@@ -58,8 +85,7 @@ run_campaign()
     "$@" &
     campaign_pid=$!
     while kill -0 "$campaign_pid" 2>/dev/null; do
-        rss_observed_kib=$(ps -o rss= -p "$campaign_pid" 2>/dev/null |
-            tr -d ' ' || true)
+        rss_observed_kib=$(sample_rss_kib "$campaign_pid" || true)
         case $rss_observed_kib in
             ''|*[!0-9]*)
                 if kill -0 "$campaign_pid" 2>/dev/null; then

@@ -6,6 +6,19 @@ tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/yew-fuzz-rss-selftest.XXXXXX")
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 mkdir -p "$tmp_dir/build" "$tmp_dir/admit"
 
+expect_output()
+{
+    file=$1
+    text=$2
+    label=$3
+
+    if ! grep -F "$text" "$file" >/dev/null; then
+        echo "fuzz-soak-rss selftest: missing $label diagnostic" >&2
+        cat "$file" >&2
+        exit 1
+    fi
+}
+
 cat >"$tmp_dir/rss_probe.c" <<'EOF'
 #define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
@@ -37,7 +50,7 @@ if YEW_SOAK_RSS_LIMIT_KIB=1024 YEW_SOAK_RSS_POLL_SECONDS=1 \
     echo 'fuzz-soak-rss selftest: oversized worker returned success' >&2
     exit 1
 fi
-grep -F 'exceeded RSS limit 1024 KiB' "$tmp_dir/out" >/dev/null
+expect_output "$tmp_dir/out" 'exceeded RSS limit 1024 KiB' 'RSS limit'
 
 if YEW_SOAK_RSS_LIMIT_KIB=invalid scripts/fuzz-soak.sh \
     "$tmp_dir/build" fuzz_rss_probe 60 1 "$tmp_dir/ledger" \
@@ -45,6 +58,6 @@ if YEW_SOAK_RSS_LIMIT_KIB=invalid scripts/fuzz-soak.sh \
     echo 'fuzz-soak-rss selftest: invalid limit returned success' >&2
     exit 1
 fi
-grep -F 'invalid RSS limit invalid' "$tmp_dir/invalid" >/dev/null
+expect_output "$tmp_dir/invalid" 'invalid RSS limit invalid' 'invalid limit'
 
 echo 'fuzz-soak-rss selftest: ok'
