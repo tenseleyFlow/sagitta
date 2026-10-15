@@ -3644,10 +3644,10 @@ static void case_s57_25_help_subcommands(PtyCtx *c)
     static const u8 initial[] = "help fixture\n";
     char path[256];
 
-    /* The sibling pending case owns the deliberately held process.  Holding
-     * this answer too can race the product's locked 1,000 ms help timeout
-     * under a loaded runner and turn valid help into a negative cache row. */
-    if (!s57_25_tool(c, "tool", s57_25_clap_help, false) ||
+    /* Hold prewarm until Tab has attached its menu context, then release
+     * immediately below.  Waiting for another frame here can exceed the
+     * product's locked 1,000 ms help timeout on a loaded runner. */
+    if (!s57_25_tool(c, "tool", s57_25_clap_help, true) ||
         !s57_24_write(c, "bu-notes.txt", "notes\n", 0600))
         return;
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
@@ -3655,6 +3655,7 @@ static void case_s57_25_help_subcommands(PtyCtx *c)
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c, "!tool bu");
     s18_settle_after_keys(c, "tab");
+    s57_25_release(c, "tool");
     ptc_wait_until(c, s57_25_answered, "Compile the project",
                    "waiting for the learned subcommands");
     s18_settle_after_keys(c, "tab");
@@ -3669,7 +3670,7 @@ static void case_s57_25_help_negative(PtyCtx *c)
     static const u8 initial[] = "help fixture\n";
     char path[256];
 
-    if (!s57_25_tool(c, "usage", "usage: usage [-abc] file ...\n", false) ||
+    if (!s57_25_tool(c, "usage", "usage: usage [-abc] file ...\n", true) ||
         !s57_24_write(c, "notes.txt", "notes\n", 0600))
         return;
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
@@ -3677,6 +3678,7 @@ static void case_s57_25_help_negative(PtyCtx *c)
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c, "!usage no");
     s18_settle_after_keys(c, "tab");
+    s57_25_release(c, "usage");
     ptc_wait_until(c, s57_25_answered, "notes.txt",
                    "waiting for the negative answer");
     s18_settle_after_keys(c, "tab");
