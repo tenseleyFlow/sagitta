@@ -24,7 +24,8 @@ enum {
     YEW_TEXT_FUZZ_MAX_LINES = 8192,
     YEW_TEXT_FUZZ_SNAPSHOTS = 4,
     YEW_TEXT_FUZZ_MARKS = 8,
-    YEW_TEXT_FUZZ_CHECK_ARGS = 8
+    YEW_TEXT_FUZZ_CHECK_ARGS = 8,
+    YEW_TEXT_FUZZ_TRACE_BYTES_MAX = 8 * 1024 * 1024
 };
 
 typedef enum {
@@ -350,6 +351,8 @@ static bool replay_init(Replay *run, const Trace *trace)
     oracle_init(&run->oracle, base.data, (u64)base.len);
     bytebuf_free(&base);
     run->marks = yew_marks_new();
+    run->clock_ms = 1U;
+    run->wall_sec = INT64_C(1700000000);
     run->undo = yew_undo_new(run->tb);
     if (run->marks == NULL || run->undo == NULL)
         goto fail;
@@ -363,9 +366,12 @@ static bool replay_init(Replay *run, const Trace *trace)
     run->edit.marks = run->marks;
     run->edit.cset = &run->cursors;
     run->edit.undo = run->undo;
-    run->clock_ms = 1U;
-    run->wall_sec = INT64_C(1700000000);
     yew_undo_set_clock(run->undo, mono_clock, wall_clock, run);
+    /* yew_undo_new() necessarily uses the production clock.  This harness
+     * installs a deterministic clock immediately afterward, so rebase the
+     * still-pristine root before an edit can compare against real time. */
+    run->undo->nodes.data[0].t_wall = run->wall_sec;
+    run->undo->nodes.data[0].t_last_ms = run->clock_ms;
     yew_undo_set_limits(run->undo, UINT64_C(1024) * 1024U, 16U,
                         YEW_UNDO_PERSIST_BYTES_MAX);
     for (i = 0U; i < YEW_TEXT_FUZZ_SNAPSHOTS; i++)
@@ -1176,9 +1182,8 @@ static bool generate_op(Generator *gen, const Replay *run, size_t index)
     return push_op(gen, TRACE_CHECK, 0U, 0U, NULL, TRACE_CONTENT_ASCII);
 }
 
-static u64 fnv_bytes(const u8 *bytes, size_t len)
+static u64 fnv_update(u64 hash, const u8 *bytes, size_t len)
 {
-    u64 hash = UINT64_C(1469598103934665603);
     size_t i;
 
     for (i = 0U; i < len; i++) {
@@ -1186,6 +1191,22 @@ static u64 fnv_bytes(const u8 *bytes, size_t len)
         hash *= UINT64_C(1099511628211);
     }
     return hash;
+}
+
+static size_t trace_storage_bytes(const Trace *trace)
+{
+    size_t bytes;
+    size_t i;
+
+    if (trace->cap > (SIZE_MAX - sizeof(*trace)) / sizeof(*trace->ops))
+        return SIZE_MAX;
+    bytes = sizeof(*trace) + trace->cap * sizeof(*trace->ops);
+    for (i = 0U; i < trace->len; i++) {
+        if (trace->ops[i].payload.cap > SIZE_MAX - bytes)
+            return SIZE_MAX;
+        bytes += trace->ops[i].payload.cap;
+    }
+    return bytes;
 }
 
 static bool write_file(const char *path, const u8 *bytes, size_t len)
@@ -1312,6 +1333,45 @@ static int report_failure(Trace *trace, TraceFailure observed)
     return 1;
 }
 
+static void fold_epoch_hashes(const Generator *gen, const Replay *run,
+                              u64 *trace_hash, u64 *final_hash)
+{
+    Bytebuf trace_bytes;
+    Bytebuf final_bytes;
+
+    bytebuf_init(&trace_bytes);
+    bytebuf_init(&final_bytes);
+    trace_write(&gen->trace, &trace_bytes);
+    oracle_materialize(&run->oracle, &final_bytes);
+    *trace_hash = fnv_update(*trace_hash, trace_bytes.data, trace_bytes.len);
+    *final_hash = fnv_update(*final_hash, final_bytes.data, final_bytes.len);
+    *final_hash ^= yew_undo_current(run->undo);
+    *final_hash *= UINT64_C(1099511628211);
+    bytebuf_free(&final_bytes);
+    bytebuf_free(&trace_bytes);
+}
+
+static bool rollover_epoch(Generator *gen, Replay *run,
+                           TraceFailure *failure, u64 *trace_hash,
+                           u64 *final_hash)
+{
+    const TraceOp *last;
+
+    if (gen->trace.len == 0U)
+        return false;
+    last = &gen->trace.ops[gen->trace.len - 1U];
+    if (!check_state(run, last, gen->trace.len - 1U, true, failure))
+        return false;
+    fold_epoch_hashes(gen, run, trace_hash, final_hash);
+    replay_dispose(run);
+    trace_free(&gen->trace);
+    trace_init(&gen->trace);
+    gen->trace.seed = gen->rng;
+    (void)snprintf(gen->trace.mix, sizeof(gen->trace.mix), "%s",
+                   mix_name(gen->mix));
+    return replay_init(run, &gen->trace);
+}
+
 static int run_generated(u64 seed, Mix mix, size_t iterations,
                          u64 seconds, const char *trace_out)
 {
@@ -1319,12 +1379,14 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
     Replay run;
     TraceFailure failure;
     Bytebuf trace_bytes;
-    Bytebuf final_bytes;
     u64 deadline = seconds == 0U
                        ? UINT64_MAX
                        : monotonic_ns() + seconds * UINT64_C(1000000000);
-    u64 final_hash;
-    size_t i;
+    u64 final_hash = UINT64_C(1469598103934665603);
+    u64 trace_hash = UINT64_C(1469598103934665603);
+    size_t total_ops = 0U;
+    size_t epochs = 0U;
+    size_t peak_trace = 0U;
     int result = 1;
 
     (void)memset(&gen, 0, sizeof(gen));
@@ -1340,11 +1402,14 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
         return 2;
     }
     (void)memset(&failure, 0, sizeof(failure));
-    for (i = 0U; i < iterations ||
-                 (seconds != 0U && monotonic_ns() < deadline); i++) {
+    while (total_ops < iterations ||
+           (seconds != 0U && monotonic_ns() < deadline)) {
         TraceOp *op;
+        size_t epoch_index = gen.trace.len;
+        size_t trace_bytes;
+        bool campaign_done;
 
-        if (!generate_op(&gen, &run, i)) {
+        if (!generate_op(&gen, &run, epoch_index)) {
             (void)fprintf(stderr, "fuzz_textbuf: trace allocation failed\n");
             goto done;
         }
@@ -1356,15 +1421,37 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
             trace_free(&gen.trace);
             return result;
         }
-        if (!check_state(&run, op, i, false, &failure)) {
+        if (!check_state(&run, op, epoch_index, false, &failure)) {
             replay_dispose(&run);
             result = report_failure(&gen.trace, failure);
             trace_free(&gen.trace);
             return result;
         }
-        if (seconds != 0U && i + 1U >= iterations &&
-            monotonic_ns() >= deadline)
-            break;
+        total_ops++;
+        trace_bytes = trace_storage_bytes(&gen.trace);
+        if (trace_bytes > peak_trace)
+            peak_trace = trace_bytes;
+        campaign_done = total_ops >= iterations &&
+                        (seconds == 0U || monotonic_ns() >= deadline);
+        if (!campaign_done &&
+            trace_bytes >= (size_t)YEW_TEXT_FUZZ_TRACE_BYTES_MAX) {
+            if (trace_out != NULL) {
+                (void)fprintf(
+                    stderr,
+                    "fuzz_textbuf: --trace-out exceeds the %u-byte "
+                    "single-trace cap\n",
+                    (u32)YEW_TEXT_FUZZ_TRACE_BYTES_MAX);
+                goto done;
+            }
+            if (!rollover_epoch(&gen, &run, &failure, &trace_hash,
+                                &final_hash)) {
+                replay_dispose(&run);
+                result = report_failure(&gen.trace, failure);
+                trace_free(&gen.trace);
+                return result;
+            }
+            epochs++;
+        }
     }
     if (gen.trace.len == 0U ||
         !check_state(&run, &gen.trace.ops[gen.trace.len - 1U],
@@ -1378,21 +1465,19 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
         (void)fprintf(stderr, "fuzz_textbuf: required content class missed\n");
         goto done;
     }
-    bytebuf_init(&trace_bytes);
-    bytebuf_init(&final_bytes);
-    trace_write(&gen.trace, &trace_bytes);
-    oracle_materialize(&run.oracle, &final_bytes);
-    gen.trace_hash = fnv_bytes(trace_bytes.data, trace_bytes.len);
-    final_hash = fnv_bytes(final_bytes.data, final_bytes.len);
-    final_hash ^= yew_undo_current(run.undo);
-    final_hash *= UINT64_C(1099511628211);
-    if (trace_out != NULL &&
-        !write_file(trace_out, trace_bytes.data, trace_bytes.len)) {
-        (void)fprintf(stderr, "fuzz_textbuf: cannot write trace %s\n",
-                      trace_out);
-        bytebuf_free(&final_bytes);
+    fold_epoch_hashes(&gen, &run, &trace_hash, &final_hash);
+    epochs++;
+    gen.trace_hash = trace_hash;
+    if (trace_out != NULL) {
+        bytebuf_init(&trace_bytes);
+        trace_write(&gen.trace, &trace_bytes);
+        if (!write_file(trace_out, trace_bytes.data, trace_bytes.len)) {
+            (void)fprintf(stderr, "fuzz_textbuf: cannot write trace %s\n",
+                          trace_out);
+            bytebuf_free(&trace_bytes);
+            goto done;
+        }
         bytebuf_free(&trace_bytes);
-        goto done;
     }
     /* The campaign report contract shared with every fuzz target (see
      * scripts/fuzz-soak.sh): "<target>: seed=<decimal> [seconds=N]
@@ -1401,10 +1486,10 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
     if (seconds != 0U)
         (void)printf("seconds=%llu ", (unsigned long long)seconds);
     (void)printf(
-        "iters=%zu mix=%s trace=%016llx "
+        "iters=%zu epochs=%zu peak_trace=%zu mix=%s trace=%016llx "
         "final=%016llx bytes=%llu pieces=%u invalid=%zu nul=%zu crlf=%zu "
         "split=%zu huge=%zu ok\n",
-        gen.trace.len, mix_name(mix),
+        total_ops, epochs, peak_trace, mix_name(mix),
         (unsigned long long)gen.trace_hash, (unsigned long long)final_hash,
         (unsigned long long)yew_textbuf_len(run.tb),
         yew_textbuf_piece_count(run.tb),
@@ -1412,8 +1497,6 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
         gen.class_counts[TRACE_CONTENT_BINARY],
         gen.class_counts[TRACE_CONTENT_CRLF], gen.sequence_splits,
         gen.class_counts[TRACE_CONTENT_HUGE_LINE]);
-    bytebuf_free(&final_bytes);
-    bytebuf_free(&trace_bytes);
     result = 0;
 
 done:
