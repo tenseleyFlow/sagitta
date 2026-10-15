@@ -37,17 +37,20 @@ typedef struct F007Files {
 static bool f007_files_make(F007Files *files)
 {
     static const char body[] = "audit fixture\n";
+    static const char dir_template[] = "/tmp/yew-f007-XXXXXX";
+    char dir[sizeof(files->dir)];
     int i;
 
     (void)memset(files, 0, sizeof(*files));
-    (void)snprintf(files->dir, sizeof(files->dir), "/tmp/yew-f007-XXXXXX");
-    if (mkdtemp(files->dir) == NULL)
+    (void)memcpy(dir, dir_template, sizeof(dir_template));
+    if (mkdtemp(dir) == NULL)
         return false;
+    (void)memcpy(files->dir, dir, strlen(dir) + 1U);
     for (i = 0; i < F007_FILES; i++) {
         FILE *stream;
 
         (void)snprintf(files->paths[i], sizeof(files->paths[i]),
-                       "%s/f%d.txt", files->dir, i);
+                       "%s/f%d.txt", dir, i);
         stream = fopen(files->paths[i], "wb");
         if (stream == NULL)
             return false;
