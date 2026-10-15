@@ -396,7 +396,8 @@ static int mode_eval(FlRun *r, const char *name, const char *src, size_t len,
 
         bytebuf_init(&bb);
         yew_fl_print_result(&r->vm, out, &bb);
-        (void)fwrite(bb.data, 1U, bb.len, stdout);
+        if (bb.len != 0U)
+            (void)fwrite(bb.data, 1U, bb.len, stdout);
         bytebuf_free(&bb);
     }
     return YEW_EXIT_OK;

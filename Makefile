@@ -434,6 +434,11 @@ endif
 ifeq ($(SAN),1)
 CFLAGS  += -fsanitize=address,undefined -fno-omit-frame-pointer -O1
 LDFLAGS += -fsanitize=address,undefined -fno-omit-frame-pointer -O1
+# A recovered UBSan diagnostic is still a failed gate.  Keep the policy in
+# the selected sanitizer profile so every direct binary, shell script, and
+# recursive test target stops at the first runtime violation.
+override UBSAN_OPTIONS := halt_on_error=1:print_stacktrace=1
+export UBSAN_OPTIONS
 # The torture shim is LD_PRELOADed, which puts it ahead of the ASan
 # runtime in the child's initial library list.  ASan then declines to
 # install its interceptors, the shim's fault injection does not take,
@@ -775,6 +780,7 @@ MOCKCURL := $(BUILD)/tests/helpers/mockcurl
 AI_TEST_HELPERS := $(if $(filter ai,$(MODULES)),$(MOCKAI) $(MOCKCURL))
 DOCS_OPTION_DUMP := $(BUILD)/tests/helpers/option_dump
 DOCS_OPTION_DUMP_OBJ := $(BUILD)/tests/helpers/option_dump.o
+UBSAN_POLICY_PROBE := $(BUILD)/tests/helpers/ubsan_policy_probe
 $(BUILD)/tests/unit/test_ai_curl.o: CFLAGS += \
   -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
 $(BUILD)/tests/unit/test_ai_curl.o: $(FAKECURL)
@@ -1179,6 +1185,7 @@ endif
         embedded-image embedded-lowmem-image embedded embedded-gate \
         musl-verify test-musl-hosts \
         test-script fletch-script-coverage test-git-script fuzzlib-selftest \
+        test-sanitizer-policy \
         fuzz-cov fuzz-cov-weekly fuzz-cov-regression-selftest cov-selftest \
         fuzz-nightly soak soak-rc soak-selftest \
         test-fuss-commands test-git-hunks test-group-from-dir \
@@ -1941,6 +1948,10 @@ $(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c \
              $(MODULE_FORCE) $(PROFILE_FORCE) | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
+$(UBSAN_POLICY_PROBE): tests/helpers/ubsan_policy_probe.c \
+                       $(BUILD)/profile.stamp $(PROFILE_FORCE) | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
 #
 # THE FAST TIER -- what to run before every commit.
 #
@@ -2170,7 +2181,7 @@ soak-selftest:
 	$(MAKE) --no-print-directory COV=1 CC='$(COV_CC)' soak-selftest
 endif
 
-test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script test-tutor test-manual test-docs-sync \
+test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty test-fletch test-script test-tutor test-manual test-docs-sync test-sanitizer-policy \
       fuzzlib-selftest \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets target-tools-selftest \
@@ -2188,6 +2199,22 @@ test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-audit test-pty te
 	scripts/check-plugin-docs.sh
 	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
 	$(TORTURE_LIVE_GATE)
+
+ifeq ($(SAN),1)
+test-sanitizer-policy: $(UBSAN_POLICY_PROBE)
+	@mkdir -p $(BUILD)/tmp
+	@if $(UBSAN_POLICY_PROBE) >$(BUILD)/tmp/ubsan-policy.out \
+		2>$(BUILD)/tmp/ubsan-policy.err; then \
+		echo "test-sanitizer-policy: UBSan violation returned success" >&2; \
+		exit 1; \
+	fi
+	@grep -q 'runtime error: signed integer overflow' \
+		$(BUILD)/tmp/ubsan-policy.err
+	@echo "test-sanitizer-policy: ok"
+else
+test-sanitizer-policy:
+	@:
+endif
 
 test-pkg: $(BUILD)/yew
 	FAULTSHIM_CC='$(FAULTSHIM_CC)' tests/pkg/run.sh $(BUILD)/yew
