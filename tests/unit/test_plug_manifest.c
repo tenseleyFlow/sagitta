@@ -3,7 +3,6 @@
 #include "harness.h"
 
 #include <fcntl.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -207,18 +206,31 @@ void test_plug_manifest_entry_symlink_escape_is_rejected(void)
 {
     ManifestFix f;
     PlugManifest mf;
-    char resolved[PATH_MAX];
+    char outside[384];
+    char *resolved;
     static const char source[] =
         "{ name: \"escape\", version: \"1.0.0\", api: 1, "
         "entry: \"src/main.fl\", capabilities: [], events: [] }\n";
+    int n;
 
     manifest_fix_init(&f, "escape", source);
+    n = snprintf(outside, sizeof(outside), "%s/escape-target.fl", f.root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(outside));
+    manifest_write(outside, "nil\n");
     YEW_ASSERT_EQ_I64(unlink(f.entry), 0);
-    YEW_ASSERT_EQ_I64(symlink("/etc/passwd", f.entry), 0);
-    YEW_ASSERT_NOT_NULL(realpath("/etc/passwd", resolved));
+    YEW_ASSERT_EQ_I64(symlink(outside, f.entry), 0);
+    /* YEW-F-134: canonicalize a fixture-owned escape target through the
+     * project's portable wrapper.  A libc realpath declaration and the FHS
+     * spelling of /etc/passwd are both platform details, not this test's
+     * containment contract. */
+    resolved = yew_xrealpath(outside);
+    YEW_ASSERT_NOT_NULL(resolved);
     YEW_ASSERT(!manifest_read(&f, &mf));
     YEW_ASSERT(strstr(f.diag, "escapes directory") != NULL);
-    YEW_ASSERT(strstr(f.diag, resolved) != NULL);
+    if (resolved != NULL)
+        YEW_ASSERT(strstr(f.diag, resolved) != NULL);
+    yew_xfree(resolved);
+    YEW_ASSERT_EQ_I64(unlink(outside), 0);
     manifest_fix_done(&f);
 }
 

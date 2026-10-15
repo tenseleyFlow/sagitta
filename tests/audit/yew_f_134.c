@@ -1,7 +1,7 @@
 /*
  * YEW-F-134 — plugin containment test assumes /etc/passwd is canonical.
- * Correct behavior: compare the diagnostic with the host's resolved escape
- * target so symlinked FHS layouts prove the same containment contract.
+ * Correct behavior: compare the diagnostic with a resolved fixture-owned
+ * escape target so libc feature macros and FHS aliases are irrelevant.
  */
 #include "audit.h"
 
@@ -29,12 +29,15 @@ bool test_yew_f_134(char *why, size_t why_cap)
 {
     bool resolves = file_has(
         "tests/unit/test_plug_manifest.c",
-        "realpath(\"/etc/passwd\", resolved)");
+        "yew_xrealpath(outside)");
     bool compares = file_has(
         "tests/unit/test_plug_manifest.c",
         "strstr(f.diag, resolved)");
+    bool contained = !file_has(
+        "tests/unit/test_plug_manifest.c",
+        "symlink(\"/etc/passwd\"");
 
-    if (resolves && compares)
+    if (resolves && compares && contained)
         return true;
     (void)snprintf(why, why_cap,
                    "plugin containment unit assumes a canonical FHS path");
