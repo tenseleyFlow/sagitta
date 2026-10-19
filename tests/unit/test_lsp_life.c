@@ -1546,6 +1546,40 @@ static bool wait_new_ready(LifeFix *f, u32 old_job, i64 timeout_ms)
     return false;
 }
 
+void test_lsp_lifecycle_restart_waits_for_old_transport_drain(void)
+{
+    LifeFix f;
+    LspServer *server;
+    YewJob *job;
+    u32 old_job;
+
+    life_fix_init(&f, "session-utf8", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    old_job = server->job;
+    YEW_ASSERT(yew_lsp_client_restart(&f.ed, &f.ed.buffer));
+    job = yew_job_find(&f.ed, old_job);
+    YEW_ASSERT_NOT_NULL(job);
+
+    /* Model the scheduler interleaving from CI: waitpid observed the old
+     * server's exit, but its framed pipes have not reached EOF yet. */
+    job->state = YEW_JOB_SIGNALED;
+    job->reaped = true;
+    YEW_ASSERT(yew_job_pending(job));
+    yew_lsp_client_pump(&f.ed);
+    YEW_ASSERT_EQ_U64(server->job, old_job);
+
+    /* Let the ordinary pump collect the real wait status, drain the old
+     * transport, and only then start a replacement. */
+    job->state = YEW_JOB_RUNNING;
+    job->reaped = false;
+    YEW_ASSERT(wait_new_ready(&f, old_job,
+                              LIFE_RESTART_READY_TIMEOUT_MS));
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_drained(&f, 2000));
+    life_fix_free(&f);
+}
+
 void test_lsp_lifecycle_diagnostics_follow_live_document_version(void)
 {
     LifeFix f;

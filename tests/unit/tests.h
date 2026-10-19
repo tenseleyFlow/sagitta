@@ -1495,6 +1495,7 @@ void test_lsp_lifecycle_fakelsp_open_edit_save_close_sequence(void);
 void test_lsp_lifecycle_language_change_closes_document(void);
 void test_lsp_lifecycle_fakelsp_delayed_response_is_stale(void);
 void test_lsp_lifecycle_editor_free_is_graceful(void);
+void test_lsp_lifecycle_restart_waits_for_old_transport_drain(void);
 void test_lsp_lifecycle_diagnostics_follow_live_document_version(void);
 void test_lsp_lifecycle_unversioned_diagnostics_track_flush(void);
 void test_lsp_lifecycle_automatic_restart_reopens_documents(void);

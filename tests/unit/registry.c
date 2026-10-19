@@ -1542,6 +1542,7 @@ const YewTest yew_tests[] = {
     T(lsp_lifecycle_language_change_closes_document),
     T(lsp_lifecycle_fakelsp_delayed_response_is_stale),
     T(lsp_lifecycle_editor_free_is_graceful),
+    T(lsp_lifecycle_restart_waits_for_old_transport_drain),
     T(lsp_lifecycle_diagnostics_follow_live_document_version),
     T(lsp_lifecycle_unversioned_diagnostics_track_flush),
     T(lsp_lifecycle_automatic_restart_reopens_documents),

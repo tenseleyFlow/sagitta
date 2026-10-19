@@ -1357,8 +1357,15 @@ void yew_lsp_client_pump(Ed *ed)
         }
         if (!s->gave_up && s->state == YEW_LSP_DEAD &&
             ed->now_ms >= s->next_try_ms) {
-            if (j != NULL && !yew_job_pending(j))
+            /* A reaped child can still have protocol bytes or stderr in its
+             * pipes.  Its framed destructor owns s->rpc, so replacing the
+             * server before those pipes drain lets the old job destroy the
+             * new connection on a later settle pass. */
+            if (j != NULL) {
+                if (yew_job_pending(j))
+                    continue;
                 yew_job_release(ed, j);
+            }
             (void)spawn_server(ed, s);
         }
     }
