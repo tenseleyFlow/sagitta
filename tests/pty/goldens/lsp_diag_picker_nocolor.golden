@@ -1,11 +1,11 @@
 # yew pty golden v1
-size 80x24 alt=1 cursor=3,2 vis=1
+size 80x24 alt=1 cursor=4,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
 ✗   1 error alpha
 ▲   2 warning beta
 ● Diagnostics (buffer) 
-·:                                                                             
+· / filter
 
   src/diag_fixture.c:1:1  ✗ use of undeclared identifier 'alpha'
   src/diag_fixture.c:2:1  ▲ warning diagnostic
@@ -30,9 +30,9 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 AAAAAABBBBBAAAAAA
 AAAAAABBBBBBBAAAAA
 ACCCCCCCCCCCCCCCCCCCCCC
-ACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+ADDDDDDDDD
 
-AADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
@@ -48,15 +48,15 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
 
 
-AEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+ADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 
 CCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 --- legend
 A fg=default bg=default attrs=----------
 B fg=default bg=default attrs=----c-----
 C fg=default bg=default attrs=b---------
-D fg=default bg=default attrs=------r---
-E fg=default bg=default attrs=-d--------
+D fg=default bg=default attrs=-d--------
+E fg=default bg=default attrs=------r---
 --- sgr
 \x1b[0m
 \x1b[4:3m
@@ -65,7 +65,7 @@ E fg=default bg=default attrs=-d--------
 \x1b[24m
 \x1b[1m
 \x1b[22m
-\x1b[1m
+\x1b[2m
 \x1b[22m
 \x1b[7m
 \x1b[27m
