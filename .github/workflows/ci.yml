@@ -523,6 +523,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The audit suite verifies the exact remediation commits named in
+          # findings.md; a shallow scheduled checkout makes YEW-F-097 fail
+          # before Valgrind examines the product.
+          fetch-depth: 0
       - name: Install Valgrind
         run: |
           sudo apt-get update
