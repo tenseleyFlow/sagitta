@@ -1174,6 +1174,7 @@ void test_cmdline_enter_accepts_a_chosen_row_without_executing(void);
 void test_cmdline_escape_leaves_a_live_menu_and_closes_the_prompt(void);
 void test_cmdline_hint_reports_what_the_parser_understands(void);
 void test_cmdline_hint_says_nothing_it_does_not_know(void);
+void test_cmdline_open_clears_prior_prompt_hint(void);
 void test_cmdline_menu_commands_are_registered_and_internal(void);
 void test_cmdline_one_fuzzy_match_executes(void);
 void test_cmdline_fuzzy_execute_keeps_arguments(void);

@@ -351,13 +351,15 @@ void test_picker_swallows_unhandled_keys(void)
 
 /*
  * The filter line is the s18 widget, opened LAZILY on the first key or
- * draw.
+ * event-loop tick.
  *
  * Not at open time: a picker is normally launched from `:find`, and
  * that prompt is still up while the command runs — so a filter line
  * opened inside the command was closed again the moment the command
  * returned, leaving a picker nobody could type into.  The guarantee is
- * therefore "by the time you can interact with it", not "immediately".
+ * therefore "before the first rendered frame", not "immediately".  Drawing
+ * itself stays side-effect-free so the footer and overlay cannot observe
+ * different modes in one frame.
  */
 void test_picker_filter_line_is_the_cmdline(void)
 {
@@ -367,8 +369,11 @@ void test_picker_filter_line_is_the_cmdline(void)
     pk_make(&f);
     YEW_ASSERT(!f.ed.cmdline.active);
     pk_open(&f, items, 1U, false);
-    /* A draw is enough to bring it up... */
+    /* Drawing cannot enter a mode halfway through a frame. */
     yew_picker_draw(&f.ed, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(!f.ed.cmdline.active);
+    /* The loop tick acquires the filter before layout and rendering. */
+    YEW_ASSERT(!yew_picker_tick(&f.ed));
     YEW_ASSERT(f.ed.cmdline.active);
     yew_picker_close(&f.ed, false);
 

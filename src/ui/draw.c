@@ -1068,7 +1068,10 @@ void yew_draw_footer(Ed *ed, Win *w)
         yew_fuss_draw_footer(ed, ed->footer_rect);
         return;
     }
-    if (ed->cmdline.active)
+    /* A list picker owns the command-line widget inside its overlay.  Drawing
+     * that same widget in the global footer produces a second prompt one
+     * frame after the picker opens. */
+    if (ed->cmdline.active && !yew_picker_active(ed))
         yew_cmdline_draw(ed, ed->footer_rect);
     else if (yew_msg_visible(ed))
         yew_message_draw(ed, w);

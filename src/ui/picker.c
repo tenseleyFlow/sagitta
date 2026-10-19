@@ -530,7 +530,20 @@ bool yew_picker_tick(Ed *ed)
     const PickItem *items;
     u32 n = 0U;
 
-    if (!pk.active || !pk.scanning || ed == NULL)
+    if (!pk.active || ed == NULL)
+        return false;
+    /*
+     * Acquire the lazily-owned filter before layout and rendering.  Doing
+     * this from yew_picker_draw made the first picker frame internally
+     * inconsistent: the footer had already drawn the restored document
+     * mode, then the overlay entered E mode, and the render epilogue
+     * cleared the damage raised by that transition.  The loop calls this
+     * tick after command dispatch, so the prompt that launched the picker
+     * has closed and our filter can safely take ownership here.
+     */
+    if (!pk.spec.filter_requires_slash || pk.filter_open)
+        ensure_filter(ed);
+    if (!pk.scanning)
         return false;
     items = pk.spec.items(pk.spec.ctx, &n);
     if (pk.spec.search_part != NULL) {
@@ -595,8 +608,9 @@ void yew_picker_open(Ed *ed, const PickerSpec *s)
      * ours inside the command meant the invoking prompt's close, which
      * happens the moment the command returns, closed the picker's
      * filter line too — leaving a picker with a blank input row and no
-     * way to type into it.  ensure_filter opens it on the first key or
-     * draw, by which time the caller's prompt is gone.
+     * way to type into it.  The loop's picker tick opens it after command
+     * dispatch, or the first key does so when input arrives before a tick;
+     * by either point the caller's prompt is gone.
      */
     yew_picker_refilter(ed);
     ed->full_damage = true;
@@ -961,8 +975,6 @@ void yew_picker_draw(Ed *ed, Rect area)
 
     if (!pk.active || ed == NULL || area.w == 0U || area.h == 0U)
         return;
-    if (!pk.spec.filter_requires_slash || pk.filter_open)
-        ensure_filter(ed);
     max_w = pk.spec.preview == NULL ? (u16)YEW_PICKER_MAX_W
                                      : (u16)YEW_PICKER_PREVIEW_MAX_W;
     w = area.w < max_w ? area.w : max_w;

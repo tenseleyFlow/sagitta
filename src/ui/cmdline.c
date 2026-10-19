@@ -517,6 +517,7 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     line->walk_bang = false;
     line->hsearch = false;
     line->hsearch_line = NULL;
+    line->hint[0] = '\0';
     tok_forget(line);
     line->err = (CmdErr){0};
     line->scroll = 0U;

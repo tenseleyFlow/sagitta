@@ -870,6 +870,24 @@ void test_cmdline_hint_says_nothing_it_does_not_know(void)
     cmdline_fixture_free(&fixture);
 }
 
+void test_cmdline_open_clears_prior_prompt_hint(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "redraw");
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "redraw");
+    yew_cmdline_close(&fixture.ed, false);
+
+    /* A picker lazily opens an input prompt after its launching command
+     * closes.  That new prompt must never draw the old command's hint. */
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_INPUT, NULL);
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "");
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_fixture_free(&fixture);
+}
+
 void test_cmdline_menu_commands_are_registered_and_internal(void)
 {
     static const char *const names[] = {

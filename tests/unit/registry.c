@@ -1203,6 +1203,7 @@ const YewTest yew_tests[] = {
     T(cmdline_escape_leaves_a_live_menu_and_closes_the_prompt),
     T(cmdline_hint_reports_what_the_parser_understands),
     T(cmdline_hint_says_nothing_it_does_not_know),
+    T(cmdline_open_clears_prior_prompt_hint),
     T(cmdline_menu_commands_are_registered_and_internal),
     T(cmdline_one_fuzzy_match_executes),
     T(cmdline_fuzzy_execute_keeps_arguments),
