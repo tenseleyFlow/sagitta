@@ -541,12 +541,15 @@ jobs:
       - uses: actions/checkout@v6
       - name: Verify deterministic 100 MiB fixtures
         run: make fixtures-verify-quick CC=gcc
-      - name: Run the budget suite five times without flapping
+      # ubuntu-latest is a shared host, not the pinned x86_64 performance
+      # runner.  Keep every functional, RSS, and 100x sanity verdict hard,
+      # but leave ordinary wall-clock verdicts to the designated job below.
+      - name: Run the text-buffer suite five times in hosted advisory mode
         run: |
           for run in 1 2 3 4 5; do
             echo "performance stability run=$run"
-            make perf-textbuf CC=gcc PERF_ADVISORY=0 \
-              PERF_RUNNER_ID=perf-x86_64-linux-gnu
+            make perf-textbuf CC=gcc PERF_ADVISORY=1 \
+              PERF_RUNNER_ID=hosted-x86_64-linux-gnu
           done
       - name: Prove the absolute gate rejects an injected delay
         run: make perf-gate-selftest CC=gcc
