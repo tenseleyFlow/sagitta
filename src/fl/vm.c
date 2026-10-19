@@ -36,6 +36,42 @@
 #include "unicode/grapheme.h"
 #include "util/log.h"
 
+/*
+ * Fletch integers wrap modulo 2^64 (§4).  Performing the operations as
+ * signed C arithmetic would make every overflow undefined behaviour.  Do
+ * the arithmetic in u64, where wrap is defined, then map the low 64 bits
+ * back into the specified signed range without an implementation-defined
+ * out-of-range unsigned-to-signed conversion.
+ */
+static i64 fl_i64_from_bits(u64 bits)
+{
+    const u64 sign = (u64)INT64_MAX + 1U;
+
+    if (bits < sign)
+        return (i64)bits;
+    return INT64_MIN + (i64)(bits - sign);
+}
+
+static i64 fl_i64_add_wrap(i64 a, i64 b)
+{
+    return fl_i64_from_bits((u64)a + (u64)b);
+}
+
+static i64 fl_i64_sub_wrap(i64 a, i64 b)
+{
+    return fl_i64_from_bits((u64)a - (u64)b);
+}
+
+static i64 fl_i64_mul_wrap(i64 a, i64 b)
+{
+    return fl_i64_from_bits((u64)a * (u64)b);
+}
+
+static i64 fl_i64_neg_wrap(i64 a)
+{
+    return fl_i64_from_bits(0U - (u64)a);
+}
+
 /* ---------------------------------------------------------------- */
 /* The null host (deliverable 11)                                   */
 /* ---------------------------------------------------------------- */
@@ -676,7 +712,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             FlValue a = *--vm->sp;
 
             if (a.t == (u8)FL_INT && b.t == (u8)FL_INT) {
-                *vm->sp++ = FL_INT_V(a.as.i + b.as.i);
+                *vm->sp++ = FL_INT_V(fl_i64_add_wrap(a.as.i, b.as.i));
             } else if (a.t == (u8)FL_STR && b.t == (u8)FL_STR) {
                 const FlStr *x = (const FlStr *)a.as.o;
                 const FlStr *y = (const FlStr *)b.as.o;
@@ -725,13 +761,13 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             }
             VM_NEXT();
         }
-#define FL_VM_ARITH(NAME, OPI, OPF)                                        \
+#define FL_VM_ARITH(NAME, INT_FN, OPF)                                     \
         VM_CASE(NAME) {                                                    \
             FlValue b = *--vm->sp;                                         \
             FlValue a = *--vm->sp;                                         \
                                                                            \
             if (a.t == (u8)FL_INT && b.t == (u8)FL_INT) {                  \
-                *vm->sp++ = FL_INT_V(a.as.i OPI b.as.i);                   \
+                *vm->sp++ = FL_INT_V(INT_FN(a.as.i, b.as.i));              \
             } else if ((a.t == (u8)FL_INT || a.t == (u8)FL_FLOAT) &&       \
                        (b.t == (u8)FL_INT || b.t == (u8)FL_FLOAT)) {       \
                 double x = a.t == (u8)FL_INT ? (double)a.as.i : a.as.f;    \
@@ -740,14 +776,14 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 *vm->sp++ = FL_FLOAT_V(x OPF y);                           \
             } else {                                                       \
                 fl_raise(vm, "type", "cannot apply '%s' to %s and %s",     \
-                         #OPI, fl_type_name((FlType)a.t),                  \
+                         #OPF, fl_type_name((FlType)a.t),                  \
                          fl_type_name((FlType)b.t));                       \
                 goto raised;                                               \
             }                                                              \
             VM_NEXT();                                                     \
         }
-        FL_VM_ARITH(SUB, -, -)
-        FL_VM_ARITH(MUL, *, *)
+        FL_VM_ARITH(SUB, fl_i64_sub_wrap, -)
+        FL_VM_ARITH(MUL, fl_i64_mul_wrap, *)
 #undef FL_VM_ARITH
         VM_CASE(DIV) {
             FlValue b = *--vm->sp;
@@ -759,8 +795,11 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                     goto raised;
                 }
                 /* Truncates toward zero, which is C's behaviour and the
-                 * spec's. */
-                *vm->sp++ = FL_INT_V(a.as.i / b.as.i);
+                 * spec's.  The sole unrepresentable C quotient wraps. */
+                if (a.as.i == INT64_MIN && b.as.i == -1)
+                    *vm->sp++ = FL_INT_V(INT64_MIN);
+                else
+                    *vm->sp++ = FL_INT_V(a.as.i / b.as.i);
             } else {
                 double x = a.t == (u8)FL_INT ? (double)a.as.i : a.as.f;
                 double y = b.t == (u8)FL_INT ? (double)b.as.i : b.as.f;
@@ -781,14 +820,19 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 fl_raise(vm, "div", "modulo by zero");
                 goto raised;
             }
-            *vm->sp++ = FL_INT_V(a.as.i % b.as.i);   /* sign of the dividend */
+            /* INT64_MIN / -1 has an exact remainder of zero, but spelling
+             * that operation in signed C would still be undefined. */
+            if (a.as.i == INT64_MIN && b.as.i == -1)
+                *vm->sp++ = FL_INT_V(0);
+            else
+                *vm->sp++ = FL_INT_V(a.as.i % b.as.i); /* dividend's sign */
             VM_NEXT();
         }
         VM_CASE(NEG) {
             FlValue a = vm->sp[-1];
 
             if (a.t == (u8)FL_INT)
-                vm->sp[-1] = FL_INT_V(-a.as.i);
+                vm->sp[-1] = FL_INT_V(fl_i64_neg_wrap(a.as.i));
             else if (a.t == (u8)FL_FLOAT)
                 vm->sp[-1] = FL_FLOAT_V(-a.as.f);
             else {

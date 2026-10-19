@@ -146,6 +146,24 @@ void test_fl_vm_arithmetic_and_precedence(void)
     YEW_ASSERT_EQ_I64(run_int("return -7 / 2\n"), -3);
     YEW_ASSERT_EQ_I64(run_int("return -7 % 2\n"), -1);
     YEW_ASSERT_EQ_I64(run_int("return 7 % -2\n"), 1);
+
+    /* §4 requires wrapping i64 arithmetic.  Each expression is also a
+     * boundary that signed C must not evaluate directly: UBSan is a gate,
+     * and the language result must stay identical with or without it. */
+    YEW_ASSERT_EQ_I64(
+        run_int("import math\nreturn math.int_max + 1\n"), INT64_MIN);
+    YEW_ASSERT_EQ_I64(
+        run_int("import math\nreturn math.int_min - 1\n"), INT64_MAX);
+    YEW_ASSERT_EQ_I64(
+        run_int("import math\nreturn math.int_max * 2\n"), -2);
+    YEW_ASSERT_EQ_I64(
+        run_int("import math\nreturn math.int_min * -1\n"), INT64_MIN);
+    YEW_ASSERT_EQ_I64(
+        run_int("import math\nreturn -math.int_min\n"), INT64_MIN);
+    YEW_ASSERT_EQ_I64(
+        run_int("import math\nreturn math.int_min / -1\n"), INT64_MIN);
+    YEW_ASSERT_EQ_I64(
+        run_int("import math\nreturn math.int_min % -1\n"), 0);
 }
 
 void test_fl_vm_truthiness_is_nil_and_false_only(void)
