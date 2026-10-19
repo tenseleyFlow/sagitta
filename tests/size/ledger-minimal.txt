@@ -1,14 +1,14 @@
 # yew size ledger v1  config=minimal  binary=build-size/measure/minimal/yew  stripped=1
 # toolchain: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 / GNU nm (GNU Binutils for Ubuntu) 2.42 / GNU size (GNU Binutils for Ubuntu) 2.42   target=x86_64-linux-gnu
-# on-disk 1804160   object-file-backed 1713368   link-file-residue 90792
-# final-file-backed 1651395   final-bss 477760   object-bss 10962763
+# on-disk 1804160   object-file-backed 1713402   link-file-residue 90758
+# final-file-backed 1651443   final-bss 477760   object-bss 10962763
 # gc_saved_bytes 77824   without-gc-on-disk 1881984
 # unattributed-symbols 0/4365 (0.0%)   limit 2.0%
-# non-folded-object-sections 11152164
+# non-folded-object-sections 11152447
 
 bucket                  .text    .rodata      .data       .bss      total     pct
 core.fl                216263      27855      11104   10492081   10747303  84.7%
-core.ui                374000      20603       6801     407209     808613   6.3%
+core.ui                374034      20603       6801     407209     808647   6.3%
 core.edit              252039      56609      35200       9981     353829   2.7%
 core.unicode            25878     154532          0          1     180411   1.4%
 core.syn               111645      12442      12680        107     136874   1.0%
@@ -22,20 +22,20 @@ mod.fuss                11581        310        144          0      12035   0.0%
 mod.lsp                  2490          3          0          0       2493   0.0%
 mod.ai                   2452          3          0          0       2455   0.0%
 mod.plugins              1382          7          0          0       1389   0.0%
-libc+crt                90792
---totals             12676131
+libc+crt                90758
+--totals             12676165
 
 -- non-folded object sections
         8924  .comment
-      260601  .debug_abbrev
+      260621  .debug_abbrev
        66848  .debug_aranges
       235888  .debug_frame
-     5349616  .debug_info
-     1262778  .debug_line
-      150888  .debug_line_str
-     1545073  .debug_loclists
-      220471  .debug_rnglists
-     2044869  .debug_str
+     5349690  .debug_info
+     1262824  .debug_line
+      150897  .debug_line_str
+     1545218  .debug_loclists
+      220442  .debug_rnglists
+     2044887  .debug_str
         6208  .note.gnu.property
 
 -- top 12 symbols by size
