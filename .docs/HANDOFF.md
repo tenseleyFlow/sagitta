@@ -26,7 +26,90 @@ The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
-chapter 1. The user-requested Git interaction detour is Sprint 59.5 below.
+chapter 1. Git interaction detour 59.5 is implemented below; the current
+user-directed suggestion/navigation investigation is Sprint 59.6.
+
+## Suggestion/navigation pickup — 2026-10-20
+
+Sprint 59.6 (`14-audits-release/s59_6-shadow-navigation.md`) began on clean
+`9364d310`. Local commits: `dfb1be84` contract, `dd30b71d` source markers,
+`5218b0fe` unchanged-frame repair. Nothing pushed; adjacent worktrees,
+the frozen soak, the live editor and scratch document bytes are untouched.
+
+The screenshot is `/Users/mfwolffe/scratch/wolf/ch7/retitle.lu`, line 18.
+The apparent stray italic `l` was the intentional **LSP provenance marker**,
+not AI output or document corruption. Source markers now use index `·`,
+LSP `◇`, AI `✦`, with `.`/`>`/`*` ASCII and appropriate ambiguous-wide
+fallbacks. Provider colors/attributes remain intact; all slots are one cell.
+
+Found and repaired a real shadow rendering inefficiency: `yew_ed_render`
+promoted every wake with a live shadow to full damage, even when no cells
+changed. It now retains the existing composition on clean/other-chrome
+wakes, and restores the document base before recomposing actual damage.
+The regression fails on the previous renderer, then passes 1,000 clean
+frames across single/multiline shadows, checking retained cells, zero
+output, stable hit-region counts, subsequent damage and dismissal.
+
+**The user's severe lag is NOT yet reproduced or declared fixed.** The
+user clarified it occurs on cursor movement in **Insert**, not Line mode.
+Read-only document navigation with isolated copies of the saved 46-tab
+workspace reproduced `Doc` from the installed Homebrew `wolf lsp` 0.2.28.
+Line-mode controls, Insert up/down and longer Insert all-arrow runs stayed
+responsive. The final baseline/fixed runs each sent 1,080 arrows (three
+360-key phases, shadow on/off/on), mixing 200 ms pauses and 10 ms bursts.
+The probe timed key-to-output tags while draining the PTY; this does not
+measure the user's terminal compositor. Before: shadow-on p95 0.313/0.318
+ms, maximum 2.61 ms; after: 0.277/0.286 ms, maximum 4.37 ms. RSS stayed
+roughly 17–19 MiB. The in-loop rolling profile's render median dropped
+81,000→6,000 ns, p99 198,000→180,000 ns. These are host-contention
+diagnostics, not release-gate or sustained-leak signoff.
+
+The user's live yew was sampled read-only while idle: blocked in poll,
+22.3 MiB physical footprint / 24.5 MiB peak, not a captured stall. Its
+parent is a Herdr-managed shell; the automated reproduction used a direct
+PTY. That difference is a lead to test, **not evidence blaming Herdr**.
+No evidence currently warrants modifying wolf-lsp; its README confirms the
+server lives in the compiler, and its `upstream` submodule was already dirty.
+The old 1.2 GB yew log contains historical region-table warnings, but the
+bounded reproductions did not reproduce that warning storm. Do not truncate
+the user's log or conflate it with the current symptom.
+
+Build/test artifacts are in `build-s59_6/` and `build-s59_6-san/` because
+the user's current `build/` contains root-owned artifacts. No ownership
+changes, sudo rebuild, or installed-binary replacement was performed.
+The new dogfood command (from this checkout) is:
+
+```sh
+YEW_PROF=1 ./build-s59_6/yew ~/scratch/wolf/
+```
+
+At the next actual Insert stall, capture `:prof.dump /tmp/yew-lag-profile.txt`
+before restarting and sample the live editor/server while it is slow. Note
+which arrows and whether Escape (first dismissing ghost, then leaving I)
+restores responsiveness; compare a direct terminal against Herdr if needed.
+Do not claim a leak or server defect without this evidence. The bounded
+local probe remains at `build-s59_6/cursor_probe.py` (ignored artifact),
+its latest isolated state/profile at `/tmp/yew-s596-workspace.AllAgw/`.
+Its earliest draft runs left invalid commands in the prompt and are **not**
+navigation evidence; only runs showing `I`, the real cursor and `Doc` count.
+
+Verification on Apple-silicon macOS, at most two build jobs:
+
+- Warning-clean default build. Units: `shadow` 52 tests / 5,143 assertions,
+  `glyphs_` 9 / 355, `viewport_` 20 / 214, `degrade` 15 / 3,226,
+  `render_` 21 / 261, all pass (filters overlap).
+- All 13 existing shadow PTYs pass with reviewed marker-only golden changes;
+  new `s43_shadow_lsp_insert_arrows` passes repeated left/right/up/down,
+  ghost reappearance, actual-document cursor rows and unchanged saved bytes.
+- ASan/UBSan shadow and glyph filters pass; `detect_leaks=0` is required by
+  this Mac runtime, so this is not LSan evidence. Bounded sanitizer fuzz:
+  `fuzz_shadow --seed=5906 --iters=500`, corpus 5,
+  hash `c70b15cb6e0bb85e`, pass.
+- `perf_shadow --measure` with checkout-pinned runtime and advisory mode:
+  8-line 200×50 frame median/p99 49/53 µs; debounce keeps one active timer
+  and one request per provider. No performance baselines/gates were changed.
+- `make -s -j2 BUILD=build-s59_6 test-docs-sync` and its selftest pass.
+- No fresh hosted CI, Linux/GCC, Valgrind or soak signoff claimed here.
 
 ## Git workflow pickup — 2026-10-20
 

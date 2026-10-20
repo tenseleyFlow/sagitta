@@ -76,11 +76,19 @@ measure editor input response separately from completion response time.
 
 ## Definition of Done
 
-- [ ] All three source markers render in exactly one cell in both width modes.
-- [ ] No source letters masquerade as document text in the gutter.
-- [ ] Focused shadow/glyph unit and PTY cases pass after reviewed goldens.
-- [ ] Cursor-only behavior measured before and after the demonstrated fix.
-- [ ] Regression exercises the cause, not merely the final screenshot.
-- [ ] No unbounded memory/request/region growth in the bounded reproduction.
-- [ ] Warning-clean build and focused ASan/UBSan checks pass.
-- [ ] Handoff distinguishes verified fixes from unreplicated symptoms.
+- [x] All three source markers render in exactly one cell in both width modes.
+- [x] No source letters masquerade as document text in the gutter.
+- [x] Focused shadow/glyph unit and PTY cases pass after reviewed goldens.
+- [x] Cursor-only behavior measured before and after the demonstrated fix.
+- [x] Regression exercises the unnecessary redraw, not merely the screenshot.
+- [x] No unbounded memory/request/region growth in the bounded reproduction.
+- [x] Warning-clean build and focused ASan/UBSan checks pass.
+- [x] Handoff distinguishes verified fixes from unreplicated symptoms.
+- [ ] Capture and resolve the reported severe Insert-mode stall itself.
+
+Checkpoint: markers and redundant-redraw repair are implemented, **not a
+claim that the reported stall is resolved**. The real-server reproduction
+repeatedly displays `Doc` at the reported location but remains responsive
+in both Line and Insert modes. See `.docs/HANDOFF.md` for exact bounded
+measurements, tests, build paths and the live-profile pickup. The user's
+terminal/Herdr path has not been covered by the direct-PTY probe.
