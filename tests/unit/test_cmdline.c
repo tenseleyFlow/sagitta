@@ -473,6 +473,58 @@ void test_cmdline_accepts_registered_command_and_closes(void)
     yew_cmd_init();
 }
 
+void test_cmdline_modal_owns_input_and_preserves_document(void)
+{
+    CmdlineFixture fixture;
+    InputDoneState state = {0};
+    Ed *ed = &fixture.ed;
+    Win *origin;
+    Key key;
+    u16 size;
+
+    cmdline_fixture_init(&fixture);
+    origin = ed->win;
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, 24U, 80U));
+    yew_cmdline_open_modal(ed, "Commit message", "Changes are staged",
+                           "first\nsecond", true, input_done, &state);
+    YEW_ASSERT(ed->win == origin);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(origin->buf->tb), 0U);
+    YEW_ASSERT_EQ_U64(yew_tab_count(ed), 1U);
+    yew_cmdline_draw_modal(ed);
+    YEW_ASSERT(grid_has_ascii(&ed->grid, "Commit message"));
+    YEW_ASSERT(grid_has_ascii(&ed->grid, "first"));
+    YEW_ASSERT(grid_has_ascii(&ed->grid, "second"));
+    key = cmdline_key(YEW_KEY_ENTER);
+    yew_ed_handle_key(ed, key, 1);
+    YEW_ASSERT(ed->cmdline.active);
+    yew_cmdline_paste(ed, (const u8 *)"body", 4U);
+    key = cmdline_key(YEW_KEY_UP);
+    yew_ed_handle_key(ed, key, 2);
+    YEW_ASSERT_EQ_U64(yew_textbuf_line_of(ed->cmdline.buf,
+                                          ed->cmdline.cur.pos).v, 1U);
+    key = cmdline_key('q');
+    key.mods = YEW_MOD_CTRL;
+    yew_ed_handle_key(ed, key, 3);
+    YEW_ASSERT(!ed->quit);
+    YEW_ASSERT_EQ_U64(yew_tab_count(ed), 1U);
+    /* Every tiny geometry must be safe, and resizing back keeps the text. */
+    for (size = 1U; size < 10U; size++) {
+        YEW_ASSERT(yew_grid_resize(&ed->grid, size, size));
+        yew_cmdline_draw_modal(ed);
+    }
+    key = cmdline_key('s');
+    key.mods = YEW_MOD_CTRL;
+    yew_ed_handle_key(ed, key, 4);
+    YEW_ASSERT_EQ_U64(state.calls, 1U);
+    YEW_ASSERT(state.accepted && state.closed);
+    YEW_ASSERT_EQ_U64(state.len, 17U);
+    YEW_ASSERT_EQ_MEM(state.text, "first\nsecond\nbody", 17U);
+    YEW_ASSERT(ed->win == origin);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(origin->buf->tb), 0U);
+    yew_grid_free(&ed->grid);
+    cmdline_fixture_free(&fixture);
+}
+
 void test_cmdline_input_draws_the_full_multiline_message(void)
 {
     static const char disclosure[] =

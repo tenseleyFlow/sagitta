@@ -38,6 +38,13 @@ typedef struct YewTokHit {
 typedef struct CmdLine {
     YewPromptKind kind;
     bool active;
+    bool modal;
+    bool multiline;
+    char *modal_title;
+    char *modal_help;
+    Rect modal_input;
+    u64 modal_top;
+    u64 modal_left;
     /* Monotonic identity for one prompt lifetime.  The CmdLine storage is
      * embedded in Ed and reused, so pointer identity cannot distinguish a
      * prompt that a command replaced while Enter was being handled. */
@@ -126,6 +133,10 @@ typedef struct CmdLine {
 void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed);
 void yew_cmdline_open_input(Ed *ed, const char *seed,
                             YewCmdlineInputDone done, void *ctx);
+void yew_cmdline_open_modal(Ed *ed, const char *title, const char *help,
+                            const char *seed, bool multiline,
+                            YewCmdlineInputDone done, void *ctx);
+void yew_cmdline_draw_modal(Ed *ed);
 void yew_cmdline_close(Ed *ed, bool accepted);
 /* Sprint 57.31 §2: open a `kind` prompt holding `text` with the caret at
  * `caret`, returning to `return_mode` when it closes. */

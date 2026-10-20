@@ -1193,6 +1193,7 @@ const YewTest yew_tests[] = {
     T(cmdline_escape_restores_completion_stem_before_closing),
     T(cmdline_accepts_registered_command_and_closes),
     T(cmdline_input_draws_the_full_multiline_message),
+    T(cmdline_modal_owns_input_and_preserves_document),
     T(cmdline_range_executes_once_with_multiple_cursors),
     T(cmdline_bang_quit_bypasses_durability_failure),
     T(cmdline_parse_error_preserves_text_and_points_at_token),

@@ -2320,6 +2320,10 @@ static void ed_handle_key(Ed *ed, Key key, i64 now_ms)
         yew_search_preview_cancel(ed);
     yew_record_key(ed, key);
     ed->now_ms = now_ms;
+    if (ed->cmdline.active && ed->cmdline.modal) {
+        (void)yew_cmdline_key(ed, &key);
+        return;
+    }
     /*
      * Esc mid-gesture cancels it and restores the state the gesture
      * started from, before the key reaches any mode that would also act
@@ -2767,6 +2771,7 @@ draw_overlays:
         if (win->panel.open)
             yew_panel_draw(ed, &win->panel, &ed->grid);
     }
+    yew_cmdline_draw_modal(ed);
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
     perf_frame_tag(ed, ed->frame.len);

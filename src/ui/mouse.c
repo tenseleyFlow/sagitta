@@ -2877,6 +2877,35 @@ void yew_mouse_event(Ed *ed, const Key *k)
      */
     if (!yew_mouse_enabled())
         return;
+    if (ed->cmdline.active && ed->cmdline.modal) {
+        Rect input = ed->cmdline.modal_input;
+
+        /* Modal keyboard editing is always reachable. Do not let an
+         * outside click focus a tab or leave a drag armed underneath. */
+        yew_mouse_cancel(ed);
+        if (k->ev == YEW_KEY_PRESS && k->button == YEW_MB_LEFT &&
+            rect_has(input, k->col, k->row)) {
+            Win *target = yew_cmdline_target(ed);
+            u64 line = ed->cmdline.modal_top + k->row - input.y;
+            u64 lines = yew_textbuf_line_count(target->buf->tb);
+            Cursor *cursor = &target->cs.curs.data[0];
+            Span span;
+
+            if (line >= lines)
+                line = lines - 1U;
+            span = yew_textbuf_line_span(target->buf->tb, (LineNo){line});
+            cursor->pos = yew_ccol_to_off(target->buf->tb, span,
+                (CCol){ed->cmdline.modal_left + k->col - input.x},
+                target->buf->tabwidth);
+            yew_cursor_clamp(target->buf->tb, cursor);
+            if ((k->mods & YEW_MOD_SHIFT) == 0U)
+                cursor->anchor = cursor->pos;
+            cursor->goal_col = (CCol){0U};
+            yew_cmdline_sync(ed);
+            ed->full_damage = true;
+        }
+        return;
+    }
     /*
      * BEFORE the phase machine, and never touching it.  A wheel event
      * has no release, so a state machine keyed on press-without-release

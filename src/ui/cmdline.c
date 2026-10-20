@@ -24,6 +24,7 @@
 #include "ui/comphelp.h"
 #include "ui/compspec.h"
 #include "ui/draw.h"
+#include "ui/glyphs.h"
 #include "ui/shctx.h"
 #include "ui/message.h"
 #include "ui/statusline.h"
@@ -307,7 +308,10 @@ bool yew_cmdline_clean(Ed *ed, const Win *win, const u8 *b, size_t n,
                 "NUL byte is not valid in a command line");
         return false;
     }
-    sanitize_bytes(b, n, out);
+    if (ed->cmdline.multiline)
+        bytebuf_append(out, b, n);
+    else
+        sanitize_bytes(b, n, out);
     return true;
 }
 
@@ -582,6 +586,35 @@ void yew_cmdline_open_input(Ed *ed, const char *seed,
     }
 }
 
+void yew_cmdline_open_modal(Ed *ed, const char *title, const char *help,
+                            const char *seed, bool multiline,
+                            YewCmdlineInputDone done, void *ctx)
+{
+    CmdLine *line;
+
+    if (ed == NULL)
+        return;
+    yew_cmdline_open_input(ed, NULL, done, ctx);
+    line = &ed->cmdline;
+    line->modal = true;
+    line->multiline = multiline;
+    line->modal_title = yew_xstrdup(title == NULL ? "Input" : title);
+    line->modal_help = yew_xstrdup(help == NULL ? "" : help);
+    line->modal_top = 0U;
+    line->modal_left = 0U;
+    line->modal_input = (Rect){0U, 0U, 0U, 0U};
+    if (seed != NULL)
+        (void)insert_sanitized(ed, (const u8 *)seed, strlen(seed));
+    /* The seed is the starting document, not an edit the first Undo can
+     * accidentally erase (especially important for a rebase todo list). */
+    yew_undo_free(cmdline_target(line)->buffer.undo);
+    cmdline_target(line)->buffer.undo = yew_undo_new(line->buf);
+    ed->chord.n = 0U;
+    ed->chord.count_given = false;
+    ed->capture_cmd = (CmdId){0U};
+    ed->full_damage = true;
+}
+
 void yew_cmdline_close(Ed *ed, bool accepted)
 {
     CmdLine *line;
@@ -651,6 +684,12 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     line->target = NULL;
     line->buf = NULL;
     line->active = false;
+    line->modal = false;
+    line->multiline = false;
+    yew_xfree(line->modal_title);
+    yew_xfree(line->modal_help);
+    line->modal_title = NULL;
+    line->modal_help = NULL;
     line->err = (CmdErr){0};
     line->scroll = 0U;
     if (!keep_message)
@@ -1107,6 +1146,11 @@ void yew_cmdline_edited(Ed *ed)
     sync_from_target(&ed->cmdline);
     yew_hist_walk_end(&ed->cmdline.walk);
     clear_error(ed);
+    if (ed->cmdline.modal) {
+        ed->full_damage = true;
+        ed->footer_dirty = true;
+        return;
+    }
     /*
      * Sprint 57.30 §1: typing leaves the table.  The SELECTION survives
      * (it is held by identity across the refilter), so Tab goes on from
@@ -1329,6 +1373,80 @@ CmdStatus yew_cmdline_cmd_copy_or_cancel(CmdCtx *cx)
     return yew_sel_cmd_clip_copy(cx);
 }
 
+static bool modal_key(Ed *ed, const Key *key)
+{
+    const char *cmd = NULL;
+    bool shift = (key->mods & YEW_MOD_SHIFT) != 0U;
+    bool ctrl = (key->mods & YEW_MOD_CTRL) != 0U;
+    bool alt = (key->mods & YEW_MOD_ALT) != 0U;
+    u32 code = key->code;
+    CmdCtx cx = {0};
+
+    if (key->ev == YEW_KEY_RELEASE)
+        return true;
+    if (code == YEW_KEY_ESCAPE || (ctrl && code == (u32)'g')) {
+        cmd = "ed.cmdline.cancel";
+    } else if (ctrl && (code == (u32)'s' || code == (u32)'S')) {
+        cmd = "ed.cmdline.accept";
+    } else if (code == YEW_KEY_ENTER) {
+        if (ed->cmdline.multiline) {
+            (void)insert_sanitized(ed, (const u8 *)"\n", 1U);
+            return true;
+        }
+        cmd = "ed.cmdline.accept";
+    } else if (code == YEW_KEY_LEFT) {
+        cmd = shift ? (alt ? "ed.sel.extend.word_prev" :
+                             "ed.sel.extend.left") :
+                      (alt ? "ed.move.word.prev" : "ed.move.char.prev");
+    } else if (code == YEW_KEY_RIGHT) {
+        cmd = shift ? (alt ? "ed.sel.extend.word_next" :
+                             "ed.sel.extend.right") :
+                      (alt ? "ed.move.word.next" : "ed.move.char.next");
+    } else if (code == YEW_KEY_UP || (ctrl && code == (u32)'p')) {
+        cmd = shift ? "ed.sel.extend.up" : "ed.move.line.up";
+    } else if (code == YEW_KEY_DOWN || (ctrl && code == (u32)'n')) {
+        cmd = shift ? "ed.sel.extend.down" : "ed.move.line.down";
+    } else if (code == YEW_KEY_HOME || (ctrl && code == (u32)'a')) {
+        cmd = shift ? "ed.sel.extend.line_home" : "ed.move.line.home";
+    } else if (code == YEW_KEY_END || (ctrl && code == (u32)'e')) {
+        cmd = shift ? "ed.sel.extend.line_end" : "ed.move.line.end";
+    } else if (code == YEW_KEY_BACKSPACE || (ctrl && code == (u32)'h')) {
+        cmd = alt ? "ed.edit.kill.word_prev" :
+                    "ed.edit.delete.grapheme_left";
+    } else if (code == YEW_KEY_DELETE || (ctrl && code == (u32)'d')) {
+        cmd = "ed.edit.delete.grapheme";
+    } else if (ctrl) {
+        switch (code) {
+        case 'c': cmd = "ed.cmdline.copy_or_cancel"; break;
+        case 'x': cmd = "ed.clip.cut"; break;
+        case 'v': cmd = "ed.clip.paste"; break;
+        case 'z': case '_': case '/': cmd = "ed.edit.undo"; break;
+        case 'w': cmd = "ed.edit.kill.ws_word_prev"; break;
+        case 'k': cmd = "ed.edit.kill.to_end"; break;
+        case 'u': cmd = "ed.edit.kill.to_home"; break;
+        case 'y': cmd = "ed.edit.kill.yank"; break;
+        default: break;
+        }
+    } else if (alt && code == (u32)'/') {
+        cmd = "ed.edit.redo";
+    } else if (!alt && key->ntext != 0U &&
+               (key->mods & (YEW_MOD_SUPER | YEW_MOD_HYPER |
+                             YEW_MOD_META)) == 0U) {
+        (void)insert_sanitized(ed, key->text, key->ntext);
+        return true;
+    }
+    if (cmd != NULL) {
+        cx.win = yew_cmdline_target(ed);
+        cx.count = 1U;
+        cx.source = YEW_SRC_KEY;
+        (void)yew_ed_invoke(ed, yew_cmd_lookup(cmd, strlen(cmd)), &cx);
+        if (ed->cmdline.active)
+            sync_from_target(&ed->cmdline);
+    }
+    ed->full_damage = true;
+    return true; /* Unknown bindings cannot act on the document behind us. */
+}
+
 bool yew_cmdline_key(Ed *ed, const Key *key)
 {
     const u16 command_mods = YEW_MOD_ALT | YEW_MOD_CTRL | YEW_MOD_SUPER |
@@ -1336,6 +1454,8 @@ bool yew_cmdline_key(Ed *ed, const Key *key)
 
     if (ed == NULL || key == NULL || !ed->cmdline.active)
         return false;
+    if (ed->cmdline.modal)
+        return modal_key(ed, key);
     if (key->ev == YEW_KEY_RELEASE)
         return true;
     /*
@@ -3627,6 +3747,179 @@ static void text_copy_span(const TextBuf *tb, Span span, u8 *out)
     }
 }
 
+static Span modal_line_span(const TextBuf *tb, u64 row)
+{
+    Span span = yew_textbuf_line_span(tb, (LineNo){row});
+    u8 last;
+
+    if (span.hi > span.lo) {
+        text_copy_span(tb, (Span){span.hi - 1U, span.hi}, &last);
+        if (last == (u8)'\n')
+            span.hi--;
+    }
+    return span;
+}
+
+static void modal_label(Ed *ed, u16 y, u16 x, u16 width,
+                         const char *text, const YewUiStyle *style)
+{
+    int cells;
+    size_t len = yew_str_clip((const u8 *)text, strlen(text), width, &cells);
+
+    (void)yew_grid_puts(&ed->grid, y, x, (const u8 *)text, len,
+                       style->chip_fg, style->chip_bg, style->attrs);
+}
+
+void yew_cmdline_draw_modal(Ed *ed)
+{
+    CmdLine *line;
+    YewUiStyle style;
+    Rect box;
+    Rect input;
+    u64 rows;
+    u64 cursor_row;
+    u64 first;
+    u64 i;
+    u16 width;
+    u16 height;
+    u16 y;
+    u16 x;
+    CCol caret;
+    Span selection = {0U, 0U};
+
+    if (ed == NULL || !ed->cmdline.active || !ed->cmdline.modal ||
+        ed->grid.rows == 0U || ed->grid.cols == 0U)
+        return;
+    line = &ed->cmdline;
+    sync_from_target(line);
+    style = yew_statusline_mode_style(YEW_MODE_E);
+    rows = yew_textbuf_line_count(line->buf);
+    cursor_row = yew_textbuf_line_of(line->buf, line->cur.pos).v;
+    width = 64U;
+    /* Bound sizing work independently of a long rebase todo. Inspect the
+     * visible neighborhood only; clipping and scrolling handle the rest. */
+    first = cursor_row > 16U ? cursor_row - 16U : 0U;
+    for (i = first; i < rows && i - first < 32U; i++) {
+        Span span = modal_line_span(line->buf, i);
+        u8 prefix[512];
+        size_t n = span.hi - span.lo > sizeof(prefix) ? sizeof(prefix) :
+                                                       (size_t)(span.hi - span.lo);
+        int cells;
+
+        text_copy_span(line->buf, (Span){span.lo, span.lo + n}, prefix);
+        cells = yew_str_width(prefix, n, YEW_CMDLINE_TABWIDTH);
+        if (cells > (int)width - 4)
+            width = cells > 116 ? 120U : (u16)(cells + 4);
+    }
+    if (width > ed->grid.cols - (ed->grid.cols > 4U ? 4U : 0U))
+        width = (u16)(ed->grid.cols - (ed->grid.cols > 4U ? 4U : 0U));
+    height = rows > 16U ? 21U : (u16)(rows + 5U);
+    if (height > ed->grid.rows - (ed->grid.rows > 8U ? 4U : 0U))
+        height = (u16)(ed->grid.rows - (ed->grid.rows > 8U ? 4U : 0U));
+    box = (Rect){(u16)((ed->grid.cols - width) / 2U),
+                  (u16)((ed->grid.rows - height) / 2U), width, height};
+    for (y = box.y; y < (u16)(box.y + box.h); y++)
+        yew_grid_fill(&ed->grid, y, box.x, (u16)(box.x + box.w),
+                      styled_blank(&style));
+    if (box.w < 5U || box.h < 6U) {
+        modal_label(ed, box.y, box.x, box.w, "Resize; Esc cancels", &style);
+        line->modal_input = (Rect){0U, 0U, 0U, 0U};
+        yew_grid_cursor(&ed->grid, 0U, 0U, false);
+        return;
+    }
+    for (y = 0U; y < box.h; y++) {
+        for (x = 0U; x < box.w; x++) {
+            YewGlyph glyph;
+
+            if (y == 0U)
+                glyph = x == 0U ? YEW_GLYPH_BORDER_TL :
+                         x + 1U == box.w ? YEW_GLYPH_BORDER_TR :
+                                           YEW_GLYPH_BORDER_H;
+            else if (y + 1U == box.h)
+                glyph = x == 0U ? YEW_GLYPH_BORDER_BL :
+                         x + 1U == box.w ? YEW_GLYPH_BORDER_BR :
+                                           YEW_GLYPH_BORDER_H;
+            else if (x == 0U || x + 1U == box.w)
+                glyph = YEW_GLYPH_BORDER_V;
+            else
+                continue;
+            (void)yew_grid_put(&ed->grid, (u16)(box.y + y),
+                               (u16)(box.x + x), (const u8 *)yew_glyph(glyph),
+                               yew_glyph_len(glyph), style.chip_fg,
+                               style.chip_bg, style.attrs);
+        }
+    }
+    modal_label(ed, box.y, (u16)(box.x + 2U), (u16)(box.w - 4U),
+                 line->modal_title, &style);
+    modal_label(ed, (u16)(box.y + 1U), (u16)(box.x + 2U),
+                 (u16)(box.w - 4U), line->modal_help, &style);
+    modal_label(ed, (u16)(box.y + box.h - 2U), (u16)(box.x + 2U),
+                 (u16)(box.w - 4U), line->multiline ?
+                 "Ctrl-S accept | Enter newline | Esc cancel" :
+                 "Enter / Ctrl-S accept | Esc cancel", &style);
+    input = (Rect){(u16)(box.x + 2U), (u16)(box.y + 2U),
+                    (u16)(box.w - 4U), (u16)(box.h - 4U)};
+    line->modal_input = input;
+    if (cursor_row < line->modal_top)
+        line->modal_top = cursor_row;
+    else if (cursor_row - line->modal_top >= input.h)
+        line->modal_top = cursor_row - input.h + 1U;
+    caret = yew_off_to_ccol(line->buf, modal_line_span(line->buf, cursor_row),
+                            line->cur.pos, YEW_CMDLINE_TABWIDTH);
+    if (caret.v < line->modal_left)
+        line->modal_left = caret.v;
+    else if (caret.v - line->modal_left >= input.w)
+        line->modal_left = caret.v - input.w + 1U;
+    (void)yew_cmdline_selection(ed, &selection);
+    for (y = 0U; y < input.h && line->modal_top + y < rows; y++) {
+        Span span = modal_line_span(line->buf, line->modal_top + y);
+        ByteOff at = yew_ccol_to_off(line->buf, span, (CCol){line->modal_left},
+                                     YEW_CMDLINE_TABWIDTH);
+        CCol col = yew_off_to_ccol(line->buf, span, at, YEW_CMDLINE_TABWIDTH);
+
+        while (at.v < span.hi && col.v - line->modal_left < input.w) {
+            YewTextCluster cluster;
+            u8 local[128];
+            u8 *bytes = local;
+            size_t n;
+            u32 cells;
+            u16 gx;
+
+            if (!yew_text_cluster_next(line->buf, span, at, &cluster))
+                break;
+            cells = cluster.tab ? yew_tab_cells(col, YEW_CMDLINE_TABWIDTH) :
+                                  cluster.cells;
+            if (cells > input.w - (col.v - line->modal_left))
+                break;
+            n = (size_t)(cluster.bytes.hi - cluster.bytes.lo);
+            gx = (u16)(input.x + col.v - line->modal_left);
+            if (!cluster.tab) {
+                if (n > sizeof(local))
+                    bytes = yew_xmalloc(n);
+                text_copy_span(line->buf, cluster.bytes, bytes);
+                (void)yew_grid_put(&ed->grid, (u16)(input.y + y), gx,
+                                   bytes, n, style.row_fg, style.row_bg, 0U);
+                if (bytes != local)
+                    yew_xfree(bytes);
+            }
+            if (cluster.bytes.lo < selection.hi &&
+                cluster.bytes.hi > selection.lo) {
+                Cell selected;
+                u8 fields = yew_draw_sel_style(ed, &selected);
+
+                yew_grid_overlay(&ed->grid, (u16)(input.y + y), gx,
+                                  (u16)(gx + cells), &selected, fields);
+            }
+            col.v += cells;
+            at = BYTEOFF(cluster.bytes.hi);
+        }
+    }
+    yew_grid_cursor_shape(&ed->grid, YEW_CURSOR_BAR);
+    yew_grid_cursor(&ed->grid, (u16)(input.y + cursor_row - line->modal_top),
+                    (u16)(input.x + caret.v - line->modal_left),
+                    caret.v - line->modal_left < input.w);
+}
+
 static void draw_menu(Ed *ed, u16 footer, const YewUiStyle *style)
 {
     /* Everything above the prompt row is the menu's to use; the widget
@@ -3774,7 +4067,7 @@ void yew_cmdline_draw(Ed *ed, Rect rect)
     YewUiStyle style;
     char prefix;
 
-    if (ed == NULL || !ed->cmdline.active || rect.h == 0U ||
+    if (ed == NULL || !ed->cmdline.active || ed->cmdline.modal || rect.h == 0U ||
         rect.y >= ed->grid.rows)
         return;
     line = &ed->cmdline;
