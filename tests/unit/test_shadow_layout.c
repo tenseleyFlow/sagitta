@@ -8,9 +8,11 @@
 #include "edit/shadow.h"
 #include "term/grid.h"
 #include "ui/draw.h"
+#include "ui/glyphs.h"
 #include "ui/mouse.h"
 #include "ui/region.h"
 #include "ui/shadowdraw.h"
+#include "unicode/width.h"
 
 static void shadow_layout_fixture(Ed *ed, const u8 *bytes, size_t len,
                                   u64 cursor, Rect rect)
@@ -211,7 +213,8 @@ void test_shadow_draw_overlays_exact_damage_blocks_hits_and_clips(void)
     for (row = 1U; row < 4U; row++) {
         const Cell *glyph = shadow_cell(&ed, row, 1U);
 
-        YEW_ASSERT_EQ_U64(glyph->utf8[0], (u8)'l');
+        YEW_ASSERT_EQ_MEM(glyph->utf8, yew_glyph(YEW_GLYPH_SHADOW_LSP),
+                          yew_glyph_len(YEW_GLYPH_SHADOW_LSP));
         YEW_ASSERT((glyph->attrs & YEW_ATTR_DIM) != 0U);
         YEW_ASSERT((glyph->attrs & YEW_ATTR_ITALIC) != 0U);
         YEW_ASSERT((glyph->attrs & YEW_ATTR_UNDERLINE) == 0U);
@@ -415,15 +418,23 @@ void test_shadow_draw_provenance_attrs_and_glyphs_are_distinct(void)
 {
     static const u8 document[] = "abc\n";
     static const u8 ghost[] = "x";
-    static const u8 glyphs[YEW_SHADOW_NPROV] = {'s', 'l', 'a'};
+    static const char *const unicode[YEW_SHADOW_NPROV] = {
+        "\xC2\xB7", "\xE2\x97\x87", "\xE2\x9C\xA6",
+    };
+    static const char *const ascii[YEW_SHADOW_NPROV] = {".", ">", "*"};
     static const u16 attrs[YEW_SHADOW_NPROV] = {
         YEW_ATTR_DIM,
         YEW_ATTR_DIM | YEW_ATTR_ITALIC,
         YEW_ATTR_DIM | YEW_ATTR_ITALIC | YEW_ATTR_UNDERLINE,
     };
-    u32 prov;
+    u32 variant;
 
-    for (prov = 0U; prov < (u32)YEW_SHADOW_NPROV; prov++) {
+    for (variant = 0U; variant < 9U; variant++) {
+        u32 prov = variant % YEW_SHADOW_NPROV;
+        bool wide = variant >= 6U;
+        YewWidthOpts opts = {wide};
+        const char *want = variant >= 3U && !(wide && prov == YEW_SHADOW_AI)
+                               ? ascii[prov] : unicode[prov];
         Ed ed;
         ShadowLayout layout;
         const Cell *text;
@@ -431,6 +442,8 @@ void test_shadow_draw_provenance_attrs_and_glyphs_are_distinct(void)
 
         shadow_layout_fixture(&ed, document, sizeof(document) - 1U, 3U,
                               (Rect){4U, 0U, 8U, 2U});
+        yew_glyph_force_ascii(variant >= 3U && !wide);
+        yew_width_set_opts(&opts);
         YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 2U, 12U));
         ed.grid_ready = true;
         shadow_layout_suggestion(ed.win, ghost, sizeof(ghost) - 1U,
@@ -441,9 +454,15 @@ void test_shadow_draw_provenance_attrs_and_glyphs_are_distinct(void)
         text = shadow_cell(&ed, 0U, 7U);
         glyph = shadow_cell(&ed, 0U, 1U);
         YEW_ASSERT_EQ_U64(text->utf8[0], (u8)'x');
-        YEW_ASSERT_EQ_U64(glyph->utf8[0], glyphs[prov]);
+        YEW_ASSERT(memcmp(glyph->utf8, want, strlen(want)) == 0);
+        YEW_ASSERT_EQ_U64(glyph->utf8[strlen(want)], 0U);
+        YEW_ASSERT_EQ_U64(glyph->w, 1U);
         YEW_ASSERT_EQ_U64(text->attrs & attrs[prov], attrs[prov]);
         YEW_ASSERT_EQ_U64(glyph->attrs & attrs[prov], attrs[prov]);
+        YEW_ASSERT(shadow_textbuf_eq(ed.win->buf->tb, document,
+                                    sizeof(document) - 1U));
         yew_ed_free(&ed);
     }
+    yew_width_set_opts(NULL);
+    yew_glyph_reset();
 }

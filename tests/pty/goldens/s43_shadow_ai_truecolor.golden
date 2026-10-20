@@ -3,10 +3,10 @@ size 80x24 alt=1 cursor=1,13 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
  1 pty-s14-s43_shadow_ai +                                                      
- a  1 anchorXassistant_model answer                                             
- a    ai overlay two                                                            
- a    ai overlay three                                                          
- a    ai overlay four                                                           
+ ✦  1 anchorXassistant_model answer                                             
+ ✦    ai overlay two                                                            
+ ✦    ai overlay three                                                          
+ ✦    ai overlay four                                                           
     1 real row two                                                              
     2 real row three                                                            
     3 real row four                                                             

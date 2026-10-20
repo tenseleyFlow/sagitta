@@ -25,6 +25,12 @@ the viewport merely to make a suggestion fit. Typing a matching prefix keeps
 the remainder; deletion, selection, multi-cursor state, undo/redo, replay,
 menu conflict, focus change, or buffer switch dismisses it.
 
+The gutter marker identifies the suggestion's source: `·` for the symbol
+index, `◇` for the language server, and `✦` for AI. It is not file content.
+ASCII terminals use `.`, `>`, and `*`; ambiguous-wide terminals also fall
+back where needed to keep the marker inside its one-cell slot. Provider
+colors and dim/italic/underline styling remain distinct without color.
+
 ## Built-in language-server defaults
 
 Servers start only for a non-binary buffer whose detected language has a

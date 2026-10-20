@@ -8638,7 +8638,7 @@ static void case_startup_workspace(PtyCtx *c)
     force_quit(c);
 }
 
-static bool s43_cell_is(const VtScreen *vt, int row, int col, u8 want)
+static bool s43_cell_is(const VtScreen *vt, int row, int col, const char *want)
 {
     const VtCell *cell;
     const u8 *glyph;
@@ -8648,7 +8648,7 @@ static bool s43_cell_is(const VtScreen *vt, int row, int col, u8 want)
         return false;
     cell = &vt->cells[(size_t)row * (size_t)vt->cols + (size_t)col];
     glyph = vt_cell_bytes(vt, cell, &n);
-    return n == 1U && glyph[0] == want;
+    return n == strlen(want) && memcmp(glyph, want, n) == 0;
 }
 
 static bool s43_open_shadow(PtyCtx *c, char *path, size_t path_cap)
@@ -8690,7 +8690,7 @@ static void case_s43_shadow_provenance(PtyCtx *c)
 {
     const char *text = "symbol_index field";
     u16 attrs = YEW_ATTR_DIM;
-    u8 glyph = 's';
+    const char *glyph = "\xC2\xB7";
     const VtCell *first;
     char path[256];
 
@@ -8700,11 +8700,11 @@ static void case_s43_shadow_provenance(PtyCtx *c)
     if (strstr(c->test->name, "_lsp_") != NULL) {
         text = "language_server item";
         attrs = (u16)(attrs | YEW_ATTR_ITALIC);
-        glyph = 'l';
+        glyph = "\xE2\x97\x87";
     } else if (strstr(c->test->name, "_ai_") != NULL) {
         text = "assistant_model answer";
         attrs = (u16)(attrs | YEW_ATTR_ITALIC | YEW_ATTR_UNDERLINE);
-        glyph = 'a';
+        glyph = "\xE2\x9C\xA6";
     }
     ptc_check(c, s43_screen_contains(&c->vt, text),
               "selected shadow provider text is not visible");

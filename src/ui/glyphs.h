@@ -78,6 +78,10 @@ typedef enum {
     YEW_GLYPH_GIT_AHEAD,
     YEW_GLYPH_GIT_CONFLICT,
     YEW_GLYPH_GIT_BEHIND,
+    /* Passive suggestion provenance; never letters from the document. */
+    YEW_GLYPH_SHADOW_INDEX,
+    YEW_GLYPH_SHADOW_LSP,
+    YEW_GLYPH_SHADOW_AI,
     YEW_GLYPH__N
 } YewGlyph;
 

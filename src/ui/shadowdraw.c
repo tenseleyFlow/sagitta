@@ -8,6 +8,7 @@
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
+#include "ui/glyphs.h"
 #include "ui/region.h"
 #include "ui/viewport.h"
 #include "ui/win.h"
@@ -117,12 +118,14 @@ void yew_shadow_layout(const Win *win, const Shadow *shadow,
 }
 
 static void shadow_style(const Ed *ed, const ShadowSug *suggestion,
-                         Cell *style, u8 *glyph)
+                         Cell *style, YewGlyph *glyph)
 {
     static const char *const roles[YEW_SHADOW_NPROV] = {
         "shadow.index", "shadow.lsp", "shadow.ai",
     };
-    static const u8 glyphs[YEW_SHADOW_NPROV] = {'s', 'l', 'a'};
+    static const YewGlyph glyphs[YEW_SHADOW_NPROV] = {
+        YEW_GLYPH_SHADOW_INDEX, YEW_GLYPH_SHADOW_LSP, YEW_GLYPH_SHADOW_AI,
+    };
     static const u16 attrs[YEW_SHADOW_NPROV] = {
         YEW_ATTR_DIM,
         YEW_ATTR_DIM | YEW_ATTR_ITALIC,
@@ -360,7 +363,7 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
     u32 at;
     u16 line;
     Cell style;
-    u8 glyph;
+    YewGlyph glyph;
     u16 gutter_col;
     u32 tabwidth;
 
@@ -402,11 +405,14 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
         at = end < len && text[end] == '\n' ? end + 1U : end;
     }
     if (win->gutter_width >= YEW_GUTTER_SIGN_COLS && win->rect.x >= 1U) {
+        if (yew_glyph_cells(glyph) != 1U)
+            YEW_BUG("shadow provenance marker must occupy one cell");
         gutter_col = (u16)(win->rect.x - win->gutter_width + 1U);
         for (line = 0U; line < layout->nlines; line++)
             (void)yew_grid_put(grid,
                                (u16)(layout->inline_run.y + line),
-                               gutter_col, &glyph, 1U, style.fg, style.bg,
+                               gutter_col, (const u8 *)yew_glyph(glyph),
+                               yew_glyph_len(glyph), style.fg, style.bg,
                                style.attrs);
     }
     yew_region_add(YEW_REGION_BLOCK, layout->inline_run, 0);

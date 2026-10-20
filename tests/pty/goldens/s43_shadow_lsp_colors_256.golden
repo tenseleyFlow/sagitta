@@ -3,10 +3,10 @@ size 80x24 alt=1 cursor=1,13 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
  1 pty-s14-s43_shadow_ls +                                                      
- l  1 anchorXlanguage_server item                                               
- l    lsp overlay two                                                           
- l    lsp overlay three                                                         
- l    lsp overlay four                                                          
+ ◇  1 anchorXlanguage_server item                                               
+ ◇    lsp overlay two                                                           
+ ◇    lsp overlay three                                                         
+ ◇    lsp overlay four                                                          
     1 real row two                                                              
     2 real row three                                                            
     3 real row four                                                             

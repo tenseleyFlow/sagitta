@@ -50,7 +50,10 @@ static const GlyphRow glyphs[] = {
     /* Reserved for Sprint 52; nothing draws these yet. */
     [YEW_GLYPH_GIT_AHEAD] = {"\xE2\x86\x91", "^"},     /* ↑ */
     [YEW_GLYPH_GIT_CONFLICT] = {"\xE2\x9C\x97", "x"},  /* ✗ */
-    [YEW_GLYPH_GIT_BEHIND] = {"\xE2\x86\x93", "v"}     /* ↓ */
+    [YEW_GLYPH_GIT_BEHIND] = {"\xE2\x86\x93", "v"},    /* ↓ */
+    [YEW_GLYPH_SHADOW_INDEX] = {"\xC2\xB7", "."},      /* · */
+    [YEW_GLYPH_SHADOW_LSP] = {"\xE2\x97\x87", ">"},    /* ◇ */
+    [YEW_GLYPH_SHADOW_AI] = {"\xE2\x9C\xA6", "*"}      /* ✦ */
 };
 
 _Static_assert(YEW_ARRAY_LEN(glyphs) == (size_t)YEW_GLYPH__N,
